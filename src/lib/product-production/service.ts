@@ -48,6 +48,7 @@ import {
 import { verifyTextOpenWorldCreatorProductionPreflightConfirmationV1 } from '../open-world/creator-production-preflight'
 import { useAIConfigStore } from '../../stores/ai-config'
 import {
+  assertProductProductionBudgetLedgerV1,
   projectProductProductionSchedulerV1,
   runProductProductionUntilBlockedV1,
   type ProductProductionCapabilityBindingV1,
@@ -434,12 +435,107 @@ export async function authorizeProductProductionStartV1(input: {
 export async function setProductProductionPausedV1(input: {
   scope: WorkspaceScope
   production: ProductProductionRecordV1
+  build?: ProductBuildRecordV1 | null
+  pausedReservationDisposition?: 'confirmed-not-charged' | 'charge-reservation-upper-bound'
 }): Promise<'paused' | 'resumed'> {
   const paused = input.production.status === 'paused'
+  let pausedReservationDispositions: Extract<
+    import('../types').ProductProductionCommandV1,
+    { type: 'resume' }
+  >['pausedReservationDispositions']
+  if (paused && input.build?.status === 'paused') {
+    let failure: Record<string, unknown>
+    try {
+      const parsed = JSON.parse(input.build.failureJson) as unknown
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid')
+      failure = parsed as Record<string, unknown>
+    } catch {
+      throw new Error('[product-production-service] 暂停恢复证据损坏')
+    }
+    if (failure!.code !== 'pause-provider-result-unknown') {
+      if (input.pausedReservationDisposition) {
+        throw new Error('[product-production-service] 普通暂停没有待结算 provider reservation')
+      }
+    } else if (!Array.isArray(failure!.pausedProviderReservations)
+      || failure!.pausedProviderReservations.length < 1) {
+      throw new Error('[product-production-service] 暂停 reservation 证据损坏')
+    } else {
+      assertProductProductionBudgetLedgerV1(input.build.budgetLedgerJson)
+      const ledger = input.build.budgetLedgerJson === '{}' || !input.build.budgetLedgerJson.trim()
+        ? {
+            version: 2,
+            charges: {} as Record<string, unknown>,
+            reservations: {} as Record<string, unknown>,
+          }
+        : JSON.parse(input.build.budgetLedgerJson) as {
+            version: number
+            charges?: Record<string, unknown>
+            reservations?: Record<string, unknown>
+          }
+      const currentReservations = ledger.version === 2 && ledger.reservations
+        ? ledger.reservations
+        : {}
+      const currentCharges = ledger.version === 2 && ledger.charges
+        ? ledger.charges
+        : {}
+      const unresolved = (failure!.pausedProviderReservations as unknown[]).flatMap((value, index) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          throw new Error(`[product-production-service] 暂停 reservation #${index + 1} 损坏`)
+        }
+        const reservation = value as Record<string, unknown>
+        if (typeof reservation.taskKey !== 'string'
+          || !Number.isSafeInteger(reservation.runId) || Number(reservation.runId) < 1
+          || !Number.isSafeInteger(reservation.attempt) || Number(reservation.attempt) < 1
+          || !Number.isSafeInteger(reservation.controlEpoch) || Number(reservation.controlEpoch) < 0) {
+          throw new Error(`[product-production-service] 暂停 reservation #${index + 1} 身份损坏`)
+        }
+        const attemptKey = `${Number(reservation.runId)}:${Number(reservation.attempt)}`
+        const pending = currentReservations[attemptKey]
+        const closed = currentCharges[attemptKey]
+        if (pending != null && closed != null) {
+          throw new Error(`[product-production-service] 暂停 reservation #${index + 1} 重复封账`)
+        }
+        const current = pending ?? closed
+        if (current == null) {
+          throw new Error(`[product-production-service] 暂停 reservation #${index + 1} 缺少精确封账证据`)
+        }
+        if (typeof current !== 'object' || Array.isArray(current)) {
+          throw new Error(`[product-production-service] 暂停 reservation #${index + 1} 当前账本损坏`)
+        }
+        const row = current as Record<string, unknown>
+        if (row.taskKey !== reservation.taskKey
+          || row.runId !== reservation.runId
+          || row.attempt !== reservation.attempt
+          || row.controlEpoch !== reservation.controlEpoch) {
+          throw new Error(`[product-production-service] 暂停 reservation #${index + 1} 与当前账本不一致`)
+        }
+        return pending == null ? [] : [{
+          taskKey: reservation.taskKey,
+          runId: Number(reservation.runId),
+          attempt: Number(reservation.attempt),
+          controlEpoch: Number(reservation.controlEpoch),
+        }]
+      })
+      if (unresolved.length > 0 && !input.pausedReservationDisposition) {
+        throw new Error('[product-production-service] 恢复前请先结算暂停时仍在途的供应商请求')
+      }
+      pausedReservationDispositions = unresolved.length > 0
+        ? unresolved.map(reservation => ({
+            ...reservation,
+            disposition: input.pausedReservationDisposition!,
+          }))
+        : undefined
+    }
+  }
   const receipt = await executeProductProductionCommand({
     scope: input.scope, productionId: input.production.id!,
     command: paused
-      ? { type: 'resume', commandId: commandId('resume'), expectedStateRevision: input.production.stateRevision }
+      ? {
+          type: 'resume',
+          commandId: commandId('resume'),
+          expectedStateRevision: input.production.stateRevision,
+          ...(pausedReservationDispositions ? { pausedReservationDispositions } : {}),
+        }
       : {
           type: 'pause', commandId: commandId('pause'), expectedStateRevision: input.production.stateRevision,
           reason: '作者从制作工作台暂停',
@@ -498,7 +594,13 @@ export async function retryProductProductionBlockerV1(input: {
   afterCapabilityChange?: boolean
   repairNote?: string
   authorDraftJson?: string
-}): Promise<void> {
+  unknownResultDisposition?: 'confirmed-not-charged' | 'charge-reservation-upper-bound'
+}): Promise<
+  | 'provider-actual-charge'
+  | 'author-confirmed-not-charged'
+  | 'author-charged-reservation-upper-bound'
+  | null
+> {
   if (!input.details.build || input.details.build.status !== 'recovery-required') {
     throw new Error('[product-production-service] 当前 Build 没有可重试 blocker')
   }
@@ -520,6 +622,51 @@ export async function retryProductProductionBlockerV1(input: {
       throw new Error('[product-production-service] 当前任务不支持作者完整 JSON 修订')
     }
   }
+  let unknownResultReservation: {
+    runId: number
+    attempt: number
+    controlEpoch: number
+    disposition: 'confirmed-not-charged' | 'charge-reservation-upper-bound'
+  } | undefined
+  let failure: Record<string, unknown> = {}
+  try {
+    const parsed = JSON.parse(input.details.build.failureJson) as unknown
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      failure = parsed as Record<string, unknown>
+    }
+  } catch { /* command boundary will reject corrupt failure evidence */ }
+  const providerReservationFailure = failure.code === 'unknown-result'
+    || failure.code === 'provider-response-uncheckpointed'
+  if (providerReservationFailure) {
+    if (!input.unknownResultDisposition) {
+      throw new Error(failure.code === 'provider-response-uncheckpointed'
+        ? '[product-production-service] 已收到供应商响应证据；请按冻结预留上限封账后重试'
+        : '[product-production-service] 结果未知；请先确认供应商是否计费')
+    }
+    if (failure.code === 'provider-response-uncheckpointed'
+      && input.unknownResultDisposition !== 'charge-reservation-upper-bound') {
+      throw new Error('[product-production-service] 已收到供应商响应证据，不能声明为未计费')
+    }
+    const provenance = failure.failureProvenance != null
+      && typeof failure.failureProvenance === 'object'
+      && !Array.isArray(failure.failureProvenance)
+      ? failure.failureProvenance as Record<string, unknown>
+      : null
+    if (!provenance
+      || !Number.isSafeInteger(provenance.runId) || Number(provenance.runId) < 1
+      || !Number.isSafeInteger(provenance.attempt) || Number(provenance.attempt) < 1
+      || !Number.isSafeInteger(provenance.controlEpoch) || Number(provenance.controlEpoch) < 0) {
+      throw new Error('[product-production-service] unknown-result 缺少可核对的 Run/attempt/epoch')
+    }
+    unknownResultReservation = {
+      runId: Number(provenance.runId),
+      attempt: Number(provenance.attempt),
+      controlEpoch: Number(provenance.controlEpoch),
+      disposition: input.unknownResultDisposition,
+    }
+  } else if (input.unknownResultDisposition) {
+    throw new Error('[product-production-service] 当前 blocker 不存在待结算 provider reservation')
+  }
   const receipt = await executeProductProductionCommand({
     scope: input.scope, productionId: input.details.production.id!,
     command: {
@@ -528,11 +675,24 @@ export async function retryProductProductionBlockerV1(input: {
       resolution: {
         action: authorDraftJson ? 'author-edit' : input.afterCapabilityChange ? 'change-capability' : 'retry',
         ...(authorDraftJson ? { authorDraftJson } : {}),
+        ...(unknownResultReservation ? { unknownResultReservation } : {}),
         note: repairNote || (input.afterCapabilityChange ? '作者已调整全局能力配置并要求重试' : '作者从制作工作台要求重试'),
       },
     },
   })
   if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? 'blocker 重试失败'))
+  const accounting = receipt.result.unknownResultAccounting
+  if (accounting == null) return null
+  if (!accounting || typeof accounting !== 'object' || Array.isArray(accounting)) {
+    throw new Error('[product-production-service] unknown-result 结算回执损坏')
+  }
+  const effectiveDisposition = (accounting as Record<string, unknown>).effectiveDisposition
+  if (effectiveDisposition !== 'provider-actual-charge'
+    && effectiveDisposition !== 'author-confirmed-not-charged'
+    && effectiveDisposition !== 'author-charged-reservation-upper-bound') {
+    throw new Error('[product-production-service] unknown-result 结算回执缺少有效处置')
+  }
+  return effectiveDisposition
 }
 
 export async function readProductProductionProgressV1(input: {

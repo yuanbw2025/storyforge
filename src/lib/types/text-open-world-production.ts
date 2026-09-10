@@ -557,9 +557,8 @@ export interface TextOpenWorldCreatorProductionSourcePlanV1 {
   sourceBinding: TextOpenWorldCreatorSourceBindingV1
   sourceBindingHash: string
   sourceVersionHash: string
-  /** Exact for novel previews; null for a WorldRelease whose P0 boundary is
-   * derived from the immutable catalog selected below. */
-  expectedSourceBoundaryHash: string | null
+  /** Exact author-visible source and descriptor boundary for both source kinds. */
+  expectedSourceBoundaryHash: string
   selection:
     | {
         kind: 'world-release'
@@ -687,6 +686,8 @@ export interface TextOpenWorldSourcePinUnitRefV1 {
   partCount: number
   readDepth: 'index' | 'full'
   sourceResourceKey: string | null
+  sourceArea: WorldCapabilityArea | null
+  sourceResourceKind: string | null
   sourceContentHash: string
   charCount: number
   wordCount: number

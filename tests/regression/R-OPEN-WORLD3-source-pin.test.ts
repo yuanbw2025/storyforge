@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import Dexie from 'dexie'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import {
@@ -11,72 +12,21 @@ import {
   verifyTextOpenWorldSourcePinAvailabilityV1,
 } from '../../src/lib/open-world/source-pin'
 import { openWorldSemanticResourceCatalogV1 } from '../../src/lib/context-gateway/world-release-client'
+import { acceptProductBuildArtifact } from '../../src/lib/product-production/artifact-store'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import type { WorkspaceScope } from '../../src/lib/types'
+import type {
+  TextOpenWorldSourcePinBundleV1,
+  TextOpenWorldSourcePinUnitRefV1,
+  TextOpenWorldSourcePinV1,
+} from '../../src/lib/types/text-open-world-production'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { seedAuthorizedTextOpenWorldCreatorBuildV1 } from '../helpers/text-open-world-creator-build'
 
 const HASH = 'a'.repeat(64)
-
-async function seedTextOpenWorldBuild(scope: WorkspaceScope, productionKey: string) {
-  const now = Date.now()
-  const productionId = await db.productProductions.add({
-    projectId: scope.projectId,
-    worldId: scope.worldId,
-    workId: scope.workId,
-    productionKey,
-    productType: 'text-open-world',
-    title: '来源锁定验收游戏',
-    status: 'producing',
-    stateRevision: 1,
-    controlEpoch: 1,
-    currentBriefRevision: 1,
-    currentBuildNumber: 1,
-    currentProductReleaseId: null,
-    lastErrorJson: '{}',
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  const buildId = await db.productBuilds.add({
-    projectId: scope.projectId,
-    worldId: scope.worldId,
-    workId: scope.workId,
-    productionId,
-    buildNumber: 1,
-    briefRevision: 1,
-    briefHash: HASH,
-    parentBuildNumber: null,
-    sourceProductReleaseId: null,
-    status: 'building',
-    resumeState: null,
-    stateRevision: 1,
-    controlEpoch: 1,
-    planRevision: 1,
-    planJson: '{}',
-    planHash: HASH,
-    budgetLedgerJson: '{}',
-    manifestJson: '{}',
-    manifestHash: HASH,
-    packageHash: '',
-    previewManifestJson: '{}',
-    previewHash: '',
-    qualityReportJson: '{}',
-    qualityReportHash: '',
-    compatibilityJson: '{}',
-    rootTerminalReceiptHash: null,
-    adoptionIntentHash: null,
-    releasedProductReleaseId: null,
-    failureJson: '{}',
-    authorizedAt: now,
-    startedAt: now,
-    completedAt: null,
-    createdAt: now,
-    updatedAt: now,
-  }) as number
-  return { productionId, buildId, controlEpoch: 1 }
-}
 
 function authorization(productionKey: string, nonce: string, authorizedAt: number) {
   return {
@@ -89,6 +39,159 @@ function authorization(productionKey: string, nonce: string, authorizedAt: numbe
     rightsNote: '作者确认仅用于本文字开放世界产品生产。',
     authorizedAt,
   }
+}
+
+function sourceUnitIdentityForTest(ref: TextOpenWorldSourcePinUnitRefV1) {
+  return {
+    unitKey: ref.unitKey,
+    kind: ref.kind,
+    order: ref.order,
+    partIndex: ref.partIndex,
+    partCount: ref.partCount,
+    readDepth: ref.readDepth,
+    sourceResourceKey: ref.sourceResourceKey,
+    sourceArea: ref.sourceArea,
+    sourceResourceKind: ref.sourceResourceKind,
+    label: ref.label,
+    sourceContentHash: ref.sourceContentHash,
+    charCount: ref.charCount,
+    wordCount: ref.wordCount,
+  }
+}
+
+/** Re-seal every Pin-level hash after a hostile ref-only mutation. This keeps
+ * the regression focused on the Bundle closure instead of merely exercising
+ * the outer pinHash guard. */
+async function resealSourcePinForTest(pin: TextOpenWorldSourcePinV1): Promise<void> {
+  const unitIdentities = pin.units.map(sourceUnitIdentityForTest)
+  pin.sourceBoundaryHash = await hashProductProductionValueV2({
+    sourceVersionHash: pin.sourceVersionHash,
+    source: pin.source,
+    units: unitIdentities,
+  })
+  pin.authorization.sourceBoundaryHash = pin.sourceBoundaryHash
+  const authorizationBody: Record<string, unknown> = { ...pin.authorization }
+  delete authorizationBody.authorizationHash
+  pin.authorization.authorizationHash = await hashProductProductionValueV2(authorizationBody)
+
+  pin.readEvidence.unitCount = pin.units.length
+  pin.readEvidence.totalChars = pin.units.reduce((sum, unit) => sum + unit.charCount, 0)
+  pin.readEvidence.totalWords = pin.units.reduce((sum, unit) => sum + unit.wordCount, 0)
+  pin.readEvidence.evidenceHash = await hashProductProductionValueV2({
+    method: pin.readEvidence.method,
+    readDepth: pin.readEvidence.readDepth,
+    unitCount: pin.readEvidence.unitCount,
+    totalChars: pin.readEvidence.totalChars,
+    totalWords: pin.readEvidence.totalWords,
+    capturedAt: pin.readEvidence.capturedAt,
+    units: unitIdentities,
+  })
+
+  const pinBody: Record<string, unknown> = { ...pin }
+  delete pinBody.pinHash
+  pin.pinHash = await hashProductProductionValueV2(pinBody)
+}
+
+async function resealSourceAuthorizationForTest(input: {
+  bundle: TextOpenWorldSourcePinBundleV1
+  startNonceHash: string
+}): Promise<void> {
+  const authorization = input.bundle.pin.authorization
+  authorization.authorizationNonceHash = await hashProductProductionValueV2({
+    nonce: input.startNonceHash,
+    productInstanceKey: authorization.productInstanceKey,
+    sourceKind: authorization.sourceKind,
+    sourceVersionHash: authorization.sourceVersionHash,
+    sourceBoundaryHash: authorization.sourceBoundaryHash,
+    briefRevision: authorization.briefRevision,
+    authorStartRevision: authorization.authorStartRevision,
+  })
+  const authorizationBody: Record<string, unknown> = { ...authorization }
+  delete authorizationBody.authorizationHash
+  authorization.authorizationHash = await hashProductProductionValueV2(authorizationBody)
+  const pinBody: Record<string, unknown> = { ...input.bundle.pin }
+  delete pinBody.pinHash
+  input.bundle.pin.pinHash = await hashProductProductionValueV2(pinBody)
+}
+
+async function resealOuterPinForTest(pin: TextOpenWorldSourcePinV1): Promise<void> {
+  const pinBody: Record<string, unknown> = { ...pin }
+  delete pinBody.pinHash
+  pin.pinHash = await hashProductProductionValueV2(pinBody)
+}
+
+async function databaseTableCounts(): Promise<number[]> {
+  return Promise.all(db.tables.map(table => table.count()))
+}
+
+function directUnitAcceptance(input: {
+  scope: WorkspaceScope
+  buildId: number
+  controlEpoch: number
+  bundle: TextOpenWorldSourcePinBundleV1
+  unit: TextOpenWorldSourcePinBundleV1['units'][number]
+  proof?: TextOpenWorldSourcePinBundleV1
+}) {
+  return acceptProductBuildArtifact({
+    scope: input.scope,
+    buildId: input.buildId,
+    controlEpoch: input.controlEpoch,
+    artifactKey: input.unit.payload.artifactKey,
+    requirementKey: 'text-open-world.source-pin',
+    kind: 'text-open-world.source-pin-unit',
+    payload: input.unit.payload,
+    metadata: {
+      sourceKind: input.bundle.pin.sourceKind,
+      sourceUnitKey: input.unit.payload.unitKey,
+      readDepth: input.unit.payload.readDepth,
+    },
+    quality: { gates: ['tow.source-pin.schema', 'tow.source-pin.hash'] },
+    rights: {
+      authorizationHash: input.bundle.pin.authorization.authorizationHash,
+      rightsBasis: input.bundle.pin.authorization.rightsBasis,
+      rightsNote: input.bundle.pin.authorization.rightsNote,
+    },
+    contentHash: input.unit.artifactContentHash,
+    inputHash: input.bundle.pin.authorization.authorizationHash,
+    ...(input.proof ? { sourcePinBundleProof: input.proof } : {}),
+  })
+}
+
+function directPinAcceptance(input: {
+  scope: WorkspaceScope
+  buildId: number
+  controlEpoch: number
+  bundle: TextOpenWorldSourcePinBundleV1
+  proof?: TextOpenWorldSourcePinBundleV1
+}) {
+  const pin = input.bundle.pin
+  return acceptProductBuildArtifact({
+    scope: input.scope,
+    buildId: input.buildId,
+    controlEpoch: input.controlEpoch,
+    artifactKey: 'text-open-world.source-pin',
+    requirementKey: 'text-open-world.source-pin',
+    kind: 'text-open-world.source-pin',
+    payload: pin,
+    metadata: {
+      sourceKind: pin.sourceKind,
+      sourceVersionHash: pin.sourceVersionHash,
+      sourceBoundaryHash: pin.sourceBoundaryHash,
+      readEvidenceHash: pin.readEvidence.evidenceHash,
+      unitArtifactHashes: pin.units.map(item => item.artifactContentHash),
+    },
+    quality: {
+      gates: ['tow.source-pin.schema', 'tow.source-pin.hash', 'tow.source-pin.authorization'],
+    },
+    rights: {
+      authorizationHash: pin.authorization.authorizationHash,
+      rightsBasis: pin.authorization.rightsBasis,
+      rightsNote: pin.authorization.rightsNote,
+    },
+    contentHash: pin.pinHash,
+    inputHash: pin.authorization.authorizationHash,
+    ...(input.proof ? { sourcePinBundleProof: input.proof } : {}),
+  })
 }
 
 async function seedNovelSource() {
@@ -150,33 +253,63 @@ async function seedNovelSource() {
   return { ...created, chapterId, originalBody, now }
 }
 
+async function seedAuthorizedWorldBundle(sessionKey: string) {
+  const world = await seedCurrentProductWorld(`TOW SourcePin ${sessionKey} ${crypto.randomUUID()}`)
+  const build = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+    source: {
+      kind: 'world-release',
+      scope: world.scope,
+      localReleaseRecordId: world.release.id!,
+      expectedReleaseHash: world.release.contentHash,
+    },
+    sessionKey: `${sessionKey}-${crypto.randomUUID()}`,
+  })
+  const capturedAt = Math.max(Date.now(), build.start.authorizedAt)
+  const bundle = await freezeTextOpenWorldWorldReleaseSourceV1({
+    scope: world.scope,
+    localReleaseRecordId: world.release.id!,
+    expectedReleaseHash: world.release.contentHash,
+    selection: { mode: 'entire-release' },
+    authorization: build.authorization,
+    createdAt: capturedAt,
+  })
+  return { world, build, bundle }
+}
+
 describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
   it('从冻结 WorldRelease 保存便携版本、Hash、授权与真实目录读取证据，并以 Artifact 组幂等落库', async () => {
     const created = await seedCurrentProductWorld(`TOW 世界 SourcePin ${crypto.randomUUID()}`)
-    const productionKey = 'tow.source.world'
-    const build = await seedTextOpenWorldBuild(created.scope, productionKey)
     const catalog = await openWorldSemanticResourceCatalogV1({
       localReleaseRecordId: created.release.id!,
       expectedProjectId: created.scope.projectId,
       expectedWorldId: created.scope.worldId,
     })
-    const selectedResourceKeys = catalog.resources.slice(0, 5).map(item => item.resourceKey)
-    const capturedAt = Date.now()
+    const build = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+      source: {
+        kind: 'world-release',
+        scope: created.scope,
+        localReleaseRecordId: created.release.id!,
+        expectedReleaseHash: created.release.contentHash,
+      },
+      sessionKey: `source-pin-world-${crypto.randomUUID()}`,
+    })
+    const selectedResourceKeys = catalog.resources.map(item => item.resourceKey)
+    const capturedAt = Math.max(Date.now(), build.start.authorizedAt)
     const bundle = await freezeTextOpenWorldWorldReleaseSourceV1({
       scope: created.scope,
       localReleaseRecordId: created.release.id!,
       expectedReleaseHash: created.release.contentHash,
-      selection: { mode: 'selected-resources', resourceKeys: selectedResourceKeys },
-      authorization: authorization(productionKey, 'world-source-authorization', capturedAt),
+      selection: { mode: 'entire-release' },
+      authorization: build.authorization,
       createdAt: capturedAt,
     })
 
     expect(bundle.pin).toMatchObject({
       productType: 'text-open-world',
-      productInstanceKey: productionKey,
+      productInstanceKey: build.productionKey,
       sourceKind: 'world-release',
       sourceVersionHash: created.release.contentHash,
       readEvidence: {
@@ -201,7 +334,7 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
     }
     expect(JSON.stringify(bundle.pin)).not.toContain('worldReleases')
     expect(bundle.pin.authorization).not.toHaveProperty('authorizationNonce')
-    expect(bundle.pin.authorization.authorizationNonceHash).not.toBe('world-source-authorization')
+    expect(bundle.pin.authorization.authorizationNonceHash).not.toBe(build.start.authorizationNonceHash)
     expect(bundle.units.every(item => item.payload.contentText === null
       && item.payload.readDepth === 'index')).toBe(true)
     expect(bundle.units[0]!.payload.artifactKey).toBe('text-open-world.source-pin-unit')
@@ -238,20 +371,23 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
 
   it('把小说正文完整复制为产品私有分片，原小说变化后旧 Build 仍可独立读取且禁止静默换源', async () => {
     const created = await seedNovelSource()
-    const productionKey = 'tow.source.novel'
-    const build = await seedTextOpenWorldBuild(created.scope, productionKey)
     const preview = await prepareTextOpenWorldNovelSourceSnapshotV1({
       sourceScope: created.scope,
       selection: { mode: 'entire-work' },
     })
+    const build = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+      source: { kind: 'novel', scope: created.scope, selection: { mode: 'entire-work' } },
+      sessionKey: `source-pin-novel-${crypto.randomUUID()}`,
+    })
+    const capturedAt = Math.max(Date.now(), build.start.authorizedAt)
     const bundle = await freezeTextOpenWorldNovelSourceV1({
       targetScope: created.scope,
       sourceScope: created.scope,
       selection: { mode: 'entire-work' },
       expectedSourceVersionHash: preview.sourceVersionHash,
       expectedSourceBoundaryHash: preview.sourceBoundaryHash,
-      authorization: authorization(productionKey, 'novel-source-authorization', created.now),
-      createdAt: created.now,
+      authorization: build.authorization,
+      createdAt: capturedAt,
     })
 
     expect(bundle.pin).toMatchObject({
@@ -290,7 +426,7 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
     })
     await db.chapters.update(created.chapterId, {
       content: '<p>来源小说后来被彻底改写。</p>',
-      updatedAt: created.now + 1,
+      updatedAt: capturedAt + 1,
     })
     const frozen = await readAcceptedTextOpenWorldSourcePinBundleV1({
       scope: created.scope,
@@ -308,8 +444,8 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
       selection: { mode: 'entire-work' },
       expectedSourceVersionHash: preview.sourceVersionHash,
       expectedSourceBoundaryHash: preview.sourceBoundaryHash,
-      authorization: authorization(productionKey, 'stale-source-authorization', created.now + 1),
-      createdAt: created.now + 1,
+      authorization: build.authorization,
+      createdAt: capturedAt + 1,
     })).rejects.toThrow(/预览后变化/)
     const changedPreview = await prepareTextOpenWorldNovelSourceSnapshotV1({
       sourceScope: created.scope,
@@ -321,8 +457,8 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
       selection: { mode: 'entire-work' },
       expectedSourceVersionHash: changedPreview.sourceVersionHash,
       expectedSourceBoundaryHash: changedPreview.sourceBoundaryHash,
-      authorization: authorization(productionKey, 'changed-source-authorization', created.now + 1),
-      createdAt: created.now + 1,
+      authorization: build.authorization,
+      createdAt: capturedAt + 1,
     })
     expect(changed.pin.sourceVersionHash).not.toBe(bundle.pin.sourceVersionHash)
     await expect(acceptTextOpenWorldSourcePinBundleV1({
@@ -410,10 +546,8 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
     expect(recomputed).toBe(valid.units[0]!.artifactContentHash)
   }, 30_000)
 
-  it('v10 导入在任何落库前验证 SourcePin Artifact payload、row hash 与 active 闭包', async () => {
-    const world = await seedCurrentProductWorld(`TOW SourcePin import ${crypto.randomUUID()}`)
-    const productionKey = 'tow.source.import-preflight'
-    const build = await seedTextOpenWorldBuild(world.scope, productionKey)
+  it('即使重封 Pin 证据，也拒绝与 SourcePinUnit Artifact 不一致的全部 ref 治理字段', async () => {
+    const world = await seedCurrentProductWorld(`TOW SourcePin ref 闭包 ${crypto.randomUUID()}`)
     const catalog = await openWorldSemanticResourceCatalogV1({
       localReleaseRecordId: world.release.id!,
       expectedProjectId: world.scope.projectId,
@@ -425,10 +559,361 @@ describe('R-OPEN-WORLD3 · WorldRelease/小说双来源 SourcePin', () => {
       expectedReleaseHash: world.release.contentHash,
       selection: {
         mode: 'selected-resources',
-        resourceKeys: catalog.resources.slice(0, 2).map(item => item.resourceKey),
+        resourceKeys: [catalog.resources[0]!.resourceKey],
       },
-      authorization: authorization(productionKey, 'import-preflight-source', Date.now()),
+      authorization: authorization('tow.source.ref-closure', 'ref-closure-source', Date.now()),
       createdAt: Date.now(),
+    })
+
+    const cases: Array<{
+      name: string
+      mutate: (candidate: TextOpenWorldSourcePinBundleV1) => void
+      expectedError: RegExp
+    }> = [
+      {
+        name: 'unitKey',
+        mutate: candidate => { candidate.pin.units[0]!.unitKey += '.forged' },
+        expectedError: /Artifact 未闭合/,
+      },
+      {
+        name: 'artifactKey',
+        mutate: candidate => { candidate.pin.units[0]!.artifactKey = 'text-open-world.source-pin-unit.99999' },
+        expectedError: /Artifact 未闭合/,
+      },
+      {
+        name: 'artifactContentHash',
+        mutate: candidate => { candidate.pin.units[0]!.artifactContentHash = 'f'.repeat(64) },
+        expectedError: /Artifact 未闭合/,
+      },
+      {
+        name: 'label',
+        mutate: candidate => { candidate.pin.units[0]!.label += '（伪造）' },
+        expectedError: /Artifact 未闭合/,
+      },
+      {
+        name: 'kind',
+        mutate: candidate => { candidate.pin.units[0]!.kind = 'story-core' },
+        expectedError: /WorldRelease SourcePin 身份、选择或 unit 闭包不一致/,
+      },
+      {
+        name: 'order',
+        mutate: candidate => { candidate.pin.units[0]!.order = 1 },
+        expectedError: /Pin unit 引用字段非法/,
+      },
+      {
+        name: 'partIndex',
+        mutate: candidate => {
+          candidate.pin.units[0]!.partIndex = 2
+          candidate.pin.units[0]!.partCount = 2
+        },
+        expectedError: /Artifact 未闭合/,
+      },
+      {
+        name: 'partCount',
+        mutate: candidate => { candidate.pin.units[0]!.partCount = 2 },
+        expectedError: /Artifact 未闭合/,
+      },
+      {
+        name: 'readDepth',
+        mutate: candidate => { candidate.pin.units[0]!.readDepth = 'full' },
+        expectedError: /WorldRelease SourcePin 身份、选择或 unit 闭包不一致/,
+      },
+      {
+        name: 'sourceResourceKey',
+        mutate: candidate => {
+          candidate.pin.units[0]!.sourceResourceKey = 'forged.world.resource'
+          if (candidate.pin.source.kind === 'world-release') {
+            candidate.pin.source.selection.selectedResourceKeys = ['forged.world.resource']
+          }
+        },
+        expectedError: /Artifact 未闭合/,
+      },
+      {
+        name: 'sourceContentHash',
+        mutate: candidate => { candidate.pin.units[0]!.sourceContentHash = 'f'.repeat(64) },
+        expectedError: /Artifact 未闭合/,
+      },
+      {
+        name: 'charCount',
+        mutate: candidate => { candidate.pin.units[0]!.charCount = 1 },
+        expectedError: /Artifact 未闭合/,
+      },
+      {
+        name: 'wordCount',
+        mutate: candidate => { candidate.pin.units[0]!.wordCount = 1 },
+        expectedError: /Artifact 未闭合/,
+      },
+    ]
+
+    for (const testCase of cases) {
+      const candidate = structuredClone(bundle)
+      testCase.mutate(candidate)
+      await resealSourcePinForTest(candidate.pin)
+      await expect(
+        validateTextOpenWorldSourcePinBundleV1(candidate),
+        `ref.${testCase.name} 不得绕过 SourcePinUnit Artifact 闭包`,
+      ).rejects.toThrow(testCase.expectedError)
+    }
+  }, 30_000)
+
+  it('完全重签后仍拒绝额外字段与跨时间拼接的 SourcePinUnit，并保持 Build 零写入', async () => {
+    const fixture = await seedAuthorizedWorldBundle('exact-schema-and-capture')
+    const cases: Array<{
+      name: string
+      mutate: (candidate: TextOpenWorldSourcePinBundleV1) => Promise<void>
+    }> = [
+      {
+        name: 'pin-extra-field',
+        mutate: async candidate => {
+          Object.assign(candidate.pin as unknown as Record<string, unknown>, { privateOverride: true })
+          await resealOuterPinForTest(candidate.pin)
+        },
+      },
+      {
+        name: 'authorization-extra-field',
+        mutate: async candidate => {
+          const authorization = candidate.pin.authorization as unknown as Record<string, unknown>
+          authorization.privateGrant = 'forged'
+          const authorizationBody = { ...authorization }
+          delete authorizationBody.authorizationHash
+          candidate.pin.authorization.authorizationHash = await hashProductProductionValueV2(authorizationBody)
+          await resealOuterPinForTest(candidate.pin)
+        },
+      },
+      {
+        name: 'read-evidence-extra-field',
+        mutate: async candidate => {
+          const evidence = candidate.pin.readEvidence as unknown as Record<string, unknown>
+          evidence.privateExcerpt = '不得进入正式合同'
+          const evidenceBody = { ...evidence }
+          delete evidenceBody.evidenceHash
+          candidate.pin.readEvidence.evidenceHash = await hashProductProductionValueV2({
+            ...evidenceBody,
+            units: candidate.pin.units.map(sourceUnitIdentityForTest),
+          })
+          await resealOuterPinForTest(candidate.pin)
+        },
+      },
+      {
+        name: 'unit-extra-field',
+        mutate: async candidate => {
+          const unit = candidate.units[0]!
+          Object.assign(unit.payload as unknown as Record<string, unknown>, { hiddenText: 'forged' })
+          unit.artifactContentHash = await hashProductProductionValueV2(unit.payload)
+          candidate.pin.units[0]!.artifactContentHash = unit.artifactContentHash
+          await resealOuterPinForTest(candidate.pin)
+        },
+      },
+      {
+        name: 'unit-captured-at-differs-from-closure',
+        mutate: async candidate => {
+          const unit = candidate.units[0]!
+          unit.payload.capturedAt = candidate.pin.createdAt + 1
+          unit.artifactContentHash = await hashProductProductionValueV2(unit.payload)
+          candidate.pin.units[0]!.artifactContentHash = unit.artifactContentHash
+          await resealOuterPinForTest(candidate.pin)
+        },
+      },
+    ]
+
+    for (const testCase of cases) {
+      const candidate = structuredClone(fixture.bundle)
+      await testCase.mutate(candidate)
+      const before = await databaseTableCounts()
+      await expect(
+        acceptTextOpenWorldSourcePinBundleV1({
+          scope: fixture.world.scope,
+          buildId: fixture.build.buildId,
+          controlEpoch: fixture.build.controlEpoch,
+          bundle: candidate,
+        }),
+        `${testCase.name} 不得被自洽重签后写入 Build`,
+      ).rejects.toThrow()
+      expect(await databaseTableCounts()).toEqual(before)
+    }
+    expect(await db.productBuildArtifacts.where('buildId').equals(fixture.build.buildId).count()).toBe(0)
+  }, 30_000)
+
+  it('Creator Brief/Start 授权 revision、hash 或 authorStart 漂移时零写入拒绝 SourcePin', async () => {
+    const fixture = await seedAuthorizedWorldBundle('authorization-anchor')
+    const cases: Array<{
+      name: string
+      mutate: (candidate: TextOpenWorldSourcePinBundleV1) => void
+    }> = [
+      {
+        name: 'briefRevision',
+        mutate: candidate => { candidate.pin.authorization.briefRevision += 1 },
+      },
+      {
+        name: 'briefHash',
+        mutate: candidate => { candidate.pin.authorization.briefHash = 'f'.repeat(64) },
+      },
+      {
+        name: 'authorStartRevision',
+        mutate: candidate => { candidate.pin.authorization.authorStartRevision += 1 },
+      },
+    ]
+
+    for (const testCase of cases) {
+      const candidate = structuredClone(fixture.bundle)
+      testCase.mutate(candidate)
+      await resealSourceAuthorizationForTest({
+        bundle: candidate,
+        startNonceHash: fixture.build.start.authorizationNonceHash,
+      })
+      await expect(validateTextOpenWorldSourcePinBundleV1(candidate)).resolves.toBeDefined()
+      const before = await databaseTableCounts()
+      await expect(
+        acceptTextOpenWorldSourcePinBundleV1({
+          scope: fixture.world.scope,
+          buildId: fixture.build.buildId,
+          controlEpoch: fixture.build.controlEpoch,
+          bundle: candidate,
+        }),
+        `${testCase.name} 不得脱离 Creator 授权锚点写入`,
+      ).rejects.toThrow(/SourcePin 与 Creator Brief\/SourcePlan\/Start 授权不闭合/)
+      expect(await databaseTableCounts()).toEqual(before)
+    }
+    expect(await db.productBuildArtifacts.where('buildId').equals(fixture.build.buildId).count()).toBe(0)
+  }, 30_000)
+
+  it('SourcePin preflight 后新增第二条匹配 Start 回执时，事务内唯一性 CAS 拒绝且零 Artifact 写入', async () => {
+    const fixture = await seedAuthorizedWorldBundle('start-command-race')
+    const original = await db.productProductionCommands
+      .where('[productionId+status]')
+      .equals([fixture.build.productionId, 'succeeded'])
+      .filter(row => row.type === 'authorize-text-open-world-creator-start')
+      .first()
+    expect(original?.id).toBeTruthy()
+    const { id: _id, ...originalFields } = original!
+    const duplicate = {
+      ...originalFields,
+      commandId: `${original!.commandId}.duplicate`,
+      payloadHash: await hashProductProductionValueV2({
+        originalPayloadHash: original!.payloadHash,
+        duplicate: true,
+      }),
+      createdAt: original!.createdAt + 1,
+      completedAt: (original!.completedAt ?? original!.createdAt) + 1,
+    }
+    const originalTransaction = db.transaction.bind(db)
+    let injected = false
+    const transactionSpy = vi.spyOn(db, 'transaction').mockImplementationOnce((async (
+      ...args: Parameters<typeof db.transaction>
+    ) => {
+      injected = true
+      await db.productProductionCommands.add(duplicate)
+      return originalTransaction(...args)
+    }) as typeof db.transaction)
+    try {
+      await expect(acceptTextOpenWorldSourcePinBundleV1({
+        scope: fixture.world.scope,
+        buildId: fixture.build.buildId,
+        controlEpoch: fixture.build.controlEpoch,
+        bundle: fixture.bundle,
+      })).rejects.toThrow(/SourcePin Production 在整包验收期间变化/)
+    } finally {
+      transactionSpy.mockRestore()
+    }
+    expect(injected).toBe(true)
+    expect(await db.productBuildArtifacts.where('buildId').equals(fixture.build.buildId).count()).toBe(0)
+    expect(await db.productProductionCommands.where('[productionId+status]')
+      .equals([fixture.build.productionId, 'succeeded'])
+      .filter(row => row.type === 'authorize-text-open-world-creator-start').count()).toBe(2)
+    expect(Dexie.currentTransaction).toBeNull()
+  }, 30_000)
+
+  it('generic accept 缺少 Bundle proof，或把完整 B proof 写入已闭合 A Build 时均零写入', async () => {
+    const fixtureA = await seedAuthorizedWorldBundle('generic-proof-a')
+    await acceptTextOpenWorldSourcePinBundleV1({
+      scope: fixtureA.world.scope,
+      buildId: fixtureA.build.buildId,
+      controlEpoch: fixtureA.build.controlEpoch,
+      bundle: fixtureA.bundle,
+    })
+    const acceptedA = await readAcceptedTextOpenWorldSourcePinBundleV1({
+      scope: fixtureA.world.scope,
+      buildId: fixtureA.build.buildId,
+    })
+
+    const buildB = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+      source: {
+        kind: 'world-release',
+        scope: fixtureA.world.scope,
+        localReleaseRecordId: fixtureA.world.release.id!,
+        expectedReleaseHash: fixtureA.world.release.contentHash,
+      },
+      sessionKey: `generic-proof-b-${crypto.randomUUID()}`,
+    })
+    const bundleB = await freezeTextOpenWorldWorldReleaseSourceV1({
+      scope: fixtureA.world.scope,
+      localReleaseRecordId: fixtureA.world.release.id!,
+      expectedReleaseHash: fixtureA.world.release.contentHash,
+      selection: { mode: 'entire-release' },
+      authorization: buildB.authorization,
+      createdAt: Math.max(Date.now(), buildB.start.authorizedAt),
+    })
+    await expect(validateTextOpenWorldSourcePinBundleV1(bundleB)).resolves.toBeDefined()
+
+    let before = await databaseTableCounts()
+    await expect(directUnitAcceptance({
+      scope: fixtureA.world.scope,
+      buildId: fixtureA.build.buildId,
+      controlEpoch: fixtureA.build.controlEpoch,
+      bundle: fixtureA.bundle,
+      unit: fixtureA.bundle.units[0]!,
+    })).rejects.toThrow(/SourcePin 必须通过整包原子验收入口写入/)
+    expect(await databaseTableCounts()).toEqual(before)
+
+    before = await databaseTableCounts()
+    await expect(directUnitAcceptance({
+      scope: fixtureA.world.scope,
+      buildId: fixtureA.build.buildId,
+      controlEpoch: fixtureA.build.controlEpoch,
+      bundle: bundleB,
+      unit: bundleB.units[0]!,
+      proof: bundleB,
+    })).rejects.toThrow(/SourcePin 必须通过整包原子验收入口写入/)
+    expect(await databaseTableCounts()).toEqual(before)
+
+    before = await databaseTableCounts()
+    await expect(directPinAcceptance({
+      scope: fixtureA.world.scope,
+      buildId: fixtureA.build.buildId,
+      controlEpoch: fixtureA.build.controlEpoch,
+      bundle: bundleB,
+      proof: bundleB,
+    })).rejects.toThrow(/SourcePin 必须通过整包原子验收入口写入/)
+    expect(await databaseTableCounts()).toEqual(before)
+
+    const afterA = await readAcceptedTextOpenWorldSourcePinBundleV1({
+      scope: fixtureA.world.scope,
+      buildId: fixtureA.build.buildId,
+    })
+    expect(afterA.pinArtifact).toEqual(acceptedA.pinArtifact)
+    expect(afterA.unitArtifacts).toEqual(acceptedA.unitArtifacts)
+    expect(await db.productBuildArtifacts.where('buildId').equals(buildB.buildId).count()).toBe(0)
+  }, 30_000)
+
+  it('v10 导入在任何落库前验证 SourcePin Artifact payload、row hash 与 active 闭包', async () => {
+    const world = await seedCurrentProductWorld(`TOW SourcePin import ${crypto.randomUUID()}`)
+    const build = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+      source: {
+        kind: 'world-release',
+        scope: world.scope,
+        localReleaseRecordId: world.release.id!,
+        expectedReleaseHash: world.release.contentHash,
+      },
+      sessionKey: `source-pin-import-${crypto.randomUUID()}`,
+    })
+    const capturedAt = Math.max(Date.now(), build.start.authorizedAt)
+    const bundle = await freezeTextOpenWorldWorldReleaseSourceV1({
+      scope: world.scope,
+      localReleaseRecordId: world.release.id!,
+      expectedReleaseHash: world.release.contentHash,
+      selection: { mode: 'entire-release' },
+      authorization: build.authorization,
+      createdAt: capturedAt,
     })
     await acceptTextOpenWorldSourcePinBundleV1({
       scope: world.scope,

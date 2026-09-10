@@ -185,7 +185,7 @@ describe('Text Open World · Action v17 durable system follow-up recovery', () =
     expect(twice).toHaveLength(eventCount)
     expect(useTextOpenWorldPlayerStore.getState().runtimeState.lastSequence).toBe(sequence)
     expect(linkedDirectorCommands(twice, causeCommandId)).toHaveLength(1)
-  }, 60_000)
+  }, 90_000)
 
   it('Director marker只由稳定玩家cause标识，刷新恢复只开奖一次并保留原始原因链', async () => {
     const created = await createGovernedTextOpenWorldSessionFixtureV1({

@@ -3,6 +3,7 @@ import { hashProductProductionValueV2 } from '../../src/lib/product-production/h
 import {
   ProductProductionDraftRejectedErrorV1,
   ProductProductionResultUnknownErrorV1,
+  ProductProductionRetryableExecutionErrorV1,
   type ProductProductionTaskExecutionInputV1,
   type ProductProductionTaskUsageV1,
 } from '../../src/lib/product-production/scheduler'
@@ -65,7 +66,8 @@ function execution(input: {
   authorDraftJson?: string
   repairFeedbackText?: string
   signal?: AbortSignal
-  onModelOutput?: (output: string) => Promise<void>
+  onModelOutput?: (output: string) => Promise<void | 'discarded-stale'>
+  beforeAdditionalModelRequest?: () => Promise<void | 'discarded-stale'>
 }): ProductProductionTaskExecutionInputV1 {
   const taskKey = input.taskKey ?? 'p2.experience-design'
   return {
@@ -102,6 +104,7 @@ function execution(input: {
     authorDraftJson: input.authorDraftJson,
     repairFeedbackText: input.repairFeedbackText,
     onModelOutput: input.onModelOutput,
+    beforeAdditionalModelRequest: input.beforeAdditionalModelRequest,
   }
 }
 
@@ -189,6 +192,107 @@ describe('R-OPEN-WORLD3 · shared production model protocol', () => {
     expect(result.artifacts[0]?.rights).toMatchObject({
       existingRight: true,
       origin: 'configured-text-model',
+    })
+  })
+
+  it('scheduler 标记原文回调已失权后立即中断 bounded 协议，不再发起下一次付费调用', async () => {
+    const receipt = await bindingReceipt()
+    const boundedExecution = execution({
+      receipt,
+      onModelOutput: async () => 'discarded-stale',
+    })
+    boundedExecution.attemptBudgetReservation = {
+      modelCalls: 2,
+      inputTokens: 2_000,
+      outputTokens: 1_000,
+      mediaCalls: 0,
+      maximumCostUsd: null,
+      durationMs: 10_000,
+      storageBytes: 0,
+    }
+    let providerCalls = 0
+    const twice: TextOpenWorldProductionDomainExecutorFactoryV1 = ({ runModel }) => async request => {
+      for (let index = 0; index < 2; index += 1) {
+        await runModel({
+          projectId: request.scope.projectId,
+          requirementKey: REQUIREMENT_KEY,
+          expectedCapabilityHash: request.capabilityBindings[0]!.bindingHash,
+          category: request.task.skillId,
+          system: `第${index + 1}次调用`,
+          contextText: request.contextText,
+          maximumOutputTokens: 256,
+          signal: request.signal,
+        })
+      }
+      throw new Error('失权后不应到达领域返回')
+    }
+    const error = await executeTextOpenWorldProductionModelProtocolV1({
+      execution: boundedExecution,
+      factory: twice,
+      callPolicy: 'bounded-derived-context',
+      modelTransport: async () => {
+        providerCalls += 1
+        return modelResponse(receipt)
+      },
+    }).catch(value => value)
+
+    expect(providerCalls).toBe(1)
+    expect(error).toBeInstanceOf(ProductProductionRetryableExecutionErrorV1)
+    expect((error as ProductProductionRetryableExecutionErrorV1).usage).toMatchObject({
+      modelCalls: 1,
+      inputTokens: 41,
+      outputTokens: 13,
+    })
+  })
+
+  it('首个原文已持久化后发生失权时在下一次 bounded provider dispatch 前重新围栏', async () => {
+    const receipt = await bindingReceipt()
+    const boundedExecution = execution({
+      receipt,
+      onModelOutput: async () => undefined,
+      beforeAdditionalModelRequest: async () => 'discarded-stale',
+    })
+    boundedExecution.attemptBudgetReservation = {
+      modelCalls: 2,
+      inputTokens: 2_000,
+      outputTokens: 1_000,
+      mediaCalls: 0,
+      maximumCostUsd: null,
+      durationMs: 10_000,
+      storageBytes: 0,
+    }
+    let providerCalls = 0
+    const twice: TextOpenWorldProductionDomainExecutorFactoryV1 = ({ runModel }) => async request => {
+      for (let index = 0; index < 2; index += 1) {
+        await runModel({
+          projectId: request.scope.projectId,
+          requirementKey: REQUIREMENT_KEY,
+          expectedCapabilityHash: request.capabilityBindings[0]!.bindingHash,
+          category: request.task.skillId,
+          system: `第${index + 1}次调用`,
+          contextText: request.contextText,
+          maximumOutputTokens: 256,
+          signal: request.signal,
+        })
+      }
+      throw new Error('第二次付费调用前应由 epoch 围栏终止')
+    }
+    const error = await executeTextOpenWorldProductionModelProtocolV1({
+      execution: boundedExecution,
+      factory: twice,
+      callPolicy: 'bounded-derived-context',
+      modelTransport: async () => {
+        providerCalls += 1
+        return modelResponse(receipt)
+      },
+    }).catch(value => value)
+
+    expect(providerCalls).toBe(1)
+    expect(error).toBeInstanceOf(ProductProductionRetryableExecutionErrorV1)
+    expect((error as ProductProductionRetryableExecutionErrorV1).usage).toMatchObject({
+      modelCalls: 1,
+      inputTokens: 41,
+      outputTokens: 13,
     })
   })
 

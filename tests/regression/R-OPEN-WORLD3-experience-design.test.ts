@@ -8,19 +8,24 @@ import {
   readContextGatewayManifestV3ForAttemptV1,
   verifyContextGatewayCandidateEvidenceV1,
 } from '../../src/lib/context-gateway/attempt-evidence'
-import { acceptProductBuildArtifact, readAcceptedBuildArtifacts } from '../../src/lib/product-production/artifact-store'
+import { readAcceptedBuildArtifacts } from '../../src/lib/product-production/artifact-store'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
-import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
 import { parseConfirmedProductBriefV1, parseProductProductionSourcePlanV1 } from '../../src/lib/product-production/source-contracts'
 import { runProductProductionUntilBlockedV1 } from '../../src/lib/product-production/scheduler'
-import type { ProductTaskBudgetReservationV1 } from '../../src/lib/types/product-production'
-import { publishProductProductionV1, startProductProductionPreviewV1 } from '../../src/lib/product-production/service'
+import type {
+  ProductBuildArtifactKindV1,
+  ProductBuildArtifactRecordV1,
+  ProductTaskBudgetReservationV1,
+} from '../../src/lib/types/product-production'
+import type { WorkspaceScope } from '../../src/lib/types'
+import { startProductProductionPreviewV1 } from '../../src/lib/product-production/service'
 import { verifyProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
-import { createProductRuntimeInstanceFromSource } from '../../src/lib/product/runtime-instances'
+import { readTextOpenWorldArtifactGovernanceV1 } from '../../src/lib/open-world/creator-artifact-governance'
 import {
   createTextOpenWorldExperienceDesignExecutorV1,
   validateTextOpenWorldExperienceArtifactsV1,
@@ -197,14 +202,15 @@ import {
   createTextOpenWorldProductionExecutorV1,
   createTextOpenWorldSourceLockExecutorV1,
 } from '../../src/lib/open-world/production-executor'
+import { readTextOpenWorldCreatorExecutionBriefV1 } from '../../src/lib/open-world/creator-production-start'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { seedAuthorizedTextOpenWorldCreatorBuildV1 } from '../helpers/text-open-world-creator-build'
 import {
   createTextOpenWorldReleaseQaExecutorV1,
   createTextOpenWorldRuntimePackageExecutorV1,
 } from '../../src/lib/open-world/runtime-package-production'
 import {
   parseProductRuntimePackageV1,
-  verifyProductReleaseManifestV1,
 } from '../../src/lib/product-production/runtime-package'
 import { parseTextOpenWorldModulesV1 } from '../../src/lib/open-world/modules'
 import { createTextOpenWorldActionRegistryV1 } from '../../src/lib/open-world/action-registry'
@@ -216,6 +222,66 @@ import {
   createInitialTextOpenWorldSessionProjectionV1,
   deriveTextOpenWorldContextsV1,
 } from '../../src/lib/open-world/session-projection'
+
+/** Domain-stage unit tests intentionally seed accepted upstream fixtures
+ * without manufacturing durable scheduler Runs. Production code must use the
+ * verified Artifact adoption boundary instead. */
+async function acceptProductBuildArtifact(input: {
+  scope: WorkspaceScope
+  buildId: number
+  controlEpoch: number
+  artifactKey: string
+  requirementKey?: string | null
+  kind: ProductBuildArtifactKindV1
+  mediaKind?: ProductBuildArtifactRecordV1['mediaKind']
+  payload: unknown
+  metadata?: unknown
+  quality?: unknown
+  rights?: unknown
+  contentHash?: string
+  blobObjectId?: number | null
+  mimeType?: string | null
+  byteSize?: number
+  inputHash: string
+}): Promise<ProductBuildArtifactRecordV1> {
+  const payloadJson = canonicalProductProductionJsonV2(input.payload)
+  const contentHash = input.contentHash ?? await hashProductProductionValueV2(input.payload)
+  const rows = await db.productBuildArtifacts
+    .where('[buildId+artifactKey+version]')
+    .between([input.buildId, input.artifactKey, 0], [input.buildId, input.artifactKey, Number.MAX_SAFE_INTEGER])
+    .toArray()
+  const now = Date.now()
+  const row: ProductBuildArtifactRecordV1 = {
+    projectId: input.scope.projectId,
+    worldId: input.scope.worldId,
+    workId: input.scope.workId,
+    buildId: input.buildId,
+    artifactKey: input.artifactKey,
+    requirementKey: input.requirementKey ?? null,
+    version: Math.max(0, ...rows.map(item => item.version)) + 1,
+    kind: input.kind,
+    mediaKind: input.mediaKind ?? null,
+    status: 'accepted',
+    producerRunId: null,
+    producerReceiptHash: null,
+    controlEpoch: input.controlEpoch,
+    inputHash: input.inputHash,
+    contentHash,
+    payloadJson,
+    metadataJson: canonicalProductProductionJsonV2(input.metadata ?? {}),
+    qualityJson: canonicalProductProductionJsonV2(input.quality ?? {}),
+    rightsJson: canonicalProductProductionJsonV2(input.rights ?? {}),
+    blobObjectId: input.blobObjectId ?? null,
+    mimeType: input.mimeType ?? null,
+    byteSize: input.byteSize ?? new TextEncoder().encode(payloadJson).byteLength,
+    parentArtifactHash: null,
+    carriedFrom: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const id = await db.productBuildArtifacts.add(row) as number
+  return { ...row, id }
+}
 
 const CAPABILITY_HASH = 'b'.repeat(64)
 const NOW = 1_788_720_000_000
@@ -380,7 +446,7 @@ async function fixture() {
   })
   const planHash = await hashProductProductionValueV2(plan)
   await db.productBuilds.update(build.id!, {
-    planJson: JSON.stringify(plan),
+    planJson: canonicalProductProductionJsonV2(plan),
     planHash,
   })
   const p0 = plan.tasks.find(task => task.taskKey === 'p0.source-lock')!
@@ -463,6 +529,47 @@ async function fixture() {
     contextText: assembled.text,
     context: JSON.parse(assembled.text) as TextOpenWorldExperienceInputContextV1,
     contextEvidence: assembled.sourceEvidence,
+  }
+}
+
+/**
+ * Scheduler integration must start from the formal Creator authorization
+ * chain. The broader domain suite intentionally keeps its compact generic
+ * fixture because it invokes stage executors directly and does not exercise
+ * official Artifact adoption.
+ */
+async function creatorSchedulerFixture() {
+  const owned = await seedCurrentProductWorld(`TOW scheduler ${crypto.randomUUID()}`)
+  const creator = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+    source: {
+      kind: 'world-release',
+      scope: owned.scope,
+      localReleaseRecordId: owned.release.id!,
+      expectedReleaseHash: owned.release.contentHash,
+    },
+    sessionKey: `experience-scheduler-${crypto.randomUUID()}`,
+  })
+  const [production, build, briefRow] = await Promise.all([
+    db.productProductions.get(creator.productionId),
+    db.productBuilds.get(creator.buildId),
+    db.productProductionBriefs
+      .where('[productionId+revision]')
+      .equals([creator.productionId, creator.brief.revision])
+      .first(),
+  ])
+  if (!production?.id || !build?.id || !briefRow?.id) {
+    throw new Error('正式 Creator scheduler 测试数据创建失败')
+  }
+  const contracts = await readTextOpenWorldCreatorExecutionBriefV1({
+    briefRow,
+    planJson: build.planJson,
+  })
+  return {
+    ...owned,
+    production,
+    build,
+    briefRow,
+    brief: contracts.executionBrief,
   }
 }
 
@@ -2864,19 +2971,14 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
       .rejects.toThrow(/未交付的SourceLedger claim/)
   }, 30_000)
 
-  it('原子阶段包确实超过Plan预算时持久化阻断，且不调用模型', async () => {
-    const input = await fixture()
-    const plan = await createTextOpenWorldProductionPlanV1({
-      buildNumber: input.build.buildNumber,
-      controlEpoch: input.build.controlEpoch,
-      briefHash: input.briefRow.briefHash,
-      brief: input.brief,
-    })
+  it('Creator 授权后即使重算Hash也不能压缩Plan预算，且不调用模型', async () => {
+    const input = await creatorSchedulerFixture()
+    const plan = JSON.parse(input.build.planJson) as Awaited<ReturnType<typeof createTextOpenWorldProductionPlanV1>>
     const p2 = plan.tasks.find(task => task.taskKey === 'p2.experience-design')!
     p2.budgetReservation.inputTokens = 1
     const planHash = await hashProductProductionValueV2(plan)
     await db.productBuilds.update(input.build.id!, {
-      planJson: JSON.stringify(plan),
+      planJson: canonicalProductProductionJsonV2(plan),
       planHash,
     })
     let p2ExecutorCalls = 0
@@ -2894,7 +2996,7 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
         },
       },
     })
-    const projection = await runProductProductionUntilBlockedV1({
+    await expect(runProductProductionUntilBlockedV1({
       scope: input.scope,
       productionId: input.production.id!,
       executor,
@@ -2905,18 +3007,9 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
           bindingHash: CAPABILITY_HASH,
           adapterId: 'configured-text.v1',
         })),
-    })
+    })).rejects.toThrow(/作者授权 DAG 或预算/)
     expect(p2ExecutorCalls).toBe(0)
-    expect(projection.tasks.find(task => task.taskKey === 'p2.experience-design'))
-      .toMatchObject({ status: 'blocked', blocker: 'run-failed' })
-    const blockedBuild = (await db.productBuilds.get(input.build.id!))!
-    expect(blockedBuild).toMatchObject({ status: 'recovery-required' })
-    expect(JSON.parse(blockedBuild.failureJson)).toMatchObject({
-      taskKey: 'p2.experience-design',
-      code: 'task-context-budget-exceeded',
-    })
-    expect(JSON.parse(blockedBuild.budgetLedgerJson).tasks['p2.experience-design'])
-      .toMatchObject({ status: 'failed', errorCode: 'task-context-budget-exceeded' })
+    expect(await db.productBuilds.get(input.build.id!)).toMatchObject({ status: 'authorized' })
   }, 30_000)
 
   it('即使重新计算Artifact Hash，也拒绝篡改交互、主线和完整缺口边界', async () => {
@@ -6040,7 +6133,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
   }, 600_000)
 
   it('由共享durable scheduler自动执行专属DAG并收口为可恢复Build，不需要人工写Artifact JSON', async () => {
-    const input = await fixture()
+    const input = await creatorSchedulerFixture()
     const production = (await db.productProductions.get(input.production.id!))!
     let p1Calls = 0
     let p1ModelAttempts = 0
@@ -6137,6 +6230,33 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     expect(parseProductRuntimePackageV1(
       artifacts.find(row => row.artifactKey === 'text-open-world.runtime-package')!.payloadJson,
     ).textOpenWorldVNext).toBeTruthy()
+    const governance = await readTextOpenWorldArtifactGovernanceV1({
+      scope: input.scope,
+      productionId: production.id!,
+    })
+    expect(
+      governance.summary.currentProblemArtifactCount,
+      JSON.stringify({
+        diagnostics: governance.diagnostics,
+        artifacts: governance.artifacts.filter(row => row.health !== 'verified').map(row => ({
+          artifactKey: row.artifactKey,
+          health: row.health,
+          diagnostics: row.diagnostics,
+        })),
+      }, null, 2),
+    ).toBe(0)
+    expect(governance.summary.currentVerifiedArtifactCount).toBe(artifacts.length)
+    expect(governance.summary.currentProductionValidatedArtifactCount).toBe(artifacts.length)
+    expect(governance.summary.currentIntegrityOnlyArtifactCount).toBe(0)
+    expect(governance.entities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'character', status: 'verified' }),
+      expect.objectContaining({ kind: 'region', status: 'verified' }),
+      expect.objectContaining({ kind: 'quest', status: 'verified' }),
+      expect.objectContaining({ kind: 'item', status: 'verified' }),
+      expect.objectContaining({ kind: 'enemy', status: 'verified' }),
+      expect.objectContaining({ kind: 'vendor', status: 'verified' }),
+      expect.objectContaining({ kind: 'recipe', status: 'verified' }),
+    ]))
     const p1RunRow = await db.agentRuns.where('[parentRunId+parentRelation]')
       .equals([projection.rootRunId!, 'task:p1.source-curation']).first()
     expect(p1RunRow?.id).toBeTruthy()
@@ -6203,25 +6323,12 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     expect(state).toMatchObject({
       interaction: null, adventure: null, openWorldEvolution: null, openWorld: null,
     })
-    const published = await publishProductProductionV1({
-      scope: input.scope, productionId: production.id!,
-    })
-    const releaseRow = (await db.productReleases.get(published.receipt.productReleaseId))!
-    expect(releaseRow).toMatchObject({ productType: 'text-open-world' })
-    const releaseManifest = await verifyProductReleaseManifestV1(releaseRow.manifestJson)
-    expect(releaseManifest.packageHash).toBe(build.packageHash)
-    for (const resourceKey of curatedResourceKeys) {
-      const sourceEvidence = releaseManifest.sourceContracts.sourceManifest?.resources
-        .find(resource => resource.resourceKey === resourceKey)
-      expect(sourceEvidence?.status).toBe('matched')
-      expect(sourceEvidence?.contextManifestHashes.some(hash => p1ManifestHashes.has(hash))).toBe(true)
-      expect(sourceEvidence?.contextManifestHashes).not.toContain(failedBatchManifestEvent!.payload.manifestHash)
-    }
-    const releasedSession = await createProductRuntimeInstanceFromSource({
-      scope: input.scope,
-      source: { kind: 'release', productReleaseId: published.receipt.productReleaseId },
-      title: '文字开放世界正式版本',
-    })
-    expect((await readProductRuntimeState(releasedSession.id!)).textOpenWorld).toBeTruthy()
+    // G5-05 closes governed production evidence and Build Preview. The
+    // Creator dual-source -> portable ProductRelease contract is owned by
+    // G5-10; do not disguise the generic WorldRelease-only publisher as that
+    // completed capability here.
+    expect(curatedResourceKeys.length).toBeGreaterThan(0)
+    expect(p1ManifestHashes.size).toBeGreaterThan(0)
+    expect(await db.productReleases.where('workId').equals(input.scope.workId).count()).toBe(0)
   }, 600_000)
 })

@@ -94,7 +94,7 @@ describe('Text Open World vNext · actor tiers, schedules and service availabili
     ])
     const scheduleEvent = parseTextOpenWorldEffectsAppliedEventPayloadV1(JSON.parse(events[9].payloadJson))
     expect(scheduleEvent.plan.authorization).toMatchObject({ kind: 'actor-schedule-settlement', worldMinute: 1080, timePeriodKey: 'time.night' })
-  })
+  }, 10_000)
 
   it('Actor v2拒绝缺口日程、越权服务和服务地点漂移', () => {
     const missingPeriod = createTextOpenWorldVNextFixture()

@@ -44,6 +44,10 @@ import {
 } from '../open-world/creator-production-start'
 import { verifyTextOpenWorldCreatorProductionPreflightConfirmationV1 } from '../open-world/creator-production-preflight'
 import { useAIConfigStore } from '../../stores/ai-config'
+import {
+  assertProductProductionBudgetLedgerV1,
+  resolveProductProductionUnknownResultReservationLedgerV2,
+} from './scheduler'
 
 export type ProductProductionErrorCodeV1 =
   | 'production-not-found'
@@ -96,6 +100,139 @@ function safeJson(value: unknown): string {
     throw new Error('[product-production] command result 超出安全上限')
   }
   return json
+}
+
+interface PausedLedgerReservationV1 {
+  taskKey: string
+  runId: number
+  attempt: number
+  controlEpoch: number
+  providerCallPossible: boolean
+}
+
+interface PausedReservationAccountingV1 {
+  taskKey: string
+  runId: number
+  attempt: number
+  controlEpoch: number
+  requestedDisposition: 'confirmed-not-charged' | 'charge-reservation-upper-bound' | null
+  effectiveDisposition:
+    | 'provider-actual-charge'
+    | 'author-confirmed-not-charged'
+    | 'author-charged-reservation-upper-bound'
+    | 'system-released-before-dispatch'
+    | 'system-released-no-usage-reported'
+  usage: {
+    modelCalls: number
+    inputTokens: number
+    outputTokens: number
+    mediaCalls: number
+    costUsd: number | null
+    durationMs: number
+    storageBytes: number
+  }
+}
+
+/** Read only after the scheduler's strict public ledger guard succeeds. */
+function pausedLedgerReservations(value: string): PausedLedgerReservationV1[] {
+  assertProductProductionBudgetLedgerV1(value)
+  if (value === '{}' || !value.trim()) return []
+  const ledger = JSON.parse(value) as {
+    version: number
+    reservations?: Record<string, {
+      runId: number
+      attempt: number
+      controlEpoch: number
+      taskKey: string
+      budget: { modelCalls: number; mediaCalls: number }
+    }>
+  }
+  if (ledger.version !== 2 || !ledger.reservations) return []
+  return Object.values(ledger.reservations).map(reservation => ({
+    taskKey: reservation.taskKey,
+    runId: reservation.runId,
+    attempt: reservation.attempt,
+    controlEpoch: reservation.controlEpoch,
+    providerCallPossible: reservation.budget.modelCalls > 0 || reservation.budget.mediaCalls > 0,
+  })).sort((left, right) => (
+    left.runId - right.runId || left.attempt - right.attempt || left.taskKey.localeCompare(right.taskKey)
+  ))
+}
+
+function pauseReservationIdentity(value: Pick<PausedLedgerReservationV1, 'taskKey' | 'runId' | 'attempt' | 'controlEpoch'>): string {
+  return `${value.taskKey}:${value.runId}:${value.attempt}:${value.controlEpoch}`
+}
+
+type PausedLedgerAttemptStateV1 =
+  | { kind: 'absent' }
+  | {
+      kind: 'reservation'
+      taskKey: string
+      runId: number
+      attempt: number
+      controlEpoch: number
+    }
+  | {
+      kind: 'charge'
+      taskKey: string
+      runId: number
+      attempt: number
+      controlEpoch: number | null
+      usage: PausedReservationAccountingV1['usage']
+      resolution:
+        | null
+        | 'author-confirmed-not-charged'
+        | 'author-charged-reservation-upper-bound'
+        | 'system-released-before-dispatch'
+        | 'system-released-no-usage-reported'
+    }
+
+function pausedLedgerAttemptState(
+  value: string,
+  identity: Pick<PausedLedgerReservationV1, 'runId' | 'attempt'>,
+): PausedLedgerAttemptStateV1 {
+  assertProductProductionBudgetLedgerV1(value)
+  if (value === '{}' || !value.trim()) return { kind: 'absent' }
+  const ledger = JSON.parse(value) as {
+    version: number
+    charges?: Record<string, {
+      taskKey: string
+      runId: number
+      attempt: number
+      controlEpoch: number | null
+      usage: PausedReservationAccountingV1['usage']
+      resolution?:
+        | null
+        | 'author-confirmed-not-charged'
+        | 'author-charged-reservation-upper-bound'
+        | 'system-released-before-dispatch'
+        | 'system-released-no-usage-reported'
+    }>
+    reservations?: Record<string, {
+      taskKey: string
+      runId: number
+      attempt: number
+      controlEpoch: number
+    }>
+  }
+  if (ledger.version !== 2) return { kind: 'absent' }
+  const key = `${identity.runId}:${identity.attempt}`
+  const reservation = ledger.reservations?.[key]
+  if (reservation) return { kind: 'reservation', ...reservation }
+  const charge = ledger.charges?.[key]
+  if (charge) return { kind: 'charge', ...charge, resolution: charge.resolution ?? null }
+  return { kind: 'absent' }
+}
+
+function requirePausedLedgerAttemptState(
+  value: string,
+  identity: Pick<PausedLedgerReservationV1, 'runId' | 'attempt'>,
+): PausedLedgerAttemptStateV1 {
+  try {
+    return pausedLedgerAttemptState(value, identity)
+  } catch {
+    reject('invalid-state-transition', '暂停恢复预算账本损坏')
+  }
 }
 
 function readResult(value: string): Record<string, unknown> {
@@ -454,32 +591,208 @@ async function applyCommand(input: {
     if (!['producing', 'preview-ready'].includes(production.status)) reject('invalid-state-transition', '当前 Production 不能暂停')
     const build = await currentBuild(production)
     if (['released', 'cancelled', 'failed', 'archived', 'paused'].includes(build.status)) reject('invalid-state-transition', '当前 Build 不能暂停')
+    const reservations = pausedLedgerReservations(build.budgetLedgerJson)
+    let budgetLedgerJson = build.budgetLedgerJson
+    const automaticallySettledReservations: PausedReservationAccountingV1[] = []
+    for (const reservation of reservations.filter(item => !item.providerCallPossible)) {
+      const settled = resolveProductProductionUnknownResultReservationLedgerV2({
+        budgetLedgerJson,
+        taskKey: reservation.taskKey,
+        runId: reservation.runId,
+        attempt: reservation.attempt,
+        controlEpoch: reservation.controlEpoch,
+        disposition: 'confirmed-not-charged',
+      })
+      budgetLedgerJson = settled.budgetLedgerJson
+      automaticallySettledReservations.push({
+        taskKey: reservation.taskKey,
+        runId: reservation.runId,
+        attempt: reservation.attempt,
+        controlEpoch: reservation.controlEpoch,
+        ...settled.accounting,
+      })
+    }
+    const providerReservations = reservations
+      .filter(item => item.providerCallPossible)
+      .map(({ providerCallPossible: _providerCallPossible, ...reservation }) => reservation)
     const controlEpoch = production.controlEpoch + 1
     const stateRevision = production.stateRevision + 1
     await db.productBuilds.update(build.id, {
-      status: 'paused', resumeState: build.status, controlEpoch, stateRevision: build.stateRevision + 1,
-      failureJson: safeJson({ code: 'user-paused', reason: command.reason }), updatedAt: now,
+      status: 'paused',
+      resumeState: build.status,
+      controlEpoch,
+      stateRevision: build.stateRevision + 1,
+      budgetLedgerJson,
+      failureJson: safeJson(providerReservations.length ? {
+        code: 'pause-provider-result-unknown',
+        detail: '暂停时仍有供应商请求未返回；恢复前必须逐项封账。',
+        reason: command.reason,
+        pausedProviderReservations: providerReservations,
+        automaticallySettledReservations,
+      } : {
+        code: 'user-paused',
+        reason: command.reason,
+        automaticallySettledReservations,
+      }),
+      updatedAt: now,
     })
     await db.productProductions.update(production.id, { status: 'paused', controlEpoch, stateRevision, updatedAt: now })
     production = { ...production, status: 'paused', controlEpoch, stateRevision, updatedAt: now }
-    return { production, result: { buildNumber: build.buildNumber, controlEpoch, resumeState: build.status } }
+    return { production, result: {
+      buildNumber: build.buildNumber,
+      controlEpoch,
+      resumeState: build.status,
+      requiresReservationResolution: providerReservations.length > 0,
+      pausedProviderReservations: providerReservations,
+      automaticallySettledReservations,
+    } }
   }
 
   if (command.type === 'resume') {
     if (production.status !== 'paused') reject('invalid-state-transition', 'Production 不在暂停态')
     const build = await currentBuild(production)
-    if (build.status !== 'paused' || !build.resumeState) reject('invalid-state-transition', 'Build 没有可恢复状态')
+    if (build.status !== 'paused' || !build.resumeState) {
+      reject('invalid-state-transition', 'Build 没有可恢复状态')
+    }
+    let budgetLedgerJson = build.budgetLedgerJson
+    let pausedReservationAccountings: PausedReservationAccountingV1[] = []
+    let failure: Record<string, unknown>
+    try {
+      const parsed = JSON.parse(build.failureJson) as unknown
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid')
+      failure = parsed as Record<string, unknown>
+    } catch {
+      reject('invalid-state-transition', '暂停恢复证据损坏')
+    }
+    if (failure!.code === 'pause-provider-result-unknown') {
+      if (!Array.isArray(failure!.pausedProviderReservations)
+        || failure!.pausedProviderReservations.length < 1) {
+        reject('invalid-state-transition', '暂停恢复 reservation 证据损坏')
+      }
+      const frozen = (failure!.pausedProviderReservations as unknown[]).map(value => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          reject('invalid-state-transition', '暂停恢复 reservation 证据损坏')
+        }
+        const row = value as Record<string, unknown>
+        if (typeof row.taskKey !== 'string'
+          || !Number.isSafeInteger(row.runId) || Number(row.runId) < 1
+          || !Number.isSafeInteger(row.attempt) || Number(row.attempt) < 1
+          || !Number.isSafeInteger(row.controlEpoch) || Number(row.controlEpoch) < 0) {
+          reject('invalid-state-transition', '暂停恢复 reservation 身份损坏')
+        }
+        return {
+          taskKey: row.taskKey,
+          runId: Number(row.runId),
+          attempt: Number(row.attempt),
+          controlEpoch: Number(row.controlEpoch),
+        }
+      }).sort((left, right) => pauseReservationIdentity(left).localeCompare(pauseReservationIdentity(right)))
+      const requested = [...(command.pausedReservationDispositions ?? [])]
+        .sort((left, right) => pauseReservationIdentity(left).localeCompare(pauseReservationIdentity(right)))
+      const frozenByIdentity = new Map(frozen.map(reservation => [pauseReservationIdentity(reservation), reservation]))
+      if (frozenByIdentity.size !== frozen.length) {
+        reject('invalid-state-transition', '暂停恢复 reservation 证据包含重复身份')
+      }
+      if (requested.some(reservation => !frozenByIdentity.has(pauseReservationIdentity(reservation)))) {
+        reject('invalid-state-transition', '恢复处置包含不属于本次暂停的 Run/attempt/epoch reservation')
+      }
+      const requestedByIdentity = new Map(requested.map(reservation => [pauseReservationIdentity(reservation), reservation]))
+      for (const reservation of frozen) {
+        const attempt = requirePausedLedgerAttemptState(budgetLedgerJson, reservation)
+        if (attempt.kind === 'absent') {
+          reject('invalid-state-transition', '暂停 reservation 缺少可验证的 charge 或 release tombstone')
+        }
+        if (attempt.taskKey !== reservation.taskKey
+          || attempt.runId !== reservation.runId
+          || attempt.attempt !== reservation.attempt
+          || attempt.controlEpoch !== reservation.controlEpoch) {
+          reject('invalid-state-transition', '暂停 reservation 已变化或不再属于冻结的 epoch')
+        }
+        if (attempt.kind === 'reservation'
+          && !requestedByIdentity.has(pauseReservationIdentity(reservation))) {
+          reject('invalid-state-transition', '恢复前必须精确处置仍未封账的 Run/attempt/epoch reservation')
+        }
+      }
+      pausedReservationAccountings = frozen.map(reservation => {
+        const identity = pauseReservationIdentity(reservation)
+        const disposition = requestedByIdentity.get(identity)?.disposition ?? null
+        const attempt = requirePausedLedgerAttemptState(budgetLedgerJson, reservation)
+        if (attempt.kind === 'reservation' || (attempt.kind === 'charge' && disposition)) {
+          if (!disposition) {
+            reject('invalid-state-transition', '恢复前必须处置仍未封账的 reservation')
+          }
+          let settled: ReturnType<typeof resolveProductProductionUnknownResultReservationLedgerV2>
+          try {
+            settled = resolveProductProductionUnknownResultReservationLedgerV2({
+              budgetLedgerJson,
+              taskKey: reservation.taskKey,
+              runId: reservation.runId,
+              attempt: reservation.attempt,
+              controlEpoch: reservation.controlEpoch,
+              disposition,
+            })
+          } catch {
+            reject('invalid-state-transition', '暂停 reservation 已由不同处置封账或身份发生变化')
+          }
+          budgetLedgerJson = settled.budgetLedgerJson
+          return {
+            taskKey: reservation.taskKey,
+            runId: reservation.runId,
+            attempt: reservation.attempt,
+            controlEpoch: reservation.controlEpoch,
+            ...settled.accounting,
+          }
+        }
+        if (attempt.kind === 'charge') {
+          return {
+            taskKey: reservation.taskKey,
+            runId: reservation.runId,
+            attempt: reservation.attempt,
+            controlEpoch: reservation.controlEpoch,
+            requestedDisposition: null,
+            effectiveDisposition: attempt.resolution ?? 'provider-actual-charge',
+            usage: structuredClone(attempt.usage),
+          }
+        }
+        if (attempt.kind === 'absent') {
+          reject('invalid-state-transition', '暂停 reservation 缺少封账证据')
+        }
+        reject('invalid-state-transition', '暂停 reservation 未能完成封账')
+      })
+      if (pausedLedgerReservations(budgetLedgerJson).length > 0) {
+        reject('invalid-state-transition', '恢复前仍存在未封账 reservation')
+      }
+    } else if (failure!.code !== 'user-paused') {
+      reject('invalid-state-transition', '当前暂停证据不能恢复')
+    } else if (command.pausedReservationDispositions) {
+      reject('invalid-state-transition', '普通暂停没有待处置 provider reservation')
+    }
     const restored = build.resumeState
     const controlEpoch = production.controlEpoch + 1
     const stateRevision = production.stateRevision + 1
     await db.productBuilds.update(build.id, {
-      status: restored, resumeState: null, controlEpoch, stateRevision: build.stateRevision + 1,
-      failureJson: '{}', updatedAt: now,
+      status: restored,
+      resumeState: null,
+      controlEpoch,
+      stateRevision: build.stateRevision + 1,
+      budgetLedgerJson,
+      failureJson: pausedReservationAccountings.length ? safeJson({
+        code: 'user-pause-resolved',
+        previousFailureCode: 'pause-provider-result-unknown',
+        pausedReservationAccountings,
+        resolvedAt: now,
+      }) : '{}',
+      updatedAt: now,
     })
     const productionStatus = restored === 'preview-ready' || restored === 'release-ready' ? 'preview-ready' as const : 'producing' as const
     await db.productProductions.update(production.id, { status: productionStatus, controlEpoch, stateRevision, updatedAt: now })
     production = { ...production, status: productionStatus, controlEpoch, stateRevision, updatedAt: now }
-    return { production, result: { buildNumber: build.buildNumber, controlEpoch, restored } }
+    return { production, result: {
+      buildNumber: build.buildNumber,
+      controlEpoch,
+      restored,
+      pausedReservationAccountings,
+    } }
   }
 
   if (command.type === 'stop') {
@@ -627,6 +940,70 @@ async function applyCommand(input: {
         reject('invalid-state-transition', '作者修订必须对应当前失败且支持作者修订的模型任务')
       }
     }
+    const unknownResultReservation = command.resolution.unknownResultReservation
+    let resolvedUnknownReservation: ReturnType<
+      typeof resolveProductProductionUnknownResultReservationLedgerV2
+    > | null = null
+    const providerReservationFailure = failure.code === 'unknown-result'
+      || failure.code === 'provider-response-uncheckpointed'
+    if (providerReservationFailure) {
+      if (command.resolution.action !== 'cancel' && !unknownResultReservation) {
+        reject('invalid-state-transition', failure.code === 'provider-response-uncheckpointed'
+          ? '已观察到供应商响应但用量未结算；必须按冻结预留上限封账后才能重试'
+          : '结果未知的任务必须先明确确认未计费，或按预留上限记账')
+      }
+      if (unknownResultReservation) {
+        if (failure.code === 'provider-response-uncheckpointed'
+          && unknownResultReservation.disposition !== 'charge-reservation-upper-bound') {
+          reject('invalid-state-transition', '已观察到供应商响应，不能声明为未计费')
+        }
+        const provenance = failure.failureProvenance != null
+          && typeof failure.failureProvenance === 'object'
+          && !Array.isArray(failure.failureProvenance)
+          ? failure.failureProvenance as Record<string, unknown>
+          : null
+        if (!provenance
+          || provenance.runId !== unknownResultReservation.runId
+          || provenance.attempt !== unknownResultReservation.attempt
+          || provenance.controlEpoch !== unknownResultReservation.controlEpoch
+          || failure.taskKey !== command.blockerKey) {
+          reject('invalid-state-transition', 'unknown-result 处置没有精确命中当前失败 Run/attempt/epoch')
+        }
+        try {
+          resolvedUnknownReservation = resolveProductProductionUnknownResultReservationLedgerV2({
+            budgetLedgerJson: build.budgetLedgerJson,
+            taskKey: command.blockerKey,
+            ...unknownResultReservation,
+          })
+        } catch {
+          reject('invalid-state-transition', 'unknown-result reservation 已变化或不再可处置')
+        }
+      }
+    } else if (unknownResultReservation) {
+      reject('invalid-state-transition', '只有 provider 结果未结算 blocker 可以处置 reservation')
+    }
+    const unknownResultAccounting = resolvedUnknownReservation && unknownResultReservation
+      ? {
+          runId: unknownResultReservation.runId,
+          attempt: unknownResultReservation.attempt,
+          controlEpoch: unknownResultReservation.controlEpoch,
+          ...resolvedUnknownReservation.accounting,
+        }
+      : null
+    // `command.resolution` is the immutable author request. The resolved
+    // failure state records the effective accounting outcome separately so a
+    // provider charge that wins the race cannot be misrepresented as an
+    // author-confirmed zero charge.
+    const persistedResolution = unknownResultAccounting
+      ? {
+          action: command.resolution.action,
+          note: command.resolution.note,
+          ...(command.resolution.authorDraftJson
+            ? { authorDraftJson: command.resolution.authorDraftJson }
+            : {}),
+          unknownResultAccounting,
+        }
+      : command.resolution
     const previousFailure = {
       taskKey: failure.taskKey,
       code: failure.code,
@@ -637,9 +1014,11 @@ async function applyCommand(input: {
     if (command.resolution.action === 'cancel') {
       await db.productBuilds.update(build.id, {
         status: 'cancelled', resumeState: null, controlEpoch,
+        budgetLedgerJson: resolvedUnknownReservation?.budgetLedgerJson ?? build.budgetLedgerJson,
         failureJson: safeJson({
           blockerKey: command.blockerKey,
-          resolution: command.resolution,
+          resolution: persistedResolution,
+          unknownResultAccounting,
           previousFailure,
         }),
         stateRevision: build.stateRevision + 1, completedAt: now, updatedAt: now,
@@ -651,9 +1030,11 @@ async function applyCommand(input: {
     } else {
       await db.productBuilds.update(build.id, {
         status: 'building', resumeState: null, controlEpoch,
+        budgetLedgerJson: resolvedUnknownReservation?.budgetLedgerJson ?? build.budgetLedgerJson,
         failureJson: safeJson({
           blockerKey: command.blockerKey,
-          resolution: command.resolution,
+          resolution: persistedResolution,
+          unknownResultAccounting,
           previousFailure,
           resolvedAt: now,
         }),
@@ -666,7 +1047,7 @@ async function applyCommand(input: {
     }
     return { production, result: {
       buildNumber: build.buildNumber, blockerKey: command.blockerKey,
-      action: command.resolution.action, controlEpoch,
+      action: command.resolution.action, controlEpoch, unknownResultAccounting,
     } }
   }
 
@@ -845,34 +1226,6 @@ async function executeTransaction(input: {
     }
 
     const transactionCreatorStart = input.preparedCreatorStart ?? null
-    if (command.type === 'authorize-text-open-world-creator-start') {
-      if (!transactionCreatorStart) {
-        throw new Error('[product-production] Creator start 缺少事务外完整预检结果')
-      }
-      // The immutable Plan and its hashes were generated before opening the
-      // transaction. Re-read only the mutable external facts here while all
-      // source stores and Production stores are locked; no provider call is
-      // permitted in this boundary.
-      await assertTextOpenWorldCreatorProductionSourceCurrentV1({
-        scope,
-        sourceLocator: command.sourceLocator,
-      })
-      const aiState = useAIConfigStore.getState()
-      const confirmation = await Dexie.waitFor(
-        verifyTextOpenWorldCreatorProductionPreflightConfirmationV1({
-          brief: transactionCreatorStart.brief,
-          preflight: command.preflight,
-          confirmation: command.confirmation,
-          projectId: scope.projectId,
-          aiConfig: aiState.config,
-          rememberApiKey: aiState.rememberApiKey,
-        }),
-      )
-      if (confirmation.confirmationHash !== transactionCreatorStart.start.confirmation.confirmationHash
-        || transactionCreatorStart.start.productionPlanHash !== command.expectedPlanHash) {
-        throw new Error('[product-production] Creator 来源、模型或冻结计划在原子授权边界发生变化')
-      }
-    }
 
     const claim = stampNewRecord(scope, 'productProductionCommands', {
       projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId, productionId: production.id,
@@ -885,6 +1238,40 @@ async function executeTransaction(input: {
     const claimId = await db.productProductionCommands.add(claim) as number
 
     try {
+      if (command.type === 'authorize-text-open-world-creator-start') {
+        if (!transactionCreatorStart) {
+          throw new Error('[product-production] Creator start 缺少事务外完整预检结果')
+        }
+        // The immutable Plan and its hashes were generated before opening the
+        // transaction. Re-read only the mutable external facts here while all
+        // source stores and Production stores are locked; no provider call is
+        // permitted in this boundary. Expected source races become a durable,
+        // stable source-stale command result instead of an unclassified throw.
+        try {
+          await assertTextOpenWorldCreatorProductionSourceCurrentV1({
+            scope,
+            sourceLocator: command.sourceLocator,
+            novelSourceCasWitness: transactionCreatorStart.novelSourceCasWitness,
+          })
+        } catch {
+          reject('source-stale', 'source-stale：Creator 来源在原子授权边界已经变化')
+        }
+        const aiState = useAIConfigStore.getState()
+        const confirmation = await Dexie.waitFor(
+          verifyTextOpenWorldCreatorProductionPreflightConfirmationV1({
+            brief: transactionCreatorStart.brief,
+            preflight: command.preflight,
+            confirmation: command.confirmation,
+            projectId: scope.projectId,
+            aiConfig: aiState.config,
+            rememberApiKey: aiState.rememberApiKey,
+          }),
+        )
+        if (confirmation.confirmationHash !== transactionCreatorStart.start.confirmation.confirmationHash
+          || transactionCreatorStart.start.productionPlanHash !== command.expectedPlanHash) {
+          reject('source-stale', 'source-stale：Creator 来源、模型或冻结计划在原子授权边界发生变化')
+        }
+      }
       const applied = await applyCommand({
         scope, production, command,
         preparedBriefHash: input.preparedBriefHash,

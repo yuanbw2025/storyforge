@@ -132,7 +132,7 @@ describe('R-PRODUCTPROD-1A1 · current product-production lifecycle', () => {
     expect(await db.projects.count()).toBe(before)
   })
 
-  it.sequential('跨 Build 只复用已验收 Artifact，错误父链或损坏媒资时事务零写入', async () => {
+  it.sequential('跨 Build 拒绝未形成 terminal seal 的旧式伪造来源且事务零写入', async () => {
     const source = await db.projects.where('name').equals('PRODUCTPROD 生产生命周期').first()
     const ownership = await resolveWorkspaceOwnership(source!.id!)
     const production = await db.productProductions.where('projectId').equals(source!.id!).first()
@@ -152,25 +152,15 @@ describe('R-PRODUCTPROD-1A1 · current product-production lifecycle', () => {
       updatedAt: Date.now(),
     }) as number
 
-    const carried = await carryForwardProductBuildArtifactsAcrossBuildsV1({
+    await expect(carryForwardProductBuildArtifactsAcrossBuildsV1({
       scope: ownership.scope,
       sourceBuildId: sourceBuild!.id!,
       targetBuildId,
       targetControlEpoch: 2,
       artifactKeys: [sourceArtifact!.artifactKey],
-    })
-    expect(carried).toHaveLength(1)
-    expect(carried[0]).toMatchObject({
-      buildId: targetBuildId,
-      status: 'carried-forward',
-      contentHash: sourceArtifact!.contentHash,
-      blobObjectId: sourceArtifact!.blobObjectId,
-      parentArtifactHash: sourceArtifact!.contentHash,
-    })
-    expect(await db.productBuildArtifacts.get(sourceArtifact!.id!)).toMatchObject({ status: 'accepted' })
-    expect(await db.mediaBlobObjects.where('projectId').equals(source!.id!).count()).toBe(1)
+    })).rejects.toThrow(/尚未封存/)
+    expect(await db.productBuildArtifacts.where('buildId').equals(targetBuildId).count()).toBe(0)
 
-    await db.productBuildArtifacts.delete(carried[0].id!)
     await db.productBuilds.update(targetBuildId, { parentBuildNumber: 999 })
     await expect(carryForwardProductBuildArtifactsAcrossBuildsV1({
       scope: ownership.scope,
@@ -180,18 +170,8 @@ describe('R-PRODUCTPROD-1A1 · current product-production lifecycle', () => {
       artifactKeys: [sourceArtifact!.artifactKey],
     })).rejects.toThrow(/来源\/目标关系不可复用/)
     expect(await db.productBuildArtifacts.where('buildId').equals(targetBuildId).count()).toBe(0)
-
-    await db.productBuilds.update(targetBuildId, { parentBuildNumber: sourceBuild!.buildNumber })
-    await db.mediaBlobObjects.update(sourceArtifact!.blobObjectId!, { storageState: 'corrupt' })
-    await expect(carryForwardProductBuildArtifactsAcrossBuildsV1({
-      scope: ownership.scope,
-      sourceBuildId: sourceBuild!.id!,
-      targetBuildId,
-      targetControlEpoch: 2,
-      artifactKeys: [sourceArtifact!.artifactKey],
-    })).rejects.toThrow(/媒资对象损坏/)
-    expect(await db.productBuildArtifacts.where('buildId').equals(targetBuildId).count()).toBe(0)
-    await db.mediaBlobObjects.update(sourceArtifact!.blobObjectId!, { storageState: 'ready' })
+    expect(await db.productBuildArtifacts.get(sourceArtifact!.id!)).toMatchObject({ status: 'accepted' })
+    expect(await db.mediaBlobObjects.where('projectId').equals(source!.id!).count()).toBe(1)
   })
 
   it.sequential('删除 Work 会清理生产根、Brief、命令、Build、Artifact 与共享媒资', async () => {

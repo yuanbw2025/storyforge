@@ -18,6 +18,10 @@ import {
   portableizeAgentRunContractV1,
   rebindPortableAgentRunContractV1,
 } from './contract-portability'
+import {
+  AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1,
+  agentRunUtf8ByteLengthV1,
+} from './checkpoint-contract'
 
 type IdMaps = ReadonlyMap<string, ReadonlyMap<number, number>>
 type ExportRow = Record<string, any>
@@ -196,6 +200,12 @@ export async function portableizeAgentRunLedgerExportV1(
       event.contractHash = pair.targetHash
     }
     for (const checkpoint of rowsForRun(checkpoints, run._exportId)) {
+      if (checkpoint.resumePayloadJson != null
+        && (typeof checkpoint.resumePayloadJson !== 'string'
+          || agentRunUtf8ByteLengthV1(checkpoint.resumePayloadJson)
+            > AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1)) {
+        fail(`run ${run._exportId} 检查点 ${checkpoint.throughSequence} 恢复载荷超过安全便携预算`)
+      }
       if (checkpoint._worldGroupExportId !== run._worldGroupExportId) {
         fail(`run ${run._exportId} 检查点世界组与运行不一致`)
       }
@@ -249,6 +259,10 @@ async function verifyImportedCheckpoint(
   }
   let resumePayload: unknown = null
   if (checkpoint.resumePayloadJson != null) {
+    if (agentRunUtf8ByteLengthV1(checkpoint.resumePayloadJson)
+      > AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1) {
+      fail(`检查点 ${checkpoint.throughSequence} 恢复载荷超过安全导入预算`)
+    }
     try {
       resumePayload = JSON.parse(checkpoint.resumePayloadJson)
     } catch {

@@ -32,6 +32,7 @@ import TextOpenWorldTutorialCoach, {
   type TextOpenWorldTutorialCoachProps,
 } from './TextOpenWorldTutorialCoach'
 import './player-roadshow.css'
+import './text-open-world-runtime.css'
 
 export const TEXT_OPEN_WORLD_GAME_VIEW_KEYS = ['scene', 'map', 'quests', 'character', 'more'] as const
 

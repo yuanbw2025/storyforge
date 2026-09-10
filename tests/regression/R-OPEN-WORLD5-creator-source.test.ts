@@ -210,7 +210,12 @@ describe('R-OPEN-WORLD5 · 创作者双来源目录与只读预检', () => {
       partCount: unit.partCount,
       readDepth: unit.readDepth,
       sourceResourceKey: unit.sourceResourceKey,
+      sourceArea: unit.sourceArea,
+      sourceResourceKind: unit.sourceResourceKind,
+      label: unit.label,
       sourceContentHash: unit.sourceContentHash,
+      charCount: unit.charCount,
+      wordCount: unit.wordCount,
     }))
     await expect(hashProductProductionValueV2({
       workCode: novel.work.code,

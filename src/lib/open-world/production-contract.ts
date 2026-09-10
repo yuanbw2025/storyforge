@@ -1,6 +1,7 @@
 import { parseProductProductionBriefV3 } from '../product-production/contracts'
 import { hashProductProductionValueV2, isSha256Hash } from '../product-production/hash'
 import { parseProductProductionPlanV3 } from '../product-production/plan'
+import { AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1 } from '../agent/run/checkpoint-contract'
 import type {
   ProductBuildArtifactKindV1,
   ProductProductionBriefV3,
@@ -17,11 +18,30 @@ import {
   TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_KINDS_V1,
   TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1,
 } from '../types'
+import { TEXT_OPEN_WORLD_SOURCE_PIN_LIMITS_V1 } from './source-pin-contract'
 
 const REQUIRED_STALE_WATCHES = [
   'sourcePinHash', 'briefHash', 'planHash', 'controlEpoch', 'inputArtifactHashes',
 ] as const
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
+
+/** Keep the Creator handoff and P0 reservation on the same acceptance boundary
+ * as the immutable SourcePin implementation. */
+export const TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1 = Object.freeze({
+  ...TEXT_OPEN_WORLD_SOURCE_PIN_LIMITS_V1,
+  maximumCheckpointResumePayloadBytes: AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1,
+})
+
+// P0's durable candidate contains every unit payload, the closure Pin refs,
+// Artifact envelopes and the scheduler candidate envelope. JSON may expand
+// one UTF-16 code unit to a six-byte escape. Each legal label can occur in both
+// the unit payload and Pin ref, so 16 KiB/unit deliberately dominates two
+// worst-case 1,000-character escaped labels plus keys, hashes, counters,
+// quality and rights. The fixed envelope covers source/authorization metadata,
+// evidence, candidate fields and structural punctuation.
+const SOURCE_LOCK_JSON_BYTES_PER_CHAR = 6
+const SOURCE_LOCK_UNIT_ENVELOPE_BYTES = 16 * 1024
+const SOURCE_LOCK_FIXED_ENVELOPE_BYTES = 256 * 1024
 
 function fail(message: string): never {
   throw new Error(`[text-open-world-production] ${message}`)
@@ -704,6 +724,66 @@ function reservation(input: Partial<ProductTaskBudgetReservationV1>): ProductTas
   }
 }
 
+export function estimateTextOpenWorldSourceLockCheckpointBytesV1(input: {
+  sourceUnitCount: number
+  sourceTotalChars?: number
+}): number {
+  if (!Number.isSafeInteger(input.sourceUnitCount) || input.sourceUnitCount < 1
+    || input.sourceUnitCount > TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1.maximumUnits) {
+    fail(`P0来源单元数必须在1到${TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1.maximumUnits}之间`)
+  }
+  const sourceTotalChars = input.sourceTotalChars
+    ?? TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1.maximumTotalChars
+  if (!Number.isSafeInteger(sourceTotalChars) || sourceTotalChars < 0
+    || sourceTotalChars > TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1.maximumTotalChars) {
+    fail(`P0来源字符数必须在0到${TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1.maximumTotalChars}之间`)
+  }
+  const required = SOURCE_LOCK_FIXED_ENVELOPE_BYTES
+    + input.sourceUnitCount * SOURCE_LOCK_UNIT_ENVELOPE_BYTES
+    + sourceTotalChars * SOURCE_LOCK_JSON_BYTES_PER_CHAR
+  if (required > TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1.maximumCheckpointResumePayloadBytes) {
+    fail(`P0来源候选超过durable checkpoint上限:${required}`)
+  }
+  return required
+}
+
+function sourceLockStorageReservationV1(input: {
+  sourceUnitCount: number
+  sourceTotalChars?: number
+  maximumStorageBytes: number
+}): number {
+  // Reserve the full durable-candidate upper bound rather than payload-only
+  // bytes. This keeps a legal P0 result writable, recoverable and acceptable
+  // under one invariant instead of letting storage and checkpoint limits drift.
+  const required = estimateTextOpenWorldSourceLockCheckpointBytesV1(input)
+  if (required > input.maximumStorageBytes) {
+    fail(`Brief storage授权不足以安全冻结P0来源，至少需要${required}字节`)
+  }
+  return required
+}
+
+function allocateStorageReservationsV1(input: {
+  taskKeys: string[]
+  p0StorageBytes: number
+  maximumStorageBytes: number
+}): Map<string, number> {
+  const p0TaskKey = 'p0.source-lock'
+  if (!input.taskKeys.includes(p0TaskKey) || new Set(input.taskKeys).size !== input.taskKeys.length) {
+    fail('storage预留任务集合无效')
+  }
+  const otherTaskKeys = input.taskKeys.filter(taskKey => taskKey !== p0TaskKey)
+  if (otherTaskKeys.length === 0) fail('P0之外没有可分配storage余量的任务')
+  const remaining = input.maximumStorageBytes - input.p0StorageBytes
+  const perTask = Math.floor(remaining / otherTaskKeys.length)
+  let residual = remaining - perTask * otherTaskKeys.length
+  const allocations = new Map<string, number>([[p0TaskKey, input.p0StorageBytes]])
+  for (const taskKey of otherTaskKeys) {
+    allocations.set(taskKey, perTask + (residual > 0 ? 1 : 0))
+    residual = Math.max(0, residual - 1)
+  }
+  return allocations
+}
+
 function allocateModelCalls(
   contracts: readonly TextOpenWorldProductionTaskContractV1[],
   maximumModelCalls: number,
@@ -788,6 +868,10 @@ export async function createTextOpenWorldProductionPlanV1(input: {
   authoritativeBriefHash?: string
   /** Exact P0 unit keys frozen by the dual-source creator SourcePlan. */
   sourceUnitArtifactKeys?: string[]
+  /** Exact P0 source-body character count when the adapter exposes it. Omit it
+   * for a bounded/private source and the 4,000,000-character safety limit is
+   * reserved instead. WorldRelease index-only P0 may explicitly pass zero. */
+  sourceTotalChars?: number
   /** G5-03 authorizes text cost only; procedural prototype media reserves no
    * paid provider amount until the G5-08 media plan is confirmed. */
   mediaCostAuthorized?: boolean
@@ -802,6 +886,27 @@ export async function createTextOpenWorldProductionPlanV1(input: {
   if (!isSha256Hash(planBriefHash)) fail('authoritativeBriefHash 无效')
   const controlEpoch = input.controlEpoch ?? 0
   if (!Number.isInteger(controlEpoch) || controlEpoch < 0) fail('controlEpoch 无效')
+
+  // P0 freezes one immutable unit Artifact for every selected WorldRelease or
+  // novel unit. Resolve and bound the exact key set before budget allocation so
+  // storage is based on the source rather than an equal task split.
+  const sourceUnitKeys = input.sourceUnitArtifactKeys
+    ? [...input.sourceUnitArtifactKeys]
+    : brief.source.selection.resourceKeys.map((_, index) => (
+        index === 0
+          ? 'text-open-world.source-pin-unit'
+          : `text-open-world.source-pin-unit.${String(index + 1).padStart(5, '0')}`
+      ))
+  if (sourceUnitKeys.length === 0
+    || sourceUnitKeys.length > TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1.maximumUnits) {
+    fail(`文字开放世界来源选择必须在1到${TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1.maximumUnits}个单元之间`)
+  }
+  if (new Set(sourceUnitKeys).size !== sourceUnitKeys.length
+    || sourceUnitKeys.some((key, index) => key !== (index === 0
+      ? 'text-open-world.source-pin-unit'
+      : `text-open-world.source-pin-unit.${String(index + 1).padStart(5, '0')}`))) {
+    fail('P0来源单元 Artifact keys 不连续或不唯一')
+  }
 
   const contracts = validateTextOpenWorldProductionTaskContractsV1()
   const modelCallsByTask = allocateModelCalls(contracts, brief.productionBudget.maximumModelCalls)
@@ -821,7 +926,6 @@ export async function createTextOpenWorldProductionPlanV1(input: {
   const requestedAudioCount = brief.media.musicTrackCount + brief.media.sfxCount + brief.media.voiceLineCount
   const audioCount = requestedAudioCount > 0 || audioCapabilities.length > 0 ? Math.max(1, requestedAudioCount) : 0
   const mediaLaneCount = Number(visualCount > 0) + Number(audioCount > 0)
-  const taskCount = contracts.length + mediaLaneCount
   const mediaDurationBudgetWeight = 2
   const durationBudgetWeightTotal = contracts.reduce(
     (sum, contract) => sum + contract.durationBudgetWeight,
@@ -829,13 +933,28 @@ export async function createTextOpenWorldProductionPlanV1(input: {
   )
   const mediaCostAuthorized = input.mediaCostAuthorized ?? true
   const costBearingUnits = plannedModelCalls + (mediaCostAuthorized ? visualCount + audioCount : 0)
-  const perStorage = Math.floor(brief.productionBudget.maximumStorageBytes / taskCount)
+  const maximumStorageBytes = Math.floor(brief.productionBudget.maximumStorageBytes)
+  const p0StorageBytes = sourceLockStorageReservationV1({
+    sourceUnitCount: sourceUnitKeys.length,
+    sourceTotalChars: input.sourceTotalChars,
+    maximumStorageBytes,
+  })
+  const storageByTask = allocateStorageReservationsV1({
+    taskKeys: [
+      ...contracts.map(contract => contract.taskKey),
+      ...(visualCount > 0 ? ['media.visual'] : []),
+      ...(audioCount > 0 ? ['media.audio'] : []),
+    ],
+    p0StorageBytes,
+    maximumStorageBytes,
+  })
+  const storageFor = (taskKey: string) => storageByTask.get(taskKey)
+    ?? fail(`任务缺少storage预留:${taskKey}`)
   const durationFor = (weight: number) => Math.floor(
     brief.productionBudget.maximumDurationMs * weight / durationBudgetWeightTotal,
   )
   const costForUnits = (units: number) => brief.productionBudget.maximumCostUsd == null
     ? null : brief.productionBudget.maximumCostUsd * 0.99 * units / costBearingUnits
-  const deterministicBudget = reservation({ durationMs: durationFor(1), storageBytes: perStorage })
   const tasks = contracts.map((contract, index) => {
     const modelCalls = modelCallsByTask.get(contract.taskKey) ?? 0
     const taskBudget = contract.executionMode === 'model' ? reservation({
@@ -848,28 +967,16 @@ export async function createTextOpenWorldProductionPlanV1(input: {
       ),
       maximumCostUsd: costForUnits(modelCalls),
       durationMs: durationFor(contract.durationBudgetWeight),
-      storageBytes: perStorage,
-    }) : deterministicBudget
+      storageBytes: storageFor(contract.taskKey),
+    }) : reservation({
+      durationMs: durationFor(1),
+      storageBytes: storageFor(contract.taskKey),
+    })
     return planTask(contract, taskBudget, textCapabilities, 1_000 - index * 10)
   })
 
-  // P0 freezes one immutable unit Artifact for every selected WorldRelease
-  // resource. The contract declares the base kind; the concrete Plan owns the
-  // exact bounded keys so P1 can prove that it read the complete selection.
-  const sourceUnitKeys = input.sourceUnitArtifactKeys
-    ? [...input.sourceUnitArtifactKeys]
-    : brief.source.selection.resourceKeys.map((_, index) => (
-        index === 0
-          ? 'text-open-world.source-pin-unit'
-          : `text-open-world.source-pin-unit.${String(index + 1).padStart(5, '0')}`
-      ))
-  if (sourceUnitKeys.length === 0) fail('文字开放世界来源选择不能为空')
-  if (new Set(sourceUnitKeys).size !== sourceUnitKeys.length
-    || sourceUnitKeys.some((key, index) => key !== (index === 0
-      ? 'text-open-world.source-pin-unit'
-      : `text-open-world.source-pin-unit.${String(index + 1).padStart(5, '0')}`))) {
-    fail('P0来源单元 Artifact keys 不连续或不唯一')
-  }
+  // The contract declares the base kind; the concrete Plan owns the exact
+  // bounded keys so P1 can prove that it read the complete selection.
   const p0 = tasks.find(task => task.taskKey === 'p0.source-lock')!
   p0.outputArtifactKeys = ['text-open-world.source-pin', ...sourceUnitKeys]
   p0.subjectLockKeys = [...p0.outputArtifactKeys]
@@ -903,7 +1010,7 @@ export async function createTextOpenWorldProductionPlanV1(input: {
       budgetReservation: reservation({
         mediaCalls: config.count,
         maximumCostUsd: mediaCostAuthorized ? costForUnits(config.count) : 0,
-        durationMs: durationFor(mediaDurationBudgetWeight), storageBytes: perStorage,
+        durationMs: durationFor(mediaDurationBudgetWeight), storageBytes: storageFor(config.taskKey),
       }),
       maxAttempts: 2,
       timeoutMs: Math.max(1, Math.min(600_000, durationFor(mediaDurationBudgetWeight))),

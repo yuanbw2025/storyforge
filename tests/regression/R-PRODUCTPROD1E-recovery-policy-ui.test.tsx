@@ -15,13 +15,20 @@ import type { ProductProductionBriefV3, WorkspaceScope } from '../../src/lib/typ
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 
 const serviceMocks = vi.hoisted(() => ({
-  retryBlocker: vi.fn(async () => undefined),
+  setPaused: vi.fn(async (): Promise<'paused' | 'resumed'> => 'resumed'),
+  retryBlocker: vi.fn(async (): Promise<
+    | 'provider-actual-charge'
+    | 'author-confirmed-not-charged'
+    | 'author-charged-reservation-upper-bound'
+    | null
+  > => null),
 }))
 
 vi.mock('../../src/lib/product-production/service', async importOriginal => {
   const actual = await importOriginal<typeof import('../../src/lib/product-production/service')>()
   return {
     ...actual,
+    setProductProductionPausedV1: serviceMocks.setPaused,
     retryProductProductionBlockerV1: serviceMocks.retryBlocker,
   }
 })
@@ -231,6 +238,7 @@ describe('PRODUCT-PROD-1E · recovery policy UI', () => {
   let root: ReturnType<typeof createRoot>
 
   beforeEach(async () => {
+    serviceMocks.setPaused.mockClear()
     serviceMocks.retryBlocker.mockClear()
     localStorage.clear()
     await db.delete()
@@ -360,4 +368,207 @@ describe('PRODUCT-PROD-1E · recovery policy UI', () => {
       expect(textarea(host, '作者修订的完整任务 JSON')?.value).toBe('')
     })
   }, 25_000)
+
+  it('unknown-result 必须显式选择结算方式，并展示命令采用的真实有效结算', async () => {
+    const owned = await seedCurrentProductWorld('结果未知结算 UI')
+    const fixture = await createRecoveryProduction({
+      scope: owned.scope,
+      worldReleaseId: owned.release.id!,
+      title: '结果未知恢复产品',
+      taskKey: 'p2.experience-design',
+      sequence: 3,
+    })
+    const build = (await db.productBuilds.get(fixture.buildId))!
+    await db.productBuilds.update(fixture.buildId, {
+      failureJson: JSON.stringify({
+        taskKey: 'p2.experience-design',
+        code: 'unknown-result',
+        detail: '供应商请求已发出，但结果和计费状态未知',
+        failureProvenance: {
+          runId: 102,
+          rootRunId: 101,
+          controlEpoch: fixture.controlEpoch,
+          planHash: build.planHash,
+          attempt: 1,
+        },
+      }),
+    })
+    serviceMocks.retryBlocker.mockResolvedValueOnce('provider-actual-charge')
+    await act(async () => {
+      root.render(createElement(ProductProductionStudio, {
+        scope: owned.scope,
+        worldGroupId: owned.world.worldGroupId,
+        initialProduct: 'text-open-world',
+        allowedProducts: ['text-open-world'],
+      }))
+    })
+
+    await waitFor(() => expect(
+      host.querySelector('[data-testid="product-production-unknown-result-disposition"]'),
+    ).toBeTruthy())
+    const retry = button(host, '修正后继续制作')
+    expect(retry.disabled).toBe(true)
+    const confirmedNotCharged = [...host.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+      .find(input => input.parentElement?.textContent?.includes('已确认未计费'))
+    expect(confirmedNotCharged).toBeTruthy()
+    await act(async () => { confirmedNotCharged!.click() })
+    await waitFor(() => expect(retry.disabled).toBe(false))
+    await act(async () => { retry.click() })
+
+    await waitFor(() => expect(serviceMocks.retryBlocker).toHaveBeenCalledTimes(1))
+    expect(serviceMocks.retryBlocker.mock.calls[0]![0]).toMatchObject({
+      unknownResultDisposition: 'confirmed-not-charged',
+    })
+    await waitFor(() => expect(host.textContent).toContain('按真实用量结算'))
+
+    serviceMocks.retryBlocker.mockClear()
+    serviceMocks.retryBlocker.mockResolvedValueOnce('author-charged-reservation-upper-bound')
+    await db.productBuilds.update(fixture.buildId, {
+      failureJson: JSON.stringify({
+        taskKey: 'p2.experience-design',
+        code: 'provider-response-uncheckpointed',
+        detail: '供应商响应正文已持久化，但完整用量未结算',
+        failureProvenance: {
+          runId: 102,
+          rootRunId: 101,
+          controlEpoch: fixture.controlEpoch,
+          planHash: build.planHash,
+          attempt: 1,
+        },
+      }),
+    })
+    await act(async () => { ariaButton(host, '刷新当前 Production').click() })
+    await waitFor(() => expect(host.textContent).toContain('只能按该 attempt 的冻结预留上限封账'))
+    const dispositionRadios = [...host.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+    expect(dispositionRadios).toHaveLength(1)
+    expect(host.textContent).not.toContain('已确认未计费')
+    expect(button(host, '修正后继续制作').disabled).toBe(true)
+    await act(async () => { dispositionRadios[0]!.click() })
+    await waitFor(() => expect(button(host, '修正后继续制作').disabled).toBe(false))
+    await act(async () => { button(host, '修正后继续制作').click() })
+    await waitFor(() => expect(serviceMocks.retryBlocker).toHaveBeenCalledTimes(1))
+    expect(serviceMocks.retryBlocker.mock.calls[0]![0]).toMatchObject({
+      unknownResultDisposition: 'charge-reservation-upper-bound',
+    })
+    await waitFor(() => expect(host.textContent).toContain('按冻结的预留上限结算'))
+  }, 20_000)
+
+  it('暂停中的在途 reservation 必须先选择处置；精确系统 tombstone 到达后可直接恢复', async () => {
+    const owned = await seedCurrentProductWorld('暂停封账 UI')
+    const fixture = await createRecoveryProduction({
+      scope: owned.scope,
+      worldReleaseId: owned.release.id!,
+      title: '暂停封账恢复产品',
+      taskKey: 'p2.experience-design',
+      sequence: 4,
+    })
+    const runId = 202
+    const attempt = 1
+    const reservationEpoch = fixture.controlEpoch
+    const pausedEpoch = reservationEpoch + 1
+    const taskKey = 'p2.experience-design'
+    const usage = {
+      modelCalls: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      mediaCalls: 0,
+      costUsd: 0,
+      durationMs: 0,
+      storageBytes: 0,
+    }
+    const reservation = {
+      runId,
+      attempt,
+      controlEpoch: reservationEpoch,
+      taskKey,
+      budget: {
+        modelCalls: 1,
+        inputTokens: 100,
+        outputTokens: 100,
+        mediaCalls: 0,
+        maximumCostUsd: 0.05,
+        durationMs: 30_000,
+        storageBytes: 0,
+      },
+    }
+    const ledger = {
+      schema: 'storyforge.product-production-budget-ledger',
+      version: 2,
+      rootRunId: null,
+      rootClaim: null,
+      charges: {},
+      reservations: { [`${runId}:${attempt}`]: reservation },
+      tasks: {},
+    }
+    await db.transaction('rw', db.productProductions, db.productBuilds, async () => {
+      await db.productProductions.update(fixture.productionId, {
+        status: 'paused',
+        controlEpoch: pausedEpoch,
+      })
+      await db.productBuilds.update(fixture.buildId, {
+        status: 'paused',
+        resumeState: 'building',
+        controlEpoch: pausedEpoch,
+        budgetLedgerJson: JSON.stringify(ledger),
+        failureJson: JSON.stringify({
+          code: 'pause-provider-result-unknown',
+          detail: '暂停时仍有供应商请求未返回；恢复前必须逐项封账。',
+          pausedProviderReservations: [{ taskKey, runId, attempt, controlEpoch: reservationEpoch }],
+        }),
+      })
+    })
+
+    await act(async () => {
+      root.render(createElement(ProductProductionStudio, {
+        scope: owned.scope,
+        worldGroupId: owned.world.worldGroupId,
+        initialProduct: 'text-open-world',
+        allowedProducts: ['text-open-world'],
+      }))
+    })
+    await waitFor(() => expect(
+      host.querySelector('[data-testid="product-production-unknown-result-disposition"]'),
+    ).toBeTruthy())
+    const settleAndResume = button(host, '结算并恢复')
+    expect(settleAndResume.disabled).toBe(true)
+    const confirmedNotCharged = [...host.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+      .find(input => input.parentElement?.textContent?.includes('已确认未计费'))
+    expect(confirmedNotCharged).toBeTruthy()
+    await act(async () => { confirmedNotCharged!.click() })
+    await waitFor(() => expect(settleAndResume.disabled).toBe(false))
+    await act(async () => { settleAndResume.click() })
+    await waitFor(() => expect(serviceMocks.setPaused).toHaveBeenCalledTimes(1))
+    expect(serviceMocks.setPaused.mock.calls[0]![0]).toMatchObject({
+      build: { id: fixture.buildId, status: 'paused' },
+      pausedReservationDisposition: 'confirmed-not-charged',
+    })
+
+    const releasedLedger = {
+      ...ledger,
+      charges: {
+        [`${runId}:${attempt}`]: {
+          runId,
+          attempt,
+          controlEpoch: reservationEpoch,
+          taskKey,
+          costUpperBoundUsd: 0,
+          usage,
+          resolution: 'system-released-before-dispatch',
+        },
+      },
+      reservations: {},
+    }
+    await db.productBuilds.update(fixture.buildId, {
+      budgetLedgerJson: JSON.stringify(releasedLedger),
+    })
+    serviceMocks.setPaused.mockClear()
+    await act(async () => { ariaButton(host, '刷新当前 Production').click() })
+    await waitFor(() => {
+      expect(host.querySelector('[data-testid="product-production-unknown-result-disposition"]')).toBeNull()
+      expect(button(host, '恢复并继续').disabled).toBe(false)
+    })
+    await act(async () => { button(host, '恢复并继续').click() })
+    await waitFor(() => expect(serviceMocks.setPaused).toHaveBeenCalledTimes(1))
+    expect(serviceMocks.setPaused.mock.calls[0]![0]).not.toHaveProperty('pausedReservationDisposition')
+  }, 20_000)
 })

@@ -615,6 +615,32 @@ export interface ProductProductionBlockerResolutionV1 {
   note: string;
   /** Explicit authored replacement; validated by the same task parser before acceptance. */
   authorDraftJson?: string;
+  /**
+   * Required before retrying an attempt whose provider result or usage has not
+   * been fully settled. The exact durable attempt is named explicitly so a
+   * stale UI cannot dispose a newer reservation by accident. When a response
+   * body is already durable, only the conservative upper-bound disposition is
+   * legal.
+   */
+  unknownResultReservation?: {
+    runId: number;
+    attempt: number;
+    controlEpoch: number;
+    disposition: "confirmed-not-charged" | "charge-reservation-upper-bound";
+  };
+}
+
+/**
+ * Author accounting decision for one exact provider reservation that was still
+ * in flight when a Production was paused. Every identity field is required so
+ * a stale resume command cannot dispose a newer attempt.
+ */
+export interface ProductProductionPausedReservationDispositionV1 {
+  taskKey: string;
+  runId: number;
+  attempt: number;
+  controlEpoch: number;
+  disposition: "confirmed-not-charged" | "charge-reservation-upper-bound";
 }
 
 export type ProductBuildCompatibilityLevelV1 =
@@ -700,7 +726,13 @@ export type ProductProductionCommandV1 =
       expectedStateRevision: number;
       reason: string;
     }
-  | { type: "resume"; commandId: string; expectedStateRevision: number }
+  | {
+      type: "resume";
+      commandId: string;
+      expectedStateRevision: number;
+      /** Required only when pause froze one or more in-flight provider reservations. */
+      pausedReservationDispositions?: ProductProductionPausedReservationDispositionV1[];
+    }
   | {
       type: "stop";
       commandId: string;
@@ -907,6 +939,8 @@ export interface ProductBuildArtifactRecordV1 {
     artifactKey: string;
     version: number;
     contentHash: string;
+    /** Frozen witness over the exact parent Artifact and its producer/root Runs. */
+    proofHash: string;
   } | null;
   createdAt: number;
   updatedAt: number;

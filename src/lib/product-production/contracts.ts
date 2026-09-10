@@ -359,12 +359,32 @@ function expectedRevision(value: unknown): number {
 
 function parseResolution(value: unknown): ProductProductionBlockerResolutionV1 {
   const row = record(value, 'resolution')
-  exactKeys(row, ['action', 'note', ...(row.action === 'author-edit' ? ['authorDraftJson'] : [])], 'resolution')
+  const hasUnknownReservation = Object.prototype.hasOwnProperty.call(row, 'unknownResultReservation')
+  exactKeys(row, [
+    'action', 'note',
+    ...(row.action === 'author-edit' ? ['authorDraftJson'] : []),
+    ...(hasUnknownReservation ? ['unknownResultReservation'] : []),
+  ], 'resolution')
   if (row.action === 'author-edit') record(JSON.parse(text(row.authorDraftJson, 'resolution.authorDraftJson', 120000)), 'authorDraft')
+  const unknownResultReservation = hasUnknownReservation
+    ? (() => {
+        const reservation = record(row.unknownResultReservation, 'resolution.unknownResultReservation')
+        exactKeys(reservation, ['runId', 'attempt', 'controlEpoch', 'disposition'], 'resolution.unknownResultReservation')
+        return {
+          runId: positiveId(reservation.runId, 'resolution.unknownResultReservation.runId'),
+          attempt: positiveId(reservation.attempt, 'resolution.unknownResultReservation.attempt'),
+          controlEpoch: finite(reservation.controlEpoch, 'resolution.unknownResultReservation.controlEpoch', Number.MAX_SAFE_INTEGER, true),
+          disposition: enumValue(reservation.disposition, [
+            'confirmed-not-charged', 'charge-reservation-upper-bound',
+          ], 'resolution.unknownResultReservation.disposition'),
+        }
+      })()
+    : undefined
   return {
     action: enumValue(row.action, ['retry', 'author-edit', 'fallback', 'waive-soft-gate', 'change-capability', 'cancel'], 'resolution.action'),
     note: text(row.note, 'resolution.note', 4000),
     ...(row.action === 'author-edit' ? { authorDraftJson: text(row.authorDraftJson, 'resolution.authorDraftJson', 120000) } : {}),
+    ...(unknownResultReservation ? { unknownResultReservation } : {}),
   }
 }
 
@@ -459,7 +479,53 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
     }
   }
   if (type === 'pause') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'reason']), expectedStateRevision: expectedRevision(row.expectedStateRevision), reason: text(row.reason, 'reason', 4000) }
-  if (type === 'resume') return { type, commandId: commandHeader(row, type, ['expectedStateRevision']), expectedStateRevision: expectedRevision(row.expectedStateRevision) }
+  if (type === 'resume') {
+    const hasPausedReservations = Object.prototype.hasOwnProperty.call(row, 'pausedReservationDispositions')
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision',
+      ...(hasPausedReservations ? ['pausedReservationDispositions'] : []),
+    ])
+    const pausedReservationDispositions = hasPausedReservations
+      ? (() => {
+          if (!Array.isArray(row.pausedReservationDispositions)
+            || row.pausedReservationDispositions.length < 1
+            || row.pausedReservationDispositions.length > 64) {
+            fail('resume.pausedReservationDispositions 必须是 1～64 项数组')
+          }
+          const seen = new Set<string>()
+          return row.pausedReservationDispositions.map((value, index) => {
+            const reservation = record(value, `resume.pausedReservationDispositions[${index}]`)
+            exactKeys(reservation, [
+              'taskKey', 'runId', 'attempt', 'controlEpoch', 'disposition',
+            ], `resume.pausedReservationDispositions[${index}]`)
+            const parsed = {
+              taskKey: stableKey(reservation.taskKey, `resume.pausedReservationDispositions[${index}].taskKey`),
+              runId: positiveId(reservation.runId, `resume.pausedReservationDispositions[${index}].runId`),
+              attempt: positiveId(reservation.attempt, `resume.pausedReservationDispositions[${index}].attempt`),
+              controlEpoch: finite(
+                reservation.controlEpoch,
+                `resume.pausedReservationDispositions[${index}].controlEpoch`,
+                Number.MAX_SAFE_INTEGER,
+                true,
+              ),
+              disposition: enumValue(reservation.disposition, [
+                'confirmed-not-charged', 'charge-reservation-upper-bound',
+              ], `resume.pausedReservationDispositions[${index}].disposition`),
+            }
+            const identity = `${parsed.runId}:${parsed.attempt}`
+            if (seen.has(identity)) fail('resume.pausedReservationDispositions 存在重复 attempt')
+            seen.add(identity)
+            return parsed
+          })
+        })()
+      : undefined
+    return {
+      type,
+      commandId,
+      expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      ...(pausedReservationDispositions ? { pausedReservationDispositions } : {}),
+    }
+  }
   if (type === 'stop') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'retention']), expectedStateRevision: expectedRevision(row.expectedStateRevision), retention: enumValue(row.retention, ['keep-build', 'discard-unreleased'], 'retention') }
   if (type === 'archive') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'reason']), expectedStateRevision: expectedRevision(row.expectedStateRevision), reason: text(row.reason, 'reason', 4000) }
   if (type === 'restore') return { type, commandId: commandHeader(row, type, ['expectedStateRevision']), expectedStateRevision: expectedRevision(row.expectedStateRevision) }

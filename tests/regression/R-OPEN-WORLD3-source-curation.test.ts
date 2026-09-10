@@ -19,37 +19,14 @@ import type {
   TextOpenWorldSourceGapReportV1,
   TextOpenWorldSourceLedgerV1,
   TextOpenWorldSourceManifestV1,
-  WorkspaceScope,
 } from '../../src/lib/types'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { seedAuthorizedTextOpenWorldCreatorBuildV1 } from '../helpers/text-open-world-creator-build'
 
 const HASH = 'a'.repeat(64)
 const CAPABILITY_HASH = 'b'.repeat(64)
-
-async function seedBuild(scope: WorkspaceScope, productionKey: string) {
-  const now = 1_788_633_600_000
-  const productionId = await db.productProductions.add({
-    projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
-    productionKey, productType: 'text-open-world', title: 'P1来源拆解验收',
-    status: 'producing', stateRevision: 1, controlEpoch: 1,
-    currentBriefRevision: 1, currentBuildNumber: 1, currentProductReleaseId: null,
-    lastErrorJson: '{}', createdAt: now, updatedAt: now,
-  }) as number
-  const buildId = await db.productBuilds.add({
-    projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
-    productionId, buildNumber: 1, briefRevision: 1, briefHash: HASH,
-    parentBuildNumber: null, sourceProductReleaseId: null, status: 'building', resumeState: null,
-    stateRevision: 1, controlEpoch: 1, planRevision: 1, planJson: '{}', planHash: HASH,
-    budgetLedgerJson: '{}', manifestJson: '{}', manifestHash: HASH, packageHash: '',
-    previewManifestJson: '{}', previewHash: '', qualityReportJson: '{}', qualityReportHash: '',
-    compatibilityJson: '{}', rootTerminalReceiptHash: null, adoptionIntentHash: null,
-    releasedProductReleaseId: null, failureJson: '{}', authorizedAt: now, startedAt: now,
-    completedAt: null, createdAt: now, updatedAt: now,
-  }) as number
-  return { productionId, buildId, now }
-}
 
 async function seedNovelFixture() {
   const created = await createWorkspace({
@@ -58,23 +35,23 @@ async function seedNovelFixture() {
     description: '巡井人追查盐脊断流并阻止旧契约吞噬城邦。',
     targetWordCount: 120_000, enableMultiWorld: false,
   }, { purpose: 'longform', kind: 'novel', novelProfile: 'long' })
-  const build = await seedBuild(created.scope, 'tow.curation.novel')
+  const now = 1_788_633_600_000
   const volumeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
     projectId: created.scope.projectId, parentId: null, type: 'volume', title: '盐脊卷',
     summary: '巡井人从断流事件进入横跨三地的调查。', order: 0,
-    createdAt: build.now, updatedAt: build.now,
+    createdAt: now, updatedAt: now,
   } as never, { owner: 'work' })) as number
   const chapterOutlineId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
     projectId: created.scope.projectId, parentId: volumeId, type: 'chapter', title: '断流',
     summary: '巡井人在旧渠发现反派留下的契约印记。', order: 0,
-    createdAt: build.now, updatedAt: build.now,
+    createdAt: now, updatedAt: now,
   } as never, { owner: 'work' })) as number
   const longBody = `巡井人走入干涸盐渠。${'他沿着契约刻痕前进。'.repeat(22_000)}`
   await db.chapters.add(stampNewRecord(created.scope, 'chapters', {
     projectId: created.scope.projectId, outlineNodeId: chapterOutlineId,
     title: '第一章 断流', content: `<p>${longBody}</p>`, wordCount: longBody.length,
     status: 'final', order: 0, notes: '', summary: '巡井人发现断流并非天灾。',
-    createdAt: build.now, updatedAt: build.now,
+    createdAt: now, updatedAt: now,
   } as never, { owner: 'work' }))
   await db.storyCores.add(stampNewRecord(created.scope, 'storyCores', {
     projectId: created.scope.projectId,
@@ -84,62 +61,63 @@ async function seedNovelFixture() {
     logline: '巡井人追查断流，逐步揭开旧契约与城邦统治者的秘密。',
     concept: '文字开放世界来源', mainPlot: '阻止断流并守护盐脊。',
     subPlots: '沿途角色、势力和地区故事。',
-    createdAt: build.now, updatedAt: build.now,
+    createdAt: now, updatedAt: now,
   } as never, { owner: 'work' }))
   const preview = await prepareTextOpenWorldNovelSourceSnapshotV1({
     sourceScope: created.scope,
     selection: { mode: 'entire-work' },
   })
+  const build = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+    source: { kind: 'novel', scope: created.scope, selection: { mode: 'entire-work' } },
+    sessionKey: `curation-novel-${crypto.randomUUID()}`,
+  })
+  const capturedAt = Math.max(Date.now(), build.start.authorizedAt)
   const bundle = await freezeTextOpenWorldNovelSourceV1({
     targetScope: created.scope, sourceScope: created.scope, selection: { mode: 'entire-work' },
     expectedSourceVersionHash: preview.sourceVersionHash,
     expectedSourceBoundaryHash: preview.sourceBoundaryHash,
-    authorization: {
-      productInstanceKey: 'tow.curation.novel', briefRevision: 1, briefHash: HASH,
-      authorStartRevision: 1, authorizationNonce: 'p1-curation-test', rightsBasis: 'author-owned',
-      rightsNote: 'P1测试授权', authorizedAt: build.now,
-    },
-    createdAt: build.now,
+    authorization: build.authorization,
+    createdAt: capturedAt,
   })
   await acceptTextOpenWorldSourcePinBundleV1({
-    scope: created.scope, buildId: build.buildId, controlEpoch: 1, bundle,
+    scope: created.scope, buildId: build.buildId, controlEpoch: build.controlEpoch, bundle,
   })
-  return { ...created, ...build, bundle }
+  return { ...created, ...build, bundle, now: capturedAt }
 }
 
 async function seedWorldFixture() {
   const created = await seedCurrentProductWorld(`TOW P1 WorldRelease ${crypto.randomUUID()}`)
-  const build = await seedBuild(created.scope, 'tow.curation.world-release')
   const catalog = await openWorldSemanticResourceCatalogV1({
     localReleaseRecordId: created.release.id!,
     expectedProjectId: created.scope.projectId,
     expectedWorldId: created.scope.worldId,
   })
-  const selectedResourceKeys = catalog.resources.slice(0, 5).map(item => item.resourceKey)
+  const build = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+    source: {
+      kind: 'world-release',
+      scope: created.scope,
+      localReleaseRecordId: created.release.id!,
+      expectedReleaseHash: created.release.contentHash,
+    },
+    sessionKey: `curation-world-${crypto.randomUUID()}`,
+  })
+  const selectedResourceKeys = catalog.resources.map(item => item.resourceKey)
+  const capturedAt = Math.max(Date.now(), build.start.authorizedAt)
   const bundle = await freezeTextOpenWorldWorldReleaseSourceV1({
     scope: created.scope,
     localReleaseRecordId: created.release.id!,
     expectedReleaseHash: created.release.contentHash,
-    selection: { mode: 'selected-resources', resourceKeys: selectedResourceKeys },
-    authorization: {
-      productInstanceKey: 'tow.curation.world-release',
-      briefRevision: 1,
-      briefHash: HASH,
-      authorStartRevision: 1,
-      authorizationNonce: 'p1-world-curation-test',
-      rightsBasis: 'author-owned',
-      rightsNote: 'P1 WorldRelease测试授权',
-      authorizedAt: build.now,
-    },
-    createdAt: build.now,
+    selection: { mode: 'entire-release' },
+    authorization: build.authorization,
+    createdAt: capturedAt,
   })
   await acceptTextOpenWorldSourcePinBundleV1({
     scope: created.scope,
     buildId: build.buildId,
-    controlEpoch: 1,
+    controlEpoch: build.controlEpoch,
     bundle,
   })
-  return { ...created, ...build, bundle, selectedResourceKeys }
+  return { ...created, ...build, bundle, selectedResourceKeys, now: capturedAt }
 }
 
 function p1Task(): ProductProductionPlanTaskV3 {
@@ -216,7 +194,8 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
     })
     const result = await executor({
       scope: fixture.scope, productionId: fixture.productionId, buildId: fixture.buildId,
-      buildNumber: 1, controlEpoch: 1, planHash: HASH, task: p1Task(), attempt: 1,
+      buildNumber: fixture.buildNumber, controlEpoch: fixture.controlEpoch,
+      planHash: fixture.planHash, task: p1Task(), attempt: 1,
       idempotencyKey: HASH, contextText: '',
       inputArtifacts: [],
       capabilityBindings: [{ requirementKey: 'text.primary', bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1' }],
@@ -279,7 +258,8 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
     })
     const result = await executor({
       scope: fixture.scope, productionId: fixture.productionId, buildId: fixture.buildId,
-      buildNumber: 1, controlEpoch: 1, planHash: HASH, task, attempt: 1,
+      buildNumber: fixture.buildNumber, controlEpoch: fixture.controlEpoch,
+      planHash: fixture.planHash, task, attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('world-curation'), contextText: '', inputArtifacts: [],
       capabilityBindings: [{ requirementKey: 'text.primary', bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1' }],
       signal: new AbortController().signal,
@@ -312,7 +292,8 @@ describe('R-OPEN-WORLD3 · P1 SourceManifest / Ledger / Gap Report', () => {
     })
     await expect(executor({
       scope: fixture.scope, productionId: fixture.productionId, buildId: fixture.buildId,
-      buildNumber: 1, controlEpoch: 1, planHash: HASH, task: p1Task(), attempt: 1,
+      buildNumber: fixture.buildNumber, controlEpoch: fixture.controlEpoch,
+      planHash: fixture.planHash, task: p1Task(), attempt: 1,
       idempotencyKey: await hashProductProductionValueV2('negative'), contextText: '', inputArtifacts: [],
       capabilityBindings: [{ requirementKey: 'text.primary', bindingHash: CAPABILITY_HASH, adapterId: 'configured-text.v1' }],
       signal: new AbortController().signal,

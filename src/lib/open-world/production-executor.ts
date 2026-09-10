@@ -1,6 +1,7 @@
 import { db } from '../db/schema'
 import { createConfiguredProductProductionExecutorV1 } from '../product-production/production-executor'
 import { parseProductProductionBriefV3 } from '../product-production/contracts'
+import { canonicalProductProductionJsonV2 } from '../product-production/hash'
 import {
   parseConfirmedProductBriefV1,
   parseProductProductionSourcePlanV1,
@@ -17,8 +18,8 @@ import type {
 } from '../types'
 import type { ProviderBindingReceiptV1 } from '../product-production/capabilities'
 import type { ResolvedProductMediaCapabilityV1 } from '../product-production/media-transport'
-import { textOpenWorldProductionArtifactKindForKeyV1 } from './production-contract'
 import {
+  createTextOpenWorldSourcePinCandidateArtifactsV1,
   freezeTextOpenWorldNovelSourceV1,
   freezeTextOpenWorldWorldReleaseSourceV1,
 } from './source-pin'
@@ -71,8 +72,8 @@ function fail(message: string): never {
   throw new Error(`[text-open-world-production-executor] ${message}`)
 }
 
-function zeroUsage(): ProductProductionTaskExecutionResultV1['usage'] {
-  return { modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0, costUsd: 0, durationMs: 0, storageBytes: 0 }
+function zeroUsage(storageBytes = 0): ProductProductionTaskExecutionResultV1['usage'] {
+  return { modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0, costUsd: 0, durationMs: 0, storageBytes }
 }
 
 export function createTextOpenWorldSourceLockExecutorV1(options: { now?: () => number } = {}): ProductProductionTaskExecutorV1 {
@@ -121,8 +122,7 @@ export function createTextOpenWorldSourceLockExecutorV1(options: { now?: () => n
               localReleaseRecordId: locator.localReleaseRecordId,
               expectedReleaseHash: contracts.sourcePlan.sourceVersionHash,
               selection: {
-                mode: 'selected-resources',
-                resourceKeys: contracts.sourcePlan.selection.resourceKeys,
+                mode: contracts.sourcePlan.selection.mode,
               },
               authorization,
               createdAt,
@@ -167,26 +167,16 @@ export function createTextOpenWorldSourceLockExecutorV1(options: { now?: () => n
     // Persist source units before the pin index. The pin is the closure marker,
     // so a process crash can never expose an accepted index whose units are
     // still missing.
-    const artifacts: ProductProductionTaskExecutionResultV1['artifacts'] = [...bundle.units.map(unit => ({
-      artifactKey: unit.payload.artifactKey,
-      kind: textOpenWorldProductionArtifactKindForKeyV1(unit.payload.artifactKey),
-      payload: unit.payload,
-      contentHash: unit.artifactContentHash,
-      quality: { frozen: true, readDepth: unit.payload.readDepth },
-      rights: { authorizationHash: bundle.pin.authorization.authorizationHash },
-    })), {
-      artifactKey: 'text-open-world.source-pin', kind: 'text-open-world.source-pin', payload: bundle.pin,
-      contentHash: bundle.pin.pinHash,
-      quality: { unitCount: bundle.units.length, sourceBoundaryHash: bundle.pin.sourceBoundaryHash },
-      rights: {
-        authorizationHash: bundle.pin.authorization.authorizationHash,
-        rightsBasis: bundle.pin.authorization.rightsBasis,
-      },
-    }]
+    const artifacts: ProductProductionTaskExecutionResultV1['artifacts'] =
+      createTextOpenWorldSourcePinCandidateArtifactsV1(bundle)
     const expected = [...execution.task.outputArtifactKeys].sort()
     const actual = artifacts.map(artifact => artifact.artifactKey).sort()
     if (expected.join('|') !== actual.join('|')) fail('P0冻结单元与Plan选择不一致')
-    return { artifacts, passedGateIds: [...execution.task.acceptanceGateIds], usage: zeroUsage() }
+    const encoder = new TextEncoder()
+    const storageBytes = artifacts.reduce((sum, artifact) => (
+      sum + encoder.encode(canonicalProductProductionJsonV2(artifact.payload)).byteLength
+    ), 0)
+    return { artifacts, passedGateIds: [...execution.task.acceptanceGateIds], usage: zeroUsage(storageBytes) }
   }
 }
 

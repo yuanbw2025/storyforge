@@ -11,7 +11,10 @@ import {
   confirmTextOpenWorldCreatorProductionPreflightV1,
   createTextOpenWorldCreatorProductionPreflightV1,
 } from '../../src/lib/open-world/creator-production-preflight'
-import { readTextOpenWorldCreatorExecutionBriefV1 } from '../../src/lib/open-world/creator-production-start'
+import {
+  parseTextOpenWorldCreatorProductionSourcePlanV1,
+  readTextOpenWorldCreatorExecutionBriefV1,
+} from '../../src/lib/open-world/creator-production-start'
 import { createTextOpenWorldProductionExecutorV1 } from '../../src/lib/open-world/production-executor'
 import {
   inspectTextOpenWorldCreatorNovelSourceV1,
@@ -66,7 +69,7 @@ const PREFLIGHT_ACKNOWLEDGEMENT = {
   mediaCostBoundaryReviewed: true,
 } as const
 
-async function seedNovel(name: string) {
+async function seedNovel(name: string, options: { chapterBody?: string } = {}) {
   const created = await createWorkspace({
     name,
     genres: ['fantasy'],
@@ -76,6 +79,8 @@ async function seedNovel(name: string) {
     enableMultiWorld: false,
   }, { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' })
   const now = Date.now() - 2_000
+  const chapterBody = options.chapterBody
+    ?? '巡井人在旧渠发现被抹去的盐印，并决定追查断流源头。'
   const volumeId = await db.outlineNodes.add(stampNewRecord(created.scope, 'outlineNodes', {
     projectId: created.scope.projectId,
     parentId: null,
@@ -100,8 +105,8 @@ async function seedNovel(name: string) {
     projectId: created.scope.projectId,
     outlineNodeId: outlineId,
     title: '第一章 断流',
-    content: '<p>巡井人在旧渠发现被抹去的盐印，并决定追查断流源头。</p>',
-    wordCount: 28,
+    content: `<p>${chapterBody}</p>`,
+    wordCount: chapterBody.replace(/\s/g, '').length,
     status: 'final',
     order: 0,
     notes: '',
@@ -330,6 +335,114 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     expect(frozen.start).toEqual(prepared.preview.start)
     expect(frozen.executionBrief).toEqual(prepared.preview.start.executionBrief)
   }, 30_000)
+
+  it('大篇幅小说的实际P0冻结用量不会再撞上任务均分，并保持总Plan预留不超过200MB Brief', async () => {
+    const novel = await seedNovel(`G5-05 large novel ${crypto.randomUUID()}`, {
+      chapterBody: '盐'.repeat(3_500_000),
+    })
+    const selection = { mode: 'entire-work' } as const
+    const source = {
+      sourceKind: 'novel',
+      sourceScope: novel.scope,
+      selection,
+      preview: await inspectTextOpenWorldCreatorNovelSourceV1({
+        sourceScope: novel.scope,
+        selection,
+      }),
+    } satisfies TextOpenWorldCreatorSourceSelectionV1
+    const prepared = await prepareStart(source, 'large-source-storage')
+    const p0 = prepared.preview.plan.tasks.find(task => task.taskKey === 'p0.source-lock')!
+    const maximumStorageBytes = prepared.preview.start.executionBrief.productionBudget.maximumStorageBytes
+    const oldEqualShare = Math.floor(maximumStorageBytes / prepared.preview.plan.tasks.length)
+    const totalReserved = prepared.preview.plan.tasks.reduce(
+      (sum, task) => sum + task.budgetReservation.storageBytes,
+      0,
+    )
+    expect(p0.budgetReservation.storageBytes).toBeGreaterThan(oldEqualShare)
+    expect(totalReserved).toBeLessThanOrEqual(maximumStorageBytes)
+
+    await authorizeTextOpenWorldCreatorProductionStartV1({
+      ...prepared.input,
+      expectedPlanHash: prepared.preview.start.productionPlanHash,
+    })
+    const build = await db.productBuilds
+      .where('[productionId+buildNumber]')
+      .equals([prepared.input.productionId, prepared.preview.buildNumber])
+      .first()
+    const executor = createTextOpenWorldProductionExecutorV1({
+      production: prepared.preview.production,
+      brief: prepared.preview.start.executionBrief,
+    })
+    const result = await executor({
+      scope: prepared.preview.scope,
+      productionId: prepared.input.productionId,
+      buildId: build!.id!,
+      buildNumber: prepared.preview.buildNumber,
+      controlEpoch: prepared.preview.plan.controlEpoch,
+      planHash: prepared.preview.start.productionPlanHash,
+      task: p0,
+      attemptBudgetReservation: p0.budgetReservation,
+      attempt: 1,
+      idempotencyKey: await hashProductProductionValueV2('large-source-storage.p0'),
+      contextText: '',
+      inputArtifacts: [],
+      capabilityBindings: [],
+      signal: new AbortController().signal,
+    })
+    expect(result.usage.storageBytes).toBeGreaterThan(oldEqualShare)
+    expect(result.usage.storageBytes).toBeLessThanOrEqual(p0.budgetReservation.storageBytes)
+  }, 60_000)
+
+  it('Creator SourcePlan 接受512个来源单元并拒绝第513个', async () => {
+    const sourceUnitArtifactKeys = Array.from({ length: 512 }, (_, index) => index === 0
+      ? 'text-open-world.source-pin-unit'
+      : `text-open-world.source-pin-unit.${String(index + 1).padStart(5, '0')}`)
+    const body = {
+      schema: 'storyforge.text-open-world-creator-production-source-plan' as const,
+      version: 1 as const,
+      productType: 'text-open-world' as const,
+      productInstanceKey: 'tow.g5.source-boundary',
+      sourceKind: 'world-release' as const,
+      sourceBinding: {
+        kind: 'world-release' as const,
+        worldCode: 'world.source-boundary',
+        releaseUid: 'release.source-boundary',
+        releaseVersion: 1,
+        releaseHash: '1'.repeat(64),
+        referenceHash: '2'.repeat(64),
+        manifestSchemaHash: '3'.repeat(64),
+        capabilityCatalogHash: '4'.repeat(64),
+        capabilityProfileHash: '5'.repeat(64),
+      },
+      sourceBindingHash: '6'.repeat(64),
+      sourceVersionHash: '1'.repeat(64),
+      expectedSourceBoundaryHash: '7'.repeat(64),
+      selection: {
+        kind: 'world-release' as const,
+        mode: 'entire-release' as const,
+        resourceKeys: Array.from({ length: 512 }, (_, index) => `resource.${index + 1}`),
+      },
+      sourceUnitArtifactKeys,
+      createdAt: 1,
+    }
+    await expect(parseTextOpenWorldCreatorProductionSourcePlanV1({
+      ...body,
+      planHash: await hashProductProductionValueV2(body),
+    })).resolves.toMatchObject({ sourceUnitArtifactKeys })
+
+    const overLimitBody = {
+      ...body,
+      selection: {
+        ...body.selection,
+        resourceKeys: [...body.selection.resourceKeys, 'resource.513'],
+      },
+      sourceUnitArtifactKeys: [...sourceUnitArtifactKeys, 'text-open-world.source-pin-unit.00513'],
+    }
+    await expect(parseTextOpenWorldCreatorProductionSourcePlanV1({
+      ...overLimitBody,
+      planHash: await hashProductProductionValueV2(overLimitBody),
+    })).rejects.toThrow(/512|selection/)
+  })
 
   it('Creator Start 只冻结非定位 compatibility 占位值，项目导入后仍由重映射行 locator 驱动', async () => {
     // Occupy the first physical release id so the regression cannot pass by

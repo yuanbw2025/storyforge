@@ -16,7 +16,6 @@ import type {
 } from '../types'
 import {
   assertWorldSemanticReleaseCurrentV1,
-  openWorldSemanticResourceCatalogV1,
   worldSemanticReleaseTransactionTablesV1,
 } from '../context-gateway/world-release-client'
 import { parseProductProductionBriefV3 } from '../product-production/contracts'
@@ -32,14 +31,22 @@ import {
   verifyTextOpenWorldCreatorBriefV1,
 } from './creator-brief-persistence'
 import { verifyTextOpenWorldCreatorProductionPreflightConfirmationV1 } from './creator-production-preflight'
-import { createTextOpenWorldProductionPlanV1 } from './production-contract'
 import {
+  createTextOpenWorldProductionPlanV1,
+  TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1,
+} from './production-contract'
+import {
+  assertTextOpenWorldNovelSourceCasWitnessCurrentV1,
+  createTextOpenWorldNovelSourceCasWitnessV1,
   prepareTextOpenWorldNovelSourceSnapshotV1,
+  prepareTextOpenWorldWorldSourceBoundaryV1,
   textOpenWorldNovelSourceTransactionTablesV1,
+  type TextOpenWorldNovelSourceCasWitnessV1,
 } from './source-pin'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
-const MAX_SOURCE_UNITS = 20_000
+const MAX_SOURCE_UNITS = TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1.maximumUnits
+const MAX_SOURCE_TOTAL_CHARS = TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1.maximumTotalChars
 
 function fail(message: string): never {
   throw new Error('[text-open-world-creator-start] ' + message)
@@ -91,6 +98,7 @@ function normalizedText(value: unknown, label: string, maximum: number, allowEmp
 export async function assertTextOpenWorldCreatorProductionSourceCurrentV1(input: {
   scope: WorkspaceScope
   sourceLocator: TextOpenWorldCreatorSourceLocatorV1
+  novelSourceCasWitness?: TextOpenWorldNovelSourceCasWitnessV1 | null
 }): Promise<void> {
   const scope = await resolveScope({ scope: input.scope })
   if (input.sourceLocator.kind === 'world-release') {
@@ -102,14 +110,17 @@ export async function assertTextOpenWorldCreatorProductionSourceCurrentV1(input:
     })
     return
   }
-  const current = await prepareTextOpenWorldNovelSourceSnapshotV1({
-    sourceScope: scope,
-    selection: input.sourceLocator.selection,
-  })
-  if (current.sourceVersionHash !== input.sourceLocator.expectedSourceVersionHash
-    || current.sourceBoundaryHash !== input.sourceLocator.expectedSourceBoundaryHash) {
-    fail('小说来源在原子授权边界已经变化')
+  const witness = input.novelSourceCasWitness
+  if (!witness
+    || witness.sourceVersionHash !== input.sourceLocator.expectedSourceVersionHash
+    || witness.sourceBoundaryHash !== input.sourceLocator.expectedSourceBoundaryHash) {
+    fail('小说来源缺少事务外冻结见证')
   }
+  await assertTextOpenWorldNovelSourceCasWitnessCurrentV1({
+    scope,
+    selection: input.sourceLocator.selection,
+    witness,
+  })
 }
 
 /** Returns only opaque Dexie table capabilities required to keep the final
@@ -188,20 +199,20 @@ export async function createTextOpenWorldCreatorProductionSourcePlanV1(input: {
     fail('Creator Brief 与当前来源 CAS 不一致')
   }
   let selection: TextOpenWorldCreatorProductionSourcePlanV1['selection']
-  let expectedSourceBoundaryHash: string | null
+  let expectedSourceBoundaryHash: string
   if (input.sourceLocator.kind === 'world-release') {
-    const catalog = await openWorldSemanticResourceCatalogV1({
+    const boundary = await prepareTextOpenWorldWorldSourceBoundaryV1({
+      scope,
       localReleaseRecordId: input.sourceLocator.localReleaseRecordId,
-      expectedProjectId: scope.projectId,
-      expectedWorldId: scope.worldId,
+      expectedReleaseHash: input.sourceLocator.expectedReleaseHash,
+      selection: { mode: 'entire-release' },
     })
-    if (catalog.description.identity.releaseHash !== input.sourceLocator.expectedReleaseHash) {
-      fail('WorldRelease 在计划生成前已变化')
+    selection = {
+      kind: 'world-release',
+      mode: 'entire-release',
+      resourceKeys: boundary.selectedResourceKeys,
     }
-    const resourceKeys = [...new Set(catalog.resources.map(item => item.resourceKey))].sort()
-    if (!resourceKeys.length) fail('WorldRelease 没有可冻结语义资源')
-    selection = { kind: 'world-release', mode: 'entire-release', resourceKeys }
-    expectedSourceBoundaryHash = null
+    expectedSourceBoundaryHash = boundary.sourceBoundaryHash
   } else {
     const preview = await prepareTextOpenWorldNovelSourceSnapshotV1({
       sourceScope: scope,
@@ -289,7 +300,7 @@ export async function parseTextOpenWorldCreatorProductionSourcePlanV1(
     || !sameJson(row.sourceUnitArtifactKeys, sourceUnitArtifactKeys(count))) {
     fail('SourcePlan 来源 Artifact keys 与选择数量不闭合')
   }
-  if (row.expectedSourceBoundaryHash !== null && !isSha256Hash(row.expectedSourceBoundaryHash)) {
+  if (!isSha256Hash(row.expectedSourceBoundaryHash)) {
     fail('expectedSourceBoundaryHash 无效')
   }
   const parsed: TextOpenWorldCreatorProductionSourcePlanV1 = {
@@ -301,7 +312,7 @@ export async function parseTextOpenWorldCreatorProductionSourcePlanV1(
     sourceBinding: structuredClone(row.sourceBinding) as TextOpenWorldCreatorProductionSourcePlanV1['sourceBinding'],
     sourceBindingHash: hash(row.sourceBindingHash, 'sourceBindingHash'),
     sourceVersionHash: hash(row.sourceVersionHash, 'sourceVersionHash'),
-    expectedSourceBoundaryHash: row.expectedSourceBoundaryHash as string | null,
+    expectedSourceBoundaryHash: row.expectedSourceBoundaryHash as string,
     selection: parsedSelection,
     sourceUnitArtifactKeys: sourceUnitArtifactKeys(count),
     createdAt: nonNegativeInteger(row.createdAt, 'createdAt'),
@@ -309,8 +320,7 @@ export async function parseTextOpenWorldCreatorProductionSourcePlanV1(
   }
   const { planHash, ...body } = parsed
   if (await hashProductProductionValueV2(body) !== planHash) fail('SourcePlan Hash 不匹配')
-  if (parsed.sourceKind !== parsed.selection.kind
-    || (parsed.sourceKind === 'novel' && parsed.expectedSourceBoundaryHash == null)) {
+  if (parsed.sourceKind !== parsed.selection.kind) {
     fail('SourcePlan 来源种类与选择不闭合')
   }
   if (expectedBrief) {
@@ -563,6 +573,7 @@ export interface TextOpenWorldCreatorStartPreparationV1 {
   start: TextOpenWorldCreatorProductionStartV1
   plan: ProductProductionPlanV3
   buildNumber: number
+  novelSourceCasWitness: TextOpenWorldNovelSourceCasWitnessV1 | null
 }
 
 export async function createTextOpenWorldCreatorStartPreparationV1(input: {
@@ -621,6 +632,14 @@ export async function createTextOpenWorldCreatorStartPreparationV1(input: {
     sourceLocator: input.sourceLocator,
     createdAt: authorizedAt,
   })
+  const novelSourceCasWitness = input.sourceLocator.kind === 'novel'
+    ? await createTextOpenWorldNovelSourceCasWitnessV1({
+        sourceScope: scope,
+        selection: input.sourceLocator.selection,
+        expectedSourceVersionHash: input.sourceLocator.expectedSourceVersionHash,
+        expectedSourceBoundaryHash: input.sourceLocator.expectedSourceBoundaryHash,
+      })
+    : null
   const executionBrief = await createTextOpenWorldCreatorExecutionBriefV1({
     brief,
     sourcePlan,
@@ -636,6 +655,10 @@ export async function createTextOpenWorldCreatorStartPreparationV1(input: {
     briefHash: executionBriefHash,
     authoritativeBriefHash: brief.briefHash,
     sourceUnitArtifactKeys: sourcePlan.sourceUnitArtifactKeys,
+    // WorldRelease P0 stores index-only unit payloads. Novel source text stays
+    // private inside the source adapter, so reserve its accepted 4M-char safety
+    // boundary instead of underestimating from the word-count-only summary.
+    sourceTotalChars: sourcePlan.sourceKind === 'world-release' ? 0 : MAX_SOURCE_TOTAL_CHARS,
     mediaCostAuthorized: false,
   })
   const productionPlanHash = await hashProductProductionValueV2(plan)
@@ -683,6 +706,7 @@ export async function createTextOpenWorldCreatorStartPreparationV1(input: {
     start,
     plan,
     buildNumber,
+    novelSourceCasWitness,
   }
 }
 

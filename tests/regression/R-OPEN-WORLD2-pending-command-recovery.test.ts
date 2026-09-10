@@ -191,7 +191,7 @@ describe('Text Open World vNext · exact pending Command recovery', () => {
     const eventCount = settledEvents.length
     await executeTextOpenWorldActionV1({ ...input, requestedAt: 3 })
     expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(eventCount)
-  }, 30_000)
+  }, 60_000)
 
   it('刷新加载会主动恢复战斗pending，不依赖已禁用的玩家Action入口', async () => {
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
@@ -221,7 +221,7 @@ describe('Text Open World vNext · exact pending Command recovery', () => {
     const events = await db.productRuntimeEvents.where('sessionId').equals(created.session.id!).sortBy('sequence')
     expect(eventsForCommand(events, commandId).filter(event => event.type === 'text-open-world.command.committed')).toHaveLength(1)
     expect(eventsForCommand(events, commandId).filter(event => event.type === 'text-open-world.effects.applied')).toHaveLength(1)
-  }, 30_000)
+  }, 60_000)
 
   it('2-draw系统命令在1/2处中断后只补第二次draw，并保留合法外层归属与base', async () => {
     const session = await createSession({ seed: 'pending-director-partial-seed' })

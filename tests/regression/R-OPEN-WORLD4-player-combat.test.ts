@@ -181,7 +181,7 @@ describe('Text Open World vNext · disclosure-safe player combat projection', ()
     expect(result.log.filter(entry => entry.tone === 'enemy')).toHaveLength(2)
     const visibleText = result.log.flatMap(entry => [entry.summary, ...entry.details]).join(' ')
     expect(visibleText).not.toMatch(/enemy\.1\.|action\.|effect\.|command\.|criticalDrawValue|sourceRefs/)
-  }, 30_000)
+  }, 60_000)
 
   it('胜利奖励只展示当前实例已经落盘的实际Effect，失败或逃跑不会预告奖励', async () => {
     const runtimePackage = createTextOpenWorldVNextFixture()

@@ -1002,6 +1002,20 @@ async function runDurableBatchModel(input: {
     const called = await callCurationModel(input)
     const response = called.response
     paidUsage = called.usage
+    // The outer scheduler may time out and terminalize this shared task Run
+    // while the nested provider request is in flight. Usage is already known
+    // at this point, so hand it back through the typed paid-failure path; never
+    // try to append a response boundary to an immutable terminal Run.
+    snapshot = await readAgentRunV1(input.execution.scope, snapshot.run.id)
+    const liveBatchStep = snapshot.projection.steps[stepId]
+    if (snapshot.projection.state !== 'running'
+      || liveBatchStep?.status !== 'running'
+      || liveBatchStep.attempt !== batchAttempt) {
+      throw new ProductProductionRetryableExecutionErrorV1(
+        'P1批次 provider 响应到达时外层 Run 已终态',
+        paidUsage,
+      )
+    }
     const candidateHash = await hashProductProductionValueV2(response.output)
     snapshot = await appendBatchEvent(input.execution.scope, snapshot, 'model.responded', {
       stepId,
@@ -1061,13 +1075,27 @@ async function runDurableBatchModel(input: {
     return { response, draft, usage: paidUsage, chargeable: true }
   } catch (error) {
     snapshot = await readAgentRunV1(input.execution.scope, snapshot.run.id)
-    if (snapshot.projection.steps[stepId]?.status === 'running') {
-      await appendBatchEvent(input.execution.scope, snapshot, 'step.failed', {
-        stepId,
-        attempt: batchAttempt,
-        code: 'source-curation-batch-failed',
-        retryable: input.execution.attempt < input.execution.task.maxAttempts,
-      })
+    const batchStep = snapshot.projection.steps[stepId]
+    if (snapshot.projection.state === 'running'
+      && batchStep?.status === 'running'
+      && batchStep.attempt === batchAttempt) {
+      try {
+        await appendBatchEvent(input.execution.scope, snapshot, 'step.failed', {
+          stepId,
+          attempt: batchAttempt,
+          code: 'source-curation-batch-failed',
+          retryable: input.execution.attempt < input.execution.task.maxAttempts,
+        })
+      } catch (appendError) {
+        // Preserve the original paid outcome when a timeout wins this final
+        // append race. Only a genuine append failure on the still-live batch
+        // may replace it.
+        const latest = await readAgentRunV1(input.execution.scope, snapshot.run.id)
+        const latestStep = latest.projection.steps[stepId]
+        if (latest.projection.state === 'running'
+          && latestStep?.status === 'running'
+          && latestStep.attempt === batchAttempt) throw appendError
+      }
     }
     throw paidUsage ? knownPaidCurationFailure(error, paidUsage) : error
   }

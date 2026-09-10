@@ -389,6 +389,76 @@ describe('TOW-G5-04 · production start UI', () => {
     expect(host.textContent).toContain('checkpoint：saved · author-retry')
   })
 
+  it('Creator Build 仅开放检查与试玩，不展示尚未实现的发布或版本演化入口', async () => {
+    serviceMocks.readDetails.mockResolvedValue({
+      ...lockedDetails,
+      production: {
+        ...lockedProduction,
+        status: 'preview-ready',
+      },
+      build: {
+        ...lockedDetails.build,
+        status: 'release-ready',
+        failureJson: null,
+      },
+    } as unknown as ProductProductionDetailsV1)
+    serviceMocks.readProgress.mockResolvedValue(null)
+
+    await act(async () => {
+      root.render(createElement(ProductProductionStudio, {
+        scope: SCOPE,
+        allowedProducts: ['text-open-world'],
+        initialProduct: 'text-open-world',
+        initialProductionId: lockedProduction.id,
+        productionOnly: true,
+      }))
+    })
+
+    await waitFor(() => expect(
+      host.querySelector('[data-testid="text-open-world-creator-later-stage-notice"]'),
+    ).toBeTruthy())
+    expect(host.textContent).toContain('当前阶段可检查与试玩 Creator Build')
+    expect(host.textContent).toContain('试玩未发布 Build')
+    expect(host.textContent).not.toContain('复验并原子发布')
+    expect(host.textContent).not.toContain('继续演化下一版')
+    expect(host.querySelector('[data-testid="text-open-world-creator-artifact-browser"]')).toBeTruthy()
+  })
+
+  it('旧泛型文字开放世界不误挂 Creator Artifact 浏览器，原有发布与演化动作保持可见', async () => {
+    serviceMocks.readDetails.mockResolvedValue({
+      ...lockedDetails,
+      production: {
+        ...lockedProduction,
+        status: 'preview-ready',
+      },
+      brief: {
+        ...lockedDetails.brief,
+        briefKind: 'product-production-v3',
+      },
+      build: {
+        ...lockedDetails.build,
+        status: 'release-ready',
+        failureJson: null,
+      },
+    } as unknown as ProductProductionDetailsV1)
+    serviceMocks.readProgress.mockResolvedValue(null)
+
+    await act(async () => {
+      root.render(createElement(ProductProductionStudio, {
+        scope: SCOPE,
+        allowedProducts: ['text-open-world'],
+        initialProduct: 'text-open-world',
+        initialProductionId: lockedProduction.id,
+        productionOnly: true,
+      }))
+    })
+
+    await waitFor(() => expect(host.querySelector('h1')?.textContent).toContain(lockedProduction.title))
+    expect(host.querySelector('[data-testid="text-open-world-creator-artifact-browser"]')).toBeNull()
+    expect(host.textContent).toContain('复验并原子发布')
+    expect(host.textContent).toContain('继续演化下一版')
+  })
+
   it('productionOnly目标不存在时失败关闭，不回退或自动续跑其他 Production', async () => {
     serviceMocks.listWorkspace.mockResolvedValue({
       worldReleases: [],

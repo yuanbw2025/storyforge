@@ -2,13 +2,15 @@ import { db } from '../db/schema'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { byOutlineOrderThenId } from '../outline/canonical-outline-walk'
 import {
-  acceptProductBuildArtifact,
+  acceptTextOpenWorldSourcePinBundleArtifactsV1,
   readAcceptedBuildArtifacts,
 } from '../product-production/artifact-store'
 import {
+  canonicalProductProductionJsonV2,
   hashProductProductionValueV2,
   isSha256Hash,
 } from '../product-production/hash'
+import { TEXT_OPEN_WORLD_SOURCE_PIN_LIMITS_V1 } from './source-pin-contract'
 import { openWorldSemanticResourceCatalogV1 } from '../context-gateway/world-release-client'
 import {
   listWorldReferenceCatalogV1,
@@ -17,6 +19,7 @@ import {
 } from '../world-engine/world-reference'
 import { countWords, htmlToPlainText } from '../utils/html'
 import { effectiveWorkKind } from '../workspace/work-kind'
+import { WORLD_CAPABILITY_AREAS } from '../registry/types'
 import {
   assertRecordInScope,
   getTableSpec,
@@ -46,7 +49,8 @@ import type {
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const MAX_SOURCE_UNIT_CHARS = 200_000
-const MAX_SOURCE_UNITS = 20_000
+const MAX_SOURCE_UNITS = TEXT_OPEN_WORLD_SOURCE_PIN_LIMITS_V1.maximumUnits
+const MAX_SOURCE_TOTAL_CHARS = TEXT_OPEN_WORLD_SOURCE_PIN_LIMITS_V1.maximumTotalChars
 const WORLD_PERMISSIONS: TextOpenWorldSourcePermissionV1[] = [
   'derive-text-open-world',
   'read-world-release-catalog',
@@ -88,7 +92,12 @@ type SourceUnitIdentityInputV1 = Pick<
   | 'partCount'
   | 'readDepth'
   | 'sourceResourceKey'
+  | 'sourceArea'
+  | 'sourceResourceKind'
+  | 'label'
   | 'sourceContentHash'
+  | 'charCount'
+  | 'wordCount'
 >
 
 interface PreparedNovelSourceChunkV1 extends SourceUnitIdentityInputV1 {
@@ -107,6 +116,19 @@ interface PreparedNovelSourceSnapshotInternalV1 {
   preview: TextOpenWorldNovelSourceSnapshotPreviewV1
 }
 
+export interface TextOpenWorldNovelSourceCasWitnessV1 {
+  schema: 'storyforge.text-open-world-novel-source-cas-witness'
+  version: 1
+  projectId: number
+  worldId: number
+  workId: number
+  selectionJson: string
+  sourceVersionHash: string
+  sourceBoundaryHash: string
+  /** Ephemeral, process-local proof. It is never persisted or exposed to UI. */
+  rawReadSetJson: string
+}
+
 function fail(message: string): never {
   throw new Error(`[text-open-world-source-pin] ${message}`)
 }
@@ -114,6 +136,14 @@ function fail(message: string): never {
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail(`${label} 必须是对象`)
   return value as Record<string, unknown>
+}
+
+function exactKeys(value: Record<string, unknown>, keys: readonly string[], label: string): void {
+  const actual = Object.keys(value).sort()
+  const expected = [...keys].sort()
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
+    fail(`${label} 字段不精确`)
+  }
 }
 
 function stableKey(value: string, label: string): string {
@@ -181,6 +211,8 @@ function unitRef(
     partCount: payload.partCount,
     readDepth: payload.readDepth,
     sourceResourceKey: payload.sourceResourceKey,
+    sourceArea: payload.sourceArea,
+    sourceResourceKind: payload.sourceResourceKind,
     sourceContentHash: payload.sourceContentHash,
     charCount: payload.charCount,
     wordCount: payload.wordCount,
@@ -196,7 +228,12 @@ function sourceUnitIdentity(ref: SourceUnitIdentityInputV1): unknown {
     partCount: ref.partCount,
     readDepth: ref.readDepth,
     sourceResourceKey: ref.sourceResourceKey,
+    sourceArea: ref.sourceArea,
+    sourceResourceKind: ref.sourceResourceKind,
+    label: ref.label,
     sourceContentHash: ref.sourceContentHash,
+    charCount: ref.charCount,
+    wordCount: ref.wordCount,
   }
 }
 
@@ -505,21 +542,28 @@ async function prepareNovelSourceChunksV1(
       partCount: parts.length,
     }))
   })
-  if (!expanded.length || expanded.length > MAX_SOURCE_UNITS) fail('小说冻结单元为空或超过上限')
-  return Promise.all(expanded.map(async (item, order) => ({
-    unitKey: `source.novel.${String(order + 1).padStart(5, '0')}`,
-    kind: item.unit.kind,
-    label: item.partCount === 1 ? item.unit.label : `${item.unit.label}（${item.partIndex}/${item.partCount}）`,
-    order,
-    partIndex: item.partIndex,
-    partCount: item.partCount,
-    readDepth: 'full' as const,
-    sourceResourceKey: null,
-    sourceContentHash: await hashProductProductionValueV2(item.contentText),
-    contentText: item.contentText,
-    charCount: item.contentText.length,
-    wordCount: countWords(item.contentText),
-  })))
+  if (!expanded.length || expanded.length > MAX_SOURCE_UNITS
+    || expanded.reduce((sum, item) => sum + item.contentText.length, 0) > MAX_SOURCE_TOTAL_CHARS) {
+    fail(`小说冻结单元为空，或超过 ${MAX_SOURCE_UNITS} 单元/400万字符上限`)
+  }
+  const chunks: PreparedNovelSourceChunkV1[] = []
+  for (const [order, item] of expanded.entries()) chunks.push({
+      unitKey: `source.novel.${String(order + 1).padStart(5, '0')}`,
+      kind: item.unit.kind,
+      label: item.partCount === 1 ? item.unit.label : `${item.unit.label}（${item.partIndex}/${item.partCount}）`,
+      order,
+      partIndex: item.partIndex,
+      partCount: item.partCount,
+      readDepth: 'full',
+      sourceResourceKey: null,
+      sourceArea: null,
+      sourceResourceKind: null,
+      sourceContentHash: await hashProductProductionValueV2(item.contentText),
+      contentText: item.contentText,
+      charCount: item.contentText.length,
+      wordCount: countWords(item.contentText),
+    })
+  return chunks
 }
 
 async function buildNovelUnitArtifacts(input: {
@@ -527,7 +571,8 @@ async function buildNovelUnitArtifacts(input: {
   chunks: PreparedNovelSourceChunkV1[]
   capturedAt: number
 }): Promise<TextOpenWorldSourcePinBundleV1['units']> {
-  return Promise.all(input.chunks.map(async item => {
+  const units: TextOpenWorldSourcePinBundleV1['units'] = []
+  for (const item of input.chunks) {
     const artifactKey = sourceUnitArtifactKey(item.order)
     const payload: TextOpenWorldSourcePinUnitV1 = {
       schema: 'storyforge.text-open-world-source-pin-unit',
@@ -551,8 +596,9 @@ async function buildNovelUnitArtifacts(input: {
       wordCount: item.wordCount,
       capturedAt: input.capturedAt,
     }
-    return { payload, artifactContentHash: await hashProductProductionValueV2(payload) }
-  }))
+    units.push({ payload, artifactContentHash: await hashProductProductionValueV2(payload) })
+  }
+  return units
 }
 
 async function prepareNovelSourceSnapshotInternalV1(input: {
@@ -664,6 +710,90 @@ async function prepareNovelSourceSnapshotInternalV1(input: {
   }
 }
 
+async function novelSourceRawReadSetJsonV1(scope: WorkspaceScope): Promise<string> {
+  const sourceWork = await db.works.get(scope.workId)
+  if (!sourceWork || sourceWork.projectId !== scope.projectId
+    || sourceWork.worldId !== scope.worldId || effectiveWorkKind(sourceWork) !== 'novel') {
+    fail('来源 scope 不是有效小说 Work')
+  }
+  const [outlines, chapters, storyCores] = await Promise.all([
+    readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' }),
+    readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
+    readOwnedRows<StoryCore>(scope, 'storyCores', { owner: 'work' }),
+  ])
+  const byId = <T extends { id?: number }>(rows: T[]) => [...rows]
+    .sort((left, right) => (left.id ?? -1) - (right.id ?? -1))
+    .map(row => ({ ...row, id: row.id ?? null }))
+  const stripUndefined = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(stripUndefined)
+    if (value != null && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+        .filter(([, child]) => child !== undefined)
+        .map(([key, child]) => [key, stripUndefined(child)]))
+    }
+    return value
+  }
+  return canonicalProductProductionJsonV2(stripUndefined({
+    work: { ...sourceWork, id: sourceWork.id ?? null },
+    outlines: byId(outlines),
+    chapters: byId(chapters),
+    storyCores: byId(storyCores),
+  }))
+}
+
+/**
+ * Builds an ephemeral exact-row witness outside the command transaction. The
+ * final authorization transaction only re-reads and byte-compares these rows;
+ * it never repeats hundreds of WebCrypto hashes while holding IndexedDB locks.
+ */
+export async function createTextOpenWorldNovelSourceCasWitnessV1(input: {
+  sourceScope: WorkspaceScope
+  selection: AdaptationSourceSelectionV1
+  expectedSourceVersionHash: string
+  expectedSourceBoundaryHash: string
+}): Promise<TextOpenWorldNovelSourceCasWitnessV1> {
+  const scope = await resolveScope({ scope: input.sourceScope })
+  const before = await novelSourceRawReadSetJsonV1(scope)
+  const snapshot = await prepareNovelSourceSnapshotInternalV1({
+    sourceScope: scope,
+    selection: input.selection,
+  })
+  const after = await novelSourceRawReadSetJsonV1(scope)
+  if (before !== after
+    || snapshot.sourceVersionHash !== input.expectedSourceVersionHash
+    || snapshot.sourceBoundaryHash !== input.expectedSourceBoundaryHash) {
+    fail('小说来源在授权见证生成期间变化')
+  }
+  return {
+    schema: 'storyforge.text-open-world-novel-source-cas-witness',
+    version: 1,
+    projectId: scope.projectId,
+    worldId: scope.worldId,
+    workId: scope.workId,
+    selectionJson: canonicalProductProductionJsonV2(input.selection),
+    sourceVersionHash: snapshot.sourceVersionHash,
+    sourceBoundaryHash: snapshot.sourceBoundaryHash,
+    rawReadSetJson: after,
+  }
+}
+
+export async function assertTextOpenWorldNovelSourceCasWitnessCurrentV1(input: {
+  scope: WorkspaceScope
+  selection: AdaptationSourceSelectionV1
+  witness: TextOpenWorldNovelSourceCasWitnessV1
+}): Promise<void> {
+  const { scope, witness } = input
+  if (witness.schema !== 'storyforge.text-open-world-novel-source-cas-witness'
+    || witness.version !== 1 || witness.projectId !== scope.projectId
+    || witness.worldId !== scope.worldId || witness.workId !== scope.workId
+    || witness.selectionJson !== canonicalProductProductionJsonV2(input.selection)
+    || !isSha256Hash(witness.sourceVersionHash)
+    || !isSha256Hash(witness.sourceBoundaryHash)
+    || await novelSourceRawReadSetJsonV1(scope) !== witness.rawReadSetJson) {
+    fail('小说来源在原子授权边界已经变化')
+  }
+}
+
 /** Prepare the exact immutable identity later used by formal freeze without
  * persisting anything or returning the internally read novel text. */
 export async function prepareTextOpenWorldNovelSourceSnapshotV1(input: {
@@ -676,7 +806,7 @@ export async function prepareTextOpenWorldNovelSourceSnapshotV1(input: {
 
 /** Opaque transaction capability for the product-private novel source CAS. */
 export function textOpenWorldNovelSourceTransactionTablesV1() {
-  return ['outlineNodes', 'chapters', 'storyCores'].map(name => getTableSpec(name).table)
+  return ['works', 'outlineNodes', 'chapters', 'storyCores'].map(name => getTableSpec(name).table)
 }
 
 async function resolveExpectedWorldReleaseHashV1(input: {
@@ -719,6 +849,78 @@ async function resolveExpectedWorldReleaseHashV1(input: {
     fail('授权 Brief 不能证明待冻结 WorldRelease 的精确版本')
   }
   return brief.sourceWorldContentHash
+}
+
+/** Derive the exact catalog descriptor boundary used by Creator SourcePlan. */
+export async function prepareTextOpenWorldWorldSourceBoundaryV1(input: {
+  scope: WorkspaceScope
+  localReleaseRecordId: number
+  expectedReleaseHash: string
+  selection: TextOpenWorldWorldSourceSelectionV1
+}): Promise<{
+  sourceVersionHash: string
+  sourceBoundaryHash: string
+  selectedResourceKeys: string[]
+}> {
+  const scope = await resolveScope({ scope: input.scope })
+  if (!isSha256Hash(input.expectedReleaseHash)) fail('expectedReleaseHash 非法')
+  const catalog = await openWorldSemanticResourceCatalogV1({
+    localReleaseRecordId: input.localReleaseRecordId,
+    expectedProjectId: scope.projectId,
+    expectedWorldId: scope.worldId,
+  })
+  if (catalog.description.identity.releaseHash !== input.expectedReleaseHash) {
+    fail('WorldRelease 已在边界推导前变化')
+  }
+  const descriptorByKey = new Map(catalog.resources.map(item => [item.resourceKey, item]))
+  const selectedResourceKeys = input.selection.mode === 'entire-release'
+    ? [...descriptorByKey.keys()].sort()
+    : uniqueSorted(input.selection.resourceKeys.map(key => stableKey(key, 'resourceKey')))
+  if (!selectedResourceKeys.length || selectedResourceKeys.length > MAX_SOURCE_UNITS
+    || (input.selection.mode === 'selected-resources'
+      && selectedResourceKeys.length !== input.selection.resourceKeys.length)) {
+    fail('WorldRelease 选择为空、重复或超过资源上限')
+  }
+  const descriptors = selectedResourceKeys.map(key => {
+    const descriptor = descriptorByKey.get(key)
+    if (!descriptor?.worldSemantic) fail(`资源不属于冻结 WorldRelease:${key}`)
+    return descriptor as typeof descriptor & { worldSemantic: NonNullable<typeof descriptor.worldSemantic> }
+  })
+  const portableReference = await portableWorldReferenceV1(catalog.description.worldReference)
+  const source: Extract<TextOpenWorldSourcePinSourceV1, { kind: 'world-release' }> = {
+    kind: 'world-release',
+    worldReference: portableReference,
+    releaseUid: portableReference.releaseUid,
+    releaseVersion: portableReference.releaseVersion,
+    releaseHash: portableReference.releaseHash,
+    sourceManifestHash: catalog.description.sourceManifestHash,
+    catalogHash: portableReference.capabilityIdentity.catalogHash,
+    selection: { mode: input.selection.mode, selectedResourceKeys },
+  }
+  const units: SourceUnitIdentityInputV1[] = descriptors.map((descriptor, order) => ({
+    unitKey: `source.world.${String(order + 1).padStart(5, '0')}`,
+    kind: 'world-resource',
+    label: descriptor.title.trim() || descriptor.resourceKey,
+    order,
+    partIndex: 1,
+    partCount: 1,
+    readDepth: 'index',
+    sourceResourceKey: descriptor.resourceKey,
+    sourceArea: descriptor.worldSemantic.area,
+    sourceResourceKind: descriptor.worldSemantic.resourceKind,
+    sourceContentHash: descriptor.contentHash,
+    charCount: 0,
+    wordCount: 0,
+  }))
+  return {
+    sourceVersionHash: source.releaseHash,
+    sourceBoundaryHash: await sourceBoundaryHash({
+      sourceVersionHash: source.releaseHash,
+      source,
+      units,
+    }),
+    selectedResourceKeys,
+  }
 }
 
 /** Freeze only neutral WorldRelease catalog coordinates. P1 is responsible for
@@ -766,7 +968,8 @@ export async function freezeTextOpenWorldWorldReleaseSourceV1(input: {
       worldSemantic: NonNullable<typeof descriptor.worldSemantic>
     }
   })
-  const units = await Promise.all(descriptors.map(async (descriptor, order) => {
+  const units: TextOpenWorldSourcePinBundleV1['units'] = []
+  for (const [order, descriptor] of descriptors.entries()) {
     const artifactKey = sourceUnitArtifactKey(order)
     const payload: TextOpenWorldSourcePinUnitV1 = {
       schema: 'storyforge.text-open-world-source-pin-unit',
@@ -790,8 +993,8 @@ export async function freezeTextOpenWorldWorldReleaseSourceV1(input: {
       wordCount: 0,
       capturedAt: createdAt,
     }
-    return { payload, artifactContentHash: await hashProductProductionValueV2(payload) }
-  }))
+    units.push({ payload, artifactContentHash: await hashProductProductionValueV2(payload) })
+  }
   const portableReference = await portableWorldReferenceV1(catalog.description.worldReference)
   const source: TextOpenWorldSourcePinSourceV1 = {
     kind: 'world-release',
@@ -886,6 +1089,12 @@ export async function freezeTextOpenWorldNovelSourceV1(input: {
 }
 
 async function validateAuthorization(input: TextOpenWorldSourceAuthorizationV1): Promise<void> {
+  exactKeys(record(input, 'SourcePin authorization'), [
+    'schema', 'version', 'productInstanceKey', 'sourceKind', 'sourceVersionHash',
+    'sourceBoundaryHash', 'briefRevision', 'briefHash', 'authorStartRevision',
+    'authorizationNonceHash', 'rightsBasis', 'rightsNote', 'permissions',
+    'authorizedAt', 'authorizationHash',
+  ], 'SourcePin authorization')
   if (input.schema !== 'storyforge.text-open-world-source-authorization' || input.version !== 1) {
     fail('授权合同身份无效')
   }
@@ -909,6 +1118,12 @@ export async function validateTextOpenWorldSourcePinUnitV1(
   value: unknown,
 ): Promise<TextOpenWorldSourcePinUnitV1> {
   const row = record(value, 'SourcePinUnit') as unknown as TextOpenWorldSourcePinUnitV1
+  exactKeys(row as unknown as Record<string, unknown>, [
+    'schema', 'version', 'productInstanceKey', 'sourceKind', 'unitKey', 'artifactKey',
+    'kind', 'label', 'order', 'partIndex', 'partCount', 'readDepth', 'sourceResourceKey',
+    'sourceArea', 'sourceResourceKind', 'sourceContentHash', 'contentText', 'charCount',
+    'wordCount', 'capturedAt',
+  ], 'SourcePinUnit')
   if (row.schema !== 'storyforge.text-open-world-source-pin-unit' || row.version !== 1) {
     fail('SourcePinUnit 合同身份无效')
   }
@@ -928,7 +1143,9 @@ export async function validateTextOpenWorldSourcePinUnitV1(
   timestamp(row.capturedAt, 'unit.capturedAt')
   if (row.sourceKind === 'world-release') {
     if (row.kind !== 'world-resource' || row.readDepth !== 'index' || row.contentText !== null
-      || !row.sourceResourceKey || !row.sourceArea || !row.sourceResourceKind
+      || !row.sourceResourceKey || !WORLD_CAPABILITY_AREAS.includes(row.sourceArea as never)
+      || typeof row.sourceResourceKind !== 'string'
+      || nonEmptyText(row.sourceResourceKind, 'unit.sourceResourceKind', 200) !== row.sourceResourceKind
       || row.charCount !== 0 || row.wordCount !== 0 || row.partIndex !== 1 || row.partCount !== 1) {
       fail('WorldRelease unit 必须是无正文的 index 证据')
     }
@@ -948,10 +1165,18 @@ export async function validateTextOpenWorldSourcePinUnitV1(
 
 export async function validateTextOpenWorldSourcePinV1(value: unknown): Promise<TextOpenWorldSourcePinV1> {
   const pin = record(value, 'SourcePin') as unknown as TextOpenWorldSourcePinV1
+  exactKeys(pin as unknown as Record<string, unknown>, [
+    'schema', 'version', 'canonicalJsonVersion', 'productType', 'productInstanceKey',
+    'sourceKind', 'sourceVersionHash', 'sourceBoundaryHash', 'source', 'authorization',
+    'units', 'readEvidence', 'createdAt', 'pinHash',
+  ], 'SourcePin')
   if (pin.schema !== 'storyforge.text-open-world-source-pin' || pin.version !== 1
     || pin.canonicalJsonVersion !== 2 || pin.productType !== 'text-open-world') fail('SourcePin 合同身份无效')
   stableKey(pin.productInstanceKey, 'pin.productInstanceKey')
-  if (!['world-release', 'novel'].includes(pin.sourceKind) || pin.source.kind !== pin.sourceKind) fail('SourcePin 来源类型冲突')
+  const pinSource = record(pin.source, 'SourcePin source')
+  const pinAuthorization = record(pin.authorization, 'SourcePin authorization')
+  const pinReadEvidence = record(pin.readEvidence, 'SourcePin readEvidence')
+  if (!['world-release', 'novel'].includes(pin.sourceKind) || pinSource.kind !== pin.sourceKind) fail('SourcePin 来源类型冲突')
   for (const hash of [pin.sourceVersionHash, pin.sourceBoundaryHash, pin.pinHash]) {
     if (!isSha256Hash(hash)) fail('SourcePin Hash 非法')
   }
@@ -961,15 +1186,45 @@ export async function validateTextOpenWorldSourcePinV1(value: unknown): Promise<
   const keys = new Set<string>()
   const artifacts = new Set<string>()
   for (const [index, unit] of pin.units.entries()) {
+    exactKeys(unit as unknown as Record<string, unknown>, [
+      'unitKey', 'artifactKey', 'artifactContentHash', 'kind', 'label', 'order',
+      'partIndex', 'partCount', 'readDepth', 'sourceResourceKey', 'sourceArea',
+      'sourceResourceKind', 'sourceContentHash', 'charCount', 'wordCount',
+    ], 'Pin unit ref')
     stableKey(unit.unitKey, 'pin.unitKey')
     stableKey(unit.artifactKey, 'pin.artifactKey')
-    if (!isSha256Hash(unit.artifactContentHash) || !isSha256Hash(unit.sourceContentHash)) fail('Pin unit Hash 非法')
-    if (keys.has(unit.unitKey) || artifacts.has(unit.artifactKey) || unit.order !== index) fail('Pin unit key/order 不唯一')
+    if (!/^text-open-world\.source-pin-unit(?:\.\d{5})?$/.test(unit.artifactKey)
+      || !isSha256Hash(unit.artifactContentHash) || !isSha256Hash(unit.sourceContentHash)
+      || !['world-resource', 'work-metadata', 'story-core', 'outline-node', 'chapter'].includes(unit.kind)
+      || !['index', 'full'].includes(unit.readDepth)
+      || typeof unit.label !== 'string' || nonEmptyText(unit.label, 'pin.unit.label', 1_000) !== unit.label
+      || !Number.isSafeInteger(unit.order) || unit.order !== index
+      || !Number.isSafeInteger(unit.partIndex) || unit.partIndex < 1
+      || !Number.isSafeInteger(unit.partCount) || unit.partCount < unit.partIndex
+      || !Number.isSafeInteger(unit.charCount) || unit.charCount < 0
+      || !Number.isSafeInteger(unit.wordCount) || unit.wordCount < 0
+      || (unit.sourceResourceKey !== null
+        && (typeof unit.sourceResourceKey !== 'string' || !STABLE_KEY.test(unit.sourceResourceKey)))
+      || (unit.sourceArea !== null && !WORLD_CAPABILITY_AREAS.includes(unit.sourceArea as never))
+      || (unit.sourceResourceKind !== null
+        && (typeof unit.sourceResourceKind !== 'string'
+          || nonEmptyText(unit.sourceResourceKind, 'pin.unit.sourceResourceKind', 200)
+            !== unit.sourceResourceKind))) {
+      fail('Pin unit 引用字段非法')
+    }
+    if (keys.has(unit.unitKey) || artifacts.has(unit.artifactKey)) fail('Pin unit key/order 不唯一')
     keys.add(unit.unitKey)
     artifacts.add(unit.artifactKey)
   }
   if (pin.sourceKind === 'world-release') {
     const source = pin.source as Extract<TextOpenWorldSourcePinSourceV1, { kind: 'world-release' }>
+    exactKeys(record(source, 'WorldRelease SourcePin source'), [
+      'kind', 'worldReference', 'releaseUid', 'releaseVersion', 'releaseHash',
+      'sourceManifestHash', 'catalogHash', 'selection',
+    ], 'WorldRelease SourcePin source')
+    exactKeys(record(source.selection, 'WorldRelease SourcePin selection'), [
+      'mode', 'selectedResourceKeys',
+    ], 'WorldRelease SourcePin selection')
     await validatePortableWorldReferenceV1(source.worldReference)
     if (source.worldReference.localReleaseRecordId !== 0
       || source.releaseUid !== source.worldReference.releaseUid
@@ -983,11 +1238,19 @@ export async function validateTextOpenWorldSourcePinV1(value: unknown): Promise<
       || JSON.stringify(source.selection.selectedResourceKeys) !== JSON.stringify([...source.selection.selectedResourceKeys].sort())
       || JSON.stringify(pin.units.map(unit => unit.sourceResourceKey)) !== JSON.stringify(source.selection.selectedResourceKeys)
       || pin.units.some(unit => unit.kind !== 'world-resource' || unit.readDepth !== 'index'
-        || !unit.sourceResourceKey || !source.selection.selectedResourceKeys.includes(unit.sourceResourceKey))) {
+        || !unit.sourceResourceKey || unit.sourceArea == null || unit.sourceResourceKind == null
+        || !source.selection.selectedResourceKeys.includes(unit.sourceResourceKey))) {
       fail('WorldRelease SourcePin 身份、选择或 unit 闭包不一致')
     }
   } else {
     const source = pin.source as Extract<TextOpenWorldSourcePinSourceV1, { kind: 'novel' }>
+    exactKeys(record(source, 'Novel SourcePin source'), [
+      'kind', 'workCode', 'workTitle', 'snapshotVersion', 'sourceUpdatedAt',
+      'sourceContentHash', 'coverage', 'selection',
+    ], 'Novel SourcePin source')
+    exactKeys(record(source.selection, 'Novel SourcePin selection'), [
+      'mode', 'label', 'selectedChapterCount', 'selectedOutlineCount',
+    ], 'Novel SourcePin selection')
     stableKey(source.workCode, 'source.workCode')
     nonEmptyText(source.workTitle, 'source.workTitle', 500)
     if (source.snapshotVersion !== 1 || source.sourceContentHash !== pin.sourceVersionHash
@@ -996,7 +1259,8 @@ export async function validateTextOpenWorldSourcePinV1(value: unknown): Promise<
       || !Number.isSafeInteger(source.selection.selectedChapterCount) || source.selection.selectedChapterCount < 0
       || !Number.isSafeInteger(source.selection.selectedOutlineCount) || source.selection.selectedOutlineCount < 0
       || pin.units.some(unit => unit.kind === 'world-resource' || unit.readDepth !== 'full'
-        || unit.sourceResourceKey !== null)) fail('小说 SourcePin 身份、选择或 unit 闭包不一致')
+        || unit.sourceResourceKey !== null || unit.sourceArea !== null
+        || unit.sourceResourceKind !== null)) fail('小说 SourcePin 身份、选择或 unit 闭包不一致')
     timestamp(source.sourceUpdatedAt, 'source.sourceUpdatedAt')
     const expectedSourceContentHash = await hashProductProductionValueV2({
       workCode: source.workCode,
@@ -1005,11 +1269,15 @@ export async function validateTextOpenWorldSourcePinV1(value: unknown): Promise<
     })
     if (expectedSourceContentHash !== source.sourceContentHash) fail('小说 SourcePin sourceContentHash 不匹配')
   }
-  if (pin.authorization.productInstanceKey !== pin.productInstanceKey
+  if (pinAuthorization.productInstanceKey !== pin.productInstanceKey
     || pin.authorization.sourceKind !== pin.sourceKind
     || pin.authorization.sourceVersionHash !== pin.sourceVersionHash
     || pin.authorization.sourceBoundaryHash !== pin.sourceBoundaryHash) fail('SourcePin 授权绑定不一致')
   await validateAuthorization(pin.authorization)
+  exactKeys(pinReadEvidence, [
+    'method', 'readDepth', 'unitCount', 'totalChars', 'totalWords', 'evidenceHash',
+    'capturedAt',
+  ], 'SourcePin readEvidence')
   const expectedBoundary = await sourceBoundaryHash({
     sourceVersionHash: pin.sourceVersionHash,
     source: pin.source,
@@ -1020,7 +1288,8 @@ export async function validateTextOpenWorldSourcePinV1(value: unknown): Promise<
     chars: result.chars + item.charCount,
     words: result.words + item.wordCount,
   }), { chars: 0, words: 0 })
-  if (pin.readEvidence.unitCount !== pin.units.length
+  if (totals.chars > MAX_SOURCE_TOTAL_CHARS
+    || pin.readEvidence.unitCount !== pin.units.length
     || pin.readEvidence.totalChars !== totals.chars
     || pin.readEvidence.totalWords !== totals.words
     || pin.readEvidence.capturedAt !== pin.createdAt
@@ -1046,19 +1315,66 @@ export async function validateTextOpenWorldSourcePinBundleV1(
     const payload = await validateTextOpenWorldSourcePinUnitV1(item.payload)
     if (!isSha256Hash(item.artifactContentHash)
       || await hashProductProductionValueV2(payload) !== item.artifactContentHash
+      || payload.capturedAt !== pin.createdAt
       || payloadByArtifact.has(payload.artifactKey)) fail('SourcePin unit Artifact Hash 或 key 不一致')
     payloadByArtifact.set(payload.artifactKey, { payload, artifactContentHash: item.artifactContentHash })
   }
   for (const ref of pin.units) {
     const item = payloadByArtifact.get(ref.artifactKey)
-    if (!item || item.artifactContentHash !== ref.artifactContentHash
-      || item.payload.productInstanceKey !== pin.productInstanceKey
+    if (!item || item.payload.productInstanceKey !== pin.productInstanceKey
       || item.payload.sourceKind !== pin.sourceKind
-      || item.payload.unitKey !== ref.unitKey
-      || item.payload.sourceContentHash !== ref.sourceContentHash
-      || item.payload.order !== ref.order) fail(`SourcePin unit Artifact 未闭合:${ref.artifactKey}`)
+      || canonicalProductProductionJsonV2(unitRef(item.payload, item.artifactContentHash))
+        !== canonicalProductProductionJsonV2(ref)) {
+      fail(`SourcePin unit Artifact 未闭合:${ref.artifactKey}`)
+    }
   }
   return { pin, units: pin.units.map(ref => payloadByArtifact.get(ref.artifactKey)!) }
+}
+
+/**
+ * Single product-owned P0 candidate envelope. The executor, atomic persistence
+ * boundary, and producer-proof verifier must all use these exact fields.
+ */
+export function createTextOpenWorldSourcePinCandidateArtifactsV1(
+  bundle: TextOpenWorldSourcePinBundleV1,
+) {
+  return [...bundle.units.map(unit => ({
+    artifactKey: unit.payload.artifactKey,
+    requirementKey: 'text-open-world.source-pin',
+    kind: 'text-open-world.source-pin-unit' as const,
+    payload: unit.payload,
+    contentHash: unit.artifactContentHash,
+    metadata: {
+      sourceKind: bundle.pin.sourceKind,
+      sourceUnitKey: unit.payload.unitKey,
+      readDepth: unit.payload.readDepth,
+    },
+    quality: { gates: ['tow.source-pin.schema', 'tow.source-pin.hash'] },
+    rights: {
+      authorizationHash: bundle.pin.authorization.authorizationHash,
+      rightsBasis: bundle.pin.authorization.rightsBasis,
+      rightsNote: bundle.pin.authorization.rightsNote,
+    },
+  })), {
+    artifactKey: 'text-open-world.source-pin',
+    requirementKey: 'text-open-world.source-pin',
+    kind: 'text-open-world.source-pin' as const,
+    payload: bundle.pin,
+    contentHash: bundle.pin.pinHash,
+    metadata: {
+      sourceKind: bundle.pin.sourceKind,
+      sourceVersionHash: bundle.pin.sourceVersionHash,
+      sourceBoundaryHash: bundle.pin.sourceBoundaryHash,
+      readEvidenceHash: bundle.pin.readEvidence.evidenceHash,
+      unitArtifactHashes: bundle.pin.units.map(item => item.artifactContentHash),
+    },
+    quality: { gates: ['tow.source-pin.schema', 'tow.source-pin.hash', 'tow.source-pin.authorization'] },
+    rights: {
+      authorizationHash: bundle.pin.authorization.authorizationHash,
+      rightsBasis: bundle.pin.authorization.rightsBasis,
+      rightsNote: bundle.pin.authorization.rightsNote,
+    },
+  }]
 }
 
 async function requireTextOpenWorldBuild(input: {
@@ -1080,9 +1396,7 @@ async function requireTextOpenWorldBuild(input: {
   return { scope, build }
 }
 
-/** Persist unit Artifacts first and the index last. The index is the closure
- * marker; retries are idempotent, while a different pin in the same Build is a
- * stale source change and is rejected. */
+/** Persist the complete frozen source and closure marker atomically. */
 export async function acceptTextOpenWorldSourcePinBundleV1(input: {
   scope: WorkspaceScope
   buildId: number
@@ -1096,61 +1410,9 @@ export async function acceptTextOpenWorldSourcePinBundleV1(input: {
     controlEpoch: input.controlEpoch,
     productInstanceKey: bundle.pin.productInstanceKey,
   })
-  const existing = await readAcceptedBuildArtifacts({ scope, buildId: input.buildId })
-  const existingPin = existing.find(item => item.artifactKey === 'text-open-world.source-pin')
-  if (existingPin) {
-    if (existingPin.contentHash !== bundle.pin.pinHash) fail('同一 Build 的 SourcePin 已冻结；来源变化必须创建新 Build')
-    return readAcceptedTextOpenWorldSourcePinBundleV1({ scope, buildId: input.buildId })
-  }
-  const rights = {
-    authorizationHash: bundle.pin.authorization.authorizationHash,
-    rightsBasis: bundle.pin.authorization.rightsBasis,
-    rightsNote: bundle.pin.authorization.rightsNote,
-  }
-  const unitArtifacts: ProductBuildArtifactRecordV1[] = []
-  for (const item of bundle.units) {
-    unitArtifacts.push(await acceptProductBuildArtifact({
-      scope,
-      buildId: input.buildId,
-      controlEpoch: input.controlEpoch,
-      artifactKey: item.payload.artifactKey,
-      requirementKey: 'text-open-world.source-pin',
-      kind: 'text-open-world.source-pin-unit',
-      payload: item.payload,
-      metadata: {
-        sourceKind: bundle.pin.sourceKind,
-        sourceUnitKey: item.payload.unitKey,
-        readDepth: item.payload.readDepth,
-      },
-      quality: { gates: ['tow.source-pin.schema', 'tow.source-pin.hash'] },
-      rights,
-      contentHash: item.artifactContentHash,
-      inputHash: bundle.pin.authorization.authorizationHash,
-    }))
-  }
-  const pinArtifact = await acceptProductBuildArtifact({
-    scope,
-    buildId: input.buildId,
-    controlEpoch: input.controlEpoch,
-    artifactKey: 'text-open-world.source-pin',
-    requirementKey: 'text-open-world.source-pin',
-    kind: 'text-open-world.source-pin',
-    payload: bundle.pin,
-    metadata: {
-      sourceKind: bundle.pin.sourceKind,
-      sourceVersionHash: bundle.pin.sourceVersionHash,
-      sourceBoundaryHash: bundle.pin.sourceBoundaryHash,
-      readEvidenceHash: bundle.pin.readEvidence.evidenceHash,
-      unitArtifactHashes: bundle.pin.units.map(item => item.artifactContentHash),
-    },
-    quality: {
-      gates: ['tow.source-pin.schema', 'tow.source-pin.hash', 'tow.source-pin.authorization'],
-    },
-    rights,
-    contentHash: bundle.pin.pinHash,
-    inputHash: bundle.pin.authorization.authorizationHash,
+  return acceptTextOpenWorldSourcePinBundleArtifactsV1({
+    scope, buildId: input.buildId, controlEpoch: input.controlEpoch, bundle,
   })
-  return { pinArtifact, unitArtifacts }
 }
 
 export async function readAcceptedTextOpenWorldSourcePinBundleV1(input: {
@@ -1212,7 +1474,11 @@ export async function verifyTextOpenWorldSourcePinAvailabilityV1(input: {
   const descriptors = new Map(catalog.resources.map(item => [item.resourceKey, item]))
   for (const ref of pin.units) {
     const descriptor = ref.sourceResourceKey ? descriptors.get(ref.sourceResourceKey) : null
-    if (!descriptor || descriptor.contentHash !== ref.sourceContentHash) {
+    if (!descriptor || !descriptor.worldSemantic
+      || descriptor.contentHash !== ref.sourceContentHash
+      || (descriptor.title.trim() || descriptor.resourceKey) !== ref.label
+      || descriptor.worldSemantic.area !== ref.sourceArea
+      || descriptor.worldSemantic.resourceKind !== ref.sourceResourceKind) {
       fail(`WorldRelease 资源与 SourcePin 不一致:${ref.sourceResourceKey ?? ref.unitKey}`)
     }
   }

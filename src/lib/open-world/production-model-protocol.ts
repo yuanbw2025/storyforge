@@ -296,6 +296,19 @@ export async function executeTextOpenWorldProductionModelProtocolV1(input: {
     }
   }
   const transport = input.modelTransport ?? runTextOpenWorldConfiguredProductionModelV1
+  const staleExecutionError = () => new ProductProductionRetryableExecutionErrorV1(
+    `${execution.task.taskKey} 模型响应到达时执行权已过期`,
+    captured ? usageForDraft(captured, startedAt) : zeroUsage(),
+  )
+  const persistModelOutput = async (output: string) => {
+    const outcome = await execution.onModelOutput?.(output)
+    if (outcome === 'discarded-stale') {
+      // The scheduler has already lost this Run/epoch. Abort the domain
+      // factory now so a bounded-derived protocol cannot issue another paid
+      // model request after its first late response.
+      throw staleExecutionError()
+    }
+  }
   if (callPolicy === 'bounded-derived-context' && execution.authorDraftJson != null) {
     if (!input.textCapabilityReceipt) fail('作者草稿缺少非密钥文本 capability receipt')
     await assertBindingReceipt({
@@ -309,9 +322,13 @@ export async function executeTextOpenWorldProductionModelProtocolV1(input: {
       inputTokens: 0,
       outputTokens: 0,
     })
-    await execution.onModelOutput?.(execution.authorDraftJson)
+    await persistModelOutput(execution.authorDraftJson)
   }
   const runModel: TextOpenWorldProductionModelTransportV1 = async request => {
+    if (calls > 0
+      && await execution.beforeAdditionalModelRequest?.() === 'discarded-stale') {
+      throw staleExecutionError()
+    }
     calls += 1
     if (callPolicy === 'single-exact-context' && calls !== 1) {
       fail(`${execution.task.taskKey} 违反单次模型调用协议`)
@@ -343,7 +360,7 @@ export async function executeTextOpenWorldProductionModelProtocolV1(input: {
         inputTokens: 0,
         outputTokens: 0,
       })
-      await execution.onModelOutput?.(execution.authorDraftJson)
+      await persistModelOutput(execution.authorDraftJson)
       return {
         output: execution.authorDraftJson,
         bindingReceipt: structuredClone(input.textCapabilityReceipt),
@@ -419,7 +436,7 @@ export async function executeTextOpenWorldProductionModelProtocolV1(input: {
       outputTokens: providerUsage?.outputTokens ?? (output == null ? 0 : estimateTokens(output)),
     })
     if (output == null) fail('文本 provider 没有返回字符串原文')
-    await execution.onModelOutput?.(output)
+    await persistModelOutput(output)
     if (execution.signal.aborted) throw new DOMException('Aborted', 'AbortError')
     await assertBindingReceipt({
       receipt: response.bindingReceipt,

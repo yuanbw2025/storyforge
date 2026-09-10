@@ -6,7 +6,7 @@ import { openWorldSemanticResourceCatalogV1 } from '../../src/lib/context-gatewa
 import { recordAgentRunArtifactV1 } from '../../src/lib/memory/artifact-store'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
-import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { createProductProductionPlanV3 } from '../../src/lib/product-production/plan'
 import {
   assertProductProductionBudgetLedgerV1,
@@ -23,8 +23,21 @@ import { seedCurrentProductWorld } from '../helpers/current-product-world'
 import { resolveProductProductionWorldCompilationDescriptorsV2 } from '../../src/lib/product-production/world-source'
 import { AIError } from '../../src/lib/types'
 import { AICompletionResponseErrorV1 } from '../../src/lib/ai/completion-response'
-import { readProductProductionTaskEvidenceV1 } from '../../src/lib/product-production/service'
+import {
+  beginProductProductionEvolutionV1,
+  readProductProductionTaskEvidenceV1,
+  setProductProductionPausedV1,
+} from '../../src/lib/product-production/service'
 import { readProductProductionRepairFeedback } from '../../src/lib/product-production/context'
+import { createTextOpenWorldSourceLockExecutorV1 } from '../../src/lib/open-world/production-executor'
+import { createTextOpenWorldSourceCurationExecutorV1 } from '../../src/lib/open-world/source-curation'
+import { seedAuthorizedTextOpenWorldCreatorBuildV1 } from '../helpers/text-open-world-creator-build'
+import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
+import { installFakeOpfsV1 } from '../helpers/fake-opfs'
+import {
+  prepareProductProductionAdoption,
+  publishProductProductionBuild,
+} from '../../src/lib/product-production/adoption'
 
 async function fixture(name: string, extraFacts: string[] = []) {
   const owned = await seedCurrentProductWorld(name)
@@ -201,6 +214,20 @@ async function singleMediaTaskBudgetPlan(
     },
   }
   return { ...base, tasks: [task], terminalTaskKey: task.taskKey }
+}
+
+function creatorLocalMediaBindings(plan: {
+  tasks: Array<{ taskKey: string; capabilityRequirementKeys: string[] }>
+}) {
+  return plan.tasks
+    .filter(task => task.taskKey === 'media.visual' || task.taskKey === 'media.audio')
+    .flatMap(task => task.capabilityRequirementKeys.map(requirementKey => ({
+      requirementKey,
+      adapterId: task.taskKey === 'media.visual'
+        ? 'storyforge.procedural-svg.v1'
+        : 'storyforge.procedural-audio.v1',
+      bindingHash: 'a'.repeat(64),
+    })))
 }
 
 describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
@@ -749,7 +776,7 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     })
   })
 
-  it('请求结果未知时不自动重试且保留预留，作者显式开启新epoch后预算闸门阻止可能重复计费', async () => {
+  it('请求结果未知时保留预留；作者精确确认未计费后释放旧attempt并可重试至终态', async () => {
     const owned = await fixture('scheduler-unknown-result-reservation')
     expect(owned.brief.productionBudget.maximumModelCalls).toBeGreaterThan(4)
     const firstPlan = await singleTaskBudgetPlan(owned, 0, 2)
@@ -813,34 +840,458 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
         commandId: 'scheduler-unknown-result-reservation.resolve',
         expectedStateRevision: production.stateRevision,
         blockerKey: 'content.design',
-        resolution: { action: 'retry', note: '作者已核对供应商后台，显式确认重试' },
+        resolution: {
+          action: 'retry',
+          note: '作者已核对供应商后台，显式确认本次未计费并重试',
+          unknownResultReservation: {
+            runId: failure.failureProvenance.runId,
+            attempt: failure.failureProvenance.attempt,
+            controlEpoch: failure.failureProvenance.controlEpoch,
+            disposition: 'confirmed-not-charged',
+          },
+        },
       },
     })
-    const secondPlan = await singleTaskBudgetPlan(owned, 1, 2)
+    const briefRow = await db.productProductionBriefs
+      .where('[productionId+revision]').equals([owned.productionId, 1]).first()
+    const secondPlan = await createProductProductionPlanV3({
+      buildNumber: 1,
+      controlEpoch: 1,
+      briefHash: briefRow!.briefHash,
+      brief: owned.brief,
+    })
+    const successfulCalls = new Map<string, number>()
     const second = await runProductProductionUntilBlockedV1({
       scope: owned.scope,
       productionId: owned.productionId,
       suppliedPlan: secondPlan,
       capabilityBindings,
-      executor: async () => {
-        calls += 1
-        throw new Error('保守预算闸门前不得再次调用 executor')
-      },
+      executor: executorFor(owned, successfulCalls, { active: 0, peak: 0 }),
     })
     expect(calls).toBe(1)
-    expect(second.buildStatus).toBe('recovery-required')
+    expect(successfulCalls.get('content.design')).toBe(1)
+    expect(second.buildStatus).toBe('release-ready')
     expect(second.controlEpoch).toBe(1)
     const secondBuild = (await db.productBuilds.get(second.buildId))!
-    expect(JSON.parse(secondBuild.failureJson)).toMatchObject({
-      taskKey: 'content.design',
-      code: 'brief-production-budget-exhausted',
-      violations: ['task-model-calls-depleted'],
-      failureProvenance: { controlEpoch: 1, planHash: second.planHash, attempt: 1 },
-    })
     const secondLedger = JSON.parse(secondBuild.budgetLedgerJson)
-    expect(Object.values(secondLedger.reservations)).toHaveLength(1)
-    expect(Object.values(secondLedger.charges)).toHaveLength(0)
+    expect(Object.values(secondLedger.reservations)).toHaveLength(0)
+    expect(Object.values(secondLedger.charges).length).toBeGreaterThan(0)
+    expect(secondLedger.charges[`${failure.failureProvenance.runId}:${failure.failureProvenance.attempt}`])
+      .toMatchObject({
+        resolution: 'author-confirmed-not-charged',
+        usage: {
+          modelCalls: 0, inputTokens: 0, outputTokens: 0,
+          mediaCalls: 0, costUsd: 0, durationMs: 0, storageBytes: 0,
+        },
+      })
   })
+
+  it('unknown-result 选择按预留上限记账时原子转为 charge，且拒绝错 attempt 处置', async () => {
+    const owned = await fixture('scheduler-unknown-result-upper-bound')
+    const firstPlan = await singleTaskBudgetPlan(owned, 0, 2)
+    const capabilityBindings = [{
+      requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+      adapterId: 'configured-text-provider.v1',
+      bindingHash: 'a'.repeat(64),
+    }]
+    const first = await runProductProductionUntilBlockedV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      suppliedPlan: firstPlan,
+      capabilityBindings,
+      executor: async () => { throw new ProductProductionResultUnknownErrorV1() },
+    })
+    const blocked = (await db.productBuilds.get(first.buildId))!
+    const failure = JSON.parse(blocked.failureJson)
+    const production = (await db.productProductions.get(owned.productionId))!
+    const wrong = await executeProductProductionCommand({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      command: {
+        type: 'resolve-blocker',
+        commandId: 'scheduler-unknown-result-upper-bound.wrong-attempt',
+        expectedStateRevision: production.stateRevision,
+        blockerKey: 'content.design',
+        resolution: {
+          action: 'retry',
+          note: '错误 attempt 不得释放预留',
+          unknownResultReservation: {
+            runId: failure.failureProvenance.runId,
+            attempt: failure.failureProvenance.attempt + 1,
+            controlEpoch: failure.failureProvenance.controlEpoch,
+            disposition: 'charge-reservation-upper-bound',
+          },
+        },
+      },
+    })
+    expect(wrong).toMatchObject({ ok: false, errorCode: 'invalid-state-transition' })
+    expect(Object.values(JSON.parse((await db.productBuilds.get(first.buildId))!.budgetLedgerJson).reservations))
+      .toHaveLength(1)
+
+    const resolved = await executeProductProductionCommand({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      command: {
+        type: 'resolve-blocker',
+        commandId: 'scheduler-unknown-result-upper-bound.resolve',
+        expectedStateRevision: production.stateRevision,
+        blockerKey: 'content.design',
+        resolution: {
+          action: 'retry',
+          note: '供应商后台无法确认，按完整预留上限记账',
+          unknownResultReservation: {
+            runId: failure.failureProvenance.runId,
+            attempt: failure.failureProvenance.attempt,
+            controlEpoch: failure.failureProvenance.controlEpoch,
+            disposition: 'charge-reservation-upper-bound',
+          },
+        },
+      },
+    })
+    expect(resolved).toMatchObject({ ok: true, result: { controlEpoch: 1 } })
+    const ledger = JSON.parse((await db.productBuilds.get(first.buildId))!.budgetLedgerJson)
+    const attemptKey = `${failure.failureProvenance.runId}:${failure.failureProvenance.attempt}`
+    expect(Object.values(ledger.reservations)).toHaveLength(0)
+    expect(ledger.charges[attemptKey]).toMatchObject({
+      runId: failure.failureProvenance.runId,
+      attempt: failure.failureProvenance.attempt,
+      controlEpoch: failure.failureProvenance.controlEpoch,
+      taskKey: 'content.design',
+      resolution: 'author-charged-reservation-upper-bound',
+      usage: {
+        modelCalls: 2,
+        inputTokens: firstPlan.tasks[0].budgetReservation.inputTokens,
+        outputTokens: firstPlan.tasks[0].budgetReservation.outputTokens,
+      },
+    })
+  })
+
+  it.each(['before-resolution', 'after-resolution'] as const)(
+    '真实并发迟到 provider 结果在作者处置 %s 返回时闭合记账、零旧候选并可完成新epoch',
+    async order => {
+      const owned = await fixture(`scheduler-unknown-result-late-${order}`)
+      const firstPlan = await singleTaskBudgetPlan(owned, 0, 2)
+      const task = firstPlan.tasks[0]
+      const baseNow = 2_100_000_000_000
+      vi.spyOn(Date, 'now').mockReturnValue(baseNow)
+      const capabilityBindings = [{
+        requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+        adapterId: 'configured-text-provider.v1',
+        bindingHash: 'a'.repeat(64),
+      }]
+      let releaseLate!: () => void
+      const lateGate = new Promise<void>(resolve => { releaseLate = resolve })
+      let markStarted!: () => void
+      const started = new Promise<void>(resolve => { markStarted = resolve })
+      const oldCalls = new Map<string, number>()
+      const oldExecutor = executorFor(owned, oldCalls, { active: 0, peak: 0 })
+      const lateRaw = JSON.stringify({ taskKey: task.taskKey, order, late: true })
+      const firstCycle = runProductProductionSchedulerCycleV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        suppliedPlan: firstPlan,
+        capabilityBindings,
+        executor: async request => {
+          markStarted()
+          await lateGate
+          const result = await oldExecutor(request)
+          await request.onModelOutput?.(lateRaw)
+          return result
+        },
+      })
+      await started
+
+      vi.mocked(Date.now).mockReturnValue(baseNow + task.timeoutMs + 1)
+      const timedOut = await runProductProductionSchedulerCycleV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        suppliedPlan: firstPlan,
+        capabilityBindings,
+        executor: async () => { throw new Error('并发恢复不得重新派发旧 attempt') },
+      })
+      expect(timedOut.buildStatus).toBe('recovery-required')
+      const blocked = (await db.productBuilds.get(timedOut.buildId))!
+      const failure = JSON.parse(blocked.failureJson)
+      const oldRunId = failure.failureProvenance.runId as number
+      const resolveUnknown = async () => {
+        const production = (await db.productProductions.get(owned.productionId))!
+        const receipt = await executeProductProductionCommand({
+          scope: owned.scope,
+          productionId: owned.productionId,
+          command: {
+            type: 'resolve-blocker',
+            commandId: `scheduler-unknown-result-late-${order}.resolve`,
+            expectedStateRevision: production.stateRevision,
+            blockerKey: task.taskKey,
+            resolution: {
+              action: 'retry',
+              note: '作者核对后关闭旧 attempt；迟到回调不得重开候选',
+              unknownResultReservation: {
+                runId: oldRunId,
+                attempt: failure.failureProvenance.attempt,
+                controlEpoch: failure.failureProvenance.controlEpoch,
+                disposition: 'confirmed-not-charged',
+              },
+            },
+          },
+        })
+        expect(receipt).toMatchObject({ ok: true, result: { controlEpoch: 1 } })
+        const expectedEffectiveDisposition = order === 'before-resolution'
+          ? 'provider-actual-charge'
+          : 'author-confirmed-not-charged'
+        expect(receipt.result.unknownResultAccounting).toMatchObject({
+          runId: oldRunId,
+          attempt: failure.failureProvenance.attempt,
+          controlEpoch: failure.failureProvenance.controlEpoch,
+          requestedDisposition: 'confirmed-not-charged',
+          effectiveDisposition: expectedEffectiveDisposition,
+          usage: { modelCalls: order === 'before-resolution' ? 1 : 0 },
+        })
+        const resolvedFailure = JSON.parse((await db.productBuilds.get(timedOut.buildId))!.failureJson)
+        expect(resolvedFailure.unknownResultAccounting).toEqual(receipt.result.unknownResultAccounting)
+        expect(resolvedFailure.resolution.unknownResultAccounting).toEqual(receipt.result.unknownResultAccounting)
+        expect(resolvedFailure.resolution.unknownResultReservation).toBeUndefined()
+      }
+      if (order === 'before-resolution') {
+        releaseLate()
+        await expect(firstCycle).resolves.toBeDefined()
+        await resolveUnknown()
+      } else {
+        await resolveUnknown()
+        releaseLate()
+        await expect(firstCycle).resolves.toBeDefined()
+      }
+      const oldRunAfterLateCallback = await readAgentRunV1(owned.scope, oldRunId)
+      expect(oldRunAfterLateCallback.events.some(event => (
+        event.type === 'evidence.artifact.recorded'
+        && event.payload.artifactKind === 'raw-response'
+      ))).toBe(false)
+
+      const briefRow = await db.productProductionBriefs
+        .where('[productionId+revision]').equals([owned.productionId, 1]).first()
+      const nextPlanBase = await createProductProductionPlanV3({
+        buildNumber: 1,
+        controlEpoch: 1,
+        briefHash: briefRow!.briefHash,
+        brief: owned.brief,
+      })
+      const nextPlan = {
+        ...nextPlanBase,
+        tasks: nextPlanBase.tasks.map(nextTask => nextTask.taskKey === task.taskKey
+          ? {
+              ...nextTask,
+              budgetReservation: { ...nextTask.budgetReservation, modelCalls: 2 },
+            }
+          : nextTask),
+      }
+      const newCalls = new Map<string, number>()
+      const completed = await runProductProductionUntilBlockedV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        suppliedPlan: nextPlan,
+        capabilityBindings,
+        executor: executorFor(owned, newCalls, { active: 0, peak: 0 }),
+      })
+      expect(completed.buildStatus, JSON.stringify({
+        failure: JSON.parse((await db.productBuilds.get(completed.buildId))!.failureJson),
+        budget: completed.budget,
+        tasks: completed.tasks.map(item => ({ taskKey: item.taskKey, status: item.status, blocker: item.blocker })),
+      }, null, 2)).toBe('release-ready')
+      expect(oldCalls.get(task.taskKey)).toBe(1)
+      expect(newCalls.get(task.taskKey)).toBe(1)
+      const finalLedger = JSON.parse((await db.productBuilds.get(completed.buildId))!.budgetLedgerJson)
+      expect(Object.values(finalLedger.reservations)).toHaveLength(0)
+      const oldCharge = finalLedger.charges[`${oldRunId}:${failure.failureProvenance.attempt}`]
+      expect(oldCharge).toMatchObject(order === 'before-resolution'
+        ? { resolution: null, usage: { modelCalls: 1 } }
+        : { resolution: 'author-confirmed-not-charged', usage: { modelCalls: 0 } })
+      const oldAccepted = await db.productBuildArtifacts.where('buildId').equals(completed.buildId)
+        .filter(row => row.producerRunId === oldRunId && row.status === 'accepted').count()
+      expect(oldAccepted).toBe(0)
+    },
+    30_000,
+  )
+
+  it('raw-response 已持久化后再超时只允许按预留上限封账，迟到 return 不重开旧处置', async () => {
+    const owned = await fixture('scheduler-response-evidence-before-timeout')
+    const firstPlan = await singleTaskBudgetPlan(owned, 0, 2)
+    const task = firstPlan.tasks[0]
+    const baseNow = 2_110_000_000_000
+    vi.spyOn(Date, 'now').mockReturnValue(baseNow)
+    const capabilityBindings = [{
+      requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+      adapterId: 'configured-text-provider.v1',
+      bindingHash: 'a'.repeat(64),
+    }]
+    const raw = JSON.stringify({ taskKey: task.taskKey, responseObserved: true })
+    let notifyRawPersisted!: () => void
+    let releaseExecutorReturn!: () => void
+    const rawPersisted = new Promise<void>(resolve => { notifyRawPersisted = resolve })
+    const executorReturn = new Promise<void>(resolve => { releaseExecutorReturn = resolve })
+    const oldCalls = new Map<string, number>()
+    const resultExecutor = executorFor(owned, oldCalls, { active: 0, peak: 0 })
+    const firstCycle = runProductProductionSchedulerCycleV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      suppliedPlan: firstPlan,
+      capabilityBindings,
+      executor: async request => {
+        // Constructing the result first models the protocol having already
+        // captured provider usage before it awaits the durable raw callback.
+        const result = await resultExecutor(request)
+        await request.onModelOutput?.(raw)
+        notifyRawPersisted()
+        await executorReturn
+        return result
+      },
+    })
+    await rawPersisted
+
+    vi.mocked(Date.now).mockReturnValue(baseNow + task.timeoutMs + 1)
+    const timedOut = await runProductProductionSchedulerCycleV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      suppliedPlan: firstPlan,
+      capabilityBindings,
+      executor: async () => { throw new Error('响应已观察的超时 attempt 不得重新派发') },
+    })
+    expect(timedOut.buildStatus).toBe('recovery-required')
+    const blocked = (await db.productBuilds.get(timedOut.buildId))!
+    const failure = JSON.parse(blocked.failureJson)
+    expect(failure).toMatchObject({
+      taskKey: task.taskKey,
+      code: 'provider-response-uncheckpointed',
+      resultStatus: 'known-incomplete',
+      reservationDisposition: 'retained',
+    })
+    const oldRunId = failure.failureProvenance.runId as number
+
+    const productionBeforeInvalidDisposition = (await db.productProductions.get(owned.productionId))!
+    const invalidZeroCharge = await executeProductProductionCommand({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      command: {
+        type: 'resolve-blocker',
+        commandId: 'scheduler-response-evidence-before-timeout.invalid-zero-charge',
+        expectedStateRevision: productionBeforeInvalidDisposition.stateRevision,
+        blockerKey: task.taskKey,
+        resolution: {
+          action: 'retry',
+          note: '已有响应原文，不得再声明未计费',
+          unknownResultReservation: {
+            runId: oldRunId,
+            attempt: failure.failureProvenance.attempt,
+            controlEpoch: failure.failureProvenance.controlEpoch,
+            disposition: 'confirmed-not-charged',
+          },
+        },
+      },
+    })
+    expect(invalidZeroCharge).toMatchObject({ ok: false, errorCode: 'invalid-state-transition' })
+
+    const production = (await db.productProductions.get(owned.productionId))!
+    const resolved = await executeProductProductionCommand({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      command: {
+        type: 'resolve-blocker',
+        commandId: 'scheduler-response-evidence-before-timeout.resolve',
+        expectedStateRevision: production.stateRevision,
+        blockerKey: task.taskKey,
+        resolution: {
+          action: 'retry',
+          note: '已观察响应但完整用量未回传，按冻结预留上限封账',
+          unknownResultReservation: {
+            runId: oldRunId,
+            attempt: failure.failureProvenance.attempt,
+            controlEpoch: failure.failureProvenance.controlEpoch,
+            disposition: 'charge-reservation-upper-bound',
+          },
+        },
+      },
+    })
+    expect(resolved).toMatchObject({
+      ok: true,
+      result: {
+        controlEpoch: 1,
+        unknownResultAccounting: {
+          requestedDisposition: 'charge-reservation-upper-bound',
+          effectiveDisposition: 'author-charged-reservation-upper-bound',
+          usage: { modelCalls: task.budgetReservation.modelCalls },
+        },
+      },
+    })
+
+    releaseExecutorReturn()
+    await expect(firstCycle).resolves.toBeDefined()
+    const ledgerAfterReturn = JSON.parse((await db.productBuilds.get(timedOut.buildId))!.budgetLedgerJson)
+    expect(Object.values(ledgerAfterReturn.reservations)).toHaveLength(0)
+    expect(ledgerAfterReturn.charges[`${oldRunId}:${failure.failureProvenance.attempt}`]).toMatchObject({
+      resolution: 'author-charged-reservation-upper-bound',
+      usage: resolved.result.unknownResultAccounting.usage,
+    })
+    const oldRun = await readAgentRunV1(owned.scope, oldRunId)
+    expect(oldRun.events.some(event => (
+      event.type === 'evidence.artifact.recorded'
+      && event.payload.artifactKind === 'raw-response'
+    ))).toBe(true)
+    expect(oldRun.events.filter(event => event.type === 'candidate.persisted')).toHaveLength(0)
+    expect(await db.productBuildArtifacts.where('buildId').equals(timedOut.buildId)
+      .filter(row => row.producerRunId === oldRunId && row.status === 'accepted').count()).toBe(0)
+
+    const briefRow = await db.productProductionBriefs
+      .where('[productionId+revision]').equals([owned.productionId, 1]).first()
+    const nextPlanBase = await createProductProductionPlanV3({
+      buildNumber: 1,
+      controlEpoch: 1,
+      briefHash: briefRow!.briefHash,
+      brief: owned.brief,
+    })
+    const nextPlan = {
+      ...nextPlanBase,
+      tasks: nextPlanBase.tasks.map(nextTask => {
+        if (nextTask.taskKey === task.taskKey) return {
+          ...nextTask,
+          budgetReservation: {
+            ...nextTask.budgetReservation,
+            modelCalls: task.budgetReservation.modelCalls + 1,
+            inputTokens: task.budgetReservation.inputTokens + 10,
+            outputTokens: task.budgetReservation.outputTokens + 10,
+            durationMs: task.budgetReservation.durationMs + 1,
+          },
+        }
+        return nextTask.executionMode === 'model'
+          ? {
+              ...nextTask,
+              budgetReservation: { ...nextTask.budgetReservation, outputTokens: 10 },
+            }
+          : nextTask.taskKey === 'integration.package'
+            ? {
+                ...nextTask,
+                budgetReservation: {
+                  ...nextTask.budgetReservation,
+                  inputTokens: nextTask.budgetReservation.inputTokens - 10,
+                },
+              }
+          : nextTask
+      }),
+    }
+    const newCalls = new Map<string, number>()
+    const completed = await runProductProductionUntilBlockedV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      suppliedPlan: nextPlan,
+      capabilityBindings,
+      executor: executorFor(owned, newCalls, { active: 0, peak: 0 }),
+    })
+    expect(completed.buildStatus, JSON.stringify({
+      failure: JSON.parse((await db.productBuilds.get(completed.buildId))!.failureJson),
+      budget: completed.budget,
+      tasks: completed.tasks.map(item => ({ taskKey: item.taskKey, status: item.status, blocker: item.blocker })),
+    }, null, 2)).toBe('release-ready')
+    expect(oldCalls.get(task.taskKey)).toBe(1)
+    expect(newCalls.get(task.taskKey)).toBe(1)
+  }, 30_000)
 
   it('P1证据只读当前task Run内精确批次的当前终态attempt', async () => {
     const owned = await fixture('scheduler-p1-batch-evidence')
@@ -1279,7 +1730,7 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
   })
 
   it.each(['pause', 'stop'] as const)(
-    'provider.requested边界并发%s后复验epoch/status，绝不进入executor或保留未派发预算',
+    'provider.requested边界并发%s后复验epoch/status，绝不进入executor并留下零费用派发证明',
     async control => {
       const owned = await fixture(`scheduler-dispatch-recheck-${control}`)
       const suppliedPlan = await singleTaskBudgetPlan(owned, 0, 2)
@@ -1304,6 +1755,26 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
           if (boundary !== 'provider.requested' || commandApplied) return
           commandApplied = true
           const production = (await db.productProductions.get(owned.productionId))!
+          if (control === 'pause') {
+            const build = (await db.productBuilds.where('productionId').equals(owned.productionId).first())!
+            const ledger = JSON.parse(build.budgetLedgerJson)
+            ledger.reservations['999991:1'] = {
+              taskKey: 'local.zero-reservation',
+              runId: 999_991,
+              attempt: 1,
+              controlEpoch: build.controlEpoch,
+              budget: {
+                modelCalls: 0,
+                inputTokens: 0,
+                outputTokens: 0,
+                mediaCalls: 0,
+                maximumCostUsd: 0,
+                durationMs: 0,
+                storageBytes: 0,
+              },
+            }
+            await db.productBuilds.update(build.id!, { budgetLedgerJson: JSON.stringify(ledger) })
+          }
           const receipt = await executeProductProductionCommand({
             scope: owned.scope,
             productionId: owned.productionId,
@@ -1322,6 +1793,17 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
                 },
           })
           expect(receipt.ok).toBe(true)
+          if (control === 'pause') {
+            expect(receipt.result).toMatchObject({
+              automaticallySettledReservations: [{
+                taskKey: 'local.zero-reservation',
+                runId: 999_991,
+                attempt: 1,
+                effectiveDisposition: 'author-confirmed-not-charged',
+                usage: { modelCalls: 0, mediaCalls: 0, costUsd: 0 },
+              }],
+            })
+          }
         },
       })
 
@@ -1330,11 +1812,133 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
       expect(projection.buildStatus).toBe(control === 'pause' ? 'paused' : 'cancelled')
       const build = (await db.productBuilds.get(projection.buildId))!
       const ledger = JSON.parse(build.budgetLedgerJson)
-      expect(Object.values(ledger.charges)).toHaveLength(0)
+      expect(Object.values(ledger.charges)).toHaveLength(control === 'pause' ? 2 : 1)
       expect(Object.values(ledger.reservations)).toHaveLength(0)
+      const releaseEntry = Object.entries(ledger.charges).find(([, value]) => (
+        (value as { resolution?: unknown }).resolution === 'system-released-before-dispatch'
+      ))!
+      const [attemptKey, releaseProof] = releaseEntry as [string, {
+        taskKey: string
+        runId: number
+        attempt: number
+        controlEpoch: number
+        costUpperBoundUsd: number
+        resolution: string
+        usage: { modelCalls: number; mediaCalls: number; costUsd: number }
+      }]
+      expect(attemptKey).toBe(`${releaseProof.runId}:${releaseProof.attempt}`)
+      expect(releaseProof).toMatchObject({
+        taskKey: task.taskKey,
+        attempt: 1,
+        controlEpoch: 0,
+        costUpperBoundUsd: 0,
+        resolution: 'system-released-before-dispatch',
+        usage: { modelCalls: 0, mediaCalls: 0, costUsd: 0 },
+      })
+      const forgedReleaseProof = structuredClone(ledger)
+      forgedReleaseProof.charges[attemptKey].usage.modelCalls = 1
+      expect(() => assertProductProductionBudgetLedgerV1(JSON.stringify(forgedReleaseProof)))
+        .toThrow('零费用 tombstone 含非零用量')
+      expect(projection.budget.usage).toMatchObject({
+        modelCalls: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        mediaCalls: 0,
+        costUsd: 0,
+      })
+      if (control === 'pause') {
+        expect(ledger.charges['999991:1']).toMatchObject({
+          taskKey: 'local.zero-reservation',
+          runId: 999_991,
+          attempt: 1,
+          controlEpoch: 0,
+          costUpperBoundUsd: 0,
+          resolution: 'author-confirmed-not-charged',
+          usage: { modelCalls: 0, mediaCalls: 0, costUsd: 0 },
+        })
+      }
       const child = await db.agentRuns.where('[parentRunId+parentRelation]')
         .equals([projection.rootRunId, `task:${task.taskKey}`]).first()
       expect(child?.status).toBe('cancelled')
+
+      if (control === 'pause') {
+        const pausedProduction = (await db.productProductions.get(owned.productionId))!
+        expect(build.status).toBe('paused')
+        expect(JSON.parse(build.failureJson)).toMatchObject({
+          code: 'pause-provider-result-unknown',
+          pausedProviderReservations: [{
+            taskKey: task.taskKey,
+            runId: releaseProof.runId,
+            attempt: releaseProof.attempt,
+            controlEpoch: releaseProof.controlEpoch,
+          }],
+        })
+
+        const wrongEpoch = await executeProductProductionCommand({
+          scope: owned.scope,
+          productionId: owned.productionId,
+          command: {
+            type: 'resume',
+            commandId: 'scheduler-dispatch-recheck-pause.resume-wrong-epoch',
+            expectedStateRevision: pausedProduction.stateRevision,
+            pausedReservationDispositions: [{
+              taskKey: releaseProof.taskKey,
+              runId: releaseProof.runId,
+              attempt: releaseProof.attempt,
+              controlEpoch: releaseProof.controlEpoch + 1,
+              disposition: 'confirmed-not-charged',
+            }],
+          },
+        })
+        expect(wrongEpoch).toMatchObject({ ok: false, errorCode: 'invalid-state-transition' })
+
+        // Mere absence is never accepted as proof. A corrupt/deleted release
+        // record must leave both Production and Build in the same paused epoch.
+        delete ledger.charges[attemptKey]
+        await db.productBuilds.update(projection.buildId, { budgetLedgerJson: JSON.stringify(ledger) })
+        const missingProof = await executeProductProductionCommand({
+          scope: owned.scope,
+          productionId: owned.productionId,
+          command: {
+            type: 'resume',
+            commandId: 'scheduler-dispatch-recheck-pause.resume-missing-proof',
+            expectedStateRevision: pausedProduction.stateRevision,
+          },
+        })
+        expect(missingProof).toMatchObject({ ok: false, errorCode: 'invalid-state-transition' })
+        expect(await db.productProductions.get(owned.productionId)).toMatchObject({
+          status: 'paused',
+          controlEpoch: pausedProduction.controlEpoch,
+          stateRevision: pausedProduction.stateRevision,
+        })
+        expect(await db.productBuilds.get(projection.buildId)).toMatchObject({ status: 'paused' })
+
+        ledger.charges[attemptKey] = releaseProof
+        await db.productBuilds.update(projection.buildId, { budgetLedgerJson: JSON.stringify(ledger) })
+        const resumed = await setProductProductionPausedV1({
+          scope: owned.scope,
+          production: pausedProduction,
+          build: (await db.productBuilds.get(projection.buildId))!,
+        })
+        expect(resumed).toBe('resumed')
+        const resumedBuild = (await db.productBuilds.get(projection.buildId))!
+        expect(JSON.parse(resumedBuild.failureJson)).toMatchObject({
+          code: 'user-pause-resolved',
+          pausedReservationAccountings: [{
+              taskKey: task.taskKey,
+              runId: releaseProof.runId,
+              attempt: releaseProof.attempt,
+              controlEpoch: releaseProof.controlEpoch,
+              requestedDisposition: null,
+              effectiveDisposition: 'system-released-before-dispatch',
+              usage: { modelCalls: 0, mediaCalls: 0, costUsd: 0 },
+          }],
+        })
+        expect(resumedBuild).toMatchObject({
+          status: 'building',
+          resumeState: null,
+        })
+      }
     },
   )
 
@@ -1475,6 +2079,599 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     )))).toBe(true)
   }, 30_000)
 
+  it.each(['delete', 'payload-tamper', 'extra'] as const)(
+    '最后 Artifact 验收后发生 %s 时 terminal verifier 拒绝封存且零发布',
+    async mutation => {
+      const owned = await fixture(`scheduler-terminal-artifact-${mutation}`)
+      const calls = new Map<string, number>()
+      const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+      let injected = false
+      await expect(runProductProductionUntilBlockedV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        executor: executorFor(owned, calls, { active: 0, peak: 0 }),
+        capabilityBindings: [{
+          requirementKey: textRequirement.requirementKey,
+          adapterId: 'configured-text-provider.v1',
+          bindingHash: await hashProductProductionValueV2({ provider: 'configured' }),
+        }],
+        async onDurableBoundary(boundary, snapshot) {
+          if (injected || boundary !== 'artifact.accepted'
+            || snapshot.contract.scope.productProduction?.taskKey !== 'qa.release') return
+          injected = true
+          const buildId = snapshot.run.productBuildId!
+          const design = await db.productBuildArtifacts
+            .where('[buildId+artifactKey]').equals([buildId, 'design.game']).first()
+          expect(design?.id).toBeTruthy()
+          if (mutation === 'delete') {
+            await db.productBuildArtifacts.delete(design!.id!)
+          } else if (mutation === 'payload-tamper') {
+            await db.productBuildArtifacts.update(design!.id!, {
+              payloadJson: canonicalProductProductionJsonV2({ tamperedAfterAcceptance: true }),
+              updatedAt: Date.now(),
+            })
+          } else {
+            const { id: _id, ...copy } = design!
+            await db.productBuildArtifacts.add({
+              ...copy,
+              artifactKey: 'unexpected.extra',
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            })
+          }
+        },
+      })).rejects.toThrow(/Artifact/)
+      expect(injected).toBe(true)
+      const build = await db.productBuilds.where('productionId').equals(owned.productionId).first()
+      expect(build?.status).not.toMatch(/preview-ready|release-ready/)
+      expect(build?.rootTerminalReceiptHash).toBeNull()
+      expect(await db.productReleases.where('workId').equals(owned.scope.workId).count()).toBe(0)
+    },
+    30_000,
+  )
+
+  it.each(['root-row', 'root-event', 'root-checkpoint'] as const)(
+    'root 完成后篡改 %s 会被 post-root 完整复验拒绝',
+    async mutation => {
+      const owned = await fixture(`scheduler-terminal-final-cas-${mutation}`)
+      const calls = new Map<string, number>()
+      const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+      let injected = false
+      let targetBuildId: number | null = null
+      await expect(runProductProductionUntilBlockedV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        executor: executorFor(owned, calls, { active: 0, peak: 0 }),
+        capabilityBindings: [{
+          requirementKey: textRequirement.requirementKey,
+          adapterId: 'configured-text-provider.v1',
+          bindingHash: await hashProductProductionValueV2({ provider: 'configured' }),
+        }],
+        async onDurableBoundary(boundary, snapshot) {
+          if (injected || boundary !== 'root.verification.accepted') return
+          injected = true
+          targetBuildId = snapshot.run.productBuildId!
+          const root = await db.agentRuns.get(snapshot.run.id)
+          expect(root?.status).toBe('completed')
+          const terminalReceiptHash = root!.terminalReceiptHash
+          if (mutation === 'root-row') {
+            await db.agentRuns.update(root!.id!, {
+              contractJson: canonicalProductProductionJsonV2({ tamperedAfterRootCompletion: true }),
+              // Keep the two shallow fields that the former final commit read.
+              status: 'completed',
+              terminalReceiptHash,
+            })
+          } else if (mutation === 'root-event') {
+            const event = await db.agentRunEvents.where('runId').equals(root!.id!).first()
+            expect(event?.id).toBeTruthy()
+            await db.agentRunEvents.update(event!.id!, {
+              payloadJson: canonicalProductProductionJsonV2({ tamperedAfterRootCompletion: true }),
+            })
+          } else {
+            await db.agentRunCheckpoints.add({
+              projectId: root!.projectId,
+              worldGroupId: root!.worldGroupId ?? null,
+              runId: root!.id!,
+              throughSequence: root!.lastSequence,
+              generation: root!.generation,
+              contractHash: root!.contractHash,
+              checkpointHash: 'f'.repeat(64),
+              projectionJson: root!.projectionJson,
+              projectionHash: root!.projectionHash,
+              resumePayloadJson: null,
+              resumePayloadHash: null,
+              createdAt: Date.now(),
+            })
+          }
+        },
+      })).rejects.toThrow()
+      expect(injected).toBe(true)
+      const build = await db.productBuilds.get(targetBuildId!)
+      expect(build?.status).toBe('validating')
+      expect(build?.rootTerminalReceiptHash).toMatch(/^[a-f0-9]{64}$/)
+      expect(await db.productReleases.where('workId').equals(owned.scope.workId).count()).toBe(0)
+    },
+    30_000,
+  )
+
+  it('root 完成后 OPFS 字节被替换时，post-root 物理复验拒绝封存', async () => {
+    const owned = await fixture('scheduler-terminal-post-root-opfs')
+    const fakeOpfs = installFakeOpfsV1()
+    try {
+      const bytes = new TextEncoder().encode('terminal-post-root-opfs-bytes').buffer
+      const blob = await putMediaBlobObject({
+        scope: owned.scope,
+        data: bytes,
+        mimeType: 'image/png',
+        backend: 'opfs',
+      })
+      const calls = new Map<string, number>()
+      const baseExecutor = executorFor(owned, calls, { active: 0, peak: 0 })
+      const executor: ProductProductionTaskExecutorV1 = async request => {
+        const result = await baseExecutor(request)
+        if (request.task.taskKey === 'content.design') {
+          result.artifacts[0] = {
+            ...result.artifacts[0],
+            kind: 'image',
+            mediaKind: 'image',
+            contentHash: blob.contentHash,
+            blobObjectId: blob.id!,
+            mimeType: blob.mimeType,
+            byteSize: blob.byteSize,
+          }
+        }
+        return result
+      }
+      const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+      let injected = false
+      let targetBuildId: number | null = null
+      await expect(runProductProductionUntilBlockedV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        executor,
+        capabilityBindings: [{
+          requirementKey: textRequirement.requirementKey,
+          adapterId: 'configured-text-provider.v1',
+          bindingHash: await hashProductProductionValueV2({ provider: 'configured' }),
+        }],
+        async onDurableBoundary(boundary, snapshot) {
+          if (injected || boundary !== 'root.verification.accepted') return
+          injected = true
+          targetBuildId = snapshot.run.productBuildId!
+          const path = [...fakeOpfs.files.keys()][0]
+          const changed = fakeOpfs.files.get(path)!.slice(0)
+          new Uint8Array(changed)[0] ^= 0xff
+          fakeOpfs.files.set(path, changed)
+        },
+      })).rejects.toThrow(/共享媒资哈希不匹配/)
+      expect(injected).toBe(true)
+      const build = await db.productBuilds.get(targetBuildId!)
+      expect(build?.status).toBe('validating')
+      expect(await db.productReleases.where('workId').equals(owned.scope.workId).count()).toBe(0)
+    } finally {
+      fakeOpfs.restore()
+    }
+  }, 30_000)
+
+  it.each([
+    ['root.step.succeeded', 'running'],
+    ['root.verification.started', 'verifying'],
+    ['root.verification.accepted', 'completed'],
+  ] as const)(
+    'terminal claim 后在 %s 崩溃可按 root 阶段恢复，且不重复追加终态事件',
+    async (crashBoundary, expectedInterruptedState) => {
+      const owned = await fixture(`scheduler-root-join-recovery-${crashBoundary}`)
+      const calls = new Map<string, number>()
+      const executor = executorFor(owned, calls, { active: 0, peak: 0 })
+      const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+      const capabilityBindings = [{
+        requirementKey: textRequirement.requirementKey,
+        adapterId: 'configured-text-provider.v1',
+        bindingHash: await hashProductProductionValueV2({ provider: 'configured' }),
+      }]
+      let crashed = false
+
+      await expect(runProductProductionUntilBlockedV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        executor,
+        capabilityBindings,
+        onDurableBoundary(boundary) {
+          if (!crashed && boundary === crashBoundary) {
+            crashed = true
+            throw new Error(`injected-after-${crashBoundary}`)
+          }
+        },
+      })).rejects.toThrow(`injected-after-${crashBoundary}`)
+
+      expect(crashed).toBe(true)
+      const interruptedBuild = await db.productBuilds
+        .where('productionId').equals(owned.productionId).first()
+      expect(interruptedBuild).toMatchObject({ status: 'validating' })
+      expect(interruptedBuild?.rootTerminalReceiptHash).toMatch(/^[a-f0-9]{64}$/)
+      const interruptedLedger = JSON.parse(interruptedBuild!.budgetLedgerJson)
+      const interruptedRoot = await readAgentRunV1(owned.scope, interruptedLedger.rootRunId)
+      expect(interruptedRoot.projection.state).toBe(expectedInterruptedState)
+
+      const recovered = await runProductProductionSchedulerCycleV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        executor,
+        capabilityBindings,
+      })
+      expect(recovered).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+      expect([...calls.values()].every(count => count === 1)).toBe(true)
+
+      const completedRoot = await readAgentRunV1(owned.scope, recovered.rootRunId!)
+      expect(completedRoot.projection).toMatchObject({
+        state: 'completed',
+        terminalReceiptHash: interruptedBuild!.rootTerminalReceiptHash,
+      })
+      const terminalEvents = completedRoot.events.filter(event => (
+        (event.type === 'step.succeeded' && event.payload.stepId === '$join')
+        || event.type === 'verification.started'
+        || event.type === 'verification.accepted'
+      ))
+      expect(terminalEvents.map(event => event.type)).toEqual([
+        'step.succeeded',
+        'verification.started',
+        'verification.accepted',
+      ])
+      expect(new Set(terminalEvents.map(event => event.sequence)).size).toBe(3)
+    },
+    30_000,
+  )
+
+  it.each(['pause', 'stop'] as const)(
+    'executor 实际开始后并发%s，暂停可在无回调时封账恢复且迟到候选永不成为 Artifact',
+    async control => {
+      const owned = await fixture(`scheduler-late-result-${control}`)
+      const suppliedPlan = await singleTaskBudgetPlan(owned, 0, 2)
+      const task = suppliedPlan.tasks[0]
+      const capabilityBindings = [{
+        requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+        adapterId: 'configured-text-provider.v1',
+        bindingHash: 'a'.repeat(64),
+      }]
+      let notifyStarted!: () => void
+      let releaseExecutor!: () => void
+      const executorStarted = new Promise<void>(resolve => { notifyStarted = resolve })
+      const executorRelease = new Promise<void>(resolve => { releaseExecutor = resolve })
+      let executorCalls = 0
+      const resultExecutor = executorFor(owned, new Map(), { active: 0, peak: 0 })
+      const schedulerPromise = runProductProductionSchedulerCycleV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        suppliedPlan,
+        capabilityBindings,
+        executor: async request => {
+          executorCalls += 1
+          notifyStarted()
+          await executorRelease
+          return resultExecutor(request)
+        },
+      })
+
+      await executorStarted
+      const production = (await db.productProductions.get(owned.productionId))!
+      const controlReceipt = await executeProductProductionCommand({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        command: control === 'pause'
+          ? {
+              type: 'pause',
+              commandId: `scheduler-late-result-${control}.pause`,
+              expectedStateRevision: production.stateRevision,
+              reason: '模拟另一控制流在供应商已开始后暂停',
+            }
+          : {
+              type: 'stop',
+              commandId: `scheduler-late-result-${control}.stop`,
+              expectedStateRevision: production.stateRevision,
+              retention: 'keep-build',
+            },
+      })
+      expect(controlReceipt.ok).toBe(true)
+      if (control === 'pause') {
+        const pausedProduction = (await db.productProductions.get(owned.productionId))!
+        const pausedBuild = (await db.productBuilds.where('productionId').equals(owned.productionId).first())!
+        expect(pausedProduction.status).toBe('paused')
+        expect(pausedBuild.status).toBe('paused')
+        const failure = JSON.parse(pausedBuild.failureJson)
+        const frozen = failure.pausedProviderReservations[0]
+        expect(failure).toMatchObject({
+          code: 'pause-provider-result-unknown',
+          pausedProviderReservations: [{ taskKey: task.taskKey, attempt: 1, controlEpoch: 0 }],
+        })
+        expect(Object.values(JSON.parse(pausedBuild.budgetLedgerJson).reservations)).toHaveLength(1)
+
+        await expect(setProductProductionPausedV1({
+          scope: owned.scope,
+          production: pausedProduction,
+          build: pausedBuild,
+        })).rejects.toThrow('恢复前请先结算暂停时仍在途的供应商请求')
+        expect(await db.productProductions.get(owned.productionId)).toMatchObject({
+          status: 'paused',
+          controlEpoch: pausedProduction.controlEpoch,
+          stateRevision: pausedProduction.stateRevision,
+        })
+
+        const resumed = await setProductProductionPausedV1({
+          scope: owned.scope,
+          production: pausedProduction,
+          build: pausedBuild,
+          pausedReservationDisposition: 'charge-reservation-upper-bound',
+        })
+        expect(resumed).toBe('resumed')
+        expect(await db.productBuilds.get(pausedBuild.id!)).toMatchObject({
+          status: 'building',
+          resumeState: null,
+          controlEpoch: pausedProduction.controlEpoch + 1,
+        })
+        expect(Object.values(JSON.parse(
+          (await db.productBuilds.get(pausedBuild.id!))!.budgetLedgerJson,
+        ).charges)[0]).toMatchObject({
+          taskKey: task.taskKey,
+          runId: frozen.runId,
+          attempt: 1,
+          controlEpoch: 0,
+          resolution: 'author-charged-reservation-upper-bound',
+        })
+      }
+      releaseExecutor()
+
+      const projection = await schedulerPromise
+      expect(executorCalls).toBe(1)
+      expect(projection.buildStatus).toBe(control === 'pause' ? 'building' : 'cancelled')
+      const build = (await db.productBuilds.get(projection.buildId))!
+      const ledger = JSON.parse(build.budgetLedgerJson)
+      expect(Object.values(ledger.charges)).toHaveLength(1)
+      expect(Object.values(ledger.reservations)).toHaveLength(0)
+      expect(Object.values(ledger.charges)[0]).toMatchObject({
+        taskKey: task.taskKey,
+        attempt: 1,
+        controlEpoch: 0,
+        ...(control === 'pause'
+          ? { resolution: 'author-charged-reservation-upper-bound' }
+          : { usage: { modelCalls: 1, inputTokens: 10, outputTokens: 10 } }),
+      })
+      expect(await db.productBuildArtifacts.where('buildId').equals(projection.buildId).count()).toBe(0)
+      const childRow = await db.agentRuns.where('[parentRunId+parentRelation]')
+        .equals([projection.rootRunId, `task:${task.taskKey}`]).first()
+      const child = await readAgentRunV1(owned.scope, childRow!.id!)
+      expect(child.projection.state).toBe('cancelled')
+      expect(child.events.filter(event => event.type === 'budget.settled')).toHaveLength(1)
+      expect(child.events.filter(event => event.type === 'candidate.persisted')).toHaveLength(0)
+      expect(child.events.filter(event => event.type === 'verification.accepted')).toHaveLength(0)
+    },
+    30_000,
+  )
+
+  it('Creator 正式 P0 将完整 SourcePin 原子写入并闭合 producer/ledger，且同 cycle 不启动 P1', async () => {
+    const world = await seedCurrentProductWorld('scheduler-creator-p0-atomic')
+    const creator = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+      source: {
+        kind: 'world-release',
+        scope: world.scope,
+        localReleaseRecordId: world.release.id!,
+        expectedReleaseHash: world.release.contentHash,
+      },
+      sessionKey: 'scheduler-creator-p0-atomic',
+    })
+    const plan = JSON.parse((await db.productBuilds.get(creator.buildId))!.planJson)
+    const p0 = plan.tasks.find((task: { taskKey: string }) => task.taskKey === 'p0.source-lock')!
+
+    const projection = await runProductProductionSchedulerCycleV1({
+      scope: creator.scope,
+      productionId: creator.productionId,
+      executor: createTextOpenWorldSourceLockExecutorV1(),
+      capabilityBindings: creatorLocalMediaBindings(plan),
+    })
+    const projectedP0 = projection.tasks.find(task => task.taskKey === 'p0.source-lock')!
+    expect(projectedP0).toMatchObject({ status: 'completed', attempt: 1 })
+    expect(projection.tasks.find(task => task.taskKey === 'p1.source-curation')).toMatchObject({
+      status: 'ready',
+      runId: null,
+    })
+    const accepted = (await db.productBuildArtifacts.where('buildId').equals(creator.buildId).toArray())
+      .filter(row => row.status === 'accepted')
+    expect(accepted.map(row => row.artifactKey).sort()).toEqual([...p0.outputArtifactKeys].sort())
+    expect(new Set(accepted.map(row => row.producerRunId))).toEqual(new Set([projectedP0.runId]))
+    expect(new Set(accepted.map(row => row.producerReceiptHash))).toEqual(new Set([projectedP0.terminalReceiptHash]))
+    expect(accepted.every(row => /^[a-f0-9]{64}$/.test(row.inputHash))).toBe(true)
+
+    const build = (await db.productBuilds.get(creator.buildId))!
+    const ledger = JSON.parse(build.budgetLedgerJson)
+    expect(Object.values(ledger.reservations)).toHaveLength(0)
+    expect(Object.values(ledger.charges)).toHaveLength(1)
+    expect(ledger.tasks['p0.source-lock']).toMatchObject({
+      runId: projectedP0.runId,
+      status: 'settled',
+      terminalReceiptHash: projectedP0.terminalReceiptHash,
+    })
+    expect(await db.agentRuns.where('[parentRunId+parentRelation]')
+      .equals([projection.rootRunId, 'task:p1.source-curation']).count()).toBe(0)
+  }, 30_000)
+
+  it('P1嵌套 provider 响应迟于外层timeout时先结算paid usage，且不向终态Run追加响应或候选', async () => {
+    const world = await seedCurrentProductWorld('scheduler-creator-p1-late-response')
+    const creator = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+      source: {
+        kind: 'world-release',
+        scope: world.scope,
+        localReleaseRecordId: world.release.id!,
+        expectedReleaseHash: world.release.contentHash,
+      },
+      sessionKey: 'scheduler-creator-p1-late-response',
+    })
+    const plan = JSON.parse((await db.productBuilds.get(creator.buildId))!.planJson)
+    const p1 = plan.tasks.find((task: { taskKey: string }) => task.taskKey === 'p1.source-curation')!
+    const textBinding = {
+      requirementKey: p1.capabilityRequirementKeys[0],
+      adapterId: 'configured-text-provider.v1',
+      bindingHash: 'b'.repeat(64),
+    }
+    const capabilityBindings = [textBinding, ...creatorLocalMediaBindings(plan)]
+    const p0Projection = await runProductProductionSchedulerCycleV1({
+      scope: creator.scope,
+      productionId: creator.productionId,
+      executor: createTextOpenWorldSourceLockExecutorV1(),
+      capabilityBindings,
+    })
+    expect(p0Projection.tasks.find(task => task.taskKey === 'p0.source-lock')).toMatchObject({
+      status: 'completed',
+    })
+
+    const baseNow = 2_120_000_000_000
+    vi.spyOn(Date, 'now').mockReturnValue(baseNow)
+    let notifyProviderStarted!: () => void
+    let releaseProvider!: () => void
+    const providerStarted = new Promise<void>(resolve => { notifyProviderStarted = resolve })
+    const providerRelease = new Promise<void>(resolve => { releaseProvider = resolve })
+    const p1Executor = createTextOpenWorldSourceCurationExecutorV1({
+      runModel: async request => {
+        notifyProviderStarted()
+        await providerRelease
+        return {
+          output: '{"late":true}',
+          bindingReceipt: {
+            schema: 'storyforge.provider-binding-receipt',
+            version: 1,
+            requirementKey: request.requirementKey,
+            adapterId: 'configured-text-provider.v1',
+            adapterVersion: 1,
+            provider: 'test',
+            model: 'test-model',
+            endpointOrigin: 'https://example.invalid',
+            executionLocation: 'browser-direct',
+            credentialSource: 'existing-ai-config',
+            credentialPresent: true,
+            capabilityHash: textBinding.bindingHash,
+            boundAt: baseNow,
+            receiptHash: 'c'.repeat(64),
+          },
+          usage: { inputTokens: 17, outputTokens: 5 },
+        }
+      },
+      now: () => baseNow,
+    })
+    const firstCycle = runProductProductionSchedulerCycleV1({
+      scope: creator.scope,
+      productionId: creator.productionId,
+      executor: p1Executor,
+      capabilityBindings,
+    })
+    await providerStarted
+
+    vi.mocked(Date.now).mockReturnValue(baseNow + p1.timeoutMs + 1)
+    const timedOut = await runProductProductionSchedulerCycleV1({
+      scope: creator.scope,
+      productionId: creator.productionId,
+      executor: async () => { throw new Error('P1 unknown-result timeout 不得重新派发') },
+      capabilityBindings,
+    })
+    expect(timedOut.buildStatus).toBe('recovery-required')
+    const blocked = (await db.productBuilds.get(creator.buildId))!
+    const failure = JSON.parse(blocked.failureJson)
+    expect(failure).toMatchObject({ taskKey: p1.taskKey, code: 'unknown-result' })
+
+    releaseProvider()
+    await expect(firstCycle).resolves.toBeDefined()
+    const ledger = JSON.parse((await db.productBuilds.get(creator.buildId))!.budgetLedgerJson)
+    const attemptKey = `${failure.failureProvenance.runId}:${failure.failureProvenance.attempt}`
+    expect(Object.values(ledger.reservations)).toHaveLength(0)
+    expect(ledger.charges[attemptKey]).toMatchObject({
+      taskKey: p1.taskKey,
+      resolution: null,
+      usage: { modelCalls: 1, inputTokens: 17, outputTokens: 5 },
+    })
+    const child = await readAgentRunV1(creator.scope, failure.failureProvenance.runId)
+    const nestedEvents = child.events.filter(event => (
+      'stepId' in event.payload
+      && typeof event.payload.stepId === 'string'
+      && event.payload.stepId.startsWith(`${p1.taskKey}.`)
+    ))
+    expect(nestedEvents.filter(event => event.type === 'model.requested')).toHaveLength(1)
+    expect(nestedEvents.filter(event => event.type === 'model.responded')).toHaveLength(0)
+    expect(nestedEvents.filter(event => event.type === 'candidate.persisted')).toHaveLength(0)
+    expect(await db.productBuildArtifacts.where('buildId').equals(creator.buildId)
+      .filter(row => row.producerRunId === failure.failureProvenance.runId).count()).toBe(0)
+
+    const production = (await db.productProductions.get(creator.productionId))!
+    const resolved = await executeProductProductionCommand({
+      scope: creator.scope,
+      productionId: creator.productionId,
+      command: {
+        type: 'resolve-blocker',
+        commandId: 'scheduler-creator-p1-late-response.resolve',
+        expectedStateRevision: production.stateRevision,
+        blockerKey: p1.taskKey,
+        resolution: {
+          action: 'retry',
+          note: '迟到实际计费已闭合，开启新 epoch',
+          unknownResultReservation: {
+            runId: failure.failureProvenance.runId,
+            attempt: failure.failureProvenance.attempt,
+            controlEpoch: failure.failureProvenance.controlEpoch,
+            disposition: 'confirmed-not-charged',
+          },
+        },
+      },
+    })
+    expect(resolved).toMatchObject({
+      ok: true,
+      result: {
+        controlEpoch: 1,
+        unknownResultAccounting: {
+          effectiveDisposition: 'provider-actual-charge',
+          usage: { modelCalls: 1, inputTokens: 17, outputTokens: 5 },
+        },
+      },
+    })
+  }, 30_000)
+
+  it('Creator P0 整包事务在中途存储故障时回滚为零半包，且 P1 不会越级启动', async () => {
+    const world = await seedCurrentProductWorld('scheduler-creator-p0-crash')
+    const creator = await seedAuthorizedTextOpenWorldCreatorBuildV1({
+      source: {
+        kind: 'world-release',
+        scope: world.scope,
+        localReleaseRecordId: world.release.id!,
+        expectedReleaseHash: world.release.contentHash,
+      },
+      sessionKey: 'scheduler-creator-p0-crash',
+    })
+    const plan = JSON.parse((await db.productBuilds.get(creator.buildId))!.planJson)
+    let sourceWrites = 0
+    const failSecondSourceWrite = (_primaryKey: unknown, row: { buildId?: number; kind?: string }) => {
+      if (row.buildId !== creator.buildId
+        || !['text-open-world.source-pin', 'text-open-world.source-pin-unit'].includes(row.kind ?? '')) return
+      sourceWrites += 1
+      if (sourceWrites === 2) throw new Error('injected-mid-p0-bundle-transaction')
+    }
+    db.productBuildArtifacts.hook('creating', failSecondSourceWrite)
+    try {
+      await expect(runProductProductionSchedulerCycleV1({
+        scope: creator.scope,
+        productionId: creator.productionId,
+        executor: createTextOpenWorldSourceLockExecutorV1(),
+        capabilityBindings: creatorLocalMediaBindings(plan),
+      })).rejects.toThrow('injected-mid-p0-bundle-transaction')
+    } finally {
+      db.productBuildArtifacts.hook('creating').unsubscribe(failSecondSourceWrite)
+    }
+
+    expect(sourceWrites).toBe(2)
+    expect(await db.productBuildArtifacts.where('buildId').equals(creator.buildId).count()).toBe(0)
+    const build = (await db.productBuilds.get(creator.buildId))!
+    const ledger = JSON.parse(build.budgetLedgerJson)
+    expect(Object.values(ledger.charges)).toHaveLength(1)
+    expect(Object.values(ledger.reservations)).toHaveLength(0)
+    expect(ledger.tasks['p0.source-lock']).toMatchObject({ status: 'settled' })
+    expect(await db.agentRuns.where('[parentRunId+parentRelation]')
+      .equals([ledger.rootRunId, 'task:p1.source-curation']).count()).toBe(0)
+  }, 30_000)
+
   it('候选检查点后崩溃会从 durable payload 恢复，不重复调用已计费 executor', async () => {
     const owned = await fixture('scheduler-recovery')
     const calls = new Map<string, number>()
@@ -1610,6 +2807,353 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(designRows[1].producerReceiptHash).not.toBe(designRows[0].producerReceiptHash)
   }, 30_000)
 
+  it('scheduler 不得为绕过 Plan API 注入的未授权 carried row 创建 synthetic receipt 或结算 ledger', async () => {
+    const owned = await fixture('scheduler-unauthorized-carried-row')
+    const plan = await singleTaskBudgetPlan(owned, 0, 1)
+    const planHash = await hashProductProductionValueV2(plan)
+    const build = await db.productBuilds.where('productionId').equals(owned.productionId).first()
+    expect(build?.id).toBeTruthy()
+    await db.productBuilds.update(build!.id!, {
+      planRevision: 1,
+      planJson: canonicalProductProductionJsonV2(plan),
+      planHash,
+      updatedAt: Date.now(),
+    })
+    const payloadJson = canonicalProductProductionJsonV2({ injected: 'not-authorized-by-plan-reuse' })
+    const contentHash = await hashProductProductionValueV2(JSON.parse(payloadJson))
+    const now = Date.now()
+    const artifactId = await db.productBuildArtifacts.add({
+      projectId: owned.scope.projectId,
+      worldId: owned.scope.worldId,
+      workId: owned.scope.workId,
+      buildId: build!.id!,
+      artifactKey: 'design.game',
+      requirementKey: null,
+      version: 1,
+      kind: 'product-design',
+      mediaKind: null,
+      status: 'carried-forward',
+      producerRunId: null,
+      producerReceiptHash: 'a'.repeat(64),
+      controlEpoch: 0,
+      inputHash: 'b'.repeat(64),
+      contentHash,
+      payloadJson,
+      metadataJson: '{}',
+      qualityJson: '{}',
+      rightsJson: '{}',
+      blobObjectId: null,
+      mimeType: null,
+      byteSize: new TextEncoder().encode(payloadJson).byteLength,
+      parentArtifactHash: contentHash,
+      carriedFrom: {
+        buildNumber: build!.buildNumber,
+        artifactKey: 'design.game',
+        version: 1,
+        contentHash,
+        proofHash: 'c'.repeat(64),
+      },
+      createdAt: now,
+      updatedAt: now,
+    }) as number
+
+    await expect(runProductProductionSchedulerCycleV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      executor: executorFor(owned, new Map(), { active: 0, peak: 0 }),
+      capabilityBindings: [{
+        requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+        adapterId: 'configured-text-provider.v1',
+        bindingHash: 'd'.repeat(64),
+      }],
+    })).rejects.toThrow(/carried-forward same-build lineage 不闭合/)
+    expect(await db.productBuildArtifacts.get(artifactId)).toMatchObject({
+      producerRunId: null,
+      producerReceiptHash: 'a'.repeat(64),
+    })
+    const refreshed = (await db.productBuilds.get(build!.id!))!
+    const ledger = JSON.parse(refreshed.budgetLedgerJson)
+    expect(ledger.tasks?.['content.design']).toBeUndefined()
+    expect(await db.agentRuns.where('[parentRunId+parentRelation]')
+      .equals([ledger.rootRunId, 'task:content.design']).count()).toBe(0)
+  })
+
+  it('目标 Plan 已持久化但首次 cross-build carry 中断时，scheduler 重入会补齐授权复用', async () => {
+    const owned = await fixture('scheduler-plan-before-cross-build-carry')
+    const calls = new Map<string, number>()
+    const bindings = [{
+      requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+      adapterId: 'configured-text-provider.v1',
+      bindingHash: 'e'.repeat(64),
+    }]
+    await runProductProductionUntilBlockedV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      executor: executorFor(owned, calls, { active: 0, peak: 0 }),
+      capabilityBindings: bindings,
+    })
+    const evolution = await beginProductProductionEvolutionV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      userText: '只调整音频方向，内容闭包保持不变',
+      affectedLanes: ['audio'],
+    })
+    const production = (await db.productProductions.get(owned.productionId))!
+    const briefRow = await db.productProductionBriefs
+      .where('[productionId+revision]').equals([owned.productionId, evolution.briefRevision]).first()
+    const authorized = await executeProductProductionCommand({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      command: {
+        type: 'authorize-start',
+        commandId: 'scheduler-plan-before-cross-build-carry.evolution-start',
+        expectedStateRevision: production.stateRevision,
+        briefRevision: briefRow!.revision,
+        briefHash: briefRow!.briefHash,
+        authorizationNonce: 'scheduler-plan-before-cross-build-carry.click',
+      },
+    })
+    const targetBuildId = authorized.result.buildId as number
+    let injected = false
+    const failFirstCarry = (_primaryKey: unknown, row: { buildId?: number; status?: string }) => {
+      if (!injected && row.buildId === targetBuildId && row.status === 'carried-forward') {
+        injected = true
+        throw new Error('injected-after-plan-before-cross-build-carry')
+      }
+    }
+    db.productBuildArtifacts.hook('creating', failFirstCarry)
+    try {
+      await expect(runProductProductionSchedulerCycleV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        executor: executorFor(owned, calls, { active: 0, peak: 0 }),
+        capabilityBindings: bindings,
+      })).rejects.toThrow('injected-after-plan-before-cross-build-carry')
+    } finally {
+      db.productBuildArtifacts.hook('creating').unsubscribe(failFirstCarry)
+    }
+    expect(injected).toBe(true)
+    const persisted = (await db.productBuilds.get(targetBuildId))!
+    const persistedPlan = JSON.parse(persisted.planJson) as {
+      tasks: Array<{ taskKey: string; outputArtifactKeys: string[]; reuse: unknown }>
+    }
+    const reuseTasks = persistedPlan.tasks.filter(task => task.reuse != null)
+    expect(persisted.planHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(reuseTasks.length).toBeGreaterThan(0)
+    expect(await db.productBuildArtifacts.where('buildId').equals(targetBuildId).count()).toBe(0)
+
+    await runProductProductionSchedulerCycleV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      executor: executorFor(owned, calls, { active: 0, peak: 0 }),
+      capabilityBindings: bindings,
+    })
+    const recovered = (await db.productBuildArtifacts.where('buildId').equals(targetBuildId).toArray())
+      .filter(row => row.controlEpoch === persisted.controlEpoch && row.status === 'carried-forward')
+    const expectedKeys = reuseTasks.flatMap(task => task.outputArtifactKeys).sort()
+    expect(recovered.map(row => row.artifactKey).sort()).toEqual(expectedKeys)
+    expect(recovered.every(row => row.producerRunId != null && row.producerReceiptHash != null)).toBe(true)
+  }, 30_000)
+
+  it.each(['parent-envelope', 'lineage-proof', 'blob-bytes'] as const)(
+    'terminal verifier 后、claim 前 %s 变化会被原始 proof readset CAS 拒绝',
+    async mutation => {
+      const owned = await fixture(`scheduler-terminal-cas-${mutation}`)
+      const calls = new Map<string, number>()
+      const baseExecutor = executorFor(owned, calls, { active: 0, peak: 0 })
+      const blob = mutation === 'blob-bytes'
+        ? await putMediaBlobObject({
+            scope: owned.scope,
+            data: new TextEncoder().encode('terminal-cas-physical-bytes').buffer,
+            mimeType: 'image/png',
+            backend: 'indexeddb',
+          })
+        : null
+      const executor: ProductProductionTaskExecutorV1 = async request => {
+        const result = await baseExecutor(request)
+        if (blob && request.task.taskKey === 'content.design') {
+          result.artifacts[0] = {
+            ...result.artifacts[0],
+            kind: 'image',
+            mediaKind: 'image',
+            contentHash: blob.contentHash,
+            blobObjectId: blob.id!,
+            mimeType: blob.mimeType,
+            byteSize: blob.byteSize,
+          }
+        }
+        return result
+      }
+      const capabilityBindings = [{
+        requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+        adapterId: 'configured-text-provider.v1',
+        bindingHash: 'f'.repeat(64),
+      }]
+      const partial = await runProductProductionSchedulerCycleV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        executor,
+        capabilityBindings,
+      })
+      expect(partial.tasks.find(task => task.taskKey === 'content.design')?.status).toBe('completed')
+      const production = (await db.productProductions.get(owned.productionId))!
+      await executeProductProductionCommand({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        command: {
+          type: 'pause',
+          commandId: `scheduler-terminal-cas-${mutation}.pause`,
+          expectedStateRevision: production.stateRevision,
+          reason: '制造合法 same-build carry 后测试 terminal CAS',
+        },
+      })
+      const paused = (await db.productProductions.get(owned.productionId))!
+      await executeProductProductionCommand({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        command: {
+          type: 'resume',
+          commandId: `scheduler-terminal-cas-${mutation}.resume`,
+          expectedStateRevision: paused.stateRevision,
+        },
+      })
+      let injected = false
+      await expect(runProductProductionUntilBlockedV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        executor,
+        capabilityBindings,
+        async onDurableBoundary(boundary, snapshot) {
+          if (injected || boundary !== 'terminal.proof.checked') return
+          injected = true
+          const rows = await db.productBuildArtifacts.where('buildId').equals(snapshot.run.productBuildId!).toArray()
+          const parent = rows.find(row => row.artifactKey === 'design.game'
+            && row.status === 'invalid' && row.controlEpoch === 0)!
+          const carried = rows.find(row => row.artifactKey === 'design.game'
+            && row.status === 'carried-forward' && row.controlEpoch > 0)!
+          if (mutation === 'parent-envelope') {
+            await db.productBuildArtifacts.update(parent.id!, {
+              metadataJson: canonicalProductProductionJsonV2({ changedAfterVerify: true }),
+              updatedAt: Date.now(),
+            })
+          } else if (mutation === 'lineage-proof') {
+            await db.productBuildArtifacts.update(carried.id!, {
+              carriedFrom: { ...carried.carriedFrom!, proofHash: '0'.repeat(64) },
+              updatedAt: Date.now(),
+            })
+          } else {
+            const stored = await db.mediaBlobObjects.get(carried.blobObjectId!)
+            const changed = stored!.data!.slice(0)
+            new Uint8Array(changed)[0] ^= 0xff
+            await db.mediaBlobObjects.update(stored!.id!, { data: changed })
+          }
+        },
+      })).rejects.toThrow(/terminal CAS (Artifact|Blob) proof/)
+      expect(injected).toBe(true)
+      const build = await db.productBuilds.get(partial.buildId)
+      expect(build?.status).toBe('building')
+      expect(build?.rootTerminalReceiptHash).toBeNull()
+    },
+    30_000,
+  )
+
+  it('发布事务前复验完整 terminal OPFS 集合而非只复验 Runtime 媒资', async () => {
+    const fakeOpfs = installFakeOpfsV1()
+    try {
+      const owned = await fixture('scheduler-adoption-non-runtime-opfs')
+      const physical = await putMediaBlobObject({
+        scope: owned.scope,
+        data: new TextEncoder().encode('non-runtime-terminal-opfs-proof').buffer,
+        mimeType: 'image/png',
+        backend: 'indexeddb',
+      })
+      const baseExecutor = executorFor(owned, new Map(), { active: 0, peak: 0 })
+      const executor: ProductProductionTaskExecutorV1 = async request => {
+        const result = await baseExecutor(request)
+        if (request.task.taskKey === 'content.design') {
+          result.artifacts[0] = {
+            ...result.artifacts[0],
+            kind: 'image',
+            mediaKind: 'image',
+            contentHash: physical.contentHash,
+            blobObjectId: physical.id!,
+            mimeType: physical.mimeType,
+            byteSize: physical.byteSize,
+          }
+        }
+        return result
+      }
+      const capabilityBindings = [{
+        requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+        adapterId: 'configured-text-provider.v1',
+        bindingHash: '9'.repeat(64),
+      }]
+      const completed = await runProductProductionUntilBlockedV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        executor,
+        capabilityBindings,
+      })
+      expect(completed).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+      const stored = await db.mediaBlobObjects.get(physical.id!)
+      const originalData = stored!.data!.slice(0)
+      const opfsPath = `storyforge/media/v1/work-${owned.scope.workId}/${stored!.contentHash}`
+      const fakePath = `/${opfsPath}`
+      fakeOpfs.files.set(fakePath, originalData.slice(0))
+      await db.mediaBlobObjects.update(stored!.id!, {
+        backend: 'opfs',
+        data: null,
+        opfsPath,
+        updatedAt: Date.now(),
+      })
+      const prepared = await prepareProductProductionAdoption({
+        scope: owned.scope,
+        productionId: owned.productionId,
+      })
+      expect(prepared.mediaAssetKeys).toEqual([])
+      const command = {
+        type: 'publish' as const,
+        commandId: 'scheduler-adoption-non-runtime-opfs.publish',
+        expectedStateRevision: prepared.intent.expectedStateRevision,
+        buildNumber: prepared.intent.buildNumber,
+        expectedManifestHash: prepared.intent.manifestHash,
+        adoptionIntentHash: prepared.adoptionIntentHash,
+      }
+      let injected = false
+      fakeOpfs.readCount = 0
+      fakeOpfs.beforeRead = (path, readCount) => {
+        // publish inspect re-proves the full terminal set once. The next read
+        // is the immediately-before-transaction refresh; this Artifact is not
+        // referenced by RuntimePackage.presentation.
+        if (injected || readCount !== 2) return
+        injected = true
+        const changed = fakeOpfs.files.get(path)!.slice(0)
+        new Uint8Array(changed)[0] ^= 0xff
+        fakeOpfs.files.set(path, changed)
+      }
+      await expect(publishProductProductionBuild({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        command,
+      })).rejects.toThrow(/共享媒资哈希不匹配/)
+      expect(injected).toBe(true)
+      expect(await db.productReleases.where('workId').equals(owned.scope.workId).count()).toBe(0)
+      expect(await db.productProductionCommands
+        .where('[productionId+commandId]')
+        .equals([owned.productionId, command.commandId]).count()).toBe(0)
+
+      fakeOpfs.beforeRead = null
+      fakeOpfs.files.set(fakePath, originalData.slice(0))
+      await expect(publishProductProductionBuild({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        command,
+      })).resolves.toMatchObject({ buildId: completed.buildId, replayed: false })
+    } finally {
+      fakeOpfs.restore()
+    }
+  }, 60_000)
+
   it('供应商连续失败停在用户 blocker，作者重试后新 epoch 继续且错误信息不泄露密钥', async () => {
     const owned = await fixture('scheduler-user-retry')
     const calls = new Map<string, number>()
@@ -1653,7 +3197,7 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(completed.terminal).toBe(true)
     expect(calls.get('content.design')).toBe(3)
     expect([...calls.entries()].filter(([key]) => key !== 'content.design').every(([, count]) => count === 1)).toBe(true)
-  }, 30_000)
+  }, 60_000)
 
   it('provider safety refusal 不自动改写或重试，第一次即暂停等待用户决定', async () => {
     const owned = await fixture('scheduler-safety-refusal')

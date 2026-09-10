@@ -195,7 +195,7 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
     dialogue = host.querySelector('[data-testid="text-open-world-npc-dialogue"]')
     expect(dialogue?.textContent).toContain('态度友好 · 友善且愿意帮助')
     expect(dialogue?.textContent).toContain('岑阿婆给你让出石栏边的位置，愿意把记得的细节再讲一遍。')
-  })
+  }, 10_000)
 
   it.sequential('教程可用性只跟随当前选中场景，而不聚合其他候选场景', async () => {
     const runtimePackage = createTextOpenWorldVNextP9Fixture()

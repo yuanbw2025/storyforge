@@ -3,6 +3,7 @@ import type {
   ConfirmedProductBriefV1,
   ProductMediaAsset,
   ProductMediaBlob,
+  MediaBlobObjectRecordV1,
   ProductBuildArtifactRecordV1,
   ProductBuildManifestV1,
   ProductBuildQualityReportV1,
@@ -33,8 +34,10 @@ import {
   productReleaseIdentityHashV1,
   verifyProductReleaseManifestV1,
 } from './runtime-package'
-import { createProductBuildRootTerminalReceiptV1 } from './receipts'
+import { verifyProductBuildRootTerminalReceiptV1 } from './receipts'
 import { readAgentRunV1 } from '../agent/run/event-store'
+import type { VerifiedProductBuildTerminalArtifactSetV1 } from './artifact-store'
+import { parseProductProductionPortableTaskLedgerV1 } from './task-evidence'
 import {
   aggregateProductSourceManifestFromExactRunsV1,
   createProductReleaseLineageV1,
@@ -100,6 +103,11 @@ interface VerifiedAdoption extends PreparedProductProductionAdoptionV1 {
   runtimePackage: ProductRuntimePackageV1
   artifacts: ProductBuildArtifactRecordV1[]
   mediaArtifacts: Map<string, ProductBuildArtifactRecordV1>
+  /** In-memory physical-byte witnesses. They are never serialized into a
+   * Release; publish refreshes them immediately before the write transaction
+   * and IndexedDB bytes are compared again inside that transaction. */
+  terminalBlobProofRows: Map<number, MediaBlobObjectRecordV1 & { id: number }>
+  terminalVerification: VerifiedProductBuildTerminalArtifactSetV1
   sourcePlan: ProductSourcePlanV1
   confirmedBrief: ConfirmedProductBriefV1
   sourceManifest: ProductSourceManifestV1
@@ -108,6 +116,14 @@ interface VerifiedAdoption extends PreparedProductProductionAdoptionV1 {
   compatibilityHash: string
   compatibilityStatus: ProductReleaseLineageV1['compatibility']['status']
   qualityReceiptHashes: string[]
+  authoritySnapshot: {
+    productionRowJson: string
+    buildRowJson: string
+    briefRowJson: string
+    activeArtifactRowsJson: string
+    qualityReceiptRowsJson: string
+    mediaBlobRowsJson: string
+  }
 }
 
 function fail(message: string): never {
@@ -125,6 +141,46 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[], labe
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
     fail(`${label} 字段不符合合同:${actual.join(',')}`)
   }
+}
+
+function canonicalRowsByIdV1<T extends { id?: number }>(rows: T[]): string {
+  return canonicalProductProductionJsonV2([...rows]
+    .sort((left, right) => (left.id ?? -1) - (right.id ?? -1))
+    .map(row => ({ ...row, id: row.id ?? null })))
+}
+
+function mediaBlobAuthorityRowV1(row: MediaBlobObjectRecordV1 & { id?: number }): unknown {
+  return {
+    id: row.id ?? null,
+    projectId: row.projectId,
+    worldId: row.worldId,
+    workId: row.workId,
+    contentHash: row.contentHash,
+    mimeType: row.mimeType,
+    byteSize: row.byteSize,
+    backend: row.backend,
+    storageState: row.storageState,
+    opfsPath: row.opfsPath,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+function cloneMediaBlobProofRowV1(
+  row: MediaBlobObjectRecordV1 & { id: number },
+): MediaBlobObjectRecordV1 & { id: number } {
+  return { ...row, data: row.data?.slice(0) ?? null }
+}
+
+function sameArrayBufferV1(left: ArrayBuffer | null, right: ArrayBuffer | null): boolean {
+  if (left === right) return true
+  if (!left || !right || left.byteLength !== right.byteLength) return false
+  const leftBytes = new Uint8Array(left)
+  const rightBytes = new Uint8Array(right)
+  for (let index = 0; index < leftBytes.length; index += 1) {
+    if (leftBytes[index] !== rightBytes[index]) return false
+  }
+  return true
 }
 
 export function parseProductBuildManifestV1(value: string): ProductBuildManifestV1 {
@@ -336,12 +392,69 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
   const qualityArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.qualityReport)
   if (!packageArtifact || packageArtifact.contentHash !== build.packageHash
     || !qualityArtifact || qualityArtifact.contentHash !== build.qualityReportHash) fail('Runtime/Quality Artifact 缺失')
-  const expectedRootReceipt = await createProductBuildRootTerminalReceiptV1({
+  const rootReceiptVerification = await verifyProductBuildRootTerminalReceiptV1({
     planHash: build.planHash, manifestHash: build.manifestHash, packageHash: build.packageHash,
     qualityReportHash: build.qualityReportHash, controlEpoch: build.controlEpoch,
     budgetLedgerJson: build.budgetLedgerJson, artifacts,
+    expectedReceiptHash: build.rootTerminalReceiptHash ?? '',
   })
-  if (expectedRootReceipt !== build.rootTerminalReceiptHash) fail('root terminal receipt 校验失败')
+  if (!rootReceiptVerification.valid) fail('root terminal receipt 校验失败')
+  if (rootReceiptVerification.version !== 2) {
+    fail('legacy root terminal receipt 仅供只读兼容；正式发布前必须重新生产 v2 Build')
+  }
+  // A v2 row seal alone is not sufficient publication authority: every
+  // producer/synthetic Run, event stream, checkpoint and carried lineage must
+  // still make that seal true. Use the same complete terminal verifier as the
+  // scheduler, then bind its raw read set into the publish transaction below.
+  // Dynamic import avoids a static adoption <-> artifact-store module cycle.
+  const { verifyProductBuildTerminalArtifactSetV1 } = await import('./artifact-store')
+  const terminalVerification = await verifyProductBuildTerminalArtifactSetV1({
+    scope,
+    productionId: production.id!,
+    buildId: build.id!,
+    expectedControlEpoch: build.controlEpoch,
+    expectedPlanHash: build.planHash,
+  })
+  const activeArtifactRowsJson = canonicalProductProductionJsonV2(
+    artifacts.map(row => ({ ...row, id: row.id ?? null })),
+  )
+  if (terminalVerification.artifactReadSetJson !== activeArtifactRowsJson) {
+    fail('terminal verifier 与发布 Artifact 集合不一致')
+  }
+  const terminalBlobProofRows = new Map<number, MediaBlobObjectRecordV1 & { id: number }>(
+    [...terminalVerification.physicalBlobProofRows].map(([blobId, row]) => [
+      blobId,
+      cloneMediaBlobProofRowV1(row),
+    ]),
+  )
+  const root = await readAgentRunV1(scope, terminalVerification.casReadSet.targetRootRunId)
+  const rootBoundary = root.contract.scope.productProduction
+  const rootStep = root.projection.steps['$join']
+  const portableTaskLedger = parseProductProductionPortableTaskLedgerV1({
+    budgetLedgerJson: build.budgetLedgerJson,
+    plan,
+  })
+  const expectedRootOutputHash = await hashProductProductionValueV2({
+    manifestHash: build.manifestHash,
+    taskReceipts: plan.tasks.map(task => ({
+      taskKey: task.taskKey,
+      receiptHash: portableTaskLedger.find(row => row.taskKey === task.taskKey)!.terminalReceiptHash,
+    })),
+  })
+  if (root.run.projectId !== scope.projectId || root.run.workId !== scope.workId
+    || root.run.productBuildId !== build.id || root.run.parentRunId != null
+    || root.run.parentRelation != null || root.run.status !== 'completed'
+    || root.projection.state !== 'completed'
+    || root.run.terminalReceiptHash !== build.rootTerminalReceiptHash
+    || root.projection.terminalReceiptHash !== build.rootTerminalReceiptHash
+    || !rootBoundary || rootBoundary.productBuildId !== build.id
+    || rootBoundary.buildNumber !== build.buildNumber
+    || rootBoundary.controlEpoch !== build.controlEpoch
+    || rootBoundary.planHash !== build.planHash || rootBoundary.taskKey !== '$root'
+    || rootStep?.status !== 'succeeded' || rootStep.attempt !== 1
+    || rootStep.outputHash !== expectedRootOutputHash) {
+    fail('root Run/terminal receipt 不是当前 Build 的完整发布证明')
+  }
 
   const sourcePlan = await parseProductProductionSourcePlanV1(briefRow)
   const confirmedBrief = await parseConfirmedProductBriefV1({ row: briefRow, sourcePlan })
@@ -403,10 +516,17 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
       fail(`媒资商业权利不完整:${artifact.artifactKey}`)
     }
     const blob = await db.mediaBlobObjects.get(artifact.blobObjectId)
-    if (!blob || !await assertRecordInScope(scope, 'mediaBlobObjects', blob, { owner: 'work' })
+    if (!blob || blob.id == null
+      || !await assertRecordInScope(scope, 'mediaBlobObjects', blob, { owner: 'work' })
       || blob.contentHash !== asset.blobContentHash || blob.mimeType !== asset.mimeType
       || blob.byteSize !== asset.byteSize) fail(`媒资物理对象不匹配:${asset.assetKey}`)
     await readVerifiedMediaBlobObjectData(blob)
+    const terminalProof = terminalBlobProofRows.get(blob.id)
+    if (!terminalProof
+      || canonicalProductProductionJsonV2(mediaBlobAuthorityRowV1(terminalProof))
+        !== canonicalProductProductionJsonV2(mediaBlobAuthorityRowV1(blob))) {
+      fail(`Runtime 媒资未进入完整 terminal 物理证明:${asset.assetKey}`)
+    }
     mediaArtifacts.set(asset.assetKey, artifact)
   }
   if (sourcePlan.worldReference.localReleaseRecordId !== brief.source.worldReleaseId
@@ -428,11 +548,26 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     worldReleaseId: sourcePlan.worldReference.localReleaseRecordId,
     worldContentHash: sourcePlan.worldReference.releaseHash,
   }
+  const qualityReceiptRows = await db.productQualityGateReceipts
+    .where('buildId').equals(build.id!).toArray()
+  for (const required of [
+    browserPerformance?.gateReceipt ?? null,
+    mainRoutePlaythrough?.gateReceipt ?? null,
+    mediaRuntime?.gateReceipt ?? null,
+  ].filter((value): value is NonNullable<typeof browserPerformance>['gateReceipt'] => value != null)) {
+    const latest = qualityReceiptRows
+      .filter(row => row.gateId === required.gateId)
+      .sort((left, right) => right.createdAt - left.createdAt || (right.id ?? -1) - (left.id ?? -1))[0]
+    if (!latest || latest.status !== 'passed' || latest.receiptHash !== required.receiptHash) {
+      fail(`商业质量门在发布快照冻结前已被更新:${required.gateId}`)
+    }
+  }
   return {
     scope, intent, adoptionIntentHash: await hashProductProductionValueV2(intent),
     productType: preview.runtimePackage.productType, title: preview.runtimePackage.definition.title,
     mediaAssetKeys: runtimeAssets.map(asset => asset.assetKey).sort(),
-    runtimePackage: preview.runtimePackage, artifacts, mediaArtifacts,
+    runtimePackage: preview.runtimePackage, artifacts, mediaArtifacts, terminalBlobProofRows,
+    terminalVerification,
     sourcePlan,
     confirmedBrief,
     sourceManifest,
@@ -441,6 +576,16 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     compatibilityHash,
     compatibilityStatus,
     qualityReceiptHashes,
+    authoritySnapshot: {
+      productionRowJson: canonicalProductProductionJsonV2({ ...production, id: production.id ?? null }),
+      buildRowJson: canonicalProductProductionJsonV2({ ...build, id: build.id ?? null }),
+      briefRowJson: canonicalProductProductionJsonV2({ ...briefRow, id: briefRow.id ?? null }),
+      activeArtifactRowsJson: canonicalRowsByIdV1(artifacts),
+      qualityReceiptRowsJson: canonicalRowsByIdV1(qualityReceiptRows),
+      mediaBlobRowsJson: canonicalProductProductionJsonV2([...terminalBlobProofRows.values()]
+        .map(mediaBlobAuthorityRowV1)
+        .sort((left, right) => Number((left as { id: number }).id) - Number((right as { id: number }).id))),
+    },
   }
 }
 
@@ -493,7 +638,35 @@ async function materializeReleaseMedia(
   }
 }
 
-async function assertPreparedAdoptionUnchangedInTransaction(verified: VerifiedAdoption): Promise<void> {
+async function refreshPreparedAdoptionMediaBlobProofsV1(
+  verified: VerifiedAdoption,
+): Promise<Map<number, MediaBlobObjectRecordV1 & { id: number }>> {
+  const refreshed = new Map<number, MediaBlobObjectRecordV1 & { id: number }>()
+  for (const [blobId, prior] of verified.terminalBlobProofRows) {
+    const current = await db.mediaBlobObjects.get(blobId)
+    if (!current || current.id == null
+      || !await assertRecordInScope(verified.scope, 'mediaBlobObjects', current, { owner: 'work' })
+      || canonicalProductProductionJsonV2(mediaBlobAuthorityRowV1(current))
+        !== canonicalProductProductionJsonV2(mediaBlobAuthorityRowV1(prior))) {
+      fail(`媒资 Blob 在发布物理复验前已变化:${blobId}`)
+    }
+    // OPFS I/O cannot be held inside an IndexedDB transaction. Its only writer
+    // is the content-addressed object creation path, so verify immediately
+    // before opening the transaction and CAS the immutable path/hash/size row
+    // inside it. IndexedDB-backed bytes receive an additional byte-for-byte
+    // comparison inside the transaction below.
+    await readVerifiedMediaBlobObjectData(current)
+    refreshed.set(blobId, cloneMediaBlobProofRowV1(
+      current as MediaBlobObjectRecordV1 & { id: number },
+    ))
+  }
+  return refreshed
+}
+
+async function assertPreparedAdoptionUnchangedInTransaction(
+  verified: VerifiedAdoption,
+  commitBlobProofRows: ReadonlyMap<number, MediaBlobObjectRecordV1 & { id: number }>,
+): Promise<void> {
   const [production, build, artifacts, qualityReceipts] = await Promise.all([
     db.productProductions.get(verified.intent.productionId),
     db.productBuilds.get(verified.intent.buildId),
@@ -517,16 +690,18 @@ async function assertPreparedAdoptionUnchangedInTransaction(verified: VerifiedAd
     || !brief || brief.briefHash !== verified.intent.briefHash || brief.status !== 'authorized') {
     fail('adoption intent 在提交前发生变化')
   }
+  if (canonicalProductProductionJsonV2({ ...production, id: production.id ?? null })
+      !== verified.authoritySnapshot.productionRowJson
+    || canonicalProductProductionJsonV2({ ...build, id: build.id ?? null })
+      !== verified.authoritySnapshot.buildRowJson
+    || canonicalProductProductionJsonV2({ ...brief, id: brief.id ?? null })
+      !== verified.authoritySnapshot.briefRowJson) {
+    fail('Production/Build/Brief 权威行在提交前发生变化')
+  }
   const accepted = artifacts
     .filter(row => row.status === 'accepted' || row.status === 'carried-forward')
     .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey) || left.version - right.version)
-  const binding = (rows: ProductBuildArtifactRecordV1[]) => rows.map(row => ({
-    id: row.id, artifactKey: row.artifactKey, version: row.version, status: row.status,
-    controlEpoch: row.controlEpoch, contentHash: row.contentHash, blobObjectId: row.blobObjectId,
-    mimeType: row.mimeType, byteSize: row.byteSize, producerReceiptHash: row.producerReceiptHash,
-  }))
-  if (canonicalProductProductionJsonV2(binding(accepted))
-    !== canonicalProductProductionJsonV2(binding(verified.artifacts))) {
+  if (canonicalRowsByIdV1(accepted) !== verified.authoritySnapshot.activeArtifactRowsJson) {
     fail('Artifact 集合在提交前发生变化')
   }
   const requiredGateHashes = [
@@ -536,13 +711,31 @@ async function assertPreparedAdoptionUnchangedInTransaction(verified: VerifiedAd
   ].filter((value): value is string => value != null)
   const currentGateHashes = new Set(qualityReceipts.map(row => row.receiptHash))
   if (requiredGateHashes.some(hash => !currentGateHashes.has(hash))) fail('商业质量回执在提交前发生变化')
+  if (canonicalRowsByIdV1(qualityReceipts) !== verified.authoritySnapshot.qualityReceiptRowsJson) {
+    fail('商业质量回执权威行在提交前发生变化')
+  }
+  const currentBlobAuthorityRows: unknown[] = []
   for (const artifact of verified.mediaArtifacts.values()) {
     if (artifact.blobObjectId == null) fail(`媒资 Artifact 缺少 Blob:${artifact.artifactKey}`)
-    const blob = await db.mediaBlobObjects.get(artifact.blobObjectId)
-    if (!blob || blob.storageState !== 'ready' || blob.contentHash !== artifact.contentHash
-      || blob.mimeType !== artifact.mimeType || blob.byteSize !== artifact.byteSize) {
-      fail(`媒资物理对象在提交前发生变化:${artifact.artifactKey}`)
+    if (!commitBlobProofRows.has(artifact.blobObjectId)) {
+      fail(`Runtime 媒资未进入提交期 terminal 证明:${artifact.artifactKey}`)
     }
+  }
+  for (const [blobId, expectedProof] of commitBlobProofRows) {
+    const blob = await db.mediaBlobObjects.get(blobId)
+    if (!blob || blob.id == null || blob.storageState !== 'ready'
+      || canonicalProductProductionJsonV2(mediaBlobAuthorityRowV1(blob))
+        !== canonicalProductProductionJsonV2(mediaBlobAuthorityRowV1(expectedProof))
+      || (expectedProof.backend === 'indexeddb'
+        && !sameArrayBufferV1(expectedProof.data, blob.data))) {
+      fail(`terminal 物理字节在发布事务前发生变化:${blobId}`)
+    }
+    currentBlobAuthorityRows.push(mediaBlobAuthorityRowV1(blob))
+  }
+  if (canonicalProductProductionJsonV2(currentBlobAuthorityRows
+    .sort((left, right) => Number((left as { id: number }).id) - Number((right as { id: number }).id)))
+      !== verified.authoritySnapshot.mediaBlobRowsJson) {
+    fail('媒资 Blob 权威行在提交前发生变化')
   }
 }
 
@@ -637,6 +830,8 @@ export async function publishProductProductionBuild(input: {
   })
   const manifestJson = canonicalProductProductionJsonV2(releaseManifest)
   const contentHash = await hashProductProductionValueV2(releaseManifest)
+  const { assertProductBuildTerminalReadSetUnchangedV1 } = await import('./artifact-store')
+  const commitBlobProofRows = await refreshPreparedAdoptionMediaBlobProofsV1(prepared)
 
   let transactionStage = 'open'
   try {
@@ -644,10 +839,14 @@ export async function publishProductProductionBuild(input: {
       db.productProductions, db.productProductionBriefs, db.productProductionCommands, db.productBuilds,
       db.productBuildArtifacts, db.mediaBlobObjects, db.productReleases,
       db.productMediaAssets, db.productMediaBlobs, db.productQualityGateReceipts,
+      db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints,
     ), async () => {
       const verified = prepared
       transactionStage = 'cas-authorities'
-      await assertPreparedAdoptionUnchangedInTransaction(verified)
+      await assertProductBuildTerminalReadSetUnchangedV1({
+        readSet: verified.terminalVerification.casReadSet,
+      })
+      await assertPreparedAdoptionUnchangedInTransaction(verified, commitBlobProofRows)
       transactionStage = 'claim-command'
       const duplicateCommand = await db.productProductionCommands
         .where('[productionId+commandId]').equals([input.productionId, command.commandId]).first()

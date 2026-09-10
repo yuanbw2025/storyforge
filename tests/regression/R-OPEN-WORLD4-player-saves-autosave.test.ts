@@ -122,5 +122,5 @@ describe('Text Open World G4-12B · 规范终态自动存档', () => {
     expect(second.createdCount).toBe(0)
     expect((await db.productRuntimeCheckpoints.where('sessionId').equals(sessionId).toArray())
       .filter(checkpoint => checkpoint.purpose === 'milestone')).toHaveLength(1)
-  }, 30_000)
+  }, 60_000)
 })

@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.36
+> 规格版本：3.2.38
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -382,6 +382,7 @@ events / checkpoints / terminalReceipt
 - 两类来源都冻结`sourceVersionHash`、包含选择边界的`sourceBoundaryHash`、Brief/开始revision、原始nonce的hash、明确rights basis、系统派生读取permission、实际读取证据hash和最终`pinHash`；
 - WorldRelease在P0只声称实际读取了目录。全文/原文是否读取必须由P1的Context Manifest和SourceLedger证明；小说则因已完成私有全文复制，单元明确标记为`full`；
 - P0复用`productBuildArtifacts`，先写独立SourcePinUnit，最后写SourcePin索引作为闭合标记。相同Pin可安全重试；同一Build试图更换来源会被视为stale并拒绝，必须重新确认Brief并建立新Build；
+- 来源冻结、Creator交接和Production Plan共同使用同一组P0边界：最多512个SourcePinUnit、合计最多400万UTF-16字符。P0候选checkpoint按每字符最坏6字节JSON转义、每单元16 KiB信封和256 KiB固定信封预留，最大为32,650,752 B，严格小于共享32 MiB resume payload上限；超过任一来源上限必须在生产前失败关闭，不能先接受来源再在checkpoint阶段失败；
 - 运行阶段只读取Session绑定的冻结运行包：正式游戏来自ProductRelease，制作端显式试玩来自同一生产链Build Preview；两者都不回读活动小说，也不直接运行WorldRelease。
 
 P0本身没有增加物理表、AI可写字段或第二套Context Source。单元与Pin共享既有Artifact导入、导出、删除、版本和Work作用域生命周期；P1在此基础上通过下述产品专属、已登记Context Source按批选择单元。
@@ -611,6 +612,20 @@ G5-04没有复制第二套叙事scheduler，而是把G5-01～G5-03的Creator事�
 - pause/resume先递增control epoch，旧epoch只显示stale且不能继续写，新epoch复用已验收Artifact。恢复命令精确绑定失败Run/rootRun、epoch、Plan Hash、task和attempt。已有可选`product-production.repair-feedback`仅作为隔离、不受信任数据进入原子上下文；作者完整JSON跳过provider但仍走同一解析、验证、候选checkpoint和来源记录。两者只开放给登记的P2～P10单次文本创作task/Skill组合，P1有界协议、V2评审、确定性任务和媒资任务只允许原冻结输入重试；Production或epoch变化会清除尚未提交的本地修复输入。
 
 因此G5-04关闭的是“作者可审查的正式启动与可恢复执行”，并不把生成内容浏览、编辑、影响分析或媒资生产提前并入同一工作包。下一项G5-05只读投影当前Build的受治理`productBuildArtifacts`，G5-06、G5-07和G5-08再分别承担编辑、stale/局部修复与媒资。
+
+#### 5.4.19 G5-05受治理Artifact浏览与验收证据落地
+
+G5-05在Creator生产工作台加入只读、快照绑定的三视图浏览器，没有复制生产数据，也没有把浏览器变成新的采纳入口：
+
+- “内容”视图把通过生产合同验证的当前Artifact投影为故事、地区、角色、任务、场景、玩法目录等可读实体，显示稳定ID、公开字段、来源证据和跨实体引用；“Artifact”视图检查不可变信封、版本、owner task、Run、Hash和媒资指针；“诊断”视图集中显示pending、stale、损坏、悬空引用和仅通过完整性检查的记录。三者共享同一个`snapshotHash`、安全搜索、过滤、分页、键盘与窄屏主从导航；刷新失败保留上一次成功快照，不用部分读取覆盖它；
+- Artifact状态明确拆为两个维度：完整性状态只说明当前epoch、作用域、Schema、内容Hash、Run/checkpoint/receipt、来源、lineage与稳定引用可由当前数据库证据重算；生产验证状态只在Artifact由文字开放世界官方P0～QA Plan、唯一owner task及其冻结输入/输出/门条件闭合时成立。自定义或历史Plan即使字节与Hash完整，也只能标为“仅完整性”，不得进入“内容”投影；stale、invalid、corrupt和dangling同样不得冒充可审查内容；
+- 验收不再只信任Artifact行上的`contentHash`和`producerReceiptHash`。非媒资内容Hash由完整payload重算，媒资还复核Blob；producer proof把官方Plan、task输入与精确输出集、ledger root、完整Run事件流、已验证candidate checkpoint正文、projection/resume正文、task terminal receipt和当前control epoch一起纳入验收期间的CAS复核。事件、checkpoint或root Run在读取与提交之间发生变化时，事务零写入失败；
+- 已完成Build的root terminal receipt使用v2信封封存全部active Artifact的payload、metadata、quality、rights、媒资、lineage及生产回执Hash；跨Build携带还必须匹配Plan owner、terminal ledger、manifest member、portable root seal和父Artifact精确字节。旧v1终端封印不包含这组完整证据，不能被静默提升为新的跨Build携带依据；需要携带时必须以当前协议重建并重新封存来源Build，已发布旧Release的只读运行兼容不因此被改写；
+- terminal verifier在root回执落库后重新读取并复核最终`$join`输出、root Run/完整事件流、所有producer/synthetic Run及checkpoint，最终事务不再豁免root行。直接携带和终态跨Build携带都会读取父Build的全部active Artifact，而非只读被复用的单行；父Build任一active Blob物理对象损坏，目标Build都保持零写入；
+- 物理媒资证明覆盖终态Build经lineage闭包依赖的全部Blob，包括未出现在`RuntimePackage.presentation`中的内容Artifact Blob。IndexedDB媒资在最终写事务中逐字节CAS，OPFS媒资在事务开启前立即重读并在事务内CAS其内容寻址路径、Hash、大小和行元数据；这依赖正式写入口只创建内容寻址不可变对象，不把外部任意OPFS写入宣称为数据库原子能力；
+- P0来源规模与checkpoint能力使用同一个硬边界：最多512个单元、合计400万字符，最大候选32,650,752 B，小于共享32 MiB限制；治理读取另设当前行、lineage、Run、事件、checkpoint、实体与公开DTO预算，超限以可定位诊断或失败关闭结束，不能无界加载并把截断结果声明为完整快照。
+
+这些“通过”只证明确定性生产合同和证据链成立，不证明叙事好看、文学质量高、平衡理想或真人体验达标。V2语义/平衡评审与G5-09质量闸门/灰盒试玩仍需继续提供质量证据。正式Creator链在本阶段只承诺可审查、可试玩的release-ready Build Preview；WorldRelease与小说双来源如何进入便携且不可变的ProductRelease，必须由G5-10扩展正式来源合同，不能把兼容Brief中的非定位占位`worldReleaseId`冒充真实发布来源。G5-05保持只读；编辑、影响分析、局部修复和媒资生产继续由G5-06～G5-08承担，正式发布归G5-10。
 
 ### 5.5 正确的验证顺序
 
@@ -1100,7 +1115,7 @@ CreativeArtifactEnvelope {
 9. 发布：通过硬闸门后生成正式ProductRelease；
 10. 更新：修复后生成新Build和新Release，显示存档兼容性。
 
-G5-04已经关闭第4、5项的正式启动和执行可见性。下一项G5-05只实现第6项的只读Artifact浏览：以当前Work/Product/Production/Build内的`productBuildArtifacts`不可变聚合为权威投影，展示类型、版本、状态、生产Run、Hash、来源证据和稳定引用；stale、损坏、悬空引用或跨作用域记录不得冒充当前有效内容。它不直接写Artifact，也不新建万能物理内容表；编辑、引用影响和局部修复仍分别属于G5-06、G5-07。
+G5-04已经关闭第4、5项的正式启动和执行可见性，G5-05已经以当前Work/Product/Production/Build内的`productBuildArtifacts`不可变聚合完成第6项的只读三视图浏览。界面把“完整性通过”和“生产验证通过”分开：前者展示证据链是否可重算，后者才允许官方生产合同下的内容实体进入“内容”视图；它们都不等于叙事或美学质量通过。该工作包没有直接写Artifact，也没有新建万能物理内容表；编辑、引用影响和局部修复仍分别属于G5-06、G5-07。
 
 ### 10.2 玩家端
 
@@ -1459,6 +1474,8 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.38 | 2026-09-10 | 收口G5-05完整终态证明：root回执写入后重新验证最终root Run、`$join`输出、完整事件/checkpoint与无豁免CAS；同Build、直接跨Build和终态携带统一复核父Build全部active Artifact及其物理Blob。发布前证明扩展为完整terminal lineage Blob闭包，IndexedDB在事务内逐字节CAS，OPFS在事务前立即重读并以正式内容寻址不可变写入边界作元数据CAS。明确Creator链本阶段止于release-ready Build Preview，双来源便携ProductRelease必须在G5-10扩展正式来源合同，不使用兼容占位WorldRelease伪装发布完成。 |
+| 3.2.37 | 2026-09-10 | 完成G5-05受治理Artifact浏览与验收证据收口：Creator工作台提供内容、Artifact、诊断三视图及同快照搜索/过滤/分页/键盘/窄屏导航；完整性与官方生产合同验证分轴，只有两者闭合的当前内容才进入实体投影，不把Hash检查夸大为叙事质量或美学验证。验收重算完整内容Hash并绑定Plan owner、producer/root Run、完整事件流、candidate checkpoint正文、task receipt及验收期间CAS；Build终端v2回执和portable seal封存完整Artifact信封及跨Build父证据，旧v1封印不得静默作为新携带依据、需要时必须重建。P0统一限制512个来源单元和400万字符，32,650,752 B最坏候选严格低于共享32 MiB checkpoint上限。 |
 | 3.2.36 | 2026-09-10 | 完成G5-04 Creator生产启动、进度与恢复：零写入预览生成不含本地ID的Creator SourcePlan、非定位兼容Brief和精确动态Plan；正式开始重验Production/Brief/来源、完整模型route与生成参数、报价预算、确认及Plan Hash，并在同一事务冻结Creator Start、Plan、Build与命令receipt。专属工作流只打开精确Production，目标缺失即失败关闭。P1/P9通过登记的有界多调用协议按分片恢复，provider响应先计账再解析；同一Build/task跨Run/epoch累计paid charge与未知reservation，durable请求标记后还会在executor前复核当前所有权，跨标签pause/stop不再产生本地可阻止的付费派发。恢复严格绑定原Run、epoch、Plan和attempt，作者修复只开放给白名单文本任务；v10导入写前验证SourcePin闭包并重映射通用SourcePlan locator。无新表、Schema或migration，媒资费用仍后置G5-08；下一项G5-05只读浏览受治理Artifact投影。 |
 | 3.2.35 | 2026-09-09 | 落地G5-03叙事生产前门：Creator Brief之后复用全局BYOK与正式creation任务路由；安全origin、基础路径Hash和凭证真实来源形成无密钥模型绑定，Verifier以当前配置作外部比较。目录价仅允许精确复核model和官方商业端点；中转、同域异路径、远程HTTP、URL内嵌凭证与自洽重算Hash均失败关闭。完整DAG的155/160调用、120万/36万token、$30文本、2小时/200MB上界与媒资费用后置规则可见；Brief已发生用量与非账单估价分开。设置往返精确恢复会谈/产品/来源；确认不创建Build/SourcePlan，G5-04仍须原子CAS授权。AI日志和错误UI统一清除Key、认证头、完整URL及供应商原始正文。 |
 | 3.2.34 | 2026-09-09 | 接入G5-02作者会谈事实：专属Creator Brief完整保存作者设定、来源边界、未决项、规模、媒资与完成条件；主Agent仅通过正式Skill读取无正文来源摘要和作者输入，候选、ContextManifest、来源CAS及终态Run证据经四项作者确认后进入统一不可变Brief修订。便携导入在事务前先校验RunContract Hash与逐事件世界组，再重放终态证明；该终态仍不是SourcePlan或生产授权，P2在G5-04显式提升前保持不可执行。 |

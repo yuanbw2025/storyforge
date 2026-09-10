@@ -5,6 +5,7 @@ import { executeProductProductionCommand } from '../../src/lib/product-productio
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
 import { resolveTrustedRelayMediaCapabilityV1 } from '../../src/lib/product-production/media-transport'
 import {
   createBuiltInProductionCapabilityBindingV1,
@@ -315,12 +316,26 @@ function recoveryExecutor(calls: Map<string, number>): ProductProductionTaskExec
   return async request => {
     calls.set(request.task.taskKey, (calls.get(request.task.taskKey) ?? 0) + 1)
     const media = request.task.taskKey === 'media.visual'
+    const mediaBlob = media
+      ? await putMediaBlobObject({
+          scope: request.scope,
+          data: new TextEncoder().encode('creator-media-boundary-procedural-png').buffer,
+          mimeType: 'image/png',
+          backend: 'indexeddb',
+        })
+      : null
     const result: ProductProductionTaskExecutionResultV1 = {
       artifacts: request.task.outputArtifactKeys.map(artifactKey => ({
         artifactKey,
         kind: media ? 'image' : 'product-design',
         mediaKind: media ? 'background' : null,
         payload: { schema: 'storyforge.creator-media-boundary-fixture', version: 1, artifactKey },
+        ...(mediaBlob ? {
+          contentHash: mediaBlob.contentHash,
+          blobObjectId: mediaBlob.id!,
+          mimeType: mediaBlob.mimeType,
+          byteSize: mediaBlob.byteSize,
+        } : {}),
         rights: {
           origin: media ? 'procedural' : 'test-executor',
           adapterId: media ? 'storyforge.procedural-svg.v1' : 'configured-text.v1',
@@ -336,7 +351,7 @@ function recoveryExecutor(calls: Map<string, number>): ProductProductionTaskExec
         mediaCalls: media ? 1 : 0,
         costUsd: 0,
         durationMs: 1,
-        storageBytes: 0,
+        storageBytes: mediaBlob?.byteSize ?? 0,
       },
     }
     return result

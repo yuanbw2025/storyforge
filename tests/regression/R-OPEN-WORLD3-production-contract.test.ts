@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createTextOpenWorldProductionPlanV1,
   createTextOpenWorldProductionRunContractBlueprintV1,
+  estimateTextOpenWorldSourceLockCheckpointBytesV1,
   TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_DEFINITIONS_V1,
   TEXT_OPEN_WORLD_PRODUCTION_DURATION_BUDGET_WEIGHT_V1,
   TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1,
@@ -11,6 +12,8 @@ import {
   textOpenWorldProductionStageTaskKeysV1,
   validateTextOpenWorldProductionTaskContractsV1,
 } from '../../src/lib/open-world/production-contract'
+import { AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1 } from '../../src/lib/agent/run/checkpoint-contract'
+import { inspectTextOpenWorldProductionPlanAuthorityV1 } from '../../src/lib/open-world/production-authority'
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { createProductProductionPlanV3 } from '../../src/lib/product-production/plan'
@@ -253,6 +256,88 @@ describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
     expect(minimumPlan.tasks.reduce((sum, task) => sum + task.budgetReservation.modelCalls, 0)).toBe(155)
     expect(minimumPlan.tasks.find(task => task.taskKey === 'p1.source-curation')?.budgetReservation.modelCalls).toBe(6)
     expect(minimumPlan.tasks.find(task => task.taskKey === 'p9.scene-scripts')?.budgetReservation.modelCalls).toBe(129)
+  })
+
+  it('只把完整官方P0到QA拓扑识别为生产验证权威，不信任自声明Plan与gate', async () => {
+    const parsedBrief = brief({ withMedia: true })
+    const official = await createTextOpenWorldProductionPlanV1({
+      buildNumber: 3,
+      controlEpoch: 2,
+      briefHash: await hashProductProductionValueV2(parsedBrief),
+      brief: parsedBrief,
+    })
+    const authority = inspectTextOpenWorldProductionPlanAuthorityV1(official)
+
+    expect(authority.valid).toBe(true)
+    expect([...authority.tasks.values()].every(task => task.valid && task.validatorId)).toBe(true)
+    expect(authority.tasks.get('p5.mainline')?.validatorId)
+      .toBe('text-open-world.p5.mainline.production-contract.v1')
+    expect(authority.tasks.get('media.visual')?.valid).toBe(true)
+    expect(authority.tasks.get('media.audio')?.valid).toBe(true)
+
+    const selfDeclared = structuredClone(official)
+    selfDeclared.tasks.find(task => task.taskKey === 'p5.mainline')!.skillId = 'fixture.self-declared'
+    selfDeclared.tasks.find(task => task.taskKey === 'p5.mainline')!.acceptanceGateIds = ['fixture.passed']
+    const rejected = inspectTextOpenWorldProductionPlanAuthorityV1(selfDeclared)
+    expect(rejected.valid).toBe(false)
+    expect(rejected.tasks.get('p5.mainline')).toMatchObject({
+      valid: false,
+      validatorId: null,
+    })
+    expect(rejected.diagnostic).toMatch(/p5\.mainline/)
+  })
+
+  it('按512单元/400万字符边界为P0预留可恢复候选空间，并只把授权余量分给其他任务', async () => {
+    const parsedBrief = brief()
+    const briefHash = await hashProductProductionValueV2(parsedBrief)
+    const sourceUnitArtifactKeys = Array.from({ length: 512 }, (_, index) => index === 0
+      ? 'text-open-world.source-pin-unit'
+      : `text-open-world.source-pin-unit.${String(index + 1).padStart(5, '0')}`)
+    const plan = await createTextOpenWorldProductionPlanV1({
+      buildNumber: 1,
+      briefHash,
+      brief: parsedBrief,
+      sourceUnitArtifactKeys,
+      sourceTotalChars: 4_000_000,
+    })
+    const p0 = plan.tasks.find(task => task.taskKey === 'p0.source-lock')!
+    const oldEqualShare = Math.floor(parsedBrief.productionBudget.maximumStorageBytes / plan.tasks.length)
+    const totalReserved = plan.tasks.reduce(
+      (sum, task) => sum + task.budgetReservation.storageBytes,
+      0,
+    )
+    const maximumP0CheckpointBytes = estimateTextOpenWorldSourceLockCheckpointBytesV1({
+      sourceUnitCount: 512,
+      sourceTotalChars: 4_000_000,
+    })
+
+    expect(maximumP0CheckpointBytes).toBe(32_650_752)
+    expect(maximumP0CheckpointBytes).toBeLessThanOrEqual(AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1)
+    expect(p0.budgetReservation.storageBytes).toBe(maximumP0CheckpointBytes)
+    expect(p0.budgetReservation.storageBytes).toBeGreaterThan(oldEqualShare)
+    expect(p0.budgetReservation.storageBytes).toBeGreaterThan(4_000_000 * 3)
+    expect(plan.tasks.filter(task => task.taskKey !== p0.taskKey)
+      .every(task => task.budgetReservation.storageBytes > 0)).toBe(true)
+    expect(totalReserved).toBe(parsedBrief.productionBudget.maximumStorageBytes)
+
+    await expect(createTextOpenWorldProductionPlanV1({
+      buildNumber: 1,
+      briefHash,
+      brief: parsedBrief,
+      sourceUnitArtifactKeys,
+      sourceTotalChars: 4_000_001,
+    })).rejects.toThrow(/4000000/)
+    await expect(createTextOpenWorldProductionPlanV1({
+      buildNumber: 1,
+      briefHash,
+      brief: parsedBrief,
+      sourceUnitArtifactKeys: [...sourceUnitArtifactKeys, 'text-open-world.source-pin-unit.00513'],
+      sourceTotalChars: 4_000_000,
+    })).rejects.toThrow(/512/)
+    expect(() => estimateTextOpenWorldSourceLockCheckpointBytesV1({
+      sourceUnitCount: 513,
+      sourceTotalChars: 4_000_000,
+    })).toThrow(/512/)
   })
 
   it('从严格Plan任务统一裁决作者修复能力，不把P1、评审、确定性或媒资任务伪装成可编辑', async () => {

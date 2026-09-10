@@ -39,4 +39,14 @@ describe('HEALTH-5 · 构建产物体积预算', () => {
 
     expect(result.violations.map(item => item.filename)).toContain('index-test.js')
   })
+
+  it('全局安全对话只在用户选择立即备份后装入完整项目导出闭包', () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), 'src/lib/safety/require-backup-before.ts'),
+      'utf8',
+    )
+
+    expect(source).not.toMatch(/^import .*['"]\.\.\/export\/json-export['"]/m)
+    expect(source).toContain("await import('../export/json-export')")
+  })
 })
