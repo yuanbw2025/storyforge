@@ -136,7 +136,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
   const attributedText = currentBeat ? splitAttributedText(currentBeat.text) : null
   const dialogueText = attributedText?.text ?? currentBeat?.text ?? ''
   const speakerLabel = currentBeat?.kind === 'dialogue'
-    ? store.speakerNames[currentBeat.speakerKey ?? ''] ?? '未知角色'
+    ? store.speakerNames[currentBeat.speakerKey ?? ''] ?? attributedText?.speaker ?? '未知角色'
     : attributedText?.speaker ?? null
   const activeSpeakerKey = currentBeat?.kind === 'dialogue'
     ? currentBeat.speakerKey
@@ -302,7 +302,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
       {panel && <div className="avg-panel-backdrop" onMouseDown={() => setPanel(null)}>
         <section className="avg-panel" role="dialog" aria-modal="true" aria-label={panel === 'history' ? '历史回看' : '存读档'} onMouseDown={event => event.stopPropagation()}>
           <header><div><small>{panel === 'history' ? 'DIALOGUE LOG' : 'SAVE & LOAD'}</small><h2>{panel === 'history' ? '历史回看' : '存档与时间线'}</h2></div><button aria-label="关闭" onClick={() => setPanel(null)}><X /></button></header>
-          {panel === 'history' ? <div className="avg-history">{historyBeats.map(beat => { const attributed = splitAttributedText(beat.text); return <article key={beat.beatKey}><strong>{beat.kind === 'dialogue' ? store.speakerNames[beat.speakerKey ?? ''] ?? '未知角色' : attributed?.speaker ?? '旁白'}</strong><p>{attributed?.text ?? beat.text}</p></article> })}{historyBeats.length === 0 && <p>还没有可以回看的对白。</p>}</div> : <div className="avg-saves">
+          {panel === 'history' ? <div className="avg-history">{historyBeats.map(beat => { const attributed = splitAttributedText(beat.text); return <article key={beat.beatKey}><strong>{beat.kind === 'dialogue' ? store.speakerNames[beat.speakerKey ?? ''] ?? attributed?.speaker ?? '未知角色' : attributed?.speaker ?? '旁白'}</strong><p>{attributed?.text ?? beat.text}</p></article> })}{historyBeats.length === 0 && <p>还没有可以回看的对白。</p>}</div> : <div className="avg-saves">
             <div className="avg-save-actions"><button disabled={store.busy} onClick={() => void quickSave()}><Save />保存当前进度</button></div>
             <h3>时间线检查点</h3>
             {store.checkpoints.map(checkpoint => <article key={checkpoint.id}><div><strong>{checkpoint.name}</strong><small>事件 #{checkpoint.throughSequence}</small></div><button disabled={store.busy} onClick={() => void run(async () => { await store.forkCheckpoint(checkpoint.id!); setPanel(null) })}><GitBranch />从这里开始新分支</button></article>)}
