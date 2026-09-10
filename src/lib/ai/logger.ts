@@ -38,6 +38,7 @@ const MAX_LOGS = 50
 const REDACTED = '[REDACTED]'
 const ENDPOINT_UNAVAILABLE = '[endpoint unavailable]'
 let logs: AILogEntry[] = []
+let logSnapshot: AILogEntry[] = []
 let listeners: Array<() => void> = []
 const redactionContexts = new Map<string, { sensitiveValues: string[]; baseUrl: string | null }>()
 
@@ -141,6 +142,10 @@ function forgetRedactionContext(id: string): void {
   redactionContexts.delete(id)
 }
 
+function refreshLogSnapshot(): void {
+  logSnapshot = logs.map(log => sanitizeLogEntry(log, redactionContexts.get(log.id)))
+}
+
 /** 创建一条新日志 */
 export function createLog(
   entry: Omit<AILogEntry, 'id' | 'timestamp'>,
@@ -159,6 +164,7 @@ export function createLog(
     if (!nextLogs.some(candidate => candidate.id === dropped.id)) forgetRedactionContext(dropped.id)
   }
   logs = nextLogs
+  refreshLogSnapshot()
   notify()
   return { ...log, ...(log.usage ? { usage: { ...log.usage } } : {}) }
 }
@@ -168,18 +174,20 @@ export function updateLog(id: string, update: Partial<AILogEntry>) {
   const context = redactionContexts.get(id)
   const sanitizedUpdate = sanitizeLogEntry(update, context)
   logs = logs.map((l) => (l.id === id ? { ...l, ...sanitizedUpdate, id: l.id, timestamp: l.timestamp } : l))
+  refreshLogSnapshot()
   notify()
 }
 
-/** 获取所有日志 */
+/** 获取所有日志；同一版本必须保持引用稳定，以满足 useSyncExternalStore。 */
 export function getLogs(): AILogEntry[] {
-  return logs.map(log => sanitizeLogEntry(log, redactionContexts.get(log.id)))
+  return logSnapshot
 }
 
 /** 清空日志 */
 export function clearLogs() {
   for (const id of redactionContexts.keys()) forgetRedactionContext(id)
   logs = []
+  refreshLogSnapshot()
   notify()
 }
 

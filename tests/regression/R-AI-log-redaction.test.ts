@@ -14,6 +14,32 @@ const baseUrl = 'https://api-user:api-password@example.test:9443/private/v1?apiK
 describe('AI connection log redaction boundary', () => {
   beforeEach(() => clearLogs())
 
+  it('keeps external-store snapshots referentially stable until the log version changes', () => {
+    const emptySnapshot = getLogs()
+    expect(getLogs()).toBe(emptySnapshot)
+
+    const created = createLog({
+      type: 'test',
+      provider: 'custom',
+      model: 'snapshot-model',
+      url: 'https://example.test/v1',
+      status: 'pending',
+    })
+    const createdSnapshot = getLogs()
+    expect(createdSnapshot).not.toBe(emptySnapshot)
+    expect(getLogs()).toBe(createdSnapshot)
+
+    updateLog(created.id, { status: 'success' })
+    const updatedSnapshot = getLogs()
+    expect(updatedSnapshot).not.toBe(createdSnapshot)
+    expect(getLogs()).toBe(updatedSnapshot)
+    expect(createdSnapshot[0].status).toBe('pending')
+
+    clearLogs()
+    expect(getLogs()).not.toBe(updatedSnapshot)
+    expect(getLogs()).toBe(getLogs())
+  })
+
   it('keeps only a safe endpoint origin and never stores caller-provided secrets', () => {
     const created = createLog({
       type: 'chat',

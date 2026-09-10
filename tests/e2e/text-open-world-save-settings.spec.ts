@@ -105,7 +105,9 @@ test('正式开放世界存档中心保留分支与旧Release，并持久化本�
   await expect(panel).toContainText('1/20 个手动档')
 
   await manualSave.getByRole('button', { name: '从此处继续', exact: true }).click()
-  const confirmation = panel.getByRole('alertdialog')
+  // The confirmation is an application-level modal and is intentionally
+  // portalled outside the scrollable save/settings panel.
+  const confirmation = page.getByRole('alertdialog')
   await expect(confirmation).toContainText('当前时间线和之后发生的事件都会保留')
   await confirmation.getByRole('button', { name: '建立分支并继续', exact: true }).click()
 

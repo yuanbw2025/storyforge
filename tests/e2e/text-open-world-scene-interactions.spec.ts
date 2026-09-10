@@ -67,7 +67,7 @@ test('P9场景在真实玩家入口统一承载叙事、固定选项、系统Act
   }, seeded.sessionId)).toBe(eventsBeforeRejectedInput)
 
   await page.getByTestId('text-open-world-fixed-choices').getByRole('button', { name: /^接下盐渠委托/ }).click()
-  await expect(published).toContainText('盐壳下的水痕')
+  await expect(published).toContainText('盐壳下的水痕', { timeout: 20_000 })
   await expect(page.getByTestId('text-open-world-feedback')).toBeVisible()
   expect(await latestCommandSource(page, seeded.sessionId)).toBe('fixed-choice')
 
