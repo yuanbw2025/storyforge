@@ -88,8 +88,12 @@ test('文字冒险候选包在新 Work 上传后可从正式 Release 完成双�
     })
     await act(parent.id, 'action.prepare.rescue')
     await choose(parent.id, 'choice.rescue')
+    await choose(parent.id, 'choice.rescue.echo.1')
+    await choose(parent.id, 'choice.rescue.echo.2')
     await act(branch.id, 'action.prepare.seal')
     await choose(branch.id, 'choice.seal')
+    await choose(branch.id, 'choice.seal.echo.1')
+    await choose(branch.id, 'choice.seal.echo.2')
     const [parentState, branchState, release, worldReleaseCount] = await Promise.all([
       runtimeApi.readProductRuntimeState(parent.id),
       runtimeApi.readProductRuntimeState(branch.id),
