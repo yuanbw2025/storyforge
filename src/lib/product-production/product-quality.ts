@@ -337,8 +337,14 @@ export function evaluateProductRuntimeProductQualityV1(input: {
             && routeQuality.minimumMainProgressActions >= minimumMainActions,
           [`mainStages=${routeQuality.mainQuestStageCount}/${minimumMainStages}`, `mainObjectives=${routeQuality.mainQuestObjectiveCount}/${minimumMainObjectives}`, `minimumMainProgressActions=${routeQuality.minimumMainProgressActions}/${minimumMainActions}`]),
           gate('product.adventure.recommendation-endings', routeQuality.endingTextUnits.length >= productionContract.narrative.targetEndingCount
-            && routeQuality.endingTextUnits.every(item => item.textUnits >= minimumEndingUnits),
-          [`requiredUnitsPerEnding=${minimumEndingUnits}`, ...routeQuality.endingTextUnits.map(item => `${item.nodeKey}=${item.textUnits}`)]),
+            && routeQuality.endingTextUnits.every(item => (
+              item.textUnits >= minimumEndingUnits
+              && item.npcDialogueTurns >= 1
+              && item.stateSettlement
+            )), [
+            `requiredUnitsPerEnding=${minimumEndingUnits}`,
+            ...routeQuality.endingTextUnits.map(item => `${item.nodeKey}=${item.textUnits};npcDialogue=${item.npcDialogueTurns};stateSettlement=${item.stateSettlement}`),
+          ]),
           gate('product.adventure.recommendation-copy', routeQuality.copyIssues.length === 0,
             routeQuality.copyIssues.length === 0 ? ['issues=none'] : routeQuality.copyIssues.map(issue => `${issue.kind}:${issue.surfaceKey}`)),
         )

@@ -3697,6 +3697,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(runtimePackage.adventure.actions.some(item => item.key.startsWith('action.travel.'))).toBe(false)
     expect(runtimePackage.adventure.storylets).toHaveLength(7)
     expect(runtimePackage.adventure.endings).toHaveLength(3)
+    const routeQuality = analyzeTextAdventureRouteQualityV1(runtimePackage)
+    expect(routeQuality.endingTextUnits).toHaveLength(3)
+    expect(routeQuality.endingTextUnits.every(ending => (
+      ending.npcDialogueTurns >= 1 && ending.stateSettlement
+    ))).toBe(true)
     const echoActions = runtimePackage.adventure.actions.filter(item => item.key.startsWith('action.echo.'))
     const arcDecisionCount = (outputs['content.narrative-arc-plan'] as {
       decisions: Array<{ options: Array<{ echoSceneKeys: string[] }> }>

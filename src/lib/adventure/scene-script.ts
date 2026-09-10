@@ -218,6 +218,29 @@ function parseBeats(input: {
   return beats
 }
 
+export function validateTextAdventureCommercialEndingNarrativeV1(input: {
+  endingKey: string
+  endingText: string
+  beats: TextAdventureSceneScriptBundleArtifactV1['endings'][number]['beats']
+  requiredConsequences: readonly string[]
+  nonPlayerSpeakerKeys: readonly string[]
+}): void {
+  if (input.requiredConsequences.length < 2) fail(`${input.endingKey} 缺少冻结结局后果合同`)
+  const missingConsequences = input.requiredConsequences.filter(consequence => (
+    !input.endingText.includes(consequence)
+  ))
+  if (missingConsequences.length > 0) {
+    fail(`${input.endingKey} 未兑现冻结结局后果:${missingConsequences.join('、')}`)
+  }
+  const nonPlayerSpeakerKeys = new Set(input.nonPlayerSpeakerKeys)
+  if (!input.beats.some(beat => (
+    beat.kind === 'dialogue' && beat.speakerKey != null
+    && nonPlayerSpeakerKeys.has(beat.speakerKey)
+  ))) {
+    fail(`${input.endingKey} 缺少正式 NPC 的角色回响`)
+  }
+}
+
 export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
   value: unknown
   brief: ProductProductionBriefV3
@@ -227,6 +250,8 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
   expectedModuleTitle: string
   sceneTitles: Readonly<Record<string, string>>
   endingTitles: Readonly<Record<string, string>>
+  endingConsequences?: Readonly<Record<string, readonly string[]>>
+  nonPlayerSpeakerKeys?: readonly string[]
   expectedSceneKeys?: readonly string[]
 }): TextAdventureSceneScriptBundleArtifactV1 {
   if (!input.brief.textAdventure) fail('分场脚本缺少文字冒险 Brief')
@@ -386,6 +411,15 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
       const minimumEndingUnits = input.brief.qualityProfile === 'commercial-candidate'
         ? Math.max(80, Math.min(400, Math.ceil(input.brief.scale.targetPlayMinutes * 4))) : 30
       if (endingUnits < minimumEndingUnits) fail(`${endingKey} 正文不足:${endingUnits}/${minimumEndingUnits}`)
+      if (input.brief.qualityProfile === 'commercial-candidate') {
+        validateTextAdventureCommercialEndingNarrativeV1({
+          endingKey,
+          endingText: [String(item.summary ?? ''), ...beats.map(beat => beat.text)].join('\n'),
+          beats,
+          requiredConsequences: input.endingConsequences?.[endingKey] ?? [],
+          nonPlayerSpeakerKeys: input.nonPlayerSpeakerKeys ?? [],
+        })
+      }
       return {
         endingKey,
         title: (() => {
@@ -452,6 +486,8 @@ export function assembleTextAdventureSceneScriptActV1(input: {
   expectedModuleTitle: string
   sceneTitles: Readonly<Record<string, string>>
   endingTitles: Readonly<Record<string, string>>
+  endingConsequences?: Readonly<Record<string, readonly string[]>>
+  nonPlayerSpeakerKeys?: readonly string[]
 }): TextAdventureSceneScriptBundleArtifactV1 {
   const expectedParts = textAdventureSceneScriptPartSceneKeysV1(input.brief, input.actIndex)
   if (input.bundles.length !== expectedParts.length) fail('分场幕装配缺少或重复正文分包')
@@ -480,6 +516,8 @@ export function assembleTextAdventureSceneScriptActV1(input: {
     expectedModuleTitle: input.expectedModuleTitle,
     sceneTitles: input.sceneTitles,
     endingTitles: input.endingTitles,
+    endingConsequences: input.endingConsequences,
+    nonPlayerSpeakerKeys: input.nonPlayerSpeakerKeys,
   })
 }
 

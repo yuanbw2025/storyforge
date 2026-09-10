@@ -15,6 +15,7 @@ import {
   assembleTextAdventureNarrativeFromSceneScriptsV1,
   parseTextAdventureSceneScriptBundleArtifactV1,
   textAdventureNarrativeSkeletonV1,
+  validateTextAdventureCommercialEndingNarrativeV1,
 } from '../../src/lib/adventure/scene-script'
 import {
   applyTextAdventureDialoguePassV1,
@@ -83,6 +84,29 @@ function castBible(qualityProfile: ProductProductionBriefV3['qualityProfile'] = 
 }
 
 describe('TEXTADV-3 · 专业生产工件合同', () => {
+  it('商业候选结局必须逐项兑现冻结后果，并包含正式 NPC 的角色回响', () => {
+    const beats = [{
+      beatKey: 'beat.ending.001', kind: 'dialogue' as const,
+      speakerKey: 'character.npc.1', text: '我会离开，但港城终于知道了真相。', order: 0,
+    }]
+    expect(() => validateTextAdventureCommercialEndingNarrativeV1({
+      endingKey: 'ending.001', endingText: '港城知情，同伴离开。', beats,
+      requiredConsequences: ['港城知情', '同伴离开'],
+      nonPlayerSpeakerKeys: ['character.npc.1'],
+    })).not.toThrow()
+    expect(() => validateTextAdventureCommercialEndingNarrativeV1({
+      endingKey: 'ending.001', endingText: '港城知情。', beats,
+      requiredConsequences: ['港城知情', '同伴离开'],
+      nonPlayerSpeakerKeys: ['character.npc.1'],
+    })).toThrow('未兑现冻结结局后果')
+    expect(() => validateTextAdventureCommercialEndingNarrativeV1({
+      endingKey: 'ending.001', endingText: '港城知情，同伴离开。',
+      beats: [{ ...beats[0], speakerKey: 'character.player' }],
+      requiredConsequences: ['港城知情', '同伴离开'],
+      nonPlayerSpeakerKeys: ['character.npc.1'],
+    })).toThrow('缺少正式 NPC 的角色回响')
+  })
+
   it('自动游玩报告必须绑定当前 Build/package，试玩总监不能自行批准发布', () => {
     const packageHash = 'a'.repeat(64)
     const autoplay = {

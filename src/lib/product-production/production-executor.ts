@@ -2834,6 +2834,11 @@ function parseTextAdventureSceneInputsV1(
     expectedModuleTitle: storyBible.title,
     sceneTitles,
     endingTitles,
+    endingConsequences: Object.fromEntries(storyBible.endings.map(ending => (
+      [ending.key, ending.requiredConsequences]
+    ))),
+    nonPlayerSpeakerKeys: cast.characters.filter(character => character.role !== 'player')
+      .map(character => character.key),
   }))
   return { architecture, locationTitles, storyBible, cast, arcPlan, bundles }
 }
@@ -2951,7 +2956,7 @@ function textAdventureSceneScriptContract(input: {
     '每个场景必须用多个 beats 完成环境建立、人物行动与有效对白、冲突升级、可行动信息和选择前铺垫；同源同目标的两个选择必须体现不同立场、代价与后续回响，不得是同义改写。' +
     `dialogue 的 speakerKey 必须逐字使用 ${JSON.stringify(input.castKeys)} 中的一个稳定 key，禁止填写角色姓名、称谓、narrator、空字符串或 null；旁白不得伪装成 dialogue，必须使用 kind=narration 且 speakerKey=null。其他非 dialogue 的 speakerKey 也必须为 null。beatKey 必须在整个游戏内唯一，建议使用 beat.act-${input.actIndex + 1}.NNN；同一场景按 order 稳定排序。` +
     (input.brief.qualityProfile === 'commercial-candidate'
-      ? `本分包 scenes 的 summary+beats.text 合计硬性下限为 ${minimumActUnits} 个玩家可见中文内容单位，低于该值会被直接拒收；本次提交目标为约 ${targetSubmissionUnits} 单位、上限 ${maximumActUnits} 单位。完成 JSON 后必须逐场估算 summary+beats.text，再汇总确认不少于 ${minimumActUnits}；不要把 choices、JSON 字段名、key 或标点误算进正文。每个场景分别以 ${targetUnitsPerScene} 单位为最低写作基准并完整起承转合；至少 ${minimumDialogueTurns} 个有效对白回合；每个结局正文至少 ${minimumEndingUnits} 单位。`
+      ? `本分包 scenes 的 summary+beats.text 合计硬性下限为 ${minimumActUnits} 个玩家可见中文内容单位，低于该值会被直接拒收；本次提交目标为约 ${targetSubmissionUnits} 单位、上限 ${maximumActUnits} 单位。完成 JSON 后必须逐场估算 summary+beats.text，再汇总确认不少于 ${minimumActUnits}；不要把 choices、JSON 字段名、key 或标点误算进正文。每个场景分别以 ${targetUnitsPerScene} 单位为最低写作基准并完整起承转合；至少 ${minimumDialogueTurns} 个有效对白回合；每个结局正文至少 ${minimumEndingUnits} 单位。终幕每个 ending 的 summary 或 beats.text 必须逐字覆盖输入 story.endings 对应 requiredConsequences 的每一项，并至少包含一个由 role 非 player 的正式 NPC 说出的 dialogue beat，形成角色回响。`
       : 'prototype 仍须形成完整场景，不得只写一句摘要。') +
     '禁止复制句子灌水，禁止写“略”“待补充”“同上”，禁止新增专用机制字段；失败推进、任务结算与持久效果由确定性编译器处理。' +
     '输出字段必须精确为：{"schema":"storyforge.text-adventure-scene-script-bundle-artifact","version":1,"actKey":"act.1","moduleTitle":"...","scenes":[{"sceneKey":"scene.001","title":"...","summary":"...","beats":[{"beatKey":"beat.act-1.001","kind":"narration|dialogue|action|system","speakerKey":null,"text":"...","order":0}]}],"choices":[{"choiceKey":"choice.001","sourceNodeKey":"scene.001","targetNodeKey":"scene.002","text":"...","description":"...","unavailableReason":"...","order":0}],"endings":[{"endingKey":"ending.001","title":"...","summary":"...","beats":[{"beatKey":"beat.act-3.ending-001.001","kind":"narration|dialogue|action|system","speakerKey":null,"text":"...","order":0}]}]}。非终幕 endings 必须是空数组。'
@@ -3938,6 +3943,11 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       expectedModuleTitle: storyBible.title,
       sceneTitles,
       endingTitles,
+      endingConsequences: Object.fromEntries(storyBible.endings.map(ending => (
+        [ending.key, ending.requiredConsequences]
+      ))),
+      nonPlayerSpeakerKeys: cast.characters.filter(character => character.role !== 'player')
+        .map(character => character.key),
       expectedSceneKeys: textAdventureSceneScriptPartSceneKeysV1(
         options.brief, sceneScriptBoundary.actIndex,
       )[sceneScriptBoundary.partIndex],
@@ -5661,6 +5671,11 @@ async function executeTextAdventureSceneScriptActAssemblyTask(
       expectedModuleTitle: storyBible.title,
       sceneTitles,
       endingTitles,
+      endingConsequences: Object.fromEntries(storyBible.endings.map(ending => (
+        [ending.key, ending.requiredConsequences]
+      ))),
+      nonPlayerSpeakerKeys: cast.characters.filter(character => character.role !== 'player')
+        .map(character => character.key),
       expectedSceneKeys,
     })
     // Older accepted part artifacts may predate frozen beat ordinals. Re-key
@@ -5694,6 +5709,11 @@ async function executeTextAdventureSceneScriptActAssemblyTask(
     expectedModuleTitle: storyBible.title,
     sceneTitles,
     endingTitles,
+    endingConsequences: Object.fromEntries(storyBible.endings.map(ending => (
+      [ending.key, ending.requiredConsequences]
+    ))),
+    nonPlayerSpeakerKeys: cast.characters.filter(character => character.role !== 'player')
+      .map(character => character.key),
   })
   return {
     artifacts: [{

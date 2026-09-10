@@ -40,7 +40,12 @@ export interface TextAdventureRouteQualityAnalysisV1 {
   mainQuestStageCount: number
   mainQuestObjectiveCount: number
   minimumMainProgressActions: number
-  endingTextUnits: Array<{ nodeKey: string; textUnits: number }>
+  endingTextUnits: Array<{
+    nodeKey: string
+    textUnits: number
+    npcDialogueTurns: number
+    stateSettlement: boolean
+  }>
   copyIssues: TextAdventureCopyIssueV1[]
 }
 
@@ -292,12 +297,34 @@ export function analyzeTextAdventureRouteQualityV1(
   )
   const minimum = (values: number[]) => values.length > 0 ? Math.min(...values) : 0
   const maximum = (values: number[]) => values.length > 0 ? Math.max(...values) : 0
+  const profiles = runtimePackage.interaction?.profiles ?? []
+  const playerProfile = profiles.find(profile => profile.name === adventure.playerIdentity.name) ?? null
+  const npcCharacterKeys = new Set(profiles.filter(profile => (
+    profile.participantKey !== playerProfile?.participantKey
+    && !profile.characterKey.startsWith('generated:')
+    && !PLACEHOLDER_PATTERN.test(profile.name)
+  )).map(profile => profile.characterKey))
+  const appliedConditionKeys = new Set(adventure.actions.flatMap(action => [
+    ...action.successEffects, ...action.costlySuccessEffects, ...action.failureEffects,
+  ]).flatMap(effect => effect.op === 'apply-condition' ? [effect.conditionKey] : []))
   const endingKeys = new Set(runtimePackage.narrative.nodes.filter(node => node.kind === 'ending').map(node => node.key))
-  const endingTextUnits = [...endingKeys].sort().map(nodeKey => ({
-    nodeKey,
-    textUnits: countPlayerVisibleTextUnitsV1(runtimePackage.narrative.beats
-      .filter(beat => beat.nodeKey === nodeKey).map(beat => beat.text)),
-  }))
+  const endingTextUnits = [...endingKeys].sort().map(nodeKey => {
+    const endingBeats = runtimePackage.narrative.beats.filter(beat => beat.nodeKey === nodeKey)
+    const ending = adventure.endings.find(item => item.narrativeNodeKey === nodeKey)
+    const settlementConditionKeys = ending?.requirements.flatMap(requirement => (
+      requirement.conditionPresent === true && requirement.conditionKey != null
+        ? [requirement.conditionKey] : []
+    )) ?? []
+    return {
+      nodeKey,
+      textUnits: countPlayerVisibleTextUnitsV1(endingBeats.map(beat => beat.text)),
+      npcDialogueTurns: endingBeats.filter(beat => (
+        beat.kind === 'dialogue' && beat.speakerKey != null && npcCharacterKeys.has(beat.speakerKey)
+      )).length,
+      stateSettlement: settlementConditionKeys.length > 0
+        && settlementConditionKeys.every(conditionKey => appliedConditionKeys.has(conditionKey)),
+    }
+  })
   const narrativePlayableTexts = [
     ...runtimePackage.narrative.beats.map(beat => beat.text),
     ...runtimePackage.narrative.choices.flatMap(choice => [choice.text, choice.description]),
@@ -305,8 +332,7 @@ export function analyzeTextAdventureRouteQualityV1(
   const actionPlayableTexts = adventure.actions.flatMap(action => [
     action.successText, action.costlySuccessText, action.failureText,
   ])
-  const profiles = runtimePackage.interaction?.profiles ?? []
-  const playerParticipantKey = profiles.find(profile => profile.name === adventure.playerIdentity.name)?.participantKey ?? null
+  const playerParticipantKey = playerProfile?.participantKey ?? null
   const authoredNpcCount = profiles.filter(profile => (
     profile.participantKey !== playerParticipantKey
     && !profile.characterKey.startsWith('generated:')
