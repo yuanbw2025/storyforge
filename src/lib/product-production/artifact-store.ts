@@ -273,6 +273,95 @@ async function frozenParentProofHash(input: {
   })
 }
 
+interface SameBuildCarryParentReadSetV1 {
+  runRows: Array<AgentRunRecord & { id: number }>
+  eventRows: Array<AgentRunEventRecord & { id: number }>
+  checkpointRows: Array<AgentRunCheckpointRecord & { id: number }>
+}
+
+function sameBuildCarryParentReadSetJsonV1(readSet: SameBuildCarryParentReadSetV1): string {
+  return canonicalProductProductionJsonV2({
+    runRows: [...readSet.runRows].sort((left, right) => left.id - right.id),
+    eventRows: [...readSet.eventRows].sort((left, right) => left.id - right.id),
+    checkpointRows: [...readSet.checkpointRows].sort((left, right) => left.id - right.id),
+  })
+}
+
+/** Freeze every raw row consumed by the producer/root proof. The proof hash is
+ * intentionally portable and therefore projects only stable witnesses; this
+ * local read set closes the stronger same-database CAS around event and
+ * checkpoint evidence that must not change between verification and carry. */
+async function collectSameBuildCarryParentReadSetV1(
+  sourceRows: ProductBuildArtifactRecordV1[],
+): Promise<SameBuildCarryParentReadSetV1> {
+  const producerRunIds = [...new Set(sourceRows.map(row => row.producerRunId))]
+  if (producerRunIds.some(id => id == null) || producerRunIds.length === 0) {
+    throw new Error('[product-production-artifact] carry-forward 父证明 Run 集合不完整')
+  }
+  const producers = await db.agentRuns.bulkGet(producerRunIds as number[])
+  if (producers.some(row => row?.id == null || row.parentRunId == null)) {
+    throw new Error('[product-production-artifact] carry-forward 父证明 Run 集合不完整')
+  }
+  const runIds = [...new Set([
+    ...(producerRunIds as number[]),
+    ...producers.map(row => row!.parentRunId!),
+  ])].sort((left, right) => left - right)
+  const rows = await db.agentRuns.bulkGet(runIds)
+  if (rows.length !== runIds.length || rows.some(row => row?.id == null)) {
+    throw new Error('[product-production-artifact] carry-forward 父证明 Run 集合不完整')
+  }
+  const runRows = rows as Array<AgentRunRecord & { id: number }>
+  const eventRows: Array<AgentRunEventRecord & { id: number }> = []
+  const checkpointRows: Array<AgentRunCheckpointRecord & { id: number }> = []
+  for (const runId of runIds) {
+    const [events, checkpoints] = await Promise.all([
+      db.agentRunEvents.where('runId').equals(runId).toArray(),
+      db.agentRunCheckpoints.where('runId').equals(runId).toArray(),
+    ])
+    if (events.some(row => row.id == null) || checkpoints.some(row => row.id == null)) {
+      throw new Error('[product-production-artifact] carry-forward 父证明事件或 checkpoint 缺少 ID')
+    }
+    eventRows.push(...events as Array<AgentRunEventRecord & { id: number }>)
+    checkpointRows.push(...checkpoints as Array<AgentRunCheckpointRecord & { id: number }>)
+  }
+  return {
+    runRows: runRows.sort((left, right) => left.id - right.id),
+    eventRows: eventRows.sort((left, right) => left.id - right.id),
+    checkpointRows: checkpointRows.sort((left, right) => left.id - right.id),
+  }
+}
+
+/** Must run inside the same rw transaction that writes carried Artifacts. */
+async function assertSameBuildCarryParentReadSetUnchangedV1(
+  expected: SameBuildCarryParentReadSetV1,
+): Promise<void> {
+  const runIds = expected.runRows.map(row => row.id)
+  const rows = await db.agentRuns.bulkGet(runIds)
+  if (rows.length !== runIds.length || rows.some(row => row?.id == null)) {
+    throw new Error('[product-production-artifact] carry-forward 父证明 Run 已变化')
+  }
+  const current: SameBuildCarryParentReadSetV1 = {
+    runRows: rows as Array<AgentRunRecord & { id: number }>,
+    eventRows: [],
+    checkpointRows: [],
+  }
+  for (const runId of runIds) {
+    const [events, checkpoints] = await Promise.all([
+      db.agentRunEvents.where('runId').equals(runId).toArray(),
+      db.agentRunCheckpoints.where('runId').equals(runId).toArray(),
+    ])
+    if (events.some(row => row.id == null) || checkpoints.some(row => row.id == null)) {
+      throw new Error('[product-production-artifact] carry-forward 父证明事件或 checkpoint 已变化')
+    }
+    current.eventRows.push(...events as Array<AgentRunEventRecord & { id: number }>)
+    current.checkpointRows.push(...checkpoints as Array<AgentRunCheckpointRecord & { id: number }>)
+  }
+  if (sameBuildCarryParentReadSetJsonV1(current)
+    !== sameBuildCarryParentReadSetJsonV1(expected)) {
+    throw new Error('[product-production-artifact] carry-forward 父证明读取后已变化')
+  }
+}
+
 interface SealedBuildProofContextV1 {
   production: ProductProductionRecordV1
   build: ProductBuildRecordV1 & { id: number }
@@ -1375,7 +1464,7 @@ async function verifyHistoricalAcceptedTaskV1(input: {
 }): Promise<void> {
   const anchor = input.siblings[0]
   if (anchor.producerRunId == null || anchor.producerReceiptHash == null
-    || input.siblings.some(row => row.carriedFrom !== null
+    || input.siblings.some(row => row.carriedFrom !== null || row.parentArtifactHash !== null
       || row.inputHash !== anchor.inputHash
       || row.producerReceiptHash !== anchor.producerReceiptHash)) {
     throw new Error(`[product-production-artifact] terminal historical accepted identity 不闭合:${input.task.taskKey}`)
@@ -1975,6 +2064,7 @@ export async function verifyProductBuildTerminalArtifactSetV1(input: {
       const receiptHash = siblings[0].producerReceiptHash
       const inputHash = siblings[0].inputHash
       if (producerRunIds.size !== 1 || receiptHashes.size !== 1 || inputHashes.size !== 1
+        || siblings.some(row => row.carriedFrom !== null || row.parentArtifactHash !== null)
         || producerRunId == null || receiptHash == null
         || producerRunId !== ledgerRunId || receiptHash !== ledger.terminalReceiptHash
         || inputHash !== ledger.idempotencyKey) {
@@ -2640,6 +2730,7 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
     || new Set(sourceRows.map(row => row.artifactKey)).size !== sourceRows.length) {
     throw new Error('[product-production-artifact] carry-forward 来源 key 不完整或不唯一')
   }
+  const initialParentReadSet = await collectSameBuildCarryParentReadSetV1(sourceRows)
   const blobProofs = await verifiedBlobProofsV1({ scope, artifacts: sourceRows, label: 'carry-forward' })
   const proofHashes = new Map<string, string>()
   for (const source of sourceRows) proofHashes.set(source.artifactKey, await frozenParentProofHash({
@@ -2654,6 +2745,11 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
       scope,
     })) throw new Error('[product-production-artifact] carry-forward producer proof 在提交前已变化')
   }
+  const commitParentReadSet = await collectSameBuildCarryParentReadSetV1(sourceRows)
+  if (sameBuildCarryParentReadSetJsonV1(initialParentReadSet)
+    !== sameBuildCarryParentReadSetJsonV1(commitParentReadSet)) {
+    throw new Error('[product-production-artifact] carry-forward 父证明读取期间已变化')
+  }
   const commitBlobProofs = await refreshVerifiedBlobProofsV1({
     scope,
     expected: blobProofs,
@@ -2662,6 +2758,7 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
   const frozenBuildJson = canonicalProductProductionJsonV2(build)
   return db.transaction('rw', scopeTransactionTables(
     db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
+    db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints,
   ), async () => {
     const [currentBuild, currentRows] = await Promise.all([
       db.productBuilds.get(build.id),
@@ -2671,6 +2768,7 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
       || !sameStoredArtifactRowsV1(allRows, currentRows)) {
       throw new Error('[product-production-artifact] carry-forward 证明读取后 Build 或 Artifact 已变化')
     }
+    await assertSameBuildCarryParentReadSetUnchangedV1(commitParentReadSet)
     for (const [blobId, expectedBlob] of commitBlobProofs) {
       const currentBlob = await db.mediaBlobObjects.get(blobId)
       if (!currentBlob || currentBlob.id == null

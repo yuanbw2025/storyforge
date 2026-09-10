@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import Dexie from 'dexie'
 import { db } from '../../src/lib/db/schema'
 import { appendAgentRunEventV1, readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { readContextGatewayManifestV3ForAttemptV1 } from '../../src/lib/context-gateway/attempt-evidence'
@@ -38,6 +39,9 @@ import {
   prepareProductProductionAdoption,
   publishProductProductionBuild,
 } from '../../src/lib/product-production/adoption'
+import {
+  verifyProductBuildTerminalArtifactSetV1,
+} from '../../src/lib/product-production/artifact-store'
 
 async function fixture(name: string, extraFacts: string[] = []) {
   const owned = await seedCurrentProductWorld(name)
@@ -2805,6 +2809,158 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     })
     expect(designRows[1].producerRunId).not.toBeNull()
     expect(designRows[1].producerReceiptHash).not.toBe(designRows[0].producerReceiptHash)
+  }, 30_000)
+
+  it('same-build carry 在写事务内精确 CAS 父 producer/root 的 Run、事件与 checkpoint', async () => {
+    const owned = await fixture('scheduler-same-build-parent-proof-cas')
+    const calls = new Map<string, number>()
+    const executor = executorFor(owned, calls, { active: 0, peak: 0 })
+    const capabilityBindings = [{
+      requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+      adapterId: 'configured-text-provider.v1',
+      bindingHash: 'a'.repeat(64),
+    }]
+    const partial = await runProductProductionSchedulerCycleV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      executor,
+      capabilityBindings,
+    })
+    const source = (await db.productBuildArtifacts.where('buildId').equals(partial.buildId).toArray())
+      .find(row => row.artifactKey === 'design.game' && row.status === 'accepted')!
+    const beforePause = (await db.productProductions.get(owned.productionId))!
+    await executeProductProductionCommand({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      command: {
+        type: 'pause', commandId: 'scheduler-same-build-parent-proof-cas.pause',
+        expectedStateRevision: beforePause.stateRevision, reason: '测试父证明原子 CAS',
+      },
+    })
+    const paused = (await db.productProductions.get(owned.productionId))!
+    await executeProductProductionCommand({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      command: {
+        type: 'resume', commandId: 'scheduler-same-build-parent-proof-cas.resume',
+        expectedStateRevision: paused.stateRevision,
+      },
+    })
+    const producerEvent = await db.agentRunEvents.where('runId').equals(source.producerRunId!).first()
+    expect(producerEvent?.id).toBeTruthy()
+
+    const originalBulkGet = db.agentRuns.bulkGet.bind(db.agentRuns)
+    let injected = false
+    const spy = vi.spyOn(db.agentRuns, 'bulkGet').mockImplementation(async keys => {
+      const rows = await originalBulkGet(keys)
+      if (!injected && Dexie.currentTransaction?.mode === 'readwrite'
+        && [...keys].includes(source.producerRunId!)) {
+        injected = true
+        await db.agentRunEvents.update(producerEvent!.id!, {
+          createdAt: producerEvent!.createdAt + 1,
+        })
+      }
+      return rows
+    })
+    try {
+      await expect(runProductProductionSchedulerCycleV1({
+        scope: owned.scope,
+        productionId: owned.productionId,
+        executor,
+        capabilityBindings,
+      })).rejects.toThrow(/carry-forward 父证明读取后已变化/)
+    } finally {
+      spy.mockRestore()
+    }
+    expect(injected).toBe(true)
+    expect((await db.agentRunEvents.get(producerEvent!.id!))?.createdAt).toBe(producerEvent!.createdAt)
+    const rows = await db.productBuildArtifacts.where('buildId').equals(partial.buildId).toArray()
+    expect(rows.filter(row => row.artifactKey === 'design.game')).toEqual([
+      expect.objectContaining({ id: source.id, status: 'accepted', controlEpoch: source.controlEpoch }),
+    ])
+  }, 30_000)
+
+  it('terminal verifier 拒绝伪装为 accepted 却携带 lineage 治理字段的当前行', async () => {
+    const owned = await fixture('scheduler-accepted-lineage-envelope')
+    const executor = executorFor(owned, new Map(), { active: 0, peak: 0 })
+    const capabilityBindings = [{
+      requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+      adapterId: 'configured-text-provider.v1',
+      bindingHash: 'b'.repeat(64),
+    }]
+    const completed = await runProductProductionUntilBlockedV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      executor,
+      capabilityBindings,
+    })
+    const build = (await db.productBuilds.get(completed.buildId))!
+    const accepted = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([completed.buildId, 'design.game']).first()
+    await db.productBuildArtifacts.update(accepted!.id!, {
+      parentArtifactHash: accepted!.contentHash,
+    })
+    await expect(verifyProductBuildTerminalArtifactSetV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      buildId: completed.buildId,
+      expectedControlEpoch: build.controlEpoch,
+      expectedPlanHash: build.planHash,
+    })).rejects.toThrow(/terminal accepted sibling producer\/ledger 不闭合/)
+  }, 30_000)
+
+  it('terminal verifier 拒绝历史 accepted 父行携带 lineage 治理字段', async () => {
+    const owned = await fixture('scheduler-historical-accepted-lineage-envelope')
+    const executor = executorFor(owned, new Map(), { active: 0, peak: 0 })
+    const capabilityBindings = [{
+      requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+      adapterId: 'configured-text-provider.v1',
+      bindingHash: 'c'.repeat(64),
+    }]
+    const partial = await runProductProductionSchedulerCycleV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      executor,
+      capabilityBindings,
+    })
+    const beforePause = (await db.productProductions.get(owned.productionId))!
+    await executeProductProductionCommand({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      command: {
+        type: 'pause', commandId: 'scheduler-historical-accepted-lineage-envelope.pause',
+        expectedStateRevision: beforePause.stateRevision, reason: '制造历史 accepted 父行',
+      },
+    })
+    const paused = (await db.productProductions.get(owned.productionId))!
+    await executeProductProductionCommand({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      command: {
+        type: 'resume', commandId: 'scheduler-historical-accepted-lineage-envelope.resume',
+        expectedStateRevision: paused.stateRevision,
+      },
+    })
+    const completed = await runProductProductionUntilBlockedV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      executor,
+      capabilityBindings,
+    })
+    const build = (await db.productBuilds.get(completed.buildId))!
+    const historical = (await db.productBuildArtifacts.where('buildId').equals(partial.buildId).toArray())
+      .find(row => row.artifactKey === 'design.game'
+        && row.status === 'invalid' && row.controlEpoch < build.controlEpoch)!
+    await db.productBuildArtifacts.update(historical.id!, {
+      parentArtifactHash: historical.contentHash,
+    })
+    await expect(verifyProductBuildTerminalArtifactSetV1({
+      scope: owned.scope,
+      productionId: owned.productionId,
+      buildId: completed.buildId,
+      expectedControlEpoch: build.controlEpoch,
+      expectedPlanHash: build.planHash,
+    })).rejects.toThrow(/terminal (same-build proof 已变化|historical accepted identity 不闭合)/)
   }, 30_000)
 
   it('scheduler 不得为绕过 Plan API 注入的未授权 carried row 创建 synthetic receipt 或结算 ledger', async () => {
