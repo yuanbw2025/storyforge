@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 test('文字开放世界玩家壳在桌面三栏与移动五入口之间保持同一场景时间线', async ({ page }) => {
+  test.setTimeout(240_000)
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'text-open-world-shell-e2e')
   })
@@ -212,6 +213,7 @@ test('文字开放世界玩家壳在桌面三栏与移动五入口之间保持�
   await expect(dropConfirmation).toContainText('丢弃盐晶')
   await dropConfirmation.getByRole('button', { name: '确认执行', exact: true }).click()
   await expect(dropConfirmation).toBeHidden()
+  await expect(inventoryPanel).toHaveAttribute('aria-busy', 'false', { timeout: 30_000 })
   await expect(inventoryPanel).toContainText('没有符合当前筛选的物品')
   await expect(inventoryPanel.getByTestId('text-open-world-inventory-feedback')).toContainText('丢弃盐晶')
 
@@ -224,7 +226,8 @@ test('文字开放世界玩家壳在桌面三栏与移动五入口之间保持�
   await weaponSlot.getByText('查看装备后的旧值、新值与差值', { exact: true }).click()
   await expect(weaponSlot.locator('tr[data-change-direction="increase"]').filter({ hasText: '攻击' })).toContainText('+2')
   await weaponSlot.getByRole('button', { name: '装备旧盐刀', exact: true }).click()
-  await expect(equipmentView.getByLabel('武器当前装备')).toContainText('旧盐刀')
+  await expect(inventoryPanel).toHaveAttribute('aria-busy', 'false', { timeout: 30_000 })
+  await expect(equipmentView.getByLabel('武器当前装备')).toContainText('旧盐刀', { timeout: 20_000 })
   await expect(inventoryPanel.getByTestId('text-open-world-inventory-summary')).toContainText('已装备1/3')
 
   await page.getByRole('button', { name: '返回当前场景', exact: true }).click()

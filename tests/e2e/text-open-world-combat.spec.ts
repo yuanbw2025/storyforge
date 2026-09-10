@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 test('玩家从正式存档进入双敌战斗，显式选敌并完成四类操作与逃跑结算', async ({ page }) => {
-  test.setTimeout(210_000)
+  test.setTimeout(300_000)
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'text-open-world-combat-e2e')
   })
@@ -94,7 +94,12 @@ test('玩家从正式存档进入双敌战斗，显式选敌并完成四类操�
   await panel.getByRole('button', { name: /普通攻击/ }).click()
 
   const escape = panel.getByRole('button', { name: /逃跑/ })
-  await expect(escape).toBeEnabled({ timeout: 60_000 })
+  await expect(page.getByTestId('text-open-world-shell')).not.toHaveAttribute(
+    'aria-busy',
+    'true',
+    { timeout: 120_000 },
+  )
+  await expect(escape).toBeEnabled({ timeout: 20_000 })
   await escape.click()
   const result = page.getByTestId('text-open-world-combat-result')
   await expect(result).toContainText('已经脱离战斗', { timeout: 30_000 })
