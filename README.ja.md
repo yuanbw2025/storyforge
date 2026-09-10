@@ -6,6 +6,8 @@
 [简体中文](./README.md) · [English](./README.en.md) · [Français](./README.fr.md) · [Deutsch](./README.de.md) · [Italiano](./README.it.md) · [Español](./README.es.md) · [Português](./README.pt.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 <!-- readme-languages:end -->
 
+**中国語のチュートリアル・コミュニティ：** [Bilibili 動画](https://www.bilibili.com/video/BV1q37j6QExh/) · [Zhihu 紹介記事](https://zhuanlan.zhihu.com/p/2038714210188780594) · **QQ グループ：1082374587** · [その他の連絡先](#community)
+
 [創作を始める](#quick-start) · [Fog Harbor を体験する](#try-a-story) · [アーキテクチャを見る](#architecture)
 
 StoryForge は、ローカルでのデータ保持を基本とする、オープンソースの AI 物語制作・体験ツールです。長編や短編の執筆、小説の脚本化・漫画化、再利用できる世界の構築、対話型の物語体験に取り組めます。制作方法は作者が選び、AI の提案は確認・承認してから作品に取り込みます。
@@ -249,7 +251,7 @@ flowchart TB
 
 ## コミュニティと貢献
 
-[GitHub Issues](https://github.com/yuanbw2025/storyforge/issues) · [開発者サイト](https://yuanbw.vercel.app/) · QQ グループ：**1082374587**
+[GitHub Issues](https://github.com/yuanbw2025/storyforge/issues) · [開発者サイト](https://yuanbw.vercel.app/) · [開発者の Zhihu プロフィール](https://www.zhihu.com/people/dan-ran-xing-yuan-59) · QQ グループ：**1082374587**
 
 [Bilibili 動画](https://www.bilibili.com/video/BV1q37j6QExh/)と[Zhihu 紹介](https://zhuanlan.zhihu.com/p/2038714210188780594)は過去の中国語資料です。現在とメニューが異なる場合があります。不具合報告にはバージョン、ブラウザー・OS、再現手順、期待結果・実際の結果を添え、画像やログからキーと私的な原稿を除いてください。Star、作例、動画、翻訳、開発への参加を歓迎します。
 

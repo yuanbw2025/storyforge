@@ -6,6 +6,8 @@
 [简体中文](./README.md) · [English](./README.en.md) · [Français](./README.fr.md) · [Deutsch](./README.de.md) · [Italiano](./README.it.md) · [Español](./README.es.md) · [Português](./README.pt.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md)
 <!-- readme-languages:end -->
 
+**Tutoriels et communauté en chinois :** [Vidéo Bilibili](https://www.bilibili.com/video/BV1q37j6QExh/) · [Présentation Zhihu](https://zhuanlan.zhihu.com/p/2038714210188780594) · **Groupe QQ : 1082374587** · [Autres liens](#community)
+
 [Commencer à créer](#quick-start) · [Découvrir Fog Harbor](#try-a-story) · [Explorer l’architecture](#architecture)
 
 StoryForge est un outil open source de création et d’expérience narrative assistées par IA, conçu pour conserver les données en local. Écrivez des romans ou des récits courts, adaptez un roman en scénario ou en bande dessinée, créez des mondes réutilisables et explorez des histoires interactives. Vous choisissez le parcours et validez les propositions de l’IA avant leur intégration à votre œuvre.
@@ -249,7 +251,7 @@ Exemple : le chapitre 8 établit qui détient un objet unique. Au chapitre 80, l
 
 ## Communauté et contributions
 
-[GitHub Issues](https://github.com/yuanbw2025/storyforge/issues) · [Site du développeur](https://yuanbw.vercel.app/) · Groupe QQ : **1082374587**
+[GitHub Issues](https://github.com/yuanbw2025/storyforge/issues) · [Site du développeur](https://yuanbw.vercel.app/) · [Profil Zhihu du développeur](https://www.zhihu.com/people/dan-ran-xing-yuan-59) · Groupe QQ : **1082374587**
 
 [Tutoriel Bilibili](https://www.bilibili.com/video/BV1q37j6QExh/) et [présentation Zhihu](https://zhuanlan.zhihu.com/p/2038714210188780594) : ressources historiques en chinois, dont les menus peuvent différer. Pour signaler un problème, indiquez version, navigateur/système, étapes et résultat attendu/observé ; retirez clés et textes privés des captures et journaux. Étoiles, exemples, vidéos, traductions et contributions sont bienvenus.
 
