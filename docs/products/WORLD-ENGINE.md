@@ -1,6 +1,6 @@
 # 世界引擎产品契约
 
-> 版本：1.3.0 · 生效：2026-08-31 · 对应总纲：§5、阶段 D
+> 版本：1.4.0 · 生效：2026-09-10 · 对应总纲：§5、S1 世界封存
 
 ## 1. 定义
 
@@ -65,7 +65,7 @@
 
 世界出口不定义一份让所有上层产品照单全收的通用 payload，也不预设某类产品的角色卡、规则、游戏时长、结局或运行字段。不同产品需要的数据广度、细节层级和证据类型可以完全不同。
 
-每个上层产品在自己的阶段二契约中提供 `WorldRequirementAdapter`（名称可按实现调整），把当前用户目标和产品配置转换成稳定必读、建议/选读、条件读取和禁止读取。网关只负责在指定不可变 release 内可靠地解释和满足这些需求。产品侧可对结果继续排序、组合或请求补充读取，但不得绕过协议查询世界底表。
+每个上层产品在自己的 `S2 产品定向`契约中提供 `WorldRequirementAdapter`（名称可按实现调整），把当前用户目标和产品配置转换成稳定必读、建议/选读、条件读取和禁止读取。网关只负责在指定不可变 release 内可靠地解释和满足这些需求。产品侧可对结果继续排序、组合或请求补充读取，但不得绕过协议查询世界底表。
 
 适配器可以由类型化代码/配置与产品 Skill 协作：代码/schema 固定版本、权限、必读和禁止边界，Skill/Prompt 处理开放式目标和语义查询。不能只靠提示词声明“必须读取”，也不能把世界物理表名复制进每个产品。
 
@@ -75,7 +75,7 @@
 
 用户确认开始后，产品先把 WorldReference、需求适配器版本、需求、允许范围、缺失/补充策略以及咨询阶段 Context Manifest refs 冻结为 `ProductSourcePlan`。生产尚未执行时不能假装已经知道全部会用到的资源。
 
-阶段三中的 Agent 可在该 plan 允许的同一不可变 WorldRelease 内继续 `describe/search/read`；每个 durable run 保存自己的不可变 Context Manifest，ProductRelease 聚合生产证据为 `ProductSourceManifest` 快照并冻结 hash。确定性编译不是例外：用户入选资源及从中立 relation 推导的必要依赖，必须由 Gateway 和编译器的同一闭包解析器确定，并先在该 run 中留下原文级证据，才能组装 RuntimePackage。开放式运行若需要继续查询世界，也必须经 ProductRelease 继承的 source plan 执行，读取证据归 session/run manifest，不能改读最新草稿或追写旧 ProductRelease。
+`S3 产品执行`中的 Agent 可在该 plan 允许的同一不可变 WorldRelease 内继续 `describe/search/read`；每个 durable run 保存自己的不可变 Context Manifest，ProductRelease 聚合生产证据为 `ProductSourceManifest` 快照并冻结 hash。确定性编译不是例外：用户入选资源及从中立 relation 推导的必要依赖，必须由 Gateway 和编译器的同一闭包解析器确定，并先在该 run 中留下原文级证据，才能组装 RuntimePackage。开放式运行若需要继续查询世界，也必须经 ProductRelease 继承的 source plan 执行，读取证据归 session/run manifest，不能改读最新草稿或追写旧 ProductRelease。
 
 同一 WorldRelease 因产品和任务不同，可以产生不同 plan 和 manifest；这正是协议统一而 payload 不统一的设计目的。
 

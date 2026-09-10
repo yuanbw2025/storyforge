@@ -1,6 +1,6 @@
 # 世界引擎上层产品跨产品架构契约
 
-> 版本：2.4.0 · 生效：2026-09-03 · 对应总纲：§6、阶段 E
+> 版本：2.5.0 · 生效：2026-09-10 · 对应总纲：§6、S1/S2/S3
 > 本文只规定跑团、角色互动、AI 小镇、文字冒险、AVG 和文字开放世界共同遵守的架构边界与流转协议，不替代任何一个产品的专项功能设计。
 
 ## 1. 契约目的与非范围
@@ -27,22 +27,24 @@
 
 ## 2. 三阶段主链
 
+本文只使用三个规范短名：`S1 世界封存`、`S2 产品定向`、`S3 产品执行`。它们表示所有权、授权和交接边界，不要求三个页面、三张表或一套全产品通用状态机。
+
 ```mermaid
 flowchart LR
-    subgraph S1["阶段一 · 世界引擎"]
+    subgraph S1["S1 世界封存"]
       D["编辑世界语义草稿"] --> W["封存不可变 WorldRelease"]
     end
-    subgraph S2["阶段二 · 用户交互与发指令"]
+    subgraph S2["S2 产品定向"]
       R["引用世界编号/版本"] --> C["填写本产品设置并与主 Agent 定向"]
       C --> A["用户明确开始"]
     end
-    subgraph S3["阶段三 · 产品执行与交付"]
+    subgraph S3["S3 产品执行"]
       P["规划与生产"] --> M["内容 / 规则 / 媒资 / 组装 / 验证"]
       M --> PR["不可变 ProductRelease"]
       PR --> RT["运行与私域演化"]
     end
-    W -->|"WorldReference"| R
-    A -->|"ConfirmedProductBrief + ProductSourcePlan"| P
+    W -->|"可引用 WorldRelease"| R
+    A -->|"WorldReference + ConfirmedProductBrief + ProductSourcePlan"| P
     RT -. "不得自动回写" .-> D
 ```
 
@@ -50,15 +52,15 @@ flowchart LR
 
 ## 3. 阶段职责
 
-### 3.1 阶段一：世界引擎
+### 3.1 S1 世界封存
 
-世界引擎只负责叙事语义内容的编辑、确认、能力描述、封存、比较和版本化读取。它向产品交付 `WorldReference`，至少包含稳定 world code、不可变 WorldRelease ID/hash 和能力画像。
+世界引擎只负责叙事语义内容的编辑、确认、能力描述、封存、比较和版本化读取。它向产品公开可引用的稳定 world code、不可变 WorldRelease ID/hash 和能力画像；用户在 S2 选定准确版本后，产品系统才据此生成并校验 `WorldReference`。
 
-阶段一不得创建某个上层产品的设置、production、媒资、build、session、玩家状态或聊天记忆。
+S1 不得创建某个上层产品的设置、production、媒资、build、session、玩家状态或聊天记忆。
 
-### 3.2 阶段二：用户交互与发指令
+### 3.2 S2 产品定向
 
-阶段二属于具体上层产品，而不属于世界引擎。用户在该产品入口：
+S2 属于具体上层产品，而不属于世界引擎。用户在该产品入口：
 
 1. 引用并核对世界编号与封存版本；
 2. 查看世界能力和与当前产品需求相关的缺口；
@@ -68,11 +70,18 @@ flowchart LR
 
 规模、时长、是否需要结局、参与者或其他体验参数若适用于该产品，应在这里由用户设置；具体字段与单位由产品自己定义。设置保存为产品草稿，不改变来源世界。
 
-用户开始前，系统可以提供只读分析、建议和估算；这些调用也要留下 Context Manifest。不得偷偷启动会产生正式 product production、媒资或 runtime 的工作。开始时冻结 `ConfirmedProductBrief`、`ProductSourcePlan` 和用户授权 revision。SourcePlan 锁定世界版本、需求适配器、读取范围、缺失策略与咨询证据，但不假装预先列出生产阶段可能读取的全部资源。
+用户开始前，系统可以提供只读分析、建议和估算；这些调用也要留下 Context Manifest。不得偷偷启动会产生正式 product production、媒资或 runtime 的工作。开始时冻结 `WorldReference`、`ConfirmedProductBrief`、`ProductSourcePlan` 和用户授权 revision。SourcePlan 锁定世界版本、需求适配器、读取范围、缺失策略与咨询证据，但不假装预先列出生产阶段可能读取的全部资源。
 
-### 3.3 阶段三：产品执行与交付
+### 3.3 S3 产品执行
 
-阶段三由具体产品的主 Agent 和内部能力完成。内容、规则、媒资、build、质量证据、ProductRelease、runtime、记忆、存档与私域演化全部归产品实例。Agent 可在 SourcePlan 允许的不可变 WorldRelease 内继续渐进式检索；每个 durable run 保存不可变 Context Manifest，发布时聚合为 ProductSourceManifest 快照。确定性组装器也是正式执行者，不得绕过网关重读世界；它要求的“用户选择 + 语义依赖闭包”必须先在同一 run 中留下可验签原文证据，才能编译 RuntimePackage。
+S3 由具体产品的主 Agent 和内部能力完成。内容、规则、媒资、build、质量证据、ProductRelease、runtime、记忆、存档与私域演化全部归产品实例。Agent 可在 SourcePlan 允许的不可变 WorldRelease 内继续渐进式检索；每个 durable run 保存不可变 Context Manifest。确定性组装器也是正式执行者，不得绕过网关重读世界；它要求的“用户选择 + 语义依赖闭包”必须先在同一 run 中留下可验签原文证据，才能编译 RuntimePackage。
+
+S3 使用四个共同定位点：
+
+1. `S3.1 生产`：按本产品计划生成内容、规则与媒资，并记录真实上下文证据；
+2. `S3.2 验收`：组装 build，执行产品专用质量门和有界修复；
+3. `S3.3 发布`：冻结 ProductRelease、聚合 ProductSourceManifest，并生成版本谱系；
+4. `S3.4 运行与演化`：runtime/session 绑定准确 ProductRelease，在产品私域内推进和形成后续版本。
 
 怎样生产、何时进入运行、用户进度何时触发下一轮演化、怎样形成结局，都属于该产品的专项功能。跨产品架构只强制：
 
@@ -87,11 +96,11 @@ flowchart LR
 
 | 交接物 | 作用 | 最低要求 |
 |---|---|---|
-| `WorldReference` | 阶段一 → 阶段二 | 从中立目录选择的 world code、release ID、release hash、schema/capability identity；不暴露物理 release 行 |
-| `ProductSourcePlan` | 阶段二 → 阶段三 | WorldReference、需求适配器/版本、资源需求、允许范围、初始选择、缺失/补充策略和咨询 Context Manifest refs |
-| `ConfirmedProductBrief` | 阶段二 → 阶段三 | product kind、用户目标、产品专用设置、限制、revision、确认时间/主体 |
-| `ProductSourceManifest` | 阶段三发布证据 | 聚合 production run manifests 中实际读取/采用/缺失/冲突/遗漏的世界资源；发布时冻结 hash |
-| `ProductReleaseLineage` | 阶段三内部演化 | product instance、release/hash、parent release、source plan/manifest、brief/build/quality references、兼容结论 |
+| `WorldReference` | S2 选定来源 → S3 | 从中立目录选择的 world code、release ID、release hash、schema/capability identity；不暴露物理 release 行 |
+| `ProductSourcePlan` | S2 → S3 | WorldReference、需求适配器/版本、资源需求、允许范围、初始选择、缺失/补充策略和咨询 Context Manifest refs |
+| `ConfirmedProductBrief` | S2 → S3 | product kind、用户目标、产品专用设置、限制、revision、确认时间/主体 |
+| `ProductSourceManifest` | S3.3 发布证据 | 聚合 production run manifests 中实际读取/采用/缺失/冲突/遗漏的世界资源；发布时冻结 hash |
+| `ProductReleaseLineage` | S3.3/S3.4 版本谱系 | product instance、release/hash、parent release、source plan/manifest、brief/build/quality references、兼容结论 |
 
 任何物理 schema 都必须能从记录恢复上述语义。不能因为某产品不用其中某个可选设置，就绕过世界版本、用户开始授权或 release 谱系。
 
@@ -104,7 +113,7 @@ flowchart LR
 ```text
 Product-specific goal/config
 → WorldRequirementAdapter
-→ list neutral WorldReference catalog
+→ list neutral world/release catalog
 → describe/search/read immutable WorldRelease
 → matched/missing/conflict/omitted resources
 → frozen ProductSourcePlan
@@ -114,7 +123,7 @@ Product-specific goal/config
 
 每个产品拥有自己的需求适配器，决定当前任务需要哪些能力、资源类型、细节层级和证据，并明确稳定必读、建议/选读、条件读取和禁止读取。现行代码已分别登记跑团、角色互动、AI 小镇、文字冒险、AVG、文字开放世界六个适配器；它们共享目标输入形状和中立协议，不共享固定资源结果。世界网关负责版本化寻址、检索、读取、充分性和来源语义，不负责理解全部产品业务。
 
-产品 UI 和服务只能通过中立目录取得 `WorldReference` 候选，随后再调用需求适配器与网关；物理 `WorldRelease` 行、内部 manifest 和世界表结构都不能穿透到产品层。
+产品 UI 和服务只能通过中立目录取得可引用世界/版本候选；用户选定后由系统生成并校验 `WorldReference`，随后再调用需求适配器与网关。物理 `WorldRelease` 行、内部 manifest 和世界表结构都不能穿透到产品层。
 
 需求适配器可以组合类型化代码/配置与产品 Skill：机器契约负责版本、权限、必读、禁止和条件边界，Skill/Prompt 负责将开放式用户目标转成查询。Skill 可以辅助选择，但不能单独充当数据访问控制或必读验证器。
 
@@ -135,7 +144,7 @@ Product-specific goal/config
 |---|---|
 | Product identity/owner | 该产品实例、草稿、production、release 和 session 如何唯一归属？ |
 | World requirement adapter | 怎样把本产品目标转换为世界资源需求，怎样处理缺失/冲突？ |
-| Brief schema | 用户在阶段二确认了什么，怎样版本化和判定 stale？ |
+| Brief schema | 用户在 S2 确认了什么，怎样版本化和判定 stale？ |
 | Production contract | 用户开始后，哪些 Agent/Skill/确定性服务被授权生产什么？ |
 | Media ownership | 哪些媒资由哪个 production/build/release 拥有，怎样存储和回收？ |
 | Release contract | 什么构成可运行版本，hash、质量证据和不可变性怎样保证？ |
@@ -146,7 +155,7 @@ Product-specific goal/config
 
 ## 7. 媒资边界
 
-媒资生产属于阶段三。主 Agent 可按产品方案自动拆解和调度图片、声音、UI 或其他资产，但所有候选、选定资产、绑定和成品都必须归明确 owner：生产/发布媒资归 product production/build/ProductRelease，运行时私域生成媒资归 ProductRuntimeSession。禁止一个媒资同时声明 release owner 与 session owner。
+媒资生产属于 S3。主 Agent 可按产品方案自动拆解和调度图片、声音、UI 或其他资产，但所有候选、选定资产、绑定和成品都必须归明确 owner：生产/发布媒资归 product production/build/ProductRelease，运行时私域生成媒资归 ProductRuntimeSession。禁止一个媒资同时声明 release owner 与 session owner。
 
 共享 media/blob/生成设施只提供传输、存储、溯源和处理能力，不取得内容 owner。世界引擎保存可供媒资创作使用的语义描述，不保存上层产品生成的媒体资产。
 
@@ -156,7 +165,7 @@ Product-specific goal/config
 
 开放式 runtime 需要继续读取世界时，必须继承 ProductRelease 的 SourcePlan，并把实际读取写入 session/run 自己的 Context Manifest。这些证据可以进入下一次 production，但不得修改旧 ProductRelease 已冻结的 ProductSourceManifest。
 
-产品自己决定何时提出或自动触发下一轮演化。若仍在既有 Brief/SourcePlan 权限内，可以继续该产品自己的有限 run；若用户目标、产品配置、资源需求或读取权限变化，则重新进入该产品的阶段二，确认新 Brief/SourcePlan 后创建新 production/ProductRelease。
+产品自己决定何时提出或自动触发下一轮演化。若仍在既有 Brief/SourcePlan 权限内，可以继续该产品自己的有限 run；若用户目标、产品配置、资源需求或读取权限变化，则重新进入该产品的 S2，确认新 Brief/SourcePlan 后创建新 production/ProductRelease。
 
 如果用户主动选择新的 WorldRelease，必须走显式来源升级：重新生成 source plan、做影响分析、形成候选 product version，并在生产中记录新的 source manifest；确认兼容后创建新 release。世界草稿更新不自动推动任何已有产品。
 
@@ -169,7 +178,7 @@ Product-specific goal/config
 - 世界入口不能直接创建正式 product runtime；
 - 所有正式产品执行都能追溯到不可变 WorldReference、用户确认的 Brief、冻结的 source plan 和实际 source manifest；
 - 不同产品可以通过各自适配器读取不同世界资源，且没有手写世界底表清单；
-- 阶段二设置由产品拥有，世界 release 不随产品设置变化；
+- S2 设置由产品拥有，世界 release 不随产品设置变化；
 - 媒资、生产、release、session 和演化均有产品 owner；
 - ProductRelease 不可变，升级/演化有父版本、兼容和回退证据；
 - 多个用户引用同一世界时数据互相隔离，运行不回写世界；
@@ -188,8 +197,8 @@ Product-specific goal/config
 《雾港：失潮钟声》恢复 `618d388e` 的作者原稿与项目许可美术。它是现有文字冒险与 AVG 的预写作品，不新增产品身份，不恢复退役安装器或世界直达 runtime 入口。
 
 - 入口：主页/文字游戏页的作品卡 → `/play/mist-harbor` → 选择玩法 → 明确开始。首页与介绍页只读；只有开始按钮安装内容。
-- 阶段一：`mist-harbor-preset` 在独立工作区通过 `adopt()` 安装 5 名角色、4 组关系、地点、词条、规则、主线和 10 章及细纲，原子提交后冻结 WorldRelease。再次进入复用已有版本，不覆盖作者修改。
-- 阶段二/三：按各产品适配器允许范围冻结 Brief/SourcePlan，确定性生产任务经过现有 scheduler、真实 Gateway Context Manifest、内容与媒资校验、原子发布为 ProductRelease。无模型、外部媒资 provider 或隐藏费用。
+- S1：`mist-harbor-preset` 在独立工作区通过 `adopt()` 安装 5 名角色、4 组关系、地点、词条、规则、主线和 10 章及细纲，原子提交后冻结 WorldRelease。再次进入复用已有版本，不覆盖作者修改。
+- S2/S3：按各产品适配器允许范围冻结 Brief/SourcePlan，确定性生产任务经过现有 scheduler、真实 Gateway Context Manifest、内容与媒资校验、原子发布为 ProductRelease。无模型、外部媒资 provider 或隐藏费用。
 - 所有权：世界只保存语义；18 节点/158 节拍的游戏包、17 项 AVG 媒资、会话与检查点属于产品。图片按仓库字节 hash 验证后进入现有 blob/产品媒资生命周期，原许可限定 StoryForge 项目内演示与产品使用，不改为通用 CC0 授权。
 - 恢复：同页防重复执行，多标签页通过浏览器安装锁串行；失败构建保留证据，用户重试可重新构建；已安装作品按冻结 productKey 识别，完整备份重映射后仍可继续。从头开始保留原存档。
 - 内容边界：文字冒险加入取证与三权接管检查，AVG 使用原美术与声明式 Cue；三结局可达，无运行时模型对话或配音。历史浏览器内三款生成结果未作为现行作品的数据来源。

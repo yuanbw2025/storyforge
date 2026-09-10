@@ -70,6 +70,47 @@ const activeDocs = [
 const failures = []
 const activeSet = new Set(activeDocs)
 const publicReadmes = activeRootDocuments.filter(file => /^README(?:\.[a-z]+)?\.md$/.test(file))
+const canonicalStageNames = ['S1 世界封存', 'S2 产品定向', 'S3 产品执行']
+const canonicalStageDocuments = [
+  'AGENTS.md',
+  'CLAUDE.md',
+  'docs/PROJECT-MASTER-CHARTER.md',
+  'docs/ARCHITECTURE.md',
+  'docs/DATA-GOVERNANCE.md',
+  'docs/HARNESS-QUALITY-STANDARD.md',
+  'docs/products/UPPER-PRODUCTS.md',
+]
+const retiredStageTitles = [
+  '阶段一：世界引擎',
+  '阶段二：用户交互与发指令',
+  '阶段三：产品执行与交付',
+  '阶段一 · 世界引擎',
+  '阶段二 · 用户交互与发指令',
+  '阶段三 · 产品执行与交付',
+]
+const canonicalStageHandoffs = [
+  {
+    file: 'docs/PROJECT-MASTER-CHARTER.md',
+    required: [
+      'S1 -->|"可引用的 WorldRelease 身份与能力画像"| S2',
+      'S2 -->|"开始授权 + WorldReference + ConfirmedProductBrief + ProductSourcePlan"| S3',
+    ],
+  },
+  {
+    file: 'docs/products/UPPER-PRODUCTS.md',
+    required: [
+      'W -->|"可引用 WorldRelease"| R',
+      'A -->|"WorldReference + ConfirmedProductBrief + ProductSourcePlan"| P',
+    ],
+  },
+  {
+    file: 'docs/ARCHITECTURE.md',
+    required: [
+      'WR -->|"用户选定版本后生成并校验"| RF',
+      'I -->|"用户明确开始\\nWorldReference + Brief + SourcePlan"| P',
+    ],
+  },
+]
 
 for (const file of publicReadmes) {
   const absolute = path.join(root, file)
@@ -98,6 +139,30 @@ const walk = directory => {
 
 for (const file of [...activeRootDocuments, ...activeDocs]) {
   if (!fs.existsSync(path.join(root, file))) failures.push(`missing active document: ${file}`)
+}
+
+for (const file of canonicalStageDocuments) {
+  const absolute = path.join(root, file)
+  if (!fs.existsSync(absolute)) continue
+  const source = fs.readFileSync(absolute, 'utf8')
+  for (const stageName of canonicalStageNames) {
+    if (!source.includes(stageName)) failures.push(`canonical stage name missing: ${file} -> ${stageName}`)
+  }
+  for (const retiredTitle of retiredStageTitles) {
+    if (source.includes(retiredTitle)) failures.push(`retired stage title restored: ${file} -> ${retiredTitle}`)
+  }
+}
+
+for (const { file, required } of canonicalStageHandoffs) {
+  const source = fs.readFileSync(path.join(root, file), 'utf8')
+  for (const snippet of required) {
+    if (!source.includes(snippet)) failures.push(`canonical stage handoff missing: ${file} -> ${snippet}`)
+  }
+}
+
+const masterCharter = fs.readFileSync(path.join(root, 'docs/PROJECT-MASTER-CHARTER.md'), 'utf8')
+for (const stageStep of ['S3.1 生产', 'S3.2 验收', 'S3.3 发布', 'S3.4 运行与演化']) {
+  if (!masterCharter.includes(stageStep)) failures.push(`master charter missing product-execution locator: ${stageStep}`)
 }
 
 for (const file of walk(path.join(root, 'docs'))) {

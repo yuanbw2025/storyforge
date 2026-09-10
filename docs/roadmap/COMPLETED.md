@@ -1,6 +1,6 @@
 # StoryForge 已完成能力索引
 
-> 版本：1.9.0 · 更新：2026-09-09
+> 版本：1.9.1 · 更新：2026-09-10
 > 只登记可长期成立且已进入当前治理交付树、并有当前代码/检查器证据的能力。完成表示声明范围已交付，不表示永无 Bug、具体产品已经完成或文学质量不再演进。
 
 ## 已完成基础能力
@@ -19,11 +19,11 @@
 | B-LF-04 | 主支线、角色、章后与只向未来持续演化 | 对应 FUTURE、PROGRESS、章后 durable 回归 |
 | B-LF-05 | 长篇原文/事实/摘要/索引、渐进式读取和长尾召回 | Context Gateway、memory/retrieval、Manifest、遗漏/充分性与长程回归 |
 | B-LF-06 | 10万/30万/100万字符理论工程规模门 | 远距事实/伏笔召回和错世界/未来隔离回归；不宣称长期文学一致性证书 |
-| A-GOV-02 | 七项项目级架构治理 | `R-ARCH01`～`R-ARCH07`、`check:architecture`；身份、纯语义 release、三阶段、五项逻辑契约、中立出口、节点同源、能力/成熟度门均已机器化 |
+| A-GOV-02 | 七项项目级架构治理 | `R-ARCH01`～`R-ARCH07`、`check:architecture`；身份、纯语义 release、S1/S2/S3、五项逻辑契约、中立出口、节点同源、能力/成熟度门均已机器化 |
 | B-NODE-01 | 官方节点与分步骤正式能力同源 | `src/lib/node-authoring/domain-action-registry.ts`、`domain-execution.ts`、`R-ARCH06-node-same-source.test.ts`；正式节点无通用生成 fallback，实验草稿不能采纳 Canon |
 | D-WORLD-01 | 世界身份、能力画像与不可变封存 | `src/lib/world-engine/{ownership,domain,releases}.ts`、`R-ARCH01`、`R-WORLD-D-phase-d-closure.test.ts` |
-| D-WORLD-02 | 中立版本化世界资源出口 | `world-release-provider.ts` 的 describe/search/read/original-evidence、五个已接入产品 requirement adapter、ARCH-05 与 Phase D 回归 |
-| A-GOV-03 | 上层产品身份与运行入口单源治理 | 当前 schema v4、索引化 Production/Release `productType`、中立 WorldReference 目录、产品专用 runtime API、`R-ARCH08-product-identity-cleanup` 与 `check:architecture`；旧身份和旧结构明确拒绝 |
+| D-WORLD-02 | 中立版本化世界资源出口 | `world-release-provider.ts` 的 describe/search/read/original-evidence、六类上层产品 requirement adapter、ARCH-05 与 Phase D 回归 |
+| A-GOV-03 | 上层产品身份与运行入口单源治理 | 当前 schema v6、索引化 Production/Release `productType`、中立 WorldReference 目录、产品专用 runtime API、`R-ARCH08-product-identity-cleanup` 与 `check:architecture`；旧身份和旧结构明确拒绝 |
 | A-GOV-04 | LocalWorkspace / World / Work 当前结构硬切分 | Project 仅保留工作区身份、用途、活动指针与开关；作品元数据和活动叙事计划只在 Work；严格备份字段、单轨上下文和 `check:architecture` ㊴ 防止镜像恢复 |
 | D-WORLD-03 | 长/短篇显式派生与多世界关系 | `world-derivation.ts`、稳定 World/Work scope、跨世界关系导航和导入重映射回归；剧本/漫画确定性拒绝 |
 | D-WORLD-04 | 世界 release 纯语义边界 | `PROJECT_TABLES.worldSemantic` 唯一派生、owner/packaging/static checks、`R-WORLD2C`、`R-WORLD2D`、`R-OUTLET1`；排除产品媒资与运行状态 |

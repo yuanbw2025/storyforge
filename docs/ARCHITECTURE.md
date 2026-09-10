@@ -1,6 +1,6 @@
 # StoryForge 当前架构总览
 
-> 版本：2.7.0 · 更新：2026-09-04 · 权威层级：L1
+> 版本：2.8.0 · 更新：2026-09-10 · 权威层级：L1
 > 本文描述当前主干代码事实与目标架构接缝。产品边界以项目总纲为准；代码偏差见对齐审计。
 
 ## 1. 运行形态
@@ -34,11 +34,11 @@ flowchart TB
     N --> LC
   end
 
-  subgraph W["世界引擎：只拥有可版本化语义"]
+  subgraph W["S1 世界封存：只拥有可版本化语义"]
     WD["世界草稿 / WorldRevision"] --> WR["不可变 WorldRelease\n编号 + hash + 能力目录 + 原文证据"]
   end
 
-  subgraph D["具体上层产品的用户定向阶段"]
+  subgraph D["S2 产品定向：具体上层产品拥有"]
     PI["跑团 / 角色互动 / AI 小镇 / 文字冒险 / AVG / 文字开放世界"]
     RF["WorldReference"] --> RA["本产品 Requirement Adapter"]
     RA --> GW["中立世界网关\ndescribe / search / read / original evidence"]
@@ -46,7 +46,9 @@ flowchart TB
     PI --> RF
   end
 
-  subgraph P["具体产品的生产、发布与运行"]
+  WR -->|"用户选定版本后生成并校验"| RF
+
+  subgraph P["S3 产品执行：具体上层产品拥有"]
     H["产品主 Agent + Durable Harness"]
     CT["内容 / 规则 / 玩法"]
     M["产品媒资"]
@@ -165,15 +167,15 @@ Field Registry 决定 AI 可写字段；Adoption Schema/Extension 决定集合�
 
 上层产品生产使用 consultation、brief、command、build、artifact、media、release 与质量证据。Production 和 Release 根记录都以索引化 `productType` 冻结产品身份；工作台、查询、Build、Release 和 Session 按该身份隔离。`ProductRuntimeSession` 及事件/checkpoint 保存私域运行。媒资通过共享设施存储：发布媒资绑定 `ProductRelease`，运行中新生成的媒资绑定 `ProductRuntimeSession`，二者均不归 `WorldRelease`。
 
-这些数据逻辑上分成两个产品阶段：用户引用世界、配置并确认方向形成 product draft/Brief；用户明确开始后进入 production/build/release/runtime。两阶段都属于上层产品，不属于世界引擎。通用 runtime 内核拒绝从世界草稿或 WorldRelease 直接启动正式上层产品；正式运行必须从产品自己的不可变 ProductRelease 或同一生产链的可验证 Build Preview 启动，并在 session 中持久化来源 hash。当前生产身份闭集为跑团、角色互动、AI 小镇、文字冒险、AVG、文字开放世界。共享工厂不改变各产品分别拥有需求适配器、生产模块、质量门和玩家运行面的事实；AI 小镇另有时间、语义地图、日程、知识、关系、轻经营和离线演化合同。
+这些数据逻辑上分成两个由上层产品拥有的阶段：`S2 产品定向`中引用世界、配置并确认方向形成 product draft/Brief；用户明确开始后进入 `S3 产品执行`的 production/build/release/runtime。S2、S3 都属于上层产品，不属于世界引擎。通用 runtime 内核拒绝从世界草稿或 WorldRelease 直接启动正式上层产品；正式运行必须从产品自己的不可变 ProductRelease 或同一生产链的可验证 Build Preview 启动，并在 session 中持久化来源 hash。当前生产身份闭集为跑团、角色互动、AI 小镇、文字冒险、AVG、文字开放世界。共享工厂不改变各产品分别拥有需求适配器、生产模块、质量门和玩家运行面的事实；AI 小镇另有时间、语义地图、日程、知识、关系、轻经营和离线演化合同。
 
 ## 8. 世界到产品的单向流
 
 ```mermaid
 flowchart LR
-  D["阶段一\n世界语义草稿"] -->|"作者封存"| R["WorldReference\n不可变 WorldRelease"]
-  R --> I["阶段二\n产品入口引用世界、填写专用设置、与主 Agent 定向"]
-  I -->|"用户明确开始\nBrief + SourcePlan"| P["阶段三\n产品 Production"]
+  D["S1 世界封存\n世界语义草稿"] -->|"作者封存"| R["可引用 WorldRelease\n编号 + hash + 能力画像"]
+  R --> I["S2 产品定向\n产品入口引用世界、填写专用设置、与主 Agent 定向"]
+  I -->|"用户明确开始\nWorldReference + Brief + SourcePlan"| P["S3 产品执行\nProduct Production"]
   P --> M["产品媒资"]
   P --> B["Build + 验证"]
   M --> B
@@ -218,8 +220,8 @@ src/
 - 代码中已存在大量上层产品、市场和托管能力，但除产品目录标为 `released` 的条目外均不等于已经完整交付；preview/internal/experimental 的可见性由机器门控。
 - Project/World/Work 可以位于同一本地物理工作区，但身份权威已经拆分：Project 只管理工作区，World 管理世界身份，Work 管理独立作品；存在内部 World 语义 scope 不等于建立了可分享世界。
 - 分步骤长篇 Phase 5 工程主链和 10万/30万/100万字符规模门已经完成；真实作者长期文学一致性仍需持续研究，但不是尚未完成的功能施工项。
-- 世界 Release、中立资源协议、五种已接入产品的需求适配器、五项逻辑契约校验、三阶段 runtime 闸门和产品成熟度门已经形成共享架构基线；它们规定接入方式，不替代各上层产品的 Brief/production/media/runtime 专项实现。
-- 当前 schema v3 直接表达 Product Production/Build/Release、Product Runtime、World、Work、独立短篇发布与媒介中立改编分析；保留 v1→v2→v3 的纯加表迁移以保护现有作者数据，不包含旧字段投影、双读或退役运行入口。非受支持数据库版本和非当前备份明确拒绝。
+- 世界 Release、中立资源协议、六类上层产品的需求适配器、五项逻辑契约校验、`S1 世界封存 → S2 产品定向 → S3 产品执行` runtime 闸门和产品成熟度门已经形成共享架构基线；它们规定接入方式，不替代各上层产品的 Brief/production/media/runtime 专项实现。
+- 当前 schema v6 直接表达 Product Production/Build/Release、Product Runtime、World、Work、独立创作产品与漫剧前期生产；保留 v1→v2→v3→v4→v5→v6 的受支持纯加表迁移以保护作者数据，不包含旧字段投影、双读或退役运行入口。非受支持数据库版本和非当前备份明确拒绝。
 - ProductRelease 谱系已经有跨产品逻辑 validator，并在角色互动参考纵切面落地；其它上层产品在转为 released 前仍需按自己的物理 schema 接入同一逻辑闸门。
 - 节点官方模板已绑定正式长篇领域 action，通用生成仅限显式 experimental draft 且不能采纳 Canon；完整跨模式真实 UI 体验仍是节点产品维护事项。
 - 账户、云端社区、支付和商业平台不是当前核心运行前提；相关代码必须 capability gate / experimental，不能掩盖主产品未完成。

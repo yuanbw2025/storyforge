@@ -1,6 +1,6 @@
 # StoryForge 数据与三注册表治理标准
 
-> 版本：1.6.0 · 生效：2026-09-06 · 权威层级：L1
+> 版本：1.7.0 · 生效：2026-09-10 · 权威层级：L1
 > 本标准规定 AI 读写、表生命周期、数据所有权、世界版本与跨产品流动。实现细节以注册表和 schema 为事实源。
 
 ## 1. 三个单一事实源
@@ -81,7 +81,7 @@
 
 上层产品记录引用的世界编号、版本、完整度与来源 hash；之后所有补充内容、规则、媒资、build、release、运行和演化属于该产品实例。运行事件只在实例私域中推进。
 
-产品入口只能先通过中立 `WorldReference` 目录发现可引用来源，再经本产品需求适配器调用世界网关；不得读取或向 UI 暴露物理 `WorldRelease` 记录、manifest 或世界底表。
+产品入口只能先通过中立世界/版本目录发现可引用来源，由系统根据用户选定的准确版本生成并校验 `WorldReference`，再经本产品需求适配器调用世界网关；不得读取或向 UI 暴露物理 `WorldRelease` 记录、manifest 或世界底表。
 
 发布前与发布媒资绑定 product production/build/ProductRelease；运行中按玩家私域新生成的媒资绑定 ProductRuntimeSession。一个媒资记录只能有一种有效 owner，不能同时归 release 与 session。
 
@@ -89,15 +89,15 @@
 
 ### 5.5 三阶段所有权与交接
 
-世界衍生产品的数据按三阶段隔离。阶段是所有权边界，不要求拆成三个页面：
+世界衍生产品的数据按 `S1 世界封存`、`S2 产品定向`、`S3 产品执行` 隔离。阶段是所有权边界，不要求拆成三个页面、三张表或一套通用状态枚举：
 
 | 阶段 | 可读取 | 新数据 owner | 必须形成的交接证据 | 禁止 |
 |---|---|---|---|---|
-| 世界引擎 | 世界草稿及其来源 | 世界 draft/release | `WorldReference`：code、不可变 release ID/hash、能力画像 | 产品设置、媒资、session 或私域演化进入世界 |
-| 用户交互与发指令 | `WorldReference` 和按需世界资源 | product draft/intent | 产品专用 Brief、`ProductSourcePlan`、用户开始授权及其 revision | 未授权即正式生产；修改或补写来源世界 |
-| 产品执行与交付 | 已冻结 Brief/source plan、旧 ProductRelease（增量时） | production/build/ProductRelease/session | 每 run Context Manifest、发布时 `ProductSourceManifest` 快照、构建证据、不可变 ProductRelease、父版本/兼容谱系 | 超出 plan 或改读可变世界草稿；追写旧 release manifest；自动回写世界 |
+| `S1 世界封存` | 世界草稿及其来源 | 世界 draft/release | 可引用 `WorldRelease`：code、不可变 release ID/hash、能力画像 | 产品设置、媒资、session 或私域演化进入世界 |
+| `S2 产品定向` | 可引用 WorldRelease 和按需世界资源 | product draft/intent | 精确 `WorldReference`、产品专用 Brief、`ProductSourcePlan`、用户开始授权及其 revision | 未授权即正式生产；修改或补写来源世界 |
+| `S3 产品执行` | 已冻结 Brief/source plan、旧 ProductRelease（增量时） | production/build/ProductRelease/session | 每 run Context Manifest、发布时 `ProductSourceManifest` 快照、构建证据、不可变 ProductRelease、父版本/兼容谱系 | 超出 plan 或改读可变世界草稿；追写旧 release manifest；自动回写世界 |
 
-阶段二的配置必须归具体产品，不能落入一个全产品通用设置表。产品可以用时长、章节、回合、分支、参与者或其他专用字段，也可以没有其中任何一项；数据治理只要求 schema 有 owner、版本、来源、用户确认和迁移规则。
+S2 的配置必须归具体产品，不能落入一个全产品通用设置表。产品可以用时长、章节、回合、分支、参与者或其他专用字段，也可以没有其中任何一项；数据治理只要求 schema 有 owner、版本、来源、用户确认和迁移规则。
 
 五种交接物是逻辑契约，不要求五张万能表。系统负责产生/校验 WorldReference；主 Agent 可起草 Brief/SourcePlan，用户确认 Brief、系统冻结 plan；ProductSourceManifest 只能由真实 run manifests 聚合；ProductReleaseLineage 只能由发布系统按真实父版本、build、quality 和兼容证据生成。
 

@@ -1,6 +1,6 @@
 # StoryForge 项目开发宪法
 
-> 版本：2.3.0 · 生效：2026-08-31
+> 版本：2.4.0 · 生效：2026-09-10
 > 本文件是详细工程宪法；短入口为 `AGENTS.md`。产品方向首先服从
 > [`docs/PROJECT-MASTER-CHARTER.md`](docs/PROJECT-MASTER-CHARTER.md)，文档裁决与读取范围服从
 > [`docs/DOCUMENT-AUTHORITY.md`](docs/DOCUMENT-AUTHORITY.md) 和
@@ -51,14 +51,14 @@
 世界引擎之上的产品必须遵守：
 
 ```text
-阶段一：世界引擎编辑并封存语义版本
-→ WorldReference
-阶段二：用户在具体产品内引用世界、填写专用设置、与主 Agent 定向并明确开始
-→ ConfirmedProductBrief + ProductSourcePlan
-阶段三：产品生产、媒资、组装、ProductRelease、运行与私域演化
+S1 世界封存：世界引擎编辑、确认并封存不可变 WorldRelease
+→ 可引用 WorldRelease 身份与能力画像
+S2 产品定向：用户在具体产品内引用世界、填写专用设置、与主 Agent 定向并明确开始
+→ WorldReference + ConfirmedProductBrief + ProductSourcePlan
+S3 产品执行：产品生产、验收、媒资、组装、ProductRelease、运行与私域演化
 ```
 
-阶段二属于具体产品。时长、章节、回合、结局或参与者等字段由产品自己定义，不建立覆盖所有产品的万能体验表。阶段三的演化触发属于产品功能；项目级只强制 ProductRelease 不可变、父版本/兼容可追溯、旧存档可定位且不回写世界。
+`S1 世界封存`、`S2 产品定向`、`S3 产品执行`是唯一规范短名。S2 属于具体产品。时长、章节、回合、结局或参与者等字段由产品自己定义，不建立覆盖所有产品的万能体验表。S3 的演化触发属于产品功能；项目级只强制 ProductRelease 不可变、父版本/兼容可追溯、旧存档可定位且不回写世界。
 
 世界读取统一的是 `describe/search/read` 协议、不可变版本、来源与遗漏，不是固定 payload。各产品用自己的需求适配器声明稳定的必读/选读、随目标变化的条件读取及禁止读取，再生成 SourcePlan；production 每个 run 只能在该 plan 锁定的 WorldRelease 内渐进读取并留 Context Manifest，发布时聚合 SourceManifest。Skill/Prompt 可帮助理解语义需求，但版本、权限和必读约束必须机器可校验。runtime 的新读取归 session/run 证据，不能改写旧 release。任何组件或产品 service 不得直接解析世界底表清单。
 
@@ -146,7 +146,7 @@ Harness 必须承担权限、状态、预算、幂等、stale、恢复、证据�
 ## 7. 每次任务的执行清单
 
 - [ ] 已确认总纲章节、产品归属、阶段与明确非范围。
-- [ ] 世界衍生产品已声明三阶段位置、输入/输出交接物；独立产品已声明自己的生产/运行边界。
+- [ ] 世界衍生产品已声明 S1/S2/S3 位置、输入/输出交接物；独立产品已声明自己的生产/运行边界。
 - [ ] 已查看工作树与相关提交，未覆盖他人改动。
 - [ ] 已用 `rg` 建立入口 → 读 → 写 → 表 → 下游 → 测试闭包。
 - [ ] 已核对 `CONTEXT_SOURCES`、`FIELD_REGISTRY` / Adoption、`PROJECT_TABLES`。

@@ -1,6 +1,6 @@
 # StoryForge 当前能力基线
 
-> 版本：2.0.0 · 基线：2026-09-09 漫剧前期生产产品交付 · 权威层级：L2
+> 版本：2.0.1 · 基线：2026-09-10 三阶段规范短名同步 · 权威层级：L2
 > 本文区分代码存在、纵切面可用和产品完成。旧完成卡不自动恢复权威，但已合入主干并由当前代码/检查器复证的 Phase 5 成果必须保留。
 
 ## 状态定义
@@ -15,7 +15,7 @@
 | ID | 状态 | 当前事实与证据 | 缺口 |
 |---|---|---|---|
 | A-GOV-01 | implemented | 总纲、WPS 完整归档、唯一现行文档白名单和当前架构审计已建立 | 后续正常功能分支按协作流程短期存在，不重新解释为长期架构分叉 |
-| A-GOV-02 | implemented | 身份/派生、纯语义 WorldRelease、三阶段闸门、五项逻辑契约、中立网关、当前产品适配器、节点同源与能力/成熟度门均已机器化；schema v6 与静态门只允许当前产品身份和运行入口 | 后续产品仍须逐项完成专项功能；治理完成不代表这些产品已经完成 |
+| A-GOV-02 | implemented | 身份/派生、纯语义 WorldRelease、`S1 世界封存 → S2 产品定向 → S3 产品执行`闸门、五项逻辑契约、中立网关、当前产品适配器、节点同源与能力/成熟度门均已机器化；schema v6 与静态门只允许当前产品身份和运行入口 | 后续产品仍须逐项完成专项功能；治理完成不代表这些产品已经完成 |
 | BASE-DATA-01 | implemented | Dexie 当前 schema v6；支持已发布 v1→v2→v3→v4→v5→v6 纯加表迁移并有保留数据反例；`npm run check:required-tables` 验证 118 张 required/project tables；非当前备份和旧字段明确拒绝 | 新表仍必须先登记；后续 schema 演进继续明确支持窗口并补迁移、回滚和生命周期反例 |
 | BASE-REG-01 | implemented | Context、Field/Adoption、Project Tables 三注册表与架构检查器存在；Project 仅为 Workspace 壳，World/Work 身份、作品数据和上层产品读取边界已分离 | 后续新入口必须先登记，不得恢复组件私有清单、Project/Work 镜像或物理世界表读取 |
 | BASE-AI-01 | implemented | AI 入口注册表与自动生成手册区分 formal/auxiliary/evaluation/experimental | 登记证明边界，不证明所有 formal UI 纵切面完成 |
