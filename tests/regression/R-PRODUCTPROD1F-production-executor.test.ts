@@ -3723,6 +3723,29 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       .map(action => ({ ...action, narrativeChoiceKey: null }))
     expect(analyzeTextAdventureRouteQualityV1(packageWithoutNarrativeActions).minimumMainProgressActions)
       .toBeLessThan(20)
+    const packageWithBranchOnlyMainActions = structuredClone(runtimePackage)
+    const firstEndingNodeKey = packageWithBranchOnlyMainActions.narrative.nodes
+      .find(node => node.kind === 'ending')!.key
+    packageWithBranchOnlyMainActions.adventure!.actions = packageWithBranchOnlyMainActions.adventure!.actions
+      .map(action => {
+        const completesMainObjective = [
+          ...action.successEffects, ...action.costlySuccessEffects, ...action.failureEffects,
+        ].some(effect => effect.op === 'complete-objective'
+          && packageWithBranchOnlyMainActions.adventure!.quests.some(quest => (
+            quest.category === 'main' && quest.key === effect.questKey
+          )))
+        if (!completesMainObjective) return action
+        return {
+          ...action,
+          requirements: action.requirements.map(requirement => (
+            requirement.narrativePath === '__storyforge.currentNarrativeNodeKey'
+              ? { ...requirement, narrativeEquals: firstEndingNodeKey }
+              : requirement
+          )),
+        }
+      })
+    expect(analyzeTextAdventureRouteQualityV1(packageWithBranchOnlyMainActions).minimumMainProgressActions)
+      .toBeLessThan(20)
     const firstDecisionChoices = runtimePackage.narrative.choices.filter(choice => (
       choice.sourceNodeKey === runtimePackage.narrative.entryNodeKey
     ))

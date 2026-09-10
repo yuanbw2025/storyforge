@@ -342,17 +342,33 @@ export function analyzeTextAdventureRouteQualityV1(
   const requiredMainObjectiveKeys = new Set(mainQuests.flatMap(quest => (
     quest.objectives.filter(objective => !objective.optional).map(objective => `${quest.key}:${objective.key}`)
   )))
-  const actionableMainObjectiveKeys = new Set(adventure.actions.flatMap(action => [
-    ...action.successEffects, ...action.costlySuccessEffects, ...action.failureEffects,
-  ]).flatMap(effect => effect.op === 'complete-objective'
-    ? [`${effect.questKey}:${effect.objectiveKey}`] : [])
-    .filter(objectiveKey => requiredMainObjectiveKeys.has(objectiveKey)))
+  const mainObjectiveActionBindings = adventure.actions.flatMap(action => {
+    const objectiveKeys = [...action.successEffects, ...action.costlySuccessEffects, ...action.failureEffects]
+      .flatMap(effect => effect.op === 'complete-objective'
+        ? [`${effect.questKey}:${effect.objectiveKey}`] : [])
+      .filter(objectiveKey => requiredMainObjectiveKeys.has(objectiveKey))
+    if (objectiveKeys.length === 0) return []
+    const narrativeNodeKeys = action.requirements.flatMap(requirement => (
+      requirement.narrativePath === '__storyforge.currentNarrativeNodeKey'
+        && typeof requirement.narrativeEquals === 'string'
+        ? [requirement.narrativeEquals] : []
+    ))
+    return [{ objectiveKeys, narrativeNodeKeys }]
+  })
   const mappedNarrativeChoiceKeys = new Set(adventure.actions.flatMap(action => (
     action.narrativeChoiceKey == null ? [] : [action.narrativeChoiceKey]
   )))
   const minimumMappedNarrativeActions = minimum(routeResult.routes.map(route => (
     route.choiceKeys.filter(choiceKey => mappedNarrativeChoiceKeys.has(choiceKey)).length
   )))
+  const minimumRouteMainObjectiveActions = minimum(routeResult.routes.map(route => {
+    const routeNodeKeys = new Set(route.nodeKeys)
+    return new Set(mainObjectiveActionBindings.flatMap(binding => (
+      binding.narrativeNodeKeys.length === 0
+        || binding.narrativeNodeKeys.some(nodeKey => routeNodeKeys.has(nodeKey))
+        ? binding.objectiveKeys : []
+    ))).size
+  }))
   const minimumNarrativeChoices = minimum(routeValues('narrativeChoices'))
   return {
     schema: 'storyforge.text-adventure-route-quality-analysis', version: 1,
@@ -369,7 +385,7 @@ export function analyzeTextAdventureRouteQualityV1(
     talkActionCount: adventure.actions.filter(action => action.kind === 'talk').length,
     mainQuestStageCount: mainQuests.reduce((total, quest) => total + quest.stages.length, 0),
     mainQuestObjectiveCount: mainQuests.reduce((total, quest) => total + quest.objectives.filter(objective => !objective.optional).length, 0),
-    minimumMainProgressActions: actionableMainObjectiveKeys.size + minimumMappedNarrativeActions,
+    minimumMainProgressActions: minimumRouteMainObjectiveActions + minimumMappedNarrativeActions,
     endingTextUnits,
     copyIssues: collectCopyIssues(runtimePackage),
   }
