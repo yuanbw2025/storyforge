@@ -904,21 +904,15 @@ function draftFromArtifact(artifact: TextOpenWorldRegionSkeletonV1): unknown {
   }
 }
 
-export async function validateTextOpenWorldRegionSkeletonV1(input: {
-  artifact: TextOpenWorldRegionSkeletonV1
-  context: TextOpenWorldRegionSkeletonInputContextV1
-}): Promise<TextOpenWorldRegionSkeletonV1> {
-  if (input.artifact.schema !== 'storyforge.text-open-world-region-skeleton' || input.artifact.version !== 1
-    || input.artifact.productType !== 'text-open-world' || !isSha256Hash(input.artifact.regionSkeletonHash)) {
-    fail('RegionSkeleton Artifact身份或Hash字段无效')
-  }
-  timestamp(input.artifact.createdAt, 'createdAt')
-  const context = await parseContext(canonicalProductProductionJsonV2(input.context))
+function authorEditableDraftFromArtifact(
+  artifact: TextOpenWorldRegionSkeletonV1,
+  context: TextOpenWorldRegionSkeletonInputContextV1,
+): unknown {
   const storyNeedNumberBySignature = new Map(context.storyNeeds.map(need => [
     `${need.beatKey}\u0000${need.need}`,
     { beatNumber: need.beatNumber, needNumber: need.needNumber },
   ]))
-  const hydrateDraft = draftFromArtifact(input.artifact) as ReturnType<typeof record>
+  const draft = draftFromArtifact(artifact) as ReturnType<typeof record>
   const replaceRefs = (value: unknown): void => {
     if (!value || typeof value !== 'object') return
     if (Array.isArray(value)) { value.forEach(replaceRefs); return }
@@ -934,13 +928,54 @@ export async function validateTextOpenWorldRegionSkeletonV1(input: {
     }
     Object.values(object).forEach(replaceRefs)
   }
-  replaceRefs(hydrateDraft)
-  const draft = parseDraft(hydrateDraft, context)
+  replaceRefs(draft)
+  return draft
+}
+
+export async function validateTextOpenWorldRegionSkeletonV1(input: {
+  artifact: TextOpenWorldRegionSkeletonV1
+  context: TextOpenWorldRegionSkeletonInputContextV1
+}): Promise<TextOpenWorldRegionSkeletonV1> {
+  if (input.artifact.schema !== 'storyforge.text-open-world-region-skeleton' || input.artifact.version !== 1
+    || input.artifact.productType !== 'text-open-world' || !isSha256Hash(input.artifact.regionSkeletonHash)) {
+    fail('RegionSkeleton Artifact身份或Hash字段无效')
+  }
+  timestamp(input.artifact.createdAt, 'createdAt')
+  const context = await parseContext(canonicalProductProductionJsonV2(input.context))
+  const draft = parseDraft(authorEditableDraftFromArtifact(input.artifact, context), context)
   const rebuilt = await createRegionSkeleton({ context, draft, createdAt: input.artifact.createdAt })
   if (canonicalProductProductionJsonV2(rebuilt) !== canonicalProductProductionJsonV2(input.artifact)) {
     fail('RegionSkeleton固定键、连通性、提前到达保护、绑定占位或Hash被篡改')
   }
   return structuredClone(input.artifact)
+}
+
+export async function projectTextOpenWorldRegionSkeletonAuthorEditableDraftV1(input: {
+  artifact: TextOpenWorldRegionSkeletonV1
+  context: TextOpenWorldRegionSkeletonInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifact = await validateTextOpenWorldRegionSkeletonV1({ artifact: input.artifact, context })
+  return structuredClone(authorEditableDraftFromArtifact(artifact, context))
+}
+
+export async function rebuildTextOpenWorldRegionSkeletonFromAuthorEditableDraftV1(input: {
+  baseArtifact: TextOpenWorldRegionSkeletonV1
+  context: TextOpenWorldRegionSkeletonInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldRegionSkeletonV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifact = await validateTextOpenWorldRegionSkeletonV1({ artifact: input.baseArtifact, context })
+  const artifact = await createRegionSkeleton({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifact.createdAt,
+  })
+  return validateTextOpenWorldRegionSkeletonV1({ artifact, context })
 }
 
 function systemPrompt(context: TextOpenWorldRegionSkeletonInputContextV1): string {

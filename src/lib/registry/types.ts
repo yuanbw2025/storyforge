@@ -593,6 +593,12 @@ export interface AssembleContextInput {
   productProductionTaskKey?: string
   productBuildId?: number
   productArtifactKeys?: string[]
+  /** G5-06: exact current governed Artifact selected by the Creator workbench. */
+  textOpenWorldCreatorEditArtifactKey?: string
+  /** Content view supplies one governed entity identity; Artifact-level edits explicitly supply null. */
+  textOpenWorldCreatorEditEntityIdentity?: string | null
+  /** G5-06: browser snapshot CAS; edit context never silently follows a newer projection. */
+  textOpenWorldCreatorEditExpectedSnapshotHash?: string
   /** Text-open-world P1: exact SourcePin units authorized for this model batch. */
   textOpenWorldSourceUnitKeys?: string[]
   /** Character interaction: exactly one viewpoint for the registered reader. */

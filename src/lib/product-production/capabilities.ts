@@ -159,7 +159,7 @@ export async function hashConfiguredTextExecutionSettingsV1(
   })
 }
 
-async function safeIdentity(config: AIConfig) {
+export async function createConfiguredTextProviderExecutionIdentityV1(config: AIConfig) {
   const endpointRouteHash = await hashConfiguredTextEndpointRouteV1(
     normalizedRequestRoute(config.baseUrl),
   )
@@ -237,7 +237,7 @@ export async function resolveConfiguredTextCapabilityV1(input: {
   const config = resolution.config
   if (!isAIConfigReady(config)) throw new Error(getAIConfigRequiredMessage(config))
   if (!config.model.trim() || !config.baseUrl.trim()) throw new Error('现有 AI 配置缺少模型或 Base URL。')
-  const identity = await safeIdentity(config)
+  const identity = await createConfiguredTextProviderExecutionIdentityV1(config)
   if (input.expectedProviderIdentity) {
     const expectedExecutionConfigHash = await hashConfiguredTextExecutionSettingsV1(
       input.expectedProviderIdentity,

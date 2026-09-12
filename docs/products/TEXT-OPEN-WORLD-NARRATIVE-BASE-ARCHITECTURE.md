@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.38
+> 规格版本：3.2.39
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -626,6 +626,19 @@ G5-05在Creator生产工作台加入只读、快照绑定的三视图浏览器�
 - P0来源规模与checkpoint能力使用同一个硬边界：最多512个单元、合计400万字符，最大候选32,650,752 B，小于共享32 MiB限制；治理读取另设当前行、lineage、Run、事件、checkpoint、实体与公开DTO预算，超限以可定位诊断或失败关闭结束，不能无界加载并把截断结果声明为完整快照。
 
 这些“通过”只证明确定性生产合同和证据链成立，不证明叙事好看、文学质量高、平衡理想或真人体验达标。V2语义/平衡评审与G5-09质量闸门/灰盒试玩仍需继续提供质量证据。正式Creator链在本阶段只承诺可审查、可试玩的release-ready Build Preview；WorldRelease与小说双来源如何进入便携且不可变的ProductRelease，必须由G5-10扩展正式来源合同，不能把兼容Brief中的非定位占位`worldReleaseId`冒充真实发布来源。G5-05保持只读；编辑、影响分析、局部修复和媒资生产继续由G5-06～G5-08承担，正式发布归G5-10。
+
+#### 5.4.20 G5-06 Creator Artifact受治理修改与影响分析交接
+
+G5-06在G5-05只读投影之上增加编辑能力，但没有把UI变成正式表写入口，也没有原地改变当前Build：
+
+- 可编辑目标必须来自当前Work、Product、Production、Build的官方生产验证Artifact，并精确定位到一个领域实体及其owner sibling group。首版覆盖P2～P10中19个作者可修复生产任务和29类Artifact；每类Artifact由自身领域模块声明作者可改字段、投影和完整重建函数，不建立跨领域万能JSON编辑器。只允许replace有界标量或字符串数组；稳定ID、实体集合和顺序、跨实体引用、治理证据、来源Claim及模型/Run元数据都不可修改；
+- 直接编辑是零模型的确定性路径。Agent修改只通过登记的`text-open-world.creator-artifact-edit`上下文读取精确目标、公开的作者可改投影和作者指令，并由登记Skill与Formal AI Entry执行；intake冻结provider、model、endpoint origin和execution config hash，恢复时不重新咨询live注册表。模型只返回受限patch候选，不能提交Artifact或Production；
+- 两条路径都将原始目标、patch、完整重建后的owner sibling group、领域验证结果、identity delta、reference delta和费用证据保存为durable候选。作者可以在同一候选上继续作确定性修订，也可以拒绝；任何非法类型、未声明路径、重复路径、超量值、实体/顺序/引用变化或领域解析失败都在正式状态变化前失败关闭；
+- 作者确认不是`adopt()`到当前Build。确认在同一事务中CAS当前Product/Production/Build、Artifact字节、候选revision/Hash、Run事件头和同组冲突，再写不可变确认意图及impact-analysis handoff；当前Artifact、Build、正式Product表和运行包保持原字节。G5-07必须消费这份交接，计算受影响闭包并创建新的修复Build，不能回头把确认解释成原地写入授权；
+- 每个修改Run持久化selection、instruction、ContextManifest、request/result/response、candidate checkpoint、作者修订、拒绝/确认、terminal receipt和memory settlement。provider明确失败会记录失败顺序后终止；已派发但结果未知保持unknown并禁止自动重发；尚未派发的静态intake即使来源resolver暂时不可用也可零费用取消。相同owner group跨实体、跨目标及刷新后的未决Run互斥；unknown结果或已有确认意图会阻断冲突任务，替换谱系有循环和深度保护；
+- UI嵌入Creator Artifact Browser，只在选中目标通过实时preflight时展示合法字段编辑器、Agent指令、候选差异、确定性问题与显式恢复动作。刷新不会自动恢复或派发模型，只有作者按钮才执行resume；确认后显示影响分析等待状态并隐藏冲突动作。所有服务经`product-production`门面进入，页面不散写IndexedDB。
+
+本项证明的是“修改意图被安全捕获并形成可追责交接”，不是下游已经修复。影响闭包、stale传播、问题定位、新Build局部重跑和再次验收全部属于G5-07；媒资内容与权利仍属于G5-08，发布仍属于G5-10。
 
 ### 5.5 正确的验证顺序
 
@@ -1474,6 +1487,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.39 | 2026-09-12 | 完成G5-06 Creator Artifact受治理修改：19个作者可修复生产任务、29类Artifact由各领域模块投影可改字段并重建完整owner sibling group；直接编辑零模型，Agent编辑走登记Context/Skill/Formal Entry且冻结完整模型身份，二者都先形成durable候选，经原生领域解析、identity/reference delta及同组冲突门后才能确认。确认只写不可变impact-analysis handoff，不改当前Build或正式表；request/result/candidate/intent/receipt/memory settlement、已知失败、结果未知、静态取消、跨目标阻塞、替换谱系和Product/Build事务CAS均失败关闭。G5-07承接影响闭包与新修复Build。 |
 | 3.2.38 | 2026-09-10 | 收口G5-05完整终态证明：root回执写入后重新验证最终root Run、`$join`输出、完整事件/checkpoint与无豁免CAS；同Build、直接跨Build和终态携带统一复核父Build全部active Artifact及其物理Blob。发布前证明扩展为完整terminal lineage Blob闭包，IndexedDB在事务内逐字节CAS，OPFS在事务前立即重读并以正式内容寻址不可变写入边界作元数据CAS。明确Creator链本阶段止于release-ready Build Preview，双来源便携ProductRelease必须在G5-10扩展正式来源合同，不使用兼容占位WorldRelease伪装发布完成。 |
 | 3.2.37 | 2026-09-10 | 完成G5-05受治理Artifact浏览与验收证据收口：Creator工作台提供内容、Artifact、诊断三视图及同快照搜索/过滤/分页/键盘/窄屏导航；完整性与官方生产合同验证分轴，只有两者闭合的当前内容才进入实体投影，不把Hash检查夸大为叙事质量或美学验证。验收重算完整内容Hash并绑定Plan owner、producer/root Run、完整事件流、candidate checkpoint正文、task receipt及验收期间CAS；Build终端v2回执和portable seal封存完整Artifact信封及跨Build父证据，旧v1封印不得静默作为新携带依据、需要时必须重建。P0统一限制512个来源单元和400万字符，32,650,752 B最坏候选严格低于共享32 MiB checkpoint上限。 |
 | 3.2.36 | 2026-09-10 | 完成G5-04 Creator生产启动、进度与恢复：零写入预览生成不含本地ID的Creator SourcePlan、非定位兼容Brief和精确动态Plan；正式开始重验Production/Brief/来源、完整模型route与生成参数、报价预算、确认及Plan Hash，并在同一事务冻结Creator Start、Plan、Build与命令receipt。专属工作流只打开精确Production，目标缺失即失败关闭。P1/P9通过登记的有界多调用协议按分片恢复，provider响应先计账再解析；同一Build/task跨Run/epoch累计paid charge与未知reservation，durable请求标记后还会在executor前复核当前所有权，跨标签pause/stop不再产生本地可阻止的付费派发。恢复严格绑定原Run、epoch、Plan和attempt，作者修复只开放给白名单文本任务；v10导入写前验证SourcePin闭包并重映射通用SourcePlan locator。无新表、Schema或migration，媒资费用仍后置G5-08；下一项G5-05只读浏览受治理Artifact投影。 |

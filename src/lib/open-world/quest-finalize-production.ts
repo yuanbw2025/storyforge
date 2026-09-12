@@ -2395,6 +2395,38 @@ export async function validateTextOpenWorldQuestFinalizeArtifactsV1(input: {
   return input.artifacts
 }
 
+export async function projectTextOpenWorldQuestFinalizeAuthorEditableDraftV1(input: {
+  artifacts: TextOpenWorldQuestFinalizeArtifactsV1
+  context: TextOpenWorldQuestFinalizeInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifacts = await validateTextOpenWorldQuestFinalizeArtifactsV1({ artifacts: input.artifacts, context })
+  return structuredClone(draftFromArtifacts(artifacts, context))
+}
+
+/** Rebuilds QuestDesignDocuments and DirectorDecks as one atomic sibling group. */
+export async function rebuildTextOpenWorldQuestFinalizeFromAuthorEditableDraftV1(input: {
+  baseArtifacts: TextOpenWorldQuestFinalizeArtifactsV1
+  context: TextOpenWorldQuestFinalizeInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldQuestFinalizeArtifactsV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifacts = await validateTextOpenWorldQuestFinalizeArtifactsV1({ artifacts: input.baseArtifacts, context })
+  const artifacts = await createArtifacts({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifacts.questDesignDocuments.createdAt,
+    lifecycleContract: context.questLifecycleContract ?? 'legacy',
+    combatMechanicsContract: context.combatMechanicsContract ?? 'legacy',
+    knowledgeProgressContract: context.knowledgeProgressContract ?? 'legacy',
+  })
+  return validateTextOpenWorldQuestFinalizeArtifactsV1({ artifacts, context })
+}
+
 function prompts(context: TextOpenWorldQuestFinalizeInputContextV1) {
   const system = [
     '你是StoryForge文字开放世界的任务最终化与地区导演设计师。只能返回JSON。',

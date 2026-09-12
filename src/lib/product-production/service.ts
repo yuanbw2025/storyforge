@@ -46,6 +46,19 @@ import {
   type TextOpenWorldCreatorStartPreparationV1,
 } from '../open-world/creator-production-start'
 import { verifyTextOpenWorldCreatorProductionPreflightConfirmationV1 } from '../open-world/creator-production-preflight'
+import {
+  abandonTextOpenWorldCreatorArtifactEditUnknownModelOutcomeV1 as abandonTextOpenWorldCreatorArtifactEditUnknownModelOutcomeCoreV1,
+  cancelTextOpenWorldCreatorArtifactEditIntakeV1 as cancelTextOpenWorldCreatorArtifactEditIntakeCoreV1,
+  confirmTextOpenWorldCreatorArtifactEditIntentV1 as confirmTextOpenWorldCreatorArtifactEditIntentCoreV1,
+  generateTextOpenWorldCreatorArtifactEditCandidateV1 as generateTextOpenWorldCreatorArtifactEditCandidateCoreV1,
+  prepareTextOpenWorldCreatorArtifactEditV1 as prepareTextOpenWorldCreatorArtifactEditCoreV1,
+  readLatestTextOpenWorldCreatorArtifactEditStateV1 as readLatestTextOpenWorldCreatorArtifactEditStateCoreV1,
+  rejectTextOpenWorldCreatorArtifactEditCandidateV1 as rejectTextOpenWorldCreatorArtifactEditCandidateCoreV1,
+  resumeTextOpenWorldCreatorArtifactEditIntakeV1 as resumeTextOpenWorldCreatorArtifactEditIntakeCoreV1,
+  reviseTextOpenWorldCreatorArtifactEditCandidateV1 as reviseTextOpenWorldCreatorArtifactEditCandidateCoreV1,
+  type TextOpenWorldCreatorArtifactEditSelectionV1,
+} from '../open-world/creator-artifact-edit'
+import type { TextOpenWorldCreatorEditPatchOperationV1 } from '../open-world/creator-artifact-edit-contract'
 import { useAIConfigStore } from '../../stores/ai-config'
 import {
   assertProductProductionBudgetLedgerV1,
@@ -83,6 +96,124 @@ export interface ProductProductionDetailsV1 {
 }
 
 export type ProductProductionProgressV1 = ProductProductionSchedulerProjectionV1
+
+/**
+ * Creator editing facade. Direct field edits are credential-free; Agent edits
+ * reuse the existing global/task-routed configuration without copying a secret
+ * into ProductProduction or its durable Run.
+ */
+export function prepareTextOpenWorldCreatorArtifactEditV1(
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1,
+) {
+  return prepareTextOpenWorldCreatorArtifactEditCoreV1(selection)
+}
+
+export function generateTextOpenWorldCreatorArtifactEditCandidateV1(input:
+  | {
+    selection: TextOpenWorldCreatorArtifactEditSelectionV1
+    mode: 'direct'
+    operations: readonly TextOpenWorldCreatorEditPatchOperationV1[]
+    signal?: AbortSignal
+  }
+  | {
+    selection: TextOpenWorldCreatorArtifactEditSelectionV1
+    mode: 'agent'
+    authorInstruction: string
+    signal?: AbortSignal
+  }) {
+  return input.mode === 'direct'
+    ? generateTextOpenWorldCreatorArtifactEditCandidateCoreV1({
+        selection: input.selection,
+        mode: 'direct',
+        operations: input.operations,
+        signal: input.signal,
+      })
+    : generateTextOpenWorldCreatorArtifactEditCandidateCoreV1({
+        selection: input.selection,
+        mode: 'agent',
+        authorInstruction: input.authorInstruction,
+        signal: input.signal,
+        aiConfig: useAIConfigStore.getState().config,
+      })
+}
+
+export function readLatestTextOpenWorldCreatorArtifactEditStateV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+}) {
+  return readLatestTextOpenWorldCreatorArtifactEditStateCoreV1(input.selection)
+}
+
+export function resumeTextOpenWorldCreatorArtifactEditIntakeV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+  runId: number
+  signal?: AbortSignal
+}) {
+  return resumeTextOpenWorldCreatorArtifactEditIntakeCoreV1({
+    selection: input.selection,
+    runId: input.runId,
+    signal: input.signal,
+    aiConfig: useAIConfigStore.getState().config,
+  })
+}
+
+export function cancelTextOpenWorldCreatorArtifactEditIntakeV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+  runId: number
+}) {
+  return cancelTextOpenWorldCreatorArtifactEditIntakeCoreV1({
+    selection: input.selection,
+    runId: input.runId,
+  })
+}
+
+export function reviseTextOpenWorldCreatorArtifactEditCandidateV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+  runId: number
+  operations: readonly TextOpenWorldCreatorEditPatchOperationV1[]
+}) {
+  if (!input.operations.length) {
+    throw new Error('[product-production-service] 候选修订必须提供字段操作；Agent 不会隐式追加第二次模型调用')
+  }
+  return reviseTextOpenWorldCreatorArtifactEditCandidateCoreV1({
+    selection: input.selection,
+    runId: input.runId,
+    operations: input.operations,
+  })
+}
+
+export function abandonTextOpenWorldCreatorArtifactEditUnknownModelOutcomeV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+  runId: number
+  acknowledgePossibleCharge: true
+}) {
+  return abandonTextOpenWorldCreatorArtifactEditUnknownModelOutcomeCoreV1({
+    selection: input.selection,
+    runId: input.runId,
+    acknowledgePossibleCharge: true,
+  })
+}
+
+export function rejectTextOpenWorldCreatorArtifactEditCandidateV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+  runId: number
+}) {
+  return rejectTextOpenWorldCreatorArtifactEditCandidateCoreV1({
+    selection: input.selection,
+    runId: input.runId,
+  })
+}
+
+export function confirmTextOpenWorldCreatorArtifactEditIntentV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+  runId: number
+  warningAcknowledgementCodes: readonly string[]
+}) {
+  return confirmTextOpenWorldCreatorArtifactEditIntentCoreV1({
+    selection: input.selection,
+    runId: input.runId,
+    warningAcknowledgementCodes: input.warningAcknowledgementCodes,
+  })
+}
 
 /** Author-only inspection of evidence already bound to the current Build task. */
 export async function readProductProductionTaskEvidenceV1(input: {

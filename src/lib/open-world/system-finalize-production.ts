@@ -723,6 +723,17 @@ async function createArtifacts(input: {
   return { systemConfigs, mediaRequirements, contentBudget }
 }
 
+function draftFromArtifacts(artifacts: TextOpenWorldSystemFinalizeArtifactsV1): unknown {
+  return {
+    schema: 'storyforge.text-open-world-system-finalize-draft',
+    version: 1,
+    mediaSlots: artifacts.mediaRequirements.slots.map(slot => ({
+      slotNumber: slot.order,
+      creativeBrief: slot.creativeBrief,
+    })),
+  }
+}
+
 export async function validateTextOpenWorldSystemFinalizeArtifactsV1(input: {
   artifacts: TextOpenWorldSystemFinalizeArtifactsV1
   context: TextOpenWorldSystemFinalizeInputContextV1 | string
@@ -735,15 +746,43 @@ export async function validateTextOpenWorldSystemFinalizeArtifactsV1(input: {
   await assertOwnHash(mediaRequirements as unknown as Record<string, unknown>, 'mediaRequirementsHash', 'MediaRequirements')
   await assertOwnHash(contentBudget as unknown as Record<string, unknown>, 'contentBudgetHash', 'ContentBudget')
   const context = await parseContext(typeof input.context === 'string' ? input.context : canonicalProductProductionJsonV2(input.context))
-  const draft = parseDraft({
-    schema: 'storyforge.text-open-world-system-finalize-draft', version: 1,
-    mediaSlots: mediaRequirements.slots.map(slot => ({ slotNumber: slot.order, creativeBrief: slot.creativeBrief })),
-  }, context)
+  const draft = parseDraft(draftFromArtifacts(input.artifacts), context)
   const expected = await createArtifacts({ context, draft, createdAt: systemConfigs.createdAt })
   if (mediaRequirements.createdAt !== systemConfigs.createdAt || contentBudget.createdAt !== systemConfigs.createdAt
     || canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(input.artifacts)) fail('P10系统、媒资、预算或Hash被篡改')
   if (!Object.values(contentBudget.fit).every(Boolean)) fail(`内容时长或地区供给不满足Brief预算:${canonicalProductProductionJsonV2({ inventory: contentBudget.inventory, requested: contentBudget.requested, fit: contentBudget.fit, perRegion: contentBudget.perRegion })}`)
   return input.artifacts
+}
+
+export async function projectTextOpenWorldSystemFinalizeAuthorEditableDraftV1(input: {
+  artifacts: TextOpenWorldSystemFinalizeArtifactsV1
+  context: TextOpenWorldSystemFinalizeInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifacts = await validateTextOpenWorldSystemFinalizeArtifactsV1({ artifacts: input.artifacts, context })
+  const draft = draftFromArtifacts(artifacts)
+  parseDraft(draft, context)
+  return structuredClone(draft)
+}
+
+/** Rebuilds system, media requirements and content budget as one atomic group. */
+export async function rebuildTextOpenWorldSystemFinalizeFromAuthorEditableDraftV1(input: {
+  baseArtifacts: TextOpenWorldSystemFinalizeArtifactsV1
+  context: TextOpenWorldSystemFinalizeInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldSystemFinalizeArtifactsV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifacts = await validateTextOpenWorldSystemFinalizeArtifactsV1({ artifacts: input.baseArtifacts, context })
+  const artifacts = await createArtifacts({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifacts.systemConfigs.createdAt,
+  })
+  return validateTextOpenWorldSystemFinalizeArtifactsV1({ artifacts, context })
 }
 
 function prompts(context: TextOpenWorldSystemFinalizeInputContextV1) {

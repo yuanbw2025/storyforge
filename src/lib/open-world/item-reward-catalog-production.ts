@@ -546,6 +546,18 @@ function draftFromArtifact(artifact: TextOpenWorldItemRewardCatalogV1): unknown 
   }
 }
 
+function authorEditableDraftFromArtifact(
+  artifact: TextOpenWorldItemRewardCatalogV1,
+  context: TextOpenWorldItemRewardCatalogInputContextV1,
+): unknown {
+  const draft = draftFromArtifact(artifact) as { rewards: Array<{ optionalItemDemandNumbers: number[] }> }
+  draft.rewards.forEach((reward, index) => {
+    const mandatory = new Set(context.rewardDemands[index]!.mandatoryItemDemandNumbers)
+    reward.optionalItemDemandNumbers = reward.optionalItemDemandNumbers.filter(number => !mandatory.has(number))
+  })
+  return draft
+}
+
 export async function validateTextOpenWorldItemRewardCatalogV1(input: {
   artifact: TextOpenWorldItemRewardCatalogV1
   context: TextOpenWorldItemRewardCatalogInputContextV1
@@ -554,17 +566,40 @@ export async function validateTextOpenWorldItemRewardCatalogV1(input: {
     || !isSha256Hash(input.artifact.itemRewardCatalogHash)) fail('ItemRewardCatalog身份或Hash字段无效')
   integer(input.artifact.createdAt, 'createdAt', 0, Number.MAX_SAFE_INTEGER)
   const context = await parseContext(canonicalProductProductionJsonV2(input.context))
-  const artifactDraft = draftFromArtifact(input.artifact) as { rewards: Array<{ optionalItemDemandNumbers: number[] }> }
-  artifactDraft.rewards.forEach((reward, index) => {
-    const mandatory = new Set(context.rewardDemands[index]!.mandatoryItemDemandNumbers)
-    reward.optionalItemDemandNumbers = reward.optionalItemDemandNumbers.filter(number => !mandatory.has(number))
-  })
-  const draft = parseDraft(artifactDraft, context)
+  const draft = parseDraft(authorEditableDraftFromArtifact(input.artifact, context), context)
   const rebuilt = await createArtifact({ context, draft, createdAt: input.artifact.createdAt })
   if (canonicalProductProductionJsonV2(rebuilt) !== canonicalProductProductionJsonV2(input.artifact)) {
     fail('物品来源、奖励预算、稳定键、掉落映射或未绑定运行槽被篡改')
   }
   return structuredClone(input.artifact)
+}
+
+export async function projectTextOpenWorldItemRewardCatalogAuthorEditableDraftV1(input: {
+  artifact: TextOpenWorldItemRewardCatalogV1
+  context: TextOpenWorldItemRewardCatalogInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifact = await validateTextOpenWorldItemRewardCatalogV1({ artifact: input.artifact, context })
+  return structuredClone(authorEditableDraftFromArtifact(artifact, context))
+}
+
+export async function rebuildTextOpenWorldItemRewardCatalogFromAuthorEditableDraftV1(input: {
+  baseArtifact: TextOpenWorldItemRewardCatalogV1
+  context: TextOpenWorldItemRewardCatalogInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldItemRewardCatalogV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifact = await validateTextOpenWorldItemRewardCatalogV1({ artifact: input.baseArtifact, context })
+  const artifact = await createArtifact({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifact.createdAt,
+  })
+  return validateTextOpenWorldItemRewardCatalogV1({ artifact, context })
 }
 
 function systemPrompt(context: TextOpenWorldItemRewardCatalogInputContextV1): string {

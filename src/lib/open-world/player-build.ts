@@ -447,10 +447,10 @@ async function createPlayerBuild(input: {
   return { ...body, playerBuildHash: await hashProductProductionValueV2(body) }
 }
 
-function draftFromArtifact(artifact: TextOpenWorldPlayerBuildV1): PlayerBuildSemanticDraftV1 {
+function authorEditableDraftFromArtifact(artifact: TextOpenWorldPlayerBuildV1): unknown {
   const [basic, signature] = artifact.catalogRequirements.skills
   const [weapon, recovery] = artifact.catalogRequirements.items
-  return parseDraft({
+  return {
     schema: 'storyforge.text-open-world-player-build-draft',
     version: 1,
     identity: {
@@ -476,7 +476,11 @@ function draftFromArtifact(artifact: TextOpenWorldPlayerBuildV1): PlayerBuildSem
     },
     starterWeapon: { title: weapon?.title, description: weapon?.description },
     recoveryConsumable: { title: recovery?.title, description: recovery?.description },
-  })
+  }
+}
+
+function draftFromArtifact(artifact: TextOpenWorldPlayerBuildV1): PlayerBuildSemanticDraftV1 {
+  return parseDraft(authorEditableDraftFromArtifact(artifact))
 }
 
 export async function validateTextOpenWorldPlayerBuildV1(input: {
@@ -505,6 +509,42 @@ export async function validateTextOpenWorldPlayerBuildV1(input: {
     fail('PlayerBuild初始属性预算无效')
   }
   return structuredClone(artifact)
+}
+
+/**
+ * Narrow Creator-workbench projection. It exposes only the semantic draft
+ * already accepted by the P4 parser; hashes, fixed rules and stable catalog
+ * keys stay outside the editable surface.
+ */
+export async function projectTextOpenWorldPlayerBuildAuthorEditableDraftV1(input: {
+  artifact: TextOpenWorldPlayerBuildV1
+  context: TextOpenWorldPlayerBuildInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parsePlayerBuildContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifact = await validateTextOpenWorldPlayerBuildV1({ artifact: input.artifact, context })
+  const draft = authorEditableDraftFromArtifact(artifact)
+  parseDraft(draft)
+  return structuredClone(draft)
+}
+
+/** Rebuilds one complete P4 candidate through the original parser/factory/validator. */
+export async function rebuildTextOpenWorldPlayerBuildFromAuthorEditableDraftV1(input: {
+  baseArtifact: TextOpenWorldPlayerBuildV1
+  context: TextOpenWorldPlayerBuildInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldPlayerBuildV1> {
+  const context = await parsePlayerBuildContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifact = await validateTextOpenWorldPlayerBuildV1({ artifact: input.baseArtifact, context })
+  const artifact = await createPlayerBuild({
+    context,
+    draft: parseDraft(input.draft),
+    createdAt: baseArtifact.createdAt,
+  })
+  return validateTextOpenWorldPlayerBuildV1({ artifact, context })
 }
 
 function systemPrompt(context: TextOpenWorldPlayerBuildInputContextV1): string {

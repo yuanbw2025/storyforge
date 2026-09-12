@@ -881,6 +881,35 @@ export async function validateTextOpenWorldStoryArchitectureArtifactsV1(input: {
   return structuredClone(input.artifacts)
 }
 
+export async function projectTextOpenWorldStoryArchitectureAuthorEditableDraftV1(input: {
+  artifacts: TextOpenWorldStoryArchitectureArtifactsV1
+  context: TextOpenWorldStoryArchitectureInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifacts = await validateTextOpenWorldStoryArchitectureArtifactsV1({ artifacts: input.artifacts, context })
+  return structuredClone(draftFromArtifacts(artifacts))
+}
+
+/** Rebuilds StoryArc, EndingContracts and NarrativePromises atomically. */
+export async function rebuildTextOpenWorldStoryArchitectureFromAuthorEditableDraftV1(input: {
+  baseArtifacts: TextOpenWorldStoryArchitectureArtifactsV1
+  context: TextOpenWorldStoryArchitectureInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldStoryArchitectureArtifactsV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifacts = await validateTextOpenWorldStoryArchitectureArtifactsV1({ artifacts: input.baseArtifacts, context })
+  const artifacts = await createArtifacts({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifacts.storyArc.createdAt,
+  })
+  return validateTextOpenWorldStoryArchitectureArtifactsV1({ artifacts, context })
+}
+
 function systemPrompt(context: TextOpenWorldStoryArchitectureInputContextV1): string {
   return [
     '你是StoryForge文字开放世界Story Architecture Designer。你设计的是长程叙事基座，不是任务表、地区表、NPC目录或场景正文。',

@@ -27,7 +27,11 @@ import {
   type TextOpenWorldGovernedArtifactV1,
   type TextOpenWorldGovernedEntityV1,
 } from '../../lib/open-world/creator-artifact-governance'
+import { prepareTextOpenWorldCreatorArtifactEditV1 } from '../../lib/product-production/service'
 import type { WorkspaceScope } from '../../lib/types'
+import TextOpenWorldCreatorArtifactEditor, {
+  type TextOpenWorldCreatorArtifactEditSelectionV1,
+} from './TextOpenWorldCreatorArtifactEditor'
 
 export interface TextOpenWorldCreatorArtifactBrowserProps {
   scope: WorkspaceScope
@@ -63,7 +67,6 @@ const PRODUCTION_VALIDATION_LABELS: Record<TextOpenWorldArtifactProductionValida
 }
 
 const PAGE_SIZES = [20, 30, 50] as const
-
 function formatDate(value: number): string {
   return new Intl.DateTimeFormat('zh-CN', {
     dateStyle: 'medium', timeStyle: 'short',
@@ -257,6 +260,7 @@ export function TextOpenWorldCreatorArtifactBrowser(
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const generation = useRef(0)
+  const editPreflightGeneration = useRef(0)
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
 
@@ -335,6 +339,97 @@ export function TextOpenWorldCreatorArtifactBrowser(
     ? page?.entities.find(item => entityLocator(item) === effectiveLocator) ?? null : null
   const selectedArtifact = mode !== 'content'
     ? page?.artifacts.find(item => artifactLocator(item) === effectiveLocator) ?? null : null
+  const selectedEntityArtifactMatches = selectedEntity
+    ? projection?.artifacts.filter(artifact => (
+      artifact.artifactKey === selectedEntity.artifactKey
+      && artifact.version === selectedEntity.artifactVersion
+      && artifact.contentHash === selectedEntity.artifactContentHash
+    )) ?? []
+    : []
+  const selectedBackingArtifact = selectedEntity
+    ? selectedEntityArtifactMatches.length === 1 ? selectedEntityArtifactMatches[0]! : null
+    : selectedArtifact
+  const editSelection = useMemo<TextOpenWorldCreatorArtifactEditSelectionV1 | null>(() => {
+    const artifactKey = selectedEntity?.artifactKey ?? selectedArtifact?.artifactKey
+    if (!projection || !artifactKey || !selectedBackingArtifact) return null
+    return {
+      scope,
+      productionId: props.productionId,
+      buildId: projection.build.id,
+      expectedSnapshotHash: projection.snapshotHash,
+      artifactKey,
+      entityIdentity: selectedEntity?.identity ?? null,
+    }
+  }, [projection, props.productionId, scope, selectedArtifact?.artifactKey,
+    selectedBackingArtifact, selectedEntity?.artifactKey, selectedEntity?.identity])
+  const editGovernanceEligible = editSelection != null
+    && selectedBackingArtifact?.currentEpoch === true
+    && selectedBackingArtifact.health === 'verified'
+    && selectedBackingArtifact.productionValidation === 'production-validated'
+    && ['accepted', 'carried-forward'].includes(selectedBackingArtifact.artifactStatus)
+    && (selectedEntity == null || selectedEntity.status === 'verified')
+  const editSelectionKey = editSelection ? [
+    editSelection.scope.projectId,
+    editSelection.scope.worldId,
+    editSelection.scope.workId,
+    editSelection.productionId,
+    editSelection.buildId,
+    editSelection.expectedSnapshotHash,
+    editSelection.artifactKey,
+    editSelection.entityIdentity ?? 'artifact',
+  ].join(':') : null
+  const [editPreflight, setEditPreflight] = useState<{
+    selectionKey: string | null
+    state: 'idle' | 'checking' | 'eligible' | 'ineligible'
+    reason: string | null
+  }>({ selectionKey: null, state: 'idle', reason: null })
+
+  useEffect(() => {
+    const current = ++editPreflightGeneration.current
+    if (!editSelection || !editGovernanceEligible || !editSelectionKey) {
+      setEditPreflight({ selectionKey: editSelectionKey, state: 'idle', reason: null })
+      return () => { editPreflightGeneration.current += 1 }
+    }
+    setEditPreflight({ selectionKey: editSelectionKey, state: 'checking', reason: null })
+    void prepareTextOpenWorldCreatorArtifactEditV1(editSelection).then(context => {
+      if (editPreflightGeneration.current !== current) return
+      if (!context.editableFields.length) {
+        setEditPreflight({
+          selectionKey: editSelectionKey,
+          state: 'ineligible',
+          reason: '该精确目标没有登记的作者可修改字段。',
+        })
+        return
+      }
+      setEditPreflight({ selectionKey: editSelectionKey, state: 'eligible', reason: null })
+    }).catch(cause => {
+      if (editPreflightGeneration.current !== current) return
+      setEditPreflight({
+        selectionKey: editSelectionKey,
+        state: 'ineligible',
+        reason: cause instanceof Error ? cause.message : String(cause),
+      })
+    })
+    return () => { editPreflightGeneration.current += 1 }
+  }, [editGovernanceEligible, editSelection, editSelectionKey])
+
+  const editEligible = editGovernanceEligible
+    && editPreflight.selectionKey === editSelectionKey
+    && editPreflight.state === 'eligible'
+  const editIneligibleReason = !editSelection || !selectedBackingArtifact
+    ? '当前条目不能解析到当前 Build 中唯一的定义 Artifact。'
+    : selectedBackingArtifact.health !== 'verified'
+        ? '该 Artifact 的证据完整性尚未通过，不能在旧基线上创建修改候选。'
+        : selectedBackingArtifact.productionValidation !== 'production-validated'
+          ? '该 Artifact 尚未通过产品生产合同验证，不能进入作者修改流程。'
+          : !selectedBackingArtifact.currentEpoch
+            ? '该 Artifact 属于历史 Epoch；只能修改当前 Build 的当前 Epoch 内容。'
+            : selectedEntity && selectedEntity.status !== 'verified'
+              ? '该实体仍有待生产或悬空引用，暂不能创建修改候选。'
+              : editPreflight.state === 'checking'
+                ? '正在通过领域 dispatcher 核验该精确目标的可编辑字段。'
+                : editPreflight.reason
+                  ?? '该精确 Artifact 或实体不是首版支持的作者修改目标。'
 
   useEffect(() => {
     if (page && page.page !== pageNumber) setPageNumber(page.page)
@@ -529,9 +624,23 @@ export function TextOpenWorldCreatorArtifactBrowser(
             <button type="button" onClick={returnToList} className="mb-4 inline-flex items-center gap-1 text-xs text-accent md:hidden">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />返回列表
             </button>
-            {selectedEntity ? <EntityDetail entity={selectedEntity} />
-              : selectedArtifact ? <ArtifactDetail artifact={selectedArtifact} />
-                : <p className="py-10 text-center text-xs text-text-muted">从列表选择一项查看只读详情。</p>}
+            {selectedEntity ? <>
+              <EntityDetail entity={selectedEntity} />
+              {editSelection && <TextOpenWorldCreatorArtifactEditor
+                key={`${editSelection.expectedSnapshotHash}:${editSelection.artifactKey}:${editSelection.entityIdentity}`}
+                selection={editSelection}
+                eligible={editEligible}
+                ineligibleReason={editIneligibleReason}
+              />}
+            </> : selectedArtifact ? <>
+              <ArtifactDetail artifact={selectedArtifact} />
+              {editSelection && <TextOpenWorldCreatorArtifactEditor
+                key={`${editSelection.expectedSnapshotHash}:${editSelection.artifactKey}:artifact`}
+                selection={editSelection}
+                eligible={editEligible}
+                ineligibleReason={editIneligibleReason}
+              />}
+            </> : <p className="py-10 text-center text-xs text-text-muted">从列表选择一项查看只读详情。</p>}
           </div>
         </div>
       </section>

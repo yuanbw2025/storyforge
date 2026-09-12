@@ -3668,6 +3668,35 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'text-open-world.creator-artifact-edit.v1',
+    agentId: 'outline',
+    defaultForAgent: false,
+    label: '文字开放世界 Creator Artifact 受治理修改',
+    owner: 'text-open-world-production',
+    promptVersion: 'text-open-world-creator-artifact-edit-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['text-open-world.creator-edit-target', 'manualText'],
+    optionalContextSourceKeys: [],
+    inputPolicy: {
+      sourceKeys: ['text-open-world.creator-edit-target', 'manualText'],
+      states: {
+        empty: { handling: 'require-upstream', instruction: '缺少当前治理快照、目标 Artifact 或作者修改要求时停止，不得调用模型。' },
+        partial: { handling: 'require-upstream', instruction: '目标 sibling group 与作者要求必须同时完整；不得在缺少任一输入时猜测修改。' },
+        complete: { handling: 'grounded-transform', instruction: '只按 editableFields 生成 replace operations；不得输出完整 Artifact、治理字段或改变实体集合、稳定 ID 与顺序。' },
+      },
+    },
+    // The target is an atomic governance contract and is never compressed.
+    // Only unusually long author instructions may use the shared bounded path.
+    contextCompression: compressionPolicy(['manualText']),
+    maxOutputTokens: 16_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-09-11',
+    regressionTests: ['R-OPEN-WORLD5-creator-artifact-edit-context-agent'],
+  },
+  {
+    version: 1,
     id: 'product-production.consult.v1',
     agentId: 'outline',
     defaultForAgent: false,

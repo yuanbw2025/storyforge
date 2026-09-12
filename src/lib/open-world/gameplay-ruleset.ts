@@ -521,6 +521,38 @@ async function createRuleset(input: {
   return { ...body, gameplayRulesetHash: await hashProductProductionValueV2(body) }
 }
 
+function draftFromArtifact(artifact: TextOpenWorldGameplayRulesetSkeletonV1): unknown {
+  return {
+    schema: 'storyforge.text-open-world-gameplay-ruleset-draft',
+    version: 1,
+    rulesetTitle: artifact.ruleset.title,
+    summary: artifact.ruleset.summary,
+    attributes: {
+      power: {
+        label: artifact.characterModel.attributes[0]?.label,
+        meaning: artifact.characterModel.attributes[0]?.meaning,
+      },
+      vitality: {
+        label: artifact.characterModel.attributes[1]?.label,
+        meaning: artifact.characterModel.attributes[1]?.meaning,
+      },
+      agility: {
+        label: artifact.characterModel.attributes[2]?.label,
+        meaning: artifact.characterModel.attributes[2]?.meaning,
+      },
+    },
+    skillResourceLabel: artifact.progression.skillResourceLabel,
+    equipmentSlotLabels: {
+      weapon: artifact.inventory.equipmentSlots[0]?.label,
+      armor: artifact.inventory.equipmentSlots[1]?.label,
+      accessory: artifact.inventory.equipmentSlots[2]?.label,
+    },
+    currencyLabel: artifact.economy.currency.label,
+    difficultyLabel: artifact.combat.difficultyProfiles[0]?.label,
+    sourceClaimKeys: artifact.ruleset.sourceClaimKeys,
+  }
+}
+
 export async function validateTextOpenWorldGameplayRulesetSkeletonV1(input: {
   artifact: TextOpenWorldGameplayRulesetSkeletonV1
   context?: TextOpenWorldGameplayRulesetInputContextV1
@@ -604,6 +636,35 @@ export async function validateTextOpenWorldGameplayRulesetSkeletonV1(input: {
     if (artifact.basisHash !== expectedBasisHash) fail('GameplayRuleset basisHash不匹配')
   }
   return structuredClone(artifact)
+}
+
+export async function projectTextOpenWorldGameplayRulesetAuthorEditableDraftV1(input: {
+  artifact: TextOpenWorldGameplayRulesetSkeletonV1
+  context: TextOpenWorldGameplayRulesetInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseRulesetContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifact = await validateTextOpenWorldGameplayRulesetSkeletonV1({ artifact: input.artifact, context })
+  parseDraft(draftFromArtifact(artifact), context)
+  return structuredClone(draftFromArtifact(artifact))
+}
+
+export async function rebuildTextOpenWorldGameplayRulesetFromAuthorEditableDraftV1(input: {
+  baseArtifact: TextOpenWorldGameplayRulesetSkeletonV1
+  context: TextOpenWorldGameplayRulesetInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldGameplayRulesetSkeletonV1> {
+  const context = await parseRulesetContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifact = await validateTextOpenWorldGameplayRulesetSkeletonV1({ artifact: input.baseArtifact, context })
+  const artifact = await createRuleset({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifact.createdAt,
+  })
+  return validateTextOpenWorldGameplayRulesetSkeletonV1({ artifact, context })
 }
 
 function systemPrompt(context: TextOpenWorldGameplayRulesetInputContextV1): string {

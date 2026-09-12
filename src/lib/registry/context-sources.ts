@@ -159,6 +159,10 @@ async function readProductProductionEvolutionBase(input: AssembleContextInput): 
 async function readTextOpenWorldSourcePinContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/source-curation')).readTextOpenWorldSourcePinContextV1(input)
 }
+async function readTextOpenWorldCreatorEditTargetContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/creator-artifact-edit-context'))
+    .readTextOpenWorldCreatorEditTargetContextV1(input)
+}
 async function readTextOpenWorldExperienceInputContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../open-world/experience-design')).readTextOpenWorldExperienceInputContextV1(input)
 }
@@ -1622,6 +1626,32 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     protectedFromTrim: true,
     enabled: input => Number.isInteger(input.productBuildId),
     read: readTextOpenWorldSourcePinContextV1,
+  },
+  {
+    key: 'text-open-world.creator-edit-target',
+    label: '文字开放世界 Creator Artifact 编辑目标',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isSafeInteger(input.productProductionId)
+      && Number(input.productProductionId) > 0
+      && Number.isSafeInteger(input.productBuildId)
+      && Number(input.productBuildId) > 0
+      && typeof input.textOpenWorldCreatorEditArtifactKey === 'string'
+      && !!input.textOpenWorldCreatorEditArtifactKey
+      && input.textOpenWorldCreatorEditArtifactKey === input.textOpenWorldCreatorEditArtifactKey.trim()
+      && Object.prototype.hasOwnProperty.call(input, 'textOpenWorldCreatorEditEntityIdentity')
+      && (input.textOpenWorldCreatorEditEntityIdentity === null
+        || (typeof input.textOpenWorldCreatorEditEntityIdentity === 'string'
+          && !!input.textOpenWorldCreatorEditEntityIdentity
+          && input.textOpenWorldCreatorEditEntityIdentity
+            === input.textOpenWorldCreatorEditEntityIdentity.trim()))
+      && typeof input.textOpenWorldCreatorEditExpectedSnapshotHash === 'string'
+      && /^[a-f0-9]{64}$/.test(input.textOpenWorldCreatorEditExpectedSnapshotHash),
+    read: readTextOpenWorldCreatorEditTargetContextV1,
   },
   {
     key: 'text-open-world.experience-input',

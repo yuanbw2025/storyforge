@@ -920,6 +920,35 @@ export async function validateTextOpenWorldQuestSkeletonArtifactsV1(input: {
   return structuredClone(input.artifacts)
 }
 
+export async function projectTextOpenWorldQuestSkeletonsAuthorEditableDraftV1(input: {
+  artifacts: TextOpenWorldQuestSkeletonArtifactsV1
+  context: TextOpenWorldQuestSkeletonsInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifacts = await validateTextOpenWorldQuestSkeletonArtifactsV1({ artifacts: input.artifacts, context })
+  return structuredClone(draftFromArtifacts(artifacts, context))
+}
+
+/** Rebuilds the QuestSkeleton and RequirementManifest as one atomic sibling group. */
+export async function rebuildTextOpenWorldQuestSkeletonsFromAuthorEditableDraftV1(input: {
+  baseArtifacts: TextOpenWorldQuestSkeletonArtifactsV1
+  context: TextOpenWorldQuestSkeletonsInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldQuestSkeletonArtifactsV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifacts = await validateTextOpenWorldQuestSkeletonArtifactsV1({ artifacts: input.baseArtifacts, context })
+  const artifacts = await createArtifacts({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifacts.questSkeletons.createdAt,
+  })
+  return validateTextOpenWorldQuestSkeletonArtifactsV1({ artifacts, context })
+}
+
 function systemPrompt(context: TextOpenWorldQuestSkeletonsInputContextV1): string {
   return [
     '你是StoryForge文字开放世界Quest Architect。你把每个主线Stage、重要故事Stage、普通任务种子和地区任务模板各编译成一个任务骨架，只描述故事动机、玩家体验、阶段目的、Objective意图与所需内容，不生成正式Quest/Action/Condition/Effect/NPC/敌人/物品/奖励键。',

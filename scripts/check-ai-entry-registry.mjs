@@ -52,6 +52,9 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
   const startAliases = new Set()
   const rawIdentifiers = new Set(['chat', 'streamChat'])
   const rawNamespaces = new Set()
+  const registeredExecutors = new Set(['executeRegisteredAIEntryV1'])
+  const frozenExecutors = new Set(['executeFrozenFormalAIEntryV1'])
+  const streamExecutors = new Set(['streamRegisteredAIEntryV1'])
   const calls = []
   const violations = []
   const typedAIStartFile = source.includes('UseAIStreamReturn') || source.includes('useAIStream')
@@ -77,6 +80,17 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
         }
       }
     }
+    if (moduleName.endsWith('/agent/formal-ai-entry')
+      || moduleName.endsWith('lib/agent/formal-ai-entry')) {
+      if (ts.isNamedImports(clause.namedBindings)) {
+        for (const specifier of clause.namedBindings.elements) {
+          const imported = specifier.propertyName?.text ?? specifier.name.text
+          if (imported === 'executeRegisteredAIEntryV1') registeredExecutors.add(specifier.name.text)
+          if (imported === 'executeFrozenFormalAIEntryV1') frozenExecutors.add(specifier.name.text)
+          if (imported === 'streamRegisteredAIEntryV1') streamExecutors.add(specifier.name.text)
+        }
+      }
+    }
   }
 
   function collectBindings(node) {
@@ -95,7 +109,7 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
   }
   collectBindings(ast)
 
-  function registerGovernedCall(node, entryNode, metaNode) {
+  function registerGovernedCall(node, entryNode, metaNode, callerNode) {
     const entryIds = literalStrings(entryNode)
     const categoryNode = objectProperty(metaNode, 'category')
     const categories = literalStrings(categoryNode)
@@ -108,15 +122,24 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
       violations.push(`${file}:${lineOf(ast, node)} 正式 AI 调用缺少可机验 category`)
       return
     }
+    if (callerNode) {
+      const callers = literalStrings(callerNode)
+      if (callers.length !== 1 || callers[0] !== file) {
+        violations.push(`${file}:${lineOf(ast, node)} 冻结正式 AI 调用必须用等于真实文件路径的单一 caller 字面量`)
+        return
+      }
+    }
     calls.push({ file, line: lineOf(ast, node), entryId: entryIds[0], categories })
   }
 
   function visit(node) {
     if (ts.isCallExpression(node)) {
       const expression = node.expression
-      if (ts.isIdentifier(expression) && expression.text === 'executeRegisteredAIEntryV1') {
+      if (ts.isIdentifier(expression) && registeredExecutors.has(expression.text)) {
         registerGovernedCall(node, node.arguments[0], node.arguments[3])
-      } else if (ts.isIdentifier(expression) && expression.text === 'streamRegisteredAIEntryV1'
+      } else if (ts.isIdentifier(expression) && frozenExecutors.has(expression.text)) {
+        registerGovernedCall(node, node.arguments[0], node.arguments[6], node.arguments[3])
+      } else if (ts.isIdentifier(expression) && streamExecutors.has(expression.text)
         && file !== 'src/hooks/useAIStream.ts') {
         registerGovernedCall(node, objectProperty(node.arguments[2], 'formalEntryId'), node.arguments[2])
       } else if (ts.isIdentifier(expression) && startAliases.has(expression.text)) {
@@ -179,6 +202,9 @@ const scannedFiles = [
   // G5-02 creator consultation is a formal durable service rather than a UI
   // hook; keep its literal entry/category binding under the same machine gate.
   'src/lib/open-world/creator-brief.ts',
+  // G5-06 Creator Artifact Agent edits are a formal durable service; direct
+  // edits share its candidate pipeline but never cross this AI entry.
+  'src/lib/open-world/creator-artifact-edit.ts',
 ]
 for (const file of [...new Set(scannedFiles)]) {
     if (file === 'src/lib/agent/formal-ai-entry.ts') continue
@@ -230,6 +256,13 @@ const namespaceSelfTest = analyzeAIEntrySource(
   'src/components/Namespace.tsx',
 )
 if (!namespaceSelfTest.violations.some(item => item.includes('member/namespace'))) failures.push('守卫自测失败：未阻断 namespace member')
+const frozenAliasSelfTest = analyzeAIEntrySource(
+  "import { executeFrozenFormalAIEntryV1 as runFrozen } from '../lib/agent/formal-ai-entry'; runFrozen('x', snapshot, skill, caller, [], {}, { category: 'x' });",
+  'src/lib/FrozenAlias.ts',
+)
+if (!frozenAliasSelfTest.violations.some(item => item.includes('caller 字面量'))) {
+  failures.push('守卫自测失败：未阻断伪造 caller 的 frozen formal entry alias')
+}
 
 if (failures.length) {
   console.error('[ai-entry-registry] ❌ 正式 AI 入口机器绑定未闭合:\n')

@@ -848,6 +848,34 @@ export async function validateTextOpenWorldSignificantThreadsV1(input: {
   return structuredClone(input.artifact)
 }
 
+export async function projectTextOpenWorldSignificantThreadsAuthorEditableDraftV1(input: {
+  artifact: TextOpenWorldSignificantThreadsV1
+  context: TextOpenWorldSignificantThreadsInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifact = await validateTextOpenWorldSignificantThreadsV1({ artifact: input.artifact, context })
+  return structuredClone(draftFromArtifact(artifact, context))
+}
+
+export async function rebuildTextOpenWorldSignificantThreadsFromAuthorEditableDraftV1(input: {
+  baseArtifact: TextOpenWorldSignificantThreadsV1
+  context: TextOpenWorldSignificantThreadsInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldSignificantThreadsV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifact = await validateTextOpenWorldSignificantThreadsV1({ artifact: input.baseArtifact, context })
+  const artifact = await createSignificantThreads({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifact.createdAt,
+  })
+  return validateTextOpenWorldSignificantThreadsV1({ artifact, context })
+}
+
 function systemPrompt(context: TextOpenWorldSignificantThreadsInputContextV1): string {
   return [
     '你是StoryForge文字开放世界Significant Story Designer。你设计角色个人长篇、势力纷争或地区命运线的结构，不生成QuestDefinition、Scene正文、NPC/Faction目录、Condition、Effect、Reward或Action键。',

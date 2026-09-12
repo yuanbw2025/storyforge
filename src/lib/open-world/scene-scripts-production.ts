@@ -2116,6 +2116,35 @@ export async function validateTextOpenWorldSceneScriptsArtifactsV1(input: {
   return input.artifacts
 }
 
+export async function projectTextOpenWorldSceneScriptsAuthorEditableDraftV1(input: {
+  artifacts: TextOpenWorldSceneScriptsArtifactsV1
+  context: TextOpenWorldSceneScriptsInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifacts = await validateTextOpenWorldSceneScriptsArtifactsV1({ artifacts: input.artifacts, context })
+  return structuredClone(draftFromArtifacts(artifacts))
+}
+
+/** Rebuilds SceneScripts, ChoiceContracts and ActionBindings atomically. */
+export async function rebuildTextOpenWorldSceneScriptsFromAuthorEditableDraftV1(input: {
+  baseArtifacts: TextOpenWorldSceneScriptsArtifactsV1
+  context: TextOpenWorldSceneScriptsInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldSceneScriptsArtifactsV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifacts = await validateTextOpenWorldSceneScriptsArtifactsV1({ artifacts: input.baseArtifacts, context })
+  const artifacts = await createArtifacts({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifacts.sceneScripts.createdAt,
+  })
+  return validateTextOpenWorldSceneScriptsArtifactsV1({ artifacts, context })
+}
+
 function prompts(context: TextOpenWorldSceneScriptsInputContextV1) {
   if (governedKnowledge(context)) {
     const isolatedScene = context.sceneDemands.length === 1

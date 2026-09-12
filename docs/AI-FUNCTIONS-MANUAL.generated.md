@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 108 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 109 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -94,6 +94,7 @@
 | `product-production.brief` | 已授权上层产品生产 Brief | project | L0 | 8000 |
 | `product-production.artifact-inputs` | 上层产品生产任务依赖 | project | L1 | 10000 |
 | `text-open-world.source-pin` | 文字开放世界冻结来源与本批读取单元 | project | L0 | 100000 |
+| `text-open-world.creator-edit-target` | 文字开放世界 Creator Artifact 编辑目标 | project | L0 | 100000 |
 | `text-open-world.experience-input` | 文字开放世界作者授权体验设计输入 | project | L0 | 100000 |
 | `text-open-world.gameplay-ruleset-input` | 文字开放世界已确认体验与玩法规则输入 | project | L0 | 40000 |
 | `text-open-world.presentation-profile-input` | 文字开放世界界面表现与文字降级输入 | project | L0 | 40000 |
@@ -376,7 +377,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 37 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
+共 38 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
@@ -417,7 +418,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `prompt.workflow.step` | `inspiration.review` | `*` | experimental / experimental | `prompt-workflow-step-draft` | 禁止 | `src/lib/generation/workflow-generation-node.ts` |
 | `style.calibration.preview` | `prose.style-learn` | `style.calibrate` | auxiliary / authoring-draft | `style-calibration-preview` | 禁止 | `src/components/style/StyleCalibrationPanel.tsx` |
 | `text-open-world.creator-brief.consult` | `text-open-world.creator-brief-consult.v1` | `authoring.text-open-world-creator-brief` | formal / durable-run | `text-open-world-creator-brief-synthesis` | 禁止 | `src/lib/open-world/creator-brief.ts` |
+| `text-open-world.creator-artifact.modify` | `text-open-world.creator-artifact-edit.v1` | `authoring.text-open-world-creator-artifact-edit` | formal / durable-run | `text-open-world-creator-edit-patch` | 禁止 | `src/lib/open-world/creator-artifact-edit.ts` |
 
 ---
 
-生成时间基准:commit `939d4391`
+生成时间基准:commit `0a613eea`

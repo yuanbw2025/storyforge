@@ -663,6 +663,34 @@ export async function validateTextOpenWorldMainlineThreadV1(input: {
   return structuredClone(input.artifact)
 }
 
+export async function projectTextOpenWorldMainlineAuthorEditableDraftV1(input: {
+  artifact: TextOpenWorldMainlineThreadV1
+  context: TextOpenWorldMainlineInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifact = await validateTextOpenWorldMainlineThreadV1({ artifact: input.artifact, context })
+  return structuredClone(draftFromArtifact(artifact, context))
+}
+
+export async function rebuildTextOpenWorldMainlineFromAuthorEditableDraftV1(input: {
+  baseArtifact: TextOpenWorldMainlineThreadV1
+  context: TextOpenWorldMainlineInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldMainlineThreadV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifact = await validateTextOpenWorldMainlineThreadV1({ artifact: input.baseArtifact, context })
+  const artifact = await createMainline({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifact.createdAt,
+  })
+  return validateTextOpenWorldMainlineThreadV1({ artifact, context })
+}
+
 function systemPrompt(context: TextOpenWorldMainlineInputContextV1): string {
   return [
     '你是StoryForge文字开放世界Mainline Designer。你把StoryArc编排为严格顺序、可长期等待且可恢复的主线Stage骨架，不生成QuestDefinition、Objective、Scene正文、NPC、敌人、物品、奖励、Action、Condition或Effect。',

@@ -217,6 +217,22 @@ async function createArtifact(input: {
   return { ...body, presentationProfileHash: await hashProductProductionValueV2(body) }
 }
 
+function draftFromArtifact(artifact: TextOpenWorldPresentationProfileV1): unknown {
+  return {
+    schema: 'storyforge.text-open-world-presentation-profile-draft',
+    version: 1,
+    title: artifact.theme.title,
+    designIntent: artifact.theme.designIntent,
+    colorMood: artifact.theme.colorMood,
+    typographyTone: artifact.theme.typographyTone,
+    contentLanguage: artifact.contentLanguage,
+    fallbackTexts: artifact.consumerSlots.map((slot, index) => ({
+      slotNumber: index + 1,
+      text: slot.textFallback,
+    })),
+  }
+}
+
 export async function validateTextOpenWorldPresentationProfileV1(input: {
   artifact: TextOpenWorldPresentationProfileV1
   context: TextOpenWorldPresentationProfileInputContextV1 | string
@@ -225,15 +241,40 @@ export async function validateTextOpenWorldPresentationProfileV1(input: {
   if (artifact.schema !== 'storyforge.text-open-world-presentation-profile' || artifact.version !== 1 || !isSha256Hash(artifact.presentationProfileHash)) fail('PresentationProfile身份无效')
   await assertOwnHash(artifact as unknown as Record<string, unknown>, 'presentationProfileHash', 'PresentationProfile')
   const context = await parseContext(typeof input.context === 'string' ? input.context : canonicalProductProductionJsonV2(input.context))
-  const fallbackTexts = artifact.consumerSlots.map((slot, index) => ({ slotNumber: index + 1, text: slot.textFallback }))
-  const draft = parseDraft({
-    schema: 'storyforge.text-open-world-presentation-profile-draft', version: 1,
-    title: artifact.theme.title, designIntent: artifact.theme.designIntent, colorMood: artifact.theme.colorMood,
-    typographyTone: artifact.theme.typographyTone, contentLanguage: artifact.contentLanguage, fallbackTexts,
-  })
+  const draft = parseDraft(draftFromArtifact(artifact))
   const expected = await createArtifact({ context, draft, createdAt: artifact.createdAt })
   if (canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(artifact)) fail('PresentationProfile内容或固定边界被篡改')
   return artifact
+}
+
+export async function projectTextOpenWorldPresentationProfileAuthorEditableDraftV1(input: {
+  artifact: TextOpenWorldPresentationProfileV1
+  context: TextOpenWorldPresentationProfileInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifact = await validateTextOpenWorldPresentationProfileV1({ artifact: input.artifact, context })
+  const draft = draftFromArtifact(artifact)
+  parseDraft(draft)
+  return structuredClone(draft)
+}
+
+export async function rebuildTextOpenWorldPresentationProfileFromAuthorEditableDraftV1(input: {
+  baseArtifact: TextOpenWorldPresentationProfileV1
+  context: TextOpenWorldPresentationProfileInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldPresentationProfileV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifact = await validateTextOpenWorldPresentationProfileV1({ artifact: input.baseArtifact, context })
+  const artifact = await createArtifact({
+    context,
+    draft: parseDraft(input.draft),
+    createdAt: baseArtifact.createdAt,
+  })
+  return validateTextOpenWorldPresentationProfileV1({ artifact, context })
 }
 
 function prompts(context: TextOpenWorldPresentationProfileInputContextV1) {

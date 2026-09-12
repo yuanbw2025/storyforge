@@ -175,6 +175,21 @@ function parseDefinitionJsonV2(binding: AgentSkillExecutionBindingV2): AgentSkil
   return definition
 }
 
+/** Project the immutable V2 snapshot back to the V1 registry shape for other
+ * frozen-binding validators. Callers must first verify binding integrity. */
+export function projectFrozenAgentSkillDefinitionV1(
+  binding: AgentSkillExecutionBindingV2,
+): AgentSkillDefinitionV1 {
+  const definition = parseDefinitionJsonV2(binding)
+  const {
+    version: _version,
+    sourceDefinitionVersion: _sourceDefinitionVersion,
+    resolvedToolSourceKeys: _resolvedToolSourceKeys,
+    ...v1
+  } = definition
+  return { ...v1, version: 1 }
+}
+
 function assertFrozenGatewayPolicyV1(definition: AgentSkillDefinitionV2): void {
   const gateway = definition.contextGateway
   if (gateway == null) return

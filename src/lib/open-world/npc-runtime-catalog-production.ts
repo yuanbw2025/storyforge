@@ -522,6 +522,34 @@ export async function validateTextOpenWorldNpcRuntimeCatalogV1(input: {
   return structuredClone(input.artifact)
 }
 
+export async function projectTextOpenWorldNpcRuntimeCatalogAuthorEditableDraftV1(input: {
+  artifact: TextOpenWorldNpcRuntimeCatalogV1
+  context: TextOpenWorldNpcRuntimeInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifact = await validateTextOpenWorldNpcRuntimeCatalogV1({ artifact: input.artifact, context })
+  return structuredClone(draftFromArtifact(artifact))
+}
+
+export async function rebuildTextOpenWorldNpcRuntimeCatalogFromAuthorEditableDraftV1(input: {
+  baseArtifact: TextOpenWorldNpcRuntimeCatalogV1
+  context: TextOpenWorldNpcRuntimeInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldNpcRuntimeCatalogV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifact = await validateTextOpenWorldNpcRuntimeCatalogV1({ artifact: input.baseArtifact, context })
+  const artifact = await createArtifact({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifact.createdAt,
+  })
+  return validateTextOpenWorldNpcRuntimeCatalogV1({ artifact, context })
+}
+
 function systemPrompt(context: TextOpenWorldNpcRuntimeInputContextV1): string {
   return [
     '你是StoryForge文字开放世界NPC Runtime Catalog Designer。人物小传与演绎说明保持完整文本资产；代码负责角色层级、Agent/规则模式、保护、死亡、日程结构、服务替代、稳定键、关系阈值和运行绑定。',

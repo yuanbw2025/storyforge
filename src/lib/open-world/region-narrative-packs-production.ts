@@ -1193,6 +1193,34 @@ export async function validateTextOpenWorldRegionNarrativePacksV1(input: {
   return structuredClone(input.artifact)
 }
 
+export async function projectTextOpenWorldRegionNarrativePacksAuthorEditableDraftV1(input: {
+  artifact: TextOpenWorldRegionNarrativePacksV1
+  context: TextOpenWorldRegionNarrativePacksInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifact = await validateTextOpenWorldRegionNarrativePacksV1({ artifact: input.artifact, context })
+  return structuredClone(draftFromArtifact(artifact, context))
+}
+
+export async function rebuildTextOpenWorldRegionNarrativePacksFromAuthorEditableDraftV1(input: {
+  baseArtifact: TextOpenWorldRegionNarrativePacksV1
+  context: TextOpenWorldRegionNarrativePacksInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldRegionNarrativePacksV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifact = await validateTextOpenWorldRegionNarrativePacksV1({ artifact: input.baseArtifact, context })
+  const artifact = await createRegionNarrativePacks({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifact.createdAt,
+  })
+  return validateTextOpenWorldRegionNarrativePacksV1({ artifact, context })
+}
+
 function systemPrompt(context: TextOpenWorldRegionNarrativePacksInputContextV1): string {
   return [
     '你是StoryForge文字开放世界Region Narrative Designer。你为已经冻结的每个地区建立可持续的生活、冲突和内容供给，不生成正式NPC/Faction/Quest/Event/Condition/Effect/Reward/Action目录键。',

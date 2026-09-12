@@ -858,6 +858,28 @@ async function createExperienceArtifacts(input: {
   return { gameBrief: input.gameBrief, experienceContract, protagonistAsset }
 }
 
+function draftFromArtifacts(artifacts: TextOpenWorldExperienceDesignArtifactsV1): unknown {
+  return {
+    schema: 'storyforge.text-open-world-experience-draft',
+    version: 1,
+    experience: {
+      pitch: artifacts.experienceContract.pitch,
+      playerFantasy: artifacts.experienceContract.playerFantasy,
+      narrativePillars: artifacts.experienceContract.narrativePillars,
+      regionalVarietyPromise: artifacts.experienceContract.regionalVarietyPromise,
+      growthPromise: artifacts.experienceContract.growthPromise,
+      toneGuide: artifacts.experienceContract.toneGuide,
+      sourceClaimKeys: artifacts.experienceContract.sourceClaimKeys,
+    },
+    protagonist: {
+      identitySummary: artifacts.protagonistAsset.identitySummary,
+      motivations: artifacts.protagonistAsset.motivations,
+      personalStakes: artifacts.protagonistAsset.personalStakes,
+      sourceClaimKeys: artifacts.protagonistAsset.sourceClaimKeys,
+    },
+  }
+}
+
 export async function validateTextOpenWorldExperienceArtifactsV1(input: {
   artifacts: TextOpenWorldExperienceDesignArtifactsV1
   context?: TextOpenWorldExperienceInputContextV1
@@ -1056,6 +1078,36 @@ export async function validateTextOpenWorldExperienceArtifactsV1(input: {
       || protagonistAsset.basisHash !== expectedProtagonistBasis) fail('体验产物basisHash不匹配')
   }
   return structuredClone({ gameBrief, experienceContract, protagonistAsset })
+}
+
+export async function projectTextOpenWorldExperienceAuthorEditableDraftV1(input: {
+  artifacts: TextOpenWorldExperienceDesignArtifactsV1
+  context: TextOpenWorldExperienceInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseExperienceContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifacts = await validateTextOpenWorldExperienceArtifactsV1({ artifacts: input.artifacts, context })
+  return structuredClone(draftFromArtifacts(artifacts))
+}
+
+/** GameBrief remains immutable; ExperienceContract and ProtagonistAsset rebuild together. */
+export async function rebuildTextOpenWorldExperienceFromAuthorEditableDraftV1(input: {
+  baseArtifacts: TextOpenWorldExperienceDesignArtifactsV1
+  context: TextOpenWorldExperienceInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldExperienceDesignArtifactsV1> {
+  const context = await parseExperienceContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifacts = await validateTextOpenWorldExperienceArtifactsV1({ artifacts: input.baseArtifacts, context })
+  const artifacts = await createExperienceArtifacts({
+    context,
+    gameBrief: baseArtifacts.gameBrief,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifacts.gameBrief.createdAt,
+  })
+  return validateTextOpenWorldExperienceArtifactsV1({ artifacts, context })
 }
 
 export function createTextOpenWorldExperienceDesignExecutorV1(options: {

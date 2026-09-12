@@ -419,6 +419,34 @@ export async function validateTextOpenWorldMapInteractionCatalogV1(input: {
   return structuredClone(input.artifact)
 }
 
+export async function projectTextOpenWorldMapInteractionCatalogAuthorEditableDraftV1(input: {
+  artifact: TextOpenWorldMapInteractionCatalogV1
+  context: TextOpenWorldMapInteractionInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifact = await validateTextOpenWorldMapInteractionCatalogV1({ artifact: input.artifact, context })
+  return structuredClone(draftFromArtifact(artifact, context))
+}
+
+export async function rebuildTextOpenWorldMapInteractionCatalogFromAuthorEditableDraftV1(input: {
+  baseArtifact: TextOpenWorldMapInteractionCatalogV1
+  context: TextOpenWorldMapInteractionInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldMapInteractionCatalogV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifact = await validateTextOpenWorldMapInteractionCatalogV1({ artifact: input.baseArtifact, context })
+  const artifact = await createArtifact({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifact.createdAt,
+  })
+  return validateTextOpenWorldMapInteractionCatalogV1({ artifact, context })
+}
+
 function systemPrompt(context: TextOpenWorldMapInteractionInputContextV1): string {
   return [
     '你是StoryForge文字开放世界Map Interaction Catalog Designer。地图拓扑、地点、道路、旅行、快旅、SVG坐标、提前到达和任务触发安全全部由代码冻结；你只把每项需求写成与地点生活和任务语境一致的可点击交互。',

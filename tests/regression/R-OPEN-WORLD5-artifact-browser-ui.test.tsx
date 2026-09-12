@@ -14,12 +14,42 @@ import type { WorkspaceScope } from '../../src/lib/types'
 const governanceMocks = vi.hoisted(() => ({
   read: vi.fn(),
 }))
+const editMocks = vi.hoisted(() => ({
+  prepare: vi.fn(),
+}))
 
 vi.mock('../../src/lib/open-world/creator-artifact-governance', async importOriginal => {
   const actual = await importOriginal<typeof import('../../src/lib/open-world/creator-artifact-governance')>()
   return {
     ...actual,
     readTextOpenWorldArtifactGovernanceV1: governanceMocks.read,
+  }
+})
+
+vi.mock('../../src/lib/product-production/service', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/lib/product-production/service')>()
+  return {
+    ...actual,
+    prepareTextOpenWorldCreatorArtifactEditV1: editMocks.prepare,
+  }
+})
+
+vi.mock('../../src/components/text-game/TextOpenWorldCreatorArtifactEditor', async () => {
+  const { createElement: element } = await import('react')
+  return {
+    default: (props: {
+      selection: { artifactKey: string; entityIdentity: string | null; buildId: number; expectedSnapshotHash: string }
+      eligible: boolean
+      ineligibleReason?: string
+    }) => element('aside', {
+      'data-testid': 'mock-text-open-world-artifact-editor',
+      'data-artifact-key': props.selection.artifactKey,
+      'data-entity-identity': props.selection.entityIdentity ?? '',
+      'data-build-id': String(props.selection.buildId),
+      'data-snapshot-hash': props.selection.expectedSnapshotHash,
+      'data-eligible': String(props.eligible),
+      'data-ineligible-reason': props.ineligibleReason ?? '',
+    }),
   }
 })
 
@@ -230,6 +260,14 @@ describe('Text Open World G5-05 · 受治理内容浏览 UI', () => {
 
   beforeEach(() => {
     governanceMocks.read.mockReset()
+    editMocks.prepare.mockReset()
+    editMocks.prepare.mockImplementation(async selection => ({
+      target: {
+        artifactKey: selection.artifactKey,
+        entityIdentity: selection.entityIdentity,
+      },
+      editableFields: [{ fieldId: 'title' }],
+    }))
     host = document.createElement('div')
     document.body.append(host)
     root = createRoot(host)
@@ -340,9 +378,9 @@ describe('Text Open World G5-05 · 受治理内容浏览 UI', () => {
 
   it('明确区分完整性与生产验证，并把仅完整性Artifact放入诊断而非内容视图', async () => {
     const integrityOnly = governedArtifact({
-      artifactKey: 'artifact.integrity-only.3',
+      artifactKey: 'text-open-world.player-build',
       label: '自声明地区模块',
-      kind: 'text-open-world-region-module',
+      kind: 'text-open-world.player-build',
       productionValidation: 'integrity-only',
     })
     governanceMocks.read.mockResolvedValue(governanceProjection({
@@ -363,6 +401,122 @@ describe('Text Open World G5-05 · 受治理内容浏览 UI', () => {
     await act(async () => listRows(host)[0].click())
     expect(host.querySelector('[data-testid="text-open-world-creator-artifact-detail"]')?.textContent)
       .toContain('未获得产品生产验证')
+    const editor = host.querySelector<HTMLElement>('[data-testid="mock-text-open-world-artifact-editor"]')!
+    expect(editor.dataset.eligible).toBe('false')
+    expect(editor.dataset.ineligibleReason).toContain('尚未通过产品生产合同验证')
+  })
+
+  it('只把当前 Build 中精确且生产验证通过的目标交给编辑器', async () => {
+    const editable = governedArtifact({
+      artifactKey: 'text-open-world.player-build',
+      label: '玩家成长方案',
+      kind: 'text-open-world.player-build',
+    })
+    const hero = {
+      ...governedEntity({ key: 'hero', title: '巡灯人' }),
+      artifactKey: editable.artifactKey,
+      artifactVersion: editable.version,
+      artifactContentHash: editable.contentHash,
+    }
+    governanceMocks.read.mockResolvedValue(governanceProjection({
+      entities: [hero],
+      artifacts: [editable],
+    }))
+    await act(async () => root.render(createElement(TextOpenWorldCreatorArtifactBrowser, {
+      scope: SCOPE,
+      productionId: 71,
+    })))
+    await waitFor(() => expect(host.textContent).toContain('巡灯人'))
+
+    const entityEditor = host.querySelector<HTMLElement>('[data-testid="mock-text-open-world-artifact-editor"]')!
+    expect(entityEditor.dataset.artifactKey).toBe(editable.artifactKey)
+    expect(entityEditor.dataset.entityIdentity).toBe('character:hero')
+    expect(entityEditor.dataset.buildId).toBe('81')
+    expect(entityEditor.dataset.snapshotHash).toBe(HASH_B)
+    await waitFor(() => expect(entityEditor.dataset.eligible).toBe('true'))
+
+    await act(async () => tab(host, 'Artifact').click())
+    const artifactEditor = host.querySelector<HTMLElement>('[data-testid="mock-text-open-world-artifact-editor"]')!
+    expect(artifactEditor.dataset.artifactKey).toBe(editable.artifactKey)
+    expect(artifactEditor.dataset.entityIdentity).toBe('')
+    await waitFor(() => expect(artifactEditor.dataset.eligible).toBe('true'))
+  })
+
+  it('领域 dispatcher 预检拒绝时，已验证 Artifact 仍必须显示为不可编辑', async () => {
+    const editable = governedArtifact({
+      artifactKey: 'text-open-world.player-build',
+      label: '玩家成长方案',
+      kind: 'text-open-world.player-build',
+    })
+    const hero = {
+      ...governedEntity({ key: 'hero', title: '巡灯人' }),
+      artifactKey: editable.artifactKey,
+      artifactVersion: editable.version,
+      artifactContentHash: editable.contentHash,
+    }
+    governanceMocks.read.mockResolvedValue(governanceProjection({
+      entities: [hero],
+      artifacts: [editable],
+    }))
+    editMocks.prepare.mockRejectedValue(new Error('领域 dispatcher 拒绝该精确目标'))
+
+    await act(async () => root.render(createElement(TextOpenWorldCreatorArtifactBrowser, {
+      scope: SCOPE,
+      productionId: 71,
+    })))
+    await waitFor(() => expect(
+      host.querySelector<HTMLElement>('[data-testid="mock-text-open-world-artifact-editor"]')
+        ?.dataset.ineligibleReason,
+    ).toContain('领域 dispatcher 拒绝'))
+
+    const editor = host.querySelector<HTMLElement>(
+      '[data-testid="mock-text-open-world-artifact-editor"]',
+    )!
+    expect(editor.dataset.eligible).toBe('false')
+    expect(editor.dataset.ineligibleReason).toBe('领域 dispatcher 拒绝该精确目标')
+    expect(editMocks.prepare).toHaveBeenCalledWith(expect.objectContaining({
+      artifactKey: editable.artifactKey,
+      entityIdentity: 'character:hero',
+      buildId: 81,
+      expectedSnapshotHash: HASH_B,
+    }))
+  })
+
+  it('领域 dispatcher 返回 editableFields=[] 时显式禁用编辑', async () => {
+    const editable = governedArtifact({
+      artifactKey: 'text-open-world.player-build',
+      label: '玩家成长方案',
+      kind: 'text-open-world.player-build',
+    })
+    const hero = {
+      ...governedEntity({ key: 'hero', title: '巡灯人' }),
+      artifactKey: editable.artifactKey,
+      artifactVersion: editable.version,
+      artifactContentHash: editable.contentHash,
+    }
+    governanceMocks.read.mockResolvedValue(governanceProjection({
+      entities: [hero],
+      artifacts: [editable],
+    }))
+    editMocks.prepare.mockResolvedValue({
+      target: { artifactKey: editable.artifactKey, entityIdentity: 'character:hero' },
+      editableFields: [],
+    })
+
+    await act(async () => root.render(createElement(TextOpenWorldCreatorArtifactBrowser, {
+      scope: SCOPE,
+      productionId: 71,
+    })))
+    await waitFor(() => expect(
+      host.querySelector<HTMLElement>('[data-testid="mock-text-open-world-artifact-editor"]')
+        ?.dataset.ineligibleReason,
+    ).toContain('没有登记的作者可修改字段'))
+
+    const editor = host.querySelector<HTMLElement>(
+      '[data-testid="mock-text-open-world-artifact-editor"]',
+    )!
+    expect(editor.dataset.eligible).toBe('false')
+    expect(editor.dataset.ineligibleReason).toBe('该精确目标没有登记的作者可修改字段。')
   })
 
   it('安全搜索、类型与状态筛选生效，分页在 UI 中最多读取 50 条', async () => {

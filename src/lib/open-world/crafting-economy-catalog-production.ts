@@ -530,6 +530,34 @@ export async function validateTextOpenWorldCraftingEconomyCatalogV1(input: {
   return structuredClone(input.artifact)
 }
 
+export async function projectTextOpenWorldCraftingEconomyCatalogAuthorEditableDraftV1(input: {
+  artifact: TextOpenWorldCraftingEconomyCatalogV1
+  context: TextOpenWorldCraftingEconomyInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifact = await validateTextOpenWorldCraftingEconomyCatalogV1({ artifact: input.artifact, context })
+  return structuredClone(draftFromArtifact(artifact, context))
+}
+
+export async function rebuildTextOpenWorldCraftingEconomyCatalogFromAuthorEditableDraftV1(input: {
+  baseArtifact: TextOpenWorldCraftingEconomyCatalogV1
+  context: TextOpenWorldCraftingEconomyInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldCraftingEconomyCatalogV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifact = await validateTextOpenWorldCraftingEconomyCatalogV1({ artifact: input.baseArtifact, context })
+  const artifact = await createArtifact({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifact.createdAt,
+  })
+  return validateTextOpenWorldCraftingEconomyCatalogV1({ artifact, context })
+}
+
 function systemPrompt(context: TextOpenWorldCraftingEconomyInputContextV1): string {
   return [
     '你是StoryForge文字开放世界Crafting与Economy Catalog Designer。你只设计符合地区与任务语境的配方/商店语义，并从代码提供的候选地点和物品中选择；代码负责稳定键、数量、价格、库存、来源/消耗闭环、反套利与运行绑定。',

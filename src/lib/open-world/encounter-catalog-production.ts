@@ -449,6 +449,34 @@ export async function validateTextOpenWorldEnemyEncounterCatalogV1(input: {
   return structuredClone(input.artifact)
 }
 
+export async function projectTextOpenWorldEncounterCatalogAuthorEditableDraftV1(input: {
+  artifact: TextOpenWorldEnemyEncounterCatalogV1
+  context: TextOpenWorldEncounterCatalogInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifact = await validateTextOpenWorldEnemyEncounterCatalogV1({ artifact: input.artifact, context })
+  return structuredClone(draftFromArtifact(artifact, context))
+}
+
+export async function rebuildTextOpenWorldEncounterCatalogFromAuthorEditableDraftV1(input: {
+  baseArtifact: TextOpenWorldEnemyEncounterCatalogV1
+  context: TextOpenWorldEncounterCatalogInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldEnemyEncounterCatalogV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifact = await validateTextOpenWorldEnemyEncounterCatalogV1({ artifact: input.baseArtifact, context })
+  const artifact = await createArtifact({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifact.createdAt,
+  })
+  return validateTextOpenWorldEnemyEncounterCatalogV1({ artifact, context })
+}
+
 function systemPrompt(context: TextOpenWorldEncounterCatalogInputContextV1): string {
   return [
     '你是StoryForge文字开放世界Enemy与Encounter Catalog Designer。你为每项encounterDemand设计一个敌人和一个可玩的单组遭遇；代码负责稳定键、数值公式、技能策略、任务消费者、奖励/掉落预留和运行绑定。',

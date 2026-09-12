@@ -578,6 +578,34 @@ export async function validateTextOpenWorldProgressionCatalogsV1(input: {
   return structuredClone(input.artifact)
 }
 
+export async function projectTextOpenWorldProgressionCatalogsAuthorEditableDraftV1(input: {
+  artifact: TextOpenWorldProgressionCatalogsV1
+  context: TextOpenWorldProgressionCatalogsInputContextV1 | string
+}): Promise<unknown> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const artifact = await validateTextOpenWorldProgressionCatalogsV1({ artifact: input.artifact, context })
+  return structuredClone(draftFromArtifact(artifact))
+}
+
+export async function rebuildTextOpenWorldProgressionCatalogsFromAuthorEditableDraftV1(input: {
+  baseArtifact: TextOpenWorldProgressionCatalogsV1
+  context: TextOpenWorldProgressionCatalogsInputContextV1 | string
+  draft: unknown
+}): Promise<TextOpenWorldProgressionCatalogsV1> {
+  const context = await parseContext(typeof input.context === 'string'
+    ? input.context
+    : canonicalProductProductionJsonV2(input.context))
+  const baseArtifact = await validateTextOpenWorldProgressionCatalogsV1({ artifact: input.baseArtifact, context })
+  const artifact = await createArtifact({
+    context,
+    draft: parseDraft(input.draft, context),
+    createdAt: baseArtifact.createdAt,
+  })
+  return validateTextOpenWorldProgressionCatalogsV1({ artifact, context })
+}
+
 function systemPrompt(context: TextOpenWorldProgressionCatalogsInputContextV1): string {
   return [
     '你是StoryForge文字开放世界Progression与Skill Catalog Designer。你只设计技能与状态语义和有界战斗参数；20级经验曲线、自动属性成长、稳定键、需求归属以及Action/Effect/Condition/Quest绑定由代码生成。',

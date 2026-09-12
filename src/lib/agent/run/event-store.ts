@@ -9,6 +9,7 @@ import type {
   AgentRunProjectionV1,
   AgentRunRecord,
   AnyAgentRunEventV1,
+  MemorySettlementReceiptV1,
   WorkspaceScope,
 } from '../../types'
 import {
@@ -43,6 +44,12 @@ export interface AgentRunSnapshotV1 {
   contract: AgentRunContract
   events: AnyAgentRunEventV1[]
   projection: AgentRunProjectionV1
+}
+
+export interface VerifiedRecordedMemorySettlementV1 {
+  event: Extract<AnyAgentRunEventV1, { type: 'memory.settlement.recorded' }>
+  receipt: MemorySettlementReceiptV1
+  artifactIndexHash: string
 }
 
 export interface CreateAgentRunV1Input {
@@ -511,6 +518,110 @@ export async function appendPrivilegedAgentRunEventInTransactionV1(
   }
 }
 
+/**
+ * @internal Append an already-validated event and, when it enters a terminal
+ * state, commit the mandatory memory settlement in the same caller-owned
+ * transaction. Callers must include agentRuns, agentRunEvents, worlds and
+ * works in that transaction.
+ */
+export async function appendAgentRunEventWithSettlementInTransactionV1(input: {
+  snapshot: AgentRunSnapshotV1
+  event: AnyAgentRunEventV1
+  scope: WorkspaceScope
+  workspaceDirty?: boolean
+}): Promise<AgentRunSnapshotV1> {
+  const { snapshot, event } = input
+  const next = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, event)
+  const terminalStates = ['completed', 'failed', 'cancelled'] as const
+  const enteredMemoryTerminal = !terminalStates.includes(
+    input.snapshot.projection.state as (typeof terminalStates)[number],
+  ) && terminalStates.includes(next.projection.state as (typeof terminalStates)[number])
+  if (!enteredMemoryTerminal) return next
+
+  const receipt = await Dexie.waitFor(buildMemorySettlementReceiptFromSnapshotV1({
+    snapshot: next,
+    scope: input.scope,
+    workspaceDirty: input.workspaceDirty ?? true,
+    evaluatedAt: input.event.createdAt,
+  }))
+  if (receipt.state === 'awaiting-confirmation') {
+    fail('memory_settlement_state', 'Harness 终态不能结算为 awaiting-confirmation')
+  }
+  const artifactIndexHash = await Dexie.waitFor(hashMemoryArtifactIndexV1(receipt.artifactRefs))
+  const settlementEvent = parseAgentRunEventV1({
+    version: 1,
+    runId: input.snapshot.run.id,
+    sequence: next.projection.lastSequence + 1,
+    generation: next.projection.generation,
+    projectId: next.run.projectId,
+    worldGroupId: next.run.worldGroupId ?? null,
+    contractHash: next.run.contractHash,
+    type: 'memory.settlement.recorded',
+    createdAt: input.event.createdAt,
+    payload: {
+      receiptHash: receipt.receiptHash,
+      terminalReceiptHash: receipt.terminalReceiptHash,
+      state: receipt.state,
+      contextManifestHashes: [...receipt.contextManifestHashes],
+      adoptionHashes: [...receipt.adoptionHashes],
+      artifactIndexHash,
+      workspaceDirty: input.workspaceDirty ?? true,
+    },
+  })
+  return appendPrivilegedAgentRunEventInTransactionV1(next, settlementEvent)
+}
+
+/**
+ * Verify the unique terminal memory-settlement event against the current
+ * ledger projection and a freshly derived receipt. Keeping this verifier in
+ * the public event store prevents downstream readers from inventing a second
+ * settlement authority.
+ */
+export async function verifyRecordedMemorySettlementV1(input: {
+  snapshot: AgentRunSnapshotV1
+  scope: WorkspaceScope
+}): Promise<VerifiedRecordedMemorySettlementV1> {
+  const events = input.snapshot.events.filter(
+    (event): event is Extract<AnyAgentRunEventV1, { type: 'memory.settlement.recorded' }> => (
+      event.type === 'memory.settlement.recorded'
+    ),
+  )
+  if (events.length === 0) {
+    throw new Error(`[memory-settlement] Run ${input.snapshot.run.id} 缺少当前终态记忆结算事件`)
+  }
+  if (events.length !== 1) {
+    throw new Error(`[memory-settlement] Run ${input.snapshot.run.id} 存在重复终态记忆结算事件`)
+  }
+  const event = events[0]!
+  const projection = input.snapshot.projection.memorySettlement
+  if (!['completed', 'failed', 'cancelled'].includes(input.snapshot.projection.state)
+    || !projection
+    || projection.receiptHash !== event.payload.receiptHash
+    || projection.terminalReceiptHash !== event.payload.terminalReceiptHash
+    || projection.state !== event.payload.state
+    || projection.artifactIndexHash !== event.payload.artifactIndexHash
+    || projection.workspaceDirty !== event.payload.workspaceDirty
+    || projection.recordedAt !== event.createdAt) {
+    throw new Error(`[memory-settlement] Run ${input.snapshot.run.id} 的终态记忆结算投影不匹配`)
+  }
+  const receipt = await buildMemorySettlementReceiptFromSnapshotV1({
+    snapshot: input.snapshot,
+    scope: input.scope,
+    workspaceDirty: event.payload.workspaceDirty,
+    evaluatedAt: event.createdAt,
+  })
+  const artifactIndexHash = await hashMemoryArtifactIndexV1(receipt.artifactRefs)
+  if (receipt.receiptHash !== event.payload.receiptHash
+    || receipt.state !== event.payload.state
+    || receipt.terminalReceiptHash !== event.payload.terminalReceiptHash
+    || artifactIndexHash !== event.payload.artifactIndexHash
+    || JSON.stringify(receipt.contextManifestHashes) !== JSON.stringify(event.payload.contextManifestHashes)
+    || JSON.stringify(receipt.adoptionHashes) !== JSON.stringify(event.payload.adoptionHashes)) {
+    throw new Error(`[memory-settlement] Run ${input.snapshot.run.id} 的终态记忆结算完整性验证失败`)
+  }
+  return { event, receipt, artifactIndexHash }
+}
+
 export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<AgentRunSnapshotV1> {
   const accepted = await acceptAgentRunContract(input.contract)
   const worldGroupId = input.worldGroupId ?? null
@@ -768,47 +879,12 @@ export async function appendAgentRunEventV1<T extends AgentRunEventTypeV1>(
         createdAt: input.now ?? Date.now(),
         payload: input.payload,
       })
-      const next = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, event)
-      const terminalStates = ['completed', 'failed', 'cancelled'] as const
-      const enteredMemoryTerminal = !terminalStates.includes(
-        snapshot.projection.state as (typeof terminalStates)[number],
-      ) && terminalStates.includes(next.projection.state as (typeof terminalStates)[number])
-      if (!enteredMemoryTerminal) return next
-
-      // Harness terminal state and the memory receipt are committed together.
-      // This preserves main's durable-memory invariant for both Work-owned and
-      // Instance-owned game runs.
-      const receipt = await Dexie.waitFor(buildMemorySettlementReceiptFromSnapshotV1({
-        snapshot: next,
+      return appendAgentRunEventWithSettlementInTransactionV1({
+        snapshot,
+        event,
         scope: input.scope,
         workspaceDirty: true,
-        evaluatedAt: event.createdAt,
-      }))
-      if (receipt.state === 'awaiting-confirmation') {
-        fail('memory_settlement_state', 'Harness 终态不能结算为 awaiting-confirmation')
-      }
-      const artifactIndexHash = await Dexie.waitFor(hashMemoryArtifactIndexV1(receipt.artifactRefs))
-      const settlementEvent = parseAgentRunEventV1({
-        version: 1,
-        runId: input.runId,
-        sequence: next.projection.lastSequence + 1,
-        generation: next.projection.generation,
-        projectId: next.run.projectId,
-        worldGroupId: next.run.worldGroupId ?? null,
-        contractHash: next.run.contractHash,
-        type: 'memory.settlement.recorded',
-        createdAt: event.createdAt,
-        payload: {
-          receiptHash: receipt.receiptHash,
-          terminalReceiptHash: receipt.terminalReceiptHash,
-          state: receipt.state,
-          contextManifestHashes: [...receipt.contextManifestHashes],
-          adoptionHashes: [...receipt.adoptionHashes],
-          artifactIndexHash,
-          workspaceDirty: true,
-        },
       })
-      return appendPrivilegedAgentRunEventInTransactionV1(next, settlementEvent)
     },
   ))
 }

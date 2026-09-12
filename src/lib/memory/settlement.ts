@@ -8,7 +8,10 @@ import type {
 } from '../types'
 import { isWorkspaceUid } from './identity'
 import { hashCanonicalValue } from '../agent/run/hash'
-import { readAgentRunV1 } from '../agent/run/event-store'
+import {
+  readAgentRunV1,
+  verifyRecordedMemorySettlementV1,
+} from '../agent/run/event-store'
 import { inspectAgentRunArtifactAvailabilityV1 } from './artifact-store'
 import {
   buildMemorySettlementReceiptFromSnapshotV1,
@@ -107,6 +110,9 @@ export async function buildMemoryArtifactIndexV1(
     if (!work) continue
     const scope = { projectId, worldId: work.worldId, workId: run.workId }
     const snapshot = await readAgentRunV1(scope, run.id)
+    if (MEMORY_SETTLEMENT_TERMINAL_STATES.has(snapshot.projection.state)) {
+      await verifyRecordedMemorySettlementV1({ snapshot, scope })
+    }
     const settlementEventCandidate = [...snapshot.events]
       .reverse()
       .find(event => event.type === 'memory.settlement.recorded')
