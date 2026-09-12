@@ -35,9 +35,11 @@ describe('TTRPG-1D · server-authoritative verifiable dice', () => {
       commitments: engine.commitments,
       receipt: { ...receipt, expression: '3d10' },
     })).toBe(false)
+    const tamperedDice = [...receipt.dice]
+    tamperedDice[0] = receipt.dice[0] === 8 ? 7 : 8
     expect(await verifyOnlineDiceReceiptV1({
       commitments: engine.commitments,
-      receipt: { ...receipt, dice: [8, 8, 8], total: 24 },
+      receipt: { ...receipt, dice: tamperedDice, total: tamperedDice.reduce((sum, value) => sum + value, 0) },
     })).toBe(false)
     expect(await verifyOnlineDiceReceiptV1({
       commitments: engine.commitments,
