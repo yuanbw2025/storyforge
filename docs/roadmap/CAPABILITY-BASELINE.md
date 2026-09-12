@@ -1,6 +1,6 @@
 # StoryForge 当前能力基线
 
-> 版本：1.6.1 · 基线：2026-09-12 文字开放世界G5-06交付 · 权威层级：L2
+> 版本：1.6.2 · 基线：2026-09-13 文字开放世界G5-07交付 · 权威层级：L2
 > 本文区分代码存在、纵切面可用和产品完成。旧完成卡不自动恢复权威，但已合入主干并由当前代码/检查器复证的 Phase 5 成果必须保留。
 
 ## 状态定义
@@ -63,7 +63,7 @@
 | E-TOWN-01 | missing | 有角色互动和通用产品运行时基础能力可复用 | 没有独立 AI 小镇产品的时间、日程、地点、群体与离线演化闭环 |
 | E-TEXTADV-01 | partial | 文字冒险已接入专用需求适配器、统一 Production/Build/ProductRelease v1 和独立玩家面 | 可玩内容、规则、媒资、结局和真实 E2E 仍需专项封板 |
 | E-AVG-01 | partial | AVG 已接入专用需求适配器、统一 Production/Build/ProductRelease v1、演出与独立玩家面 | 真实视觉/声音资产、演出绑定和完整体验未验收 |
-| E-OPENWORLD-01 | partial | 已在统一Production/Build/ProductRelease和ProductRuntime事件底座上完成G1运行治理、G2确定性玩法闭环、G3 P0～P10/V1～V3/QA内容生产编译器和G4完整玩家端；成长、任务、地图/快旅、时间天气、NPC日程/生死/关系、战斗、制作、经济、地区演化、受限发牌、动态任务、随机事件与知识历程均可重放。G5-01～G5-06已落地双来源Creator入口、Creator Brief、BYOK/模型/预算预检、原子Creator SourcePlan/Start、精确DAG、Run进度/付费边界恢复、受治理Artifact三视图，以及直接/Agent双修改入口。当前29类Artifact只开放领域声明字段；直接路径零模型，Agent路径冻结完整模型身份并走正式登记；两者都先形成durable候选，经过领域解析和identity/reference delta门后才能确认，确认只生成impact-analysis handoff，不改当前Build或正式表。完整性与官方生产合同验证分轴，验收绑定完整内容Hash、producer/root Run、事件流、checkpoint、terminal receipt、完整跨Build Artifact/Blob闭包及最终CAS。P0统一限制512个来源单元、400万字符，32,650,752 B最坏候选低于共享32 MiB checkpoint上限；旧v1终端封印不能静默作为新携带依据。只读旧Release继续兼容 | G5-07～G5-12的影响闭包/局部修复、媒资、质量/试玩、双来源正式发布更新和创作者E2E仍待完成；Creator链当前只到受治理修改意图与release-ready Build Preview，不能使用兼容Brief的占位WorldRelease冒充ProductRelease来源；当前确定性/证据链验证不等于内容质量或美学验证；G6运行时有边界自由演绎、G7盐脊真人验收与旧入口收口仍未完成 |
+| E-OPENWORLD-01 | partial | 已在统一Production/Build/ProductRelease和ProductRuntime事件底座上完成G1运行治理、G2确定性玩法闭环、G3 P0～P10/V1～V3/QA内容生产编译器和G4完整玩家端；成长、任务、地图/快旅、时间天气、NPC日程/生死/关系、战斗、制作、经济、地区演化、受限发牌、动态任务、随机事件与知识历程均可重放。G5-01～G5-07已落地双来源Creator入口、Creator Brief、BYOK/模型/预算预检、原子Creator SourcePlan/Start、精确DAG、Run进度/付费边界恢复、受治理Artifact三视图、直接/Agent双修改，以及正式影响闭包/局部修复Build。当前29类Artifact只开放领域声明字段；确认handoff必须先通过G5-05完整terminal v2封印，冻结DAG唯一计算目标/传递stale/reuse并由作者二次确认。正式命令原子创建下一子Build；直接目标零provider但保留新Run/tool evidence/checkpoint/receipt，下游按原生产链重跑，闭包外任务含确定性P0也须逐项跨Build复验。历史授权、base sibling、reuseKey、candidate和预览读集均受CAS，旧Build/Release/Session不改。P0统一限制512个来源单元、400万字符，32,650,752 B最坏候选低于共享32 MiB checkpoint上限；旧v1终端封印不能静默作为新携带依据。只读旧Release继续兼容 | G5-08～G5-12的媒资、质量/试玩、双来源正式发布更新、兼容迁移和创作者E2E仍待完成；Creator链当前只到可生成新受治理Build Preview，不能使用兼容Brief的占位WorldRelease冒充ProductRelease来源；当前确定性/证据链验证不等于内容质量或美学验证；G6运行时有边界自由演绎、G7盐脊真人验收与旧入口收口仍未完成 |
 
 ## F · 平台与商业化
 

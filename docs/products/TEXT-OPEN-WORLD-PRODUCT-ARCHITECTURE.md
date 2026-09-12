@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.56
+> 规格版本：1.1.57
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -2251,6 +2251,18 @@ AI创建任务、物品、敌人或配方时，本质上生成结构化候选行
 - 已知模型失败、已派发结果未知、未派发取消、候选替换、刷新恢复、跨目标冲突和确认意图都拥有显式状态及恢复动作。刷新不自动调用模型；unknown不自动重发；同一owner sibling group在任何目标上存在unknown或已确认意图时均失败关闭；
 - G5-07必须以交接单为唯一作者授权，计算下游stale闭包并创建新修复Build。G5-06不能借“编辑完成”原地重写当前Build，G5-07也不能把裸UI patch当成生产输入。
 
+### 24.6 G5-07引用影响与局部修复实现边界
+
+G5-07把G5-06已确认交接提升为新的、可执行且可审计的ProductBuild，而不是在原Build上改一行内容：
+
+- 影响预览只接受当前`preview-ready` Production上的完整Creator封存Build。它先复用G5-05的完整生产验证，重算Plan、manifest、root Run、全部task Run/event/checkpoint/receipt、Artifact/Blob和跨Build lineage；只伪造`release-ready`状态或根Hash不能进入修复。预览前后还逐字节比较Production、Brief、Build、全部Artifact、编辑Run/evidence和历史修复命令，读集漂移即要求重算；
+- 修改目标只能来自未消费的`impact-analysis handoff`。同一owner task只能有一张交接；同批目标不能互为祖先/后代，避免下游候选建立在同批将被替换的上游之上。完整owner sibling group必须随交接进入新Build，但允许未被本次编辑触及的siblings保持字节和Hash不变；至少目标内容必须真实变化；
+- 唯一代码实现的DAG传递闭包同时服务质量评审和Creator修复。目标task计入stale，全部后代按冻结Plan顺序进入重跑集合，其余task进入逐项复验的reuse集合；UI分别展示直接采用、下游重跑、可复用任务及模型、媒资、token、费用、耗时和存储上限，作者必须二次确认施工范围；
+- 正式`authorize-text-open-world-creator-repair`命令在一个事务中CAS预览Hash与完整读集，创建紧邻的不可变子Build、冻结目标Plan/影响授权、原子暂存完整确认siblings，并把Production切回`producing`。重复command幂等回读；stale预览、并发Build号、来源/命令/候选漂移均零部分写入失败；
+- 目标task不再调用模型或外部执行器。scheduler把已暂存内容作为零费用工具结果，仍生成新的child Run、source-snapshot、tool call/return、candidate checkpoint、验收receipt和accepted Artifact；在checkpoint后崩溃可由同一Run继续，不能重复采用或计费。其余stale后代走原冻结Executor正常生成与验证；
+- 未受影响task只能从直接父Build按完整terminal v2证明跨Build携带，并逐task重新生成零调用receipt；这一规则也覆盖P0等确定性task，不能因`executionMode=deterministic`跳过依赖证明。修复链逐级绑定全部授权命令，任一历史命令、base sibling、reuseKey或staged candidate被篡改都会使后续执行失败关闭；
+- 原Build、旧ProductRelease和现有Session始终保持原字节。修复Build完成后仍须经过G5-09质量/试玩和G5-10正式发布；本项复用既有Production、Brief、Command、Build、Artifact、Run、checkpoint和ledger生命周期，没有新增物理表、Context Source、AI写字段或世界引擎回写。
+
 ---
 
 ## 25. 媒资、表现与可访问性
@@ -2938,6 +2950,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.57 | 2026-09-13 | 完成G5-07引用影响与局部修复：G5-06确认交接经G5-05完整封印验证与前后读集CAS形成唯一影响计划；代码按冻结DAG计算目标、传递stale和逐项复验reuse，禁止同批祖先/后代目标并允许未改siblings原Hash携带。作者二次确认后，正式命令原子创建紧邻子Build、暂存完整siblings并冻结便携授权；目标以零provider工具结果进入新Run/checkpoint/receipt，崩溃可恢复，下游按原Executor重跑，确定性P0等未受影响task也必须获得新的跨Build复验receipt。旧Build/Release/Session不变；篡改历史修复命令、base sibling、reuseKey、staged candidate或预览读集均失败关闭；未新增表、Context Source或AI写入口。 |
 | 1.1.56 | 2026-09-12 | 完成G5-06直接编辑与Agent修改双入口：当前官方生产验证Artifact按19个领域任务、29类Artifact投影受限作者字段并完整重建owner sibling group；直接路径零模型，Agent路径走登记Context/Skill/Formal Entry并冻结完整模型身份。两条路径统一产生durable候选，经原生解析、领域验证、identity/reference delta和同组冲突门后，可由作者修订、拒绝或确认。确认只形成不可变impact-analysis handoff，不改当前Build、正式表或运行包；结果未知不重发，未派发可零费用取消，跨目标冲突、替换谱系、刷新恢复及Product/Build事务CAS均失败关闭。G5-07承接影响闭包和新修复Build。 |
 | 1.1.55 | 2026-09-10 | 完成G5-04专属Creator生产启动、进度与恢复：零写入预览生成不含本地ID的Creator SourcePlan、兼容Brief及精确DAG；正式开始重验Production/Brief/来源、完整模型route与参数、报价预算、确认及Plan Hash，并原子冻结Creator Start、Plan、Build与命令receipt。工作流只打开精确Production，目标失效即失败关闭。P1/P9以登记的有界多调用协议按分片恢复，响应先计账再解析；同一Build/task跨Run/epoch累计paid charge和未知reservation，executor前重验当前所有权，跨标签pause/stop不产生本地可阻止的付费派发。恢复绑定原Run、epoch、Plan及attempt，作者修复只开放给白名单文本任务；v10导入写前验证SourcePin闭包并重映射通用SourcePlan locator。媒资费用仍后置G5-08；未新增物理表、Schema或迁移。 |
 | 1.1.54 | 2026-09-09 | 完成G5-03生产准备纵切面：确认Brief进入无写入的BYOK/模型/报价/预算页，复用全局凭证与正式creation任务路由；模型绑定保存安全origin与不可反显路径Hash，确认时再以当前路由和凭证来源作外部真实性比较。内置价仅适用精确复核model及官方商业端点，中转、同域异路径、远程HTTP和URL内嵌凭证均失败关闭；作者报价和严格本地零费用形成独立快照。界面显示完整DAG 155/160次调用、120万/36万token、$30文本、2小时/200MB硬保护及媒资费用后置边界，并展示Brief真实用量与非账单估价。设置往返精确绑定会谈/产品/来源；四项确认仍为内存事实，G5-04必须CAS并原子授权。中央AI日志清除Key、认证头及URL敏感部分，供应商错误只暴露安全分类和恢复动作。 |

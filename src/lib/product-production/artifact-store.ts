@@ -25,6 +25,7 @@ import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewReco
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { parseProductBuildManifestV1, parseProductBuildQualityReportV1 } from './adoption'
 import { parseProductProductionBriefV3 } from './contracts'
+import { readTextOpenWorldCreatorRepairExecutionAuthorityV1 } from '../open-world/creator-artifact-repair-authority'
 import { readVerifiedMediaBlobObjectData } from './media-blob-store'
 import { parseProductProductionPlanV3 } from './plan'
 import {
@@ -529,6 +530,8 @@ interface CrossBuildCarryAuthorizationV1 {
   plan: ProductProductionPlanV3
   brief: ProductProductionBriefV3
   briefRowJson: string
+  repairCommands: Array<{ id: number; rowJson: string }>
+  reuseImpact: string[]
 }
 
 async function crossBuildCarryAuthorizationV1(input: {
@@ -549,19 +552,27 @@ async function crossBuildCarryAuthorizationV1(input: {
     || briefRow.briefHash !== input.targetBuild.briefHash) {
     throw new Error('[product-production-artifact] cross-build 目标 Brief 不存在或未授权')
   }
-  const brief = parseProductProductionBriefV3(briefRow.briefJson)
-  const plan = parseProductProductionPlanV3(
+  const repairAuthority = briefRow.briefKind === 'text-open-world-creator-v1'
+    ? await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
+        scope: input.scope,
+        buildId: input.targetBuild.id,
+      })
+    : null
+  const brief = repairAuthority?.executionBrief ?? parseProductProductionBriefV3(briefRow.briefJson)
+  const plan = repairAuthority?.targetProductionPlan ?? parseProductProductionPlanV3(
     input.targetBuild.planJson,
     brief,
     input.targetBuild.briefHash,
   )
+  const reuseImpact = repairAuthority?.authorization.impactPlan.targetTaskKeys
+    ?? brief.evolution?.affectedLanes
   if (canonicalProductProductionJsonV2(plan) !== input.targetBuild.planJson
     || await hashProductProductionValueV2(plan) !== input.targetBuild.planHash
     || plan.productType !== input.production.productType
     || plan.buildNumber !== input.targetBuild.buildNumber
     || plan.controlEpoch !== input.targetBuild.controlEpoch
     || input.targetBuild.parentBuildNumber !== input.sourceBuild.buildNumber
-    || !brief.evolution) {
+    || !reuseImpact) {
     throw new Error('[product-production-artifact] cross-build 目标 Plan/Brief 未冻结复用授权')
   }
   const sourceByKey = new Map(input.sources.map(row => [row.artifactKey, row]))
@@ -596,14 +607,23 @@ async function crossBuildCarryAuthorizationV1(input: {
       sourceBuildNumber: input.sourceBuild.buildNumber,
       targetBuildNumber: input.targetBuild.buildNumber,
       taskKey: task.taskKey,
-      userImpact: brief.evolution.affectedLanes,
+      userImpact: reuseImpact,
       artifacts: sources.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })),
     })
     if (reuse.reuseKey !== expectedReuseKey) {
       throw new Error(`[product-production-artifact] cross-build reuseKey 不闭合:${task.taskKey}`)
     }
   }
-  return { plan, brief, briefRowJson: canonicalProductProductionJsonV2(briefRow) }
+  return {
+    plan,
+    brief,
+    briefRowJson: canonicalProductProductionJsonV2(briefRow),
+    repairCommands: repairAuthority?.commandChain.map(command => ({
+      id: command.id,
+      rowJson: canonicalProductProductionJsonV2(command),
+    })) ?? [],
+    reuseImpact: [...reuseImpact],
+  }
 }
 
 function sameArrayBufferV1(left: ArrayBuffer | null, right: ArrayBuffer | null): boolean {
@@ -2971,9 +2991,9 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
   const frozenProductionJson = canonicalProductProductionJsonV2(production)
   return db.transaction('rw', scopeTransactionTables(
     db.productProductions, db.productProductionBriefs, db.productBuilds,
-    db.productBuildArtifacts, db.mediaBlobObjects,
+    db.productBuildArtifacts, db.mediaBlobObjects, db.productProductionCommands,
   ), async () => {
-    const [currentSourceBuild, currentTargetBuild, currentProduction, currentBrief, currentSourceRows, currentTargetRows] = await Promise.all([
+    const [currentSourceBuild, currentTargetBuild, currentProduction, currentBrief, currentSourceRows, currentTargetRows, currentRepairCommands] = await Promise.all([
       db.productBuilds.get(sourceBuild.id),
       db.productBuilds.get(targetBuild.id),
       db.productProductions.get(production.id),
@@ -2981,12 +3001,19 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
         .equals([targetBuild.productionId, targetBuild.briefRevision]).first(),
       db.productBuildArtifacts.where('buildId').equals(sourceBuild.id).toArray(),
       db.productBuildArtifacts.where('buildId').equals(targetBuild.id).toArray(),
+      Promise.all(authorization.repairCommands.map(command => (
+        db.productProductionCommands.get(command.id)
+      ))),
     ])
     if (!currentSourceBuild || !currentTargetBuild || !currentProduction || !currentBrief
       || canonicalProductProductionJsonV2(currentSourceBuild) !== frozenSourceBuildJson
       || canonicalProductProductionJsonV2(currentTargetBuild) !== frozenTargetBuildJson
       || canonicalProductProductionJsonV2(currentProduction) !== frozenProductionJson
       || canonicalProductProductionJsonV2(currentBrief) !== authorization.briefRowJson
+      || currentRepairCommands.length !== authorization.repairCommands.length
+      || currentRepairCommands.some((row, index) => (
+        canonicalProductProductionJsonV2(row) !== authorization.repairCommands[index]!.rowJson
+      ))
       || !sameStoredArtifactRowsV1(sourceRows, currentSourceRows)
       || !sameStoredArtifactRowsV1(targetRows, currentTargetRows)) {
       throw new Error('[product-production-artifact] cross-build 证明读取后来源或目标已变化')

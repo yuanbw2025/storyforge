@@ -5,6 +5,7 @@ import { readMediaBlobObjectData } from '../product-production/media-blob-store'
 import { parseProductRuntimePackageV1 } from '../product-production/runtime-package'
 import { db } from '../db/schema'
 import { readTextOpenWorldCreatorExecutionBriefV1 } from './creator-production-start'
+import { readTextOpenWorldCreatorRepairExecutionAuthorityV1 } from './creator-artifact-repair-authority'
 import type {
   ProductProductionTaskExecutionInputV1,
   ProductProductionTaskExecutionResultV1,
@@ -1128,10 +1129,15 @@ export async function compileTextOpenWorldRuntimePackageV1(input: {
     fail('找不到当前Build绑定的授权Product Brief')
   }
   const creatorContracts = productionBriefRow.briefKind === 'text-open-world-creator-v1'
-    ? await readTextOpenWorldCreatorExecutionBriefV1({
-        briefRow: productionBriefRow,
-        planJson: productionBuild.planJson,
-      })
+    ? productionBuild.parentBuildNumber == null
+      ? await readTextOpenWorldCreatorExecutionBriefV1({
+          briefRow: productionBriefRow,
+          planJson: productionBuild.planJson,
+        })
+      : await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
+          scope: input.execution.scope,
+          buildId: productionBuild.id!,
+        })
     : null
   const sharedBrief = creatorContracts?.executionBrief
     ?? parseProductProductionBriefV3(productionBriefRow.briefJson)

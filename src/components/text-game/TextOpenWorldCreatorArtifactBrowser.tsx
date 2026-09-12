@@ -631,6 +631,7 @@ export function TextOpenWorldCreatorArtifactBrowser(
                 selection={editSelection}
                 eligible={editEligible}
                 ineligibleReason={editIneligibleReason}
+                onRepairBuildCreated={load}
               />}
             </> : selectedArtifact ? <>
               <ArtifactDetail artifact={selectedArtifact} />
@@ -639,6 +640,7 @@ export function TextOpenWorldCreatorArtifactBrowser(
                 selection={editSelection}
                 eligible={editEligible}
                 ineligibleReason={editIneligibleReason}
+                onRepairBuildCreated={load}
               />}
             </> : <p className="py-10 text-center text-xs text-text-muted">从列表选择一项查看只读详情。</p>}
           </div>

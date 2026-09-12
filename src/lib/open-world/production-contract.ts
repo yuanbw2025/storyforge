@@ -608,6 +608,32 @@ export const TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_DEFINITIONS_V1: TextOpenWorldPr
     ownerTaskKey: task.taskKey,
   })))
 
+/**
+ * Canonical transitive stale closure for the production DAG. The edited task
+ * itself is included. Review findings and creator repair Builds must share
+ * this code-owned rule instead of encoding propagation in prompts or UI.
+ */
+export function textOpenWorldProductionTaskDescendantsV1(
+  taskKey: string,
+  contracts: readonly Pick<TextOpenWorldProductionTaskContractV1, 'taskKey' | 'dependsOn'>[] =
+    TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1,
+): string[] {
+  if (!contracts.some(task => task.taskKey === taskKey)) {
+    fail(`stale closure 起点不存在:${taskKey}`)
+  }
+  const found = new Set<string>([taskKey])
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const task of contracts) {
+      if (found.has(task.taskKey) || !task.dependsOn.some(dependency => found.has(dependency))) continue
+      found.add(task.taskKey)
+      changed = true
+    }
+  }
+  return contracts.filter(task => found.has(task.taskKey)).map(task => task.taskKey)
+}
+
 function ancestorsOf(
   taskKey: string,
   taskByKey: ReadonlyMap<string, TextOpenWorldProductionTaskContractV1>,

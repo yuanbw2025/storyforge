@@ -53,6 +53,11 @@ import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha25
 import { createProductProductionPlanV3, parseProductProductionPlanV3 } from './plan'
 import { createTextOpenWorldProductionPlanV1 } from '../open-world/production-contract'
 import { readTextOpenWorldCreatorExecutionBriefV1 } from '../open-world/creator-production-start'
+import {
+  readTextOpenWorldCreatorRepairExecutionAuthorityV1,
+  resolveTextOpenWorldCreatorRepairTaskResultV1,
+  type TextOpenWorldCreatorRepairExecutionAuthorityV1,
+} from '../open-world/creator-artifact-repair-authority'
 import { parseTextOpenWorldModulesV1 } from '../open-world/modules'
 import { createProductBuildPreviewManifestV1 } from './preview-manifest'
 import { createProductBuildRootTerminalReceiptV1 } from './receipts'
@@ -1116,14 +1121,24 @@ async function currentProductionBuild(scope: WorkspaceScope, productionId: numbe
     || briefRow.status !== 'authorized' || build.briefHash !== briefRow.briefHash) {
     throw new Error('[product-production-scheduler] Build/Brief 不满足调度条件')
   }
+  const repairAuthority = briefRow.briefKind === 'text-open-world-creator-v1'
+    && build.parentBuildNumber != null
+    ? await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
+        scope,
+        buildId: build.id!,
+      })
+    : null
   const creatorContracts = briefRow.briefKind === 'text-open-world-creator-v1'
-    ? await readTextOpenWorldCreatorExecutionBriefV1({ briefRow, planJson: build.planJson })
+    ? repairAuthority ?? await readTextOpenWorldCreatorExecutionBriefV1({
+        briefRow,
+        planJson: build.planJson,
+      })
     : null
   const brief = creatorContracts?.executionBrief ?? parseProductProductionBriefV3(briefRow.briefJson)
   if (!creatorContracts && await hashProductProductionValueV2(brief) !== briefRow.briefHash) {
     throw new Error('[product-production-scheduler] Brief hash 校验失败')
   }
-  return { production, build, briefRow, brief, creatorContracts }
+  return { production, build, briefRow, brief, creatorContracts, repairAuthority }
 }
 
 function evolutionTaskLane(taskKey: string): 'content' | 'product' | 'visual' | 'audio' | null {
@@ -1669,7 +1684,12 @@ async function ensureCarriedForwardTaskRuns(input: {
     const artifacts = allArtifactRows
       .filter(row => row.controlEpoch === input.build.controlEpoch && row.status === 'carried-forward')
     for (const task of input.plan.tasks) {
-      if (task.executionMode === 'deterministic') continue
+      // Normal same-Build recovery never carries deterministic work. A
+      // Creator repair Plan, however, may explicitly authorize an unaffected
+      // deterministic task (notably P0 SourcePin) for sealed cross-Build
+      // reuse. That task still needs a fresh zero-call child receipt before
+      // downstream dependencies can become ready.
+      if (task.executionMode === 'deterministic' && task.reuse === null) continue
       const outputs = artifacts.filter(row => task.outputArtifactKeys.includes(row.artifactKey))
       if (outputs.length !== task.outputArtifactKeys.length
         || task.dependsOn.some(dependency => !completed.has(dependency))) continue
@@ -2382,6 +2402,7 @@ async function runClaimedTask(input: {
   task: ProductProductionPlanTaskV3
   snapshot: AgentRunSnapshotV1
   executor: ProductProductionTaskExecutorV1
+  repairAuthority: TextOpenWorldCreatorRepairExecutionAuthorityV1 | null
   capabilityBindings: ProductProductionCapabilityBindingV1[]
   signal: AbortSignal
   onDurableBoundary?: (boundary: ProductProductionSchedulerBoundaryV1, snapshot: AgentRunSnapshotV1) => void | Promise<void>
@@ -2392,6 +2413,13 @@ async function runClaimedTask(input: {
   if (!previous) snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: input.task.taskKey })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: input.task.taskKey, attempt })
   const artifacts = await acceptedInputs(input.build.id, input.build.controlEpoch, input.task.inputArtifactKeys)
+  const authorizedRepair = input.repairAuthority == null
+    ? null
+    : await resolveTextOpenWorldCreatorRepairTaskResultV1({
+        authority: input.repairAuthority,
+        taskKey: input.task.taskKey,
+        inputArtifacts: artifacts,
+      })
   const bindings = normalizedBindings(input.task, input.capabilityBindings)
   const localProceduralMedia = isLocalProceduralMediaTaskV1(input.task, bindings)
   const dependencyRuns = await Promise.all(input.task.dependsOn.map(async taskKey => {
@@ -2604,10 +2632,12 @@ async function runClaimedTask(input: {
       if (!build || build.productionId !== input.productionId) {
         throw new Error('[product-production-scheduler] Creator 模型任务缺少当前 Build')
       }
-      const contracts = await readTextOpenWorldCreatorExecutionBriefV1({
-        briefRow,
-        planJson: build.planJson,
-      })
+      const contracts = build.parentBuildNumber == null
+        ? await readTextOpenWorldCreatorExecutionBriefV1({ briefRow, planJson: build.planJson })
+        : await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
+            scope: input.scope,
+            buildId: build.id!,
+          })
       sourcePlanHash = contracts.sourcePlan.planHash
       confirmedBriefHash = contracts.start.startHash
       // P1 owns exact per-batch Gateway attempts. A future shared-Gateway
@@ -2701,8 +2731,11 @@ async function runClaimedTask(input: {
       ? await hashProductProductionValueV2(repairAssembled.text)
       : null,
     authorDraftHash,
+    creatorRepairAuthorizationHash: authorizedRepair == null
+      ? null
+      : input.repairAuthority!.authorization.authorizationHash,
   })
-  const executionReservation: ProductTaskBudgetReservationV1 = authorDraftJson
+  const executionReservation: ProductTaskBudgetReservationV1 = authorDraftJson || authorizedRepair
     ? {
         modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0,
         maximumCostUsd: 0,
@@ -2719,7 +2752,7 @@ async function runClaimedTask(input: {
     attempt,
     budget: executionReservation,
     limits: input.brief.productionBudget,
-    requiredProviderCall: authorDraftJson !== undefined
+    requiredProviderCall: authorDraftJson !== undefined || authorizedRepair !== null
       ? null
       : input.task.executionMode === 'model'
         ? 'model'
@@ -2768,11 +2801,11 @@ async function runClaimedTask(input: {
     toolCalls: attemptReservation.mediaCalls,
     tokens: attemptReservation.inputTokens + attemptReservation.outputTokens,
   })
-  if (authorDraftJson !== undefined || repairAssembled) {
+  if (authorDraftJson !== undefined || repairAssembled || authorizedRepair) {
     const recorded = await recordAgentRunArtifactV1({
       scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
       artifactKind: 'source-snapshot',
-      content: authorDraftJson ?? repairAssembled!.text,
+      content: authorDraftJson ?? authorizedRepair?.evidenceJson ?? repairAssembled!.text,
       expectedLastSequence: snapshot.projection.lastSequence,
     })
     snapshot = recorded.snapshot
@@ -2794,7 +2827,14 @@ async function runClaimedTask(input: {
     snapshot,
   })
   if (expiredBeforeDispatch !== 'unchanged') return
-  if (input.task.executionMode === 'model' && !authorDraftJson && !executorOwnsWorldGateway) {
+  if (authorizedRepair) {
+    snapshot = await append(input.scope, snapshot, 'tool.called', {
+      stepId: input.task.taskKey,
+      attempt,
+      toolName: 'text-open-world-creator-repair-adoption',
+      callHash: inputHash,
+    })
+  } else if (input.task.executionMode === 'model' && !authorDraftJson && !executorOwnsWorldGateway) {
     snapshot = await append(input.scope, snapshot, 'model.requested', { stepId: input.task.taskKey, attempt, bindingHash })
   } else if (input.task.executionMode === 'media-provider') {
     snapshot = await append(input.scope, snapshot, 'tool.called', {
@@ -2856,7 +2896,7 @@ async function runClaimedTask(input: {
     })
   }
   try {
-    result = await input.executor({
+    result = authorizedRepair?.result ?? await input.executor({
       scope: input.scope, productionId: input.productionId, buildId: input.build.id,
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.build.planHash, task: input.task,
@@ -3089,7 +3129,14 @@ async function runClaimedTask(input: {
     return
   }
   const candidateHash = await hashProductProductionTaskCandidateV1(result)
-  if (input.task.executionMode === 'model' && !authorDraftJson && !executorOwnsWorldGateway) {
+  if (authorizedRepair) {
+    snapshot = await append(input.scope, snapshot, 'tool.returned', {
+      stepId: input.task.taskKey,
+      attempt,
+      toolName: 'text-open-world-creator-repair-adoption',
+      resultHash: candidateHash,
+    })
+  } else if (input.task.executionMode === 'model' && !authorDraftJson && !executorOwnsWorldGateway) {
     snapshot = await append(input.scope, snapshot, 'model.responded', {
       stepId: input.task.taskKey, attempt, outputHash: candidateHash,
     })
@@ -3868,6 +3915,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
         controlEpoch: state.build.controlEpoch, planHash: state.build.planHash, failureJson: state.build.failureJson,
       },
       task, snapshot, executor: input.executor,
+      repairAuthority: state.repairAuthority,
       capabilityBindings: input.capabilityBindings ?? [], signal: controller.signal,
       onDurableBoundary: input.onDurableBoundary,
     })))

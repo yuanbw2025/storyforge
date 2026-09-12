@@ -32,7 +32,7 @@ import type {
   WorkspaceScope,
 } from '../types'
 import { assertRecordInScope } from '../workspace/scope'
-import { TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1 } from './production-contract'
+import { textOpenWorldProductionTaskDescendantsV1 } from './production-contract'
 
 const BALANCE_SKILL_ID = 'text-open-world.production.balance-review.v1'
 const SEMANTIC_SKILL_ID = 'text-open-world.production.semantic-review.v1'
@@ -273,20 +273,6 @@ async function readArtifacts(
   const productKeys = [...values.values()].map(value => value.productInstanceKey).filter(Boolean)
   if (new Set(productKeys).size !== 1) fail('评审输入跨产品实例')
   return { values, hashes }
-}
-
-function descendants(taskKey: string): string[] {
-  const found = new Set<string>([taskKey])
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const task of TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1) {
-      if (!found.has(task.taskKey) && task.dependsOn.some(key => found.has(key))) {
-        found.add(task.taskKey); changed = true
-      }
-    }
-  }
-  return TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1.filter(task => found.has(task.taskKey)).map(task => task.taskKey)
 }
 
 function balanceMetricDemands(input: {
@@ -551,7 +537,8 @@ function buildFindings(draft: ReviewDraftV1, demands: ReviewMetricDemandV1[], ki
       targetEntityKeys: finding.targetEntityKeys,
       repair: {
         targetTaskKey: demand.targetTaskKey, mode: 'new-build-bounded-local-repair', instruction: finding.instruction,
-        staleTaskKeys: descendants(demand.targetTaskKey), mutatesAcceptedArtifact: false,
+        staleTaskKeys: textOpenWorldProductionTaskDescendantsV1(demand.targetTaskKey),
+        mutatesAcceptedArtifact: false,
       },
     }
   })

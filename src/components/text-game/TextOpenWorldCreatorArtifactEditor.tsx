@@ -11,10 +11,12 @@ import {
 } from 'lucide-react'
 import {
   abandonTextOpenWorldCreatorArtifactEditUnknownModelOutcomeV1,
+  authorizeTextOpenWorldCreatorArtifactRepairV1,
   cancelTextOpenWorldCreatorArtifactEditIntakeV1,
   confirmTextOpenWorldCreatorArtifactEditIntentV1,
   generateTextOpenWorldCreatorArtifactEditCandidateV1,
   prepareTextOpenWorldCreatorArtifactEditV1,
+  previewTextOpenWorldCreatorArtifactRepairV1,
   readLatestTextOpenWorldCreatorArtifactEditStateV1,
   rejectTextOpenWorldCreatorArtifactEditCandidateV1,
   resumeTextOpenWorldCreatorArtifactEditIntakeV1,
@@ -31,6 +33,7 @@ import type { TextOpenWorldCreatorEditTargetContextV1 } from '../../lib/open-wor
 import type {
   TextOpenWorldCreatorArtifactEditSelectionV1 as TextOpenWorldCreatorArtifactEditSelectionContractV1,
 } from '../../lib/open-world/creator-artifact-edit'
+import type { TextOpenWorldCreatorRepairImpactPlanV1 } from '../../lib/open-world/creator-artifact-repair-contract'
 
 export type TextOpenWorldCreatorArtifactEditSelectionV1 =
   TextOpenWorldCreatorArtifactEditSelectionContractV1
@@ -39,6 +42,21 @@ export interface TextOpenWorldCreatorArtifactEditorProps {
   selection: TextOpenWorldCreatorArtifactEditSelectionV1
   eligible: boolean
   ineligibleReason?: string
+  onRepairBuildCreated?: (result: {
+    productionId: number
+    baseBuildNumber: number
+    targetBuildNumber: number
+  }) => void | Promise<void>
+}
+
+interface CreatorRepairPreviewV1 {
+  productionId: number
+  productionStateRevision: number
+  baseBuildId: number
+  baseBuildNumber: number
+  basePlanHash: string
+  targetPlanHash: string
+  impactPlan: TextOpenWorldCreatorRepairImpactPlanV1
 }
 
 interface EditableValueV1 {
@@ -208,6 +226,11 @@ export default function TextOpenWorldCreatorArtifactEditor(
   const [acknowledgedWarnings, setAcknowledgedWarnings] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [repairPreview, setRepairPreview] = useState<CreatorRepairPreviewV1 | null>(null)
+  const [repairPreviewLoading, setRepairPreviewLoading] = useState(false)
+  const [repairPreviewAttempted, setRepairPreviewAttempted] = useState(false)
+  const [repairAcknowledged, setRepairAcknowledged] = useState(false)
+  const [repairCreated, setRepairCreated] = useState(false)
   const [abandonUnknownOutcomeArmed, setAbandonUnknownOutcomeArmed] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -267,11 +290,46 @@ export default function TextOpenWorldCreatorArtifactEditor(
     })
     setAbandonUnknownOutcomeArmed(false)
     setAcknowledgedWarnings([])
+    setRepairPreview(null)
+    setRepairPreviewLoading(false)
+    setRepairPreviewAttempted(false)
+    setRepairAcknowledged(false)
+    setRepairCreated(false)
     setError('')
     setNotice('')
     void restore()
     return () => { generation.current += 1 }
   }, [restore, selectionKey])
+
+  const loadRepairPreview = useCallback(async () => {
+    if (!state.intent || repairCreated) return
+    const current = ++generation.current
+    setRepairPreviewLoading(true)
+    setRepairPreviewAttempted(true)
+    setRepairPreview(null)
+    setRepairAcknowledged(false)
+    setError('')
+    try {
+      const preview = await previewTextOpenWorldCreatorArtifactRepairV1({
+        scope: props.selection.scope,
+        productionId: props.selection.productionId,
+        buildId: props.selection.buildId,
+      })
+      if (generation.current === current) setRepairPreview(preview)
+    } catch (cause) {
+      if (generation.current === current) setError(errorMessage(cause))
+    } finally {
+      if (generation.current === current) setRepairPreviewLoading(false)
+    }
+  }, [props.selection, repairCreated, state.intent])
+
+  useEffect(() => {
+    if (state.intent && !repairPreview && !repairPreviewLoading
+      && !repairPreviewAttempted && !repairCreated) {
+      void loadRepairPreview()
+    }
+  }, [loadRepairPreview, repairCreated, repairPreview, repairPreviewAttempted,
+    repairPreviewLoading, state.intent])
 
   const operations = useMemo<TextOpenWorldCreatorEditPatchOperationV1[]>(() => fields
     .filter(field => normalizedJson(field.value) !== normalizedJson(field.baseValue))
@@ -469,6 +527,41 @@ export default function TextOpenWorldCreatorArtifactEditor(
       setAbandonUnknownOutcomeArmed(false)
       await restore()
       setNotice('结果未知的模型请求已由作者明确放弃；系统没有自动重发。当前 Build 未被改写。')
+    } catch (cause) {
+      setError(errorMessage(cause))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const authorizeRepair = async () => {
+    if (!repairPreview || !repairAcknowledged || repairCreated) return
+    setSubmitting(true)
+    setError('')
+    setNotice('')
+    try {
+      const receipt = await authorizeTextOpenWorldCreatorArtifactRepairV1({
+        scope: props.selection.scope,
+        productionId: repairPreview.productionId,
+        expectedStateRevision: repairPreview.productionStateRevision,
+        baseBuildNumber: repairPreview.baseBuildNumber,
+        expectedBasePlanHash: repairPreview.basePlanHash,
+        expectedHandoffSetHash: repairPreview.impactPlan.handoffSetHash,
+        expectedImpactPlanHash: repairPreview.impactPlan.impactPlanHash,
+        expectedTargetPlanHash: repairPreview.targetPlanHash,
+      })
+      if (!receipt.ok) {
+        throw new Error(typeof receipt.result.message === 'string'
+          ? receipt.result.message
+          : `修复 Build 创建失败：${receipt.errorCode ?? 'unknown'}`)
+      }
+      setRepairCreated(true)
+      setNotice(`修复 Build #${repairPreview.impactPlan.targetBuildNumber} 已创建；原 Build 保持不变，等待执行受影响任务。`)
+      await props.onRepairBuildCreated?.({
+        productionId: repairPreview.productionId,
+        baseBuildNumber: repairPreview.baseBuildNumber,
+        targetBuildNumber: repairPreview.impactPlan.targetBuildNumber,
+      })
     } catch (cause) {
       setError(errorMessage(cause))
     } finally {
@@ -800,6 +893,95 @@ export default function TextOpenWorldCreatorArtifactEditor(
             className="inline-flex items-center justify-center gap-1.5 rounded bg-accent px-4 py-2 text-xs font-medium text-white disabled:opacity-40"
           ><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />确认修改方案并进入影响分析</button>
         </div>}
+      </section>}
+
+      {state.intent && <section
+        className="mt-4 rounded-lg border border-accent/40 bg-accent/5 p-4"
+        aria-labelledby="text-open-world-repair-impact-title"
+        data-testid="text-open-world-creator-repair-impact"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h5 id="text-open-world-repair-impact-title" className="text-xs font-semibold">
+              修改影响与局部修复 Build
+            </h5>
+            <p className="mt-1 max-w-2xl text-[10px] leading-5 text-text-muted">
+              系统按冻结任务 DAG 重算直接修改、下游失效与可复用任务。此处确认的是新 Build 的施工范围，不会覆盖原 Build 或已发布版本。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadRepairPreview()}
+            disabled={repairPreviewLoading || submitting || repairCreated}
+            className="inline-flex items-center gap-1.5 rounded border border-border px-2.5 py-1.5 text-[10px] disabled:opacity-40"
+          >
+            {repairPreviewLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+            重新分析影响
+          </button>
+        </div>
+
+        {repairPreviewLoading && <p className="mt-4 text-xs text-text-muted">
+          <Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          正在核验全部确认交接、基础 Artifact 与下游依赖…
+        </p>}
+
+        {repairPreview && <>
+          <dl className="mt-4 grid gap-2 text-[10px] sm:grid-cols-2 lg:grid-cols-5">
+            <div className="rounded border border-border bg-bg-base p-2"><dt className="text-text-muted">Build</dt><dd className="mt-1">#{repairPreview.baseBuildNumber} → #{repairPreview.impactPlan.targetBuildNumber}</dd></div>
+            <div className="rounded border border-border bg-bg-base p-2"><dt className="text-text-muted">直接修改任务</dt><dd className="mt-1">{repairPreview.impactPlan.targetTaskKeys.length}</dd></div>
+            <div className="rounded border border-border bg-bg-base p-2"><dt className="text-text-muted">影响闭包任务</dt><dd className="mt-1">{repairPreview.impactPlan.staleTaskKeys.length}</dd></div>
+            <div className="rounded border border-border bg-bg-base p-2"><dt className="text-text-muted">安全复用任务</dt><dd className="mt-1">{repairPreview.impactPlan.reuseTaskKeys.length}</dd></div>
+            <div className="rounded border border-border bg-bg-base p-2"><dt className="text-text-muted">预计模型 / 媒资调用</dt><dd className="mt-1">{repairPreview.impactPlan.estimatedRerunBudget.modelCalls} / {repairPreview.impactPlan.estimatedRerunBudget.mediaCalls}</dd></div>
+          </dl>
+
+          <div className="mt-3 grid gap-3 lg:grid-cols-3">
+            <section className="rounded border border-border bg-bg-base p-3">
+              <h6 className="text-[11px] font-medium">直接采用确认修改</h6>
+              <ul className="mt-2 space-y-1 text-[10px]">
+                {repairPreview.impactPlan.targetTaskKeys.map(key => <li key={key}><code>{key}</code></li>)}
+              </ul>
+            </section>
+            <section className="rounded border border-border bg-bg-base p-3">
+              <h6 className="text-[11px] font-medium">下游重新生成与验证</h6>
+              <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-[10px]">
+                {repairPreview.impactPlan.staleTaskKeys
+                  .filter(key => !repairPreview.impactPlan.targetTaskKeys.includes(key))
+                  .map(key => <li key={key}><code>{key}</code></li>)}
+              </ul>
+            </section>
+            <section className="rounded border border-border bg-bg-base p-3">
+              <h6 className="text-[11px] font-medium">预算上限估算</h6>
+              <dl className="mt-2 grid grid-cols-2 gap-2 text-[10px]">
+                <div><dt className="text-text-muted">Tokens</dt><dd>{(repairPreview.impactPlan.estimatedRerunBudget.inputTokens + repairPreview.impactPlan.estimatedRerunBudget.outputTokens).toLocaleString('zh-CN')}</dd></div>
+                <div><dt className="text-text-muted">最长耗时</dt><dd>{Math.ceil(repairPreview.impactPlan.estimatedRerunBudget.durationMs / 1000)} 秒</dd></div>
+                <div><dt className="text-text-muted">新增存储</dt><dd>{repairPreview.impactPlan.estimatedRerunBudget.storageBytes.toLocaleString('zh-CN')} B</dd></div>
+                <div><dt className="text-text-muted">最高成本</dt><dd>{repairPreview.impactPlan.estimatedRerunBudget.maximumCostUsd == null ? '未定价' : `$${repairPreview.impactPlan.estimatedRerunBudget.maximumCostUsd.toFixed(4)}`}</dd></div>
+              </dl>
+            </section>
+          </div>
+
+          {!repairCreated && <div className="mt-4 rounded border border-warning/40 bg-warning/5 p-3">
+            <label className="flex items-start gap-2 text-[10px] leading-5">
+              <input
+                type="checkbox"
+                checked={repairAcknowledged}
+                onChange={event => setRepairAcknowledged(event.target.checked)}
+              />
+              <span>我已核对：直接修改会在新 Build 中采用，所有下游失效任务将重新执行，其余任务只在逐项复验通过后跨 Build 复用。</span>
+            </label>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => void authorizeRepair()}
+                disabled={submitting || !repairAcknowledged}
+                className="inline-flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs font-medium text-white disabled:opacity-40"
+              >
+                {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+                确认范围并创建修复 Build
+              </button>
+            </div>
+          </div>}
+        </>}
       </section>}
     </>}
   </section>

@@ -59,6 +59,10 @@ import {
   type TextOpenWorldCreatorArtifactEditSelectionV1,
 } from '../open-world/creator-artifact-edit'
 import type { TextOpenWorldCreatorEditPatchOperationV1 } from '../open-world/creator-artifact-edit-contract'
+import { prepareTextOpenWorldCreatorArtifactRepairV1 as prepareTextOpenWorldCreatorArtifactRepairCoreV1 } from '../open-world/creator-artifact-repair'
+import {
+  readTextOpenWorldCreatorRepairExecutionAuthorityV1,
+} from '../open-world/creator-artifact-repair-authority'
 import { useAIConfigStore } from '../../stores/ai-config'
 import {
   assertProductProductionBudgetLedgerV1,
@@ -106,6 +110,53 @@ export function prepareTextOpenWorldCreatorArtifactEditV1(
   selection: TextOpenWorldCreatorArtifactEditSelectionV1,
 ) {
   return prepareTextOpenWorldCreatorArtifactEditCoreV1(selection)
+}
+
+export async function previewTextOpenWorldCreatorArtifactRepairV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+  buildId: number
+}) {
+  const prepared = await prepareTextOpenWorldCreatorArtifactRepairCoreV1(input)
+  return {
+    productionId: prepared.production.id,
+    productionStateRevision: prepared.production.stateRevision,
+    baseBuildId: prepared.baseBuild.id,
+    baseBuildNumber: prepared.baseBuild.buildNumber,
+    basePlanHash: prepared.baseBuild.planHash,
+    targetPlanHash: prepared.targetPlanHash,
+    impactPlan: prepared.impactPlan,
+  }
+}
+
+export async function authorizeTextOpenWorldCreatorArtifactRepairV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+  expectedStateRevision: number
+  baseBuildNumber: number
+  expectedBasePlanHash: string
+  expectedHandoffSetHash: string
+  expectedImpactPlanHash: string
+  expectedTargetPlanHash: string
+  authorizationNonce?: string
+  authorizedAt?: number
+}): Promise<ProductProductionCommandReceiptV1> {
+  return executeProductProductionCommand({
+    scope: input.scope,
+    productionId: input.productionId,
+    command: {
+      type: 'authorize-text-open-world-creator-repair',
+      commandId: `tow-creator-repair:${crypto.randomUUID()}`,
+      expectedStateRevision: input.expectedStateRevision,
+      baseBuildNumber: input.baseBuildNumber,
+      expectedBasePlanHash: input.expectedBasePlanHash,
+      expectedHandoffSetHash: input.expectedHandoffSetHash,
+      expectedImpactPlanHash: input.expectedImpactPlanHash,
+      expectedTargetPlanHash: input.expectedTargetPlanHash,
+      authorizationNonce: input.authorizationNonce ?? crypto.randomUUID(),
+      authorizedAt: input.authorizedAt ?? Date.now(),
+    },
+  })
 }
 
 export function generateTextOpenWorldCreatorArtifactEditCandidateV1(input:
@@ -478,10 +529,15 @@ export async function readProductProductionDetailsV1(
   }
   const executionBrief = brief?.briefKind === 'text-open-world-creator-v1'
     ? brief.status === 'authorized' && build
-      ? (await readTextOpenWorldCreatorExecutionBriefV1({
-          briefRow: brief,
-          planJson: build.planJson,
-        })).executionBrief
+      ? (build.parentBuildNumber == null
+          ? await readTextOpenWorldCreatorExecutionBriefV1({
+              briefRow: brief,
+              planJson: build.planJson,
+            })
+          : await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
+              scope,
+              buildId: build.id!,
+            })).executionBrief
       : null
     : brief ? parseProductProductionBriefV3(brief.briefJson) : null
   return {
@@ -854,10 +910,15 @@ export async function runAuthorizedProductProductionV1(input: {
     return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
   }
   const creatorContracts = details.brief.briefKind === 'text-open-world-creator-v1'
-    ? await readTextOpenWorldCreatorExecutionBriefV1({
-        briefRow: details.brief,
-        planJson: details.build.planJson,
-      })
+    ? details.build.parentBuildNumber == null
+      ? await readTextOpenWorldCreatorExecutionBriefV1({
+          briefRow: details.brief,
+          planJson: details.build.planJson,
+        })
+      : await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
+          scope,
+          buildId: details.build.id!,
+        })
     : null
   if (creatorContracts) {
     // Creator authorization freezes the complete non-secret route identity,

@@ -478,6 +478,31 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
       authorizedAt: finite(row.authorizedAt, 'authorizedAt', Number.MAX_SAFE_INTEGER, true),
     }
   }
+  if (type === 'authorize-text-open-world-creator-repair') {
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision', 'baseBuildNumber', 'expectedBasePlanHash',
+      'expectedHandoffSetHash', 'expectedImpactPlanHash', 'expectedTargetPlanHash',
+      'authorizationNonce', 'authorizedAt',
+    ])
+    for (const key of [
+      'expectedBasePlanHash', 'expectedHandoffSetHash',
+      'expectedImpactPlanHash', 'expectedTargetPlanHash',
+    ] as const) {
+      if (!isSha256Hash(row[key])) fail(`Creator repair 的 ${key} 无效`)
+    }
+    return {
+      type,
+      commandId,
+      expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      baseBuildNumber: positiveId(row.baseBuildNumber, 'baseBuildNumber'),
+      expectedBasePlanHash: row.expectedBasePlanHash as string,
+      expectedHandoffSetHash: row.expectedHandoffSetHash as string,
+      expectedImpactPlanHash: row.expectedImpactPlanHash as string,
+      expectedTargetPlanHash: row.expectedTargetPlanHash as string,
+      authorizationNonce: stableKey(row.authorizationNonce, 'authorizationNonce'),
+      authorizedAt: finite(row.authorizedAt, 'authorizedAt', Number.MAX_SAFE_INTEGER, true),
+    }
+  }
   if (type === 'pause') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'reason']), expectedStateRevision: expectedRevision(row.expectedStateRevision), reason: text(row.reason, 'reason', 4000) }
   if (type === 'resume') {
     const hasPausedReservations = Object.prototype.hasOwnProperty.call(row, 'pausedReservationDispositions')

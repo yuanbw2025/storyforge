@@ -2,6 +2,7 @@ import Dexie from 'dexie'
 import { db } from '../db/schema'
 import type {
   ConfirmedProductBriefV1,
+  ProductBuildArtifactRecordV1,
   ProductBuildRecordV1,
   ProductProductionBriefRecordV1,
   ProductProductionCommandRecordV1,
@@ -48,6 +49,14 @@ import {
   assertProductProductionBudgetLedgerV1,
   resolveProductProductionUnknownResultReservationLedgerV2,
 } from './scheduler'
+import {
+  assertTextOpenWorldCreatorRepairPreparationCurrentV1,
+  createTextOpenWorldCreatorRepairAuthorizationV1,
+  prepareTextOpenWorldCreatorArtifactRepairV1,
+  type TextOpenWorldCreatorRepairPreparationV1,
+} from '../open-world/creator-artifact-repair'
+import type { TextOpenWorldCreatorRepairAuthorizationV1 } from '../open-world/creator-artifact-repair-contract'
+import { hashTextOpenWorldCreatorEditImpactPlanHandoffV1 } from '../open-world/creator-artifact-edit'
 
 export type ProductProductionErrorCodeV1 =
   | 'production-not-found'
@@ -65,6 +74,7 @@ export type ProductProductionErrorCodeV1 =
   | 'dependency-receipt-stale'
   | 'quality-hard-gate-failed'
   | 'rights-incomplete'
+  | 'repair-impact-stale'
   | 'preview-stale'
   | 'publication-intent-stale'
   | 'publication-transaction-failed'
@@ -290,6 +300,8 @@ async function applyCommand(input: {
     terminalReceiptHash: string
   } | null
   preparedCreatorStart?: TextOpenWorldCreatorStartPreparationV1 | null
+  preparedCreatorRepair?: TextOpenWorldCreatorRepairPreparationV1 | null
+  preparedCreatorRepairAuthorization?: TextOpenWorldCreatorRepairAuthorizationV1 | null
   emptyHash: string
   now: number
 }): Promise<{ production: ProductProductionRecordV1 & { id: number }; result: Record<string, unknown> }> {
@@ -646,6 +658,119 @@ async function applyCommand(input: {
       pausedProviderReservations: providerReservations,
       automaticallySettledReservations,
     } }
+  }
+
+  if (command.type === 'authorize-text-open-world-creator-repair') {
+    const prepared = input.preparedCreatorRepair
+    const authorization = input.preparedCreatorRepairAuthorization
+    if (production.productType !== 'text-open-world'
+      || !prepared || !authorization
+      || production.status !== 'preview-ready'
+      || production.currentBuildNumber !== command.baseBuildNumber
+      || production.currentBriefRevision !== prepared.baseBuild.briefRevision
+      || prepared.production.id !== production.id
+      || prepared.production.stateRevision !== command.expectedStateRevision
+      || prepared.baseBuild.buildNumber !== command.baseBuildNumber
+      || prepared.baseBuild.planHash !== command.expectedBasePlanHash
+      || prepared.impactPlan.handoffSetHash !== command.expectedHandoffSetHash
+      || prepared.impactPlan.impactPlanHash !== command.expectedImpactPlanHash
+      || prepared.targetPlanHash !== command.expectedTargetPlanHash
+      || authorization.expectedStateRevision !== command.expectedStateRevision
+      || authorization.impactPlanHash !== command.expectedImpactPlanHash
+      || authorization.targetPlanHash !== command.expectedTargetPlanHash) {
+      reject('repair-impact-stale', 'Creator 修复预览、生产状态或作者授权已经变化')
+    }
+    const buildNumber = await nextBuildNumber(production.id)
+    if (buildNumber !== prepared.impactPlan.targetBuildNumber) {
+      reject('production-state-conflict', '修复 Build 序号已被其他命令占用')
+    }
+    const build = stampNewRecord(scope, 'productBuilds', {
+      projectId: scope.projectId,
+      worldId: scope.worldId,
+      workId: scope.workId,
+      productionId: production.id,
+      buildNumber,
+      briefRevision: prepared.baseBuild.briefRevision,
+      briefHash: prepared.baseBuild.briefHash,
+      parentBuildNumber: prepared.baseBuild.buildNumber,
+      sourceProductReleaseId: prepared.baseBuild.sourceProductReleaseId,
+      status: 'authorized' as const,
+      resumeState: null,
+      stateRevision: 0,
+      controlEpoch: production.controlEpoch,
+      planRevision: 1,
+      planJson: canonicalProductProductionJsonV2(prepared.targetPlan),
+      planHash: prepared.targetPlanHash,
+      budgetLedgerJson: '{}',
+      manifestJson: '{}',
+      manifestHash: input.emptyHash,
+      packageHash: '',
+      previewManifestJson: '{}',
+      previewHash: '',
+      qualityReportJson: '{}',
+      qualityReportHash: input.emptyHash,
+      compatibilityJson: '{}',
+      rootTerminalReceiptHash: null,
+      adoptionIntentHash: null,
+      releasedProductReleaseId: null,
+      failureJson: '{}',
+      authorizedAt: authorization.authorizedAt,
+      startedAt: null,
+      completedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    } satisfies ProductBuildRecordV1, { owner: 'work' })
+    const buildId = await db.productBuilds.add(build) as number
+    for (const handoff of prepared.handoffs) {
+      const impactHandoffHash = await Dexie.waitFor(
+        hashTextOpenWorldCreatorEditImpactPlanHandoffV1(handoff.intent),
+      )
+      for (const artifact of handoff.candidate.rebuiltArtifacts) {
+        await db.productBuildArtifacts.add(stampNewRecord(scope, 'productBuildArtifacts', {
+          projectId: scope.projectId,
+          worldId: scope.worldId,
+          workId: scope.workId,
+          buildId,
+          artifactKey: artifact.artifactKey,
+          requirementKey: artifact.requirementKey,
+          version: 1,
+          kind: artifact.kind,
+          mediaKind: null,
+          status: 'candidate' as const,
+          producerRunId: handoff.snapshot.run.id,
+          producerReceiptHash: handoff.verificationReceipt.receiptHash,
+          controlEpoch: production.controlEpoch,
+          inputHash: impactHandoffHash,
+          contentHash: artifact.contentHash,
+          payloadJson: canonicalProductProductionJsonV2(artifact.payload),
+          metadataJson: canonicalProductProductionJsonV2(artifact.metadata),
+          qualityJson: canonicalProductProductionJsonV2(artifact.quality),
+          rightsJson: canonicalProductProductionJsonV2(artifact.rights),
+          blobObjectId: null,
+          mimeType: null,
+          byteSize: artifact.byteSize,
+          parentArtifactHash: artifact.baseContentHash,
+          carriedFrom: null,
+          createdAt: now,
+          updatedAt: now,
+        } satisfies ProductBuildArtifactRecordV1, { owner: 'work' }))
+      }
+    }
+    const stateRevision = production.stateRevision + 1
+    await db.productProductions.update(production.id, {
+      status: 'producing',
+      currentBuildNumber: buildNumber,
+      stateRevision,
+      updatedAt: now,
+    })
+    production = {
+      ...production,
+      status: 'producing',
+      currentBuildNumber: buildNumber,
+      stateRevision,
+      updatedAt: now,
+    }
+    return { production, result: { ...authorization } }
   }
 
   if (command.type === 'resume') {
@@ -1159,6 +1284,8 @@ async function executeTransaction(input: {
     terminalReceiptHash: string
   } | null
   preparedCreatorStart?: TextOpenWorldCreatorStartPreparationV1 | null
+  preparedCreatorRepair?: TextOpenWorldCreatorRepairPreparationV1 | null
+  preparedCreatorRepairAuthorization?: TextOpenWorldCreatorRepairAuthorizationV1 | null
   preparedWorldReferenceHash: string | null
   emptyHash: string
   now: number
@@ -1168,7 +1295,7 @@ async function executeTransaction(input: {
     db.productReleases,
     db.productProductions, db.productProductionBriefs, db.productProductionCommands,
     db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
-    db.agentRuns, db.agentRunEvents,
+    db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, db.agentRunArtifacts,
     ...(command.type === 'authorize-text-open-world-creator-start'
       // Creator source adapters expose only opaque transaction capabilities;
       // the command layer never learns physical WorldRelease/novel table names.
@@ -1272,6 +1399,18 @@ async function executeTransaction(input: {
           reject('source-stale', 'source-stale：Creator 来源、模型或冻结计划在原子授权边界发生变化')
         }
       }
+      if (command.type === 'authorize-text-open-world-creator-repair') {
+        if (!input.preparedCreatorRepair || !input.preparedCreatorRepairAuthorization) {
+          throw new Error('[product-production] Creator repair 缺少事务外完整影响计划')
+        }
+        try {
+          await Dexie.waitFor(assertTextOpenWorldCreatorRepairPreparationCurrentV1(
+            input.preparedCreatorRepair,
+          ))
+        } catch {
+          reject('repair-impact-stale', 'Creator repair 的 Production、Build、Handoff 或 Artifact 已变化')
+        }
+      }
       const applied = await applyCommand({
         scope, production, command,
         preparedBriefHash: input.preparedBriefHash,
@@ -1281,6 +1420,8 @@ async function executeTransaction(input: {
         preparedCreatorBrief: input.preparedCreatorBrief,
         preparedCreatorEvidence: input.preparedCreatorEvidence,
         preparedCreatorStart: transactionCreatorStart,
+        preparedCreatorRepair: input.preparedCreatorRepair,
+        preparedCreatorRepairAuthorization: input.preparedCreatorRepairAuthorization,
         emptyHash: input.emptyHash,
         now,
       })
@@ -1343,6 +1484,8 @@ export async function executeProductProductionCommand(input: {
         preparedCreatorSource: null,
         preparedCreatorBrief: null,
         preparedCreatorEvidence: null,
+        preparedCreatorRepair: null,
+        preparedCreatorRepairAuthorization: null,
         preparedWorldReferenceHash: null,
         emptyHash,
         now,
@@ -1367,6 +1510,8 @@ export async function executeProductProductionCommand(input: {
         preparedCreatorSource: null,
         preparedCreatorBrief: null,
         preparedCreatorEvidence: null,
+        preparedCreatorRepair: null,
+        preparedCreatorRepairAuthorization: null,
         preparedWorldReferenceHash: null,
         emptyHash,
         now,
@@ -1395,6 +1540,8 @@ export async function executeProductProductionCommand(input: {
     terminalReceiptHash: string
   } | null = null
   let preparedCreatorStart: TextOpenWorldCreatorStartPreparationV1 | null = null
+  let preparedCreatorRepair: TextOpenWorldCreatorRepairPreparationV1 | null = null
+  let preparedCreatorRepairAuthorization: TextOpenWorldCreatorRepairAuthorizationV1 | null = null
   const preparedWorldReferenceHash = command.type === 'create-intent'
     ? (await createWorldReferenceV1(command.worldReleaseId)).referenceHash
     : null
@@ -1544,6 +1691,33 @@ export async function executeProductProductionCommand(input: {
         authorStartRevision: command.expectedStateRevision,
       })
     }
+  } else if (command.type === 'authorize-text-open-world-creator-repair') {
+    if (!Number.isInteger(input.productionId)) {
+      throw new Error('[product-production] Creator repair 缺少 productionId')
+    }
+    const production = await productionInScope(scope, input.productionId!)
+    const build = await db.productBuilds
+      .where('[productionId+buildNumber]')
+      .equals([production.id, command.baseBuildNumber])
+      .first()
+    if (!build?.id) throw new Error('[product-production] Creator repair base Build 不存在')
+    preparedCreatorRepair = await prepareTextOpenWorldCreatorArtifactRepairV1({
+      scope,
+      productionId: production.id,
+      buildId: build.id,
+    })
+    if (preparedCreatorRepair.baseBuild.planHash !== command.expectedBasePlanHash
+      || preparedCreatorRepair.impactPlan.handoffSetHash !== command.expectedHandoffSetHash
+      || preparedCreatorRepair.impactPlan.impactPlanHash !== command.expectedImpactPlanHash
+      || preparedCreatorRepair.targetPlanHash !== command.expectedTargetPlanHash) {
+      throw new Error('[product-production] Creator repair 预览 Hash 已变化')
+    }
+    preparedCreatorRepairAuthorization = await createTextOpenWorldCreatorRepairAuthorizationV1({
+      prepared: preparedCreatorRepair,
+      expectedStateRevision: command.expectedStateRevision,
+      authorizationNonce: command.authorizationNonce,
+      authorizedAt: command.authorizedAt,
+    })
   }
   const request = {
     scope,
@@ -1557,6 +1731,8 @@ export async function executeProductProductionCommand(input: {
     preparedCreatorBrief,
     preparedCreatorEvidence,
     preparedCreatorStart,
+    preparedCreatorRepair,
+    preparedCreatorRepairAuthorization,
     preparedWorldReferenceHash,
     emptyHash,
     now,

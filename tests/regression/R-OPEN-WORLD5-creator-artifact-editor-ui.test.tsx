@@ -15,6 +15,8 @@ const editMocks = vi.hoisted(() => ({
   resumeIntake: vi.fn(),
   reject: vi.fn(),
   confirm: vi.fn(),
+  previewRepair: vi.fn(),
+  authorizeRepair: vi.fn(),
 }))
 
 vi.mock('../../src/lib/product-production/service', () => ({
@@ -27,6 +29,8 @@ vi.mock('../../src/lib/product-production/service', () => ({
   rejectTextOpenWorldCreatorArtifactEditCandidateV1: editMocks.reject,
   resumeTextOpenWorldCreatorArtifactEditIntakeV1: editMocks.resumeIntake,
   confirmTextOpenWorldCreatorArtifactEditIntentV1: editMocks.confirm,
+  previewTextOpenWorldCreatorArtifactRepairV1: editMocks.previewRepair,
+  authorizeTextOpenWorldCreatorArtifactRepairV1: editMocks.authorizeRepair,
 }))
 
 import TextOpenWorldCreatorArtifactEditor, {
@@ -125,6 +129,50 @@ function targetContext(): TextOpenWorldCreatorEditTargetContextV1 {
       { ...common, fieldId: 'hero.protected', jsonPointer: '/hero/protected', label: '关键保护', valueKind: 'boolean', baseValueHash: HASH_A },
       { ...common, fieldId: 'hero.tags', jsonPointer: '/hero/tags', label: '角色标签', valueKind: 'string-array', baseValueHash: HASH_A },
     ],
+  }
+}
+
+function repairPreview() {
+  return {
+    productionId: 71,
+    productionStateRevision: 9,
+    baseBuildId: 81,
+    baseBuildNumber: 4,
+    basePlanHash: HASH_A,
+    targetPlanHash: HASH_B,
+    impactPlan: {
+      schema: 'storyforge.text-open-world-creator-repair-impact-plan',
+      version: 1,
+      portable: true,
+      productType: 'text-open-world',
+      productionKey: 'text-open-world.primary.fixture',
+      baseBuild: {
+        buildNumber: 4,
+        stateRevision: 7,
+        controlEpoch: 8,
+        briefRevision: 1,
+        briefHash: HASH_A,
+        planHash: HASH_A,
+        manifestHash: HASH_B,
+        rootTerminalReceiptHash: HASH_C,
+      },
+      targetBuildNumber: 5,
+      handoffSetHash: HASH_A,
+      handoffs: [],
+      targetTaskKeys: ['p4.player-build'],
+      staleTaskKeys: ['p4.player-build', 'p5.mainline', 'qa.release'],
+      reuseTaskKeys: ['p0.source-lock', 'p1.source-curation'],
+      estimatedRerunBudget: {
+        modelCalls: 2,
+        inputTokens: 1_200,
+        outputTokens: 800,
+        mediaCalls: 0,
+        maximumCostUsd: 0.42,
+        durationMs: 45_000,
+        storageBytes: 4_096,
+      },
+      impactPlanHash: HASH_C,
+    },
   }
 }
 
@@ -268,6 +316,17 @@ describe('Text Open World G5-06 · Creator Artifact 编辑 UI', () => {
     for (const mock of Object.values(editMocks)) mock.mockReset()
     editMocks.prepare.mockResolvedValue(targetContext())
     editMocks.read.mockResolvedValue(null)
+    editMocks.previewRepair.mockResolvedValue(repairPreview())
+    editMocks.authorizeRepair.mockResolvedValue({
+      ok: true,
+      commandId: 'tow-creator-repair:test',
+      commandType: 'authorize-text-open-world-creator-repair',
+      productionId: 71,
+      stateRevision: 10,
+      result: {},
+      errorCode: null,
+      replayed: false,
+    })
     host = document.createElement('div')
     document.body.append(host)
     root = createRoot(host)
@@ -542,5 +601,84 @@ describe('Text Open World G5-06 · Creator Artifact 编辑 UI', () => {
     expect(host.querySelector('[data-testid="text-open-world-creator-artifact-editor"]')).toBeNull()
     expect(editMocks.prepare).not.toHaveBeenCalled()
     expect(editMocks.read).not.toHaveBeenCalled()
+  })
+
+  it('确认修改后展示完整 DAG 影响与预算，二次确认才创建下一修复 Build', async () => {
+    const candidate = editCandidate()
+    const intent = editIntent(candidate)
+    const completed: Array<{ targetBuildNumber: number }> = []
+    editMocks.read.mockResolvedValue({
+      runId: 907,
+      runState: 'completed',
+      candidate,
+      intent,
+    })
+    await act(async () => root.render(createElement(TextOpenWorldCreatorArtifactEditor, {
+      selection: SELECTION,
+      eligible: true,
+      onRepairBuildCreated: async result => { completed.push(result) },
+    })))
+    await waitFor(() => expect(host.querySelector(
+      '[data-testid="text-open-world-creator-repair-impact"]',
+    )).not.toBeNull())
+    await waitFor(() => expect(host.textContent).toContain('#4 → #5'))
+
+    expect(editMocks.previewRepair).toHaveBeenCalledWith({
+      scope: SCOPE,
+      productionId: 71,
+      buildId: 81,
+    })
+    expect(host.textContent).toContain('p4.player-build')
+    expect(host.textContent).toContain('p5.mainline')
+    expect(host.textContent).toContain('2,000')
+    expect(host.textContent).toContain('$0.4200')
+    const authorize = button(host, '确认范围并创建修复 Build')
+    expect(authorize.disabled).toBe(true)
+    expect(editMocks.authorizeRepair).not.toHaveBeenCalled()
+
+    const acknowledgement = host.querySelector<HTMLInputElement>(
+      '[data-testid="text-open-world-creator-repair-impact"] input[type="checkbox"]',
+    )!
+    await act(async () => acknowledgement.click())
+    expect(authorize.disabled).toBe(false)
+    await act(async () => authorize.click())
+
+    await waitFor(() => expect(editMocks.authorizeRepair).toHaveBeenCalledWith({
+      scope: SCOPE,
+      productionId: 71,
+      expectedStateRevision: 9,
+      baseBuildNumber: 4,
+      expectedBasePlanHash: HASH_A,
+      expectedHandoffSetHash: HASH_A,
+      expectedImpactPlanHash: HASH_C,
+      expectedTargetPlanHash: HASH_B,
+    }))
+    expect(completed).toEqual([expect.objectContaining({ targetBuildNumber: 5 })])
+    expect(host.textContent).toContain('修复 Build #5 已创建')
+  })
+
+  it('影响预览失败时保持原 Build，并只在作者点击后重新分析', async () => {
+    const candidate = editCandidate()
+    editMocks.read.mockResolvedValue({
+      runId: 908,
+      runState: 'completed',
+      candidate,
+      intent: editIntent(candidate),
+    })
+    editMocks.previewRepair
+      .mockRejectedValueOnce(new Error('影响输入已变化，请重新预览'))
+      .mockResolvedValueOnce(repairPreview())
+    await act(async () => root.render(createElement(TextOpenWorldCreatorArtifactEditor, {
+      selection: SELECTION,
+      eligible: true,
+    })))
+    await waitFor(() => expect(host.querySelector('[role="alert"]')?.textContent)
+      .toContain('影响输入已变化'))
+    expect(editMocks.previewRepair).toHaveBeenCalledTimes(1)
+
+    await act(async () => button(host, '重新分析影响').click())
+    await waitFor(() => expect(host.textContent).toContain('#4 → #5'))
+    expect(editMocks.previewRepair).toHaveBeenCalledTimes(2)
+    expect(editMocks.authorizeRepair).not.toHaveBeenCalled()
   })
 })

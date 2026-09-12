@@ -137,6 +137,7 @@ export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "save-text-open-world-creator-brief",
   "authorize-start",
   "authorize-text-open-world-creator-start",
+  "authorize-text-open-world-creator-repair",
   "pause",
   "resume",
   "stop",
@@ -718,6 +719,18 @@ export type ProductProductionCommandV1 =
       rightsNote: string;
       authorizationNonce: string;
       expectedPlanHash: string;
+      authorizedAt: number;
+    }
+  | {
+      type: "authorize-text-open-world-creator-repair";
+      commandId: string;
+      expectedStateRevision: number;
+      baseBuildNumber: number;
+      expectedBasePlanHash: string;
+      expectedHandoffSetHash: string;
+      expectedImpactPlanHash: string;
+      expectedTargetPlanHash: string;
+      authorizationNonce: string;
       authorizedAt: number;
     }
   | {
