@@ -164,11 +164,12 @@ export default function AIConfigPanel() {
 
   return (
     <div className="max-w-2xl">
-      <h2 className="text-xl font-bold text-text-primary mb-6">设置</h2>
+      <h2 className="text-xl font-bold text-text-primary mb-2">模型与连接</h2>
+      <p className="mb-6 text-sm text-text-muted">建立通用模型连接和可复用预设；每个产品在自己的生产页选择来源、适配要求与具体流程。</p>
 
       {/* AI 配置 */}
       <div className="bg-bg-surface border border-border rounded-xl p-5 mb-6">
-        <h3 className="text-base font-semibold text-text-primary mb-4">AI 模型配置</h3>
+        <h3 className="text-base font-semibold text-text-primary mb-4">通用服务与凭据</h3>
         <p className="text-[11px] text-text-muted mb-4 rounded-lg border border-border bg-bg-base px-3 py-2">
           API Key 默认仅保存在本次浏览器会话；勾选“记住在本机”才会写入 localStorage。发起 AI 生成、测试连接或使用自定义 baseUrl 时，相关提示词和上下文会发送到你配置的模型服务。
         </p>
@@ -189,17 +190,19 @@ export default function AIConfigPanel() {
           onDeletePreset={(id, name) => { void handleDeletePreset(id, name) }}
         />
 
-        <AITaskRoutingSection
-          presets={presets}
-          routes={taskRoutes}
-          contextProfiles={agentContextProfiles}
-          teamBudgetProfile={agentTeamBudgetProfile}
-          creativeQualityMode={creativeQualityMode}
-          onSetRoute={setTaskRoute}
-          onSetContextProfile={setAgentContextProfile}
-          onSetTeamBudgetProfile={setAgentTeamBudgetProfile}
-          onSetCreativeQualityMode={setCreativeQualityMode}
-        />
+        <div id="settings-routing">
+          <AITaskRoutingSection
+            presets={presets}
+            routes={taskRoutes}
+            contextProfiles={agentContextProfiles}
+            teamBudgetProfile={agentTeamBudgetProfile}
+            creativeQualityMode={creativeQualityMode}
+            onSetRoute={setTaskRoute}
+            onSetContextProfile={setAgentContextProfile}
+            onSetTeamBudgetProfile={setAgentTeamBudgetProfile}
+            onSetCreativeQualityMode={setCreativeQualityMode}
+          />
+        </div>
 
         <div className="space-y-4">
           <div>
@@ -498,7 +501,7 @@ export default function AIConfigPanel() {
       {showLogs && <AIConnectionLogPanel logs={logs} onClear={clearLogs} />}
 
       {/* 主题切换 */}
-      <ThemeSelector value={currentTheme} onChange={handleThemeChange} />
+      <div id="settings-appearance"><ThemeSelector value={currentTheme} onChange={handleThemeChange} /></div>
     </div>
   )
 }

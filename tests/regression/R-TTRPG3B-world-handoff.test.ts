@@ -26,7 +26,6 @@ describe('TTRPG-3B · WorldRelease to TTRPG production handoff', () => {
     expect(productHub).toContain('const parsed = parseProductProductionHandoffV1(handoff)')
     expect(productHub).toContain("if (parsed.productType === 'ttrpg')")
     expect(productHub).toContain('setTtrpgProductionHandoff(parsed)')
-    expect(productHub).toContain("setActiveTab('ttrpg')")
-    expect(productHub).toContain("setActiveTab('ttrpg')")
+    expect(productHub).toContain("selectTab('ttrpg')")
   })
 })

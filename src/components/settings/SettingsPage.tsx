@@ -24,9 +24,9 @@ export default function SettingsPage({ project, onOpenDataManagement }: Props) {
   const [guideReset, setGuideReset] = useState(false)
 
   return (
-    <div className="h-full overflow-auto p-6">
-      <AIConfigPanel />
-      <div className="mt-6">
+    <div className="sf-settings-sections">
+      <section id="settings-ai"><AIConfigPanel /></section>
+      <div id="settings-storage" className="mt-6">
         <ProjectStorageWorkspacePanel project={project} onOpenDataManagement={onOpenDataManagement} />
       </div>
       <CreativeReliabilityCommunityPanel />
@@ -37,7 +37,7 @@ export default function SettingsPage({ project, onOpenDataManagement }: Props) {
       )}
 
       {/* 其他设置 */}
-      <div className="max-w-2xl mt-6 p-4 bg-bg-surface border border-border rounded-xl">
+      <div id="settings-other" className="max-w-2xl mt-6 p-4 bg-bg-surface border border-border rounded-xl">
         <h3 className="text-sm font-semibold text-text-primary mb-3">其他</h3>
         <div className="flex items-center justify-between">
           <div>

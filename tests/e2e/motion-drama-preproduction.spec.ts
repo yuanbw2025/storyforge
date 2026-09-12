@@ -145,8 +145,8 @@ test('Seedance 执行包呈现能力画像、真实槽位、时间轴、镜间�
   expect(compiled).toEqual({ version: 2, directUseReady: true })
 
   await page.reload()
-  await page.getByText('继续创作', { exact: true }).click()
   const studio = page.getByTestId('motion-drama-studio')
+  await expect(studio).toBeVisible()
   await studio.locator('.motion-rail').getByRole('button', { name: /工具适配包/ }).click()
   await expect(studio.getByLabel('Seedance 能力画像')).toHaveValue('seedance-2.5-2026-07')
   await expect(studio.getByRole('heading', { name: '逐镜生成、选片与交接运行单', exact: true })).toBeVisible()

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { openCurrentAiTownPlayer, seedCurrentAiTownProduct } from './helpers/current-products'
+import { openCurrentAiTownPlayer, openProductTab, seedCurrentAiTownProduct } from './helpers/current-products'
 
 test('后日谈小镇完成交谈、行动、离线演化、分支与刷新恢复且不改写世界', async ({ page }) => {
   await page.addInitScript(() => {
@@ -41,7 +41,7 @@ test('后日谈小镇完成交谈、行动、离线演化、分支与刷新恢�
   await expect(player.getByText('茶屋修缮支线', { exact: true })).toBeVisible()
 
   await page.reload()
-  await page.getByTestId('product-tab-town').click()
+  await openProductTab(page, 'town')
   player = page.getByTestId('ai-town-player')
   await expect(player).toContainText('茶屋修缮支线')
   await expect(player).toContainText('第 2 日')
