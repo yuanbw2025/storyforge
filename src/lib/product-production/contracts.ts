@@ -503,6 +503,46 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
       authorizedAt: finite(row.authorizedAt, 'authorizedAt', Number.MAX_SAFE_INTEGER, true),
     }
   }
+  if (type === 'authorize-text-open-world-creator-media') {
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision', 'baseBuildNumber', 'expectedBasePlanHash',
+      'expectedMediaPlanHash', 'expectedTargetPlanHash', 'mode',
+      'acknowledgement', 'authorizationNonce', 'authorizedAt',
+    ])
+    for (const key of [
+      'expectedBasePlanHash', 'expectedMediaPlanHash', 'expectedTargetPlanHash',
+    ] as const) {
+      if (!isSha256Hash(row[key])) fail(`Creator media 的 ${key} 无效`)
+    }
+    if (row.mode !== 'provider-generate' && row.mode !== 'author-import') {
+      fail('Creator media 的 mode 无效')
+    }
+    const acknowledgement = record(row.acknowledgement, 'command.acknowledgement')
+    exactKeys(acknowledgement, [
+      'completeBundle', 'rightsAndProvenance', 'costAndProvider', 'oldBuildImmutable',
+    ], 'command.acknowledgement')
+    if (Object.values(acknowledgement).some(value => value !== true)) {
+      fail('Creator media 的四项作者确认不完整')
+    }
+    return {
+      type,
+      commandId,
+      expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      baseBuildNumber: positiveId(row.baseBuildNumber, 'baseBuildNumber'),
+      expectedBasePlanHash: row.expectedBasePlanHash as string,
+      expectedMediaPlanHash: row.expectedMediaPlanHash as string,
+      expectedTargetPlanHash: row.expectedTargetPlanHash as string,
+      mode: row.mode,
+      acknowledgement: {
+        completeBundle: true,
+        rightsAndProvenance: true,
+        costAndProvider: true,
+        oldBuildImmutable: true,
+      },
+      authorizationNonce: stableKey(row.authorizationNonce, 'authorizationNonce'),
+      authorizedAt: finite(row.authorizedAt, 'authorizedAt', Number.MAX_SAFE_INTEGER, true),
+    }
+  }
   if (type === 'pause') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'reason']), expectedStateRevision: expectedRevision(row.expectedStateRevision), reason: text(row.reason, 'reason', 4000) }
   if (type === 'resume') {
     const hasPausedReservations = Object.prototype.hasOwnProperty.call(row, 'pausedReservationDispositions')

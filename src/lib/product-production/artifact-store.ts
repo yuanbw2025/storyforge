@@ -25,7 +25,7 @@ import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewReco
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { parseProductBuildManifestV1, parseProductBuildQualityReportV1 } from './adoption'
 import { parseProductProductionBriefV3 } from './contracts'
-import { readTextOpenWorldCreatorRepairExecutionAuthorityV1 } from '../open-world/creator-artifact-repair-authority'
+import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../open-world/creator-derived-authority'
 import { readVerifiedMediaBlobObjectData } from './media-blob-store'
 import { parseProductProductionPlanV3 } from './plan'
 import {
@@ -552,19 +552,20 @@ async function crossBuildCarryAuthorizationV1(input: {
     || briefRow.briefHash !== input.targetBuild.briefHash) {
     throw new Error('[product-production-artifact] cross-build 目标 Brief 不存在或未授权')
   }
-  const repairAuthority = briefRow.briefKind === 'text-open-world-creator-v1'
-    ? await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
+  const creatorAuthority = briefRow.briefKind === 'text-open-world-creator-v1'
+    ? await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
         scope: input.scope,
         buildId: input.targetBuild.id,
       })
     : null
-  const brief = repairAuthority?.executionBrief ?? parseProductProductionBriefV3(briefRow.briefJson)
-  const plan = repairAuthority?.targetProductionPlan ?? parseProductProductionPlanV3(
+  const brief = creatorAuthority?.contracts.executionBrief ?? parseProductProductionBriefV3(briefRow.briefJson)
+  const plan = creatorAuthority?.productionPlan ?? parseProductProductionPlanV3(
     input.targetBuild.planJson,
     brief,
     input.targetBuild.briefHash,
   )
-  const reuseImpact = repairAuthority?.authorization.impactPlan.targetTaskKeys
+  const reuseImpact = creatorAuthority?.repair?.authorization.impactPlan.targetTaskKeys
+    ?? creatorAuthority?.media?.authorization.plan.targetTaskKeys
     ?? brief.evolution?.affectedLanes
   if (canonicalProductProductionJsonV2(plan) !== input.targetBuild.planJson
     || await hashProductProductionValueV2(plan) !== input.targetBuild.planHash
@@ -618,7 +619,7 @@ async function crossBuildCarryAuthorizationV1(input: {
     plan,
     brief,
     briefRowJson: canonicalProductProductionJsonV2(briefRow),
-    repairCommands: repairAuthority?.commandChain.map(command => ({
+    repairCommands: creatorAuthority?.commandChain.map(command => ({
       id: command.id,
       rowJson: canonicalProductProductionJsonV2(command),
     })) ?? [],

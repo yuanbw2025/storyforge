@@ -256,7 +256,7 @@ export async function prepareTextOpenWorldCreatorArtifactRepairV1(input: {
     buildId: input.buildId,
   })
   if (!authority.authority.valid
-    || !['creator-start-v1', 'creator-repair-v1'].includes(authority.authority.origin)) {
+    || !['creator-start-v1', 'creator-repair-v1', 'creator-media-v1'].includes(authority.authority.origin)) {
     fail(`base Build 缺少 Creator 生产权威:${authority.authority.diagnostic ?? 'unknown'}`)
   }
   const production = authority.production

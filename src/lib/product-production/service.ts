@@ -42,7 +42,6 @@ import {
 import { createTextOpenWorldProductionExecutorV1 } from '../open-world/production-executor'
 import {
   createTextOpenWorldCreatorStartPreparationV1,
-  readTextOpenWorldCreatorExecutionBriefV1,
   type TextOpenWorldCreatorStartPreparationV1,
 } from '../open-world/creator-production-start'
 import { verifyTextOpenWorldCreatorProductionPreflightConfirmationV1 } from '../open-world/creator-production-preflight'
@@ -60,9 +59,18 @@ import {
 } from '../open-world/creator-artifact-edit'
 import type { TextOpenWorldCreatorEditPatchOperationV1 } from '../open-world/creator-artifact-edit-contract'
 import { prepareTextOpenWorldCreatorArtifactRepairV1 as prepareTextOpenWorldCreatorArtifactRepairCoreV1 } from '../open-world/creator-artifact-repair'
+import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../open-world/creator-derived-authority'
 import {
-  readTextOpenWorldCreatorRepairExecutionAuthorityV1,
-} from '../open-world/creator-artifact-repair-authority'
+  inspectTextOpenWorldCreatorMediaWorkspaceV1 as inspectTextOpenWorldCreatorMediaWorkspaceCoreV1,
+  prepareTextOpenWorldCreatorMediaV1 as prepareTextOpenWorldCreatorMediaCoreV1,
+  type TextOpenWorldCreatorMediaImportInputV1,
+  type TextOpenWorldCreatorMediaPreparationV1,
+} from '../open-world/creator-media'
+import type {
+  TextOpenWorldCreatorMediaModeV1,
+} from '../open-world/creator-media-contract'
+import { putMediaBlobObject } from './media-blob-store'
+import { detectProductImageDimensionsV1, detectProductMediaMimeTypeV1 } from './media-adapters'
 import { useAIConfigStore } from '../../stores/ai-config'
 import {
   assertProductProductionBudgetLedgerV1,
@@ -110,6 +118,144 @@ export function prepareTextOpenWorldCreatorArtifactEditV1(
   selection: TextOpenWorldCreatorArtifactEditSelectionV1,
 ) {
   return prepareTextOpenWorldCreatorArtifactEditCoreV1(selection)
+}
+
+async function resolveTextOpenWorldCreatorMediaProviderV1(input: {
+  scope: WorkspaceScope
+  buildId: number
+  now?: number
+}): Promise<ResolvedProductMediaCapabilityV1> {
+  const authority = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+    scope: input.scope,
+    buildId: input.buildId,
+  })
+  const visualTask = authority.productionPlan.tasks.find(task => task.taskKey === 'media.visual')
+  const requirementKey = visualTask?.capabilityRequirementKeys[0]
+  const requirement = authority.contracts.executionBrief.capabilityRequirements.find(item => (
+    item.requirementKey === requirementKey && item.mediaClass === 'image'
+  ))
+  if (!visualTask || !requirement) {
+    throw new Error('[product-production-service] 当前 Creator Build 缺少图片生产能力合同')
+  }
+  const agnes = inspectConfiguredAgnesImageCapabilityV1({ projectId: input.scope.projectId })
+  if (agnes.ready) {
+    return resolveConfiguredAgnesImageCapabilityV1({
+      projectId: input.scope.projectId,
+      requirement,
+      now: input.now,
+    })
+  }
+  const relayUrl = configuredMediaRelayUrlV1()
+  if (relayUrl) {
+    return resolveTrustedRelayMediaCapabilityV1({ requirement, relayUrl, now: input.now })
+  }
+  throw new Error(`[product-production-service] capability-unbound: ${agnes.issue || '没有可用的图片 Provider 或可信 Relay。'}`)
+}
+
+/** Store one author-selected image in the product-owned content-addressed Blob
+ * store. The returned id is a local locator only and never enters the durable
+ * command/result contract. */
+export async function importTextOpenWorldCreatorMediaBlobV1(input: {
+  scope: WorkspaceScope
+  data: ArrayBuffer
+}): Promise<{
+  blobObjectId: number
+  contentHash: string
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp'
+  byteSize: number
+  width: number
+  height: number
+}> {
+  const mimeType = detectProductMediaMimeTypeV1(input.data)
+  const dimensions = detectProductImageDimensionsV1(input.data)
+  if (!mimeType || !['image/png', 'image/jpeg', 'image/webp'].includes(mimeType) || !dimensions) {
+    throw new Error('[product-production-service] 只允许导入可验证的 PNG、JPEG 或 WebP 图片')
+  }
+  const row = await putMediaBlobObject({ scope: input.scope, data: input.data, mimeType })
+  if (row.id == null) throw new Error('[product-production-service] 导入图片没有形成持久 Blob')
+  return {
+    blobObjectId: row.id,
+    contentHash: row.contentHash,
+    mimeType: mimeType as 'image/png' | 'image/jpeg' | 'image/webp',
+    byteSize: row.byteSize,
+    width: dimensions.width,
+    height: dimensions.height,
+  }
+}
+
+export function inspectTextOpenWorldCreatorMediaWorkspaceV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+  buildId: number
+}) {
+  return inspectTextOpenWorldCreatorMediaWorkspaceCoreV1(input)
+}
+
+export async function previewTextOpenWorldCreatorMediaV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+  buildId: number
+  mode: TextOpenWorldCreatorMediaModeV1
+  maximumCostUsd?: number
+  imports?: TextOpenWorldCreatorMediaImportInputV1[]
+  now?: number
+}): Promise<TextOpenWorldCreatorMediaPreparationV1> {
+  const provider = input.mode === 'provider-generate'
+    ? await resolveTextOpenWorldCreatorMediaProviderV1({
+        scope: input.scope,
+        buildId: input.buildId,
+        now: input.now,
+      })
+    : null
+  return prepareTextOpenWorldCreatorMediaCoreV1({
+    scope: input.scope,
+    productionId: input.productionId,
+    buildId: input.buildId,
+    mode: input.mode,
+    maximumCostUsd: input.maximumCostUsd,
+    provider,
+    imports: input.imports,
+  })
+}
+
+export async function authorizeTextOpenWorldCreatorMediaV1(input: {
+  prepared: TextOpenWorldCreatorMediaPreparationV1
+  acknowledgement: {
+    completeBundle: boolean
+    rightsAndProvenance: boolean
+    costAndProvider: boolean
+    oldBuildImmutable: boolean
+  }
+  authorizationNonce?: string
+  authorizedAt?: number
+}): Promise<ProductProductionCommandReceiptV1> {
+  if (Object.values(input.acknowledgement).some(value => value !== true)) {
+    throw new Error('[product-production-service] 创建媒资 Build 前必须完成四项显式确认')
+  }
+  const plan = input.prepared.mediaPlan
+  return executeProductProductionCommand({
+    scope: input.prepared.scope,
+    productionId: input.prepared.production.id,
+    preparedCreatorMedia: input.prepared,
+    command: {
+      type: 'authorize-text-open-world-creator-media',
+      commandId: `tow-creator-media:${crypto.randomUUID()}`,
+      expectedStateRevision: input.prepared.production.stateRevision,
+      baseBuildNumber: plan.baseBuild.buildNumber,
+      expectedBasePlanHash: plan.baseBuild.planHash,
+      expectedMediaPlanHash: plan.planHash,
+      expectedTargetPlanHash: input.prepared.targetPlanHash,
+      mode: plan.mode,
+      acknowledgement: {
+        completeBundle: true,
+        rightsAndProvenance: true,
+        costAndProvider: true,
+        oldBuildImmutable: true,
+      },
+      authorizationNonce: input.authorizationNonce ?? crypto.randomUUID(),
+      authorizedAt: input.authorizedAt ?? Date.now(),
+    },
+  })
 }
 
 export async function previewTextOpenWorldCreatorArtifactRepairV1(input: {
@@ -529,15 +675,10 @@ export async function readProductProductionDetailsV1(
   }
   const executionBrief = brief?.briefKind === 'text-open-world-creator-v1'
     ? brief.status === 'authorized' && build
-      ? (build.parentBuildNumber == null
-          ? await readTextOpenWorldCreatorExecutionBriefV1({
-              briefRow: brief,
-              planJson: build.planJson,
-            })
-          : await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
-              scope,
-              buildId: build.id!,
-            })).executionBrief
+      ? (await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+          scope,
+          buildId: build.id!,
+        })).contracts.executionBrief
       : null
     : brief ? parseProductProductionBriefV3(brief.briefJson) : null
   return {
@@ -909,17 +1050,13 @@ export async function runAuthorizedProductProductionV1(input: {
   if (['preview-ready', 'release-ready', 'released'].includes(details.build.status)) {
     return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
   }
-  const creatorContracts = details.brief.briefKind === 'text-open-world-creator-v1'
-    ? details.build.parentBuildNumber == null
-      ? await readTextOpenWorldCreatorExecutionBriefV1({
-          briefRow: details.brief,
-          planJson: details.build.planJson,
-        })
-      : await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
-          scope,
-          buildId: details.build.id!,
-        })
+  const creatorAuthority = details.brief.briefKind === 'text-open-world-creator-v1'
+    ? await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+        scope,
+        buildId: details.build.id!,
+      })
     : null
+  const creatorContracts = creatorAuthority?.contracts ?? null
   if (creatorContracts) {
     // Creator authorization freezes the complete non-secret route identity,
     // pricing and generation settings. Re-prove it before every run/resume;
@@ -964,13 +1101,33 @@ export async function runAuthorizedProductProductionV1(input: {
   const mediaCapabilities = new Map<string, ResolvedProductMediaCapabilityV1>()
   const relayUrl = configuredMediaRelayUrlV1()
   const agnesImageReadiness = inspectConfiguredAgnesImageCapabilityV1({ projectId: scope.projectId })
+  const creatorMediaPlan = creatorAuthority?.media?.authorization.plan ?? null
   const useExternalMedia = brief.qualityProfile !== 'prototype'
+    || creatorMediaPlan?.mode === 'provider-generate'
   for (const requirement of brief.capabilityRequirements) {
     if (!['image', 'music', 'sfx'].includes(requirement.mediaClass)) continue
-    if (requirement.mediaClass === 'image' && useExternalMedia && agnesImageReadiness.ready) {
-      const resolved = await resolveConfiguredAgnesImageCapabilityV1({
-        projectId: scope.projectId, requirement,
+    if (requirement.mediaClass === 'image'
+      && creatorMediaPlan?.mode === 'author-import'
+      && creatorMediaPlan.capability.requirementKey === requirement.requirementKey) {
+      capabilityBindings.push({
+        requirementKey: creatorMediaPlan.capability.requirementKey,
+        adapterId: creatorMediaPlan.capability.adapterId,
+        bindingHash: creatorMediaPlan.capability.bindingHash,
       })
+    } else if (requirement.mediaClass === 'image'
+      && creatorMediaPlan?.mode === 'provider-generate'
+      && creatorMediaPlan.capability.requirementKey === requirement.requirementKey) {
+      const resolved = creatorMediaPlan.capability.adapterId === 'agnes.image-2.1-flash.v1'
+        ? await resolveConfiguredAgnesImageCapabilityV1({ projectId: scope.projectId, requirement })
+        : await resolveTrustedRelayMediaCapabilityV1({ requirement, relayUrl })
+      if (resolved.binding.adapterId !== creatorMediaPlan.capability.adapterId
+        || resolved.binding.bindingHash !== creatorMediaPlan.capability.bindingHash) {
+        throw new Error('[product-production-service] Creator 图片 Provider 身份已变化，请重新预览并授权媒资 Build')
+      }
+      mediaCapabilities.set(requirement.requirementKey, resolved)
+      capabilityBindings.push(resolved.binding)
+    } else if (requirement.mediaClass === 'image' && useExternalMedia && agnesImageReadiness.ready) {
+      const resolved = await resolveConfiguredAgnesImageCapabilityV1({ projectId: scope.projectId, requirement })
       mediaCapabilities.set(requirement.requirementKey, resolved)
       capabilityBindings.push(resolved.binding)
     } else if (useExternalMedia && relayUrl != null) {

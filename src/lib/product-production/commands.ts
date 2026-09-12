@@ -57,6 +57,13 @@ import {
 } from '../open-world/creator-artifact-repair'
 import type { TextOpenWorldCreatorRepairAuthorizationV1 } from '../open-world/creator-artifact-repair-contract'
 import { hashTextOpenWorldCreatorEditImpactPlanHandoffV1 } from '../open-world/creator-artifact-edit'
+import {
+  assertTextOpenWorldCreatorMediaPreparationCurrentV1,
+  createTextOpenWorldCreatorMediaAuthorizationV1,
+  prepareTextOpenWorldCreatorMediaV1,
+  type TextOpenWorldCreatorMediaPreparationV1,
+} from '../open-world/creator-media'
+import type { TextOpenWorldCreatorMediaAuthorizationV1 } from '../open-world/creator-media-contract'
 
 export type ProductProductionErrorCodeV1 =
   | 'production-not-found'
@@ -75,6 +82,7 @@ export type ProductProductionErrorCodeV1 =
   | 'quality-hard-gate-failed'
   | 'rights-incomplete'
   | 'repair-impact-stale'
+  | 'creator-media-stale'
   | 'preview-stale'
   | 'publication-intent-stale'
   | 'publication-transaction-failed'
@@ -302,6 +310,8 @@ async function applyCommand(input: {
   preparedCreatorStart?: TextOpenWorldCreatorStartPreparationV1 | null
   preparedCreatorRepair?: TextOpenWorldCreatorRepairPreparationV1 | null
   preparedCreatorRepairAuthorization?: TextOpenWorldCreatorRepairAuthorizationV1 | null
+  preparedCreatorMedia?: TextOpenWorldCreatorMediaPreparationV1 | null
+  preparedCreatorMediaAuthorization?: TextOpenWorldCreatorMediaAuthorizationV1 | null
   emptyHash: string
   now: number
 }): Promise<{ production: ProductProductionRecordV1 & { id: number }; result: Record<string, unknown> }> {
@@ -769,6 +779,163 @@ async function applyCommand(input: {
       currentBuildNumber: buildNumber,
       stateRevision,
       updatedAt: now,
+    }
+    return { production, result: { ...authorization } }
+  }
+
+  if (command.type === 'authorize-text-open-world-creator-media') {
+    const prepared = input.preparedCreatorMedia
+    const authorization = input.preparedCreatorMediaAuthorization
+    if (production.productType !== 'text-open-world'
+      || !prepared || !authorization
+      || production.status !== 'preview-ready'
+      || production.currentBuildNumber !== command.baseBuildNumber
+      || production.currentBriefRevision !== prepared.baseBuild.briefRevision
+      || prepared.production.id !== production.id
+      || prepared.production.stateRevision !== command.expectedStateRevision
+      || prepared.baseBuild.buildNumber !== command.baseBuildNumber
+      || prepared.baseBuild.planHash !== command.expectedBasePlanHash
+      || prepared.mediaPlan.planHash !== command.expectedMediaPlanHash
+      || prepared.targetPlanHash !== command.expectedTargetPlanHash
+      || prepared.mediaPlan.mode !== command.mode
+      || authorization.expectedStateRevision !== command.expectedStateRevision
+      || authorization.mediaPlanHash !== command.expectedMediaPlanHash
+      || authorization.targetProductionPlanHash !== command.expectedTargetPlanHash) {
+      reject('creator-media-stale', 'Creator 媒资预览、生产状态或作者授权已经变化')
+    }
+    const buildNumber = await nextBuildNumber(production.id)
+    if (buildNumber !== prepared.mediaPlan.targetBuildNumber) {
+      reject('production-state-conflict', '媒资 Build 序号已被其他命令占用')
+    }
+    const build = stampNewRecord(scope, 'productBuilds', {
+      projectId: scope.projectId,
+      worldId: scope.worldId,
+      workId: scope.workId,
+      productionId: production.id,
+      buildNumber,
+      briefRevision: prepared.baseBuild.briefRevision,
+      briefHash: prepared.baseBuild.briefHash,
+      parentBuildNumber: prepared.baseBuild.buildNumber,
+      sourceProductReleaseId: prepared.baseBuild.sourceProductReleaseId,
+      status: 'authorized' as const,
+      resumeState: null,
+      stateRevision: 0,
+      controlEpoch: production.controlEpoch,
+      planRevision: 1,
+      planJson: canonicalProductProductionJsonV2(prepared.targetPlan),
+      planHash: prepared.targetPlanHash,
+      budgetLedgerJson: '{}',
+      manifestJson: '{}',
+      manifestHash: input.emptyHash,
+      packageHash: '',
+      previewManifestJson: '{}',
+      previewHash: '',
+      qualityReportJson: '{}',
+      qualityReportHash: input.emptyHash,
+      compatibilityJson: '{}',
+      rootTerminalReceiptHash: null,
+      adoptionIntentHash: null,
+      releasedProductReleaseId: null,
+      failureJson: '{}',
+      authorizedAt: authorization.authorizedAt,
+      startedAt: null,
+      completedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    } satisfies ProductBuildRecordV1, { owner: 'work' })
+    const buildId = await db.productBuilds.add(build) as number
+    if (prepared.mediaPlan.mode === 'author-import') {
+      const sourceRows = await db.productBuildArtifacts.where('buildId')
+        .equals(prepared.baseBuild.id).toArray()
+      const activeByKey = new Map(sourceRows.filter(row => (
+        row.controlEpoch === prepared.baseBuild.controlEpoch
+        && (row.status === 'accepted' || row.status === 'carried-forward')
+      )).map(row => [row.artifactKey, row]))
+      const localByKey = new Map(prepared.imports.map(item => [item.descriptor.artifactKey, item]))
+      for (const [index, slot] of prepared.mediaPlan.slots.entries()) {
+        const imported = prepared.mediaPlan.imports[index]
+        const local = localByKey.get(slot.artifactKey)
+        const parent = activeByKey.get(slot.artifactKey)
+        if (!imported || imported.artifactKey !== slot.artifactKey
+          || local?.descriptor.contentHash !== imported.contentHash || !parent) {
+          reject('creator-media-stale', `Creator 导入媒资暂存集合已变化:${slot.artifactKey}`)
+        }
+        await db.productBuildArtifacts.add(stampNewRecord(scope, 'productBuildArtifacts', {
+          projectId: scope.projectId,
+          worldId: scope.worldId,
+          workId: scope.workId,
+          buildId,
+          artifactKey: slot.artifactKey,
+          requirementKey: prepared.mediaPlan.capability.requirementKey,
+          version: 1,
+          kind: 'image' as const,
+          mediaKind: slot.mediaKind,
+          status: 'candidate' as const,
+          producerRunId: null,
+          producerReceiptHash: authorization.authorizationHash,
+          controlEpoch: production.controlEpoch,
+          inputHash: prepared.mediaPlan.planHash,
+          contentHash: imported.contentHash,
+          payloadJson: canonicalProductProductionJsonV2({
+            schema: 'storyforge.generated-media-artifact',
+            version: 1,
+            assetKey: imported.assetKey,
+            request: {
+              beatKey: slot.subjectKey,
+              slotKey: slot.slotKey,
+              sceneTag: slot.subjectKey,
+              mediaKind: slot.mediaKind,
+              width: imported.width,
+              height: imported.height,
+              altText: imported.altText,
+            },
+          }),
+          metadataJson: canonicalProductProductionJsonV2({
+            assetKey: imported.assetKey,
+            name: imported.name,
+            width: imported.width,
+            height: imported.height,
+            durationMs: null,
+            altText: imported.altText,
+            characterTag: slot.slotKind === 'character-portrait' ? slot.subjectKey : '',
+            sceneTag: slot.subjectKey,
+            source: imported.source,
+            license: imported.license,
+          }),
+          qualityJson: canonicalProductProductionJsonV2({
+            adapterId: prepared.mediaPlan.capability.adapterId,
+            imported: true,
+            mimeVerified: true,
+            dimensionsVerified: true,
+            importReceiptHash: authorization.authorizationHash,
+            authorizationHash: authorization.authorizationHash,
+          }),
+          rightsJson: canonicalProductProductionJsonV2({
+            origin: 'imported',
+            adapterId: prepared.mediaPlan.capability.adapterId,
+            source: imported.source,
+            license: imported.license,
+            commercialUse: true,
+            rightsBasis: imported.rightsBasis,
+            rightsNote: imported.rightsNote,
+            importReceiptHash: authorization.authorizationHash,
+          }),
+          blobObjectId: local.blobObjectId,
+          mimeType: imported.mimeType,
+          byteSize: imported.byteSize,
+          parentArtifactHash: parent.contentHash,
+          carriedFrom: null,
+          createdAt: now,
+          updatedAt: now,
+        } satisfies ProductBuildArtifactRecordV1, { owner: 'work' }))
+      }
+    }
+    const stateRevision = production.stateRevision + 1
+    await db.productProductions.update(production.id, {
+      status: 'producing', currentBuildNumber: buildNumber, stateRevision, updatedAt: now,
+    })
+    production = {
+      ...production, status: 'producing', currentBuildNumber: buildNumber, stateRevision, updatedAt: now,
     }
     return { production, result: { ...authorization } }
   }
@@ -1286,6 +1453,8 @@ async function executeTransaction(input: {
   preparedCreatorStart?: TextOpenWorldCreatorStartPreparationV1 | null
   preparedCreatorRepair?: TextOpenWorldCreatorRepairPreparationV1 | null
   preparedCreatorRepairAuthorization?: TextOpenWorldCreatorRepairAuthorizationV1 | null
+  preparedCreatorMedia?: TextOpenWorldCreatorMediaPreparationV1 | null
+  preparedCreatorMediaAuthorization?: TextOpenWorldCreatorMediaAuthorizationV1 | null
   preparedWorldReferenceHash: string | null
   emptyHash: string
   now: number
@@ -1411,6 +1580,18 @@ async function executeTransaction(input: {
           reject('repair-impact-stale', 'Creator repair 的 Production、Build、Handoff 或 Artifact 已变化')
         }
       }
+      if (command.type === 'authorize-text-open-world-creator-media') {
+        if (!input.preparedCreatorMedia || !input.preparedCreatorMediaAuthorization) {
+          throw new Error('[product-production] Creator media 缺少事务外完整媒资计划')
+        }
+        try {
+          await Dexie.waitFor(assertTextOpenWorldCreatorMediaPreparationCurrentV1(
+            input.preparedCreatorMedia,
+          ))
+        } catch {
+          reject('creator-media-stale', 'Creator media 的 Production、Build、Artifact、Blob 或命令链已变化')
+        }
+      }
       const applied = await applyCommand({
         scope, production, command,
         preparedBriefHash: input.preparedBriefHash,
@@ -1422,6 +1603,8 @@ async function executeTransaction(input: {
         preparedCreatorStart: transactionCreatorStart,
         preparedCreatorRepair: input.preparedCreatorRepair,
         preparedCreatorRepairAuthorization: input.preparedCreatorRepairAuthorization,
+        preparedCreatorMedia: input.preparedCreatorMedia,
+        preparedCreatorMediaAuthorization: input.preparedCreatorMediaAuthorization,
         emptyHash: input.emptyHash,
         now,
       })
@@ -1457,6 +1640,10 @@ export async function executeProductProductionCommand(input: {
   scope: WorkspaceScope
   productionId?: number
   command: ProductProductionCommandV1 | unknown
+  /** Non-portable local locators used only while atomically authorizing a
+   * Creator media Build. The durable command/result stores hashes and rights,
+   * never browser-local Blob ids. */
+  preparedCreatorMedia?: TextOpenWorldCreatorMediaPreparationV1 | null
   now?: number
 }): Promise<ProductProductionCommandReceiptV1> {
   const scope = await resolveScope({ scope: input.scope })
@@ -1486,6 +1673,8 @@ export async function executeProductProductionCommand(input: {
         preparedCreatorEvidence: null,
         preparedCreatorRepair: null,
         preparedCreatorRepairAuthorization: null,
+        preparedCreatorMedia: null,
+        preparedCreatorMediaAuthorization: null,
         preparedWorldReferenceHash: null,
         emptyHash,
         now,
@@ -1512,6 +1701,8 @@ export async function executeProductProductionCommand(input: {
         preparedCreatorEvidence: null,
         preparedCreatorRepair: null,
         preparedCreatorRepairAuthorization: null,
+        preparedCreatorMedia: null,
+        preparedCreatorMediaAuthorization: null,
         preparedWorldReferenceHash: null,
         emptyHash,
         now,
@@ -1542,6 +1733,8 @@ export async function executeProductProductionCommand(input: {
   let preparedCreatorStart: TextOpenWorldCreatorStartPreparationV1 | null = null
   let preparedCreatorRepair: TextOpenWorldCreatorRepairPreparationV1 | null = null
   let preparedCreatorRepairAuthorization: TextOpenWorldCreatorRepairAuthorizationV1 | null = null
+  let preparedCreatorMedia: TextOpenWorldCreatorMediaPreparationV1 | null = input.preparedCreatorMedia ?? null
+  let preparedCreatorMediaAuthorization: TextOpenWorldCreatorMediaAuthorizationV1 | null = null
   const preparedWorldReferenceHash = command.type === 'create-intent'
     ? (await createWorldReferenceV1(command.worldReleaseId)).referenceHash
     : null
@@ -1718,6 +1911,48 @@ export async function executeProductProductionCommand(input: {
       authorizationNonce: command.authorizationNonce,
       authorizedAt: command.authorizedAt,
     })
+  } else if (command.type === 'authorize-text-open-world-creator-media') {
+    const supplied = preparedCreatorMedia
+    if (!Number.isInteger(input.productionId) || !supplied) {
+      throw new Error('[product-production] Creator media 缺少 productionId 或本地媒资准备结果')
+    }
+    const production = await productionInScope(scope, input.productionId!)
+    preparedCreatorMedia = await prepareTextOpenWorldCreatorMediaV1({
+      scope,
+      productionId: production.id,
+      buildId: supplied.baseBuild.id,
+      mode: supplied.mediaPlan.mode,
+      maximumCostUsd: supplied.mediaPlan.mode === 'provider-generate'
+        ? supplied.mediaPlan.capability.maximumCostUsd
+        : undefined,
+      provider: supplied.provider,
+      imports: supplied.imports.map(item => ({
+        artifactKey: item.descriptor.artifactKey,
+        slotKey: item.descriptor.slotKey,
+        blobObjectId: item.blobObjectId,
+        name: item.descriptor.name,
+        altText: item.descriptor.altText,
+        source: item.descriptor.source,
+        license: item.descriptor.license,
+        rightsBasis: item.descriptor.rightsBasis,
+        rightsNote: item.descriptor.rightsNote,
+      })),
+    })
+    if (preparedCreatorMedia.production.id !== production.id
+      || preparedCreatorMedia.production.stateRevision !== command.expectedStateRevision
+      || preparedCreatorMedia.baseBuild.buildNumber !== command.baseBuildNumber
+      || preparedCreatorMedia.baseBuild.planHash !== command.expectedBasePlanHash
+      || preparedCreatorMedia.mediaPlan.planHash !== command.expectedMediaPlanHash
+      || preparedCreatorMedia.targetPlanHash !== command.expectedTargetPlanHash
+      || preparedCreatorMedia.mediaPlan.mode !== command.mode) {
+      throw new Error('[product-production] Creator media 预览 Hash 或本地准备结果已变化')
+    }
+    preparedCreatorMediaAuthorization = await createTextOpenWorldCreatorMediaAuthorizationV1({
+      prepared: preparedCreatorMedia,
+      expectedStateRevision: command.expectedStateRevision,
+      authorizationNonce: command.authorizationNonce,
+      authorizedAt: command.authorizedAt,
+    })
   }
   const request = {
     scope,
@@ -1733,6 +1968,8 @@ export async function executeProductProductionCommand(input: {
     preparedCreatorStart,
     preparedCreatorRepair,
     preparedCreatorRepairAuthorization,
+    preparedCreatorMedia,
+    preparedCreatorMediaAuthorization,
     preparedWorldReferenceHash,
     emptyHash,
     now,

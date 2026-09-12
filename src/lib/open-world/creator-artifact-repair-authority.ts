@@ -235,18 +235,17 @@ export async function readTextOpenWorldCreatorRepairExecutionAuthorityV1(input: 
     || !isSha256Hash(sourceBuild.rootTerminalReceiptHash)) {
     fail('repair authorization 与 sealed base Build 不闭合')
   }
-  const priorRepair = sourceBuild.parentBuildNumber == null
+  const priorDerived = sourceBuild.parentBuildNumber == null
     ? null
-    : await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
-        scope,
-        buildId: sourceBuild.id,
-      })
+    : await import('./creator-derived-authority').then(module => (
+        module.readTextOpenWorldCreatorDerivedBuildAuthorityV1({ scope, buildId: sourceBuild.id })
+      ))
   const { readTextOpenWorldCreatorExecutionBriefV1 } = await import('./creator-production-start')
-  const contracts = priorRepair ?? await readTextOpenWorldCreatorExecutionBriefV1({
+  const contracts = priorDerived?.contracts ?? await readTextOpenWorldCreatorExecutionBriefV1({
     briefRow,
     planJson: sourceBuild.planJson,
   })
-  const sourceProductionPlan = priorRepair?.targetProductionPlan ?? parseProductProductionPlanV3(
+  const sourceProductionPlan = priorDerived?.productionPlan ?? parseProductProductionPlanV3(
     sourceBuild.planJson,
     contracts.executionBrief,
     briefRow.briefHash,
@@ -276,7 +275,7 @@ export async function readTextOpenWorldCreatorRepairExecutionAuthorityV1(input: 
     briefRow,
     command,
     commandChain: [
-      ...(priorRepair?.commandChain ?? []),
+      ...(priorDerived?.commandChain ?? []),
       command,
     ],
     creatorBrief: contracts.creatorBrief,

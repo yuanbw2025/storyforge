@@ -1920,7 +1920,8 @@ async function projectTextOpenWorldArtifactGovernanceTrustedV1(
     throw new Error('[text-open-world-artifact-governance] Artifact 输入数量或作用域不闭合')
   }
   const originAuthorized = (productionAuthority.origin === 'creator-start-v1'
-    || productionAuthority.origin === 'creator-repair-v1')
+    || productionAuthority.origin === 'creator-repair-v1'
+    || productionAuthority.origin === 'creator-media-v1')
     && isSha256Hash(productionAuthority.authorityReceiptHash)
   const ownerByArtifact = new Map<string, ProductProductionPlanV3['tasks'][number]>()
   for (const task of plan.tasks) for (const artifactKey of task.outputArtifactKeys) {

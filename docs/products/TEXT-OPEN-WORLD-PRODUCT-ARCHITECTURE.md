@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.57
+> 规格版本：1.1.58
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -2263,6 +2263,17 @@ G5-07把G5-06已确认交接提升为新的、可执行且可审计的ProductBui
 - 未受影响task只能从直接父Build按完整terminal v2证明跨Build携带，并逐task重新生成零调用receipt；这一规则也覆盖P0等确定性task，不能因`executionMode=deterministic`跳过依赖证明。修复链逐级绑定全部授权命令，任一历史命令、base sibling、reuseKey或staged candidate被篡改都会使后续执行失败关闭；
 - 原Build、旧ProductRelease和现有Session始终保持原字节。修复Build完成后仍须经过G5-09质量/试玩和G5-10正式发布；本项复用既有Production、Brief、Command、Build、Artifact、Run、checkpoint和ledger生命周期，没有新增物理表、Context Source、AI写字段或世界引擎回写。
 
+### 24.7 G5-08 Creator媒资生成、导入与权利边界
+
+G5-08把P10的媒资需求接回正式Creator Build链，而不是在页面上给当前运行包替换图片：
+
+- 入口只接受当前`preview-ready` Production中已通过完整G5-05封印的最新Creator Build。系统从冻结P10 `MediaRequirements`和`media.visual`输出精确提取一个地区场景背景、一个角色头像组成完整sibling group；程序地图继续使用已验证的SVG代码资产，首版不排产音频并保留明确静音降级；
+- 作者导入模式要求所有视觉槽一次完整覆盖。浏览器读取真实文件字节，仅接受PNG、JPEG或WebP，复核MIME、尺寸、byte size和SHA-256后写入产品私有内容寻址Blob；候选同时冻结alt、来源、许可、`author-owned/licensed/public-domain`权利依据和权利说明。导入不调用模型、不产生媒资费用，也不能混入Provider参数；
+- AI生成模式复用全局已配置的Agnes或可信图片Relay，冻结requirement、adapter、binding和回执Hash以及严格为正的本次费用上限；预览不派发图片请求。正式执行仍走共享media executor、usage账本和失败恢复，不能由页面或task override绕过Provider身份；
+- 两种模式都从官方DAG唯一计算`media.visual`及其传递后代为stale，其余task逐项跨Build复验。UI展示槽位、覆盖、Provider、费用和重跑预算，四项显式确认进入严格命令合同；正式命令在事务外完成物理Blob验真，在事务内CAS Production、Brief、base Build、全部Artifact、Blob信封及历史Creator派生命令，随后原子创建紧邻子Build；
+- 作者导入的`media.visual`在scheduler中作为零调用工具结果进入新的Run、candidate checkpoint、验收receipt和accepted Artifact；V3运行包装配与QA按原链重跑。命令重放只读取durable receipt，不再次依赖本地Blob定位器。任何Blob、Plan、来源、权利、候选或命令链漂移都失败关闭；
+- 旧Build、ProductRelease和Session不变，新媒资Build仍只是受治理Preview候选。MIME、Hash、权利声明和合同覆盖通过不等于美术质量通过；审美、一致性、可读性和试玩效果由G5-09质量/灰盒试玩继续裁决。
+
 ---
 
 ## 25. 媒资、表现与可访问性
@@ -2950,6 +2961,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.58 | 2026-09-13 | 完成G5-08 Creator媒资纵切面：P10精确视觉槽形成背景+头像完整sibling包，程序SVG地图和静音音频降级保持确定性；作者导入验真真实PNG/JPEG/WebP字节、尺寸、Hash并冻结产品Blob、alt、来源、许可和权利依据，AI生成冻结当前可信图片Provider及正费用上限。统一影响预览和四项确认经严格命令/CAS创建紧邻子Build；导入目标零模型但保留Run/checkpoint/receipt，生成目标走正式media executor，V3/QA重跑、其余任务逐项复验。旧Build/Release/Session不改，结构与来源通过不冒充美学质量。 |
 | 1.1.57 | 2026-09-13 | 完成G5-07引用影响与局部修复：G5-06确认交接经G5-05完整封印验证与前后读集CAS形成唯一影响计划；代码按冻结DAG计算目标、传递stale和逐项复验reuse，禁止同批祖先/后代目标并允许未改siblings原Hash携带。作者二次确认后，正式命令原子创建紧邻子Build、暂存完整siblings并冻结便携授权；目标以零provider工具结果进入新Run/checkpoint/receipt，崩溃可恢复，下游按原Executor重跑，确定性P0等未受影响task也必须获得新的跨Build复验receipt。旧Build/Release/Session不变；篡改历史修复命令、base sibling、reuseKey、staged candidate或预览读集均失败关闭；未新增表、Context Source或AI写入口。 |
 | 1.1.56 | 2026-09-12 | 完成G5-06直接编辑与Agent修改双入口：当前官方生产验证Artifact按19个领域任务、29类Artifact投影受限作者字段并完整重建owner sibling group；直接路径零模型，Agent路径走登记Context/Skill/Formal Entry并冻结完整模型身份。两条路径统一产生durable候选，经原生解析、领域验证、identity/reference delta和同组冲突门后，可由作者修订、拒绝或确认。确认只形成不可变impact-analysis handoff，不改当前Build、正式表或运行包；结果未知不重发，未派发可零费用取消，跨目标冲突、替换谱系、刷新恢复及Product/Build事务CAS均失败关闭。G5-07承接影响闭包和新修复Build。 |
 | 1.1.55 | 2026-09-10 | 完成G5-04专属Creator生产启动、进度与恢复：零写入预览生成不含本地ID的Creator SourcePlan、兼容Brief及精确DAG；正式开始重验Production/Brief/来源、完整模型route与参数、报价预算、确认及Plan Hash，并原子冻结Creator Start、Plan、Build与命令receipt。工作流只打开精确Production，目标失效即失败关闭。P1/P9以登记的有界多调用协议按分片恢复，响应先计账再解析；同一Build/task跨Run/epoch累计paid charge和未知reservation，executor前重验当前所有权，跨标签pause/stop不产生本地可阻止的付费派发。恢复绑定原Run、epoch、Plan及attempt，作者修复只开放给白名单文本任务；v10导入写前验证SourcePin闭包并重映射通用SourcePlan locator。媒资费用仍后置G5-08；未新增物理表、Schema或迁移。 |

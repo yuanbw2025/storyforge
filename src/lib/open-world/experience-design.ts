@@ -29,8 +29,7 @@ import {
   readAcceptedTextOpenWorldSourcePinBundleV1,
   validateTextOpenWorldSourcePinBundleV1,
 } from './source-pin'
-import { readTextOpenWorldCreatorExecutionBriefV1 } from './creator-production-start'
-import { readTextOpenWorldCreatorRepairExecutionAuthorityV1 } from './creator-artifact-repair-authority'
+import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
 import { validateTextOpenWorldSourceCurationArtifactsV1 } from './source-curation'
 import { TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1 } from './production-contract'
 import type {
@@ -249,12 +248,11 @@ async function authorizedProduction(input: {
     fail('Build缺少同revision/hash的作者授权Brief')
   }
   if (briefRow.briefKind === 'text-open-world-creator-v1') {
-    const contracts = build.parentBuildNumber == null
-      ? await readTextOpenWorldCreatorExecutionBriefV1({ briefRow, planJson: build.planJson })
-      : await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
-          scope: input.scope,
-          buildId: build.id!,
-        })
+    const authority = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+      scope: input.scope,
+      buildId: build.id!,
+    })
+    const contracts = authority.contracts
     const brief = contracts.executionBrief
     if (brief.intent.productType !== 'text-open-world' || brief.unresolvedDecisionKeys.length > 0) {
       fail('Creator执行Brief产品身份或未决项无效')

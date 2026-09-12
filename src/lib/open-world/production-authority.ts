@@ -36,7 +36,7 @@ export interface TextOpenWorldProductionTaskAuthorityV1 {
 export interface TextOpenWorldProductionPlanAuthorityV1 {
   valid: boolean
   diagnostic: string | null
-  origin: 'structural-only' | 'creator-start-v1' | 'creator-repair-v1' | 'invalid'
+  origin: 'structural-only' | 'creator-start-v1' | 'creator-repair-v1' | 'creator-media-v1' | 'invalid'
   authorityReceiptHash: string | null
   tasks: ReadonlyMap<string, TextOpenWorldProductionTaskAuthorityV1>
 }
@@ -422,51 +422,53 @@ export async function readTextOpenWorldProductionPlanAuthorityV1(input: {
   }
   if (build.parentBuildNumber != null) {
     try {
-      const { readTextOpenWorldCreatorRepairExecutionAuthorityV1 } = await import(
-        './creator-artifact-repair-authority'
+      const { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } = await import(
+        './creator-derived-authority'
       )
-      const repair = await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
+      const derived = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
         scope,
         buildId: build.id,
       })
       const structuralPlan = {
-        ...repair.targetProductionPlan,
-        tasks: repair.targetProductionPlan.tasks.map(task => ({ ...task, reuse: null })),
+        ...derived.productionPlan,
+        tasks: derived.productionPlan.tasks.map(task => ({ ...task, reuse: null })),
       }
       const structural = inspectTextOpenWorldProductionPlanAuthorityV1(structuralPlan)
-      if (!structural.valid) throw new Error(structural.diagnostic ?? 'repair Plan 结构不合法')
+      if (!structural.valid) throw new Error(structural.diagnostic ?? '派生 Creator Plan 结构不合法')
       const authorityReceiptHash = await hashProductProductionValueV2({
-        schema: 'storyforge.text-open-world-production-repair-authority-receipt',
+        schema: 'storyforge.text-open-world-production-derived-authority-receipt',
         version: 1,
-        authorizationHash: repair.authorization.authorizationHash,
-        commandChain: repair.commandChain.map(command => ({
+        origin: derived.origin,
+        authorizationHash: derived.authorizationHash,
+        commandChain: derived.commandChain.map(command => ({
           commandId: command.commandId,
           payloadHash: command.payloadHash,
           expectedStateRevision: command.expectedStateRevision,
           completedAt: command.completedAt,
         })),
-        targetBuildNumber: repair.targetBuild.buildNumber,
-        targetPlanHash: repair.targetBuild.planHash,
+        targetBuildNumber: derived.build.buildNumber,
+        targetPlanHash: derived.build.planHash,
       })
       return {
         authority: {
           ...structural,
-          origin: 'creator-repair-v1',
+          origin: derived.origin,
           authorityReceiptHash,
         },
         evidenceHash: await hashProductProductionValueV2({
-          schema: 'storyforge.text-open-world-governance-production-repair-authority-evidence',
+          schema: 'storyforge.text-open-world-governance-production-derived-authority-evidence',
           version: 1,
-          production: { ...repair.production, id: repair.production.id },
-          sourceBuild: { ...repair.sourceBuild, id: repair.sourceBuild.id },
-          targetBuild: { ...repair.targetBuild, id: repair.targetBuild.id },
-          brief: { ...repair.briefRow, id: repair.briefRow.id },
-          commandChain: repair.commandChain.map(command => ({ ...command, id: command.id })),
-          authorization: repair.authorization,
+          origin: derived.origin,
+          production: { ...derived.production, id: derived.production.id },
+          targetBuild: { ...derived.build, id: derived.build.id },
+          brief: { ...derived.briefRow, id: derived.briefRow.id },
+          commandChain: derived.commandChain.map(command => ({ ...command, id: command.id })),
+          authorizationHash: derived.authorizationHash,
+          authorization: derived.repair?.authorization ?? derived.media?.authorization ?? null,
         }),
-        production: repair.production,
-        build: repair.targetBuild,
-        plan: repair.targetProductionPlan,
+        production: derived.production,
+        build: derived.build,
+        plan: derived.productionPlan,
       }
     } catch (cause) {
       return {
@@ -475,10 +477,10 @@ export async function readTextOpenWorldProductionPlanAuthorityV1(input: {
             ...plan,
             tasks: plan.tasks.map(task => ({ ...task, reuse: null })),
           }),
-          cause instanceof Error ? cause.message : 'Creator repair 权威无法验证',
+          cause instanceof Error ? cause.message : 'Creator 派生 Build 权威无法验证',
         ),
         evidenceHash: await hashProductProductionValueV2({
-          schema: 'storyforge.text-open-world-governance-production-repair-authority-invalid',
+          schema: 'storyforge.text-open-world-governance-production-derived-authority-invalid',
           version: 1,
           productionId: production.id,
           buildId: build.id,

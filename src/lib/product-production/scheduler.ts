@@ -52,12 +52,17 @@ import { parseProductProductionBriefV3 } from './contracts'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { createProductProductionPlanV3, parseProductProductionPlanV3 } from './plan'
 import { createTextOpenWorldProductionPlanV1 } from '../open-world/production-contract'
-import { readTextOpenWorldCreatorExecutionBriefV1 } from '../open-world/creator-production-start'
 import {
-  readTextOpenWorldCreatorRepairExecutionAuthorityV1,
   resolveTextOpenWorldCreatorRepairTaskResultV1,
   type TextOpenWorldCreatorRepairExecutionAuthorityV1,
 } from '../open-world/creator-artifact-repair-authority'
+import {
+  readTextOpenWorldCreatorDerivedBuildAuthorityV1,
+} from '../open-world/creator-derived-authority'
+import {
+  resolveTextOpenWorldCreatorImportedMediaTaskResultV1,
+  type TextOpenWorldCreatorMediaExecutionAuthorityV1,
+} from '../open-world/creator-media-authority'
 import { parseTextOpenWorldModulesV1 } from '../open-world/modules'
 import { createProductBuildPreviewManifestV1 } from './preview-manifest'
 import { createProductBuildRootTerminalReceiptV1 } from './receipts'
@@ -846,12 +851,13 @@ function normalizedBindings(
 function isLocalProceduralMediaTaskV1(
   task: ProductProductionPlanTaskV3,
   bindings: readonly ProductProductionCapabilityBindingV1[],
+  authorizedCreatorImportAdapter: string | null = null,
 ): boolean {
   if (task.executionMode !== 'media-provider'
     || !['media.visual', 'media.audio'].includes(task.taskKey)
     || task.budgetReservation.maximumCostUsd !== 0) return false
   const expectedAdapter = task.taskKey === 'media.visual'
-    ? 'storyforge.procedural-svg.v1'
+    ? authorizedCreatorImportAdapter ?? 'storyforge.procedural-svg.v1'
     : 'storyforge.procedural-audio.v1'
   if (task.capabilityRequirementKeys.length === 0) {
     throw new Error(`[product-production-scheduler] ${task.taskKey} 零费用程序化任务缺少 capability 绑定`)
@@ -859,7 +865,7 @@ function isLocalProceduralMediaTaskV1(
   for (const requirementKey of task.capabilityRequirementKeys) {
     const binding = bindings.find(item => item.requirementKey === requirementKey)
     if (!binding || binding.adapterId !== expectedAdapter || !isSha256Hash(binding.bindingHash)) {
-      throw new Error(`[product-production-scheduler] ${task.taskKey} 未获外部媒资费用授权，只允许内置程序化 adapter`)
+      throw new Error(`[product-production-scheduler] ${task.taskKey} 未获匹配的本地程序化或Creator导入授权`)
     }
   }
   return true
@@ -1121,24 +1127,24 @@ async function currentProductionBuild(scope: WorkspaceScope, productionId: numbe
     || briefRow.status !== 'authorized' || build.briefHash !== briefRow.briefHash) {
     throw new Error('[product-production-scheduler] Build/Brief 不满足调度条件')
   }
-  const repairAuthority = briefRow.briefKind === 'text-open-world-creator-v1'
-    && build.parentBuildNumber != null
-    ? await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
-        scope,
-        buildId: build.id!,
-      })
+  const creatorAuthority = briefRow.briefKind === 'text-open-world-creator-v1'
+    ? await readTextOpenWorldCreatorDerivedBuildAuthorityV1({ scope, buildId: build.id! })
     : null
-  const creatorContracts = briefRow.briefKind === 'text-open-world-creator-v1'
-    ? repairAuthority ?? await readTextOpenWorldCreatorExecutionBriefV1({
-        briefRow,
-        planJson: build.planJson,
-      })
-    : null
+  const creatorContracts = creatorAuthority?.contracts ?? null
   const brief = creatorContracts?.executionBrief ?? parseProductProductionBriefV3(briefRow.briefJson)
-  if (!creatorContracts && await hashProductProductionValueV2(brief) !== briefRow.briefHash) {
+  if (!creatorAuthority && await hashProductProductionValueV2(brief) !== briefRow.briefHash) {
     throw new Error('[product-production-scheduler] Brief hash 校验失败')
   }
-  return { production, build, briefRow, brief, creatorContracts, repairAuthority }
+  return {
+    production,
+    build,
+    briefRow,
+    brief,
+    creatorContracts,
+    creatorAuthority,
+    repairAuthority: creatorAuthority?.repair ?? null,
+    mediaAuthority: creatorAuthority?.media ?? null,
+  }
 }
 
 function evolutionTaskLane(taskKey: string): 'content' | 'product' | 'visual' | 'audio' | null {
@@ -2403,6 +2409,7 @@ async function runClaimedTask(input: {
   snapshot: AgentRunSnapshotV1
   executor: ProductProductionTaskExecutorV1
   repairAuthority: TextOpenWorldCreatorRepairExecutionAuthorityV1 | null
+  mediaAuthority: TextOpenWorldCreatorMediaExecutionAuthorityV1 | null
   capabilityBindings: ProductProductionCapabilityBindingV1[]
   signal: AbortSignal
   onDurableBoundary?: (boundary: ProductProductionSchedulerBoundaryV1, snapshot: AgentRunSnapshotV1) => void | Promise<void>
@@ -2420,8 +2427,21 @@ async function runClaimedTask(input: {
         taskKey: input.task.taskKey,
         inputArtifacts: artifacts,
       })
+  const authorizedMediaImport = input.mediaAuthority == null
+    ? null
+    : await resolveTextOpenWorldCreatorImportedMediaTaskResultV1({
+        authority: input.mediaAuthority,
+        taskKey: input.task.taskKey,
+      })
+  const authorizedDirectResult = authorizedRepair ?? authorizedMediaImport
   const bindings = normalizedBindings(input.task, input.capabilityBindings)
-  const localProceduralMedia = isLocalProceduralMediaTaskV1(input.task, bindings)
+  const localProceduralMedia = isLocalProceduralMediaTaskV1(
+    input.task,
+    bindings,
+    input.mediaAuthority?.authorization.plan.mode === 'author-import'
+      ? input.mediaAuthority.authorization.plan.capability.adapterId
+      : null,
+  )
   const dependencyRuns = await Promise.all(input.task.dependsOn.map(async taskKey => {
     const row = await db.agentRuns.where('[parentRunId+parentRelation]')
       .equals([snapshot.run.parentRunId!, `task:${taskKey}`]).first()
@@ -2632,14 +2652,12 @@ async function runClaimedTask(input: {
       if (!build || build.productionId !== input.productionId) {
         throw new Error('[product-production-scheduler] Creator 模型任务缺少当前 Build')
       }
-      const contracts = build.parentBuildNumber == null
-        ? await readTextOpenWorldCreatorExecutionBriefV1({ briefRow, planJson: build.planJson })
-        : await readTextOpenWorldCreatorRepairExecutionAuthorityV1({
-            scope: input.scope,
-            buildId: build.id!,
-          })
-      sourcePlanHash = contracts.sourcePlan.planHash
-      confirmedBriefHash = contracts.start.startHash
+      const creator = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+        scope: input.scope,
+        buildId: build.id!,
+      })
+      sourcePlanHash = creator.contracts.sourcePlan.planHash
+      confirmedBriefHash = creator.contracts.start.startHash
       // P1 owns exact per-batch Gateway attempts. A future shared-Gateway
       // Creator task needs an explicit dual-source adapter; it may not coerce
       // the Creator plan into the legacy world-only SourcePlan contract.
@@ -2731,11 +2749,13 @@ async function runClaimedTask(input: {
       ? await hashProductProductionValueV2(repairAssembled.text)
       : null,
     authorDraftHash,
-    creatorRepairAuthorizationHash: authorizedRepair == null
+    creatorDerivedAuthorizationHash: authorizedDirectResult == null
       ? null
-      : input.repairAuthority!.authorization.authorizationHash,
+      : input.repairAuthority?.authorization.authorizationHash
+        ?? input.mediaAuthority?.authorization.authorizationHash
+        ?? null,
   })
-  const executionReservation: ProductTaskBudgetReservationV1 = authorDraftJson || authorizedRepair
+  const executionReservation: ProductTaskBudgetReservationV1 = authorDraftJson || authorizedDirectResult
     ? {
         modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0,
         maximumCostUsd: 0,
@@ -2801,11 +2821,11 @@ async function runClaimedTask(input: {
     toolCalls: attemptReservation.mediaCalls,
     tokens: attemptReservation.inputTokens + attemptReservation.outputTokens,
   })
-  if (authorDraftJson !== undefined || repairAssembled || authorizedRepair) {
+  if (authorDraftJson !== undefined || repairAssembled || authorizedDirectResult) {
     const recorded = await recordAgentRunArtifactV1({
       scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
       artifactKind: 'source-snapshot',
-      content: authorDraftJson ?? authorizedRepair?.evidenceJson ?? repairAssembled!.text,
+      content: authorDraftJson ?? authorizedDirectResult?.evidenceJson ?? repairAssembled!.text,
       expectedLastSequence: snapshot.projection.lastSequence,
     })
     snapshot = recorded.snapshot
@@ -2827,11 +2847,13 @@ async function runClaimedTask(input: {
     snapshot,
   })
   if (expiredBeforeDispatch !== 'unchanged') return
-  if (authorizedRepair) {
+  if (authorizedDirectResult) {
     snapshot = await append(input.scope, snapshot, 'tool.called', {
       stepId: input.task.taskKey,
       attempt,
-      toolName: 'text-open-world-creator-repair-adoption',
+      toolName: authorizedRepair
+        ? 'text-open-world-creator-repair-adoption'
+        : 'text-open-world-creator-media-import-adoption',
       callHash: inputHash,
     })
   } else if (input.task.executionMode === 'model' && !authorDraftJson && !executorOwnsWorldGateway) {
@@ -2896,7 +2918,7 @@ async function runClaimedTask(input: {
     })
   }
   try {
-    result = authorizedRepair?.result ?? await input.executor({
+    result = authorizedDirectResult?.result ?? await input.executor({
       scope: input.scope, productionId: input.productionId, buildId: input.build.id,
       buildNumber: input.build.buildNumber, controlEpoch: input.build.controlEpoch,
       planHash: input.build.planHash, task: input.task,
@@ -3763,7 +3785,13 @@ export async function runProductProductionSchedulerCycleV1(input: {
   // task. This also prevents test/extension executor overrides from turning a
   // local-only authorization into an external provider call.
   for (const task of state.plan.tasks) {
-    isLocalProceduralMediaTaskV1(task, input.capabilityBindings ?? [])
+    isLocalProceduralMediaTaskV1(
+      task,
+      input.capabilityBindings ?? [],
+      state.mediaAuthority?.authorization.plan.mode === 'author-import'
+        ? state.mediaAuthority.authorization.plan.capability.adapterId
+        : null,
+    )
   }
   let children = await childSnapshots(scope, state.build.id!, state.root.run.id)
   let interruptedTaskBlocked = false
@@ -3916,6 +3944,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
       },
       task, snapshot, executor: input.executor,
       repairAuthority: state.repairAuthority,
+      mediaAuthority: state.mediaAuthority,
       capabilityBindings: input.capabilityBindings ?? [], signal: controller.signal,
       onDurableBoundary: input.onDurableBoundary,
     })))

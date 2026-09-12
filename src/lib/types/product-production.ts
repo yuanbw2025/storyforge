@@ -138,6 +138,7 @@ export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "authorize-start",
   "authorize-text-open-world-creator-start",
   "authorize-text-open-world-creator-repair",
+  "authorize-text-open-world-creator-media",
   "pause",
   "resume",
   "stop",
@@ -730,6 +731,24 @@ export type ProductProductionCommandV1 =
       expectedHandoffSetHash: string;
       expectedImpactPlanHash: string;
       expectedTargetPlanHash: string;
+      authorizationNonce: string;
+      authorizedAt: number;
+    }
+  | {
+      type: "authorize-text-open-world-creator-media";
+      commandId: string;
+      expectedStateRevision: number;
+      baseBuildNumber: number;
+      expectedBasePlanHash: string;
+      expectedMediaPlanHash: string;
+      expectedTargetPlanHash: string;
+      mode: "provider-generate" | "author-import";
+      acknowledgement: {
+        completeBundle: true;
+        rightsAndProvenance: true;
+        costAndProvider: true;
+        oldBuildImmutable: true;
+      };
       authorizationNonce: string;
       authorizedAt: number;
     }

@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.40
+> 规格版本：3.2.41
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -650,6 +650,14 @@ G5-07已经把确认交接接回同一套P0～QA生产Harness，并保持“AI�
 - 正式命令创建`buildNumber + 1`的不可变子Build，冻结局部修复Plan和作者授权，并原子暂存每个目标的完整确认siblings。目标task在scheduler中作为零provider工具结果运行，但仍保留新的child Run、source snapshot、tool call/return、candidate checkpoint、验收receipt与accepted Artifact；候选checkpoint后的崩溃恢复沿用同一Run，不重复调用、采用或计费；
 - stale闭包内的非目标task继续使用原Skill、Context、Executor、预算和验收门重新生产。闭包外task只能从直接父Build按terminal v2 lineage逐项携带，并在新Build生成新的零调用task receipt；P0 SourcePin等确定性任务也不能跳过这一步。修复authority递归绑定全部历史授权命令、base sibling、reuseKey和staged candidate，任一证明被改写都会终止调度；
 - 原Build、旧Release和已有Session不会被改写。新Build完成仍只是新的受治理Preview候选，叙事质量、平衡、真人体验和发布资格继续由G5-09/G5-10裁决。G5-07没有新增万能内容表、Context Source或AI写入口，运行结果也不会回写世界引擎。
+
+#### 5.4.22 G5-08 Creator媒资Build与叙事消费边界
+
+G5-08不让图片反向成为叙事事实。P10已经从角色与地区目录声明完整媒资需求，Creator媒资工作区只选择冻结计划允许实际生产的一个地区背景和一个角色头像作为首版visual sibling group；叙事身份、角色设定、地区事实、场景脚本和任务引用仍由上游结构化Artifact持有，图片模型或作者文件都不能新增、删除或改写这些内容。
+
+作者完整导入与AI完整生成共用同一媒资计划、DAG影响和新Build授权。导入必须逐槽验真真实图片字节并冻结alt、来源、许可和权利依据，执行时零模型调用但仍产生正式Run/checkpoint/receipt；生成必须绑定当前可信图片Provider和正费用上限，并沿用共享媒资执行、账本与恢复边界。两条路径都只替换`media.visual`完整sibling group，随后重新装配V3运行包并执行QA，闭包外叙事任务须逐项跨Build复验，不能因为“只换图”跳过来源和终态证明。
+
+程序地图继续由确定性SVG目录覆盖，音频在首版保持显式静音降级。旧Build、Release和Session不可变；新Build中的媒资Hash、格式、权利与槽位闭合只证明可消费性，不证明画面与文本叙事匹配或美学质量达标，后者必须由G5-09的语义质量门和隔离试玩回执提供证据。
 
 ### 5.5 正确的验证顺序
 
@@ -1498,6 +1506,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.41 | 2026-09-13 | 完成G5-08 Creator媒资Build：P10冻结需求中的背景+头像完整visual sibling包可由作者真实图片导入或可信Provider生成，程序SVG地图与静音音频降级保持确定性；导入验真字节/尺寸/Hash并冻结alt、来源、许可和权利，生成冻结binding与费用上限。严格媒资计划、四项确认和事务CAS创建紧邻子Build；导入零调用仍走Run/checkpoint/receipt，V3/QA重跑且闭包外叙事任务逐项复验。媒资不能反写叙事事实，合同通过不冒充美学质量。 |
 | 3.2.40 | 2026-09-13 | 完成G5-07 Creator影响闭包与局部修复：已确认handoff经完整G5-05封印验证、冻结DAG传递stale和预览前后读集CAS形成便携影响计划；同批祖先/后代目标被拒绝，完整siblings允许未改项保持原Hash。作者二次确认后正式命令原子创建紧邻子Build并暂存目标；目标以零provider工具结果进入新Run/checkpoint/receipt并可断点恢复，下游走原生产链重跑，闭包外任务含确定性P0也须逐项跨Build复验。历史授权命令、base sibling、reuseKey、候选或读集篡改均失败关闭；旧Build/Release/Session不变，无新表或AI旁路。 |
 | 3.2.39 | 2026-09-12 | 完成G5-06 Creator Artifact受治理修改：19个作者可修复生产任务、29类Artifact由各领域模块投影可改字段并重建完整owner sibling group；直接编辑零模型，Agent编辑走登记Context/Skill/Formal Entry且冻结完整模型身份，二者都先形成durable候选，经原生领域解析、identity/reference delta及同组冲突门后才能确认。确认只写不可变impact-analysis handoff，不改当前Build或正式表；request/result/candidate/intent/receipt/memory settlement、已知失败、结果未知、静态取消、跨目标阻塞、替换谱系和Product/Build事务CAS均失败关闭。G5-07承接影响闭包与新修复Build。 |
 | 3.2.38 | 2026-09-10 | 收口G5-05完整终态证明：root回执写入后重新验证最终root Run、`$join`输出、完整事件/checkpoint与无豁免CAS；同Build、直接跨Build和终态携带统一复核父Build全部active Artifact及其物理Blob。发布前证明扩展为完整terminal lineage Blob闭包，IndexedDB在事务内逐字节CAS，OPFS在事务前立即重读并以正式内容寻址不可变写入边界作元数据CAS。明确Creator链本阶段止于release-ready Build Preview，双来源便携ProductRelease必须在G5-10扩展正式来源合同，不使用兼容占位WorldRelease伪装发布完成。 |
