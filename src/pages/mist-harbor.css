@@ -1,28 +1,8 @@
 .mist-page {
-  min-height: 100vh;
+  min-height: calc(100vh - 62px);
   background: #0b171e;
   color: #e9e6dc;
   font-family: inherit;
-}
-.mist-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 22px 5vw;
-  border-bottom: 1px solid #bfa87530;
-  font-size: 12px;
-}
-.mist-nav a {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #d0c19e;
-}
-.mist-nav > span {
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  color: #8faaa9;
 }
 .mist-hero {
   position: relative;
@@ -245,13 +225,6 @@
   color: #dbc795;
 }
 @media (max-width: 640px) {
-  .mist-nav {
-    padding: 18px;
-    flex-wrap: wrap;
-  }
-  .mist-nav > span {
-    display: none;
-  }
   .mist-hero {
     min-height: 570px;
   }

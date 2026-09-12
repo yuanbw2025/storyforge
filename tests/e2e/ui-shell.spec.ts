@@ -72,5 +72,26 @@ test('世界状态和文字游戏专属生产链在同一外框内可见', async
   await expect(lifecycle).toContainText('文字冒险适配器')
   await expect(lifecycle).toContainText('制作与发布')
   await expect(lifecycle).toContainText('成果与运行')
+  await expect(page.getByText('面板加载中…')).toBeHidden({ timeout: 20_000 })
   await page.screenshot({ path: testInfo.outputPath('text-game-desktop.png'), fullPage: true })
+})
+
+test('独立游戏入口沿用全局顶栏和当前产品导航', async ({ page }, testInfo) => {
+  await page.goto('./play/mist-harbor')
+  await expect(page.getByTestId('product-route-shell')).toBeVisible()
+  await expect(page.getByRole('navigation', { name: '产品页签' })).toBeVisible()
+  await expect(page.getByRole('complementary', { name: '雾港：失潮钟声功能导航' })).toContainText('作品介绍')
+  await expect(page.getByRole('heading', { name: /雾港.*失潮钟声/ })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('mist-harbor-shell-desktop.png'), fullPage: true })
+
+  await page.goto('./play')
+  await expect(page.getByTestId('product-route-shell')).toBeVisible()
+  await expect(page.getByRole('complementary', { name: '跑团作品功能导航' })).toContainText('原创冒险')
+  await expect(page.getByRole('heading', { name: /坐下来/ })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('ttrpg-community-shell-desktop.png'), fullPage: true })
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await expect(page.getByTestId('product-route-context-nav')).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('ttrpg-community-shell-mobile.png'), fullPage: true })
 })

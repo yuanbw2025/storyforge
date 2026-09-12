@@ -1,11 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Link } from 'react-router'
-import { ArrowLeft, ArrowRight, BookOpen, Loader2, Play } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, BookOpenText, Gamepad2, Loader2, Play } from 'lucide-react'
 import { db } from '../lib/db/schema'
 import { mistHarborAdventure, mistHarborAvg } from '../lib/mist-harbor/production'
 import { mistTitle, type MistHarborEdition } from '../lib/mist-harbor/compiler'
 import { createAvgGameInstance, createTextAdventureInstance } from '../lib/product/runtime-instances'
 import type { Project, WorkspaceScope } from '../lib/types'
+import ProductRouteShell from '../components/layout/ProductRouteShell'
 import './mist-harbor.css'
 const AvgPlayer = lazy(() => import('../components/text-game/AvgGamePlayer'))
 const AdventurePlayer = lazy(() => import('../components/text-game/AdventureGamePlayer'))
@@ -71,19 +71,16 @@ export default function MistHarborPage() {
       setProgress('')
     }
   }
+  const navigation = [
+    { id: 'back', label: '文字游戏', detail: '返回作品中心', icon: ArrowLeft, to: '/?view=text-games' },
+    { id: 'introduction', label: '作品介绍', detail: '故事与版本', icon: BookOpenText, active: !player, onClick: () => setPlayer(null) },
+    { id: 'avg', label: '视觉小说', detail: '舞台演出模式', icon: Gamepad2, active: Boolean(player && edition === 'avg'), onClick: () => { setEdition('avg'); setPlayer(null); setError('') } },
+    { id: 'adventure', label: '文字冒险', detail: '探索与行动模式', icon: Play, active: Boolean(player && edition === 'adventure'), onClick: () => { setEdition('adventure'); setPlayer(null); setError('') } },
+    ...(worldProjectId != null ? [{ id: 'source', label: '查看原稿', detail: '独立来源工作区', icon: BookOpen, to: `/workspace/${worldProjectId}` }] : []),
+  ]
   return (
+    <ProductRouteShell active="text-games" title="雾港：失潮钟声" caption="STORYFORGE ORIGINALS" items={navigation} tone="immersive">
     <main className="mist-page">
-      <header className="mist-nav">
-        <Link to="/">
-          <ArrowLeft size={16} /> 返回故事熔炉
-        </Link>
-        <span>STORYFORGE ORIGINALS</span>
-        {worldProjectId != null && (
-          <Link to={`/workspace/${worldProjectId}`}>
-            <BookOpen size={16} /> 查看雾港原稿
-          </Link>
-        )}
-      </header>
       {player ? (
         <section className="mist-playing">
           <div className="mist-player-header">
@@ -187,5 +184,6 @@ export default function MistHarborPage() {
         </>
       )}
     </main>
+    </ProductRouteShell>
   )
 }
