@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { openCurrentTtrpgPlayer, seedCurrentTtrpgProduct } from './helpers/current-products'
+import { openCurrentTtrpgPlayer, openProductTab, seedCurrentTtrpgProduct } from './helpers/current-products'
 import { publishCurrentWorldRelease } from './helpers/world-release'
 
 async function seedFormalTtrpgCampaign(page: Page) {
@@ -221,7 +221,7 @@ test('演化 Build 展示稳定键兼容报告且旧 Release 与旧存档继续�
   })
 
   await page.reload()
-  await page.getByTestId('product-tab-text-games').click()
+  await openProductTab(page, 'text-games')
   await page.getByRole('button', { name: '制作', exact: true }).click()
   const studio = page.getByTestId('product-production-studio')
   await expect(studio).toBeVisible({ timeout: 15_000 })

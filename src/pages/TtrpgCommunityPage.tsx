@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { liveQuery } from 'dexie'
 import { Link, useNavigate, useParams } from 'react-router'
-import { ArrowLeft, ArrowRight, Dices, Play, Settings, Users } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpenText, Dices, Play, Save, Settings, Users } from 'lucide-react'
 import { db } from '../lib/db/schema'
 import { readCommunityTtrpgBundleV1, readCommunityTtrpgCatalogV1, startCommunityTtrpgGameV1, type CommunityTtrpgGameV1 } from '../lib/ttrpg/community-games'
 import type { ProductRuntimeSession } from '../lib/types'
+import ProductRouteShell from '../components/layout/ProductRouteShell'
 import './ttrpg-community.css'
 
 export default function TtrpgCommunityPage({ embedded = false }: { embedded?: boolean }) {
@@ -39,9 +40,8 @@ export default function TtrpgCommunityPage({ embedded = false }: { embedded?: bo
   }
   const visible = gameKey ? games.filter(game => game.key === gameKey) : games
   const Content = embedded ? 'section' : 'main'
-  return <div className={`sf-community${embedded ? ' sf-community-embedded' : ''}`}>
-    {!embedded && <header className="sf-community-nav"><Link to="/"><ArrowLeft size={16} />StoryForge</Link><Link to={`/settings?returnTo=${encodeURIComponent(gameKey ? `/play/${gameKey}` : '/play')}`}><Settings size={16} />API 设置</Link></header>}
-    <Content className="sf-community-main" aria-label={embedded ? '跑团作品' : undefined}><div className="sf-community-intro"><span>STORYFORGE ORIGINALS</span>{embedded ? <h2>跑团作品</h2> : <h1>坐下来，<br />让故事开始。</h1>}<p>{embedded ? '体验随项目提供的原创冒险，或继续已有的故事。无需先创建世界，配置自己的模型 API 即可开局。' : '你扮演角色，AI 担任主持人。带上自己的选择、疑问和秘密，走进一场由你改变的冒险。'}</p></div>
+  const content = <div className={`sf-community${embedded ? ' sf-community-embedded' : ''}`}>
+    <Content className="sf-community-main" aria-label={embedded ? '跑团作品' : undefined}><div id="community-adventures" className="sf-community-intro"><span>STORYFORGE ORIGINALS</span>{embedded ? <h2>跑团作品</h2> : <h1>坐下来，<br />让故事开始。</h1>}<p>{embedded ? '体验随项目提供的原创冒险，或继续已有的故事。无需先创建世界，配置自己的模型 API 即可开局。' : '你扮演角色，AI 担任主持人。带上自己的选择、疑问和秘密，走进一场由你改变的冒险。'}</p></div>
       {loading && <p role="status">正在布置游戏桌面…</p>}
       {catalogError && <div className="sf-community-error" role="alert"><p>新冒险目录暂时无法加载。已有存档仍可在下方打开。</p><small>{catalogError}</small><button onClick={() => setCatalogAttempt(attempt => attempt + 1)}>重新加载游戏目录</button></div>}
       {error && <div className="sf-community-error" role="alert">{error}</div>}
@@ -54,8 +54,21 @@ export default function TtrpgCommunityPage({ embedded = false }: { embedded?: bo
           <small>需要你在本机配置可用的模型 API。游戏进度自动保存在当前浏览器。</small>
         </div></article>)}</div>
       {savesError && <div className="sf-community-error" role="alert"><p>本地存档暂时无法读取：{savesError}</p><button onClick={() => setSavesAttempt(attempt => attempt + 1)}>重新读取本地存档</button></div>}
-      {sessions.length > 0 && <section className="sf-community-saves" aria-label="本地冒险存档"><h2>故事还在等你</h2>{sessions.map(session => <Link key={session.id} to={`/play/session/${session.id}`}><div><strong>{session.title}</strong><small>{session.parentSessionId != null ? '恢复的冒险 · ' : ''}{new Date(session.updatedAt).toLocaleString('zh-CN')}</small></div><ArrowRight size={18} /></Link>)}</section>}
+      {sessions.length > 0 && <section id="community-saves" className="sf-community-saves" aria-label="本地冒险存档"><h2>故事还在等你</h2>{sessions.map(session => <Link key={session.id} to={`/play/session/${session.id}`}><div><strong>{session.title}</strong><small>{session.parentSessionId != null ? '恢复的冒险 · ' : ''}{new Date(session.updatedAt).toLocaleString('zh-CN')}</small></div><ArrowRight size={18} /></Link>)}</section>}
       <footer>原创规则与模组 · 真实骰点与持久存档 · 随时暂停</footer>
     </Content>
   </div>
+  if (embedded) return content
+  return <ProductRouteShell
+    active="ttrpg"
+    title="跑团作品"
+    caption="PLAY / TTRPG"
+    tone="immersive"
+    items={[
+      { id: 'hub', label: '跑团中心', detail: '制作与运行入口', icon: ArrowLeft, to: '/?view=ttrpg' },
+      { id: 'published', label: '原创冒险', detail: '选择已有作品', icon: BookOpenText, active: true, to: gameKey ? `/play/${gameKey}#community-adventures` : '/play#community-adventures' },
+      { id: 'saves', label: '本地存档', detail: '继续已有故事', icon: Save, to: gameKey ? `/play/${gameKey}#community-saves` : '/play#community-saves' },
+      { id: 'settings', label: '模型设置', detail: '配置主持模型', icon: Settings, to: `/settings?returnTo=${encodeURIComponent(gameKey ? `/play/${gameKey}` : '/play')}` },
+    ]}
+  >{content}</ProductRouteShell>
 }

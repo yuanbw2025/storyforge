@@ -15,7 +15,7 @@ import { useEmotionBeatStore } from '../stores/emotion-beat'
 import { useWorldRulesStore } from '../stores/world-rules'
 import { useAutoBackup } from '../hooks/useAutoBackup'
 import { useGistAutoBackup } from '../hooks/useGistAutoBackup'
-import { MessageSquare, PanelRight } from 'lucide-react'
+import { BookOpenText, MessageSquare, PanelRight, Workflow } from 'lucide-react'
 import Sidebar, { type SidebarModule } from '../components/layout/Sidebar'
 import ContentTypeBadge from '../components/layout/ContentTypeBadge'
 import { getModuleContentType, MODULE_CONTENT_TYPES } from '../components/layout/sidebar-tree'
@@ -88,6 +88,20 @@ import { effectiveNovelProfile, effectiveWorkKind, SHORT_NOVEL_DEFAULT_WORDS } f
 import { switchNovelProfile } from '../lib/workspace/works'
 import { secondaryNovelWorkflowModules } from '../lib/novel/workflow'
 import WorldDerivationActions from '../components/world-engine/WorldDerivationActions'
+import ApplicationHeader from '../components/layout/ApplicationHeader'
+import {
+  currentExperimentalProductOptInV1,
+  currentProductCatalogChannelV1,
+  evaluateProductSurfaceV1,
+} from '../lib/product/product-catalog'
+
+type WorkspaceMode = 'steps' | 'nodes' | 'agent'
+
+function workspaceModeFromSearch(value: string | null, module: SidebarModule | null): WorkspaceMode {
+  if (value === 'agent') return 'agent'
+  if (value === 'nodes' || module === 'visual-workflows') return 'nodes'
+  return 'steps'
+}
 
 export default function WorkspacePage() {
   const { projectId } = useParams()
@@ -99,13 +113,15 @@ export default function WorkspacePage() {
   const initialSidebarModule = initialModule && Object.prototype.hasOwnProperty.call(MODULE_CONTENT_TYPES, initialModule)
     ? initialModule as SidebarModule
     : null
+  const initialWorkspaceMode = workspaceModeFromSearch(new URLSearchParams(location.search).get('mode'), initialSidebarModule)
   const backPath = '/'
   const [activeModule, setActiveModule] = useState<SidebarModule>(initialSidebarModule ?? 'info')
   const [loading, setLoading] = useState(true)
   const [editorNodeId, setEditorNodeId] = useState<number | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showProperties, setShowProperties] = useState(false)
-  const [showCopilot, setShowCopilot] = useState(false)
+  const [showCopilot, setShowCopilot] = useState(initialWorkspaceMode === 'agent')
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(initialWorkspaceMode)
   const [impactHandoff, setImpactHandoff] = useState<ImpactHandoffV2 | null>(null)
   const [impactHandoffTarget, setImpactHandoffTarget] = useState<CurrentImpactHandoffTargetV2 | null>(null)
   const [impactCorrectionStatus, setImpactCorrectionStatus] = useState<'idle' | 'pending' | 'verifying' | 'completed'>('idle')
@@ -136,8 +152,19 @@ export default function WorkspacePage() {
       setImpactHandoffTarget(null)
       setActiveModule(module)
       if (module !== 'editor') setEditorNodeId(null)
+      const params = new URLSearchParams(location.search)
+      params.set('module', module)
+      if (module === 'visual-workflows') {
+        params.set('mode', 'nodes')
+        setWorkspaceMode('nodes')
+        setShowCopilot(false)
+      } else if (workspaceMode !== 'agent') {
+        params.set('mode', 'steps')
+        setWorkspaceMode('steps')
+      }
+      navigate(`${location.pathname}?${params.toString()}`, { replace: true })
     }, '当前编辑未能保存，已阻止切换页面')
-  }, [afterPendingEdits])
+  }, [afterPendingEdits, location.pathname, location.search, navigate, workspaceMode])
 
   // 从 Zustand Store 中动态获取当前项目，实现全局响应式更新
   const project = useMemo(() => {
@@ -166,7 +193,10 @@ export default function WorkspacePage() {
   // 加载项目 + 所有关联数据
   useEffect(() => {
     if (initialSidebarModule) setActiveModule(initialSidebarModule)
-  }, [initialSidebarModule])
+    const nextMode = workspaceModeFromSearch(new URLSearchParams(location.search).get('mode'), initialSidebarModule)
+    setWorkspaceMode(nextMode)
+    setShowCopilot(nextMode === 'agent')
+  }, [initialSidebarModule, location.search])
 
   useEffect(() => {
     let active = true
@@ -574,8 +604,32 @@ export default function WorkspacePage() {
     }
   }
 
+  const nodeSurfaceDecision = evaluateProductSurfaceV1({
+    surfaceId: 'node-authoring',
+    channel: currentProductCatalogChannelV1(),
+    experimentalOptIn: currentExperimentalProductOptInV1(),
+  })
+  const selectWorkspaceMode = (mode: WorkspaceMode) => {
+    if (mode === 'nodes' && !nodeSurfaceDecision.enterable) return
+    afterPendingEdits(() => {
+      const params = new URLSearchParams(location.search)
+      const nextModule: SidebarModule = mode === 'nodes'
+        ? 'visual-workflows'
+        : activeModule === 'visual-workflows' ? 'outline' : activeModule
+      params.set('module', nextModule)
+      params.set('mode', mode)
+      setActiveModule(nextModule)
+      setWorkspaceMode(mode)
+      setShowCopilot(mode === 'agent')
+      if (mode !== 'agent') setShowProperties(false)
+      navigate(`${location.pathname}?${params.toString()}`, { replace: true })
+    }, '当前编辑未能保存，已阻止切换创作模式')
+  }
+
   return (
-    <div className="h-screen bg-bg-base flex overflow-hidden">
+    <div className="sf-workspace-shell sf-bronze-shell flex h-screen flex-col overflow-hidden">
+      <ApplicationHeader active="novel" compact />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* 左侧导航 */}
       <Sidebar
         active={activeModule}
@@ -590,12 +644,17 @@ export default function WorkspacePage() {
 
       {/* 主面板 */}
       <main
-        className={`relative flex min-w-0 flex-1 flex-col overflow-hidden ${
+        className={`sf-workspace-content relative flex min-w-0 flex-1 flex-col overflow-hidden ${
           isImmersiveModule
             ? 'bg-[radial-gradient(circle_at_top_left,var(--border-subtle)_1px,transparent_1px)] [background-size:32px_32px]'
             : ''
         }`}
       >
+        <nav className="sf-workspace-modes" aria-label="长篇创作模式">
+          <button type="button" className={workspaceMode === 'steps' ? 'active' : ''} onClick={() => selectWorkspaceMode('steps')}><BookOpenText className="h-4 w-4" /><span>分步骤模式</span></button>
+          <button type="button" className={workspaceMode === 'nodes' ? 'active' : ''} onClick={() => selectWorkspaceMode('nodes')} disabled={!nodeSurfaceDecision.enterable} title={!nodeSurfaceDecision.enterable ? nodeSurfaceDecision.blockers.join('；') : '打开同源节点工作流'}><Workflow className="h-4 w-4" /><span>节点模式</span>{nodeSurfaceDecision.badge && <small>{nodeSurfaceDecision.badge}</small>}</button>
+          <button type="button" className={workspaceMode === 'agent' ? 'active' : ''} onClick={() => selectWorkspaceMode('agent')}><MessageSquare className="h-4 w-4" /><span>Agent 创作</span></button>
+        </nav>
         <div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-bg-surface/70 px-4">
           <div className="flex min-w-0 items-center gap-2">
             <ContentTypeBadge contentType={getModuleContentType(activeModule)} showDescription />
@@ -619,12 +678,7 @@ export default function WorkspacePage() {
               onDerived={targetProjectId => navigate(`/workspace/${targetProjectId}?module=info`)}
             />
             <button
-              onClick={() => {
-                setShowCopilot(value => {
-                  if (!value) setShowProperties(false)
-                  return !value
-                })
-              }}
+              onClick={() => selectWorkspaceMode(showCopilot ? 'steps' : 'agent')}
               title={showCopilot ? '关闭 AI 对话副驾' : '打开 AI 对话副驾'}
               aria-label={showCopilot ? '关闭 AI 对话副驾' : '打开 AI 对话副驾'}
               className={`shrink-0 rounded p-1.5 text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary ${showCopilot ? 'text-accent' : ''}`}
@@ -633,10 +687,8 @@ export default function WorkspacePage() {
             </button>
             <button
               onClick={() => {
-                setShowProperties(value => {
-                  if (!value) setShowCopilot(false)
-                  return !value
-                })
+                if (!showProperties && showCopilot) selectWorkspaceMode('steps')
+                setShowProperties(value => !value)
               }}
               title={showProperties ? '关闭属性面板' : '打开属性面板'}
               aria-label={showProperties ? '关闭属性面板' : '打开属性面板'}
@@ -715,10 +767,11 @@ export default function WorkspacePage() {
             project={project}
             worldGroupId={copilotWorldGroupId}
             worldName={copilotWorldName}
-            onClose={() => setShowCopilot(false)}
+            onClose={() => selectWorkspaceMode('steps')}
           />
         </Suspense>
       )}
+      </div>
     </div>
   )
 }

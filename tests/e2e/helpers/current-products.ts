@@ -20,6 +20,11 @@ export interface CurrentTtrpgSeedInput {
   seats?: CurrentTtrpgSeedSeat[]
 }
 
+export async function openProductTab(page: Page, id: 'ttrpg' | 'chat' | 'town' | 'text-games' | 'market') {
+  await page.getByTestId('product-more-menu').click()
+  await page.getByTestId(`product-tab-${id}`).click()
+}
+
 /**
  * Browser-side seed for runtime-heavy E2E tests. The fixture still traverses
  * the current neutral WorldRelease -> source catalog -> TTRPG compiler ->
@@ -75,7 +80,7 @@ export async function seedCurrentTtrpgProduct(page: Page, input: CurrentTtrpgSee
 
 export async function openCurrentTtrpgPlayer(page: Page): Promise<Locator> {
   await page.reload()
-  await page.getByTestId('product-tab-ttrpg').click()
+  await openProductTab(page, 'ttrpg')
   await page.getByRole('button', { name: '主持、联机与存档工具', exact: true }).click()
   const guide = page.getByTestId('formal-ttrpg-campaign-guide')
   await expect(guide).toBeVisible({ timeout: 20_000 })
@@ -107,7 +112,7 @@ export async function seedCurrentAiTownProduct(page: Page) {
 
 export async function openCurrentAiTownPlayer(page: Page): Promise<Locator> {
   await page.reload()
-  await page.getByTestId('product-tab-town').click()
+  await openProductTab(page, 'town')
   const player = page.getByTestId('ai-town-player')
   await expect(player).toBeVisible({ timeout: 20_000 })
   return player

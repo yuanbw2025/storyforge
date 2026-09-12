@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { seedCurrentTtrpgProduct } from './helpers/current-products'
+import { openProductTab, seedCurrentTtrpgProduct } from './helpers/current-products'
 import { installKpRehearsal, reachHumanTurn } from './helpers/ttrpg-kp-rehearsal'
 
 test('目录不可用时仍能读取本地存档，另一标签新增存档后列表自动更新', async ({ page, context }) => {
@@ -29,7 +29,7 @@ test('社区真实游戏包：多人刷新和交接遮屏，检查点另建冒�
   await installKpRehearsal(page)
   await page.goto('./')
   await expect(page.getByRole('heading', { name: '雾港：最后一盏灯' })).toHaveCount(0)
-  await page.getByTestId('product-tab-ttrpg').click()
+  await openProductTab(page, 'ttrpg')
   await expect(page.getByRole('heading', { name: '跑团', exact: true })).toBeVisible()
   const games = page.getByRole('region', { name: '跑团作品', exact: true })
   await expect(games.getByRole('heading', { name: '雾港：最后一盏灯' })).toBeVisible()

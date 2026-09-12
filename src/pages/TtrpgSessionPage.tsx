@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
-import { ArrowLeft, Settings } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router'
+import { ArrowLeft, BookOpenText, Settings } from 'lucide-react'
 import { db } from '../lib/db/schema'
 import type { ProductRuntimeCheckpoint, ProductRuntimeSession, ProductRuntimeState, WorkspaceScope } from '../lib/types'
 import { branchProductRuntimeSession, verifyProductRuntimeCheckpoint, readProductRuntimeState, createProductRuntimeCheckpoint } from '../lib/ttrpg/runtime-api'
 import { resolveScope } from '../lib/workspace/scope'
 import TtrpgPlayTable from '../components/ttrpg/TtrpgPlayTable'
+import ProductRouteShell from '../components/layout/ProductRouteShell'
 import './ttrpg-community.css'
 
 export default function TtrpgSessionPage() {
@@ -60,8 +61,17 @@ function TtrpgSessionView({ sessionId }: { sessionId: number }) {
       if (mounted.current) setRestoring(false)
     }
   }
-  return <div className="sf-community sf-community-playing">
-    <header className="sf-community-nav"><Link to="/play"><ArrowLeft size={16} />我的冒险</Link><Link to={`/settings?returnTo=${encodeURIComponent(`/play/session/${sessionId}`)}`}><Settings size={16} />API 设置</Link></header>
+  return <ProductRouteShell
+    active="ttrpg"
+    title={loaded?.session.title ?? '跑团桌面'}
+    caption="PLAY / TTRPG"
+    tone="immersive"
+    items={[
+      { id: 'back', label: '我的冒险', detail: '返回作品与存档', icon: ArrowLeft, to: '/play' },
+      { id: 'table', label: '游戏桌面', detail: '当前场景与行动', icon: BookOpenText, active: true },
+      { id: 'settings', label: '模型设置', detail: '配置主持模型', icon: Settings, to: `/settings?returnTo=${encodeURIComponent(`/play/session/${sessionId}`)}` },
+    ]}
+  ><div className="sf-community sf-community-playing">
     <main className="sf-community-table">
       {loaded && checkpoints.length > 0 && <details className="sf-community-checkpoints"><summary>读取存档 · {checkpoints.length}</summary>
         <p>读取时会另建一条冒险记录，保留现在的进度。</p>
@@ -77,5 +87,5 @@ function TtrpgSessionView({ sessionId }: { sessionId: number }) {
           onCheckpoint={async name => { await createProductRuntimeCheckpoint({ sessionId, name }); await refresh() }} />
       </fieldset> : !loadError && <p role="status">正在恢复你的冒险…</p>}
     </main>
-  </div>
+  </div></ProductRouteShell>
 }

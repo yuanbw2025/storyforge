@@ -1,13 +1,14 @@
 import { expect, test, type Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { currentWorldReleasePanel, publishCurrentWorldRelease } from './helpers/world-release'
+import { openProductTab } from './helpers/current-products'
 
 async function openCleanHome(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
   await page.goto('./', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: '你的创作与游玩空间', exact: true }))
+  await expect(page.getByRole('heading', { name: '我的创作空间', exact: true }))
     .toBeVisible({ timeout: 15_000 })
 }
 
@@ -21,7 +22,7 @@ async function createProject(page: Page, name: string) {
 }
 
 function sidebarButton(page: Page, name: string) {
-  return page.getByRole('navigation')
+  return page.locator('.sf-workspace-sidebar')
     .getByText(name, { exact: true })
     .locator('xpath=ancestor::button[1]')
 }
@@ -31,11 +32,13 @@ test('产品综合首页提供并列功能入口和真实世界基座', async ({
     localStorage.setItem('storyforge_guide_completed', 'e2e')
   })
   await page.goto('./')
-  await expect(page.getByRole('heading', { name: '你的创作与游玩空间', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '我的创作空间', exact: true })).toBeVisible()
   await expect(page.getByRole('navigation', { name: '产品页签' })).toBeVisible()
-  for (const tab of ['worlds', 'novel', 'nodes', 'ttrpg', 'chat', 'text-games']) {
+  for (const tab of ['home', 'novel', 'worlds']) {
     await expect(page.getByTestId(`product-tab-${tab}`)).toBeVisible()
   }
+  await page.getByTestId('product-more-menu').click()
+  for (const tab of ['ttrpg', 'chat', 'town', 'text-games']) await expect(page.getByTestId(`product-tab-${tab}`)).toBeVisible()
 })
 
 test('短篇小说使用独立创作基座，世界页不暴露可变作品改编入口', async ({ page }) => {
@@ -171,14 +174,14 @@ test('产品综合首页可从零创建世界引擎并分配稳定编号', async
   await expect(page.locator('.sf-world-code-large')).toHaveText(/W-[A-Z0-9]+-[A-Z0-9]+ · v0/)
   await expect(page.getByText('从基础设定开始', { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: '回到总览', exact: true }).click()
+  await page.getByRole('button', { name: '首页', exact: true }).click()
   await page.getByRole('banner').getByRole('button', { name: '新建', exact: true }).click()
   await page.getByRole('button', { name: /世界引擎.*从零创建/ }).click()
   await page.getByPlaceholder('例如：潮汐之后').fill('群星港')
   await page.getByRole('button', { name: '创建世界引擎', exact: true }).click()
   await expect(page.locator('.sf-worlds-featured').getByRole('heading', { name: '群星港', exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: '回到总览', exact: true }).click()
+  await page.getByRole('button', { name: '首页', exact: true }).click()
   const tidalWorld = page.locator('.sf-world-card').filter({ hasText: '潮汐之后' })
   await expect(tidalWorld).toHaveCount(1)
   await tidalWorld.click()
@@ -546,10 +549,7 @@ test('上层产品只暴露独立制作与玩家入口，不存在通用互动�
   await createProject(page, 'E2E 互动运行时')
   await expect(sidebarButton(page, '互动运行时')).toHaveCount(0)
   await page.goto('./')
-  await expect(page.getByTestId('product-tab-chat')).toBeVisible()
-  await expect(page.getByTestId('product-tab-ttrpg')).toBeVisible()
-  await expect(page.getByTestId('product-tab-text-games')).toBeVisible()
-  await page.getByTestId('product-tab-chat').click()
+  await openProductTab(page, 'chat')
   await expect(page.getByRole('heading', { name: '角色聊天', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '创建并冻结', exact: true })).toHaveCount(0)
 })

@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test'
-import { seedCurrentTtrpgProduct } from './helpers/current-products'
+import { openProductTab, seedCurrentTtrpgProduct } from './helpers/current-products'
 import { installKpRehearsal, reachHumanTurn } from './helpers/ttrpg-kp-rehearsal'
 
 test('AI KP 主桌面：开团、调查、私密询问、失败恢复与刷新', async ({ page }) => {
   const transport = await installKpRehearsal(page)
   const fixture = await seedCurrentTtrpgProduct(page, { title: '雾港 · 主桌面排练', gmMode: 'ai', playerController: 'human' })
   await page.reload()
-  await page.getByTestId('product-tab-ttrpg').click()
+  await openProductTab(page, 'ttrpg')
   const table = page.getByTestId('ttrpg-play-table')
   await expect(table.getByText('选择你要扮演的人')).toBeVisible()
   await table.getByRole('checkbox').check()
@@ -37,7 +37,7 @@ test('AI KP 主桌面：开团、调查、私密询问、失败恢复与刷新',
   await expect(table.getByRole('log')).not.toContainText('先保护自己的线索')
   await page.screenshot({ path: 'test-results/ttrpg-ai-kp-desktop.png', fullPage: true })
   await page.reload()
-  await page.getByTestId('product-tab-ttrpg').click()
+  await openProductTab(page, 'ttrpg')
   await expect(table.getByRole('log')).toContainText('潮声从石阶下传来')
   await expect(table.locator('.sf-ttrpg-whisper')).toHaveCount(0)
   await table.getByRole('button', { name: /我的秘密/ }).click()

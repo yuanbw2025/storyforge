@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 /* ============================================================
-   StoryForge · Design Tokens v3
-   六主题：暖白编辑室(warm) / 墨玉青(jade) / 冷灰银蓝(slate)
+   StoryForge · Design Tokens v4
+   七主题：青铜青绿(bronze) / 暖白编辑室(warm) / 墨玉青(jade) / 冷灰银蓝(slate)
           熔炉(forge) / 古卷(scroll) / 纸与墨(paper)
    ============================================================ */
 
@@ -17,9 +17,64 @@
 }
 
 /* ============================================================
-   暖白编辑室 · Warm Studio — 长时间写作默认主题
+   青铜青绿 · Bronze Verdigris — 默认连续工坊外框
    ============================================================ */
 :root,
+[data-theme="bronze"] {
+  --bg-base: #EAF4EF;
+  --bg-surface: #DCEBE5;
+  --bg-elevated: #FFFDF8;
+  --bg-hover: rgba(16, 74, 64, 0.06);
+
+  --text-primary: #173A3A;
+  --text-secondary: #496966;
+  --text-muted: #78938D;
+
+  --accent: #C86543;
+  --accent-hover: #B55234;
+  --accent-muted: #DFA58A;
+
+  --success: #2F8B67;
+  --warning: #B67628;
+  --error: #B9413A;
+  --info: #317690;
+
+  --border: rgba(23, 72, 66, 0.14);
+  --border-hover: rgba(23, 72, 66, 0.27);
+  --accent-soft: rgba(200, 101, 67, 0.12);
+  --border-subtle: rgba(23, 72, 66, 0.07);
+  --shadow-sm: 0 2px 7px rgba(15, 57, 50, 0.07);
+  --shadow-md: 0 9px 28px rgba(15, 57, 50, 0.11);
+  --shadow-lg: 0 24px 60px rgba(8, 46, 40, 0.18);
+
+  --editor-page-bg: #FFFDF8;
+  --editor-ruled-line: rgba(23, 72, 66, 0.07);
+  --editor-selection-bg: rgba(71, 154, 133, 0.22);
+  --editor-selection-text: #102F2B;
+
+  --editor-ink-primary: #173A3A;
+  --editor-ink-strong: #082520;
+  --editor-ink-cream: #764424;
+  --editor-ink-muted: #5D6F58;
+  --editor-ink-gold: #8A640E;
+  --editor-ink-orange: #B55234;
+  --editor-ink-red: #A92D2D;
+  --editor-ink-blue: #275D8D;
+  --editor-ink-green: #2B7658;
+  --editor-ink-purple: #75508E;
+
+  --editor-mark-yellow: #FFE894;
+  --editor-mark-red: #FFD9D1;
+  --editor-mark-blue: #D6EAF2;
+  --editor-mark-green: #D2EDDF;
+  --editor-mark-purple: #E9DDF0;
+  --editor-mark-brown: #EADFC8;
+  --editor-mark-ink: #D8E4DE;
+}
+
+/* ============================================================
+   暖白编辑室 · Warm Studio — 长时间写作默认主题
+   ============================================================ */
 [data-theme="warm"] {
   --bg-base: #F4EFE7;
   --bg-surface: #E9E0D4;

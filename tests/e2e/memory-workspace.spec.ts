@@ -11,7 +11,7 @@ async function openCleanHome(page: Page) {
     }
   })
   await page.goto('./', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: '你的创作与游玩空间', exact: true })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('heading', { name: '我的创作空间', exact: true })).toBeVisible({ timeout: 15_000 })
 }
 
 async function createProject(page: Page, name: string) {
@@ -25,7 +25,7 @@ async function createProject(page: Page, name: string) {
 }
 
 function sidebarButton(page: Page, name: string) {
-  return page.getByRole('navigation').getByText(name, { exact: true }).locator('xpath=ancestor::button[1]')
+  return page.locator('.sf-workspace-sidebar').getByText(name, { exact: true }).locator('xpath=ancestor::button[1]')
 }
 
 async function opfsFileText(page: Page, path: string): Promise<string> {

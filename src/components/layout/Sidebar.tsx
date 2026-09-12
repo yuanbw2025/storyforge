@@ -52,7 +52,7 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`${collapsed ? 'w-14' : 'w-56'} bg-bg-surface border-r border-border flex flex-col h-full shrink-0 transition-[width] duration-200`}
+      className={`sf-workspace-sidebar ${collapsed ? 'w-14' : 'w-56'} bg-bg-surface border-r border-border flex flex-col h-full shrink-0 transition-[width] duration-200`}
     >
       {/* 顶部：返回 + 项目名 */}
       <div className={`border-b border-border ${collapsed ? 'p-2' : 'p-3'}`}>

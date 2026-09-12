@@ -320,8 +320,9 @@ test('真实浏览器采样写入 Build 回执；smoke 不冒充商业通过', a
   const exitImmersivePlayer = page.getByRole('button', { name: '退出游戏', exact: true })
   if (await exitImmersivePlayer.isVisible().catch(() => false)) await exitImmersivePlayer.click()
   if (!await page.getByRole('button', { name: '制作', exact: true }).isVisible().catch(() => false)) {
-    await page.getByRole('navigation', { name: '产品页签' })
-      .getByRole('button', { name: '文字游戏', exact: true }).click()
+    const productNav = page.getByRole('navigation', { name: '产品页签' })
+    await productNav.getByTestId('product-more-menu').click()
+    await productNav.getByRole('button', { name: '文字游戏', exact: true }).click()
   }
   await page.getByRole('button', { name: '制作', exact: true }).click()
   const receiptPanel = page.getByTestId('product-production-performance-receipt')

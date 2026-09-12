@@ -1,6 +1,7 @@
-export const DEFAULT_THEME = 'warm'
+export const DEFAULT_THEME = 'bronze'
 
 export const THEME_OPTIONS = [
+  { value: 'bronze', label: '青铜青绿', emoji: '◐', desc: '连续工坊外框 · 青绿纸面 · 陶铜强调', swatches: ['#123E36', '#EAF4EF', '#C86543'] },
   { value: 'warm', label: '暖白编辑室', emoji: '☕', desc: '长时间写作 · 层级清楚 · 默认推荐', swatches: ['#F4EFE7', '#965A3A', '#2B2620'] },
   { value: 'jade', label: '墨玉青', emoji: '墨', desc: '深色沉浸 · 暗绿书房 · 白纸正文', swatches: ['#101A17', '#65BFA8', '#F7F1E5'] },
   { value: 'slate', label: '冷灰银蓝', emoji: '◈', desc: '生产力管理 · 冷静清晰 · 适合设定库', swatches: ['#EEF2F6', '#3F6F96', '#172033'] },

@@ -114,7 +114,7 @@ export default function WorldSharingPanel({ project, worldReleaseRevision = 0, o
   }
 
   return (
-    <section className="sf-world-sharing" aria-label="世界发布与导入">
+    <section className="sf-world-sharing" aria-label="世界发布与导入" data-testid="world-sharing-panel">
       <div className="sf-section-header">
         <div>
           <div className="sf-eyebrow">LOCAL PUBLISHING</div>

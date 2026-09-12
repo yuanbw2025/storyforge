@@ -1,6 +1,6 @@
 # StoryForge 当前架构总览
 
-> 版本：2.8.0 · 更新：2026-09-10 · 权威层级：L1
+> 版本：2.8.1 · 更新：2026-09-13 · 权威层级：L1
 > 本文描述当前主干代码事实与目标架构接缝。产品边界以项目总纲为准；代码偏差见对齐审计。
 
 ## 1. 运行形态
@@ -16,6 +16,8 @@ StoryForge 当前是 React + TypeScript + Vite 的本地优先单页应用，核
 - `/play/session/:sessionId`：绑定正式发布或受治理预览的沉浸跑团桌面；
 - `/settings`：模型与应用设置；
 - `/workspace/:projectId`：分步骤长篇工作区。
+
+所有顶级路由共用 `ApplicationHeader` 和青铜青绿应用外框；顶部全局产品导航与左侧当前功能导航由同一背景层连续呈现。首页、设置和工作区在浅色纸面承载业务内容，AVG、文字冒险和跑团等沉浸页面可保留自己的舞台背景，但不得重新建立一套全局顶栏。产品内部面板继续调用既有 service、store 和 IndexedDB 生命周期，应用外框不取得任何领域数据所有权。
 
 综合页从 `PRODUCT_CATALOG_V1` 派生世界引擎、作品、节点与上层产品入口；生产环境只显示 `released`，本地/测试才按状态显示 preview/internal，experimental 还需显式 opt-in。分步骤工作区仍是当前主要、最完整的作者路径，其 Phase 5 工程主链已经验收完成。
 
@@ -87,7 +89,7 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 1048 个文件 / 346040 行 | `tsconfig.json` |
+| TypeScript 生产源码 | 1050 个文件 / 346363 行 | `tsconfig.json` |
 | IndexedDB schema | v6 / 118 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
 | PROJECT_TABLES | 118 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 210 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
