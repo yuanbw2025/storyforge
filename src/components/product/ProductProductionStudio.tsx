@@ -68,6 +68,7 @@ import {
 } from '../../lib/product-production/recovery-policy'
 import TextOpenWorldCreatorArtifactBrowser from '../text-game/TextOpenWorldCreatorArtifactBrowser'
 import TextOpenWorldCreatorMediaStudio from '../text-game/TextOpenWorldCreatorMediaStudio'
+import TextOpenWorldCreatorQualityStudio from '../text-game/TextOpenWorldCreatorQualityStudio'
 type SupportedProduct = ProductionProductKindV1
 
 const PRODUCT_LABELS: Record<SupportedProduct, string> = {
@@ -1027,6 +1028,18 @@ export default function ProductProductionStudio(props: {
             productionId={selectedProductionId!}
             buildId={details.build.id!}
             disabled={busy || productionRunning}
+            onChanged={() => refresh(details.production.id)}
+          />}
+        {isTextOpenWorldCreator && details.build
+          && details.production.status === 'preview-ready'
+          && ['preview-ready', 'release-ready'].includes(details.build.status)
+          && <TextOpenWorldCreatorQualityStudio
+            scope={props.scope}
+            productionId={selectedProductionId!}
+            buildId={details.build.id!}
+            refreshToken={`${details.build.id}:${details.build.stateRevision}:${details.production.stateRevision}`}
+            disabled={busy || productionRunning}
+            onPreview={() => void preview()}
             onChanged={() => refresh(details.production.id)}
           />}
         {canEvolve && <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><div className="flex items-center gap-2"><GitBranch className="h-4 w-4 text-accent" /><h2 className="text-sm font-semibold">继续演化下一版</h2></div><p className="mt-2 text-[10px] leading-5 text-text-muted">描述希望增加、延续或改变的体验。旧 Build、Release 和存档不会被改写；提交后先生成新的可审查 Brief，不会直接调用模型。</p><textarea value={evolutionGoal} onChange={event => setEvolutionGoal(event.target.value)} maxLength={2000} rows={4} placeholder="例如：从当前结局继续，让配角成为新主角，增加一条调查旧港失踪案的支线，并保留已经发生的选择后果。" className="mt-4 w-full rounded border border-border bg-bg-base p-3 text-xs text-text-primary" /><fieldset className="mt-3 flex flex-wrap gap-3 text-[10px] text-text-muted"><legend className="mb-2">本轮影响范围（未勾选且依赖未变化的产物可复用）</legend>{([['content', '剧情内容'], ['product', '玩法模块'], ['visual', '美术'], ['audio', '音乐/音效']] as const).map(([lane, label]) => <label key={lane} className="flex items-center gap-1.5"><input type="checkbox" checked={evolutionLanes.includes(lane)} onChange={event => setEvolutionLanes(current => event.target.checked ? [...new Set([...current, lane])] : current.filter(item => item !== lane))} />{label}</label>)}</fieldset><button disabled={busy || productionRunning || !evolutionGoal.trim() || evolutionLanes.length === 0} onClick={evolve} className="mt-3 flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent disabled:opacity-40"><GitBranch className="h-3.5 w-3.5" />生成下一轮 Brief</button></section>}

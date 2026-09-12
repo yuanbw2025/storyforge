@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.58
+> 规格版本：1.1.59
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -2274,6 +2274,17 @@ G5-08把P10的媒资需求接回正式Creator Build链，而不是在页面上�
 - 作者导入的`media.visual`在scheduler中作为零调用工具结果进入新的Run、candidate checkpoint、验收receipt和accepted Artifact；V3运行包装配与QA按原链重跑。命令重放只读取durable receipt，不再次依赖本地Blob定位器。任何Blob、Plan、来源、权利、候选或命令链漂移都失败关闭；
 - 旧Build、ProductRelease和Session不变，新媒资Build仍只是受治理Preview候选。MIME、Hash、权利声明和合同覆盖通过不等于美术质量通过；审美、一致性、可读性和试玩效果由G5-09质量/灰盒试玩继续裁决。
 
+### 24.8 G5-09发布质量、隔离灰盒与问题证据
+
+G5-09是当前不可变Creator Build进入发布命令前的独立质量层，不重复生产期V1/V2/QA，也不把作者勾选伪装成运行证明：
+
+- 入口重新解析Creator派生授权、完整Artifact治理快照、Build QualityReport、全部QA硬门以及平衡/叙事评审Artifact自身Hash。Schema、引用、权利、运行包装配、可玩性和模型阻断finding均为不可豁免硬门；70～84分的模型建议仍可通过，但作者必须逐项记录本版接受风险的理由；
+- 灰盒候选只来自当前Build Preview创建的`text-open-world` Session，必须绑定精确packageHash且没有ProductRelease来源。系统重放连续Event、核对规范状态头和有效Checkpoint，组合覆盖主线结局、受治理Action、世界探索、战斗、成长/经济与刷新恢复六类证据，并至少有一个Session真正完成主线；作者还须确认引导、叙事、媒资降级和问题登记；
+- 灰盒与问题凭据存入现有`productQualityGateReceipts`。便携证据只保存Build Hash、稳定Action/结局键、事件流/状态/Checkpoint Hash和环境，不保存Session本地ID、世界原文、玩家输入、完整事件正文或内部Prompt；
+- 作者可登记带前置条件、复现步骤、预期/实际结果和稳定受影响键的问题。阻断问题不能豁免，只能通过G5-07生成新Build；非阻断问题可逐项绑定明确理由。相同问题以指纹幂等，跨Build、跨Work、篡改或碰撞失败关闭；
+- 最终质量结论由确定性代码联结当前Build、治理快照、硬门回执、作者语义抽检、灰盒回执及完整问题/豁免集合，并在同一事务CAS全部权威行。新增问题、替换Build、Artifact漂移、回执被改写或集合变化都会使旧结论立即失效；G5-10只能消费这一份当前通过回执，不能根据UI状态或旧QA结果旁路发布；
+- 该能力属于文字开放世界产品生产私域，不新增物理表、Schema、Context Source或AI写字段，也不修改WorldRelease、正式Release或玩家Session。质量通过表示证据满足首版发布门，不等价于作品已经达到固定文学或审美水平。
+
 ---
 
 ## 25. 媒资、表现与可访问性
@@ -2961,6 +2972,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.59 | 2026-09-13 | 完成G5-09发布前质量层：复验当前Creator Build授权、Artifact治理、QualityReport、QA硬门与双模型评审；硬门/阻断finding不可豁免，建议finding和非阻断问题逐项说明。灰盒只从Build Preview真实Session的连续事件、状态头和Checkpoint生成，覆盖主线结局、Action、探索、战斗、成长经济及恢复；便携凭据不含本地ID或原文。最终质量回执事务联结硬门、作者抽检、灰盒与完整问题集合，新问题或证据漂移自动使旧结论失效，G5-10必须显式消费。 |
 | 1.1.58 | 2026-09-13 | 完成G5-08 Creator媒资纵切面：P10精确视觉槽形成背景+头像完整sibling包，程序SVG地图和静音音频降级保持确定性；作者导入验真真实PNG/JPEG/WebP字节、尺寸、Hash并冻结产品Blob、alt、来源、许可和权利依据，AI生成冻结当前可信图片Provider及正费用上限。统一影响预览和四项确认经严格命令/CAS创建紧邻子Build；导入目标零模型但保留Run/checkpoint/receipt，生成目标走正式media executor，V3/QA重跑、其余任务逐项复验。旧Build/Release/Session不改，结构与来源通过不冒充美学质量。 |
 | 1.1.57 | 2026-09-13 | 完成G5-07引用影响与局部修复：G5-06确认交接经G5-05完整封印验证与前后读集CAS形成唯一影响计划；代码按冻结DAG计算目标、传递stale和逐项复验reuse，禁止同批祖先/后代目标并允许未改siblings原Hash携带。作者二次确认后，正式命令原子创建紧邻子Build、暂存完整siblings并冻结便携授权；目标以零provider工具结果进入新Run/checkpoint/receipt，崩溃可恢复，下游按原Executor重跑，确定性P0等未受影响task也必须获得新的跨Build复验receipt。旧Build/Release/Session不变；篡改历史修复命令、base sibling、reuseKey、staged candidate或预览读集均失败关闭；未新增表、Context Source或AI写入口。 |
 | 1.1.56 | 2026-09-12 | 完成G5-06直接编辑与Agent修改双入口：当前官方生产验证Artifact按19个领域任务、29类Artifact投影受限作者字段并完整重建owner sibling group；直接路径零模型，Agent路径走登记Context/Skill/Formal Entry并冻结完整模型身份。两条路径统一产生durable候选，经原生解析、领域验证、identity/reference delta和同组冲突门后，可由作者修订、拒绝或确认。确认只形成不可变impact-analysis handoff，不改当前Build、正式表或运行包；结果未知不重发，未派发可零费用取消，跨目标冲突、替换谱系、刷新恢复及Product/Build事务CAS均失败关闭。G5-07承接影响闭包和新修复Build。 |

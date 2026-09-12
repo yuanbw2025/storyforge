@@ -1,6 +1,6 @@
 # StoryForge 当前能力基线
 
-> 版本：1.6.2 · 基线：2026-09-13 文字开放世界G5-07交付 · 权威层级：L2
+> 版本：1.6.3 · 基线：2026-09-13 文字开放世界G5-09交付 · 权威层级：L2
 > 本文区分代码存在、纵切面可用和产品完成。旧完成卡不自动恢复权威，但已合入主干并由当前代码/检查器复证的 Phase 5 成果必须保留。
 
 ## 状态定义
@@ -63,7 +63,7 @@
 | E-TOWN-01 | missing | 有角色互动和通用产品运行时基础能力可复用 | 没有独立 AI 小镇产品的时间、日程、地点、群体与离线演化闭环 |
 | E-TEXTADV-01 | partial | 文字冒险已接入专用需求适配器、统一 Production/Build/ProductRelease v1 和独立玩家面 | 可玩内容、规则、媒资、结局和真实 E2E 仍需专项封板 |
 | E-AVG-01 | partial | AVG 已接入专用需求适配器、统一 Production/Build/ProductRelease v1、演出与独立玩家面 | 真实视觉/声音资产、演出绑定和完整体验未验收 |
-| E-OPENWORLD-01 | partial | 已在统一Production/Build/ProductRelease和ProductRuntime事件底座上完成G1运行治理、G2确定性玩法闭环、G3 P0～P10/V1～V3/QA内容生产编译器和G4完整玩家端；成长、任务、地图/快旅、时间天气、NPC日程/生死/关系、战斗、制作、经济、地区演化、受限发牌、动态任务、随机事件与知识历程均可重放。G5-01～G5-08已落地双来源Creator入口、Creator Brief、BYOK/模型/预算预检、原子Creator SourcePlan/Start、精确DAG、Run进度/付费边界恢复、受治理Artifact三视图、直接/Agent双修改、正式影响闭包/局部修复Build，以及完整视觉媒资生成/导入子Build。P10背景+头像槽可整体导入真实PNG/JPEG/WebP并冻结Blob/alt/来源/许可/权利，或绑定可信图片Provider与正费用上限生成；程序SVG地图和静音音频降级保持确定性。媒资命令CAS完整读集，导入目标零provider但保留Run/checkpoint/receipt，生成沿用正式media executor，V3/QA重跑，闭包外逐项复验。历史授权、base sibling、reuseKey、candidate、Blob和预览读集均受CAS，旧Build/Release/Session不改。P0统一限制512个来源单元、400万字符，32,650,752 B最坏候选低于共享32 MiB checkpoint上限；旧v1终态封印不能静默作为新携带依据。只读旧Release继续兼容 | G5-09～G5-12的质量/试玩、双来源正式发布更新、兼容迁移和创作者E2E仍待完成；Creator链当前只到可生成新受治理Build Preview，不能使用兼容Brief的占位WorldRelease冒充ProductRelease来源；MIME/Hash/权利与证据链验证不等于内容质量或美学验证；G6运行时有边界自由演绎、G7盐脊真人验收与旧入口收口仍未完成 |
+| E-OPENWORLD-01 | partial | 已在统一Production/Build/ProductRelease和ProductRuntime事件底座上完成G1运行治理、G2确定性玩法闭环、G3 P0～P10/V1～V3/QA内容生产编译器和G4完整玩家端；成长、任务、地图/快旅、时间天气、NPC日程/生死/关系、战斗、制作、经济、地区演化、受限发牌、动态任务、随机事件与知识历程均可重放。G5-01～G5-09已落地双来源Creator入口、Creator Brief、BYOK/模型/预算预检、原子Creator SourcePlan/Start、精确DAG、Run进度/付费恢复、受治理Artifact三视图、直接/Agent双修改、影响闭包/局部修复、完整视觉媒资子Build，以及发布前质量/真人灰盒/问题回执。当前Build会重新验证派生授权、Artifact治理、QualityReport、QA硬门和双模型评审；灰盒只接受Build Preview真实Session并核对事件重放、状态头、Checkpoint和核心循环覆盖；阻断项不可豁免，建议项逐项说明，最终质量回执绑定完整问题集合并随新问题或证据漂移失效。便携质量证据不含本地ID、来源原文或完整事件。P0统一限制512个来源单元、400万字符，32,650,752 B最坏候选低于共享32 MiB checkpoint上限；旧v1终态封印不能静默作为新携带依据。只读旧Release继续兼容 | G5-10～G5-12的双来源正式发布、兼容迁移和创作者E2E仍待完成；Creator链当前只到通过发布质量门的不可变Build Preview，尚未形成正式ProductRelease，不能使用兼容Brief的占位WorldRelease冒充真实来源；质量回执也不等价于固定文学或美学水平；G6运行时有边界自由演绎、G7盐脊真人验收与旧入口收口仍未完成 |
 
 ## F · 平台与商业化
 

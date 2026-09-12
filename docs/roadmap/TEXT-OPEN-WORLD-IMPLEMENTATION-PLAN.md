@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.94
+> 版本：1.1.95
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,17 +36,17 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 92（G0、G1、G2、G3、G4及G5-01～G5-08完成） |
-| 产品总进度 | 92 / 121（76.0%） |
-| G1～G7业务功能进度 | 82 / 111（73.9%） |
+| 已完成 | 93（G0、G1、G2、G3、G4及G5-01～G5-09完成） |
+| 产品总进度 | 93 / 121（76.9%） |
+| G1～G7业务功能进度 | 83 / 111（74.8%） |
 | 当前阶段 | G5 创作者工作台与发布更新 |
 | G0阶段进度 | 10 / 10（100%） |
 | G1阶段进度 | 13 / 13（100%） |
 | G2阶段进度 | 28 / 28（100%） |
 | G3阶段进度 | 18 / 18（100%） |
 | G4阶段进度 | 15 / 15（100%） |
-| G5阶段进度 | 8 / 12（66.7%） |
-| 当前工作包 | `TOW-G5-09` |
+| G5阶段进度 | 9 / 12（75.0%） |
+| 当前工作包 | `TOW-G5-10` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -248,8 +248,8 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G5-06 | DONE | 直接编辑与Agent修改双入口 | G5-05、G1-12 | 当前Work/Production/Build中通过官方生产验证的Artifact实体可进入直接编辑或Agent修改；19个作者可修复生产任务、29类Artifact只投影各自领域合同声明的标量或字符串数组字段，稳定ID、实体集合与顺序、引用、治理和来源字段均不可改。直接编辑零模型调用；Agent编辑只读取登记Context与作者要求，并以冻结Skill/Formal Entry最多调用一次。两类入口统一形成可复核候选，经过领域原生解析、完整owner sibling group重建、确定性验证及identity/reference delta门后，才允许作者修订、拒绝或确认。确认只生成不可变影响分析交接单，不原地改当前Build或正式表；durable intake/request/result/candidate/intent/receipt/memory settlement、完整模型身份、已知失败/结果未知、显式取消/放弃、同组互斥、跨目标阻塞、Product/Build事务CAS和刷新恢复均失败关闭 |
 | TOW-G5-07 | DONE | 引用影响、stale、问题定位和局部修复 | G3-17、G5-06 | G5-06确认交接经G5-05完整封印和预览前后CAS形成便携影响计划；代码以冻结DAG计算目标/传递stale/逐项复验reuse，禁止同批祖先与后代目标并允许未改siblings保持原Hash。作者二次确认后，正式命令原子创建紧邻子Build并暂存完整目标组；目标以零provider工具结果生成新Run/checkpoint/receipt且可断点恢复，下游按原Executor重跑，闭包外含确定性P0的task也须逐项跨Build复验。旧Build/Release/Session不变，历史命令、base sibling、reuseKey、staged candidate或读集篡改失败关闭；无新表、Context Source或AI写入口 |
 | TOW-G5-08 | DONE | 媒资需求、生成/导入、权利和绑定 | G3-17 | 当前已封账Creator Build可按P10精确槽位形成完整视觉sibling包；作者可本地导入真实PNG/JPEG/WebP并冻结尺寸、内容Hash、Blob、来源、许可、权利依据与alt，也可绑定当前可信图片Provider及正费用上限生成。两条路径都须预览DAG影响与四项确认，正式命令CAS完整读集并创建紧邻子Build；导入目标零模型/零费用但仍走Run/checkpoint/receipt，生成目标沿用正式media executor，V3/QA重跑，闭包外逐项复验。程序SVG地图继续由代码覆盖，音频保持明确静音降级；旧Build/Release/Session不变，当前只证明媒资结构、来源和执行证据，不证明美学质量 |
-| TOW-G5-09 | READY | 质量门、灰盒试玩和问题回执 | G3-18、G2-28、G5-07 | 硬门、语义评测、豁免、隔离试玩和问题复现证据完整 |
-| TOW-G5-10 | QUEUED | Build装配、发布和不可变ProductRelease | G5-08、G5-09 | 一次授权后可完成生产；发布前验证消费槽、Hash和终态Receipt |
+| TOW-G5-09 | DONE | 质量门、灰盒试玩和问题回执 | G3-18、G2-28、G5-07 | 当前Creator Build的完整生产治理、QualityReport、全部QA硬门及平衡/叙事双评审先由代码复验；硬门和模型阻断项不可豁免，70～84分建议项与作者登记的非阻断问题只能逐项说明。隔离灰盒只接受绑定当前未发布Build的文字开放世界Session，重放连续Event、状态头和Checkpoint并覆盖主线结局、Action、探索、战斗、成长/经济及恢复；便携凭据只保存稳定键与Hash。问题回执可复现、可导出且不含本地ID、来源原文或完整事件；阻断项必须新Build修复。最终发布质量回执联结当前Build、治理快照、硬门、人工叙事复核、灰盒和完整问题集合，新问题或证据篡改自动使旧结论失效。创作者工作台已提供全过程UI；专项7项、G5关联218项、完整CI 671文件/3443项及Chromium E2E 80项通过，无新表、Schema、Context Source、AI写入口或WorldRelease回写 |
+| TOW-G5-10 | READY | Build装配、发布和不可变ProductRelease | G5-08、G5-09 | 一次授权后可完成生产；发布前验证消费槽、Hash和终态Receipt |
 | TOW-G5-11 | QUEUED | 新Release、兼容报告和存档迁移 | G1-09、G5-10 | 旧档留在旧Release；兼容时可预演迁移并保留原分支 |
 | TOW-G5-12 | QUEUED | 工作台导入导出、删除和真实E2E | G5-01～G5-11、G1-12 | 从来源到发布更新全路径通过，刷新/失败/导入导出和删除不丢数据；复验G5-04已落地的SourcePin/Unit写前闭包验真与通用SourcePlan嵌套locator重映射，并覆盖完整Creator工作流的篡改备份失败关闭、删除和真实浏览器往返 |
 
@@ -357,6 +357,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.95 | 2026-09-13 | 完成G5-09发布前质量纵切面：当前Creator Build重新验证派生授权、Artifact治理、QualityReport、全部QA硬门及平衡/叙事双评审；确定性硬门和模型阻断项不能豁免，模型建议与作者非阻断问题须逐项说明。灰盒凭据只接受当前未发布Build的真实文字开放世界Session，验证事件重放、状态头、检查点及主线结局/Action/探索/战斗/成长经济/恢复六类覆盖，并只携带稳定键与Hash。可复现问题回执不含本地ID、来源原文或完整事件；阻断问题必须进入新Build。最终质量回执联结硬门、作者语义抽检、灰盒和完整问题/豁免集合，新问题或任何证据篡改都会使旧结论失效。创作者工作台已接入质量状态、试玩选择、问题导出和最终冻结；专项7项、G5关联218项、完整CI 671文件/3443项与Chromium E2E 80项通过。总进度93/121，业务功能83/111，下一项G5-10。 |
 | 1.1.94 | 2026-09-13 | 完成G5-08媒资生成/导入纵切面：从当前已封账Creator Build与P10 MediaRequirements提取一个场景背景和一个角色头像的完整visual sibling group，程序地图保持SVG代码覆盖、首版音频保持静音降级。作者可导入真实PNG/JPEG/WebP，系统验真MIME、尺寸、bytes与内容Hash并保存产品私有Blob、来源、许可、权利依据和alt；也可冻结当前可信Agnes/Relay图片Provider、binding回执和正费用上限。预览以唯一DAG计算media.visual及下游stale/reuse和完整预算，四项确认进入严格正式命令；事务CAS Production/Brief/Build/全部Artifact/Blob/派生命令链后创建紧邻子Build。导入目标零provider但仍保留Run/tool evidence/checkpoint/receipt，生成目标复用正式media executor，V3/QA重跑、闭包外逐项复验；命令刷新重放不依赖本地Blob定位器，旧Build/Release/Session不变。专项、旧修复、调度、生产执行与媒资质量回归通过；总进度92/121，业务功能82/111，下一项G5-09。 |
 | 1.1.93 | 2026-09-13 | 完成G5-07引用影响、stale与局部修复：G5-06确认handoff须通过G5-05完整terminal v2生产封印，并在预览前后和正式事务中CAS Production/Brief/Build/Artifact/编辑Run/evidence/历史修复命令。冻结DAG唯一计算目标、传递stale和reuse三分区；同批祖先/后代目标被拒绝，完整siblings允许未改项保持原Hash。UI展示闭包与模型/媒资/token/费用/耗时/存储上界，二次确认后正式命令原子创建下一子Build并暂存目标。目标零provider但仍走新Run/tool evidence/candidate checkpoint/receipt，checkpoint崩溃可恢复；下游正常重跑，未受影响任务含确定性P0也逐项跨Build复验。篡改授权、base sibling、Plan/reuseKey/candidate或读集均失败关闭；旧Build/Release/Session不变。专项合同、命令、DB/CAS、调度恢复和React UI回归已覆盖，三项架构门、TypeScript与目标ESLint通过；总进度91/121，业务功能81/111，下一项G5-08。 |
 | 1.1.92 | 2026-09-12 | 完成G5-06直接编辑与Agent修改双入口：当前Build中通过官方生产验证的29类Artifact实体按19个领域生产合同投影作者可改字段，只允许replace有界标量或字符串数组，稳定ID、实体集合/顺序、引用、治理及来源字段不可改；每次修改完整重建同owner sibling group，并再次运行原生解析器、领域验证、identity/reference delta门。直接编辑零模型；Agent编辑通过登记Context、冻结Skill/Formal Entry和完整provider/model/endpoint/config身份最多调用一次，live注册表漂移不改变已冻结执行。两类入口均形成durable候选，可确定性修订、拒绝或确认；确认只落不可变impact-analysis handoff，当前Build和正式表保持不变，由G5-07创建新修复Build。intake/request/result/candidate/intent/receipt/memory settlement全链持久化；结果未知不重发，已知失败显式终止，静态未派发intake可零费用取消，同组与跨目标冲突、替换谱系、Product/Build事务CAS和刷新恢复均失败关闭。当前198项G5关联回归及三注册表、架构和TypeScript门已通过；总进度90/121，业务功能80/111，下一项G5-07。 |
