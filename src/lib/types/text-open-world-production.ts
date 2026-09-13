@@ -758,6 +758,97 @@ export interface TextOpenWorldSourcePinBundleV1 {
   }>
 }
 
+/** Portable author confirmation for the single irreversible publication
+ * boundary. The raw nonce is never persisted; every reviewed Build/source/
+ * quality coordinate is part of `authorizationHash`. */
+export interface TextOpenWorldCreatorReleaseAuthorizationV1 {
+  schema: 'storyforge.text-open-world-creator-release-authorization'
+  version: 1
+  productInstanceKey: string
+  buildNumber: number
+  adoptionIntentHash: string
+  buildManifestHash: string
+  runtimePackageHash: string
+  releaseQualityReceiptHash: string
+  releaseLabel: string
+  acknowledgement: {
+    sourceAndRightsReviewed: true
+    buildAndQualityReviewed: true
+    immutableReleaseReviewed: true
+    publishNow: true
+  }
+  authorizationNonceHash: string
+  authorizedAt: number
+  authorizationHash: string
+}
+
+export interface TextOpenWorldCreatorReleaseArtifactReceiptV1 {
+  artifactKey: string
+  version: number
+  contentHash: string
+  producerReceiptHash: string | null
+}
+
+/** Product-specific stage-three source and assembly evidence. It deliberately
+ * contains no local row ids and no novel source body. SourcePin unit hashes and
+ * the sealed Build receipt set prove that private source copy without exposing
+ * it in a player/distribution manifest. */
+export interface TextOpenWorldCreatorReleaseSourceContractsV1 {
+  schema: 'storyforge.text-open-world-creator-release-source-contracts'
+  version: 1
+  productType: 'text-open-world'
+  creatorBrief: TextOpenWorldCreatorBriefV1
+  sourcePlan: TextOpenWorldCreatorProductionSourcePlanV1
+  creatorStart: TextOpenWorldCreatorProductionStartV1
+  sourcePin: TextOpenWorldSourcePinV1
+  sourceManifest: TextOpenWorldSourceManifestV1
+  artifactReceipts: TextOpenWorldCreatorReleaseArtifactReceiptV1[]
+  artifactSetHash: string
+  integrationReport: TextOpenWorldIntegrationReportV1
+  governanceSnapshotHash: string
+  releaseQuality: {
+    gateId: 'text-open-world.creator.release-quality'
+    status: 'passed'
+    receiptHash: string
+    evidence: import('../open-world/creator-quality-contract').TextOpenWorldCreatorReleaseQualityEvidenceV1
+    createdAt: number
+  }
+  releaseAuthorization: TextOpenWorldCreatorReleaseAuthorizationV1
+  contractHash: string
+}
+
+/** Creator releases use a neutral source lineage instead of fabricating a
+ * WorldReference for novel sources. Common release identity/build/quality
+ * fields stay compatible with the shared ProductRelease reader. */
+export interface TextOpenWorldCreatorReleaseLineageV1 {
+  schema: 'storyforge.text-open-world-creator-release-lineage'
+  version: 1
+  productType: 'text-open-world'
+  productInstanceKey: string
+  releaseUid: string
+  releaseVersion: number
+  releaseHash: string
+  parentRelease: null | { releaseUid: string; releaseHash: string }
+  sourceKind: TextOpenWorldSourceKindV1
+  sourceBindingHash: string
+  sourcePlanHash: string
+  sourcePinHash: string
+  sourceManifestHash: string
+  creatorBriefHash: string
+  creatorStartHash: string
+  build: { buildUid: string; buildHash: string }
+  quality: { passed: true; receiptHashes: string[] }
+  governanceSnapshotHash: string
+  releaseAuthorizationHash: string
+  compatibility: {
+    status: 'initial' | 'compatible' | 'requires-migration' | 'incompatible'
+    protocolVersion: number
+    evidenceHashes: string[]
+  }
+  createdAt: number
+  lineageHash: string
+}
+
 export type TextOpenWorldSourceCurationDepthV1 = 'full' | 'original'
 
 export interface TextOpenWorldSourceManifestUnitV1 {

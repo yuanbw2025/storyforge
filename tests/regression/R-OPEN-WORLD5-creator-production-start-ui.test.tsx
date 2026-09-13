@@ -389,7 +389,7 @@ describe('TOW-G5-04 · production start UI', () => {
     expect(host.textContent).toContain('checkpoint：saved · author-retry')
   })
 
-  it('Creator Build 仅开放检查与试玩，不展示尚未实现的发布或版本演化入口', async () => {
+  it('Creator Build 开放检查、试玩和专属发布入口，但仍不展示尚未实现的版本演化', async () => {
     serviceMocks.readDetails.mockResolvedValue({
       ...lockedDetails,
       production: {
@@ -415,11 +415,11 @@ describe('TOW-G5-04 · production start UI', () => {
     })
 
     await waitFor(() => expect(
-      host.querySelector('[data-testid="text-open-world-creator-later-stage-notice"]'),
+      host.querySelector('[data-testid="text-open-world-creator-release-stage-notice"]'),
     ).toBeTruthy())
-    expect(host.textContent).toContain('当前阶段可检查与试玩 Creator Build')
+    expect(host.textContent).toContain('作者最终确认 → 不可变 Release')
     expect(host.textContent).toContain('试玩未发布 Build')
-    expect(host.textContent).not.toContain('复验并原子发布')
+    expect(host.textContent).toContain('正式发布 ProductRelease')
     expect(host.textContent).not.toContain('继续演化下一版')
     expect(host.querySelector('[data-testid="text-open-world-creator-artifact-browser"]')).toBeTruthy()
   })

@@ -171,6 +171,9 @@ export interface ProductReleaseManifestV1 {
   schema: 'storyforge.product-release'
   version: 1
   productType: ProductionProductKindV1
+  /** Legacy/shared runtime source coordinate. Creator releases additionally
+   * carry the authoritative dual-source contract below and never use this
+   * field or `ProductRelease.worldReleaseId` as a novel locator. */
   sourceWorldRelease: { contentHash: string }
   runtimePackage: ProductRuntimePackageV1
   packageHash: string
@@ -184,10 +187,11 @@ export interface ProductReleaseManifestV1 {
     sourcePlan: import('./world-product-contracts').ProductSourcePlanV1
     confirmedBrief: import('./world-product-contracts').ConfirmedProductBriefV1
     sourceManifest: import('./world-product-contracts').ProductSourceManifestV1
-  }
+  } | import('./text-open-world-production').TextOpenWorldCreatorReleaseSourceContractsV1
   /** Hash of every release field except lineage. */
   releaseIdentityHash: string
   lineage: import('./world-product-contracts').ProductReleaseLineageV1
+    | import('./text-open-world-production').TextOpenWorldCreatorReleaseLineageV1
 }
 
 export type CharacterInteractionProductRuntimePackageV1 = ProductRuntimePackageV1 & {

@@ -597,9 +597,23 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
   if (type === 'resolve-blocker') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'blockerKey', 'resolution']), expectedStateRevision: expectedRevision(row.expectedStateRevision), blockerKey: stableKey(row.blockerKey, 'blockerKey'), resolution: parseResolution(row.resolution) }
   if (type === 'request-preview') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'buildNumber']), expectedStateRevision: expectedRevision(row.expectedStateRevision), buildNumber: positiveId(row.buildNumber, 'buildNumber') }
   if (type === 'publish') {
-    const commandId = commandHeader(row, type, ['expectedStateRevision', 'buildNumber', 'expectedManifestHash', 'adoptionIntentHash'])
+    const creatorReleaseAuthorizationHash = row.creatorReleaseAuthorizationHash == null
+      ? undefined
+      : row.creatorReleaseAuthorizationHash
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision', 'buildNumber', 'expectedManifestHash', 'adoptionIntentHash',
+      ...(creatorReleaseAuthorizationHash == null ? [] : ['creatorReleaseAuthorizationHash']),
+    ])
     if (!isSha256Hash(row.expectedManifestHash) || !isSha256Hash(row.adoptionIntentHash)) fail('publish hash 无效')
-    return { type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision), buildNumber: positiveId(row.buildNumber, 'buildNumber'), expectedManifestHash: row.expectedManifestHash, adoptionIntentHash: row.adoptionIntentHash }
+    if (creatorReleaseAuthorizationHash != null && !isSha256Hash(creatorReleaseAuthorizationHash)) {
+      fail('creatorReleaseAuthorizationHash 无效')
+    }
+    return {
+      type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      buildNumber: positiveId(row.buildNumber, 'buildNumber'),
+      expectedManifestHash: row.expectedManifestHash, adoptionIntentHash: row.adoptionIntentHash,
+      ...(creatorReleaseAuthorizationHash == null ? {} : { creatorReleaseAuthorizationHash }),
+    }
   }
   const commandId = commandHeader(row, type, ['expectedStateRevision', 'base', 'userText', 'affectedLanes'])
   const affectedLanes = stringArray(row.affectedLanes, 'affectedLanes', EVOLUTION_LANES.length, true)

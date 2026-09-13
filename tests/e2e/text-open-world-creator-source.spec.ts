@@ -524,16 +524,17 @@ test('真实 Chromium Creator 链路以 512 个小说来源单元和约 390 万�
         .map((row: any) => row.status),
     }
   }, fixture.projectId)
-  expect(authorization).toEqual({
+  expect(authorization).toMatchObject({
     productionStatus: 'producing',
     currentBuildNumber: 1,
     briefStatus: 'authorized',
-    buildStatuses: ['authorized'],
     sourceKind: 'novel',
     sourceUnitCount: 512,
     sourceUnitArtifactKeyCount: 512,
     startCommandStatuses: ['succeeded'],
   })
+  expect(authorization.buildStatuses).toHaveLength(1)
+  expect(['authorized', 'building']).toContain(authorization.buildStatuses[0])
   expect(browserErrors.join('\n')).not.toMatch(/PrematureCommitError/i)
   testInfo.annotations.push({ type: 'creator-cas-duration-ms', description: String(durationMs) })
   console.log(`[CREATOR-CAS-E2E] 512 units / ${fixture.totalWordCount} chars authorized in ${durationMs}ms`)

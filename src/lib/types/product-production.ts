@@ -791,6 +791,8 @@ export type ProductProductionCommandV1 =
       buildNumber: number;
       expectedManifestHash: string;
       adoptionIntentHash: string;
+      /** Required only for the Creator dual-source publication path. */
+      creatorReleaseAuthorizationHash?: string;
     }
   | {
       type: "archive";

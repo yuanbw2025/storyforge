@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.59
+> 规格版本：1.1.60
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -2285,6 +2285,19 @@ G5-09是当前不可变Creator Build进入发布命令前的独立质量层，�
 - 最终质量结论由确定性代码联结当前Build、治理快照、硬门回执、作者语义抽检、灰盒回执及完整问题/豁免集合，并在同一事务CAS全部权威行。新增问题、替换Build、Artifact漂移、回执被改写或集合变化都会使旧结论立即失效；G5-10只能消费这一份当前通过回执，不能根据UI状态或旧QA结果旁路发布；
 - 该能力属于文字开放世界产品生产私域，不新增物理表、Schema、Context Source或AI写字段，也不修改WorldRelease、正式Release或玩家Session。质量通过表示证据满足首版发布门，不等价于作品已经达到固定文学或审美水平。
 
+### 24.9 G5-10 Creator装配发布与不可变ProductRelease
+
+G5-10复用共享`productReleases`、正式媒资表和原子发布事务，但不再把Creator兼容执行Brief中的占位`worldReleaseId`当成真实来源：
+
+- 发布准备从当前`release-ready` Creator Build重新读取Creator Brief、专属SourcePlan/Start、已接受SourcePin整包、P1 SourceManifest、全部当前Artifact、V3 IntegrationReport、G5-09最终质量回执、root Run与terminal v2读集。世界来源重新绑定精确本地WorldReference；小说来源只验证产品私有SourcePin整包可用，并把`ProductRelease.worldReleaseId`写为`null`；
+- Creator Release来源合同携带便携Brief、SourcePlan、Start、SourcePin索引、实际读取清单、完整Artifact receipt集合及集合Hash、装配报告、治理快照、最终质量回执和作者发布授权。小说正文继续只存在SourcePin Unit Artifact中，不复制进Release manifest；本地行ID和原始授权nonce不进入便携合同；
+- 共享Release外层的`sourceWorldRelease.contentHash`仅保留为现有运行包的来源内容Hash坐标。真正来源种类、版本、边界和血缘由Creator专属source contract与中立lineage持有，小说不会伪造WorldReference；旧共享WorldRelease Release仍使用原合同和reader；
+- 创作者面板展示下一版本、Build/RuntimePackage、SourcePin、SourceManifest、Artifact集合、装配报告、治理快照、质量回执和媒资数量。作者须分别确认来源权利、Build/质量、不可变规则和立即发布；一次性授权Hash绑定当前adoption intent、Build manifest、RuntimePackage、G5-09回执和发布名称；
+- 正式提交继续使用共享事务，对Production、Brief、Build、全部当前Artifact、全部质量回执、terminal读集和物理Blob做最终CAS；随后原子创建不可变ProductRelease、固化Release媒资、回写Build/Production并保存幂等命令回执。任一权威行、Blob、来源、问题或质量证据漂移均零发布失败关闭；同一成功命令可安全重放；
+- ProductRelease reader在创建Session或读取包时重新验证Creator合同自身Hash、来源链、消费槽、Artifact receipt、装配报告、质量、作者授权、release identity和lineage。世界与小说两种正式Release均可启动同一文字开放世界Runtime；旧Build、旧Release和既有Session不被改写。新Release兼容评估、旧档迁移预演和版本演化仍由G5-11负责。
+
+本项没有新增表、Schema、Context Source或AI写入口，也不向WorldRelease或小说源作品回写。发布证明当前冻结内容满足既定证据门，不对文学或美术质量作永久保证。
+
 ---
 
 ## 25. 媒资、表现与可访问性
@@ -2972,6 +2985,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.60 | 2026-09-13 | 完成G5-10 Creator正式发布：专属双来源合同封印Creator Brief/SourcePlan/Start、SourcePin索引、P1实读清单、完整Artifact receipt、V3装配、治理快照、G5-09质量与作者授权；小说正文不进Release且`worldReleaseId=null`，世界来源重绑真实locator。共享事务最终CAS全部权威行、terminal读集与物理Blob并原子固化Release/媒资/幂等命令；专属中立lineage不伪造WorldReference，reader完整验签后两种Release均可启动正式Session。 |
 | 1.1.59 | 2026-09-13 | 完成G5-09发布前质量层：复验当前Creator Build授权、Artifact治理、QualityReport、QA硬门与双模型评审；硬门/阻断finding不可豁免，建议finding和非阻断问题逐项说明。灰盒只从Build Preview真实Session的连续事件、状态头和Checkpoint生成，覆盖主线结局、Action、探索、战斗、成长经济及恢复；便携凭据不含本地ID或原文。最终质量回执事务联结硬门、作者抽检、灰盒与完整问题集合，新问题或证据漂移自动使旧结论失效，G5-10必须显式消费。 |
 | 1.1.58 | 2026-09-13 | 完成G5-08 Creator媒资纵切面：P10精确视觉槽形成背景+头像完整sibling包，程序SVG地图和静音音频降级保持确定性；作者导入验真真实PNG/JPEG/WebP字节、尺寸、Hash并冻结产品Blob、alt、来源、许可和权利依据，AI生成冻结当前可信图片Provider及正费用上限。统一影响预览和四项确认经严格命令/CAS创建紧邻子Build；导入目标零模型但保留Run/checkpoint/receipt，生成目标走正式media executor，V3/QA重跑、其余任务逐项复验。旧Build/Release/Session不改，结构与来源通过不冒充美学质量。 |
 | 1.1.57 | 2026-09-13 | 完成G5-07引用影响与局部修复：G5-06确认交接经G5-05完整封印验证与前后读集CAS形成唯一影响计划；代码按冻结DAG计算目标、传递stale和逐项复验reuse，禁止同批祖先/后代目标并允许未改siblings原Hash携带。作者二次确认后，正式命令原子创建紧邻子Build、暂存完整siblings并冻结便携授权；目标以零provider工具结果进入新Run/checkpoint/receipt，崩溃可恢复，下游按原Executor重跑，确定性P0等未受影响task也必须获得新的跨Build复验receipt。旧Build/Release/Session不变；篡改历史修复命令、base sibling、reuseKey、staged candidate或预览读集均失败关闭；未新增表、Context Source或AI写入口。 |

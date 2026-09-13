@@ -1183,6 +1183,9 @@ export async function publishProductProductionV1(input: {
   productionId: number
 }) {
   const prepared = await prepareProductProductionAdoption(input)
+  if (prepared.creatorRelease) {
+    throw new Error('文字开放世界 Creator Build 必须经过专属作者发布确认，不能调用通用发布入口。')
+  }
   const receipt = await publishProductProductionBuild({
     ...input,
     command: {

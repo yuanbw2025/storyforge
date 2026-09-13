@@ -1328,7 +1328,7 @@ function qddHasStart(qdd: TextOpenWorldQuestDesignDocumentsV1): true {
   return true
 }
 
-async function validateIntegrationReportV1(input: {
+export async function validateTextOpenWorldIntegrationReportV1(input: {
   runtimePackage: ProductRuntimePackageV1
   report: TextOpenWorldIntegrationReportV1
 }): Promise<TextOpenWorldIntegrationReportV1> {
@@ -1468,7 +1468,7 @@ export function createTextOpenWorldReleaseQaExecutorV1(): ProductProductionTaskE
       fail('QA executor收到错误任务')
     }
     const runtimePackage = parseProductRuntimePackageV1(payload(execution, 'text-open-world.runtime-package'))
-    const report = await validateIntegrationReportV1({
+    const report = await validateTextOpenWorldIntegrationReportV1({
       runtimePackage,
       report: payload<TextOpenWorldIntegrationReportV1>(execution, 'text-open-world.integration-report'),
     })

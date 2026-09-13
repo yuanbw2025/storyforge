@@ -15,6 +15,14 @@ import type {
   ProductReleaseLineageV1,
   ProductSourceManifestV1,
   ProductSourcePlanV1,
+  TextOpenWorldCreatorBriefV1,
+  TextOpenWorldCreatorProductionSourcePlanV1,
+  TextOpenWorldCreatorProductionStartV1,
+  TextOpenWorldCreatorReleaseAuthorizationV1,
+  TextOpenWorldCreatorReleaseSourceContractsV1,
+  TextOpenWorldIntegrationReportV1,
+  TextOpenWorldSourceManifestV1,
+  TextOpenWorldSourcePinV1,
   WorkspaceScope,
 } from '../types'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
@@ -51,6 +59,10 @@ import {
   parseConfirmedProductBriefV1,
   parseProductProductionSourcePlanV1,
 } from './source-contracts'
+import type {
+  TextOpenWorldCreatorQualityReceiptV1,
+  TextOpenWorldCreatorReleaseQualityEvidenceV1,
+} from '../open-world/creator-quality-contract'
 
 type PublishCommandV1 = Extract<ProductProductionCommandV1, { type: 'publish' }>
 
@@ -73,8 +85,21 @@ export interface ProductProductionAdoptionIntentV1 {
   browserPerformanceReceiptHash: string | null
   mainRoutePlaythroughReceiptHash: string | null
   mediaRuntimeReceiptHash: string | null
-  worldReleaseId: number
+  worldReleaseId: number | null
   worldContentHash: string
+}
+
+export interface PreparedTextOpenWorldCreatorReleaseV1 {
+  sourceKind: 'world-release' | 'novel'
+  sourceVersionHash: string
+  sourceBoundaryHash: string
+  sourcePlanHash: string
+  sourcePinHash: string
+  sourceManifestHash: string
+  artifactSetHash: string
+  integrationReportHash: string
+  governanceSnapshotHash: string
+  releaseQualityReceiptHash: string
 }
 
 export interface PreparedProductProductionAdoptionV1 {
@@ -82,7 +107,9 @@ export interface PreparedProductProductionAdoptionV1 {
   adoptionIntentHash: string
   productType: ProductRuntimePackageV1['productType']
   title: string
+  releaseVersion: number
   mediaAssetKeys: string[]
+  creatorRelease: PreparedTextOpenWorldCreatorReleaseV1 | null
 }
 
 export interface ProductProductionPublishReceiptV1 {
@@ -108,9 +135,19 @@ interface VerifiedAdoption extends PreparedProductProductionAdoptionV1 {
    * and IndexedDB bytes are compared again inside that transaction. */
   terminalBlobProofRows: Map<number, MediaBlobObjectRecordV1 & { id: number }>
   terminalVerification: VerifiedProductBuildTerminalArtifactSetV1
-  sourcePlan: ProductSourcePlanV1
-  confirmedBrief: ConfirmedProductBriefV1
-  sourceManifest: ProductSourceManifestV1
+  sourcePlan: ProductSourcePlanV1 | null
+  confirmedBrief: ConfirmedProductBriefV1 | null
+  sourceManifest: ProductSourceManifestV1 | null
+  creatorReleaseAuthority: null | {
+    creatorBrief: TextOpenWorldCreatorBriefV1
+    sourcePlan: TextOpenWorldCreatorProductionSourcePlanV1
+    creatorStart: TextOpenWorldCreatorProductionStartV1
+    sourcePin: TextOpenWorldSourcePinV1
+    sourceManifest: TextOpenWorldSourceManifestV1
+    integrationReport: TextOpenWorldIntegrationReportV1
+    governanceSnapshotHash: string
+    releaseQuality: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorReleaseQualityEvidenceV1>
+  }
   releaseVersion: number
   parentRelease: ProductReleaseLineageV1['parentRelease']
   compatibilityHash: string
@@ -309,13 +346,15 @@ async function priorReleaseLineageV1(input: {
   const latest = rows[0]
   if (!latest) return { version: 1, parentRelease: null, sourceManifest: null }
   const manifest = await verifyProductReleaseManifestV1(latest.manifestJson)
+  const creatorSource = 'schema' in manifest.sourceContracts
+    && manifest.sourceContracts.schema === 'storyforge.text-open-world-creator-release-source-contracts'
   return {
     version: latest.version + 1,
     parentRelease: {
       releaseUid: manifest.lineage.releaseUid,
       releaseHash: manifest.lineage.releaseHash,
     },
-    sourceManifest: manifest.sourceContracts.sourceManifest,
+    sourceManifest: creatorSource ? null : manifest.sourceContracts.sourceManifest as ProductSourceManifestV1,
   }
 }
 
@@ -336,8 +375,27 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     || build.controlEpoch !== production.controlEpoch || !build.rootTerminalReceiptHash) {
     fail('Build/Brief/status/epoch 绑定不满足发布条件')
   }
-  const brief = parseProductProductionBriefV3(briefRow.briefJson)
-  if (await hashProductProductionValueV2(brief) !== briefRow.briefHash) fail('Brief hash 校验失败')
+  const creatorDerived = briefRow.briefKind === 'text-open-world-creator-v1'
+    ? await (async () => {
+        const { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } = await import(
+          '../open-world/creator-derived-authority'
+        )
+        const authority = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+          scope, buildId: build.id!,
+        })
+        if (authority.production.id !== production.id || authority.build.id !== build.id
+          || authority.briefRow.id !== briefRow.id
+          || authority.contracts.creatorBrief.briefHash !== briefRow.briefHash) {
+          fail('Creator派生授权与当前Production/Build/Brief不闭合')
+        }
+        return authority
+      })()
+    : null
+  const brief = creatorDerived?.contracts.executionBrief
+    ?? parseProductProductionBriefV3(briefRow.briefJson)
+  if (creatorDerived == null && await hashProductProductionValueV2(brief) !== briefRow.briefHash) {
+    fail('Brief hash 校验失败')
+  }
   const mediaRuntimeRequired = brief.media.requiredMediaKinds.length > 0
   const [browserPerformance, mainRoutePlaythrough, mediaRuntime] = brief.qualityProfile === 'commercial-candidate'
     ? await Promise.all([
@@ -456,32 +514,140 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     fail('root Run/terminal receipt 不是当前 Build 的完整发布证明')
   }
 
-  const sourcePlan = await parseProductProductionSourcePlanV1(briefRow)
-  const confirmedBrief = await parseConfirmedProductBriefV1({ row: briefRow, sourcePlan })
-  if (sourcePlan.productType !== brief.intent.productType
-    || sourcePlan.productInstanceKey !== production.productionKey
-    || sourcePlan.worldReference.releaseHash !== brief.source.worldContentHash) {
-    fail('SourcePlan/ConfirmedBrief 与 Production/Brief/WorldRelease 不闭合')
-  }
-  await resolveProductSourceReadBoundaryV1(sourcePlan)
   const prior = await priorReleaseLineageV1({
     workId: scope.workId,
     productionKey: production.productionKey,
   })
-  const pointers = await worldContextManifestPointersV1({
-    scope,
-    buildId: build.id!,
-    worldSourceTaskKeys: plan.tasks.filter(productProductionTaskUsesWorldGatewayV1).map(task => task.taskKey),
-  })
-  const sourceManifest = pointers.length > 0
-    ? await aggregateProductSourceManifestFromExactRunsV1({
-      scope,
-      sourcePlan,
-      runContextManifests: pointers,
+  let sourcePlan: ProductSourcePlanV1 | null = null
+  let confirmedBrief: ConfirmedProductBriefV1 | null = null
+  let sourceManifest: ProductSourceManifestV1 | null = null
+  let creatorReleaseAuthority: VerifiedAdoption['creatorReleaseAuthority'] = null
+  let creatorRelease: PreparedTextOpenWorldCreatorReleaseV1 | null = null
+  let worldReleaseId: number | null
+  let worldContentHash: string
+  if (creatorDerived) {
+    const [{
+      readAcceptedTextOpenWorldSourcePinBundleV1,
+      validateTextOpenWorldSourcePinV1,
+      verifyTextOpenWorldSourcePinAvailabilityV1,
+    }, {
+      validateTextOpenWorldSourceManifestForReleaseV1,
+      creatorReleaseArtifactReceiptsFromRowsV1,
+    }, {
+      validateTextOpenWorldIntegrationReportV1,
+    }, {
+      readTextOpenWorldCreatorQualityWorkspaceV1,
+    }] = await Promise.all([
+      import('../open-world/source-pin'),
+      import('../open-world/creator-release-contract'),
+      import('../open-world/runtime-package-production'),
+      import('../open-world/creator-quality'),
+    ])
+    const pinRows = await readAcceptedTextOpenWorldSourcePinBundleV1({ scope, buildId: build.id! })
+    let pinValue: unknown
+    try { pinValue = JSON.parse(pinRows.pinArtifact.payloadJson) }
+    catch { fail('Creator SourcePin Artifact JSON损坏') }
+    const sourcePin = await validateTextOpenWorldSourcePinV1(pinValue)
+    const sourceManifestArtifact = artifacts.find(row => row.artifactKey === 'text-open-world.source-manifest')
+    const integrationArtifact = artifacts.find(row => row.artifactKey === 'text-open-world.integration-report')
+    if (!sourceManifestArtifact || !integrationArtifact) {
+      fail('Creator Release缺少SourceManifest或V3 IntegrationReport')
+    }
+    let sourceManifestValue: unknown
+    let integrationValue: unknown
+    try {
+      sourceManifestValue = JSON.parse(sourceManifestArtifact.payloadJson)
+      integrationValue = JSON.parse(integrationArtifact.payloadJson)
+    } catch { fail('Creator Release来源或装配Artifact JSON损坏') }
+    const creatorSourceManifest = await validateTextOpenWorldSourceManifestForReleaseV1(
+      sourcePin,
+      sourceManifestValue as TextOpenWorldSourceManifestV1,
+    )
+    const integrationReport = await validateTextOpenWorldIntegrationReportV1({
+      runtimePackage: preview.runtimePackage,
+      report: integrationValue as TextOpenWorldIntegrationReportV1,
     })
-    : prior.sourceManifest && prior.sourceManifest.sourcePlanHash === sourcePlan.planHash
-      ? await validateProductSourceManifestV1({ sourceManifest: prior.sourceManifest, sourcePlan })
-      : fail('当前 Build 没有真实世界读取 ContextManifestV3，且不存在可继承的同 SourcePlan 来源清单')
+    if (sourceManifestArtifact.contentHash !== creatorSourceManifest.manifestHash
+      || integrationArtifact.contentHash !== integrationReport.integrationReportHash) {
+      fail('Creator来源或装配Artifact行Hash不匹配')
+    }
+    const qualityWorkspace = await readTextOpenWorldCreatorQualityWorkspaceV1({
+      scope, productionId: production.id!, expectedBuildId: build.id!,
+    })
+    if (!qualityWorkspace.releaseQualityReady || !qualityWorkspace.releaseQualityReceipt) {
+      fail(`Creator Build未通过G5-09发布质量门:${qualityWorkspace.blockers.join('；') || 'unknown'}`)
+    }
+    const creatorSourcePlan = creatorDerived.contracts.sourcePlan
+    const availability = await verifyTextOpenWorldSourcePinAvailabilityV1({ scope, pin: sourcePin })
+    if (creatorSourcePlan.productInstanceKey !== production.productionKey
+      || creatorSourcePlan.sourceKind !== sourcePin.sourceKind
+      || creatorSourcePlan.sourceVersionHash !== sourcePin.sourceVersionHash
+      || creatorSourcePlan.expectedSourceBoundaryHash !== sourcePin.sourceBoundaryHash
+      || creatorSourceManifest.sourcePinHash !== sourcePin.pinHash
+      || integrationReport.sourcePinHash !== sourcePin.pinHash) {
+      fail('Creator SourcePlan/SourcePin/P1/V3来源链不闭合')
+    }
+    if (availability.kind === 'world-release') {
+      worldReleaseId = availability.worldReference.localReleaseRecordId
+      if (briefRow.sourceWorldReleaseId !== worldReleaseId
+        || availability.worldReference.releaseHash !== creatorSourcePlan.sourceVersionHash) {
+        fail('Creator WorldRelease本地locator与冻结来源不闭合')
+      }
+    } else {
+      worldReleaseId = null
+      if (briefRow.sourceWorldReleaseId !== null) fail('Creator小说来源不得携带WorldRelease locator')
+    }
+    worldContentHash = creatorSourcePlan.sourceVersionHash
+    const artifactReceipts = creatorReleaseArtifactReceiptsFromRowsV1(artifacts)
+    const artifactSetHash = await hashProductProductionValueV2(artifactReceipts)
+    creatorReleaseAuthority = {
+      creatorBrief: creatorDerived.contracts.creatorBrief,
+      sourcePlan: creatorSourcePlan,
+      creatorStart: creatorDerived.contracts.start,
+      sourcePin,
+      sourceManifest: creatorSourceManifest,
+      integrationReport,
+      governanceSnapshotHash: qualityWorkspace.governanceSnapshotHash,
+      releaseQuality: qualityWorkspace.releaseQualityReceipt,
+    }
+    creatorRelease = {
+      sourceKind: creatorSourcePlan.sourceKind,
+      sourceVersionHash: creatorSourcePlan.sourceVersionHash,
+      sourceBoundaryHash: creatorSourcePlan.expectedSourceBoundaryHash,
+      sourcePlanHash: creatorSourcePlan.planHash,
+      sourcePinHash: sourcePin.pinHash,
+      sourceManifestHash: creatorSourceManifest.manifestHash,
+      artifactSetHash,
+      integrationReportHash: integrationReport.integrationReportHash,
+      governanceSnapshotHash: qualityWorkspace.governanceSnapshotHash,
+      releaseQualityReceiptHash: qualityWorkspace.releaseQualityReceipt.receiptHash,
+    }
+  } else {
+    sourcePlan = await parseProductProductionSourcePlanV1(briefRow)
+    confirmedBrief = await parseConfirmedProductBriefV1({ row: briefRow, sourcePlan })
+    if (sourcePlan.productType !== brief.intent.productType
+      || sourcePlan.productInstanceKey !== production.productionKey
+      || sourcePlan.worldReference.releaseHash !== brief.source.worldContentHash) {
+      fail('SourcePlan/ConfirmedBrief 与 Production/Brief/WorldRelease 不闭合')
+    }
+    await resolveProductSourceReadBoundaryV1(sourcePlan)
+    const pointers = await worldContextManifestPointersV1({
+      scope,
+      buildId: build.id!,
+      worldSourceTaskKeys: plan.tasks.filter(productProductionTaskUsesWorldGatewayV1).map(task => task.taskKey),
+    })
+    sourceManifest = pointers.length > 0
+      ? await aggregateProductSourceManifestFromExactRunsV1({
+        scope,
+        sourcePlan,
+        runContextManifests: pointers,
+      })
+      : prior.sourceManifest && prior.sourceManifest.sourcePlanHash === sourcePlan.planHash
+        ? await validateProductSourceManifestV1({ sourceManifest: prior.sourceManifest, sourcePlan })
+        : fail('当前 Build 没有真实世界读取 ContextManifestV3，且不存在可继承的同 SourcePlan 来源清单')
+    worldReleaseId = sourcePlan.worldReference.localReleaseRecordId
+    worldContentHash = sourcePlan.worldReference.releaseHash
+  }
   let compatibilityBody: unknown
   try { compatibilityBody = JSON.parse(build.compatibilityJson) }
   catch { fail('Build compatibility JSON 损坏') }
@@ -501,6 +667,12 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     browserPerformance?.gateReceipt.receiptHash ?? null,
     mainRoutePlaythrough?.gateReceipt.receiptHash ?? null,
     mediaRuntime?.gateReceipt.receiptHash ?? null,
+    creatorReleaseAuthority?.releaseQuality.receiptHash ?? null,
+    creatorReleaseAuthority?.releaseQuality.evidence.hardGateReceiptHash ?? null,
+    creatorReleaseAuthority?.releaseQuality.evidence.semanticDecisionReceiptHash ?? null,
+    creatorReleaseAuthority?.releaseQuality.evidence.grayboxReceiptHash ?? null,
+    ...(creatorReleaseAuthority?.releaseQuality.evidence.issueReceiptHashes ?? []),
+    ...(creatorReleaseAuthority?.releaseQuality.evidence.issueWaiverReceiptHashes ?? []),
   ].filter((value): value is string => value != null)
 
   const mediaArtifacts = new Map<string, ProductBuildArtifactRecordV1>()
@@ -529,9 +701,13 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     }
     mediaArtifacts.set(asset.assetKey, artifact)
   }
-  if (sourcePlan.worldReference.localReleaseRecordId !== brief.source.worldReleaseId
+  if (preview.runtimePackage.sourceWorld.contentHash !== worldContentHash) {
+    fail('RuntimePackage来源Hash与正式来源合同不一致')
+  }
+  if (!creatorReleaseAuthority && sourcePlan && (
+    sourcePlan.worldReference.localReleaseRecordId !== brief.source.worldReleaseId
     || sourcePlan.worldReference.releaseHash !== brief.source.worldContentHash
-    || preview.runtimePackage.sourceWorld.contentHash !== sourcePlan.worldReference.releaseHash) {
+  )) {
     fail('WorldReference 来源绑定失败')
   }
 
@@ -545,8 +721,8 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     browserPerformanceReceiptHash: browserPerformance?.gateReceipt.receiptHash ?? null,
     mainRoutePlaythroughReceiptHash: mainRoutePlaythrough?.gateReceipt.receiptHash ?? null,
     mediaRuntimeReceiptHash: mediaRuntime?.gateReceipt.receiptHash ?? null,
-    worldReleaseId: sourcePlan.worldReference.localReleaseRecordId,
-    worldContentHash: sourcePlan.worldReference.releaseHash,
+    worldReleaseId,
+    worldContentHash,
   }
   const qualityReceiptRows = await db.productQualityGateReceipts
     .where('buildId').equals(build.id!).toArray()
@@ -566,11 +742,13 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     scope, intent, adoptionIntentHash: await hashProductProductionValueV2(intent),
     productType: preview.runtimePackage.productType, title: preview.runtimePackage.definition.title,
     mediaAssetKeys: runtimeAssets.map(asset => asset.assetKey).sort(),
+    creatorRelease,
     runtimePackage: preview.runtimePackage, artifacts, mediaArtifacts, terminalBlobProofRows,
     terminalVerification,
     sourcePlan,
     confirmedBrief,
     sourceManifest,
+    creatorReleaseAuthority,
     releaseVersion: prior.version,
     parentRelease: prior.parentRelease,
     compatibilityHash,
@@ -597,7 +775,9 @@ export async function prepareProductProductionAdoption(input: {
   const verified = await inspectAdoption(scope, input.productionId)
   return {
     intent: verified.intent, adoptionIntentHash: verified.adoptionIntentHash,
-    productType: verified.productType, title: verified.title, mediaAssetKeys: verified.mediaAssetKeys,
+    productType: verified.productType, title: verified.title, releaseVersion: verified.releaseVersion,
+    mediaAssetKeys: verified.mediaAssetKeys,
+    creatorRelease: verified.creatorRelease,
   }
 }
 
@@ -744,6 +924,7 @@ export async function publishProductProductionBuild(input: {
   productionId: number
   command: PublishCommandV1
   label?: string
+  creatorReleaseAuthorization?: TextOpenWorldCreatorReleaseAuthorizationV1
 }): Promise<ProductProductionPublishReceiptV1> {
   const scope = await resolveScope({ scope: input.scope })
   const command = parseProductProductionCommandV1(input.command)
@@ -764,6 +945,32 @@ export async function publishProductProductionBuild(input: {
     || command.expectedManifestHash !== prepared.intent.manifestHash
     || command.adoptionIntentHash !== prepared.adoptionIntentHash) fail('publish command 与 adoption intent 不一致或已过期')
 
+  let creatorAuthorization: TextOpenWorldCreatorReleaseAuthorizationV1 | null = null
+  if (prepared.creatorReleaseAuthority) {
+    if (!input.creatorReleaseAuthorization || !command.creatorReleaseAuthorizationHash) {
+      fail('Creator双来源发布缺少作者最终发布授权')
+    }
+    const { validateTextOpenWorldCreatorReleaseAuthorizationV1 } = await import(
+      '../open-world/creator-release-contract'
+    )
+    creatorAuthorization = await validateTextOpenWorldCreatorReleaseAuthorizationV1(
+      input.creatorReleaseAuthorization,
+    )
+    if (creatorAuthorization.authorizationHash !== command.creatorReleaseAuthorizationHash
+      || creatorAuthorization.productInstanceKey !== prepared.intent.productionKey
+      || creatorAuthorization.buildNumber !== prepared.intent.buildNumber
+      || creatorAuthorization.adoptionIntentHash !== prepared.adoptionIntentHash
+      || creatorAuthorization.buildManifestHash !== prepared.intent.manifestHash
+      || creatorAuthorization.runtimePackageHash !== prepared.intent.packageHash
+      || creatorAuthorization.releaseQualityReceiptHash
+        !== prepared.creatorReleaseAuthority.releaseQuality.receiptHash
+      || input.label?.trim() !== creatorAuthorization.releaseLabel) {
+      fail('Creator发布授权与当前adoption intent、质量回执或发布名称不一致')
+    }
+  } else if (input.creatorReleaseAuthorization || command.creatorReleaseAuthorizationHash) {
+    fail('非Creator发布不得携带Creator发布授权')
+  }
+
   // All expensive canonical hashing, browser-receipt replay and physical blob
   // verification happen before acquiring the write transaction. The
   // transaction repeats a bounded field-level CAS over every locked authority
@@ -775,11 +982,31 @@ export async function publishProductProductionBuild(input: {
     buildManifestHash: prepared.intent.manifestHash,
     rootTerminalReceiptHash: prepared.intent.rootTerminalReceiptHash,
   }
-  const portableSourcePlan = await portableProductSourcePlanV1(prepared.sourcePlan)
-  const sourceContracts: ProductReleaseManifestV1['sourceContracts'] = {
-    sourcePlan: portableSourcePlan,
-    confirmedBrief: prepared.confirmedBrief,
-    sourceManifest: prepared.sourceManifest,
+  let portableSourcePlan: ProductSourcePlanV1 | null = null
+  let sourceContracts: ProductReleaseManifestV1['sourceContracts']
+  if (prepared.creatorReleaseAuthority && creatorAuthorization) {
+    const { createTextOpenWorldCreatorReleaseSourceContractsV1 } = await import(
+      '../open-world/creator-release-contract'
+    )
+    sourceContracts = await createTextOpenWorldCreatorReleaseSourceContractsV1({
+      ...prepared.creatorReleaseAuthority,
+      artifactReceipts: prepared.artifacts.map(row => ({
+        artifactKey: row.artifactKey, version: row.version, contentHash: row.contentHash,
+        producerReceiptHash: row.producerReceiptHash,
+      })),
+      releaseAuthorization: creatorAuthorization,
+      runtimePackage: prepared.runtimePackage,
+    })
+  } else {
+    if (!prepared.sourcePlan || !prepared.confirmedBrief || !prepared.sourceManifest) {
+      fail('共享WorldRelease发布缺少正式来源合同')
+    }
+    portableSourcePlan = await portableProductSourcePlanV1(prepared.sourcePlan)
+    sourceContracts = {
+      sourcePlan: portableSourcePlan,
+      confirmedBrief: prepared.confirmedBrief,
+      sourceManifest: prepared.sourceManifest,
+    }
   }
   const identityBody: Omit<ProductReleaseManifestV1, 'releaseIdentityHash' | 'lineage'> = {
     schema: 'storyforge.product-release',
@@ -799,35 +1026,56 @@ export async function publishProductProductionBuild(input: {
     releaseVersion: prepared.releaseVersion,
     releaseHash: releaseIdentityHash,
   })
-  const lineage = await createProductReleaseLineageV1({
-    productType: prepared.productType,
-    productInstanceKey: prepared.intent.productionKey,
-    releaseUid,
-    releaseVersion: prepared.releaseVersion,
-    releaseHash: releaseIdentityHash,
-    parentRelease: prepared.parentRelease,
-    worldReference: prepared.sourcePlan.worldReference,
-    sourcePlan: portableSourcePlan,
-    sourceManifest: prepared.sourceManifest,
-    confirmedBrief: prepared.confirmedBrief,
-    build: {
-      buildUid: `GB-${encodeURIComponent(prepared.intent.productionKey)}-b${prepared.intent.buildNumber}-${prepared.intent.manifestHash.slice(0, 24)}`,
-      buildHash: prepared.intent.manifestHash,
-    },
-    quality: { passed: true, receiptHashes: prepared.qualityReceiptHashes },
-    compatibility: {
-      status: prepared.compatibilityStatus,
-      protocolVersion: 1,
-      evidenceHashes: [prepared.compatibilityHash],
-    },
-    createdAt: releaseCreatedAt,
-  })
-  const releaseManifest = await createProductReleaseManifestV1({
-    runtimePackage: prepared.runtimePackage,
-    productionProvenance,
-    sourceContracts,
-    lineage,
-  })
+  const buildLineage = {
+    buildUid: `GB-${encodeURIComponent(prepared.intent.productionKey)}-b${prepared.intent.buildNumber}-${prepared.intent.manifestHash.slice(0, 24)}`,
+    buildHash: prepared.intent.manifestHash,
+  }
+  const compatibility = {
+    status: prepared.compatibilityStatus,
+    protocolVersion: 1,
+    evidenceHashes: [prepared.compatibilityHash],
+  }
+  const lineage = prepared.creatorReleaseAuthority
+    ? await (async () => {
+        const { createTextOpenWorldCreatorReleaseLineageV1 } = await import(
+          '../open-world/creator-release-contract'
+        )
+        return createTextOpenWorldCreatorReleaseLineageV1({
+          sourceContracts: sourceContracts as TextOpenWorldCreatorReleaseSourceContractsV1,
+          releaseUid, releaseVersion: prepared.releaseVersion, releaseHash: releaseIdentityHash,
+          parentRelease: prepared.parentRelease, build: buildLineage,
+          qualityReceiptHashes: prepared.qualityReceiptHashes,
+          compatibility, createdAt: releaseCreatedAt,
+        })
+      })()
+    : await createProductReleaseLineageV1({
+        productType: prepared.productType,
+        productInstanceKey: prepared.intent.productionKey,
+        releaseUid,
+        releaseVersion: prepared.releaseVersion,
+        releaseHash: releaseIdentityHash,
+        parentRelease: prepared.parentRelease,
+        worldReference: prepared.sourcePlan!.worldReference,
+        sourcePlan: portableSourcePlan!,
+        sourceManifest: prepared.sourceManifest!,
+        confirmedBrief: prepared.confirmedBrief!,
+        build: buildLineage,
+        quality: { passed: true, receiptHashes: prepared.qualityReceiptHashes },
+        compatibility,
+        createdAt: releaseCreatedAt,
+      })
+  const releaseManifest = prepared.creatorReleaseAuthority
+    ? await verifyProductReleaseManifestV1({ ...identityBody, releaseIdentityHash, lineage })
+    : await createProductReleaseManifestV1({
+        runtimePackage: prepared.runtimePackage,
+        productionProvenance,
+        sourceContracts: sourceContracts as {
+          sourcePlan: ProductSourcePlanV1
+          confirmedBrief: ConfirmedProductBriefV1
+          sourceManifest: ProductSourceManifestV1
+        },
+        lineage: lineage as ProductReleaseLineageV1,
+      })
   const manifestJson = canonicalProductProductionJsonV2(releaseManifest)
   const contentHash = await hashProductProductionValueV2(releaseManifest)
   const { assertProductBuildTerminalReadSetUnchangedV1 } = await import('./artifact-store')

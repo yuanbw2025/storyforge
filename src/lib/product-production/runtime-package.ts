@@ -28,6 +28,8 @@ import type {
   ConfirmedProductBriefV1,
   ProductSourceManifestV1,
   ProductWorldSourceSelectionV1,
+  TextOpenWorldCreatorReleaseSourceContractsV1,
+  TextOpenWorldCreatorReleaseLineageV1,
 } from '../types'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import {
@@ -38,6 +40,13 @@ import {
 } from '../product/source-contracts'
 
 const PRODUCT_TYPES = new Set<ProductionProductKindV1>(PRODUCTION_PRODUCT_KINDS_V1)
+
+function isCreatorReleaseSourceContracts(
+  value: ProductReleaseManifestV1['sourceContracts'],
+): value is TextOpenWorldCreatorReleaseSourceContractsV1 {
+  return 'schema' in value
+    && value.schema === 'storyforge.text-open-world-creator-release-source-contracts'
+}
 
 export interface ProductProductionTerminalArtifactKeysV1 {
   runtimePackage: string
@@ -469,8 +478,13 @@ export function parseProductReleaseManifestV1(value: string | unknown): ProductR
     rootTerminalReceiptHash: provenance.rootTerminalReceiptHash,
   }
   const sourceContracts = record(manifest.sourceContracts, 'sourceContracts')
-  exactKeys(sourceContracts, ['sourcePlan', 'confirmedBrief', 'sourceManifest'], 'sourceContracts')
-  const lineage = record(manifest.lineage, 'lineage') as unknown as ProductReleaseLineageV1
+  const creatorSourceContracts = sourceContracts.schema
+    === 'storyforge.text-open-world-creator-release-source-contracts'
+  if (!creatorSourceContracts) {
+    exactKeys(sourceContracts, ['sourcePlan', 'confirmedBrief', 'sourceManifest'], 'sourceContracts')
+  }
+  const lineage = record(manifest.lineage, 'lineage') as unknown as
+    ProductReleaseLineageV1 | TextOpenWorldCreatorReleaseLineageV1
   return {
     schema: 'storyforge.product-release',
     version: 1,
@@ -479,11 +493,13 @@ export function parseProductReleaseManifestV1(value: string | unknown): ProductR
     runtimePackage,
     packageHash: manifest.packageHash,
     productionProvenance,
-    sourceContracts: {
-      sourcePlan: sourceContracts.sourcePlan as ProductSourcePlanV1,
-      confirmedBrief: sourceContracts.confirmedBrief as ConfirmedProductBriefV1,
-      sourceManifest: sourceContracts.sourceManifest as ProductSourceManifestV1,
-    },
+    sourceContracts: creatorSourceContracts
+      ? structuredClone(sourceContracts) as unknown as TextOpenWorldCreatorReleaseSourceContractsV1
+      : {
+          sourcePlan: sourceContracts.sourcePlan as ProductSourcePlanV1,
+          confirmedBrief: sourceContracts.confirmedBrief as ConfirmedProductBriefV1,
+          sourceManifest: sourceContracts.sourceManifest as ProductSourceManifestV1,
+        },
     releaseIdentityHash: manifest.releaseIdentityHash,
     lineage,
   }
@@ -501,6 +517,21 @@ export async function verifyProductReleaseManifestV1(value: string | unknown): P
   if (manifest.productType === 'ttrpg' && manifest.runtimePackage.ttrpg
     && await hashProductProductionValueV2(manifest.runtimePackage.ttrpg.rulePack.content)
       !== manifest.runtimePackage.ttrpg.rulePack.contentHash) fail('TTRPG RulePack contentHash 校验失败')
+  if (isCreatorReleaseSourceContracts(manifest.sourceContracts)) {
+    const { verifyTextOpenWorldCreatorReleaseManifestBindingsV1 } = await import(
+      '../open-world/creator-release-contract'
+    )
+    await verifyTextOpenWorldCreatorReleaseManifestBindingsV1(manifest)
+    const { releaseIdentityHash, lineage: _lineage, ...identityBody } = manifest
+    const expectedIdentity = await productReleaseIdentityHashV1(identityBody)
+    if (releaseIdentityHash !== expectedIdentity || manifest.lineage.releaseHash !== expectedIdentity) {
+      fail('Creator Release identity或lineage hash不一致')
+    }
+    return manifest
+  }
+  if (manifest.lineage.schema !== 'storyforge.product-release-lineage') {
+    fail('共享WorldRelease来源必须使用共享lineage')
+  }
   const sourcePlan = await validateProductSourcePlanV1(manifest.sourceContracts.sourcePlan)
   const confirmedBrief = await validateConfirmedProductBriefV1({
     brief: manifest.sourceContracts.confirmedBrief,
@@ -533,7 +564,11 @@ export async function verifyProductReleaseManifestV1(value: string | unknown): P
 export async function createProductReleaseManifestV1(input: {
   runtimePackage: ProductRuntimePackageV1
   productionProvenance: ProductReleaseManifestV1['productionProvenance']
-  sourceContracts: ProductReleaseManifestV1['sourceContracts']
+  sourceContracts: {
+    sourcePlan: ProductSourcePlanV1
+    confirmedBrief: ConfirmedProductBriefV1
+    sourceManifest: ProductSourceManifestV1
+  }
   lineage: ProductReleaseLineageV1
 }): Promise<ProductReleaseManifestV1> {
   const runtimePackage = parseProductRuntimePackageV1(input.runtimePackage)
