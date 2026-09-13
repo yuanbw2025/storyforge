@@ -256,7 +256,8 @@ export const TEXT_OPEN_WORLD_RUNTIME_AI_SKILL_CONTRACTS_V1 = [
     capability: 'expression',
     skillId: 'prose.text-open-world-runtime-expression',
     formalEntryId: 'text-open-world.runtime.expression',
-    promptVersion: 'text-open-world-runtime-expression-v1',
+    promptVersion: 'text-open-world-runtime-expression-v2',
+    availability: 'player-ui-routed',
     purpose: '只依据已提交Receipt和终态Event演绎场景、战斗、任务或系统结果。',
     logicalSlices: ['scene.current', 'events.terminal-receipts', 'player.visible-state', 'quests.related-visible', 'actors.present-public', 'time-weather.current'],
     routeCategory: 'runtime.text-open-world.expression',
@@ -357,7 +358,9 @@ export function validateTextOpenWorldRuntimeAISkillContractsV1(
   const schemaIds = new Set<string>()
   for (const item of contracts) {
     if (item.version !== 1 || item.productType !== 'text-open-world' || item.phase !== 'runtime') fail('产品阶段或版本无效')
-    const expectedAvailability = item.capability === 'intent' || item.capability === 'dialogue'
+    const expectedAvailability = item.capability === 'intent'
+      || item.capability === 'dialogue'
+      || item.capability === 'expression'
       ? 'player-ui-routed'
       : 'registered-not-yet-ui-routed'
     if (item.availability !== expectedAvailability) fail(`${item.skillId} UI接入状态与已完成工作包不一致`)

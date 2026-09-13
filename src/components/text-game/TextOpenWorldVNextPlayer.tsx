@@ -24,6 +24,10 @@ import {
   generateTextOpenWorldRuntimeDialogueV1,
   type TextOpenWorldRuntimeDialogueHistoryTurnV1,
 } from '../../lib/open-world/runtime-dialogue'
+import {
+  generateTextOpenWorldRuntimeExpressionV1,
+  type TextOpenWorldRuntimeExpressionPresentationV1,
+} from '../../lib/open-world/runtime-expression'
 import { projectTextOpenWorldScenesV1 } from '../../lib/open-world/scene-projection'
 import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-projection'
 import type { TextOpenWorldCommandSourceV1 } from '../../lib/types'
@@ -41,6 +45,7 @@ import TextOpenWorldGameShell from './TextOpenWorldGameShell'
 import TextOpenWorldInventoryPanel from './TextOpenWorldInventoryPanel'
 import TextOpenWorldMapPanel, { type TextOpenWorldMapTravelRequestV1 } from './TextOpenWorldMapPanel'
 import TextOpenWorldQuestLogPanel from './TextOpenWorldQuestLogPanel'
+import TextOpenWorldResultExpressionPanel from './TextOpenWorldResultExpressionPanel'
 import TextOpenWorldScenePanel, {
   type TextOpenWorldSceneTutorialAvailabilityV1,
 } from './TextOpenWorldScenePanel'
@@ -68,6 +73,10 @@ export default function TextOpenWorldVNextPlayer() {
   const store = useTextOpenWorldPlayerStore()
   const aiConfig = useAIConfigStore(state => state.config)
   const intentAbortController = useRef<AbortController | null>(null)
+  const expressionAbortController = useRef<AbortController | null>(null)
+  const [resultExpression, setResultExpression] = useState<TextOpenWorldRuntimeExpressionPresentationV1 | null>(null)
+  const [resultExpressionBusy, setResultExpressionBusy] = useState(false)
+  const [resultExpressionIssue, setResultExpressionIssue] = useState<string | null>(null)
   const [dismissedCombatIdentity, setDismissedCombatIdentity] = useState<string | null>(null)
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     actionKey: string
@@ -119,6 +128,7 @@ export default function TextOpenWorldVNextPlayer() {
     ?? store.selectedSessionId
     ?? runtimePackage?.metadata.packageKey
     ?? 'no-session'
+  const feedbackReceiptHash = store.lastFeedback?.receiptHash ?? null
   const productionKey = store.selectedManifest?.definition.productKey
     ?? `unavailable-product:${sessionKey}`
   const handleSceneTutorialAvailability = useCallback((
@@ -270,6 +280,18 @@ export default function TextOpenWorldVNextPlayer() {
   }, [projectionSequence, sessionKey])
 
   useEffect(() => {
+    expressionAbortController.current?.abort()
+    expressionAbortController.current = null
+    setResultExpression(null)
+    setResultExpressionBusy(false)
+    setResultExpressionIssue(null)
+    return () => {
+      expressionAbortController.current?.abort()
+      expressionAbortController.current = null
+    }
+  }, [feedbackReceiptHash, sessionKey])
+
+  useEffect(() => {
     setQuestMapFocus(null)
     setDismissedCombatIdentity(null)
   }, [sessionKey])
@@ -338,6 +360,46 @@ export default function TextOpenWorldVNextPlayer() {
     } catch {
       // The governed store owns player-visible diagnostics.
     }
+  }
+  const generateResultExpression = () => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    const receipt = liveStore.lastFeedback
+    if (!liveStore.scope || liveSessionId == null || !receipt
+      || receipt.sessionId !== liveSessionId || receipt.phase !== 'terminal'
+      || !receipt.outcomeCommitted || !receipt.commandId) return
+    expressionAbortController.current?.abort()
+    const controller = new AbortController()
+    const receiptHash = receipt.receiptHash
+    expressionAbortController.current = controller
+    setResultExpression(null)
+    setResultExpressionIssue(null)
+    setResultExpressionBusy(true)
+    void generateTextOpenWorldRuntimeExpressionV1({
+      scope: liveStore.scope,
+      productRuntimeSessionId: liveSessionId,
+      receipt,
+      aiConfig,
+      signal: controller.signal,
+    }).then(presentation => {
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (controller.signal.aborted || currentSessionId !== liveSessionId
+        || current.lastFeedback?.receiptHash !== receiptHash) return
+      setResultExpression(presentation)
+    }).catch(() => {
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (controller.signal.aborted || currentSessionId !== liveSessionId
+        || current.lastFeedback?.receiptHash !== receiptHash) return
+      setResultExpressionIssue('runtime-expression-unavailable')
+    }).finally(() => {
+      if (expressionAbortController.current === controller) expressionAbortController.current = null
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (!controller.signal.aborted && currentSessionId === liveSessionId
+        && current.lastFeedback?.receiptHash === receiptHash) setResultExpressionBusy(false)
+    })
   }
   const executeProjectedAction = (
     action: typeof projectedActions[number],
@@ -872,6 +934,13 @@ export default function TextOpenWorldVNextPlayer() {
         <span><strong>保存状态</strong>{store.busy ? '正在结算' : issue ? '需要处理' : '事件已落盘'}</span>
       </>}
       navigationSupplement={trackedQuestContent}
+      resultSupplement={<TextOpenWorldResultExpressionPanel
+        feedback={store.lastFeedback}
+        presentation={resultExpression}
+        busy={resultExpressionBusy}
+        issue={resultExpressionIssue}
+        onGenerate={generateResultExpression}
+      />}
       overlay={confirmationOverlay}
       onDismissOverlay={dismissConfirmation}
       issue={issue}

@@ -76,6 +76,8 @@ export interface TextOpenWorldGameShellProps {
   context: ReactNode
   status: ReactNode
   navigationSupplement?: ReactNode
+  /** Product-owned global result layer shown above every active player view. */
+  resultSupplement?: ReactNode
   tutorial?: TextOpenWorldGameTutorialConfig
   /** One-shot navigation intent from content such as a task-location link. */
   viewRequest?: TextOpenWorldGameViewRequest | null
@@ -494,6 +496,7 @@ export default function TextOpenWorldGameShell(props: TextOpenWorldGameShellProp
           secondaryLabel="返回游戏库"
           onSecondary={blocked ? props.onExit : undefined}
         />}
+        {props.resultSupplement}
         {TEXT_OPEN_WORLD_GAME_VIEW_KEYS.map(view => <section
           key={view}
           className="open-world-game-view"

@@ -2942,7 +2942,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '文字开放世界vNext·正式结果演绎候选',
     owner: 'prose-agent',
-    promptVersion: 'text-open-world-runtime-expression-v1',
+    promptVersion: 'text-open-world-runtime-expression-v2',
     executionMode: 'text-open-world-runtime-expression',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
@@ -2954,7 +2954,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 2_000,
     writeTargets: [],
     lastVerifiedAt: '2026-09-13',
-    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway'],
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-expression'],
   },
   {
     version: 1,
