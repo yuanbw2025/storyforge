@@ -1701,30 +1701,55 @@ async function ensureCarriedForwardTaskRuns(input: {
         || task.dependsOn.some(dependency => !completed.has(dependency))) continue
       const dependencies = task.dependsOn.map(taskKey => ({ taskKey, receiptHash: completed.get(taskKey)! }))
       const candidateHash = await hashProductProductionCarriedCandidateV1(outputs)
+      let existing = children.get(task.taskKey)
+      if (existing) {
+        let recoveredImportProof = false
+        if (existing.projection.state !== 'completed') {
+          const recovered = await revalidateImportedCarriedTaskV1({
+            scope: input.scope,
+            buildId: input.build.id,
+            controlEpoch: input.build.controlEpoch,
+            task,
+            snapshot: existing,
+            dependencies,
+            candidateHash,
+            outputs,
+          })
+          if (!recovered) continue
+          existing = recovered
+          recoveredImportProof = true
+          progressed = true
+        }
+        const inputHash = recoveredImportProof
+          ? parseLedger((await db.productBuilds.get(input.build.id))!.budgetLedgerJson).tasks[task.taskKey]!.idempotencyKey
+          : await hashProductProductionValueV2({
+              schema: 'storyforge.product-production-carried-task-input', version: 1,
+              planHash: input.build.planHash, taskKey: task.taskKey,
+              controlEpoch: input.build.controlEpoch, dependencies, candidateHash,
+              capabilityBindings: normalizedBindings(task, input.capabilityBindings),
+            })
+        const settledExisting = existing
+        const receiptHash = settledExisting.projection.terminalReceiptHash!
+        const alreadySettled = outputs.every(artifact => (
+          artifact.producerRunId === settledExisting.run.id && artifact.producerReceiptHash === receiptHash
+            && artifact.inputHash === inputHash
+        ))
+        if (!alreadySettled) {
+          await settleCarriedTask({
+            scope: input.scope, buildId: input.build.id, controlEpoch: input.build.controlEpoch,
+            task, plan: input.plan, snapshot: settledExisting, inputHash, candidateHash,
+          })
+          progressed = true
+        }
+        completed.set(task.taskKey, settledExisting.projection.terminalReceiptHash!)
+        continue
+      }
       const bindings = normalizedBindings(task, input.capabilityBindings)
       const inputHash = await hashProductProductionValueV2({
         schema: 'storyforge.product-production-carried-task-input', version: 1,
         planHash: input.build.planHash, taskKey: task.taskKey,
         controlEpoch: input.build.controlEpoch, dependencies, candidateHash, capabilityBindings: bindings,
       })
-      const existing = children.get(task.taskKey)
-      if (existing) {
-        if (existing.projection.state !== 'completed') continue
-        const receiptHash = existing.projection.terminalReceiptHash!
-        const alreadySettled = outputs.every(artifact => (
-          artifact.producerRunId === existing.run.id && artifact.producerReceiptHash === receiptHash
-            && artifact.inputHash === inputHash
-        ))
-        if (!alreadySettled) {
-          await settleCarriedTask({
-            scope: input.scope, buildId: input.build.id, controlEpoch: input.build.controlEpoch,
-            task, plan: input.plan, snapshot: existing, inputHash, candidateHash,
-          })
-          progressed = true
-        }
-        completed.set(task.taskKey, existing.projection.terminalReceiptHash!)
-        continue
-      }
       const capabilityBindingHash = bindings.length > 0 ? await hashProductProductionValueV2(bindings) : undefined
       let snapshot: AgentRunSnapshotV1
       try {
@@ -2175,6 +2200,123 @@ async function finishCandidateRun(input: {
   return append(input.scope, snapshot, 'verification.accepted', { receiptHash })
 }
 
+function importedScopeReboundReceiptV1(snapshot: AgentRunSnapshotV1): string | null {
+  const last = snapshot.events[snapshot.events.length - 1]
+  if (snapshot.projection.state !== 'running'
+    || last?.type !== 'verification.staled'
+    || last.payload.reason !== 'project-import-scope-rebound'
+    || !isSha256Hash(last.payload.previousReceiptHash)
+    || Object.values(snapshot.projection.steps).some(step => step.status !== 'succeeded')) {
+    return null
+  }
+  return last.payload.previousReceiptHash
+}
+
+async function revalidateImportedCheckpointedTaskV1(input: {
+  scope: WorkspaceScope
+  buildId: number
+  controlEpoch: number
+  task: ProductProductionPlanTaskV3
+  snapshot: AgentRunSnapshotV1
+  candidate: ResumeCandidateV1
+}): Promise<AgentRunSnapshotV1 | null> {
+  const previousReceiptHash = importedScopeReboundReceiptV1(input.snapshot)
+  if (!previousReceiptHash) return null
+  const candidateHash = await hashProductProductionTaskCandidateV1(input.candidate.result)
+  const receiptHash = await hashProductProductionTaskReceiptV1({
+    taskKey: input.task.taskKey,
+    attempt: input.candidate.attempt,
+    inputHash: input.candidate.inputHash,
+    candidateHash,
+    passedGateIds: input.candidate.result.passedGateIds,
+    usage: input.candidate.result.usage,
+    controlEpoch: input.controlEpoch,
+  })
+  const build = await db.productBuilds.get(input.buildId)
+  const ledger = build == null ? null : parseLedger(build.budgetLedgerJson).tasks[input.task.taskKey]
+  const rows = build == null ? [] : (await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray())
+    .filter(row => row.controlEpoch === input.controlEpoch
+      && row.status === 'accepted'
+      && input.task.outputArtifactKeys.includes(row.artifactKey))
+  const expectedKeys = [...input.task.outputArtifactKeys].sort()
+  const actualKeys = rows.map(row => row.artifactKey).sort()
+  if (!build || build.controlEpoch !== input.controlEpoch
+    || candidateHash !== input.candidate.candidateHash
+    || receiptHash !== previousReceiptHash
+    || ledger?.status !== 'settled'
+    || ledger.runId !== input.snapshot.run.id
+    || ledger.attempt !== input.candidate.attempt
+    || ledger.idempotencyKey !== input.candidate.inputHash
+    || ledger.candidateHash !== candidateHash
+    || ledger.terminalReceiptHash !== receiptHash
+    || ledger.errorCode !== null
+    || canonicalProductProductionJsonV2(ledger.passedGateIds)
+      !== canonicalProductProductionJsonV2(input.candidate.result.passedGateIds)
+    || canonicalProductProductionJsonV2(ledger.usage)
+      !== canonicalProductProductionJsonV2(input.candidate.result.usage)
+    || rows.length !== expectedKeys.length
+    || expectedKeys.some((key, index) => key !== actualKeys[index])
+    || rows.some(row => row.producerRunId !== input.snapshot.run.id
+      || row.producerReceiptHash !== receiptHash
+      || row.inputHash !== input.candidate.inputHash)) {
+    throw new Error(`[product-production-scheduler] 导入 task 完成证据无法在新 scope 复验:${input.task.taskKey}`)
+  }
+  let snapshot = await append(input.scope, input.snapshot, 'verification.started', {
+    verifierSetVersion: 'product-production-task-import-rebind-v1',
+  })
+  snapshot = await append(input.scope, snapshot, 'verification.accepted', { receiptHash })
+  return snapshot
+}
+
+async function revalidateImportedCarriedTaskV1(input: {
+  scope: WorkspaceScope
+  buildId: number
+  controlEpoch: number
+  task: ProductProductionPlanTaskV3
+  snapshot: AgentRunSnapshotV1
+  dependencies: Array<{ taskKey: string; receiptHash: string }>
+  candidateHash: string
+  outputs: ProductBuildArtifactRecordV1[]
+}): Promise<AgentRunSnapshotV1 | null> {
+  const previousReceiptHash = importedScopeReboundReceiptV1(input.snapshot)
+  if (!previousReceiptHash) return null
+  const build = await db.productBuilds.get(input.buildId)
+  const ledger = build == null ? null : parseLedger(build.budgetLedgerJson).tasks[input.task.taskKey]
+  const receiptHash = ledger == null ? '' : await hashProductProductionCarriedReceiptV1({
+    taskKey: input.task.taskKey,
+    inputHash: ledger.idempotencyKey,
+    candidateHash: input.candidateHash,
+    dependencies: input.dependencies,
+    passedGateIds: input.task.acceptanceGateIds,
+    controlEpoch: input.controlEpoch,
+  })
+  const step = input.snapshot.projection.steps[input.task.taskKey]
+  if (!build || build.controlEpoch !== input.controlEpoch
+    || receiptHash !== previousReceiptHash
+    || ledger?.status !== 'settled'
+    || ledger.runId !== input.snapshot.run.id
+    || ledger.attempt !== 1
+    || ledger.candidateHash !== input.candidateHash
+    || ledger.terminalReceiptHash !== receiptHash
+    || ledger.errorCode !== null
+    || canonicalProductProductionJsonV2(ledger.passedGateIds)
+      !== canonicalProductProductionJsonV2(input.task.acceptanceGateIds)
+    || canonicalProductProductionJsonV2(ledger.usage) !== canonicalProductProductionJsonV2(zeroUsage())
+    || step?.status !== 'succeeded' || step.attempt !== 1
+    || step.candidateHash != null || step.outputHash !== input.candidateHash
+    || input.outputs.length !== input.task.outputArtifactKeys.length
+    || input.outputs.some(row => row.producerRunId !== input.snapshot.run.id
+      || row.producerReceiptHash !== receiptHash
+      || row.inputHash !== ledger.idempotencyKey)) {
+    throw new Error(`[product-production-scheduler] 导入 carried task 完成证据无法在新 scope 复验:${input.task.taskKey}`)
+  }
+  let snapshot = await append(input.scope, input.snapshot, 'verification.started', {
+    verifierSetVersion: 'product-production-carried-task-import-rebind-v1',
+  })
+  snapshot = await append(input.scope, snapshot, 'verification.accepted', { receiptHash })
+  return snapshot
+}
+
 async function recoverCompletedOrCheckpointed(input: {
   scope: WorkspaceScope
   buildId: number
@@ -2186,6 +2328,8 @@ async function recoverCompletedOrCheckpointed(input: {
   if (!checkpoint?.resumePayload) return false
   const candidate = parseResumeCandidate(checkpoint.resumePayload, input.task, input.controlEpoch)
   let snapshot = input.snapshot
+  const imported = await revalidateImportedCheckpointedTaskV1({ ...input, candidate })
+  if (imported) return true
   if (snapshot.projection.state === 'completed' && input.task.taskKey !== 'p0.source-lock') {
     const build = await db.productBuilds.get(input.buildId)
     const settled = build == null ? null : parseLedger(build.budgetLedgerJson).tasks[input.task.taskKey]
@@ -3242,12 +3386,13 @@ async function compileTerminalBuild(input: {
   brief: ProductProductionBriefV3
   onDurableBoundary?: (boundary: ProductProductionSchedulerBoundaryV1, snapshot: AgentRunSnapshotV1) => void | Promise<void>
 }): Promise<string> {
+  let root = input.root
   const build = await db.productBuilds.get(input.buildId)
   const production = await db.productProductions.get(input.productionId)
   if (!build || !production || build.controlEpoch !== input.plan.controlEpoch) {
     throw new Error('[product-production-scheduler] terminal join Build 已过期')
   }
-  const initialBuildAuthorityJson = canonicalProductProductionJsonV2({
+  let initialBuildAuthorityJson = canonicalProductProductionJsonV2({
     ...build, id: build.id ?? null,
   })
   const initialProductionAuthorityJson = canonicalProductProductionJsonV2({
@@ -3354,6 +3499,40 @@ async function compileTerminalBuild(input: {
     planHash: build.planHash, manifestHash, packageHash, qualityReportHash,
     controlEpoch: build.controlEpoch, budgetLedgerJson: build.budgetLedgerJson, artifacts,
   })
+  const importedRootReceipt = importedScopeReboundReceiptV1(root)
+  if (importedRootReceipt) {
+    const rootStep = root.projection.steps[ROOT_STEP_ID]
+    if (rootStep?.status !== 'succeeded'
+      || importedRootReceipt !== build.rootTerminalReceiptHash) {
+      throw new Error('[product-production-scheduler] 导入 root 完成证据无法在新 scope 复验')
+    }
+    root = await append(input.scope, root, 'verification.started', {
+      verifierSetVersion: 'product-production-root-import-rebind-v1',
+    })
+    root = await append(input.scope, root, 'verification.accepted', { receiptHash: rootTerminalReceiptHash })
+    if (build.rootTerminalReceiptHash !== rootTerminalReceiptHash) {
+      await db.transaction('rw', db.productBuilds, async () => {
+        const current = await db.productBuilds.get(build.id!)
+        if (!current || canonicalProductProductionJsonV2({ ...current, id: current.id ?? null })
+          !== initialBuildAuthorityJson
+          || current.rootTerminalReceiptHash !== importedRootReceipt) {
+          throw new Error('[product-production-scheduler] 导入 root 本地重封存 CAS 已过期')
+        }
+        const updatedAt = Date.now()
+        await db.productBuilds.update(build.id!, {
+          rootTerminalReceiptHash,
+          stateRevision: current.stateRevision + 1,
+          updatedAt,
+        })
+        Object.assign(build, {
+          rootTerminalReceiptHash,
+          stateRevision: current.stateRevision + 1,
+          updatedAt,
+        })
+      })
+      initialBuildAuthorityJson = canonicalProductProductionJsonV2({ ...build, id: build.id ?? null })
+    }
+  }
   const preparedTerminalFields = {
     manifestJson: canonicalProductProductionJsonV2(manifest), manifestHash, packageHash,
     previewManifestJson: canonicalProductProductionJsonV2(preview), previewHash: preview.previewHash,
@@ -3361,6 +3540,15 @@ async function compileTerminalBuild(input: {
     compatibilityJson: canonicalProductProductionJsonV2(compatibility),
     rootTerminalReceiptHash,
   }
+  const baselineVerification = importedRootReceipt
+    ? await verifyProductBuildTerminalArtifactSetV1({
+        scope: input.scope,
+        productionId: input.productionId,
+        buildId: build.id!,
+        expectedControlEpoch: build.controlEpoch,
+        expectedPlanHash: build.planHash,
+      })
+    : verifiedArtifacts
   const claimVerification = await verifyProductBuildTerminalArtifactSetV1({
     scope: input.scope,
     productionId: input.productionId,
@@ -3369,10 +3557,10 @@ async function compileTerminalBuild(input: {
     expectedPlanHash: build.planHash,
   })
   if (claimVerification.artifactReadSetJson !== artifactReadSetJson
-    || claimVerification.verificationReadSetJson !== verifiedArtifacts.verificationReadSetJson) {
+    || claimVerification.verificationReadSetJson !== baselineVerification.verificationReadSetJson) {
     throw new Error('[product-production-scheduler] terminal verifier readset 在 claim 前已变化')
   }
-  await input.onDurableBoundary?.('terminal.proof.checked', input.root)
+  await input.onDurableBoundary?.('terminal.proof.checked', root)
   // First freeze the exact active Artifact read-set. `validating` is a durable
   // terminal-join claim: every official Artifact mutation boundary rejects it.
   // Therefore a crash before the root receipt is appended is recoverable by
@@ -3440,7 +3628,7 @@ async function compileTerminalBuild(input: {
       })
       return
     }
-    if (['preview-ready', 'release-ready'].includes(current.status)
+    if (['preview-ready', 'release-ready', 'released'].includes(current.status)
       && current.rootTerminalReceiptHash === rootTerminalReceiptHash) {
       terminalClaim.alreadyCommitted = true
       return
@@ -3448,8 +3636,8 @@ async function compileTerminalBuild(input: {
     throw new Error(`[product-production-scheduler] Build 状态 ${current.status} 不能取得 terminal claim`)
   })
   if (terminalClaim.alreadyCommitted) {
-    if (input.root.projection.state !== 'completed'
-      || input.root.projection.terminalReceiptHash !== rootTerminalReceiptHash) {
+    if (root.projection.state !== 'completed'
+      || root.projection.terminalReceiptHash !== rootTerminalReceiptHash) {
       throw new Error('[product-production-scheduler] 已封存 Build 缺少匹配 root terminal receipt')
     }
     return rootTerminalReceiptHash
@@ -3457,7 +3645,6 @@ async function compileTerminalBuild(input: {
   if (terminalClaim.claimedBuildRowJson == null) {
     throw new Error('[product-production-scheduler] terminal claim 未返回冻结 Build')
   }
-  let root = input.root
   if (root.projection.state === 'running') {
     const rootStep = root.projection.steps[ROOT_STEP_ID]
     if (rootStep?.status === 'running') {
@@ -3547,6 +3734,108 @@ async function compileTerminalBuild(input: {
     })
   })
   return rootTerminalReceiptHash
+}
+
+/**
+ * A complete project backup deliberately invalidates cloned Harness receipts
+ * after rebinding local IDs. Terminal product Builds are special: their exact
+ * candidate checkpoints, Artifact envelopes, ledger and root seal are all
+ * present in the backup, so they can be re-proved locally without a provider
+ * call or a new Build. Any non-import stale reason or incomplete proof fails
+ * closed and must use the ordinary repair/evolution workflow instead.
+ */
+export async function recoverImportedProductProductionProofsV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+}): Promise<ProductProductionSchedulerProjectionV1> {
+  const scope = await resolveScope({ scope: input.scope })
+  const current = await currentProductionBuild(scope, input.productionId)
+  if (!['preview-ready', 'release-ready', 'released'].includes(current.build.status)) {
+    throw new Error('[product-production-scheduler] 只有已封存的导入 Build 可以执行本地证明复验')
+  }
+  const plan = parseProductProductionPlanV3(
+    current.build.planJson,
+    current.brief,
+    current.briefRow.briefHash,
+  )
+  const ledger = parseLedger(current.build.budgetLedgerJson)
+  if (ledger.rootRunId == null || Object.keys(ledger.reservations).length > 0) {
+    throw new Error('[product-production-scheduler] 导入 Build 缺少已结算 root/预算证明')
+  }
+  let root = await readAgentRunV1(scope, ledger.rootRunId)
+  if (root.projection.state !== 'completed' && !importedScopeReboundReceiptV1(root)) {
+    throw new Error('[product-production-scheduler] root 不是可复验的导入完成态')
+  }
+  const children = await childSnapshots(scope, current.build.id!, root.run.id)
+  if (children.size !== plan.tasks.length) {
+    throw new Error('[product-production-scheduler] 导入 Build 的 task Run 集合不完整')
+  }
+  let progressed = true
+  while (progressed) {
+    progressed = false
+    const completed = new Map([...children].flatMap(([taskKey, snapshot]) => (
+      snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash
+        ? [[taskKey, snapshot.projection.terminalReceiptHash] as const] : []
+    )))
+    for (const task of plan.tasks) {
+      const snapshot = children.get(task.taskKey)
+      if (!snapshot || snapshot.projection.state === 'completed'
+        || task.dependsOn.some(dependency => !completed.has(dependency))) continue
+      const outputs = (await db.productBuildArtifacts.where('buildId').equals(current.build.id!).toArray())
+        .filter(row => row.controlEpoch === current.build.controlEpoch
+          && task.outputArtifactKeys.includes(row.artifactKey)
+          && (row.status === 'accepted' || row.status === 'carried-forward'))
+      const statuses = new Set(outputs.map(row => row.status))
+      let recovered: AgentRunSnapshotV1 | null = null
+      if (statuses.size === 1 && statuses.has('accepted')) {
+        const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(scope, snapshot.run.id)
+        if (!checkpoint?.resumePayload) {
+          throw new Error(`[product-production-scheduler] 导入 task 缺少可复验 checkpoint:${task.taskKey}`)
+        }
+        recovered = await revalidateImportedCheckpointedTaskV1({
+          scope,
+          buildId: current.build.id!,
+          controlEpoch: current.build.controlEpoch,
+          task,
+          snapshot,
+          candidate: parseResumeCandidate(checkpoint.resumePayload, task, current.build.controlEpoch),
+        })
+      } else if (statuses.size === 1 && statuses.has('carried-forward')) {
+        recovered = await revalidateImportedCarriedTaskV1({
+          scope,
+          buildId: current.build.id!,
+          controlEpoch: current.build.controlEpoch,
+          task,
+          snapshot,
+          dependencies: task.dependsOn.map(taskKey => ({
+            taskKey,
+            receiptHash: completed.get(taskKey)!,
+          })),
+          candidateHash: await hashProductProductionCarriedCandidateV1(outputs),
+          outputs,
+        })
+      }
+      if (!recovered) {
+        throw new Error(`[product-production-scheduler] 导入 task 不是单一可复验完成证据:${task.taskKey}`)
+      }
+      children.set(task.taskKey, recovered)
+      progressed = true
+    }
+  }
+  if ([...children.values()].some(child => child.projection.state !== 'completed'
+    || !child.projection.terminalReceiptHash)) {
+    throw new Error('[product-production-scheduler] 导入 task 依赖闭包无法完成本地复验')
+  }
+  root = await readAgentRunV1(scope, root.run.id)
+  await compileTerminalBuild({
+    scope,
+    productionId: input.productionId,
+    buildId: current.build.id!,
+    root,
+    plan,
+    brief: current.brief,
+  })
+  return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
 }
 
 function durableBoundaryFromEvent(event: AnyAgentRunEventV1): ProductProductionDurableBoundaryProjectionV1 {

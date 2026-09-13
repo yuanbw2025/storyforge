@@ -185,8 +185,48 @@ interface VerifiedProducerCandidateV1 {
   receiptHash: string
   passedGateIds: string[]
   usage: unknown
+  importedScopeRebound: boolean
   artifacts: Map<string, PreparedArtifactAcceptanceV1>
   remainingArtifactKeys: Set<string>
+}
+
+function hasImportedScopeRevalidationV1(snapshot: AgentRunSnapshotV1): boolean {
+  let staleIndex = -1
+  for (let index = snapshot.events.length - 1; index >= 0; index -= 1) {
+    if (snapshot.events[index].type === 'verification.staled') {
+      staleIndex = index
+      break
+    }
+  }
+  if (staleIndex < 0) return false
+  const stale = snapshot.events[staleIndex]
+  if (stale.type !== 'verification.staled'
+    || stale.payload.reason !== 'project-import-scope-rebound') return false
+  const rebound = snapshot.events.slice(staleIndex + 1)
+  const startedIndex = rebound.findIndex(event => event.type === 'verification.started'
+    && event.payload.verifierSetVersion === 'product-production-task-import-rebind-v1')
+  if (startedIndex < 0) return false
+  return rebound.slice(startedIndex + 1).some(event => event.type === 'verification.accepted'
+    && event.payload.receiptHash === snapshot.projection.terminalReceiptHash)
+}
+
+function samePreparedProducerArtifactV1(input: {
+  expected: PreparedArtifactAcceptanceV1
+  actual: PreparedArtifactAcceptanceV1 | undefined
+  importedScopeRebound: boolean
+}): boolean {
+  if (!input.actual) return false
+  if (canonicalProductProductionJsonV2(input.expected)
+    === canonicalProductProductionJsonV2(input.actual)) return true
+  // Candidate v1 historically included the local Blob row id. A strict
+  // project import remaps that storage locator while preserving contentHash,
+  // mime type, byte size and verified bytes. Only the exact import-revalidation
+  // event tail may therefore compare the portable envelope without that id.
+  if (!input.importedScopeRebound
+    || input.expected.blobObjectId == null
+    || input.actual.blobObjectId == null) return false
+  return canonicalProductProductionJsonV2({ ...input.expected, blobObjectId: null })
+    === canonicalProductProductionJsonV2({ ...input.actual, blobObjectId: null })
 }
 
 const producerProofCache = new Map<string, Promise<VerifiedProducerCandidateV1>>()
@@ -1382,6 +1422,7 @@ async function createVerifiedProducerCandidateV1(input: {
     receiptHash,
     passedGateIds: normalizedGateIds,
     usage: result.usage,
+    importedScopeRebound: hasImportedScopeRevalidationV1(snapshot),
     artifacts,
     remainingArtifactKeys: new Set(actualKeys),
   }
@@ -2008,7 +2049,7 @@ export async function verifyProductBuildTerminalArtifactSetV1(input: {
     || buildRow.productionId !== productionRow.id
     || buildRow.controlEpoch !== input.expectedControlEpoch
     || buildRow.planHash !== input.expectedPlanHash
-    || !['building', 'validating', 'preview-ready', 'release-ready'].includes(buildRow.status)) {
+    || !['building', 'validating', 'preview-ready', 'release-ready', 'released'].includes(buildRow.status)) {
     throw new Error('[product-production-artifact] terminal Build/Production authority 已过期')
   }
   const production = productionRow as ProductProductionRecordV1 & { id: number }
@@ -2104,17 +2145,27 @@ export async function verifyProductBuildTerminalArtifactSetV1(input: {
         inputHash,
         fresh: true,
       })
-      if (proof.task.taskKey !== task.taskKey || proof.attempt !== ledger.attempt
-        || proof.candidateHash !== ledger.candidateHash || proof.receiptHash !== ledger.terminalReceiptHash
-        || canonicalProductProductionJsonV2(proof.passedGateIds)
-          !== canonicalProductProductionJsonV2(rawLedger.passedGateIds)
-        || canonicalProductProductionJsonV2(proof.usage) !== canonicalProductProductionJsonV2(ledger.usage)
-        || siblings.some(row => {
+      const mismatchedArtifacts = siblings.filter(row => {
           const expected = proof.artifacts.get(row.artifactKey)
-          return !expected || canonicalProductProductionJsonV2(expected)
-            !== canonicalProductProductionJsonV2(preparedByKey.get(row.artifactKey))
-        })) {
-        throw new Error(`[product-production-artifact] terminal accepted candidate/receipt/ledger 不闭合:${task.taskKey}`)
+          return !expected || !samePreparedProducerArtifactV1({
+            expected,
+            actual: preparedByKey.get(row.artifactKey),
+            importedScopeRebound: proof.importedScopeRebound,
+          })
+        })
+      const mismatchCodes = [
+        proof.task.taskKey !== task.taskKey ? 'task' : null,
+        proof.attempt !== ledger.attempt ? 'attempt' : null,
+        proof.candidateHash !== ledger.candidateHash ? 'candidate' : null,
+        proof.receiptHash !== ledger.terminalReceiptHash ? 'receipt' : null,
+        canonicalProductProductionJsonV2(proof.passedGateIds)
+          !== canonicalProductProductionJsonV2(rawLedger.passedGateIds) ? 'gates' : null,
+        canonicalProductProductionJsonV2(proof.usage)
+          !== canonicalProductProductionJsonV2(ledger.usage) ? 'usage' : null,
+        mismatchedArtifacts.length > 0 ? `artifacts(${mismatchedArtifacts.map(row => row.artifactKey).join(',')})` : null,
+      ].filter((code): code is string => code != null)
+      if (mismatchCodes.length > 0) {
+        throw new Error(`[product-production-artifact] terminal accepted candidate/receipt/ledger 不闭合:${task.taskKey}:${mismatchCodes.join('|')}`)
       }
       proofMembers.push({
         taskKey: task.taskKey,

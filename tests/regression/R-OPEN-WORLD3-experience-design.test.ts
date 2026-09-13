@@ -15,7 +15,10 @@ import { parseProductProductionBriefV3 } from '../../src/lib/product-production/
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
 import { parseConfirmedProductBriefV1, parseProductProductionSourcePlanV1 } from '../../src/lib/product-production/source-contracts'
-import { runProductProductionUntilBlockedV1 } from '../../src/lib/product-production/scheduler'
+import {
+  recoverImportedProductProductionProofsV1,
+  runProductProductionUntilBlockedV1,
+} from '../../src/lib/product-production/scheduler'
 import type {
   ProductBuildArtifactKindV1,
   ProductBuildArtifactRecordV1,
@@ -25,6 +28,9 @@ import type { WorkspaceScope } from '../../src/lib/types'
 import { startProductProductionPreviewV1 } from '../../src/lib/product-production/service'
 import { verifyProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
+import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { readTextOpenWorldArtifactGovernanceV1 } from '../../src/lib/open-world/creator-artifact-governance'
 import {
   createTextOpenWorldExperienceDesignExecutorV1,
@@ -6330,5 +6336,118 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     expect(curatedResourceKeys.length).toBeGreaterThan(0)
     expect(p1ManifestHashes.size).toBeGreaterThan(0)
     expect(await db.productReleases.where('workId').equals(input.scope.workId).count()).toBe(0)
+
+    // G5-12 closes the full governed Creator workbench lifecycle around the
+    // already-real scheduler run above. The imported copy must preserve every
+    // Run/Artifact/Build and remain a valid Preview source under new local IDs.
+    const backup = await exportProjectJSON(input.scope.projectId)
+    const projectsBeforeTamperChecks = await db.projects.count()
+    const tamperedLedgerBackup = structuredClone(backup)
+    const tamperedPortableLedger = JSON.parse(
+      tamperedLedgerBackup.productBuilds[0]!._budgetLedgerPortableJson!,
+    )
+    tamperedPortableLedger.rootRunId = 999_999_999
+    tamperedLedgerBackup.productBuilds[0]!._budgetLedgerPortableJson = JSON.stringify(tamperedPortableLedger)
+    await expect(importProjectJSON(tamperedLedgerBackup)).rejects.toThrow(/缺少本地映射/)
+    expect(await db.projects.count()).toBe(projectsBeforeTamperChecks)
+
+    const commandWithBuild = backup.productProductionCommands.find(row => {
+      if (!row._resultPortableJson) return false
+      try { return Number.isInteger(JSON.parse(row._resultPortableJson).buildId) } catch { return false }
+    })
+    expect(commandWithBuild).toBeTruthy()
+    const tamperedCommandBackup = structuredClone(backup)
+    const tamperedCommand = tamperedCommandBackup.productProductionCommands.find(row => (
+      row._exportId === commandWithBuild!._exportId
+    ))!
+    const tamperedResult = JSON.parse(tamperedCommand._resultPortableJson!)
+    tamperedResult.buildId = 999_999_999
+    tamperedCommand._resultPortableJson = JSON.stringify(tamperedResult)
+    await expect(importProjectJSON(tamperedCommandBackup)).rejects.toThrow(/缺少本地映射/)
+    expect(await db.projects.count()).toBe(projectsBeforeTamperChecks)
+
+    const importedProjectId = await importProjectJSON(structuredClone(backup))
+    const importedScope = (await resolveWorkspaceOwnership(importedProjectId)).scope
+    const importedProduction = await db.productProductions
+      .where('projectId').equals(importedProjectId)
+      .filter(row => row.productionKey === production.productionKey)
+      .first()
+    const importedBuild = await db.productBuilds
+      .where('productionId').equals(importedProduction!.id!).first()
+    const importedArtifacts = await readAcceptedBuildArtifacts({
+      scope: importedScope,
+      buildId: importedBuild!.id!,
+    })
+    expect(importedBuild).toMatchObject({ status: 'release-ready', packageHash: build.packageHash })
+    const originalLedger = JSON.parse(build.budgetLedgerJson)
+    const importedLedger = JSON.parse(importedBuild!.budgetLedgerJson)
+    const importedRunIds = new Set((await db.agentRuns.where('projectId').equals(importedProjectId).toArray())
+      .map(row => row.id!))
+    expect(importedLedger.rootRunId).not.toBe(originalLedger.rootRunId)
+    expect(importedRunIds.has(importedLedger.rootRunId)).toBe(true)
+    for (const task of Object.values(importedLedger.tasks) as Array<{ runId?: number | null }>) {
+      if (task.runId != null) expect(importedRunIds.has(task.runId)).toBe(true)
+    }
+    for (const collection of [importedLedger.charges, importedLedger.reservations]) {
+      for (const [key, entry] of Object.entries(collection) as Array<[
+        string,
+        { runId: number; attempt: number },
+      ]>) {
+        expect(importedRunIds.has(entry.runId)).toBe(true)
+        expect(key).toBe(`${entry.runId}:${entry.attempt}`)
+      }
+    }
+    const importedCommands = await db.productProductionCommands
+      .where('productionId').equals(importedProduction!.id!).toArray()
+    const importedCommandResults = importedCommands
+      .map(row => JSON.parse(row.resultJson))
+      .filter(result => result.buildId != null)
+    expect(importedCommandResults.length).toBeGreaterThan(0)
+    expect(importedCommandResults.every(result => result.buildId === importedBuild!.id)).toBe(true)
+    expect(importedArtifacts.map(row => [row.artifactKey, row.contentHash]))
+      .toEqual(artifacts.map(row => [row.artifactKey, row.contentHash]))
+    const importedGovernanceBeforeRecovery = await readTextOpenWorldArtifactGovernanceV1({
+      scope: importedScope,
+      productionId: importedProduction!.id!,
+    })
+    expect(importedGovernanceBeforeRecovery.summary.currentProblemArtifactCount).toBe(artifacts.length)
+    const providerCallsBeforeRecovery = p1Calls
+    const recoveredProjection = await recoverImportedProductProductionProofsV1({
+      scope: importedScope,
+      productionId: importedProduction!.id!,
+    })
+    expect(recoveredProjection).toMatchObject({
+      terminal: true,
+      buildStatus: 'release-ready',
+    })
+    expect(p1Calls).toBe(providerCallsBeforeRecovery)
+    const importedGovernance = await readTextOpenWorldArtifactGovernanceV1({
+      scope: importedScope,
+      productionId: importedProduction!.id!,
+    })
+    expect(importedGovernance.summary, JSON.stringify({
+      diagnostics: importedGovernance.diagnostics,
+      artifacts: importedGovernance.artifacts.slice(0, 8).map(row => ({
+        artifactKey: row.artifactKey,
+        health: row.health,
+        diagnostics: row.diagnostics,
+      })),
+    }, null, 2)).toMatchObject({
+      currentProblemArtifactCount: 0,
+      currentProductionValidatedArtifactCount: artifacts.length,
+    })
+    const importedPreviewSession = await db.productRuntimeSessions
+      .where('projectId').equals(importedProjectId).first()
+    expect(importedPreviewSession).toMatchObject({
+      productBuildId: importedBuild!.id,
+      productReleaseId: null,
+      runtimeSourceHash: build.packageHash,
+    })
+    expect((await readProductRuntimeState(importedPreviewSession!.id!)).textOpenWorld).toBeTruthy()
+
+    await cascadeDeleteProject(importedProjectId)
+    expect(await db.productProductions.where('projectId').equals(importedProjectId).count()).toBe(0)
+    expect(await db.productBuildArtifacts.where('projectId').equals(importedProjectId).count()).toBe(0)
+    expect(await db.agentRuns.where('projectId').equals(importedProjectId).count()).toBe(0)
   }, 600_000)
 })

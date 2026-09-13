@@ -1394,6 +1394,19 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
         onUnmapped: "require",
       },
     ],
+    exportRefRemap: [
+      {
+        // Successful authorization/evolution command receipts identify the
+        // Build they created. The Build is inserted later, so import restores
+        // this polymorphic locator in the deferred JSON pass.
+        field: "resultJson",
+        remapVia: "productBuilds",
+        kind: "json-id-paths",
+        paths: ["buildId"],
+        exportAs: "_resultPortableJson",
+        onUnmapped: "require-if-present",
+      },
+    ],
     defaults: {
       expectedStateRevision: null,
       status: "claimed",
@@ -1465,6 +1478,24 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
         field: "releasedProductReleaseId",
         remapVia: "productReleases",
         exportAs: "_releasedProductReleaseExportId",
+      },
+    ],
+    exportRefRemap: [
+      {
+        // The scheduler ledger is a durable proof graph, not opaque JSON: all
+        // root/task/attempt Run IDs must follow the AgentRun table across a
+        // project round-trip. `*` traverses the keyed task/charge maps; import
+        // resolves this forward reference after AgentRuns have been inserted.
+        field: "budgetLedgerJson",
+        remapVia: "agentRuns",
+        kind: "json-id-paths",
+        paths: ["rootRunId", "tasks.*.runId", "charges.*.runId", "reservations.*.runId"],
+        keyedMaps: [
+          { path: "charges", keyFields: ["runId", "attempt"], separator: ":" },
+          { path: "reservations", keyFields: ["runId", "attempt"], separator: ":" },
+        ],
+        exportAs: "_budgetLedgerPortableJson",
+        onUnmapped: "require-if-present",
       },
     ],
     defaults: {

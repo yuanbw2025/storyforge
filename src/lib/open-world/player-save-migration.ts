@@ -3,6 +3,7 @@ import { db } from '../db/schema'
 import {
   hashProductRuntimeStateV1,
   insertPreparedProductRuntimeSessionV1,
+  parseProductRuntimeState,
   prepareReleasedProductRuntimeSessionRecordV1,
   readVerifiedProductRuntimeHeadV1,
   stableJson,
@@ -28,6 +29,10 @@ import {
   verifyOwnedTextOpenWorldPlayerReleaseV1,
   type VerifiedTextOpenWorldPlayerReleaseV1,
 } from './player-version-compatibility'
+import {
+  TEXT_OPEN_WORLD_SAVE_MIGRATION_PLAN_SCHEMA_V1,
+  type TextOpenWorldSaveMigrationPlanV1,
+} from './player-save-migration-contract'
 
 export const TEXT_OPEN_WORLD_SAVE_MIGRATION_VERSION_V1 = 1 as const
 
@@ -85,7 +90,7 @@ interface PreparedMigrationV1 {
   targetRelease: VerifiedTextOpenWorldPlayerReleaseV1
   migratedState: ProductRuntimeState
   preview: TextOpenWorldSaveMigrationPreviewV1
-  portablePlan: Record<string, unknown>
+  portablePlan: TextOpenWorldSaveMigrationPlanV1
 }
 
 function fail(message: string): never {
@@ -236,11 +241,11 @@ async function prepareMigrationV1(input: {
     runtimePackage: targetRelease.manifest.runtimePackage,
     runtimeSourceHash: targetRelease.manifest.packageHash,
   })
-  const migratedState = migrateRuntimeStateV1({
+  const migratedState = parseProductRuntimeState(migrateRuntimeStateV1({
     source: sourceHead.state,
     targetInitial,
     throughSequence: sourceHead.sequence,
-  })
+  }))
   const migratedStateHash = await hashProductRuntimeStateV1(migratedState)
   const modules = parseTextOpenWorldModulesV1(migratedState.textOpenWorld!.runtimePackage)
   const state = migratedState.textOpenWorld!.state
@@ -248,8 +253,8 @@ async function prepareMigrationV1(input: {
     .filter(instance => ['accepted', 'active', 'suspended'].includes(instance.status)).length
   const locationLabel = modules.world.locations.find(location => location.key === state.map.currentLocationKey)?.title
     ?? state.map.currentLocationKey
-  const portablePlan = {
-    schema: 'storyforge.text-open-world-save-migration-plan',
+  const portablePlan: TextOpenWorldSaveMigrationPlanV1 = {
+    schema: TEXT_OPEN_WORLD_SAVE_MIGRATION_PLAN_SCHEMA_V1,
     version: 1,
     productInstanceKey: sourceRelease.release.productionKey,
     source: {

@@ -1,6 +1,6 @@
 # StoryForge 当前能力基线
 
-> 版本：1.6.4 · 基线：2026-09-13 文字开放世界G5-10交付 · 权威层级：L2
+> 版本：1.6.5 · 基线：2026-09-13 文字开放世界G5阶段交付 · 权威层级：L2
 > 本文区分代码存在、纵切面可用和产品完成。旧完成卡不自动恢复权威，但已合入主干并由当前代码/检查器复证的 Phase 5 成果必须保留。
 
 ## 状态定义
@@ -63,7 +63,7 @@
 | E-TOWN-01 | missing | 有角色互动和通用产品运行时基础能力可复用 | 没有独立 AI 小镇产品的时间、日程、地点、群体与离线演化闭环 |
 | E-TEXTADV-01 | partial | 文字冒险已接入专用需求适配器、统一 Production/Build/ProductRelease v1 和独立玩家面 | 可玩内容、规则、媒资、结局和真实 E2E 仍需专项封板 |
 | E-AVG-01 | partial | AVG 已接入专用需求适配器、统一 Production/Build/ProductRelease v1、演出与独立玩家面 | 真实视觉/声音资产、演出绑定和完整体验未验收 |
-| E-OPENWORLD-01 | partial | 已在统一Production/Build/ProductRelease和ProductRuntime事件底座上完成G1运行治理、G2确定性玩法闭环、G3 P0～P10/V1～V3/QA内容生产编译器和G4完整玩家端；成长、任务、地图/快旅、时间天气、NPC日程/生死/关系、战斗、制作、经济、地区演化、受限发牌、动态任务、随机事件与知识历程均可重放。G5-01～G5-11已落地双来源Creator入口、Creator Brief、BYOK/模型/预算预检、原子Creator SourcePlan/Start、精确DAG、Run进度/付费恢复、受治理Artifact三视图、直接/Agent双修改、影响闭包/局部修复、完整视觉媒资子Build，发布前质量/真人灰盒/问题回执，以及双来源正式ProductRelease。当前Build会重新验证派生授权、Artifact治理、QualityReport、QA硬门和双模型评审；灰盒只接受Build Preview真实Session并核对事件重放、状态头、Checkpoint和核心循环覆盖；阻断项不可豁免，建议项逐项说明，最终质量回执绑定完整问题集合并随新问题或证据漂移失效。便携质量证据不含本地ID、来源原文或完整事件；正式Release进一步冻结Creator Brief/SourcePlan/Start、SourcePin索引、P1实读清单、完整Artifact receipt、V3装配、治理快照、质量与作者授权，小说正文不进入Release且不伪造WorldReference。共享原子事务CAS全部权威行和Blob，reader完整验签后世界与小说来源都可启动正式Session。P0统一限制512个来源单元、400万字符，32,650,752 B最坏候选低于共享32 MiB checkpoint上限；旧v1终态封印不能静默作为新携带依据。只读旧Release继续兼容 | G5-12的创作者导入导出/删除/真实E2E仍待完成；质量回执也不等价于固定文学或美学水平；G6运行时有边界自由演绎、G7盐脊真人验收与旧入口收口仍未完成 |
+| E-OPENWORLD-01 | partial | 已在统一Production/Build/ProductRelease和ProductRuntime事件底座上完成G1运行治理、G2确定性玩法闭环、G3 P0～P10/V1～V3/QA内容生产编译器、G4完整玩家端和G5完整Creator生产/发布/更新阶段；成长、任务、地图/快旅、时间天气、NPC日程/生死/关系、战斗、制作、经济、地区演化、受限发牌、动态任务、随机事件与知识历程均可重放。G5-01～G5-12已落地双来源Creator入口、Creator Brief、BYOK/模型/预算预检、原子Creator SourcePlan/Start、精确DAG、Run进度/付费恢复、受治理Artifact三视图、直接/Agent双修改、影响闭包/局部修复、完整视觉媒资子Build、发布前质量/真人灰盒/问题回执、双来源正式ProductRelease、版本维护与存档迁移，以及完整导入导出/删除/真实E2E。v10便携包重映射SourcePlan、预算账本、命令、Build、Artifact、Release、Session和迁移分支，写入前验真全部来源与正式封印；导入终态Build的本地Run/Blob证明显式失效，Creator工作台阻断Preview并用零provider/零费用恢复逐项复核Checkpoint、Artifact/Blob、ledger、terminal lineage和root seal。世界与小说均可完整往返，篡改零写入拒绝，项目删除级联清理产品私域。质量回执仍不等价于固定文学或美学水平；旧Release继续不可变兼容 | G6运行时有边界自由演绎和G7盐脊真人验收、压力/质量校准与旧入口收口仍未完成 |
 
 ## F · 平台与商业化
 

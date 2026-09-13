@@ -75,6 +75,7 @@ import { useAIConfigStore } from '../../stores/ai-config'
 import {
   assertProductProductionBudgetLedgerV1,
   projectProductProductionSchedulerV1,
+  recoverImportedProductProductionProofsV1 as recoverImportedProductProductionProofsCoreV1,
   runProductProductionUntilBlockedV1,
   type ProductProductionCapabilityBindingV1,
   type ProductProductionSchedulerProjectionV1,
@@ -1028,6 +1029,15 @@ export async function readProductProductionProgressV1(input: {
   productionId: number
 }): Promise<ProductProductionSchedulerProjectionV1> {
   return projectProductProductionSchedulerV1(input)
+}
+
+/** Re-seal a terminal Build after a trusted project import remapped local IDs.
+ * This path is deterministic and never resolves or calls an AI/media provider. */
+export async function recoverImportedProductProductionProofsV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+}): Promise<ProductProductionSchedulerProjectionV1> {
+  return recoverImportedProductProductionProofsCoreV1(input)
 }
 
 /**

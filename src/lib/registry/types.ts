@@ -255,6 +255,14 @@ export type ExportRefRemap = {
   kind: 'json-id-paths'
   paths: readonly string[]
   exportAs: string
+  /** Rebuild keyed object maps after nested IDs are remapped. This keeps
+   * composite identities such as `${runId}:${attempt}` portable as well as the
+   * fields stored inside each value. */
+  keyedMaps?: readonly {
+    path: string
+    keyFields: readonly string[]
+    separator: string
+  }[]
   /**
    * `require-if-present` lets a polymorphic JSON column participate in the
    * portable lifecycle without requiring every schema stored in that column

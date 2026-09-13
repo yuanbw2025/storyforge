@@ -255,13 +255,19 @@ export interface ProjectExportData {
     }
   )[]
   productProductionCommands: (
-    Omit<ProductProductionCommandRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'productionId'>
-    & { _exportId: number; _worldExportId: number; _workExportId: number; _productionExportId: number }
+    Omit<ProductProductionCommandRecordV1, 'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'resultJson'>
+    & {
+      _exportId: number
+      _worldExportId: number
+      _workExportId: number
+      _productionExportId: number
+      _resultPortableJson: string
+    }
   )[]
   productBuilds: (
     Omit<ProductBuildRecordV1,
       'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceProductReleaseId'
-      | 'releasedProductReleaseId'>
+      | 'releasedProductReleaseId' | 'budgetLedgerJson'>
     & {
       _exportId: number
       _worldExportId: number
@@ -269,6 +275,7 @@ export interface ProjectExportData {
       _productionExportId: number
       _sourceProductReleaseExportId?: number | null
       _releasedProductReleaseExportId?: number | null
+      _budgetLedgerPortableJson: string
     }
   )[]
   productQualityGateReceipts: (

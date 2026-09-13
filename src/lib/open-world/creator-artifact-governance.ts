@@ -350,6 +350,7 @@ export interface TextOpenWorldArtifactRunEvidenceV1 {
     outputHash: string | null
   } | null
   candidate: TextOpenWorldArtifactCandidateEvidenceV1 | null
+  importedScopeRebound: boolean
   /** Exact initial read-set member retained even when the Run row is missing. */
   snapshotFingerprint?: GovernanceRunFingerprintV1
   integrity?: {
@@ -386,6 +387,27 @@ export interface TextOpenWorldArtifactRunEvidenceV1 {
     eventStream: TextOpenWorldArtifactRunEventStreamFingerprintV1
   } | null
   error: string | null
+}
+
+function hasImportedTaskScopeRevalidationV1(snapshot: AgentRunSnapshotV1): boolean {
+  let staleIndex = -1
+  for (let index = snapshot.events.length - 1; index >= 0; index -= 1) {
+    if (snapshot.events[index].type === 'verification.staled') {
+      staleIndex = index
+      break
+    }
+  }
+  if (staleIndex < 0) return false
+  const stale = snapshot.events[staleIndex]
+  if (stale.type !== 'verification.staled'
+    || stale.payload.reason !== 'project-import-scope-rebound') return false
+  const rebound = snapshot.events.slice(staleIndex + 1)
+  const startedIndex = rebound.findIndex(event => event.type === 'verification.started'
+    && event.payload.verifierSetVersion === 'product-production-task-import-rebind-v1')
+  return startedIndex >= 0 && rebound.slice(startedIndex + 1).some(event => (
+    event.type === 'verification.accepted'
+      && event.payload.receiptHash === snapshot.projection.terminalReceiptHash
+  ))
 }
 
 export interface TextOpenWorldArtifactBuildEvidenceV1 {
@@ -1088,6 +1110,7 @@ async function runEvidence(
       outputHash: step.outputHash ?? null,
     } : null,
     candidate,
+    importedScopeRebound: hasImportedTaskScopeRevalidationV1(snapshot),
     integrity: {
       status: snapshot.run.status,
       projectId: snapshot.run.projectId,
@@ -1193,6 +1216,7 @@ function isSafeCarriedArtifactRefV1(
 async function candidateArtifactMatchesRow(
   candidate: ProductProductionTaskArtifactV1,
   row: ProductBuildArtifactRecordV1,
+  importedScopeRebound = false,
 ): Promise<boolean> {
   const payloadJson = canonicalProductProductionJsonV2(candidate.payload)
   const metadataJson = canonicalProductProductionJsonV2(candidate.metadata ?? {})
@@ -1209,7 +1233,8 @@ async function candidateArtifactMatchesRow(
     && qualityJson === row.qualityJson
     && rightsJson === row.rightsJson
     && expectedHash === row.contentHash
-    && (candidate.blobObjectId ?? null) === row.blobObjectId
+    && ((candidate.blobObjectId ?? null) === row.blobObjectId
+      || (importedScopeRebound && candidate.blobObjectId != null && row.blobObjectId != null))
     && (candidate.mimeType ?? null) === row.mimeType
     && expectedBytes === row.byteSize
 }
@@ -1385,7 +1410,7 @@ async function verifyAcceptedRowsAgainstProof(input: {
       return 'candidate checkpoint、receipt 与 Artifact 身份不一致'
     }
     const artifact = proof.artifactsByKey.get(row.artifactKey)
-    if (!artifact || !await candidateArtifactMatchesRow(artifact, row)) {
+    if (!artifact || !await candidateArtifactMatchesRow(artifact, row, evidence.importedScopeRebound)) {
       return 'Artifact payload/metadata/quality/rights/blob 与 checkpoint 候选不一致'
     }
   }
@@ -3176,6 +3201,7 @@ async function loadRunEvidence(
           boundary: null,
           taskStep: null,
           candidate: null,
+          importedScopeRebound: false,
           snapshotFingerprint: fingerprint,
           integrity: fingerprint.missing ? null : {
             status: fingerprint.status!,

@@ -14,7 +14,7 @@ import { PROJECT_TABLES } from '../registry/project-tables'
 import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
 import { remapWorldPortalTargets } from '../utils/world-portals'
 import { transactionTablesFor } from '../registry/lifecycle'
-import type { TableSpec } from '../registry/types'
+import type { ExportRefRemap, TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
 import { CURRENT_BACKUP_VERSION } from './backup-trust'
 import { rebindPortableAgentRunContractV1 } from '../agent/run/contract-portability'
@@ -33,7 +33,17 @@ import { isCurrentWorldCode } from '../workspace/identity'
 import { assertAdaptationProjectInvariant } from '../adaptation/contracts'
 import { validateScreenplayBlocksV1 } from '../screenplay/contracts'
 import { assertComicLetteringV1, assertComicMediaAssetV1, assertNormalizedFrameV1, framesOverlap } from '../comic/contracts'
-import type { AdaptationProject, ComicLetteringItemV1, ComicMediaAsset, ScreenplayBlock, Work } from '../types'
+
+type JsonIdPathsExportRefRemapV1 = Extract<ExportRefRemap, { kind: 'json-id-paths' }>
+import type {
+  AdaptationProject,
+  ComicLetteringItemV1,
+  ComicMediaAsset,
+  ProductReleaseManifestV1,
+  ProductRuntimeEvent,
+  ScreenplayBlock,
+  Work,
+} from '../types'
 import {
   PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1,
   PRODUCTION_PRODUCT_KINDS_V1,
@@ -52,6 +62,11 @@ import {
   validateTextOpenWorldSourcePinV1,
 } from '../open-world/source-pin'
 import { hashProductProductionValueV2 } from '../product-production/hash'
+import { verifyProductReleaseManifestV1 } from '../product-production/runtime-package'
+import {
+  replayTextOpenWorldMigrationSourceStateHashV1,
+  verifyTextOpenWorldSaveMigrationBranchV1,
+} from '../open-world/player-save-migration-contract'
 
 function portableRows(value: Record<string, any>, name: string): Record<string, any>[] {
   const rows = value[name]
@@ -407,16 +422,22 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     sameOwner(row, build, 'Build 子记录')
   }
   await validateTextOpenWorldSourcePinArtifactsV10({ artifacts, builds, productions })
+  const releaseManifests = new Map<number, ProductReleaseManifestV1>()
   for (const release of releases.values()) {
     if (!productKinds.has(release.productType) || !/^[a-f0-9]{64}$/.test(String(release.contentHash ?? ''))) {
       throw new Error('[deriveImport] v10 ProductRelease 身份或 hash 无效')
     }
-    let manifest: Record<string, any>
-    try { manifest = JSON.parse(String(release.manifestJson ?? '')) }
-    catch { throw new Error('[deriveImport] v10 ProductRelease manifest 不是 JSON') }
-    if (manifest.schema !== 'storyforge.product-release' || manifest.version !== 1
-      || manifest.productType !== release.productType) {
-      throw new Error('[deriveImport] v10 ProductRelease manifest 与根身份不一致')
+    try {
+      const manifest = await verifyProductReleaseManifestV1(String(release.manifestJson ?? ''))
+      if (await hashProductProductionValueV2(manifest) !== release.contentHash
+        || manifest.productType !== release.productType
+        || manifest.productionProvenance.productionKey !== release.productionKey
+        || manifest.lineage.releaseVersion !== release.version) {
+        throw new Error('release-root-mismatch')
+      }
+      releaseManifests.set(release._exportId, manifest)
+    } catch {
+      throw new Error('[deriveImport] v10 ProductRelease 内容、身份或Hash无效')
     }
   }
   for (const session of runtimeSessions) {
@@ -434,6 +455,7 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     }
   }
   const runtimeSequences = new Map<number, Set<number>>()
+  const runtimeEventsBySession = new Map<number, ProductRuntimeEvent[]>()
   for (const event of runtimeEvents) {
     const session = runtimeSessionById.get(event._productRuntimeSessionExportId)
     if (!session || event._worldGroupExportId !== session._worldGroupExportId
@@ -446,6 +468,36 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     }
     sequences.add(event.sequence)
     runtimeSequences.set(session._exportId, sequences)
+    const ownedEvents = runtimeEventsBySession.get(session._exportId) ?? []
+    const replaySessionId = session._exportId + 1
+    const portablePayload = event._portablePayloadJson ?? event.payloadJson
+    let replayPayload = portablePayload
+    try {
+      const parsed = JSON.parse(portablePayload)
+      if (parsed?.envelope && typeof parsed.envelope === 'object'
+        && parsed.envelope.sessionId === session._exportId) {
+        parsed.envelope.sessionId = replaySessionId
+        replayPayload = JSON.stringify(parsed)
+      }
+    } catch {
+      // The product event parser below owns the fail-closed error. Preserve the
+      // original payload here so this normalization never hides bad JSON.
+    }
+    ownedEvents.push({
+      projectId: 0,
+      worldGroupId: event._worldGroupExportId ?? null,
+      sessionId: replaySessionId,
+      sequence: event.sequence,
+      type: event.type,
+      actorKey: event.actorKey ?? null,
+      targetKey: event.targetKey ?? null,
+      commandId: event.commandId ?? null,
+      baseSequence: event.baseSequence ?? null,
+      baseStateHash: event.baseStateHash ?? null,
+      payloadJson: replayPayload,
+      createdAt: event.createdAt,
+    } as ProductRuntimeEvent)
+    runtimeEventsBySession.set(session._exportId, ownedEvents)
   }
   for (const [sessionId, sequences] of runtimeSequences) {
     const ordered = [...sequences].sort((left, right) => left - right)
@@ -466,13 +518,45 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     const parentMaximumSequence = maximumRuntimeSequence(runtimeSequences.get(parentExportId))
     if (!parent || parent === session || !Number.isSafeInteger(parentThroughSequence)
       || parentThroughSequence < 0 || parentThroughSequence > parentMaximumSequence
-      || parent.kind !== session.kind || parent.runtimeSourceHash !== session.runtimeSourceHash
+      || parent.kind !== session.kind
       || parent._worldGroupExportId !== session._worldGroupExportId
       || parent._worldExportId !== session._worldExportId
-      || parent._workExportId !== session._workExportId
-      || parent._productReleaseExportId !== session._productReleaseExportId
-      || parent._productBuildExportId !== session._productBuildExportId) {
+      || parent._workExportId !== session._workExportId) {
       throw new Error('[deriveImport] v10 ProductRuntime 分支 lineage 或序号无效')
+    }
+    const sameSource = parent.runtimeSourceHash === session.runtimeSourceHash
+      && parent._productReleaseExportId === session._productReleaseExportId
+      && parent._productBuildExportId === session._productBuildExportId
+    if (sameSource) continue
+    if (parent._productReleaseExportId == null || session._productReleaseExportId == null
+      || parent._productBuildExportId != null || session._productBuildExportId != null) {
+      throw new Error('[deriveImport] v10 ProductRuntime 分支 lineage 或序号无效')
+    }
+    const parentRelease = releases.get(parent._productReleaseExportId)
+    const childRelease = releases.get(session._productReleaseExportId)
+    const parentManifest = releaseManifests.get(parent._productReleaseExportId)
+    const childManifest = releaseManifests.get(session._productReleaseExportId)
+    if (!parentRelease || !childRelease || !parentManifest || !childManifest) {
+      throw new Error('[deriveImport] v10 ProductRuntime 迁移Release缺失')
+    }
+    try {
+      const sourceStateHash = await replayTextOpenWorldMigrationSourceStateHashV1({
+        session: parent as unknown as Pick<import('../types').ProductRuntimeSession, 'initialStateJson'>,
+        events: runtimeEventsBySession.get(parent._exportId) ?? [],
+        throughSequence: parentThroughSequence,
+      })
+      await verifyTextOpenWorldSaveMigrationBranchV1({
+        parentSession: parent as unknown as import('../types').ProductRuntimeSession,
+        childSession: session as unknown as import('../types').ProductRuntimeSession,
+        parentRelease: parentRelease as unknown as import('../types').ProductRelease,
+        childRelease: childRelease as unknown as import('../types').ProductRelease,
+        parentManifest,
+        childManifest,
+        sourceStateHash,
+      })
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(`[deriveImport] v10 ProductRuntime 迁移lineage无效:${detail}`)
     }
   }
   for (const session of runtimeSessions) {
@@ -908,7 +992,10 @@ function deriveImportOrder(specs: TableSpec[]): TableSpec[] {
           && rm.deferImport !== true)
         .map(rm => rm.remapVia)
       const refDeps = (spec.exportRefRemap ?? [])
-        .filter(ref => ref.remapVia !== spec.name)
+        // JSON locators are restored in a second pass when their target table
+        // is a forward reference. This is required for legitimate proof cycles
+        // such as ProductBuild ledger -> AgentRun -> ProductBuild.
+        .filter(ref => ref.kind !== 'json-id-paths' && ref.remapVia !== spec.name)
         .map(ref => ref.remapVia)
       const ownerDeps = spec.domainOwner?.locator?.kind === 'field'
         ? [spec.domainOwner.locator.owner === 'world' ? 'worlds' : spec.domainOwner.locator.owner === 'work' ? 'works' : null]
@@ -1048,6 +1135,13 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
 
     const newIdMaps = new Map<string, Map<number, number>>()
     const deferredForeignKeys: Array<{ table: any; id: number; field: string; target: string; exportId: number }> = []
+    const deferredJsonIdPaths: Array<{
+      table: any
+      tableName: string
+      id: number
+      remap: JsonIdPathsExportRefRemapV1
+      portableRefs: unknown
+    }> = []
 
     for (const spec of order) {
       const rawRows: any[] = (data as any)[spec.name]
@@ -1188,7 +1282,22 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
           }
         } else {
           const refMap = newIdMaps.get(rr.remapVia)
-          if (!refMap) continue
+          if (!refMap) {
+            if (rr.kind === 'json-id-paths') {
+              for (const pending of pendingRefRemap) {
+                const portableRefs = pending.stashed[rr.exportAs]
+                if (portableRefs == null) continue
+                deferredJsonIdPaths.push({
+                  table: (db as any)[spec.name],
+                  tableName: spec.name,
+                  id: pending.newId,
+                  remap: rr,
+                  portableRefs,
+                })
+              }
+            }
+            continue
+          }
           for (const pending of pendingRefRemap) {
             const portableRefs = pending.stashed[rr.exportAs]
             if (portableRefs == null) continue
@@ -1218,6 +1327,7 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
                     refMap,
                     rr.onUnmapped ?? 'null',
                     `${spec.name}.${rr.field}`,
+                    rr.keyedMaps,
                   )
             if (patch !== undefined) {
               await (db as any)[spec.name].update(pending.newId, { [rr.field]: patch })
@@ -1232,6 +1342,23 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
     for (const deferred of deferredForeignKeys) {
       const mapped = newIdMaps.get(deferred.target)?.get(deferred.exportId)
       if (mapped != null) await deferred.table.update(deferred.id, { [deferred.field]: mapped })
+    }
+    for (const deferred of deferredJsonIdPaths) {
+      const refMap = newIdMaps.get(deferred.remap.remapVia)
+      if (!refMap) {
+        throw new Error(`[deriveImport] ${deferred.tableName}.${deferred.remap.field} 缺少引用表映射`)
+      }
+      const patch = remapPortableJsonIdPaths(
+        deferred.portableRefs,
+        deferred.remap.paths,
+        refMap,
+        deferred.remap.onUnmapped ?? 'null',
+        `${deferred.tableName}.${deferred.remap.field}`,
+        deferred.remap.keyedMaps,
+      )
+      if (patch !== undefined) {
+        await deferred.table.update(deferred.id, { [deferred.remap.field]: patch })
+      }
     }
 
     const projectPatch: Record<string, number | null> = {}
@@ -1265,6 +1392,7 @@ function remapPortableJsonIdPaths(
   idMap: Map<number, number>,
   onUnmapped: 'require' | 'require-if-present' | 'null',
   label: string,
+  keyedMaps?: readonly { path: string; keyFields: readonly string[]; separator: string }[],
 ): string | null | undefined {
   if (value == null) return value === null ? null : undefined
   let parsed: unknown
@@ -1276,37 +1404,90 @@ function remapPortableJsonIdPaths(
   }
   for (const path of paths) {
     const parts = path.split('.').filter(Boolean)
+    const field = parts[parts.length - 1]
+    if (!field) continue
+    const owners: Array<Record<string, unknown>> = []
+    const visit = (value: unknown, index: number): void => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        if (onUnmapped === 'require') throw new Error(`[deriveImport] ${label}.${path} 缺失`)
+        return
+      }
+      const owner = value as Record<string, unknown>
+      if (index >= parts.length - 1) {
+        owners.push(owner)
+        return
+      }
+      const part = parts[index]
+      if (part === '*') {
+        for (const child of Object.values(owner)) visit(child, index + 1)
+        return
+      }
+      if (!(part in owner)) {
+        if (onUnmapped === 'require') throw new Error(`[deriveImport] ${label}.${path} 缺失`)
+        return
+      }
+      visit(owner[part], index + 1)
+    }
+    visit(parsed, 0)
+    for (const owner of owners) {
+      if (!(field in owner)) {
+        if (onUnmapped === 'require') throw new Error(`[deriveImport] ${label}.${path} 缺失`)
+        if (onUnmapped === 'require-if-present') continue
+      }
+      const portableId = owner[field]
+      if (portableId == null) {
+        if (onUnmapped !== 'null') {
+          throw new Error(`[deriveImport] ${label}.${path} 缺少本地映射`)
+        }
+        owner[field] = null
+        continue
+      }
+      const localId = typeof portableId === 'number' ? idMap.get(portableId) : undefined
+      if (localId == null && onUnmapped !== 'null') {
+        throw new Error(`[deriveImport] ${label}.${path} 缺少本地映射`)
+      }
+      owner[field] = localId ?? null
+    }
+  }
+  for (const keyed of keyedMaps ?? []) {
+    const parts = keyed.path.split('.').filter(Boolean)
     let owner = parsed as Record<string, unknown>
-    let parentExists = true
+    let missing = false
     for (const part of parts.slice(0, -1)) {
       const child = owner[part]
       if (!child || typeof child !== 'object' || Array.isArray(child)) {
-        if (onUnmapped === 'require') throw new Error(`[deriveImport] ${label}.${path} 缺失`)
-        parentExists = false
-        break
+        if (onUnmapped === 'require-if-present') {
+          missing = true
+          break
+        }
+        throw new Error(`[deriveImport] ${label}.${keyed.path} keyed map 缺失`)
       }
       owner = child as Record<string, unknown>
     }
-    if (!parentExists) continue
+    if (missing) continue
     const field = parts[parts.length - 1]
-    if (!field) continue
-    if (!(field in owner)) {
-      if (onUnmapped === 'require') throw new Error(`[deriveImport] ${label}.${path} 缺失`)
-      if (onUnmapped === 'require-if-present') continue
+    if (field && !(field in owner) && onUnmapped === 'require-if-present') continue
+    const current = field ? owner[field] : undefined
+    if (!field || !current || typeof current !== 'object' || Array.isArray(current)) {
+      throw new Error(`[deriveImport] ${label}.${keyed.path} keyed map 无效`)
     }
-    const portableId = owner[field]
-    if (portableId == null) {
-      if (onUnmapped !== 'null') {
-        throw new Error(`[deriveImport] ${label}.${path} 缺少本地映射`)
+    const rebuilt: Record<string, unknown> = {}
+    for (const value of Object.values(current as Record<string, unknown>)) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error(`[deriveImport] ${label}.${keyed.path} keyed map value 无效`)
       }
-      owner[field] = null
-      continue
+      const row = value as Record<string, unknown>
+      const values = keyed.keyFields.map(key => row[key])
+      if (values.some(candidate => typeof candidate !== 'string' && typeof candidate !== 'number')) {
+        throw new Error(`[deriveImport] ${label}.${keyed.path} keyed map identity 无效`)
+      }
+      const key = values.map(String).join(keyed.separator)
+      if (!key || key in rebuilt) {
+        throw new Error(`[deriveImport] ${label}.${keyed.path} keyed map identity 重复`)
+      }
+      rebuilt[key] = value
     }
-    const localId = typeof portableId === 'number' ? idMap.get(portableId) : undefined
-    if (localId == null && onUnmapped !== 'null') {
-      throw new Error(`[deriveImport] ${label}.${path} 缺少本地映射`)
-    }
-    owner[field] = localId ?? null
+    owner[field] = rebuilt
   }
   return JSON.stringify(parsed)
 }

@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.61
+> 规格版本：1.1.62
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -2310,6 +2310,14 @@ G5-10复用共享`productReleases`、正式媒资表和原子发布事务，但�
 
 该纵切面复用`productRuntimeSessions`父子关系、现有Release和事件生命周期，不新增表、Schema、Context Source或AI写字段。它只保证受支持的状态语义兼容与可回退分支，不声称能自动迁移任务状态机、数值规则、删除/重命名ID或任意剧情结构变化。
 
+### 24.11 G5-12 Creator便携生命周期与导入后本机复验
+
+Creator备份不是对旧机器数据库主键和本地Blob定位器的直接复制。v10导出把SourcePlan、预算账本、生产命令、Build、Artifact、Release、Session和存档迁移分支的引用全部纳入`PROJECT_TABLES`生命周期；导入先建立完整ID映射，再重建按Run组成的复合键，并在任何项目写入前验证SourcePin/Unit闭包、正式Release合同和迁移Canon。来源、ledger、command、Release或迁移证据任一被篡改都必须零写入拒绝。
+
+终态Build导入后不继承“这台机器已经验证过”的假设。所有携带的生产Artifact和Run证明先显式转为待本机复验，Creator工作台禁止Build Preview并给出可恢复状态；作者触发恢复后，确定性服务在不调用provider、不新增费用的情况下重验checkpoint、Artifact payload与物理Blob、预算账本、跨Build lineage和root terminal seal，并为当前本地ID签发新的复验尾证。只有完整闭合后，既有正式Release和Session才重新进入可用路径。Release自身保持不可变，恢复只重封本地Build证明，不重新生成、摘要或改写内容。
+
+世界与小说双来源都使用同一便携边界完成来源、Build、正式发布和Session往返。删除继续由项目级生命周期派生，并在Creator UI双重确认后级联清理Production、Build、Artifact、Release、Session、Run、Checkpoint和Blob，不删除或回写被引用的WorldRelease和小说源Work。该能力不新增表、Schema、Context Source或AI写字段。
+
 ---
 
 ## 25. 媒资、表现与可访问性
@@ -2997,6 +3005,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.62 | 2026-09-13 | 完成G5-12 Creator便携生命周期：v10导出导入重映射SourcePlan、预算账本复合键、生产命令、Build/Artifact/Release/Session和迁移分支，并在写入前验证SourcePin/Unit、正式Release和迁移Canon，篡改时零写入失败关闭。导入终态Build的本地Run/Blob证明显式失效，工作台阻断Preview并提供零provider、零费用的确定性复验；checkpoint、Artifact/Blob、ledger、terminal lineage和root seal闭合后恢复正式Release/Session使用。世界与小说全路径真实往返及项目级联删除通过。 |
 | 1.1.61 | 2026-09-13 | 完成G5-11发布后版本维护与存档迁移：已发布Creator Build可作为不可变修改基线，新Build精确继承来源Release并复用原生产、质量和发布链。兼容报告比较运行契约、初始变量、叙事与状态模块稳定键，只有直接兼容子Release可进入状态级复算；迁移预演重放当前事件、安装目标冻结定义并验证完整投影。正式事务CAS源Session、事件头和双Release，只创建绑定新Release且事件从0开始的子时间线，旧档、旧事件、旧Release和其它分支不变。真实Chromium已覆盖显式预演、确认迁移、切换新版本、保留旧分支与刷新恢复。 |
 | 1.1.60 | 2026-09-13 | 完成G5-10 Creator正式发布：专属双来源合同封印Creator Brief/SourcePlan/Start、SourcePin索引、P1实读清单、完整Artifact receipt、V3装配、治理快照、G5-09质量与作者授权；小说正文不进Release且`worldReleaseId=null`，世界来源重绑真实locator。共享事务最终CAS全部权威行、terminal读集与物理Blob并原子固化Release/媒资/幂等命令；专属中立lineage不伪造WorldReference，reader完整验签后两种Release均可启动正式Session。 |
 | 1.1.59 | 2026-09-13 | 完成G5-09发布前质量层：复验当前Creator Build授权、Artifact治理、QualityReport、QA硬门与双模型评审；硬门/阻断finding不可豁免，建议finding和非阻断问题逐项说明。灰盒只从Build Preview真实Session的连续事件、状态头和Checkpoint生成，覆盖主线结局、Action、探索、战斗、成长经济及恢复；便携凭据不含本地ID或原文。最终质量回执事务联结硬门、作者抽检、灰盒与完整问题集合，新问题或证据漂移自动使旧结论失效，G5-10必须显式消费。 |

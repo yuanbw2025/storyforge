@@ -42,7 +42,7 @@ async function seedNovelSource() {
     name: `Creator Release Novel ${crypto.randomUUID()}`,
     genres: ['fantasy'], status: 'drafting', description: '小说双来源发布夹具。',
     targetWordCount: 50_000, enableMultiWorld: false,
-  }, { purpose: 'longform', kind: 'novel', novelProfile: 'long' })
+  }, { purpose: 'independent-work', kind: 'novel', novelProfile: 'long' })
   const now = Date.now() - 10_000
   const outlineNodeId = await db.outlineNodes.add(stampNewRecord(workspace.scope, 'outlineNodes', {
     projectId: workspace.scope.projectId, parentId: null, type: 'chapter',

@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.97
+> 版本：1.1.98
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,17 +36,17 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 95（G0、G1、G2、G3、G4及G5-01～G5-11完成） |
-| 产品总进度 | 95 / 121（78.5%） |
-| G1～G7业务功能进度 | 85 / 111（76.6%） |
-| 当前阶段 | G5 创作者工作台与发布更新 |
+| 已完成 | 96（G0、G1、G2、G3、G4及G5完成） |
+| 产品总进度 | 96 / 121（79.3%） |
+| G1～G7业务功能进度 | 86 / 111（77.5%） |
+| 当前阶段 | G6 运行时AI与有边界自由 |
 | G0阶段进度 | 10 / 10（100%） |
 | G1阶段进度 | 13 / 13（100%） |
 | G2阶段进度 | 28 / 28（100%） |
 | G3阶段进度 | 18 / 18（100%） |
 | G4阶段进度 | 15 / 15（100%） |
-| G5阶段进度 | 11 / 12（91.7%） |
-| 当前工作包 | `TOW-G5-12` |
+| G5阶段进度 | 12 / 12（100%） |
+| 当前工作包 | `TOW-G6-01` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -251,7 +251,7 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G5-09 | DONE | 质量门、灰盒试玩和问题回执 | G3-18、G2-28、G5-07 | 当前Creator Build的完整生产治理、QualityReport、全部QA硬门及平衡/叙事双评审先由代码复验；硬门和模型阻断项不可豁免，70～84分建议项与作者登记的非阻断问题只能逐项说明。隔离灰盒只接受绑定当前未发布Build的文字开放世界Session，重放连续Event、状态头和Checkpoint并覆盖主线结局、Action、探索、战斗、成长/经济及恢复；便携凭据只保存稳定键与Hash。问题回执可复现、可导出且不含本地ID、来源原文或完整事件；阻断项必须新Build修复。最终发布质量回执联结当前Build、治理快照、硬门、人工叙事复核、灰盒和完整问题集合，新问题或证据篡改自动使旧结论失效。创作者工作台已提供全过程UI；专项7项、G5关联218项、完整CI 671文件/3443项及Chromium E2E 80项通过，无新表、Schema、Context Source、AI写入口或WorldRelease回写 |
 | TOW-G5-10 | DONE | Build装配、发布和不可变ProductRelease | G5-08、G5-09 | Creator发布准备重验双来源、专属Brief/SourcePlan/Start、SourcePin、P1实读清单、完整Artifact receipt、V3装配、terminal读集和G5-09质量回执；作者四项最终确认生成一次性授权并绑定当前adoption intent/Build/包/质量/名称。共享原子事务最终CAS全部权威行和物理Blob，创建不可变ProductRelease、固化媒资并保存幂等回执。世界来源写真实locator，小说来源写`worldReleaseId=null`且Release不复制正文；专属中立lineage不伪造WorldReference。Reader重验完整合同后两种Release均可启动正式Session；旧共享Release保持兼容。专项7项及共享发布/运行101项回归、三架构检查通过，无新表、Schema、Context Source、AI写入口或来源回写 |
 | TOW-G5-11 | DONE | 新Release、兼容报告和存档迁移 | G1-09、G5-10 | 已发布Creator Build可作为不可变修订基线，子Build精确继承来源Release并复用原生产/质量/发布链。兼容报告比较运行契约、初始变量、叙事与状态模块稳定键，仅放行直接兼容子Release；玩家迁移预演会从两个已核验Release重新计算报告、重放当前状态并给出可见摘要。正式迁移以源Session、事件头和双Release做事务CAS，只创建绑定新Release、事件序号从0开始的子Session；原档、原事件、原Release及其它分支不变。跨Work、Build Preview、旧混合包、非直接版本、语义不兼容和过期预演均零写入失败关闭；专项与G4/G5扩大回归79文件477项、完整CI 675文件3457项及隔离Chromium E2E 80项通过，无新表、Schema、Context Source或AI写入口 |
-| TOW-G5-12 | READY | 工作台导入导出、删除和真实E2E | G5-01～G5-11、G1-12 | 从来源到发布更新全路径通过，刷新/失败/导入导出和删除不丢数据；复验G5-04已落地的SourcePin/Unit写前闭包验真与通用SourcePlan嵌套locator重映射，并覆盖完整Creator工作流的篡改备份失败关闭、删除和真实浏览器往返 |
+| TOW-G5-12 | DONE | 工作台导入导出、删除和真实E2E | G5-01～G5-11、G1-12 | v10备份会重映射Creator SourcePlan、预算账本和生产命令回执中的完整本地ID图，并在写入前严格验证SourcePin/Unit、正式Release和存档迁移分支；篡改Build、ledger、command或Release均零写入失败关闭。导入后的终态Build明确标记Artifact/Run/root proof待本机复验，工作台阻断预览并提供零provider、零新增费用的确定性恢复；恢复逐项重验checkpoint、Artifact、Blob、预算账本、terminal lineage和root seal，随后正式Release/Session可继续使用。世界与小说双来源均完成来源→Build→发布→Session完整往返，项目删除通过双重确认并级联清理Production、Build、Artifact、Release、Session、Run与Blob；专项回归、676文件3462项完整CI和真实Chromium导出、篡改拒绝、合法导入、游玩入口、刷新及删除路径通过 |
 
 阶段出口：创作者不需要手改JSON即可完成游戏生产和版本维护。
 
@@ -263,7 +263,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | ID | 状态 | 工作包 | 依赖 | 完成判据 |
 |---|---|---|---|---|
-| TOW-G6-01 | QUEUED | 运行时AI Skill、Contract和权限边界 | G1-12、G2-28、G3-01 | 每个Skill的reads/writes/model/schema/预算/失败策略已登记 |
+| TOW-G6-01 | READY | 运行时AI Skill、Contract和权限边界 | G1-12、G2-28、G3-01 | 每个Skill的reads/writes/model/schema/预算/失败策略已登记 |
 | TOW-G6-02 | QUEUED | Context Manifest与按需上下文选择 | G6-01 | 只读当前场景、相关任务/人物/知识和必要摘要；无固定条数冒充检索 |
 | TOW-G6-03 | QUEUED | 自然语言意图映射和风险确认 | G1-04、G4-03、G6-02 | 低风险唯一匹配直接执行；高风险/不可逆确认；多匹配让玩家选择 |
 | TOW-G6-04 | QUEUED | NPC对白与角色知识边界 | G2-18、G2-20、G6-02 | 人格、态度和已知事实一致；无秘密泄露；失败使用安全模板 |
@@ -357,6 +357,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.98 | 2026-09-13 | 完成G5-12创作者生命周期便携化与真实E2E：v10导出导入覆盖Creator SourcePlan、生产预算账本、命令回执、双来源SourcePin、正式Release、迁移分支和完整运行私域，复合键映射随Run/Build ID一并重建；任何来源、ledger、command、Release或迁移Canon篡改都在项目落库前失败关闭。导入终态Build不会盲信旧机器Run/Blob定位证据，而是把本地生产证明显式置为待恢复，Creator工作台阻断Preview并提供零provider/零费用的确定性重验，逐项闭合checkpoint、Artifact/Blob、预算账本、terminal lineage和root seal后恢复正式使用。世界与小说Creator全路径均完成导出、合法恢复、Release/Session读取和项目级联删除；完整CI 676文件3462项及真实Chromium导出、篡改拒绝、合法导入、玩家入口、刷新与删除路径通过。总进度96/121，业务功能86/111，G5阶段关闭，下一项G6-01。 |
 | 1.1.97 | 2026-09-13 | 完成G5-11版本维护与存档迁移纵切面：当前已发布Creator Build可继续进入受治理修改与局部修复，新子Build精确记录来源Release并重新经过媒资、质量、授权和正式发布。兼容报告把运行契约、初始变量、叙事和状态模块稳定语义纳入比较，Presentation仅允许内容与布局级变化；玩家端只向活动正式vNext存档开放直接兼容子版本，并在提交前对双Release重新计算报告。迁移预演重放当前事件流、安装目标冻结定义并验证完整投影；正式事务CAS源Session、事件头和双Release，只创建事件序号从0开始的新Release子时间线，原档、原事件、旧Release与其它分支保持不变。跨Work、Build Preview、旧混合包、非直接版本、语义不兼容、伪造lineage和过期预演均零写入拒绝。专项与G4/G5扩大回归79文件477项、完整CI 675文件3457项及隔离Chromium E2E 80项通过；总进度95/121，业务功能85/111，下一项G5-12。 |
 | 1.1.96 | 2026-09-13 | 完成G5-10双来源正式发布纵切面：发布准备重验Creator派生授权、SourcePin/P1/V3、完整Artifact与terminal证据、G5-09当前质量回执；四项作者确认生成绑定adoption intent、Build、包、质量和名称的一次性授权。ProductRelease携带无本地ID/无小说正文的Creator来源合同与中立lineage；世界写真实locator，小说写`worldReleaseId=null`。共享事务最终CAS权威行和Blob，原子创建Release/媒资/幂等回执；reader完整验签后两种来源均能启动正式Session，旧通用Release保持兼容。专项7项、共享发布与运行101项、完整CI及隔离Chromium E2E 80项通过；512单元大来源授权断言允许授权后自动续跑进入`building`，不再依赖浏览器调度竞态。总进度94/121，业务功能84/111，下一项G5-11。 |
 | 1.1.95 | 2026-09-13 | 完成G5-09发布前质量纵切面：当前Creator Build重新验证派生授权、Artifact治理、QualityReport、全部QA硬门及平衡/叙事双评审；确定性硬门和模型阻断项不能豁免，模型建议与作者非阻断问题须逐项说明。灰盒凭据只接受当前未发布Build的真实文字开放世界Session，验证事件重放、状态头、检查点及主线结局/Action/探索/战斗/成长经济/恢复六类覆盖，并只携带稳定键与Hash。可复现问题回执不含本地ID、来源原文或完整事件；阻断问题必须进入新Build。最终质量回执联结硬门、作者语义抽检、灰盒和完整问题/豁免集合，新问题或任何证据篡改都会使旧结论失效。创作者工作台已接入质量状态、试玩选择、问题导出和最终冻结；专项7项、G5关联218项、完整CI 671文件/3443项与Chromium E2E 80项通过。总进度93/121，业务功能83/111，下一项G5-10。 |

@@ -7,6 +7,8 @@ import {
 } from '../../src/lib/open-world/player-save-migration'
 import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { assertProductReleaseUnchanged } from '../../src/lib/product/releases'
 import type { ProductRelease, ProductRuntimePackageV1 } from '../../src/lib/types'
 import { createFixtureProductReleaseManifestV1 } from '../helpers/product-release-v1'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
@@ -182,6 +184,73 @@ describe('Text Open World G5-11 · 新Release存档迁移', () => {
     })).rejects.toThrow('预演已过期')
     expect(await db.productRuntimeSessions.count()).toBe(1)
   })
+
+  it('迁移父子链可完整导出导入并重绑双Release，迁移Canon篡改时零写入拒绝', async () => {
+    const created = await fixture('便携迁移')
+    await executeTextOpenWorldActionV1({
+      sessionId: created.session.id!,
+      actionKey: 'action.investigate-channel',
+      targetKey: 'location.salt-port',
+      commandId: 'command.g5-12.portable',
+    })
+    const childRelease = await addChildRelease({
+      created,
+      runtimePackage: presentationOnlyUpdate(created.runtimePackage),
+    })
+    const preview = await previewTextOpenWorldSaveMigrationV1({
+      scope: created.scope,
+      sourceSessionId: created.session.id!,
+      targetProductReleaseId: childRelease.release.id!,
+    })
+    const migrated = await migrateTextOpenWorldSaveToReleaseV1({
+      scope: created.scope,
+      sourceSessionId: created.session.id!,
+      targetProductReleaseId: childRelease.release.id!,
+      expectedPreviewHash: preview.previewHash,
+      title: '盐脊便携迁移分支',
+    })
+
+    const backup = await exportProjectJSON(created.scope.projectId)
+    const portableChild = backup.productRuntimeSessions.find(row => row.title === migrated.session.title)!
+    const portableParent = backup.productRuntimeSessions.find(row => row.title === created.session.title)!
+    expect(portableChild).toMatchObject({
+      _parentSessionExportId: portableParent._exportId,
+      parentThroughSequence: preview.source.throughSequence,
+    })
+    expect(portableChild._productReleaseExportId).not.toBe(portableParent._productReleaseExportId)
+
+    const importedProjectId = await importProjectJSON(structuredClone(backup))
+    const importedSessions = await db.productRuntimeSessions
+      .where('projectId').equals(importedProjectId).toArray()
+    const importedParent = importedSessions.find(row => row.title === created.session.title)!
+    const importedChild = importedSessions.find(row => row.title === migrated.session.title)!
+    const [importedSourceRelease, importedTargetRelease] = await Promise.all([
+      db.productReleases.get(importedParent.productReleaseId!),
+      db.productReleases.get(importedChild.productReleaseId!),
+    ])
+    expect(importedChild).toMatchObject({
+      parentSessionId: importedParent.id,
+      parentThroughSequence: preview.source.throughSequence,
+      productBuildId: null,
+    })
+    expect(importedTargetRelease?.version).toBe(2)
+    expect(importedSourceRelease?.version).toBe(1)
+    await expect(assertProductReleaseUnchanged(importedSourceRelease!.id!)).resolves.toBeDefined()
+    await expect(assertProductReleaseUnchanged(importedTargetRelease!.id!)).resolves.toBeDefined()
+    expect((await readProductRuntimeState(importedChild.id!)).textOpenWorld?.state)
+      .toEqual((await readProductRuntimeState(migrated.session.id)).textOpenWorld?.state)
+
+    const tampered = structuredClone(backup)
+    const tamperedChild = tampered.productRuntimeSessions.find(row => row.title === migrated.session.title)!
+    const canon = JSON.parse(tamperedChild.canonSnapshotJson)
+    canon.migration.source.stateHash = '0'.repeat(64)
+    const { previewHash: _oldPreviewHash, ...plan } = canon.migration
+    canon.migration.previewHash = await hashProductProductionValueV2(plan)
+    tamperedChild.canonSnapshotJson = JSON.stringify(canon)
+    const before = await db.projects.count()
+    await expect(importProjectJSON(tampered)).rejects.toThrow(/迁移lineage无效/)
+    expect(await db.projects.count()).toBe(before)
+  }, 60_000)
 
   it('不允许跨Work、非直接子版本或Build Preview进入迁移边界', async () => {
     const created = await fixture('作用域')

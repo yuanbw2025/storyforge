@@ -29,6 +29,7 @@ const serviceMocks = vi.hoisted(() => ({
   previewCreatorStart: vi.fn(),
   readDetails: vi.fn(),
   readProgress: vi.fn(),
+  recoverImportedProofs: vi.fn(),
   runAuthorized: vi.fn(),
 }))
 
@@ -55,6 +56,7 @@ vi.mock('../../src/lib/product-production/service', async importOriginal => {
     previewTextOpenWorldCreatorProductionStartV1: serviceMocks.previewCreatorStart,
     readProductProductionDetailsV1: serviceMocks.readDetails,
     readProductProductionProgressV1: serviceMocks.readProgress,
+    recoverImportedProductProductionProofsV1: serviceMocks.recoverImportedProofs,
     runAuthorizedProductProductionV1: serviceMocks.runAuthorized,
   }
 })
@@ -273,6 +275,28 @@ const recoveryProgress = {
   }],
 } as unknown as ProductProductionProgressV1
 
+const importedProgress = {
+  ...recoveryProgress,
+  buildStatus: 'release-ready',
+  terminal: false,
+  tasks: recoveryProgress.tasks.map(task => ({
+    ...task,
+    status: 'stale',
+    blocker: null,
+    staleReason: 'project-import-scope-rebound',
+  })),
+} as unknown as ProductProductionProgressV1
+
+const recoveredImportedProgress = {
+  ...importedProgress,
+  terminal: true,
+  tasks: importedProgress.tasks.map(task => ({
+    ...task,
+    status: 'completed',
+    staleReason: null,
+  })),
+} as unknown as ProductProductionProgressV1
+
 describe('TOW-G5-04 · production start UI', () => {
   let host: HTMLDivElement
   let root: ReturnType<typeof createRoot>
@@ -287,6 +311,7 @@ describe('TOW-G5-04 · production start UI', () => {
     })
     serviceMocks.readDetails.mockResolvedValue(lockedDetails)
     serviceMocks.readProgress.mockResolvedValue(recoveryProgress)
+    serviceMocks.recoverImportedProofs.mockResolvedValue(recoveredImportedProgress)
     serviceMocks.runAuthorized.mockResolvedValue(recoveryProgress)
     host = document.createElement('div')
     document.body.append(host)
@@ -422,6 +447,51 @@ describe('TOW-G5-04 · production start UI', () => {
     expect(host.textContent).toContain('正式发布 ProductRelease')
     expect(host.textContent).not.toContain('继续演化下一版')
     expect(host.querySelector('[data-testid="text-open-world-creator-artifact-browser"]')).toBeTruthy()
+  })
+
+  it('导入的终态 Build 先显示零调用证明复验，完成前禁止试玩，复验后恢复本地工作台', async () => {
+    serviceMocks.readDetails.mockResolvedValue({
+      ...lockedDetails,
+      production: {
+        ...lockedProduction,
+        status: 'preview-ready',
+      },
+      build: {
+        ...lockedDetails.build,
+        status: 'release-ready',
+        failureJson: null,
+      },
+    } as unknown as ProductProductionDetailsV1)
+    serviceMocks.readProgress
+      .mockResolvedValueOnce(importedProgress)
+      .mockResolvedValue(recoveredImportedProgress)
+
+    await act(async () => {
+      root.render(createElement(ProductProductionStudio, {
+        scope: SCOPE,
+        allowedProducts: ['text-open-world'],
+        initialProduct: 'text-open-world',
+        initialProductionId: lockedProduction.id,
+        productionOnly: true,
+      }))
+    })
+
+    await waitFor(() => expect(
+      host.querySelector('[data-testid="product-production-import-proof-recovery"]'),
+    ).toBeTruthy())
+    expect(host.textContent).toContain('复验不会调用模型或媒资供应商')
+    expect(button(host, '试玩未发布 Build').disabled).toBe(true)
+
+    await act(async () => { button(host, '复验导入生产证明').click() })
+    await waitFor(() => expect(serviceMocks.recoverImportedProofs).toHaveBeenCalledWith({
+      scope: SCOPE,
+      productionId: lockedProduction.id,
+    }))
+    await waitFor(() => expect(
+      host.querySelector('[data-testid="product-production-import-proof-recovery"]'),
+    ).toBeNull())
+    expect(host.textContent).toContain('已在新本地作用域完成零调用复验')
+    expect(button(host, '试玩未发布 Build').disabled).toBe(false)
   })
 
   it('旧泛型文字开放世界不误挂 Creator Artifact 浏览器，原有发布与演化动作保持可见', async () => {
