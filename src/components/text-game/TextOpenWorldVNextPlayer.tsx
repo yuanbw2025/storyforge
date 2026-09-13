@@ -19,6 +19,11 @@ import {
   generateTextOpenWorldRuntimeIntentV1,
   type TextOpenWorldRuntimeIntentAuthorizationV1,
 } from '../../lib/open-world/runtime-intent'
+import {
+  createTextOpenWorldRuntimeDialogueFallbackV1,
+  generateTextOpenWorldRuntimeDialogueV1,
+  type TextOpenWorldRuntimeDialogueHistoryTurnV1,
+} from '../../lib/open-world/runtime-dialogue'
 import { projectTextOpenWorldScenesV1 } from '../../lib/open-world/scene-projection'
 import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-projection'
 import type { TextOpenWorldCommandSourceV1 } from '../../lib/types'
@@ -373,6 +378,7 @@ export default function TextOpenWorldVNextPlayer() {
   const interpretNaturalInput = async (request: {
     utterance: string
     selectedSceneKey: string
+    recentDialogue: readonly TextOpenWorldRuntimeDialogueHistoryTurnV1[]
   }) => {
     const liveStore = useTextOpenWorldPlayerStore.getState()
     const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
@@ -387,7 +393,7 @@ export default function TextOpenWorldVNextPlayer() {
     const controller = new AbortController()
     intentAbortController.current = controller
     try {
-      return await generateTextOpenWorldRuntimeIntentV1({
+      const intent = await generateTextOpenWorldRuntimeIntentV1({
         scope: liveStore.scope,
         productRuntimeSessionId: liveSessionId,
         selectedSceneKey: request.selectedSceneKey,
@@ -395,6 +401,27 @@ export default function TextOpenWorldVNextPlayer() {
         aiConfig,
         signal: controller.signal,
       })
+      if (intent.status !== 'reply-only') return intent
+      const liveScenes = projectTextOpenWorldScenesV1(liveProjection)
+      const selectedScene = liveScenes.status === 'ready'
+        ? liveScenes.scenes.find(item => item.key === request.selectedSceneKey)
+        : null
+      if (!selectedScene?.actor || selectedScene.sourceKind !== 'actor-dialogue') return intent
+      try {
+        const dialogue = await generateTextOpenWorldRuntimeDialogueV1({
+          scope: liveStore.scope,
+          productRuntimeSessionId: liveSessionId,
+          selectedSceneKey: request.selectedSceneKey,
+          utterance: request.utterance,
+          recentDialogue: request.recentDialogue,
+          aiConfig,
+          signal: controller.signal,
+        })
+        return { ...intent, dialogue }
+      } catch (error) {
+        if (controller.signal.aborted) throw error
+        return { ...intent, dialogue: createTextOpenWorldRuntimeDialogueFallbackV1(selectedScene) }
+      }
     } finally {
       if (intentAbortController.current === controller) intentAbortController.current = null
     }

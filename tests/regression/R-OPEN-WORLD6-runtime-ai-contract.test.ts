@@ -34,7 +34,7 @@ describe('R-OPEN-WORLD6 · vNext 运行时 AI Skill 合同总表', () => {
     for (const item of TEXT_OPEN_WORLD_RUNTIME_AI_SKILL_CONTRACTS_V1) {
       const skill = getAgentSkillV1(item.skillId)
       const entry = FORMAL_AI_ENTRY_BY_ID_V1.get(item.formalEntryId)
-      expect(item.availability).toBe(item.capability === 'intent'
+      expect(item.availability).toBe(item.capability === 'intent' || item.capability === 'dialogue'
         ? 'player-ui-routed'
         : 'registered-not-yet-ui-routed')
       expect(item.reads.contextSourceKeys).toEqual(['openWorldRuntime'])

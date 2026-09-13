@@ -31,6 +31,7 @@ export interface TextOpenWorldRuntimeAIContextRequestV1 {
   contractScope: AgentRunScopeV1
   skillId: TextOpenWorldRuntimeAISkillIdV1
   objective: string
+  targetSceneKey?: string
   targetActorKey?: string
   targetQuestInstanceKey?: string
   terminalCommandIds?: readonly string[]
@@ -79,6 +80,7 @@ function normalizedTokens(values: readonly string[] | undefined, label: string):
 
 function targetSpecificResourceAllowed(input: {
   resource: TextOpenWorldRuntimeContextResourceV1
+  targetSceneKey?: string
   targetActorKey?: string
   targetQuestInstanceKey?: string
   terminalCommandIds: ReadonlySet<string>
@@ -86,6 +88,20 @@ function targetSpecificResourceAllowed(input: {
   directorTrigger?: string
 }): boolean {
   const key = input.resource.descriptor.resourceKey
+  const sceneScoped = key.includes(':scene:')
+    || key.includes(':scene-actions:')
+    || key.includes(':scene-choices:')
+    || key.includes(':actor-knowledge-scene:')
+  const sceneAggregate = key.includes(':scene-current')
+    || key.includes(':actions-available')
+    || key.includes(':choices-available')
+    || key.includes(':actor-knowledge:')
+  if (input.targetSceneKey) {
+    if (sceneAggregate) return false
+    if (sceneScoped && !input.resource.targetKeys.includes(input.targetSceneKey)) return false
+  } else if (sceneScoped) {
+    return false
+  }
   if (key.includes(':terminal-receipt:')) {
     return input.resource.targetKeys.some(target => input.terminalCommandIds.has(target))
   }
@@ -97,7 +113,8 @@ function targetSpecificResourceAllowed(input: {
     return input.directorTrigger != null
       && input.resource.targetKeys.includes(input.directorTrigger)
   }
-  if (key.includes(':actor:') || key.includes(':attitude:') || key.includes(':actor-knowledge:')) {
+  if (key.includes(':actor:') || key.includes(':attitude:')
+    || key.includes(':actor-knowledge:') || key.includes(':actor-knowledge-scene:')) {
     return input.targetActorKey != null
       && input.resource.targetKeys.includes(input.targetActorKey)
   }
@@ -170,6 +187,7 @@ export async function prepareTextOpenWorldRuntimeAIContextV1(
   const runtime = input.contractScope.runtime ?? fail('RunContract缺少runtime边界')
   if (input.contractScope.projectId !== input.scope.projectId) fail('RunContract与WorkspaceScope项目不一致')
   const targetActorKey = normalizedToken(input.targetActorKey, 'targetActorKey')
+  const targetSceneKey = normalizedToken(input.targetSceneKey, 'targetSceneKey')
   const targetQuestInstanceKey = normalizedToken(input.targetQuestInstanceKey, 'targetQuestInstanceKey')
   const terminalCommandIds = normalizedTokens(input.terminalCommandIds, 'terminalCommandIds')
   const selectedTemplateKey = normalizedToken(input.selectedTemplateKey, 'selectedTemplateKey')
@@ -205,6 +223,7 @@ export async function prepareTextOpenWorldRuntimeAIContextV1(
     resource.logicalSlices.some(slice => requestedSlices.includes(slice))
     && targetSpecificResourceAllowed({
       resource,
+      targetSceneKey,
       targetActorKey,
       targetQuestInstanceKey,
       terminalCommandIds: terminalSet,
@@ -232,6 +251,7 @@ export async function prepareTextOpenWorldRuntimeAIContextV1(
   if (!allowedResourceKeys.length || !mandatoryResourceKeys.length) fail('当前Skill没有可执行的资源选择计划')
   const entityKeys = [
     targetActorKey,
+    targetSceneKey,
     targetQuestInstanceKey,
     selectedTemplateKey,
     directorTrigger,
@@ -241,7 +261,7 @@ export async function prepareTextOpenWorldRuntimeAIContextV1(
     skill,
     scope: input.scope,
     worldGroupId: input.contractScope.worldGroupId,
-    query: [objective, targetActorKey, targetQuestInstanceKey, selectedTemplateKey, directorTrigger, ...terminalCommandIds]
+    query: [objective, targetSceneKey, targetActorKey, targetQuestInstanceKey, selectedTemplateKey, directorTrigger, ...terminalCommandIds]
       .filter(Boolean).join('\n'),
     budgetTokens: registered.budget.maxInputTokens,
     mandatoryResourceKeys,

@@ -14,6 +14,10 @@ import type {
   TextOpenWorldRuntimeIntentAuthorizationV1,
   TextOpenWorldRuntimeIntentResolutionV1,
 } from '../../lib/open-world/runtime-intent'
+import type {
+  TextOpenWorldRuntimeDialogueHistoryTurnV1,
+  TextOpenWorldRuntimeDialoguePresentationV1,
+} from '../../lib/open-world/runtime-dialogue'
 
 export interface TextOpenWorldSceneTutorialAvailabilityV1 {
   systemActions: boolean
@@ -48,9 +52,14 @@ interface TextOpenWorldScenePanelProps {
   onInterpretNaturalInput?(request: {
     utterance: string
     selectedSceneKey: string
-  }): Promise<TextOpenWorldRuntimeIntentResolutionV1>
+    recentDialogue: readonly TextOpenWorldRuntimeDialogueHistoryTurnV1[]
+  }): Promise<TextOpenWorldSceneNaturalInputResolutionV1>
   /** Reports only controls rendered for the currently selected scene. */
   onTutorialAvailabilityChange?(availability: TextOpenWorldSceneTutorialAvailabilityV1): void
+}
+
+export interface TextOpenWorldSceneNaturalInputResolutionV1 extends TextOpenWorldRuntimeIntentResolutionV1 {
+  dialogue?: TextOpenWorldRuntimeDialoguePresentationV1
 }
 
 type InteractionNotice = {
@@ -66,6 +75,15 @@ interface PendingIntentOption {
   description: string
   expectedBaseSequence?: number
   runtimeIntentAuthorization?: TextOpenWorldRuntimeIntentAuthorizationV1
+}
+
+interface PresentedDialogueTurn extends TextOpenWorldRuntimeDialogueHistoryTurnV1 {
+  actorName: string | null
+  source: TextOpenWorldRuntimeDialoguePresentationV1['source'] | null
+  tone: TextOpenWorldRuntimeDialoguePresentationV1['tone'] | null
+  recommendedActionKeys: string[]
+  recommendedChoiceKeys: string[]
+  boundaryExplanation: string | null
 }
 
 const ATTITUDE_LABELS = { bad: '态度较差', neutral: '态度一般', good: '态度友好' } as const
@@ -147,6 +165,7 @@ export default function TextOpenWorldScenePanel({
   const [notice, setNotice] = useState<InteractionNotice>(null)
   const [interpreting, setInterpreting] = useState(false)
   const [pendingIntentOptions, setPendingIntentOptions] = useState<PendingIntentOption[]>([])
+  const [dialogueTurns, setDialogueTurns] = useState<PresentedDialogueTurn[]>([])
   const interpretationRevision = useRef(0)
 
   useEffect(() => {
@@ -155,6 +174,7 @@ export default function TextOpenWorldScenePanel({
     setNotice(null)
     setInterpreting(false)
     setPendingIntentOptions([])
+    setDialogueTurns([])
     interpretationRevision.current += 1
   }, [eventSequence, projection.recommendedSceneKey, sessionKey])
 
@@ -293,6 +313,11 @@ export default function TextOpenWorldScenePanel({
       const resolution = await onInterpretNaturalInput({
         utterance: naturalInput.normalize('NFC').trim(),
         selectedSceneKey: scene.key,
+        recentDialogue: dialogueTurns.map(turn => ({
+          speaker: turn.speaker,
+          actorKey: turn.actorKey,
+          text: turn.text,
+        })),
       })
       if (interpretationRevision.current !== requestRevision || resolution.selectedSceneKey !== scene.key) return
       if (resolution.status === 'mapped' && resolution.options.length === 1) {
@@ -316,6 +341,30 @@ export default function TextOpenWorldScenePanel({
           runtimeIntentAuthorization: option.authorization,
         })))
         setNotice({ tone: 'boundary', message: 'AI找到了多个合法解释，请明确选择一个；选择前不会改变世界状态。' })
+        setNaturalInput('')
+        return
+      }
+      if (resolution.status === 'reply-only' && resolution.dialogue) {
+        const dialogue = resolution.dialogue
+        if (dialogue.selectedSceneKey !== scene.key || dialogue.actorKey !== scene.actor?.key) return
+        const addedTurns: PresentedDialogueTurn[] = [{
+          speaker: 'player', actorKey: null, text: naturalInput.normalize('NFC').trim(),
+          actorName: null, source: null, tone: null,
+          recommendedActionKeys: [], recommendedChoiceKeys: [], boundaryExplanation: null,
+        }, {
+          speaker: 'npc', actorKey: dialogue.actorKey, text: dialogue.replyText,
+          actorName: dialogue.actorName, source: dialogue.source, tone: dialogue.tone,
+          recommendedActionKeys: [...dialogue.recommendedActionKeys],
+          recommendedChoiceKeys: [...dialogue.recommendedChoiceKeys],
+          boundaryExplanation: dialogue.boundaryExplanation,
+        }]
+        setDialogueTurns(current => [...current, ...addedTurns].slice(-12))
+        setNotice({
+          tone: 'boundary',
+          message: dialogue.source === 'ai-candidate'
+            ? 'NPC已按当前人格、态度和可说知识回应；这段对白没有直接改变游戏状态。'
+            : dialogue.boundaryExplanation,
+        })
         setNaturalInput('')
         return
       }
@@ -353,6 +402,7 @@ export default function TextOpenWorldScenePanel({
           setNotice(null)
           setInterpreting(false)
           setPendingIntentOptions([])
+          setDialogueTurns([])
         }}
       >
         {item.actor ? `${item.actor.name} · ${item.title}` : item.title}
@@ -370,6 +420,35 @@ export default function TextOpenWorldScenePanel({
     </article>}
 
     <SystemReceipt feedback={feedback} />
+
+    {dialogueTurns.length > 0 && <section
+      className="open-world-runtime-dialogue-log"
+      data-testid="text-open-world-runtime-dialogue"
+      role="log"
+      aria-live="polite"
+      aria-label="本场景临时对白"
+    >
+      <header><MessageCircle aria-hidden="true" /><strong>本场景临时对白</strong><small>不直接写入游戏状态</small></header>
+      {dialogueTurns.map((turn, index) => {
+        const actionLabels = turn.recommendedActionKeys.flatMap(key => actionByKey.get(key)?.action.label ?? [])
+        const choiceLabels = turn.recommendedChoiceKeys.flatMap(key => scene?.fixedChoices.find(choice => choice.key === key)?.label ?? [])
+        const recommendations = [...actionLabels, ...choiceLabels]
+        return <article
+          key={`${turn.speaker}:${index}`}
+          className={`open-world-runtime-dialogue-turn is-${turn.speaker}`}
+        >
+          <header>
+            <strong>{turn.speaker === 'player' ? '你' : turn.actorName}</strong>
+            {turn.source && <small>
+              {turn.source === 'ai-candidate' ? `${ATTITUDE_LABELS[turn.tone!]} · AI只读候选` : '冻结安全回退'}
+            </small>}
+          </header>
+          <p>{turn.text}</p>
+          {recommendations.length > 0 && <small>可考虑：{recommendations.join('、')}（未执行）</small>}
+          {turn.source === 'frozen-scene-fallback' && turn.boundaryExplanation && <small>{turn.boundaryExplanation}</small>}
+        </article>
+      })}
+    </section>}
 
     {scene?.fixedChoices.length ? <section
       className="open-world-scene-input-card"
@@ -433,7 +512,7 @@ export default function TextOpenWorldScenePanel({
         可识别示例：{naturalCandidates.slice(0, 3).map(candidate => candidate.example).join(' / ')}
       </p>}
       <p className="open-world-scene-boundary-copy">
-        AI只可选择当前已投影的既有行动；无法识别的描述不会创建任务、地点、结果或直接修改状态。
+        AI只可选择当前已投影的既有行动；角色对白场景还可生成不写状态的受限对白。无法识别的描述不会创建任务、地点、结果或直接修改状态。
       </p>
       {pendingIntentOptions.length > 0 && <div
         className="open-world-scene-choice-list"

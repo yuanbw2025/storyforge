@@ -233,9 +233,10 @@ export const TEXT_OPEN_WORLD_RUNTIME_AI_SKILL_CONTRACTS_V1 = [
     capability: 'dialogue',
     skillId: 'prose.text-open-world-runtime-dialogue',
     formalEntryId: 'text-open-world.runtime.dialogue',
-    promptVersion: 'text-open-world-runtime-dialogue-v1',
+    promptVersion: 'text-open-world-runtime-dialogue-v2',
+    availability: 'player-ui-routed',
     purpose: '基于当前在场NPC、三档态度和该角色实际知识生成只读对白候选。',
-    logicalSlices: ['scene.current', 'actor.present-public-dossier', 'actor.knowledge', 'player.known-facts', 'relationship.attitude', 'quests.related-visible', 'conversation.recent', 'actions.available', 'choices.available'],
+    logicalSlices: ['scene.current', 'actor.present-public-dossier', 'actor.knowledge', 'relationship.attitude', 'conversation.recent', 'actions.available', 'choices.available'],
     routeCategory: 'runtime.text-open-world.dialogue',
     minimumContextWindow: 24_000,
     temperatureMaximum: 0.7,
@@ -356,7 +357,7 @@ export function validateTextOpenWorldRuntimeAISkillContractsV1(
   const schemaIds = new Set<string>()
   for (const item of contracts) {
     if (item.version !== 1 || item.productType !== 'text-open-world' || item.phase !== 'runtime') fail('产品阶段或版本无效')
-    const expectedAvailability = item.capability === 'intent'
+    const expectedAvailability = item.capability === 'intent' || item.capability === 'dialogue'
       ? 'player-ui-routed'
       : 'registered-not-yet-ui-routed'
     if (item.availability !== expectedAvailability) fail(`${item.skillId} UI接入状态与已完成工作包不一致`)

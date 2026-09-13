@@ -2921,7 +2921,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '文字开放世界vNext·NPC自由对白候选',
     owner: 'prose-agent',
-    promptVersion: 'text-open-world-runtime-dialogue-v1',
+    promptVersion: 'text-open-world-runtime-dialogue-v2',
     executionMode: 'text-open-world-runtime-dialogue',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
@@ -2933,7 +2933,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 1_600,
     writeTargets: [],
     lastVerifiedAt: '2026-09-13',
-    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway'],
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-dialogue'],
   },
   {
     version: 1,

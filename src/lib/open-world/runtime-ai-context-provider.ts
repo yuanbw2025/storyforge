@@ -306,6 +306,10 @@ async function loadCatalog(scope: FrozenResourceScopeV1): Promise<TextOpenWorldR
   const availableActions = projectedActions.filter(item => item.available)
   const sceneProjection = projectTextOpenWorldScenesV1(projection)
   const currentScenes = sceneProjection.status === 'ready' ? sceneProjection.scenes : []
+  const availableActionByKey = new Map(availableActions.map(item => [item.action.key, item]))
+  const ambientSceneActionKeys = sceneProjection.status === 'ready'
+    ? sceneProjection.ambientActionKeys
+    : []
   const actors = projectTextOpenWorldActorsV1({
     runtimePackage,
     state,
@@ -431,6 +435,48 @@ async function loadCatalog(scope: FrozenResourceScopeV1): Promise<TextOpenWorldR
     logicalSlices: ['choices.available'], targetKeys: currentScenes.flatMap(scene => scene.fixedChoices.flatMap(choice => [choice.key, choice.actionKey])),
     content: currentScenes.flatMap(scene => scene.fixedChoices.map(choice => ({ sceneKey: scene.key, ...choice }))),
   })
+  for (const scene of currentScenes) {
+    const sceneActions = [...scene.actionKeys, ...ambientSceneActionKeys]
+      .flatMap(actionKey => availableActionByKey.get(actionKey) ?? [])
+      .filter((item, index, all) => all.findIndex(candidate => candidate.action.key === item.action.key) === index)
+    add({
+      kind: 'location', key: typedResourceKey('location', session.id, `scene:${safeKey(scene.key)}`), title: `所选场景·${scene.title}`,
+      summary: `${region.title}／${location.title}中场景${scene.title}的精确玩家视图。`,
+      logicalSlices: ['scene.current'],
+      targetKeys: [scene.key, region.key, location.key, ...scene.participantKeys],
+      content: {
+        region: { key: region.key, title: region.title, description: region.description, theme: region.theme },
+        location: {
+          key: location.key, title: location.title, description: location.description,
+          purpose: location.purpose, earlyArrivalDescription: location.earlyArrivalDescription,
+        },
+        scene: {
+          key: scene.key, sourceKind: scene.sourceKind, sourceKey: scene.sourceKey,
+          title: scene.title, openingText: scene.openingText, bodyText: scene.bodyText,
+          actor: scene.actor, participantKeys: scene.participantKeys,
+          presentationMode: scene.presentationMode, compatibilityNotice: scene.compatibilityNotice,
+        },
+      },
+    })
+    add({
+      kind: 'fact', key: resourceKey(session.id, `scene-actions:${safeKey(scene.key)}`), title: `${scene.title}可执行Action闭集`,
+      summary: `${sceneActions.length}项在所选场景表面可执行的Action及合法目标。`,
+      logicalSlices: ['actions.available'],
+      targetKeys: [scene.key, ...sceneActions.flatMap(item => [item.action.key, ...item.validTargetKeys])],
+      content: sceneActions.map(item => ({
+        key: item.action.key, category: item.action.category, label: item.action.label,
+        targetScope: item.targetScope, validTargetKeys: item.validTargetKeys,
+        confirmationRequired: item.confirmationRequired,
+      })),
+    })
+    add({
+      kind: 'storyline-progress', key: typedResourceKey('storyline-progress', session.id, `scene-choices:${safeKey(scene.key)}`), title: `${scene.title}固定选择闭集`,
+      summary: `${scene.fixedChoices.length}项属于所选场景的固定选择。`,
+      logicalSlices: ['choices.available'],
+      targetKeys: [scene.key, ...scene.fixedChoices.flatMap(choice => [choice.key, choice.actionKey])],
+      content: scene.fixedChoices.map(choice => ({ sceneKey: scene.key, ...choice })),
+    })
+  }
   add({
     kind: 'fact', key: resourceKey(session.id, 'player-known-facts'), title: '玩家已知事实',
     summary: `${knownFacts.length}项已知事实或已读传闻；隐藏知识不在资源中。`,
@@ -453,12 +499,13 @@ async function loadCatalog(scope: FrozenResourceScopeV1): Promise<TextOpenWorldR
   }
   add({
     kind: 'reference', key: typedResourceKey('reference', session.id, 'conversation-boundary'), title: '当前对话输入边界',
-    summary: 'G6-02不伪造持久化对话历史；本轮原始文字由最终rendered request逐字留证。',
+    summary: '不伪造持久化对话历史；本轮原文与同场景临时短窗口由最终rendered request逐字留证。',
     logicalSlices: ['conversation.recent', 'conversation.closed-window'], targetKeys: [],
     content: {
       persistedConversationWindow: null,
       currentInputSource: 'rendered-request-exact-artifact',
-      rule: '不得把未留证的历史对话补入上下文；G6-08接入关闭窗口摘要后替换此显式空边界。',
+      ephemeralSameSceneWindowSource: 'rendered-request-exact-artifact',
+      rule: '临时短窗口只辅助措辞连续性，不是事实来源且不持久化；G6-08接入关闭窗口摘要后替换此显式空边界。',
     },
   })
   add({
@@ -547,6 +594,29 @@ async function loadCatalog(scope: FrozenResourceScopeV1): Promise<TextOpenWorldR
         rule: '不在本资源中的角色私密知识、未来目标和隐藏世界事实不得补全或暗示。',
       },
     })
+    for (const actorScene of currentActorScenes) {
+      const sceneAllowedClaimKeys = modules.narrative.version === 2
+        ? modules.narrative.scenes.find(item => item.key === actorScene.key)?.allowedKnowledgeClaimKeys ?? []
+        : []
+      const sceneKnowledge = modules.knowledge.entries
+        .filter(entry => entry.actorKeys.includes(actor.key) && sceneAllowedClaimKeys.includes(entry.key))
+        .map(entry => ({ key: entry.key, kind: entry.kind, title: entry.title, content: entry.content }))
+      add({
+        kind: 'fact',
+        key: resourceKey(session.id, `actor-knowledge-scene:${safeKey(actor.key)}:${safeKey(actorScene.key)}`),
+        title: `${actor.name}在${actorScene.title}的可说知识`,
+        summary: `${sceneKnowledge.length}项同时满足角色知情与所选场景允许声明的事实。`,
+        logicalSlices: ['actor.knowledge', 'actor.scoped-knowledge'],
+        targetKeys: [actor.key, actorScene.key, ...sceneKnowledge.map(item => item.key)],
+        content: {
+          actorKey: actor.key,
+          sceneKey: actorScene.key,
+          allowedKnowledgeClaimKeys: sceneAllowedClaimKeys,
+          knowledge: sceneKnowledge,
+          rule: '只能声明本资源列出的事实；其他角色知识、未来目标和隐藏世界事实均不得补全或暗示。',
+        },
+      })
+    }
   }
 
   const questView = currentRegionQuestRows.map(({ definition, instance }) => {

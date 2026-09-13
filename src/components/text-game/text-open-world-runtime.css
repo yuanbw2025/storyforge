@@ -104,6 +104,16 @@
 .open-world-scene-dialogue>header span { color: #c9ac7a; font-family: var(--font-serif); font-size: 13px; }
 .open-world-scene-dialogue>header small { color: #819b96; font-size: 8px; }
 .open-world-scene-dialogue blockquote { margin: 0; padding-left: 12px; border-left: 2px solid rgba(205,166,101,.55); color: #e7e4db; font-family: var(--font-serif); font-size: var(--open-world-reader-font-size); line-height: var(--open-world-reader-line-height); }
+.open-world-runtime-dialogue-log { display: grid; gap: 9px; padding: 14px 15px; border: 1px solid rgba(88,145,124,.28); border-radius: 9px; background: rgba(20,52,45,.12); }
+.open-world-runtime-dialogue-log>header { display: flex; align-items: center; gap: 7px; color: #a8c8bc; font-family: var(--font-mono); font-size: 8px; letter-spacing: .07em; text-transform: uppercase; }
+.open-world-runtime-dialogue-log>header small { margin-left: auto; color: #687e7e; }
+.open-world-runtime-dialogue-turn { display: grid; gap: 5px; max-width: 88%; padding: 9px 11px; border-radius: 8px; background: rgba(255,255,255,.035); }
+.open-world-runtime-dialogue-turn.is-player { justify-self: end; border: 1px solid rgba(189,150,90,.2); background: rgba(126,86,35,.12); }
+.open-world-runtime-dialogue-turn.is-npc { justify-self: start; border: 1px solid rgba(88,145,124,.2); }
+.open-world-runtime-dialogue-turn>header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.open-world-runtime-dialogue-turn strong { color: #d5c196; font-size: 10px; }
+.open-world-runtime-dialogue-turn small { color: #718987; font-size: 8px; line-height: 1.5; }
+.open-world-runtime-dialogue-turn p { margin: 0; color: #dce5e1; font-family: var(--font-serif); font-size: 11px; line-height: 1.65; white-space: pre-wrap; }
 .open-world-scene-input-card,.open-world-scene-receipt { display: grid; min-width: 0; gap: 10px; padding: 14px 15px; border: 1px solid rgba(255,255,255,.09); border-radius: 9px; background: rgba(255,255,255,.026); }
 .open-world-scene-input-card>header { color: #d8e1de; font-size: 11px; }
 .open-world-scene-input-card>header small { color: #74898d; font-size: 8px; }

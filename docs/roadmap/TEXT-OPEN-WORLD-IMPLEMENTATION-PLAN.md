@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.101
+> 版本：1.1.102
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -36,9 +36,9 @@
 | 指标 | 当前值 |
 |---|---|
 | 首版工作包 | 121 |
-| 已完成 | 99（G0、G1、G2、G3、G4、G5及G6-01～G6-03完成） |
-| 产品总进度 | 99 / 121（81.8%） |
-| G1～G7业务功能进度 | 89 / 111（80.2%） |
+| 已完成 | 100（G0、G1、G2、G3、G4、G5及G6-01～G6-04完成） |
+| 产品总进度 | 100 / 121（82.6%） |
+| G1～G7业务功能进度 | 90 / 111（81.1%） |
 | 当前阶段 | G6 运行时AI与有边界自由 |
 | G0阶段进度 | 10 / 10（100%） |
 | G1阶段进度 | 13 / 13（100%） |
@@ -46,8 +46,8 @@
 | G3阶段进度 | 18 / 18（100%） |
 | G4阶段进度 | 15 / 15（100%） |
 | G5阶段进度 | 12 / 12（100%） |
-| G6阶段进度 | 3 / 10（30.0%） |
-| 当前工作包 | `TOW-G6-04` |
+| G6阶段进度 | 4 / 10（40.0%） |
+| 当前工作包 | `TOW-G6-05` |
 | 当前阻塞项 | 无 |
 
 每次状态变化必须同时更新本节汇总、对应任务行、验证证据和变更记录。
@@ -267,8 +267,8 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G6-01 | DONE | 运行时AI Skill、Contract和权限边界 | G1-12、G2-28、G3-01 | 登记自由文字意图、NPC对白、结果演绎、地区任务包装、导演建议和长期记忆六个vNext运行时Skill；每项均冻结唯一Formal AI Entry、只读`openWorldRuntime`来源、逻辑读取片、禁止读取片、严格JSON候选Schema、全局运行任务路由/BYOK模型能力、单调用零工具预算和失败/未知结果策略，并派生带Release/Session/Sequence/State/Visibility精确边界的V3 `product-runtime` RunContract。唯一provider网关只消费冻结Skill/入口快照且无正式写集合；当前诚实标记为仅完成契约、尚未接入UI。AI入口机器门44 bindings/48 calls、专项9项、关联36项回归、完整CI 677文件3471项、生产构建和包体积门通过；无真实模型调用、无新表/Schema/migration/Field写入口 |
 | TOW-G6-02 | DONE | Context Manifest与按需上下文选择 | G6-01 | 在既有`openWorldRuntime`注册源上挂载vNext资源Provider，只从冻结ProductRelease/Build与当前ProductRuntimeSession规范投影构建场景、合法Action/Choice、玩家可见任务/故事线、在场角色及交集后知识、终态回执、模板槽和导演候选；六个Skill各自冻结必读片、禁读片和精确actor/command/template/trigger目标，非长尾必读全量读取，只对事实/任务长尾运行语义选择，不以“最近N条”代替检索。每个资源都携带可验SourceRef，模型请求不包含本地Session数字ID；Instance所有Run的资源快照、rendered request、模型请求/回应和最终V3 Context Manifest进入共享Harness，运行头变化后旧上下文失效关闭。Gateway读取工具快照正式升级为v6并冻结实算Hash。无新表、Schema/migration、FIELD写入、UI或真实模型调用；专项26项、共享新鲜度4项、完整CI 678文件3475项、生产构建及包体积门通过 |
 | TOW-G6-03 | DONE | 自然语言意图映射和风险确认 | G1-04、G4-03、G6-02 | 冻结例句继续零模型确定性映射；其余自由输入经唯一Formal AI Entry、精确运行边界和G6-02 Context Gateway生成严格JSON候选，只能选择当前场景已投影的Action/Choice稳定键。代码重建当前合法闭集与目标，低于0.72、越界、扩字段和无目标均零写入失败关闭；唯一低风险候选进入既有Action，多义候选先展示给玩家选择，高风险/不可逆仍由Action权威进入原确认层。候选、原始请求/响应、V3 Context Manifest、Checkpoint和终态Receipt保存在Instance Run；临时本地Run ID不进入正式Command，只写候选/Manifest/Receipt及所选Action/Choice的便携证据。Session、Sequence、State或Visibility变化后授权失效；模型失败只降级自由输入，固定Choice和系统Action保持可玩。无新表、Schema/migration或FIELD写入口，未调用真实模型；完整CI 680文件3482项、生产构建、包体积门及隔离Chromium 81项通过 |
-| TOW-G6-04 | READY | NPC对白与角色知识边界 | G2-18、G2-20、G6-02 | 人格、态度和已知事实一致；无秘密泄露；失败使用安全模板 |
-| TOW-G6-05 | QUEUED | 场景、战斗和任务结果演绎 | G1-11、G2-25、G6-02 | 只描述Receipt已发生结果，不额外创造物品、伤害、关系或推进 |
+| TOW-G6-04 | DONE | NPC对白与角色知识边界 | G2-18、G2-20、G6-02 | 自由输入先由Intent确认`reply-only`，仅在当前角色对白场景且目标角色在场时调用正式Dialogue Skill；Context按所选场景和角色精确读取公开人物档案、确定性三档态度、场景允许知识与角色已知知识交集、合法Action/Choice，隐藏知识和其他场景内容不进请求。严格候选只允许当前角色、确定性语气、知识交集和可用建议闭集，响应后重验Session新鲜度与场景；Instance Run封存请求/响应、候选、V3 Manifest、Checkpoint和Receipt。UI把AI对白/冻结降级与正式场景、系统回执分层显示，当前场景临时历史最多12轮且切场即清空，不写Event、关系、知识、任务或正式记忆；模型失败使用冻结开场/态度安全模板，固定Action/Choice继续可玩。精确隐藏键/标题/内容短语具有确定性泄露拦截，改写式语义泄露和风格质量留G6-10评测。专项7项、完整CI 682文件3489项、生产构建、包体积门及隔离Chromium 81项通过；无新表、Schema/migration、FIELD写入口或真实模型调用 |
+| TOW-G6-05 | READY | 场景、战斗和任务结果演绎 | G1-11、G2-25、G6-02 | 只描述Receipt已发生结果，不额外创造物品、伤害、关系或推进 |
 | TOW-G6-06 | QUEUED | 地区化模板任务文字包装 | G2-28、G3-11～G3-15、G6-02 | 代码先选合法槽位，AI只包装；失败可不发或使用预制变体 |
 | TOW-G6-07 | QUEUED | 叙事导演建议和主线保护 | G2-28、G6-02 | AI只建议候选；代码控制密度、冷却、冲突、保护和Blank输出 |
 | TOW-G6-08 | QUEUED | 对话摘要、玩家知识、角色知识和长期最小记忆 | G6-02、G6-04 | World Truth/Player Knowledge/Actor Knowledge隔离；小任务只留必要回执与指纹 |
@@ -358,6 +358,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.102 | 2026-09-13 | 完成G6-04受治理NPC对白：自由输入经Intent确认`reply-only`后，只有当前角色对白场景中的在场角色可进入正式Dialogue Skill；精确Context仅提供公开人物档案、确定性三档态度、场景允许知识与角色已知知识交集以及当前合法建议。代码严格重验角色、语气、引用知识、建议闭集、协议和Session新鲜度，精确隐藏键/标题/内容短语泄露失败关闭；候选及完整V3 Harness证据归Instance Run，UI只分层展示对白，不写Event、关系、知识、任务或记忆。当前场景短历史最多12轮并在切场时清空；模型失败使用冻结开场/态度安全模板，确定性入口继续可玩。改写式语义泄露与人物文风质量留G6-10评测；无新表、Schema、migration、FIELD写入口或真实模型调用。专项7项、完整CI 682文件3489项、生产构建、包体积门及隔离Chromium 81项通过。总进度100/121，业务功能90/111，下一项G6-05。 |
 | 1.1.101 | 2026-09-13 | 完成G6-03受治理自然语言意图纵切面：冻结例句保持零模型确定性路径，其他自由输入通过正式Intent Skill与G6-02精确Context形成严格候选，仅能引用当前场景合法Action/Choice。代码重验目标、置信度和Action真实风险；唯一低风险映射进入既有执行链，多义候选先由玩家选择，高风险沿用事件基线确认。Instance Run封存请求/响应、V3 Manifest、Checkpoint与Receipt，Command只携带无本地Run ID的便携来源证据；状态或可见性变化后旧授权失效。模型失败、低置信、越界键和协议污染均不写玩家状态，系统Action与固定Choice继续可玩。无新表、Schema、migration、FIELD写入口或真实模型调用；完整CI 680文件3482项、构建、包体积门与隔离Chromium 81项通过。总进度99/121，业务功能89/111，下一项G6-04。 |
 | 1.1.100 | 2026-09-13 | 完成G6-02运行期按需Context：`openWorldRuntime`提供者从精确Release/Session/Sequence/State/Visibility边界构建可分页、可验SourceRef的玩家可见资源目录，六个Skill只读各自必需场景、Action/Choice、角色知识、任务/故事线、终态回执、模板槽或导演候选；必读切片不裁剪，长尾事实/任务才进行语义选择，隐藏知识、未来内容和其他角色私密知识不入模型请求。Instance所有Run的资源快照、请求/回应和V3 Context Manifest已进入共享Harness，边界过期时失效关闭；Gateway读取工具快照正式升级为v6并冻结实算Hash。无新表、Schema、正式写入、UI或真实模型调用；专项26项、共享新鲜度4项、完整CI 678文件3475项、生产构建和包体积门通过。总进度98/121，业务功能88/111，下一项G6-03。 |
 | 1.1.99 | 2026-09-13 | 完成G6-01运行时AI合同总表：为意图、对白、结果演绎、地区任务包装、导演建议和长期记忆登记六个vNext Skill、Formal AI Entry与严格JSON候选Schema；每项明确逻辑读取/禁止读取、模型能力、BYOK凭证边界、一次调用零工具预算和失败策略，并由唯一网关消费冻结V2 Skill/正式入口快照。V3 product-runtime RunContract绑定Release、Session、Sequence、State和Visibility，写集合为空，Action与Effect继续只由确定性服务提交；能力尚未接入玩家UI。AI入口机器门44 bindings/48 calls、完整CI 677文件3471项、构建及包体积检查通过，下一项G6-02。总进度97/121，业务功能87/111。 |
