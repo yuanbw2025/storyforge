@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.45
+> 规格版本：3.2.46
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -976,6 +976,14 @@ P9没有为休息等所有通用玩法Action造Scene。运行投影会保留当�
 
 G4-05同时把生产端生命周期升级为Action v16：可放弃任务在未开始与每个Stage都有唯一匹配Action；只有固定普通不限时任务拥有原发布Scene上的`restart-quest`，四个迁移Effect原子重置同一实例并从第一Stage激活。限时任务放弃后保留截止时间，仍可从`abandoned`确定性过期；主线、重要故事、模板/Director任务不进入重接规则。终态清除追踪并同步Director镜像，Event Replay重建完全相同的Projection与历史。新合同在P8F/P9/P10/V3共同验签，Action v16强制Quest v2；历史durable Context继续生成并复验Action v15，不重新解释旧事件。
 
+#### 8.2.4 G6-01运行时叙事Skill边界
+
+运行时叙事不由一个全知Agent同时理解输入、决定规则、推进任务和写正文。首版登记六个独立只读Skill：Intent只映射当前合法Action/Choice；Dialogue只依据在场角色、三档态度与实际知识生成对白；Expression只叙述已提交Receipt/Event；Quest Packaging只包装代码选定的地区模板槽；Direction只在合法候选闭集中建议发牌或Blank；Memory只压缩已经发生的对话和终态事件。
+
+六个Skill共用登记的`openWorldRuntime`来源，但合同另行声明各自的逻辑读取片和禁止读取片，不能把整份玩家投影无差别塞给模型。每次正式调用冻结Prompt、Skill、入口、任务路由、严格JSON Schema、token/费用/时间预算及Release/Session/Sequence/State/Visibility边界。模型只有一次调用、零工具和零正式写权限；未知结果不重发，stale候选不采用，失败时回到固定Action、预制对白/文案或Blank。
+
+这项实现只建立G6运行时AI的叙事权限骨架。按需Context Manifest、玩家自由输入、NPC对白、结果演绎、地区包装、导演采用和长期记忆仍须由G6-02～G6-08分别接入并验证，不能因Skill已登记就宣称体验完成。
+
 ### 8.3 叙事导演与发牌
 
 叙事导演不直接写状态，只读取投影并提出候选。确定性发牌服务负责：
@@ -1532,6 +1540,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.46 | 2026-09-13 | 完成G6-01运行时叙事Skill权限骨架：把Intent、Dialogue、Expression、Quest Packaging、Direction和Memory拆为六个只读候选Skill，逐项冻结可读/禁读语义、Formal Entry、严格JSON、模型与预算边界和失败降级。Run绑定精确Release/Session/Sequence/State/Visibility，模型不能提交Action、任务、关系或记忆；当前不冒充玩家UI已接通。 |
 | 3.2.45 | 2026-09-13 | 完成G5-12叙事便携边界：导出导入保持SourcePin、叙事/任务Artifact、Run/Checkpoint/receipt与正式Release内容逐Hash不变，只重映射本地身份；任何来源、账本、发布或迁移证据篡改都在写入前整体拒绝。导入终态Build先阻断Preview，随后用零模型、零费用的确定性本机复验闭合Artifact/Blob、terminal lineage和root seal，不重新生成、总结或改写叙事；旧Release和Session历史继续不可变。 |
 | 3.2.44 | 2026-09-13 | 完成G5-11叙事版本维护边界：叙事修改只能从已发布Build创建新子Build并重新通过原生产与发布证据链；旧Release和旧Session继续冻结原叙事。兼容报告把叙事节点、选择条件、Effect和全部状态模块纳入稳定语义比较，只允许不改变稳定叙事/任务状态的直接兼容子版本进入迁移预演。正式迁移把已验证玩家进度接到目标Release冻结定义的新子Session，不复制旧事件、不原地改写旧叙事历史；跨Work、混合旧包、非直接版本、伪造声明与过期预演均失败关闭。 |
 | 3.2.43 | 2026-09-13 | 完成G5-10叙事发布封印：正式发布不重新总结或生成故事，而把P1实读、全部叙事/任务Artifact receipt、V3装配、G5-09质量和作者授权绑定到同一RuntimePackage。世界保留冻结Release血缘，小说保留SourcePin逐单元Hash且正文不进入Release；任何故事或任务变更必须生成新Build/质量决定/Release，旧Session继续固定旧叙事历史。 |

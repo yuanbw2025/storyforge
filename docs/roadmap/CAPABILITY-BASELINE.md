@@ -1,6 +1,6 @@
 # StoryForge 当前能力基线
 
-> 版本：1.6.5 · 基线：2026-09-13 文字开放世界G5阶段交付 · 权威层级：L2
+> 版本：1.6.6 · 基线：2026-09-13 文字开放世界G6-01运行时AI契约 · 权威层级：L2
 > 本文区分代码存在、纵切面可用和产品完成。旧完成卡不自动恢复权威，但已合入主干并由当前代码/检查器复证的 Phase 5 成果必须保留。
 
 ## 状态定义
@@ -63,7 +63,7 @@
 | E-TOWN-01 | missing | 有角色互动和通用产品运行时基础能力可复用 | 没有独立 AI 小镇产品的时间、日程、地点、群体与离线演化闭环 |
 | E-TEXTADV-01 | partial | 文字冒险已接入专用需求适配器、统一 Production/Build/ProductRelease v1 和独立玩家面 | 可玩内容、规则、媒资、结局和真实 E2E 仍需专项封板 |
 | E-AVG-01 | partial | AVG 已接入专用需求适配器、统一 Production/Build/ProductRelease v1、演出与独立玩家面 | 真实视觉/声音资产、演出绑定和完整体验未验收 |
-| E-OPENWORLD-01 | partial | 已在统一Production/Build/ProductRelease和ProductRuntime事件底座上完成G1运行治理、G2确定性玩法闭环、G3 P0～P10/V1～V3/QA内容生产编译器、G4完整玩家端和G5完整Creator生产/发布/更新阶段；成长、任务、地图/快旅、时间天气、NPC日程/生死/关系、战斗、制作、经济、地区演化、受限发牌、动态任务、随机事件与知识历程均可重放。G5-01～G5-12已落地双来源Creator入口、Creator Brief、BYOK/模型/预算预检、原子Creator SourcePlan/Start、精确DAG、Run进度/付费恢复、受治理Artifact三视图、直接/Agent双修改、影响闭包/局部修复、完整视觉媒资子Build、发布前质量/真人灰盒/问题回执、双来源正式ProductRelease、版本维护与存档迁移，以及完整导入导出/删除/真实E2E。v10便携包重映射SourcePlan、预算账本、命令、Build、Artifact、Release、Session和迁移分支，写入前验真全部来源与正式封印；导入终态Build的本地Run/Blob证明显式失效，Creator工作台阻断Preview并用零provider/零费用恢复逐项复核Checkpoint、Artifact/Blob、ledger、terminal lineage和root seal。世界与小说均可完整往返，篡改零写入拒绝，项目删除级联清理产品私域。质量回执仍不等价于固定文学或美学水平；旧Release继续不可变兼容 | G6运行时有边界自由演绎和G7盐脊真人验收、压力/质量校准与旧入口收口仍未完成 |
+| E-OPENWORLD-01 | partial | 已在统一Production/Build/ProductRelease和ProductRuntime事件底座上完成G1运行治理、G2确定性玩法闭环、G3 P0～P10/V1～V3/QA内容生产编译器、G4完整玩家端、G5完整Creator生产/发布/更新阶段及G6-01运行时AI契约。成长、任务、地图/快旅、时间天气、NPC日程/生死/关系、战斗、制作、经济、地区演化、受限发牌、动态任务、随机事件与知识历程均可重放；Creator双来源生产、修改、媒资、质量、发布、版本维护、便携恢复和删除已闭合。运行时现登记意图、对白、结果演绎、地区任务包装、导演建议、长期记忆六类只读Skill，每项绑定Formal AI Entry、严格JSON候选、模型/BYOK能力、预算、失败策略和精确Release/Session/Sequence/State/Visibility V3 RunContract；唯一provider网关不能写正式状态。质量回执仍不等价于固定文学或美学水平；旧Release继续不可变兼容 | 六类运行时AI尚未接入按需Context Manifest、玩家交互和降级链；G6-02～G6-10及G7盐脊真人验收、压力/质量校准与旧入口收口仍未完成 |
 
 ## F · 平台与商业化
 

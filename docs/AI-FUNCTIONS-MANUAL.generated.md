@@ -377,7 +377,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 38 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
+共 44 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
@@ -419,7 +419,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `style.calibration.preview` | `prose.style-learn` | `style.calibrate` | auxiliary / authoring-draft | `style-calibration-preview` | 禁止 | `src/components/style/StyleCalibrationPanel.tsx` |
 | `text-open-world.creator-brief.consult` | `text-open-world.creator-brief-consult.v1` | `authoring.text-open-world-creator-brief` | formal / durable-run | `text-open-world-creator-brief-synthesis` | 禁止 | `src/lib/open-world/creator-brief.ts` |
 | `text-open-world.creator-artifact.modify` | `text-open-world.creator-artifact-edit.v1` | `authoring.text-open-world-creator-artifact-edit` | formal / durable-run | `text-open-world-creator-edit-patch` | 禁止 | `src/lib/open-world/creator-artifact-edit.ts` |
+| `text-open-world.runtime.intent` | `prose.text-open-world-runtime-intent` | `runtime.text-open-world.intent` | formal / product-runtime | `storyforge.text-open-world.runtime-intent-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.dialogue` | `prose.text-open-world-runtime-dialogue` | `runtime.text-open-world.dialogue` | formal / product-runtime | `storyforge.text-open-world.runtime-dialogue-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.expression` | `prose.text-open-world-runtime-expression` | `runtime.text-open-world.expression` | formal / product-runtime | `storyforge.text-open-world.runtime-expression-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.quest-packaging` | `prose.text-open-world-runtime-quest-packaging` | `runtime.text-open-world.quest-packaging` | formal / product-runtime | `storyforge.text-open-world.runtime-quest-packaging-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.direction` | `prose.text-open-world-runtime-direction` | `runtime.text-open-world.direction` | formal / product-runtime | `storyforge.text-open-world.runtime-direction-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.memory` | `prose.text-open-world-runtime-memory` | `runtime.text-open-world.memory` | formal / product-runtime | `storyforge.text-open-world.runtime-memory-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
 
 ---
 
-生成时间基准:commit `0a613eea`
+生成时间基准:commit `7dfb1081`

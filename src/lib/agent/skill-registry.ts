@@ -87,6 +87,12 @@ export type AgentSkillExecutionModeV1 =
   | 'open-world-actor-suggestion'
   | 'open-world-expression'
   | 'open-world-narration'
+  | 'text-open-world-runtime-intent'
+  | 'text-open-world-runtime-dialogue'
+  | 'text-open-world-runtime-expression'
+  | 'text-open-world-runtime-quest-packaging'
+  | 'text-open-world-runtime-direction'
+  | 'text-open-world-runtime-memory'
   | 'ttrpg-gm-narrator'
   | 'ttrpg-gm-actor-intent'
   | 'ttrpg-director'
@@ -1114,6 +1120,15 @@ const OPEN_WORLD_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   },
 }
 const OPEN_WORLD_RUNTIME_COMPRESSION_POLICY = compressionPolicy(['openWorldRuntime'])
+const TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY: AgentSkillInputPolicyV1 = {
+  sourceKeys: ['openWorldRuntime'],
+  states: {
+    empty: { handling: 'require-upstream', instruction: '缺少文字开放世界vNext玩家视角时停止，不得从来源原文、未来剧情或其他角色私有知识补全。' },
+    partial: { handling: 'require-upstream', instruction: '文字开放世界vNext运行时上下文不完整时停止，保留确定性玩法并等待重新装配。' },
+    complete: { handling: 'grounded-transform', instruction: '只能依据当前Session的玩家可见状态提出严格结构候选；不得直接写状态、创建内容或声明任何未结算结果。' },
+  },
+}
+const TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY = compressionPolicy(['openWorldRuntime'])
 const TTRPG_GM_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   sourceKeys: ['ttrpgRuntime'],
   states: {
@@ -2859,6 +2874,126 @@ export const AGENT_SKILLS = [
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
+    version: 1,
+    id: 'prose.text-open-world-runtime-intent',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '文字开放世界vNext·自由输入意图候选',
+    owner: 'prose-agent',
+    promptVersion: 'text-open-world-runtime-intent-v1',
+    executionMode: 'text-open-world-runtime-intent',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['openWorldRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY,
+    contextCompression: TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY,
+    maxOutputTokens: 800,
+    writeTargets: [],
+    lastVerifiedAt: '2026-09-13',
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract'],
+  },
+  {
+    version: 1,
+    id: 'prose.text-open-world-runtime-dialogue',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '文字开放世界vNext·NPC自由对白候选',
+    owner: 'prose-agent',
+    promptVersion: 'text-open-world-runtime-dialogue-v1',
+    executionMode: 'text-open-world-runtime-dialogue',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['openWorldRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY,
+    contextCompression: TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY,
+    maxOutputTokens: 1_600,
+    writeTargets: [],
+    lastVerifiedAt: '2026-09-13',
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract'],
+  },
+  {
+    version: 1,
+    id: 'prose.text-open-world-runtime-expression',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '文字开放世界vNext·正式结果演绎候选',
+    owner: 'prose-agent',
+    promptVersion: 'text-open-world-runtime-expression-v1',
+    executionMode: 'text-open-world-runtime-expression',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['openWorldRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY,
+    contextCompression: TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-09-13',
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract'],
+  },
+  {
+    version: 1,
+    id: 'prose.text-open-world-runtime-quest-packaging',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '文字开放世界vNext·地区任务包装候选',
+    owner: 'prose-agent',
+    promptVersion: 'text-open-world-runtime-quest-packaging-v1',
+    executionMode: 'text-open-world-runtime-quest-packaging',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['openWorldRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY,
+    contextCompression: TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY,
+    maxOutputTokens: 2_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-09-13',
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract'],
+  },
+  {
+    version: 1,
+    id: 'prose.text-open-world-runtime-direction',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '文字开放世界vNext·叙事导演建议候选',
+    owner: 'prose-agent',
+    promptVersion: 'text-open-world-runtime-direction-v1',
+    executionMode: 'text-open-world-runtime-direction',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['openWorldRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY,
+    contextCompression: TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY,
+    maxOutputTokens: 1_200,
+    writeTargets: [],
+    lastVerifiedAt: '2026-09-13',
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract'],
+  },
+  {
+    version: 1,
+    id: 'prose.text-open-world-runtime-memory',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '文字开放世界vNext·最小长期记忆候选',
+    owner: 'prose-agent',
+    promptVersion: 'text-open-world-runtime-memory-v1',
+    executionMode: 'text-open-world-runtime-memory',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['openWorldRuntime'],
+    optionalContextSourceKeys: [],
+    inputPolicy: TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY,
+    contextCompression: TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY,
+    maxOutputTokens: 1_600,
+    writeTargets: [],
+    lastVerifiedAt: '2026-09-13',
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract'],
+  },
+  {
     version: 1, id: 'prose.ttrpg-private-guidance', agentId: 'prose', defaultForAgent: false,
     label: '角色私密指引', owner: 'prose-agent', promptVersion: 'ttrpg-private-guidance-v1', executionMode: 'ttrpg-private-guidance',
     contextTaskKind: 'agent-prose', readToolNames: [], contextSourceKeys: ['ttrpgPrivateGuidance'], optionalContextSourceKeys: [],
@@ -4157,7 +4292,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-brief', 'adaptation-impact', 'screenplay-plan', 'comic-plan', 'comic-storyboard', 'character-interaction-production', 'product-production']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scenes', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
+    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'text-open-world-runtime-intent', 'text-open-world-runtime-dialogue', 'text-open-world-runtime-expression', 'text-open-world-runtime-quest-packaging', 'text-open-world-runtime-direction', 'text-open-world-runtime-memory', 'screenplay-scenes', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<DomainAgentId>()

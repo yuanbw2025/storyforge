@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.62
+> 规格版本：1.1.63
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -1630,6 +1630,21 @@ SceneProjection {
 - 战斗、商店和制作是场景模式，不创建互相隔离的第二套玩家状态；
 - 场景结束后正文可以压缩，关键Choice、知识和结果写入长期事件。
 
+### 18.7 G6-01运行时AI合同总表
+
+首版不把“有一个会聊天的Agent”当作运行时AI架构。G6-01把真正需要模型的能力拆成六个独立Skill：自由文字意图映射、NPC对白、已提交结果演绎、地区任务文字包装、叙事导演建议和长期最小记忆。每个Skill都在唯一合同总表中显式登记：
+
+- 唯一Skill、Prompt版本、Formal AI Entry、任务路由类别和严格JSON候选Schema；
+- 唯一登记来源`openWorldRuntime`，以及当前场景、合法Action、可见任务、在场角色、角色知识、已提交Event等逻辑读取片；
+- 禁止输入的未揭示故事、玩家未知世界真相、其他角色私密知识、provider凭证和确定性随机结果；
+- provider无关的BYOK模型能力要求、输入/输出/token/时间/费用上界，以及每次Run最多一次模型调用、零工具调用、零隐藏重试；
+- provider失败、超时、预算不足和协议错误的确定性降级，结果未知时按Run查询而不重发，输入过期时丢弃候选；
+- 空正式写集合和`adoptAllowed=false`。候选只能进入Agent Run事件/Checkpoint，Action、Choice、Effect、任务实例、关系和记忆的权威写入继续由确定性服务负责。
+
+每次调用必须先派生V3 `product-runtime` RunContract并冻结V2 Skill与Formal Entry快照，同时绑定精确的ProductRelease、Session、事件序号、状态Hash和可见性Hash。恢复不得查询新版本注册表来重新解释旧Run。六个入口只能通过同一个运行时provider网关执行；网关返回JSON候选而不采用它。
+
+G6-01只完成可机验合同，不声称自由输入、对白、演绎、发牌和记忆已经接入玩家UI。当前Skill状态明确为`registered-not-yet-ui-routed`；G6-02补齐按Skill选择的Context Manifest后，G6-03～G6-08才能逐项把候选接入真实流程。
+
 ---
 
 ## 19. 地区模拟、任务导演与随机事件
@@ -3005,6 +3020,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.63 | 2026-09-13 | 完成G6-01运行时AI合同总表：意图、对白、结果演绎、地区任务包装、导演建议和长期记忆六个Skill逐项登记逻辑读取/禁止读取、Formal AI Entry、严格JSON候选、BYOK模型能力、一次调用零工具预算和失败策略；V3 product-runtime RunContract冻结Skill/入口并绑定Release、Session、Sequence、State和Visibility，唯一provider网关无正式状态写权限。当前仅完成契约，尚未接入玩家UI。 |
 | 1.1.62 | 2026-09-13 | 完成G5-12 Creator便携生命周期：v10导出导入重映射SourcePlan、预算账本复合键、生产命令、Build/Artifact/Release/Session和迁移分支，并在写入前验证SourcePin/Unit、正式Release和迁移Canon，篡改时零写入失败关闭。导入终态Build的本地Run/Blob证明显式失效，工作台阻断Preview并提供零provider、零费用的确定性复验；checkpoint、Artifact/Blob、ledger、terminal lineage和root seal闭合后恢复正式Release/Session使用。世界与小说全路径真实往返及项目级联删除通过。 |
 | 1.1.61 | 2026-09-13 | 完成G5-11发布后版本维护与存档迁移：已发布Creator Build可作为不可变修改基线，新Build精确继承来源Release并复用原生产、质量和发布链。兼容报告比较运行契约、初始变量、叙事与状态模块稳定键，只有直接兼容子Release可进入状态级复算；迁移预演重放当前事件、安装目标冻结定义并验证完整投影。正式事务CAS源Session、事件头和双Release，只创建绑定新Release且事件从0开始的子时间线，旧档、旧事件、旧Release和其它分支不变。真实Chromium已覆盖显式预演、确认迁移、切换新版本、保留旧分支与刷新恢复。 |
 | 1.1.60 | 2026-09-13 | 完成G5-10 Creator正式发布：专属双来源合同封印Creator Brief/SourcePlan/Start、SourcePin索引、P1实读清单、完整Artifact receipt、V3装配、治理快照、G5-09质量与作者授权；小说正文不进Release且`worldReleaseId=null`，世界来源重绑真实locator。共享事务最终CAS全部权威行、terminal读集与物理Blob并原子固化Release/媒资/幂等命令；专属中立lineage不伪造WorldReference，reader完整验签后两种Release均可启动正式Session。 |

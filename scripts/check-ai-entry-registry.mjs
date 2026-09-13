@@ -205,6 +205,9 @@ const scannedFiles = [
   // G5-06 Creator Artifact Agent edits are a formal durable service; direct
   // edits share its candidate pipeline but never cross this AI entry.
   'src/lib/open-world/creator-artifact-edit.ts',
+  // G6-01 owns the only frozen provider gateway for all six vNext open-world
+  // runtime AI skills. Later UI work must call this governed service.
+  'src/lib/open-world/runtime-ai-execution.ts',
 ]
 for (const file of [...new Set(scannedFiles)]) {
     if (file === 'src/lib/agent/formal-ai-entry.ts') continue

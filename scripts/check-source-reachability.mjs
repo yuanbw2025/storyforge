@@ -58,6 +58,9 @@ const entrypoints = [
   // The player UI consumes its frozen Release result; importing the compiler into that runtime bundle
   // would couple authoring-only WorldRelease reads to play. This entry also owns source-gateway reachability.
   'src/lib/open-world/player-definition.ts',
+  // G6-01 exposes the governed vNext runtime AI provider gateway as a headless
+  // product-runtime API. Player routes adopt its candidates only in later G6 slices.
+  'src/lib/open-world/runtime-ai-execution.ts',
 ].map(file => path.resolve(root, file))
 
 const graph = new Map()
