@@ -63,7 +63,7 @@ export interface TextOpenWorldRuntimeAISkillContractV1 {
   version: 1
   productType: 'text-open-world'
   phase: 'runtime'
-  availability: 'registered-not-yet-ui-routed'
+  availability: 'registered-not-yet-ui-routed' | 'player-ui-routed'
   capability:
     | 'intent'
     | 'dialogue'
@@ -149,6 +149,7 @@ function schema(
 function contract(input: Omit<TextOpenWorldRuntimeAISkillContractV1,
   'version' | 'productType' | 'phase' | 'availability' | 'reads' | 'writes' | 'model' | 'failurePolicy'
 > & {
+  availability?: TextOpenWorldRuntimeAISkillContractV1['availability']
   logicalSlices: readonly string[]
   routeCategory: string
   minimumContextWindow: number
@@ -158,7 +159,7 @@ function contract(input: Omit<TextOpenWorldRuntimeAISkillContractV1,
     version: 1,
     productType: 'text-open-world',
     phase: 'runtime',
-    availability: 'registered-not-yet-ui-routed',
+    availability: input.availability ?? 'registered-not-yet-ui-routed',
     capability: input.capability,
     skillId: input.skillId,
     formalEntryId: input.formalEntryId,
@@ -208,7 +209,8 @@ export const TEXT_OPEN_WORLD_RUNTIME_AI_SKILL_CONTRACTS_V1 = [
     capability: 'intent',
     skillId: 'prose.text-open-world-runtime-intent',
     formalEntryId: 'text-open-world.runtime.intent',
-    promptVersion: 'text-open-world-runtime-intent-v1',
+    promptVersion: 'text-open-world-runtime-intent-v2',
+    availability: 'player-ui-routed',
     purpose: '把玩家自由文字分类并映射到当前已投影的Action或Choice候选，不创建任何新行动或结果。',
     logicalSlices: ['scene.current', 'actions.available', 'choices.available', 'player.known-facts', 'conversation.recent'],
     routeCategory: 'runtime.text-open-world.intent',
@@ -217,8 +219,8 @@ export const TEXT_OPEN_WORLD_RUNTIME_AI_SKILL_CONTRACTS_V1 = [
     candidateSchema: schema('storyforge.text-open-world.runtime-intent-candidate', [
       field('kind', 'string', true, { enumValues: ['dialogue-only', 'mapped-action', 'mapped-choice', 'unsupported'] }),
       field('confidence', 'number', true, { minimum: 0, maximum: 1 }),
-      field('actionKey', 'string|null', true, { maxLength: 160 }),
-      field('choiceKey', 'string|null', true, { maxLength: 160 }),
+      field('actionKeys', 'stable-key[]', true, { maxItems: 4 }),
+      field('choiceKeys', 'stable-key[]', true, { maxItems: 4 }),
       field('extractedArguments', 'json-scalar-record', true),
       field('rationale', 'string', true, { maxLength: 1_000 }),
       field('requiresConfirmation', 'boolean'),
@@ -354,7 +356,10 @@ export function validateTextOpenWorldRuntimeAISkillContractsV1(
   const schemaIds = new Set<string>()
   for (const item of contracts) {
     if (item.version !== 1 || item.productType !== 'text-open-world' || item.phase !== 'runtime') fail('产品阶段或版本无效')
-    if (item.availability !== 'registered-not-yet-ui-routed') fail(`${item.skillId} 不得在G6-01提前声明UI已接通`)
+    const expectedAvailability = item.capability === 'intent'
+      ? 'player-ui-routed'
+      : 'registered-not-yet-ui-routed'
+    if (item.availability !== expectedAvailability) fail(`${item.skillId} UI接入状态与已完成工作包不一致`)
     if (skillIds.has(item.skillId) || capabilities.has(item.capability) || entryIds.has(item.formalEntryId)) fail('Skill、能力或正式入口重复')
     skillIds.add(item.skillId); capabilities.add(item.capability); entryIds.add(item.formalEntryId)
     const skill = getAgentSkillV1(item.skillId)

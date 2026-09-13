@@ -38,6 +38,7 @@ import {
   type TextOpenWorldPlayerIssueSurfaceV1,
   type TextOpenWorldPlayerIssueV1,
 } from '../lib/open-world/player-resilience'
+import type { TextOpenWorldRuntimeIntentAuthorizationV1 } from '../lib/open-world/runtime-intent'
 import {
   adoptOpenWorldRuntimeCandidateV1,
   generateOpenWorldRuntimeCandidateV1,
@@ -94,6 +95,7 @@ export interface TextOpenWorldExecuteActionOptions {
   expectedBaseSequence?: number
   quantity?: number
   itemKey?: string
+  runtimeIntentAuthorization?: TextOpenWorldRuntimeIntentAuthorizationV1
 }
 
 export type TextOpenWorldPlayerRecoveryRequestV1 =
@@ -751,6 +753,7 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
             expectedBaseSequence,
             quantity: options?.quantity,
             itemKey: options?.itemKey,
+            runtimeIntentAuthorization: options?.runtimeIntentAuthorization,
           })
           assertActionFeedbackIdentity(feedback, {
             sessionId,

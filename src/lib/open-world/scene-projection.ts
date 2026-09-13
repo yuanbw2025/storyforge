@@ -1,4 +1,5 @@
 import type {
+  TextOpenWorldActionAvailabilityV1,
   TextOpenWorldActionInputBindingsV1,
   TextOpenWorldSessionProjectionV1,
 } from '../types'
@@ -15,6 +16,22 @@ import {
   deriveTextOpenWorldContextsV1,
   parseTextOpenWorldSessionProjectionV1,
 } from './session-projection'
+
+const TEXT_OPEN_WORLD_SPECIALIZED_ACTION_CATEGORIES_V1 = new Set([
+  'respawn', 'equip', 'unequip', 'travel', 'fast-travel', 'buy', 'sell', 'craft',
+  'continue-combat', 'combat-basic-attack', 'combat-skill', 'combat-item', 'escape',
+])
+
+/**
+ * Scene prose may only expose interactions owned by the scene surface. Combat,
+ * inventory, map and economy actions keep their dedicated target-aware UI.
+ */
+export function isTextOpenWorldSceneSurfaceActionV1(
+  action: TextOpenWorldActionAvailabilityV1,
+): boolean {
+  return action.targetScope !== 'quest'
+    && !TEXT_OPEN_WORLD_SPECIALIZED_ACTION_CATEGORIES_V1.has(action.action.category)
+}
 
 type AuthoredSceneV1 = TextOpenWorldAuthoredSceneV2
 const PARAMETERIZED_ACTION_CATEGORIES = new Set(['craft', 'buy', 'sell'])

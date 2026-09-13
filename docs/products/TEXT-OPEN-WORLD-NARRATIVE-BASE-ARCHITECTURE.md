@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.47
+> 规格版本：3.2.48
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -996,6 +996,14 @@ G6-02把六个Skill的“逻辑读取片”落成可验资源，而不是让模�
 
 这一层只提供叙事候选所需的最小真实上下文，不写Action、Quest、Knowledge、Relation或Memory。它也不会因资源目录已可用就伪装G6-03～G6-08的玩家体验已完成。
 
+#### 8.2.6 G6-03自由输入的叙事采用边界
+
+自由输入现在可以扩大玩家的表达方式，但不能扩大世界事实或规则集合。冻结P9例句仍由本地精确匹配；其余文字才由Intent Skill结合当前所选场景、可执行Action/Choice和玩家可见知识形成候选。候选最多包含四个同类稳定键，不能同时提议Action与Choice，也不能创建新地图、任务、角色、物品、结局、数值或任务表外解法。代码在响应后重新投影当前场景、目标与Action风险，置信度低于0.72、目标不唯一且无法显式展开、越界、污染或过期时均不采用。
+
+唯一低风险解释可以进入同一Action/Event结算；多义解释必须先让玩家选择；犯罪、消耗、任务变化及其他由Action声明的高影响行为仍使用全局确认层。模型的`requiresConfirmation`只是非权威说明，不能降低代码风险等级。解释候选自身作为只读Creative Candidate进入Instance Run及Checkpoint，完整请求、响应、Context Manifest和Receipt可复验；真正的玩家Command只保留不含本地Run ID的便携来源Hash，并在提交前验证原Run终态、候选选择和Release/Session/Sequence/State/Visibility仍一致。
+
+这一步没有实现NPC自由对白或结果演绎。无法解释、模型不可用或网络失败时，只显示边界回应和当前正式行动建议，冻结正文、固定Choice与系统Action仍然可玩；因此AI不能用自然语言伪造已经发生的剧情，也不能成为推进主线的唯一通道。
+
 ### 8.3 叙事导演与发牌
 
 叙事导演不直接写状态，只读取投影并提出候选。确定性发牌服务负责：
@@ -1552,6 +1560,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.48 | 2026-09-13 | 完成G6-03自由输入叙事采用：Intent Skill只从当前场景Action/Choice闭集生成严格候选，代码重验目标、置信度、风险与运行新鲜度；唯一低风险解释进入原Action链，多义先选，高风险再确认。完整候选和Context证据留在Instance Harness，正式Command仅携带无本地Run ID的便携来源Hash；失败时不写状态并回到冻结叙事与确定性入口。 |
 | 3.2.47 | 2026-09-13 | 完成G6-02叙事上下文切片：Intent、Dialogue、Expression、Quest Packaging、Direction和Memory只获得各自必读的当前场景、合法动作、角色知识交集、终态回执、已选模板槽或导演候选；长尾事实/任务语义选择不用固定N条替代，隐藏/未来/其他角色私密知识不进模型请求。资源SourceRef与精确运行边界进入V3 Context Manifest，过期候选失效关闭；当前仍未接入各项真实玩家体验。 |
 | 3.2.46 | 2026-09-13 | 完成G6-01运行时叙事Skill权限骨架：把Intent、Dialogue、Expression、Quest Packaging、Direction和Memory拆为六个只读候选Skill，逐项冻结可读/禁读语义、Formal Entry、严格JSON、模型与预算边界和失败降级。Run绑定精确Release/Session/Sequence/State/Visibility，模型不能提交Action、任务、关系或记忆；当前不冒充玩家UI已接通。 |
 | 3.2.45 | 2026-09-13 | 完成G5-12叙事便携边界：导出导入保持SourcePin、叙事/任务Artifact、Run/Checkpoint/receipt与正式Release内容逐Hash不变，只重映射本地身份；任何来源、账本、发布或迁移证据篡改都在写入前整体拒绝。导入终态Build先阻断Preview，随后用零模型、零费用的确定性本机复验闭合Artifact/Blob、terminal lineage和root seal，不重新生成、总结或改写叙事；旧Release和Session历史继续不可变。 |

@@ -33,6 +33,11 @@ import { createTextOpenWorldCombatActionCatalogV1 } from './combat-actions'
 import { createTextOpenWorldCraftingCatalogV1 } from './crafting'
 import { createTextOpenWorldEconomyCatalogV1 } from './economy'
 import { createTextOpenWorldDirectorCatalogV1 } from './director'
+import {
+  projectTextOpenWorldRuntimeIntentEvidenceV1,
+  verifyTextOpenWorldRuntimeIntentAuthorizationV1,
+  type TextOpenWorldRuntimeIntentAuthorizationV1,
+} from './runtime-intent'
 
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -273,6 +278,8 @@ type ExecuteTextOpenWorldActionInputV1 = {
   expectedBaseSequence?: number
   commandId?: string
   requestedAt?: number
+  /** Ephemeral local Run handle; only its portable evidence projection enters the command. */
+  runtimeIntentAuthorization?: TextOpenWorldRuntimeIntentAuthorizationV1
 }
 type ExecuteTextOpenWorldActionInternalInputV1 = ExecuteTextOpenWorldActionInputV1 & {
   combatTransitionIntent?: TextOpenWorldCombatTransitionIntentV1
@@ -295,6 +302,12 @@ async function executeTextOpenWorldActionAsV1(
   if (!COMMAND_ID.test(commandId)) fail('commandId无效')
   const targetKey = input.targetKey ?? null
   const source = input.source ?? 'system-action'
+  const runtimeIntent = input.runtimeIntentAuthorization == null
+    ? null
+    : await projectTextOpenWorldRuntimeIntentEvidenceV1(input.runtimeIntentAuthorization)
+  if (runtimeIntent && (source !== 'mapped-intent' || actorKey !== 'player' || systemCategory != null)) {
+    fail('AI意图授权只能用于玩家mapped-intent行动')
+  }
   const hasCombatTransitionIntent = input.combatTransitionIntent != null
   if (hasCombatTransitionIntent !== (systemCategory === 'combat-state-action')) fail('战斗阶段intent只能由战斗系统Action提交')
   if (hasCombatTransitionIntent) {
@@ -316,6 +329,7 @@ async function executeTextOpenWorldActionAsV1(
     ...(input.combatTransitionIntent == null ? {} : { combatTransitionIntent: input.combatTransitionIntent }),
     ...(input.directorTrigger == null ? {} : { directorTrigger: input.directorTrigger }),
     ...(input.systemCauseCommandId == null ? {} : { systemCauseCommandId: input.systemCauseCommandId }),
+    ...(runtimeIntent == null ? {} : { runtimeIntent: runtimeIntent.evidence }),
   }
 
   const prior = await getTextOpenWorldCommandStatusV1({ sessionId: input.sessionId, commandId })
@@ -338,6 +352,19 @@ async function executeTextOpenWorldActionAsV1(
   const projection = parseTextOpenWorldSessionProjectionV1(state.textOpenWorld)
   assertTextOpenWorldVNextProjectionBindingV1(projection, binding)
   const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+  if (runtimeIntent) {
+    await verifyTextOpenWorldRuntimeIntentAuthorizationV1({
+      scope: {
+        projectId: session.projectId,
+        worldId: session.worldId ?? fail('AI意图Session缺少worldId'),
+        workId: session.workId ?? fail('AI意图Session缺少workId'),
+      },
+      productRuntimeSessionId: input.sessionId,
+      actionKey: input.actionKey,
+      targetKey,
+      authorization: runtimeIntent.authorization,
+    })
+  }
   if (input.systemCauseCommandId != null) {
     if (modules.actions.version < 17) fail('Action v17以前不能写入系统后续工作causeCommandId')
     const cause = await assertTerminalPlayerCauseV1(input.sessionId, input.systemCauseCommandId, modules)

@@ -34,7 +34,9 @@ describe('R-OPEN-WORLD6 · vNext 运行时 AI Skill 合同总表', () => {
     for (const item of TEXT_OPEN_WORLD_RUNTIME_AI_SKILL_CONTRACTS_V1) {
       const skill = getAgentSkillV1(item.skillId)
       const entry = FORMAL_AI_ENTRY_BY_ID_V1.get(item.formalEntryId)
-      expect(item.availability).toBe('registered-not-yet-ui-routed')
+      expect(item.availability).toBe(item.capability === 'intent'
+        ? 'player-ui-routed'
+        : 'registered-not-yet-ui-routed')
       expect(item.reads.contextSourceKeys).toEqual(['openWorldRuntime'])
       expect(item.reads.logicalSlices.length).toBeGreaterThan(0)
       expect(item.reads.forbiddenSlices).toEqual(expect.arrayContaining([
@@ -68,6 +70,13 @@ describe('R-OPEN-WORLD6 · vNext 运行时 AI Skill 合同总表', () => {
         additionalProperties: false,
       })
       expect(item.candidateSchema.fields.some(field => field.name === 'kind' && field.required)).toBe(true)
+      if (item.capability === 'intent') {
+        expect(item.promptVersion).toBe('text-open-world-runtime-intent-v2')
+        expect(item.candidateSchema.fields).toEqual(expect.arrayContaining([
+          expect.objectContaining({ name: 'actionKeys', type: 'stable-key[]', maxItems: 4 }),
+          expect.objectContaining({ name: 'choiceKeys', type: 'stable-key[]', maxItems: 4 }),
+        ]))
+      }
       expect(item.budget).toMatchObject({ maxModelCalls: 1, maxToolCalls: 0, maxAttemptsPerStep: 1 })
       expect(item.failurePolicy).toMatchObject({
         staleInput: 'discard-candidate',

@@ -322,7 +322,7 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
       .toBeGreaterThan(480)
   }, 20_000)
 
-  it.sequential('自然输入仅精确映射冻结例句；不匹配时给出边界提示且不写事件', async () => {
+  it.sequential('冻结例句仍由确定性映射直接进入正式Action，不调用模型', async () => {
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
       name: `场景自然输入-${crypto.randomUUID()}`,
       textOpenWorldVNext: createTextOpenWorldVNextP9Fixture(),
@@ -347,15 +347,6 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
 
     const input = host.querySelector('#text-open-world-natural-command')
     if (!(input instanceof HTMLInputElement)) throw new Error('自然语言输入框不存在')
-    const eventCountBeforeBoundary = useTextOpenWorldPlayerStore.getState().events.length
-    await setInputValue(input, '我要飞到月亮')
-    await click(buttonByText(host, '提交'))
-
-    expect(useTextOpenWorldPlayerStore.getState().events).toHaveLength(eventCountBeforeBoundary)
-    expect(host.querySelector('[data-testid="text-open-world-input-notice"]')?.textContent)
-      .toContain('没有改变世界状态')
-    expect(commandEnvelope('action.accept-main')).toBeNull()
-
     await setInputValue(input, '  我接受这个任务  ')
     await click(buttonByText(host, '提交'))
     await waitFor(() => {

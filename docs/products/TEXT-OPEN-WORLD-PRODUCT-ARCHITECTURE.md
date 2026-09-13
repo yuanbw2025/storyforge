@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.64
+> 规格版本：1.1.65
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -1658,6 +1658,16 @@ G6-01只完成可机验合同，不声称自由输入、对白、演绎、发牌
 
 G6-02没有新增表、Schema/migration、受治理字段写入、玩家UI或真实模型调用。它只完成六个Skill共用的精确读取和证据底座；意图、对白、演绎、包装、导演和记忆的真实产品采用仍归G6-03～G6-08。
 
+### 18.9 G6-03受治理自由输入与风险确认
+
+玩家场景页现在把自然语言分成两条明确路径。发布时冻结的例句仍在本地精确匹配，不调用模型；无法精确匹配的自由输入才进入`prose.text-open-world-runtime-intent`。该Skill通过G6-02网关只读取当前所选场景、当前可执行Action/Choice、玩家可见状态与相关已知内容，输出严格闭集候选：`kind`、0～1置信度、最多四个Action键或Choice键、可选目标、解释和安全回应。扩字段、混用Action/Choice、越界稳定键、非法目标或展开过多候选一律失败关闭。
+
+模型不能决定“已经做了什么”。服务在模型返回后重新读取冻结Release与当前Session Projection，重建所选场景和合法目标闭集；低于0.72置信度、无匹配、越界和过期请求都不写ProductRuntimeEvent。唯一低风险候选才会交给既有Action执行器；多个同样合理的合法解释显示为显式选项，玩家选择前零状态变化；风险与不可逆性完全读取Action定义，不采用模型的`requiresConfirmation`意见，高风险候选仍进入G4已有的全局确认层。
+
+每次模型解释建立Instance所有的V3 Run，保存冻结Contract、Context资源快照、最终请求、原始响应、严格候选、Checkpoint、V3 Context Manifest与验证Receipt。UI只暂持带本地Run定位的短期授权；正式Command/Event不写本地Run ID，只携带候选、Manifest、终态Receipt及所选Action/Choice/目标的便携Hash证据。执行前再次核验Run终态、候选完整性、精确Session归属、Release/Sequence/State/Visibility新鲜度和当前合法选项，因其他行动或标签页推进造成的stale必须重新输入。
+
+AI理解期间和失败之后，系统Action、固定Choice与冻结例句继续工作；错误只显示安全边界和当前可用替代行动，不把provider原文、内部键或假结果混入叙事正文。G6-03没有新增状态表、Schema、迁移或FIELD写入口，也没有开放新地图、新任务、自由战斗动作或任务表外解法；NPC自由对白仍由G6-04负责。
+
 ---
 
 ## 19. 地区模拟、任务导演与随机事件
@@ -3033,6 +3043,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.65 | 2026-09-13 | 完成G6-03受治理自由输入：冻结例句零模型直达既有Action，其他输入经正式Intent Skill和精确运行Context只生成当前Action/Choice闭集候选；代码重验目标、0.72置信门和Action真实风险，唯一低风险执行、多义先选、高风险再确认。Instance Run保存完整Harness证据，正式Command只带无本地Run ID的便携来源Hash；任何运行边界变化使授权过期。失败时自由输入降级而确定性入口继续可玩；无新表、Schema或正式AI写入口。 |
 | 1.1.64 | 2026-09-13 | 完成G6-02运行期按需Context底座：`openWorldRuntime`注册资源Provider从冻结Release/Build与当前Session构建玩家可见资源目录，六个Skill只读各自必读片和精确目标；长尾事实/任务才进行语义选择，不固定截取最近N条。资源SourceRef、快照、rendered request、请求/回应与V3 Context Manifest进入Instance所有Harness，边界过期后失效关闭；无UI、正式写入或真实模型调用。 |
 | 1.1.63 | 2026-09-13 | 完成G6-01运行时AI合同总表：意图、对白、结果演绎、地区任务包装、导演建议和长期记忆六个Skill逐项登记逻辑读取/禁止读取、Formal AI Entry、严格JSON候选、BYOK模型能力、一次调用零工具预算和失败策略；V3 product-runtime RunContract冻结Skill/入口并绑定Release、Session、Sequence、State和Visibility，唯一provider网关无正式状态写权限。当前仅完成契约，尚未接入玩家UI。 |
 | 1.1.62 | 2026-09-13 | 完成G5-12 Creator便携生命周期：v10导出导入重映射SourcePlan、预算账本复合键、生产命令、Build/Artifact/Release/Session和迁移分支，并在写入前验证SourcePin/Unit、正式Release和迁移Canon，篡改时零写入失败关闭。导入终态Build的本地Run/Blob证明显式失效，工作台阻断Preview并提供零provider、零费用的确定性复验；checkpoint、Artifact/Blob、ledger、terminal lineage和root seal闭合后恢复正式Release/Session使用。世界与小说全路径真实往返及项目级联删除通过。 |

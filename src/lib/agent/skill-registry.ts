@@ -2900,7 +2900,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '文字开放世界vNext·自由输入意图候选',
     owner: 'prose-agent',
-    promptVersion: 'text-open-world-runtime-intent-v1',
+    promptVersion: 'text-open-world-runtime-intent-v2',
     executionMode: 'text-open-world-runtime-intent',
     contextTaskKind: 'agent-prose',
     readToolNames: [],

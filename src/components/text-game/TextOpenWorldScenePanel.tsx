@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MessageCircle, MousePointerClick, ScrollText, Send, TerminalSquare } from 'lucide-react'
 import type {
   TextOpenWorldActionAvailabilityV1,
@@ -9,6 +9,11 @@ import type {
   TextOpenWorldProjectedSceneV1,
   TextOpenWorldSceneProjectionV1,
 } from '../../lib/open-world/scene-projection'
+import { isTextOpenWorldSceneSurfaceActionV1 } from '../../lib/open-world/scene-projection'
+import type {
+  TextOpenWorldRuntimeIntentAuthorizationV1,
+  TextOpenWorldRuntimeIntentResolutionV1,
+} from '../../lib/open-world/runtime-intent'
 
 export interface TextOpenWorldSceneTutorialAvailabilityV1 {
   systemActions: boolean
@@ -35,7 +40,15 @@ interface TextOpenWorldScenePanelProps {
     actionKey: string,
     targetKey: string | null,
     source: TextOpenWorldCommandSourceV1,
+    options?: {
+      expectedBaseSequence: number
+      runtimeIntentAuthorization: TextOpenWorldRuntimeIntentAuthorizationV1
+    },
   ): void
+  onInterpretNaturalInput?(request: {
+    utterance: string
+    selectedSceneKey: string
+  }): Promise<TextOpenWorldRuntimeIntentResolutionV1>
   /** Reports only controls rendered for the currently selected scene. */
   onTutorialAvailabilityChange?(availability: TextOpenWorldSceneTutorialAvailabilityV1): void
 }
@@ -45,12 +58,17 @@ type InteractionNotice = {
   message: string
 } | null
 
-const ATTITUDE_LABELS = { bad: '态度较差', neutral: '态度一般', good: '态度友好' } as const
-const SPECIALIZED_ACTION_CATEGORIES = new Set([
-  'respawn', 'equip', 'unequip', 'travel', 'fast-travel', 'buy', 'sell', 'craft',
-  'continue-combat', 'combat-basic-attack', 'combat-skill', 'combat-item', 'escape',
-])
+interface PendingIntentOption {
+  optionKey: string
+  actionKey: string
+  targetKey: string | null
+  label: string
+  description: string
+  expectedBaseSequence?: number
+  runtimeIntentAuthorization?: TextOpenWorldRuntimeIntentAuthorizationV1
+}
 
+const ATTITUDE_LABELS = { bad: '态度较差', neutral: '态度一般', good: '态度友好' } as const
 function normalizeUtterance(value: string): string {
   return value.normalize('NFC').trim().toLocaleLowerCase('zh-CN')
 }
@@ -121,16 +139,23 @@ export default function TextOpenWorldScenePanel({
   busy,
   fallback,
   onExecute,
+  onInterpretNaturalInput,
   onTutorialAvailabilityChange,
 }: TextOpenWorldScenePanelProps) {
   const [selectedSceneKey, setSelectedSceneKey] = useState<string | null>(projection.recommendedSceneKey)
   const [naturalInput, setNaturalInput] = useState('')
   const [notice, setNotice] = useState<InteractionNotice>(null)
+  const [interpreting, setInterpreting] = useState(false)
+  const [pendingIntentOptions, setPendingIntentOptions] = useState<PendingIntentOption[]>([])
+  const interpretationRevision = useRef(0)
 
   useEffect(() => {
     setSelectedSceneKey(projection.recommendedSceneKey)
     setNaturalInput('')
     setNotice(null)
+    setInterpreting(false)
+    setPendingIntentOptions([])
+    interpretationRevision.current += 1
   }, [eventSequence, projection.recommendedSceneKey, sessionKey])
 
   const actionByKey = useMemo(
@@ -142,14 +167,11 @@ export default function TextOpenWorldScenePanel({
     ?? scenes.find(item => item.key === projection.recommendedSceneKey)
     ?? scenes[0]
     ?? null
-  const isSceneSurfaceAction = (action: TextOpenWorldActionAvailabilityV1) => (
-    action.targetScope !== 'quest' && !SPECIALIZED_ACTION_CATEGORIES.has(action.action.category)
-  )
-  const compatibilityActions = availableActions.filter(isSceneSurfaceAction)
+  const compatibilityActions = availableActions.filter(isTextOpenWorldSceneSurfaceActionV1)
   const ambientActions = projection.status === 'ready'
     ? projection.ambientActionKeys
       .flatMap(actionKey => actionByKey.get(actionKey) ?? [])
-      .filter(isSceneSurfaceAction)
+      .filter(isTextOpenWorldSceneSurfaceActionV1)
     : []
   const selectedSceneActions = scene
     ? scene.actionKeys.flatMap(actionKey => actionByKey.get(actionKey) ?? [])
@@ -165,7 +187,8 @@ export default function TextOpenWorldScenePanel({
     entry.exampleUtterances.map(example => ({ actionKey: entry.actionKey, example }))
   )) ?? []
   const naturalInputEnabled = projection.status === 'ready'
-    && naturalCandidates.length > 0
+    && scene != null
+    && (naturalCandidates.length > 0 || onInterpretNaturalInput != null)
 
   useEffect(() => {
     onTutorialAvailabilityChange?.({
@@ -185,12 +208,25 @@ export default function TextOpenWorldScenePanel({
   const execute = (
     action: TextOpenWorldActionAvailabilityV1 | undefined,
     source: TextOpenWorldCommandSourceV1,
+    governed?: {
+      targetKey: string | null
+      expectedBaseSequence: number
+      runtimeIntentAuthorization: TextOpenWorldRuntimeIntentAuthorizationV1
+    },
   ) => {
     if (!action?.available) {
       setNotice({ tone: 'boundary', message: '该行动已经不在当前合法投影中，未写入任何状态。' })
       return
     }
-    const target = targetForAction(action)
+    const target = governed
+      ? action.targetScope === 'none'
+        ? governed.targetKey == null
+          ? { targetKey: null, error: null }
+          : { targetKey: null, error: `“${action.action.label}”不接受目标，未执行任何行动。` }
+        : governed.targetKey != null && action.validTargetKeys.includes(governed.targetKey)
+          ? { targetKey: governed.targetKey, error: null }
+          : { targetKey: null, error: `“${action.action.label}”的目标已经不在当前合法投影中。` }
+      : targetForAction(action)
     if (target.error) {
       setNotice({ tone: 'boundary', message: target.error })
       return
@@ -203,15 +239,45 @@ export default function TextOpenWorldScenePanel({
           ? `已选择“${action.action.label}”；实际结果仍由正式规则结算。`
           : `已提交系统行动“${action.action.label}”。`,
     })
-    onExecute(action.action.key, target.targetKey, source)
+    onExecute(action.action.key, target.targetKey, source, governed == null ? undefined : {
+      expectedBaseSequence: governed.expectedBaseSequence,
+      runtimeIntentAuthorization: governed.runtimeIntentAuthorization,
+    })
   }
 
-  const submitNaturalInput = () => {
+  const submitNaturalInput = async () => {
     const normalized = normalizeUtterance(naturalInput)
     if (!normalized || !naturalInputEnabled) return
     const matches = naturalCandidates.filter(candidate => normalizeUtterance(candidate.example) === normalized)
     const actionKeys = [...new Set(matches.map(match => match.actionKey))]
-    if (actionKeys.length !== 1) {
+    if (actionKeys.length === 1) {
+      setPendingIntentOptions([])
+      execute(actionByKey.get(actionKeys[0]!), 'mapped-intent')
+      setNaturalInput('')
+      return
+    }
+    if (actionKeys.length > 1) {
+      const options = actionKeys.flatMap(actionKey => {
+        const action = actionByKey.get(actionKey)
+        if (!action?.available) return []
+        const target = targetForAction(action)
+        if (target.error) return []
+        return [{
+          optionKey: `frozen:${actionKey}:${target.targetKey ?? 'none'}`,
+          actionKey,
+          targetKey: target.targetKey,
+          label: action.action.label,
+          description: action.action.description,
+        }]
+      })
+      if (options.length) {
+        setPendingIntentOptions(options)
+        setNotice({ tone: 'boundary', message: '这句话对应多个当前可执行行动，请明确选择一个；选择前不会改变世界状态。' })
+        setNaturalInput('')
+        return
+      }
+    }
+    if (!onInterpretNaturalInput || !scene) {
       const alternatives = sceneActions.slice(0, 3).map(action => `“${action.action.label}”`).join('、')
       setNotice({
         tone: 'boundary',
@@ -219,8 +285,56 @@ export default function TextOpenWorldScenePanel({
       })
       return
     }
-    execute(actionByKey.get(actionKeys[0]!), 'mapped-intent')
-    setNaturalInput('')
+    const requestRevision = ++interpretationRevision.current
+    setPendingIntentOptions([])
+    setInterpreting(true)
+    setNotice({ tone: 'boundary', message: 'AI正在按当前场景理解这句话；完成前没有改变世界状态，你仍可使用系统行动。' })
+    try {
+      const resolution = await onInterpretNaturalInput({
+        utterance: naturalInput.normalize('NFC').trim(),
+        selectedSceneKey: scene.key,
+      })
+      if (interpretationRevision.current !== requestRevision || resolution.selectedSceneKey !== scene.key) return
+      if (resolution.status === 'mapped' && resolution.options.length === 1) {
+        const option = resolution.options[0]!
+        execute(actionByKey.get(option.actionKey), 'mapped-intent', {
+          targetKey: option.targetKey,
+          expectedBaseSequence: resolution.baseSequence,
+          runtimeIntentAuthorization: option.authorization,
+        })
+        setNaturalInput('')
+        return
+      }
+      if (resolution.status === 'needs-selection' && resolution.options.length > 1) {
+        setPendingIntentOptions(resolution.options.map(option => ({
+          optionKey: option.optionKey,
+          actionKey: option.actionKey,
+          targetKey: option.targetKey,
+          label: option.label,
+          description: option.description,
+          expectedBaseSequence: resolution.baseSequence,
+          runtimeIntentAuthorization: option.authorization,
+        })))
+        setNotice({ tone: 'boundary', message: 'AI找到了多个合法解释，请明确选择一个；选择前不会改变世界状态。' })
+        setNaturalInput('')
+        return
+      }
+      const alternatives = sceneActions.slice(0, 3).map(action => `“${action.action.label}”`).join('、')
+      const safeReply = resolution.replyText || resolution.boundaryExplanation || '这句话暂时不能映射为当前行动。'
+      setNotice({
+        tone: 'boundary',
+        message: `${safeReply} 当前没有改变世界状态。${alternatives ? `你可以改用 ${alternatives}。` : ''}`,
+      })
+    } catch {
+      if (interpretationRevision.current !== requestRevision) return
+      const alternatives = sceneActions.slice(0, 3).map(action => `“${action.action.label}”`).join('、')
+      setNotice({
+        tone: 'boundary',
+        message: `AI理解当前不可用，因此没有改变世界状态。${alternatives ? `你仍可改用 ${alternatives}，或输入发布时给出的示例。` : ''}`,
+      })
+    } finally {
+      if (interpretationRevision.current === requestRevision) setInterpreting(false)
+    }
   }
 
   return <div className="open-world-scene-stack">
@@ -233,9 +347,12 @@ export default function TextOpenWorldScenePanel({
         type="button"
         aria-current={item.key === scene?.key ? 'page' : undefined}
         onClick={() => {
+          interpretationRevision.current += 1
           setSelectedSceneKey(item.key)
           setNaturalInput('')
           setNotice(null)
+          setInterpreting(false)
+          setPendingIntentOptions([])
         }}
       >
         {item.actor ? `${item.actor.name} · ${item.title}` : item.title}
@@ -296,19 +413,19 @@ export default function TextOpenWorldScenePanel({
       data-testid="text-open-world-natural-input"
       data-open-world-ui-key="play.natural-language"
     >
-      <header><MessageCircle aria-hidden="true" /><strong>自然语言</strong><small>首版确定性理解</small></header>
-      <form onSubmit={event => { event.preventDefault(); submitNaturalInput() }}>
+      <header><MessageCircle aria-hidden="true" /><strong>自然语言</strong><small>冻结例句 + AI 语义理解</small></header>
+      <form onSubmit={event => { event.preventDefault(); void submitNaturalInput() }}>
         <label htmlFor="text-open-world-natural-command">你想怎么做？</label>
         <div>
           <input
             id="text-open-world-natural-command"
             value={naturalInput}
             onChange={event => setNaturalInput(event.target.value)}
-            disabled={!naturalInputEnabled || busy}
+            disabled={!naturalInputEnabled || busy || interpreting}
             placeholder={naturalInputEnabled ? '输入本场景中的行动表达' : '当前场景没有自然语言绑定'}
           />
-          <button type="submit" disabled={!naturalInput.trim() || !naturalInputEnabled || busy}>
-            <Send aria-hidden="true" />提交
+          <button type="submit" disabled={!naturalInput.trim() || !naturalInputEnabled || busy || interpreting}>
+            <Send aria-hidden="true" />{interpreting ? '理解中…' : '提交'}
           </button>
         </div>
       </form>
@@ -316,8 +433,36 @@ export default function TextOpenWorldScenePanel({
         可识别示例：{naturalCandidates.slice(0, 3).map(candidate => candidate.example).join(' / ')}
       </p>}
       <p className="open-world-scene-boundary-copy">
-        当前只映射发布时冻结的既有行动；无法识别的描述不会创建任务、地点、结果或直接修改状态。
+        AI只可选择当前已投影的既有行动；无法识别的描述不会创建任务、地点、结果或直接修改状态。
       </p>
+      {pendingIntentOptions.length > 0 && <div
+        className="open-world-scene-choice-list"
+        role="group"
+        aria-label="请选择自由输入的解释"
+        data-testid="text-open-world-intent-options"
+      >
+        {pendingIntentOptions.map(option => <button
+          key={option.optionKey}
+          type="button"
+          disabled={busy || interpreting}
+          onClick={() => {
+            setPendingIntentOptions([])
+            const authorization = option.runtimeIntentAuthorization
+            const expectedBaseSequence = option.expectedBaseSequence
+            if (authorization && expectedBaseSequence != null) {
+              execute(actionByKey.get(option.actionKey), 'mapped-intent', {
+                targetKey: option.targetKey,
+                expectedBaseSequence,
+                runtimeIntentAuthorization: authorization,
+              })
+            } else {
+              execute(actionByKey.get(option.actionKey), 'mapped-intent')
+            }
+          }}
+        >
+          <strong>{option.label}</strong><small>{option.description}</small>
+        </button>)}
+      </div>}
     </section>
 
     <div

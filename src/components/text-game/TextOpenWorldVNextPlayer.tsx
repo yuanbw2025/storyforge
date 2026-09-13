@@ -15,6 +15,10 @@ import {
   type TextOpenWorldPlayerNotificationCategoryV1,
 } from '../../lib/open-world/player-notifications'
 import { projectTextOpenWorldPlayerWorldRecordV1 } from '../../lib/open-world/player-world-record'
+import {
+  generateTextOpenWorldRuntimeIntentV1,
+  type TextOpenWorldRuntimeIntentAuthorizationV1,
+} from '../../lib/open-world/runtime-intent'
 import { projectTextOpenWorldScenesV1 } from '../../lib/open-world/scene-projection'
 import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-projection'
 import type { TextOpenWorldCommandSourceV1 } from '../../lib/types'
@@ -22,6 +26,7 @@ import {
   selectTextOpenWorldVNextActions,
   useTextOpenWorldPlayerStore,
 } from '../../stores/text-open-world-player'
+import { useAIConfigStore } from '../../stores/ai-config'
 import TextOpenWorldActorsPanel from './TextOpenWorldActorsPanel'
 import TextOpenWorldCharacterPanel from './TextOpenWorldCharacterPanel'
 import TextOpenWorldCombatPanel, { type TextOpenWorldCombatActionRequestV1 } from './TextOpenWorldCombatPanel'
@@ -56,6 +61,8 @@ const NOTIFICATION_CATEGORY_LABELS: Record<TextOpenWorldPlayerNotificationCatego
 
 export default function TextOpenWorldVNextPlayer() {
   const store = useTextOpenWorldPlayerStore()
+  const aiConfig = useAIConfigStore(state => state.config)
+  const intentAbortController = useRef<AbortController | null>(null)
   const [dismissedCombatIdentity, setDismissedCombatIdentity] = useState<string | null>(null)
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     actionKey: string
@@ -65,6 +72,7 @@ export default function TextOpenWorldVNextPlayer() {
     sessionId: number
     baseSequence: number
     source: TextOpenWorldCommandSourceV1
+    runtimeIntentAuthorization?: TextOpenWorldRuntimeIntentAuthorizationV1
   } | null>(null)
   const [liveAnnouncement, setLiveAnnouncement] = useState<{
     sessionId: number
@@ -248,6 +256,12 @@ export default function TextOpenWorldVNextPlayer() {
 
   useEffect(() => {
     setPendingConfirmation(null)
+    intentAbortController.current?.abort()
+    intentAbortController.current = null
+    return () => {
+      intentAbortController.current?.abort()
+      intentAbortController.current = null
+    }
   }, [projectionSequence, sessionKey])
 
   useEffect(() => {
@@ -325,6 +339,7 @@ export default function TextOpenWorldVNextPlayer() {
     explicitTargetKey?: string | null,
     source: TextOpenWorldCommandSourceV1 = 'system-action',
     expectedBaseSequence?: number,
+    runtimeIntentAuthorization?: TextOpenWorldRuntimeIntentAuthorizationV1,
   ) => {
     if (gameplayLocked || !action.available) return
     if (action.targetScope === 'combatant' && explicitTargetKey === undefined) return
@@ -342,6 +357,7 @@ export default function TextOpenWorldVNextPlayer() {
         sessionId,
         baseSequence: expectedBaseSequence ?? store.runtimeState.lastSequence,
         source,
+        ...(runtimeIntentAuthorization ? { runtimeIntentAuthorization } : {}),
       })
       return
     }
@@ -349,8 +365,39 @@ export default function TextOpenWorldVNextPlayer() {
       ? store.executeVNextAction(action.action.key, targetKey)
       : store.executeVNextAction(action.action.key, targetKey, {
           source,
+          ...(runtimeIntentAuthorization ? { runtimeIntentAuthorization } : {}),
           ...(expectedBaseSequence == null ? {} : { expectedBaseSequence }),
         }))
+  }
+
+  const interpretNaturalInput = async (request: {
+    utterance: string
+    selectedSceneKey: string
+  }) => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    const liveProjection = liveStore.runtimeState.textOpenWorld
+    if (!liveStore.scope || liveSessionId == null || liveProjection == null
+      || liveSessionId !== selectedSessionId
+      || liveProjection.lastEventSequence !== projection.lastEventSequence
+      || liveStore.runtimeState.lastSequence !== store.runtimeState.lastSequence) {
+      throw new Error('当前场景已经变化，请重新输入。')
+    }
+    intentAbortController.current?.abort()
+    const controller = new AbortController()
+    intentAbortController.current = controller
+    try {
+      return await generateTextOpenWorldRuntimeIntentV1({
+        scope: liveStore.scope,
+        productRuntimeSessionId: liveSessionId,
+        selectedSceneKey: request.selectedSceneKey,
+        utterance: request.utterance,
+        aiConfig,
+        signal: controller.signal,
+      })
+    } finally {
+      if (intentAbortController.current === controller) intentAbortController.current = null
+    }
   }
 
   const trackedQuestContent = <section className="open-world-game-rail-card" aria-label="当前任务">
@@ -552,10 +599,17 @@ export default function TextOpenWorldVNextPlayer() {
         description: location?.description || location?.earlyArrivalDescription || '这里的场景信息仍在展开。',
         playerName: modules.actors.player.identity.name,
       }}
-      onExecute={(actionKey, targetKey, source) => {
+      onExecute={(actionKey, targetKey, source, options) => {
         const action = availableActions.find(item => item.action.key === actionKey)
-        if (action) executeProjectedAction(action, targetKey, source)
+        if (action) executeProjectedAction(
+          action,
+          targetKey,
+          source,
+          options?.expectedBaseSequence,
+          options?.runtimeIntentAuthorization,
+        )
       }}
+      onInterpretNaturalInput={interpretNaturalInput}
       onTutorialAvailabilityChange={handleSceneTutorialAvailability}
     />}
   </div>
@@ -691,6 +745,9 @@ export default function TextOpenWorldVNextPlayer() {
             {
               confirmed: true,
               source: request.source,
+              ...(request.runtimeIntentAuthorization
+                ? { runtimeIntentAuthorization: request.runtimeIntentAuthorization }
+                : {}),
               expectedBaseSequence: request.baseSequence,
             },
           ))
