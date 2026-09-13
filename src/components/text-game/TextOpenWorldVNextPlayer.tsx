@@ -28,6 +28,13 @@ import {
   generateTextOpenWorldRuntimeExpressionV1,
   type TextOpenWorldRuntimeExpressionPresentationV1,
 } from '../../lib/open-world/runtime-expression'
+import {
+  generateTextOpenWorldRuntimeQuestPackagingV1,
+  projectTextOpenWorldRuntimeQuestPackagingSlotV1,
+  readTextOpenWorldRuntimeQuestPackagingPresentationsV1,
+  type TextOpenWorldRuntimeQuestPackagingPresentationV1,
+  type TextOpenWorldRuntimeQuestPackagingSlotV1,
+} from '../../lib/open-world/runtime-quest-packaging'
 import { projectTextOpenWorldScenesV1 } from '../../lib/open-world/scene-projection'
 import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-projection'
 import type { TextOpenWorldCommandSourceV1 } from '../../lib/types'
@@ -74,9 +81,13 @@ export default function TextOpenWorldVNextPlayer() {
   const aiConfig = useAIConfigStore(state => state.config)
   const intentAbortController = useRef<AbortController | null>(null)
   const expressionAbortController = useRef<AbortController | null>(null)
+  const questPackagingAbortController = useRef<AbortController | null>(null)
   const [resultExpression, setResultExpression] = useState<TextOpenWorldRuntimeExpressionPresentationV1 | null>(null)
   const [resultExpressionBusy, setResultExpressionBusy] = useState(false)
   const [resultExpressionIssue, setResultExpressionIssue] = useState<string | null>(null)
+  const [questPackagingPresentations, setQuestPackagingPresentations] = useState<Record<string, TextOpenWorldRuntimeQuestPackagingPresentationV1>>({})
+  const [questPackagingBusyInstanceKey, setQuestPackagingBusyInstanceKey] = useState<string | null>(null)
+  const [questPackagingIssueInstanceKey, setQuestPackagingIssueInstanceKey] = useState<string | null>(null)
   const [dismissedCombatIdentity, setDismissedCombatIdentity] = useState<string | null>(null)
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     actionKey: string
@@ -120,6 +131,19 @@ export default function TextOpenWorldVNextPlayer() {
     () => projection ? projectTextOpenWorldScenesV1(projection) : null,
     [projection],
   )
+  const questPackagingSlots = useMemo(() => {
+    if (!projection || !runtimePackage) return {} as Record<string, TextOpenWorldRuntimeQuestPackagingSlotV1>
+    const slots: Record<string, TextOpenWorldRuntimeQuestPackagingSlotV1> = {}
+    for (const instance of Object.values(projection.state.quests.instancesByKey)) {
+      const slot = projectTextOpenWorldRuntimeQuestPackagingSlotV1({
+        runtimePackage,
+        projection,
+        questInstanceKey: instance.instanceKey,
+      })
+      if (slot) slots[slot.questInstanceKey] = slot
+    }
+    return slots
+  }, [projection, runtimePackage])
   const session = store.selectedSession
     ?? store.sessions.find(item => item.id === store.selectedSessionId)
     ?? null
@@ -292,6 +316,33 @@ export default function TextOpenWorldVNextPlayer() {
   }, [feedbackReceiptHash, sessionKey])
 
   useEffect(() => {
+    questPackagingAbortController.current?.abort()
+    questPackagingAbortController.current = null
+    setQuestPackagingPresentations({})
+    setQuestPackagingBusyInstanceKey(null)
+    setQuestPackagingIssueInstanceKey(null)
+    return () => {
+      questPackagingAbortController.current?.abort()
+      questPackagingAbortController.current = null
+    }
+  }, [sessionKey])
+
+  useEffect(() => {
+    if (!store.scope || selectedSessionId == null) return
+    let cancelled = false
+    void readTextOpenWorldRuntimeQuestPackagingPresentationsV1({
+      scope: store.scope,
+      productRuntimeSessionId: selectedSessionId,
+    }).then(presentations => {
+      if (!cancelled) setQuestPackagingPresentations(presentations)
+    }).catch(() => {
+      // The canonical frozen quest presentation is already visible. Restore
+      // failures therefore remain a safe no-op instead of blocking play.
+    })
+    return () => { cancelled = true }
+  }, [selectedSessionId, sessionKey, store.scope])
+
+  useEffect(() => {
     setQuestMapFocus(null)
     setDismissedCombatIdentity(null)
   }, [sessionKey])
@@ -399,6 +450,61 @@ export default function TextOpenWorldVNextPlayer() {
       const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
       if (!controller.signal.aborted && currentSessionId === liveSessionId
         && current.lastFeedback?.receiptHash === receiptHash) setResultExpressionBusy(false)
+    })
+  }
+  const generateQuestPackaging = (questInstanceKey: string) => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    const liveProjection = liveStore.runtimeState.textOpenWorld
+    const livePackage = liveStore.selectedManifest?.textOpenWorldVNext
+    if (!liveStore.scope || liveSessionId == null || !liveProjection || !livePackage) return
+    const slot = projectTextOpenWorldRuntimeQuestPackagingSlotV1({
+      runtimePackage: livePackage,
+      projection: liveProjection,
+      questInstanceKey,
+    })
+    if (!slot?.generation.available) return
+    questPackagingAbortController.current?.abort()
+    const controller = new AbortController()
+    questPackagingAbortController.current = controller
+    setQuestPackagingBusyInstanceKey(questInstanceKey)
+    setQuestPackagingIssueInstanceKey(null)
+    void generateTextOpenWorldRuntimeQuestPackagingV1({
+      scope: liveStore.scope,
+      productRuntimeSessionId: liveSessionId,
+      questInstanceKey,
+      aiConfig,
+      signal: controller.signal,
+    }).then(presentation => {
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      const currentProjection = current.runtimeState.textOpenWorld
+      const currentPackage = current.selectedManifest?.textOpenWorldVNext
+      if (controller.signal.aborted || currentSessionId !== liveSessionId || !currentProjection || !currentPackage) return
+      const currentSlot = projectTextOpenWorldRuntimeQuestPackagingSlotV1({
+        runtimePackage: currentPackage,
+        projection: currentProjection,
+        questInstanceKey,
+      })
+      if (!currentSlot || currentSlot.templateKey !== presentation.templateKey
+        || currentSlot.regionKey !== presentation.regionKey) return
+      setQuestPackagingPresentations(currentPresentations => ({
+        ...currentPresentations,
+        [questInstanceKey]: presentation,
+      }))
+      setQuestPackagingIssueInstanceKey(currentIssue => currentIssue === questInstanceKey ? null : currentIssue)
+    }).catch(() => {
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (controller.signal.aborted || currentSessionId !== liveSessionId) return
+      setQuestPackagingIssueInstanceKey(questInstanceKey)
+    }).finally(() => {
+      if (questPackagingAbortController.current === controller) questPackagingAbortController.current = null
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (!controller.signal.aborted && currentSessionId === liveSessionId) {
+        setQuestPackagingBusyInstanceKey(currentBusy => currentBusy === questInstanceKey ? null : currentBusy)
+      }
     })
   }
   const executeProjectedAction = (
@@ -711,6 +817,11 @@ export default function TextOpenWorldVNextPlayer() {
         events={store.events}
         actions={projectedActions}
         busy={gameplayLocked}
+        questPackagingSlots={questPackagingSlots}
+        questPackagingPresentations={questPackagingPresentations}
+        questPackagingBusyInstanceKey={questPackagingBusyInstanceKey}
+        questPackagingIssueInstanceKey={questPackagingIssueInstanceKey}
+        onGenerateQuestPackaging={generateQuestPackaging}
         onExecute={(action, instanceKey) => executeProjectedAction(action, instanceKey)}
         onFocusLocation={focusQuestLocation}
       />

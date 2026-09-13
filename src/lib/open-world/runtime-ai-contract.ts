@@ -276,7 +276,8 @@ export const TEXT_OPEN_WORLD_RUNTIME_AI_SKILL_CONTRACTS_V1 = [
     capability: 'quest-packaging',
     skillId: 'prose.text-open-world-runtime-quest-packaging',
     formalEntryId: 'text-open-world.runtime.quest-packaging',
-    promptVersion: 'text-open-world-runtime-quest-packaging-v1',
+    promptVersion: 'text-open-world-runtime-quest-packaging-v2',
+    availability: 'player-ui-routed',
     purpose: '为代码已经选定的地区任务模板槽生成差异化文字包装，不创建任务定义、奖励或Effect。',
     logicalSlices: ['director.selected-template-slot', 'region.current-visible', 'player.growth-summary', 'quests.active-summary', 'quest-packaging.recent-fingerprints'],
     routeCategory: 'runtime.text-open-world.quest-packaging',
@@ -361,6 +362,7 @@ export function validateTextOpenWorldRuntimeAISkillContractsV1(
     const expectedAvailability = item.capability === 'intent'
       || item.capability === 'dialogue'
       || item.capability === 'expression'
+      || item.capability === 'quest-packaging'
       ? 'player-ui-routed'
       : 'registered-not-yet-ui-routed'
     if (item.availability !== expectedAvailability) fail(`${item.skillId} UI接入状态与已完成工作包不一致`)

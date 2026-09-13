@@ -37,6 +37,7 @@ describe('R-OPEN-WORLD6 · vNext 运行时 AI Skill 合同总表', () => {
       expect(item.availability).toBe(item.capability === 'intent'
         || item.capability === 'dialogue'
         || item.capability === 'expression'
+        || item.capability === 'quest-packaging'
         ? 'player-ui-routed'
         : 'registered-not-yet-ui-routed')
       expect(item.reads.contextSourceKeys).toEqual(['openWorldRuntime'])

@@ -8,10 +8,15 @@ import {
   type TextOpenWorldPlayerQuestLogTrackingFilterV1,
 } from '../../lib/open-world/player-quest-log'
 import type {
+  TextOpenWorldRuntimeQuestPackagingPresentationV1,
+  TextOpenWorldRuntimeQuestPackagingSlotV1,
+} from '../../lib/open-world/runtime-quest-packaging'
+import type {
   ProductRuntimeEvent,
   TextOpenWorldActionAvailabilityV1,
   TextOpenWorldSessionProjectionV1,
 } from '../../lib/types'
+import TextOpenWorldQuestPackagingPanel from './TextOpenWorldQuestPackagingPanel'
 
 const CATEGORY_LABELS: Record<TextOpenWorldPlayerQuestLogCategoryV1, string> = {
   main: '主线',
@@ -148,6 +153,11 @@ export interface TextOpenWorldQuestLogPanelProps {
   events: readonly ProductRuntimeEvent[]
   actions: readonly TextOpenWorldActionAvailabilityV1[]
   busy: boolean
+  questPackagingSlots?: Readonly<Record<string, TextOpenWorldRuntimeQuestPackagingSlotV1>>
+  questPackagingPresentations?: Readonly<Record<string, TextOpenWorldRuntimeQuestPackagingPresentationV1>>
+  questPackagingBusyInstanceKey?: string | null
+  questPackagingIssueInstanceKey?: string | null
+  onGenerateQuestPackaging?(questInstanceKey: string): void
   onExecute(action: TextOpenWorldActionAvailabilityV1, instanceKey: string): void
   onFocusLocation(locationKey: string): void
 }
@@ -391,6 +401,17 @@ export default function TextOpenWorldQuestLogPanel(props: TextOpenWorldQuestLogP
           {selected.tracking && <Pin className="h-4 w-4 shrink-0 text-accent" aria-label={trackingLabel(selected)} />}
         </div>
         <p className="mt-2 break-words text-xs text-text-muted">{selected.description}</p>
+
+        {props.questPackagingSlots?.[selected.instanceKey] && <TextOpenWorldQuestPackagingPanel
+          slot={props.questPackagingSlots[selected.instanceKey]}
+          presentation={props.questPackagingPresentations?.[selected.instanceKey] ?? null}
+          completed={selected.status === 'completed'}
+          busy={props.questPackagingBusyInstanceKey === selected.instanceKey}
+          issue={props.questPackagingIssueInstanceKey === selected.instanceKey
+            ? 'runtime-quest-packaging-unavailable'
+            : null}
+          onGenerate={props.onGenerateQuestPackaging ?? (() => undefined)}
+        />}
 
         {!!selected.knownFacts.length && <section className="mt-3 min-w-0" aria-label="关键已知事实">
           <h3 className="flex items-center gap-2 text-sm font-semibold">

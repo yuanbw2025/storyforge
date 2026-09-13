@@ -2963,7 +2963,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '文字开放世界vNext·地区任务包装候选',
     owner: 'prose-agent',
-    promptVersion: 'text-open-world-runtime-quest-packaging-v1',
+    promptVersion: 'text-open-world-runtime-quest-packaging-v2',
     executionMode: 'text-open-world-runtime-quest-packaging',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
@@ -2975,7 +2975,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 2_000,
     writeTargets: [],
     lastVerifiedAt: '2026-09-13',
-    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway'],
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-quest-packaging'],
   },
   {
     version: 1,
