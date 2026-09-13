@@ -301,7 +301,8 @@ export const TEXT_OPEN_WORLD_RUNTIME_AI_SKILL_CONTRACTS_V1 = [
     capability: 'direction',
     skillId: 'prose.text-open-world-runtime-direction',
     formalEntryId: 'text-open-world.runtime.direction',
-    promptVersion: 'text-open-world-runtime-direction-v1',
+    promptVersion: 'text-open-world-runtime-direction-v2',
+    availability: 'player-ui-routed',
     purpose: '在代码提供的合法候选闭集中提出发牌与节奏建议；代码仍决定Blank、密度、冷却、冲突和主线保护。',
     logicalSlices: ['director.legal-candidates', 'director.pacing-summary', 'quests.active-summary', 'region.current-state', 'mainline.protection-window', 'director.cooldowns-conflicts'],
     routeCategory: 'runtime.text-open-world.direction',
@@ -363,6 +364,7 @@ export function validateTextOpenWorldRuntimeAISkillContractsV1(
       || item.capability === 'dialogue'
       || item.capability === 'expression'
       || item.capability === 'quest-packaging'
+      || item.capability === 'direction'
       ? 'player-ui-routed'
       : 'registered-not-yet-ui-routed'
     if (item.availability !== expectedAvailability) fail(`${item.skillId} UI接入状态与已完成工作包不一致`)

@@ -2984,7 +2984,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '文字开放世界vNext·叙事导演建议候选',
     owner: 'prose-agent',
-    promptVersion: 'text-open-world-runtime-direction-v1',
+    promptVersion: 'text-open-world-runtime-direction-v2',
     executionMode: 'text-open-world-runtime-direction',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
@@ -2996,7 +2996,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 1_200,
     writeTargets: [],
     lastVerifiedAt: '2026-09-13',
-    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway'],
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway', 'R-OPEN-WORLD6-runtime-direction'],
   },
   {
     version: 1,

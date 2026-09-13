@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Bell } from 'lucide-react'
+import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { parseTextOpenWorldModulesV1 } from '../../lib/open-world/modules'
 import { projectTextOpenWorldPlayerCombatV1 } from '../../lib/open-world/player-combat'
 import {
@@ -35,6 +36,7 @@ import {
   type TextOpenWorldRuntimeQuestPackagingPresentationV1,
   type TextOpenWorldRuntimeQuestPackagingSlotV1,
 } from '../../lib/open-world/runtime-quest-packaging'
+import { createTextOpenWorldRuntimeAIPreferencesStoreV1 } from '../../lib/open-world/runtime-ai-preferences'
 import { projectTextOpenWorldScenesV1 } from '../../lib/open-world/scene-projection'
 import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-projection'
 import type { TextOpenWorldCommandSourceV1 } from '../../lib/types'
@@ -155,6 +157,18 @@ export default function TextOpenWorldVNextPlayer() {
   const feedbackReceiptHash = store.lastFeedback?.receiptHash ?? null
   const productionKey = store.selectedManifest?.definition.productKey
     ?? `unavailable-product:${sessionKey}`
+  const runtimeAIPreferencesStore = useMemo(
+    () => createTextOpenWorldRuntimeAIPreferencesStoreV1(productionKey),
+    [productionKey],
+  )
+  const runtimeAIPreferences = useSyncExternalStore(
+    runtimeAIPreferencesStore.subscribe,
+    runtimeAIPreferencesStore.getSnapshot,
+    runtimeAIPreferencesStore.getServerSnapshot,
+  )
+  const runtimeDirectionAIConfig = runtimeAIPreferences.directionEnabled && isAIConfigReady(aiConfig)
+    ? aiConfig
+    : undefined
   const handleSceneTutorialAvailability = useCallback((
     value: TextOpenWorldSceneTutorialAvailabilityV1,
   ) => {
@@ -534,12 +548,16 @@ export default function TextOpenWorldVNextPlayer() {
       })
       return
     }
-    void run(() => source === 'system-action' && expectedBaseSequence == null
+    void run(() => source === 'system-action'
+      && expectedBaseSequence == null
+      && runtimeIntentAuthorization == null
+      && runtimeDirectionAIConfig == null
       ? store.executeVNextAction(action.action.key, targetKey)
       : store.executeVNextAction(action.action.key, targetKey, {
           source,
           ...(runtimeIntentAuthorization ? { runtimeIntentAuthorization } : {}),
           ...(expectedBaseSequence == null ? {} : { expectedBaseSequence }),
+          ...(runtimeDirectionAIConfig ? { runtimeDirectionAIConfig } : {}),
         }))
   }
 
@@ -694,6 +712,7 @@ export default function TextOpenWorldVNextPlayer() {
         expectedBaseSequence: request.expectedBaseSequence,
         quantity: request.quantity,
         confirmed: true,
+        ...(runtimeDirectionAIConfig ? { runtimeDirectionAIConfig } : {}),
         ...(request.kind === 'craft' ? {} : { itemKey: request.itemKey }),
       },
     )
@@ -948,6 +967,7 @@ export default function TextOpenWorldVNextPlayer() {
               ...(request.runtimeIntentAuthorization
                 ? { runtimeIntentAuthorization: request.runtimeIntentAuthorization }
                 : {}),
+              ...(runtimeDirectionAIConfig ? { runtimeDirectionAIConfig } : {}),
               expectedBaseSequence: request.baseSequence,
             },
           ))
@@ -1013,7 +1033,10 @@ export default function TextOpenWorldVNextPlayer() {
             return liveStore.executeVNextAction(
               request.actionKey,
               request.destinationLocationKey,
-              { expectedBaseSequence: request.expectedBaseSequence },
+              {
+                expectedBaseSequence: request.expectedBaseSequence,
+                ...(runtimeDirectionAIConfig ? { runtimeDirectionAIConfig } : {}),
+              },
             )
           }}
         />,
@@ -1043,6 +1066,13 @@ export default function TextOpenWorldVNextPlayer() {
           <strong>运行包</strong>{runtimeSourceEvidence}
         </span>
         <span><strong>保存状态</strong>{store.busy ? '正在结算' : issue ? '需要处理' : '事件已落盘'}</span>
+        {store.lastDirectionOutcome && <span data-testid="text-open-world-runtime-direction-status">
+          <strong>叙事导演</strong>{store.lastDirectionOutcome.status === 'adopted'
+            ? 'AI建议已在合法候选闭集中采用'
+            : store.lastDirectionOutcome.status === 'no-bias'
+              ? 'AI本轮不偏置，代码照常选择'
+              : 'AI不可用，已使用确定性选择'}
+        </span>}
       </>}
       navigationSupplement={trackedQuestContent}
       resultSupplement={<TextOpenWorldResultExpressionPanel

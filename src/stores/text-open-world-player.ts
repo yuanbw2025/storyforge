@@ -39,6 +39,10 @@ import {
   type TextOpenWorldPlayerIssueV1,
 } from '../lib/open-world/player-resilience'
 import type { TextOpenWorldRuntimeIntentAuthorizationV1 } from '../lib/open-world/runtime-intent'
+import type {
+  TextOpenWorldRuntimeDirectionOutcomeV1,
+  TextOpenWorldRuntimeDirectionRunAIV1,
+} from '../lib/open-world/runtime-direction'
 import {
   adoptOpenWorldRuntimeCandidateV1,
   generateOpenWorldRuntimeCandidateV1,
@@ -96,6 +100,8 @@ export interface TextOpenWorldExecuteActionOptions {
   quantity?: number
   itemKey?: string
   runtimeIntentAuthorization?: TextOpenWorldRuntimeIntentAuthorizationV1
+  runtimeDirectionAIConfig?: AIConfig
+  runtimeDirectionRunAI?: TextOpenWorldRuntimeDirectionRunAIV1
 }
 
 export type TextOpenWorldPlayerRecoveryRequestV1 =
@@ -137,6 +143,8 @@ export interface TextOpenWorldPlayerState {
   runtimeState: ProductRuntimeState
   selectedManifest: PlayableTextOpenWorldProductRuntimePackageV1 | null
   lastFeedback: TextOpenWorldFeedbackReceiptV1 | null
+  /** Latest optional Director-advice result for this tab; canonical gameplay stays in Event state. */
+  lastDirectionOutcome: TextOpenWorldRuntimeDirectionOutcomeV1 | null
   generatedCandidate: OpenWorldRuntimeCandidateV1 | null
   /** Optional AI expression has its own lifecycle and never locks deterministic gameplay. */
   presentationBusy: boolean
@@ -251,6 +259,7 @@ function emptySelectionState(error = '') {
     presentationBusy: false,
     presentationIssue: null,
     lastFeedback: null,
+    lastDirectionOutcome: null,
     issue: null,
     recovery: null,
     recoveryNotice: '',
@@ -343,6 +352,7 @@ async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, s
     runtimeState,
     selectedManifest,
     lastFeedback: recoveredFeedback,
+    lastDirectionOutcome: null,
     recoveryNotice: recoveredFeedback
       ? '检测到一项已记录但未完成展示的操作；播放器已沿用原命令完成核对，没有重复提交。'
       : '',
@@ -600,6 +610,7 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
     selectedSession: null, selectedSessionSource: null, events: [], checkpoints: [],
     saveProjection: emptySaveProjection(), versionCompatibility: null,
     runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null, lastFeedback: null,
+    lastDirectionOutcome: null,
     generatedCandidate: null, presentationBusy: false, presentationIssue: null,
     issue: null, recovery: null, recoveryNotice: '',
     loading: false, busy: false, error: '',
@@ -736,6 +747,7 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
         ?? `text-open-world:action:${sessionId}:${crypto.randomUUID()}`
       let commandNeedsSettlement = false
       let terminalFeedback: TextOpenWorldFeedbackReceiptV1 | null = null
+      let directionOutcome: TextOpenWorldRuntimeDirectionOutcomeV1 | null = null
       const actionRevision = ++actionRequestRevision
       const mayPublish = () => actionRequestRevision === actionRevision
         && isCurrentSessionRequest(request, sessionId)
@@ -754,6 +766,9 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
             quantity: options?.quantity,
             itemKey: options?.itemKey,
             runtimeIntentAuthorization: options?.runtimeIntentAuthorization,
+            runtimeDirectionAIConfig: options?.runtimeDirectionAIConfig,
+            runtimeDirectionRunAI: options?.runtimeDirectionRunAI,
+            onRuntimeDirectionOutcome: outcome => { directionOutcome = outcome },
           })
           assertActionFeedbackIdentity(feedback, {
             sessionId,
@@ -763,7 +778,11 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
             expectedBaseSequence,
           })
           await refresh(request, sessionId)
-          if (mayPublish()) set({ generatedCandidate: null, lastFeedback: feedback })
+          if (mayPublish()) set({
+            generatedCandidate: null,
+            lastFeedback: feedback,
+            lastDirectionOutcome: directionOutcome,
+          })
           return feedback
         } catch (error) {
           // Querying is read-only. Distinguish an actually pending envelope

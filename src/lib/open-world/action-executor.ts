@@ -5,7 +5,7 @@ import {
   hashProductRuntimeStateV1,
   readProductRuntimeState,
 } from '../product/runtime-core'
-import type { TextOpenWorldCombatTransitionIntentV1, TextOpenWorldCommandEnvelopeV1, TextOpenWorldDirectorTriggerV1, TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectPlanV1, TextOpenWorldFeedbackReceiptV1, TextOpenWorldRandomEvidenceV1, TextOpenWorldRandomRequestV1 } from '../types'
+import type { AIConfig, TextOpenWorldCombatTransitionIntentV1, TextOpenWorldCommandEnvelopeV1, TextOpenWorldDirectorTriggerV1, TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectPlanV1, TextOpenWorldFeedbackReceiptV1, TextOpenWorldRandomEvidenceV1, TextOpenWorldRandomRequestV1 } from '../types'
 import { createTextOpenWorldActionRegistryV1 } from './action-registry'
 import { ensureTextOpenWorldCombatRetryCheckpointV1 } from './checkpoints'
 import { commitTextOpenWorldCommandV1, getTextOpenWorldCommandStatusV1 } from './commands'
@@ -32,7 +32,12 @@ import { createTextOpenWorldCombatStateMachineV1 } from './combat-state-machine'
 import { createTextOpenWorldCombatActionCatalogV1 } from './combat-actions'
 import { createTextOpenWorldCraftingCatalogV1 } from './crafting'
 import { createTextOpenWorldEconomyCatalogV1 } from './economy'
-import { createTextOpenWorldDirectorCatalogV1 } from './director'
+import { createTextOpenWorldDirectorCatalogV1, projectTextOpenWorldDirectorCandidatesV1 } from './director'
+import {
+  generateTextOpenWorldRuntimeDirectionV1,
+  type TextOpenWorldRuntimeDirectionOutcomeV1,
+  type TextOpenWorldRuntimeDirectionRunAIV1,
+} from './runtime-direction'
 import {
   projectTextOpenWorldRuntimeIntentEvidenceV1,
   verifyTextOpenWorldRuntimeIntentAuthorizationV1,
@@ -76,7 +81,16 @@ function directorTriggerFrom(envelope: TextOpenWorldCommandEnvelopeV1): TextOpen
   return value as TextOpenWorldDirectorTriggerV1
 }
 
-async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): Promise<TextOpenWorldFeedbackReceiptV1> {
+interface RuntimeDirectionSettlementOptionsV1 {
+  aiConfig?: AIConfig
+  runAI?: TextOpenWorldRuntimeDirectionRunAIV1
+  onOutcome?: (outcome: TextOpenWorldRuntimeDirectionOutcomeV1) => void | Promise<void>
+}
+
+async function settleAcceptedCommand(
+  envelope: TextOpenWorldCommandEnvelopeV1,
+  runtimeDirection?: RuntimeDirectionSettlementOptionsV1,
+): Promise<TextOpenWorldFeedbackReceiptV1> {
   const state = await readProductRuntimeState(envelope.sessionId)
   const projection = parseTextOpenWorldSessionProjectionV1(state.textOpenWorld)
   if (projection.protocol.pendingCommandId !== envelope.commandId) {
@@ -185,6 +199,69 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
       request,
     })))
   }
+  let directorAuthorization = directorInput
+    ? directorCatalog!.resolve({ ...directorInput, evidence: randomEvidence })
+    : null
+  let directionOutcome: TextOpenWorldRuntimeDirectionOutcomeV1 | null = null
+  if (directorAuthorization?.selection.outcomeKind !== 'blank'
+    && (runtimeDirection?.runAI || runtimeDirection?.aiConfig)) {
+    const projected = projectTextOpenWorldDirectorCandidatesV1({
+      runtimePackage: projection.runtimePackage,
+      state: projection.state,
+      trigger: directorInput!.trigger,
+      conditionResults,
+      parsedModules: modules,
+    })
+    const recommendable = projected.candidates.filter(candidate => {
+      const quest = candidate.definitionKey
+        ? modules.quests.quests.find(item => item.key === candidate.definitionKey)
+        : null
+      return quest?.type !== 'mainline' && quest?.type !== 'significant'
+    })
+    if (recommendable.length >= 2) {
+      let directionRunId: number | null = null
+      try {
+        const session = await db.productRuntimeSessions.get(envelope.sessionId)
+        if (!session || session.kind !== 'text-open-world' || session.worldId == null || session.workId == null) {
+          fail('Director AI建议Session缺少完整作用域')
+        }
+        const resolution = await generateTextOpenWorldRuntimeDirectionV1({
+          scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
+          productRuntimeSessionId: envelope.sessionId,
+          trigger: directorInput!.trigger,
+          aiConfig: runtimeDirection.aiConfig,
+          runAI: runtimeDirection.runAI,
+          onRunCreated: runId => { directionRunId = runId },
+        })
+        if (resolution.advice) {
+          directorAuthorization = directorCatalog!.resolve({
+            ...directorInput!,
+            evidence: randomEvidence,
+            advice: resolution.advice,
+          })
+        }
+        directionOutcome = {
+          version: 1,
+          status: resolution.advice ? 'adopted' : 'no-bias',
+          trigger: directorInput!.trigger,
+          runId: resolution.runId,
+          recommendedCandidateKey: resolution.candidateKey,
+          selectedCandidateKey: directorAuthorization!.selection.sourceKey,
+        }
+      } catch {
+        // Direction is an optional read-only adviser. Any provider, protocol,
+        // budget or stale failure must preserve the already resolved rules path.
+        directionOutcome = {
+          version: 1,
+          status: 'deterministic-fallback',
+          trigger: directorInput!.trigger,
+          runId: directionRunId,
+          recommendedCandidateKey: null,
+          selectedCandidateKey: directorAuthorization!.selection.sourceKey,
+        }
+      }
+    }
+  }
   const authorization: TextOpenWorldEffectPlanV1['authorization'] = crimeResolution?.authorization
     ?? (questTransitions.length
       ? createTextOpenWorldQuestTransitionCatalogV1(projection.runtimePackage).prepare({
@@ -238,7 +315,7 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
                           quantity: actionQuantityFrom(envelope),
                         })
                       : directorEffects.length === 1
-                        ? directorCatalog!.resolve({ ...directorInput!, evidence: randomEvidence })
+                        ? directorAuthorization
               : null)
   if (authorization?.kind === 'director-settlement') {
     effectKeys = [...effectKeys, ...authorization.selection.effectKeys]
@@ -257,6 +334,7 @@ async function settleAcceptedCommand(envelope: TextOpenWorldCommandEnvelopeV1): 
     reason: crimeResolution?.failureReason ?? null,
     degradation: null,
   })
+  if (directionOutcome) await runtimeDirection?.onOutcome?.(directionOutcome)
   return readTextOpenWorldFeedbackV1({ sessionId: envelope.sessionId, commandId: envelope.commandId })
 }
 
@@ -280,12 +358,18 @@ type ExecuteTextOpenWorldActionInputV1 = {
   requestedAt?: number
   /** Ephemeral local Run handle; only its portable evidence projection enters the command. */
   runtimeIntentAuthorization?: TextOpenWorldRuntimeIntentAuthorizationV1
+  /** Optional BYOK adviser for the automatic Director follow-up; never enters the command payload. */
+  runtimeDirectionAIConfig?: AIConfig
+  /** Test/host injection for one model request; never enters durable runtime state. */
+  runtimeDirectionRunAI?: TextOpenWorldRuntimeDirectionRunAIV1
+  onRuntimeDirectionOutcome?: (outcome: TextOpenWorldRuntimeDirectionOutcomeV1) => void | Promise<void>
 }
 type ExecuteTextOpenWorldActionInternalInputV1 = ExecuteTextOpenWorldActionInputV1 & {
   combatTransitionIntent?: TextOpenWorldCombatTransitionIntentV1
   directorTrigger?: TextOpenWorldDirectorTriggerV1
   /** Durable Action v17 linkage from a system follow-up to its player cause. */
   systemCauseCommandId?: string
+  runtimeDirection?: RuntimeDirectionSettlementOptionsV1
 }
 
 async function executeTextOpenWorldActionAsV1(
@@ -318,6 +402,7 @@ async function executeTextOpenWorldActionAsV1(
   }
   const hasDirectorTrigger = input.directorTrigger != null
   if (hasDirectorTrigger !== (systemCategory === 'director-action')) fail('Director触发只能由Director系统Action提交')
+  if (input.runtimeDirection != null && systemCategory !== 'director-action') fail('Director AI建议只能用于Director系统Action')
   if (input.systemCauseCommandId != null && !COMMAND_ID.test(input.systemCauseCommandId)) fail('系统后续工作causeCommandId无效')
   if (input.systemCauseCommandId != null && (actorKey !== 'system' || (systemCategory !== 'quest-action' && systemCategory !== 'director-action'))) {
     fail('系统后续工作causeCommandId只能由任务或Director系统Action提交')
@@ -339,6 +424,7 @@ async function executeTextOpenWorldActionAsV1(
       || prior.envelope.source !== source
       || prior.envelope.actorKey !== actorKey) fail('相同commandId对应另一项Action请求')
     const feedback = await readTextOpenWorldFeedbackV1({ sessionId: input.sessionId, commandId })
+    // A durable pending command is recovered without another model request.
     return feedback.phase === 'terminal' ? feedback : settleAcceptedCommand(prior.envelope)
   }
 
@@ -437,7 +523,7 @@ async function executeTextOpenWorldActionAsV1(
     requestedAt: input.requestedAt ?? Date.now(),
   }
   await commitTextOpenWorldCommandV1(envelope)
-  return settleAcceptedCommand(envelope)
+  return settleAcceptedCommand(envelope, input.runtimeDirection)
 }
 
 type DurableCommandRecordV1 = {
@@ -799,7 +885,12 @@ function directorTriggerForActionCategory(category: string): TextOpenWorldDirect
   return 'activity'
 }
 
-async function settleDirectorAfterActionV1(sessionId: number, causeCommandId: string, causeActionKey: string): Promise<void> {
+async function settleDirectorAfterActionV1(
+  sessionId: number,
+  causeCommandId: string,
+  causeActionKey: string,
+  runtimeDirection?: RuntimeDirectionSettlementOptionsV1,
+): Promise<void> {
   const runtime = await readProductRuntimeState(sessionId)
   const projection = parseTextOpenWorldSessionProjectionV1(runtime.textOpenWorld)
   const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
@@ -830,6 +921,7 @@ async function settleDirectorAfterActionV1(sessionId: number, causeCommandId: st
     commandId,
     source: 'system-action',
     ...(modern ? { systemCauseCommandId: causeCommandId } : {}),
+    ...(runtimeDirection ? { runtimeDirection } : {}),
   }, 'system', 'director-action')
   if (feedback.phase !== 'terminal' || feedback.status !== 'succeeded') fail(`Director系统结算未成功:${trigger}`)
 }
@@ -1043,7 +1135,11 @@ export async function executeTextOpenWorldActionV1(input: ExecuteTextOpenWorldAc
     await settleWeatherForCurrentEpochV1(input.sessionId)
     await settleActorSchedulesForCurrentPeriodV1(input.sessionId)
     await settleReadyQuestSystemActionsV1(input.sessionId, feedback.commandId)
-    await settleDirectorAfterActionV1(input.sessionId, feedback.commandId, input.actionKey)
+    await settleDirectorAfterActionV1(input.sessionId, feedback.commandId, input.actionKey, {
+      aiConfig: input.runtimeDirectionAIConfig,
+      runAI: input.runtimeDirectionRunAI,
+      onOutcome: input.onRuntimeDirectionOutcome,
+    })
     await reconcileTextOpenWorldSessionCompletionV1(input.sessionId)
   }
   return feedback

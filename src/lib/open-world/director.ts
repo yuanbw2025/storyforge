@@ -26,6 +26,23 @@ type Candidate = {
   weight: number
 }
 
+const DIRECTION_REASON_PREFIX_V1 = 'runtime-direction-v1'
+const HASH = /^[a-f0-9]{64}$/
+
+/**
+ * Verified, read-only model advice. The Director may only use it to choose one
+ * candidate that deterministic code has already admitted. Blank probability,
+ * eligibility, cooldowns, capacity and all effects remain code-owned.
+ */
+export interface TextOpenWorldDirectorAdviceV1 {
+  version: 1
+  source: 'runtime-direction'
+  candidateKey: string
+  candidateHash: string
+  contextManifestHash: string
+  terminalReceiptHash: string
+}
+
 export interface TextOpenWorldDirectorCandidateProjectionV1 {
   regionKey: string
   deckReady: boolean
@@ -236,6 +253,36 @@ function requestsFor(input: ReturnType<typeof candidates>, drawNumber: number): 
   ]
 }
 
+function directionReason(advice: TextOpenWorldDirectorAdviceV1): string {
+  return [
+    DIRECTION_REASON_PREFIX_V1,
+    encodeURIComponent(advice.candidateKey),
+    advice.candidateHash,
+    advice.contextManifestHash,
+    advice.terminalReceiptHash,
+  ].join('|')
+}
+
+function parseDirectionReason(reason: string): TextOpenWorldDirectorAdviceV1 | null {
+  if (!reason.startsWith(`${DIRECTION_REASON_PREFIX_V1}|`)) return null
+  const parts = reason.split('|')
+  if (parts.length !== 5) fail('Director AI建议证据格式无效')
+  let candidateKey = ''
+  try { candidateKey = decodeURIComponent(parts[1]) } catch { fail('Director AI建议候选键编码无效') }
+  if (!/^[A-Za-z][A-Za-z0-9._:-]{0,199}$/.test(candidateKey)
+    || !HASH.test(parts[2]) || !HASH.test(parts[3]) || !HASH.test(parts[4])) {
+    fail('Director AI建议证据无效')
+  }
+  return {
+    version: 1,
+    source: 'runtime-direction',
+    candidateKey,
+    candidateHash: parts[2],
+    contextManifestHash: parts[3],
+    terminalReceiptHash: parts[4],
+  }
+}
+
 function earnedAchievements(modules: TextOpenWorldParsedModulesV1, state: TextOpenWorldEffectStateV1, conditionResults: ConditionResults) {
   return modules.knowledge.achievements.filter(achievement => achievement.grantAuthority !== 'owner-action'
     && !state.knowledge.earnedAchievementKeys.includes(achievement.key)
@@ -245,7 +292,7 @@ function earnedAchievements(modules: TextOpenWorldParsedModulesV1, state: TextOp
 export interface TextOpenWorldDirectorCatalogV1 {
   shouldSettle(input: { state: TextOpenWorldEffectStateV1; trigger: TextOpenWorldDirectorTriggerV1; conditionResults: ConditionResults }): boolean
   randomRequestsFor(input: { state: TextOpenWorldEffectStateV1; trigger: TextOpenWorldDirectorTriggerV1; conditionResults: ConditionResults }): TextOpenWorldRandomRequestV1[]
-  resolve(input: { state: TextOpenWorldEffectStateV1; trigger: TextOpenWorldDirectorTriggerV1; conditionResults: ConditionResults; evidence: TextOpenWorldRandomEvidenceV1[] }): TextOpenWorldDirectorSettlementAuthorizationV1
+  resolve(input: { state: TextOpenWorldEffectStateV1; trigger: TextOpenWorldDirectorTriggerV1; conditionResults: ConditionResults; evidence: TextOpenWorldRandomEvidenceV1[]; advice?: TextOpenWorldDirectorAdviceV1 | null }): TextOpenWorldDirectorSettlementAuthorizationV1
   assertAuthorization(input: { state: TextOpenWorldEffectStateV1; authorization: TextOpenWorldDirectorSettlementAuthorizationV1; conditionResults?: ConditionResults; evidence?: TextOpenWorldRandomEvidenceV1[] }): void
   applyAuthorization(input: { state: TextOpenWorldEffectStateV1; authorization: TextOpenWorldDirectorSettlementAuthorizationV1 }): TextOpenWorldEffectStateV1
 }
@@ -255,7 +302,7 @@ export function createTextOpenWorldDirectorCatalogV1(
   parsedModules?: TextOpenWorldParsedModulesV1,
 ): TextOpenWorldDirectorCatalogV1 {
   const modules = parsedModules ?? parseTextOpenWorldModulesV1(value)
-  const resolve = (input: { state: TextOpenWorldEffectStateV1; trigger: TextOpenWorldDirectorTriggerV1; conditionResults: ConditionResults; evidence: TextOpenWorldRandomEvidenceV1[] }) => {
+  const resolve = (input: { state: TextOpenWorldEffectStateV1; trigger: TextOpenWorldDirectorTriggerV1; conditionResults: ConditionResults; evidence: TextOpenWorldRandomEvidenceV1[]; advice?: TextOpenWorldDirectorAdviceV1 | null }) => {
     const state = input.state; const drawNumber = state.director.drawCount + 1
     const eligible = candidates({ modules, state, trigger: input.trigger, conditionResults: input.conditionResults })
     const randomRequests = requestsFor(eligible, drawNumber)
@@ -272,6 +319,19 @@ export function createTextOpenWorldDirectorCatalogV1(
         }
       }
     }
+    // The deterministic roll decides Blank versus content first. Advice may
+    // only replace one non-Blank candidate with another currently legal one.
+    if (selected && input.advice) {
+      const advised = eligible.candidates.find(candidate => candidate.sourceKey === input.advice!.candidateKey)
+      if (!advised) fail(`Director AI建议不在当前合法候选闭集:${input.advice.candidateKey}`)
+      const advisedQuest = advised.definitionKey
+        ? modules.quests.quests.find(quest => quest.key === advised.definitionKey)
+        : null
+      if (advisedQuest?.type === 'mainline' || advisedQuest?.type === 'significant') {
+        fail(`Director AI建议不能选择受保护故事线:${input.advice.candidateKey}`)
+      }
+      selected = advised
+    }
     const variantTextKey = selected && selected.variantTextKeys.length
       ? selected.variantTextKeys[(input.evidence[1].value - 1) % selected.variantTextKeys.length]
       : null
@@ -279,7 +339,8 @@ export function createTextOpenWorldDirectorCatalogV1(
       outcomeKind: selected.outcomeKind, sourceKey: selected.sourceKey, definitionKey: selected.definitionKey,
       sourceInstanceKey: selected.sourceInstanceKey, questInstanceKey: selected.questInstanceKey,
       variantTextKey, fingerprint: selected.fingerprint, intensity: selected.intensity,
-      effectKeys: [...selected.effectKeys], rumorKey: selected.rumorKey, reason: 'weighted-selection',
+      effectKeys: [...selected.effectKeys], rumorKey: selected.rumorKey,
+      reason: input.advice ? directionReason(input.advice) : 'weighted-selection',
     } : {
       outcomeKind: 'blank', sourceKey: null, definitionKey: null, sourceInstanceKey: null, questInstanceKey: null,
       variantTextKey: null, fingerprint: null, intensity: 0, effectKeys: [], rumorKey: null,
@@ -298,7 +359,14 @@ export function createTextOpenWorldDirectorCatalogV1(
   }
   const assertAuthorization: TextOpenWorldDirectorCatalogV1['assertAuthorization'] = input => {
     if (input.conditionResults && input.evidence) {
-      const expected = resolve({ state: input.state, trigger: input.authorization.trigger, conditionResults: input.conditionResults, evidence: input.evidence })
+      const advice = parseDirectionReason(input.authorization.selection.reason)
+      const expected = resolve({
+        state: input.state,
+        trigger: input.authorization.trigger,
+        conditionResults: input.conditionResults,
+        evidence: input.evidence,
+        advice,
+      })
       if (canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(input.authorization)) fail('Director授权与冻结规则或当前状态不一致')
       return
     }
