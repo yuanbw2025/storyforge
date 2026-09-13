@@ -43,6 +43,12 @@ describe('R-OPEN-WORLD6 · vNext 运行时 AI Skill 合同总表', () => {
         'provider-credential-or-endpoint-secret',
       ]))
       expect(item.reads.contextManifestRequired).toBe(true)
+      expect(skill.contextGateway).toMatchObject({
+        rollout: 'required',
+        providerSourceKeys: ['openWorldRuntime'],
+        allowOriginalRead: false,
+      })
+      expect(skill.contextGateway?.allowedDepths).not.toContain('original')
       expect(item.writes).toEqual({
         formalStateWriteTargets: [],
         candidatePersistence: ['agentRunEvents', 'agentRunCheckpoints'],

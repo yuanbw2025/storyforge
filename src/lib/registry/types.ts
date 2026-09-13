@@ -700,6 +700,9 @@ export interface ContextResourceDescriptorV1 {
     workId?: number
     worldGroupId?: number | null
     chapterId?: number
+    /** Exact upper-product instance when the resource is derived from a
+     * ProductRuntimeSession rather than mutable authoring Canon. */
+    productRuntimeSessionId?: number
     /** Immutable release locator when the resource comes from WorldReference. */
     worldReleaseId?: number
     worldReleaseHash?: string
@@ -729,6 +732,10 @@ export interface FrozenResourceScopeV1 {
   worldId?: number
   workId?: number
   worldGroupId?: number | null
+  /** Exact instance locator for registered runtime Context Providers. The
+   * provider fingerprint still freezes Release/sequence/state/visibility; an
+   * id by itself never grants access to another WorkspaceScope. */
+  productRuntimeSessionId?: number
   /** Optional operation boundary. Providers may expose target-specific
    * aggregate resources without materializing one aggregate for every chapter. */
   chapterId?: number

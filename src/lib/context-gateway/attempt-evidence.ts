@@ -2,7 +2,7 @@ import { estimateTokens } from '../ai/context-budget'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import {
   appendAgentRunEventV1,
-  readAgentRunV1,
+  readAgentRunByOwnerV1,
   type AgentRunSnapshotV1,
 } from '../agent/run/event-store'
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
@@ -88,6 +88,10 @@ function fail(code: string, message: string): never {
   throw new ContextGatewayEvidenceError(code, message)
 }
 
+async function readEvidenceRunV1(scope: WorkspaceScope, runId: number): Promise<AgentRunSnapshotV1> {
+  return readAgentRunByOwnerV1(scope, runId)
+}
+
 function exactPayload(value: unknown): string {
   return typeof value === 'string' ? value : canonicalStringify(value)
 }
@@ -157,6 +161,9 @@ async function recordExact(input: {
   return recordAgentRunArtifactV1({
     scope: input.scope,
     runId: input.runId,
+    ...(input.snapshot.run.productRuntimeSessionId == null
+      ? {}
+      : { productRuntimeSessionId: input.snapshot.run.productRuntimeSessionId }),
     artifactKind: input.artifactKind,
     content: input.content,
     stepId: input.stepId,
@@ -181,7 +188,7 @@ export async function recordContextGatewayPreflightEvidenceV1(input: {
 }): Promise<{ evidence: ContextGatewayPreflightEvidenceV1; snapshot: AgentRunSnapshotV1 }> {
   await assertContextPacketIntegrity(input.contextPacket)
   await assertSelectorIntegrity(input.selector)
-  let snapshot = await readAgentRunV1(input.scope, input.runId)
+  let snapshot = await readEvidenceRunV1(input.scope, input.runId)
   if (input.expectedLastSequence != null && input.expectedLastSequence !== snapshot.projection.lastSequence) {
     fail('sequence-conflict', '运行已推进，拒绝记录过期 preflight')
   }
@@ -458,7 +465,7 @@ export async function finalizeContextGatewayAttemptEvidenceV1(input: {
     || input.baseManifest.scope.projectId !== input.scope.projectId) {
     fail('attempt-scope', 'preflight/V2/Run step attempt 或 scope 不一致')
   }
-  let snapshot = await readAgentRunV1(input.scope, input.runId)
+  let snapshot = await readEvidenceRunV1(input.scope, input.runId)
   if (input.expectedLastSequence != null && input.expectedLastSequence !== snapshot.projection.lastSequence) {
     fail('sequence-conflict', '运行已推进，拒绝基于过期 response finalize')
   }
@@ -533,6 +540,9 @@ export async function finalizeContextGatewayAttemptEvidenceV1(input: {
   snapshot = await appendAgentRunEventV1({
     scope: input.scope,
     runId: input.runId,
+    ...(snapshot.run.productRuntimeSessionId == null
+      ? {}
+      : { productRuntimeSessionId: snapshot.run.productRuntimeSessionId }),
     type: 'context.assembled',
     payload: { stepId: input.stepId, attempt: input.attempt, manifestHash: manifest.manifestHash },
     expectedLastSequence: snapshot.projection.lastSequence,
@@ -547,7 +557,7 @@ export async function readContextGatewayManifestV3ForAttemptV1(input: {
   stepId: string
   attempt: number
 }): Promise<{ manifest: ContextManifestV3; manifestArtifactHash: string; snapshot: AgentRunSnapshotV1 }> {
-  const snapshot = await readAgentRunV1(input.scope, input.runId)
+  const snapshot = await readEvidenceRunV1(input.scope, input.runId)
   const assembled = snapshot.events.filter((event): event is Extract<typeof event, { type: 'context.assembled' }> => (
     event.type === 'context.assembled'
       && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt

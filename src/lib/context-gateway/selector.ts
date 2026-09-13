@@ -285,6 +285,8 @@ function matchesTimeRange(descriptor: ContextResourceDescriptorV1, requested: Co
 
 function scopeConflict(descriptor: ContextResourceDescriptorV1, scope: FrozenResourceScopeV1): boolean {
   if (descriptor.scope.projectId !== scope.projectId) return true
+  if (scope.productRuntimeSessionId != null
+    && descriptor.scope.productRuntimeSessionId !== scope.productRuntimeSessionId) return true
   if (scope.workId != null && descriptor.scope.workId != null && descriptor.scope.workId !== scope.workId) return true
   if (scope.worldGroupId != null && descriptor.scope.worldGroupId != null
     && descriptor.scope.worldGroupId !== scope.worldGroupId) return true

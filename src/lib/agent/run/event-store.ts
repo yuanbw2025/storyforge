@@ -755,6 +755,19 @@ export async function readInstanceAgentRunV1(
   )
 }
 
+/** Resolve the immutable Work/Instance owner before opening the matching read
+ * transaction. Shared evidence readers use this boundary instead of probing
+ * ownership tables inside their own transaction. */
+export async function readAgentRunByOwnerV1(
+  scope: WorkspaceScope,
+  runId: number,
+): Promise<AgentRunSnapshotV1> {
+  const owner = await db.agentRuns.get(runId)
+  return owner?.productRuntimeSessionId == null
+    ? readAgentRunV1(scope, runId)
+    : readInstanceAgentRunV1(scope, runId)
+}
+
 /** Read and verify the exact child for a parent/relation pair. */
 export async function readAgentRunChildV1(input: {
   scope: WorkspaceScope

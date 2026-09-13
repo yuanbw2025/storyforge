@@ -61,6 +61,12 @@ import {
   WORLD_RELEASE_PROVIDER_VERSION_V1,
   WORLD_RELEASE_RESOURCE_KINDS_V1,
 } from '../context-gateway/world-release-provider-contract'
+import {
+  TEXT_OPEN_WORLD_RUNTIME_CONTEXT_NORMALIZATION_VERSION_V1,
+  TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_ID_V1,
+  TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_VERSION_V1,
+  TEXT_OPEN_WORLD_RUNTIME_CONTEXT_RESOURCE_KINDS_V1,
+} from '../open-world/runtime-ai-context-provider-contract'
 import type {
   Chapter,
   Character,
@@ -135,6 +141,24 @@ const WORLD_RELEASE_RESOURCE_PROVIDER_PROXY_V1: ContextResourceProviderV1 = {
     .WORLD_RELEASE_RESOURCE_PROVIDER_V1.readOriginal!(input),
   fingerprint: async scope => (await import('../context-gateway/world-release-provider'))
     .WORLD_RELEASE_RESOURCE_PROVIDER_V1.fingerprint(scope),
+}
+
+const TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_PROXY_V1: ContextResourceProviderV1 = {
+  version: 'context-resource-provider-v1',
+  providerId: TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_ID_V1,
+  providerVersion: TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_VERSION_V1,
+  normalizationVersion: TEXT_OPEN_WORLD_RUNTIME_CONTEXT_NORMALIZATION_VERSION_V1,
+  kinds: TEXT_OPEN_WORLD_RUNTIME_CONTEXT_RESOURCE_KINDS_V1,
+  listMetadata: async input => (await import('../open-world/runtime-ai-context-provider'))
+    .TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_V1.listMetadata(input),
+  searchMetadata: async input => (await import('../open-world/runtime-ai-context-provider'))
+    .TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_V1.searchMetadata(input),
+  read: async input => (await import('../open-world/runtime-ai-context-provider'))
+    .TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_V1.read(input),
+  readOriginal: async input => (await import('../open-world/runtime-ai-context-provider'))
+    .TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_V1.readOriginal(input),
+  fingerprint: async scope => (await import('../open-world/runtime-ai-context-provider'))
+    .TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_V1.fingerprint(scope),
 }
 
 // Upper-product readers are lazy for the same reason as adaptation readers:
@@ -2050,6 +2074,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 8000,
     protectedFromTrim: true,
     requiresProductRuntimeSessionId: true,
+    resources: TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_PROXY_V1,
     read: readOpenWorldRuntimeContext,
   },
   {

@@ -1129,6 +1129,26 @@ const TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   },
 }
 const TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY = compressionPolicy(['openWorldRuntime'])
+const TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY: AgentSkillContextGatewayPolicyV1 = {
+  version: 1,
+  rollout: 'required',
+  providerSourceKeys: ['openWorldRuntime'],
+  allowedResourceKinds: [
+    'fact', 'location', 'character', 'character-relation', 'story-arc',
+    'storyline-progress', 'narrative-blueprint', 'reference',
+  ],
+  allowedDepths: ['index', 'summary', 'focused', 'full'],
+  // Provider reads are deterministic pre-model retrieval. Runtime RunContracts
+  // still permit zero model tool calls and exactly one model request.
+  maxReadCalls: 64,
+  maxRetrievedTokens: 16_000,
+  maxPlanningSteps: 1,
+  maxPlanningModelTokens: 1_000,
+  allowOriginalRead: false,
+  additionalReadToolNames: [
+    'list_context_catalog', 'search_context', 'read_context_resource',
+  ],
+}
 const TTRPG_GM_RUNTIME_INPUT_POLICY: AgentSkillInputPolicyV1 = {
   sourceKeys: ['ttrpgRuntime'],
   states: {
@@ -2888,10 +2908,11 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: [],
     inputPolicy: TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY,
     contextCompression: TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY,
+    contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 800,
     writeTargets: [],
     lastVerifiedAt: '2026-09-13',
-    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract'],
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway'],
   },
   {
     version: 1,
@@ -2908,10 +2929,11 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: [],
     inputPolicy: TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY,
     contextCompression: TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY,
+    contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 1_600,
     writeTargets: [],
     lastVerifiedAt: '2026-09-13',
-    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract'],
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway'],
   },
   {
     version: 1,
@@ -2928,10 +2950,11 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: [],
     inputPolicy: TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY,
     contextCompression: TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY,
+    contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
     lastVerifiedAt: '2026-09-13',
-    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract'],
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway'],
   },
   {
     version: 1,
@@ -2948,10 +2971,11 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: [],
     inputPolicy: TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY,
     contextCompression: TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY,
+    contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
     lastVerifiedAt: '2026-09-13',
-    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract'],
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway'],
   },
   {
     version: 1,
@@ -2968,10 +2992,11 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: [],
     inputPolicy: TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY,
     contextCompression: TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY,
+    contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 1_200,
     writeTargets: [],
     lastVerifiedAt: '2026-09-13',
-    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract'],
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway'],
   },
   {
     version: 1,
@@ -2988,10 +3013,11 @@ export const AGENT_SKILLS = [
     optionalContextSourceKeys: [],
     inputPolicy: TEXT_OPEN_WORLD_RUNTIME_G6_INPUT_POLICY,
     contextCompression: TEXT_OPEN_WORLD_RUNTIME_G6_COMPRESSION_POLICY,
+    contextGateway: TEXT_OPEN_WORLD_RUNTIME_G6_GATEWAY_POLICY,
     maxOutputTokens: 1_600,
     writeTargets: [],
     lastVerifiedAt: '2026-09-13',
-    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract'],
+    regressionTests: ['R-OPEN-WORLD6-runtime-ai-contract', 'R-OPEN-WORLD6-runtime-context-gateway'],
   },
   {
     version: 1, id: 'prose.ttrpg-private-guidance', agentId: 'prose', defaultForAgent: false,

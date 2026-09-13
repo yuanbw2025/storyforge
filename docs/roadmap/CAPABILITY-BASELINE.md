@@ -1,6 +1,6 @@
 # StoryForge 当前能力基线
 
-> 版本：1.6.6 · 基线：2026-09-13 文字开放世界G6-01运行时AI契约 · 权威层级：L2
+> 版本：1.6.7 · 基线：2026-09-13 文字开放世界G6-02运行时按需Context · 权威层级：L2
 > 本文区分代码存在、纵切面可用和产品完成。旧完成卡不自动恢复权威，但已合入主干并由当前代码/检查器复证的 Phase 5 成果必须保留。
 
 ## 状态定义
@@ -63,7 +63,7 @@
 | E-TOWN-01 | missing | 有角色互动和通用产品运行时基础能力可复用 | 没有独立 AI 小镇产品的时间、日程、地点、群体与离线演化闭环 |
 | E-TEXTADV-01 | partial | 文字冒险已接入专用需求适配器、统一 Production/Build/ProductRelease v1 和独立玩家面 | 可玩内容、规则、媒资、结局和真实 E2E 仍需专项封板 |
 | E-AVG-01 | partial | AVG 已接入专用需求适配器、统一 Production/Build/ProductRelease v1、演出与独立玩家面 | 真实视觉/声音资产、演出绑定和完整体验未验收 |
-| E-OPENWORLD-01 | partial | 已在统一Production/Build/ProductRelease和ProductRuntime事件底座上完成G1运行治理、G2确定性玩法闭环、G3 P0～P10/V1～V3/QA内容生产编译器、G4完整玩家端、G5完整Creator生产/发布/更新阶段及G6-01运行时AI契约。成长、任务、地图/快旅、时间天气、NPC日程/生死/关系、战斗、制作、经济、地区演化、受限发牌、动态任务、随机事件与知识历程均可重放；Creator双来源生产、修改、媒资、质量、发布、版本维护、便携恢复和删除已闭合。运行时现登记意图、对白、结果演绎、地区任务包装、导演建议、长期记忆六类只读Skill，每项绑定Formal AI Entry、严格JSON候选、模型/BYOK能力、预算、失败策略和精确Release/Session/Sequence/State/Visibility V3 RunContract；唯一provider网关不能写正式状态。质量回执仍不等价于固定文学或美学水平；旧Release继续不可变兼容 | 六类运行时AI尚未接入按需Context Manifest、玩家交互和降级链；G6-02～G6-10及G7盐脊真人验收、压力/质量校准与旧入口收口仍未完成 |
+| E-OPENWORLD-01 | partial | 已在统一Production/Build/ProductRelease和ProductRuntime事件底座上完成G1运行治理、G2确定性玩法闭环、G3 P0～P10/V1～V3/QA内容生产编译器、G4完整玩家端、G5完整Creator生产/发布/更新阶段及G6-01～G6-02运行时AI契约与按需Context底座。成长、任务、地图/快旅、时间天气、NPC日程/生死/关系、战斗、制作、经济、地区演化、受限发牌、动态任务、随机事件与知识历程均可重放；Creator双来源生产、修改、媒资、质量、发布、版本维护、便携恢复和删除已闭合。六类只读Skill每项绑定Formal AI Entry、严格JSON候选、模型/BYOK能力、预算、失败策略和精确Release/Session/Sequence/State/Visibility V3 RunContract；`openWorldRuntime`注册Provider仅投影当前场景、合法Action/Choice、可见任务/故事线、角色知识交集、终态回执、模板槽和导演候选，必读全量、长尾语义选择、无固定N条截取。SourceRef、资源快照、请求/回应与V3 Context Manifest已进入Instance所有Harness，边界过期失效关闭。唯一provider网关不能写正式状态；质量回执仍不等价于固定文学或美学水平；旧Release继续不可变兼容 | 六类运行时AI尚未接入玩家交互、候选采用和完整降级链；G6-03～G6-10及G7盐脊真人验收、压力/质量校准与旧入口收口仍未完成 |
 
 ## F · 平台与商业化
 

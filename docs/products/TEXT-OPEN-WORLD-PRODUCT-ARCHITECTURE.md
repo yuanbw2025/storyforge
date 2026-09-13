@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.63
+> 规格版本：1.1.64
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -1645,6 +1645,19 @@ SceneProjection {
 
 G6-01只完成可机验合同，不声称自由输入、对白、演绎、发牌和记忆已经接入玩家UI。当前Skill状态明确为`registered-not-yet-ui-routed`；G6-02补齐按Skill选择的Context Manifest后，G6-03～G6-08才能逐项把候选接入真实流程。
 
+### 18.8 G6-02运行期按需Context与证据闭环
+
+六个运行期Skill不再共用一份完整存档或通用摘要。既有`openWorldRuntime`注册源挂载vNext资源Provider，只从冻结ProductRelease/Build和当前ProductRuntimeSession的规范投影生成可见资源：
+
+- Intent读当前场景、合法Action/Choice、玩家可见状态和相关任务；Dialogue另外只读指定在场角色、三档态度与该角色在当前场景允许且实际知道的知识；
+- Expression必须精确绑定已闭合命令的终态回执；Quest Packaging必须精确绑定代码已选模板槽；Direction只读指定触发点下的合法候选、冲突、冷却、主线保护与Blank；Memory只压缩指定角色与已闭合事件窗口；
+- 当前场景、Action/Choice、精确目标和回执等必读片必须全量交付；只对玩家已知事实和可见任务这类长尾资源做语义选择，不能用“最近N条”代替检索；页数、单资源过大和显式上下文预算只是失败关闭的最终保护；
+- 未揭示故事、未来任务、玩家未知真相、其他角色私密知识、provider凭证和未解析随机数不进入资源目录或模型请求。
+
+资源描述符冻结Release、Session、Sequence、State与Visibility边界，并携带可追溯到冻结manifest、运行头、规范Event或精确初始读集的SourceRef。本地Session数字ID只用于Harness所有权和取证，不写入模型可见资源键或内容。正式Run把所选资源快照、rendered request、模型请求/回应和最终V3 Context Manifest写入Instance所有的共享Harness；任一运行头或可见性改变都使旧边界过期，后续候选必须失效关闭。
+
+G6-02没有新增表、Schema/migration、受治理字段写入、玩家UI或真实模型调用。它只完成六个Skill共用的精确读取和证据底座；意图、对白、演绎、包装、导演和记忆的真实产品采用仍归G6-03～G6-08。
+
 ---
 
 ## 19. 地区模拟、任务导演与随机事件
@@ -3020,6 +3033,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.64 | 2026-09-13 | 完成G6-02运行期按需Context底座：`openWorldRuntime`注册资源Provider从冻结Release/Build与当前Session构建玩家可见资源目录，六个Skill只读各自必读片和精确目标；长尾事实/任务才进行语义选择，不固定截取最近N条。资源SourceRef、快照、rendered request、请求/回应与V3 Context Manifest进入Instance所有Harness，边界过期后失效关闭；无UI、正式写入或真实模型调用。 |
 | 1.1.63 | 2026-09-13 | 完成G6-01运行时AI合同总表：意图、对白、结果演绎、地区任务包装、导演建议和长期记忆六个Skill逐项登记逻辑读取/禁止读取、Formal AI Entry、严格JSON候选、BYOK模型能力、一次调用零工具预算和失败策略；V3 product-runtime RunContract冻结Skill/入口并绑定Release、Session、Sequence、State和Visibility，唯一provider网关无正式状态写权限。当前仅完成契约，尚未接入玩家UI。 |
 | 1.1.62 | 2026-09-13 | 完成G5-12 Creator便携生命周期：v10导出导入重映射SourcePlan、预算账本复合键、生产命令、Build/Artifact/Release/Session和迁移分支，并在写入前验证SourcePin/Unit、正式Release和迁移Canon，篡改时零写入失败关闭。导入终态Build的本地Run/Blob证明显式失效，工作台阻断Preview并提供零provider、零费用的确定性复验；checkpoint、Artifact/Blob、ledger、terminal lineage和root seal闭合后恢复正式Release/Session使用。世界与小说全路径真实往返及项目级联删除通过。 |
 | 1.1.61 | 2026-09-13 | 完成G5-11发布后版本维护与存档迁移：已发布Creator Build可作为不可变修改基线，新Build精确继承来源Release并复用原生产、质量和发布链。兼容报告比较运行契约、初始变量、叙事与状态模块稳定键，只有直接兼容子Release可进入状态级复算；迁移预演重放当前事件、安装目标冻结定义并验证完整投影。正式事务CAS源Session、事件头和双Release，只创建绑定新Release且事件从0开始的子时间线，旧档、旧事件、旧Release和其它分支不变。真实Chromium已覆盖显式预演、确认迁移、切换新版本、保留旧分支与刷新恢复。 |

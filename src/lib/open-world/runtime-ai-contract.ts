@@ -362,6 +362,12 @@ export function validateTextOpenWorldRuntimeAISkillContractsV1(
     if (skill.writeTargets.length !== 0 || item.writes.formalStateWriteTargets.length !== 0 || item.writes.adoptAllowed) fail(`${item.skillId} 不得获得正式状态写权限`)
     if (JSON.stringify(skill.contextSourceKeys) !== JSON.stringify(item.reads.contextSourceKeys)
       || skill.optionalContextSourceKeys.length !== 0 || skill.readToolNames.length !== 0) fail(`${item.skillId} 读取集合与Skill注册表不一致`)
+    const gateway = skill.contextGateway
+    if (!gateway || gateway.rollout !== 'required'
+      || JSON.stringify(gateway.providerSourceKeys) !== JSON.stringify(item.reads.contextSourceKeys)
+      || gateway.allowOriginalRead || gateway.allowedDepths.includes('original')) {
+      fail(`${item.skillId} 未接入只读按需Context Gateway`)
+    }
     if (!item.reads.logicalSlices.length || !item.reads.forbiddenSlices.length || !item.reads.contextManifestRequired) fail(`${item.skillId} 读取策略不完整`)
     if (!item.model.providerAgnostic || item.model.selectionPolicy !== 'global-runtime-task-routing'
       || item.model.credentialPolicy !== 'configured-byok-never-persist-in-run'

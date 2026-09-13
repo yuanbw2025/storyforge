@@ -26,6 +26,22 @@ type Candidate = {
   weight: number
 }
 
+export interface TextOpenWorldDirectorCandidateProjectionV1 {
+  regionKey: string
+  deckReady: boolean
+  blankWeight: number
+  candidates: Array<{
+    outcomeKind: Candidate['outcomeKind']
+    sourceKey: string
+    definitionKey: string | null
+    questInstanceKey: string | null
+    variantTextKeys: string[]
+    fingerprint: string
+    intensity: number
+    weight: number
+  }>
+}
+
 function fail(message: string): never { throw new Error(`[text-open-world-director] ${message}`) }
 function clamp(value: number, minimum: number, maximum: number) { return Math.max(minimum, Math.min(maximum, value)) }
 function allSatisfied(keys: string[], results: ConditionResults) { return keys.every(key => results[key] === true) }
@@ -170,6 +186,43 @@ function candidates(input: {
     })
   })
   return { regionKey, deck, deckReady: true, candidates: result.sort((left, right) => left.outcomeKind.localeCompare(right.outcomeKind) || left.sourceKey.localeCompare(right.sourceKey)) }
+}
+
+/**
+ * Read-only Director candidate projection for the registered runtime AI
+ * Context Provider. It exposes only the same candidates deterministic
+ * settlement may choose; random evidence and final selection remain owned by
+ * createTextOpenWorldDirectorCatalogV1().
+ */
+export function projectTextOpenWorldDirectorCandidatesV1(input: {
+  runtimePackage: TextOpenWorldRuntimePackageV1 | string | unknown
+  state: TextOpenWorldEffectStateV1
+  trigger: TextOpenWorldDirectorTriggerV1
+  conditionResults: ConditionResults
+  parsedModules?: TextOpenWorldParsedModulesV1
+}): TextOpenWorldDirectorCandidateProjectionV1 {
+  const modules = input.parsedModules ?? parseTextOpenWorldModulesV1(input.runtimePackage)
+  const projected = candidates({
+    modules,
+    state: input.state,
+    trigger: input.trigger,
+    conditionResults: input.conditionResults,
+  })
+  return {
+    regionKey: projected.regionKey,
+    deckReady: projected.deckReady,
+    blankWeight: projected.deckReady ? projected.deck.blankWeight : 0,
+    candidates: projected.candidates.map(candidate => ({
+      outcomeKind: candidate.outcomeKind,
+      sourceKey: candidate.sourceKey,
+      definitionKey: candidate.definitionKey,
+      questInstanceKey: candidate.questInstanceKey,
+      variantTextKeys: [...candidate.variantTextKeys],
+      fingerprint: candidate.fingerprint,
+      intensity: candidate.intensity,
+      weight: candidate.weight,
+    })),
+  }
 }
 
 function requestsFor(input: ReturnType<typeof candidates>, drawNumber: number): TextOpenWorldRandomRequestV1[] {

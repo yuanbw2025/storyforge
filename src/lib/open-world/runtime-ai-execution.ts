@@ -10,6 +10,18 @@ import {
   type TextOpenWorldRuntimeAISkillIdV1,
 } from './runtime-ai-contract'
 
+// G6-02 extends this existing headless runtime-AI boundary with the exact
+// Context Gateway preparation API. Keeping the export here makes the governed
+// packet builder reachable without pulling it into a player route before
+// G6-03 starts adopting intent candidates.
+export {
+  createTextOpenWorldRuntimeAIContextBaseManifestV2,
+  prepareTextOpenWorldRuntimeAIContextV1,
+  type TextOpenWorldRuntimeAIContextPreparationV1,
+  type TextOpenWorldRuntimeAIContextRequestV1,
+  type TextOpenWorldRuntimeAIContextSelectionV1,
+} from './runtime-ai-context'
+
 function fail(message: string): never {
   throw new Error(`[text-open-world-runtime-ai-execution] ${message}`)
 }
