@@ -37,6 +37,11 @@ export interface TextOpenWorldCreatorArtifactBrowserProps {
   scope: WorkspaceScope
   productionId: number
   refreshToken?: string | number
+  onRepairBuildCreated?: (result: {
+    productionId: number
+    baseBuildNumber: number
+    targetBuildNumber: number
+  }) => void | Promise<void>
 }
 
 const TABS: ReadonlyArray<{ key: TextOpenWorldArtifactBrowserModeV1; label: string }> = [
@@ -631,7 +636,10 @@ export function TextOpenWorldCreatorArtifactBrowser(
                 selection={editSelection}
                 eligible={editEligible}
                 ineligibleReason={editIneligibleReason}
-                onRepairBuildCreated={load}
+                onRepairBuildCreated={async result => {
+                  await load()
+                  await props.onRepairBuildCreated?.(result)
+                }}
               />}
             </> : selectedArtifact ? <>
               <ArtifactDetail artifact={selectedArtifact} />
@@ -640,7 +648,10 @@ export function TextOpenWorldCreatorArtifactBrowser(
                 selection={editSelection}
                 eligible={editEligible}
                 ineligibleReason={editIneligibleReason}
-                onRepairBuildCreated={load}
+                onRepairBuildCreated={async result => {
+                  await load()
+                  await props.onRepairBuildCreated?.(result)
+                }}
               />}
             </> : <p className="py-10 text-center text-xs text-text-muted">从列表选择一项查看只读详情。</p>}
           </div>

@@ -620,6 +620,12 @@ export default function TextOpenWorldVNextPlayer() {
       onDeleteBranch={sessionId => store.remove(sessionId)}
       onRepairCheckpoint={checkpointId => store.repairCheckpoint(checkpointId)}
       onRepairRuntimeHead={sessionId => store.repairRuntimeHead(sessionId)}
+      onPreviewReleaseMigration={targetProductReleaseId => (
+        store.previewReleaseMigration(targetProductReleaseId)
+      )}
+      onMigrateRelease={(targetProductReleaseId, expectedPreviewHash) => (
+        store.migrateRelease(targetProductReleaseId, expectedPreviewHash)
+      )}
       onRefresh={() => store.refreshSaveCenter()}
     />
   </div>

@@ -574,6 +574,61 @@ describe.sequential('Text Open World G5-07 · governed local repair Build', () =
     expect(adopted?.result.artifacts.map(row => row.artifactKey)).toEqual(task.outputArtifactKeys)
   }, 30_000)
 
+  it('uses the immutable current Release as the source of a repair child Build after publication', async () => {
+    const fixture = await seedRepairFixture()
+    const releasedProductReleaseId = 9_500_711
+    const releasedStateRevision = fixture.stateRevision + 1
+    await db.productBuilds.update(fixture.buildId, {
+      status: 'released',
+      releasedProductReleaseId,
+      updatedAt: Date.now() + 1,
+    })
+    await db.productProductions.update(fixture.productionId, {
+      status: 'released',
+      currentProductReleaseId: releasedProductReleaseId,
+      stateRevision: releasedStateRevision,
+      updatedAt: Date.now() + 1,
+    })
+    fixture.stateRevision = releasedStateRevision
+    repairMocks.governance!.productionStateRevision = releasedStateRevision
+    repairMocks.handoffs = [await handoffFor({
+      fixture,
+      taskKey: 'p4.player-build',
+      runId: 90_071,
+    })]
+
+    const prepared = await prepareTextOpenWorldCreatorArtifactRepairV1({
+      scope: fixture.scope,
+      productionId: fixture.productionId,
+      buildId: fixture.buildId,
+    })
+    const command = commandFor(prepared)
+    const receipt = await executeProductProductionCommand({
+      scope: fixture.scope,
+      productionId: fixture.productionId,
+      command,
+      now: command.authorizedAt,
+    })
+    expect(receipt).toMatchObject({ ok: true, replayed: false })
+    const target = await db.productBuilds.where('[productionId+buildNumber]')
+      .equals([fixture.productionId, fixture.buildNumber + 1]).first()
+    expect(target).toMatchObject({
+      parentBuildNumber: fixture.buildNumber,
+      sourceProductReleaseId: releasedProductReleaseId,
+      releasedProductReleaseId: null,
+      status: 'authorized',
+    })
+    await expect(db.productBuilds.get(fixture.buildId)).resolves.toMatchObject({
+      status: 'released',
+      releasedProductReleaseId,
+    })
+    await expect(db.productProductions.get(fixture.productionId)).resolves.toMatchObject({
+      status: 'producing',
+      currentProductReleaseId: releasedProductReleaseId,
+      currentBuildNumber: fixture.buildNumber + 1,
+    })
+  }, 30_000)
+
   it('fails stale preview hashes without a partial Build and detects any witnessed source mutation', async () => {
     const fixture = await seedRepairFixture()
     const prepared = await prepareTextOpenWorldCreatorArtifactRepairV1({

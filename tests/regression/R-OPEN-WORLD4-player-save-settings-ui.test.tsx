@@ -22,6 +22,8 @@ const MANUAL_CHECKPOINT_ID = 810_000_041
 const AUTOSAVE_CHECKPOINT_ID = 810_000_042
 const COMBAT_CHECKPOINT_ID = 810_000_043
 const MILESTONE_CHECKPOINT_ID = 810_000_044
+const CURRENT_RELEASE_ID = 910_000_051
+const TARGET_RELEASE_ID = 910_000_052
 
 const SUMMARY: TextOpenWorldPlayerSaveSummaryV1 = {
   runtimeFormat: 'vnext',
@@ -139,6 +141,7 @@ function readyVersions(): TextOpenWorldPlayerVersionCompatibilityProjectionV1 {
     },
     releases: [
       {
+        actionIdentity: { productReleaseId: TARGET_RELEASE_ID },
         version: 2,
         label: '盐脊修复版',
         createdAt: 1_780_000_100_000,
@@ -146,9 +149,10 @@ function readyVersions(): TextOpenWorldPlayerVersionCompatibilityProjectionV1 {
         verified: true,
         declaredCompatibleWithPinnedRelease: true,
         compatibilityDeclaration: 'direct-release-lineage',
-        canMigratePinnedSession: false,
+        canMigratePinnedSession: true,
       },
       {
+        actionIdentity: { productReleaseId: CURRENT_RELEASE_ID },
         version: 1,
         label: '盐脊旧版',
         createdAt: 1_780_000_000_000,
@@ -160,7 +164,7 @@ function readyVersions(): TextOpenWorldPlayerVersionCompatibilityProjectionV1 {
       },
     ],
     diagnostics: [],
-    migration: { available: false, reason: 'versioned-migrator-not-implemented' },
+    migration: { available: true, reason: 'compatible-release-available' },
   }
 }
 
@@ -176,7 +180,7 @@ function previewVersions(): TextOpenWorldPlayerVersionCompatibilityProjectionV1 
       releaseVersion: null,
       message: '制作预览不属于正式版本目录。',
     }],
-    migration: { available: false, reason: 'versioned-migrator-not-implemented' },
+    migration: { available: false, reason: 'not-applicable' },
   }
 }
 
@@ -190,6 +194,27 @@ function callbacks() {
     onDeleteBranch: vi.fn(async (_sessionId: number) => undefined),
     onRepairCheckpoint: vi.fn(async (_checkpointId: number) => undefined),
     onRepairRuntimeHead: vi.fn(async (_sessionId: number) => undefined),
+    onPreviewReleaseMigration: vi.fn(async (targetProductReleaseId: number) => ({
+      version: 1 as const,
+      status: 'ready' as const,
+      previewHash: 'a'.repeat(64),
+      actionIdentity: { sourceSessionId: CURRENT_SESSION_ID, targetProductReleaseId },
+      source: {
+        releaseVersion: 1, releaseLabel: '盐脊旧版', throughSequence: 12,
+        stateHash: 'b'.repeat(64),
+      },
+      target: { releaseVersion: 2, releaseLabel: '盐脊修复版' },
+      summary: { playerLevel: 4, locationLabel: '盐港', activeQuestCount: 3, worldMinute: 1_920 },
+      guarantees: {
+        originalSessionUnchanged: true as const,
+        originalReleasePinned: true as const,
+        createsChildSession: true as const,
+        targetReleaseVerified: true as const,
+        stateValidatedAgainstTargetPackage: true as const,
+      },
+      warnings: ['迁移会创建绑定新Release的子时间线，不会覆盖原存档。'],
+    })),
+    onMigrateRelease: vi.fn(async (_targetProductReleaseId: number, _previewHash: string) => undefined),
     onRefresh: vi.fn(async () => undefined),
   }
 }
@@ -291,6 +316,7 @@ describe('Text Open World G4-12E · 存档、分支、版本与设置纯组件',
     for (const internalId of [
       CURRENT_SESSION_ID, HISTORICAL_SESSION_ID, MANUAL_CHECKPOINT_ID,
       AUTOSAVE_CHECKPOINT_ID, COMBAT_CHECKPOINT_ID, MILESTONE_CHECKPOINT_ID,
+      CURRENT_RELEASE_ID, TARGET_RELEASE_ID,
     ]) expect(panel.textContent).not.toContain(String(internalId))
 
     const settingsTab = buttonByText(nav, '设置')
@@ -419,7 +445,7 @@ describe('Text Open World G4-12E · 存档、分支、版本与设置纯组件',
     expect(actions.onDeleteBranch).toHaveBeenCalledWith(HISTORICAL_SESSION_ID)
   })
 
-  it('旧Release保持固定；即使新版声明兼容也无迁移入口，Build Preview不混入正式版本', async () => {
+  it('旧Release保持固定；直接兼容新版先预演再显式创建迁移分支，Build Preview不混入正式版本', async () => {
     const actions = callbacks()
     await render(panelProps(actions))
     await click(buttonByText(host.querySelector('nav')!, '版本'))
@@ -428,11 +454,20 @@ describe('Text Open World G4-12E · 存档、分支、版本与设置纯组件',
     expect(host.textContent).toContain('盐脊旧版 · v1')
     expect(host.textContent).toContain('不会被静默升级')
     expect(host.querySelector('[data-version-relation="newer"]')?.textContent)
-      .toBe('声明兼容；首版仍暂不能迁移')
-    expect(host.textContent).toContain('首版尚未提供版本化迁移器')
-    expect(host.textContent).toContain('当前不能迁移此存档')
-    expect(Array.from(host.querySelectorAll('button')).some(button => /迁移/.test(button.textContent ?? '')))
-      .toBe(false)
+      .toBe('直接兼容子版本 · 可预演迁移')
+    expect(host.textContent).toContain('状态级预演后才能迁移')
+    await click(buttonByText(host, '预演迁移'))
+    expect(actions.onPreviewReleaseMigration).toHaveBeenCalledWith(TARGET_RELEASE_ID)
+    expect(host.textContent).toContain('迁移预演已通过')
+    expect(host.textContent).toContain('玩家等级4')
+    expect(host.textContent).toContain('不会覆盖原存档')
+    const migrate = buttonByText(host, '创建迁移分支并切换')
+    expect(migrate.disabled).toBe(true)
+    const acknowledge = host.querySelector<HTMLInputElement>('.open-world-version-migration-preview input[type="checkbox"]')!
+    await act(async () => { acknowledge.click() })
+    expect(migrate.disabled).toBe(false)
+    await click(migrate)
+    expect(actions.onMigrateRelease).toHaveBeenCalledWith(TARGET_RELEASE_ID, 'a'.repeat(64))
 
     await render(panelProps(actions, {
       sessionKey: 'session:build-preview',

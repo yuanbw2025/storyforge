@@ -70,7 +70,7 @@ test('正式开放世界存档中心保留分支与旧Release，并持久化本�
         releaseHash: created.manifest.releaseIdentityHash,
       },
     })
-    await db.productReleases.add({
+    const nextReleaseId = await db.productReleases.add({
       ...created.scope,
       productionKey: created.release.productionKey,
       productType: 'text-open-world',
@@ -85,6 +85,7 @@ test('正式开放世界存档中心保留分支与旧Release，并持久化本�
       parentSessionId: created.session.id as number,
       parentTitle: created.session.title,
       pinnedReleaseLabel: created.release.label,
+      nextReleaseId: nextReleaseId as number,
     }
   })
 
@@ -139,8 +140,30 @@ test('正式开放世界存档中心保留分支与旧Release，并持久化本�
   await expect(versions).toContainText(`${seeded.pinnedReleaseLabel} · v1`)
   await expect(versions).toContainText('盐脊修订版 v2 · v2')
   await expect(versions).toContainText('旧存档会继续使用自己的不可变 Release')
-  await expect(versions).toContainText('当前不能迁移此存档')
-  await expect(versions.getByRole('button', { name: /迁移/ })).toHaveCount(0)
+  await expect(versions).toContainText('直接兼容子版本 · 可预演迁移')
+  await versions.getByRole('button', { name: '预演迁移', exact: true }).click()
+  const migrationPreview = panel.getByTestId('text-open-world-version-migration-preview')
+  await expect(migrationPreview).toContainText('迁移预演已通过')
+  await expect(migrationPreview).toContainText('v1 → v2')
+  await expect(migrationPreview).toContainText('不会覆盖原存档')
+  await migrationPreview.getByLabel(/我确认创建新版本子时间线/).check()
+  await migrationPreview.getByRole('button', { name: '创建迁移分支并切换', exact: true }).click()
+
+  const migrationTitle = `${childTitle} · v2迁移分支`
+  await expect(page.getByTestId('text-open-world-shell')).toBeVisible()
+  await expect(page.getByTestId('text-open-world-runtime-source'))
+    .toContainText('PRODUCT RELEASE v2 · 已固定')
+  await expect(page.getByTestId('text-open-world-main-view'))
+    .toHaveAttribute('data-open-world-view', 'scene')
+  panel = await openSaveSettings(page)
+  await panel.getByRole('navigation', { name: '存档与设置分类' })
+    .getByRole('button', { name: /^分支/ })
+    .click()
+  const migratedBranches = panel.getByTestId('text-open-world-branch-list')
+  await expect(migratedBranches).toContainText(seeded.parentTitle)
+  await expect(migratedBranches).toContainText(childTitle)
+  const migratedBranch = migratedBranches.locator('article').filter({ hasText: migrationTitle })
+  await expect(migratedBranch).toContainText('当前时间线')
 
   await panel.getByRole('navigation', { name: '存档与设置分类' })
     .getByRole('button', { name: '设置', exact: true })
@@ -162,7 +185,7 @@ test('正式开放世界存档中心保留分支与旧Release，并持久化本�
 
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.reload()
-  await openFormalSession(page, childTitle)
+  await openFormalSession(page, migrationTitle)
   const restoredShell = page.getByTestId('text-open-world-shell')
   await expect(restoredShell).toHaveAttribute('data-high-contrast', 'true')
   await expect.poll(() => restoredShell.evaluate(element => (
@@ -177,25 +200,49 @@ test('正式开放世界存档中心保留分支与旧Release，并持久化本�
   await expect(panel.locator('input[type="range"]').first()).toHaveValue('24')
   await expectNoHorizontalOverflow(page, 390)
 
-  const durable = await page.evaluate(async ({ parentSessionId, currentTitle }) => {
+  const durable = await page.evaluate(async ({ parentSessionId, childTitle, migrationTitle }) => {
     const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
     const { db } = await importer('/storyforge/src/lib/db/schema.ts')
     const sessions = await db.productRuntimeSessions.toArray()
     const parent = sessions.find((session: { id?: number }) => session.id === parentSessionId)
-    const child = sessions.find((session: { title: string }) => session.title === currentTitle)
+    const child = sessions.find((session: { title: string }) => session.title === childTitle)
+    const migration = sessions.find((session: { title: string }) => session.title === migrationTitle)
     return {
       parentExists: Boolean(parent),
+      childId: child?.id ?? null,
       childParentId: child?.parentSessionId ?? null,
       sameRelease: parent?.productReleaseId === child?.productReleaseId,
+      migrationParentId: migration?.parentSessionId ?? null,
+      migrationReleaseId: migration?.productReleaseId ?? null,
+      migrationEventCount: migration?.id == null
+        ? -1
+        : await db.productRuntimeEvents.where('sessionId').equals(migration.id).count(),
+      migrationPlanSchema: migration == null
+        ? null
+        : JSON.parse(migration.canonSnapshotJson).migration?.schema ?? null,
+      oldReleaseStillExists: parent?.productReleaseId == null
+        ? false
+        : Boolean(await db.productReleases.get(parent.productReleaseId)),
       parentCheckpointNames: (await db.productRuntimeCheckpoints
         .where('sessionId').equals(parentSessionId).toArray())
         .map((checkpoint: { name: string }) => checkpoint.name),
     }
-  }, { parentSessionId: seeded.parentSessionId, currentTitle: childTitle })
+  }, {
+    parentSessionId: seeded.parentSessionId,
+    childTitle,
+    migrationTitle,
+  })
   expect(durable).toEqual({
     parentExists: true,
+    childId: expect.any(Number),
     childParentId: seeded.parentSessionId,
     sameRelease: true,
+    migrationParentId: expect.any(Number),
+    migrationReleaseId: seeded.nextReleaseId,
+    migrationEventCount: 0,
+    migrationPlanSchema: 'storyforge.text-open-world-save-migration-plan',
+    oldReleaseStillExists: true,
     parentCheckpointNames: ['进入盐渠前'],
   })
+  expect(durable.migrationParentId).toBe(durable.childId)
 })

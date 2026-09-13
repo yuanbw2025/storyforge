@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.60
+> 规格版本：1.1.61
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -1897,6 +1897,8 @@ Checkpoint包含：
 
 用户可以继续旧Release。迁移必须显式、可预演、可回滚到原分支，不能静默升级存档。
 
+G5-11首版实现采用“直接兼容子版本 + 状态级复算”的双门：Release lineage必须把目标声明为当前固定版本的直接兼容子版本，代码还会根据新旧RuntimePackage重新计算稳定键兼容报告。当前只放行稳定ID、规则、任务、数值和状态语义完全不变的文本、图片、音频及Presentation替换；任何状态语义变化都拒绝迁移并继续固定旧档。预演读取当前规范事件头，重建新Release冻结定义并验证完整玩家投影；作者确认后创建绑定新Release的子Session，不复制旧事件、不修改父Session，父子关系与迁移计划Hash共同保留回退证据。
+
 ### 22.5 Session生命周期
 
 ```text
@@ -2294,9 +2296,19 @@ G5-10复用共享`productReleases`、正式媒资表和原子发布事务，但�
 - 共享Release外层的`sourceWorldRelease.contentHash`仅保留为现有运行包的来源内容Hash坐标。真正来源种类、版本、边界和血缘由Creator专属source contract与中立lineage持有，小说不会伪造WorldReference；旧共享WorldRelease Release仍使用原合同和reader；
 - 创作者面板展示下一版本、Build/RuntimePackage、SourcePin、SourceManifest、Artifact集合、装配报告、治理快照、质量回执和媒资数量。作者须分别确认来源权利、Build/质量、不可变规则和立即发布；一次性授权Hash绑定当前adoption intent、Build manifest、RuntimePackage、G5-09回执和发布名称；
 - 正式提交继续使用共享事务，对Production、Brief、Build、全部当前Artifact、全部质量回执、terminal读集和物理Blob做最终CAS；随后原子创建不可变ProductRelease、固化Release媒资、回写Build/Production并保存幂等命令回执。任一权威行、Blob、来源、问题或质量证据漂移均零发布失败关闭；同一成功命令可安全重放；
-- ProductRelease reader在创建Session或读取包时重新验证Creator合同自身Hash、来源链、消费槽、Artifact receipt、装配报告、质量、作者授权、release identity和lineage。世界与小说两种正式Release均可启动同一文字开放世界Runtime；旧Build、旧Release和既有Session不被改写。新Release兼容评估、旧档迁移预演和版本演化仍由G5-11负责。
+- ProductRelease reader在创建Session或读取包时重新验证Creator合同自身Hash、来源链、消费槽、Artifact receipt、装配报告、质量、作者授权、release identity和lineage。世界与小说两种正式Release均可启动同一文字开放世界Runtime；旧Build、旧Release和既有Session不被改写。G5-11已允许作者从当前已发布Creator Build修改受治理内容、创建紧邻子Build并重新完成媒资/质量/发布链；兼容报告和玩家迁移仍以新旧不可变Release为唯一输入。
 
 本项没有新增表、Schema、Context Source或AI写入口，也不向WorldRelease或小说源作品回写。发布证明当前冻结内容满足既定证据门，不对文学或美术质量作永久保证。
+
+### 24.10 G5-11 新Release、兼容报告与存档迁移
+
+发布后的Creator Production不另造通用Brief或第二套演化系统。作者仍在当前Release对应的受治理Artifact上使用G5-06修改入口；G5-07影响闭包现在允许当前已发布Build作为不可变基线，新子Build的`sourceProductReleaseId`精确指向该Release。子Build完成后重新经过媒资、质量、作者授权和G5-10发布，因此版本维护与首次生产共用同一套Artifact、DAG、Run和Release事实源。
+
+兼容报告以稳定状态语义为准：运行契约、初始变量、叙事节点/选择条件与Effect、全部状态模块的schema/hash/dependency都会参与比较；文字开放世界Presentation模块只把schema与依赖纳入状态稳定键，其文案、地图布局和媒资内容Hash可作为表现更新。删除或改变任一既有状态稳定键仍为`breaking / pin-old-save`，仅新增稳定键或纯表现变化才是`compatible`。玩家端不会仅相信lineage文字声明，迁移预演会再次对两个已核验Release的RuntimePackage计算同一报告。
+
+迁移只支持活动中的正式vNext Session，并要求目标是当前Release的直接兼容子版本。预演从规范事件流读取精确序号和状态Hash，把玩家进度迁入目标Release的冻结叙事定义与RuntimePackage后运行完整解析验证，同时展示等级、地点、任务和世界时间摘要。正式提交重新计算预演并用Session、事件头、源Release和目标Release做事务CAS；成功时只创建一个事件序号从0开始的新子Session，`parentSessionId/parentThroughSequence`指回原时间线，便携迁移计划与preview Hash写入新Session的Canon快照。原Session、原事件、原Release和其它分支逐字节不变；预演过期、跨Work、Build Preview、旧混合包、非直接版本或语义不兼容均零写入失败关闭。
+
+该纵切面复用`productRuntimeSessions`父子关系、现有Release和事件生命周期，不新增表、Schema、Context Source或AI写字段。它只保证受支持的状态语义兼容与可回退分支，不声称能自动迁移任务状态机、数值规则、删除/重命名ID或任意剧情结构变化。
 
 ---
 
@@ -2985,6 +2997,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.61 | 2026-09-13 | 完成G5-11发布后版本维护与存档迁移：已发布Creator Build可作为不可变修改基线，新Build精确继承来源Release并复用原生产、质量和发布链。兼容报告比较运行契约、初始变量、叙事与状态模块稳定键，只有直接兼容子Release可进入状态级复算；迁移预演重放当前事件、安装目标冻结定义并验证完整投影。正式事务CAS源Session、事件头和双Release，只创建绑定新Release且事件从0开始的子时间线，旧档、旧事件、旧Release和其它分支不变。真实Chromium已覆盖显式预演、确认迁移、切换新版本、保留旧分支与刷新恢复。 |
 | 1.1.60 | 2026-09-13 | 完成G5-10 Creator正式发布：专属双来源合同封印Creator Brief/SourcePlan/Start、SourcePin索引、P1实读清单、完整Artifact receipt、V3装配、治理快照、G5-09质量与作者授权；小说正文不进Release且`worldReleaseId=null`，世界来源重绑真实locator。共享事务最终CAS全部权威行、terminal读集与物理Blob并原子固化Release/媒资/幂等命令；专属中立lineage不伪造WorldReference，reader完整验签后两种Release均可启动正式Session。 |
 | 1.1.59 | 2026-09-13 | 完成G5-09发布前质量层：复验当前Creator Build授权、Artifact治理、QualityReport、QA硬门与双模型评审；硬门/阻断finding不可豁免，建议finding和非阻断问题逐项说明。灰盒只从Build Preview真实Session的连续事件、状态头和Checkpoint生成，覆盖主线结局、Action、探索、战斗、成长经济及恢复；便携凭据不含本地ID或原文。最终质量回执事务联结硬门、作者抽检、灰盒与完整问题集合，新问题或证据漂移自动使旧结论失效，G5-10必须显式消费。 |
 | 1.1.58 | 2026-09-13 | 完成G5-08 Creator媒资纵切面：P10精确视觉槽形成背景+头像完整sibling包，程序SVG地图和静音音频降级保持确定性；作者导入验真真实PNG/JPEG/WebP字节、尺寸、Hash并冻结产品Blob、alt、来源、许可和权利依据，AI生成冻结当前可信图片Provider及正费用上限。统一影响预览和四项确认经严格命令/CAS创建紧邻子Build；导入目标零模型但保留Run/checkpoint/receipt，生成目标走正式media executor，V3/QA重跑、其余任务逐项复验。旧Build/Release/Session不改，结构与来源通过不冒充美学质量。 |

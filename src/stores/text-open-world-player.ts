@@ -29,6 +29,11 @@ import {
   type TextOpenWorldPlayerVersionCompatibilityProjectionV1,
 } from '../lib/open-world/player-version-compatibility'
 import {
+  migrateTextOpenWorldSaveToReleaseV1,
+  previewTextOpenWorldSaveMigrationV1,
+  type TextOpenWorldSaveMigrationPreviewV1,
+} from '../lib/open-world/player-save-migration'
+import {
   classifyTextOpenWorldPlayerIssueV1,
   type TextOpenWorldPlayerIssueSurfaceV1,
   type TextOpenWorldPlayerIssueV1,
@@ -160,6 +165,11 @@ export interface TextOpenWorldPlayerState {
   repairCheckpoint(checkpointId: number): Promise<void>
   repairRuntimeHead(sessionId: number): Promise<void>
   refreshSaveCenter(): Promise<void>
+  previewReleaseMigration(targetProductReleaseId: number): Promise<TextOpenWorldSaveMigrationPreviewV1>
+  migrateRelease(
+    targetProductReleaseId: number,
+    expectedPreviewHash: string,
+  ): Promise<number>
   recover(): Promise<void>
   dismissIssue(): void
   retryDefeatedCombat(title?: string): Promise<number>
@@ -936,6 +946,42 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
         const projection = sessionOperationProjection(request)
         if (sessionId == null || !projection) throw new Error('[text-open-world] 请先开始正式开放世界。')
         await refresh(projection, sessionId, mayPublish)
+      }, mayPublish)
+    },
+    previewReleaseMigration: async targetProductReleaseId => {
+      const scope = get().scope
+      const sourceSessionId = get().selectedSessionId
+      if (!scope || sourceSessionId == null) {
+        throw new Error('[text-open-world] 请先打开正式Release存档。')
+      }
+      return previewTextOpenWorldSaveMigrationV1({
+        scope,
+        sourceSessionId,
+        targetProductReleaseId,
+      })
+    },
+    migrateRelease: async (targetProductReleaseId, expectedPreviewHash) => {
+      const request = beginSessionOperation()
+      const mayPublish = () => isCurrentSessionOperation(request)
+      return run(async () => {
+        const sourceSessionId = request.selectedSessionId
+        const projection = sessionOperationProjection(request)
+        if (sourceSessionId == null || !projection) {
+          throw new Error('[text-open-world] 请先打开正式Release存档。')
+        }
+        await assertSessionProjection(
+          projection.scope,
+          projection.worldGroupId,
+          sourceSessionId,
+        )
+        const migrated = await migrateTextOpenWorldSaveToReleaseV1({
+          scope: projection.scope,
+          sourceSessionId,
+          targetProductReleaseId,
+          expectedPreviewHash,
+        })
+        await reloadSessionOperation(request, migrated.session.id)
+        return migrated.session.id
       }, mayPublish)
     },
     recover: async () => {

@@ -9,7 +9,7 @@ import {
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { createTextOpenWorldInstance } from '../../src/lib/product/runtime-instances'
-import { EMPTY_PRODUCT_RUNTIME_STATE, type ProductRelease } from '../../src/lib/types'
+import { EMPTY_PRODUCT_RUNTIME_STATE, type ProductRelease, type ProductRuntimePackageV1 } from '../../src/lib/types'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { useTextOpenWorldPlayerStore } from '../../src/stores/text-open-world-player'
 import { createFixtureProductReleaseManifestV1 } from '../helpers/product-release-v1'
@@ -57,6 +57,37 @@ async function fixture(name: string) {
   })
   const owner: TextOpenWorldSaveOwnerV1 = { scope: created.scope, worldGroupId: null }
   return { ...created, owner }
+}
+
+async function addCompatibleChildRelease(
+  created: Awaited<ReturnType<typeof fixture>>,
+): Promise<ProductRelease & { id: number }> {
+  const runtimePackage: ProductRuntimePackageV1 = structuredClone(created.runtimePackage)
+  const presentation = runtimePackage.textOpenWorldVNext!.modules.presentation
+  ;(presentation.payload as { tutorials: Array<{ body: string }> }).tutorials[0]!.body = '更新后的玩家教学说明。'
+  presentation.contentHash = 'd'.repeat(64)
+  const manifest = await createFixtureProductReleaseManifestV1({
+    runtimePackage,
+    productionKey: created.release.productionKey,
+    releaseVersion: 2,
+    parentRelease: {
+      releaseUid: created.manifest.lineage.releaseUid,
+      releaseHash: created.manifest.releaseIdentityHash,
+    },
+  })
+  const release: ProductRelease = {
+    ...created.scope,
+    productionKey: created.release.productionKey,
+    productType: 'text-open-world',
+    worldReleaseId: null,
+    version: 2,
+    label: '盐脊兼容修复版 v2',
+    manifestJson: JSON.stringify(manifest),
+    contentHash: await hashProductProductionValueV2(manifest),
+    createdAt: created.release.createdAt + 1_000,
+  }
+  release.id = await db.productReleases.add(release) as number
+  return release as ProductRelease & { id: number }
 }
 
 async function legacyFixture() {
@@ -176,9 +207,57 @@ describe('Text Open World G4-12F · Store与玩家存档领域集成', () => {
         label: created.release.label,
         canContinueWithoutUpgrade: true,
       },
-      migration: { available: false, reason: 'versioned-migrator-not-implemented' },
+      migration: { available: false, reason: 'no-compatible-newer-release' },
     })
   }, 20_000)
+
+  it('Store完成迁移预演、原子创建新Release子时间线并切换选择', async () => {
+    const created = await fixture('版本迁移旅程')
+    const childRelease = await addCompatibleChildRelease(created)
+    await executeTextOpenWorldActionV1({
+      sessionId: created.session.id!,
+      actionKey: 'action.investigate-channel',
+      targetKey: 'location.salt-port',
+      commandId: 'command.save-store.migration-progress',
+    })
+    await useTextOpenWorldPlayerStore.getState().load(created.scope, null, created.session.id)
+    expect(useTextOpenWorldPlayerStore.getState().versionCompatibility).toMatchObject({
+      migration: { available: true, reason: 'compatible-release-available' },
+      releases: [
+        { version: 2, canMigratePinnedSession: true },
+        { version: 1, canMigratePinnedSession: false },
+      ],
+    })
+
+    const preview = await useTextOpenWorldPlayerStore.getState()
+      .previewReleaseMigration(childRelease.id)
+    const sourceSequence = preview.source.throughSequence
+    const childSessionId = await useTextOpenWorldPlayerStore.getState()
+      .migrateRelease(childRelease.id, preview.previewHash)
+
+    const state = useTextOpenWorldPlayerStore.getState()
+    expect(state).toMatchObject({
+      selectedSessionId: childSessionId,
+      selectedSessionSource: 'release',
+      busy: false,
+      error: '',
+      versionCompatibility: {
+        pinnedRelease: { version: 2, canContinueWithoutUpgrade: true },
+        migration: { available: false, reason: 'no-compatible-newer-release' },
+      },
+    })
+    await expect(db.productRuntimeSessions.get(childSessionId)).resolves.toMatchObject({
+      productReleaseId: childRelease.id,
+      parentSessionId: created.session.id,
+      parentThroughSequence: sourceSequence,
+    })
+    expect(state.saveProjection.totalBranches).toBe(2)
+    expect(state.saveProjection.groups.map(group => group.versionLabel)).toEqual(['版本 2', '版本 1'])
+    await expect(db.productRuntimeSessions.get(created.session.id!)).resolves.toMatchObject({
+      productReleaseId: created.release.id,
+      parentSessionId: null,
+    })
+  }, 30_000)
 
   it('saveCheckpoint执行20槽领域上限并刷新投影，满槽时forkCurrent仍创建system点', async () => {
     const created = await fixture('手动槽旅程')

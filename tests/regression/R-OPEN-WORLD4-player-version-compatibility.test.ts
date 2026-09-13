@@ -80,7 +80,7 @@ describe('Text Open World G4-12C · 玩家版本兼容投影', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
-  it('从当前Session固定版列出同productionKey已核验版本，并区分两类兼容声明但绝不提供迁移', async () => {
+  it('从当前Session固定版列出同productionKey已核验版本，并只开放直接兼容子版本的迁移预演', async () => {
     const created = await fixture('版本族')
     const baseTime = created.release.createdAt
     const direct = await addRelease({
@@ -165,8 +165,8 @@ describe('Text Open World G4-12C · 玩家版本兼容投影', () => {
         canContinueWithoutUpgrade: true,
       },
       migration: {
-        available: false,
-        reason: 'versioned-migrator-not-implemented',
+        available: true,
+        reason: 'compatible-release-available',
       },
       diagnostics: [{ code: 'release-damaged', releaseVersion: 5 }],
     })
@@ -187,7 +187,7 @@ describe('Text Open World G4-12C · 玩家版本兼容投影', () => {
       relationToPinned: 'newer',
       declaredCompatibleWithPinnedRelease: true,
       compatibilityDeclaration: 'direct-release-lineage',
-      canMigratePinnedSession: false,
+      canMigratePinnedSession: true,
     })
     expect(projection.releases.find(release => release.version === 1)).toMatchObject({
       relationToPinned: 'pinned',
@@ -232,7 +232,7 @@ describe('Text Open World G4-12C · 玩家版本兼容投影', () => {
         releaseVersion: null,
         message: '制作预览不属于正式版本目录。',
       }],
-      migration: { available: false, reason: 'versioned-migrator-not-implemented' },
+      migration: { available: false, reason: 'not-applicable' },
     })
   })
 

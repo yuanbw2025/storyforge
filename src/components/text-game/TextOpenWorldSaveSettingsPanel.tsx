@@ -23,6 +23,7 @@ import type {
   TextOpenWorldPlayerReleaseVersionV1,
   TextOpenWorldPlayerVersionCompatibilityProjectionV1,
 } from '../../lib/open-world/player-version-compatibility'
+import type { TextOpenWorldSaveMigrationPreviewV1 } from '../../lib/open-world/player-save-migration'
 import TextOpenWorldPlayerPreferencesPanel from './TextOpenWorldPlayerPreferencesPanel'
 
 type SaveSettingsTab = 'saves' | 'branches' | 'versions' | 'settings'
@@ -45,6 +46,8 @@ export interface TextOpenWorldSaveSettingsPanelProps {
   onDeleteBranch(sessionId: number): Promise<unknown>
   onRepairCheckpoint(checkpointId: number): Promise<unknown>
   onRepairRuntimeHead(sessionId: number): Promise<unknown>
+  onPreviewReleaseMigration?(targetProductReleaseId: number): Promise<TextOpenWorldSaveMigrationPreviewV1>
+  onMigrateRelease?(targetProductReleaseId: number, expectedPreviewHash: string): Promise<unknown>
   onRefresh(): Promise<unknown>
 }
 
@@ -97,8 +100,10 @@ function Summary({ value }: { value: TextOpenWorldPlayerSaveSummaryV1 | null }) 
 function versionStatus(version: TextOpenWorldPlayerReleaseVersionV1): string {
   if (version.relationToPinned === 'pinned') return '当前存档固定版本'
   if (version.relationToPinned === 'older') return '更早的可用版本'
-  return version.declaredCompatibleWithPinnedRelease
-    ? '声明兼容；首版仍暂不能迁移'
+  return version.canMigratePinnedSession
+    ? '直接兼容子版本 · 可预演迁移'
+    : version.declaredCompatibleWithPinnedRelease
+      ? '存在兼容声明，但不能从当前版本直接迁移'
     : '未声明与当前存档兼容'
 }
 
@@ -449,7 +454,13 @@ export default function TextOpenWorldSaveSettingsPanel(
     </div>}
 
     {tab === 'versions' && <div className="open-world-save-settings-content" data-testid="text-open-world-version-list">
-      <VersionPanel projection={props.versions} />
+      <VersionPanel
+        key={String(props.sessionKey)}
+        projection={props.versions}
+        disabled={disabled}
+        onPreview={props.onPreviewReleaseMigration}
+        onMigrate={props.onMigrateRelease}
+      />
     </div>}
 
     {tab === 'settings' && <div className="open-world-save-settings-content">
@@ -493,7 +504,14 @@ function BranchCard(props: {
 
 function VersionPanel(props: {
   projection: TextOpenWorldPlayerVersionCompatibilityProjectionV1 | null
+  disabled: boolean
+  onPreview?: (targetProductReleaseId: number) => Promise<TextOpenWorldSaveMigrationPreviewV1>
+  onMigrate?: (targetProductReleaseId: number, expectedPreviewHash: string) => Promise<unknown>
 }) {
+  const [preview, setPreview] = useState<TextOpenWorldSaveMigrationPreviewV1 | null>(null)
+  const [acknowledged, setAcknowledged] = useState(false)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
   const projection = props.projection
   if (!projection) return <p className="open-world-save-settings-empty">版本信息正在核验。</p>
   if (projection.availability === 'build-preview-excluded') return <section className="open-world-version-notice">
@@ -518,14 +536,68 @@ function VersionPanel(props: {
       <div>{projection.releases.map((version, index) => <article key={`${version.version}:${version.createdAt}:${index}`}>
         <div><strong>{version.label} · v{version.version}</strong><small>{formatTimestamp(version.createdAt)}</small></div>
         <span data-version-relation={version.relationToPinned}>{versionStatus(version)}</span>
+        {version.canMigratePinnedSession && props.onPreview && <button
+          type="button"
+          disabled={props.disabled || pending}
+          onClick={() => {
+            setPending(true)
+            setError('')
+            setPreview(null)
+            setAcknowledged(false)
+            void props.onPreview!(version.actionIdentity.productReleaseId)
+              .then(setPreview)
+              .catch(() => setError('迁移预演未能通过；原存档没有变化，请刷新版本后重试。'))
+              .finally(() => setPending(false))
+          }}
+        >{pending ? <Loader2 className="is-spinning" aria-hidden="true" /> : <GitBranch aria-hidden="true" />}预演迁移</button>}
       </article>)}</div>
     </section>
+    {error && <p className="open-world-save-settings-error" role="alert">{error}</p>}
+    {preview && <section className="open-world-version-migration-preview" data-testid="text-open-world-version-migration-preview">
+      <header>
+        <div><small>迁移预演已通过</small><strong>v{preview.source.releaseVersion} → v{preview.target.releaseVersion}</strong></div>
+        <ShieldCheck aria-hidden="true" />
+      </header>
+      <dl>
+        <div><dt>玩家等级</dt><dd>{preview.summary.playerLevel}</dd></div>
+        <div><dt>当前位置</dt><dd>{preview.summary.locationLabel}</dd></div>
+        <div><dt>进行中任务</dt><dd>{preview.summary.activeQuestCount}</dd></div>
+        <div><dt>世界分钟</dt><dd>{preview.summary.worldMinute}</dd></div>
+      </dl>
+      {preview.warnings.map(warning => <p key={warning}>{warning}</p>)}
+      <label>
+        <input
+          type="checkbox"
+          checked={acknowledged}
+          disabled={props.disabled || pending}
+          onChange={event => setAcknowledged(event.currentTarget.checked)}
+        />
+        我确认创建新版本子时间线，并保留当前旧版本时间线作为可回退原分支。
+      </label>
+      <button
+        type="button"
+        disabled={props.disabled || pending || !acknowledged || !props.onMigrate}
+        onClick={() => {
+          if (!props.onMigrate) return
+          setPending(true)
+          setError('')
+          void props.onMigrate(
+            preview.actionIdentity.targetProductReleaseId,
+            preview.previewHash,
+          ).catch(() => {
+            setError('迁移提交失败或预演已过期；原存档保持不变，请重新预演。')
+            setPreview(null)
+            setAcknowledged(false)
+          }).finally(() => setPending(false))
+        }}
+      >{pending ? <Loader2 className="is-spinning" aria-hidden="true" /> : <GitBranch aria-hidden="true" />}创建迁移分支并切换</button>
+    </section>}
     {!!projection.diagnostics.length && <section className="open-world-version-diagnostics">
       <strong>被排除的损坏版本</strong>
       {projection.diagnostics.map((diagnostic, index) => <p key={`${diagnostic.code}:${index}`}>{diagnostic.message}</p>)}
     </section>}
     <p className="open-world-version-migration-boundary">
-      <AlertTriangle aria-hidden="true" />即使新版本声明兼容，首版尚未提供版本化迁移器；当前不能迁移此存档。你可以继续旧版本，或用新 Release 开始另一段旅程。
+      <AlertTriangle aria-hidden="true" />只有直接子版本通过兼容声明和当前存档的状态级预演后才能迁移；其他版本继续固定旧档，或另开新旅程。
     </p>
   </>
 }

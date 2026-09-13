@@ -35,6 +35,8 @@ export type TextOpenWorldPlayerCompatibilityDeclarationV1 =
   | 'not-declared'
 
 export interface TextOpenWorldPlayerReleaseVersionV1 {
+  /** Local command locator. Player UI must never render this value. */
+  actionIdentity: { productReleaseId: number }
   version: number
   label: string
   createdAt: number
@@ -43,8 +45,8 @@ export interface TextOpenWorldPlayerReleaseVersionV1 {
   /** Only newer releases make a compatibility claim against this Session's pinned package. */
   declaredCompatibleWithPinnedRelease: boolean | null
   compatibilityDeclaration: TextOpenWorldPlayerCompatibilityDeclarationV1 | null
-  /** G4-12C deliberately has no versioned migration executor. */
-  canMigratePinnedSession: false
+  /** Only an active Session and a verified direct compatible child Release qualify. */
+  canMigratePinnedSession: boolean
 }
 
 export interface TextOpenWorldPlayerPinnedReleaseV1 {
@@ -64,19 +66,19 @@ export interface TextOpenWorldPlayerVersionCompatibilityProjectionV1 {
   releases: TextOpenWorldPlayerReleaseVersionV1[]
   diagnostics: TextOpenWorldPlayerVersionDiagnosticV1[]
   migration: {
-    available: false
-    reason: 'versioned-migrator-not-implemented'
+    available: boolean
+    reason: 'compatible-release-available' | 'no-compatible-newer-release' | 'not-applicable'
   }
 }
 
-interface VerifiedReleaseV1 {
+export interface VerifiedTextOpenWorldPlayerReleaseV1 {
   release: ProductRelease & { id: number }
   manifest: ProductReleaseManifestV1
 }
 
 const NO_MIGRATION = {
   available: false,
-  reason: 'versioned-migrator-not-implemented',
+  reason: 'not-applicable',
 } as const
 
 function fail(message: string): never {
@@ -113,10 +115,10 @@ function assertPublicReleaseRoot(release: ProductRelease): asserts release is Pr
   }
 }
 
-async function verifyOwnedTextOpenWorldRelease(
+export async function verifyOwnedTextOpenWorldPlayerReleaseV1(
   scope: WorkspaceScope,
   release: ProductRelease,
-): Promise<VerifiedReleaseV1> {
+): Promise<VerifiedTextOpenWorldPlayerReleaseV1> {
   assertPublicReleaseRoot(release)
   if (!await assertRecordInScope(scope, 'productReleases', release, { owner: 'work' })) {
     fail('Release 不属于当前 Work')
@@ -138,9 +140,9 @@ async function verifyOwnedTextOpenWorldRelease(
   return { release: unchanged, manifest }
 }
 
-function compatibilityDeclaration(
-  pinned: VerifiedReleaseV1,
-  candidate: VerifiedReleaseV1,
+export function textOpenWorldPlayerCompatibilityDeclarationV1(
+  pinned: VerifiedTextOpenWorldPlayerReleaseV1,
+  candidate: VerifiedTextOpenWorldPlayerReleaseV1,
 ): TextOpenWorldPlayerCompatibilityDeclarationV1 {
   const directLineage = candidate.manifest.lineage.parentRelease?.releaseUid
     === pinned.manifest.lineage.releaseUid
@@ -160,12 +162,21 @@ function sessionBelongsToScope(session: ProductRuntimeSession, scope: WorkspaceS
     && session.workId === scope.workId
 }
 
+function isVNextOnlyRelease(release: VerifiedTextOpenWorldPlayerReleaseV1): boolean {
+  const runtime = release.manifest.runtimePackage
+  return runtime.textOpenWorldVNext != null
+    && runtime.interaction == null
+    && runtime.adventure == null
+    && runtime.openWorldEvolution == null
+    && runtime.openWorld == null
+}
+
 /**
  * Read-only, disclosure-safe version projection for one current text-open-world Session.
  *
  * It never returns RuntimePackage/manifest payloads and never reads Build Preview as a
- * formal release. Compatibility is informational only: no migration command or mapping
- * is produced until a versioned migrator exists.
+ * formal release. Only a verified direct compatible child is exposed as a
+ * migration target; the actual state-specific preview still fails closed.
  */
 export async function projectTextOpenWorldPlayerVersionCompatibilityV1(input: {
   scope: WorkspaceScope
@@ -203,9 +214,9 @@ export async function projectTextOpenWorldPlayerVersionCompatibilityV1(input: {
     })
   }
 
-  let pinned: VerifiedReleaseV1
+  let pinned: VerifiedTextOpenWorldPlayerReleaseV1
   try {
-    pinned = await verifyOwnedTextOpenWorldRelease(scope, currentRoot)
+    pinned = await verifyOwnedTextOpenWorldPlayerReleaseV1(scope, currentRoot)
   } catch {
     return unavailable('unavailable', {
       code: 'current-release-damaged',
@@ -223,12 +234,12 @@ export async function projectTextOpenWorldPlayerVersionCompatibilityV1(input: {
 
   const familyRoots = (await db.productReleases.where('workId').equals(scope.workId).toArray())
     .filter(release => release.productionKey === pinned.release.productionKey)
-  const verified: VerifiedReleaseV1[] = []
+  const verified: VerifiedTextOpenWorldPlayerReleaseV1[] = []
   const diagnostics: TextOpenWorldPlayerVersionDiagnosticV1[] = []
   for (const release of familyRoots) {
     if (!await assertRecordInScope(scope, 'productReleases', release, { owner: 'work' })) continue
     try {
-      verified.push(await verifyOwnedTextOpenWorldRelease(scope, release))
+      verified.push(await verifyOwnedTextOpenWorldPlayerReleaseV1(scope, release))
     } catch {
       diagnostics.push({
         code: 'release-damaged',
@@ -247,9 +258,12 @@ export async function projectTextOpenWorldPlayerVersionCompatibilityV1(input: {
       ? 'pinned' as const
       : release.version < pinned.release.version ? 'older' as const : 'newer' as const
     const declaration = relationToPinned === 'newer'
-      ? compatibilityDeclaration(pinned, { release, manifest })
+      ? textOpenWorldPlayerCompatibilityDeclarationV1(pinned, { release, manifest })
       : null
+    const directCompatibleChild = declaration === 'direct-release-lineage'
+      || declaration === 'release-lineage-and-runtime-package-hash'
     return {
+      actionIdentity: { productReleaseId: release.id },
       version: release.version,
       label: release.label.trim(),
       createdAt: release.createdAt,
@@ -259,9 +273,15 @@ export async function projectTextOpenWorldPlayerVersionCompatibilityV1(input: {
         ? null
         : declaration !== 'not-declared',
       compatibilityDeclaration: declaration,
-      canMigratePinnedSession: false as const,
+      canMigratePinnedSession: relationToPinned === 'newer'
+        && session.status === 'active'
+        && isVNextOnlyRelease(pinned)
+        && isVNextOnlyRelease({ release, manifest })
+        && directCompatibleChild,
     }
   })
+
+  const migrationAvailable = releases.some(release => release.canMigratePinnedSession)
 
   return {
     version: TEXT_OPEN_WORLD_PLAYER_VERSION_PROJECTION_VERSION_V1,
@@ -276,6 +296,8 @@ export async function projectTextOpenWorldPlayerVersionCompatibilityV1(input: {
     },
     releases,
     diagnostics,
-    migration: { ...NO_MIGRATION },
+    migration: migrationAvailable
+      ? { available: true, reason: 'compatible-release-available' }
+      : { available: false, reason: 'no-compatible-newer-release' },
   }
 }

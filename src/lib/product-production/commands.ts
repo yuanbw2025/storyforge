@@ -675,7 +675,13 @@ async function applyCommand(input: {
     const authorization = input.preparedCreatorRepairAuthorization
     if (production.productType !== 'text-open-world'
       || !prepared || !authorization
-      || production.status !== 'preview-ready'
+      || !(
+        production.status === 'preview-ready'
+        || (production.status === 'released'
+          && prepared.baseBuild.status === 'released'
+          && production.currentProductReleaseId != null
+          && prepared.baseBuild.releasedProductReleaseId === production.currentProductReleaseId)
+      )
       || production.currentBuildNumber !== command.baseBuildNumber
       || production.currentBriefRevision !== prepared.baseBuild.briefRevision
       || prepared.production.id !== production.id
@@ -703,7 +709,8 @@ async function applyCommand(input: {
       briefRevision: prepared.baseBuild.briefRevision,
       briefHash: prepared.baseBuild.briefHash,
       parentBuildNumber: prepared.baseBuild.buildNumber,
-      sourceProductReleaseId: prepared.baseBuild.sourceProductReleaseId,
+      sourceProductReleaseId: prepared.baseBuild.releasedProductReleaseId
+        ?? prepared.baseBuild.sourceProductReleaseId,
       status: 'authorized' as const,
       resumeState: null,
       stateRevision: 0,

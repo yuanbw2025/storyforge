@@ -261,13 +261,18 @@ export async function prepareTextOpenWorldCreatorArtifactRepairV1(input: {
   }
   const production = authority.production
   const baseBuild = authority.build
-  if (production.status !== 'preview-ready'
-    || !['preview-ready', 'release-ready'].includes(baseBuild.status)
+  const unpublishedBaseline = production.status === 'preview-ready'
+    && ['preview-ready', 'release-ready'].includes(baseBuild.status)
+  const releasedBaseline = production.status === 'released'
+    && baseBuild.status === 'released'
+    && production.currentProductReleaseId != null
+    && baseBuild.releasedProductReleaseId === production.currentProductReleaseId
+  if ((!unpublishedBaseline && !releasedBaseline)
     || production.currentBuildNumber !== baseBuild.buildNumber
     || production.currentBriefRevision !== baseBuild.briefRevision
     || !baseBuild.rootTerminalReceiptHash
     || !isSha256Hash(baseBuild.manifestHash)) {
-    fail('只有当前已封账的 Creator Build 可以创建局部修复')
+    fail('只有当前已封账或已发布且仍为当前版本的 Creator Build 可以创建局部修复')
   }
   const briefValue = await db.productProductionBriefs
     .where('[productionId+revision]')

@@ -151,7 +151,7 @@ function initialNarrativeState(
   }
 }
 
-function productOwnedCanonSnapshot(input: {
+export function createProductRuntimeCanonSnapshotV1(input: {
   runtimePackage: ProductRuntimePackageV1
   runtimeSourceHash: string
 }): Record<string, unknown> {
@@ -164,7 +164,7 @@ function productOwnedCanonSnapshot(input: {
   }
 }
 
-function createProductInitialState(input: {
+export function createProductInitialStateV1(input: {
   runtimePackage: ProductRuntimePackageV1
   runtimeSourceHash: string
 }): ProductRuntimeState {
@@ -368,7 +368,7 @@ export async function createProductRuntimeInstance(
     throw new Error('[instance] 跨发布续团父产品发布不是 TTRPG')
   }
 
-  let initialState = createProductInitialState({
+  let initialState = createProductInitialStateV1({
     runtimePackage: runtimePackage,
     runtimeSourceHash: playable.runtimeSourceHash,
   })
@@ -417,7 +417,7 @@ export async function createProductRuntimeInstance(
     kind: input.kind,
     title: input.title,
     seed: input.seed,
-    canonSnapshot: productOwnedCanonSnapshot({
+    canonSnapshot: createProductRuntimeCanonSnapshotV1({
       runtimePackage: runtimePackage,
       runtimeSourceHash: playable.runtimeSourceHash,
     }),

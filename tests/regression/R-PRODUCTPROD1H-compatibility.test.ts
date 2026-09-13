@@ -121,5 +121,26 @@ describe('R-PRODUCTPROD-1H · deterministic save compatibility', () => {
       expect(report).toMatchObject({ level: 'breaking', migrationPolicy: 'pin-old-save' })
       expect(report.changedStableKeys).toContain(changedKey)
     }
+
+    const presentationOnlyVNext = structuredClone(previousVNext)
+    ;(presentationOnlyVNext.modules.presentation.payload as { tutorials: Array<{ body: string }> })
+      .tutorials[0]!.body = '更新后的教学说明，不改变任何行动或状态语义。'
+    presentationOnlyVNext.modules.presentation.contentHash = 'd'.repeat(64)
+    const presentationOnly = createTextOpenWorldProductRuntimePackageFixtureV1(presentationOnlyVNext)
+    const report = await createProductBuildCompatibilityReportV1({
+      previous: {
+        buildNumber: 1,
+        packageHash: await hashProductProductionValueV2(previous),
+        runtimePackage: previous,
+      },
+      current: {
+        buildNumber: 2,
+        packageHash: await hashProductProductionValueV2(presentationOnly),
+        runtimePackage: presentationOnly,
+      },
+    })
+    expect(report).toMatchObject({ level: 'compatible', migrationPolicy: 'identity' })
+    expect(report.changedStableKeys).not.toContain('text-open-world.module:presentation')
+    expect(report.reasons).toContain('变化只涉及不进入存档语义的表现内容。')
   })
 })
