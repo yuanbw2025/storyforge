@@ -80,8 +80,10 @@ body:
     id: description
     attributes:
       label: 问题描述 / Description
-      description: 请简要说明发生了什么问题。
-      placeholder: 描述你遇到的问题……
+      description: |
+        请简要描述你遇到的问题。
+        可在此处直接粘贴图片，也可在下方上传。
+      placeholder: 请简要描述问题
     validations:
       required: true
 
@@ -89,7 +91,9 @@ body:
     id: steps
     attributes:
       label: 复现步骤 / Steps to Reproduce
-      description: 请尽量写出可以稳定复现问题的步骤。
+      description: |
+        请尽量写出可以稳定复现问题的步骤。
+        可在此处直接粘贴图片，也可在下方上传。
       placeholder: |
         1. 打开……
         2. 点击……
@@ -102,6 +106,7 @@ body:
     id: expected
     attributes:
       label: 期望结果 / Expected Behavior
+      description: 可在此处直接粘贴图片，也可在下方上传。
       placeholder: 你原本希望发生什么？
     validations:
       required: true
@@ -110,6 +115,7 @@ body:
     id: actual
     attributes:
       label: 实际结果 / Actual Behavior
+      description: 可在此处直接粘贴图片，也可在下方上传。
       placeholder: 实际发生了什么？
     validations:
       required: true
@@ -118,8 +124,21 @@ body:
     id: logs
     attributes:
       label: 日志或错误信息 / Logs or Error Messages
-      description: 如果有报错信息、控制台输出或日志，请粘贴在这里。
+      description: |
+        如果有报错信息、控制台输出或日志，请粘贴在这里。
+        可在此处直接粘贴图片，也可在下方上传。
       placeholder: 没有的话可以留空。
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息 / Additional Information
+      description: |
+        其他你认为可能有帮助的信息。
+        可在此处直接粘贴图片，也可在下方上传。
+      placeholder: 其他你认为可能有帮助的信息。
     validations:
       required: false
 
@@ -128,19 +147,12 @@ body:
     attributes:
       label: 截图、录屏或附件 / Screenshots, Videos or Files
       description: |
-        可以上传截图、录屏、日志或其他有助于定位问题的文件。
+        截图可以直接粘贴到上方文本框，也可以在这里上传。
+        录屏、日志、压缩包或其他附件请在这里上传。
         请不要上传包含 API Key、Token、密码或其他敏感信息的文件。
     validations:
       required: false
       accept: ".png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm,.log,.txt,.json,.zip"
-
-  - type: textarea
-    id: extra
-    attributes:
-      label: 补充信息 / Additional Information
-      placeholder: 其他你认为可能有帮助的信息。
-    validations:
-      required: false
 
   - type: checkboxes
     id: checks
