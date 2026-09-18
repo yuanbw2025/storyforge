@@ -1,0 +1,127 @@
+name: 文档纠错 / Documentation Issue
+description: 反馈 StoryForge 官方文档中的错误、过时内容、缺失说明或阅读问题 / Report documentation errors, outdated content, missing information, or unclear explanations
+title: "[Docs] "
+labels:
+  - documentation
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你帮助改进 StoryForge 官方文档。
+
+        这里用于反馈文档本身的问题，例如：
+        - 文档内容与当前版本不一致
+        - 操作步骤已经过时
+        - 截图或界面名称错误
+        - 某项功能缺少说明
+        - 链接失效
+        - 中英文内容不一致
+        - 文档表述不清楚或容易产生误解
+
+        Thank you for helping improve the StoryForge documentation.
+
+  - type: dropdown
+    id: issue_type
+    attributes:
+      label: 问题类型 / Issue Type
+      options:
+        - 内容错误 / Incorrect Information
+        - 内容已过时 / Outdated Documentation
+        - 缺少说明 / Missing Documentation
+        - 操作步骤错误 / Incorrect Steps
+        - 截图或界面信息过时 / Outdated Screenshot or UI
+        - 链接失效 / Broken Link
+        - 表述不清 / Unclear Explanation
+        - 翻译问题 / Translation Issue
+        - 排版或显示问题 / Formatting Issue
+        - 其他 / Other
+    validations:
+      required: true
+
+  - type: input
+    id: page
+    attributes:
+      label: 文档页面 / Documentation Page
+      description: 请填写出现问题的文档名称、页面地址或章节名称。
+      placeholder: 例如：https://docs.storyforge-lab.com/... 或 “世界设定 → 世界地图”
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: StoryForge 版本 / Version
+      description: 如果这个文档问题与特定版本有关，请填写版本号；不确定可以留空。
+      placeholder: 例如：v0.8.3
+    validations:
+      required: false
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 发现了什么问题？ / What Is Wrong?
+      description: |
+        请说明文档中具体哪里有问题。
+        可在此处直接粘贴图片，也可在下方上传。
+      placeholder: |
+        例如：
+        文档中写的是“点击右上角设置按钮”，
+        但当前版本中这个入口已经移动到了左侧菜单。
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 你认为应该如何修改？ / Suggested Correction
+      description: |
+        如果你知道正确内容，可以直接写出来；如果不确定，也可以只描述问题。
+        可在此处直接粘贴图片，也可在下方上传。
+      placeholder: 例如：建议改成……
+    validations:
+      required: false
+
+  - type: textarea
+    id: missing
+    attributes:
+      label: 是否缺少重要说明？ / Missing Information
+      description: |
+        如果你认为某个功能、步骤、注意事项没有写进文档，可以在这里说明。
+        可在此处直接粘贴图片，也可在下方上传。
+      placeholder: 例如：这里应该补充……
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息 / Additional Information
+      description: |
+        其他你认为有帮助的信息。
+        可在此处直接粘贴图片，也可在下方上传。
+      placeholder: 其他补充信息……
+    validations:
+      required: false
+
+  - type: upload
+    id: attachments
+    attributes:
+      label: 截图、录屏或附件 / Screenshots, Videos or Files
+      description: |
+        可以上传文档截图、StoryForge 当前界面截图、标注图、录屏或其他辅助材料。
+        截图也可以直接粘贴到上方文本框。
+        请不要上传包含 API Key、Token、密码或其他敏感信息的文件。
+    validations:
+      required: false
+      accept: ".png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm,.txt,.json,.zip"
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认 / Before Submitting
+      options:
+        - label: 我已经确认反馈的是文档问题，而不是 StoryForge 软件 Bug。 / I confirm this is a documentation issue rather than a software bug.
+          required: true
+        - label: 我确认以上内容不包含 API Key、Token、密码等敏感信息。 / I confirm that no sensitive credentials are included.
+          required: true
