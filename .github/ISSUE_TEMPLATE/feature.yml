@@ -1,0 +1,147 @@
+name: 功能建议 / Feature Request
+description: 提交 StoryForge 的新功能、改进建议或体验优化想法 / Suggest a new feature or improvement for StoryForge
+title: "[Feature] "
+labels:
+  - enhancement
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你为 StoryForge 提出建议。
+
+        如果可以，请尽量说明你实际遇到了什么问题、希望解决什么需求，而不仅仅是描述一个功能名称。这样更有助于判断需求和设计方案。
+
+        Thank you for helping improve StoryForge.
+        Please describe the problem or use case behind your idea whenever possible.
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: 建议类型 / Request Type
+      options:
+        - 新功能 / New Feature
+        - 现有功能改进 / Improvement
+        - 交互体验优化 / UX Improvement
+        - 性能优化 / Performance
+        - 模型或 API 能力 / Model or API
+        - 导入导出 / Import or Export
+        - 其他 / Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: 涉及模块 / Related Module
+      options:
+        - 项目管理 / Project
+        - 世界设定 / World
+        - 故事设计 / Story Design
+        - 角色系统 / Characters
+        - 道具系统 / Items
+        - 创作区 / Writing
+        - 长期记忆 / Memory
+        - 互动叙事 / Interactive Narrative
+        - 游戏相关功能 / Game Features
+        - 模型或 API 配置 / Model or API
+        - 导入导出 / Import or Export
+        - UI / 界面
+        - 整体产品 / Product-wide
+        - 其他 / Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你遇到了什么问题？ / Problem or Use Case
+      description: |
+        请描述你目前遇到的不便、限制或实际使用场景。
+        可在此处直接粘贴图片，也可在下方上传。
+      placeholder: |
+        例如：
+        我在同时管理多个角色时，需要反复进入不同角色页面查看关系，因此……
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 你希望 StoryForge 怎么改？ / Proposed Solution
+      description: |
+        请描述你期望的功能或改进方式。不需要考虑具体技术实现。
+        可在此处直接粘贴图片，也可在下方上传。
+      placeholder: |
+        例如：
+        希望增加一个角色关系图，可以……
+    validations:
+      required: true
+
+  - type: textarea
+    id: workflow
+    attributes:
+      label: 期望的使用方式 / Expected Workflow
+      description: |
+        如果你已经有比较具体的想法，可以描述这个功能应该如何操作。
+        可在此处直接粘贴图片，也可在下方上传。
+      placeholder: |
+        例如：
+        1. 进入角色页面
+        2. 点击“关系图”
+        3. 自动展示……
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 目前有没有替代办法？ / Current Workaround
+      description: 如果你现在通过其他方式解决这个问题，可以简单说明。
+      placeholder: 例如：目前我只能通过……
+    validations:
+      required: false
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: 参考产品或案例 / References
+      description: |
+        如果其他软件、网站或工具已经有类似设计，可以贴链接、截图或简单说明。
+        可在此处直接粘贴图片，也可在下方上传。
+      placeholder: 例如：某产品中的……功能
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充说明 / Additional Information
+      description: |
+        其他你认为可能有帮助的信息。
+        可在此处直接粘贴图片，也可在下方上传。
+      placeholder: 其他补充信息……
+    validations:
+      required: false
+
+  - type: upload
+    id: attachments
+    attributes:
+      label: 截图、录屏或附件 / Screenshots, Videos or Files
+      description: |
+        截图可以直接粘贴到上方文本框，也可以在这里上传。
+        可以上传界面草图、参考截图、录屏或其他辅助材料。
+        请不要上传包含 API Key、Token、密码或其他敏感信息的文件。
+    validations:
+      required: false
+      accept: ".png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm,.txt,.json,.zip"
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认 / Before Submitting
+      options:
+        - label: 我已经搜索过现有 Issues，没有找到相同或高度相似的建议。 / I have searched existing issues for similar requests.
+          required: true
+        - label: 我确认以上内容不包含 API Key、Token、密码等敏感信息。 / I confirm that no sensitive credentials are included.
+          required: true
