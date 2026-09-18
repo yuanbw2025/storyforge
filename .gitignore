@@ -16,6 +16,11 @@ playwright-report/
 website-docs/.vitepress/cache/
 website-docs/.vitepress/dist/
 
+# 公司内部资料（仅保留在本地，不进入仓库）
+application-materials/
+docs/brand/
+presentation/
+
 # Release packaging outputs
 release/
 packaging/desktop-server/web/*
