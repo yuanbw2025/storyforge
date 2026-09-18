@@ -1,0 +1,153 @@
+name: Bug 报告 / Bug Report
+description: 报告 StoryForge 中可复现的问题 / Report a reproducible problem in StoryForge
+title: "[Bug] "
+labels:
+  - bug
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你帮助改进 StoryForge。
+        请尽量完整填写以下信息。信息越完整，问题越容易被复现和修复。
+
+        Thank you for helping improve StoryForge.
+        The more information you provide, the easier it is to reproduce and fix the issue.
+
+  - type: input
+    id: version
+    attributes:
+      label: StoryForge 版本 / Version
+      description: 请填写你正在使用的版本号；如果不确定，也可以填写安装或更新时间。
+      placeholder: 例如：v0.8.3 / 2026-09-18
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统 / Operating System
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS
+        - Linux
+        - Other / 其他
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: 浏览器及版本 / Browser
+      description: 如果问题与浏览器无关，可以填写“不适用”。
+      placeholder: 例如：Chrome 152 / Edge 152 / 不适用
+    validations:
+      required: true
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: 问题发生在哪个模块 / Affected Module
+      options:
+        - 项目管理 / Project
+        - 世界设定 / World
+        - 故事设计 / Story Design
+        - 角色系统 / Characters
+        - 道具系统 / Items
+        - 创作区 / Writing
+        - 长期记忆 / Memory
+        - 互动叙事 / Interactive Narrative
+        - 游戏相关功能 / Game Features
+        - 模型或 API 配置 / Model or API
+        - 导入导出 / Import or Export
+        - UI / 界面
+        - 性能 / Performance
+        - 其他 / Other
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: 使用的模型或 API / Model or API
+      description: 如果与模型或 API 无关，可以填写“不适用”。
+      placeholder: 例如：OpenAI / Claude / Gemini / DeepSeek / 不适用
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述 / Description
+      description: 请简要说明发生了什么问题。
+      placeholder: 描述你遇到的问题……
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to Reproduce
+      description: 请尽量写出可以稳定复现问题的步骤。
+      placeholder: |
+        1. 打开……
+        2. 点击……
+        3. 输入……
+        4. 出现……
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果 / Expected Behavior
+      placeholder: 你原本希望发生什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果 / Actual Behavior
+      placeholder: 实际发生了什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或错误信息 / Logs or Error Messages
+      description: 如果有报错信息、控制台输出或日志，请粘贴在这里。
+      placeholder: 没有的话可以留空。
+    validations:
+      required: false
+
+  - type: upload
+    id: attachments
+    attributes:
+      label: 截图、录屏或附件 / Screenshots, Videos or Files
+      description: |
+        可以上传截图、录屏、日志或其他有助于定位问题的文件。
+        请不要上传包含 API Key、Token、密码或其他敏感信息的文件。
+    validations:
+      required: false
+      accept: ".png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm,.log,.txt,.json,.zip"
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息 / Additional Information
+      placeholder: 其他你认为可能有帮助的信息。
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认 / Before Submitting
+      options:
+        - label: 我已经搜索过现有 Issues，没有找到相同问题。 / I have searched existing issues and did not find the same problem.
+          required: true
+        - label: 我确认以上内容不包含 API Key、Token、密码等敏感信息。 / I confirm that no sensitive credentials are included.
+          required: true
