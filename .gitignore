@@ -13,6 +13,8 @@ tree.txt
 coverage/
 test-results/
 playwright-report/
+website-docs/.vitepress/cache/
+website-docs/.vitepress/dist/
 
 # Release packaging outputs
 release/

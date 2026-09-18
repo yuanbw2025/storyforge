@@ -1,0 +1,108 @@
+:root {
+  --vp-c-bg: #f3f6f1;
+  --vp-c-bg-alt: #e8efe9;
+  --vp-c-bg-elv: #fbfcf8;
+  --vp-c-bg-soft: #e3ece6;
+  --vp-c-text-1: #173f37;
+  --vp-c-text-2: #476b62;
+  --vp-c-text-3: #6b887f;
+  --vp-c-border: #c8d8d0;
+  --vp-c-divider: #d7e2dc;
+  --vp-c-gutter: #dce6e0;
+  --vp-c-brand-1: #207d6c;
+  --vp-c-brand-2: #196858;
+  --vp-c-brand-3: #145448;
+  --vp-c-brand-soft: rgba(32, 125, 108, 0.14);
+  --vp-button-brand-border: #2b9a85;
+  --vp-button-brand-bg: #207d6c;
+  --vp-button-brand-hover-border: #3eb69f;
+  --vp-button-brand-hover-bg: #288d79;
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #9de9d5 12%, #38ae96 55%, #c6e8b0);
+  --vp-home-hero-image-background-image: radial-gradient(circle, rgba(42, 139, 117, 0.38), transparent 68%);
+  --vp-home-hero-image-filter: blur(44px);
+  --vp-font-family-base: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --vp-font-family-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+.dark {
+  --vp-c-bg: #081512;
+  --vp-c-bg-alt: #0b1d1a;
+  --vp-c-bg-elv: #102620;
+  --vp-c-bg-soft: #122b25;
+  --vp-c-text-1: #e6f1ec;
+  --vp-c-text-2: #a8c0b7;
+  --vp-c-text-3: #78958b;
+  --vp-c-border: #24483f;
+  --vp-c-divider: #18362f;
+  --vp-c-gutter: #06110e;
+  --vp-c-brand-1: #63cdb5;
+  --vp-c-brand-2: #45b99f;
+  --vp-c-brand-3: #309b85;
+  --vp-c-brand-soft: rgba(78, 190, 165, 0.15);
+  --vp-code-block-bg: #07110f;
+  --vp-sidebar-bg-color: #0b1d1a;
+}
+
+body {
+  background-image:
+    radial-gradient(circle at 12% 0%, rgba(51, 139, 118, 0.12), transparent 28rem),
+    radial-gradient(circle at 90% 20%, rgba(72, 126, 99, 0.08), transparent 24rem);
+}
+
+.VPNavBarTitle .logo {
+  width: 30px;
+  height: 30px;
+}
+
+.VPHomeHero .image-src {
+  width: min(280px, 58vw);
+  height: min(280px, 58vw);
+}
+
+.VPHomeHero .tagline {
+  max-width: 34rem;
+  line-height: 1.8;
+}
+
+.feedback-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.feedback-card {
+  display: block;
+  padding: 20px;
+  border: 1px solid var(--vp-c-border);
+  border-radius: 14px;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1) !important;
+  text-decoration: none !important;
+  transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+}
+
+.feedback-card:hover {
+  border-color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-soft);
+  transform: translateY(-2px);
+}
+
+.feedback-card strong,
+.feedback-card span {
+  display: block;
+}
+
+.feedback-card span {
+  margin-top: 8px;
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+@media (max-width: 720px) {
+  .feedback-grid {
+    grid-template-columns: 1fr;
+  }
+}

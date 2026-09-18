@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">StoryForge 故事熔炉品牌图形</title>
+  <desc id="desc">浑仪轨道环绕一枚悬浮星火，象征世界与故事的锻造。</desc>
+  <g fill="none" stroke="#8FD8C4" stroke-width="14" stroke-linecap="round">
+    <path d="M58 57A96 96 0 0 1 220 105"/>
+    <path d="M198 202A96 96 0 0 1 36 151"/>
+  </g>
+  <ellipse cx="128" cy="128" rx="94" ry="45" transform="rotate(-24 128 128)" fill="none" stroke="#3FAF98" stroke-width="10"/>
+  <path fill="#63CDB5" d="M128 72c6 29 27 50 56 56-29 6-50 27-56 56-6-29-27-50-56-56 29-6 50-27 56-56Z"/>
+  <circle cx="128" cy="128" r="8" fill="#F5F0E7"/>
+</svg>

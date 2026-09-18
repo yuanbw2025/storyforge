@@ -6,6 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "docs:dev": "vitepress dev website-docs",
+    "docs:build": "vitepress build website-docs",
+    "docs:preview": "vitepress preview website-docs",
     "build": "tsc -b && tsc -p ui-preview/tsconfig.json && vite build",
     "preview": "vite preview",
     "test": "vitest run",
@@ -82,6 +85,7 @@
     "typescript-eslint": "^8.61.1",
     "vite": "^6.0.0",
     "vite-plugin-pwa": "^1.2.0",
+    "vitepress": "^1.6.4",
     "vitest": "^2.1.9"
   }
 }
