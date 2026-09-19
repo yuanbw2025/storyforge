@@ -3,11 +3,10 @@ import { defineConfig } from 'vitepress'
 const githubUrl = 'https://github.com/yuanbw2025/storyforge'
 
 const zhNav = [
-  { text: '首页', link: '/' },
-  { text: '文档', link: '/getting-started/' },
+  { text: '知识库首页', link: '/' },
   { text: 'Prompt 与创作方法', link: '/prompts/' },
   { text: '更新日志', link: '/updates/changelog' },
-  { text: '反馈', link: '/feedback/' },
+  { text: 'Bug、功能与文档纠错反馈', link: '/feedback/' },
   { text: 'GitHub', link: githubUrl },
 ]
 
@@ -144,9 +143,14 @@ const zhSidebar = [
     ],
   },
   {
-    text: '反馈',
+    text: 'Bug、功能与文档纠错反馈',
     collapsed: false,
-    items: [{ text: '反馈入口', link: '/feedback/' }],
+    items: [
+      { text: '反馈中心', link: '/feedback/' },
+      { text: 'Bug 报告', link: '/feedback/bug' },
+      { text: '功能建议', link: '/feedback/feature' },
+      { text: '文档纠错', link: '/feedback/documentation' },
+    ],
   },
   {
     text: '历史归档',
