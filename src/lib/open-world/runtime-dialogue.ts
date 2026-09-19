@@ -277,8 +277,10 @@ async function loadSurface(input: {
     .flatMap(key => byKey.get(key) ?? [])
     .filter((item, index, all) => all.findIndex(candidate => candidate.action.key === item.action.key) === index)
   const authoredAllowed = new Set(authored.allowedKnowledgeClaimKeys)
+  const acquiredKnowledge = new Set(projection.memory.actorKnowledgeByActorKey[actor.key] ?? [])
   const allowedKnowledgeKeys = modules.knowledge.entries
-    .filter(entry => entry.actorKeys.includes(actor.key) && authoredAllowed.has(entry.key))
+    .filter(entry => (entry.actorKeys.includes(actor.key) || acquiredKnowledge.has(entry.key))
+      && authoredAllowed.has(entry.key))
     .map(entry => entry.key)
     .sort()
   const allowedSet = new Set(allowedKnowledgeKeys)

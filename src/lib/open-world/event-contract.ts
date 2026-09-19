@@ -34,6 +34,11 @@ import type {
   TextOpenWorldCrimeAuthorizationV1,
   TextOpenWorldDirectorSettlementAuthorizationV1,
 } from '../types'
+import {
+  createTextOpenWorldMemoryAdoptionHashV1,
+  createTextOpenWorldMemoryEvidenceEventHashV1,
+  parseTextOpenWorldMemoryCommittedEventPayloadV1,
+} from './runtime-memory-contract'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
 
 type Row = Record<string, unknown>
@@ -848,6 +853,7 @@ export async function replayTextOpenWorldEventProtocolV1(events: readonly Produc
   }
   let pending: TextOpenWorldEventBatchProjectionV1 | null = null
   const randomRequests: TextOpenWorldRandomRequestV1[] = []
+  const priorEventsBySequence = new Map<number, ProductRuntimeEvent>()
   for (const event of events) {
     if (event.sequence !== projection.lastSequence + 1) fail(`事件序号不连续:${projection.lastSequence + 1}->${event.sequence}`)
     if (projection.sessionId == null) projection.sessionId = event.sessionId
@@ -878,11 +884,32 @@ export async function replayTextOpenWorldEventProtocolV1(events: readonly Produc
       if (expectedFingerprint !== effect.outcomeFingerprint) fail('命令结果批次指纹无效')
       pending.ruleset = effect.ruleset; pending.effectsEventSequence = event.sequence; pending.outcomeFingerprint = effect.outcomeFingerprint
       projection.batches.push(structuredClone(pending)); pending = null; randomRequests.length = 0
+    } else if (event.type === 'text-open-world.memory.committed') {
+      if (pending) fail('待处理命令期间不能插入长期记忆事件')
+      const memory = parseTextOpenWorldMemoryCommittedEventPayloadV1(payload(event))
+      if (event.commandId != null || event.baseSequence !== projection.lastSequence
+        || event.baseStateHash == null || event.actorKey !== 'player'
+        || event.targetKey !== memory.actorKey) fail('长期记忆事件索引无效')
+      const { adoptionHash, ...memoryWithoutAdoption } = memory
+      if (await createTextOpenWorldMemoryAdoptionHashV1(memoryWithoutAdoption) !== adoptionHash) {
+        fail('长期记忆采用Hash无法重放')
+      }
+      for (let index = 0; index < memory.coveredEventSequences.length; index += 1) {
+        const sequence = memory.coveredEventSequences[index]!
+        const evidence = priorEventsBySequence.get(sequence)
+        if (!evidence || evidence.type !== 'text-open-world.effects.applied') {
+          fail(`长期记忆证据不是已提交终态事件:${sequence}`)
+        }
+        if (await createTextOpenWorldMemoryEvidenceEventHashV1(evidence) !== memory.coveredEventHashes[index]) {
+          fail(`长期记忆事件指纹无法重放:${sequence}`)
+        }
+      }
     }
     // ProductRuntimeSession is a shared event stream. Narrative, interaction
     // and other product events advance the global cursor but do not belong to
     // the vNext command/outcome sub-protocol.
     projection.lastSequence = event.sequence
+    priorEventsBySequence.set(event.sequence, event)
   }
   projection.pendingCommandId = pending?.commandId ?? null
   return projection

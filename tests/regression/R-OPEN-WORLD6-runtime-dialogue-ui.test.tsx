@@ -118,7 +118,10 @@ describe('R-OPEN-WORLD6 · NPC对白玩家界面', () => {
     host.remove()
   })
 
-  async function render(onInterpretNaturalInput: NonNullable<Parameters<typeof TextOpenWorldScenePanel>[0]['onInterpretNaturalInput']>) {
+  async function render(
+    onInterpretNaturalInput: NonNullable<Parameters<typeof TextOpenWorldScenePanel>[0]['onInterpretNaturalInput']>,
+    extra: Partial<Parameters<typeof TextOpenWorldScenePanel>[0]> = {},
+  ) {
     const current = fixture()
     const onExecute = vi.fn()
     await act(async () => {
@@ -132,6 +135,7 @@ describe('R-OPEN-WORLD6 · NPC对白玩家界面', () => {
         fallback: { regionTitle: '盐港', locationTitle: '盐港广场', description: '测试', playerName: '来客' },
         onExecute,
         onInterpretNaturalInput,
+        ...extra,
       }))
     })
     await click(button(host, '守渠人的话', true))
@@ -192,5 +196,48 @@ describe('R-OPEN-WORLD6 · NPC对白玩家界面', () => {
 
     await click(button(host, '干涸的内渠', true))
     expect(host.querySelector('[data-testid="text-open-world-runtime-dialogue"]')).toBeNull()
+  })
+
+  it('由玩家明确关闭对白窗口后才提交长期记忆，并把Run证据逐项交给服务', async () => {
+    const onCommitMemory = vi.fn(async () => ({
+      version: 1 as const,
+      source: 'ai-memory' as const,
+      status: 'committed' as const,
+      memoryKey: 'memory.dialogue.verified',
+      actorKey: 'actor.caretaker',
+      actorName: '岑阿婆',
+      sceneKey: 'scene.actor.caretaker',
+      summary: '岑阿婆记住了这次关于旧渠异响的谈话。',
+      playerKnowledgeKeys: [],
+      actorKnowledgeKeys: [],
+      openThreadKeys: [],
+      coveredEventSequences: [],
+      eventSequence: 5,
+      candidateHash: 'e'.repeat(64),
+      contextManifestHash: 'f'.repeat(64),
+      runId: 202,
+    }))
+    await render(vi.fn(async () => resolution(dialogue())), {
+      memoryAvailable: true,
+      onCommitMemory,
+      longTermMemories: [],
+    })
+    await inputValue(host, '把这件事记下来。')
+    await click(button(host, '提交'))
+    await waitFor(() => expect(host.querySelector('[data-testid="text-open-world-runtime-dialogue"]')).not.toBeNull())
+    expect(onCommitMemory).not.toHaveBeenCalled()
+
+    await click(button(host, '整理并保存长期记忆'))
+    await waitFor(() => expect(onCommitMemory).toHaveBeenCalledTimes(1))
+    expect(onCommitMemory.mock.calls[0]![0].dialogue).toEqual([
+      expect.objectContaining({ speaker: 'player', dialogueRunId: null }),
+      expect.objectContaining({
+        speaker: 'npc', source: 'ai-candidate', dialogueRunId: 201,
+        dialogueCandidateHash: 'a'.repeat(64), dialogueContextManifestHash: 'b'.repeat(64),
+      }),
+    ])
+    expect(host.querySelector('[data-testid="text-open-world-runtime-dialogue"]')).toBeNull()
+    expect(host.querySelector('[data-testid="text-open-world-memory-notice"]')?.textContent)
+      .toContain('已写入长期记忆')
   })
 })

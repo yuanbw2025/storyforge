@@ -113,7 +113,7 @@ function targetSpecificResourceAllowed(input: {
     return input.directorTrigger != null
       && input.resource.targetKeys.includes(input.directorTrigger)
   }
-  if (key.includes(':actor:') || key.includes(':attitude:')
+  if (key.includes(':actor:') || key.includes(':attitude:') || key.includes(':actor-memory:')
     || key.includes(':actor-knowledge:') || key.includes(':actor-knowledge-scene:')) {
     return input.targetActorKey != null
       && input.resource.targetKeys.includes(input.targetActorKey)
@@ -148,9 +148,8 @@ function assertCapabilityInputs(input: {
   if (input.skillId === 'prose.text-open-world-runtime-direction' && !input.directorTrigger) {
     fail('导演建议必须指定代码当前评估的directorTrigger')
   }
-  if (input.skillId === 'prose.text-open-world-runtime-memory'
-    && (!input.targetActorKey || !input.terminalCommandIds.length)) {
-    fail('G6-02最小记忆上下文必须指定角色作用域与已关闭终态命令窗口')
+  if (input.skillId === 'prose.text-open-world-runtime-memory' && !input.targetActorKey) {
+    fail('最小记忆上下文必须指定当前角色作用域；终态命令窗口可以为空')
   }
 }
 

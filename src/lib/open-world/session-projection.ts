@@ -9,6 +9,7 @@ import type {
   TextOpenWorldDirectorTriggerV1,
   TextOpenWorldEffectDefinitionV1,
   TextOpenWorldEffectStateV1,
+  TextOpenWorldLongTermMemoryProjectionV1,
   TextOpenWorldParsedModulesV1,
   TextOpenWorldSessionProjectionV1,
 } from '../types'
@@ -20,6 +21,7 @@ import {
   parseTextOpenWorldRandomResolvedEventPayloadV1,
 } from './event-contract'
 import { parseTextOpenWorldCommandEventPayloadV1 } from './command-contract'
+import { parseTextOpenWorldMemoryCommittedEventPayloadV1 } from './runtime-memory-contract'
 import { parseTextOpenWorldModulesV1 } from './modules'
 import {
   createInitialTextOpenWorldInventoryV1,
@@ -62,6 +64,70 @@ function enumToken<T extends string>(value: unknown, allowed: readonly T[], labe
 function nullableToken(value: unknown, label: string, pattern = STABLE_KEY): string | null { return value == null ? null : token(value, label, pattern) }
 function uniqueTokens(value: unknown, label: string, pattern = STABLE_KEY): string[] { if (!Array.isArray(value)) fail(`${label}必须是数组`); const parsed = value.map((item, index) => token(item, `${label}[${index}]`, pattern)); if (new Set(parsed).size !== parsed.length) fail(`${label}不能重复`); return parsed }
 function json(event: ProductRuntimeEvent): unknown { try { return JSON.parse(event.payloadJson) } catch { fail(`事件${event.sequence}不是合法JSON`) } }
+
+function parseLongTermMemoryProjectionV1(input: {
+  value: unknown
+  modules: TextOpenWorldParsedModulesV1
+  lastEventSequence: number
+}): TextOpenWorldLongTermMemoryProjectionV1 {
+  const memory = row(input.value, 'memory')
+  exact(memory, ['version', 'records', 'actorKnowledgeByActorKey'], 'memory')
+  if (memory.version !== 1) fail('memory.version无效')
+  const actorKeys = new Set(input.modules.actors.actors.map(actor => actor.key))
+  const knowledgeKeys = new Set(input.modules.knowledge.entries.map(entry => entry.key))
+  const actorKnowledgeByActorKey: Record<string, string[]> = {}
+  const actorKnowledge = row(memory.actorKnowledgeByActorKey, 'memory.actorKnowledgeByActorKey')
+  for (const [actorKey, value] of Object.entries(actorKnowledge)) {
+    if (!actorKeys.has(actorKey)) fail(`长期记忆引用未知Actor:${actorKey}`)
+    const keys = uniqueTokens(value, `memory.actorKnowledgeByActorKey.${actorKey}`)
+    if (keys.some(key => !knowledgeKeys.has(key))) fail(`Actor长期记忆引用未知知识:${actorKey}`)
+    actorKnowledgeByActorKey[actorKey] = keys
+  }
+  if (!Array.isArray(memory.records) || memory.records.length > 64) fail('长期记忆记录最多64项')
+  const seenMemoryKeys = new Set<string>()
+  const seenDialogueHashes = new Set<string>()
+  const records = memory.records.map((value, index) => {
+    const item = row(value, `memory.records[${index}]`)
+    exact(item, [
+      'memoryKey', 'kind', 'subjectKey', 'sceneKey', 'actorKey', 'summary',
+      'coveredEventSequences', 'coveredEventHashes', 'playerKnowledgeKeys', 'actorKnowledgeKeys',
+      'sourceDialogueKnowledgeKeys', 'openThreadKeys', 'sourceDialogueHash', 'candidateHash',
+      'contextManifestHash', 'adoptionHash', 'worldMinute', 'committedSequence', 'inherited',
+    ], `memory.records[${index}]`)
+    const parsed = parseTextOpenWorldMemoryCommittedEventPayloadV1({
+      schema: 'storyforge.text-open-world.memory-committed-event', version: 1,
+      memoryKey: item.memoryKey, kind: item.kind, subjectKey: item.subjectKey,
+      sceneKey: item.sceneKey, actorKey: item.actorKey, summary: item.summary,
+      coveredEventSequences: item.coveredEventSequences, coveredEventHashes: item.coveredEventHashes,
+      playerKnowledgeKeys: item.playerKnowledgeKeys, actorKnowledgeKeys: item.actorKnowledgeKeys,
+      sourceDialogueKnowledgeKeys: item.sourceDialogueKnowledgeKeys, openThreadKeys: item.openThreadKeys,
+      sourceDialogueHash: item.sourceDialogueHash, candidateHash: item.candidateHash,
+      contextManifestHash: item.contextManifestHash, adoptionHash: item.adoptionHash,
+      worldMinute: item.worldMinute,
+    })
+    if (seenMemoryKeys.has(parsed.memoryKey) || seenDialogueHashes.has(parsed.sourceDialogueHash)) {
+      fail('长期记忆记录键或对话窗口Hash重复')
+    }
+    seenMemoryKeys.add(parsed.memoryKey); seenDialogueHashes.add(parsed.sourceDialogueHash)
+    if (parsed.actorKey != null && !actorKeys.has(parsed.actorKey)) fail('长期记忆引用未知Actor')
+    if (parsed.sceneKey != null && !input.modules.narrative.scenes.some(scene => scene.key === parsed.sceneKey)) fail('长期记忆引用未知Scene')
+    if ([...parsed.playerKnowledgeKeys, ...parsed.actorKnowledgeKeys, ...parsed.sourceDialogueKnowledgeKeys]
+      .some(key => !knowledgeKeys.has(key))) fail('长期记忆引用未知Knowledge')
+    const committedSequence = integer(item.committedSequence, `memory.records[${index}].committedSequence`)
+    if (typeof item.inherited !== 'boolean') fail('长期记忆inherited必须是boolean')
+    if (item.inherited) {
+      if (committedSequence !== 0 || parsed.coveredEventSequences.length || parsed.coveredEventHashes.length) {
+        fail('继承记忆不得引用子分支本地事件序号')
+      }
+    } else if (committedSequence < 1 || committedSequence > input.lastEventSequence
+      || parsed.coveredEventSequences.some(sequence => sequence >= committedSequence)) {
+      fail('长期记忆事件序号无效')
+    }
+    const { schema: _schema, version: _version, ...record } = parsed
+    return { ...record, committedSequence, inherited: item.inherited }
+  })
+  return { version: 1, records, actorKnowledgeByActorKey }
+}
 
 function assertTextOpenWorldItemActionReplayBindingV1(input: {
   action: TextOpenWorldParsedModulesV1['actions']['actions'][number]
@@ -284,6 +350,7 @@ export function createInitialTextOpenWorldSessionProjectionV1(value: unknown): T
     schema: 'storyforge.text-open-world.session-projection', version: 1, runtimePackage,
     ruleset: { key: runtimePackage.metadata.rulesetKey, version: runtimePackage.metadata.rulesetVersion }, state,
     actions: { completedOnceActionKeys: [], cooldownUntilWorldMinuteByActionKey: {} }, director: structuredClone(state.director),
+    memory: { version: 1, records: [], actorKnowledgeByActorKey: {} },
     protocol: { pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, pendingCombatTransitionIntent: null, pendingActionQuantity: null, pendingActionItemKey: null, pendingDirectorTrigger: null, randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null },
     lastEventSequence: 0,
   }
@@ -301,6 +368,12 @@ export function createTextOpenWorldInitialProjectionCandidatesV1(value: unknown)
   const current = createInitialTextOpenWorldSessionProjectionV1(value)
   const modules = parseTextOpenWorldModulesV1(current.runtimePackage)
   const candidates: unknown[] = [current]
+  // Releases produced before G6-08 freeze an otherwise current vNext initial
+  // state without the product-owned memory projection. Keep that byte shape as
+  // a verification candidate; parsing upgrades it to an empty in-memory view.
+  const preMemory = structuredClone(current) as unknown as Row
+  delete preMemory.memory
+  candidates.push(preMemory)
   if (modules.actions.version === 1) {
     const legacy = structuredClone(current) as unknown as Row
     const legacyState = row(legacy.state, 'legacy projection.state')
@@ -382,7 +455,9 @@ export function createTextOpenWorldInitialProjectionCandidatesV1(value: unknown)
 }
 
 export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenWorldSessionProjectionV1 {
-  const parsed = row(value, 'projection'); exact(parsed, ['schema', 'version', 'runtimePackage', 'ruleset', 'state', 'actions', 'director', 'protocol', 'lastEventSequence'], 'projection')
+  const parsed = row(value, 'projection')
+  const hasMemory = Object.prototype.hasOwnProperty.call(parsed, 'memory')
+  exact(parsed, ['schema', 'version', 'runtimePackage', 'ruleset', 'state', 'actions', 'director', ...hasMemory ? ['memory'] : [], 'protocol', 'lastEventSequence'], 'projection')
   if (parsed.schema !== 'storyforge.text-open-world.session-projection' || parsed.version !== 1) fail('projection schema/version无效')
   const runtimePackage = parseTextOpenWorldRuntimePackageV1(parsed.runtimePackage); const modules = parseTextOpenWorldModulesV1(runtimePackage)
   const lastEventSequence = integer(parsed.lastEventSequence, 'lastEventSequence')
@@ -445,6 +520,9 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
   const director = parseDirectorRuntime(parsed.director, modules, 'director', legacyTopLevelDirector)
   if (currentDirectorContract && canonicalProductProductionJsonV2(state.director) !== canonicalProductProductionJsonV2(director)) fail('EffectState与顶层Director镜像不一致')
   state.director = structuredClone(director)
+  const memory = hasMemory
+    ? parseLongTermMemoryProjectionV1({ value: parsed.memory, modules, lastEventSequence })
+    : { version: 1 as const, records: [], actorKnowledgeByActorKey: {} }
   const protocol = row(parsed.protocol, 'protocol')
   const legacyProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingTargetKey')
   const legacyCombatProtocol = !Object.prototype.hasOwnProperty.call(protocol, 'pendingCombatTransitionIntent')
@@ -508,6 +586,7 @@ export function parseTextOpenWorldSessionProjectionV1(value: unknown): TextOpenW
     schema: 'storyforge.text-open-world.session-projection', version: 1, runtimePackage, ruleset: { key: token(ruleset.key, 'ruleset.key'), version: integer(ruleset.version, 'ruleset.version', 1) }, state,
     actions: { completedOnceActionKeys, cooldownUntilWorldMinuteByActionKey },
     director: structuredClone(director),
+    memory,
     protocol: { pendingCommandId, pendingCommandSequence, pendingActionKey, pendingActorKey, pendingTargetKey, pendingCombatTransitionIntent, pendingActionQuantity, pendingActionItemKey, pendingDirectorTrigger, randomEvidence, lastCompletedCommandId: nullableToken(protocol.lastCompletedCommandId, 'protocol.lastCompletedCommandId', COMMAND_ID), lastOutcomeFingerprint: nullableToken(protocol.lastOutcomeFingerprint, 'protocol.lastOutcomeFingerprint', /^[a-f0-9]{64}$/) },
     lastEventSequence,
   }
@@ -781,6 +860,93 @@ export function applyTextOpenWorldSessionEventV1(current: TextOpenWorldSessionPr
     projection.protocol.lastCompletedCommandId = applied.commandId; projection.protocol.lastOutcomeFingerprint = applied.outcomeFingerprint
     projection.director = structuredClone(projection.state.director)
     projection.protocol.pendingCommandId = null; projection.protocol.pendingCommandSequence = null; projection.protocol.pendingActionKey = null; projection.protocol.pendingActorKey = null; projection.protocol.pendingTargetKey = null; projection.protocol.pendingCombatTransitionIntent = null; projection.protocol.pendingActionQuantity = null; projection.protocol.pendingActionItemKey = null; projection.protocol.pendingDirectorTrigger = null
+  } else if (event.type === 'text-open-world.memory.committed') {
+    if (projection.protocol.pendingCommandId) fail('待处理命令期间不能写入长期记忆')
+    const memory = parseTextOpenWorldMemoryCommittedEventPayloadV1(json(event))
+    if (event.commandId != null) fail('长期记忆事件不能绑定命令')
+    // baseSequence belongs to the shared ProductRuntime stream. Shared events
+    // can advance it without entering this product-private projection; the
+    // async event protocol validates the exact global predecessor.
+    if (event.baseStateHash == null) fail('长期记忆事件缺少基线状态Hash')
+    if (event.actorKey !== 'player') fail('长期记忆事件只能由玩家确认')
+    if (event.targetKey !== memory.actorKey) fail('长期记忆事件目标角色不一致')
+    if (memory.worldMinute !== projection.state.time.worldMinute) fail('长期记忆世界时间与当前投影不一致')
+    if (memory.coveredEventSequences.some(sequence => sequence >= event.sequence)) fail('长期记忆不能引用自身或未来事件')
+    if (projection.memory.records.some(record => record.memoryKey === memory.memoryKey
+      || record.sourceDialogueHash === memory.sourceDialogueHash)) fail('长期记忆窗口已经提交')
+
+    const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
+    const knowledgeKeys = new Set(modules.knowledge.entries.map(entry => entry.key))
+    const actor = memory.actorKey == null
+      ? null
+      : modules.actors.actors.find(item => item.key === memory.actorKey) ?? fail('长期记忆Actor不存在')
+    const scene = memory.sceneKey == null || modules.narrative.version !== 2
+      ? null
+      : modules.narrative.scenes.find(item => item.key === memory.sceneKey) ?? fail('长期记忆Scene不存在')
+    if (memory.kind === 'dialogue-window') {
+      const actorState = actor ? projection.state.actors[actor.key] : null
+      if (!actor || !scene || scene.actorKey !== actor.key || !actorState?.alive || !actorState.present
+        || actorState.locationKey !== projection.state.map.currentLocationKey) {
+        fail('长期对白记忆必须绑定当前地点仍在场的存活角色')
+      }
+    }
+    const acquiredActorKnowledge = new Set(actor ? projection.memory.actorKnowledgeByActorKey[actor.key] ?? [] : [])
+    const actorKnownBefore = new Set(actor
+      ? modules.knowledge.entries
+        .filter(entry => entry.actorKeys.includes(actor.key) || acquiredActorKnowledge.has(entry.key))
+        .map(entry => entry.key)
+      : [])
+    const sceneAllowed = new Set(scene?.allowedKnowledgeClaimKeys ?? [])
+    if (memory.sourceDialogueKnowledgeKeys.some(key => !knowledgeKeys.has(key)
+      || !actorKnownBefore.has(key) || !sceneAllowed.has(key))) {
+      fail('长期记忆引用了NPC当时不知道或场景不允许声明的知识')
+    }
+    if (memory.sourceDialogueKnowledgeKeys.some(key => !memory.playerKnowledgeKeys.includes(key))) {
+      fail('NPC实际引用知识必须进入玩家知识回执')
+    }
+    const playerKnownBefore = new Set(Object.entries(projection.state.knowledge.visibilityByKey)
+      .filter(([, visibility]) => visibility === 'known').map(([key]) => key))
+    const dialogueKnown = new Set(memory.sourceDialogueKnowledgeKeys)
+    if (memory.playerKnowledgeKeys.some(key => !knowledgeKeys.has(key)
+      || (!playerKnownBefore.has(key) && !dialogueKnown.has(key)))) {
+      fail('玩家长期记忆只能包含原已知或本窗口由NPC实际引用的知识')
+    }
+    if (memory.actorKnowledgeKeys.some(key => !knowledgeKeys.has(key)
+      || (!playerKnownBefore.has(key) && !dialogueKnown.has(key) && !actorKnownBefore.has(key)))) {
+      fail('角色长期记忆只能包含玩家原已知、本窗口已说出或角色本来知道的知识')
+    }
+    const visibleInstances = Object.values(projection.state.quests.instancesByKey)
+      .filter(instance => !['locked', 'available'].includes(instance.status))
+    const visibleDefinitions = new Set(visibleInstances.map(instance => instance.definitionKey))
+    const openThreadKeys = new Set([
+      ...visibleInstances.map(instance => instance.instanceKey),
+      ...visibleDefinitions,
+      ...modules.narrative.storylines.flatMap(storyline => storyline.stageKeys.some(stageKey => (
+        modules.narrative.stages.find(stage => stage.key === stageKey)?.questKeys.some(key => visibleDefinitions.has(key))
+      )) ? [storyline.key] : []),
+    ])
+    if (memory.openThreadKeys.some(key => !openThreadKeys.has(key))) fail('长期记忆引用了尚未公开的故事线程')
+
+    const regionKey = modules.world.locations.find(location => location.key === projection.state.map.currentLocationKey)!.regionKey
+    for (const key of memory.playerKnowledgeKeys) {
+      if (projection.state.knowledge.visibilityByKey[key] === 'known') continue
+      projection.state.knowledge.visibilityByKey[key] = 'known'
+      projection.state.knowledge.history.push({
+        kind: 'knowledge-revealed', targetKey: key, sourceKey: memory.memoryKey,
+        regionKey, worldMinute: projection.state.time.worldMinute,
+      })
+    }
+    projection.state.knowledge.history = projection.state.knowledge.history.slice(-modules.director.rules.historyLimit)
+    if (actor) {
+      projection.memory.actorKnowledgeByActorKey[actor.key] = [...new Set([
+        ...(projection.memory.actorKnowledgeByActorKey[actor.key] ?? []),
+        ...memory.actorKnowledgeKeys,
+      ])].sort()
+    }
+    const { schema: _schema, version: _version, ...memoryRecord } = memory
+    projection.memory.records.push({ ...memoryRecord, committedSequence: event.sequence, inherited: false })
+    projection.memory.records = projection.memory.records.slice(-64)
+    validateTextOpenWorldEffectStateV1(projection.state, modules)
   } else fail(`事件类型不属于vNext Session投影:${event.type}`)
   projection.lastEventSequence = event.sequence
   return parseTextOpenWorldSessionProjectionV1(projection)
@@ -879,6 +1045,13 @@ export function rebaseTextOpenWorldSessionProjectionForBranchV1(value: TextOpenW
     pendingCommandId: null, pendingCommandSequence: null, pendingActionKey: null, pendingActorKey: null, pendingTargetKey: null, pendingCombatTransitionIntent: null, pendingActionQuantity: null, pendingActionItemKey: null,
     pendingDirectorTrigger: null, randomEvidence: [], lastCompletedCommandId: null, lastOutcomeFingerprint: null,
   }
+  projection.memory.records = projection.memory.records.map(record => ({
+    ...record,
+    coveredEventSequences: [],
+    coveredEventHashes: [],
+    committedSequence: 0,
+    inherited: true,
+  }))
   projection.lastEventSequence = 0
   return parseTextOpenWorldSessionProjectionV1(projection)
 }

@@ -68,6 +68,45 @@ export interface TextOpenWorldSessionProtocolProjectionV1 {
   lastOutcomeFingerprint: string | null
 }
 
+export type TextOpenWorldLongTermMemoryKindV1 =
+  | 'dialogue-window'
+  | 'player-memory'
+  | 'actor-memory'
+
+/**
+ * Portable, bounded memory projection owned by one text-open-world Session.
+ * The full dialogue/model transcript remains Harness evidence; runtime state
+ * keeps only the minimum summary, governed references and portable hashes.
+ */
+export interface TextOpenWorldLongTermMemoryRecordV1 {
+  memoryKey: string
+  kind: TextOpenWorldLongTermMemoryKindV1
+  subjectKey: string
+  sceneKey: string | null
+  actorKey: string | null
+  summary: string
+  coveredEventSequences: number[]
+  coveredEventHashes: string[]
+  playerKnowledgeKeys: string[]
+  actorKnowledgeKeys: string[]
+  sourceDialogueKnowledgeKeys: string[]
+  openThreadKeys: string[]
+  sourceDialogueHash: string
+  candidateHash: string
+  contextManifestHash: string
+  adoptionHash: string
+  worldMinute: number
+  committedSequence: number
+  inherited: boolean
+}
+
+export interface TextOpenWorldLongTermMemoryProjectionV1 {
+  version: 1
+  records: TextOpenWorldLongTermMemoryRecordV1[]
+  /** Runtime-acquired actor knowledge; frozen actorKeys remain Release-owned. */
+  actorKnowledgeByActorKey: Record<string, string[]>
+}
+
 export interface TextOpenWorldSessionProjectionV1 {
   schema: 'storyforge.text-open-world.session-projection'
   version: 1
@@ -76,6 +115,7 @@ export interface TextOpenWorldSessionProjectionV1 {
   state: TextOpenWorldEffectStateV1
   actions: TextOpenWorldActionRuntimeProjectionV1
   director: TextOpenWorldDirectorProjectionV1
+  memory: TextOpenWorldLongTermMemoryProjectionV1
   protocol: TextOpenWorldSessionProtocolProjectionV1
   lastEventSequence: number
 }

@@ -114,6 +114,16 @@
 .open-world-runtime-dialogue-turn strong { color: #d5c196; font-size: 10px; }
 .open-world-runtime-dialogue-turn small { color: #718987; font-size: 8px; line-height: 1.5; }
 .open-world-runtime-dialogue-turn p { margin: 0; color: #dce5e1; font-family: var(--font-serif); font-size: 11px; line-height: 1.65; white-space: pre-wrap; }
+.open-world-runtime-memory-actions { display: flex; align-items: center; gap: 9px; padding-top: 4px; border-top: 1px solid rgba(112,155,141,.16); }
+.open-world-runtime-memory-actions button { display: inline-flex; min-height: 32px; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid rgba(124,177,157,.35); border-radius: 7px; background: rgba(54,111,91,.18); color: #c7ded5; font-size: 9px; cursor: pointer; }
+.open-world-runtime-memory-actions button:disabled { opacity: .42; cursor: not-allowed; }
+.open-world-runtime-memory-actions small { color: #708584; font-size: 8px; line-height: 1.5; }
+.open-world-runtime-memory-log { display: grid; gap: 8px; padding: 13px 15px; border: 1px solid rgba(163,132,85,.26); border-radius: 9px; background: rgba(73,54,28,.1); }
+.open-world-runtime-memory-log>header { display: flex; align-items: center; gap: 7px; color: #d4b77e; font-family: var(--font-mono); font-size: 8px; letter-spacing: .07em; text-transform: uppercase; }
+.open-world-runtime-memory-log>header small { margin-left: auto; color: #756f64; }
+.open-world-runtime-memory-log article { display: grid; gap: 4px; padding-left: 10px; border-left: 2px solid rgba(183,145,84,.32); }
+.open-world-runtime-memory-log p { margin: 0; color: #cbd3cc; font-family: var(--font-serif); font-size: 10px; line-height: 1.6; }
+.open-world-runtime-memory-log article small { color: #756f64; font-size: 8px; }
 .open-world-runtime-expression { display: grid; min-width: 0; gap: 9px; margin-bottom: 12px; padding: 13px 15px; border: 1px solid rgba(154,117,180,.31); border-radius: 9px; background: linear-gradient(125deg,rgba(94,55,118,.15),rgba(28,53,62,.13)); }
 .open-world-runtime-expression>header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .open-world-runtime-expression>header>span { display: inline-flex; align-items: center; gap: 7px; color: #d0b6de; font-family: var(--font-mono); font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }

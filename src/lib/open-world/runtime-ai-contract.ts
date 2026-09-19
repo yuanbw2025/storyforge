@@ -233,10 +233,10 @@ export const TEXT_OPEN_WORLD_RUNTIME_AI_SKILL_CONTRACTS_V1 = [
     capability: 'dialogue',
     skillId: 'prose.text-open-world-runtime-dialogue',
     formalEntryId: 'text-open-world.runtime.dialogue',
-    promptVersion: 'text-open-world-runtime-dialogue-v2',
+    promptVersion: 'text-open-world-runtime-dialogue-v3',
     availability: 'player-ui-routed',
     purpose: '基于当前在场NPC、三档态度和该角色实际知识生成只读对白候选。',
-    logicalSlices: ['scene.current', 'actor.present-public-dossier', 'actor.knowledge', 'relationship.attitude', 'conversation.recent', 'actions.available', 'choices.available'],
+    logicalSlices: ['scene.current', 'actor.present-public-dossier', 'actor.knowledge', 'relationship.attitude', 'memory.actor-long-term', 'conversation.recent', 'actions.available', 'choices.available'],
     routeCategory: 'runtime.text-open-world.dialogue',
     minimumContextWindow: 24_000,
     temperatureMaximum: 0.7,
@@ -322,9 +322,10 @@ export const TEXT_OPEN_WORLD_RUNTIME_AI_SKILL_CONTRACTS_V1 = [
     capability: 'memory',
     skillId: 'prose.text-open-world-runtime-memory',
     formalEntryId: 'text-open-world.runtime.memory',
-    promptVersion: 'text-open-world-runtime-memory-v1',
+    promptVersion: 'text-open-world-runtime-memory-v2',
+    availability: 'player-ui-routed',
     purpose: '压缩已发生对话和终态事件的最小长期记忆候选，并保持World Truth、Player Knowledge与Actor Knowledge隔离。',
-    logicalSlices: ['conversation.closed-window', 'events.terminal-receipts', 'player.known-facts', 'actor.scoped-knowledge', 'story.open-visible-threads'],
+    logicalSlices: ['conversation.closed-window', 'events.terminal-receipts', 'player.known-facts', 'actor.scoped-knowledge', 'memory.player-long-term', 'memory.actor-long-term', 'story.open-visible-threads'],
     routeCategory: 'runtime.text-open-world.memory',
     minimumContextWindow: 24_000,
     temperatureMaximum: 0.3,
@@ -360,13 +361,7 @@ export function validateTextOpenWorldRuntimeAISkillContractsV1(
   const schemaIds = new Set<string>()
   for (const item of contracts) {
     if (item.version !== 1 || item.productType !== 'text-open-world' || item.phase !== 'runtime') fail('产品阶段或版本无效')
-    const expectedAvailability = item.capability === 'intent'
-      || item.capability === 'dialogue'
-      || item.capability === 'expression'
-      || item.capability === 'quest-packaging'
-      || item.capability === 'direction'
-      ? 'player-ui-routed'
-      : 'registered-not-yet-ui-routed'
+    const expectedAvailability = 'player-ui-routed'
     if (item.availability !== expectedAvailability) fail(`${item.skillId} UI接入状态与已完成工作包不一致`)
     if (skillIds.has(item.skillId) || capabilities.has(item.capability) || entryIds.has(item.formalEntryId)) fail('Skill、能力或正式入口重复')
     skillIds.add(item.skillId); capabilities.add(item.capability); entryIds.add(item.formalEntryId)

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MessageCircle, MousePointerClick, ScrollText, Send, TerminalSquare } from 'lucide-react'
+import { Archive, MessageCircle, MousePointerClick, ScrollText, Send, TerminalSquare } from 'lucide-react'
 import type {
   TextOpenWorldActionAvailabilityV1,
   TextOpenWorldCommandSourceV1,
   TextOpenWorldFeedbackReceiptV1,
+  TextOpenWorldLongTermMemoryRecordV1,
 } from '../../lib/types'
 import type {
   TextOpenWorldProjectedSceneV1,
@@ -18,6 +19,10 @@ import type {
   TextOpenWorldRuntimeDialogueHistoryTurnV1,
   TextOpenWorldRuntimeDialoguePresentationV1,
 } from '../../lib/open-world/runtime-dialogue'
+import type {
+  TextOpenWorldRuntimeMemoryDialogueTurnV1,
+  TextOpenWorldRuntimeMemoryPresentationV1,
+} from '../../lib/open-world/runtime-memory'
 
 export interface TextOpenWorldSceneTutorialAvailabilityV1 {
   systemActions: boolean
@@ -54,6 +59,13 @@ interface TextOpenWorldScenePanelProps {
     selectedSceneKey: string
     recentDialogue: readonly TextOpenWorldRuntimeDialogueHistoryTurnV1[]
   }): Promise<TextOpenWorldSceneNaturalInputResolutionV1>
+  longTermMemories?: readonly TextOpenWorldLongTermMemoryRecordV1[]
+  memoryAvailable?: boolean
+  onCommitMemory?(request: {
+    selectedSceneKey: string
+    actorKey: string
+    dialogue: readonly TextOpenWorldRuntimeMemoryDialogueTurnV1[]
+  }): Promise<TextOpenWorldRuntimeMemoryPresentationV1>
   /** Reports only controls rendered for the currently selected scene. */
   onTutorialAvailabilityChange?(availability: TextOpenWorldSceneTutorialAvailabilityV1): void
 }
@@ -84,6 +96,10 @@ interface PresentedDialogueTurn extends TextOpenWorldRuntimeDialogueHistoryTurnV
   recommendedActionKeys: string[]
   recommendedChoiceKeys: string[]
   boundaryExplanation: string | null
+  citedKnowledgeKeys: string[]
+  candidateHash: string | null
+  contextManifestHash: string | null
+  runId: number | null
 }
 
 const ATTITUDE_LABELS = { bad: '态度较差', neutral: '态度一般', good: '态度友好' } as const
@@ -158,6 +174,9 @@ export default function TextOpenWorldScenePanel({
   fallback,
   onExecute,
   onInterpretNaturalInput,
+  longTermMemories = [],
+  memoryAvailable = false,
+  onCommitMemory,
   onTutorialAvailabilityChange,
 }: TextOpenWorldScenePanelProps) {
   const [selectedSceneKey, setSelectedSceneKey] = useState<string | null>(projection.recommendedSceneKey)
@@ -166,6 +185,8 @@ export default function TextOpenWorldScenePanel({
   const [interpreting, setInterpreting] = useState(false)
   const [pendingIntentOptions, setPendingIntentOptions] = useState<PendingIntentOption[]>([])
   const [dialogueTurns, setDialogueTurns] = useState<PresentedDialogueTurn[]>([])
+  const [memoryBusy, setMemoryBusy] = useState(false)
+  const [memoryNotice, setMemoryNotice] = useState<string | null>(null)
   const interpretationRevision = useRef(0)
 
   useEffect(() => {
@@ -175,6 +196,8 @@ export default function TextOpenWorldScenePanel({
     setInterpreting(false)
     setPendingIntentOptions([])
     setDialogueTurns([])
+    setMemoryBusy(false)
+    setMemoryNotice(null)
     interpretationRevision.current += 1
   }, [eventSequence, projection.recommendedSceneKey, sessionKey])
 
@@ -351,12 +374,18 @@ export default function TextOpenWorldScenePanel({
           speaker: 'player', actorKey: null, text: naturalInput.normalize('NFC').trim(),
           actorName: null, source: null, tone: null,
           recommendedActionKeys: [], recommendedChoiceKeys: [], boundaryExplanation: null,
+          citedKnowledgeKeys: [], candidateHash: null, contextManifestHash: null,
+          runId: null,
         }, {
           speaker: 'npc', actorKey: dialogue.actorKey, text: dialogue.replyText,
           actorName: dialogue.actorName, source: dialogue.source, tone: dialogue.tone,
           recommendedActionKeys: [...dialogue.recommendedActionKeys],
           recommendedChoiceKeys: [...dialogue.recommendedChoiceKeys],
           boundaryExplanation: dialogue.boundaryExplanation,
+          citedKnowledgeKeys: [...dialogue.citedKnowledgeKeys],
+          candidateHash: dialogue.candidateHash,
+          contextManifestHash: dialogue.contextManifestHash,
+          runId: dialogue.runId,
         }]
         setDialogueTurns(current => [...current, ...addedTurns].slice(-12))
         setNotice({
@@ -383,6 +412,38 @@ export default function TextOpenWorldScenePanel({
       })
     } finally {
       if (interpretationRevision.current === requestRevision) setInterpreting(false)
+    }
+  }
+
+  const commitDialogueMemory = async () => {
+    if (!scene?.actor || !onCommitMemory || dialogueTurns.length < 2 || memoryBusy) return
+    setMemoryBusy(true)
+    setMemoryNotice('正在把本场景对白压缩为最小长期记忆；完成前不会改变游戏状态。')
+    try {
+      const result = await onCommitMemory({
+        selectedSceneKey: scene.key,
+        actorKey: scene.actor.key,
+        dialogue: dialogueTurns.map(turn => ({
+          speaker: turn.speaker,
+          actorKey: turn.actorKey,
+          text: turn.text,
+          source: turn.speaker === 'player'
+            ? 'player-input'
+            : turn.source === 'ai-candidate'
+              ? 'ai-candidate'
+              : 'frozen-scene-fallback',
+          citedKnowledgeKeys: [...turn.citedKnowledgeKeys],
+          dialogueCandidateHash: turn.candidateHash,
+          dialogueContextManifestHash: turn.contextManifestHash,
+          dialogueRunId: turn.runId,
+        })),
+      })
+      setDialogueTurns([])
+      setMemoryNotice(`已写入长期记忆：${result.summary}`)
+    } catch {
+      setMemoryNotice('长期记忆整理失败；临时对白和确定性玩法不受影响，可以稍后重试。')
+    } finally {
+      setMemoryBusy(false)
     }
   }
 
@@ -448,7 +509,35 @@ export default function TextOpenWorldScenePanel({
           {turn.source === 'frozen-scene-fallback' && turn.boundaryExplanation && <small>{turn.boundaryExplanation}</small>}
         </article>
       })}
+      {scene?.actor && <footer className="open-world-runtime-memory-actions">
+        <button
+          type="button"
+          disabled={busy || memoryBusy || !memoryAvailable || !onCommitMemory || dialogueTurns.length < 2}
+          onClick={() => void commitDialogueMemory()}
+        >
+          <Archive aria-hidden="true" />{memoryBusy ? '整理中…' : '整理并保存长期记忆'}
+        </button>
+        <small>{memoryAvailable
+          ? '只保存摘要、知识键和证据指纹；不保存完整聊天正文。'
+          : '配置可用的文字模型后，才能整理长期记忆。'}</small>
+      </footer>}
     </section>}
+
+    {scene?.actor && longTermMemories.some(memory => memory.actorKey === scene.actor?.key) && <section
+      className="open-world-runtime-memory-log"
+      data-testid="text-open-world-runtime-memory"
+      aria-label={`${scene.actor.name}的长期记忆`}
+    >
+      <header><Archive aria-hidden="true" /><strong>{scene.actor.name}的长期记忆</strong><small>随当前存档分支重放</small></header>
+      {longTermMemories.filter(memory => memory.actorKey === scene.actor?.key).slice(-4).reverse().map(memory => <article key={memory.memoryKey}>
+        <p>{memory.summary}</p>
+        <small>第 {Math.floor(memory.worldMinute / 1_440) + 1} 天 · {memory.inherited ? '继承自父分支' : `事件 #${memory.committedSequence}`}</small>
+      </article>)}
+    </section>}
+
+    {memoryNotice && <div className="open-world-scene-notice is-boundary" role="status" aria-live="polite" data-testid="text-open-world-memory-notice">
+      {memoryNotice}
+    </div>}
 
     {scene?.fixedChoices.length ? <section
       className="open-world-scene-input-card"

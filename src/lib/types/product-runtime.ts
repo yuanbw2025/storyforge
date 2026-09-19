@@ -1153,6 +1153,7 @@ export const PRODUCT_RUNTIME_EVENT_TYPES = [
   "text-open-world.command.committed",
   "text-open-world.random.resolved",
   "text-open-world.effects.applied",
+  "text-open-world.memory.committed",
   "time.advanced",
   "entity.upserted",
   "entity.patched",

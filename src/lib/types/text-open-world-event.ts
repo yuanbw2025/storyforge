@@ -1,4 +1,5 @@
 import type { TextOpenWorldEffectPlanV1, TextOpenWorldEffectReceiptV1 } from './text-open-world-effect'
+import type { TextOpenWorldLongTermMemoryKindV1 } from './text-open-world-session'
 
 export type TextOpenWorldCommandOutcomeV1 = 'success' | 'failure' | 'degraded'
 
@@ -55,6 +56,40 @@ export interface TextOpenWorldEffectsAppliedEventPayloadV1 {
   plan: TextOpenWorldEffectPlanV1
   receipt: TextOpenWorldEffectReceiptV1
   outcomeFingerprint: string
+}
+
+export interface TextOpenWorldMemoryCommittedEventPayloadV1 {
+  schema: 'storyforge.text-open-world.memory-committed-event'
+  version: 1
+  memoryKey: string
+  kind: TextOpenWorldLongTermMemoryKindV1
+  subjectKey: string
+  sceneKey: string | null
+  actorKey: string | null
+  summary: string
+  coveredEventSequences: number[]
+  coveredEventHashes: string[]
+  playerKnowledgeKeys: string[]
+  actorKnowledgeKeys: string[]
+  sourceDialogueKnowledgeKeys: string[]
+  openThreadKeys: string[]
+  sourceDialogueHash: string
+  candidateHash: string
+  contextManifestHash: string
+  adoptionHash: string
+  worldMinute: number
+}
+
+export interface TextOpenWorldMemoryCommitReceiptV1 {
+  schema: 'storyforge.text-open-world.memory-commit-receipt'
+  version: 1
+  status: 'committed'
+  sessionId: number
+  memoryKey: string
+  eventId: number
+  eventSequence: number
+  resultingStateHash: string
+  replayed: boolean
 }
 
 export interface TextOpenWorldEventBatchProjectionV1 {

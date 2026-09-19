@@ -499,14 +499,40 @@ async function loadCatalog(scope: FrozenResourceScopeV1): Promise<TextOpenWorldR
   }
   add({
     kind: 'reference', key: typedResourceKey('reference', session.id, 'conversation-boundary'), title: '当前对话输入边界',
-    summary: '不伪造持久化对话历史；本轮原文与同场景临时短窗口由最终rendered request逐字留证。',
+    summary: '本轮原文与同场景短窗口由rendered request逐字留证；已确认的长期摘要由独立记忆资源提供。',
     logicalSlices: ['conversation.recent', 'conversation.closed-window'], targetKeys: [],
     content: {
       persistedConversationWindow: null,
       currentInputSource: 'rendered-request-exact-artifact',
       ephemeralSameSceneWindowSource: 'rendered-request-exact-artifact',
-      rule: '临时短窗口只辅助措辞连续性，不是事实来源且不持久化；G6-08接入关闭窗口摘要后替换此显式空边界。',
+      rule: '临时短窗口仍不是事实来源；只有text-open-world.memory.committed事件中的最小摘要和知识键可以跨场景读取。',
     },
+  })
+  add({
+    kind: 'reference', key: typedResourceKey('reference', session.id, 'terminal-window-boundary'), title: '终态事件窗口边界',
+    summary: '调用方未指定终态命令时窗口为空；不得用相邻或最近事件自行补齐。',
+    logicalSlices: ['events.terminal-receipts'], targetKeys: [],
+    content: {
+      selection: 'explicit-terminal-command-ids-only',
+      emptyWindowAllowed: true,
+      rule: '只压缩调用方精确授权的终态Receipt；空窗口不得猜测发生过的行动。',
+    },
+  })
+  add({
+    kind: 'storyline-progress', key: typedResourceKey('storyline-progress', session.id, 'player-memory'), title: '玩家长期最小记忆',
+    summary: `${projection.memory.records.length}项已确认摘要；事件和数值仍以正式投影为准。`,
+    logicalSlices: ['memory.player-long-term'],
+    targetKeys: projection.memory.records.flatMap(record => [record.subjectKey, ...record.openThreadKeys]),
+    content: projection.memory.records.map(record => ({
+      memoryKey: record.memoryKey,
+      kind: record.kind,
+      subjectKey: record.subjectKey,
+      summary: record.summary,
+      playerKnowledgeKeys: record.playerKnowledgeKeys,
+      openThreadKeys: record.openThreadKeys,
+      worldMinute: record.worldMinute,
+      inherited: record.inherited,
+    })),
   })
   add({
     kind: 'fact', key: resourceKey(session.id, 'player-visible-state'), title: '玩家可见角色与资源状态',
@@ -560,8 +586,10 @@ async function loadCatalog(scope: FrozenResourceScopeV1): Promise<TextOpenWorldR
         ? modules.narrative.scenes.find(item => item.key === scene.key)?.allowedKnowledgeClaimKeys ?? []
         : []
     )))]
+    const acquiredKnowledge = new Set(projection.memory.actorKnowledgeByActorKey[actor.key] ?? [])
     const scopedKnowledge = modules.knowledge.entries
-      .filter(entry => entry.actorKeys.includes(actor.key) && allowedClaimKeys.includes(entry.key))
+      .filter(entry => (entry.actorKeys.includes(actor.key) || acquiredKnowledge.has(entry.key))
+        && allowedClaimKeys.includes(entry.key))
       .map(entry => ({ key: entry.key, kind: entry.kind, title: entry.title, content: entry.content }))
     add({
       kind: 'character', key: typedResourceKey('character', session.id, `actor:${safeKey(actor.key)}`), title: `${actor.name}公开档案`,
@@ -571,6 +599,24 @@ async function loadCatalog(scope: FrozenResourceScopeV1): Promise<TextOpenWorldR
         ...actor,
         portrayal: actorDefinition.tier === 'mainline' || actorDefinition.tier === 'significant'
           ? actorDefinition.portrayal : null,
+      },
+    })
+    const actorMemories = projection.memory.records.filter(record => record.actorKey === actor.key)
+    add({
+      kind: 'character-relation', key: typedResourceKey('character-relation', session.id, `actor-memory:${safeKey(actor.key)}`), title: `${actor.name}长期最小记忆`,
+      summary: `${actorMemories.length}项已确认摘要，${acquiredKnowledge.size}项运行期获得知识。`,
+      logicalSlices: ['memory.actor-long-term'], targetKeys: [actor.key, ...acquiredKnowledge],
+      content: {
+        actorKey: actor.key,
+        summaries: actorMemories.map(record => ({
+          memoryKey: record.memoryKey,
+          summary: record.summary,
+          worldMinute: record.worldMinute,
+          openThreadKeys: record.openThreadKeys,
+          inherited: record.inherited,
+        })),
+        acquiredKnowledgeKeys: [...acquiredKnowledge].sort(),
+        rule: '摘要用于保持人物连续性，不覆盖世界真相、当前任务状态或确定性数值。',
       },
     })
     add({
@@ -599,7 +645,8 @@ async function loadCatalog(scope: FrozenResourceScopeV1): Promise<TextOpenWorldR
         ? modules.narrative.scenes.find(item => item.key === actorScene.key)?.allowedKnowledgeClaimKeys ?? []
         : []
       const sceneKnowledge = modules.knowledge.entries
-        .filter(entry => entry.actorKeys.includes(actor.key) && sceneAllowedClaimKeys.includes(entry.key))
+        .filter(entry => (entry.actorKeys.includes(actor.key) || acquiredKnowledge.has(entry.key))
+          && sceneAllowedClaimKeys.includes(entry.key))
         .map(entry => ({ key: entry.key, kind: entry.kind, title: entry.title, content: entry.content }))
       add({
         kind: 'fact',

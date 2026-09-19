@@ -34,13 +34,7 @@ describe('R-OPEN-WORLD6 · vNext 运行时 AI Skill 合同总表', () => {
     for (const item of TEXT_OPEN_WORLD_RUNTIME_AI_SKILL_CONTRACTS_V1) {
       const skill = getAgentSkillV1(item.skillId)
       const entry = FORMAL_AI_ENTRY_BY_ID_V1.get(item.formalEntryId)
-      expect(item.availability).toBe(item.capability === 'intent'
-        || item.capability === 'dialogue'
-        || item.capability === 'expression'
-        || item.capability === 'quest-packaging'
-        || item.capability === 'direction'
-        ? 'player-ui-routed'
-        : 'registered-not-yet-ui-routed')
+      expect(item.availability).toBe('player-ui-routed')
       expect(item.reads.contextSourceKeys).toEqual(['openWorldRuntime'])
       expect(item.reads.logicalSlices.length).toBeGreaterThan(0)
       expect(item.reads.forbiddenSlices).toEqual(expect.arrayContaining([

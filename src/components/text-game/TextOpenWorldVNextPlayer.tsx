@@ -29,6 +29,7 @@ import {
   generateTextOpenWorldRuntimeExpressionV1,
   type TextOpenWorldRuntimeExpressionPresentationV1,
 } from '../../lib/open-world/runtime-expression'
+import type { TextOpenWorldRuntimeMemoryDialogueTurnV1 } from '../../lib/open-world/runtime-memory'
 import {
   generateTextOpenWorldRuntimeQuestPackagingV1,
   projectTextOpenWorldRuntimeQuestPackagingSlotV1,
@@ -84,6 +85,7 @@ export default function TextOpenWorldVNextPlayer() {
   const intentAbortController = useRef<AbortController | null>(null)
   const expressionAbortController = useRef<AbortController | null>(null)
   const questPackagingAbortController = useRef<AbortController | null>(null)
+  const memoryAbortController = useRef<AbortController | null>(null)
   const [resultExpression, setResultExpression] = useState<TextOpenWorldRuntimeExpressionPresentationV1 | null>(null)
   const [resultExpressionBusy, setResultExpressionBusy] = useState(false)
   const [resultExpressionIssue, setResultExpressionIssue] = useState<string | null>(null)
@@ -311,9 +313,13 @@ export default function TextOpenWorldVNextPlayer() {
     setPendingConfirmation(null)
     intentAbortController.current?.abort()
     intentAbortController.current = null
+    memoryAbortController.current?.abort()
+    memoryAbortController.current = null
     return () => {
       intentAbortController.current?.abort()
       intentAbortController.current = null
+      memoryAbortController.current?.abort()
+      memoryAbortController.current = null
     }
   }, [projectionSequence, sessionKey])
 
@@ -613,6 +619,47 @@ export default function TextOpenWorldVNextPlayer() {
     }
   }
 
+  const commitDialogueMemory = async (request: {
+    selectedSceneKey: string
+    actorKey: string
+    dialogue: readonly TextOpenWorldRuntimeMemoryDialogueTurnV1[]
+  }) => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    const liveProjection = liveStore.runtimeState.textOpenWorld
+    if (!liveStore.scope || liveSessionId == null || liveProjection == null
+      || liveSessionId !== selectedSessionId
+      || liveProjection.lastEventSequence !== projection.lastEventSequence
+      || liveStore.runtimeState.lastSequence !== store.runtimeState.lastSequence) {
+      throw new Error('当前场景已经变化，请重新形成长期记忆。')
+    }
+    if (!isAIConfigReady(aiConfig)) throw new Error('当前没有可用的文字模型配置。')
+    memoryAbortController.current?.abort()
+    const controller = new AbortController()
+    memoryAbortController.current = controller
+    try {
+      const { generateAndCommitTextOpenWorldRuntimeMemoryV1 } = await import('../../lib/open-world/runtime-memory')
+      const result = await generateAndCommitTextOpenWorldRuntimeMemoryV1({
+        scope: liveStore.scope,
+        productRuntimeSessionId: liveSessionId,
+        selectedSceneKey: request.selectedSceneKey,
+        actorKey: request.actorKey,
+        dialogue: request.dialogue,
+        terminalCommandIds: liveStore.lastFeedback?.phase === 'terminal'
+          && liveStore.lastFeedback.outcomeCommitted
+          && liveStore.lastFeedback.commandId
+          ? [liveStore.lastFeedback.commandId]
+          : [],
+        aiConfig,
+        signal: controller.signal,
+      })
+      await useTextOpenWorldPlayerStore.getState().select(liveSessionId)
+      return result
+    } finally {
+      if (memoryAbortController.current === controller) memoryAbortController.current = null
+    }
+  }
+
   const trackedQuestContent = <section className="open-world-game-rail-card" aria-label="当前任务">
     <small>当前任务</small>
     {hud.primaryQuest ? <>
@@ -824,6 +871,9 @@ export default function TextOpenWorldVNextPlayer() {
         )
       }}
       onInterpretNaturalInput={interpretNaturalInput}
+      longTermMemories={projection.memory.records}
+      memoryAvailable={isAIConfigReady(aiConfig)}
+      onCommitMemory={commitDialogueMemory}
       onTutorialAvailabilityChange={handleSceneTutorialAvailability}
     />}
   </div>
