@@ -1,0 +1,69 @@
+name: Deploy StoryForge Docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "website-docs/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/deploy-docs.yml"
+
+  workflow_dispatch:
+
+concurrency:
+  group: storyforge-docs-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and deploy docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build VitePress docs
+        run: npm run docs:build
+
+      - name: Prepare SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.STORYFORGE_DOCS_SSH_KEY }}
+          SSH_HOST: ${{ secrets.STORYFORGE_DOCS_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/storyforge_docs_deploy
+          chmod 600 ~/.ssh/storyforge_docs_deploy
+
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy to Tencent Cloud
+        env:
+          SSH_HOST: ${{ secrets.STORYFORGE_DOCS_HOST }}
+          SSH_USER: ${{ secrets.STORYFORGE_DOCS_USER }}
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/storyforge_docs_deploy" \
+            website-docs/.vitepress/dist/ \
+            "$SSH_USER@$SSH_HOST:/var/www/storyforge-docs/"
+
+      - name: Verify deployment
+        run: |
+          curl --fail --retry 5 --retry-delay 3 \
+            https://docs.storyforge-lab.com/ > /dev/null
+
+          echo "StoryForge 文档站部署成功"
