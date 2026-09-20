@@ -38,6 +38,7 @@ import {
 } from '../types'
 import { assertRecordInScope } from '../workspace/scope'
 import { validateTextOpenWorldKnowledgeProductionClosureV1 } from './knowledge-production'
+import { TEXT_OPEN_WORLD_REQUIRED_KEY_PORTRAIT_COUNT_V1 } from './product-config'
 
 const SKILL_ID = 'text-open-world.production.system-finalize.v1'
 const P10_INPUT_SPECS = [
@@ -247,7 +248,7 @@ function moduleSources(
 const MODULE_SCHEMA_VERSIONS: Record<TextOpenWorldRuntimeModuleKeyV1, number> = {
   narrative: 2, world: 3, actors: 3, quests: 2, actions: 16, progression: 1,
   combat: 3, items: 1, crafting: 2, economy: 2, relationships: 3,
-  'time-weather': 2, director: 2, knowledge: 1, presentation: 2,
+  'time-weather': 2, director: 2, knowledge: 1, presentation: 3,
 }
 
 const UI_MODULES: Record<string, TextOpenWorldRuntimeModuleKeyV1[]> = {
@@ -364,20 +365,31 @@ function mediaDemands(artifacts: P10Artifacts): TextOpenWorldMediaSlotDemandV1[]
     sourceArtifactKey: 'text-open-world.map-interaction-catalog', sourceEntityKey: artifacts.map.mapInteractionCatalogHash,
     consumerKeys: ['overlay.map'], semanticContext: artifacts.map.regions.map(region => `${region.title}:${region.theme}`).join('；'),
   })
-  for (const actor of artifacts.npcs.actors) {
+  const actorPriority = (actor: TextOpenWorldNpcRuntimeCatalogV1['actors'][number]): number => (
+    actor.tier === 'mainline' ? 0
+      : actor.tier === 'significant' ? 1
+        : actor.tier === 'resident' ? 2 : 3
+  )
+  const keyPortraitActors = [...artifacts.npcs.actors]
+    .sort((left, right) => actorPriority(left) - actorPriority(right) || left.order - right.order)
+    .slice(0, TEXT_OPEN_WORLD_REQUIRED_KEY_PORTRAIT_COUNT_V1)
+  for (const actor of keyPortraitActors) {
     demands.push({
       key: `media.portrait.${actor.key}`, kind: 'character-portrait', subjectKind: 'actor', subjectKey: actor.key,
-      title: `${actor.name}头像`, required: true, productionMode: 'generate-or-import', fallback: 'generated-placeholder',
+      title: `${actor.name}头像`, required: true, productionMode: 'generate-or-import', fallback: 'text-description',
       sourceArtifactKey: 'text-open-world.npc-runtime-catalog', sourceEntityKey: actor.key,
       consumerKeys: ['play.scene', 'overlay.relationships'], semanticContext: `${actor.name}；${actor.portrayal}；${actor.biography}`,
     })
   }
-  for (const region of artifacts.map.regions) {
+  for (const location of artifacts.map.locations) {
+    const region = artifacts.map.regions.find(candidate => candidate.key === location.regionKey)
+      ?? fail(`地点缺少所属地区:${location.key}`)
     demands.push({
-      key: `media.background.${region.key}`, kind: 'scene-background', subjectKind: 'region', subjectKey: region.key,
-      title: `${region.title}场景背景`, required: true, productionMode: 'generate-or-import', fallback: 'generated-placeholder',
-      sourceArtifactKey: 'text-open-world.map-interaction-catalog', sourceEntityKey: region.key,
-      consumerKeys: ['play.scene', 'overlay.map'], semanticContext: `${region.title}；${region.theme}；${region.description}`,
+      key: `media.background.${location.key}`, kind: 'scene-background', subjectKind: 'location', subjectKey: location.key,
+      title: `${location.title}场景背景`, required: true, productionMode: 'generate-or-import', fallback: 'text-description',
+      sourceArtifactKey: 'text-open-world.map-interaction-catalog', sourceEntityKey: location.key,
+      consumerKeys: ['play.scene', 'overlay.map'],
+      semanticContext: `${region.title}；${region.theme}；${location.title}；${location.description}；${location.purpose}`,
     })
   }
   demands.push({
@@ -386,6 +398,32 @@ function mediaDemands(artifacts: P10Artifacts): TextOpenWorldMediaSlotDemandV1[]
     sourceArtifactKey: 'text-open-world.presentation-profile', sourceEntityKey: artifacts.presentationProfile.presentationProfileHash,
     consumerKeys: artifacts.presentationProfile.consumerSlots.map(slot => slot.key), semanticContext: artifacts.presentationProfile.theme.designIntent,
   })
+  // The Creator plan reserves the maximum named-location count before P4 is
+  // allowed to choose an exact count. When the accepted map uses fewer nodes,
+  // consume the remaining authorized outputs as optional reusable atmosphere
+  // variants instead of inventing extra locations or ordinary "key" actors.
+  const targetVisualCount = artifacts.gameBrief.media.imageCount
+  const currentVisualCount = demands.filter(slot => [
+    'character-portrait', 'scene-background',
+  ].includes(slot.kind)).length
+  if (currentVisualCount < targetVisualCount) {
+    if (artifacts.map.locations.length === 0) fail('缺少可承接媒资余量的命名地点')
+    for (let index = currentVisualCount; index < targetVisualCount; index += 1) {
+      const location = artifacts.map.locations[(index - currentVisualCount) % artifacts.map.locations.length]!
+      const region = artifacts.map.regions.find(candidate => candidate.key === location.regionKey)
+        ?? fail(`地点缺少所属地区:${location.key}`)
+      const variantNumber = Math.floor((index - currentVisualCount) / artifacts.map.locations.length) + 2
+      demands.push({
+        key: `media.background.${location.key}.variant.${String(variantNumber).padStart(3, '0')}`,
+        kind: 'scene-background', subjectKind: 'location', subjectKey: location.key,
+        title: `${location.title}环境变体${variantNumber}`, required: false,
+        productionMode: 'optional-generate-or-import', fallback: 'text-description',
+        sourceArtifactKey: 'text-open-world.map-interaction-catalog', sourceEntityKey: location.key,
+        consumerKeys: ['play.scene'],
+        semanticContext: `${region.title}；${region.theme}；${location.title}；在不改变地点事实的前提下表现不同时间或天气氛围。`,
+      })
+    }
+  }
   demands.push(...deriveTextOpenWorldAudioSlotDemandsV1({
     productInstanceKey: artifacts.gameBrief.productInstanceKey,
     media: artifacts.gameBrief.media,
@@ -395,16 +433,18 @@ function mediaDemands(artifacts: P10Artifacts): TextOpenWorldMediaSlotDemandV1[]
     scenes: artifacts.scenes.scenes,
     actors: artifacts.npcs.actors,
   }))
-  const portraits = demands.filter(slot => slot.kind === 'character-portrait')
-  const backgrounds = demands.filter(slot => slot.kind === 'scene-background')
-  const optionalVisuals = demands.filter(slot => slot.kind === 'ui-skin')
+  const requiredPortraits = demands.filter(slot => slot.kind === 'character-portrait' && slot.required)
+  const requiredBackgrounds = demands.filter(slot => slot.kind === 'scene-background' && slot.required)
+  const optionalContentVisuals = demands.filter(slot => (
+    ['character-portrait', 'scene-background'].includes(slot.kind) && !slot.required
+  ))
+  const optionalUiVisuals = demands.filter(slot => slot.kind === 'ui-skin' && !slot.required)
   // `imageCount` is the exact provider-output count already frozen into the
   // Plan. P10 may describe every runtime slot, but only this deterministic
   // subset is eligible for generation; every other slot is explicitly
   // fallback-only instead of pretending that it has a scheduled provider job.
   const visualPriority = [
-    ...backgrounds.slice(0, 1), ...portraits.slice(0, 1),
-    ...backgrounds.slice(1), ...portraits.slice(1), ...optionalVisuals,
+    ...requiredPortraits, ...requiredBackgrounds, ...optionalContentVisuals, ...optionalUiVisuals,
   ]
   if (visualPriority.length < artifacts.gameBrief.media.imageCount) {
     fail(`冻结图片数超过可生产视觉槽:${artifacts.gameBrief.media.imageCount}/${visualPriority.length}`)
@@ -713,7 +753,12 @@ async function createArtifacts(input: {
     coverage: {
       requiredVisualKinds: ['procedural-map', 'character-portrait', 'scene-background'],
       coveredRequiredVisualKinds: ['procedural-map', 'character-portrait', 'scene-background'],
-      requiredActorKeys: context.actors.map(actor => actor.key), coveredActorKeys: context.actors.map(actor => actor.key),
+      requiredActorKeys: context.mediaSlotDemands.filter(slot => (
+        slot.required && slot.kind === 'character-portrait'
+      )).map(slot => slot.subjectKey),
+      coveredActorKeys: context.mediaSlotDemands.filter(slot => (
+        slot.required && slot.kind === 'character-portrait'
+      )).map(slot => slot.subjectKey),
       requiredRegionKeys: context.regions.map(region => region.key), coveredRegionKeys: context.regions.map(region => region.key),
       requiredSlotKeys: context.mediaSlotDemands.filter(slot => slot.required).map(slot => slot.key),
       fallbackReadySlotKeys: context.mediaSlotDemands.filter(slot => slot.required).map(slot => slot.key), missingRequiredSlotKeys: [],

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Bell } from 'lucide-react'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { parseTextOpenWorldModulesV1 } from '../../lib/open-world/modules'
+import { projectTextOpenWorldPlayerMediaV1 } from '../../lib/open-world/player-media'
 import { projectTextOpenWorldPlayerCombatV1 } from '../../lib/open-world/player-combat'
 import {
   projectTextOpenWorldPlayerCraftingEconomyReceiptV1,
@@ -45,7 +46,11 @@ import {
 import type { TextOpenWorldRuntimeAIObservabilityV1 } from '../../lib/open-world/runtime-ai-observability'
 import { projectTextOpenWorldScenesV1 } from '../../lib/open-world/scene-projection'
 import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-projection'
-import type { TextOpenWorldCommandSourceV1 } from '../../lib/types'
+import {
+  productRuntimeSourceForSessionV1,
+  resolveProductRuntimeSource,
+} from '../../lib/product-production/preview-source'
+import type { ProductMediaResolverV1, TextOpenWorldCommandSourceV1 } from '../../lib/types'
 import {
   selectTextOpenWorldVNextActions,
   useTextOpenWorldPlayerStore,
@@ -112,6 +117,9 @@ export default function TextOpenWorldVNextPlayer() {
   } | null>(null)
   const [runtimeAIObservability, setRuntimeAIObservability] = useState<TextOpenWorldRuntimeAIObservabilityV1 | null>(null)
   const [runtimeAIObservabilityLoading, setRuntimeAIObservabilityLoading] = useState(false)
+  const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({})
+  const [mediaFailures, setMediaFailures] = useState<Array<{ assetKey: string; reason: string }>>([])
+  const [mediaLoading, setMediaLoading] = useState(false)
   const [dismissedCombatIdentity, setDismissedCombatIdentity] = useState<string | null>(null)
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     actionKey: string
@@ -176,6 +184,92 @@ export default function TextOpenWorldVNextPlayer() {
     ?? store.selectedSessionId
     ?? runtimePackage?.metadata.packageKey
     ?? 'no-session'
+  const presentationAssets = useMemo(
+    () => store.selectedManifest?.presentation?.assets ?? [],
+    [store.selectedManifest],
+  )
+  const mediaAssetSignature = presentationAssets
+    .map(asset => `${asset.assetKey}@${asset.version}:${asset.contentHash}:${asset.byteSize}`)
+    .sort()
+    .join('|')
+  const mediaSlotAssetKeys = useMemo(() => modules
+    ? (() => {
+        const chosenSubjects = new Set<string>()
+        return [...modules.presentation.mediaSlots]
+          .filter(slot => slot.kind === 'background' || slot.kind === 'portrait')
+          .sort((left, right) => Number(right.required) - Number(left.required) || left.key.localeCompare(right.key))
+          .flatMap(slot => {
+            const subject = `${slot.kind}:${slot.subjectKind}:${slot.subjectKey}`
+            if (chosenSubjects.has(subject)) return []
+            chosenSubjects.add(subject)
+            return slot.assetKey == null ? [] : [slot.assetKey]
+          })
+      })()
+    : [], [modules])
+  const mediaSlotAssetSignature = mediaSlotAssetKeys.join('|')
+  useEffect(() => {
+    let cancelled = false
+    let resolver: ProductMediaResolverV1 | null = null
+    setMediaUrls({})
+    setMediaFailures([])
+    if (!store.scope || !session || presentationAssets.length === 0 || mediaSlotAssetKeys.length === 0) {
+      setMediaLoading(false)
+      return () => { cancelled = true }
+    }
+    setMediaLoading(true)
+    const expectedRuntimeSourceHash = session.runtimeSourceHash
+    void (async () => {
+      try {
+        const source = await productRuntimeSourceForSessionV1(session)
+        const resolved = await resolveProductRuntimeSource({ scope: store.scope!, source })
+        resolver = resolved.mediaResolver
+        if (cancelled) {
+          resolver.dispose()
+          resolver = null
+          return
+        }
+        if (resolved.runtimeSourceHash !== expectedRuntimeSourceHash) {
+          throw new Error('玩家媒资来源与当前存档绑定的不可变运行包不一致')
+        }
+        const result = await resolver.preload({
+          assetKeys: mediaSlotAssetKeys,
+          maximumBytes: 64 * 1024 * 1024,
+        })
+        if (cancelled) return
+        setMediaUrls(result.urls)
+        setMediaFailures(result.failures)
+      } catch (error) {
+        if (cancelled) return
+        resolver?.dispose()
+        resolver = null
+        const reason = error instanceof Error ? error.message : String(error)
+        setMediaFailures(mediaSlotAssetKeys.map(assetKey => ({ assetKey, reason })))
+      } finally {
+        if (!cancelled) setMediaLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+      resolver?.dispose()
+    }
+  }, [
+    mediaAssetSignature,
+    mediaSlotAssetKeys,
+    mediaSlotAssetSignature,
+    presentationAssets.length,
+    session,
+    store.scope,
+  ])
+  const playerMedia = useMemo(() => (
+    projection && modules
+      ? projectTextOpenWorldPlayerMediaV1({
+          modules,
+          assets: presentationAssets,
+          urls: mediaUrls,
+          currentLocationKey: projection.state.map.currentLocationKey,
+        })
+      : null
+  ), [mediaUrls, modules, presentationAssets, projection])
   const feedbackReceiptHash = store.lastFeedback?.receiptHash ?? null
   const productionKey = store.selectedManifest?.definition.productKey
     ?? `unavailable-product:${sessionKey}`
@@ -935,6 +1029,7 @@ export default function TextOpenWorldVNextPlayer() {
         description: location?.description || location?.earlyArrivalDescription || '这里的场景信息仍在展开。',
         playerName: modules.actors.player.identity.name,
       }}
+      background={playerMedia?.currentLocationBackground}
       onExecute={(actionKey, targetKey, source, options) => {
         const action = availableActions.find(item => item.action.key === actionKey)
         if (action) executeProjectedAction(
@@ -1045,7 +1140,19 @@ export default function TextOpenWorldVNextPlayer() {
       runtimePackage={runtimePackage}
       state={state}
       attitudeByActorKey={derived.condition.relations.attitudeByActorKey}
+      portraitByActorKey={playerMedia?.portraitByActorKey}
     />
+    {presentationAssets.length > 0 && (mediaLoading || mediaFailures.length > 0) && <article
+      className="open-world-game-context-card"
+      role="status"
+      data-testid="text-open-world-media-status"
+    >
+      <small>场景媒资</small>
+      <strong>{mediaLoading ? '正在读取不可变媒资' : `${mediaFailures.length} 项已使用文字回退`}</strong>
+      <p>{mediaLoading
+        ? '玩法与文字内容保持可用。'
+        : '加载失败不会改变游戏状态；重新打开存档时会再次校验。'}</p>
+    </article>}
     {!!notifications.length && <article
       className="open-world-game-context-card open-world-game-notifications"
       data-testid="text-open-world-important-changes"

@@ -6502,7 +6502,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })).rejects.toThrow(/IntegrationReport自身Hash不匹配/)
   }, 600_000)
 
-  it('G7-01至G7-05 盐脊完整DAG产出地图、故事、地区库存和1至5级成长经济闭环', async () => {
+  it('G7-01至G7-06 盐脊完整DAG产出叙事玩法闭环与最低媒资', async () => {
     const input = await creatorSchedulerFixture()
     expect(input.characterIds).toHaveLength(7)
     expect(await db.importantLocations.where('projectId').equals(input.scope.projectId).count()).toBe(10)
@@ -6648,6 +6648,9 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     const saltRidgeContentBudget = JSON.parse(artifacts.find(
       row => row.artifactKey === 'text-open-world.content-budget',
     )!.payloadJson) as TextOpenWorldContentBudgetV1
+    const saltRidgeMedia = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.media-requirements',
+    )!.payloadJson) as TextOpenWorldMediaRequirementsV1
     const saltRidgeEndings = JSON.parse(artifacts.find(
       row => row.artifactKey === 'text-open-world.ending-contracts',
     )!.payloadJson) as { endings: Array<{ title: string }> }
@@ -6714,6 +6717,47 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })
     expect(saltRidgeContentBudget.singlePlaythrough.typicalTotalMinutes).toBeGreaterThanOrEqual(180)
     expect(saltRidgeContentBudget.singlePlaythrough.typicalTotalMinutes).toBeLessThanOrEqual(300)
+
+    const requiredMapSlots = saltRidgeMedia.slots.filter(slot => (
+      slot.required && slot.kind === 'procedural-map'
+    ))
+    const requiredPortraitSlots = saltRidgeMedia.slots.filter(slot => (
+      slot.required && slot.kind === 'character-portrait'
+    ))
+    const requiredLocationBackgroundSlots = saltRidgeMedia.slots.filter(slot => (
+      slot.required && slot.kind === 'scene-background' && slot.subjectKind === 'location'
+    ))
+    expect(requiredMapSlots).toHaveLength(1)
+    expect(requiredMapSlots[0]).toMatchObject({
+      productionMode: 'procedural-code', fallback: 'procedural-svg',
+      consumerKeys: ['overlay.map'],
+    })
+    expect(requiredPortraitSlots).toHaveLength(6)
+    expect(requiredLocationBackgroundSlots).toHaveLength(10)
+    expect(new Set(requiredLocationBackgroundSlots.map(slot => slot.subjectKey))).toEqual(new Set([
+      'location.001', 'location.002', 'location.003', 'location.004', 'location.005',
+      'location.006', 'location.007', 'location.008', 'location.009', 'location.010',
+    ]))
+    expect([...requiredPortraitSlots, ...requiredLocationBackgroundSlots].every(slot => (
+      slot.fallback === 'text-description'
+      && slot.sourceArtifactKey === (slot.kind === 'character-portrait'
+        ? 'text-open-world.npc-runtime-catalog' : 'text-open-world.map-interaction-catalog')
+      && slot.sourceEntityKey === slot.subjectKey
+      && slot.consumerKeys.length > 0
+      && slot.title.trim().length > 0
+      && slot.creativeBrief.trim().length > 0
+    ))).toBe(true)
+    const scheduledVisualSlots = saltRidgeMedia.slots.filter(slot => (
+      ['character-portrait', 'scene-background', 'ui-skin'].includes(slot.kind)
+      && slot.productionMode !== 'fallback-only'
+    ))
+    expect(scheduledVisualSlots).toHaveLength(input.brief.media.imageCount)
+    expect(saltRidgeMedia.productionBudget).toMatchObject({
+      requestedGeneratedSlotCount: input.brief.media.imageCount,
+      authorizedMaximumMediaCalls: input.brief.media.imageCount,
+      fitsAuthorizedMediaCalls: true,
+      overflowSlotKeys: [],
+    })
 
     expect(saltRidgeProgression.levels).toHaveLength(20)
     expect(saltRidgeProgression.levels.slice(0, 5).map(level => level.level)).toEqual([1, 2, 3, 4, 5])
@@ -6896,6 +6940,29 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       ]),
     })
     expect(saltRidgeModules.presentation.mapLayout.locationNodes).toHaveLength(10)
+    expect(saltRidgeModules.presentation).toMatchObject({ version: 3, sourceVersion: 3 })
+    for (const slot of requiredLocationBackgroundSlots) {
+      expect(saltRidgeModules.world.locations.find(location => location.key === slot.subjectKey)?.presentationRefs)
+        .toEqual(expect.arrayContaining(['media.map.world.svg', slot.key]))
+    }
+    for (const slot of [...requiredPortraitSlots, ...requiredLocationBackgroundSlots]) {
+      expect(saltRidgeModules.presentation.mediaSlots.find(candidate => candidate.key === slot.key))
+        .toMatchObject({
+          required: true,
+          subjectKind: slot.subjectKind,
+          subjectKey: slot.subjectKey,
+          assetKey: expect.any(String),
+          altText: slot.title,
+          fallbackText: expect.stringContaining(slot.title),
+        })
+    }
+    expect(saltRidgePackage.presentation?.assets).toHaveLength(input.brief.media.imageCount)
+    expect(saltRidgePackage.presentation?.assets.every(asset => (
+      asset.altText.trim().length > 0
+      && asset.source.trim().length > 0
+      && asset.license.trim().length > 0
+      && asset.contentHash === asset.blobContentHash
+    ))).toBe(true)
     const initialSaltRidgeProjection = createInitialTextOpenWorldSessionProjectionV1(
       saltRidgePackage.textOpenWorldVNext!,
     )

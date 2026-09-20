@@ -6,6 +6,10 @@ export const TEXT_OPEN_WORLD_CALIBRATION_DECISION_IDS_V1 = [
   'OW-CAL-005-ai-budget-guardrails',
 ] as const
 
+/** Minimum portrait set for the mainline/significant cast in the first
+ * playable product. Ordinary residents retain text presentation by default. */
+export const TEXT_OPEN_WORLD_REQUIRED_KEY_PORTRAIT_COUNT_V1 = 6
+
 export interface TextOpenWorldCalibrationConfigV1 {
   schema: 'storyforge.text-open-world.calibration'
   version: 1

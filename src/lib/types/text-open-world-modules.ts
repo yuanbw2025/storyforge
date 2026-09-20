@@ -969,7 +969,9 @@ export interface TextOpenWorldKnowledgeModuleV1 {
 }
 
 export interface TextOpenWorldPresentationModuleV1 {
-  version: 2
+  /** Normalized reader shape. Runtime payloads v1/v2 are upgraded in memory. */
+  version: 3
+  sourceVersion: 1 | 2 | 3
   textStyle: {
     narrationTone: string
     dialogueStyle: string
@@ -990,6 +992,9 @@ export interface TextOpenWorldPresentationModuleV1 {
   mediaSlots: Array<{
     key: string
     kind: 'map' | 'portrait' | 'background' | 'item-icon' | 'enemy-icon' | 'audio'
+    /** Stable semantic binding; player surfaces never infer owners from slot names. */
+    subjectKind: 'world' | 'region' | 'location' | 'actor' | 'scene' | 'ui'
+    subjectKey: string
     consumerRef: string
     required: boolean
     assetKey: string | null

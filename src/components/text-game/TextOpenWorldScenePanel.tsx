@@ -28,6 +28,7 @@ import {
   type TextOpenWorldRuntimeAIFailureV1,
 } from '../../lib/open-world/runtime-ai-error'
 import TextOpenWorldRuntimeAIFailureNotice from './TextOpenWorldRuntimeAIFailureNotice'
+import type { TextOpenWorldPlayerMediaVisualV1 } from '../../lib/open-world/player-media'
 
 export interface TextOpenWorldSceneTutorialAvailabilityV1 {
   systemActions: boolean
@@ -50,6 +51,7 @@ interface TextOpenWorldScenePanelProps {
     description: string
     playerName: string
   }
+  background?: TextOpenWorldPlayerMediaVisualV1 | null
   onExecute(
     actionKey: string,
     targetKey: string | null,
@@ -148,8 +150,25 @@ function SystemReceipt({ feedback }: { feedback: TextOpenWorldFeedbackReceiptV1 
   </section>
 }
 
-function PublishedScene({ scene }: { scene: TextOpenWorldProjectedSceneV1 }) {
-  return <article className="open-world-scene-narrative" data-testid="text-open-world-published-scene">
+function PublishedScene({
+  scene,
+  background,
+}: {
+  scene: TextOpenWorldProjectedSceneV1
+  background?: TextOpenWorldPlayerMediaVisualV1 | null
+}) {
+  return <article
+    className="open-world-scene-narrative"
+    data-testid="text-open-world-published-scene"
+    data-media-slot={background?.slotKey ?? undefined}
+    data-media-fallback={background && !background.url ? 'true' : undefined}
+  >
+    {background?.url && <img
+      className="open-world-scene-background"
+      src={background.url}
+      alt={background.altText}
+      data-asset-key={background.assetKey ?? undefined}
+    />}
     <header>
       <span><ScrollText aria-hidden="true" />冻结叙事</span>
       <small>{scene.sourceKind}</small>
@@ -178,6 +197,7 @@ export default function TextOpenWorldScenePanel({
   feedback,
   busy,
   fallback,
+  background = null,
   onExecute,
   onInterpretNaturalInput,
   longTermMemories = [],
@@ -493,7 +513,17 @@ export default function TextOpenWorldScenePanel({
       </button>)}
     </nav>}
 
-    {scene ? <PublishedScene scene={scene} /> : <article className="open-world-game-scene-card">
+    {scene ? <PublishedScene scene={scene} background={background} /> : <article
+      className={`open-world-game-scene-card${background?.url ? ' has-background-media' : ''}`}
+      data-media-slot={background?.slotKey ?? undefined}
+      data-media-fallback={background && !background.url ? 'true' : undefined}
+    >
+      {background?.url && <img
+        className="open-world-scene-background"
+        src={background.url}
+        alt={background.altText}
+        data-asset-key={background.assetKey ?? undefined}
+      />}
       <small>{fallback.regionTitle} · 兼容场景</small>
       <h1>{fallback.locationTitle}</h1>
       <p>{fallback.description}</p>

@@ -3925,7 +3925,7 @@ export interface TextOpenWorldMediaRequirementsV1 {
     key: string
     order: number
     kind: TextOpenWorldMediaSlotKindV1
-    subjectKind: 'world' | 'region' | 'actor' | 'scene' | 'ui'
+    subjectKind: 'world' | 'region' | 'location' | 'actor' | 'scene' | 'ui'
     subjectKey: string
     title: string
     creativeBrief: string

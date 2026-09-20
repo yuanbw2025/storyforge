@@ -2543,7 +2543,8 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (item.rumorKey !== event.rumorKey) fail(`随机事件表现与Director传闻引用不一致:${String(item.key)}`)
   })
 
-  const presentation = versioned(packageValue, 'presentation', [1, 2])
+  const presentation = versioned(packageValue, 'presentation', [1, 2, 3])
+  const presentationSourceVersion = presentation.version as 1 | 2 | 3
   const legacyPresentationModule = presentation.version === 1
   exact(presentation, legacyPresentationModule
     ? ['version', 'textStyle', 'mediaSlots', 'taskTextVariants', 'tutorials']
@@ -2581,9 +2582,44 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     }
     mapLayout = { version: 1, coordinateSystem: 'normalized-1000', width: 1000, height: 700, source, locationNodes: nodes }
   }
-  const mediaSlots = catalog(presentation.mediaSlots, 'presentation.mediaSlots', ['key', 'kind', 'consumerRef', 'required', 'assetKey', 'fallbackText', 'altText']); const variants = catalog(presentation.taskTextVariants, 'presentation.taskTextVariants', ['key', 'templateKey', 'title', 'description']); const tutorials = catalog(presentation.tutorials, 'presentation.tutorials', ['key', 'triggerActionKey', 'targetUiKey', 'title', 'body']); const mediaSlotKeys = keysOf(mediaSlots, 'presentation.mediaSlots'); const variantKeys = keysOf(variants, 'presentation.taskTextVariants'); keysOf(tutorials, 'presentation.tutorials')
+  const mediaSlotRows = catalog(presentation.mediaSlots, 'presentation.mediaSlots', presentation.version === 3
+    ? ['key', 'kind', 'subjectKind', 'subjectKey', 'consumerRef', 'required', 'assetKey', 'fallbackText', 'altText']
+    : ['key', 'kind', 'consumerRef', 'required', 'assetKey', 'fallbackText', 'altText'])
+  const mediaSlots = mediaSlotRows.map((item, index): TextOpenWorldParsedModulesV1['presentation']['mediaSlots'][number] => {
+    const slotKey = key(item.key, `presentation.mediaSlots[${index}].key`)
+    const kind = enumValue(item.kind, ['map', 'portrait', 'background', 'item-icon', 'enemy-icon', 'audio'], `presentation.mediaSlots[${index}].kind`)
+    let subjectKind: TextOpenWorldParsedModulesV1['presentation']['mediaSlots'][number]['subjectKind'] = 'ui'
+    let subjectKey = `legacy:${slotKey}`
+    if (presentation.version === 3) {
+      subjectKind = enumValue(item.subjectKind, ['world', 'region', 'location', 'actor', 'scene', 'ui'], `presentation.mediaSlots[${index}].subjectKind`)
+      subjectKey = key(item.subjectKey, `presentation.mediaSlots[${index}].subjectKey`)
+    } else if (kind === 'map') {
+      subjectKind = 'world'; subjectKey = 'world'
+    } else if (kind === 'portrait' && slotKey.startsWith('media.portrait.')) {
+      const inferred = slotKey.slice('media.portrait.'.length)
+      if (KEY.test(inferred)) { subjectKind = 'actor'; subjectKey = inferred }
+    } else if (kind === 'background' && slotKey.startsWith('media.background.')) {
+      const inferred = slotKey.slice('media.background.'.length)
+      if (KEY.test(inferred)) { subjectKind = 'location'; subjectKey = inferred }
+    }
+    return {
+      key: slotKey, kind, subjectKind, subjectKey,
+      consumerRef: text(item.consumerRef, `presentation.mediaSlots[${index}].consumerRef`, 1_000),
+      required: bool(item.required, `presentation.mediaSlots[${index}].required`),
+      assetKey: nullableKey(item.assetKey, `presentation.mediaSlots[${index}].assetKey`),
+      fallbackText: text(item.fallbackText, `presentation.mediaSlots[${index}].fallbackText`, 5_000),
+      altText: text(item.altText, `presentation.mediaSlots[${index}].altText`, 2_000),
+    }
+  })
+  const variants = catalog(presentation.taskTextVariants, 'presentation.taskTextVariants', ['key', 'templateKey', 'title', 'description']); const tutorials = catalog(presentation.tutorials, 'presentation.tutorials', ['key', 'triggerActionKey', 'targetUiKey', 'title', 'body']); const mediaSlotKeys = keysOf(mediaSlots as unknown as Row[], 'presentation.mediaSlots'); const variantKeys = keysOf(variants, 'presentation.taskTextVariants'); keysOf(tutorials, 'presentation.tutorials')
   if ([...mediaSlotKeys].sort().join(',') !== [...packageValue.mediaManifest.slotKeys].sort().join(',')) fail('presentation.mediaSlots与根mediaManifest.slotKeys不一致')
-  mediaSlots.forEach((item, index) => { enumValue(item.kind, ['map', 'portrait', 'background', 'item-icon', 'enemy-icon', 'audio'], `presentation.mediaSlots[${index}].kind`); text(item.consumerRef, `presentation.mediaSlots[${index}].consumerRef`, 1_000); const required = bool(item.required, `presentation.mediaSlots[${index}].required`); nullableKey(item.assetKey, `presentation.mediaSlots[${index}].assetKey`); text(item.fallbackText, `presentation.mediaSlots[${index}].fallbackText`, 5_000); text(item.altText, `presentation.mediaSlots[${index}].altText`, 2_000); if (required !== packageValue.mediaManifest.requiredSlotKeys.includes(String(item.key))) fail(`presentation.mediaSlots[${index}].required与根manifest不一致`) })
+  mediaSlots.forEach((item, index) => {
+    if (item.required !== packageValue.mediaManifest.requiredSlotKeys.includes(item.key)) fail(`presentation.mediaSlots[${index}].required与根manifest不一致`)
+    if (item.subjectKind === 'region') requireRef(item.subjectKey, regionKeys, `presentation.mediaSlots[${index}].subjectKey`)
+    if (item.subjectKind === 'location') requireRef(item.subjectKey, locationKeys, `presentation.mediaSlots[${index}].subjectKey`)
+    if (item.subjectKind === 'actor') requireRef(item.subjectKey, actorKeys, `presentation.mediaSlots[${index}].subjectKey`)
+    if (item.subjectKind === 'scene') requireRef(item.subjectKey, sceneKeys, `presentation.mediaSlots[${index}].subjectKey`)
+  })
   normalizedWorld.regions.forEach((item, index) => requireRefs(item.presentationRefs, mediaSlotKeys, `world.regions[${index}].presentationRefs`))
   normalizedWorld.locations.forEach((item, index) => requireRefs(item.presentationRefs, mediaSlotKeys, `world.locations[${index}].presentationRefs`))
   variants.forEach((item, index) => { requireRef(key(item.templateKey, `presentation.taskTextVariants[${index}].templateKey`), templateKeys, 'task text template'); text(item.title, `presentation.taskTextVariants[${index}].title`, 2_000); text(item.description, `presentation.taskTextVariants[${index}].description`) })
@@ -2747,7 +2783,8 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     director: structuredClone(normalizedDirector),
     knowledge: structuredClone(knowledge) as unknown as TextOpenWorldParsedModulesV1['knowledge'],
     presentation: {
-      ...structuredClone(presentation), version: 2, mapLayout,
+      ...structuredClone(presentation), version: 3, sourceVersion: presentationSourceVersion,
+      mapLayout, mediaSlots: structuredClone(mediaSlots),
     } as unknown as TextOpenWorldParsedModulesV1['presentation'],
   }
 }

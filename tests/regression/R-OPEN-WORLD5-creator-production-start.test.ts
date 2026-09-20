@@ -272,7 +272,7 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     expect(prepared.preview.start.executionBrief).toMatchObject({
       qualityProfile: 'prototype',
       media: {
-        imageCount: 2,
+        imageCount: 18,
         musicTrackCount: 0,
         sfxCount: 0,
       },
@@ -284,7 +284,7 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
       .toMatchObject({
         executionMode: 'media-provider',
         capabilityRequirementKeys: ['media.visual'],
-        budgetReservation: { mediaCalls: 2, maximumCostUsd: 0 },
+        budgetReservation: { mediaCalls: 18, maximumCostUsd: 0 },
       })
     expect(prepared.preview.plan.briefHash).toBe(prepared.confirmed.confirmedBrief!.briefHash)
     expect(prepared.afterPreview).toEqual(prepared.beforePreview)

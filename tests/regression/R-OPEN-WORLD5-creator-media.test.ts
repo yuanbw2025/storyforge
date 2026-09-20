@@ -62,10 +62,23 @@ const PNG_1X1 = Uint8Array.from(atob(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
 ), char => char.charCodeAt(0)).buffer
 
+function fixtureVisualSlots() {
+  return [
+    ...Array.from({ length: 12 }, (_, index) => ({
+      key: `media.background.${String(index + 1).padStart(3, '0')}`,
+      kind: 'scene-background' as const,
+      subjectKey: `location.creator-test.${String(index + 1).padStart(3, '0')}`,
+    })),
+    ...Array.from({ length: 6 }, (_, index) => ({
+      key: `media.portrait.${String(index + 1).padStart(3, '0')}`,
+      kind: 'character-portrait' as const,
+      subjectKey: `actor.creator-test.${String(index + 1).padStart(3, '0')}`,
+    })),
+  ]
+}
+
 async function mediaRequirements(input: {
   productInstanceKey: string
-  portraitSubject: string
-  backgroundSubject: string
 }): Promise<TextOpenWorldMediaRequirementsV1> {
   const hash = 'a'.repeat(64)
   const slot = (
@@ -79,7 +92,7 @@ async function mediaRequirements(input: {
     key,
     order,
     kind,
-    subjectKind: kind === 'character-portrait' ? 'actor' : kind === 'scene-background' ? 'region' : 'world',
+    subjectKind: kind === 'character-portrait' ? 'actor' : kind === 'scene-background' ? 'location' : 'world',
     subjectKey,
     title: key,
     creativeBrief: `测试媒资需求:${key}`,
@@ -101,23 +114,29 @@ async function mediaRequirements(input: {
     sceneScriptsHash: hash,
     slots: [
       slot('media.map', 1, 'procedural-map', input.productInstanceKey, 'procedural-code', 'procedural-svg'),
-      slot('media.background', 2, 'scene-background', input.backgroundSubject, 'generate-or-import', 'text-description'),
-      slot('media.portrait', 3, 'character-portrait', input.portraitSubject, 'generate-or-import', 'generated-placeholder'),
+      ...fixtureVisualSlots().map((item, index) => slot(
+        item.key,
+        index + 2,
+        item.kind,
+        item.subjectKey,
+        'generate-or-import',
+        'text-description',
+      )),
     ],
     coverage: {
       requiredVisualKinds: ['procedural-map', 'character-portrait', 'scene-background'] as const,
       coveredRequiredVisualKinds: ['procedural-map', 'character-portrait', 'scene-background'] as const,
-      requiredActorKeys: [input.portraitSubject],
-      coveredActorKeys: [input.portraitSubject],
-      requiredRegionKeys: [input.backgroundSubject],
-      coveredRegionKeys: [input.backgroundSubject],
-      requiredSlotKeys: ['media.map', 'media.background', 'media.portrait'],
-      fallbackReadySlotKeys: ['media.map', 'media.background', 'media.portrait'],
+      requiredActorKeys: fixtureVisualSlots().filter(item => item.kind === 'character-portrait').map(item => item.subjectKey),
+      coveredActorKeys: fixtureVisualSlots().filter(item => item.kind === 'character-portrait').map(item => item.subjectKey),
+      requiredRegionKeys: ['region.creator-test'],
+      coveredRegionKeys: ['region.creator-test'],
+      requiredSlotKeys: ['media.map', ...fixtureVisualSlots().map(item => item.key)],
+      fallbackReadySlotKeys: ['media.map', ...fixtureVisualSlots().map(item => item.key)],
       missingRequiredSlotKeys: [] as [],
     },
     productionBudget: {
-      requestedGeneratedSlotCount: 2,
-      authorizedMaximumMediaCalls: 2,
+      requestedGeneratedSlotCount: 18,
+      authorizedMaximumMediaCalls: 18,
       fitsAuthorizedMediaCalls: true,
       overflowSlotKeys: [] as string[],
     },
@@ -160,11 +179,9 @@ async function seedMediaFixture(): Promise<FixtureV1> {
   const production = (await db.productProductions.get(creator.productionId))!
   const plan = JSON.parse(build.planJson) as ProductProductionPlanV3
   const visualTask = plan.tasks.find(task => task.taskKey === 'media.visual')!
-  expect(visualTask.outputArtifactKeys).toHaveLength(2)
+  expect(visualTask.outputArtifactKeys).toHaveLength(18)
   const requirements = await mediaRequirements({
     productInstanceKey: creator.productionKey,
-    portraitSubject: 'actor.creator-test',
-    backgroundSubject: 'region.creator-test',
   })
   const now = Date.now()
   const rows: ProductBuildArtifactRecordV1[] = []
@@ -175,7 +192,9 @@ async function seedMediaFixture(): Promise<FixtureV1> {
         : { schema: artifactKey, version: 1, marker: `base:${artifactKey}` }
       const payloadJson = canonicalProductProductionJsonV2(payload)
       const isVisual = task.taskKey === 'media.visual'
-      const mediaKind = isVisual ? index === 0 ? 'background' : 'character-pose' : null
+      const mediaKind = isVisual
+        ? fixtureVisualSlots()[index]!.kind === 'scene-background' ? 'background' : 'character-pose'
+        : null
       const row = stampNewRecord(world.scope, 'productBuildArtifacts', {
         projectId: world.scope.projectId,
         worldId: world.scope.worldId,
@@ -256,8 +275,7 @@ async function importedPreparation(fixture: FixtureV1) {
     buildId: fixture.buildId,
   })
   const visual = derived.productionPlan.tasks.find(task => task.taskKey === 'media.visual')!
-  const subjects = ['region.creator-test', 'actor.creator-test']
-  const slots = ['media.background', 'media.portrait']
+  const visualSlots = fixtureVisualSlots()
   return prepareTextOpenWorldCreatorMediaV1({
     scope: fixture.scope,
     productionId: fixture.productionId,
@@ -265,10 +283,10 @@ async function importedPreparation(fixture: FixtureV1) {
     mode: 'author-import',
     imports: visual.outputArtifactKeys.map((artifactKey, index) => ({
       artifactKey,
-      slotKey: slots[index],
+      slotKey: visualSlots[index]!.key,
       blobObjectId: blob.id!,
       name: `导入图片${index + 1}`,
-      altText: `可访问替代文本${subjects[index]}`,
+      altText: `可访问替代文本${visualSlots[index]!.subjectKey}`,
       source: '作者本地导入',
       license: '当前产品永久使用许可',
       rightsBasis: 'author-owned',
@@ -299,8 +317,8 @@ describe.sequential('Text Open World G5-08 · governed Creator media Build', () 
     expect(prepared.mediaPlan.reuseTaskKeys).toContain('p0.source-lock')
     expect(prepared.mediaPlan.requiredCoverage).toEqual({
       proceduralMapReady: true,
-      portraitSlotCount: 1,
-      backgroundSlotCount: 1,
+      portraitSlotCount: 6,
+      backgroundSlotCount: 12,
       audioFallback: 'silent',
     })
     expect(prepared.mediaPlan.estimatedRerunBudget.mediaCalls).toBe(0)
@@ -357,7 +375,7 @@ describe.sequential('Text Open World G5-08 · governed Creator media Build', () 
     })
     const candidates = await db.productBuildArtifacts.where('[buildId+status]')
       .equals([target!.id!, 'candidate']).toArray()
-    expect(candidates).toHaveLength(2)
+    expect(candidates).toHaveLength(18)
     expect(candidates.every(row => row.blobObjectId != null && row.rightsJson.includes('author-owned'))).toBe(true)
 
     const authority = await readTextOpenWorldCreatorMediaExecutionAuthorityV1({
@@ -376,7 +394,7 @@ describe.sequential('Text Open World G5-08 · governed Creator media Build', () 
     expect(direct?.result).toMatchObject({
       usage: { modelCalls: 0, mediaCalls: 0, costUsd: 0 },
     })
-    expect(direct?.result.artifacts).toHaveLength(2)
+    expect(direct?.result.artifacts).toHaveLength(18)
 
     const imported = candidates[0]
     const imageRequirement = authority.executionBrief.capabilityRequirements.find(item => (

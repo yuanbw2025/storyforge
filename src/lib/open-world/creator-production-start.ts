@@ -35,6 +35,7 @@ import {
   createTextOpenWorldProductionPlanV1,
   TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1,
 } from './production-contract'
+import { TEXT_OPEN_WORLD_REQUIRED_KEY_PORTRAIT_COUNT_V1 } from './product-config'
 import {
   assertTextOpenWorldNovelSourceCasWitnessCurrentV1,
   createTextOpenWorldNovelSourceCasWitnessV1,
@@ -348,6 +349,8 @@ export async function createTextOpenWorldCreatorExecutionBriefV1(input: {
   const requiredPlayMinutes = Math.round(
     (brief.draft.scale.requiredPlayMinutes.minimum + brief.draft.scale.requiredPlayMinutes.maximum) / 2,
   )
+  const requiredImageCount = brief.draft.scale.namedLocations.maximum
+    + TEXT_OPEN_WORLD_REQUIRED_KEY_PORTRAIT_COUNT_V1
   const textCapability = await capabilityRequirement({
     requirementKey: 'text-open-world.production.text.v1',
     mediaClass: 'text',
@@ -421,7 +424,7 @@ export async function createTextOpenWorldCreatorExecutionBriefV1(input: {
     media: {
       visualLevel: 'key-scenes',
       audioLevel: 'none',
-      imageCount: 2,
+      imageCount: requiredImageCount,
       musicTrackCount: 0,
       sfxCount: 0,
       voiceLineCount: 0,
@@ -438,7 +441,7 @@ export async function createTextOpenWorldCreatorExecutionBriefV1(input: {
       maximumInputTokens: input.productionBudget.reservedInputTokens,
       maximumOutputTokens: input.productionBudget.reservedOutputTokens,
       maximumCostUsd: input.productionBudget.maximumCostUsd,
-      maximumMediaCalls: 2,
+      maximumMediaCalls: requiredImageCount,
       maximumDurationMs: input.productionBudget.maximumDurationMs,
       maximumStorageBytes: input.productionBudget.maximumStorageBytes,
     },

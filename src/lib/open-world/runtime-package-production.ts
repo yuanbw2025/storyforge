@@ -675,7 +675,7 @@ function compileModulePayloads(
         kind: location.kind, tags: [...location.functions], purpose: location.purpose, functions: location.functions,
         earlyArrivalDescription: location.earlyArrivalDescription, initialKnowledge: location.initialKnowledge,
         sourceRefs: location.sourceRefs,
-        presentationRefs: [...new Set([...worldMapSlotKeys, ...(mediaSlotBySubject.get(location.regionKey) ?? [])])],
+        presentationRefs: [...new Set([...worldMapSlotKeys, ...(mediaSlotBySubject.get(location.key) ?? [])])],
       })),
       edges: artifacts.map.edges.map(edge => ({
         key: edge.key, fromLocationKey: edge.fromLocationKey, toLocationKey: edge.toLocationKey,
@@ -1008,7 +1008,8 @@ function compileModulePayloads(
     },
     knowledge: knowledgeModule,
     presentation: {
-      version: 2,
+      version: 3,
+      sourceVersion: 3,
       textStyle: {
         narrationTone: artifacts.experience.toneGuide.join('、') || '沉浸而克制',
         dialogueStyle: '符合角色小传、当前态度与已知信息边界',
@@ -1017,6 +1018,7 @@ function compileModulePayloads(
       mapLayout: { ...artifacts.map.mapLayout, source: 'authored' },
       mediaSlots: artifacts.media.slots.map(slot => ({
         key: slot.key, kind: runtimeMediaKind(slot.kind), consumerRef: slot.consumerKeys.join(','),
+        subjectKind: slot.subjectKind, subjectKey: slot.subjectKey,
         required: slot.required, assetKey: assetKeyBySlot.get(slot.key) ?? null,
         fallbackText: `${slot.title}：${slot.creativeBrief}`,
         altText: slot.title,

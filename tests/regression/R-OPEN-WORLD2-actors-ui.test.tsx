@@ -29,4 +29,43 @@ describe('Text Open World vNext · actor UI projection', () => {
     expect(container.textContent).not.toContain('盐港最后一位老守渠人')
     root.unmount()
   })
+
+  it('显示显式绑定的角色头像，解析失败时保留文字头像回退', async () => {
+    const runtimePackage = createTextOpenWorldVNextFixture()
+    const projection = createInitialTextOpenWorldSessionProjectionV1(runtimePackage)
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    root.render(createElement(TextOpenWorldActorsPanel, {
+      runtimePackage,
+      state: projection.state,
+      attitudeByActorKey: { 'actor.caretaker': 'good' },
+      portraitByActorKey: {
+        'actor.caretaker': {
+          slotKey: 'slot.caretaker', assetKey: 'asset.caretaker', url: 'blob:caretaker',
+          altText: '岑阿婆头像', fallbackText: '岑阿婆文字肖像',
+        },
+      },
+    }))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const portrait = container.querySelector('[data-media-slot="slot.caretaker"] img')
+    expect(portrait?.getAttribute('src')).toBe('blob:caretaker')
+    expect(portrait?.getAttribute('alt')).toBe('岑阿婆头像')
+
+    root.render(createElement(TextOpenWorldActorsPanel, {
+      runtimePackage,
+      state: projection.state,
+      attitudeByActorKey: { 'actor.caretaker': 'good' },
+      portraitByActorKey: {
+        'actor.caretaker': {
+          slotKey: 'slot.caretaker', assetKey: null, url: null,
+          altText: '岑阿婆头像', fallbackText: '岑阿婆文字肖像',
+        },
+      },
+    }))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(container.querySelector('[data-media-slot="slot.caretaker"]')?.getAttribute('data-media-fallback')).toBe('true')
+    expect(container.querySelector('[aria-label="岑阿婆文字肖像"]')?.textContent).toBe('岑')
+    root.unmount()
+  })
 })
