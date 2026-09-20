@@ -21,19 +21,23 @@ for (const file of files) {
   const front = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
   const meta = front ? parse(front[1]) : {}
   if (!meta?.productId) continue
-  if (docs.has(meta.productId)) errors.push('Duplicate product: ' + meta.productId)
-  docs.set(meta.productId, { file, meta })
+  const locale = relative(root, file).startsWith('en/') ? 'en' : 'root'
+  const key = locale + ':' + meta.productId
+  if (docs.has(key)) errors.push('Duplicate product: ' + key)
+  docs.set(key, { file, meta })
   if (!meta.lastVerified || Number.isNaN(new Date(meta.lastVerified).valueOf())) errors.push('Missing verification date: ' + file)
   const route = '/' + relative(root, file).replace(/\\/g, '/').replace(/index\.md$/, '').replace(/\.md$/, '')
-  if (!config.includes("link: '" + route + "'")) errors.push('Product missing from sidebar: ' + route)
+  if (!config.includes("link: '" + route.replace(/^\/en\//, '/') + "'")) errors.push('Product missing from sidebar: ' + route)
 }
 for (const [, id, status] of products) {
   if (status === 'experimental') continue
-  const doc = docs.get(id)
-  if (!doc) errors.push('Missing product guide: ' + id)
-  else if (doc.meta.status !== status) errors.push('Stale status: ' + id)
+  for (const locale of ['root', 'en']) {
+    const doc = docs.get(locale + ':' + id)
+    if (!doc) errors.push('Missing product guide: ' + locale + ':' + id)
+    else if (doc.meta.status !== status) errors.push('Stale status: ' + locale + ':' + id)
+  }
 }
-for (const id of docs.keys()) if (!products.some(p => p[1] === id)) errors.push('Unknown product: ' + id)
+for (const id of docs.keys()) if (!products.some(p => p[1] === id.split(':')[1])) errors.push('Unknown product: ' + id)
 for (const file of files.filter(f => f.includes('/archive/') && !f.endsWith('/index.md') || f.endsWith('/updates/historical-feature-updates.md'))) {
   if (!/^---\r?\n[\s\S]*?search: false[\s\S]*?\r?\n---/.test(readFileSync(file, 'utf8'))) errors.push('Historical page still searchable: ' + file)
 }

@@ -13,6 +13,18 @@ body { background-image:radial-gradient(circle at 12% 0%,rgba(51,139,118,.12),tr
 .feedback-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:24px 0}.feedback-card{display:block;padding:20px;border:1px solid var(--vp-c-border);border-radius:14px;background:var(--vp-c-bg-soft);color:var(--vp-c-text-1)!important;text-decoration:none!important;transition:border-color .2s ease,transform .2s ease,background .2s ease}.feedback-card:hover{border-color:var(--vp-c-brand-1);background:var(--vp-c-brand-soft);transform:translateY(-2px)}.feedback-card strong,.feedback-card span{display:block}.feedback-card span{margin-top:8px;color:var(--vp-c-text-2);font-size:14px;line-height:1.7}@media(max-width:720px){.feedback-grid{grid-template-columns:1fr}}
 .source-note{font-size:13px;color:var(--vp-c-text-2)}
 
+/* Keep full navigation labels; use the existing accessible menu before they crowd. */
+@media (max-width:1279px){
+  .VPNavBar .VPNavBarMenu,.VPNavBar .VPNavBarExtra{display:none}
+  .VPNavBar .VPNavBarHamburger{display:flex}
+  .VPNav .VPNavScreen{display:block}
+}
+@media (min-width:1280px) and (max-width:1599px){
+  .VPNavBarSearch .DocSearch-Button-Placeholder,.VPNavBarSearch .DocSearch-Button-Keys{display:none}
+  .VPNavBarSearch{padding-left:12px}
+  .VPNavBar .VPNavBarSocialLinks{display:none}
+}
+
 .knowledge-banner{display:flex;align-items:center;gap:20px;min-height:156px;margin:0 0 32px;padding:26px 30px;border:1px solid var(--vp-c-border);border-left:4px solid var(--vp-c-brand-1);border-radius:16px;background:var(--vp-c-bg-soft);box-sizing:border-box}
 .knowledge-banner__mark{width:64px;height:64px;flex:none;object-fit:contain}
 .vp-doc .knowledge-banner__eyebrow{margin:0 0 4px;color:var(--vp-c-brand-1);font-size:13px;font-weight:700;line-height:1.4;letter-spacing:.08em}

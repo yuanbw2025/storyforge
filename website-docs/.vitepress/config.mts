@@ -1,4 +1,6 @@
 import { defineConfig } from 'vitepress'
+import type { DefaultTheme } from 'vitepress'
+import { enLabels } from './en-labels'
 
 const githubUrl = 'https://github.com/yuanbw2025/storyforge'
 
@@ -213,6 +215,20 @@ const zhSidebar = [
   },
 ]
 
+function translateSidebar(items: DefaultTheme.SidebarItem[]): DefaultTheme.SidebarItem[] {
+  return items.map(item => {
+    const text = item.text ? enLabels[item.text] : undefined
+    if (item.text && !text) throw new Error(`Missing English navigation label: ${item.text}`)
+    return {
+      ...item, text,
+      link: item.link?.startsWith('/') ? '/en' + item.link : item.link,
+      items: item.items ? translateSidebar(item.items) : undefined,
+    }
+  })
+}
+const enSidebar = translateSidebar(zhSidebar)
+const enNav = zhNav.map(item => ({ text: enLabels[item.text], link: item.link.startsWith('/') ? '/en' + item.link : item.link }))
+
 export default defineConfig({
   srcExclude: ['**/AGENTS.md'],
   cleanUrls: true,
@@ -224,11 +240,21 @@ export default defineConfig({
     ['meta', { name: 'theme-color', content: '#0b1d1a' }],
   ],
   themeConfig: {
-    // English is a reserved entry, so do not link to untranslated page paths.
-    i18nRouting: false,
+    i18nRouting: true,
     search: {
       provider: 'local',
       options: {
+        locales: {
+          en: {
+            translations: {
+              button: { buttonText: 'Search docs', buttonAriaLabel: 'Search docs' },
+              modal: {
+                displayDetails: 'Display details', resetButtonTitle: 'Clear query', backButtonTitle: 'Close search', noResultsText: 'No results found',
+                footer: { selectText: 'Select', selectKeyAriaLabel: 'Enter', navigateText: 'Navigate', navigateUpKeyAriaLabel: 'Up', navigateDownKeyAriaLabel: 'Down', closeText: 'Close', closeKeyAriaLabel: 'Escape' },
+              },
+            },
+          },
+        },
         translations: {
           button: { buttonText: '搜索文档', buttonAriaLabel: '搜索文档' },
           modal: {
@@ -254,7 +280,14 @@ export default defineConfig({
     },
     en: {
       label: 'English', lang: 'en-US', link: '/en/', title: 'StoryForge Documentation', description: 'Official StoryForge user documentation',
-      themeConfig: { logo: '/brand/storyforge-mark.svg', siteTitle: 'StoryForge Docs', nav: [ { text: 'Home', link: '/en/' }, { text: 'Chinese Docs', link: '/getting-started/' }, { text: 'GitHub', link: githubUrl } ], socialLinks: [{ icon: 'github', link: githubUrl }] },
+      themeConfig: {
+        logo: '/brand/storyforge-mark.svg', siteTitle: 'StoryForge Docs', nav: enNav, sidebar: enSidebar,
+        outline: { level: [2, 4], label: 'On this page' },
+        docFooter: { prev: 'Previous page', next: 'Next page' },
+        lastUpdated: { text: 'Last updated', formatOptions: { dateStyle: 'medium', timeStyle: 'short' } },
+        socialLinks: [{ icon: 'github', link: githubUrl }],
+        footer: { message: 'Official StoryForge user documentation', copyright: 'Refer to the current release and repository state for applicability.' },
+      },
     },
   },
 })

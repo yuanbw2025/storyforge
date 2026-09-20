@@ -21,7 +21,8 @@ const watch = page => {
     if (response.status() >= 400) errors.push('HTTP ' + response.status() + ' ' + response.url())
   })
 }
-const paths = ['/', '/getting-started/', '/features/longform/', '/features/comic', '/features/interactive/ttrpg', '/guides/backup-restore', '/prompts/', '/updates/changelog', '/feedback/', '/feedback/bug', '/feedback/feature', '/feedback/documentation', '/en/']
+const sourcePaths = ['/', '/getting-started/', '/features/longform/', '/features/comic', '/features/interactive/ttrpg', '/guides/backup-restore', '/prompts/', '/prompts/b/b-9', '/prompts/c/c-01', '/prompts/d/d-08', '/updates/changelog', '/feedback/', '/feedback/bug', '/feedback/feature', '/feedback/documentation']
+const paths = [...sourcePaths, ...sourcePaths.map(path => '/en' + path)]
 try {
   for (const width of [1440, 1024, 390]) {
     const page = await browser.newPage({ viewport: { width, height: 900 } })
@@ -34,12 +35,12 @@ try {
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
       if (overflow) errors.push('Horizontal overflow: ' + width + ' ' + path)
       if (await page.locator('.VPNotFound').count()) errors.push('404: ' + path)
-      if (path === '/') {
+      if (path === '/' || path === '/en/') {
         const banner = await page.locator('.knowledge-banner').boundingBox()
         if (!banner || (width >= 1024 && (banner.height < 140 || banner.height > 180))) errors.push('Banner size: ' + JSON.stringify(banner))
         if (width >= 1024 && !await page.locator('.VPSidebar').isVisible()) errors.push('Missing home sidebar')
         if (await page.locator('.VPHero').count()) errors.push('Unexpected landing hero')
-        await page.screenshot({ path: join(output, 'home-' + width + '.png'), fullPage: true })
+        await page.screenshot({ path: join(output, (path === '/' ? 'zh' : 'en') + '-home-' + width + '.png'), fullPage: true })
       }
     }
     await page.goto(base + '/features/longform/', { waitUntil: 'networkidle' })
