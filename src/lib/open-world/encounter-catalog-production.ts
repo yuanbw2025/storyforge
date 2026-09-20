@@ -25,6 +25,7 @@ const SKILL_ID = 'text-open-world.production.encounter-catalog.v1'
 const MAX_CONTEXT_CHARS = 280_000
 const ARCHETYPES = ['balanced', 'brute', 'swift', 'armored'] as const
 const INTENSITIES = ['ordinary', 'dangerous', 'boss'] as const
+const ENEMY_FAMILY_TAG_PREFIX = 'enemy-family:'
 
 interface EncounterDemandV1 {
   demandNumber: number
@@ -330,6 +331,7 @@ async function createArtifact(input: { context: TextOpenWorldEncounterCatalogInp
   const enemies: TextOpenWorldEnemyEncounterCatalogV1['enemies'] = []
   const encounters: TextOpenWorldEnemyEncounterCatalogV1['encounters'] = []
   const strategies: TextOpenWorldEnemyEncounterCatalogV1['strategyProfiles'] = []
+  const governedFamilyKeys = new Map<string, string>()
   input.draft.encounters.forEach((draft, index) => {
     const demand = input.context.encounterDemands[draft.demandNumber - 1]!
     const number = String(index + 1).padStart(3, '0')
@@ -338,9 +340,26 @@ async function createArtifact(input: { context: TextOpenWorldEncounterCatalogInp
     const strategyKey = `strategy.enemy.${number}`
     const stats = enemyStats(draft.recommendedLevel, draft.enemyArchetype)
     const fulfilled = demand.requirementKey === null ? [] : [demand.requirementKey]
+    const familyMarkers = draft.enemyTags.filter(tag => tag.startsWith(ENEMY_FAMILY_TAG_PREFIX))
+    if (familyMarkers.length > 1) fail(`敌人只能声明一个家族标记:${demand.sourceDemandKey}`)
+    const familyMarker = familyMarkers[0] ?? null
+    const familyLabel = familyMarker?.slice(ENEMY_FAMILY_TAG_PREFIX.length).trim() ?? ''
+    if (familyMarker && !familyLabel) fail(`敌人家族标记为空:${demand.sourceDemandKey}`)
+    let familyKey = `enemy-family.catalog.${number}`
+    if (familyLabel) {
+      const existing = governedFamilyKeys.get(familyLabel)
+      if (existing) familyKey = existing
+      else {
+        // Reuse the first member's encounter ordinal. This cannot collide
+        // with an ungrouped enemy at another ordinal, while later members of
+        // the same named family deliberately reuse the exact key.
+        familyKey = `enemy-family.catalog.${number}`
+        governedFamilyKeys.set(familyLabel, familyKey)
+      }
+    }
     strategies.push({ key: strategyKey, title: `${draft.enemyTitle}行动策略`, selection: 'ordered-skill-priority', prioritySkillKeys: [basicSkill.key], fallbackSkillKey: basicSkill.key })
     enemies.push({
-      key: enemyKey, order: index + 1, familyKey: `enemy-family.catalog.${number}`, sourceDemandKey: demand.sourceDemandKey,
+      key: enemyKey, order: index + 1, familyKey, sourceDemandKey: demand.sourceDemandKey,
       title: draft.enemyTitle, description: draft.enemyDescription, tags: draft.enemyTags,
       regionKey: demand.regionKey, homeLocationKey: demand.candidateLocationKeys[draft.locationNumber - 1]!, level: draft.recommendedLevel,
       ...stats, skillKeys: [basicSkill.key], strategyProfileKey: strategyKey,
@@ -481,7 +500,7 @@ function systemPrompt(context: TextOpenWorldEncounterCatalogInputContextV1): str
   return [
     '你是StoryForge文字开放世界Enemy与Encounter Catalog Designer。你为每项encounterDemand设计一个敌人和一个可玩的单组遭遇；代码负责稳定键、数值公式、技能策略、任务消费者、奖励/掉落预留和运行绑定。',
     `encounterDemands共有${context.encounterDemands.length}项，必须按demandNumber顺序精确覆盖。语义必须服从需求的title/description/requestedTraits、regionKey和候选地点；locationNumber是一基candidateLocationKeys序号。`,
-    'enemyArchetype只能balanced/brute/swift/armored；recommendedLevel为1到20；intensity只能ordinary/dangerous/boss；enemyCount为1到5。保护需求通常不能靠极端等级制造主线锁死，首版战斗失败始终可重试或无代价复活。',
+    'enemyArchetype只能balanced/brute/swift/armored；recommendedLevel为1到20；intensity只能ordinary/dangerous/boss；enemyCount为1到5。若多个敌人属于同一家族，在enemyTags中使用完全一致的enemy-family:家族名标记；代码只把该标记编译成共享familyKey，不允许模型直接写运行键。保护需求通常不能靠极端等级制造主线锁死，首版战斗失败始终可重试或无代价复活。',
     '只写敌人、遭遇的可见语义和开战/胜利/失败文本。不要输出属性数值、技能键、任务键、奖励、掉落、Action、Effect、Condition或媒资引用。敌人与遭遇标题分别不得重复。',
     '只输出字段精确的JSON：',
     '{"schema":"storyforge.text-open-world-encounter-catalog-draft","version":1,"encounters":[{"demandNumber":1,"enemyTitle":"...","enemyDescription":"...","enemyTags":["..."],"enemyArchetype":"balanced","encounterTitle":"...","encounterDescription":"...","locationNumber":1,"recommendedLevel":1,"intensity":"ordinary","enemyCount":1,"openingText":"...","victoryText":"...","defeatText":"..."}]}',

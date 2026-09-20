@@ -344,7 +344,10 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P8', taskKey: 'p8.catalog.items-rewards', objective: '生产物品、装备、掉落和奖励目录并闭合任务及成长预算。',
-    skillId: 'text-open-world.production.item-reward-catalog.v1', recommendedModelCalls: 1, tokenBudgetWeight: 8,
+    // The formal Creator inventory carries every quest reward, encounter drop
+    // and the complete 8/4/5/2 equipment-consumable-material-key-item floor.
+    // Keep its exact structured context above that accepted content ceiling.
+    skillId: 'text-open-world.production.item-reward-catalog.v1', recommendedModelCalls: 1, tokenBudgetWeight: 9,
     dependsOn: [
       'p2.gameplay-ruleset', 'p4.player-build', 'p8.quest-skeletons',
       'p8.catalog.progression', 'p8.catalog.encounters',
@@ -411,7 +414,10 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P8F', taskKey: 'p8f.quest-finalize', objective: '把任务骨架绑定到真实Action、目录、奖励、失败和时间合同。',
-    skillId: 'text-open-world.production.quest-finalize.v1', recommendedModelCalls: 1, tokenBudgetWeight: 17,
+    // P8F consumes the complete formal gameplay catalogs. The accepted
+    // 8/4/5/2 item floor and three governed enemy families are part of that
+    // atomic binding input, so this reservation covers the full Creator scale.
+    skillId: 'text-open-world.production.quest-finalize.v1', recommendedModelCalls: 1, tokenBudgetWeight: 19,
     dependsOn: [
       'p5.mainline', 'p6.significant-threads', 'p7.region-narrative-packs', 'p8.quest-skeletons',
       'p8.catalog.progression', 'p8.catalog.encounters', 'p8.catalog.items-rewards',

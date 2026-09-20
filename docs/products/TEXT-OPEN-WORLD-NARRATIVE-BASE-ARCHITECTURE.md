@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.59
+> 规格版本：3.2.60
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -364,7 +364,7 @@ events / checkpoints / terminalReceipt
 - 40种专属Artifact Kind分别保存来源、体验、故事、地区、任务、玩法目录、场景、系统整合和质量证据；每种Kind只有一个任务owner；其中SourcePin索引与大体量来源单元分开；
 - P0～P10连同V1确定性预检、V2平衡/语义双评审、V3装配和QA共26个任务，全部进入`qa.release`终态汇合；
 - 22个模型型durable Run分别承担来源、体验、Ruleset、表现、故事、地区、主角、任务、六类玩法目录和评审；当前执行器中P1最多使用6个来源批次，P9按Scene使用最多159项隔离请求并追加1项零Scene共享请求，其余Run初始执行各1次；
-- 完整Build最多执行186次初始模型调用，并为P9额外授权1次明确失败片段修复，总调用预算187次；调用扇出、token份额与时长份额分开计算，输入/输出token按199份叙事生产权重分配，生产时长按100份独立权重分配；P8F/P9/P10分别占17/26/18份token，P9的最多160次初始小请求及1次修复占48份时长，并在输入/输出内为最大片段预留修复余量，不会挤占不可切分上游；共享账本逐attempt保存已付用量，重试只预留同Run任务剩余额度，部分调用费用上界按实际模型/媒资调用比例分摊，未知结果则保留预留等待人工裁决；实际调用按执行结果计量，不能把“任务数”误当成“一任务只调用一次模型”；
+- 完整Build最多执行186次初始模型调用，并为P9额外授权1次明确失败片段修复，总调用预算187次；调用扇出、token份额与时长份额分开计算，输入/输出token按202份叙事生产权重分配，生产时长按100份独立权重分配；P8物品/P8F/P9/P10分别占9/19/26/18份token，P9的最多160次初始小请求及1次修复占48份时长，并在输入/输出内为最大片段预留修复余量，不会挤占不可切分上游；共享账本逐attempt保存已付用量，重试只预留同Run任务剩余额度，部分调用费用上界按实际模型/媒资调用比例分摊，未知结果则保留预留等待人工裁决；实际调用按执行结果计量，不能把“任务数”误当成“一任务只调用一次模型”；
 - P8的成长、遭遇、物品奖励、制作经济、NPC运行和地图交互目录允许按依赖并行，P8F只能在六类目录完成后把任务绑定到真实引用；
 - 每项任务显式声明输入、输出、依赖回执、Context Source、候选写目标、预算、超时、重试、不可重试错误、stale传播和完成Gate；
 - `sourcePinHash`、`briefHash`、`planHash`、`controlEpoch`或上游Artifact Hash变化都会使下游保守stale；旧候选只读，不能直接采纳；
@@ -516,7 +516,7 @@ P3仍只产出Build候选，不写世界引擎、ProductRelease或Session。它�
 `src/lib/open-world/quest-skeletons-production.ts`把P5～P7的故事结构转换成“玩家究竟能做什么”和“后序目录必须生产什么”，但在目录尚不存在时不伪造正式运行引用：
 
 - `text-open-world.quest-skeletons-input`只读取同一Build已验收的GameBrief、ExperienceContract、GameplayRulesetSkeleton、MainlineThread、SignificantThreads和RegionNarrativePacks；Context复核全部Artifact行Hash、内容Hash、跨Artifact引用和任务保底数量，再从上游确定性投影Quest Source；
-- 每个Mainline Stage、Significant Stage、ordinary quest seed和task template seed必须且只能生成一个Quest骨架。当前“盐脊”验收世界形成7个主线、6个重要故事、6个普通任务和4个模板，共23个Quest；模型不得合并、遗漏或另造来源；
+- 每个Mainline Stage、Significant Stage、ordinary quest seed和task template seed必须且只能生成一个Quest骨架。当前“盐脊”验收世界形成7个主线、7个重要故事、8个普通任务和5个模板，共27个Quest；模型不得合并、遗漏或另造来源；
 - 模型为每个Quest设计故事动机、目标体验、1～4个Stage和每Stage 1～5个Objective。Objective使用对话、调查、探索、战斗、收集、制作、交易、选择、旅行、交互闭集表达玩家意图，并通过语义需求说明需要的角色、势力、敌人、遭遇、物品、装备、材料、技能、配方、商人、奖励、Action或地点交互；战斗目标必须提出敌人或遭遇需求；
 - 代码生成Quest、Stage和Objective稳定键及前后关系。主线和重要故事固定`protected-wait`、不可放弃/过期/永久失败且缺席无压力；普通任务可放弃后重接，地区模板由Director实例化并可重复；到达地点永远不是唯一启动条件；
 - `ContentRequirementManifest`不仅汇总Objective需求，也覆盖P7全部角色需求、势力需求和Location Plan。每项需求按照kind明确归属Progression、Encounter、Item/Reward、Crafting/Economy、NPC Runtime、Map Interaction或QuestFinalize任务，同kind同title的冲突定义失败关闭；
@@ -541,7 +541,7 @@ P8前三条Gameplay Catalog Lane把ContentRequirementManifest变成后序任务�
 
 P8后半目录已补齐制作经济、NPC运行和地图交互：配方/商店保证物品来源、消耗、定价、库存和反套利闭环；NPC保留整体人物小传，区分重要Agent与普通规则角色，冻结关键保护、四时段日程、三档态度与功能替代；地图目录原样保持Region/Location/Edge/FastTravel拓扑，覆盖每个地点入口，并固定逐步揭示、提前到达安全、旅行推进时间、快旅到访解锁和程序SVG布局。这三类目录与前三类一样，在P8只交付稳定定义，运行引用保持unbound。
 
-`quest-finalize-production.ts`现以不可切分的原子Context读取Mainline、SignificantThreads、RegionNarrativePacks、QuestSkeletons、ContentRequirementManifest和六类Gameplay Catalog，对11件Artifact逐一校验行Hash、内容Hash、产品实例及精确上游来源。任意一件超出任务输入预算时失败关闭，不会把JSON从中间截断后交给模型；调度器把所有`text-open-world.*`生产Context视为精确结构化合同并传入实际任务预算。P8F当前初始执行使用1次模型调用，但获得17/199的token份额，以容纳不可切分的完整任务上下文；完整Build的186次初始调用上限主要用于P1来源分批与P9逐Scene硬隔离，调用扇出不等同于叙事内容预算比例。
+`quest-finalize-production.ts`现以不可切分的原子Context读取Mainline、SignificantThreads、RegionNarrativePacks、QuestSkeletons、ContentRequirementManifest和六类Gameplay Catalog，对11件Artifact逐一校验行Hash、内容Hash、产品实例及精确上游来源。任意一件超出任务输入预算时失败关闭，不会把JSON从中间截断后交给模型；调度器把所有`text-open-world.*`生产Context视为精确结构化合同并传入实际任务预算。P8F当前初始执行使用1次模型调用，并获得19/202的token份额，以容纳不可切分的完整任务上下文；完整Build的186次初始调用上限主要用于P1来源分批与P9逐Scene硬隔离，调用扇出不等同于叙事内容预算比例。
 
 模型在P8F只能提交任务/Objective描述、Objective成功语义、发牌预算/触发类型、模板类别/强度/权重/冷却及随机事件语义；任务键、目录键、条件、效果、行动、数值、生命周期和引用均属于代码。确定性编译器完成：
 
@@ -560,7 +560,7 @@ fresh Knowledge运行包使用Director v3：每条受治理传闻事件冻结唯
 
 #### 5.4.15 P9场景脚本、知识边界与统一交互结果源落地
 
-P9把已经可运行的任务与地区Director结果图转换为玩家可读、可选择的叙事表现，但不允许表现层重新定义玩法结果。`scene-scripts-production.ts`先在代码侧读取并验签SourceLedger、ExperienceContract、StoryArc、RegionNarrativePacks、QuestSkeletons、ContentRequirementManifest、NpcRuntimeCatalog、MapInteractionCatalog、QuestDesignDocuments和DirectorDecks；随后生成去重的Scene Demand、Knowledge Boundary、自然语言Action Demand、模板文字变体和随机事件表现需求。完整上游不会截断，重复且与模型写作无关的Condition/Effect等确定性字段只在代码侧校验，模型接收的是仍可追溯到原Artifact Hash的紧凑投影；当前26/199的token份额已用真实8/5/16库存证明可以原子交付，而不是依赖截断后的偶然合法JSON。
+P9把已经可运行的任务与地区Director结果图转换为玩家可读、可选择的叙事表现，但不允许表现层重新定义玩法结果。`scene-scripts-production.ts`先在代码侧读取并验签SourceLedger、ExperienceContract、StoryArc、RegionNarrativePacks、QuestSkeletons、ContentRequirementManifest、NpcRuntimeCatalog、MapInteractionCatalog、QuestDesignDocuments和DirectorDecks；随后生成去重的Scene Demand、Knowledge Boundary、自然语言Action Demand、模板文字变体和随机事件表现需求。完整上游不会截断，重复且与模型写作无关的Condition/Effect等确定性字段只在代码侧校验，模型接收的是仍可追溯到原Artifact Hash的紧凑投影；当前P9在总权重202中占26份token，已用真实8/5/16库存证明可以原子交付，而不是依赖截断后的偶然合法JSON。
 
 确定性编译器为每个Quest生成委托与收束场景、为每个Objective生成推进场景、为每个NPC生成含`bad/neutral/good`三档态度开场的对话场景、为每个地点交互和随机事件生成入口与表现，并兑现Director为每个模板预留的3份差异化文字。每个Scene只引用当前允许的Source Claim，显式携带禁止提前透露的后续Objective；随机传闻只有存在需求时才能生成且固定为不确定信息。
 
@@ -1425,7 +1425,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 盐脊叙事来源已不再只是Brief中的文字说明：独立语义WorldRelease冻结了潮脉、潮井、旧引潮机、两地区、十地点、七名来源角色、两势力、关键物件、核心故事和两条重要故事素材。Creator Brief把“查明潮脉衰竭并保障两地生存”固定为所有结局共享目标，同时禁止毁灭任一地区、投靠灾难制造者和地点到达自动推进关键主线。
 
-真实生产候选通过P1逐单元实读36个来源资源，再依次形成体验、故事弧、两结局、七段主线、角色/地区重要故事、地区生态、任务与玩法目录、场景脚本和运行包。当前自动证据说明叙事Artifact由正式Run与Context Manifest产生，而不是人工塞入JSON；它不说明文风、节奏、重复度和3至5小时真人体验已经合格，这些仍由G7-04、G7-11和G7-13校准。
+真实生产候选通过P1逐单元实读36个来源资源，再依次形成体验、故事弧、两结局、七段主线、角色/地区重要故事、地区生态、任务与玩法目录、场景脚本和运行包。当前自动证据说明叙事Artifact由正式Run与Context Manifest产生，而不是人工塞入JSON；它不说明文风、节奏、重复度和3至5小时真人体验已经合格，这些仍由G7-11和G7-13校准。
 
 ### 12.5 G7-03盐脊主线、重要故事与双结局闭环
 
@@ -1442,6 +1442,12 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 普通任务的失败语义现由代码拥有。限时任务可在世界时间越过截止点后进入`expired`；可重接任务需玩家确认放弃，并只能在原发布场景重新经过揭示、接取与激活链；允许永久失败的任务在每个活动Stage有唯一系统Action，不能由玩家直接伪造失败。模板任务仍由Director创建实例，实例结果不改写模板定义。重复、过期、放弃、重接和永久失败均通过正式Event与Projection回放验证。
 
 本阶段同时暴露并修复了叙事生产容量的真实边界：P2必须保留Creator规模，结构化Context必须完整交付，P9场景硬上限从127调整为159以承载当前136个实际Scene，完整DAG建议187次模型调用并按199份token权重分配。自动证据证明“有足量结构化内容且能运行”，仍不能证明文字新颖性、节奏或真人3至5小时体验已经合格；这些结论继续留给真实模型校准与真人游玩。
+
+### 12.7 G7-05任务语义到玩法目录的叙事边界
+
+任务Agent仍先从主线、重要故事、地区任务和随机侜料出发，只说明某个Objective需要什么敌人、物品、技能、配方、商人或奖励。G7-05不让它直接书写数值和运行引用，而是用两个小而可验的语义桥表达编译意图：`runtime-consumable`表示该`item`必须成为可使用消耗品，`enemy-family:家族名`表示多个敌人应共享世界内家族。编译器再将这些语义翻译为唯一稳定键、目录定义、任务奖励和Action/Effect。
+
+这保持了叙事与玩法的分工：模型负责让“盐蜥”“白口”“潮脉药剂”和相关任务动机符合盐脊的世界与故事；代码负责等级、经验、伤害、库存下限、价格、材料来源、配方学习、防丢及反套利。玩家最终看到的成长、战斗、装备、消耗、制作、买卖和奖励全部来自同一RuntimePackage，而不是剧情文本外的临时AI承诺。当前自动验收确认结构完整与引用可运行，但敌人压力、奖励节奏和经济体感仍等待G7-11/G7-13的真实模型与真人证据。
 
 ---
 
@@ -1634,6 +1640,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.60 | 2026-09-21 | 完成G7-05任务叙事到玩法目录的编译闭环：任务Agent只以受治理消耗品/敌人家族标记表达意图，代码生成等级、数值、稳定键、保护、价格及Action/Effect。盐脊1→5级、3敌人家族、技能组合、物品下限、配方和两区商店已进入同一RuntimePackage；P8F不可切分Context获得19/202 token份额，人工平衡与叙事体感仍待后续验收。 |
 | 3.2.59 | 2026-09-21 | 完成G7-04地区叙事供给：Creator规模精确贯通P2，盐脊8个固定普通任务、5个模板×3个变体和16个原创随机事件进入正式DAG/运行包；传闻路线不重复计时。过期、确认放弃、原场景重接和系统永久失败经Event/Projection验证。精确生产Context禁止截断，Scene上限159，DAG建议187次/硬上限200次，token权重199；真人时长与文风质量仍待G7-11/G7-13。 |
 | 3.2.58 | 2026-09-20 | 完成G7-03叙事闭环：盐脊7段严格主线、两个路线资格不同的合规结局、3段角色线和4段跨区势力/地区线全部进入正式Quest/Scene。P8F `governed-v19`把闭集任务、势力和配方选择编译为可运行结局Condition；重要故事局部后果编译为精确Stage完成Effect。旧Context不重新解释，运行时实证未满足资格不可选、满足对应路线后可选。 |
 | 3.2.57 | 2026-09-20 | 对齐G7-02盐脊地图契约：世界骨架初始以`visited + heard`公开名称与无条件拓扑，未到访详情继续隐藏；快旅/复活点只在真实到访后解锁，不再要求伪造默认远程点，首个点前由战前检查点保证失败可重试。 |

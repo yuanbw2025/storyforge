@@ -25,6 +25,12 @@ const SKILL_ID = 'text-open-world.production.item-reward-catalog.v1'
 const MAX_CONTEXT_CHARS = 320_000
 type ItemKindV1 = 'equipment' | 'consumable' | 'material' | 'quest' | 'misc'
 const EQUIPMENT_SLOTS = ['weapon', 'armor', 'accessory'] as const
+/**
+ * Quest planning uses the broad `item` requirement kind. This reserved trait
+ * is the narrow, governed bridge that lets the deterministic catalog compiler
+ * distinguish a usable consumable from flavour-only miscellaneous loot.
+ */
+export const TEXT_OPEN_WORLD_RUNTIME_CONSUMABLE_TRAIT_V1 = 'runtime-consumable' as const
 
 interface ItemDemandV1 {
   demandNumber: number
@@ -180,7 +186,10 @@ function buildItemDemands(input: {
       || requirement.binding.status !== 'catalog-unbound' || requirement.binding.definitionKeys.length) fail(`物品目录收到非法需求:${requirement.key}`)
     const plannedKind = requirement.kind === 'equipment' ? 'equipment'
       : requirement.kind === 'material' ? 'material'
-        : requirement.criticality === 'protected' ? 'quest' : 'misc'
+        : requirement.criticality === 'protected' ? 'quest'
+          : requirement.requestedTraits.includes(TEXT_OPEN_WORLD_RUNTIME_CONSUMABLE_TRAIT_V1)
+            ? 'consumable'
+            : 'misc'
     for (let index = 0; index < requirement.minimumCount; index += 1) demands.push({
       demandNumber: demands.length + 1,
       sourceDemandKey: `${requirement.key}.${String(index + 1).padStart(3, '0')}`,

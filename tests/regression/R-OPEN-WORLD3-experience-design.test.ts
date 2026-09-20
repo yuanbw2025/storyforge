@@ -220,6 +220,7 @@ import {
   parseProductRuntimePackageV1,
 } from '../../src/lib/product-production/runtime-package'
 import { parseTextOpenWorldModulesV1 } from '../../src/lib/open-world/modules'
+import { levelForTextOpenWorldExperienceV1 } from '../../src/lib/open-world/progression'
 import { projectTextOpenWorldPlayerMapScreenV1 } from '../../src/lib/open-world/player-map'
 import { createTextOpenWorldActionRegistryV1 } from '../../src/lib/open-world/action-registry'
 import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
@@ -1847,7 +1848,13 @@ function questSkeletonsRunner(options: {
       const sourceNumber = sameKindSources.findIndex(candidate => candidate.sourceKey === source.sourceKey) + 1
       let kind = kindsBySource[source.kind][(sourceNumber - 1) % kindsBySource[source.kind].length]
       if (options.saltRidgeAcceptance && source.kind === 'significant-stage' && source.title === '枯井里的回声') kind = 'encounter'
+      if (options.saltRidgeAcceptance && source.kind === 'mainline-stage' && source.title === '谁动了潮门') kind = 'actor'
+      if (options.saltRidgeAcceptance && source.kind === 'mainline-stage' && source.title === '引潮机决战') kind = 'encounter'
+      if (options.saltRidgeAcceptance && source.kind === 'ordinary-seed' && source.title === '仓道里的盐蜥') kind = 'enemy'
       let title = `${source.title}所需${kind}`
+      if (options.saltRidgeAcceptance && source.title === '两地的水' && kind === 'equipment') title = '双井测潮坠'
+      if (options.saltRidgeAcceptance && source.title === '旧机之下' && kind === 'item') title = '裂潮阀芯'
+      if (options.saltRidgeAcceptance && source.title === '引潮机决战' && kind === 'encounter') title = '白口与引潮机决战'
       if (options.conflictingRequirement && source.kind === 'mainline-stage' && sourceNumber <= 2) {
         kind = 'actor'
         title = '冲突定义的同名关键角色'
@@ -1859,13 +1866,50 @@ function questSkeletonsRunner(options: {
         kind,
         title,
         description: `为${source.sourceKey}提供能够支持玩家完成目标的${kind}定义。`,
-        requestedTraits: [`关联${source.kind}`, `服务${source.title}`],
+        requestedTraits: [
+          `关联${source.kind}`,
+          `服务${source.title}`,
+          ...(options.saltRidgeAcceptance && title === '双井测潮坠' ? ['slot:accessory'] : []),
+        ],
         minimumCount: 1,
         criticality,
       }
       if (options.prematureField && source.kind === 'mainline-stage' && sourceNumber === 1) {
         requirement.enemyKey = 'enemy.forged'
       }
+      const saltRidgeRequirement = (
+        extraKind: 'item' | 'equipment' | 'material',
+        extraTitle: string,
+        traits: string[],
+        extraCriticality: 'ordinary' | 'important' | 'protected' = 'important',
+      ) => ({
+        kind: extraKind,
+        title: extraTitle,
+        description: `${extraTitle}必须通过${source.title}的正式奖励进入物品循环。`,
+        requestedTraits: [`关联${source.kind}`, `服务${source.title}`, ...traits],
+        minimumCount: 1,
+        criticality: extraCriticality,
+      })
+      const saltRidgeExtras = options.saltRidgeAcceptance ? ({
+        '来信与低潮': [saltRidgeRequirement('equipment', '盐脊折潮短刃', ['slot:weapon'])],
+        '空白水尺': [saltRidgeRequirement('equipment', '测潮皮甲', ['slot:armor'])],
+        '两地的水': [saltRidgeRequirement('item', '澄盐解毒剂', ['runtime-consumable'])],
+        '旧机之下': [saltRidgeRequirement('equipment', '旧机护腕', ['slot:armor'])],
+        '谁动了潮门': [
+          saltRidgeRequirement('material', '旧机铜簧', ['制作材料']),
+          saltRidgeRequirement('equipment', '仓道破障锤', ['slot:weapon']),
+        ],
+        '引潮机决战': [
+          saltRidgeRequirement('equipment', '潮门重甲', ['slot:armor']),
+          saltRidgeRequirement('item', '潮息药剂', ['runtime-consumable']),
+        ],
+        '新的潮线': [
+          saltRidgeRequirement('item', '双井议约铭牌', ['关键道具'], 'protected'),
+          saltRidgeRequirement('equipment', '共潮护符', ['slot:accessory']),
+        ],
+        '集市假药': [saltRidgeRequirement('item', '净盐药剂', ['runtime-consumable'])],
+        '拾潮营地证词': [saltRidgeRequirement('material', '拾潮麻绳', ['制作材料'])],
+      } as Record<string, Array<ReturnType<typeof saltRidgeRequirement>>>)[source.title] ?? [] : []
       const timed = (source.type === 'ordinary' && sourceNumber % 3 === 0) || source.type === 'template'
       const playerIntent = options.invalidCombat && source.kind === 'mainline-stage' && sourceNumber === 1
         ? 'combat'
@@ -1890,6 +1934,7 @@ function questSkeletonsRunner(options: {
             optional: false,
             requirements: [
               requirement,
+              ...saltRidgeExtras,
               ...((source.kind === 'ordinary-seed' && sourceNumber === 5)
                 || (options.saltRidgeAcceptance && source.kind === 'significant-stage' && source.title === '不再守空井') ? [{
                 kind: 'recipe',
@@ -1974,17 +2019,25 @@ function progressionCatalogsRunner(options: {
   rewriteInitial?: boolean
   invalidPassive?: boolean
   missingCombatFormula?: boolean
+  saltRidgeAcceptance?: boolean
 } = {}): TextOpenWorldProgressionCatalogsModelRunnerV1 {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldProgressionCatalogsInputContextV1
     const skills = context.skillDemands.map((demand, index) => {
       const fixed = demand.fixedMechanics
-      let activation = fixed?.activation ?? (index % 3 === 0 ? 'passive' : 'active')
-      let kind = fixed?.kind ?? (index % 3 === 0 ? 'status' : index % 3 === 1 ? 'attack' : 'recovery')
-      let target = fixed?.target ?? (activation === 'passive' || kind !== 'attack' ? 'self' : 'single-enemy')
-      const scalingAttribute = fixed?.scalingAttribute ?? (kind === 'attack' ? 'power' : kind === 'recovery' ? 'vitality' : null)
+      const saltLevel = options.saltRidgeAcceptance && demand.demandKind === 'level-progression'
+        ? demand.unlockPlan.level : null
+      const saltQuestSkill = options.saltRidgeAcceptance && demand.demandKind === 'quest-requirement'
+      let activation = fixed?.activation ?? (saltLevel === 4 ? 'active' : index % 3 === 0 ? 'passive' : 'active')
+      let kind = fixed?.kind ?? (saltLevel === 2 ? 'attack'
+        : saltLevel === 4 ? 'status'
+          : saltQuestSkill ? 'recovery'
+            : index % 3 === 0 ? 'status' : index % 3 === 1 ? 'attack' : 'recovery')
+      let target = fixed?.target ?? (kind === 'attack' ? 'single-enemy' : 'self')
+      const scalingAttribute = fixed?.scalingAttribute
+        ?? (kind === 'attack' ? 'power' : kind === 'recovery' ? 'vitality' : kind === 'resource' ? 'agility' : null)
       let resourceCost = fixed?.resourceCost ?? (activation === 'passive' ? 0 : 2)
-      let cooldownTurns = fixed?.cooldownTurns ?? (activation === 'passive' ? 0 : 1)
+      let cooldownTurns = fixed?.cooldownTurns ?? (activation === 'passive' ? 0 : saltLevel === 4 || saltQuestSkill ? 2 : 1)
       if (options.invalidPassive && demand.demandKind === 'level-progression' && demand.unlockPlan.level === 2) {
         activation = 'passive'; kind = 'status'; target = 'single-enemy'; resourceCost = 1; cooldownTurns = 1
       }
@@ -1993,9 +2046,11 @@ function progressionCatalogsRunner(options: {
         demandNumber: demand.demandNumber,
         title: options.rewriteInitial && demand.demandNumber === 1
           ? '篡改后的基础攻击'
-          : demand.fixedTitle ?? (demand.demandKind === 'level-progression'
-            ? `${demand.unlockPlan.level}级潮脉技`
-            : `${demand.semanticBrief.slice(0, 12)}技${index + 1}`),
+          : saltLevel === 2 ? '盐雾连斩'
+            : saltLevel === 4 ? '潮息守势'
+              : demand.fixedTitle ?? (demand.demandKind === 'level-progression'
+                ? `${demand.unlockPlan.level}级潮脉技`
+                : `${demand.semanticBrief.slice(0, 12)}技${index + 1}`),
         description: demand.fixedDescription ?? `${demand.semanticBrief}该能力以明确的系统效果支持角色成长。`,
         tags: [demand.demandKind, demand.requestedTraits[0] ?? '成长'],
         activation,
@@ -2082,25 +2137,52 @@ function encounterCatalogRunner(options: {
   omitDemand?: boolean
   invalidLocation?: boolean
   duplicateEnemyTitle?: boolean
+  sharedFamilyMarkers?: boolean
+  duplicateFamilyMarkers?: boolean
+  saltRidgeAcceptance?: boolean
 } = {}): TextOpenWorldEncounterCatalogModelRunnerV1 {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldEncounterCatalogInputContextV1
-    const encounters = context.encounterDemands.map((demand, index) => ({
-      demandNumber: demand.demandNumber,
-      enemyTitle: options.duplicateEnemyTitle ? '重复敌人' : `${demand.title}之敌${index + 1}`,
-      enemyDescription: `${demand.description}该敌人的行动方式能够体现${demand.requestedTraits[0] ?? '地区危险'}。`,
-      enemyTags: [demand.demandKind, demand.criticality],
-      enemyArchetype: ['balanced', 'brute', 'swift', 'armored'][index % 4],
-      encounterTitle: `${demand.title}遭遇${index + 1}`,
-      encounterDescription: `玩家在${demand.regionKey}面对与需求相符、可以逃跑并可失败恢复的战斗。`,
-      locationNumber: options.invalidLocation && index === 0 ? demand.candidateLocationKeys.length + 1 : 1,
-      recommendedLevel: Math.min(5, index + 1),
-      intensity: demand.criticality === 'protected' ? 'dangerous' : 'ordinary',
-      enemyCount: demand.criticality === 'ordinary' ? 1 : 2,
-      openingText: `${demand.title}对应的威胁挡在玩家面前。`,
-      victoryText: '威胁暂时解除，玩家可以继续当前行动。',
-      defeatText: '这次交锋失败了；玩家可以从战前重试或回到复活点。',
-    }))
+    const encounters = context.encounterDemands.map((demand, index) => {
+      const boss = options.saltRidgeAcceptance && demand.title.includes('白口')
+      const nonBossIndex = context.encounterDemands.slice(0, index)
+        .filter(candidate => !candidate.title.includes('白口')).length
+      const family = boss ? '盐枭'
+        : demand.title.includes('盐蜥') || demand.regionKey === 'region.001' && index % 2 === 0 ? '盐蜥'
+          : demand.title.includes('枯井') || demand.regionKey === 'region.002' ? '潮蚀物'
+            : '盐枭'
+      const familyIndex = context.encounterDemands.slice(0, index + 1).filter(candidate => {
+        if (family === '盐枭') return candidate.title.includes('白口') || (!candidate.title.includes('盐蜥') && candidate.regionKey !== 'region.002')
+        if (family === '盐蜥') return candidate.title.includes('盐蜥') || candidate.regionKey === 'region.001'
+        return candidate.title.includes('枯井') || candidate.regionKey === 'region.002'
+      }).length
+      const enemyTitle = boss ? '盐枭首领“白口”' : `${family}${familyIndex === 1 ? '' : `·${familyIndex}`}`
+      return {
+        demandNumber: demand.demandNumber,
+        enemyTitle: options.duplicateEnemyTitle ? '重复敌人' : options.saltRidgeAcceptance ? enemyTitle : `${demand.title}之敌${index + 1}`,
+        enemyDescription: `${demand.description}该敌人的行动方式能够体现${demand.requestedTraits[0] ?? '地区危险'}。`,
+        enemyTags: options.saltRidgeAcceptance
+          ? [demand.demandKind, demand.criticality, `enemy-family:${family}`]
+          : [
+              demand.demandKind,
+              demand.criticality,
+              ...(options.sharedFamilyMarkers && index < 2 ? ['enemy-family:测试家族'] : []),
+              ...(options.duplicateFamilyMarkers && index === 0
+                ? ['enemy-family:测试家族', 'enemy-family:重复家族'] : []),
+            ],
+        enemyArchetype: ['balanced', 'brute', 'swift', 'armored'][index % 4],
+        encounterTitle: boss ? '旧引潮机前的白口决战' : `${demand.title}遭遇${index + 1}`,
+        encounterDescription: `玩家在${demand.regionKey}面对与需求相符、可以逃跑并可失败恢复的战斗。`,
+        locationNumber: options.invalidLocation && index === 0 ? demand.candidateLocationKeys.length + 1 : 1,
+        recommendedLevel: boss ? 4
+          : options.saltRidgeAcceptance ? [1, 2, 3, 5][nonBossIndex % 4]! : Math.min(5, index + 1),
+        intensity: boss ? 'boss' : demand.criticality === 'ordinary' ? 'ordinary' : 'dangerous',
+        enemyCount: boss ? 1 : demand.criticality === 'ordinary' ? 1 : 2,
+        openingText: boss ? '白口守在旧引潮机前，最后的水路被他的盐枭封锁。' : `${demand.title}对应的威胁挡在玩家面前。`,
+        victoryText: boss ? '白口败退，引潮机的最终处置权回到玩家手中。' : '威胁暂时解除，玩家可以继续当前行动。',
+        defeatText: '这次交锋失败了；玩家可以从战前重试或回到复活点。',
+      }
+    })
     return {
       output: JSON.stringify({
         schema: 'storyforge.text-open-world-encounter-catalog-draft',
@@ -2170,6 +2252,7 @@ function itemRewardCatalogRunner(options: {
   rewriteStarter?: boolean
   invalidSlot?: boolean
   duplicateRewardTitle?: boolean
+  saltRidgeAcceptance?: boolean
 } = {}): TextOpenWorldItemRewardCatalogModelRunnerV1 {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldItemRewardCatalogInputContextV1
@@ -2178,12 +2261,17 @@ function itemRewardCatalogRunner(options: {
       title: options.rewriteStarter && demand.demandNumber === 1
         ? '被改写的初始武器'
         : demand.fixedTitle ?? (demand.demandKind === 'region-drop-material'
-          ? `${demand.regionKey}地区素材`
+          ? options.saltRidgeAcceptance
+            ? demand.regionKey === 'region.001' ? '盐脊晶砂' : '沉钟潮苔'
+            : `${demand.regionKey}地区素材`
           : `${demand.semanticBrief.slice(0, 14)}物品${index + 1}`),
       description: demand.fixedDescription ?? `${demand.semanticBrief}该物品在世界中拥有明确的获得与使用去向。`,
       tags: [demand.demandKind, demand.plannedKind],
       equipmentSlotKey: demand.plannedKind === 'equipment'
-        ? options.invalidSlot && demand.fixedEquipmentSlotKey === null ? null : demand.fixedEquipmentSlotKey ?? 'weapon'
+        ? options.invalidSlot && demand.fixedEquipmentSlotKey === null ? null
+          : demand.fixedEquipmentSlotKey ?? (demand.requestedTraits.includes('slot:armor') ? 'armor'
+              : demand.requestedTraits.includes('slot:accessory') ? 'accessory'
+                : 'weapon')
         : options.invalidSlot && index === context.itemDemands.length - 1 ? 'armor' : null,
     }))
     const rewards = context.rewardDemands.map(demand => ({
@@ -2261,17 +2349,36 @@ function craftingEconomyRunner(options: {
   invalidLocation?: boolean
   criticalInventory?: boolean
   duplicateVendorTitle?: boolean
+  saltRidgeAcceptance?: boolean
 } = {}): TextOpenWorldCraftingEconomyModelRunnerV1 {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldCraftingEconomyInputContextV1
+    const usedOutputKeys = new Set<string>()
     const recipes = context.recipeDemands.map((demand, index) => {
-      const ingredientItemNumber = 1
+      const ingredientIndex = options.saltRidgeAcceptance
+        ? demand.candidateIngredientItemKeys.findIndex(key => (
+            context.itemRewardCatalog.items.find(item => item.key === key)?.kind === 'material'
+          ))
+        : 0
+      const ingredientItemNumber = Math.max(0, ingredientIndex) + 1
       const ingredientKey = demand.candidateIngredientItemKeys[ingredientItemNumber - 1]
-      const outputItemNumber = Math.max(1, demand.candidateOutputItemKeys.findIndex(key => key !== ingredientKey) + 1)
+      const desiredKind = (['consumable', 'equipment', 'material', 'consumable'] as const)[index % 4]
+      let outputIndex = options.saltRidgeAcceptance
+        ? demand.candidateOutputItemKeys.findIndex(key => {
+            const item = context.itemRewardCatalog.items.find(candidate => candidate.key === key)
+            return key !== ingredientKey && item?.kind === desiredKind && !usedOutputKeys.has(key)
+          })
+        : demand.candidateOutputItemKeys.findIndex(key => key !== ingredientKey)
+      if (outputIndex < 0) outputIndex = demand.candidateOutputItemKeys.findIndex(key => (
+        key !== ingredientKey && !usedOutputKeys.has(key)
+      ))
+      if (outputIndex < 0) outputIndex = demand.candidateOutputItemKeys.findIndex(key => key !== ingredientKey)
+      const outputItemNumber = Math.max(0, outputIndex) + 1
       const output = context.itemRewardCatalog.items.find(item => item.key === demand.candidateOutputItemKeys[outputItemNumber - 1])!
+      usedOutputKeys.add(output.key)
       return {
         demandNumber: demand.demandNumber,
-        title: `${demand.title}配方${index + 1}`,
+        title: options.saltRidgeAcceptance ? `${output.title}配方` : `${demand.title}配方${index + 1}`,
         description: `${demand.description}制作过程符合${demand.requestedTraits[0] ?? '当地生活'}。`,
         category: output.kind === 'equipment' || output.kind === 'consumable' || output.kind === 'material' ? output.kind : 'tool',
         stationLocationNumber: options.invalidLocation && index === 0 ? demand.candidateLocationKeys.length + 1 : 1,
@@ -2283,7 +2390,10 @@ function craftingEconomyRunner(options: {
     const firstCritical = context.itemRewardCatalog.items.findIndex(item => item.critical || !item.sellable) + 1
     const vendors = context.vendorDemands.map((demand, index) => ({
       demandNumber: demand.demandNumber,
-      title: options.duplicateVendorTitle ? '重复商店' : `${demand.title}${index + 1}`,
+      title: options.duplicateVendorTitle ? '重复商店'
+        : options.saltRidgeAcceptance
+          ? `${demand.regionKey === 'region.001' ? '盐灯集市补给铺' : '沉钟村杂货台'}${index + 1}`
+          : `${demand.title}${index + 1}`,
       description: `${demand.description}店铺供应日常成长所需物资。`,
       locationNumber: 1,
       inventoryItemNumbers: [options.criticalInventory && index === 0 ? firstCritical : firstTradeable],
@@ -4322,6 +4432,13 @@ describe('R-OPEN-WORLD3 · P8 EnemyEncounterCatalog', () => {
     })
     await expect(validateTextOpenWorldEnemyEncounterCatalogV1({ artifact, context: input.encounterContext }))
       .resolves.toEqual(artifact)
+
+    const grouped = (await executeEncounterCatalog(
+      input,
+      encounterCatalogRunner({ sharedFamilyMarkers: true }),
+    )).artifacts[0]!.payload as TextOpenWorldEnemyEncounterCatalogV1
+    expect(grouped.enemies[0]!.familyKey).toBe(grouped.enemies[1]!.familyKey)
+    expect(grouped.enemies[2]!.familyKey).not.toBe(grouped.enemies[0]!.familyKey)
   }, 150_000)
 
   it('拒绝遭遇需求漏项、越界地点和同质化敌人标题', async () => {
@@ -4332,6 +4449,8 @@ describe('R-OPEN-WORLD3 · P8 EnemyEncounterCatalog', () => {
       .rejects.toThrow(/locationNumber必须是/)
     await expect(executeEncounterCatalog(input, encounterCatalogRunner({ duplicateEnemyTitle: true })))
       .rejects.toThrow(/敌人标题不得重复/)
+    await expect(executeEncounterCatalog(input, encounterCatalogRunner({ duplicateFamilyMarkers: true })))
+      .rejects.toThrow(/敌人只能声明一个家族标记/)
   }, 150_000)
 
   it('拒绝重算Hash后修改敌人数值、奖励预留或战斗保护策略', async () => {
@@ -6383,7 +6502,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })).rejects.toThrow(/IntegrationReport自身Hash不匹配/)
   }, 600_000)
 
-  it('G7-01至G7-04 盐脊完整DAG产出地图、受保护故事和可运行地区内容库存', async () => {
+  it('G7-01至G7-05 盐脊完整DAG产出地图、故事、地区库存和1至5级成长经济闭环', async () => {
     const input = await creatorSchedulerFixture()
     expect(input.characterIds).toHaveLength(7)
     expect(await db.importantLocations.where('projectId').equals(input.scope.projectId).count()).toBe(10)
@@ -6422,10 +6541,10 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
         'p6.significant-threads': createTextOpenWorldSignificantThreadsExecutorV1({ runModel: significantThreadsRunner({ saltRidgeAcceptance: true }), now: () => NOW + 10 }),
         'p7.region-narrative-packs': createTextOpenWorldRegionNarrativePacksExecutorV1({ runModel: regionNarrativePacksRunner({ saltRidgeAcceptance: true }), now: () => NOW + 11 }),
         'p8.quest-skeletons': createTextOpenWorldQuestSkeletonsExecutorV1({ runModel: questSkeletonsRunner({ saltRidgeAcceptance: true }), now: () => NOW + 12 }),
-        'p8.catalog.progression': createTextOpenWorldProgressionCatalogsExecutorV1({ runModel: progressionCatalogsRunner(), now: () => NOW + 13 }),
-        'p8.catalog.encounters': createTextOpenWorldEncounterCatalogExecutorV1({ runModel: encounterCatalogRunner(), now: () => NOW + 14 }),
-        'p8.catalog.items-rewards': createTextOpenWorldItemRewardCatalogExecutorV1({ runModel: itemRewardCatalogRunner(), now: () => NOW + 15 }),
-        'p8.catalog.crafting-economy': createTextOpenWorldCraftingEconomyCatalogExecutorV1({ runModel: craftingEconomyRunner(), now: () => NOW + 16 }),
+        'p8.catalog.progression': createTextOpenWorldProgressionCatalogsExecutorV1({ runModel: progressionCatalogsRunner({ saltRidgeAcceptance: true }), now: () => NOW + 13 }),
+        'p8.catalog.encounters': createTextOpenWorldEncounterCatalogExecutorV1({ runModel: encounterCatalogRunner({ saltRidgeAcceptance: true }), now: () => NOW + 14 }),
+        'p8.catalog.items-rewards': createTextOpenWorldItemRewardCatalogExecutorV1({ runModel: itemRewardCatalogRunner({ saltRidgeAcceptance: true }), now: () => NOW + 15 }),
+        'p8.catalog.crafting-economy': createTextOpenWorldCraftingEconomyCatalogExecutorV1({ runModel: craftingEconomyRunner({ saltRidgeAcceptance: true }), now: () => NOW + 16 }),
         'p8.catalog.npc-runtime': createTextOpenWorldNpcRuntimeCatalogExecutorV1({ runModel: npcRuntimeRunner(), now: () => NOW + 17 }),
         'p8.catalog.map-interactions': createTextOpenWorldMapInteractionCatalogExecutorV1({ runModel: mapInteractionRunner(), now: () => NOW + 18 }),
         'p8f.quest-finalize': createTextOpenWorldQuestFinalizeExecutorV1({ runModel: questFinalizeRunner({ saltRidgeAcceptance: true }), now: () => NOW + 19 }),
@@ -6505,6 +6624,18 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     const saltRidgeSkeletons = JSON.parse(artifacts.find(
       row => row.artifactKey === 'text-open-world.quest-skeletons',
     )!.payloadJson) as TextOpenWorldQuestSkeletonsV1
+    const saltRidgeProgression = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.progression-catalogs',
+    )!.payloadJson) as TextOpenWorldProgressionCatalogsV1
+    const saltRidgeEncounters = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.enemy-encounter-catalog',
+    )!.payloadJson) as TextOpenWorldEnemyEncounterCatalogV1
+    const saltRidgeItems = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.item-reward-catalog',
+    )!.payloadJson) as TextOpenWorldItemRewardCatalogV1
+    const saltRidgeEconomy = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.crafting-economy-catalog',
+    )!.payloadJson) as TextOpenWorldCraftingEconomyCatalogV1
     const saltRidgeQuests = JSON.parse(artifacts.find(
       row => row.artifactKey === 'text-open-world.quest-design-documents',
     )!.payloadJson) as TextOpenWorldQuestDesignDocumentsV1
@@ -6583,6 +6714,93 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })
     expect(saltRidgeContentBudget.singlePlaythrough.typicalTotalMinutes).toBeGreaterThanOrEqual(180)
     expect(saltRidgeContentBudget.singlePlaythrough.typicalTotalMinutes).toBeLessThanOrEqual(300)
+
+    expect(saltRidgeProgression.levels).toHaveLength(20)
+    expect(saltRidgeProgression.levels.slice(0, 5).map(level => level.level)).toEqual([1, 2, 3, 4, 5])
+    expect(saltRidgeProgression.rules).toMatchObject({
+      maximumLevel: 20,
+      automaticAttributeGrowth: true,
+      attributes: {
+        power: { label: expect.any(String) },
+        vitality: { label: expect.any(String) },
+        agility: { label: expect.any(String) },
+      },
+    })
+    expect(saltRidgeItems.coverage.mainlineExperienceTotal)
+      .toBe(saltRidgeProgression.levels[4]!.cumulativeExperience)
+    expect(saltRidgeItems.coverage.mainlineExperienceTotal)
+      .toBe(saltRidgeItems.coverage.mainlineTargetExperience)
+    const acceptanceSkillKeys = new Set([
+      ...saltRidgeProgression.coverage.acceptanceRangeUnlockSkillKeys,
+      ...saltRidgeProgression.skills.filter(skill => skill.unlockPlan.kind === 'quest-requirement')
+        .map(skill => skill.key),
+    ])
+    const acceptanceSkills = saltRidgeProgression.skills.filter(skill => acceptanceSkillKeys.has(skill.key))
+    expect(acceptanceSkills).toHaveLength(5)
+    expect(acceptanceSkills.filter(skill => skill.kind === 'attack')).toHaveLength(3)
+    expect(acceptanceSkills.some(skill => skill.title === '盐钩挥击')).toBe(true)
+    expect(acceptanceSkills.some(skill => skill.title === '潮息守势' && skill.kind === 'status')).toBe(true)
+    expect(acceptanceSkills.some(skill => (
+      skill.unlockPlan.kind === 'quest-requirement' && skill.kind === 'recovery'
+    ))).toBe(true)
+
+    expect(new Set(saltRidgeEncounters.enemies.map(enemy => enemy.familyKey)).size).toBe(3)
+    expect(new Set(saltRidgeEncounters.enemies.flatMap(enemy => (
+      enemy.tags.filter(tag => tag.startsWith('enemy-family:')).map(tag => tag.slice('enemy-family:'.length))
+    )))).toEqual(new Set(['盐蜥', '盐枭', '潮蚀物']))
+    expect(new Set(saltRidgeEncounters.encounters.map(encounter => encounter.intensity)))
+      .toEqual(new Set(['ordinary', 'dangerous', 'boss']))
+    expect(new Set(saltRidgeEncounters.encounters.map(encounter => encounter.regionKey)))
+      .toEqual(new Set(['region.001', 'region.002']))
+    expect(new Set(saltRidgeEncounters.encounters.map(encounter => encounter.recommendedLevel)))
+      .toEqual(new Set([1, 2, 3, 4, 5]))
+    const saltRidgeBoss = saltRidgeEncounters.encounters.find(encounter => encounter.intensity === 'boss')!
+    expect(saltRidgeBoss).toMatchObject({ title: '旧引潮机前的白口决战', recommendedLevel: 4 })
+    expect(saltRidgeEncounters.enemies.find(enemy => (
+      saltRidgeBoss.enemyGroups.some(group => group.enemyKey === enemy.key)
+    ))).toMatchObject({ title: '盐枭首领“白口”', level: 4 })
+
+    const equipment = saltRidgeItems.items.filter(item => item.kind === 'equipment')
+    const consumables = saltRidgeItems.items.filter(item => item.kind === 'consumable')
+    const materials = saltRidgeItems.items.filter(item => item.kind === 'material')
+    const criticalItems = saltRidgeItems.items.filter(item => item.critical)
+    expect(equipment.length).toBeGreaterThanOrEqual(8)
+    expect(new Set(equipment.map(item => item.equipmentSlotKey))).toEqual(new Set(['weapon', 'armor', 'accessory']))
+    expect(consumables.length).toBeGreaterThanOrEqual(4)
+    expect(materials.length).toBeGreaterThanOrEqual(5)
+    expect(criticalItems.length).toBeGreaterThanOrEqual(2)
+    expect(criticalItems.every(item => !item.droppable && !item.sellable && !item.consumable)).toBe(true)
+    expect(saltRidgeItems.items.find(item => item.title === '裂潮阀芯')).toMatchObject({ kind: 'quest', critical: true })
+    expect(saltRidgeItems.items.find(item => item.title === '双井议约铭牌')).toMatchObject({ kind: 'quest', critical: true })
+
+    expect(saltRidgeEconomy.recipes.length).toBeGreaterThanOrEqual(4)
+    expect(saltRidgeEconomy.recipes.length).toBeLessThanOrEqual(6)
+    expect(saltRidgeEconomy.recipes.some(recipe => !recipe.learnedByDefault)).toBe(true)
+    expect(saltRidgeEconomy.recipes.some(recipe => (
+      recipe.category === 'consumable'
+      && recipe.outputs.some(output => consumables.some(item => item.key === output.itemKey))
+    ))).toBe(true)
+    expect(new Set(saltRidgeEconomy.vendors.map(vendor => vendor.regionKey)))
+      .toEqual(new Set(['region.001', 'region.002']))
+    expect(saltRidgeEconomy.vendors.flatMap(vendor => vendor.inventoryEntries)
+      .filter(entry => equipment.some(item => item.key === entry.itemKey))
+      .every(entry => entry.stockPolicy === 'limited' && entry.initialQuantity === 1)).toBe(true)
+    expect(saltRidgeEconomy.vendors.flatMap(vendor => vendor.inventoryEntries)
+      .filter(entry => !equipment.some(item => item.key === entry.itemKey))
+      .every(entry => entry.stockPolicy === 'unlimited' && entry.initialQuantity === null)).toBe(true)
+    expect(materials.every(item => {
+      const flow = saltRidgeEconomy.itemFlows.find(candidate => candidate.itemKey === item.key)
+      return flow != null && flow.sourceKinds.length > 0 && flow.sinkKinds.length > 0
+    })).toBe(true)
+    expect(saltRidgeEconomy.coverage.riskFreeArbitrageRecipeKeys).toEqual([])
+    expect(saltRidgeEconomy.governance).toMatchObject({
+      singleCurrency: true,
+      guaranteedCrafting: true,
+      recipeKnowledgeRequired: true,
+      everyIngredientSourced: true,
+      everyOutputHasSink: true,
+      noRiskFreeArbitrage: true,
+    })
     expect(saltRidgeQuests.governance.ordinaryFailureActionsReady).toBe(true)
     expect(saltRidgeQuests.actions.filter(action => action.key.startsWith('action.fail.quest.ordinary.')))
       .toHaveLength(8)
@@ -6633,6 +6851,33 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })
     expect(saltRidgePackage.textOpenWorldVNext).toBeTruthy()
     const saltRidgeModules = parseTextOpenWorldModulesV1(saltRidgePackage.textOpenWorldVNext!)
+    expect(levelForTextOpenWorldExperienceV1(
+      saltRidgeModules,
+      saltRidgeItems.coverage.mainlineExperienceTotal,
+    )).toBe(5)
+    expect(saltRidgeModules.progression.skills).toHaveLength(saltRidgeProgression.skills.length)
+    expect(saltRidgeModules.combat.enemies).toHaveLength(saltRidgeEncounters.enemies.length)
+    expect(saltRidgeModules.combat.encounters).toHaveLength(saltRidgeEncounters.encounters.length)
+    expect(saltRidgeModules.items.items).toHaveLength(saltRidgeItems.items.length)
+    expect(saltRidgeModules.crafting.recipes).toHaveLength(saltRidgeEconomy.recipes.length)
+    expect(saltRidgeModules.economy.vendors).toHaveLength(saltRidgeEconomy.vendors.length)
+    expect(saltRidgeModules.actions.effects.map(effect => effect.operation)).toEqual(expect.arrayContaining([
+      'grant-experience', 'change-currency', 'grant-item', 'learn-skill', 'learn-recipe',
+      'change-morality', 'change-faction-affinity', 'enter-location', 'unlock-fast-travel',
+    ]))
+    expect(saltRidgeQuests.catalogBindings.skills.filter(binding => (
+      acceptanceSkillKeys.has(binding.skillKey)
+    )).every(binding => binding.actionKey != null)).toBe(true)
+    expect(saltRidgeModules.items.items.filter(item => item.consumable)
+      .every(item => item.useActionKey != null)).toBe(true)
+    expect(saltRidgeQuests.catalogBindings.recipes.every(binding => binding.craftActionKey != null)).toBe(true)
+    expect(saltRidgeEconomy.recipes.filter(recipe => !recipe.learnedByDefault).every(recipe => {
+      const binding = saltRidgeQuests.catalogBindings.recipes.find(candidate => candidate.recipeKey === recipe.key)
+      return binding?.learnActionKey != null && binding.learnQuestKey != null
+    })).toBe(true)
+    expect(saltRidgeQuests.catalogBindings.vendors.every(binding => (
+      binding.buyActionKey != null && binding.sellActionKey != null
+    ))).toBe(true)
     expect(saltRidgeModules.world.regions.map(region => region.title)).toEqual(['盐脊港', '沉钟盆地'])
     expect(saltRidgeModules.world.locations.map(location => location.title)).toEqual([
       '白盐码头', '测潮所', '盐灯集市', '风蚀仓道', '北潮门',

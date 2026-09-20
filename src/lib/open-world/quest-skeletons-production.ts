@@ -954,7 +954,7 @@ function systemPrompt(context: TextOpenWorldQuestSkeletonsInputContextV1): strin
     '你是StoryForge文字开放世界Quest Architect。你把每个主线Stage、重要故事Stage、普通任务种子和地区任务模板各编译成一个任务骨架，只描述故事动机、玩家体验、阶段目的、Objective意图与所需内容，不生成正式Quest/Action/Condition/Effect/NPC/敌人/物品/奖励键。',
     `questSources共有${context.questSources.length}项。必须按sourceKind分别使用一基sourceNumber并且每项精确覆盖一次；不能合并、遗漏或新增任务来源。mainline-stage/significant-stage固定无限等待、不可放弃或永久失败；ordinary-seed可放弃并重接，template-seed由地区导演实例化；后两类可选择waits或timed，timed必须给60到10080分钟。`,
     '每个任务写1到4个Stage，每Stage写1到5个Objective且至少一个必做。Objective的playerIntent只能是dialogue/investigate/explore/combat/collect/craft/trade/choice/travel/interact；combat必须提出enemy或encounter需求。',
-    '每个Objective必须提出1到8项内容需求。kind只能是actor/faction/enemy/encounter/item/equipment/material/skill/recipe/vendor/reward/action/location-interaction；用title、description、requestedTraits、minimumCount描述能力，不得写目录键或数值Effect。同kind同title若重复，定义必须完全一致，代码会合并消费者。',
+    '每个Objective必须提出1到8项内容需求。kind只能是actor/faction/enemy/encounter/item/equipment/material/skill/recipe/vendor/reward/action/location-interaction；用title、description、requestedTraits、minimumCount描述能力，不得写目录键或数值Effect。同kind同title若重复，定义必须完全一致，代码会合并消费者。若kind=item且物品必须在运行时作为可消耗道具使用，requestedTraits必须包含保留标记runtime-consumable；普通杂物不得使用该标记。',
     '每个mainline-stage任务至少有一项protected需求，每个significant-stage至少有一项important或protected需求，确保关键角色、线索、战斗或访问路径能由后序目录明确保护。ordinary/template通常使用ordinary需求。',
     '任务的标题、前提、故事动机和玩家体验必须与对应source一致，并将自然语言“目标”拆成玩家能完成的Objective，不要写成剧情摘要。抵达地点绝不是唯一启动条件；正式生命周期、奖励、条件、Action和目录绑定由代码与后序QuestFinalize完成。',
     '只输出一个JSON对象，字段必须精确为：',
