@@ -705,11 +705,19 @@ export function parseEventPayload(event: ProductRuntimeEvent): JsonObject {
   return parseJsonObject(event.payloadJson, `演化事件 ${event.type}`);
 }
 
-export function applyProductRuntimeEvent(
+function reduceProductRuntimeEvent(
   current: ProductRuntimeState,
   event: ProductRuntimeEvent,
+  trustedMutableState: boolean,
 ): ProductRuntimeState {
-  const state = cloneState(parseProductRuntimeState(current));
+  // Public single-event application remains immutable and validates its input.
+  // replayProductRuntimeEvents owns a freshly parsed clone, so parsing and
+  // cloning that entire state again for every event would make replay O(events
+  // * state-size). Its private mutable path keeps the same event validation and
+  // reducer logic while reducing an exclusively owned state in place.
+  const state = trustedMutableState
+    ? current
+    : cloneState(parseProductRuntimeState(current));
   if (event.sequence !== state.lastSequence + 1) {
     throw new Error(
       `演化事件序号不连续: 期望 ${state.lastSequence + 1}，收到 ${event.sequence}`,
@@ -926,6 +934,13 @@ export function applyProductRuntimeEvent(
   return state;
 }
 
+export function applyProductRuntimeEvent(
+  current: ProductRuntimeState,
+  event: ProductRuntimeEvent,
+): ProductRuntimeState {
+  return reduceProductRuntimeEvent(current, event, false);
+}
+
 export function replayProductRuntimeEvents(
   initialState: ProductRuntimeState,
   events: readonly ProductRuntimeEvent[],
@@ -935,7 +950,7 @@ export function replayProductRuntimeEvents(
   const ordered = [...events]
     .filter((event) => event.sequence <= throughSequence)
     .sort((a, b) => a.sequence - b.sequence);
-  for (const event of ordered) state = applyProductRuntimeEvent(state, event);
+  for (const event of ordered) state = reduceProductRuntimeEvent(state, event, true);
   return state;
 }
 

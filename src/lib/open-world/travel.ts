@@ -33,12 +33,7 @@ export interface TextOpenWorldFastTravelOptionV1 {
   unavailableReasons: TextOpenWorldActionUnavailableReasonV1[]
 }
 
-/**
- * Projects only player-known, directly adjacent ordinary travel Actions.
- * Arrival is deliberately not a Scene/Quest trigger; it only commits the
- * Release-authored travel Effect sequence.
- */
-export function projectTextOpenWorldTravelOptionsV1(value: TextOpenWorldSessionProjectionV1): TextOpenWorldTravelOptionV1[] {
+function projectionDependencies(value: TextOpenWorldSessionProjectionV1) {
   const projection = parseTextOpenWorldSessionProjectionV1(value)
   const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
   const visibleLocations = new Map(projectTextOpenWorldPlayerMapV1({
@@ -47,6 +42,11 @@ export function projectTextOpenWorldTravelOptionsV1(value: TextOpenWorldSessionP
   }).locations.map(location => [location.locationKey, location]))
   const actions = createTextOpenWorldActionRegistryV1(projection.runtimePackage)
     .project(deriveTextOpenWorldContextsV1(projection).action)
+  return { projection, modules, visibleLocations, actions }
+}
+
+function ordinaryOptions(dependencies: ReturnType<typeof projectionDependencies>): TextOpenWorldTravelOptionV1[] {
+  const { projection, modules, visibleLocations, actions } = dependencies
   return actions.filter(entry => entry.action.category === 'travel'
     && entry.action.locationKeys.includes(projection.state.map.currentLocationKey))
     .flatMap(entry => {
@@ -74,17 +74,9 @@ export function projectTextOpenWorldTravelOptionsV1(value: TextOpenWorldSessionP
       || left.destinationLocationKey.localeCompare(right.destinationLocationKey))
 }
 
-/** Projects only previously visited, unlocked destinations for atomic fast travel. */
-export function projectTextOpenWorldFastTravelOptionsV1(value: TextOpenWorldSessionProjectionV1): TextOpenWorldFastTravelOptionV1[] {
-  const projection = parseTextOpenWorldSessionProjectionV1(value)
-  const modules = parseTextOpenWorldModulesV1(projection.runtimePackage)
-  const visibleLocations = new Map(projectTextOpenWorldPlayerMapV1({
-    runtimePackage: projection.runtimePackage,
-    state: projection.state,
-  }).locations.map(location => [location.locationKey, location]))
-  const projectedAction = createTextOpenWorldActionRegistryV1(projection.runtimePackage)
-    .project(deriveTextOpenWorldContextsV1(projection).action)
-    .find(entry => entry.action.category === 'fast-travel')
+function fastOptions(dependencies: ReturnType<typeof projectionDependencies>): TextOpenWorldFastTravelOptionV1[] {
+  const { projection, modules, visibleLocations, actions } = dependencies
+  const projectedAction = actions.find(entry => entry.action.category === 'fast-travel')
   if (!projectedAction) return []
   const effect = projectedAction.action.successEffectKeys.map(effectKey => modules.actions.effects.find(candidate => candidate.key === effectKey)!)
     .find(candidate => candidate.operation === 'fast-travel')
@@ -126,4 +118,30 @@ export function projectTextOpenWorldFastTravelOptionsV1(value: TextOpenWorldSess
         unavailableReasons,
       }
     })
+}
+
+/** One-pass projector used by the full map screen to avoid reparsing the same immutable package. */
+export function projectTextOpenWorldTravelSurfacesV1(value: TextOpenWorldSessionProjectionV1): {
+  ordinary: TextOpenWorldTravelOptionV1[]
+  fast: TextOpenWorldFastTravelOptionV1[]
+} {
+  const dependencies = projectionDependencies(value)
+  return {
+    ordinary: ordinaryOptions(dependencies),
+    fast: fastOptions(dependencies),
+  }
+}
+
+/**
+ * Projects only player-known, directly adjacent ordinary travel Actions.
+ * Arrival is deliberately not a Scene/Quest trigger; it only commits the
+ * Release-authored travel Effect sequence.
+ */
+export function projectTextOpenWorldTravelOptionsV1(value: TextOpenWorldSessionProjectionV1): TextOpenWorldTravelOptionV1[] {
+  return ordinaryOptions(projectionDependencies(value))
+}
+
+/** Projects only previously visited, unlocked destinations for atomic fast travel. */
+export function projectTextOpenWorldFastTravelOptionsV1(value: TextOpenWorldSessionProjectionV1): TextOpenWorldFastTravelOptionV1[] {
+  return fastOptions(projectionDependencies(value))
 }

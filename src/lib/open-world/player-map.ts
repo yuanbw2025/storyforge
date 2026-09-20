@@ -11,8 +11,7 @@ import {
 import { parseTextOpenWorldModulesV1 } from './modules'
 import { parseTextOpenWorldSessionProjectionV1 } from './session-projection'
 import {
-  projectTextOpenWorldFastTravelOptionsV1,
-  projectTextOpenWorldTravelOptionsV1,
+  projectTextOpenWorldTravelSurfacesV1,
   type TextOpenWorldFastTravelOptionV1,
   type TextOpenWorldTravelOptionV1,
 } from './travel'
@@ -85,8 +84,9 @@ export function projectTextOpenWorldPlayerMapScreenV1(
     runtimePackage: projection.runtimePackage,
     state: projection.state,
   })
-  const ordinaryOptions = projectTextOpenWorldTravelOptionsV1(projection)
-  const fastOptions = projectTextOpenWorldFastTravelOptionsV1(projection)
+  const travel = projectTextOpenWorldTravelSurfacesV1(projection)
+  const ordinaryOptions = travel.ordinary
+  const fastOptions = travel.fast
   const regionByKey = new Map(map.regions.map(region => [region.regionKey, region]))
   const visibleLocationByKey = new Map(map.locations.map(location => [location.locationKey, location]))
   const visibleEdgeKeys = new Set(map.edges.map(edge => edge.edgeKey))

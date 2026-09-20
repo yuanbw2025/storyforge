@@ -1,0 +1,86 @@
+{
+  "schema": "storyforge.text-open-world.g7-performance-matrix",
+  "version": 1,
+  "profileStatus": "local-automated-baseline",
+  "profileNote": "阈值来自当前本机Vitest fake-indexeddb与Playwright Chromium桌面/390x844实测，只作为回归上限，不代表未测硬件认证。",
+  "workloads": {
+    "locations": 96,
+    "inventoryItems": 180,
+    "questInstances": 120,
+    "replayEvents": 160
+  },
+  "budgetsMs": {
+    "packageParse": 250,
+    "sessionStartup": 6000,
+    "actionProjection": 1800,
+    "questProjection": 1000,
+    "inventoryProjection": 2200,
+    "mapProjection": 500,
+    "mapScreenProjection": 3000,
+    "replay": 1000,
+    "checkpointCreateAndVerify": 2000,
+    "projectExport": 1000,
+    "projectImport": 2500,
+    "formalSessionOpen": 50000,
+    "largeMapRender": 20000,
+    "largeQuestLogRender": 5000,
+    "largeInventoryRender": 5000,
+    "mobileMapListRender": 5000
+  },
+  "gates": [
+    {
+      "id": "TOW-G7-P01",
+      "title": "大Release解析和正式Session建立必须通过真实Schema与来源绑定",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD7-large-state-performance.test.ts",
+      "testName": "大Release解析、Session启动、Action、任务、背包和地图投影保持在登记基线内"
+    },
+    {
+      "id": "TOW-G7-P02",
+      "title": "长任务账本后的Action计算和任务日志投影必须保持有界",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD7-large-state-performance.test.ts",
+      "testName": "大Release解析、Session启动、Action、任务、背包和地图投影保持在登记基线内"
+    },
+    {
+      "id": "TOW-G7-P03",
+      "title": "大背包与大地图投影必须使用正式运行包并保持有界",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD7-large-state-performance.test.ts",
+      "testName": "大Release解析、Session启动、Action、任务、背包和地图投影保持在登记基线内"
+    },
+    {
+      "id": "TOW-G7-P04",
+      "title": "160条Event完整重放和Checkpoint恢复必须可验且保持线性",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD7-large-state-performance.test.ts",
+      "testName": "160条事件的完整重放与Checkpoint恢复保持可验且在登记基线内"
+    },
+    {
+      "id": "TOW-G7-P05",
+      "title": "大状态项目必须通过IndexedDB导出导入、引用重映射和当前Schema门",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD7-large-state-performance.test.ts",
+      "testName": "含大状态Session、事件和Checkpoint的项目可在IndexedDB中导出导入并重映射"
+    },
+    {
+      "id": "TOW-G7-P06",
+      "title": "桌面Chromium必须真实渲染大地图、长任务日志和大背包",
+      "evidenceFile": "tests/e2e/text-open-world-large-state-performance.spec.ts",
+      "testName": "大状态正式Release在桌面与390px移动端保持性能、等价地图和基础可访问性"
+    },
+    {
+      "id": "TOW-G7-P07",
+      "title": "390像素移动端必须保留与SVG地图等价的完整地点列表且无横向溢出",
+      "evidenceFile": "tests/e2e/text-open-world-large-state-performance.spec.ts",
+      "testName": "大状态正式Release在桌面与390px移动端保持性能、等价地图和基础可访问性"
+    },
+    {
+      "id": "TOW-G7-P08",
+      "title": "大状态移动界面的交互控件、导航地标和键盘焦点必须具备基础可访问性",
+      "evidenceFile": "tests/e2e/text-open-world-large-state-performance.spec.ts",
+      "testName": "大状态正式Release在桌面与390px移动端保持性能、等价地图和基础可访问性"
+    },
+    {
+      "id": "TOW-G7-P09",
+      "title": "IndexedDB当前命名空间、唯一Schema和PROJECT_TABLES覆盖必须继续一致",
+      "evidenceFile": "tests/regression/R-CURRENT-SCHEMA-single-baseline.test.ts",
+      "testName": "空浏览器存储直接建立当前 schema，不执行升级或重置"
+    }
+  ]
+}
