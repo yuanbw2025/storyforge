@@ -631,6 +631,7 @@ export async function generateTextOpenWorldRuntimeQuestPackagingV1(input: {
     stepId: TEXT_OPEN_WORLD_RUNTIME_QUEST_PACKAGING_STEP_ID_V1,
     attempt: 1,
   })
+  let providerResponseObserved = false
   try {
     const preparation = await prepareTextOpenWorldRuntimeAIContextV1({
       scope: input.scope,
@@ -680,6 +681,7 @@ export async function generateTextOpenWorldRuntimeQuestPackagingV1(input: {
           projectId: input.scope.projectId,
           signal: input.signal,
         })
+    providerResponseObserved = true
     snapshot = await append(input.scope, input.productRuntimeSessionId, snapshot, 'model.responded', {
       stepId: TEXT_OPEN_WORLD_RUNTIME_QUEST_PACKAGING_STEP_ID_V1,
       attempt: 1,
@@ -806,25 +808,15 @@ export async function generateTextOpenWorldRuntimeQuestPackagingV1(input: {
     })
     return presentationFromCandidate(candidate)
   } catch (error) {
-    const current = await readInstanceAgentRunV1(input.scope, snapshot.run.id)
-    let failed = current
-    if (failed.projection.steps[TEXT_OPEN_WORLD_RUNTIME_QUEST_PACKAGING_STEP_ID_V1]?.status === 'running') {
-      failed = await append(input.scope, input.productRuntimeSessionId, failed, 'step.failed', {
-        stepId: TEXT_OPEN_WORLD_RUNTIME_QUEST_PACKAGING_STEP_ID_V1,
-        attempt: 1,
-        code: input.signal?.aborted ? 'runtime-quest-packaging-cancelled' : 'runtime-quest-packaging-failed',
-        retryable: false,
-        category: input.signal?.aborted ? 'cancelled' : 'protocol',
-        action: 'fail',
-      })
-    }
-    if (!['completed', 'failed', 'cancelled'].includes(failed.projection.state)) {
-      await append(input.scope, input.productRuntimeSessionId, failed,
-        input.signal?.aborted ? 'run.cancelled' : 'run.failed',
-        input.signal?.aborted
-          ? { reason: 'runtime-quest-packaging-cancelled' }
-          : { code: 'runtime-quest-packaging-failed', retryable: false })
-    }
-    throw error
+    const { failTextOpenWorldRuntimeAIRunV1 } = await import('./runtime-ai-resilience')
+    throw await failTextOpenWorldRuntimeAIRunV1({
+      scope: input.scope,
+      productRuntimeSessionId: input.productRuntimeSessionId,
+      runId: snapshot.run.id,
+      stepId: TEXT_OPEN_WORLD_RUNTIME_QUEST_PACKAGING_STEP_ID_V1,
+      error,
+      signal: input.signal,
+      providerResponseObserved,
+    })
   }
 }

@@ -11,6 +11,7 @@ import type {
   TextOpenWorldRuntimeQuestPackagingPresentationV1,
   TextOpenWorldRuntimeQuestPackagingSlotV1,
 } from '../../lib/open-world/runtime-quest-packaging'
+import type { TextOpenWorldRuntimeAIFailureV1 } from '../../lib/open-world/runtime-ai-error'
 import type {
   ProductRuntimeEvent,
   TextOpenWorldActionAvailabilityV1,
@@ -156,7 +157,10 @@ export interface TextOpenWorldQuestLogPanelProps {
   questPackagingSlots?: Readonly<Record<string, TextOpenWorldRuntimeQuestPackagingSlotV1>>
   questPackagingPresentations?: Readonly<Record<string, TextOpenWorldRuntimeQuestPackagingPresentationV1>>
   questPackagingBusyInstanceKey?: string | null
-  questPackagingIssueInstanceKey?: string | null
+  questPackagingIssue?: {
+    questInstanceKey: string
+    failure: TextOpenWorldRuntimeAIFailureV1
+  } | null
   onGenerateQuestPackaging?(questInstanceKey: string): void
   onExecute(action: TextOpenWorldActionAvailabilityV1, instanceKey: string): void
   onFocusLocation(locationKey: string): void
@@ -407,8 +411,8 @@ export default function TextOpenWorldQuestLogPanel(props: TextOpenWorldQuestLogP
           presentation={props.questPackagingPresentations?.[selected.instanceKey] ?? null}
           completed={selected.status === 'completed'}
           busy={props.questPackagingBusyInstanceKey === selected.instanceKey}
-          issue={props.questPackagingIssueInstanceKey === selected.instanceKey
-            ? 'runtime-quest-packaging-unavailable'
+          issue={props.questPackagingIssue?.questInstanceKey === selected.instanceKey
+            ? props.questPackagingIssue.failure
             : null}
           onGenerate={props.onGenerateQuestPackaging ?? (() => undefined)}
         />}

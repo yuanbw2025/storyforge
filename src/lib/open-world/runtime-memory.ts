@@ -7,7 +7,6 @@ import {
   appendAgentRunEventV1,
   appendRuntimeCandidateAdoptedV1,
   createAgentRunV1,
-  readInstanceAgentRunV1,
   type AgentRunSnapshotV1,
 } from '../agent/run/event-store'
 import { hashCanonicalValue } from '../agent/run/hash'
@@ -640,6 +639,7 @@ export async function generateAndCommitTextOpenWorldRuntimeMemoryV1(input: {
   snapshot = await append(input.scope, input.productRuntimeSessionId, snapshot, 'step.started', {
     stepId: TEXT_OPEN_WORLD_RUNTIME_MEMORY_STEP_ID_V1, attempt: 1,
   })
+  let providerResponseObserved = false
   try {
     const preparation = await prepareTextOpenWorldRuntimeAIContextV1({
       scope: input.scope, contractScope: contract.scope,
@@ -678,6 +678,7 @@ export async function generateAndCommitTextOpenWorldRuntimeMemoryV1(input: {
           skillId: 'prose.text-open-world-runtime-memory', executionBinding,
           messages, aiConfig: input.aiConfig!, projectId: input.scope.projectId, signal: input.signal,
         })
+    providerResponseObserved = true
     snapshot = await append(input.scope, input.productRuntimeSessionId, snapshot, 'model.responded', {
       stepId: TEXT_OPEN_WORLD_RUNTIME_MEMORY_STEP_ID_V1, attempt: 1,
       outputHash: await sha256Text(output),
@@ -816,21 +817,15 @@ export async function generateAndCommitTextOpenWorldRuntimeMemoryV1(input: {
       runId: snapshot.run.id,
     }
   } catch (error) {
-    const current = await readInstanceAgentRunV1(input.scope, snapshot.run.id)
-    let failed = current
-    if (failed.projection.steps[TEXT_OPEN_WORLD_RUNTIME_MEMORY_STEP_ID_V1]?.status === 'running') {
-      failed = await append(input.scope, input.productRuntimeSessionId, failed, 'step.failed', {
-        stepId: TEXT_OPEN_WORLD_RUNTIME_MEMORY_STEP_ID_V1, attempt: 1,
-        code: input.signal?.aborted ? 'runtime-memory-cancelled' : 'runtime-memory-failed',
-        retryable: false, category: input.signal?.aborted ? 'cancelled' : 'protocol', action: 'fail',
-      })
-    }
-    if (!['completed', 'failed', 'cancelled'].includes(failed.projection.state)) {
-      await append(input.scope, input.productRuntimeSessionId, failed,
-        input.signal?.aborted ? 'run.cancelled' : 'run.failed',
-        input.signal?.aborted ? { reason: 'runtime-memory-cancelled' }
-          : { code: 'runtime-memory-failed', retryable: false })
-    }
-    throw error
+    const { failTextOpenWorldRuntimeAIRunV1 } = await import('./runtime-ai-resilience')
+    throw await failTextOpenWorldRuntimeAIRunV1({
+      scope: input.scope,
+      productRuntimeSessionId: input.productRuntimeSessionId,
+      runId: snapshot.run.id,
+      stepId: TEXT_OPEN_WORLD_RUNTIME_MEMORY_STEP_ID_V1,
+      error,
+      signal: input.signal,
+      providerResponseObserved,
+    })
   }
 }

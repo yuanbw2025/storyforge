@@ -1,6 +1,8 @@
 import { Sparkles } from 'lucide-react'
 import type { TextOpenWorldFeedbackReceiptV1 } from '../../lib/types'
 import type { TextOpenWorldRuntimeExpressionPresentationV1 } from '../../lib/open-world/runtime-expression'
+import type { TextOpenWorldRuntimeAIFailureV1 } from '../../lib/open-world/runtime-ai-error'
+import TextOpenWorldRuntimeAIFailureNotice from './TextOpenWorldRuntimeAIFailureNotice'
 
 const KIND_LABELS: Record<TextOpenWorldRuntimeExpressionPresentationV1['kind'], string> = {
   scene: '场景结果',
@@ -13,7 +15,8 @@ export interface TextOpenWorldResultExpressionPanelProps {
   feedback: TextOpenWorldFeedbackReceiptV1 | null
   presentation: TextOpenWorldRuntimeExpressionPresentationV1 | null
   busy: boolean
-  issue: string | null
+  /** String is accepted only for restored/legacy callers and is never rendered verbatim. */
+  issue: TextOpenWorldRuntimeAIFailureV1 | string | null
   onGenerate(): void
 }
 
@@ -30,6 +33,7 @@ export default function TextOpenWorldResultExpressionPanel(
     && props.presentation.commandId === terminal.commandId
     ? props.presentation
     : null
+  const governedFailure = props.issue && typeof props.issue !== 'string' ? props.issue : null
   return <section
     className="open-world-runtime-expression"
     data-testid="text-open-world-runtime-expression"
@@ -50,13 +54,22 @@ export default function TextOpenWorldResultExpressionPanel(
       </small>
     </> : <>
       <p>“{terminal.presentation.headline}”已经由确定性规则结算。你可以让AI只依据这份回执补充现场感。</p>
-      {props.issue && <p role="status" className="open-world-runtime-expression-issue">
-        AI演绎当前不可用；上方系统结算与游戏状态不受影响。
-      </p>}
-      <button type="button" disabled={props.busy} onClick={props.onGenerate}>
-        <Sparkles aria-hidden="true" />
-        {props.busy ? '正在核对回执并演绎…' : props.issue ? '重新尝试AI演绎' : 'AI演绎本次结果'}
-      </button>
+      {governedFailure ? <TextOpenWorldRuntimeAIFailureNotice
+        failure={governedFailure}
+        busy={props.busy}
+        retryLabel="明确重试AI演绎"
+        onRetry={props.onGenerate}
+      /> : props.issue ? <>
+        <p role="status" className="open-world-runtime-expression-issue">
+          AI演绎当前不可用；上方系统结算与游戏状态不受影响。
+        </p>
+        <button type="button" disabled={props.busy} onClick={props.onGenerate}>
+          <Sparkles aria-hidden="true" />重新尝试AI演绎
+        </button>
+      </> : <button type="button" disabled={props.busy} onClick={props.onGenerate}>
+          <Sparkles aria-hidden="true" />
+          {props.busy ? '正在核对回执并演绎…' : 'AI演绎本次结果'}
+        </button>}
     </>}
   </section>
 }

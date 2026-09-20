@@ -38,6 +38,11 @@ import {
   type TextOpenWorldRuntimeQuestPackagingSlotV1,
 } from '../../lib/open-world/runtime-quest-packaging'
 import { createTextOpenWorldRuntimeAIPreferencesStoreV1 } from '../../lib/open-world/runtime-ai-preferences'
+import {
+  textOpenWorldRuntimeAIPlayerFailureV1,
+  type TextOpenWorldRuntimeAIFailureV1,
+} from '../../lib/open-world/runtime-ai-error'
+import type { TextOpenWorldRuntimeAIObservabilityV1 } from '../../lib/open-world/runtime-ai-observability'
 import { projectTextOpenWorldScenesV1 } from '../../lib/open-world/scene-projection'
 import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-projection'
 import type { TextOpenWorldCommandSourceV1 } from '../../lib/types'
@@ -56,6 +61,7 @@ import TextOpenWorldInventoryPanel from './TextOpenWorldInventoryPanel'
 import TextOpenWorldMapPanel, { type TextOpenWorldMapTravelRequestV1 } from './TextOpenWorldMapPanel'
 import TextOpenWorldQuestLogPanel from './TextOpenWorldQuestLogPanel'
 import TextOpenWorldResultExpressionPanel from './TextOpenWorldResultExpressionPanel'
+import TextOpenWorldRuntimeAIStatusPanel from './TextOpenWorldRuntimeAIStatusPanel'
 import TextOpenWorldScenePanel, {
   type TextOpenWorldSceneTutorialAvailabilityV1,
 } from './TextOpenWorldScenePanel'
@@ -79,6 +85,15 @@ const NOTIFICATION_CATEGORY_LABELS: Record<TextOpenWorldPlayerNotificationCatego
   combat: '战斗', achievement: '成就', 'random-event': '随机事件',
 }
 
+async function resolveRuntimeAIFailure(error: unknown): Promise<TextOpenWorldRuntimeAIFailureV1> {
+  const known = textOpenWorldRuntimeAIPlayerFailureV1(error)
+  if (known) return known
+  const { classifyTextOpenWorldRuntimeAIFailureV1 } = await import(
+    '../../lib/open-world/runtime-ai-resilience'
+  )
+  return classifyTextOpenWorldRuntimeAIFailureV1({ error })
+}
+
 export default function TextOpenWorldVNextPlayer() {
   const store = useTextOpenWorldPlayerStore()
   const aiConfig = useAIConfigStore(state => state.config)
@@ -88,10 +103,15 @@ export default function TextOpenWorldVNextPlayer() {
   const memoryAbortController = useRef<AbortController | null>(null)
   const [resultExpression, setResultExpression] = useState<TextOpenWorldRuntimeExpressionPresentationV1 | null>(null)
   const [resultExpressionBusy, setResultExpressionBusy] = useState(false)
-  const [resultExpressionIssue, setResultExpressionIssue] = useState<string | null>(null)
+  const [resultExpressionIssue, setResultExpressionIssue] = useState<TextOpenWorldRuntimeAIFailureV1 | null>(null)
   const [questPackagingPresentations, setQuestPackagingPresentations] = useState<Record<string, TextOpenWorldRuntimeQuestPackagingPresentationV1>>({})
   const [questPackagingBusyInstanceKey, setQuestPackagingBusyInstanceKey] = useState<string | null>(null)
-  const [questPackagingIssueInstanceKey, setQuestPackagingIssueInstanceKey] = useState<string | null>(null)
+  const [questPackagingIssue, setQuestPackagingIssue] = useState<{
+    questInstanceKey: string
+    failure: TextOpenWorldRuntimeAIFailureV1
+  } | null>(null)
+  const [runtimeAIObservability, setRuntimeAIObservability] = useState<TextOpenWorldRuntimeAIObservabilityV1 | null>(null)
+  const [runtimeAIObservabilityLoading, setRuntimeAIObservabilityLoading] = useState(false)
   const [dismissedCombatIdentity, setDismissedCombatIdentity] = useState<string | null>(null)
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     actionKey: string
@@ -171,6 +191,31 @@ export default function TextOpenWorldVNextPlayer() {
   const runtimeDirectionAIConfig = runtimeAIPreferences.directionEnabled && isAIConfigReady(aiConfig)
     ? aiConfig
     : undefined
+  const refreshRuntimeAIObservability = useCallback(async () => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    if (!liveStore.scope || liveSessionId == null) {
+      setRuntimeAIObservability(null)
+      return
+    }
+    setRuntimeAIObservabilityLoading(true)
+    try {
+      const { projectTextOpenWorldRuntimeAIObservabilityV1 } = await import(
+        '../../lib/open-world/runtime-ai-observability'
+      )
+      const value = await projectTextOpenWorldRuntimeAIObservabilityV1({
+        scope: liveStore.scope,
+        productRuntimeSessionId: liveSessionId,
+      })
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (currentSessionId === liveSessionId) setRuntimeAIObservability(value)
+    } finally {
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (currentSessionId === liveSessionId) setRuntimeAIObservabilityLoading(false)
+    }
+  }, [])
   const handleSceneTutorialAvailability = useCallback((
     value: TextOpenWorldSceneTutorialAvailabilityV1,
   ) => {
@@ -324,6 +369,11 @@ export default function TextOpenWorldVNextPlayer() {
   }, [projectionSequence, sessionKey])
 
   useEffect(() => {
+    setRuntimeAIObservability(null)
+    void refreshRuntimeAIObservability()
+  }, [projectionSequence, refreshRuntimeAIObservability, sessionKey])
+
+  useEffect(() => {
     expressionAbortController.current?.abort()
     expressionAbortController.current = null
     setResultExpression(null)
@@ -340,7 +390,7 @@ export default function TextOpenWorldVNextPlayer() {
     questPackagingAbortController.current = null
     setQuestPackagingPresentations({})
     setQuestPackagingBusyInstanceKey(null)
-    setQuestPackagingIssueInstanceKey(null)
+    setQuestPackagingIssue(null)
     return () => {
       questPackagingAbortController.current?.abort()
       questPackagingAbortController.current = null
@@ -458,18 +508,28 @@ export default function TextOpenWorldVNextPlayer() {
       if (controller.signal.aborted || currentSessionId !== liveSessionId
         || current.lastFeedback?.receiptHash !== receiptHash) return
       setResultExpression(presentation)
-    }).catch(() => {
+    }).catch(error => {
       const current = useTextOpenWorldPlayerStore.getState()
       const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
       if (controller.signal.aborted || currentSessionId !== liveSessionId
         || current.lastFeedback?.receiptHash !== receiptHash) return
-      setResultExpressionIssue('runtime-expression-unavailable')
+      const known = textOpenWorldRuntimeAIPlayerFailureV1(error)
+      if (known) setResultExpressionIssue(known)
+      else void resolveRuntimeAIFailure(error).then(failure => {
+        const latest = useTextOpenWorldPlayerStore.getState()
+        const latestSessionId = latest.selectedSession?.id ?? latest.selectedSessionId
+        if (latestSessionId === liveSessionId
+          && latest.lastFeedback?.receiptHash === receiptHash) setResultExpressionIssue(failure)
+      })
     }).finally(() => {
       if (expressionAbortController.current === controller) expressionAbortController.current = null
       const current = useTextOpenWorldPlayerStore.getState()
       const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
       if (!controller.signal.aborted && currentSessionId === liveSessionId
-        && current.lastFeedback?.receiptHash === receiptHash) setResultExpressionBusy(false)
+        && current.lastFeedback?.receiptHash === receiptHash) {
+        setResultExpressionBusy(false)
+        void refreshRuntimeAIObservability()
+      }
     })
   }
   const generateQuestPackaging = (questInstanceKey: string) => {
@@ -488,7 +548,7 @@ export default function TextOpenWorldVNextPlayer() {
     const controller = new AbortController()
     questPackagingAbortController.current = controller
     setQuestPackagingBusyInstanceKey(questInstanceKey)
-    setQuestPackagingIssueInstanceKey(null)
+    setQuestPackagingIssue(null)
     void generateTextOpenWorldRuntimeQuestPackagingV1({
       scope: liveStore.scope,
       productRuntimeSessionId: liveSessionId,
@@ -512,18 +572,25 @@ export default function TextOpenWorldVNextPlayer() {
         ...currentPresentations,
         [questInstanceKey]: presentation,
       }))
-      setQuestPackagingIssueInstanceKey(currentIssue => currentIssue === questInstanceKey ? null : currentIssue)
-    }).catch(() => {
+      setQuestPackagingIssue(currentIssue => currentIssue?.questInstanceKey === questInstanceKey ? null : currentIssue)
+    }).catch(error => {
       const current = useTextOpenWorldPlayerStore.getState()
       const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
       if (controller.signal.aborted || currentSessionId !== liveSessionId) return
-      setQuestPackagingIssueInstanceKey(questInstanceKey)
+      const known = textOpenWorldRuntimeAIPlayerFailureV1(error)
+      if (known) setQuestPackagingIssue({ questInstanceKey, failure: known })
+      else void resolveRuntimeAIFailure(error).then(failure => {
+        const latest = useTextOpenWorldPlayerStore.getState()
+        const latestSessionId = latest.selectedSession?.id ?? latest.selectedSessionId
+        if (latestSessionId === liveSessionId) setQuestPackagingIssue({ questInstanceKey, failure })
+      })
     }).finally(() => {
       if (questPackagingAbortController.current === controller) questPackagingAbortController.current = null
       const current = useTextOpenWorldPlayerStore.getState()
       const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
       if (!controller.signal.aborted && currentSessionId === liveSessionId) {
         setQuestPackagingBusyInstanceKey(currentBusy => currentBusy === questInstanceKey ? null : currentBusy)
+        void refreshRuntimeAIObservability()
       }
     })
   }
@@ -612,10 +679,17 @@ export default function TextOpenWorldVNextPlayer() {
         return { ...intent, dialogue }
       } catch (error) {
         if (controller.signal.aborted) throw error
-        return { ...intent, dialogue: createTextOpenWorldRuntimeDialogueFallbackV1(selectedScene) }
+        const runtimeAIFailure = textOpenWorldRuntimeAIPlayerFailureV1(error)
+          ?? await resolveRuntimeAIFailure(error)
+        return {
+          ...intent,
+          dialogue: createTextOpenWorldRuntimeDialogueFallbackV1(selectedScene),
+          runtimeAIFailure,
+        }
       }
     } finally {
       if (intentAbortController.current === controller) intentAbortController.current = null
+      void refreshRuntimeAIObservability()
     }
   }
 
@@ -657,6 +731,7 @@ export default function TextOpenWorldVNextPlayer() {
       return result
     } finally {
       if (memoryAbortController.current === controller) memoryAbortController.current = null
+      void refreshRuntimeAIObservability()
     }
   }
 
@@ -889,7 +964,7 @@ export default function TextOpenWorldVNextPlayer() {
         questPackagingSlots={questPackagingSlots}
         questPackagingPresentations={questPackagingPresentations}
         questPackagingBusyInstanceKey={questPackagingBusyInstanceKey}
-        questPackagingIssueInstanceKey={questPackagingIssueInstanceKey}
+        questPackagingIssue={questPackagingIssue}
         onGenerateQuestPackaging={generateQuestPackaging}
         onExecute={(action, instanceKey) => executeProjectedAction(action, instanceKey)}
         onFocusLocation={focusQuestLocation}
@@ -927,6 +1002,12 @@ export default function TextOpenWorldVNextPlayer() {
       role="status"
       data-testid="text-open-world-world-record-synchronizing"
     >世界记录正在核对，完成前不会展示不完整或尚未揭示的内容。</article>}
+    <TextOpenWorldRuntimeAIStatusPanel
+      configured={isAIConfigReady(aiConfig)}
+      loading={runtimeAIObservabilityLoading}
+      value={runtimeAIObservability}
+      onRefresh={() => void refreshRuntimeAIObservability()}
+    />
     <TextOpenWorldSaveSettingsPanel
       sessionKey={sessionKey}
       productionKey={productionKey}

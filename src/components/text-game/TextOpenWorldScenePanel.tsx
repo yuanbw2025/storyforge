@@ -23,6 +23,11 @@ import type {
   TextOpenWorldRuntimeMemoryDialogueTurnV1,
   TextOpenWorldRuntimeMemoryPresentationV1,
 } from '../../lib/open-world/runtime-memory'
+import {
+  textOpenWorldRuntimeAIPlayerFailureV1,
+  type TextOpenWorldRuntimeAIFailureV1,
+} from '../../lib/open-world/runtime-ai-error'
+import TextOpenWorldRuntimeAIFailureNotice from './TextOpenWorldRuntimeAIFailureNotice'
 
 export interface TextOpenWorldSceneTutorialAvailabilityV1 {
   systemActions: boolean
@@ -72,6 +77,7 @@ interface TextOpenWorldScenePanelProps {
 
 export interface TextOpenWorldSceneNaturalInputResolutionV1 extends TextOpenWorldRuntimeIntentResolutionV1 {
   dialogue?: TextOpenWorldRuntimeDialoguePresentationV1
+  runtimeAIFailure?: TextOpenWorldRuntimeAIFailureV1
 }
 
 type InteractionNotice = {
@@ -187,6 +193,10 @@ export default function TextOpenWorldScenePanel({
   const [dialogueTurns, setDialogueTurns] = useState<PresentedDialogueTurn[]>([])
   const [memoryBusy, setMemoryBusy] = useState(false)
   const [memoryNotice, setMemoryNotice] = useState<string | null>(null)
+  const [runtimeAIFailure, setRuntimeAIFailure] = useState<{
+    failure: TextOpenWorldRuntimeAIFailureV1
+    operation: 'natural-input' | 'memory'
+  } | null>(null)
   const interpretationRevision = useRef(0)
 
   useEffect(() => {
@@ -198,6 +208,7 @@ export default function TextOpenWorldScenePanel({
     setDialogueTurns([])
     setMemoryBusy(false)
     setMemoryNotice(null)
+    setRuntimeAIFailure(null)
     interpretationRevision.current += 1
   }, [eventSequence, projection.recommendedSceneKey, sessionKey])
 
@@ -291,6 +302,7 @@ export default function TextOpenWorldScenePanel({
   const submitNaturalInput = async () => {
     const normalized = normalizeUtterance(naturalInput)
     if (!normalized || !naturalInputEnabled) return
+    setRuntimeAIFailure(null)
     const matches = naturalCandidates.filter(candidate => normalizeUtterance(candidate.example) === normalized)
     const actionKeys = [...new Set(matches.map(match => match.actionKey))]
     if (actionKeys.length === 1) {
@@ -394,7 +406,13 @@ export default function TextOpenWorldScenePanel({
             ? 'NPC已按当前人格、态度和可说知识回应；这段对白没有直接改变游戏状态。'
             : dialogue.boundaryExplanation,
         })
-        setNaturalInput('')
+        if (resolution.runtimeAIFailure) {
+          setRuntimeAIFailure({
+            failure: resolution.runtimeAIFailure,
+            operation: 'natural-input',
+          })
+        }
+        if (!resolution.runtimeAIFailure) setNaturalInput('')
         return
       }
       const alternatives = sceneActions.slice(0, 3).map(action => `“${action.action.label}”`).join('、')
@@ -403,12 +421,14 @@ export default function TextOpenWorldScenePanel({
         tone: 'boundary',
         message: `${safeReply} 当前没有改变世界状态。${alternatives ? `你可以改用 ${alternatives}。` : ''}`,
       })
-    } catch {
+    } catch (error) {
       if (interpretationRevision.current !== requestRevision) return
+      const failure = textOpenWorldRuntimeAIPlayerFailureV1(error)
+      if (failure) setRuntimeAIFailure({ failure, operation: 'natural-input' })
       const alternatives = sceneActions.slice(0, 3).map(action => `“${action.action.label}”`).join('、')
       setNotice({
         tone: 'boundary',
-        message: `AI理解当前不可用，因此没有改变世界状态。${alternatives ? `你仍可改用 ${alternatives}，或输入发布时给出的示例。` : ''}`,
+        message: `${failure?.message ?? 'AI理解当前不可用'}，因此没有改变世界状态。${alternatives ? `你仍可改用 ${alternatives}，或输入发布时给出的示例。` : ''}`,
       })
     } finally {
       if (interpretationRevision.current === requestRevision) setInterpreting(false)
@@ -417,6 +437,7 @@ export default function TextOpenWorldScenePanel({
 
   const commitDialogueMemory = async () => {
     if (!scene?.actor || !onCommitMemory || dialogueTurns.length < 2 || memoryBusy) return
+    setRuntimeAIFailure(null)
     setMemoryBusy(true)
     setMemoryNotice('正在把本场景对白压缩为最小长期记忆；完成前不会改变游戏状态。')
     try {
@@ -440,8 +461,10 @@ export default function TextOpenWorldScenePanel({
       })
       setDialogueTurns([])
       setMemoryNotice(`已写入长期记忆：${result.summary}`)
-    } catch {
-      setMemoryNotice('长期记忆整理失败；临时对白和确定性玩法不受影响，可以稍后重试。')
+    } catch (error) {
+      const failure = textOpenWorldRuntimeAIPlayerFailureV1(error)
+      if (failure) setRuntimeAIFailure({ failure, operation: 'memory' })
+      setMemoryNotice(`${failure?.message ?? '长期记忆整理失败'}；临时对白和确定性玩法不受影响。`)
     } finally {
       setMemoryBusy(false)
     }
@@ -538,6 +561,14 @@ export default function TextOpenWorldScenePanel({
     {memoryNotice && <div className="open-world-scene-notice is-boundary" role="status" aria-live="polite" data-testid="text-open-world-memory-notice">
       {memoryNotice}
     </div>}
+    {runtimeAIFailure && <TextOpenWorldRuntimeAIFailureNotice
+      failure={runtimeAIFailure.failure}
+      busy={interpreting || memoryBusy}
+      retryLabel={runtimeAIFailure.operation === 'memory' ? '明确重试记忆整理' : '明确重试这句话'}
+      onRetry={runtimeAIFailure.operation === 'memory'
+        ? () => void commitDialogueMemory()
+        : () => void submitNaturalInput()}
+    />}
 
     {scene?.fixedChoices.length ? <section
       className="open-world-scene-input-card"

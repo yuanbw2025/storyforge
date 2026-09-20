@@ -151,6 +151,32 @@
 .open-world-runtime-quest-packaging>button { min-height: 38px; justify-content: center; justify-self: start; padding: 0 12px; border: 1px solid rgba(197,154,86,.42); border-radius: 7px; background: rgba(113,78,31,.17); color: #eedab7; font-size: 9px; cursor: pointer; }
 .open-world-runtime-quest-packaging>button:hover:not(:disabled) { border-color: rgba(222,180,111,.72); background: rgba(126,86,33,.29); }
 .open-world-runtime-quest-packaging>button:disabled { opacity: .46; cursor: not-allowed; }
+.open-world-runtime-ai-failure { display: grid; min-width: 0; gap: 6px; padding: 10px 11px; border: 1px solid rgba(205,151,78,.34); border-radius: 8px; background: rgba(104,67,24,.14); }
+.open-world-runtime-ai-failure>header,.open-world-runtime-ai-failure>button { display: inline-flex; align-items: center; gap: 7px; }
+.open-world-runtime-ai-failure>header { color: #e4bd80; font-size: 9px; line-height: 1.45; }
+.open-world-runtime-ai-failure>p { margin: 0; color: #b7c1bd; font-size: 9px; line-height: 1.55; }
+.open-world-runtime-ai-failure>small { color: #9b8670; font-size: 8px; line-height: 1.5; }
+.open-world-runtime-ai-failure>button { min-height: 34px; justify-self: start; padding: 0 10px; border: 1px solid rgba(205,151,78,.42); border-radius: 7px; background: rgba(120,75,25,.18); color: #f0d3a4; font-size: 9px; cursor: pointer; }
+.open-world-runtime-ai-failure>button:disabled { opacity: .46; cursor: wait; }
+.open-world-runtime-ai-status { display: grid; min-width: 0; gap: 10px; padding: 14px; border: 1px solid rgba(116,159,166,.28); border-radius: 10px; background: linear-gradient(130deg,rgba(40,77,82,.14),rgba(49,42,69,.12)); }
+.open-world-runtime-ai-status>header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.open-world-runtime-ai-status>header>span,.open-world-runtime-ai-status>header button,.open-world-runtime-ai-status>p { display: flex; align-items: center; gap: 7px; }
+.open-world-runtime-ai-status>header strong { color: #d9e8e5; font-family: var(--font-serif); font-size: 15px; font-weight: 500; }
+.open-world-runtime-ai-status>header button { min-height: 32px; padding: 0 9px; border: 1px solid rgba(116,159,166,.35); border-radius: 7px; background: rgba(40,77,82,.15); color: #b9d4d1; font-size: 9px; cursor: pointer; }
+.open-world-runtime-ai-status>p { margin: 0; color: #aebdb9; font-size: 9px; line-height: 1.55; }
+.open-world-runtime-ai-status>dl { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 7px; margin: 0; }
+.open-world-runtime-ai-status>dl>div { display: grid; gap: 3px; min-width: 0; padding: 8px; border-radius: 7px; background: rgba(2,10,12,.24); }
+.open-world-runtime-ai-status dt,.open-world-runtime-ai-status>small { color: #718889; font-size: 8px; }
+.open-world-runtime-ai-status dd { margin: 0; color: #d4dfdc; font-family: var(--font-mono); font-size: 9px; overflow-wrap: anywhere; }
+.open-world-runtime-ai-status details { display: grid; gap: 9px; }
+.open-world-runtime-ai-status summary { color: #9fc1bd; font-size: 9px; cursor: pointer; }
+.open-world-runtime-ai-budget-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; margin-top: 8px; }
+.open-world-runtime-ai-budget-grid article { display: grid; gap: 2px; padding: 7px 8px; border: 1px solid rgba(116,159,166,.18); border-radius: 6px; }
+.open-world-runtime-ai-budget-grid strong { color: #c8d9d5; font-size: 9px; }
+.open-world-runtime-ai-budget-grid span,.open-world-runtime-ai-status ol { color: #7f9694; font-size: 8px; }
+.open-world-runtime-ai-status ol { display: grid; gap: 5px; margin: 9px 0 0; padding-left: 18px; }
+.open-world-runtime-ai-status li span { color: #b4c7c3; margin-right: 7px; }
+.open-world-runtime-ai-status li strong { color: #d8c095; margin-right: 7px; }
 .open-world-scene-input-card,.open-world-scene-receipt { display: grid; min-width: 0; gap: 10px; padding: 14px 15px; border: 1px solid rgba(255,255,255,.09); border-radius: 9px; background: rgba(255,255,255,.026); }
 .open-world-scene-input-card>header { color: #d8e1de; font-size: 11px; }
 .open-world-scene-input-card>header small { color: #74898d; font-size: 8px; }

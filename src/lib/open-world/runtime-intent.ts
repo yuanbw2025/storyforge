@@ -4,7 +4,6 @@ import {
   appendAgentRunEventV1,
   appendRuntimeCandidateAdoptedV1,
   createAgentRunV1,
-  readInstanceAgentRunV1,
   type AgentRunSnapshotV1,
 } from '../agent/run/event-store'
 import { hashCanonicalValue } from '../agent/run/hash'
@@ -494,6 +493,7 @@ export async function generateTextOpenWorldRuntimeIntentV1(input: {
     stepId: TEXT_OPEN_WORLD_RUNTIME_INTENT_STEP_ID_V1,
     attempt: 1,
   })
+  let providerResponseObserved = false
   try {
     const preparation = await prepareTextOpenWorldRuntimeAIContextV1({
       scope: input.scope,
@@ -545,6 +545,7 @@ export async function generateTextOpenWorldRuntimeIntentV1(input: {
           projectId: input.scope.projectId,
           signal: input.signal,
         })
+    providerResponseObserved = true
     snapshot = await append(input.scope, input.productRuntimeSessionId, snapshot, 'model.responded', {
       stepId: TEXT_OPEN_WORLD_RUNTIME_INTENT_STEP_ID_V1,
       attempt: 1,
@@ -690,26 +691,16 @@ export async function generateTextOpenWorldRuntimeIntentV1(input: {
       boundaryExplanation: draft.boundaryExplanation,
     }
   } catch (error) {
-    const current = await readInstanceAgentRunV1(input.scope, snapshot.run.id)
-    let failed = current
-    if (failed.projection.steps[TEXT_OPEN_WORLD_RUNTIME_INTENT_STEP_ID_V1]?.status === 'running') {
-      failed = await append(input.scope, input.productRuntimeSessionId, failed, 'step.failed', {
-        stepId: TEXT_OPEN_WORLD_RUNTIME_INTENT_STEP_ID_V1,
-        attempt: 1,
-        code: input.signal?.aborted ? 'runtime-intent-cancelled' : 'runtime-intent-failed',
-        retryable: false,
-        category: input.signal?.aborted ? 'cancelled' : 'protocol',
-        action: 'fail',
-      })
-    }
-    if (!['completed', 'failed', 'cancelled'].includes(failed.projection.state)) {
-      await append(input.scope, input.productRuntimeSessionId, failed,
-        input.signal?.aborted ? 'run.cancelled' : 'run.failed',
-        input.signal?.aborted
-          ? { reason: 'runtime-intent-cancelled' }
-          : { code: 'runtime-intent-failed', retryable: false })
-    }
-    throw error
+    const { failTextOpenWorldRuntimeAIRunV1 } = await import('./runtime-ai-resilience')
+    throw await failTextOpenWorldRuntimeAIRunV1({
+      scope: input.scope,
+      productRuntimeSessionId: input.productRuntimeSessionId,
+      runId: snapshot.run.id,
+      stepId: TEXT_OPEN_WORLD_RUNTIME_INTENT_STEP_ID_V1,
+      error,
+      signal: input.signal,
+      providerResponseObserved,
+    })
   }
 }
 
