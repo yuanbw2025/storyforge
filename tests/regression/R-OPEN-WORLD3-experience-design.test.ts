@@ -210,6 +210,7 @@ import {
 } from '../../src/lib/open-world/production-executor'
 import { readTextOpenWorldCreatorExecutionBriefV1 } from '../../src/lib/open-world/creator-production-start'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { seedSaltRidgeWorldV1 } from '../helpers/salt-ridge-world'
 import { seedAuthorizedTextOpenWorldCreatorBuildV1 } from '../helpers/text-open-world-creator-build'
 import {
   createTextOpenWorldReleaseQaExecutorV1,
@@ -325,8 +326,8 @@ function curationRunner(protagonistResourceKey: string): TextOpenWorldSourceCura
         unitKeys: context.units.map(unit => unit.unitKey),
         claims: [{
           claimKind: 'plot',
-          canonicalName: '雾港核心冒险',
-          statement: '守灯调查者从雾港危机出发，在地区探索中成长并守住核心目标。',
+          canonicalName: '盐脊港核心冒险',
+          statement: '来信调查者从盐脊港危机出发，在地区探索中成长并守住核心目标。',
           entityKeys: ['story.mist-harbor', 'character.linzho'],
           coverageTags: [
             'story-core', 'protagonist', 'core-conflict', 'character',
@@ -352,8 +353,8 @@ function experienceRunner(options: { forgedClaim?: boolean } = {}): TextOpenWorl
         schema: 'storyforge.text-open-world-experience-draft',
         version: 1,
         experience: {
-          pitch: '在持续演化的雾港及周边地区调查危机，通过主线、重要支线与地区冒险逐步成长。',
-          playerFantasy: '成为能够旅行、战斗、调查并影响局部关系的守灯调查者。',
+          pitch: '在持续演化的盐脊港及周边地区调查危机，通过主线、重要支线与地区冒险逐步成长。',
+          playerFantasy: '成为能够旅行、战斗、调查并影响局部关系的来信调查者。',
           narrativePillars: ['受保护的长程主线', '地区化重要故事', '有后果的边界自由'],
           regionalVarietyPromise: '每个地区具有不同人物需求、风险、资源与可抛弃的小故事。',
           growthPromise: '通过任务、战斗与制作稳定获得等级、技能、装备和关系反馈。',
@@ -361,7 +362,7 @@ function experienceRunner(options: { forgedClaim?: boolean } = {}): TextOpenWorl
           sourceClaimKeys: [claimKey],
         },
         protagonist: {
-          identitySummary: '林舟是熟悉雾港规则、必须承担守护责任的守灯调查者。',
+          identitySummary: '澜砂是熟悉盐脊港规则、必须承担守护责任的来信调查者。',
           motivations: ['追查危机来源', '保护仍在运行的港口秩序'],
           personalStakes: ['失败会让家园继续失去安全边界'],
           sourceClaimKeys: [claimKey],
@@ -389,8 +390,8 @@ async function fixture() {
     visualLevel: 'key-scenes',
     audioLevel: 'none',
     qualityProfile: 'prototype',
-    playerRole: '扮演守灯调查者林舟',
-    openingSituation: '从雾港潮门危机开始，逐步进入两个完整地区。',
+    playerRole: '扮演来信调查者澜砂',
+    openingSituation: '从盐脊港潮门危机开始，逐步进入两个完整地区。',
     coreExperience: ['有边界的自由演绎', '长期任务成长', '地区探索'],
     requiredFacts: ['潮汐规则和主角身份必须保持'],
     forbiddenChanges: ['不得让主线核心目标永久失败'],
@@ -545,7 +546,7 @@ async function fixture() {
  * official Artifact adoption.
  */
 async function creatorSchedulerFixture() {
-  const owned = await seedCurrentProductWorld(`TOW scheduler ${crypto.randomUUID()}`)
+  const owned = await seedSaltRidgeWorldV1(`盐脊 G7 scheduler ${crypto.randomUUID()}`)
   const creator = await seedAuthorizedTextOpenWorldCreatorBuildV1({
     source: {
       kind: 'world-release',
@@ -554,6 +555,22 @@ async function creatorSchedulerFixture() {
       expectedReleaseHash: owned.release.contentHash,
     },
     sessionKey: `experience-scheduler-${crypto.randomUUID()}`,
+    briefDraft: {
+      gameTitle: '盐脊',
+      playerRole: '扮演收到失踪测潮师来信、能够往返两地调查的旅人澜砂。',
+      playerFantasy: '从陌生来客成长为能决定盐脊港与沉钟盆地共同未来的行动者。',
+      protagonistMode: 'source-character',
+      protagonistDirective: '选择来源角色旅人澜砂；不得让主角取代迟砾、苒秋、陆衡、苏弦、乌迟或白口的叙事职责。',
+      coreGoal: '查明潮脉衰竭，并在不牺牲盐脊港或沉钟盆地居民生存的前提下恢复可持续供水。',
+      primaryConflict: '盐脊港主张集中修复旧引潮机，沉钟盆地担心这会再次抽干支井，而白口正在利用双方的不信任。',
+      openingSituation: '玩家因迟砾留下的来信抵达白盐码头，从测潮所与港区低潮开始调查。',
+      experiencePillars: ['严格顺序主线', '角色与地区重要故事', '地区任务与有界自由探索'],
+      toneKeywords: ['边境奇幻', '调查冒险', '共同体抉择'],
+      mustKeep: ['潮脉、潮井和旧引潮机规则', '两个地区及十个命名地点', '两个都保障两地生存的结局'],
+      allowedInferences: ['允许补齐敌人、技能、装备、配方、奖励、任务实例和表现文本，但只能属于游戏Build。'],
+      forbiddenChanges: ['不得让毁灭任一地区或投靠白口成为合规结局', '不得把到达地点本身作为关键主线推进条件'],
+      authorNotes: '以盐脊Brief作为G7纵向验收世界，目标总游玩库存3至5小时。',
+    },
   })
   const [production, build, briefRow] = await Promise.all([
     db.productProductions.get(creator.productionId),
@@ -626,7 +643,7 @@ function rulesetRunner(options: { forgedClaim?: boolean } = {}): TextOpenWorldGa
       output: JSON.stringify({
         schema: 'storyforge.text-open-world-gameplay-ruleset-draft',
         version: 1,
-        rulesetTitle: '雾港标准冒险规则',
+        rulesetTitle: '盐脊港标准冒险规则',
         summary: '用简洁的成长、回合战斗、装备、制作和经济规则支撑以叙事为核心的地区冒险。',
         attributes: {
           power: { label: '腕力', meaning: '决定武器攻击的基础能力。' },
@@ -717,26 +734,26 @@ function playerBuildRunner(options: { sameAttributes?: boolean } = {}): TextOpen
       version: 1,
       identity: {
         pronouns: '他',
-        appearance: '披着受潮的守灯人短斗篷，随身带有旧港区留下的盐迹。',
-        background: '林舟熟悉雾港规则，并因潮门危机承担起调查与守护责任。',
+        appearance: '披着受潮的旅人短斗篷，随身带着迟砾来信和盐路留下的白痕。',
+        background: '澜砂因迟砾的来信来到盐脊，在两地旧立场之外承担调查责任。',
         personality: '谨慎、坚韧，对陌生线索保持克制的好奇。',
-        publicKnowledge: '港区居民知道他是参与调查的守灯人。',
+        publicKnowledge: '两地居民只知道他是受迟砾来信吸引而来的外乡调查者。',
         privateKnowledge: '他担心自己无法同时守住港口秩序和身边的人。',
         shortGoal: '查清潮门附近的首批异常。',
-        longGoal: '在地区冒险与成长中阻止危机吞没雾港。',
+        longGoal: '在地区冒险与成长中阻止危机吞没盐脊港。',
         portrayal: '用简短观察和务实判断回应世界，对危机保持警惕但不冷漠。',
       },
-      playstyleTitle: '敏锐的守灯调查者',
+      playstyleTitle: '敏锐的来信调查者',
       playstyleSummary: '以观察后的迅速出手为主，同时保留正面解决危险的能力。',
       primaryAttribute: 'agility',
       secondaryAttribute: options.sameAttributes ? 'agility' : 'power',
-      basicAttack: { title: '灯钩挥击', description: '用守灯短钩进行可靠的普通攻击。' },
+      basicAttack: { title: '盐钩挥击', description: '用旅行盐钩进行可靠的普通攻击。' },
       signatureSkill: {
         title: '潮隙突袭',
         description: '抓住敌人动作间隙快速突进，形成一次高压攻击。',
         combatPurpose: 'burst-damage',
       },
-      starterWeapon: { title: '旧守灯短钩', description: '便于在潮湿狭窄环境中挥动的基础武器。' },
+      starterWeapon: { title: '旧旅行盐钩', description: '便于在仓道和井台狭窄环境中挥动的基础武器。' },
       recoveryConsumable: { title: '盐草敷包', description: '用于战斗中稳定伤势的基础恢复用品。' },
     }),
     bindingReceipt: bindingReceipt(input.requirementKey),
@@ -821,16 +838,16 @@ function storyArchitectureRunner(options: {
     const sourceClaimKeys = [claimKey]
     const endings = [
       {
-        title: '共守潮门', outcomeSummary: '各地区共同承担潮门维护，雾港以协作换来稳定。',
+        title: '共潮议约', outcomeSummary: '两地共同管理中央引潮机，贸易恢复并由公开议约监督水源。',
         differentiationAxis: '地区协作与权力共享', decisivePlayerValue: '信任与共同责任',
-        coreGoalResolution: '林舟终止潮门危机，并建立多地区共同维护的新秩序。',
+        coreGoalResolution: '澜砂恢复两地可持续供水，并建立共同维护潮门的新秩序。',
         eligiblePathSummary: '适合持续帮助各地区并维护合作关系的游玩路径。', sourceClaimKeys,
       },
       {
-        title: '孤灯守界', outcomeSummary: '危机被终止，但林舟承担主要代价，地区保留更强自主性。',
-        differentiationAxis: '个人承担与地区自主', decisivePlayerValue: '牺牲与克制干预',
-        coreGoalResolution: '林舟以个人代价封住潮门，使沿岸免于继续被危机吞没。',
-        eligiblePathSummary: '适合优先保护地区自主、接受个人代价的游玩路径。', sourceClaimKeys,
+        title: '分井新路', outcomeSummary: '两地修复支井并保留互助通道，以分散维护替代中央垄断。',
+        differentiationAxis: '支井自治与跨地互助', decisivePlayerValue: '地方自主与可持续分流',
+        coreGoalResolution: '澜砂通过分流配方和支井修复恢复两地供水，终止中央潮门危机。',
+        eligiblePathSummary: '适合修复支井、获得盆地支持并保护地方自主的游玩路径。', sourceClaimKeys,
       },
     ]
     while (endings.length < context.gameBrief.scale.endingCount) {
@@ -840,7 +857,7 @@ function storyArchitectureRunner(options: {
         outcomeSummary: `危机被终止，沿岸以第${number}种责任安排进入重建。`,
         differentiationAxis: `重建责任分配${number}`,
         decisivePlayerValue: `长期选择组合${number}`,
-        coreGoalResolution: '林舟终止潮门危机，并让沿岸获得继续重建的条件。',
+        coreGoalResolution: '澜砂终止潮门危机，并让沿岸获得继续重建的条件。',
         eligiblePathSummary: `适合形成第${number}种地区后果组合的游玩路径。`,
         sourceClaimKeys,
       })
@@ -850,22 +867,22 @@ function storyArchitectureRunner(options: {
       output: JSON.stringify({
         schema: 'storyforge.text-open-world-story-architecture-draft',
         version: 1,
-        title: '雾港潮门纪事',
-        logline: '林舟从潮门异变出发，穿行多个地区查清危机，并以不同代价守住雾港。',
+        title: '盐脊港潮门纪事',
+        logline: '澜砂从潮门异变出发，穿行多个地区查清危机，并以不同代价守住盐脊港。',
         themeStatement: '守护不是维持原状，而是在代价中选择应由谁共同承担未来。',
         coreConflict: {
-          coreGoal: '终止持续吞没雾港边界的潮门危机。',
+          coreGoal: '终止持续吞没盐脊港边界的潮门危机。',
           protagonistDrive: '守住家园并查明危机为何重现。',
           opposingForce: '利用旧港盟约裂痕扩散潮灾的幕后力量。',
-          conflictMechanism: '每次局部解围都会揭开更深的地区利益冲突，并迫使林舟寻找可持续的解决办法。',
-          personalStakes: '林舟可能失去守灯人身份以及仍信任他的人。',
+          conflictMechanism: '每次局部解围都会揭开更深的地区利益冲突，并迫使澜砂寻找可持续的解决办法。',
+          personalStakes: '澜砂可能失去两地信任，也可能让迟砾的证据再次被利益冲突掩埋。',
           regionalStakes: '各地区可能因互不信任而拒绝协作，逐步失去安全边界。',
           worldStakes: '潮门秩序崩解会让沿岸聚落长期暴露在失控潮灾中。',
         },
         macroBeats: [
           {
             phase: 'opening', title: '潮门失序',
-            dramaticPurpose: '让主角承担守灯调查职责并确认危机不是偶发事故。',
+            dramaticPurpose: '让主角接受迟砾的调查委托并确认衰竭不是偶发事故。',
             protagonistChange: '从执行日常职责转为主动追查异常。',
             requiredReveal: '潮门异变与旧港盟约留下的裂痕有关。',
             spatialFunctionNeeds: ['提供安全起点与首个危机现场'], sourceClaimKeys,
@@ -881,7 +898,7 @@ function storyArchitectureRunner(options: {
             phase: 'turning-point', title: '旧约真相',
             dramaticPurpose: '重释危机成因，使玩家此前的地区经历获得新的意义。',
             protagonistChange: '从寻找单一敌人转为处理制度与个人共同造成的后果。',
-            requiredReveal: '旧盟约曾以牺牲边缘地区换取雾港核心区稳定。',
+            requiredReveal: '旧盟约曾以牺牲边缘地区换取盐脊港稳定。',
             spatialFunctionNeeds: ['提供真相揭示与价值冲突场所'], sourceClaimKeys,
           },
           {
@@ -895,7 +912,7 @@ function storyArchitectureRunner(options: {
             phase: 'resolution', title: '新灯亮起',
             dramaticPurpose: '完成核心目标，并按玩家长期选择呈现不同但兼容的结局。',
             protagonistChange: '成为能够定义新秩序而不只是服从旧规则的守护者。',
-            requiredReveal: '新的安全边界取决于林舟此前建立的信任与选择的代价。',
+            requiredReveal: '新的安全边界取决于澜砂此前建立的信任与选择的代价。',
             spatialFunctionNeeds: ['承载终局行动与结局回收'], sourceClaimKeys,
           },
         ],
@@ -909,15 +926,15 @@ function storyArchitectureRunner(options: {
             endingNumbers: allEndingNumbers, sourceClaimKeys,
           },
           {
-            kind: 'character', statement: '林舟会从守灯执行者成长为新秩序的定义者。',
-            setupBeatNumber: 1, setupDescription: '林舟最初只想完成守灯职责。',
+            kind: 'character', statement: '澜砂会从受来信引导的外乡调查者成长为新秩序的推动者。',
+            setupBeatNumber: 1, setupDescription: '澜砂最初只想完成迟砾来信中的调查委托。',
             callbacks: [{ beatNumber: 3, function: 'recontextualize', description: '旧约真相迫使他重新理解职责。' }],
             payoffBeatNumber: 5, payoffDescription: '他的价值选择决定新秩序的形式。',
             endingNumbers: [1], sourceClaimKeys,
           },
           {
             kind: 'world', statement: '多个地区的局部冒险会汇成可见的世界后果。',
-            setupBeatNumber: 1, setupDescription: '雾港首先暴露地区间依赖。',
+            setupBeatNumber: 1, setupDescription: '盐脊港首先暴露地区间依赖。',
             callbacks: [{ beatNumber: 3, function: 'complicate', description: '地区利益让共同解决方案变得困难。' }],
             payoffBeatNumber: 5, payoffDescription: '终局呈现各地区如何共同存续或保持自主。',
             endingNumbers: allEndingNumbers, sourceClaimKeys,
@@ -1034,36 +1051,36 @@ function regionSkeletonRunner(options: {
         startingLocationNumber: 1,
         regions: [
           {
-            title: '雾港核心区',
-            description: '守灯人、工坊与潮门共同维持的港口核心，也是玩家最初理解危机的安全起点。',
+            title: '盐脊港',
+            description: '码头、测潮所、集市与仓道共同维持的港口核心，也是玩家最初理解衰竭危机的安全起点。',
             theme: '职责、日常秩序与最初裂痕',
             narrativeRole: '承载开场危机、主角身份和最终回到家园时可见的变化。',
             ...grounding(1),
             hubLocationNumber: 1,
             locations: [
               {
-                title: '雾港潮门', description: '守灯人与居民出入的港口广场，潮门异变的痕迹仍清晰可见。',
+                title: '白盐码头', description: '商旅和居民出入的港口码头，低潮与供水紧张的迹象已清晰可见。',
                 kind: 'settlement', purpose: '提供开局叙事、安全服务、制作与地区旅行枢纽。',
                 functions: ['narrative', 'service', 'crafting', 'travel'],
                 earlyArrivalDescription: '主线未推进时，这里仍保持日常港务、基础服务和可反复调查的公开痕迹。',
                 ...grounding(1),
               },
               {
-                title: '守灯塔', description: '俯瞰潮门和沿岸航路的旧塔，保存守灯人的公开记录。',
-                kind: 'landmark', purpose: '承载主角身份、世界观察和后续叙事回收。',
+                title: '测潮所', description: '保存水尺、测潮档案和迟砾工作痕迹的石屋。',
+                kind: 'landmark', purpose: '承载主线调查、世界规则解释和后续证据回收。',
                 functions: ['narrative', 'exploration'],
                 earlyArrivalDescription: '玩家可查看公开记录与远眺沿岸，但关键真相不会因抵达而自动揭示。',
                 ...grounding(5),
               },
               {
-                title: '盐雾工坊', description: '修理灯具、武器和航行器材的公共工坊。',
+                title: '盐灯集市', description: '交易盐货、药剂、武器和修井材料的港口集市。',
                 kind: 'interior', purpose: '为装备制作、补给和普通居民委托预留功能空间。',
                 functions: ['service', 'crafting', 'exploration'],
                 earlyArrivalDescription: '工匠只提供与当前进度相符的普通服务，不泄露尚未发生的任务信息。',
                 ...grounding(2),
               },
               {
-                title: '退潮滩', description: '潮水退去后显露盐壳、残骸与危险生物的开阔滩地。',
+                title: '风蚀仓道', description: '盐风侵蚀的仓储道路，散布材料、运输痕迹与危险生物。',
                 kind: 'wilderness', purpose: '提供探索、基础战斗和地区小事件空间。',
                 functions: ['exploration', 'combat'],
                 earlyArrivalDescription: '这里始终可进行普通探索和战斗，主线相关遗留物只有在条件满足后才进入场景。',
@@ -1072,8 +1089,8 @@ function regionSkeletonRunner(options: {
             ],
           },
           {
-            title: '脊湾沿岸',
-            description: '与雾港互相依赖却长期保留戒心的沿岸地区，分布集市、峡谷与旧约遗迹。',
+            title: '沉钟盆地',
+            description: '与盐脊港互相依赖却长期保留戒心的低地聚落，分布村庄、营地、枯井与旧设施。',
             theme: '地区利益、旧约代价与协作选择',
             narrativeRole: '扩展地区差异，承载冲突升级、真相揭示、集结和终局选择。',
             sourceClaimKeys: [claimKey],
@@ -1081,28 +1098,28 @@ function regionSkeletonRunner(options: {
             hubLocationNumber: 1,
             locations: [
               {
-                title: '脊湾集市', description: '沿岸居民交换物资与消息的中立集市。',
+                title: '沉钟村', description: '盆地居民交换物资、维护井钟并讨论供水的生活中心。',
                 kind: 'settlement', purpose: '提供第二地区服务、旅行枢纽、地方传闻和重要人物交汇点。',
                 functions: ['narrative', 'service', 'travel'],
                 earlyArrivalDescription: '提前到达时只呈现日常贸易与当地态度，重要人物保持安全等待而不自动开场。',
                 ...grounding(2),
               },
               {
-                title: '旧约档案所', description: '存放沿岸盟约公开副本与残缺索引的石屋。',
+                title: '拾潮营地', description: '拾潮民议会活动并保存地方证词与旧盐路索引的营地。',
                 kind: 'interior', purpose: '为调查与分阶段真相揭示提供可控的叙事空间。',
                 functions: ['narrative', 'exploration'],
                 earlyArrivalDescription: '玩家只能阅读公开索引，关键卷宗由后续明确任务条件开放而非到达触发。',
                 ...grounding(3),
               },
               {
-                title: '裂潮峡', description: '潮灾侵蚀形成的峡谷，危险生物与旧设施散布其中。',
+                title: '枯井群', description: '盐化水井和旧管道散布的荒地，危险生物与设施遗迹藏在井间。',
                 kind: 'dungeon', purpose: '承载成长战斗、资源探索和危机升级的环境证据。',
                 functions: ['combat', 'exploration'],
                 earlyArrivalDescription: '普通敌人与资源始终存在，涉及核心危机的场景在主线到达前不会加载。',
                 ...grounding(2),
               },
               {
-                title: '沿岸议事台', description: '各聚落处理共同事务的露天环形议场。',
+                title: '旧引潮机', description: '曾以盆地支井为代价维持港口的中央设施，也是终局冲突的核心现场。',
                 kind: 'landmark', purpose: '承载地区群像、后果汇聚与多结局前的价值选择。',
                 functions: ['narrative', 'exploration'],
                 earlyArrivalDescription: '非关键议事和居民争论可正常发生，主线集结必须由明确任务阶段启动。',
@@ -1216,20 +1233,20 @@ function mainlineRunner(options: {
       durationWeight,
     })
     const stages = [
-      stage('潮门失序', 1, [1], [options.invalidLocation ? 99 : 1, 2], ['dialogue', 'investigation'], '确认潮门危机并非偶发事故。', '林舟正式承担调查责任并获得下一阶段明确入口。', 1),
-      stage('退潮痕迹', 2, [1], [3, 4], ['exploration', 'combat'], '局部异常正沿地区依赖扩散。', '玩家获得进入脊湾调查所需的公开线索与成长准备。', 1),
-      stage('分裂的沿岸', 2, [2], [5], ['dialogue', 'exploration'], '不同地区掌握互相矛盾但真实的线索。', '玩家理解两地利益冲突，并建立继续查证的路径。', 1),
-      stage('旧约真相', options.badBeatOrder ? 1 : 3, [2], [6], ['investigation', 'choice'], '旧盟约曾以边缘地区代价维持核心区稳定。', '旧约真相被确认，核心冲突从寻找敌人转向修复失衡秩序。', 2),
-      stage('裂潮试炼', 4, [2], [7], ['combat', 'preparation'], '危机可被终止，但最终行动需要可恢复的战斗准备。', '关键危险被清除，终局所需的行动窗口被建立。', 1),
-      stage('沿岸集结', 4, [1, 2], [1, 5, 8], ['dialogue', 'choice', 'preparation'], '地区关系和长期选择将影响解决方案的代价。', '多个地区后果汇入最终行动，两个合规方案同时保持可达。', 2),
-      stage('新灯亮起', 5, [1, 2], [2, 8], ['choice', 'investigation'], '新的安全边界取决于此前建立的信任与代价。', '核心危机被终止，并按玩家长期价值选择进入合规结局。', 1),
+      stage('来信与低潮', 1, [1], [options.invalidLocation ? 99 : 1, 2], ['dialogue', 'investigation'], '确认迟砾失踪与港区低潮并非偶发事故。', '澜砂正式承担调查责任并获得下一阶段明确入口。', 1),
+      stage('空白水尺', 2, [1], [3, 4], ['exploration', 'combat'], '被抹去的水尺记录表明异常正在沿地区依赖扩散。', '玩家获得进入沉钟盆地调查所需的公开线索与成长准备。', 1),
+      stage('两地的水', 2, [2], [5], ['dialogue', 'exploration'], '不同地区掌握互相矛盾但真实的潮井证词。', '玩家理解两地利益冲突，并建立继续查证的路径。', 1),
+      stage('旧机之下', options.badBeatOrder ? 1 : 3, [2], [6], ['investigation', 'choice'], '旧引潮方案曾以盆地支井为代价维持港口稳定。', '旧设施真相被确认，核心冲突从寻找单一事故转向修复失衡秩序。', 2),
+      stage('谁动了潮门', 4, [2], [7], ['combat', 'preparation'], '白口正在利用旧设施和两地不信任制造短缺。', '人为操控被揭露，终局所需的行动窗口被建立。', 1),
+      stage('引潮机决战', 4, [1, 2], [1, 5, 8], ['dialogue', 'choice', 'preparation'], '地区关系、维修准备和长期选择将影响解决方案的代价。', '白口被阻止，多个地区后果汇入最终行动，两个合规方案同时保持可达。', 2),
+      stage('新的潮线', 5, [1, 2], [2, 8], ['choice', 'investigation'], '可持续供水取决于此前建立的信任、分流知识与治理选择。', '两地供水恢复，并按玩家长期价值选择进入合规结局。', 1),
     ]
     return {
       output: JSON.stringify({
         schema: 'storyforge.text-open-world-mainline-draft',
         version: 1,
-        title: '雾港潮门主线',
-        summary: '林舟从雾港危机出发，调查两地裂痕、揭露旧约并以不同代价终止潮门危机。',
+        title: '盐脊潮脉主线',
+        summary: '澜砂从迟砾来信与港区低潮出发，调查两地水源、揭露白口操控并恢复可持续供水。',
         stages,
         endingRoutes: context.endingContracts.endings.map(ending => ({
           endingNumber: ending.order,
@@ -1403,11 +1420,11 @@ function significantThreadsRunner(options: {
     const threads = [
       {
         ownerKind: 'character',
-        ownerTitle: '守灯学徒阿澜',
-        title: '失落的守灯誓言',
-        summary: '阿澜试图在家族责任、个人真相与雾港公共安全之间找到能够承担的选择。',
-        centralConflict: '阿澜必须决定继承一套有缺陷的守灯传统，还是公开真相并重建自己的责任。',
-        theme: '继承不是服从，而是理解代价之后重新作出承诺。',
+        ownerTitle: '守井人苒秋',
+        title: '不再守空井',
+        summary: '苒秋试图在家族责任、空井真相与沉钟盆地的共同生存之间找到能够承担的选择。',
+        centralConflict: '苒秋必须决定继续守着被掩盖的空井，还是公开家族证物并重新定义守井责任。',
+        theme: '继承不是沉默，而是理解代价之后重新承担公共责任。',
         sourceClaimKeys: [claimKey],
         storyBeatNumbers: [1, 2],
         regionNumbers: [1],
@@ -1415,22 +1432,22 @@ function significantThreadsRunner(options: {
         supportingPromiseNumbers: [1],
         availableAfterMainlineStageNumber: 1,
         conflictSides: [
-          { name: '阿澜', goal: '查明导师隐瞒的誓言代价', resource: '守灯训练与导师留下的私人物件', pressure: '既害怕背叛传统，也无法继续假装无事发生' },
-          { name: '守灯旧规维护者', goal: '维持雾港对守灯制度的信任', resource: '公开记录、职业权威与居民支持', pressure: '潮门异变让任何质疑都可能引发恐慌' },
+          { name: '苒秋', goal: '查明家族隐瞒的抽水代价', resource: '守井经验与家人留下的测井证物', pressure: '既害怕伤害共同体，也无法继续假装空井只是天灾' },
+          { name: '旧井规维护者', goal: '维持盆地对守井制度的信任', resource: '公开记录、职业权威与居民支持', pressure: '供水危机让任何质疑都可能引发恐慌' },
         ],
-        escalationSteps: ['私人物件暴露记录矛盾', '公开职责与个人真相发生冲突', '阿澜必须在保密与重建承诺之间选择'],
-        atmosphereSignals: ['塔下学徒压低声音议论旧誓', '工坊拒绝修复来历不明的灯具', '居民对守灯人的问候随调查阶段变化'],
+        escalationSteps: ['家族证物暴露水位记录矛盾', '守井职责与公开真相发生冲突', '苒秋必须在沉默与重建责任之间选择'],
+        atmosphereSignals: ['井边居民压低声音议论旧账', '修井人拒绝碰来历不明的阀芯', '居民对苒秋的问候随调查阶段变化'],
         stages: [
-          stage('塔下旧物', 1, 2, ['dialogue', 'investigation'], 'npc-attitude', 1),
-          stage('工坊证言', 1, 3, ['dialogue', 'exploration'], 'morality', 2),
-          stage('重立誓言', 1, 1, ['dialogue', 'choice'], 'npc-attitude', 3),
+          stage('井边旧物', 1, 2, ['dialogue', 'investigation'], 'npc-attitude', 1),
+          stage('家族证言', 1, 3, ['dialogue', 'exploration'], 'morality', 2),
+          stage('不再守空井', 1, 1, ['dialogue', 'choice'], 'npc-attitude', 3),
         ],
       },
       {
         ownerKind: options.insufficientOwnerCoverage ? 'character' : 'region',
-        ownerTitle: '脊湾沿岸共同体',
-        title: '盐路与旧约',
-        summary: '脊湾各聚落围绕盐路收益、危险治理和旧约责任展开一场可被玩家介入的地区纷争。',
+        ownerTitle: '盐灯商会与拾潮民议会',
+        title: '盐路归谁',
+        summary: '沉钟盆地各聚落围绕盐路收益、危险治理和旧约责任展开一场可被玩家介入的地区纷争。',
         centralConflict: '依赖同一条盐路的群体无法就风险、收益和历史责任达成一致。',
         theme: '共同体不是没有冲突，而是能否建立承担冲突的规则。',
         sourceClaimKeys: [claimKey],
@@ -1536,7 +1553,7 @@ function regionNarrativePacksRunner(options: {
         regionNumber: region.order,
         title: `${region.title}地区生态`,
         fantasy: regionIndex === 0
-          ? '在潮雾港口的日常职责中追查危机留下的细小裂痕。'
+          ? '在盐雾港口的日常职责中追查危机留下的细小裂痕。'
           : '在盐路、旧约和多方利益之间参与一场持续变化的沿岸生活。',
         localConflict: regionIndex === 0
           ? '维持港口日常秩序的人们对公开危机真相的代价存在分歧。'
@@ -1570,7 +1587,7 @@ function regionNarrativePacksRunner(options: {
         characters: [
           {
             tier: 'important',
-            roleTitle: regionIndex === 0 ? '守灯学徒阿澜' : '沿岸议事记录人',
+            roleTitle: regionIndex === 0 ? '守井人苒秋' : '沿岸议事记录人',
             narrativeFunction: '持续保持地区冲突、重要故事进度和玩家已知后果的一致表达。',
             homeLocationNumber: locationNumber(0),
             routine: '在安全等待点按地区时段出现在固定公共地点，不因玩家缺席推进关键结果。',
@@ -1580,7 +1597,7 @@ function regionNarrativePacksRunner(options: {
           },
           {
             tier: 'functional',
-            roleTitle: regionIndex === 0 ? '盐雾工匠' : '脊湾行商',
+            roleTitle: regionIndex === 0 ? '盐雾工匠' : '沉钟盆地行商',
             narrativeFunction: '通过服务、价格、问候和普通委托表现地区状态。',
             homeLocationNumber: locationNumber(1),
             routine: '日出后提供功能，夜晚休息；只按规则读取道德、阵营和地区状态。',
@@ -1600,7 +1617,7 @@ function regionNarrativePacksRunner(options: {
           },
         ],
         factions: [{
-          title: regionIndex === 0 ? '雾港守灯会' : '脊湾行商联合',
+          title: regionIndex === 0 ? '盐灯商会' : '拾潮民议会',
           publicGoal: '维持地区生活所依赖的公共功能，同时争取对风险处置的话语权。',
           localResource: regionIndex === 0 ? '灯塔记录、工坊和居民信任' : '货运网络、价格消息和盐路节点',
           visiblePresence: '通过服饰、工作地点、问候和地区事件中的立场被玩家识别。',
@@ -1886,7 +1903,7 @@ function progressionCatalogsRunner(options: {
         title: options.rewriteInitial && demand.demandNumber === 1
           ? '篡改后的基础攻击'
           : demand.fixedTitle ?? (demand.demandKind === 'level-progression'
-            ? `${demand.unlockPlan.level}级守灯技`
+            ? `${demand.unlockPlan.level}级潮脉技`
             : `${demand.semanticBrief.slice(0, 12)}技${index + 1}`),
         description: demand.fixedDescription ?? `${demand.semanticBrief}该能力以明确的系统效果支持角色成长。`,
         tags: [demand.demandKind, demand.requestedTraits[0] ?? '成长'],
@@ -3085,7 +3102,7 @@ describe('R-OPEN-WORLD3 · P2 GameplayRulesetSkeleton', () => {
     expect(result.usage.inputTokens).toBeGreaterThan(0)
     expect(artifact).toMatchObject({
       productInstanceKey: input.production.productionKey,
-      ruleset: { key: 'storyforge.standard', version: 1, title: '雾港标准冒险规则' },
+      ruleset: { key: 'storyforge.standard', version: 1, title: '盐脊港标准冒险规则' },
       characterModel: {
         professionSystem: 'none',
         playerAttributeAllocation: 'automatic-no-player-points',
@@ -3216,7 +3233,7 @@ describe('R-OPEN-WORLD3 · P4 PlayerBuild', () => {
       productInstanceKey: input.production.productionKey,
       identity: { name: input.playerBuildContext.protagonistAsset.displayName },
       playstyle: {
-        title: '敏锐的守灯调查者',
+        title: '敏锐的来信调查者',
         professionKey: null,
         primaryAttribute: 'agility',
         secondaryAttribute: 'power',
@@ -6138,8 +6155,11 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })).rejects.toThrow(/IntegrationReport自身Hash不匹配/)
   }, 600_000)
 
-  it('由共享durable scheduler自动执行专属DAG并收口为可恢复Build，不需要人工写Artifact JSON', async () => {
+  it('G7-01 盐脊来源经共享durable scheduler执行完整DAG并收口为真实可恢复Build', async () => {
     const input = await creatorSchedulerFixture()
+    expect(input.characterIds).toHaveLength(7)
+    expect(await db.importantLocations.where('projectId').equals(input.scope.projectId).count()).toBe(10)
+    expect(await db.storyArcs.where('projectId').equals(input.scope.projectId).count()).toBe(3)
     const production = (await db.productProductions.get(input.production.id!))!
     let p1Calls = 0
     let p1ModelAttempts = 0
@@ -6233,9 +6253,14 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     expect(artifacts.some(row => row.artifactKey === 'runtime.package')).toBe(false)
     expect(artifacts.find(row => row.artifactKey === 'text-open-world.runtime-package')).toBeTruthy()
     expect(artifacts.find(row => row.artifactKey === 'text-open-world.quality-report')).toBeTruthy()
-    expect(parseProductRuntimePackageV1(
+    const saltRidgePackage = parseProductRuntimePackageV1(
       artifacts.find(row => row.artifactKey === 'text-open-world.runtime-package')!.payloadJson,
-    ).textOpenWorldVNext).toBeTruthy()
+    )
+    expect(saltRidgePackage).toMatchObject({
+      definition: { title: '盐脊' },
+      sourceWorld: { contentHash: input.release.contentHash },
+    })
+    expect(saltRidgePackage.textOpenWorldVNext).toBeTruthy()
     const governance = await readTextOpenWorldArtifactGovernanceV1({
       scope: input.scope,
       productionId: production.id!,
@@ -6313,11 +6338,20 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     const p1SourceManifest = JSON.parse(artifacts.find(
       row => row.artifactKey === 'text-open-world.source-manifest',
     )!.payloadJson) as TextOpenWorldSourceManifestV1
+    expect(p1SourceManifest).toMatchObject({ readUnitCount: 36, unreadUnitCount: 0 })
     const curatedResourceKeys = p1SourceManifest.units
       .filter(unit => unit.curationStatus === 'read')
       .map(unit => unit.sourceResourceKey!)
       .sort()
     expect([...p1ActuallyReadResourceKeys].sort()).toEqual(curatedResourceKeys)
+    const curatedSourceText = p1SourceManifest.units
+      .filter(unit => unit.curationStatus === 'read')
+      .map(unit => artifacts.find(row => row.artifactKey === unit.artifactKey)?.payloadJson ?? '')
+      .join('\n')
+    expect(curatedSourceText).toContain('白盐码头')
+    expect(curatedSourceText).toContain('沉钟村')
+    expect(curatedSourceText).toContain('潮脉')
+    expect(curatedSourceText).toContain('测潮师迟砾')
     const previewManifest = await verifyProductBuildPreviewManifestV1(build.previewManifestJson)
     expect(previewManifest.mediaBindings).toHaveLength(input.brief.media.imageCount)
     expect(previewManifest.fallbackSummary.length).toBeGreaterThan(0)
@@ -6329,10 +6363,9 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     expect(state).toMatchObject({
       interaction: null, adventure: null, openWorldEvolution: null, openWorld: null,
     })
-    // G5-05 closes governed production evidence and Build Preview. The
-    // Creator dual-source -> portable ProductRelease contract is owned by
-    // G5-10; do not disguise the generic WorldRelease-only publisher as that
-    // completed capability here.
+    // G7-01 stops at the release-ready candidate on purpose. A formal Creator
+    // ProductRelease requires G7-13 human graybox evidence; automated CI must
+    // not fabricate that evidence merely to make a release row exist.
     expect(curatedResourceKeys.length).toBeGreaterThan(0)
     expect(p1ManifestHashes.size).toBeGreaterThan(0)
     expect(await db.productReleases.where('workId').equals(input.scope.workId).count()).toBe(0)

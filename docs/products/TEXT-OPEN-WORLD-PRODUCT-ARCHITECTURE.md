@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.72
+> 规格版本：1.1.73
 > 生效日期：2026-09-06
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
@@ -2883,6 +2883,12 @@ Player/Progression
 16. 刷新、重放和分支后状态一致；
 17. 发布修复版并验证兼容或明确要求新档。
 
+### 31.2 G7-01盐脊来源与候选Build证据
+
+盐脊不能由测试直接拼装RuntimePackage冒充生产结果。当前验收夹具先建立产品之外的纯语义WorldRelease，包含7名来源角色、10个命名地点、潮脉/潮井/旧引潮机规则、两地势力、关键物件、核心故事及两条重要故事素材；敌人、技能、装备、配方、奖励、可执行任务和媒资均不写回世界引擎。
+
+Creator在S2显式确认盐脊Brief与来源版本后，S3使用共享durable scheduler执行P0～P10、V1～V3与QA。首个真实候选已证明36个冻结来源单元全部经Context Gateway实读，SourcePin/Manifest/Ledger、Run/Checkpoint/Receipt、受治理Artifact、程序媒资、Integration/Quality Report、RuntimePackage和可恢复Build Preview闭合，且包内来源Hash等于冻结WorldRelease。CI只能证明这条生产链和结构约束；它不得伪造真人灰盒或叙事质量证据，因此正式ProductRelease继续等待G7-13真人完整游玩，再由G7-14执行发布与修复更新。
+
 ---
 
 ## 32. 测试与质量矩阵
@@ -3105,6 +3111,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.73 | 2026-09-20 | 完成G7-01盐脊来源与真实候选Build：独立纯语义WorldRelease冻结36个资源单元，Creator Brief绑定两地共同生存核心目标；共享scheduler真实执行P0～P10/V1～V3/QA，形成可验Run、Artifact、程序媒资、质量报告、RuntimePackage及release-ready Preview。自动化不伪造真人质量证据，正式Release留G7-13/14。 |
 | 1.1.72 | 2026-09-20 | 完成G6-10运行时AI评测与浏览器反例：8项版本化夹具、严格独立grader身份、全风险100%门槛及Hash可验报告覆盖越权、同义剧透、假推进、错配、长上下文、断网和确认边界；中文长尾检索修复后可召回96项目录末位事实且继续隔离隐藏知识。真实E2E证明高风险映射零提前写入、断网未知结果零重发且固定玩法可用；真实模型与真人质量仍留G7-11。 |
 | 1.1.71 | 2026-09-20 | 完成G6-09运行时AI失败与成本边界：六类Skill共享一次路由冻结和合同超时，每个Run最多一次请求、零隐藏重试；传输阶段区分请求前失败、已派发未知结果与已观察响应。精确失败写Instance Run，未知结果暂停且不开放重试，只有确定可重试项提供玩家显式新Run；固定Action/Choice及确定性回退始终可玩。更多页从既有成功用量日志展示token、目录估算、合同上限与最近Run，并明确不是provider账单；无新表、Schema、FIELD或世界回写。 |
 | 1.1.70 | 2026-09-14 | 完成G6-08长期最小记忆纵切面：玩家显式关闭当前角色对白窗口后才调用Memory Skill；每条AI对白必须回查已完成Dialogue Run与可验Checkpoint，冻结回退不能提升知识。World Truth保持冻结，Player Knowledge只接受NPC实际说出的允许事实，Actor Knowledge只吸收双方合法已知事实且继续服从场景公开门。采用追加可重放产品私域Memory Event，仅保存摘要、闭集键和便携Hash；完整聊天归Harness，事件Hash、幂等冲突、stale、旧档兼容和存档分支继承均有确定性守卫。UI展示显式关闭、状态与角色最近记忆；无新表、migration、FIELD写入口或世界回写。 |

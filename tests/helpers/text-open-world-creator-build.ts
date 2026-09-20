@@ -22,6 +22,7 @@ import {
 import type {
   AdaptationSourceSelectionV1,
   AIConfig,
+  TextOpenWorldCreatorBriefDraftV1,
   TextOpenWorldCreatorSourceSelectionV1,
   WorkspaceScope,
 } from '../../src/lib/types'
@@ -99,6 +100,22 @@ async function creatorSelection(source: CreatorSourceForTestV1): Promise<TextOpe
 export async function seedAuthorizedTextOpenWorldCreatorBuildV1(input: {
   source: CreatorSourceForTestV1
   sessionKey: string
+  briefDraft?: Partial<Pick<TextOpenWorldCreatorBriefDraftV1,
+    | 'gameTitle'
+    | 'playerRole'
+    | 'playerFantasy'
+    | 'protagonistMode'
+    | 'protagonistDirective'
+    | 'coreGoal'
+    | 'primaryConflict'
+    | 'openingSituation'
+    | 'experiencePillars'
+    | 'toneKeywords'
+    | 'mustKeep'
+    | 'allowedInferences'
+    | 'forbiddenChanges'
+    | 'authorNotes'
+  >>
 }) {
   const selection = await creatorSelection(input.source)
   const baseTime = Date.now() - 1_000
@@ -113,6 +130,7 @@ export async function seedAuthorizedTextOpenWorldCreatorBuildV1(input: {
       ...started.draft,
       gameTitle: `SourcePin ${input.sessionKey}`,
       coreGoal: '只从作者冻结来源生产可验证的文字开放世界。',
+      ...structuredClone(input.briefDraft ?? {}),
     },
     acknowledgements: BRIEF_ACKNOWLEDGEMENTS,
     confirmedAt: baseTime + 1,
