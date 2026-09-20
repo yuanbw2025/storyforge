@@ -943,9 +943,18 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       const expectedStageKey = stageIndex === orderedStages.length - 1 ? stage.key : orderedStages[stageIndex + 1].key
       const successEffects = strings(action.successEffectKeys, `stage action ${completionActionKey} successEffectKeys`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
       const transitions = successEffects.filter(effect => effect.operation === 'transition-quest')
+      const storyOutcomeEffects = successEffects.filter(effect => effect.operation !== 'transition-quest')
+      const validStoryOutcomeSuffix = storyOutcomeEffects.length > 0
+        && quest.type === 'significant'
+        && expectedStatus === 'completed'
+        && successEffects[0]?.operation === 'transition-quest'
+        && storyOutcomeEffects.every(effect => String(effect.key).startsWith('effect.story-outcome.')
+          && ['change-morality', 'change-faction-affinity', 'set-story-modifier', 'change-region-state', 'change-currency']
+            .includes(String(effect.operation)))
       const payload = transitions.length === 1 ? row(transitions[0].payload, `stage action ${completionActionKey} payload`) : null
       if (!payload || action.category !== 'quest-action' || action.actorScope !== 'system' || action.targetScope !== 'quest'
-        || successEffects.length !== 1 || transitions.length !== 1 || payload?.questKey !== quest.key
+        || (successEffects.length !== 1 && !validStoryOutcomeSuffix)
+        || transitions.length !== 1 || payload?.questKey !== quest.key
         || payload.status !== expectedStatus || payload.stageKey !== expectedStageKey) fail(`Stage完成Action没有推进相邻Stage或完成任务:${completionActionKey}`)
       requireSameKeys(strings(action.requirementConditionKeys, `stage action ${completionActionKey} requirements`), strings(stage.completionConditionKeys, `stage ${String(stage.key)} completion conditions`), `stage ${String(stage.key)} completion conditions`)
     })
@@ -1001,15 +1010,25 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (!['accept-quest', 'restart-quest', 'abandon-quest', 'quest-action'].includes(category)) fail(`任务迁移Effect只能由任务生命周期Action引用:${String(action.key)}`)
     if (category !== 'quest-action') return
     const label = `system quest action ${String(action.key)}`
+    const successEffects = strings(action.successEffectKeys, `${label}.successEffectKeys`)
+      .map(effectKey => effects.find(effect => effect.key === effectKey)!)
+    const storyOutcomeEffects = successEffects.filter(effect => effect.operation !== 'transition-quest')
+    const validStoryOutcomeSuffix = storyOutcomeEffects.length > 0
+      && String(action.key).startsWith('action.advance.quest.significant.')
+      && successEffects[0]?.operation === 'transition-quest'
+      && storyOutcomeEffects.every(effect => String(effect.key).startsWith('effect.story-outcome.')
+        && ['change-morality', 'change-faction-affinity', 'set-story-modifier', 'change-region-state', 'change-currency']
+          .includes(String(effect.operation)))
     if (action.actorScope !== 'system' || action.targetScope !== 'quest'
       || strings(action.costEffectKeys, `${label}.costEffectKeys`).length
       || strings(action.failureEffectKeys, `${label}.failureEffectKeys`).length
-      || transitions.length !== strings(action.successEffectKeys, `${label}.successEffectKeys`).length
+      || (transitions.length !== successEffects.length && !validStoryOutcomeSuffix)
       || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable') fail(`${label}合同无效`)
     const payloads = transitions.map(effect => row(effect.payload, `${label}.${String(effect.key)}.payload`))
     const definitionKeys = new Set(payloads.map(payload => String(payload.questKey)))
     if (definitionKeys.size !== 1) fail(`${label}必须只迁移一个任务定义`)
     const definition = questRows.find(quest => quest.key === [...definitionKeys][0]) ?? fail(`${label}任务定义不存在`)
+    if (validStoryOutcomeSuffix && definition.type !== 'significant') fail(`${label}重要故事后果不能绑定到非重要任务`)
     const targetStatuses = payloads.map(payload => String(payload.status))
     if (targetStatuses.includes('accepted') || targetStatuses.includes('abandoned')) fail(`${label}不能代替玩家接取或放弃`)
     if ((definition.type === 'mainline' || definition.type === 'significant')

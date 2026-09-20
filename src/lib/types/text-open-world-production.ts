@@ -3232,6 +3232,20 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     earnEffectKey: string
   }>
   /**
+   * Fresh G7 story-outcome builds bind every semantic important-story
+   * consequence to the exact protected quest-stage completion Action that
+   * commits it. Historical artifacts omit this field and retain their frozen
+   * byte shape.
+   */
+  storyOutcomeBindings?: Array<{
+    threadKey: string
+    sourceStageKey: string
+    questKey: string
+    questStageKey: string
+    consequencePlanKey: string
+    effectKeys: string[]
+  }>
+  /**
    * Deterministic P8F binding of every authored ending to the final protected
    * mainline quest. P9 may author the visible choice copy, but it must point at
    * these already-frozen Actions instead of creating a second result path.
@@ -3244,10 +3258,18 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     routes: Array<{
       endingKey: string
       conditionKey: string
+      /** Fresh G7 builds gate the choice with authored, closed-candidate prerequisites. */
+      eligibilityConditionKey?: string
       actionKey: string
       routeEffectKey: string
       unlockEffectKey: string
       reachEffectKey: string
+      eligibility?: {
+        requiredQuestKeys: string[]
+        anyQuestKeyGroups: string[][]
+        requiredFactionAffinities: Array<{ factionKey: string; minimum: number }>
+        requiredRecipeKeys: string[]
+      }
     }>
   }
   catalogBindings: {
@@ -3375,6 +3397,8 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     allAchievementsOneTimeReachable?: true
     /** Fresh P8F Knowledge/rumor/achievement graph is complete and runnable. */
     knowledgeProgressReady?: true
+    /** Fresh G7 build binds important-story consequences and distinct ending eligibility paths. */
+    storyOutcomesRuntimeBound?: true
     allCatalogBindingsResolved: true
     allEndingsRuntimeBound: true
     sceneBindingsDeferred: true

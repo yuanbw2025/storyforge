@@ -399,6 +399,7 @@ async function fixture() {
     contentBoundaries: ['不生成露骨内容'],
     tone: ['边地悬疑', '成长冒险'],
   })
+  draft.scale.targetEndingCount = 2
   const brief = parseProductProductionBriefV3(draft)
   const productionKey = `tow.p2.${crypto.randomUUID()}`
   const created = await executeProductProductionCommand({
@@ -556,6 +557,7 @@ async function creatorSchedulerFixture() {
       expectedReleaseHash: owned.release.contentHash,
     },
     sessionKey: `experience-scheduler-${crypto.randomUUID()}`,
+    briefScale: { endings: 2 },
     briefDraft: {
       gameTitle: '盐脊',
       playerRole: '扮演收到失踪测潮师来信、能够往返两地调查的旅人澜砂。',
@@ -1405,6 +1407,7 @@ async function executeMainline(
 function significantThreadsRunner(options: {
   insufficientOwnerCoverage?: boolean
   invalidLocation?: boolean
+  saltRidgeAcceptance?: boolean
 } = {}): TextOpenWorldSignificantThreadsModelRunnerV1 {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldSignificantThreadsInputContextV1
@@ -1428,7 +1431,7 @@ function significantThreadsRunner(options: {
       durationWeight: index,
       localConsequences: [{
         kind: consequenceKind,
-        direction: index % 2 ? 'increase' : 'change',
+        direction: index % 2 ? 'increase' : 'decrease',
         magnitude: index === 3 ? 'moderate' : 'minor',
         description: '改变当地人对玩家的态度或地区日常表现，不改变主线核心目标和可达性。',
       }],
@@ -1443,8 +1446,8 @@ function significantThreadsRunner(options: {
         theme: '继承不是沉默，而是理解代价之后重新承担公共责任。',
         sourceClaimKeys: [claimKey],
         storyBeatNumbers: [1, 2],
-        regionNumbers: [1],
-        locationNumbers: [1, 2, 3],
+        regionNumbers: [options.saltRidgeAcceptance ? 2 : 1],
+        locationNumbers: options.saltRidgeAcceptance ? [6, 8, 7] : [1, 2, 3],
         supportingPromiseNumbers: [1],
         availableAfterMainlineStageNumber: 1,
         conflictSides: [
@@ -1453,7 +1456,11 @@ function significantThreadsRunner(options: {
         ],
         escalationSteps: ['家族证物暴露水位记录矛盾', '守井职责与公开真相发生冲突', '苒秋必须在沉默与重建责任之间选择'],
         atmosphereSignals: ['井边居民压低声音议论旧账', '修井人拒绝碰来历不明的阀芯', '居民对苒秋的问候随调查阶段变化'],
-        stages: [
+        stages: options.saltRidgeAcceptance ? [
+          stage('井边旧物', 2, 6, ['dialogue', 'investigation'], 'npc-attitude', 1),
+          stage('枯井里的回声', 2, 8, ['exploration', 'combat'], 'resource', 2),
+          stage('不再守空井', 2, 7, ['dialogue', 'choice'], 'npc-attitude', 3),
+        ] : [
           stage('井边旧物', 1, 2, ['dialogue', 'investigation'], 'npc-attitude', 1),
           stage('家族证言', 1, 3, ['dialogue', 'exploration'], 'morality', 2),
           stage('不再守空井', 1, 1, ['dialogue', 'choice'], 'npc-attitude', 3),
@@ -1468,8 +1475,10 @@ function significantThreadsRunner(options: {
         theme: '共同体不是没有冲突，而是能否建立承担冲突的规则。',
         sourceClaimKeys: [claimKey],
         storyBeatNumbers: [2, 3, 4],
-        regionNumbers: [2],
-        locationNumbers: [6, 7, options.invalidLocation ? 99 : 9],
+        regionNumbers: options.saltRidgeAcceptance ? [2, 1] : [2],
+        locationNumbers: options.saltRidgeAcceptance
+          ? [6, 7, 3, options.invalidLocation ? 99 : 4]
+          : [6, 7, options.invalidLocation ? 99 : 9],
         supportingPromiseNumbers: [2],
         availableAfterMainlineStageNumber: 3,
         conflictSides: [
@@ -1479,7 +1488,12 @@ function significantThreadsRunner(options: {
         ],
         escalationSteps: ['盐路检查引发价格冲突', '伤亡证据使双方拒绝妥协', '议事台必须形成新的共同治理办法'],
         atmosphereSignals: ['集市货架价格与货量发生变化', '道路旁增加守望者和受困行商', '功能NPC用不同问候表达对争议的立场'],
-        stages: [
+        stages: options.saltRidgeAcceptance ? [
+          stage('沉钟村公开账', 2, 6, ['dialogue', 'investigation'], 'faction-affinity', 1),
+          stage('拾潮营地证词', 2, 7, ['dialogue', 'investigation'], 'regional-state', 2),
+          stage('盐灯集市对账', 1, 3, ['dialogue', 'investigation'], 'morality', 3),
+          stage('盐路归谁', 1, 4, ['dialogue', 'choice'], 'regional-state', 4),
+        ] : [
           stage('盐路争执', 2, 6, ['dialogue', 'investigation'], 'faction-affinity', 1),
           stage('旧约证词', 2, 7, ['dialogue', 'exploration'], 'regional-state', 2),
           stage('议事台新规', 2, 9, ['dialogue', 'choice'], 'regional-state', 3),
@@ -1556,6 +1570,7 @@ function regionNarrativePacksRunner(options: {
   omitLocation?: boolean
   duplicateDistinctiveness?: boolean
   missingOwner?: boolean
+  saltRidgeAcceptance?: boolean
 } = {}): TextOpenWorldRegionNarrativePacksModelRunnerV1 {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldRegionNarrativePacksInputContextV1
@@ -1603,12 +1618,16 @@ function regionNarrativePacksRunner(options: {
         characters: [
           {
             tier: 'important',
-            roleTitle: regionIndex === 0 ? '守井人苒秋' : '沿岸议事记录人',
+            roleTitle: options.saltRidgeAcceptance
+              ? regionIndex === 0 ? '盐灯商会执秤人陆衡' : '守井人苒秋'
+              : regionIndex === 0 ? '守井人苒秋' : '沿岸议事记录人',
             narrativeFunction: '持续保持地区冲突、重要故事进度和玩家已知后果的一致表达。',
             homeLocationNumber: locationNumber(0),
             routine: '在安全等待点按地区时段出现在固定公共地点，不因玩家缺席推进关键结果。',
             serviceNeeds: [],
-            significantThreadNumbers: regionIndex === 0 && !options.missingOwner ? [1] : regionIndex === 1 ? [2] : [],
+            significantThreadNumbers: options.saltRidgeAcceptance
+              ? regionIndex === 0 ? [2] : options.missingOwner ? [2] : [1, 2]
+              : regionIndex === 0 && !options.missingOwner ? [1] : regionIndex === 1 ? [2] : [],
             sourceClaimKeys: [claimKey],
           },
           {
@@ -1618,7 +1637,7 @@ function regionNarrativePacksRunner(options: {
             homeLocationNumber: locationNumber(1),
             routine: '日出后提供功能，夜晚休息；只按规则读取道德、阵营和地区状态。',
             serviceNeeds: ['基础交易', '地区普通委托入口'],
-            significantThreadNumbers: [],
+            significantThreadNumbers: options.saltRidgeAcceptance ? [2] : [],
             sourceClaimKeys: [],
           },
           {
@@ -1628,7 +1647,7 @@ function regionNarrativePacksRunner(options: {
             homeLocationNumber: locationNumber(0),
             routine: '日出而作、日落而息，危险时移动到安全地点。',
             serviceNeeds: [],
-            significantThreadNumbers: [],
+            significantThreadNumbers: options.saltRidgeAcceptance ? [2] : [],
             sourceClaimKeys: [],
           },
         ],
@@ -1637,12 +1656,24 @@ function regionNarrativePacksRunner(options: {
           publicGoal: '维持地区生活所依赖的公共功能，同时争取对风险处置的话语权。',
           localResource: regionIndex === 0 ? '灯塔记录、工坊和居民信任' : '货运网络、价格消息和盐路节点',
           visiblePresence: '通过服饰、工作地点、问候和地区事件中的立场被玩家识别。',
-          significantThreadNumbers: regionIndex === 1 ? [2] : [],
+          significantThreadNumbers: options.saltRidgeAcceptance ? [2] : regionIndex === 1 ? [2] : [],
           sourceClaimKeys: [claimKey],
         }],
         ordinaryQuestSeeds: Array.from({ length: regionIndex === 0 && options.wrongSupply ? 2 : 3 }, (_, index) => ({
-          title: `${region.title}普通委托${index + 1}`,
-          premise: `一名处在${tensionTitle(index % 2)}中的普通居民遇到具体而局部的问题。`,
+          title: options.saltRidgeAcceptance
+            ? regionIndex === 0 && index === 0
+              ? '中央引潮机修复准备'
+              : regionIndex === 1 && index === 0
+                ? '东支井修复'
+                : regionIndex === 1 && index === 1
+                  ? '南支井修复'
+                  : `${region.title}普通委托${index + 1}`
+            : `${region.title}普通委托${index + 1}`,
+          premise: options.saltRidgeAcceptance && regionIndex === 0 && index === 0
+            ? '港区工匠需要玩家核验旧引潮机材料和公开维修记录，为共同治理路线留下可验证准备。'
+            : options.saltRidgeAcceptance && regionIndex === 1 && index < 2
+              ? `盆地居民需要玩家修复第${index + 1}口支井，使分流路线不只停留在口头方案。`
+              : `一名处在${tensionTitle(index % 2)}中的普通居民遇到具体而局部的问题。`,
           playerActivity: ['调查公开痕迹并核对说法', '探索指定地点并带回资源', '在冲突双方之间传递可验证信息'][index % 3],
           locationNumbers: [locationNumber(index)],
           tensionNumber: index % 2 + 1,
@@ -1754,6 +1785,7 @@ function questSkeletonsRunner(options: {
   invalidCombat?: boolean
   conflictingRequirement?: boolean
   prematureField?: boolean
+  saltRidgeAcceptance?: boolean
 } = {}): TextOpenWorldQuestSkeletonsModelRunnerV1 {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldQuestSkeletonsInputContextV1
@@ -1773,6 +1805,7 @@ function questSkeletonsRunner(options: {
       const sameKindSources = context.questSources.filter(candidate => candidate.kind === source.kind)
       const sourceNumber = sameKindSources.findIndex(candidate => candidate.sourceKey === source.sourceKey) + 1
       let kind = kindsBySource[source.kind][(sourceNumber - 1) % kindsBySource[source.kind].length]
+      if (options.saltRidgeAcceptance && source.kind === 'significant-stage' && source.title === '枯井里的回声') kind = 'encounter'
       let title = `${source.title}所需${kind}`
       if (options.conflictingRequirement && source.kind === 'mainline-stage' && sourceNumber <= 2) {
         kind = 'actor'
@@ -1816,13 +1849,14 @@ function questSkeletonsRunner(options: {
             optional: false,
             requirements: [
               requirement,
-              ...(source.kind === 'ordinary-seed' && sourceNumber === 5 ? [{
+              ...((source.kind === 'ordinary-seed' && sourceNumber === 5)
+                || (options.saltRidgeAcceptance && source.kind === 'significant-stage' && source.title === '不再守空井') ? [{
                 kind: 'recipe',
-                title: `${source.title}所需recipe`,
+                title: source.title === '不再守空井' ? '支井分流配方' : `${source.title}所需recipe`,
                 description: `为${source.sourceKey}提供能够支持玩家完成目标的recipe定义。`,
                 requestedTraits: [`关联${source.kind}`, `服务${source.title}`],
                 minimumCount: 1,
-                criticality: 'ordinary',
+                criticality: source.type === 'significant' ? 'important' : 'ordinary',
               }] : []),
             ],
           }],
@@ -2426,6 +2460,7 @@ function questFinalizeRunner(options: {
   invalidEventUpgrade?: boolean
   prematureField?: boolean
   knowledgeTimeBatchOnly?: boolean
+  invalidEndingEligibility?: boolean
 } = {}): TextOpenWorldQuestFinalizeModelRunnerV1 {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldQuestFinalizeInputContextV1
@@ -2438,6 +2473,51 @@ function questFinalizeRunner(options: {
       timeCostMinutes: index % 3 === 0 ? 10 : 0,
       ...(options.prematureField && index === 0 ? { actionKey: 'action.forged' } : {}),
     }))
+    const endingEligibilitySelections = context.endingEligibilityDemands?.map(demand => {
+      const significantQuests = demand.candidates.filter(candidate => (
+        candidate.kind === 'quest-complete' && candidate.questType === 'significant'
+      ))
+      const ordinaryQuests = demand.candidates.filter(candidate => (
+        candidate.kind === 'quest-complete' && candidate.questType === 'ordinary'
+      ))
+      const factions = demand.candidates.filter(candidate => candidate.kind === 'faction-affinity')
+      const recipes = demand.candidates.filter(candidate => candidate.kind === 'recipe-known')
+      if (demand.endingNumber === 1) {
+        return {
+          endingNumber: demand.endingNumber,
+          requiredQuestCandidateNumbers: [(ordinaryQuests.find(candidate => candidate.title === '中央引潮机修复准备')
+            ?? ordinaryQuests[0]!)
+            .candidateNumber],
+          anyQuestCandidateGroups: [[
+            significantQuests[0]!.candidateNumber,
+            significantQuests[1]!.candidateNumber,
+          ]],
+          requiredFactionAffinities: factions.slice(0, 2).map(candidate => ({
+            candidateNumber: candidate.candidateNumber,
+            minimum: 10,
+          })),
+          requiredRecipeCandidateNumbers: [],
+        }
+      }
+      return {
+        endingNumber: demand.endingNumber,
+        requiredQuestCandidateNumbers: (ordinaryQuests
+          .filter(candidate => candidate.title === '东支井修复' || candidate.title === '南支井修复').length
+          ? ordinaryQuests.filter(candidate => candidate.title === '东支井修复' || candidate.title === '南支井修复')
+          : ordinaryQuests.slice(-2))
+          .map(candidate => candidate.candidateNumber),
+        anyQuestCandidateGroups: [],
+        requiredFactionAffinities: factions.slice(-1).map(candidate => ({
+          candidateNumber: candidate.candidateNumber,
+          minimum: 10,
+        })),
+        requiredRecipeCandidateNumbers: [recipes.find(candidate => candidate.title.includes('分流'))?.candidateNumber
+          ?? recipes[0]!.candidateNumber],
+      }
+    })
+    if (options.invalidEndingEligibility && endingEligibilitySelections?.[1]) {
+      endingEligibilitySelections[1].requiredRecipeCandidateNumbers = [1]
+    }
     return {
       output: JSON.stringify({
         schema: 'storyforge.text-open-world-quest-finalize-draft', version: 1,
@@ -2466,6 +2546,7 @@ function questFinalizeRunner(options: {
           intensity: 2, weight: 30, cooldownMinutes: 360,
           upgradeTemplateNumber: null,
         })),
+        ...(context.storyOutcomeContract === 'governed-v19' ? { endingEligibilitySelections } : {}),
       }),
       bindingReceipt: bindingReceipt(input.requirementKey), usage: null,
     }
@@ -4521,6 +4602,8 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     expect(input.questFinalizeContext.objectiveBindingDemands).toHaveLength(input.questFinalizeContext.questSkeletons.objectives.length)
     expect(input.questFinalizeContext.combatMechanicsContract).toBe('governed-v17')
     expect(input.questFinalizeContext.knowledgeProgressContract).toBe('governed-v18')
+    expect(input.questFinalizeContext.storyOutcomeContract).toBe('governed-v19')
+    expect(input.questFinalizeContext.endingEligibilityDemands).toHaveLength(2)
 
     const shuffledContext = structuredClone(input.questFinalizeContext)
     shuffledContext.questSkeletons.quests.reverse()
@@ -4576,6 +4659,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       restartActionsRequireOriginalOfferRoute: true,
       structuredCombatMechanicsReady: true,
       protectedStoryRevealActionsReady: true,
+      storyOutcomesRuntimeBound: true,
     })
     expect(questArtifact.catalogBindings.skills.every(binding => binding.effectKeys.length === 0)).toBe(true)
     const questTransitionPayloads = (actionKey: string) => questArtifact.actions
@@ -4649,6 +4733,10 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     expect(questArtifact.coverage.boundEndingKeys).toEqual(requiredEndingKeys)
     expect(questArtifact.endingBindings.routes.map(route => route.endingKey)).toEqual(requiredEndingKeys)
     expect(questArtifact.governance.allEndingsRuntimeBound).toBe(true)
+    expect(questArtifact.storyOutcomeBindings).toHaveLength(
+      input.questFinalizeContext.significantThreads.stages
+        .flatMap(stage => stage.localConsequencePlans).length,
+    )
     expect(questArtifact.governance.knowledgeProgressReady).toBe(true)
     expect(questArtifact.knowledgeBindings).toHaveLength(
       input.questFinalizeContext.regionNarrativePacks.packs.flatMap(pack => pack.rumors).length,
@@ -4669,11 +4757,16 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       expect(questArtifact.actions.find(action => action.key === route.actionKey)).toMatchObject({
         actorScope: 'player', targetScope: 'none', category: 'quest-action',
         locationKeys: [questArtifact.endingBindings.finalLocationKey],
-        requirementConditionKeys: [questArtifact.endingBindings.selectionReadyConditionKey],
+        requirementConditionKeys: [
+          questArtifact.endingBindings.selectionReadyConditionKey,
+          route.eligibilityConditionKey,
+        ],
         successEffectKeys: [route.routeEffectKey, route.unlockEffectKey, route.reachEffectKey, ...governedSuffixEffectKeys],
         confirmationPolicy: 'always', repeatPolicy: 'once',
       })
       expect(questArtifact.conditions.some(condition => condition.key === route.conditionKey)).toBe(true)
+      expect(route.eligibility).toBeDefined()
+      expect(questArtifact.conditions.some(condition => condition.key === route.eligibilityConditionKey)).toBe(true)
       expect(questArtifact.effects.filter(effect => (
         [route.routeEffectKey, route.unlockEffectKey, route.reachEffectKey].includes(effect.key)
       ))).toHaveLength(3)
@@ -4695,6 +4788,8 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     const legacyContext = structuredClone(input.questFinalizeContext)
     delete legacyContext.questLifecycleContract
     delete legacyContext.combatMechanicsContract
+    delete legacyContext.storyOutcomeContract
+    delete legacyContext.endingEligibilityDemands
     const { contextSelectionHash: _contextSelectionHash, ...legacyBody } = legacyContext
     legacyContext.contextSelectionHash = await hashProductProductionValueV2(legacyBody)
     const legacyInput = {
@@ -4708,6 +4803,11 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     expect(questArtifact.governance.allAbandonableQuestStagesCovered).toBeUndefined()
     expect(questArtifact.governance.restartActionsRequireOriginalOfferRoute).toBeUndefined()
     expect(questArtifact.governance.structuredCombatMechanicsReady).toBeUndefined()
+    expect(questArtifact.governance.storyOutcomesRuntimeBound).toBeUndefined()
+    expect(questArtifact.storyOutcomeBindings).toBeUndefined()
+    expect(questArtifact.endingBindings.routes.every(route => (
+      route.eligibilityConditionKey === undefined && route.eligibility === undefined
+    ))).toBe(true)
     expect(questArtifact.actions.some(action => action.category === 'restart-quest')).toBe(false)
     expect(questArtifact.quests.filter(quest => quest.abandonActionKey !== null).every(quest => (
       questArtifact.actions.filter(action => action.category === 'abandon-quest'
@@ -4721,7 +4821,7 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
     })).resolves.toEqual({ questDesignDocuments: questArtifact, directorDecks: directorArtifact })
   }, 300_000)
 
-  it('拒绝目标漏项、越界牌组预算、不可达Knowledge牌组、非法模板升级和模型越权Action字段', async () => {
+  it('拒绝目标漏项、越界牌组预算、不可达Knowledge牌组、非法模板升级、错误结局资格和模型越权Action字段', async () => {
     const input = await questFinalizeFixture()
     await expect(executeQuestFinalize(input, questFinalizeRunner({ omitObjective: true })))
       .rejects.toThrow(/objectives必须与\d+项目标一一对应/)
@@ -4731,6 +4831,8 @@ describe('R-OPEN-WORLD3 · P8F QuestFinalize / EncounterFinalize', () => {
       .rejects.toThrow(/承载Knowledge传播时必须包含编译器保证可达的rest触发/)
     await expect(executeQuestFinalize(input, questFinalizeRunner({ invalidEventUpgrade: true })))
       .rejects.toThrow(/升级模板与地区或类型不一致/)
+    await expect(executeQuestFinalize(input, questFinalizeRunner({ invalidEndingEligibility: true })))
+      .rejects.toThrow(/配方资格引用了错误候选类型/)
     await expect(executeQuestFinalize(input, questFinalizeRunner({ prematureField: true })))
       .rejects.toThrow(/字段不精确/)
   }, 300_000)
@@ -6071,12 +6173,17 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })).toThrow(/Action不可用/)
 
     const endingActions = modules.actions.actions.filter(action => action.key.startsWith('action.ending.'))
-    const endingConditions = modules.actions.conditions.filter(condition => condition.key.startsWith('condition.ending.'))
+    const endingConditions = modules.actions.conditions.filter(condition => (
+      condition.key.startsWith('condition.ending.') && !condition.key.startsWith('condition.ending.eligibility.')
+    ))
+    const endingEligibilityConditions = modules.actions.conditions
+      .filter(condition => condition.key.startsWith('condition.ending.eligibility.'))
     expect(endingActions).toHaveLength(modules.narrative.endings.length)
     expect(new Set(endingConditions.map(condition => JSON.stringify(condition.expression))).size)
       .toBe(modules.narrative.endings.length)
     expect(endingConditions.every(condition => JSON.stringify(condition.expression).includes('flag.ending.route')))
       .toBe(true)
+    expect(endingEligibilityConditions).toHaveLength(modules.narrative.endings.length)
     expect(endingActions.every(action => (
       action.requirementConditionKeys.includes('condition.system.ending-selection-ready')
       && action.successEffectKeys.some(key => key.startsWith('effect.ending.route.'))
@@ -6175,7 +6282,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })).rejects.toThrow(/IntegrationReport自身Hash不匹配/)
   }, 600_000)
 
-  it('G7-01/G7-02 盐脊来源经完整DAG产出两区十点可提前到达地图与可恢复Build', async () => {
+  it('G7-01/G7-02/G7-03 盐脊来源经完整DAG产出地图、严格主线、双结局和两类重要故事', async () => {
     const input = await creatorSchedulerFixture()
     expect(input.characterIds).toHaveLength(7)
     expect(await db.importantLocations.where('projectId').equals(input.scope.projectId).count()).toBe(10)
@@ -6211,9 +6318,9 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
         'p4.region-skeleton': createTextOpenWorldRegionSkeletonExecutorV1({ runModel: regionSkeletonRunner(), now: () => NOW + 8 }),
         'p4.player-build': createTextOpenWorldPlayerBuildExecutorV1({ runModel: playerBuildRunner(), now: () => NOW + 6 }),
         'p5.mainline': createTextOpenWorldMainlineExecutorV1({ runModel: mainlineRunner(), now: () => NOW + 9 }),
-        'p6.significant-threads': createTextOpenWorldSignificantThreadsExecutorV1({ runModel: significantThreadsRunner(), now: () => NOW + 10 }),
-        'p7.region-narrative-packs': createTextOpenWorldRegionNarrativePacksExecutorV1({ runModel: regionNarrativePacksRunner(), now: () => NOW + 11 }),
-        'p8.quest-skeletons': createTextOpenWorldQuestSkeletonsExecutorV1({ runModel: questSkeletonsRunner(), now: () => NOW + 12 }),
+        'p6.significant-threads': createTextOpenWorldSignificantThreadsExecutorV1({ runModel: significantThreadsRunner({ saltRidgeAcceptance: true }), now: () => NOW + 10 }),
+        'p7.region-narrative-packs': createTextOpenWorldRegionNarrativePacksExecutorV1({ runModel: regionNarrativePacksRunner({ saltRidgeAcceptance: true }), now: () => NOW + 11 }),
+        'p8.quest-skeletons': createTextOpenWorldQuestSkeletonsExecutorV1({ runModel: questSkeletonsRunner({ saltRidgeAcceptance: true }), now: () => NOW + 12 }),
         'p8.catalog.progression': createTextOpenWorldProgressionCatalogsExecutorV1({ runModel: progressionCatalogsRunner(), now: () => NOW + 13 }),
         'p8.catalog.encounters': createTextOpenWorldEncounterCatalogExecutorV1({ runModel: encounterCatalogRunner(), now: () => NOW + 14 }),
         'p8.catalog.items-rewards': createTextOpenWorldItemRewardCatalogExecutorV1({ runModel: itemRewardCatalogRunner(), now: () => NOW + 15 }),
@@ -6248,9 +6355,21 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })).rejects.toThrow('injected-open-world-process-crash')
     expect(p1Calls).toBe(2)
     expect(p1OutputBudgets[1]).toBeLessThan(p1OutputBudgets[0]!)
-    const projection = await runProductProductionUntilBlockedV1({
-      scope: input.scope, productionId: production.id!, executor, capabilityBindings: bindings,
-    })
+    let projection
+    try {
+      projection = await runProductProductionUntilBlockedV1({
+        scope: input.scope, productionId: production.id!, executor, capabilityBindings: bindings,
+      })
+    } catch (error) {
+      const failedBuild = await db.productBuilds.get(input.build.id!)
+      throw new Error(`${error instanceof Error ? error.message : String(error)}\nBuild=${JSON.stringify({
+        status: failedBuild?.status,
+        controlEpoch: failedBuild?.controlEpoch,
+        stateRevision: failedBuild?.stateRevision,
+        failureJson: failedBuild?.failureJson,
+        resumeState: failedBuild?.resumeState,
+      }, null, 2)}`)
+    }
     expect(p1Calls).toBe(2)
     const projectedBuild = await db.productBuilds.get(projection.buildId)
     expect(
@@ -6273,6 +6392,78 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     expect(artifacts.some(row => row.artifactKey === 'runtime.package')).toBe(false)
     expect(artifacts.find(row => row.artifactKey === 'text-open-world.runtime-package')).toBeTruthy()
     expect(artifacts.find(row => row.artifactKey === 'text-open-world.quality-report')).toBeTruthy()
+    const saltRidgeMainline = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.mainline-thread',
+    )!.payloadJson) as TextOpenWorldMainlineThreadV1
+    const saltRidgeSignificant = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.significant-threads',
+    )!.payloadJson) as TextOpenWorldSignificantThreadsV1
+    const saltRidgePacks = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.region-narrative-packs',
+    )!.payloadJson) as TextOpenWorldRegionNarrativePacksV1
+    const saltRidgeSkeletons = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.quest-skeletons',
+    )!.payloadJson) as TextOpenWorldQuestSkeletonsV1
+    const saltRidgeQuests = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.quest-design-documents',
+    )!.payloadJson) as TextOpenWorldQuestDesignDocumentsV1
+    const saltRidgeScenes = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.scene-scripts',
+    )!.payloadJson) as TextOpenWorldSceneScriptsV1
+    const saltRidgeEndings = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.ending-contracts',
+    )!.payloadJson) as { endings: Array<{ title: string }> }
+    expect(saltRidgeMainline.governance.order).toBe('strict-sequential')
+    expect(saltRidgeMainline.stages.map(stage => stage.title)).toEqual([
+      '来信与低潮', '空白水尺', '两地的水', '旧机之下', '谁动了潮门', '引潮机决战', '新的潮线',
+    ])
+    expect(saltRidgeEndings.endings.map(ending => ending.title)).toEqual(['共潮议约', '分井新路'])
+    expect(saltRidgeSignificant.threads.map(thread => [thread.ownerKind, thread.title])).toEqual([
+      ['character', '不再守空井'], ['region', '盐路归谁'],
+    ])
+    const characterThread = saltRidgeSignificant.threads[0]!
+    const regionalThread = saltRidgeSignificant.threads[1]!
+    expect(saltRidgeSignificant.stages.filter(stage => stage.threadKey === characterThread.key)
+      .some(stage => stage.gameplayFocus.includes('combat'))).toBe(true)
+    expect(saltRidgeSignificant.stages.filter(stage => stage.threadKey === regionalThread.key)).toHaveLength(4)
+    expect(saltRidgePacks.packs.flatMap(pack => pack.characterRequirements)
+      .filter(requirement => requirement.significantThreadKeys.includes(regionalThread.key)).length).toBeGreaterThanOrEqual(4)
+    const significantSkeletons = saltRidgeSkeletons.quests.filter(quest => quest.type === 'significant')
+    expect(significantSkeletons).toHaveLength(saltRidgeSignificant.stages.length)
+    expect(saltRidgeSkeletons.quests.filter(quest => quest.type === 'ordinary').map(quest => quest.title))
+      .toEqual(expect.arrayContaining(['中央引潮机修复准备', '东支井修复', '南支井修复']))
+    expect(significantSkeletons.every(skeleton => (
+      saltRidgeQuests.quests.some(quest => quest.key === skeleton.key)
+      && saltRidgeScenes.scenes.some(scene => scene.questKey === skeleton.key)
+    ))).toBe(true)
+    expect(saltRidgeQuests.governance.storyOutcomesRuntimeBound).toBe(true)
+    expect(saltRidgeQuests.storyOutcomeBindings).toHaveLength(
+      saltRidgeSignificant.stages.flatMap(stage => stage.localConsequencePlans).length,
+    )
+    for (const binding of saltRidgeQuests.storyOutcomeBindings ?? []) {
+      const stage = saltRidgeQuests.stages.find(item => item.key === binding.questStageKey)!
+      const completion = saltRidgeQuests.actions.find(item => item.key === stage.completionActionKey)!
+      expect(binding.effectKeys.every(effectKey => completion.successEffectKeys.includes(effectKey))).toBe(true)
+    }
+    expect(saltRidgeQuests.endingBindings.routes).toHaveLength(2)
+    expect(new Set(saltRidgeQuests.endingBindings.routes
+      .map(route => JSON.stringify(route.eligibility))).size).toBe(2)
+    expect(saltRidgeQuests.endingBindings.routes[0]!.eligibility).toMatchObject({
+      requiredQuestKeys: [expect.any(String)],
+      anyQuestKeyGroups: [expect.any(Array)],
+      requiredFactionAffinities: [expect.any(Object), expect.any(Object)],
+    })
+    expect(saltRidgeQuests.endingBindings.routes[1]!.eligibility).toMatchObject({
+      requiredQuestKeys: [expect.any(String), expect.any(String)],
+      requiredFactionAffinities: [expect.any(Object)],
+      requiredRecipeKeys: [expect.any(String)],
+    })
+    for (const route of saltRidgeQuests.endingBindings.routes) {
+      expect(saltRidgeQuests.actions.find(action => action.key === route.actionKey)?.requirementConditionKeys).toEqual([
+        saltRidgeQuests.endingBindings.selectionReadyConditionKey,
+        route.eligibilityConditionKey,
+      ])
+    }
     const saltRidgePackage = parseProductRuntimePackageV1(
       artifacts.find(row => row.artifactKey === 'text-open-world.runtime-package')!.payloadJson,
     )
@@ -6303,6 +6494,63 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     const initialSaltRidgeProjection = createInitialTextOpenWorldSessionProjectionV1(
       saltRidgePackage.textOpenWorldVNext!,
     )
+    const endingRegistry = createTextOpenWorldActionRegistryV1(saltRidgePackage.textOpenWorldVNext!)
+    const finalOnlyProjection = structuredClone(initialSaltRidgeProjection)
+    finalOnlyProjection.state.map.currentLocationKey = saltRidgeQuests.endingBindings.finalLocationKey
+    const finalLocation = saltRidgeModules.world.locations
+      .find(location => location.key === saltRidgeQuests.endingBindings.finalLocationKey)!
+    finalOnlyProjection.state.map.locationKnowledgeByKey[finalLocation.key] = 'visited'
+    finalOnlyProjection.state.map.regionKnowledgeByKey[finalLocation.regionKey] = 'visited'
+    if (!finalOnlyProjection.state.map.revealedLocationKeys.includes(finalLocation.key)) {
+      finalOnlyProjection.state.map.revealedLocationKeys.push(finalLocation.key)
+    }
+    const completeQuest = (projection: typeof finalOnlyProjection, definitionKey: string) => {
+      const definition = saltRidgeModules.quests.quests.find(quest => quest.key === definitionKey)!
+      const orderedStages = definition.stageKeys
+        .map(stageKey => saltRidgeModules.quests.stages.find(stage => stage.key === stageKey)!)
+        .sort((left, right) => left.order - right.order)
+      const instance = Object.values(projection.state.quests.instancesByKey)
+        .find(candidate => candidate.definitionKey === definitionKey)!
+      instance.status = 'completed'
+      instance.currentStageKey = orderedStages.at(-1)!.key
+      Object.keys(instance.objectiveStatusByKey).forEach(objectiveKey => {
+        instance.objectiveStatusByKey[objectiveKey] = 'completed'
+      })
+      instance.offeredAtWorldMinute = projection.state.time.worldMinute
+      instance.acceptedAtWorldMinute = projection.state.time.worldMinute
+      instance.terminalAtWorldMinute = projection.state.time.worldMinute
+      if (definition.rewardContractKey != null) {
+        const claimKey = `claim.test.${definition.key}`
+        instance.rewardClaimKey = claimKey
+        if (!projection.state.appliedClaimKeys.includes(claimKey)) projection.state.appliedClaimKeys.push(claimKey)
+      }
+    }
+    completeQuest(finalOnlyProjection, saltRidgeQuests.endingBindings.finalMainlineQuestKey)
+    const endingAvailability = (projection: typeof finalOnlyProjection, actionKey: string) => endingRegistry
+      .project(deriveTextOpenWorldContextsV1(projection).action)
+      .find(entry => entry.action.key === actionKey)
+    const endingAvailable = (projection: typeof finalOnlyProjection, actionKey: string) => (
+      endingAvailability(projection, actionKey)?.available
+    )
+    expect(saltRidgeQuests.endingBindings.routes.every(route => (
+      endingAvailable(finalOnlyProjection, route.actionKey) === false
+    ))).toBe(true)
+    for (const route of saltRidgeQuests.endingBindings.routes) {
+      const eligibleProjection = structuredClone(finalOnlyProjection)
+      const eligibility = route.eligibility!
+      for (const questKey of [
+        ...eligibility.requiredQuestKeys,
+        ...eligibility.anyQuestKeyGroups.map(group => group[0]!),
+      ]) {
+        completeQuest(eligibleProjection, questKey)
+      }
+      eligibility.requiredFactionAffinities.forEach(requirement => {
+        eligibleProjection.state.relationships.factionAffinityByKey[requirement.factionKey] = requirement.minimum
+      })
+      eligibleProjection.state.inventory.knownRecipeKeys.push(...eligibility.requiredRecipeKeys)
+      const availability = endingAvailability(eligibleProjection, route.actionKey)
+      expect(availability?.available, JSON.stringify({ route, availability })).toBe(true)
+    }
     const initialSaltRidgeMap = projectTextOpenWorldPlayerMapScreenV1(initialSaltRidgeProjection)
     expect(initialSaltRidgeMap.regions.map(region => [region.title, region.knowledge])).toEqual([
       ['盐脊港', 'visited'], ['沉钟盆地', 'heard'],

@@ -242,7 +242,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P5', taskKey: 'p5.mainline', objective: '形成严格顺序、可等待、可恢复且不能被普通状态锁死的主线。',
-    skillId: 'text-open-world.production.mainline.v1', recommendedModelCalls: 1, tokenBudgetWeight: 12,
+    skillId: 'text-open-world.production.mainline.v1', recommendedModelCalls: 1, tokenBudgetWeight: 10,
     dependsOn: ['p2.gameplay-ruleset', 'p3.story-architecture', 'p4.region-skeleton', 'p4.player-build'],
     inputArtifactKeys: [
       'text-open-world.game-brief', 'text-open-world.gameplay-ruleset-skeleton',
@@ -308,7 +308,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P8', taskKey: 'p8.catalog.progression', objective: '生产成长、属性和技能目录，满足任务需求与等级节奏。',
-    skillId: 'text-open-world.production.progression-catalogs.v1', recommendedModelCalls: 1, tokenBudgetWeight: 4,
+    skillId: 'text-open-world.production.progression-catalogs.v1', recommendedModelCalls: 1, tokenBudgetWeight: 5,
     dependsOn: ['p2.gameplay-ruleset', 'p4.player-build', 'p8.quest-skeletons'],
     inputArtifactKeys: [
       'text-open-world.gameplay-ruleset-skeleton', 'text-open-world.player-build',
@@ -404,7 +404,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P8F', taskKey: 'p8f.quest-finalize', objective: '把任务骨架绑定到真实Action、目录、奖励、失败和时间合同。',
-    skillId: 'text-open-world.production.quest-finalize.v1', recommendedModelCalls: 1, tokenBudgetWeight: 12,
+    skillId: 'text-open-world.production.quest-finalize.v1', recommendedModelCalls: 1, tokenBudgetWeight: 13,
     dependsOn: [
       'p5.mainline', 'p6.significant-threads', 'p7.region-narrative-packs', 'p8.quest-skeletons',
       'p8.catalog.progression', 'p8.catalog.encounters', 'p8.catalog.items-rewards',

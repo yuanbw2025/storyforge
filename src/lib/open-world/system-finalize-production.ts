@@ -963,6 +963,9 @@ export async function createTextOpenWorldDeterministicPreflightV1(input: {
   for (const route of ending.routes) {
     const action = actionByKey.get(route.actionKey)
     const condition = quests.conditions.find(item => item.key === route.conditionKey)
+    const eligibilityCondition = route.eligibilityConditionKey === undefined
+      ? undefined
+      : quests.conditions.find(item => item.key === route.eligibilityConditionKey)
     const routeEffect = quests.effects.find(item => item.key === route.routeEffectKey)
     const unlockEffect = quests.effects.find(item => item.key === route.unlockEffectKey)
     const reachEffect = quests.effects.find(item => item.key === route.reachEffectKey)
@@ -977,9 +980,40 @@ export async function createTextOpenWorldDeterministicPreflightV1(input: {
         achievement.sourceKind === 'ending-action' && achievement.sourceKey === route.endingKey
       )).map(achievement => achievement.earnEffectKey),
     ]
+    const expectedEligibilityExpression = route.eligibility === undefined ? undefined : {
+      op: 'all' as const,
+      conditions: [
+        ...route.eligibility.requiredQuestKeys.map(questKey => ({
+          op: 'quest-status' as const, questKey, statuses: ['completed' as const],
+        })),
+        ...route.eligibility.anyQuestKeyGroups.map(questKeys => ({
+          op: 'any' as const,
+          conditions: questKeys.map(questKey => ({
+            op: 'quest-status' as const, questKey, statuses: ['completed' as const],
+          })),
+        })),
+        ...route.eligibility.requiredFactionAffinities.map(item => ({
+          op: 'relation-faction-affinity' as const,
+          factionKey: item.factionKey,
+          comparator: 'gte' as const,
+          value: item.minimum,
+        })),
+        ...route.eligibility.requiredRecipeKeys.map(recipeKey => ({
+          op: 'inventory-recipe-known' as const, recipeKey, known: true,
+        })),
+      ],
+    }
+    const expectedRequirementConditionKeys = [
+      ending.selectionReadyConditionKey,
+      ...(route.eligibilityConditionKey === undefined ? [] : [route.eligibilityConditionKey]),
+    ]
     if (!action || action.category !== 'quest-action' || action.actorScope !== 'player' || action.targetScope !== 'none'
       || !same(action.locationKeys, [ending.finalLocationKey])
-      || !same(action.requirementConditionKeys, [ending.selectionReadyConditionKey])
+      || !same(action.requirementConditionKeys, expectedRequirementConditionKeys)
+      || (route.eligibilityConditionKey === undefined) !== (route.eligibility === undefined)
+      || (expectedEligibilityExpression === undefined
+        ? eligibilityCondition !== undefined
+        : !eligibilityCondition || !same(eligibilityCondition.expression, expectedEligibilityExpression))
       || canonicalProductProductionJsonV2(action.successEffectKeys)
         !== canonicalProductProductionJsonV2([
           route.routeEffectKey, route.unlockEffectKey, route.reachEffectKey, ...governedSuffixEffectKeys,

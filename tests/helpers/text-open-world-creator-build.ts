@@ -23,6 +23,7 @@ import type {
   AdaptationSourceSelectionV1,
   AIConfig,
   TextOpenWorldCreatorBriefDraftV1,
+  TextOpenWorldCreatorScaleV1,
   TextOpenWorldCreatorSourceSelectionV1,
   WorkspaceScope,
 } from '../../src/lib/types'
@@ -116,6 +117,7 @@ export async function seedAuthorizedTextOpenWorldCreatorBuildV1(input: {
     | 'forbiddenChanges'
     | 'authorNotes'
   >>
+  briefScale?: Partial<TextOpenWorldCreatorScaleV1>
 }) {
   const selection = await creatorSelection(input.source)
   const baseTime = Date.now() - 1_000
@@ -131,6 +133,7 @@ export async function seedAuthorizedTextOpenWorldCreatorBuildV1(input: {
       gameTitle: `SourcePin ${input.sessionKey}`,
       coreGoal: '只从作者冻结来源生产可验证的文字开放世界。',
       ...structuredClone(input.briefDraft ?? {}),
+      scale: { ...started.draft.scale, ...structuredClone(input.briefScale ?? {}) },
     },
     acknowledgements: BRIEF_ACKNOWLEDGEMENTS,
     confirmedAt: baseTime + 1,

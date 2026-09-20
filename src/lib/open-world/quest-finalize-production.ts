@@ -66,6 +66,26 @@ interface KnowledgeBindingDemandV1 {
   confirmationCandidates: KnowledgeConfirmationCandidateV1[]
 }
 
+type EndingEligibilityCandidateKindV1 = 'quest-complete' | 'faction-affinity' | 'recipe-known'
+
+interface EndingEligibilityCandidateV1 {
+  candidateNumber: number
+  kind: EndingEligibilityCandidateKindV1
+  sourceKey: string
+  title: string
+  summary: string
+  questType: 'significant' | 'ordinary' | null
+  storylineKey: string | null
+}
+
+interface EndingEligibilityDemandV1 {
+  endingNumber: number
+  endingKey: string
+  title: string
+  eligiblePathSummary: string
+  candidates: EndingEligibilityCandidateV1[]
+}
+
 type AchievementBindingCandidateV1 = KnowledgeConfirmationCandidateV1
 
 export interface TextOpenWorldQuestFinalizeInputContextV1 {
@@ -92,6 +112,9 @@ export interface TextOpenWorldQuestFinalizeInputContextV1 {
   knowledgeProgressContract?: 'governed-v18'
   knowledgeBindingDemands?: KnowledgeBindingDemandV1[]
   achievementBindingCandidates?: AchievementBindingCandidateV1[]
+  /** Missing from pre-G7 durable contexts; omission preserves the historical ending/consequence graph. */
+  storyOutcomeContract?: 'governed-v19'
+  endingEligibilityDemands?: EndingEligibilityDemandV1[]
   contextSelectionHash: string
 }
 
@@ -157,6 +180,13 @@ interface QuestFinalizeDraftV1 {
     confirmationCandidateNumbers: number[]
   }>
   achievementCandidateNumbers?: number[]
+  endingEligibilitySelections?: Array<{
+    endingNumber: number
+    requiredQuestCandidateNumbers: number[]
+    anyQuestCandidateGroups: number[][]
+    requiredFactionAffinities: Array<{ candidateNumber: number; minimum: number }>
+    requiredRecipeCandidateNumbers: number[]
+  }>
 }
 
 function fail(message: string): never { throw new Error(`[text-open-world-quest-finalize] ${message}`) }
@@ -383,6 +413,60 @@ function buildKnowledgeProductionDemands(context: QuestFinalizeContextWithoutHas
   return { governed: true, knowledgeBindingDemands, achievementBindingCandidates }
 }
 
+function buildEndingEligibilityDemands(context: QuestFinalizeContextWithoutHashV1): EndingEligibilityDemandV1[] {
+  const candidates: EndingEligibilityCandidateV1[] = []
+  const addCandidate = (candidate: Omit<EndingEligibilityCandidateV1, 'candidateNumber'>) => {
+    if (candidates.some(item => item.kind === candidate.kind && item.sourceKey === candidate.sourceKey)) return
+    candidates.push({ ...candidate, candidateNumber: candidates.length + 1 })
+  }
+  for (const thread of context.significantThreads.threads) {
+    const orderedStages = context.significantThreads.stages
+      .filter(stage => stage.threadKey === thread.key)
+      .sort((left, right) => left.order - right.order)
+    const finalStage = orderedStages[orderedStages.length - 1] ?? fail(`重要故事线缺少最终阶段:${thread.key}`)
+    const quest = context.questSkeletons.quests.find(item => (
+      item.type === 'significant'
+      && item.storylineKey === thread.key
+      && item.source.kind === 'significant-stage'
+      && item.source.sourceKey === finalStage.key
+    )) ?? fail(`重要故事线最终阶段缺少任务骨架:${thread.key}`)
+    addCandidate({
+      kind: 'quest-complete', sourceKey: quest.key, title: quest.title,
+      summary: `完成重要故事线“${thread.title}”的最终任务。`, questType: 'significant', storylineKey: thread.key,
+    })
+  }
+  context.questSkeletons.quests
+    .filter(quest => quest.type === 'ordinary' && quest.lifecyclePlan.instantiationPolicy === 'session-start')
+    .sort((left, right) => left.order - right.order || left.key.localeCompare(right.key))
+    .forEach(quest => addCandidate({
+      kind: 'quest-complete', sourceKey: quest.key, title: quest.title,
+      summary: '完成一项发布时已存在、可以永久记录结果的普通支线。', questType: 'ordinary', storylineKey: quest.storylineKey,
+    }))
+  ;[...context.npcRuntimeCatalog.factions]
+    .sort((left, right) => left.order - right.order || left.key.localeCompare(right.key))
+    .forEach(faction => addCandidate({
+      kind: 'faction-affinity', sourceKey: faction.key, title: faction.title,
+      summary: faction.publicGoal, questType: null, storylineKey: null,
+    }))
+  ;[...context.craftingEconomyCatalog.recipes]
+    .sort((left, right) => left.order - right.order || left.key.localeCompare(right.key))
+    .forEach(recipe => addCandidate({
+      kind: 'recipe-known', sourceKey: recipe.key, title: recipe.title,
+      summary: recipe.description, questType: null, storylineKey: null,
+    }))
+  if (candidates.length < 2) fail('结局资格至少需要两个可区分的闭集候选')
+  return [...context.mainlineThread.endingRoutes]
+    .sort((left, right) => context.mainlineThread.thread.endingKeys.indexOf(left.endingKey)
+      - context.mainlineThread.thread.endingKeys.indexOf(right.endingKey))
+    .map((route, index) => ({
+      endingNumber: index + 1,
+      endingKey: route.endingKey,
+      title: route.decisivePlayerValue,
+      eligiblePathSummary: route.routeSummary,
+      candidates: candidates.map(candidate => ({ ...candidate })),
+    }))
+}
+
 async function validateUpstream(context: Omit<TextOpenWorldQuestFinalizeInputContextV1, 'contextSelectionHash'>): Promise<void> {
   if (context.questLifecycleContract !== undefined && context.questLifecycleContract !== 'governed-v16') {
     fail('Quest生命周期生产合同无效')
@@ -392,6 +476,9 @@ async function validateUpstream(context: Omit<TextOpenWorldQuestFinalizeInputCon
   }
   if (context.knowledgeProgressContract !== undefined && context.knowledgeProgressContract !== 'governed-v18') {
     fail('Knowledge进展生产合同无效')
+  }
+  if (context.storyOutcomeContract !== undefined && context.storyOutcomeContract !== 'governed-v19') {
+    fail('重要故事后果与结局资格生产合同无效')
   }
   if (context.combatMechanicsContract === 'governed-v17'
     && context.progressionCatalogs.governance.structuredCombatSemanticsReady !== true) {
@@ -410,6 +497,27 @@ async function validateUpstream(context: Omit<TextOpenWorldQuestFinalizeInputCon
     }
   } else if (context.knowledgeBindingDemands !== undefined || context.achievementBindingCandidates !== undefined) {
     fail('历史P8F Context不能携带Knowledge/成就候选')
+  }
+  if (context.storyOutcomeContract === 'governed-v19') {
+    const expectedDemands = buildEndingEligibilityDemands(context)
+    if (canonicalProductProductionJsonV2(context.endingEligibilityDemands)
+      !== canonicalProductProductionJsonV2(expectedDemands)) {
+      fail('结局资格候选不是受治理上游目录的确定性投影')
+    }
+    for (const stage of context.significantThreads.stages) {
+      for (const consequence of stage.localConsequencePlans) {
+        if (consequence.runtimeBinding.status !== 'effect-unbound'
+          || consequence.runtimeBinding.conditionKeys.length
+          || consequence.runtimeBinding.effectKeys.length) {
+          fail(`重要故事后果已经被上游越权绑定:${consequence.key}`)
+        }
+        if (consequence.direction === 'change') {
+          fail(`重要故事后果必须明确增加或减少方向:${consequence.key}`)
+        }
+      }
+    }
+  } else if (context.endingEligibilityDemands !== undefined) {
+    fail('历史P8F Context不能携带结局资格候选')
   }
   const artifacts: Array<[Record<string, unknown>, string, string]> = [
     [context.mainlineThread as unknown as Record<string, unknown>, 'mainlineThreadHash', 'MainlineThread'],
@@ -535,6 +643,8 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     body.knowledgeBindingDemands = knowledgeProduction.knowledgeBindingDemands
     body.achievementBindingCandidates = knowledgeProduction.achievementBindingCandidates
   }
+  body.storyOutcomeContract = 'governed-v19'
+  body.endingEligibilityDemands = buildEndingEligibilityDemands(body)
   await validateUpstream(body)
   const context = { ...body, contextSelectionHash: await hashProductProductionValueV2(body) }
   if (canonicalProductProductionJsonV2(context).length > MAX_CONTEXT_CHARS) fail('QuestFinalize Context超过硬上限')
@@ -560,15 +670,18 @@ async function parseContext(value: string): Promise<TextOpenWorldQuestFinalizeIn
 function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputContextV1): QuestFinalizeDraftV1 {
   const root = record(value, 'draft')
   const governedKnowledge = context.knowledgeProgressContract === 'governed-v18'
+  const governedStoryOutcome = context.storyOutcomeContract === 'governed-v19'
   const hasKnowledgeSelections = Object.prototype.hasOwnProperty.call(root, 'knowledgeSelections')
   const hasAchievementSelections = Object.prototype.hasOwnProperty.call(root, 'achievementCandidateNumbers')
   if (governedKnowledge && hasKnowledgeSelections !== hasAchievementSelections) {
     fail('Knowledge与成就模型选择字段必须同时存在或同时缺失')
   }
   const explicitKnowledgeSelections = governedKnowledge && hasKnowledgeSelections && hasAchievementSelections
-  exactKeys(root, explicitKnowledgeSelections
-    ? ['schema', 'version', 'quests', 'objectives', 'decks', 'templates', 'randomEvents', 'knowledgeSelections', 'achievementCandidateNumbers']
-    : ['schema', 'version', 'quests', 'objectives', 'decks', 'templates', 'randomEvents'], 'draft')
+  exactKeys(root, [
+    'schema', 'version', 'quests', 'objectives', 'decks', 'templates', 'randomEvents',
+    ...(explicitKnowledgeSelections ? ['knowledgeSelections', 'achievementCandidateNumbers'] : []),
+    ...(governedStoryOutcome ? ['endingEligibilitySelections'] : []),
+  ], 'draft')
   if (root.schema !== 'storyforge.text-open-world-quest-finalize-draft' || root.version !== 1) fail('draft schema/version无效')
   if (!Array.isArray(root.quests) || root.quests.length !== context.questSkeletons.quests.length) fail(`quests必须与${context.questSkeletons.quests.length}项骨架一一对应`)
   const quests = root.quests.map((value, index) => {
@@ -664,7 +777,120 @@ function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputCont
     }
   })
   if (randomEvents.some((event, index) => event.seedNumber !== index + 1)) fail('randomEvents必须按序精确覆盖')
-  if (!governedKnowledge) return { quests, objectives, decks, templates, randomEvents }
+  const baseDraft: QuestFinalizeDraftV1 = { quests, objectives, decks, templates, randomEvents }
+  if (governedStoryOutcome) {
+    const demands = context.endingEligibilityDemands ?? fail('结局资格选择缺少候选合同')
+    if (!Array.isArray(root.endingEligibilitySelections)
+      || root.endingEligibilitySelections.length !== demands.length) {
+      fail(`endingEligibilitySelections必须与${demands.length}个结局一一对应`)
+    }
+    const numberArray = (candidateValue: unknown, label: string, maximum: number): number[] => {
+      if (!Array.isArray(candidateValue) || candidateValue.length > maximum) fail(`${label}必须是最多${maximum}项数组`)
+      const values = candidateValue.map((item, index) => integer(item, `${label}[${index}]`, 1, maximum))
+      if (new Set(values).size !== values.length
+        || values.some((number, index) => index > 0 && number <= values[index - 1]!)) {
+        fail(`${label}必须严格升序且不重复`)
+      }
+      return values
+    }
+    const endingEligibilitySelections = root.endingEligibilitySelections.map((value, index) => {
+      const row = record(value, `endingEligibilitySelections[${index}]`)
+      exactKeys(row, [
+        'endingNumber', 'requiredQuestCandidateNumbers', 'anyQuestCandidateGroups',
+        'requiredFactionAffinities', 'requiredRecipeCandidateNumbers',
+      ], `endingEligibilitySelections[${index}]`)
+      const demand = demands[index]!
+      const endingNumber = integer(row.endingNumber, `endingEligibilitySelections[${index}].endingNumber`, 1, demands.length)
+      if (endingNumber !== index + 1 || endingNumber !== demand.endingNumber) {
+        fail('endingEligibilitySelections必须按结局顺序精确覆盖')
+      }
+      const requiredQuestCandidateNumbers = numberArray(
+        row.requiredQuestCandidateNumbers,
+        `endingEligibilitySelections[${index}].requiredQuestCandidateNumbers`,
+        demand.candidates.length,
+      )
+      if (!Array.isArray(row.anyQuestCandidateGroups) || row.anyQuestCandidateGroups.length > 4) {
+        fail(`endingEligibilitySelections[${index}].anyQuestCandidateGroups必须是最多4组数组`)
+      }
+      const anyQuestCandidateGroups = row.anyQuestCandidateGroups.map((group, groupIndex) => {
+        const values = numberArray(
+          group,
+          `endingEligibilitySelections[${index}].anyQuestCandidateGroups[${groupIndex}]`,
+          demand.candidates.length,
+        )
+        if (values.length < 2) fail(`endingEligibilitySelections[${index}]任一任务组至少需要两个替代候选`)
+        return values
+      })
+      if (!Array.isArray(row.requiredFactionAffinities)
+        || row.requiredFactionAffinities.length > demand.candidates.length) {
+        fail(`endingEligibilitySelections[${index}].requiredFactionAffinities无效`)
+      }
+      const requiredFactionAffinities = row.requiredFactionAffinities.map((value, affinityIndex) => {
+        const affinity = record(value, `endingEligibilitySelections[${index}].requiredFactionAffinities[${affinityIndex}]`)
+        exactKeys(affinity, ['candidateNumber', 'minimum'], `endingEligibilitySelections[${index}].requiredFactionAffinities[${affinityIndex}]`)
+        const minimum = integer(
+          affinity.minimum,
+          `endingEligibilitySelections[${index}].requiredFactionAffinities[${affinityIndex}].minimum`,
+          context.npcRuntimeCatalog.relationshipPolicy.factionAffinity.minimum,
+          context.npcRuntimeCatalog.relationshipPolicy.factionAffinity.maximum,
+        )
+        if (minimum <= context.npcRuntimeCatalog.relationshipPolicy.factionAffinity.initial) {
+          fail(`endingEligibilitySelections[${index}]阵营资格必须高于初始亲合度`)
+        }
+        return {
+          candidateNumber: integer(
+            affinity.candidateNumber,
+            `endingEligibilitySelections[${index}].requiredFactionAffinities[${affinityIndex}].candidateNumber`,
+            1,
+            demand.candidates.length,
+          ),
+          minimum,
+        }
+      })
+      if (new Set(requiredFactionAffinities.map(item => item.candidateNumber)).size !== requiredFactionAffinities.length
+        || requiredFactionAffinities.some((item, affinityIndex) => affinityIndex > 0
+          && item.candidateNumber <= requiredFactionAffinities[affinityIndex - 1]!.candidateNumber)) {
+        fail(`endingEligibilitySelections[${index}]阵营亲和候选必须严格升序且不重复`)
+      }
+      const requiredRecipeCandidateNumbers = numberArray(
+        row.requiredRecipeCandidateNumbers,
+        `endingEligibilitySelections[${index}].requiredRecipeCandidateNumbers`,
+        demand.candidates.length,
+      )
+      const questNumbers = [requiredQuestCandidateNumbers, ...anyQuestCandidateGroups].flat()
+      if (questNumbers.some(number => demand.candidates[number - 1]?.kind !== 'quest-complete')) {
+        fail(`endingEligibilitySelections[${index}]任务资格引用了错误候选类型`)
+      }
+      if (requiredFactionAffinities.some(item => demand.candidates[item.candidateNumber - 1]?.kind !== 'faction-affinity')) {
+        fail(`endingEligibilitySelections[${index}]阵营资格引用了错误候选类型`)
+      }
+      if (requiredRecipeCandidateNumbers.some(number => demand.candidates[number - 1]?.kind !== 'recipe-known')) {
+        fail(`endingEligibilitySelections[${index}]配方资格引用了错误候选类型`)
+      }
+      const allCandidateNumbers = [
+        ...questNumbers,
+        ...requiredFactionAffinities.map(item => item.candidateNumber),
+        ...requiredRecipeCandidateNumbers,
+      ]
+      if (!allCandidateNumbers.length) fail(`endingEligibilitySelections[${index}]必须至少选择一项路线资格`)
+      if (new Set(allCandidateNumbers).size !== allCandidateNumbers.length) {
+        fail(`endingEligibilitySelections[${index}]同一候选不能重复承担路线资格`)
+      }
+      return {
+        endingNumber, requiredQuestCandidateNumbers, anyQuestCandidateGroups,
+        requiredFactionAffinities, requiredRecipeCandidateNumbers,
+      }
+    })
+    const signatures = endingEligibilitySelections.map(selection => canonicalProductProductionJsonV2({
+      requiredQuestCandidateNumbers: selection.requiredQuestCandidateNumbers,
+      anyQuestCandidateGroups: selection.anyQuestCandidateGroups,
+      requiredFactionAffinities: selection.requiredFactionAffinities,
+      requiredRecipeCandidateNumbers: selection.requiredRecipeCandidateNumbers,
+    }))
+    if (new Set(signatures).size !== signatures.length) fail('每个结局必须拥有可区分的路线资格')
+    baseDraft.endingEligibilitySelections = endingEligibilitySelections
+  }
+  if (!governedKnowledge) return baseDraft
   const demands = context.knowledgeBindingDemands ?? fail('Knowledge选择缺少候选合同')
   if (!explicitKnowledgeSelections) {
     const achievementCandidates = context.achievementBindingCandidates ?? fail('成就选择缺少候选合同')
@@ -679,7 +905,7 @@ function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputCont
     }
     achievementCandidateNumbers.sort((left, right) => left - right)
     return {
-      quests, objectives, decks, templates, randomEvents,
+      ...baseDraft,
       knowledgeSelections: demands.map(demand => ({
         rumorNumber: demand.rumorNumber,
         propagationLocationNumber: 1,
@@ -739,7 +965,7 @@ function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputCont
     || !selectedAchievements.some(candidate => candidate.sourceKind === 'ending-action')) {
     fail('首版成就必须同时覆盖受保护任务与结局')
   }
-  return { quests, objectives, decks, templates, randomEvents, knowledgeSelections, achievementCandidateNumbers }
+  return { ...baseDraft, knowledgeSelections, achievementCandidateNumbers }
 }
 
 function action(input: Partial<TextOpenWorldActionDefinitionV1> & Pick<TextOpenWorldActionDefinitionV1, 'key' | 'category' | 'label' | 'description'>): TextOpenWorldActionDefinitionV1 {
@@ -994,10 +1220,12 @@ async function createArtifacts(input: {
   lifecycleContract?: 'legacy' | 'governed-v16'
   combatMechanicsContract?: 'legacy' | 'governed-v17'
   knowledgeProgressContract?: 'legacy' | 'governed-v18'
+  storyOutcomeContract?: 'legacy' | 'governed-v19'
 }): Promise<TextOpenWorldQuestFinalizeArtifactsV1> {
   const governedLifecycle = input.lifecycleContract !== 'legacy'
   const governedCombatMechanics = input.combatMechanicsContract === 'governed-v17'
   const governedKnowledge = input.knowledgeProgressContract === 'governed-v18'
+  const governedStoryOutcome = input.storyOutcomeContract === 'governed-v19'
   const governedProtectedStoryReveal = governedLifecycle && governedCombatMechanics && governedKnowledge
   if (governedCombatMechanics) {
     input.context.progressionCatalogs.statuses.forEach(compileTextOpenWorldStatusDefinitionV2)
@@ -1273,6 +1501,7 @@ async function createArtifacts(input: {
   const questRows: TextOpenWorldQuestDesignDocumentsV1['quests'] = []
   const stageRows: TextOpenWorldQuestDesignDocumentsV1['stages'] = []
   const objectiveRows: TextOpenWorldQuestDesignDocumentsV1['objectives'] = []
+  const storyOutcomeBindings: NonNullable<TextOpenWorldQuestDesignDocumentsV1['storyOutcomeBindings']> = []
   input.context.questSkeletons.objectives.forEach((objective, index) => {
     const draft = input.draft.objectives[index]!
     const definitions = requirementBindings.filter(binding => objective.requirementKeys.includes(binding.requirementKey)).flatMap(binding => binding.definitionKeys)
@@ -1344,7 +1573,83 @@ async function createArtifacts(input: {
     const final = stageIndex === ordered.length - 1
     const effectKey = `effect.advance.${stage.key}`; const actionKey = `action.advance.${stage.key}`
     addEffect({ key: effectKey, operation: 'transition-quest', payload: { questKey: quest.key, status: final ? 'completed' : 'active', stageKey: final ? stage.key : ordered[stageIndex + 1]!.key } })
-    addAction(action({ key: actionKey, category: 'quest-action', label: final ? `完成${quest.title}` : `推进${quest.title}`, description: stage.completionIntent, actorScope: 'system', targetScope: 'quest', requirementConditionKeys: completionConditionKeys, successEffectKeys: [effectKey] }))
+    const storyOutcomeEffectKeys: string[] = []
+    if (governedStoryOutcome && final && quest.type === 'significant' && quest.source.kind === 'significant-stage') {
+      const sourceStage = input.context.significantThreads.stages.find(item => item.key === quest.source.sourceKey)
+        ?? fail(`重要故事任务来源阶段不存在:${quest.key}`)
+      sourceStage.localConsequencePlans.forEach(plan => {
+        const outcomeEffectKey = `effect.story-outcome.${plan.key}`
+        const unsignedAmount = plan.magnitude === 'minor' ? 5 : plan.magnitude === 'moderate' ? 10 : 20
+        const amount = plan.direction === 'decrease' ? -unsignedAmount : unsignedAmount
+        const outcomeEffects: TextOpenWorldEffectDefinitionV1[] = []
+        if (plan.kind === 'morality') {
+          if (plan.targetSemanticKey !== 'player.morality') fail(`道德后果目标无效:${plan.key}`)
+          outcomeEffects.push({ key: outcomeEffectKey, operation: 'change-morality', payload: { amount } })
+        } else if (plan.kind === 'faction-affinity') {
+          const factionRequirementKeys = input.context.regionNarrativePacks.packs
+            .flatMap(pack => pack.factionRequirements)
+            .filter(requirement => requirement.significantThreadKeys.includes(sourceStage.threadKey))
+            .map(requirement => requirement.key)
+          const manifestRequirementKeys = input.context.contentRequirementManifest.requirements
+            .filter(requirement => requirement.kind === 'faction'
+              && requirement.sourceReservationKey !== null
+              && factionRequirementKeys.includes(requirement.sourceReservationKey))
+            .map(requirement => requirement.key)
+          const matches = input.context.npcRuntimeCatalog.factions.filter(faction => (
+            faction.key === plan.targetSemanticKey
+            || factionRequirementKeys.includes(faction.key)
+            || faction.fulfilledRequirementKeys.some(key => manifestRequirementKeys.includes(key))
+          ))
+          if (!matches.length) fail(`阵营后果没有解析到运行Faction:${plan.key}`)
+          matches.forEach((faction, factionIndex) => outcomeEffects.push({
+            key: `${outcomeEffectKey}.${String(factionIndex + 1).padStart(3, '0')}`,
+            operation: 'change-faction-affinity',
+            payload: { factionKey: faction.key, amount },
+          }))
+        } else if (plan.kind === 'npc-attitude') {
+          const matches = input.context.npcRuntimeCatalog.actors.filter(actor => (
+            actor.key === plan.targetSemanticKey || actor.fulfilledRequirementKeys.includes(plan.targetSemanticKey)
+          ))
+          if (matches.length !== 1) fail(`NPC态度后果必须唯一解析到运行Actor:${plan.key}`)
+          outcomeEffects.push({
+            key: outcomeEffectKey,
+            operation: 'set-story-modifier',
+            payload: { actorKey: matches[0]!.key, value: amount },
+          })
+        } else if (plan.kind === 'regional-state') {
+          const region = input.context.mapInteractionCatalog.regions.find(item => item.key === plan.targetSemanticKey)
+            ?? fail(`地区后果目标不存在:${plan.key}`)
+          outcomeEffects.push({
+            key: outcomeEffectKey,
+            operation: 'change-region-state',
+            payload: { regionKey: region.key, state: `story-outcome.${plan.direction}.${plan.magnitude}` },
+          })
+        } else {
+          if (plan.targetSemanticKey !== 'player.inventory') fail(`资源后果目标无效:${plan.key}`)
+          outcomeEffects.push({ key: outcomeEffectKey, operation: 'change-currency', payload: { amount } })
+        }
+        outcomeEffects.forEach(addEffect)
+        storyOutcomeEffectKeys.push(...outcomeEffects.map(effect => effect.key))
+        storyOutcomeBindings.push({
+          threadKey: sourceStage.threadKey,
+          sourceStageKey: sourceStage.key,
+          questKey: quest.key,
+          questStageKey: stage.key,
+          consequencePlanKey: plan.key,
+          effectKeys: outcomeEffects.map(effect => effect.key),
+        })
+      })
+    }
+    addAction(action({
+      key: actionKey,
+      category: 'quest-action',
+      label: final ? `完成${quest.title}` : `推进${quest.title}`,
+      description: stage.completionIntent,
+      actorScope: 'system',
+      targetScope: 'quest',
+      requirementConditionKeys: completionConditionKeys,
+      successEffectKeys: [effectKey, ...storyOutcomeEffectKeys],
+    }))
     stageRows.push({ key: stage.key, questKey: stage.questKey, order: stage.order, title: stage.title, objectiveKeys: stage.objectiveKeys, completionConditionKeys, completionActionKey: actionKey })
   })
 
@@ -1512,8 +1817,9 @@ async function createArtifacts(input: {
     expression: { op: 'quest-status', questKey: finalMainlineQuest.key, statuses: ['completed'] },
     failureMessage: '完成主线最终任务后，才能作出最终选择。',
   })
-  const endingRouteBindings: TextOpenWorldQuestDesignDocumentsV1['endingBindings']['routes'] = endingRoutes.map(route => {
+  const endingRouteBindings: TextOpenWorldQuestDesignDocumentsV1['endingBindings']['routes'] = endingRoutes.map((route, routeIndex) => {
     const conditionKey = `condition.ending.${route.endingKey}`
+    const eligibilityConditionKey = `condition.ending.eligibility.${route.endingKey}`
     const actionKey = `action.ending.${route.endingKey}`
     const routeEffectKey = `effect.ending.route.${route.endingKey}`
     const unlockEffectKey = `effect.ending.unlock.${route.endingKey}`
@@ -1529,17 +1835,76 @@ async function createArtifacts(input: {
       },
       failureMessage: `尚未选择“${route.decisivePlayerValue}”对应的最终道路。`,
     })
+    let eligibility: NonNullable<TextOpenWorldQuestDesignDocumentsV1['endingBindings']['routes'][number]['eligibility']> | undefined
+    if (governedStoryOutcome) {
+      const demand = input.context.endingEligibilityDemands?.[routeIndex]
+        ?? fail(`结局缺少资格候选:${route.endingKey}`)
+      const selection = input.draft.endingEligibilitySelections?.[routeIndex]
+        ?? fail(`结局缺少资格选择:${route.endingKey}`)
+      if (demand.endingKey !== route.endingKey || selection.endingNumber !== demand.endingNumber) {
+        fail(`结局资格选择与路线错位:${route.endingKey}`)
+      }
+      const candidate = (candidateNumber: number, kind: EndingEligibilityCandidateKindV1) => {
+        const value = demand.candidates[candidateNumber - 1]
+          ?? fail(`结局资格候选不存在:${route.endingKey}:${candidateNumber}`)
+        if (value.kind !== kind) fail(`结局资格候选类型错误:${route.endingKey}:${candidateNumber}`)
+        return value
+      }
+      const requiredQuestKeys = selection.requiredQuestCandidateNumbers
+        .map(number => candidate(number, 'quest-complete').sourceKey)
+      const anyQuestKeyGroups = selection.anyQuestCandidateGroups.map(group => group
+        .map(number => candidate(number, 'quest-complete').sourceKey))
+      const requiredFactionAffinities = selection.requiredFactionAffinities.map(item => ({
+        factionKey: candidate(item.candidateNumber, 'faction-affinity').sourceKey,
+        minimum: item.minimum,
+      }))
+      const requiredRecipeKeys = selection.requiredRecipeCandidateNumbers
+        .map(number => candidate(number, 'recipe-known').sourceKey)
+      eligibility = { requiredQuestKeys, anyQuestKeyGroups, requiredFactionAffinities, requiredRecipeKeys }
+      addCondition({
+        key: eligibilityConditionKey,
+        expression: {
+          op: 'all',
+          conditions: [
+            ...requiredQuestKeys.map(questKey => ({ op: 'quest-status' as const, questKey, statuses: ['completed' as const] })),
+            ...anyQuestKeyGroups.map(questKeys => ({
+              op: 'any' as const,
+              conditions: questKeys.map(questKey => ({ op: 'quest-status' as const, questKey, statuses: ['completed' as const] })),
+            })),
+            ...requiredFactionAffinities.map(item => ({
+              op: 'relation-faction-affinity' as const,
+              factionKey: item.factionKey,
+              comparator: 'gte' as const,
+              value: item.minimum,
+            })),
+            ...requiredRecipeKeys.map(recipeKey => ({ op: 'inventory-recipe-known' as const, recipeKey, known: true })),
+          ],
+        },
+        failureMessage: `尚未满足“${route.decisivePlayerValue}”的路线资格。`,
+      })
+    }
     addEffect({ key: routeEffectKey, operation: 'set-world-flag', payload: { flagKey: 'flag.ending.route', value: route.endingKey } })
     addEffect({ key: unlockEffectKey, operation: 'unlock-ending', payload: { endingKey: route.endingKey } })
     addEffect({ key: reachEffectKey, operation: 'reach-ending', payload: { endingKey: route.endingKey } })
     addAction(action({
       key: actionKey, category: 'quest-action', label: `走向结局：${route.decisivePlayerValue}`,
       description: route.routeSummary, actorScope: 'player', targetScope: 'none',
-      locationKeys: [finalLocationKey], requirementConditionKeys: [selectionReadyConditionKey],
+      locationKeys: [finalLocationKey], requirementConditionKeys: [
+        selectionReadyConditionKey,
+        ...(governedStoryOutcome ? [eligibilityConditionKey] : []),
+      ],
       successEffectKeys: [routeEffectKey, unlockEffectKey, reachEffectKey],
       confirmationPolicy: 'always', repeatPolicy: 'once',
     }))
-    return { endingKey: route.endingKey, conditionKey, actionKey, routeEffectKey, unlockEffectKey, reachEffectKey }
+    return {
+      endingKey: route.endingKey,
+      conditionKey,
+      ...(governedStoryOutcome ? { eligibilityConditionKey, eligibility } : {}),
+      actionKey,
+      routeEffectKey,
+      unlockEffectKey,
+      reachEffectKey,
+    }
   })
   const endingBindings: TextOpenWorldQuestDesignDocumentsV1['endingBindings'] = {
     finalMainlineQuestKey: finalMainlineQuest.key,
@@ -1741,6 +2106,7 @@ async function createArtifacts(input: {
     mapInteractionCatalogHash: input.context.mapInteractionCatalog.mapInteractionCatalogHash,
     requirementBindings, quests: questRows, stages: stageRows, objectives: objectiveRows, conditions, effects, actions,
     ...(governedKnowledge ? { knowledgeBindings, achievementBindings } : {}),
+    ...(governedStoryOutcome ? { storyOutcomeBindings } : {}),
     endingBindings,
     catalogBindings: {
       skills: skillBindings, enemies: enemyBindings, encounters: encounterBindings, items: itemBindings,
@@ -1782,6 +2148,7 @@ async function createArtifacts(input: {
         allAchievementsOneTimeReachable: true as const,
         knowledgeProgressReady: true as const,
       } : {}),
+      ...(governedStoryOutcome ? { storyOutcomesRuntimeBound: true as const } : {}),
       ...(governedProtectedStoryReveal ? { protectedStoryRevealActionsReady: true as const } : {}),
       allCatalogBindingsResolved: true,
       allEndingsRuntimeBound: true, sceneBindingsDeferred: true, questAndEncounterBindingsReady: true,
@@ -1958,6 +2325,13 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
     && artifact.governance.knowledgeProgressReady === true
   const knowledgeBindings = artifact.knowledgeBindings ?? []
   const achievementBindings = artifact.achievementBindings ?? []
+  const storyOutcomeDeclared = artifact.storyOutcomeBindings !== undefined
+    || artifact.governance.storyOutcomesRuntimeBound !== undefined
+    || artifact.endingBindings.routes.some(route => route.eligibilityConditionKey !== undefined || route.eligibility !== undefined)
+  const governedStoryOutcome = artifact.storyOutcomeBindings !== undefined
+    && artifact.governance.storyOutcomesRuntimeBound === true
+    && artifact.endingBindings.routes.every(route => route.eligibilityConditionKey !== undefined && route.eligibility !== undefined)
+  const storyOutcomeBindings = artifact.storyOutcomeBindings ?? []
   const ownerEffectKeys = (binding: {
     effectOwnerKind: 'reward-contract' | 'action'
     effectOwnerKey: string
@@ -2119,6 +2493,25 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
         && action.category === 'quest-action' && action.actorScope === 'system'
     })
   )
+  const storyOutcomeCoverageInvalid = storyOutcomeDeclared && (
+    !governedStoryOutcome
+    || !storyOutcomeBindings.length
+    || new Set(storyOutcomeBindings.map(binding => binding.consequencePlanKey)).size !== storyOutcomeBindings.length
+    || storyOutcomeBindings.some(binding => {
+      const stage = artifact.stages.find(item => item.key === binding.questStageKey && item.questKey === binding.questKey)
+      const action = stage ? artifact.actions.find(item => item.key === stage.completionActionKey) : null
+      return binding.effectKeys.length < 1
+        || new Set(binding.effectKeys).size !== binding.effectKeys.length
+        || binding.threadKey.length === 0 || binding.sourceStageKey.length === 0
+        || !action
+        || binding.effectKeys.some(effectKey => (
+          !artifact.effects.some(effect => effect.key === effectKey)
+          || action.successEffectKeys.filter(key => key === effectKey).length !== 1
+        ))
+    })
+    || new Set(artifact.endingBindings.routes.map(route => canonicalProductProductionJsonV2(route.eligibility))).size
+      !== artifact.endingBindings.routes.length
+  )
   if (!same(artifact.coverage.requiredQuestKeys, artifact.coverage.finalizedQuestKeys)
     || !same(artifact.coverage.requiredObjectiveKeys, artifact.coverage.finalizedObjectiveKeys)
     || !same(artifact.coverage.requiredRequirementKeys, artifact.coverage.boundRequirementKeys)
@@ -2132,6 +2525,7 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
     || lifecycleGovernanceDeclared && (!governedLifecycle || abandonCoverageInvalid || restartCoverageInvalid)
     || protectedRevealCoverageInvalid
     || knowledgeCoverageInvalid
+    || storyOutcomeCoverageInvalid
     || artifact.catalogBindings.encounters.some(binding => !binding.rewardContractKey || !binding.startActionKey)
     || new Set(artifact.conditions.map(item => item.key)).size !== artifact.conditions.length
     || new Set(artifact.effects.map(item => item.key)).size !== artifact.effects.length
@@ -2154,6 +2548,9 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
     })) fail('结局选择入口没有绑定最终主线完成条件')
   artifact.endingBindings.routes.forEach(binding => {
     const condition = artifact.conditions.find(item => item.key === binding.conditionKey)
+    const eligibilityCondition = binding.eligibilityConditionKey === undefined
+      ? undefined
+      : artifact.conditions.find(item => item.key === binding.eligibilityConditionKey)
     const routeEffect = artifact.effects.find(item => item.key === binding.routeEffectKey)
     const unlockEffect = artifact.effects.find(item => item.key === binding.unlockEffectKey)
     const reachEffect = artifact.effects.find(item => item.key === binding.reachEffectKey)
@@ -2166,12 +2563,45 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
         && achievement.sourceKey === binding.endingKey)
         .map(achievement => achievement.earnEffectKey),
     ]
+    const expectedEligibilityExpression = binding.eligibility === undefined ? undefined : {
+      op: 'all' as const,
+      conditions: [
+        ...binding.eligibility.requiredQuestKeys.map(questKey => ({
+          op: 'quest-status' as const, questKey, statuses: ['completed' as const],
+        })),
+        ...binding.eligibility.anyQuestKeyGroups.map(questKeys => ({
+          op: 'any' as const,
+          conditions: questKeys.map(questKey => ({
+            op: 'quest-status' as const, questKey, statuses: ['completed' as const],
+          })),
+        })),
+        ...binding.eligibility.requiredFactionAffinities.map(item => ({
+          op: 'relation-faction-affinity' as const,
+          factionKey: item.factionKey,
+          comparator: 'gte' as const,
+          value: item.minimum,
+        })),
+        ...binding.eligibility.requiredRecipeKeys.map(recipeKey => ({
+          op: 'inventory-recipe-known' as const, recipeKey, known: true,
+        })),
+      ],
+    }
+    const expectedRequirementConditionKeys = [
+      artifact.endingBindings.selectionReadyConditionKey,
+      ...(binding.eligibilityConditionKey === undefined ? [] : [binding.eligibilityConditionKey]),
+    ]
     if (canonicalProductProductionJsonV2(condition?.expression) !== canonicalProductProductionJsonV2({
       op: 'all', conditions: [
         { op: 'quest-status', questKey: finalQuest.key, statuses: ['completed'] },
         { op: 'world-flag', flagKey: 'flag.ending.route', value: binding.endingKey },
       ],
     })
+      || (binding.eligibilityConditionKey === undefined) !== (binding.eligibility === undefined)
+      || (expectedEligibilityExpression === undefined
+        ? eligibilityCondition !== undefined
+        : !eligibilityCondition || canonicalProductProductionJsonV2(eligibilityCondition.expression)
+          !== canonicalProductProductionJsonV2(expectedEligibilityExpression))
+      || (binding.eligibility !== undefined && expectedEligibilityExpression?.conditions.length === 0)
       || canonicalProductProductionJsonV2(routeEffect) !== canonicalProductProductionJsonV2({
         key: binding.routeEffectKey, operation: 'set-world-flag', payload: { flagKey: 'flag.ending.route', value: binding.endingKey },
       })
@@ -2184,7 +2614,7 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
       || !endingAction || endingAction.category !== 'quest-action' || endingAction.actorScope !== 'player'
       || endingAction.targetScope !== 'none'
       || !same(endingAction.locationKeys, [artifact.endingBindings.finalLocationKey])
-      || !same(endingAction.requirementConditionKeys, [artifact.endingBindings.selectionReadyConditionKey])
+      || !same(endingAction.requirementConditionKeys, expectedRequirementConditionKeys)
       || canonicalProductProductionJsonV2(endingAction.successEffectKeys)
         !== canonicalProductProductionJsonV2([
           binding.routeEffectKey, binding.unlockEffectKey, binding.reachEffectKey, ...governedSuffixEffectKeys,
@@ -2297,7 +2727,7 @@ function draftFromArtifacts(
   const sourceRandomEvents = governedKnowledge
     ? artifacts.directorDecks.randomEvents.filter(event => randomSeedKeys.has(event.sourceSeedKey))
     : artifacts.directorDecks.randomEvents
-  const body = {
+  const body: Record<string, unknown> = {
     schema: 'storyforge.text-open-world-quest-finalize-draft', version: 1,
     quests: artifacts.questDesignDocuments.quests.map((quest, index) => ({
       questNumber: index + 1, description: quest.description,
@@ -2321,6 +2751,30 @@ function draftFromArtifacts(
       upgradeTemplateNumber: event.upgradeTemplateKey === null ? null
         : artifacts.directorDecks.templates.findIndex(template => template.key === event.upgradeTemplateKey) + 1,
     })),
+  }
+  if (context.storyOutcomeContract === 'governed-v19') {
+    const demands = context.endingEligibilityDemands ?? fail('结局资格反向验证缺少候选合同')
+    body.endingEligibilitySelections = demands.map((demand, index) => {
+      const route = artifacts.questDesignDocuments.endingBindings.routes[index]
+      const eligibility = route?.eligibility ?? fail(`结局资格绑定缺失:${demand.endingKey}`)
+      if (route.endingKey !== demand.endingKey) fail(`结局资格绑定顺序错位:${demand.endingKey}`)
+      const candidateNumber = (kind: EndingEligibilityCandidateKindV1, sourceKey: string): number => (
+        demand.candidates.find(candidate => candidate.kind === kind && candidate.sourceKey === sourceKey)?.candidateNumber
+        ?? 0
+      )
+      return {
+        endingNumber: demand.endingNumber,
+        requiredQuestCandidateNumbers: eligibility.requiredQuestKeys
+          .map(sourceKey => candidateNumber('quest-complete', sourceKey)).sort((left, right) => left - right),
+        anyQuestCandidateGroups: eligibility.anyQuestKeyGroups.map(group => group
+          .map(sourceKey => candidateNumber('quest-complete', sourceKey)).sort((left, right) => left - right)),
+        requiredFactionAffinities: eligibility.requiredFactionAffinities
+          .map(item => ({ candidateNumber: candidateNumber('faction-affinity', item.factionKey), minimum: item.minimum }))
+          .sort((left, right) => left.candidateNumber - right.candidateNumber),
+        requiredRecipeCandidateNumbers: eligibility.requiredRecipeKeys
+          .map(sourceKey => candidateNumber('recipe-known', sourceKey)).sort((left, right) => left - right),
+      }
+    })
   }
   if (!governedKnowledge) return body
   const demands = context.knowledgeBindingDemands ?? fail('Knowledge反向验证缺少候选合同')
@@ -2389,6 +2843,7 @@ export async function validateTextOpenWorldQuestFinalizeArtifactsV1(input: {
     lifecycleContract,
     combatMechanicsContract: context.combatMechanicsContract ?? 'legacy',
     knowledgeProgressContract: context.knowledgeProgressContract ?? 'legacy',
+    storyOutcomeContract: context.storyOutcomeContract ?? 'legacy',
   })
   assertCrossArtifacts(input.artifacts)
   if (canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(input.artifacts)) fail('P8F Artifact固定引用、运行定义、预算或Hash被篡改')
@@ -2423,6 +2878,7 @@ export async function rebuildTextOpenWorldQuestFinalizeFromAuthorEditableDraftV1
     lifecycleContract: context.questLifecycleContract ?? 'legacy',
     combatMechanicsContract: context.combatMechanicsContract ?? 'legacy',
     knowledgeProgressContract: context.knowledgeProgressContract ?? 'legacy',
+    storyOutcomeContract: context.storyOutcomeContract ?? 'legacy',
   })
   return validateTextOpenWorldQuestFinalizeArtifactsV1({ artifacts, context })
 }
@@ -2436,6 +2892,10 @@ function prompts(context: TextOpenWorldQuestFinalizeInputContextV1) {
       'Knowledge与成就只能从输入候选编号中选择；不得改写事实、传闻、可靠度、来源或创建稳定键。',
       '凡承载Knowledge传播的地区牌组，triggerKinds必须包含rest；这是编译器保证可在传播地点执行的稳定触发。',
     ] : []),
+    ...(context.storyOutcomeContract === 'governed-v19' ? [
+      '每个结局的资格只能从该结局输入的闭集候选编号中选择；不得新增任务、阵营、配方、稳定键或把最终主线自身当作资格。',
+      '不同结局必须采用可区分的资格组合。代码会把选择编译为Condition；重要故事局部后果由代码绑定，模型不得输出Effect。',
+    ] : []),
   ].join('\n')
   const user = [
     '以下用户消息将提供已登记、已验签且字段精确的QuestFinalize输入合同。',
@@ -2447,10 +2907,11 @@ function prompts(context: TextOpenWorldQuestFinalizeInputContextV1) {
       `knowledgeSelections按${context.knowledgeBindingDemands?.length ?? 0}条传闻顺序输出rumorNumber/propagationLocationNumber/confirmationCandidateNumbers；传播地点只能选本条location候选编号，确认必须严格升序选择1到3个本条候选编号。`,
       `achievementCandidateNumbers严格升序选择3到6个输入候选编号，并同时包含至少一个任务奖励来源和一个结局来源。`,
     ] : []),
+    ...(context.storyOutcomeContract === 'governed-v19' ? [
+      `endingEligibilitySelections按${context.endingEligibilityDemands?.length ?? 0}个结局顺序输出endingNumber、requiredQuestCandidateNumbers、anyQuestCandidateGroups、requiredFactionAffinities(candidateNumber/minimum)、requiredRecipeCandidateNumbers。阵营minimum必须高于初始亲合度且不超过目录上限；所有编号数组严格升序；替代任务组至少两个候选；每条路线至少一项资格。`,
+    ] : []),
     '不要输出敌人、物品、角色、地点、奖励、Action、Condition、Effect、Quest键或任何未要求字段。',
-    context.knowledgeProgressContract === 'governed-v18'
-      ? '返回：{"schema":"storyforge.text-open-world-quest-finalize-draft","version":1,"quests":[...],"objectives":[...],"decks":[...],"templates":[...],"randomEvents":[...],"knowledgeSelections":[...],"achievementCandidateNumbers":[...]}'
-      : '返回：{"schema":"storyforge.text-open-world-quest-finalize-draft","version":1,"quests":[...],"objectives":[...],"decks":[...],"templates":[...],"randomEvents":[...]}',
+    `返回：{"schema":"storyforge.text-open-world-quest-finalize-draft","version":1,"quests":[...],"objectives":[...],"decks":[...],"templates":[...],"randomEvents":[...]${context.knowledgeProgressContract === 'governed-v18' ? ',"knowledgeSelections":[...],"achievementCandidateNumbers":[...]' : ''}${context.storyOutcomeContract === 'governed-v19' ? ',"endingEligibilitySelections":[...]' : ''}}`,
   ].join('\n')
   return { system, user }
 }
@@ -2494,6 +2955,7 @@ export function createTextOpenWorldQuestFinalizeExecutorV1(options: {
       lifecycleContract: context.questLifecycleContract ?? 'legacy',
       combatMechanicsContract: context.combatMechanicsContract ?? 'legacy',
       knowledgeProgressContract: context.knowledgeProgressContract ?? 'legacy',
+      storyOutcomeContract: context.storyOutcomeContract ?? 'legacy',
     })
     await validateTextOpenWorldQuestFinalizeArtifactsV1({ artifacts, context })
     const durationMs = Math.max(0, Math.round(performance.now() - started))
