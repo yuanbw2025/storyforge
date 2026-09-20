@@ -1612,7 +1612,7 @@ export interface TextOpenWorldRegionSkeletonV1 {
     fastTravelPointKey: string
     progressionOrder: number
     knowledgePolicy: 'title-on-heard'
-    initialKnowledge: 'unknown' | 'visited'
+    initialKnowledge: 'unknown' | 'heard' | 'visited'
     presentationBinding: {
       status: 'presentation-unbound'
       presentationRefs: []
@@ -1631,7 +1631,7 @@ export interface TextOpenWorldRegionSkeletonV1 {
     derivationBasis: TextOpenWorldRegionDerivationBasisV1
     sourceClaimKeys: string[]
     storyNeedRefs: TextOpenWorldRegionStoryNeedRefV1[]
-    initialKnowledge: 'unknown' | 'visited'
+    initialKnowledge: 'unknown' | 'heard' | 'visited'
     contentBinding: {
       status: 'content-unbound'
       sceneKeys: []
@@ -2981,7 +2981,7 @@ export interface TextOpenWorldMapInteractionCatalogV1 {
     theme: string
     locationKeys: string[]
     fastTravelPointKey: string
-    initialKnowledge: 'unknown' | 'visited'
+    initialKnowledge: 'unknown' | 'heard' | 'visited'
     sourceRefs: string[]
     presentationRefs: []
   }>
@@ -2995,7 +2995,7 @@ export interface TextOpenWorldMapInteractionCatalogV1 {
     purpose: string
     functions: TextOpenWorldLocationFunctionV1[]
     earlyArrivalDescription: string
-    initialKnowledge: 'unknown' | 'visited'
+    initialKnowledge: 'unknown' | 'heard' | 'visited'
     interactionKeys: string[]
     sourceRefs: string[]
     presentationRefs: []

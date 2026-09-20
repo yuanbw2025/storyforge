@@ -347,7 +347,12 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       : location.key === initialLocationKey
     if (!initiallyVisited) fail(`默认解锁快速旅行点所属地点必须已到访:${String(item.key)}`)
   })
-  if (!travelPoints.some(item => item.unlockedByDefault === true && item.canRespawn === true)) fail('至少需要一个默认解锁的复活点')
+  // A world may place its first travel/respawn point away from the opening
+  // scene. Combat still has the governed pre-battle retry checkpoint, while a
+  // respawn destination becomes available only after the player has actually
+  // visited and unlocked it. Requiring a default point here used to force
+  // authors either to lie about a visit or to move the authored landmark.
+  if (!travelPoints.some(item => item.canRespawn === true)) fail('至少需要一个可在到访后用于复活的快速旅行点')
   if (!legacyWorldModule) {
     const declaredTravelPointKeys = regions.map((item, index) => key(item.fastTravelPointKey, `world.regions[${index}].fastTravelPointKey`))
     requireSameKeys(declaredTravelPointKeys, [...travelPointKeys], 'region fast travel points')

@@ -220,6 +220,7 @@ import {
   parseProductRuntimePackageV1,
 } from '../../src/lib/product-production/runtime-package'
 import { parseTextOpenWorldModulesV1 } from '../../src/lib/open-world/modules'
+import { projectTextOpenWorldPlayerMapScreenV1 } from '../../src/lib/open-world/player-map'
 import { createTextOpenWorldActionRegistryV1 } from '../../src/lib/open-world/action-registry'
 import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
 import { createTextOpenWorldQuestTransitionCatalogV1 } from '../../src/lib/open-world/quest-state-machine'
@@ -1030,9 +1031,9 @@ function regionSkeletonRunner(options: {
       storyNeedRefs: [{ beatNumber, needNumber: 1 }],
     })
     const connections = [
-      [1, 2, 'near', 'safe'], [1, 3, 'near', 'safe'], [1, 4, 'medium', 'ordinary'],
-      [1, 5, 'far', 'ordinary'], [5, 6, 'near', 'safe'], [5, 7, 'medium', 'dangerous'],
-      [5, 8, 'near', 'safe'],
+      [1, 2, 'near', 'safe'], [1, 3, 'near', 'safe'], [2, 4, 'medium', 'ordinary'],
+      [4, 5, 'near', 'ordinary'], [5, 6, 'far', 'ordinary'], [6, 7, 'near', 'safe'],
+      [6, 8, 'medium', 'ordinary'], [8, 9, 'medium', 'dangerous'], [9, 10, 'near', 'safe'],
     ].map(([fromLocationNumber, toLocationNumber, distanceBand, riskProfile], index) => ({
       fromLocationNumber,
       toLocationNumber,
@@ -1042,7 +1043,7 @@ function regionSkeletonRunner(options: {
       connectionPurpose: '让玩家可自由往返，并为后续任务提供不依赖到达触发的空间路径。',
       ...grounding(Math.min(5, index + 1)),
     }))
-    if (options.disconnected) connections.splice(3, 1)
+    if (options.disconnected) connections.splice(4, 1)
     return {
       output: JSON.stringify({
         schema: 'storyforge.text-open-world-region-skeleton-draft',
@@ -1056,7 +1057,7 @@ function regionSkeletonRunner(options: {
             theme: '职责、日常秩序与最初裂痕',
             narrativeRole: '承载开场危机、主角身份和最终回到家园时可见的变化。',
             ...grounding(1),
-            hubLocationNumber: 1,
+            hubLocationNumber: 5,
             locations: [
               {
                 title: '白盐码头', description: '商旅和居民出入的港口码头，低潮与供水紧张的迹象已清晰可见。',
@@ -1086,6 +1087,13 @@ function regionSkeletonRunner(options: {
                 earlyArrivalDescription: '这里始终可进行普通探索和战斗，主线相关遗留物只有在条件满足后才进入场景。',
                 ...grounding(2),
               },
+              {
+                title: '北潮门', description: '穿过盐脊高地的北侧潮门，是两地旧盐路与港区的交界。',
+                kind: 'landmark', purpose: '作为盐脊港地区出口、旅行服务点和到访后解锁的快速旅行点。',
+                functions: ['narrative', 'service', 'travel'],
+                earlyArrivalDescription: '守门人只提供普通道路消息和旅行服务，不会因玩家提前到达而触发主线或公开隐藏真相。',
+                ...grounding(2),
+              },
             ],
           },
           {
@@ -1095,7 +1103,7 @@ function regionSkeletonRunner(options: {
             narrativeRole: '扩展地区差异，承载冲突升级、真相揭示、集结和终局选择。',
             sourceClaimKeys: [claimKey],
             storyNeedRefs: [2, 3, 4, 5].map(beatNumber => ({ beatNumber, needNumber: 1 })),
-            hubLocationNumber: 1,
+            hubLocationNumber: 5,
             locations: [
               {
                 title: '沉钟村', description: '盆地居民交换物资、维护井钟并讨论供水的生活中心。',
@@ -1125,6 +1133,14 @@ function regionSkeletonRunner(options: {
                 earlyArrivalDescription: '非关键议事和居民争论可正常发生，主线集结必须由明确任务阶段启动。',
                 sourceClaimKeys: [claimKey],
                 storyNeedRefs: [{ beatNumber: 4, needNumber: 1 }, { beatNumber: 5, needNumber: 1 }],
+              },
+              {
+                title: '南井台', description: '俯瞰盆地支井的公共平台，也是分流方案与共同议约的终局现场。',
+                kind: 'landmark', purpose: '作为沉钟盆地的旅行服务点、第二快速旅行点与合规结局地点。',
+                functions: ['narrative', 'service', 'travel'],
+                earlyArrivalDescription: '平台保持公共通行与日常水位观测，治理结局只能由最终任务Action解锁。',
+                sourceClaimKeys: [claimKey],
+                storyNeedRefs: [{ beatNumber: 5, needNumber: 1 }],
               },
             ],
           },
@@ -1235,11 +1251,11 @@ function mainlineRunner(options: {
     const stages = [
       stage('来信与低潮', 1, [1], [options.invalidLocation ? 99 : 1, 2], ['dialogue', 'investigation'], '确认迟砾失踪与港区低潮并非偶发事故。', '澜砂正式承担调查责任并获得下一阶段明确入口。', 1),
       stage('空白水尺', 2, [1], [3, 4], ['exploration', 'combat'], '被抹去的水尺记录表明异常正在沿地区依赖扩散。', '玩家获得进入沉钟盆地调查所需的公开线索与成长准备。', 1),
-      stage('两地的水', 2, [2], [5], ['dialogue', 'exploration'], '不同地区掌握互相矛盾但真实的潮井证词。', '玩家理解两地利益冲突，并建立继续查证的路径。', 1),
-      stage('旧机之下', options.badBeatOrder ? 1 : 3, [2], [6], ['investigation', 'choice'], '旧引潮方案曾以盆地支井为代价维持港口稳定。', '旧设施真相被确认，核心冲突从寻找单一事故转向修复失衡秩序。', 2),
-      stage('谁动了潮门', 4, [2], [7], ['combat', 'preparation'], '白口正在利用旧设施和两地不信任制造短缺。', '人为操控被揭露，终局所需的行动窗口被建立。', 1),
-      stage('引潮机决战', 4, [1, 2], [1, 5, 8], ['dialogue', 'choice', 'preparation'], '地区关系、维修准备和长期选择将影响解决方案的代价。', '白口被阻止，多个地区后果汇入最终行动，两个合规方案同时保持可达。', 2),
-      stage('新的潮线', 5, [1, 2], [2, 8], ['choice', 'investigation'], '可持续供水取决于此前建立的信任、分流知识与治理选择。', '两地供水恢复，并按玩家长期价值选择进入合规结局。', 1),
+      stage('两地的水', 2, [2], [6], ['dialogue', 'exploration'], '不同地区掌握互相矛盾但真实的潮井证词。', '玩家理解两地利益冲突，并建立继续查证的路径。', 1),
+      stage('旧机之下', options.badBeatOrder ? 1 : 3, [2], [8, 9], ['investigation', 'choice'], '旧引潮方案曾以盆地支井为代价维持港口稳定。', '旧设施真相被确认，核心冲突从寻找单一事故转向修复失衡秩序。', 2),
+      stage('谁动了潮门', 4, [1, 2], [5, 9], ['combat', 'preparation'], '白口正在利用旧设施和两地不信任制造短缺。', '人为操控被揭露，终局所需的行动窗口被建立。', 1),
+      stage('引潮机决战', 4, [1, 2], [5, 9], ['dialogue', 'choice', 'preparation'], '地区关系、维修准备和长期选择将影响解决方案的代价。', '白口被阻止，多个地区后果汇入最终行动，两个合规方案同时保持可达。', 2),
+      stage('新的潮线', 5, [1, 2], [2, 10], ['choice', 'investigation'], '可持续供水取决于此前建立的信任、分流知识与治理选择。', '两地供水恢复，并按玩家长期价值选择进入合规结局。', 1),
     ]
     return {
       output: JSON.stringify({
@@ -1453,7 +1469,7 @@ function significantThreadsRunner(options: {
         sourceClaimKeys: [claimKey],
         storyBeatNumbers: [2, 3, 4],
         regionNumbers: [2],
-        locationNumbers: [5, 6, options.invalidLocation ? 99 : 8],
+        locationNumbers: [6, 7, options.invalidLocation ? 99 : 9],
         supportingPromiseNumbers: [2],
         availableAfterMainlineStageNumber: 3,
         conflictSides: [
@@ -1464,9 +1480,9 @@ function significantThreadsRunner(options: {
         escalationSteps: ['盐路检查引发价格冲突', '伤亡证据使双方拒绝妥协', '议事台必须形成新的共同治理办法'],
         atmosphereSignals: ['集市货架价格与货量发生变化', '道路旁增加守望者和受困行商', '功能NPC用不同问候表达对争议的立场'],
         stages: [
-          stage('盐路争执', 2, 5, ['dialogue', 'investigation'], 'faction-affinity', 1),
-          stage('旧约证词', 2, 6, ['dialogue', 'exploration'], 'regional-state', 2),
-          stage('议事台新规', 2, 8, ['dialogue', 'choice'], 'regional-state', 3),
+          stage('盐路争执', 2, 6, ['dialogue', 'investigation'], 'faction-affinity', 1),
+          stage('旧约证词', 2, 7, ['dialogue', 'exploration'], 'regional-state', 2),
+          stage('议事台新规', 2, 9, ['dialogue', 'choice'], 'regional-state', 3),
         ],
       },
     ]
@@ -3448,7 +3464,7 @@ describe('R-OPEN-WORLD3 · P4 RegionSkeleton', () => {
       productInstanceKey: input.production.productionKey,
       worldScale: {
         regionCount: 2,
-        namedLocationCount: 8,
+        namedLocationCount: 10,
         completeness: 'complete-at-build',
         revealPolicy: 'progressive-knowledge',
       },
@@ -3468,14 +3484,18 @@ describe('R-OPEN-WORLD3 · P4 RegionSkeleton', () => {
     })
     expect(artifact.regions.map(region => region.key)).toEqual(['region.001', 'region.002'])
     expect(artifact.locations.map(location => location.key)).toEqual(
-      Array.from({ length: 8 }, (_, index) => `location.${String(index + 1).padStart(3, '0')}`),
+      Array.from({ length: 10 }, (_, index) => `location.${String(index + 1).padStart(3, '0')}`),
     )
     expect(artifact.edges.map(edge => edge.key)).toEqual(
-      Array.from({ length: 7 }, (_, index) => `edge.${String(index + 1).padStart(3, '0')}`),
+      Array.from({ length: 9 }, (_, index) => `edge.${String(index + 1).padStart(3, '0')}`),
     )
     expect(artifact.fastTravelPoints).toEqual([
-      expect.objectContaining({ key: 'fast-travel.001', locationKey: 'location.001', unlockedByDefault: true, canRespawn: true }),
-      expect.objectContaining({ key: 'fast-travel.002', locationKey: 'location.005', unlockedByDefault: false, canRespawn: true }),
+      expect.objectContaining({ key: 'fast-travel.001', locationKey: 'location.005', unlockedByDefault: false, canRespawn: true }),
+      expect.objectContaining({ key: 'fast-travel.002', locationKey: 'location.010', unlockedByDefault: false, canRespawn: true }),
+    ])
+    expect(artifact.regions.map(region => region.initialKnowledge)).toEqual(['visited', 'heard'])
+    expect(artifact.locations.map(location => location.initialKnowledge)).toEqual([
+      'visited', 'heard', 'heard', 'heard', 'heard', 'heard', 'heard', 'heard', 'heard', 'heard',
     ])
     expect(artifact.locations.every(location => (
       location.contentBinding.status === 'content-unbound'
@@ -4402,21 +4422,21 @@ describe('R-OPEN-WORLD3 · P8 MapInteractionCatalog', () => {
     expect(input.mapInteractionContextEvidence).toEqual([
       expect.objectContaining({ key: 'text-open-world.map-interaction-input', status: 'included', delivery: 'full' }),
     ])
-    expect(input.mapInteractionContext.interactionDemands).toHaveLength(9)
+    expect(input.mapInteractionContext.interactionDemands).toHaveLength(11)
 
     const result = await executeMapInteraction(input)
     const artifact = result.artifacts[0]!.payload as TextOpenWorldMapInteractionCatalogV1
     expect(result.passedGateIds).toEqual(input.task.acceptanceGateIds)
     expect(result.usage).toMatchObject({ modelCalls: 1, mediaCalls: 0 })
     expect(artifact.regions).toHaveLength(2)
-    expect(artifact.locations).toHaveLength(8)
+    expect(artifact.locations).toHaveLength(10)
     expect(artifact.fastTravelPoints).toHaveLength(2)
-    expect(artifact.interactions).toHaveLength(9)
+    expect(artifact.interactions).toHaveLength(11)
     expect(artifact.mapLayout).toMatchObject({
       coordinateSystem: 'normalized-1000', width: 1000, height: 700, source: 'deterministic-fallback',
     })
-    expect(artifact.mapLayout.locationNodes).toHaveLength(8)
-    expect(new Set(artifact.mapLayout.locationNodes.map(node => `${node.x}:${node.y}`)).size).toBe(8)
+    expect(artifact.mapLayout.locationNodes).toHaveLength(10)
+    expect(new Set(artifact.mapLayout.locationNodes.map(node => `${node.x}:${node.y}`)).size).toBe(10)
     expect(new Set(artifact.coverage.coveredRegionKeys)).toEqual(new Set(artifact.coverage.requiredRegionKeys))
     expect(new Set(artifact.coverage.coveredLocationKeys)).toEqual(new Set(artifact.coverage.requiredLocationKeys))
     expect(new Set(artifact.coverage.coveredEdgeKeys)).toEqual(new Set(artifact.coverage.requiredEdgeKeys))
@@ -4430,7 +4450,7 @@ describe('R-OPEN-WORLD3 · P8 MapInteractionCatalog', () => {
       && !interaction.startsQuestOnArrival
       && interaction.runtimeBinding.status === 'runtime-unbound'
       && interaction.runtimeBinding.questKeys.length === 0)).toBe(true)
-    expect(artifact.fastTravelPoints.filter(point => point.unlockedByDefault)).toHaveLength(1)
+    expect(artifact.fastTravelPoints.filter(point => point.unlockedByDefault)).toHaveLength(0)
     expect(artifact.fastTravelPoints.filter(point => !point.unlockedByDefault)
       .every(point => point.unlockPolicy === 'first-visit')).toBe(true)
     expect(artifact.travelPolicy).toMatchObject({
@@ -4450,7 +4470,7 @@ describe('R-OPEN-WORLD3 · P8 MapInteractionCatalog', () => {
   it('拒绝地点交互漏项、非法类型、越界地点、同名交互和模型越权Quest字段', async () => {
     const input = await mapInteractionFixture()
     await expect(executeMapInteraction(input, mapInteractionRunner({ omitInteraction: true })))
-      .rejects.toThrow(/interactions必须与9项需求一一对应/)
+      .rejects.toThrow(/interactions必须与11项需求一一对应/)
     await expect(executeMapInteraction(input, mapInteractionRunner({ invalidKind: true })))
       .rejects.toThrow(/不在允许闭集/)
     await expect(executeMapInteraction(input, mapInteractionRunner({ invalidLocation: true })))
@@ -6155,7 +6175,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })).rejects.toThrow(/IntegrationReport自身Hash不匹配/)
   }, 600_000)
 
-  it('G7-01 盐脊来源经共享durable scheduler执行完整DAG并收口为真实可恢复Build', async () => {
+  it('G7-01/G7-02 盐脊来源经完整DAG产出两区十点可提前到达地图与可恢复Build', async () => {
     const input = await creatorSchedulerFixture()
     expect(input.characterIds).toHaveLength(7)
     expect(await db.importantLocations.where('projectId').equals(input.scope.projectId).count()).toBe(10)
@@ -6261,6 +6281,45 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       sourceWorld: { contentHash: input.release.contentHash },
     })
     expect(saltRidgePackage.textOpenWorldVNext).toBeTruthy()
+    const saltRidgeModules = parseTextOpenWorldModulesV1(saltRidgePackage.textOpenWorldVNext!)
+    expect(saltRidgeModules.world.regions.map(region => region.title)).toEqual(['盐脊港', '沉钟盆地'])
+    expect(saltRidgeModules.world.locations.map(location => location.title)).toEqual([
+      '白盐码头', '测潮所', '盐灯集市', '风蚀仓道', '北潮门',
+      '沉钟村', '拾潮营地', '枯井群', '旧引潮机', '南井台',
+    ])
+    expect(saltRidgeModules.world.edges).toHaveLength(9)
+    expect(saltRidgeModules.world.fastTravelPoints).toEqual([
+      expect.objectContaining({ key: 'fast-travel.001', locationKey: 'location.005', unlockedByDefault: false }),
+      expect.objectContaining({ key: 'fast-travel.002', locationKey: 'location.010', unlockedByDefault: false }),
+    ])
+    expect(saltRidgeModules.presentation.mapLayout).toMatchObject({
+      source: 'authored',
+      locationNodes: expect.arrayContaining([
+        expect.objectContaining({ locationKey: 'location.005' }),
+        expect.objectContaining({ locationKey: 'location.010' }),
+      ]),
+    })
+    expect(saltRidgeModules.presentation.mapLayout.locationNodes).toHaveLength(10)
+    const initialSaltRidgeProjection = createInitialTextOpenWorldSessionProjectionV1(
+      saltRidgePackage.textOpenWorldVNext!,
+    )
+    const initialSaltRidgeMap = projectTextOpenWorldPlayerMapScreenV1(initialSaltRidgeProjection)
+    expect(initialSaltRidgeMap.regions.map(region => [region.title, region.knowledge])).toEqual([
+      ['盐脊港', 'visited'], ['沉钟盆地', 'heard'],
+    ])
+    expect(initialSaltRidgeMap.locations).toHaveLength(10)
+    expect(initialSaltRidgeMap.routes).toHaveLength(9)
+    expect(initialSaltRidgeMap.listFallback).toHaveLength(10)
+    expect(initialSaltRidgeMap.unlockedFastTravelPointCount).toBe(0)
+    expect(initialSaltRidgeMap.locations.find(location => location.title === '沉钟村')).toMatchObject({
+      knowledge: 'heard', description: null, earlyArrivalDescription: null,
+    })
+    expect(initialSaltRidgeMap.locations.find(location => location.title === '白盐码头')).toMatchObject({
+      knowledge: 'visited', current: true,
+    })
+    expect(initialSaltRidgeMap.locations.find(location => location.title === '测潮所')
+      ?.ordinaryTravelOptions).toEqual([expect.objectContaining({ destinationLocationKey: 'location.002' })])
+    expect(initialSaltRidgeMap.locations.flatMap(location => location.fastTravelOption ?? [])).toEqual([])
     const governance = await readTextOpenWorldArtifactGovernanceV1({
       scope: input.scope,
       productionId: production.id!,

@@ -154,8 +154,18 @@ describe('Text Open World vNext · life, rest, defeat and recovery', () => {
 
   it('复活Effect只能引用已声明、可复活且已经解锁的快速旅行点', async () => {
     const noDefault = createTextOpenWorldVNextFixture()
-    ;(noDefault.modules.world.payload as any).fastTravelPoints.forEach((point: any) => { point.canRespawn = false })
-    expect(() => createInitialTextOpenWorldSessionProjectionV1(noDefault)).toThrow('至少需要一个默认解锁的复活点')
+    ;(noDefault.modules.world.payload as any).fastTravelPoints.forEach((point: any) => { point.unlockedByDefault = false })
+    const beforeFirstVisit = createInitialTextOpenWorldSessionProjectionV1(noDefault)
+    expect(beforeFirstVisit.state.map.unlockedFastTravelPointKeys).toEqual([])
+    expect(deriveTextOpenWorldLifeProjectionV1({
+      runtimePackage: noDefault,
+      state: beforeFirstVisit.state,
+    }).respawnPoints).toEqual([])
+
+    const noRespawn = createTextOpenWorldVNextFixture()
+    ;(noRespawn.modules.world.payload as any).fastTravelPoints.forEach((point: any) => { point.canRespawn = false })
+    expect(() => createInitialTextOpenWorldSessionProjectionV1(noRespawn))
+      .toThrow('至少需要一个可在到访后用于复活的快速旅行点')
 
     const runtimePackage = createTextOpenWorldVNextFixture()
     const actions = runtimePackage.modules.actions.payload as any
