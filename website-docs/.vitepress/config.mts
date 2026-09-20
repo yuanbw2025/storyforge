@@ -17,6 +17,8 @@ const zhSidebar = [
     items: [
       { text: '概览', link: '/getting-started/' },
       { text: 'StoryForge 是什么', link: '/getting-started/what-is-storyforge' },
+      { text: '根据目标选择产品', link: '/getting-started/choose-product' },
+      { text: '五分钟上手', link: '/getting-started/quick-start' },
       { text: '安装与启动', link: '/getting-started/install' },
       { text: '模型与 API 配置', link: '/getting-started/model-config' },
       { text: '文档站说明', link: '/getting-started/basics/site-overview' },
@@ -28,7 +30,44 @@ const zhSidebar = [
     items: [
       { text: '功能指南概览', link: '/features/' },
       { text: '当前产品能力', link: '/features/current-capabilities' },
+      {
+        text: '分步骤长篇', collapsed: true, items: [
+          { text: '长篇完整流程', link: '/features/longform/' },
+          { text: '设定、人物与故事设计', link: '/features/longform/planning' },
+          { text: '大纲、细纲与正文', link: '/features/longform/writing' },
+          { text: '连续性与改稿', link: '/features/longform/continuity' },
+          { text: '文风学习与校准', link: '/features/longform/style-learning' },
+          { text: '项目参考与作品分析', link: '/features/longform/references' },
+          { text: '角色驱动剧情', link: '/features/longform/character-driven' },
+          { text: '伏笔、事实与认知', link: '/features/longform/facts-foreshadowing' },
+          { text: '多世界、地点与地图', link: '/features/longform/worlds-maps' },
+        ],
+      },
+      { text: '短篇小说', link: '/features/shortform' },
+      { text: '小说转剧本', link: '/features/screenplay' },
+      { text: '小说转漫画', link: '/features/comic' },
+      { text: '漫剧素材与前期生产', link: '/features/motion-drama' },
+      { text: '世界引擎', link: '/features/world-engine' },
+      { text: '节点创作（预览）', link: '/features/nodes' },
+      {
+        text: '互动产品（预览）', collapsed: true, items: [
+          { text: '共同流程与边界', link: '/features/interactive/' },
+          { text: '跑团与 AI KP', link: '/features/interactive/ttrpg' },
+          { text: '角色聊天', link: '/features/interactive/character-chat' },
+          { text: 'AI 小镇', link: '/features/interactive/ai-town' },
+          { text: 'AVG 与视觉小说', link: '/features/interactive/avg' },
+          { text: '文字冒险（开发中）', link: '/features/interactive/text-adventure' },
+          { text: '文字开放世界（开发中）', link: '/features/interactive/open-world' },
+        ],
+      },
       { text: '本地记忆工作区', link: '/features/memory-workspace' },
+    ],
+  },
+  {
+    text: '核心概念', collapsed: true, items: [
+      { text: '核心概念概览', link: '/concepts/' },
+      { text: '项目、作品与世界', link: '/concepts/work-world' },
+      { text: '封存、制作、发布与存档', link: '/concepts/versions' },
     ],
   },
   {
@@ -36,7 +75,15 @@ const zhSidebar = [
     collapsed: false,
     items: [
       { text: '使用指南概览', link: '/guides/' },
-      { text: 'Token 消耗与省钱指南', link: '/guides/token-cost' },
+      { text: '内置作品与示例', link: '/guides/examples' },
+      { text: '导入小说与参考资料', link: '/guides/import' },
+      { text: 'AI 候选、确认与恢复', link: '/guides/ai-workflow' },
+      { text: '保存、备份与恢复', link: '/guides/backup-restore' },
+      { text: '导出、交付与分享', link: '/guides/export' },
+      { text: '费用、Token 与省钱方法', link: '/guides/token-cost' },
+      { text: '本地数据与隐私', link: '/guides/privacy' },
+      { text: '如何使用 Prompt', link: '/guides/using-prompts' },
+      { text: '故障排查', link: '/guides/troubleshooting' },
       { text: '常见问题', link: '/guides/faq' },
     ],
   },
@@ -139,7 +186,7 @@ const zhSidebar = [
     items: [
       { text: '项目动态概览', link: '/updates/' },
       { text: '更新日志', link: '/updates/changelog' },
-      { text: '历史功能更新全文', link: '/updates/historical-feature-updates' },
+      { text: '版本、升级与兼容', link: '/updates/compatibility' },
     ],
   },
   {
@@ -156,7 +203,10 @@ const zhSidebar = [
     text: '历史归档',
     collapsed: true,
     items: [
+      { text: '归档说明', link: '/archive/' },
       { text: '2026-05-28 功能全景指南', link: '/archive/panorama-2026-05-28' },
+      { text: '历史功能更新全文', link: '/updates/historical-feature-updates' },
+      { text: '历史费用指南', link: '/archive/token-cost-2026-07-06' },
       { text: '旧 Bug 收集', link: '/archive/legacy-bugs' },
       { text: '旧功能建议收集', link: '/archive/legacy-feature-ideas' },
     ],
@@ -164,6 +214,7 @@ const zhSidebar = [
 ]
 
 export default defineConfig({
+  srcExclude: ['**/AGENTS.md'],
   cleanUrls: true,
   lastUpdated: true,
   appearance: 'dark',
@@ -173,6 +224,8 @@ export default defineConfig({
     ['meta', { name: 'theme-color', content: '#0b1d1a' }],
   ],
   themeConfig: {
+    // English is a reserved entry, so do not link to untranslated page paths.
+    i18nRouting: false,
     search: {
       provider: 'local',
       options: {

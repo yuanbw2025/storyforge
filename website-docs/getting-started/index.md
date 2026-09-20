@@ -1,17 +1,14 @@
 # 开始使用
 
-StoryForge 是开源、本地优先的 AI 叙事创作与体验工具。官方文档按“先能运行、再理解产品、最后深入功能”的顺序组织。
+第一次使用建议按下面顺序完成一次小创作：
 
-## 推荐阅读顺序
+1. [StoryForge 是什么](/getting-started/what-is-storyforge)：了解本地优先、作者确认和不同产品。
+2. [选择产品](/getting-started/choose-product)：从想要的交付物出发。
+3. [安装与启动](/getting-started/install)：打开应用。
+4. [五分钟上手](/getting-started/quick-start)：完成第一轮手工创作。
+5. [模型与 API 配置](/getting-started/model-config)：需要生成时接入自己的服务。
+6. [备份与恢复](/guides/backup-restore)：保留第一份独立备份。
 
-1. [StoryForge 是什么](./what-is-storyforge.md)
-2. [安装与启动](./install.md)
-3. [模型与 API 配置](./model-config.md)
-4. [当前产品能力](../features/current-capabilities.md)
-5. [本地记忆工作区](../features/memory-workspace.md)
-6. [Token 消耗与省钱指南](../guides/token-cost.md)
-7. [常见问题](../guides/faq.md)
+已经熟悉项目？直接查看[产品指南](/features/)和[最新更新](/updates/changelog)。
 
-::: info 当前边界
-StoryForge 的核心创作数据以本地存储为主；AI 生成使用用户自己配置的第三方模型服务。StoryForge 不向用户提供模型 API Key 或平台代理账户。
-:::
+本文档描述当前 main。固定 Release 和在线部署可能不同，先看[当前能力与版本](/features/current-capabilities)。
