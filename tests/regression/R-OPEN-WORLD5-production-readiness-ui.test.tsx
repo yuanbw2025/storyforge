@@ -344,7 +344,7 @@ describe('TOW-G5-03 · production readiness UI', () => {
     expect(rendered).toContain('deepseek-v4-flash')
     expect(rendered).toContain('https://api.deepseek.com')
     expect(rendered).toContain('已配置 · 仅当前会话')
-    expect(rendered).toContain('155 / 160')
+    expect(rendered).toContain('187 / 200')
     expect(rendered).toContain('1,200,000')
     expect(rendered).toContain('360,000')
     expect(rendered).toContain('$0.2688 / $30.00')

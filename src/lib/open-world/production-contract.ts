@@ -308,7 +308,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P8', taskKey: 'p8.catalog.progression', objective: '生产成长、属性和技能目录，满足任务需求与等级节奏。',
-    skillId: 'text-open-world.production.progression-catalogs.v1', recommendedModelCalls: 1, tokenBudgetWeight: 5,
+    skillId: 'text-open-world.production.progression-catalogs.v1', recommendedModelCalls: 1, tokenBudgetWeight: 6,
     dependsOn: ['p2.gameplay-ruleset', 'p4.player-build', 'p8.quest-skeletons'],
     inputArtifactKeys: [
       'text-open-world.gameplay-ruleset-skeleton', 'text-open-world.player-build',
@@ -322,7 +322,10 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P8', taskKey: 'p8.catalog.encounters', objective: '生产敌人和遭遇目录，满足地区语义、任务需求和成长曲线。',
-    skillId: 'text-open-world.production.encounter-catalog.v1', recommendedModelCalls: 1, tokenBudgetWeight: 6,
+    // Encounter generation consumes every playable quest requirement and the
+    // full regional inventory; size this lane for the accepted Creator scale,
+    // not the earlier 6-quest prototype fixture.
+    skillId: 'text-open-world.production.encounter-catalog.v1', recommendedModelCalls: 1, tokenBudgetWeight: 9,
     dependsOn: [
       'p2.gameplay-ruleset', 'p4.player-build', 'p7.region-narrative-packs',
       'p8.quest-skeletons', 'p8.catalog.progression',
@@ -341,7 +344,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P8', taskKey: 'p8.catalog.items-rewards', objective: '生产物品、装备、掉落和奖励目录并闭合任务及成长预算。',
-    skillId: 'text-open-world.production.item-reward-catalog.v1', recommendedModelCalls: 1, tokenBudgetWeight: 6,
+    skillId: 'text-open-world.production.item-reward-catalog.v1', recommendedModelCalls: 1, tokenBudgetWeight: 8,
     dependsOn: [
       'p2.gameplay-ruleset', 'p4.player-build', 'p8.quest-skeletons',
       'p8.catalog.progression', 'p8.catalog.encounters',
@@ -360,7 +363,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P8', taskKey: 'p8.catalog.crafting-economy', objective: '生产配方、商店、货币流和价格目录并闭合资源来源与消耗。',
-    skillId: 'text-open-world.production.crafting-economy-catalog.v1', recommendedModelCalls: 1, tokenBudgetWeight: 5,
+    skillId: 'text-open-world.production.crafting-economy-catalog.v1', recommendedModelCalls: 1, tokenBudgetWeight: 8,
     dependsOn: ['p2.gameplay-ruleset', 'p7.region-narrative-packs', 'p8.quest-skeletons', 'p8.catalog.items-rewards'],
     inputArtifactKeys: [
       'text-open-world.gameplay-ruleset-skeleton', 'text-open-world.region-narrative-packs',
@@ -375,7 +378,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P8', taskKey: 'p8.catalog.npc-runtime', objective: '生产角色层级、日程、服务、关系和死亡替代运行规则。',
-    skillId: 'text-open-world.production.npc-runtime-catalog.v1', recommendedModelCalls: 1, tokenBudgetWeight: 5,
+    skillId: 'text-open-world.production.npc-runtime-catalog.v1', recommendedModelCalls: 1, tokenBudgetWeight: 8,
     dependsOn: ['p2.gameplay-ruleset', 'p7.region-narrative-packs', 'p8.quest-skeletons', 'p8.catalog.crafting-economy'],
     inputArtifactKeys: [
       'text-open-world.gameplay-ruleset-skeleton', 'text-open-world.region-narrative-packs',
@@ -390,7 +393,11 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P8', taskKey: 'p8.catalog.map-interactions', objective: '生产地点交互、道路、旅行、快速旅行和程序地图绑定目录。',
-    skillId: 'text-open-world.production.map-interaction-catalog.v1', recommendedModelCalls: 1, tokenBudgetWeight: 4,
+    // This compiler consumes the full regional pack plus every quest/location
+    // requirement. Its context grows with the Creator-authored inventory, so
+    // the old prototype weight could not carry even the accepted 8/5/16
+    // campaign profile without truncating an authoritative dependency.
+    skillId: 'text-open-world.production.map-interaction-catalog.v1', recommendedModelCalls: 1, tokenBudgetWeight: 8,
     dependsOn: ['p4.region-skeleton', 'p7.region-narrative-packs', 'p8.quest-skeletons'],
     inputArtifactKeys: [
       'text-open-world.region-skeleton', 'text-open-world.region-narrative-packs',
@@ -404,7 +411,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P8F', taskKey: 'p8f.quest-finalize', objective: '把任务骨架绑定到真实Action、目录、奖励、失败和时间合同。',
-    skillId: 'text-open-world.production.quest-finalize.v1', recommendedModelCalls: 1, tokenBudgetWeight: 13,
+    skillId: 'text-open-world.production.quest-finalize.v1', recommendedModelCalls: 1, tokenBudgetWeight: 17,
     dependsOn: [
       'p5.mainline', 'p6.significant-threads', 'p7.region-narrative-packs', 'p8.quest-skeletons',
       'p8.catalog.progression', 'p8.catalog.encounters', 'p8.catalog.items-rewards',
@@ -426,7 +433,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P9', taskKey: 'p9.scene-scripts', objective: '生产场景、固定选项和系统Action绑定，保持三类交互同一结果源。',
-    skillId: 'text-open-world.production.scene-scripts.v1', recommendedModelCalls: 129, tokenBudgetWeight: 19,
+    skillId: 'text-open-world.production.scene-scripts.v1', recommendedModelCalls: 161, tokenBudgetWeight: 26,
     durationBudgetWeight: 48,
     timeoutMs: 3_600_000,
     dependsOn: ['p7.region-narrative-packs', 'p8f.quest-finalize'],
@@ -447,7 +454,10 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'P10', taskKey: 'p10.system-finalize', objective: '汇总系统配置、媒资槽和内容预算，证明体量与玩法闭环。',
-    skillId: 'text-open-world.production.system-finalize.v1', recommendedModelCalls: 1, tokenBudgetWeight: 4,
+    // P10 validates the complete playable closure (all catalogs, finalized
+    // quests and scenes), so its exact structured input is comparable to P9,
+    // not to a single early-stage design artifact.
+    skillId: 'text-open-world.production.system-finalize.v1', recommendedModelCalls: 1, tokenBudgetWeight: 18,
     dependsOn: [
       'p2.experience-design', 'p2.gameplay-ruleset', 'p2.presentation-profile',
       'p4.player-build', 'p7.region-narrative-packs',
@@ -509,7 +519,7 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
   }),
   modelTask({
     stage: 'V2', taskKey: 'v2.semantic-review', objective: '评审叙事、任务体验、内容重复度、时长和世界一致性。',
-    lane: 'qa', skillId: 'text-open-world.production.semantic-review.v1', recommendedModelCalls: 1, tokenBudgetWeight: 6,
+    lane: 'qa', skillId: 'text-open-world.production.semantic-review.v1', recommendedModelCalls: 1, tokenBudgetWeight: 8,
     dependsOn: ['p3.story-architecture', 'p5.mainline', 'p6.significant-threads', 'p7.region-narrative-packs', 'p9.scene-scripts', 'v1.deterministic-preflight'],
     inputArtifactKeys: [
       'text-open-world.source-ledger', 'text-open-world.experience-contract',
@@ -569,8 +579,8 @@ export const TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1: TextOpenWorldProducti
 
 /**
  * One canonical model-call profile for every producer of a text-open-world
- * Brief. Fresh production reserves six bounded P1 source batches, 128
- * disclosure-isolated P9 calls (at most 127 Scenes plus one shared request),
+ * Brief. Fresh production reserves six bounded P1 source batches, 160
+ * disclosure-isolated P9 calls (at most 159 Scenes plus one shared request),
  * one additional P9 fragment-repair call, and one call for every other current
  * model executor. Actual provider usage is metered from executed calls and can
  * be lower than the reservation.

@@ -1776,6 +1776,27 @@ async function createArtifacts(input: {
         expirationActionKeys.push(actionKey)
       })
     }
+    if (governedLifecycle && quest.type === 'ordinary' && quest.lifecyclePlan.mayFailPermanently) {
+      orderedStages.forEach((stage, stageIndex) => {
+        const suffix = String(stageIndex + 1).padStart(3, '0')
+        const effectKey = `effect.fail.${quest.key}.stage.${suffix}`
+        const actionKey = `action.fail.${quest.key}.stage.${suffix}`
+        addEffect({
+          key: effectKey,
+          operation: 'transition-quest',
+          payload: { questKey: quest.key, status: 'failed', stageKey: stage.key },
+        })
+        addAction(action({
+          key: actionKey,
+          category: 'quest-action',
+          label: `判定永久失败：${quest.title}`,
+          description: '由确定性玩法结果在当前阶段确认普通任务已经永久失败。',
+          actorScope: 'system',
+          targetScope: 'quest',
+          successEffectKeys: [effectKey],
+        }))
+      })
+    }
     const reward = input.context.itemRewardCatalog.rewardContracts.find(item => item.sourceKind === 'quest' && item.sourceSemanticKey === quest.key)
       ?? fail(`任务缺少奖励合同:${quest.key}`)
     const rewardBinding = rewardBindings.find(item => item.rewardContractKey === reward.key)!
@@ -2140,6 +2161,7 @@ async function createArtifacts(input: {
       ...(governedLifecycle ? {
         allAbandonableQuestStagesCovered: true as const,
         restartActionsRequireOriginalOfferRoute: true as const,
+        ordinaryFailureActionsReady: true as const,
       } : {}),
       ...(governedCombatMechanics ? { structuredCombatMechanicsReady: true as const } : {}),
       ...(governedKnowledge ? {
@@ -2311,6 +2333,7 @@ function artifactsHashes(context: TextOpenWorldQuestFinalizeInputContextV1) {
 function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1, 'questDesignDocumentsHash'>): void {
   const lifecycleGovernanceDeclared = artifact.governance.allAbandonableQuestStagesCovered !== undefined
     || artifact.governance.restartActionsRequireOriginalOfferRoute !== undefined
+    || artifact.governance.ordinaryFailureActionsReady !== undefined
   const governedLifecycle = artifact.governance.allAbandonableQuestStagesCovered === true
     && artifact.governance.restartActionsRequireOriginalOfferRoute === true
   const knowledgeGovernanceDeclared = artifact.knowledgeBindings !== undefined
@@ -2451,6 +2474,36 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
         { status: 'accepted', stageKey: null }, { status: 'active', stageKey: quest.stageKeys[0]! },
       ])
   })
+  const failureCoverageDeclared = artifact.governance.ordinaryFailureActionsReady !== undefined
+  const failureCoverageInvalid = failureCoverageDeclared && (
+    artifact.governance.ordinaryFailureActionsReady !== true
+    || !governedLifecycle
+    || artifact.quests.filter(quest => quest.type === 'ordinary').some(quest => (
+      quest.stageKeys.some((stageKey, stageIndex) => {
+        const suffix = String(stageIndex + 1).padStart(3, '0')
+        const actionKey = `action.fail.${quest.key}.stage.${suffix}`
+        const effectKey = `effect.fail.${quest.key}.stage.${suffix}`
+        const action = artifact.actions.find(item => item.key === actionKey)
+        const effect = artifact.effects.find(item => item.key === effectKey)
+        return canonicalProductProductionJsonV2(effect) !== canonicalProductProductionJsonV2({
+          key: effectKey,
+          operation: 'transition-quest',
+          payload: { questKey: quest.key, status: 'failed', stageKey },
+        }) || !action || action.category !== 'quest-action' || action.actorScope !== 'system'
+          || action.targetScope !== 'quest' || action.locationKeys.length
+          || action.requirementConditionKeys.length || action.costEffectKeys.length || action.failureEffectKeys.length
+          || !same(action.successEffectKeys, [effectKey]) || action.timeCostMinutes !== 0
+          || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable'
+          || action.cooldownMinutes !== null
+      })
+    ))
+    || artifact.actions.some(action => questTransitionsFor(action.key).some(effect => (
+      effect.payload.status === 'failed'
+      && !artifact.quests.some(quest => quest.type === 'ordinary'
+        && quest.stageKeys.includes(effect.payload.stageKey ?? '')
+        && action.key === `action.fail.${quest.key}.stage.${String(quest.stageKeys.indexOf(effect.payload.stageKey ?? '') + 1).padStart(3, '0')}`)
+    )))
+  )
   const protectedRevealDeclared = artifact.governance.protectedStoryRevealActionsReady !== undefined
   const protectedRevealReady = artifact.governance.protectedStoryRevealActionsReady === true
   const protectedLockedQuests = artifact.quests.filter(quest => (
@@ -2523,6 +2576,7 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
       && (quest.lifecyclePolicy !== 'protected-wait' || quest.timePolicy !== 'waits' || quest.abandonActionKey !== null))
     || artifact.quests.some(quest => quest.timePolicy === 'timed' && quest.expirationActionKeys.length !== quest.stageKeys.length + 1)
     || lifecycleGovernanceDeclared && (!governedLifecycle || abandonCoverageInvalid || restartCoverageInvalid)
+    || failureCoverageInvalid
     || protectedRevealCoverageInvalid
     || knowledgeCoverageInvalid
     || storyOutcomeCoverageInvalid

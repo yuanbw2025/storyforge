@@ -544,6 +544,9 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
             const expiration = transitionDefinitions.length === 1 && transitionDefinitions[0].payload.status === 'expired'
               ? transitionDefinitions[0]
               : null
+            const permanentFailure = transitionDefinitions.length === 1 && transitionDefinitions[0].payload.status === 'failed'
+              ? transitionDefinitions[0]
+              : null
             validTargetKeys = reveal
               ? validTargetKeys.filter(instanceKey => (
                   context.questDefinitionKeyByInstanceKey[instanceKey] === reveal
@@ -555,6 +558,11 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
                   ['revealed', 'accepted', 'active', 'suspended', 'abandoned'].includes(context.questStatusByInstanceKey[instanceKey])
                   && context.questStageKeyByInstanceKey[instanceKey] === expiration.payload.stageKey
                   && context.worldMinute >= (context.questDeadlineWorldMinuteByInstanceKey[instanceKey] ?? Number.MAX_SAFE_INTEGER)
+                ))
+              : permanentFailure
+              ? validTargetKeys.filter(instanceKey => (
+                  context.questStatusByInstanceKey[instanceKey] === 'active'
+                  && context.questStageKeyByInstanceKey[instanceKey] === permanentFailure.payload.stageKey
                 ))
               : []
           }

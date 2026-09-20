@@ -97,7 +97,7 @@ function brief(input: {
       maximumOutputTokens: 8_000, maximumCostUsd: null,
     },
     productionBudget: {
-      maximumModelCalls: input.maximumModelCalls ?? 160,
+      maximumModelCalls: input.maximumModelCalls ?? 200,
       maximumInputTokens: 320_000, maximumOutputTokens: 128_000,
       maximumCostUsd: 80, maximumMediaCalls: withMedia ? 2 : 0,
       maximumDurationMs: 7_200_000, maximumStorageBytes: 200_000_000,
@@ -214,23 +214,23 @@ describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
       terminalTaskKey: 'qa.release',
     })
     expect(plan.tasks.filter(task => task.executionMode === 'model')).toHaveLength(22)
-    expect(TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1).toEqual({ minimum: 155, recommended: 155 })
-    expect(TEXT_OPEN_WORLD_PRODUCTION_TOKEN_BUDGET_WEIGHT_V1).toBe(156)
+    expect(TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1).toEqual({ minimum: 187, recommended: 187 })
+    expect(TEXT_OPEN_WORLD_PRODUCTION_TOKEN_BUDGET_WEIGHT_V1).toBe(199)
     expect(TEXT_OPEN_WORLD_PRODUCTION_DURATION_BUDGET_WEIGHT_V1).toBe(100)
     expect(plan.tasks.reduce((sum, task) => sum + task.budgetReservation.modelCalls, 0))
       .toBe(TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1.recommended)
     expect(plan.tasks.find(task => task.taskKey === 'p1.source-curation')?.budgetReservation.modelCalls).toBe(6)
     expect(plan.tasks.find(task => task.taskKey === 'p5.mainline')?.budgetReservation.modelCalls).toBe(1)
     expect(plan.tasks.find(task => task.taskKey === 'p7.region-narrative-packs')?.budgetReservation.modelCalls).toBe(1)
-    expect(plan.tasks.find(task => task.taskKey === 'p9.scene-scripts')?.budgetReservation.modelCalls).toBe(129)
+    expect(plan.tasks.find(task => task.taskKey === 'p9.scene-scripts')?.budgetReservation.modelCalls).toBe(161)
     expect(plan.tasks.find(task => task.taskKey === 'p5.mainline')?.budgetReservation.inputTokens)
-      .toBe(Math.floor(parsedBrief.productionBudget.maximumInputTokens * 10 / 156))
+      .toBe(Math.floor(parsedBrief.productionBudget.maximumInputTokens * 10 / 199))
     expect(plan.tasks.find(task => task.taskKey === 'p8.catalog.progression')?.budgetReservation.inputTokens)
-      .toBe(Math.floor(parsedBrief.productionBudget.maximumInputTokens * 5 / 156))
+      .toBe(Math.floor(parsedBrief.productionBudget.maximumInputTokens * 6 / 199))
     expect(plan.tasks.find(task => task.taskKey === 'p8f.quest-finalize')?.budgetReservation.inputTokens)
-      .toBe(Math.floor(parsedBrief.productionBudget.maximumInputTokens * 13 / 156))
+      .toBe(Math.floor(parsedBrief.productionBudget.maximumInputTokens * 17 / 199))
     expect(plan.tasks.find(task => task.taskKey === 'p9.scene-scripts')?.budgetReservation.inputTokens)
-      .toBe(Math.floor(parsedBrief.productionBudget.maximumInputTokens * 19 / 156))
+      .toBe(Math.floor(parsedBrief.productionBudget.maximumInputTokens * 26 / 199))
     expect(plan.tasks.find(task => task.taskKey === 'p9.scene-scripts')?.budgetReservation.durationMs)
       .toBe(Math.floor(parsedBrief.productionBudget.maximumDurationMs * 48 / 100))
     expect(plan.tasks.find(task => task.taskKey === 'p9.scene-scripts')?.timeoutMs)
@@ -251,15 +251,15 @@ describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
     expect(plan.tasks.find(task => task.taskKey === 'qa.release')?.acceptanceGateIds)
       .toEqual(expect.arrayContaining(parsedBrief.completionContract.requiredGateIds))
 
-    const minimumBrief = brief({ maximumModelCalls: 155 })
+    const minimumBrief = brief({ maximumModelCalls: 187 })
     const minimumPlan = await createTextOpenWorldProductionPlanV1({
       buildNumber: 1,
       briefHash: await hashProductProductionValueV2(minimumBrief),
       brief: minimumBrief,
     })
-    expect(minimumPlan.tasks.reduce((sum, task) => sum + task.budgetReservation.modelCalls, 0)).toBe(155)
+    expect(minimumPlan.tasks.reduce((sum, task) => sum + task.budgetReservation.modelCalls, 0)).toBe(187)
     expect(minimumPlan.tasks.find(task => task.taskKey === 'p1.source-curation')?.budgetReservation.modelCalls).toBe(6)
-    expect(minimumPlan.tasks.find(task => task.taskKey === 'p9.scene-scripts')?.budgetReservation.modelCalls).toBe(129)
+    expect(minimumPlan.tasks.find(task => task.taskKey === 'p9.scene-scripts')?.budgetReservation.modelCalls).toBe(161)
   })
 
   it('只把完整官方P0到QA拓扑识别为生产验证权威，不信任自声明Plan与gate', async () => {
@@ -452,10 +452,10 @@ describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
       buildNumber: 1, briefHash: await hashProductProductionValueV2(avgBrief), brief: avgBrief,
     })).rejects.toThrow(/只能为 text-open-world/)
 
-    const underBudget = brief({ maximumModelCalls: 154 })
+    const underBudget = brief({ maximumModelCalls: 186 })
     await expect(createTextOpenWorldProductionPlanV1({
       buildNumber: 1, briefHash: await hashProductProductionValueV2(underBudget), brief: underBudget,
-    })).rejects.toThrow(/至少需要 155 次/)
+    })).rejects.toThrow(/至少需要 187 次/)
 
     const unsupportedVoice = structuredClone(brief())
     unsupportedVoice.media.audioLevel = 'full'

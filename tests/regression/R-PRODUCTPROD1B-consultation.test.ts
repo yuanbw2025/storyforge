@@ -154,7 +154,7 @@ describe('R-PRODUCTPROD-1B · consultation and reviewable Brief', () => {
     expect(openWorldBrief).toMatchObject({
       media: { visualLevel: 'key-scenes', imageCount: 2 },
       productionBudget: {
-        maximumModelCalls: 160, maximumInputTokens: 1_200_000,
+        maximumModelCalls: 200, maximumInputTokens: 1_200_000,
         maximumOutputTokens: 360_000, maximumCostUsd: 30,
       },
     })

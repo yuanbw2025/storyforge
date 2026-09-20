@@ -1,4 +1,8 @@
-export const TEXT_OPEN_WORLD_MAX_GOVERNED_SCENES_V1 = 127
+/** Current Creator inventory needs 136 governed Scenes in the Salt Ridge
+ * acceptance world. Keep a bounded 159-Scene ceiling so P9 can still reserve
+ * one shared request and one explicit fragment-repair request inside a
+ * 161-call task contract. */
+export const TEXT_OPEN_WORLD_MAX_GOVERNED_SCENES_V1 = 159
 
 export interface TextOpenWorldSceneDemandCapacityInputV1 {
   quests: readonly unknown[]

@@ -90,7 +90,7 @@ function officialBrief() {
       maximumOutputTokens: 8_000, maximumCostUsd: null,
     },
     productionBudget: {
-      maximumModelCalls: 160, maximumInputTokens: 320_000, maximumOutputTokens: 128_000,
+      maximumModelCalls: 200, maximumInputTokens: 320_000, maximumOutputTokens: 128_000,
       maximumCostUsd: 80, maximumMediaCalls: 0, maximumDurationMs: 7_200_000,
       maximumStorageBytes: 200_000_000,
     },

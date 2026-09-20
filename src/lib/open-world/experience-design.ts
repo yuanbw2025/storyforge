@@ -35,6 +35,7 @@ import { TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1 } from './production-co
 import type {
   ProductBuildArtifactRecordV1,
   ProductProductionBriefV3,
+  TextOpenWorldCreatorScaleV1,
   TextOpenWorldExperienceContractV1,
   TextOpenWorldGameBriefV1,
   TextOpenWorldProtagonistAssetV1,
@@ -75,6 +76,9 @@ export interface TextOpenWorldExperienceInputContextV1 {
     unreadUnitCount: number
   }
   brief: ProductProductionBriefV3
+  /** Present only for the Creator flow. Legacy/shared scheduler Briefs do not
+   * own the product-specific inventory ranges and keep using calibration. */
+  creatorScale?: TextOpenWorldCreatorScaleV1
   protagonistCandidates: Array<{
     resourceKey: string
     label: string
@@ -175,6 +179,55 @@ function integer(value: unknown, label: string, minimum = 0): number {
   return Number(value)
 }
 
+function creatorScale(value: unknown, label: string): TextOpenWorldCreatorScaleV1 {
+  const scale = record(value, label)
+  exactKeys(scale, [
+    'regions', 'namedLocations', 'mainlineStages', 'endings', 'significantStorylines',
+    'ordinaryQuests', 'taskTemplates', 'randomEvents', 'requiredPlayMinutes',
+    'optionalInventoryMinutes',
+  ], label)
+  const boundedInteger = (candidate: unknown, field: string, minimum: number, maximum: number) => {
+    const parsed = integer(candidate, field, minimum)
+    if (parsed > maximum) fail(`${field}超出范围`)
+    return parsed
+  }
+  const range = (
+    candidate: unknown,
+    field: string,
+    minimum: number,
+    maximum: number,
+  ): { minimum: number; maximum: number } => {
+    const parsed = record(candidate, field)
+    exactKeys(parsed, ['minimum', 'maximum'], field)
+    const lower = boundedInteger(parsed.minimum, `${field}.minimum`, minimum, maximum)
+    const upper = boundedInteger(parsed.maximum, `${field}.maximum`, minimum, maximum)
+    if (lower > upper) fail(`${field}范围倒置`)
+    return { minimum: lower, maximum: upper }
+  }
+  return {
+    regions: boundedInteger(scale.regions, `${label}.regions`, 1, 12),
+    namedLocations: range(scale.namedLocations, `${label}.namedLocations`, 2, 100),
+    mainlineStages: range(scale.mainlineStages, `${label}.mainlineStages`, 2, 60),
+    endings: boundedInteger(scale.endings, `${label}.endings`, 1, 12),
+    significantStorylines: boundedInteger(
+      scale.significantStorylines,
+      `${label}.significantStorylines`,
+      0,
+      30,
+    ),
+    ordinaryQuests: range(scale.ordinaryQuests, `${label}.ordinaryQuests`, 0, 200),
+    taskTemplates: range(scale.taskTemplates, `${label}.taskTemplates`, 0, 100),
+    randomEvents: range(scale.randomEvents, `${label}.randomEvents`, 0, 500),
+    requiredPlayMinutes: range(scale.requiredPlayMinutes, `${label}.requiredPlayMinutes`, 10, 10_000),
+    optionalInventoryMinutes: range(
+      scale.optionalInventoryMinutes,
+      `${label}.optionalInventoryMinutes`,
+      0,
+      20_000,
+    ),
+  }
+}
+
 function finite(value: unknown, label: string, minimum: number, maximum: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < minimum || value > maximum) {
     fail(`${label}超出范围`)
@@ -262,6 +315,7 @@ async function authorizedProduction(input: {
       build,
       briefRow,
       brief,
+      creatorScale: structuredClone(contracts.creatorBrief.draft.scale),
       executionBriefHash: contracts.start.executionBriefHash,
       sourceReferenceHash: contracts.sourcePlan.sourceBinding.kind === 'world-release'
         ? contracts.sourcePlan.sourceBinding.referenceHash
@@ -286,6 +340,7 @@ async function authorizedProduction(input: {
     build,
     briefRow,
     brief,
+    creatorScale: null,
     executionBriefHash: briefRow.briefHash,
     sourceReferenceHash: sourcePlan.worldReference.referenceHash,
     confirmed,
@@ -341,6 +396,7 @@ async function loadExperienceInput(input: {
     production,
     briefRow,
     brief,
+    creatorScale: authorizedCreatorScale,
     executionBriefHash,
     sourceReferenceHash,
     confirmed,
@@ -450,6 +506,9 @@ async function loadExperienceInput(input: {
         unreadUnitCount: manifest.unreadUnitCount,
       },
       brief,
+      ...(authorizedCreatorScale == null
+        ? {}
+        : { creatorScale: structuredClone(authorizedCreatorScale) }),
       protagonistCandidates,
       selectedClaims,
       totalClaimCount: ledger.claimCount,
@@ -521,6 +580,9 @@ async function parseExperienceContext(value: string): Promise<TextOpenWorldExper
     || !Array.isArray(context.allOpenGapKeys)
     || !Array.isArray(context.protagonistCandidates)) fail('Experience登记上下文身份无效')
   const brief = parseProductProductionBriefV3(context.brief)
+  const parsedCreatorScale = context.creatorScale == null
+    ? null
+    : creatorScale(context.creatorScale, 'context.creatorScale')
   integer(context.authorization.productBriefRevision, 'context.authorization.productBriefRevision', 1)
   integer(context.authorization.authorStartRevision, 'context.authorization.authorStartRevision', 1)
   timestamp(context.authorization.confirmedAt, 'context.authorization.confirmedAt')
@@ -537,6 +599,15 @@ async function parseExperienceContext(value: string): Promise<TextOpenWorldExper
     || context.totalGapCount !== context.allOpenGapKeys.length
     || context.omittedGapCount !== context.totalGapCount - context.selectedGaps.length) {
     fail('Experience登记上下文Brief或数量闭包无效')
+  }
+  if (parsedCreatorScale != null) {
+    const expectedPlayMinutes = Math.round(
+      (parsedCreatorScale.requiredPlayMinutes.minimum + parsedCreatorScale.requiredPlayMinutes.maximum) / 2,
+    )
+    if (parsedCreatorScale.endings !== brief.scale.targetEndingCount
+      || expectedPlayMinutes !== brief.scale.targetPlayMinutes) {
+      fail('Creator规模与调度执行Brief不一致')
+    }
   }
   stringArray(context.allOpenGapKeys, 'context.allOpenGapKeys', 2_000, true)
   for (const entry of context.selectedClaims) {
@@ -563,6 +634,9 @@ async function compileGameBrief(input: {
   const config = parseTextOpenWorldCalibrationConfigV1(input.calibration)
   const { context } = input
   const brief = parseProductProductionBriefV3(context.brief)
+  const authoredScale = context.creatorScale == null
+    ? null
+    : creatorScale(context.creatorScale, 'context.creatorScale')
   if (brief.unresolvedDecisionKeys.length) fail('GameBrief不能从含未决项的作者Brief生成')
   if (brief.intent.protagonistRefs.length > 1) fail('首版GameBrief只能拥有一个主角')
   const budget = brief.productionBudget
@@ -611,15 +685,30 @@ async function compileGameBrief(input: {
       requestedPlayMinutes: brief.scale.targetPlayMinutes,
       requestedNarrativeWords: brief.scale.targetWordCount,
       endingCount: brief.scale.targetEndingCount,
-      regionCount: config.defaultScale.regions,
-      namedLocationRange: { ...config.defaultScale.namedLocations },
-      mainlineStageRange: { ...config.defaultScale.mainlineStages },
-      significantStorylineCount: config.defaultScale.significantStorylines,
-      ordinaryQuestRange: { ...config.defaultScale.ordinaryQuests },
-      taskTemplateRange: { ...config.defaultScale.taskTemplates },
-      randomEventRange: { ...config.defaultScale.randomEvents },
-      requiredPlayMinuteRange: { ...config.defaultScale.requiredPlayMinutes },
-      optionalInventoryMinuteRange: { ...config.defaultScale.optionalInventoryMinutes },
+      regionCount: authoredScale?.regions ?? config.defaultScale.regions,
+      namedLocationRange: {
+        ...(authoredScale?.namedLocations ?? config.defaultScale.namedLocations),
+      },
+      mainlineStageRange: {
+        ...(authoredScale?.mainlineStages ?? config.defaultScale.mainlineStages),
+      },
+      significantStorylineCount: authoredScale?.significantStorylines
+        ?? config.defaultScale.significantStorylines,
+      ordinaryQuestRange: {
+        ...(authoredScale?.ordinaryQuests ?? config.defaultScale.ordinaryQuests),
+      },
+      taskTemplateRange: {
+        ...(authoredScale?.taskTemplates ?? config.defaultScale.taskTemplates),
+      },
+      randomEventRange: {
+        ...(authoredScale?.randomEvents ?? config.defaultScale.randomEvents),
+      },
+      requiredPlayMinuteRange: {
+        ...(authoredScale?.requiredPlayMinutes ?? config.defaultScale.requiredPlayMinutes),
+      },
+      optionalInventoryMinuteRange: {
+        ...(authoredScale?.optionalInventoryMinutes ?? config.defaultScale.optionalInventoryMinutes),
+      },
     },
     fixedProductBoundary: {
       freedomMode: 'bounded-guided',

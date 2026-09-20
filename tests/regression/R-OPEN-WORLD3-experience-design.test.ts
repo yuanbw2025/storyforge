@@ -225,6 +225,7 @@ import { createTextOpenWorldActionRegistryV1 } from '../../src/lib/open-world/ac
 import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
 import { createTextOpenWorldQuestTransitionCatalogV1 } from '../../src/lib/open-world/quest-state-machine'
 import { projectTextOpenWorldQuestHistoryV1 } from '../../src/lib/open-world/quest-history'
+import { createTextOpenWorldDirectorQuestInstanceV1 } from '../../src/lib/open-world/quests'
 import {
   applyTextOpenWorldSessionEventV1,
   createInitialTextOpenWorldSessionProjectionV1,
@@ -557,7 +558,12 @@ async function creatorSchedulerFixture() {
       expectedReleaseHash: owned.release.contentHash,
     },
     sessionKey: `experience-scheduler-${crypto.randomUUID()}`,
-    briefScale: { endings: 2 },
+    briefScale: {
+      endings: 2,
+      ordinaryQuests: { minimum: 8, maximum: 10 },
+      taskTemplates: { minimum: 5, maximum: 6 },
+      randomEvents: { minimum: 16, maximum: 20 },
+    },
     briefDraft: {
       gameTitle: '盐脊',
       playerRole: '扮演收到失踪测潮师来信、能够往返两地调查的旅人澜砂。',
@@ -1575,7 +1581,33 @@ function regionNarrativePacksRunner(options: {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldRegionNarrativePacksInputContextV1
     const claimKey = context.sourceLedger.selectedClaims[0]!.claimKey
-    const eventKinds = ['ambient', 'opportunity', 'danger', 'discovery', 'social', 'ambient']
+    const eventKinds = ['ambient', 'social', 'opportunity', 'discovery', 'danger', 'ambient', 'social', 'danger'] as const
+    const saltRidgeOrdinaryTitles = [
+      ['仓道里的盐蜥', '丢失的盐灯', '集市假药', '失控的驮兽'],
+      ['枯井回声', '迟到的水车', '拾潮人的绳结', '无主的测潮箱'],
+    ] as const
+    const saltRidgeOrdinaryPremises = [
+      [
+        '盐蜥占据风蚀仓道，清理威胁并回收旧机零件，才能为中央引潮机修复方案留下可靠准备。',
+        '码头居民遗失一盏带有家族刻记的盐灯，玩家需要调查去向，并在归还或出售之间承担局部道德后果。',
+        '盐灯集市出现掺假的恢复药剂，玩家要核对货源、询问买家并让商店价格反馈调查结果。',
+        '受盐雾惊扰的驮兽冲进仓道，玩家可以稳住它、追赶或在普通遭遇中选择逃跑。',
+      ],
+      [
+        '枯井中的回声指向一处被遗漏的旧藏和东支井阀门，玩家调查传闻并恢复第一口支井。',
+        '运水车必须在潮雨到来前抵达沉钟村；玩家可以接下这项有明确截止时间的普通委托。',
+        '拾潮人教授承重绳结，玩家制作替换绳具并恢复南支井，获得关系与制作教学反馈。',
+        '一只无人认领的测潮箱留在南井台，玩家可放弃后回到原发布地点重接，箱内关键记录仍受保护。',
+      ],
+    ] as const
+    const saltRidgeTemplateTitles = [
+      ['失踪运盐人', '道路阻断', 'NPC资源委托'],
+      ['潮井污染', '地区寻宝'],
+    ] as const
+    const saltRidgeEventTitles = [
+      ['盐雾压港', '码头问路', '灯油涨价的传闻', '仓道盐晶', '潮门拖痕', '换岗迟到', '商会与脚夫争秤', '盐蜥伏行预警'],
+      ['潮雨漫井', '村口借火', '绳价异动', '枯井遗落药包', '旧盐路新蹄印', '守井换班', '拾潮民与行商争路', '潮蚀物出没警告'],
+    ] as const
     const packs = context.regionSkeleton.regions.map((region, regionIndex) => {
       const ownedLocations = context.regionSkeleton.locations.filter(location => location.regionKey === region.key)
       const locationNumber = (index: number) => ownedLocations[index % ownedLocations.length]!.order
@@ -1659,42 +1691,51 @@ function regionNarrativePacksRunner(options: {
           significantThreadNumbers: options.saltRidgeAcceptance ? [2] : regionIndex === 1 ? [2] : [],
           sourceClaimKeys: [claimKey],
         }],
-        ordinaryQuestSeeds: Array.from({ length: regionIndex === 0 && options.wrongSupply ? 2 : 3 }, (_, index) => ({
+        ordinaryQuestSeeds: Array.from({
+          length: options.saltRidgeAcceptance ? 4 : regionIndex === 0 && options.wrongSupply ? 2 : 3,
+        }, (_, index) => ({
           title: options.saltRidgeAcceptance
-            ? regionIndex === 0 && index === 0
-              ? '中央引潮机修复准备'
-              : regionIndex === 1 && index === 0
-                ? '东支井修复'
-                : regionIndex === 1 && index === 1
-                  ? '南支井修复'
-                  : `${region.title}普通委托${index + 1}`
+            ? saltRidgeOrdinaryTitles[regionIndex]![index]!
             : `${region.title}普通委托${index + 1}`,
-          premise: options.saltRidgeAcceptance && regionIndex === 0 && index === 0
-            ? '港区工匠需要玩家核验旧引潮机材料和公开维修记录，为共同治理路线留下可验证准备。'
-            : options.saltRidgeAcceptance && regionIndex === 1 && index < 2
-              ? `盆地居民需要玩家修复第${index + 1}口支井，使分流路线不只停留在口头方案。`
-              : `一名处在${tensionTitle(index % 2)}中的普通居民遇到具体而局部的问题。`,
-          playerActivity: ['调查公开痕迹并核对说法', '探索指定地点并带回资源', '在冲突双方之间传递可验证信息'][index % 3],
+          premise: options.saltRidgeAcceptance
+            ? saltRidgeOrdinaryPremises[regionIndex]![index]!
+            : `一名处在${tensionTitle(index % 2)}中的普通居民遇到具体而局部的问题。`,
+          playerActivity: options.saltRidgeAcceptance
+            ? [
+                ['战斗并回收可用零件', '调查物件去向并作出局部选择', '对话核验货源与价格', '处理遭遇并决定是否逃跑'],
+                ['调查传闻、寻宝并修复东支井', '在截止前护送水车', '制作绳具并修复南支井', '调查关键记录并保护测潮箱'],
+              ][regionIndex]![index]!
+            : ['调查公开痕迹并核对说法', '探索指定地点并带回资源', '在冲突双方之间传递可验证信息'][index % 3],
           locationNumbers: [locationNumber(index)],
           tensionNumber: index % 2 + 1,
           rewardNeeds: index % 2 ? ['经验', '货币'] : ['经验', '制作材料'],
-          estimatedMinutes: 12 + index * 3,
+          estimatedMinutes: options.saltRidgeAcceptance ? 8 + (index % 2) * 2 : 12 + index * 3,
           sourceClaimKeys: [],
         })),
-        taskTemplateSeeds: Array.from({ length: 2 }, (_, index) => ({
-          title: `${region.title}需求模板${index + 1}`,
-          storyFrame: index === 0 ? '功能NPC因地区状态产生一项可替换目标的资源需求。' : '居民听到传闻后请求玩家核实一个可替换地点的异常。',
+        taskTemplateSeeds: Array.from({ length: options.saltRidgeAcceptance ? (regionIndex === 0 ? 3 : 2) : 2 }, (_, index) => ({
+          title: options.saltRidgeAcceptance
+            ? saltRidgeTemplateTitles[regionIndex]![index]!
+            : `${region.title}需求模板${index + 1}`,
+          storyFrame: options.saltRidgeAcceptance
+            ? `${saltRidgeTemplateTitles[regionIndex]![index]!}根据委托人、目标地点、地区压力和奖励需求生成一项结构稳定但故事包装不同的地方委托。`
+            : index === 0 ? '功能NPC因地区状态产生一项可替换目标的资源需求。' : '居民听到传闻后请求玩家核实一个可替换地点的异常。',
           locationNumbers: [locationNumber(index)],
           variationAxes: ['委托人身份', '目标地点', '所需资源', '地区当前压力'],
           eligibilitySummary: '只在地点已知、玩家等级合适且同结构近期未出现时进入地区牌组。',
           cooldownIntent: '同一结构冷却若干次地区抽牌，并优先更换委托人、地点和叙事包装。',
           sourceClaimKeys: [],
         })),
-        randomEventSeeds: Array.from({ length: 6 }, (_, index) => ({
-          kind: eventKinds[index],
-          title: `${region.title}地区事件${index + 1}`,
-          setup: `地区状态与${tensionTitle(index % 2)}在${ownedLocations[index % ownedLocations.length]!.title}形成一个短时可见场面。`,
-          playerOpportunity: '玩家可以观察、交谈、提供普通帮助或离开；忽略不会阻断主线或重要故事。',
+        randomEventSeeds: Array.from({ length: options.saltRidgeAcceptance ? 8 : 6 }, (_, index) => ({
+          kind: eventKinds[index]!,
+          title: options.saltRidgeAcceptance
+            ? saltRidgeEventTitles[regionIndex]![index]!
+            : `${region.title}地区事件${index + 1}`,
+          setup: options.saltRidgeAcceptance
+            ? `${saltRidgeEventTitles[regionIndex]![index]!}让天气、路人、价格、拾取、道路痕迹、NPC日程、势力摩擦或战斗预警在${ownedLocations[index % ownedLocations.length]!.title}成为短时可见反馈。`
+            : `地区状态与${tensionTitle(index % 2)}在${ownedLocations[index % ownedLocations.length]!.title}形成一个短时可见场面。`,
+          playerOpportunity: index === 7
+            ? '玩家可以提前准备、绕开或进入普通战斗；忽略不会阻断主线或重要故事。'
+            : '玩家可以观察、交谈、提供普通帮助或离开；忽略不会阻断主线或重要故事。',
           locationNumbers: [locationNumber(index)],
           repeatability: index < 2 ? 'repeatable-variant' : 'one-shot',
           sourceClaimKeys: [],
@@ -2461,6 +2502,7 @@ function questFinalizeRunner(options: {
   prematureField?: boolean
   knowledgeTimeBatchOnly?: boolean
   invalidEndingEligibility?: boolean
+  saltRidgeAcceptance?: boolean
 } = {}): TextOpenWorldQuestFinalizeModelRunnerV1 {
   return async input => {
     const context = JSON.parse(input.contextText) as TextOpenWorldQuestFinalizeInputContextV1
@@ -2485,7 +2527,7 @@ function questFinalizeRunner(options: {
       if (demand.endingNumber === 1) {
         return {
           endingNumber: demand.endingNumber,
-          requiredQuestCandidateNumbers: [(ordinaryQuests.find(candidate => candidate.title === '中央引潮机修复准备')
+          requiredQuestCandidateNumbers: [(ordinaryQuests.find(candidate => candidate.title === '仓道里的盐蜥')
             ?? ordinaryQuests[0]!)
             .candidateNumber],
           anyQuestCandidateGroups: [[
@@ -2502,8 +2544,8 @@ function questFinalizeRunner(options: {
       return {
         endingNumber: demand.endingNumber,
         requiredQuestCandidateNumbers: (ordinaryQuests
-          .filter(candidate => candidate.title === '东支井修复' || candidate.title === '南支井修复').length
-          ? ordinaryQuests.filter(candidate => candidate.title === '东支井修复' || candidate.title === '南支井修复')
+          .filter(candidate => candidate.title === '枯井回声' || candidate.title === '拾潮人的绳结').length
+          ? ordinaryQuests.filter(candidate => candidate.title === '枯井回声' || candidate.title === '拾潮人的绳结')
           : ordinaryQuests.slice(-2))
           .map(candidate => candidate.candidateNumber),
         anyQuestCandidateGroups: [],
@@ -2536,16 +2578,33 @@ function questFinalizeRunner(options: {
           blankWeight: 20,
         })),
         templates: templates.map((_template, index) => ({
-          templateNumber: index + 1, category: index % 2 === 0 ? 'help' : 'exploration',
+          templateNumber: index + 1,
+          category: options.saltRidgeAcceptance
+            ? (['mystery', 'conflict', 'resource', 'help', 'exploration'] as const)[index]!
+            : index % 2 === 0 ? 'help' : 'exploration',
           intensity: 2, weight: 40, cooldownMinutes: 720,
         })),
-        randomEvents: randomSeeds.map((_source, index) => ({
-          seedNumber: index + 1,
-          description: `地区事件${index + 1}根据当地生活与冲突提供一次不阻断主线的短反馈。`,
-          kind: options.invalidEventUpgrade && index === 0 ? 'quest-upgrade' : index === 0 ? 'resource' : 'atmosphere',
-          intensity: 2, weight: 30, cooldownMinutes: 360,
-          upgradeTemplateNumber: null,
-        })),
+        randomEvents: randomSeeds.map((source, index) => {
+          const regionTemplateNumber = templates.findIndex(template => template.regionKeys.includes(source.pack.regionKey)) + 1
+          const localEventIndex = randomSeeds.slice(0, index)
+            .filter(candidate => candidate.pack.regionKey === source.pack.regionKey).length
+          const kind = options.invalidEventUpgrade && index === 0
+            ? 'quest-upgrade'
+            : options.saltRidgeAcceptance
+              ? (['atmosphere', 'atmosphere', 'quest-upgrade', 'resource', 'atmosphere', 'atmosphere', 'quest-upgrade', 'encounter'] as const)[localEventIndex]!
+              : index === 0 ? 'resource' : 'atmosphere'
+          return {
+            seedNumber: index + 1,
+            description: `${source.seed.title}根据当地生活与冲突提供一次不阻断主线的短反馈。`,
+            kind,
+            intensity: kind === 'encounter' ? 3 : kind === 'quest-upgrade' ? 2 : 1,
+            weight: 30,
+            cooldownMinutes: kind === 'atmosphere' ? 360 : 720,
+            upgradeTemplateNumber: options.invalidEventUpgrade && index === 0
+              ? null
+              : kind === 'quest-upgrade' ? regionTemplateNumber : null,
+          }
+        }),
         ...(context.storyOutcomeContract === 'governed-v19' ? { endingEligibilitySelections } : {}),
       }),
       bindingReceipt: bindingReceipt(input.requirementKey), usage: null,
@@ -3130,6 +3189,48 @@ describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset'
     })).rejects.toThrow(/作者授权 DAG 或预算/)
     expect(p2ExecutorCalls).toBe(0)
     expect(await db.productBuilds.get(input.build.id!)).toMatchObject({ status: 'authorized' })
+  }, 30_000)
+
+  it('即使重算Context Hash也拒绝把伪造Creator规模注入P2', async () => {
+    const input = await fixture()
+    const forgedContext = structuredClone(input.context)
+    forgedContext.creatorScale = {
+      regions: 2,
+      namedLocations: { minimum: 8, maximum: 12 },
+      mainlineStages: { minimum: 6, maximum: 8 },
+      endings: input.brief.scale.targetEndingCount + 1,
+      significantStorylines: 2,
+      ordinaryQuests: { minimum: 8, maximum: 10 },
+      taskTemplates: { minimum: 5, maximum: 6 },
+      randomEvents: { minimum: 16, maximum: 20 },
+      requiredPlayMinutes: {
+        minimum: input.brief.scale.targetPlayMinutes,
+        maximum: input.brief.scale.targetPlayMinutes,
+      },
+      optionalInventoryMinutes: { minimum: 180, maximum: 300 },
+    }
+    const { contextSelectionHash: _oldHash, ...body } = forgedContext
+    forgedContext.contextSelectionHash = await hashProductProductionValueV2(body)
+    const executor = createTextOpenWorldExperienceDesignExecutorV1({ runModel: experienceRunner() })
+    await expect(executor({
+      scope: input.scope,
+      productionId: input.production.id!,
+      buildId: input.build.id!,
+      buildNumber: input.build.buildNumber,
+      controlEpoch: input.build.controlEpoch,
+      planHash: input.planHash,
+      task: input.p2,
+      attempt: 1,
+      idempotencyKey: await hashProductProductionValueV2('forged-creator-scale'),
+      contextText: JSON.stringify(forgedContext),
+      inputArtifacts: [],
+      capabilityBindings: input.p2.capabilityRequirementKeys.map(requirementKey => ({
+        requirementKey,
+        bindingHash: CAPABILITY_HASH,
+        adapterId: 'configured-text.v1',
+      })),
+      signal: new AbortController().signal,
+    })).rejects.toThrow(/Creator规模与调度执行Brief不一致/)
   }, 30_000)
 
   it('即使重新计算Artifact Hash，也拒绝篡改交互、主线和完整缺口边界', async () => {
@@ -6282,7 +6383,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     })).rejects.toThrow(/IntegrationReport自身Hash不匹配/)
   }, 600_000)
 
-  it('G7-01/G7-02/G7-03 盐脊来源经完整DAG产出地图、严格主线、双结局和两类重要故事', async () => {
+  it('G7-01至G7-04 盐脊完整DAG产出地图、受保护故事和可运行地区内容库存', async () => {
     const input = await creatorSchedulerFixture()
     expect(input.characterIds).toHaveLength(7)
     expect(await db.importantLocations.where('projectId').equals(input.scope.projectId).count()).toBe(10)
@@ -6327,7 +6428,7 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
         'p8.catalog.crafting-economy': createTextOpenWorldCraftingEconomyCatalogExecutorV1({ runModel: craftingEconomyRunner(), now: () => NOW + 16 }),
         'p8.catalog.npc-runtime': createTextOpenWorldNpcRuntimeCatalogExecutorV1({ runModel: npcRuntimeRunner(), now: () => NOW + 17 }),
         'p8.catalog.map-interactions': createTextOpenWorldMapInteractionCatalogExecutorV1({ runModel: mapInteractionRunner(), now: () => NOW + 18 }),
-        'p8f.quest-finalize': createTextOpenWorldQuestFinalizeExecutorV1({ runModel: questFinalizeRunner(), now: () => NOW + 19 }),
+        'p8f.quest-finalize': createTextOpenWorldQuestFinalizeExecutorV1({ runModel: questFinalizeRunner({ saltRidgeAcceptance: true }), now: () => NOW + 19 }),
         'p9.scene-scripts': createTextOpenWorldSceneScriptsExecutorV1({ runModel: sceneScriptsRunner(), now: () => NOW + 20 }),
         'p10.system-finalize': createTextOpenWorldSystemFinalizeExecutorV1({ runModel: systemFinalizeRunner(), now: () => NOW + 22 }),
         'v2.balance-review': createTextOpenWorldBalanceReviewExecutorV1({ runModel: qualityReviewRunner(), now: () => NOW + 24 }),
@@ -6410,6 +6511,12 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     const saltRidgeScenes = JSON.parse(artifacts.find(
       row => row.artifactKey === 'text-open-world.scene-scripts',
     )!.payloadJson) as TextOpenWorldSceneScriptsV1
+    const saltRidgeDirector = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.director-decks',
+    )!.payloadJson) as TextOpenWorldDirectorDecksV1
+    const saltRidgeContentBudget = JSON.parse(artifacts.find(
+      row => row.artifactKey === 'text-open-world.content-budget',
+    )!.payloadJson) as TextOpenWorldContentBudgetV1
     const saltRidgeEndings = JSON.parse(artifacts.find(
       row => row.artifactKey === 'text-open-world.ending-contracts',
     )!.payloadJson) as { endings: Array<{ title: string }> }
@@ -6430,8 +6537,61 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       .filter(requirement => requirement.significantThreadKeys.includes(regionalThread.key)).length).toBeGreaterThanOrEqual(4)
     const significantSkeletons = saltRidgeSkeletons.quests.filter(quest => quest.type === 'significant')
     expect(significantSkeletons).toHaveLength(saltRidgeSignificant.stages.length)
+    const ordinaryTitles = [
+      '仓道里的盐蜥', '丢失的盐灯', '集市假药', '失控的驮兽',
+      '枯井回声', '迟到的水车', '拾潮人的绳结', '无主的测潮箱',
+    ]
+    const templateTitles = ['失踪运盐人', '道路阻断', 'NPC资源委托', '潮井污染', '地区寻宝']
     expect(saltRidgeSkeletons.quests.filter(quest => quest.type === 'ordinary').map(quest => quest.title))
-      .toEqual(expect.arrayContaining(['中央引潮机修复准备', '东支井修复', '南支井修复']))
+      .toEqual(ordinaryTitles)
+    expect(saltRidgeSkeletons.quests.filter(quest => quest.type === 'template').map(quest => quest.title))
+      .toEqual(templateTitles)
+    expect(saltRidgePacks.coverage).toMatchObject({
+      ordinaryQuestSeedCount: 8,
+      requiredOrdinaryQuestSeedCount: 8,
+      taskTemplateSeedCount: 5,
+      requiredTaskTemplateSeedCount: 5,
+      randomEventSeedCount: 16,
+      requiredRandomEventSeedCount: 16,
+    })
+    expect(saltRidgePacks.packs.map(pack => [
+      pack.ordinaryQuestSeeds.length,
+      pack.taskTemplateSeeds.length,
+      pack.randomEventSeeds.length,
+    ])).toEqual([[4, 3, 8], [4, 2, 8]])
+    const baseRandomSeedKeys = new Set(saltRidgePacks.packs.flatMap(pack => pack.randomEventSeeds.map(seed => seed.key)))
+    const baseRandomEvents = saltRidgeDirector.randomEvents.filter(event => baseRandomSeedKeys.has(event.sourceSeedKey))
+    expect(saltRidgeDirector.templates).toHaveLength(5)
+    expect(saltRidgeDirector.templates.every(template => template.variantTextRequirementKeys.length === 3)).toBe(true)
+    expect(saltRidgeScenes.templateTextVariants).toHaveLength(15)
+    expect(baseRandomEvents).toHaveLength(16)
+    expect(new Set(baseRandomEvents.map(event => event.kind))).toEqual(new Set([
+      'atmosphere', 'resource', 'encounter', 'quest-upgrade',
+    ]))
+    expect(new Set(baseRandomEvents.map(event => event.fingerprint)).size).toBe(16)
+    expect(saltRidgeContentBudget.inventory).toMatchObject({
+      questCounts: { mainline: 7, significant: 7, ordinary: 8, template: 5 },
+      templateVariantCount: 15,
+      // Rumor propagation routes are not separately authored playable events.
+      randomEventCount: baseRandomEvents.length,
+    })
+    expect(saltRidgeContentBudget.fit).toEqual({
+      requiredPlayMinutesInRange: true,
+      optionalInventoryMinutesInRange: true,
+      inventoryAtLeastSinglePlaythrough: true,
+      everyRegionHasOrdinarySupply: true,
+    })
+    expect(saltRidgeContentBudget.singlePlaythrough.typicalTotalMinutes).toBeGreaterThanOrEqual(180)
+    expect(saltRidgeContentBudget.singlePlaythrough.typicalTotalMinutes).toBeLessThanOrEqual(300)
+    expect(saltRidgeQuests.governance.ordinaryFailureActionsReady).toBe(true)
+    expect(saltRidgeQuests.actions.filter(action => action.key.startsWith('action.fail.quest.ordinary.')))
+      .toHaveLength(8)
+    expect(saltRidgeQuests.quests.find(quest => quest.title === '迟到的水车')).toMatchObject({
+      timePolicy: 'timed', lifecyclePolicy: 'abandon-terminal', expirationMinutes: 240,
+    })
+    expect(saltRidgeQuests.quests.find(quest => quest.title === '无主的测潮箱')).toMatchObject({
+      timePolicy: 'waits', lifecyclePolicy: 'abandon-restart',
+    })
     expect(significantSkeletons.every(skeleton => (
       saltRidgeQuests.quests.some(quest => quest.key === skeleton.key)
       && saltRidgeScenes.scenes.some(scene => scene.questKey === skeleton.key)
@@ -6495,6 +6655,197 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       saltRidgePackage.textOpenWorldVNext!,
     )
     const endingRegistry = createTextOpenWorldActionRegistryV1(saltRidgePackage.textOpenWorldVNext!)
+    const questTransitionCatalog = createTextOpenWorldQuestTransitionCatalogV1(saltRidgePackage.textOpenWorldVNext!)
+    const questEffectCatalog = createTextOpenWorldEffectCatalogV1(saltRidgePackage.textOpenWorldVNext!)
+    const prepareActiveOrdinaryQuest = (
+      lifecycleProjection: typeof initialSaltRidgeProjection,
+      title: string,
+    ) => {
+      const definition = saltRidgeModules.quests.quests.find(quest => quest.title === title)!
+      const instance = Object.values(lifecycleProjection.state.quests.instancesByKey)
+        .find(candidate => candidate.definitionKey === definition.key)!
+      const stage = saltRidgeModules.quests.stages.find(candidate => candidate.key === definition.stageKeys[0])!
+      instance.status = 'active'
+      instance.currentStageKey = stage.key
+      instance.offeredAtWorldMinute = lifecycleProjection.state.time.worldMinute
+      instance.acceptedAtWorldMinute = lifecycleProjection.state.time.worldMinute
+      instance.deadlineWorldMinute = definition.timePolicy === 'timed'
+        ? lifecycleProjection.state.time.worldMinute + definition.expirationMinutes!
+        : null
+      stage.objectiveKeys.forEach(objectiveKey => { instance.objectiveStatusByKey[objectiveKey] = 'active' })
+      lifecycleProjection.state.director.revealedQuestInstanceKeys = [
+        ...new Set([...lifecycleProjection.state.director.revealedQuestInstanceKeys, instance.instanceKey]),
+      ]
+      lifecycleProjection.state.director.activeQuestInstanceKeys = [
+        ...new Set([...lifecycleProjection.state.director.activeQuestInstanceKeys, instance.instanceKey]),
+      ]
+      lifecycleProjection.director = structuredClone(lifecycleProjection.state.director)
+      return { definition, instance, stage }
+    }
+    const applyQuestLifecycleAction = async (
+      lifecycleProjection: typeof initialSaltRidgeProjection,
+      action: typeof saltRidgeModules.actions.actions[number],
+      instanceKey: string,
+      claimKey: string,
+    ) => {
+      const transitions = action.successEffectKeys.map(effectKey => (
+        saltRidgeModules.actions.effects.find(effect => effect.key === effectKey)!
+      )).filter((effect): effect is Extract<typeof effect, { operation: 'transition-quest' }> => (
+        effect.operation === 'transition-quest'
+      ))
+      const authorization = questTransitionCatalog.prepare({
+        instanceKey,
+        state: lifecycleProjection.state,
+        transitions: transitions.map(effect => ({
+          toStatus: effect.payload.status,
+          stageKey: effect.payload.stageKey,
+        })),
+      })
+      const plan = await questEffectCatalog.plan({
+        effectKeys: action.successEffectKeys,
+        claimKey,
+        state: lifecycleProjection.state,
+        authorization,
+      })
+      const applied = await questEffectCatalog.apply({ plan, state: structuredClone(lifecycleProjection.state) })
+      lifecycleProjection.state = applied.state
+      lifecycleProjection.director = structuredClone(applied.state.director)
+      return { authorization, plan, receipt: applied.receipt }
+    }
+
+    const templateDefinition = saltRidgeModules.quests.quests.find(quest => quest.title === '失踪运盐人')!
+    const firstTemplateInstance = createTextOpenWorldDirectorQuestInstanceV1(saltRidgePackage.textOpenWorldVNext!, {
+      definitionKey: templateDefinition.key,
+      sourceInstanceKey: 'draw.g7-04.001',
+      worldMinute: initialSaltRidgeProjection.state.time.worldMinute,
+    })
+    const secondTemplateInstance = createTextOpenWorldDirectorQuestInstanceV1(saltRidgePackage.textOpenWorldVNext!, {
+      definitionKey: templateDefinition.key,
+      sourceInstanceKey: 'draw.g7-04.002',
+      worldMinute: initialSaltRidgeProjection.state.time.worldMinute,
+    })
+    expect(firstTemplateInstance.instanceKey).not.toBe(secondTemplateInstance.instanceKey)
+    expect([firstTemplateInstance, secondTemplateInstance].every(instance => (
+      instance.definitionKey === templateDefinition.key && instance.status === 'revealed'
+    ))).toBe(true)
+
+    const failedQuestProjection = structuredClone(initialSaltRidgeProjection)
+    const failedQuest = prepareActiveOrdinaryQuest(failedQuestProjection, '失控的驮兽')
+    const failureAction = saltRidgeModules.actions.actions.find(action => (
+      action.key === `action.fail.${failedQuest.definition.key}.stage.001`
+    ))!
+    expect(endingRegistry.resolve({
+      actionKey: failureAction.key,
+      targetKey: failedQuest.instance.instanceKey,
+      context: {
+        ...deriveTextOpenWorldContextsV1(failedQuestProjection).action,
+        actorKey: 'system',
+      },
+    }).entry.available).toBe(true)
+    const failed = await applyQuestLifecycleAction(
+      failedQuestProjection,
+      failureAction,
+      failedQuest.instance.instanceKey,
+      'claim.g7-04.failure',
+    )
+    expect(failedQuestProjection.state.quests.instancesByKey[failedQuest.instance.instanceKey].status).toBe('failed')
+    const failedHistoryEvent: ProductRuntimeEvent = {
+      projectId: 1,
+      worldGroupId: null,
+      sessionId: 1,
+      sequence: 2,
+      type: 'text-open-world.effects.applied',
+      actorKey: 'system',
+      targetKey: failedQuest.instance.instanceKey,
+      commandId: 'command.g7-04.failure',
+      baseSequence: 1,
+      baseStateHash: failed.plan.baseStateHash,
+      createdAt: NOW,
+      payloadJson: JSON.stringify({
+        schema: 'storyforge.text-open-world.effects-applied-event',
+        version: 1,
+        commandId: 'command.g7-04.failure',
+        commandSequence: 1,
+        ruleset: failedQuestProjection.ruleset,
+        randomEventSequences: [],
+        outcome: 'success',
+        reason: null,
+        degradation: null,
+        plan: failed.plan,
+        receipt: failed.receipt,
+        outcomeFingerprint: await hashProductProductionValueV2('g7-04-failure-outcome'),
+      }),
+    }
+    expect(projectTextOpenWorldQuestHistoryV1({
+      runtimePackage: saltRidgePackage.textOpenWorldVNext!,
+      events: [failedHistoryEvent],
+      instanceKey: failedQuest.instance.instanceKey,
+    })).toEqual([expect.objectContaining({ kind: 'failed', summary: '失控的驮兽：永久失败' })])
+
+    const expiredQuestProjection = structuredClone(initialSaltRidgeProjection)
+    const expiredQuest = prepareActiveOrdinaryQuest(expiredQuestProjection, '迟到的水车')
+    expiredQuestProjection.state.time.worldMinute = expiredQuest.instance.deadlineWorldMinute!
+    const expiredQuestRow = saltRidgeQuests.quests.find(quest => quest.key === expiredQuest.definition.key)!
+    const expirationAction = saltRidgeModules.actions.actions.find(action => (
+      action.key === expiredQuestRow.expirationActionKeys[1]
+    ))!
+    expect(endingRegistry.resolve({
+      actionKey: expirationAction.key,
+      targetKey: expiredQuest.instance.instanceKey,
+      context: {
+        ...deriveTextOpenWorldContextsV1(expiredQuestProjection).action,
+        actorKey: 'system',
+      },
+    }).entry.available).toBe(true)
+    await applyQuestLifecycleAction(
+      expiredQuestProjection,
+      expirationAction,
+      expiredQuest.instance.instanceKey,
+      'claim.g7-04.expiration',
+    )
+    expect(expiredQuestProjection.state.quests.instancesByKey[expiredQuest.instance.instanceKey].status).toBe('expired')
+
+    const restartQuestProjection = structuredClone(initialSaltRidgeProjection)
+    const restartQuest = prepareActiveOrdinaryQuest(restartQuestProjection, '无主的测潮箱')
+    const restartQuestRow = saltRidgeQuests.quests.find(quest => quest.key === restartQuest.definition.key)!
+    const abandonAction = saltRidgeModules.actions.actions.find(action => action.key === restartQuestRow.abandonActionKey)!
+    await applyQuestLifecycleAction(
+      restartQuestProjection,
+      abandonAction,
+      restartQuest.instance.instanceKey,
+      'claim.g7-04.abandon',
+    )
+    expect(restartQuestProjection.state.quests.instancesByKey[restartQuest.instance.instanceKey].status).toBe('abandoned')
+    const restartAction = saltRidgeModules.actions.actions.find(action => (
+      action.key === `action.restart.${restartQuest.definition.key}`
+    ))!
+    const restartOfferScene = saltRidgeModules.narrative.scenes.find(scene => (
+      scene.sourceKind === 'quest-offer' && scene.questKey === restartQuest.definition.key
+    ))!
+    restartQuestProjection.state.map.currentLocationKey = restartOfferScene.locationKey
+    const restartOfferLocation = saltRidgeModules.world.locations.find(location => (
+      location.key === restartOfferScene.locationKey
+    ))!
+    restartQuestProjection.state.map.locationKnowledgeByKey[restartOfferLocation.key] = 'visited'
+    restartQuestProjection.state.map.regionKnowledgeByKey[restartOfferLocation.regionKey] = 'visited'
+    if (!restartQuestProjection.state.map.revealedLocationKeys.includes(restartOfferLocation.key)) {
+      restartQuestProjection.state.map.revealedLocationKeys.push(restartOfferLocation.key)
+    }
+    expect(endingRegistry.resolve({
+      actionKey: restartAction.key,
+      targetKey: restartQuest.instance.instanceKey,
+      context: deriveTextOpenWorldContextsV1(restartQuestProjection).action,
+    }).entry.available).toBe(true)
+    await applyQuestLifecycleAction(
+      restartQuestProjection,
+      restartAction,
+      restartQuest.instance.instanceKey,
+      'claim.g7-04.restart',
+    )
+    expect(restartQuestProjection.state.quests.instancesByKey[restartQuest.instance.instanceKey]).toMatchObject({
+      status: 'active', currentStageKey: restartQuest.stage.key, terminalAtWorldMinute: null,
+    })
+
     const finalOnlyProjection = structuredClone(initialSaltRidgeProjection)
     finalOnlyProjection.state.map.currentLocationKey = saltRidgeQuests.endingBindings.finalLocationKey
     const finalLocation = saltRidgeModules.world.locations

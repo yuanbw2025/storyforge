@@ -178,7 +178,8 @@ export interface TextOpenWorldSystemFinalizeInputContextV1 {
   quests: Array<Pick<TextOpenWorldQuestDesignDocumentsV1['quests'][number], 'key' | 'type' | 'title' | 'regionKeys' | 'estimatedMinutes' | 'lifecyclePolicy' | 'timePolicy'>>
   director: {
     templates: Array<Pick<TextOpenWorldDirectorDecksV1['templates'][number], 'key' | 'questKey' | 'regionKeys' | 'variantTextRequirementKeys'>>
-    randomEvents: Array<Pick<TextOpenWorldDirectorDecksV1['randomEvents'][number], 'key' | 'title' | 'kind' | 'regionKeys' | 'locationKeys'>>
+    randomEvents: Array<Pick<TextOpenWorldDirectorDecksV1['randomEvents'][number],
+      'key' | 'title' | 'kind' | 'regionKeys' | 'locationKeys' | 'rumorKey'>>
   }
   scenes: Array<Pick<TextOpenWorldSceneScriptsV1['scenes'][number], 'key' | 'title' | 'purpose' | 'regionKey' | 'locationKey' | 'sourceKind'>>
   mediaSlotDemands: TextOpenWorldMediaSlotDemandV1[]
@@ -478,7 +479,19 @@ async function buildContext(scope: WorkspaceScope, buildId: number): Promise<Tex
     })),
     director: {
       templates: artifacts.director.templates.map(item => ({ key: item.key, questKey: item.questKey, regionKeys: item.regionKeys, variantTextRequirementKeys: item.variantTextRequirementKeys })),
-      randomEvents: artifacts.director.randomEvents.map(item => ({ key: item.key, title: item.title, kind: item.kind, regionKeys: item.regionKeys, locationKeys: item.locationKeys })),
+      randomEvents: artifacts.director.randomEvents.map(item => ({
+        key: item.key,
+        title: item.title,
+        kind: item.kind,
+        regionKeys: item.regionKeys,
+        locationKeys: item.locationKeys,
+        // Historical Director rows did not own the governed rumor key. Keep
+        // their projection byte-compatible while letting fresh P10 distinguish
+        // Knowledge propagation routes from authored playable events.
+        ...(Object.prototype.hasOwnProperty.call(item, 'rumorKey')
+          ? { rumorKey: item.rumorKey ?? null }
+          : {}),
+      })),
     },
     scenes: artifacts.scenes.scenes.map(scene => ({ key: scene.key, title: scene.title, purpose: scene.purpose, regionKey: scene.regionKey, locationKey: scene.locationKey, sourceKind: scene.sourceKind })),
     mediaSlotDemands: mediaDemands(artifacts),
@@ -556,7 +569,13 @@ function deriveContentBudget(context: TextOpenWorldSystemFinalizeInputContextV1,
     const quest = templateByQuest.get(template.questKey) ?? fail(`模板引用未知Quest:${template.key}`)
     return authoredTemplateMinutes(quest.estimatedMinutes, template.variantTextRequirementKeys.length)
   }))
-  const randomEventMinutes = context.director.randomEvents.length * 3
+  // Governed rumor propagation rows are delivery routes for already-authored
+  // Knowledge, not an additional three-minute playable event. Counting them
+  // again inflated both regional supply and the author-confirmed optional
+  // inventory range. Historical decks omit `rumorKey` and retain their prior
+  // authored-event interpretation.
+  const authoredRandomEvents = context.director.randomEvents.filter(event => event.rumorKey == null)
+  const randomEventMinutes = authoredRandomEvents.length * 3
   const totalAuthoredMinutes = mainlineMinutes + significantMinutes + ordinaryFixedMinutes + templateVariantMinutes + randomEventMinutes
   const templateSingleRun = sum(context.director.templates.map(template => templateByQuest.get(template.questKey)?.estimatedMinutes ?? 0))
   const maximumOptional = significantMinutes + ordinaryFixedMinutes + templateSingleRun + randomEventMinutes
@@ -568,7 +587,7 @@ function deriveContentBudget(context: TextOpenWorldSystemFinalizeInputContextV1,
       const quest = templateByQuest.get(template.questKey)
       return quest ? authoredTemplateMinutes(quest.estimatedMinutes, template.variantTextRequirementKeys.length) : 0
     }))
-    const events = context.director.randomEvents.filter(event => event.regionKeys.includes(region.key)).length * 3
+    const events = authoredRandomEvents.filter(event => event.regionKeys.includes(region.key)).length * 3
     return { regionKey: region.key, fixedQuestMinutes, templateVariantMinutes: templateMinutes, randomEventMinutes: events, authoredInventoryMinutes: fixedQuestMinutes + templateMinutes + events }
   })
   const counts = {
@@ -592,7 +611,7 @@ function deriveContentBudget(context: TextOpenWorldSystemFinalizeInputContextV1,
     inventory: {
       mainlineMinutes, significantMinutes, ordinaryFixedMinutes, templateVariantMinutes, randomEventMinutes,
       totalAuthoredMinutes, questCounts: counts, templateVariantCount: context.director.templates.reduce((total, item) => total + item.variantTextRequirementKeys.length, 0),
-      randomEventCount: context.director.randomEvents.length, regionCount: context.regions.length, sceneCount: context.scenes.length,
+      randomEventCount: authoredRandomEvents.length, regionCount: context.regions.length, sceneCount: context.scenes.length,
     },
     singlePlaythrough: {
       requiredMainlineMinutes: mainlineMinutes, minimumOptionalMinutes: 0, maximumOptionalMinutes: maximumOptional,

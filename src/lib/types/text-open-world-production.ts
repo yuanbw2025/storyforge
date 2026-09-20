@@ -3383,6 +3383,9 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     allAbandonableQuestStagesCovered?: true
     /** P9 must prove this requirement against the authored quest-offer scene. */
     restartActionsRequireOriginalOfferRoute?: true
+    /** Fresh fixed ordinary quests expose a system-owned permanent-failure
+     * transition for every active stage. Historical artifacts omit this. */
+    ordinaryFailureActionsReady?: true
     /**
      * Fresh P8F builds compile active recovery/resource/status and passive
      * mechanics into the strict Action v17 + Progression v2 + Combat v4

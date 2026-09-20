@@ -96,7 +96,7 @@ const ACKNOWLEDGEMENT = {
 }
 
 describe('TOW-G5-03 · creator production preflight', () => {
-  it('以 provider-qualified 报价形成不含 Key/完整 URL 的 155/160 文本预算快照', async () => {
+  it('以 provider-qualified 报价形成不含 Key/完整 URL 的 187/200 文本预算快照', async () => {
     const result = await createTextOpenWorldCreatorProductionPreflightV1({
       brief: await brief(), projectId: 7, aiConfig: config(), rememberApiKey: false, pricing: { mode: 'catalog' },
     })
@@ -108,7 +108,7 @@ describe('TOW-G5-03 · creator production preflight', () => {
         endpointOrigin: 'https://api.deepseek.com', credentialMode: 'session',
       },
       estimate: {
-        recommendedModelCalls: 155, maximumModelCalls: 160,
+        recommendedModelCalls: 187, maximumModelCalls: 200,
         reservedInputTokens: 1_200_000, reservedOutputTokens: 360_000,
         maximumCostUsd: 30, maximumDurationMs: 7_200_000,
         maximumStorageBytes: 200_000_000,

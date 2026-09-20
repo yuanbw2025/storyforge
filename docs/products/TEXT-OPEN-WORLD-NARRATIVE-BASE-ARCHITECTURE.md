@@ -1,6 +1,6 @@
 # AI 主导文字开放世界叙事基座 · StoryForge 施工规格
 
-> 规格版本：3.2.58
+> 规格版本：3.2.59
 > 生效日期：2026-09-06
 > 文档层级：L2 产品目标架构与施工规格
 > 当前状态：设计基线；不代表代码已经实现
@@ -363,8 +363,8 @@ events / checkpoints / terminalReceipt
 
 - 40种专属Artifact Kind分别保存来源、体验、故事、地区、任务、玩法目录、场景、系统整合和质量证据；每种Kind只有一个任务owner；其中SourcePin索引与大体量来源单元分开；
 - P0～P10连同V1确定性预检、V2平衡/语义双评审、V3装配和QA共26个任务，全部进入`qa.release`终态汇合；
-- 22个模型型durable Run分别承担来源、体验、Ruleset、表现、故事、地区、主角、任务、六类玩法目录和评审；当前执行器中P1最多使用6个来源批次，P9按Scene使用最多127项隔离请求并追加1项零Scene共享请求，其余Run初始执行各1次；
-- 完整Build最多执行154次初始模型调用，并为P9额外授权1次明确失败片段修复，总调用预算155次；调用扇出、token份额与时长份额分开计算，输入/输出token按156份叙事生产权重分配，生产时长按100份独立权重分配；P8F/P9分别占12/19份token，P9的最多128次初始小请求及1次修复占48份时长，并在输入/输出内为最大片段预留修复余量，不会挤占不可切分上游；共享账本逐attempt保存已付用量，重试只预留同Run任务剩余额度，部分调用费用上界按实际模型/媒资调用比例分摊，未知结果则保留预留等待人工裁决；实际调用按执行结果计量，不能把“任务数”误当成“一任务只调用一次模型”；
+- 22个模型型durable Run分别承担来源、体验、Ruleset、表现、故事、地区、主角、任务、六类玩法目录和评审；当前执行器中P1最多使用6个来源批次，P9按Scene使用最多159项隔离请求并追加1项零Scene共享请求，其余Run初始执行各1次；
+- 完整Build最多执行186次初始模型调用，并为P9额外授权1次明确失败片段修复，总调用预算187次；调用扇出、token份额与时长份额分开计算，输入/输出token按199份叙事生产权重分配，生产时长按100份独立权重分配；P8F/P9/P10分别占17/26/18份token，P9的最多160次初始小请求及1次修复占48份时长，并在输入/输出内为最大片段预留修复余量，不会挤占不可切分上游；共享账本逐attempt保存已付用量，重试只预留同Run任务剩余额度，部分调用费用上界按实际模型/媒资调用比例分摊，未知结果则保留预留等待人工裁决；实际调用按执行结果计量，不能把“任务数”误当成“一任务只调用一次模型”；
 - P8的成长、遭遇、物品奖励、制作经济、NPC运行和地图交互目录允许按依赖并行，P8F只能在六类目录完成后把任务绑定到真实引用；
 - 每项任务显式声明输入、输出、依赖回执、Context Source、候选写目标、预算、超时、重试、不可重试错误、stale传播和完成Gate；
 - `sourcePinHash`、`briefHash`、`planHash`、`controlEpoch`或上游Artifact Hash变化都会使下游保守stale；旧候选只读，不能直接采纳；
@@ -405,9 +405,9 @@ P1专属Skill与Executor已经进入正式P0～P10生产Plan。共享durable sch
 `src/lib/open-world/experience-design.ts` 已把通用作者会谈终态和文字开放世界专属体验设计拆为“代码冻结边界 + 模型补充语义”，避免让模型重新解释已经确认的产品决策：
 
 - G5-02已经用文字开放世界专属Creator Brief承接作者会谈，并把确认结果保存到统一`ProductProductionBrief`修订；它持久绑定G5-01来源身份、作者设定、规模、边界、媒资、完成条件和durable候选证据，但自身不是`SourcePlan`或开始授权。现在只有G5-04专属Creator启动命令能把它提升为生产链可消费的正式来源计划与确认事实；在该命令成功前P2不能运行，也不能把缺少作者确认的字段当作默认值悄悄补齐；
-- G5-03在Creator Brief之后加入零写入的生产准备门：复用全局BYOK设置和正式creation任务路由，以provider、精确model、安全endpoint origin、规范基础路径Hash、真实凭证来源和非敏感生成参数形成绑定；远程必须HTTPS，URL内嵌凭证、查询或fragment直接阻断。目录价还要求命中注册的官方商业端点，中转、同域异路径和未复核模型都必须由作者录入报价，本地token零费用只允许明确localhost上的Ollama/custom。界面向作者展示完整叙事生产DAG的155次建议调用/160硬上限、120万输入/36万输出token、30美元文本硬保护、2小时和200MB资源边界，并明确媒资费用由G5-08另行排产；已发生的Brief会谈只把真实调用、token和耗时与非账单估价分开呈现。四项确认在准备页只形成内存Hash，但Verifier会以当前任务路由和AIConfig作外部真实性比较，空确认、自洽重算Hash、同域换路径均不能授权；设置往返只恢复精确会谈/产品/来源。准备页不创建Build或SourcePlan，正式Creator启动会在原子边界重新CAS Brief、来源、模型、报价、预算和Plan Hash后才允许P0运行。中央日志脱敏及供应商错误分类保证Key、认证头、完整URL和原始错误正文不会进入日志、Artifact或创作者页面；
+- G5-03在Creator Brief之后加入零写入的生产准备门：复用全局BYOK设置和正式creation任务路由，以provider、精确model、安全endpoint origin、规范基础路径Hash、真实凭证来源和非敏感生成参数形成绑定；远程必须HTTPS，URL内嵌凭证、查询或fragment直接阻断。目录价还要求命中注册的官方商业端点，中转、同域异路径和未复核模型都必须由作者录入报价，本地token零费用只允许明确localhost上的Ollama/custom。界面向作者展示完整叙事生产DAG的187次建议调用/200硬上限、120万输入/36万输出token、30美元文本硬保护、2小时和200MB资源边界，并明确媒资费用由G5-08另行排产；已发生的Brief会谈只把真实调用、token和耗时与非账单估价分开呈现。四项确认在准备页只形成内存Hash，但Verifier会以当前任务路由和AIConfig作外部真实性比较，空确认、自洽重算Hash、同域换路径均不能授权；设置往返只恢复精确会谈/产品/来源。准备页不创建Build或SourcePlan，正式Creator启动会在原子边界重新CAS Brief、来源、模型、报价、预算和Plan Hash后才允许P0运行。中央日志脱敏及供应商错误分类保证Key、认证头、完整URL和原始错误正文不会进入日志、Artifact或创作者页面；
 - 登记的`text-open-world.experience-input` Context Source只读取同一Work/Production/Build内的已授权Brief、SourcePin及已验收P1三件Artifact。它选择有界的高优先级Ledger事实和缺口，但把全部开放缺口key带入GameBrief；整个输入而非少数索引字段进入`contextSelectionHash`；
-- `GameBrief`完全由确定性代码投影作者意图和集中校准：主角来源模式、目标体量、至少两个结局、严格顺序主线、重要故事安全等待、普通世界持续演化、非地点唯一关键触发、有边界自由、三类输入、四类回合战斗操作、标准难度、三类首版视觉消费槽、成本上限和直接发布条件均不能由模型改写；
+- `GameBrief`完全由确定性代码投影作者意图和集中校准：Creator路径保留作者确认的地区、地点、主线、结局、重要故事、普通任务、模板、随机事件和时长范围，旧通用路径才使用集中校准默认值；规模必须与冻结执行Brief的结局数和目标时长一致，即使重算Context Hash也不能注入冲突规模。主角来源模式、严格顺序主线、重要故事安全等待、普通世界持续演化、非地点唯一关键触发、有边界自由、三类输入、四类回合战斗操作、标准难度、三类首版视觉消费槽、成本上限和直接发布条件均不能由模型改写；
 - 模型只输出pitch、玩家幻想、叙事支柱、地区差异、成长承诺、基调及主角身份/动机/个人代价。每个来源引用必须是当前上下文已交付的`claimKey`；来源型主角还必须引用证据锚定到作者所选角色来源单元的claim，不能只根据显示名编写新小传；
 - `ExperienceContract`冻结有边界自由的承接/拒绝/引导策略、主线与重要故事保护、地区发牌内容、世界演化和失败策略；`ProtagonistAsset`只保存叙事身份，初始数值Build明确留给P4在GameplayRuleset完成后生成；
 - GameBrief、ExperienceContract和ProtagonistAsset分别拥有内容Hash，并通过Brief、Pin、Manifest、Ledger、Gap Report、完整P2输入与实际claim entry hash形成basis链。即使重新计算单个Artifact Hash，偷换作者意图、固定边界、来源缺口或未交付claim仍会在采纳前失败关闭；
@@ -541,7 +541,7 @@ P8前三条Gameplay Catalog Lane把ContentRequirementManifest变成后序任务�
 
 P8后半目录已补齐制作经济、NPC运行和地图交互：配方/商店保证物品来源、消耗、定价、库存和反套利闭环；NPC保留整体人物小传，区分重要Agent与普通规则角色，冻结关键保护、四时段日程、三档态度与功能替代；地图目录原样保持Region/Location/Edge/FastTravel拓扑，覆盖每个地点入口，并固定逐步揭示、提前到达安全、旅行推进时间、快旅到访解锁和程序SVG布局。这三类目录与前三类一样，在P8只交付稳定定义，运行引用保持unbound。
 
-`quest-finalize-production.ts`现以不可切分的原子Context读取Mainline、SignificantThreads、RegionNarrativePacks、QuestSkeletons、ContentRequirementManifest和六类Gameplay Catalog，对11件Artifact逐一校验行Hash、内容Hash、产品实例及精确上游来源。任意一件超出任务输入预算时失败关闭，不会把JSON从中间截断后交给模型；生产调度器传入实际任务预算。P8F当前初始执行使用1次模型调用，但获得12/156的token份额，以容纳不可切分的完整任务上下文；完整Build的154次初始调用上限主要用于P1来源分批与P9逐Scene硬隔离，调用扇出不等同于叙事内容预算比例。
+`quest-finalize-production.ts`现以不可切分的原子Context读取Mainline、SignificantThreads、RegionNarrativePacks、QuestSkeletons、ContentRequirementManifest和六类Gameplay Catalog，对11件Artifact逐一校验行Hash、内容Hash、产品实例及精确上游来源。任意一件超出任务输入预算时失败关闭，不会把JSON从中间截断后交给模型；调度器把所有`text-open-world.*`生产Context视为精确结构化合同并传入实际任务预算。P8F当前初始执行使用1次模型调用，但获得17/199的token份额，以容纳不可切分的完整任务上下文；完整Build的186次初始调用上限主要用于P1来源分批与P9逐Scene硬隔离，调用扇出不等同于叙事内容预算比例。
 
 模型在P8F只能提交任务/Objective描述、Objective成功语义、发牌预算/触发类型、模板类别/强度/权重/冷却及随机事件语义；任务键、目录键、条件、效果、行动、数值、生命周期和引用均属于代码。确定性编译器完成：
 
@@ -560,7 +560,7 @@ fresh Knowledge运行包使用Director v3：每条受治理传闻事件冻结唯
 
 #### 5.4.15 P9场景脚本、知识边界与统一交互结果源落地
 
-P9把已经可运行的任务与地区Director结果图转换为玩家可读、可选择的叙事表现，但不允许表现层重新定义玩法结果。`scene-scripts-production.ts`先在代码侧读取并验签SourceLedger、ExperienceContract、StoryArc、RegionNarrativePacks、QuestSkeletons、ContentRequirementManifest、NpcRuntimeCatalog、MapInteractionCatalog、QuestDesignDocuments和DirectorDecks；随后生成去重的Scene Demand、Knowledge Boundary、自然语言Action Demand、模板文字变体和随机事件表现需求。完整上游不会截断，重复且与模型写作无关的Condition/Effect等确定性字段只在代码侧校验，模型接收的是仍可追溯到原Artifact Hash的紧凑投影，因此验收世界能够在P9实际112000 token输入预算内原子交付。
+P9把已经可运行的任务与地区Director结果图转换为玩家可读、可选择的叙事表现，但不允许表现层重新定义玩法结果。`scene-scripts-production.ts`先在代码侧读取并验签SourceLedger、ExperienceContract、StoryArc、RegionNarrativePacks、QuestSkeletons、ContentRequirementManifest、NpcRuntimeCatalog、MapInteractionCatalog、QuestDesignDocuments和DirectorDecks；随后生成去重的Scene Demand、Knowledge Boundary、自然语言Action Demand、模板文字变体和随机事件表现需求。完整上游不会截断，重复且与模型写作无关的Condition/Effect等确定性字段只在代码侧校验，模型接收的是仍可追溯到原Artifact Hash的紧凑投影；当前26/199的token份额已用真实8/5/16库存证明可以原子交付，而不是依赖截断后的偶然合法JSON。
 
 确定性编译器为每个Quest生成委托与收束场景、为每个Objective生成推进场景、为每个NPC生成含`bad/neutral/good`三档态度开场的对话场景、为每个地点交互和随机事件生成入口与表现，并兑现Director为每个模板预留的3份差异化文字。每个Scene只引用当前允许的Source Claim，显式携带禁止提前透露的后续Objective；随机传闻只有存在需求时才能生成且固定为不确定信息。
 
@@ -1435,6 +1435,14 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 重要故事的`localConsequencePlans`也在这一阶段从叙事意图变成运行事实。编译器只为明确增加/降低的道德、势力亲合度、NPC态度、地区状态和资源结果生成白名单Effect，并绑定到对应重要任务最终Stage的完成Action；运行包只允许这组确定性后缀Effect出现在重要故事完成动作中。盐脊验收内容包括一条3段角色线（含战斗）和一条4段跨区势力/地区线（至少4名关联角色），每段都有Quest和Scene，既能独立推进又不能改写主线核心目标。
 
+### 12.6 G7-04盐脊普通内容库存与地区叙事供给
+
+盐脊的地区叙事供给现已按Creator确认规模落地为8个固定普通任务、5个模板、每模板3个预生成差异变体和16个原创随机/环境事件。固定任务覆盖调查、战斗、收集、制作、关系与限时救援等不同包装；模板在结构、奖励和生命周期受控的前提下按地区角色、地点与公开冲突替换叙事表面；随机事件由Director在合法地区、触发、冷却、密度与指纹门内发放。Knowledge传闻的传播路线是已有叙事事实的投递机制，不再被内容预算重复视为独立事件。
+
+普通任务的失败语义现由代码拥有。限时任务可在世界时间越过截止点后进入`expired`；可重接任务需玩家确认放弃，并只能在原发布场景重新经过揭示、接取与激活链；允许永久失败的任务在每个活动Stage有唯一系统Action，不能由玩家直接伪造失败。模板任务仍由Director创建实例，实例结果不改写模板定义。重复、过期、放弃、重接和永久失败均通过正式Event与Projection回放验证。
+
+本阶段同时暴露并修复了叙事生产容量的真实边界：P2必须保留Creator规模，结构化Context必须完整交付，P9场景硬上限从127调整为159以承载当前136个实际Scene，完整DAG建议187次模型调用并按199份token权重分配。自动证据证明“有足量结构化内容且能运行”，仍不能证明文字新颖性、节奏或真人3至5小时体验已经合格；这些结论继续留给真实模型校准与真人游玩。
+
 ---
 
 ## 13. 与现有 StoryForge 的施工映射
@@ -1626,6 +1634,7 @@ StoryForge当前没有独立staging。发布前仍需在隔离数据中完成灰
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 3.2.59 | 2026-09-21 | 完成G7-04地区叙事供给：Creator规模精确贯通P2，盐脊8个固定普通任务、5个模板×3个变体和16个原创随机事件进入正式DAG/运行包；传闻路线不重复计时。过期、确认放弃、原场景重接和系统永久失败经Event/Projection验证。精确生产Context禁止截断，Scene上限159，DAG建议187次/硬上限200次，token权重199；真人时长与文风质量仍待G7-11/G7-13。 |
 | 3.2.58 | 2026-09-20 | 完成G7-03叙事闭环：盐脊7段严格主线、两个路线资格不同的合规结局、3段角色线和4段跨区势力/地区线全部进入正式Quest/Scene。P8F `governed-v19`把闭集任务、势力和配方选择编译为可运行结局Condition；重要故事局部后果编译为精确Stage完成Effect。旧Context不重新解释，运行时实证未满足资格不可选、满足对应路线后可选。 |
 | 3.2.57 | 2026-09-20 | 对齐G7-02盐脊地图契约：世界骨架初始以`visited + heard`公开名称与无条件拓扑，未到访详情继续隐藏；快旅/复活点只在真实到访后解锁，不再要求伪造默认远程点，首个点前由战前检查点保证失败可重试。 |
 | 3.2.56 | 2026-09-20 | 完成G7-01盐脊叙事来源落地：独立WorldRelease冻结两地、十地点、七角色、两势力、核心故事及两条重要故事素材；36个来源单元经P1实读并由正式DAG生成故事、主支线、地区生态、任务、脚本与运行包候选。CI只证明来源与生产证据链，不代替后续叙事质量和真人时长校准。 |

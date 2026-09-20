@@ -2715,7 +2715,17 @@ async function runClaimedTask(input: {
     if (requiresExactContext && (normalAssembled.overBudgetAfterTrim || !normalAssembled.sourceEvidence || normalAssembled.sourceEvidence.some(source => (
       source.status !== 'included' || source.delivery !== 'full'
     )))) {
-      throw new ProductProductionContextBudgetErrorV1('[product-production-context] 制作合同或依赖产物未完整进入任务预算；未调用模型，请缩小制作范围。')
+      const incompleteSources = normalAssembled.sourceEvidence?.filter(source => (
+        source.status !== 'included' || source.delivery !== 'full'
+      )).map(source => (
+        `${source.key}:${source.status}/${source.delivery}`
+        + `(${source.inputTokens}/${source.originalTokens})`
+      )).join(',') ?? 'missing-evidence'
+      throw new ProductProductionContextBudgetErrorV1(
+        `[product-production-context] 制作合同或依赖产物未完整进入任务预算`
+        + `（需要${normalAssembled.totalInputTokens} tokens，预算${totalInputBudget}，未完整来源:${incompleteSources}）；`
+        + '未调用模型，请缩小制作范围或提高已授权预算。',
+      )
     }
     if (separateRepairFeedback) {
       // The stage packet is authoritative and atomic. Only after it passes at

@@ -9,20 +9,20 @@ import {
 } from '../../src/lib/open-world/scene-demand-capacity'
 
 describe('R-OPEN-WORLD-G4-11A · P9 governed-v3 model disclosure', () => {
-  it('proves the shared P8F/P9 deterministic Scene capacity at 127 and rejects 128', () => {
+  it('proves the shared P8F/P9 deterministic Scene capacity at 159 and rejects 160', () => {
     const atLimit = {
-      quests: Array.from({ length: 30 }),
-      objectives: Array.from({ length: 60 }),
+      quests: Array.from({ length: 38 }),
+      objectives: Array.from({ length: 76 }),
       actors: Array.from({ length: 4 }),
       interactions: Array.from({ length: 2 }),
       randomEvents: Array.from({ length: 1 }),
     }
-    expect(countTextOpenWorldSceneDemandsV1(atLimit)).toBe(127)
-    expect(assertTextOpenWorldSceneDemandCapacityV1(atLimit)).toBe(127)
+    expect(countTextOpenWorldSceneDemandsV1(atLimit)).toBe(159)
+    expect(assertTextOpenWorldSceneDemandCapacityV1(atLimit)).toBe(159)
     expect(() => assertTextOpenWorldSceneDemandCapacityV1({
       ...atLimit,
       randomEvents: Array.from({ length: 2 }),
-    })).toThrow(/场景数超过硬上限:128\/127/)
+    })).toThrow(/场景数超过硬上限:160\/159/)
   })
 
   it('keeps the durable v2 envelope but sends the runner only a deterministic safe projection', async () => {
@@ -330,22 +330,22 @@ describe('R-OPEN-WORLD-G4-11A · P9 governed-v3 model disclosure', () => {
 
     const atLimit = {
       ...context,
-      sceneDemands: Array.from({ length: 127 }, (_, index) => ({
+      sceneDemands: Array.from({ length: 159 }, (_, index) => ({
         ...context.sceneDemands[0]!,
         sceneNumber: index + 1,
         sceneKey: `scene.limit.${String(index + 1).padStart(3, '0')}`,
       })),
     }
-    await expect(createTextOpenWorldSceneScriptsModelContextV1(atLimit, { kind: 'scene', sceneIndex: 126 }))
+    await expect(createTextOpenWorldSceneScriptsModelContextV1(atLimit, { kind: 'scene', sceneIndex: 158 }))
       .resolves.toMatchObject({ sceneDemands: [{ sceneNumber: 1 }] })
     await expect(createTextOpenWorldSceneScriptsModelContextV1({
       ...atLimit,
       sceneDemands: [...atLimit.sceneDemands, {
         ...context.sceneDemands[0]!,
-        sceneNumber: 128,
-        sceneKey: 'scene.limit.128',
+        sceneNumber: 160,
+        sceneKey: 'scene.limit.160',
       }],
-    }, { kind: 'scene', sceneIndex: 127 })).rejects.toThrow(/场景数超过硬上限:128\/127/)
+    }, { kind: 'scene', sceneIndex: 159 })).rejects.toThrow(/场景数超过硬上限:160\/159/)
   })
 
   it('preserves historical runner context unchanged when Knowledge governance is absent', async () => {

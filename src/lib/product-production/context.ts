@@ -22,7 +22,12 @@ export interface ValidatedProductProductionRecoveryDirectiveV1 {
 /** Structured production contracts must remain exact JSON, including secrets
  * and late fields. Their registered cap is soft; the task budget is hard. */
 export const preserveProductProductionContextV1: ContextSourceTransformer = async input => {
-  if (!input.source.key.startsWith('product-production.')) return undefined
+  // Text-open-world task readers emit schema-validated, hash-bound JSON
+  // projections just like the shared production sources. Compressing or
+  // deterministically truncating those projections can silently remove one
+  // quest/location requirement while leaving syntactically plausible JSON.
+  if (!input.source.key.startsWith('product-production.')
+    && !input.source.key.startsWith('text-open-world.')) return undefined
   if (input.originalTokens > input.inputBudgetTokens) {
     throw new ProductProductionContextBudgetErrorV1(`[product-production-context] ${input.source.label} 需要 ${input.originalTokens} tokens，超过本任务输入预算 ${input.inputBudgetTokens}；未调用模型，请缩小制作范围。`)
   }

@@ -103,7 +103,7 @@ function creatorExecutionBrief(): ProductProductionBriefV3 {
       maximumCostUsd: 0,
     },
     productionBudget: {
-      maximumModelCalls: 160,
+      maximumModelCalls: 200,
       maximumInputTokens: 1_200_000,
       maximumOutputTokens: 360_000,
       maximumCostUsd: 30,

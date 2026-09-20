@@ -101,7 +101,7 @@ export const DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1: TextOpenWorldCalibrationCon
   },
   aiBudget: {
     production: {
-      maximumCalls: 160,
+      maximumCalls: 200,
       maximumInputTokens: 1_200_000,
       maximumOutputTokens: 360_000,
       maximumEstimatedCostUsd: 30,
