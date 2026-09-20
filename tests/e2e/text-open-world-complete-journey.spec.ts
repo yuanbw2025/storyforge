@@ -339,7 +339,7 @@ test('玩家从正式 Release 目录走完整旅程，并在结局刷新后保�
     expect(restored).toEqual(terminalSnapshot)
   })
 
-  await test.step('终局当前分支不可复制，但结局前可读检查点能够派生新时间线', async () => {
+  await test.step('终局当前分支不可复制，但结局前可读检查点能够派生新时间线并走完第二结局', async () => {
     await openMoreView(page)
     const saves = page.getByTestId('text-open-world-save-settings')
     await saves.scrollIntoViewIfNeeded()
@@ -406,5 +406,28 @@ test('玩家从正式 Release 目录走完整旅程，并在结局刷新后保�
       productBuildId: null,
     })
     expect(child.id).not.toBe(sessionId)
+
+    await fixedChoices.getByRole('button', { name: /^选择港口控渠/ }).click()
+    const endingConfirmation = page.getByRole('alertdialog', { name: '确认高风险行动' })
+    await expect(endingConfirmation).toContainText('选择港口控渠')
+    await endingConfirmation.getByRole('button', { name: '确认执行', exact: true }).click()
+    const childEnding = page.getByTestId('text-open-world-ending-panel')
+    await expect(childEnding).toHaveAttribute('data-ending-phase', 'completed', { timeout: 60_000 })
+    await expect(childEnding).toContainText('港口控渠')
+
+    const [childTerminal, unchangedParent] = await Promise.all([
+      readJourneySnapshot(page, child.id),
+      readJourneySnapshot(page, sessionId),
+    ])
+    expect(childTerminal).toMatchObject({
+      sessionStatus: 'completed',
+      productReleaseId: releaseId,
+      productBuildId: null,
+      reachedEndingKey: 'ending.control',
+      finalQuestStatus: 'completed',
+    })
+    expect(childTerminal.playerActionKeys).toContain('action.ending.ending.control')
+    expect(childTerminal.playerActionKeys).not.toContain('action.ending.ending.cooperate')
+    expect(unchangedParent).toEqual(terminalSnapshot)
   })
 })

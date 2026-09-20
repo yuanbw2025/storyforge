@@ -16,9 +16,26 @@ test('玩家在正式存档完成买材料、制作药剂与卖出产物的同�
       importer('/storyforge/tests/helpers/text-open-world-product-session.ts'),
       importer('/storyforge/tests/helpers/text-open-world-vnext-fixture.ts'),
     ])
+    const runtimePackage = createTextOpenWorldVNextFixture()
+    const actors = runtimePackage.modules.actors.payload as {
+      player: { build: { startingItemKeys: string[] } }
+    }
+    const combat = runtimePackage.modules.combat.payload as {
+      encounters: Array<{ key: string; locationKey: string; enemyGroups: Array<{ count: number }> }>
+    }
+    const actions = runtimePackage.modules.actions.payload as {
+      actions: Array<{ key: string; locationKeys: string[] }>
+    }
+    actors.player.build.startingItemKeys.push('item.brine-tonic')
+    const encounter = combat.encounters.find(candidate => candidate.key === 'encounter.ridge-jackal')!
+    encounter.locationKey = 'location.salt-port'
+    encounter.enemyGroups[0]!.count = 2
+    actions.actions.find(candidate => candidate.key === 'action.start-ridge-jackal')!.locationKeys = [
+      'location.salt-port',
+    ]
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
       name: '浏览器制作与经济验收',
-      textOpenWorldVNext: createTextOpenWorldVNextFixture(),
+      textOpenWorldVNext: runtimePackage,
       runtimeShape: 'vnext-only',
       title: '盐脊制作与交易存档',
       seed: 'browser-open-world-crafting-economy',
@@ -125,6 +142,32 @@ test('玩家在正式存档完成买材料、制作药剂与卖出产物的同�
   await expect(recipe).toContainText('不可用')
   await expect(recipeDetail).toContainText('需要 2 / 库存 0')
 
+  await page.getByRole('button', { name: '返回当前场景', exact: true }).click()
+  await page.getByTestId('text-open-world-system-actions')
+    .getByRole('button', { name: /迎战盐鬣犬/ })
+    .click()
+  const combatPanel = page.getByTestId('text-open-world-combat-panel')
+  await expect(combatPanel).toContainText('战斗进行中', { timeout: 60_000 })
+  const secondTarget = combatPanel.getByRole('radio', { name: /盐鬣犬 2/ })
+  await secondTarget.check()
+  await combatPanel.getByRole('button', { name: /重击/ }).click()
+  const combatItem = combatPanel.getByRole('button', { name: /使用盐露药剂/ })
+  await expect(combatItem).toBeEnabled({ timeout: 60_000 })
+  await combatItem.click()
+  await expect(combatPanel.locator('[aria-label="本场战斗记录"]'))
+    .toContainText('来客使用盐露药剂', { timeout: 60_000 })
+  const escape = combatPanel.getByRole('button', { name: /逃跑/ })
+  await expect(escape).toBeEnabled({ timeout: 60_000 })
+  await escape.click()
+  const combatResult = page.getByTestId('text-open-world-combat-result')
+  await expect(combatResult).toContainText('已经脱离战斗', { timeout: 30_000 })
+  await combatResult.getByRole('button', { name: '返回当前场景', exact: true }).click()
+
+  await page.getByTestId('text-open-world-navigation-rail')
+    .getByRole('button', { name: '更多', exact: true })
+    .click()
+  await expect(panel).toBeVisible({ timeout: 20_000 })
+
   await panel.getByTestId('text-open-world-shop-tab').click()
   await panel.getByTestId('text-open-world-sell-tab').click()
   await expect(panel.getByTestId('text-open-world-sell-tab')).toHaveAttribute('aria-selected', 'true')
@@ -173,7 +216,7 @@ test('玩家在正式存档完成买材料、制作药剂与卖出产物的同�
     saltCrystalQuantity: 0,
     brineTonicQuantity: 0,
     worldMinute: 495,
-    commands: [
+    commands: expect.arrayContaining([
       {
         actionKey: 'action.buy-caretaker',
         payload: { targetKey: 'vendor.caretaker', quantity: 2, itemKey: 'item.salt-crystal' },
@@ -183,9 +226,25 @@ test('玩家在正式存档完成买材料、制作药剂与卖出产物的同�
         payload: { targetKey: 'recipe.brine-tonic', quantity: 1 },
       },
       {
+        actionKey: 'action.start-ridge-jackal',
+        payload: { targetKey: 'encounter.ridge-jackal' },
+      },
+      {
+        actionKey: 'action.combat-power-strike',
+        payload: { targetKey: 'enemy.1.2' },
+      },
+      {
+        actionKey: 'action.combat-brine-tonic',
+        payload: { targetKey: 'item.brine-tonic' },
+      },
+      {
+        actionKey: 'action.combat-escape',
+        payload: {},
+      },
+      {
         actionKey: 'action.sell-caretaker',
         payload: { targetKey: 'vendor.caretaker', quantity: 1, itemKey: 'item.brine-tonic' },
       },
-    ],
+    ]),
   })
 })

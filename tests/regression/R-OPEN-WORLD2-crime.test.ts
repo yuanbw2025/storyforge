@@ -106,9 +106,13 @@ describe('Text Open World vNext · governed theft, deception and local crime', (
       phase: 'terminal', status: 'succeeded', outcomeCommitted: true,
       evidenceEventSequences: [3, 4], reason: null,
     })
-    const state = (await readProductRuntimeState(session.id!)).textOpenWorld!.state
+    const projection = (await readProductRuntimeState(session.id!)).textOpenWorld!
+    const state = projection.state
     expect(state.relationships).toMatchObject({ morality: -5, factionAffinityByKey: { 'faction.canal-keepers': 0 } })
     expect(state.inventory.stackQuantities['item.brine-tonic']).toBe(1)
+    expect(createTextOpenWorldActionRegistryV1(projection.runtimePackage)
+      .project(deriveTextOpenWorldContextsV1(projection).action)
+      .find(entry => entry.action.key === 'action.accept-main')).toMatchObject({ available: true })
 
     const retry = await executeTextOpenWorldActionV1({
       sessionId: session.id!, actionKey: 'action.steal-tonic', targetKey: 'actor.caretaker', confirmed: true,

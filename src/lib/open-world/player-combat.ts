@@ -485,6 +485,10 @@ function logForAction(input: {
 }): TextOpenWorldPlayerCombatLogEntryV1 {
   const action = input.modules.actions.actions.find(candidate => candidate.key === input.authorization.actionKey)
     ?? fail('战斗日志引用未知Action')
+  const normalizedActionLabel = action.label.replace(/^敌方/, '').replace(/^战斗中/, '')
+  const actionPhrase = /^(使用|施放|发动|执行)/.test(normalizedActionLabel)
+    ? normalizedActionLabel
+    : `使用${normalizedActionLabel}`
   const actorLabel = input.authorization.actorCombatantKey === 'player'
     ? input.playerName
     : input.labels.get(input.authorization.actorCombatantKey) ?? fail('战斗日志行动者不存在')
@@ -543,18 +547,18 @@ function logForAction(input: {
     defeated.length ? `${defeated.join('、')} 已被击败` : null,
   ])
   const summary = damage > 0
-    ? `${actorLabel}使用${action.label}，对${targetLabels.join('、')}造成 ${damage} 点伤害${critical ? '，触发暴击' : ''}。`
+    ? `${actorLabel}${actionPhrase}，对${targetLabels.join('、')}造成 ${damage} 点伤害${critical ? '，触发暴击' : ''}。`
     : recoveryResolutions.length
-      ? `${actorLabel}使用${action.label}，恢复 ${recoveredHealth} 点生命。`
+      ? `${actorLabel}${actionPhrase}，恢复 ${recoveredHealth} 点生命。`
       : resourceResolutions.length
-        ? `${actorLabel}使用${action.label}，恢复 ${recoveredResource} 点技能资源。`
+        ? `${actorLabel}${actionPhrase}，恢复 ${recoveredResource} 点技能资源。`
         : statusResolutions.length
-          ? `${actorLabel}使用${action.label}，${statusResolutions.some(resolution => ['applied', 'refreshed', 'stacked'].includes(resolution.outcome)) ? '状态效果已经结算' : '状态没有发生变化'}。`
+          ? `${actorLabel}${actionPhrase}，${statusResolutions.some(resolution => ['applied', 'refreshed', 'stacked'].includes(resolution.outcome)) ? '状态效果已经结算' : '状态没有发生变化'}。`
     : input.authorization.actionKind === 'escape'
       ? `${actorLabel}尝试脱离战斗。`
       : input.authorization.actionKind === 'item'
-        ? `${actorLabel}使用${action.label}。`
-        : `${actorLabel}使用${action.label}${targetLabels.length ? `，目标是${targetLabels.join('、')}` : ''}。`
+        ? `${actorLabel}${actionPhrase}。`
+        : `${actorLabel}${actionPhrase}${targetLabels.length ? `，目标是${targetLabels.join('、')}` : ''}。`
   return {
     id: `text-open-world-combat-log:${input.sessionId}:${input.event.sequence}`,
     eventSequence: input.event.sequence,

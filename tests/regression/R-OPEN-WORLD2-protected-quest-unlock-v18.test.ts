@@ -27,6 +27,7 @@ interface ProtectedQuestInput {
   narrativeStageKey: string
   narrativeStageOrder: number
   prerequisiteQuestKey: string
+  significantOwnerKind?: 'character' | 'faction' | 'region'
 }
 
 function eventPayload(event: ProductRuntimeEvent): any {
@@ -169,6 +170,11 @@ function addProtectedQuest(runtimePackage: TextOpenWorldRuntimePackageV1, input:
   const resolutionSceneKey = `scene.resolution.${suffix}`
   const offerChoiceKey = `choice.accept.${suffix}`
   const objectiveChoiceKey = `choice.complete.${suffix}`
+  const significantOwner = input.significantOwnerKind === 'character'
+    ? { storylineOwnerKind: 'character', questOwnerKind: 'actor', ownerKey: 'actor.caretaker' }
+    : input.significantOwnerKind === 'faction'
+      ? { storylineOwnerKind: 'faction', questOwnerKind: 'faction', ownerKey: 'faction.canal-keepers' }
+      : { storylineOwnerKind: 'region', questOwnerKind: 'region', ownerKey: 'region.salt-port' }
 
   actions.conditions.push({
     key: conditionKey,
@@ -265,8 +271,8 @@ function addProtectedQuest(runtimePackage: TextOpenWorldRuntimePackageV1, input:
   quests.quests.unshift({
     key: input.key,
     type: input.kind,
-    ownerKind: input.kind === 'mainline' ? 'global' : 'region',
-    ownerKey: input.kind === 'mainline' ? null : 'region.salt-port',
+    ownerKind: input.kind === 'mainline' ? 'global' : significantOwner.questOwnerKind,
+    ownerKey: input.kind === 'mainline' ? null : significantOwner.ownerKey,
     title: `任务${input.key}`,
     description: `验证${input.key}的受保护等待与揭示。`,
     storylineKey: input.storylineKey,
@@ -309,8 +315,8 @@ function addProtectedQuest(runtimePackage: TextOpenWorldRuntimePackageV1, input:
     narrative.storylines.unshift({
       key: input.storylineKey,
       kind: 'significant',
-      ownerKind: 'region',
-      ownerKey: 'region.salt-port',
+      ownerKind: significantOwner.storylineOwnerKind,
+      ownerKey: significantOwner.ownerKey,
       title: `故事线${input.storylineKey}`,
       summary: `验证${input.storylineKey}的安全等待。`,
       stageKeys: [input.narrativeStageKey],
@@ -400,6 +406,7 @@ function protectedStoryRuntime(input: {
       narrativeStageKey: `story-stage.significant.${suffix}`,
       narrativeStageOrder: 1,
       prerequisiteQuestKey: 'quest.main.1',
+      significantOwnerKind: index === 1 ? 'character' : index === 2 ? 'faction' : 'region',
     })
   }
   upgradeFixtureToActionV18(runtimePackage)
@@ -502,8 +509,8 @@ describe('Text Open World · Action v18 protected story unlock and reveal', () =
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
-  it('乱序定义仍按冻结前置图完成主线与重要故事揭示，并经事件重放进入Scene和任务日志', async () => {
-    const runtimePackage = protectedStoryRuntime({ continuation: true, significantCount: 1 })
+  it('乱序定义仍按冻结前置图揭示并正式推进角色线与势力线，经事件重放进入Scene和任务日志', async () => {
+    const runtimePackage = protectedStoryRuntime({ continuation: true, significantCount: 2 })
     const parsed = parseTextOpenWorldModulesV1(runtimePackage)
     expect(parsed.actions.version).toBe(18)
     expect(parsed.quests.quests.findIndex(quest => quest.key === 'quest.main.3'))
@@ -524,7 +531,7 @@ describe('Text Open World · Action v18 protected story unlock and reveal', () =
       projection: before.textOpenWorld!,
       events: beforeEvents,
     })
-    for (const definitionKey of ['quest.main.2', 'quest.main.3', 'quest.significant.001']) {
+    for (const definitionKey of ['quest.main.2', 'quest.main.3', 'quest.significant.001', 'quest.significant.002']) {
       expect(before.textOpenWorld!.state.quests.instancesByKey[instanceKeyFor(before, definitionKey)].status).toBe('locked')
       expect(beforeScenes.scenes.some(scene => scene.sourceKey === definitionKey)).toBe(false)
       expect(beforeLog.entries.some(entry => entry.definitionKey === definitionKey)).toBe(false)
@@ -534,7 +541,7 @@ describe('Text Open World · Action v18 protected story unlock and reveal', () =
     const replay = await readProductRuntimeState(sessionId, head.lastSequence)
     expect(replay).toEqual(head)
 
-    for (const definitionKey of ['quest.main.2', 'quest.significant.001']) {
+    for (const definitionKey of ['quest.main.2', 'quest.significant.001', 'quest.significant.002']) {
       const instance = head.textOpenWorld!.state.quests.instancesByKey[instanceKeyFor(head, definitionKey)]
       expect(instance).toMatchObject({ status: 'revealed', deadlineWorldMinute: null })
       expect(instance.offeredAtWorldMinute).toBe(head.textOpenWorld!.state.time.worldMinute)
@@ -551,6 +558,7 @@ describe('Text Open World · Action v18 protected story unlock and reveal', () =
     expect(linkedActionKeys).toEqual(expect.arrayContaining([
       'action.reveal.quest.main.2',
       'action.reveal.quest.significant.001',
+      'action.reveal.quest.significant.002',
     ]))
     expect(linkedActionKeys).not.toContain('action.reveal.quest.main.3')
 
@@ -567,15 +575,43 @@ describe('Text Open World · Action v18 protected story unlock and reveal', () =
     expect(scenes.scenes.map(scene => scene.sourceKey)).toEqual(expect.arrayContaining([
       'quest.main.2',
       'quest.significant.001',
+      'quest.significant.002',
     ]))
     expect(scenes.scenes.some(scene => scene.sourceKey === 'quest.main.3')).toBe(false)
     const questLog = projectTextOpenWorldPlayerQuestLogV1({ sessionId, projection: replay.textOpenWorld!, events })
     expect(questLog.entries).toEqual(expect.arrayContaining([
       expect.objectContaining({ definitionKey: 'quest.main.2', category: 'main', status: 'revealed' }),
       expect.objectContaining({ definitionKey: 'quest.significant.001', category: 'significant', status: 'revealed' }),
+      expect.objectContaining({ definitionKey: 'quest.significant.002', category: 'significant', status: 'revealed' }),
     ]))
     expect(questLog.entries.some(entry => entry.definitionKey === 'quest.main.3')).toBe(false)
-  }, 60_000)
+
+    for (const definitionKey of ['quest.significant.001', 'quest.significant.002']) {
+      const suffix = definitionKey.slice('quest.'.length)
+      const beforeStory = await readProductRuntimeState(sessionId)
+      const storyInstanceKey = instanceKeyFor(beforeStory, definitionKey)
+      await executeTextOpenWorldActionV1({
+        sessionId,
+        actionKey: `action.accept.${definitionKey}`,
+        targetKey: storyInstanceKey,
+        commandId: `command.protected-story.${suffix}.accept`,
+        requestedAt: 10,
+      })
+      await executeTextOpenWorldActionV1({
+        sessionId,
+        actionKey: `action.complete.objective.${suffix}`,
+        targetKey: storyInstanceKey,
+        commandId: `command.protected-story.${suffix}.objective`,
+        requestedAt: 11,
+      })
+      const completedStory = await readProductRuntimeState(sessionId)
+      expect(completedStory.textOpenWorld!.state.quests.instancesByKey[storyInstanceKey]).toMatchObject({
+        definitionKey,
+        status: 'completed',
+      })
+      expect(await readProductRuntimeState(sessionId, completedStory.lastSequence)).toEqual(completedStory)
+    }
+  }, 180_000)
 
   it('玩家Effect已落盘但系统揭示未开始时可幂等续跑，重复恢复不增加Command、Effect或claim', async () => {
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
