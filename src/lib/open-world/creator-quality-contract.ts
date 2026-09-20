@@ -4,6 +4,7 @@ import { isSha256Hash } from '../product-production/hash'
 export const TEXT_OPEN_WORLD_CREATOR_HARD_GATE_ID_V1 = 'text-open-world.creator.hard-gates'
 export const TEXT_OPEN_WORLD_CREATOR_SEMANTIC_GATE_ID_V1 = 'text-open-world.creator.semantic-release'
 export const TEXT_OPEN_WORLD_CREATOR_GRAYBOX_GATE_ID_V1 = 'text-open-world.creator.graybox'
+export const TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1 = 'text-open-world.creator.release-calibration'
 export const TEXT_OPEN_WORLD_CREATOR_RELEASE_QUALITY_GATE_ID_V1 = 'text-open-world.creator.release-quality'
 export const TEXT_OPEN_WORLD_CREATOR_ISSUE_GATE_PREFIX_V1 = 'text-open-world.creator.issue.'
 export const TEXT_OPEN_WORLD_CREATOR_ISSUE_WAIVER_GATE_PREFIX_V1 = 'text-open-world.creator.issue-waiver.'
@@ -155,6 +156,92 @@ export interface TextOpenWorldCreatorGrayboxEvidenceV1 {
   confirmedAt: number
 }
 
+export const TEXT_OPEN_WORLD_CREATOR_CALIBRATION_METRICS_V1 = [
+  'mainline-quality', 'significant-stories', 'template-differentiation',
+] as const
+export type TextOpenWorldCreatorCalibrationMetricV1 = typeof TEXT_OPEN_WORLD_CREATOR_CALIBRATION_METRICS_V1[number]
+
+export interface TextOpenWorldCreatorCalibrationEvidenceV1 {
+  schema: 'storyforge.text-open-world-creator-calibration-evidence'
+  version: 1
+  build: TextOpenWorldCreatorBuildBindingV1
+  generator: {
+    provider: string
+    model: string
+    bindingHash: string
+  }
+  independentReview: {
+    provider: string
+    model: string
+    promptVersion: string
+    inputHash: string
+    outputHash: string
+    inputTokens: number | null
+    outputTokens: number | null
+    finishReason: string | null
+    durationMs: number
+    scores: Array<{
+      metricKey: TextOpenWorldCreatorCalibrationMetricV1
+      score: number
+      rationale: string
+    }>
+    findings: string[]
+  }
+  productionSemanticReview: {
+    reviewHash: string
+    scores: Array<{ metricKey: string; score: number; rationale: string }>
+  }
+  templateDifferentiation: {
+    templateCount: number
+    variantCount: number
+    minimumVariantsPerTemplate: number
+    exactDuplicateTitleCount: number
+    exactDuplicateDescriptionCount: number
+    maximumPairSimilarityBasisPoints: number
+  }
+  contentDuration: {
+    mainlineMinutes: number
+    optionalInventoryMinutes: number
+    totalAuthoredMinutes: number
+    typicalPlaythroughMinutes: number
+    requestedMainlineMinimum: number
+    requestedMainlineMaximum: number
+    requestedOptionalMinimum: number
+    requestedOptionalMaximum: number
+  }
+  productionUsage: {
+    ledgerHash: string
+    modelCalls: number
+    inputTokens: number
+    outputTokens: number
+    totalDurationMs: number
+    averageCallDurationMs: number
+    p95CallDurationMs: number
+    maximumCallDurationMs: number
+    estimatedTextCostUsd: number
+    priceQuoteHash: string
+    priceQuoteSource: string
+    priceQuoteAsOf: string
+    budgetMaximumCalls: number
+    budgetMaximumInputTokens: number
+    budgetMaximumOutputTokens: number
+    budgetMaximumDurationMs: number
+    budgetMaximumCostUsd: number
+  }
+  checks: Array<{ key: string; passed: boolean; summary: string }>
+  passed: boolean
+  evaluatedAt: number
+}
+
+export interface TextOpenWorldCreatorCalibrationReadinessV1 {
+  generator: { provider: string; model: string }
+  grader: { provider: string; model: string }
+  credentialReady: boolean
+  independentIdentity: boolean
+  ready: boolean
+  issue: string | null
+}
+
 export interface TextOpenWorldCreatorIssueRuntimeWitnessV1 {
   sessionWitnessKey: string
   runtimeSourceHash: string
@@ -243,6 +330,11 @@ function text(value: unknown, label: string, maximum: number, minimum = 1): stri
 function integer(value: unknown, label: string, minimum = 0): number {
   if (!Number.isInteger(value) || Number(value) < minimum) fail(`${label} 无效`)
   return Number(value)
+}
+
+function finiteNumber(value: unknown, label: string, minimum = 0): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < minimum) fail(`${label} 无效`)
+  return value
 }
 
 function hash(value: unknown, label: string): string {
@@ -458,6 +550,140 @@ export function parseTextOpenWorldCreatorGrayboxEvidenceV1(value: unknown): Text
     authorNote: typeof row.authorNote === 'string' && row.authorNote.trim()
       ? text(row.authorNote, 'authorNote', 4_000) : '',
     confirmedAt: integer(row.confirmedAt, 'confirmedAt', 1),
+  }
+}
+
+export function parseTextOpenWorldCreatorCalibrationEvidenceV1(value: unknown): TextOpenWorldCreatorCalibrationEvidenceV1 {
+  const row = record(value, 'calibration evidence')
+  exactKeys(row, [
+    'schema', 'version', 'build', 'generator', 'independentReview', 'productionSemanticReview',
+    'templateDifferentiation', 'contentDuration', 'productionUsage', 'checks', 'passed', 'evaluatedAt',
+  ], 'calibration evidence')
+  if (row.schema !== 'storyforge.text-open-world-creator-calibration-evidence' || row.version !== 1
+    || typeof row.passed !== 'boolean' || !Array.isArray(row.checks)) fail('calibration evidence 身份无效')
+  const generator = record(row.generator, 'generator')
+  exactKeys(generator, ['provider', 'model', 'bindingHash'], 'generator')
+  const review = record(row.independentReview, 'independentReview')
+  exactKeys(review, [
+    'provider', 'model', 'promptVersion', 'inputHash', 'outputHash', 'inputTokens', 'outputTokens',
+    'finishReason', 'durationMs', 'scores', 'findings',
+  ], 'independentReview')
+  if (!Array.isArray(review.scores) || review.scores.length !== TEXT_OPEN_WORLD_CREATOR_CALIBRATION_METRICS_V1.length) {
+    fail('independentReview.scores 数量无效')
+  }
+  const scores = review.scores.map((value, index) => {
+    const score = record(value, `independentReview.scores[${index}]`)
+    exactKeys(score, ['metricKey', 'score', 'rationale'], `independentReview.scores[${index}]`)
+    if (score.metricKey !== TEXT_OPEN_WORLD_CREATOR_CALIBRATION_METRICS_V1[index]
+      || !Number.isInteger(score.score) || Number(score.score) < 0 || Number(score.score) > 100) {
+      fail(`independentReview.scores[${index}] 无效`)
+    }
+    return {
+      metricKey: score.metricKey as TextOpenWorldCreatorCalibrationMetricV1,
+      score: Number(score.score), rationale: text(score.rationale, `independentReview.scores[${index}].rationale`, 1_000),
+    }
+  })
+  const semantic = record(row.productionSemanticReview, 'productionSemanticReview')
+  exactKeys(semantic, ['reviewHash', 'scores'], 'productionSemanticReview')
+  if (!Array.isArray(semantic.scores) || semantic.scores.length < 3 || semantic.scores.length > 20) {
+    fail('productionSemanticReview.scores 数量无效')
+  }
+  const semanticScores = semantic.scores.map((value, index) => {
+    const score = record(value, `productionSemanticReview.scores[${index}]`)
+    exactKeys(score, ['metricKey', 'score', 'rationale'], `productionSemanticReview.scores[${index}]`)
+    if (!Number.isInteger(score.score) || Number(score.score) < 0 || Number(score.score) > 100) {
+      fail(`productionSemanticReview.scores[${index}].score 无效`)
+    }
+    return {
+      metricKey: text(score.metricKey, `productionSemanticReview.scores[${index}].metricKey`, 100),
+      score: Number(score.score), rationale: text(score.rationale, `productionSemanticReview.scores[${index}].rationale`, 1_000),
+    }
+  })
+  const variants = record(row.templateDifferentiation, 'templateDifferentiation')
+  exactKeys(variants, [
+    'templateCount', 'variantCount', 'minimumVariantsPerTemplate', 'exactDuplicateTitleCount',
+    'exactDuplicateDescriptionCount', 'maximumPairSimilarityBasisPoints',
+  ], 'templateDifferentiation')
+  const duration = record(row.contentDuration, 'contentDuration')
+  exactKeys(duration, [
+    'mainlineMinutes', 'optionalInventoryMinutes', 'totalAuthoredMinutes', 'typicalPlaythroughMinutes',
+    'requestedMainlineMinimum', 'requestedMainlineMaximum', 'requestedOptionalMinimum', 'requestedOptionalMaximum',
+  ], 'contentDuration')
+  const usage = record(row.productionUsage, 'productionUsage')
+  exactKeys(usage, [
+    'ledgerHash', 'modelCalls', 'inputTokens', 'outputTokens', 'totalDurationMs', 'averageCallDurationMs',
+    'p95CallDurationMs', 'maximumCallDurationMs', 'estimatedTextCostUsd', 'priceQuoteHash',
+    'priceQuoteSource', 'priceQuoteAsOf', 'budgetMaximumCalls', 'budgetMaximumInputTokens',
+    'budgetMaximumOutputTokens', 'budgetMaximumDurationMs', 'budgetMaximumCostUsd',
+  ], 'productionUsage')
+  const checks = row.checks.map((value, index) => {
+    const check = record(value, `checks[${index}]`)
+    exactKeys(check, ['key', 'passed', 'summary'], `checks[${index}]`)
+    if (typeof check.passed !== 'boolean') fail(`checks[${index}].passed 无效`)
+    return {
+      key: text(check.key, `checks[${index}].key`, 200), passed: check.passed,
+      summary: text(check.summary, `checks[${index}].summary`, 1_000),
+    }
+  })
+  if (checks.length < 5 || checks.length > 30 || new Set(checks.map(check => check.key)).size !== checks.length
+    || row.passed !== checks.every(check => check.passed)) fail('checks 与 passed 不一致')
+  const inputTokens = review.inputTokens == null ? null : integer(review.inputTokens, 'independentReview.inputTokens')
+  const outputTokens = review.outputTokens == null ? null : integer(review.outputTokens, 'independentReview.outputTokens')
+  return {
+    schema: 'storyforge.text-open-world-creator-calibration-evidence', version: 1,
+    build: parseTextOpenWorldCreatorBuildBindingV1(row.build),
+    generator: {
+      provider: text(generator.provider, 'generator.provider', 100), model: text(generator.model, 'generator.model', 500),
+      bindingHash: hash(generator.bindingHash, 'generator.bindingHash'),
+    },
+    independentReview: {
+      provider: text(review.provider, 'independentReview.provider', 100),
+      model: text(review.model, 'independentReview.model', 500),
+      promptVersion: text(review.promptVersion, 'independentReview.promptVersion', 200),
+      inputHash: hash(review.inputHash, 'independentReview.inputHash'),
+      outputHash: hash(review.outputHash, 'independentReview.outputHash'), inputTokens, outputTokens,
+      finishReason: review.finishReason == null ? null : text(review.finishReason, 'independentReview.finishReason', 100),
+      durationMs: integer(review.durationMs, 'independentReview.durationMs', 1), scores,
+      findings: textList(review.findings, 'independentReview.findings', 30, 1_000),
+    },
+    productionSemanticReview: { reviewHash: hash(semantic.reviewHash, 'productionSemanticReview.reviewHash'), scores: semanticScores },
+    templateDifferentiation: {
+      templateCount: integer(variants.templateCount, 'templateCount'), variantCount: integer(variants.variantCount, 'variantCount'),
+      minimumVariantsPerTemplate: integer(variants.minimumVariantsPerTemplate, 'minimumVariantsPerTemplate'),
+      exactDuplicateTitleCount: integer(variants.exactDuplicateTitleCount, 'exactDuplicateTitleCount'),
+      exactDuplicateDescriptionCount: integer(variants.exactDuplicateDescriptionCount, 'exactDuplicateDescriptionCount'),
+      maximumPairSimilarityBasisPoints: integer(variants.maximumPairSimilarityBasisPoints, 'maximumPairSimilarityBasisPoints'),
+    },
+    contentDuration: {
+      mainlineMinutes: integer(duration.mainlineMinutes, 'mainlineMinutes'),
+      optionalInventoryMinutes: integer(duration.optionalInventoryMinutes, 'optionalInventoryMinutes'),
+      totalAuthoredMinutes: integer(duration.totalAuthoredMinutes, 'totalAuthoredMinutes'),
+      typicalPlaythroughMinutes: integer(duration.typicalPlaythroughMinutes, 'typicalPlaythroughMinutes'),
+      requestedMainlineMinimum: integer(duration.requestedMainlineMinimum, 'requestedMainlineMinimum'),
+      requestedMainlineMaximum: integer(duration.requestedMainlineMaximum, 'requestedMainlineMaximum'),
+      requestedOptionalMinimum: integer(duration.requestedOptionalMinimum, 'requestedOptionalMinimum'),
+      requestedOptionalMaximum: integer(duration.requestedOptionalMaximum, 'requestedOptionalMaximum'),
+    },
+    productionUsage: {
+      ledgerHash: hash(usage.ledgerHash, 'productionUsage.ledgerHash'),
+      modelCalls: integer(usage.modelCalls, 'productionUsage.modelCalls'),
+      inputTokens: integer(usage.inputTokens, 'productionUsage.inputTokens'),
+      outputTokens: integer(usage.outputTokens, 'productionUsage.outputTokens'),
+      totalDurationMs: integer(usage.totalDurationMs, 'productionUsage.totalDurationMs'),
+      averageCallDurationMs: integer(usage.averageCallDurationMs, 'productionUsage.averageCallDurationMs'),
+      p95CallDurationMs: integer(usage.p95CallDurationMs, 'productionUsage.p95CallDurationMs'),
+      maximumCallDurationMs: integer(usage.maximumCallDurationMs, 'productionUsage.maximumCallDurationMs'),
+      estimatedTextCostUsd: finiteNumber(usage.estimatedTextCostUsd, 'productionUsage.estimatedTextCostUsd'),
+      priceQuoteHash: hash(usage.priceQuoteHash, 'productionUsage.priceQuoteHash'),
+      priceQuoteSource: text(usage.priceQuoteSource, 'productionUsage.priceQuoteSource', 100),
+      priceQuoteAsOf: text(usage.priceQuoteAsOf, 'productionUsage.priceQuoteAsOf', 100),
+      budgetMaximumCalls: integer(usage.budgetMaximumCalls, 'productionUsage.budgetMaximumCalls'),
+      budgetMaximumInputTokens: integer(usage.budgetMaximumInputTokens, 'productionUsage.budgetMaximumInputTokens'),
+      budgetMaximumOutputTokens: integer(usage.budgetMaximumOutputTokens, 'productionUsage.budgetMaximumOutputTokens'),
+      budgetMaximumDurationMs: integer(usage.budgetMaximumDurationMs, 'productionUsage.budgetMaximumDurationMs'),
+      budgetMaximumCostUsd: finiteNumber(usage.budgetMaximumCostUsd, 'productionUsage.budgetMaximumCostUsd'),
+    },
+    checks, passed: row.passed, evaluatedAt: integer(row.evaluatedAt, 'evaluatedAt', 1),
   }
 }
 

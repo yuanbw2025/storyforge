@@ -6,6 +6,7 @@ import type { WorkspaceScope } from '../../src/lib/types'
 const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   recordGraybox: vi.fn(),
+  recordCalibration: vi.fn(),
   recordIssue: vi.fn(),
   waiveIssue: vi.fn(),
   finalize: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../src/lib/open-world/creator-quality', () => ({
   readTextOpenWorldCreatorQualityWorkspaceV1: mocks.read,
   recordTextOpenWorldCreatorGrayboxV1: mocks.recordGraybox,
+  recordTextOpenWorldCreatorCalibrationV1: mocks.recordCalibration,
   recordTextOpenWorldCreatorIssueV1: mocks.recordIssue,
   waiveTextOpenWorldCreatorAdvisoryIssueV1: mocks.waiveIssue,
   finalizeTextOpenWorldCreatorQualityV1: mocks.finalize,
@@ -37,7 +39,7 @@ function receipt<T>(gateId: string, receiptHash: string, evidence: T, status = '
   return { rowId: 1, gateId, status, receiptHash, evidence, createdAt: 1 }
 }
 
-function workspace(input: { graybox?: boolean; issueWaived?: boolean } = {}) {
+function workspace(input: { graybox?: boolean; issueWaived?: boolean; calibration?: boolean } = {}) {
   const build = {
     productionKey: 'text-open-world.quality-ui', buildNumber: 4,
     packageHash: HASH, previewHash: 'c'.repeat(64), manifestHash: 'd'.repeat(64),
@@ -73,6 +75,21 @@ function workspace(input: { graybox?: boolean; issueWaived?: boolean } = {}) {
       targetArtifactKey: 'text-open-world.story-arc', targetEntityKeys: ['ending.fixture'],
       repairTaskKey: 'p3.story-arc',
     }],
+    calibrationReadiness: {
+      generator: { provider: 'deepseek', model: 'deepseek-v4-pro' },
+      grader: { provider: 'claude', model: 'claude-sonnet-4-20250514' },
+      credentialReady: true, independentIdentity: true, ready: true, issue: null,
+    },
+    calibrationReceipt: input.calibration ? receipt('text-open-world.creator.release-calibration', '9'.repeat(64), {
+      independentReview: { scores: [
+        { metricKey: 'mainline-quality', score: 90 },
+        { metricKey: 'significant-stories', score: 88 },
+        { metricKey: 'template-differentiation', score: 86 },
+      ], findings: [] },
+      templateDifferentiation: { templateCount: 5, variantCount: 15 },
+      contentDuration: { mainlineMinutes: 105, optionalInventoryMinutes: 220 },
+      productionUsage: { modelCalls: 187, averageCallDurationMs: 1200, p95CallDurationMs: 2400, estimatedTextCostUsd: 2.5 },
+    }) : null,
     grayboxCandidates: [{
       sessionId: 901, title: '完整核心循环', createdAt: 1, updatedAt: 2, completed: true,
       endingKey: 'ending.fixture',
@@ -110,6 +127,7 @@ describe('Text Open World G5-09 · Creator quality studio UI', () => {
     for (const mock of Object.values(mocks)) if ('mockReset' in mock) mock.mockReset()
     mocks.portable.mockReturnValue('{"portable":true}')
     mocks.recordGraybox.mockResolvedValue({})
+    mocks.recordCalibration.mockResolvedValue({})
     mocks.recordIssue.mockResolvedValue({ receipt: { evidence: { issueKey: 'issue.created' } } })
     mocks.waiveIssue.mockResolvedValue({})
     mocks.finalize.mockResolvedValue({})
@@ -155,10 +173,30 @@ describe('Text Open World G5-09 · Creator quality studio UI', () => {
     }))
   })
 
+  it('独立校准必须由作者显式触发，调用完成后展示质量、库存、延迟和费用证据', async () => {
+    mocks.read
+      .mockResolvedValueOnce(workspace({ graybox: true }))
+      .mockResolvedValue(workspace({ graybox: true, calibration: true }))
+    await act(async () => root.render(createElement(TextOpenWorldCreatorQualityStudio, {
+      scope: SCOPE, productionId: 71, buildId: 81, refreshToken: '1',
+      onPreview: vi.fn(), onChanged: vi.fn(),
+    })))
+    await vi.waitFor(() => expect(host.textContent).toContain('生产生成器：deepseek/deepseek-v4-pro'))
+    await act(async () => button(host, '运行一次独立校准并冻结回执').click())
+    await vi.waitFor(() => expect(mocks.recordCalibration).toHaveBeenCalledOnce())
+    expect(mocks.recordCalibration).toHaveBeenCalledWith({
+      scope: SCOPE, productionId: 71, buildId: 81,
+    })
+    await vi.waitFor(() => expect(host.textContent).toContain('校准通过'))
+    expect(host.textContent).toContain('模板 5 个 / 变体 15 个')
+    expect(host.textContent).toContain('P95 2400ms')
+    expect(host.textContent).toContain('冻结价格估算 $2.5000')
+  })
+
   it('逐项软豁免问题和模型finding后才允许冻结最终质量结论', async () => {
     mocks.read
       .mockResolvedValueOnce(workspace({ graybox: true }))
-      .mockResolvedValue(workspace({ graybox: true, issueWaived: true }))
+      .mockResolvedValue(workspace({ graybox: true, issueWaived: true, calibration: true }))
     await act(async () => root.render(createElement(TextOpenWorldCreatorQualityStudio, {
       scope: SCOPE, productionId: 71, buildId: 81, refreshToken: '1',
       onPreview: vi.fn(), onChanged: vi.fn(),

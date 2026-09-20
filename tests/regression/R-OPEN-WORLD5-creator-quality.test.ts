@@ -12,8 +12,11 @@ import {
 import {
   TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KEYS_V1,
   TEXT_OPEN_WORLD_CREATOR_GRAYBOX_GATE_ID_V1,
+  TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1,
+  parseTextOpenWorldCreatorCalibrationEvidenceV1,
   parseTextOpenWorldCreatorGrayboxEvidenceV1,
 } from '../../src/lib/open-world/creator-quality-contract'
+import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../../src/lib/open-world/creator-derived-authority'
 import {
   canonicalProductProductionJsonV2,
   hashProductProductionValueV2,
@@ -90,7 +93,12 @@ interface FixtureV1 {
 
 async function reviewPayload(kind: 'balance' | 'semantic', advisory: boolean) {
   const metricKey = kind === 'balance' ? 'progression' : 'mainline-arc'
-  const scores = [{ metricKey, score: advisory ? 80 : 90, rationale: `${kind}评审理由足够具体` }]
+  const metricKeys = kind === 'balance'
+    ? [metricKey]
+    : ['mainline-arc', 'significant-stories', 'repetition', 'duration-and-guidance']
+  const scores = metricKeys.map(key => ({
+    metricKey: key, score: advisory ? 80 : 90, rationale: `${kind}评审理由足够具体`,
+  }))
   const findings = advisory ? [{
     key: `${kind}.finding.1`, metricKey, severity: 'advisory', score: 80,
     summary: `${kind}建议项`, evidence: '当前内容的具体证据',
@@ -133,6 +141,27 @@ async function fixture(input: { advisories?: boolean } = {}): Promise<FixtureV1>
       producerReceiptHash: await hashProductProductionValueV2({ artifactKey, receipt: true }),
       controlEpoch: build.controlEpoch,
       inputHash: await hashProductProductionValueV2({ artifactKey, input: true }),
+      contentHash: await hashProductProductionValueV2(payload), payloadJson,
+      metadataJson: '{}', qualityJson: '{}', rightsJson: '{}', blobObjectId: null,
+      mimeType: null, byteSize: new TextEncoder().encode(payloadJson).byteLength,
+      parentArtifactHash: null, carriedFrom: null, createdAt: now, updatedAt: now,
+    }
+    row.id = await db.productBuildArtifacts.add(row) as number
+    artifacts.push(row)
+  }
+  for (const artifactKey of [
+    'text-open-world.mainline-thread', 'text-open-world.significant-threads',
+    'text-open-world.region-narrative-packs', 'text-open-world.scene-scripts',
+    'text-open-world.content-budget',
+  ] as const) {
+    const payload = { schema: `storyforge.fixture.${artifactKey}`, version: 1, artifactKey }
+    const payloadJson = canonicalProductProductionJsonV2(payload)
+    const row: ProductBuildArtifactRecordV1 = {
+      projectId: world.scope.projectId, worldId: world.scope.worldId, workId: world.scope.workId,
+      buildId: build.id!, artifactKey, requirementKey: null, version: 1, kind: artifactKey,
+      mediaKind: null, status: 'accepted', producerRunId: 200 + artifacts.length,
+      producerReceiptHash: await hashProductProductionValueV2({ artifactKey, receipt: true }),
+      controlEpoch: build.controlEpoch, inputHash: await hashProductProductionValueV2({ artifactKey, input: true }),
       contentHash: await hashProductProductionValueV2(payload), payloadJson,
       metadataJson: '{}', qualityJson: '{}', rightsJson: '{}', blobObjectId: null,
       mimeType: null, byteSize: new TextEncoder().encode(payloadJson).byteLength,
@@ -240,6 +269,96 @@ async function insertGrayboxReceipt(input: FixtureV1): Promise<string> {
   return receipt.receiptHash
 }
 
+async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
+  const [build, derived, artifacts] = await Promise.all([
+    db.productBuilds.get(input.buildId),
+    readTextOpenWorldCreatorDerivedBuildAuthorityV1({ scope: input.scope, buildId: input.buildId }),
+    db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray(),
+  ])
+  if (!build) throw new Error('fixture build missing')
+  const quote = derived.contracts.start.preflight.priceQuote!
+  const semanticRow = artifacts.find(row => row.artifactKey === 'text-open-world.semantic-review')!
+  const semantic = JSON.parse(semanticRow.payloadJson)
+  const artifactHash = (key: string) => artifacts.find(row => row.artifactKey === key)!.contentHash
+  const ledgerHash = await hashProductProductionValueV2(JSON.parse(build.budgetLedgerJson))
+  const inputHash = await hashProductProductionValueV2({ calibration: 'input', buildId: input.buildId })
+  const outputHash = await hashProductProductionValueV2({ calibration: 'output', buildId: input.buildId })
+  const evaluatedAt = Date.now()
+  const checks = [
+    'real-independent-provider-identities', 'production-semantic-release-line',
+    'independent-narrative-release-line', 'three-distinct-variants-per-template',
+    'authored-duration-inventory', 'production-call-usage-observed', 'production-budget-and-cost',
+  ].map(key => ({ key, passed: true, summary: `${key} fixture evidence` }))
+  const evidence = parseTextOpenWorldCreatorCalibrationEvidenceV1({
+    schema: 'storyforge.text-open-world-creator-calibration-evidence', version: 1,
+    build: input.buildBinding,
+    generator: {
+      provider: derived.contracts.start.preflight.providerBinding.provider,
+      model: derived.contracts.start.preflight.providerBinding.model,
+      bindingHash: derived.contracts.start.preflight.providerBinding.bindingHash,
+    },
+    independentReview: {
+      provider: 'claude', model: 'claude-sonnet-4-20250514',
+      promptVersion: 'text-open-world-release-calibration-grader.v1',
+      inputHash, outputHash, inputTokens: 100, outputTokens: 50,
+      finishReason: 'stop', durationMs: 100,
+      scores: [
+        { metricKey: 'mainline-quality', score: 90, rationale: '主线结构清晰完整。' },
+        { metricKey: 'significant-stories', score: 90, rationale: '重要故事冲突完整。' },
+        { metricKey: 'template-differentiation', score: 90, rationale: '模板变体有明确差异。' },
+      ], findings: [],
+    },
+    productionSemanticReview: { reviewHash: semantic.semanticReviewHash, scores: semantic.scores },
+    templateDifferentiation: {
+      templateCount: 5, variantCount: 15, minimumVariantsPerTemplate: 3,
+      exactDuplicateTitleCount: 0, exactDuplicateDescriptionCount: 0,
+      maximumPairSimilarityBasisPoints: 3000,
+    },
+    contentDuration: {
+      mainlineMinutes: 105, optionalInventoryMinutes: 220, totalAuthoredMinutes: 325,
+      typicalPlaythroughMinutes: 240, requestedMainlineMinimum: 90, requestedMainlineMaximum: 120,
+      requestedOptionalMinimum: 180, requestedOptionalMaximum: 300,
+    },
+    productionUsage: {
+      ledgerHash, modelCalls: 1, inputTokens: 100, outputTokens: 50,
+      totalDurationMs: 100, averageCallDurationMs: 100, p95CallDurationMs: 100,
+      maximumCallDurationMs: 100, estimatedTextCostUsd: 0.01,
+      priceQuoteHash: quote.quoteHash, priceQuoteSource: quote.source, priceQuoteAsOf: quote.asOf,
+      budgetMaximumCalls: 200, budgetMaximumInputTokens: 1_200_000,
+      budgetMaximumOutputTokens: 360_000, budgetMaximumDurationMs: 86_400_000,
+      budgetMaximumCostUsd: 30,
+    },
+    checks, passed: true, evaluatedAt,
+  })
+  const inputHashes = [
+    input.buildBinding.packageHash,
+    artifactHash('text-open-world.mainline-thread'), artifactHash('text-open-world.significant-threads'),
+    artifactHash('text-open-world.region-narrative-packs'), artifactHash('text-open-world.scene-scripts'),
+    artifactHash('text-open-world.content-budget'), artifactHash('text-open-world.semantic-review'),
+    evidence.generator.bindingHash, evidence.productionUsage.priceQuoteHash,
+    evidence.productionUsage.ledgerHash, evidence.independentReview.inputHash,
+    evidence.independentReview.outputHash,
+  ]
+  const receiptBody = {
+    schema: 'storyforge.product-quality-gate-receipt' as const, version: 1 as const,
+    gateId: TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1, gateVersion: '1',
+    verifierId: 'storyforge.creator-independent-release-calibration', verifierVersion: '1',
+    verifierKind: 'provider-review' as const, inputHashes, environmentHash: null,
+    measuredJson: canonicalProductProductionJsonV2(evidence), status: 'passed' as const,
+    thresholdProfileId: 'storyforge.text-open-world-creator-release-calibration.v1', thresholdProfileVersion: '1',
+    evidenceRefs: [semantic.semanticReviewHash, inputHash, outputHash, ledgerHash], createdAt: evaluatedAt,
+  }
+  const receipt = { ...receiptBody, receiptHash: await hashProductProductionValueV2(receiptBody) }
+  await db.productQualityGateReceipts.add({
+    projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId,
+    buildId: input.buildId, gateId: receipt.gateId, gateVersion: '1',
+    verifierId: receipt.verifierId, verifierVersion: '1', status: 'passed',
+    receiptJson: canonicalProductProductionJsonV2(receipt), receiptHash: receipt.receiptHash,
+    createdAt: evaluatedAt,
+  })
+  return receipt.receiptHash
+}
+
 beforeEach(async () => {
   await db.delete()
   await db.open()
@@ -302,6 +421,7 @@ describe('TOW-G5-09 · Creator质量、灰盒和问题回执', () => {
 
   it('灰盒、逐项软豁免和人工抽检汇合成当前Build唯一发布质量回执；新问题会使旧结论失效', async () => {
     const seeded = await fixture()
+    await insertCalibrationReceipt(seeded)
     await insertGrayboxReceipt(seeded)
     const finalized = await finalizeTextOpenWorldCreatorQualityV1({
       scope: seeded.scope, productionId: seeded.productionId, buildId: seeded.buildId,

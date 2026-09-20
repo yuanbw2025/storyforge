@@ -1,4 +1,7 @@
 import { db } from '../db/schema'
+import { resolveRequestConfig } from '../ai/client'
+import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
+import { useAIConfigStore } from '../../stores/ai-config'
 import type {
   ProductBuildArtifactRecordV1,
   ProductBuildQualityReportV1,
@@ -9,6 +12,12 @@ import type {
   ProductQualityGateReceiptStatusV1,
   ProductRuntimeEvent,
   ProductRuntimeSession,
+  TextOpenWorldContentBudgetV1,
+  TextOpenWorldMainlineThreadV1,
+  TextOpenWorldRegionNarrativePacksV1,
+  TextOpenWorldSceneScriptsV1,
+  TextOpenWorldSemanticReviewV1,
+  TextOpenWorldSignificantThreadsV1,
   WorkspaceScope,
 } from '../types'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
@@ -34,7 +43,17 @@ import {
 } from './checkpoints'
 import { readTextOpenWorldArtifactGovernanceV1 } from './creator-artifact-governance'
 import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
+import { projectProductProductionSchedulerV1 } from '../product-production/scheduler'
 import {
+  buildTextOpenWorldCreatorCalibrationContextV1,
+  projectTextOpenWorldContentDurationV1,
+  projectTextOpenWorldTemplateDifferentiationV1,
+  runTextOpenWorldCreatorIndependentCalibrationReviewV1,
+  TEXT_OPEN_WORLD_CREATOR_CALIBRATION_CATEGORY_V1,
+  type TextOpenWorldCreatorCalibrationReviewContextV1,
+} from './creator-quality-calibration'
+import {
+  TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1,
   TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KEYS_V1,
   TEXT_OPEN_WORLD_CREATOR_GRAYBOX_GATE_ID_V1,
   TEXT_OPEN_WORLD_CREATOR_HARD_GATE_ID_V1,
@@ -43,6 +62,7 @@ import {
   TEXT_OPEN_WORLD_CREATOR_ISSUE_WAIVER_GATE_PREFIX_V1,
   TEXT_OPEN_WORLD_CREATOR_RELEASE_QUALITY_GATE_ID_V1,
   TEXT_OPEN_WORLD_CREATOR_SEMANTIC_GATE_ID_V1,
+  parseTextOpenWorldCreatorCalibrationEvidenceV1,
   parseTextOpenWorldCreatorGrayboxEvidenceV1,
   parseTextOpenWorldCreatorHardGateEvidenceV1,
   parseTextOpenWorldCreatorIssueEvidenceV1,
@@ -50,6 +70,8 @@ import {
   parseTextOpenWorldCreatorReleaseQualityEvidenceV1,
   parseTextOpenWorldCreatorSemanticDecisionEvidenceV1,
   type TextOpenWorldCreatorBuildBindingV1,
+  type TextOpenWorldCreatorCalibrationEvidenceV1,
+  type TextOpenWorldCreatorCalibrationReadinessV1,
   type TextOpenWorldCreatorGrayboxEnvironmentV1,
   type TextOpenWorldCreatorGrayboxEvidenceV1,
   type TextOpenWorldCreatorGrayboxHumanChecksV1,
@@ -73,6 +95,7 @@ import {
 const HARD_GATE_POLICY_ID = 'storyforge.text-open-world-creator-hard-gates.v1'
 const SEMANTIC_POLICY_ID = 'storyforge.text-open-world-creator-semantic-release.v1'
 const GRAYBOX_POLICY_ID = 'storyforge.text-open-world-creator-graybox.v1'
+const CALIBRATION_POLICY_ID = 'storyforge.text-open-world-creator-release-calibration.v1'
 const ISSUE_POLICY_ID = 'storyforge.text-open-world-creator-issue.v1'
 const ISSUE_WAIVER_POLICY_ID = 'storyforge.text-open-world-creator-issue-waiver.v1'
 const RELEASE_QUALITY_POLICY_ID = 'storyforge.text-open-world-creator-release-quality.v1'
@@ -135,6 +158,8 @@ export interface TextOpenWorldCreatorQualityWorkspaceV1 {
   hardGatesPassed: boolean
   reviews: TextOpenWorldCreatorReviewSummaryV1[]
   modelFindings: TextOpenWorldCreatorReviewFindingV1[]
+  calibrationReadiness: TextOpenWorldCreatorCalibrationReadinessV1
+  calibrationReceipt: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorCalibrationEvidenceV1> | null
   grayboxCandidates: TextOpenWorldCreatorGrayboxCandidateV1[]
   grayboxReceipt: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorGrayboxEvidenceV1> | null
   issues: TextOpenWorldCreatorIssueRecordV1[]
@@ -177,6 +202,89 @@ function uniqueStrings(values: string[]): string[] {
 
 function stringListsEqual(left: string[], right: string[]): boolean {
   return canonicalProductProductionJsonV2(left) === canonicalProductProductionJsonV2(uniqueStrings(right))
+}
+
+function acceptedArtifactPayload<T>(authority: BuildAuthorityV1, artifactKey: string): T {
+  const rows = authority.artifacts.filter(row => row.artifactKey === artifactKey)
+    .sort((left, right) => right.version - left.version || right.updatedAt - left.updatedAt)
+  const row = rows[0]
+  if (!row) fail(`校准缺少受治理Artifact:${artifactKey}`)
+  try { return JSON.parse(row.payloadJson) as T } catch { fail(`校准Artifact不是合法JSON:${artifactKey}`) }
+}
+
+function acceptedArtifactHash(authority: BuildAuthorityV1, artifactKey: string): string {
+  const rows = authority.artifacts.filter(row => row.artifactKey === artifactKey)
+    .sort((left, right) => right.version - left.version || right.updatedAt - left.updatedAt)
+  return rows[0]?.contentHash ?? fail(`校准缺少Artifact Hash:${artifactKey}`)
+}
+
+function textCallDurations(budgetLedgerJson: string): number[] {
+  let value: unknown
+  try { value = JSON.parse(budgetLedgerJson) } catch { fail('Build预算账本不是合法JSON') }
+  const ledger = object(value, 'budget ledger')
+  const charges = object(ledger.charges, 'budget ledger.charges')
+  const durations: number[] = []
+  for (const [key, raw] of Object.entries(charges)) {
+    const charge = object(raw, `budget ledger.charges.${key}`)
+    const usage = object(charge.usage, `budget ledger.charges.${key}.usage`)
+    const calls = Number(usage.modelCalls)
+    const durationMs = Number(usage.durationMs)
+    if (!Number.isSafeInteger(calls) || calls < 0 || !Number.isSafeInteger(durationMs) || durationMs < 0) {
+      fail(`Build预算账本用量无效:${key}`)
+    }
+    if (calls > 0) {
+      const perCall = Math.max(1, Math.round(durationMs / calls))
+      for (let index = 0; index < calls; index += 1) durations.push(perCall)
+    }
+  }
+  return durations.sort((left, right) => left - right)
+}
+
+function percentile(values: number[], quantile: number): number {
+  if (!values.length) return 0
+  return values[Math.min(values.length - 1, Math.max(0, Math.ceil(values.length * quantile) - 1))]!
+}
+
+function plausibleRealProviderIdentity(provider: string, model: string): boolean {
+  return !/(fixture|mock|simulat|fake|test-provider|test-model)/i.test(`${provider}/${model}`)
+}
+
+async function calibrationReadiness(authority: BuildAuthorityV1): Promise<{
+  readiness: TextOpenWorldCreatorCalibrationReadinessV1
+  graderConfig: ReturnType<typeof resolveRequestConfig>['config']
+  graderResolution: ReturnType<typeof resolveRequestConfig>
+  generator: Awaited<ReturnType<typeof readTextOpenWorldCreatorDerivedBuildAuthorityV1>>['contracts']['start']['preflight']['providerBinding']
+}> {
+  const derived = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+    scope: authority.scope, buildId: authority.build.id,
+  })
+  const generator = derived.contracts.start.preflight.providerBinding
+  const aiState = useAIConfigStore.getState()
+  const resolved = resolveRequestConfig(aiState.config, {
+    category: TEXT_OPEN_WORLD_CREATOR_CALIBRATION_CATEGORY_V1,
+    projectId: authority.scope.projectId,
+  })
+  const grader = resolved.config
+  const credentialReady = isAIConfigReady(grader) && Boolean(grader.model.trim() && grader.baseUrl.trim())
+  const independentIdentity = grader.provider !== generator.provider || grader.model.trim() !== generator.model.trim()
+  const realIdentities = plausibleRealProviderIdentity(generator.provider, generator.model)
+    && plausibleRealProviderIdentity(grader.provider, grader.model)
+  const issue = !credentialReady
+    ? getAIConfigRequiredMessage(grader)
+    : !independentIdentity
+      ? '审查路由必须选择与生产生成器不同的 provider/model；请在AI设置中给“审查校验”绑定独立预设。'
+      : !realIdentities
+        ? 'fixture/mock/simulated 身份只能验证协议，不能冻结真实质量校准回执。'
+        : null
+  return {
+    readiness: {
+      generator: { provider: generator.provider, model: generator.model },
+      grader: { provider: grader.provider, model: grader.model },
+      credentialReady, independentIdentity, ready: issue == null, issue,
+    },
+    graderConfig: grader, graderResolution: resolved,
+    generator,
+  }
 }
 
 function canonicalRows<T extends { id?: number }>(rows: T[]): string {
@@ -751,6 +859,61 @@ async function readGrayboxReceipt(authority: BuildAuthorityV1): Promise<Verified
   return receipt
 }
 
+async function readCalibrationReceipt(authority: BuildAuthorityV1): Promise<VerifiedReceiptV1<TextOpenWorldCreatorCalibrationEvidenceV1> | null> {
+  const receipt = await latestFixedReceipt({
+    authority, gateId: TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1,
+    verifierId: 'storyforge.creator-independent-release-calibration', policyId: CALIBRATION_POLICY_ID,
+    statuses: ['passed', 'failed'], parseEvidence: parseTextOpenWorldCreatorCalibrationEvidenceV1,
+  })
+  if (!receipt) return null
+  const evidence = receipt.evidence
+  const derived = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+    scope: authority.scope, buildId: authority.build.id,
+  })
+  const generator = derived.contracts.start.preflight.providerBinding
+  const quote = derived.contracts.start.preflight.priceQuote ?? fail('校准Build缺少冻结价格快照')
+  const currentLedgerHash = await hashProductProductionValueV2(JSON.parse(authority.build.budgetLedgerJson))
+  const semanticReview = acceptedArtifactPayload<TextOpenWorldSemanticReviewV1>(authority, 'text-open-world.semantic-review')
+  if (!bindingEquals(evidence.build, authority.buildBinding)
+    || evidence.generator.provider !== generator.provider || evidence.generator.model !== generator.model
+    || evidence.generator.bindingHash !== generator.bindingHash
+    || evidence.productionUsage.priceQuoteHash !== quote.quoteHash
+    || evidence.productionUsage.priceQuoteSource !== quote.source
+    || evidence.productionUsage.priceQuoteAsOf !== quote.asOf
+    || evidence.productionUsage.ledgerHash !== currentLedgerHash
+    || evidence.productionSemanticReview.reviewHash !== semanticReview.semanticReviewHash
+    || canonicalProductProductionJsonV2(evidence.productionSemanticReview.scores)
+      !== canonicalProductProductionJsonV2(semanticReview.scores.filter(score => (
+        ['mainline-arc', 'significant-stories', 'repetition', 'duration-and-guidance'].includes(score.metricKey)
+      )))
+    || (evidence.independentReview.provider === evidence.generator.provider
+      && evidence.independentReview.model === evidence.generator.model)
+    || !plausibleRealProviderIdentity(evidence.generator.provider, evidence.generator.model)
+    || !plausibleRealProviderIdentity(evidence.independentReview.provider, evidence.independentReview.model)
+    || receipt.status !== (evidence.passed ? 'passed' : 'failed')
+    || receipt.gateReceipt.verifierKind !== 'provider-review'
+    || !stringListsEqual(receipt.gateReceipt.inputHashes, [
+      authority.build.packageHash,
+      acceptedArtifactHash(authority, 'text-open-world.mainline-thread'),
+      acceptedArtifactHash(authority, 'text-open-world.significant-threads'),
+      acceptedArtifactHash(authority, 'text-open-world.region-narrative-packs'),
+      acceptedArtifactHash(authority, 'text-open-world.scene-scripts'),
+      acceptedArtifactHash(authority, 'text-open-world.content-budget'),
+      acceptedArtifactHash(authority, 'text-open-world.semantic-review'),
+      evidence.generator.bindingHash, evidence.productionUsage.priceQuoteHash,
+      evidence.productionUsage.ledgerHash, evidence.independentReview.inputHash,
+      evidence.independentReview.outputHash,
+    ])
+    || !stringListsEqual(receipt.gateReceipt.evidenceRefs, [
+      evidence.productionSemanticReview.reviewHash,
+      evidence.independentReview.inputHash, evidence.independentReview.outputHash,
+      evidence.productionUsage.ledgerHash,
+    ])
+    || receipt.gateReceipt.environmentHash !== null
+    || receipt.gateReceipt.createdAt !== evidence.evaluatedAt) fail('发布校准回执与当前Build/模型/账本不闭合')
+  return receipt
+}
+
 async function readSemanticDecisionReceipt(authority: BuildAuthorityV1): Promise<VerifiedReceiptV1<TextOpenWorldCreatorSemanticDecisionEvidenceV1> | null> {
   const receipt = await latestFixedReceipt({
     authority, gateId: TEXT_OPEN_WORLD_CREATOR_SEMANTIC_GATE_ID_V1,
@@ -790,6 +953,7 @@ async function readSemanticDecisionReceipt(authority: BuildAuthorityV1): Promise
 async function readReleaseQualityReceipt(input: {
   authority: BuildAuthorityV1
   hardReceipt: VerifiedReceiptV1<TextOpenWorldCreatorHardGateEvidenceV1> | null
+  calibrationReceipt: VerifiedReceiptV1<TextOpenWorldCreatorCalibrationEvidenceV1> | null
   semanticReceipt: VerifiedReceiptV1<TextOpenWorldCreatorSemanticDecisionEvidenceV1> | null
   grayboxReceipt: VerifiedReceiptV1<TextOpenWorldCreatorGrayboxEvidenceV1> | null
   issueSet: Awaited<ReturnType<typeof currentIssueSet>>
@@ -799,7 +963,8 @@ async function readReleaseQualityReceipt(input: {
     verifierId: 'storyforge.creator-release-quality-join', policyId: RELEASE_QUALITY_POLICY_ID,
     statuses: ['passed'], parseEvidence: parseTextOpenWorldCreatorReleaseQualityEvidenceV1,
   })
-  if (!receipt || !input.hardReceipt || !input.semanticReceipt || !input.grayboxReceipt) return null
+  if (!receipt || !input.hardReceipt || !input.calibrationReceipt
+    || input.calibrationReceipt.status !== 'passed' || !input.semanticReceipt || !input.grayboxReceipt) return null
   const evidence = receipt.evidence
   if (!bindingEquals(evidence.build, input.authority.buildBinding)
     || evidence.hardGateReceiptHash !== input.hardReceipt.receiptHash
@@ -811,11 +976,11 @@ async function readReleaseQualityReceipt(input: {
     || receipt.gateReceipt.verifierKind !== 'deterministic'
     || !stringListsEqual(receipt.gateReceipt.inputHashes, [
       input.authority.build.packageHash, input.authority.build.previewHash,
-      input.hardReceipt.receiptHash, input.semanticReceipt.receiptHash,
+      input.hardReceipt.receiptHash, input.calibrationReceipt.receiptHash, input.semanticReceipt.receiptHash,
       input.grayboxReceipt.receiptHash, input.issueSet.issueSetHash,
     ])
     || !stringListsEqual(receipt.gateReceipt.evidenceRefs, [
-      input.hardReceipt.receiptHash, input.semanticReceipt.receiptHash,
+      input.hardReceipt.receiptHash, input.calibrationReceipt.receiptHash, input.semanticReceipt.receiptHash,
       input.grayboxReceipt.receiptHash, ...input.issueSet.issueReceiptHashes,
       ...input.issueSet.issueWaiverReceiptHashes,
     ])
@@ -829,14 +994,15 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
   internal: {
     issues: Awaited<ReturnType<typeof readIssues>>
     hardReceipt: VerifiedReceiptV1<TextOpenWorldCreatorHardGateEvidenceV1> | null
+    calibrationReceipt: VerifiedReceiptV1<TextOpenWorldCreatorCalibrationEvidenceV1> | null
     semanticReceipt: VerifiedReceiptV1<TextOpenWorldCreatorSemanticDecisionEvidenceV1> | null
     grayboxReceipt: VerifiedReceiptV1<TextOpenWorldCreatorGrayboxEvidenceV1> | null
     releaseReceipt: VerifiedReceiptV1<TextOpenWorldCreatorReleaseQualityEvidenceV1> | null
     issueSet: Awaited<ReturnType<typeof currentIssueSet>>
   }
 }> {
-  const [grayboxCandidates, issues] = await Promise.all([
-    listGrayboxCandidates(authority), readIssues(authority),
+  const [grayboxCandidates, issues, calibrationState] = await Promise.all([
+    listGrayboxCandidates(authority), readIssues(authority), calibrationReadiness(authority),
   ])
   const hardReceipt = await latestFixedReceipt({
     authority, gateId: TEXT_OPEN_WORLD_CREATOR_HARD_GATE_ID_V1,
@@ -858,17 +1024,21 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
     || hardReceipt.gateReceipt.createdAt !== hardReceipt.evidence.evaluatedAt)) {
     fail('硬门回执与当前治理快照不闭合')
   }
-  const [semanticReceipt, grayboxReceipt] = await Promise.all([
-    readSemanticDecisionReceipt(authority), readGrayboxReceipt(authority),
+  const [calibrationReceipt, semanticReceipt, grayboxReceipt] = await Promise.all([
+    readCalibrationReceipt(authority), readSemanticDecisionReceipt(authority), readGrayboxReceipt(authority),
   ])
   const issueSet = await currentIssueSet(issues)
   const releaseReceipt = await readReleaseQualityReceipt({
-    authority, hardReceipt, semanticReceipt, grayboxReceipt, issueSet,
+    authority, hardReceipt, calibrationReceipt, semanticReceipt, grayboxReceipt, issueSet,
   })
   const modelFindings = authority.reviews.flatMap(review => review.findings)
   const blockers: string[] = []
   if (authority.hardChecks.some(check => !check.passed)) blockers.push('存在未通过且不可豁免的代码硬门')
   if (authority.reviews.some(review => review.verdict !== 'pass')) blockers.push('平衡或叙事模型评审仍要求新Build修复')
+  if (!calibrationReceipt) blockers.push(calibrationState.readiness.ready
+    ? '尚未运行当前Build的独立叙事、重复度、时长与成本校准'
+    : `独立校准尚未就绪：${calibrationState.readiness.issue}`)
+  else if (calibrationReceipt.status !== 'passed') blockers.push('独立校准未达到发布线，必须根据finding创建新Build修复')
   if (!grayboxReceipt) blockers.push('尚无当前Build的完整隔离灰盒试玩回执')
   if (!semanticReceipt) blockers.push(modelFindings.length
     ? '模型建议项尚未逐项说明软豁免并完成作者质量复核'
@@ -887,6 +1057,8 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
       hardChecks: structuredClone(authority.hardChecks),
       hardGatesPassed: authority.hardChecks.every(check => check.passed),
       reviews: structuredClone(authority.reviews), modelFindings: structuredClone(modelFindings),
+      calibrationReadiness: structuredClone(calibrationState.readiness),
+      calibrationReceipt: publicReceipt(calibrationReceipt),
       grayboxCandidates, grayboxReceipt: publicReceipt(grayboxReceipt),
       issues: issues.map(row => ({
         receipt: publicReceipt(row.issue)!, waiver: publicReceipt(row.waiver),
@@ -898,7 +1070,7 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
       releaseQualityReady: releaseReceipt != null,
       blockers,
     },
-    internal: { issues, hardReceipt, semanticReceipt, grayboxReceipt, releaseReceipt, issueSet },
+    internal: { issues, hardReceipt, calibrationReceipt, semanticReceipt, grayboxReceipt, releaseReceipt, issueSet },
   }
 }
 
@@ -909,6 +1081,173 @@ export async function readTextOpenWorldCreatorQualityWorkspaceV1(input: {
 }): Promise<TextOpenWorldCreatorQualityWorkspaceV1> {
   const authority = await loadBuildAuthority(input)
   return (await readQualityWorkspaceWithAuthority(authority)).workspace
+}
+
+export async function recordTextOpenWorldCreatorCalibrationV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+  buildId: number
+  signal?: AbortSignal
+}, dependencies: {
+  runReview?: typeof runTextOpenWorldCreatorIndependentCalibrationReviewV1
+  now?: () => number
+} = {}): Promise<TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorCalibrationEvidenceV1>> {
+  const authority = await loadBuildAuthority({
+    scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId,
+  })
+  const state = await calibrationReadiness(authority)
+  if (!state.readiness.ready) fail(state.readiness.issue ?? '独立校准尚未就绪')
+  const [progress, mainline, significant, regions, scenes, contentBudget, semanticReview] = await Promise.all([
+    projectProductProductionSchedulerV1({ scope: authority.scope, productionId: authority.production.id }),
+    Promise.resolve(acceptedArtifactPayload<TextOpenWorldMainlineThreadV1>(authority, 'text-open-world.mainline-thread')),
+    Promise.resolve(acceptedArtifactPayload<TextOpenWorldSignificantThreadsV1>(authority, 'text-open-world.significant-threads')),
+    Promise.resolve(acceptedArtifactPayload<TextOpenWorldRegionNarrativePacksV1>(authority, 'text-open-world.region-narrative-packs')),
+    Promise.resolve(acceptedArtifactPayload<TextOpenWorldSceneScriptsV1>(authority, 'text-open-world.scene-scripts')),
+    Promise.resolve(acceptedArtifactPayload<TextOpenWorldContentBudgetV1>(authority, 'text-open-world.content-budget')),
+    Promise.resolve(acceptedArtifactPayload<TextOpenWorldSemanticReviewV1>(authority, 'text-open-world.semantic-review')),
+  ])
+  if (progress.buildId !== authority.build.id) fail('生产账本不再指向当前Build，不能冻结校准')
+  const context: TextOpenWorldCreatorCalibrationReviewContextV1 = buildTextOpenWorldCreatorCalibrationContextV1({
+    buildPackageHash: authority.build.packageHash, mainline, significant, regions, scenes, contentBudget,
+  })
+  const independentReview = await (dependencies.runReview ?? runTextOpenWorldCreatorIndependentCalibrationReviewV1)({
+    projectId: authority.scope.projectId, config: state.graderConfig,
+    frozenResolution: state.graderResolution, context, signal: input.signal,
+  })
+  if (independentReview.provider !== state.readiness.grader.provider
+    || independentReview.model !== state.readiness.grader.model) fail('独立grader返回身份与冻结路由不一致')
+  const templateDifferentiation = projectTextOpenWorldTemplateDifferentiationV1({ regions, scenes })
+  const contentDuration = projectTextOpenWorldContentDurationV1(contentBudget)
+  const quote = (await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+    scope: authority.scope, buildId: authority.build.id,
+  })).contracts.start.preflight.priceQuote ?? fail('Creator生产缺少冻结价格快照')
+  const usage = progress.budget.usage
+  const estimatedTextCostUsd = usage.inputTokens / 1_000_000 * quote.inputUsdPerMillionTokens
+    + usage.outputTokens / 1_000_000 * quote.outputUsdPerMillionTokens
+  const durations = textCallDurations(authority.build.budgetLedgerJson)
+  const ledgerHash = await hashProductProductionValueV2(JSON.parse(authority.build.budgetLedgerJson))
+  const productionUsage: TextOpenWorldCreatorCalibrationEvidenceV1['productionUsage'] = {
+    ledgerHash, modelCalls: usage.modelCalls, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
+    totalDurationMs: usage.durationMs,
+    averageCallDurationMs: durations.length ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length) : 0,
+    p95CallDurationMs: percentile(durations, 0.95), maximumCallDurationMs: durations[durations.length - 1] ?? 0,
+    estimatedTextCostUsd, priceQuoteHash: quote.quoteHash, priceQuoteSource: quote.source,
+    priceQuoteAsOf: quote.asOf, budgetMaximumCalls: progress.budget.limits.maximumModelCalls,
+    budgetMaximumInputTokens: progress.budget.limits.maximumInputTokens,
+    budgetMaximumOutputTokens: progress.budget.limits.maximumOutputTokens,
+    budgetMaximumDurationMs: progress.budget.limits.maximumDurationMs,
+    budgetMaximumCostUsd: progress.budget.limits.maximumCostUsd ?? fail('Creator生产预算必须冻结费用上限'),
+  }
+  const semanticMetrics = new Set(['mainline-arc', 'significant-stories', 'repetition', 'duration-and-guidance'])
+  const productionSemanticScores = semanticReview.scores.filter(score => semanticMetrics.has(score.metricKey))
+  if (productionSemanticScores.length !== semanticMetrics.size) fail('正式语义评审缺少G7-11所需指标')
+  const checks: TextOpenWorldCreatorCalibrationEvidenceV1['checks'] = [
+    {
+      key: 'real-independent-provider-identities', passed: state.readiness.ready,
+      summary: `生成器 ${state.readiness.generator.provider}/${state.readiness.generator.model}；独立评审 ${state.readiness.grader.provider}/${state.readiness.grader.model}。`,
+    },
+    {
+      key: 'production-semantic-release-line',
+      passed: productionSemanticScores.every(score => score.score >= 70),
+      summary: `正式语义评审四项最低 ${Math.min(...productionSemanticScores.map(score => score.score))} 分。`,
+    },
+    {
+      key: 'independent-narrative-release-line',
+      passed: independentReview.scores.every(score => score.score >= 70),
+      summary: `独立复评三项最低 ${Math.min(...independentReview.scores.map(score => score.score))} 分。`,
+    },
+    {
+      key: 'three-distinct-variants-per-template',
+      passed: templateDifferentiation.templateCount > 0
+        && templateDifferentiation.minimumVariantsPerTemplate >= 3
+        && templateDifferentiation.exactDuplicateTitleCount === 0
+        && templateDifferentiation.exactDuplicateDescriptionCount === 0
+        && templateDifferentiation.maximumPairSimilarityBasisPoints <= 8_500,
+      summary: `${templateDifferentiation.templateCount}个模板/${templateDifferentiation.variantCount}个变体；最少${templateDifferentiation.minimumVariantsPerTemplate}份，最大文本相似度${(templateDifferentiation.maximumPairSimilarityBasisPoints / 100).toFixed(1)}%。`,
+    },
+    {
+      key: 'authored-duration-inventory',
+      passed: contentDuration.mainlineMinutes >= contentDuration.requestedMainlineMinimum
+        && contentDuration.mainlineMinutes <= contentDuration.requestedMainlineMaximum
+        && contentDuration.optionalInventoryMinutes >= contentDuration.requestedOptionalMinimum
+        && contentDuration.optionalInventoryMinutes <= contentDuration.requestedOptionalMaximum
+        && contentDuration.totalAuthoredMinutes >= contentDuration.typicalPlaythroughMinutes,
+      summary: `主线${contentDuration.mainlineMinutes}分钟、可选库存${contentDuration.optionalInventoryMinutes}分钟、总创作库存${contentDuration.totalAuthoredMinutes}分钟；均为结构估算，不冒充真人时长。`,
+    },
+    {
+      key: 'production-call-usage-observed',
+      passed: usage.modelCalls > 0 && usage.inputTokens > 0 && usage.outputTokens > 0
+        && durations.length === usage.modelCalls,
+      summary: `${usage.modelCalls}次模型调用，输入${usage.inputTokens}、输出${usage.outputTokens} tokens；平均${productionUsage.averageCallDurationMs}ms，P95 ${productionUsage.p95CallDurationMs}ms。`,
+    },
+    {
+      key: 'production-budget-and-cost',
+      passed: usage.modelCalls <= productionUsage.budgetMaximumCalls
+        && usage.inputTokens <= productionUsage.budgetMaximumInputTokens
+        && usage.outputTokens <= productionUsage.budgetMaximumOutputTokens
+        && usage.durationMs <= productionUsage.budgetMaximumDurationMs
+        && estimatedTextCostUsd <= productionUsage.budgetMaximumCostUsd,
+      summary: `按冻结${quote.source}价格快照估算文本费用$${estimatedTextCostUsd.toFixed(4)}；这不是供应商账单。`,
+    },
+  ]
+  const evaluatedAt = Math.max(1, Math.round((dependencies.now ?? Date.now)()))
+  const evidence = parseTextOpenWorldCreatorCalibrationEvidenceV1({
+    schema: 'storyforge.text-open-world-creator-calibration-evidence', version: 1,
+    build: authority.buildBinding,
+    generator: {
+      provider: state.generator.provider, model: state.generator.model,
+      bindingHash: state.generator.bindingHash,
+    },
+    independentReview,
+    productionSemanticReview: {
+      reviewHash: semanticReview.semanticReviewHash,
+      scores: productionSemanticScores.map(score => ({ ...score })),
+    },
+    templateDifferentiation, contentDuration, productionUsage, checks,
+    passed: checks.every(check => check.passed), evaluatedAt,
+  })
+  const receipt = await createGateReceipt({
+    gateId: TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1,
+    verifierId: 'storyforge.creator-independent-release-calibration', verifierKind: 'provider-review',
+    inputHashes: [
+      authority.build.packageHash,
+      acceptedArtifactHash(authority, 'text-open-world.mainline-thread'),
+      acceptedArtifactHash(authority, 'text-open-world.significant-threads'),
+      acceptedArtifactHash(authority, 'text-open-world.region-narrative-packs'),
+      acceptedArtifactHash(authority, 'text-open-world.scene-scripts'),
+      acceptedArtifactHash(authority, 'text-open-world.content-budget'),
+      acceptedArtifactHash(authority, 'text-open-world.semantic-review'),
+      evidence.generator.bindingHash, evidence.productionUsage.priceQuoteHash,
+      evidence.productionUsage.ledgerHash, evidence.independentReview.inputHash,
+      evidence.independentReview.outputHash,
+    ],
+    environmentHash: null, evidence, status: evidence.passed ? 'passed' : 'failed',
+    policyId: CALIBRATION_POLICY_ID,
+    evidenceRefs: [
+      evidence.productionSemanticReview.reviewHash,
+      evidence.independentReview.inputHash, evidence.independentReview.outputHash,
+      evidence.productionUsage.ledgerHash,
+    ],
+    createdAt: evaluatedAt,
+  })
+  const pending = pendingReceiptRow(authority, receipt)
+  const stored = await db.transaction('rw', scopeTransactionTables(
+    db.productProductions, db.productProductionBriefs, db.productBuilds,
+    db.productBuildArtifacts, db.productQualityGateReceipts,
+  ), async () => {
+    await assertAuthorityRowsUnchangedInTransaction(authority)
+    const existing = await db.productQualityGateReceipts
+      .where('[buildId+gateId+receiptHash]').equals([authority.build.id, receipt.gateId, receipt.receiptHash]).first()
+    if (existing?.id != null) return existing as ProductQualityGateReceiptRecordV1 & { id: number }
+    const id = await db.productQualityGateReceipts.add(pending) as number
+    return { ...pending, id }
+  })
+  const verified = await verifyGenericReceiptRow({
+    row: stored, authority, gateId: TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1,
+    verifierId: 'storyforge.creator-independent-release-calibration', policyId: CALIBRATION_POLICY_ID,
+    statuses: ['passed', 'failed'], parseEvidence: parseTextOpenWorldCreatorCalibrationEvidenceV1,
+  })
+  return publicReceipt(verified)!
 }
 
 export async function recordTextOpenWorldCreatorGrayboxV1(input: {
@@ -1146,6 +1485,9 @@ export async function finalizeTextOpenWorldCreatorQualityV1(input: {
   if (authority.reviews.some(review => review.verdict !== 'pass'
     || review.findings.some(finding => finding.severity === 'blocking'))) fail('模型评审仍有阻断项，必须创建新Build修复')
   const before = await readQualityWorkspaceWithAuthority(authority)
+  if (!before.internal.calibrationReceipt || before.internal.calibrationReceipt.status !== 'passed') {
+    fail('必须先通过当前Build的独立叙事、重复度、时长与成本校准')
+  }
   if (!before.internal.grayboxReceipt) fail('必须先冻结当前Build的完整隔离灰盒试玩回执')
   const blockingIssues = before.internal.issues.filter(row => row.issue.evidence.severity === 'blocking')
   const unwaivedAdvisories = before.internal.issues.filter(row => row.issue.evidence.severity === 'advisory' && !row.waiver)
@@ -1213,9 +1555,10 @@ export async function finalizeTextOpenWorldCreatorQualityV1(input: {
     gateId: TEXT_OPEN_WORLD_CREATOR_RELEASE_QUALITY_GATE_ID_V1,
     verifierId: 'storyforge.creator-release-quality-join', verifierKind: 'deterministic',
     inputHashes: [authority.build.packageHash, authority.build.previewHash, hardReceipt.receiptHash,
-      semanticReceipt.receiptHash, before.internal.grayboxReceipt.receiptHash, before.internal.issueSet.issueSetHash],
+      before.internal.calibrationReceipt.receiptHash, semanticReceipt.receiptHash,
+      before.internal.grayboxReceipt.receiptHash, before.internal.issueSet.issueSetHash],
     environmentHash: null, evidence: releaseEvidence, status: 'passed', policyId: RELEASE_QUALITY_POLICY_ID,
-    evidenceRefs: [hardReceipt.receiptHash, semanticReceipt.receiptHash,
+    evidenceRefs: [hardReceipt.receiptHash, before.internal.calibrationReceipt.receiptHash, semanticReceipt.receiptHash,
       before.internal.grayboxReceipt.receiptHash, ...before.internal.issueSet.issueReceiptHashes,
       ...before.internal.issueSet.issueWaiverReceiptHashes],
     createdAt: confirmedAt,
@@ -1239,6 +1582,10 @@ export async function finalizeTextOpenWorldCreatorQualityV1(input: {
     if (!latestGraybox || latestGraybox.receiptHash !== before.internal.grayboxReceipt!.receiptHash) {
       fail('灰盒回执在冻结发布质量前变化')
     }
+    const latestCalibration = currentAll.filter(row => row.gateId === TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1)
+      .sort((left, right) => right.createdAt - left.createdAt || (right.id ?? -1) - (left.id ?? -1))[0]
+    if (!latestCalibration || latestCalibration.receiptHash !== before.internal.calibrationReceipt!.receiptHash
+      || latestCalibration.status !== 'passed') fail('独立校准回执在冻结发布质量前变化')
     for (const [index, receipt] of [hardReceipt, semanticReceipt, releaseReceipt].entries()) {
       const existing = await db.productQualityGateReceipts
         .where('[buildId+gateId+receiptHash]').equals([authority.build.id, receipt.gateId, receipt.receiptHash]).first()

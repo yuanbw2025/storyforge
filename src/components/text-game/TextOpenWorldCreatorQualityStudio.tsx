@@ -5,6 +5,7 @@ import {
   finalizeTextOpenWorldCreatorQualityV1,
   portableTextOpenWorldCreatorIssueJsonV1,
   readTextOpenWorldCreatorQualityWorkspaceV1,
+  recordTextOpenWorldCreatorCalibrationV1,
   recordTextOpenWorldCreatorGrayboxV1,
   recordTextOpenWorldCreatorIssueV1,
   waiveTextOpenWorldCreatorAdvisoryIssueV1,
@@ -208,6 +209,12 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
     })
   }, '当前Build的发布质量结论已冻结。')
 
+  const runCalibration = () => run(async () => {
+    await recordTextOpenWorldCreatorCalibrationV1({
+      scope: props.scope, productionId: props.productionId, buildId: props.buildId,
+    })
+  }, '独立叙事、重复度、时长与成本校准回执已冻结。')
+
   const disabled = props.disabled || busy
 
   return <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="text-open-world-creator-quality-studio">
@@ -252,8 +259,29 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
         </label>)}</div> : <p className="mt-3 text-[10px] text-success">双评审均达到85分以上，没有需要作者软豁免的建议项。</p>}
       </section>
 
+      <section className="mt-4 rounded border border-border bg-bg-base p-4" aria-labelledby="creator-calibration-title">
+        <h3 id="creator-calibration-title" className="text-xs font-semibold">3. 独立模型与数据校准</h3>
+        <p className="mt-1 text-[10px] text-text-muted">一次显式付费调用会使用“审查校验”路由，并且必须与生产生成器的 provider/model 身份不同。它只评价主线、重要故事和模板差异；时长、调用量、延迟与费用来自当前Build的冻结Artifact、账本和价格快照。</p>
+        <div className="mt-3 grid gap-2 md:grid-cols-2 text-[10px]">
+          <span className="rounded border border-border p-2">生产生成器：{workspace.calibrationReadiness.generator.provider}/{workspace.calibrationReadiness.generator.model}</span>
+          <span className="rounded border border-border p-2">独立评审：{workspace.calibrationReadiness.grader.provider}/{workspace.calibrationReadiness.grader.model}</span>
+        </div>
+        {!workspace.calibrationReceipt && <>
+          {workspace.calibrationReadiness.issue && <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">{workspace.calibrationReadiness.issue}</p>}
+          <button type="button" disabled={disabled || !workspace.calibrationReadiness.ready} onClick={() => void runCalibration()} className="mt-3 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40">运行一次独立校准并冻结回执</button>
+        </>}
+        {workspace.calibrationReceipt && <div className={`mt-3 rounded border p-3 text-[10px] ${workspace.calibrationReceipt.status === 'passed' ? 'border-success/30 bg-success/5 text-success' : 'border-error/30 bg-error/5 text-error'}`} data-testid="text-open-world-creator-calibration-result">
+          <strong>{workspace.calibrationReceipt.status === 'passed' ? '校准通过' : '校准未通过'}</strong>
+          <span className="ml-2">{compactHash(workspace.calibrationReceipt.receiptHash)}</span>
+          <div className="mt-2 grid gap-1 md:grid-cols-3">{workspace.calibrationReceipt.evidence.independentReview.scores.map(score => <span key={score.metricKey}>{score.metricKey}：{score.score}</span>)}</div>
+          <p className="mt-2">模板 {workspace.calibrationReceipt.evidence.templateDifferentiation.templateCount} 个 / 变体 {workspace.calibrationReceipt.evidence.templateDifferentiation.variantCount} 个 · 主线 {workspace.calibrationReceipt.evidence.contentDuration.mainlineMinutes} 分钟 · 可选库存 {workspace.calibrationReceipt.evidence.contentDuration.optionalInventoryMinutes} 分钟</p>
+          <p className="mt-1">生产模型 {workspace.calibrationReceipt.evidence.productionUsage.modelCalls} 次 · 平均 {workspace.calibrationReceipt.evidence.productionUsage.averageCallDurationMs}ms · P95 {workspace.calibrationReceipt.evidence.productionUsage.p95CallDurationMs}ms · 冻结价格估算 ${workspace.calibrationReceipt.evidence.productionUsage.estimatedTextCostUsd.toFixed(4)}</p>
+          {workspace.calibrationReceipt.evidence.independentReview.findings.length > 0 && <ul className="mt-2 grid gap-1">{workspace.calibrationReceipt.evidence.independentReview.findings.map(finding => <li key={finding}>· {finding}</li>)}</ul>}
+        </div>}
+      </section>
+
       <section className="mt-4 rounded border border-border bg-bg-base p-4" aria-labelledby="creator-graybox-title">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 id="creator-graybox-title" className="text-xs font-semibold">3. 隔离灰盒试玩</h3><p className="mt-1 text-[10px] text-text-muted">可组合最多6个当前Build Session，但必须覆盖完整核心循环，并至少有一个真正到达结局。</p></div><button type="button" disabled={disabled} onClick={props.onPreview} className="flex items-center gap-1 rounded border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-accent disabled:opacity-40"><Play className="h-3.5 w-3.5" />试玩当前Build</button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 id="creator-graybox-title" className="text-xs font-semibold">4. 隔离灰盒试玩</h3><p className="mt-1 text-[10px] text-text-muted">可组合最多6个当前Build Session，但必须覆盖完整核心循环，并至少有一个真正到达结局。</p></div><button type="button" disabled={disabled} onClick={props.onPreview} className="flex items-center gap-1 rounded border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-accent disabled:opacity-40"><Play className="h-3.5 w-3.5" />试玩当前Build</button></div>
         <div className="mt-3 grid gap-2">{workspace.grayboxCandidates.map(candidate => <label key={candidate.sessionId} className="flex items-start gap-2 rounded border border-border p-3 text-[10px]">
           <input type="checkbox" checked={selectedSessionIds.includes(candidate.sessionId)} onChange={event => setSelectedSessionIds(current => event.target.checked ? [...new Set([...current, candidate.sessionId])] : current.filter(id => id !== candidate.sessionId))} />
           <span className="min-w-0"><strong className="block">{candidate.title} {candidate.completed ? '· 已到达结局' : '· 尚未完成'}</strong><span className="mt-1 block text-text-muted">事件 {candidate.eventCount} · 检查点 {candidate.checkpointCount} · 覆盖 {candidate.coverageKeys.map(key => COVERAGE_LABELS[key]).join('、') || '尚无'}</span></span>
@@ -274,7 +302,7 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
       </section>
 
       <section className="mt-4 rounded border border-border bg-bg-base p-4" aria-labelledby="creator-issue-title">
-        <h3 id="creator-issue-title" className="text-xs font-semibold">4. 问题回执</h3>
+        <h3 id="creator-issue-title" className="text-xs font-semibold">5. 问题回执</h3>
         <p className="mt-1 text-[10px] text-text-muted">阻断问题不能豁免；非阻断问题可明确接受风险。导出的JSON只有复现描述、稳定键与Hash，不包含数据库本地ID、来源原文或完整事件正文。</p>
         <div className="mt-3 grid gap-2 md:grid-cols-2">{workspace.issues.map(issue => <article key={issue.receipt.receiptHash} className={`rounded border p-3 text-[10px] ${issue.blocksRelease ? 'border-error/30 bg-error/5' : 'border-success/30 bg-success/5'}`}>
           <span className="flex flex-wrap items-center justify-between gap-2"><strong>{issue.receipt.evidence.severity === 'blocking' ? '阻断' : '非阻断'} · {CATEGORY_LABELS[issue.receipt.evidence.category]}</strong><code>{compactHash(issue.receipt.receiptHash)}</code></span>
@@ -302,7 +330,7 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
       </section>
 
       {!workspace.releaseQualityReady && <section className="mt-4 rounded border border-border bg-bg-base p-4" aria-labelledby="creator-final-quality-title">
-        <h3 id="creator-final-quality-title" className="text-xs font-semibold">5. 冻结发布质量结论</h3>
+        <h3 id="creator-final-quality-title" className="text-xs font-semibold">6. 冻结发布质量结论</h3>
         <fieldset className="mt-3 grid gap-2 text-[10px] text-text-muted"><legend className="font-semibold text-text-main">作者最终抽检</legend>{([
           ['narrativeAndGuidanceReviewed', '我已抽检主线叙事、目标引导和失败说明'],
           ['regionalAndQuestVarietyReviewed', '我已抽检地区身份、重要支线与小任务差异'],
@@ -311,7 +339,7 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
           ['issueListComplete', '我确认当前已知问题清单完整，阻断项均已清除'],
         ] as const).map(([key, label]) => <label key={key} className="flex gap-2"><input type="checkbox" checked={qualityChecks[key]} onChange={event => setQualityChecks(current => ({ ...current, [key]: event.target.checked }))} />{label}</label>)}</fieldset>
         <textarea aria-label="发布质量备注" value={qualityNote} onChange={event => setQualityNote(event.target.value)} maxLength={4000} className="mt-3 min-h-20 w-full rounded border border-border bg-bg-elevated p-3 text-xs" placeholder="可选：记录本版已知取舍和下一版改进方向。" />
-        <button type="button" disabled={disabled || !workspace.hardGatesPassed || !workspace.grayboxReceipt || !allQualityChecks || !allFindingWaiversComplete || workspace.issues.some(issue => issue.blocksRelease)} onClick={() => void finalizeQuality()} className="mt-3 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40">复验全部证据并冻结质量结论</button>
+        <button type="button" disabled={disabled || !workspace.hardGatesPassed || workspace.calibrationReceipt?.status !== 'passed' || !workspace.grayboxReceipt || !allQualityChecks || !allFindingWaiversComplete || workspace.issues.some(issue => issue.blocksRelease)} onClick={() => void finalizeQuality()} className="mt-3 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40">复验全部证据并冻结质量结论</button>
       </section>}
     </>}
   </section>

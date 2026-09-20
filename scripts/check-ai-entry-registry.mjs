@@ -211,6 +211,9 @@ const scannedFiles = [
   // G6-10's independent semantic grader is an eval-only formal model entry.
   // It may judge redacted observations, but can never adopt product content.
   'src/lib/evals/open-world-runtime/judge.ts',
+  // G7-11's independent release calibrator is an explicit paid eval-only call.
+  // Its output may only become Build-bound quality evidence.
+  'src/lib/open-world/creator-quality-calibration.ts',
 ]
 for (const file of [...new Set(scannedFiles)]) {
     if (file === 'src/lib/agent/formal-ai-entry.ts') continue
