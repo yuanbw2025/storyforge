@@ -39,6 +39,7 @@ import type {
   AdaptationProject,
   ComicLetteringItemV1,
   ComicMediaAsset,
+  ProductQualityGateReceiptRecordV1,
   ProductReleaseManifestV1,
   ProductRuntimeEvent,
   ScreenplayBlock,
@@ -62,6 +63,7 @@ import {
   validateTextOpenWorldSourcePinV1,
 } from '../open-world/source-pin'
 import { hashProductProductionValueV2 } from '../product-production/hash'
+import { verifyProductQualityGateReceiptRecordV1 } from '../product-production/quality-receipts'
 import { verifyProductReleaseManifestV1 } from '../product-production/runtime-package'
 import {
   replayTextOpenWorldMigrationSourceStateHashV1,
@@ -420,6 +422,16 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     const build = builds.get(row._buildExportId)
     if (!build) throw new Error('[deriveImport] v10 Build 子记录引用越界')
     sameOwner(row, build, 'Build 子记录')
+  }
+  for (const receipt of receipts) {
+    try {
+      await verifyProductQualityGateReceiptRecordV1(
+        receipt as unknown as ProductQualityGateReceiptRecordV1,
+      )
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(`[deriveImport] v10 ProductQualityGateReceipt 内容或Hash无效:${detail}`)
+    }
   }
   await validateTextOpenWorldSourcePinArtifactsV10({ artifacts, builds, productions })
   const releaseManifests = new Map<number, ProductReleaseManifestV1>()

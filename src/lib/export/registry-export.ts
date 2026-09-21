@@ -28,6 +28,7 @@ import {
 } from '../open-world/player-save-migration-contract'
 import { verifyProductReleaseManifestV1 } from '../product-production/runtime-package'
 import { hashProductProductionValueV2 } from '../product-production/hash'
+import { verifyProductQualityGateReceiptRecordV1 } from '../product-production/quality-receipts'
 import type { ProductReleaseManifestV1, ProductRuntimeEvent } from '../types'
 
 /** 当前完整便携备份契约。 */
@@ -52,12 +53,34 @@ function maximumRuntimeSequenceForExport(sequences: ReadonlySet<number> | undefi
 async function assertProductRuntimeExportIntegrityV1(
   rowsByTable: ReadonlyMap<string, readonly any[]>,
 ): Promise<void> {
+  const builds = rowsByTable.get('productBuilds') ?? []
+  const qualityReceipts = rowsByTable.get('productQualityGateReceipts') ?? []
   const sessions = rowsByTable.get('productRuntimeSessions') ?? []
   const events = rowsByTable.get('productRuntimeEvents') ?? []
   const checkpoints = rowsByTable.get('productRuntimeCheckpoints') ?? []
   const releases = rowsByTable.get('productReleases') ?? []
   const releasesById = new Map<number, any>()
   const releaseManifestsById = new Map<number, ProductReleaseManifestV1>()
+  const buildsById = new Map<number, any>()
+  for (const build of builds) {
+    if (!Number.isSafeInteger(build.id) || build.id < 1 || buildsById.has(build.id)) {
+      throw new Error('[deriveExport] ProductBuild 本地主键无效')
+    }
+    buildsById.set(build.id, build)
+  }
+  for (const row of qualityReceipts) {
+    const build = buildsById.get(row.buildId)
+    if (!build || row.projectId !== build.projectId || row.worldId !== build.worldId
+      || row.workId !== build.workId) {
+      throw new Error('[deriveExport] ProductQualityGateReceipt Build或owner无效')
+    }
+    try {
+      await verifyProductQualityGateReceiptRecordV1(row)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(`[deriveExport] ProductQualityGateReceipt 内容或Hash无效:${detail}`)
+    }
+  }
   for (const release of releases) {
     if (!Number.isSafeInteger(release.id) || release.id < 1 || releasesById.has(release.id)) {
       throw new Error('[deriveExport] ProductRelease 本地主键无效')

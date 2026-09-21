@@ -426,6 +426,39 @@ async function verifyGateReceiptHash(receipt: ProductQualityGateReceiptV1): Prom
   if (await hashProductProductionValueV2(body) !== receiptHash) fail('receiptHash 校验失败')
 }
 
+/**
+ * Product-neutral integrity check used at the portable backup boundary.
+ * Product-specific readers still own the meaning of measuredJson, thresholds
+ * and evidence refs; this verifier guarantees that no malformed or re-indexed
+ * receipt can cross export/import and only fail much later at release time.
+ */
+export async function verifyProductQualityGateReceiptRecordV1(
+  row: Pick<ProductQualityGateReceiptRecordV1,
+    | 'gateId'
+    | 'gateVersion'
+    | 'verifierId'
+    | 'verifierVersion'
+    | 'status'
+    | 'receiptJson'
+    | 'receiptHash'
+    | 'createdAt'
+  >,
+): Promise<ProductQualityGateReceiptV1> {
+  const receipt = parseProductQualityGateReceiptV1(row.receiptJson)
+  await verifyGateReceiptHash(receipt)
+  try { JSON.parse(receipt.measuredJson) } catch { fail('measuredJson 不是合法 JSON') }
+  if (row.gateId !== receipt.gateId
+    || row.gateVersion !== receipt.gateVersion
+    || row.verifierId !== receipt.verifierId
+    || row.verifierVersion !== receipt.verifierVersion
+    || row.status !== receipt.status
+    || row.receiptHash !== receipt.receiptHash
+    || row.createdAt !== receipt.createdAt) {
+    fail('数据库索引字段与不可变 receipt 不一致')
+  }
+  return receipt
+}
+
 function parseBrowserEvidence(value: string): ProductBrowserPerformanceEvidenceV1 {
   let raw: unknown
   try { raw = JSON.parse(value) } catch { fail('浏览器性能 measuredJson 不是合法 JSON') }
