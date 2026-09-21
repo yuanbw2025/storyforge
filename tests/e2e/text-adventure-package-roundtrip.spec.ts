@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { openTextAdventurePage } from './helpers/text-adventure-entry'
 
 test('文字冒险候选包在新 Work 上传后可从正式 Release 完成双结局并刷新恢复', async ({ page }) => {
   await page.addInitScript(() => {
@@ -32,9 +33,7 @@ test('文字冒险候选包在新 Work 上传后可从正式 Release 完成双�
   })
   expect(prepared.sourceReleaseCount).toBe(1)
 
-  await page.reload()
-  await page.getByTestId('product-tab-text-games').click()
-  await page.getByRole('button', { name: '制作', exact: true }).click()
+  await openTextAdventurePage(page, prepared.targetScope, 'production')
   const packagePanel = page.getByTestId('text-adventure-package-panel')
   await expect(packagePanel).toBeVisible({ timeout: 15_000 })
   await packagePanel.getByLabel('上传文字冒险产品包').setInputFiles({
@@ -130,14 +129,13 @@ test('文字冒险候选包在新 Work 上传后可从正式 Release 完成双�
     sourceKind: 'release',
   })
 
-  await page.reload()
-  await page.getByTestId('product-tab-text-games').click()
+  await openTextAdventurePage(page, prepared.targetScope, 'play')
   const restored = page.getByTestId('adventure-game-player')
-  await restored.getByRole('button', { name: /雾潮灯塔.*新冒险.*可继续/ }).click()
+  await restored.getByRole('button', { name: /雾潮灯塔.*新冒险.*(?:可继续|已通关)/ }).click()
   await expect(restored).toContainText('海上归灯', { timeout: 15_000 })
   await expect(restored).toContainText('冒险结束')
 
-  await page.getByRole('button', { name: '制作', exact: true }).click()
+  await openTextAdventurePage(page, prepared.targetScope, 'production')
   const lifecyclePanel = page.getByTestId('text-adventure-package-panel')
   await expect(lifecyclePanel.getByTestId('text-adventure-imported-release-copies')).toContainText(prepared.title)
   await lifecyclePanel.getByRole('button', { name: '删除本地副本', exact: true }).click()

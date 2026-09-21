@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { createWorld } from './helpers/product-entry'
+import { openTextAdventurePage } from './helpers/text-adventure-entry'
 
 async function finishNarration(player: Locator) {
   const continueButton = player.locator('.adventure-narrative-continue')
@@ -23,12 +25,15 @@ async function chooseVisibleAction(player: Locator, label: string) {
 }
 
 async function createImportWorkspace(page: Page) {
-  await page.getByRole('banner').getByRole('button', { name: '新建', exact: true }).click()
-  await page.getByRole('button', { name: /世界引擎.*从零创建/ }).click()
-  await page.getByPlaceholder('例如：潮汐之后').fill('文字冒险 UI 往返技术工作区')
-  await page.getByPlaceholder('一句话描述这个世界或作品').fill('仅用于验证产品包导入和玩家界面的隔离工作区。')
-  await page.getByRole('button', { name: '创建世界引擎', exact: true }).click()
-  await expect(page.locator('.sf-worlds-featured').getByRole('heading', { name: '文字冒险 UI 往返技术工作区', exact: true })).toBeVisible()
+  await createWorld(page, '文字冒险 UI 往返技术工作区', '仅用于验证产品包导入和玩家界面的隔离工作区。')
+  await expect(page.getByRole('heading', { name: '文字冒险 UI 往返技术工作区', exact: true }).last()).toBeVisible()
+  return page.evaluate(async () => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const project = (await db.projects.toArray()).find((row: any) => row.name === '文字冒险 UI 往返技术工作区')
+    if (!project?.id || !project.activeWorkId) throw new Error('新导入工作区没有稳定的产品作用域')
+    return { projectId: project.id, workId: project.activeWorkId }
+  })
 }
 
 test('制作页真实下载的文字冒险包可在全新 Work 上传、存档恢复、分支双结局并安全删除', async ({ page }, testInfo) => {
@@ -77,9 +82,7 @@ test('制作页真实下载的文字冒险包可在全新 Work 上传、存档�
   })
   expect(source.sourceReleaseCount).toBe(1)
 
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.getByTestId('product-tab-text-games').click()
-  await page.getByRole('button', { name: '制作', exact: true }).click()
+  await openTextAdventurePage(page, source.scope, 'production')
   const sourcePanel = page.getByTestId('text-adventure-package-panel')
   await expect(sourcePanel).toBeVisible({ timeout: 15_000 })
   const downloadEvent = page.waitForEvent('download')
@@ -108,12 +111,12 @@ test('制作页真实下载的文字冒险包可在全新 Work 上传、存档�
     dossier: { title: source.title, runtimePackageHash: source.runtimePackageHash },
   })
 
-  await createImportWorkspace(page)
+  const importScope = await createImportWorkspace(page)
 
-  await page.getByTestId('product-tab-text-games').click()
-  await page.getByRole('button', { name: '制作', exact: true }).click()
+  await openTextAdventurePage(page, importScope, 'production')
   const enableProduction = page.getByRole('button', { name: '为当前项目显式启用', exact: true })
-  if (await enableProduction.count()) await enableProduction.click()
+  await expect(enableProduction).toBeVisible()
+  await enableProduction.click()
 
   const packagePanel = page.getByTestId('text-adventure-package-panel')
   await expect(packagePanel).toBeVisible({ timeout: 15_000 })
@@ -153,7 +156,8 @@ test('制作页真实下载的文字冒险包可在全新 Work 上传、存档�
     candidatePackageHash: source.candidatePackageHash,
     originalReleaseHash: source.releaseContentHash,
   })
-  expect(new URL(page.url()).searchParams.get('worldWorkspace')).toBe(imported.workspaceUid)
+  expect(new URL(page.url()).searchParams.get('project')).toBe(String(imported.scope.projectId))
+  expect(new URL(page.url()).searchParams.get('work')).toBe(String(imported.scope.workId))
 
   const player = page.getByTestId('adventure-game-player')
   await expect(player).toBeVisible({ timeout: 15_000 })
@@ -232,9 +236,9 @@ test('制作页真实下载的文字冒险包可在全新 Work 上传、存档�
   await expect(player).toContainText('海上归灯')
 
   await page.reload({ waitUntil: 'domcontentloaded' })
-  expect(new URL(page.url()).searchParams.get('worldWorkspace')).toBe(imported.workspaceUid)
-  await page.getByTestId('product-tab-text-games').click()
-  await expect(page.locator('.sf-binding-banner')).toContainText('文字冒险 UI 往返技术工作区')
+  expect(new URL(page.url()).searchParams.get('project')).toBe(String(imported.scope.projectId))
+  expect(new URL(page.url()).searchParams.get('work')).toBe(String(imported.scope.workId))
+  await expect(page.getByLabel('创作工作区')).toHaveValue(String(imported.scope.projectId))
   const restoredPlayer = page.getByTestId('adventure-game-player')
   // A completed timeline remains reopenable after refresh so the player can
   // review its ending, inspect the event log, and fork an earlier checkpoint.
@@ -377,7 +381,7 @@ test('制作页真实下载的文字冒险包可在全新 Work 上传、存档�
     }
   }, { scope: imported.scope, importedReleaseId: imported.releaseId })
 
-  await page.getByRole('button', { name: '制作', exact: true }).click()
+  await openTextAdventurePage(page, imported.scope, 'production')
   const lifecyclePanel = page.getByTestId('text-adventure-package-panel')
   await expect(lifecyclePanel.getByTestId('text-adventure-imported-release-copies')).toContainText(source.title)
   await lifecyclePanel.getByRole('button', { name: '删除本地副本', exact: true }).click()

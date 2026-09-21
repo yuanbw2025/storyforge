@@ -1746,16 +1746,18 @@ async function ensurePlan(input: {
     task.taskKey === 'media.repair-feedback'
       || task.reuse?.reason.startsWith('媒资修订 ') === true
   )) ? currentPlan : null
-  const freshBasePlan = await createProductProductionPlanV3({
-    brief: state.brief,
-    briefHash: state.briefRow.briefHash,
-    buildNumber: state.build.buildNumber,
-    controlEpoch: state.build.controlEpoch,
-  })
-  const refreshedBaseTaskByKey = new Map(freshBasePlan.tasks.map(task => [task.taskKey, task]))
-  let plan = input.suppliedPlan
-    ? parseProductProductionPlanV3(input.suppliedPlan, state.brief, state.briefRow.briefHash)
-    : currentMediaRevisionPlan
+  let plan: ProductProductionPlanV3
+  if (input.suppliedPlan) {
+    plan = parseProductProductionPlanV3(input.suppliedPlan, state.brief, state.briefRow.briefHash)
+  } else {
+    const freshBasePlan = await createProductProductionPlanV3({
+      brief: state.brief,
+      briefHash: state.briefRow.briefHash,
+      buildNumber: state.build.buildNumber,
+      controlEpoch: state.build.controlEpoch,
+    })
+    const refreshedBaseTaskByKey = new Map(freshBasePlan.tasks.map(task => [task.taskKey, task]))
+    plan = currentMediaRevisionPlan
       ? parseProductProductionPlanV3({
           ...currentMediaRevisionPlan,
           controlEpoch: state.build.controlEpoch,
@@ -1771,6 +1773,7 @@ async function ensurePlan(input: {
           }),
         }, state.brief, state.briefRow.briefHash)
       : freshBasePlan
+  }
   // Cross-Build reuse belongs only to the child's initial Plan. A later
   // recovery epoch must derive reuse from the immediately preceding epoch so
   // that a deterministic failure can invalidate a carried parent artifact.

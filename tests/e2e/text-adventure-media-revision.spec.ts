@@ -1,5 +1,6 @@
 import { deflateSync } from 'node:zlib'
 import { expect, test } from '@playwright/test'
+import { openTextAdventurePage } from './helpers/text-adventure-entry'
 
 function crc32(bytes: Buffer): number {
   let crc = 0xffffffff
@@ -74,9 +75,7 @@ test('旧两图商业 Build 可在同一 Production 取消、修订为十二图 
     return fixture.seedTextAdventureLegacyCommercialGateV1(imageBase64)
   }, image.toString('base64'))
 
-  await page.reload()
-  await page.getByTestId('product-tab-text-games').click()
-  await page.getByRole('button', { name: '制作', exact: true }).click()
+  await openTextAdventurePage(page, seeded.scope, 'production')
   const studio = page.getByTestId('product-production-studio')
   await expect(studio).toContainText('潮门灯塔 · 媒资修订验收')
   await expect(page.getByTestId('text-adventure-media-plan-blocker')).toContainText('2 张图片')
@@ -169,9 +168,7 @@ test('作者退回单图后从真实文件输入派生新 Build，并只在新 h
     return fixture.seedTextAdventureMediaRevisionWorkbenchV1(imageBase64)
   }, parentImage.toString('base64'))
 
-  await page.reload()
-  await page.getByTestId('product-tab-text-games').click()
-  await page.getByRole('button', { name: '制作', exact: true }).click()
+  await openTextAdventurePage(page, seeded.scope, 'production')
   const studio = page.getByTestId('product-production-studio')
   await expect(studio).toBeVisible({ timeout: 15_000 })
   await expect(studio).toContainText('潮门灯塔 · 媒资修订验收')
@@ -304,9 +301,7 @@ test('作者退回意见绑定旧图 hash 与失败回执，单图重生成只�
     const fixture = await importer('/storyforge/tests/helpers/text-adventure-media-revision-workbench.ts')
     return fixture.seedTextAdventureMediaRevisionWorkbenchV1(imageBase64)
   }, parentImage.toString('base64'))
-  await page.reload()
-  await page.getByTestId('product-tab-text-games').click()
-  await page.getByRole('button', { name: '制作', exact: true }).click()
+  await openTextAdventurePage(page, seeded.scope, 'production')
   const media = page.getByTestId('text-adventure-media-authoring')
   await expect(media).toContainText('2 张冻结图片')
   await expect(page.getByTestId('text-adventure-visual-review-layers')).toContainText('已实际观察并通过')

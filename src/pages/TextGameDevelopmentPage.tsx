@@ -87,7 +87,7 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
       : undefined
   ), [projectId, worldId, workId])
 
-  const entryDecision = evaluateProductEntryV1({
+  const decision = evaluateProductEntryV1({
     productId: openWorld ? 'upper.text-open-world' : 'upper.text-adventure',
     channel: currentProductCatalogChannelV1(),
     experimentalOptIn: currentExperimentalProductOptInV1(),
@@ -171,8 +171,8 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
   return <ProductFrame product={base} title={title} page={page.label} navigation={navigation}>
     <section className="lf-paper">
       <h3>{title} · 可验证预览</h3>
-      <p>{entryDecision.entry.maturityNote}</p>
-      {!entryDecision.enterable
+      <p>{decision.entry.maturityNote}</p>
+      {!decision.enterable
         ? <p>当前产品通道尚未开放此入口。</p>
         : <label>
             选择创作工作区
@@ -183,7 +183,7 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
           </label>}
     </section>
     {error && <p role="alert">{error}</p>}
-    {entryDecision.enterable && scope && project && !error && <section className="lf-paper">
+    {decision.enterable && scope && project && !error && <section className="lf-paper">
       <Suspense fallback={<p>正在读取…</p>}>
         {mode === 'production'
           ? productionDecision.enabled

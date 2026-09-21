@@ -39,7 +39,20 @@
 - `docs/products/UPPER-PRODUCTS.md`
 - `docs/products/TTRPG-AI-KP.md`：跑团 AI KP 专项产品契约。
 - `docs/products/TEXT-ADVENTURE.md`：AI 主导文字冒险专项产品契约。
-- `docs/products/text-adventure-production/README.md`：文字冒险专业生产与旗舰交付的唯一施工入口；其按序链接的 13 份子文档共同构成该专项方案包，不得脱离入口单独提升权威。
+- `docs/products/text-adventure-production/README.md`：文字冒险专业生产与旗舰交付的唯一施工入口；以下 13 份子文档共同构成该专项方案包，不得脱离入口单独提升权威。
+- `docs/products/text-adventure-production/01-DELIVERY-CONTRACT.md`
+- `docs/products/text-adventure-production/02-AGENT-TEAM-AND-SKILLS.md`
+- `docs/products/text-adventure-production/03-SOURCE-SUFFICIENCY-AND-ADAPTATION.md`
+- `docs/products/text-adventure-production/04-STORY-TO-QUEST-AND-SCENE.md`
+- `docs/products/text-adventure-production/05-PRODUCTION-DAG-AND-ARTIFACTS.md`
+- `docs/products/text-adventure-production/06-RUNTIME-MEDIA-PLAYER-AND-DISTRIBUTION.md`
+- `docs/products/text-adventure-production/07-QUALITY-EVAL-AND-ACCEPTANCE.md`
+- `docs/products/text-adventure-production/08-IMPLEMENTATION-AND-DELIVERY-PLAN.md`
+- `docs/products/text-adventure-production/09-MEDIA-AUTHORING-AND-REVISION.md`
+- `docs/products/text-adventure-production/10-MEDIA-QUALITY-AND-BINDING.md`
+- `docs/products/text-adventure-production/11-HUMAN-VISUAL-REVIEW-AND-RECOMMENDATION.md`
+- `docs/products/text-adventure-production/12-PRODUCT-PACKAGE-IMPORT-AND-COMMUNITY-CANDIDATE.md`
+- `docs/products/text-adventure-production/13-FIRST-FLAGSHIP-PRODUCTION-AND-SHOWCASE.md`
 - `docs/ROADMAP.md`
 - `docs/roadmap/README.md`
 - `docs/roadmap/CAPABILITY-BASELINE.md`

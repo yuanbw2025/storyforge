@@ -78,11 +78,11 @@ test('theme categories and dark mobile navigation stay usable', async ({ page })
 })
 
 
-test('shared preview controls inherit the dark palette and standalone preview stays read only', async ({ page }) => {
+test('shared text-adventure surfaces inherit the dark palette and standalone preview stays read only', async ({ page }) => {
   await page.goto('./home/settings')
   await page.getByRole('button', { name: '星穹 · 透光版', exact: true }).click()
   await page.goto('./adventure/play')
-  const colors = await page.locator('.adventure-status').evaluate(el => ({
+  const colors = await page.locator('.lf-paper').first().evaluate(el => ({
     paper: getComputedStyle(el).backgroundColor,
     ink: getComputedStyle(el.querySelector('h3')!).color,
   }))

@@ -32,6 +32,7 @@ import {
   type ProductProductionTaskExecutorV1,
 } from '../product-production/scheduler'
 import { assertProductReleaseUnchanged, parseAnyProductReleaseManifest } from '../product/releases'
+import { compileTextAdventureProductionBriefV1 } from '../adventure/production-brief'
 
 import {
   compileMistHarbor,
@@ -68,6 +69,21 @@ export async function createMistHarborBrief(
     selected[key] = selected[key].filter((resource) => allowed.has(resource))
   const roleBindings = compileUpperProductWorldRoleBindingsV1(mistProductType(edition), selected)
   const resourceKeys = [...new Set(Object.values(selected).flat())].sort()
+  const scale: ProductProductionBriefV3['scale'] = {
+    scope: edition === 'adventure' ? 'chapter' : 'multi-chapter',
+    targetPlayMinutes: 30,
+    targetWordCount: 7000,
+    targetEndingCount: 3,
+  }
+  const media: ProductProductionBriefV3['media'] = {
+    visualLevel: edition === 'avg' ? 'key-scenes' : 'none',
+    audioLevel: 'none',
+    imageCount: edition === 'avg' ? 17 : 0,
+    musicTrackCount: 0,
+    sfxCount: 0,
+    voiceLineCount: 0,
+    requiredMediaKinds: edition === 'avg' ? ['background', 'character-pose', 'cg'] : [],
+  }
   return parseProductProductionBriefV3({
     schema: 'storyforge.product-production-brief',
     version: 3,
@@ -102,16 +118,8 @@ export async function createMistHarborBrief(
       contentBoundaries: ['涉及灾难与失亲，无血腥画面'],
       tone: ['工业海港悬疑', '克制'],
     },
-    scale: { scope: 'multi-chapter', targetPlayMinutes: 30, targetWordCount: 7000, targetEndingCount: 3 },
-    media: {
-      visualLevel: edition === 'avg' ? 'key-scenes' : 'none',
-      audioLevel: 'none',
-      imageCount: edition === 'avg' ? 17 : 0,
-      musicTrackCount: 0,
-      sfxCount: 0,
-      voiceLineCount: 0,
-      requiredMediaKinds: edition === 'avg' ? ['background', 'character-pose', 'cg'] : [],
-    },
+    scale,
+    media,
     consultationBudget: {
       maximumModelCalls: 0,
       maximumInputTokens: 0,
@@ -154,6 +162,17 @@ export async function createMistHarborBrief(
       allowSoftWaivers: false,
     },
     unresolvedDecisionKeys: [],
+    ...(edition === 'adventure' ? {
+      textAdventure: compileTextAdventureProductionBriefV1({
+        scale,
+        media,
+        draft: {
+          sourceTreatment: 'adapt-rich',
+          minimumDistinctRoutes: 3,
+          confirmAll: true,
+        },
+      }),
+    } : {}),
   })
 }
 

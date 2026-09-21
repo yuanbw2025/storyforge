@@ -35,6 +35,22 @@ function manualChunkFor(moduleId: string): string | undefined {
 
   if (id.endsWith('/src/lib/ai/context-builder.ts')) return 'ai-context'
   if (id.endsWith('/src/lib/context-gateway/selector.ts')) return 'context-selector'
+  // The governed text-adventure production contracts are shared by the
+  // scheduler, executor and player-facing package verifier. Keep their large
+  // parsers/assemblers in one cacheable async chunk instead of folding them
+  // into the already substantial generic production executor route chunk.
+  if (/\/src\/lib\/adventure\/(?:dialogue-pass|language-quality|media-composition|narrative-location-plan|production-artifacts(?:-v2)?|production-brief|quality-analysis|scene-script)\.ts$/.test(id)) {
+    return 'text-adventure-production-contracts'
+  }
+  if (id.endsWith('/src/lib/product-production/text-adventure-quality.ts')) {
+    return 'text-adventure-production-contracts'
+  }
+  if (id.endsWith('/src/lib/product-production/product-quality.ts')) {
+    return 'product-production-quality'
+  }
+  if (id.endsWith('/src/lib/product-production/compatibility.ts')) {
+    return 'product-production-quality'
+  }
   // System prompt catalogs are large, immutable data. Keep them in one
   // cacheable chunk instead of making every application release reparse them
   // as part of the route entry bundle.

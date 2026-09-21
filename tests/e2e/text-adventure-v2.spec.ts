@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { openTextAdventurePage } from './helpers/text-adventure-entry'
 
 test('文字冒险 V2 在浏览器中加载冻结插图、系统面板并在刷新后恢复事件状态', async ({ page }) => {
   await page.addInitScript(() => {
@@ -73,11 +74,10 @@ test('文字冒险 V2 在浏览器中加载冻结插图、系统面板并在刷�
       contentHash: blob.contentHash, blobObjectId: blob.id, mimeType: blob.mimeType, byteSize: blob.byteSize,
       inputHash: 'a'.repeat(64),
     })
-    return { sessionId: built.session.id, blobObjectId: blob.id }
+    return { scope: owned.scope, sessionId: built.session.id, blobObjectId: blob.id }
   })
 
-  await page.reload()
-  await page.getByTestId('product-tab-text-games').click()
+  await openTextAdventurePage(page, seeded.scope, 'play')
   const player = page.getByTestId('adventure-game-player')
   await expect(player).toBeVisible({ timeout: 15_000 })
   await player.getByRole('button', { name: /雾潮灯塔 V2 浏览器版/ }).click()
@@ -107,7 +107,6 @@ test('文字冒险 V2 在浏览器中加载冻结插图、系统面板并在刷�
   }, seeded.blobObjectId)
 
   await page.reload()
-  await page.getByTestId('product-tab-text-games').click()
   const restoredPlayer = page.getByTestId('adventure-game-player')
   const restoredLog = restoredPlayer.getByRole('log', { name: '冒险文字记录' })
   const continueButton = restoredPlayer.getByRole('button', { name: /雾潮灯塔 V2 浏览器版/ })
