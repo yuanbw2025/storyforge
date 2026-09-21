@@ -1753,6 +1753,58 @@ export async function verifyProductRuntimeCheckpoint(
   );
 }
 
+export interface RecoveredProductRuntimeCheckpointV1 {
+  checkpoint: ProductRuntimeCheckpoint;
+  damagedCheckpointId: number;
+  recoveryBaseCheckpointId: number | null;
+}
+
+export async function recoverProductRuntimeCheckpointFromEventsV1(
+  checkpointId: number,
+): Promise<RecoveredProductRuntimeCheckpointV1> {
+  const damaged = await db.productRuntimeCheckpoints.get(checkpointId);
+  if (!damaged) throw new Error("待恢复的产品运行检查点不存在。");
+  if (await verifyProductRuntimeCheckpoint(checkpointId)) {
+    throw new Error("产品运行检查点完整，无需恢复。");
+  }
+  const session = await db.productRuntimeSessions.get(damaged.sessionId);
+  if (
+    !session ||
+    session.projectId !== damaged.projectId ||
+    (session.worldGroupId ?? null) !== (damaged.worldGroupId ?? null)
+  ) throw new Error("损坏检查点与产品运行会话作用域不一致。");
+
+  const events = await readSessionEvents(session);
+  const latestSequence = events[events.length - 1]?.sequence ?? 0;
+  if (!Number.isInteger(damaged.throughSequence) || damaged.throughSequence < 0 || damaged.throughSequence > latestSequence) {
+    throw new Error("损坏检查点序号超出可恢复事件范围。");
+  }
+  const recoveryName = `恢复 #${checkpointId} · ${damaged.name}`.slice(0, 200);
+  const candidates = (await db.productRuntimeCheckpoints
+    .where("sessionId").equals(session.id!).toArray())
+    .filter(row => row.id !== checkpointId && row.throughSequence <= damaged.throughSequence)
+    .sort((left, right) => right.throughSequence - left.throughSequence || right.createdAt - left.createdAt);
+  const existing = candidates.find(row => row.throughSequence === damaged.throughSequence && row.name === recoveryName);
+  if (existing?.id != null && await verifyProductRuntimeCheckpoint(existing.id)) {
+    return { checkpoint: existing, damagedCheckpointId: checkpointId, recoveryBaseCheckpointId: null };
+  }
+  let recoveryBaseCheckpointId: number | null = null;
+  for (const candidate of candidates) {
+    if (candidate.throughSequence >= damaged.throughSequence || candidate.id == null) continue;
+    if (await verifyProductRuntimeCheckpoint(candidate.id)) {
+      recoveryBaseCheckpointId = candidate.id;
+      break;
+    }
+  }
+  const checkpoint = await createProductRuntimeCheckpoint({
+    sessionId: session.id!, throughSequence: damaged.throughSequence, name: recoveryName,
+  });
+  if (!await verifyProductRuntimeCheckpoint(checkpoint.id!)) {
+    throw new Error("事件重放生成的恢复检查点未通过完整性复验。");
+  }
+  return { checkpoint, damagedCheckpointId: checkpointId, recoveryBaseCheckpointId };
+}
+
 export interface BranchProductRuntimeSessionInputV1 {
   parentSessionId: number;
   throughSequence: number;

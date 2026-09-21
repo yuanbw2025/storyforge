@@ -13,20 +13,33 @@ const DANGEROUS_TAGS = new Set([
   'animate', 'animatetransform', 'set', 'handler',
 ])
 
-/** 清洗 SVG 字符串，移除脚本/事件/危险协议。失败时返回空串（不渲染）。 */
-export function sanitizeSvg(raw: string): string {
-  if (!raw || !raw.trim()) return ''
+export interface SanitizedSvgResultV1 {
+  sanitized: string
+  removedUnsafeContent: boolean
+}
+
+/**
+ * 清洗 SVG 并报告是否实际移除了不安全内容。分发导入使用该报告区分
+ * “仅序列化格式变化”和“脚本/事件等危险内容被删掉”，不能靠字符串相等猜测。
+ */
+export function sanitizeSvgWithReportV1(raw: string): SanitizedSvgResultV1 {
+  if (!raw || !raw.trim()) return { sanitized: '', removedUnsafeContent: true }
   try {
     const doc = new DOMParser().parseFromString(raw, 'image/svg+xml')
     // 解析错误（parsererror 节点）→ 拒绝
-    if (doc.querySelector('parsererror')) return ''
+    if (doc.querySelector('parsererror')) return { sanitized: '', removedUnsafeContent: true }
     const svg = doc.documentElement
-    if (!svg || svg.nodeName.toLowerCase() !== 'svg') return ''
+    if (!svg || svg.nodeName.toLowerCase() !== 'svg') {
+      return { sanitized: '', removedUnsafeContent: true }
+    }
+
+    let removedUnsafeContent = false
 
     const walk = (el: Element) => {
       // 1. 危险标签整体删除
       for (const child of Array.from(el.children)) {
         if (DANGEROUS_TAGS.has(child.nodeName.toLowerCase())) {
+          removedUnsafeContent = true
           child.remove()
           continue
         }
@@ -35,11 +48,14 @@ export function sanitizeSvg(raw: string): string {
           const name = attr.name.toLowerCase()
           const value = attr.value.replace(/\s+/g, '').toLowerCase()
           if (name.startsWith('on')) {
+            removedUnsafeContent = true
             child.removeAttribute(attr.name)
           } else if ((name === 'href' || name === 'xlink:href' || name === 'src') &&
                      (value.startsWith('javascript:') || value.startsWith('data:text/html'))) {
+            removedUnsafeContent = true
             child.removeAttribute(attr.name)
           } else if (name === 'style' && /expression\(|javascript:/i.test(attr.value)) {
+            removedUnsafeContent = true
             child.removeAttribute(attr.name)
           }
         }
@@ -48,12 +64,23 @@ export function sanitizeSvg(raw: string): string {
     }
     // 根节点自身的事件属性也清掉
     for (const attr of Array.from(svg.attributes)) {
-      if (attr.name.toLowerCase().startsWith('on')) svg.removeAttribute(attr.name)
+      if (attr.name.toLowerCase().startsWith('on')) {
+        removedUnsafeContent = true
+        svg.removeAttribute(attr.name)
+      }
     }
     walk(svg)
 
-    return new XMLSerializer().serializeToString(svg)
+    return {
+      sanitized: new XMLSerializer().serializeToString(svg),
+      removedUnsafeContent,
+    }
   } catch {
-    return ''
+    return { sanitized: '', removedUnsafeContent: true }
   }
+}
+
+/** 清洗 SVG 字符串，移除脚本/事件/危险协议。失败时返回空串（不渲染）。 */
+export function sanitizeSvg(raw: string): string {
+  return sanitizeSvgWithReportV1(raw).sanitized
 }

@@ -15,6 +15,14 @@ import type { Project } from '../types/project'
 const DB_NAME = 'storyforge-fsa'
 const STORE = 'handles'
 
+// A handle selected in the current document does not need an immediate
+// IndexedDB structured-clone round trip. Besides making the Settings/Data
+// Management hand-off cheaper, this avoids a Chromium headless crash observed
+// when an OPFS directory handle is read back in the same document. Reloads and
+// other tabs still recover from IndexedDB, so durable binding semantics stay
+// unchanged.
+const liveHandles = new Map<string, FileSystemDirectoryHandle>()
+
 /** Stable workspace key; survives numeric project id remapping. */
 export const workspaceFolderKey = (workspaceUid: string) => `workspace-${workspaceUid}`
 /** 最近一次绑定的文件夹（首页「从本地文件夹恢复」用，跨项目/库已空时也能找回） */
@@ -41,20 +49,25 @@ export async function saveFolderHandle(key: string, handle: FileSystemDirectoryH
       tx.oncomplete = () => resolve()
       tx.onerror = () => reject(tx.error)
     })
+    liveHandles.set(key, handle)
   } finally {
     db.close()
   }
 }
 
 export async function loadFolderHandle(key: string): Promise<FileSystemDirectoryHandle | null> {
+  const live = liveHandles.get(key)
+  if (live) return live
   const db = await openDB()
   try {
-    return await new Promise<FileSystemDirectoryHandle | null>((resolve, reject) => {
+    const handle = await new Promise<FileSystemDirectoryHandle | null>((resolve, reject) => {
       const tx = db.transaction(STORE, 'readonly')
       const r = tx.objectStore(STORE).get(key)
       r.onsuccess = () => resolve((r.result as FileSystemDirectoryHandle) ?? null)
       r.onerror = () => reject(r.error)
     })
+    if (handle) liveHandles.set(key, handle)
+    return handle
   } finally {
     db.close()
   }
@@ -69,6 +82,7 @@ export async function clearFolderHandle(key: string): Promise<void> {
       tx.oncomplete = () => resolve()
       tx.onerror = () => reject(tx.error)
     })
+    liveHandles.delete(key)
   } finally {
     db.close()
   }

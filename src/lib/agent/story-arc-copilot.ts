@@ -14,7 +14,7 @@ import { prepareGenerationNode } from '../generation/generation-node'
 import { adopt } from '../registry/adopt'
 import { assembleContext } from '../registry/assemble-context'
 import type { AssembleContextResult } from '../registry/types'
-import type { AIConfig, ChatMessage, StoryArc, StoryArcType, WorkspaceScope } from '../types'
+import type { AIConfig, ChatMessage, StoryArc, StoryArcType, StoryCore, WorkspaceScope } from '../types'
 import { parseStages, stringifyStages, type StoryStage } from '../types/story-arc'
 import type { StorylineCrossing, StorylineProgress } from '../types/storyline-progress'
 import {
@@ -241,6 +241,38 @@ async function readSnapshot(
     readOwnedRows<StorylineCrossing & { ragDocumentId?: string }>(resolved, 'storylineCrossings', { owner: 'work' }),
   ])
   return snapshotOf(rows, storyIntent, progress, crossings)
+}
+
+async function readSnapshotForAtomicAdoption(
+  scope: WorkspaceScope,
+  expectedIntent: StoryCoreIntentSnapshotV1,
+): Promise<StoryArcCopilotSnapshot> {
+  const [rows, storyCores, progress, crossings] = await Promise.all([
+    readOwnedRows<StoryArc & { ragDocumentId?: string }>(scope, 'storyArcs', { owner: 'work' }),
+    readOwnedRows<StoryCore>(scope, 'storyCores', { owner: 'work' }),
+    readOwnedRows<StorylineProgress & { ragDocumentId?: string }>(scope, 'storylineProgress', { owner: 'work' }),
+    readOwnedRows<StorylineCrossing & { ragDocumentId?: string }>(scope, 'storylineCrossings', { owner: 'work' }),
+  ])
+  const storyCore = storyCores.sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0))[0] ?? null
+  const currentIntentIdentity = {
+    storyCoreId: storyCore?.id ?? null,
+    ragDocumentId: storyCore?.ragDocumentId ?? null,
+    revision: storyCore?.updatedAt ?? null,
+    values: Object.fromEntries(STORY_INTENT_FIELDS_V1.map(field => [field, storyCore?.[field] ?? ''])),
+  }
+  const expectedIntentIdentity = {
+    storyCoreId: expectedIntent.storyCoreId,
+    ragDocumentId: expectedIntent.ragDocumentId,
+    revision: expectedIntent.revision,
+    values: expectedIntent.values,
+  }
+  if (JSON.stringify(currentIntentIdentity) !== JSON.stringify(expectedIntentIdentity)) {
+    throw new StoryArcCopilotStaleError()
+  }
+  // The current identity and every hashed value are byte-equal to the frozen
+  // candidate snapshot, so the already verified hash is safe to reuse here.
+  // This avoids WebCrypto inside the IndexedDB write transaction.
+  return snapshotOf(rows, expectedIntent, progress, crossings)
 }
 
 function assertAuthorRequest(value: string): string {
@@ -1264,7 +1296,10 @@ async function adoptCandidates(input: {
     db.storylineCrossings,
     db.agentRuns,
   ), async () => {
-    const current = await readSnapshot(input.projectId, scope)
+    // Do not run WebCrypto in the IndexedDB write transaction. The transactional
+    // reader compares the exact intent identity/values and then reuses the
+    // already verified frozen hash, keeping stale validation and adoption atomic.
+    const current = await readSnapshotForAtomicAdoption(scope, input.snapshot.storyIntent)
     if (current.serialized !== input.snapshot.serialized) throw new StoryArcCopilotStaleError()
     const issues = candidateIssues(input.candidates, current, 'mixed', mutation)
       .filter(issue => issue.code !== 'story-arc-kind-mismatch')

@@ -341,4 +341,35 @@ describe('Phase 1.3a · 统一上下文装配层', () => {
     expect(assembled.text).toContain('旧王印记')
     expect(assembled.text).not.toContain('非常长的叙事手法分析')
   })
+
+  it('确定性截断时保留可验签的回退证据和瞬时 exact snapshot', async () => {
+    const scope = await createProject()
+    const exact = `主角在潮门前发现旧王印记，并听见远海警钟。${'潮声仍在逼近。'.repeat(600)}`
+    const assembled = await assembleContext({
+      projectId: scope.projectId,
+      scope,
+      sourceKeys: ['previousChapterEnding'],
+      previousChapterEnding: exact,
+      inputBudgetTokens: 64,
+    })
+
+    expect(assembled.included).toEqual(['previousChapterEnding'])
+    expect(assembled.sourceEvidence?.[0]).toMatchObject({
+      key: 'previousChapterEnding',
+      status: 'included',
+      delivery: 'truncated',
+      compression: {
+        outcome: 'fallback',
+        fallback: 'deterministic-truncation',
+        attempts: 0,
+        failureCode: 'source-budget-exceeded-without-semantic-transformer',
+      },
+    })
+    expect(assembled.sourceEvidence?.[0]?.compression?.sourceHash)
+      .toBe(assembled.sourceEvidence?.[0]?.sourceHash)
+    expect(assembled.sourceSnapshots).toHaveLength(1)
+    expect(assembled.sourceSnapshots?.[0]).toMatchObject({ key: 'previousChapterEnding' })
+    expect(assembled.sourceSnapshots?.[0].content).toContain(exact)
+    expect(assembled.text.length).toBeLessThan(assembled.sourceSnapshots![0].content.length)
+  })
 })

@@ -92,7 +92,7 @@ function skillContract(skillId: AgentSkillId, agentId: DomainAgentId): FutureEvo
   const skill = getAgentSkillV1(skillId, agentId)
   return {
     skillId: skill.id as AgentSkillId,
-    agentId: skill.agentId,
+    agentId,
     contextSourceKeys: [...skill.contextSourceKeys],
     writeTargets: skill.writeTargets.map(target => ({
       table: target.table,

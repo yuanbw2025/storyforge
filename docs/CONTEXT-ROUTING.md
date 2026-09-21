@@ -1,6 +1,6 @@
 # StoryForge 上下文路由
 
-> 版本：2.4.0 · 生效：2026-09-10
+> 版本：2.5.0 · 生效：2026-09-21
 > 目标：保持项目级关联理解，同时只读取当前任务需要的现行文档与源码。三注册表和数据红线不因上下文精简而降低。
 
 ## 1. 默认入口
@@ -28,7 +28,7 @@
 | 短篇、剧本、漫画 | work/adaptation kind、source manifest、产物 owner | `products/INDEPENDENT-CREATION.md`、`roadmap/INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md` 和且仅和目标产品的专项方案、对应领域代码和表/Skill | 另外两个独立创作产品内部实现、世界引擎或游戏媒资的无关实现 |
 | 漫剧前期生产 | MotionDrama Work、source manifest、series/episode、asset/shot/reference、Image/Video Prompt IR | `products/MOTION-DRAMA.md`、`roadmap/MOTION-DRAMA-PREPRODUCTION-DEVELOPMENT-PLAN.md`、对应 motion-drama 代码与三注册表 | 页漫排字/页面、最终视频/剪辑、世界与上层产品媒资内部实现 |
 | 世界引擎 | World draft/release、code/version/completeness、source gateway | `products/WORLD-ENGINE.md`、数据治理、world-engine 代码与三注册表 | 上层运行状态、产品媒资实现 |
-| 跑团/聊天/AI 小镇/文字游戏 | WorldReference、产品 requirement adapter、Brief/SourcePlan/SourceManifest、production/build/release/session | `products/UPPER-PRODUCTS.md`、目标产品代码、中立世界资源协议和 owner | 其它上层产品内部细节 |
+| 跑团/聊天/AI 小镇/文字游戏 | WorldReference、产品 requirement adapter、Brief/SourcePlan/SourceManifest、production/build/release/session | `products/UPPER-PRODUCTS.md`、目标产品代码、中立世界资源协议和 owner；文字冒险还须读取 `products/TEXT-ADVENTURE.md`，专业生产任务再由其路由到 `products/text-adventure-production/README.md` | 其它上层产品内部细节 |
 | 新体系或完整产品 | 总纲阶段、稳定 ID、依赖和当前能力状态 | 总纲、对应产品契约、能力基线、路线图与质量标准 | 旧任务名驱动的历史方案 |
 | PR、合并、发布、交接 | branch/commit/PR/check 状态 | `COLLAB-WORKFLOW.md` 相关段、diff、验证证据 | 协作历史全文 |
 | 并行产品开发 | 产品 ID、共同基线、共享热点、各自 owner | 总纲 §12.1、`COLLAB-WORKFLOW.md` §2.1、产品契约和受影响注册表 | 其它产品内部实现；禁止多分支各改一套共享协议 |

@@ -3,6 +3,7 @@ import { expect, test, type Page, type TestInfo } from '@playwright/test'
 import { publishCurrentWorldRelease, openWorldSection } from './helpers/world-release'
 
 type BrowserMeasurement = {
+  runtimeVerifier: 'playwright-cdp'
   browserName: string
   browserVersion: string
   platform: string
@@ -10,6 +11,7 @@ type BrowserMeasurement = {
   packageHash: string
   previewHash: string
   firstInteractiveBytes: number
+  firstInteractiveAssetKeys: string[]
   cachedSceneLatenciesMs: number[]
   choiceInputLatenciesMs: number[]
   memorySamples: Array<{ elapsedMs: number; usedHeapBytes: number }>
@@ -100,24 +102,35 @@ async function createPerformanceBuild(page: Page) {
   await page.getByTitle('新增主线').click()
   await page.getByRole('button', { name: '添加阶段', exact: true }).click()
   await page.getByRole('button', { name: '添加阶段', exact: true }).click()
-  const pipeline = await publishCurrentWorldRelease(page, '性能验收来源')
-  await pipeline.getByRole('button', { name: '交给文字游戏', exact: true }).click()
+  await publishCurrentWorldRelease(page, '性能验收来源')
 
-  const enableProduction = page.getByRole('button', { name: '为当前项目显式启用', exact: true })
+  // Browser performance is a shared product-platform gate. Exercise it through
+  // AVG's product-owned route instead of borrowing the text-adventure entry.
+  await page.goto('./avg/vision')
+  await page.getByLabel('AVG 作品名称').fill('浏览器性能验收 Build')
+  await page.getByLabel('玩家身份／主角', { exact: true }).fill('潮门信号员')
+  await page.getByLabel('开场与核心目标').fill('持续检查潮门信号，测量选择输入和缓存场景切换。')
+  await page.getByLabel('视觉素材').selectOption('none')
+  await page.getByLabel('音频目标').selectOption('none')
+  if (commercialQuality) await page.getByLabel('制作质量').selectOption('commercial-candidate')
+  await page.getByRole('button', { name: '保存制作方案', exact: true }).click()
+  const avgNavigation = page.getByRole('navigation', { name: 'AVG 页面导航' })
+  await avgNavigation.getByRole('button', { name: '世界引擎', exact: true }).click()
+  await page.getByRole('button', { name: '选择此版本', exact: true }).first().click()
+  await avgNavigation.getByRole('button', { name: '制作台', exact: true }).click()
+  await page.getByRole('navigation', { name: 'AVG 内容导航' })
+    .getByRole('button', { name: '确认制作方案', exact: true }).click()
+
+  const enableProduction = page.getByRole('button', { name: '启用并继续确认', exact: true })
   // This fresh world's production switch is off. Wait for the routed product
   // page before authorizing; an immediate visibility probe can skip this step.
   await enableProduction.click()
 
   await expect(page.getByRole('textbox', { name: '游戏标题', exact: true })).toBeVisible({ timeout: 15_000 })
-  await page.getByRole('combobox', { name: /产品形态/ }).selectOption('avg')
-  await page.getByRole('combobox', { name: /视觉目标/ }).selectOption('none')
-  await page.getByRole('combobox', { name: /音频目标/ }).selectOption('none')
+  await expect(page.getByRole('combobox', { name: /产品形态/ })).toHaveValue('avg')
   await page.getByRole('textbox', { name: '游戏标题', exact: true }).fill('浏览器性能验收 Build')
   await page.getByRole('textbox', { name: '玩家身份 / 主角', exact: true }).fill('扮演潮门信号员')
   await page.getByRole('combobox', { name: '游戏规模', exact: true }).selectOption('scene')
-  if (commercialQuality) {
-    await page.getByRole('combobox', { name: /制作质量/ }).selectOption('commercial-candidate')
-  }
   await page.getByRole('textbox', { name: /你想玩的第一幕与核心目标/ }).fill('持续检查潮门信号，测量选择输入和缓存场景切换。')
   await page.getByRole('button', { name: '分析可玩起点', exact: true }).click()
   await page.getByRole('button', { name: '生成严格 Brief', exact: true }).click()
@@ -165,22 +178,24 @@ async function readBuildProbe(page: Page) {
   return page.evaluate(async () => {
     const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
     const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const { createProductFirstInteractiveResourcePlanV1 } = await importer('/storyforge/src/lib/product-production/first-interactive-resources.ts')
     const build = await db.productBuilds.orderBy('id').last()
     if (!build) throw new Error('性能验收 Build 不存在')
-    const artifacts = await db.productBuildArtifacts.where('buildId').equals(build.id).toArray()
-    const blockingMediaBytes = artifacts
-      .filter((artifact: { blobObjectId?: number | null; byteSize?: number }) => artifact.blobObjectId != null)
-      .reduce((sum: number, artifact: { byteSize?: number }) => sum + Number(artifact.byteSize || 0), 0)
-    const packageBytes = new TextEncoder().encode(build.previewManifestJson).byteLength
+    const preview = JSON.parse(build.previewManifestJson)
+    const firstInteractive = createProductFirstInteractiveResourcePlanV1({
+      previewManifestJson: build.previewManifestJson,
+      runtimePackage: preview.runtimePackage,
+    })
     return {
       buildId: build.id as number,
       scope: { projectId: build.projectId, worldId: build.worldId, workId: build.workId },
       packageHash: build.packageHash as string,
       previewHash: build.previewHash as string,
-      // V3's 12 MiB gate is explicitly the first-interactive game package and
-      // blocking media, not the development server's unbundled application
-      // modules. Application JS/CSS has its separate bundle-size release gate.
-      firstInteractiveBytes: packageBytes + blockingMediaBytes,
+      // The 12 MiB gate covers the verified Preview JSON plus only media used
+      // by the first playable surface. The long-run phase still decodes and
+      // exercises the complete catalog; bundle size has its own release gate.
+      firstInteractiveBytes: firstInteractive.totalBytes,
+      firstInteractiveAssetKeys: firstInteractive.assetKeys,
     }
   })
 }
@@ -257,9 +272,11 @@ test('真实浏览器采样写入 Build 回执；smoke 不冒充商业通过', a
   const browserVersion = await page.evaluate(() => navigator.userAgent)
   const viewport = page.viewportSize() ?? { width: 1280, height: 720 }
   const measurement: BrowserMeasurement = {
+    runtimeVerifier: 'playwright-cdp',
     browserName, browserVersion, platform: await page.evaluate(() => navigator.platform || 'desktop'),
     viewport, packageHash: probe.packageHash, previewHash: probe.previewHash,
     firstInteractiveBytes: probe.firstInteractiveBytes,
+    firstInteractiveAssetKeys: probe.firstInteractiveAssetKeys,
     cachedSceneLatenciesMs: [], choiceInputLatenciesMs: [], memorySamples: [], measuredAt: Date.now(),
   }
 
@@ -318,7 +335,9 @@ test('真实浏览器采样写入 Build 回执；smoke 不冒充商业通过', a
   // relying on test attachments or a hidden database row.
   const exitImmersivePlayer = page.getByRole('button', { name: '退出游戏', exact: true })
   if (await exitImmersivePlayer.isVisible().catch(() => false)) await exitImmersivePlayer.click()
-  await page.getByRole('navigation', { name: '开发体验模式' }).getByRole('button', { name: '制作', exact: true }).click()
+  await page.getByRole('navigation', { name: 'AVG 页面导航' }).getByRole('button', { name: '制作台', exact: true }).click()
+  await page.getByRole('navigation', { name: 'AVG 内容导航' })
+    .getByRole('button', { name: '制作流程', exact: true }).click()
   const receiptPanel = page.getByTestId('product-production-performance-receipt')
   await expect(receiptPanel).toBeVisible()
   await expect(receiptPanel).toContainText(

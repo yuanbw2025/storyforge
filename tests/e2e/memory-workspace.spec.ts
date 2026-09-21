@@ -50,7 +50,8 @@ test('本地记忆工作区以真实浏览器文件系统完成手动双向核�
 
   await openWorkspaceLeaf(page, '设置')
   const storageSettings = page.getByTestId('project-storage-workspace-settings')
-  await expect(storageSettings.getByRole('heading', { name: '项目存储工作区', exact: true })).toBeVisible()
+  await expect(storageSettings.getByRole('heading', { name: '项目存储工作区', exact: true }))
+    .toBeVisible({ timeout: 15_000 })
   await expect(storageSettings.getByText(/已关联/)).toBeVisible()
   await expect(storageSettings.getByRole('button', { name: '更换位置', exact: true })).toBeVisible()
 

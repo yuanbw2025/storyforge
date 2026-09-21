@@ -22,6 +22,7 @@ import { isSha256Hash, canonicalProductProductionJsonV2 } from './hash'
 import { parseProductRuntimePackageV1, parseProductWorldSourceSelectionV1 } from './runtime-package'
 import { parseTtrpgProductionBriefV2 } from '../ttrpg/production-brief'
 import { parseAiTownProductionBriefV1 } from '../ai-town/contracts'
+import { parseTextAdventureProductionBriefV1 } from '../adventure/production-brief'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -220,13 +221,24 @@ function parseEvolutionBase(value: unknown, label: string): ProductEvolutionBase
     if (!isSha256Hash(base.manifestHash)) fail(`${label}.manifestHash 无效`)
     return { kind: 'build', buildNumber: positiveId(base.buildNumber, `${label}.buildNumber`), manifestHash: base.manifestHash }
   }
+  if (base.kind === 'recovery-build') {
+    exactKeys(base, ['kind', 'buildNumber', 'briefHash', 'planHash', 'controlEpoch'], label)
+    if (!isSha256Hash(base.briefHash) || !isSha256Hash(base.planHash)) fail(`${label} recovery hash 无效`)
+    return {
+      kind: 'recovery-build',
+      buildNumber: positiveId(base.buildNumber, `${label}.buildNumber`),
+      briefHash: base.briefHash,
+      planHash: base.planHash,
+      controlEpoch: finite(base.controlEpoch, `${label}.controlEpoch`, Number.MAX_SAFE_INTEGER, true),
+    }
+  }
   exactKeys(base, ['kind', 'productReleaseId', 'contentHash'], label)
   if (base.kind !== 'release' || !isSha256Hash(base.contentHash)) fail(`${label} release 无效`)
   return { kind: 'release', productReleaseId: positiveId(base.productReleaseId, `${label}.productReleaseId`), contentHash: base.contentHash }
 }
 
 const EVOLUTION_LANES: readonly ProductEvolutionAffectedLaneV1[] = [
-  'content', 'product', 'visual', 'audio', 'world-source',
+  'content', 'product', 'visual', 'audio', 'runtime', 'world-source', 'production-budget', 'execution-plan',
 ]
 
 function parseEvolutionImpact(value: unknown): ProductEvolutionImpactV1 {
@@ -258,6 +270,7 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     ...(Object.prototype.hasOwnProperty.call(row, 'avgRevision') ? ['avgRevision'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'ttrpg') ? ['ttrpg'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'aiTown') ? ['aiTown'] : []),
+    ...(Object.prototype.hasOwnProperty.call(row, 'textAdventure') ? ['textAdventure'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'authorConfirmations') ? ['authorConfirmations'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'evolution') ? ['evolution'] : []),
   ], 'brief')
@@ -325,6 +338,9 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     ...(Object.prototype.hasOwnProperty.call(row, 'aiTown')
       ? { aiTown: parseAiTownProductionBriefV1(row.aiTown) }
       : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'textAdventure')
+      ? { textAdventure: parseTextAdventureProductionBriefV1(row.textAdventure) }
+      : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'authorConfirmations')
       ? { authorConfirmations: (() => {
         const confirmations = record(row.authorConfirmations, 'authorConfirmations')
@@ -373,6 +389,21 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
       fail('AI 小镇未确认状态必须登记 unresolved decision')
     }
   }
+  if ((parsed.intent.productType === 'text-adventure') !== (parsed.textAdventure != null)) {
+    fail('text-adventure 产品与 TextAdventureProductionBriefV1 不闭合')
+  }
+  if (parsed.textAdventure) {
+    if (parsed.scale.targetPlayMinutes > 120 || ['multi-chapter', 'campaign'].includes(parsed.scale.scope)) {
+      fail('文字冒险第一阶段只允许 15–120 分钟的有限篇幅')
+    }
+    if (parsed.textAdventure.narrative.targetEndingCount !== parsed.scale.targetEndingCount) {
+      fail('文字冒险结局目标与通用规模不一致')
+    }
+    const confirmationUnresolved = parsed.unresolvedDecisionKeys.includes('text-adventure-boundary-confirmation')
+    if (confirmationUnresolved === Object.values(parsed.textAdventure.confirmations).every(Boolean)) {
+      fail('文字冒险边界确认状态与 unresolvedDecisionKeys 不一致')
+    }
+  }
   if (parsed.ttrpg) {
     if (parsed.ttrpg.campaignDesign.sourceWorldContentHash !== parsed.source.worldContentHash) {
       fail('TTRPG 战役提案来源与冻结 WorldRelease 不一致')
@@ -408,7 +439,10 @@ function parseResolution(value: unknown): ProductProductionBlockerResolutionV1 {
   exactKeys(row, ['action', 'note', ...(row.action === 'author-edit' ? ['authorDraftJson'] : [])], 'resolution')
   if (row.action === 'author-edit') record(JSON.parse(text(row.authorDraftJson, 'resolution.authorDraftJson', 120000)), 'authorDraft')
   return {
-    action: enumValue(row.action, ['retry', 'author-edit', 'fallback', 'waive-soft-gate', 'change-capability', 'cancel'], 'resolution.action'),
+    action: enumValue(row.action, [
+      'retry', 'author-edit', 'fallback', 'waive-soft-gate', 'change-capability',
+      'accept-product-private-expansion', 'confirm-character-anchors', 'cancel',
+    ], 'resolution.action'),
     note: text(row.note, 'resolution.note', 4000),
     ...(row.action === 'author-edit' ? { authorDraftJson: text(row.authorDraftJson, 'resolution.authorDraftJson', 120000) } : {}),
   }
@@ -441,6 +475,95 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
   if (type === 'restore') return { type, commandId: commandHeader(row, type, ['expectedStateRevision']), expectedStateRevision: expectedRevision(row.expectedStateRevision) }
   if (type === 'resolve-blocker') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'blockerKey', 'resolution']), expectedStateRevision: expectedRevision(row.expectedStateRevision), blockerKey: stableKey(row.blockerKey, 'blockerKey'), resolution: parseResolution(row.resolution) }
   if (type === 'request-preview') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'buildNumber']), expectedStateRevision: expectedRevision(row.expectedStateRevision), buildNumber: positiveId(row.buildNumber, 'buildNumber') }
+  if (type === 'revise-media-asset') {
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision', 'buildNumber', 'artifactKey', 'expectedArtifactHash', 'action',
+      ...(Object.prototype.hasOwnProperty.call(row, 'repairFeedback') ? ['repairFeedback'] : []), 'replacement',
+    ])
+    if (!isSha256Hash(row.expectedArtifactHash)) fail('expectedArtifactHash 无效')
+    const action = enumValue(row.action, ['upload-replacement', 'regenerate', 'lock', 'unlock'], 'action')
+    let repairFeedback: Extract<ProductProductionCommandV1, { type: 'revise-media-asset' }>['repairFeedback'] = null
+    if (row.repairFeedback != null) {
+      const item = record(row.repairFeedback, 'repairFeedback')
+      exactKeys(item, [
+        'sourceGateReceiptHash', 'sourceEvidenceHash', 'priorContentHash', 'note',
+      ], 'repairFeedback')
+      if (!isSha256Hash(item.sourceGateReceiptHash) || !isSha256Hash(item.sourceEvidenceHash)
+        || !isSha256Hash(item.priorContentHash)) fail('repairFeedback hash 无效')
+      repairFeedback = {
+        sourceGateReceiptHash: item.sourceGateReceiptHash,
+        sourceEvidenceHash: item.sourceEvidenceHash,
+        priorContentHash: item.priorContentHash,
+        note: text(item.note, 'repairFeedback.note', 2_000),
+      }
+    }
+    let replacement: Extract<ProductProductionCommandV1, { type: 'revise-media-asset' }>['replacement'] = null
+    if (row.replacement != null) {
+      const item = record(row.replacement, 'replacement')
+      exactKeys(item, [
+        'blobObjectId', 'contentHash', 'mimeType', 'byteSize', 'width', 'height', 'altText',
+        'license', 'commercialUse', 'redistribution', 'declaration', 'attribution',
+      ], 'replacement')
+      if (!isSha256Hash(item.contentHash)) fail('replacement.contentHash 无效')
+      if (typeof item.commercialUse !== 'boolean' || typeof item.redistribution !== 'boolean') {
+        fail('replacement 权利布尔值无效')
+      }
+      const byteSize = finite(item.byteSize, 'replacement.byteSize', 100 * 1024 * 1024, true)
+      const width = finite(item.width, 'replacement.width', 10_000, true)
+      const height = finite(item.height, 'replacement.height', 10_000, true)
+      if (byteSize < 1 || width < 1 || height < 1) fail('replacement 大小与尺寸必须为正整数')
+      replacement = {
+        blobObjectId: positiveId(item.blobObjectId, 'replacement.blobObjectId'),
+        contentHash: item.contentHash,
+        mimeType: enumValue(item.mimeType, ['image/png', 'image/jpeg', 'image/webp'], 'replacement.mimeType'),
+        byteSize, width, height,
+        altText: text(item.altText, 'replacement.altText', 1_000),
+        license: text(item.license, 'replacement.license', 500),
+        commercialUse: item.commercialUse,
+        redistribution: item.redistribution,
+        declaration: text(item.declaration, 'replacement.declaration', 4_000),
+        attribution: text(item.attribution, 'replacement.attribution', 1_000),
+      }
+    }
+    if ((action === 'upload-replacement') !== (replacement != null)) {
+      fail('仅 upload-replacement 必须携带 replacement')
+    }
+    if ((action === 'regenerate') !== (repairFeedback != null)) {
+      fail('仅 regenerate 必须携带已冻结的作者退回证据')
+    }
+    return {
+      type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      buildNumber: positiveId(row.buildNumber, 'buildNumber'),
+      artifactKey: stableKey(row.artifactKey, 'artifactKey'),
+      expectedArtifactHash: row.expectedArtifactHash,
+      action, repairFeedback, replacement,
+    }
+  }
+  if (type === 'revise-media-assets') {
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision', 'buildNumber', 'action', 'targets',
+    ])
+    if (row.action !== 'regenerate' || !Array.isArray(row.targets)
+      || row.targets.length < 1 || row.targets.length > 24) {
+      fail('批量媒资修订只允许 1–24 个 regenerate 目标')
+    }
+    const targets = row.targets.map((value, index) => {
+      const target = record(value, `targets[${index}]`)
+      exactKeys(target, ['artifactKey', 'expectedArtifactHash'], `targets[${index}]`)
+      if (!isSha256Hash(target.expectedArtifactHash)) fail(`targets[${index}].expectedArtifactHash 无效`)
+      return {
+        artifactKey: stableKey(target.artifactKey, `targets[${index}].artifactKey`),
+        expectedArtifactHash: target.expectedArtifactHash,
+      }
+    })
+    if (new Set(targets.map(target => target.artifactKey)).size !== targets.length) {
+      fail('批量媒资修订目标重复')
+    }
+    return {
+      type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      buildNumber: positiveId(row.buildNumber, 'buildNumber'), action: 'regenerate', targets,
+    }
+  }
   if (type === 'publish') {
     const commandId = commandHeader(row, type, ['expectedStateRevision', 'buildNumber', 'expectedManifestHash', 'adoptionIntentHash'])
     if (!isSha256Hash(row.expectedManifestHash) || !isSha256Hash(row.adoptionIntentHash)) fail('publish hash 无效')

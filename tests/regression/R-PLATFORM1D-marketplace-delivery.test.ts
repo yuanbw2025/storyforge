@@ -9,6 +9,7 @@ import {
 import { createCommercialGatewayV1 } from '../../src/lib/commercial/gateway'
 import { createCommercialFetchHandlerV1 } from '../../src/lib/commercial/fetch-service'
 import { CommercialHttpClientV1 } from '../../src/lib/commercial/http-client'
+import { encodeCommercialDiscoveryCursorV1 } from '../../src/lib/commercial/discovery-cursor'
 import { createCommercialReleaseDeliveryGatewayV1 } from '../../src/lib/commercial/release-delivery-gateway'
 import {
   CommercialReleaseDeliveryServiceV1,
@@ -117,9 +118,8 @@ describe('PLATFORM-1D · creator upload to buyer playable local copy', () => {
     const creatorWorkspace = await workspace('创作者')
     const bundle = await releaseBundle(creatorWorkspace.scope)
     const authority = await CommercialPlatformAuthorityV1.create({ persistence: new CommercialStore() })
-    const delivery = new CommercialReleaseDeliveryServiceV1(
-      authority, new InMemoryCommercialReleaseDeliveryPersistenceV1(),
-    )
+    const deliveryPersistence = new InMemoryCommercialReleaseDeliveryPersistenceV1()
+    const delivery = new CommercialReleaseDeliveryServiceV1(authority, deliveryPersistence)
     const commercial = createCommercialGatewayV1({
       authority, identity, releaseDelivery: delivery, webhookSecret: 'delivery-test-secret-at-least-16',
       checkoutProvider: { createOrResumeSession: async order => ({
@@ -181,9 +181,8 @@ describe('PLATFORM-1D · creator upload to buyer playable local copy', () => {
     const creatorWorkspace = await workspace('HTTP 创作者')
     const bundle = await releaseBundle(creatorWorkspace.scope)
     const authority = await CommercialPlatformAuthorityV1.create({ persistence: new CommercialStore() })
-    const delivery = new CommercialReleaseDeliveryServiceV1(
-      authority, new InMemoryCommercialReleaseDeliveryPersistenceV1(),
-    )
+    const deliveryPersistence = new InMemoryCommercialReleaseDeliveryPersistenceV1()
+    const delivery = new CommercialReleaseDeliveryServiceV1(authority, deliveryPersistence)
     const commercial = createCommercialGatewayV1({
       authority, identity, releaseDelivery: delivery, webhookSecret: 'http-test-secret-at-least-16',
       checkoutProvider: { createOrResumeSession: async order => ({
@@ -216,7 +215,22 @@ describe('PLATFORM-1D · creator upload to buyer playable local copy', () => {
     await expect(client.publishListing({
       accessToken: TOKEN_PUBLISHER, requestId: 'http.publish.missing', listingId: listing.listingId,
     })).rejects.toMatchObject({ code: 'release_delivery_missing', status: 409 })
-    await client.registerRelease({ accessToken: TOKEN_CREATOR, requestId: 'http.upload', bundle })
+    const firstUpload = await client.registerRelease({
+      accessToken: TOKEN_CREATOR, requestId: 'http.upload', bundle,
+    })
+    const exactUploadRetry = await client.registerRelease({
+      accessToken: TOKEN_CREATOR, requestId: 'http.upload', bundle,
+    })
+    expect(firstUpload).toEqual(exactUploadRetry)
+    expect(firstUpload).toMatchObject({ duplicate: false })
+    expect(firstUpload).not.toHaveProperty('textAdventureReview')
+    await expect(deliveryPersistence.loadUploadRequest({
+      creatorId: 'user.creator', requestId: 'http.upload',
+    })).resolves.toMatchObject({
+      status: 'completed', listingId: null, candidateHash: null,
+      releaseHash: bundle.productRelease.contentHash, bundleHash: bundle.bundleHash,
+      result: firstUpload,
+    })
     await client.submitListing({
       accessToken: TOKEN_CREATOR, requestId: 'http.submit.ready', listingId: listing.listingId,
     })
@@ -234,4 +248,36 @@ describe('PLATFORM-1D · creator upload to buyer playable local copy', () => {
     })
     await expect(assertProductReleaseUnchanged(imported.id!)).resolves.toMatchObject({ id: imported.id })
   }, 40_000)
+
+  it('HTTP client 只接受与当前筛选绑定的规范 opaque discovery cursor', async () => {
+    const cursor = encodeCommercialDiscoveryCursorV1({
+      productType: 'text-adventure', query: '潮钟', updatedAt: 123,
+      listingId: 'listing.cursor-anchor',
+    })
+    let calls = 0
+    const client = new CommercialHttpClientV1({
+      baseUrl: 'https://api.storyforge.test',
+      fetch: async () => {
+        calls += 1
+        return new Response('[]', {
+          status: 200,
+          headers: { 'content-type': 'application/json', 'x-storyforge-next-cursor': cursor },
+        })
+      },
+    })
+    await expect(client.discoverPage({ productType: 'text-adventure', query: ' 潮钟 ' }))
+      .resolves.toEqual({ items: [], nextCursor: cursor })
+    await expect(client.discoverPage({
+      productType: 'text-adventure', query: '另一筛选', cursor,
+    })).rejects.toMatchObject({ code: 'protocol' })
+    expect(calls).toBe(1)
+
+    const malformed = new CommercialHttpClientV1({
+      baseUrl: 'https://api.storyforge.test',
+      fetch: async () => new Response('[]', {
+        status: 200, headers: { 'x-storyforge-next-cursor': '50' },
+      }),
+    })
+    await expect(malformed.discoverPage()).rejects.toMatchObject({ code: 'protocol' })
+  })
 })

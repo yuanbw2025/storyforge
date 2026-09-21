@@ -8,6 +8,11 @@ import {
 import { CommercialWebhookErrorV1, verifyCommercialWebhookWithSecretsV1 } from './webhook'
 import type { CommercialPaymentEventV1 } from './webhook'
 import { PRODUCTION_PRODUCT_KINDS_V1, type ProductionProductKindV1 } from '../types'
+import {
+  encodeCommercialDiscoveryCursorV1,
+  isCommercialListingAfterCursorV1,
+  parseCommercialDiscoveryCursorV1,
+} from './discovery-cursor'
 
 export interface CommercialGatewayRequestV1 {
   method: string
@@ -41,7 +46,15 @@ export interface CommercialGatewayAuditV1 {
 }
 
 export interface CommercialReleaseReadinessV1 {
-  hasVerifiedRelease(input: { releaseHash: string; creatorId: string }): Promise<boolean>
+  hasVerifiedRelease(input: {
+    releaseHash: string
+    creatorId: string
+    listingId?: string
+    productType?: ProductionProductKindV1
+    verification?: 'full' | 'attestation'
+    /** Discovery callers always supply a deadline-bound signal. Adapters must abort external I/O. */
+    signal?: AbortSignal
+  }): Promise<boolean>
 }
 
 export interface CommercialCheckoutSessionV1 {
@@ -140,7 +153,7 @@ function statusFor(code: string): number {
   if (['forbidden', 'self_purchase', 'entitlement_required', 'license_forbidden', 'release_forbidden'].includes(code)) return 403
   if (['listing_not_found', 'order_not_found', 'entitlement_missing'].includes(code)) return 404
   if (['request_conflict', 'event_conflict', 'already_owned', 'payment_pending', 'invalid_transition', 'checkout_invalid',
-    'persistence_conflict', 'release_delivery_missing', 'release_conflict', 'release_corrupt'].includes(code)) return 409
+    'persistence_conflict', 'release_delivery_missing', 'release_conflict', 'release_corrupt', 'candidate_missing'].includes(code)) return 409
   if (code === 'payload_too_large') return 413
   if (['signature', 'stale'].includes(code)) return 401
   if (code === 'configuration') return 503
@@ -183,6 +196,58 @@ async function webhookSecrets(input: {
     .map(key => key.secret)
 }
 
+function createSharedSemaphore(limit: number): {
+  acquire(signal: AbortSignal): Promise<(() => void) | null>
+} {
+  let active = 0
+  const queue: Array<{
+    signal: AbortSignal
+    resolve: (release: (() => void) | null) => void
+    abort: () => void
+  }> = []
+  const releaseToken = () => {
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      active -= 1
+      while (queue.length > 0) {
+        const next = queue.shift()!
+        next.signal.removeEventListener('abort', next.abort)
+        if (next.signal.aborted) {
+          next.resolve(null)
+          continue
+        }
+        active += 1
+        next.resolve(releaseToken())
+        break
+      }
+    }
+  }
+  return {
+    acquire(signal) {
+      if (signal.aborted) return Promise.resolve(null)
+      if (active < limit) {
+        active += 1
+        return Promise.resolve(releaseToken())
+      }
+      return new Promise(resolve => {
+        const waiter = {
+          signal,
+          resolve,
+          abort: () => {
+            const index = queue.indexOf(waiter)
+            if (index >= 0) queue.splice(index, 1)
+            resolve(null)
+          },
+        }
+        queue.push(waiter)
+        signal.addEventListener('abort', waiter.abort, { once: true })
+      })
+    },
+  }
+}
+
 /**
  * Framework-neutral commercial API boundary. Deployment adapters own TLS,
  * identity sessions, rate limits and raw-body capture. Neither bearer tokens,
@@ -199,12 +264,58 @@ export function createCommercialGatewayV1(input: {
   webhookSecrets?: CommercialWebhookSecretProviderV1
   audit?: (entry: CommercialGatewayAuditV1) => void | Promise<void>
   now?: () => number
+  maximumDiscoveryPageSize?: number
+  discoveryVerificationConcurrency?: number
+  discoveryVerificationTimeoutMs?: number
 }) {
   if ((typeof input.webhookSecret === 'string') === Boolean(input.webhookSecrets)) {
     throw new Error('[commercial-gateway:configuration] webhookSecret 与 webhookSecrets 必须且只能配置一个')
   }
   if (typeof input.webhookSecret === 'string' && input.webhookSecret.length < 16) {
     throw new Error('[commercial-gateway:configuration] webhookSecret 长度不足')
+  }
+  const maximumDiscoveryPageSize = input.maximumDiscoveryPageSize ?? 50
+  const discoveryVerificationConcurrency = input.discoveryVerificationConcurrency ?? 4
+  const discoveryVerificationTimeoutMs = input.discoveryVerificationTimeoutMs ?? 2_000
+  if (!Number.isInteger(maximumDiscoveryPageSize) || maximumDiscoveryPageSize < 1
+    || maximumDiscoveryPageSize > 100
+    || !Number.isInteger(discoveryVerificationConcurrency) || discoveryVerificationConcurrency < 1
+    || discoveryVerificationConcurrency > 16
+    || !Number.isInteger(discoveryVerificationTimeoutMs) || discoveryVerificationTimeoutMs < 10
+    || discoveryVerificationTimeoutMs > 30_000) {
+    throw new Error('[commercial-gateway:configuration] 发现分页或验证并发配置无效')
+  }
+  const discoveryVerificationSemaphore = createSharedSemaphore(discoveryVerificationConcurrency)
+  const verifyDiscoveryCandidate = async (listing: {
+    releaseHash: string
+    creatorId: string
+    listingId: string
+    productType: ProductionProductKindV1
+  }): Promise<boolean> => {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), discoveryVerificationTimeoutMs)
+    let abortListener: (() => void) | null = null
+    try {
+      const release = await discoveryVerificationSemaphore.acquire(controller.signal)
+      if (!release) return false
+      const aborted = new Promise<boolean>(resolve => {
+        abortListener = () => resolve(false)
+        if (controller.signal.aborted) resolve(false)
+        else controller.signal.addEventListener('abort', abortListener, { once: true })
+      })
+      // Keep the shared permit until the adapter really settles. If an adapter
+      // ignores AbortSignal, the public request still fails closed at deadline,
+      // while the leaked external I/O cannot make later requests exceed budget.
+      const verification = input.releaseDelivery.hasVerifiedRelease({
+        releaseHash: listing.releaseHash, creatorId: listing.creatorId,
+        listingId: listing.listingId, productType: listing.productType,
+        verification: 'attestation', signal: controller.signal,
+      }).then(value => value === true, () => false).finally(release)
+      return await Promise.race([verification, aborted])
+    } finally {
+      clearTimeout(timeout)
+      if (abortListener) controller.signal.removeEventListener('abort', abortListener)
+    }
   }
   const now = input.now ?? (() => Date.now())
   return async (request: CommercialGatewayRequestV1): Promise<CommercialGatewayResponseV1> => {
@@ -246,16 +357,49 @@ export function createCommercialGatewayV1(input: {
         const body = record(request.body)
         requestId = typeof body.requestId === 'string' ? body.requestId : null
         if (request.path === '/v1/commercial/discover') {
-          fields(body, [], ['productType', 'query'])
+          fields(body, [], ['productType', 'query', 'cursor', 'limit'])
           const products: readonly ProductionProductKindV1[] = PRODUCTION_PRODUCT_KINDS_V1
           if ((body.productType != null && (typeof body.productType !== 'string' || !products.includes(body.productType as ProductionProductKindV1)))
-            || (body.query != null && typeof body.query !== 'string')) {
+            || (body.query != null && (typeof body.query !== 'string' || body.query.length > 500))
+            || (body.cursor != null && typeof body.cursor !== 'string')
+            || (body.limit != null && (!Number.isInteger(body.limit) || Number(body.limit) < 1
+              || Number(body.limit) > maximumDiscoveryPageSize))) {
             throw new CommercialAuthorityErrorV1('protocol', '发现筛选字段无效')
           }
-          result = response(200, input.authority.discover({
-            productType: body.productType as ProductionProductKindV1 | undefined,
-            query: body.query as string | undefined,
-          }))
+          const productType = body.productType as ProductionProductKindV1 | undefined
+          const query = body.query as string | undefined
+          const cursor = body.cursor == null ? null : parseCommercialDiscoveryCursorV1({
+            value: body.cursor, productType, query,
+          })
+          if (body.cursor != null && !cursor) {
+            throw new CommercialAuthorityErrorV1('protocol', '发现分页游标无效或不属于当前筛选')
+          }
+          const discovered = input.authority.discover({ productType, query })
+            .filter(listing => !cursor || isCommercialListingAfterCursorV1(listing, cursor))
+          const pageSize = body.limit == null ? maximumDiscoveryPageSize : Number(body.limit)
+          const candidates = discovered.slice(0, pageSize)
+          const hasMore = discovered.length > candidates.length
+          const accepted = new Array<boolean>(candidates.length).fill(false)
+          let nextCandidateIndex = 0
+          const workers = Array.from({
+            length: Math.min(discoveryVerificationConcurrency, candidates.length),
+          }, async () => {
+            while (true) {
+              const index = nextCandidateIndex
+              nextCandidateIndex += 1
+              const listing = candidates[index]
+              if (!listing) return
+              accepted[index] = await verifyDiscoveryCandidate(listing)
+            }
+          })
+          await Promise.all(workers)
+          result = response(200, candidates.filter((_listing, index) => accepted[index]))
+          const lastCandidate = candidates[candidates.length - 1]
+          if (hasMore && lastCandidate) {
+            result.headers['x-storyforge-next-cursor'] = encodeCommercialDiscoveryCursorV1({
+              productType, query, updatedAt: lastCandidate.updatedAt, listingId: lastCandidate.listingId,
+            })
+          }
         } else {
           const principal = await authenticate(input.identity, request)
           userId = principal.userId
@@ -284,6 +428,8 @@ export function createCommercialGatewayV1(input: {
             })
             if (!await input.releaseDelivery.hasVerifiedRelease({
               releaseHash: listing.releaseHash, creatorId: listing.creatorId,
+              listingId: listing.listingId, productType: listing.productType,
+              verification: 'attestation',
             })) {
               throw new CommercialAuthorityErrorV1('release_delivery_missing', '提交审核前必须上传并验证完整发行物')
             }
@@ -298,6 +444,8 @@ export function createCommercialGatewayV1(input: {
             })
             if (!await input.releaseDelivery.hasVerifiedRelease({
               releaseHash: listing.releaseHash, creatorId: listing.creatorId,
+              listingId: listing.listingId, productType: listing.productType,
+              verification: 'full',
             })) {
               throw new CommercialAuthorityErrorV1('release_delivery_missing', '发布前必须上传并验证完整发行物')
             }
@@ -336,6 +484,14 @@ export function createCommercialGatewayV1(input: {
             }))
           } else if (request.path === '/v1/commercial/acquisitions') {
             fields(body, ['requestId', 'listingId'])
+            const listing = input.authority.listingForAcquisition({ listingId: body.listingId as string })
+            if (!await input.releaseDelivery.hasVerifiedRelease({
+              releaseHash: listing.releaseHash, creatorId: listing.creatorId,
+              listingId: listing.listingId, productType: listing.productType,
+              verification: 'attestation',
+            })) {
+              throw new CommercialAuthorityErrorV1('release_delivery_missing', '目录项缺少服务端验证的发行物或候选记录')
+            }
             const acquisition = await input.authority.beginAcquisition({
               principal, requestId: body.requestId as string, listingId: body.listingId as string,
             })

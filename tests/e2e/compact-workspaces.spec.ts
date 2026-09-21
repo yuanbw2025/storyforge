@@ -24,13 +24,17 @@ for (const width of [1440, 1920, 768, 390]) {
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), `${route} page overflow`).toBe(true)
     }
-    for (const route of ['adventure/vision', 'openworld/vision']) {
-      await page.goto(`./${route}`)
-      await expect(page.getByRole('note')).toBeVisible()
-      const previewMain = page.locator('.main')
-      await expect(previewMain).toBeVisible()
-      expect((await previewMain.boundingBox())!.width).toBeGreaterThan(width - (width > 650 ? 155 : 2))
-    }
+    await page.goto('./adventure/vision')
+    await expect(page.getByText('文字冒险 · 可验证预览', { exact: true })).toBeVisible()
+    const adventureMain = page.locator('.lf-main').first()
+    await expect(adventureMain).toBeVisible()
+    expect((await adventureMain.boundingBox())!.width).toBeGreaterThan(width - (width > 650 ? 155 : 2))
+
+    await page.goto('./openworld/vision')
+    await expect(page.getByRole('note')).toBeVisible()
+    const previewMain = page.locator('.main')
+    await expect(previewMain).toBeVisible()
+    expect((await previewMain.boundingBox())!.width).toBeGreaterThan(width - (width > 650 ? 155 : 2))
   })
 }
 

@@ -44,6 +44,7 @@ const LAYERS_BY_TRIM_PRIORITY: ContextLayer[] = ['L3', 'L2', 'L1']
 interface KeyedContextSegment {
   key: string
   segment: ContextSegment
+  exactContent: string
   sourceHash: string
   originalCharacters: number
   originalTokens: number
@@ -237,8 +238,21 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       && transformed?.allowSourceBudgetOverflow !== true
       ? capContextSourceByBudget(content, sourceBudgetTokens)
       : { content: preparedContent, truncated: false }
+    const compression = transformed?.compression ?? (capped.truncated ? {
+      version: 1 as const,
+      promptVersion: 'agent-context-compression-v1' as const,
+      outcome: 'fallback' as const,
+      fallback: 'deterministic-truncation' as const,
+      sourceHash,
+      attempts: 0,
+      targetTokens: sourceBudgetTokens,
+      requiredAnchorCount: 1,
+      coveredAnchorCount: 0,
+      failureCode: 'source-budget-exceeded-without-semantic-transformer',
+    } : undefined)
     keyedSegments.push({
       key: source.key,
+      exactContent: content,
       sourceHash,
       originalCharacters: content.length,
       segment: {
@@ -250,7 +264,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       },
       originalTokens,
       delivery: capped.truncated ? 'truncated' : delivery,
-      compression: transformed?.compression,
+      compression,
     })
   }
 
@@ -299,6 +313,9 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
     omitted,
     trimmed,
     sourceEvidence,
+    sourceSnapshots: kept.filter(item => (
+      item.delivery === 'compressed' || item.delivery === 'truncated'
+    )).map(item => ({ key: item.key, content: item.exactContent })),
     totalInputTokens,
     inputBudget,
     overBudgetBeforeTrim,

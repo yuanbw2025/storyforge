@@ -39,10 +39,14 @@ describe('COMMERCIAL-1 · authenticated and signed HTTP gateway', () => {
     const now = 1_800_000_000_000
     const authority = await CommercialPlatformAuthorityV1.create({ persistence: new Store(), now: () => now })
     const audits: CommercialGatewayAuditV1[] = []
+    const releaseVerifications: Array<'full' | 'attestation' | undefined> = []
     const gateway = createCommercialGatewayV1({
       authority, webhookSecret: SECRET, now: () => now,
       identity: { authenticate: async token => structuredClone(tokens.get(token) ?? null) },
-      releaseDelivery: { hasVerifiedRelease: async () => true },
+      releaseDelivery: { hasVerifiedRelease: async input => {
+        releaseVerifications.push(input.verification)
+        return true
+      } },
       checkoutProvider: { createOrResumeSession: async order => ({
         checkoutSessionId: `checkout.${order.orderId}`, orderId: order.orderId,
         checkoutUrl: `https://pay.storyforge.test/checkout/${order.orderId}`, expiresAt: now + 60_000,
@@ -115,6 +119,9 @@ describe('COMMERCIAL-1 · authenticated and signed HTTP gateway', () => {
     expect(JSON.stringify(audits)).not.toContain('provider.private.reference')
     expect(JSON.stringify(audits)).not.toContain(signature)
     expect(JSON.stringify(audits)).not.toContain('token-buyer')
+    expect(releaseVerifications).toEqual([
+      'attestation', 'attestation', 'full', 'attestation', 'attestation',
+    ])
   })
 
   it('字段类型欺骗、伪造签名、未知凭据和额外字段全部 fail-closed', async () => {
@@ -150,6 +157,184 @@ describe('COMMERCIAL-1 · authenticated and signed HTTP gateway', () => {
         'x-storyforge-signature': `t=${now},v1=${'0'.repeat(64)},v1=${'0'.repeat(64)}`,
       },
     })).resolves.toMatchObject({ status: 401, body: { code: 'signature' } })
+  })
+
+  it('公开发现按候选页限制外部证明读取，并以有界并发保持顺序和 fail-closed', async () => {
+    let now = 1_800_000_150_000
+    const authority = await CommercialPlatformAuthorityV1.create({ persistence: new Store(), now: () => now })
+    const creator = tokens.get('token-creator-123456789')!
+    const publisher = tokens.get('token-publisher-12345678')!
+    for (let index = 0; index < 7; index += 1) {
+      const listing = await authority.createListing({
+        principal: creator, requestId: `listing.page.create.${index}`,
+        releaseHash: (index + 1).toString(16).padStart(64, '0'), productType: 'ttrpg',
+        title: `分页候选 ${index}`, summary: '验证公开目录不会放大对象存储读取',
+        contentWarnings: [],
+        license: {
+          licenseId: 'license.page-v1', licenseVersion: '1.0.0', allowOfflineExport: true,
+          allowRemix: false, commercialReuse: false, requiresAttribution: false,
+          termsUrl: 'https://storyforge.test/licenses/page-v1',
+        },
+        currency: 'CNY', amountMinor: 0, creatorShareBps: 8_000,
+      })
+      await authority.submitListing({
+        principal: creator, requestId: `listing.page.submit.${index}`,
+        listingId: listing.listingId, rightsConfirmed: true,
+      })
+      await authority.publishListing({
+        principal: publisher, requestId: `listing.page.publish.${index}`,
+        listingId: listing.listingId, rightsConfirmed: true,
+      })
+    }
+    const ordered = authority.discover({})
+    const unavailable = new Set([ordered[1].listingId])
+    const corrupt = new Set([ordered[2].listingId])
+    let active = 0
+    let maximumActive = 0
+    const verifiedListingIds: string[] = []
+    const gateway = createCommercialGatewayV1({
+      authority, webhookSecret: SECRET, now: () => now,
+      identity: { authenticate: async token => structuredClone(tokens.get(token) ?? null) },
+      releaseDelivery: {
+        async hasVerifiedRelease(input) {
+          active += 1
+          maximumActive = Math.max(maximumActive, active)
+          verifiedListingIds.push(input.listingId!)
+          try {
+            await new Promise(resolve => setTimeout(resolve, 2))
+            if (corrupt.has(input.listingId!)) throw new Error('corrupt attestation')
+            return !unavailable.has(input.listingId!)
+          } finally {
+            active -= 1
+          }
+        },
+      },
+      checkoutProvider: { createOrResumeSession: async () => { throw new Error('not reached') } },
+      maximumDiscoveryPageSize: 3,
+      discoveryVerificationConcurrency: 2,
+    })
+
+    const first = await gateway(request('/v1/commercial/discover', { limit: 3 }))
+    expect(first.status).toBe(200)
+    const firstCursor = first.headers['x-storyforge-next-cursor']
+    expect(firstCursor).toMatch(/^sf-discovery-v1\./)
+    expect(verifiedListingIds).toHaveLength(3)
+    expect(new Set(verifiedListingIds)).toEqual(new Set(ordered.slice(0, 3).map(item => item.listingId)))
+    expect(maximumActive).toBeLessThanOrEqual(2)
+    expect(first.body).toEqual([ordered[0]])
+
+    now += 1_000
+    const inserted = await authority.createListing({
+      principal: creator,
+      requestId: 'listing.page.inserted',
+      releaseHash: '8'.repeat(64),
+      productType: 'ttrpg',
+      title: '分页期间新增的目录头部',
+      summary: '不得移动旧候选的 keyset 位置',
+      contentWarnings: [],
+      license: ordered[0].license,
+      currency: 'CNY', amountMinor: 0, creatorShareBps: 8_000,
+    })
+    await authority.submitListing({
+      principal: creator, requestId: 'listing.page.inserted.submit',
+      listingId: inserted.listingId, rightsConfirmed: true,
+    })
+    await authority.publishListing({
+      principal: publisher, requestId: 'listing.page.inserted.publish',
+      listingId: inserted.listingId, rightsConfirmed: true,
+    })
+    expect(authority.discover({})[0].listingId).toBe(inserted.listingId)
+
+    const second = await gateway(request('/v1/commercial/discover', { cursor: firstCursor, limit: 3 }))
+    expect(second.status).toBe(200)
+    expect(second.headers['x-storyforge-next-cursor']).toMatch(/^sf-discovery-v1\./)
+    expect(second.body).toEqual(ordered.slice(3, 6))
+    expect(verifiedListingIds).toHaveLength(6)
+
+    const invalid = await gateway(request('/v1/commercial/discover', { cursor: '-1', limit: 4 }))
+    expect(invalid).toMatchObject({ status: 422, body: { code: 'protocol' } })
+    const wrongFilter = await gateway(request('/v1/commercial/discover', {
+      cursor: firstCursor, limit: 3, query: '另一筛选',
+    }))
+    expect(wrongFilter).toMatchObject({ status: 422, body: { code: 'protocol' } })
+    expect(verifiedListingIds).toHaveLength(6)
+  })
+
+  it('cross-request discovery proof budget aborts hanging adapters', async () => {
+    const now = 1_800_000_180_000
+    const authority = await CommercialPlatformAuthorityV1.create({ persistence: new Store(), now: () => now })
+    const creator = tokens.get('token-creator-123456789')!
+    const publisher = tokens.get('token-publisher-12345678')!
+    for (let index = 0; index < 4; index += 1) {
+      const listing = await authority.createListing({
+        principal: creator,
+        requestId: `listing.deadline.create.${index}`,
+        releaseHash: (index + 20).toString(16).padStart(64, '0'),
+        productType: 'ttrpg',
+        title: `Deadline ${index}`,
+        summary: 'hanging proof fixture',
+        contentWarnings: [],
+        license: {
+          licenseId: 'license.deadline-v1',
+          licenseVersion: '1.0.0',
+          allowOfflineExport: true,
+          allowRemix: false,
+          commercialReuse: false,
+          requiresAttribution: false,
+          termsUrl: 'https://storyforge.test/licenses/deadline-v1',
+        },
+        currency: 'CNY',
+        amountMinor: 0,
+        creatorShareBps: 8_000,
+      })
+      await authority.submitListing({
+        principal: creator,
+        requestId: `listing.deadline.submit.${index}`,
+        listingId: listing.listingId,
+        rightsConfirmed: true,
+      })
+      await authority.publishListing({
+        principal: publisher,
+        requestId: `listing.deadline.publish.${index}`,
+        listingId: listing.listingId,
+        rightsConfirmed: true,
+      })
+    }
+    let active = 0
+    let maximumActive = 0
+    let signalCount = 0
+    const gateway = createCommercialGatewayV1({
+      authority,
+      webhookSecret: SECRET,
+      now: () => now,
+      identity: { authenticate: async () => null },
+      releaseDelivery: {
+        async hasVerifiedRelease(input) {
+          if (!input.signal) return false
+          signalCount += 1
+          active += 1
+          maximumActive = Math.max(maximumActive, active)
+          return await new Promise<boolean>(resolve => {
+            const finish = () => { active -= 1; resolve(false) }
+            if (input.signal!.aborted) finish()
+            else input.signal!.addEventListener('abort', finish, { once: true })
+          })
+        },
+      },
+      checkoutProvider: { createOrResumeSession: async () => { throw new Error('not reached') } },
+      maximumDiscoveryPageSize: 2,
+      discoveryVerificationConcurrency: 2,
+      discoveryVerificationTimeoutMs: 20,
+    })
+    const responses = await Promise.all([
+      gateway(request('/v1/commercial/discover', { limit: 2 })),
+      gateway(request('/v1/commercial/discover', { limit: 2 })),
+    ])
+    expect(responses.map(response => response.status)).toEqual([200, 200])
+    expect(responses.map(response => response.body)).toEqual([[], []])
+    expect(signalCount).toBe(4)
+    expect(maximumActive).toBe(2)
+    expect(active).toBe(0)
   })
 
   it('secret manager 轮换窗只接受当前和一个未过期上一版，旧密钥与密钥内容不进入审计', async () => {

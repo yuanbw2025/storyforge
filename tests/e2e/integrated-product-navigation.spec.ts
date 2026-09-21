@@ -23,9 +23,20 @@ for (const [product, navName, labels, entry, contentName, contentLabel] of [
   await page.screenshot({path:`/tmp/integrated-${product}-mobile.png`,fullPage:true})
  })
 }
-for(const product of ['adventure','openworld'])test(`${product}: development notice persists across pages`,async({page})=>{
+test('adventure: real product entry persists across pages', async ({ page }) => {
+ const pages = [['library', '作品与试玩'], ['vision', '产品定向'], ['play', '开始冒险']] as const
+ for (const [section, heading] of pages) {
+  await page.goto(`./adventure/${section}`)
+  await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
+  await expect(page.getByText('文字冒险 · 可验证预览', { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
+ }
+})
+
+test('openworld: development notice persists across pages',async({page})=>{
  for(const section of ['library','vision','play']){
-  await page.goto(`./${product}/${section}`)
+  await page.goto(`./openworld/${section}`)
   await expect(page.getByRole('note')).toContainText('尚在开发完善中，目前非正式功能')
   await page.reload()
   await expect(page.getByRole('note')).toContainText('尚未接入正式功能')

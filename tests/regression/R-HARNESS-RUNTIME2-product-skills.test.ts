@@ -34,6 +34,8 @@ import {
   seedCurrentProductWorld,
 } from '../helpers/current-product-world'
 import { createCurrentRuntimePackageFixture } from '../helpers/current-runtime-package'
+import { createTextAdventureFoundationRuntimePackageV2 } from '../helpers/text-adventure-v2-foundation'
+import { commitAdventureAction } from '../../src/lib/adventure/runtime-api'
 import { useAdventureGamePlayerStore } from '../../src/stores/adventure-game-player'
 import { useAvgGamePlayerStore } from '../../src/stores/avg-game-player'
 import { useCharacterInteractionPlayerStore } from '../../src/stores/character-interaction-player'
@@ -107,10 +109,13 @@ describe('R-HARNESS-RUNTIME2 · current Product Build runtime Skills', () => {
       runId: intent.snapshot.run.id,
     })
     expect(actionAdoption.snapshot.projection.state).toBe('completed')
-    expect(actionAdoption.event?.type).toBe('adventure.action.committed')
+    expect(['adventure.action.committed', 'narrative.choice.committed'])
+      .toContain(actionAdoption.event?.type)
 
+    const adoptedState = await readProductRuntimeState(seeded.session.id)
+    const actionSequence = adoptedState.adventure?.actionHistory.find(item => item.actionKey === action.key)?.eventSequence
     const evidence = (await db.productRuntimeEvents.where('sessionId').equals(seeded.session.id).toArray())
-      .find(event => event.id === actionAdoption.event?.id)
+      .find(event => event.sequence === actionSequence)
     if (!evidence) throw new Error('动作采用后缺少正式事件证据')
     const beforeNarration = await readProductRuntimeStateVersion(seeded.session.id)
     const narration = await generateAdventureRuntimeCandidateV1({
@@ -118,10 +123,11 @@ describe('R-HARNESS-RUNTIME2 · current Product Build runtime Skills', () => {
       productRuntimeSessionId: seeded.session.id,
       skillId: 'prose.adventure-result-narrator',
       objective: '叙述刚才已结算的行动',
-      runAI: async () => JSON.stringify({
-        kind: 'adventure-result', narrative: '守灯人依照已经结算的结果继续调查。',
-        evidenceEventSequences: [evidence.sequence],
-      }),
+      runAI: async messages => {
+        expect(messages.map(message => message.content).join('\n'))
+          .toContain(`【允许引用的冒险事件序号 JSON】[${evidence.sequence}]`)
+        return `结果如下：\n\`\`\`json\n{"kind":"adventure-result","narrative":"守灯人依照已经结算的结果继续调查。\n潮声仍在证据之外保持沉默。","evidenceEventSequences":[${evidence.sequence}]}\n\`\`\``
+      },
     })
     const narrationAdoption = await adoptAdventureRuntimeCandidateV1({
       scope: seeded.scope,
@@ -129,6 +135,46 @@ describe('R-HARNESS-RUNTIME2 · current Product Build runtime Skills', () => {
     })
     expect(narrationAdoption.snapshot.projection.state).toBe('completed')
     expect(await readProductRuntimeStateVersion(seeded.session.id)).toEqual(beforeNarration)
+  })
+
+  it('自然语言候选命中 Narrative 公共行动时原子提交行动与叙事推进', async () => {
+    const world = await seedCurrentProductWorld('Narrative 自由输入桥接')
+    const release = world.release as WorldRelease & { id: number }
+    const sourceCatalog = await loadCurrentProductWorldSourceCatalogV1({
+      scope: world.scope, worldReleaseId: release.id, productType: 'text-adventure',
+    })
+    const runtimePackage = createTextAdventureFoundationRuntimePackageV2({ worldRelease: release, sourceCatalog })
+    const created = await seedCurrentProductBuild({
+      scope: world.scope, worldRelease: release, runtimePackage, title: 'Narrative 自由输入桥接',
+    })
+    const sessionId = created.session.id!
+    for (const actionKey of ['action.move.marsh', 'action.find.route', 'action.move.tower', 'action.take.lens']) {
+      const base = await readProductRuntimeStateVersion(sessionId)
+      await commitAdventureAction({
+        sessionId, actionKey, commandId: `prepare:${actionKey}`,
+        baseSequence: base.sequence, baseStateHash: base.stateHash,
+      })
+    }
+    const generated = await generateAdventureRuntimeCandidateV1({
+      scope: world.scope, productRuntimeSessionId: sessionId,
+      skillId: 'prose.adventure-intent-parser', objective: '带着透镜进入灯塔核心',
+      runAI: async messages => {
+        const context = messages.map(message => message.content).join('\n')
+        expect(context).toContain('【允许输出的 actionKey JSON】')
+        expect(context).toContain('action.move.core')
+        return JSON.stringify({
+          kind: 'adventure-intent', actionKey: 'action.move.core',
+          rationale: '该行动是当前可执行的主线公共行动。', requiresConfirmation: true,
+        })
+      },
+    })
+    const adopted = await adoptAdventureRuntimeCandidateV1({ scope: world.scope, runId: generated.snapshot.run.id })
+    expect(adopted.event?.type).toBe('narrative.choice.committed')
+    const state = await readProductRuntimeState(sessionId)
+    expect(state.narrative?.currentNodeKey).toBe('crossroads')
+    expect(state.adventure?.actionHistory.some(item => item.actionKey === 'action.move.core')).toBe(true)
+    expect(adopted.snapshot.events.find(event => event.type === 'runtime.candidate.adopted')?.payload.commandIds)
+      .toEqual([adopted.event?.commandId])
   })
 
   it('开放世界内部模拟能力的四类表现 Skill 均绑定正式 Build，且保持状态只读', async () => {

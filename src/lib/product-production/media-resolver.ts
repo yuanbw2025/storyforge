@@ -30,7 +30,7 @@ function createResolver(input: {
   releaseAll(): Promise<void>
 }): ProductMediaResolverV1 {
   const assets = assetCatalog(input.runtimePackage)
-  const urls = new Set<string>()
+  const urls = new Map<string, string>()
   let disposed = false
   const ensureActive = () => {
     if (disposed) throw new Error('[product-media-resolver] resolver 已释放')
@@ -60,9 +60,15 @@ function createResolver(input: {
           continue
         }
         try {
+          const cached = urls.get(assetKey)
+          if (cached) {
+            result.urls[assetKey] = cached
+            result.usedBytes += asset.byteSize
+            continue
+          }
           const blob = await this.read(assetKey)
           const url = URL.createObjectURL(blob)
-          urls.add(url)
+          urls.set(assetKey, url)
           result.urls[assetKey] = url
           result.usedBytes += asset.byteSize
         } catch (cause) {
@@ -74,7 +80,7 @@ function createResolver(input: {
     dispose() {
       if (disposed) return
       disposed = true
-      for (const url of urls) URL.revokeObjectURL(url)
+      for (const url of urls.values()) URL.revokeObjectURL(url)
       urls.clear()
       void input.releaseAll()
     },

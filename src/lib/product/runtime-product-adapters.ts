@@ -281,10 +281,10 @@ export function assertFrozenProductRuntimeStateV1(input: {
     const expected = createInitialAdventureState(runtimePackage.adventure!, runtimeSourceHash)
     const frozenMismatch = !adventure
       || adventure.contentHash !== runtimeSourceHash
-      || stableProductRuntimeJsonV1(adventure.abilities) !== stableProductRuntimeJsonV1(expected.abilities)
-      || Object.keys(adventure.resources).some(
-        key => !Object.prototype.hasOwnProperty.call(expected.resources, key),
-      )
+      || stableProductRuntimeJsonV1(Object.keys(adventure.abilities).sort())
+        !== stableProductRuntimeJsonV1(Object.keys(expected.abilities).sort())
+      || stableProductRuntimeJsonV1(Object.keys(adventure.resources).sort())
+        !== stableProductRuntimeJsonV1(Object.keys(expected.resources).sort())
     const entryStateMismatch = input.origin !== 'branch'
       && stableProductRuntimeJsonV1(adventure) !== stableProductRuntimeJsonV1(expected)
     if (frozenMismatch || entryStateMismatch) {

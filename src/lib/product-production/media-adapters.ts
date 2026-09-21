@@ -262,6 +262,25 @@ export function detectProductImageDimensionsV1(data: ArrayBuffer): { width: numb
   return null
 }
 
+/**
+ * Providers may honor an authorized aspect ratio with a native 1K/2K size
+ * rather than the exact requested pixels. Preserve the actual dimensions and
+ * accept only a useful delivery whose ratio stays within the governed target.
+ */
+export function isProductImageDeliveryDimensionCompatibleV1(input: {
+  requestedWidth: number
+  requestedHeight: number
+  actualWidth: number
+  actualHeight: number
+}): boolean {
+  const values = [input.requestedWidth, input.requestedHeight, input.actualWidth, input.actualHeight]
+  if (values.some(value => !Number.isSafeInteger(value) || value < 1 || value > 32_768)) return false
+  if (input.actualWidth < 320 || input.actualHeight < 320) return false
+  const requestedRatio = input.requestedWidth / input.requestedHeight
+  const actualRatio = input.actualWidth / input.actualHeight
+  return Math.abs(actualRatio - requestedRatio) / requestedRatio <= 0.08
+}
+
 async function candidate(input: {
   adapterId: string
   request: ProductMediaRequestV1
@@ -379,7 +398,10 @@ export const agnesImage21FlashAdapterV1: ProductMediaProviderAdapterV1 = {
       'created', 'data', 'usage',
       'background', 'output_format', 'quality', 'size', 'task_id',
     ], 'Agnes image response')
-    for (const metadataKey of ['background', 'output_format', 'quality', 'size', 'task_id'] as const) {
+    if (root.task_id != null && (typeof root.task_id !== 'string' || !KEY.test(root.task_id))) {
+      fail('Agnes image response.task_id 元数据无效')
+    }
+    for (const metadataKey of ['background', 'output_format', 'quality', 'size'] as const) {
       const value = root[metadataKey]
       if (value != null && (typeof value !== 'string' || value.length > 100)) {
         fail(`Agnes image response.${metadataKey} 元数据无效`)

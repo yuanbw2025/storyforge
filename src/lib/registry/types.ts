@@ -965,7 +965,7 @@ export interface AssembleContextSourceEvidence {
   originalTokens: number
   /** Tokens actually delivered to the model. Zero for omitted/trimmed sources. */
   inputTokens: number
-  /** Optional for sources processed by the HARNESS-16 semantic compression policy. */
+  /** Semantic-compression evidence or deterministic-truncation fallback proof. */
   compression?: ContextCompressionEvidenceV1
 }
 
@@ -977,6 +977,13 @@ export interface AssembleContextResult {
   trimmed: string[]
   /** Optional for historical/test fixtures; production assembleContext always supplies it. */
   sourceEvidence?: AssembleContextSourceEvidence[]
+  /**
+   * Transient exact bytes for sources whose model delivery was compressed or
+   * truncated. Durable Harness callers persist these as source-snapshot Run
+   * Artifacts before the provider boundary; ordinary callers may ignore them.
+   * They are never spliced into the rendered prompt a second time.
+   */
+  sourceSnapshots?: Array<{ key: string; content: string }>
   totalInputTokens: number
   inputBudget: number
   overBudgetBeforeTrim: boolean

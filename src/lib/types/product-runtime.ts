@@ -1210,6 +1210,7 @@ export const PRODUCT_RUNTIME_EVENT_TYPES = [
   "adventure.item.state-changed",
   "adventure.resource.changed",
   "adventure.ability.changed",
+  "adventure.skill-point.allocated",
   "adventure.condition.applied",
   "adventure.condition.removed",
   "adventure.check.resolved",

@@ -2,6 +2,7 @@ import type {
   AdventureActionDefinition,
   AdventureActionHistoryEntry,
   AdventureProductRuntimePackageV1,
+  ProductRuntimePackageV1,
   ProductRuntimeEvent,
 } from '../types'
 
@@ -205,6 +206,27 @@ export function resolveAdventurePlayerIdentity(
     participantKey: profile.participantKey,
     inferred: true,
   } : null
+}
+
+/** Keep internal compatibility profiles out of every player-visible action path. */
+export function isAdventureActionPlayerVisible(
+  manifest: Pick<ProductRuntimePackageV1, 'adventure' | 'interaction'>,
+  action: AdventureActionDefinition,
+): boolean {
+  if (!action.interaction) return true
+  const adventure = manifest.adventure
+  const interaction = manifest.interaction
+  if (!adventure || !interaction) return false
+  const profile = interaction.profiles.find(item => (
+    item.participantKey === action.interaction?.participantKey
+  ))
+  if (!profile || profile.characterKey.startsWith('generated:') || /^产品角色\s*\d+$/u.test(profile.name.trim())) {
+    return false
+  }
+  const playerParticipantKey = adventure.playerIdentity
+    ? interaction.profiles.find(item => item.name === adventure.playerIdentity?.name)?.participantKey
+    : null
+  return profile.participantKey !== playerParticipantKey
 }
 
 function narrativeBlockForBeat(

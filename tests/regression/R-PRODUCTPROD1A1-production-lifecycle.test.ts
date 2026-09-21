@@ -138,6 +138,15 @@ describe('R-PRODUCTPROD-1A1 · current product-production lifecycle', () => {
     const production = await db.productProductions.where('projectId').equals(source!.id!).first()
     const sourceBuild = await db.productBuilds.where('productionId').equals(production!.id!).first()
     const sourceArtifact = await db.productBuildArtifacts.where('buildId').equals(sourceBuild!.id!).first()
+    const sourceAssetKey = `${production!.productionKey}.build-1.${sourceArtifact!.artifactKey}`
+    await db.productProductions.update(production!.id!, { productType: 'text-adventure' })
+    await db.productBuildArtifacts.update(sourceArtifact!.id!, {
+      payloadJson: JSON.stringify({
+        schema: 'storyforge.generated-media-artifact', version: 1,
+        assetKey: sourceAssetKey, request: {},
+      }),
+      metadataJson: JSON.stringify({ assetKey: sourceAssetKey }),
+    })
     await db.productBuilds.update(sourceBuild!.id!, { status: 'released', completedAt: Date.now() })
     const { id: _sourceBuildId, ...buildFields } = sourceBuild!
     const targetBuildId = await db.productBuilds.add({
@@ -167,10 +176,25 @@ describe('R-PRODUCTPROD-1A1 · current product-production lifecycle', () => {
       blobObjectId: sourceArtifact!.blobObjectId,
       parentArtifactHash: sourceArtifact!.contentHash,
     })
+    const targetAssetKey = `${production!.productionKey}.build-2.${sourceArtifact!.artifactKey}`
+    expect(JSON.parse(carried[0].payloadJson)).toMatchObject({ assetKey: targetAssetKey })
+    expect(JSON.parse(carried[0].metadataJson)).toMatchObject({ assetKey: targetAssetKey })
+    expect(carried[0].inputHash).not.toBe(sourceArtifact!.inputHash)
     expect(await db.productBuildArtifacts.get(sourceArtifact!.id!)).toMatchObject({ status: 'accepted' })
     expect(await db.mediaBlobObjects.where('projectId').equals(source!.id!).count()).toBe(1)
 
     await db.productBuildArtifacts.delete(carried[0].id!)
+    await db.productBuilds.update(sourceBuild!.id!, { status: 'recovery-required' })
+    await expect(carryForwardProductBuildArtifactsAcrossBuildsV1({
+      scope: ownership.scope,
+      sourceBuildId: sourceBuild!.id!,
+      targetBuildId,
+      targetControlEpoch: 2,
+      artifactKeys: [sourceArtifact!.artifactKey],
+    })).rejects.toThrow(/来源\/目标关系不可复用/)
+    expect(await db.productBuildArtifacts.where('buildId').equals(targetBuildId).count()).toBe(0)
+
+    await db.productBuilds.update(sourceBuild!.id!, { status: 'released' })
     await db.productBuilds.update(targetBuildId, { parentBuildNumber: 999 })
     await expect(carryForwardProductBuildArtifactsAcrossBuildsV1({
       scope: ownership.scope,

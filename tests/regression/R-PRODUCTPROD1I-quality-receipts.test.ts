@@ -8,21 +8,37 @@ import {
   listCompletedProductBuildPlaythroughsV1,
   readLatestProductBrowserPerformanceGateV1,
   readLatestProductMediaRuntimeGateV1,
+  readLatestTextAdventureHumanPlaytestGateV1,
   recordProductBrowserPerformanceMeasurementV1,
   recordProductBuildMainRoutePlaythroughV1,
   recordProductMediaRuntimeMeasurementV1,
+  recordTextAdventureHumanPlaytestV1,
+  recordTextAdventureHumanVisualReviewV1,
   requirePassedProductBrowserPerformanceGateV1,
   requirePassedProductBuildMainRouteGateV1,
   requirePassedProductMediaRuntimeGateV1,
+  requirePassedTextAdventureHumanPlaytestGateV1,
+  requirePassedTextAdventureHumanVisualReviewGateV1,
 } from '../../src/lib/product-production/quality-receipts'
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { createProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
+import { buildUpperProductModulesV1 } from '../../src/lib/product-production/product-adapters'
+import { parseProductMediaRequirementsArtifactV2 } from '../../src/lib/product-production/production-executor'
+import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
+import { compileTextAdventureProductionBriefV1 } from '../../src/lib/adventure/production-brief'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { commitNarrativeChoice, readProductRuntimeStateVersion } from '../../src/lib/avg/runtime-api'
+import { commitAdventureAction, commitAdventureNarrativeChoice } from '../../src/lib/adventure/runtime-api'
+import { createProductRuntimeInstance } from '../../src/lib/product/runtime-instances'
 import { EMPTY_PRODUCT_RUNTIME_STATE } from '../../src/lib/types'
-import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
+import { CURRENT_PRODUCT_RESOURCE_KEYS, CURRENT_PRODUCT_SOURCE_CATALOG, currentProductSelection } from '../helpers/current-product-world'
+import {
+  createTextAdventureFoundationContentV2,
+  createTextAdventureFoundationNarrativeV2,
+  createTextAdventureFoundationRuntimePackageV2,
+} from '../helpers/text-adventure-v2-foundation'
 
 const PACKAGE_HASH = 'a'.repeat(64)
 const PREVIEW_HASH = 'b'.repeat(64)
@@ -180,6 +196,151 @@ async function mediaFixture(input: { width?: number; height?: number } = {}) {
   return { ...owned, packageHash: preview.packageHash, previewHash: preview.previewHash, briefHash }
 }
 
+async function textAdventureHumanVisualFixture() {
+  const owned = await fixture()
+  const scale = { scope: 'short-arc' as const, targetPlayMinutes: 60, targetWordCount: 15_000, targetEndingCount: 3 }
+  const media = {
+    visualLevel: 'key-scenes' as const, audioLevel: 'none' as const, imageCount: 1,
+    musicTrackCount: 0, sfxCount: 0, voiceLineCount: 0, requiredMediaKinds: ['background' as const],
+  }
+  const brief = parseProductProductionBriefV3({
+    ...commercialBrief(),
+    source: {
+      ...commercialBrief().source,
+      selection: currentProductSelection('text-adventure', {
+        characters: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
+        locations: [CURRENT_PRODUCT_RESOURCE_KEYS.location],
+        items: [CURRENT_PRODUCT_RESOURCE_KEYS.artifact],
+        quests: [CURRENT_PRODUCT_RESOURCE_KEYS.arc],
+      }),
+    },
+    intent: { ...commercialBrief().intent, productType: 'text-adventure' },
+    scale,
+    media,
+    productionBudget: { ...commercialBrief().productionBudget, maximumMediaCalls: 1 },
+    textAdventure: compileTextAdventureProductionBriefV1({
+      scale,
+      media,
+      draft: {
+        targetRegionCount: 2, targetAreaCount: 5, targetLocationCount: 12, targetSceneCount: 18,
+        targetSideQuestCount: 3, targetAmbientEventCount: 6, minimumDistinctRoutes: 2, confirmAll: true,
+      },
+    }),
+  })
+  const briefHash = await hashProductProductionValueV2(brief)
+  const imageBlob = await putMediaBlobObject({
+    scope: owned.scope,
+    data: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]).buffer,
+    mimeType: 'image/png',
+  })
+  const assetKey = 'quality.text-adventure.build-1.image.opening'
+  const artifactKey = 'media.visual.001'
+  const narrative = createTextAdventureFoundationNarrativeV2()
+  const modules = buildUpperProductModulesV1({ brief, narrative })
+  const runtimePackage = parseProductRuntimePackageV1({
+    schema: 'storyforge.product-runtime-package', version: 1, productType: 'text-adventure',
+    definition: {
+      productKey: 'quality.text-adventure', title: '逐图审查夹具', description: '验证三层图片质量证据。',
+      enabledCapabilities: [...modules.enabledCapabilities, 'presentation'], rulesetVersion: 2,
+      initialVariables: {},
+    },
+    sourceWorld: { contentHash: PACKAGE_HASH, selection: brief.source.selection },
+    narrative,
+    interaction: modules.interaction,
+    adventure: {
+      ...createTextAdventureFoundationContentV2(),
+      media: { mode: 'key-illustrations', fallback: 'text-only', assetKeys: [assetKey] },
+    },
+    presentation: {
+      version: 1, cues: [], assets: [{
+        assetKey, version: 1, kind: 'background', name: '雾港开场', mimeType: 'image/png',
+        byteSize: imageBlob.byteSize, width: 1280, height: 720, durationMs: null,
+        contentHash: imageBlob.contentHash, blobContentHash: imageBlob.contentHash,
+        source: 'fixture-provider', license: 'fixture-commercial-license', altText: '雾港灯塔开场',
+        characterTag: '', sceneTag: 'opening',
+      }],
+    },
+  })
+  const build = (await db.productBuilds.get(owned.buildId))!
+  const production = (await db.productProductions.get(build.productionId))!
+  const preview = await createProductBuildPreviewManifestV1({
+    productionKey: production.productionKey, buildNumber: build.buildNumber,
+    buildManifestHash: build.manifestHash, runtimePackage,
+    mediaBindings: [{ assetKey, artifactKey, blobContentHash: imageBlob.contentHash }],
+  })
+  const requirements = parseProductMediaRequirementsArtifactV2({
+    schema: 'storyforge.product-media-requirements-artifact', version: 2,
+    visual: [{
+      artifactKey, mediaKind: 'background', sceneTag: 'opening', beatKey: 'beat.opening.1',
+      prompt: '雾港灯塔在暴潮前点亮，构图清晰，不包含文字。', altText: '暴潮前的雾港灯塔',
+      width: 1280, height: 720, palette: ['#172033', '#52647A', '#D8C6A0'],
+      characterAnchorRefs: [], hardConstraints: [],
+    }],
+    audio: [],
+  }, brief)
+  const visualBible = { schema: 'fixture.visual-bible', version: 1, style: 'painterly maritime mystery' }
+  const requirementsHash = await hashProductProductionValueV2(requirements)
+  const visualBibleHash = await hashProductProductionValueV2(visualBible)
+  const audit = {
+    schema: 'storyforge.text-adventure-media-audit-artifact', version: 1,
+    buildNumber: 1, requirementsHash, visualBibleHash,
+    assets: [{
+      artifactKey, status: 'fulfilled', assetKey, requirementHash: await hashProductProductionValueV2(requirements.visual[0]),
+      contentHash: imageBlob.contentHash, mimeType: 'image/png', width: 1280, height: 720,
+      source: 'fixture-provider', license: 'fixture-commercial-license', rightsComplete: true,
+      fallbackReason: null,
+    }],
+    passed: true,
+  }
+  const auditHash = await hashProductProductionValueV2(audit)
+  const visualReview = {
+    schema: 'storyforge.text-adventure-visual-quality-review-artifact', version: 1,
+    buildNumber: 1, mediaAuditHash: auditHash, status: 'passed',
+    reviews: [{
+      artifactKey, contentHash: imageBlob.contentHash, verdict: 'accept',
+      scores: { requirementFit: 5, identityContinuity: 5, styleContinuity: 5, composition: 4, technicalCleanliness: 5 },
+      issues: [], reviewSource: 'multimodal-model',
+    }],
+    blockingIssueCount: 0, providerReviewCompleted: true,
+  }
+  const now = Date.now()
+  const jsonArtifact = async (artifactKeyValue: string, kind: 'asset-manifest' | 'visual-bible' | 'integration-report' | 'playtest-report', payload: unknown) => ({
+    ...owned.scope, buildId: owned.buildId, artifactKey: artifactKeyValue, requirementKey: null,
+    version: 1, kind, mediaKind: null, status: 'accepted' as const, producerRunId: null,
+    producerReceiptHash: null, controlEpoch: 0, inputHash: PACKAGE_HASH,
+    contentHash: await hashProductProductionValueV2(payload), payloadJson: canonicalProductProductionJsonV2(payload),
+    metadataJson: '{}', qualityJson: '{}', rightsJson: '{}', blobObjectId: null,
+    mimeType: null, byteSize: 1, parentArtifactHash: null, carriedFrom: null,
+    createdAt: now, updatedAt: now,
+  })
+  await db.productBuildArtifacts.bulkAdd([
+    await jsonArtifact('media.requirements', 'asset-manifest', requirements),
+    await jsonArtifact('media.visual-bible', 'visual-bible', visualBible),
+    await jsonArtifact('media.audit', 'integration-report', audit),
+    await jsonArtifact('quality.visual-review', 'playtest-report', visualReview),
+    {
+      ...owned.scope, buildId: owned.buildId, artifactKey, requirementKey: null, version: 1,
+      kind: 'image', mediaKind: 'background', status: 'accepted', producerRunId: null,
+      producerReceiptHash: null, controlEpoch: 0, inputHash: PACKAGE_HASH,
+      contentHash: imageBlob.contentHash,
+      payloadJson: canonicalProductProductionJsonV2({ schema: 'storyforge.generated-media-artifact', version: 1 }),
+      metadataJson: canonicalProductProductionJsonV2({ assetKey, name: '雾港开场' }),
+      qualityJson: '{}', rightsJson: '{}', blobObjectId: imageBlob.id!, mimeType: 'image/png',
+      byteSize: imageBlob.byteSize, parentArtifactHash: null, carriedFrom: null, createdAt: now, updatedAt: now,
+    },
+  ])
+  await db.productProductions.update(production.id!, { productType: 'text-adventure' })
+  await db.productProductionBriefs.where('[productionId+revision]').equals([production.id!, 1]).modify({
+    briefJson: canonicalProductProductionJsonV2(brief), briefHash,
+    confirmedBriefJson: canonicalProductProductionJsonV2(brief), confirmedBriefHash: briefHash,
+  })
+  await db.productBuilds.update(owned.buildId, {
+    briefHash, packageHash: preview.packageHash, previewHash: preview.previewHash,
+    previewManifestJson: canonicalProductProductionJsonV2(preview),
+  })
+  return { ...owned, assetKey, artifactKey, imageBlob }
+}
+
 async function completePreviewMainRoute(input: Awaited<ReturnType<typeof fixture>>): Promise<number> {
   const now = Date.now()
   const initial = structuredClone(EMPTY_PRODUCT_RUNTIME_STATE)
@@ -237,6 +398,130 @@ async function confirmPreviewMainRoute(input: Awaited<ReturnType<typeof fixture>
       viewport: { width: 1440, height: 900 },
     },
   })
+}
+
+async function textAdventurePlaytestFixture() {
+  const owned = await fixture()
+  const scale = { scope: 'scene' as const, targetPlayMinutes: 20, targetWordCount: 4_000, targetEndingCount: 2 }
+  const media = {
+    visualLevel: 'none' as const, audioLevel: 'none' as const, imageCount: 0,
+    musicTrackCount: 0, sfxCount: 0, voiceLineCount: 0, requiredMediaKinds: [],
+  }
+  const brief = parseProductProductionBriefV3({
+    ...commercialBrief(),
+    source: {
+      ...commercialBrief().source,
+      selection: currentProductSelection('text-adventure', {
+        characters: [CURRENT_PRODUCT_RESOURCE_KEYS.character],
+        locations: [CURRENT_PRODUCT_RESOURCE_KEYS.location],
+        items: [CURRENT_PRODUCT_RESOURCE_KEYS.artifact],
+        quests: [CURRENT_PRODUCT_RESOURCE_KEYS.arc],
+      }),
+    },
+    intent: { ...commercialBrief().intent, productType: 'text-adventure' },
+    scale, media,
+    textAdventure: compileTextAdventureProductionBriefV1({ scale, media, draft: { confirmAll: true } }),
+  })
+  const authored = createTextAdventureFoundationRuntimePackageV2({
+    worldRelease: { id: 1, contentHash: PACKAGE_HASH } as never,
+    sourceCatalog: {
+      ...CURRENT_PRODUCT_SOURCE_CATALOG,
+      worldReference: { referenceHash: 'f'.repeat(64) },
+    } as never,
+  })
+  const opening = authored.narrative.nodes.find(node => node.key === 'opening')!
+  const crossroads = authored.narrative.nodes.find(node => node.key === 'crossroads')!
+  const enterCore = authored.narrative.choices.find(choice => choice.choiceKey === 'choice.enter-core')!
+  opening.successorKeys = ['approach']
+  enterCore.targetNodeKey = 'approach'
+  crossroads.effectsJson = '[]'
+  authored.narrative.nodes.splice(1, 0,
+    { key: 'approach', kind: 'scene', title: '灯芯回声', summary: '听完两种代价。', conditionJson: '{}', effectsJson: '[]', successorKeys: ['stance'] },
+    { key: 'stance', kind: 'choice', title: '先作承诺', summary: '决定先保护什么。', conditionJson: '{}', effectsJson: '[]', successorKeys: ['crossroads'] },
+  )
+  authored.narrative.choices.push(
+    { choiceKey: 'choice.listen', sourceNodeKey: 'approach', text: '听完争论', description: '理解两种代价。', unavailableReason: '', targetNodeKey: 'stance', displayConditionJson: '{}', availableConditionJson: '{}', effectsJson: '[]', tags: [], order: 0 },
+    { choiceKey: 'choice.promise-people', sourceNodeKey: 'stance', text: '先保护求救者', description: '承担港城风险。', unavailableReason: '', targetNodeKey: 'crossroads', displayConditionJson: '{}', availableConditionJson: '{}', effectsJson: '[]', tags: [], order: 0 },
+    { choiceKey: 'choice.promise-city', sourceNodeKey: 'stance', text: '先保护港城', description: '承担海上风险。', unavailableReason: '', targetNodeKey: 'crossroads', displayConditionJson: '{}', availableConditionJson: '{}', effectsJson: '[]', tags: [], order: 1 },
+  )
+  const runtimePackage = parseProductRuntimePackageV1(authored)
+  const briefHash = await hashProductProductionValueV2(brief)
+  const packageHash = await hashProductProductionValueV2(runtimePackage)
+  const build = (await db.productBuilds.get(owned.buildId))!
+  const production = (await db.productProductions.get(build.productionId))!
+  const preview = await createProductBuildPreviewManifestV1({
+    productionKey: production.productionKey, buildNumber: build.buildNumber,
+    buildManifestHash: build.manifestHash, runtimePackage, mediaBindings: [],
+  })
+  await db.productProductions.update(production.id!, { productType: 'text-adventure' })
+  await db.productProductionBriefs.where('[productionId+revision]').equals([production.id!, 1]).modify({
+    briefJson: canonicalProductProductionJsonV2(brief), briefHash,
+    confirmedBriefJson: canonicalProductProductionJsonV2(brief), confirmedBriefHash: briefHash,
+  })
+  await db.productBuilds.update(owned.buildId, {
+    briefHash, packageHash, previewHash: preview.previewHash,
+    previewManifestJson: canonicalProductProductionJsonV2(preview),
+  })
+  return { ...owned, briefHash, packageHash, previewHash: preview.previewHash }
+}
+
+async function completeTextAdventureHumanPlaytest(
+  input: Awaited<ReturnType<typeof textAdventurePlaytestFixture>>,
+  route: 'rescue' | 'seal',
+  elapsedMinutes = 16,
+): Promise<number> {
+  const session = await createProductRuntimeInstance({
+    scope: input.scope, kind: 'text-adventure', title: `真人试玩-${route}`,
+    productSource: {
+      kind: 'build', productBuildId: input.buildId, expectedPreviewHash: input.previewHash,
+    },
+  })
+  const act = async (actionKey: string) => {
+    const state = await readProductRuntimeStateVersion(session.id!)
+    await commitAdventureAction({
+      sessionId: session.id!, actionKey, commandId: `human-${session.id}-${actionKey}`,
+      baseSequence: state.sequence, baseStateHash: state.stateHash,
+    })
+  }
+  for (const actionKey of [
+    'action.look.harbor', 'action.equip.cloak', 'action.search.cache', 'action.move.marsh',
+    'action.find.route', 'action.move.tower', 'action.take.lens', 'action.rest.tower',
+  ]) await act(actionKey)
+  await commitAdventureNarrativeChoice({ sessionId: session.id!, choiceKey: 'choice.enter-core', commandId: `human-${session.id}-choice-enter` })
+  await act(route === 'rescue' ? 'action.prepare.rescue' : 'action.prepare.seal')
+  await commitAdventureNarrativeChoice({ sessionId: session.id!, choiceKey: 'choice.listen', commandId: `human-${session.id}-choice-listen` })
+  await commitAdventureNarrativeChoice({
+    sessionId: session.id!, choiceKey: route === 'rescue' ? 'choice.promise-people' : 'choice.promise-city',
+    commandId: `human-${session.id}-choice-promise`,
+  })
+  await commitAdventureNarrativeChoice({
+    sessionId: session.id!, choiceKey: route === 'rescue' ? 'choice.rescue' : 'choice.seal',
+    commandId: `human-${session.id}-choice-ending`,
+  })
+  const events = await db.productRuntimeEvents.where('sessionId').equals(session.id!).sortBy('sequence')
+  const endingAt = Date.now()
+  const startedAt = endingAt - elapsedMinutes * 60_000
+  await db.productRuntimeEvents.bulkPut(events.map((event, index) => ({
+    ...event,
+    createdAt: index === events.length - 1
+      ? endingAt : startedAt + Math.floor((endingAt - startedAt) * index / Math.max(1, events.length - 1)),
+  })))
+  return session.id!
+}
+
+const passingHumanAssessment = () => ({
+  ratings: { comprehension: 4, pacing: 4, agency: 4, emotionalImpact: 4 },
+  blockingIssues: [],
+  feedback: {
+    comprehensionObstacles: '无', boringMoments: '无', errors: '无',
+    choiceExperience: '选择与后果清楚', endingFeedback: '结局回应此前行动',
+  },
+  note: '',
+})
+
+const humanEnvironment = {
+  browserName: 'chromium', browserVersion: 'fixture', platform: 'desktop',
+  viewport: { width: 1440, height: 900 },
 }
 
 function measurement(measuredAt = Date.now()): ProductBrowserPerformanceMeasurementV1 {
@@ -431,5 +716,134 @@ describe('R-PRODUCTPROD-1I · durable Build quality receipts', () => {
       scope: owned.scope, productBuildId: owned.buildId,
     })).rejects.toThrow(/image-background-dimensions-below-commercial-minimum/)
     expect(await db.productBuilds.get(owned.buildId)).toMatchObject({ status: 'preview-ready' })
+  })
+
+  it('要求作者与独立玩家使用两个不同完整会话，单角色只能留下 needs-human 回执', async () => {
+    const owned = await textAdventurePlaytestFixture()
+    const authorSessionId = await completeTextAdventureHumanPlaytest(owned, 'rescue')
+    const author = await recordTextAdventureHumanPlaytestV1({
+      scope: owned.scope, productBuildId: owned.buildId, productRuntimeSessionId: authorSessionId,
+      participantRole: 'author', participantLabel: '测试作者', participantDeclaration: 'author-self-attestation',
+      assessment: passingHumanAssessment(), environment: humanEnvironment,
+    })
+    expect(author.gateReceipt).toMatchObject({
+      gateId: 'text-adventure.playtest.human-coverage', status: 'needs-human', verifierKind: 'human-evidence',
+    })
+    expect(author.evidence.sessions[0]).toMatchObject({
+      participantRole: 'author', elapsedMs: 16 * 60_000, choiceCount: 4,
+      meaningfulActionCount: 11, passed: true,
+    })
+    await expect(requirePassedTextAdventureHumanPlaytestGateV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+    })).rejects.toThrow(/尚未由作者与独立玩家分别通过/)
+    await expect(recordTextAdventureHumanPlaytestV1({
+      scope: owned.scope, productBuildId: owned.buildId, productRuntimeSessionId: authorSessionId,
+      participantRole: 'independent-player', participantLabel: '独立玩家甲',
+      participantDeclaration: 'not-involved-in-production',
+      assessment: passingHumanAssessment(), environment: humanEnvironment,
+    })).rejects.toThrow(/同一个事件流不能同时冒充/)
+
+    const independentSessionId = await completeTextAdventureHumanPlaytest(owned, 'seal')
+    const completed = await recordTextAdventureHumanPlaytestV1({
+      scope: owned.scope, productBuildId: owned.buildId, productRuntimeSessionId: independentSessionId,
+      participantRole: 'independent-player', participantLabel: '独立玩家甲',
+      participantDeclaration: 'not-involved-in-production',
+      assessment: passingHumanAssessment(), environment: humanEnvironment,
+    })
+    expect(completed.gateReceipt.status).toBe('passed')
+    expect(completed.evidence).toMatchObject({ passed: true })
+    expect(completed.evidence.sessions.map(item => item.participantRole)).toEqual(['author', 'independent-player'])
+    expect(completed.evidence.sessions[0].eventStreamHash).not.toBe(completed.evidence.sessions[1].eventStreamHash)
+    await expect(requirePassedTextAdventureHumanPlaytestGateV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+    })).resolves.toMatchObject({ row: { receiptHash: completed.row.receiptHash } })
+  })
+
+  it('过短、交互量不足、低评分或未关闭 blocking 问题会冻结失败证据且拒绝篡改', async () => {
+    const owned = await textAdventurePlaytestFixture()
+    const sessionId = await completeTextAdventureHumanPlaytest(owned, 'rescue', 2)
+    const failed = await recordTextAdventureHumanPlaytestV1({
+      scope: owned.scope, productBuildId: owned.buildId, productRuntimeSessionId: sessionId,
+      participantRole: 'author', participantLabel: '测试作者',
+      participantDeclaration: 'author-self-attestation', environment: humanEnvironment,
+      assessment: {
+        ...passingHumanAssessment(),
+        ratings: { comprehension: 4, pacing: 2, agency: 4, emotionalImpact: 4 },
+        blockingIssues: ['选择后任务状态没有及时刷新'],
+      },
+    })
+    expect(failed.gateReceipt.status).toBe('failed')
+    expect(failed.evidence.sessions[0]).toMatchObject({ elapsedMs: 2 * 60_000, passed: false })
+    await expect(requirePassedTextAdventureHumanPlaytestGateV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+    })).rejects.toThrow(/尚未由作者与独立玩家分别通过/)
+    const row = (await db.productQualityGateReceipts.get(failed.row.id!))!
+    const receipt = JSON.parse(row.receiptJson)
+    const evidence = JSON.parse(receipt.measuredJson)
+    evidence.sessions[0].meaningfulActionCount += 100
+    receipt.measuredJson = canonicalProductProductionJsonV2(evidence)
+    await db.productQualityGateReceipts.update(row.id!, { receiptJson: canonicalProductProductionJsonV2(receipt) })
+    await expect(readLatestTextAdventureHumanPlaytestGateV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+    })).rejects.toThrow(/receiptHash 校验失败/)
+  })
+
+  it('把独立 Visual QA 已接受的每张图片交给作者逐图确认，并冻结精确 Build/Artifact/Blob 证据', async () => {
+    const owned = await textAdventureHumanVisualFixture()
+    const rejected = await recordTextAdventureHumanVisualReviewV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+      decisions: [{ assetKey: owned.assetKey, decision: 'rejected', note: '灯塔主体过暗，需要提高视觉焦点。' }],
+    })
+    expect(rejected.gateReceipt).toMatchObject({
+      gateId: 'text-adventure.visual.author-approval', verifierKind: 'human-evidence', status: 'failed',
+    })
+    expect(rejected.evidence.assets[0]).toMatchObject({
+      assetKey: owned.assetKey, artifactKey: owned.artifactKey,
+      contentHash: owned.imageBlob.contentHash, blobContentHash: owned.imageBlob.contentHash,
+      decision: 'rejected', note: '灯塔主体过暗，需要提高视觉焦点。',
+    })
+    await expect(requirePassedTextAdventureHumanVisualReviewGateV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+    })).rejects.toThrow(/逐图确认未通过/)
+    expect(await db.productBuilds.get(owned.buildId)).toMatchObject({ status: 'preview-ready' })
+
+    const approved = await recordTextAdventureHumanVisualReviewV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+      decisions: [{ assetKey: owned.assetKey, decision: 'approved', note: '构图、题材与剧透边界均可接受。' }],
+    })
+    expect(approved.gateReceipt.status).toBe('passed')
+    await expect(requirePassedTextAdventureHumanVisualReviewGateV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+    })).resolves.toMatchObject({ row: { receiptHash: approved.row.receiptHash } })
+    const repeated = await recordTextAdventureHumanVisualReviewV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+      decisions: [{ assetKey: owned.assetKey, decision: 'approved', note: '构图、题材与剧透边界均可接受。' }],
+    })
+    expect(repeated.row.id).toBe(approved.row.id)
+    expect(repeated.gateReceipt.receiptHash).toBe(approved.gateReceipt.receiptHash)
+    expect(await db.productQualityGateReceipts.where('gateId')
+      .equals('text-adventure.visual.author-approval').count()).toBe(2)
+  })
+
+  it('逐图决定不完整、退回无理由或图片 Blob 在确认后变化时拒绝证据复用', async () => {
+    const owned = await textAdventureHumanVisualFixture()
+    await expect(recordTextAdventureHumanVisualReviewV1({
+      scope: owned.scope, productBuildId: owned.buildId, decisions: [],
+    })).rejects.toThrow(/未完整覆盖/)
+    await expect(recordTextAdventureHumanVisualReviewV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+      decisions: [{ assetKey: owned.assetKey, decision: 'rejected', note: '   ' }],
+    })).rejects.toThrow(/退回必须填写原因/)
+    expect(await db.productQualityGateReceipts.where('gateId')
+      .equals('text-adventure.visual.author-approval').count()).toBe(0)
+
+    await recordTextAdventureHumanVisualReviewV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+      decisions: [{ assetKey: owned.assetKey, decision: 'approved', note: '' }],
+    })
+    await db.mediaBlobObjects.update(owned.imageBlob.id!, { byteSize: owned.imageBlob.byteSize + 1 })
+    await expect(requirePassedTextAdventureHumanVisualReviewGateV1({
+      scope: owned.scope, productBuildId: owned.buildId,
+    })).rejects.toThrow(/元数据与冻结引用不匹配|大小不一致|数据长度不一致/)
   })
 })

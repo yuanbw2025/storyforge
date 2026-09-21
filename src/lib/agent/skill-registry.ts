@@ -29,6 +29,37 @@ import { AGENT_TOOL_BY_NAME } from './tool-registry'
 export const DOMAIN_AGENT_IDS = ['world-origin', 'character', 'inspiration', 'outline', 'prose'] as const
 export type DomainAgentId = typeof DOMAIN_AGENT_IDS[number]
 
+/**
+ * Product production roles are registered Agent identities, not aliases for
+ * the long-form outline Agent. They are deliberately kept out of
+ * DOMAIN_AGENT_IDS because the long-form master planner must not route normal
+ * author requests into an upper-product production department.
+ */
+export const TEXT_ADVENTURE_PRODUCTION_AGENT_IDS = [
+  'text-adventure-showrunner',
+  'text-adventure-creative-director',
+  'text-adventure-source-editor',
+  'text-adventure-story-architect',
+  'text-adventure-narrative-designer',
+  'text-adventure-ending-route-designer',
+  'text-adventure-cast-director',
+  'text-adventure-space-designer',
+  'text-adventure-game-designer',
+  'text-adventure-main-quest-designer',
+  'text-adventure-side-quest-designer',
+  'text-adventure-storylet-designer',
+  'text-adventure-quest-scripter',
+  'text-adventure-scene-writer',
+  'text-adventure-dialogue-editor',
+  'text-adventure-art-director',
+  'text-adventure-visual-qa-director',
+  'text-adventure-continuity-editor',
+  'text-adventure-playtest-director',
+] as const
+export type TextAdventureProductionAgentId = typeof TEXT_ADVENTURE_PRODUCTION_AGENT_IDS[number]
+export const REGISTERED_AGENT_IDS = [...DOMAIN_AGENT_IDS, ...TEXT_ADVENTURE_PRODUCTION_AGENT_IDS] as const
+export type RegisteredAgentId = typeof REGISTERED_AGENT_IDS[number]
+
 export type AgentSkillExecutionModeV1 =
   | 'worldview-field'
   | 'world-suggest'
@@ -179,7 +210,7 @@ export interface AgentSkillContextGatewayPolicyV1 {
 export interface AgentSkillDefinitionV1 {
   version: 1
   id: string
-  agentId: DomainAgentId
+  agentId: RegisteredAgentId
   defaultForAgent: boolean
   label: string
   owner: string
@@ -3525,6 +3556,450 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'text-adventure.production-supervision.v1',
+    agentId: 'text-adventure-showrunner',
+    defaultForAgent: true,
+    label: '文字冒险制作主管与阶段调度',
+    owner: 'text-adventure-showrunner',
+    promptVersion: 'text-adventure-production-supervision-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs', 'product-production.quality-feedback'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.artifact-inputs', 'product-production.quality-feedback',
+    ]),
+    maxOutputTokens: 6_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-TEXTADV3-agent-team'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.source-sufficiency.v1',
+    agentId: 'text-adventure-source-editor',
+    defaultForAgent: true,
+    label: '文字冒险来源充分性与改编审计',
+    owner: 'text-adventure-source-editor',
+    promptVersion: 'text-adventure-source-sufficiency-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: [],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy(['product-production.brief']),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
+    maxOutputTokens: 10_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-TEXTADV3-agent-team'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.creative-direction.v1',
+    agentId: 'text-adventure-creative-director',
+    defaultForAgent: true,
+    label: '文字冒险产品创意方向与核心循环',
+    owner: 'text-adventure-creative-director',
+    promptVersion: 'text-adventure-creative-direction-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.artifact-inputs',
+    ]),
+    maxOutputTokens: 6_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-07',
+    regressionTests: ['R-TEXTADV3-agent-team'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.story-bible.v1',
+    agentId: 'text-adventure-story-architect',
+    defaultForAgent: true,
+    label: '文字冒险故事圣经与主题承诺',
+    owner: 'text-adventure-story-architect',
+    promptVersion: 'text-adventure-story-bible-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs', 'product-production.adventure-repair-feedback'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.artifact-inputs', 'product-production.adventure-repair-feedback',
+    ]),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
+    maxOutputTokens: 14_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-TEXTADV3-agent-team', 'R-TEXTADV3-production-artifacts'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.narrative-design.v1',
+    agentId: 'text-adventure-narrative-designer',
+    defaultForAgent: true,
+    label: '文字冒险叙事弧、场景卡与选择回响设计',
+    owner: 'text-adventure-narrative-designer',
+    promptVersion: 'text-adventure-narrative-design-v2',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs', 'product-production.adventure-repair-feedback'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.artifact-inputs', 'product-production.adventure-repair-feedback',
+    ]),
+    maxOutputTokens: 20_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-TEXTADV3-agent-team', 'R-TEXTADV3-production-artifacts'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.ending-route-plan.v1',
+    agentId: 'text-adventure-ending-route-designer',
+    defaultForAgent: true,
+    label: '文字冒险结局条件与行动链设计',
+    owner: 'text-adventure-ending-route-designer',
+    promptVersion: 'text-adventure-ending-route-plan-v3',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs', 'product-production.adventure-repair-feedback'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.artifact-inputs', 'product-production.adventure-repair-feedback',
+    ]),
+    maxOutputTokens: 4_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-20',
+    regressionTests: ['R-TEXTADV3-agent-team', 'R-TEXTADV3-production-artifacts'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.cast-bible.v1',
+    agentId: 'text-adventure-cast-director',
+    defaultForAgent: true,
+    label: '文字冒险角色圣经与关系弧',
+    owner: 'text-adventure-cast-director',
+    promptVersion: 'text-adventure-cast-bible-v2',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs', 'product-production.adventure-repair-feedback'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.artifact-inputs', 'product-production.adventure-repair-feedback',
+    ]),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
+    maxOutputTokens: 16_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-08',
+    regressionTests: ['R-TEXTADV3-agent-team'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.quest-script.v1',
+    agentId: 'text-adventure-quest-scripter',
+    defaultForAgent: true,
+    label: '文字冒险任务脚本与状态效果编译',
+    owner: 'text-adventure-quest-scripter',
+    promptVersion: 'text-adventure-quest-script-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs', 'product-production.adventure-repair-feedback'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.artifact-inputs', 'product-production.adventure-repair-feedback',
+    ]),
+    maxOutputTokens: 24_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-TEXTADV3-agent-team'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.scene-script.v1',
+    agentId: 'text-adventure-scene-writer',
+    defaultForAgent: true,
+    label: '文字冒险分场正文与玩家可见选择',
+    owner: 'text-adventure-scene-writer',
+    promptVersion: 'text-adventure-scene-script-v6',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: [
+      'product-production.adventure-scene-script-inputs',
+      'product-production.adventure-repair-feedback',
+    ],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.adventure-scene-script-inputs',
+      'product-production.adventure-repair-feedback',
+    ]),
+    maxOutputTokens: 24_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-11',
+    regressionTests: ['R-TEXTADV3-agent-team'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.dialogue-pass.v1',
+    agentId: 'text-adventure-dialogue-editor',
+    defaultForAgent: true,
+    label: '文字冒险对白声音与知识边界审校',
+    owner: 'text-adventure-dialogue-editor',
+    // Keep v3 while the currently authorized flagship Build #89 is recovered;
+    // the stricter copy guard is deterministic and therefore applies without
+    // rewriting already-settled act-1/act-2 request identities.  Promote the
+    // prompt version only when the next Build freezes a new plan.
+    promptVersion: 'text-adventure-dialogue-pass-v3',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: [
+      'product-production.adventure-dialogue-inputs',
+      'product-production.adventure-repair-feedback',
+    ],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.adventure-dialogue-inputs',
+      'product-production.adventure-repair-feedback',
+    ]),
+    maxOutputTokens: 40_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-10',
+    regressionTests: ['R-TEXTADV3-agent-team', 'R-TEXTADV3-production-artifacts'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.visual-direction.v1',
+    agentId: 'text-adventure-art-director',
+    defaultForAgent: true,
+    label: '文字冒险视觉圣经与媒资需求',
+    owner: 'text-adventure-art-director',
+    promptVersion: 'text-adventure-visual-direction-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy(['product-production.brief', 'product-production.artifact-inputs']),
+    maxOutputTokens: 12_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-07',
+    regressionTests: ['R-TEXTADV3-agent-team'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.visual-quality-review.v1',
+    agentId: 'text-adventure-visual-qa-director',
+    defaultForAgent: true,
+    label: '文字冒险图片语义与审美独立审查',
+    owner: 'text-adventure-visual-qa-director',
+    promptVersion: 'text-adventure-visual-quality-review-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.adventure-visual-quality-inputs'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.adventure-visual-quality-inputs',
+    ]),
+    maxOutputTokens: 4_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-07',
+    regressionTests: ['R-TEXTADV3-agent-team', 'R-PRODUCTPROD1F-production-executor'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.playtest-strategy.v1',
+    agentId: 'text-adventure-playtest-director',
+    defaultForAgent: true,
+    label: '文字冒险路线试玩与发布验证策略',
+    owner: 'text-adventure-playtest-director',
+    promptVersion: 'text-adventure-playtest-strategy-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief', 'product-production.adventure-playtest-inputs'],
+    optionalContextSourceKeys: [],
+    inputPolicy: productProductionInputPolicy([
+      'product-production.brief', 'product-production.adventure-playtest-inputs',
+    ]),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.adventure-playtest-inputs',
+    ]),
+    maxOutputTokens: 8_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-TEXTADV3-agent-team'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.production-architecture.v1',
+    agentId: 'text-adventure-space-designer',
+    defaultForAgent: true,
+    label: '文字冒险叙事骨架与空间设计',
+    owner: 'text-adventure-space-designer',
+    promptVersion: 'text-adventure-production-architecture-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs', 'product-production.adventure-repair-feedback'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.artifact-inputs',
+      'product-production.adventure-repair-feedback',
+    ]),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
+    maxOutputTokens: 16_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-TEXTADV2-production'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.production-mainline.v1',
+    agentId: 'text-adventure-main-quest-designer',
+    defaultForAgent: true,
+    label: '文字冒险主线与分支叙事生产',
+    owner: 'text-adventure-main-quest-designer',
+    promptVersion: 'text-adventure-production-mainline-v2',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs', 'product-production.adventure-repair-feedback'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.artifact-inputs',
+      'product-production.adventure-repair-feedback',
+    ]),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
+    maxOutputTokens: 32_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-08',
+    regressionTests: ['R-TEXTADV2-production'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.production-systems.v1',
+    agentId: 'text-adventure-game-designer',
+    defaultForAgent: true,
+    label: '文字冒险角色与玩法系统设计',
+    owner: 'text-adventure-game-designer',
+    promptVersion: 'text-adventure-production-systems-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs', 'product-production.adventure-repair-feedback'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.artifact-inputs',
+      'product-production.adventure-repair-feedback',
+    ]),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
+    maxOutputTokens: 12_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-TEXTADV2-production'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.production-side-quests.v1',
+    agentId: 'text-adventure-side-quest-designer',
+    defaultForAgent: true,
+    label: '文字冒险支线任务生产',
+    owner: 'text-adventure-side-quest-designer',
+    promptVersion: 'text-adventure-production-side-quests-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs', 'product-production.adventure-repair-feedback'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.artifact-inputs',
+      'product-production.adventure-repair-feedback',
+    ]),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
+    maxOutputTokens: 16_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-TEXTADV2-production'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.production-ambient-events.v1',
+    agentId: 'text-adventure-storylet-designer',
+    defaultForAgent: true,
+    label: '文字冒险区域与随机事件生产',
+    owner: 'text-adventure-storylet-designer',
+    promptVersion: 'text-adventure-production-ambient-events-v1',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief'],
+    optionalContextSourceKeys: ['product-production.artifact-inputs', 'product-production.adventure-repair-feedback'],
+    inputPolicy: productProductionInputPolicy(['product-production.brief']),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.artifact-inputs',
+      'product-production.adventure-repair-feedback',
+    ]),
+    contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
+    maxOutputTokens: 12_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-06',
+    regressionTests: ['R-TEXTADV2-production'],
+  },
+  {
+    version: 1,
+    id: 'text-adventure.production-quality-review.v1',
+    agentId: 'text-adventure-continuity-editor',
+    defaultForAgent: true,
+    label: '文字冒险分区叙事质量独立审查',
+    owner: 'text-adventure-continuity-editor',
+    promptVersion: 'text-adventure-production-quality-review-v19',
+    executionMode: 'product-production',
+    contextTaskKind: 'agent-outline',
+    readToolNames: [],
+    contextSourceKeys: ['product-production.brief', 'product-production.adventure-quality-inputs'],
+    optionalContextSourceKeys: ['product-production.adventure-repair-feedback'],
+    inputPolicy: productProductionInputPolicy([
+      'product-production.brief', 'product-production.adventure-quality-inputs',
+    ]),
+    contextCompression: compressionPolicy([
+      'product-production.brief', 'product-production.adventure-quality-inputs',
+      'product-production.adventure-repair-feedback',
+    ]),
+    maxOutputTokens: 12_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-09-10',
+    regressionTests: ['R-TEXTADV2-production'],
+  },
+  {
+    version: 1,
     id: 'product-production.media-requirements.v1',
     agentId: 'outline',
     defaultForAgent: false,
@@ -3849,15 +4324,35 @@ export function validateAgentSkillContextEvidenceV1(
 export function validateAgentSkillDefinitionsV1(
   definitions: readonly AgentSkillDefinitionV1[],
 ): void {
-  const executionModesByAgent: Record<DomainAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
+  const productProductionModes = new Set<AgentSkillExecutionModeV1>(['product-production'])
+  const executionModesByAgent: Record<RegisteredAgentId, ReadonlySet<AgentSkillExecutionModeV1>> = {
     'world-origin': new Set(['worldview-field', 'world-suggest', 'worldview-expand', 'world-link-context', 'constitution-extract', 'codex-extract', 'codex-enrich', 'story-core', 'creative-rules', 'locations', 'map-config', 'history-consult', 'history-storm', 'review']),
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-source-analysis', 'adaptation-causal-graph', 'screenplay-adaptation-brief', 'screenplay-decision-pass', 'screenplay-beat-sheet', 'screenplay-scene-card', 'screenplay-grounding-review', 'screenplay-dramaturgy-review', 'comic-adaptation-brief', 'comic-decision-pass', 'comic-script-adaptation', 'comic-page-rhythm', 'comic-panel-plan', 'comic-visual-bible', 'comic-image-request', 'comic-visual-continuity-review', 'comic-targeted-repair', 'comic-page-review', 'motion-drama-series-bible', 'motion-drama-asset-bible', 'motion-drama-episode-outline', 'motion-drama-shot-design', 'motion-drama-image-prompts', 'motion-drama-video-prompts', 'motion-drama-quality-review', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),
     prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'ai-town-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'screenplay-scene-draft', 'screenplay-targeted-rewrite', 'motion-drama-episode-script', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
+    'text-adventure-showrunner': productProductionModes,
+    'text-adventure-creative-director': productProductionModes,
+    'text-adventure-source-editor': productProductionModes,
+    'text-adventure-story-architect': productProductionModes,
+    'text-adventure-narrative-designer': productProductionModes,
+    'text-adventure-ending-route-designer': productProductionModes,
+    'text-adventure-cast-director': productProductionModes,
+    'text-adventure-space-designer': productProductionModes,
+    'text-adventure-game-designer': productProductionModes,
+    'text-adventure-main-quest-designer': productProductionModes,
+    'text-adventure-side-quest-designer': productProductionModes,
+    'text-adventure-storylet-designer': productProductionModes,
+    'text-adventure-quest-scripter': productProductionModes,
+    'text-adventure-scene-writer': productProductionModes,
+    'text-adventure-dialogue-editor': productProductionModes,
+    'text-adventure-art-director': productProductionModes,
+    'text-adventure-visual-qa-director': productProductionModes,
+    'text-adventure-continuity-editor': productProductionModes,
+    'text-adventure-playtest-director': productProductionModes,
   }
   const ids = new Set<string>()
-  const defaultAgents = new Set<DomainAgentId>()
+  const defaultAgents = new Set<RegisteredAgentId>()
   for (const skill of definitions) {
     if (skill.version !== 1) throw new Error(`Agent Skill ${skill.id} 版本不受支持`)
     if (ids.has(skill.id)) throw new Error(`Agent Skill ID 重复：${skill.id}`)
@@ -4012,7 +4507,7 @@ export function validateAgentSkillDefinitionsV1(
       }
     }
   }
-  for (const agentId of DOMAIN_AGENT_IDS) {
+  for (const agentId of REGISTERED_AGENT_IDS) {
     if (!defaultAgents.has(agentId)) throw new Error(`Agent ${agentId} 缺少默认 Skill`)
   }
 }
@@ -4023,11 +4518,11 @@ export const AGENT_SKILL_BY_ID: ReadonlyMap<string, AgentSkillDefinitionV1> = ne
   AGENT_SKILLS.map(skill => [skill.id, skill]),
 )
 
-export const DEFAULT_AGENT_SKILL_BY_AGENT: ReadonlyMap<DomainAgentId, AgentSkillDefinitionV1> = new Map(
+export const DEFAULT_AGENT_SKILL_BY_AGENT: ReadonlyMap<RegisteredAgentId, AgentSkillDefinitionV1> = new Map(
   AGENT_SKILLS.filter(skill => skill.defaultForAgent).map(skill => [skill.agentId, skill]),
 )
 
-export function getDefaultAgentSkillV1(agentId: DomainAgentId): AgentSkillDefinitionV1 {
+export function getDefaultAgentSkillV1(agentId: RegisteredAgentId): AgentSkillDefinitionV1 {
   const skill = DEFAULT_AGENT_SKILL_BY_AGENT.get(agentId)
   if (!skill) throw new Error(`Agent ${agentId} 缺少默认 Skill`)
   return skill
@@ -4035,7 +4530,7 @@ export function getDefaultAgentSkillV1(agentId: DomainAgentId): AgentSkillDefini
 
 export function getAgentSkillV1(
   skillId: string,
-  expectedAgentId?: DomainAgentId,
+  expectedAgentId?: RegisteredAgentId,
 ): AgentSkillDefinitionV1 {
   const skill = AGENT_SKILL_BY_ID.get(skillId)
   if (!skill) throw new Error(`未知 Agent Skill：${skillId}`)
@@ -4046,7 +4541,7 @@ export function getAgentSkillV1(
 }
 
 export function resolveAgentSkillV1(
-  agentId: DomainAgentId,
+  agentId: RegisteredAgentId,
   skillId?: string,
 ): AgentSkillDefinitionV1 {
   return skillId ? getAgentSkillV1(skillId, agentId) : getDefaultAgentSkillV1(agentId)

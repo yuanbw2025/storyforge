@@ -5,6 +5,7 @@ import {
   isSha256Hash,
 } from '../product-production/hash'
 import {
+  discardUnreferencedMediaBlobObjectsV1,
   putMediaBlobObject,
   sha256MediaData,
 } from '../product-production/media-blob-store'
@@ -18,9 +19,15 @@ import type {
   ProductReleaseManifestV1,
   ProductMediaAsset,
   ProductMediaBlob,
+  ProductReleaseDistributionProvenanceV1,
+  ProductReleaseMarketplaceProvenanceV1,
+  ProductReleaseLocalFileProvenanceV1,
   WorkspaceScope,
 } from '../types'
 import { assertProductReleaseUnchanged } from '../product/releases'
+import { transactionTablesForReferenceCascade } from '../registry/lifecycle'
+import { sanitizeSvgWithReportV1 } from '../utils/sanitize-svg'
+import { cascadeRegisteredReferences } from '../workspace/lifecycle'
 import {
   assertRecordInScope,
   resolveScope,
@@ -53,10 +60,28 @@ export interface MarketplaceImportProvenanceV2 {
   listingId: string
   orderId: string | null
   entitlementId: string | null
-  license: NonNullable<ProductRelease['distributionProvenance']>['license']
+  license: ProductReleaseMarketplaceProvenanceV1['license']
   attribution: string[]
   localCopyPreserved: boolean
   acquiredAt: number
+}
+
+export interface LocalFileImportProvenanceV1 {
+  candidatePackageHash: string
+  originalReleaseHash: string
+  candidateStatus: 'eligible-for-community-submission'
+}
+
+export const DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1 = 'delete-imported-product-release-copy'
+
+export interface DeleteImportedProductReleaseResultV1 {
+  productReleaseId: number
+  source: ProductReleaseDistributionProvenanceV1['source']
+  deletedSessionCount: number
+  deletedMediaAssetCount: number
+  deletedMediaBindingCount: number
+  reclaimedBlobObjectIds: number[]
+  retainedBlobObjectIds: number[]
 }
 
 const MAXIMUM_DISTRIBUTION_BYTES = 256 * 1024 * 1024
@@ -92,6 +117,19 @@ function decodeBase64(value: unknown, expectedBytes: number): ArrayBuffer {
   return bytes.buffer
 }
 
+function assertDistributionSvgAlreadySanitized(data: ArrayBuffer, assetKey: string): void {
+  let raw: string
+  try {
+    raw = new TextDecoder('utf-8', { fatal: true }).decode(data)
+  } catch {
+    throw new Error(`[distribution] SVG 不是有效 UTF-8:${assetKey}`)
+  }
+  const report = sanitizeSvgWithReportV1(raw)
+  if (!report.sanitized || report.removedUnsafeContent) {
+    throw new Error(`[distribution] SVG 未经受治理净化或包含不安全内容:${assetKey}`)
+  }
+}
+
 function exactKeys(value: Record<string, unknown>, expected: string[], label: string): void {
   const actual = Object.keys(value)
   if (actual.length !== expected.length || actual.some(key => !expected.includes(key))) {
@@ -108,7 +146,7 @@ function record(value: unknown, label: string): Record<string, unknown> {
 
 async function verifiedBundle(value: unknown): Promise<{
   bundle: ProductDistributionBundleV2
-  decodedMedia: Array<{ asset: FrozenRuntimeMediaAssetV2; data: ArrayBuffer }>
+  decodedMedia: Array<{ asset: FrozenRuntimeMediaAssetV2; data: ArrayBuffer; sanitizedSvg: boolean }>
 }> {
   const raw = record(value, 'bundle')
   exactKeys(raw, ['schema', 'version', 'productRelease', 'sourceWorld', 'media', 'bundleHash'], 'bundle')
@@ -140,7 +178,11 @@ async function verifiedBundle(value: unknown): Promise<{
   const expectedByKey = new Map(
     expectedAssets.map(asset => [`${asset.assetKey}\u0000${asset.version}`, asset]),
   )
-  const decodedMedia: Array<{ asset: FrozenRuntimeMediaAssetV2; data: ArrayBuffer }> = []
+  const decodedMedia: Array<{
+    asset: FrozenRuntimeMediaAssetV2
+    data: ArrayBuffer
+    sanitizedSvg: boolean
+  }> = []
   let totalBytes = 0
   for (const item of raw.media) {
     const media = record(item, 'media')
@@ -162,7 +204,9 @@ async function verifiedBundle(value: unknown): Promise<{
       || asset.contentHash !== asset.blobContentHash) {
       throw new Error(`[distribution] 媒资哈希不一致:${asset.assetKey}`)
     }
-    decodedMedia.push({ asset: structuredClone(asset), data })
+    const sanitizedSvg = asset.mimeType === 'image/svg+xml'
+    if (sanitizedSvg) assertDistributionSvgAlreadySanitized(data, asset.assetKey)
+    decodedMedia.push({ asset: structuredClone(asset), data, sanitizedSvg })
     expectedByKey.delete(`${asset.assetKey}\u0000${asset.version}`)
   }
   if (expectedByKey.size) {
@@ -324,25 +368,191 @@ async function installProductDistributionV2(input: {
   provenance: MarketplaceImportProvenanceV2
 }): Promise<ProductRelease> {
   const scope = await resolveScope({ scope: input.scope })
-  const { bundle, decodedMedia } = await verifiedBundle(input.bundle)
+  const verified = await verifiedBundle(input.bundle)
   const provenance = validateProvenance(input.provenance)
-  const blobObjects = await Promise.all(decodedMedia.map(item => putMediaBlobObject({
+  return importVerifiedProductDistributionV2({
     scope,
-    data: item.data,
-    mimeType: item.asset.mimeType,
-    expectedContentHash: item.asset.blobContentHash,
-  })))
+    verified,
+    productionKeyPrefix: input.source === 'marketplace' ? 'marketplace' : 'community',
+    labelSuffix: input.source === 'marketplace' ? '市场副本' : '社区游戏',
+    distributionProvenance: {
+      source: input.source,
+      ...provenance,
+      importedAt: Date.now(),
+    },
+  })
+}
 
-  return db.transaction('rw', scopeTransactionTables(
-    db.productReleases,
-    db.productMediaAssets,
-    db.productMediaBlobs,
-    db.mediaBlobObjects,
+export async function importLocalProductDistributionV2(input: {
+  scope: WorkspaceScope
+  bundle: unknown
+  provenance: LocalFileImportProvenanceV1
+}): Promise<ProductRelease> {
+  const scope = await resolveScope({ scope: input.scope })
+  const verified = await verifiedBundle(input.bundle)
+  if (!isSha256Hash(input.provenance?.candidatePackageHash)
+    || input.provenance?.originalReleaseHash !== verified.bundle.productRelease.contentHash
+    || input.provenance?.candidateStatus !== 'eligible-for-community-submission') {
+    throw new Error('[distribution] 本地文字冒险候选包来源无效')
+  }
+  return importVerifiedProductDistributionV2({
+    scope,
+    verified,
+    productionKeyPrefix: 'local-file',
+    labelSuffix: '本地导入副本',
+    distributionProvenance: {
+      source: 'local-file',
+      candidatePackageHash: input.provenance.candidatePackageHash,
+      originalReleaseHash: input.provenance.originalReleaseHash,
+      candidateStatus: input.provenance.candidateStatus,
+      remoteCreatorIdentityVerified: false,
+      localCopyPreserved: true,
+      importedAt: Date.now(),
+    },
+  })
+}
+
+export async function listImportedProductReleasesV1(input: {
+  scope: WorkspaceScope
+  productType?: ProductRelease['productType']
+}): Promise<ProductRelease[]> {
+  const scope = await resolveScope({ scope: input.scope })
+  const rows = await db.productReleases.where('workId').equals(scope.workId).toArray()
+  const imported: ProductRelease[] = []
+  for (const row of rows) {
+    if (!row.distributionProvenance || (input.productType && row.productType !== input.productType)) continue
+    if (!await assertRecordInScope(scope, 'productReleases', row, { owner: 'work' })) {
+      throw new Error('[distribution] 导入 ProductRelease 越过当前 Work')
+    }
+    imported.push(row)
+  }
+  return imported.sort((left, right) => right.createdAt - left.createdAt || (right.id ?? 0) - (left.id ?? 0))
+}
+
+/**
+ * Remove one imported local copy and the product-private runtime state that was
+ * created from it. The cascade topology is derived from PROJECT_TABLES; the
+ * content-addressed Blob objects are reclaimed only after every registered
+ * release/build binding has disappeared.
+ */
+export async function deleteImportedProductReleaseV1(input: {
+  scope: WorkspaceScope
+  productReleaseId: number
+  confirmation: typeof DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1
+}): Promise<DeleteImportedProductReleaseResultV1> {
+  if (input.confirmation !== DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1) {
+    throw new Error('[distribution] 删除导入副本需要明确确认')
+  }
+  if (!Number.isInteger(input.productReleaseId) || input.productReleaseId <= 0) {
+    throw new Error('[distribution] ProductRelease id 无效')
+  }
+  const scope = await resolveScope({ scope: input.scope })
+  const cascadeTables = transactionTablesForReferenceCascade('productReleases')
+  const deleted = await db.transaction('rw', scopeTransactionTables(
+    ...cascadeTables,
+    db.productBuilds,
+    db.productProductions,
   ), async () => {
+    const release = await db.productReleases.get(input.productReleaseId)
+    if (!release || !await assertRecordInScope(scope, 'productReleases', release, { owner: 'work' })) {
+      throw new Error('[distribution] 导入 ProductRelease 不存在或跨 Work')
+    }
+    if (!release.distributionProvenance) {
+      throw new Error('[distribution] 原创 ProductRelease 不允许通过导入副本入口删除')
+    }
+    const [releasedBuild, sourceBuild, currentProduction] = await Promise.all([
+      db.productBuilds.where('releasedProductReleaseId').equals(release.id!).first(),
+      db.productBuilds.where('sourceProductReleaseId').equals(release.id!).first(),
+      db.productProductions.where('currentProductReleaseId').equals(release.id!).first(),
+    ])
+    if (releasedBuild || sourceBuild || currentProduction) {
+      throw new Error('[distribution] ProductRelease 已进入本地生产血缘，必须先处理引用它的 Production/Build')
+    }
+
+    const sessions = await db.productRuntimeSessions.where('productReleaseId').equals(release.id!).toArray()
+    const sessionIds = sessions.map(row => row.id).filter((id): id is number => id != null)
+    const releaseAssets = await db.productMediaAssets.where('productReleaseId').equals(release.id!).toArray()
+    const sessionAssets = sessionIds.length
+      ? await db.productMediaAssets.where('productRuntimeSessionId').anyOf(sessionIds).toArray()
+      : []
+    const mediaAssets = [...releaseAssets, ...sessionAssets]
+    const mediaAssetIds = [...new Set(mediaAssets.map(row => row.id).filter((id): id is number => id != null))]
+    const mediaBindings = mediaAssetIds.length
+      ? await db.productMediaBlobs.where('mediaAssetId').anyOf(mediaAssetIds).toArray()
+      : []
+    const blobObjectIds = [...new Set(mediaBindings.map(row => row.blobObjectId))]
+
+    await cascadeRegisteredReferences('productReleases', release.id!)
+    await db.productReleases.delete(release.id!)
+    return {
+      source: release.distributionProvenance.source,
+      deletedSessionCount: sessions.length,
+      deletedMediaAssetCount: mediaAssetIds.length,
+      deletedMediaBindingCount: mediaBindings.length,
+      blobObjectIds,
+    }
+  })
+  const reclaimedBlobObjectIds = await discardUnreferencedMediaBlobObjectsV1({
+    scope,
+    blobObjectIds: deleted.blobObjectIds,
+  })
+  const reclaimed = new Set(reclaimedBlobObjectIds)
+  return {
+    productReleaseId: input.productReleaseId,
+    source: deleted.source,
+    deletedSessionCount: deleted.deletedSessionCount,
+    deletedMediaAssetCount: deleted.deletedMediaAssetCount,
+    deletedMediaBindingCount: deleted.deletedMediaBindingCount,
+    reclaimedBlobObjectIds,
+    retainedBlobObjectIds: deleted.blobObjectIds.filter(id => !reclaimed.has(id)),
+  }
+}
+
+async function importVerifiedProductDistributionV2(input: {
+  scope: WorkspaceScope
+  verified: Awaited<ReturnType<typeof verifiedBundle>>
+  productionKeyPrefix: 'marketplace' | 'community' | 'local-file'
+  labelSuffix: string
+  distributionProvenance: ProductReleaseMarketplaceProvenanceV1 | ProductReleaseLocalFileProvenanceV1
+}): Promise<ProductRelease> {
+  const { scope, verified, distributionProvenance } = input
+  const { bundle, decodedMedia } = verified
+  const stagedIds: number[] = []
+  const blobObjects: Array<Awaited<ReturnType<typeof putMediaBlobObject>>> = []
+
+  try {
+    // Stage sequentially so a failure cannot race the scoped rollback while
+    // sibling writes are still completing in the background.
+    for (const item of decodedMedia) {
+      const existed = await db.mediaBlobObjects
+        .where('[workId+contentHash]').equals([scope.workId, item.asset.blobContentHash]).first()
+      try {
+        const row = await putMediaBlobObject({
+          scope,
+          data: item.data,
+          mimeType: item.asset.mimeType,
+          expectedContentHash: item.asset.blobContentHash,
+          sanitizedSvg: item.sanitizedSvg,
+        })
+        if (!existed && row.id != null) stagedIds.push(row.id)
+        blobObjects.push(row)
+      } catch (cause) {
+        const failed = !existed ? await db.mediaBlobObjects
+          .where('[workId+contentHash]').equals([scope.workId, item.asset.blobContentHash]).first() : null
+        if (failed?.id != null) stagedIds.push(failed.id)
+        throw cause
+      }
+    }
+    return await db.transaction('rw', scopeTransactionTables(
+      db.productReleases,
+      db.productMediaAssets,
+      db.productMediaBlobs,
+      db.mediaBlobObjects,
+    ), async () => {
     const manifest = bundle.productRelease.manifest
     const productKey = manifest.runtimePackage.definition.productKey
     const productionKey = manifest.productionProvenance?.productionKey
-      ?? `marketplace:${productKey}:${bundle.productRelease.contentHash.slice(0, 16)}`
+      ?? `${input.productionKeyPrefix}:${productKey}:${bundle.productRelease.contentHash.slice(0, 16)}`
     let release = await db.productReleases.where('contentHash')
       .equals(bundle.productRelease.contentHash)
       .filter(row => row.workId === scope.workId)
@@ -355,7 +565,7 @@ async function installProductDistributionV2(input: {
     } else {
       const prior = (await db.productReleases.where('workId').equals(scope.workId).toArray())
         .filter(row => row.productionKey === productionKey)
-      const importedAt = Date.now()
+      const importedAt = distributionProvenance.importedAt
       const releaseRow = stampNewRecord(scope, 'productReleases', {
         projectId: scope.projectId,
         worldId: scope.worldId,
@@ -364,15 +574,11 @@ async function installProductDistributionV2(input: {
         productType: manifest.productType,
         worldReleaseId: null,
         version: Math.max(0, ...prior.map(candidate => candidate.version)) + 1,
-        label: `${manifest.runtimePackage.definition.title} · ${input.source === 'marketplace' ? '市场副本' : '社区游戏'}`,
+        label: `${manifest.runtimePackage.definition.title} · ${input.labelSuffix}`,
         manifestJson: canonicalProductProductionJsonV2(manifest),
         contentHash: bundle.productRelease.contentHash,
         createdAt: importedAt,
-        distributionProvenance: {
-          source: input.source,
-          ...provenance,
-          importedAt,
-        },
+        distributionProvenance,
       } satisfies ProductRelease, { owner: 'work' })
       const id = await db.productReleases.add(releaseRow) as number
       release = { ...releaseRow, id }
@@ -431,8 +637,12 @@ async function installProductDistributionV2(input: {
       }
     }
 
-    return release
-  })
+      return release
+    })
+  } catch (cause) {
+    await discardUnreferencedMediaBlobObjectsV1({ scope, blobObjectIds: stagedIds }).catch(() => undefined)
+    throw cause
+  }
 }
 
 /** Marketplace orders retain their existing provenance contract. */

@@ -34,6 +34,7 @@ export async function createFixtureProductReleaseManifestV1(input: {
   productionKey?: string
   releaseVersion?: number
   parentRelease?: ProductReleaseLineageV1['parentRelease']
+  qualityReceiptHashes?: string[]
 }): Promise<ProductReleaseManifestV1> {
   const releaseVersion = input.releaseVersion ?? 1
   const productionKey = input.productionProvenance?.productionKey
@@ -199,7 +200,10 @@ export async function createFixtureProductReleaseManifestV1(input: {
     sourceManifest,
     confirmedBrief,
     build: { buildUid: `fixture-build-${releaseVersion}`, buildHash: productionProvenance.buildManifestHash },
-    quality: { passed: true, receiptHashes: [productionProvenance.rootTerminalReceiptHash] },
+    quality: {
+      passed: true,
+      receiptHashes: input.qualityReceiptHashes ?? [productionProvenance.rootTerminalReceiptHash],
+    },
     compatibility: {
       status: releaseVersion === 1 ? 'initial' : 'compatible',
       protocolVersion: 1,

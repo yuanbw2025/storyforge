@@ -5,6 +5,7 @@
  * 组件、Prompt 和产品适配器不得自行维护来源清单。
  */
 import { db } from '../db/schema'
+import { isAdventureActionPlayerVisible } from '../adventure/player-experience'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
 import { walkOutlineChaptersInCanonicalOrder } from '../outline/canonical-outline-walk'
 import { getFactPredicate } from './fact-predicate-registry'
@@ -145,6 +146,24 @@ async function readProductProductionBriefContext(input: AssembleContextInput): P
 }
 async function readProductProductionArtifactInputs(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionArtifactInputs(input)
+}
+async function readTextAdventureSceneScriptInputsV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTextAdventureSceneScriptInputsV1(input)
+}
+async function readTextAdventureDialogueInputsV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTextAdventureDialogueInputsV1(input)
+}
+async function readTextAdventureVisualQualityInputsV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTextAdventureVisualQualityInputsV1(input)
+}
+async function readTextAdventureQualityInputsV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTextAdventureQualityInputsV1(input)
+}
+async function readTextAdventurePlaytestInputsV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTextAdventurePlaytestInputsV1(input)
+}
+async function readTextAdventureRepairFeedbackV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTextAdventureRepairFeedbackV1(input)
 }
 async function readProductProductionQualityFeedback(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionQualityFeedback(input)
@@ -710,7 +729,7 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
     || (session.productReleaseId == null && session.productBuildId == null)) return ''
   if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return ''
   if (session.worldId == null || session.workId == null) throw new Error('正式文字冒险实例缺少工作区作用域。')
-  const [playable, { availableAdventureActions }] = await Promise.all([
+  const [playable, { adventureNarrativeActionContext, availableAdventureActions }] = await Promise.all([
     verifyPlayableRuntimeSession({
       scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId },
       session,
@@ -727,7 +746,10 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
   if (!state.adventure) return ''
   const location = adventure.locations.find(item => item.key === state.adventure!.currentLocationKey)
   if (!location) throw new Error('文字冒险当前位置不在冻结发布中。')
-  const actions = availableAdventureActions(adventure, state.adventure, state.narrative?.variables)
+  const actions = availableAdventureActions(
+    adventure, state.adventure, adventureNarrativeActionContext(state.narrative),
+  ).filter(item => runtimePackage.productType !== 'text-adventure'
+    || isAdventureActionPlayerVisible(runtimePackage, item.action))
   const inventory = state.adventure.inventory
     .filter(item => item.ownerKey === 'player' && item.state !== 'transferred')
     .map(item => `${item.itemKey}×${item.quantity}`)
@@ -741,6 +763,7 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
   })
   const actionLines = actions.map(item => `- ${item.action.key}｜${item.action.kind}｜${item.action.label}｜${item.available ? '可执行' : `不可执行:${item.reason}`}`)
   const recent = state.adventure.actionHistory.slice(-12).map(item => `- #${item.eventSequence} ${item.actionKey}｜${item.outcome}｜${item.narrative}`)
+  const latestActionEvidence = state.adventure.actionHistory.slice(-1).map(item => item.eventSequence)
   return [
     `【文字冒险运行时】${session.title}｜事件序号=${state.lastSequence}｜运行源=${playable.packageHash.slice(0, 16)}`,
     `【当前位置】${location.title}｜key=${location.key}｜${location.description}`,
@@ -751,9 +774,11 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
     `【状态】${state.adventure.conditions.map(item => `${item.conditionKey}${item.duration == null ? '' : `(${item.duration})`}`).join('、') || '无'}`,
     '【任务】', ...(quests.length ? quests : ['- 无']),
     '【当前位置行动闭集】', ...(actionLines.length ? actionLines : ['- 无']),
+    `【允许输出的 actionKey JSON】${JSON.stringify(actions.filter(item => item.available).map(item => item.action.key))}`,
+    `【允许引用的冒险事件序号 JSON】${JSON.stringify(latestActionEvidence)}`,
     `【Narrative】节点=${state.narrative?.currentNodeKey ?? '无'}｜可用选择=${state.narrative?.availableChoiceKeys?.join('、') || '无'}`,
     '【最近行动结果】', ...(recent.length ? recent : ['- 无']),
-    '自由输入只能映射到“可执行”的 action key；不得创造新地点、物品、任务、判定结果或状态变化。',
+    '自由输入只能映射到“可执行”的 action key；结果叙述只能引用允许序号；不得创造新地点、物品、任务、判定结果或状态变化。',
   ].join('\n')
 }
 
@@ -1694,9 +1719,87 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L1',
     ownerFrom: 'work',
-    budgetTokens: 10_000,
+    budgetTokens: 24_000,
     enabled: input => Number.isInteger(input.productBuildId) && !!input.productArtifactKeys?.length,
     read: readProductProductionArtifactInputs,
+  },
+  {
+    key: 'product-production.adventure-scene-script-inputs',
+    label: '文字冒险单幕分场写作投影',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 15_100,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId)
+      && /^content\.scene-script\.act-[123]\.part-[12]$/.test(input.productProductionTaskKey ?? '')
+      && !!input.productArtifactKeys?.length,
+    read: readTextAdventureSceneScriptInputsV1,
+  },
+  {
+    key: 'product-production.adventure-dialogue-inputs',
+    label: '文字冒险独立对白审校投影',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 12_500,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId)
+      && /^content\.dialogue-pass\.act-[123]$/.test(input.productProductionTaskKey ?? '')
+      && !!input.productArtifactKeys?.length,
+    read: readTextAdventureDialogueInputsV1,
+  },
+  {
+    key: 'product-production.adventure-visual-quality-inputs',
+    label: '文字冒险独立图片审查投影',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 12_500,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId)
+      && /^media\.visual-quality-review\.batch-[1-9]\d*$/.test(input.productProductionTaskKey ?? '')
+      && !!input.productArtifactKeys?.length,
+    read: readTextAdventureVisualQualityInputsV1,
+  },
+  {
+    key: 'product-production.adventure-quality-inputs',
+    label: '文字冒险分区叙事质量审查投影',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 32_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId)
+      && /^content\.adventure-quality-review(?:\.(?:structure|act-[123]))?$/.test(
+        input.productProductionTaskKey ?? '',
+      )
+      && !!input.productArtifactKeys?.length,
+    read: readTextAdventureQualityInputsV1,
+  },
+  {
+    key: 'product-production.adventure-playtest-inputs',
+    label: '文字冒险试玩总监验收证据投影',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 8_500,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId)
+      && input.productProductionTaskKey === 'qa.playtest-strategy'
+      && !!input.productArtifactKeys?.length,
+    read: readTextAdventurePlaytestInputsV1,
+  },
+  {
+    key: 'product-production.adventure-repair-feedback',
+    label: '文字冒险上一轮质量修复反馈',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 6_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId) && !!input.productArtifactKeys?.length,
+    read: readTextAdventureRepairFeedbackV1,
   },
   {
     key: 'product-production.quality-feedback',

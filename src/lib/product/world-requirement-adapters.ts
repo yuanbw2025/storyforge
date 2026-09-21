@@ -208,9 +208,12 @@ export function compileUpperProductWorldRoleBindingsV1(
     artifacts: [...catalog.artifactResourceKeys],
   }
   if (productType === 'text-adventure') return {
+    story: [...catalog.storyResourceKeys, ...catalog.storyArcResourceKeys],
+    characters: [...catalog.characterResourceKeys],
     locations: [...catalog.importantLocationResourceKeys],
     items: [...catalog.artifactResourceKeys],
     quests: [...catalog.storyArcResourceKeys],
+    lore: [...catalog.codexEntryResourceKeys],
   }
   if (productType === 'avg') return {
     story: [...catalog.storyResourceKeys, ...catalog.storyArcResourceKeys],

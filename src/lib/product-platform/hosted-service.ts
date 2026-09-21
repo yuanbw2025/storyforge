@@ -29,6 +29,10 @@ import {
   type CommercialReleaseDeliveryPersistenceV1,
 } from '../commercial/release-delivery'
 import {
+  createCommercialReleaseDeliveryReadinessAdapterV1,
+  type CommercialReleaseDeliveryProductionAdapterV1,
+} from '../commercial/release-delivery-capabilities'
+import {
   CommunityPlatformAuthorityV1,
   type CommunityPlatformSnapshotV1,
   type CommunityPrincipalV1,
@@ -136,8 +140,7 @@ export interface HostedProductPlatformProductionRuntimeV1 {
     & ProductPlatformProductionDependencyAdapterV1<'identity-provider'>
   /** The exact transactional storage used by all four authorities and LFG handoff state. */
   storage: HostedProductPlatformProductionStorageV1
-  releaseDeliveryPersistence: CommercialReleaseDeliveryPersistenceV1
-    & ProductPlatformProductionDependencyAdapterV1<'object-storage'>
+  releaseDeliveryPersistence: CommercialReleaseDeliveryProductionAdapterV1
   checkoutProvider: CommercialCheckoutProviderV1
     & ProductPlatformProductionDependencyAdapterV1<'payment-provider'>
   /** One deployment-owned secret boundary for webhook, LFG and room credentials. */
@@ -301,7 +304,9 @@ export async function createHostedProductPlatformServiceV1(
     ? {
         'identity-provider': input.productionRuntime.identity,
         ...input.productionRuntime.storage.dependencyAdapters,
-        'object-storage': input.productionRuntime.releaseDeliveryPersistence,
+        'object-storage': createCommercialReleaseDeliveryReadinessAdapterV1(
+          input.productionRuntime.releaseDeliveryPersistence,
+        ),
         'payment-provider': input.productionRuntime.checkoutProvider,
         'webhook-secret-manager': input.productionRuntime.secretManager,
         'realtime-fanout': input.productionRuntime.realtime,

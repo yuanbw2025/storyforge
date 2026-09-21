@@ -89,6 +89,17 @@ describe('R-PRODUCTPROD-1C · authorized deterministic acceptance fixture', () =
     const svg = await media.text()
     expect(svg).toContain('<svg')
     expect(svg).not.toMatch(/<script|onload=|javascript:/i)
+
+    // Resolver lifetime and physical-byte read lifetime are different. A
+    // performance lab can retain its object URL while another preview tab
+    // independently reads the same immutable Build asset.
+    const concurrent = await resolveProductRuntimeSource({
+      scope: owned.scope,
+      source: { kind: 'build', productBuildId: owned.buildId, expectedPreviewHash: result.previewHash },
+    })
+    const concurrentlyRead = await concurrent.mediaResolver.read(preview.runtimePackage.presentation!.assets[0].assetKey)
+    expect(concurrentlyRead).toMatchObject({ type: 'image/svg+xml', size: media.size })
+    concurrent.mediaResolver.dispose()
     resolved.mediaResolver.dispose()
 
     const session = await createProductRuntimeInstanceFromSource({

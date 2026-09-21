@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：1.8.0 · 生效：2026-09-10
+> 版本：1.9.0 · 生效：2026-09-21
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -38,6 +38,21 @@
 - `docs/products/WORLD-ENGINE.md`
 - `docs/products/UPPER-PRODUCTS.md`
 - `docs/products/TTRPG-AI-KP.md`：跑团 AI KP 专项产品契约。
+- `docs/products/TEXT-ADVENTURE.md`：AI 主导文字冒险专项产品契约。
+- `docs/products/text-adventure-production/README.md`：文字冒险专业生产与旗舰交付的唯一施工入口；以下 13 份子文档共同构成该专项方案包，不得脱离入口单独提升权威。
+- `docs/products/text-adventure-production/01-DELIVERY-CONTRACT.md`
+- `docs/products/text-adventure-production/02-AGENT-TEAM-AND-SKILLS.md`
+- `docs/products/text-adventure-production/03-SOURCE-SUFFICIENCY-AND-ADAPTATION.md`
+- `docs/products/text-adventure-production/04-STORY-TO-QUEST-AND-SCENE.md`
+- `docs/products/text-adventure-production/05-PRODUCTION-DAG-AND-ARTIFACTS.md`
+- `docs/products/text-adventure-production/06-RUNTIME-MEDIA-PLAYER-AND-DISTRIBUTION.md`
+- `docs/products/text-adventure-production/07-QUALITY-EVAL-AND-ACCEPTANCE.md`
+- `docs/products/text-adventure-production/08-IMPLEMENTATION-AND-DELIVERY-PLAN.md`
+- `docs/products/text-adventure-production/09-MEDIA-AUTHORING-AND-REVISION.md`
+- `docs/products/text-adventure-production/10-MEDIA-QUALITY-AND-BINDING.md`
+- `docs/products/text-adventure-production/11-HUMAN-VISUAL-REVIEW-AND-RECOMMENDATION.md`
+- `docs/products/text-adventure-production/12-PRODUCT-PACKAGE-IMPORT-AND-COMMUNITY-CANDIDATE.md`
+- `docs/products/text-adventure-production/13-FIRST-FLAGSHIP-PRODUCTION-AND-SHOWCASE.md`
 - `docs/ROADMAP.md`
 - `docs/roadmap/README.md`
 - `docs/roadmap/CAPABILITY-BASELINE.md`
@@ -116,3 +131,5 @@
 本次 1.7.0 增量复审把 Phase C 总规划拆成短篇、小说转剧本、小说转漫画三份专项施工方案，并登记一次跨方案隔离审查。三份方案各自拥有产品 owner、Skill DAG、UI、数据生命周期、完成条件和唯一功能分支；共享来源分析只允许通过独立 foundation 提交进入集成基线。该拆分未改变总纲 1.5.0 的产品边界、当前架构事实或世界引擎 owner。
 
 本次 1.8.0 复审随总纲 1.7.0 统一世界衍生产品阶段短名为 `S1 世界封存`、`S2 产品定向`、`S3 产品执行`。现行白名单没有增加或删除；L1/L2 文档已同步阶段职责、交接与闸门。旧长标题不再作为另一套阶段名称，但 Git/WPS 历史记录仍按 H 层保留。
+
+本次 1.9.0 复审登记文字冒险专项产品契约及其专业生产方案包。它细化 `UPPER-PRODUCTS.md` 已确定的共同边界，不改变世界引擎、AVG、文字开放世界或共享底座 owner；实现状态仍以能力基线、代码与当前验证证据为准。

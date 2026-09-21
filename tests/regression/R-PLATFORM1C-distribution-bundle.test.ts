@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
+  DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1,
+  deleteImportedProductReleaseV1,
   exportProductDistributionBundleV2,
+  importLocalProductDistributionV2,
   importMarketplaceProductDistributionV2,
+  listImportedProductReleasesV1,
   verifyProductDistributionBundleV2,
   type MarketplaceImportProvenanceV2,
 } from '../../src/lib/product-platform/distribution-bundle'
@@ -10,7 +14,9 @@ import { hashProductProductionValueV2 } from '../../src/lib/product-production/h
 import { putMediaBlobObject, sha256MediaData } from '../../src/lib/product-production/media-blob-store'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { assertProductReleaseUnchanged } from '../../src/lib/product/releases'
+import { createAvgGameInstance } from '../../src/lib/product/runtime-instances'
 import type { FrozenRuntimeMediaAssetV2, ProductRuntimePackageV1, WorkspaceScope } from '../../src/lib/types'
+import { sanitizeSvg } from '../../src/lib/utils/sanitize-svg'
 import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
@@ -60,18 +66,28 @@ function avgPackage(worldContentHash: string, asset: FrozenRuntimeMediaAssetV2):
   })
 }
 
-async function publishedFixture(scope: WorkspaceScope) {
+async function publishedFixture(scope: WorkspaceScope, media?: {
+  data: ArrayBuffer
+  mimeType: 'image/png' | 'image/svg+xml'
+  sanitizedSvg?: boolean
+}) {
   const revision = await createWorldRevision({ scope, label: '市场来源世界' })
   const worldRelease = await publishWorldRevision(revision.id!)
-  const data = new TextEncoder().encode('storyforge-distribution-image-v1').buffer
+  const data = media?.data ?? new TextEncoder().encode('storyforge-distribution-image-v1').buffer
   const contentHash = await sha256MediaData(data)
   const asset: FrozenRuntimeMediaAssetV2 = {
     assetKey: 'background.harbor', version: 1, kind: 'background', name: '雾港',
-    mimeType: 'image/png', byteSize: data.byteLength, width: 1920, height: 1080, durationMs: null,
+    mimeType: media?.mimeType ?? 'image/png', byteSize: data.byteLength, width: 1920, height: 1080, durationMs: null,
     contentHash, blobContentHash: contentHash, source: 'creator-upload', license: 'CC-BY-4.0',
     altText: '雾中的港口', characterTag: '', sceneTag: 'harbor',
   }
-  const object = await putMediaBlobObject({ scope, data, mimeType: asset.mimeType, expectedContentHash: contentHash })
+  const object = await putMediaBlobObject({
+    scope,
+    data,
+    mimeType: asset.mimeType,
+    expectedContentHash: contentHash,
+    sanitizedSvg: media?.sanitizedSvg,
+  })
   const now = Date.now()
   const manifest = await createFixtureProductReleaseManifestV1({
     runtimePackage: avgPackage(worldRelease.contentHash, asset), productionKey: 'market.harbor',
@@ -148,6 +164,76 @@ describe('PLATFORM-1C · Marketplace ProductDistributionBundle', () => {
     expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(1)
   }, 40_000)
 
+  it('受治理净化且字节稳定的 SVG 可随正式分发包导入，不安全 SVG 零写入拒绝', async () => {
+    const safeSource = await workspace('安全 SVG 来源')
+    const safeText = sanitizeSvg('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="18"><rect width="32" height="18" fill="#123456"/></svg>')
+    expect(safeText).not.toBe('')
+    const safeFixture = await publishedFixture(safeSource.scope, {
+      data: new TextEncoder().encode(safeText).buffer,
+      mimeType: 'image/svg+xml',
+      sanitizedSvg: true,
+    })
+    const safeBundle = await exportProductDistributionBundleV2({
+      scope: safeSource.scope,
+      productReleaseId: safeFixture.releaseId,
+    })
+    const safeTarget = await workspace('安全 SVG 目标')
+    const imported = await importMarketplaceProductDistributionV2({
+      scope: safeTarget.scope,
+      bundle: JSON.parse(JSON.stringify(safeBundle)),
+      provenance: provenance({ listingId: 'listing.safe-svg' }),
+    })
+    expect(imported.productType).toBe('avg')
+    const importedBlob = await db.mediaBlobObjects.where('workId').equals(safeTarget.scope.workId).first()
+    expect(importedBlob).toMatchObject({ mimeType: 'image/svg+xml', contentHash: safeFixture.asset.contentHash })
+
+    const unsafeBytes = new TextEncoder().encode(
+      '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(2)</script><rect width="1" height="1"/></svg>',
+    )
+    const unsafeHash = await sha256MediaData(unsafeBytes.buffer)
+    const unsafeAsset = {
+      ...safeBundle.media[0].asset,
+      byteSize: unsafeBytes.byteLength,
+      contentHash: unsafeHash,
+      blobContentHash: unsafeHash,
+    }
+    const unsafeRuntimePackage = structuredClone(safeBundle.productRelease.manifest.runtimePackage)
+    unsafeRuntimePackage.presentation!.assets[0] = unsafeAsset
+    const unsafeManifest = await createFixtureProductReleaseManifestV1({
+      runtimePackage: unsafeRuntimePackage,
+      productionKey: 'market.unsafe-svg',
+    })
+    const frozenUnsafeAsset = unsafeManifest.runtimePackage.presentation!.assets[0]
+    const unsafeMedia = [{
+      asset: frozenUnsafeAsset,
+      dataBase64: btoa(String.fromCharCode(...unsafeBytes)),
+    }]
+    const unsafeProductRelease = {
+      manifest: unsafeManifest,
+      contentHash: await hashProductProductionValueV2(unsafeManifest),
+    }
+    const unsafePayload = {
+      schema: 'storyforge.product-distribution-bundle' as const,
+      version: 2 as const,
+      productRelease: unsafeProductRelease,
+      sourceWorld: { contentHash: unsafeManifest.sourceWorldRelease.contentHash },
+      media: unsafeMedia,
+    }
+    const unsafeBundle = {
+      ...unsafePayload,
+      bundleHash: await hashProductProductionValueV2(unsafePayload),
+    }
+    await expect(verifyProductDistributionBundleV2(unsafeBundle)).rejects.toThrow(/SVG.*净化|不安全/)
+    const unsafeTarget = await workspace('危险 SVG 目标')
+    await expect(importMarketplaceProductDistributionV2({
+      scope: unsafeTarget.scope,
+      bundle: unsafeBundle,
+      provenance: provenance({ listingId: 'listing.unsafe-svg' }),
+    })).rejects.toThrow(/SVG.*净化|不安全/)
+    expect(await db.productReleases.where('workId').equals(unsafeTarget.scope.workId).count()).toBe(0)
+    expect(await db.mediaBlobObjects.where('workId').equals(unsafeTarget.scope.workId).count()).toBe(0)
+  }, 40_000)
+
   it('拒绝媒资、世界来源证明和总包任一层篡改', async () => {
     const source = await workspace('篡改来源')
     const fixture = await publishedFixture(source.scope)
@@ -182,5 +268,194 @@ describe('PLATFORM-1C · Marketplace ProductDistributionBundle', () => {
     expect(await db.productReleases.where('workId').equals(target.scope.workId).count()).toBe(0)
     expect(await db.worldReleases.where('worldId').equals(target.scope.worldId).count()).toBe(0)
     expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(0)
+  }, 40_000)
+
+  it('本地文件导入使用独立来源语义，重复导入幂等且不伪造市场权益', async () => {
+    const source = await workspace('本地包来源')
+    const fixture = await publishedFixture(source.scope)
+    const bundle = await exportProductDistributionBundleV2({ scope: source.scope, productReleaseId: fixture.releaseId })
+    const target = await workspace('本地包目标')
+    const candidatePackageHash = 'c'.repeat(64)
+
+    const imported = await importLocalProductDistributionV2({
+      scope: target.scope,
+      bundle,
+      provenance: {
+        candidatePackageHash,
+        originalReleaseHash: bundle.productRelease.contentHash,
+        candidateStatus: 'eligible-for-community-submission',
+      },
+    })
+    expect(imported.distributionProvenance).toEqual(expect.objectContaining({
+      source: 'local-file', candidatePackageHash,
+      originalReleaseHash: bundle.productRelease.contentHash,
+      remoteCreatorIdentityVerified: false, localCopyPreserved: true,
+    }))
+    expect(imported.distributionProvenance).not.toHaveProperty('listingId')
+    expect(imported.distributionProvenance).not.toHaveProperty('entitlementId')
+
+    const repeated = await importLocalProductDistributionV2({
+      scope: target.scope,
+      bundle,
+      provenance: {
+        candidatePackageHash,
+        originalReleaseHash: bundle.productRelease.contentHash,
+        candidateStatus: 'eligible-for-community-submission',
+      },
+    })
+    expect(repeated.id).toBe(imported.id)
+    expect(await db.productReleases.where('workId').equals(target.scope.workId).count()).toBe(1)
+    expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(1)
+  }, 40_000)
+
+  it('本地导入在 Release 身份冲突后回收本次暂存 Blob，不留下半成品', async () => {
+    const source = await workspace('冲突包来源')
+    const fixture = await publishedFixture(source.scope)
+    const bundle = await exportProductDistributionBundleV2({ scope: source.scope, productReleaseId: fixture.releaseId })
+    const target = await workspace('冲突包目标')
+    await db.productReleases.add({
+      projectId: target.scope.projectId, worldId: target.scope.worldId, workId: target.scope.workId,
+      productionKey: 'conflicting.production', productType: 'avg', worldReleaseId: null,
+      version: 1, label: '冲突占位', manifestJson: '{}',
+      contentHash: bundle.productRelease.contentHash, createdAt: Date.now(),
+    })
+
+    await expect(importLocalProductDistributionV2({
+      scope: target.scope,
+      bundle,
+      provenance: {
+        candidatePackageHash: 'd'.repeat(64),
+        originalReleaseHash: bundle.productRelease.contentHash,
+        candidateStatus: 'eligible-for-community-submission',
+      },
+    })).rejects.toThrow(/身份.*冲突/)
+    expect(await db.productReleases.where('workId').equals(target.scope.workId).count()).toBe(1)
+    expect(await db.productMediaAssets.where('workId').equals(target.scope.workId).count()).toBe(0)
+    expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(0)
+  }, 40_000)
+
+  it('只删除导入副本及其私域会话，并按注册引用保留其他 Release 共用的 Blob', async () => {
+    const source = await workspace('删除副本来源')
+    const fixture = await publishedFixture(source.scope)
+    const bundle = await exportProductDistributionBundleV2({ scope: source.scope, productReleaseId: fixture.releaseId })
+    const target = await workspace('删除副本目标')
+    const imported = await importLocalProductDistributionV2({
+      scope: target.scope,
+      bundle,
+      provenance: {
+        candidatePackageHash: 'e'.repeat(64),
+        originalReleaseHash: bundle.productRelease.contentHash,
+        candidateStatus: 'eligible-for-community-submission',
+      },
+    })
+    const session = await createAvgGameInstance({
+      scope: target.scope,
+      productReleaseId: imported.id!,
+      title: '待删除导入副本存档',
+      seed: 'delete-imported-copy',
+    })
+    const importedAsset = await db.productMediaAssets.where('productReleaseId').equals(imported.id!).first()
+    const importedBinding = await db.productMediaBlobs.where('mediaAssetId').equals(importedAsset!.id!).first()
+    const sharedReleaseId = await db.productReleases.add({
+      ...imported,
+      id: undefined,
+      productionKey: 'local-file:shared-copy',
+      version: 1,
+      label: '仍需保留的导入副本',
+      createdAt: Date.now() + 1,
+    }) as number
+    const sharedAssetId = await db.productMediaAssets.add({
+      ...importedAsset!,
+      id: undefined,
+      productReleaseId: sharedReleaseId,
+      createdAt: Date.now() + 1,
+      updatedAt: Date.now() + 1,
+    }) as number
+    await db.productMediaBlobs.add({
+      ...importedBinding!,
+      id: undefined,
+      mediaAssetId: sharedAssetId,
+      createdAt: Date.now() + 1,
+    })
+
+    await expect(listImportedProductReleasesV1({ scope: target.scope, productType: 'avg' }))
+      .resolves.toHaveLength(2)
+    await expect(deleteImportedProductReleaseV1({
+      scope: target.scope,
+      productReleaseId: imported.id!,
+      confirmation: DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1,
+    })).resolves.toMatchObject({
+      productReleaseId: imported.id,
+      source: 'local-file',
+      deletedSessionCount: 1,
+      deletedMediaAssetCount: 1,
+      deletedMediaBindingCount: 1,
+      reclaimedBlobObjectIds: [],
+      retainedBlobObjectIds: [importedBinding!.blobObjectId],
+    })
+    expect(await db.productReleases.get(imported.id!)).toBeUndefined()
+    expect(await db.productRuntimeSessions.get(session.id!)).toBeUndefined()
+    expect(await db.productRuntimeEvents.where('sessionId').equals(session.id!).count()).toBe(0)
+    expect(await db.productReleases.get(sharedReleaseId)).toBeDefined()
+    expect(await db.mediaBlobObjects.get(importedBinding!.blobObjectId)).toBeDefined()
+    expect(await db.worldReleases.where('worldId').equals(source.scope.worldId).count()).toBe(1)
+
+    const finalRemoval = await deleteImportedProductReleaseV1({
+      scope: target.scope,
+      productReleaseId: sharedReleaseId,
+      confirmation: DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1,
+    })
+    expect(finalRemoval.reclaimedBlobObjectIds).toEqual([importedBinding!.blobObjectId])
+    expect(await db.mediaBlobObjects.get(importedBinding!.blobObjectId)).toBeUndefined()
+  }, 40_000)
+
+  it('拒绝无确认、跨 Work、原创 Release 与已进入生产血缘的导入副本删除', async () => {
+    const source = await workspace('删除边界来源')
+    const fixture = await publishedFixture(source.scope)
+    const bundle = await exportProductDistributionBundleV2({ scope: source.scope, productReleaseId: fixture.releaseId })
+    const target = await workspace('删除边界目标')
+    const imported = await importLocalProductDistributionV2({
+      scope: target.scope,
+      bundle,
+      provenance: {
+        candidatePackageHash: 'f'.repeat(64),
+        originalReleaseHash: bundle.productRelease.contentHash,
+        candidateStatus: 'eligible-for-community-submission',
+      },
+    })
+
+    await expect(deleteImportedProductReleaseV1({
+      scope: target.scope,
+      productReleaseId: imported.id!,
+      confirmation: 'missing-confirmation' as typeof DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1,
+    })).rejects.toThrow(/明确确认/)
+    await expect(deleteImportedProductReleaseV1({
+      scope: source.scope,
+      productReleaseId: imported.id!,
+      confirmation: DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1,
+    })).rejects.toThrow(/不存在或跨 Work/)
+    await expect(deleteImportedProductReleaseV1({
+      scope: source.scope,
+      productReleaseId: fixture.releaseId,
+      confirmation: DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1,
+    })).rejects.toThrow(/原创 ProductRelease/)
+
+    const productionId = await db.productProductions.add({
+      projectId: target.scope.projectId,
+      worldId: target.scope.worldId,
+      workId: target.scope.workId,
+      productType: 'avg',
+      productionKey: 'lineage-protection',
+      currentProductReleaseId: imported.id!,
+      status: 'released',
+      updatedAt: Date.now(),
+    } as never) as number
+    await expect(deleteImportedProductReleaseV1({
+      scope: target.scope,
+      productReleaseId: imported.id!,
+      confirmation: DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1,
+    })).rejects.toThrow(/生产血缘/)
+    expect(await db.productReleases.get(imported.id!)).toBeDefined()
+    await db.productProductions.delete(productionId)
   }, 40_000)
 })

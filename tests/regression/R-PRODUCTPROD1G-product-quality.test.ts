@@ -3,11 +3,15 @@ import type { ProductProductionBriefV3, ProductRuntimePackageV1, ProductionProdu
 import { buildUpperProductModulesV1 } from '../../src/lib/product-production/product-adapters'
 import { evaluateProductRuntimeProductQualityV1 } from '../../src/lib/product-production/product-quality'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
+import { compileTextAdventureProductionBriefV1 } from '../../src/lib/adventure/production-brief'
+import { TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1 } from '../../src/lib/adventure/media-composition'
 import {
   CURRENT_PRODUCT_RESOURCE_KEYS,
   CURRENT_PRODUCT_SOURCE_CATALOG,
   currentProductSelection,
 } from '../helpers/current-product-world'
+import { createTextAdventureFoundationContentV2 } from '../helpers/text-adventure-v2-foundation'
+import { analyzeTextAdventureRouteQualityV1 } from '../../src/lib/adventure/quality-analysis'
 
 const PRODUCTS: ProductionProductKindV1[] = [
   'character-interaction', 'text-adventure', 'avg', 'text-open-world',
@@ -107,5 +111,119 @@ describe('PRODUCT-PROD-1G · product-specific quality gates', () => {
     const report = evaluateProductRuntimeProductQualityV1({ runtimePackage: broken, brief: currentBrief })
     expect(report.passed).toBe(false)
     expect(report.gates).toContainEqual(expect.objectContaining({ gateId: 'product.adventure.progression', passed: false }))
+  })
+
+  it('公开文案拒绝内部演化指令，即使指令只有中文也不能混入运行包', () => {
+    const broken = runtime('text-adventure')
+    broken.adventure = createTextAdventureFoundationContentV2()
+    broken.definition.description = '质量门 · 本轮演化：返修玩家可见任务文案并重新核对目标。'
+    expect(analyzeTextAdventureRouteQualityV1(broken).copyIssues).toContainEqual({
+      kind: 'instruction-leak', surfaceKey: 'definition.description',
+      excerpt: '质量门 · 本轮演化：返修玩家可见任务文案并重新核对目标。',
+    })
+  })
+
+  it('任一叙事选择缺少唯一可执行行动时拒绝运行包，不能只验证剩余映射', () => {
+    const currentBrief = brief('text-adventure')
+    const broken = runtime('text-adventure')
+    const foundation = createTextAdventureFoundationContentV2()
+    const actionTemplate = foundation.actions.find(action => action.narrativeChoiceKey != null)!
+    broken.narrative.choices.forEach(choice => {
+      const actionKey = `action.choice.${choice.choiceKey}`
+      choice.tags = [`adventure-action:${actionKey}`]
+    })
+    broken.adventure = {
+      ...foundation,
+      actions: [
+        ...foundation.actions.filter(action => action.narrativeChoiceKey == null),
+        ...broken.narrative.choices.map(choice => ({
+          ...actionTemplate,
+          key: `action.choice.${choice.choiceKey}`,
+          narrativeChoiceKey: choice.choiceKey,
+        })),
+      ],
+    }
+    const removedChoiceKey = broken.narrative.choices[0].choiceKey
+    broken.adventure = {
+      ...broken.adventure!,
+      actions: broken.adventure!.actions.filter(action => action.narrativeChoiceKey !== removedChoiceKey),
+    }
+    const report = evaluateProductRuntimeProductQualityV1({ runtimePackage: broken, brief: currentBrief })
+    expect(report.gates).toContainEqual(expect.objectContaining({
+      gateId: 'product.adventure.v2-choice-bridge',
+      passed: false,
+      evidence: expect.arrayContaining([
+        `unmapped=${removedChoiceKey}`,
+        'orphan=none',
+        'duplicate=none',
+      ]),
+    }))
+
+    broken.adventure.actions.push(
+      {
+        ...actionTemplate,
+        key: `action.choice.${removedChoiceKey}`,
+        narrativeChoiceKey: removedChoiceKey,
+      },
+      {
+        ...actionTemplate,
+        key: `action.choice.${removedChoiceKey}.duplicate`,
+        narrativeChoiceKey: removedChoiceKey,
+      },
+    )
+    const duplicateReport = evaluateProductRuntimeProductQualityV1({ runtimePackage: broken, brief: currentBrief })
+    expect(duplicateReport.gates).toContainEqual(expect.objectContaining({
+      gateId: 'product.adventure.v2-choice-bridge',
+      passed: false,
+      evidence: expect.arrayContaining([
+        'unmapped=none',
+        'orphan=none',
+        `duplicate=${removedChoiceKey}`,
+      ]),
+    }))
+  })
+
+  it('商业文字冒险不能用十二张泛图冒充封面、地图、角色与关键剧情构成', () => {
+    const currentBrief = brief('text-adventure')
+    currentBrief.media = {
+      ...currentBrief.media, visualLevel: 'key-scenes', imageCount: 12,
+    }
+    currentBrief.textAdventure = compileTextAdventureProductionBriefV1({
+      scale: currentBrief.scale,
+      media: currentBrief.media,
+      draft: { confirmAll: true },
+    })
+    const currentRuntime = runtime('text-adventure')
+    currentRuntime.adventure = createTextAdventureFoundationContentV2()
+    const asset = (index: number, kind: 'background' | 'character-pose' | 'cg', sceneTag: string) => ({
+      assetKey: `asset.quality.${index}`, version: 1, kind, name: `质量图片 ${index}`,
+      mimeType: 'image/png', byteSize: 1, width: 1280, height: 720, durationMs: null,
+      contentHash: String(index + 1).padStart(64, 'a'),
+      blobContentHash: String(index + 1).padStart(64, 'a'),
+      source: 'quality-fixture', license: 'test-only', altText: `质量图片 ${index}`,
+      characterTag: '', sceneTag,
+    })
+    currentRuntime.presentation = {
+      version: 1, cues: [],
+      assets: Array.from({ length: 12 }, (_, index) => asset(
+        index, index === 1 ? 'character-pose' : 'background', `generic-${index + 1}`,
+      )),
+    }
+    const genericReport = evaluateProductRuntimeProductQualityV1({
+      runtimePackage: currentRuntime, brief: currentBrief,
+    })
+    expect(genericReport.gates).toContainEqual(expect.objectContaining({
+      gateId: 'product.adventure.recommendation-media-composition', passed: false,
+    }))
+
+    currentRuntime.presentation.assets = TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1.map(
+      (role, index) => asset(index, role.mediaKind, role.sceneTag),
+    )
+    const composedReport = evaluateProductRuntimeProductQualityV1({
+      runtimePackage: currentRuntime, brief: currentBrief,
+    })
+    expect(composedReport.gates).toContainEqual(expect.objectContaining({
+      gateId: 'product.adventure.recommendation-media-composition', passed: true,
+    }))
   })
 })

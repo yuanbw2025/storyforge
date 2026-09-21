@@ -81,6 +81,14 @@ describe('R-PRODUCTPROD-1B · consultation and reviewable Brief', () => {
     expect(first.worldContentHash).toBe(owned.release.contentHash)
     expect(first.suggestions.some(item => item.kind === 'mainline')).toBe(true)
     expect(first.suggestions.at(-1)).toMatchObject({ kind: 'custom' })
+    const custom = first.suggestions.at(-1)!
+    const customSelection = first.selectionDefaults[custom.suggestionKey]
+    expect(first.sourceOptions.storySources.some(item => item.kind === 'world-foundation')).toBe(true)
+    expect(customSelection.storyResourceKeys).toEqual(expect.arrayContaining(
+      first.sourceOptions.storySources
+        .filter(item => item.kind === 'world-foundation')
+        .map(item => item.resourceKey),
+    ))
     expect(new Set(first.suggestions.map(item => item.suggestionKey)).size).toBe(first.suggestions.length)
     expect(await db.productProductions.count()).toBe(0)
     expect(await db.productBuilds.count()).toBe(0)
@@ -148,10 +156,13 @@ describe('R-PRODUCTPROD-1B · consultation and reviewable Brief', () => {
     const resolvedAdventure = await draftProductProductionBriefV3({
       scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: mainline.suggestionKey,
       productType: 'text-adventure', visualLevel: 'none', audioLevel: 'none',
+      scale: 'short-arc',
       playerRole: '扮演调查信号的守灯人',
       openingSituation: '从用户确认的潮门信号塔入口开始调查。',
     })
     expect(resolvedAdventure.unresolvedDecisionKeys).not.toContain('adventure-starting-location')
+    expect(resolvedAdventure.productionBudget.maximumModelCalls).toBe(88)
+    expect(resolvedAdventure.productionBudget.maximumOutputTokens).toBe(704_000)
 
     const ttrpgWithoutConfirmation = await draftProductProductionBriefV3({
       scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: mainline.suggestionKey,

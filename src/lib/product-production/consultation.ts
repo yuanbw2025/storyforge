@@ -26,6 +26,12 @@ import {
   type TtrpgProductionBriefDraftInputV2,
   unresolvedTtrpgProductionBriefDecisionsV2,
 } from '../ttrpg/production-brief'
+import {
+  compileTextAdventureProductionBriefV1,
+  minimumTextAdventureCommercialImageCountV1,
+  type TextAdventureProductionBriefDraftV1,
+  unresolvedTextAdventureProductionBriefDecisionsV1,
+} from '../adventure/production-brief'
 
 type ConsultationSourceV1 = ProductProductionConsultationSourceV2
 
@@ -148,22 +154,28 @@ function mediaProfile(input: {
   audioLevel: ProductProductionMediaProfileV1['audioLevel']
   aiTown?: Pick<AiTownBriefSettingsV1,
     'residentTarget' | 'majorLocationTarget' | 'portraits' | 'expressions' | 'locationCards' | 'ambientAudio'>
+  qualityProfile: ProductProductionBriefV3['qualityProfile']
 }): ProductProductionMediaProfileV1 {
   // Each presentation product owns its own count/profile while sharing the
   // content-addressed media transport and release integrity primitives.
-  const presentationEnabled = input.productType === 'avg' || input.productType === 'ttrpg' || input.productType === 'ai-town'
+  const presentationEnabled = ['avg', 'ttrpg', 'ai-town', 'text-adventure'].includes(input.productType)
   const townImages = input.productType === 'ai-town' && input.visualLevel !== 'none'
     ? (input.aiTown?.locationCards === false ? 0 : input.aiTown?.majorLocationTarget ?? 4)
       + (input.aiTown?.portraits === false ? 0 : input.aiTown?.residentTarget ?? 6)
       + (input.aiTown?.expressions === false ? 0 : input.aiTown?.residentTarget ?? 6)
     : 0
+  const textAdventureMode = input.visualLevel === 'none'
+    ? 'text-only' : input.visualLevel === 'illustrated' ? 'rich-illustrations' : 'key-illustrations'
   const images = !presentationEnabled || input.visualLevel === 'none' ? 0
     : input.productType === 'ai-town' ? Math.min(28, townImages)
+      : input.productType === 'text-adventure' && input.qualityProfile === 'commercial-candidate'
+        ? minimumTextAdventureCommercialImageCountV1(textAdventureMode)
       : input.visualLevel === 'key-scenes' ? 2 : 8
   const townAudio = input.productType === 'ai-town' && input.aiTown?.ambientAudio === true && input.audioLevel !== 'none'
-  const music = input.productType === 'ai-town' ? 0 : !presentationEnabled || input.audioLevel === 'none' ? 0 : 1
+  const audioEnabled = input.productType === 'avg' || input.productType === 'ttrpg'
+  const music = !audioEnabled || input.audioLevel === 'none' ? 0 : 1
   const sfx = input.productType === 'ai-town' ? (townAudio ? 1 : 0)
-    : !presentationEnabled || input.audioLevel === 'none' ? 0 : input.audioLevel === 'music-sfx' ? 3 : 8
+    : !audioEnabled || input.audioLevel === 'none' ? 0 : input.audioLevel === 'music-sfx' ? 3 : 8
   const requiredMediaKinds: ProductProductionMediaProfileV1['requiredMediaKinds'] = []
   if (input.productType === 'ai-town') {
     if (images > 0 && input.aiTown?.locationCards !== false) requiredMediaKinds.push('background')
@@ -185,6 +197,7 @@ async function capabilityRequirement(input: {
   requirementKey: string
   mediaClass: 'text' | 'image' | 'music' | 'sfx'
   required: boolean
+  allowedDataClasses?: string[]
 }) {
   const basis = {
     requirementKey: input.requirementKey,
@@ -192,7 +205,7 @@ async function capabilityRequirement(input: {
     operation: 'generate',
     adapterFamily: input.mediaClass === 'text' ? 'configured-text' : 'configured-media',
     minimumCapabilityVersion: '1',
-    allowedDataClasses: ['world-selection'],
+    allowedDataClasses: input.allowedDataClasses ?? ['world-selection'],
     maximumRequestCost: null,
     maximumTotalCost: null,
     rightsPolicyVersion: 'storyforge-rights-v1',
@@ -311,6 +324,7 @@ export async function draftProductProductionBriefV3(input: {
   aiTown?: AiTownBriefSettingsV1
   characterChat?: ChatAuthoringSettingsV1
   avg?: AvgAuthoringSettingsV1
+  textAdventure?: TextAdventureProductionBriefDraftV1
   sourceSelection?: ProductProductionSourceSelectionV1
 }): Promise<ProductProductionBriefV3> {
   const scope = await resolveScope({ scope: input.scope })
@@ -369,6 +383,7 @@ export async function draftProductProductionBriefV3(input: {
       locationCards: input.aiTown?.locationCards ?? true,
       ambientAudio: input.aiTown?.ambientAudio ?? false,
     } : undefined,
+    qualityProfile,
   })
   const roleBindings = compileUpperProductWorldRoleBindingsV1(input.productType, selectedCatalog)
   const selection: ProductWorldSourceSelectionV1 = {
@@ -414,11 +429,18 @@ export async function draftProductProductionBriefV3(input: {
       authorConfirmed: true,
     }
   })() : null
+  const textAdventure = input.productType === 'text-adventure'
+    ? compileTextAdventureProductionBriefV1({ scale, media, draft: input.textAdventure })
+    : null
   const requirements = [await capabilityRequirement({
     // The built-in deterministic compiler provides a no-provider vertical
     // slice. External text generation is an optional quality upgrade and may
     // never become an implicit prerequisite for an authorized local Build.
     requirementKey: 'text.runtime-package', mediaClass: 'text', required: false,
+    allowedDataClasses: [
+      'world-selection',
+      ...(input.productType === 'text-adventure' && media.imageCount > 0 ? ['product-owned-media'] : []),
+    ],
   })]
   if (media.imageCount > 0) requirements.push(await capabilityRequirement({
     requirementKey: 'media.visual', mediaClass: 'image', required: qualityProfile === 'commercial-candidate',
@@ -452,6 +474,57 @@ export async function draftProductProductionBriefV3(input: {
     }
     unresolvedDecisionKeys.push(...unresolvedTtrpgProductionBriefDecisionsV2(ttrpg!))
   }
+  if (textAdventure) unresolvedDecisionKeys.push(...unresolvedTextAdventureProductionBriefDecisionsV1(textAdventure))
+  const textAdventureModelTaskCount = textAdventure
+    ? (() => {
+        const baseScenesPerAct = Math.floor(textAdventure.narrative.targetSceneCount / 3)
+        const extraScenes = textAdventure.narrative.targetSceneCount % 3
+        const scenePacketCount = [0, 1, 2].reduce((sum, actIndex) => {
+          const sceneCount = baseScenesPerAct + (actIndex < extraScenes ? 1 : 0)
+          return sum + (sceneCount <= 1 ? 1 : 2)
+        }, 0)
+        // Visual QA owns one provider Run per frozen image. Count every Run
+        // in the author-visible production envelope instead of treating the
+        // whole illustrated release as one hidden model call.
+        // Four bounded narrative-quality Runs (structure + three acts) replace
+        // the former whole-product review, adding three first-attempt model
+        // calls. Keep author-visible Brief authorization aligned with the Plan
+        // floor so a newly created Build can admit its complete professional DAG.
+        const visualRunCount = media.imageCount > 0 ? Math.max(1, media.imageCount) : 0
+        // A real, bounded image-input preflight is its own professional Run.
+        // It must be authorized in the Brief before any paid image task exists.
+        return 29 + scenePacketCount + visualRunCount + Number(visualRunCount > 0)
+      })()
+    : 0
+  const productionModelCalls = textAdventure
+    // The professional pipeline owns one first-attempt Run per specialist and
+    // per frozen image review. A live flagship rehearsal exhausted its former
+    // envelope before late quality roles began, so the governed default keeps
+    // explicit bounded recovery headroom, matching the Plan floor.
+    ? Math.max(
+        textAdventureModelTaskCount + Math.max(48, Math.ceil(textAdventureModelTaskCount * 1.5)),
+        28 + textAdventure.narrative.targetSceneCount + scale.targetEndingCount,
+      )
+    : 16
+  const productionInputTokens = textAdventure
+    // Formal production now preserves exact registered context per task. Keep
+    // this aligned with the Plan floor so late narrative and quality roles do
+    // not fail solely because their governed source packet is larger than the
+    // former generic-product estimate.
+    ? Math.max(300_000, productionModelCalls * 32_000)
+    : 180_000
+  const productionOutputTokens = textAdventure
+      ? Math.max(
+        100_000,
+        scale.targetWordCount * 8 + 60_000,
+        scale.targetPlayMinutes * 2_000 + 40_000,
+        // Provider completion receipts include hidden reasoning. The 200k
+        // envelope was exhausted during act prose even though the visible
+        // story was still incomplete; 8k per admitted attempt is the measured
+        // commercial lifetime floor, not a per-response generation target.
+        productionModelCalls * 8_000,
+      )
+    : 60_000
   return parseProductProductionBriefV3({
     schema: 'storyforge.product-production-brief', version: 3,
     ...(avg ? { avg } : {}),
@@ -482,9 +555,11 @@ export async function draftProductProductionBriefV3(input: {
       maximumModelCalls: 3, maximumInputTokens: 30_000, maximumOutputTokens: 8_000, maximumCostUsd: null,
     },
     productionBudget: {
-      maximumModelCalls: 16, maximumInputTokens: 180_000, maximumOutputTokens: 60_000,
+      maximumModelCalls: productionModelCalls,
+      maximumInputTokens: productionInputTokens,
+      maximumOutputTokens: productionOutputTokens,
       maximumCostUsd: null, maximumMediaCalls: Math.max(1, media.imageCount + media.musicTrackCount + media.sfxCount),
-      maximumDurationMs: 3_600_000, maximumStorageBytes: 200_000_000,
+      maximumDurationMs: textAdventure ? 18_000_000 : 3_600_000, maximumStorageBytes: 200_000_000,
     },
     qualityProfile,
     capabilityRequirements: requirements,
@@ -499,15 +574,45 @@ export async function draftProductProductionBriefV3(input: {
     },
     completionContract: {
       requiresPlayablePreview: true,
-      requiredGateIds: ['runtime.package.valid', 'runtime.playable', 'narrative.graph.valid', 'rights.complete'],
+      requiredGateIds: [
+        'runtime.package.valid', 'runtime.playable', 'narrative.graph.valid', 'rights.complete',
+        ...(input.productType === 'text-adventure' ? [
+          'product.adventure.world-actions',
+          'product.adventure.progression',
+          'product.adventure.v2-capabilities',
+          'product.adventure.v2-space',
+          'product.adventure.v2-character-system',
+          'product.adventure.v2-equipment',
+          'product.adventure.v2-quest-time-storylets-endings',
+          'product.adventure.v2-offline-fallback',
+          'product.adventure.v2-production-targets',
+          'product.adventure.v2-choice-bridge',
+          'product.adventure.v2-fail-forward',
+          'product.adventure.v2-media-binding',
+          'product.adventure.narrative-depth',
+          'product.adventure.content-volume',
+          ...(qualityProfile === 'commercial-candidate' ? [
+            'product.adventure.recommendation-analysis-complete',
+            'product.adventure.recommendation-route-volume',
+            'product.adventure.recommendation-total-volume',
+            'product.adventure.recommendation-dialogue-and-cast',
+            'product.adventure.recommendation-decisions',
+            'product.adventure.recommendation-main-quest',
+            'product.adventure.recommendation-endings',
+            'product.adventure.recommendation-copy',
+            'product.adventure.recommendation-media-composition',
+          ] : []),
+        ] : []),
+      ],
       minimumMediaCoverage: media.requiredMediaKinds.length
         ? qualityProfile === 'commercial-candidate' ? 1 : 0.5
         : 0,
-      allowSoftWaivers: true,
+      allowSoftWaivers: !(input.productType === 'text-adventure' && qualityProfile === 'commercial-candidate'),
     },
     unresolvedDecisionKeys,
     ...(ttrpg ? { ttrpg } : {}),
     ...(aiTown ? { aiTown } : {}),
+    ...(textAdventure ? { textAdventure } : {}),
     ...(input.productType === 'ttrpg' ? {
       authorConfirmations: { ttrpgDefaultRuleMappings: input.confirmTtrpgDefaultMappings === true },
     } : {}),
