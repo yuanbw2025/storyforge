@@ -4,6 +4,7 @@ import { isSha256Hash } from '../product-production/hash'
 export const TEXT_OPEN_WORLD_CREATOR_HARD_GATE_ID_V1 = 'text-open-world.creator.hard-gates'
 export const TEXT_OPEN_WORLD_CREATOR_SEMANTIC_GATE_ID_V1 = 'text-open-world.creator.semantic-release'
 export const TEXT_OPEN_WORLD_CREATOR_GRAYBOX_GATE_ID_V1 = 'text-open-world.creator.graybox'
+export const TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_GATE_ID_V1 = 'text-open-world.creator.full-playtest'
 export const TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1 = 'text-open-world.creator.release-calibration'
 export const TEXT_OPEN_WORLD_CREATOR_RELEASE_QUALITY_GATE_ID_V1 = 'text-open-world.creator.release-quality'
 export const TEXT_OPEN_WORLD_CREATOR_ISSUE_GATE_PREFIX_V1 = 'text-open-world.creator.issue.'
@@ -11,7 +12,7 @@ export const TEXT_OPEN_WORLD_CREATOR_ISSUE_WAIVER_GATE_PREFIX_V1 = 'text-open-wo
 
 export const TEXT_OPEN_WORLD_CREATOR_ISSUE_CATEGORIES_V1 = [
   'narrative', 'quest', 'gameplay', 'balance', 'ui-accessibility', 'media',
-  'performance', 'save-recovery', 'data-integrity', 'other',
+  'performance', 'cost-wait', 'save-recovery', 'data-integrity', 'other',
 ] as const
 export type TextOpenWorldCreatorIssueCategoryV1 = typeof TEXT_OPEN_WORLD_CREATOR_ISSUE_CATEGORIES_V1[number]
 export type TextOpenWorldCreatorIssueSeverityV1 = 'advisory' | 'blocking'
@@ -21,6 +22,13 @@ export const TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KEYS_V1 = [
   'growth-or-economy', 'checkpoint-replay',
 ] as const
 export type TextOpenWorldCreatorGrayboxCoverageKeyV1 = typeof TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KEYS_V1[number]
+
+export const TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_CRITERIA_V1 = [
+  'action-clarity', 'narrative-rhythm', 'growth-feedback', 'combat-experience',
+  'quest-variety', 'map-and-journal-usability', 'free-input-quality',
+  'world-evolution-visibility', 'content-duration', 'cost-and-wait',
+] as const
+export type TextOpenWorldCreatorFullPlaytestCriterionV1 = typeof TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_CRITERIA_V1[number]
 
 export interface TextOpenWorldCreatorBuildBindingV1 {
   productionKey: string
@@ -153,6 +161,59 @@ export interface TextOpenWorldCreatorGrayboxEvidenceV1 {
   environment: TextOpenWorldCreatorGrayboxEnvironmentV1
   humanChecks: TextOpenWorldCreatorGrayboxHumanChecksV1
   authorNote: string
+  confirmedAt: number
+}
+
+export interface TextOpenWorldCreatorFullPlaytestRouteV1 {
+  session: TextOpenWorldCreatorGrayboxSessionEvidenceV1
+  reportedActiveMinutes: number
+}
+
+export interface TextOpenWorldCreatorFullPlaytestRuntimeAIEvidenceV1 {
+  runCount: number
+  modelRequestCount: number
+  modelResponseCount: number
+  freeInputResponseCount: number
+  failedRunCount: number
+  totalObservedWaitMs: number
+  maximumObservedWaitMs: number
+  evidenceHash: string
+}
+
+export interface TextOpenWorldCreatorFullPlaytestAssessmentV1 {
+  criterionKey: TextOpenWorldCreatorFullPlaytestCriterionV1
+  rating: 1 | 2 | 3 | 4 | 5
+  note: string
+}
+
+export interface TextOpenWorldCreatorFullPlaytestHumanChecksV1 {
+  personallyPlayedAllRoutes: true
+  noAutomationOrModelProxy: true
+  freeInputActuallyTested: true
+  allObservedProblemsReported: true
+}
+
+export interface TextOpenWorldCreatorFullPlaytestEvidenceV1 {
+  schema: 'storyforge.text-open-world-creator-full-playtest-evidence'
+  version: 1
+  build: TextOpenWorldCreatorBuildBindingV1
+  routes: TextOpenWorldCreatorFullPlaytestRouteV1[]
+  endingKeys: string[]
+  combinedCoverageKeys: TextOpenWorldCreatorGrayboxCoverageKeyV1[]
+  runtimeAi: TextOpenWorldCreatorFullPlaytestRuntimeAIEvidenceV1
+  calibrationReceiptHash: string
+  costObservation: {
+    source: 'provider-dashboard' | 'not-available'
+    runtimeCostUsd: number | null
+    note: string
+  }
+  assessments: TextOpenWorldCreatorFullPlaytestAssessmentV1[]
+  environment: TextOpenWorldCreatorGrayboxEnvironmentV1
+  humanChecks: TextOpenWorldCreatorFullPlaytestHumanChecksV1
+  issueReceiptHashes: string[]
+  issueSetHash: string
+  authorNote: string
+  outcome: 'accepted' | 'repair-required'
   confirmedAt: number
 }
 
@@ -549,6 +610,122 @@ export function parseTextOpenWorldCreatorGrayboxEvidenceV1(value: unknown): Text
     environment: parseEnvironment(row.environment), humanChecks: parseGrayboxHumanChecks(row.humanChecks),
     authorNote: typeof row.authorNote === 'string' && row.authorNote.trim()
       ? text(row.authorNote, 'authorNote', 4_000) : '',
+    confirmedAt: integer(row.confirmedAt, 'confirmedAt', 1),
+  }
+}
+
+function parseFullPlaytestHumanChecks(value: unknown): TextOpenWorldCreatorFullPlaytestHumanChecksV1 {
+  const row = record(value, 'fullPlaytest.humanChecks')
+  const keys = [
+    'personallyPlayedAllRoutes', 'noAutomationOrModelProxy',
+    'freeInputActuallyTested', 'allObservedProblemsReported',
+  ] as const
+  exactKeys(row, keys, 'fullPlaytest.humanChecks')
+  if (keys.some(key => row[key] !== true)) fail('完整试玩人工声明必须全部明确确认')
+  return row as unknown as TextOpenWorldCreatorFullPlaytestHumanChecksV1
+}
+
+export function parseTextOpenWorldCreatorFullPlaytestEvidenceV1(value: unknown): TextOpenWorldCreatorFullPlaytestEvidenceV1 {
+  const row = record(value, 'full playtest evidence')
+  exactKeys(row, [
+    'schema', 'version', 'build', 'routes', 'endingKeys', 'combinedCoverageKeys',
+    'runtimeAi', 'calibrationReceiptHash', 'costObservation', 'assessments',
+    'environment', 'humanChecks', 'issueReceiptHashes', 'issueSetHash',
+    'authorNote', 'outcome', 'confirmedAt',
+  ], 'full playtest evidence')
+  if (row.schema !== 'storyforge.text-open-world-creator-full-playtest-evidence' || row.version !== 1
+    || !Array.isArray(row.routes) || row.routes.length < 2 || row.routes.length > 6
+    || !Array.isArray(row.assessments) || row.assessments.length !== TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_CRITERIA_V1.length
+    || !['accepted', 'repair-required'].includes(String(row.outcome))) {
+    fail('full playtest evidence 身份或数量无效')
+  }
+  const routes = row.routes.map((value, index) => {
+    const route = record(value, `routes[${index}]`)
+    exactKeys(route, ['session', 'reportedActiveMinutes'], `routes[${index}]`)
+    const reportedActiveMinutes = integer(route.reportedActiveMinutes, `routes[${index}].reportedActiveMinutes`, 1)
+    if (reportedActiveMinutes > 100_000) fail(`routes[${index}].reportedActiveMinutes 超出合理范围`)
+    return { session: parseGrayboxSession(route.session, index), reportedActiveMinutes }
+  }).sort((left, right) => left.session.sessionWitnessKey.localeCompare(right.session.sessionWitnessKey))
+  if (new Set(routes.map(route => route.session.sessionWitnessKey)).size !== routes.length
+    || routes.some(route => route.session.status !== 'completed' || !route.session.endingKey)) {
+    fail('完整试玩路线必须唯一且全部真正到达结局')
+  }
+  const endingKeys = textList(row.endingKeys, 'endingKeys', 20, 200, 2).sort()
+  if (new Set(endingKeys).size !== endingKeys.length) fail('endingKeys 不能重复')
+  const actualEndings = [...new Set(routes.map(route => route.session.endingKey!))].sort()
+  if (actualEndings.length < 2 || actualEndings.length !== endingKeys.length
+    || actualEndings.some((key, index) => key !== endingKeys[index])) fail('完整试玩没有覆盖两个不同结局')
+  const combinedCoverageKeys = parseCoverageKeys(row.combinedCoverageKeys, 'combinedCoverageKeys').sort()
+  if (TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KEYS_V1.some(key => !combinedCoverageKeys.includes(key))) {
+    fail('完整试玩未覆盖完整首版标准路径')
+  }
+  const actualCombined = [...new Set(routes.flatMap(route => route.session.coverageKeys))].sort()
+  if (actualCombined.length !== combinedCoverageKeys.length
+    || actualCombined.some((key, index) => key !== combinedCoverageKeys[index])) fail('完整试玩覆盖项与路线不一致')
+  const runtimeAiRow = record(row.runtimeAi, 'runtimeAi')
+  exactKeys(runtimeAiRow, [
+    'runCount', 'modelRequestCount', 'modelResponseCount', 'freeInputResponseCount', 'failedRunCount',
+    'totalObservedWaitMs', 'maximumObservedWaitMs', 'evidenceHash',
+  ], 'runtimeAi')
+  const runtimeAi: TextOpenWorldCreatorFullPlaytestRuntimeAIEvidenceV1 = {
+    runCount: integer(runtimeAiRow.runCount, 'runtimeAi.runCount', 1),
+    modelRequestCount: integer(runtimeAiRow.modelRequestCount, 'runtimeAi.modelRequestCount', 1),
+    modelResponseCount: integer(runtimeAiRow.modelResponseCount, 'runtimeAi.modelResponseCount', 1),
+    freeInputResponseCount: integer(runtimeAiRow.freeInputResponseCount, 'runtimeAi.freeInputResponseCount', 1),
+    failedRunCount: integer(runtimeAiRow.failedRunCount, 'runtimeAi.failedRunCount'),
+    totalObservedWaitMs: integer(runtimeAiRow.totalObservedWaitMs, 'runtimeAi.totalObservedWaitMs'),
+    maximumObservedWaitMs: integer(runtimeAiRow.maximumObservedWaitMs, 'runtimeAi.maximumObservedWaitMs'),
+    evidenceHash: hash(runtimeAiRow.evidenceHash, 'runtimeAi.evidenceHash'),
+  }
+  if (runtimeAi.failedRunCount > runtimeAi.runCount
+    || runtimeAi.freeInputResponseCount > runtimeAi.modelResponseCount
+    || runtimeAi.modelResponseCount > runtimeAi.modelRequestCount
+    || runtimeAi.maximumObservedWaitMs > runtimeAi.totalObservedWaitMs) fail('runtimeAi 统计不一致')
+  const costRow = record(row.costObservation, 'costObservation')
+  exactKeys(costRow, ['source', 'runtimeCostUsd', 'note'], 'costObservation')
+  if (!['provider-dashboard', 'not-available'].includes(String(costRow.source))) fail('costObservation.source 无效')
+  const runtimeCostUsd = costRow.runtimeCostUsd == null ? null
+    : finiteNumber(costRow.runtimeCostUsd, 'costObservation.runtimeCostUsd')
+  if ((costRow.source === 'provider-dashboard') !== (runtimeCostUsd != null)) {
+    fail('服务商后台费用来源与费用值不一致')
+  }
+  const assessments = row.assessments.map((value, index) => {
+    const assessment = record(value, `assessments[${index}]`)
+    exactKeys(assessment, ['criterionKey', 'rating', 'note'], `assessments[${index}]`)
+    if (!TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_CRITERIA_V1.includes(assessment.criterionKey as TextOpenWorldCreatorFullPlaytestCriterionV1)
+      || !Number.isInteger(assessment.rating) || Number(assessment.rating) < 1 || Number(assessment.rating) > 5) {
+      fail(`assessments[${index}] 无效`)
+    }
+    return {
+      criterionKey: assessment.criterionKey as TextOpenWorldCreatorFullPlaytestCriterionV1,
+      rating: Number(assessment.rating) as 1 | 2 | 3 | 4 | 5,
+      note: text(assessment.note, `assessments[${index}].note`, 2_000, 10),
+    }
+  }).sort((left, right) => left.criterionKey.localeCompare(right.criterionKey))
+  const expectedCriteria = [...TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_CRITERIA_V1].sort()
+  if (assessments.some((assessment, index) => assessment.criterionKey !== expectedCriteria[index])) {
+    fail('完整试玩评估没有覆盖全部十项标准')
+  }
+  if (assessments.some(assessment => assessment.rating < 3) && row.outcome !== 'repair-required') {
+    fail('存在低分项时完整试玩必须进入修复')
+  }
+  return {
+    schema: 'storyforge.text-open-world-creator-full-playtest-evidence', version: 1,
+    build: parseTextOpenWorldCreatorBuildBindingV1(row.build), routes, endingKeys,
+    combinedCoverageKeys, runtimeAi,
+    calibrationReceiptHash: hash(row.calibrationReceiptHash, 'calibrationReceiptHash'),
+    costObservation: {
+      source: costRow.source as 'provider-dashboard' | 'not-available', runtimeCostUsd,
+      note: text(costRow.note, 'costObservation.note', 2_000, 10),
+    },
+    assessments,
+    environment: parseEnvironment(row.environment),
+    humanChecks: parseFullPlaytestHumanChecks(row.humanChecks),
+    issueReceiptHashes: hashList(row.issueReceiptHashes, 'issueReceiptHashes'),
+    issueSetHash: hash(row.issueSetHash, 'issueSetHash'),
+    authorNote: typeof row.authorNote === 'string' && row.authorNote.trim()
+      ? text(row.authorNote, 'authorNote', 4_000) : '',
+    outcome: row.outcome as 'accepted' | 'repair-required',
     confirmedAt: integer(row.confirmedAt, 'confirmedAt', 1),
   }
 }

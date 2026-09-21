@@ -22,6 +22,7 @@ import type {
 } from '../types'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { readAcceptedBuildArtifacts } from '../product-production/artifact-store'
+import { readInstanceAgentRunV1 } from '../agent/run/event-store'
 import { parseProductBuildQualityReportV1 } from '../product-production/adoption'
 import {
   canonicalProductProductionJsonV2,
@@ -56,6 +57,7 @@ import {
   TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1,
   TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KEYS_V1,
   TEXT_OPEN_WORLD_CREATOR_GRAYBOX_GATE_ID_V1,
+  TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_GATE_ID_V1,
   TEXT_OPEN_WORLD_CREATOR_HARD_GATE_ID_V1,
   TEXT_OPEN_WORLD_CREATOR_ISSUE_CATEGORIES_V1,
   TEXT_OPEN_WORLD_CREATOR_ISSUE_GATE_PREFIX_V1,
@@ -64,6 +66,7 @@ import {
   TEXT_OPEN_WORLD_CREATOR_SEMANTIC_GATE_ID_V1,
   parseTextOpenWorldCreatorCalibrationEvidenceV1,
   parseTextOpenWorldCreatorGrayboxEvidenceV1,
+  parseTextOpenWorldCreatorFullPlaytestEvidenceV1,
   parseTextOpenWorldCreatorHardGateEvidenceV1,
   parseTextOpenWorldCreatorIssueEvidenceV1,
   parseTextOpenWorldCreatorIssueWaiverEvidenceV1,
@@ -76,6 +79,10 @@ import {
   type TextOpenWorldCreatorGrayboxEvidenceV1,
   type TextOpenWorldCreatorGrayboxHumanChecksV1,
   type TextOpenWorldCreatorGrayboxSessionEvidenceV1,
+  type TextOpenWorldCreatorFullPlaytestAssessmentV1,
+  type TextOpenWorldCreatorFullPlaytestEvidenceV1,
+  type TextOpenWorldCreatorFullPlaytestHumanChecksV1,
+  type TextOpenWorldCreatorFullPlaytestRuntimeAIEvidenceV1,
   type TextOpenWorldCreatorHardGateCheckV1,
   type TextOpenWorldCreatorHardGateEvidenceV1,
   type TextOpenWorldCreatorHumanQualityChecksV1,
@@ -95,6 +102,7 @@ import {
 const HARD_GATE_POLICY_ID = 'storyforge.text-open-world-creator-hard-gates.v1'
 const SEMANTIC_POLICY_ID = 'storyforge.text-open-world-creator-semantic-release.v1'
 const GRAYBOX_POLICY_ID = 'storyforge.text-open-world-creator-graybox.v1'
+const FULL_PLAYTEST_POLICY_ID = 'storyforge.text-open-world-creator-full-playtest.v1'
 const CALIBRATION_POLICY_ID = 'storyforge.text-open-world-creator-release-calibration.v1'
 const ISSUE_POLICY_ID = 'storyforge.text-open-world-creator-issue.v1'
 const ISSUE_WAIVER_POLICY_ID = 'storyforge.text-open-world-creator-issue-waiver.v1'
@@ -162,6 +170,7 @@ export interface TextOpenWorldCreatorQualityWorkspaceV1 {
   calibrationReceipt: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorCalibrationEvidenceV1> | null
   grayboxCandidates: TextOpenWorldCreatorGrayboxCandidateV1[]
   grayboxReceipt: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorGrayboxEvidenceV1> | null
+  fullPlaytestReceipt: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorFullPlaytestEvidenceV1> | null
   issues: TextOpenWorldCreatorIssueRecordV1[]
   semanticDecisionReceipt: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorSemanticDecisionEvidenceV1> | null
   releaseQualityReceipt: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorReleaseQualityEvidenceV1> | null
@@ -740,6 +749,79 @@ async function listGrayboxCandidates(authority: BuildAuthorityV1): Promise<TextO
   return candidates.sort((left, right) => right.updatedAt - left.updatedAt || right.sessionId - left.sessionId)
 }
 
+interface FullPlaytestRuntimeAICaptureV1 {
+  evidence: TextOpenWorldCreatorFullPlaytestRuntimeAIEvidenceV1
+  runRowsJson: string
+  eventRowsJson: string
+}
+
+async function captureFullPlaytestRuntimeAIV1(
+  authority: BuildAuthorityV1,
+  sessionIds: number[],
+): Promise<FullPlaytestRuntimeAICaptureV1> {
+  const runRows = (await Promise.all(sessionIds.map(sessionId => (
+    db.agentRuns.where('productRuntimeSessionId').equals(sessionId).toArray()
+  )))).flat().sort((left, right) => (left.id ?? -1) - (right.id ?? -1))
+  if (runRows.some(run => run.id == null || run.projectId !== authority.scope.projectId
+    || !sessionIds.includes(run.productRuntimeSessionId ?? -1) || run.workId != null
+    || run.productBuildId != null)) fail('完整试玩运行时AI Run作用域无效')
+  const rawEventRows = (await Promise.all(runRows.map(run => (
+    db.agentRunEvents.where('runId').equals(run.id!).sortBy('sequence')
+  )))).flat().sort((left, right) => left.runId - right.runId || left.sequence - right.sequence)
+  const snapshots = await Promise.all(runRows.map(run => readInstanceAgentRunV1(authority.scope, run.id!)))
+  const waits: number[] = []
+  let modelRequestCount = 0
+  let modelResponseCount = 0
+  let freeInputResponseCount = 0
+  const portableRuns: Array<Record<string, unknown>> = []
+  for (const snapshot of snapshots) {
+    const freeInputRun = (snapshot.contract.executionBindings ?? []).some(binding => (
+      binding.skillId === 'prose.text-open-world-runtime-intent'
+    ))
+    const pending = new Map<string, number[]>()
+    for (const event of snapshot.events) {
+      if (event.type === 'model.requested') {
+        modelRequestCount += 1
+        const key = `${event.generation}:${event.payload.stepId}:${event.payload.attempt}`
+        pending.set(key, [...(pending.get(key) ?? []), event.createdAt])
+      } else if (event.type === 'model.responded') {
+        modelResponseCount += 1
+        if (freeInputRun) freeInputResponseCount += 1
+        const key = `${event.generation}:${event.payload.stepId}:${event.payload.attempt}`
+        const starts = pending.get(key) ?? []
+        const startedAt = starts.shift()
+        if (startedAt == null || event.createdAt < startedAt) fail('完整试玩运行时AI请求/响应顺序无效')
+        waits.push(event.createdAt - startedAt)
+        if (starts.length) pending.set(key, starts)
+        else pending.delete(key)
+      }
+    }
+    const eventHash = await hashProductProductionValueV2(snapshot.events.map(event => ({
+      sequence: event.sequence, generation: event.generation, contractHash: event.contractHash,
+      type: event.type, payload: event.payload, createdAt: event.createdAt,
+    })))
+    portableRuns.push({
+      contractHash: snapshot.run.contractHash, generation: snapshot.run.generation,
+      status: snapshot.run.status, lastSequence: snapshot.run.lastSequence,
+      terminalReceiptHash: snapshot.run.terminalReceiptHash ?? null, eventHash,
+    })
+  }
+  if (freeInputResponseCount < 1) fail('完整试玩必须至少真实完成一次玩家自由输入runtime-intent响应')
+  const evidenceHash = await hashProductProductionValueV2(portableRuns)
+  return {
+    evidence: {
+      runCount: runRows.length, modelRequestCount, modelResponseCount,
+      freeInputResponseCount,
+      failedRunCount: runRows.filter(run => run.status === 'failed').length,
+      totalObservedWaitMs: waits.reduce((sum, value) => sum + value, 0),
+      maximumObservedWaitMs: waits.length ? Math.max(...waits) : 0,
+      evidenceHash,
+    },
+    runRowsJson: canonicalRows(runRows),
+    eventRowsJson: canonicalRows(rawEventRows),
+  }
+}
+
 async function parseIssueReceipt(
   authority: BuildAuthorityV1,
   row: ProductQualityGateReceiptRecordV1 & { id: number },
@@ -856,6 +938,45 @@ async function readGrayboxReceipt(authority: BuildAuthorityV1): Promise<Verified
     ]))
     || receipt.gateReceipt.environmentHash !== await hashProductProductionValueV2(receipt.evidence.environment)
     || receipt.gateReceipt.createdAt !== receipt.evidence.confirmedAt) fail('灰盒回执与当前Build/环境不闭合')
+  return receipt
+}
+
+async function readFullPlaytestReceipt(input: {
+  authority: BuildAuthorityV1
+  calibrationReceipt: VerifiedReceiptV1<TextOpenWorldCreatorCalibrationEvidenceV1> | null
+  issueSet: Awaited<ReturnType<typeof currentIssueSet>>
+}): Promise<VerifiedReceiptV1<TextOpenWorldCreatorFullPlaytestEvidenceV1> | null> {
+  const receipt = await latestFixedReceipt({
+    authority: input.authority, gateId: TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_GATE_ID_V1,
+    verifierId: 'storyforge.creator-full-human-playtest', policyId: FULL_PLAYTEST_POLICY_ID,
+    statuses: ['passed', 'needs-human'], parseEvidence: parseTextOpenWorldCreatorFullPlaytestEvidenceV1,
+  })
+  if (!receipt || !input.calibrationReceipt || input.calibrationReceipt.status !== 'passed') return null
+  const evidence = receipt.evidence
+  if (evidence.calibrationReceiptHash !== input.calibrationReceipt.receiptHash
+    || evidence.issueSetHash !== input.issueSet.issueSetHash
+    || canonicalProductProductionJsonV2(evidence.issueReceiptHashes)
+      !== canonicalProductProductionJsonV2(input.issueSet.issueReceiptHashes)) return null
+  const status = evidence.outcome === 'accepted' ? 'passed' : 'needs-human'
+  if (!bindingEquals(evidence.build, input.authority.buildBinding)
+    || receipt.status !== status
+    || receipt.gateReceipt.verifierKind !== 'human-evidence'
+    || !stringListsEqual(receipt.gateReceipt.inputHashes, [
+      input.authority.build.packageHash, input.authority.build.previewHash,
+      input.calibrationReceipt.receiptHash, input.issueSet.issueSetHash,
+      evidence.runtimeAi.evidenceHash,
+      ...evidence.routes.map(route => route.session.eventStreamHash),
+    ])
+    || !stringListsEqual(receipt.gateReceipt.evidenceRefs, [
+      input.calibrationReceipt.receiptHash, evidence.runtimeAi.evidenceHash,
+      ...evidence.issueReceiptHashes,
+      ...evidence.routes.flatMap(route => [
+        route.session.currentStateHash, route.session.eventStreamHash,
+        ...route.session.checkpointStateHashes,
+      ]),
+    ])
+    || receipt.gateReceipt.environmentHash !== await hashProductProductionValueV2(evidence.environment)
+    || receipt.gateReceipt.createdAt !== evidence.confirmedAt) fail('完整真人试玩回执与当前Build、校准或问题集不闭合')
   return receipt
 }
 
@@ -997,6 +1118,7 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
     calibrationReceipt: VerifiedReceiptV1<TextOpenWorldCreatorCalibrationEvidenceV1> | null
     semanticReceipt: VerifiedReceiptV1<TextOpenWorldCreatorSemanticDecisionEvidenceV1> | null
     grayboxReceipt: VerifiedReceiptV1<TextOpenWorldCreatorGrayboxEvidenceV1> | null
+    fullPlaytestReceipt: VerifiedReceiptV1<TextOpenWorldCreatorFullPlaytestEvidenceV1> | null
     releaseReceipt: VerifiedReceiptV1<TextOpenWorldCreatorReleaseQualityEvidenceV1> | null
     issueSet: Awaited<ReturnType<typeof currentIssueSet>>
   }
@@ -1028,6 +1150,7 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
     readCalibrationReceipt(authority), readSemanticDecisionReceipt(authority), readGrayboxReceipt(authority),
   ])
   const issueSet = await currentIssueSet(issues)
+  const fullPlaytestReceipt = await readFullPlaytestReceipt({ authority, calibrationReceipt, issueSet })
   const releaseReceipt = await readReleaseQualityReceipt({
     authority, hardReceipt, calibrationReceipt, semanticReceipt, grayboxReceipt, issueSet,
   })
@@ -1060,6 +1183,7 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
       calibrationReadiness: structuredClone(calibrationState.readiness),
       calibrationReceipt: publicReceipt(calibrationReceipt),
       grayboxCandidates, grayboxReceipt: publicReceipt(grayboxReceipt),
+      fullPlaytestReceipt: publicReceipt(fullPlaytestReceipt),
       issues: issues.map(row => ({
         receipt: publicReceipt(row.issue)!, waiver: publicReceipt(row.waiver),
         blocksRelease: row.issue.evidence.severity === 'blocking' || !row.waiver,
@@ -1070,7 +1194,10 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
       releaseQualityReady: releaseReceipt != null,
       blockers,
     },
-    internal: { issues, hardReceipt, calibrationReceipt, semanticReceipt, grayboxReceipt, releaseReceipt, issueSet },
+    internal: {
+      issues, hardReceipt, calibrationReceipt, semanticReceipt, grayboxReceipt,
+      fullPlaytestReceipt, releaseReceipt, issueSet,
+    },
   }
 }
 
@@ -1318,6 +1445,133 @@ export async function recordTextOpenWorldCreatorGrayboxV1(input: {
     row: stored, authority, gateId: TEXT_OPEN_WORLD_CREATOR_GRAYBOX_GATE_ID_V1,
     verifierId: 'storyforge.creator-graybox-playtest', policyId: GRAYBOX_POLICY_ID,
     statuses: ['passed'], parseEvidence: parseTextOpenWorldCreatorGrayboxEvidenceV1,
+  }))!
+}
+
+export async function recordTextOpenWorldCreatorFullPlaytestV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+  buildId: number
+  routes: Array<{ sessionId: number; reportedActiveMinutes: number }>
+  environment: TextOpenWorldCreatorGrayboxEnvironmentV1
+  humanChecks: TextOpenWorldCreatorFullPlaytestHumanChecksV1
+  assessments: TextOpenWorldCreatorFullPlaytestAssessmentV1[]
+  costObservation: {
+    source: 'provider-dashboard' | 'not-available'
+    runtimeCostUsd: number | null
+    note: string
+  }
+  authorNote: string
+}): Promise<TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorFullPlaytestEvidenceV1>> {
+  const authority = await loadBuildAuthority({
+    scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId,
+  })
+  const sessionIds = input.routes.map(route => route.sessionId)
+  if (new Set(sessionIds).size !== sessionIds.length || sessionIds.length < 2 || sessionIds.length > 6
+    || sessionIds.some(id => !Number.isInteger(id) || id < 1)) fail('完整试玩路线选择无效')
+  const sessionRows = await db.productRuntimeSessions.bulkGet(sessionIds)
+  if (sessionRows.some(row => !row || row.id == null)) fail('完整试玩Session不存在')
+  const witnesses = await Promise.all(sessionRows.map(row => createSessionWitness({
+    authority, session: row as ProductRuntimeSession & { id: number },
+  })))
+  if (witnesses.some(row => !row.candidate.completed || !row.candidate.endingKey)) {
+    fail('完整试玩的每条路线都必须真正完成主线')
+  }
+  const endingKeys = [...new Set(witnesses.map(row => row.candidate.endingKey!))].sort()
+  if (endingKeys.length < 2) fail('完整试玩必须覆盖至少两个不同结局')
+  const combinedCoverageKeys = [...new Set(witnesses.flatMap(row => row.candidate.coverageKeys))].sort()
+  const missing = TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KEYS_V1.filter(key => !combinedCoverageKeys.includes(key))
+  if (missing.length) fail(`完整试玩未覆盖首版标准路径:${missing.join(',')}`)
+  const runtimeAiCapture = await captureFullPlaytestRuntimeAIV1(authority, sessionIds)
+  const quality = await readQualityWorkspaceWithAuthority(authority)
+  const qualityReceiptRowsJson = canonicalRows(
+    await db.productQualityGateReceipts.where('buildId').equals(authority.build.id).toArray(),
+  )
+  const calibrationReceipt = quality.internal.calibrationReceipt
+  if (!calibrationReceipt || calibrationReceipt.status !== 'passed') {
+    fail('完整试玩必须绑定当前Build已通过的真实独立模型校准回执')
+  }
+  const blocksRepair = quality.internal.issues.some(row => (
+    row.issue.evidence.severity === 'blocking'
+      || (row.issue.evidence.severity === 'advisory' && !row.waiver)
+  ))
+  const routeMinutes = new Map(input.routes.map(route => [route.sessionId, route.reportedActiveMinutes]))
+  const confirmedAt = Math.max(Date.now(), ...witnesses.map(row => row.candidate.updatedAt))
+  const issueReceiptHashes = quality.internal.issueSet.issueReceiptHashes
+  const provisionalOutcome = blocksRepair || input.assessments.some(assessment => assessment.rating < 3)
+    ? 'repair-required' : 'accepted'
+  const evidence = parseTextOpenWorldCreatorFullPlaytestEvidenceV1({
+    schema: 'storyforge.text-open-world-creator-full-playtest-evidence', version: 1,
+    build: authority.buildBinding,
+    routes: witnesses.map(row => ({
+      session: row.candidate.witness,
+      reportedActiveMinutes: routeMinutes.get(row.candidate.sessionId),
+    })).sort((left, right) => left.session.sessionWitnessKey.localeCompare(right.session.sessionWitnessKey)),
+    endingKeys, combinedCoverageKeys, runtimeAi: runtimeAiCapture.evidence,
+    calibrationReceiptHash: calibrationReceipt.receiptHash,
+    costObservation: input.costObservation, assessments: input.assessments,
+    environment: input.environment, humanChecks: input.humanChecks,
+    issueReceiptHashes, issueSetHash: quality.internal.issueSet.issueSetHash,
+    authorNote: input.authorNote.trim(), outcome: provisionalOutcome, confirmedAt,
+  })
+  const status: ProductQualityGateReceiptStatusV1 = evidence.outcome === 'accepted' ? 'passed' : 'needs-human'
+  const receipt = await createGateReceipt({
+    gateId: TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_GATE_ID_V1,
+    verifierId: 'storyforge.creator-full-human-playtest', verifierKind: 'human-evidence',
+    inputHashes: [
+      authority.build.packageHash, authority.build.previewHash, calibrationReceipt.receiptHash,
+      evidence.issueSetHash, evidence.runtimeAi.evidenceHash,
+      ...evidence.routes.map(route => route.session.eventStreamHash),
+    ],
+    environmentHash: await hashProductProductionValueV2(evidence.environment),
+    evidence, status, policyId: FULL_PLAYTEST_POLICY_ID,
+    evidenceRefs: [
+      calibrationReceipt.receiptHash, evidence.runtimeAi.evidenceHash, ...evidence.issueReceiptHashes,
+      ...evidence.routes.flatMap(route => [
+        route.session.currentStateHash, route.session.eventStreamHash,
+        ...route.session.checkpointStateHashes,
+      ]),
+    ],
+    createdAt: confirmedAt,
+  })
+  const pending = pendingReceiptRow(authority, receipt)
+  const stored = await db.transaction('rw', scopeTransactionTables(
+    db.productProductions, db.productProductionBriefs, db.productBuilds, db.productBuildArtifacts,
+    db.productRuntimeSessions, db.productRuntimeEvents, db.productRuntimeCheckpoints,
+    db.agentRuns, db.agentRunEvents, db.productQualityGateReceipts,
+  ), async () => {
+    await assertAuthorityRowsUnchangedInTransaction(authority)
+    const currentQualityReceiptRows = await db.productQualityGateReceipts
+      .where('buildId').equals(authority.build.id).toArray()
+    if (canonicalRows(currentQualityReceiptRows) !== qualityReceiptRowsJson) {
+      fail('完整试玩写入前校准或问题回执集合已经变化')
+    }
+    for (const [index, witness] of witnesses.entries()) {
+      const session = await db.productRuntimeSessions.get(sessionIds[index]!)
+      const events = await db.productRuntimeEvents.where('sessionId').equals(sessionIds[index]!).toArray()
+      const checkpoints = await db.productRuntimeCheckpoints.where('sessionId').equals(sessionIds[index]!).toArray()
+      if (!session || canonicalRows([session]) !== witness.sessionRowJson
+        || canonicalRows(events) !== witness.eventRowsJson
+        || canonicalRows(checkpoints) !== witness.checkpointRowsJson) fail('完整试玩Session证据在写入前变化')
+    }
+    const runRows = (await Promise.all(sessionIds.map(sessionId => (
+      db.agentRuns.where('productRuntimeSessionId').equals(sessionId).toArray()
+    )))).flat()
+    const eventRows = (await Promise.all(runRows.map(run => (
+      db.agentRunEvents.where('runId').equals(run.id!).toArray()
+    )))).flat()
+    if (canonicalRows(runRows) !== runtimeAiCapture.runRowsJson
+      || canonicalRows(eventRows) !== runtimeAiCapture.eventRowsJson) fail('完整试玩运行时AI证据在写入前变化')
+    const existing = await db.productQualityGateReceipts
+      .where('[buildId+gateId+receiptHash]').equals([authority.build.id, receipt.gateId, receipt.receiptHash]).first()
+    if (existing?.id != null) return existing as ProductQualityGateReceiptRecordV1 & { id: number }
+    const id = await db.productQualityGateReceipts.add(pending) as number
+    return { ...pending, id }
+  })
+  return publicReceipt(await verifyGenericReceiptRow({
+    row: stored, authority, gateId: TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_GATE_ID_V1,
+    verifierId: 'storyforge.creator-full-human-playtest', policyId: FULL_PLAYTEST_POLICY_ID,
+    statuses: ['passed', 'needs-human'], parseEvidence: parseTextOpenWorldCreatorFullPlaytestEvidenceV1,
   }))!
 }
 

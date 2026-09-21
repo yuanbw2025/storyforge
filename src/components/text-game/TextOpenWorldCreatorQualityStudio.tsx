@@ -6,6 +6,7 @@ import {
   portableTextOpenWorldCreatorIssueJsonV1,
   readTextOpenWorldCreatorQualityWorkspaceV1,
   recordTextOpenWorldCreatorCalibrationV1,
+  recordTextOpenWorldCreatorFullPlaytestV1,
   recordTextOpenWorldCreatorGrayboxV1,
   recordTextOpenWorldCreatorIssueV1,
   waiveTextOpenWorldCreatorAdvisoryIssueV1,
@@ -13,8 +14,12 @@ import {
 } from '../../lib/open-world/creator-quality'
 import {
   TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KEYS_V1,
+  TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_CRITERIA_V1,
   TEXT_OPEN_WORLD_CREATOR_ISSUE_CATEGORIES_V1,
   type TextOpenWorldCreatorGrayboxHumanChecksV1,
+  type TextOpenWorldCreatorFullPlaytestAssessmentV1,
+  type TextOpenWorldCreatorFullPlaytestCriterionV1,
+  type TextOpenWorldCreatorFullPlaytestHumanChecksV1,
   type TextOpenWorldCreatorHumanQualityChecksV1,
   type TextOpenWorldCreatorIssueCategoryV1,
   type TextOpenWorldCreatorIssueSeverityV1,
@@ -33,7 +38,21 @@ const COVERAGE_LABELS: Record<typeof TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KE
 const CATEGORY_LABELS: Record<TextOpenWorldCreatorIssueCategoryV1, string> = {
   narrative: '叙事', quest: '任务', gameplay: '玩法', balance: '平衡',
   'ui-accessibility': 'UI/无障碍', media: '媒资', performance: '性能',
-  'save-recovery': '存档/恢复', 'data-integrity': '数据完整性', other: '其他',
+  'cost-wait': '费用/等待', 'save-recovery': '存档/恢复',
+  'data-integrity': '数据完整性', other: '其他',
+}
+
+const PLAYTEST_CRITERION_LABELS: Record<TextOpenWorldCreatorFullPlaytestCriterionV1, string> = {
+  'action-clarity': '初次进入后是否清楚能做什么、下一步是什么',
+  'narrative-rhythm': '主线、重要支线、探索与小任务的节奏是否自然',
+  'growth-feedback': '升级、技能、装备、制作与奖励是否带来明确成长感',
+  'combat-experience': '战斗时长、反馈、技能与逃跑是否清晰且不过度重复',
+  'quest-variety': '任务包装、目标与过程是否有足够差异，是否出现明显重复',
+  'map-and-journal-usability': '地图、旅行、任务日志与追踪是否容易理解和操作',
+  'free-input-quality': '自由输入的理解、回应与回到确定性主线的引导是否自然诚实',
+  'world-evolution-visibility': '非主线世界演化是否可感知，同时不干扰核心推进',
+  'content-duration': '两条路线的实际内容量、节奏和总游玩时长是否合适',
+  'cost-and-wait': '模型调用等待、失败恢复与实际费用是否可以接受',
 }
 
 const EMPTY_GRAYBOX_CHECKS = {
@@ -51,6 +70,17 @@ const EMPTY_QUALITY_CHECKS = {
   mediaAndAccessibilityReviewed: false,
   issueListComplete: false,
 }
+
+const EMPTY_PLAYTEST_CHECKS = {
+  personallyPlayedAllRoutes: false,
+  noAutomationOrModelProxy: false,
+  freeInputActuallyTested: false,
+  allObservedProblemsReported: false,
+}
+
+const EMPTY_PLAYTEST_ASSESSMENTS = Object.fromEntries(
+  TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_CRITERIA_V1.map(key => [key, { rating: 3, note: '' }]),
+) as Record<TextOpenWorldCreatorFullPlaytestCriterionV1, { rating: number; note: string }>
 
 function compactHash(value: string): string {
   return `${value.slice(0, 10)}…${value.slice(-6)}`
@@ -87,6 +117,15 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [selectedSessionIds, setSelectedSessionIds] = useState<number[]>([])
+  const [playtestSessionIds, setPlaytestSessionIds] = useState<number[]>([])
+  const [playtestMinutes, setPlaytestMinutes] = useState<Record<number, string>>({})
+  const [playtestChecks, setPlaytestChecks] = useState(EMPTY_PLAYTEST_CHECKS)
+  const [playtestAssessments, setPlaytestAssessments] = useState(EMPTY_PLAYTEST_ASSESSMENTS)
+  const [playtestCostSource, setPlaytestCostSource] = useState<'provider-dashboard' | 'not-available'>('not-available')
+  const [playtestRuntimeCost, setPlaytestRuntimeCost] = useState('')
+  const [playtestCostNote, setPlaytestCostNote] = useState('')
+  const [playtestNote, setPlaytestNote] = useState('')
+  const [reopenFullPlaytest, setReopenFullPlaytest] = useState(false)
   const [grayboxChecks, setGrayboxChecks] = useState(EMPTY_GRAYBOX_CHECKS)
   const [grayboxNote, setGrayboxNote] = useState('')
   const [qualityChecks, setQualityChecks] = useState(EMPTY_QUALITY_CHECKS)
@@ -119,6 +158,20 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
         const completed = next.grayboxCandidates.find(candidate => candidate.completed)
         return completed ? [completed.sessionId] : next.grayboxCandidates[0] ? [next.grayboxCandidates[0].sessionId] : []
       })
+      setPlaytestSessionIds(current => {
+        const available = new Set(next.grayboxCandidates.map(candidate => candidate.sessionId))
+        const retained = current.filter(id => available.has(id))
+        if (retained.length) return retained
+        const byEnding = new Map<string, number>()
+        next.grayboxCandidates.filter(candidate => candidate.completed && candidate.endingKey)
+          .forEach(candidate => {
+            if (!byEnding.has(candidate.endingKey!)) byEnding.set(candidate.endingKey!, candidate.sessionId)
+          })
+        return [...byEnding.values()].slice(0, 2)
+      })
+      setPlaytestMinutes(current => Object.fromEntries(next.grayboxCandidates.map(candidate => [
+        candidate.sessionId, current[candidate.sessionId] ?? '',
+      ])))
       setIssueSessionId(current => next.grayboxCandidates.some(candidate => candidate.sessionId === current)
         ? current : next.grayboxCandidates[0]?.sessionId ?? null)
     } catch (cause) {
@@ -142,6 +195,25 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
   const allFindingWaiversComplete = workspace?.modelFindings.every(finding => (
     (findingWaivers[finding.findingKey] ?? '').trim().length >= 20
   )) ?? false
+  const selectedPlaytestCandidates = workspace?.grayboxCandidates
+    .filter(candidate => playtestSessionIds.includes(candidate.sessionId)) ?? []
+  const selectedEndingCount = new Set(selectedPlaytestCandidates.flatMap(candidate => (
+    candidate.completed && candidate.endingKey ? [candidate.endingKey] : []
+  ))).size
+  const allPlaytestChecks = Object.values(playtestChecks).every(Boolean)
+  const allPlaytestAssessments = TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_CRITERIA_V1.every(key => (
+    playtestAssessments[key].rating >= 1 && playtestAssessments[key].rating <= 5
+      && playtestAssessments[key].note.trim().length >= 10
+  ))
+  const allPlaytestMinutes = selectedPlaytestCandidates.length >= 2
+    && selectedPlaytestCandidates.every(candidate => {
+      const value = Number(playtestMinutes[candidate.sessionId])
+      return Number.isInteger(value) && value >= 1 && value <= 100_000
+    })
+  const playtestCostValid = playtestCostNote.trim().length >= 10
+    && (playtestCostSource === 'not-available'
+      ? playtestRuntimeCost.trim() === ''
+      : Number.isFinite(Number(playtestRuntimeCost)) && Number(playtestRuntimeCost) >= 0)
 
   const run = async (action: () => Promise<unknown>, success: string) => {
     setBusy(true)
@@ -167,6 +239,28 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
       authorNote: grayboxNote,
     })
   }, '隔离灰盒试玩回执已冻结。')
+
+  const confirmFullPlaytest = () => run(async () => {
+    await recordTextOpenWorldCreatorFullPlaytestV1({
+      scope: props.scope, productionId: props.productionId, buildId: props.buildId,
+      routes: playtestSessionIds.map(sessionId => ({
+        sessionId, reportedActiveMinutes: Number(playtestMinutes[sessionId]),
+      })),
+      environment: browserEnvironment(),
+      humanChecks: playtestChecks as TextOpenWorldCreatorFullPlaytestHumanChecksV1,
+      assessments: TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_CRITERIA_V1.map(criterionKey => ({
+        criterionKey, rating: playtestAssessments[criterionKey].rating,
+        note: playtestAssessments[criterionKey].note,
+      })) as TextOpenWorldCreatorFullPlaytestAssessmentV1[],
+      costObservation: {
+        source: playtestCostSource,
+        runtimeCostUsd: playtestCostSource === 'provider-dashboard' ? Number(playtestRuntimeCost) : null,
+        note: playtestCostNote,
+      },
+      authorNote: playtestNote,
+    })
+    setReopenFullPlaytest(false)
+  }, '真人双结局完整试玩回执已冻结。')
 
   const submitIssue = () => run(async () => {
     const created = await recordTextOpenWorldCreatorIssueV1({
@@ -329,8 +423,55 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
         </details>
       </section>
 
+      <section className="mt-4 rounded border border-border bg-bg-base p-4" aria-labelledby="creator-full-playtest-title" data-testid="text-open-world-creator-full-playtest">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 id="creator-full-playtest-title" className="text-xs font-semibold">6. 真人双结局完整试玩</h3>
+            <p className="mt-1 max-w-4xl text-[10px] leading-5 text-text-muted">这是最终体验验收，不是自动测试。必须由创作者本人完成当前Build的至少两个不同结局，实际使用一次自由输入/运行时AI，并逐项记录体验、叙事、战斗、UI、时长、费用与等待。</p>
+          </div>
+          <button type="button" disabled={disabled} onClick={props.onPreview} className="flex items-center gap-1 rounded border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-accent disabled:opacity-40"><Play className="h-3.5 w-3.5" />继续真人试玩</button>
+        </div>
+        {(!workspace.fullPlaytestReceipt || reopenFullPlaytest) && <>
+          {workspace.calibrationReceipt?.status !== 'passed' && <p className="mt-3 rounded border border-warning/30 bg-warning/5 p-3 text-[10px] text-warning">先完成并通过“独立模型与数据校准”。完整试玩必须绑定真实校准回执，fixture、自动化或同模型自评不能代替。</p>}
+          <div className="mt-3 grid gap-2">{workspace.grayboxCandidates.map(candidate => {
+            const selected = playtestSessionIds.includes(candidate.sessionId)
+            return <div key={candidate.sessionId} className="rounded border border-border p-3 text-[10px]">
+              <label className="flex items-start gap-2">
+                <input type="checkbox" checked={selected} disabled={!candidate.completed} onChange={event => setPlaytestSessionIds(current => event.target.checked ? [...new Set([...current, candidate.sessionId])].slice(0, 6) : current.filter(id => id !== candidate.sessionId))} />
+                <span className="min-w-0 flex-1"><strong className="block">{candidate.title}</strong><span className="mt-1 block text-text-muted">{candidate.completed ? `结局 ${candidate.endingKey}` : '尚未真正完成主线'} · 事件 {candidate.eventCount} · 检查点 {candidate.checkpointCount}</span></span>
+              </label>
+              {selected && <label className="mt-2 block text-text-muted">本人实际操作时长（分钟，不含挂机）<input aria-label={`试玩时长 ${candidate.title}`} inputMode="numeric" value={playtestMinutes[candidate.sessionId] ?? ''} onChange={event => setPlaytestMinutes(current => ({ ...current, [candidate.sessionId]: event.target.value }))} className="mt-1 block w-full rounded border border-border bg-bg-elevated p-2 text-text-main" placeholder="例如 95" /></label>}
+            </div>
+          })}</div>
+          <p className={`mt-3 text-[10px] ${selectedEndingCount >= 2 ? 'text-success' : 'text-text-muted'}`}>当前选择 {selectedPlaytestCandidates.length} 条路线 / {selectedEndingCount} 个不同结局；必须至少覆盖两个不同结局。</p>
+          <div className="mt-4 grid gap-3">{TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_CRITERIA_V1.map(key => <div key={key} className="rounded border border-border p-3">
+            <label className="text-[10px] font-medium text-text-main">{PLAYTEST_CRITERION_LABELS[key]}<select aria-label={`试玩评分 ${key}`} value={playtestAssessments[key].rating} onChange={event => setPlaytestAssessments(current => ({ ...current, [key]: { ...current[key], rating: Number(event.target.value) } }))} className="ml-2 rounded border border-border bg-bg-elevated px-2 py-1"><option value={1}>1 · 严重问题</option><option value={2}>2 · 需要修复</option><option value={3}>3 · 基本可用</option><option value={4}>4 · 体验良好</option><option value={5}>5 · 表现优秀</option></select></label>
+            <textarea aria-label={`试玩说明 ${key}`} value={playtestAssessments[key].note} onChange={event => setPlaytestAssessments(current => ({ ...current, [key]: { ...current[key], note: event.target.value } }))} maxLength={2000} className="mt-2 min-h-16 w-full rounded border border-border bg-bg-elevated p-2 text-[10px]" placeholder="至少10字，写实际观察和判断依据；1～2分项还应先登记对应问题回执。" />
+          </div>)}</div>
+          <fieldset className="mt-4 grid gap-3 rounded border border-border p-3 text-[10px]"><legend className="font-semibold text-text-main">运行时费用观察</legend>
+            <label className="text-text-muted">费用来源<select aria-label="运行时费用来源" value={playtestCostSource} onChange={event => { const source = event.target.value as 'provider-dashboard' | 'not-available'; setPlaytestCostSource(source); if (source === 'not-available') setPlaytestRuntimeCost('') }} className="ml-2 rounded border border-border bg-bg-elevated px-2 py-1 text-text-main"><option value="not-available">服务商未提供可归因费用</option><option value="provider-dashboard">服务商后台实际值</option></select></label>
+            {playtestCostSource === 'provider-dashboard' && <label className="text-text-muted">本次路线运行时AI费用（USD）<input aria-label="运行时AI费用" inputMode="decimal" value={playtestRuntimeCost} onChange={event => setPlaytestRuntimeCost(event.target.value)} className="ml-2 rounded border border-border bg-bg-elevated px-2 py-1 text-text-main" placeholder="0.00" /></label>}
+            <textarea aria-label="费用与等待说明" value={playtestCostNote} onChange={event => setPlaytestCostNote(event.target.value)} maxLength={2000} className="min-h-16 w-full rounded border border-border bg-bg-elevated p-2" placeholder="至少10字：说明费用是否可获得、等待是否可接受、超时或重试体验。系统会另外冻结真实请求/响应次数和可观测等待时间。" />
+          </fieldset>
+          <fieldset className="mt-4 grid gap-2 text-[10px] text-text-muted"><legend className="font-semibold text-text-main">不可代签的真人声明</legend>{([
+            ['personallyPlayedAllRoutes', '以上所选路线均由我本人实际操作并分别完成'],
+            ['noAutomationOrModelProxy', '没有使用自动脚本、fixture或模型代替真人体验判断'],
+            ['freeInputActuallyTested', '我在所选路线中实际使用过自由输入/运行时AI能力'],
+            ['allObservedProblemsReported', '试玩中观察到的问题已全部登记为问题回执'],
+          ] as const).map(([key, label]) => <label key={key} className="flex gap-2"><input type="checkbox" checked={playtestChecks[key]} onChange={event => setPlaytestChecks(current => ({ ...current, [key]: event.target.checked }))} />{label}</label>)}</fieldset>
+          <textarea aria-label="完整试玩总备注" value={playtestNote} onChange={event => setPlaytestNote(event.target.value)} maxLength={4000} className="mt-3 min-h-20 w-full rounded border border-border bg-bg-elevated p-3 text-xs" placeholder="可选：记录两条路线的选择差异、总体感受及下一版建议。" />
+          <button type="button" disabled={disabled || workspace.calibrationReceipt?.status !== 'passed' || selectedEndingCount < 2 || !allPlaytestMinutes || !allPlaytestChecks || !allPlaytestAssessments || !playtestCostValid} onClick={() => void confirmFullPlaytest()} className="mt-3 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40">复验双路线并冻结真人完整试玩回执</button>
+        </>}
+        {workspace.fullPlaytestReceipt && <div className={`mt-3 rounded border p-3 text-[10px] ${workspace.fullPlaytestReceipt.status === 'passed' ? 'border-success/30 bg-success/5 text-success' : 'border-warning/30 bg-warning/5 text-warning'}`}>
+          <strong>{workspace.fullPlaytestReceipt.status === 'passed' ? '真人完整试玩已接受' : '真人完整试玩已记录，需进入修复'}</strong><span className="ml-2">{compactHash(workspace.fullPlaytestReceipt.receiptHash)}</span>
+          <p className="mt-2">{workspace.fullPlaytestReceipt.evidence.routes.length}条路线 · {workspace.fullPlaytestReceipt.evidence.endingKeys.length}个结局 · 主动游玩 {workspace.fullPlaytestReceipt.evidence.routes.reduce((sum, route) => sum + route.reportedActiveMinutes, 0)} 分钟</p>
+          <p className="mt-1">运行时AI {workspace.fullPlaytestReceipt.evidence.runtimeAi.modelResponseCount} 次响应（自由输入 {workspace.fullPlaytestReceipt.evidence.runtimeAi.freeInputResponseCount} 次） · 可观测等待合计 {Math.round(workspace.fullPlaytestReceipt.evidence.runtimeAi.totalObservedWaitMs / 100) / 10} 秒 · 最长 {Math.round(workspace.fullPlaytestReceipt.evidence.runtimeAi.maximumObservedWaitMs / 100) / 10} 秒</p>
+          {workspace.fullPlaytestReceipt.status !== 'passed' && !reopenFullPlaytest && <button type="button" onClick={() => setReopenFullPlaytest(true)} className="mt-2 rounded border border-warning/40 px-3 py-1.5 text-warning">继续试玩并重新记录</button>}
+        </div>}
+      </section>
+
       {!workspace.releaseQualityReady && <section className="mt-4 rounded border border-border bg-bg-base p-4" aria-labelledby="creator-final-quality-title">
-        <h3 id="creator-final-quality-title" className="text-xs font-semibold">6. 冻结发布质量结论</h3>
+        <h3 id="creator-final-quality-title" className="text-xs font-semibold">7. 冻结发布质量结论</h3>
         <fieldset className="mt-3 grid gap-2 text-[10px] text-text-muted"><legend className="font-semibold text-text-main">作者最终抽检</legend>{([
           ['narrativeAndGuidanceReviewed', '我已抽检主线叙事、目标引导和失败说明'],
           ['regionalAndQuestVarietyReviewed', '我已抽检地区身份、重要支线与小任务差异'],

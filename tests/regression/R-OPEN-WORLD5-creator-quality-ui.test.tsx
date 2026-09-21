@@ -6,6 +6,7 @@ import type { WorkspaceScope } from '../../src/lib/types'
 const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   recordGraybox: vi.fn(),
+  recordFullPlaytest: vi.fn(),
   recordCalibration: vi.fn(),
   recordIssue: vi.fn(),
   waiveIssue: vi.fn(),
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../src/lib/open-world/creator-quality', () => ({
   readTextOpenWorldCreatorQualityWorkspaceV1: mocks.read,
   recordTextOpenWorldCreatorGrayboxV1: mocks.recordGraybox,
+  recordTextOpenWorldCreatorFullPlaytestV1: mocks.recordFullPlaytest,
   recordTextOpenWorldCreatorCalibrationV1: mocks.recordCalibration,
   recordTextOpenWorldCreatorIssueV1: mocks.recordIssue,
   waiveTextOpenWorldCreatorAdvisoryIssueV1: mocks.waiveIssue,
@@ -39,7 +41,7 @@ function receipt<T>(gateId: string, receiptHash: string, evidence: T, status = '
   return { rowId: 1, gateId, status, receiptHash, evidence, createdAt: 1 }
 }
 
-function workspace(input: { graybox?: boolean; issueWaived?: boolean; calibration?: boolean } = {}) {
+function workspace(input: { graybox?: boolean; issueWaived?: boolean; calibration?: boolean; twoEndings?: boolean } = {}) {
   const build = {
     productionKey: 'text-open-world.quality-ui', buildNumber: 4,
     packageHash: HASH, previewHash: 'c'.repeat(64), manifestHash: 'd'.repeat(64),
@@ -96,10 +98,16 @@ function workspace(input: { graybox?: boolean; issueWaived?: boolean; calibratio
       coverageKeys: ['checkpoint-replay', 'combat', 'governed-action', 'growth-or-economy', 'mainline-ending', 'world-exploration'],
       missingCoverageKeys: [], eventCount: 24, checkpointCount: 2,
       witness: {},
-    }],
+    }, ...(input.twoEndings ? [{
+      sessionId: 902, title: '第二结局路线', createdAt: 3, updatedAt: 4, completed: true,
+      endingKey: 'ending.second',
+      coverageKeys: ['checkpoint-replay', 'combat', 'governed-action', 'growth-or-economy', 'mainline-ending', 'world-exploration'],
+      missingCoverageKeys: [], eventCount: 28, checkpointCount: 2, witness: {},
+    }] : [])],
     grayboxReceipt: input.graybox ? receipt('text-open-world.creator.graybox', '4'.repeat(64), {
       sessions: [{ sessionWitnessKey: 'session.fixture' }],
     }) : null,
+    fullPlaytestReceipt: null,
     issues: [{ receipt: issueReceipt, waiver: issueWaiver, blocksRelease: !issueWaiver, portableJson: '{}' }],
     semanticDecisionReceipt: null, releaseQualityReceipt: null,
     releaseQualityReady: false,
@@ -127,6 +135,7 @@ describe('Text Open World G5-09 · Creator quality studio UI', () => {
     for (const mock of Object.values(mocks)) if ('mockReset' in mock) mock.mockReset()
     mocks.portable.mockReturnValue('{"portable":true}')
     mocks.recordGraybox.mockResolvedValue({})
+    mocks.recordFullPlaytest.mockResolvedValue({})
     mocks.recordCalibration.mockResolvedValue({})
     mocks.recordIssue.mockResolvedValue({ receipt: { evidence: { issueKey: 'issue.created' } } })
     mocks.waiveIssue.mockResolvedValue({})
@@ -191,6 +200,47 @@ describe('Text Open World G5-09 · Creator quality studio UI', () => {
     expect(host.textContent).toContain('模板 5 个 / 变体 15 个')
     expect(host.textContent).toContain('P95 2400ms')
     expect(host.textContent).toContain('冻结价格估算 $2.5000')
+  })
+
+  it('只有两条不同结局、十项说明、时长、费用观察与真人声明齐全时才可冻结完整试玩', async () => {
+    mocks.read.mockResolvedValue(workspace({ calibration: true, twoEndings: true }))
+    await act(async () => root.render(createElement(TextOpenWorldCreatorQualityStudio, {
+      scope: SCOPE, productionId: 71, buildId: 81, refreshToken: '1',
+      onPreview: vi.fn(), onChanged: vi.fn(),
+    })))
+    await vi.waitFor(() => expect(host.textContent).toContain('2 个不同结局'))
+    const section = host.querySelector<HTMLElement>('[data-testid="text-open-world-creator-full-playtest"]')!
+    const firstMinutes = section.querySelector<HTMLInputElement>('input[aria-label="试玩时长 完整核心循环"]')!
+    const secondMinutes = section.querySelector<HTMLInputElement>('input[aria-label="试玩时长 第二结局路线"]')!
+    await act(async () => {
+      setValue(firstMinutes, '95')
+      setValue(secondMinutes, '110')
+    })
+    const assessmentNotes = [...section.querySelectorAll<HTMLTextAreaElement>('textarea[aria-label^="试玩说明 "]')]
+    expect(assessmentNotes).toHaveLength(10)
+    for (const note of assessmentNotes) {
+      await act(async () => setValue(note, '这项体验已经在两条完整路线中由本人实际检查并记录。'))
+    }
+    const costNote = section.querySelector<HTMLTextAreaElement>('textarea[aria-label="费用与等待说明"]')!
+    await act(async () => setValue(costNote, '服务商无法拆分本次费用，实际等待时间在可接受范围。'))
+    const checks = [...section.querySelectorAll<HTMLInputElement>('fieldset input[type="checkbox"]')]
+    expect(checks).toHaveLength(4)
+    for (const checkbox of checks) await act(async () => checkbox.click())
+    const confirm = button(section, '复验双路线并冻结真人完整试玩回执')
+    expect(confirm.disabled).toBe(false)
+    await act(async () => confirm.click())
+    await vi.waitFor(() => expect(mocks.recordFullPlaytest).toHaveBeenCalledOnce())
+    expect(mocks.recordFullPlaytest).toHaveBeenCalledWith(expect.objectContaining({
+      routes: [
+        { sessionId: 901, reportedActiveMinutes: 95 },
+        { sessionId: 902, reportedActiveMinutes: 110 },
+      ],
+      humanChecks: {
+        personallyPlayedAllRoutes: true, noAutomationOrModelProxy: true,
+        freeInputActuallyTested: true, allObservedProblemsReported: true,
+      },
+      costObservation: expect.objectContaining({ source: 'not-available', runtimeCostUsd: null }),
+    }))
   })
 
   it('逐项软豁免问题和模型finding后才允许冻结最终质量结论', async () => {

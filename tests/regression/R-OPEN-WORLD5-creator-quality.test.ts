@@ -4,6 +4,7 @@ import {
   finalizeTextOpenWorldCreatorQualityV1,
   portableTextOpenWorldCreatorIssueJsonV1,
   readTextOpenWorldCreatorQualityWorkspaceV1,
+  recordTextOpenWorldCreatorFullPlaytestV1,
   recordTextOpenWorldCreatorGrayboxV1,
   recordTextOpenWorldCreatorIssueV1,
   requirePassedTextOpenWorldCreatorQualityGateV1,
@@ -13,6 +14,8 @@ import {
   TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KEYS_V1,
   TEXT_OPEN_WORLD_CREATOR_GRAYBOX_GATE_ID_V1,
   TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1,
+  TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_CRITERIA_V1,
+  TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_GATE_ID_V1,
   parseTextOpenWorldCreatorCalibrationEvidenceV1,
   parseTextOpenWorldCreatorGrayboxEvidenceV1,
 } from '../../src/lib/open-world/creator-quality-contract'
@@ -28,6 +31,8 @@ import type {
 } from '../../src/lib/types'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 import { seedAuthorizedTextOpenWorldCreatorBuildV1 } from '../helpers/text-open-world-creator-build'
+import { appendAgentRunEventV1, createAgentRunV1 } from '../../src/lib/agent/run/event-store'
+import { createTextOpenWorldRuntimeAIRunContractV1 } from '../../src/lib/open-world/runtime-ai-contract'
 
 const governance = vi.hoisted(() => ({
   productionId: 0,
@@ -43,6 +48,7 @@ const runtimeEvidence = vi.hoisted(() => ({
   state: null as unknown,
   stateHash: '',
   sequence: 0,
+  bySession: new Map<number, { state: unknown; stateHash: string; sequence: number }>(),
 }))
 
 vi.mock('../../src/lib/open-world/creator-artifact-governance', () => ({
@@ -60,17 +66,19 @@ vi.mock('../../src/lib/open-world/creator-artifact-governance', () => ({
 }))
 
 vi.mock('../../src/lib/open-world/runtime-api', () => ({
-  readProductRuntimeState: vi.fn(async () => structuredClone(runtimeEvidence.state)),
-  readProductRuntimeStateVersion: vi.fn(async () => ({
-    sequence: runtimeEvidence.sequence,
-    stateHash: runtimeEvidence.stateHash,
+  readProductRuntimeState: vi.fn(async (sessionId: number) => structuredClone(
+    runtimeEvidence.bySession.get(sessionId)?.state ?? runtimeEvidence.state,
+  )),
+  readProductRuntimeStateVersion: vi.fn(async (sessionId: number) => ({
+    sequence: runtimeEvidence.bySession.get(sessionId)?.sequence ?? runtimeEvidence.sequence,
+    stateHash: runtimeEvidence.bySession.get(sessionId)?.stateHash ?? runtimeEvidence.stateHash,
   })),
   verifyProductRuntimeCheckpoint: vi.fn(async () => true),
 }))
 
 vi.mock('../../src/lib/open-world/checkpoints', () => ({
-  inspectTextOpenWorldRuntimeHeadV1: vi.fn(async () => ({
-    code: 'valid', canonicalStateHash: runtimeEvidence.stateHash,
+  inspectTextOpenWorldRuntimeHeadV1: vi.fn(async (sessionId: number) => ({
+    code: 'valid', canonicalStateHash: runtimeEvidence.bySession.get(sessionId)?.stateHash ?? runtimeEvidence.stateHash,
   })),
   inspectTextOpenWorldCheckpointV1: vi.fn(async () => ({ valid: true })),
 }))
@@ -359,9 +367,103 @@ async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
   return receipt.receiptHash
 }
 
+async function insertCompletedPlaytestRoute(input: FixtureV1, endingKey: string, suffix: string): Promise<number> {
+  const now = Date.now()
+  const initialState = {
+    version: 1, clock: 0, entities: {}, memories: [], narratives: [],
+    ttrpg: null, interaction: null, narrative: null, adventure: null,
+    presentation: null, openWorldEvolution: null, openWorld: null,
+    textOpenWorld: {
+      state: {
+        player: { level: 1, experience: 0 },
+        inventory: { currency: 0, stackQuantities: {}, itemInstances: {} },
+        endings: { reachedKey: null },
+      },
+    },
+    lastSequence: 0,
+  }
+  const currentState = structuredClone(initialState)
+  currentState.textOpenWorld.state.player = { level: 2, experience: 20 }
+  currentState.textOpenWorld.state.inventory.currency = 10
+  currentState.textOpenWorld.state.endings.reachedKey = endingKey
+  currentState.lastSequence = 6
+  const stateHash = await hashProductProductionValueV2(currentState)
+  const sessionId = await db.productRuntimeSessions.add({
+    projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId,
+    worldGroupId: null, productReleaseId: null, productBuildId: input.buildId,
+    runtimeSourceHash: input.buildBinding.packageHash, kind: 'text-open-world',
+    title: `真人完整试玩 ${suffix}`, status: 'completed', rulesetVersion: 1,
+    seed: `full-playtest-${suffix}`, canonSnapshotJson: '{}',
+    initialStateJson: canonicalProductProductionJsonV2(initialState),
+    runtimeHeadSequence: 6, runtimeHeadStateJson: canonicalProductProductionJsonV2(currentState),
+    runtimeHeadStateHash: stateHash, parentSessionId: null, parentThroughSequence: null,
+    createdAt: now - 10_000, updatedAt: now,
+  }) as number
+  runtimeEvidence.bySession.set(sessionId, { state: currentState, stateHash, sequence: 6 })
+  const event = (sequence: number, type: string, payload: unknown) => ({
+    projectId: input.scope.projectId, worldGroupId: null, sessionId, sequence,
+    type, actorKey: null, targetKey: null,
+    payloadJson: canonicalProductProductionJsonV2(payload), createdAt: now - 9_000 + sequence,
+  })
+  await db.productRuntimeEvents.bulkAdd([
+    event(1, 'text-open-world.command.committed', { envelope: { actionKey: 'action.travel' } }),
+    event(2, 'text-open-world.effects.applied', { effectKind: 'travel' }),
+    event(3, 'world.travel.completed', { regionKey: 'region.fixture' }),
+    event(4, 'text-open-world.command.committed', { envelope: { actionKey: 'action.combat.attack' } }),
+    event(5, 'text-open-world.effects.applied', { effectKind: 'combat' }),
+    event(6, 'text-open-world.command.committed', { envelope: { actionKey: 'action.craft' } }),
+  ] as never[])
+  await db.productRuntimeCheckpoints.add({
+    projectId: input.scope.projectId, worldGroupId: null, sessionId,
+    throughSequence: 6, name: `结局检查点 ${suffix}`, purpose: 'manual', subjectKey: null,
+    stateJson: canonicalProductProductionJsonV2(currentState),
+    stateHash: await hashProductProductionValueV2({ checkpoint: suffix, stateHash }), createdAt: now,
+  })
+  const runtimeBindingHash = await hashProductProductionValueV2({ sessionId, kind: 'full-playtest-runtime-ai' })
+  const contract = await createTextOpenWorldRuntimeAIRunContractV1({
+    skillId: 'prose.text-open-world-runtime-intent', objective: `真人试玩自由输入 ${suffix}`,
+    scope: {
+      projectId: input.scope.projectId, worldGroupId: null,
+      runtime: {
+        productRuntimeSessionId: sessionId, baseSequence: 6, stateHash,
+        visibilityHash: await hashProductProductionValueV2({ visibility: suffix }),
+        releaseHash: input.buildBinding.packageHash,
+      },
+    },
+    runtimeBindingHash,
+  })
+  let snapshot = await createAgentRunV1({
+    scope: input.scope, productRuntimeSessionId: sessionId, worldGroupId: null, contract, now: now - 500,
+  })
+  const append = async (type: Parameters<typeof appendAgentRunEventV1>[0]['type'], payload: unknown, eventNow: number) => {
+    snapshot = await appendAgentRunEventV1({
+      scope: input.scope, productRuntimeSessionId: sessionId, runId: snapshot.run.id,
+      type, payload, expectedLastSequence: snapshot.projection.lastSequence, now: eventNow,
+    } as Parameters<typeof appendAgentRunEventV1>[0])
+  }
+  const stepId = 'text-open-world-runtime-ai:intent'
+  await append('step.scheduled', { stepId }, now - 400)
+  await append('step.started', { stepId, attempt: 1 }, now - 350)
+  await append('model.requested', {
+    stepId, attempt: 1, bindingHash: await hashProductProductionValueV2({ request: suffix }),
+  }, now - 300)
+  await append('model.responded', {
+    stepId, attempt: 1, outputHash: await hashProductProductionValueV2({ response: suffix }),
+  }, now - 100)
+  return sessionId
+}
+
+function fullPlaytestAssessments(rating = 4) {
+  return TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_CRITERIA_V1.map(criterionKey => ({
+    criterionKey, rating: rating as 1 | 2 | 3 | 4 | 5,
+    note: `${criterionKey} 已由真人在两条完整路线中实际检查并记录。`,
+  }))
+}
+
 beforeEach(async () => {
   await db.delete()
   await db.open()
+  runtimeEvidence.bySession.clear()
 })
 
 afterAll(async () => {
@@ -562,5 +664,146 @@ describe('TOW-G5-09 · Creator质量、灰盒和问题回执', () => {
     })).rejects.toThrow(/质量回执索引或Hash无效/)
     expect(await db.productQualityGateReceipts
       .where('[buildId+gateId]').equals([seeded.buildId, 'text-open-world.creator.release-quality']).count()).toBe(0)
+  })
+
+  it('真人完整试玩必须绑定两个不同结局、运行时AI与十项人工判断，并在问题集变化后失效', async () => {
+    const seeded = await fixture({ advisories: false })
+    await insertCalibrationReceipt(seeded)
+    const firstSessionId = await insertCompletedPlaytestRoute(seeded, 'ending.harbor', 'harbor')
+    const secondSessionId = await insertCompletedPlaytestRoute(seeded, 'ending.ridge', 'ridge')
+    const receipt = await recordTextOpenWorldCreatorFullPlaytestV1({
+      scope: seeded.scope, productionId: seeded.productionId, buildId: seeded.buildId,
+      routes: [
+        { sessionId: firstSessionId, reportedActiveMinutes: 95 },
+        { sessionId: secondSessionId, reportedActiveMinutes: 110 },
+      ],
+      environment: {
+        browserName: 'Vitest Chromium', browserVersion: '1', platform: 'test',
+        viewport: { width: 1280, height: 720 },
+      },
+      humanChecks: {
+        personallyPlayedAllRoutes: true, noAutomationOrModelProxy: true,
+        freeInputActuallyTested: true, allObservedProblemsReported: true,
+      },
+      assessments: fullPlaytestAssessments(4),
+      costObservation: {
+        source: 'provider-dashboard', runtimeCostUsd: 0.42,
+        note: '服务商后台可看到本次调用费用，等待时间和费用均在可接受范围。',
+      },
+      authorNote: '两条路线由真人完成，选择和结局差异已核对。',
+    })
+    expect(receipt.status).toBe('passed')
+    expect(receipt.evidence.endingKeys).toEqual(['ending.harbor', 'ending.ridge'])
+    expect(receipt.evidence.runtimeAi.modelResponseCount).toBe(2)
+    expect(receipt.evidence.runtimeAi.freeInputResponseCount).toBe(2)
+    expect(receipt.evidence.runtimeAi.totalObservedWaitMs).toBe(400)
+    expect(receipt.evidence.routes.every(route => !('sessionId' in route.session))).toBe(true)
+    const workspace = await readTextOpenWorldCreatorQualityWorkspaceV1({
+      scope: seeded.scope, productionId: seeded.productionId, expectedBuildId: seeded.buildId,
+    })
+    expect(workspace.fullPlaytestReceipt?.receiptHash).toBe(receipt.receiptHash)
+
+    await recordTextOpenWorldCreatorIssueV1({
+      scope: seeded.scope, productionId: seeded.productionId, buildId: seeded.buildId,
+      severity: 'advisory', category: 'cost-wait', summary: '晚间运行时模型等待略长',
+      preconditions: ['晚间调用'], reproductionSteps: ['在场景中输入自由行动'],
+      expected: '等待时间保持稳定', actual: '偶发等待明显超过白天体验',
+      affectedStableKeys: [], sessionId: firstSessionId, sourceTextExcluded: true,
+    })
+    const stale = await readTextOpenWorldCreatorQualityWorkspaceV1({
+      scope: seeded.scope, productionId: seeded.productionId, expectedBuildId: seeded.buildId,
+    })
+    expect(stale.fullPlaytestReceipt).toBeNull()
+  })
+
+  it('相同结局或没有真实运行时AI响应不能冒充完整试玩', async () => {
+    const seeded = await fixture({ advisories: false })
+    await insertCalibrationReceipt(seeded)
+    const firstSessionId = await insertCompletedPlaytestRoute(seeded, 'ending.same', 'same-a')
+    const secondSessionId = await insertCompletedPlaytestRoute(seeded, 'ending.same', 'same-b')
+    const common = {
+      scope: seeded.scope, productionId: seeded.productionId, buildId: seeded.buildId,
+      environment: {
+        browserName: 'Vitest Chromium', browserVersion: '1', platform: 'test',
+        viewport: { width: 1280, height: 720 },
+      },
+      humanChecks: {
+        personallyPlayedAllRoutes: true as const, noAutomationOrModelProxy: true as const,
+        freeInputActuallyTested: true as const, allObservedProblemsReported: true as const,
+      },
+      assessments: fullPlaytestAssessments(4),
+      costObservation: {
+        source: 'not-available' as const, runtimeCostUsd: null,
+        note: '服务商不能按本次路线拆分费用，但等待体验已人工记录。',
+      },
+      authorNote: '',
+    }
+    await expect(recordTextOpenWorldCreatorFullPlaytestV1({
+      ...common,
+      routes: [
+        { sessionId: firstSessionId, reportedActiveMinutes: 80 },
+        { sessionId: secondSessionId, reportedActiveMinutes: 82 },
+      ],
+    })).rejects.toThrow(/两个不同结局/)
+
+    const thirdSessionId = await insertCompletedPlaytestRoute(seeded, 'ending.other', 'other')
+    await db.agentRunEvents.clear()
+    await db.agentRuns.clear()
+    await expect(recordTextOpenWorldCreatorFullPlaytestV1({
+      ...common,
+      routes: [
+        { sessionId: firstSessionId, reportedActiveMinutes: 80 },
+        { sessionId: thirdSessionId, reportedActiveMinutes: 90 },
+      ],
+    })).rejects.toThrow(/至少真实完成一次玩家自由输入/)
+  })
+
+  it('低分或未解决问题只生成修复态回执，回执内容篡改会失败关闭', async () => {
+    const seeded = await fixture({ advisories: false })
+    await insertCalibrationReceipt(seeded)
+    const firstSessionId = await insertCompletedPlaytestRoute(seeded, 'ending.one', 'one')
+    const secondSessionId = await insertCompletedPlaytestRoute(seeded, 'ending.two', 'two')
+    await recordTextOpenWorldCreatorIssueV1({
+      scope: seeded.scope, productionId: seeded.productionId, buildId: seeded.buildId,
+      severity: 'blocking', category: 'gameplay', summary: '最终战斗反馈无法判断伤害来源',
+      preconditions: ['进入最终战'], reproductionSteps: ['连续使用两个技能'],
+      expected: '每次伤害来源清晰', actual: '两次伤害合并显示且无法区分',
+      affectedStableKeys: ['combat.final'], sessionId: secondSessionId, sourceTextExcluded: true,
+    })
+    const assessments = fullPlaytestAssessments(4)
+    assessments.find(item => item.criterionKey === 'combat-experience')!.rating = 2
+    const receipt = await recordTextOpenWorldCreatorFullPlaytestV1({
+      scope: seeded.scope, productionId: seeded.productionId, buildId: seeded.buildId,
+      routes: [
+        { sessionId: firstSessionId, reportedActiveMinutes: 75 },
+        { sessionId: secondSessionId, reportedActiveMinutes: 86 },
+      ],
+      environment: {
+        browserName: 'Vitest Chromium', browserVersion: '1', platform: 'test',
+        viewport: { width: 390, height: 844 },
+      },
+      humanChecks: {
+        personallyPlayedAllRoutes: true, noAutomationOrModelProxy: true,
+        freeInputActuallyTested: true, allObservedProblemsReported: true,
+      },
+      assessments,
+      costObservation: {
+        source: 'not-available', runtimeCostUsd: null,
+        note: '本次无法从后台拆分实际费用，等待时长仍由事件账本冻结。',
+      },
+      authorNote: '战斗低分项已登记阻断问题，进入下一Build修复。',
+    })
+    expect(receipt.status).toBe('needs-human')
+    expect(receipt.evidence.outcome).toBe('repair-required')
+    const row = await db.productQualityGateReceipts
+      .where('[buildId+gateId]').equals([seeded.buildId, TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_GATE_ID_V1]).first()
+    const tampered = JSON.parse(row!.receiptJson)
+    tampered.measuredJson = tampered.measuredJson.replace('"rating":2', '"rating":5')
+    await db.productQualityGateReceipts.update(row!.id!, {
+      receiptJson: canonicalProductProductionJsonV2(tampered),
+    })
+    await expect(readTextOpenWorldCreatorQualityWorkspaceV1({
+      scope: seeded.scope, productionId: seeded.productionId, expectedBuildId: seeded.buildId,
+    })).rejects.toThrow(/质量回执索引或Hash无效/)
   })
 })
