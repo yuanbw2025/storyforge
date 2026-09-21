@@ -1,4 +1,7 @@
 import type { ProductProductionBriefV3, ProductRuntimePackageV1 } from '../types'
+import { analyzeTextAdventureRouteQualityV1 } from '../adventure/quality-analysis'
+import { TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1 } from '../adventure/media-composition'
+import { minimumTextAdventureCommercialImageCountV1 } from '../adventure/production-brief'
 import { validateTtrpgCampaignForPublicationV1 } from '../ttrpg/campaign'
 
 export interface ProductQualityGateV1 {
@@ -18,6 +21,15 @@ function gate(gateId: string, passed: boolean, evidence: string[]): ProductQuali
   return { gateId, passed, evidence }
 }
 
+function estimatedTextUnits(values: string[]): number {
+  const unique = [...new Set(values.map(value => value.trim()).filter(Boolean))]
+  return unique.reduce((total, value) => {
+    const cjk = value.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu)?.length ?? 0
+    const latin = value.match(/[\p{L}\p{N}]+/gu)?.filter(token => !/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(token)).length ?? 0
+    return total + cjk + latin
+  }, 0)
+}
+
 /**
  * Product-specific structural quality gates. Parsers prove that a package is
  * valid; these gates prove that each product contains its own minimum playable
@@ -32,9 +44,8 @@ export function evaluateProductRuntimeProductQualityV1(input: {
   const endingCount = narrative.nodes.filter(node => node.kind === 'ending').length
   const nonEndingCount = narrative.nodes.length - endingCount
   const gates: ProductQualityGateV1[] = [
-    gate('product.narrative.play-loop', nonEndingCount >= (brief.scale.targetPlayMinutes >= 45 ? 2 : 1)
-      && narrative.choices.length >= 2,
-    [`nonEndingNodes=${nonEndingCount}`, `choices=${narrative.choices.length}`, `minutes=${brief.scale.targetPlayMinutes}`]),
+    gate('product.narrative.play-loop', nonEndingCount >= 1 && narrative.choices.length >= 1,
+      [`nonEndingNodes=${nonEndingCount}`, `choices=${narrative.choices.length}`]),
     gate('product.narrative.endings', endingCount >= (runtimePackage.productType === 'ttrpg'
       ? 2 : Math.max(1, Math.min(8, brief.scale.targetEndingCount))),
       [`endings=${endingCount}`, `target=${brief.scale.targetEndingCount}`]),
@@ -127,16 +138,271 @@ export function evaluateProductRuntimeProductQualityV1(input: {
     )
   } else if (runtimePackage.productType === 'text-adventure') {
     const adventure = runtimePackage.adventure
+    const interactionProfiles = runtimePackage.interaction?.profiles ?? []
     const kinds = new Set(adventure?.actions.map(action => action.kind) ?? [])
+    const placeholderPattern = /产品角色\s*\d+/u
+    const playerParticipantKey = adventure?.playerIdentity
+      ? interactionProfiles.find(profile => profile.name === adventure.playerIdentity?.name)?.participantKey
+      : null
+    const authoredNpcProfiles = interactionProfiles.filter(profile => (
+      profile.participantKey !== playerParticipantKey
+      && !profile.characterKey.startsWith('generated:')
+      && !placeholderPattern.test(profile.name)
+    ))
+    const talkActions = adventure?.actions.filter(action => action.kind === 'talk') ?? []
     gates.push(
       gate('product.adventure.world-actions', !!adventure && adventure.locations.length >= 2
         && adventure.objects.length >= 1 && adventure.items.length >= 1
-        && kinds.has('look') && kinds.has('move') && kinds.has('take') && kinds.has('talk'),
-      [`locations=${adventure?.locations.length ?? 0}`, `objects=${adventure?.objects.length ?? 0}`, `items=${adventure?.items.length ?? 0}`, `actionKinds=${[...kinds].sort().join(',')}`]),
+        && kinds.has('look') && kinds.has('move') && kinds.has('take')
+        && (adventure.version !== 2 || authoredNpcProfiles.length === 0 || kinds.has('talk')),
+      [`locations=${adventure?.locations.length ?? 0}`, `objects=${adventure?.objects.length ?? 0}`, `items=${adventure?.items.length ?? 0}`, `authoredNpcProfiles=${authoredNpcProfiles.length}`, `actionKinds=${[...kinds].sort().join(',')}`]),
       gate('product.adventure.progression', !!adventure && adventure.quests.length >= 1
         && adventure.abilities.length >= 1 && adventure.resources.length >= 1,
       [`quests=${adventure?.quests.length ?? 0}`, `abilities=${adventure?.abilities.length ?? 0}`, `resources=${adventure?.resources.length ?? 0}`]),
     )
+    if (adventure?.version === 2) {
+      const enabledCapabilities = new Set(adventure.capabilities.filter(item => item.enabled).map(item => item.key))
+      const requiredCapabilities = ['space', 'character', 'inventory', 'equipment', 'quests', 'time', 'storylets', 'endings']
+      const productionContract = brief.textAdventure
+      const sideQuests = adventure.quests.filter(item => item.category === 'side')
+      const sideQuestCount = sideQuests.length
+      const multiStageSideQuestCount = sideQuests.filter(quest => (
+        quest.stages.length >= 3 && quest.objectives.length >= 3
+      )).length
+      const mappedNarrativeActions = adventure.actions.filter(action => action.narrativeChoiceKey != null)
+      const narrativeChoices = new Map(narrative.choices.map(choice => [choice.choiceKey, choice]))
+      const mappedNarrativeChoiceKeys = mappedNarrativeActions.map(action => action.narrativeChoiceKey!)
+      const mappedNarrativeChoiceCounts = mappedNarrativeChoiceKeys.reduce((counts, choiceKey) => {
+        counts.set(choiceKey, (counts.get(choiceKey) ?? 0) + 1)
+        return counts
+      }, new Map<string, number>())
+      const uniqueMappedNarrativeChoiceKeys = new Set(mappedNarrativeChoiceKeys)
+      const unmappedNarrativeChoiceKeys = [...narrativeChoices.keys()].filter(choiceKey => (
+        !uniqueMappedNarrativeChoiceKeys.has(choiceKey)
+      ))
+      const orphanMappedNarrativeChoiceKeys = [...uniqueMappedNarrativeChoiceKeys].filter(choiceKey => (
+        !narrativeChoices.has(choiceKey)
+      ))
+      const duplicateMappedNarrativeChoiceKeys = [...uniqueMappedNarrativeChoiceKeys].filter(choiceKey => (
+        mappedNarrativeChoiceCounts.get(choiceKey) !== 1
+      ))
+      const bridgedNarrativeActions = mappedNarrativeActions.filter(action => (
+        narrativeChoices.get(action.narrativeChoiceKey!)?.tags.includes(`adventure-action:${action.key}`)
+      ))
+      const failForwardActions = adventure.actions.filter(action => action.rule.kind !== 'automatic'
+        && action.failureEffects.length > 0 && action.failureText.trim().length > 0)
+      const itemOperationActions = adventure.actions.filter(action => (
+        action.kind === 'take' || action.kind === 'give' || action.kind === 'use'
+      ))
+      const invalidItemOperationActions = itemOperationActions.filter(action => {
+        const successfulEffects = [...action.successEffects, ...action.costlySuccessEffects]
+        if (action.kind === 'take') return !successfulEffects.some(effect => effect.op === 'gain-item')
+        if (action.kind === 'give') return !successfulEffects.some(effect => (
+          effect.op === 'transfer-item' || effect.op === 'remove-item'
+        ))
+        return action.targetKey == null
+          || !action.requirements.some(requirement => requirement.itemKey === action.targetKey)
+      })
+      const presentationKeys = new Set(runtimePackage.presentation?.assets.map(asset => asset.assetKey) ?? [])
+      const narrativeNonEnding = narrative.nodes.filter(node => node.kind !== 'ending')
+      const narrativeNonEndingKeys = new Set(narrativeNonEnding.map(node => node.key))
+      const narrativeNonEndingBeatCount = narrative.beats.filter(beat => narrativeNonEndingKeys.has(beat.nodeKey)).length
+      const profileByParticipant = new Map(interactionProfiles.map(profile => [profile.participantKey, profile]))
+      const invalidTalkActions = talkActions.filter(action => {
+        const profile = action.interaction ? profileByParticipant.get(action.interaction.participantKey) : null
+        return !profile || profile.participantKey === playerParticipantKey
+          || profile.characterKey.startsWith('generated:') || placeholderPattern.test(profile.name)
+      })
+      const placeholderSurfaces = [
+        ...adventure.locations.flatMap(item => [item.title, item.description]),
+        ...adventure.quests.flatMap(item => [item.title, item.description, ...item.objectives.map(objective => objective.title)]),
+        ...adventure.actions.flatMap(item => [item.label, item.description, item.successText, item.costlySuccessText, item.failureText]),
+      ].filter(value => placeholderPattern.test(value))
+      const questByKey = new Map(adventure.quests.map(quest => [quest.key, quest]))
+      const locationByKey = new Map(adventure.locations.map(location => [location.key, location]))
+      const locationBoundQuestActions = adventure.actions.flatMap(action => {
+        const completion = action.successEffects.find(effect => effect.op === 'complete-objective')
+        const quest = completion ? questByKey.get(completion.questKey) : null
+        return quest && quest.category !== 'main' ? [{ action, quest }] : []
+      })
+      const incoherentQuestActions = locationBoundQuestActions.filter(({ action, quest }) => {
+        const location = locationByKey.get(action.locationKey)
+        if (!location) return true
+        return ![quest.title, quest.description, action.label, action.description].join('\n').includes(location.title)
+      })
+      const routeQuality = analyzeTextAdventureRouteQualityV1(runtimePackage)
+      const descriptiveTextUnits = estimatedTextUnits([
+        ...narrative.beats.map(item => item.text),
+        ...adventure.actions.flatMap(item => [
+          item.successText, item.costlySuccessText, item.failureText,
+        ]),
+      ])
+      gates.push(
+        gate('product.adventure.v2-capabilities', requiredCapabilities.every(key => enabledCapabilities.has(key)),
+          [`enabled=${[...enabledCapabilities].sort().join(',')}`]),
+        gate('product.adventure.v2-space', adventure.regions.length >= 1 && adventure.areas.length >= 1
+          && adventure.scenes.length >= adventure.locations.length
+          && adventure.locations.every(location => location.sceneKeys.length >= 1),
+        [`regions=${adventure.regions.length}`, `areas=${adventure.areas.length}`, `locations=${adventure.locations.length}`, `scenes=${adventure.scenes.length}`]),
+        gate('product.adventure.v2-character-system', adventure.abilities.some(item => item.role === 'stat')
+          && adventure.abilities.some(item => item.role === 'skill')
+          && ['health', 'mana', 'stamina', 'experience', 'skill-points'].every(role => adventure.resources.some(item => item.role === role)),
+        [`abilityRoles=${[...new Set(adventure.abilities.map(item => item.role))].join(',')}`, `resourceRoles=${[...new Set(adventure.resources.map(item => item.role))].join(',')}`]),
+        gate('product.adventure.v2-equipment', adventure.equipmentSlots.length >= 1
+          && adventure.items.some(item => item.category === 'equipment' && item.equipmentSlotKey && item.modifiers.length >= 1),
+        [`slots=${adventure.equipmentSlots.length}`, `equipment=${adventure.items.filter(item => item.category === 'equipment').length}`]),
+        gate('product.adventure.v2-quest-time-storylets-endings', adventure.quests.every(quest => quest.stages.length >= 1)
+          && adventure.resources.some(item => item.key === adventure.clock.resourceKey && item.role === 'clock')
+          && adventure.storylets.length >= 1 && adventure.endings.length >= 2,
+        [`questStages=${adventure.quests.map(item => item.stages.length).join(',')}`, `storylets=${adventure.storylets.length}`, `endings=${adventure.endings.length}`]),
+        gate('product.adventure.v2-multi-stage-side-quests', !productionContract || (
+          multiStageSideQuestCount >= Math.min(2, productionContract.narrative.targetSideQuestCount)
+        ), [
+          `multiStageSideQuests=${multiStageSideQuestCount}/${Math.min(2, productionContract?.narrative.targetSideQuestCount ?? 0)}`,
+          `sideQuestStages=${sideQuests.map(quest => `${quest.key}:${quest.stages.length}`).join(',') || 'none'}`,
+        ]),
+        gate('product.adventure.v2-item-action-semantics', invalidItemOperationActions.length === 0
+          && (!productionContract || brief.qualityProfile !== 'commercial-candidate'
+            || (kinds.has('take') && kinds.has('give') && kinds.has('use'))), [
+          `itemActionKinds=${[...new Set(itemOperationActions.map(action => action.kind))].sort().join(',') || 'none'}`,
+          `invalid=${invalidItemOperationActions.map(action => action.key).join(',') || 'none'}`,
+        ]),
+        gate('product.adventure.v2-offline-fallback', adventure.media.fallback === 'text-only',
+          [`media=${adventure.media.mode}`, `fallback=${adventure.media.fallback}`]),
+        gate('product.adventure.v2-production-targets', !productionContract || (
+          adventure.regions.length >= productionContract.narrative.targetRegionCount
+          && adventure.areas.length >= productionContract.narrative.targetAreaCount
+          && adventure.locations.length >= productionContract.narrative.targetLocationCount
+          && adventure.scenes.length >= productionContract.narrative.targetSceneCount
+          && sideQuestCount >= productionContract.narrative.targetSideQuestCount
+          && adventure.storylets.length >= productionContract.narrative.targetAmbientEventCount
+          && adventure.endings.length >= productionContract.narrative.targetEndingCount
+        ), [
+          `regions=${adventure.regions.length}/${productionContract?.narrative.targetRegionCount ?? 'legacy'}`,
+          `areas=${adventure.areas.length}/${productionContract?.narrative.targetAreaCount ?? 'legacy'}`,
+          `locations=${adventure.locations.length}/${productionContract?.narrative.targetLocationCount ?? 'legacy'}`,
+          `scenes=${adventure.scenes.length}/${productionContract?.narrative.targetSceneCount ?? 'legacy'}`,
+          `side=${sideQuestCount}/${productionContract?.narrative.targetSideQuestCount ?? 'legacy'}`,
+          `storylets=${adventure.storylets.length}/${productionContract?.narrative.targetAmbientEventCount ?? 'legacy'}`,
+          `endings=${adventure.endings.length}/${productionContract?.narrative.targetEndingCount ?? 'legacy'}`,
+        ]),
+        gate('product.adventure.v2-choice-bridge', narrativeChoices.size >= 1
+          && mappedNarrativeActions.length === narrativeChoices.size
+          && uniqueMappedNarrativeChoiceKeys.size === narrativeChoices.size
+          && bridgedNarrativeActions.length === mappedNarrativeActions.length,
+        [
+          `choices=${narrativeChoices.size}`,
+          `mapped=${mappedNarrativeActions.length}`,
+          `unique=${uniqueMappedNarrativeChoiceKeys.size}`,
+          `bridged=${bridgedNarrativeActions.length}`,
+          `unmapped=${unmappedNarrativeChoiceKeys.join(',') || 'none'}`,
+          `orphan=${orphanMappedNarrativeChoiceKeys.join(',') || 'none'}`,
+          `duplicate=${duplicateMappedNarrativeChoiceKeys.join(',') || 'none'}`,
+        ]),
+        gate('product.adventure.v2-character-presence', invalidTalkActions.length === 0
+          && placeholderSurfaces.length === 0
+          && (authoredNpcProfiles.length === 0 || talkActions.length >= 1), [
+          `authoredNpcProfiles=${authoredNpcProfiles.length}`,
+          `talkActions=${talkActions.length}`,
+          `invalidTalkActions=${invalidTalkActions.map(item => item.key).join(',') || 'none'}`,
+          `placeholderSurfaces=${placeholderSurfaces.length}`,
+        ]),
+        gate('product.adventure.v2-location-action-coherence', incoherentQuestActions.length === 0,
+          [`checked=${locationBoundQuestActions.length}`, `invalid=${incoherentQuestActions.map(item => item.action.key).join(',') || 'none'}`]),
+        gate('product.adventure.v2-fail-forward', failForwardActions.length >= 1,
+          [`actions=${failForwardActions.map(item => item.key).join(',') || 'none'}`]),
+        gate('product.adventure.v2-media-binding', adventure.media.assetKeys.every(key => presentationKeys.has(key))
+          && (adventure.media.assetKeys.length === 0 || runtimePackage.presentation != null),
+        [`adventureAssets=${adventure.media.assetKeys.length}`, `presentationAssets=${presentationKeys.size}`]),
+        gate('product.adventure.narrative-depth', !productionContract || (
+          narrativeNonEnding.length >= Math.min(4, productionContract.narrative.targetSceneCount)
+          && narrativeNonEndingBeatCount >= narrativeNonEnding.length
+        ), [
+          `nonEndingNodes=${narrativeNonEnding.length}`,
+          `nonEndingBeats=${narrativeNonEndingBeatCount}`,
+          `minimumNodes=${Math.min(4, productionContract?.narrative.targetSceneCount ?? 1)}`,
+        ]),
+        gate('product.adventure.content-volume', descriptiveTextUnits >= Math.min(500, Math.floor(brief.scale.targetWordCount * 0.2)),
+          [`playerFacingUnits=${descriptiveTextUnits}`, `minimum=${Math.min(500, Math.floor(brief.scale.targetWordCount * 0.2))}`, `target=${brief.scale.targetWordCount}`]),
+      )
+      if (brief.qualityProfile === 'commercial-candidate' && productionContract) {
+        const minimumImageCount = minimumTextAdventureCommercialImageCountV1(productionContract.media.mode)
+        const actualImages = runtimePackage.presentation?.assets.filter(asset => (
+          ['background', 'character-pose', 'character-expression', 'cg', 'ui'].includes(asset.kind)
+        )).length ?? 0
+        const imageKinds = new Set(runtimePackage.presentation?.assets.map(asset => asset.kind) ?? [])
+        const requiredImageKinds = productionContract.media.mode === 'text-only'
+          ? [] : ['background', 'character-pose']
+        const requiredVisualComposition = productionContract.media.mode === 'text-only'
+          ? [] : TEXT_ADVENTURE_COMMERCIAL_VISUAL_BASELINE_V1
+        const visualKindBySceneTag = new Map(runtimePackage.presentation?.assets.map(asset => (
+          [asset.sceneTag, asset.kind] as const
+        )) ?? [])
+        const missingVisualRoles = requiredVisualComposition.filter(role => (
+          visualKindBySceneTag.get(role.sceneTag) !== role.mediaKind
+        ))
+        const minimumRouteUnits = Math.max(
+          brief.scale.targetWordCount,
+          Math.ceil(brief.scale.targetPlayMinutes * 200),
+        )
+        const minimumTotalUnits = Math.max(
+          Math.ceil(brief.scale.targetWordCount * 1.5),
+          Math.ceil(brief.scale.targetPlayMinutes * (20_000 / 60)),
+        )
+        const minimumNpcCount = Math.max(1, Math.min(5, Math.ceil(brief.scale.targetPlayMinutes / 12)))
+        const minimumDialogueTurns = Math.max(4, Math.ceil(brief.scale.targetPlayMinutes / 2))
+        const minimumNarrativeChoices = Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 6))
+        const minimumDecisions = Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 10))
+        const minimumMainStages = Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 20))
+        const minimumMainObjectives = Math.max(3, Math.ceil(brief.scale.targetPlayMinutes / 7.5))
+        const minimumMainActions = Math.max(6, Math.ceil(brief.scale.targetPlayMinutes / 3))
+        const minimumEndingUnits = Math.max(80, Math.min(400, Math.ceil(brief.scale.targetPlayMinutes * 4)))
+        gates.push(
+          gate('product.adventure.recommendation-media-composition', actualImages >= minimumImageCount
+            && requiredImageKinds.every(kind => imageKinds.has(kind as 'background' | 'character-pose'))
+            && missingVisualRoles.length === 0,
+          [
+            `images=${actualImages}/${minimumImageCount}`,
+            `kinds=${[...imageKinds].sort().join(',') || 'none'}`,
+            `requiredKinds=${requiredImageKinds.join(',') || 'none'}`,
+            `missingRoles=${missingVisualRoles.map(role => `${role.sceneTag}:${role.mediaKind}`).join(',') || 'none'}`,
+          ]),
+          gate('product.adventure.recommendation-analysis-complete', !routeQuality.truncated
+            && routeQuality.routes.length >= productionContract.narrative.minimumDistinctRoutes
+            && routeQuality.reachableEndingKeys.length >= productionContract.narrative.targetEndingCount,
+          [`routes=${routeQuality.routes.length}`, `truncated=${routeQuality.truncated}`, `reachableEndings=${routeQuality.reachableEndingKeys.length}`]),
+          gate('product.adventure.recommendation-route-volume', routeQuality.minimumRouteTextUnits >= minimumRouteUnits,
+            [`minimumRouteUnits=${routeQuality.minimumRouteTextUnits}`, `required=${minimumRouteUnits}`, `estimatedMinutes=${routeQuality.estimatedMinimumRouteMinutes}`, `targetMinutes=${brief.scale.targetPlayMinutes}`]),
+          gate('product.adventure.recommendation-total-volume', routeQuality.totalPlayableTextUnits >= minimumTotalUnits,
+            [`playableUnits=${routeQuality.totalPlayableTextUnits}`, `required=${minimumTotalUnits}`]),
+          gate('product.adventure.recommendation-dialogue-and-cast', routeQuality.authoredNpcCount >= minimumNpcCount
+            && routeQuality.talkActionCount >= 1 && routeQuality.minimumRouteDialogueTurns >= minimumDialogueTurns,
+          [`authoredNpcs=${routeQuality.authoredNpcCount}/${minimumNpcCount}`, `talkActions=${routeQuality.talkActionCount}`, `minimumRouteDialogueTurns=${routeQuality.minimumRouteDialogueTurns}/${minimumDialogueTurns}`]),
+          gate('product.adventure.recommendation-decisions',
+            routeQuality.minimumRouteNarrativeChoices >= minimumNarrativeChoices
+              && routeQuality.minimumRouteStatefulDecisions >= minimumDecisions,
+            [
+              `minimumRouteNarrativeChoices=${routeQuality.minimumRouteNarrativeChoices}/${minimumNarrativeChoices}`,
+              `minimumRouteStatefulDecisions=${routeQuality.minimumRouteStatefulDecisions}/${minimumDecisions}`,
+            ]),
+          gate('product.adventure.recommendation-main-quest', routeQuality.mainQuestStageCount >= minimumMainStages
+            && routeQuality.mainQuestObjectiveCount >= minimumMainObjectives
+            && routeQuality.minimumMainProgressActions >= minimumMainActions,
+          [`mainStages=${routeQuality.mainQuestStageCount}/${minimumMainStages}`, `mainObjectives=${routeQuality.mainQuestObjectiveCount}/${minimumMainObjectives}`, `minimumMainProgressActions=${routeQuality.minimumMainProgressActions}/${minimumMainActions}`]),
+          gate('product.adventure.recommendation-endings', routeQuality.endingTextUnits.length >= productionContract.narrative.targetEndingCount
+            && routeQuality.endingTextUnits.every(item => (
+              item.textUnits >= minimumEndingUnits
+              && item.npcDialogueTurns >= 1
+              && item.stateSettlement
+            )), [
+            `requiredUnitsPerEnding=${minimumEndingUnits}`,
+            ...routeQuality.endingTextUnits.map(item => `${item.nodeKey}=${item.textUnits};npcDialogue=${item.npcDialogueTurns};stateSettlement=${item.stateSettlement}`),
+          ]),
+          gate('product.adventure.recommendation-copy', routeQuality.copyIssues.length === 0,
+            routeQuality.copyIssues.length === 0 ? ['issues=none'] : routeQuality.copyIssues.map(issue => `${issue.kind}:${issue.surfaceKey}`)),
+        )
+      }
+    }
   } else if (runtimePackage.productType === 'avg') {
     const presentation = runtimePackage.presentation
     const assetKeys = new Set(presentation?.assets.map(asset => asset.assetKey) ?? [])

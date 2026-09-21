@@ -279,7 +279,7 @@ test('世界引擎只封存纯语义 Release，并显式交给上层产品生产
   await expect(pipeline.getByLabel('互动实例类型')).toHaveCount(0)
   await expect(pipeline.getByRole('button', { name: /创建实例|直接运行/ })).toHaveCount(0)
   await pipeline.getByRole('button', { name: '交给文字游戏', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '开发体验', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '制作与试玩', exact: true })).toBeVisible()
   const enableProduction = page.getByRole('button', { name: '为当前项目显式启用', exact: true })
   // A fresh workspace requires explicit authorization; wait for its async owner load.
   await enableProduction.click()

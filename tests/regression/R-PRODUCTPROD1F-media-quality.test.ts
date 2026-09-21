@@ -28,6 +28,14 @@ function runtimeWithAsset(asset: NonNullable<ProductRuntimePackageV1['presentati
   } as ProductRuntimePackageV1
 }
 
+function imageProbe(assetKey: string, decodedHasAlpha = false) {
+  return {
+    assetKey, status: 'decoded' as const, decodedHasAlpha,
+    decodedChannelCount: null, decodedSampleRateHz: null, integratedLufs: null,
+    truePeakDbtp: null, loopSeamDbfs: null,
+  }
+}
+
 describe('R-PRODUCTPROD-1F · commercial media quality analyzers', () => {
   it('对浏览器解码后的精确 PCM 计算版本化 LUFS、true peak 与循环接缝', () => {
     const channel = sine({ amplitude: 0.16, seconds: 2 })
@@ -84,5 +92,62 @@ describe('R-PRODUCTPROD-1F · commercial media quality analyzers', () => {
       'audio-sample-rate-out-of-range',
       'audio-true-peak-exceeded',
     ])
+  })
+
+  it('用运行包角色注册和编辑职责区分角色立绘、物品特写与场景 CG', () => {
+    const character = runtimeWithAsset({
+      assetKey: 'character.npc-01', version: 1, kind: 'character-pose', name: '守钟人',
+      mimeType: 'image/png', byteSize: 1024, width: 720, height: 1080, durationMs: null,
+      contentHash: 'c'.repeat(64), blobContentHash: 'c'.repeat(64), source: 'fixture', license: 'fixture',
+      altText: '守钟人的透明背景立绘', characterTag: 'character.npc-01', sceneTag: 'major-character-anchor',
+    })
+    character.interaction = {
+      playerKey: 'player',
+      profiles: [{
+        participantKey: 'participant.01', characterKey: 'character.npc-01', name: '守钟人', roleLabel: '守钟人',
+        voiceRules: '克制', initialKnowledge: [], relationshipDimensions: [], maxMemoryEntries: 40,
+      }],
+      sceneTemplates: [],
+    }
+    expect(evaluateProductMediaCommercialPolicyV2({
+      runtimePackage: character,
+      probe: imageProbe('character.npc-01', true),
+    })).toEqual([])
+
+    character.presentation!.assets[0].characterTag = 'character.unknown'
+    expect(evaluateProductMediaCommercialPolicyV2({
+      runtimePackage: character,
+      probe: imageProbe('character.npc-01', true),
+    })).toEqual(['image-character-anchor-missing'])
+    character.presentation!.assets[0].characterTag = 'character.player'
+    character.presentation!.assets[0].sceneTag = 'protagonist-anchor'
+    character.adventure = { playerKey: 'player' } as never
+    expect(evaluateProductMediaCommercialPolicyV2({
+      runtimePackage: character,
+      probe: imageProbe('character.npc-01', true),
+    })).toEqual([])
+
+    const item = runtimeWithAsset({
+      assetKey: 'item.memory-box', version: 1, kind: 'cg', name: '记忆匣特写',
+      mimeType: 'image/png', byteSize: 1024, width: 1024, height: 1024, durationMs: null,
+      contentHash: 'd'.repeat(64), blobContentHash: 'd'.repeat(64), source: 'fixture', license: 'fixture',
+      altText: '中性承托面上的记忆匣', characterTag: '', sceneTag: 'important-item-primary',
+    })
+    expect(evaluateProductMediaCommercialPolicyV2({
+      runtimePackage: item,
+      probe: imageProbe('item.memory-box'),
+    })).toEqual([])
+
+    item.presentation!.assets[0].width = 800
+    expect(evaluateProductMediaCommercialPolicyV2({
+      runtimePackage: item,
+      probe: imageProbe('item.memory-box'),
+    })).toEqual(['image-detail-dimensions-below-commercial-minimum'])
+
+    item.presentation!.assets[0].sceneTag = 'mainline-turn-act-2'
+    expect(evaluateProductMediaCommercialPolicyV2({
+      runtimePackage: item,
+      probe: imageProbe('item.memory-box'),
+    })).toEqual(['image-background-dimensions-below-commercial-minimum'])
   })
 })

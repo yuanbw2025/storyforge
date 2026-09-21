@@ -18,6 +18,7 @@ export {
   parseProductRuntimeState,
   readProductRuntimeState,
   readProductRuntimeStateVersion,
+  recoverProductRuntimeCheckpointFromEventsV1,
   replayProductRuntimeEvents,
   verifyProductRuntimeCheckpoint,
   type NarrativeChoiceCommitResultV1,

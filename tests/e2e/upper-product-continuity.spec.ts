@@ -301,7 +301,7 @@ test('世界到游戏只进入统一制作中心并自动复用全局 AI 配置'
   await expect(pipeline.getByRole('button', { name: /主 Agent 生成游戏候选|快速映射|直接发布/ })).toHaveCount(0)
   await pipeline.getByRole('button', { name: '交给文字游戏', exact: true }).click()
 
-  await expect(page.getByRole('heading', { name: '开发体验', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '制作与试玩', exact: true })).toBeVisible()
   await expect(page.getByText('自动游戏制作需要项目授权', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '为当前项目显式启用', exact: true }).click()
   await expect(page.getByText('文本生成能力已就绪', { exact: true })).toBeVisible()
@@ -311,10 +311,12 @@ test('世界到游戏只进入统一制作中心并自动复用全局 AI 配置'
   await expect(page.getByRole('button', { name: '手工维护', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /新建空白游戏|载入验收样例/ })).toHaveCount(0)
   await expect(page.getByTestId('product-production-studio')).toBeVisible()
-  await page.getByRole('combobox', { name: /产品形态/ }).selectOption('avg')
+  await expect(page.getByRole('combobox', { name: /产品形态/ })).toHaveValue('text-adventure')
+  await expect(page.getByRole('combobox', { name: /产品形态/ })).toBeDisabled()
   await page.getByRole('combobox', { name: /制作质量/ }).selectOption('commercial-candidate')
   await expect(page.getByText(/图片能力已就绪：复用同一 Agnes Key.*agnes-image-2\.1-flash/)).toBeVisible()
-  await expect(page.getByText(/Agnes 当前公开接口未提供独立音乐\/SFX 生成/)).toBeVisible()
+  await expect(page.getByRole('combobox', { name: /音频目标/ })).toBeDisabled()
+  await expect(page.getByText('不制作音频，产品仍可完整游玩。', { exact: true })).toBeVisible()
   await expect(page.getByLabel('API Key', { exact: true })).toHaveCount(0)
   await page.getByRole('combobox', { name: /制作质量/ }).selectOption('prototype')
 

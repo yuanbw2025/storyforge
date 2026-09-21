@@ -9,6 +9,11 @@ import {
   PRODUCT_PLATFORM_PRODUCTION_DEPENDENCIES_V1,
   type ProductPlatformProductionDependencyV1,
 } from '../../src/lib/product-platform/service-router'
+import {
+  COMMERCIAL_RELEASE_DELIVERY_CAPABILITIES_V1,
+  createCommercialReleaseDeliveryReadinessAdapterV1,
+} from '../../src/lib/commercial/release-delivery-capabilities'
+import { InMemoryCommercialReleaseDeliveryPersistenceV1 } from '../../src/lib/commercial/release-delivery'
 
 function configuredEvidence() {
   return Object.fromEntries(PRODUCT_PLATFORM_PRODUCTION_DEPENDENCIES_V1.map(dependency => [
@@ -124,5 +129,42 @@ describe('PLATFORM-1I · active production adapters and readiness', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('对象存储只有主动证明当前版本的 delivery 全能力后才能进入生产 ready', async () => {
+    const persistence = new InMemoryCommercialReleaseDeliveryPersistenceV1()
+    const adapter = Object.assign(persistence, {
+      dependency: 'object-storage' as const,
+      adapterId: 'test.external.release-store',
+      deployment: 'external' as const,
+      probe: async () => ({ ok: true, code: 'ok' }),
+      probeReleaseDeliveryCapabilities: async () => ({
+        schema: 'storyforge.commercial-release-delivery-capabilities', version: 1,
+        storageSchemaVersion: 1,
+        capabilities: [...COMMERCIAL_RELEASE_DELIVERY_CAPABILITIES_V1],
+      }),
+    })
+    const readiness = createProductPlatformActiveReadinessV1({
+      serviceVersion: 'production-release-store-v1', environment: 'production',
+      dependencyEvidence: configuredEvidence(),
+      adapters: {
+        ...externalAdapters(),
+        'object-storage': createCommercialReleaseDeliveryReadinessAdapterV1(adapter),
+      },
+    })
+    await expect(readiness.read({ force: true })).resolves.toMatchObject({
+      ready: true, checks: { 'object-storage': 'ready' },
+    })
+
+    adapter.probeReleaseDeliveryCapabilities = async () => ({
+      schema: 'storyforge.commercial-release-delivery-capabilities', version: 1,
+      storageSchemaVersion: 1,
+      capabilities: COMMERCIAL_RELEASE_DELIVERY_CAPABILITIES_V1.filter(
+        capability => capability !== 'upload-request-idempotency-v1',
+      ),
+    })
+    await expect(readiness.read({ force: true })).resolves.toMatchObject({
+      ready: false, checks: { 'object-storage': 'unhealthy' },
+    })
   })
 })

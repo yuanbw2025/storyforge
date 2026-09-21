@@ -135,6 +135,12 @@ function narrativeFromBrief(brief: ProductProductionBriefV3): {
   const opening = brief.intent.openingSituation
   const requiredFact = brief.intent.requiredFacts[0] ?? '世界保持其既定规则。'
   const forbidden = brief.intent.forbiddenChanges[0] ?? '既定事实不会被无理由改写。'
+  const hasContentEvolution = brief.evolution?.affectedLanes.some(
+    lane => lane === 'content' || lane === 'world-source',
+  ) === true
+  const evolutionContinuation = hasContentEvolution
+    ? '你在既有结果之后发现了仍待追查的新余波。'
+    : ''
   const nodes: FrozenProductNarrativeNode[] = [
     { key: 'opening', kind: 'entry', title: brief.source.startingPoint.title, summary: opening, conditionJson: '{}', effectsJson: '[]', successorKeys: ['observe', 'act'] },
     { key: 'observe', kind: 'scene', title: '先理解局势', summary: requiredFact, conditionJson: '{}', effectsJson: '[{"op":"set","path":"approach","value":"observe"}]', successorKeys: ['ending.insight'] },
@@ -144,7 +150,7 @@ function narrativeFromBrief(brief: ProductProductionBriefV3): {
   ]
   const beatTexts = [
     opening,
-    `你停下来核对已知事实：${requiredFact}`,
+    `你停下来核对已知事实：${requiredFact}${evolutionContinuation}`,
     `你决定行动，同时守住边界：${forbidden}`,
     '线索终于连成完整的图景。',
     '新的结果出现了，而代价也被诚实地保留下来。',

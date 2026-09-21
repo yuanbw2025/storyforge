@@ -1,7 +1,12 @@
 import { db } from '../../src/lib/db/schema'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { createProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
-import type { ProductRuntimePackageV1, WorkspaceScope, WorldRelease } from '../../src/lib/types'
+import type {
+  ProductBuildPreviewManifestV1,
+  ProductRuntimePackageV1,
+  WorkspaceScope,
+  WorldRelease,
+} from '../../src/lib/types'
 import { createProductRuntimeInstanceFromSource } from '../../src/lib/product/runtime-instances'
 
 /**
@@ -16,6 +21,7 @@ export async function seedCurrentProductBuild(input: {
   title: string
   worldGroupId?: number | null
   seed?: string
+  mediaBindings?: ProductBuildPreviewManifestV1['mediaBindings']
 }) {
   const now = Date.now()
   const productionKey = `current-product-${input.scope.projectId}-${crypto.randomUUID().slice(0, 8)}`
@@ -82,6 +88,7 @@ export async function seedCurrentProductBuild(input: {
     buildNumber: 1,
     buildManifestHash: manifestHash,
     runtimePackage: input.runtimePackage,
+    mediaBindings: input.mediaBindings,
   })
   const planBody = { schema: 'storyforge.test-build-plan', version: 1, tasks: [] }
   const planHash = await hashProductProductionValueV2(planBody)

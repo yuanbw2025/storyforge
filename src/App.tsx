@@ -41,9 +41,9 @@ export default function App() {
     <>
     <ResumeTracker/>
     <Routes>
-      {[...PRODUCT_NAVIGATION.filter(item => !['home', 'long', 'short', 'script', 'world', 'avg', 'ttrpg', 'town', 'comic', 'motion', 'chat'].includes(item.id))].map(item => <Route key={item.id} path={`/${item.id}/:pageId?`} element={<Suspense fallback={<RouteFallback />}><PreviewRoutePage productId={item.id}/></Suspense>}/>)}
+      {[...PRODUCT_NAVIGATION.filter(item => !['home', 'long', 'short', 'script', 'world', 'avg', 'ttrpg', 'town', 'comic', 'motion', 'chat', 'adventure'].includes(item.id))].map(item => <Route key={item.id} path={`/${item.id}/:pageId?`} element={<Suspense fallback={<RouteFallback />}><PreviewRoutePage productId={item.id}/></Suspense>}/>)}
       <Route path="/community/:pageId?" element={<Suspense fallback={<RouteFallback/>}><CommunityPage/></Suspense>}/>
-      <Route path="/adventure/runtime" element={<Suspense fallback={<RouteFallback/>}><TextGameDevelopmentPage/></Suspense>}/>
+      <Route path="/adventure/:pageId?" element={<Suspense fallback={<RouteFallback/>}><TextGameDevelopmentPage/></Suspense>}/>
       <Route path="/openworld/runtime" element={<Suspense fallback={<RouteFallback/>}><TextGameDevelopmentPage openWorld/></Suspense>}/>
       <Route path="/motion/:pageId?" element={<Suspense fallback={<RouteFallback />}><MotionMaterialsPage/></Suspense>}/>
       <Route path="/town/:pageId?" element={<Suspense fallback={<RouteFallback />}><AiTownPage /></Suspense>}/>

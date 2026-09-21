@@ -7,6 +7,7 @@ import type {
   FrozenInteractionSceneTemplate,
 } from './character-interaction'
 import type { AdventureContentV1 } from './adventure'
+import type { AdventureContent } from './adventure-v2'
 import type { AvgPresentationContentV1 } from './avg'
 import type { FrozenProductMediaAsset } from './product-media'
 import type { OpenWorldEvolutionContentV1 } from './open-world-evolution'
@@ -154,7 +155,7 @@ export interface ProductRuntimePackageV1 {
   }
   narrative: FrozenProductNarrativeV1
   interaction?: FrozenInteractionRuntimeV2
-  adventure?: AdventureContentV1
+  adventure?: AdventureContent
   presentation?: AvgPresentationContentV1 & { assets: FrozenRuntimeMediaAssetV2[] }
   openWorldEvolution?: OpenWorldEvolutionContentV1
   openWorld?: OpenWorldContentV1
@@ -192,7 +193,7 @@ export type CharacterInteractionProductRuntimePackageV1 = ProductRuntimePackageV
 export type AdventureProductRuntimePackageV1 = ProductRuntimePackageV1 & {
   productType: 'text-adventure'
   interaction: FrozenInteractionRuntimeV2
-  adventure: AdventureContentV1
+  adventure: AdventureContent
 }
 export type AvgProductRuntimePackageV1 = ProductRuntimePackageV1 & {
   productType: 'avg'
@@ -213,6 +214,40 @@ export type AiTownProductRuntimePackageV1 = ProductRuntimePackageV1 & {
 
 export type AnyProductReleaseManifest = ProductReleaseManifestV1
 
+export interface ProductReleaseMarketplaceProvenanceV1 {
+  source: 'marketplace' | 'community-bundle'
+  listingId: string
+  orderId: string | null
+  entitlementId: string | null
+  license: {
+    licenseId: string
+    licenseVersion: string
+    allowOfflineExport: boolean
+    allowRemix: boolean
+    commercialReuse: boolean
+    requiresAttribution: boolean
+    termsUrl: string
+  }
+  attribution: string[]
+  localCopyPreserved: boolean
+  acquiredAt: number
+  importedAt: number
+}
+
+export interface ProductReleaseLocalFileProvenanceV1 {
+  source: 'local-file'
+  candidatePackageHash: string
+  originalReleaseHash: string
+  candidateStatus: 'eligible-for-community-submission'
+  remoteCreatorIdentityVerified: false
+  localCopyPreserved: true
+  importedAt: number
+}
+
+export type ProductReleaseDistributionProvenanceV1 =
+  | ProductReleaseMarketplaceProvenanceV1
+  | ProductReleaseLocalFileProvenanceV1
+
 export interface ProductRelease {
   id?: number
   projectId: number
@@ -227,23 +262,5 @@ export interface ProductRelease {
   manifestJson: string
   contentHash: string
   createdAt: number
-  distributionProvenance?: {
-    source: 'marketplace' | 'community-bundle'
-    listingId: string
-    orderId: string | null
-    entitlementId: string | null
-    license: {
-      licenseId: string
-      licenseVersion: string
-      allowOfflineExport: boolean
-      allowRemix: boolean
-      commercialReuse: boolean
-      requiresAttribution: boolean
-      termsUrl: string
-    }
-    attribution: string[]
-    localCopyPreserved: boolean
-    acquiredAt: number
-    importedAt: number
-  }
+  distributionProvenance?: ProductReleaseDistributionProvenanceV1
 }

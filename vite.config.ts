@@ -15,7 +15,12 @@ function resolveBuildSha(): string {
 
 function manualChunkFor(moduleId: string): string | undefined {
   const id = moduleId.replaceAll('\\', '/')
-  const packagePath = id.split('/node_modules/')[1]
+  // pnpm resolves a package through `.pnpm/.../node_modules/<package>` and
+  // therefore produces more than one `node_modules` segment. The actual
+  // package identity is always after the final segment; using the first one
+  // silently disabled all vendor rules and pushed React/editor code back into
+  // route chunks.
+  const packagePath = id.split('/node_modules/').at(-1)
 
   if (packagePath) {
     if (/^(?:react|react-dom|scheduler|react-router)(?:\/|$)/.test(packagePath)) {

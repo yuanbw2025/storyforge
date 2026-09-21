@@ -386,9 +386,13 @@ export async function deriveStrictExportProjectSnapshotInCurrentTransaction(
   if (!Dexie.currentTransaction) {
     throw new Error('[strictExport] 当前事务快照只能在已打开的 Dexie 事务中派生')
   }
-  const snapshot = await portableizeSnapshot(
-    await captureProjectExportInTransaction(projectId, CURRENT_EXPORT_VERSION, true),
-  )
+  const captured = await captureProjectExportInTransaction(projectId, CURRENT_EXPORT_VERSION, true)
+  // `portableizeSnapshot()` is deliberately asynchronous even when this
+  // particular project has no portable Blob rows. Keeping the whole promise
+  // inside Dexie.waitFor prevents a real browser from auto-committing the
+  // caller-owned revision transaction between the final export read and the
+  // subsequent worldRevisions write.
+  const snapshot = await Dexie.waitFor(portableizeSnapshot(captured))
   const worldExportId = snapshot.exportIds.get('worlds')?.get(ownership.worldId)
   const workExportId = snapshot.exportIds.get('works')?.get(ownership.workId)
   if (worldExportId == null || workExportId == null) {

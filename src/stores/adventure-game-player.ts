@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import {
+  allocateAdventureSkillPoint,
   branchProductRuntimeSession,
   commitAdventureAction,
   commitAdventureNarrativeChoice,
@@ -8,9 +9,11 @@ import {
   deleteProductRuntimeSession,
   readProductRuntimeState,
   readProductRuntimeStateVersion,
+  recoverProductRuntimeCheckpointFromEventsV1,
   verifyProductRuntimeCheckpoint,
 } from '../lib/adventure/runtime-api'
-import { availableAdventureActions } from '../lib/adventure/runtime'
+import { adventureNarrativeActionContext, availableAdventureActions } from '../lib/adventure/runtime'
+import { isAdventureActionPlayerVisible } from '../lib/adventure/player-experience'
 import {
   adoptAdventureRuntimeCandidateV1,
   cancelAdventureRuntimeRunV1,
@@ -18,13 +21,18 @@ import {
   type AdventureIntentCandidateV1,
   type AdventureNarrationCandidateV1,
 } from '../lib/adventure/harness'
-import { verifyProductRuntimeSessionSourceV1 } from '../lib/product-production/preview-source'
+import {
+  productRuntimeSourceForSessionV1,
+  resolveProductRuntimeSource,
+  verifyProductRuntimeSessionSourceV1,
+} from '../lib/product-production/preview-source'
 import { assertProductReleaseUnchanged, parseAdventureProductReleaseManifest } from '../lib/product/releases'
 import { assertInstanceBinding, createTextAdventureInstance, readBoundInstances } from '../lib/product/runtime-instances'
 import type {
   AdventureProductRuntimePackageV1,
   AIConfig,
   ProductRelease,
+  ProductMediaResolverV1,
   ProductRuntimeCheckpoint,
   ProductRuntimeEvent,
   ProductRuntimeState,
@@ -44,12 +52,16 @@ interface AdventurePlayerState {
   worldGroupId: number | null
   releases: AdventureLibraryItem[]
   sessions: ProductRuntimeSession[]
+  /** Derived from the canonical event log; keys identify timelines that reached a frozen ending. */
+  completedSessionEndingKeys: Record<number, string>
   selectedSessionId: number | null
   events: ProductRuntimeEvent[]
   checkpoints: ProductRuntimeCheckpoint[]
   recoverableRunIds: number[]
   runtimeState: ProductRuntimeState
   selectedManifest: AdventureProductRuntimePackageV1 | null
+  selectedMediaResolver: ProductMediaResolverV1 | null
+  selectedSourceSessionId: number | null
   pendingIntent: AdventureIntentCandidateV1 | null
   generatedNarrative: AdventureNarrationCandidateV1 | null
   generatingRunId: number | null
@@ -60,6 +72,7 @@ interface AdventurePlayerState {
   select(sessionId: number | null): Promise<void>
   start(productReleaseId: number, title?: string): Promise<number>
   act(actionKey: string, commandId?: string): Promise<void>
+  allocateSkillPoint(abilityKey: string, commandId?: string): Promise<void>
   generateIntent(text: string, aiConfig: AIConfig): Promise<void>
   adoptPendingIntent(): Promise<void>
   rejectPendingIntent(): Promise<void>
@@ -67,6 +80,8 @@ interface AdventurePlayerState {
   cancelGeneration(): Promise<void>
   resumeRun(runId: number): Promise<void>
   choose(choiceKey: string): Promise<void>
+  preloadMedia(maximumBytes?: number): Promise<{ urls: Record<string, string>; failures: Array<{ assetKey: string; reason: string }> }>
+  preloadMediaSelection(assetKeys: string[], maximumBytes?: number): Promise<{ urls: Record<string, string>; failures: Array<{ assetKey: string; reason: string }> }>
   saveCheckpoint(name: string): Promise<void>
   forkCheckpoint(checkpointId: number, title?: string): Promise<number>
   forkCurrent(title?: string): Promise<number>
@@ -107,15 +122,28 @@ function playableManifest(runtimePackage: Awaited<ReturnType<typeof verifyProduc
   return structuredClone(runtimePackage) as AdventureProductRuntimePackageV1
 }
 
-async function details(scope: WorkspaceScope, sessionId: number) {
+async function details(scope: WorkspaceScope, sessionId: number, current: {
+  sessionId: number | null
+  resolver: ProductMediaResolverV1 | null
+}) {
   const session = await assertAdventureSession(scope, sessionId)
-  const [events, checkpoints, runtimeState, playable, runRows] = await Promise.all([
+  const [events, checkpoints, runtimeState, verified, runRows] = await Promise.all([
     db.productRuntimeEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
     db.productRuntimeCheckpoints.where('sessionId').equals(sessionId).toArray(),
     readProductRuntimeState(sessionId),
     verifyProductRuntimeSessionSourceV1({ scope, session }),
     db.agentRuns.where('productRuntimeSessionId').equals(sessionId).toArray(),
   ])
+  let selectedMediaResolver = current.resolver
+  let playable = verified
+  if (current.sessionId !== sessionId || !selectedMediaResolver) {
+    selectedMediaResolver?.dispose()
+    const resolved = await resolveProductRuntimeSource({
+      scope, source: await productRuntimeSourceForSessionV1(session),
+    })
+    playable = resolved
+    selectedMediaResolver = resolved.mediaResolver
+  }
   checkpoints.sort((left, right) => right.createdAt - left.createdAt)
   const resumableRows = runRows.filter(row => !['completed', 'failed', 'cancelled'].includes(row.status))
   const resumeCheckpoints = resumableRows.length
@@ -126,6 +154,8 @@ async function details(scope: WorkspaceScope, sessionId: number) {
     checkpoints,
     runtimeState,
     selectedManifest: playableManifest(playable.runtimePackage),
+    selectedMediaResolver,
+    selectedSourceSessionId: sessionId,
     recoverableRunIds: resumableRows
       .filter(row => resumeCheckpoints.some(item => item.runId === row.id && item.resumePayloadJson != null))
       .map(row => row.id!),
@@ -149,7 +179,19 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
   const refresh = async () => {
     const scope = get().scope; const sessionId = get().selectedSessionId
     if (!scope || sessionId == null) return
-    set(await details(scope, sessionId))
+    const resolved = await details(scope, sessionId, {
+      sessionId: get().selectedSourceSessionId,
+      resolver: get().selectedMediaResolver,
+    })
+    const endingKey = resolved.runtimeState.narrative?.completed
+      ? resolved.runtimeState.narrative.endingKey
+      : null
+    set({
+      ...resolved,
+      completedSessionEndingKeys: endingKey
+        ? { ...get().completedSessionEndingKeys, [sessionId]: endingKey }
+        : get().completedSessionEndingKeys,
+    })
   }
   const reload = async (requested?: number | null) => {
     const scope = get().scope
@@ -158,14 +200,40 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     const sessions = (await readBoundInstances(scope))
       .filter(item => item.kind === 'text-adventure' && (item.worldGroupId ?? null) === get().worldGroupId)
       .sort((a, b) => b.updatedAt - a.updatedAt)
+    const completedSessionEndingKeys = Object.fromEntries((await Promise.all(sessions.map(async session => {
+      try {
+        const state = await readProductRuntimeState(session.id!)
+        return state.narrative?.completed && state.narrative.endingKey
+          ? [session.id!, state.narrative.endingKey] as const
+          : null
+      } catch {
+        // A damaged timeline remains selectable so its existing recovery/error
+        // path is preserved; it must never be mislabeled as completed.
+        return null
+      }
+    }))).filter((entry): entry is readonly [number, string] => entry != null))
     const explicitlySelected = requested !== undefined
     const desired = explicitlySelected ? requested : get().selectedSessionId
     const selectedSessionId = desired != null && sessions.some(item => item.id === desired)
       ? desired
       : explicitlySelected ? null : sessions[0]?.id ?? null
-    set({ releases, sessions, selectedSessionId })
-    if (selectedSessionId != null) await refresh()
-    else set({ events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null })
+    if (selectedSessionId != null) {
+      const resolved = await details(scope, selectedSessionId, {
+        sessionId: get().selectedSourceSessionId,
+        resolver: get().selectedMediaResolver,
+      })
+      // Publish the new session and its matching resolver together. Exposing
+      // the next sessionId with the previous session's resolver lets React
+      // start a stale preload between these two states.
+      set({ releases, sessions, completedSessionEndingKeys, selectedSessionId, ...resolved })
+    } else {
+      get().selectedMediaResolver?.dispose()
+      set({
+        releases, sessions, completedSessionEndingKeys, selectedSessionId: null,
+        events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
+        selectedManifest: null, selectedMediaResolver: null, selectedSourceSessionId: null,
+      })
+    }
   }
   const run = async <T>(operation: () => Promise<T>): Promise<T> => {
     set({ busy: true, error: '' })
@@ -174,23 +242,42 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     finally { set({ busy: false }) }
   }
   return {
-    scope: null, worldGroupId: null, releases: [], sessions: [], selectedSessionId: null,
+    scope: null, worldGroupId: null, releases: [], sessions: [], completedSessionEndingKeys: {}, selectedSessionId: null,
     events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null,
+    selectedMediaResolver: null, selectedSourceSessionId: null,
     pendingIntent: null, generatedNarrative: null, generatingRunId: null,
     loading: false, busy: false, error: '',
     load: async (scope, worldGroupId, openLibrary = false) => {
       const changed = get().scope?.workId !== scope.workId || get().worldGroupId !== worldGroupId
+      if (changed) get().selectedMediaResolver?.dispose()
       set({ scope, worldGroupId, loading: true, error: '', ...(changed ? {
-        selectedSessionId: null, pendingIntent: null, generatedNarrative: null,
+        selectedSessionId: null, selectedMediaResolver: null, selectedSourceSessionId: null,
+        completedSessionEndingKeys: {},
+        pendingIntent: null, generatedNarrative: null,
       } : {}) })
       try { await reload(openLibrary ? null : undefined) } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) }
       finally { set({ loading: false }) }
     },
     select: async sessionId => {
-      set({ selectedSessionId: sessionId, loading: true, error: '', pendingIntent: null, generatedNarrative: null })
+      set({ loading: true, error: '', pendingIntent: null, generatedNarrative: null })
       try {
-        if (sessionId == null) set({ events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null })
-        else await refresh()
+        if (sessionId == null) {
+          get().selectedMediaResolver?.dispose()
+          set({
+            selectedSessionId: null,
+            events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
+            selectedManifest: null, selectedMediaResolver: null, selectedSourceSessionId: null,
+          })
+        }
+        else {
+          const scope = get().scope
+          if (!scope) throw new Error('当前 World/Work 尚未就绪。')
+          const resolved = await details(scope, sessionId, {
+            sessionId: get().selectedSourceSessionId,
+            resolver: get().selectedMediaResolver,
+          })
+          set({ selectedSessionId: sessionId, ...resolved })
+        }
       } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) }
       finally { set({ loading: false }) }
     },
@@ -216,6 +303,19 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
         baseSequence: base.sequence, baseStateHash: base.stateHash,
       })
       await automaticCheckpoint(sessionId)
+      await refresh()
+      set({ generatedNarrative: null })
+    }),
+    allocateSkillPoint: (abilityKey, commandId) => run(async () => {
+      const scope = get().scope; const sessionId = get().selectedSessionId
+      if (!scope || sessionId == null) throw new Error('请先开始或继续一个文字冒险。')
+      await assertAdventureSession(scope, sessionId)
+      const base = await readProductRuntimeStateVersion(sessionId)
+      await allocateAdventureSkillPoint({
+        sessionId, abilityKey,
+        commandId: commandId ?? `textadv-skill:${sessionId}:${crypto.randomUUID()}`,
+        baseSequence: base.sequence, baseStateHash: base.stateHash,
+      })
       await refresh()
       set({ generatedNarrative: null })
     }),
@@ -303,6 +403,33 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       })
       await refresh()
     }),
+    preloadMedia: async maximumBytes => {
+      const resolver = get().selectedMediaResolver
+      const assets = get().selectedManifest?.presentation?.assets ?? []
+      if (!resolver) return {
+        urls: {}, failures: assets.map(asset => ({ assetKey: asset.assetKey, reason: '可玩媒资解析器未就绪' })),
+      }
+      // Full-catalog browser verification must be able to resolve every frozen
+      // object. A fixed 64 MiB default can silently omit a late asset even when
+      // the Build's governed media budget explicitly permits the catalog.
+      const budget = maximumBytes ?? assets.reduce((sum, asset) => sum + asset.byteSize, 0)
+      const result = await resolver.preload({ assetKeys: assets.map(asset => asset.assetKey), maximumBytes: budget })
+      return { urls: result.urls, failures: result.failures }
+    },
+    preloadMediaSelection: async (assetKeys, maximumBytes) => {
+      const resolver = get().selectedMediaResolver
+      const assets = get().selectedManifest?.presentation?.assets ?? []
+      const requested = [...new Set(assetKeys)]
+      if (!resolver) return {
+        urls: {}, failures: requested.map(assetKey => ({ assetKey, reason: '可玩媒资解析器未就绪' })),
+      }
+      const requestedSet = new Set(requested)
+      const budget = maximumBytes ?? assets
+        .filter(asset => requestedSet.has(asset.assetKey))
+        .reduce((sum, asset) => sum + asset.byteSize, 0)
+      const result = await resolver.preload({ assetKeys: requested, maximumBytes: budget })
+      return { urls: result.urls, failures: result.failures }
+    },
     saveCheckpoint: name => run(async () => {
       const scope = get().scope; const sessionId = get().selectedSessionId
       if (!scope || sessionId == null) throw new Error('请先选择文字冒险。')
@@ -313,9 +440,12 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     forkCheckpoint: (checkpointId, title) => run(async () => {
       const checkpoint = get().checkpoints.find(item => item.id === checkpointId)
       const parent = get().sessions.find(item => item.id === checkpoint?.sessionId)
-      if (!checkpoint || !parent || !await verifyProductRuntimeCheckpoint(checkpointId)) throw new Error('检查点不存在或完整性失败。')
+      if (!checkpoint || !parent) throw new Error('检查点不存在。')
+      const source = await verifyProductRuntimeCheckpoint(checkpointId)
+        ? checkpoint
+        : (await recoverProductRuntimeCheckpointFromEventsV1(checkpointId)).checkpoint
       const child = await branchProductRuntimeSession({
-        parentSessionId: parent.id!, throughSequence: checkpoint.throughSequence,
+        parentSessionId: parent.id!, throughSequence: source.throughSequence,
         title: title?.trim() || `${parent.title} · ${checkpoint.name}`,
       })
       await reload(child.id!); return child.id!
@@ -344,6 +474,6 @@ export function selectAdventureActions(state: AdventurePlayerState) {
   return availableAdventureActions(
     state.selectedManifest.adventure,
     state.runtimeState.adventure,
-    state.runtimeState.narrative?.variables,
-  )
+    adventureNarrativeActionContext(state.runtimeState.narrative),
+  ).filter(item => isAdventureActionPlayerVisible(state.selectedManifest!, item.action))
 }

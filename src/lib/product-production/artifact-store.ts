@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { db } from '../db/schema'
 import type {
   ProductBuildArtifactKindV1,
@@ -6,6 +7,7 @@ import type {
 } from '../types'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
+import { parseProductProductionPlanV3 } from './plan'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -19,6 +21,52 @@ function boundedJson(value: unknown, label: string): string {
   const json = canonicalProductProductionJsonV2(value)
   if (json.length > 2_000_000) throw new Error(`[product-production-artifact] ${label} 超出 2MB 上限`)
   return json
+}
+
+async function rebindBuildLocalTextAdventureMediaV1(input: {
+  productionKey: string | null
+  targetBuildNumber: number
+  source: ProductBuildArtifactRecordV1
+}): Promise<Pick<ProductBuildArtifactRecordV1, 'inputHash' | 'payloadJson' | 'metadataJson'>> {
+  if (!input.productionKey || (input.source.kind !== 'image' && input.source.kind !== 'audio')) {
+    return {
+      inputHash: input.source.inputHash,
+      payloadJson: input.source.payloadJson,
+      metadataJson: input.source.metadataJson,
+    }
+  }
+  let payload: Record<string, unknown>
+  let metadata: Record<string, unknown>
+  try {
+    payload = JSON.parse(input.source.payloadJson) as Record<string, unknown>
+    metadata = JSON.parse(input.source.metadataJson) as Record<string, unknown>
+  } catch {
+    throw new Error(`[product-production-artifact] 文字冒险媒资缺少可重绑定 JSON:${input.source.artifactKey}`)
+  }
+  if (!payload || Array.isArray(payload) || payload.schema !== 'storyforge.generated-media-artifact'
+    || payload.version !== 1 || typeof payload.assetKey !== 'string' || !payload.assetKey.trim()
+    || !metadata || Array.isArray(metadata)
+    || typeof metadata.assetKey !== 'string' || !metadata.assetKey.trim()) {
+    throw new Error(`[product-production-artifact] 文字冒险媒资缺少可重绑定生成合同:${input.source.artifactKey}`)
+  }
+  const assetKey = `${input.productionKey}.build-${input.targetBuildNumber}.${input.source.artifactKey}`
+  if (payload.assetKey === assetKey && metadata.assetKey === assetKey) {
+    return {
+      inputHash: input.source.inputHash,
+      payloadJson: input.source.payloadJson,
+      metadataJson: input.source.metadataJson,
+    }
+  }
+  const inputHash = await Dexie.waitFor(hashProductProductionValueV2({
+    schema: 'storyforge.text-adventure-carried-media-input', version: 1,
+    targetBuildNumber: input.targetBuildNumber, artifactKey: input.source.artifactKey,
+    assetKey, sourceInputHash: input.source.inputHash, contentHash: input.source.contentHash,
+  }))
+  return {
+    inputHash,
+    payloadJson: canonicalProductProductionJsonV2({ ...payload, assetKey }),
+    metadataJson: canonicalProductProductionJsonV2({ ...metadata, assetKey }),
+  }
 }
 
 /**
@@ -141,8 +189,9 @@ export async function readAcceptedBuildArtifacts(input: {
 /**
  * Rebinds already accepted, immutable outputs to a new control epoch after an
  * author pause/resume. Binary objects and payload bytes are reused; a new
- * carried-forward Artifact version preserves the old provenance until the new
- * scheduler root signs a current-epoch reuse receipt.
+ * carried-forward Artifact version preserves the original producer provenance;
+ * the new scheduler records its reuse receipt in the Build ledger rather than
+ * pretending that a newer Run produced the immutable bytes.
  */
 export async function carryForwardProductBuildArtifactsToEpochV1(input: {
   scope: WorkspaceScope
@@ -150,6 +199,14 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
   fromControlEpoch: number
   toControlEpoch: number
   artifactKeys: string[]
+  allowInvalidSourceAtFromEpoch?: boolean
+  /**
+   * Pause can interrupt synthetic carry settlement after older immutable rows
+   * were fenced as invalid. For tasks already proven coherent by the scheduler,
+   * recover the latest unique signed row at or before fromControlEpoch instead
+   * of paying the provider again. Never enable this for an unclassified repair.
+   */
+  allowHistoricalInvalidSourceBeforeEpoch?: boolean
 }): Promise<ProductBuildArtifactRecordV1[]> {
   const scope = await resolveScope({ scope: input.scope })
   if (!Number.isInteger(input.fromControlEpoch) || !Number.isInteger(input.toControlEpoch)
@@ -159,7 +216,7 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
   const keys = [...new Set(input.artifactKeys.map(value => stableKey(value, 'artifactKey')))]
   if (keys.length !== input.artifactKeys.length) throw new Error('[product-production-artifact] carry-forward keys 重复')
   return db.transaction('rw', scopeTransactionTables(
-    db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
+    db.productProductions, db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
   ), async () => {
     const build = await db.productBuilds.get(input.buildId)
     if (!build || !await assertRecordInScope(scope, 'productBuilds', build, { owner: 'work' })
@@ -167,13 +224,40 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
       || ['cancelled', 'failed', 'archived', 'released'].includes(build.status)) {
       throw new Error('[product-production-artifact] carry-forward Build/epoch 不可写')
     }
-    const allRows = await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray()
-    const sourceRows = allRows.filter(row => keys.includes(row.artifactKey)
-      && row.controlEpoch === input.fromControlEpoch
-      && (row.status === 'accepted' || row.status === 'carried-forward'))
-    if (new Set(sourceRows.map(row => row.artifactKey)).size !== sourceRows.length) {
-      throw new Error('[product-production-artifact] carry-forward 来源 key 不唯一')
+    const production = await db.productProductions.get(build.productionId)
+    if (!production || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
+      throw new Error('[product-production-artifact] carry-forward Production 缺失或跨 Work')
     }
+    const productionKey = production.productType === 'text-adventure' ? production.productionKey : null
+    const allRows = await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray()
+    const sourceRows = keys.flatMap(artifactKey => {
+      const immediate = allRows.filter(row => row.artifactKey === artifactKey
+        && row.controlEpoch === input.fromControlEpoch
+        && isSha256Hash(row.contentHash)
+        && isSha256Hash(row.producerReceiptHash ?? '')
+        && (row.status === 'accepted' || row.status === 'carried-forward'
+          || (input.allowInvalidSourceAtFromEpoch === true && row.status === 'invalid')))
+      if (immediate.length > 1) {
+        throw new Error(`[product-production-artifact] carry-forward 当前来源 key 不唯一:${artifactKey}`)
+      }
+      let source = immediate[0]
+      if (!source && input.allowHistoricalInvalidSourceBeforeEpoch === true) {
+        const historical = allRows.filter(row => row.artifactKey === artifactKey
+          && row.controlEpoch <= input.fromControlEpoch
+          && isSha256Hash(row.contentHash)
+          && isSha256Hash(row.producerReceiptHash ?? '')
+          && (row.status === 'accepted' || row.status === 'carried-forward' || row.status === 'invalid'))
+          .sort((left, right) => right.controlEpoch - left.controlEpoch || right.version - left.version)
+        const latestEpoch = historical[0]?.controlEpoch
+        const latest = latestEpoch == null
+          ? [] : historical.filter(row => row.controlEpoch === latestEpoch)
+        if (latest.length > 1) {
+          throw new Error(`[product-production-artifact] carry-forward 历史来源 key 不唯一:${artifactKey}`)
+        }
+        source = latest[0]
+      }
+      return source ? [source] : []
+    })
     const carried: ProductBuildArtifactRecordV1[] = []
     const now = Date.now()
     for (const source of sourceRows) {
@@ -197,13 +281,16 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
       }
       const version = Math.max(0, ...allRows.filter(row => row.artifactKey === source.artifactKey)
         .map(row => row.version)) + 1
+      const rebound = await rebindBuildLocalTextAdventureMediaV1({
+        productionKey, targetBuildNumber: build.buildNumber, source,
+      })
       const next = stampNewRecord(scope, 'productBuildArtifacts', {
         projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
         buildId: build.id!, artifactKey: source.artifactKey, requirementKey: source.requirementKey,
         version, kind: source.kind, mediaKind: source.mediaKind, status: 'carried-forward' as const,
-        producerRunId: null, producerReceiptHash: source.producerReceiptHash,
+        producerRunId: source.producerRunId, producerReceiptHash: source.producerReceiptHash,
         controlEpoch: input.toControlEpoch, inputHash: source.inputHash, contentHash: source.contentHash,
-        payloadJson: source.payloadJson, metadataJson: source.metadataJson,
+        payloadJson: rebound.payloadJson, metadataJson: rebound.metadataJson,
         qualityJson: source.qualityJson, rightsJson: source.rightsJson,
         blobObjectId: source.blobObjectId, mimeType: source.mimeType, byteSize: source.byteSize,
         parentArtifactHash: source.contentHash,
@@ -232,6 +319,15 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
   targetBuildId: number
   targetControlEpoch: number
   artifactKeys: string[]
+  recoverySource?: {
+    briefHash: string
+    planHash: string
+    controlEpoch: number
+    qualityRollback?: {
+      originControlEpoch: number
+      invalidReviewContentHash: string
+    }
+  }
 }): Promise<ProductBuildArtifactRecordV1[]> {
   const scope = await resolveScope({ scope: input.scope })
   if (input.sourceBuildId === input.targetBuildId || !Number.isInteger(input.targetControlEpoch)
@@ -243,28 +339,91 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
     throw new Error('[product-production-artifact] cross-build carry-forward keys 为空或重复')
   }
   return db.transaction('rw', scopeTransactionTables(
-    db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
+    db.productProductions, db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
   ), async () => {
     const [sourceBuild, targetBuild] = await Promise.all([
       db.productBuilds.get(input.sourceBuildId), db.productBuilds.get(input.targetBuildId),
     ])
+    const activeRecoverySourceAllowed = sourceBuild?.status === 'recovery-required'
+      && input.recoverySource != null
+      && input.recoverySource.briefHash === sourceBuild.briefHash
+      && input.recoverySource.planHash === sourceBuild.planHash
+      && input.recoverySource.controlEpoch === sourceBuild.controlEpoch
+    const rejectedAnchorRecoverySourceAllowed = (() => {
+      if (sourceBuild?.status !== 'cancelled' || input.recoverySource == null
+        || input.recoverySource.briefHash !== sourceBuild.briefHash
+        || input.recoverySource.planHash !== sourceBuild.planHash) return false
+      try {
+        const failure = JSON.parse(sourceBuild.failureJson) as {
+          blockerKey?: unknown
+          resolution?: { action?: unknown }
+          previousFailure?: { taskKey?: unknown }
+        }
+        return failure.blockerKey === 'media.anchor-author-gate'
+          && failure.resolution?.action === 'cancel'
+          && failure.previousFailure?.taskKey === 'media.anchor-author-gate'
+          && input.recoverySource.controlEpoch === parseProductProductionPlanV3(sourceBuild.planJson).controlEpoch
+      } catch { return false }
+    })()
+    const recoverySourceAllowed = activeRecoverySourceAllowed || rejectedAnchorRecoverySourceAllowed
+    const requestedQualityRollback = input.recoverySource?.qualityRollback
+    const qualityRollbackShapeValid = requestedQualityRollback == null || (
+      activeRecoverySourceAllowed
+      && Number.isInteger(requestedQualityRollback.originControlEpoch)
+      && requestedQualityRollback.originControlEpoch >= 0
+      && requestedQualityRollback.originControlEpoch <= input.recoverySource!.controlEpoch
+      && isSha256Hash(requestedQualityRollback.invalidReviewContentHash)
+    )
+    const sourceControlEpoch = requestedQualityRollback?.originControlEpoch
+      ?? input.recoverySource?.controlEpoch ?? sourceBuild?.controlEpoch
     if (!sourceBuild || !targetBuild
       || !await assertRecordInScope(scope, 'productBuilds', sourceBuild, { owner: 'work' })
       || !await assertRecordInScope(scope, 'productBuilds', targetBuild, { owner: 'work' })
       || sourceBuild.productionId !== targetBuild.productionId
       || targetBuild.parentBuildNumber !== sourceBuild.buildNumber
       || targetBuild.controlEpoch !== input.targetControlEpoch
-      || !['preview-ready', 'release-ready', 'released'].includes(sourceBuild.status)
+      || !qualityRollbackShapeValid
+      || (!['preview-ready', 'release-ready', 'released'].includes(sourceBuild.status)
+        && !recoverySourceAllowed)
       || ['cancelled', 'failed', 'archived', 'released'].includes(targetBuild.status)) {
       throw new Error('[product-production-artifact] cross-build 来源/目标关系不可复用')
     }
+    const production = await db.productProductions.get(targetBuild.productionId)
+    if (!production || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
+      throw new Error('[product-production-artifact] cross-build Production 缺失或跨 Work')
+    }
+    const productionKey = production.productType === 'text-adventure' ? production.productionKey : null
     const [sourceRows, targetRows] = await Promise.all([
       db.productBuildArtifacts.where('buildId').equals(sourceBuild.id!).toArray(),
       db.productBuildArtifacts.where('buildId').equals(targetBuild.id!).toArray(),
     ])
+    let qualityRollbackVerified = requestedQualityRollback == null
+    if (requestedQualityRollback) {
+      const reviewRows = sourceRows.filter(row => (
+        row.artifactKey === 'quality.adventure-review'
+        && row.controlEpoch === requestedQualityRollback.originControlEpoch
+        && row.contentHash === requestedQualityRollback.invalidReviewContentHash
+        && isSha256Hash(row.producerReceiptHash ?? '')
+      ))
+      const verifiedReviews: ProductBuildArtifactRecordV1[] = []
+      for (const row of reviewRows) {
+        try {
+          const payload = JSON.parse(row.payloadJson) as Record<string, unknown>
+          if (payload && !Array.isArray(payload) && payload.passed === false
+            && await Dexie.waitFor(hashProductProductionValueV2(payload)) === row.contentHash) {
+            verifiedReviews.push(row)
+          }
+        } catch { /* malformed historical evidence stays unusable */ }
+      }
+      qualityRollbackVerified = verifiedReviews.length === 1
+    }
+    if (!qualityRollbackVerified) {
+      throw new Error('[product-production-artifact] cross-build 无效审查回滚证据不可验证')
+    }
     const sources = sourceRows.filter(row => keys.includes(row.artifactKey)
-      && row.controlEpoch === sourceBuild.controlEpoch
-      && (row.status === 'accepted' || row.status === 'carried-forward'))
+      && row.controlEpoch === sourceControlEpoch
+      && (row.status === 'accepted' || row.status === 'carried-forward'
+        || (requestedQualityRollback != null && row.status === 'invalid')))
     if (sources.length !== keys.length || new Set(sources.map(row => row.artifactKey)).size !== keys.length) {
       throw new Error('[product-production-artifact] cross-build 来源 Artifact 不完整或不唯一')
     }
@@ -291,13 +450,16 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
       }
       const version = Math.max(0, ...targetRows.filter(row => row.artifactKey === source.artifactKey)
         .map(row => row.version)) + 1
+      const rebound = await rebindBuildLocalTextAdventureMediaV1({
+        productionKey, targetBuildNumber: targetBuild.buildNumber, source,
+      })
       const next = stampNewRecord(scope, 'productBuildArtifacts', {
         projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
         buildId: targetBuild.id!, artifactKey: source.artifactKey, requirementKey: source.requirementKey,
         version, kind: source.kind, mediaKind: source.mediaKind, status: 'carried-forward' as const,
         producerRunId: null, producerReceiptHash: source.producerReceiptHash,
-        controlEpoch: targetBuild.controlEpoch, inputHash: source.inputHash, contentHash: source.contentHash,
-        payloadJson: source.payloadJson, metadataJson: source.metadataJson,
+        controlEpoch: targetBuild.controlEpoch, inputHash: rebound.inputHash, contentHash: source.contentHash,
+        payloadJson: rebound.payloadJson, metadataJson: rebound.metadataJson,
         qualityJson: source.qualityJson, rightsJson: source.rightsJson,
         blobObjectId: source.blobObjectId, mimeType: source.mimeType, byteSize: source.byteSize,
         parentArtifactHash: source.contentHash,

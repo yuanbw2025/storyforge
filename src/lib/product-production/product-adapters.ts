@@ -4,8 +4,24 @@ import {
   compileOpenWorldModulesV1,
   compileAiTownModuleV1,
 } from './product-module-compilers'
+import {
+  compileTextAdventureInteractionV1,
+  compileTextAdventureModuleV2,
+} from '../adventure/production-compiler'
 import type {
-  AdventureContentV1,
+  TextAdventureArchitectureArtifactV1,
+  TextAdventureQuestBundleArtifactV2,
+  TextAdventureSystemsArtifactV1,
+} from '../adventure/production-artifacts'
+import type {
+  TextAdventureCastBibleArtifactV1,
+  TextAdventureEndingRoutePlanArtifactV1,
+  TextAdventureNarrativeArcPlanArtifactV1,
+  TextAdventureQuestPlanArtifactV1,
+  TextAdventureQuestScriptArtifactV2,
+} from '../adventure/production-artifacts-v2'
+import type {
+  AdventureContent,
   ProductionProductKindV1,
   ProductProductionBriefV3,
   ProductRuntimePackageV1,
@@ -29,6 +45,17 @@ export interface ProductAdapterBuildInputV1 {
   sourceCatalog?: Pick<ProductWorldSourceCatalog,
     'storySources' | 'characters' | 'relationships' | 'locations' | 'artifacts' | 'loreEntries' | 'storyArcs'>
   ttrpg?: TtrpgRuntimeContentV1
+  textAdventureProduction?: {
+    architecture: TextAdventureArchitectureArtifactV1
+    systems: TextAdventureSystemsArtifactV1
+    cast: TextAdventureCastBibleArtifactV1
+    arcPlan: TextAdventureNarrativeArcPlanArtifactV1
+    endingRoutePlan: TextAdventureEndingRoutePlanArtifactV1
+    mainQuestPlan: TextAdventureQuestPlanArtifactV1
+    questScript: TextAdventureQuestScriptArtifactV2
+    sideQuests: TextAdventureQuestBundleArtifactV2
+    ambientEvents: TextAdventureQuestBundleArtifactV2
+  }
 }
 
 export interface ProductAdapterBuildResultV1 {
@@ -51,7 +78,23 @@ function interactionModules(input: ProductAdapterBuildInputV1) {
   return compileInteractionModulesV1(input)
 }
 
-function adventureModule(input: ProductAdapterBuildInputV1): AdventureContentV1 {
+function adventureModule(
+  input: ProductAdapterBuildInputV1,
+  interaction: NonNullable<ProductRuntimePackageV1['interaction']>,
+): AdventureContent {
+  if (input.textAdventureProduction) return compileTextAdventureModuleV2({
+    ...input,
+    interaction,
+    architecture: input.textAdventureProduction.architecture,
+    systems: input.textAdventureProduction.systems,
+    cast: input.textAdventureProduction.cast,
+    arcPlan: input.textAdventureProduction.arcPlan,
+    endingRoutePlan: input.textAdventureProduction.endingRoutePlan,
+    mainQuestPlan: input.textAdventureProduction.mainQuestPlan,
+    questScript: input.textAdventureProduction.questScript,
+    sideQuests: input.textAdventureProduction.sideQuests,
+    ambientEvents: input.textAdventureProduction.ambientEvents,
+  })
   return compileAdventureModuleV1(input)
 }
 
@@ -85,13 +128,24 @@ const ADAPTERS = new Map<ProductionProductKindV1, UpperProductProductionAdapterV
     }),
   }),
   adapter({
-    id: 'storyforge.product.text-adventure.v1', productType: 'text-adventure',
+    id: 'storyforge.product.text-adventure.v2', productType: 'text-adventure',
     enabledCapabilities: ['narrative', 'interaction', 'adventure'], commercialReady: true,
     buildModules: input => ({
-      adapterId: 'storyforge.product.text-adventure.v1',
+      adapterId: 'storyforge.product.text-adventure.v2',
       commercialReady: input.brief.qualityProfile === 'commercial-candidate',
       enabledCapabilities: ['narrative', 'interaction', 'adventure'],
-      interaction: interactionModules(input), adventure: adventureModule(input),
+      ...(() => {
+        const interaction = input.textAdventureProduction
+          ? compileTextAdventureInteractionV1({
+              brief: input.brief,
+              narrative: input.narrative,
+              cast: input.textAdventureProduction.cast,
+              arcPlan: input.textAdventureProduction.arcPlan,
+              endingRoutePlan: input.textAdventureProduction.endingRoutePlan,
+            })
+          : interactionModules(input)
+        return { interaction, adventure: adventureModule(input, interaction) }
+      })(),
     }),
   }),
   adapter({

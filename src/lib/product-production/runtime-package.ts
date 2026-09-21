@@ -271,7 +271,11 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
   }
   const pkg = record(raw, 'package')
   const selectedProduct = productType(pkg.productType)
-  const hasOptionalPresentation = (selectedProduct === 'ttrpg' || selectedProduct === 'ai-town')
+  const hasOptionalPresentation = (
+    selectedProduct === 'ttrpg'
+    || selectedProduct === 'ai-town'
+    || selectedProduct === 'text-adventure'
+  )
     && Object.prototype.hasOwnProperty.call(pkg, 'presentation')
   exactKeys(pkg, [
     'schema', 'version', 'productType', 'definition', 'sourceWorld', 'narrative',
@@ -328,6 +332,16 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     || selectedProduct === 'text-open-world') parsed.interaction = validateInteraction(pkg.interaction)
   if (selectedProduct === 'text-adventure' || selectedProduct === 'text-open-world') {
     parsed.adventure = parseAdventureContent(pkg.adventure as never)
+    if (selectedProduct === 'text-open-world' && parsed.adventure.version !== 1) {
+      fail('text-open-world 仍只接受隔离的 Adventure V1，不能复用文字冒险 V2 私域状态')
+    }
+    if (selectedProduct === 'text-adventure' && parsed.adventure.version === 2) {
+      const narrativeNodes = new Map(narrative.nodes.map(node => [node.key, node]))
+      for (const ending of parsed.adventure.endings) {
+        const node = narrativeNodes.get(ending.narrativeNodeKey)
+        if (!node || node.kind !== 'ending') fail(`Adventure V2 结局没有对应 ending 节点:${ending.key}`)
+      }
+    }
   }
   if (selectedProduct === 'avg' || hasOptionalPresentation) {
     const presentation = record(pkg.presentation, 'presentation')
@@ -355,10 +369,12 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     parsed.openWorldEvolution = openWorldEvolution
   }
   if (selectedProduct === 'text-open-world') {
+    const adventure = parsed.adventure
+    if (!adventure || adventure.version !== 1) fail('text-open-world 冒险兼容层必须是 V1')
     const openWorld = parseOpenWorldContent(pkg.openWorld)
     const report = validateOpenWorldContent({
       content: openWorld,
-      adventure: parsed.adventure!,
+      adventure,
       interactionProfiles: parsed.interaction!.profiles,
       interactionScenes: parsed.interaction!.sceneTemplates,
       openWorldEvolution: parsed.openWorldEvolution!,

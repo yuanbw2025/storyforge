@@ -6,6 +6,7 @@ import {
   type ProductBrowserPerformanceMeasurementV1,
 } from './browser-performance'
 import { createBuildProductMediaResolver } from './media-resolver'
+import { createProductFirstInteractiveResourcePlanV1 } from './first-interactive-resources'
 import { verifyProductBuildPreviewManifestV1 } from './preview-manifest'
 
 export interface InAppBrowserPerformanceLabProgressV1 {
@@ -194,9 +195,15 @@ export async function runInAppBrowserPerformanceLabV1(input: {
       throw new Error('[product-browser-performance-lab] Build Artifact 跨 Work')
     }
   }
-  const firstInteractiveBytes = new TextEncoder().encode(build.previewManifestJson).byteLength
-    + artifacts.filter(artifact => artifact.blobObjectId != null)
-      .reduce((sum, artifact) => sum + Number(artifact.byteSize || 0), 0)
+  // The long-run stage deliberately decodes the complete catalog so scene
+  // transitions and retained heap are exercised. That is different from the
+  // first-interaction budget: the real text-adventure player verifies the full
+  // manifest, then loads only the entry scene illustration before later media
+  // is requested or background-verified.
+  const firstInteractive = createProductFirstInteractiveResourcePlanV1({
+    previewManifestJson: build.previewManifestJson,
+    runtimePackage: preview.runtimePackage,
+  })
   const resolver = await createBuildProductMediaResolver({ scope, productBuildId: build.id!, preview })
   const assetKeys = (preview.runtimePackage.presentation?.assets ?? []).map(asset => asset.assetKey)
   const maximumBytes = (preview.runtimePackage.presentation?.assets ?? [])
@@ -208,7 +215,8 @@ export async function runInAppBrowserPerformanceLabV1(input: {
   const catalog = await resolver.preload({ assetKeys, maximumBytes })
   if (catalog.failures.length) {
     resolver.dispose()
-    throw new Error(`[product-browser-performance-lab] 媒资预加载失败:${catalog.failures.map(row => row.assetKey).join(',')}`)
+    throw new Error(`[product-browser-performance-lab] 媒资预加载失败:${catalog.failures
+      .map(row => `${row.assetKey}:${row.reason}`).join(',')}`)
   }
   const surface = document.createElement('section')
   surface.setAttribute('aria-label', '当前 Build 浏览器性能采样舞台')
@@ -290,7 +298,9 @@ export async function runInAppBrowserPerformanceLabV1(input: {
       browserName: browserName(userAgent), browserVersion: userAgent,
       platform: navigator.platform || 'desktop',
       viewport: { width: Math.max(1, window.innerWidth), height: Math.max(1, window.innerHeight) },
-      packageHash: build.packageHash, previewHash: build.previewHash, firstInteractiveBytes,
+      packageHash: build.packageHash, previewHash: build.previewHash,
+      firstInteractiveBytes: firstInteractive.totalBytes,
+      firstInteractiveAssetKeys: firstInteractive.assetKeys,
       ...samples, measuredAt: Date.now(),
     }
   } finally {

@@ -123,6 +123,8 @@ export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "stop",
   "resolve-blocker",
   "request-preview",
+  "revise-media-asset",
+  "revise-media-assets",
   "publish",
   "evolve",
   "archive",
@@ -405,6 +407,59 @@ export interface TtrpgProductionBriefV2 {
   };
 }
 
+/**
+ * Author-confirmed construction contract for a finite text adventure. It is
+ * stored inside the existing versioned ProductProductionBrief record, so it
+ * does not create a parallel product draft or an ungoverned AI write path.
+ */
+export interface TextAdventureProductionBriefV1 {
+  schema: "storyforge.text-adventure-production-brief";
+  version: 1;
+  creationMode: "quick" | "advanced";
+  sourceTreatment: "expand-sparse" | "adapt-rich" | "author-outline";
+  narrative: {
+    structure: "trunk-convergent-storylets";
+    targetRegionCount: number;
+    targetAreaCount: number;
+    targetLocationCount: number;
+    targetSceneCount: number;
+    mainQuestCount: 1;
+    targetSideQuestCount: number;
+    targetAmbientEventCount: number;
+    targetEndingCount: number;
+    minimumDistinctRoutes: number;
+    choiceDensity: "focused" | "balanced" | "dense";
+    failForward: boolean;
+  };
+  character: {
+    preset: "general-adventure-rpg";
+    statLabels: string[];
+    skillLabels: string[];
+    resourceRoles: Array<"health" | "mana" | "stamina" | "experience" | "skill-points" | "currency" | "clock">;
+    equipmentSlotLabels: string[];
+    progressionEnabled: boolean;
+  };
+  experience: {
+    perspective: "second-person" | "first-person";
+    consequenceVisibility: "explicit" | "partial" | "hidden";
+    contentExpansion: "required" | "preserve-source-depth";
+    emotionalTarget: string;
+    endingCauseRecap: boolean;
+  };
+  media: {
+    mode: "text-only" | "key-illustrations" | "rich-illustrations";
+    characterAnchorsRequired: boolean;
+    reviewBeforePublish: boolean;
+    runtimeGeneration: "disabled";
+  };
+  confirmations: {
+    worldCanonBoundary: boolean;
+    deterministicStateAuthority: boolean;
+    genericCoreBoundary: boolean;
+    mediaRights: boolean;
+  };
+}
+
 export interface ProductProductionBriefV3 {
   schema: "storyforge.product-production-brief";
   version: 3;
@@ -442,6 +497,8 @@ export interface ProductProductionBriefV3 {
   ttrpg?: TtrpgProductionBriefV2;
   /** Closed AI Town construction contract; required exactly when productType=ai-town. */
   aiTown?: AiTownProductionBriefV1;
+  /** Closed text-adventure construction contract; required exactly for text-adventure. */
+  textAdventure?: TextAdventureProductionBriefV1;
   /** Explicit author confirmations required by product-specific deterministic compilers. */
   authorConfirmations?: {
     ttrpgDefaultRuleMappings: boolean;
@@ -582,10 +639,18 @@ export interface ProductQualityGateReceiptRecordV1 {
 
 export type ProductEvolutionBaseV1 =
   | { kind: "build"; buildNumber: number; manifestHash: string }
+  | {
+      kind: "recovery-build";
+      buildNumber: number;
+      briefHash: string;
+      planHash: string;
+      controlEpoch: number;
+    }
   | { kind: "release"; productReleaseId: number; contentHash: string };
 
 export type ProductEvolutionAffectedLaneV1 =
-  "content" | "product" | "visual" | "audio" | "world-source";
+  "content" | "product" | "visual" | "audio" | "runtime" | "world-source"
+  | "production-budget" | "execution-plan";
 
 export interface ProductEvolutionImpactV1 {
   schema: "storyforge.product-evolution-impact";
@@ -597,7 +662,8 @@ export interface ProductEvolutionImpactV1 {
 
 export interface ProductProductionBlockerResolutionV1 {
   action:
-    "retry" | "author-edit" | "fallback" | "waive-soft-gate" | "change-capability" | "cancel";
+    "retry" | "author-edit" | "fallback" | "waive-soft-gate" | "change-capability"
+    | "accept-product-private-expansion" | "confirm-character-anchors" | "cancel";
   note: string;
   /** Explicit authored replacement; validated by the same task parser before acceptance. */
   authorDraftJson?: string;
@@ -672,6 +738,46 @@ export type ProductProductionCommandV1 =
       commandId: string;
       expectedStateRevision: number;
       buildNumber: number;
+    }
+  | {
+      type: "revise-media-asset";
+      commandId: string;
+      expectedStateRevision: number;
+      buildNumber: number;
+      artifactKey: string;
+      expectedArtifactHash: string;
+      action: "upload-replacement" | "regenerate" | "lock" | "unlock";
+      repairFeedback: {
+        sourceGateReceiptHash: string;
+        sourceEvidenceHash: string;
+        priorContentHash: string;
+        note: string;
+      } | null;
+      replacement: {
+        blobObjectId: number;
+        contentHash: string;
+        mimeType: "image/png" | "image/jpeg" | "image/webp";
+        byteSize: number;
+        width: number;
+        height: number;
+        altText: string;
+        license: string;
+        commercialUse: boolean;
+        redistribution: boolean;
+        declaration: string;
+        attribution: string;
+      } | null;
+    }
+  | {
+      type: "revise-media-assets";
+      commandId: string;
+      expectedStateRevision: number;
+      buildNumber: number;
+      action: "regenerate";
+      targets: Array<{
+        artifactKey: string;
+        expectedArtifactHash: string;
+      }>;
     }
   | {
       type: "publish";

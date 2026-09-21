@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
-import { availableAdventureActions } from '../lib/adventure/runtime'
+import { adventureNarrativeActionContext, availableAdventureActions } from '../lib/adventure/runtime'
 import {
   adoptOpenWorldRuntimeCandidateV1,
   generateOpenWorldRuntimeCandidateV1,
@@ -232,6 +232,10 @@ export const useTextOpenWorldPlayerStore = create<TextOpenWorldPlayerState>((set
 
 export function selectTextOpenWorldAdventureActions(state: TextOpenWorldPlayerState) {
   if (!state.selectedManifest || !state.runtimeState.adventure) return []
-  return availableAdventureActions(state.selectedManifest.adventure, state.runtimeState.adventure, state.runtimeState.narrative?.variables)
+  return availableAdventureActions(
+    state.selectedManifest.adventure,
+    state.runtimeState.adventure,
+    adventureNarrativeActionContext(state.runtimeState.narrative),
+  )
     .filter(item => item.action.kind !== 'move')
 }

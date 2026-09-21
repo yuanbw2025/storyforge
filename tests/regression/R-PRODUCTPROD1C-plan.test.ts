@@ -5,6 +5,7 @@ import {
   createProductProductionPlanV3,
   parseProductProductionPlanV3,
 } from '../../src/lib/product-production/plan'
+import { productProductionProviderOutputLimitV1 } from '../../src/lib/product-production/production-executor'
 import type { ProductProductionBriefV3 } from '../../src/lib/types'
 import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
 
@@ -91,6 +92,25 @@ async function planFixture() {
 }
 
 describe('R-PRODUCTPROD-1C · bounded parallel production plan', () => {
+  it('把 Provider 可见输出上限与含隐藏推理的 task 计费预留分开', () => {
+    const budgetReservation = {
+      modelCalls: 1, inputTokens: 23_760, outputTokens: 32_000,
+      mediaCalls: 0, durationMs: 420_000, storageBytes: 0, maximumCostUsd: null,
+    }
+    expect(productProductionProviderOutputLimitV1({
+      skillId: 'text-adventure.scene-script.v1', budgetReservation,
+    })).toBe(24_000)
+    expect(productProductionProviderOutputLimitV1({
+      skillId: null, budgetReservation,
+    })).toBe(32_000)
+    expect(productProductionProviderOutputLimitV1({
+      skillId: 'text-adventure.dialogue-pass.v1', budgetReservation,
+    })).toBe(32_000)
+    expect(productProductionProviderOutputLimitV1({
+      skillId: 'text-adventure.dialogue-pass.v1', budgetReservation,
+    }, '{"schema":"storyforge.text-adventure-repair-feedback","version":1}')).toBe(16_000)
+  })
+
   it('把内容、美术和音频拆成有界 DAG，并在集成节点汇合', async () => {
     const { plan, briefHash, parsedBrief } = await planFixture()
     expect(plan.briefHash).toBe(briefHash)

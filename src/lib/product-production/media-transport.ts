@@ -289,10 +289,14 @@ export function inspectConfiguredAgnesImageCapabilityV1(input: {
   }
 }
 
-function responseRequestId(response: Response): string | null {
+function responseRequestId(response: Response, json?: unknown): string | null {
   const value = response.headers.get('x-request-id') ?? response.headers.get('request-id')
-  if (!value) return null
-  return SAFE_ID.test(value) ? value : null
+  if (value && SAFE_ID.test(value)) return value
+  if (json && typeof json === 'object' && !Array.isArray(json)) {
+    const taskId = (json as Record<string, unknown>).task_id
+    if (typeof taskId === 'string' && SAFE_ID.test(taskId)) return taskId
+  }
+  return null
 }
 
 async function readAgnesJson(response: Response): Promise<unknown> {
@@ -345,7 +349,7 @@ function createConfiguredAgnesImageTransportV1(input: {
         : null
       return {
         status: response.status, contentType: response.headers.get('content-type'), body: null, json,
-        providerRequestId: responseRequestId(response), usage, costUsd: null,
+        providerRequestId: responseRequestId(response, json), usage, costUsd: null,
       }
     },
     async fetchExternalAsset(asset, signal) {

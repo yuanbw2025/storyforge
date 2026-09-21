@@ -3,6 +3,8 @@ import { readAgentRunV1 } from '../agent/run/event-store'
 import { readAgentRunArtifactExactV1 } from '../memory/artifact-store'
 import type {
   ProductBuildRecordV1,
+  ProductMediaKind,
+  ProductBuildArtifactKindV1,
   ProductEvolutionAffectedLaneV1,
   ProductEvolutionBaseV1,
   ProductProductionBriefRecordV1,
@@ -16,7 +18,17 @@ import type {
 import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { listWorldReferenceCatalogV1 } from '../product/source'
 import { prepareProductProductionAdoption, publishProductProductionBuild } from './adoption'
-import { executeProductProductionCommand } from './commands'
+import {
+  canReviseTextAdventureContentBeforeMediaV1,
+  canReviseTextAdventureRuntimeCopyFromRecoveryV1,
+  canReviseTextAdventureVisualContractFromRecoveryV1,
+  canUpgradeTextAdventureExecutionPlanV1,
+  executeProductProductionCommand,
+  hasPassedTextAdventureQualityReviewForExecutionPlanUpgradeV1,
+  isLegacyOversizedTextAdventureQualityReviewPlanV1,
+  isRepairRetryableFailedProductBuildV1,
+  isTextAdventureBuildLifetimeBudgetExhaustedV1,
+} from './commands'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from './consultation'
 import { parseProductProductionBriefV3 } from './contracts'
 import {
@@ -52,6 +64,10 @@ import {
   type ConfiguredAgnesImageReadinessV1,
   type ResolvedProductMediaCapabilityV1,
 } from './media-transport'
+import { readAcceptedBuildArtifacts } from './artifact-store'
+import { putMediaBlobObject, readMediaBlobObjectData } from './media-blob-store'
+import { minimumTextAdventureCommercialImageCountV1 } from '../adventure/production-brief'
+import { parseProductProductionPlanV3, textAdventureProductionBudgetFloorV1 } from './plan'
 
 export interface ProductProductionDetailsV1 {
   production: ProductProductionRecordV1
@@ -112,6 +128,310 @@ export interface ProductProductionAuthorizationReadinessV1 {
   blockerCode: 'capability-unbound' | null
   blockerMessages: string[]
   requiredMediaRequirementKeys: string[]
+}
+
+export interface ProductProductionReviewArtifactV1 {
+  artifactKey: string
+  kind: ProductBuildArtifactKindV1
+  version: number
+  status: 'accepted' | 'carried-forward'
+  contentHash: string
+  byteSize: number
+  producerRunId: number | null
+  payload: unknown
+  quality: unknown
+}
+
+export interface TextAdventureMediaAssetV1 {
+  assetKey: string
+  artifactKey: string
+  version: number
+  status: 'accepted' | 'carried-forward'
+  contentHash: string
+  blobObjectId: number
+  mediaKind: ProductMediaKind
+  mimeType: string
+  byteSize: number
+  metadata: Record<string, unknown>
+  quality: Record<string, unknown>
+  rights: Record<string, unknown>
+  locked: boolean
+}
+
+function productProductionFailureTaskKey(build: ProductBuildRecordV1 | null): string | null {
+  if (!build) return null
+  try {
+    const failure = JSON.parse(build.failureJson) as { taskKey?: unknown }
+    return typeof failure.taskKey === 'string' ? failure.taskKey : null
+  } catch { return null }
+}
+
+export function isTextAdventureSourceDecisionBlockerV1(details: ProductProductionDetailsV1): boolean {
+  return details.production.productType === 'text-adventure'
+    && details.build?.status === 'recovery-required'
+    && productProductionFailureTaskKey(details.build) === 'source.author-gate'
+}
+
+export function isTextAdventureMediaAnchorBlockerV1(details: ProductProductionDetailsV1): boolean {
+  return details.production.productType === 'text-adventure'
+    && details.build?.status === 'recovery-required'
+    && productProductionFailureTaskKey(details.build) === 'media.anchor-author-gate'
+}
+
+export function canRetryProductProductionBlockerV1(details: ProductProductionDetailsV1): boolean {
+  return (details.build?.status === 'recovery-required'
+      && !isTextAdventureSourceDecisionBlockerV1(details)
+      && !isTextAdventureMediaAnchorBlockerV1(details))
+    || !!details.build && isRepairRetryableFailedProductBuildV1(details.build)
+}
+
+export function canUpgradeTextAdventureProductionPlanV1(details: ProductProductionDetailsV1): boolean {
+  return details.production.productType === 'text-adventure'
+    && details.production.status === 'producing'
+    && !!details.build
+    && canUpgradeTextAdventureExecutionPlanV1(details.build)
+}
+
+export function canRepairTextAdventureVisualContractV1(details: ProductProductionDetailsV1): boolean {
+  return details.production.productType === 'text-adventure'
+    && !!details.build
+    && (details.production.status === 'producing' || details.production.status === 'stopped')
+    && canReviseTextAdventureVisualContractFromRecoveryV1(details.build)
+}
+
+export function canRepairTextAdventureRuntimeCopyV1(details: ProductProductionDetailsV1): boolean {
+  return details.production.productType === 'text-adventure'
+    && details.production.status === 'producing'
+    && !!details.build
+    && canReviseTextAdventureRuntimeCopyFromRecoveryV1(details.build)
+}
+
+const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
+  'production.supervision',
+  'design.game',
+  'content.source-sufficiency',
+  'content.source-decision',
+  'content.story-bible',
+  'content.cast-bible',
+  'content.adventure-architecture',
+  'content.narrative-arc-scenes',
+  'content.narrative-decision-plan',
+  'content.narrative-arc-plan',
+  'content.ending-route-plan',
+  'content.main-quest-plan',
+  'content.quest-script.supplemental',
+  'content.quest-script',
+  'content.scene-script.act-1',
+  'content.scene-script.act-2',
+  'content.scene-script.act-3',
+  'content.dialogue-pass.act-1',
+  'content.dialogue-pass.act-2',
+  'content.dialogue-pass.act-3',
+  'content.narrative',
+  'content.product-module',
+  'content.adventure-side-quests',
+  'content.adventure-ambient-events',
+  'quality.adventure-review',
+  'media.requirements',
+  'media.visual-bible',
+  'media.vision-preflight',
+  'media.anchor-decision',
+  'media.audit',
+  'runtime.package',
+  'quality.autoplay',
+  'quality.visual-review',
+  'media.repair-feedback',
+  'quality.report',
+  'quality.playtest-plan',
+])
+
+export async function listProductProductionReviewArtifactsV1(input: {
+  scope: WorkspaceScope
+  buildId: number
+}): Promise<ProductProductionReviewArtifactV1[]> {
+  const rows = await readAcceptedBuildArtifacts(input)
+  return rows.filter(row => AUTHOR_REVIEW_ARTIFACT_KEYS.has(row.artifactKey)
+    || /^content\.quest-script\.main\.act-[1-3]\.(single|multi)$/.test(row.artifactKey)
+    || /^content\.scene-script\.act-[1-3]\.part-[1-2]$/.test(row.artifactKey)).map(row => ({
+    artifactKey: row.artifactKey,
+    kind: row.kind,
+    version: row.version,
+    status: row.status as 'accepted' | 'carried-forward',
+    contentHash: row.contentHash,
+    byteSize: row.byteSize,
+    producerRunId: row.producerRunId,
+    payload: JSON.parse(row.payloadJson) as unknown,
+    quality: JSON.parse(row.qualityJson) as unknown,
+  }))
+}
+
+export async function listTextAdventureMediaAssetsV1(input: {
+  scope: WorkspaceScope
+  buildId: number
+}): Promise<TextAdventureMediaAssetV1[]> {
+  const rows = await readAcceptedBuildArtifacts(input)
+  return rows.filter(row => row.kind === 'image' && row.mediaKind != null
+    && row.blobObjectId != null && row.mimeType != null && row.artifactKey.startsWith('media.visual.'))
+    .map(row => {
+      const metadata = JSON.parse(row.metadataJson) as Record<string, unknown>
+      if (typeof metadata.assetKey !== 'string' || !metadata.assetKey.trim()) {
+        throw new Error(`[product-production-service] 图片缺少稳定 assetKey:${row.artifactKey}`)
+      }
+      const revision = metadata.authorRevision
+      return {
+        assetKey: metadata.assetKey, artifactKey: row.artifactKey, version: row.version,
+        status: row.status as 'accepted' | 'carried-forward', contentHash: row.contentHash,
+        blobObjectId: row.blobObjectId!, mediaKind: row.mediaKind!, mimeType: row.mimeType!,
+        byteSize: row.byteSize, metadata, quality: JSON.parse(row.qualityJson) as Record<string, unknown>,
+        rights: JSON.parse(row.rightsJson) as Record<string, unknown>,
+        locked: !!revision && typeof revision === 'object' && !Array.isArray(revision)
+          && (revision as Record<string, unknown>).locked === true,
+      }
+    }).sort((left, right) => left.artifactKey.localeCompare(right.artifactKey))
+}
+
+export async function readTextAdventureMediaAssetBytesV1(input: {
+  scope: WorkspaceScope
+  asset: TextAdventureMediaAssetV1
+}): Promise<ArrayBuffer> {
+  return readMediaBlobObjectData({
+    scope: input.scope, blobObjectId: input.asset.blobObjectId,
+    expected: {
+      contentHash: input.asset.contentHash,
+      byteSize: input.asset.byteSize,
+      mimeType: input.asset.mimeType,
+    },
+  })
+}
+
+async function decodeUploadedImageSize(file: File): Promise<{ width: number; height: number }> {
+  if (typeof createImageBitmap === 'function') {
+    const bitmap = await createImageBitmap(file)
+    try { return { width: bitmap.width, height: bitmap.height } }
+    finally { bitmap.close() }
+  }
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const image = new Image()
+    image.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve({ width: image.naturalWidth, height: image.naturalHeight })
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('[product-production-service] 无法解码作者上传的图片'))
+    }
+    image.src = url
+  })
+}
+
+export async function reviseTextAdventureMediaAssetV1(input: {
+  scope: WorkspaceScope
+  details: ProductProductionDetailsV1
+  asset: TextAdventureMediaAssetV1
+  action: 'upload-replacement' | 'regenerate' | 'lock' | 'unlock'
+  repairFeedback?: {
+    sourceGateReceiptHash: string
+    sourceEvidenceHash: string
+    priorContentHash: string
+    note: string
+  }
+  upload?: {
+    file: File
+    altText: string
+    license: string
+    commercialUse: boolean
+    redistribution: boolean
+    declaration: string
+    attribution: string
+  }
+}): Promise<{ parentBuildNumber: number; buildNumber: number }> {
+  const build = input.details.build
+  if (!build || input.details.production.productType !== 'text-adventure') {
+    throw new Error('[product-production-service] 缺少可修订的文字冒险 Build')
+  }
+  let uploadContract: Extract<import('../types').ProductProductionCommandV1, {
+    type: 'revise-media-asset'
+  }>['replacement'] = null
+  if (input.action === 'upload-replacement') {
+    if (!input.upload) throw new Error('[product-production-service] 上传替换缺少图片与权利声明')
+    const mimeType = input.upload.file.type.trim().toLowerCase()
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(mimeType)) {
+      throw new Error('[product-production-service] 只允许 PNG、JPEG 或 WebP 图片')
+    }
+    const data = await input.upload.file.arrayBuffer()
+    const size = await decodeUploadedImageSize(input.upload.file)
+    const blob = await putMediaBlobObject({ scope: input.scope, data, mimeType })
+    uploadContract = {
+      blobObjectId: blob.id!, contentHash: blob.contentHash,
+      mimeType: mimeType as 'image/png' | 'image/jpeg' | 'image/webp', byteSize: blob.byteSize,
+      width: size.width, height: size.height,
+      altText: input.upload.altText.trim(), license: input.upload.license.trim(),
+      commercialUse: input.upload.commercialUse, redistribution: input.upload.redistribution,
+      declaration: input.upload.declaration.trim(), attribution: input.upload.attribution.trim() || '无需署名',
+    }
+  } else if (input.upload) {
+    throw new Error('[product-production-service] 非上传操作不能携带图片')
+  }
+  const repairFeedback = input.repairFeedback ? {
+    ...input.repairFeedback,
+    note: input.repairFeedback.note.trim().normalize('NFC'),
+  } : null
+  if (input.action === 'regenerate' && (!repairFeedback
+    || repairFeedback.priorContentHash !== input.asset.contentHash || !repairFeedback.note)) {
+    throw new Error('[product-production-service] 重生成必须绑定当前图片的作者退回回执与非空修订意见')
+  }
+  if (input.action !== 'regenerate' && repairFeedback) {
+    throw new Error('[product-production-service] 只有重生成可以携带作者退回证据')
+  }
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope, productionId: input.details.production.id!,
+    command: {
+      type: 'revise-media-asset', commandId: commandId(`media-${input.action}`),
+      expectedStateRevision: input.details.production.stateRevision,
+      buildNumber: build.buildNumber, artifactKey: input.asset.artifactKey,
+      expectedArtifactHash: input.asset.contentHash, action: input.action,
+      repairFeedback,
+      replacement: uploadContract,
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '媒资修订失败'))
+  return {
+    parentBuildNumber: Number(receipt.result.parentBuildNumber),
+    buildNumber: Number(receipt.result.buildNumber),
+  }
+}
+
+export async function regenerateTextAdventureMediaAssetsV1(input: {
+  scope: WorkspaceScope
+  details: ProductProductionDetailsV1
+  assets: TextAdventureMediaAssetV1[]
+}): Promise<{ parentBuildNumber: number; buildNumber: number; artifactKeys: string[] }> {
+  const build = input.details.build
+  if (!build || input.details.production.productType !== 'text-adventure') {
+    throw new Error('[product-production-service] 缺少可批量修复的文字冒险 Build')
+  }
+  const targets = input.assets.map(asset => ({
+    artifactKey: asset.artifactKey, expectedArtifactHash: asset.contentHash,
+  }))
+  if (!targets.length || new Set(targets.map(target => target.artifactKey)).size !== targets.length) {
+    throw new Error('[product-production-service] 批量媒资修复目标为空或重复')
+  }
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope, productionId: input.details.production.id!,
+    command: {
+      type: 'revise-media-assets', commandId: commandId('media-batch-regenerate'),
+      expectedStateRevision: input.details.production.stateRevision,
+      buildNumber: build.buildNumber, action: 'regenerate', targets,
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '批量媒资修复失败'))
+  return {
+    parentBuildNumber: Number(receipt.result.parentBuildNumber),
+    buildNumber: Number(receipt.result.buildNumber),
+    artifactKeys: Array.isArray(receipt.result.artifactKeys)
+      ? receipt.result.artifactKeys.map(String) : targets.map(target => target.artifactKey),
+  }
 }
 
 /** Safe preflight only; never returns a provider credential or performs a call. */
@@ -310,6 +630,170 @@ export async function createProductProductionWithBriefV1(input: {
   return created.productionId
 }
 
+/**
+ * Builds a reviewable replacement for a legacy commercial text-adventure
+ * Brief whose frozen image count predates the current recommendation floor.
+ * This is deliberately pure: the author must save the revision and then
+ * authorize a new Build in two separate commands.
+ */
+export function draftTextAdventureCommercialMediaRepairV1(
+  details: ProductProductionDetailsV1,
+): ProductProductionBriefV3 {
+  if (details.production.productType !== 'text-adventure'
+    || details.production.status !== 'stopped'
+    || details.build?.status !== 'cancelled'
+    || !details.brief) {
+    throw new Error('[product-production-service] 只有已取消的文字冒险 Build 可以生成商业媒资修订 Brief')
+  }
+  const brief = parseProductProductionBriefV3(details.brief.briefJson)
+  if (brief.qualityProfile !== 'commercial-candidate' || !brief.textAdventure) {
+    throw new Error('[product-production-service] 当前 Brief 不是商业文字冒险')
+  }
+  const minimum = minimumTextAdventureCommercialImageCountV1(brief.textAdventure.media.mode)
+  if (minimum === 0 || brief.media.imageCount >= minimum) {
+    throw new Error('[product-production-service] 当前 Brief 已满足商业媒资底线，无需自动修订')
+  }
+  return parseProductProductionBriefV3({
+    ...brief,
+    media: { ...brief.media, imageCount: minimum },
+    productionBudget: {
+      ...brief.productionBudget,
+      maximumMediaCalls: Math.max(
+        brief.productionBudget.maximumMediaCalls,
+        minimum + brief.media.musicTrackCount + brief.media.sfxCount,
+      ),
+    },
+  })
+}
+
+/**
+ * Upgrades a stopped legacy commercial candidate to the minimum envelope used
+ * by the current one-hour flagship pipeline. This is a reviewable Brief only:
+ * the cancelled Build and its paid-attempt evidence remain immutable, and a
+ * new Build still requires the normal save + authorize commands.
+ */
+export function draftTextAdventureCommunityCandidateRepairV1(
+  details: ProductProductionDetailsV1,
+): ProductProductionBriefV3 {
+  if (details.production.productType !== 'text-adventure'
+    || details.production.status !== 'stopped'
+    || details.build?.status !== 'cancelled'
+    || !details.brief) {
+    throw new Error('[product-production-service] 只有已取消的文字冒险 Build 可以生成社区候选修订 Brief')
+  }
+  const brief = parseProductProductionBriefV3(details.brief.briefJson)
+  if (brief.qualityProfile !== 'commercial-candidate' || !brief.textAdventure) {
+    throw new Error('[product-production-service] 当前 Brief 不是商业文字冒险')
+  }
+  const minimumImages = minimumTextAdventureCommercialImageCountV1(brief.textAdventure.media.mode)
+  const targetEndingCount = Math.max(
+    3, brief.scale.targetEndingCount, brief.textAdventure.narrative.targetEndingCount,
+  )
+  const repairedContent = parseProductProductionBriefV3({
+    ...brief,
+    scale: {
+      ...brief.scale,
+      scope: brief.scale.scope === 'scene' ? 'short-arc' : brief.scale.scope,
+      targetPlayMinutes: Math.max(60, brief.scale.targetPlayMinutes),
+      targetWordCount: Math.max(10_000, brief.scale.targetWordCount),
+      targetEndingCount,
+    },
+    textAdventure: {
+      ...brief.textAdventure,
+      narrative: {
+        ...brief.textAdventure.narrative,
+        targetRegionCount: Math.max(2, brief.textAdventure.narrative.targetRegionCount),
+        targetAreaCount: Math.max(4, brief.textAdventure.narrative.targetAreaCount),
+        targetLocationCount: Math.max(8, brief.textAdventure.narrative.targetLocationCount),
+        targetSceneCount: Math.max(12, brief.textAdventure.narrative.targetSceneCount),
+        targetSideQuestCount: Math.max(3, brief.textAdventure.narrative.targetSideQuestCount),
+        targetAmbientEventCount: Math.max(4, brief.textAdventure.narrative.targetAmbientEventCount),
+        targetEndingCount,
+        minimumDistinctRoutes: Math.max(2, brief.textAdventure.narrative.minimumDistinctRoutes),
+      },
+    },
+    media: { ...brief.media, imageCount: Math.max(minimumImages, brief.media.imageCount) },
+  })
+  const floor = textAdventureProductionBudgetFloorV1(repairedContent)
+  return parseProductProductionBriefV3({
+    ...repairedContent,
+    productionBudget: {
+      ...repairedContent.productionBudget,
+      maximumModelCalls: Math.max(
+        repairedContent.productionBudget.maximumModelCalls,
+        floor.minimumModelCalls,
+      ),
+      maximumInputTokens: Math.max(
+        repairedContent.productionBudget.maximumInputTokens,
+        floor.minimumInputTokens,
+      ),
+      maximumOutputTokens: Math.max(
+        repairedContent.productionBudget.maximumOutputTokens,
+        floor.minimumOutputTokens,
+      ),
+      maximumDurationMs: Math.max(
+        repairedContent.productionBudget.maximumDurationMs,
+        floor.minimumDurationMs,
+      ),
+      maximumMediaCalls: Math.max(
+        repairedContent.productionBudget.maximumMediaCalls,
+        repairedContent.media.imageCount
+          + repairedContent.media.musicTrackCount + repairedContent.media.sfxCount,
+      ),
+    },
+  })
+}
+
+export function isTextAdventureCommunityCandidateRepairRequiredV1(
+  details: ProductProductionDetailsV1,
+): boolean {
+  try {
+    const current = parseProductProductionBriefV3(details.brief?.briefJson ?? '')
+    const repaired = draftTextAdventureCommunityCandidateRepairV1(details)
+    return current.scale.targetPlayMinutes !== repaired.scale.targetPlayMinutes
+      || current.scale.targetWordCount !== repaired.scale.targetWordCount
+      || current.scale.targetEndingCount !== repaired.scale.targetEndingCount
+      || current.media.imageCount !== repaired.media.imageCount
+      || current.productionBudget.maximumModelCalls !== repaired.productionBudget.maximumModelCalls
+      || current.productionBudget.maximumInputTokens !== repaired.productionBudget.maximumInputTokens
+      || current.productionBudget.maximumOutputTokens !== repaired.productionBudget.maximumOutputTokens
+      || current.productionBudget.maximumMediaCalls !== repaired.productionBudget.maximumMediaCalls
+      || current.textAdventure?.narrative.targetSceneCount
+        !== repaired.textAdventure?.narrative.targetSceneCount
+  } catch {
+    return false
+  }
+}
+
+/** Saves a candidate revision on the same stopped Production lineage. */
+export async function saveStoppedProductProductionBriefRevisionV1(input: {
+  scope: WorkspaceScope
+  details: ProductProductionDetailsV1
+  brief: ProductProductionBriefV3
+}): Promise<void> {
+  if (input.details.production.status !== 'stopped'
+    || input.details.build?.status !== 'cancelled'
+    || !input.details.brief) {
+    throw new Error('[product-production-service] 当前 Production 没有可修订的已取消 Build')
+  }
+  if (input.brief.intent.productType !== input.details.production.productType
+    || input.brief.source.worldReleaseId !== input.details.brief.sourceWorldReleaseId
+    || input.brief.source.worldContentHash !== input.details.brief.sourceWorldContentHash) {
+    throw new Error('[product-production-service] Brief 修订不得静默更换产品或冻结世界来源')
+  }
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope,
+    productionId: input.details.production.id!,
+    command: {
+      type: 'save-brief-revision', commandId: commandId('brief-repair'),
+      expectedStateRevision: input.details.production.stateRevision,
+      parentRevision: input.details.brief.revision,
+      brief: input.brief,
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? 'Brief 修订保存失败'))
+}
+
 export async function authorizeProductProductionStartV1(input: {
   scope: WorkspaceScope
   details: ProductProductionDetailsV1
@@ -404,7 +888,7 @@ export async function retryProductProductionBlockerV1(input: {
   repairNote?: string
   authorDraftJson?: string
 }): Promise<void> {
-  if (!input.details.build || input.details.build.status !== 'recovery-required') {
+  if (!input.details.build || !canRetryProductProductionBlockerV1(input.details)) {
     throw new Error('[product-production-service] 当前 Build 没有可重试 blocker')
   }
   let blockerKey = 'build-recovery'
@@ -427,6 +911,73 @@ export async function retryProductProductionBlockerV1(input: {
     },
   })
   if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? 'blocker 重试失败'))
+}
+
+export async function resolveTextAdventureSourceDecisionV1(input: {
+  scope: WorkspaceScope
+  details: ProductProductionDetailsV1
+  action: 'accept-product-private-expansion' | 'cancel'
+  note: string
+}): Promise<void> {
+  if (!input.details.build || !isTextAdventureSourceDecisionBlockerV1(input.details)) {
+    throw new Error('[product-production-service] 当前 Build 没有待作者处理的来源决策')
+  }
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope,
+    productionId: input.details.production.id!,
+    command: {
+      type: 'resolve-blocker', commandId: commandId('source-decision'),
+      expectedStateRevision: input.details.production.stateRevision,
+      blockerKey: 'source.author-gate',
+      resolution: { action: input.action, note: input.note.trim() },
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '来源决策失败'))
+}
+
+export async function retryTextAdventureSourceReviewV1(input: {
+  scope: WorkspaceScope
+  details: ProductProductionDetailsV1
+}): Promise<void> {
+  if (!input.details.build || !isTextAdventureSourceDecisionBlockerV1(input.details)) {
+    throw new Error('[product-production-service] 当前 Build 没有可重新审查的来源结论')
+  }
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope,
+    productionId: input.details.production.id!,
+    command: {
+      type: 'resolve-blocker', commandId: commandId('source-review-retry'),
+      expectedStateRevision: input.details.production.stateRevision,
+      blockerKey: 'content.source-sufficiency',
+      resolution: {
+        action: 'retry',
+        note: '作者拒绝当前来源编辑的阻断归因；保持 WorldRelease 与 Brief 不变，要求按产品私域边界重新审查。',
+      },
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '来源重新审查失败'))
+}
+
+export async function resolveTextAdventureMediaAnchorDecisionV1(input: {
+  scope: WorkspaceScope
+  details: ProductProductionDetailsV1
+  action: 'confirm-character-anchors' | 'cancel'
+  note: string
+}): Promise<void> {
+  if (!input.details.build || !isTextAdventureMediaAnchorBlockerV1(input.details)) {
+    throw new Error('[product-production-service] 当前 Build 没有待作者处理的角色视觉锚点')
+  }
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope,
+    productionId: input.details.production.id!,
+    command: {
+      type: 'resolve-blocker', commandId: commandId('media-anchor-decision'),
+      expectedStateRevision: input.details.production.stateRevision,
+      blockerKey: 'media.anchor-author-gate',
+      resolution: { action: input.action, note: input.note.trim() },
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '角色视觉锚点决策失败'))
 }
 
 export async function readProductProductionProgressV1(input: {
@@ -467,6 +1018,8 @@ export async function runAuthorizedProductProductionV1(input: {
     requirementKey: textRequirements[0].requirementKey,
     adapterId: textCapability.receipt.adapterId,
     bindingHash: textCapability.receipt.capabilityHash,
+    provider: textCapability.receipt.provider,
+    model: textCapability.receipt.model,
   }]
   const mediaCapabilities = new Map<string, ResolvedProductMediaCapabilityV1>()
   const relayUrl = configuredMediaRelayUrlV1()
@@ -601,6 +1154,7 @@ export async function beginProductProductionEvolutionV1(input: {
   userText: string
   affectedLanes?: ProductEvolutionAffectedLaneV1[]
   expectedStateRevision?: number
+  commandId?: string
 }): Promise<{ briefRevision: number }> {
   const userText = input.userText.trim()
   if (!userText) throw new Error('[product-production-service] 请先填写本轮演化目标')
@@ -614,7 +1168,72 @@ export async function beginProductProductionEvolutionV1(input: {
   if (input.expectedStateRevision != null && details.production.stateRevision !== input.expectedStateRevision) throw new Error('制作版本已变化，请重新读取')
   if (!details.build) throw new Error('[product-production-service] 演化需要一个可验证的 Preview 或 Release 基线')
   let base: ProductEvolutionBaseV1
-  if (details.production.status === 'released' && details.production.currentProductReleaseId != null) {
+  const budgetRecovery = affectedLanes.length === 1 && affectedLanes[0] === 'production-budget'
+  const planUpgradeRecovery = affectedLanes.length === 1 && affectedLanes[0] === 'execution-plan'
+  const currentTextAdventureRecovery = details.production.productType === 'text-adventure'
+    && details.production.status === 'producing'
+    && details.build.status === 'recovery-required'
+  const visualLaneOnly = affectedLanes.length === 1 && affectedLanes[0] === 'visual'
+  const rejectedAnchorRecoveryCandidate = visualLaneOnly
+    && details.production.productType === 'text-adventure'
+    && details.production.status === 'stopped'
+    && details.build.status === 'cancelled'
+    && canReviseTextAdventureVisualContractFromRecoveryV1(details.build)
+  // `visual`, `content+visual`, and `runtime` are ordinary author evolution
+  // lanes when the baseline is already preview-ready/released. They become
+  // special recovery lanes only while the current text-adventure Build is at
+  // its governed recovery boundary (or the author explicitly rejected a
+  // character anchor). Classifying from the lane name alone made legitimate
+  // cross-Build reassembly/evolution impossible for every product.
+  const visualContractRecovery = visualLaneOnly
+    && (currentTextAdventureRecovery || rejectedAnchorRecoveryCandidate)
+  const preMediaContentRecovery = currentTextAdventureRecovery
+    && affectedLanes.length === 2
+    && affectedLanes.includes('content') && affectedLanes.includes('visual')
+  const runtimeCopyRecovery = currentTextAdventureRecovery
+    && affectedLanes.length === 1 && affectedLanes[0] === 'runtime'
+  const recoveryEvolution = budgetRecovery || planUpgradeRecovery || visualContractRecovery
+    || preMediaContentRecovery || runtimeCopyRecovery
+  if (recoveryEvolution) {
+    const rejectedAnchorRecovery = rejectedAnchorRecoveryCandidate
+    if (details.production.productType !== 'text-adventure'
+      || (!rejectedAnchorRecovery && (details.production.status !== 'producing'
+        || details.build.status !== 'recovery-required'))
+      || !details.build.briefHash || !details.build.planHash) {
+      throw new Error('[product-production-service] 当前状态不能创建文字冒险恢复 Build')
+    }
+    const brief = parseProductProductionBriefV3(details.brief?.briefJson ?? '')
+    const floor = textAdventureProductionBudgetFloorV1(brief)
+    if (budgetRecovery && !isTextAdventureBuildLifetimeBudgetExhaustedV1(details.build)
+      && brief.productionBudget.maximumModelCalls >= floor.minimumModelCalls
+      && brief.productionBudget.maximumInputTokens >= floor.minimumInputTokens
+      && brief.productionBudget.maximumOutputTokens >= floor.minimumOutputTokens
+      && brief.productionBudget.maximumDurationMs >= floor.minimumDurationMs) {
+      throw new Error('[product-production-service] 当前 Brief 已满足专业生产预算底线，请检查实际 blocker 后重试')
+    }
+    if (planUpgradeRecovery && (!canUpgradeTextAdventureExecutionPlanV1(details.build)
+      || (isLegacyOversizedTextAdventureQualityReviewPlanV1(details.build)
+        && await hasPassedTextAdventureQualityReviewForExecutionPlanUpgradeV1(details.build)))) {
+      throw new Error('[product-production-service] 当前 Build 没有可验证的执行计划升级证据，或叙事质量审查已经通过')
+    }
+    if (visualContractRecovery && !canReviseTextAdventureVisualContractFromRecoveryV1(details.build)) {
+      throw new Error('[product-production-service] 当前 Build 没有可验证的视觉合同或媒资质量阻断')
+    }
+    if (runtimeCopyRecovery && !canReviseTextAdventureRuntimeCopyFromRecoveryV1(details.build)) {
+      throw new Error('[product-production-service] 当前 Build 没有可验证的文字冒险公开文案质量阻断')
+    }
+    if (preMediaContentRecovery && !canReviseTextAdventureContentBeforeMediaV1(details.build)) {
+      throw new Error('[product-production-service] 当前 Build 不在可返修正文的生成图片前作者闸门')
+    }
+    const recoveryControlEpoch = rejectedAnchorRecovery
+      ? parseProductProductionPlanV3(details.build.planJson).controlEpoch
+      : details.build.controlEpoch
+    base = {
+      kind: 'recovery-build', buildNumber: details.build.buildNumber,
+      briefHash: details.build.briefHash, planHash: details.build.planHash,
+      controlEpoch: recoveryControlEpoch,
+    }
+  } else if (details.production.status === 'released' && details.production.currentProductReleaseId != null) {
     const release = await db.productReleases.get(details.production.currentProductReleaseId)
     if (!release || !await assertRecordInScope(scope, 'productReleases', release, { owner: 'work' })) {
       throw new Error('[product-production-service] 当前 ProductRelease 基线缺失或跨 Work')
@@ -631,7 +1250,7 @@ export async function beginProductProductionEvolutionV1(input: {
   const receipt = await executeProductProductionCommand({
     scope, productionId: details.production.id!,
     command: {
-      type: 'evolve', commandId: commandId('evolve'),
+      type: 'evolve', commandId: input.commandId ?? commandId('evolve'),
       expectedStateRevision: details.production.stateRevision, base, userText, affectedLanes,
     },
   })
@@ -639,4 +1258,33 @@ export async function beginProductProductionEvolutionV1(input: {
   const briefRevision = receipt.result.briefRevision
   if (typeof briefRevision !== 'number') throw new Error('[product-production-service] 演化命令未返回 Brief revision')
   return { briefRevision }
+}
+
+/** Creates a reviewable Brief that upgrades a frozen execution plan without changing product content. */
+export async function upgradeTextAdventureProductionPlanV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+}): Promise<{ briefRevision: number }> {
+  const scope = await resolveScope({ scope: input.scope })
+  const details = await readProductProductionDetailsV1(scope, input.productionId)
+  if (!details.build?.id) {
+    throw new Error('[product-production-service] 执行计划升级缺少当前 Build')
+  }
+  const upgradeCommandId = [
+    'execution-plan-upgrade', details.build.id, details.build.controlEpoch, details.build.planHash,
+  ].join('.')
+  const prior = await db.productProductionCommands
+    .where('[productionId+commandId]').equals([input.productionId, upgradeCommandId]).first()
+  if (prior?.status === 'succeeded') {
+    const result = JSON.parse(prior.resultJson) as { briefRevision?: unknown }
+    if (typeof result.briefRevision !== 'number') {
+      throw new Error('[product-production-service] 已完成的执行计划升级回执缺少 Brief revision')
+    }
+    return { briefRevision: result.briefRevision }
+  }
+  return beginProductProductionEvolutionV1({
+    scope, productionId: input.productionId, commandId: upgradeCommandId,
+    userText: '依据当前 Build 的可验证失败回执升级执行计划：采用现行逐任务合同、实测时长与 token 预留、有界重试和持久化回执；继承所有可证明未变化且已签收的正文与媒资，不修改剧情、玩法、世界来源、图片内容或媒资范围。',
+    affectedLanes: ['execution-plan'],
+  })
 }

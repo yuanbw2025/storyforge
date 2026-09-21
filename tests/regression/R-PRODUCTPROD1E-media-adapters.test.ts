@@ -5,6 +5,7 @@ import {
   agnesImage21FlashAdapterV1,
   authoredImagePackAdapterV1,
   detectProductImageDimensionsV1,
+  isProductImageDeliveryDimensionCompatibleV1,
   elevenLabsMusicAdapterV2,
   listProductMediaProviderCapabilitiesV1,
   openAIGptImage2AdapterV1,
@@ -87,6 +88,18 @@ describe('R-PRODUCTPROD-1E · central media provider adapters', () => {
     expect(detectProductImageDimensionsV1(jpeg)).toEqual({ width: 1024, height: 576 })
     expect(detectProductImageDimensionsV1(webp.buffer)).toEqual({ width: 1024, height: 576 })
     expect(detectProductImageDimensionsV1(PNG)).toBeNull()
+    expect(isProductImageDeliveryDimensionCompatibleV1({
+      requestedWidth: 1280, requestedHeight: 720, actualWidth: 1024, actualHeight: 576,
+    })).toBe(true)
+    expect(isProductImageDeliveryDimensionCompatibleV1({
+      requestedWidth: 720, requestedHeight: 1080, actualWidth: 683, actualHeight: 1024,
+    })).toBe(true)
+    expect(isProductImageDeliveryDimensionCompatibleV1({
+      requestedWidth: 1280, requestedHeight: 720, actualWidth: 1024, actualHeight: 1024,
+    })).toBe(false)
+    expect(isProductImageDeliveryDimensionCompatibleV1({
+      requestedWidth: 1280, requestedHeight: 720, actualWidth: 300, actualHeight: 169,
+    })).toBe(false)
   })
 
   it('Agnes 图片 adapter 复用 browser transport，并按官方 2.1 接口请求 Base64 图片', async () => {
@@ -95,7 +108,7 @@ describe('R-PRODUCTPROD-1E · central media provider adapters', () => {
       response: {
         status: 200, contentType: 'application/json', body: null,
         json: {
-          created: 1, background: 'auto', output_format: 'png', quality: 'auto', size: '1312x736',
+          created: 1, task_id: 'task.image.1', background: 'auto', output_format: 'png', quality: 'auto', size: '1312x736',
           data: [{ url: null, b64_json: base64(PNG), revised_prompt: null }],
         },
         providerRequestId: 'agnes-image-1', usage: null, costUsd: null,
@@ -139,6 +152,18 @@ describe('R-PRODUCTPROD-1E · central media provider adapters', () => {
     await expect(agnesImage21FlashAdapterV1.generate(request({
       adapterId: 'agnes.image-2.1-flash.v1',
     }), unknownMetadata.value, new AbortController().signal)).rejects.toThrow(/未允许字段/)
+
+    const invalidTaskId = transport({
+      executionLocation: 'browser-direct',
+      response: {
+        status: 200, contentType: 'application/json', body: null,
+        json: { created: 1, task_id: 'bad task id', data: [{ b64_json: base64(PNG) }] },
+        providerRequestId: null, usage: null, costUsd: null,
+      },
+    })
+    await expect(agnesImage21FlashAdapterV1.generate(request({
+      adapterId: 'agnes.image-2.1-flash.v1',
+    }), invalidTaskId.value, new AbortController().signal)).rejects.toThrow(/task_id 元数据无效/)
   })
 
   it('作者媒资包按 artifactKey 导入真实 PNG，并复核清单 hash 与固有尺寸', async () => {
@@ -256,7 +281,7 @@ describe('R-PRODUCTPROD-1E · central media provider adapters', () => {
     expect(JSON.stringify(candidates[0].metadata)).not.toContain('signature=secret')
   })
 
-  it('Agnes 不发送队列不支持的 background 参数，透明要求交给生成后 alpha 验证', async () => {
+  it('Agnes 角色立绘不发送未登记的透明参数，由下游受控抠图保证 alpha', async () => {
     const direct = transport({
       executionLocation: 'browser-direct',
       response: {
@@ -268,8 +293,10 @@ describe('R-PRODUCTPROD-1E · central media provider adapters', () => {
     const candidates = await agnesImage21FlashAdapterV1.generate(request({
       adapterId: 'agnes.image-2.1-flash.v1', mediaKind: 'character-pose',
     }), direct.value, new AbortController().signal)
-    expect(direct.call.mock.calls[0][0].body).toMatchObject({
+    expect(direct.call.mock.calls[0][0].body).toEqual({
       model: 'agnes-image-2.1-flash',
+      prompt: '暮色中的港口灯塔，原创构图。\nAvoid: 文字，水印',
+      size: '1K', ratio: '1:1', return_base64: true,
       extra_body: { response_format: 'b64_json' },
     })
     expect(candidates[0].metadata).toMatchObject({ requestedTransparentBackground: true })

@@ -27,6 +27,8 @@ import {
   requirePassedProductBrowserPerformanceGateV1,
   requirePassedProductBuildMainRouteGateV1,
   requirePassedProductMediaRuntimeGateV1,
+  requirePassedTextAdventureHumanPlaytestGateV1,
+  requirePassedTextAdventureHumanVisualReviewGateV1,
 } from './quality-receipts'
 import {
   createProductReleaseManifestV1,
@@ -69,7 +71,9 @@ export interface ProductProductionAdoptionIntentV1 {
   rootTerminalReceiptHash: string
   browserPerformanceReceiptHash: string | null
   mainRoutePlaythroughReceiptHash: string | null
+  humanPlaytestReceiptHash: string | null
   mediaRuntimeReceiptHash: string | null
+  humanVisualReviewReceiptHash: string | null
   worldReleaseId: number
   worldContentHash: string
 }
@@ -282,15 +286,22 @@ async function inspectAdoption(
   const brief = parseProductProductionBriefV3(briefRow.briefJson)
   if (await hashProductProductionValueV2(brief) !== briefRow.briefHash) fail('Brief hash 校验失败')
   const mediaRuntimeRequired = brief.media.requiredMediaKinds.length > 0
-  const [browserPerformance, mainRoutePlaythrough, mediaRuntime] = brief.qualityProfile === 'commercial-candidate'
+  const humanVisualReviewRequired = brief.intent.productType === 'text-adventure' && mediaRuntimeRequired
+  const [browserPerformance, mainRoutePlaythrough, humanPlaytest, mediaRuntime, humanVisualReview] = brief.qualityProfile === 'commercial-candidate'
     ? await Promise.all([
       requirePassedProductBrowserPerformanceGateV1({ scope, productBuildId: build.id! }),
       requirePassedProductBuildMainRouteGateV1({ scope, productBuildId: build.id! }),
+      brief.intent.productType === 'text-adventure'
+        ? requirePassedTextAdventureHumanPlaytestGateV1({ scope, productBuildId: build.id! })
+        : Promise.resolve(null),
       mediaRuntimeRequired
         ? requirePassedProductMediaRuntimeGateV1({ scope, productBuildId: build.id! })
         : Promise.resolve(null),
+      humanVisualReviewRequired
+        ? requirePassedTextAdventureHumanVisualReviewGateV1({ scope, productBuildId: build.id! })
+        : Promise.resolve(null),
     ])
-    : [null, null, null]
+    : [null, null, null, null, null]
   if (build.status !== 'release-ready') fail('Build 尚未通过全部发布硬门')
   const plan = parseProductProductionPlanV3(build.planJson, brief, briefRow.briefHash)
   if (await hashProductProductionValueV2(plan) !== build.planHash
@@ -385,7 +396,9 @@ async function inspectAdoption(
     build.qualityReportHash,
     browserPerformance?.gateReceipt.receiptHash ?? null,
     mainRoutePlaythrough?.gateReceipt.receiptHash ?? null,
+    humanPlaytest?.gateReceipt.receiptHash ?? null,
     mediaRuntime?.gateReceipt.receiptHash ?? null,
+    humanVisualReview?.gateReceipt.receiptHash ?? null,
   ].filter((value): value is string => value != null)
 
   const mediaArtifacts = new Map<string, ProductBuildArtifactRecordV1>()
@@ -426,7 +439,9 @@ async function inspectAdoption(
     qualityReportHash: build.qualityReportHash, rootTerminalReceiptHash: build.rootTerminalReceiptHash,
     browserPerformanceReceiptHash: browserPerformance?.gateReceipt.receiptHash ?? null,
     mainRoutePlaythroughReceiptHash: mainRoutePlaythrough?.gateReceipt.receiptHash ?? null,
+    humanPlaytestReceiptHash: humanPlaytest?.gateReceipt.receiptHash ?? null,
     mediaRuntimeReceiptHash: mediaRuntime?.gateReceipt.receiptHash ?? null,
+    humanVisualReviewReceiptHash: humanVisualReview?.gateReceipt.receiptHash ?? null,
     worldReleaseId: sourcePlan.worldReference.localReleaseRecordId,
     worldContentHash: sourcePlan.worldReference.releaseHash,
   }
@@ -621,7 +636,9 @@ async function assertPreparedAdoptionUnchangedInTransaction(verified: VerifiedAd
   const requiredGateHashes = [
     verified.intent.browserPerformanceReceiptHash,
     verified.intent.mainRoutePlaythroughReceiptHash,
+    verified.intent.humanPlaytestReceiptHash,
     verified.intent.mediaRuntimeReceiptHash,
+    verified.intent.humanVisualReviewReceiptHash,
   ].filter((value): value is string => value != null)
   const currentGateHashes = new Set(qualityReceipts.map(row => row.receiptHash))
   if (requiredGateHashes.some(hash => !currentGateHashes.has(hash))) fail('商业质量回执在提交前发生变化')

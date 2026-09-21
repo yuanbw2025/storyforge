@@ -1,5 +1,6 @@
 import { buildUpperProductModulesV1 } from '../../src/lib/product-production/product-adapters'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
+import { compileTextAdventureProductionBriefV1 } from '../../src/lib/adventure/production-brief'
 import type { ProductProductionWorldSourceCatalogV2 } from '../../src/lib/product-production/world-source'
 import type {
   ProductProductionBriefV3,
@@ -108,6 +109,14 @@ export function createCurrentProductBriefFixture(input: {
     productRoles(input.productType),
     input.sourceCatalog.worldReference.referenceHash,
   )
+  const scale: ProductProductionBriefV3['scale'] = {
+    scope: 'scene', targetPlayMinutes: 15, targetWordCount: 2_500,
+    targetEndingCount: input.productType === 'text-adventure' ? 2 : 4,
+  }
+  const media: ProductProductionBriefV3['media'] = {
+    visualLevel: 'none', audioLevel: 'none', imageCount: 0, musicTrackCount: 0,
+    sfxCount: 0, voiceLineCount: 0, requiredMediaKinds: [],
+  }
   return {
     schema: 'storyforge.product-production-brief',
     version: 3,
@@ -131,11 +140,8 @@ export function createCurrentProductBriefFixture(input: {
       requiredFacts: [], forbiddenChanges: [],
       contentBoundaries: ['不生成未授权露骨内容'], tone: ['克制', '悬疑'],
     },
-    scale: { scope: 'scene', targetPlayMinutes: 15, targetWordCount: 2_500, targetEndingCount: 4 },
-    media: {
-      visualLevel: 'none', audioLevel: 'none', imageCount: 0, musicTrackCount: 0,
-      sfxCount: 0, voiceLineCount: 0, requiredMediaKinds: [],
-    },
+    scale,
+    media,
     consultationBudget: {
       maximumModelCalls: 3, maximumInputTokens: 30_000, maximumOutputTokens: 8_000,
       maximumCostUsd: null,
@@ -161,6 +167,17 @@ export function createCurrentProductBriefFixture(input: {
       minimumMediaCoverage: 0, allowSoftWaivers: true,
     },
     unresolvedDecisionKeys: [],
+    ...(input.productType === 'text-adventure' ? {
+      textAdventure: compileTextAdventureProductionBriefV1({
+        scale,
+        media,
+        draft: {
+          targetRegionCount: 2, targetAreaCount: 3, targetLocationCount: 4,
+          targetSceneCount: 4, targetSideQuestCount: 0, targetAmbientEventCount: 1,
+          minimumDistinctRoutes: 2, confirmAll: true,
+        },
+      }),
+    } : {}),
   }
 }
 
