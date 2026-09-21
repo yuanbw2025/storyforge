@@ -34,6 +34,10 @@ import {
   seedCurrentProductWorld,
 } from '../helpers/current-product-world'
 import { createCurrentRuntimePackageFixture } from '../helpers/current-runtime-package'
+import {
+  createGovernedTextOpenWorldSessionFixtureV1,
+} from '../helpers/text-open-world-product-session'
+import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 import { useAdventureGamePlayerStore } from '../../src/stores/adventure-game-player'
 import { useAvgGamePlayerStore } from '../../src/stores/avg-game-player'
 import { useCharacterInteractionPlayerStore } from '../../src/stores/character-interaction-player'
@@ -47,7 +51,7 @@ interface RuntimeFixture {
 }
 
 async function runtimeFixture(
-  productType: Exclude<ProductionProductKindV1, 'ttrpg'>,
+  productType: Exclude<ProductionProductKindV1, 'ttrpg' | 'text-open-world'>,
   title: string,
 ): Promise<RuntimeFixture> {
   const world = await seedCurrentProductWorld(title)
@@ -73,6 +77,20 @@ async function runtimeFixture(
     release,
     session: created.session as ProductRuntimeSession & { id: number },
     runtimePackage,
+  }
+}
+
+async function legacyOpenWorldReleaseFixture(title: string): Promise<RuntimeFixture> {
+  const created = await createGovernedTextOpenWorldSessionFixtureV1({
+    name: title,
+    textOpenWorldVNext: createTextOpenWorldVNextFixture(),
+    runtimeShape: 'legacy-only',
+  })
+  return {
+    scope: created.scope,
+    release: created.worldRelease as WorldRelease & { id: number },
+    session: created.session as ProductRuntimeSession & { id: number },
+    runtimePackage: created.runtimePackage,
   }
 }
 
@@ -131,8 +149,8 @@ describe('R-HARNESS-RUNTIME2 · current Product Build runtime Skills', () => {
     expect(await readProductRuntimeStateVersion(seeded.session.id)).toEqual(beforeNarration)
   })
 
-  it('开放世界内部模拟能力的四类表现 Skill 均绑定正式 Build，且保持状态只读', async () => {
-    const seeded = await runtimeFixture('text-open-world', '现行开放世界内部模拟 Harness')
+  it('旧开放世界内部模拟 Skill 只兼容不可变历史 Release，且保持状态只读', async () => {
+    const seeded = await legacyOpenWorldReleaseFixture('历史开放世界内部模拟 Harness')
     const base = await readProductRuntimeStateVersion(seeded.session.id)
     await commitOpenWorldEvolutionTurn({
       sessionId: seeded.session.id,
@@ -172,8 +190,8 @@ describe('R-HARNESS-RUNTIME2 · current Product Build runtime Skills', () => {
     expect(await readProductRuntimeStateVersion(seeded.session.id)).toEqual(frozen)
   })
 
-  it('开放世界任务表现与场景叙述 Skill 只引用已公开任务和正式事件', async () => {
-    const seeded = await runtimeFixture('text-open-world', '现行开放世界 Harness')
+  it('旧开放世界任务表现与场景叙述 Skill 只兼容不可变历史 Release', async () => {
+    const seeded = await legacyOpenWorldReleaseFixture('历史开放世界 Harness')
     let state = await readProductRuntimeState(seeded.session.id)
     let instance = state.openWorld?.questInstances.find(candidate => candidate.status === 'revealed')
     for (let attempt = 0; attempt < 8 && !instance; attempt += 1) {
@@ -228,7 +246,7 @@ describe('R-HARNESS-RUNTIME2 · current Product Build runtime Skills', () => {
     expect(await readProductRuntimeStateVersion(seeded.session.id)).toEqual(frozen)
   })
 
-  it('四类现行非跑团产品界面都能直接接住统一 Production 返回的 Build Preview 会话', async () => {
+  it('三个通用产品接住共享 Build Preview，开放世界只接专属 Creator vNext 会话', async () => {
     const interaction = await runtimeFixture('character-interaction', '现行角色互动预览界面')
     await useCharacterInteractionPlayerStore.getState().load(interaction.scope, null)
     expect(useCharacterInteractionPlayerStore.getState()).toMatchObject({
@@ -249,8 +267,11 @@ describe('R-HARNESS-RUNTIME2 · current Product Build runtime Skills', () => {
       selectedManifest: { productType: 'avg' },
     })
 
-    const openWorld = await runtimeFixture('text-open-world', '现行开放世界预览界面')
-    await useTextOpenWorldPlayerStore.getState().load(openWorld.scope, null, openWorld.session.id)
+    const openWorld = await createGovernedTextOpenWorldSessionFixtureV1({
+      name: '现行开放世界 Creator 界面',
+      textOpenWorldVNext: createTextOpenWorldVNextFixture(),
+    })
+    await useTextOpenWorldPlayerStore.getState().load(openWorld.scope, null, openWorld.session.id!)
     expect(useTextOpenWorldPlayerStore.getState()).toMatchObject({
       selectedSessionId: openWorld.session.id, error: '',
       selectedManifest: { productType: 'text-open-world' },

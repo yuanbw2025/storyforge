@@ -1461,7 +1461,12 @@ export function createConfiguredProductProductionExecutorV1(input: {
   runText?: ProductionTextRunnerV1
   mediaCapabilities?: ReadonlyMap<string, ResolvedProductMediaCapabilityV1>
 }): ProductProductionTaskExecutorV1 {
-  const supportedProducts = new Set<ProductionProductKindV1>(PRODUCTION_PRODUCT_KINDS_V1)
+  if (input.brief.intent.productType === 'text-open-world') {
+    fail('文字开放世界已下线通用生产执行器；必须使用专属 Creator P0-P10 / V1-V3 执行器')
+  }
+  const supportedProducts = new Set<ProductionProductKindV1>(
+    PRODUCTION_PRODUCT_KINDS_V1.filter(productType => productType !== 'text-open-world'),
+  )
   if (!supportedProducts.has(input.brief.intent.productType)) {
     fail(`正式执行器尚未支持产品:${input.brief.intent.productType}`)
   }

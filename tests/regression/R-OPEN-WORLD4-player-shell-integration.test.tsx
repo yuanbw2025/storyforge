@@ -375,6 +375,38 @@ describe('Text Open World G4 · 真实 vNext 玩家壳集成', () => {
     expect(packageHash?.textContent).toContain(created.session.runtimeSourceHash.slice(0, 12))
   })
 
+  it.sequential('旧运行包只允许从不可变Release进入兼容播放器，不能作为Build Preview继续开放', async () => {
+    const created = await createGovernedTextOpenWorldSessionFixtureV1({
+      name: `旧Release兼容入口-${crypto.randomUUID()}`,
+      textOpenWorldVNext: createTextOpenWorldVNextFixture(),
+      runtimeShape: 'legacy-only',
+      title: '旧版盐脊旅程',
+      seed: 'g7-legacy-release-compatibility',
+    })
+
+    await act(async () => {
+      root.render(createElement(DialogProvider, null, createElement(TextOpenWorldPlayer, {
+        project: created.project,
+        scope: created.scope,
+        worldGroupId: null,
+        initialSessionId: created.session.id,
+      })))
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    await waitFor(() => {
+      expect(host.querySelector('[data-testid="text-open-world-shell"]')).toBeTruthy()
+      expect(host.textContent).toContain('历史 PRODUCT RELEASE v1 · 兼容只读包已固定')
+    })
+    expect(host.querySelector('[data-testid="text-open-world-vnext-runtime"]')).toBeNull()
+
+    await act(async () => {
+      useTextOpenWorldPlayerStore.setState({ selectedSessionSource: 'build-preview' })
+      await Promise.resolve()
+    })
+    expect(host.querySelector('[data-testid="text-open-world-shell"]')).toBeNull()
+    expect(host.querySelector('[data-testid="text-open-world-runtime-blocking"]')).toBeTruthy()
+  })
+
   it.sequential('父壳只公开固定分类错误，未知 Action、物品与 hash 诊断不进入 DOM', async () => {
     const runtimePackage = createTextOpenWorldVNextFixture()
     const productRuntimePackage = createTextOpenWorldProductRuntimePackageFixtureV1(runtimePackage)

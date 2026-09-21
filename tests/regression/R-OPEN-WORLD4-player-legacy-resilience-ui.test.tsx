@@ -1,7 +1,7 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import TextOpenWorldLegacyPlayer from '../../src/components/text-game/TextOpenWorldLegacyPlayer'
+import TextOpenWorldLegacyCompatibilityPlayer from '../../src/components/text-game/TextOpenWorldLegacyCompatibilityPlayer'
 import { createInitialOpenWorldState } from '../../src/lib/open-world/runtime'
 import { classifyTextOpenWorldPlayerIssueV1 } from '../../src/lib/open-world/player-resilience'
 import {
@@ -14,7 +14,7 @@ import {
   type TextOpenWorldPlayerState,
   useTextOpenWorldPlayerStore,
 } from '../../src/stores/text-open-world-player'
-import { createTextOpenWorldProductRuntimePackageFixtureV1 } from '../helpers/text-open-world-product-session'
+import { createLegacyTextOpenWorldProductRuntimePackageFixtureV1 } from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -76,8 +76,8 @@ function setModelReady(ready: boolean): void {
 function prepareLegacyPlayer(
   overrides: Partial<TextOpenWorldPlayerState> = {},
 ): void {
-  const runtimePackage = createTextOpenWorldProductRuntimePackageFixtureV1(
-    createTextOpenWorldVNextFixture(),
+  const runtimePackage = createLegacyTextOpenWorldProductRuntimePackageFixtureV1(
+    createTextOpenWorldVNextFixture().sourceManifest.contentHash,
   )
   if (!runtimePackage.openWorld) throw new Error('测试运行包缺少 legacy 开放世界模块')
   const contentHash = runtimePackage.sourceWorld.contentHash
@@ -87,8 +87,8 @@ function prepareLegacyPlayer(
     worldGroupId: null,
     worldId: 2,
     workId: 3,
-    productReleaseId: null,
-    productBuildId: 4,
+    productReleaseId: 4,
+    productBuildId: null,
     runtimeSourceHash: contentHash,
     kind: 'text-open-world',
     title: 'Legacy 韧性验收',
@@ -112,7 +112,7 @@ function prepareLegacyPlayer(
     sessions: [],
     selectedSessionId: session.id!,
     selectedSession: session,
-    selectedSessionSource: 'build-preview',
+    selectedSessionSource: 'release',
     events: [],
     checkpoints: [],
     saveProjection: { groups: [], totalBranches: 0, totalCheckpoints: 0 },
@@ -174,7 +174,7 @@ describe('Text Open World G4 · Legacy 玩家 AI 降级与恢复状态', () => {
     setModelReady(false)
     prepareLegacyPlayer({ command })
 
-    await act(async () => root.render(createElement(TextOpenWorldLegacyPlayer)))
+    await act(async () => root.render(createElement(TextOpenWorldLegacyCompatibilityPlayer)))
 
     const notice = host.querySelector('[data-testid="text-open-world-player-state-notice"]')
     const tick = buttonByText(host, '推进世界 tick')
@@ -217,7 +217,7 @@ describe('Text Open World G4 · Legacy 玩家 AI 降级与恢复状态', () => {
       presentationBusy: true,
     })
 
-    await act(async () => root.render(createElement(TextOpenWorldLegacyPlayer)))
+    await act(async () => root.render(createElement(TextOpenWorldLegacyCompatibilityPlayer)))
 
     const tick = buttonByText(host, '推进世界 tick')
     const presentationAction = buttonByText(host, '正在生成')
@@ -266,7 +266,7 @@ describe('Text Open World G4 · Legacy 玩家 AI 降级与恢复状态', () => {
       recover,
     })
 
-    await act(async () => root.render(createElement(TextOpenWorldLegacyPlayer)))
+    await act(async () => root.render(createElement(TextOpenWorldLegacyCompatibilityPlayer)))
 
     const tick = buttonByText(host, '推进世界 tick')
     const notice = host.querySelector('[data-testid="text-open-world-player-state-notice"]')

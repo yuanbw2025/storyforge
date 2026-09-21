@@ -7,7 +7,6 @@ import {
   type TextOpenWorldSaveOwnerV1,
 } from '../../src/lib/open-world/player-saves'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
-import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { createTextOpenWorldInstance } from '../../src/lib/product/runtime-instances'
 import { EMPTY_PRODUCT_RUNTIME_STATE, type ProductRelease, type ProductRuntimePackageV1 } from '../../src/lib/types'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
@@ -15,7 +14,7 @@ import { useTextOpenWorldPlayerStore } from '../../src/stores/text-open-world-pl
 import { createFixtureProductReleaseManifestV1 } from '../helpers/product-release-v1'
 import {
   createGovernedTextOpenWorldSessionFixtureV1,
-  createTextOpenWorldProductRuntimePackageFixtureV1,
+  createLegacyTextOpenWorldProductRuntimePackageFixtureV1,
 } from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
@@ -91,12 +90,9 @@ async function addCompatibleChildRelease(
 }
 
 async function legacyFixture() {
-  const hybrid = createTextOpenWorldProductRuntimePackageFixtureV1(createTextOpenWorldVNextFixture())
-  const raw = structuredClone(hybrid) as any
-  delete raw.textOpenWorldVNext
-  raw.definition.enabledCapabilities = raw.definition.enabledCapabilities
-    .filter((capability: string) => capability !== 'textOpenWorldVNext')
-  const runtimePackage = parseProductRuntimePackageV1(raw)
+  const runtimePackage = createLegacyTextOpenWorldProductRuntimePackageFixtureV1(
+    createTextOpenWorldVNextFixture().sourceManifest.contentHash,
+  )
   const workspace = await createWorkspace({
     name: `旧Release Store集成-${crypto.randomUUID()}`,
     genres: ['open-world'],

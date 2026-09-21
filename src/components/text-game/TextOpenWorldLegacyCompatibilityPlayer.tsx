@@ -24,7 +24,8 @@ import {
 import TextOpenWorldGameShell from './TextOpenWorldGameShell'
 import TextOpenWorldSaveSettingsPanel from './TextOpenWorldSaveSettingsPanel'
 
-export default function TextOpenWorldLegacyPlayer() {
+/** Compatibility player for immutable legacy ProductReleases; never a Build Preview target. */
+export default function TextOpenWorldLegacyCompatibilityPlayer() {
   const store = useTextOpenWorldPlayerStore()
   const { config } = useAIConfigStore()
   const [localError, setLocalError] = useState('')
@@ -76,14 +77,12 @@ export default function TextOpenWorldLegacyPlayer() {
   }
   const publicError = localError || (store.error ? '操作未能完成，请确认当前状态后重试。' : '')
 
-  if (!selected?.id || !world || !openWorld) return null
+  if (!selected?.id || !world || !openWorld || store.selectedSessionSource !== 'release') return null
 
   const selectedReleaseVersion = selected.productReleaseId == null
     ? null
     : store.releases.find(item => item.release.id === selected.productReleaseId)?.release.version ?? null
-  const sourceLabel = store.selectedSessionSource === 'build-preview'
-    ? `TEXT-OPEN-WORLD · BUILD PREVIEW · 非正式发布 · Build ID #${selected.productBuildId ?? '?'}`
-    : `TEXT-OPEN-WORLD · PRODUCT RELEASE v${selectedReleaseVersion ?? '?'} · 已固定`
+  const sourceLabel = `TEXT-OPEN-WORLD · 历史 PRODUCT RELEASE v${selectedReleaseVersion ?? '?'} · 兼容只读包已固定`
   const productionKey = manifest.definition.productKey
   const currentRegionTitle = currentRegion?.title ?? world.currentRegionKey
   const currentRegionDescription = currentRegion?.description || '当前地区资料尚未展开。'
@@ -316,7 +315,7 @@ export default function TextOpenWorldLegacyPlayer() {
   const checkpointPanel = <TextOpenWorldSaveSettingsPanel
     sessionKey={selected.id}
     productionKey={productionKey}
-    formalSaveAvailable={store.selectedSessionSource === 'release'}
+    formalSaveAvailable
     audioAvailable={false}
     saves={store.saveProjection}
     versions={store.versionCompatibility}
@@ -390,14 +389,14 @@ export default function TextOpenWorldLegacyPlayer() {
     </section>}
     tutorial={{
       productionKey,
-      runtimeChannel: store.selectedSessionSource === 'build-preview' ? 'build-preview' : 'release',
+      runtimeChannel: 'release',
       cycleKey: store.runtimeState.lastSequence,
       featureSupport: {
         scene: true,
         'system-actions': true,
         quests: true,
         'map-travel': true,
-        'formal-save': store.selectedSessionSource === 'release',
+        'formal-save': true,
         'settings-help': true,
       },
       featureAvailability: {
@@ -405,7 +404,7 @@ export default function TextOpenWorldLegacyPlayer() {
         'system-actions': !world.ended,
         quests: revealed.length + active.length > 0,
         'map-travel': travelEdges.length > 0 && !world.travel && !world.ended,
-        'formal-save': store.selectedSessionSource === 'release',
+        'formal-save': true,
         'settings-help': true,
       },
       availableActionKeys: [],

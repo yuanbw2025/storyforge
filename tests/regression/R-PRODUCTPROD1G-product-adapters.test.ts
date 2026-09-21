@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import type {
   ProductBuildRecordV1,
   ProductProductionBriefV3,
+  ProductProductionRecordV1,
   ProductRuntimePackageV1,
   ProductionProductKindV1,
   WorkspaceScope,
@@ -14,19 +15,9 @@ import {
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { createInitialInteractionState } from '../../src/lib/character-interaction/runtime'
 import { applyAdventureEffects, availableAdventureActions, createInitialAdventureState } from '../../src/lib/adventure/runtime'
-import {
-  availableOpenWorldEvolutionActions,
-  createInitialOpenWorldEvolutionState,
-  parseOpenWorldEvolutionState,
-  planOpenWorldEvolutionTurn,
-} from '../../src/lib/open-world/evolution-runtime'
-import {
-  createInitialOpenWorldState,
-  planOpenWorldDraw,
-  planOpenWorldTravel,
-} from '../../src/lib/open-world/runtime'
 import { db } from '../../src/lib/db/schema'
 import { createProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
+import { createConfiguredProductProductionExecutorV1 } from '../../src/lib/product-production/production-executor'
 import { createProductRuntimeInstanceFromSource } from '../../src/lib/product/runtime-instances'
 import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-engine/releases'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
@@ -37,8 +28,8 @@ import {
   currentProductSelection,
 } from '../helpers/current-product-world'
 
-const PRODUCTS: ProductionProductKindV1[] = [
-  'character-interaction', 'text-adventure', 'avg', 'text-open-world',
+const PRODUCTS: Array<Exclude<ProductionProductKindV1, 'ttrpg' | 'text-open-world'>> = [
+  'character-interaction', 'text-adventure', 'avg',
 ]
 
 function productRoles(productType: ProductionProductKindV1): Record<string, string[]> {
@@ -139,7 +130,9 @@ function narrative(): ProductRuntimePackageV1['narrative'] {
   }
 }
 
-function runtimePackage(productType: ProductionProductKindV1): ProductRuntimePackageV1 {
+function runtimePackage(
+  productType: Exclude<ProductionProductKindV1, 'ttrpg' | 'text-open-world'>,
+): ProductRuntimePackageV1 {
   const currentBrief = brief(productType)
   const currentNarrative = narrative()
   const modules = buildUpperProductModulesV1({
@@ -157,8 +150,6 @@ function runtimePackage(productType: ProductionProductKindV1): ProductRuntimePac
   }
   if (modules.interaction) pkg.interaction = modules.interaction
   if (modules.adventure) pkg.adventure = modules.adventure
-  if (modules.openWorldEvolution) pkg.openWorldEvolution = modules.openWorldEvolution
-  if (modules.openWorld) pkg.openWorld = modules.openWorld
   if (productType === 'avg') pkg.presentation = { version: 1, cues: [], assets: [] }
   return parseProductRuntimePackageV1(pkg)
 }
@@ -218,23 +209,20 @@ async function insertPreviewBuild(input: {
   return { buildId, previewHash: preview.previewHash }
 }
 
-describe('R-PRODUCTPROD-1G · five-product adapter registry', () => {
-  it('文字开放世界内部模拟使用现行 schema，并只在解析旧存档时单向归一化', () => {
-    const initial = createInitialOpenWorldEvolutionState(
-      runtimePackage('text-open-world').openWorldEvolution!,
-      'a'.repeat(64),
-    )
-    expect(initial.schema).toBe('storyforge.text-open-world.evolution')
-    expect(parseOpenWorldEvolutionState({
-      ...initial,
-      schema: 'storyforge.text-open-world.evolution',
-    })?.schema).toBe('storyforge.text-open-world.evolution')
-  })
-
-  it('四类非跑团产品与 TTRPG 共享同一 registry，但未过 Golden 的 TTRPG 不得标商业就绪', () => {
+describe('R-PRODUCTPROD-1G · generic product adapter registry', () => {
+  it('三类通用产品与 TTRPG 共享 registry，文字开放世界必须走专属 Creator', () => {
     const catalog = listUpperProductProductionAdaptersV1()
     expect(catalog.map(item => item.productType)).toEqual([...PRODUCTS, 'ttrpg'])
     expect(catalog.filter(item => item.commercialReady).map(item => item.productType)).toEqual(PRODUCTS)
+    expect(() => buildUpperProductModulesV1({
+      brief: brief('text-open-world'),
+      narrative: narrative(),
+      sourceCatalog: CURRENT_PRODUCT_SOURCE_CATALOG,
+    })).toThrow('必须使用专属 Creator P0-P10 / V1-V3 生产链')
+    expect(() => createConfiguredProductProductionExecutorV1({
+      production: {} as ProductProductionRecordV1,
+      brief: brief('text-open-world'),
+    })).toThrow('必须使用专属 Creator P0-P10 / V1-V3 执行器')
 
     for (const productType of PRODUCTS) {
       const currentBrief = brief(productType)
@@ -258,8 +246,6 @@ describe('R-PRODUCTPROD-1G · five-product adapter registry', () => {
       }
       if (modules.interaction) pkg.interaction = modules.interaction
       if (modules.adventure) pkg.adventure = modules.adventure
-      if (modules.openWorldEvolution) pkg.openWorldEvolution = modules.openWorldEvolution
-      if (modules.openWorld) pkg.openWorld = modules.openWorld
       if (productType === 'avg') pkg.presentation = { version: 1, cues: [], assets: [] }
       const parsed = parseProductRuntimePackageV1(pkg)
       expect(parsed).toMatchObject({
@@ -277,46 +263,12 @@ describe('R-PRODUCTPROD-1G · five-product adapter registry', () => {
           expect(moved.currentLocationKey).not.toBe(initial.currentLocationKey)
         }
       }
-      if (parsed.openWorldEvolution) {
-        const initial = createInitialOpenWorldEvolutionState(parsed.openWorldEvolution, worldContentHash)
-        expect(initial.phase).toBe('planning')
-        const action = availableOpenWorldEvolutionActions(parsed.openWorldEvolution, initial).find(item => item.available)!.action
-        const turn = planOpenWorldEvolutionTurn({
-          content: parsed.openWorldEvolution, state: initial, decisionKeys: [action.key], seed: 'registry', startingSequence: 0,
-        })
-        expect(turn.projected.turn).toBeGreaterThan(initial.turn)
-      }
-      if (parsed.openWorld) {
-        const initial = createInitialOpenWorldState(parsed.openWorld, worldContentHash)
-        expect(initial.currentRegionKey).toBe(parsed.openWorld.initialRegionKey)
-        expect(parsed.adventure!.quests.every(quest => quest.initialStatus === 'available')).toBe(true)
-        const draw = planOpenWorldDraw({
-          content: parsed.openWorld,
-          state: initial,
-          adventure: createInitialAdventureState(parsed.adventure!, worldContentHash),
-          trigger: 'observe',
-          seed: 'registry',
-          startingSequence: 0,
-        })
-        expect(draw.projected.questInstances.some(instance => instance.status === 'revealed')).toBe(true)
-        const edge = parsed.openWorld.travelEdges.find(item => item.fromRegionKey === initial.currentRegionKey)!
-        const travel = planOpenWorldTravel({ content: parsed.openWorld, state: initial, edgeKey: edge.key, startingSequence: 0 })
-        expect(travel.projected.travel?.edgeKey).toBe(edge.key)
-      }
       if (parsed.interaction) {
         expect(parsed.interaction.sceneTemplates).toHaveLength(currentNarrative.nodes.filter(node => node.kind !== 'ending').length)
       }
       if (parsed.adventure) {
         expect(parsed.adventure.locations).toHaveLength(currentNarrative.nodes.length)
         expect(parsed.adventure.actions.filter(action => action.narrativeChoiceKey != null)).toHaveLength(currentNarrative.choices.length)
-      }
-      if (parsed.openWorldEvolution) {
-        expect(parsed.openWorldEvolution.issues).toHaveLength(currentNarrative.nodes.filter(node => node.kind !== 'ending').length)
-        expect(parsed.openWorldEvolution.actions).toHaveLength(currentNarrative.choices.length)
-      }
-      if (parsed.openWorld) {
-        expect(parsed.openWorld.regions).toHaveLength(currentNarrative.nodes.length)
-        expect(parsed.openWorld.travelEdges).toHaveLength(currentNarrative.choices.length)
       }
       expect(JSON.stringify(parsed)).not.toMatch(/十二街区治理录|公共资金|失踪的潮汐钟|固定区域任务/)
     }
@@ -337,7 +289,7 @@ describe('R-PRODUCTPROD-1G · five-product adapter registry', () => {
   })
 
   it('正式产品模块消费冻结世界详情，不再把真实角色、地点、道具和势力降级为编号占位符', () => {
-    const currentBrief = brief('text-open-world')
+    const currentBrief = brief('text-adventure')
     const modules = buildUpperProductModulesV1({
       brief: currentBrief,
       narrative: narrative(),
@@ -355,12 +307,6 @@ describe('R-PRODUCTPROD-1G · five-product adapter registry', () => {
     expect(modules.adventure?.actions).toContainEqual(expect.objectContaining({
       key: 'action.take.source.001', label: '取得：黄铜潮汐钥匙',
     }))
-    expect(modules.openWorldEvolution?.actors).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: '林舟', kind: 'actor' }),
-      expect.objectContaining({ title: '守潮公会', kind: 'organization' }),
-    ]))
-    expect(modules.openWorldEvolution?.issues[0]).toMatchObject({ title: '失踪船队' })
-    expect(modules.openWorld?.regions[0].title).toContain('雾港灯塔')
   })
 
   it('内部预览不能伪装成商业候选；只有显式 commercial-candidate Brief 才打开后续商业 QA 门', () => {
@@ -392,13 +338,13 @@ describe('R-PRODUCTPROD-1G · five-product adapter registry', () => {
   })
 })
 
-describe('R-PRODUCTPROD-1H · four current non-TTRPG playable Build Previews', () => {
+describe('R-PRODUCTPROD-1H · three generic non-TTRPG playable Build Previews', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
-  it('四种产品均从不可变 Build Preview 建立正式会话，并初始化各自玩法状态', async () => {
-    const owned = await workspace('四产品预览闭环')
-    const revision = await createWorldRevision({ scope: owned.scope, label: '四产品冻结来源' })
+  it('三种通用产品均从不可变 Build Preview 建立正式会话，并初始化各自玩法状态', async () => {
+    const owned = await workspace('三产品预览闭环')
+    const revision = await createWorldRevision({ scope: owned.scope, label: '三产品冻结来源' })
     const worldRelease = await publishWorldRevision(revision.id!)
     for (const productType of PRODUCTS) {
       const pkg = runtimePackage(productType)
@@ -412,11 +358,11 @@ describe('R-PRODUCTPROD-1H · four current non-TTRPG playable Build Previews', (
       const state = await readProductRuntimeState(session.id!)
       expect(session).toMatchObject({ kind: productType, productBuildId: build.buildId, productReleaseId: null })
       expect(state.narrative).toMatchObject({ currentNodeKey: 'opening', completed: false })
-      expect(state.interaction != null).toBe(['character-interaction', 'text-adventure', 'text-open-world'].includes(productType))
-      expect(state.adventure != null).toBe(['text-adventure', 'text-open-world'].includes(productType))
+      expect(state.interaction != null).toBe(['character-interaction', 'text-adventure'].includes(productType))
+      expect(state.adventure != null).toBe(productType === 'text-adventure')
       expect(state.presentation != null).toBe(productType === 'avg')
-      expect(state.openWorldEvolution != null).toBe(productType === 'text-open-world')
-      expect(state.openWorld != null).toBe(productType === 'text-open-world')
+      expect(state.openWorldEvolution).toBeNull()
+      expect(state.openWorld).toBeNull()
     }
     expect(await db.productRuntimeSessions.count()).toBe(PRODUCTS.length)
   })

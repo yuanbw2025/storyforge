@@ -4,7 +4,7 @@ import { textOpenWorldUnsupportedRuntimeIssueV1 } from '../../lib/open-world/pla
 import type { Project, WorkspaceScope } from '../../lib/types'
 import { useTextOpenWorldPlayerStore } from '../../stores/text-open-world-player'
 import TextOpenWorldLauncher from './TextOpenWorldLauncher'
-import TextOpenWorldLegacyPlayer from './TextOpenWorldLegacyPlayer'
+import TextOpenWorldLegacyCompatibilityPlayer from './TextOpenWorldLegacyCompatibilityPlayer'
 import TextOpenWorldPlayerErrorBoundary from './TextOpenWorldPlayerErrorBoundary'
 import TextOpenWorldPlayerStateNotice from './TextOpenWorldPlayerStateNotice'
 import TextOpenWorldVNextPlayer from './TextOpenWorldVNextPlayer'
@@ -53,12 +53,14 @@ export default function TextOpenWorldPlayer(props: {
       onExit={() => void store.select(null)}
     ><TextOpenWorldVNextPlayer /></TextOpenWorldPlayerErrorBoundary>
   }
-  if (store.runtimeState.openWorld && store.selectedManifest?.openWorld) {
+  if (store.selectedSessionSource === 'release'
+    && store.runtimeState.openWorld
+    && store.selectedManifest?.openWorld) {
     return <TextOpenWorldPlayerErrorBoundary
       resetKey={`${store.selectedSession.id}:legacy:${store.runtimeState.lastSequence}`}
       onRecover={() => void store.select(store.selectedSessionId)}
       onExit={() => void store.select(null)}
-    ><TextOpenWorldLegacyPlayer /></TextOpenWorldPlayerErrorBoundary>
+    ><TextOpenWorldLegacyCompatibilityPlayer /></TextOpenWorldPlayerErrorBoundary>
   }
   return <div
     className="avg-title-screen open-world-launcher open-world-player-boundary"

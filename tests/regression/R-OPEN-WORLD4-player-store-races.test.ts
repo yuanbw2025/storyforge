@@ -292,7 +292,7 @@ describe('Text Open World G4 · 玩家Store异步操作作用域', () => {
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
       name: `Legacy 重复行动-${crypto.randomUUID()}`,
       textOpenWorldVNext: createTextOpenWorldVNextFixture(),
-      runtimeShape: 'hybrid',
+      runtimeShape: 'legacy-only',
       title: 'Legacy 重复行动',
       seed: 'legacy-command-deduplication',
     })

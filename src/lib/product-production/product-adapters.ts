@@ -1,7 +1,6 @@
 import {
   compileAdventureModuleV1,
   compileInteractionModulesV1,
-  compileOpenWorldModulesV1,
 } from './product-module-compilers'
 import type {
   AdventureContentV1,
@@ -53,10 +52,6 @@ function adventureModule(input: ProductAdapterBuildInputV1): AdventureContentV1 
   return compileAdventureModuleV1(input)
 }
 
-function textOpenWorldModules(input: ProductAdapterBuildInputV1) {
-  return compileOpenWorldModulesV1(input)
-}
-
 function adapter(input: Omit<UpperProductProductionAdapterV1, 'version'>): UpperProductProductionAdapterV1 {
   return { ...input, version: 1 }
 }
@@ -91,17 +86,6 @@ const ADAPTERS = new Map<ProductionProductKindV1, UpperProductProductionAdapterV
     }),
   }),
   adapter({
-    id: 'storyforge.product.text-open-world.v1', productType: 'text-open-world',
-    enabledCapabilities: ['narrative', 'interaction', 'adventure', 'openWorldEvolution', 'open-world'],
-    commercialReady: true,
-    buildModules: input => ({
-      adapterId: 'storyforge.product.text-open-world.v1',
-      commercialReady: input.brief.qualityProfile === 'commercial-candidate',
-      enabledCapabilities: ['narrative', 'interaction', 'adventure', 'openWorldEvolution', 'open-world'],
-      ...textOpenWorldModules(input),
-    }),
-  }),
-  adapter({
     id: 'storyforge.product.ttrpg.v1', productType: 'ttrpg',
     // TTRPG remains fail-closed until the product-level Golden A/B/C and
     // non-fixture browser evidence are verified. A commercial-candidate Brief
@@ -125,6 +109,9 @@ export function listUpperProductProductionAdaptersV1(): UpperProductProductionAd
 export function resolveUpperProductProductionAdapterV1(
   productType: ProductionProductKindV1,
 ): UpperProductProductionAdapterV1 {
+  if (productType === 'text-open-world') {
+    fail('文字开放世界已下线通用节点 adapter；必须使用专属 Creator P0-P10 / V1-V3 生产链')
+  }
   const resolved = ADAPTERS.get(productType)
   if (!resolved) fail(`未知产品:${productType}`)
   return resolved

@@ -28,6 +28,9 @@ export function evaluateProductRuntimeProductQualityV1(input: {
   brief: ProductProductionBriefV3
 }): ProductQualityReportV1 {
   const { runtimePackage, brief } = input
+  if (runtimePackage.productType === 'text-open-world') {
+    throw new Error('[product-quality] 文字开放世界必须使用专属V1/V2/QA质量链，禁止回退旧四模块通用质量门')
+  }
   const narrative = runtimePackage.narrative
   const endingCount = narrative.nodes.filter(node => node.kind === 'ending').length
   const nonEndingCount = narrative.nodes.length - endingCount
@@ -125,23 +128,6 @@ export function evaluateProductRuntimeProductQualityV1(input: {
       gate('product.avg.media-plan', brief.media.requiredMediaKinds.length === 0
         || (!!presentation && brief.media.requiredMediaKinds.every(kind => presentation.assets.some(asset => asset.kind === kind))),
       [`required=${brief.media.requiredMediaKinds.join(',') || 'none'}`]),
-    )
-  } else if (runtimePackage.productType === 'text-open-world') {
-    const openWorld = runtimePackage.openWorld
-    const openWorldEvolution = runtimePackage.openWorldEvolution
-    gates.push(
-      gate('product.open-world.evolution-system', !!openWorldEvolution && openWorldEvolution.resources.length >= 1
-        && openWorldEvolution.metrics.length >= 2 && openWorldEvolution.issues.length >= 1
-        && openWorldEvolution.actors.length >= 1 && openWorldEvolution.actions.length >= 2,
-      [`resources=${openWorldEvolution?.resources.length ?? 0}`, `metrics=${openWorldEvolution?.metrics.length ?? 0}`, `issues=${openWorldEvolution?.issues.length ?? 0}`, `actors=${openWorldEvolution?.actors.length ?? 0}`, `actions=${openWorldEvolution?.actions.length ?? 0}`]),
-      gate('product.open-world.space', !!openWorld && openWorld.regions.length >= 3
-        && openWorld.travelEdges.length >= 2 && openWorld.discoveryChannels.length >= openWorld.regions.length,
-      [`regions=${openWorld?.regions.length ?? 0}`, `edges=${openWorld?.travelEdges.length ?? 0}`, `channels=${openWorld?.discoveryChannels.length ?? 0}`]),
-      gate('product.open-world.director', !!openWorld && openWorld.fixedTaskCards.length >= 1
-        && openWorld.decks.length === openWorld.regions.length && openWorld.regionalIssueRules.length >= 1
-        && openWorld.mainline.questKeys.length >= 1 && openWorld.taskTemplates.length >= 1
-        && openWorld.actorSchedules.length >= 1,
-      [`cards=${openWorld?.fixedTaskCards.length ?? 0}`, `templates=${openWorld?.taskTemplates.length ?? 0}`, `schedules=${openWorld?.actorSchedules.length ?? 0}`, `decks=${openWorld?.decks.length ?? 0}`, `issueRules=${openWorld?.regionalIssueRules.length ?? 0}`]),
     )
   }
 

@@ -22,6 +22,8 @@ import { useTextOpenWorldPlayerStore } from '../../src/stores/text-open-world-pl
 import { createFixtureProductReleaseManifestV1 } from '../helpers/product-release-v1'
 import {
   createGovernedTextOpenWorldSessionFixtureV1,
+  createHybridTextOpenWorldProductRuntimePackageFixtureV1,
+  createLegacyTextOpenWorldProductRuntimePackageFixtureV1,
   createTextOpenWorldProductRuntimePackageFixtureV1,
   createTextOpenWorldVNextOnlyProductRuntimePackageFixtureV1,
 } from '../helpers/text-open-world-product-session'
@@ -69,16 +71,10 @@ describe('Text Open World vNext · ProductBuild/ProductRelease、InitialState和
 
   it('产品专用Release reader同时接受legacy-only、hybrid和vNext-only三态', async () => {
     const textOpenWorldVNext = createTextOpenWorldVNextFixture()
-    const hybrid = createTextOpenWorldProductRuntimePackageFixtureV1(textOpenWorldVNext)
-    const { textOpenWorldVNext: _removed, ...legacyShell } = hybrid
-    const legacyOnly = {
-      ...legacyShell,
-      definition: {
-        ...legacyShell.definition,
-        enabledCapabilities: legacyShell.definition.enabledCapabilities
-          .filter(capability => capability !== 'textOpenWorldVNext'),
-      },
-    }
+    const hybrid = createHybridTextOpenWorldProductRuntimePackageFixtureV1(textOpenWorldVNext)
+    const legacyOnly = createLegacyTextOpenWorldProductRuntimePackageFixtureV1(
+      textOpenWorldVNext.sourceManifest.contentHash,
+    )
     const vNextOnly = createTextOpenWorldVNextOnlyProductRuntimePackageFixtureV1(textOpenWorldVNext)
     const [legacyManifest, hybridManifest, vNextManifest] = await Promise.all([
       createFixtureProductReleaseManifestV1({ runtimePackage: parseProductRuntimePackageV1(legacyOnly) }),
@@ -121,6 +117,7 @@ describe('Text Open World vNext · ProductBuild/ProductRelease、InitialState和
     const textOpenWorldVNext = createTextOpenWorldVNextFixture()
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
       name: 'TEXT-OPEN-WORLD Release绑定验收', textOpenWorldVNext,
+      runtimeShape: 'hybrid-compatibility',
       title: '盐脊新游戏', seed: 'release-seed',
     })
     const state = await readProductRuntimeState(created.session.id!)

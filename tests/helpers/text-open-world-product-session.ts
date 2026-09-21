@@ -1,5 +1,4 @@
 import { db } from '../../src/lib/db/schema'
-import { buildUpperProductModulesV1 } from '../../src/lib/product-production/product-adapters'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { createTextOpenWorldInstance } from '../../src/lib/product/runtime-instances'
@@ -12,11 +11,8 @@ import type {
   TextOpenWorldSessionProjectionV1,
 } from '../../src/lib/types'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
-import {
-  CURRENT_PRODUCT_RESOURCE_KEYS,
-  CURRENT_PRODUCT_SOURCE_CATALOG,
-  currentProductSelection,
-} from './current-product-world'
+import legacyRuntimePackageV1 from './fixtures/text-open-world-legacy-runtime-package-v1.json'
+import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from './current-product-world'
 import { createFixtureProductReleaseManifestV1 } from './product-release-v1'
 
 function narrative(): ProductRuntimePackageV1['narrative'] {
@@ -110,30 +106,21 @@ export function createTextOpenWorldProductRuntimePackageFixtureV1(
 ): ProductRuntimePackageV1 {
   const currentBrief = brief(textOpenWorldVNext.sourceManifest.contentHash)
   const frozenNarrative = narrative()
-  const modules = buildUpperProductModulesV1({
-    brief: currentBrief,
-    narrative: frozenNarrative,
-    sourceCatalog: CURRENT_PRODUCT_SOURCE_CATALOG,
-  })
   return parseProductRuntimePackageV1({
     schema: 'storyforge.product-runtime-package', version: 1, productType: 'text-open-world',
     definition: {
       productKey: textOpenWorldVNext.metadata.packageKey,
       title: textOpenWorldVNext.metadata.title,
       description: textOpenWorldVNext.metadata.description,
-      enabledCapabilities: [...modules.enabledCapabilities, 'textOpenWorldVNext'],
+      enabledCapabilities: ['narrative', 'textOpenWorldVNext'],
       rulesetVersion: textOpenWorldVNext.metadata.rulesetVersion,
-      initialVariables: { productAdapterId: modules.adapterId },
+      initialVariables: { productAdapterId: 'storyforge.text-open-world.creator.v1' },
     },
     sourceWorld: {
       contentHash: textOpenWorldVNext.sourceManifest.contentHash,
       selection: currentBrief.source.selection,
     },
     narrative: frozenNarrative,
-    interaction: modules.interaction,
-    adventure: modules.adventure,
-    openWorldEvolution: modules.openWorldEvolution,
-    openWorld: modules.openWorld,
     textOpenWorldVNext,
   })
 }
@@ -141,17 +128,31 @@ export function createTextOpenWorldProductRuntimePackageFixtureV1(
 export function createTextOpenWorldVNextOnlyProductRuntimePackageFixtureV1(
   textOpenWorldVNext: TextOpenWorldRuntimePackageV1,
 ): ProductRuntimePackageV1 {
-  const hybrid = createTextOpenWorldProductRuntimePackageFixtureV1(textOpenWorldVNext)
+  return createTextOpenWorldProductRuntimePackageFixtureV1(textOpenWorldVNext)
+}
+
+/** Frozen historical package used only to prove old immutable Releases remain playable. */
+export function createLegacyTextOpenWorldProductRuntimePackageFixtureV1(
+  sourceContentHash = 'a'.repeat(64),
+): ProductRuntimePackageV1 {
+  const legacy = structuredClone(legacyRuntimePackageV1) as unknown as ProductRuntimePackageV1
+  legacy.sourceWorld.contentHash = sourceContentHash
+  return parseProductRuntimePackageV1(legacy)
+}
+
+/** Historical transition shape; compatibility readers may consume it but production must never emit it. */
+export function createHybridTextOpenWorldProductRuntimePackageFixtureV1(
+  textOpenWorldVNext: TextOpenWorldRuntimePackageV1,
+): ProductRuntimePackageV1 {
+  const legacy = createLegacyTextOpenWorldProductRuntimePackageFixtureV1(
+    textOpenWorldVNext.sourceManifest.contentHash,
+  )
   return parseProductRuntimePackageV1({
-    schema: hybrid.schema,
-    version: hybrid.version,
-    productType: hybrid.productType,
+    ...legacy,
     definition: {
-      ...hybrid.definition,
-      enabledCapabilities: ['narrative', 'textOpenWorldVNext'],
+      ...legacy.definition,
+      enabledCapabilities: [...legacy.definition.enabledCapabilities, 'textOpenWorldVNext'],
     },
-    sourceWorld: hybrid.sourceWorld,
-    narrative: hybrid.narrative,
     textOpenWorldVNext,
   })
 }
@@ -197,7 +198,7 @@ export function createTextOpenWorldPlayerSessionRowFixtureV1(input: {
 export async function createGovernedTextOpenWorldReleaseFixtureV1(input: {
   name: string
   textOpenWorldVNext: TextOpenWorldRuntimePackageV1
-  runtimeShape?: 'hybrid' | 'vnext-only'
+  runtimeShape?: 'vnext-only' | 'legacy-only' | 'hybrid-compatibility'
   releaseVersion?: number
 }) {
   const created = await createWorkspace({
@@ -205,9 +206,11 @@ export async function createGovernedTextOpenWorldReleaseFixtureV1(input: {
     genres: ['open-world'], status: 'drafting', description: '', targetWordCount: 1,
     enableMultiWorld: false,
   }, { purpose: 'world-engine', kind: 'novel', novelProfile: 'long' })
-  const runtimePackage = input.runtimeShape === 'vnext-only'
-    ? createTextOpenWorldVNextOnlyProductRuntimePackageFixtureV1(input.textOpenWorldVNext)
-    : createTextOpenWorldProductRuntimePackageFixtureV1(input.textOpenWorldVNext)
+  const runtimePackage = input.runtimeShape === 'legacy-only'
+    ? createLegacyTextOpenWorldProductRuntimePackageFixtureV1(input.textOpenWorldVNext.sourceManifest.contentHash)
+    : input.runtimeShape === 'hybrid-compatibility'
+      ? createHybridTextOpenWorldProductRuntimePackageFixtureV1(input.textOpenWorldVNext)
+      : createTextOpenWorldProductRuntimePackageFixtureV1(input.textOpenWorldVNext)
   const productionKey = `fixture.text-open-world.${crypto.randomUUID()}`
   const manifest = await createFixtureProductReleaseManifestV1({
     runtimePackage,
@@ -235,7 +238,7 @@ export async function createGovernedTextOpenWorldReleaseFixtureV1(input: {
 export async function createGovernedTextOpenWorldSessionFixtureV1(input: {
   name: string
   textOpenWorldVNext: TextOpenWorldRuntimePackageV1
-  runtimeShape?: 'hybrid' | 'vnext-only'
+  runtimeShape?: 'vnext-only' | 'legacy-only' | 'hybrid-compatibility'
   title?: string
   seed?: string
   status?: ProductRuntimeSession['status']

@@ -9,23 +9,19 @@ import {
   type TextOpenWorldSaveOwnerV1,
 } from '../../src/lib/open-world/player-saves'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
-import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { createTextOpenWorldInstance } from '../../src/lib/product/runtime-instances'
 import type { ProductRelease } from '../../src/lib/types'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import {
-  createTextOpenWorldProductRuntimePackageFixtureV1,
+  createLegacyTextOpenWorldProductRuntimePackageFixtureV1,
 } from '../helpers/text-open-world-product-session'
 import { createFixtureProductReleaseManifestV1 } from '../helpers/product-release-v1'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
 async function legacyFixture() {
-  const hybrid = createTextOpenWorldProductRuntimePackageFixtureV1(createTextOpenWorldVNextFixture())
-  const raw = structuredClone(hybrid) as any
-  delete raw.textOpenWorldVNext
-  raw.definition.enabledCapabilities = raw.definition.enabledCapabilities
-    .filter((capability: string) => capability !== 'textOpenWorldVNext')
-  const runtimePackage = parseProductRuntimePackageV1(raw)
+  const runtimePackage = createLegacyTextOpenWorldProductRuntimePackageFixtureV1(
+    createTextOpenWorldVNextFixture().sourceManifest.contentHash,
+  )
   const workspace = await createWorkspace({
     name: `旧版开放世界-${crypto.randomUUID()}`,
     genres: ['open-world'],
