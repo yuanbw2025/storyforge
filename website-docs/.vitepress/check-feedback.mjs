@@ -1,4 +1,5 @@
-/* global console, document, File, DataTransfer, DragEvent, ClipboardEvent, Uint8Array */
+/* global console, document, File, DataTransfer, DragEvent, ClipboardEvent, Event */
+import { Buffer } from 'node:buffer'
 import { chromium, expect } from '@playwright/test'
 
 const browser = await chromium.launch()
