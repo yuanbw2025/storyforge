@@ -5,6 +5,7 @@ import { enLabels } from './en-labels'
 const githubUrl = 'https://github.com/yuanbw2025/storyforge'
 
 const zhNav = [
+  { text: '回到官网', link: 'https://storyforge-lab.com/', target: '_self' },
   { text: '知识库首页', link: '/' },
   { text: 'Prompt 与创作方法', link: '/prompts/' },
   { text: '更新日志', link: '/updates/changelog' },
@@ -227,7 +228,7 @@ function translateSidebar(items: DefaultTheme.SidebarItem[]): DefaultTheme.Sideb
   })
 }
 const enSidebar = translateSidebar(zhSidebar)
-const enNav = zhNav.map(item => ({ text: enLabels[item.text], link: item.link.startsWith('/') ? '/en' + item.link : item.link }))
+const enNav = zhNav.map(item => ({ ...item, text: enLabels[item.text], link: item.link.startsWith('/') ? '/en' + item.link : item.link }))
 
 export default defineConfig({
   srcExclude: ['**/AGENTS.md'],

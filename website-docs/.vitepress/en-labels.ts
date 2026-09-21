@@ -132,5 +132,6 @@ export const enLabels: Record<string, string> = {
   '旧 Bug 收集': 'Old bug collection (Chinese)',
   '旧功能建议收集': 'Old feature requests (Chinese)',
   '知识库首页': 'Knowledge base',
+  '回到官网': 'Official website',
   'GitHub': 'GitHub',
 }

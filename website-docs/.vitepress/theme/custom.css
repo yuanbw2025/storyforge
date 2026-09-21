@@ -14,16 +14,18 @@ body { background-image:radial-gradient(circle at 12% 0%,rgba(51,139,118,.12),tr
 .source-note{font-size:13px;color:var(--vp-c-text-2)}
 
 /* Keep full navigation labels; use the existing accessible menu before they crowd. */
-@media (max-width:1279px){
-  .VPNavBar .VPNavBarMenu,.VPNavBar .VPNavBarExtra{display:none}
+@media (max-width:1439px){
+  .VPNavBar .VPNavBarMenu,.VPNavBar .VPNavBarExtra,.VPNavBar .VPNavBarTranslations,.VPNavBar .VPNavBarAppearance,.VPNavBar .VPNavBarSocialLinks{display:none}
   .VPNavBar .VPNavBarHamburger{display:flex}
   .VPNav .VPNavScreen{display:block}
 }
-@media (min-width:1280px) and (max-width:1599px){
+@media (min-width:1440px) and (max-width:1799px){
   .VPNavBarSearch .DocSearch-Button-Placeholder,.VPNavBarSearch .DocSearch-Button-Keys{display:none}
   .VPNavBarSearch{padding-left:12px}
   .VPNavBar .VPNavBarSocialLinks{display:none}
 }
+.VPNavBarMenu a[href="https://storyforge-lab.com/"]{align-self:center;height:34px;margin-right:8px;padding:0 12px;border:1px solid var(--vp-c-brand-1);border-radius:6px;color:var(--vp-c-brand-1);line-height:32px;white-space:nowrap}
+.VPNavBarMenu a[href="https://storyforge-lab.com/"]:hover{background:var(--vp-c-brand-soft)}
 
 .knowledge-banner{display:flex;align-items:center;gap:20px;min-height:156px;margin:0 0 32px;padding:26px 30px;border:1px solid var(--vp-c-border);border-left:4px solid var(--vp-c-brand-1);border-radius:16px;background:var(--vp-c-bg-soft);box-sizing:border-box}
 .knowledge-banner__mark{width:64px;height:64px;flex:none;object-fit:contain}
