@@ -1434,13 +1434,17 @@ export const CONTEXT_SOURCES: ContextSource[] = [
   },
   {
     key: 'product-production.adventure-quality-inputs',
-    label: '文字冒险叙事质量审查投影',
+    label: '文字冒险分区叙事质量审查投影',
     scope: 'project',
     layer: 'L0',
     ownerFrom: 'work',
     budgetTokens: 32_000,
     protectedFromTrim: true,
-    enabled: input => Number.isInteger(input.productBuildId) && !!input.productArtifactKeys?.length,
+    enabled: input => Number.isInteger(input.productBuildId)
+      && /^content\.adventure-quality-review(?:\.(?:structure|act-[123]))?$/.test(
+        input.productProductionTaskKey ?? '',
+      )
+      && !!input.productArtifactKeys?.length,
     read: readTextAdventureQualityInputsV1,
   },
   {

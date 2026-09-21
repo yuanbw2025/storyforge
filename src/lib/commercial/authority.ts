@@ -1,5 +1,9 @@
 import { hashCanonicalValue } from '../agent/run/hash'
 import { isProductionProductKindV1, type ProductionProductKindV1 } from '../types'
+import {
+  compareCommercialDiscoveryOrderV1,
+  normalizeCommercialDiscoveryQueryV1,
+} from './discovery-cursor'
 import { parseCommercialPaymentEventV1, type CommercialPaymentEventV1 } from './webhook'
 
 export type CommercialListingStatusV1 = 'draft' | 'submitted' | 'changes-requested' | 'published' | 'suspended' | 'withdrawn'
@@ -567,12 +571,12 @@ export class CommercialPlatformAuthorityV1 {
   }
 
   discover(input: { productType?: ProductionProductKindV1; query?: string }): CommercialListingV1[] {
-    const query = input.query?.trim().toLocaleLowerCase() ?? ''
+    const query = normalizeCommercialDiscoveryQueryV1(input.query)
     return [...this.listings.values()]
       .filter(listing => listing.status === 'published')
       .filter(listing => !input.productType || listing.productType === input.productType)
-      .filter(listing => !query || `${listing.title}\n${listing.summary}`.toLocaleLowerCase().includes(query))
-      .sort((left, right) => right.updatedAt - left.updatedAt || left.listingId.localeCompare(right.listingId))
+      .filter(listing => !query || `${listing.title}\n${listing.summary}`.toLowerCase().includes(query))
+      .sort(compareCommercialDiscoveryOrderV1)
       .map(publicListing)
   }
 
@@ -591,6 +595,14 @@ export class CommercialPlatformAuthorityV1 {
     const userId = stableKey(input.principal.userId, 'principal.userId')
     const listing = this.requireListing(input.listingId)
     if (listing.creatorId !== userId) fail('forbidden', '目录项不属于当前创作者')
+    return publicListing(listing)
+  }
+
+  listingForAcquisition(input: { listingId: string }): CommercialListingV1 {
+    const listing = this.requireListing(input.listingId)
+    if (listing.status !== 'published' || !listing.rightsConfirmed) {
+      fail('listing_unavailable', '目录项当前不可领取或购买')
+    }
     return publicListing(listing)
   }
 

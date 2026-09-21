@@ -54,6 +54,7 @@ import { evaluateProductRuntimeProductQualityV1 } from '../product-production/pr
 import { assertRecordInScope, resolveScope } from '../workspace/scope'
 
 export const TEXT_ADVENTURE_COMMUNITY_PACKAGE_SCHEMA_V1 = 'storyforge.text-adventure-community-package' as const
+export const TEXT_ADVENTURE_COMMUNITY_SUBMISSION_SCHEMA_V1 = 'storyforge.text-adventure-community-submission' as const
 export const TEXT_ADVENTURE_COMMUNITY_PACKAGE_FILE_EXTENSION_V1 = '.storyforge-adventure.json'
 export const MAXIMUM_TEXT_ADVENTURE_COMMUNITY_PACKAGE_FILE_BYTES_V1 = 350 * 1024 * 1024
 
@@ -171,6 +172,19 @@ export interface TextAdventureCommunityPackageV1 {
   candidatePackageHash: string
 }
 
+/**
+ * Network handoff for the hosted review service. The distribution bundle is
+ * carried once beside this envelope; the server reconstructs and verifies the
+ * complete community package instead of trusting the client dossier.
+ */
+export interface TextAdventureCommunitySubmissionV1 {
+  schema: typeof TEXT_ADVENTURE_COMMUNITY_SUBMISSION_SCHEMA_V1
+  version: 1
+  dossier: TextAdventureCommunityCandidateDossierV1
+  evidence: TextAdventureCommunityPackageV1['evidence']
+  candidateHash: string
+}
+
 function fail(message: string): never {
   throw new Error(`[text-adventure-community-package] ${message}`)
 }
@@ -186,6 +200,103 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[], labe
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
     fail(`${label} 字段不符合合同:${actual.join(',')}`)
   }
+}
+
+function dossierText(value: unknown, label: string, maximum = 2_000): string {
+  if (typeof value !== 'string' || !value.trim() || value.length > maximum) fail(`${label} 无效`)
+  return value.trim().normalize('NFC')
+}
+
+function dossierNumber(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) fail(`${label} 无效`)
+  return value
+}
+
+/** Strict public parser used by both the local package and remote review UI. */
+export function parseTextAdventureCommunityCandidateDossierV1(
+  value: unknown,
+): TextAdventureCommunityCandidateDossierV1 {
+  const row = record(value, 'dossier')
+  exactKeys(row, [
+    'schema', 'version', 'status', 'title', 'releaseContentHash', 'releaseIdentityHash',
+    'runtimePackageHash', 'distributionBundleHash', 'sourceWorldHash', 'buildNumber',
+    'metrics', 'systems', 'evidence', 'offlineFallback',
+  ], 'dossier')
+  if (row.schema !== 'storyforge.text-adventure-community-candidate-dossier'
+    || row.version !== 1 || row.status !== 'eligible-for-community-submission'
+    || row.offlineFallback !== 'text-only') fail('dossier schema/version/status 无效')
+  for (const [key, candidate] of Object.entries({
+    releaseContentHash: row.releaseContentHash,
+    releaseIdentityHash: row.releaseIdentityHash,
+    runtimePackageHash: row.runtimePackageHash,
+    distributionBundleHash: row.distributionBundleHash,
+    sourceWorldHash: row.sourceWorldHash,
+  })) if (!isSha256Hash(candidate)) fail(`dossier.${key} 不是 sha256`)
+  if (!Number.isInteger(row.buildNumber) || Number(row.buildNumber) < 1) fail('dossier.buildNumber 无效')
+
+  const metrics = record(row.metrics, 'dossier.metrics')
+  const metricKeys = [
+    'routeCount', 'reachableEndingCount', 'minimumRouteTextUnits', 'maximumRouteTextUnits',
+    'totalPlayableTextUnits', 'estimatedMinimumRouteMinutes', 'minimumRouteDialogueTurns',
+    'minimumRouteNarrativeChoices', 'minimumRouteStatefulDecisions', 'authoredNpcCount',
+    'talkActionCount', 'mainQuestStageCount', 'mainQuestObjectiveCount', 'minimumMainProgressActions',
+  ] as const
+  exactKeys(metrics, metricKeys, 'dossier.metrics')
+  for (const key of metricKeys) dossierNumber(metrics[key], `dossier.metrics.${key}`)
+  const systems = record(row.systems, 'dossier.systems')
+  const systemKeys = [
+    'regions', 'areas', 'locations', 'scenes', 'mainQuests', 'sideQuests', 'storylets',
+    'items', 'equipmentItems', 'abilities', 'resources', 'mediaAssets',
+  ] as const
+  exactKeys(systems, systemKeys, 'dossier.systems')
+  for (const key of systemKeys) {
+    if (!Number.isInteger(systems[key])) fail(`dossier.systems.${key} 无效`)
+    dossierNumber(systems[key], `dossier.systems.${key}`)
+  }
+
+  const evidence = record(row.evidence, 'dossier.evidence')
+  exactKeys(evidence, [
+    'buildManifestHash', 'qualityReportHash', 'autoplayArtifactHash', 'gateReceiptHashes',
+    'mediaAuditHash', 'visualReviewHash', 'authorMainRouteEndingKey',
+    'authorMainRouteChoiceCount', 'humanPlaytest',
+  ], 'dossier.evidence')
+  for (const key of ['buildManifestHash', 'qualityReportHash', 'autoplayArtifactHash'] as const) {
+    if (!isSha256Hash(evidence[key])) fail(`dossier.evidence.${key} 不是 sha256`)
+  }
+  if (!Array.isArray(evidence.gateReceiptHashes) || evidence.gateReceiptHashes.length > 16
+    || evidence.gateReceiptHashes.length === 0
+    || evidence.gateReceiptHashes.some(item => !isSha256Hash(item))
+    || new Set(evidence.gateReceiptHashes).size !== evidence.gateReceiptHashes.length) {
+    fail('dossier.evidence.gateReceiptHashes 无效')
+  }
+  for (const key of ['mediaAuditHash', 'visualReviewHash'] as const) {
+    if (evidence[key] != null && !isSha256Hash(evidence[key])) fail(`dossier.evidence.${key} 不是 sha256/null`)
+  }
+  dossierText(evidence.authorMainRouteEndingKey, 'dossier.evidence.authorMainRouteEndingKey', 200)
+  if (!Number.isInteger(evidence.authorMainRouteChoiceCount)
+    || Number(evidence.authorMainRouteChoiceCount) < 0) fail('dossier.evidence.authorMainRouteChoiceCount 无效')
+  const humanPlaytest = record(evidence.humanPlaytest, 'dossier.evidence.humanPlaytest')
+  exactKeys(humanPlaytest, ['author', 'independentPlayer'], 'dossier.evidence.humanPlaytest')
+  for (const role of ['author', 'independentPlayer'] as const) {
+    const participant = record(humanPlaytest[role], `dossier.evidence.humanPlaytest.${role}`)
+    exactKeys(participant, [
+      'participantLabel', 'endingKey', 'elapsedMs', 'choiceCount', 'actionCount',
+      'meaningfulActionCount', 'dialogueActionCount', 'ratings',
+    ], `dossier.evidence.humanPlaytest.${role}`)
+    dossierText(participant.participantLabel, `${role}.participantLabel`, 200)
+    dossierText(participant.endingKey, `${role}.endingKey`, 200)
+    for (const key of ['elapsedMs', 'choiceCount', 'actionCount', 'meaningfulActionCount', 'dialogueActionCount'] as const) {
+      if (!Number.isInteger(participant[key])) fail(`${role}.${key} 无效`)
+      dossierNumber(participant[key], `${role}.${key}`)
+    }
+    const ratings = record(participant.ratings, `${role}.ratings`)
+    exactKeys(ratings, ['comprehension', 'pacing', 'agency', 'emotionalImpact'], `${role}.ratings`)
+    for (const key of ['comprehension', 'pacing', 'agency', 'emotionalImpact']) {
+      if (!Number.isInteger(ratings[key]) || Number(ratings[key]) < 1 || Number(ratings[key]) > 5) fail(`${role}.ratings.${key} 无效`)
+    }
+  }
+  dossierText(row.title, 'dossier.title', 300)
+  return structuredClone(row) as unknown as TextAdventureCommunityCandidateDossierV1
 }
 
 function safeArtifactKey(value: unknown, label: string): string {
@@ -536,6 +647,41 @@ export async function verifyTextAdventureCommunityPackageV1(value: unknown): Pro
   }
   if (await hashProductProductionValueV2(body) !== raw.candidatePackageHash) fail('candidatePackageHash 不一致')
   return { ...body, candidatePackageHash: raw.candidatePackageHash }
+}
+
+export function createTextAdventureCommunitySubmissionV1(
+  value: TextAdventureCommunityPackageV1,
+): TextAdventureCommunitySubmissionV1 {
+  return {
+    schema: TEXT_ADVENTURE_COMMUNITY_SUBMISSION_SCHEMA_V1,
+    version: 1,
+    dossier: structuredClone(value.dossier),
+    evidence: structuredClone(value.evidence),
+    candidateHash: value.candidatePackageHash,
+  }
+}
+
+export async function verifyTextAdventureCommunitySubmissionV1(input: {
+  submission: unknown
+  distributionBundle: unknown
+}): Promise<{ submission: TextAdventureCommunitySubmissionV1; package: TextAdventureCommunityPackageV1 }> {
+  const raw = record(input.submission, 'submission')
+  exactKeys(raw, ['schema', 'version', 'dossier', 'evidence', 'candidateHash'], 'submission')
+  if (raw.schema !== TEXT_ADVENTURE_COMMUNITY_SUBMISSION_SCHEMA_V1
+    || raw.version !== 1
+    || !isSha256Hash(raw.candidateHash)) fail('远程候选交接 schema/version/hash 无效')
+  const verified = await verifyTextAdventureCommunityPackageV1({
+    schema: TEXT_ADVENTURE_COMMUNITY_PACKAGE_SCHEMA_V1,
+    version: 1,
+    distributionBundle: input.distributionBundle,
+    dossier: raw.dossier,
+    evidence: raw.evidence,
+    candidatePackageHash: raw.candidateHash,
+  })
+  return {
+    submission: createTextAdventureCommunitySubmissionV1(verified),
+    package: verified,
+  }
 }
 
 export async function createTextAdventureCommunityPackageV1(input: {

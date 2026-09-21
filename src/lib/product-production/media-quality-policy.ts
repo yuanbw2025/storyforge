@@ -6,6 +6,8 @@ export const PRODUCT_COMMERCIAL_MEDIA_POLICY_V2 = Object.freeze({
   maximumImageBytes: 12 * 1024 * 1024,
   minimumBackgroundWidth: 1_280,
   minimumBackgroundHeight: 720,
+  minimumDetailWidth: 1_024,
+  minimumDetailHeight: 1_024,
   minimumPortraitHeight: 1_024,
   minimumUiWidth: 256,
   minimumUiHeight: 256,
@@ -42,11 +44,27 @@ export function evaluateProductMediaCommercialPolicyV2(input: {
   const failures: string[] = []
   if (!asset.altText.trim()) failures.push('alt-text-missing')
   if (asset.mimeType.startsWith('image/')) {
+    const isNarrativeObjectDetail = asset.kind === 'cg'
+      && /^important-item(?:-|$)/u.test(asset.sceneTag)
+    const knownCharacterKeys = new Set(
+      input.runtimePackage.interaction?.profiles.map(profile => profile.characterKey) ?? [],
+    )
+    const isLegacyCharacterAnchor = /^(?:character:[0-9]+|intent:protagonist)$/u.test(asset.characterTag)
+    const isRegisteredCharacterAnchor = knownCharacterKeys.has(asset.characterTag)
+    const playerKey = input.runtimePackage.adventure?.playerKey
+    const isPlayerCharacterAnchor = asset.sceneTag === 'protagonist-anchor'
+      && playerKey != null
+      && [playerKey, `character.${playerKey}`, `character:${playerKey}`].includes(asset.characterTag)
     if (asset.byteSize > policy.maximumImageBytes) failures.push('image-byte-size-exceeded')
-    if ((asset.kind === 'background' || asset.kind === 'cg')
+    if ((asset.kind === 'background' || asset.kind === 'cg' && !isNarrativeObjectDetail)
       && (asset.width == null || asset.height == null
         || asset.width < policy.minimumBackgroundWidth || asset.height < policy.minimumBackgroundHeight)) {
       failures.push('image-background-dimensions-below-commercial-minimum')
+    }
+    if (isNarrativeObjectDetail
+      && (asset.width == null || asset.height == null
+        || asset.width < policy.minimumDetailWidth || asset.height < policy.minimumDetailHeight)) {
+      failures.push('image-detail-dimensions-below-commercial-minimum')
     }
     if ((asset.kind === 'character-pose' || asset.kind === 'character-expression')
       && (asset.height == null || asset.height < policy.minimumPortraitHeight)) {
@@ -55,7 +73,7 @@ export function evaluateProductMediaCommercialPolicyV2(input: {
     if ((asset.kind === 'character-pose' || asset.kind === 'character-expression')
       && input.probe.decodedHasAlpha !== true) failures.push('image-character-alpha-missing')
     if ((asset.kind === 'character-pose' || asset.kind === 'character-expression')
-      && !(/^(?:character:[0-9]+|intent:protagonist)$/.test(asset.characterTag))) {
+      && !isLegacyCharacterAnchor && !isRegisteredCharacterAnchor && !isPlayerCharacterAnchor) {
       failures.push('image-character-anchor-missing')
     }
     if (asset.kind === 'ui' && (asset.width == null || asset.height == null

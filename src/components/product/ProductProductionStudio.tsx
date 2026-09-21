@@ -7,6 +7,7 @@ import {
   authorizeProductProductionStartV1,
   archiveProductProductionV1,
   beginProductProductionEvolutionV1,
+  canRepairTextAdventureRuntimeCopyV1,
   canRepairTextAdventureVisualContractV1,
   canUpgradeTextAdventureProductionPlanV1,
   canRetryProductProductionBlockerV1,
@@ -72,11 +73,13 @@ import { minimumTextAdventureCommercialImageCountV1 } from '../../lib/adventure/
 import { useAIConfigStore } from '../../stores/ai-config'
 import { resolveRequestConfig } from '../../lib/ai/client'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
+import { hashProductProductionValueV2 } from '../../lib/product-production/hash'
+import { isTextAdventureReadableGlyphViolationV1 } from '../../lib/product-production/text-adventure-quality'
 
-function visualReviewRepairTargets(artifact: ProductProductionReviewArtifactV1 | undefined): Array<{
+export function visualReviewRepairTargets(artifact: ProductProductionReviewArtifactV1 | undefined): Array<{
   artifactKey: string
   verdict: string
-  issues: Array<{ severity: string; detail: string; recommendation: string }>
+  issues: Array<{ severity: string; category: string; detail: string; recommendation: string }>
 }> {
   if (!artifact?.payload || typeof artifact.payload !== 'object' || Array.isArray(artifact.payload)) return []
   const reviews = (artifact.payload as Record<string, unknown>).reviews
@@ -88,9 +91,14 @@ function visualReviewRepairTargets(artifact: ProductProductionReviewArtifactV1 |
     const issues = row.issues.flatMap(issueValue => {
       if (!issueValue || typeof issueValue !== 'object' || Array.isArray(issueValue)) return []
       const issue = issueValue as Record<string, unknown>
-      return typeof issue.severity === 'string' && typeof issue.detail === 'string'
-        && typeof issue.recommendation === 'string'
-        ? [{ severity: issue.severity, detail: issue.detail, recommendation: issue.recommendation }]
+      return typeof issue.severity === 'string' && typeof issue.category === 'string'
+        && typeof issue.detail === 'string' && typeof issue.recommendation === 'string'
+        ? [{
+            severity: isTextAdventureReadableGlyphViolationV1(issue) ? 'blocking' : issue.severity,
+            category: issue.category,
+            detail: issue.detail,
+            recommendation: issue.recommendation,
+          }]
         : []
     })
     const verdict = String(row.verdict ?? '')
@@ -148,27 +156,51 @@ function formatDurationMs(value: number): string {
   return `${String(Math.floor(totalSeconds / 60)).padStart(2, '0')}:${String(totalSeconds % 60).padStart(2, '0')}`
 }
 
-function TextAdventureMediaThumbnail(props: { scope: WorkspaceScope; asset: TextAdventureMediaAssetV1 }) {
-  const [url, setUrl] = useState('')
-  const [failed, setFailed] = useState(false)
+export function TextAdventureMediaThumbnail(props: { scope: WorkspaceScope; asset: TextAdventureMediaAssetV1 }) {
+  const identity = `${props.scope.projectId}:${props.scope.worldId}:${props.scope.workId}:`
+    + `${props.asset.assetKey}:${props.asset.blobObjectId}:${props.asset.contentHash}`
+  const [loaded, setLoaded] = useState<{ identity: string; url: string } | null>(null)
+  const [failedIdentity, setFailedIdentity] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
   useEffect(() => {
     let active = true
     let objectUrl = ''
+    setFailedIdentity(null)
+    setExpanded(false)
     void readTextAdventureMediaAssetBytesV1({ scope: props.scope, asset: props.asset })
       .then(data => {
         if (!active) return
         objectUrl = URL.createObjectURL(new Blob([data], { type: props.asset.mimeType }))
-        setUrl(objectUrl)
+        setLoaded({ identity, url: objectUrl })
       })
-      .catch(() => { if (active) setFailed(true) })
+      .catch(() => { if (active) setFailedIdentity(identity) })
     return () => {
       active = false
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [props.asset, props.scope])
-  if (failed) return <div className="flex aspect-video items-center justify-center bg-error/5 text-[10px] text-error">图片校验失败</div>
-  if (!url) return <div className="flex aspect-video items-center justify-center bg-bg-surface text-[10px] text-text-muted">正在校验图片…</div>
-  return <img src={url} alt={String(props.asset.metadata.altText ?? '')} className="aspect-video w-full object-cover" />
+  }, [identity, props.asset, props.scope])
+  useEffect(() => {
+    if (!expanded) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false)
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [expanded])
+  const url = loaded?.identity === identity ? loaded.url : ''
+  if (failedIdentity === identity) return <div className="flex min-h-40 items-center justify-center bg-error/5 text-[10px] text-error">图片校验失败</div>
+  if (!url) return <div className="flex min-h-40 items-center justify-center bg-bg-surface text-[10px] text-text-muted">正在校验图片…</div>
+  const altText = String(props.asset.metadata.altText ?? '')
+  return <>
+    <div className="relative flex min-h-40 items-center justify-center bg-bg-surface p-2">
+      <img src={url} alt={altText} className="max-h-[32rem] w-full object-contain" data-testid={`text-adventure-media-image-${props.asset.artifactKey}`} />
+      <button type="button" onClick={() => setExpanded(true)} className="absolute bottom-3 right-3 rounded border border-border bg-bg-base/90 px-2 py-1 text-[10px] text-text-primary shadow" aria-label={`放大查看 ${props.asset.artifactKey}`}>放大原图</button>
+    </div>
+    {expanded && <div role="dialog" aria-modal="true" aria-label={`${props.asset.artifactKey} 原图审查`} className="fixed inset-0 z-50 flex flex-col bg-black/90 p-4" data-testid={`text-adventure-media-lightbox-${props.asset.artifactKey}`}>
+      <div className="mb-3 flex items-center justify-between gap-3 text-xs text-white"><span>{props.asset.artifactKey} · 原比例完整图</span><div className="flex gap-2"><a href={url} target="_blank" rel="noreferrer" className="rounded border border-white/40 px-3 py-1.5">新窗口打开</a><button type="button" onClick={() => setExpanded(false)} className="rounded border border-white/40 px-3 py-1.5">关闭</button></div></div>
+      <img src={url} alt={altText} className="min-h-0 flex-1 object-contain" />
+    </div>}
+  </>
 }
 
 function nonEmptyLines(value: string): string[] {
@@ -228,9 +260,10 @@ function reviewArtifactLabel(key: string): string {
     'content.product-module': '角色属性、资源与装备系统',
     'content.adventure-side-quests': '支线任务包',
     'content.adventure-ambient-events': '区域与随机事件包',
-    'quality.adventure-review': '独立叙事质量审查',
+    'quality.adventure-review': '叙事质量确定性总报告',
     'media.requirements': '美术需求清单',
     'media.visual-bible': '冻结视觉圣经与角色锚点',
+    'media.vision-preflight': '真实图片输入能力预检',
     'media.anchor-decision': '角色视觉锚点作者确认回执',
     'media.audit': '美术需求、素材与运行引用审计',
     'runtime.package': '装配后的可玩运行包',
@@ -253,6 +286,16 @@ function productionTaskPresentation(taskKey: string): { label: string; owner: st
     label: `第${sceneScriptPart[1]}幕正文 ${sceneScriptPart[2]}/2`,
     owner: `分场叙事作者 · 第${sceneScriptPart[1]}幕分包 ${sceneScriptPart[2]} Run`,
   }
+  const narrativeReviewBatch = /^content\.adventure-quality-review\.(structure|act-([1-3]))$/.exec(taskKey)
+  if (narrativeReviewBatch) return narrativeReviewBatch[1] === 'structure'
+    ? {
+        label: '叙事结构专业审查',
+        owner: '连续性编辑 · 跨幕结构 Run',
+      }
+    : {
+        label: `第${narrativeReviewBatch[2]}幕叙事专业审查`,
+        owner: `连续性编辑 · 第${narrativeReviewBatch[2]}幕 Run`,
+      }
   const visualReviewBatch = /^media\.visual-quality-review\.batch-([1-9]\d*)$/.exec(taskKey)
   if (visualReviewBatch) return {
     label: `视觉质量审查 · 第 ${visualReviewBatch[1]} 批`,
@@ -290,9 +333,10 @@ function productionTaskPresentation(taskKey: string): { label: string; owner: st
     'content.dialogue-pass.act-3': ['对白审校 3/3', '第三幕独立对白编辑'],
     'integration.narrative': ['三幕叙事确定性装配', '叙事装配器'],
     'content.narrative': ['装配后的主线与分支叙事', '叙事装配器'],
-    'content.adventure-quality-review': ['叙事连续性独立审查', '连续性与内容审校'],
+    'content.adventure-quality-review': ['叙事质量确定性总报告', '确定性质量汇总器'],
     'media.requirements': ['美术需求清单', '美术总监'],
     'media.visual-bible.compile': ['冻结视觉圣经与角色锚点', '确定性视觉圣经编译器'],
+    'media.vision-preflight': ['真实图片输入能力预检', '图片能力审计员 · 独立 Run'],
     'media.anchor-author-gate': ['角色视觉锚点作者确认', '确定性治理系统'],
     'media.visual-quality-review': ['视觉质量审查总报告', '确定性视觉审查汇总器'],
     'media.visual': ['受控图片生成与验收', '媒资 Provider'],
@@ -346,6 +390,8 @@ function sourceDecisionDisplay(
 interface MediaAnchorDisplayV1 {
   style: string
   palette: string[]
+  compositionRules: string[]
+  continuityRules: string[]
   characterAnchors: Array<{
     characterKey: string
     name: string
@@ -353,6 +399,14 @@ interface MediaAnchorDisplayV1 {
     identity: string
     visualAnchor: string
     palette: string[]
+    requirementArtifactKeys: string[]
+    hardConstraints: string[]
+  }>
+  assetRequirements: Array<{
+    artifactKey: string
+    mediaKind: string
+    sceneTag: string
+    beatKey: string
   }>
 }
 
@@ -362,13 +416,16 @@ function mediaAnchorDisplay(
   const artifact = artifacts.find(item => item.artifactKey === 'media.visual-bible')
   if (!artifact?.payload || typeof artifact.payload !== 'object' || Array.isArray(artifact.payload)) return null
   const row = artifact.payload as Record<string, unknown>
-  if (typeof row.style !== 'string' || !Array.isArray(row.palette) || !Array.isArray(row.characterAnchors)) return null
+  if (typeof row.style !== 'string' || !Array.isArray(row.palette)
+    || !Array.isArray(row.compositionRules) || !Array.isArray(row.continuityRules)
+    || !Array.isArray(row.characterAnchors) || !Array.isArray(row.assetRequirements)) return null
   const characterAnchors = row.characterAnchors.flatMap(value => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return []
     const anchor = value as Record<string, unknown>
     return typeof anchor.characterKey === 'string' && typeof anchor.name === 'string'
       && typeof anchor.role === 'string' && typeof anchor.identity === 'string'
       && typeof anchor.visualAnchor === 'string' && Array.isArray(anchor.palette)
+      && Array.isArray(anchor.requirementArtifactKeys) && Array.isArray(anchor.hardConstraints)
       ? [{
           characterKey: anchor.characterKey,
           name: anchor.name,
@@ -376,14 +433,110 @@ function mediaAnchorDisplay(
           identity: anchor.identity,
           visualAnchor: anchor.visualAnchor,
           palette: anchor.palette.filter((color): color is string => typeof color === 'string'),
+          requirementArtifactKeys: anchor.requirementArtifactKeys.filter((key): key is string => typeof key === 'string'),
+          hardConstraints: anchor.hardConstraints.filter((rule): rule is string => typeof rule === 'string'),
         }]
       : []
+  })
+  const assetRequirements = row.assetRequirements.flatMap(value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+    const requirement = value as Record<string, unknown>
+    return typeof requirement.artifactKey === 'string' && typeof requirement.mediaKind === 'string'
+      && typeof requirement.sceneTag === 'string' && typeof requirement.beatKey === 'string'
+      ? [{
+          artifactKey: requirement.artifactKey, mediaKind: requirement.mediaKind,
+          sceneTag: requirement.sceneTag, beatKey: requirement.beatKey,
+        }] : []
   })
   return {
     style: row.style,
     palette: row.palette.filter((color): color is string => typeof color === 'string'),
+    compositionRules: row.compositionRules.filter((rule): rule is string => typeof rule === 'string'),
+    continuityRules: row.continuityRules.filter((rule): rule is string => typeof rule === 'string'),
     characterAnchors,
+    assetRequirements,
   }
+}
+
+interface MediaRequirementDisplayV1 {
+  artifactKey: string
+  mediaKind: string
+  sceneTag: string
+  beatKey: string
+  prompt: string
+  altText: string
+  width: number
+  height: number
+  characterAnchorRefs: string[]
+  hardConstraints: string[]
+}
+
+function mediaRequirementDisplay(
+  artifacts: ProductProductionReviewArtifactV1[],
+): Map<string, MediaRequirementDisplayV1> {
+  const artifact = artifacts.find(item => item.artifactKey === 'media.requirements')
+  if (!artifact?.payload || typeof artifact.payload !== 'object' || Array.isArray(artifact.payload)) return new Map()
+  const visual = (artifact.payload as Record<string, unknown>).visual
+  if (!Array.isArray(visual)) return new Map()
+  return new Map(visual.flatMap(value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+    const item = value as Record<string, unknown>
+    if (typeof item.artifactKey !== 'string' || typeof item.mediaKind !== 'string'
+      || typeof item.sceneTag !== 'string' || typeof item.beatKey !== 'string'
+      || typeof item.prompt !== 'string' || typeof item.altText !== 'string'
+      || !Number.isFinite(item.width) || !Number.isFinite(item.height)
+      || !Array.isArray(item.characterAnchorRefs) || !Array.isArray(item.hardConstraints)) return []
+    return [[item.artifactKey, {
+      artifactKey: item.artifactKey, mediaKind: item.mediaKind,
+      sceneTag: item.sceneTag, beatKey: item.beatKey, prompt: item.prompt, altText: item.altText,
+      width: Number(item.width), height: Number(item.height),
+      characterAnchorRefs: item.characterAnchorRefs.filter((key): key is string => typeof key === 'string'),
+      hardConstraints: item.hardConstraints.filter((rule): rule is string => typeof rule === 'string'),
+    }] as const]
+  }))
+}
+
+interface MediaVisualReviewDisplayV1 {
+  verdict: string
+  scores: Record<string, number> | null
+  issues: Array<{ severity: string; category: string; detail: string; recommendation: string }>
+}
+
+function mediaVisualReviewDisplay(
+  artifacts: ProductProductionReviewArtifactV1[],
+): Map<string, MediaVisualReviewDisplayV1> {
+  const artifact = artifacts.find(item => item.artifactKey === 'quality.visual-review')
+  if (!artifact?.payload || typeof artifact.payload !== 'object' || Array.isArray(artifact.payload)) return new Map()
+  const reviews = (artifact.payload as Record<string, unknown>).reviews
+  if (!Array.isArray(reviews)) return new Map()
+  return new Map(reviews.flatMap(value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+    const item = value as Record<string, unknown>
+    if (typeof item.artifactKey !== 'string' || typeof item.verdict !== 'string' || !Array.isArray(item.issues)) return []
+    const scores = item.scores && typeof item.scores === 'object' && !Array.isArray(item.scores)
+      ? Object.fromEntries(Object.entries(item.scores as Record<string, unknown>)
+          .filter((entry): entry is [string, number] => typeof entry[1] === 'number')) : null
+    const issues = item.issues.flatMap(issueValue => {
+      if (!issueValue || typeof issueValue !== 'object' || Array.isArray(issueValue)) return []
+      const issue = issueValue as Record<string, unknown>
+      return typeof issue.severity === 'string' && typeof issue.category === 'string'
+        && typeof issue.detail === 'string' && typeof issue.recommendation === 'string'
+        ? [{ severity: issue.severity, category: issue.category, detail: issue.detail, recommendation: issue.recommendation }]
+        : []
+    })
+    return [[item.artifactKey, { verdict: item.verdict, scores, issues }] as const]
+  }))
+}
+
+function mediaArtifactPurposeLabel(artifactKey: string): string {
+  return ({
+    'media.visual.001': '封面与开场背景', 'media.visual.002': '主角视觉锚点',
+    'media.visual.003': '区域地图', 'media.visual.004': '第一幕主线转折 CG',
+    'media.visual.005': '次级区域锚点', 'media.visual.006': '第一件重要物品',
+    'media.visual.007': '核心配角视觉锚点', 'media.visual.008': '第二幕主线转折 CG',
+    'media.visual.009': '辅助角色视觉锚点', 'media.visual.010': '第三幕主线转折 CG',
+    'media.visual.011': '第二件重要物品', 'media.visual.012': '结局后果 CG',
+  } as Record<string, string>)[artifactKey] ?? '插图职责'
 }
 
 function compatibilityReport(value: string | undefined): ProductBuildCompatibilityReportV1 | null {
@@ -403,6 +556,17 @@ export function shouldAutoContinueProductProductionV1(input: {
 }): boolean {
   return !input.running && input.productionStatus === 'producing'
     && input.buildStatus != null && ['authorized', 'building'].includes(input.buildStatus)
+}
+
+export function productProductionRecoveryCheckDelayV1(
+  progress: ProductProductionProgressV1,
+  now = Date.now(),
+): number | null {
+  const recoveryTimes = progress.tasks.flatMap(task => (
+    task.status === 'running' && task.recoveryCheckAt != null ? [task.recoveryCheckAt] : []
+  ))
+  if (progress.buildStatus !== 'building' || recoveryTimes.length === 0) return null
+  return Math.max(250, Math.min(...recoveryTimes) - now + 50)
 }
 
 export default function ProductProductionStudio(props: {
@@ -483,8 +647,11 @@ export default function ProductProductionStudio(props: {
   const [mediaRuntimeGateError, setMediaRuntimeGateError] = useState('')
   const [humanVisualGate, setHumanVisualGate] = useState<VerifiedTextAdventureHumanVisualReviewGateV1 | null>(null)
   const [humanVisualGateError, setHumanVisualGateError] = useState('')
+  const [humanVisualReviewReadyBuildId, setHumanVisualReviewReadyBuildId] = useState<number | null>(null)
   const [humanVisualDecisions, setHumanVisualDecisions] = useState<Record<string, 'approved' | 'rejected' | null>>({})
   const [humanVisualNotes, setHumanVisualNotes] = useState<Record<string, string>>({})
+  const [mediaAnchorConfirmationNote, setMediaAnchorConfirmationNote] = useState('')
+  const [mediaAnchorRevisionNote, setMediaAnchorRevisionNote] = useState('')
   const [completedPlaythroughs, setCompletedPlaythroughs] = useState<CompletedProductBuildPlaythroughV1[]>([])
   const [reviewArtifacts, setReviewArtifacts] = useState<ProductProductionReviewArtifactV1[]>([])
   const [mediaAssets, setMediaAssets] = useState<TextAdventureMediaAssetV1[]>([])
@@ -500,6 +667,7 @@ export default function ProductProductionStudio(props: {
     'content', 'product', 'visual', 'audio',
   ])
   const productionAbort = useRef<AbortController | null>(null)
+  const productionRecoveryTimer = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null)
   const performanceLabAbort = useRef<AbortController | null>(null)
   const performanceLabHost = useRef<HTMLDivElement | null>(null)
   const productionRunningRef = useRef(false)
@@ -515,6 +683,7 @@ export default function ProductProductionStudio(props: {
   } = props
 
   const refresh = useCallback(async (preferredId?: number | null) => {
+    setHumanVisualReviewReadyBuildId(null)
     const { worldReleases: nextReleases, productions: nextProductions } = await listProductProductionWorkspaceV1(
       scope,
       allowedProducts,
@@ -665,6 +834,7 @@ export default function ProductProductionStudio(props: {
         setHumanVisualDecisions(Object.fromEntries(nextMediaAssets.map(asset => [asset.artifactKey, null])))
         setHumanVisualNotes(Object.fromEntries(nextMediaAssets.map(asset => [asset.artifactKey, ''])))
       }
+      setHumanVisualReviewReadyBuildId(nextDetails.build.id!)
     } else {
       setPerformanceGate(null)
       setPerformanceGateError('')
@@ -679,6 +849,7 @@ export default function ProductProductionStudio(props: {
       setHumanVisualGateError('')
       setHumanVisualDecisions({})
       setHumanVisualNotes({})
+      setHumanVisualReviewReadyBuildId(null)
       setCompletedPlaythroughs([])
       setReviewArtifacts([])
       setMediaAssets([])
@@ -695,6 +866,7 @@ export default function ProductProductionStudio(props: {
   }, [])
   useEffect(() => () => {
     queuedProductionIdRef.current = null
+    if (productionRecoveryTimer.current != null) globalThis.clearTimeout(productionRecoveryTimer.current)
     productionAbort.current?.abort('product-production-studio-unmounted')
     performanceLabAbort.current?.abort('product-production-studio-unmounted')
   }, [])
@@ -844,6 +1016,10 @@ export default function ProductProductionStudio(props: {
       return
     }
     productionRunningRef.current = true
+    if (productionRecoveryTimer.current != null) {
+      globalThis.clearTimeout(productionRecoveryTimer.current)
+      productionRecoveryTimer.current = null
+    }
     const controller = new AbortController()
     productionAbort.current = controller
     setProductionRunning(true); setError(''); setMessage('正在复用“设置”中的全局 AI 配置，自动执行内容、视觉、装配和质量门。')
@@ -859,7 +1035,17 @@ export default function ProductProductionStudio(props: {
         setProgress(result)
         await refresh(productionId)
         setCommandActivity({ label: '执行 Build DAG', status: 'succeeded', detail: `Build ${result.buildStatus}，持久化投影已复验。` })
-        setMessage(result.buildStatus === 'release-ready'
+        const recoveryDelay = productProductionRecoveryCheckDelayV1(result)
+        if (recoveryDelay != null) {
+          const waitSeconds = Math.max(1, Math.ceil(recoveryDelay / 1_000))
+          setMessage(`检测到另一个执行者留下的进行中任务；为避免重复调用，正在等待合同截止，并将在约 ${waitSeconds} 秒后自动复验。`)
+          productionRecoveryTimer.current = globalThis.setTimeout(() => {
+            productionRecoveryTimer.current = null
+            if (selectedProductionIdRef.current !== productionId) return
+            if (productionRunningRef.current) queuedProductionIdRef.current = productionId
+            else void startProduction(productionId)
+          }, recoveryDelay)
+        } else setMessage(result.buildStatus === 'release-ready'
           ? '自动制作完成：Build 已通过硬门与媒资覆盖门，可以预览并原子发布。'
           : result.buildStatus === 'preview-ready'
             ? '自动制作完成：Build 已可试玩；商业候选还需完成真实浏览器性能、主路线试玩、媒资自动解码，并在有图时完成独立 Visual QA 与作者逐图确认后才可发布。'
@@ -916,6 +1102,8 @@ export default function ProductProductionStudio(props: {
     if (!details) throw new Error('缺少 Production。')
     if (details.production.status !== 'paused') {
       queuedProductionIdRef.current = null
+      if (productionRecoveryTimer.current != null) globalThis.clearTimeout(productionRecoveryTimer.current)
+      productionRecoveryTimer.current = null
       productionAbort.current?.abort('author-paused')
     }
     const result = await setProductProductionPausedV1({ scope: props.scope, production: details.production })
@@ -926,6 +1114,8 @@ export default function ProductProductionStudio(props: {
   const stop = () => run(async () => {
     if (!details) throw new Error('缺少 Production。')
     queuedProductionIdRef.current = null
+    if (productionRecoveryTimer.current != null) globalThis.clearTimeout(productionRecoveryTimer.current)
+    productionRecoveryTimer.current = null
     productionAbort.current?.abort('author-stopped')
     await stopProductProductionV1({ scope: props.scope, production: details.production })
     await refresh(details.production.id)
@@ -1163,6 +1353,18 @@ export default function ProductProductionStudio(props: {
     setMessage(`视觉合同修复已形成 Brief r${created.briefRevision}；审查并授权后将创建子 Build，正文与玩法继续按 hash 复用。`)
   }, '创建视觉合同修复 Brief')
 
+  const repairRuntimeCopy = () => run(async () => {
+    if (!details) throw new Error('缺少 Production。')
+    const created = await beginProductProductionEvolutionV1({
+      scope: props.scope,
+      productionId: details.production.id!,
+      userText: '修复玩家可见的产品简介与角色身份文案：内部演化、返修、任务 key、字段名和执行指令不得进入 RuntimePackage。保留已验收的世界来源、故事、任务、对白、玩法与媒资，只重新装配运行包并复验自动游玩和发布质量门。',
+      affectedLanes: ['runtime'],
+    })
+    await refresh(details.production.id)
+    setMessage(`公开文案修复已形成 Brief r${created.briefRevision}；审查并授权后将创建 runtime-only 子 Build，全部内容与媒资按 hash 复用。`)
+  }, '创建公开文案修复 Brief')
+
   const reviseMediaAsset = (
     asset: TextAdventureMediaAssetV1,
     action: 'upload-replacement' | 'regenerate' | 'lock' | 'unlock',
@@ -1172,8 +1374,21 @@ export default function ProductProductionStudio(props: {
     if (action === 'upload-replacement' && (!mediaLicense.trim() || !mediaDeclaration.trim())) {
       throw new Error('上传图片前必须填写许可与权利声明。')
     }
+    const rejectedEvidence = action === 'regenerate'
+      ? humanVisualGate?.evidence.assets.find(item => item.artifactKey === asset.artifactKey
+        && item.contentHash === asset.contentHash && item.decision === 'rejected')
+      : null
+    if (action === 'regenerate' && (!humanVisualGate || !rejectedEvidence)) {
+      throw new Error('请先冻结包含该图片退回理由的作者逐图审查回执，再按意见重生成。')
+    }
     const result = await reviseTextAdventureMediaAssetV1({
       scope: props.scope, details, asset, action,
+      repairFeedback: humanVisualGate && rejectedEvidence ? {
+        sourceGateReceiptHash: humanVisualGate.gateReceipt.receiptHash,
+        sourceEvidenceHash: await hashProductProductionValueV2(humanVisualGate.evidence),
+        priorContentHash: rejectedEvidence.contentHash,
+        note: rejectedEvidence.note,
+      } : undefined,
       upload: file ? {
         file,
         altText: String(asset.metadata.altText ?? asset.metadata.name ?? file.name),
@@ -1242,25 +1457,49 @@ export default function ProductProductionStudio(props: {
     action: 'confirm-character-anchors' | 'cancel',
   ) => run(async () => {
     if (!details) throw new Error('缺少 Production。')
+    if (action === 'confirm-character-anchors' && !mediaAnchorConfirmationNote.trim()) {
+      throw new Error('确认角色锚点前必须填写本次审查说明。')
+    }
     const productionId = details.production.id!
     await resolveTextAdventureMediaAnchorDecisionV1({
       scope: props.scope,
       details,
       action,
       note: action === 'confirm-character-anchors'
-        ? '作者已在制作工作台检查当前 Build 的视觉风格、角色身份与角色视觉锚点，同意按此冻结基线开始逐项出图。'
-        : '作者拒绝当前角色视觉锚点并取消 Build；修改视觉方向后再创建新 Build。',
+        ? mediaAnchorConfirmationNote.trim()
+        : '作者拒绝当前冻结视觉基线并取消本 Build；旧工件与回执保留供审计。',
     })
     await refresh(productionId)
+    setMediaAnchorConfirmationNote('')
     setMessage(action === 'confirm-character-anchors'
       ? '角色视觉锚点已由作者确认并冻结为决策证据；逐项图片生产将从新 epoch 继续。'
-      : '当前 Build 已取消；已发布版本、世界版本和已有媒资未被修改。')
+      : '当前 Build 已取消；冻结视觉基线、已完成工件与回执均保留供审计。')
   }, '处理角色视觉锚点决策')
+
+  const requestMediaAnchorRevision = () => run(async () => {
+    if (!details) throw new Error('缺少 Production。')
+    const revisionNote = mediaAnchorRevisionNote.trim().normalize('NFC')
+    if (!revisionNote) throw new Error('请填写需要修改的视觉风格、角色锚点或素材职责。')
+    const productionId = details.production.id!
+    await resolveTextAdventureMediaAnchorDecisionV1({
+      scope: props.scope, details, action: 'cancel',
+      note: `作者拒绝当前冻结视觉基线并要求受治理修订：${revisionNote}`,
+    })
+    const created = await beginProductProductionEvolutionV1({
+      scope: props.scope, productionId,
+      userText: `仅修订文字冒险视觉泳道。作者逐项意见：${revisionNote}`,
+      affectedLanes: ['visual'],
+    })
+    setMediaAnchorRevisionNote('')
+    await refresh(productionId)
+    setMessage(`当前 Build 已作为不可变审计基线取消；作者意见已形成视觉专用 Brief r${created.briefRevision}，确认后才会创建子 Build。`)
+  }, '提交角色锚点视觉修订')
 
   const selectedSuggestion = suggestions.find(item => item.suggestionKey === suggestionKey) ?? null
   const canPause = details && ['producing', 'preview-ready'].includes(details.production.status)
     && details.build && !['released', 'cancelled', 'failed', 'archived', 'paused', 'recovery-required'].includes(details.build.status)
   const canRepairVisualContract = !!details && canRepairTextAdventureVisualContractV1(details)
+  const canRepairRuntimeCopy = !!details && canRepairTextAdventureRuntimeCopyV1(details)
   const canRetryBlocker = details?.production.status === 'producing'
     && canRetryProductProductionBlockerV1(details) && !canRepairVisualContract
   const canUpgradeExecutionPlan = !!details && canUpgradeTextAdventureProductionPlanV1(details)
@@ -1359,6 +1598,15 @@ export default function ProductProductionStudio(props: {
     || mediaRuntimeGate?.gateReceipt.status === 'passed' && mediaRuntimeGate.evidence.passed
   const visualReviewArtifact = reviewArtifacts.find(artifact => artifact.artifactKey === 'quality.visual-review')
   const mediaAuditArtifact = reviewArtifacts.find(artifact => artifact.artifactKey === 'media.audit')
+  const mediaRequirementByKey = useMemo(() => mediaRequirementDisplay(reviewArtifacts), [reviewArtifacts])
+  const mediaVisualReviewByKey = useMemo(() => mediaVisualReviewDisplay(reviewArtifacts), [reviewArtifacts])
+  const visionPreflightArtifact = reviewArtifacts.find(artifact => artifact.artifactKey === 'media.vision-preflight')
+  const visionPreflightPassed = !!visionPreflightArtifact?.payload
+    && typeof visionPreflightArtifact.payload === 'object' && !Array.isArray(visionPreflightArtifact.payload)
+    && (visionPreflightArtifact.payload as Record<string, unknown>).schema
+      === 'storyforge.text-adventure-vision-capability-preflight'
+    && (visionPreflightArtifact.payload as Record<string, unknown>).passed === true
+    && (visionPreflightArtifact.payload as Record<string, unknown>).buildNumber === details?.build?.buildNumber
   const visualReviewStatus = visualReviewArtifact?.payload && typeof visualReviewArtifact.payload === 'object'
     && !Array.isArray(visualReviewArtifact.payload)
     ? String((visualReviewArtifact.payload as Record<string, unknown>).status ?? '')
@@ -1382,10 +1630,16 @@ export default function ProductProductionStudio(props: {
     && selectedBrief?.intent.productType === 'text-adventure' && mediaAssets.length > 0
   const commercialHumanVisualPassed = !commercialHumanVisualRequired
     || humanVisualGate?.gateReceipt.status === 'passed' && humanVisualGate.evidence.passed
+  const authorRejectedAssetKeys = useMemo(() => new Set((humanVisualGate?.evidence.assets ?? [])
+    .filter(item => item.decision === 'rejected'
+      && mediaAssets.some(asset => asset.artifactKey === item.artifactKey
+        && asset.contentHash === item.contentHash))
+    .map(item => item.artifactKey)), [humanVisualGate, mediaAssets])
   const humanVisualDecisionsComplete = mediaAssets.length > 0 && mediaAssets.every(asset => {
     const decision = humanVisualDecisions[asset.artifactKey]
     return decision === 'approved' || decision === 'rejected' && !!humanVisualNotes[asset.artifactKey]?.trim()
   })
+  const humanVisualReviewReady = humanVisualReviewReadyBuildId === details?.build?.id
   const commercialQualityPassed = commercialPerformancePassed
     && commercialPlaythroughPassed && commercialHumanPlaytestPassed
     && commercialMediaRuntimePassed && commercialHumanVisualPassed
@@ -1522,8 +1776,16 @@ export default function ProductProductionStudio(props: {
             <strong className="block text-xs">美术总监已完成视觉圣经，等待作者确认角色锚点</strong>
             <p className="mt-2 leading-5 text-text-muted">确认后，每张插图会把下列身份、视觉特征和色板作为不可弱化约束；未经确认不会调用图片 Provider。</p>
             {!commercialTextAdventureMediaPlanReady && <p className="mt-2 rounded border border-error/30 bg-error/5 p-3 text-error" data-testid="text-adventure-media-plan-blocker">当前旧 Build 只计划 {selectedBrief?.media.imageCount ?? 0} 张图片，低于社区推荐关键插图档的 {commercialTextAdventureImageMinimum} 张底线。不得继续消耗图片额度；请取消此 Build，并用修正后的商业 Brief 重新授权。已完成工件仍保留供审计。</p>}
-            {mediaAnchor ? <><p className="mt-2 rounded bg-bg-base p-2"><strong>整体风格：</strong>{mediaAnchor.style}</p><ul className="mt-2 grid gap-2">{mediaAnchor.characterAnchors.map(anchor => <li key={anchor.characterKey} className="rounded border border-border bg-bg-base p-3"><span className="flex flex-wrap items-center gap-2"><strong>{anchor.name}</strong><em className="not-italic text-accent">{anchor.role}</em><span className="text-text-muted">{anchor.identity}</span></span><p className="mt-1 leading-5 text-text-muted">{anchor.visualAnchor}</p><span className="mt-2 flex gap-1" aria-label={`${anchor.name} 色板`}>{anchor.palette.map(color => <i key={color} title={color} className="h-4 w-4 rounded border border-border" style={{ backgroundColor: color }} />)}</span></li>)}</ul></> : <p className="mt-2 text-error">视觉圣经读取失败；请保留当前 Build 并检查工件。</p>}
-            <p className="mt-3 text-text-muted">若不接受，请取消本 Build，再以“视觉”演化目标创建新版。确认只对当前冻结视觉圣经 hash 有效。</p>
+            {!visionPreflightPassed && <p className="mt-2 rounded border border-error/30 bg-error/5 p-3 text-error" data-testid="text-adventure-vision-preflight-blocker">当前 Build 没有通过真实图片输入预检。确认按钮已锁定，必须先生成执行计划升级 Brief；新子 Build 会在任何 Agnes 图片调用之前验证当前文本模型确实能观察图片。</p>}
+            {mediaAnchor ? <div className="mt-2 grid gap-3" data-testid="text-adventure-media-anchor-contract">
+              <div className="rounded bg-bg-base p-3"><strong>整体风格：</strong>{mediaAnchor.style}<span className="mt-2 flex flex-wrap gap-1" aria-label="全局视觉色板">{mediaAnchor.palette.map(color => <i key={color} title={color} className="h-5 w-5 rounded border border-border" style={{ backgroundColor: color }} />)}</span></div>
+              <div className="grid gap-2 md:grid-cols-2"><article className="rounded border border-border bg-bg-base p-3"><strong>构图规则</strong><ul className="mt-2 grid gap-1 text-text-muted">{mediaAnchor.compositionRules.map(rule => <li key={rule}>· {rule}</li>)}</ul></article><article className="rounded border border-border bg-bg-base p-3"><strong>连续性规则</strong><ul className="mt-2 grid gap-1 text-text-muted">{mediaAnchor.continuityRules.map(rule => <li key={rule}>· {rule}</li>)}</ul></article></div>
+              <ul className="grid gap-2">{mediaAnchor.characterAnchors.map(anchor => <li key={anchor.characterKey} className="rounded border border-border bg-bg-base p-3"><span className="flex flex-wrap items-center gap-2"><strong>{anchor.name}</strong><em className="not-italic text-accent">{anchor.role}</em><span className="text-text-muted">{anchor.identity}</span></span><p className="mt-1 leading-5 text-text-muted">{anchor.visualAnchor}</p><span className="mt-2 flex gap-1" aria-label={`${anchor.name} 色板`}>{anchor.palette.map(color => <i key={color} title={color} className="h-4 w-4 rounded border border-border" style={{ backgroundColor: color }} />)}</span><p className="mt-2"><strong>关联图片：</strong>{anchor.requirementArtifactKeys.join('、') || '无'}</p><ul className="mt-1 grid gap-1 text-text-muted">{anchor.hardConstraints.map(rule => <li key={rule}>· {rule}</li>)}</ul></li>)}</ul>
+              <div className="rounded border border-border bg-bg-base p-3"><strong>本轮 {mediaAnchor.assetRequirements.length} 张图片职责</strong><ol className="mt-2 grid gap-2 md:grid-cols-2">{mediaAnchor.assetRequirements.map(requirement => <li key={requirement.artifactKey} className="rounded bg-bg-surface p-2"><strong>{requirement.artifactKey} · {mediaArtifactPurposeLabel(requirement.artifactKey)}</strong><span className="mt-1 block text-text-muted">{requirement.mediaKind} · 场景 {requirement.sceneTag} · 节拍 {requirement.beatKey}</span></li>)}</ol></div>
+              <label className="grid gap-1 rounded border border-success/30 bg-success/5 p-3"><span className="font-semibold">确认说明（确认时必填）</span><textarea value={mediaAnchorConfirmationNote} onChange={event => setMediaAnchorConfirmationNote(event.target.value)} maxLength={2000} rows={2} placeholder="例如：已核对全局风格、三位角色身份与 12 张图片职责，同意冻结后开始出图。" className="rounded border border-border bg-bg-base p-2" /></label>
+              <label className="grid gap-1 rounded border border-error/30 bg-error/5 p-3"><span className="font-semibold text-error">需要修订时填写具体意见</span><textarea value={mediaAnchorRevisionNote} onChange={event => setMediaAnchorRevisionNote(event.target.value)} maxLength={2000} rows={3} placeholder="明确指出要修改的风格、角色身份/服装、构图规则或图片职责；提交后只生成视觉泳道新 Brief，不会原地改写本 Build。" className="rounded border border-border bg-bg-base p-2" /></label>
+            </div> : <p className="mt-2 text-error">视觉圣经读取失败；请保留当前 Build 并检查工件。</p>}
+            <p className="mt-3 text-text-muted">确认只对当前冻结视觉锚点 hash 有效；提交修改会先取消当前未发布 Build，再把原意见写入受治理的视觉专用 Brief，后续生产进入不可变子 Build。</p>
           </div>}
           {communityCandidateRepairAvailable && <div className="mt-3 rounded border border-accent/40 bg-accent/5 p-4 text-[10px] leading-5 text-text-primary" data-testid="text-adventure-commercial-media-repair">
             <strong className="block text-xs">旧商业 Brief 需要社区候选规模与预算修订</strong>
@@ -1546,14 +1808,16 @@ export default function ProductProductionStudio(props: {
             {sourceDecision?.decision === 'ready-with-private-additions' && <button disabled={busy || productionRunning} onClick={() => resolveSourceDecision('accept-product-private-expansion')} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />接受私域补充并继续</button>}
             {sourceDecision?.decision === 'blocked' && <button disabled={busy || productionRunning} onClick={retrySourceReview} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><RefreshCw className="h-3.5 w-3.5" />按产品边界重新审查</button>}
             {sourceDecisionBlocker && <button disabled={busy || productionRunning} onClick={() => resolveSourceDecision('cancel')} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><Square className="h-3.5 w-3.5" />取消本次 Build</button>}
-            {mediaAnchorBlocker && mediaAnchor && <button disabled={busy || productionRunning || !commercialTextAdventureMediaPlanReady} onClick={() => resolveMediaAnchorDecision('confirm-character-anchors')} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />确认角色锚点并开始出图</button>}
-            {mediaAnchorBlocker && <button disabled={busy || productionRunning} onClick={() => resolveMediaAnchorDecision('cancel')} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><Square className="h-3.5 w-3.5" />拒绝并取消 Build</button>}
+            {mediaAnchorBlocker && mediaAnchor && <button disabled={busy || productionRunning || !commercialTextAdventureMediaPlanReady || !visionPreflightPassed || !mediaAnchorConfirmationNote.trim()} onClick={() => resolveMediaAnchorDecision('confirm-character-anchors')} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />确认角色锚点并开始出图</button>}
+            {mediaAnchorBlocker && <button disabled={busy || productionRunning || !mediaAnchorRevisionNote.trim()} onClick={requestMediaAnchorRevision} className="flex items-center gap-2 rounded border border-error/40 px-4 py-2 text-xs text-error disabled:opacity-40"><GitBranch className="h-3.5 w-3.5" />按意见创建视觉修订 Brief</button>}
+            {mediaAnchorBlocker && <button disabled={busy || productionRunning} onClick={() => resolveMediaAnchorDecision('cancel')} className="flex items-center gap-2 rounded border border-border px-4 py-2 text-xs text-text-muted disabled:opacity-40"><Square className="h-3.5 w-3.5" />拒绝并取消 Build</button>}
             {communityCandidateRepairAvailable && !activeBriefRepairDraft && <button disabled={busy || productionRunning} onClick={prepareCommunityCandidateBriefRepair} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent disabled:opacity-40"><FileCheck2 className="h-3.5 w-3.5" />{commercialTextAdventureImageMinimum > 0 ? `生成 ${commercialTextAdventureImageMinimum} 图修订 Brief` : '生成社区候选修订 Brief'}</button>}
             {communityCandidateRepairAvailable && activeBriefRepairDraft && <button disabled={busy || productionRunning} onClick={saveCommunityCandidateBriefRepair} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><ShieldCheck className="h-3.5 w-3.5" />保存为 Brief r{(details.brief?.revision ?? 0) + 1}</button>}
             {canRecoverProductionBudget && <button disabled={busy || productionRunning} onClick={recoverProductionBudget} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />续建预算并启动子 Build</button>}
             {canUpgradeExecutionPlan && <button disabled={busy || productionRunning} onClick={upgradeExecutionPlan} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><GitBranch className="h-3.5 w-3.5" />生成执行计划升级 Brief</button>}
             {canRepairVisualContract && <button disabled={busy || productionRunning} onClick={repairVisualContract} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><GitBranch className="h-3.5 w-3.5" />重建媒资规划 Brief</button>}
-            {canRetryBlocker && !modelBudgetExhausted && !canUpgradeExecutionPlan && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />修正后重试</button>}
+            {canRepairRuntimeCopy && <button disabled={busy || productionRunning} onClick={repairRuntimeCopy} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><GitBranch className="h-3.5 w-3.5" />重建公开文案运行包</button>}
+            {canRetryBlocker && !modelBudgetExhausted && !canUpgradeExecutionPlan && !canRepairRuntimeCopy && <button disabled={busy || productionRunning} onClick={retryBlocker} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><RefreshCw className="h-3.5 w-3.5" />修正后重试</button>}
             {details.build && ['preview-ready', 'release-ready', 'released'].includes(details.build.status) && <button disabled={busy || productionRunning} onClick={preview} className="flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent"><Play className="h-3.5 w-3.5" />{details.build.status === 'released' ? '试玩此 Build' : '试玩未发布 Build'}</button>}
             {details.build?.status === 'release-ready' && <button disabled={busy || productionRunning || (commercialPerformanceRequired && !commercialQualityPassed)} onClick={publish} className="flex items-center gap-2 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40"><Rocket className="h-3.5 w-3.5" />复验并原子发布</button>}
             {details.production.status === 'released' && <button disabled={busy} onClick={() => props.onPublished?.(details.production.productType)} className="flex items-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white"><Gamepad2 className="h-3.5 w-3.5" />进入玩家模式</button>}
@@ -1609,11 +1873,30 @@ export default function ProductProductionStudio(props: {
           <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{mediaAssets.map(asset => <article key={`${asset.artifactKey}:${asset.version}`} className="overflow-hidden rounded border border-border bg-bg-base">
             <TextAdventureMediaThumbnail scope={props.scope} asset={asset} />
             <div className="p-3 text-[10px]"><span className="flex items-center justify-between gap-2"><strong className="text-xs">{String(asset.metadata.name ?? asset.artifactKey)}</strong><em className={`not-italic ${asset.locked ? 'text-accent' : 'text-text-muted'}`}>{asset.locked ? '已锁定' : '可重生成'}</em></span><p className="mt-1 text-text-muted">{asset.assetKey} · {asset.artifactKey} · {asset.mimeType} · {formatBytes(asset.byteSize)}</p><p className="mt-1 text-text-muted">{String(asset.metadata.source ?? 'unknown')} · {String(asset.metadata.license ?? asset.rights.license ?? '未声明许可')}</p><code className="mt-1 block text-[9px]" title={asset.contentHash}>{compactHash(asset.contentHash)}</code>
-              <div className="mt-3 flex flex-wrap gap-2"><label className={`flex cursor-pointer items-center gap-1 rounded border border-accent/40 px-2 py-1 text-accent ${(busy || productionRunning || details.production.status !== 'preview-ready') ? 'pointer-events-none opacity-40' : ''}`}><Upload className="h-3 w-3" />上传替换<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={busy || productionRunning || details.production.status !== 'preview-ready'} onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void reviseMediaAsset(asset, 'upload-replacement', file) }} /></label>{asset.locked ? <button disabled={busy || productionRunning || details.production.status !== 'preview-ready'} onClick={() => reviseMediaAsset(asset, 'unlock')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><Unlock className="h-3 w-3" />解锁</button> : <><button disabled={busy || productionRunning || details.production.status !== 'preview-ready'} onClick={() => reviseMediaAsset(asset, 'lock')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><Lock className="h-3 w-3" />锁定</button><button disabled={busy || productionRunning || details.production.status !== 'preview-ready'} onClick={() => reviseMediaAsset(asset, 'regenerate')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><RefreshCw className="h-3 w-3" />重生成此图</button></>}</div>
-              {commercialHumanVisualRequired && <fieldset className="mt-3 rounded border border-border bg-bg-surface p-3" data-testid={`text-adventure-human-visual-${asset.artifactKey}`}><legend className="px-1 font-semibold">作者对当前冻结图片的判断</legend><div className="flex gap-2"><button type="button" aria-pressed={humanVisualDecisions[asset.artifactKey] === 'approved'} onClick={() => setHumanVisualDecisions(current => ({ ...current, [asset.artifactKey]: 'approved' }))} className={`rounded border px-3 py-1 ${humanVisualDecisions[asset.artifactKey] === 'approved' ? 'border-success bg-success/10 text-success' : 'border-border'}`}>接受此图</button><button type="button" aria-pressed={humanVisualDecisions[asset.artifactKey] === 'rejected'} onClick={() => setHumanVisualDecisions(current => ({ ...current, [asset.artifactKey]: 'rejected' }))} className={`rounded border px-3 py-1 ${humanVisualDecisions[asset.artifactKey] === 'rejected' ? 'border-error bg-error/10 text-error' : 'border-border'}`}>退回修改</button></div><label className="mt-2 grid gap-1"><span>审查备注{humanVisualDecisions[asset.artifactKey] === 'rejected' ? '（退回必填）' : '（可选）'}</span><textarea value={humanVisualNotes[asset.artifactKey] ?? ''} onChange={event => setHumanVisualNotes(current => ({ ...current, [asset.artifactKey]: event.target.value }))} maxLength={2000} rows={2} placeholder="说明构图、角色一致性、剧透、文字伪影或其他问题" className="rounded border border-border bg-bg-base p-2" /></label></fieldset>}
+              {(() => {
+                const requirement = mediaRequirementByKey.get(asset.artifactKey)
+                const visualReview = mediaVisualReviewByKey.get(asset.artifactKey)
+                const actualWidth = Number(asset.metadata.width ?? 0)
+                const actualHeight = Number(asset.metadata.height ?? 0)
+                return <div className="mt-3 grid gap-2 rounded border border-border bg-bg-surface p-3" data-testid={`text-adventure-media-contract-${asset.artifactKey}`}>
+                  <p><strong>职责：</strong>{mediaArtifactPurposeLabel(asset.artifactKey)} · {requirement?.mediaKind ?? asset.mediaKind}</p>
+                  <p><strong>场景 / 节拍：</strong>{requirement?.sceneTag ?? String(asset.metadata.sceneTag ?? '—')} / {requirement?.beatKey ?? '—'}</p>
+                  <p><strong>请求 / 实际尺寸：</strong>{requirement ? `${requirement.width}×${requirement.height}` : '—'} / {actualWidth > 0 && actualHeight > 0 ? `${actualWidth}×${actualHeight}` : '—'}</p>
+                  <p><strong>替代文本：</strong>{requirement?.altText ?? String(asset.metadata.altText ?? '—')}</p>
+                  <p><strong>角色锚点：</strong>{requirement?.characterAnchorRefs.join('、') || '无'}</p>
+                  <div><strong>硬约束：</strong>{requirement?.hardConstraints.length ? <ul className="mt-1 grid gap-1 text-text-muted">{requirement.hardConstraints.map(rule => <li key={rule}>· {rule}</li>)}</ul> : <span className="text-text-muted">无</span>}</div>
+                  <div className={`rounded border p-2 ${visualReview?.verdict === 'accept' ? 'border-success/30 bg-success/5' : 'border-accent/30 bg-accent/5'}`}>
+                    <p><strong>Visual QA：</strong>{visualReview?.verdict ?? '等待审查'}</p>
+                    {visualReview?.scores && <dl className="mt-1 grid grid-cols-2 gap-1 text-text-muted">{Object.entries(visualReview.scores).map(([key, score]) => <div key={key}><dt className="inline">{key}</dt><dd className="ml-1 inline font-semibold text-text-primary">{score}/5</dd></div>)}</dl>}
+                    {visualReview?.issues.length ? <ul className="mt-2 grid gap-1">{visualReview.issues.map((issue, index) => <li key={`${issue.category}:${index}`} className={issue.severity === 'blocking' ? 'text-error' : 'text-accent'}><strong>{issue.severity} · {issue.category}：</strong>{issue.detail}<span className="block pl-3 text-text-muted">建议：{issue.recommendation}</span></li>)}</ul> : visualReview && <p className="mt-1 text-success">未报告问题</p>}
+                  </div>
+                </div>
+              })()}
+              <div className="mt-3 flex flex-wrap gap-2"><label className={`flex cursor-pointer items-center gap-1 rounded border border-accent/40 px-2 py-1 text-accent ${(busy || productionRunning || details.production.status !== 'preview-ready') ? 'pointer-events-none opacity-40' : ''}`}><Upload className="h-3 w-3" />上传替换<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={busy || productionRunning || details.production.status !== 'preview-ready'} onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void reviseMediaAsset(asset, 'upload-replacement', file) }} /></label>{asset.locked ? <button disabled={busy || productionRunning || details.production.status !== 'preview-ready'} onClick={() => reviseMediaAsset(asset, 'unlock')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><Unlock className="h-3 w-3" />解锁</button> : <><button disabled={busy || productionRunning || details.production.status !== 'preview-ready'} onClick={() => reviseMediaAsset(asset, 'lock')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><Lock className="h-3 w-3" />锁定</button><button disabled={busy || productionRunning || details.production.status !== 'preview-ready' || !authorRejectedAssetKeys.has(asset.artifactKey)} title={authorRejectedAssetKeys.has(asset.artifactKey) ? '按冻结作者退回意见生成新候选' : '先退回此图并冻结逐图审查回执'} onClick={() => reviseMediaAsset(asset, 'regenerate')} className="flex items-center gap-1 rounded border border-border px-2 py-1 disabled:opacity-40"><RefreshCw className="h-3 w-3" />按作者意见重生成</button></>}</div>
+              {commercialHumanVisualRequired && <fieldset disabled={!humanVisualReviewReady} className="mt-3 rounded border border-border bg-bg-surface p-3 disabled:opacity-50" data-testid={`text-adventure-human-visual-${asset.artifactKey}`}><legend className="px-1 font-semibold">作者对当前冻结图片的判断</legend><div className="flex gap-2"><button type="button" aria-pressed={humanVisualDecisions[asset.artifactKey] === 'approved'} onClick={() => setHumanVisualDecisions(current => ({ ...current, [asset.artifactKey]: 'approved' }))} className={`rounded border px-3 py-1 ${humanVisualDecisions[asset.artifactKey] === 'approved' ? 'border-success bg-success/10 text-success' : 'border-border'}`}>接受此图</button><button type="button" aria-pressed={humanVisualDecisions[asset.artifactKey] === 'rejected'} onClick={() => setHumanVisualDecisions(current => ({ ...current, [asset.artifactKey]: 'rejected' }))} className={`rounded border px-3 py-1 ${humanVisualDecisions[asset.artifactKey] === 'rejected' ? 'border-error bg-error/10 text-error' : 'border-border'}`}>退回修改</button></div><label className="mt-2 grid gap-1"><span>审查备注{humanVisualDecisions[asset.artifactKey] === 'rejected' ? '（退回必填）' : '（可选）'}</span><textarea value={humanVisualNotes[asset.artifactKey] ?? ''} onChange={event => setHumanVisualNotes(current => ({ ...current, [asset.artifactKey]: event.target.value }))} maxLength={2000} rows={2} placeholder="说明构图、角色一致性、剧透、文字伪影或其他问题" className="rounded border border-border bg-bg-base p-2" /></label></fieldset>}
             </div>
           </article>)}</div>
-          {commercialHumanVisualRequired && <div className="mt-4 rounded border border-border bg-bg-base p-4 text-[10px]" data-testid="text-adventure-human-visual-review"><strong className="block">冻结作者逐图审查</strong><p className="mt-1 leading-5 text-text-muted">回执绑定当前 Build、Preview、需求审计、独立 Visual QA、每张 Artifact/Blob hash。任何图片修订都会使旧回执失效。退回决定也会保存，但不会解锁发布。</p>{humanVisualGateError && <p className="mt-2 text-error">当前回执无法复验：{humanVisualGateError}</p>}{humanVisualGate && <p className={`mt-2 ${humanVisualGate.evidence.passed ? 'text-success' : 'text-error'}`}>最新回执：{humanVisualGate.evidence.passed ? '全部接受' : `${humanVisualGate.evidence.assets.filter(asset => asset.decision === 'rejected').length} 张退回`} · {compactHash(humanVisualGate.gateReceipt.receiptHash)}</p>}<button disabled={busy || productionRunning || visualReviewStatus !== 'passed' || !mediaAuditPassed || !humanVisualDecisionsComplete} onClick={confirmHumanVisualReview} className="mt-3 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40">冻结本次逐图审查回执</button></div>}
+          {commercialHumanVisualRequired && <div className="mt-4 rounded border border-border bg-bg-base p-4 text-[10px]" data-testid="text-adventure-human-visual-review"><strong className="block">冻结作者逐图审查</strong><p className="mt-1 leading-5 text-text-muted">回执绑定当前 Build、Preview、需求审计、独立 Visual QA、每张 Artifact/Blob hash。任何图片修订都会使旧回执失效。退回决定也会保存，但不会解锁发布。</p>{!humanVisualReviewReady && <p className="mt-2 text-accent">正在核对当前 Build 的逐图回执…</p>}{humanVisualGateError && <p className="mt-2 text-error">当前回执无法复验：{humanVisualGateError}</p>}{humanVisualGate && <p className={`mt-2 ${humanVisualGate.evidence.passed ? 'text-success' : 'text-error'}`}>最新回执：{humanVisualGate.evidence.passed ? '全部接受' : `${humanVisualGate.evidence.assets.filter(asset => asset.decision === 'rejected').length} 张退回`} · {compactHash(humanVisualGate.gateReceipt.receiptHash)}</p>}<button disabled={busy || productionRunning || !humanVisualReviewReady || visualReviewStatus !== 'passed' || !mediaAuditPassed || !humanVisualDecisionsComplete} onClick={confirmHumanVisualReview} className="mt-3 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40">冻结本次逐图审查回执</button></div>}
         </section>}
         {canEvolve && <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><div className="flex items-center gap-2"><GitBranch className="h-4 w-4 text-accent" /><h2 className="text-sm font-semibold">继续演化下一版</h2></div><p className="mt-2 text-[10px] leading-5 text-text-muted">描述希望增加、延续或改变的体验。旧 Build、Release 和存档不会被改写；提交后先生成新的可审查 Brief，不会直接调用模型。</p><textarea value={evolutionGoal} onChange={event => setEvolutionGoal(event.target.value)} maxLength={2000} rows={4} placeholder="例如：从当前结局继续，让配角成为新主角，增加一条调查旧港失踪案的支线，并保留已经发生的选择后果。" className="mt-4 w-full rounded border border-border bg-bg-base p-3 text-xs text-text-primary" /><fieldset className="mt-3 flex flex-wrap gap-3 text-[10px] text-text-muted"><legend className="mb-2">本轮影响范围（未勾选且依赖未变化的产物可复用）</legend>{([['content', '剧情内容'], ['product', '玩法模块'], ['visual', '美术'], ['audio', '音乐/音效'], ['runtime', '装配/运行时']] as const).map(([lane, label]) => <label key={lane} className="flex items-center gap-1.5"><input type="checkbox" checked={evolutionLanes.includes(lane)} onChange={event => setEvolutionLanes(current => event.target.checked ? [...new Set([...current, lane])] : current.filter(item => item !== lane))} />{label}</label>)}</fieldset><button disabled={busy || productionRunning || !evolutionGoal.trim() || evolutionLanes.length === 0} onClick={evolve} className="mt-3 flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent disabled:opacity-40"><GitBranch className="h-3.5 w-3.5" />生成下一轮 Brief</button></section>}
         {compatibility && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="product-production-compatibility"><div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold">存档兼容报告</h2><strong className={`text-[10px] ${compatibility.level === 'compatible' ? 'text-success' : compatibility.level === 'breaking' ? 'text-error' : 'text-accent'}`}>{compatibility.level === 'compatible' ? '可兼容' : compatibility.level === 'breaking' ? '破坏性变化' : '建议重开'}</strong></div><p className="mt-2 text-[10px] leading-5 text-text-muted">{compatibility.fromBuildNumber == null ? '首个 Build，无旧存档需要迁移。' : `Build #${compatibility.fromBuildNumber} → #${compatibility.toBuildNumber} · ${compatibility.migrationPolicy}`}</p><ul className="mt-3 grid gap-1 text-[10px] text-text-muted">{compatibility.reasons.map(reason => <li key={reason}>· {reason}</li>)}</ul>{compatibility.level === 'breaking' && <p className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error">旧存档继续固定在旧 packageHash；系统不会静默迁移或覆盖。</p>}</section>}

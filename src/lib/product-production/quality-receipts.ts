@@ -19,6 +19,10 @@ import {
 } from './browser-performance'
 import { parseProductProductionBriefV3 } from './contracts'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
+import {
+  assertProductFirstInteractiveMeasurementV1,
+  createProductFirstInteractiveResourcePlanV1,
+} from './first-interactive-resources'
 import { verifyProductBuildPreviewManifestV1 } from './preview-manifest'
 import {
   evaluateProductMediaCommercialPolicyV2,
@@ -1168,6 +1172,24 @@ export async function recordProductBrowserPerformanceMeasurementV1(input: {
   if (input.measurement.packageHash !== build.packageHash || input.measurement.previewHash !== build.previewHash) {
     fail('测量输入 hash 与 Build Preview 不一致')
   }
+  // Measurements emitted by registered browser verifiers must carry the exact
+  // deterministic first-interaction resource set. Unmarked legacy evidence is
+  // kept compatible; the current UI and Playwright gate paths are registered
+  // explicitly and cannot submit an arbitrary byte count.
+  if (input.measurement.runtimeVerifier != null) {
+    const preview = await verifyProductBuildPreviewManifestV1(build.previewManifestJson)
+    if (preview.packageHash !== build.packageHash || preview.previewHash !== build.previewHash) {
+      fail('首次可交互资源计划与 Build Preview hash 不一致')
+    }
+    assertProductFirstInteractiveMeasurementV1({
+      firstInteractiveBytes: input.measurement.firstInteractiveBytes,
+      firstInteractiveAssetKeys: input.measurement.firstInteractiveAssetKeys,
+      expected: createProductFirstInteractiveResourcePlanV1({
+        previewManifestJson: build.previewManifestJson,
+        runtimePackage: preview.runtimePackage,
+      }),
+    })
+  }
   const briefRow = await db.productProductionBriefs
     .where('[productionId+revision]').equals([build.productionId, build.briefRevision]).first()
   if (!briefRow || !await assertRecordInScope(scope, 'productProductionBriefs', briefRow, { owner: 'work' })
@@ -1781,6 +1803,34 @@ async function verifyTextAdventureHumanVisualReviewGateV1(
     fail('文字冒险人工审图 evidence、Build 或 gate receipt 不一致')
   }
   return { row, gateReceipt, evidence }
+}
+
+/**
+ * Verifies one exact immutable author-visual receipt against the Build's
+ * current Preview, Audit, independent Visual QA, Artifact and Blob closure.
+ * Mutation commands use this instead of partially re-parsing receipt JSON.
+ */
+export async function verifyTextAdventureHumanVisualReviewReceiptV1(input: {
+  scope: WorkspaceScope
+  productBuildId: number
+  receiptHash: string
+}): Promise<VerifiedTextAdventureHumanVisualReviewGateV1> {
+  if (!isSha256Hash(input.receiptHash)) fail('人工审图 receiptHash 无效')
+  const scope = await resolveScope({ scope: input.scope })
+  const build = await db.productBuilds.get(input.productBuildId)
+  if (!build || !await assertRecordInScope(scope, 'productBuilds', build, { owner: 'work' })) {
+    fail('Build 不存在或跨 Work')
+  }
+  const rows = await db.productQualityGateReceipts
+    .where('[buildId+gateId+receiptHash]')
+    .equals([build.id!, TEXT_ADVENTURE_HUMAN_VISUAL_REVIEW_GATE_ID_V1, input.receiptHash])
+    .toArray()
+  if (rows.length !== 1
+    || !await assertRecordInScope(scope, 'productQualityGateReceipts', rows[0], { owner: 'work' })) {
+    fail('人工审图回执不存在、重复或跨 Work')
+  }
+  const resolved = await resolveTextAdventureHumanVisualInputsV1({ scope, build })
+  return verifyTextAdventureHumanVisualReviewGateV1(rows[0], resolved)
 }
 
 export async function recordTextAdventureHumanVisualReviewV1(input: {

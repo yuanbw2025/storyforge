@@ -17,8 +17,8 @@ const LEGACY_TEXT_ADVENTURE_SKILLS = [
 ] as const
 
 describe('TEXTADV-3 · 专业生产 Agent 团队', () => {
-  it('把十八个专业岗位登记为独立 Agent 身份，每个岗位拥有自己的默认 Skill 与 owner', () => {
-    expect(TEXT_ADVENTURE_PRODUCTION_AGENT_IDS).toHaveLength(18)
+  it('把十九个专业岗位登记为独立 Agent 身份，每个岗位拥有自己的默认 Skill 与 owner', () => {
+    expect(TEXT_ADVENTURE_PRODUCTION_AGENT_IDS).toHaveLength(19)
     const defaults = TEXT_ADVENTURE_PRODUCTION_AGENT_IDS.map(agentId => getDefaultAgentSkillV1(agentId))
     expect(new Set(defaults.map(skill => skill.agentId))).toEqual(new Set(TEXT_ADVENTURE_PRODUCTION_AGENT_IDS))
     expect(defaults.every(skill => skill.owner === skill.agentId)).toBe(true)
@@ -51,6 +51,7 @@ describe('TEXTADV-3 · 专业生产 Agent 团队', () => {
     expect(counts.get('text-adventure-visual-qa-director')).toBe(1)
     expect(counts.get('text-adventure-showrunner')).toBe(1)
     expect(counts.get('text-adventure-scene-writer')).toBe(1)
+    expect(counts.get('text-adventure-ending-route-designer')).toBe(1)
   })
 
   it('分场作者和对白编辑只读取各自登记的有界投影', () => {

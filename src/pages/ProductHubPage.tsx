@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 import {
   ArrowRight,
   BookOpenText,
@@ -63,6 +63,13 @@ import { useActiveWork } from '../hooks/useActiveWork'
 import WorkKindBadge from '../components/work/WorkKindBadge'
 import { effectiveNovelProfile, effectiveWorkKind, SHORT_NOVEL_DEFAULT_WORDS } from '../lib/workspace/work-kind'
 import { switchNovelProfile } from '../lib/workspace/works'
+import {
+  loadProductHubWorkspaceCatalogV1,
+  PRODUCT_HUB_WORK_WORKSPACE_PARAM_V1,
+  PRODUCT_HUB_WORLD_WORKSPACE_PARAM_V1,
+  resolveProductHubWorkspaceSelectionV1,
+  updateProductHubWorkspaceQueryV1,
+} from '../lib/workspace/product-hub-selection'
 import WorldDerivationActions from '../components/world-engine/WorldDerivationActions'
 import {
   currentExperimentalProductOptInV1,
@@ -711,10 +718,10 @@ function MobileNavPanel({ activeTab, onClose, onSelect }: { activeTab: TabId; on
 
 export default function ProductHubPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const { projects, loadProjects } = useProjectStore()
   const [activeTab, setActiveTab] = useState<TabId>('home')
-  const [activeWorkProjectId, setActiveWorkProjectId] = useState<number | null>(null)
-  const [activeWorldProjectId, setActiveWorldProjectId] = useState<number | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [showWorldPicker, setShowWorldPicker] = useState(false)
   const [showMobileNav, setShowMobileNav] = useState(false)
@@ -724,51 +731,135 @@ export default function ProductHubPage() {
   const [ttrpgInitialSessionId, setTtrpgInitialSessionId] = useState<number | null>(null)
   const [ttrpgProductionHandoff, setTtrpgProductionHandoff] = useState<ProductProductionHandoffV1 | null>(null)
   const [onlineRoomHandoff, setOnlineRoomHandoff] = useState<OnlineRoomJoinHandoffV1 | null>(null)
-  const [projections, setProjections] = useState<Record<number, WorldProjection>>({})
+  const [projectsLoaded, setProjectsLoaded] = useState(false)
+  const [workspaceCatalog, setWorkspaceCatalog] = useState<{
+    ready: boolean
+    worldProjects: Project[]
+    workProjects: Project[]
+    projections: Record<number, WorldProjection>
+  }>({ ready: false, worldProjects: [], workProjects: [], projections: {} })
   const activeWorldGroupId = useWorldGroupStore(state => state.activeGroupId)
-
-  useEffect(() => { void loadProjects() }, [loadProjects])
 
   useEffect(() => {
     let cancelled = false
+    void loadProjects().finally(() => {
+      if (!cancelled) setProjectsLoaded(true)
+    })
+    return () => { cancelled = true }
+  }, [loadProjects])
+
+  useEffect(() => {
+    if (!projectsLoaded) return
+    let cancelled = false
     const load = async () => {
       try {
-        const loaded = await loadWorldProjections(projects.filter(project => project.id != null))
-        if (!cancelled) setProjections(Object.fromEntries(loaded.map(projection => [projection.projectId, projection])))
+        const catalog = await loadProductHubWorkspaceCatalogV1(projects)
+        const loaded = await loadWorldProjections(catalog.worldProjects)
+        if (catalog.rejected.length > 0) {
+          console.warn('[product-hub-selection] 已忽略活动根失效的工作区', catalog.rejected)
+        }
+        if (!cancelled) setWorkspaceCatalog({
+          ready: true,
+          worldProjects: catalog.worldProjects,
+          workProjects: catalog.workProjects,
+          projections: Object.fromEntries(loaded.map(projection => [projection.projectId, projection])),
+        })
       } catch (error) {
         console.error('[WORLD-2] 读取世界投影失败', error)
-        if (!cancelled) setProjections({})
+        if (!cancelled) setWorkspaceCatalog({
+          ready: true,
+          worldProjects: [],
+          workProjects: [],
+          projections: {},
+        })
       }
     }
+    setWorkspaceCatalog(current => ({ ...current, ready: false }))
     void load()
     return () => { cancelled = true }
-  }, [projects])
+  }, [projects, projectsLoaded])
 
-  const worlds = useMemo(() => Object.values(projections).map((projection, index) => {
-    const project = projects.find(candidate => candidate.id === projection.projectId)
+  const worlds = useMemo(() => Object.values(workspaceCatalog.projections).map((projection, index) => {
+    const project = workspaceCatalog.worldProjects.find(candidate => candidate.id === projection.projectId)
     return project ? projectToWorld(project, index, projection) : null
-  }).filter((world): world is ProductWorld => world != null), [projects, projections])
-  const workProjects = useMemo(() => projects.filter(project => (
-    project.workspacePurpose !== 'world-engine'
-  )), [projects])
-  useEffect(() => {
-    if (activeWorkProjectId != null && workProjects.some(project => project.id === activeWorkProjectId)) return
-    setActiveWorkProjectId(workProjects[0]?.id ?? null)
-  }, [activeWorkProjectId, workProjects])
-  useEffect(() => {
-    // Project identity is authoritative while the derived world projection is
-    // still loading. Otherwise a newly-created/imported world is immediately
-    // reset to the first stale projection before its own projection arrives.
-    if (activeWorldProjectId != null && projects.some(project => (
-      project.id === activeWorldProjectId && project.workspacePurpose === 'world-engine'
-    ))) return
-    setActiveWorldProjectId(worlds[0]?.projectId ?? null)
-  }, [activeWorldProjectId, projects, worlds])
-  const activeWorkProject = workProjects.find(project => project.id === activeWorkProjectId) ?? workProjects[0]
-  const activeWorld = worlds.find(world => world.projectId === activeWorldProjectId) ?? worlds[0]
+  }).filter((world): world is ProductWorld => world != null), [workspaceCatalog.projections, workspaceCatalog.worldProjects])
+  const workProjects = workspaceCatalog.workProjects
+  const requestedWorkWorkspaceUid = searchParams.get(PRODUCT_HUB_WORK_WORKSPACE_PARAM_V1)
+  const requestedWorldWorkspaceUid = searchParams.get(PRODUCT_HUB_WORLD_WORKSPACE_PARAM_V1)
+  const activeWorkProject = resolveProductHubWorkspaceSelectionV1(workProjects, requestedWorkWorkspaceUid)
+  const selectedWorldProject = resolveProductHubWorkspaceSelectionV1(
+    workspaceCatalog.worldProjects,
+    requestedWorldWorkspaceUid,
+  )
+  const activeWorld = worlds.find(world => world.projectId === selectedWorldProject?.id) ?? worlds[0]
   const activeWorldProject = activeWorld?.project
-  const selectWorld = (world: ProductWorld) => setActiveWorldProjectId(world.projectId)
-  const selectWork = (projectId: number) => setActiveWorkProjectId(projectId)
+  const replaceProductHubSearchParams = useCallback((next: URLSearchParams) => {
+    const pathname = window.location.pathname.endsWith('/')
+      ? window.location.pathname
+      : `${window.location.pathname}/`
+    const search = next.size > 0 ? `?${next.toString()}` : ''
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${pathname}${search}${window.location.hash}`,
+    )
+    // BrowserRouter owns the rendered location. A same-document popstate keeps
+    // it synchronized without letting basename normalization remove the
+    // trailing slash required by Vite's public base.
+    window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }))
+  }, [])
+
+  useEffect(() => {
+    if (!workspaceCatalog.ready) return
+    let next = searchParams
+    let changed = false
+    const canonicalWorldUid = activeWorldProject?.workspaceUid ?? null
+    const canonicalWorkUid = activeWorkProject?.workspaceUid ?? null
+    if (requestedWorldWorkspaceUid != null && requestedWorldWorkspaceUid !== canonicalWorldUid) {
+      next = updateProductHubWorkspaceQueryV1(next, 'world-engine', canonicalWorldUid)
+      changed = true
+    }
+    if (requestedWorkWorkspaceUid != null && requestedWorkWorkspaceUid !== canonicalWorkUid) {
+      next = updateProductHubWorkspaceQueryV1(next, 'independent-work', canonicalWorkUid)
+      changed = true
+    }
+    if (changed) replaceProductHubSearchParams(next)
+  }, [
+    activeWorkProject?.workspaceUid,
+    activeWorldProject?.workspaceUid,
+    requestedWorkWorkspaceUid,
+    requestedWorldWorkspaceUid,
+    searchParams,
+    replaceProductHubSearchParams,
+    workspaceCatalog.ready,
+  ])
+
+  const selectWorld = (world: ProductWorld) => replaceProductHubSearchParams(
+    updateProductHubWorkspaceQueryV1(searchParams, 'world-engine', world.project.workspaceUid),
+  )
+  const selectWork = (projectId: number) => {
+    const project = workProjects.find(candidate => candidate.id === projectId)
+    if (!project) return
+    replaceProductHubSearchParams(
+      updateProductHubWorkspaceQueryV1(searchParams, 'independent-work', project.workspaceUid),
+    )
+  }
+  const selectWorkspaceProject = (purpose: Project['workspacePurpose'], projectId: number) => {
+    const project = useProjectStore.getState().projects.find(candidate => (
+      candidate.id === projectId && candidate.workspacePurpose === purpose
+    ))
+    if (!project) return
+    replaceProductHubSearchParams(
+      updateProductHubWorkspaceQueryV1(searchParams, purpose, project.workspaceUid),
+    )
+  }
+  const reloadAndSelectWorkspaceProject = async (
+    purpose: Project['workspacePurpose'],
+    projectId: number,
+  ) => {
+    await loadProjects()
+    selectWorkspaceProject(purpose, projectId)
+  }
   const selectTab = (tab: TabId) => {
     const decision = tabDecision(tab)
     if (decision && !decision.enterable) return
@@ -821,7 +912,7 @@ export default function ProductHubPage() {
       return home()
     }
     switch (activeTab) {
-      case 'worlds': return <WorldEnginePage worlds={worlds} activeWorld={activeWorld} onSelectWorld={selectWorld} onOpenCreate={() => setShowCreate(true)} onOpenWorldPicker={() => setShowWorldPicker(true)} onImported={async projectId => { await loadProjects(); setActiveWorldProjectId(projectId); setActiveTab('worlds') }} onOpenModule={module => { if (activeWorldProject?.id) navigate(`/workspace/${activeWorldProject.id}?module=${module}`) }} onOpenProductProduction={handoff => {
+      case 'worlds': return <WorldEnginePage worlds={worlds} activeWorld={activeWorld} onSelectWorld={selectWorld} onOpenCreate={() => setShowCreate(true)} onOpenWorldPicker={() => setShowWorldPicker(true)} onImported={async projectId => { await reloadAndSelectWorkspaceProject('world-engine', projectId); setActiveTab('worlds') }} onOpenModule={module => { if (activeWorldProject?.id) navigate(`/workspace/${activeWorldProject.id}?module=${module}`) }} onOpenProductProduction={handoff => {
         const parsed = parseProductProductionHandoffV1(handoff)
         if (parsed.productType === 'ttrpg') {
           if (!productDecision('upper.ttrpg').enterable) throw new Error('跑团产品当前未开放。')
@@ -840,7 +931,7 @@ export default function ProductHubPage() {
         setTextProductProductionHandoff(parsed)
         setActiveTab('text-games')
       }} />
-      case 'novel': return <NovelPage project={activeWorkProject} onCreate={() => setShowCreate(true)} onDerived={async projectId => { await loadProjects(); setActiveWorldProjectId(projectId); setActiveTab('worlds') }} />
+      case 'novel': return <NovelPage project={activeWorkProject} onCreate={() => setShowCreate(true)} onDerived={async projectId => { await reloadAndSelectWorkspaceProject('world-engine', projectId); setActiveTab('worlds') }} />
       case 'nodes': return <NodesPage project={activeWorkProject} onCreate={() => setShowCreate(true)} />
       case 'ttrpg': return <TtrpgPage project={activeWorldProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} initialSessionId={ttrpgInitialSessionId} initialProductionHandoff={ttrpgProductionHandoff} initialOnlineHandoff={onlineRoomHandoff} onOnlineHandoffConsumed={() => setOnlineRoomHandoff(null)} />
       case 'chat': return <CharacterInteractionPage project={activeWorldProject} world={activeWorld} onOpenWorldPicker={() => setShowWorldPicker(true)} onCreate={() => setShowCreate(true)} />
@@ -850,5 +941,5 @@ export default function ProductHubPage() {
     }
   }
 
-  return <div className="sf-product-shell"><WelcomeGuide onGoSettings={() => navigate('/settings')} /><ProductHeader activeTab={activeTab} onSelect={selectTab} onOpenCreate={() => setShowCreate(true)} onOpenMobileNav={() => setShowMobileNav(true)} onOpenWorldPicker={() => setShowWorldPicker(true)} onOpenSettings={() => navigate('/settings')} /><main className="sf-product-main">{renderPage()}</main><footer className="sf-product-footer"><span>StoryForge 产品综合页 · 本地数据</span><span><ShieldCheck className="h-3.5 w-3.5" />世界版本与产品实例分开管理</span></footer>{showCreate && <CreatePanel onClose={() => setShowCreate(false)} onCreated={(kind, id) => { if (kind === 'worlds') setActiveWorldProjectId(id); else setActiveWorkProjectId(id); setActiveTab(kind); setShowCreate(false); if (kind === 'novel') navigate(`/workspace/${id}?module=outline`) }} />}{showWorldPicker && <WorldPicker worlds={worlds} onClose={() => setShowWorldPicker(false)} onChoose={selectWorld} />}{showMobileNav && <MobileNavPanel activeTab={activeTab} onClose={() => setShowMobileNav(false)} onSelect={selectTab} />}</div>
+  return <div className="sf-product-shell"><WelcomeGuide onGoSettings={() => navigate('/settings')} /><ProductHeader activeTab={activeTab} onSelect={selectTab} onOpenCreate={() => setShowCreate(true)} onOpenMobileNav={() => setShowMobileNav(true)} onOpenWorldPicker={() => setShowWorldPicker(true)} onOpenSettings={() => navigate('/settings')} /><main className="sf-product-main">{renderPage()}</main><footer className="sf-product-footer"><span>StoryForge 产品综合页 · 本地数据</span><span><ShieldCheck className="h-3.5 w-3.5" />世界版本与产品实例分开管理</span></footer>{showCreate && <CreatePanel onClose={() => setShowCreate(false)} onCreated={(kind, id) => { selectWorkspaceProject(kind === 'worlds' ? 'world-engine' : 'independent-work', id); setActiveTab(kind); setShowCreate(false); if (kind === 'novel') navigate(`/workspace/${id}?module=outline`) }} />}{showWorldPicker && <WorldPicker worlds={worlds} onClose={() => setShowWorldPicker(false)} onChoose={selectWorld} />}{showMobileNav && <MobileNavPanel activeTab={activeTab} onClose={() => setShowMobileNav(false)} onSelect={selectTab} />}</div>
 }

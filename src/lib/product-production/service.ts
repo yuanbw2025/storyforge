@@ -17,9 +17,13 @@ import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { listWorldReferenceCatalogV1 } from '../product/source'
 import { prepareProductProductionAdoption, publishProductProductionBuild } from './adoption'
 import {
+  canReviseTextAdventureContentBeforeMediaV1,
+  canReviseTextAdventureRuntimeCopyFromRecoveryV1,
   canReviseTextAdventureVisualContractFromRecoveryV1,
   canUpgradeTextAdventureExecutionPlanV1,
   executeProductProductionCommand,
+  hasPassedTextAdventureQualityReviewForExecutionPlanUpgradeV1,
+  isLegacyOversizedTextAdventureQualityReviewPlanV1,
   isRepairRetryableFailedProductBuildV1,
   isTextAdventureBuildLifetimeBudgetExhaustedV1,
 } from './commands'
@@ -156,6 +160,13 @@ export function canRepairTextAdventureVisualContractV1(details: ProductProductio
     && canReviseTextAdventureVisualContractFromRecoveryV1(details.build)
 }
 
+export function canRepairTextAdventureRuntimeCopyV1(details: ProductProductionDetailsV1): boolean {
+  return details.production.productType === 'text-adventure'
+    && details.production.status === 'producing'
+    && !!details.build
+    && canReviseTextAdventureRuntimeCopyFromRecoveryV1(details.build)
+}
+
 const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
   'production.supervision',
   'design.game',
@@ -167,6 +178,7 @@ const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
   'content.narrative-arc-scenes',
   'content.narrative-decision-plan',
   'content.narrative-arc-plan',
+  'content.ending-route-plan',
   'content.main-quest-plan',
   'content.quest-script.supplemental',
   'content.quest-script',
@@ -183,6 +195,7 @@ const AUTHOR_REVIEW_ARTIFACT_KEYS = new Set([
   'quality.adventure-review',
   'media.requirements',
   'media.visual-bible',
+  'media.vision-preflight',
   'media.anchor-decision',
   'media.audit',
   'runtime.package',
@@ -278,6 +291,12 @@ export async function reviseTextAdventureMediaAssetV1(input: {
   details: ProductProductionDetailsV1
   asset: TextAdventureMediaAssetV1
   action: 'upload-replacement' | 'regenerate' | 'lock' | 'unlock'
+  repairFeedback?: {
+    sourceGateReceiptHash: string
+    sourceEvidenceHash: string
+    priorContentHash: string
+    note: string
+  }
   upload?: {
     file: File
     altText: string
@@ -315,6 +334,17 @@ export async function reviseTextAdventureMediaAssetV1(input: {
   } else if (input.upload) {
     throw new Error('[product-production-service] 非上传操作不能携带图片')
   }
+  const repairFeedback = input.repairFeedback ? {
+    ...input.repairFeedback,
+    note: input.repairFeedback.note.trim().normalize('NFC'),
+  } : null
+  if (input.action === 'regenerate' && (!repairFeedback
+    || repairFeedback.priorContentHash !== input.asset.contentHash || !repairFeedback.note)) {
+    throw new Error('[product-production-service] 重生成必须绑定当前图片的作者退回回执与非空修订意见')
+  }
+  if (input.action !== 'regenerate' && repairFeedback) {
+    throw new Error('[product-production-service] 只有重生成可以携带作者退回证据')
+  }
   const receipt = await executeProductProductionCommand({
     scope: input.scope, productionId: input.details.production.id!,
     command: {
@@ -322,6 +352,7 @@ export async function reviseTextAdventureMediaAssetV1(input: {
       expectedStateRevision: input.details.production.stateRevision,
       buildNumber: build.buildNumber, artifactKey: input.asset.artifactKey,
       expectedArtifactHash: input.asset.contentHash, action: input.action,
+      repairFeedback,
       replacement: uploadContract,
     },
   })
@@ -656,6 +687,10 @@ export function draftTextAdventureCommunityCandidateRepairV1(
         repairedContent.productionBudget.maximumOutputTokens,
         floor.minimumOutputTokens,
       ),
+      maximumDurationMs: Math.max(
+        repairedContent.productionBudget.maximumDurationMs,
+        floor.minimumDurationMs,
+      ),
       maximumMediaCalls: Math.max(
         repairedContent.productionBudget.maximumMediaCalls,
         repairedContent.media.imageCount
@@ -935,6 +970,8 @@ export async function runAuthorizedProductProductionV1(input: {
     requirementKey: textRequirements[0].requirementKey,
     adapterId: textCapability.receipt.adapterId,
     bindingHash: textCapability.receipt.capabilityHash,
+    provider: textCapability.receipt.provider,
+    model: textCapability.receipt.model,
   }]
   const mediaCapabilities = new Map<string, ResolvedProductMediaCapabilityV1>()
   const relayUrl = configuredMediaRelayUrlV1()
@@ -1052,6 +1089,7 @@ export async function beginProductProductionEvolutionV1(input: {
   productionId: number
   userText: string
   affectedLanes?: ProductEvolutionAffectedLaneV1[]
+  commandId?: string
 }): Promise<{ briefRevision: number }> {
   const userText = input.userText.trim()
   if (!userText) throw new Error('[product-production-service] 请先填写本轮演化目标')
@@ -1066,13 +1104,32 @@ export async function beginProductProductionEvolutionV1(input: {
   let base: ProductEvolutionBaseV1
   const budgetRecovery = affectedLanes.length === 1 && affectedLanes[0] === 'production-budget'
   const planUpgradeRecovery = affectedLanes.length === 1 && affectedLanes[0] === 'execution-plan'
-  const visualContractRecovery = affectedLanes.length === 1 && affectedLanes[0] === 'visual'
+  const currentTextAdventureRecovery = details.production.productType === 'text-adventure'
+    && details.production.status === 'producing'
+    && details.build.status === 'recovery-required'
+  const visualLaneOnly = affectedLanes.length === 1 && affectedLanes[0] === 'visual'
+  const rejectedAnchorRecoveryCandidate = visualLaneOnly
+    && details.production.productType === 'text-adventure'
+    && details.production.status === 'stopped'
+    && details.build.status === 'cancelled'
+    && canReviseTextAdventureVisualContractFromRecoveryV1(details.build)
+  // `visual`, `content+visual`, and `runtime` are ordinary author evolution
+  // lanes when the baseline is already preview-ready/released. They become
+  // special recovery lanes only while the current text-adventure Build is at
+  // its governed recovery boundary (or the author explicitly rejected a
+  // character anchor). Classifying from the lane name alone made legitimate
+  // cross-Build reassembly/evolution impossible for every product.
+  const visualContractRecovery = visualLaneOnly
+    && (currentTextAdventureRecovery || rejectedAnchorRecoveryCandidate)
+  const preMediaContentRecovery = currentTextAdventureRecovery
+    && affectedLanes.length === 2
+    && affectedLanes.includes('content') && affectedLanes.includes('visual')
+  const runtimeCopyRecovery = currentTextAdventureRecovery
+    && affectedLanes.length === 1 && affectedLanes[0] === 'runtime'
   const recoveryEvolution = budgetRecovery || planUpgradeRecovery || visualContractRecovery
+    || preMediaContentRecovery || runtimeCopyRecovery
   if (recoveryEvolution) {
-    const rejectedAnchorRecovery = visualContractRecovery
-      && details.production.status === 'stopped'
-      && details.build.status === 'cancelled'
-      && canReviseTextAdventureVisualContractFromRecoveryV1(details.build)
+    const rejectedAnchorRecovery = rejectedAnchorRecoveryCandidate
     if (details.production.productType !== 'text-adventure'
       || (!rejectedAnchorRecovery && (details.production.status !== 'producing'
         || details.build.status !== 'recovery-required'))
@@ -1084,14 +1141,23 @@ export async function beginProductProductionEvolutionV1(input: {
     if (budgetRecovery && !isTextAdventureBuildLifetimeBudgetExhaustedV1(details.build)
       && brief.productionBudget.maximumModelCalls >= floor.minimumModelCalls
       && brief.productionBudget.maximumInputTokens >= floor.minimumInputTokens
-      && brief.productionBudget.maximumOutputTokens >= floor.minimumOutputTokens) {
+      && brief.productionBudget.maximumOutputTokens >= floor.minimumOutputTokens
+      && brief.productionBudget.maximumDurationMs >= floor.minimumDurationMs) {
       throw new Error('[product-production-service] 当前 Brief 已满足专业生产预算底线，请检查实际 blocker 后重试')
     }
-    if (planUpgradeRecovery && !canUpgradeTextAdventureExecutionPlanV1(details.build)) {
-      throw new Error('[product-production-service] 当前 Build 没有可验证的执行计划升级证据')
+    if (planUpgradeRecovery && (!canUpgradeTextAdventureExecutionPlanV1(details.build)
+      || (isLegacyOversizedTextAdventureQualityReviewPlanV1(details.build)
+        && await hasPassedTextAdventureQualityReviewForExecutionPlanUpgradeV1(details.build)))) {
+      throw new Error('[product-production-service] 当前 Build 没有可验证的执行计划升级证据，或叙事质量审查已经通过')
     }
     if (visualContractRecovery && !canReviseTextAdventureVisualContractFromRecoveryV1(details.build)) {
       throw new Error('[product-production-service] 当前 Build 没有可验证的视觉合同或媒资质量阻断')
+    }
+    if (runtimeCopyRecovery && !canReviseTextAdventureRuntimeCopyFromRecoveryV1(details.build)) {
+      throw new Error('[product-production-service] 当前 Build 没有可验证的文字冒险公开文案质量阻断')
+    }
+    if (preMediaContentRecovery && !canReviseTextAdventureContentBeforeMediaV1(details.build)) {
+      throw new Error('[product-production-service] 当前 Build 不在可返修正文的生成图片前作者闸门')
     }
     const recoveryControlEpoch = rejectedAnchorRecovery
       ? parseProductProductionPlanV3(details.build.planJson).controlEpoch
@@ -1118,7 +1184,7 @@ export async function beginProductProductionEvolutionV1(input: {
   const receipt = await executeProductProductionCommand({
     scope, productionId: details.production.id!,
     command: {
-      type: 'evolve', commandId: commandId('evolve'),
+      type: 'evolve', commandId: input.commandId ?? commandId('evolve'),
       expectedStateRevision: details.production.stateRevision, base, userText, affectedLanes,
     },
   })
@@ -1133,8 +1199,25 @@ export async function upgradeTextAdventureProductionPlanV1(input: {
   scope: WorkspaceScope
   productionId: number
 }): Promise<{ briefRevision: number }> {
+  const scope = await resolveScope({ scope: input.scope })
+  const details = await readProductProductionDetailsV1(scope, input.productionId)
+  if (!details.build?.id) {
+    throw new Error('[product-production-service] 执行计划升级缺少当前 Build')
+  }
+  const upgradeCommandId = [
+    'execution-plan-upgrade', details.build.id, details.build.controlEpoch, details.build.planHash,
+  ].join('.')
+  const prior = await db.productProductionCommands
+    .where('[productionId+commandId]').equals([input.productionId, upgradeCommandId]).first()
+  if (prior?.status === 'succeeded') {
+    const result = JSON.parse(prior.resultJson) as { briefRevision?: unknown }
+    if (typeof result.briefRevision !== 'number') {
+      throw new Error('[product-production-service] 已完成的执行计划升级回执缺少 Brief revision')
+    }
+    return { briefRevision: result.briefRevision }
+  }
   return beginProductProductionEvolutionV1({
-    ...input,
+    scope, productionId: input.productionId, commandId: upgradeCommandId,
     userText: '依据当前 Build 的可验证失败回执升级执行计划：采用现行逐任务合同、实测时长与 token 预留、有界重试和持久化回执；继承所有可证明未变化且已签收的正文与媒资，不修改剧情、玩法、世界来源、图片内容或媒资范围。',
     affectedLanes: ['execution-plan'],
   })

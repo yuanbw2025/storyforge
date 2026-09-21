@@ -425,10 +425,26 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
   if (type === 'request-preview') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'buildNumber']), expectedStateRevision: expectedRevision(row.expectedStateRevision), buildNumber: positiveId(row.buildNumber, 'buildNumber') }
   if (type === 'revise-media-asset') {
     const commandId = commandHeader(row, type, [
-      'expectedStateRevision', 'buildNumber', 'artifactKey', 'expectedArtifactHash', 'action', 'replacement',
+      'expectedStateRevision', 'buildNumber', 'artifactKey', 'expectedArtifactHash', 'action',
+      ...(Object.prototype.hasOwnProperty.call(row, 'repairFeedback') ? ['repairFeedback'] : []), 'replacement',
     ])
     if (!isSha256Hash(row.expectedArtifactHash)) fail('expectedArtifactHash 无效')
     const action = enumValue(row.action, ['upload-replacement', 'regenerate', 'lock', 'unlock'], 'action')
+    let repairFeedback: Extract<ProductProductionCommandV1, { type: 'revise-media-asset' }>['repairFeedback'] = null
+    if (row.repairFeedback != null) {
+      const item = record(row.repairFeedback, 'repairFeedback')
+      exactKeys(item, [
+        'sourceGateReceiptHash', 'sourceEvidenceHash', 'priorContentHash', 'note',
+      ], 'repairFeedback')
+      if (!isSha256Hash(item.sourceGateReceiptHash) || !isSha256Hash(item.sourceEvidenceHash)
+        || !isSha256Hash(item.priorContentHash)) fail('repairFeedback hash 无效')
+      repairFeedback = {
+        sourceGateReceiptHash: item.sourceGateReceiptHash,
+        sourceEvidenceHash: item.sourceEvidenceHash,
+        priorContentHash: item.priorContentHash,
+        note: text(item.note, 'repairFeedback.note', 2_000),
+      }
+    }
     let replacement: Extract<ProductProductionCommandV1, { type: 'revise-media-asset' }>['replacement'] = null
     if (row.replacement != null) {
       const item = record(row.replacement, 'replacement')
@@ -460,12 +476,15 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
     if ((action === 'upload-replacement') !== (replacement != null)) {
       fail('仅 upload-replacement 必须携带 replacement')
     }
+    if ((action === 'regenerate') !== (repairFeedback != null)) {
+      fail('仅 regenerate 必须携带已冻结的作者退回证据')
+    }
     return {
       type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision),
       buildNumber: positiveId(row.buildNumber, 'buildNumber'),
       artifactKey: stableKey(row.artifactKey, 'artifactKey'),
       expectedArtifactHash: row.expectedArtifactHash,
-      action, replacement,
+      action, repairFeedback, replacement,
     }
   }
   if (type === 'revise-media-assets') {

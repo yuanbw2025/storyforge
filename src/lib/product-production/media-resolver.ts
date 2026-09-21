@@ -11,10 +11,6 @@ import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { readProductReleaseMediaBytes } from './release-media'
 import { acquireMediaBlobLease, readMediaBlobObjectData } from './media-blob-store'
 
-interface ResolverLease {
-  release(): Promise<void>
-}
-
 function assetCatalog(runtimePackage: ProductRuntimePackageV1): Map<string, FrozenRuntimeMediaAssetV2> {
   return new Map((runtimePackage.presentation?.assets ?? []).map(asset => [asset.assetKey, asset]))
 }
@@ -25,7 +21,7 @@ function createResolver(input: {
   releaseAll(): Promise<void>
 }): ProductMediaResolverV1 {
   const assets = assetCatalog(input.runtimePackage)
-  const urls = new Set<string>()
+  const urls = new Map<string, string>()
   let disposed = false
   const ensureActive = () => {
     if (disposed) throw new Error('[product-media-resolver] resolver 已释放')
@@ -55,9 +51,15 @@ function createResolver(input: {
           continue
         }
         try {
+          const cached = urls.get(assetKey)
+          if (cached) {
+            result.urls[assetKey] = cached
+            result.usedBytes += asset.byteSize
+            continue
+          }
           const blob = await this.read(assetKey)
           const url = URL.createObjectURL(blob)
-          urls.add(url)
+          urls.set(assetKey, url)
           result.urls[assetKey] = url
           result.usedBytes += asset.byteSize
         } catch (cause) {
@@ -69,7 +71,7 @@ function createResolver(input: {
     dispose() {
       if (disposed) return
       disposed = true
-      for (const url of urls) URL.revokeObjectURL(url)
+      for (const url of urls.values()) URL.revokeObjectURL(url)
       urls.clear()
       void input.releaseAll()
     },
@@ -105,7 +107,6 @@ export async function createBuildProductMediaResolver(input: {
 }): Promise<ProductMediaResolverV1> {
   const scope = await resolveScope({ scope: input.scope })
   const owner = `preview:${input.productBuildId}:${crypto.randomUUID()}`
-  const leases = new Map<number, ResolverLease>()
   const bindings = new Map(input.preview.mediaBindings.map(binding => [binding.assetKey, binding]))
   return createResolver({
     runtimePackage: input.preview.runtimePackage,
@@ -123,22 +124,27 @@ export async function createBuildProductMediaResolver(input: {
         || !await assertRecordInScope(scope, 'productBuildArtifacts', artifact, { owner: 'work' })) {
         throw new Error(`[product-media-resolver] Build Artifact 缺失或不匹配:${binding.artifactKey}`)
       }
-      if (!leases.has(artifact.blobObjectId)) {
-        leases.set(artifact.blobObjectId, await acquireMediaBlobLease({
-          scope,
-          blobObjectId: artifact.blobObjectId,
-          owner,
-        }))
-      }
-      return readMediaBlobObjectData({
+      // The lease protects the physical read, not the lifetime of the object
+      // URL created from the copied ArrayBuffer. Holding it until resolver
+      // disposal made a 30-minute browser benchmark exclude the real player
+      // (and made two preview tabs degrade every image to text). Release as
+      // soon as the verified bytes have been materialized so independent
+      // read-only consumers can use the same immutable Build concurrently.
+      const lease = await acquireMediaBlobLease({
         scope,
         blobObjectId: artifact.blobObjectId,
-        expected: { contentHash: asset.blobContentHash, byteSize: asset.byteSize, mimeType: asset.mimeType },
+        owner,
       })
+      try {
+        return await readMediaBlobObjectData({
+          scope,
+          blobObjectId: artifact.blobObjectId,
+          expected: { contentHash: asset.blobContentHash, byteSize: asset.byteSize, mimeType: asset.mimeType },
+        })
+      } finally {
+        await lease.release()
+      }
     },
-    async releaseAll() {
-      await Promise.all([...leases.values()].map(lease => lease.release()))
-      leases.clear()
-    },
+    async releaseAll() {},
   })
 }

@@ -11,6 +11,7 @@ import {
   currentProductSelection,
 } from '../helpers/current-product-world'
 import { createTextAdventureFoundationContentV2 } from '../helpers/text-adventure-v2-foundation'
+import { analyzeTextAdventureRouteQualityV1 } from '../../src/lib/adventure/quality-analysis'
 
 const PRODUCTS: ProductionProductKindV1[] = [
   'character-interaction', 'text-adventure', 'avg', 'text-open-world',
@@ -110,6 +111,76 @@ describe('PRODUCT-PROD-1G · product-specific quality gates', () => {
     const report = evaluateProductRuntimeProductQualityV1({ runtimePackage: broken, brief: currentBrief })
     expect(report.passed).toBe(false)
     expect(report.gates).toContainEqual(expect.objectContaining({ gateId: 'product.adventure.progression', passed: false }))
+  })
+
+  it('公开文案拒绝内部演化指令，即使指令只有中文也不能混入运行包', () => {
+    const broken = runtime('text-adventure')
+    broken.adventure = createTextAdventureFoundationContentV2()
+    broken.definition.description = '质量门 · 本轮演化：返修玩家可见任务文案并重新核对目标。'
+    expect(analyzeTextAdventureRouteQualityV1(broken).copyIssues).toContainEqual({
+      kind: 'instruction-leak', surfaceKey: 'definition.description',
+      excerpt: '质量门 · 本轮演化：返修玩家可见任务文案并重新核对目标。',
+    })
+  })
+
+  it('任一叙事选择缺少唯一可执行行动时拒绝运行包，不能只验证剩余映射', () => {
+    const currentBrief = brief('text-adventure')
+    const broken = runtime('text-adventure')
+    const foundation = createTextAdventureFoundationContentV2()
+    const actionTemplate = foundation.actions.find(action => action.narrativeChoiceKey != null)!
+    broken.narrative.choices.forEach(choice => {
+      const actionKey = `action.choice.${choice.choiceKey}`
+      choice.tags = [`adventure-action:${actionKey}`]
+    })
+    broken.adventure = {
+      ...foundation,
+      actions: [
+        ...foundation.actions.filter(action => action.narrativeChoiceKey == null),
+        ...broken.narrative.choices.map(choice => ({
+          ...actionTemplate,
+          key: `action.choice.${choice.choiceKey}`,
+          narrativeChoiceKey: choice.choiceKey,
+        })),
+      ],
+    }
+    const removedChoiceKey = broken.narrative.choices[0].choiceKey
+    broken.adventure = {
+      ...broken.adventure!,
+      actions: broken.adventure!.actions.filter(action => action.narrativeChoiceKey !== removedChoiceKey),
+    }
+    const report = evaluateProductRuntimeProductQualityV1({ runtimePackage: broken, brief: currentBrief })
+    expect(report.gates).toContainEqual(expect.objectContaining({
+      gateId: 'product.adventure.v2-choice-bridge',
+      passed: false,
+      evidence: expect.arrayContaining([
+        `unmapped=${removedChoiceKey}`,
+        'orphan=none',
+        'duplicate=none',
+      ]),
+    }))
+
+    broken.adventure.actions.push(
+      {
+        ...actionTemplate,
+        key: `action.choice.${removedChoiceKey}`,
+        narrativeChoiceKey: removedChoiceKey,
+      },
+      {
+        ...actionTemplate,
+        key: `action.choice.${removedChoiceKey}.duplicate`,
+        narrativeChoiceKey: removedChoiceKey,
+      },
+    )
+    const duplicateReport = evaluateProductRuntimeProductQualityV1({ runtimePackage: broken, brief: currentBrief })
+    expect(duplicateReport.gates).toContainEqual(expect.objectContaining({
+      gateId: 'product.adventure.v2-choice-bridge',
+      passed: false,
+      evidence: expect.arrayContaining([
+        'unmapped=none',
+        'orphan=none',
+        `duplicate=${removedChoiceKey}`,
+      ]),
+    }))
   })
 
   it('商业文字冒险不能用十二张泛图冒充封面、地图、角色与关键剧情构成', () => {

@@ -739,6 +739,12 @@ export type ProductProductionCommandV1 =
       artifactKey: string;
       expectedArtifactHash: string;
       action: "upload-replacement" | "regenerate" | "lock" | "unlock";
+      repairFeedback: {
+        sourceGateReceiptHash: string;
+        sourceEvidenceHash: string;
+        priorContentHash: string;
+        note: string;
+      } | null;
       replacement: {
         blobObjectId: number;
         contentHash: string;

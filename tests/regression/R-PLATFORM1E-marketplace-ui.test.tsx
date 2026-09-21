@@ -82,6 +82,7 @@ function client() {
     reviseListing: vi.fn().mockResolvedValue({ ...listing, status: 'draft', reviewReasonCode: null }),
     suspendListing: vi.fn().mockResolvedValue({ ...listing, status: 'suspended' }),
     withdrawListing: vi.fn().mockResolvedValue({ ...listing, status: 'withdrawn' }),
+    reviewTextAdventureCandidate: vi.fn(),
   }
 }
 
@@ -152,6 +153,38 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     expect(JSON.stringify(localStorage)).not.toContain('token-buyer')
   })
 
+  it('分页市场允许跳过空证明页加载更多，筛选变化立即废弃旧 cursor', async () => {
+    const fake = client() as ReturnType<typeof client> & {
+      discoverPage: ReturnType<typeof vi.fn>
+    }
+    fake.discoverPage = vi.fn()
+      .mockResolvedValueOnce({ items: [], nextCursor: 'cursor.page-1' })
+      .mockResolvedValueOnce({ items: [listing], nextCursor: null })
+      .mockResolvedValueOnce({ items: [], nextCursor: null })
+    await act(async () => {
+      root.render(createElement(MarketplacePanel, { client: fake as never }))
+      await settle()
+    })
+    await act(async () => { button(host, '刷新').click(); await settle() })
+    await waitFor(() => expect(button(host, '加载更多')).toBeTruthy())
+    expect(host.textContent).not.toContain('市场短篇')
+    await act(async () => { button(host, '加载更多').click(); await settle() })
+    await waitFor(() => expect(host.textContent).toContain('市场短篇'))
+    expect(fake.discoverPage).toHaveBeenNthCalledWith(2, {
+      productType: undefined, query: '', cursor: 'cursor.page-1',
+    })
+
+    const search = host.querySelector<HTMLInputElement>('input[placeholder="搜索战役或文字游戏"]')!
+    await act(async () => setInput(search, '新筛选'))
+    expect(host.textContent).not.toContain('市场短篇')
+    expect([...host.querySelectorAll('button')].some(item => item.textContent?.includes('加载更多'))).toBe(false)
+    await act(async () => { button(host, '刷新').click(); await settle() })
+    await waitFor(() => expect(fake.discoverPage).toHaveBeenCalledTimes(3))
+    expect(fake.discoverPage).toHaveBeenLastCalledWith({
+      productType: undefined, query: '新筛选', cursor: undefined,
+    })
+  })
+
   it('创作者对本地正式 Release 依次执行冻结、建目录、上传和提交审核', async () => {
     await db.productReleases.add({
       projectId: 1, worldId: 1, workId: 1, worldReleaseId: 1,
@@ -218,7 +251,19 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
     await act(async () => { button(host, '冻结、上传并提交审核').click(); await settle() })
     await waitFor(() => expect(fake.submitListing).toHaveBeenCalledOnce())
     expect(exportTextAdventureCandidate).toHaveBeenCalledTimes(2)
-    expect(fake.registerRelease).toHaveBeenCalledWith(expect.objectContaining({ bundle }))
+    expect(fake.registerRelease).toHaveBeenCalledWith(expect.objectContaining({
+      bundle,
+      listingId: listing.listingId,
+      textAdventureCandidate: expect.objectContaining({
+        schema: 'storyforge.text-adventure-community-submission', version: 1,
+        candidateHash: '6'.repeat(64),
+        dossier: expect.objectContaining({ releaseContentHash: RELEASE }),
+      }),
+    }))
+    expect(fake.createListing.mock.invocationCallOrder[0])
+      .toBeLessThan(fake.registerRelease.mock.invocationCallOrder[0])
+    expect(fake.registerRelease.mock.invocationCallOrder[0])
+      .toBeLessThan(fake.submitListing.mock.invocationCallOrder[0])
   })
 
   it('有权限的发行审核员读取 submitted 队列并显式批准发布', async () => {
@@ -237,6 +282,42 @@ describe('PLATFORM-1E · Marketplace product UI', () => {
       requestId: expect.stringMatching(/^approve:listing\.market-ui\./),
     })))
     expect(host.textContent).toContain('已审核发布')
+  })
+
+  it('文字冒险审核员必须读取同一 Release 的服务端候选证据后才能发布', async () => {
+    const textListing = {
+      ...listing, productType: 'text-adventure' as const, status: 'submitted' as const,
+      title: '潮钟群岛', amountMinor: 0,
+    }
+    const fake = client()
+    const bundle = {
+      productRelease: { contentHash: RELEASE }, bundleHash: 'b'.repeat(64),
+    } as unknown as ProductDistributionBundleV1
+    const dossier = textAdventureCandidate(bundle).dossier
+    fake.reviewQueue.mockResolvedValue([textListing])
+    fake.reviewTextAdventureCandidate.mockResolvedValue({
+      schema: 'storyforge.commercial-text-adventure-review-projection', version: 1,
+      status: 'pending-review', listingId: textListing.listingId,
+      releaseHash: textListing.releaseHash, bundleHash: 'b'.repeat(64),
+      candidateHash: '6'.repeat(64), recordHash: '7'.repeat(64), verifiedAt: 2,
+      dossier, evidenceSummary: dossier.evidence,
+    })
+    fake.publishListing.mockResolvedValue({ ...textListing, status: 'published' })
+    await act(async () => {
+      root.render(createElement(MarketplacePanel, { client: fake as never }))
+      await settle()
+    })
+    await act(async () => setInput(host.querySelector<HTMLInputElement>('input[type="password"]')!, 'token-catalog-reviewer-123'))
+    await act(async () => { button(host, '发行审核').click(); await settle() })
+    await act(async () => { button(host, '加载待审').click(); await settle() })
+    await waitFor(() => expect(host.textContent).toContain('潮钟群岛'))
+    expect(button(host, '审核发布').disabled).toBe(true)
+    await act(async () => { button(host, '查看候选证据').click(); await settle() })
+    await waitFor(() => expect(host.textContent).toContain('服务端候选证据已复验'))
+    expect(host.textContent).toContain('candidate 666666')
+    expect(button(host, '审核发布').disabled).toBe(false)
+    await act(async () => { button(host, '审核发布').click(); await settle() })
+    await waitFor(() => expect(fake.publishListing).toHaveBeenCalledOnce())
   })
 
   it('市场详情公开展示聚合分数，并只通过社区服务提交已验证权益评价', async () => {

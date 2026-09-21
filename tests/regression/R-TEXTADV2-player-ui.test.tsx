@@ -261,5 +261,51 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
     expect(equipment?.textContent).toContain('身体')
     expect(equipment?.textContent).toContain('守灯披风')
     expect(equipment?.textContent).toContain('感知 +1')
+    await closePanel()
+
+    for (const actionKey of [
+      'action.move.marsh', 'action.find.route', 'action.move.tower',
+      'action.take.lens',
+    ]) {
+      await act(async () => useAdventureGamePlayerStore.getState().act(actionKey, `ui-complete:${actionKey}`))
+    }
+    await act(async () => useAdventureGamePlayerStore.getState().choose('choice.enter-core'))
+    await act(async () => useAdventureGamePlayerStore.getState().act(
+      'action.prepare.rescue',
+      'ui-complete:action.prepare.rescue',
+    ))
+    await act(async () => useAdventureGamePlayerStore.getState().choose('choice.rescue'))
+    expect(useAdventureGamePlayerStore.getState().runtimeState.narrative).toMatchObject({
+      completed: true,
+      endingKey: 'ending.rescue',
+    })
+    await act(async () => useAdventureGamePlayerStore.getState().select(null))
+    expect(host.textContent).toContain('冒险存档')
+    expect(host.textContent).toContain('已通关')
+    expect(host.textContent).not.toContain('新冒险 · 可继续')
+  })
+
+  it('全量媒资验收默认使用冻结目录总 bytes，不会用 64 MiB 隐式丢弃后续素材', async () => {
+    const preload = vi.fn(async () => ({ urls: {}, failures: [], usedBytes: 0 }))
+    const first = { assetKey: 'image.001', byteSize: 40 * 1024 * 1024 }
+    const second = { assetKey: 'image.002', byteSize: 40 * 1024 * 1024 }
+    useAdventureGamePlayerStore.setState({
+      selectedManifest: {
+        presentation: { assets: [first, second] },
+      } as never,
+      selectedMediaResolver: {
+        preload,
+        read: vi.fn(),
+        dispose: vi.fn(),
+      } as never,
+    })
+
+    await expect(useAdventureGamePlayerStore.getState().preloadMedia()).resolves.toEqual({
+      urls: {}, failures: [],
+    })
+    expect(preload).toHaveBeenCalledWith({
+      assetKeys: ['image.001', 'image.002'],
+      maximumBytes: 80 * 1024 * 1024,
+    })
   })
 })

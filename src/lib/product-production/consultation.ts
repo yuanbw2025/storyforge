@@ -396,7 +396,14 @@ export async function draftProductProductionBriefV3(input: {
         // Visual QA owns one provider Run per frozen image. Count every Run
         // in the author-visible production envelope instead of treating the
         // whole illustrated release as one hidden model call.
-        return 25 + scenePacketCount + (media.imageCount > 0 ? Math.max(1, media.imageCount) : 0)
+        // Four bounded narrative-quality Runs (structure + three acts) replace
+        // the former whole-product review, adding three first-attempt model
+        // calls. Keep author-visible Brief authorization aligned with the Plan
+        // floor so a newly created Build can admit its complete professional DAG.
+        const visualRunCount = media.imageCount > 0 ? Math.max(1, media.imageCount) : 0
+        // A real, bounded image-input preflight is its own professional Run.
+        // It must be authorized in the Brief before any paid image task exists.
+        return 29 + scenePacketCount + visualRunCount + Number(visualRunCount > 0)
       })()
     : 0
   const productionModelCalls = textAdventure
@@ -456,7 +463,7 @@ export async function draftProductProductionBriefV3(input: {
       maximumInputTokens: productionInputTokens,
       maximumOutputTokens: productionOutputTokens,
       maximumCostUsd: null, maximumMediaCalls: Math.max(1, media.imageCount + media.musicTrackCount + media.sfxCount),
-      maximumDurationMs: textAdventure ? 14_400_000 : 3_600_000, maximumStorageBytes: 200_000_000,
+      maximumDurationMs: textAdventure ? 18_000_000 : 3_600_000, maximumStorageBytes: 200_000_000,
     },
     qualityProfile,
     capabilityRequirements: requirements,

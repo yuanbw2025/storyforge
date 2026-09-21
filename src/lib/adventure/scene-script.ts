@@ -69,6 +69,64 @@ function visibleUnits(value: string): number {
   return cjk + latin
 }
 
+function narrativeProseOutsideQuotes(value: string, locationTitles: readonly string[] = []): string {
+  const withoutQuotes = value
+    .replace(/「[^」\n]*」/gu, '')
+    .replace(/『[^』\n]*』/gu, '')
+    .replace(/“[^”\n]*”/gu, '')
+    .replace(/‘[^’\n]*’/gu, '')
+    .replace(/"[^"\n]*"/gu, '')
+    .replace(/'[^'\n]*'/gu, '')
+  return locationTitles.reduce(
+    (prose, title) => prose.split(title).join(''),
+    withoutQuotes,
+  )
+}
+
+function projectPlayerNameToSecondPersonInSummary(input: {
+  value: string
+  playerName?: string
+  locationTitles?: readonly string[]
+}): string {
+  const playerName = input.playerName?.trim() ?? ''
+  if (!playerName) return input.value
+  const protectedSpans: Array<{ start: number; end: number }> = []
+  const quotedSpanPattern = /「[^」\n]*」|『[^』\n]*』|“[^”\n]*”|‘[^’\n]*’|"[^"\n]*"|'[^'\n]*'/gu
+  for (const match of input.value.matchAll(quotedSpanPattern)) {
+    protectedSpans.push({ start: match.index, end: match.index + match[0].length })
+  }
+  for (const title of input.locationTitles ?? []) {
+    if (!title) continue
+    let offset = 0
+    while (offset < input.value.length) {
+      const start = input.value.indexOf(title, offset)
+      if (start < 0) break
+      protectedSpans.push({ start, end: start + title.length })
+      offset = start + Math.max(1, title.length)
+    }
+  }
+  const mergedSpans = protectedSpans
+    .sort((left, right) => left.start - right.start || left.end - right.end)
+    .reduce<Array<{ start: number; end: number }>>((spans, current) => {
+      const last = spans[spans.length - 1]
+      if (!last || current.start > last.end) spans.push({ ...current })
+      else last.end = Math.max(last.end, current.end)
+      return spans
+    }, [])
+  const rewrite = (value: string) => value
+    .split(`${playerName}的`).join('你的')
+    .split(playerName).join('你')
+  let cursor = 0
+  let projected = ''
+  for (const span of mergedSpans) {
+    projected += rewrite(input.value.slice(cursor, span.start))
+    projected += input.value.slice(span.start, span.end)
+    cursor = span.end
+  }
+  projected += rewrite(input.value.slice(cursor))
+  return projected
+}
+
 export interface TextAdventureNarrativeSkeletonEdgeV1 {
   choiceKey: string
   sourceNodeKey: string
@@ -80,7 +138,58 @@ export interface TextAdventureNarrativeSkeletonV1 {
   sceneKeys: string[]
   endingKeys: string[]
   edges: TextAdventureNarrativeSkeletonEdgeV1[]
+  statefulDecisionSceneKeys: string[]
   statefulDecisionSceneCount: number
+}
+
+function textAdventureThreeActSceneCountsV1(sceneCount: number): [number, number, number] {
+  const base = Math.floor(sceneCount / 3)
+  const extra = sceneCount % 3
+  return [0, 1, 2].map(index => base + (index < extra ? 1 : 0)) as [number, number, number]
+}
+
+function distributedStatefulDecisionSceneKeysV1(
+  sceneKeys: readonly string[],
+  requestedCount: number,
+): string[] {
+  // Two later scenes are reserved for every decision so each option can carry
+  // the minimum two observable echoes required by the arc-plan contract.
+  const lastEligibleIndex = sceneKeys.length - 3
+  if (requestedCount <= 0 || lastEligibleIndex < 0) return []
+  const decisionCount = Math.min(requestedCount, lastEligibleIndex + 1)
+  const actCounts = textAdventureThreeActSceneCountsV1(sceneKeys.length)
+  let actStart = 0
+  const eligibleIndicesByAct = actCounts.map(count => {
+    const indices = Array.from({ length: count }, (_, localIndex) => actStart + localIndex)
+      .filter(index => index <= lastEligibleIndex)
+    actStart += count
+    return indices
+  })
+  const quotas = [0, 0, 0]
+  let remaining = decisionCount
+  // When fewer than three decisions are requested, first/last-act priority
+  // still spans the widest available story interval. Further rounds keep the
+  // three acts balanced while respecting each act's eligible capacity.
+  const actAllocationOrder = [0, 2, 1]
+  while (remaining > 0) {
+    let allocatedThisRound = false
+    for (const actIndex of actAllocationOrder) {
+      if (remaining === 0) break
+      if (quotas[actIndex] >= eligibleIndicesByAct[actIndex].length) continue
+      quotas[actIndex] += 1
+      remaining -= 1
+      allocatedThisRound = true
+    }
+    if (!allocatedThisRound) break
+  }
+  const decisionIndices = eligibleIndicesByAct.flatMap((eligibleIndices, actIndex) => {
+    const quota = quotas[actIndex]
+    if (quota === 0) return []
+    return Array.from({ length: quota }, (_, slotIndex) => (
+      eligibleIndices[Math.floor(slotIndex * eligibleIndices.length / quota)]
+    ))
+  }).sort((left, right) => left - right)
+  return decisionIndices.map(index => sceneKeys[index])
 }
 
 export interface TextAdventureAssembledNarrativeArtifactV1 {
@@ -109,7 +218,12 @@ export function textAdventureNarrativeSkeletonV1(
     brief.qualityProfile === 'commercial-candidate'
       ? Math.max(2, Math.ceil(brief.scale.targetPlayMinutes / 10)) : 1,
   )
-  const statefulDecisionSceneCount = Math.min(requiredStatefulDecisions, Math.max(0, sceneKeys.length - 1))
+  const statefulDecisionSceneKeys = distributedStatefulDecisionSceneKeysV1(
+    sceneKeys,
+    requiredStatefulDecisions,
+  )
+  const statefulDecisionSceneCount = statefulDecisionSceneKeys.length
+  const statefulDecisionSceneKeySet = new Set(statefulDecisionSceneKeys)
   const edges: TextAdventureNarrativeSkeletonEdgeV1[] = []
   let choiceIndex = 0
   const add = (sourceNodeKey: string, targetNodeKey: string, order: number) => {
@@ -121,18 +235,16 @@ export function textAdventureNarrativeSkeletonV1(
   }
   for (let index = 0; index < sceneKeys.length - 1; index += 1) {
     add(sceneKeys[index], sceneKeys[index + 1], 0)
-    if (index < statefulDecisionSceneCount) add(sceneKeys[index], sceneKeys[index + 1], 1)
+    if (statefulDecisionSceneKeySet.has(sceneKeys[index])) add(sceneKeys[index], sceneKeys[index + 1], 1)
   }
   endingKeys.forEach((endingKey, index) => add(sceneKeys[sceneKeys.length - 1], endingKey, index))
-  return { sceneKeys, endingKeys, edges, statefulDecisionSceneCount }
+  return { sceneKeys, endingKeys, edges, statefulDecisionSceneKeys, statefulDecisionSceneCount }
 }
 
 export function textAdventureActSceneKeysV1(brief: ProductProductionBriefV3, actIndex: number): string[] {
   if (!Number.isInteger(actIndex) || actIndex < 0 || actIndex > 2) fail('actIndex 无效')
   const { sceneKeys } = textAdventureNarrativeSkeletonV1(brief)
-  const base = Math.floor(sceneKeys.length / 3)
-  const extra = sceneKeys.length % 3
-  const counts = [0, 1, 2].map(index => base + (index < extra ? 1 : 0))
+  const counts = textAdventureThreeActSceneCountsV1(sceneKeys.length)
   const start = counts.slice(0, actIndex).reduce((sum, count) => sum + count, 0)
   return sceneKeys.slice(start, start + counts[actIndex])
 }
@@ -246,6 +358,9 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
   brief: ProductProductionBriefV3
   actIndex: number
   allowedSpeakerKeys: readonly string[]
+  sceneSpeakerKeys?: Readonly<Record<string, readonly string[]>>
+  playerName?: string
+  characterAliasesByKey?: Readonly<Record<string, readonly string[]>>
   locationTitles: readonly string[]
   expectedModuleTitle: string
   sceneTitles: Readonly<Record<string, string>>
@@ -282,6 +397,12 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
     fail('expectedSceneKeys 必须是本幕连续且有序的冻结场景子集')
   }
   const speakerKeys = new Set(input.allowedSpeakerKeys)
+  if (input.sceneSpeakerKeys) {
+    for (const [sceneKey, keys] of Object.entries(input.sceneSpeakerKeys)) {
+      const unknownKeys = keys.filter(value => !speakerKeys.has(value))
+      if (unknownKeys.length > 0) fail(`${sceneKey} 的场景说话者未列入全局 Cast:${unknownKeys.join(',')}`)
+    }
+  }
   const rawSceneRows = array(row.scenes, 'sceneScriptBundle.scenes', 1, 80)
   const identifiedSceneRows = rawSceneRows.map((value, index) => {
     const item = record(value, `scenes[${index}]`)
@@ -313,9 +434,37 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
           : ['sceneKey', 'title', 'summary', 'beats', 'choices'],
         `scenes[${sourceIndex}]`,
       )
+      const sceneSpeakerKeys = input.sceneSpeakerKeys?.[sceneKey]
+      if (input.sceneSpeakerKeys && !sceneSpeakerKeys) fail(`${sceneKey} 缺少冻结场景说话者权限`)
       const beats = parseBeats({
-        value: item.beats, label: `scenes[${sourceIndex}].beats`, allowedSpeakerKeys: speakerKeys,
+        value: item.beats,
+        label: `scenes[${sourceIndex}].beats`,
+        allowedSpeakerKeys: sceneSpeakerKeys ? new Set(sceneSpeakerKeys) : speakerKeys,
       })
+      const playerName = input.playerName?.trim() ?? ''
+      const perspectiveViolation = playerName
+        ? beats.find(beat => {
+            if (beat.kind !== 'narration' && beat.kind !== 'action') return false
+            return narrativeProseOutsideQuotes(beat.text, input.locationTitles).includes(playerName)
+          })
+        : undefined
+      if (perspectiveViolation) {
+        fail(`${sceneKey} 的 ${perspectiveViolation.beatKey} 以玩家姓名「${playerName}」进行第三人称叙事；narration/action 必须使用第二人称「你」`)
+      }
+      if (sceneSpeakerKeys && input.characterAliasesByKey) {
+        const authorized = new Set(sceneSpeakerKeys)
+        for (const beat of beats) {
+          if (beat.kind !== 'dialogue') continue
+          for (const [characterKey, aliases] of Object.entries(input.characterAliasesByKey)) {
+            if (authorized.has(characterKey)) continue
+            const alias = aliases.find(value => value && new RegExp(
+              `${value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:的)?(?:(?:终于|再次|缓缓|忽然|还是)?开口|说(?:道)?|问(?:道)?|喊(?:道)?|回答|回应|打断|喝(?:道|问)|反驳|警告|命令|接(?:话|过话)|低声|沉默|语气|声音|指(?:向|了)|走(?:来|到|出)|蹲下|转身|一把)`,
+            ).test(beat.text))
+            if (!alias) continue
+            fail(`${sceneKey} 的 ${beat.beatKey} 正文让未授权角色「${alias}」当面发言或行动；不得用已授权 speakerKey 包装越界登场`)
+          }
+        }
+      }
       const locationIndex = skeleton.sceneKeys.indexOf(sceneKey)
       const locationPlan = planTextAdventureNarrativeLocationsV1(
         skeleton.sceneKeys.length,
@@ -328,7 +477,11 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
       // typo cannot rename the graph node or waste otherwise valid prose.
       const title = input.sceneTitles[sceneKey]
       if (!title) fail(`${sceneKey} 缺少已冻结叙事弧场景标题`)
-      const authoredSummary = text(item.summary, `scenes[${sourceIndex}].summary`, 2_000)
+      const authoredSummary = projectPlayerNameToSecondPersonInSummary({
+        value: text(item.summary, `scenes[${sourceIndex}].summary`, 2_000),
+        playerName,
+        locationTitles: input.locationTitles,
+      })
       // Scene identity already has one deterministic location assignment from
       // the frozen architecture. Providers sometimes use a natural short name
       // in prose; preserve that prose while making the canonical location
@@ -344,17 +497,24 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
   const fullActChoiceKeys = new Set(skeleton.edges
     .filter(edge => fullActSceneKeys.includes(edge.sourceNodeKey))
     .map(edge => edge.choiceKey))
+  const rootChoiceRows = array(row.choices ?? [], 'sceneScriptBundle.choices', 0, 100)
   const rawChoiceRows = [
-    ...array(row.choices ?? [], 'sceneScriptBundle.choices', 0, 100),
-    ...nestedChoiceRows,
-  ].map((value, index) => {
+    ...rootChoiceRows.map(value => ({ value, source: 'root' as const })),
+    ...nestedChoiceRows.map(value => ({ value, source: 'scene' as const })),
+  ].map(({ value, source }, index) => {
     const item = record(value, `choiceCandidates[${index}]`)
     const choiceKey = key(item.choiceKey, `choiceCandidates[${index}].choiceKey`)
     if (!fullActChoiceKeys.has(choiceKey)) fail(`choiceCandidates[${index}] 不属于本幕:${choiceKey}`)
-    return { item, choiceKey, sourceIndex: index }
+    return { item, choiceKey, source, sourceIndex: index }
   })
   const choices = expectedEdges.map(expected => {
-      const candidates = rawChoiceRows.filter(candidate => candidate.choiceKey === expected.choiceKey)
+      const allCandidates = rawChoiceRows.filter(candidate => candidate.choiceKey === expected.choiceKey)
+      const rootCandidates = allCandidates.filter(candidate => candidate.source === 'root')
+      // The current contract owns choices at the root. Scene-local copies are
+      // accepted only as a legacy fallback when the root omitted this frozen
+      // choice. Ignoring a conflicting legacy echo is lossless because the
+      // root copy is the provider's contract-compliant submission.
+      const candidates = rootCandidates.length > 0 ? rootCandidates : allCandidates
       if (candidates.length === 0) fail(`sceneScriptBundle.choices 缺少冻结选择 ${expected.choiceKey}`)
       const parsedCandidates = candidates.map(({ item, sourceIndex }) => {
       exactKeys(item, [
@@ -364,26 +524,38 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
       ], `choiceCandidates[${sourceIndex}]`)
       const parsed = {
         choiceKey: key(item.choiceKey, `choiceCandidates[${sourceIndex}].choiceKey`),
-        sourceNodeKey: key(item.sourceNodeKey, `choiceCandidates[${sourceIndex}].sourceNodeKey`),
-        targetNodeKey: key(item.targetNodeKey, `choiceCandidates[${sourceIndex}].targetNodeKey`),
+        // The Scene Writer owns only player-visible copy. Graph identity and
+        // routing already belong to the frozen narrative skeleton, so merely
+        // validate the echoed machine fields and project the authoritative
+        // values instead of spending another provider call on a typo.
+        sourceNodeKey: (() => {
+          key(item.sourceNodeKey, `choiceCandidates[${sourceIndex}].sourceNodeKey`)
+          return expected.sourceNodeKey
+        })(),
+        targetNodeKey: (() => {
+          key(item.targetNodeKey, `choiceCandidates[${sourceIndex}].targetNodeKey`)
+          return expected.targetNodeKey
+        })(),
         text: text(item.text, `choiceCandidates[${sourceIndex}].text`, 240),
         description: text(item.description, `choiceCandidates[${sourceIndex}].description`, 1_000),
         unavailableReason: (item.unavailableReason === undefined
           ? ''
           : boundedString(item.unavailableReason, `choiceCandidates[${sourceIndex}].unavailableReason`, 500))
           || '当前状态不满足此行动条件。',
-        order: item.order === undefined
-          ? expected.order
-          : integer(item.order, `choiceCandidates[${sourceIndex}].order`, 0, 100),
+        order: (() => {
+          if (item.order !== undefined) {
+            integer(item.order, `choiceCandidates[${sourceIndex}].order`, 0, 100)
+          }
+          return expected.order
+        })(),
       }
-      if (parsed.choiceKey !== expected.choiceKey || parsed.sourceNodeKey !== expected.sourceNodeKey
-        || parsed.targetNodeKey !== expected.targetNodeKey || parsed.order !== expected.order) {
+      if (parsed.choiceKey !== expected.choiceKey) {
         fail(`choiceCandidates[${sourceIndex}] 改写了冻结图骨架`)
       }
       return parsed
       })
       if (new Set(parsedCandidates.map(candidate => JSON.stringify(candidate))).size !== 1) {
-        fail(`${expected.choiceKey} 在根级与 scene 内的重复内容冲突`)
+        fail(`${expected.choiceKey} 在同一权威层的重复内容冲突`)
       }
       return parsedCandidates[0]
     })
@@ -407,6 +579,21 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
       const beats = parseBeats({
         value: item.beats, label: `endings[${index}].beats`, allowedSpeakerKeys: speakerKeys,
       })
+      const playerName = input.playerName?.trim() ?? ''
+      const perspectiveViolation = playerName
+        ? beats.find(beat => (
+            (beat.kind === 'narration' || beat.kind === 'action')
+            && narrativeProseOutsideQuotes(beat.text, input.locationTitles).includes(playerName)
+          ))
+        : undefined
+      if (perspectiveViolation) {
+        fail(`${endingKey} 的 ${perspectiveViolation.beatKey} 以玩家姓名「${playerName}」进行第三人称叙事；narration/action 必须使用第二人称「你」`)
+      }
+      const endingSummary = projectPlayerNameToSecondPersonInSummary({
+        value: text(item.summary, `endings[${index}].summary`, 2_000),
+        playerName,
+        locationTitles: input.locationTitles,
+      })
       const endingUnits = visibleUnits([item.summary, ...beats.map(beat => beat.text)].join('\n'))
       const minimumEndingUnits = input.brief.qualityProfile === 'commercial-candidate'
         ? Math.max(80, Math.min(400, Math.ceil(input.brief.scale.targetPlayMinutes * 4))) : 30
@@ -427,7 +614,7 @@ export function parseTextAdventureSceneScriptBundleArtifactV1(input: {
           if (title !== input.endingTitles[endingKey]) fail(`${endingKey} title 必须复用故事圣经结局标题`)
           return title
         })(),
-        summary: text(item.summary, `endings[${index}].summary`, 2_000),
+        summary: endingSummary,
         beats,
       }
     })
@@ -482,6 +669,9 @@ export function assembleTextAdventureSceneScriptActV1(input: {
   actIndex: number
   bundles: readonly TextAdventureSceneScriptBundleArtifactV1[]
   allowedSpeakerKeys: readonly string[]
+  sceneSpeakerKeys?: Readonly<Record<string, readonly string[]>>
+  playerName?: string
+  characterAliasesByKey?: Readonly<Record<string, readonly string[]>>
   locationTitles: readonly string[]
   expectedModuleTitle: string
   sceneTitles: Readonly<Record<string, string>>
@@ -512,6 +702,9 @@ export function assembleTextAdventureSceneScriptActV1(input: {
     brief: input.brief,
     actIndex: input.actIndex,
     allowedSpeakerKeys: input.allowedSpeakerKeys,
+    sceneSpeakerKeys: input.sceneSpeakerKeys,
+    playerName: input.playerName,
+    characterAliasesByKey: input.characterAliasesByKey,
     locationTitles: input.locationTitles,
     expectedModuleTitle: input.expectedModuleTitle,
     sceneTitles: input.sceneTitles,

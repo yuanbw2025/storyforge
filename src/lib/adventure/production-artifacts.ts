@@ -350,6 +350,53 @@ export interface TextAdventureQuestBundleArtifactV2 {
   }>
 }
 
+export const TEXT_ADVENTURE_QUALITY_REVIEW_SCORE_KEYS_V1 = [
+  'causality', 'playerAgency', 'routeDifferentiation', 'pacing', 'setupPayoff',
+  'characterMotivation', 'emotionalImpact',
+] as const
+
+export type TextAdventureQualityReviewScoreKeyV1 =
+  typeof TEXT_ADVENTURE_QUALITY_REVIEW_SCORE_KEYS_V1[number]
+
+export const TEXT_ADVENTURE_QUALITY_REVIEW_SCOPES_V1 = [
+  'structure', 'act-1', 'act-2', 'act-3',
+] as const
+
+export type TextAdventureQualityReviewScopeV1 =
+  typeof TEXT_ADVENTURE_QUALITY_REVIEW_SCOPES_V1[number]
+
+export const TEXT_ADVENTURE_QUALITY_REVIEW_SCORE_KEYS_BY_SCOPE_V1 = {
+  structure: ['causality', 'routeDifferentiation', 'setupPayoff', 'characterMotivation'],
+  'act-1': [
+    'causality', 'playerAgency', 'routeDifferentiation', 'pacing',
+    'characterMotivation', 'emotionalImpact',
+  ],
+  'act-2': [
+    'causality', 'playerAgency', 'routeDifferentiation', 'pacing',
+    'characterMotivation', 'emotionalImpact',
+  ],
+  'act-3': [
+    'causality', 'playerAgency', 'routeDifferentiation', 'pacing',
+    'characterMotivation', 'emotionalImpact',
+  ],
+} as const satisfies Record<TextAdventureQualityReviewScopeV1, readonly TextAdventureQualityReviewScoreKeyV1[]>
+
+export type TextAdventureQualityReviewArtifactKeyV1 =
+  | 'content.story-bible' | 'content.cast-bible' | 'content.adventure-architecture'
+  | 'content.narrative-arc-plan' | 'content.ending-route-plan'
+  | 'content.main-quest-plan' | 'content.quest-script'
+  | 'content.scene-script.act-1' | 'content.scene-script.act-2' | 'content.scene-script.act-3'
+  | 'content.dialogue-pass.act-1' | 'content.dialogue-pass.act-2' | 'content.dialogue-pass.act-3'
+  | 'content.narrative' | 'content.product-module'
+  | 'content.adventure-side-quests' | 'content.adventure-ambient-events'
+
+export interface TextAdventureQualityReviewIssueV1 {
+  severity: 'warning' | 'blocking'
+  artifactKey: TextAdventureQualityReviewArtifactKeyV1
+  detail: string
+  recommendation: string
+}
+
 export interface TextAdventureQualityReviewArtifactV1 {
   schema: 'storyforge.text-adventure-quality-review-artifact'
   version: 1
@@ -362,17 +409,22 @@ export interface TextAdventureQualityReviewArtifactV1 {
     characterMotivation: number
     emotionalImpact: number
   }
-  issues: Array<{
-    severity: 'warning' | 'blocking'
-    artifactKey: 'content.story-bible' | 'content.cast-bible' | 'content.adventure-architecture'
-      | 'content.narrative-arc-plan' | 'content.main-quest-plan' | 'content.quest-script'
-      | 'content.scene-script.act-1' | 'content.scene-script.act-2' | 'content.scene-script.act-3'
-      | 'content.dialogue-pass.act-1' | 'content.dialogue-pass.act-2' | 'content.dialogue-pass.act-3'
-      | 'content.narrative' | 'content.product-module'
-      | 'content.adventure-side-quests' | 'content.adventure-ambient-events'
-    detail: string
-    recommendation: string
-  }>
+  issues: TextAdventureQualityReviewIssueV1[]
+  passed: boolean
+}
+
+/**
+ * Private per-scope evidence produced by the four independent Continuity
+ * Editor Runs. The public review contract above intentionally remains stable;
+ * a deterministic task aggregates these bounded scorecards after all Runs
+ * have durable receipts.
+ */
+export interface TextAdventureQualityReviewBatchArtifactV1 {
+  schema: 'storyforge.text-adventure-quality-review-batch-artifact'
+  version: 1
+  scope: TextAdventureQualityReviewScopeV1
+  scores: Partial<Record<TextAdventureQualityReviewScoreKeyV1, number>>
+  issues: TextAdventureQualityReviewIssueV1[]
   passed: boolean
 }
 
@@ -417,41 +469,73 @@ export function validateTextAdventureQuestBundleLocationAnchorsV2(
   return issues
 }
 
+export const TEXT_ADVENTURE_QUALITY_REVIEW_ARTIFACT_KEYS_V1: readonly TextAdventureQualityReviewArtifactKeyV1[] = [
+  'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+  'content.narrative-arc-plan', 'content.ending-route-plan',
+  'content.main-quest-plan', 'content.quest-script',
+  'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
+  'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3',
+  'content.narrative', 'content.product-module',
+  'content.adventure-side-quests', 'content.adventure-ambient-events',
+]
+
+function parseTextAdventureQualityReviewIssuesV1(
+  value: unknown,
+  label: string,
+  maximum = 100,
+): TextAdventureQualityReviewIssueV1[] {
+  if (!Array.isArray(value)) fail(`${label} 必须是数组`)
+  const normalizeArtifactKey = (value: unknown, issueLabel: string) => {
+    if (typeof value !== 'string') {
+      return enumValue(value, TEXT_ADVENTURE_QUALITY_REVIEW_ARTIFACT_KEYS_V1, issueLabel)
+    }
+    // One OpenAI-compatible reviewer used this exact near-synonym for the
+    // registered narrative-arc owner. It has a single unambiguous target and
+    // changes no field/state authority, so normalize only this observed alias;
+    // all other unknown roots continue to fail closed below.
+    const exactAliases: Readonly<Record<string, TextAdventureQualityReviewArtifactKeyV1>> = {
+      'content.adventure-arc-plan': 'content.narrative-arc-plan',
+    }
+    const aliased = exactAliases[value] ?? value
+    // Reviewers sometimes append a field address (for example
+    // `content.narrative.choices`) even though the contract asks for the
+    // owning artifact key. A field address does not create a new artifact or
+    // change repair ownership, so deterministically collapse only a path that
+    // is rooted in one of the registered artifact keys. Unknown roots remain
+    // fail-closed.
+    const owner = [...TEXT_ADVENTURE_QUALITY_REVIEW_ARTIFACT_KEYS_V1]
+      .sort((left, right) => right.length - left.length)
+      .find(key => aliased === key || aliased.startsWith(`${key}.`) || aliased.startsWith(`${key}[`))
+    return enumValue(owner ?? aliased, TEXT_ADVENTURE_QUALITY_REVIEW_ARTIFACT_KEYS_V1, issueLabel)
+  }
+  const issues = value.map((item, index) => {
+    const issue = record(item, `${label}[${index}]`)
+    exactKeys(issue, ['severity', 'artifactKey', 'detail', 'recommendation'], `${label}[${index}]`)
+    return {
+      severity: enumValue(issue.severity, ['warning', 'blocking'], `${label}[${index}].severity`),
+      artifactKey: normalizeArtifactKey(issue.artifactKey, `${label}[${index}].artifactKey`),
+      detail: text(issue.detail, `${label}[${index}].detail`, 2_000),
+      recommendation: text(issue.recommendation, `${label}[${index}].recommendation`, 2_000),
+    }
+  })
+  if (issues.length > maximum) fail(`${label} 超出上限`)
+  return issues
+}
+
 export function parseTextAdventureQualityReviewArtifactV1(
   value: unknown,
 ): TextAdventureQualityReviewArtifactV1 {
   const row = record(value, 'qualityReview')
   exactKeys(row, ['schema', 'version', 'scores', 'issues', 'passed'], 'qualityReview')
-  if (row.schema !== 'storyforge.text-adventure-quality-review-artifact' || row.version !== 1
-    || !Array.isArray(row.issues)) fail('qualityReview schema/issues 无效')
+  if (row.schema !== 'storyforge.text-adventure-quality-review-artifact' || row.version !== 1) {
+    fail('qualityReview schema 无效')
+  }
   const scores = record(row.scores, 'qualityReview.scores')
-  const scoreKeys = [
-    'causality', 'playerAgency', 'routeDifferentiation', 'pacing', 'setupPayoff',
-    'characterMotivation', 'emotionalImpact',
-  ] as const
-  exactKeys(scores, scoreKeys, 'qualityReview.scores')
-  const parsedScores = Object.fromEntries(scoreKeys.map(scoreKey => [
+  exactKeys(scores, TEXT_ADVENTURE_QUALITY_REVIEW_SCORE_KEYS_V1, 'qualityReview.scores')
+  const parsedScores = Object.fromEntries(TEXT_ADVENTURE_QUALITY_REVIEW_SCORE_KEYS_V1.map(scoreKey => [
     scoreKey, integer(scores[scoreKey], `qualityReview.scores.${scoreKey}`, 1, 5),
   ])) as unknown as TextAdventureQualityReviewArtifactV1['scores']
-  const artifactKeys: TextAdventureQualityReviewArtifactV1['issues'][number]['artifactKey'][] = [
-    'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
-    'content.narrative-arc-plan', 'content.main-quest-plan', 'content.quest-script',
-    'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3',
-    'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3',
-    'content.narrative', 'content.product-module',
-    'content.adventure-side-quests', 'content.adventure-ambient-events',
-  ]
-  const issues = row.issues.map((value, index) => {
-    const issue = record(value, `qualityReview.issues[${index}]`)
-    exactKeys(issue, ['severity', 'artifactKey', 'detail', 'recommendation'], `qualityReview.issues[${index}]`)
-    return {
-      severity: enumValue(issue.severity, ['warning', 'blocking'], `qualityReview.issues[${index}].severity`),
-      artifactKey: enumValue(issue.artifactKey, artifactKeys, `qualityReview.issues[${index}].artifactKey`),
-      detail: text(issue.detail, `qualityReview.issues[${index}].detail`, 2_000),
-      recommendation: text(issue.recommendation, `qualityReview.issues[${index}].recommendation`, 2_000),
-    }
-  })
-  if (issues.length > 100) fail('qualityReview.issues 超出上限')
+  const issues = parseTextAdventureQualityReviewIssuesV1(row.issues, 'qualityReview.issues')
   // `passed` is a deterministic projection of the review evidence, not a
   // model-owned decision. Still require the model field to be a boolean so
   // malformed protocol cannot pass silently, then canonicalize it below.
@@ -461,6 +545,54 @@ export function parseTextAdventureQualityReviewArtifactV1(
   return {
     schema: 'storyforge.text-adventure-quality-review-artifact', version: 1,
     scores: parsedScores, issues, passed: expectedPassed,
+  }
+}
+
+export function parseTextAdventureQualityReviewBatchArtifactV1(
+  value: unknown,
+  expectedScope?: TextAdventureQualityReviewScopeV1,
+): TextAdventureQualityReviewBatchArtifactV1 {
+  const row = record(value, 'qualityReviewBatch')
+  // `passed` is a derived verdict rather than model-owned evidence. Accept
+  // legacy candidates that still include it, but do not reject an otherwise
+  // complete review merely because the provider omitted the redundant field.
+  // Unknown fields remain fail-closed in both shapes.
+  const hasPassed = Object.prototype.hasOwnProperty.call(row, 'passed')
+  exactKeys(
+    row,
+    hasPassed
+      ? ['schema', 'version', 'scope', 'scores', 'issues', 'passed']
+      : ['schema', 'version', 'scope', 'scores', 'issues'],
+    'qualityReviewBatch',
+  )
+  const scope = enumValue(
+    row.scope,
+    TEXT_ADVENTURE_QUALITY_REVIEW_SCOPES_V1,
+    'qualityReviewBatch.scope',
+  )
+  if (row.schema !== 'storyforge.text-adventure-quality-review-batch-artifact' || row.version !== 1) {
+    fail('qualityReviewBatch schema 无效')
+  }
+  if (expectedScope && scope !== expectedScope) {
+    fail(`qualityReviewBatch.scope 与任务不一致:${scope}/${expectedScope}`)
+  }
+  const scores = record(row.scores, 'qualityReviewBatch.scores')
+  const scoreKeys = TEXT_ADVENTURE_QUALITY_REVIEW_SCORE_KEYS_BY_SCOPE_V1[scope]
+  exactKeys(scores, scoreKeys, 'qualityReviewBatch.scores')
+  const parsedScores = Object.fromEntries(scoreKeys.map(scoreKey => [
+    scoreKey, integer(scores[scoreKey], `qualityReviewBatch.scores.${scoreKey}`, 1, 5),
+  ])) as TextAdventureQualityReviewBatchArtifactV1['scores']
+  const issues = parseTextAdventureQualityReviewIssuesV1(row.issues, 'qualityReviewBatch.issues', 20)
+  if (hasPassed) bool(row.passed, 'qualityReviewBatch.passed')
+  const expectedPassed = !issues.some(issue => issue.severity === 'blocking')
+    && Object.values(parsedScores).every(score => score >= 3)
+  return {
+    schema: 'storyforge.text-adventure-quality-review-batch-artifact',
+    version: 1,
+    scope,
+    scores: parsedScores,
+    issues,
+    passed: expectedPassed,
   }
 }
 

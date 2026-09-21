@@ -14,10 +14,12 @@ import type { CommunitySocialEdgeV1 } from '../../lib/community/authority'
 import { exportProductDistributionBundleV2, importMarketplaceProductDistributionV2 } from '../../lib/product-platform/distribution-bundle'
 import type { ProductDistributionBundleV2, MarketplaceImportProvenanceV2 } from '../../lib/product-platform/distribution-bundle'
 import {
+  createTextAdventureCommunitySubmissionV1,
   exportTextAdventureCommunityPackageV1,
   type TextAdventureCommunityCandidateDossierV1,
   type TextAdventureCommunityPackageV1,
 } from '../../lib/adventure/community-package'
+import type { CommercialTextAdventureReviewProjectionV1 } from '../../lib/commercial/release-delivery'
 import {
   isProductionProductKindV1,
   type ProductionProductKindV1,
@@ -37,7 +39,10 @@ import {
 type MarketplaceClientV1 = Pick<CommercialHttpClientV1,
   'discover' | 'acquire' | 'downloadRelease' | 'createListing' | 'registerRelease' | 'submitListing'
   | 'myListings' | 'reviewQueue' | 'publishListing' | 'requestListingChanges' | 'reviseListing'
-  | 'suspendListing' | 'withdrawListing'>
+  | 'suspendListing' | 'withdrawListing' | 'reviewTextAdventureCandidate'> & {
+    /** Optional for injected legacy clients; those clients still receive a safe first page via discover(). */
+    discoverPage?: CommercialHttpClientV1['discoverPage']
+  }
 
 interface LocalReleaseView {
   row: ProductRelease
@@ -107,6 +112,7 @@ export default function MarketplacePanel(props: {
   const [query, setQuery] = useState('')
   const [productType, setProductType] = useState<'' | ProductionProductKindV1>('')
   const [listings, setListings] = useState<CommercialListingV1[]>([])
+  const [nextDiscoveryCursor, setNextDiscoveryCursor] = useState<string | null>(null)
   const [localReleases, setLocalReleases] = useState<LocalReleaseView[]>([])
   const [selectedReleaseId, setSelectedReleaseId] = useState<number | null>(null)
   const [creatorTitle, setCreatorTitle] = useState('')
@@ -122,6 +128,7 @@ export default function MarketplacePanel(props: {
   const [socialEdges, setSocialEdges] = useState<CommunitySocialEdgeV1[]>([])
   const [creatorListings, setCreatorListings] = useState<CommercialListingV1[]>([])
   const [reviewQueue, setReviewQueue] = useState<CommercialListingV1[]>([])
+  const [reviewCandidates, setReviewCandidates] = useState<Record<string, CommercialTextAdventureReviewProjectionV1>>({})
   const [reviewReasonCode, setReviewReasonCode] = useState('catalog.changes-required')
   const [revisionListingId, setRevisionListingId] = useState<string | null>(null)
   const [textAdventureCandidate, setTextAdventureCandidate] = useState<TextAdventureCommunityCandidateDossierV1 | null>(null)
@@ -135,6 +142,7 @@ export default function MarketplacePanel(props: {
     uploadRequestId: string
     submitRequestId: string
   } | null>(null)
+  const discoveryEpoch = useRef(0)
 
   const generatedClient = useMemo(() => {
     if (props.client || !serviceUrl.trim()) return null
@@ -151,6 +159,12 @@ export default function MarketplacePanel(props: {
     try { return new CommunityHttpClientV1({ baseUrl: serviceUrl, timeoutMs: 60_000 }) } catch { return null }
   }, [props.communityClient, serviceUrl])
   const communityClient = props.communityClient ?? generatedCommunityClient
+
+  useEffect(() => {
+    discoveryEpoch.current += 1
+    setListings([])
+    setNextDiscoveryCursor(null)
+  }, [client])
 
   const refreshLocal = useCallback(async () => {
     if (!props.scope) { setLocalReleases([]); return }
@@ -186,10 +200,32 @@ export default function MarketplacePanel(props: {
     return created
   }
 
-  const discover = () => run('discover', async () => {
+  const invalidateDiscovery = () => {
+    discoveryEpoch.current += 1
+    setListings([])
+    setNextDiscoveryCursor(null)
+  }
+
+  const discover = (append = false) => run(append ? 'discover-more' : 'discover', async () => {
     if (!client) throw new Error('请先配置市场服务地址。')
-    setListings(await client.discover({ productType: productType || undefined, query }))
-    if (communityClient && accessToken.trim()) {
+    const epoch = append ? discoveryEpoch.current : discoveryEpoch.current + 1
+    if (!append) {
+      discoveryEpoch.current = epoch
+      setListings([])
+      setNextDiscoveryCursor(null)
+    }
+    const cursor = append ? nextDiscoveryCursor : null
+    if (append && (!cursor || typeof client.discoverPage !== 'function')) return
+    const page = typeof client.discoverPage === 'function'
+      ? await client.discoverPage({ productType: productType || undefined, query, cursor: cursor ?? undefined })
+      : { items: await client.discover({ productType: productType || undefined, query }), nextCursor: null }
+    if (discoveryEpoch.current !== epoch) return
+    if (cursor && page.nextCursor === cursor) throw new Error('市场服务返回了未推进的分页游标。')
+    setListings(current => append
+      ? [...new Map([...current, ...page.items].map(item => [item.listingId, item])).values()]
+      : page.items)
+    setNextDiscoveryCursor(page.nextCursor)
+    if (!append && communityClient && accessToken.trim()) {
       try { setSocialEdges(await communityClient.mySocialEdges(accessToken.trim())) } catch { setSocialEdges([]) }
     }
   })
@@ -244,9 +280,16 @@ export default function MarketplacePanel(props: {
     if (!props.scope || selectedReleaseId == null) throw new Error('当前 Work 没有可提交的正式 ProductRelease。')
     const selected = localReleases.find(item => item.row.id === selectedReleaseId)
     if (!selected) throw new Error('所选 Release 已不存在。')
+    const candidate = selected.productType === 'text-adventure'
+      ? await (props.exportTextAdventureCandidate ?? exportTextAdventureCommunityPackageV1)({
+          scope: props.scope, productReleaseId: selectedReleaseId,
+        })
+      : null
+    if (candidate) setTextAdventureCandidate(candidate.dossier)
     const fingerprint = JSON.stringify({
       releaseId: selectedReleaseId, title: creatorTitle.trim(), summary: creatorSummary.trim(),
       amountMinor, allowRemix, requiresAttribution, revisionListingId,
+      candidateHash: candidate?.candidatePackageHash ?? null,
     })
     if (submission.current?.fingerprint !== fingerprint) {
       submission.current = {
@@ -258,12 +301,6 @@ export default function MarketplacePanel(props: {
       }
     }
     const ids = submission.current
-    const candidate = selected.productType === 'text-adventure'
-      ? await (props.exportTextAdventureCandidate ?? exportTextAdventureCommunityPackageV1)({
-          scope: props.scope, productReleaseId: selectedReleaseId,
-        })
-      : null
-    if (candidate) setTextAdventureCandidate(candidate.dossier)
     const bundle = candidate?.distributionBundle ?? await (props.exportBundle ?? exportProductDistributionBundleV2)({
       scope: props.scope, productReleaseId: selectedReleaseId,
     })
@@ -277,7 +314,6 @@ export default function MarketplacePanel(props: {
       },
       currency: 'CNY', amountMinor, creatorShareBps: 8_000,
     }
-    await client.registerRelease({ accessToken: accessToken.trim(), requestId: ids.uploadRequestId, bundle })
     const listing = revisionListingId
       ? await client.reviseListing({
           accessToken: accessToken.trim(), requestId: ids.reviseRequestId,
@@ -287,6 +323,13 @@ export default function MarketplacePanel(props: {
           accessToken: accessToken.trim(), requestId: ids.createRequestId,
           productType: selected.productType, ...listingInput,
         })
+    await client.registerRelease({
+      accessToken: accessToken.trim(), requestId: ids.uploadRequestId, bundle,
+      ...(candidate ? {
+        listingId: listing.listingId,
+        textAdventureCandidate: createTextAdventureCommunitySubmissionV1(candidate),
+      } : {}),
+    })
     await client.submitListing({
       accessToken: accessToken.trim(), requestId: ids.submitRequestId, listingId: listing.listingId,
     })
@@ -313,6 +356,18 @@ export default function MarketplacePanel(props: {
   const loadReviewQueue = () => run('review-queue', async () => {
     if (!client || !accessToken.trim()) throw new Error('请输入审核账号访问凭据。')
     setReviewQueue(await client.reviewQueue(accessToken.trim()))
+    setReviewCandidates({})
+  })
+  const loadTextAdventureReview = (listing: CommercialListingV1) => run(`review-candidate:${listing.listingId}`, async () => {
+    if (!client || !accessToken.trim()) throw new Error('请输入审核账号访问凭据。')
+    const review = await client.reviewTextAdventureCandidate({
+      accessToken: accessToken.trim(), listingId: listing.listingId,
+    })
+    if (review.releaseHash !== listing.releaseHash) throw new Error('服务端候选证据与当前待审 Release 不一致。')
+    setReviewCandidates(current => ({
+      ...current, [`${listing.listingId}\u0000${listing.releaseHash}`]: review,
+    }))
+    setMessage('已读取服务端重新验证并冻结的文字冒险候选证据。')
   })
   const approveListing = (listingId: string) => run(`approve:${listingId}`, async () => {
     if (!client) throw new Error('请先配置市场服务地址。')
@@ -376,14 +431,23 @@ export default function MarketplacePanel(props: {
         {busy && <Loader2 className="h-5 w-5 animate-spin text-accent" />}
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
-        {!props.client && <label className="grid gap-2 text-[10px] text-text-muted">市场服务地址<input value={serviceUrl} onChange={event => setServiceUrl(event.target.value)} placeholder="https://market.example.com" className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label>}
+        {!props.client && <label className="grid gap-2 text-[10px] text-text-muted">市场服务地址<input value={serviceUrl} onChange={event => { invalidateDiscovery(); setServiceUrl(event.target.value) }} placeholder="https://market.example.com" className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" /></label>}
         <label className="grid gap-2 text-[10px] text-text-muted">账号访问凭据（仅保存在当前页面内存）<span className="flex items-center gap-2 rounded border border-border bg-bg-base px-2"><KeyRound className="h-4 w-4" /><input type="password" value={accessToken} onChange={event => setAccessToken(event.target.value)} autoComplete="off" className="min-w-0 flex-1 bg-transparent py-2 text-xs text-text-primary outline-none" /></span></label>
       </div>
       <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => setMode('discover')} className={`rounded px-3 py-2 text-xs ${mode === 'discover' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><ShoppingBag className="mr-2 inline h-4 w-4" />玩家市场</button><button onClick={() => setMode('groups')} className={`rounded px-3 py-2 text-xs ${mode === 'groups' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><PackageCheck className="mr-2 inline h-4 w-4" />组团中心</button><button onClick={() => setMode('creator')} className={`rounded px-3 py-2 text-xs ${mode === 'creator' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><Upload className="mr-2 inline h-4 w-4" />创作者提交</button><button onClick={() => setMode('review')} className={`rounded px-3 py-2 text-xs ${mode === 'review' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><PackageCheck className="mr-2 inline h-4 w-4" />发行审核</button><button onClick={() => setMode('safety')} className={`rounded px-3 py-2 text-xs ${mode === 'safety' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><ShieldAlert className="mr-2 inline h-4 w-4" />安全与申诉</button><button onClick={() => setMode('operations')} className={`rounded px-3 py-2 text-xs ${mode === 'operations' ? 'bg-accent text-white' : 'border border-border text-text-primary'}`}><KeyRound className="mr-2 inline h-4 w-4" />支持与结算</button></div>
     </section>
 
     {mode === 'discover' ? <section className="rounded-lg border border-border bg-bg-elevated p-5">
-      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]"><label className="flex items-center gap-2 rounded border border-border bg-bg-base px-3"><Search className="h-4 w-4 text-text-muted" /><input value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void discover() }} placeholder="搜索战役或文字游戏" className="min-w-0 flex-1 bg-transparent py-2 text-xs outline-none" /></label><select value={productType} onChange={event => setProductType(event.target.value as typeof productType)} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary">{PRODUCT_OPTIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select><button disabled={busy != null || !client} onClick={() => void discover()} className="flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><RefreshCw className="h-4 w-4" />刷新</button></div>
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
+        <label className="flex items-center gap-2 rounded border border-border bg-bg-base px-3">
+          <Search className="h-4 w-4 text-text-muted" />
+          <input value={query} onChange={event => { invalidateDiscovery(); setQuery(event.target.value) }} onKeyDown={event => { if (event.key === 'Enter') void discover() }} placeholder="搜索战役或文字游戏" className="min-w-0 flex-1 bg-transparent py-2 text-xs outline-none" />
+        </label>
+        <select value={productType} onChange={event => { invalidateDiscovery(); setProductType(event.target.value as typeof productType) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary">
+          {PRODUCT_OPTIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+        <button disabled={busy != null || !client} onClick={() => void discover()} className="flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40"><RefreshCw className="h-4 w-4" />刷新</button>
+      </div>
       <div className="mt-5 grid gap-3 lg:grid-cols-2">{listings.map(listing => {
         const favorite = socialEdges.some(edge => edge.kind === 'favorite-listing' && edge.targetId === listing.listingId)
         const subscribed = socialEdges.some(edge => edge.kind === 'subscribe-listing' && edge.targetId === listing.listingId)
@@ -395,6 +459,9 @@ export default function MarketplacePanel(props: {
           </div></div>
         </article>
       })}{listings.length === 0 && <div className="rounded border border-dashed border-border p-8 text-center text-xs text-text-muted lg:col-span-2">配置服务后点击刷新；公开目录只返回已审核且可领取的发行物。</div>}</div>
+      {nextDiscoveryCursor && typeof client?.discoverPage === 'function' && <div className="mt-4 flex justify-center">
+        <button disabled={busy != null} onClick={() => void discover(true)} className="rounded border border-accent/50 px-4 py-2 text-xs text-accent disabled:opacity-40">{busy === 'discover-more' ? '正在加载…' : '加载更多'}</button>
+      </div>}
       {reviewListingId && (() => { const listing = listings.find(item => item.listingId === reviewListingId); return listing ? <div className="mt-5"><CommunityReviewPanel client={communityClient} accessToken={accessToken} subjectType="release" releaseHash={listing.releaseHash} heading={`《${listing.title}》评价`} /></div> : null })()}
     </section> : mode === 'groups' ? <LfgCenterPanel
       client={communityClient}
@@ -405,7 +472,19 @@ export default function MarketplacePanel(props: {
       <div className="flex flex-wrap items-center gap-2"><PackageCheck className="h-4 w-4 text-accent" /><h3 className="text-sm font-semibold text-text-primary">发行物审核队列</h3><button disabled={busy != null || !client || !accessToken.trim()} onClick={() => void loadReviewQueue()} className="ml-auto flex items-center gap-1 rounded border border-border px-3 py-2 text-xs text-text-primary disabled:opacity-40"><RefreshCw className="h-3.5 w-3.5" />加载待审</button></div>
       <p className="mt-2 text-xs text-text-muted">只有 catalog:publish 权限账号可以读取队列和发布；完整发行包已在提交时通过服务端验证。</p>
       <label className="mt-4 grid max-w-md gap-1 text-[10px] text-text-muted">修改理由码<input aria-label="发行审核理由码" value={reviewReasonCode} onChange={event => setReviewReasonCode(event.target.value)} className="rounded border border-border bg-bg-base p-2 font-mono text-[10px] text-text-primary" /></label>
-      <div className="mt-4 space-y-2">{reviewQueue.map(listing => <article key={listing.listingId} className="rounded border border-border bg-bg-base p-4"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-text-primary">{listing.title}</strong><span className="text-[10px] text-text-muted">{listing.productType} · {listing.creatorId}</span><span className="ml-auto font-mono text-[9px] text-text-muted">{listing.listingId}</span></div><p className="mt-2 text-xs leading-5 text-text-muted">{listing.summary}</p><p className="mt-1 break-all font-mono text-[9px] text-text-muted">{listing.releaseHash}</p><div className="mt-3 flex gap-2"><button disabled={busy != null} onClick={() => void approveListing(listing.listingId)} className="rounded bg-success px-3 py-2 text-xs text-white">审核发布</button><button disabled={busy != null || !reviewReasonCode.trim()} onClick={() => void rejectListing(listing.listingId)} className="rounded border border-warning/50 px-3 py-2 text-xs text-warning">要求修改</button></div></article>)}{reviewQueue.length === 0 && <p className="rounded border border-dashed border-border p-6 text-center text-xs text-text-muted">加载后显示 submitted 且完整包已验证的目录项。</p>}</div>
+      <div className="mt-4 space-y-2">{reviewQueue.map(listing => {
+        const candidateReview = reviewCandidates[`${listing.listingId}\u0000${listing.releaseHash}`]
+        return <article key={listing.listingId} className="rounded border border-border bg-bg-base p-4">
+          <div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-text-primary">{listing.title}</strong><span className="text-[10px] text-text-muted">{listing.productType} · {listing.creatorId}</span><span className="ml-auto font-mono text-[9px] text-text-muted">{listing.listingId}</span></div>
+          <p className="mt-2 text-xs leading-5 text-text-muted">{listing.summary}</p><p className="mt-1 break-all font-mono text-[9px] text-text-muted">{listing.releaseHash}</p>
+          {candidateReview && <div className="mt-3 rounded border border-success/30 bg-success/5 p-3 text-[10px] text-success" data-testid={`marketplace-review-candidate-${listing.listingId}`}>
+            <strong className="block">服务端候选证据已复验</strong>
+            <span className="mt-1 block">最短路线 {candidateReview.dossier.metrics.estimatedMinimumRouteMinutes.toFixed(1)} 分钟 · {candidateReview.dossier.metrics.minimumRouteDialogueTurns} 轮对白 · {candidateReview.dossier.metrics.reachableEndingCount} 个结局</span>
+            <span className="mt-1 block break-all font-mono">candidate {candidateReview.candidateHash} · record {candidateReview.recordHash}</span>
+          </div>}
+          <div className="mt-3 flex flex-wrap gap-2">{listing.productType === 'text-adventure' && <button disabled={busy != null} onClick={() => void loadTextAdventureReview(listing)} className="rounded border border-accent/50 px-3 py-2 text-xs text-accent">查看候选证据</button>}<button disabled={busy != null || (listing.productType === 'text-adventure' && !candidateReview)} onClick={() => void approveListing(listing.listingId)} className="rounded bg-success px-3 py-2 text-xs text-white disabled:opacity-40">审核发布</button><button disabled={busy != null || !reviewReasonCode.trim()} onClick={() => void rejectListing(listing.listingId)} className="rounded border border-warning/50 px-3 py-2 text-xs text-warning">要求修改</button></div>
+        </article>
+      })}{reviewQueue.length === 0 && <p className="rounded border border-dashed border-border p-6 text-center text-xs text-text-muted">加载后显示 submitted 且完整包已验证的目录项。</p>}</div>
     </section> : mode === 'safety' ? <CommunitySafetyPanel client={communityClient} accessToken={accessToken} /> : mode === 'operations' ? <CommercialOperationsPanel client={operationsClient} accessToken={accessToken} /> : <>
     <section className="rounded-lg border border-border bg-bg-elevated p-5">
       <div className="flex items-center gap-2"><Send className="h-4 w-4 text-accent" /><h3 className="text-sm font-semibold text-text-primary">{revisionListingId ? '修订并重新提交发行物' : '提交当前 Work 的正式发行物'}</h3>{revisionListingId && <button onClick={() => { setRevisionListingId(null); submission.current = null }} className="ml-auto rounded border border-border px-2 py-1 text-[10px] text-text-muted">取消修订</button>}</div>

@@ -10,11 +10,25 @@ import type {
   CommercialOrderV1,
 } from './authority'
 import type { CommercialCheckoutSessionV1 } from './gateway'
+import type {
+  CommercialReleaseRegistrationReceiptV1,
+  CommercialTextAdventureReviewProjectionV1,
+} from './release-delivery'
+import {
+  parseTextAdventureCommunityCandidateDossierV1,
+  type TextAdventureCommunityCandidateDossierV1,
+  type TextAdventureCommunitySubmissionV1,
+} from '../adventure/community-package'
+import {
+  canonicalProductProductionJsonV2,
+} from '../product-production/hash'
 import { PRODUCTION_PRODUCT_KINDS_V1, type ProductionProductKindV1 } from '../types'
+import { parseCommercialDiscoveryCursorV1 } from './discovery-cursor'
 
 interface FetchResponseV1 {
   ok: boolean
   status: number
+  headers?: { get(name: string): string | null }
   text(): Promise<string>
 }
 
@@ -180,6 +194,39 @@ function parseCheckout(value: unknown): CommercialCheckoutSessionV1 | null {
   }
 }
 
+function parseTextAdventureReviewProjection(value: unknown): CommercialTextAdventureReviewProjectionV1 {
+  const row = record(value, 'text adventure review projection')
+  exact(row, [
+    'schema', 'version', 'status', 'listingId', 'releaseHash', 'bundleHash', 'candidateHash',
+    'recordHash', 'verifiedAt', 'dossier', 'evidenceSummary',
+  ], 'text adventure review projection')
+  let dossier: TextAdventureCommunityCandidateDossierV1
+  try { dossier = parseTextAdventureCommunityCandidateDossierV1(row.dossier) } catch {
+    fail('protocol', 'text adventure review dossier 无效')
+  }
+  const evidenceSummary = record(row.evidenceSummary, 'text adventure review evidence summary')
+  if (row.schema !== 'storyforge.commercial-text-adventure-review-projection'
+    || row.version !== 1 || row.status !== 'pending-review'
+    || canonicalProductProductionJsonV2(dossier.evidence) !== canonicalProductProductionJsonV2(evidenceSummary)
+    || dossier.releaseContentHash !== row.releaseHash
+    || dossier.distributionBundleHash !== row.bundleHash) {
+    fail('protocol', 'text adventure review projection 绑定无效')
+  }
+  return {
+    schema: row.schema,
+    version: 1,
+    status: row.status,
+    listingId: text(row.listingId, 'text adventure review listingId', 200),
+    releaseHash: sha(row.releaseHash, 'text adventure review releaseHash'),
+    bundleHash: sha(row.bundleHash, 'text adventure review bundleHash'),
+    candidateHash: sha(row.candidateHash, 'text adventure review candidateHash'),
+    recordHash: sha(row.recordHash, 'text adventure review recordHash'),
+    verifiedAt: integer(row.verifiedAt, 'text adventure review verifiedAt'),
+    dossier,
+    evidenceSummary: structuredClone(dossier.evidence),
+  }
+}
+
 function normalizedBaseUrl(value: string): string {
   const raw = value.trim().replace(/\/+$/, '')
   let url: URL
@@ -204,10 +251,35 @@ export class CommercialHttpClientV1 {
       || this.timeoutMs < 100 || this.timeoutMs > 300_000) fail('configuration', '市场 HTTP 配置无效')
   }
 
-  async discover(input: { productType?: ProductionProductKindV1; query?: string } = {}): Promise<CommercialListingV1[]> {
-    const value = await this.post('/v1/commercial/discover', input, null, 2_000_000)
+  async discover(input: {
+    productType?: ProductionProductKindV1
+    query?: string
+    cursor?: string
+    limit?: number
+  } = {}): Promise<CommercialListingV1[]> {
+    return (await this.discoverPage(input)).items
+  }
+
+  async discoverPage(input: {
+    productType?: ProductionProductKindV1
+    query?: string
+    cursor?: string
+    limit?: number
+  } = {}): Promise<{ items: CommercialListingV1[]; nextCursor: string | null }> {
+    if (input.cursor != null && !parseCommercialDiscoveryCursorV1({
+      value: input.cursor, productType: input.productType, query: input.query,
+    })) fail('protocol', 'discover 请求分页游标无效或不属于当前筛选')
+    const { value, response } = await this.postWithResponse(
+      '/v1/commercial/discover', input, null, 2_000_000,
+    )
     if (!Array.isArray(value) || value.length > 10_000) fail('protocol', 'discover 响应无效')
-    return value.map(parseListing)
+    const nextCursor = response.headers?.get('x-storyforge-next-cursor') ?? null
+    if (nextCursor != null && !parseCommercialDiscoveryCursorV1({
+      value: nextCursor, productType: input.productType, query: input.query,
+    })) {
+      fail('protocol', 'discover 分页游标无效')
+    }
+    return { items: value.map(parseListing), nextCursor }
   }
 
   async createListing(input: {
@@ -320,13 +392,26 @@ export class CommercialHttpClientV1 {
     accessToken: string
     requestId: string
     bundle: ProductDistributionBundleV2
-  }): Promise<{ releaseHash: string; bundleHash: string; duplicate: boolean }> {
+    listingId?: string
+    textAdventureCandidate?: TextAdventureCommunitySubmissionV1
+  }): Promise<CommercialReleaseRegistrationReceiptV1> {
     const bundle = await verifyProductDistributionBundleV2(input.bundle)
+    const hasCandidate = input.listingId != null || input.textAdventureCandidate != null
+    if ((input.listingId == null) !== (input.textAdventureCandidate == null)) {
+      fail('protocol', '文字冒险候选上传必须同时携带 listingId 与候选证据')
+    }
     const row = record(await this.post('/v1/commercial/releases/register', {
       requestId: input.requestId, bundle,
+      ...(hasCandidate ? {
+        listingId: input.listingId,
+        textAdventureCandidate: input.textAdventureCandidate,
+      } : {}),
     }, input.accessToken, 2_000_000), 'release registration')
-    exact(row, ['releaseHash', 'bundleHash', 'duplicate'], 'release registration')
-    const result = {
+    const hasReview = 'textAdventureReview' in row
+    exact(row, hasReview
+      ? ['releaseHash', 'bundleHash', 'duplicate', 'textAdventureReview']
+      : ['releaseHash', 'bundleHash', 'duplicate'], 'release registration')
+    const result: CommercialReleaseRegistrationReceiptV1 = {
       releaseHash: sha(row.releaseHash, 'release registration.releaseHash'),
       bundleHash: sha(row.bundleHash, 'release registration.bundleHash'),
       duplicate: boolean(row.duplicate, 'release registration.duplicate'),
@@ -334,7 +419,35 @@ export class CommercialHttpClientV1 {
     if (result.releaseHash !== bundle.productRelease.contentHash || result.bundleHash !== bundle.bundleHash) {
       fail('protocol', 'release registration 回执与上传包不一致')
     }
+    if (hasCandidate !== hasReview) fail('protocol', 'release registration 候选审核回执缺失或意外出现')
+    if (hasReview) {
+      const review = record(row.textAdventureReview, 'release registration.textAdventureReview')
+      exact(review, ['schema', 'version', 'status', 'listingId', 'candidateHash', 'recordHash'], 'release registration.textAdventureReview')
+      if (review.schema !== 'storyforge.commercial-text-adventure-review-projection'
+        || review.version !== 1 || review.status !== 'pending-review'
+        || review.listingId !== input.listingId
+        || review.candidateHash !== input.textAdventureCandidate?.candidateHash) {
+        fail('protocol', 'release registration 候选审核回执绑定无效')
+      }
+      result.textAdventureReview = {
+        schema: review.schema,
+        version: 1,
+        status: review.status,
+        listingId: text(review.listingId, 'release registration.textAdventureReview.listingId', 200),
+        candidateHash: sha(review.candidateHash, 'release registration.textAdventureReview.candidateHash'),
+        recordHash: sha(review.recordHash, 'release registration.textAdventureReview.recordHash'),
+      }
+    }
     return result
+  }
+
+  async reviewTextAdventureCandidate(input: {
+    accessToken: string
+    listingId: string
+  }): Promise<CommercialTextAdventureReviewProjectionV1> {
+    return parseTextAdventureReviewProjection(await this.post('/v1/commercial/releases/review-candidate', {
+      listingId: input.listingId,
+    }, input.accessToken))
   }
 
   async downloadRelease(input: { accessToken: string; releaseHash: string }): Promise<{
@@ -372,6 +485,15 @@ export class CommercialHttpClientV1 {
   }
 
   private async post(path: string, body: unknown, accessToken: string | null, maximumResponseBytes = 2_000_000) {
+    return (await this.postWithResponse(path, body, accessToken, maximumResponseBytes)).value
+  }
+
+  private async postWithResponse(
+    path: string,
+    body: unknown,
+    accessToken: string | null,
+    maximumResponseBytes = 2_000_000,
+  ): Promise<{ value: unknown; response: FetchResponseV1 }> {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs)
     try {
@@ -390,7 +512,7 @@ export class CommercialHttpClientV1 {
         const message = typeof error.message === 'string' ? error.message : '市场请求失败'
         fail(code, message, response.status === 408 || response.status === 429 || response.status >= 500, response.status)
       }
-      return value
+      return { value, response }
     } catch (error) {
       if (error instanceof CommercialHttpErrorV1) throw error
       if (controller.signal.aborted) fail('timeout', '市场请求超时', true)

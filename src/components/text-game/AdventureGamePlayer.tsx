@@ -44,6 +44,10 @@ import {
 } from '../../lib/adventure/runtime'
 import { verifyProductMediaRuntimeUrlsV1 } from '../../lib/product-production/media-runtime-verifier'
 import { createReleaseProductMediaResolver } from '../../lib/product-production/media-resolver'
+import {
+  createProductProgressiveMediaRequestLedgerV1,
+  textAdventureSceneMediaAssetKeysV1,
+} from '../../lib/product-production/first-interactive-resources'
 import { recordProductMediaRuntimeMeasurementV1 } from '../../lib/product-production/quality-receipts'
 import { currentPlayerReleases } from '../../lib/text-game/player-library'
 import type { AdventureProductRuntimePackageV1, Project, WorkspaceScope } from '../../lib/types'
@@ -229,6 +233,13 @@ export default function AdventureGamePlayer(props: {
   const knownTranscriptSequencesRef = useRef<Set<number>>(new Set())
   const generatedNarrativeRef = useRef('')
   const mediaVerificationKeys = useRef(new Set<string>())
+  const progressiveMedia = useRef(createProductProgressiveMediaRequestLedgerV1()).current
+  const playerMounted = useRef(true)
+
+  useEffect(() => {
+    playerMounted.current = true
+    return () => { playerMounted.current = false }
+  }, [])
 
   useEffect(() => {
     setCatalogReleaseId(null)
@@ -247,6 +258,9 @@ export default function AdventureGamePlayer(props: {
     : selected?.productBuildId != null ? 'Build 预览 #' + selected.productBuildId : '未绑定运行来源'
   const catalog = useMemo(() => currentPlayerReleases(store.releases), [store.releases])
   const catalogRelease = catalog.find(item => item.release.id === catalogReleaseId) ?? null
+  const catalogSession = catalogRelease
+    ? store.sessions.find(session => session.productReleaseId === catalogRelease.release.id) ?? null
+    : null
   const catalogCoverAsset = catalogRelease?.manifest?.presentation?.assets.find(asset => asset.sceneTag === 'cover-opening')
   const adventure = store.runtimeState.adventure
   const manifest = store.selectedManifest
@@ -348,6 +362,13 @@ export default function AdventureGamePlayer(props: {
     : [], [adventure, manifest, store.events])
   const mediaCacheKey = `${store.selectedSessionId ?? 'title'}:${manifest?.presentation?.assets
     .map(asset => `${asset.assetKey}@${asset.version}:${asset.contentHash}`).join('|') ?? ''}`
+  const visibleMediaAssetKeys = [...new Set([
+    ...(manifest && store.runtimeState.narrative?.currentNodeKey
+      ? textAdventureSceneMediaAssetKeysV1(manifest, store.runtimeState.narrative.currentNodeKey)
+      : []),
+    ...(panel === 'character' && characterPortraitAsset ? [characterPortraitAsset.assetKey] : []),
+  ])]
+  const visibleMediaCacheKey = visibleMediaAssetKeys.join('|')
 
   useEffect(() => {
     localStorage.setItem('storyforge.text-adventure.accessibility', JSON.stringify(accessibility))
@@ -380,42 +401,75 @@ export default function AdventureGamePlayer(props: {
   }, [catalogCoverAsset, catalogRelease, props.scope, selected])
 
   useEffect(() => {
-    let active = true
+    progressiveMedia.reset()
     setMediaUrls({})
     setMediaFailures([])
+  }, [mediaCacheKey, progressiveMedia])
+
+  useEffect(() => {
+    if (store.selectedSessionId == null || visibleMediaAssetKeys.length === 0) return
+    const request = progressiveMedia.begin(visibleMediaAssetKeys)
+    if (request.assetKeys.length === 0) return
+    void store.preloadMediaSelection(request.assetKeys).then(result => {
+      if (!progressiveMedia.settle(request, result.failures.map(item => item.assetKey))
+        || !playerMounted.current) return
+      setMediaUrls(current => ({ ...current, ...result.urls }))
+      setMediaFailures(current => [
+        ...current.filter(item => !request.assetKeys.includes(item.assetKey)),
+        ...result.failures,
+      ])
+    }).catch(reason => {
+      if (!progressiveMedia.settle(request, request.assetKeys) || !playerMounted.current) return
+      setMediaFailures(current => [...current, {
+        assetKey: request.assetKeys.join(','),
+        reason: reason instanceof Error ? reason.message : String(reason),
+      }])
+    })
+  // Scene/panel changes request only media that the player can render now.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mediaCacheKey, visibleMediaCacheKey, progressiveMedia, props.scope.projectId, props.scope.worldId, props.scope.workId])
+
+  useEffect(() => {
+    let active = true
+    let timer = 0
     const assets = manifest?.presentation?.assets ?? []
-    if (!assets.length || store.selectedSessionId == null) return () => { active = false }
-    void store.preloadMedia().then(result => {
-      if (active) {
-        setMediaUrls(result.urls)
-        setMediaFailures(result.failures)
-      }
-      if (selected?.productBuildId == null) return
-      const verificationKey = `${selected.productBuildId}:${assets
-        .map(asset => `${asset.assetKey}:${asset.contentHash}`).sort().join('|')}`
-      if (mediaVerificationKeys.current.has(verificationKey)) return
+    const productBuildId = selected?.productBuildId
+    if (!assets.length || productBuildId == null || store.selectedSessionId == null) {
+      return () => { active = false }
+    }
+    const verificationKey = `${productBuildId}:${assets
+      .map(asset => `${asset.assetKey}:${asset.contentHash}`).sort().join('|')}`
+    if (mediaVerificationKeys.current.has(verificationKey)) return () => { active = false }
+    // Full-catalog decode is a Build technical gate, not a prerequisite for
+    // first interaction. Yield the initial reading surface first; released
+    // games keep loading media progressively and never run this Build-only job.
+    timer = window.setTimeout(() => {
+      if (!active || mediaVerificationKeys.current.has(verificationKey)) return
       mediaVerificationKeys.current.add(verificationKey)
-      void verifyProductMediaRuntimeUrlsV1({
-        assets: assets.map(asset => ({
-          assetKey: asset.assetKey, contentHash: asset.contentHash, mimeType: asset.mimeType,
-          width: asset.width, height: asset.height, durationMs: asset.durationMs,
-        })),
-        urls: result.urls,
-        environment: currentBrowserEnvironment(),
+      void store.preloadMedia().then(result => {
+        if (!active) throw new DOMException('播放器已离开当前 Build', 'AbortError')
+        setMediaUrls(current => ({ ...current, ...result.urls }))
+        setMediaFailures(result.failures)
+        return verifyProductMediaRuntimeUrlsV1({
+          assets: assets.map(asset => ({
+            assetKey: asset.assetKey, contentHash: asset.contentHash, mimeType: asset.mimeType,
+            width: asset.width, height: asset.height, durationMs: asset.durationMs,
+          })),
+          urls: result.urls,
+          environment: currentBrowserEnvironment(),
+        })
       }).then(measurement => recordProductMediaRuntimeMeasurementV1({
-        scope: props.scope, productBuildId: selected.productBuildId!, measurement,
+        scope: props.scope, productBuildId, measurement,
       })).then(verified => {
         if (!verified.evidence.passed) mediaVerificationKeys.current.delete(verificationKey)
       }).catch(() => {
-        // The visible pure-text fallback remains authoritative. A failed or
-        // interrupted measurement may be retried when this Preview is reopened.
+        // Pure text remains playable. Failed/interrupted technical verification
+        // is not promoted and may be retried when this Preview is reopened.
         mediaVerificationKeys.current.delete(verificationKey)
       })
-    }).catch(reason => {
-      if (active) setMediaFailures([{ assetKey: 'presentation', reason: reason instanceof Error ? reason.message : String(reason) }])
-    })
-    return () => { active = false }
-  // The store owns resolver disposal; URLs remain valid across action refreshes in the same session.
+    }, 1_000)
+    return () => { active = false; window.clearTimeout(timer) }
+  // The store owns resolver disposal; cached URLs remain valid for this session.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mediaCacheKey, props.scope.projectId, props.scope.worldId, props.scope.workId])
 
@@ -603,7 +657,7 @@ export default function AdventureGamePlayer(props: {
           <h3>{presentationText(catalogRelease.manifest?.definition.title) || catalogRelease.release.label}</h3>
           <p>{presentationText(catalogRelease.manifest?.definition.description) || '一场由探索、物品、能力和任务共同推进的冒险。'}</p>
           {catalogRelease.manifest && <div className="textgame-title-stats"><span>{catalogRelease.manifest.adventure.locations.length} 个地点</span><span>{adventureNpcCount(catalogRelease.manifest)} 名可交谈角色</span><span>{catalogRelease.manifest.adventure.items.length} 件物品</span><span>{catalogRelease.manifest.adventure.abilities.length} 项技能</span><span>{catalogRelease.manifest.adventure.quests.length} 个任务</span></div>}
-          {catalogRelease.error ? <p className="adventure-error">{catalogRelease.error}</p> : <div className="textgame-title-actions"><button type="button" className="textgame-start" disabled={!catalogRelease.manifest || store.busy} onClick={() => void run(() => store.start(catalogRelease.release.id!))}><Plus />开始新冒险</button>{store.sessions.find(session => session.productReleaseId === catalogRelease.release.id) && <button type="button" onClick={() => void store.select(store.sessions.find(session => session.productReleaseId === catalogRelease.release.id)!.id!)}><Save />继续上次进度</button>}</div>}
+          {catalogRelease.error ? <p className="adventure-error">{catalogRelease.error}</p> : <div className="textgame-title-actions"><button type="button" className="textgame-start" disabled={!catalogRelease.manifest || store.busy} onClick={() => void run(() => store.start(catalogRelease.release.id!))}><Plus />开始新冒险</button>{catalogSession && <button type="button" onClick={() => void store.select(catalogSession.id!)}><Save />{store.completedSessionEndingKeys[catalogSession.id!] ? '查看通关记录' : '继续上次进度'}</button>}</div>}
         </div>
       </section> : <>
         <div className="textgame-catalog-heading"><span>全部游戏</span><small>{catalog.length} 部可游玩作品</small></div>
@@ -611,7 +665,7 @@ export default function AdventureGamePlayer(props: {
           {catalog.map(item => <article key={item.release.id}><button type="button" aria-label={`查看游戏：${presentationText(item.manifest?.definition.title) || item.release.label}`} onClick={() => setCatalogReleaseId(item.release.id!)}><span className="textgame-catalog-icon"><Map /></span><span className="textgame-catalog-copy"><small>文字冒险</small><strong>{presentationText(item.manifest?.definition.title) || item.release.label}</strong><p>{presentationText(item.manifest?.definition.description) || '一场由探索、物品、能力和任务共同推进的冒险。'}</p>{item.manifest && <i>{item.manifest.adventure.locations.length} 地点 · {adventureNpcCount(item.manifest)} 可交谈角色 · {item.manifest.adventure.items.length} 物品 · {item.manifest.adventure.quests.length} 任务</i>}</span><span className="textgame-catalog-open">查看详情<ChevronRight /></span></button></article>)}
           {!catalog.length && <div className="adventure-empty">尚无可游玩的文字冒险。请先在作者工作台完成发布。</div>}
         </section>
-        {!!store.sessions.length && <section className="adventure-launcher-saves"><h3><Save />继续冒险</h3>{store.sessions.map(session => <div key={session.id}><button onClick={() => void store.select(session.id!)}><strong>{session.title}</strong><small>{formatTime(session.updatedAt)} · 可继续</small></button><button aria-label="删除冒险存档" onClick={() => void removeSession(session.id!, session.title)}><Trash2 /></button></div>)}</section>}
+        {!!store.sessions.length && <section className="adventure-launcher-saves"><h3><Save />冒险存档</h3>{store.sessions.map(session => <div key={session.id}><button onClick={() => void store.select(session.id!)}><strong>{session.title}</strong><small>{formatTime(session.updatedAt)} · {store.completedSessionEndingKeys[session.id!] ? '已通关' : '可继续'}</small></button><button aria-label="删除冒险存档" onClick={() => void removeSession(session.id!, session.title)}><Trash2 /></button></div>)}</section>}
       </>}
     </div>
   </div>

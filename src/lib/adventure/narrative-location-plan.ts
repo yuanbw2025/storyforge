@@ -40,10 +40,26 @@ function assignedLocationTitleByNodeV1(
   ]))
 }
 
+function escapedLocationTitleV1(title: string): string {
+  return title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** A source location may be named as the place being crossed or left, but it
+ * cannot be presented as the destination of an edge whose frozen target is
+ * elsewhere. This is a deterministic registered-place guard, not a general
+ * natural-language classifier. */
+function choiceNamesLocationAsDestinationV1(copy: string, title: string): boolean {
+  const escaped = escapedLocationTitleV1(title)
+  return new RegExp(`(?:前往|赶往|去往|进入|抵达|回到|返回|走向|奔赴|驶向|航向|去|到)\\s*${escaped}`, 'i').test(copy)
+    || new RegExp(`${escaped}[^。！？；\\n]{0,20}(?:作为|当成|是)[^。！？；\\n]{0,12}目的地`, 'i').test(copy)
+    || new RegExp(`(?:把|将)[^。！？；\\n]{0,12}${escaped}[^。！？；\\n]{0,12}(?:作为|当成)[^。！？；\\n]{0,12}目的地`, 'i').test(copy)
+}
+
 /**
  * A Choice's frozen target node is authoritative. If generated copy names a
- * different registered location and omits the actual target, replace only
- * those location titles. The graph, action identity and effects never change.
+ * different registered location, replace only those location titles. For a
+ * real cross-location edge that names no location, append one deterministic
+ * transition sentence. The graph, action identity and effects never change.
  */
 export function canonicalizeTextAdventureChoiceLocationsV1(input: {
   nodes: readonly FrozenProductNarrativeNode[]
@@ -54,16 +70,30 @@ export function canonicalizeTextAdventureChoiceLocationsV1(input: {
   return input.choices.map(choice => {
     const expectedTitle = assignedTitleByNode.get(choice.targetNodeKey)
     if (!expectedTitle) return { ...choice }
+    const sourceTitle = assignedTitleByNode.get(choice.sourceNodeKey)
     const copy = `${choice.text}\n${choice.description}`
-    if (copy.includes(expectedTitle)) return { ...choice }
+    const mentionsExpectedTitle = copy.includes(expectedTitle)
+    const allowsSourceOrigin = sourceTitle != null
+      && mentionsExpectedTitle
+      && copy.includes(sourceTitle)
+      && !choiceNamesLocationAsDestinationV1(copy, sourceTitle)
     const conflictingTitles = [...input.locationTitles]
-      .filter(title => title !== expectedTitle && copy.includes(title))
+      .filter(title => title !== expectedTitle
+        && copy.includes(title)
+        // A complete A -> B transition may legitimately name both where the
+        // player departs and where they arrive. Source-only copy is still
+        // repaired below because it fails to name the frozen destination.
+        && !(allowsSourceOrigin && title === sourceTitle))
       .sort((left, right) => right.length - left.length)
-    if (!conflictingTitles.length) return { ...choice }
     const replace = (value: string) => conflictingTitles.reduce(
       (current, title) => current.split(title).join(expectedTitle), value,
     )
-    return { ...choice, text: replace(choice.text), description: replace(choice.description) }
+    const text = replace(choice.text)
+    let description = replace(choice.description)
+    if (sourceTitle !== expectedTitle && !`${text}\n${description}`.includes(expectedTitle)) {
+      description = [description, `选择后立即进入${expectedTitle}。`].filter(Boolean).join('\n')
+    }
+    return { ...choice, text, description }
   })
 }
 
@@ -94,8 +124,21 @@ export function validateTextAdventureNarrativeLocationPlanV1(input: {
       choice.text.includes(title) || choice.description.includes(title)
     ))
     const expectedTitle = assignedTitleByNode.get(choice.targetNodeKey)!
-    if (mentionedLocations.length > 0 && !mentionedLocations.includes(expectedTitle)) {
-      errors.push(`${choice.choiceKey} 提到「${mentionedLocations.join('、')}」但目标节点位于「${expectedTitle}」`)
+    const sourceTitle = assignedTitleByNode.get(choice.sourceNodeKey)
+    const mentionsExpectedTitle = mentionedLocations.includes(expectedTitle)
+    const copy = `${choice.text}\n${choice.description}`
+    const allowsSourceOrigin = sourceTitle != null
+      && mentionsExpectedTitle
+      && !choiceNamesLocationAsDestinationV1(copy, sourceTitle)
+    const conflictingTitles = mentionedLocations.filter(title => (
+      title !== expectedTitle && !(allowsSourceOrigin && title === sourceTitle)
+    ))
+    if (conflictingTitles.length > 0) {
+      errors.push(`${choice.choiceKey} 提到「${conflictingTitles.join('、')}」但目标节点位于「${expectedTitle}」`)
+      continue
+    }
+    if (sourceTitle !== expectedTitle && !mentionsExpectedTitle) {
+      errors.push(`${choice.choiceKey} 跨地点转场必须明确目标地点「${expectedTitle}」`)
     }
   }
   return errors

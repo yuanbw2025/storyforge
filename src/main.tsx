@@ -50,6 +50,26 @@ async function bootstrap() {
   // 不能在打开失败后继续执行 Store 初始化并造成半可用界面。
   await openCurrentSchema()
 
+  if (import.meta.env.DEV) {
+    // Local flagship-production recovery helpers are deliberately absent from
+    // production bundles. They operate only on exact guarded Build identities
+    // in this developer profile and must never become a shipped app feature.
+    void Promise.all([
+      import('./dev/build52-quality-v10-retry'),
+      import('./dev/build52-epoch286-reconcile'),
+    ]).then(([qualityRecovery, epochReconcile]) => Promise.all([
+      qualityRecovery.recoverBuild59QualityAuthorityEpoch351V104(),
+      epochReconcile.reconcileBuild52Epoch289(),
+    ])).catch((error: unknown) => {
+      console.error('[local-product-production-recovery] stopped:', error)
+      localStorage.setItem(
+        'codex.local-product-production-recovery.error',
+        error instanceof Error ? error.message : String(error),
+      )
+    })
+  }
+
+
   // 2. 初始化提示词模板（必要时 seed 系统模板）。
   try {
     await usePromptStore.getState().init()

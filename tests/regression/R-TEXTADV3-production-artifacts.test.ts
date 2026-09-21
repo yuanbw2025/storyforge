@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { ProductProductionBriefV3 } from '../../src/lib/types'
 import {
   parseTextAdventureCastBibleArtifactV1,
+  parseTextAdventureEndingRoutePlanArtifactV1,
   parseTextAdventureNarrativeArcPlanArtifactV1,
+  parseTextAdventureNarrativeDecisionPlanArtifactV1,
   parseTextAdventureQuestPlanArtifactV1,
+  normalizeTextAdventureQuestPlanLocationCopyV1,
   parseTextAdventureQuestScriptArtifactV2,
   parseTextAdventureSourceDecisionArtifactV1,
   parseTextAdventureSourceSufficiencyArtifactV1,
@@ -14,6 +17,7 @@ import {
 import {
   assembleTextAdventureNarrativeFromSceneScriptsV1,
   parseTextAdventureSceneScriptBundleArtifactV1,
+  textAdventureActSceneKeysV1,
   textAdventureNarrativeSkeletonV1,
   validateTextAdventureCommercialEndingNarrativeV1,
 } from '../../src/lib/adventure/scene-script'
@@ -84,6 +88,75 @@ function castBible(qualityProfile: ProductProductionBriefV3['qualityProfile'] = 
 }
 
 describe('TEXTADV-3 · 专业生产工件合同', () => {
+  it('商业叙事骨架把有状态决定均匀冻结到三幕并为每项保留两个后续回响场景', () => {
+    const distributedBrief = {
+      ...brief('commercial-candidate'),
+      scale: { targetPlayMinutes: 60, targetWordCount: 12_000, targetEndingCount: 3 },
+      textAdventure: {
+        narrative: { targetLocationCount: 8, targetSceneCount: 12 },
+      },
+    } as ProductProductionBriefV3
+    const skeleton = textAdventureNarrativeSkeletonV1(distributedBrief)
+    expect(skeleton.statefulDecisionSceneCount).toBe(6)
+    expect(skeleton.statefulDecisionSceneKeys).toEqual([
+      'scene.001', 'scene.003',
+      'scene.005', 'scene.007',
+      'scene.009', 'scene.010',
+    ])
+    expect([0, 1, 2].map(actIndex => {
+      const actKeys = new Set(textAdventureActSceneKeysV1(distributedBrief, actIndex))
+      return skeleton.statefulDecisionSceneKeys.filter(sceneKey => actKeys.has(sceneKey)).length
+    })).toEqual([2, 2, 2])
+    expect(skeleton.statefulDecisionSceneKeys.every(sceneKey => (
+      skeleton.sceneKeys.length - skeleton.sceneKeys.indexOf(sceneKey) - 1 >= 2
+    ))).toBe(true)
+    expect(skeleton.statefulDecisionSceneKeys.every(sceneKey => (
+      skeleton.edges.filter(edge => edge.sourceNodeKey === sceneKey).length === 2
+    ))).toBe(true)
+
+    const story = storyBible()
+    const commercialStory = {
+      ...story,
+      endings: [...story.endings, {
+        key: 'ending.003', title: '余波', dramaticAnswer: '承担第三种代价。',
+        requiredConsequences: ['共同体记住了选择'],
+      }],
+    }
+    const decisionPlan = {
+      schema: 'storyforge.text-adventure-narrative-decision-plan-artifact', version: 1,
+      decisions: skeleton.statefulDecisionSceneKeys.map((sceneKey, decisionIndex) => {
+        const sceneIndex = skeleton.sceneKeys.indexOf(sceneKey)
+        return {
+          key: `decision.${decisionIndex + 1}`, sceneKey,
+          prompt: `第 ${decisionIndex + 1} 次决定`,
+          options: [1, 2].map(optionIndex => ({
+            key: `option.${decisionIndex + 1}.${optionIndex}`,
+            label: `行动 ${optionIndex}`,
+            cost: `代价 ${optionIndex}`,
+            persistentEffectKey: `flag.decision.${decisionIndex + 1}.${optionIndex}`,
+            echoSceneKeys: skeleton.sceneKeys.slice(sceneIndex + 1, sceneIndex + 3),
+          })),
+        }
+      }),
+    }
+    expect(parseTextAdventureNarrativeDecisionPlanArtifactV1({
+      value: decisionPlan,
+      brief: distributedBrief,
+      cast: castBible('commercial-candidate'),
+      storyBible: commercialStory,
+    }).decisions.map(decision => decision.sceneKey)).toEqual(skeleton.statefulDecisionSceneKeys)
+    const frontLoadedPlan = structuredClone(decisionPlan)
+    frontLoadedPlan.decisions.forEach((decision, index) => {
+      decision.sceneKey = skeleton.sceneKeys[index]
+    })
+    expect(() => parseTextAdventureNarrativeDecisionPlanArtifactV1({
+      value: frontLoadedPlan,
+      brief: distributedBrief,
+      cast: castBible('commercial-candidate'),
+      storyBible: commercialStory,
+    })).toThrow('sceneKey 必须为 scene.003')
+  })
+
   it('商业候选结局必须逐项兑现冻结后果，并包含正式 NPC 的角色回响', () => {
     const beats = [{
       beatKey: 'beat.ending.001', kind: 'dialogue' as const,
@@ -367,6 +440,52 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     })).toThrow('回响必须位于决定场景之后')
   })
 
+  it('结局路线必须用已登记持久效果形成互斥且完备的三结局状态分区', () => {
+    const story = {
+      ...storyBible(),
+      endings: [
+        { key: 'ending.001', title: '撤离', dramaticAnswer: '先让群岛居民撤离并公开真相。', requiredConsequences: ['居民撤离'] },
+        { key: 'ending.002', title: '永续', dramaticAnswer: '继承旧规则并继续活体记忆方案。', requiredConsequences: ['旧规则延续'] },
+        { key: 'ending.003', title: '记忆之匣', dramaticAnswer: '重写规则并采用机械替代方案。', requiredConsequences: ['机械方案生效'] },
+      ],
+    }
+    const arcPlan = {
+      decisions: [
+        {
+          key: 'decision.5',
+          options: [
+            { persistentEffectKey: 'flag.decision.5.1' },
+            { persistentEffectKey: 'flag.decision.5.2' },
+          ],
+        },
+        {
+          key: 'decision.6',
+          options: [
+            { persistentEffectKey: 'flag.decision.6.1' },
+            { persistentEffectKey: 'flag.decision.6.2' },
+          ],
+        },
+      ],
+    } as unknown as Parameters<typeof parseTextAdventureEndingRoutePlanArtifactV1>[0]['arcPlan']
+    const value = {
+      schema: 'storyforge.text-adventure-ending-route-plan-artifact', version: 1,
+      routes: [
+        { endingKey: 'ending.001', requiredEffectKeys: ['flag.decision.6.2'], rationale: '撤离行动直接兑现居民先行离岛。' },
+        { endingKey: 'ending.002', requiredEffectKeys: ['flag.decision.6.1', 'flag.decision.5.1'], rationale: '继承规则并保留活体记忆方案。' },
+        { endingKey: 'ending.003', requiredEffectKeys: ['flag.decision.6.1', 'flag.decision.5.2'], rationale: '继承责任但改用机械替代方案。' },
+      ],
+    }
+    expect(parseTextAdventureEndingRoutePlanArtifactV1({ value, arcPlan, storyBible: story }).routes)
+      .toEqual(value.routes)
+    const overlapping = structuredClone(value)
+    overlapping.routes[1].requiredEffectKeys = ['flag.decision.6.1']
+    expect(() => parseTextAdventureEndingRoutePlanArtifactV1({
+      value: overlapping,
+      arcPlan,
+      storyBible: story,
+    })).toThrow('没有形成互斥且完备的状态分区')
+  })
+
   it('主线任务计划把阶段、目标、场景、通用解法与持久后果精确闭合', () => {
     const cast = castBible()
     const story = storyBible()
@@ -421,6 +540,49 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
       value: broken, brief: brief(), arcPlan: arc, cast, expectedKind: 'main', expectedQuestCount: 1,
     })).toThrow('未精确覆盖')
 
+    const wrongLocationCopy = structuredClone(value)
+    wrongLocationCopy.quests[0].objectives[0].title = '在信号塔取得记录'
+    wrongLocationCopy.quests[0].objectives[0].narrativePurpose = '去信号塔完成当前目标。'
+    wrongLocationCopy.quests[0].objectives[0].alternatives[0].successConsequence = '在信号塔取得记录。'
+    const normalized = normalizeTextAdventureQuestPlanLocationCopyV1({
+      value: wrongLocationCopy,
+      locationTitles: ['潮门广场', '信号塔'],
+    })
+    expect(normalized.repairedFields).toEqual([
+      'quests[0].objectives[0].title',
+      'quests[0].objectives[0].narrativePurpose',
+      'quests[0].objectives[0].alternatives[0].successConsequence',
+    ])
+    const normalizedParsed = parseTextAdventureQuestPlanArtifactV1({
+      value: wrongLocationCopy,
+      brief: brief(),
+      arcPlan: arc,
+      cast,
+      expectedKind: 'main',
+      expectedQuestCount: 1,
+      locationTitles: ['潮门广场', '信号塔'],
+    })
+    expect(normalizedParsed.quests[0].objectives[0]).toMatchObject({
+      title: '在潮门广场取得记录',
+      narrativePurpose: '去潮门广场完成当前目标。',
+      alternatives: [{ successConsequence: '在后续地点取得记录。' }],
+    })
+    const shorthandLocationCopy = structuredClone(value)
+    shorthandLocationCopy.quests[0].objectives[0].title = '在档案库取得记录'
+    shorthandLocationCopy.quests[0].objectives[0].narrativePurpose = '前往灯塔顶端完成核对。'
+    const shorthandNormalized = normalizeTextAdventureQuestPlanLocationCopyV1({
+      value: shorthandLocationCopy,
+      locationTitles: ['潮门广场', '议会档案库', '主灯塔'],
+    })
+    expect(shorthandNormalized.repairedFields).toEqual([
+      'quests[0].objectives[0].title',
+      'quests[0].objectives[0].narrativePurpose',
+    ])
+    expect((shorthandNormalized.value as typeof value).quests[0].objectives[0]).toMatchObject({
+      title: '在潮门广场取得记录',
+      narrativePurpose: '前往潮门广场完成核对。',
+    })
+
     const questScriptValue = {
       schema: 'storyforge.text-adventure-quest-script-artifact', version: 2,
       mainObjectiveScripts: [{
@@ -439,6 +601,7 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
       value: questScriptValue, brief: brief(), mainQuestPlan: parsed,
       systems: { abilities: [{ key: 'ability.perception' }] } as never,
       sideQuests: { entries: [] } as never, ambientEvents: { entries: [] } as never,
+      locationTitles: ['潮门广场'],
     })
     expect(script.mainObjectiveScripts[0].alternatives[0].resolution.mode).toBe('automatic')
     const illegalCheck = JSON.parse(JSON.stringify(questScriptValue))
@@ -449,7 +612,26 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
       value: illegalCheck, brief: brief(), mainQuestPlan: parsed,
       systems: { abilities: [{ key: 'ability.perception' }] } as never,
       sideQuests: { entries: [] } as never, ambientEvents: { entries: [] } as never,
+      locationTitles: ['潮门广场'],
     })).toThrow('已登记能力')
+
+    const wrongPlace = JSON.parse(JSON.stringify(questScriptValue))
+    wrongPlace.mainObjectiveScripts[0].alternatives[0].successText = '你在信号塔修好了第一座潮钟。'
+    expect(() => parseTextAdventureQuestScriptArtifactV2({
+      value: wrongPlace, brief: brief(), mainQuestPlan: parsed,
+      systems: { abilities: [{ key: 'ability.perception' }] } as never,
+      sideQuests: { entries: [] } as never, ambientEvents: { entries: [] } as never,
+      locationTitles: ['潮门广场', '信号塔'],
+    })).toThrow('绑定「潮门广场」却把行动写在「信号塔」')
+
+    const wrongGoal = JSON.parse(JSON.stringify(questScriptValue))
+    wrongGoal.mainObjectiveScripts[0].alternatives[0].successText = '你修好了远处的潮钟，海面恢复平静。'
+    expect(() => parseTextAdventureQuestScriptArtifactV2({
+      value: wrongGoal, brief: brief(), mainQuestPlan: parsed,
+      systems: { abilities: [{ key: 'ability.perception' }] } as never,
+      sideQuests: { entries: [] } as never, ambientEvents: { entries: [] } as never,
+      locationTitles: ['潮门广场'],
+    })).toThrow('偏离冻结目标「取得记录」')
   })
 
   it('三幕 Scene Writer 只能填写冻结槽位，并由确定性装配器生成唯一叙事图', () => {
@@ -604,6 +786,38 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     expect(parseTextAdventureDialoguePassArtifactV1({
       value: normalizedNoOp, brief: inputBrief, cast, bundles: [bundles[0]],
     })).toEqual(normalizedNoOp)
+    const changedSpeaker = structuredClone(dialoguePassValue)
+    changedSpeaker.beatReviews[0].speakerKey = 'character.player'
+    expect(() => parseTextAdventureDialoguePassArtifactV1({
+      value: changedSpeaker, brief: inputBrief, cast, bundles: [bundles[0]],
+    })).toThrow('speakerKey 不得改写')
+    const crossSpeakerBundle = structuredClone(bundles[0])
+    crossSpeakerBundle.scenes[0].beats.push({
+      beatKey: 'beat.act-1.player-response', kind: 'dialogue', speakerKey: 'character.player',
+      text: '我会先封住潮门，再回来与你核对每一个失踪者的名字。', order: 1,
+    })
+    const normalizedCrossSpeakerCopy = parseTextAdventureDialoguePassArtifactV1({
+      value: {
+        schema: 'storyforge.text-adventure-dialogue-pass-artifact', version: 1,
+        actKey: 'act.1', reviewedCharacterCount: 2, reviewedBeatCount: 2,
+        reviewedChoiceCount: choices.length,
+        beatReviews: [{
+          beatOrdinal: 1, issueTags: ['voice-collapse'], rationale: '错误地搬运了玩家台词。',
+          revisedText: '我会先封住潮门，再回来与你核对每一个失踪者的名字。',
+        }],
+        choiceReviews: [],
+      },
+      brief: inputBrief, cast, bundles: [crossSpeakerBundle],
+    })
+    expect(normalizedCrossSpeakerCopy.beatReviews[0]).toMatchObject({
+      beatKey: dialogueBeats[0].beatKey,
+      verdict: 'keep',
+      issueTags: ['none'],
+      revisedText: dialogueBeats[0].text,
+    })
+    expect(normalizedCrossSpeakerCopy.beatReviews[0].rationale).toContain('保留冻结原文')
+    expect(normalizedCrossSpeakerCopy.beatReviews[1].revisedText)
+      .toBe('我会先封住潮门，再回来与你核对每一个失踪者的名字。')
     const revisedBundles = [
       ...applyTextAdventureDialoguePassV1({ bundles: [bundles[0]], dialoguePass }),
       bundles[1], bundles[2],
@@ -637,6 +851,61 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
       nodes: locationNodes, beats: [], choices: alignedChoices,
       locationTitles: ['冰窟渔村', '观潮台废墟'],
     })).toEqual([])
+    const conflictingDespiteExpected = [{
+      ...alignedChoices[0],
+      text: '先确认观潮台废墟，再赶往冰窟渔村',
+      description: '观潮台废墟是目标，但这句话仍把冰窟渔村当成目的地。',
+    }]
+    expect(validateTextAdventureNarrativeLocationPlanV1({
+      nodes: locationNodes, beats: [], choices: conflictingDespiteExpected,
+      locationTitles: ['冰窟渔村', '观潮台废墟'],
+    })).toEqual(['choice.location-drift 提到「冰窟渔村」但目标节点位于「观潮台废墟」'])
+    const cleanedConflict = canonicalizeTextAdventureChoiceLocationsV1({
+      nodes: locationNodes, choices: conflictingDespiteExpected,
+      locationTitles: ['冰窟渔村', '观潮台废墟'],
+    })
+    expect(`${cleanedConflict[0].text}\n${cleanedConflict[0].description}`).not.toContain('冰窟渔村')
+    const sourceToTargetNodes = [
+      { key: 'scene.source', kind: 'entry' as const, title: '灯塔余烬', summary: '第二灯塔废墟', conditionJson: '{}', effectsJson: '[]', successorKeys: ['scene.target'] },
+      { key: 'scene.target', kind: 'scene' as const, title: '匣中回声', summary: '沉砾的秘密工作室', conditionJson: '{}', effectsJson: '[]', successorKeys: [] },
+    ]
+    const sourceToTargetChoice = {
+      ...alignedChoices[0], choiceKey: 'choice.source-to-target',
+      sourceNodeKey: 'scene.source', targetNodeKey: 'scene.target',
+      text: '穿过第二灯塔废墟的残垣',
+      description: '沿石阶进入沉砾的秘密工作室，继续调试记忆匣。',
+    }
+    const sourceToTarget = canonicalizeTextAdventureChoiceLocationsV1({
+      nodes: sourceToTargetNodes, choices: [sourceToTargetChoice],
+      locationTitles: ['第二灯塔废墟', '沉砾的秘密工作室', '冰窟海井'],
+    })
+    expect(sourceToTarget[0]).toMatchObject({
+      text: sourceToTargetChoice.text, description: sourceToTargetChoice.description,
+    })
+    expect(validateTextAdventureNarrativeLocationPlanV1({
+      nodes: sourceToTargetNodes, beats: [], choices: sourceToTarget,
+      locationTitles: ['第二灯塔废墟', '沉砾的秘密工作室', '冰窟海井'],
+    })).toEqual([])
+    const thirdLocationConflict = [{
+      ...sourceToTargetChoice,
+      description: '穿过第二灯塔废墟后先赶往冰窟海井，再进入沉砾的秘密工作室。',
+    }]
+    expect(validateTextAdventureNarrativeLocationPlanV1({
+      nodes: sourceToTargetNodes, beats: [], choices: thirdLocationConflict,
+      locationTitles: ['第二灯塔废墟', '沉砾的秘密工作室', '冰窟海井'],
+    })).toEqual(['choice.source-to-target 提到「冰窟海井」但目标节点位于「沉砾的秘密工作室」'])
+    const cleanedThirdLocation = canonicalizeTextAdventureChoiceLocationsV1({
+      nodes: sourceToTargetNodes, choices: thirdLocationConflict,
+      locationTitles: ['第二灯塔废墟', '沉砾的秘密工作室', '冰窟海井'],
+    })
+    expect(`${cleanedThirdLocation[0].text}\n${cleanedThirdLocation[0].description}`).not.toContain('冰窟海井')
+    expect(`${cleanedThirdLocation[0].text}\n${cleanedThirdLocation[0].description}`).toContain('第二灯塔废墟')
+    const unnamedCrossLocation = canonicalizeTextAdventureChoiceLocationsV1({
+      nodes: locationNodes,
+      choices: [{ ...alignedChoices[0], text: '继续追查', description: '承担新的代价。' }],
+      locationTitles: ['冰窟渔村', '观潮台废墟'],
+    })
+    expect(unnamedCrossLocation[0].description).toContain('选择后立即进入观潮台废墟')
     const omittedCosmeticOrder = bundleValue(0)
     delete omittedCosmeticOrder.scenes[0].beats[0].order
     delete omittedCosmeticOrder.choices[0].order
@@ -649,6 +918,60 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     expect(normalizedOrder.scenes[0].beats[0].order).toBe(0)
     expect(normalizedOrder.choices[0].order).toBe(skeleton.edges[0].order)
     expect(normalizedOrder.choices[0].unavailableReason).toBe('当前状态不满足此行动条件。')
+    const invalidBeatKind = bundleValue(0)
+    invalidBeatKind.scenes[0].beats[0].kind = 'banana'
+    expect(() => parseTextAdventureSceneScriptBundleArtifactV1({
+      value: invalidBeatKind, brief: inputBrief, actIndex: 0,
+      allowedSpeakerKeys: cast.characters.map(character => character.key),
+      locationTitles, expectedModuleTitle: story.title, sceneTitles, endingTitles,
+    })).toThrow('kind 枚举无效')
+    const globallyKnownButSceneUnauthorized = bundleValue(0)
+    expect(() => parseTextAdventureSceneScriptBundleArtifactV1({
+      value: globallyKnownButSceneUnauthorized, brief: inputBrief, actIndex: 0,
+      allowedSpeakerKeys: cast.characters.map(character => character.key),
+      sceneSpeakerKeys: { 'scene.001': ['character.player'] },
+      locationTitles, expectedModuleTitle: story.title, sceneTitles, endingTitles,
+    })).toThrow('dialogue speakerKey 无效')
+    const thirdPersonPlayerNarration = bundleValue(0)
+    thirdPersonPlayerNarration.scenes[0].beats[0] = {
+      beatKey: 'beat.act-1.001', kind: 'narration', speakerKey: null,
+      text: '守门人推开潮门工坊的门，她必须在钟声停止前作出选择。', order: 0,
+    }
+    expect(() => parseTextAdventureSceneScriptBundleArtifactV1({
+      value: thirdPersonPlayerNarration, brief: inputBrief, actIndex: 0,
+      allowedSpeakerKeys: cast.characters.map(character => character.key),
+      playerName: '守门人',
+      locationTitles, expectedModuleTitle: story.title, sceneTitles, endingTitles,
+    })).toThrow('narration/action 必须使用第二人称「你」')
+    const thirdPersonPlayerSummary = bundleValue(0)
+    thirdPersonPlayerSummary.scenes[0].summary = '守门人必须拿起守门人的钥匙，在钟声停止前作出选择。'
+    expect(parseTextAdventureSceneScriptBundleArtifactV1({
+      value: thirdPersonPlayerSummary, brief: inputBrief, actIndex: 0,
+      allowedSpeakerKeys: cast.characters.map(character => character.key),
+      playerName: '守门人',
+      locationTitles, expectedModuleTitle: story.title, sceneTitles, endingTitles,
+    }).scenes[0].summary).toBe('潮门广场｜你必须拿起你的钥匙，在钟声停止前作出选择。')
+    const quotedPlayerName = bundleValue(0)
+    quotedPlayerName.scenes[0].summary = '你看到信上写着「守门人，请在钟声停止前作出选择」。'
+    expect(parseTextAdventureSceneScriptBundleArtifactV1({
+      value: quotedPlayerName, brief: inputBrief, actIndex: 0,
+      allowedSpeakerKeys: cast.characters.map(character => character.key),
+      playerName: '守门人',
+      locationTitles, expectedModuleTitle: story.title, sceneTitles, endingTitles,
+    }).scenes[0].summary).toContain('守门人')
+    const disguisedUnauthorizedSpeaker = bundleValue(0)
+    disguisedUnauthorizedSpeaker.scenes[0].beats[0].text = '「离开这里。」角色2打断你。'
+    expect(() => parseTextAdventureSceneScriptBundleArtifactV1({
+      value: disguisedUnauthorizedSpeaker, brief: inputBrief, actIndex: 0,
+      allowedSpeakerKeys: cast.characters.map(character => character.key),
+      sceneSpeakerKeys: { 'scene.001': ['character.player', 'character.npc.1'] },
+      characterAliasesByKey: {
+        'character.player': ['守门人'],
+        'character.npc.1': ['角色1'],
+        'character.npc.2': ['角色2'],
+      },
+      locationTitles, expectedModuleTitle: story.title, sceneTitles, endingTitles,
+    })).toThrow('不得用已授权 speakerKey 包装越界登场')
     const scopedBrief = {
       ...inputBrief,
       textAdventure: {
@@ -720,12 +1043,22 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     conflictingNestedChoice.choices = [{
       ...conflictingNestedChoice.scenes[0].choices[0], text: '与 scene 内副本冲突的选择',
     }]
-    expect(() => parseTextAdventureSceneScriptBundleArtifactV1({
+    expect(parseTextAdventureSceneScriptBundleArtifactV1({
       value: conflictingNestedChoice, brief: scopedBrief, actIndex: 0,
       allowedSpeakerKeys: cast.characters.map(character => character.key),
       locationTitles, expectedModuleTitle: story.title,
       sceneTitles: scopedSceneTitles, endingTitles, expectedSceneKeys: ['scene.001'],
-    })).toThrow('根级与 scene 内的重复内容冲突')
+    }).choices[0].text).toBe('与 scene 内副本冲突的选择')
+    const conflictingRootChoices = structuredClone(conflictingNestedChoice)
+    conflictingRootChoices.choices.push({
+      ...conflictingRootChoices.choices[0], text: '同一根级的另一份冲突文案',
+    })
+    expect(() => parseTextAdventureSceneScriptBundleArtifactV1({
+      value: conflictingRootChoices, brief: scopedBrief, actIndex: 0,
+      allowedSpeakerKeys: cast.characters.map(character => character.key),
+      locationTitles, expectedModuleTitle: story.title,
+      sceneTitles: scopedSceneTitles, endingTitles, expectedSceneKeys: ['scene.001'],
+    })).toThrow('同一权威层的重复内容冲突')
     const incompleteDialoguePass = structuredClone(dialoguePassValue)
     incompleteDialoguePass.beatReviews.pop()
     expect(() => parseTextAdventureDialoguePassArtifactV1({
@@ -733,10 +1066,18 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     })).toThrow('beatReviews 数量无效')
     const changed = bundleValue(0)
     changed.choices[0].targetNodeKey = 'scene.003'
-    expect(() => parseTextAdventureSceneScriptBundleArtifactV1({
+    changed.choices[0].sourceNodeKey = 'scene.999'
+    changed.choices[0].order = 99
+    const normalizedGraph = parseTextAdventureSceneScriptBundleArtifactV1({
       value: changed, brief: inputBrief, actIndex: 0,
       allowedSpeakerKeys: cast.characters.map(character => character.key),
       locationTitles, expectedModuleTitle: story.title, sceneTitles, endingTitles,
-    })).toThrow('改写了冻结图骨架')
+    })
+    expect(normalizedGraph.choices[0]).toMatchObject({
+      choiceKey: skeleton.edges[0].choiceKey,
+      sourceNodeKey: skeleton.edges[0].sourceNodeKey,
+      targetNodeKey: skeleton.edges[0].targetNodeKey,
+      order: skeleton.edges[0].order,
+    })
   })
 })

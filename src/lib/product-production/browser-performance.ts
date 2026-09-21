@@ -23,6 +23,8 @@ export interface ProductBrowserPerformanceMeasurementV1 {
   packageHash: string
   previewHash: string
   firstInteractiveBytes: number
+  /** Ordered keys from the deterministic first-interaction resource plan. */
+  firstInteractiveAssetKeys?: string[]
   cachedSceneLatenciesMs: number[]
   choiceInputLatenciesMs: number[]
   memorySamples: Array<{ elapsedMs: number; usedHeapBytes: number }>
@@ -83,6 +85,10 @@ export async function createProductBrowserPerformanceReceiptV1(
     || !Number.isInteger(measurement.viewport.height) || measurement.viewport.height < 1
     || !Number.isInteger(measurement.measuredAt) || measurement.measuredAt < 1
     || !validNumber(measurement.firstInteractiveBytes)
+    || (measurement.firstInteractiveAssetKeys != null
+      && (measurement.firstInteractiveAssetKeys.length > 10_000
+        || measurement.firstInteractiveAssetKeys.some(key => !key.trim() || key.length > 500)
+        || new Set(measurement.firstInteractiveAssetKeys).size !== measurement.firstInteractiveAssetKeys.length))
     || measurement.cachedSceneLatenciesMs.length > PRODUCT_BROWSER_PERFORMANCE_POLICY_V1.maximumLatencySamples
     || measurement.choiceInputLatenciesMs.length > PRODUCT_BROWSER_PERFORMANCE_POLICY_V1.maximumLatencySamples
     || measurement.memorySamples.length > PRODUCT_BROWSER_PERFORMANCE_POLICY_V1.maximumMemorySamples

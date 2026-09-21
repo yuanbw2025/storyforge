@@ -24,7 +24,9 @@ import { parseProductProductionBriefV3 } from '../../src/lib/product-production/
 import type {
   ProductBuildManifestV1,
   ProductBuildQualityReportV1,
+  ProductProductionWorldSourceCatalogV2,
   ProductRuntimePackageV1,
+  WorldRelease,
 } from '../../src/lib/types'
 import { createFixtureProductReleaseManifestV1 } from './product-release-v1'
 import { CURRENT_PRODUCT_SOURCE_CATALOG } from './current-product-world'
@@ -228,13 +230,18 @@ async function humanPlaytestReceipt(
  * Technical fixture for package/lifecycle verification only. It is deliberately
  * short and must never be presented as the one-hour flagship product.
  */
-export async function createTextAdventureCommunityPackageFixtureV1(): Promise<TextAdventureCommunityPackageV1> {
+export async function createTextAdventureCommunityPackageFixtureV1(input?: {
+  worldRelease: WorldRelease & { id: number }
+  sourceCatalog: ProductProductionWorldSourceCatalogV2
+}): Promise<TextAdventureCommunityPackageV1> {
+  const worldRelease = input?.worldRelease ?? ({ id: 1, contentHash: HASH } as never)
+  const sourceCatalog = input?.sourceCatalog ?? ({
+    ...CURRENT_PRODUCT_SOURCE_CATALOG,
+    worldReference: { referenceHash: 'f'.repeat(64) },
+  } as never)
   const baseRuntime = createTextAdventureFoundationRuntimePackageV2({
-    worldRelease: { id: 1, contentHash: HASH } as never,
-    sourceCatalog: {
-      ...CURRENT_PRODUCT_SOURCE_CATALOG,
-      worldReference: { referenceHash: 'f'.repeat(64) },
-    } as never,
+    worldRelease,
+    sourceCatalog,
   })
   const profile = baseRuntime.interaction!.profiles[0]
   const opening = baseRuntime.narrative.nodes.find(node => node.key === 'opening')!
@@ -339,7 +346,19 @@ export async function createTextAdventureCommunityPackageFixtureV1(): Promise<Te
     if (!decisionChoice) {
       throw new Error(`[text-adventure-community-package-fixture] 决定缺少叙事选项:${option.choiceKey}`)
     }
-    decisionChoice.tags.push(`adventure-action:${choiceActionKey}`)
+    const replacedActionKeys = new Set(baseRuntime.adventure!.actions
+      .filter(action => action.narrativeChoiceKey === option.choiceKey)
+      .map(action => action.key))
+    baseRuntime.adventure!.actions = baseRuntime.adventure!.actions.filter(action => (
+      action.narrativeChoiceKey !== option.choiceKey
+    ))
+    for (const scene of baseRuntime.adventure!.scenes) {
+      scene.actionKeys = scene.actionKeys.filter(actionKey => !replacedActionKeys.has(actionKey))
+    }
+    decisionChoice.tags = [
+      ...decisionChoice.tags.filter(tag => !tag.startsWith('adventure-action:')),
+      `adventure-action:${choiceActionKey}`,
+    ]
     baseRuntime.adventure!.actions.push({
       key: choiceActionKey, kind: 'quest-action', label: `执行：${option.choiceKey}`,
       description: '把玩家选择写成确定性持久状态。', locationKey: 'location.core', targetKey: null,
@@ -371,16 +390,35 @@ export async function createTextAdventureCommunityPackageFixtureV1(): Promise<Te
       coreScene.actionKeys.push(echoActionKey)
     }
   }
+  const mappedChoiceKeys = new Set(baseRuntime.adventure!.actions.flatMap(action => (
+    action.narrativeChoiceKey ? [action.narrativeChoiceKey] : []
+  )))
+  for (const choice of baseRuntime.narrative.choices.filter(item => !mappedChoiceKeys.has(item.choiceKey))) {
+    const choiceActionKey = `action.progress.${choice.choiceKey}`
+    choice.tags = [
+      ...choice.tags.filter(tag => !tag.startsWith('adventure-action:')),
+      `adventure-action:${choiceActionKey}`,
+    ]
+    baseRuntime.adventure!.actions.push({
+      key: choiceActionKey, kind: 'quest-action', label: choice.text,
+      description: choice.description || '继续当前叙事路线。', locationKey: 'location.core', targetKey: null,
+      requirements: [{ narrativePath: '__storyforge.currentNarrativeNodeKey', narrativeEquals: choice.sourceNodeKey }],
+      rule: { kind: 'automatic' }, successEffects: [], costlySuccessEffects: [], failureEffects: [],
+      successText: baseRuntime.narrative.beats.filter(beat => beat.nodeKey === choice.targetNodeKey)
+        .map(beat => beat.text).join('\n') || choice.text,
+      costlySuccessText: '你付出代价后继续前进。', failureText: '叙事没有继续。',
+      unavailableText: choice.unavailableReason || '当前条件不允许这个选择。', repeatable: false,
+      narrativeChoiceKey: choice.choiceKey, interaction: null,
+    })
+    coreScene.actionKeys.push(choiceActionKey)
+  }
   baseRuntime.definition.initialVariables.productAdapterCommercialReady = true
   const authoredRuntime = parseProductRuntimePackageV1(baseRuntime)
   const runtime = (await createFixtureProductReleaseManifestV1({ runtimePackage: authoredRuntime })).runtimePackage
   const brief = createCurrentProductBriefFixture({
     productType: 'text-adventure',
-    worldRelease: { id: 1, contentHash: HASH } as never,
-    sourceCatalog: {
-      ...CURRENT_PRODUCT_SOURCE_CATALOG,
-      worldReference: { referenceHash: 'f'.repeat(64) },
-    } as never,
+    worldRelease,
+    sourceCatalog,
   })
   brief.qualityProfile = 'commercial-candidate'
   brief.scale.targetPlayMinutes = 10

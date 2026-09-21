@@ -169,7 +169,13 @@ export async function seedTextAdventureMediaRevisionWorkbenchV1(imageBase64: str
     schema: 'storyforge.text-adventure-visual-bible-artifact', version: 1,
     style: '克制的海洋奇幻厚涂', palette: ['#172033', '#52647A', '#D8C6A0'],
     compositionRules: ['叙事焦点清楚'], continuityRules: ['灯塔铜金结构保持一致'],
-    characterAnchors: [], assetDirectives: visual.visual.map(item => ({ artifactKey: item.artifactKey })),
+    characterAnchors: [],
+    assetRequirements: visual.visual.map(item => ({
+      artifactKey: item.artifactKey,
+      mediaKind: item.mediaKind,
+      sceneTag: item.sceneTag,
+      beatKey: item.beatKey,
+    })),
   }
   const requirementsHash = await hashProductProductionValueV2(visual)
   const visualBibleHash = await hashProductProductionValueV2(visualBible)

@@ -14,6 +14,7 @@ import type {
 } from '../adventure/production-artifacts'
 import type {
   TextAdventureCastBibleArtifactV1,
+  TextAdventureEndingRoutePlanArtifactV1,
   TextAdventureNarrativeArcPlanArtifactV1,
   TextAdventureQuestPlanArtifactV1,
   TextAdventureQuestScriptArtifactV2,
@@ -48,6 +49,7 @@ export interface ProductAdapterBuildInputV1 {
     systems: TextAdventureSystemsArtifactV1
     cast: TextAdventureCastBibleArtifactV1
     arcPlan: TextAdventureNarrativeArcPlanArtifactV1
+    endingRoutePlan: TextAdventureEndingRoutePlanArtifactV1
     mainQuestPlan: TextAdventureQuestPlanArtifactV1
     questScript: TextAdventureQuestScriptArtifactV2
     sideQuests: TextAdventureQuestBundleArtifactV2
@@ -85,6 +87,7 @@ function adventureModule(
     systems: input.textAdventureProduction.systems,
     cast: input.textAdventureProduction.cast,
     arcPlan: input.textAdventureProduction.arcPlan,
+    endingRoutePlan: input.textAdventureProduction.endingRoutePlan,
     mainQuestPlan: input.textAdventureProduction.mainQuestPlan,
     questScript: input.textAdventureProduction.questScript,
     sideQuests: input.textAdventureProduction.sideQuests,
@@ -125,6 +128,7 @@ const ADAPTERS = new Map<ProductionProductKindV1, UpperProductProductionAdapterV
               narrative: input.narrative,
               cast: input.textAdventureProduction.cast,
               arcPlan: input.textAdventureProduction.arcPlan,
+              endingRoutePlan: input.textAdventureProduction.endingRoutePlan,
             })
           : interactionModules(input)
         return { interaction, adventure: adventureModule(input, interaction) }

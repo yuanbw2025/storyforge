@@ -4,10 +4,30 @@ import {
   findTextAdventurePlayerVisibleLanguageIssuesV1,
   groupTextAdventurePlayerVisibleLanguageIssuesV1,
 } from '../adventure/language-quality'
+import { TEXT_ADVENTURE_QUALITY_REVIEW_SCORE_KEYS_BY_SCOPE_V1 } from '../adventure/production-artifacts'
+import { textAdventureDecisionEchoPresentationV1 } from '../adventure/production-compiler'
 import type { WorkspaceScope } from '../types'
 import type { AssembleContextInput } from '../registry/types'
 import { assertRecordInScope } from '../workspace/scope'
-import { textAdventureQualityIssueOwnerArtifactKeyV1 } from './text-adventure-quality'
+import { isSha256Hash } from './hash'
+import { textAdventureQualityReviewScopeFromTaskKeyV1 } from './plan'
+import {
+  textAdventureQualityArcRepairTaskKeysV1,
+  textAdventureQualityChoiceCopyOnlyRepairV1,
+  textAdventureQualityExecutableRecommendationV1,
+  textAdventureQualityIssueOwnerArtifactKeyV1,
+  textAdventureQualityIssueSupersededByCompiledEchoV1,
+  textAdventureQualityIssueFrozenBeatContradictionV1,
+  normalizeTextAdventureQualityStableReferenceV1,
+  textAdventureQualityReviewAuthorityViolationsV1,
+  textAdventureQualityReviewScopeViolationsV1,
+  textAdventurePlayerPerspectiveIssuesV1,
+  textAdventureUnauthorizedKinshipIssuesV1,
+  textAdventureDialogueAttributionIssuesV1,
+  textAdventureSceneSpeakerAuthorityIssuesV1,
+  textAdventureQuestLocationAuthorityIssuesV1,
+  isTextAdventureRecomputedQualityIssueV1,
+} from './text-adventure-quality'
 
 function requiredScope(input: AssembleContextInput): WorkspaceScope {
   if (!input.scope) throw new Error('[product-production-context] 缺少已解析 WorkspaceScope')
@@ -78,6 +98,15 @@ function contextText(value: unknown, maximum: number): string {
   if (typeof value !== 'string') return ''
   const normalized = value.trim().normalize('NFC')
   return normalized.length <= maximum ? normalized : `${normalized.slice(0, maximum)}…`
+}
+
+function contextFailureDetail(value: unknown, maximum = 800): string {
+  if (typeof value !== 'string') return ''
+  const normalized = value.trim().normalize('NFC')
+  if (normalized.length <= maximum) return normalized
+  const headLength = Math.floor((maximum - 1) / 2)
+  const tailLength = maximum - 1 - headLength
+  return `${normalized.slice(0, headLength)}…${normalized.slice(-tailLength)}`
 }
 
 async function requiredContextArtifactsV1(input: AssembleContextInput, options: {
@@ -497,15 +526,15 @@ export async function readTextAdventureDialogueInputsV1(input: AssembleContextIn
   }
   const serialized = JSON.stringify(packet)
   const estimatedTokens = estimateTokens(serialized)
-  // The current Plan reserves 18,480 input tokens for each independent
-  // Dialogue Editor. Keep the registered source packet below 16,500 so the
-  // system contract and provider framing retain roughly 2k tokens of explicit
-  // headroom. The former 12,500 ceiling predated that Plan reservation and
-  // rejected a valid 60-minute third act even though its role-specific packet
-  // stayed inside the durable task budget.
-  const maximumDialogueContextTokens = 16_500
+  // The current Plan reserves 26,400 input tokens for each independent
+  // Dialogue Editor. Keep the registered source packet below 20k so the
+  // system contract, schema and provider framing retain about 6.4k tokens of
+  // explicit headroom. A live complete 60-minute third act measured 17,425
+  // tokens here; keeping the act whole preserves voice and knowledge
+  // continuity and remains far below the configured 512K model context.
+  const maximumDialogueContextTokens = 20_000
   if (estimatedTokens > maximumDialogueContextTokens) {
-    throw new Error(`[product-production-context] 第 ${act} 幕对白审校投影超过登记预算:${estimatedTokens}/${maximumDialogueContextTokens}，必须增加更小的有界对白分包计划`)
+    throw new Error(`[product-production-context] 第 ${act} 幕对白审校投影超过登记预算:${estimatedTokens}/${maximumDialogueContextTokens}，必须升级执行计划容量或增加更小的有界对白分包计划`)
   }
   return serialized
 }
@@ -575,219 +604,580 @@ export async function readTextAdventureVisualQualityInputsV1(input: AssembleCont
 }
 
 /**
- * Registered, deterministic review projection for the text-adventure quality
- * Agent. The full accepted Artifacts stay authoritative in IndexedDB; this
- * packet keeps every graph edge, target opening and quest location visible
- * inside the bounded model context instead of truncating one large JSON blob.
+ * Registered deterministic projection for one of four independent narrative
+ * review Runs. Every packet carries the same global story spine and
+ * setup/payoff map. The structure Run owns cross-act architecture, while an
+ * act Run owns the player-visible prose, dialogue and choices for one act.
+ * Full accepted Artifacts remain authoritative in IndexedDB and are supplied
+ * again to the deterministic aggregate for reference/language validation.
  */
 export async function readTextAdventureQualityInputsV1(input: AssembleContextInput): Promise<string> {
-  const { build } = await productionAndBuild(input)
-  if (!build) throw new Error('[product-production-context] 文字冒险质量审查需要 productBuildId')
+  const scope = textAdventureQualityReviewScopeFromTaskKeyV1(input.productProductionTaskKey ?? '')
+  if (!scope) {
+    throw new Error('[product-production-context] 旧版整包文字冒险质量审查不可继续执行；必须升级冻结生产计划后按 structure/act scope 重跑')
+  }
   const requiredKeys = [
     'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
-    'content.narrative-arc-plan', 'content.main-quest-plan', 'content.quest-script',
+    'content.narrative-arc-plan', 'content.ending-route-plan',
+    'content.main-quest-plan', 'content.quest-script',
     'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2',
     'content.dialogue-pass.act-3', 'content.narrative', 'content.product-module',
     'content.adventure-side-quests', 'content.adventure-ambient-events',
   ]
-  const requested = new Set(input.productArtifactKeys ?? [])
-  if (requiredKeys.some(key => !requested.has(key))) {
-    throw new Error('[product-production-context] 文字冒险质量审查 Artifact 选择不完整')
-  }
-  const candidateRows = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
-    .filter(row => requiredKeys.includes(row.artifactKey)
-      && (row.status === 'accepted' || row.status === 'carried-forward'))
-    .sort((left, right) => left.version - right.version)
-  const rowByKey = new Map(candidateRows.map(row => [row.artifactKey, row]))
-  const rows = requiredKeys.flatMap(key => {
-    const row = rowByKey.get(key)
-    return row ? [row] : []
+  const { build, rows, payloadByKey } = await requiredContextArtifactsV1(input, {
+    label: `文字冒险叙事质量审查 ${scope}`, requiredKeys,
   })
-  if (rows.length !== requiredKeys.length) {
-    throw new Error('[product-production-context] 文字冒险质量审查 Artifact 缺失或未验收')
-  }
-  const payloadByKey = new Map(rows.map(row => [row.artifactKey, contextRecord(JSON.parse(row.payloadJson))]))
   const architecture = payloadByKey.get('content.adventure-architecture') ?? {}
   const storyBible = payloadByKey.get('content.story-bible') ?? {}
   const castBible = payloadByKey.get('content.cast-bible') ?? {}
   const arcPlan = payloadByKey.get('content.narrative-arc-plan') ?? {}
+  const endingRoutePlan = payloadByKey.get('content.ending-route-plan') ?? {}
   const mainQuestPlan = payloadByKey.get('content.main-quest-plan') ?? {}
   const questScript = payloadByKey.get('content.quest-script') ?? {}
-  const dialoguePasses = [1, 2, 3].map(act => payloadByKey.get(`content.dialogue-pass.act-${act}`) ?? {})
   const narrative = payloadByKey.get('content.narrative') ?? {}
   const productModule = payloadByKey.get('content.product-module') ?? {}
+  const acts = contextRows(arcPlan.acts)
+  const actIndex = scope === 'structure' ? null : Number(scope.slice('act-'.length)) - 1
+  const activeAct = actIndex == null ? null : acts[actIndex]
+  if (actIndex != null && !activeAct) {
+    throw new Error(`[product-production-context] 文字冒险质量审查缺少第 ${actIndex + 1} 幕`)
+  }
+  const activeSceneKeys = new Set(contextRows(activeAct?.sceneCards).map(scene => (
+    contextText(scene.key, 200)
+  )).filter(Boolean))
+  const endingNodeKeys = new Set(contextRows(arcPlan.endings).map(ending => (
+    contextText(ending.endingKey, 200)
+  )).filter(Boolean))
+  const ownedEndingNodeKeys = scope === 'structure' || actIndex === 2
+    ? endingNodeKeys : new Set<string>()
   const locations = contextRows(architecture.regions).flatMap(region => (
-    contextRows(region.areas).flatMap(area => contextRows(area.locations).map(location => contextText(location.title, 80)))
-  )).filter(Boolean)
+    contextRows(region.areas).flatMap(area => contextRows(area.locations).map(location => ({
+      title: contextText(location.title, 80),
+      description: contextText(location.description, 100),
+    })))
+  )).filter(location => location.title)
+  const projectSceneCard = (scene: Record<string, unknown>) => ({
+    key: scene.key,
+    title: contextText(scene.title, 80),
+    locationOrdinal: scene.locationOrdinal,
+    purpose: contextText(scene.purpose, 100),
+    conflict: contextText(scene.conflict, scope === 'structure' ? 80 : 100),
+    entryState: contextText(scene.entryState, scope === 'structure' ? 60 : 80),
+    exitState: contextText(scene.exitState, scope === 'structure' ? 60 : 80),
+    castKeys: Array.isArray(scene.castKeys) ? scene.castKeys : [],
+    setupKeys: Array.isArray(scene.setupKeys) ? scene.setupKeys : [],
+    payoffKeys: Array.isArray(scene.payoffKeys) ? scene.payoffKeys : [],
+  })
+  const projectDecision = (decision: Record<string, unknown>) => ({
+    key: decision.key,
+    sceneKey: decision.sceneKey,
+    prompt: contextText(decision.prompt, 100),
+    options: contextRows(decision.options).map(option => ({
+      key: option.key,
+      label: contextText(option.label, 90),
+      cost: contextText(option.cost, 90),
+      persistentEffectKey: option.persistentEffectKey,
+      echoSceneKeys: Array.isArray(option.echoSceneKeys) ? option.echoSceneKeys : [],
+    })),
+  })
+  const projectedActs = (scope === 'structure' ? acts : activeAct ? [activeAct] : []).map(act => ({
+    key: act.key,
+    title: contextText(act.title, 80),
+    targetMinutes: act.targetMinutes,
+    goal: contextText(act.goal, 160),
+    irreversibleTurn: contextText(act.irreversibleTurn, 160),
+    sceneCards: contextRows(act.sceneCards).map(projectSceneCard),
+  }))
+  const decisions = contextRows(arcPlan.decisions)
+    .filter(decision => scope === 'structure' || activeSceneKeys.has(contextText(decision.sceneKey, 200)))
+    .map(projectDecision)
   const beatsByNode = new Map<string, Record<string, unknown>[]>()
   contextRows(narrative.beats).forEach(beat => {
     const nodeKey = contextText(beat.nodeKey, 200)
     if (!nodeKey) return
     beatsByNode.set(nodeKey, [...(beatsByNode.get(nodeKey) ?? []), beat])
   })
-  const nodes = contextRows(narrative.nodes).map(node => {
+  const allChoices = contextRows(narrative.choices)
+  const graphChoiceEdges = allChoices.flatMap(choice => {
+    const choiceKey = contextText(choice.choiceKey, 200)
+    const sourceNodeKey = contextText(choice.sourceNodeKey, 200)
+    const targetNodeKey = contextText(choice.targetNodeKey, 200)
+    return choiceKey && sourceNodeKey && targetNodeKey
+      ? [{ choiceKey, sourceNodeKey, targetNodeKey }] : []
+  })
+  const outgoingChoiceKeysByNodeKey: Record<string, string[]> = {}
+  const incomingChoiceKeysByNodeKey: Record<string, string[]> = {}
+  graphChoiceEdges.forEach(edge => {
+    ;(outgoingChoiceKeysByNodeKey[edge.sourceNodeKey] ??= []).push(edge.choiceKey)
+    ;(incomingChoiceKeysByNodeKey[edge.targetNodeKey] ??= []).push(edge.choiceKey)
+  })
+  const graphTargetByChoiceKey = new Map(graphChoiceEdges.map(edge => [edge.choiceKey, edge.targetNodeKey]))
+  const entryNodeKey = contextText(narrative.entryNodeKey, 200)
+  const reachableNodeKeys = new Set<string>()
+  const pendingNodeKeys = entryNodeKey ? [entryNodeKey] : []
+  while (pendingNodeKeys.length > 0) {
+    const current = pendingNodeKeys.shift()!
+    if (reachableNodeKeys.has(current)) continue
+    reachableNodeKeys.add(current)
+    for (const choiceKey of outgoingChoiceKeysByNodeKey[current] ?? []) {
+      const targetNodeKey = graphTargetByChoiceKey.get(choiceKey)
+      if (targetNodeKey && !reachableNodeKeys.has(targetNodeKey)) pendingNodeKeys.push(targetNodeKey)
+    }
+  }
+  const sceneCardByKey = new Map(acts.flatMap(act => contextRows(act.sceneCards)).flatMap(scene => {
+    const sceneKey = contextText(scene.key, 200)
+    return sceneKey ? [[sceneKey, scene] as const] : []
+  }))
+  const decisionChoiceBindings = decisions.map(decision => {
+    const choiceKeys = outgoingChoiceKeysByNodeKey[contextText(decision.sceneKey, 200)] ?? []
+    return {
+      decisionKey: decision.key,
+      sceneKey: decision.sceneKey,
+      options: decision.options.map((option, optionIndex) => ({
+        optionKey: option.key,
+        choiceKey: choiceKeys[optionIndex] ?? null,
+        persistentEffectKey: option.persistentEffectKey,
+        cost: option.cost,
+        echoes: (Array.isArray(option.echoSceneKeys) ? option.echoSceneKeys : []).flatMap(value => {
+          if (typeof value !== 'string') return []
+          const sceneCard = sceneCardByKey.get(value)
+          if (!sceneCard) return []
+          const presentation = textAdventureDecisionEchoPresentationV1({
+            decisionPrompt: contextText(decision.prompt, 100),
+            optionLabel: contextText(option.label, 90),
+            optionCost: contextText(option.cost, 90),
+            sceneTitle: contextText(sceneCard.title, 80),
+            sceneConflict: contextText(sceneCard.conflict, 100),
+          })
+          return [{
+            sceneKey: value,
+            actionKey: `action.echo.${decision.key}.${option.key}.${value}`,
+            requiredConditionKey: option.persistentEffectKey,
+            label: presentation.label,
+            // One exact primary success echo is the authored route evidence.
+            // description/costly/failure/unavailable are fixed compiler
+            // templates derived from the same option, not independent story
+            // content; repeating them across every scope obscures the prose
+            // the act reviewer actually owns.
+            // The structure reviewer needs the authored route echo, but not the
+            // same full local prose that the owning act reviewer receives. A
+            // real 60-minute flagship packet reached 31,962 estimated tokens
+            // against this registered source's 32k ceiling when every echo
+            // kept 180 characters. Keep a meaningful 120-character causal
+            // sample here; the act packet and accepted narrative retain the
+            // complete player-visible text under their own authority.
+            successText: contextText(presentation.successText, scope === 'structure' ? 120 : 260),
+          }]
+        }),
+      })),
+    }
+  })
+  const endingRouteRequirements = contextRows(endingRoutePlan.routes).map(route => ({
+    endingKey: contextText(route.endingKey, 200),
+    requiredEffectKeys: Array.isArray(route.requiredEffectKeys)
+      ? route.requiredEffectKeys.filter((value): value is string => typeof value === 'string') : [],
+    rationale: contextText(route.rationale, 280),
+  }))
+  const activeChoices = allChoices.filter(choice => (
+    activeSceneKeys.has(contextText(choice.sourceNodeKey, 200))
+  ))
+  const projectedChoiceKeys = new Set((scope === 'structure' ? allChoices : activeChoices)
+    .map(choice => contextText(choice.choiceKey, 200)).filter(Boolean))
+  const boundaryNodeKeys = new Set(activeChoices.map(choice => contextText(choice.targetNodeKey, 200)).filter(Boolean))
+  decisions.flatMap(decision => decision.options).forEach(option => {
+    ;(Array.isArray(option.echoSceneKeys) ? option.echoSceneKeys : []).forEach(sceneKey => {
+      if (typeof sceneKey === 'string' && sceneKey) boundaryNodeKeys.add(sceneKey)
+    })
+  })
+  contextRows(arcPlan.endings).forEach(ending => {
+    const sceneKey = contextText(ending.sceneKey, 200)
+    if (sceneKey && activeSceneKeys.has(sceneKey)) boundaryNodeKeys.add(sceneKey)
+  })
+  const projectNarrativeNode = (node: Record<string, unknown>, mode: 'structure' | 'full' | 'boundary') => {
     const nodeKey = contextText(node.key, 200)
-    const beats = (beatsByNode.get(nodeKey) ?? []).sort((left, right) => (
+    const beats = [...(beatsByNode.get(nodeKey) ?? [])].sort((left, right) => (
       Number(left.order ?? 0) - Number(right.order ?? 0)
     ))
+    const selectedBeats = mode === 'full' ? beats : beats.slice(0, 1)
     return {
       key: nodeKey,
       kind: contextText(node.kind, 40),
-      title: contextText(node.title, 80),
-      // The reviewer needs the immediate destination action, not a second
-      // copy of the full scene prose. Keep both excerpts bounded so a valid
-      // commercial-length narrative cannot overflow this registered source.
-      summary: contextText(node.summary, 140),
-      openingBeat: contextText(beats[0]?.text, 200),
-      beatCount: beats.length,
-      beatCharacters: beats.reduce((sum, beat) => sum + (typeof beat.text === 'string' ? beat.text.length : 0), 0),
+      title: contextText(node.title, 100),
+      // In an act review every accepted beat is present below. Repeating the
+      // generated node summary spends scarce review context without adding
+      // player-visible evidence; structure/boundary nodes still need it.
+      // The structure packet already carries the authoritative scene-card
+      // purpose/conflict/states plus one identified beat. Keep the runtime
+      // node summary as a short corroborating label instead of duplicating a
+      // second synopsis for every scene.
+      summary: mode === 'full' ? '' : contextText(node.summary, mode === 'structure' ? 40 : 140),
+      // Repeated JSON field names cost more than a thousand tokens in a long
+      // act. The columns are declared once beside narrative.nodes below; the
+      // stable beat identity and complete reviewed text remain present.
+      beats: selectedBeats.map(beat => ([
+        beat.beatKey,
+        beat.order,
+        beat.kind,
+        beat.speakerKey,
+        // Structure review needs one representative beat per node to audit
+        // setup/payoff and route causality, not the full local prose. A 180
+        // character sample keeps a commercial 60-minute graph inside the
+        // registered 31.5k-token source envelope while preserving stable beat
+        // identity, order, kind and speaker for every node.
+        contextText(beat.text, mode === 'full' ? 1_200 : mode === 'structure' ? 80 : 180),
+      ])),
+      ...(mode === 'full' ? {} : {
+        beatCount: beats.length,
+        beatCharacters: beats.reduce((sum, beat) => (
+          sum + (typeof beat.text === 'string' ? beat.text.length : 0)
+        ), 0),
+      }),
+      projection: mode,
     }
+  }
+  const narrativeNodes = contextRows(narrative.nodes).flatMap(node => {
+    const nodeKey = contextText(node.key, 200)
+    if (scope === 'structure') return [projectNarrativeNode(node, 'structure')]
+    if (activeSceneKeys.has(nodeKey) || ownedEndingNodeKeys.has(nodeKey)) {
+      return [projectNarrativeNode(node, 'full')]
+    }
+    if (boundaryNodeKeys.has(nodeKey)) return [projectNarrativeNode(node, 'boundary')]
+    return []
   })
-  const projectQuestBundle = (key: string) => contextRows(payloadByKey.get(key)?.entries).map(entry => ({
+  const activeCastKeys = new Set([
+    ...contextRows(activeAct?.sceneCards).flatMap(scene => (
+      Array.isArray(scene.castKeys)
+        ? scene.castKeys.filter((key): key is string => typeof key === 'string') : []
+    )),
+    ...contextRows(narrative.beats).flatMap(beat => (
+      (activeSceneKeys.has(contextText(beat.nodeKey, 200))
+        || ownedEndingNodeKeys.has(contextText(beat.nodeKey, 200)))
+        && typeof beat.speakerKey === 'string'
+        ? [beat.speakerKey] : []
+    )),
+  ])
+  const projectChoice = (choice: Record<string, unknown>) => {
+    const edge = {
+      key: contextText(choice.choiceKey, 120),
+      sourceNodeKey: contextText(choice.sourceNodeKey, 120),
+      targetNodeKey: contextText(choice.targetNodeKey, 120),
+    }
+    if (scope === 'structure') return edge
+    return {
+      ...edge,
+      label: contextText(choice.text ?? choice.label, 140),
+      description: contextText(choice.description, 140),
+      unavailableReason: contextText(choice.unavailableReason, 120),
+      // These are the deterministic runtime authority for whether a choice is
+      // shown, can be selected and what it changes. unavailableReason is only
+      // fallback copy and cannot establish current availability by itself.
+      displayConditionJson: contextText(choice.displayConditionJson, 64_000),
+      availableConditionJson: contextText(choice.availableConditionJson, 64_000),
+      effectsJson: contextText(choice.effectsJson, 64_000),
+    }
+  }
+  const questRows = contextRows(mainQuestPlan.quests)
+  const activeObjectives = questRows.flatMap(quest => contextRows(quest.objectives)).filter(objective => (
+    scope === 'structure'
+      || (Array.isArray(objective.sceneKeys)
+        && objective.sceneKeys.some(sceneKey => typeof sceneKey === 'string' && activeSceneKeys.has(sceneKey)))
+  ))
+  const activeObjectiveKeys = new Set(activeObjectives.map(objective => contextText(objective.key, 200)))
+  const projectObjective = (objective: Record<string, unknown>) => ({
+    key: objective.key,
+    stageKey: objective.stageKey,
+    title: contextText(objective.title, 100),
+    narrativePurpose: contextText(objective.narrativePurpose, 130),
+    sceneKeys: Array.isArray(objective.sceneKeys) ? objective.sceneKeys : [],
+    locationOrdinal: objective.locationOrdinal,
+    alternatives: contextRows(objective.alternatives).map(alternative => ({
+      key: alternative.key,
+      actionKind: alternative.actionKind,
+      targetCharacterKey: alternative.targetCharacterKey,
+      cost: contextText(alternative.cost, 80),
+      success: contextText(alternative.successConsequence, 110),
+      failureForward: contextText(alternative.failureForwardConsequence, 110),
+      persistentEffectKeys: Array.isArray(alternative.persistentEffectKeys)
+        ? alternative.persistentEffectKeys : [],
+    })),
+  })
+  const projectMainQuest = (quest: Record<string, unknown>) => {
+    const objectives = contextRows(quest.objectives).filter(objective => (
+      activeObjectiveKeys.has(contextText(objective.key, 200))
+    ))
+    const objectiveKeys = new Set(objectives.map(objective => contextText(objective.key, 200)))
+    return {
+      key: quest.key,
+      title: contextText(quest.title, 100),
+      ...(scope === 'structure' ? { description: contextText(quest.description, 160) } : {}),
+      stages: contextRows(quest.stages).flatMap(stage => {
+        const stageObjectiveKeys = (Array.isArray(stage.objectiveKeys) ? stage.objectiveKeys : [])
+          .filter(objectiveKey => typeof objectiveKey === 'string' && objectiveKeys.has(objectiveKey))
+        return stageObjectiveKeys.length ? [{
+          key: stage.key,
+          title: contextText(stage.title, 100),
+          objectiveKeys: stageObjectiveKeys,
+        }] : []
+      }),
+      objectives: objectives.map(objective => scope === 'structure'
+        ? projectObjective(objective)
+        : {
+            key: objective.key,
+            stageKey: objective.stageKey,
+            title: contextText(objective.title, 80),
+            sceneKeys: Array.isArray(objective.sceneKeys) ? objective.sceneKeys : [],
+            locationOrdinal: objective.locationOrdinal,
+            alternatives: contextRows(objective.alternatives).map(alternative => ({
+              key: alternative.key,
+              actionKind: alternative.actionKind,
+              targetCharacterKey: alternative.targetCharacterKey,
+              persistentEffectKeys: Array.isArray(alternative.persistentEffectKeys)
+                ? alternative.persistentEffectKeys : [],
+            })),
+          }),
+    }
+  }
+  const projectMainScript = (script: Record<string, unknown>) => ({
+    objectiveKey: script.objectiveKey,
+    sceneKey: script.sceneKey,
+    alternatives: contextRows(script.alternatives).map(alternative => ({
+      alternativeKey: alternative.alternativeKey,
+      resolution: alternative.resolution,
+      timeCostMinutes: alternative.timeCostMinutes,
+    })),
+  })
+  const supplementalEntries = (artifactKey: string) => contextRows(payloadByKey.get(artifactKey)?.entries)
+  const allSideEntries = supplementalEntries('content.adventure-side-quests')
+  const allAmbientEntries = supplementalEntries('content.adventure-ambient-events')
+  const assignedSupplementalEntries = (entries: readonly Record<string, unknown>[]) => entries
+    .filter((_, index) => actIndex != null && index % 3 === actIndex)
+  const projectSupplementalEntry = (entry: Record<string, unknown>) => ({
     key: contextText(entry.key, 120),
-    title: contextText(entry.title, 80),
-    description: contextText(entry.description, 180),
-    hook: contextText(entry.hook, 140),
+    title: contextText(entry.title, 100),
+    hook: contextText(entry.hook, 120),
     stages: contextRows(entry.stages).map(stage => ({
       key: contextText(stage.key, 120),
-      title: contextText(stage.title, 80),
-      objective: contextText(stage.objective, 140),
+      title: contextText(stage.title, 100),
       locationOrdinal: stage.locationOrdinal,
       actionKind: stage.actionKind,
-      success: contextText(stage.successText, 120),
-      costlySuccess: contextText(stage.costlySuccessText, 120),
-      failure: contextText(stage.failureText, 120),
-      abilityKey: contextText(stage.abilityKey, 120),
+      abilityKey: stage.abilityKey,
       difficulty: stage.difficulty,
       timeCostMinutes: stage.timeCostMinutes,
     })),
     rewardExperience: entry.rewardExperience,
     rewardCurrency: entry.rewardCurrency,
-  }))
+  })
+  const sideEntries = assignedSupplementalEntries(allSideEntries)
+  const ambientEntries = assignedSupplementalEntries(allAmbientEntries)
+  const sideEntryKeys = new Set(sideEntries.map(entry => contextText(entry.key, 200)))
+  const ambientEntryKeys = new Set(ambientEntries.map(entry => contextText(entry.key, 200)))
+  const supplementalStageKeys = [...sideEntries, ...ambientEntries].flatMap(entry => (
+    contextRows(entry.stages).map(stage => contextText(stage.key, 200)).filter(Boolean)
+  ))
+  const structureSideEntryKeys = allSideEntries
+    .map(entry => contextText(entry.key, 200)).filter(Boolean)
+  const structureAmbientEntryKeys = allAmbientEntries
+    .map(entry => contextText(entry.key, 200)).filter(Boolean)
+  const structureSupplementalStageKeys = [...allSideEntries, ...allAmbientEntries]
+    .flatMap(entry => contextRows(entry.stages))
+    .map(stage => contextText(stage.key, 200)).filter(Boolean)
+  const projectSupplementalScript = (script: Record<string, unknown>) => ({
+    entryKey: script.entryKey,
+    stages: contextRows(script.stages).map(stage => ({
+      stageKey: stage.stageKey,
+      actionKind: stage.actionKind,
+      abilityKey: stage.abilityKey,
+      difficulty: stage.difficulty,
+      timeCostMinutes: stage.timeCostMinutes,
+      success: contextText(stage.successText, 100),
+      costlySuccess: contextText(stage.costlySuccessText, 100),
+      failureForward: contextText(stage.failureForwardText, 100),
+    })),
+  })
+  const dialoguePass = actIndex == null
+    ? null
+    : payloadByKey.get(`content.dialogue-pass.act-${actIndex + 1}`) ?? {}
+  const dialogueBeatReviews = contextRows(dialoguePass?.beatReviews)
+  const dialogueChoiceReviews = contextRows(dialoguePass?.choiceReviews).filter(review => (
+    projectedChoiceKeys.has(contextText(review.choiceKey, 200))
+  ))
+  const revisedDialogueBeatReviews = dialogueBeatReviews.filter(review => review.verdict === 'revise')
+  const revisedDialogueChoiceReviews = dialogueChoiceReviews.filter(review => review.verdict === 'revise')
   const packet = {
-    schema: 'storyforge.text-adventure-quality-inputs', version: 1,
+    schema: 'storyforge.text-adventure-quality-inputs',
+    version: 3,
     buildNumber: build.buildNumber,
-    sources: rows.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })).sort((a, b) => (
-      a.artifactKey.localeCompare(b.artifactKey)
-    )),
+    reviewScope: {
+      scope,
+      applicableScoreKeys: [...TEXT_ADVENTURE_QUALITY_REVIEW_SCORE_KEYS_BY_SCOPE_V1[scope]],
+      sceneKeys: scope === 'structure'
+        ? acts.flatMap(act => contextRows(act.sceneCards).map(scene => contextText(scene.key, 200))).filter(Boolean)
+        : [...activeSceneKeys],
+      endingKeys: [...ownedEndingNodeKeys],
+      boundaryNodeKeys: scope === 'structure'
+        ? [] : [...boundaryNodeKeys].filter(key => !activeSceneKeys.has(key) && !ownedEndingNodeKeys.has(key)),
+      objectiveKeys: [...activeObjectiveKeys],
+      choiceKeys: (scope === 'structure' ? allChoices : activeChoices)
+        .map(choice => contextText(choice.choiceKey, 200)).filter(Boolean),
+      decisionKeys: decisions.map(decision => contextText(decision.key, 200)).filter(Boolean),
+      optionKeys: decisions.flatMap(decision => decision.options)
+        .map(option => contextText(option.key, 200)).filter(Boolean),
+      alternativeKeys: activeObjectives.flatMap(objective => contextRows(objective.alternatives))
+        .map(alternative => contextText(alternative.key, 200)).filter(Boolean),
+      sideQuestKeys: scope === 'structure' ? structureSideEntryKeys : [...sideEntryKeys],
+      ambientEventKeys: scope === 'structure' ? structureAmbientEntryKeys : [...ambientEntryKeys],
+      supplementalStageKeys: scope === 'structure'
+        ? structureSupplementalStageKeys : supplementalStageKeys,
+      supplementalAssignmentRule: 'bundle-entry-index-modulo-three',
+      coverageRule: scope === 'structure'
+        ? '全局故事脊柱、三幕因果、路线差异、人物动机与铺垫回收；不审逐句文风。'
+        : '本幕玩家可见正文、对白、选择、主线脚本与按稳定序号分配的补充内容；跨幕判断以全局故事脊柱为锚。',
+    },
+    sources: rows.map(row => ({
+      artifactKey: row.artifactKey,
+      contentHash: row.contentHash,
+    })).sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)),
+    globalStorySpine: {
+      title: contextText(storyBible.title, 120),
+      premise: contextText(storyBible.premise, 280),
+      thematicQuestion: contextText(storyBible.thematicQuestion, 180),
+      emotionalPromise: contextText(storyBible.emotionalPromise, 200),
+      centralConflict: contextText(storyBible.centralConflict, 280),
+      setupPayoffs: contextRows(storyBible.setupPayoffs).map(item => scope === 'structure'
+        ? {
+            key: item.key,
+            setup: contextText(item.setup, 150),
+            payoff: contextText(item.payoff, 150),
+            introducedAct: item.introducedAct,
+            resolvedAct: item.resolvedAct,
+          }
+        : {
+            key: item.key,
+            introducedAct: item.introducedAct,
+            resolvedAct: item.resolvedAct,
+          }),
+      endings: contextRows(storyBible.endings).map(item => scope === 'structure' || scope === 'act-3'
+        ? {
+            key: item.key,
+            title: contextText(item.title, 100),
+            dramaticAnswer: contextText(item.dramaticAnswer, 170),
+            requiredConsequences: (Array.isArray(item.requiredConsequences) ? item.requiredConsequences : [])
+              .map(value => contextText(value, 130)),
+          }
+        : {
+            title: contextText(item.title, 100),
+            dramaticAnswer: contextText(item.dramaticAnswer, 140),
+          }),
+    },
     architecture: {
       title: contextText(architecture.title, 120),
-      premise: contextText(architecture.premise, 300),
-      emotionalPromise: contextText(architecture.emotionalPromise, 240),
+      premise: scope === 'structure' ? contextText(architecture.premise, 220) : '',
+      emotionalPromise: scope === 'structure' ? contextText(architecture.emotionalPromise, 180) : '',
       themes: Array.isArray(architecture.themes) ? architecture.themes : [],
-      locations,
+      locations: scope === 'structure' ? locations : locations.map(location => ({ title: location.title })),
     },
-    storyBible: {
-      title: contextText(storyBible.title, 120), premise: contextText(storyBible.premise, 300),
-      thematicQuestion: contextText(storyBible.thematicQuestion, 200),
-      emotionalPromise: contextText(storyBible.emotionalPromise, 240),
-      centralConflict: contextText(storyBible.centralConflict, 300),
-      setupPayoffs: contextRows(storyBible.setupPayoffs).map(item => ({
-        key: item.key, setup: contextText(item.setup, 160), payoff: contextText(item.payoff, 160),
-        introducedAct: item.introducedAct, resolvedAct: item.resolvedAct,
-      })),
-      endings: contextRows(storyBible.endings).map(item => ({
-        key: item.key, title: contextText(item.title, 80),
-        dramaticAnswer: contextText(item.dramaticAnswer, 180),
-      })),
+    locationAuthority: {
+      ownerArtifactKey: 'content.narrative-arc-plan',
+      sceneBindingPath: 'arcPlan.acts[].sceneCards[].locationOrdinal',
+      runtimeJoinKey: 'sceneKey',
+      narrativeNodeOwnsLocationOrdinal: false,
+      repeatedLocationOrdinalAllowed: true,
+      maximumLocationOrdinal: locations.length,
+      rule: '同一登记地点允许承载多个连续场景；locationOrdinal 是地点引用，不是场景唯一编号。content.narrative.nodes 不复制该字段。',
     },
-    cast: contextRows(castBible.characters).map(character => ({
-      key: character.key, role: character.role, name: contextText(character.name, 80),
-      desire: contextText(character.desire, 140), fear: contextText(character.fear, 140),
-      motivation: contextText(character.motivation, 120), voice: contextText(character.voice, 100),
-      initialKnowledgeCount: Array.isArray(character.initialKnowledge) ? character.initialKnowledge.length : 0,
-      relationshipArc: Array.isArray(character.relationshipArc) ? character.relationshipArc : [],
-    })),
+    graphFacts: {
+      authority: 'accepted-content.narrative-deterministic-projection',
+      entryNodeKey,
+      reachableNodeKeys: [...reachableNodeKeys],
+      incomingChoiceKeysByNodeKey,
+      outgoingChoiceKeysByNodeKey,
+      decisionChoiceBindings,
+      endingRouteRequirements,
+      rule: '此处是冻结图事实。不得把已列出的入边、出边或 reachable node 误报为缺失；decisionChoiceBindings 是运行编译器按冻结顺序应用的 option→choice 精确绑定，options[].echoes 是将进入运行包的条件化玩家可见回响精确投影，不得自行猜测、交换、解绑或声称已列回响不存在。endingRouteRequirements 是已经过互斥、完备与可达性穷举验证的结局运行条件，最终场景 choice.availableConditionJson 不是结局资格 owner；不得要求用最终菜单覆盖或重复这些条件。只可评价实际玩家可见措辞、代价、差异和回响质量。',
+    },
+    cast: contextRows(castBible.characters)
+      .filter(character => scope === 'structure'
+        || activeCastKeys.has(contextText(character.key, 200)))
+      .map(character => ({
+        key: character.key,
+        role: character.role,
+        name: contextText(character.name, 80),
+        ...(scope === 'structure' ? {
+          desire: contextText(character.desire, 120),
+          fear: contextText(character.fear, 120),
+          initialKnowledge: (Array.isArray(character.initialKnowledge) ? character.initialKnowledge : [])
+            .map(value => contextText(value, 90)),
+        } : {}),
+        motivation: contextText(character.motivation, scope === 'structure' ? 120 : 80),
+        voice: contextText(character.voice, scope === 'structure' ? 100 : 70),
+        relationshipArc: (Array.isArray(character.relationshipArc) ? character.relationshipArc : [])
+          .map(value => contextText(value, scope === 'structure' ? 100 : 60)),
+      })),
     arcPlan: {
-      acts: contextRows(arcPlan.acts).map(act => ({
-        key: act.key, title: contextText(act.title, 80), targetMinutes: act.targetMinutes,
-        goal: contextText(act.goal, 140), irreversibleTurn: contextText(act.irreversibleTurn, 140),
-        sceneCards: contextRows(act.sceneCards).map(scene => ({
-          key: scene.key, title: contextText(scene.title, 80), locationOrdinal: scene.locationOrdinal,
-          castKeys: Array.isArray(scene.castKeys) ? scene.castKeys : [],
-          setupKeys: Array.isArray(scene.setupKeys) ? scene.setupKeys : [],
-          payoffKeys: Array.isArray(scene.payoffKeys) ? scene.payoffKeys : [],
-        })),
-      })),
-      decisions: contextRows(arcPlan.decisions).map(decision => ({
-        key: decision.key, sceneKey: decision.sceneKey, prompt: contextText(decision.prompt, 120),
-        options: contextRows(decision.options).map(option => ({
-          key: option.key, label: contextText(option.label, 80), cost: contextText(option.cost, 100),
-          persistentEffectKey: option.persistentEffectKey,
-          echoSceneKeys: Array.isArray(option.echoSceneKeys) ? option.echoSceneKeys : [],
-        })),
-      })),
+      acts: projectedActs,
+      decisions,
+      endings: scope === 'structure' || scope === 'act-3'
+        ? contextRows(arcPlan.endings) : [],
     },
-    mainQuestPlan: contextRows(mainQuestPlan.quests).map(quest => ({
-      key: quest.key, title: contextText(quest.title, 80),
-      stages: contextRows(quest.stages).map(stage => ({
-        key: stage.key, title: contextText(stage.title, 80),
-        objectiveKeys: Array.isArray(stage.objectiveKeys) ? stage.objectiveKeys : [],
-      })),
-      objectives: contextRows(quest.objectives).map(objective => ({
-        key: objective.key, stageKey: objective.stageKey, title: contextText(objective.title, 80),
-        sceneKeys: Array.isArray(objective.sceneKeys) ? objective.sceneKeys : [],
-        locationOrdinal: objective.locationOrdinal,
-        alternatives: contextRows(objective.alternatives).map(alternative => ({
-          key: alternative.key, actionKind: alternative.actionKind,
-          targetCharacterKey: alternative.targetCharacterKey,
-          cost: contextText(alternative.cost, 80),
-          success: contextText(alternative.successConsequence, 90),
-          failureForward: contextText(alternative.failureForwardConsequence, 90),
-        })),
-      })),
-    })),
+    mainQuestPlan: questRows.map(projectMainQuest).filter(quest => quest.objectives.length > 0),
     questScript: {
-      mainObjectives: contextRows(questScript.mainObjectiveScripts).map(script => ({
-        objectiveKey: script.objectiveKey, sceneKey: script.sceneKey,
-        alternatives: contextRows(script.alternatives).map(alternative => ({
-          alternativeKey: alternative.alternativeKey,
-          resolution: alternative.resolution,
-          timeCostMinutes: alternative.timeCostMinutes,
-          failureForward: contextText(alternative.failureForwardText, 60),
-        })),
-      })),
-      side: contextRows(questScript.sideQuestScripts).map(script => ({
-        entryKey: script.entryKey,
-        stages: contextRows(script.stages).map(stage => ({
-          stageKey: stage.stageKey, actionKind: stage.actionKind, abilityKey: stage.abilityKey,
-          difficulty: stage.difficulty, timeCostMinutes: stage.timeCostMinutes,
-        })),
-      })),
-      ambient: contextRows(questScript.ambientEventScripts).map(script => ({
-        entryKey: script.entryKey,
-        stages: contextRows(script.stages).map(stage => ({
-          stageKey: stage.stageKey, actionKind: stage.actionKind, abilityKey: stage.abilityKey,
-          difficulty: stage.difficulty, timeCostMinutes: stage.timeCostMinutes,
-        })),
-      })),
+      mainObjectives: contextRows(questScript.mainObjectiveScripts)
+        .filter(script => activeObjectiveKeys.has(contextText(script.objectiveKey, 200)))
+        .map(projectMainScript),
+      side: contextRows(questScript.sideQuestScripts)
+        .filter(script => sideEntryKeys.has(contextText(script.entryKey, 200)))
+        .map(projectSupplementalScript),
+      ambient: contextRows(questScript.ambientEventScripts)
+        .filter(script => ambientEntryKeys.has(contextText(script.entryKey, 200)))
+        .map(projectSupplementalScript),
     },
-    dialoguePasses: dialoguePasses.map(dialoguePass => ({
+    dialoguePass: dialoguePass == null ? null : {
       actKey: dialoguePass.actKey,
-      summary: contextText(dialoguePass.summary, 300),
+      summary: contextText(dialoguePass.summary, 240),
+      reviewCoverage: {
+        reviewedBeatCount: dialogueBeatReviews.length,
+        revisedBeatCount: revisedDialogueBeatReviews.length,
+        reviewedChoiceCount: dialogueChoiceReviews.length,
+        revisedChoiceCount: revisedDialogueChoiceReviews.length,
+      },
       characterAssessments: contextRows(dialoguePass.characterAssessments).map(assessment => ({
         characterKey: assessment.characterKey,
         voiceDistinctness: assessment.voiceDistinctness,
         knowledgeBoundary: assessment.knowledgeBoundary,
         notes: contextText(assessment.notes, 120),
       })),
-      dialogueTurnCount: contextRows(dialoguePass.beatReviews).length,
-      revisedDialogueCount: contextRows(dialoguePass.beatReviews)
-        .filter(review => review.verdict === 'revise').length,
-      reviewedChoiceCount: contextRows(dialoguePass.choiceReviews).length,
-      revisedChoiceCount: contextRows(dialoguePass.choiceReviews)
-        .filter(review => review.verdict === 'revise').length,
-    })),
-    narrative: {
-      entryNodeKey: contextText(narrative.entryNodeKey, 200),
-      nodes,
-      choices: contextRows(narrative.choices).map(choice => ({
-        key: contextText(choice.choiceKey, 120),
-        sourceNodeKey: contextText(choice.sourceNodeKey, 120),
-        targetNodeKey: contextText(choice.targetNodeKey, 120),
-        label: contextText(choice.text ?? choice.label, 140),
-        description: contextText(choice.description, 140),
+      // The accepted narrative already contains every keep/revise result. Repeating
+      // one synthetic "keep" receipt per beat can consume thousands of tokens in
+      // a commercial-length act without adding review evidence. Preserve exact
+      // coverage counts and only project the independently evidenced revisions.
+      flaggedBeatReviews: revisedDialogueBeatReviews.map(review => ({
+        beatKey: review.beatKey,
+        speakerKey: review.speakerKey,
+        issueTags: review.issueTags,
+        rationale: contextText(review.rationale, 120),
       })),
+      flaggedChoiceReviews: revisedDialogueChoiceReviews.map(review => ({
+        choiceKey: review.choiceKey,
+        issueTags: review.issueTags,
+        rationale: contextText(review.rationale, 120),
+      })),
+    },
+    projectionPolicy: {
+      referenceDetail: 'bounded-contract-projection',
+      playerVisibleBeatText: scope === 'structure'
+        ? 'one-beat-sample-per-node'
+        : 'all-accepted-beats-without-node-summary-duplication',
+      routeEchoProjection: 'edge-authority-plus-primary-compiled-success-echo',
+      castProjection: scope === 'structure'
+        ? 'all-cast'
+        : 'active-scene-ending-speakers',
+      runtimeChoiceAuthority: 'displayConditionJson+availableConditionJson+effectsJson',
+    },
+    narrative: {
+      entryNodeKey,
+      beatColumns: ['beatKey', 'order', 'kind', 'speakerKey', 'text'],
+      nodes: narrativeNodes,
+      choices: (scope === 'structure' ? allChoices : activeChoices).map(projectChoice),
     },
     systems: {
       abilities: contextRows(productModule.abilities).map(item => ({
@@ -799,13 +1189,39 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
         initial: item.initial, minimum: item.minimum, maximum: item.maximum,
       })),
     },
-    sideQuests: projectQuestBundle('content.adventure-side-quests'),
-    ambientEvents: projectQuestBundle('content.adventure-ambient-events'),
+    supplementalContent: scope === 'structure' ? {
+      sideQuestCount: allSideEntries.length,
+      ambientEventCount: allAmbientEntries.length,
+      sideQuestKeys: structureSideEntryKeys,
+      ambientEventKeys: structureAmbientEntryKeys,
+      stageKeys: structureSupplementalStageKeys,
+    } : {
+      sideQuests: sideEntries.map(projectSupplementalEntry),
+      ambientEvents: ambientEntries.map(projectSupplementalEntry),
+    },
+    authorityBoundary: {
+      modelMay: ['score only the fixed applicable dimensions', 'identify evidenced issues', 'recommend repairs'],
+      modelMayNot: [
+        'change story or runtime state', 'invent stable keys or field ownership',
+        'perform prompt-security classification', 'approve or publish the Build',
+      ],
+    },
   }
   const serialized = JSON.stringify(packet)
   const estimatedTokens = estimateTokens(serialized)
   if (estimatedTokens > 31_500) {
-    throw new Error(`[product-production-context] 文字冒险质量审查投影超过登记预算:${estimatedTokens}/31500，必须拆分审查任务`)
+    const sectionTokens: Record<string, number> = Object.fromEntries(Object.entries(packet).map(([key, value]) => [
+      key,
+      estimateTokens(JSON.stringify(value)),
+    ]))
+    sectionTokens['narrative.nodes'] = estimateTokens(JSON.stringify(packet.narrative.nodes))
+    sectionTokens['narrative.choices'] = estimateTokens(JSON.stringify(packet.narrative.choices))
+    sectionTokens['questScript.mainObjectives'] = estimateTokens(JSON.stringify(packet.questScript.mainObjectives))
+    sectionTokens['questScript.side'] = estimateTokens(JSON.stringify(packet.questScript.side))
+    sectionTokens['questScript.ambient'] = estimateTokens(JSON.stringify(packet.questScript.ambient))
+    throw new Error(
+      `[product-production-context] 文字冒险质量审查 ${scope} 投影超过登记预算:${estimatedTokens}/31500 sections=${JSON.stringify(sectionTokens)}`,
+    )
   }
   return serialized
 }
@@ -876,82 +1292,445 @@ export async function readTextAdventurePlaytestInputsV1(input: AssembleContextIn
  * the repaired Artifact must still pass its normal parser and quality gate.
  */
 export async function readTextAdventureRepairFeedbackV1(input: AssembleContextInput): Promise<string> {
-  const { build } = await productionAndBuild(input)
+  const { production, build } = await productionAndBuild(input)
   if (!build) throw new Error('[product-production-context] 文字冒险修复反馈需要 productBuildId')
   const pending = [contextRecord(JSON.parse(build.failureJson))]
+  const visitedFailures = new Set<Record<string, unknown>>()
   let failure: Record<string, unknown> | null = null
-  const taskFailures = new Map<string, { taskKey: string; code: string; attempt: number | null; detail: string }>()
-  for (let depth = 0; depth < 8 && pending.length > 0; depth++) {
+  const taskFailures = new Map<string, {
+    taskKey: string
+    code: string
+    attempt: number | null
+    detail: string
+    controlEpoch?: number
+  }>()
+  // `taskFailures` can contain one entry per professional task. Count visited
+  // nodes, not tree depth, and prioritize the causal chain so a large sibling
+  // map cannot starve the quality-review failure that authorized this repair.
+  for (let visited = 0; visited < 128 && pending.length > 0; visited += 1) {
     const current = pending.shift()!
+    if (visitedFailures.has(current)) continue
+    visitedFailures.add(current)
     if (typeof current.taskKey === 'string'
       && (current.taskKey.startsWith('content.') || current.taskKey === 'integration.narrative')
-      && typeof current.detail === 'string' && current.detail.trim()) {
+      && typeof current.detail === 'string' && current.detail.trim()
+      && !taskFailures.has(current.taskKey)) {
+      // The queue visits the direct/current causal chain before the older
+      // sibling history. Keep the first failure for a task so a deeper epoch
+      // cannot overwrite the blocker that actually authorized this repair.
       taskFailures.set(current.taskKey, {
         taskKey: contextText(current.taskKey, 120), code: contextText(current.code, 80),
         attempt: Number.isInteger(current.attempt) ? Number(current.attempt) : null,
-        detail: contextText(current.detail, 500),
+        detail: contextFailureDetail(current.detail),
       })
+    }
+    if (current.taskKey === 'integration.package'
+      && typeof current.detail === 'string'
+      && current.detail.includes('文字冒险叙事质量审查未通过')) {
+      if (!failure) failure = current
+    }
+    for (const key of ['repairCause', 'previousFailure']) {
+      const nested = contextRecord(current[key])
+      if (Object.keys(nested).length > 0) pending.unshift(nested)
     }
     const recordedFailures = contextRecord(current.taskFailures)
     for (const nested of Object.values(recordedFailures)) {
       const row = contextRecord(nested)
       if (Object.keys(row).length > 0) pending.push(row)
     }
-    if (current.taskKey === 'integration.package'
-      && typeof current.detail === 'string'
-      && current.detail.includes('文字冒险叙事质量审查未通过')) {
-      failure = current
-      break
-    }
-    for (const key of ['repairCause', 'previousFailure']) {
-      const nested = contextRecord(current[key])
-      if (Object.keys(nested).length > 0) pending.push(nested)
-    }
   }
-  if (!failure && taskFailures.size === 0) return ''
-  const reviews = failure ? (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+  const reviews = (failure || ['producing', 'paused'].includes(production.status))
+    ? (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
     .filter(row => row.artifactKey === 'quality.adventure-review'
       && row.controlEpoch < build.controlEpoch)
-    .sort((left, right) => right.version - left.version) : []
-  const review = reviews.find(row => contextRecord(JSON.parse(row.payloadJson)).passed === false)
+    .sort((left, right) => right.controlEpoch - left.controlEpoch || right.version - left.version)
+    : []
+  // Pause/resume intentionally wraps build.failureJson in a durable
+  // user-paused/user-resumed receipt. The latest signed aggregate review in
+  // the same Build remains the
+  // durable cause for already-invalidated repair tasks; recover it instead of
+  // silently reverting to an unscoped full rewrite. Only the newest review is
+  // eligible, so an older failure can never override a later passing review.
+  const latestReview = reviews[0]
+  const review = latestReview
+    && contextRecord(JSON.parse(latestReview.payloadJson)).passed === false
+    ? latestReview : undefined
+  if (!failure && taskFailures.size === 0 && !review) return ''
   const payload = review ? contextRecord(JSON.parse(review.payloadJson)) : {}
-  const reviewBlockingIssues = contextRows(payload.issues)
-    .filter(issue => issue.severity === 'blocking')
-    .slice(0, 40)
-    .map(issue => ({
-      artifactKey: contextText(textAdventureQualityIssueOwnerArtifactKeyV1(issue), 120),
-      detail: contextText(issue.detail, 240),
-      recommendation: contextText(issue.recommendation, 240),
-    }))
-  const latestArtifacts = new Map<string, { artifactKey: string; payload: unknown }>()
+  const reviewEvidenceInvalid = textAdventureQualityReviewAuthorityViolationsV1(payload.issues).length > 0
+    || textAdventureQualityReviewScopeViolationsV1(payload.issues).length > 0
+  const latestArtifacts = new Map<string, {
+    artifactKey: string
+    version: number
+    controlEpoch: number
+    contentHash: string
+    payload: unknown
+  }>()
+  const reviewedControlEpoch = review?.controlEpoch ?? Math.max(0, build.controlEpoch - 1)
   for (const row of (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
-    .filter(row => row.controlEpoch < build.controlEpoch
-      && (row.status === 'accepted' || row.status === 'carried-forward'))
+    .filter(row => row.controlEpoch <= reviewedControlEpoch
+      // `ensurePlan` invalidates stale descendants before the first repair
+      // Agent assembles context. Historical status therefore cannot tell us
+      // whether the signed review actually consumed this row; the frozen
+      // epoch + hashes are the durable provenance boundary.
+      && (row.status === 'accepted' || row.status === 'carried-forward' || row.status === 'invalid')
+      && isSha256Hash(row.contentHash) && isSha256Hash(row.producerReceiptHash))
     .sort((left, right) => left.controlEpoch - right.controlEpoch || left.version - right.version)) {
-    latestArtifacts.set(row.artifactKey, { artifactKey: row.artifactKey, payload: JSON.parse(row.payloadJson) })
+    latestArtifacts.set(row.artifactKey, {
+      artifactKey: row.artifactKey,
+      version: row.version,
+      controlEpoch: row.controlEpoch,
+      contentHash: row.contentHash,
+      payload: JSON.parse(row.payloadJson),
+    })
   }
+  if (taskFailures.size > 0) {
+    const runEvidence = (await db.agentRuns.where('productBuildId').equals(build.id!).toArray())
+      .flatMap(row => {
+        if (!row.id || !row.parentRelation?.startsWith('task:')) return []
+        let controlEpoch: number | null = null
+        let contractTaskKey: string | null = null
+        let attempt: number | null = null
+        let errors: string[] = []
+        try {
+          const contract = contextRecord(JSON.parse(row.contractJson))
+          const scope = contextRecord(contextRecord(contract.scope).productProduction)
+          controlEpoch = Number.isInteger(scope.controlEpoch) ? Number(scope.controlEpoch) : null
+          contractTaskKey = typeof scope.taskKey === 'string' ? scope.taskKey : null
+          const projection = contextRecord(JSON.parse(row.projectionJson))
+          errors = Array.isArray(projection.errors)
+            ? projection.errors.filter((value): value is string => typeof value === 'string')
+            : []
+          const step = contextRecord(contextRecord(projection.steps)[contractTaskKey ?? ''])
+          attempt = Number.isInteger(step.attempt) ? Number(step.attempt) : null
+        } catch {
+          return []
+        }
+        const taskKey = row.parentRelation.slice('task:'.length)
+        if (contractTaskKey !== taskKey || controlEpoch == null) return []
+        return [{ runId: row.id, taskKey, controlEpoch, attempt, errors, updatedAt: row.updatedAt }]
+      })
+    const runById = new Map(runEvidence.map(row => [row.runId, row]))
+    const failedAttempts = (() => {
+      try {
+        const ledger = contextRecord(JSON.parse(build.budgetLedgerJson))
+        return contextRows(ledger.attempts).flatMap(row => (
+          row.outcome === 'failed'
+          && typeof row.taskKey === 'string'
+          && Number.isInteger(row.controlEpoch)
+          && Number.isInteger(row.attempt)
+          && Number.isInteger(row.runId)
+            ? [{
+                taskKey: row.taskKey,
+                controlEpoch: Number(row.controlEpoch),
+                attempt: Number(row.attempt),
+                runId: Number(row.runId),
+                errorCode: typeof row.errorCode === 'string' ? row.errorCode : null,
+              }]
+            : []
+        ))
+      } catch {
+        return []
+      }
+    })()
+    for (const failure of taskFailures.values()) {
+      const attempts = failedAttempts.filter(attempt => (
+        attempt.taskKey === failure.taskKey
+        && (failure.attempt == null || attempt.attempt === failure.attempt)
+        && (!failure.code || attempt.errorCode === failure.code)
+      ))
+      const exactAttempts = attempts.map(attempt => {
+        const run = runById.get(attempt.runId)
+        const detailMatch = run?.errors.some(error => (
+            error.includes(failure.detail) || failure.detail.includes(error)
+        )) ?? false
+        return { ...attempt, detailMatch }
+      }).sort((left, right) => Number(right.detailMatch) - Number(left.detailMatch)
+        || right.controlEpoch - left.controlEpoch)
+      const matchedAttempt = exactAttempts.find(candidate => candidate.detailMatch)
+        ?? (exactAttempts.length === 1 ? exactAttempts[0] : undefined)
+      if (matchedAttempt) {
+        failure.controlEpoch = matchedAttempt.controlEpoch
+        continue
+      }
+      const runCandidates = runEvidence.filter(run => run.taskKey === failure.taskKey)
+        .map(run => ({
+          ...run,
+          detailMatch: run.errors.some(error => (
+            error.includes(failure.detail) || failure.detail.includes(error)
+          )),
+          attemptMatch: failure.attempt != null && run.attempt === failure.attempt,
+        }))
+        .sort((left, right) => Number(right.detailMatch) - Number(left.detailMatch)
+          || Number(right.attemptMatch) - Number(left.attemptMatch)
+          || right.updatedAt - left.updatedAt)
+      const matchedRun = runCandidates.find(candidate => candidate.detailMatch)
+      if (matchedRun) failure.controlEpoch = matchedRun.controlEpoch
+    }
+  }
+  const scenePartArtifacts = [...latestArtifacts.values()].filter(row => (
+    /^content\.scene-script\.act-[1-3]\.part-\d+$/.test(row.artifactKey)
+  ))
+  const scenePartTaskKeys = scenePartArtifacts.map(row => row.artifactKey)
+  const dialoguePassTaskKeys = [
+    'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3',
+  ]
+  const questScriptPartTaskKeys = [...latestArtifacts.keys()].filter(key => (
+    /^content\.quest-script\.(?:main\.act-[1-3]\.(?:single|multi)|supplemental)$/.test(key)
+  ))
+  const knownScenePartChoiceKeys = new Set(scenePartArtifacts.flatMap(row => (
+    contextRows(contextRecord(row.payload).choices)
+      .flatMap(choice => typeof choice.choiceKey === 'string' ? [choice.choiceKey] : [])
+  )))
+  const knownScenePartSceneKeys = new Set(scenePartArtifacts.flatMap(row => (
+    contextRows(contextRecord(row.payload).scenes)
+      .flatMap(scene => typeof scene.sceneKey === 'string' ? [scene.sceneKey] : [])
+  )))
+  const knownScenePartEndingKeys = new Set(scenePartArtifacts.flatMap(row => (
+    contextRows(contextRecord(row.payload).endings)
+      .flatMap(ending => typeof ending.endingKey === 'string' ? [ending.endingKey] : [])
+  )))
+  const knownQuestScriptStableKeys = new Set(questScriptPartTaskKeys.flatMap(taskKey => {
+    const row = latestArtifacts.get(taskKey)
+    return row ? [...JSON.stringify(row.payload).matchAll(
+      /"(?:objectiveKey|alternativeKey|entryKey|stageKey)":"((?:objective|alternative|entry|stage)\.[A-Za-z0-9._:-]+)"/g,
+    )].map(match => match[1]) : []
+  }))
+  const narrativeRepairTaskKeys = (issue: Record<string, unknown>): string[] => {
+    const detail = contextText(issue.detail, 1_000)
+    const recommendation = contextText(issue.recommendation, 1_000)
+    const evidence = `${detail}\n${recommendation}`
+    const choiceKeys = new Set((evidence.match(/choice\.[A-Za-z0-9._:-]+/g) ?? [])
+      .map(key => normalizeTextAdventureQualityStableReferenceV1(key, knownScenePartChoiceKeys)))
+    const sourceSceneKeys = new Set([...evidence.matchAll(
+      /sourceNodeKey\s*(?:=|:)?\s*["']?(scene\.[A-Za-z0-9._:-]+)/g,
+    )].map(match => normalizeTextAdventureQualityStableReferenceV1(match[1], knownScenePartSceneKeys)))
+    const sceneKeys = new Set((evidence.match(/scene\.[A-Za-z0-9._:-]+/g) ?? [])
+      .map(key => normalizeTextAdventureQualityStableReferenceV1(key, knownScenePartSceneKeys)))
+    const endingKeys = new Set((evidence.match(/ending\.[A-Za-z0-9._:-]+/g) ?? [])
+      .map(key => normalizeTextAdventureQualityStableReferenceV1(key, knownScenePartEndingKeys)))
+    const hasChoiceOrEndingIdentity = choiceKeys.size > 0
+      || sourceSceneKeys.size > 0 || endingKeys.size > 0
+    const matchedParts = scenePartArtifacts.flatMap(row => {
+      const part = contextRecord(row.payload)
+      const ownsChoice = contextRows(part.choices).some(choice => (
+        (typeof choice.choiceKey === 'string' && choiceKeys.has(choice.choiceKey))
+        || (typeof choice.sourceNodeKey === 'string' && sourceSceneKeys.has(choice.sourceNodeKey))
+      ))
+      const ownsScene = contextRows(part.scenes).some(scene => (
+        typeof scene.sceneKey === 'string' && sceneKeys.has(scene.sceneKey)
+      ))
+      const ownsEnding = contextRows(part.endings).some(ending => (
+        typeof ending.endingKey === 'string' && endingKeys.has(ending.endingKey)
+      ))
+      return (hasChoiceOrEndingIdentity ? (ownsChoice || ownsEnding) : ownsScene)
+        ? [row.artifactKey] : []
+    })
+    if (matchedParts.length === 0) {
+      if (hasChoiceOrEndingIdentity || sceneKeys.size > 0) return []
+      return textAdventureQualityChoiceCopyOnlyRepairV1(issue)
+        ? dialoguePassTaskKeys
+        : scenePartTaskKeys
+    }
+    if (!textAdventureQualityChoiceCopyOnlyRepairV1(issue)) return matchedParts
+    return [...new Set(matchedParts.flatMap(taskKey => {
+      const match = /^content\.scene-script\.act-([1-3])\.part-\d+$/.exec(taskKey)
+      return match ? [`content.dialogue-pass.act-${match[1]}`] : []
+    }))]
+  }
+  const repairTaskKeysForIssue = (issue: Record<string, unknown>): string[] => {
+    const ownerArtifactKey = textAdventureQualityIssueOwnerArtifactKeyV1(issue)
+    if (ownerArtifactKey === 'content.narrative-arc-plan') {
+      return textAdventureQualityArcRepairTaskKeysV1(issue)
+    }
+    if (ownerArtifactKey === 'content.narrative') return narrativeRepairTaskKeys(issue)
+    const actMatch = /^content\.scene-script\.act-([1-3])$/.exec(ownerArtifactKey)
+    if (actMatch) {
+      const exact = narrativeRepairTaskKeys(issue).filter(key => key.startsWith(`${ownerArtifactKey}.part-`))
+      return exact.length > 0 ? exact : scenePartTaskKeys.filter(key => key.startsWith(`${ownerArtifactKey}.part-`))
+    }
+    if (ownerArtifactKey === 'content.quest-script') {
+      const evidence = `${contextText(issue.detail, 1_000)}\n${contextText(issue.recommendation, 1_000)}`
+      const stableKeys = new Set((evidence.match(
+        /(?:objective|alternative|entry|stage)\.[A-Za-z0-9._:-]+/g,
+      ) ?? []).map(key => normalizeTextAdventureQualityStableReferenceV1(
+        key, knownQuestScriptStableKeys,
+      )))
+      const exact = stableKeys.size === 0 ? [] : [...latestArtifacts.values()].flatMap(row => {
+        if (!questScriptPartTaskKeys.includes(row.artifactKey)) return []
+        const serialized = JSON.stringify(row.payload)
+        return [...stableKeys].some(key => serialized.includes(`"${key}"`)) ? [row.artifactKey] : []
+      })
+      return exact.length > 0 ? exact : questScriptPartTaskKeys
+    }
+    return ownerArtifactKey ? [ownerArtifactKey] : []
+  }
+  const targetTaskKey = input.productProductionTaskKey ?? null
+  const reviewScores = contextRecord(payload.scores)
+  const failedByScore = Object.values(reviewScores).some(score => (
+    typeof score === 'number' && Number.isFinite(score) && score < 3
+  ))
+  // A batch can fail deterministically because a score is below three even
+  // when the reviewer classified its concrete evidence as warning. In that
+  // case, forwarding only blocking issues creates an impossible repair loop:
+  // the owning Agent never sees the evidence that explains the failing score.
+  // Preserve the existing `blockingIssues` wire name for compatibility, but
+  // include all actionable review evidence whenever the aggregate failed by
+  // score.
+  const reviewedArcPlan = latestArtifacts.get('content.narrative-arc-plan')?.payload
+  const reviewedNarrative = latestArtifacts.get('content.narrative')?.payload
+  const providerReviewBlockingIssues = (reviewEvidenceInvalid ? [] : contextRows(payload.issues))
+    .filter(issue => issue.severity === 'blocking' || failedByScore)
+    .filter(issue => !isTextAdventureRecomputedQualityIssueV1(issue))
+    // Older reviews could see authored echoSceneKeys but not the exact
+    // condition-gated action text because RuntimePackage is assembled later.
+    // The compiler and v3 quality projection now share one pure echo builder;
+    // when both routes are provably gated into the complained-of scene, rerun
+    // the reviewer against that new evidence instead of rewriting the story or
+    // decision plan from a stale “echo absent” claim.
+    .filter(issue => !textAdventureQualityIssueSupersededByCompiledEchoV1(issue, reviewedArcPlan))
+    .filter(issue => textAdventureQualityIssueFrozenBeatContradictionV1(issue, reviewedNarrative) == null)
+    .slice(0, 40)
+    .map(issue => {
+      const ownerArtifactKey = contextText(textAdventureQualityIssueOwnerArtifactKeyV1(issue), 120)
+      return {
+        artifactKey: ownerArtifactKey,
+        ownerArtifactKey,
+        severity: contextText(issue.severity, 16),
+        repairTaskKeys: repairTaskKeysForIssue(issue),
+        detail: contextText(issue.detail, 240),
+        recommendation: contextText(textAdventureQualityExecutableRecommendationV1(issue), 360),
+      }
+    })
+    .filter(issue => targetTaskKey == null || issue.repairTaskKeys.includes(targetTaskKey))
+  const perspectiveBlockingIssues = textAdventurePlayerPerspectiveIssuesV1(
+    reviewedNarrative,
+    latestArtifacts.get('content.cast-bible')?.payload,
+    latestArtifacts.get('content.adventure-architecture')?.payload,
+  ).map(issue => {
+    const ownerArtifactKey = contextText(textAdventureQualityIssueOwnerArtifactKeyV1(issue), 120)
+    return {
+      artifactKey: ownerArtifactKey,
+      ownerArtifactKey,
+      severity: issue.severity,
+      repairTaskKeys: repairTaskKeysForIssue(issue),
+      detail: contextText(issue.detail, 2_000),
+      recommendation: contextText(issue.recommendation, 500),
+    }
+  }).filter(issue => targetTaskKey == null || issue.repairTaskKeys.includes(targetTaskKey))
+  const kinshipBlockingIssues = textAdventureUnauthorizedKinshipIssuesV1(
+    reviewedNarrative,
+    latestArtifacts.get('content.cast-bible')?.payload,
+  ).map(issue => {
+    const ownerArtifactKey = contextText(textAdventureQualityIssueOwnerArtifactKeyV1(issue), 120)
+    return {
+      artifactKey: ownerArtifactKey,
+      ownerArtifactKey,
+      severity: issue.severity,
+      repairTaskKeys: repairTaskKeysForIssue(issue),
+      detail: contextText(issue.detail, 2_000),
+      recommendation: contextText(issue.recommendation, 500),
+    }
+  }).filter(issue => targetTaskKey == null || issue.repairTaskKeys.includes(targetTaskKey))
+  const dialogueAttributionBlockingIssues = textAdventureDialogueAttributionIssuesV1(
+    reviewedNarrative,
+    latestArtifacts.get('content.cast-bible')?.payload,
+  ).map(issue => {
+    const ownerArtifactKey = contextText(textAdventureQualityIssueOwnerArtifactKeyV1(issue), 120)
+    return {
+      artifactKey: ownerArtifactKey,
+      ownerArtifactKey,
+      severity: issue.severity,
+      repairTaskKeys: repairTaskKeysForIssue(issue),
+      detail: contextText(issue.detail, 2_000),
+      recommendation: contextText(issue.recommendation, 800),
+    }
+  }).filter(issue => targetTaskKey == null || issue.repairTaskKeys.includes(targetTaskKey))
+  const sceneSpeakerAuthorityBlockingIssues = textAdventureSceneSpeakerAuthorityIssuesV1(
+    reviewedNarrative,
+    reviewedArcPlan,
+    latestArtifacts.get('content.cast-bible')?.payload,
+  ).map(issue => {
+    const ownerArtifactKey = contextText(textAdventureQualityIssueOwnerArtifactKeyV1(issue), 120)
+    return {
+      artifactKey: ownerArtifactKey,
+      ownerArtifactKey,
+      severity: issue.severity,
+      repairTaskKeys: repairTaskKeysForIssue(issue),
+      detail: contextText(issue.detail, 2_000),
+      recommendation: contextText(issue.recommendation, 1_000),
+    }
+  }).filter(issue => targetTaskKey == null || issue.repairTaskKeys.includes(targetTaskKey))
+  const reviewedArchitecture = contextRecord(
+    latestArtifacts.get('content.adventure-architecture')?.payload,
+  )
+  const reviewedLocationTitles = contextRows(reviewedArchitecture.regions).flatMap(region => (
+    contextRows(region.areas).flatMap(area => contextRows(area.locations).flatMap(location => (
+      typeof location.title === 'string' ? [location.title] : []
+    )))
+  ))
+  const questLocationAuthorityBlockingIssues = textAdventureQuestLocationAuthorityIssuesV1(
+    latestArtifacts.get('content.main-quest-plan')?.payload,
+    reviewedLocationTitles,
+  ).map(issue => {
+    const ownerArtifactKey = contextText(textAdventureQualityIssueOwnerArtifactKeyV1(issue), 120)
+    return {
+      artifactKey: ownerArtifactKey,
+      ownerArtifactKey,
+      severity: issue.severity,
+      repairTaskKeys: repairTaskKeysForIssue(issue),
+      detail: contextText(issue.detail, 2_000),
+      recommendation: contextText(issue.recommendation, 1_000),
+    }
+  }).filter(issue => targetTaskKey == null || issue.repairTaskKeys.includes(targetTaskKey))
   const languageBlockingIssues = groupTextAdventurePlayerVisibleLanguageIssuesV1(
     findTextAdventurePlayerVisibleLanguageIssuesV1([...latestArtifacts.values()]),
   )
-    .map(issue => ({
-      artifactKey: contextText(issue.artifactKey, 120),
-      detail: contextText(
+    .map(issue => {
+      const repairIssue = {
+        artifactKey: contextText(issue.artifactKey, 120),
+        detail: contextText(
         `玩家可见字段混入未本地化词 ${issue.tokens.join('、')}；位置：${issue.examples.map(example => example.path).join('、')}`,
         240,
-      ),
-      recommendation: '保持稳定 key 和叙事含义，将混入的外语单词改成自然、完整的简体中文。',
-    }))
-  const blockingIssues = [...reviewBlockingIssues, ...languageBlockingIssues].slice(0, 40)
+        ),
+        recommendation: '保持稳定 key 和叙事含义，将混入的外语单词改成自然、完整的简体中文。',
+      }
+      const ownerArtifactKey = contextText(textAdventureQualityIssueOwnerArtifactKeyV1(repairIssue), 120)
+      return {
+        ...repairIssue, ownerArtifactKey,
+        repairTaskKeys: repairTaskKeysForIssue(repairIssue),
+      }
+    })
+    .filter(issue => targetTaskKey == null || issue.repairTaskKeys.includes(targetTaskKey))
+  const blockingIssues = [...new Map([
+    ...providerReviewBlockingIssues,
+    ...perspectiveBlockingIssues,
+    ...kinshipBlockingIssues,
+    ...dialogueAttributionBlockingIssues,
+    ...sceneSpeakerAuthorityBlockingIssues,
+    ...questLocationAuthorityBlockingIssues,
+    ...languageBlockingIssues,
+  ].map(issue => [
+    `${issue.ownerArtifactKey}\n${issue.detail}\n${issue.recommendation}`, issue,
+  ] as const)).values()].slice(0, 40)
   if (blockingIssues.length === 0 && taskFailures.size === 0) return ''
+  const baselineArtifact = targetTaskKey == null ? null : latestArtifacts.get(targetTaskKey) ?? null
   return JSON.stringify({
     schema: 'storyforge.text-adventure-repair-feedback', version: 1,
-    targetTaskKey: input.productProductionTaskKey ?? null,
+    targetTaskKey,
     source: review ? {
       artifactKey: review.artifactKey, artifactVersion: review.version,
       contentHash: review.contentHash, producerReceiptHash: review.producerReceiptHash,
       controlEpoch: review.controlEpoch,
     } : null,
-    instruction: '只修复与 targetTaskKey 当前输出相关的 blocking 问题和 lastTaskFailures 中同 taskKey 的精确协议错误；当问题原定位为 content.narrative 时，当前场景/对白任务必须修正其所拥有 scene/choice 的标签、目标节点、地点与开场衔接；保持冻结 Brief、架构、稳定 key 与未受影响内容。',
+    instruction: 'blockingIssues 已按 repairTaskKeys 精确投影给 targetTaskKey；只修复当前任务实际拥有的字段和 lastTaskFailures 中同 taskKey 的协议错误。ownerArtifactKey 是对外聚合工件，repairTaskKeys 才是专业返修职责。baselineArtifact 是上一轮已验收的完整本任务工件。分场质量返修使用执行器声明的精确字段补丁协议，由规则层合并底稿；补丁协议错误仍继续提交补丁，只有正文体量、图结构、身份或结局覆盖等底稿结构错误才提交完整工件。两种模式都必须保持冻结 Brief、架构、稳定 key 与未受影响内容。',
+    baselineArtifact: baselineArtifact == null ? null : {
+      artifactKey: baselineArtifact.artifactKey,
+      artifactVersion: baselineArtifact.version,
+      controlEpoch: baselineArtifact.controlEpoch,
+      contentHash: baselineArtifact.contentHash,
+      payload: baselineArtifact.payload,
+    },
     scores: payload.scores,
     blockingIssues,
     lastTaskFailures: [...taskFailures.values()].sort((left, right) => left.taskKey.localeCompare(right.taskKey)),

@@ -2,6 +2,7 @@ import { expect, test, type Page, type TestInfo } from '@playwright/test'
 import { publishCurrentWorldRelease } from './helpers/world-release'
 
 type BrowserMeasurement = {
+  runtimeVerifier: 'playwright-cdp'
   browserName: string
   browserVersion: string
   platform: string
@@ -9,6 +10,7 @@ type BrowserMeasurement = {
   packageHash: string
   previewHash: string
   firstInteractiveBytes: number
+  firstInteractiveAssetKeys: string[]
   cachedSceneLatenciesMs: number[]
   choiceInputLatenciesMs: number[]
   memorySamples: Array<{ elapsedMs: number; usedHeapBytes: number }>
@@ -166,22 +168,24 @@ async function readBuildProbe(page: Page) {
   return page.evaluate(async () => {
     const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
     const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const { createProductFirstInteractiveResourcePlanV1 } = await importer('/storyforge/src/lib/product-production/first-interactive-resources.ts')
     const build = await db.productBuilds.orderBy('id').last()
     if (!build) throw new Error('性能验收 Build 不存在')
-    const artifacts = await db.productBuildArtifacts.where('buildId').equals(build.id).toArray()
-    const blockingMediaBytes = artifacts
-      .filter((artifact: { blobObjectId?: number | null; byteSize?: number }) => artifact.blobObjectId != null)
-      .reduce((sum: number, artifact: { byteSize?: number }) => sum + Number(artifact.byteSize || 0), 0)
-    const packageBytes = new TextEncoder().encode(build.previewManifestJson).byteLength
+    const preview = JSON.parse(build.previewManifestJson)
+    const firstInteractive = createProductFirstInteractiveResourcePlanV1({
+      previewManifestJson: build.previewManifestJson,
+      runtimePackage: preview.runtimePackage,
+    })
     return {
       buildId: build.id as number,
       scope: { projectId: build.projectId, worldId: build.worldId, workId: build.workId },
       packageHash: build.packageHash as string,
       previewHash: build.previewHash as string,
-      // V3's 12 MiB gate is explicitly the first-interactive game package and
-      // blocking media, not the development server's unbundled application
-      // modules. Application JS/CSS has its separate bundle-size release gate.
-      firstInteractiveBytes: packageBytes + blockingMediaBytes,
+      // The 12 MiB gate covers the verified Preview JSON plus only media used
+      // by the first playable surface. The long-run phase still decodes and
+      // exercises the complete catalog; bundle size has its own release gate.
+      firstInteractiveBytes: firstInteractive.totalBytes,
+      firstInteractiveAssetKeys: firstInteractive.assetKeys,
     }
   })
 }
@@ -258,9 +262,11 @@ test('真实浏览器采样写入 Build 回执；smoke 不冒充商业通过', a
   const browserVersion = await page.evaluate(() => navigator.userAgent)
   const viewport = page.viewportSize() ?? { width: 1280, height: 720 }
   const measurement: BrowserMeasurement = {
+    runtimeVerifier: 'playwright-cdp',
     browserName, browserVersion, platform: await page.evaluate(() => navigator.platform || 'desktop'),
     viewport, packageHash: probe.packageHash, previewHash: probe.previewHash,
     firstInteractiveBytes: probe.firstInteractiveBytes,
+    firstInteractiveAssetKeys: probe.firstInteractiveAssetKeys,
     cachedSceneLatenciesMs: [], choiceInputLatenciesMs: [], memorySamples: [], measuredAt: Date.now(),
   }
 

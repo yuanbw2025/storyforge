@@ -73,7 +73,7 @@ test('文字冒险 V2 在浏览器中加载冻结插图、系统面板并在刷�
       contentHash: blob.contentHash, blobObjectId: blob.id, mimeType: blob.mimeType, byteSize: blob.byteSize,
       inputHash: 'a'.repeat(64),
     })
-    return { sessionId: built.session.id }
+    return { sessionId: built.session.id, blobObjectId: blob.id }
   })
 
   await page.reload()
@@ -97,6 +97,15 @@ test('文字冒险 V2 在浏览器中加载冻结插图、系统面板并在刷�
   }
   await expect(player.getByRole('log', { name: '冒险文字记录' })).toContainText('寻找隐藏补给')
 
+  // Simulate a locally unavailable frozen image after it has already rendered.
+  // The next real browser reload must keep deterministic play available and
+  // surface the explicit text-only fallback instead of a broken image.
+  await page.evaluate(async blobObjectId => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    await db.mediaBlobObjects.delete(blobObjectId)
+  }, seeded.blobObjectId)
+
   await page.reload()
   await page.getByTestId('product-tab-text-games').click()
   const restoredPlayer = page.getByTestId('adventure-game-player')
@@ -106,6 +115,8 @@ test('文字冒险 V2 在浏览器中加载冻结插图、系统面板并在刷�
   if (await continueButton.count()) {
     await continueButton.click()
   }
+  await expect(restoredPlayer.locator('.adventure-media-fallback')).toContainText('插图已降级为纯文字')
+  await expect(restoredPlayer).toContainText('离线确定性模式')
   await expect(restoredLog).toContainText('寻找隐藏补给')
   const restored = await page.evaluate(async sessionId => {
     const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>

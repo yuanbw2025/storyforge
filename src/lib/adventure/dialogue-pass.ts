@@ -130,6 +130,18 @@ function canonicalReviewRationale(
   return `${rationale.slice(0, Math.max(0, 2_000 - suffix.length))}${suffix}`
 }
 
+function normalizedDialogueCopyText(value: string): string {
+  return value.normalize('NFC').replace(/[\p{P}\p{S}\s]/gu, '').toLocaleLowerCase()
+}
+
+function dialogueTextContainsCopy(left: string, right: string): boolean {
+  const normalizedLeft = normalizedDialogueCopyText(left)
+  const normalizedRight = normalizedDialogueCopyText(right)
+  const shorter = normalizedLeft.length <= normalizedRight.length ? normalizedLeft : normalizedRight
+  const longer = shorter === normalizedLeft ? normalizedRight : normalizedLeft
+  return Array.from(shorter).length >= 14 && longer.includes(shorter)
+}
+
 export function parseTextAdventureDialoguePassArtifactV1(input: {
   value: unknown
   brief: ProductProductionBriefV3
@@ -289,7 +301,7 @@ export function parseTextAdventureDialoguePassArtifactV1(input: {
     }
   }
   const beatReviewByKey = new Map(parsedBeatReviews.map(item => [item.beatKey, item]))
-  const beatReviews = expectedBeatKeys.map(beatKey => beatReviewByKey.get(beatKey) ?? {
+  let beatReviews = expectedBeatKeys.map(beatKey => beatReviewByKey.get(beatKey) ?? {
     beatKey,
     speakerKey: sourceBeatByKey.get(beatKey)!.speakerKey,
     verdict: 'keep' as const,
@@ -297,6 +309,57 @@ export function parseTextAdventureDialoguePassArtifactV1(input: {
     rationale: '已逐条审校并保留冻结原文。',
     revisedText: sourceBeatByKey.get(beatKey)!.text,
   })
+  // Dialogue Editor owns wording, never dialogue identity. A frequent model
+  // failure is to copy an entire line from another character while the
+  // deterministic source speakerKey remains unchanged. Preserve the valid
+  // frozen source for every offending revision instead of making an optional
+  // wording pass deadlock the whole Build. Pre-existing scene defects remain
+  // visible to the independent quality gate and are repaired by Scene Writer.
+  const rejectedCopyBeatKeys = new Set<string>()
+  for (let leftIndex = 0; leftIndex < beatReviews.length; leftIndex += 1) {
+    const left = beatReviews[leftIndex]
+    const leftSource = sourceBeatByKey.get(left.beatKey)!
+    for (let rightIndex = leftIndex + 1; rightIndex < beatReviews.length; rightIndex += 1) {
+      const right = beatReviews[rightIndex]
+      if (left.speakerKey === right.speakerKey) continue
+      const rightSource = sourceBeatByKey.get(right.beatKey)!
+      const sourceAlreadyCopied = dialogueTextContainsCopy(leftSource.text, rightSource.text)
+      const revisedCopied = dialogueTextContainsCopy(left.revisedText, right.revisedText)
+      if (revisedCopied && !sourceAlreadyCopied) {
+        if (left.revisedText !== leftSource.text) rejectedCopyBeatKeys.add(left.beatKey)
+        if (right.revisedText !== rightSource.text) rejectedCopyBeatKeys.add(right.beatKey)
+      }
+    }
+  }
+  if (rejectedCopyBeatKeys.size > 0) {
+    beatReviews = beatReviews.map(review => {
+      if (!rejectedCopyBeatKeys.has(review.beatKey)) return review
+      const sourceBeat = sourceBeatByKey.get(review.beatKey)!
+      const suffix = '（该改写与另一说话人的对白发生整句复制；规则已拒绝改写并保留冻结原文。）'
+      return {
+        ...review,
+        verdict: 'keep' as const,
+        issueTags: ['none'] as TextAdventureDialogueIssueV1[],
+        rationale: `${review.rationale.slice(0, Math.max(0, 2_000 - suffix.length))}${suffix}`,
+        revisedText: sourceBeat.text,
+      }
+    })
+  }
+  // A canonicalized artifact must never retain a newly introduced
+  // cross-speaker copy, even if future changes alter the rejection projection.
+  for (let leftIndex = 0; leftIndex < beatReviews.length; leftIndex += 1) {
+    const left = beatReviews[leftIndex]
+    const leftSource = sourceBeatByKey.get(left.beatKey)!
+    for (let rightIndex = leftIndex + 1; rightIndex < beatReviews.length; rightIndex += 1) {
+      const right = beatReviews[rightIndex]
+      if (left.speakerKey === right.speakerKey) continue
+      const rightSource = sourceBeatByKey.get(right.beatKey)!
+      if (dialogueTextContainsCopy(left.revisedText, right.revisedText)
+        && !dialogueTextContainsCopy(leftSource.text, rightSource.text)) {
+        fail(`${left.beatKey} 与 ${right.beatKey} 不得在不同 speakerKey 之间复制对白`)
+      }
+    }
+  }
 
   const sourceChoiceByKey = new Map(source.choices.map(choice => [choice.choiceKey, choice]))
   const expectedChoiceKeys = source.choices.map(choice => choice.choiceKey).sort()
@@ -384,7 +447,7 @@ export function parseTextAdventureDialoguePassArtifactV1(input: {
     beatReviews,
     choiceReviews,
     summary: ordinalCompact
-      ? `已逐项审校 ${source.beats.length} 条对白与 ${source.choices.length} 个玩家选择；实际修订 ${parsedBeatReviews.filter(review => review.verdict === 'revise').length} 条对白、${parsedChoiceReviews.filter(review => review.verdict === 'revise').length} 个选择，未完成的修订建议保留问题标签供独立质量门复验。`
+      ? `已逐项审校 ${source.beats.length} 条对白与 ${source.choices.length} 个玩家选择；实际修订 ${beatReviews.filter(review => review.verdict === 'revise').length} 条对白、${parsedChoiceReviews.filter(review => review.verdict === 'revise').length} 个选择，未完成的修订建议保留问题标签供独立质量门复验。`
       : text(row.summary, 'summary', 4_000),
   }
 }

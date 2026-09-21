@@ -24,6 +24,7 @@ import type {
 } from '../types'
 import { assertProductReleaseUnchanged } from '../product/releases'
 import { transactionTablesForReferenceCascade } from '../registry/lifecycle'
+import { sanitizeSvgWithReportV1 } from '../utils/sanitize-svg'
 import { cascadeRegisteredReferences } from '../workspace/lifecycle'
 import {
   assertRecordInScope,
@@ -114,6 +115,19 @@ function decodeBase64(value: unknown, expectedBytes: number): ArrayBuffer {
   return bytes.buffer
 }
 
+function assertDistributionSvgAlreadySanitized(data: ArrayBuffer, assetKey: string): void {
+  let raw: string
+  try {
+    raw = new TextDecoder('utf-8', { fatal: true }).decode(data)
+  } catch {
+    throw new Error(`[distribution] SVG 不是有效 UTF-8:${assetKey}`)
+  }
+  const report = sanitizeSvgWithReportV1(raw)
+  if (!report.sanitized || report.removedUnsafeContent) {
+    throw new Error(`[distribution] SVG 未经受治理净化或包含不安全内容:${assetKey}`)
+  }
+}
+
 function exactKeys(value: Record<string, unknown>, expected: string[], label: string): void {
   const actual = Object.keys(value)
   if (actual.length !== expected.length || actual.some(key => !expected.includes(key))) {
@@ -130,7 +144,7 @@ function record(value: unknown, label: string): Record<string, unknown> {
 
 async function verifiedBundle(value: unknown): Promise<{
   bundle: ProductDistributionBundleV2
-  decodedMedia: Array<{ asset: FrozenRuntimeMediaAssetV2; data: ArrayBuffer }>
+  decodedMedia: Array<{ asset: FrozenRuntimeMediaAssetV2; data: ArrayBuffer; sanitizedSvg: boolean }>
 }> {
   const raw = record(value, 'bundle')
   exactKeys(raw, ['schema', 'version', 'productRelease', 'sourceWorld', 'media', 'bundleHash'], 'bundle')
@@ -162,7 +176,11 @@ async function verifiedBundle(value: unknown): Promise<{
   const expectedByKey = new Map(
     expectedAssets.map(asset => [`${asset.assetKey}\u0000${asset.version}`, asset]),
   )
-  const decodedMedia: Array<{ asset: FrozenRuntimeMediaAssetV2; data: ArrayBuffer }> = []
+  const decodedMedia: Array<{
+    asset: FrozenRuntimeMediaAssetV2
+    data: ArrayBuffer
+    sanitizedSvg: boolean
+  }> = []
   let totalBytes = 0
   for (const item of raw.media) {
     const media = record(item, 'media')
@@ -184,7 +202,9 @@ async function verifiedBundle(value: unknown): Promise<{
       || asset.contentHash !== asset.blobContentHash) {
       throw new Error(`[distribution] 媒资哈希不一致:${asset.assetKey}`)
     }
-    decodedMedia.push({ asset: structuredClone(asset), data })
+    const sanitizedSvg = asset.mimeType === 'image/svg+xml'
+    if (sanitizedSvg) assertDistributionSvgAlreadySanitized(data, asset.assetKey)
+    decodedMedia.push({ asset: structuredClone(asset), data, sanitizedSvg })
     expectedByKey.delete(`${asset.assetKey}\u0000${asset.version}`)
   }
   if (expectedByKey.size) {
@@ -463,6 +483,7 @@ async function importVerifiedProductDistributionV2(input: {
           data: item.data,
           mimeType: item.asset.mimeType,
           expectedContentHash: item.asset.blobContentHash,
+          sanitizedSvg: item.sanitizedSvg,
         })
         if (!existed && row.id != null) stagedIds.push(row.id)
         blobObjects.push(row)

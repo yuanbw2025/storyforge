@@ -189,8 +189,9 @@ export async function readAcceptedBuildArtifacts(input: {
 /**
  * Rebinds already accepted, immutable outputs to a new control epoch after an
  * author pause/resume. Binary objects and payload bytes are reused; a new
- * carried-forward Artifact version preserves the old provenance until the new
- * scheduler root signs a current-epoch reuse receipt.
+ * carried-forward Artifact version preserves the original producer provenance;
+ * the new scheduler records its reuse receipt in the Build ledger rather than
+ * pretending that a newer Run produced the immutable bytes.
  */
 export async function carryForwardProductBuildArtifactsToEpochV1(input: {
   scope: WorkspaceScope
@@ -198,6 +199,14 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
   fromControlEpoch: number
   toControlEpoch: number
   artifactKeys: string[]
+  allowInvalidSourceAtFromEpoch?: boolean
+  /**
+   * Pause can interrupt synthetic carry settlement after older immutable rows
+   * were fenced as invalid. For tasks already proven coherent by the scheduler,
+   * recover the latest unique signed row at or before fromControlEpoch instead
+   * of paying the provider again. Never enable this for an unclassified repair.
+   */
+  allowHistoricalInvalidSourceBeforeEpoch?: boolean
 }): Promise<ProductBuildArtifactRecordV1[]> {
   const scope = await resolveScope({ scope: input.scope })
   if (!Number.isInteger(input.fromControlEpoch) || !Number.isInteger(input.toControlEpoch)
@@ -222,19 +231,31 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
     const productionKey = production.productType === 'text-adventure' ? production.productionKey : null
     const allRows = await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray()
     const sourceRows = keys.flatMap(artifactKey => {
-      const eligible = allRows.filter(row => row.artifactKey === artifactKey
-        && row.controlEpoch <= input.fromControlEpoch
+      const immediate = allRows.filter(row => row.artifactKey === artifactKey
+        && row.controlEpoch === input.fromControlEpoch
         && isSha256Hash(row.contentHash)
-        && isSha256Hash(row.producerReceiptHash ?? ''))
-      const immediate = eligible.filter(row => row.controlEpoch === input.fromControlEpoch
-        && (row.status === 'accepted' || row.status === 'carried-forward'))
+        && isSha256Hash(row.producerReceiptHash ?? '')
+        && (row.status === 'accepted' || row.status === 'carried-forward'
+          || (input.allowInvalidSourceAtFromEpoch === true && row.status === 'invalid')))
       if (immediate.length > 1) {
         throw new Error(`[product-production-artifact] carry-forward 当前来源 key 不唯一:${artifactKey}`)
       }
-      const source = immediate[0] ?? eligible
-        .filter(row => row.controlEpoch < input.fromControlEpoch
+      let source = immediate[0]
+      if (!source && input.allowHistoricalInvalidSourceBeforeEpoch === true) {
+        const historical = allRows.filter(row => row.artifactKey === artifactKey
+          && row.controlEpoch <= input.fromControlEpoch
+          && isSha256Hash(row.contentHash)
+          && isSha256Hash(row.producerReceiptHash ?? '')
           && (row.status === 'accepted' || row.status === 'carried-forward' || row.status === 'invalid'))
-        .sort((left, right) => right.controlEpoch - left.controlEpoch || right.version - left.version)[0]
+          .sort((left, right) => right.controlEpoch - left.controlEpoch || right.version - left.version)
+        const latestEpoch = historical[0]?.controlEpoch
+        const latest = latestEpoch == null
+          ? [] : historical.filter(row => row.controlEpoch === latestEpoch)
+        if (latest.length > 1) {
+          throw new Error(`[product-production-artifact] carry-forward 历史来源 key 不唯一:${artifactKey}`)
+        }
+        source = latest[0]
+      }
       return source ? [source] : []
     })
     const carried: ProductBuildArtifactRecordV1[] = []
@@ -267,8 +288,8 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
         projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
         buildId: build.id!, artifactKey: source.artifactKey, requirementKey: source.requirementKey,
         version, kind: source.kind, mediaKind: source.mediaKind, status: 'carried-forward' as const,
-        producerRunId: null, producerReceiptHash: source.producerReceiptHash,
-        controlEpoch: input.toControlEpoch, inputHash: rebound.inputHash, contentHash: source.contentHash,
+        producerRunId: source.producerRunId, producerReceiptHash: source.producerReceiptHash,
+        controlEpoch: input.toControlEpoch, inputHash: source.inputHash, contentHash: source.contentHash,
         payloadJson: rebound.payloadJson, metadataJson: rebound.metadataJson,
         qualityJson: source.qualityJson, rightsJson: source.rightsJson,
         blobObjectId: source.blobObjectId, mimeType: source.mimeType, byteSize: source.byteSize,
@@ -302,6 +323,10 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
     briefHash: string
     planHash: string
     controlEpoch: number
+    qualityRollback?: {
+      originControlEpoch: number
+      invalidReviewContentHash: string
+    }
   }
 }): Promise<ProductBuildArtifactRecordV1[]> {
   const scope = await resolveScope({ scope: input.scope })
@@ -341,13 +366,23 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
       } catch { return false }
     })()
     const recoverySourceAllowed = activeRecoverySourceAllowed || rejectedAnchorRecoverySourceAllowed
-    const sourceControlEpoch = input.recoverySource?.controlEpoch ?? sourceBuild?.controlEpoch
+    const requestedQualityRollback = input.recoverySource?.qualityRollback
+    const qualityRollbackShapeValid = requestedQualityRollback == null || (
+      activeRecoverySourceAllowed
+      && Number.isInteger(requestedQualityRollback.originControlEpoch)
+      && requestedQualityRollback.originControlEpoch >= 0
+      && requestedQualityRollback.originControlEpoch <= input.recoverySource!.controlEpoch
+      && isSha256Hash(requestedQualityRollback.invalidReviewContentHash)
+    )
+    const sourceControlEpoch = requestedQualityRollback?.originControlEpoch
+      ?? input.recoverySource?.controlEpoch ?? sourceBuild?.controlEpoch
     if (!sourceBuild || !targetBuild
       || !await assertRecordInScope(scope, 'productBuilds', sourceBuild, { owner: 'work' })
       || !await assertRecordInScope(scope, 'productBuilds', targetBuild, { owner: 'work' })
       || sourceBuild.productionId !== targetBuild.productionId
       || targetBuild.parentBuildNumber !== sourceBuild.buildNumber
       || targetBuild.controlEpoch !== input.targetControlEpoch
+      || !qualityRollbackShapeValid
       || (!['preview-ready', 'release-ready', 'released'].includes(sourceBuild.status)
         && !recoverySourceAllowed)
       || ['cancelled', 'failed', 'archived', 'released'].includes(targetBuild.status)) {
@@ -362,9 +397,33 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
       db.productBuildArtifacts.where('buildId').equals(sourceBuild.id!).toArray(),
       db.productBuildArtifacts.where('buildId').equals(targetBuild.id!).toArray(),
     ])
+    let qualityRollbackVerified = requestedQualityRollback == null
+    if (requestedQualityRollback) {
+      const reviewRows = sourceRows.filter(row => (
+        row.artifactKey === 'quality.adventure-review'
+        && row.controlEpoch === requestedQualityRollback.originControlEpoch
+        && row.contentHash === requestedQualityRollback.invalidReviewContentHash
+        && isSha256Hash(row.producerReceiptHash ?? '')
+      ))
+      const verifiedReviews: ProductBuildArtifactRecordV1[] = []
+      for (const row of reviewRows) {
+        try {
+          const payload = JSON.parse(row.payloadJson) as Record<string, unknown>
+          if (payload && !Array.isArray(payload) && payload.passed === false
+            && await Dexie.waitFor(hashProductProductionValueV2(payload)) === row.contentHash) {
+            verifiedReviews.push(row)
+          }
+        } catch { /* malformed historical evidence stays unusable */ }
+      }
+      qualityRollbackVerified = verifiedReviews.length === 1
+    }
+    if (!qualityRollbackVerified) {
+      throw new Error('[product-production-artifact] cross-build 无效审查回滚证据不可验证')
+    }
     const sources = sourceRows.filter(row => keys.includes(row.artifactKey)
       && row.controlEpoch === sourceControlEpoch
-      && (row.status === 'accepted' || row.status === 'carried-forward'))
+      && (row.status === 'accepted' || row.status === 'carried-forward'
+        || (requestedQualityRollback != null && row.status === 'invalid')))
     if (sources.length !== keys.length || new Set(sources.map(row => row.artifactKey)).size !== keys.length) {
       throw new Error('[product-production-artifact] cross-build 来源 Artifact 不完整或不唯一')
     }

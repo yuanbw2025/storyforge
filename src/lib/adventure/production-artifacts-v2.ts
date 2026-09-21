@@ -844,7 +844,7 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
   if (Math.abs(totalMinutes - input.brief.scale.targetPlayMinutes) > Math.max(5, input.brief.scale.targetPlayMinutes * 0.15)) {
     fail('叙事弧各幕目标分钟与 Brief 不闭合')
   }
-  const decisionSceneKeys = skeleton.sceneKeys.slice(0, skeleton.statefulDecisionSceneCount)
+  const decisionSceneKeys = skeleton.statefulDecisionSceneKeys
   const decisions = array(
     row.decisions,
     'decisions',
@@ -906,6 +906,100 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
   }
 }
 
+export interface TextAdventureEndingRoutePlanArtifactV1 {
+  schema: 'storyforge.text-adventure-ending-route-plan-artifact'
+  version: 1
+  routes: Array<{
+    endingKey: string
+    requiredEffectKeys: string[]
+    rationale: string
+  }>
+}
+
+/**
+ * Freezes a semantic, executable partition from prior decisions to endings.
+ * Every possible combination of the referenced binary decisions must match
+ * exactly one ending; this prevents both a dead final menu and a late choice
+ * that silently discards the player's earlier route.
+ */
+export function parseTextAdventureEndingRoutePlanArtifactV1(input: {
+  value: unknown
+  arcPlan: TextAdventureNarrativeArcPlanArtifactV1
+  storyBible: TextAdventureStoryBibleArtifactV1
+}): TextAdventureEndingRoutePlanArtifactV1 {
+  const row = record(input.value, 'endingRoutePlan')
+  exactKeys(row, ['schema', 'version', 'routes'], 'endingRoutePlan')
+  if (row.schema !== 'storyforge.text-adventure-ending-route-plan-artifact' || row.version !== 1) {
+    fail('endingRoutePlan schema/version 无效')
+  }
+  const endings = input.storyBible.endings
+  const effectOwner = new Map<string, string>()
+  const optionsByDecision = new Map<string, string[]>()
+  input.arcPlan.decisions.forEach(decision => {
+    const effects = decision.options.map(option => option.persistentEffectKey)
+    optionsByDecision.set(decision.key, effects)
+    effects.forEach(effectKey => effectOwner.set(effectKey, decision.key))
+  })
+  const routes = array(row.routes, 'endingRoutePlan.routes', endings.length, endings.length)
+    .map((value, index) => {
+      const route = record(value, `endingRoutePlan.routes[${index}]`)
+      exactKeys(route, ['endingKey', 'requiredEffectKeys', 'rationale'], `endingRoutePlan.routes[${index}]`)
+      const endingKey = key(route.endingKey, `endingRoutePlan.routes[${index}].endingKey`)
+      if (endingKey !== endings[index].key) {
+        fail(`endingRoutePlan.routes[${index}].endingKey 必须为 ${endings[index].key}`)
+      }
+      const requiredEffectKeys = keyArray(
+        route.requiredEffectKeys,
+        `endingRoutePlan.routes[${index}].requiredEffectKeys`,
+        1,
+        Math.min(12, input.arcPlan.decisions.length),
+      )
+      const unknownEffects = requiredEffectKeys.filter(effectKey => !effectOwner.has(effectKey))
+      if (unknownEffects.length > 0) fail(`结局路线引用未知决定效果:${unknownEffects.join(',')}`)
+      const ownerKeys = requiredEffectKeys.map(effectKey => effectOwner.get(effectKey)!)
+      if (new Set(ownerKeys).size !== ownerKeys.length) {
+        fail(`结局路线 ${endingKey} 同时要求同一决定的互斥选项`)
+      }
+      return {
+        endingKey,
+        requiredEffectKeys,
+        rationale: text(route.rationale, `endingRoutePlan.routes[${index}].rationale`, 2_000),
+      }
+    })
+  const signatures = routes.map(route => [...route.requiredEffectKeys].sort().join('|'))
+  if (new Set(signatures).size !== signatures.length) fail('不同结局不能复用相同决定条件')
+  const referencedDecisionKeys = [...new Set(routes.flatMap(route => (
+    route.requiredEffectKeys.map(effectKey => effectOwner.get(effectKey)!)
+  )))]
+  if (referencedDecisionKeys.length > 12) fail('结局路线引用决定过多，无法有界验证')
+  const selected = new Set<string>()
+  const routeMatchCounts = new Map(routes.map(route => [route.endingKey, 0]))
+  const verifyCombination = (decisionIndex: number): void => {
+    if (decisionIndex < referencedDecisionKeys.length) {
+      const decisionKey = referencedDecisionKeys[decisionIndex]
+      for (const effectKey of optionsByDecision.get(decisionKey) ?? []) {
+        selected.add(effectKey)
+        verifyCombination(decisionIndex + 1)
+        selected.delete(effectKey)
+      }
+      return
+    }
+    const matches = routes.filter(route => route.requiredEffectKeys.every(effectKey => selected.has(effectKey)))
+    if (matches.length !== 1) {
+      fail(`结局路线没有形成互斥且完备的状态分区:选择=${[...selected].join(',')} 匹配=${matches.map(route => route.endingKey).join(',') || 'none'}`)
+    }
+    routeMatchCounts.set(matches[0].endingKey, (routeMatchCounts.get(matches[0].endingKey) ?? 0) + 1)
+  }
+  verifyCombination(0)
+  const unreachable = routes.filter(route => (routeMatchCounts.get(route.endingKey) ?? 0) < 1)
+  if (unreachable.length > 0) fail(`结局路线不可达:${unreachable.map(route => route.endingKey).join(',')}`)
+  return {
+    schema: 'storyforge.text-adventure-ending-route-plan-artifact',
+    version: 1,
+    routes,
+  }
+}
+
 export interface TextAdventureNarrativeArcScenesArtifactV1 {
   schema: 'storyforge.text-adventure-narrative-arc-scenes-artifact'
   version: 1
@@ -921,7 +1015,7 @@ export interface TextAdventureNarrativeDecisionPlanArtifactV1 {
 
 function placeholderNarrativeDecisionsV1(brief: ProductProductionBriefV3) {
   const skeleton = textAdventureNarrativeSkeletonV1(brief)
-  return skeleton.sceneKeys.slice(0, skeleton.statefulDecisionSceneCount).map((sceneKey, index) => {
+  return skeleton.statefulDecisionSceneKeys.map((sceneKey, index) => {
     const decisionSceneIndex = skeleton.sceneKeys.indexOf(sceneKey)
     const echoes = skeleton.sceneKeys.slice(decisionSceneIndex + 1, decisionSceneIndex + 3)
     return {
@@ -1082,6 +1176,134 @@ export interface TextAdventureQuestPlanArtifactV1 {
   }>
 }
 
+export interface TextAdventureQuestPlanLocationCopyNormalizationV1 {
+  value: unknown
+  repairedFields: string[]
+}
+
+const TEXT_ADVENTURE_LOCATION_KIND_ALIASES_V1 = [
+  '档案库', '观潮台', '灯塔', '酒馆', '祭坛', '渔村', '工坊', '观测站',
+  '海井', '广场', '废墟', '遗址', '洞窟', '宫殿', '车站', '港口', '码头',
+] as const
+
+/**
+ * Return player-visible aliases that point at a registered location other
+ * than the objective's frozen location. Exact titles remain strongest, while
+ * a small place-kind vocabulary catches natural shorthand such as
+ * "档案库" for "议会档案库" and "灯塔顶端" for a different
+ * registered lighthouse. An alias contained by the expected title is legal.
+ */
+export function textAdventureConflictingLocationAliasesV1(input: {
+  text: string
+  expectedLocation: string
+  locationTitles: readonly string[]
+}): string[] {
+  const candidates = new Set<string>()
+  for (const title of input.locationTitles) {
+    if (!title || title === input.expectedLocation) continue
+    if (input.text.includes(title)) candidates.add(title)
+    for (const alias of TEXT_ADVENTURE_LOCATION_KIND_ALIASES_V1) {
+      if (!title.includes(alias)
+        || input.expectedLocation.includes(alias)
+        || !input.text.includes(alias)) continue
+      const qualifiedAlias = new RegExp(
+        `${alias}(?:顶端|顶部|底部|内部|门口|入口|附近|地下|上层|深处)?`,
+        'u',
+      ).exec(input.text)?.[0]
+      candidates.add(qualifiedAlias ?? alias)
+    }
+    // Registered multi-character suffixes are stable natural abbreviations.
+    // Keep the floor at three CJK glyphs so character names or generic
+    // one/two-character particles cannot be mistaken for places.
+    const glyphs = Array.from(title)
+    for (let length = glyphs.length - 1; length >= 3; length -= 1) {
+      const suffix = glyphs.slice(glyphs.length - length).join('')
+      if (!input.expectedLocation.includes(suffix) && input.text.includes(suffix)) {
+        candidates.add(suffix)
+        break
+      }
+    }
+  }
+  return [...candidates].sort((left, right) => right.length - left.length || left.localeCompare(right))
+}
+
+/**
+ * A quest objective's scene binding and locationOrdinal are the frozen spatial
+ * authority. Model-written copy is presentation data and must not silently
+ * move the action to another registered location. Keep the repair narrow:
+ * current-objective prose is rebound to the authoritative location, while
+ * consequence prose neutralizes a conflicting future-place mention rather
+ * than pretending that the future action has already happened here.
+ */
+export function normalizeTextAdventureQuestPlanLocationCopyV1(input: {
+  value: unknown
+  locationTitles: readonly string[]
+}): TextAdventureQuestPlanLocationCopyNormalizationV1 {
+  if (!input.value || typeof input.value !== 'object' || Array.isArray(input.value)
+    || input.locationTitles.length === 0) {
+    return { value: input.value, repairedFields: [] }
+  }
+  const root = structuredClone(input.value) as Record<string, unknown>
+  if (!Array.isArray(root.quests)) return { value: input.value, repairedFields: [] }
+  const repairedFields: string[] = []
+  const replaceConflictingLocations = (
+    value: unknown,
+    expectedLocation: string,
+    replacement: string,
+    path: string,
+  ): unknown => {
+    if (typeof value !== 'string') return value
+    let next = value
+    for (const alias of textAdventureConflictingLocationAliasesV1({
+      text: next,
+      expectedLocation,
+      locationTitles: input.locationTitles,
+    })) {
+      next = next.split(alias).join(replacement)
+    }
+    if (next !== value) repairedFields.push(path)
+    return next
+  }
+  root.quests.forEach((questValue, questIndex) => {
+    if (!questValue || typeof questValue !== 'object' || Array.isArray(questValue)) return
+    const quest = questValue as Record<string, unknown>
+    if (!Array.isArray(quest.objectives)) return
+    quest.objectives.forEach((objectiveValue, objectiveIndex) => {
+      if (!objectiveValue || typeof objectiveValue !== 'object' || Array.isArray(objectiveValue)) return
+      const objective = objectiveValue as Record<string, unknown>
+      if (!Number.isSafeInteger(objective.locationOrdinal)) return
+      const expectedLocation = input.locationTitles[Number(objective.locationOrdinal) - 1]
+      if (!expectedLocation) return
+      const objectivePath = `quests[${questIndex}].objectives[${objectiveIndex}]`
+      objective.title = replaceConflictingLocations(
+        objective.title, expectedLocation, expectedLocation, `${objectivePath}.title`,
+      )
+      objective.narrativePurpose = replaceConflictingLocations(
+        objective.narrativePurpose, expectedLocation, expectedLocation, `${objectivePath}.narrativePurpose`,
+      )
+      if (!Array.isArray(objective.alternatives)) return
+      objective.alternatives.forEach((alternativeValue, alternativeIndex) => {
+        if (!alternativeValue || typeof alternativeValue !== 'object' || Array.isArray(alternativeValue)) return
+        const alternative = alternativeValue as Record<string, unknown>
+        const alternativePath = `${objectivePath}.alternatives[${alternativeIndex}]`
+        alternative.successConsequence = replaceConflictingLocations(
+          alternative.successConsequence,
+          expectedLocation,
+          '后续地点',
+          `${alternativePath}.successConsequence`,
+        )
+        alternative.failureForwardConsequence = replaceConflictingLocations(
+          alternative.failureForwardConsequence,
+          expectedLocation,
+          '后续地点',
+          `${alternativePath}.failureForwardConsequence`,
+        )
+      })
+    })
+  })
+  return { value: root, repairedFields }
+}
+
 export function parseTextAdventureQuestPlanArtifactV1(input: {
   value: unknown
   brief: ProductProductionBriefV3
@@ -1090,9 +1312,16 @@ export function parseTextAdventureQuestPlanArtifactV1(input: {
   expectedKind: TextAdventureQuestPlanArtifactV1['bundleKind']
   expectedQuestCount: number
   locationCount?: number
+  locationTitles?: readonly string[]
 }): TextAdventureQuestPlanArtifactV1 {
   if (!input.brief.textAdventure) fail('任务计划缺少文字冒险 Brief')
-  const row = record(input.value, `${input.expectedKind}QuestPlan`)
+  const normalized = input.locationTitles
+    ? normalizeTextAdventureQuestPlanLocationCopyV1({
+        value: input.value,
+        locationTitles: input.locationTitles,
+      }).value
+    : input.value
+  const row = record(normalized, `${input.expectedKind}QuestPlan`)
   exactKeys(row, ['schema', 'version', 'bundleKind', 'quests'], `${input.expectedKind}QuestPlan`)
   if (row.schema !== 'storyforge.text-adventure-quest-plan-artifact' || row.version !== 1
     || row.bundleKind !== input.expectedKind) fail('任务计划 schema/version/kind 无效')
@@ -1135,7 +1364,9 @@ export function parseTextAdventureQuestPlanArtifactV1(input: {
           objective.locationOrdinal,
           `objectives[${objectiveIndex}].locationOrdinal`,
           1,
-          input.locationCount ?? input.brief.textAdventure!.narrative.targetLocationCount,
+          input.locationTitles?.length
+            ?? input.locationCount
+            ?? input.brief.textAdventure!.narrative.targetLocationCount,
         )
         const sceneCards = input.arcPlan.acts.flatMap(act => act.sceneCards)
           .filter(scene => parsedSceneKeys.includes(scene.key))
@@ -1285,6 +1516,52 @@ export interface TextAdventureSupplementalQuestScriptV2 {
   }>
 }
 
+function compactNarrativeAnchorV1(value: string): string {
+  return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+}
+
+function longestSharedNarrativeSpanV1(left: string, right: string): number {
+  const source = compactNarrativeAnchorV1(left)
+  const target = compactNarrativeAnchorV1(right)
+  const maximum = Math.min(16, source.length, target.length)
+  for (let length = maximum; length >= 2; length -= 1) {
+    for (let index = 0; index + length <= source.length; index += 1) {
+      if (target.includes(source.slice(index, index + length))) return length
+    }
+  }
+  return 0
+}
+
+function assertMainQuestScriptNarrativeAlignmentV1(input: {
+  objective: TextAdventureQuestPlanArtifactV1['quests'][number]['objectives'][number]
+  alternative: TextAdventureQuestPlanArtifactV1['quests'][number]['objectives'][number]['alternatives'][number]
+  outcomeText: string
+  outcomeLabel: string
+  locationTitles: readonly string[]
+}): void {
+  const expectedLocation = input.locationTitles[input.objective.locationOrdinal - 1]
+  if (!expectedLocation) fail(`${input.outcomeLabel} 缺少冻结发生地`)
+  const conflictingLocations = input.locationTitles.filter((title, titleIndex) => (
+    titleIndex !== input.objective.locationOrdinal - 1
+    && title !== expectedLocation
+    && !expectedLocation.includes(title)
+    && input.outcomeText.includes(title)
+  ))
+  if (conflictingLocations.length > 0) {
+    fail(`${input.outcomeLabel} 绑定「${expectedLocation}」却把行动写在「${[...new Set(conflictingLocations)].join('、')}」`)
+  }
+  const expectedSurfaces = input.outcomeLabel.endsWith('failureForwardText')
+    ? [input.objective.title, input.alternative.failureForwardConsequence]
+    : [input.objective.title, input.alternative.successConsequence]
+  const requiredSpan = compactNarrativeAnchorV1(input.objective.title).length <= 4 ? 2 : 3
+  const sharedSpan = Math.max(...expectedSurfaces.map(surface => (
+    longestSharedNarrativeSpanV1(surface, input.outcomeText)
+  )))
+  if (sharedSpan < requiredSpan) {
+    fail(`${input.outcomeLabel} 偏离冻结目标「${input.objective.title}」与对应后果`)
+  }
+}
+
 /**
  * The Quest Scripter does not invent runtime operations. It resolves authored
  * quest plans into a bounded rule/check script; the deterministic compiler
@@ -1297,6 +1574,7 @@ export function parseTextAdventureQuestScriptArtifactV2(input: {
   mainQuestPlan: TextAdventureQuestPlanArtifactV1
   sideQuests: TextAdventureQuestBundleArtifactV2
   ambientEvents: TextAdventureQuestBundleArtifactV2
+  locationTitles: readonly string[]
 }): TextAdventureQuestScriptArtifactV2 {
   const row = record(input.value, 'questScript')
   exactKeys(row, [
@@ -1362,7 +1640,7 @@ export function parseTextAdventureQuestScriptArtifactV2(input: {
           + `difficulty=${String(difficulty)}, costlySuccessFloor=${String(costlySuccessFloor)}`,
         )
       }
-      return {
+      const parsed = {
         alternativeKey,
         resolution: { mode, abilityKey, difficulty, costlySuccessFloor },
         timeCostMinutes: integer(alternative.timeCostMinutes, 'questScript.timeCostMinutes', 1, 120),
@@ -1382,6 +1660,21 @@ export function parseTextAdventureQuestScriptArtifactV2(input: {
           4_000,
         ),
       }
+      const plannedAlternative = alternativeByKey.get(alternativeKey)!
+      for (const [outcomeLabel, outcomeText] of [
+        ['successText', parsed.successText],
+        ['costlySuccessText', parsed.costlySuccessText],
+        ['failureForwardText', parsed.failureForwardText],
+      ] as const) {
+        assertMainQuestScriptNarrativeAlignmentV1({
+          objective,
+          alternative: plannedAlternative,
+          outcomeText,
+          outcomeLabel: `mainObjectiveScripts[${objectiveIndex}].alternatives[${alternativeIndex}].${outcomeLabel}`,
+          locationTitles: input.locationTitles,
+        })
+      }
+      return parsed
     })
     if (new Set(alternatives.map(alternative => alternative.alternativeKey)).size !== alternativeByKey.size) {
       fail(`questScript 未精确覆盖目标解法:${objectiveKey}`)

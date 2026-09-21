@@ -1,6 +1,6 @@
 # 12 · 产品包、原子导入与社区推荐候选档案
 
-> 层级：L2 · 版本：1.2.0 · 生效：2026-09-09
+> 层级：L2 · 版本：1.5.2 · 生效：2026-09-11
 > 性质：文字冒险发布后分发、离线复验、上传导入与社区候选提交的施工合同。
 
 ## 1. 本阶段交付的不是一个 JSON 下载按钮
@@ -86,9 +86,21 @@
 
 ## 6. 市场提交规则
 
-通用市场继续接收内层分发包；文字冒险创作者提交前，客户端必须先生成并复验外层候选包，显示候选档案和阻断原因。只有 `eligible-for-community-submission` 才允许调用 `registerRelease/createListing/submitListing`。
+通用市场继续接收内层分发包；文字冒险创作者提交前，客户端必须先生成并复验外层候选包，显示候选档案和阻断原因。只有 `eligible-for-community-submission` 才允许按 `createListing/reviseListing → registerRelease → submitListing` 顺序提交。先有目录草稿是服务端验证 creator、listing、productType 与 releaseHash 同一作用域的必要条件，不能在建目录前上传，也不能用 UI mock 的成功回执替代真实网关顺序。
 
-远程服务最终应保存候选档案 hash，并让审核员能读取同一证据投影；在服务端合同升级前，UI 必须明确标注“本地候选资格已验证，远程仍需人工审核”，不得把通用 bundle 校验冒充完整内容推荐审核。外部注册和提交始终需要作者点击并提供账号凭据；本地导出或导入不能隐式触发网络调用。
+文字冒险上传使用 `storyforge.text-adventure-community-submission` v1：通用 `distributionBundle` 只传一次，旁路信封携带版本化 dossier、完整离线复验 evidence 和 `candidateHash`。服务端必须重建完整 `storyforge.text-adventure-community-package`，执行与本地导入相同的严格验证，逐项绑定 listing、creator、产品类型、Release、bundle、候选 hash 与证据摘要；不得直接信任客户端的 `eligible`、分钟数、质量结果或 receipt。验证成功后，对象存储以 `(listingId, releaseHash)` 为不可变键保存完整候选审核记录和小型 verification attestation，因此同一 listing 修订到新 Release 时保留旧证据历史但绝不复用旧版本。
+
+发行上传的 `requestId` 是服务端 durable 幂等键，而不是只写审计日志的客户端标签。发行持久层必须先以 `(creatorId, requestId)` 原子登记 `processing` 请求记录，冻结由 `listingId + releaseHash + bundleHash + candidateHash + productType` 形成的 fingerprint、候选回执计划和开始时间；完成发行物、候选记录与 attestation 的写后回读后，再以实际唯一审核记录原子冻结首次终态回执并把同一请求提交为 `completed`。同 fingerprint 重试（包括响应丢失、进程退出和 service 重建）继续完成未结束步骤或返回首次冻结回执；同一 requestId 携带不同绑定一律以 409 `request_conflict` fail-closed。候选审核记录由 `(listingId, releaseHash)` 唯一拥有：第一个成功落盘的记录冻结规范 `verifiedAt` 与 hash；若同一 owner 的记录已经存在，任何新的、并发的或恢复中的 requestId 都必须复用该记录，并在完成 processing 请求时把候选回执计划收敛到实际 recordHash，不能用各自请求开始时间制造第二份候选或让旧请求永久失效。终态 `completedAt` 至少为 `max(当前时钟, createdAt)`，所以进程重建时系统时钟回拨也不能生成逆序状态。非文字冒险继续使用 `{requestId, bundle}`，其 `listingId/candidateHash` 固定为 null，但同样经过 durable 请求回执。
+
+生产对象存储必须显式实现 `storyforge.commercial-release-delivery-capabilities` v1，而不能因为一个通用健康探针返回 ok 就被视为可用。当前能力闭集依次为 `delivery-record-v1`、`delivery-head-v1`、`text-adventure-review-v1`、`text-adventure-review-attestation-v1` 和 `upload-request-idempotency-v1`，存储 schema 版本固定为 1。`productionRuntime.releaseDeliveryPersistence` 同时承担真实读写接口、通用外部依赖活探针和专用能力探针；托管组合根把两种探针合并，schema、版本、顺序或任一能力不匹配时 `object-storage=unhealthy`，平台 readiness 为 false。仓库只定义协议和内存合规夹具，不伪造某家云对象存储；真实 Provider、凭据、桶版本和备份策略仍由部署环境注入。
+
+从旧对象存储 adapter 切换时顺序固定：先停止新上传并完成在途请求盘点；对旧 delivery/review/attestation 做只读快照与 hash 清单；在新命名空间建立 schema v1 和 upload-request 条件写/CAS 能力；复制不可变记录并逐项执行 load/head/候选/attestation 写后回读；历史上传没有可信 requestId 时不得伪造 completed 回执，只允许以后以新 requestId 得到 duplicate 回执；在影子环境强制运行能力探针和恢复夹具；最后一次性切换 `productionRuntime` 绑定并强制刷新 readiness。旧存储保持只读备份直至保留期结束，回滚只能整体恢复旧绑定，禁止双写两个权威存储。
+
+`submitListing`、公开发现和领取只读取可信不可变 HEAD + attestation；`publishListing` 与实际下载重新读取 bundle 和完整候选记录复验，完整上传本身也执行同等级复验。审核员通过受 `catalog:publish` 权限保护的 `review-candidate` 端点读取由服务端确定性投影的 dossier、candidateHash、recordHash 和证据摘要，文字冒险审核 UI 在读取当前 `listingId + releaseHash` 投影前不得启用发布。公开发现一次只处理受控候选页（默认 50、服务端硬上限 100）；证明读取由网关实例级共享 semaphore 约束全局在途并发（默认 4），每项读取都有硬 deadline 和 `AbortSignal`，外部 adapter 必须把 signal 传到底层 HEAD/attestation 请求，挂起、超时、损坏或 legacy 记录均只从该页 fail-closed 隐藏。兼容 `discover()` 仍返回 listing 数组；新客户端通过 `discoverPage` 显式翻页，响应 `x-storyforge-next-cursor` 是绑定规范化 query、productType 及最后扫描 `updatedAt + listingId` 的不透明 keyset 游标，客户端和服务端都严格复验。游标推进已扫描候选而非通过证明的结果，因此空结果页仍可继续；目录头部插入也不会让既有遍历因数字 offset 位移而重复或漏项。筛选变化必须清空 UI 旧游标。
+
+升级前已经是 published、但没有服务端候选记录的文字冒险属于 legacy 未证明内容：不得进入发现、不得新领取或重新下载，必须退回修改并重新上传候选证据。已依法下载到用户本地的副本仍遵守 `localCopyPreserved`，升级不能远程删除。本地候选资格、服务端候选复验和人工社区审核是三件不同的事，任何一个都不得冒充另一个。
+
+外部注册和提交始终需要作者点击并提供账号凭据；本地导出或导入不能隐式触发网络调用。生产对象存储 adapter 必须实现 delivery HEAD、候选记录、attestation 与 upload request 的不可变/条件写入、read-after-write 和版本化备份恢复；损坏记录一律 fail-closed，普通上传不能静默覆盖。市场 Fetch 边界以实际 `ReadableStream` 字节为权威逐块计数，默认发行上传硬上限 360MiB、单进程同时读取最多 2 个大包；Origin、方法、Content-Type、声明长度与 header-only Bearer preflight 必须在取得大包槽之前通过，认证边界缺失或异常时以 503 拒绝且不读正文。非法或已超限 `Content-Length` 在提前拒绝时也必须 cancel 未读流；实际字节越界立即 cancel reader，超过并发预算返回 429 与 `Retry-After`。正文读取同时监听请求 `AbortSignal` 和硬 deadline（普通命令默认 10 秒，发行上传默认 120 秒），超时返回 408 并取消 reader，任何完成、拒绝、中止、超时和异常路径都必须释放槽。`Content-Length` 只用于提前拒绝，缺失或伪造偏小都不能绕过流式限额。当前 JSON v1 在上限内仍需完整组装后严格解析；真实反向代理/Serverless 运行环境还必须施加不高于该值的流量、内存、超时和并发限制。
 
 市场购得的 Release 可本地游玩和按许可离线保存。`distributionProvenance.source=marketplace` 的副本默认不能作为原创作品重新提交；允许派生时也必须生成新的 Production/Release、遵守 remix 与 attribution 条款，不能直接改标签后上传原 hash。
 
@@ -128,6 +140,15 @@
 - 数据库中途写入失败不留下可见半成品 Release；孤立 Blob 可被立即回收；
 - 删除导入副本后，原世界 hash、其他 Release 和共享 Blob 引用仍正确；
 - 市场来源副本直接作为原创提交被阻断。
+- 服务端拒绝 candidateHash、dossier、receipt、bundle 或证据摘要任一篡改，以及 creator/listing/productType/releaseHash 的跨作用域绑定；HEAD/attestation 损坏时不得提交或领取，完整 bundle/review 损坏时不得发布或下载；
+- 同一 listing 修订到新 Release 后，审核 UI 必须重新读取新 `(listingId, releaseHash)` 候选，旧缓存不能解锁发布；legacy published 文字冒险若无 attestation，不得出现在发现或领取结果中；
+- 上传在发行物或候选记录已经落盘后中断时，新 service 实例用相同 requestId 必须恢复并返回首次冻结回执；即使重建实例的系统时钟早于 processing.createdAt，completedAt 仍不得倒退；响应丢失后的精确重试也不得重复创建，换 listing/release/bundle/candidate 复用同一 requestId 必须返回 409；
+- 请求 A 在审核记录落盘前中断、请求 B 用不同 requestId 完成同一 listing/release/candidate 后，A 的精确重试必须复用 B 已冻结的 review/attestation 并完成；两个不同 requestId 并发写同一候选也必须收敛到同一 recordHash；
+- 生产对象存储缺少 upload-request、HEAD、候选或 attestation 任一能力，能力 schema/版本不匹配，或专用探针异常时 readiness 必须 fail-closed；内存 adapter 不能冒充 production；
+- 大包使用 chunked body、无 Content-Length 或伪造偏小 Content-Length 时都按真实流字节在越界处终止且不调用发行网关；非法或声明超限 Content-Length 必须在拒绝时取消未读流；并发预算占满返回 429，前一请求完成后必须释放名额；
+- 未认证、错误方法或错误 Content-Type 的大包必须在读取正文和取得并发槽前拒绝并取消流；两个永不结束的慢流必须在 deadline 后返回 408、取消 reader、释放全部槽，随后合法上传可立即进入；客户端 AbortSignal 也必须触发同一释放语义；
+- 公开发现对每个请求最多读取配置页大小的 HEAD/attestation，多个并发请求的实际在途读取总数也不得超过共享 semaphore 上限；单项证明挂起必须在 deadline 后通过 AbortSignal fail-closed。坏 attestation 不改变候选游标推进，空结果页仍能加载下一页；opaque keyset cursor 必须绑定筛选和稳定排序键，目录头部插入不得造成旧遍历重复/漏项，查询变化不得复用旧游标；旧 discover 调用仍兼容返回数组第一页；
+- 非文字冒险仍接受原 `{requestId, bundle}` 上传合同，但提交时必须确认目录 productType 与冻结 bundle manifest 一致，不能把文字冒险伪装成其他产品绕过候选门。
 
 完整 E2E 必须在隔离浏览器数据中执行，不得修改作者当前 Work。测试不仅检查按钮存在，还要下载真实文件、清空或切换到全新隔离 Work、重新上传、打开玩家端、走到结局并核对导入前后 Release/package/bundle/candidate hash。
 
@@ -135,4 +156,4 @@
 
 本阶段完成意味着：本地文件导出与上传导入真实可用；候选包在无数据库上下文时仍能复验内容规模、运行包、媒资和关键质量证据；导入失败不产生半成品；市场提交对文字冒险执行候选资格门；隔离浏览器往返与删除生命周期通过。
 
-当前实现已闭合导入副本的明确确认、注册表派生级联、共享 Blob 保留与回收回执，并把“上传 → 双结局 → 刷新 → 删除 → 世界不变”纳入隔离浏览器 E2E。完成后进入批次 G：建立来源充分的隔离 WorldRelease，用专业 Agent 团队正式生产首个约一小时旗舰内容，经过作者试玩与视觉确认后生成同一 Release/hash 的候选包。该旗舰通过本文合同只代表“具备提交资格”；向社区实际上传和公开仍要在展示最终游戏与证据后由作者单独确认。
+当前实现已闭合导入副本的明确确认、注册表派生级联、共享 Blob 保留与回收回执，并把“上传 → 双结局 → 刷新 → 删除 → 世界不变”纳入隔离浏览器 E2E；远端市场现已接收并服务端复验文字冒险候选信封、持久化待审记录、向审核员暴露同一证据投影，并在提交、发布、发现、领取和下载边界 fail-closed。发行上传已持久化 creator/request fingerprint、处理状态与首次回执，并覆盖进程重建恢复、响应丢失精确重试、request 冲突和非文字冒险兼容；对象存储能力以显式版本协议进入生产 readiness，大包 Fetch 则按真实流字节和并发预算 fail-closed。仓库没有配置真实云对象存储，Provider、外部探针实现和迁移执行仍是部署环境接入项。完成后进入批次 G：建立来源充分的隔离 WorldRelease，用专业 Agent 团队正式生产首个约一小时旗舰内容，经过作者试玩与视觉确认后生成同一 Release/hash 的候选包。该旗舰通过本文合同只代表“具备提交资格”；向社区实际上传和公开仍要在展示最终游戏与证据后由作者单独确认。

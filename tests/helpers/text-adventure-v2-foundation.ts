@@ -54,14 +54,14 @@ export function createTextAdventureFoundationNarrativeV2(): ProductRuntimePackag
         description: '救回海上的人，但让裂隙继续存在。', unavailableReason: '尚未校准归航光路。',
         targetNodeKey: 'ending.rescue', displayConditionJson: '{}',
         availableConditionJson: JSON.stringify({ path: 'adventure.conditions.condition_route_rescue', exists: true }),
-        effectsJson: '[]', tags: [], order: 0,
+        effectsJson: '[]', tags: ['adventure-action:action.choose.rescue'], order: 0,
       },
       {
         choiceKey: 'choice.seal', sourceNodeKey: 'crossroads', text: '封闭裂隙保护港城',
         description: '保住港城，但海上的船要独自熬过长夜。', unavailableReason: '尚未校准封闭光路。',
         targetNodeKey: 'ending.seal', displayConditionJson: '{}',
         availableConditionJson: JSON.stringify({ path: 'adventure.conditions.condition_route_seal', exists: true }),
-        effectsJson: '[]', tags: [], order: 1,
+        effectsJson: '[]', tags: ['adventure-action:action.choose.seal'], order: 1,
       },
     ],
   }
@@ -97,7 +97,7 @@ export function createTextAdventureFoundationContentV2(): AdventureContentV2 {
       { key: 'scene.harbor', locationKey: 'location.harbor', title: '出发整备', description: '装备与补给教学场景。', actionKeys: ['action.look.harbor', 'action.equip.cloak', 'action.move.marsh', 'action.search.cache'], tags: ['onboarding'] },
       { key: 'scene.marsh', locationKey: 'location.marsh', title: '穿越盐沼', description: '确定性失败推进与代价场景。', actionKeys: ['action.find.route', 'action.move.tower'], tags: ['fail-forward'] },
       { key: 'scene.tower', locationKey: 'location.tower', title: '回收透镜', description: '物品、任务与成长结算场景。', actionKeys: ['action.take.lens', 'action.rest.tower', 'action.move.marsh.return', 'action.move.core'], tags: ['quest'] },
-      { key: 'scene.core', locationKey: 'location.core', title: '光路抉择', description: '两个互斥价值方向的结局准备场景。', actionKeys: ['action.prepare.rescue', 'action.prepare.seal'], tags: ['ending'] },
+      { key: 'scene.core', locationKey: 'location.core', title: '光路抉择', description: '两个互斥价值方向的结局准备场景。', actionKeys: ['action.prepare.rescue', 'action.prepare.seal', 'action.choose.rescue', 'action.choose.seal'], tags: ['ending'] },
     ],
     objects: [
       { key: 'object.chart', locationKey: 'location.harbor', sceneKey: 'scene.harbor', title: '潮汐图', description: '标着盐沼旧路的防水图纸。', tags: ['map'] },
@@ -195,6 +195,12 @@ export function createTextAdventureFoundationContentV2(): AdventureContentV2 {
       },
       {
         key: 'action.prepare.seal', kind: 'quest-action', label: '校准封闭光路', description: '解锁守城结局。', locationKey: 'location.core', targetKey: 'object.light-paths', requirements: [{ conditionKey: 'condition.route-rescue', conditionPresent: false }], rule: { kind: 'resource-payment', resourceKey: 'resource.mana', amount: 2 }, successEffects: [{ op: 'apply-condition', conditionKey: 'condition.route-seal', duration: null }, { op: 'change-resource', resourceKey: 'resource.time', delta: 10 }], costlySuccessEffects: [], failureEffects: [], successText: '朝向裂隙的封闭光路完成校准。', costlySuccessText: '光路带着损耗亮起。', failureText: '光路拒绝响应。', unavailableText: '法力不足，或另一条光路已经锁定。', repeatable: false, narrativeChoiceKey: null, interaction: null,
+      },
+      {
+        key: 'action.choose.rescue', kind: 'quest-action', label: '确认引导求救船', description: '在归航光路完成校准后确认结局选择。', locationKey: 'location.core', targetKey: 'object.light-paths', requirements: [{ narrativePath: '__storyforge.currentNarrativeNodeKey', narrativeEquals: 'crossroads' }, { conditionKey: 'condition.route-rescue', conditionPresent: true }], rule: { kind: 'automatic' }, successEffects: [], costlySuccessEffects: [], failureEffects: [], successText: '你确认了归航光路，灯火转向海面。', costlySuccessText: '你付出代价后坚持了救援选择。', failureText: '归航光路没有完成确认。', unavailableText: '需要先校准归航光路。', repeatable: false, narrativeChoiceKey: 'choice.rescue', interaction: null,
+      },
+      {
+        key: 'action.choose.seal', kind: 'quest-action', label: '确认封闭裂隙', description: '在封闭光路完成校准后确认结局选择。', locationKey: 'location.core', targetKey: 'object.light-paths', requirements: [{ narrativePath: '__storyforge.currentNarrativeNodeKey', narrativeEquals: 'crossroads' }, { conditionKey: 'condition.route-seal', conditionPresent: true }], rule: { kind: 'automatic' }, successEffects: [], costlySuccessEffects: [], failureEffects: [], successText: '你确认了封闭光路，灯火转向裂隙。', costlySuccessText: '你付出代价后坚持了守城选择。', failureText: '封闭光路没有完成确认。', unavailableText: '需要先校准封闭光路。', repeatable: false, narrativeChoiceKey: 'choice.seal', interaction: null,
       },
     ],
     initialInventory: [

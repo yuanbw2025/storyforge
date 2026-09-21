@@ -8,6 +8,10 @@ import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
 import { parseProductProductionBriefV3 } from './contracts'
 import { hashProductProductionValueV2, isSha256Hash } from './hash'
 import { textAdventureSceneScriptPartSceneKeysV1 } from '../adventure/scene-script'
+import {
+  TEXT_ADVENTURE_QUALITY_REVIEW_SCOPES_V1,
+  type TextAdventureQualityReviewScopeV1,
+} from '../adventure/production-artifacts'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 const LANES = ['planning', 'content', 'visual', 'audio', 'integration', 'qa'] as const
@@ -19,6 +23,35 @@ const FAILURE_POLICIES = ['fail-build', 'pause', 'fallback', 'skip-optional'] as
 // One image per Run keeps retries, receipts, budgets and repair lineage
 // truthful instead of treating provider batch cardinality as a prompt concern.
 export const TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1 = 1
+
+export type TextAdventureQualityReviewTaskKeyV1 =
+  `content.adventure-quality-review.${TextAdventureQualityReviewScopeV1}`
+export type TextAdventureQualityReviewBatchArtifactKeyV1 =
+  `quality.adventure-review.${TextAdventureQualityReviewScopeV1}`
+
+export function textAdventureQualityReviewTaskKeyV1(
+  scope: TextAdventureQualityReviewScopeV1,
+): TextAdventureQualityReviewTaskKeyV1 {
+  return `content.adventure-quality-review.${scope}`
+}
+
+export function textAdventureQualityReviewBatchArtifactKeyV1(
+  scope: TextAdventureQualityReviewScopeV1,
+): TextAdventureQualityReviewBatchArtifactKeyV1 {
+  return `quality.adventure-review.${scope}`
+}
+
+export function textAdventureQualityReviewScopeFromTaskKeyV1(
+  taskKey: string,
+): TextAdventureQualityReviewScopeV1 | null {
+  return TEXT_ADVENTURE_QUALITY_REVIEW_SCOPES_V1.find(scope => (
+    taskKey === textAdventureQualityReviewTaskKeyV1(scope)
+  )) ?? null
+}
+
+export function textAdventureQualityReviewBatchTaskKeysV1(): TextAdventureQualityReviewTaskKeyV1[] {
+  return TEXT_ADVENTURE_QUALITY_REVIEW_SCOPES_V1.map(textAdventureQualityReviewTaskKeyV1)
+}
 
 export function textAdventureVisualReviewArtifactBatchesV1(
   artifactKeys: readonly string[],
@@ -48,6 +81,7 @@ export interface TextAdventureProductionBudgetFloorV1 {
   minimumModelCalls: number
   minimumInputTokens: number
   minimumOutputTokens: number
+  minimumDurationMs: number
 }
 
 /**
@@ -71,7 +105,10 @@ export function textAdventureProductionBudgetFloorV1(
   const visualReviewBatchCount = textAdventureVisualReviewArtifactBatchesV1(
     Array.from({ length: visualAssetCount }, (_, index) => String(index)),
   ).length
-  const modelTaskCount = 25 + sceneScriptPartCount + visualReviewBatchCount
+  // Four bounded professional review Runs replace the former single
+  // whole-product review (+3 net model calls). Their public scorecard is
+  // assembled by a separate deterministic task below.
+  const modelTaskCount = 29 + sceneScriptPartCount + visualReviewBatchCount + Number(activeVisual)
   // A complete commercial run exercises many deep structured schemas. Live
   // provider evidence showed that half-pipeline retry headroom was exhausted
   // before the remaining prose/editing Runs could even be admitted. Reserve
@@ -88,7 +125,12 @@ export function textAdventureProductionBudgetFloorV1(
     modelTaskCount,
     retryReserveSlots,
     minimumModelCalls,
-    minimumInputTokens: Math.max(300_000, minimumModelCalls * 16_000),
+    // Real commercial repair evidence reached 1,915,599 input tokens after
+    // 109 settled/failed model calls (~17.6k per call) while a substantial
+    // downstream closure was still pending. Reserve 24k per admitted call so
+    // the author-approved child Build can finish; actual usage remains the
+    // append-only scheduler authority.
+    minimumInputTokens: Math.max(300_000, minimumModelCalls * 24_000),
     minimumOutputTokens: Math.max(
       100_000,
       brief.scale.targetWordCount * 8 + 60_000,
@@ -99,6 +141,11 @@ export function textAdventureProductionBudgetFloorV1(
       // below and therefore cannot inflate one response to consume the pool.
       minimumModelCalls * 8_000,
     ),
+    // The full professional DAG includes long-form scene writers and
+    // provider-native visual reviews. Five hours is a Build-lifetime sum of
+    // task receipts, not five hours of wall-clock latency; independent Runs
+    // still execute concurrently and retain their own shorter timeouts.
+    minimumDurationMs: Math.max(18_000_000, modelTaskCount * 360_000),
   }
 }
 
@@ -434,67 +481,101 @@ export async function createProductProductionPlanV3(input: {
     'content.cast-bible': 0.045,
     'content.adventure-architecture': 0.04,
     'content.product-module': 0.04,
-    'content.narrative-arc-scenes': 0.035,
-    'content.narrative-decision-plan': 0.03,
+    // A live three-act repair returned 9,429 billable output tokens after
+    // hidden reasoning, exceeding the former 7,000-token reservation. Keep a
+    // bounded 10k ceiling for the complete three-act scene-card topology.
+    'content.narrative-arc-scenes': 0.05,
+    // Decision planning carries every branch option, persistent echo and
+    // cross-scene consequence. A real repair receipt used 6,837 output tokens
+    // and exceeded the former 6,120 ceiling, so reserve the same 8k class as
+    // other deep structured planning tasks at the 200k baseline.
+    'content.narrative-decision-plan': 0.04,
+    'content.ending-route-plan': 0.02,
     'content.main-quest-plan': 0.035,
     // One whole act still encouraged providers to collapse multi-route
     // objectives. Each act therefore has a simple and complex Run. Live Agnes
-    // receipts include hidden reasoning: even a one-objective single-route
-    // packet reported 4,074 tokens against a 4,000 visible-output ceiling.
-    // Reserve 5k/6k in the 200k flagship envelope and 8k for the ten-stage
-    // supplemental bundle; the append-only Build ledger remains the aggregate
-    // authority and charges actual provider usage.
-    'content.quest-script.main.act-1.single': 0.025,
-    'content.quest-script.main.act-1.multi': 0.03,
-    'content.quest-script.main.act-2.single': 0.025,
-    'content.quest-script.main.act-2.multi': 0.03,
-    'content.quest-script.main.act-3.single': 0.025,
-    'content.quest-script.main.act-3.multi': 0.03,
-    'content.quest-script.supplemental': 0.04,
-    // Scene prose is the player-visible product, not scaffolding. Each act's
-    // 18% envelope is split into two bounded scene packets so a provider cannot
-    // strand a whole act in one oversized request.
-    // A live 60-minute packet reported 17,701 billable output tokens after
-    // hidden reasoning, despite a much smaller visible JSON body. The Scene
-    // Writer skill is registered for 24k output, so each bounded packet gets
-    // that complete ceiling while the append-only Build ledger remains the
-    // aggregate authority.
-    'content.scene-script.act-1.part-1': 0.12,
-    'content.scene-script.act-1.part-2': 0.12,
-    'content.scene-script.act-2.part-1': 0.12,
-    'content.scene-script.act-2.part-2': 0.12,
-    'content.scene-script.act-3.part-1': 0.12,
-    'content.scene-script.act-3.part-2': 0.12,
-    // The provider usage receipt may include hidden reasoning. Each Dialogue
-    // Editor therefore receives an 8,800-token ceiling in the repaired Brief
-    // while returning only an ordinal
-    // delta; the Build-lifetime ledger, not the sum of task ceilings, remains
-    // the author-approved hard budget.
-    'content.dialogue-pass.act-1': 0.055,
-    'content.dialogue-pass.act-2': 0.055,
-    'content.dialogue-pass.act-3': 0.055,
-    // Three multi-stage side quests reported 5,722 billable output tokens on
-    // the live flagship, including provider-hidden reasoning. Reserve 7,000
-    // at the reviewed baseline while the append-only Build ledger continues
-    // to enforce the author-approved aggregate ceiling.
-    'content.adventure-side-quests': 0.035,
-    'content.adventure-ambient-events': 0.03,
-    // Independent continuity review is reasoning-heavy even though its visible
-    // result is a compact scorecard. Provider receipts may charge those hidden
-    // reasoning tokens as output, so its task ceiling must reflect observed
-    // billable usage rather than the JSON byte count alone.
-    'content.adventure-quality-review': 0.075,
+    // receipts include hidden reasoning: a later one-objective single-route
+    // packet reported 6,831 tokens and exceeded the former 5,100-token frozen
+    // ceiling. Reserve 8k for every bounded main-quest packet. The combined
+    // side/ambient supplemental packet later returned 10,009 billed output
+    // tokens, so it receives a measured 12k ceiling; the append-only Build
+    // ledger remains the aggregate authority and charges actual usage.
+    'content.quest-script.main.act-1.single': 0.04,
+    'content.quest-script.main.act-1.multi': 0.04,
+    'content.quest-script.main.act-2.single': 0.04,
+    'content.quest-script.main.act-2.multi': 0.04,
+    'content.quest-script.main.act-3.single': 0.04,
+    'content.quest-script.main.act-3.multi': 0.04,
+    'content.quest-script.supplemental': 0.06,
+    // Scene prose is the player-visible product, not scaffolding. Each act is
+    // split into two bounded scene packets so a provider cannot strand a whole
+    // act in one oversized request. The Scene Writer skill keeps its 24k
+    // visible-generation ceiling, but provider receipts also bill hidden
+    // reasoning: a live packet reported 29,343 output tokens and exceeded the
+    // old 24,128 Plan reservation. Reserve 32k per packet at the reviewed 200k
+    // task baseline (24k visible + a bounded 8k reasoning allowance). This is
+    // 2,657 tokens of measured headroom, while the append-only Build ledger
+    // remains the aggregate hard limit.
+    'content.scene-script.act-1.part-1': 0.16,
+    'content.scene-script.act-1.part-2': 0.16,
+    'content.scene-script.act-2.part-1': 0.16,
+    'content.scene-script.act-2.part-2': 0.16,
+    'content.scene-script.act-3.part-1': 0.16,
+    'content.scene-script.act-3.part-2': 0.16,
+    // The provider usage receipt includes hidden reasoning even though the
+    // visible response is only an ordinal delta. Two live first-act reviews
+    // used 15,205 and 24,077 billed output tokens. Every Dialogue Editor gets
+    // a 32k ceiling at the reviewed 200k baseline so normal provider variance
+    // remains bounded without discarding another paid result. The append-only
+    // Build ledger, not the sum of task ceilings, remains the hard budget.
+    'content.dialogue-pass.act-1': 0.16,
+    'content.dialogue-pass.act-2': 0.16,
+    'content.dialogue-pass.act-3': 0.16,
+    // A later three-quest flagship receipt reported 7,457 billable output
+    // tokens once provider-hidden reasoning was included. A live four-event
+    // ambient repair later reported 7,878 billable output tokens as well, so
+    // both bounded supplemental writers receive an 8,000-token ceiling at the
+    // reviewed baseline. The append-only Build ledger still charges actual
+    // usage and remains the author-approved aggregate hard limit.
+    // A location-authority repair for the three multi-stage side quests used
+    // 11,131 billable output tokens. Reserve 12k so a contract-valid result is
+    // not discarded solely because provider reasoning is included in usage.
+    'content.adventure-side-quests': 0.06,
+    'content.adventure-ambient-events': 0.04,
+    // Each independent continuity review owns one bounded evidence packet.
+    // Provider receipts may charge hidden reasoning tokens even though the
+    // visible result is a compact scorecard, so every professional Run keeps
+    // the previously observed whole-review ceiling. The Build ledger remains
+    // the aggregate authority; the public scorecard assembly uses no model.
+    // Live act reviews returned 18,550 and then 27,915 billable output tokens
+    // once provider reasoning was included, exceeding the former 24,128
+    // frozen reservation. Match the reviewed 32k ceiling used by other deep
+    // editorial passes; actual usage remains charged by the append-only Build
+    // ledger and cannot exceed the author-approved Build lifetime envelope.
+    ...Object.fromEntries(TEXT_ADVENTURE_QUALITY_REVIEW_SCOPES_V1.map(scope => [
+      textAdventureQualityReviewTaskKeyV1(scope), 0.16,
+    ])),
     // Live 12-image flagship manifests reached 5,552 billable output tokens
     // after explicit narrative-beat grounding was added. Reserve 7,000 at the
     // reviewed 200k baseline so hidden reasoning cannot invalidate an otherwise
     // bounded receipt; the Build-lifetime ledger remains the hard ceiling.
     'media.requirements': 0.035,
+    // One tiny real image-input request proves the configured text model can
+    // observe image bytes before any paid Agnes generation is admitted.
+    'media.vision-preflight': 0.002,
     // Each bounded Visual QA Run reviews one frozen image. A live repair
     // review used 2,782 billable output tokens because the provider included
     // detailed issue evidence and recommendations. Reserve 4,000 at the
     // reviewed 200k baseline; the Build-lifetime ledger remains authoritative.
     'media.visual-quality-review': 0.02,
-    'qa.playtest-strategy': 0.015,
+    // The independent playtest director consumes the complete frozen runtime,
+    // autoplay evidence and release report. Two live flagship receipts billed
+    // 6,404 and 5,066 output tokens once provider-hidden reasoning was
+    // included, so the former 3,000-token ceiling repeatedly discarded a
+    // contract-valid final artifact after every other quality gate had passed.
+    // Reserve 8,000 at the reviewed 200k baseline; actual usage is still
+    // charged to the append-only Build ledger and remains author-bounded.
+    'qa.playtest-strategy': 0.04,
   }
   // Most model tasks consume a similarly sized context packet. Dialogue and
   // independent whole-product review are exceptions: even after compact
@@ -503,24 +584,40 @@ export async function createProductProductionPlanV3(input: {
   // ceiling while retaining aggregate input headroom for retries. The
   // append-only Build ledger below the Plan remains the hard authority.
   const textAdventureInputWeights: Record<string, number> = {
-    // Live flagship receipts reached 16,549 input tokens after the scene
-    // packet, system schema and provider framing were accounted together.
-    // Reserve 18,480 in the 528k envelope for every bounded prose packet;
-    // aggregate reservations still remain below the Build hard ceiling.
-    'content.scene-script.act-1.part-1': 0.035,
-    'content.scene-script.act-1.part-2': 0.035,
-    'content.scene-script.act-2.part-1': 0.035,
-    'content.scene-script.act-2.part-2': 0.035,
-    'content.scene-script.act-3.part-1': 0.035,
-    'content.scene-script.act-3.part-2': 0.035,
-    'content.dialogue-pass.act-1': 0.035,
-    'content.dialogue-pass.act-2': 0.035,
-    'content.dialogue-pass.act-3': 0.035,
-    'content.adventure-quality-review': 0.075,
+    // Scene repair must carry the complete previously accepted prose bundle,
+    // not a lossy summary. A live baseline-preserving repair consumed 19,369
+    // input tokens after packet, repair evidence, full baseline, system schema
+    // and provider framing were accounted together. Reserve 23,760 in the
+    // reviewed 528k task baseline (22.7% measured headroom) for both initial
+    // and repair attempts; the append-only Build ledger remains the aggregate
+    // authority and charges actual usage only.
+    'content.scene-script.act-1.part-1': 0.045,
+    'content.scene-script.act-1.part-2': 0.045,
+    'content.scene-script.act-2.part-1': 0.045,
+    'content.scene-script.act-2.part-2': 0.045,
+    'content.scene-script.act-3.part-1': 0.045,
+    'content.scene-script.act-3.part-2': 0.045,
+    // A complete 60-minute third act produced a 17,425-token registered
+    // Dialogue Editor packet before the system/schema/provider framing was
+    // added. Keep the whole act together for character voice and knowledge
+    // continuity, but reserve 26,400 tokens per act so that framing retains
+    // about 6.4k of explicit headroom beyond the 20k packet hard limit.
+    'content.dialogue-pass.act-1': 0.05,
+    'content.dialogue-pass.act-2': 0.05,
+    'content.dialogue-pass.act-3': 0.05,
+    ...Object.fromEntries(TEXT_ADVENTURE_QUALITY_REVIEW_SCOPES_V1.map(scope => [
+      textAdventureQualityReviewTaskKeyV1(scope), 0.075,
+    ])),
     // Keep the measured four-image ceiling even though reliability work now
     // sends two provider-native 1K images per batch. The headroom covers image
     // token variance without weakening the Build-lifetime hard budget.
     'media.visual-quality-review': 0.05,
+    // Live provider-native image probes consumed 1,141, 2,163 and then 7,387
+    // input tokens after image accounting, provider framing and hidden usage
+    // were included. Reserve 15,840 at the reviewed 528k baseline so provider
+    // variance cannot discard a valid one-shot proof after it has returned.
+    // The append-only Build ledger still charges actual usage only.
+    'media.vision-preflight': 0.03,
   }
   // Every provider task and deterministic integration receives a declared
   // slice. Text adventure reserves separate bounded specialists for the
@@ -538,7 +635,7 @@ export async function createProductProductionPlanV3(input: {
   const activeMediaTaskCount = textAdventure
     ? visualArtifactKeys.length + audioArtifactKeys.length
     : activeMediaLaneCount
-  const textAdventureDeterministicTaskCount = textAdventure ? 12 + Number(activeVisual) * 2 : 4
+  const textAdventureDeterministicTaskCount = textAdventure ? 13 + Number(activeVisual) * 2 : 4
   const durationSlots = modelTaskCount + textAdventureDeterministicTaskCount + activeMediaTaskCount
   const perDuration = Math.floor(
     brief.productionBudget.maximumDurationMs / Math.max(1, durationSlots + retryReserveSlots),
@@ -582,16 +679,45 @@ export async function createProductProductionPlanV3(input: {
     // response is not rejected against the generic average after it returns.
     // The complete Plan still stays inside the author-approved Build duration
     // envelope and the append-only ledger charges actual time.
-    durationMs: textAdventure && (
-      /^content\.scene-script\.act-[1-3]\.part-[1-2]$/.test(taskKey)
-      || /^content\.quest-script\./.test(taskKey)
-      || /^content\.dialogue-pass\.act-[1-3]$/.test(taskKey)
-      || taskKey === 'content.source-sufficiency'
-      || taskKey === 'content.main-quest-plan'
-    )
-      ? 300_000
+    durationMs: textAdventure && /^content\.scene-script\.act-[1-3]\.part-[1-2]$/.test(taskKey)
+      // A live commercial scene packet reached the former 300-second bound
+      // before the provider could return its long structured prose. Give only
+      // scene-writer Runs a measured seven-minute envelope; all calls remain
+      // abortable, metered and bounded by the Build lifetime ledger.
+      ? 420_000
+      : textAdventure && (
+        /^content\.quest-script\.main\.act-[1-3]\.(?:single|multi)$/.test(taskKey)
+        || taskKey === 'content.main-quest-plan'
+      )
+        // Live repair production reached the former five-minute contract in
+        // both the main-quest planner and a main-route script compiler. These
+        // Runs own full-act objective/alternative closure, so align their
+        // receipt reservation with a bounded seven-minute hard timeout.
+        ? 420_000
+      : textAdventure && (
+        taskKey === 'content.quest-script.supplemental'
+        || /^content\.dialogue-pass\.act-[1-3]$/.test(taskKey)
+        || taskKey === 'content.source-sufficiency'
+      ) ? 300_000
+      : textAdventure && (
+        taskKey === 'content.adventure-side-quests'
+        || taskKey === 'content.adventure-ambient-events'
+      )
+        // A real directed-repair side-quest Run returned a valid candidate at
+        // 207.3s. Match the already-frozen four-minute task timeout so a paid,
+        // schema-valid response is not rejected against the generic 180s
+        // receipt reservation after it has completed.
+        ? 240_000
       : textAdventure && taskKey === 'media.requirements'
         ? 180_000
+      : textAdventure && /^content\.adventure-quality-review\.(structure|act-[1-3])$/.test(taskKey)
+        // Commercial review batches inspect the complete frozen narrative
+        // closure. A real provider receipt reached 185.8s, so the former
+        // generic 180s reservation could reject a successful paid response.
+        // A later cross-epoch repair review reached the full 240s contract.
+        // Six minutes gives the read-only reviewer enough time to traverse
+        // all frozen evidence while retaining a hard abortable bound.
+        ? 360_000
       : textAdventure && taskKey === 'media.visual-quality-review'
         ? 270_000
       : textAdventure
@@ -730,6 +856,24 @@ export async function createProductProductionPlanV3(input: {
       acceptanceGateIds: ['artifact.protocol', 'adventure.narrative-arc-plan'],
     }),
     productionTask({
+      taskKey: 'content.ending-route-plan', lane: 'planning', kind: 'text-adventure-ending-route-plan',
+      skillId: 'text-adventure.ending-route-plan.v1', executionMode: 'model',
+      dependsOn: [
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.narrative-arc-plan',
+      ],
+      inputArtifactKeys: [
+        'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+        'content.narrative-arc-plan',
+      ],
+      outputArtifactKeys: ['content.ending-route-plan'], requirementKeys: [],
+      capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+      subjectLockKeys: ['content.ending-route-plan'], priority: 87,
+      budgetReservation: modelBudget('content.ending-route-plan'),
+      maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'adventure.ending-route-plan'],
+    }),
+    productionTask({
       taskKey: 'content.main-quest-plan', lane: 'planning', kind: 'text-adventure-main-quest-plan',
       skillId: 'text-adventure.production-mainline.v1', executionMode: 'model',
       dependsOn: [
@@ -743,7 +887,7 @@ export async function createProductProductionPlanV3(input: {
       outputArtifactKeys: ['content.main-quest-plan'], requirementKeys: [],
       capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
       subjectLockKeys: ['content.main-quest-plan'], priority: 87, budgetReservation: modelBudget('content.main-quest-plan'),
-      maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      maxAttempts: 2, timeoutMs: 420_000, failurePolicy: 'pause', fallbackTaskKey: null,
       acceptanceGateIds: ['artifact.protocol', 'adventure.main-quest-plan'],
     }),
   )
@@ -808,7 +952,7 @@ export async function createProductProductionPlanV3(input: {
           capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
           subjectLockKeys: [taskKey], priority: 82 - act * 2 - Number(routeClass === 'multi'),
           budgetReservation: modelBudget(taskKey),
-          maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
+          maxAttempts: 2, timeoutMs: 420_000, failurePolicy: 'pause', fallbackTaskKey: null,
           acceptanceGateIds: ['artifact.protocol', 'adventure.quest-script-part'],
         }))
       }
@@ -853,6 +997,7 @@ export async function createProductProductionPlanV3(input: {
     const sceneScriptDependencies = [
       'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
       'content.product-module', 'content.narrative-arc-plan',
+      'content.ending-route-plan',
       'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events',
       'content.quest-script',
     ]
@@ -868,7 +1013,7 @@ export async function createProductProductionPlanV3(input: {
         outputArtifactKeys: [taskKey], requirementKeys: [],
         capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
         subjectLockKeys: [taskKey], priority: 79 - act, budgetReservation: modelBudget(taskKey),
-        maxAttempts: 2, timeoutMs: 300_000, failurePolicy: 'pause', fallbackTaskKey: null,
+        maxAttempts: 2, timeoutMs: 420_000, failurePolicy: 'pause', fallbackTaskKey: null,
         acceptanceGateIds: ['artifact.protocol', 'adventure.scene-script-part'],
       }))
       const taskKey = `content.scene-script.act-${act}`
@@ -919,11 +1064,13 @@ export async function createProductProductionPlanV3(input: {
       dependsOn: [
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
         'content.narrative-arc-plan',
+        'content.ending-route-plan',
         ...sceneScriptTaskKeys, ...dialoguePassTaskKeys,
       ],
       inputArtifactKeys: [
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
         'content.narrative-arc-plan',
+        'content.ending-route-plan',
         ...sceneScriptTaskKeys, ...dialoguePassTaskKeys,
       ],
       outputArtifactKeys: ['content.narrative'], requirementKeys: [],
@@ -934,32 +1081,58 @@ export async function createProductProductionPlanV3(input: {
       acceptanceGateIds: ['artifact.protocol', 'narrative.graph'],
     }))
   }
-  if (textAdventure) tasks.push(productionTask({
-    taskKey: 'content.adventure-quality-review', lane: 'qa', kind: 'text-adventure-quality-review',
-    skillId: 'text-adventure.production-quality-review.v1', executionMode: 'model',
-    dependsOn: [
-      'production.supervision',
-      'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
-      'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
-      'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
-      'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2',
-      'content.dialogue-pass.act-3', 'integration.narrative',
-    ],
-    inputArtifactKeys: [
-      'production.supervision',
-      'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
-      'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
-      'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
-      'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2',
-      'content.dialogue-pass.act-3', 'content.narrative',
-    ],
-    outputArtifactKeys: ['quality.adventure-review'], requirementKeys: [],
-    capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
-    subjectLockKeys: ['quality.adventure-review'], priority: 75,
-    budgetReservation: modelBudget('content.adventure-quality-review'),
-    maxAttempts: 2, timeoutMs: 240_000, failurePolicy: 'pause', fallbackTaskKey: null,
-    acceptanceGateIds: ['artifact.protocol', 'adventure.narrative-quality-review'],
-  }))
+  const textAdventureQualitySourceTaskKeys = [
+    'production.supervision',
+    'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+    'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
+    'content.ending-route-plan',
+    'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
+    'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2',
+    'content.dialogue-pass.act-3', 'integration.narrative',
+  ]
+  const textAdventureQualitySourceArtifactKeys = [
+    'production.supervision',
+    'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+    'content.product-module', 'content.narrative-arc-plan', 'content.main-quest-plan',
+    'content.ending-route-plan',
+    'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
+    'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2',
+    'content.dialogue-pass.act-3', 'content.narrative',
+  ]
+  const textAdventureQualityBatchTaskKeys = textAdventureQualityReviewBatchTaskKeysV1()
+  if (textAdventure) {
+    TEXT_ADVENTURE_QUALITY_REVIEW_SCOPES_V1.forEach((scope, index) => {
+      const taskKey = textAdventureQualityReviewTaskKeyV1(scope)
+      const artifactKey = textAdventureQualityReviewBatchArtifactKeyV1(scope)
+      tasks.push(productionTask({
+        taskKey, lane: 'qa', kind: 'text-adventure-quality-review-batch',
+        skillId: 'text-adventure.production-quality-review.v1', executionMode: 'model',
+        dependsOn: textAdventureQualitySourceTaskKeys,
+        inputArtifactKeys: textAdventureQualitySourceArtifactKeys,
+        outputArtifactKeys: [artifactKey], requirementKeys: [],
+        capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+        subjectLockKeys: [artifactKey], priority: 78 - index,
+        budgetReservation: modelBudget(taskKey),
+        maxAttempts: 2, timeoutMs: 360_000, failurePolicy: 'pause', fallbackTaskKey: null,
+        acceptanceGateIds: ['artifact.protocol', 'adventure.narrative-quality-review-batch'],
+      }))
+    })
+    tasks.push(productionTask({
+      taskKey: 'content.adventure-quality-review', lane: 'qa',
+      kind: 'text-adventure-quality-review-assembly', skillId: null,
+      executionMode: 'deterministic', dependsOn: textAdventureQualityBatchTaskKeys,
+      inputArtifactKeys: [
+        ...textAdventureQualitySourceArtifactKeys,
+        ...TEXT_ADVENTURE_QUALITY_REVIEW_SCOPES_V1.map(textAdventureQualityReviewBatchArtifactKeyV1),
+      ],
+      outputArtifactKeys: ['quality.adventure-review'], requirementKeys: [],
+      capabilityRequirementKeys: [], concurrencyGroup: 'deterministic',
+      subjectLockKeys: ['quality.adventure-review'], priority: 74,
+      budgetReservation: reservation({ durationMs: perDuration }),
+      maxAttempts: 1, timeoutMs: 120_000, failurePolicy: 'pause', fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'adventure.narrative-quality-review'],
+    }))
+  }
   const mediaDependenciesForContent = textAdventure
     ? ['content.adventure-quality-review']
     : ['content.design']
@@ -995,10 +1168,21 @@ export async function createProductProductionPlanV3(input: {
     acceptanceGateIds: ['artifact.protocol', 'media.visual-bible'],
   }))
   if (textAdventure && activeVisual) tasks.push(productionTask({
+    taskKey: 'media.vision-preflight', lane: 'planning', kind: 'text-adventure-vision-capability-preflight',
+    skillId: 'text-adventure.visual-quality-review.v1', executionMode: 'model',
+    dependsOn: ['media.visual-bible.compile'], inputArtifactKeys: ['media.visual-bible'],
+    outputArtifactKeys: ['media.vision-preflight'], requirementKeys: [],
+    capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
+    subjectLockKeys: ['media.vision-preflight'], priority: 75,
+    budgetReservation: modelBudget('media.vision-preflight'), maxAttempts: 1,
+    timeoutMs: 60_000, failurePolicy: 'pause', fallbackTaskKey: null,
+    acceptanceGateIds: ['artifact.protocol', 'media.vision-input-capability'],
+  }))
+  if (textAdventure && activeVisual) tasks.push(productionTask({
     taskKey: 'media.anchor-author-gate', lane: 'planning', kind: 'text-adventure-media-anchor-decision',
-    skillId: null, executionMode: 'deterministic', dependsOn: ['media.visual-bible.compile'],
-    inputArtifactKeys: ['content.cast-bible', 'media.visual-bible'],
-    outputArtifactKeys: ['media.anchor-decision'], requirementKeys: [], capabilityRequirementKeys: [],
+    skillId: null, executionMode: 'deterministic', dependsOn: ['media.vision-preflight'],
+    inputArtifactKeys: ['content.cast-bible', 'media.visual-bible', 'media.vision-preflight'],
+    outputArtifactKeys: ['media.anchor-decision'], requirementKeys: [], capabilityRequirementKeys: textCapabilities,
     concurrencyGroup: 'deterministic', subjectLockKeys: ['media.anchor-decision'], priority: 74,
     budgetReservation: reservation({ durationMs: perDuration }), maxAttempts: 1,
     timeoutMs: 30_000, failurePolicy: 'pause', fallbackTaskKey: null,
@@ -1097,6 +1281,7 @@ export async function createProductProductionPlanV3(input: {
         'production.supervision',
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
         'content.narrative-arc-plan', 'content.main-quest-plan', 'content.adventure-side-quests',
+        'content.ending-route-plan',
         'content.adventure-ambient-events', 'content.quest-script',
         'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3',
         'content.adventure-quality-review',
@@ -1113,6 +1298,7 @@ export async function createProductProductionPlanV3(input: {
         'production.supervision',
         'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
         'content.narrative-arc-plan', 'content.main-quest-plan', 'content.adventure-side-quests',
+        'content.ending-route-plan',
         'content.adventure-ambient-events', 'content.quest-script',
         'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3',
         'quality.adventure-review',

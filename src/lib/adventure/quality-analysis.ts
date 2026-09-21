@@ -50,7 +50,7 @@ export interface TextAdventureRouteQualityAnalysisV1 {
 }
 
 const PLACEHOLDER_PATTERN = /(?:产品角色\s*\d+|generated:participant|TODO|TBD|占位(?:符|角色|文本))/iu
-const INSTRUCTION_LEAK_PATTERN = /(?:输出字段|不得省略|修复反馈|taskKey|system\s*prompt|JSON\s*对象|请按.{0,16}(?:格式|要求).{0,8}(?:输出|生成))/iu
+const INSTRUCTION_LEAK_PATTERN = /(?:本轮演化\s*[：:]|输出字段|不得省略|修复反馈|taskKey|system\s*prompt|JSON\s*对象|请按.{0,16}(?:格式|要求).{0,8}(?:输出|生成))/iu
 const MIXED_LANGUAGE_PATTERN = /(?:[\p{Script=Han}]\s+[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})*\s+[\p{Script=Han}]|[A-Za-z]{2,}\s+[\p{Script=Han}])/u
 
 export function countPlayerVisibleTextUnitsV1(values: readonly string[]): number {

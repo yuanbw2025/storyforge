@@ -149,6 +149,21 @@ export function evaluateProductRuntimeProductQualityV1(input: {
       )).length
       const mappedNarrativeActions = adventure.actions.filter(action => action.narrativeChoiceKey != null)
       const narrativeChoices = new Map(narrative.choices.map(choice => [choice.choiceKey, choice]))
+      const mappedNarrativeChoiceKeys = mappedNarrativeActions.map(action => action.narrativeChoiceKey!)
+      const mappedNarrativeChoiceCounts = mappedNarrativeChoiceKeys.reduce((counts, choiceKey) => {
+        counts.set(choiceKey, (counts.get(choiceKey) ?? 0) + 1)
+        return counts
+      }, new Map<string, number>())
+      const uniqueMappedNarrativeChoiceKeys = new Set(mappedNarrativeChoiceKeys)
+      const unmappedNarrativeChoiceKeys = [...narrativeChoices.keys()].filter(choiceKey => (
+        !uniqueMappedNarrativeChoiceKeys.has(choiceKey)
+      ))
+      const orphanMappedNarrativeChoiceKeys = [...uniqueMappedNarrativeChoiceKeys].filter(choiceKey => (
+        !narrativeChoices.has(choiceKey)
+      ))
+      const duplicateMappedNarrativeChoiceKeys = [...uniqueMappedNarrativeChoiceKeys].filter(choiceKey => (
+        mappedNarrativeChoiceCounts.get(choiceKey) !== 1
+      ))
       const bridgedNarrativeActions = mappedNarrativeActions.filter(action => (
         narrativeChoices.get(action.narrativeChoiceKey!)?.tags.includes(`adventure-action:${action.key}`)
       ))
@@ -249,9 +264,19 @@ export function evaluateProductRuntimeProductQualityV1(input: {
           `storylets=${adventure.storylets.length}/${productionContract?.narrative.targetAmbientEventCount ?? 'legacy'}`,
           `endings=${adventure.endings.length}/${productionContract?.narrative.targetEndingCount ?? 'legacy'}`,
         ]),
-        gate('product.adventure.v2-choice-bridge', mappedNarrativeActions.length >= 1
+        gate('product.adventure.v2-choice-bridge', narrativeChoices.size >= 1
+          && mappedNarrativeActions.length === narrativeChoices.size
+          && uniqueMappedNarrativeChoiceKeys.size === narrativeChoices.size
           && bridgedNarrativeActions.length === mappedNarrativeActions.length,
-        [`mapped=${mappedNarrativeActions.length}`, `bridged=${bridgedNarrativeActions.length}`]),
+        [
+          `choices=${narrativeChoices.size}`,
+          `mapped=${mappedNarrativeActions.length}`,
+          `unique=${uniqueMappedNarrativeChoiceKeys.size}`,
+          `bridged=${bridgedNarrativeActions.length}`,
+          `unmapped=${unmappedNarrativeChoiceKeys.join(',') || 'none'}`,
+          `orphan=${orphanMappedNarrativeChoiceKeys.join(',') || 'none'}`,
+          `duplicate=${duplicateMappedNarrativeChoiceKeys.join(',') || 'none'}`,
+        ]),
         gate('product.adventure.v2-character-presence', invalidTalkActions.length === 0
           && placeholderSurfaces.length === 0
           && (authoredNpcProfiles.length === 0 || talkActions.length >= 1), [

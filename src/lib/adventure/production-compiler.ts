@@ -15,11 +15,13 @@ import type {
 } from './production-artifacts'
 import type {
   TextAdventureCastBibleArtifactV1,
+  TextAdventureEndingRoutePlanArtifactV1,
   TextAdventureNarrativeArcPlanArtifactV1,
   TextAdventureQuestPlanArtifactV1,
   TextAdventureQuestScriptArtifactV2,
 } from './production-artifacts-v2'
 import { planTextAdventureNarrativeLocationsV1 } from './narrative-location-plan'
+import { textAdventurePublicPlayerDescriptionV1 } from '../product-production/public-copy'
 
 export interface TextAdventureProductionCompilerInputV1 {
   brief: ProductProductionBriefV3
@@ -29,6 +31,7 @@ export interface TextAdventureProductionCompilerInputV1 {
   systems: TextAdventureSystemsArtifactV1
   cast: TextAdventureCastBibleArtifactV1
   arcPlan: TextAdventureNarrativeArcPlanArtifactV1
+  endingRoutePlan: TextAdventureEndingRoutePlanArtifactV1
   mainQuestPlan: TextAdventureQuestPlanArtifactV1
   questScript: TextAdventureQuestScriptArtifactV2
   sideQuests: TextAdventureQuestBundleArtifactV2
@@ -48,26 +51,64 @@ function participantKeyForCastIndex(index: number): string {
   return `participant.cast.${pad(index)}`
 }
 
+export function conciseTextAdventureActionLabelV1(value: string, maximumUnits = 32): string {
+  const normalized = value.trim()
+  if ([...normalized.replace(/\s+/g, '')].length <= maximumUnits) return normalized
+  const firstClause = normalized.split(/[，。；！？\n]/u).map(item => item.trim()).find(Boolean) ?? normalized
+  if ([...firstClause.replace(/\s+/g, '')].length <= maximumUnits) return firstClause
+  return `${[...firstClause].slice(0, Math.max(1, maximumUnits - 1)).join('').trimEnd()}…`
+}
+
+export type TextAdventureDecisionEchoPresentationV1 = {
+  label: string
+  description: string
+  successText: string
+  costlySuccessText: string
+  failureText: string
+  unavailableText: string
+}
+
 /**
- * Partition the ending space with a deterministic prefix tree. This makes the
- * route's earlier decisions authoritative: the final menu cannot silently
- * replace them with an unrelated ending.
+ * Compile the exact player-visible route echo once, then reuse the same pure
+ * projection in RuntimePackage assembly and the pre-release narrative review.
+ * This prevents a reviewer from treating a registered condition-gated echo as
+ * absent merely because the runtime package has not been assembled yet.
  */
-function endingDecisionRequirementKeysV1(
-  arcPlan: TextAdventureNarrativeArcPlanArtifactV1,
+export function textAdventureDecisionEchoPresentationV1(input: {
+  decisionPrompt: string
+  optionLabel: string
+  optionCost: string
+  sceneTitle: string
+  sceneConflict: string
+}): TextAdventureDecisionEchoPresentationV1 {
+  const cost = /[。！？]$/u.test(input.optionCost.trim())
+    ? input.optionCost.trim() : `${input.optionCost.trim()}。`
+  return {
+    label: `回响：${input.optionLabel}`,
+    description: `此前的决定正在改变「${input.sceneTitle}」的局面。`,
+    successText: `来到「${input.sceneTitle}」，你先前面对“${input.decisionPrompt}”时选择“${input.optionLabel}”的后果显现。${cost}眼前的冲突“${input.sceneConflict}”因此出现了只属于这条路线的回应。`,
+    costlySuccessText: `「${input.sceneTitle}」再次让你感到“${input.optionLabel}”留下的代价。`,
+    failureText: '这段回响没有发生。',
+    unavailableText: '只有作出对应决定后，才能看见这段回响。',
+  }
+}
+
+/**
+ * Project the accepted semantic route partition into deterministic runtime
+ * requirements. The strict artifact parser proves completeness and mutual
+ * exclusion before this compiler is reached.
+ */
+export function textAdventureEndingRouteRequirementsV1(
+  endingRoutePlan: TextAdventureEndingRoutePlanArtifactV1,
   endingKeys: readonly string[],
 ): Map<string, string[]> {
-  const result = new Map<string, string[]>()
-  if (endingKeys.length <= 1 || arcPlan.decisions.length < endingKeys.length - 1) return result
-  endingKeys.forEach((endingKey, endingIndex) => {
-    const conditionKeys = arcPlan.decisions.slice(0, endingIndex)
-      .map(decision => decision.options[1].persistentEffectKey)
-    if (endingIndex < endingKeys.length - 1) {
-      conditionKeys.push(arcPlan.decisions[endingIndex].options[0].persistentEffectKey)
-    }
-    result.set(endingKey, conditionKeys)
-  })
-  return result
+  const routeByEnding = new Map(endingRoutePlan.routes.map(route => [route.endingKey, route] as const))
+  if (routeByEnding.size !== endingKeys.length) fail('结局路线数量与运行结局不一致')
+  return new Map(endingKeys.map(endingKey => {
+    const route = routeByEnding.get(endingKey)
+    if (!route) fail(`结局路线缺少运行结局:${endingKey}`)
+    return [endingKey, [...route.requiredEffectKeys]] as const
+  }))
 }
 
 export function compileTextAdventureInteractionV1(input: {
@@ -75,6 +116,7 @@ export function compileTextAdventureInteractionV1(input: {
   narrative: ProductRuntimePackageV1['narrative']
   cast: TextAdventureCastBibleArtifactV1
   arcPlan: TextAdventureNarrativeArcPlanArtifactV1
+  endingRoutePlan: TextAdventureEndingRoutePlanArtifactV1
 }): FrozenInteractionRuntimeV2 {
   const npcs = input.cast.characters.filter(character => character.role !== 'player')
   if (!npcs.length) fail('角色圣经没有可互动 NPC')
@@ -206,6 +248,7 @@ export function compileTextAdventureModuleV2(
   for (const scene of scenes) if (!firstSceneForLocation.has(scene.locationKey)) firstSceneForLocation.set(scene.locationKey, scene.key)
   const sceneForNode = new Map(narrativeNodes.map((node, index) => [node.key, scenes[index]]))
   const arcSceneCards = input.arcPlan.acts.flatMap(act => act.sceneCards)
+  const arcSceneCardByKey = new Map(arcSceneCards.map(sceneCard => [sceneCard.key, sceneCard]))
   const sceneForArcKey = new Map(arcSceneCards.map((sceneCard, index) => [sceneCard.key, scenes[index]]))
   const narrativeNodeForScene = new Map(narrativeNodes.map((node, index) => [scenes[index].key, node.key]))
   const locationForNode = new Map([...sceneForNode].map(([nodeKey, scene]) => [nodeKey, scene.locationKey]))
@@ -266,7 +309,14 @@ export function compileTextAdventureModuleV2(
   const actions: AdventureActionDefinition[] = []
   const actionScene = new Map<string, string>()
   const registerAction = (action: AdventureActionDefinition, sceneKey?: string) => {
-    actions.push(action)
+    // Every generated title ultimately crosses this single player-visible
+    // boundary.  Source, quest and storylet titles are authored/model-owned
+    // and may be arbitrarily long, so protecting only narrative choices leaves
+    // the remaining action families capable of failing the commercial copy
+    // gate.  Normalize here so every V2 runtime action obeys the same compact
+    // interaction contract without discarding the full text in description or
+    // result copy.
+    actions.push({ ...action, label: conciseTextAdventureActionLabelV1(action.label) })
     actionScene.set(action.key, sceneKey ?? firstSceneForLocation.get(action.locationKey) ?? scenes[0].key)
   }
 
@@ -455,7 +505,10 @@ export function compileTextAdventureModuleV2(
 
   const orderedEndingNodeKeys = input.narrative.nodes.filter(node => node.kind === 'ending').map(node => node.key)
   const endingNodeKeys = new Set(orderedEndingNodeKeys)
-  const endingDecisionRequirements = endingDecisionRequirementKeysV1(input.arcPlan, orderedEndingNodeKeys)
+  const endingDecisionRequirements = textAdventureEndingRouteRequirementsV1(
+    input.endingRoutePlan,
+    orderedEndingNodeKeys,
+  )
   const choiceBySource = new Map<string, typeof input.narrative.choices>()
   for (const choice of input.narrative.choices) {
     choiceBySource.set(choice.sourceNodeKey, [...(choiceBySource.get(choice.sourceNodeKey) ?? []), choice])
@@ -499,7 +552,8 @@ export function compileTextAdventureModuleV2(
         { op: 'change-resource', resourceKey: clock.key, delta: Math.max(5, Math.round(60 / Math.max(1, narrativeNodes.length))) } as const,
       ]
       registerAction({
-        key: `action.choice.${choice.choiceKey}`, kind: targetLocationKey ? 'move' : 'quest-action', label: choice.text,
+        key: `action.choice.${choice.choiceKey}`, kind: targetLocationKey ? 'move' : 'quest-action',
+        label: conciseTextAdventureActionLabelV1(choice.text),
         description: choice.description || `推进主线：${choice.text}`, locationKey,
         targetKey: targetLocationKey ?? null, requirements: [
           { narrativePath: '__storyforge.currentNarrativeNodeKey', narrativeEquals: choice.sourceNodeKey },
@@ -527,13 +581,23 @@ export function compileTextAdventureModuleV2(
   for (const decision of input.arcPlan.decisions) for (const option of decision.options) {
     for (const echoSceneKey of option.echoSceneKeys) {
       const scene = sceneForArcKey.get(echoSceneKey)
+      const sceneCard = arcSceneCardByKey.get(echoSceneKey)
       const narrativeNodeKey = scene ? narrativeNodeForScene.get(scene.key) : null
-      if (!scene || !narrativeNodeKey) fail(`决定回响没有 Runtime 场景:${decision.key}->${echoSceneKey}`)
+      if (!scene || !sceneCard || !narrativeNodeKey) {
+        fail(`决定回响没有 Runtime 场景:${decision.key}->${echoSceneKey}`)
+      }
+      const echo = textAdventureDecisionEchoPresentationV1({
+        decisionPrompt: decision.prompt,
+        optionLabel: option.label,
+        optionCost: option.cost,
+        sceneTitle: scene.title,
+        sceneConflict: sceneCard.conflict,
+      })
       registerAction({
         key: `action.echo.${decision.key}.${option.key}.${echoSceneKey}`,
         kind: 'look',
-        label: `回响：${option.label}`,
-        description: `此前的选择正在影响${scene.title}。`,
+        label: echo.label,
+        description: echo.description,
         locationKey: scene.locationKey,
         targetKey: null,
         requirements: [
@@ -542,10 +606,10 @@ export function compileTextAdventureModuleV2(
         ],
         rule: { kind: 'automatic' },
         successEffects: [], costlySuccessEffects: [], failureEffects: [],
-        successText: `你曾面对“${decision.prompt}”，并选择了“${option.label}”。${option.cost}。这个决定已经改变眼前人物的立场与可用道路。`,
-        costlySuccessText: `你再次感到“${option.label}”留下的代价。`,
-        failureText: '这段回响没有发生。',
-        unavailableText: '只有作出对应决定后，才能看见这段回响。',
+        successText: echo.successText,
+        costlySuccessText: echo.costlySuccessText,
+        failureText: echo.failureText,
+        unavailableText: echo.unavailableText,
         repeatable: true, narrativeChoiceKey: null, interaction: null,
       }, scene.key)
     }
@@ -569,6 +633,7 @@ export function compileTextAdventureModuleV2(
       const script = scriptByEntry.get(entry.key)
       if (!script) fail(`${bundle.bundleKind} 条目缺少 Quest Script:${entry.key}`)
       const firstLocation = locations[(entry.stages[0].locationOrdinal - 1) % locations.length]
+      const intakeLocation = locations.find(location => entry.hook.includes(location.title)) ?? firstLocation
       const questKey = `quest.${bundle.bundleKind}.${entry.key}`
       const intakeStageKey = `stage.${bundle.bundleKind}.${entry.key}.intake`
       const intakeObjectiveKey = `objective.${bundle.bundleKind}.${entry.key}.intake`
@@ -618,7 +683,9 @@ export function compileTextAdventureModuleV2(
       })
       if (bundle.bundleKind === 'side') registerAction({
         key: acceptActionKey, kind: 'quest-action', label: `接取：${entry.title}`,
-        description: entry.hook, locationKey: firstLocation.key, targetKey: null,
+        description: entry.hook.includes(intakeLocation.title)
+          ? entry.hook : `${entry.hook}\n地点：${intakeLocation.title}`,
+        locationKey: intakeLocation.key, targetKey: null,
         requirements: [{ questKey, questStatus: 'available' }], rule: { kind: 'automatic' },
         successEffects: [
           { op: 'accept-quest', questKey },
@@ -833,7 +900,10 @@ export function compileTextAdventureModuleV2(
   const parsed = parseAdventureContent({
     schema: 'storyforge.text-adventure.content', version: 2, recipeKey: 'general-adventure.v1',
     initialLocationKey: entryLocationKey, playerKey: 'player',
-    playerIdentity: { name: input.brief.intent.playerRole, description: input.brief.intent.openingSituation },
+    playerIdentity: {
+      name: input.brief.intent.playerRole,
+      description: textAdventurePublicPlayerDescriptionV1(input.brief),
+    },
     capabilities: ['space', 'character', 'inventory', 'equipment', 'quests', 'time', 'storylets', 'endings'].map(key => ({
       key, version: 1, enabled: true, required: true,
     })),

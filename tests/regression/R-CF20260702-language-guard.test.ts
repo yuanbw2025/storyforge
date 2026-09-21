@@ -11,6 +11,7 @@ import {
 import {
   findTextAdventurePlayerVisibleLanguageIssuesV1,
   groupTextAdventurePlayerVisibleLanguageIssuesV1,
+  repairKnownTextAdventureLanguageLeaksV1,
 } from '../../src/lib/adventure/language-quality'
 
 const textOf = (messages: { content: string }[]) => messages.map(m => m.content).join('\n\n')
@@ -81,5 +82,42 @@ describe('R-CF20260702-language-guard', () => {
         artifactKey, payload: { revisedText: '她 waits for the bell。' },
       }])).toEqual([expect.objectContaining({ artifactKey, tokens: ['waits', 'for', 'the', 'bell'] })])
     }
+  })
+
+  it('只确定性修复无歧义的已知外语残片，其他泄漏仍由严格质量门拒绝', () => {
+    const repaired = repairKnownTextAdventureLanguageLeaksV1({
+      artifactKey: 'content.scene-script.act-1.part-2',
+      payload: {
+        scenes: [{ beats: [
+          { text: 'Nobody 回答，只有潮声。' },
+          { text: '他 carefully 收起铜钟。' },
+        ] }],
+        cost: '消耗 stamina 10 与 mana 5，需先完成 objective.02',
+        machineKey: 'Nobody.must-remain-outside-player-fields',
+      },
+    })
+    expect(repaired.repairedFields).toEqual(['scenes[0].beats[0].text', 'cost'])
+    expect(repaired.payload).toMatchObject({
+      scenes: [{ beats: [
+        { text: '没有人回答，只有潮声。' },
+        { text: '他 carefully 收起铜钟。' },
+      ] }],
+      cost: '消耗体力 10 与法力 5，需先完成目标 02',
+      machineKey: 'Nobody.must-remain-outside-player-fields',
+    })
+    expect(findTextAdventurePlayerVisibleLanguageIssuesV1([{
+      artifactKey: 'content.scene-script.act-1.part-2', payload: repaired.payload,
+    }])).toEqual([expect.objectContaining({
+      path: 'scenes[0].beats[1].text', tokens: ['carefully'],
+    })])
+  })
+
+  it('文字冒险把任务代价视为玩家可见字段', () => {
+    expect(findTextAdventurePlayerVisibleLanguageIssuesV1([{
+      artifactKey: 'content.main-quest-plan',
+      payload: { alternatives: [{ cost: '消耗 stamina 10，需完成 objective.02' }] },
+    }])).toEqual([expect.objectContaining({
+      path: 'alternatives[0].cost', tokens: ['stamina', 'objective'],
+    })])
   })
 })

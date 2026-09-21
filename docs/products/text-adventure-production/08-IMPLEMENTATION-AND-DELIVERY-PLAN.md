@@ -1,6 +1,6 @@
 # 08 · 实现、迁移与旗舰交付计划
 
-> 层级：L2 · 版本：2.7.0 · 生效：2026-09-10
+> 层级：L2 · 版本：2.9.0 · 生效：2026-09-21
 > 性质：当前施工顺序；每批必须留下代码、测试、文档和提交证据。
 
 ## 总原则
@@ -30,7 +30,7 @@
 
 ## 批次 C · Agent 身份、Skill 与工件合同
 
-状态：18 个独立 Agent 均只有一个核心 Skill；计划测试验证 18 个岗位全部进入真实模型任务，并拒绝同一岗位出现第二个 Skill。叙事设计师的单一 Skill 通过两个有界 Run 生成结构与决定子工件，再由确定性装配器形成正式叙事弧。Showrunner 的 `production.supervision`、专业规划、分场、对白、连续性审校、Visual QA Director 和 Playtest Director 工件均有独立 parser/Run Contract/receipt。
+状态：19 个独立 Agent 均只有一个核心 Skill；计划测试验证 19 个岗位全部进入真实模型任务，并拒绝同一岗位出现第二个 Skill。叙事设计师的单一 Skill 通过两个有界 Run 生成结构与决定子工件，再由确定性装配器形成正式叙事弧；独立结局路线设计师再把结局绑定到互斥、完备、可穷举验证的持久效果条件。Showrunner 的 `production.supervision`、专业规划、分场、对白、连续性审校、Visual QA Director 和 Playtest Director 工件均有独立 parser/Run Contract/receipt。
 
 - 扩展 Domain Agent Registry，登记专业 Agent、owner、UI 标签和最小权限。
 - 新增来源审计、故事/角色圣经、弧计划、主支线计划、任务脚本、场景、对白、连续性、美术与试玩策略的严格 schema/parser。
@@ -41,7 +41,7 @@
 
 ## 批次 D · 新 Durable DAG 与执行器
 
-状态：`production.supervision` 已成为 DAG 首个真实任务，并被来源、质量和装配链消费；专业依赖拓扑、来源决策专用闸门、分步叙事弧、六个 Scene Writer 场景包、三个确定性分幕装配、三幕 Dialogue Editor、最终确定性装配、连续性审校、自动游玩、质量门和试玩策略已接通。真实 Agnes 调用证明单次超长叙事弧或整幕正文 JSON 会出现截断、漏字段或长期不返回，因此分别拆为职责内聚的结构/决定 Run、场景包 Run 和零模型装配；Scheduler 强制超时不再依赖 Provider 是否响应 AbortSignal，任务预检及返回后证据阶段的逃逸异常也会正式失败而不留下 `running`。跨 Build runtime-only 复用回归证明不会因此把内容 Agent 错误重跑。工作台已区分来源可接受补充与阻断冲突，并保存作者命令证据；总任务与各泳道展示真实 receipt 进度，文字冒险媒资已经按单项 task 显示生成数。图片级锁定、替换和局部重跑已实现；通用文本工件 diff/锁定仍需后续批次评估。
+状态：`production.supervision` 已成为 DAG 首个真实任务，并被来源、质量和装配链消费；专业依赖拓扑、来源决策专用闸门、分步叙事弧、独立结局路线计划、六个 Scene Writer 场景包、三个确定性分幕装配、三幕 Dialogue Editor、最终确定性装配、连续性审校、自动游玩、质量门和试玩策略已接通。真实 Agnes 调用证明单次超长叙事弧或整幕正文 JSON 会出现截断、漏字段或长期不返回，因此分别拆为职责内聚的结构/决定 Run、场景包 Run 和零模型装配；Scheduler 强制超时不再依赖 Provider 是否响应 AbortSignal，任务预检及返回后证据阶段的逃逸异常也会正式失败而不留下 `running`。跨 Build runtime-only 复用回归证明不会因此把内容 Agent 错误重跑。工作台已区分来源可接受补充与阻断冲突，并保存作者命令证据；总任务与各泳道展示真实 receipt 进度，文字冒险媒资已经按单项 task 显示生成数。图片级锁定、替换和局部重跑已实现；通用文本工件 diff/锁定仍需后续批次评估。
 
 - 实现两段式计划和专业依赖拓扑；正文按 Act/场景包有界生成。
 - 构建每任务上下文投影、prompt、严格解析、candidate/adopt、checkpoint、stale 和最小修复闭包。
@@ -77,9 +77,15 @@
 
 完成判据：真实 provider 与文字降级均可构建；导出包往返等价；权利和媒资 receipt 完整。
 
+### 技术黄金路径闭合证据（2026-09-21）
+
+在继续消耗真实模型与图片额度之前，先用受控输出复验工程路径。`R-PRODUCTPROD1F-production-executor` 现已在同一次正式 Production 中覆盖：冻结 `WorldRelease` 与作者授权 Brief、专业文字冒险计划和工件生产、受治理插图生成与 Blob 固定、确定性装配、质量门、Build Preview、主线任务全部完成、抵达结局、同包原子发布，以及带完整媒资的分发包导出。测试随后把这个同一分发包原样导入隔离的新 Work，复验 Release/hash/RuntimePackage/媒资字节，并从导入 Release 再次完成全部主线目标和结局。它走正式 Scheduler、Artifact、Build、Runtime、ProductRelease 与 DistributionBundle 契约；受控 Provider 输出只替代不稳定的外部模型内容，不绕过这些边界。
+
+`text-adventure-player-package-journey.spec.ts` 另从浏览器真实下载文件开始，验证全新 Work 上传、正式 Release、角色/背包/任务 UI、行动结算、存档、刷新后重新打开已通关时间线、损坏检查点恢复、分支双结局与导入副本删除。因此当前证据是“正式同源包的代码级完整往返”加“真实浏览器文件/UI 生命周期”，不是用两个互不相干的半程样例拼接闭环；它们只证明流程通畅，不证明旗舰内容、审美或真人体验已经达标。
+
 ## 批次 G · 首个社区推荐旗舰
 
-状态：真实生产进行中，尚未形成经复核的可试玩 Build。隔离世界 `潮钟群岛旗舰来源世界 v4`、商业候选 Brief、冻结 SourcePlan 和来源私域补充决定已经建立；早期 2 图计划已沿不可变子 Build 血缘修订为至少 12 图商业计划。2026-09-10 最近一次可验证的浏览器事实是 Production `productprod.mtqcyoyo.ae9e63f7` 的 Build #46 在严格拒绝第 2 幕正文非法 `scenes[1]` 后，经作者恢复命令进入 epoch 242：25/69 个 durable task 已签收、总进度 36%，两个第 2 幕场景正文分包执行中且当时无阻塞。随后 macOS 再次锁屏，故这些计数只作为最后观测快照，不代表当前终态，也不得假定 Build #46 已完成。底座候选包的上传、双结局、刷新和删除生命周期已闭合，真实旗舰仍须完成浏览器复核、真人验收、不可变 ProductRelease、实际下载文件和全新 Work 往返。
+状态：真实旗舰生产已暂停，先完成并固化上面的技术黄金路径，不再把真实长内容当作流程调试夹具。隔离世界 `潮钟群岛旗舰来源世界 v4`、商业候选 Brief、冻结 SourcePlan 和来源私域补充决定已经建立；早期 2 图计划已沿不可变子 Build 血缘修订为至少 12 图商业计划。暂停时 Production `productprod.mtqcyoyo.ae9e63f7` 的当前 Build #105 保留 75 项冻结计划及已签收工件，投影为 30/75（规划 11/15、内容 19/24、集成 0/2、QA 0/22、视觉 0/12）；暂停递增 `controlEpoch`，旧执行者不得继续写入。底座技术路径已经闭合，但真实旗舰仍须另行恢复并完成全部内容/媒资质量闭包、真人验收、不可变 ProductRelease、实际下载文件和全新 Work 往返。
 
 - 以作者确认的 Brief 和 SourcePlan 启动新专业 DAG，生成约一小时原创文字冒险。
 - 完成结构审查、自动游玩、内容审校、媒资审查、完整真人计时试玩和有界修复。

@@ -731,7 +731,7 @@ describe('R-PRODUCTPROD-1I · durable Build quality receipts', () => {
     })
     expect(author.evidence.sessions[0]).toMatchObject({
       participantRole: 'author', elapsedMs: 16 * 60_000, choiceCount: 4,
-      meaningfulActionCount: 10, passed: true,
+      meaningfulActionCount: 11, passed: true,
     })
     await expect(requirePassedTextAdventureHumanPlaytestGateV1({
       scope: owned.scope, productBuildId: owned.buildId,

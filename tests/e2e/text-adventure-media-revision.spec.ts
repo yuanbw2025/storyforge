@@ -183,6 +183,24 @@ test('作者退回单图后从真实文件输入派生新 Build，并只在新 h
   await expect(studio).toContainText('Production 可预览')
   const first = media.locator('article').filter({ hasText: 'media.visual.001' })
   const second = media.locator('article').filter({ hasText: 'media.visual.002' })
+  const firstImage = page.getByTestId('text-adventure-media-image-media.visual.001')
+  await expect(firstImage).toHaveClass(/object-contain/)
+  await expect(firstImage).not.toHaveClass(/object-cover/)
+  const firstContract = page.getByTestId('text-adventure-media-contract-media.visual.001')
+  await expect(firstContract).toContainText('职责：')
+  await expect(firstContract).toContainText('场景 / 节拍：')
+  await expect(firstContract).toContainText('请求 / 实际尺寸：')
+  await expect(firstContract).toContainText('替代文本：')
+  await expect(firstContract).toContainText('角色锚点：')
+  await expect(firstContract).toContainText('硬约束：')
+  await expect(firstContract).toContainText('Visual QA：accept')
+  await first.getByRole('button', { name: '放大查看 media.visual.001' }).click()
+  const lightbox = page.getByTestId('text-adventure-media-lightbox-media.visual.001')
+  await expect(lightbox).toBeVisible()
+  await expect(lightbox.locator('img')).toHaveClass(/object-contain/)
+  await expect(lightbox.getByRole('link', { name: '新窗口打开' })).toHaveAttribute('target', '_blank')
+  await lightbox.getByRole('button', { name: '关闭' }).click()
+  await expect(lightbox).toBeHidden()
   await first.getByRole('textbox').fill('开场灯塔主体过暗，需要提高视觉焦点。')
   const rejectFirst = first.getByRole('button', { name: '退回修改' })
   await rejectFirst.click()
@@ -267,4 +285,88 @@ test('作者退回单图后从真实文件输入派生新 Build，并只在新 h
       assetKey: 'e2e.text-adventure.media-revision.build-2.media.visual.002', source: 'e2e-controlled-fixture',
     },
   ])
+})
+
+test('作者退回意见绑定旧图 hash 与失败回执，单图重生成只让图片任务消费 repair feedback', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge_guide_completed', 'text-adventure-author-repair-e2e')
+  })
+  let imageRequests = 0
+  await page.route('**/images/generations', async route => {
+    imageRequests += 1
+    await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"must-not-run"}' })
+  })
+  const parentImage = solidPng(1280, 720, [38, 56, 78, 255])
+  await page.goto('./')
+  const seeded = await page.evaluate(async imageBase64 => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const fixture = await importer('/storyforge/tests/helpers/text-adventure-media-revision-workbench.ts')
+    return fixture.seedTextAdventureMediaRevisionWorkbenchV1(imageBase64)
+  }, parentImage.toString('base64'))
+  await page.reload()
+  await page.getByTestId('product-tab-text-games').click()
+  await page.getByRole('button', { name: '制作', exact: true }).click()
+  const media = page.getByTestId('text-adventure-media-authoring')
+  await expect(media).toContainText('2 张冻结图片')
+  await expect(page.getByTestId('text-adventure-visual-review-layers')).toContainText('已实际观察并通过')
+  const first = media.locator('article').filter({ hasText: 'media.visual.001' })
+  const second = media.locator('article').filter({ hasText: 'media.visual.002' })
+  const note = '角色脸型和年龄偏离冻结锚点；保留服装与构图，只修正五官和年龄。'
+  const noteInput = first.getByRole('textbox')
+  await expect(noteInput).toBeEnabled()
+  await noteInput.fill(note)
+  await expect(noteInput).toHaveValue(note)
+  await first.getByRole('button', { name: '退回修改' }).click()
+  await expect(first.getByRole('button', { name: '退回修改' })).toHaveAttribute('aria-pressed', 'true')
+  await second.getByRole('button', { name: '接受此图' }).click()
+  await expect(second.getByRole('button', { name: '接受此图' })).toHaveAttribute('aria-pressed', 'true')
+  const freezeReview = media.getByRole('button', { name: '冻结本次逐图审查回执' })
+  await expect(freezeReview).toBeEnabled()
+  await freezeReview.click()
+  const regenerate = first.getByRole('button', { name: '按作者意见重生成' })
+  await expect(regenerate).toBeEnabled()
+  await regenerate.click()
+  await expect.poll(async () => page.evaluate(async productionId => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    return (await db.productProductions.get(productionId))?.currentBuildNumber ?? 0
+  }, seeded.productionId), { timeout: 20_000 }).toBe(2)
+
+  const repair = await page.evaluate(async ({ productionId, note }) => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const builds = await db.productBuilds.where('productionId').equals(productionId).sortBy('buildNumber')
+    const parent = builds[0]
+    const child = builds[1]
+    const receipt = (await db.productQualityGateReceipts.where('buildId').equals(parent.id).toArray())
+      .find((row: any) => row.gateId === 'text-adventure.visual.author-approval')
+    const feedback = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([child.id, 'media.repair-feedback']).first()
+    const payload = JSON.parse(feedback.payloadJson)
+    const plan = JSON.parse(child.planJson)
+    const imageTask = plan.tasks.find((task: any) => task.taskKey === 'media.visual.001')
+    const qaTasks = plan.tasks.filter((task: any) => task.kind === 'text-adventure-visual-quality-review-batch')
+    return {
+      parentStatus: parent.status, childNumber: child.buildNumber,
+      receiptHash: receipt.receiptHash, feedbackParentHash: feedback.parentArtifactHash,
+      carriedFrom: feedback.carriedFrom,
+      sourceReceiptHash: payload.sourceReview.gateReceiptHash,
+      priorContentHash: payload.targets[0].priorContentHash,
+      issue: payload.targets[0].issues[0],
+      imageInputs: imageTask.inputArtifactKeys,
+      qaConsumesFeedback: qaTasks.some((task: any) => task.inputArtifactKeys.includes('media.repair-feedback')),
+      note,
+    }
+  }, { productionId: seeded.productionId, note })
+  expect(repair).toMatchObject({
+    parentStatus: 'preview-ready', childNumber: 2,
+    receiptHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    feedbackParentHash: repair.receiptHash, carriedFrom: null,
+    sourceReceiptHash: repair.receiptHash,
+    priorContentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    issue: { severity: 'blocking', category: 'author-direction', detail: note, recommendation: note },
+    imageInputs: expect.arrayContaining(['media.repair-feedback']), qaConsumesFeedback: false,
+  })
+  expect(imageRequests).toBe(0)
 })
