@@ -18,6 +18,7 @@ import {
   TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_GATE_ID_V1,
   parseTextOpenWorldCreatorCalibrationEvidenceV1,
   parseTextOpenWorldCreatorGrayboxEvidenceV1,
+  parseTextOpenWorldCreatorUpdateVerificationEvidenceV1,
 } from '../../src/lib/open-world/creator-quality-contract'
 import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../../src/lib/open-world/creator-derived-authority'
 import {
@@ -805,5 +806,63 @@ describe('TOW-G5-09 · Creator质量、灰盒和问题回执', () => {
     await expect(readTextOpenWorldCreatorQualityWorkspaceV1({
       scope: seeded.scope, productionId: seeded.productionId, expectedBuildId: seeded.buildId,
     })).rejects.toThrow(/质量回执索引或Hash无效/)
+  })
+
+  it('更新验证合同要求直接后继、逐项修复路线、真人声明和保守存档策略', () => {
+    const sourceBuild = {
+      productionKey: 'text-open-world.update', buildNumber: 1,
+      packageHash: '1'.repeat(64), previewHash: '2'.repeat(64), manifestHash: '3'.repeat(64),
+      qualityReportHash: '4'.repeat(64), rootTerminalReceiptHash: '5'.repeat(64),
+    }
+    const value = {
+      schema: 'storyforge.text-open-world-creator-update-verification-evidence', version: 1,
+      sourceBuild,
+      targetBuild: {
+        ...sourceBuild, buildNumber: 2, packageHash: '6'.repeat(64), previewHash: '7'.repeat(64),
+        manifestHash: '8'.repeat(64), qualityReportHash: '9'.repeat(64), rootTerminalReceiptHash: 'a'.repeat(64),
+      },
+      sourceRelease: { releaseUid: 'release.v1', releaseVersion: 1, releaseHash: 'b'.repeat(64), packageHash: sourceBuild.packageHash },
+      targetRelease: { releaseUid: 'release.v2', releaseVersion: 2, releaseHash: 'c'.repeat(64), packageHash: '6'.repeat(64) },
+      sourceFullPlaytestReceiptHash: 'd'.repeat(64), targetFullPlaytestReceiptHash: 'e'.repeat(64),
+      repairAuthorizationHash: 'f'.repeat(64), impactPlanHash: '0'.repeat(64),
+      derivedCommandHashes: ['6'.repeat(64)],
+      targetTaskKeys: ['p3.story-arc'], staleTaskKeys: ['p3.story-arc', 'p4.quest-packs'],
+      issueResolutions: [{
+        sourceIssueReceiptHash: '1'.repeat(64), issueKey: 'issue.combat-feedback',
+        category: 'gameplay', severity: 'blocking', affectedStableKeys: ['combat.final'],
+        targetRouteWitnessKeys: ['session.route.one'],
+        verificationNote: '已由真人在新版最终战中重新复现，伤害来源现在分别显示。',
+      }],
+      lowScoreResolutions: [{
+        criterionKey: 'combat-experience', sourceRating: 2, targetRating: 4,
+        targetRouteWitnessKeys: ['session.route.one', 'session.route.two'],
+        verificationNote: '两条新版路线均由真人确认战斗反馈已经清晰且节奏合理。',
+      }],
+      compatibility: { level: 'breaking', migrationPolicy: 'pin-old-save', reportHash: '2'.repeat(64) },
+      saveWitness: {
+        mode: 'continued-on-source-release', sourceSessionWitnessKey: 'save.source',
+        sourceStateHash: '3'.repeat(64), sourceThroughSequence: 24,
+        targetSessionWitnessKey: null, targetStateHash: null, migrationPreviewHash: null,
+      },
+      humanChecks: {
+        repairedBehaviorRetested: true, oldVersionStillAvailable: true,
+        savePolicyActuallyVerified: true, noAutomationOrModelProxy: true,
+      },
+      authorNote: '修复版已完成真人更新验证。', verifiedAt: 100,
+    }
+    expect(parseTextOpenWorldCreatorUpdateVerificationEvidenceV1(value).compatibility.migrationPolicy)
+      .toBe('pin-old-save')
+    expect(() => parseTextOpenWorldCreatorUpdateVerificationEvidenceV1({
+      ...value,
+      humanChecks: { ...value.humanChecks, noAutomationOrModelProxy: false },
+    })).toThrow(/人工声明必须全部确认/)
+    expect(() => parseTextOpenWorldCreatorUpdateVerificationEvidenceV1({
+      ...value,
+      saveWitness: {
+        ...value.saveWitness, mode: 'explicit-migration-child',
+        targetSessionWitnessKey: 'save.target', targetStateHash: '4'.repeat(64),
+        migrationPreviewHash: '5'.repeat(64),
+      },
+    })).toThrow(/破坏性更新不能声明存档迁移/)
   })
 })

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   recordGraybox: vi.fn(),
   recordFullPlaytest: vi.fn(),
+  recordUpdateVerification: vi.fn(),
   recordCalibration: vi.fn(),
   recordIssue: vi.fn(),
   waiveIssue: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('../../src/lib/open-world/creator-quality', () => ({
   readTextOpenWorldCreatorQualityWorkspaceV1: mocks.read,
   recordTextOpenWorldCreatorGrayboxV1: mocks.recordGraybox,
   recordTextOpenWorldCreatorFullPlaytestV1: mocks.recordFullPlaytest,
+  recordTextOpenWorldCreatorUpdateVerificationV1: mocks.recordUpdateVerification,
   recordTextOpenWorldCreatorCalibrationV1: mocks.recordCalibration,
   recordTextOpenWorldCreatorIssueV1: mocks.recordIssue,
   waiveTextOpenWorldCreatorAdvisoryIssueV1: mocks.waiveIssue,
@@ -96,18 +98,25 @@ function workspace(input: { graybox?: boolean; issueWaived?: boolean; calibratio
       sessionId: 901, title: '完整核心循环', createdAt: 1, updatedAt: 2, completed: true,
       endingKey: 'ending.fixture',
       coverageKeys: ['checkpoint-replay', 'combat', 'governed-action', 'growth-or-economy', 'mainline-ending', 'world-exploration'],
-      missingCoverageKeys: [], eventCount: 24, checkpointCount: 2,
+      missingCoverageKeys: [], eventCount: 24, checkpointCount: 2, source: 'build-preview',
       witness: {},
     }, ...(input.twoEndings ? [{
       sessionId: 902, title: '第二结局路线', createdAt: 3, updatedAt: 4, completed: true,
       endingKey: 'ending.second',
       coverageKeys: ['checkpoint-replay', 'combat', 'governed-action', 'growth-or-economy', 'mainline-ending', 'world-exploration'],
-      missingCoverageKeys: [], eventCount: 28, checkpointCount: 2, witness: {},
+      missingCoverageKeys: [], eventCount: 28, checkpointCount: 2, source: 'build-preview', witness: {},
     }] : [])],
     grayboxReceipt: input.graybox ? receipt('text-open-world.creator.graybox', '4'.repeat(64), {
       sessions: [{ sessionWitnessKey: 'session.fixture' }],
     }) : null,
     fullPlaytestReceipt: null,
+    updateVerificationReadiness: {
+      required: false, ready: false, issue: null,
+      sourceReleaseVersion: null, targetReleaseVersion: null, compatibility: null,
+      sourceIssues: [], sourceLowScores: [], sourceSessionCandidates: [],
+      migratedSessionCandidates: [], targetRouteWitnessKeys: [],
+    },
+    updateVerificationReceipt: null,
     issues: [{ receipt: issueReceipt, waiver: issueWaiver, blocksRelease: !issueWaiver, portableJson: '{}' }],
     semanticDecisionReceipt: null, releaseQualityReceipt: null,
     releaseQualityReady: false,
@@ -136,6 +145,7 @@ describe('Text Open World G5-09 · Creator quality studio UI', () => {
     mocks.portable.mockReturnValue('{"portable":true}')
     mocks.recordGraybox.mockResolvedValue({})
     mocks.recordFullPlaytest.mockResolvedValue({})
+    mocks.recordUpdateVerification.mockResolvedValue({})
     mocks.recordCalibration.mockResolvedValue({})
     mocks.recordIssue.mockResolvedValue({ receipt: { evidence: { issueKey: 'issue.created' } } })
     mocks.waiveIssue.mockResolvedValue({})
@@ -279,6 +289,66 @@ describe('Text Open World G5-09 · Creator quality studio UI', () => {
         narrativeAndGuidanceReviewed: true, regionalAndQuestVarietyReviewed: true,
         dialogueAndKnowledgeReviewed: true, mediaAndAccessibilityReviewed: true,
         issueListComplete: true,
+      },
+    }))
+  })
+
+  it('正式修复Release逐项绑定原问题、真人路线和旧档策略后才能冻结更新回执', async () => {
+    const value = workspace({ calibration: true, twoEndings: true }) as ReturnType<typeof workspace> & Record<string, any>
+    value.buildStatus = 'released'
+    value.releaseQualityReady = true
+    value.updateVerificationReadiness = {
+      required: true, ready: true, issue: null,
+      sourceReleaseVersion: 1, targetReleaseVersion: 2,
+      compatibility: { level: 'compatible', migrationPolicy: 'additive', reportHash: '7'.repeat(64) },
+      sourceIssues: [{
+        sourceIssueReceiptHash: ISSUE_RECEIPT_HASH,
+        issueKey: 'issue.fixture', category: 'ui-accessibility', severity: 'advisory',
+        affectedStableKeys: ['ui.quest.primary'],
+      }],
+      sourceLowScores: [{ criterionKey: 'quest-variety', sourceRating: 2, targetRating: 4 }],
+      sourceSessionCandidates: [{ sessionId: 701, title: '旧版正式存档', status: 'active' }],
+      migratedSessionCandidates: [{ sessionId: 702, title: '新版迁移子档', parentSessionId: 701 }],
+      targetRouteWitnessKeys: ['session.route.one', 'session.route.two'],
+    }
+    mocks.read.mockResolvedValue(value)
+    await act(async () => root.render(createElement(TextOpenWorldCreatorQualityStudio, {
+      scope: SCOPE, productionId: 71, buildId: 81, refreshToken: '1',
+      onPreview: vi.fn(), onChanged: vi.fn(),
+    })))
+    await vi.waitFor(() => expect(host.textContent).toContain('修复版真人更新验证'))
+    const section = host.querySelector<HTMLElement>('[data-testid="text-open-world-creator-update-verification"]')!
+    const issueNote = section.querySelector<HTMLTextAreaElement>('textarea[aria-label="更新问题复测说明 issue.fixture"]')!
+    const lowNote = section.querySelector<HTMLTextAreaElement>('textarea[aria-label="更新低分复测说明 quest-variety"]')!
+    await act(async () => {
+      setValue(issueNote, '已在新版本的两条完整路线中复现并确认按钮对比度恢复。')
+      setValue(lowNote, '新版任务目标和包装差异已经在两条路线中由本人重新检查。')
+    })
+    const checks = [...section.querySelectorAll<HTMLInputElement>('fieldset input[type="checkbox"]')]
+      .filter(input => input.type === 'checkbox')
+    expect(checks).toHaveLength(4)
+    for (const checkbox of checks) await act(async () => checkbox.click())
+    const confirm = button(section, '复验修复、Release与旧档并冻结更新回执')
+    expect(confirm.disabled).toBe(false)
+    await act(async () => confirm.click())
+    await vi.waitFor(() => expect(mocks.recordUpdateVerification).toHaveBeenCalledOnce())
+    expect(mocks.recordUpdateVerification).toHaveBeenCalledWith(expect.objectContaining({
+      sourceSessionId: 701,
+      saveMode: 'continued-on-source-release',
+      migratedSessionId: null,
+      issueResolutions: [{
+        sourceIssueReceiptHash: ISSUE_RECEIPT_HASH,
+        targetRouteWitnessKeys: ['session.route.one', 'session.route.two'],
+        verificationNote: '已在新版本的两条完整路线中复现并确认按钮对比度恢复。',
+      }],
+      lowScoreResolutions: [{
+        criterionKey: 'quest-variety',
+        targetRouteWitnessKeys: ['session.route.one', 'session.route.two'],
+        verificationNote: '新版任务目标和包装差异已经在两条路线中由本人重新检查。',
+      }],
+      humanChecks: {
+        repairedBehaviorRetested: true, oldVersionStillAvailable: true,
+        savePolicyActuallyVerified: true, noAutomationOrModelProxy: true,
       },
     }))
   })

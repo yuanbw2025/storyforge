@@ -5,6 +5,7 @@ export const TEXT_OPEN_WORLD_CREATOR_HARD_GATE_ID_V1 = 'text-open-world.creator.
 export const TEXT_OPEN_WORLD_CREATOR_SEMANTIC_GATE_ID_V1 = 'text-open-world.creator.semantic-release'
 export const TEXT_OPEN_WORLD_CREATOR_GRAYBOX_GATE_ID_V1 = 'text-open-world.creator.graybox'
 export const TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_GATE_ID_V1 = 'text-open-world.creator.full-playtest'
+export const TEXT_OPEN_WORLD_CREATOR_UPDATE_VERIFICATION_GATE_ID_V1 = 'text-open-world.creator.update-verification'
 export const TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1 = 'text-open-world.creator.release-calibration'
 export const TEXT_OPEN_WORLD_CREATOR_RELEASE_QUALITY_GATE_ID_V1 = 'text-open-world.creator.release-quality'
 export const TEXT_OPEN_WORLD_CREATOR_ISSUE_GATE_PREFIX_V1 = 'text-open-world.creator.issue.'
@@ -215,6 +216,75 @@ export interface TextOpenWorldCreatorFullPlaytestEvidenceV1 {
   authorNote: string
   outcome: 'accepted' | 'repair-required'
   confirmedAt: number
+}
+
+export interface TextOpenWorldCreatorUpdateReleaseBindingV1 {
+  releaseUid: string
+  releaseVersion: number
+  releaseHash: string
+  packageHash: string
+}
+
+export interface TextOpenWorldCreatorUpdateIssueResolutionV1 {
+  sourceIssueReceiptHash: string
+  issueKey: string
+  category: TextOpenWorldCreatorIssueCategoryV1
+  severity: TextOpenWorldCreatorIssueSeverityV1
+  affectedStableKeys: string[]
+  targetRouteWitnessKeys: string[]
+  verificationNote: string
+}
+
+export interface TextOpenWorldCreatorUpdateLowScoreResolutionV1 {
+  criterionKey: TextOpenWorldCreatorFullPlaytestCriterionV1
+  sourceRating: 1 | 2
+  targetRating: 3 | 4 | 5
+  targetRouteWitnessKeys: string[]
+  verificationNote: string
+}
+
+export interface TextOpenWorldCreatorUpdateSaveWitnessV1 {
+  mode: 'continued-on-source-release' | 'explicit-migration-child'
+  sourceSessionWitnessKey: string
+  sourceStateHash: string
+  sourceThroughSequence: number
+  targetSessionWitnessKey: string | null
+  targetStateHash: string | null
+  migrationPreviewHash: string | null
+}
+
+export interface TextOpenWorldCreatorUpdateVerificationHumanChecksV1 {
+  repairedBehaviorRetested: true
+  oldVersionStillAvailable: true
+  savePolicyActuallyVerified: true
+  noAutomationOrModelProxy: true
+}
+
+export interface TextOpenWorldCreatorUpdateVerificationEvidenceV1 {
+  schema: 'storyforge.text-open-world-creator-update-verification-evidence'
+  version: 1
+  sourceBuild: TextOpenWorldCreatorBuildBindingV1
+  targetBuild: TextOpenWorldCreatorBuildBindingV1
+  sourceRelease: TextOpenWorldCreatorUpdateReleaseBindingV1
+  targetRelease: TextOpenWorldCreatorUpdateReleaseBindingV1
+  sourceFullPlaytestReceiptHash: string
+  targetFullPlaytestReceiptHash: string
+  repairAuthorizationHash: string
+  impactPlanHash: string
+  derivedCommandHashes: string[]
+  targetTaskKeys: string[]
+  staleTaskKeys: string[]
+  issueResolutions: TextOpenWorldCreatorUpdateIssueResolutionV1[]
+  lowScoreResolutions: TextOpenWorldCreatorUpdateLowScoreResolutionV1[]
+  compatibility: {
+    level: 'compatible' | 'restart-recommended' | 'breaking'
+    migrationPolicy: 'identity' | 'additive' | 'pin-old-save'
+    reportHash: string
+  }
+  saveWitness: TextOpenWorldCreatorUpdateSaveWitnessV1
+  humanChecks: TextOpenWorldCreatorUpdateVerificationHumanChecksV1
+  authorNote: string
+  verifiedAt: number
 }
 
 export const TEXT_OPEN_WORLD_CREATOR_CALIBRATION_METRICS_V1 = [
@@ -727,6 +797,148 @@ export function parseTextOpenWorldCreatorFullPlaytestEvidenceV1(value: unknown):
       ? text(row.authorNote, 'authorNote', 4_000) : '',
     outcome: row.outcome as 'accepted' | 'repair-required',
     confirmedAt: integer(row.confirmedAt, 'confirmedAt', 1),
+  }
+}
+
+function parseUpdateReleaseBinding(value: unknown, label: string): TextOpenWorldCreatorUpdateReleaseBindingV1 {
+  const row = record(value, label)
+  exactKeys(row, ['releaseUid', 'releaseVersion', 'releaseHash', 'packageHash'], label)
+  return {
+    releaseUid: text(row.releaseUid, `${label}.releaseUid`, 1_000),
+    releaseVersion: integer(row.releaseVersion, `${label}.releaseVersion`, 1),
+    releaseHash: hash(row.releaseHash, `${label}.releaseHash`),
+    packageHash: hash(row.packageHash, `${label}.packageHash`),
+  }
+}
+
+export function parseTextOpenWorldCreatorUpdateVerificationEvidenceV1(
+  value: unknown,
+): TextOpenWorldCreatorUpdateVerificationEvidenceV1 {
+  const row = record(value, 'update verification evidence')
+  exactKeys(row, [
+    'schema', 'version', 'sourceBuild', 'targetBuild', 'sourceRelease', 'targetRelease',
+    'sourceFullPlaytestReceiptHash', 'targetFullPlaytestReceiptHash',
+    'repairAuthorizationHash', 'impactPlanHash', 'derivedCommandHashes', 'targetTaskKeys', 'staleTaskKeys',
+    'issueResolutions', 'lowScoreResolutions', 'compatibility', 'saveWitness',
+    'humanChecks', 'authorNote', 'verifiedAt',
+  ], 'update verification evidence')
+  if (row.schema !== 'storyforge.text-open-world-creator-update-verification-evidence'
+    || row.version !== 1 || !Array.isArray(row.issueResolutions)
+    || !Array.isArray(row.lowScoreResolutions)) fail('update verification evidence 身份无效')
+  const sourceBuild = parseTextOpenWorldCreatorBuildBindingV1(row.sourceBuild)
+  const targetBuild = parseTextOpenWorldCreatorBuildBindingV1(row.targetBuild)
+  if (targetBuild.productionKey !== sourceBuild.productionKey
+    || targetBuild.buildNumber <= sourceBuild.buildNumber) fail('更新Build必须是同产品后继')
+  const sourceRelease = parseUpdateReleaseBinding(row.sourceRelease, 'sourceRelease')
+  const targetRelease = parseUpdateReleaseBinding(row.targetRelease, 'targetRelease')
+  if (targetRelease.releaseVersion <= sourceRelease.releaseVersion
+    || targetRelease.packageHash !== targetBuild.packageHash
+    || sourceRelease.packageHash !== sourceBuild.packageHash) fail('更新Release版本或Build绑定无效')
+  const targetTaskKeys = textList(row.targetTaskKeys, 'targetTaskKeys', 200, 200, 1)
+  const staleTaskKeys = textList(row.staleTaskKeys, 'staleTaskKeys', 200, 200, 1)
+  const derivedCommandHashes = hashList(row.derivedCommandHashes, 'derivedCommandHashes', 128)
+  if (!derivedCommandHashes.length) fail('更新验证缺少派生命令证据')
+  if (new Set(targetTaskKeys).size !== targetTaskKeys.length
+    || new Set(staleTaskKeys).size !== staleTaskKeys.length
+    || targetTaskKeys.some(key => !staleTaskKeys.includes(key))) fail('修复任务闭包无效')
+  const issueResolutions = row.issueResolutions.map((value, index) => {
+    const item = record(value, `issueResolutions[${index}]`)
+    exactKeys(item, [
+      'sourceIssueReceiptHash', 'issueKey', 'category', 'severity', 'affectedStableKeys',
+      'targetRouteWitnessKeys', 'verificationNote',
+    ], `issueResolutions[${index}]`)
+    if (!TEXT_OPEN_WORLD_CREATOR_ISSUE_CATEGORIES_V1.includes(item.category as TextOpenWorldCreatorIssueCategoryV1)
+      || !['advisory', 'blocking'].includes(String(item.severity))) fail(`issueResolutions[${index}] 分类无效`)
+    return {
+      sourceIssueReceiptHash: hash(item.sourceIssueReceiptHash, `issueResolutions[${index}].sourceIssueReceiptHash`),
+      issueKey: text(item.issueKey, `issueResolutions[${index}].issueKey`, 200),
+      category: item.category as TextOpenWorldCreatorIssueCategoryV1,
+      severity: item.severity as TextOpenWorldCreatorIssueSeverityV1,
+      affectedStableKeys: textList(item.affectedStableKeys, `issueResolutions[${index}].affectedStableKeys`, 200, 200),
+      targetRouteWitnessKeys: textList(item.targetRouteWitnessKeys, `issueResolutions[${index}].targetRouteWitnessKeys`, 6, 200, 1).sort(),
+      verificationNote: text(item.verificationNote, `issueResolutions[${index}].verificationNote`, 2_000, 10),
+    }
+  }).sort((left, right) => left.sourceIssueReceiptHash.localeCompare(right.sourceIssueReceiptHash))
+  if (new Set(issueResolutions.map(item => item.sourceIssueReceiptHash)).size !== issueResolutions.length) {
+    fail('问题修复验证不能重复')
+  }
+  const lowScoreResolutions = row.lowScoreResolutions.map((value, index) => {
+    const item = record(value, `lowScoreResolutions[${index}]`)
+    exactKeys(item, [
+      'criterionKey', 'sourceRating', 'targetRating', 'targetRouteWitnessKeys', 'verificationNote',
+    ], `lowScoreResolutions[${index}]`)
+    if (!TEXT_OPEN_WORLD_CREATOR_FULL_PLAYTEST_CRITERIA_V1.includes(item.criterionKey as TextOpenWorldCreatorFullPlaytestCriterionV1)
+      || !Number.isInteger(item.sourceRating) || Number(item.sourceRating) < 1 || Number(item.sourceRating) > 2
+      || !Number.isInteger(item.targetRating) || Number(item.targetRating) < 3 || Number(item.targetRating) > 5) {
+      fail(`lowScoreResolutions[${index}] 无效`)
+    }
+    return {
+      criterionKey: item.criterionKey as TextOpenWorldCreatorFullPlaytestCriterionV1,
+      sourceRating: Number(item.sourceRating) as 1 | 2,
+      targetRating: Number(item.targetRating) as 3 | 4 | 5,
+      targetRouteWitnessKeys: textList(item.targetRouteWitnessKeys, `lowScoreResolutions[${index}].targetRouteWitnessKeys`, 6, 200, 1).sort(),
+      verificationNote: text(item.verificationNote, `lowScoreResolutions[${index}].verificationNote`, 2_000, 10),
+    }
+  }).sort((left, right) => left.criterionKey.localeCompare(right.criterionKey))
+  if (new Set(lowScoreResolutions.map(item => item.criterionKey)).size !== lowScoreResolutions.length
+    || issueResolutions.length + lowScoreResolutions.length < 1) fail('更新验证必须闭合至少一项原问题或低分')
+  const compatibility = record(row.compatibility, 'compatibility')
+  exactKeys(compatibility, ['level', 'migrationPolicy', 'reportHash'], 'compatibility')
+  if (!['compatible', 'restart-recommended', 'breaking'].includes(String(compatibility.level))
+    || !['identity', 'additive', 'pin-old-save'].includes(String(compatibility.migrationPolicy))
+    || (compatibility.level !== 'compatible') !== (compatibility.migrationPolicy === 'pin-old-save')) {
+    fail('更新兼容结论无效')
+  }
+  const save = record(row.saveWitness, 'saveWitness')
+  exactKeys(save, [
+    'mode', 'sourceSessionWitnessKey', 'sourceStateHash', 'sourceThroughSequence',
+    'targetSessionWitnessKey', 'targetStateHash', 'migrationPreviewHash',
+  ], 'saveWitness')
+  if (!['continued-on-source-release', 'explicit-migration-child'].includes(String(save.mode))) {
+    fail('存档验证模式无效')
+  }
+  const migrated = save.mode === 'explicit-migration-child'
+  if (migrated && compatibility.level !== 'compatible') fail('破坏性更新不能声明存档迁移')
+  const nullableHash = (candidate: unknown, label: string) => candidate == null ? null : hash(candidate, label)
+  const targetSessionWitnessKey = save.targetSessionWitnessKey == null ? null
+    : text(save.targetSessionWitnessKey, 'saveWitness.targetSessionWitnessKey', 200)
+  if (migrated !== (targetSessionWitnessKey != null)
+    || migrated !== (save.targetStateHash != null)
+    || migrated !== (save.migrationPreviewHash != null)) fail('迁移存档证据不完整')
+  const checks = record(row.humanChecks, 'humanChecks')
+  const checkKeys = [
+    'repairedBehaviorRetested', 'oldVersionStillAvailable',
+    'savePolicyActuallyVerified', 'noAutomationOrModelProxy',
+  ] as const
+  exactKeys(checks, checkKeys, 'humanChecks')
+  if (checkKeys.some(key => checks[key] !== true)) fail('更新验证人工声明必须全部确认')
+  return {
+    schema: 'storyforge.text-open-world-creator-update-verification-evidence', version: 1,
+    sourceBuild, targetBuild, sourceRelease, targetRelease,
+    sourceFullPlaytestReceiptHash: hash(row.sourceFullPlaytestReceiptHash, 'sourceFullPlaytestReceiptHash'),
+    targetFullPlaytestReceiptHash: hash(row.targetFullPlaytestReceiptHash, 'targetFullPlaytestReceiptHash'),
+    repairAuthorizationHash: hash(row.repairAuthorizationHash, 'repairAuthorizationHash'),
+    impactPlanHash: hash(row.impactPlanHash, 'impactPlanHash'),
+    derivedCommandHashes,
+    targetTaskKeys, staleTaskKeys, issueResolutions, lowScoreResolutions,
+    compatibility: {
+      level: compatibility.level as 'compatible' | 'restart-recommended' | 'breaking',
+      migrationPolicy: compatibility.migrationPolicy as 'identity' | 'additive' | 'pin-old-save',
+      reportHash: hash(compatibility.reportHash, 'compatibility.reportHash'),
+    },
+    saveWitness: {
+      mode: save.mode as TextOpenWorldCreatorUpdateSaveWitnessV1['mode'],
+      sourceSessionWitnessKey: text(save.sourceSessionWitnessKey, 'saveWitness.sourceSessionWitnessKey', 200),
+      sourceStateHash: hash(save.sourceStateHash, 'saveWitness.sourceStateHash'),
+      sourceThroughSequence: integer(save.sourceThroughSequence, 'saveWitness.sourceThroughSequence'),
+      targetSessionWitnessKey,
+      targetStateHash: nullableHash(save.targetStateHash, 'saveWitness.targetStateHash'),
+      migrationPreviewHash: nullableHash(save.migrationPreviewHash, 'saveWitness.migrationPreviewHash'),
+    },
+    humanChecks: checks as unknown as TextOpenWorldCreatorUpdateVerificationHumanChecksV1,
+    authorNote: typeof row.authorNote === 'string' && row.authorNote.trim()
+      ? text(row.authorNote, 'authorNote', 4_000) : '',
+    verifiedAt: integer(row.verifiedAt, 'verifiedAt', 1),
   }
 }
 

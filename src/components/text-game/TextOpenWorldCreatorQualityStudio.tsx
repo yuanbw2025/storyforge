@@ -9,6 +9,7 @@ import {
   recordTextOpenWorldCreatorFullPlaytestV1,
   recordTextOpenWorldCreatorGrayboxV1,
   recordTextOpenWorldCreatorIssueV1,
+  recordTextOpenWorldCreatorUpdateVerificationV1,
   waiveTextOpenWorldCreatorAdvisoryIssueV1,
   type TextOpenWorldCreatorQualityWorkspaceV1,
 } from '../../lib/open-world/creator-quality'
@@ -23,6 +24,7 @@ import {
   type TextOpenWorldCreatorHumanQualityChecksV1,
   type TextOpenWorldCreatorIssueCategoryV1,
   type TextOpenWorldCreatorIssueSeverityV1,
+  type TextOpenWorldCreatorUpdateVerificationHumanChecksV1,
 } from '../../lib/open-world/creator-quality-contract'
 import { downloadTextFile } from '../../lib/export/text-export'
 
@@ -76,6 +78,13 @@ const EMPTY_PLAYTEST_CHECKS = {
   noAutomationOrModelProxy: false,
   freeInputActuallyTested: false,
   allObservedProblemsReported: false,
+}
+
+const EMPTY_UPDATE_CHECKS = {
+  repairedBehaviorRetested: false,
+  oldVersionStillAvailable: false,
+  savePolicyActuallyVerified: false,
+  noAutomationOrModelProxy: false,
 }
 
 const EMPTY_PLAYTEST_ASSESSMENTS = Object.fromEntries(
@@ -142,6 +151,13 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
   const [issueSessionId, setIssueSessionId] = useState<number | null>(null)
   const [issueSourceExcluded, setIssueSourceExcluded] = useState(false)
   const [issueWaivers, setIssueWaivers] = useState<Record<string, string>>({})
+  const [updateSourceSessionId, setUpdateSourceSessionId] = useState<number | null>(null)
+  const [updateSaveMode, setUpdateSaveMode] = useState<'continued-on-source-release' | 'explicit-migration-child'>('continued-on-source-release')
+  const [updateMigratedSessionId, setUpdateMigratedSessionId] = useState<number | null>(null)
+  const [updateIssueNotes, setUpdateIssueNotes] = useState<Record<string, string>>({})
+  const [updateLowScoreNotes, setUpdateLowScoreNotes] = useState<Record<string, string>>({})
+  const [updateChecks, setUpdateChecks] = useState(EMPTY_UPDATE_CHECKS)
+  const [updateNote, setUpdateNote] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -174,6 +190,16 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
       ])))
       setIssueSessionId(current => next.grayboxCandidates.some(candidate => candidate.sessionId === current)
         ? current : next.grayboxCandidates[0]?.sessionId ?? null)
+      setUpdateSourceSessionId(current => next.updateVerificationReadiness.sourceSessionCandidates
+        .some(candidate => candidate.sessionId === current)
+        ? current : next.updateVerificationReadiness.sourceSessionCandidates[0]?.sessionId ?? null)
+      setUpdateMigratedSessionId(current => next.updateVerificationReadiness.migratedSessionCandidates
+        .some(candidate => candidate.sessionId === current)
+        ? current : null)
+      if (next.updateVerificationReadiness.compatibility?.level !== 'compatible') {
+        setUpdateSaveMode('continued-on-source-release')
+        setUpdateMigratedSessionId(null)
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -214,6 +240,16 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
     && (playtestCostSource === 'not-available'
       ? playtestRuntimeCost.trim() === ''
       : Number.isFinite(Number(playtestRuntimeCost)) && Number(playtestRuntimeCost) >= 0)
+  const updateSourceMigrations = workspace?.updateVerificationReadiness.migratedSessionCandidates
+    .filter(candidate => candidate.parentSessionId === updateSourceSessionId) ?? []
+  const allUpdateChecks = Object.values(updateChecks).every(Boolean)
+  const allUpdateNotes = (workspace?.updateVerificationReadiness.sourceIssues.every(issue => (
+    (updateIssueNotes[issue.sourceIssueReceiptHash] ?? '').trim().length >= 10
+  )) ?? false) && (workspace?.updateVerificationReadiness.sourceLowScores.every(score => (
+    (updateLowScoreNotes[score.criterionKey] ?? '').trim().length >= 10
+  )) ?? false)
+  const updateSaveSelectionReady = updateSourceSessionId != null
+    && (updateSaveMode === 'continued-on-source-release' || updateMigratedSessionId != null)
 
   const run = async (action: () => Promise<unknown>, success: string) => {
     setBusy(true)
@@ -309,13 +345,38 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
     })
   }, '独立叙事、重复度、时长与成本校准回执已冻结。')
 
+  const confirmUpdateVerification = () => run(async () => {
+    if (!workspace || updateSourceSessionId == null) return
+    const routeKeys = workspace.updateVerificationReadiness.targetRouteWitnessKeys
+    await recordTextOpenWorldCreatorUpdateVerificationV1({
+      scope: props.scope,
+      productionId: props.productionId,
+      buildId: props.buildId,
+      sourceSessionId: updateSourceSessionId,
+      saveMode: updateSaveMode,
+      migratedSessionId: updateSaveMode === 'explicit-migration-child' ? updateMigratedSessionId : null,
+      issueResolutions: workspace.updateVerificationReadiness.sourceIssues.map(issue => ({
+        sourceIssueReceiptHash: issue.sourceIssueReceiptHash,
+        targetRouteWitnessKeys: routeKeys,
+        verificationNote: updateIssueNotes[issue.sourceIssueReceiptHash] ?? '',
+      })),
+      lowScoreResolutions: workspace.updateVerificationReadiness.sourceLowScores.map(score => ({
+        criterionKey: score.criterionKey,
+        targetRouteWitnessKeys: routeKeys,
+        verificationNote: updateLowScoreNotes[score.criterionKey] ?? '',
+      })),
+      humanChecks: updateChecks as TextOpenWorldCreatorUpdateVerificationHumanChecksV1,
+      authorNote: updateNote,
+    })
+  }, '修复版真人更新验证回执已冻结。')
+
   const disabled = props.disabled || busy
 
   return <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="text-open-world-creator-quality-studio">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-accent" /><h2 className="text-sm font-semibold">发布前质量、灰盒试玩与问题回执</h2></div>
-        <p className="mt-2 max-w-4xl text-[10px] leading-5 text-text-muted">代码硬门不能豁免；模型建议项和作者登记的非阻断问题只能逐项写明理由后软豁免。试玩只接受当前未发布Build的隔离Session、真实事件流和有效检查点，回执不会携带世界原文。</p>
+        <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-accent" /><h2 className="text-sm font-semibold">质量、真人试玩、问题与更新验证</h2></div>
+        <p className="mt-2 max-w-4xl text-[10px] leading-5 text-text-muted">代码硬门不能豁免；模型建议项和作者登记的非阻断问题只能逐项写明理由后软豁免。正式发布后仍可用Release Session完成真人验收、登记问题并验证修复子版本，回执不会携带世界原文。</p>
       </div>
       <button type="button" disabled={loading || disabled} onClick={() => void load()} className="flex items-center gap-1 rounded border border-border px-3 py-2 text-xs disabled:opacity-40"><RefreshCw className="h-3.5 w-3.5" />刷新证据</button>
     </div>
@@ -378,7 +439,7 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 id="creator-graybox-title" className="text-xs font-semibold">4. 隔离灰盒试玩</h3><p className="mt-1 text-[10px] text-text-muted">可组合最多6个当前Build Session，但必须覆盖完整核心循环，并至少有一个真正到达结局。</p></div><button type="button" disabled={disabled} onClick={props.onPreview} className="flex items-center gap-1 rounded border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-accent disabled:opacity-40"><Play className="h-3.5 w-3.5" />试玩当前Build</button></div>
         <div className="mt-3 grid gap-2">{workspace.grayboxCandidates.map(candidate => <label key={candidate.sessionId} className="flex items-start gap-2 rounded border border-border p-3 text-[10px]">
           <input type="checkbox" checked={selectedSessionIds.includes(candidate.sessionId)} onChange={event => setSelectedSessionIds(current => event.target.checked ? [...new Set([...current, candidate.sessionId])] : current.filter(id => id !== candidate.sessionId))} />
-          <span className="min-w-0"><strong className="block">{candidate.title} {candidate.completed ? '· 已到达结局' : '· 尚未完成'}</strong><span className="mt-1 block text-text-muted">事件 {candidate.eventCount} · 检查点 {candidate.checkpointCount} · 覆盖 {candidate.coverageKeys.map(key => COVERAGE_LABELS[key]).join('、') || '尚无'}</span></span>
+          <span className="min-w-0"><strong className="block">{candidate.title} {candidate.completed ? '· 已到达结局' : '· 尚未完成'}</strong><span className="mt-1 block text-text-muted">{candidate.source === 'product-release' ? '正式Release' : '未发布Build'} · 事件 {candidate.eventCount} · 检查点 {candidate.checkpointCount} · 覆盖 {candidate.coverageKeys.map(key => COVERAGE_LABELS[key]).join('、') || '尚无'}</span></span>
         </label>)}{workspace.grayboxCandidates.length === 0 && <p className="rounded border border-dashed border-border p-3 text-[10px] text-text-muted">尚无可验证的当前Build隔离Session；先进入试玩并完成核心循环。</p>}</div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KEYS_V1.map(key => <span key={key} className={`rounded border p-2 text-[10px] ${selectedCoverage.has(key) ? 'border-success/30 text-success' : 'border-border text-text-muted'}`}>{selectedCoverage.has(key) ? '已验证' : '缺少'} · {COVERAGE_LABELS[key]}</span>)}</div>
         {!workspace.grayboxReceipt && <>
@@ -438,7 +499,7 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
             return <div key={candidate.sessionId} className="rounded border border-border p-3 text-[10px]">
               <label className="flex items-start gap-2">
                 <input type="checkbox" checked={selected} disabled={!candidate.completed} onChange={event => setPlaytestSessionIds(current => event.target.checked ? [...new Set([...current, candidate.sessionId])].slice(0, 6) : current.filter(id => id !== candidate.sessionId))} />
-                <span className="min-w-0 flex-1"><strong className="block">{candidate.title}</strong><span className="mt-1 block text-text-muted">{candidate.completed ? `结局 ${candidate.endingKey}` : '尚未真正完成主线'} · 事件 {candidate.eventCount} · 检查点 {candidate.checkpointCount}</span></span>
+                <span className="min-w-0 flex-1"><strong className="block">{candidate.title}</strong><span className="mt-1 block text-text-muted">{candidate.source === 'product-release' ? '正式Release' : '未发布Build'} · {candidate.completed ? `结局 ${candidate.endingKey}` : '尚未真正完成主线'} · 事件 {candidate.eventCount} · 检查点 {candidate.checkpointCount}</span></span>
               </label>
               {selected && <label className="mt-2 block text-text-muted">本人实际操作时长（分钟，不含挂机）<input aria-label={`试玩时长 ${candidate.title}`} inputMode="numeric" value={playtestMinutes[candidate.sessionId] ?? ''} onChange={event => setPlaytestMinutes(current => ({ ...current, [candidate.sessionId]: event.target.value }))} className="mt-1 block w-full rounded border border-border bg-bg-elevated p-2 text-text-main" placeholder="例如 95" /></label>}
             </div>
@@ -470,8 +531,45 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
         </div>}
       </section>
 
-      {!workspace.releaseQualityReady && <section className="mt-4 rounded border border-border bg-bg-base p-4" aria-labelledby="creator-final-quality-title">
-        <h3 id="creator-final-quality-title" className="text-xs font-semibold">7. 冻结发布质量结论</h3>
+      {workspace.updateVerificationReadiness.required && <section className="mt-4 rounded border border-border bg-bg-base p-4" aria-labelledby="creator-update-verification-title" data-testid="text-open-world-creator-update-verification">
+        <h3 id="creator-update-verification-title" className="text-xs font-semibold">7. 修复版真人更新验证</h3>
+        <p className="mt-1 text-[10px] leading-5 text-text-muted">这不是自动测试或模型代签。系统把源Release的真人问题、低分项、修复授权、直接后继Release和旧存档策略冻结成一条可追溯证据链。</p>
+        <div className="mt-3 grid gap-2 text-[10px] sm:grid-cols-3">
+          <span className="rounded border border-border p-2">源Release：v{workspace.updateVerificationReadiness.sourceReleaseVersion ?? '—'}</span>
+          <span className="rounded border border-border p-2">修复Release：v{workspace.updateVerificationReadiness.targetReleaseVersion ?? '尚未发布'}</span>
+          <span className="rounded border border-border p-2">兼容策略：{workspace.updateVerificationReadiness.compatibility ? `${workspace.updateVerificationReadiness.compatibility.level} / ${workspace.updateVerificationReadiness.compatibility.migrationPolicy}` : '—'}</span>
+        </div>
+        {workspace.updateVerificationReadiness.issue && !workspace.updateVerificationReceipt && <p className="mt-3 rounded border border-warning/30 bg-warning/5 p-3 text-[10px] text-warning">{workspace.updateVerificationReadiness.issue}</p>}
+        {!workspace.updateVerificationReceipt && <>
+          <div className="mt-3 grid gap-3">{workspace.updateVerificationReadiness.sourceIssues.map(issue => <label key={issue.sourceIssueReceiptHash} className="rounded border border-border p-3 text-[10px] text-text-muted">
+            <strong className="block text-text-main">原问题 · {issue.severity === 'blocking' ? '阻断' : '未豁免'} · {CATEGORY_LABELS[issue.category]}</strong>
+            <code className="mt-1 block">{issue.issueKey} · {compactHash(issue.sourceIssueReceiptHash)}</code>
+            <textarea aria-label={`更新问题复测说明 ${issue.issueKey}`} value={updateIssueNotes[issue.sourceIssueReceiptHash] ?? ''} onChange={event => setUpdateIssueNotes(current => ({ ...current, [issue.sourceIssueReceiptHash]: event.target.value }))} maxLength={2000} className="mt-2 min-h-16 w-full rounded border border-border bg-bg-elevated p-2 text-text-main" placeholder="至少10字：说明新Release中如何复测、实际结果为何已修复。" />
+          </label>)}{workspace.updateVerificationReadiness.sourceLowScores.map(score => <label key={score.criterionKey} className="rounded border border-border p-3 text-[10px] text-text-muted">
+            <strong className="block text-text-main">原低分项 · {PLAYTEST_CRITERION_LABELS[score.criterionKey]}</strong>
+            <span className="mt-1 block">评分 {score.sourceRating} → {score.targetRating}</span>
+            <textarea aria-label={`更新低分复测说明 ${score.criterionKey}`} value={updateLowScoreNotes[score.criterionKey] ?? ''} onChange={event => setUpdateLowScoreNotes(current => ({ ...current, [score.criterionKey]: event.target.value }))} maxLength={2000} className="mt-2 min-h-16 w-full rounded border border-border bg-bg-elevated p-2 text-text-main" placeholder="至少10字：说明新版体验发生了什么可观察变化。" />
+          </label>)}</div>
+          <fieldset className="mt-4 grid gap-3 rounded border border-border p-3 text-[10px]"><legend className="font-semibold text-text-main">旧存档策略实测</legend>
+            <label className="text-text-muted">源Release存档<select aria-label="更新验证源存档" value={updateSourceSessionId ?? ''} onChange={event => { setUpdateSourceSessionId(event.target.value ? Number(event.target.value) : null); setUpdateMigratedSessionId(null) }} className="mt-1 block w-full rounded border border-border bg-bg-elevated p-2 text-text-main"><option value="">请选择</option>{workspace.updateVerificationReadiness.sourceSessionCandidates.map(candidate => <option key={candidate.sessionId} value={candidate.sessionId}>{candidate.title} · {candidate.status}</option>)}</select></label>
+            <label className="flex gap-2 text-text-muted"><input type="radio" name="update-save-mode" checked={updateSaveMode === 'continued-on-source-release'} onChange={() => { setUpdateSaveMode('continued-on-source-release'); setUpdateMigratedSessionId(null) }} />旧存档继续固定并可运行旧Release</label>
+            {workspace.updateVerificationReadiness.compatibility?.level === 'compatible' && <label className="flex gap-2 text-text-muted"><input type="radio" name="update-save-mode" checked={updateSaveMode === 'explicit-migration-child'} onChange={() => setUpdateSaveMode('explicit-migration-child')} />验证用户显式创建的兼容迁移子存档</label>}
+            {updateSaveMode === 'explicit-migration-child' && <label className="text-text-muted">迁移子存档<select aria-label="更新验证迁移子存档" value={updateMigratedSessionId ?? ''} onChange={event => setUpdateMigratedSessionId(event.target.value ? Number(event.target.value) : null)} className="mt-1 block w-full rounded border border-border bg-bg-elevated p-2 text-text-main"><option value="">请选择</option>{updateSourceMigrations.map(candidate => <option key={candidate.sessionId} value={candidate.sessionId}>{candidate.title}</option>)}</select></label>}
+          </fieldset>
+          <fieldset className="mt-4 grid gap-2 text-[10px] text-text-muted"><legend className="font-semibold text-text-main">不可代签的真人声明</legend>{([
+            ['repairedBehaviorRetested', '我已在修复Release中重新执行并观察所有上述问题与低分项'],
+            ['oldVersionStillAvailable', '我已确认源Release保持不可变且旧版本仍可继续使用'],
+            ['savePolicyActuallyVerified', '我已实际打开旧档，或实际验证了所选显式迁移子存档'],
+            ['noAutomationOrModelProxy', '没有使用自动脚本、fixture或模型代替真人更新判断'],
+          ] as const).map(([key, label]) => <label key={key} className="flex gap-2"><input type="checkbox" checked={updateChecks[key]} onChange={event => setUpdateChecks(current => ({ ...current, [key]: event.target.checked }))} />{label}</label>)}</fieldset>
+          <textarea aria-label="修复版更新验证备注" value={updateNote} onChange={event => setUpdateNote(event.target.value)} maxLength={4000} className="mt-3 min-h-20 w-full rounded border border-border bg-bg-elevated p-3 text-xs" placeholder="可选：记录版本更新后的总体感受与仍需后续调优的内容。" />
+          <button type="button" disabled={disabled || !workspace.updateVerificationReadiness.ready || !allUpdateNotes || !allUpdateChecks || !updateSaveSelectionReady || (updateSaveMode === 'explicit-migration-child' && !updateSourceMigrations.some(candidate => candidate.sessionId === updateMigratedSessionId))} onClick={() => void confirmUpdateVerification()} className="mt-3 rounded bg-success px-4 py-2 text-xs text-white disabled:opacity-40">复验修复、Release与旧档并冻结更新回执</button>
+        </>}
+        {workspace.updateVerificationReceipt && <div className="mt-3 rounded border border-success/30 bg-success/5 p-3 text-[10px] text-success"><strong>真人更新验证已闭合</strong><span className="ml-2">{compactHash(workspace.updateVerificationReceipt.receiptHash)}</span><p className="mt-1">{workspace.updateVerificationReceipt.evidence.issueResolutions.length}个原问题、{workspace.updateVerificationReceipt.evidence.lowScoreResolutions.length}个原低分项 · {workspace.updateVerificationReceipt.evidence.saveWitness.mode === 'explicit-migration-child' ? '显式迁移子存档' : '旧档固定旧Release'}</p></div>}
+      </section>}
+
+      {!workspace.releaseQualityReady && workspace.buildStatus !== 'released' && <section className="mt-4 rounded border border-border bg-bg-base p-4" aria-labelledby="creator-final-quality-title">
+        <h3 id="creator-final-quality-title" className="text-xs font-semibold">{workspace.updateVerificationReadiness.required ? '8' : '7'}. 冻结发布质量结论</h3>
         <fieldset className="mt-3 grid gap-2 text-[10px] text-text-muted"><legend className="font-semibold text-text-main">作者最终抽检</legend>{([
           ['narrativeAndGuidanceReviewed', '我已抽检主线叙事、目标引导和失败说明'],
           ['regionalAndQuestVarietyReviewed', '我已抽检地区身份、重要支线与小任务差异'],

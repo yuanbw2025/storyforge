@@ -4,13 +4,16 @@ import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readin
 import { useAIConfigStore } from '../../stores/ai-config'
 import type {
   ProductBuildArtifactRecordV1,
+  ProductBuildCompatibilityReportV1,
   ProductBuildQualityReportV1,
   ProductBuildRecordV1,
   ProductProductionBriefRecordV1,
+  ProductProductionCommandRecordV1,
   ProductProductionRecordV1,
   ProductQualityGateReceiptRecordV1,
   ProductQualityGateReceiptStatusV1,
   ProductRuntimeEvent,
+  ProductRuntimePackageV1,
   ProductRuntimeSession,
   TextOpenWorldContentBudgetV1,
   TextOpenWorldMainlineThreadV1,
@@ -24,6 +27,8 @@ import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewReco
 import { readAcceptedBuildArtifacts } from '../product-production/artifact-store'
 import { readInstanceAgentRunV1 } from '../agent/run/event-store'
 import { parseProductBuildQualityReportV1 } from '../product-production/adoption'
+import { createProductBuildCompatibilityReportV1 } from '../product-production/compatibility'
+import { parseProductRuntimePackageV1 } from '../product-production/runtime-package'
 import {
   canonicalProductProductionJsonV2,
   hashProductProductionValueV2,
@@ -64,6 +69,7 @@ import {
   TEXT_OPEN_WORLD_CREATOR_ISSUE_WAIVER_GATE_PREFIX_V1,
   TEXT_OPEN_WORLD_CREATOR_RELEASE_QUALITY_GATE_ID_V1,
   TEXT_OPEN_WORLD_CREATOR_SEMANTIC_GATE_ID_V1,
+  TEXT_OPEN_WORLD_CREATOR_UPDATE_VERIFICATION_GATE_ID_V1,
   parseTextOpenWorldCreatorCalibrationEvidenceV1,
   parseTextOpenWorldCreatorGrayboxEvidenceV1,
   parseTextOpenWorldCreatorFullPlaytestEvidenceV1,
@@ -72,6 +78,7 @@ import {
   parseTextOpenWorldCreatorIssueWaiverEvidenceV1,
   parseTextOpenWorldCreatorReleaseQualityEvidenceV1,
   parseTextOpenWorldCreatorSemanticDecisionEvidenceV1,
+  parseTextOpenWorldCreatorUpdateVerificationEvidenceV1,
   type TextOpenWorldCreatorBuildBindingV1,
   type TextOpenWorldCreatorCalibrationEvidenceV1,
   type TextOpenWorldCreatorCalibrationReadinessV1,
@@ -97,7 +104,18 @@ import {
   type TextOpenWorldCreatorReviewSummaryV1,
   type TextOpenWorldCreatorSemanticDecisionEvidenceV1,
   type TextOpenWorldCreatorSemanticWaiverV1,
+  type TextOpenWorldCreatorUpdateIssueResolutionV1,
+  type TextOpenWorldCreatorUpdateLowScoreResolutionV1,
+  type TextOpenWorldCreatorUpdateVerificationEvidenceV1,
+  type TextOpenWorldCreatorUpdateVerificationHumanChecksV1,
 } from './creator-quality-contract'
+import { parseTextOpenWorldCreatorRepairAuthorizationV1 } from './creator-artifact-repair-contract'
+import { verifyOwnedTextOpenWorldPlayerReleaseV1 } from './player-version-compatibility'
+import {
+  replayTextOpenWorldMigrationSourceStateHashV1,
+  verifyTextOpenWorldSaveMigrationBranchV1,
+} from './player-save-migration-contract'
+import { readVerifiedProductRuntimeHeadV1 } from '../product/runtime-core'
 
 const HARD_GATE_POLICY_ID = 'storyforge.text-open-world-creator-hard-gates.v1'
 const SEMANTIC_POLICY_ID = 'storyforge.text-open-world-creator-semantic-release.v1'
@@ -107,6 +125,7 @@ const CALIBRATION_POLICY_ID = 'storyforge.text-open-world-creator-release-calibr
 const ISSUE_POLICY_ID = 'storyforge.text-open-world-creator-issue.v1'
 const ISSUE_WAIVER_POLICY_ID = 'storyforge.text-open-world-creator-issue-waiver.v1'
 const RELEASE_QUALITY_POLICY_ID = 'storyforge.text-open-world-creator-release-quality.v1'
+const UPDATE_VERIFICATION_POLICY_ID = 'storyforge.text-open-world-creator-update-verification.v1'
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
 interface BuildAuthorityV1 {
@@ -120,6 +139,7 @@ interface BuildAuthorityV1 {
   governanceSnapshotHash: string
   hardChecks: TextOpenWorldCreatorHardGateCheckV1[]
   reviews: TextOpenWorldCreatorReviewSummaryV1[]
+  derivedCommandChain: Array<ProductProductionCommandRecordV1 & { id: number }>
   authorityRowsJson: {
     production: string
     build: string
@@ -127,6 +147,8 @@ interface BuildAuthorityV1 {
     artifacts: string
   }
 }
+
+type ReceiptAuthorityV1 = Pick<BuildAuthorityV1, 'scope' | 'build' | 'buildBinding'>
 
 interface VerifiedReceiptV1<T> extends TextOpenWorldCreatorQualityReceiptV1<T> {
   row: ProductQualityGateReceiptRecordV1 & { id: number }
@@ -144,7 +166,24 @@ export interface TextOpenWorldCreatorGrayboxCandidateV1 {
   missingCoverageKeys: TextOpenWorldCreatorGrayboxSessionEvidenceV1['coverageKeys']
   eventCount: number
   checkpointCount: number
+  source: 'build-preview' | 'product-release'
   witness: TextOpenWorldCreatorGrayboxSessionEvidenceV1
+}
+
+export interface TextOpenWorldCreatorUpdateVerificationReadinessV1 {
+  required: boolean
+  ready: boolean
+  issue: string | null
+  sourceReleaseVersion: number | null
+  targetReleaseVersion: number | null
+  compatibility: TextOpenWorldCreatorUpdateVerificationEvidenceV1['compatibility'] | null
+  sourceIssues: Array<Pick<TextOpenWorldCreatorUpdateIssueResolutionV1,
+    'sourceIssueReceiptHash' | 'issueKey' | 'category' | 'severity' | 'affectedStableKeys'>>
+  sourceLowScores: Array<Pick<TextOpenWorldCreatorUpdateLowScoreResolutionV1,
+    'criterionKey' | 'sourceRating' | 'targetRating'>>
+  sourceSessionCandidates: Array<{ sessionId: number; title: string; status: ProductRuntimeSession['status'] }>
+  migratedSessionCandidates: Array<{ sessionId: number; title: string; parentSessionId: number }>
+  targetRouteWitnessKeys: string[]
 }
 
 export interface TextOpenWorldCreatorIssueRecordV1 {
@@ -171,6 +210,8 @@ export interface TextOpenWorldCreatorQualityWorkspaceV1 {
   grayboxCandidates: TextOpenWorldCreatorGrayboxCandidateV1[]
   grayboxReceipt: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorGrayboxEvidenceV1> | null
   fullPlaytestReceipt: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorFullPlaytestEvidenceV1> | null
+  updateVerificationReadiness: TextOpenWorldCreatorUpdateVerificationReadinessV1
+  updateVerificationReceipt: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorUpdateVerificationEvidenceV1> | null
   issues: TextOpenWorldCreatorIssueRecordV1[]
   semanticDecisionReceipt: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorSemanticDecisionEvidenceV1> | null
   releaseQualityReceipt: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorReleaseQualityEvidenceV1> | null
@@ -203,6 +244,19 @@ function boundedLines(value: unknown, label: string, maximumItems: number, maxim
 
 function bindingEquals(left: TextOpenWorldCreatorBuildBindingV1, right: TextOpenWorldCreatorBuildBindingV1): boolean {
   return canonicalProductProductionJsonV2(left) === canonicalProductProductionJsonV2(right)
+}
+
+function buildBindingFromRow(
+  productionKey: string,
+  build: ProductBuildRecordV1,
+): TextOpenWorldCreatorBuildBindingV1 {
+  if (![build.packageHash, build.previewHash, build.manifestHash, build.qualityReportHash, build.rootTerminalReceiptHash]
+    .every(value => typeof value === 'string' && isSha256Hash(value))) fail('历史Build缺少终态Hash')
+  return {
+    productionKey, buildNumber: build.buildNumber, packageHash: build.packageHash,
+    previewHash: build.previewHash, manifestHash: build.manifestHash,
+    qualityReportHash: build.qualityReportHash, rootTerminalReceiptHash: build.rootTerminalReceiptHash!,
+  }
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -393,10 +447,17 @@ async function loadBuildAuthority(input: {
   }
   const build = await db.productBuilds
     .where('[productionId+buildNumber]').equals([production.id, production.currentBuildNumber]).first()
+  const previewAuthority = build != null
+    && ['preview-ready', 'release-ready'].includes(build.status)
+    && production.status === 'preview-ready'
+  const releasedAuthority = build != null
+    && build.status === 'released'
+    && production.status === 'released'
+    && production.currentProductReleaseId != null
+    && build.releasedProductReleaseId === production.currentProductReleaseId
   if (!build || build.id == null || input.expectedBuildId != null && build.id !== input.expectedBuildId
     || !await assertRecordInScope(scope, 'productBuilds', build, { owner: 'work' })
-    || !['preview-ready', 'release-ready'].includes(build.status)
-    || production.status !== 'preview-ready') fail('当前Creator Build尚未封账或已变化')
+    || (!previewAuthority && !releasedAuthority)) fail('当前Creator Build尚未封账、已发布绑定损坏或已经变化')
   const briefRow = await db.productProductionBriefs
     .where('[productionId+revision]').equals([production.id, build.briefRevision]).first()
   if (!briefRow || briefRow.id == null
@@ -479,6 +540,7 @@ async function loadBuildAuthority(input: {
     governanceSnapshotHash: governance.snapshotHash,
     hardChecks,
     reviews: reviews.sort((left, right) => left.reviewKind.localeCompare(right.reviewKind)),
+    derivedCommandChain: derivedAuthority.commandChain,
     authorityRowsJson: {
       production: canonicalRows([production]),
       build: canonicalRows([build]),
@@ -559,7 +621,7 @@ function pendingReceiptRow(
 
 async function verifyGenericReceiptRow<T>(input: {
   row: ProductQualityGateReceiptRecordV1 & { id: number }
-  authority: BuildAuthorityV1
+  authority: ReceiptAuthorityV1
   gateId: string
   verifierId: string
   policyId: string
@@ -595,7 +657,7 @@ async function verifyGenericReceiptRow<T>(input: {
 }
 
 async function latestFixedReceipt<T>(input: {
-  authority: BuildAuthorityV1
+  authority: ReceiptAuthorityV1
   gateId: string
   verifierId: string
   policyId: string
@@ -640,9 +702,13 @@ async function createSessionWitness(input: {
   session: ProductRuntimeSession & { id: number }
 }): Promise<{ candidate: TextOpenWorldCreatorGrayboxCandidateV1; eventRowsJson: string; checkpointRowsJson: string; sessionRowJson: string }> {
   const { authority, session } = input
+  const buildPreview = session.productBuildId === authority.build.id && session.productReleaseId == null
+  const formalRelease = authority.build.releasedProductReleaseId != null
+    && session.productBuildId == null
+    && session.productReleaseId === authority.build.releasedProductReleaseId
   if (session.projectId !== authority.scope.projectId || session.worldId !== authority.scope.worldId
-    || session.workId !== authority.scope.workId || session.productBuildId !== authority.build.id
-    || session.productReleaseId != null || session.kind !== 'text-open-world'
+    || session.workId !== authority.scope.workId || (!buildPreview && !formalRelease)
+    || session.kind !== 'text-open-world'
     || session.runtimeSourceHash !== authority.build.packageHash) fail('灰盒Session未绑定当前Creator Build')
   const [state, version, headInspection, events, checkpoints] = await Promise.all([
     readProductRuntimeState(session.id),
@@ -727,6 +793,7 @@ async function createSessionWitness(input: {
         .filter(key => !coverage.has(key)),
       eventCount: events.length,
       checkpointCount: validCheckpointHashes.length,
+      source: buildPreview ? 'build-preview' : 'product-release',
       witness,
     },
     eventRowsJson: canonicalRows(events),
@@ -736,10 +803,16 @@ async function createSessionWitness(input: {
 }
 
 async function listGrayboxCandidates(authority: BuildAuthorityV1): Promise<TextOpenWorldCreatorGrayboxCandidateV1[]> {
-  const sessions = (await db.productRuntimeSessions.where('productBuildId').equals(authority.build.id).toArray())
+  const sessionGroups = await Promise.all([
+    db.productRuntimeSessions.where('productBuildId').equals(authority.build.id).toArray(),
+    authority.build.releasedProductReleaseId == null ? Promise.resolve([])
+      : db.productRuntimeSessions.where('productReleaseId').equals(authority.build.releasedProductReleaseId).toArray(),
+  ])
+  const sessions = sessionGroups.flat()
+    .filter((session, index, rows) => rows.findIndex(item => item.id === session.id) === index)
     .filter(session => session.id != null && session.projectId === authority.scope.projectId
       && session.worldId === authority.scope.worldId && session.workId === authority.scope.workId
-      && session.productReleaseId == null && session.runtimeSourceHash === authority.build.packageHash
+      && session.runtimeSourceHash === authority.build.packageHash
       && session.kind === 'text-open-world') as Array<ProductRuntimeSession & { id: number }>
   const candidates: TextOpenWorldCreatorGrayboxCandidateV1[] = []
   for (const session of sessions) {
@@ -823,7 +896,7 @@ async function captureFullPlaytestRuntimeAIV1(
 }
 
 async function parseIssueReceipt(
-  authority: BuildAuthorityV1,
+  authority: ReceiptAuthorityV1,
   row: ProductQualityGateReceiptRecordV1 & { id: number },
 ): Promise<VerifiedReceiptV1<TextOpenWorldCreatorIssueEvidenceV1>> {
   const receipt = await verifyGenericReceiptRow({
@@ -852,7 +925,7 @@ async function parseIssueReceipt(
 }
 
 async function parseIssueWaiverReceipt(
-  authority: BuildAuthorityV1,
+  authority: ReceiptAuthorityV1,
   issue: VerifiedReceiptV1<TextOpenWorldCreatorIssueEvidenceV1>,
   row: ProductQualityGateReceiptRecordV1 & { id: number },
 ): Promise<VerifiedReceiptV1<TextOpenWorldCreatorIssueWaiverEvidenceV1>> {
@@ -874,7 +947,7 @@ async function parseIssueWaiverReceipt(
   return receipt
 }
 
-async function readIssues(authority: BuildAuthorityV1): Promise<Array<{
+async function readIssues(authority: ReceiptAuthorityV1): Promise<Array<{
   issue: VerifiedReceiptV1<TextOpenWorldCreatorIssueEvidenceV1>
   waiver: VerifiedReceiptV1<TextOpenWorldCreatorIssueWaiverEvidenceV1> | null
 }>> {
@@ -942,7 +1015,7 @@ async function readGrayboxReceipt(authority: BuildAuthorityV1): Promise<Verified
 }
 
 async function readFullPlaytestReceipt(input: {
-  authority: BuildAuthorityV1
+  authority: ReceiptAuthorityV1
   calibrationReceipt: VerifiedReceiptV1<TextOpenWorldCreatorCalibrationEvidenceV1> | null
   issueSet: Awaited<ReturnType<typeof currentIssueSet>>
 }): Promise<VerifiedReceiptV1<TextOpenWorldCreatorFullPlaytestEvidenceV1> | null> {
@@ -977,6 +1050,386 @@ async function readFullPlaytestReceipt(input: {
     ])
     || receipt.gateReceipt.environmentHash !== await hashProductProductionValueV2(evidence.environment)
     || receipt.gateReceipt.createdAt !== evidence.confirmedAt) fail('完整真人试玩回执与当前Build、校准或问题集不闭合')
+  return receipt
+}
+
+interface UpdateVerificationContextV1 {
+  sourceBuild: ProductBuildRecordV1 & { id: number }
+  repairAuthorizations: Array<Awaited<ReturnType<typeof parseTextOpenWorldCreatorRepairAuthorizationV1>>>
+  derivedCommandHashes: string[]
+  targetTaskKeys: string[]
+  staleTaskKeys: string[]
+  sourceRelease: Awaited<ReturnType<typeof verifyOwnedTextOpenWorldPlayerReleaseV1>>
+  targetRelease: Awaited<ReturnType<typeof verifyOwnedTextOpenWorldPlayerReleaseV1>> | null
+  sourceCalibration: VerifiedReceiptV1<TextOpenWorldCreatorCalibrationEvidenceV1>
+  sourceFullPlaytest: VerifiedReceiptV1<TextOpenWorldCreatorFullPlaytestEvidenceV1>
+  targetFullPlaytest: VerifiedReceiptV1<TextOpenWorldCreatorFullPlaytestEvidenceV1> | null
+  sourceIssues: Awaited<ReturnType<typeof readIssues>>
+  repairIssues: Awaited<ReturnType<typeof readIssues>>
+  sourceLowScores: TextOpenWorldCreatorFullPlaytestAssessmentV1[]
+  compatibility: ProductBuildCompatibilityReportV1
+  sourceSessions: Array<ProductRuntimeSession & { id: number }>
+  migratedSessions: Array<ProductRuntimeSession & { id: number }>
+}
+
+function updateReleaseBindingV1(
+  release: Awaited<ReturnType<typeof verifyOwnedTextOpenWorldPlayerReleaseV1>>,
+): TextOpenWorldCreatorUpdateVerificationEvidenceV1['sourceRelease'] {
+  return {
+    releaseUid: release.manifest.lineage.releaseUid,
+    releaseVersion: release.release.version,
+    releaseHash: release.manifest.releaseIdentityHash,
+    packageHash: release.manifest.packageHash,
+  }
+}
+
+interface ReleaseSaveCaptureV1 {
+  session: ProductRuntimeSession & { id: number }
+  sessionWitnessKey: string
+  stateHash: string
+  throughSequence: number
+  sessionRowJson: string
+  eventRowsJson: string
+}
+
+async function captureReleaseSaveV1(input: {
+  scope: WorkspaceScope
+  release: Awaited<ReturnType<typeof verifyOwnedTextOpenWorldPlayerReleaseV1>>
+  session: ProductRuntimeSession & { id: number }
+  throughSequence?: number
+}): Promise<ReleaseSaveCaptureV1> {
+  const { scope, release, session } = input
+  if (session.projectId !== scope.projectId || session.worldId !== scope.worldId
+    || session.workId !== scope.workId || session.kind !== 'text-open-world'
+    || session.productBuildId != null || session.productReleaseId !== release.release.id
+    || session.runtimeSourceHash !== release.manifest.packageHash) {
+    fail('更新验证存档没有固定在指定正式Release')
+  }
+  const allEvents = await db.productRuntimeEvents.where('sessionId').equals(session.id).sortBy('sequence')
+  const throughSequence = input.throughSequence ?? allEvents.length
+  if (!Number.isSafeInteger(throughSequence) || throughSequence < 0
+    || throughSequence > allEvents.length
+    || allEvents.some((event, index) => event.projectId !== scope.projectId
+      || event.sessionId !== session.id || event.sequence !== index + 1
+      || (event.worldGroupId ?? null) !== (session.worldGroupId ?? null))) {
+    fail('更新验证存档事件前缀不完整或越界')
+  }
+  const events = allEvents.slice(0, throughSequence)
+  const stateHash = throughSequence === allEvents.length
+    ? (await readVerifiedProductRuntimeHeadV1(session)).stateHash
+    : await replayTextOpenWorldMigrationSourceStateHashV1({ session, events, throughSequence })
+  const eventStreamHash = await hashProductProductionValueV2(await Promise.all(events.map(async event => ({
+    sequence: event.sequence,
+    type: event.type,
+    actorKeyHash: event.actorKey ? await hashProductProductionValueV2(event.actorKey) : null,
+    targetKeyHash: event.targetKey ? await hashProductProductionValueV2(event.targetKey) : null,
+    commandIdHash: event.commandId ? await hashProductProductionValueV2(event.commandId) : null,
+    payloadHash: await hashProductProductionValueV2(JSON.parse(event.payloadJson)),
+    createdAt: event.createdAt,
+  }))))
+  const portable = {
+    releaseUid: release.manifest.lineage.releaseUid,
+    releaseHash: release.manifest.releaseIdentityHash,
+    runtimeSourceHash: session.runtimeSourceHash,
+    seedHash: await hashProductProductionValueV2(session.seed),
+    titleHash: await hashProductProductionValueV2(session.title),
+    status: session.status,
+    stateHash,
+    eventStreamHash,
+    throughSequence,
+    startedAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  }
+  return {
+    session,
+    sessionWitnessKey: `save.${(await hashProductProductionValueV2(portable)).slice(0, 24)}`,
+    stateHash,
+    throughSequence,
+    sessionRowJson: canonicalRows([session]),
+    eventRowsJson: canonicalRows(allEvents),
+  }
+}
+
+const EMPTY_UPDATE_READINESS: TextOpenWorldCreatorUpdateVerificationReadinessV1 = {
+  required: false, ready: false, issue: null,
+  sourceReleaseVersion: null, targetReleaseVersion: null, compatibility: null,
+  sourceIssues: [], sourceLowScores: [], sourceSessionCandidates: [],
+  migratedSessionCandidates: [], targetRouteWitnessKeys: [],
+}
+
+async function updateVerificationContextV1(input: {
+  authority: BuildAuthorityV1
+  targetFullPlaytest: VerifiedReceiptV1<TextOpenWorldCreatorFullPlaytestEvidenceV1> | null
+}): Promise<{ context: UpdateVerificationContextV1 | null; readiness: TextOpenWorldCreatorUpdateVerificationReadinessV1 }> {
+  const { authority } = input
+  if (authority.build.sourceProductReleaseId == null) {
+    return { context: null, readiness: structuredClone(EMPTY_UPDATE_READINESS) }
+  }
+  const sourceBuildRows = await db.productBuilds.where('productionId').equals(authority.production.id)
+    .filter(row => row.releasedProductReleaseId === authority.build.sourceProductReleaseId).toArray()
+  if (sourceBuildRows.length !== 1 || sourceBuildRows[0]?.id == null
+    || sourceBuildRows[0].buildNumber >= authority.build.buildNumber) {
+    fail('更新修复Build没有绑定唯一已发布源版本')
+  }
+  const sourceBuild = sourceBuildRows[0] as ProductBuildRecordV1 & { id: number }
+  const repairAuthorizations = []
+  for (const command of authority.derivedCommandChain) {
+    if (command.type !== 'authorize-text-open-world-creator-repair') continue
+    repairAuthorizations.push(await parseTextOpenWorldCreatorRepairAuthorizationV1(command.resultJson))
+  }
+  if (!repairAuthorizations.length) fail('更新Build派生链缺少局部修复授权')
+  const derivedCommandHashes = [...new Set(await Promise.all(authority.derivedCommandChain.map(async command => (
+    hashProductProductionValueV2({
+      type: command.type,
+      payloadHash: command.payloadHash,
+      resultHash: await hashProductProductionValueV2(JSON.parse(command.resultJson)),
+    })
+  ))))].sort()
+  const targetTaskKeys = [...new Set(repairAuthorizations.flatMap(row => row.impactPlan.targetTaskKeys))].sort()
+  const staleTaskKeys = [...new Set(repairAuthorizations.flatMap(row => row.impactPlan.staleTaskKeys))].sort()
+  const sourceReleaseRoot = await db.productReleases.get(authority.build.sourceProductReleaseId)
+  if (!sourceReleaseRoot) fail('更新源Release不存在')
+  const sourceRelease = await verifyOwnedTextOpenWorldPlayerReleaseV1(authority.scope, sourceReleaseRoot)
+  if (sourceRelease.manifest.productionProvenance.buildNumber !== sourceBuild.buildNumber
+    || sourceRelease.manifest.packageHash !== sourceBuild.packageHash) {
+    fail('更新源Release与修复基线Build不闭合')
+  }
+  const sourceAuthority: ReceiptAuthorityV1 = {
+    scope: authority.scope,
+    build: sourceBuild,
+    buildBinding: buildBindingFromRow(authority.production.productionKey, sourceBuild),
+  }
+  const sourceCalibration = await latestFixedReceipt({
+    authority: sourceAuthority, gateId: TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1,
+    verifierId: 'storyforge.creator-independent-release-calibration', policyId: CALIBRATION_POLICY_ID,
+    statuses: ['passed'], parseEvidence: parseTextOpenWorldCreatorCalibrationEvidenceV1,
+  })
+  const sourceIssues = await readIssues(sourceAuthority)
+  const sourceIssueSet = await currentIssueSet(sourceIssues)
+  const sourceFullPlaytest = await readFullPlaytestReceipt({
+    authority: sourceAuthority, calibrationReceipt: sourceCalibration, issueSet: sourceIssueSet,
+  })
+  if (!sourceCalibration || !sourceFullPlaytest || sourceFullPlaytest.status !== 'needs-human'
+    || sourceFullPlaytest.evidence.outcome !== 'repair-required'
+    || !bindingEquals(sourceFullPlaytest.evidence.build, sourceAuthority.buildBinding)) {
+    fail('已发布源版本缺少真人发现问题的完整试玩回执')
+  }
+  const repairIssues = sourceIssues.filter(row => row.issue.evidence.severity === 'blocking'
+    || (row.issue.evidence.severity === 'advisory' && !row.waiver))
+  const sourceLowScores = sourceFullPlaytest.evidence.assessments.filter(row => row.rating < 3)
+  if (repairIssues.length + sourceLowScores.length < 1) fail('源版本完整试玩没有需要修复的问题或低分项')
+  const runtimePackage = parseProductRuntimePackageV1(
+    acceptedArtifactPayload<ProductRuntimePackageV1>(authority, 'text-open-world.runtime-package'),
+  )
+  const compatibility = await createProductBuildCompatibilityReportV1({
+    previous: {
+      buildNumber: sourceBuild.buildNumber,
+      packageHash: sourceRelease.manifest.packageHash,
+      runtimePackage: sourceRelease.manifest.runtimePackage,
+    },
+    current: {
+      buildNumber: authority.build.buildNumber,
+      packageHash: authority.build.packageHash,
+      runtimePackage,
+    },
+  })
+  let storedCompatibility: unknown
+  try { storedCompatibility = JSON.parse(authority.build.compatibilityJson) }
+  catch { fail('更新Build兼容报告不是合法JSON') }
+  if (canonicalProductProductionJsonV2(storedCompatibility)
+    !== canonicalProductProductionJsonV2(compatibility)) fail('更新Build兼容报告与当前RuntimePackage复算不一致')
+  if (compatibility.migrationPolicy === 'initial-session') fail('修复Build不能使用首版存档策略')
+  let targetRelease: Awaited<ReturnType<typeof verifyOwnedTextOpenWorldPlayerReleaseV1>> | null = null
+  if (authority.build.status === 'released' && authority.build.releasedProductReleaseId != null) {
+    const targetReleaseRoot = await db.productReleases.get(authority.build.releasedProductReleaseId)
+    if (!targetReleaseRoot) fail('修复版Release不存在')
+    targetRelease = await verifyOwnedTextOpenWorldPlayerReleaseV1(authority.scope, targetReleaseRoot)
+    const parent = targetRelease.manifest.lineage.parentRelease
+    if (targetRelease.manifest.productionProvenance.buildNumber !== authority.build.buildNumber
+      || targetRelease.manifest.packageHash !== authority.build.packageHash
+      || parent?.releaseUid !== sourceRelease.manifest.lineage.releaseUid
+      || parent.releaseHash !== sourceRelease.manifest.releaseIdentityHash) {
+      fail('修复版Release没有形成源版本的直接不可变后继')
+    }
+  }
+  const sourceSessions = (await db.productRuntimeSessions
+    .where('productReleaseId').equals(sourceRelease.release.id!).toArray())
+    .filter(row => row.id != null && row.projectId === authority.scope.projectId
+      && row.worldId === authority.scope.worldId && row.workId === authority.scope.workId
+      && row.productBuildId == null && row.runtimeSourceHash === sourceRelease.manifest.packageHash
+      && row.kind === 'text-open-world') as Array<ProductRuntimeSession & { id: number }>
+  const migratedSessions = targetRelease == null ? [] : (await db.productRuntimeSessions
+    .where('productReleaseId').equals(targetRelease.release.id!).toArray())
+    .filter(row => row.id != null && row.projectId === authority.scope.projectId
+      && row.worldId === authority.scope.worldId && row.workId === authority.scope.workId
+      && row.parentSessionId != null && sourceSessions.some(source => source.id === row.parentSessionId)
+      && row.productBuildId == null && row.runtimeSourceHash === targetRelease!.manifest.packageHash
+      && row.kind === 'text-open-world') as Array<ProductRuntimeSession & { id: number }>
+  const issue = !input.targetFullPlaytest || input.targetFullPlaytest.status !== 'passed'
+    || input.targetFullPlaytest.evidence.outcome !== 'accepted'
+    ? '修复Build尚未完成通过线的真人双结局完整试玩'
+    : !targetRelease
+      ? '修复Build尚未正式发布为新的不可变Release'
+      : sourceSessions.length < 1
+        ? '源Release没有可用于验证旧档继续或显式迁移的正式存档'
+        : null
+  const sourceLowScoreReadiness = sourceLowScores.map(row => {
+    const targetRating = input.targetFullPlaytest?.evidence.assessments
+      .find(item => item.criterionKey === row.criterionKey)?.rating
+    if (input.targetFullPlaytest?.status === 'passed'
+      && (targetRating == null || targetRating < 3)) {
+      fail(`修复版完整试玩没有把低分项提升到通过线:${row.criterionKey}`)
+    }
+    return {
+      criterionKey: row.criterionKey,
+      sourceRating: row.rating as 1 | 2,
+      targetRating: (targetRating ?? 3) as 3 | 4 | 5,
+    }
+  })
+  const readiness: TextOpenWorldCreatorUpdateVerificationReadinessV1 = {
+    required: true, ready: issue == null, issue,
+    sourceReleaseVersion: sourceRelease.release.version,
+    targetReleaseVersion: targetRelease?.release.version ?? null,
+    compatibility: {
+      level: compatibility.level,
+      migrationPolicy: compatibility.migrationPolicy,
+      reportHash: compatibility.reportHash,
+    },
+    sourceIssues: repairIssues.map(row => ({
+      sourceIssueReceiptHash: row.issue.receiptHash,
+      issueKey: row.issue.evidence.issueKey,
+      category: row.issue.evidence.category,
+      severity: row.issue.evidence.severity,
+      affectedStableKeys: [...row.issue.evidence.affectedStableKeys],
+    })),
+    sourceLowScores: sourceLowScoreReadiness,
+    sourceSessionCandidates: sourceSessions.map(row => ({
+      sessionId: row.id, title: row.title, status: row.status,
+    })),
+    migratedSessionCandidates: migratedSessions.map(row => ({
+      sessionId: row.id, title: row.title, parentSessionId: row.parentSessionId!,
+    })),
+    targetRouteWitnessKeys: input.targetFullPlaytest?.evidence.routes
+      .map(row => row.session.sessionWitnessKey) ?? [],
+  }
+  return {
+    context: {
+      sourceBuild, repairAuthorizations, derivedCommandHashes, targetTaskKeys, staleTaskKeys,
+      sourceRelease, targetRelease, sourceCalibration, sourceFullPlaytest,
+      targetFullPlaytest: input.targetFullPlaytest, sourceIssues, repairIssues,
+      sourceLowScores, compatibility, sourceSessions, migratedSessions,
+    },
+    readiness,
+  }
+}
+
+async function readUpdateVerificationReceipt(input: {
+  authority: BuildAuthorityV1
+  context: UpdateVerificationContextV1 | null
+}): Promise<VerifiedReceiptV1<TextOpenWorldCreatorUpdateVerificationEvidenceV1> | null> {
+  const receipt = await latestFixedReceipt({
+    authority: input.authority, gateId: TEXT_OPEN_WORLD_CREATOR_UPDATE_VERIFICATION_GATE_ID_V1,
+    verifierId: 'storyforge.creator-release-update-verification',
+    policyId: UPDATE_VERIFICATION_POLICY_ID, statuses: ['passed'],
+    parseEvidence: parseTextOpenWorldCreatorUpdateVerificationEvidenceV1,
+  })
+  const context = input.context
+  if (!receipt || !context) return null
+  const targetRelease = context.targetRelease
+  const targetFullPlaytest = context.targetFullPlaytest
+  if (!targetRelease || !targetFullPlaytest) return null
+  const evidence = receipt.evidence
+  const repairAuthorization = context.repairAuthorizations[context.repairAuthorizations.length - 1]!
+  const expectedIssueHashes = context.repairIssues.map(row => row.issue.receiptHash).sort()
+  const expectedLow = context.sourceLowScores.map(row => row.criterionKey).sort()
+  const targetRouteKeys = targetFullPlaytest.evidence.routes
+    .map(row => row.session.sessionWitnessKey).sort()
+  const expectedIssueFacts = context.repairIssues.map(row => ({
+    sourceIssueReceiptHash: row.issue.receiptHash,
+    issueKey: row.issue.evidence.issueKey,
+    category: row.issue.evidence.category,
+    severity: row.issue.evidence.severity,
+    affectedStableKeys: [...row.issue.evidence.affectedStableKeys],
+  })).sort((left, right) => left.sourceIssueReceiptHash.localeCompare(right.sourceIssueReceiptHash))
+  const actualIssueFacts = evidence.issueResolutions.map(row => ({
+    sourceIssueReceiptHash: row.sourceIssueReceiptHash,
+    issueKey: row.issueKey,
+    category: row.category,
+    severity: row.severity,
+    affectedStableKeys: [...row.affectedStableKeys],
+  }))
+  const expectedLowFacts = context.sourceLowScores.map(row => ({
+    criterionKey: row.criterionKey,
+    sourceRating: row.rating,
+    targetRating: targetFullPlaytest.evidence.assessments
+      .find(item => item.criterionKey === row.criterionKey)?.rating,
+  })).sort((left, right) => left.criterionKey.localeCompare(right.criterionKey))
+  const actualLowFacts = evidence.lowScoreResolutions.map(row => ({
+    criterionKey: row.criterionKey,
+    sourceRating: row.sourceRating,
+    targetRating: row.targetRating,
+  }))
+  const inputHashes = [
+    context.sourceRelease.manifest.packageHash,
+    input.authority.build.packageHash,
+    context.sourceFullPlaytest.receiptHash,
+    targetFullPlaytest.receiptHash,
+    repairAuthorization.authorizationHash,
+    repairAuthorization.impactPlanHash,
+    ...context.derivedCommandHashes,
+    context.compatibility.reportHash,
+    evidence.saveWitness.sourceStateHash,
+    ...(evidence.saveWitness.targetStateHash ? [evidence.saveWitness.targetStateHash] : []),
+    ...(evidence.saveWitness.migrationPreviewHash ? [evidence.saveWitness.migrationPreviewHash] : []),
+  ]
+  const evidenceRefs = [
+    context.sourceFullPlaytest.receiptHash,
+    targetFullPlaytest.receiptHash,
+    repairAuthorization.authorizationHash,
+    repairAuthorization.impactPlanHash,
+    ...context.derivedCommandHashes,
+    context.compatibility.reportHash,
+    ...expectedIssueHashes,
+    ...targetRouteKeys,
+    evidence.saveWitness.sourceSessionWitnessKey,
+    evidence.saveWitness.sourceStateHash,
+    ...(evidence.saveWitness.targetSessionWitnessKey ? [evidence.saveWitness.targetSessionWitnessKey] : []),
+    ...(evidence.saveWitness.targetStateHash ? [evidence.saveWitness.targetStateHash] : []),
+    ...(evidence.saveWitness.migrationPreviewHash ? [evidence.saveWitness.migrationPreviewHash] : []),
+  ]
+  if (!bindingEquals(evidence.targetBuild, input.authority.buildBinding)
+    || !bindingEquals(evidence.sourceBuild,
+      buildBindingFromRow(input.authority.production.productionKey, context.sourceBuild))
+    || evidence.sourceFullPlaytestReceiptHash !== context.sourceFullPlaytest.receiptHash
+    || evidence.targetFullPlaytestReceiptHash !== targetFullPlaytest.receiptHash
+    || evidence.repairAuthorizationHash !== repairAuthorization.authorizationHash
+    || evidence.impactPlanHash !== repairAuthorization.impactPlanHash
+    || canonicalProductProductionJsonV2(evidence.derivedCommandHashes)
+      !== canonicalProductProductionJsonV2(context.derivedCommandHashes)
+    || canonicalProductProductionJsonV2(evidence.issueResolutions.map(row => row.sourceIssueReceiptHash).sort())
+      !== canonicalProductProductionJsonV2(expectedIssueHashes)
+    || canonicalProductProductionJsonV2(evidence.lowScoreResolutions.map(row => row.criterionKey).sort())
+      !== canonicalProductProductionJsonV2(expectedLow)
+    || canonicalProductProductionJsonV2(evidence.sourceRelease)
+      !== canonicalProductProductionJsonV2(updateReleaseBindingV1(context.sourceRelease))
+    || canonicalProductProductionJsonV2(evidence.targetRelease)
+      !== canonicalProductProductionJsonV2(updateReleaseBindingV1(targetRelease))
+    || canonicalProductProductionJsonV2(evidence.targetTaskKeys)
+      !== canonicalProductProductionJsonV2(context.targetTaskKeys)
+    || canonicalProductProductionJsonV2(evidence.staleTaskKeys)
+      !== canonicalProductProductionJsonV2(context.staleTaskKeys)
+    || canonicalProductProductionJsonV2(actualIssueFacts) !== canonicalProductProductionJsonV2(expectedIssueFacts)
+    || canonicalProductProductionJsonV2(actualLowFacts) !== canonicalProductProductionJsonV2(expectedLowFacts)
+    || evidence.issueResolutions.some(row => row.targetRouteWitnessKeys.some(key => !targetRouteKeys.includes(key)))
+    || evidence.lowScoreResolutions.some(row => row.targetRouteWitnessKeys.some(key => !targetRouteKeys.includes(key)))
+    || evidence.compatibility.reportHash !== context.compatibility.reportHash
+    || evidence.compatibility.level !== context.compatibility.level
+    || evidence.compatibility.migrationPolicy !== context.compatibility.migrationPolicy
+    || receipt.gateReceipt.verifierKind !== 'human-evidence'
+    || !stringListsEqual(receipt.gateReceipt.inputHashes, inputHashes)
+    || !stringListsEqual(receipt.gateReceipt.evidenceRefs, evidenceRefs)
+    || receipt.gateReceipt.environmentHash !== null
+    || receipt.gateReceipt.createdAt !== evidence.verifiedAt) fail('修复版更新验证回执与当前Release链不闭合')
   return receipt
 }
 
@@ -1119,6 +1572,8 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
     semanticReceipt: VerifiedReceiptV1<TextOpenWorldCreatorSemanticDecisionEvidenceV1> | null
     grayboxReceipt: VerifiedReceiptV1<TextOpenWorldCreatorGrayboxEvidenceV1> | null
     fullPlaytestReceipt: VerifiedReceiptV1<TextOpenWorldCreatorFullPlaytestEvidenceV1> | null
+    updateContext: UpdateVerificationContextV1 | null
+    updateVerificationReceipt: VerifiedReceiptV1<TextOpenWorldCreatorUpdateVerificationEvidenceV1> | null
     releaseReceipt: VerifiedReceiptV1<TextOpenWorldCreatorReleaseQualityEvidenceV1> | null
     issueSet: Awaited<ReturnType<typeof currentIssueSet>>
   }
@@ -1151,6 +1606,12 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
   ])
   const issueSet = await currentIssueSet(issues)
   const fullPlaytestReceipt = await readFullPlaytestReceipt({ authority, calibrationReceipt, issueSet })
+  const updateState = await updateVerificationContextV1({
+    authority, targetFullPlaytest: fullPlaytestReceipt,
+  })
+  const updateVerificationReceipt = await readUpdateVerificationReceipt({
+    authority, context: updateState.context,
+  })
   const releaseReceipt = await readReleaseQualityReceipt({
     authority, hardReceipt, calibrationReceipt, semanticReceipt, grayboxReceipt, issueSet,
   })
@@ -1184,6 +1645,8 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
       calibrationReceipt: publicReceipt(calibrationReceipt),
       grayboxCandidates, grayboxReceipt: publicReceipt(grayboxReceipt),
       fullPlaytestReceipt: publicReceipt(fullPlaytestReceipt),
+      updateVerificationReadiness: structuredClone(updateState.readiness),
+      updateVerificationReceipt: publicReceipt(updateVerificationReceipt),
       issues: issues.map(row => ({
         receipt: publicReceipt(row.issue)!, waiver: publicReceipt(row.waiver),
         blocksRelease: row.issue.evidence.severity === 'blocking' || !row.waiver,
@@ -1196,7 +1659,8 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
     },
     internal: {
       issues, hardReceipt, calibrationReceipt, semanticReceipt, grayboxReceipt,
-      fullPlaytestReceipt, releaseReceipt, issueSet,
+      fullPlaytestReceipt, updateContext: updateState.context, updateVerificationReceipt,
+      releaseReceipt, issueSet,
     },
   }
 }
@@ -1573,6 +2037,253 @@ export async function recordTextOpenWorldCreatorFullPlaytestV1(input: {
     verifierId: 'storyforge.creator-full-human-playtest', policyId: FULL_PLAYTEST_POLICY_ID,
     statuses: ['passed', 'needs-human'], parseEvidence: parseTextOpenWorldCreatorFullPlaytestEvidenceV1,
   }))!
+}
+
+export async function recordTextOpenWorldCreatorUpdateVerificationV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+  buildId: number
+  sourceSessionId: number
+  saveMode: TextOpenWorldCreatorUpdateVerificationEvidenceV1['saveWitness']['mode']
+  migratedSessionId?: number | null
+  issueResolutions: Array<{
+    sourceIssueReceiptHash: string
+    targetRouteWitnessKeys: string[]
+    verificationNote: string
+  }>
+  lowScoreResolutions: Array<{
+    criterionKey: TextOpenWorldCreatorUpdateLowScoreResolutionV1['criterionKey']
+    targetRouteWitnessKeys: string[]
+    verificationNote: string
+  }>
+  humanChecks: TextOpenWorldCreatorUpdateVerificationHumanChecksV1
+  authorNote: string
+}): Promise<TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorUpdateVerificationEvidenceV1>> {
+  const authority = await loadBuildAuthority({
+    scope: input.scope, productionId: input.productionId, expectedBuildId: input.buildId,
+  })
+  if (authority.build.sourceProductReleaseId == null || authority.build.status !== 'released') {
+    fail('只有已正式发布的Creator修复Build可以记录更新验证')
+  }
+  const quality = await readQualityWorkspaceWithAuthority(authority)
+  if (quality.internal.updateVerificationReceipt) return publicReceipt(quality.internal.updateVerificationReceipt)!
+  const context = quality.internal.updateContext
+  if (!context?.targetRelease || !context.targetFullPlaytest
+    || !quality.workspace.updateVerificationReadiness.ready) {
+    fail(`修复版更新验证尚未就绪:${quality.workspace.updateVerificationReadiness.issue ?? '证据不完整'}`)
+  }
+  const targetRouteKeys = context.targetFullPlaytest.evidence.routes
+    .map(row => row.session.sessionWitnessKey).sort()
+  const routeSet = new Set(targetRouteKeys)
+  const requestedIssues = new Map(input.issueResolutions.map(row => [row.sourceIssueReceiptHash, row]))
+  const expectedIssueHashes = context.repairIssues.map(row => row.issue.receiptHash).sort()
+  if (requestedIssues.size !== input.issueResolutions.length
+    || requestedIssues.size !== expectedIssueHashes.length
+    || expectedIssueHashes.some(hash => !requestedIssues.has(hash))) {
+    fail('更新验证必须逐项覆盖源版本全部未闭合问题')
+  }
+  const requestedLowScores = new Map(input.lowScoreResolutions.map(row => [row.criterionKey, row]))
+  const expectedLowKeys = context.sourceLowScores.map(row => row.criterionKey).sort()
+  if (requestedLowScores.size !== input.lowScoreResolutions.length
+    || requestedLowScores.size !== expectedLowKeys.length
+    || expectedLowKeys.some(key => !requestedLowScores.has(key))) {
+    fail('更新验证必须逐项覆盖源版本全部低分项')
+  }
+  for (const row of [...input.issueResolutions, ...input.lowScoreResolutions]) {
+    if (!row.targetRouteWitnessKeys.length
+      || row.targetRouteWitnessKeys.some(key => !routeSet.has(key))) {
+      fail('每项修复结论必须绑定修复版完整试玩中的真实路线')
+    }
+  }
+  const sourceSession = context.sourceSessions.find(row => row.id === input.sourceSessionId)
+    ?? fail('选择的旧存档不属于源Release')
+  let sourceSave: ReleaseSaveCaptureV1
+  let targetSave: ReleaseSaveCaptureV1 | null = null
+  let migrationPreviewHash: string | null = null
+  if (input.saveMode === 'continued-on-source-release') {
+    if (input.migratedSessionId != null) fail('继续固定旧版本时不能同时选择迁移子存档')
+    sourceSave = await captureReleaseSaveV1({
+      scope: authority.scope, release: context.sourceRelease, session: sourceSession,
+    })
+  } else if (input.saveMode === 'explicit-migration-child') {
+    if (context.compatibility.level !== 'compatible' || input.migratedSessionId == null) {
+      fail('只有兼容更新和已创建的显式迁移子存档可以验证迁移')
+    }
+    const child = context.migratedSessions.find(row => row.id === input.migratedSessionId
+      && row.parentSessionId === sourceSession.id) ?? fail('迁移子存档与所选源存档不闭合')
+    const throughSequence = child.parentThroughSequence ?? fail('迁移子存档缺少源分支序号')
+    sourceSave = await captureReleaseSaveV1({
+      scope: authority.scope, release: context.sourceRelease, session: sourceSession, throughSequence,
+    })
+    const migration = await verifyTextOpenWorldSaveMigrationBranchV1({
+      parentSession: sourceSession,
+      childSession: child,
+      parentRelease: context.sourceRelease.release,
+      childRelease: context.targetRelease.release,
+      parentManifest: context.sourceRelease.manifest,
+      childManifest: context.targetRelease.manifest,
+      sourceStateHash: sourceSave.stateHash,
+    })
+    targetSave = await captureReleaseSaveV1({
+      scope: authority.scope, release: context.targetRelease, session: child,
+    })
+    migrationPreviewHash = migration.previewHash
+  } else {
+    fail('存档验证模式无效')
+  }
+  const verifiedAt = Date.now()
+  const repairAuthorization = context.repairAuthorizations[context.repairAuthorizations.length - 1]!
+  const evidence = parseTextOpenWorldCreatorUpdateVerificationEvidenceV1({
+    schema: 'storyforge.text-open-world-creator-update-verification-evidence', version: 1,
+    sourceBuild: buildBindingFromRow(authority.production.productionKey, context.sourceBuild),
+    targetBuild: authority.buildBinding,
+    sourceRelease: updateReleaseBindingV1(context.sourceRelease),
+    targetRelease: updateReleaseBindingV1(context.targetRelease),
+    sourceFullPlaytestReceiptHash: context.sourceFullPlaytest.receiptHash,
+    targetFullPlaytestReceiptHash: context.targetFullPlaytest.receiptHash,
+    repairAuthorizationHash: repairAuthorization.authorizationHash,
+    impactPlanHash: repairAuthorization.impactPlanHash,
+    derivedCommandHashes: context.derivedCommandHashes,
+    targetTaskKeys: context.targetTaskKeys,
+    staleTaskKeys: context.staleTaskKeys,
+    issueResolutions: context.repairIssues.map(row => {
+      const resolution = requestedIssues.get(row.issue.receiptHash)!
+      return {
+        sourceIssueReceiptHash: row.issue.receiptHash,
+        issueKey: row.issue.evidence.issueKey,
+        category: row.issue.evidence.category,
+        severity: row.issue.evidence.severity,
+        affectedStableKeys: row.issue.evidence.affectedStableKeys,
+        targetRouteWitnessKeys: resolution.targetRouteWitnessKeys,
+        verificationNote: resolution.verificationNote,
+      }
+    }),
+    lowScoreResolutions: context.sourceLowScores.map(row => {
+      const resolution = requestedLowScores.get(row.criterionKey)!
+      const targetRating = context.targetFullPlaytest!.evidence.assessments
+        .find(item => item.criterionKey === row.criterionKey)?.rating
+      return {
+        criterionKey: row.criterionKey,
+        sourceRating: row.rating,
+        targetRating,
+        targetRouteWitnessKeys: resolution.targetRouteWitnessKeys,
+        verificationNote: resolution.verificationNote,
+      }
+    }),
+    compatibility: {
+      level: context.compatibility.level,
+      migrationPolicy: context.compatibility.migrationPolicy,
+      reportHash: context.compatibility.reportHash,
+    },
+    saveWitness: {
+      mode: input.saveMode,
+      sourceSessionWitnessKey: sourceSave.sessionWitnessKey,
+      sourceStateHash: sourceSave.stateHash,
+      sourceThroughSequence: sourceSave.throughSequence,
+      targetSessionWitnessKey: targetSave?.sessionWitnessKey ?? null,
+      targetStateHash: targetSave?.stateHash ?? null,
+      migrationPreviewHash,
+    },
+    humanChecks: input.humanChecks,
+    authorNote: input.authorNote.trim(),
+    verifiedAt,
+  })
+  const receipt = await createGateReceipt({
+    gateId: TEXT_OPEN_WORLD_CREATOR_UPDATE_VERIFICATION_GATE_ID_V1,
+    verifierId: 'storyforge.creator-release-update-verification', verifierKind: 'human-evidence',
+    inputHashes: [
+      context.sourceRelease.manifest.packageHash,
+      authority.build.packageHash,
+      context.sourceFullPlaytest.receiptHash,
+      context.targetFullPlaytest.receiptHash,
+      repairAuthorization.authorizationHash,
+      repairAuthorization.impactPlanHash,
+      ...context.derivedCommandHashes,
+      context.compatibility.reportHash,
+      evidence.saveWitness.sourceStateHash,
+      ...(evidence.saveWitness.targetStateHash ? [evidence.saveWitness.targetStateHash] : []),
+      ...(evidence.saveWitness.migrationPreviewHash ? [evidence.saveWitness.migrationPreviewHash] : []),
+    ],
+    environmentHash: null,
+    evidence,
+    status: 'passed',
+    policyId: UPDATE_VERIFICATION_POLICY_ID,
+    evidenceRefs: [
+      context.sourceFullPlaytest.receiptHash,
+      context.targetFullPlaytest.receiptHash,
+      repairAuthorization.authorizationHash,
+      repairAuthorization.impactPlanHash,
+      ...context.derivedCommandHashes,
+      context.compatibility.reportHash,
+      ...expectedIssueHashes,
+      ...targetRouteKeys,
+      evidence.saveWitness.sourceSessionWitnessKey,
+      evidence.saveWitness.sourceStateHash,
+      ...(evidence.saveWitness.targetSessionWitnessKey ? [evidence.saveWitness.targetSessionWitnessKey] : []),
+      ...(evidence.saveWitness.targetStateHash ? [evidence.saveWitness.targetStateHash] : []),
+      ...(evidence.saveWitness.migrationPreviewHash ? [evidence.saveWitness.migrationPreviewHash] : []),
+    ],
+    createdAt: verifiedAt,
+  })
+  const pending = pendingReceiptRow(authority, receipt)
+  const sourceBuildJson = canonicalRows([context.sourceBuild])
+  const derivedCommandsJson = canonicalRows(authority.derivedCommandChain)
+  const sourceReleaseJson = canonicalRows([context.sourceRelease.release])
+  const targetReleaseJson = canonicalRows([context.targetRelease.release])
+  const qualityRows = [
+    context.sourceCalibration.row,
+    ...(quality.internal.calibrationReceipt ? [quality.internal.calibrationReceipt.row] : []),
+    context.sourceFullPlaytest.row,
+    context.targetFullPlaytest.row,
+    ...context.sourceIssues.flatMap(row => [row.issue.row, ...(row.waiver ? [row.waiver.row] : [])]),
+    ...quality.internal.issues.flatMap(row => [row.issue.row, ...(row.waiver ? [row.waiver.row] : [])]),
+  ]
+  const qualityRowsJson = canonicalRows(qualityRows)
+  const stored = await db.transaction('rw', scopeTransactionTables(
+    db.productProductions, db.productProductionBriefs, db.productProductionCommands,
+    db.productBuilds, db.productBuildArtifacts, db.productReleases,
+    db.productRuntimeSessions, db.productRuntimeEvents, db.productQualityGateReceipts,
+  ), async () => {
+    await assertAuthorityRowsUnchangedInTransaction(authority)
+    const [sourceBuild, derivedCommands, sourceRelease, targetRelease, sourceSessionCurrent] = await Promise.all([
+      db.productBuilds.get(context.sourceBuild.id),
+      db.productProductionCommands.bulkGet(authority.derivedCommandChain.map(row => row.id)),
+      db.productReleases.get(context.sourceRelease.release.id!),
+      db.productReleases.get(context.targetRelease!.release.id!),
+      db.productRuntimeSessions.get(sourceSave.session.id),
+    ])
+    if (!sourceBuild || canonicalRows([sourceBuild]) !== sourceBuildJson
+      || derivedCommands.some(row => !row)
+      || canonicalRows(derivedCommands.filter((row): row is ProductProductionCommandRecordV1 => row != null))
+        !== derivedCommandsJson
+      || !sourceRelease || canonicalRows([sourceRelease]) !== sourceReleaseJson
+      || !targetRelease || canonicalRows([targetRelease]) !== targetReleaseJson
+      || !sourceSessionCurrent || canonicalRows([sourceSessionCurrent]) !== sourceSave.sessionRowJson
+      || canonicalRows(await db.productRuntimeEvents.where('sessionId').equals(sourceSave.session.id).toArray())
+        !== sourceSave.eventRowsJson) fail('更新验证依赖证据在写入前变化')
+    if (targetSave) {
+      const [targetSessionCurrent, targetEvents] = await Promise.all([
+        db.productRuntimeSessions.get(targetSave.session.id),
+        db.productRuntimeEvents.where('sessionId').equals(targetSave.session.id).toArray(),
+      ])
+      if (!targetSessionCurrent || canonicalRows([targetSessionCurrent]) !== targetSave.sessionRowJson
+        || canonicalRows(targetEvents) !== targetSave.eventRowsJson) fail('迁移子存档在写入前变化')
+    }
+    const currentQualityRows = await db.productQualityGateReceipts.bulkGet(qualityRows.map(row => row.id))
+    if (currentQualityRows.some(row => !row)
+      || canonicalRows(currentQualityRows.filter((row): row is ProductQualityGateReceiptRecordV1 => row != null))
+        !== qualityRowsJson) fail('更新验证质量证据在写入前变化')
+    const existing = await db.productQualityGateReceipts
+      .where('[buildId+gateId+receiptHash]').equals([authority.build.id, receipt.gateId, receipt.receiptHash]).first()
+    if (existing?.id != null) return existing as ProductQualityGateReceiptRecordV1 & { id: number }
+    const id = await db.productQualityGateReceipts.add(pending) as number
+    return { ...pending, id }
+  })
+  const verified = await readUpdateVerificationReceipt({ authority, context })
+  if (!verified || verified.row.id !== stored.id || verified.receiptHash !== receipt.receiptHash) {
+    fail('修复版更新验证回执写入后复验失败')
+  }
+  return publicReceipt(verified)!
 }
 
 export async function recordTextOpenWorldCreatorIssueV1(input: {

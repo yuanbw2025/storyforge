@@ -1048,8 +1048,9 @@ export default function ProductProductionStudio(props: {
             onChanged={() => refresh(details.production.id)}
           />}
         {isTextOpenWorldCreator && details.build
-          && details.production.status === 'preview-ready'
-          && ['preview-ready', 'release-ready'].includes(details.build.status)
+          && ((details.production.status === 'preview-ready'
+            && ['preview-ready', 'release-ready'].includes(details.build.status))
+            || (details.production.status === 'released' && details.build.status === 'released'))
           && <TextOpenWorldCreatorQualityStudio
             scope={props.scope}
             productionId={selectedProductionId!}
