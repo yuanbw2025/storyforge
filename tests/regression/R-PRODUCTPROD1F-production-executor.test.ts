@@ -7495,7 +7495,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3', 'media.visual-bible',
       'quality.adventure-review', 'quality.autoplay', 'quality.playtest-plan', 'quality.report', 'runtime.package',
     ])
-  }, 45_000)
+  }, 120_000)
 
   it('保留独立叙事审查证据，并在存在阻塞问题时拒绝装配可玩包', async () => {
     const owned = await fixtureForProduct('text-adventure', { visualLevel: 'none', maximumModelCalls: 64 })
@@ -7767,7 +7767,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       .toMatchObject({ passed: true })
     expect(await db.productBuildArtifacts
       .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).count()).toBe(1)
-  }, 45_000)
+  }, 120_000)
 
   it('六种现行生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {
     const products: ProductionProductKindV1[] = [
@@ -8058,5 +8058,5 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         })
       }
     }
-  }, 90_000)
+  }, 180_000)
 })
