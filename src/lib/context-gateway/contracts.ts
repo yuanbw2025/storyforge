@@ -54,7 +54,7 @@ function assertExactKeys(value: object, allowed: readonly string[], label: strin
 
 function assertScope(scope: ContextResourceDescriptorV1['scope']): void {
   if (!Number.isSafeInteger(scope.projectId) || scope.projectId < 1) fail('invalid-scope', 'projectId 非法')
-  for (const field of ['worldId', 'workId', 'chapterId'] as const) {
+  for (const field of ['worldId', 'workId', 'chapterId', 'productRuntimeSessionId'] as const) {
     const value = scope[field]
     if (value != null && (!Number.isSafeInteger(value) || value < 1)) fail('invalid-scope', `${field} 非法`)
   }

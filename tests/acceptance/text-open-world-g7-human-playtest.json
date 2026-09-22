@@ -1,0 +1,75 @@
+{
+  "schema": "storyforge.text-open-world.g7-human-playtest-matrix",
+  "version": 1,
+  "profileStatus": "implementation-ready-awaiting-human-evidence",
+  "profileNote": "自动测试只证明真人试玩证据合同、双结局校验、运行时AI账本、问题分级和失败关闭；不得由自动化、fixture、模型或开发脚本冒充真人完成G7-13。",
+  "requirements": {
+    "minimumDistinctEndings": 2,
+    "maximumRoutes": 6,
+    "assessmentCriteria": 10,
+    "minimumFreeInputResponses": 1,
+    "minimumPassingRating": 3
+  },
+  "gates": [
+    {
+      "id": "TOW-G7-H01",
+      "title": "每条路线必须来自当前不可变Build并拥有可重放事件头与检查点",
+      "evidenceFile": "src/lib/open-world/creator-quality.ts",
+      "testName": "完整试玩Session证据在写入前变化"
+    },
+    {
+      "id": "TOW-G7-H02",
+      "title": "真人完整试玩必须至少完成两条路线并抵达两个不同结局",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD5-creator-quality.test.ts",
+      "testName": "相同结局或没有真实运行时AI响应不能冒充完整试玩"
+    },
+    {
+      "id": "TOW-G7-H03",
+      "title": "所选路线必须合并覆盖主线结局、行动、探索、战斗、成长与恢复",
+      "evidenceFile": "src/lib/open-world/creator-quality-contract.ts",
+      "testName": "完整试玩未覆盖完整首版标准路径"
+    },
+    {
+      "id": "TOW-G7-H04",
+      "title": "自由输入体验必须绑定真实运行时AI请求响应账本与可观测等待时间",
+      "evidenceFile": "src/lib/open-world/creator-quality.ts",
+      "testName": "至少真实完成一次玩家自由输入runtime-intent响应"
+    },
+    {
+      "id": "TOW-G7-H05",
+      "title": "体验、叙事、成长、战斗、任务、UI、自由输入、演化、时长和费用必须逐项评价",
+      "evidenceFile": "src/lib/open-world/creator-quality-contract.ts",
+      "testName": "完整试玩评估没有覆盖全部十项标准"
+    },
+    {
+      "id": "TOW-G7-H06",
+      "title": "运行时费用只能记录服务商后台实值或明确声明当前不可获得",
+      "evidenceFile": "src/components/text-game/TextOpenWorldCreatorQualityStudio.tsx",
+      "testName": "服务商未提供可归因费用"
+    },
+    {
+      "id": "TOW-G7-H07",
+      "title": "任何低分或未解决问题必须生成修复态而不能伪装成验收通过",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD5-creator-quality.test.ts",
+      "testName": "低分或未解决问题只生成修复态回执"
+    },
+    {
+      "id": "TOW-G7-H08",
+      "title": "Build路线AI账本校准和问题集必须在同一事务边界内保持不变",
+      "evidenceFile": "src/lib/open-world/creator-quality.ts",
+      "testName": "完整试玩写入前校准或问题回执集合已经变化"
+    },
+    {
+      "id": "TOW-G7-H09",
+      "title": "创作者界面必须收齐双结局时长十项说明费用观察和四项真人声明",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD5-creator-quality-ui.test.tsx",
+      "testName": "只有两条不同结局、十项说明、时长、费用观察与真人声明齐全时才可冻结完整试玩"
+    },
+    {
+      "id": "TOW-G7-H10",
+      "title": "验收资料必须持续声明自动化不能代替真人完成最终游玩证据",
+      "evidenceFile": "tests/acceptance/text-open-world-g7-human-playtest.json",
+      "testName": "不得由自动化、fixture、模型或开发脚本冒充真人"
+    }
+  ]
+}

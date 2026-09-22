@@ -18,6 +18,7 @@ import { resolveWorkspaceOwnership } from '../workspace/ownership'
 import { portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portability'
 import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-record'
 import { readVerifiedMediaBlobObjectData } from '../product-production/media-blob-store'
+import type { ProductReleaseManifestV1, ProductRuntimeEvent } from '../types'
 
 /** 当前完整便携备份契约。 */
 export const CURRENT_EXPORT_VERSION = 14
@@ -25,6 +26,199 @@ export const CURRENT_EXPORT_VERSION = 14
 export interface StrictProjectExportSnapshot {
   data: ProjectExportData
   exportIds: ReadonlyMap<string, ReadonlyMap<number, number>>
+}
+
+interface CapturedProjectExportSnapshot extends StrictProjectExportSnapshot {
+  integrityRows: ReadonlyMap<string, readonly any[]>
+}
+
+function maximumRuntimeSequenceForExport(sequences: ReadonlySet<number> | undefined): number {
+  let maximum = 0
+  for (const sequence of sequences ?? []) maximum = Math.max(maximum, sequence)
+  return maximum
+}
+
+/** Fail closed before a corrupt runtime tree or derived checkpoint leaves IndexedDB. */
+async function assertProductRuntimeExportIntegrityV1(
+  rowsByTable: ReadonlyMap<string, readonly any[]>,
+): Promise<void> {
+  const builds = rowsByTable.get('productBuilds') ?? []
+  const qualityReceipts = rowsByTable.get('productQualityGateReceipts') ?? []
+  const sessions = rowsByTable.get('productRuntimeSessions') ?? []
+  const events = rowsByTable.get('productRuntimeEvents') ?? []
+  const checkpoints = rowsByTable.get('productRuntimeCheckpoints') ?? []
+  const releases = rowsByTable.get('productReleases') ?? []
+  const releasesById = new Map<number, any>()
+  const releaseManifestsById = new Map<number, ProductReleaseManifestV1>()
+  const buildsById = new Map<number, any>()
+  for (const build of builds) {
+    if (!Number.isSafeInteger(build.id) || build.id < 1 || buildsById.has(build.id)) {
+      throw new Error('[deriveExport] ProductBuild 本地主键无效')
+    }
+    buildsById.set(build.id, build)
+  }
+  if (qualityReceipts.length > 0) {
+    const { verifyProductQualityGateReceiptRecordV1 } = await import('../product-production/quality-receipts')
+    for (const row of qualityReceipts) {
+      const build = buildsById.get(row.buildId)
+      if (!build || row.projectId !== build.projectId || row.worldId !== build.worldId
+        || row.workId !== build.workId) {
+        throw new Error('[deriveExport] ProductQualityGateReceipt Build或owner无效')
+      }
+      try {
+        await verifyProductQualityGateReceiptRecordV1(row)
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error)
+        throw new Error(`[deriveExport] ProductQualityGateReceipt 内容或Hash无效:${detail}`)
+      }
+    }
+  }
+  if (releases.length > 0) {
+    const [runtimePackage, productionHash] = await Promise.all([
+      import('../product-production/runtime-package'),
+      import('../product-production/hash'),
+    ])
+    for (const release of releases) {
+      if (!Number.isSafeInteger(release.id) || release.id < 1 || releasesById.has(release.id)) {
+        throw new Error('[deriveExport] ProductRelease 本地主键无效')
+      }
+      try {
+        const manifest = await runtimePackage.verifyProductReleaseManifestV1(release.manifestJson)
+        if (await productionHash.hashProductProductionValueV2(manifest) !== release.contentHash
+          || release.productType !== manifest.productType
+          || release.productionKey !== manifest.productionProvenance.productionKey
+          || release.version !== manifest.lineage.releaseVersion) {
+          throw new Error('release-root-mismatch')
+        }
+        releasesById.set(release.id, release)
+        releaseManifestsById.set(release.id, manifest)
+      } catch {
+        throw new Error('[deriveExport] ProductRelease 内容、身份或Hash无效')
+      }
+    }
+  }
+  const sessionsById = new Map<number, any>()
+  let migrationContract: typeof import('../open-world/player-save-migration-contract') | null = null
+  for (const session of sessions) {
+    if (!Number.isSafeInteger(session.id) || session.id < 1 || sessionsById.has(session.id)) {
+      throw new Error('[deriveExport] ProductRuntimeSession 本地主键无效')
+    }
+    sessionsById.set(session.id, session)
+  }
+
+  const sequencesBySession = new Map<number, Set<number>>()
+  const eventsBySession = new Map<number, ProductRuntimeEvent[]>()
+  for (const event of events) {
+    const session = sessionsById.get(event.sessionId)
+    if (!session || event.projectId !== session.projectId
+      || (event.worldGroupId ?? null) !== (session.worldGroupId ?? null)
+      || !Number.isSafeInteger(event.sequence) || event.sequence < 1) {
+      throw new Error('[deriveExport] ProductRuntimeEvent lineage 或序号无效')
+    }
+    const sequences = sequencesBySession.get(session.id) ?? new Set<number>()
+    if (sequences.has(event.sequence)) {
+      throw new Error('[deriveExport] ProductRuntimeEvent 序号重复')
+    }
+    sequences.add(event.sequence)
+    sequencesBySession.set(session.id, sequences)
+    const ownedEvents = eventsBySession.get(session.id) ?? []
+    ownedEvents.push(event as ProductRuntimeEvent)
+    eventsBySession.set(session.id, ownedEvents)
+  }
+  for (const [sessionId, sequences] of sequencesBySession) {
+    const ordered = [...sequences].sort((left, right) => left - right)
+    if (ordered.some((sequence, index) => sequence !== index + 1)) {
+      throw new Error(`[deriveExport] ProductRuntimeEvent 序号不连续:${sessionId}`)
+    }
+  }
+
+  for (const session of sessions) {
+    const hasParent = session.parentSessionId != null
+    const hasParentSequence = session.parentThroughSequence != null
+    if (hasParent !== hasParentSequence) {
+      throw new Error('[deriveExport] ProductRuntimeSession 分支 lineage 配对无效')
+    }
+    if (!hasParent) continue
+    const parent = sessionsById.get(session.parentSessionId)
+    const parentMaximumSequence = maximumRuntimeSequenceForExport(
+      sequencesBySession.get(session.parentSessionId),
+    )
+    if (!parent || parent === session || !Number.isSafeInteger(session.parentThroughSequence)
+      || session.parentThroughSequence < 0 || session.parentThroughSequence > parentMaximumSequence
+      || parent.projectId !== session.projectId
+      || (parent.worldGroupId ?? null) !== (session.worldGroupId ?? null)
+      || parent.worldId !== session.worldId || parent.workId !== session.workId
+      || parent.kind !== session.kind) {
+      throw new Error('[deriveExport] ProductRuntimeSession 分支 lineage 或序号无效')
+    }
+    const sameSource = parent.runtimeSourceHash === session.runtimeSourceHash
+      && parent.productReleaseId === session.productReleaseId
+      && parent.productBuildId === session.productBuildId
+    if (sameSource) continue
+    if (parent.productReleaseId == null || session.productReleaseId == null
+      || parent.productBuildId != null || session.productBuildId != null) {
+      throw new Error('[deriveExport] ProductRuntimeSession 分支 lineage 或序号无效')
+    }
+    const parentRelease = releasesById.get(parent.productReleaseId)
+    const childRelease = releasesById.get(session.productReleaseId)
+    const parentManifest = releaseManifestsById.get(parent.productReleaseId)
+    const childManifest = releaseManifestsById.get(session.productReleaseId)
+    if (!parentRelease || !childRelease || !parentManifest || !childManifest) {
+      throw new Error('[deriveExport] ProductRuntimeSession 迁移Release缺失')
+    }
+    try {
+      migrationContract ??= await import('../open-world/player-save-migration-contract')
+      const sourceStateHash = await migrationContract.replayTextOpenWorldMigrationSourceStateHashV1({
+        session: parent,
+        events: eventsBySession.get(parent.id) ?? [],
+        throughSequence: session.parentThroughSequence,
+      })
+      await migrationContract.verifyTextOpenWorldSaveMigrationBranchV1({
+        parentSession: parent,
+        childSession: session,
+        parentRelease,
+        childRelease,
+        parentManifest,
+        childManifest,
+        sourceStateHash,
+      })
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(`[deriveExport] ProductRuntimeSession 迁移lineage无效:${detail}`)
+    }
+  }
+  for (const session of sessions) {
+    const seen = new Set<number>([session.id])
+    let parentSessionId = session.parentSessionId
+    while (parentSessionId != null) {
+      if (seen.has(parentSessionId)) {
+        throw new Error('[deriveExport] ProductRuntimeSession 分支 lineage 形成循环')
+      }
+      seen.add(parentSessionId)
+      parentSessionId = sessionsById.get(parentSessionId)?.parentSessionId ?? null
+    }
+  }
+
+  if (checkpoints.length > 0) {
+    const runtimeCore = await import('../product/runtime-core')
+    for (const checkpoint of checkpoints) {
+      let parsed
+      try {
+        parsed = runtimeCore.parseProductRuntimeCheckpointV1(checkpoint)
+      } catch {
+        throw new Error('[deriveExport] ProductRuntimeCheckpoint 内容、purpose、序号或 Hash 无效')
+      }
+      const session = sessionsById.get(parsed.sessionId)
+      if (!session || parsed.projectId !== session.projectId
+        || parsed.worldGroupId !== (session.worldGroupId ?? null)
+        || parsed.throughSequence > maximumRuntimeSequenceForExport(
+          sequencesBySession.get(parsed.sessionId),
+        )
+        || await runtimeCore.hashStateJson(parsed.stateJson) !== parsed.stateHash) {
+        throw new Error('[deriveExport] ProductRuntimeCheckpoint 内容、purpose、序号或 Hash 无效')
+      }
+    }
+  }
 }
 
 /** 取一张 exportable 表的库内记录(项目级按 projectId;direct-child 经 projectResolver) */
@@ -76,7 +270,11 @@ function toExportRow(
     } else if (rr.kind === 'id-array') {
       const map = idMaps.get(rr.remapVia)
       const raw = parseIdArray(obj[rr.field])
-      obj[rr.exportAs] = raw.map(id => map?.get(id)).filter((id): id is number => id != null)
+      const mapped = raw.map(id => map?.get(id))
+      if (rr.onUnmapped === 'require' && mapped.some(id => id == null)) {
+        throw new Error(`[deriveExport] ${spec.name}.${rr.field} 缺少必填引用映射`)
+      }
+      obj[rr.exportAs] = mapped.filter((id): id is number => id != null)
       // Portable shadow indexes are authoritative; local numeric IDs must not
       // leak into or destabilize a later restore.
       if (strictOwners) delete obj[rr.field]
@@ -103,8 +301,9 @@ function toExportRow(
         obj[rr.field],
         rr.paths,
         idMaps.get(rr.remapVia),
-        rr.onUnmapped === 'require',
+        rr.onUnmapped ?? 'null',
         `${spec.name}.${rr.field}`,
+        rr.keyedMaps,
       )
       // The portable shadow is authoritative. Never leak embedded local IDs
       // into either ordinary or strict backups.
@@ -159,8 +358,9 @@ function remapJsonIdPathsForExport(
   value: unknown,
   paths: readonly string[],
   idMap: Map<number, number> | undefined,
-  required: boolean,
+  onUnmapped: 'require' | 'require-if-present' | 'null',
   label: string,
+  keyedMaps?: readonly { path: string; keyFields: readonly string[]; separator: string }[],
 ): string | null {
   if (value == null) return null
   let parsed: unknown
@@ -172,23 +372,98 @@ function remapJsonIdPathsForExport(
   }
   for (const path of paths) {
     const parts = path.split('.').filter(Boolean)
+    const field = parts[parts.length - 1]
+    if (!field) continue
+    const owners: Array<Record<string, unknown>> = []
+    const visit = (value: unknown, index: number): void => {
+      if (!value || typeof value !== 'object') {
+        if (onUnmapped === 'require') throw new Error(`[deriveExport] ${label}.${path} 缺失`)
+        return
+      }
+      const part = parts[index]
+      if (Array.isArray(value)) {
+        if (part === '*') {
+          for (const child of value) visit(child, index + 1)
+          return
+        }
+        if (onUnmapped === 'require') throw new Error(`[deriveExport] ${label}.${path} 缺失`)
+        return
+      }
+      const owner = value as Record<string, unknown>
+      if (index >= parts.length - 1) {
+        owners.push(owner)
+        return
+      }
+      if (part === '*') {
+        for (const child of Object.values(owner)) visit(child, index + 1)
+        return
+      }
+      if (!(part in owner)) {
+        if (onUnmapped === 'require') throw new Error(`[deriveExport] ${label}.${path} 缺失`)
+        return
+      }
+      visit(owner[part], index + 1)
+    }
+    visit(parsed, 0)
+    for (const owner of owners) {
+      if (!(field in owner)) {
+        if (onUnmapped === 'require') throw new Error(`[deriveExport] ${label}.${path} 缺失`)
+        if (onUnmapped === 'require-if-present') continue
+      }
+      const localId = owner[field]
+      if (localId == null) {
+        if (onUnmapped !== 'null') {
+          throw new Error(`[deriveExport] ${label}.${path} 缺少便携映射`)
+        }
+        owner[field] = null
+        continue
+      }
+      const portableId = typeof localId === 'number' ? idMap?.get(localId) : undefined
+      if (portableId == null && onUnmapped !== 'null') {
+        throw new Error(`[deriveExport] ${label}.${path} 缺少便携映射`)
+      }
+      owner[field] = portableId ?? null
+    }
+  }
+  for (const keyed of keyedMaps ?? []) {
+    const parts = keyed.path.split('.').filter(Boolean)
     let owner = parsed as Record<string, unknown>
+    let missing = false
     for (const part of parts.slice(0, -1)) {
       const child = owner[part]
       if (!child || typeof child !== 'object' || Array.isArray(child)) {
-        if (required) throw new Error(`[deriveExport] ${label}.${path} 缺失`)
-        owner = {}
-        break
+        if (onUnmapped === 'require-if-present') {
+          missing = true
+          break
+        }
+        throw new Error(`[deriveExport] ${label}.${keyed.path} keyed map 缺失`)
       }
       owner = child as Record<string, unknown>
     }
+    if (missing) continue
     const field = parts[parts.length - 1]
-    if (!field) continue
-    const localId = owner[field]
-    if (localId == null) { owner[field] = null; continue }
-    const portableId = typeof localId === 'number' ? idMap?.get(localId) : undefined
-    if (portableId == null && required) throw new Error(`[deriveExport] ${label}.${path} 缺少便携映射`)
-    owner[field] = portableId ?? null
+    if (field && !(field in owner) && onUnmapped === 'require-if-present') continue
+    const current = field ? owner[field] : undefined
+    if (!field || !current || typeof current !== 'object' || Array.isArray(current)) {
+      throw new Error(`[deriveExport] ${label}.${keyed.path} keyed map 无效`)
+    }
+    const rebuilt: Record<string, unknown> = {}
+    for (const value of Object.values(current as Record<string, unknown>)) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error(`[deriveExport] ${label}.${keyed.path} keyed map value 无效`)
+      }
+      const row = value as Record<string, unknown>
+      const values = keyed.keyFields.map(key => row[key])
+      if (values.some(candidate => typeof candidate !== 'string' && typeof candidate !== 'number')) {
+        throw new Error(`[deriveExport] ${label}.${keyed.path} keyed map identity 无效`)
+      }
+      const key = values.map(String).join(keyed.separator)
+      if (!key || key in rebuilt) {
+        throw new Error(`[deriveExport] ${label}.${keyed.path} keyed map identity 重复`)
+      }
+      rebuilt[key] = value
+    }
+    owner[field] = rebuilt
   }
   return JSON.stringify(parsed)
 }
@@ -223,7 +498,7 @@ async function captureProjectExportInTransaction(
   projectId: number,
   version: number,
   strictOwners: boolean,
-): Promise<StrictProjectExportSnapshot> {
+): Promise<CapturedProjectExportSnapshot> {
   const project = await db.projects.get(projectId)
   if (!project) throw new Error('项目不存在')
 
@@ -245,7 +520,6 @@ async function captureProjectExportInTransaction(
     rows.forEach((r, i) => { if (r.id != null) idMap.set(r.id, i) })
     idMaps.set(spec.name, idMap)
   }
-
   // 第二遍:逐行转导出对象
   const projectSpec = REGISTRY_BY_NAME.get('projects')
   if (!projectSpec) throw new Error('[deriveExport] PROJECT_TABLES 缺少 projects 根表')
@@ -265,12 +539,21 @@ async function captureProjectExportInTransaction(
     result[spec.name] = out
   }
 
-  return { data: result as ProjectExportData, exportIds: idMaps }
+  return { data: result as ProjectExportData, exportIds: idMaps, integrityRows: rowsByTable }
 }
 
 async function captureProjectExport(projectId: number, version: number, strictOwners: boolean): Promise<StrictProjectExportSnapshot> {
   const tables = [...new Set(PROJECT_TABLES.filter(spec => spec.exportable).map(spec => spec.table))]
-  return db.transaction('r', tables, () => captureProjectExportInTransaction(projectId, version, strictOwners))
+  const captured = await db.transaction(
+    'r',
+    tables,
+    () => captureProjectExportInTransaction(projectId, version, strictOwners),
+  )
+  // Dynamic Creator-release validators and WebCrypto run against the immutable
+  // rows captured by the read transaction. Keeping them outside IndexedDB
+  // avoids both premature auto-commit and an artificial Dexie.waitFor lock.
+  await assertProductRuntimeExportIntegrityV1(captured.integrityRows)
+  return { data: captured.data, exportIds: captured.exportIds }
 }
 
 async function portableizeSnapshot(snapshot: StrictProjectExportSnapshot): Promise<StrictProjectExportSnapshot> {

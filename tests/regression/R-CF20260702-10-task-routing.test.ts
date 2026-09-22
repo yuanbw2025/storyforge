@@ -35,6 +35,8 @@ describe('R-CF20260702-10 · task classification and resolution', () => {
     ['chapter.content', 'creation'],
     ['outline.volume', 'creation'],
     ['worldview.dimension', 'creation'],
+    ['product-production', 'creation'],
+    ['product-production.scene-script', 'creation'],
     ['state.extract', 'extraction'],
     ['chapter.memory', 'extraction'],
     ['foreshadow.structure', 'extraction'],

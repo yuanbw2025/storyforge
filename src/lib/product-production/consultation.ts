@@ -32,6 +32,7 @@ import {
   type TextAdventureProductionBriefDraftV1,
   unresolvedTextAdventureProductionBriefDecisionsV1,
 } from '../adventure/production-brief'
+import { DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1 } from '../open-world/product-config'
 
 type ConsultationSourceV1 = ProductProductionConsultationSourceV2
 
@@ -158,7 +159,7 @@ function mediaProfile(input: {
 }): ProductProductionMediaProfileV1 {
   // Each presentation product owns its own count/profile while sharing the
   // content-addressed media transport and release integrity primitives.
-  const presentationEnabled = ['avg', 'ttrpg', 'ai-town', 'text-adventure'].includes(input.productType)
+  const presentationEnabled = ['avg', 'ttrpg', 'ai-town', 'text-adventure', 'text-open-world'].includes(input.productType)
   const townImages = input.productType === 'ai-town' && input.visualLevel !== 'none'
     ? (input.aiTown?.locationCards === false ? 0 : input.aiTown?.majorLocationTarget ?? 4)
       + (input.aiTown?.portraits === false ? 0 : input.aiTown?.residentTarget ?? 6)
@@ -173,6 +174,7 @@ function mediaProfile(input: {
       : input.visualLevel === 'key-scenes' ? 2 : 8
   const townAudio = input.productType === 'ai-town' && input.aiTown?.ambientAudio === true && input.audioLevel !== 'none'
   const audioEnabled = input.productType === 'avg' || input.productType === 'ttrpg'
+    || input.productType === 'text-open-world'
   const music = !audioEnabled || input.audioLevel === 'none' ? 0 : 1
   const sfx = input.productType === 'ai-town' ? (townAudio ? 1 : 0)
     : !audioEnabled || input.audioLevel === 'none' ? 0 : input.audioLevel === 'music-sfx' ? 3 : 8
@@ -525,6 +527,36 @@ export async function draftProductProductionBriefV3(input: {
         productionModelCalls * 8_000,
       )
     : 60_000
+  const openWorldBudget = DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1.aiBudget.production
+  const productionBudget = textAdventure
+    ? {
+        maximumModelCalls: productionModelCalls,
+        maximumInputTokens: productionInputTokens,
+        maximumOutputTokens: productionOutputTokens,
+        maximumCostUsd: null,
+        maximumMediaCalls: Math.max(1, media.imageCount + media.musicTrackCount + media.sfxCount),
+        maximumDurationMs: 18_000_000,
+        maximumStorageBytes: 200_000_000,
+      }
+    : input.productType === 'text-open-world'
+    ? {
+        maximumModelCalls: openWorldBudget.maximumCalls,
+        maximumInputTokens: openWorldBudget.maximumInputTokens,
+        maximumOutputTokens: openWorldBudget.maximumOutputTokens,
+        maximumCostUsd: openWorldBudget.maximumEstimatedCostUsd,
+        maximumMediaCalls: Math.max(1, media.imageCount + media.musicTrackCount + media.sfxCount),
+        maximumDurationMs: 7_200_000,
+        maximumStorageBytes: 200_000_000,
+      }
+    : {
+        maximumModelCalls: 16,
+        maximumInputTokens: 180_000,
+        maximumOutputTokens: 60_000,
+        maximumCostUsd: null,
+        maximumMediaCalls: Math.max(1, media.imageCount + media.musicTrackCount + media.sfxCount),
+        maximumDurationMs: 3_600_000,
+        maximumStorageBytes: 200_000_000,
+      }
   return parseProductProductionBriefV3({
     schema: 'storyforge.product-production-brief', version: 3,
     ...(avg ? { avg } : {}),
@@ -554,13 +586,7 @@ export async function draftProductProductionBriefV3(input: {
     consultationBudget: {
       maximumModelCalls: 3, maximumInputTokens: 30_000, maximumOutputTokens: 8_000, maximumCostUsd: null,
     },
-    productionBudget: {
-      maximumModelCalls: productionModelCalls,
-      maximumInputTokens: productionInputTokens,
-      maximumOutputTokens: productionOutputTokens,
-      maximumCostUsd: null, maximumMediaCalls: Math.max(1, media.imageCount + media.musicTrackCount + media.sfxCount),
-      maximumDurationMs: textAdventure ? 18_000_000 : 3_600_000, maximumStorageBytes: 200_000_000,
-    },
+    productionBudget,
     qualityProfile,
     capabilityRequirements: requirements,
     externalDataPolicy: {

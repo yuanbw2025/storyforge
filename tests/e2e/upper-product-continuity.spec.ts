@@ -299,7 +299,7 @@ test('世界到游戏只进入统一制作中心并自动复用全局 AI 配置'
 
   const pipeline = await publishCurrentWorldRelease(page, '生产入口修订')
   await expect(pipeline.getByRole('button', { name: /主 Agent 生成游戏候选|快速映射|直接发布/ })).toHaveCount(0)
-  await pipeline.getByRole('button', { name: '交给文字游戏', exact: true }).click()
+  await pipeline.getByRole('button', { name: '交给文字冒险', exact: true }).click()
 
   await expect(page.getByRole('heading', { name: '制作与试玩', exact: true })).toBeVisible()
   await expect(page.getByText('自动游戏制作需要项目授权', { exact: true })).toBeVisible()

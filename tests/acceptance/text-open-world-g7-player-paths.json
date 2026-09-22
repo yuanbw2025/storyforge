@@ -1,0 +1,135 @@
+{
+  "schema": "storyforge.text-open-world.g7-player-path-matrix",
+  "version": 1,
+  "paths": [
+    {
+      "id": "TOW-G7-P01",
+      "title": "从来源创建或选择主角，进入第一地区",
+      "evidence": [
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD2-player-definition.test.ts", "testName": "把自建、已确认AI候选和预设统一编译为同一个产品定义" },
+        { "runner": "playwright", "file": "tests/e2e/text-open-world-complete-journey.spec.ts", "testName": "玩家从正式 Release 目录走完整旅程" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P02",
+      "title": "接取主线，完成调查和NPC对话",
+      "evidence": [
+        { "runner": "playwright", "file": "tests/e2e/text-open-world-scene-interactions.spec.ts", "testName": "P9场景在真实玩家入口统一承载叙事" },
+        { "runner": "playwright", "file": "tests/e2e/text-open-world-complete-journey.spec.ts", "testName": "玩家从正式 Release 目录走完整旅程" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P03",
+      "title": "获得材料和装备，查看背包并换装",
+      "evidence": [
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD2-end-to-end.test.ts", "testName": "发布、启动、行动、保存、刷新重放和检查点分支使用同一正式事件链" },
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD4-inventory-panel.test.tsx", "testName": "装备区展示三槽、旧值/新值/差值和资源裁剪提示" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P04",
+      "title": "四类战斗操作以及另一场胜利奖励",
+      "evidence": [
+        { "runner": "playwright", "file": "tests/e2e/text-open-world-combat.spec.ts", "testName": "玩家从正式存档进入双敌战斗" },
+        { "runner": "playwright", "file": "tests/e2e/text-open-world-complete-journey.spec.ts", "testName": "玩家从正式 Release 目录走完整旅程" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P05",
+      "title": "制作药剂并在后续战斗中主动使用",
+      "evidence": [
+        { "runner": "playwright", "file": "tests/e2e/text-open-world-crafting-economy.spec.ts", "testName": "玩家在正式存档完成买材料、制作药剂与卖出产物的同一经济闭环" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P06",
+      "title": "商店买卖并显示关系价格差异",
+      "evidence": [
+        { "runner": "playwright", "file": "tests/e2e/text-open-world-crafting-economy.spec.ts", "testName": "玩家在正式存档完成买材料、制作药剂与卖出产物的同一经济闭环" },
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD2-economy.test.ts", "testName": "商店投影给出关系价格解释" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P07",
+      "title": "完成普通任务，放弃并重接另一普通任务",
+      "evidence": [
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD2-quest-state-machine.test.ts", "testName": "不限时普通任务可放弃并重新揭示" },
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD4-player-quest-log.test.ts", "testName": "从canonical Effect事件还原接取、目标、放弃、重接、失败与过期证据" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P08",
+      "title": "搁置主线并推进时间使限时任务过期",
+      "evidence": [
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD2-quest-tracking-history.test.ts", "testName": "时间越过期限后由系统Action使普通任务过期" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P09",
+      "title": "提前前往第二地区且不误触关键主线",
+      "evidence": [
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD2-travel.test.ts", "testName": "提前到达不会触发主线或场景" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P10",
+      "title": "解锁快速旅行并返回",
+      "evidence": [
+        { "runner": "playwright", "file": "tests/e2e/text-open-world-complete-journey.spec.ts", "testName": "玩家从正式 Release 目录走完整旅程" },
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD2-fast-travel.test.ts", "testName": "普通到访后才自动解锁" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P11",
+      "title": "犯罪或欺骗改变道德关系且主线仍可继续",
+      "evidence": [
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD2-crime.test.ts", "testName": "正式ProductRuntimeSession要求二次确认并原子提交偷窃后果" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P12",
+      "title": "战败后从战前检查点或复活点恢复",
+      "evidence": [
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD2-life-cycle.test.ts", "testName": "战败把生命归零并屏蔽普通行动" },
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD2-life-cycle.test.ts", "testName": "失败后重试创建子分支并保留父分支失败史" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P13",
+      "title": "使用系统Action、固定选项和自然语言三种交互",
+      "evidence": [
+        { "runner": "playwright", "file": "tests/e2e/text-open-world-scene-interactions.spec.ts", "testName": "P9场景在真实玩家入口统一承载叙事" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P14",
+      "title": "推进角色重要故事线与势力地区重要故事线",
+      "evidence": [
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD2-protected-quest-unlock-v18.test.ts", "testName": "正式推进角色线与势力线" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P15",
+      "title": "从同一Release走到两个不同结局",
+      "evidence": [
+        { "runner": "playwright", "file": "tests/e2e/text-open-world-complete-journey.spec.ts", "testName": "走完整旅程，并在结局刷新后保留可读且可分支的时间线" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P16",
+      "title": "刷新、重放和分支后状态一致",
+      "evidence": [
+        { "runner": "playwright", "file": "tests/e2e/text-open-world-complete-journey.spec.ts", "testName": "结局刷新后保留可读且可分支的时间线" },
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD2-end-to-end.test.ts", "testName": "刷新重放和检查点分支使用同一正式事件链" }
+      ]
+    },
+    {
+      "id": "TOW-G7-P17",
+      "title": "发布修复版并验证兼容或明确要求新档",
+      "evidence": [
+        { "runner": "vitest", "file": "tests/regression/R-OPEN-WORLD4-player-version-compatibility.test.ts", "testName": "只开放直接兼容子版本的迁移预演" },
+        { "runner": "playwright", "file": "tests/e2e/text-open-world-save-settings.spec.ts", "testName": "正式开放世界存档中心保留分支与旧Release" }
+      ]
+    }
+  ]
+}

@@ -175,8 +175,8 @@ function enumValue<T extends string>(value: unknown, allowed: readonly T[], labe
   if (typeof value !== 'string' || !allowed.includes(value as T)) fail(`${label} 枚举无效`)
   return value as T
 }
-function keys(value: unknown, label: string): string[] {
-  if (!Array.isArray(value) || value.length > 1_000) fail(`${label} 必须是有界数组`)
+function keys(value: unknown, label: string, maximum = 1_000): string[] {
+  if (!Array.isArray(value) || value.length > maximum) fail(`${label} 必须是有界数组`)
   const parsed = value.map((item, index) => key(item, `${label}[${index}]`))
   if (new Set(parsed).size !== parsed.length) fail(`${label} 不允许重复`)
   return parsed
@@ -246,12 +246,14 @@ function parseTask(value: unknown, index: number): ProductProductionPlanTaskV3 {
     executionMode: enumValue(row.executionMode, EXECUTION_MODES, `${label}.executionMode`),
     dependsOn: keys(row.dependsOn, `${label}.dependsOn`),
     requiredReceipts,
-    inputArtifactKeys: keys(row.inputArtifactKeys, `${label}.inputArtifactKeys`),
-    outputArtifactKeys: keys(row.outputArtifactKeys, `${label}.outputArtifactKeys`),
+    // A frozen WorldRelease/novel may contain up to 20k source units. P0 owns
+    // one exact Artifact and subject lock per unit, plus the closure index.
+    inputArtifactKeys: keys(row.inputArtifactKeys, `${label}.inputArtifactKeys`, 20_001),
+    outputArtifactKeys: keys(row.outputArtifactKeys, `${label}.outputArtifactKeys`, 20_001),
     requirementKeys: keys(row.requirementKeys, `${label}.requirementKeys`),
     capabilityRequirementKeys: keys(row.capabilityRequirementKeys, `${label}.capabilityRequirementKeys`),
     concurrencyGroup: key(row.concurrencyGroup, `${label}.concurrencyGroup`),
-    subjectLockKeys: keys(row.subjectLockKeys, `${label}.subjectLockKeys`),
+    subjectLockKeys: keys(row.subjectLockKeys, `${label}.subjectLockKeys`, 20_001),
     priority: integer(row.priority, `${label}.priority`, 1_000_000),
     budgetReservation: parseBudget(row.budgetReservation, `${label}.budgetReservation`),
     maxAttempts: integer(row.maxAttempts, `${label}.maxAttempts`, 20),
@@ -383,10 +385,11 @@ export function parseProductProductionPlanV3(
       'content.design', 'content.narrative', 'content.product-module',
       'media.requirements', 'integration.package',
     ]
-    const isCanonicalProductionPlan = productType !== 'text-adventure'
+    const isCanonicalProductionPlan = !['text-adventure', 'text-open-world'].includes(productType)
       && (canonicalInputTasks.some(taskKey => taskByKey.has(taskKey)) || taskByKey.has('qa.release'))
     if (isCanonicalProductionPlan && canonicalInputTasks.some(taskKey => (
-      taskByKey.get(taskKey)?.budgetReservation.inputTokens !== canonicalInputBudget
+      taskByKey.has(taskKey)
+        && taskByKey.get(taskKey)!.budgetReservation.inputTokens !== canonicalInputBudget
     ))) {
       fail('Plan 输入预算切片不是当前生产协议')
     }

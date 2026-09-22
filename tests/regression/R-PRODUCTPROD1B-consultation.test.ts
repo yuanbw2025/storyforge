@@ -164,6 +164,20 @@ describe('R-PRODUCTPROD-1B · consultation and reviewable Brief', () => {
     expect(resolvedAdventure.productionBudget.maximumModelCalls).toBe(88)
     expect(resolvedAdventure.productionBudget.maximumOutputTokens).toBe(704_000)
 
+    const openWorldBrief = await draftProductProductionBriefV3({
+      scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: mainline.suggestionKey,
+      productType: 'text-open-world', visualLevel: 'key-scenes', audioLevel: 'none',
+      playerRole: '扮演巡盐人', openingSituation: '从盐井失声事件开始调查。',
+    })
+    expect(openWorldBrief).toMatchObject({
+      media: { visualLevel: 'key-scenes', imageCount: 2 },
+      productionBudget: {
+        maximumModelCalls: 200, maximumInputTokens: 1_200_000,
+        maximumOutputTokens: 360_000, maximumCostUsd: 30,
+      },
+    })
+    expect(openWorldBrief.media.requiredMediaKinds).toEqual(['background', 'character-pose'])
+
     const ttrpgWithoutConfirmation = await draftProductProductionBriefV3({
       scope: owned.scope, worldReleaseId: owned.release.id!, suggestionKey: mainline.suggestionKey,
       productType: 'ttrpg', visualLevel: 'none', audioLevel: 'none',

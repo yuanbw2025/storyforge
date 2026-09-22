@@ -24,7 +24,6 @@ import {
 } from '../../src/lib/adventure/runtime-api'
 import { db } from '../../src/lib/db/schema'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
-import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { evaluateProductRuntimeProductQualityV1 } from '../../src/lib/product-production/product-quality'
 import { parseProductRuntimeState, replayProductRuntimeEvents } from '../../src/lib/product/runtime-api'
 import { createProductRuntimeInstanceFromSource } from '../../src/lib/product/runtime-instances'
@@ -198,22 +197,18 @@ describe('TEXTADV-2 · 通用文字冒险基座纵切面', () => {
       ]))
   })
 
-  it('文字开放世界不能误用文字冒险 V2 私域契约', async () => {
+  it('文字开放世界不能经通用节点入口误用文字冒险 V2 私域契约', async () => {
     const owned = await seedCurrentProductWorld('TEXTADV-2 产品隔离反例')
     const sourceCatalog = await loadCurrentProductWorldSourceCatalogV1({
       scope: owned.scope,
       worldReleaseId: owned.release.id!,
       productType: 'text-open-world',
     })
-    const openWorld = createCurrentRuntimePackageFixture({
+    expect(() => createCurrentRuntimePackageFixture({
       productType: 'text-open-world',
       worldRelease: owned.release as typeof owned.release & { id: number },
       sourceCatalog,
-    })
-    expect(() => parseProductRuntimePackageV1({
-      ...openWorld,
-      adventure: createTextAdventureFoundationContentV2(),
-    })).toThrow('text-open-world 仍只接受隔离的 Adventure V1')
+    })).toThrow('必须使用专属 Creator P0-P10 / V1-V3 生产链')
   })
 
   it('装备修正只影响有效能力，不篡改基础属性，且同槽位冲突会在纯预演阶段失败', () => {

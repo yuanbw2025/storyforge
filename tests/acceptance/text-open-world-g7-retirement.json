@@ -1,0 +1,80 @@
+{
+  "schema": "storyforge.text-open-world.g7-retirement-matrix",
+  "version": 1,
+  "policy": "dedicated-creator-vnext-only-with-release-compatibility",
+  "profileNote": "文字开放世界只能由专属Creator P0-P10/V1-V3生产；旧四模块只作为冻结历史Release兼容输入，禁止新建旧包、混合包或旧Build Preview。",
+  "gates": [
+    {
+      "id": "TOW-G7-R01",
+      "title": "正式生产服务必须把文字开放世界路由到专属Creator执行器",
+      "evidenceFile": "src/lib/product-production/service.ts",
+      "testName": "createTextOpenWorldProductionExecutorV1"
+    },
+    {
+      "id": "TOW-G7-R02",
+      "title": "产品入口必须使用文字开放世界专属Creator工作流而非通用Studio",
+      "evidenceFile": "src/components/product/ProductProductionStudio.tsx",
+      "testName": "TextOpenWorldCreatorArtifactBrowser"
+    },
+    {
+      "id": "TOW-G7-R03",
+      "title": "通用产品Adapter必须显式拒绝文字开放世界旧节点编译路径",
+      "evidenceFile": "src/lib/product-production/product-adapters.ts",
+      "testName": "文字开放世界已下线通用节点 adapter"
+    },
+    {
+      "id": "TOW-G7-R04",
+      "title": "通用生产执行器必须显式拒绝文字开放世界旁路调用",
+      "evidenceFile": "src/lib/product-production/production-executor.ts",
+      "testName": "文字开放世界已下线通用生产执行器"
+    },
+    {
+      "id": "TOW-G7-R05",
+      "title": "专属RuntimePackage测试夹具默认只能生成纯vNext运行包",
+      "evidenceFile": "tests/helpers/text-open-world-product-session.ts",
+      "testName": "storyforge.text-open-world.creator.v1"
+    },
+    {
+      "id": "TOW-G7-R06",
+      "title": "历史旧包必须冻结为测试证据且不得重新调用生产编译器生成",
+      "evidenceFile": "tests/helpers/text-open-world-product-session.ts",
+      "testName": "Frozen historical package used only to prove old immutable Releases remain playable"
+    },
+    {
+      "id": "TOW-G7-R07",
+      "title": "旧运行包兼容播放器必须以不可变正式Release作为唯一入口",
+      "evidenceFile": "src/components/text-game/TextOpenWorldPlayer.tsx",
+      "testName": "store.selectedSessionSource === 'release'"
+    },
+    {
+      "id": "TOW-G7-R08",
+      "title": "旧单页Player必须改名并收口为历史Release兼容播放器",
+      "evidenceFile": "src/components/text-game/TextOpenWorldLegacyCompatibilityPlayer.tsx",
+      "testName": "never a Build Preview target"
+    },
+    {
+      "id": "TOW-G7-R09",
+      "title": "回归测试必须证明通用Adapter执行器与质量门同时拒绝文字开放世界",
+      "evidenceFile": "tests/regression/R-PRODUCTPROD1G-product-adapters.test.ts",
+      "testName": "文字开放世界不再经过通用节点 adapter，而由专属 Creator 生产链负责"
+    },
+    {
+      "id": "TOW-G7-R10",
+      "title": "回归测试必须证明旧Release可玩而旧Build Preview会被阻断",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD4-player-shell-integration.test.tsx",
+      "testName": "旧运行包只允许从不可变Release进入兼容播放器"
+    },
+    {
+      "id": "TOW-G7-R11",
+      "title": "新建正式Release夹具必须默认选择纯vNext而非历史混合形态",
+      "evidenceFile": "tests/helpers/text-open-world-product-session.ts",
+      "testName": "runtimeShape?: 'vnext-only' | 'legacy-only' | 'hybrid-compatibility'"
+    },
+    {
+      "id": "TOW-G7-R12",
+      "title": "旧Release兼容数据必须与现行生产源代码物理隔离并保持只读用途",
+      "evidenceFile": "tests/helpers/fixtures/text-open-world-legacy-runtime-package-v1.json",
+      "testName": "storyforge.product.text-open-world.v1"
+    }
+  ]
+}

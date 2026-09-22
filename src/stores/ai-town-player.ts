@@ -58,7 +58,7 @@ interface AiTownPlayerStoreV1 {
   generatingRunId: number | null
   directorRunId: number | null
   error: string
-  load(scope: WorkspaceScope, worldGroupId: number | null): Promise<void>
+  load(scope: WorkspaceScope, worldGroupId: number | null, initialSessionId?: number | null): Promise<void>
   select(sessionId: number | null): Promise<void>
   start(productReleaseId: number): Promise<number>
   move(locationKey: string): Promise<void>
@@ -173,11 +173,12 @@ export const useAiTownPlayerStore = create<AiTownPlayerStoreV1>((set, get) => {
     generatingRunId: null,
     directorRunId: null,
     error: '',
-    load: async (scope, worldGroupId) => {
+    load: async (scope, worldGroupId, initialSessionId) => {
       const changed = get().scope?.projectId !== scope.projectId || get().scope?.worldId !== scope.worldId
         || get().scope?.workId !== scope.workId || get().worldGroupId !== worldGroupId
       set({ scope, worldGroupId, loading: true, error: '', ...(changed ? { selectedSessionId: null } : {}) })
-      try { await reload() } catch (reason) { set({ error: reason instanceof Error ? reason.message : String(reason) }) }
+      try { await reload(initialSessionId === undefined ? undefined : initialSessionId) }
+      catch (reason) { set({ error: reason instanceof Error ? reason.message : String(reason) }) }
       finally { set({ loading: false }) }
     },
     select: async selectedSessionId => {

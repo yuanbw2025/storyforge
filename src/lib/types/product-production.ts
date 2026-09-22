@@ -6,6 +6,7 @@ import type {
   TtrpgHouseRuleDiffV2,
   TtrpgHouseRuleOverlayV2,
 } from "./ttrpg-product";
+import { TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_KINDS_V1 } from "./text-open-world-production";
 
 export const STORYFORGE_CANONICAL_JSON_VERSION = 2 as const;
 
@@ -97,27 +98,48 @@ export type ProductBuildArtifactStatusV1 =
   | "orphaned"
   | "invalid";
 
+export const GENERIC_PRODUCT_BUILD_ARTIFACT_KINDS_V1 = [
+  "consultation-evidence",
+  "product-design",
+  "narrative",
+  "product-module",
+  "visual-bible",
+  "audio-bible",
+  "asset-manifest",
+  "image",
+  "audio",
+  "rule-pack",
+  "campaign-pack",
+  "presentation",
+  "quality-report",
+  "playtest-report",
+  "integration-report",
+] as const;
+
+export const PRODUCT_BUILD_ARTIFACT_KINDS_V1 = [
+  ...GENERIC_PRODUCT_BUILD_ARTIFACT_KINDS_V1,
+  ...TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_KINDS_V1,
+] as const;
+
 export type ProductBuildArtifactKindV1 =
-  | "consultation-evidence"
-  | "product-design"
-  | "narrative"
-  | "product-module"
-  | "visual-bible"
-  | "audio-bible"
-  | "asset-manifest"
-  | "image"
-  | "audio"
-  | "rule-pack"
-  | "campaign-pack"
-  | "presentation"
-  | "quality-report"
-  | "playtest-report"
-  | "integration-report";
+  (typeof PRODUCT_BUILD_ARTIFACT_KINDS_V1)[number];
+
+export function isProductBuildArtifactKindV1(
+  value: unknown,
+): value is ProductBuildArtifactKindV1 {
+  return typeof value === "string"
+    && (PRODUCT_BUILD_ARTIFACT_KINDS_V1 as readonly string[]).includes(value);
+}
 
 export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "create-intent",
+  "create-text-open-world-intent",
   "save-brief-revision",
+  "save-text-open-world-creator-brief",
   "authorize-start",
+  "authorize-text-open-world-creator-start",
+  "authorize-text-open-world-creator-repair",
+  "authorize-text-open-world-creator-media",
   "pause",
   "resume",
   "stop",
@@ -667,6 +689,32 @@ export interface ProductProductionBlockerResolutionV1 {
   note: string;
   /** Explicit authored replacement; validated by the same task parser before acceptance. */
   authorDraftJson?: string;
+  /**
+   * Required before retrying an attempt whose provider result or usage has not
+   * been fully settled. The exact durable attempt is named explicitly so a
+   * stale UI cannot dispose a newer reservation by accident. When a response
+   * body is already durable, only the conservative upper-bound disposition is
+   * legal.
+   */
+  unknownResultReservation?: {
+    runId: number;
+    attempt: number;
+    controlEpoch: number;
+    disposition: "confirmed-not-charged" | "charge-reservation-upper-bound";
+  };
+}
+
+/**
+ * Author accounting decision for one exact provider reservation that was still
+ * in flight when a Production was paused. Every identity field is required so
+ * a stale resume command cannot dispose a newer attempt.
+ */
+export interface ProductProductionPausedReservationDispositionV1 {
+  taskKey: string;
+  runId: number;
+  attempt: number;
+  controlEpoch: number;
+  disposition: "confirmed-not-charged" | "charge-reservation-upper-bound";
 }
 
 export type ProductBuildCompatibilityLevelV1 =
@@ -699,11 +747,29 @@ export type ProductProductionCommandV1 =
       userText: string;
     }
   | {
+      type: "create-text-open-world-intent";
+      commandId: string;
+      productionKey: string;
+      productType: "text-open-world";
+      sourceLocator: import("./text-open-world-production").TextOpenWorldCreatorSourceLocatorV1;
+      expectedSourceBindingHash: string;
+      userText: string;
+    }
+  | {
       type: "save-brief-revision";
       commandId: string;
       expectedStateRevision: number;
       parentRevision: number | null;
       brief: ProductProductionBriefV3;
+    }
+  | {
+      type: "save-text-open-world-creator-brief";
+      commandId: string;
+      expectedStateRevision: number;
+      parentRevision: number | null;
+      sourceLocator: import("./text-open-world-production").TextOpenWorldCreatorSourceLocatorV1;
+      candidateRunId: number;
+      brief: import("./text-open-world-production").TextOpenWorldCreatorBriefV1;
     }
   | {
       type: "authorize-start";
@@ -714,12 +780,63 @@ export type ProductProductionCommandV1 =
       authorizationNonce: string;
     }
   | {
+      type: "authorize-text-open-world-creator-start";
+      commandId: string;
+      expectedStateRevision: number;
+      briefRevision: number;
+      briefHash: string;
+      sourceLocator: import("./text-open-world-production").TextOpenWorldCreatorSourceLocatorV1;
+      preflight: import("./text-open-world-production").TextOpenWorldCreatorProductionPreflightV1;
+      confirmation: import("./text-open-world-production").TextOpenWorldCreatorProductionPreflightConfirmationV1;
+      rightsBasis: import("./text-open-world-production").TextOpenWorldSourceRightsBasisV1;
+      rightsNote: string;
+      authorizationNonce: string;
+      expectedPlanHash: string;
+      authorizedAt: number;
+    }
+  | {
+      type: "authorize-text-open-world-creator-repair";
+      commandId: string;
+      expectedStateRevision: number;
+      baseBuildNumber: number;
+      expectedBasePlanHash: string;
+      expectedHandoffSetHash: string;
+      expectedImpactPlanHash: string;
+      expectedTargetPlanHash: string;
+      authorizationNonce: string;
+      authorizedAt: number;
+    }
+  | {
+      type: "authorize-text-open-world-creator-media";
+      commandId: string;
+      expectedStateRevision: number;
+      baseBuildNumber: number;
+      expectedBasePlanHash: string;
+      expectedMediaPlanHash: string;
+      expectedTargetPlanHash: string;
+      mode: "provider-generate" | "author-import";
+      acknowledgement: {
+        completeBundle: true;
+        rightsAndProvenance: true;
+        costAndProvider: true;
+        oldBuildImmutable: true;
+      };
+      authorizationNonce: string;
+      authorizedAt: number;
+    }
+  | {
       type: "pause";
       commandId: string;
       expectedStateRevision: number;
       reason: string;
     }
-  | { type: "resume"; commandId: string; expectedStateRevision: number }
+  | {
+      type: "resume";
+      commandId: string;
+      expectedStateRevision: number;
+      /** Required only when pause froze one or more in-flight provider reservations. */
+      pausedReservationDispositions?: ProductProductionPausedReservationDispositionV1[];
+    }
   | {
       type: "stop";
       commandId: string;
@@ -786,6 +903,8 @@ export type ProductProductionCommandV1 =
       buildNumber: number;
       expectedManifestHash: string;
       adoptionIntentHash: string;
+      /** Required only for the Creator dual-source publication path. */
+      creatorReleaseAuthorizationHash?: string;
     }
   | {
       type: "archive";
@@ -817,6 +936,20 @@ export interface ProductProductionRecordV1 {
   currentBriefRevision: number | null;
   currentBuildNumber: number | null;
   currentProductReleaseId: number | null;
+  /** Pre-authorization creator source locator. Local ids are registry-remapped;
+   * the portable binding/hash prevents an existing productionKey changing source. */
+  creatorSourceKind?: "world-release" | "novel" | null;
+  creatorSourceWorldReleaseId?: number | null;
+  creatorSourceWorkId?: number | null;
+  creatorSourceSelectionMode?: import("./adaptation").AdaptationSourceSelectionV1["mode"] | null;
+  creatorSourceOutlineRootId?: number | null;
+  creatorSourceStartChapterId?: number | null;
+  creatorSourceEndChapterId?: number | null;
+  creatorSourceChapterIdsJson?: string;
+  creatorSourceVersionHash?: string;
+  creatorSourceBoundaryHash?: string;
+  creatorSourceBindingJson?: string;
+  creatorSourceBindingHash?: string;
   lastErrorJson: string;
   createdAt: number;
   updatedAt: number;
@@ -831,8 +964,26 @@ export interface ProductProductionBriefRecordV1 {
   revision: number;
   parentRevision: number | null;
   status: "draft" | "authorized" | "superseded" | "withdrawn";
-  sourceWorldReleaseId: number;
-  sourceWorldContentHash: string;
+  /** Missing on records created before the dual-source creator contract. */
+  briefKind?: "product-production-v3" | "text-open-world-creator-v1";
+  /** Missing on legacy rows, where world-release is implied. */
+  sourceKind?: "world-release" | "novel";
+  sourceWorldReleaseId: number | null;
+  sourceWorldContentHash: string | null;
+  /** Local source locator columns. They are remapped on backup import and are
+   * excluded from the portable Brief/source-plan hashes. */
+  sourceWorkId?: number | null;
+  sourceOutlineRootId?: number | null;
+  sourceStartChapterId?: number | null;
+  sourceEndChapterId?: number | null;
+  sourceChapterIdsJson?: string;
+  sourceSelectionMode?: import("./adaptation").AdaptationSourceSelectionV1["mode"] | null;
+  sourceVersionHash?: string;
+  sourceBoundaryHash?: string;
+  sourceBindingJson?: string;
+  sourceBindingHash?: string;
+  /** Local evidence pointer. The portable Brief carries only the Run contract hash. */
+  candidateRunId?: number | null;
   userIntentSummary: string;
   unresolvedJson: string;
   estimateJson: string;
@@ -934,6 +1085,8 @@ export interface ProductBuildArtifactRecordV1 {
     artifactKey: string;
     version: number;
     contentHash: string;
+    /** Frozen witness over the exact parent Artifact and its producer/root Runs. */
+    proofHash?: string;
   } | null;
   createdAt: number;
   updatedAt: number;

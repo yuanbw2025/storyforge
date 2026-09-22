@@ -233,6 +233,8 @@ export type ExportRefRemap = {
   kind: 'id-array'
   exportAs: string
   storage?: 'array' | 'json-string'
+  /** Fail closed when any non-null local/portable id has no mapping. */
+  onUnmapped?: 'require' | 'drop'
 } | {
   field: string
   remapVia: string
@@ -253,7 +255,21 @@ export type ExportRefRemap = {
   kind: 'json-id-paths'
   paths: readonly string[]
   exportAs: string
-  onUnmapped?: 'require' | 'null'
+  /** Rebuild keyed object maps after nested IDs are remapped. This keeps
+   * composite identities such as `${runId}:${attempt}` portable as well as the
+   * fields stored inside each value. */
+  keyedMaps?: readonly {
+    path: string
+    keyFields: readonly string[]
+    separator: string
+  }[]
+  /**
+   * `require-if-present` lets a polymorphic JSON column participate in the
+   * portable lifecycle without requiring every schema stored in that column
+   * to expose the same nested locator. Once the path exists, however, its
+   * local/portable id must resolve in both directions.
+   */
+  onUnmapped?: 'require' | 'require-if-present' | 'null'
 }
 
 /**
@@ -585,6 +601,14 @@ export interface AssembleContextInput {
   productProductionTaskKey?: string
   productBuildId?: number
   productArtifactKeys?: string[]
+  /** G5-06: exact current governed Artifact selected by the Creator workbench. */
+  textOpenWorldCreatorEditArtifactKey?: string
+  /** Content view supplies one governed entity identity; Artifact-level edits explicitly supply null. */
+  textOpenWorldCreatorEditEntityIdentity?: string | null
+  /** G5-06: browser snapshot CAS; edit context never silently follows a newer projection. */
+  textOpenWorldCreatorEditExpectedSnapshotHash?: string
+  /** Text-open-world P1: exact SourcePin units authorized for this model batch. */
+  textOpenWorldSourceUnitKeys?: string[]
   /** Character interaction: exactly one viewpoint for the registered reader. */
   interactionParticipantKey?: string
   /** Character interaction: frozen product source + confirmed product Brief. */
@@ -676,6 +700,9 @@ export interface ContextResourceDescriptorV1 {
     workId?: number
     worldGroupId?: number | null
     chapterId?: number
+    /** Exact upper-product instance when the resource is derived from a
+     * ProductRuntimeSession rather than mutable authoring Canon. */
+    productRuntimeSessionId?: number
     /** Immutable release locator when the resource comes from WorldReference. */
     worldReleaseId?: number
     worldReleaseHash?: string
@@ -705,6 +732,10 @@ export interface FrozenResourceScopeV1 {
   worldId?: number
   workId?: number
   worldGroupId?: number | null
+  /** Exact instance locator for registered runtime Context Providers. The
+   * provider fingerprint still freezes Release/sequence/state/visibility; an
+   * id by itself never grants access to another WorkspaceScope. */
+  productRuntimeSessionId?: number
   /** Optional operation boundary. Providers may expose target-specific
    * aggregate resources without materializing one aggregate for every chapter. */
   chapterId?: number
@@ -926,6 +957,8 @@ export interface ContextSource {
   budgetTokens: number
   /** NS-1: assembleContext 总预算裁剪时不得整段删除。 */
   protectedFromTrim?: boolean
+  /** Structured contract sources must remain byte-complete; overflow fails instead of slicing invalid JSON. */
+  atomic?: boolean
   /** Source can use a caller-provided continuity snapshot without reading a Chapter row. */
   acceptsDetachedContinuitySnapshot?: boolean
   requiresWorldGroupId?: boolean
@@ -946,6 +979,32 @@ export interface ContextSource {
 
 export type AssembleContextSourceStatus = 'included' | 'omitted' | 'trimmed'
 export type AssembleContextSourceDelivery = 'full' | 'compressed' | 'truncated' | 'none'
+
+/** A registered source could not honor the caller's explicit input budget. */
+export class ContextSourceBudgetErrorV1 extends Error {
+  constructor(
+    message: string,
+    readonly sourceKey: string,
+    readonly requiredTokens: number,
+    readonly budgetTokens: number,
+  ) {
+    super(message)
+    this.name = 'ContextSourceBudgetErrorV1'
+  }
+}
+
+/** An atomic source cannot be trimmed without changing the task contract. */
+export class AtomicContextSourceBudgetErrorV1 extends ContextSourceBudgetErrorV1 {
+  constructor(sourceKey: string, originalTokens: number, budgetTokens: number) {
+    super(
+      `[assembleContext] 原子来源 ${sourceKey} 超出预算:${originalTokens}>${budgetTokens}`,
+      sourceKey,
+      originalTokens,
+      budgetTokens,
+    )
+    this.name = 'AtomicContextSourceBudgetErrorV1'
+  }
+}
 
 /**
  * Per-source delivery evidence derived by assembleContext(). It records only

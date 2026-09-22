@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 109 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 132 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -104,6 +104,29 @@
 | `product-production.adventure-quality-inputs` | 文字冒险分区叙事质量审查投影 | project | L0 | 32000 |
 | `product-production.adventure-playtest-inputs` | 文字冒险试玩总监验收证据投影 | project | L0 | 8500 |
 | `product-production.adventure-repair-feedback` | 文字冒险上一轮质量修复反馈 | project | L0 | 6000 |
+| `text-open-world.source-pin` | 文字开放世界冻结来源与本批读取单元 | project | L0 | 100000 |
+| `text-open-world.creator-edit-target` | 文字开放世界 Creator Artifact 编辑目标 | project | L0 | 100000 |
+| `text-open-world.experience-input` | 文字开放世界作者授权体验设计输入 | project | L0 | 100000 |
+| `text-open-world.gameplay-ruleset-input` | 文字开放世界已确认体验与玩法规则输入 | project | L0 | 40000 |
+| `text-open-world.presentation-profile-input` | 文字开放世界界面表现与文字降级输入 | project | L0 | 40000 |
+| `text-open-world.player-build-input` | 文字开放世界已确认主角与玩法构筑输入 | project | L0 | 40000 |
+| `text-open-world.story-architecture-input` | 文字开放世界全局故事架构输入 | project | L0 | 100000 |
+| `text-open-world.region-skeleton-input` | 文字开放世界来源与故事空间骨架输入 | project | L0 | 100000 |
+| `text-open-world.mainline-input` | 文字开放世界严格顺序主线生产输入 | project | L0 | 100000 |
+| `text-open-world.significant-threads-input` | 文字开放世界重要故事线生产输入 | project | L0 | 100000 |
+| `text-open-world.region-narrative-packs-input` | 文字开放世界地区叙事生态生产输入 | project | L0 | 100000 |
+| `text-open-world.quest-skeletons-input` | 文字开放世界任务骨架与内容需求生产输入 | project | L0 | 100000 |
+| `text-open-world.progression-catalogs-input` | 文字开放世界成长与技能目录生产输入 | project | L0 | 80000 |
+| `text-open-world.encounter-catalog-input` | 文字开放世界敌人与遭遇目录生产输入 | project | L0 | 100000 |
+| `text-open-world.item-reward-catalog-input` | 文字开放世界物品与奖励目录生产输入 | project | L0 | 100000 |
+| `text-open-world.crafting-economy-input` | 文字开放世界配方与经济目录生产输入 | project | L0 | 100000 |
+| `text-open-world.npc-runtime-input` | 文字开放世界NPC运行规则目录生产输入 | project | L0 | 100000 |
+| `text-open-world.map-interaction-input` | 文字开放世界地图交互目录生产输入 | project | L0 | 100000 |
+| `text-open-world.quest-finalize-input` | 文字开放世界任务最终化与地区导演生产输入 | project | L0 | 180000 |
+| `text-open-world.scene-scripts-input` | 文字开放世界场景脚本与三类交互绑定生产输入 | project | L0 | 220000 |
+| `text-open-world.system-finalize-input` | 文字开放世界系统配置、媒资槽与内容预算收口输入 | project | L0 | 180000 |
+| `text-open-world.balance-review-input` | 文字开放世界平衡评审输入 | project | L0 | 120000 |
+| `text-open-world.semantic-review-input` | 文字开放世界叙事语义评审输入 | project | L0 | 220000 |
 | `product-production.quality-feedback` | 上层产品生产质量反馈 | project | L1 | 6000 |
 | `product-production.repair-feedback` | 当前制作任务的失败草稿与校验意见 | project | L1 | 12000 |
 | `product-production.evolution-base` | 游戏持续演化基线 | project | L0 | 12000 |
@@ -324,7 +347,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `product-production-briefs` | `productProductionBriefs` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/adoption.ts` | 2027-08-21 |
 | `product-production-commands` | `productProductionCommands` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/adoption.ts` | 2027-08-21 |
 | `product-production-builds` | `productBuilds` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PRODUCT_PRODUCTION_ARTIFACT_POLICY + PRODUCT_QUALITY_GATE_RECEIPT_V1 + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts`<br/>`src/lib/product-production/quality-receipts.ts` | 2027-08-21 |
-| `product-production-artifacts` | `productBuildArtifacts` | `PRODUCT_PRODUCTION_ARTIFACT_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts` | 2027-08-21 |
+| `product-production-artifacts` | `productBuildArtifacts` | `PRODUCT_PRODUCTION_ARTIFACT_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/text-adventure-artifact-store.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts` | 2027-08-21 |
 | `product-production-release-adoption` | `productReleases` | `PRODUCT_PRODUCTION_PACKAGE_ADOPTION_V1 + PRODUCT_DISTRIBUTION_BUNDLE_V2 + PROJECT_TABLES + product validators` | `src/lib/product/releases.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-platform/distribution-bundle.ts` | 2027-08-21 |
 | `ttrpg-rule-pack-library` | `ttrpgRulePacks` | `RULE_PACK_V1 parser + fixture verifier + immutable version identity + PROJECT_TABLES` | `src/lib/ttrpg/rule-pack-library.ts` | 2027-08-21 |
 
@@ -415,14 +438,14 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/open-world/evolution-harness.ts:246 · chat`
 - `src/lib/open-world/harness.ts:139 · chat`
 - `src/lib/product-production/authoring-consultation.ts:169 · chat`
-- `src/lib/product-production/capabilities.ts:163 · chat`
+- `src/lib/product-production/capabilities.ts:314 · chat`
 - `src/lib/screenplay/durable-production.ts:449 · chat`
 - `src/lib/ttrpg/gm-actor-harness.ts:481 · chat`
 - `src/lib/ttrpg/gm-harness.ts:542 · chat`
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 37 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
+共 47 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
@@ -460,10 +483,20 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `eval.long-consistency.verifier` | `prose.review` | `eval.h4.verifier` | evaluation / eval-only | `long-consistency-verdict` | 禁止 | `src/components/settings/HarnessEvalPanel.tsx` |
 | `eval.long-consistency.adjudicator` | `prose.review` | `eval.h4.verifier` | evaluation / eval-only | `consistency-subtype-adjudication` | 禁止 | `src/components/settings/HarnessEvalPanel.tsx` |
 | `eval.races-gateway.grader` | `prose.review` | `eval.race6.blind-grader` | evaluation / eval-only | `races-gateway-blind-grade` | 禁止 | `src/components/settings/RacesGatewayEvalPanel.tsx` |
+| `eval.text-open-world.runtime-ai-grader` | `prose.review` | `eval.text-open-world.runtime-ai-grader` | evaluation / eval-only | `text-open-world-runtime-ai-semantic-grade` | 禁止 | `src/lib/evals/open-world-runtime/judge.ts` |
+| `eval.text-open-world.release-calibration-grader` | `prose.review` | `review.text-open-world.release-calibration-grader` | evaluation / eval-only | `text-open-world-release-calibration-grade` | 禁止 | `src/lib/open-world/creator-quality-calibration.ts` |
 | `prompt.examples.generate` | `inspiration.review` | `prompt.examples` | auxiliary / authoring-draft | `prompt-example-draft` | 禁止 | `src/components/settings/prompt/PromptExamplesEditor.tsx` |
 | `prompt.workflow.step` | `inspiration.review` | `*` | experimental / experimental | `prompt-workflow-step-draft` | 禁止 | `src/lib/generation/workflow-generation-node.ts` |
 | `style.calibration.preview` | `prose.style-learn` | `style.calibrate` | auxiliary / authoring-draft | `style-calibration-preview` | 禁止 | `src/components/style/StyleCalibrationPanel.tsx` |
+| `text-open-world.creator-brief.consult` | `text-open-world.creator-brief-consult.v1` | `authoring.text-open-world-creator-brief` | formal / durable-run | `text-open-world-creator-brief-synthesis` | 禁止 | `src/lib/open-world/creator-brief.ts` |
+| `text-open-world.creator-artifact.modify` | `text-open-world.creator-artifact-edit.v1` | `authoring.text-open-world-creator-artifact-edit` | formal / durable-run | `text-open-world-creator-edit-patch` | 禁止 | `src/lib/open-world/creator-artifact-edit.ts` |
+| `text-open-world.runtime.intent` | `prose.text-open-world-runtime-intent` | `runtime.text-open-world.intent` | formal / product-runtime | `storyforge.text-open-world.runtime-intent-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.dialogue` | `prose.text-open-world-runtime-dialogue` | `runtime.text-open-world.dialogue` | formal / product-runtime | `storyforge.text-open-world.runtime-dialogue-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.expression` | `prose.text-open-world-runtime-expression` | `runtime.text-open-world.expression` | formal / product-runtime | `storyforge.text-open-world.runtime-expression-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.quest-packaging` | `prose.text-open-world-runtime-quest-packaging` | `runtime.text-open-world.quest-packaging` | formal / product-runtime | `storyforge.text-open-world.runtime-quest-packaging-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.direction` | `prose.text-open-world-runtime-direction` | `runtime.text-open-world.direction` | formal / product-runtime | `storyforge.text-open-world.runtime-direction-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.memory` | `prose.text-open-world-runtime-memory` | `runtime.text-open-world.memory` | formal / product-runtime | `storyforge.text-open-world.runtime-memory-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
 
 ---
 
-生成时间基准:commit `a8684b97`
+生成时间基准:commit `58c5723c`

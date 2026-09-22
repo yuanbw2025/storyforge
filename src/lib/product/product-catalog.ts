@@ -15,6 +15,16 @@ export const PRODUCT_RELEASE_STATUSES_V1 = [
 export type ProductReleaseStatusV1 = typeof PRODUCT_RELEASE_STATUSES_V1[number]
 export type ProductCatalogChannelV1 = 'local-development' | 'production' | 'test'
 
+export const PRODUCT_SOURCE_POLICIES_V1 = [
+  'world-engine-content',
+  'independent-work',
+  'world-release-required',
+  'world-release-or-novel',
+  'distribution-bundle',
+] as const
+
+export type ProductSourcePolicyV1 = typeof PRODUCT_SOURCE_POLICIES_V1[number]
+
 export type StoryForgeProductIdV1 =
   | 'world-engine'
   | 'independent.longform'
@@ -39,6 +49,9 @@ export interface ProductCatalogEntryV1 {
   status: ProductReleaseStatusV1
   /** Governing charter phase; this is not a claim that the phase is complete. */
   charterPhase: 'B' | 'C' | 'D' | 'E' | 'F'
+  /** The authoritative source families from which this product may be created. */
+  sourcePolicy: ProductSourcePolicyV1
+  /** Compatibility projection. Source selection must use sourcePolicy instead. */
   requiresWorldReference: boolean
   ownsRuntime: boolean
   ownsMedia: boolean
@@ -69,8 +82,14 @@ export interface ProductSurfaceEntryV1 {
   productIds: readonly StoryForgeProductIdV1[]
 }
 
-function entry(input: Omit<ProductCatalogEntryV1, 'version'>): ProductCatalogEntryV1 {
-  return Object.freeze({ version: 1, ...input })
+function entry(
+  input: Omit<ProductCatalogEntryV1, 'version' | 'requiresWorldReference'>,
+): ProductCatalogEntryV1 {
+  return Object.freeze({
+    version: 1,
+    ...input,
+    requiresWorldReference: input.sourcePolicy === 'world-release-required',
+  })
 }
 
 function surface(input: Omit<ProductSurfaceEntryV1, 'version'>): ProductSurfaceEntryV1 {
@@ -78,20 +97,20 @@ function surface(input: Omit<ProductSurfaceEntryV1, 'version'>): ProductSurfaceE
 }
 
 export const PRODUCT_CATALOG_V1: readonly ProductCatalogEntryV1[] = Object.freeze([
-  entry({ id: 'world-engine', label: '世界引擎', family: 'world-engine', status: 'released', charterPhase: 'D', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '语义编辑、显式派生、冻结版本与中立读取出口。' }),
-  entry({ id: 'independent.longform', label: '分步骤长篇', family: 'independent-creation', status: 'released', charterPhase: 'B', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '工程主链已验收；文学质量继续增量研究。' }),
-  entry({ id: 'independent.shortform', label: '短篇小说', family: 'independent-creation', status: 'released', charterPhase: 'C', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '独立 Brief、故事设计、章节卡、逐章正文、审校、定向重写、冻结发布与三格式导出已形成闭环。' }),
-  entry({ id: 'independent.screenplay', label: '小说转剧本', family: 'independent-creation', status: 'released', charterPhase: 'C', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '来源冻结、十步专业改编、双重审查、定点修订、不可变版本与 Fountain/FDX/打印导出已形成闭环。' }),
-  entry({ id: 'independent.comic', label: '小说转漫画', family: 'independent-creation', status: 'released', charterPhase: 'C', requiresWorldReference: false, ownsRuntime: false, ownsMedia: true, maturityNote: '十二步专业改编、页格与本地排字、双层审查、分镜/视觉不可变发布及 PNG/WebP/CBZ/PDF 导出已形成闭环；视觉版按 provider 实际能力和媒资权利严格放行。' }),
-  entry({ id: 'independent.motion-drama', label: '漫剧素材', family: 'independent-creation', status: 'released', charterPhase: 'C', requiresWorldReference: false, ownsRuntime: false, ownsMedia: true, maturityNote: '一句话或小说来源冻结、系列与物料圣经、逐集剧本、分镜、双 Prompt IR、Seedance 逐镜执行包、Runway/LTX 适配包、质量门与不可变发布已形成闭环；不包含视频生成和成片制作。' }),
-  entry({ id: 'authoring.nodes', label: '节点创作', family: 'authoring-view', status: 'preview', charterPhase: 'B', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '已与分步骤领域后端同源；完整跨模式真实 UI 验收仍持续。' }),
-  entry({ id: 'upper.ttrpg', label: '跑团', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '架构入口与既有功能可预览，玩法和多人体验尚未专项封板。' }),
-  entry({ id: 'upper.character-interaction', label: '角色聊天', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '冻结来源生产与运行纵切面可预览，完整长期体验待专项验收。' }),
-  entry({ id: 'upper.ai-town', label: '后日谈 AI 小镇', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '冻结来源生产、发布、单机运行与私域演化纵切面可预览；长期内容量与商业化媒资仍待专项验收。' }),
-  entry({ id: 'upper.text-adventure', label: '文字冒险', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '专业生产、媒资、发布与确定性运行纵切面可验证；真实模型内容质量、真人试玩和首个社区推荐成品仍待专项验收。' }),
-  entry({ id: 'upper.avg', label: 'AVG', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '制作与运行基础可预览，真实视听资产和演出交付待专项验收。' }),
-  entry({ id: 'upper.text-open-world', label: '文字开放世界', family: 'upper-product', status: 'preview', charterPhase: 'E', requiresWorldReference: true, ownsRuntime: true, ownsMedia: true, maturityNote: '生产与运行能力可预览，区域自治、长期任务演化和性能门待专项验收。' }),
-  entry({ id: 'platform.marketplace', label: '社区市场', family: 'platform', status: 'experimental', charterPhase: 'F', requiresWorldReference: false, ownsRuntime: false, ownsMedia: false, maturityNote: '平台与商业化阶段后置，默认隐藏，仅允许本地显式研究。' }),
+  entry({ id: 'world-engine', label: '世界引擎', family: 'world-engine', status: 'released', charterPhase: 'D', sourcePolicy: 'world-engine-content', ownsRuntime: false, ownsMedia: false, maturityNote: '语义编辑、显式派生、冻结版本与中立读取出口。' }),
+  entry({ id: 'independent.longform', label: '分步骤长篇', family: 'independent-creation', status: 'released', charterPhase: 'B', sourcePolicy: 'independent-work', ownsRuntime: false, ownsMedia: false, maturityNote: '工程主链已验收；文学质量继续增量研究。' }),
+  entry({ id: 'independent.shortform', label: '短篇小说', family: 'independent-creation', status: 'released', charterPhase: 'C', sourcePolicy: 'independent-work', ownsRuntime: false, ownsMedia: false, maturityNote: '独立 Brief、故事设计、章节卡、逐章正文、审校、定向重写、冻结发布与三格式导出已形成闭环。' }),
+  entry({ id: 'independent.screenplay', label: '小说转剧本', family: 'independent-creation', status: 'released', charterPhase: 'C', sourcePolicy: 'independent-work', ownsRuntime: false, ownsMedia: false, maturityNote: '来源冻结、十步专业改编、双重审查、定点修订、不可变版本与 Fountain/FDX/打印导出已形成闭环。' }),
+  entry({ id: 'independent.comic', label: '小说转漫画', family: 'independent-creation', status: 'released', charterPhase: 'C', sourcePolicy: 'independent-work', ownsRuntime: false, ownsMedia: true, maturityNote: '十二步专业改编、页格与本地排字、双层审查、分镜/视觉不可变发布及 PNG/WebP/CBZ/PDF 导出已形成闭环；视觉版按 provider 实际能力和媒资权利严格放行。' }),
+  entry({ id: 'independent.motion-drama', label: '漫剧素材', family: 'independent-creation', status: 'released', charterPhase: 'C', sourcePolicy: 'independent-work', ownsRuntime: false, ownsMedia: true, maturityNote: '一句话或小说来源冻结、系列与物料圣经、逐集剧本、分镜、双 Prompt IR、Seedance 逐镜执行包、Runway/LTX 适配包、质量门与不可变发布已形成闭环；不包含视频生成和成片制作。' }),
+  entry({ id: 'authoring.nodes', label: '节点创作', family: 'authoring-view', status: 'preview', charterPhase: 'B', sourcePolicy: 'independent-work', ownsRuntime: false, ownsMedia: false, maturityNote: '已与分步骤领域后端同源；完整跨模式真实 UI 验收仍持续。' }),
+  entry({ id: 'upper.ttrpg', label: '跑团', family: 'upper-product', status: 'preview', charterPhase: 'E', sourcePolicy: 'world-release-required', ownsRuntime: true, ownsMedia: true, maturityNote: '架构入口与既有功能可预览，玩法和多人体验尚未专项封板。' }),
+  entry({ id: 'upper.character-interaction', label: '角色聊天', family: 'upper-product', status: 'preview', charterPhase: 'E', sourcePolicy: 'world-release-required', ownsRuntime: true, ownsMedia: true, maturityNote: '冻结来源生产与运行纵切面可预览，完整长期体验待专项验收。' }),
+  entry({ id: 'upper.ai-town', label: '后日谈 AI 小镇', family: 'upper-product', status: 'preview', charterPhase: 'E', sourcePolicy: 'world-release-required', ownsRuntime: true, ownsMedia: true, maturityNote: '冻结来源生产、发布、单机运行与私域演化纵切面可预览；长期内容量与商业化媒资仍待专项验收。' }),
+  entry({ id: 'upper.text-adventure', label: '文字冒险', family: 'upper-product', status: 'preview', charterPhase: 'E', sourcePolicy: 'world-release-required', ownsRuntime: true, ownsMedia: true, maturityNote: '专业生产、媒资、发布与确定性运行纵切面可验证；真实模型内容质量、真人试玩和首个社区推荐成品仍待专项验收。' }),
+  entry({ id: 'upper.avg', label: 'AVG', family: 'upper-product', status: 'preview', charterPhase: 'E', sourcePolicy: 'world-release-required', ownsRuntime: true, ownsMedia: true, maturityNote: '制作与运行基础可预览，真实视听资产和演出交付待专项验收。' }),
+  entry({ id: 'upper.text-open-world', label: '文字开放世界', family: 'upper-product', status: 'preview', charterPhase: 'E', sourcePolicy: 'world-release-or-novel', ownsRuntime: true, ownsMedia: true, maturityNote: '可从冻结世界版本或受治理小说来源生产；专属 Creator、确定性玩法、运行时 AI 与玩家端已经贯通，仍待真实模型校准和真人双结局验收。' }),
+  entry({ id: 'platform.marketplace', label: '社区市场', family: 'platform', status: 'experimental', charterPhase: 'F', sourcePolicy: 'distribution-bundle', ownsRuntime: false, ownsMedia: false, maturityNote: '平台与商业化阶段后置，默认隐藏，仅允许本地显式研究。' }),
 ])
 
 export const PRODUCT_CATALOG_BY_ID_V1: ReadonlyMap<StoryForgeProductIdV1, ProductCatalogEntryV1> = new Map(
@@ -217,8 +236,26 @@ function validateProductCatalogV1(): void {
     if (item.family === 'world-engine' && (item.ownsRuntime || item.ownsMedia)) {
       throw new Error('[product-catalog] 世界引擎不得拥有 runtime 或产品媒资')
     }
-    if (item.requiresWorldReference && item.family !== 'upper-product') {
-      throw new Error(`[product-catalog] 只有上层产品可强制要求 WorldReference：${item.id}`)
+    if (item.requiresWorldReference !== (item.sourcePolicy === 'world-release-required')) {
+      throw new Error(`[product-catalog] 来源策略与WorldReference投影不一致：${item.id}`)
+    }
+    if (item.family === 'world-engine' && item.sourcePolicy !== 'world-engine-content') {
+      throw new Error('[product-catalog] 世界引擎来源策略无效')
+    }
+    if ((item.family === 'independent-creation' || item.family === 'authoring-view')
+      && item.sourcePolicy !== 'independent-work') {
+      throw new Error(`[product-catalog] 独立创作来源策略无效：${item.id}`)
+    }
+    if (item.family === 'upper-product'
+      && item.sourcePolicy !== 'world-release-required'
+      && item.sourcePolicy !== 'world-release-or-novel') {
+      throw new Error(`[product-catalog] 上层产品来源策略无效：${item.id}`)
+    }
+    if (item.sourcePolicy === 'world-release-or-novel' && item.id !== 'upper.text-open-world') {
+      throw new Error(`[product-catalog] 双来源策略只属于文字开放世界：${item.id}`)
+    }
+    if (item.family === 'platform' && item.sourcePolicy !== 'distribution-bundle') {
+      throw new Error(`[product-catalog] 平台来源策略无效：${item.id}`)
     }
   }
   const covered = new Set<StoryForgeProductIdV1>()

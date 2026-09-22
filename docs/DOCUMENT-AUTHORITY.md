@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：1.9.0 · 生效：2026-09-21
+> 版本：2.0.0 · 生效：2026-09-22
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -39,6 +39,10 @@
 - `docs/products/UPPER-PRODUCTS.md`
 - `docs/products/TTRPG-AI-KP.md`：跑团 AI KP 专项产品契约。
 - `docs/products/TEXT-ADVENTURE.md`：AI 主导文字冒险专项产品契约。
+- `docs/products/TEXT-OPEN-WORLD-PRODUCT-ARCHITECTURE.md`：文字开放世界整体产品与游戏系统的唯一施工入口。
+- `docs/products/TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md`：文字开放世界叙事生产子系统规格；受整体产品入口约束。
+- `docs/products/TEXT-OPEN-WORLD-VISION-AND-EVOLUTION.md`：文字开放世界愿景、答疑与方案演进记录；不能单独作为施工完成证明。
+- `docs/products/TEXT-OPEN-WORLD-SALT-RIDGE-BRIEF.md`：首个纵向验收世界的冻结产品 Brief；只证明小型验收循环。
 - `docs/products/text-adventure-production/README.md`：文字冒险专业生产与旗舰交付的唯一施工入口；以下 13 份子文档共同构成该专项方案包，不得脱离入口单独提升权威。
 - `docs/products/text-adventure-production/01-DELIVERY-CONTRACT.md`
 - `docs/products/text-adventure-production/02-AGENT-TEAM-AND-SKILLS.md`
@@ -62,6 +66,8 @@
 - `docs/roadmap/NOVEL-TO-COMIC-DEVELOPMENT-PLAN.md`
 - `docs/roadmap/MOTION-DRAMA-PREPRODUCTION-DEVELOPMENT-PLAN.md`
 - `docs/roadmap/MOTION-DRAMA-CONTENT-PRODUCTION-FLOW.md`
+- `docs/roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md`：文字开放世界完整开发清单与当前进度口径。
+- `docs/roadmap/TEXT-OPEN-WORLD-WORK-PACKAGE-CARDS.md`：文字开放世界 G1/G2 功能开工卡与风险台账。
 - `docs/roadmap/COMPLETED.md`
 
 ### 2.3 机器事实与质量证据
@@ -72,6 +78,7 @@
 - `docs/audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md`：当前代码树的项目级架构闭环审计；不替代具体产品方案和质量认证。
 - `docs/roadmap/INDEPENDENT-CREATION-PLAN-AUDIT.md`：三份独立创作专项方案的边界、共享底座和分支隔离审查证据；不替代专项方案。
 - `docs/roadmap/MOTION-DRAMA-PLAN-AUDIT.md`：漫剧前期生产方案对当前行业流程的交叉审查与修订证据。
+- `docs/audits/TEXT-OPEN-WORLD-CAPABILITY-AUDIT-20260906.md`：文字开放世界开工时的能力审计快照；只作实施证据，当前实现以代码、测试与能力基线为准。
 
 ### 2.4 用户、维护与法律资料
 
@@ -133,3 +140,5 @@
 本次 1.8.0 复审随总纲 1.7.0 统一世界衍生产品阶段短名为 `S1 世界封存`、`S2 产品定向`、`S3 产品执行`。现行白名单没有增加或删除；L1/L2 文档已同步阶段职责、交接与闸门。旧长标题不再作为另一套阶段名称，但 Git/WPS 历史记录仍按 H 层保留。
 
 本次 1.9.0 复审登记文字冒险专项产品契约及其专业生产方案包。它细化 `UPPER-PRODUCTS.md` 已确定的共同边界，不改变世界引擎、AVG、文字开放世界或共享底座 owner；实现状态仍以能力基线、代码与当前验证证据为准。
+
+本次 2.0.0 复审登记文字开放世界整体产品、叙事子系统、愿景演进、盐脊验收 Brief、开发清单、开工卡和能力审计。整体产品架构是该产品唯一施工入口；叙事文档只管理叙事生产子系统，愿景与审计不覆盖当前代码事实。该登记不改变 `UPPER-PRODUCTS.md` 的世界衍生产品边界，也不允许文字开放世界接管共享生产、Release 或世界引擎 owner。

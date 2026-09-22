@@ -51,6 +51,18 @@ function manualChunkFor(moduleId: string): string | undefined {
   if (id.endsWith('/src/lib/product-production/compatibility.ts')) {
     return 'product-production-quality'
   }
+  // The product-neutral runtime delegates deterministic rule reduction to
+  // product-owned adapters. Keep the sizeable TTRPG rule reducer separate so
+  // text/AVG/open-world players do not parse an unrelated ruleset up front.
+  // Files that call back into runtime-core (commands/context readers) are
+  // intentionally excluded to preserve an acyclic chunk graph.
+  if (/\/src\/lib\/ttrpg\/(?:runtime-state|runtime-event-reducer|runtime|runtime-branch|campaign|action-feedback|effect-runtime|participants|item-ledger|character-sheet|media-contract|effect-plan|action-economy|advancement|director-model|private-guidance-model)\.ts$/.test(id)) {
+    return 'runtime-domain-ttrpg'
+  }
+  // The retired four-module open-world reducer is loaded only for immutable
+  // legacy Releases. Do not make every vNext player parse that compatibility
+  // implementation as part of the shared runtime foundation.
+  if (id.endsWith('/src/lib/open-world/runtime.ts')) return 'runtime-domain-open-world-legacy'
   // System prompt catalogs are large, immutable data. Keep them in one
   // cacheable chunk instead of making every application release reparse them
   // as part of the route entry bundle.

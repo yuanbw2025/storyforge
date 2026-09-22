@@ -624,10 +624,12 @@ export async function verifyTextAdventureCommunityPackageV1(value: unknown): Pro
     || !isSha256Hash(raw.candidatePackageHash)) fail('候选包 schema/version/hash 无效')
   const distributionBundle = await verifyProductDistributionBundleV2(raw.distributionBundle)
   const manifest = distributionBundle.productRelease.manifest
+  const sourceManifest = manifest.sourceContracts.sourceManifest
   if (manifest.productType !== 'text-adventure' || manifest.runtimePackage.adventure?.version !== 2
     || manifest.lineage.quality.passed !== true
-    || manifest.sourceContracts.sourceManifest.summary.conflict !== 0
-    || manifest.sourceContracts.sourceManifest.summary.insufficient !== 0) {
+    || !('summary' in sourceManifest)
+    || sourceManifest.summary.conflict !== 0
+    || sourceManifest.summary.insufficient !== 0) {
     fail('Release 不是来源充分且质量通过的 Adventure V2')
   }
   const verified = await verifyEvidence({ raw: raw.evidence, bundle: distributionBundle })

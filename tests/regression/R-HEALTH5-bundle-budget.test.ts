@@ -48,4 +48,14 @@ describe('HEALTH-5 · 构建产物体积预算', () => {
     fs.writeFileSync(path.join(distDir, 'assets/ui-preview-test.css'), 'x'.repeat(BUNDLE_BUDGETS.previewStylesheet.raw + 1))
     expect(checkBundleBudget(distDir).violations.map(item => item.filename)).toEqual(['app-test.css', 'ui-preview-test.css'])
   })
+
+  it('全局安全对话只在用户选择立即备份后装入完整项目导出闭包', () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), 'src/lib/safety/require-backup-before.ts'),
+      'utf8',
+    )
+
+    expect(source).not.toMatch(/^import .*['"]\.\.\/export\/json-export['"]/m)
+    expect(source).toContain("await import('../export/json-export')")
+  })
 })

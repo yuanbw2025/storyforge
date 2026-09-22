@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { liveQuery } from 'dexie'
 import ProductFrame from '../components/navigation/ProductFrame'
 import { db } from '../lib/db/schema'
@@ -17,13 +17,26 @@ import {
   evaluateProductPlatformCapabilityV1,
 } from '../lib/product-platform/capability-status'
 import { updateWorkspace } from '../lib/workspace/works'
+import {
+  parseTextOpenWorldSettingsReturnV1,
+  type TextOpenWorldSettingsReturnV1,
+} from '../lib/open-world/creator-settings-navigation'
+import type { TextOpenWorldCreatorBriefResumeTargetV1 } from '../lib/open-world/creator-brief'
 
 const AdventureGamePlayer = lazy(() => import('../components/text-game/AdventureGamePlayer'))
 const TextOpenWorldPlayer = lazy(() => import('../components/text-game/TextOpenWorldPlayer'))
 const ProductProductionStudio = lazy(() => import('../components/product/ProductProductionStudio'))
+const TextOpenWorldCreatorWorkflow = lazy(() => import('../components/text-game/TextOpenWorldCreatorWorkflow')
+  .then(module => ({ default: module.TextOpenWorldCreatorWorkflow })))
 
 type StudioView = 'confirm' | 'production' | 'review' | 'release'
 type PageMode = 'play' | 'production'
+
+function scopeForProject(project: Project | undefined): WorkspaceScope | undefined {
+  return project?.id != null && project.activeWorldId != null && project.activeWorkId != null
+    ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
+    : undefined
+}
 
 const ADVENTURE_PAGE: Record<string, { label: string; mode: PageMode; studioView?: StudioView }> = {
   library: { label: '作品与试玩', mode: 'play' },
@@ -50,6 +63,7 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
   const { pageId: routePageId } = useParams<{ pageId?: string }>()
   const [params] = useSearchParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const pageId = routePageId ?? (openWorld ? 'runtime' : 'library')
   const page = ADVENTURE_PAGE[pageId] ?? ADVENTURE_PAGE.library
   const queryMode = params.get('mode') === 'production' ? 'production' : null
@@ -60,6 +74,10 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
   const [session, setSession] = useState<number | null>(Number(params.get('session')) || null)
   const [handoff, setHandoff] = useState<ProductProductionHandoffV1 | null>(null)
   const activeWorldGroupId = useWorldGroupStore(state => state.activeGroupId)
+  const settingsReturn = useMemo(
+    () => parseTextOpenWorldSettingsReturnV1(location.state),
+    [location.state],
+  )
 
   useEffect(() => {
     const subscription = liveQuery(() => db.projects.toArray()).subscribe({
@@ -77,7 +95,11 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
     setSession(Number(params.get('session')) || null)
   }, [params])
 
-  const project = projects.find(candidate => candidate.id === Number(params.get('project')))
+  const returnProjectId = settingsReturn?.sourceKind === 'novel'
+    ? settingsReturn.activeWorkProjectId
+    : settingsReturn?.activeWorldProjectId
+  const requestedProjectId = Number(params.get('project')) || returnProjectId || 0
+  const project = projects.find(candidate => candidate.id === requestedProjectId)
   const projectId = project?.id
   const workId = Number(params.get('work')) || project?.activeWorkId
   const worldId = project?.activeWorldId
@@ -86,6 +108,15 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
       ? { projectId, worldId, workId }
       : undefined
   ), [projectId, worldId, workId])
+  const worldProject = projects.find(candidate => candidate.id === settingsReturn?.activeWorldProjectId)
+    ?? (settingsReturn?.sourceKind === 'novel' || project?.workspacePurpose !== 'world-engine' ? undefined : project)
+  const novelProject = projects.find(candidate => candidate.id === settingsReturn?.activeWorkProjectId)
+    ?? (settingsReturn?.sourceKind === 'world-release' || project?.workspacePurpose !== 'independent-work' ? undefined : project)
+  const worldScope = scopeForProject(worldProject)
+  const novelScope = scopeForProject(novelProject)
+  const creatorSourceReady = openWorld && mode === 'production' && Boolean(worldScope || novelScope)
+  const initialCreatorSource = settingsReturn?.sourceKind
+    ?? (project?.workspacePurpose === 'independent-work' ? 'novel' : 'world-release')
 
   const decision = evaluateProductEntryV1({
     productId: openWorld ? 'upper.text-open-world' : 'upper.text-adventure',
@@ -168,6 +199,18 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
     }))
   }
 
+  const openCreatorSettings = (target: TextOpenWorldCreatorBriefResumeTargetV1) => {
+    const creatorReturn: TextOpenWorldSettingsReturnV1 = {
+      schema: 'storyforge.text-open-world-settings-return',
+      version: 1,
+      activeWorkProjectId: novelProject?.id ?? null,
+      activeWorldProjectId: worldProject?.id ?? null,
+      sourceKind: target.sourceBinding.kind,
+      ...target,
+    }
+    navigate('/settings', { state: { storyforgeProductHubReturn: creatorReturn } })
+  }
+
   return <ProductFrame product={base} title={title} page={page.label} navigation={navigation}>
     <section className="lf-paper">
       <h3>{title} · 可验证预览</h3>
@@ -183,17 +226,29 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
           </label>}
     </section>
     {error && <p role="alert">{error}</p>}
-    {decision.enterable && scope && project && !error && <section className="lf-paper">
+    {decision.enterable && !error && (creatorSourceReady || (scope && project)) && <section className="lf-paper">
       <Suspense fallback={<p>正在读取…</p>}>
         {mode === 'production'
-          ? productionDecision.enabled
+          ? openWorld
+            ? <TextOpenWorldCreatorWorkflow
+                key={`${initialCreatorSource}:${handoff?.worldReleaseId ?? 'none'}:${handoff?.worldContentHash ?? 'none'}`}
+                worldScope={worldScope ?? null}
+                novelScope={novelScope ?? null}
+                worldGroupId={worldProject?.enableMultiWorld ? activeWorldGroupId : null}
+                initialSource={handoff}
+                initialSourceKind={initialCreatorSource}
+                initialView={settingsReturn ? 'readiness' : 'brief'}
+                initialResumeTarget={settingsReturn}
+                onOpenSettings={openCreatorSettings}
+              />
+            : productionDecision.enabled
             ? <ProductProductionStudio
-                scope={scope}
-                worldGroupId={project.enableMultiWorld ? activeWorldGroupId : null}
+                scope={scope!}
+                worldGroupId={project!.enableMultiWorld ? activeWorldGroupId : null}
                 allowedProducts={[routeProduct]}
                 initialProduct={routeProduct}
                 initialSource={handoff}
-                authorOptIn={project.productPlatformOptIns?.productProductionV3 === true}
+                authorOptIn={project!.productPlatformOptIns?.productProductionV3 === true}
                 view={page.studioView ?? 'production'}
                 onPublished={() => openPlayer(null)}
                 onPreviewStarted={(_, id) => openPlayer(id)}
@@ -203,9 +258,9 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
                 <p>{productionDecision.blockers.join('；')}</p>
                 <button
                   className="lf-action"
-                  onClick={() => void updateWorkspace(project.id!, {
+                  onClick={() => void updateWorkspace(project!.id!, {
                     productPlatformOptIns: {
-                      ...project.productPlatformOptIns,
+                      ...project!.productPlatformOptIns,
                       productProductionV3: true,
                     },
                   }).catch(cause => setError(String(cause)))}
@@ -215,20 +270,24 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
               </div>
           : openWorld
             ? <TextOpenWorldPlayer
-                key={`${scope.workId}:${session}`}
-                project={project}
-                scope={scope}
-                worldGroupId={project.enableMultiWorld ? activeWorldGroupId : null}
+                key={`${scope!.workId}:${session}`}
+                project={project!}
+                scope={scope!}
+                worldGroupId={project!.enableMultiWorld ? activeWorldGroupId : null}
                 initialSessionId={session}
               />
             : <AdventureGamePlayer
-                key={`${scope.workId}:${session}`}
-                project={project}
-                scope={scope}
-                worldGroupId={project.enableMultiWorld ? activeWorldGroupId : null}
+                key={`${scope!.workId}:${session}`}
+                project={project!}
+                scope={scope!}
+                worldGroupId={project!.enableMultiWorld ? activeWorldGroupId : null}
                 initialSessionId={session}
               />}
       </Suspense>
+    </section>}
+    {decision.enterable && !error && openWorld && mode === 'production' && !creatorSourceReady && <section className="lf-paper" data-testid="text-open-world-source-empty">
+      <h3>小说或世界来源工作区归属尚未就绪</h3>
+      <p>请选择已初始化的独立小说作品，或从世界引擎交接一个冻结 WorldRelease。</p>
     </section>}
   </ProductFrame>
 }

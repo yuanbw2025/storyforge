@@ -16,6 +16,7 @@ import type { RagDocumentMetadata } from './rag-library'
 import type { TtrpgRuntimeContentV1 } from './ttrpg-product'
 import type { ProductionProductKindV1 } from './product-identity'
 import type { AiTownRuntimeContentV1 } from './ai-town'
+import type { TextOpenWorldRuntimePackageV1 } from './text-open-world-runtime'
 
 /** Product-owned selection over the neutral WorldRelease resource protocol. */
 export interface ProductWorldSourceSelectionV1 {
@@ -159,6 +160,12 @@ export interface ProductRuntimePackageV1 {
   presentation?: AvgPresentationContentV1 & { assets: FrozenRuntimeMediaAssetV2[] }
   openWorldEvolution?: OpenWorldEvolutionContentV1
   openWorld?: OpenWorldContentV1
+  /**
+   * TEXT-OPEN-WORLD-2 governed runtime payload. Existing text-open-world releases
+   * may omit it; every vNext release/build includes it inside the one shared
+   * ProductRuntimePackage instead of creating a parallel release family.
+   */
+  textOpenWorldVNext?: TextOpenWorldRuntimePackageV1
   ttrpg?: TtrpgRuntimeContentV1
   town?: AiTownRuntimeContentV1
 }
@@ -167,6 +174,9 @@ export interface ProductReleaseManifestV1 {
   schema: 'storyforge.product-release'
   version: 1
   productType: ProductionProductKindV1
+  /** Legacy/shared runtime source coordinate. Creator releases additionally
+   * carry the authoritative dual-source contract below and never use this
+   * field or `ProductRelease.worldReleaseId` as a novel locator. */
   sourceWorldRelease: { contentHash: string }
   runtimePackage: ProductRuntimePackageV1
   packageHash: string
@@ -180,10 +190,11 @@ export interface ProductReleaseManifestV1 {
     sourcePlan: import('./world-product-contracts').ProductSourcePlanV1
     confirmedBrief: import('./world-product-contracts').ConfirmedProductBriefV1
     sourceManifest: import('./world-product-contracts').ProductSourceManifestV1
-  }
+  } | import('./text-open-world-production').TextOpenWorldCreatorReleaseSourceContractsV1
   /** Hash of every release field except lineage. */
   releaseIdentityHash: string
   lineage: import('./world-product-contracts').ProductReleaseLineageV1
+    | import('./text-open-world-production').TextOpenWorldCreatorReleaseLineageV1
 }
 
 export type CharacterInteractionProductRuntimePackageV1 = ProductRuntimePackageV1 & {
@@ -205,12 +216,47 @@ export type TextOpenWorldProductRuntimePackageV1 = ProductRuntimePackageV1 & {
   adventure: AdventureContentV1
   openWorldEvolution: OpenWorldEvolutionContentV1
   openWorld: OpenWorldContentV1
+  textOpenWorldVNext?: TextOpenWorldRuntimePackageV1
 }
 export type AiTownProductRuntimePackageV1 = ProductRuntimePackageV1 & {
   productType: 'ai-town'
   interaction: FrozenInteractionRuntimeV2
   town: AiTownRuntimeContentV1
 }
+
+export type TextOpenWorldLegacyOnlyProductRuntimePackageV1 =
+  Omit<TextOpenWorldProductRuntimePackageV1, 'textOpenWorldVNext' | 'presentation'> & {
+    textOpenWorldVNext?: undefined
+    presentation?: undefined
+  }
+
+export type TextOpenWorldHybridProductRuntimePackageV1 =
+  TextOpenWorldProductRuntimePackageV1 & {
+    textOpenWorldVNext: TextOpenWorldRuntimePackageV1
+    /** Optional vNext media; when present every inner slot asset must close to
+     * exactly one frozen outer presentation asset. */
+    presentation?: AvgPresentationContentV1 & { assets: FrozenRuntimeMediaAssetV2[] }
+  }
+
+/**
+ * A vNext-only text-open-world package deliberately omits the four legacy
+ * runtime modules. Keeping this shape separate preserves the stricter legacy
+ * contract for old command code while allowing product readers and players to
+ * model all three formal release states: legacy-only, hybrid, and vNext-only.
+ */
+export type TextOpenWorldVNextOnlyProductRuntimePackageV1 = ProductRuntimePackageV1 & {
+  productType: 'text-open-world'
+  interaction?: undefined
+  adventure?: undefined
+  openWorldEvolution?: undefined
+  openWorld?: undefined
+  textOpenWorldVNext: TextOpenWorldRuntimePackageV1
+}
+
+export type PlayableTextOpenWorldProductRuntimePackageV1 =
+  | TextOpenWorldLegacyOnlyProductRuntimePackageV1
+  | TextOpenWorldHybridProductRuntimePackageV1
+  | TextOpenWorldVNextOnlyProductRuntimePackageV1
 
 export type AnyProductReleaseManifest = ProductReleaseManifestV1
 

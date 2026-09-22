@@ -67,7 +67,13 @@ const activeDocs = [
   'docs/products/text-adventure-production/11-HUMAN-VISUAL-REVIEW-AND-RECOMMENDATION.md',
   'docs/products/text-adventure-production/12-PRODUCT-PACKAGE-IMPORT-AND-COMMUNITY-CANDIDATE.md',
   'docs/products/text-adventure-production/13-FIRST-FLAGSHIP-PRODUCTION-AND-SHOWCASE.md',
+  'docs/products/TEXT-OPEN-WORLD-VISION-AND-EVOLUTION.md',
+  'docs/products/TEXT-OPEN-WORLD-PRODUCT-ARCHITECTURE.md',
+  'docs/products/TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md',
+  'docs/products/TEXT-OPEN-WORLD-SALT-RIDGE-BRIEF.md',
   'docs/roadmap/README.md',
+  'docs/roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md',
+  'docs/roadmap/TEXT-OPEN-WORLD-WORK-PACKAGE-CARDS.md',
   'docs/roadmap/CAPABILITY-BASELINE.md',
   'docs/roadmap/INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md',
   'docs/roadmap/SHORT-NOVEL-DEVELOPMENT-PLAN.md',
@@ -79,6 +85,7 @@ const activeDocs = [
   'docs/roadmap/MOTION-DRAMA-PLAN-AUDIT.md',
   'docs/roadmap/COMPLETED.md',
   'docs/audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md',
+  'docs/audits/TEXT-OPEN-WORLD-CAPABILITY-AUDIT-20260906.md',
   'docs/ttrpg/licenses/SRD-5.2.1-CC-BY-4.0.md',
 ]
 

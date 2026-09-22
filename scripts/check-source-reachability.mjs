@@ -34,6 +34,12 @@ const entrypoints = [
   // TTRPG's durable host loop is a headless product API; its independent foundation
   // is validated before the playing table is integrated and can be driven by replay tooling.
   'src/lib/ttrpg/kp-coordinator.ts',
+  // G3 content production is a headless contract boundary until all product
+  // Skills/executors are registered and the creator route activates it.
+  'src/lib/open-world/production-contract.ts',
+  // P0 dual-source freezing is independently testable authoring code. Runtime
+  // must not import mutable novel or WorldRelease source readers.
+  'src/lib/open-world/source-pin.ts',
   // FLOW-3 public domain-node boundary is exercised by regression tests and external tooling.
   'src/lib/node-authoring/index.ts',
   // HARNESS-26 is a headless offline release-evaluation boundary; production routing must not import it.
@@ -48,6 +54,13 @@ const entrypoints = [
   // Scope conversion is a headless ownership-administration service. It remains independently tested
   // while no author UI exposes arbitrary record-owner conversion.
   'src/lib/registry/ownership-scope-conversion.ts',
+  // Text Open World vNext release authoring exposes the player compiler/installer as a headless boundary.
+  // The player UI consumes its frozen Release result; importing the compiler into that runtime bundle
+  // would couple authoring-only WorldRelease reads to play. This entry also owns source-gateway reachability.
+  'src/lib/open-world/player-definition.ts',
+  // G6-01 exposes the governed vNext runtime AI provider gateway as a headless
+  // product-runtime API. Player routes adopt its candidates only in later G6 slices.
+  'src/lib/open-world/runtime-ai-execution.ts',
 ].map(file => path.resolve(root, file))
 
 const graph = new Map()

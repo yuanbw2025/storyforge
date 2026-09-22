@@ -11,6 +11,7 @@ import {
   beginAgentRunRecoveryV1,
   completeAgentRunRecoveryV1,
   createAgentRunCheckpointV1,
+  readLatestVerifiedAgentRunCheckpointV1,
   verifyAgentRunCheckpointV1,
 } from '../../src/lib/agent/run/checkpoint'
 import type { WorkspaceScope } from '../../src/lib/types'
@@ -342,6 +343,29 @@ describe('R-HARNESS1-event-store-resume · durable run ledger', () => {
       resumePayloadJson: JSON.stringify({ providerCursor: 'tampered' }),
     })
     expect(await verifyAgentRunCheckpointV1(fixture.scope, saved.checkpoint.id)).toBe(false)
+  })
+
+  it('在解析恢复载荷前执行原始 UTF-8 字节预算，并精确读取最新检查点', async () => {
+    const { fixture, snapshot } = await createRunningStep('检查点读取预算')
+    const first = await createAgentRunCheckpointV1({
+      scope: fixture.scope,
+      runId: snapshot.run.id,
+      resumePayload: { marker: 'first' },
+    })
+    const second = await createAgentRunCheckpointV1({
+      scope: fixture.scope,
+      runId: snapshot.run.id,
+      resumePayload: { marker: 'second', payload: '界'.repeat(64) },
+      expectedLastSequence: first.snapshot.projection.lastSequence,
+    })
+
+    const latest = await readLatestVerifiedAgentRunCheckpointV1(fixture.scope, snapshot.run.id)
+    expect(latest?.checkpoint.id).toBe(second.checkpoint.id)
+    expect(latest?.resumePayload).toMatchObject({ marker: 'second' })
+
+    await expect(readLatestVerifiedAgentRunCheckpointV1(fixture.scope, snapshot.run.id, {
+      maximumResumePayloadBytes: 32,
+    })).rejects.toMatchObject({ code: 'checkpoint_resume_budget' })
   })
 
   it('契约修订递增 generation，并使旧检查点明确失效', async () => {

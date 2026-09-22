@@ -3,9 +3,10 @@ import type {
   ConfirmedProductBriefV1,
   ProductMediaAsset,
   ProductMediaBlob,
+  MediaBlobObjectRecordV1,
   ProductBuildArtifactRecordV1,
-  ProductBuildPreviewManifestV1,
   ProductBuildManifestV1,
+  ProductBuildPreviewManifestV1,
   ProductBuildQualityReportV1,
   ProductProductionCommandRecordV1,
   ProductProductionCommandV1,
@@ -15,6 +16,14 @@ import type {
   ProductReleaseLineageV1,
   ProductSourceManifestV1,
   ProductSourcePlanV1,
+  TextOpenWorldCreatorBriefV1,
+  TextOpenWorldCreatorProductionSourcePlanV1,
+  TextOpenWorldCreatorProductionStartV1,
+  TextOpenWorldCreatorReleaseAuthorizationV1,
+  TextOpenWorldCreatorReleaseSourceContractsV1,
+  TextOpenWorldIntegrationReportV1,
+  TextOpenWorldSourceManifestV1,
+  TextOpenWorldSourcePinV1,
   WorkspaceScope,
 } from '../types'
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
@@ -27,16 +36,17 @@ import {
   requirePassedProductBrowserPerformanceGateV1,
   requirePassedProductBuildMainRouteGateV1,
   requirePassedProductMediaRuntimeGateV1,
-  requirePassedTextAdventureHumanPlaytestGateV1,
-  requirePassedTextAdventureHumanVisualReviewGateV1,
 } from './quality-receipts'
 import {
   createProductReleaseManifestV1,
+  productProductionTerminalArtifactKeysV1,
   productReleaseIdentityHashV1,
   verifyProductReleaseManifestV1,
 } from './runtime-package'
-import { createProductBuildRootTerminalReceiptV1 } from './receipts'
+import { verifyProductBuildRootTerminalReceiptV1 } from './receipts'
 import { readAgentRunV1 } from '../agent/run/event-store'
+import type { VerifiedProductBuildTerminalArtifactSetV1 } from './artifact-store'
+import { parseProductProductionPortableTaskLedgerV1 } from './task-evidence'
 import {
   aggregateProductSourceManifestFromExactRunsV1,
   createProductReleaseLineageV1,
@@ -50,6 +60,10 @@ import {
   parseConfirmedProductBriefV1,
   parseProductProductionSourcePlanV1,
 } from './source-contracts'
+import type {
+  TextOpenWorldCreatorQualityReceiptV1,
+  TextOpenWorldCreatorReleaseQualityEvidenceV1,
+} from '../open-world/creator-quality-contract'
 
 type PublishCommandV1 = Extract<ProductProductionCommandV1, { type: 'publish' }>
 
@@ -71,11 +85,22 @@ export interface ProductProductionAdoptionIntentV1 {
   rootTerminalReceiptHash: string
   browserPerformanceReceiptHash: string | null
   mainRoutePlaythroughReceiptHash: string | null
-  humanPlaytestReceiptHash: string | null
   mediaRuntimeReceiptHash: string | null
-  humanVisualReviewReceiptHash: string | null
-  worldReleaseId: number
+  worldReleaseId: number | null
   worldContentHash: string
+}
+
+export interface PreparedTextOpenWorldCreatorReleaseV1 {
+  sourceKind: 'world-release' | 'novel'
+  sourceVersionHash: string
+  sourceBoundaryHash: string
+  sourcePlanHash: string
+  sourcePinHash: string
+  sourceManifestHash: string
+  artifactSetHash: string
+  integrationReportHash: string
+  governanceSnapshotHash: string
+  releaseQualityReceiptHash: string
 }
 
 export interface PreparedProductProductionAdoptionV1 {
@@ -83,7 +108,9 @@ export interface PreparedProductProductionAdoptionV1 {
   adoptionIntentHash: string
   productType: ProductRuntimePackageV1['productType']
   title: string
+  releaseVersion: number
   mediaAssetKeys: string[]
+  creatorRelease: PreparedTextOpenWorldCreatorReleaseV1 | null
 }
 
 export interface ProductProductionPublishReceiptV1 {
@@ -102,17 +129,39 @@ export interface ProductProductionPublishReceiptV1 {
 interface VerifiedAdoption extends PreparedProductProductionAdoptionV1 {
   scope: WorkspaceScope
   runtimePackage: ProductRuntimePackageV1
-  preview: ProductBuildPreviewManifestV1
   artifacts: ProductBuildArtifactRecordV1[]
   mediaArtifacts: Map<string, ProductBuildArtifactRecordV1>
-  sourcePlan: ProductSourcePlanV1
-  confirmedBrief: ConfirmedProductBriefV1
-  sourceManifest: ProductSourceManifestV1
+  /** In-memory physical-byte witnesses. They are never serialized into a
+   * Release; publish refreshes them immediately before the write transaction
+   * and IndexedDB bytes are compared again inside that transaction. */
+  terminalBlobProofRows: Map<number, MediaBlobObjectRecordV1 & { id: number }>
+  terminalVerification: VerifiedProductBuildTerminalArtifactSetV1
+  sourcePlan: ProductSourcePlanV1 | null
+  confirmedBrief: ConfirmedProductBriefV1 | null
+  sourceManifest: ProductSourceManifestV1 | null
+  creatorReleaseAuthority: null | {
+    creatorBrief: TextOpenWorldCreatorBriefV1
+    sourcePlan: TextOpenWorldCreatorProductionSourcePlanV1
+    creatorStart: TextOpenWorldCreatorProductionStartV1
+    sourcePin: TextOpenWorldSourcePinV1
+    sourceManifest: TextOpenWorldSourceManifestV1
+    integrationReport: TextOpenWorldIntegrationReportV1
+    governanceSnapshotHash: string
+    releaseQuality: TextOpenWorldCreatorQualityReceiptV1<TextOpenWorldCreatorReleaseQualityEvidenceV1>
+  }
   releaseVersion: number
   parentRelease: ProductReleaseLineageV1['parentRelease']
   compatibilityHash: string
   compatibilityStatus: ProductReleaseLineageV1['compatibility']['status']
   qualityReceiptHashes: string[]
+  authoritySnapshot: {
+    productionRowJson: string
+    buildRowJson: string
+    briefRowJson: string
+    activeArtifactRowsJson: string
+    qualityReceiptRowsJson: string
+    mediaBlobRowsJson: string
+  }
 }
 
 function fail(message: string): never {
@@ -130,6 +179,46 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[], labe
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
     fail(`${label} 字段不符合合同:${actual.join(',')}`)
   }
+}
+
+function canonicalRowsByIdV1<T extends { id?: number }>(rows: T[]): string {
+  return canonicalProductProductionJsonV2([...rows]
+    .sort((left, right) => (left.id ?? -1) - (right.id ?? -1))
+    .map(row => ({ ...row, id: row.id ?? null })))
+}
+
+function mediaBlobAuthorityRowV1(row: MediaBlobObjectRecordV1 & { id?: number }): unknown {
+  return {
+    id: row.id ?? null,
+    projectId: row.projectId,
+    worldId: row.worldId,
+    workId: row.workId,
+    contentHash: row.contentHash,
+    mimeType: row.mimeType,
+    byteSize: row.byteSize,
+    backend: row.backend,
+    storageState: row.storageState,
+    opfsPath: row.opfsPath,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+function cloneMediaBlobProofRowV1(
+  row: MediaBlobObjectRecordV1 & { id: number },
+): MediaBlobObjectRecordV1 & { id: number } {
+  return { ...row, data: row.data?.slice(0) ?? null }
+}
+
+function sameArrayBufferV1(left: ArrayBuffer | null, right: ArrayBuffer | null): boolean {
+  if (left === right) return true
+  if (!left || !right || left.byteLength !== right.byteLength) return false
+  const leftBytes = new Uint8Array(left)
+  const rightBytes = new Uint8Array(right)
+  for (let index = 0; index < leftBytes.length; index += 1) {
+    if (leftBytes[index] !== rightBytes[index]) return false
+  }
+  return true
 }
 
 export function parseProductBuildManifestV1(value: string): ProductBuildManifestV1 {
@@ -225,7 +314,13 @@ async function worldContextManifestPointersV1(input: {
     if (!wanted.has(taskKey)) continue
     const snapshot = await readAgentRunV1(input.scope, row.id)
     for (const event of snapshot.events) {
-      if (event.type !== 'context.assembled' || event.payload.stepId !== taskKey) continue
+      if (event.type !== 'context.assembled') continue
+      const isExactAttempt = taskKey === 'p1.source-curation'
+        ? event.payload.stepId.startsWith(`${taskKey}.world.source-curation.batch.`)
+          && snapshot.projection.steps[event.payload.stepId]?.status === 'succeeded'
+          && snapshot.projection.steps[event.payload.stepId]?.attempt === event.payload.attempt
+        : event.payload.stepId === taskKey
+      if (!isExactAttempt) continue
       pointers.push({
         runId: row.id,
         stepId: event.payload.stepId,
@@ -252,21 +347,19 @@ async function priorReleaseLineageV1(input: {
   const latest = rows[0]
   if (!latest) return { version: 1, parentRelease: null, sourceManifest: null }
   const manifest = await verifyProductReleaseManifestV1(latest.manifestJson)
+  const creatorSource = 'schema' in manifest.sourceContracts
+    && manifest.sourceContracts.schema === 'storyforge.text-open-world-creator-release-source-contracts'
   return {
     version: latest.version + 1,
     parentRelease: {
       releaseUid: manifest.lineage.releaseUid,
       releaseHash: manifest.lineage.releaseHash,
     },
-    sourceManifest: manifest.sourceContracts.sourceManifest,
+    sourceManifest: creatorSource ? null : manifest.sourceContracts.sourceManifest as ProductSourceManifestV1,
   }
 }
 
-async function inspectAdoption(
-  scope: WorkspaceScope,
-  productionId: number,
-  mediaRightsPolicy: 'commercial-release' | 'community-prototype' = 'commercial-release',
-): Promise<VerifiedAdoption> {
+async function inspectAdoption(scope: WorkspaceScope, productionId: number): Promise<VerifiedAdoption> {
   const production = await db.productProductions.get(productionId)
   if (!production || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
     fail('Production 不存在或跨 Work')
@@ -283,25 +376,37 @@ async function inspectAdoption(
     || build.controlEpoch !== production.controlEpoch || !build.rootTerminalReceiptHash) {
     fail('Build/Brief/status/epoch 绑定不满足发布条件')
   }
-  const brief = parseProductProductionBriefV3(briefRow.briefJson)
-  if (await hashProductProductionValueV2(brief) !== briefRow.briefHash) fail('Brief hash 校验失败')
+  const creatorDerived = briefRow.briefKind === 'text-open-world-creator-v1'
+    ? await (async () => {
+        const { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } = await import(
+          '../open-world/creator-derived-authority'
+        )
+        const authority = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+          scope, buildId: build.id!,
+        })
+        if (authority.production.id !== production.id || authority.build.id !== build.id
+          || authority.briefRow.id !== briefRow.id
+          || authority.contracts.creatorBrief.briefHash !== briefRow.briefHash) {
+          fail('Creator派生授权与当前Production/Build/Brief不闭合')
+        }
+        return authority
+      })()
+    : null
+  const brief = creatorDerived?.contracts.executionBrief
+    ?? parseProductProductionBriefV3(briefRow.briefJson)
+  if (creatorDerived == null && await hashProductProductionValueV2(brief) !== briefRow.briefHash) {
+    fail('Brief hash 校验失败')
+  }
   const mediaRuntimeRequired = brief.media.requiredMediaKinds.length > 0
-  const humanVisualReviewRequired = brief.intent.productType === 'text-adventure' && mediaRuntimeRequired
-  const [browserPerformance, mainRoutePlaythrough, humanPlaytest, mediaRuntime, humanVisualReview] = brief.qualityProfile === 'commercial-candidate'
+  const [browserPerformance, mainRoutePlaythrough, mediaRuntime] = brief.qualityProfile === 'commercial-candidate'
     ? await Promise.all([
       requirePassedProductBrowserPerformanceGateV1({ scope, productBuildId: build.id! }),
       requirePassedProductBuildMainRouteGateV1({ scope, productBuildId: build.id! }),
-      brief.intent.productType === 'text-adventure'
-        ? requirePassedTextAdventureHumanPlaytestGateV1({ scope, productBuildId: build.id! })
-        : Promise.resolve(null),
       mediaRuntimeRequired
         ? requirePassedProductMediaRuntimeGateV1({ scope, productBuildId: build.id! })
         : Promise.resolve(null),
-      humanVisualReviewRequired
-        ? requirePassedTextAdventureHumanVisualReviewGateV1({ scope, productBuildId: build.id! })
-        : Promise.resolve(null),
     ])
-    : [null, null, null, null, null]
+    : [null, null, null]
   if (build.status !== 'release-ready') fail('Build 尚未通过全部发布硬门')
   const plan = parseProductProductionPlanV3(build.planJson, brief, briefRow.briefHash)
   if (await hashProductProductionValueV2(plan) !== build.planHash
@@ -341,43 +446,209 @@ async function inspectAdoption(
   if (canonicalProductProductionJsonV2(receipts) !== canonicalProductProductionJsonV2(manifest.artifactReceipts)) {
     fail('Build manifest 未完整且唯一地覆盖 accepted Artifacts')
   }
-  const packageArtifact = artifacts.find(row => row.artifactKey === 'runtime.package')
-  const qualityArtifact = artifacts.find(row => row.artifactKey === 'quality.report')
+  const terminalArtifactKeys = productProductionTerminalArtifactKeysV1(brief.intent.productType)
+  const packageArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.runtimePackage)
+  const qualityArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.qualityReport)
   if (!packageArtifact || packageArtifact.contentHash !== build.packageHash
     || !qualityArtifact || qualityArtifact.contentHash !== build.qualityReportHash) fail('Runtime/Quality Artifact 缺失')
-  const expectedRootReceipt = await createProductBuildRootTerminalReceiptV1({
+  const rootReceiptVerification = await verifyProductBuildRootTerminalReceiptV1({
     planHash: build.planHash, manifestHash: build.manifestHash, packageHash: build.packageHash,
     qualityReportHash: build.qualityReportHash, controlEpoch: build.controlEpoch,
     budgetLedgerJson: build.budgetLedgerJson, artifacts,
+    expectedReceiptHash: build.rootTerminalReceiptHash ?? '',
   })
-  if (expectedRootReceipt !== build.rootTerminalReceiptHash) fail('root terminal receipt 校验失败')
-
-  const sourcePlan = await parseProductProductionSourcePlanV1(briefRow)
-  const confirmedBrief = await parseConfirmedProductBriefV1({ row: briefRow, sourcePlan })
-  if (sourcePlan.productType !== brief.intent.productType
-    || sourcePlan.productInstanceKey !== production.productionKey
-    || sourcePlan.worldReference.releaseHash !== brief.source.worldContentHash) {
-    fail('SourcePlan/ConfirmedBrief 与 Production/Brief/WorldRelease 不闭合')
+  if (!rootReceiptVerification.valid) fail('root terminal receipt 校验失败')
+  if (rootReceiptVerification.version !== 2) {
+    fail('legacy root terminal receipt 仅供只读兼容；正式发布前必须重新生产 v2 Build')
   }
-  await resolveProductSourceReadBoundaryV1(sourcePlan)
+  // A v2 row seal alone is not sufficient publication authority: every
+  // producer/synthetic Run, event stream, checkpoint and carried lineage must
+  // still make that seal true. Use the same complete terminal verifier as the
+  // scheduler, then bind its raw read set into the publish transaction below.
+  // Dynamic import avoids a static adoption <-> artifact-store module cycle.
+  const { verifyProductBuildTerminalArtifactSetV1 } = await import('./artifact-store')
+  const terminalVerification = await verifyProductBuildTerminalArtifactSetV1({
+    scope,
+    productionId: production.id!,
+    buildId: build.id!,
+    expectedControlEpoch: build.controlEpoch,
+    expectedPlanHash: build.planHash,
+  })
+  const activeArtifactRowsJson = canonicalProductProductionJsonV2(
+    artifacts.map(row => ({ ...row, id: row.id ?? null })),
+  )
+  if (terminalVerification.artifactReadSetJson !== activeArtifactRowsJson) {
+    fail('terminal verifier 与发布 Artifact 集合不一致')
+  }
+  const terminalBlobProofRows = new Map<number, MediaBlobObjectRecordV1 & { id: number }>(
+    [...terminalVerification.physicalBlobProofRows].map(([blobId, row]) => [
+      blobId,
+      cloneMediaBlobProofRowV1(row),
+    ]),
+  )
+  const root = await readAgentRunV1(scope, terminalVerification.casReadSet.targetRootRunId)
+  const rootBoundary = root.contract.scope.productProduction
+  const rootStep = root.projection.steps['$join']
+  const portableTaskLedger = parseProductProductionPortableTaskLedgerV1({
+    budgetLedgerJson: build.budgetLedgerJson,
+    plan,
+  })
+  const expectedRootOutputHash = await hashProductProductionValueV2({
+    manifestHash: build.manifestHash,
+    taskReceipts: plan.tasks.map(task => ({
+      taskKey: task.taskKey,
+      receiptHash: portableTaskLedger.find(row => row.taskKey === task.taskKey)!.terminalReceiptHash,
+    })),
+  })
+  if (root.run.projectId !== scope.projectId || root.run.workId !== scope.workId
+    || root.run.productBuildId !== build.id || root.run.parentRunId != null
+    || root.run.parentRelation != null || root.run.status !== 'completed'
+    || root.projection.state !== 'completed'
+    || root.run.terminalReceiptHash !== build.rootTerminalReceiptHash
+    || root.projection.terminalReceiptHash !== build.rootTerminalReceiptHash
+    || !rootBoundary || rootBoundary.productBuildId !== build.id
+    || rootBoundary.buildNumber !== build.buildNumber
+    || rootBoundary.controlEpoch !== build.controlEpoch
+    || rootBoundary.planHash !== build.planHash || rootBoundary.taskKey !== '$root'
+    || rootStep?.status !== 'succeeded' || rootStep.attempt !== 1
+    || rootStep.outputHash !== expectedRootOutputHash) {
+    fail('root Run/terminal receipt 不是当前 Build 的完整发布证明')
+  }
+
   const prior = await priorReleaseLineageV1({
     workId: scope.workId,
     productionKey: production.productionKey,
   })
-  const pointers = await worldContextManifestPointersV1({
-    scope,
-    buildId: build.id!,
-    worldSourceTaskKeys: plan.tasks.filter(productProductionTaskUsesWorldGatewayV1).map(task => task.taskKey),
-  })
-  const sourceManifest = pointers.length > 0
-    ? await aggregateProductSourceManifestFromExactRunsV1({
-      scope,
-      sourcePlan,
-      runContextManifests: pointers,
+  let sourcePlan: ProductSourcePlanV1 | null = null
+  let confirmedBrief: ConfirmedProductBriefV1 | null = null
+  let sourceManifest: ProductSourceManifestV1 | null = null
+  let creatorReleaseAuthority: VerifiedAdoption['creatorReleaseAuthority'] = null
+  let creatorRelease: PreparedTextOpenWorldCreatorReleaseV1 | null = null
+  let worldReleaseId: number | null
+  let worldContentHash: string
+  if (creatorDerived) {
+    const [{
+      readAcceptedTextOpenWorldSourcePinBundleV1,
+      validateTextOpenWorldSourcePinV1,
+      verifyTextOpenWorldSourcePinAvailabilityV1,
+    }, {
+      validateTextOpenWorldSourceManifestForReleaseV1,
+      creatorReleaseArtifactReceiptsFromRowsV1,
+    }, {
+      validateTextOpenWorldIntegrationReportV1,
+    }, {
+      readTextOpenWorldCreatorQualityWorkspaceV1,
+    }] = await Promise.all([
+      import('../open-world/source-pin'),
+      import('../open-world/creator-release-contract'),
+      import('../open-world/runtime-package-production'),
+      import('../open-world/creator-quality'),
+    ])
+    const pinRows = await readAcceptedTextOpenWorldSourcePinBundleV1({ scope, buildId: build.id! })
+    let pinValue: unknown
+    try { pinValue = JSON.parse(pinRows.pinArtifact.payloadJson) }
+    catch { fail('Creator SourcePin Artifact JSON损坏') }
+    const sourcePin = await validateTextOpenWorldSourcePinV1(pinValue)
+    const sourceManifestArtifact = artifacts.find(row => row.artifactKey === 'text-open-world.source-manifest')
+    const integrationArtifact = artifacts.find(row => row.artifactKey === 'text-open-world.integration-report')
+    if (!sourceManifestArtifact || !integrationArtifact) {
+      fail('Creator Release缺少SourceManifest或V3 IntegrationReport')
+    }
+    let sourceManifestValue: unknown
+    let integrationValue: unknown
+    try {
+      sourceManifestValue = JSON.parse(sourceManifestArtifact.payloadJson)
+      integrationValue = JSON.parse(integrationArtifact.payloadJson)
+    } catch { fail('Creator Release来源或装配Artifact JSON损坏') }
+    const creatorSourceManifest = await validateTextOpenWorldSourceManifestForReleaseV1(
+      sourcePin,
+      sourceManifestValue as TextOpenWorldSourceManifestV1,
+    )
+    const integrationReport = await validateTextOpenWorldIntegrationReportV1({
+      runtimePackage: preview.runtimePackage,
+      report: integrationValue as TextOpenWorldIntegrationReportV1,
     })
-    : prior.sourceManifest && prior.sourceManifest.sourcePlanHash === sourcePlan.planHash
-      ? await validateProductSourceManifestV1({ sourceManifest: prior.sourceManifest, sourcePlan })
-      : fail('当前 Build 没有真实世界读取 ContextManifestV3，且不存在可继承的同 SourcePlan 来源清单')
+    if (sourceManifestArtifact.contentHash !== creatorSourceManifest.manifestHash
+      || integrationArtifact.contentHash !== integrationReport.integrationReportHash) {
+      fail('Creator来源或装配Artifact行Hash不匹配')
+    }
+    const qualityWorkspace = await readTextOpenWorldCreatorQualityWorkspaceV1({
+      scope, productionId: production.id!, expectedBuildId: build.id!,
+    })
+    if (!qualityWorkspace.releaseQualityReady || !qualityWorkspace.releaseQualityReceipt) {
+      fail(`Creator Build未通过G5-09发布质量门:${qualityWorkspace.blockers.join('；') || 'unknown'}`)
+    }
+    const creatorSourcePlan = creatorDerived.contracts.sourcePlan
+    const availability = await verifyTextOpenWorldSourcePinAvailabilityV1({ scope, pin: sourcePin })
+    if (creatorSourcePlan.productInstanceKey !== production.productionKey
+      || creatorSourcePlan.sourceKind !== sourcePin.sourceKind
+      || creatorSourcePlan.sourceVersionHash !== sourcePin.sourceVersionHash
+      || creatorSourcePlan.expectedSourceBoundaryHash !== sourcePin.sourceBoundaryHash
+      || creatorSourceManifest.sourcePinHash !== sourcePin.pinHash
+      || integrationReport.sourcePinHash !== sourcePin.pinHash) {
+      fail('Creator SourcePlan/SourcePin/P1/V3来源链不闭合')
+    }
+    if (availability.kind === 'world-release') {
+      worldReleaseId = availability.worldReference.localReleaseRecordId
+      if (briefRow.sourceWorldReleaseId !== worldReleaseId
+        || availability.worldReference.releaseHash !== creatorSourcePlan.sourceVersionHash) {
+        fail('Creator WorldRelease本地locator与冻结来源不闭合')
+      }
+    } else {
+      worldReleaseId = null
+      if (briefRow.sourceWorldReleaseId !== null) fail('Creator小说来源不得携带WorldRelease locator')
+    }
+    worldContentHash = creatorSourcePlan.sourceVersionHash
+    const artifactReceipts = creatorReleaseArtifactReceiptsFromRowsV1(artifacts)
+    const artifactSetHash = await hashProductProductionValueV2(artifactReceipts)
+    creatorReleaseAuthority = {
+      creatorBrief: creatorDerived.contracts.creatorBrief,
+      sourcePlan: creatorSourcePlan,
+      creatorStart: creatorDerived.contracts.start,
+      sourcePin,
+      sourceManifest: creatorSourceManifest,
+      integrationReport,
+      governanceSnapshotHash: qualityWorkspace.governanceSnapshotHash,
+      releaseQuality: qualityWorkspace.releaseQualityReceipt,
+    }
+    creatorRelease = {
+      sourceKind: creatorSourcePlan.sourceKind,
+      sourceVersionHash: creatorSourcePlan.sourceVersionHash,
+      sourceBoundaryHash: creatorSourcePlan.expectedSourceBoundaryHash,
+      sourcePlanHash: creatorSourcePlan.planHash,
+      sourcePinHash: sourcePin.pinHash,
+      sourceManifestHash: creatorSourceManifest.manifestHash,
+      artifactSetHash,
+      integrationReportHash: integrationReport.integrationReportHash,
+      governanceSnapshotHash: qualityWorkspace.governanceSnapshotHash,
+      releaseQualityReceiptHash: qualityWorkspace.releaseQualityReceipt.receiptHash,
+    }
+  } else {
+    sourcePlan = await parseProductProductionSourcePlanV1(briefRow)
+    confirmedBrief = await parseConfirmedProductBriefV1({ row: briefRow, sourcePlan })
+    if (sourcePlan.productType !== brief.intent.productType
+      || sourcePlan.productInstanceKey !== production.productionKey
+      || sourcePlan.worldReference.releaseHash !== brief.source.worldContentHash) {
+      fail('SourcePlan/ConfirmedBrief 与 Production/Brief/WorldRelease 不闭合')
+    }
+    await resolveProductSourceReadBoundaryV1(sourcePlan)
+    const pointers = await worldContextManifestPointersV1({
+      scope,
+      buildId: build.id!,
+      worldSourceTaskKeys: plan.tasks.filter(productProductionTaskUsesWorldGatewayV1).map(task => task.taskKey),
+    })
+    sourceManifest = pointers.length > 0
+      ? await aggregateProductSourceManifestFromExactRunsV1({
+        scope,
+        sourcePlan,
+        runContextManifests: pointers,
+      })
+      : prior.sourceManifest && prior.sourceManifest.sourcePlanHash === sourcePlan.planHash
+        ? await validateProductSourceManifestV1({ sourceManifest: prior.sourceManifest, sourcePlan })
+        : fail('当前 Build 没有真实世界读取 ContextManifestV3，且不存在可继承的同 SourcePlan 来源清单')
+    worldReleaseId = sourcePlan.worldReference.localReleaseRecordId
+    worldContentHash = sourcePlan.worldReference.releaseHash
+  }
   let compatibilityBody: unknown
   try { compatibilityBody = JSON.parse(build.compatibilityJson) }
   catch { fail('Build compatibility JSON 损坏') }
@@ -396,9 +667,13 @@ async function inspectAdoption(
     build.qualityReportHash,
     browserPerformance?.gateReceipt.receiptHash ?? null,
     mainRoutePlaythrough?.gateReceipt.receiptHash ?? null,
-    humanPlaytest?.gateReceipt.receiptHash ?? null,
     mediaRuntime?.gateReceipt.receiptHash ?? null,
-    humanVisualReview?.gateReceipt.receiptHash ?? null,
+    creatorReleaseAuthority?.releaseQuality.receiptHash ?? null,
+    creatorReleaseAuthority?.releaseQuality.evidence.hardGateReceiptHash ?? null,
+    creatorReleaseAuthority?.releaseQuality.evidence.semanticDecisionReceiptHash ?? null,
+    creatorReleaseAuthority?.releaseQuality.evidence.grayboxReceiptHash ?? null,
+    ...(creatorReleaseAuthority?.releaseQuality.evidence.issueReceiptHashes ?? []),
+    ...(creatorReleaseAuthority?.releaseQuality.evidence.issueWaiverReceiptHashes ?? []),
   ].filter((value): value is string => value != null)
 
   const mediaArtifacts = new Map<string, ProductBuildArtifactRecordV1>()
@@ -410,23 +685,30 @@ async function inspectAdoption(
     if (!binding || !artifact || artifact.blobObjectId == null || artifact.contentHash !== asset.blobContentHash
       || artifact.mimeType !== asset.mimeType || artifact.byteSize !== asset.byteSize) fail(`媒资 Artifact 绑定无效:${asset.assetKey}`)
     const rights = object(JSON.parse(artifact.rightsJson), `rights:${artifact.artifactKey}`)
-    const license = typeof rights.license === 'string' ? rights.license.trim() : ''
-    if (mediaRightsPolicy === 'commercial-release') {
-      if (rights.commercialUse !== true || !license) fail(`媒资商业权利不完整:${artifact.artifactKey}`)
-    } else if (typeof rights.commercialUse !== 'boolean' || !license
-      || rights.commercialUse === false && rights.requiresProviderTermsReview !== true) {
-      fail(`社区原型媒资权利声明不完整:${artifact.artifactKey}`)
+    if (rights.commercialUse !== true || typeof rights.license !== 'string' || !rights.license.trim()) {
+      fail(`媒资商业权利不完整:${artifact.artifactKey}`)
     }
     const blob = await db.mediaBlobObjects.get(artifact.blobObjectId)
-    if (!blob || !await assertRecordInScope(scope, 'mediaBlobObjects', blob, { owner: 'work' })
+    if (!blob || blob.id == null
+      || !await assertRecordInScope(scope, 'mediaBlobObjects', blob, { owner: 'work' })
       || blob.contentHash !== asset.blobContentHash || blob.mimeType !== asset.mimeType
       || blob.byteSize !== asset.byteSize) fail(`媒资物理对象不匹配:${asset.assetKey}`)
     await readVerifiedMediaBlobObjectData(blob)
+    const terminalProof = terminalBlobProofRows.get(blob.id)
+    if (!terminalProof
+      || canonicalProductProductionJsonV2(mediaBlobAuthorityRowV1(terminalProof))
+        !== canonicalProductProductionJsonV2(mediaBlobAuthorityRowV1(blob))) {
+      fail(`Runtime 媒资未进入完整 terminal 物理证明:${asset.assetKey}`)
+    }
     mediaArtifacts.set(asset.assetKey, artifact)
   }
-  if (sourcePlan.worldReference.localReleaseRecordId !== brief.source.worldReleaseId
+  if (preview.runtimePackage.sourceWorld.contentHash !== worldContentHash) {
+    fail('RuntimePackage来源Hash与正式来源合同不一致')
+  }
+  if (!creatorReleaseAuthority && sourcePlan && (
+    sourcePlan.worldReference.localReleaseRecordId !== brief.source.worldReleaseId
     || sourcePlan.worldReference.releaseHash !== brief.source.worldContentHash
-    || preview.runtimePackage.sourceWorld.contentHash !== sourcePlan.worldReference.releaseHash) {
+  )) {
     fail('WorldReference 来源绑定失败')
   }
 
@@ -439,32 +721,83 @@ async function inspectAdoption(
     qualityReportHash: build.qualityReportHash, rootTerminalReceiptHash: build.rootTerminalReceiptHash,
     browserPerformanceReceiptHash: browserPerformance?.gateReceipt.receiptHash ?? null,
     mainRoutePlaythroughReceiptHash: mainRoutePlaythrough?.gateReceipt.receiptHash ?? null,
-    humanPlaytestReceiptHash: humanPlaytest?.gateReceipt.receiptHash ?? null,
     mediaRuntimeReceiptHash: mediaRuntime?.gateReceipt.receiptHash ?? null,
-    humanVisualReviewReceiptHash: humanVisualReview?.gateReceipt.receiptHash ?? null,
-    worldReleaseId: sourcePlan.worldReference.localReleaseRecordId,
-    worldContentHash: sourcePlan.worldReference.releaseHash,
+    worldReleaseId,
+    worldContentHash,
+  }
+  const qualityReceiptRows = await db.productQualityGateReceipts
+    .where('buildId').equals(build.id!).toArray()
+  for (const required of [
+    browserPerformance?.gateReceipt ?? null,
+    mainRoutePlaythrough?.gateReceipt ?? null,
+    mediaRuntime?.gateReceipt ?? null,
+  ].filter((value): value is NonNullable<typeof browserPerformance>['gateReceipt'] => value != null)) {
+    const latest = qualityReceiptRows
+      .filter(row => row.gateId === required.gateId)
+      .sort((left, right) => right.createdAt - left.createdAt || (right.id ?? -1) - (left.id ?? -1))[0]
+    if (!latest || latest.status !== 'passed' || latest.receiptHash !== required.receiptHash) {
+      fail(`商业质量门在发布快照冻结前已被更新:${required.gateId}`)
+    }
   }
   return {
     scope, intent, adoptionIntentHash: await hashProductProductionValueV2(intent),
     productType: preview.runtimePackage.productType, title: preview.runtimePackage.definition.title,
     mediaAssetKeys: runtimeAssets.map(asset => asset.assetKey).sort(),
-    runtimePackage: preview.runtimePackage, preview, artifacts, mediaArtifacts,
+    creatorRelease,
+    runtimePackage: preview.runtimePackage, artifacts, mediaArtifacts, terminalBlobProofRows,
+    terminalVerification,
     sourcePlan,
     confirmedBrief,
     sourceManifest,
+    creatorReleaseAuthority,
     releaseVersion: prior.version,
     parentRelease: prior.parentRelease,
     compatibilityHash,
     compatibilityStatus,
     qualityReceiptHashes,
+    authoritySnapshot: {
+      productionRowJson: canonicalProductProductionJsonV2({ ...production, id: production.id ?? null }),
+      buildRowJson: canonicalProductProductionJsonV2({ ...build, id: build.id ?? null }),
+      briefRowJson: canonicalProductProductionJsonV2({ ...briefRow, id: briefRow.id ?? null }),
+      activeArtifactRowsJson: canonicalRowsByIdV1(artifacts),
+      qualityReceiptRowsJson: canonicalRowsByIdV1(qualityReceiptRows),
+      mediaBlobRowsJson: canonicalProductProductionJsonV2([...terminalBlobProofRows.values()]
+        .map(mediaBlobAuthorityRowV1)
+        .sort((left, right) => Number((left as { id: number }).id) - Number((right as { id: number }).id))),
+    },
   }
 }
 
-async function composeProductReleaseManifestV1(
-  verified: VerifiedAdoption,
-  releaseCreatedAt: number,
-): Promise<{ manifest: ProductReleaseManifestV1; manifestJson: string; contentHash: string }> {
+export async function prepareProductProductionAdoption(input: {
+  scope: WorkspaceScope
+  productionId: number
+}): Promise<PreparedProductProductionAdoptionV1> {
+  const scope = await resolveScope({ scope: input.scope })
+  const verified = await inspectAdoption(scope, input.productionId)
+  return {
+    intent: verified.intent, adoptionIntentHash: verified.adoptionIntentHash,
+    productType: verified.productType, title: verified.title, releaseVersion: verified.releaseVersion,
+    mediaAssetKeys: verified.mediaAssetKeys,
+    creatorRelease: verified.creatorRelease,
+  }
+}
+
+/** Read-only packaging boundary used by the community exporter. It composes
+ * the same immutable Release contract as publish without writing a Release. */
+export async function prepareCommunityPrototypeProductReleaseV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+}): Promise<{
+  productBuildId: number
+  preview: ProductBuildPreviewManifestV1
+  productRelease: { contentHash: string; manifest: ProductReleaseManifestV1 }
+}> {
+  const scope = await resolveScope({ scope: input.scope })
+  const verified = await inspectAdoption(scope, input.productionId)
+  if (verified.creatorReleaseAuthority || !verified.sourcePlan
+    || !verified.confirmedBrief || !verified.sourceManifest) {
+    fail('社区候选包当前只支持共享WorldRelease来源产品')
+  }
   const productionProvenance: NonNullable<ProductReleaseManifestV1['productionProvenance']> = {
     productionKey: verified.intent.productionKey,
     buildNumber: verified.intent.buildNumber,
@@ -472,14 +805,13 @@ async function composeProductReleaseManifestV1(
     rootTerminalReceiptHash: verified.intent.rootTerminalReceiptHash,
   }
   const portableSourcePlan = await portableProductSourcePlanV1(verified.sourcePlan)
-  const sourceContracts: ProductReleaseManifestV1['sourceContracts'] = {
+  const sourceContracts = {
     sourcePlan: portableSourcePlan,
     confirmedBrief: verified.confirmedBrief,
     sourceManifest: verified.sourceManifest,
   }
   const identityBody: Omit<ProductReleaseManifestV1, 'releaseIdentityHash' | 'lineage'> = {
-    schema: 'storyforge.product-release',
-    version: 1,
+    schema: 'storyforge.product-release', version: 1,
     productType: verified.runtimePackage.productType,
     sourceWorldRelease: { contentHash: verified.runtimePackage.sourceWorld.contentHash },
     runtimePackage: verified.runtimePackage,
@@ -488,6 +820,7 @@ async function composeProductReleaseManifestV1(
     sourceContracts,
   }
   const releaseIdentityHash = await productReleaseIdentityHashV1(identityBody)
+  const releaseCreatedAt = Date.now()
   const releaseUid = productReleaseUidV1({
     productType: verified.productType,
     productInstanceKey: verified.intent.productionKey,
@@ -524,39 +857,14 @@ async function composeProductReleaseManifestV1(
     lineage,
   })
   return {
-    manifest,
-    manifestJson: canonicalProductProductionJsonV2(manifest),
-    contentHash: await hashProductProductionValueV2(manifest),
-  }
-}
-
-export async function prepareCommunityPrototypeProductReleaseV1(input: {
-  scope: WorkspaceScope
-  productionId: number
-}): Promise<{
-  productBuildId: number
-  preview: ProductBuildPreviewManifestV1
-  productRelease: { contentHash: string; manifest: ProductReleaseManifestV1 }
-}> {
-  const scope = await resolveScope({ scope: input.scope })
-  const verified = await inspectAdoption(scope, input.productionId, 'community-prototype')
-  const release = await composeProductReleaseManifestV1(verified, Date.now())
-  return {
     productBuildId: verified.intent.buildId,
-    preview: verified.preview,
-    productRelease: { contentHash: release.contentHash, manifest: release.manifest },
-  }
-}
-
-export async function prepareProductProductionAdoption(input: {
-  scope: WorkspaceScope
-  productionId: number
-}): Promise<PreparedProductProductionAdoptionV1> {
-  const scope = await resolveScope({ scope: input.scope })
-  const verified = await inspectAdoption(scope, input.productionId)
-  return {
-    intent: verified.intent, adoptionIntentHash: verified.adoptionIntentHash,
-    productType: verified.productType, title: verified.title, mediaAssetKeys: verified.mediaAssetKeys,
+    preview: await verifyProductBuildPreviewManifestV1(
+      (await db.productBuilds.get(verified.intent.buildId))!.previewManifestJson,
+    ),
+    productRelease: {
+      manifest,
+      contentHash: await hashProductProductionValueV2(manifest),
+    },
   }
 }
 
@@ -597,7 +905,35 @@ async function materializeReleaseMedia(
   }
 }
 
-async function assertPreparedAdoptionUnchangedInTransaction(verified: VerifiedAdoption): Promise<void> {
+async function refreshPreparedAdoptionMediaBlobProofsV1(
+  verified: VerifiedAdoption,
+): Promise<Map<number, MediaBlobObjectRecordV1 & { id: number }>> {
+  const refreshed = new Map<number, MediaBlobObjectRecordV1 & { id: number }>()
+  for (const [blobId, prior] of verified.terminalBlobProofRows) {
+    const current = await db.mediaBlobObjects.get(blobId)
+    if (!current || current.id == null
+      || !await assertRecordInScope(verified.scope, 'mediaBlobObjects', current, { owner: 'work' })
+      || canonicalProductProductionJsonV2(mediaBlobAuthorityRowV1(current))
+        !== canonicalProductProductionJsonV2(mediaBlobAuthorityRowV1(prior))) {
+      fail(`媒资 Blob 在发布物理复验前已变化:${blobId}`)
+    }
+    // OPFS I/O cannot be held inside an IndexedDB transaction. Its only writer
+    // is the content-addressed object creation path, so verify immediately
+    // before opening the transaction and CAS the immutable path/hash/size row
+    // inside it. IndexedDB-backed bytes receive an additional byte-for-byte
+    // comparison inside the transaction below.
+    await readVerifiedMediaBlobObjectData(current)
+    refreshed.set(blobId, cloneMediaBlobProofRowV1(
+      current as MediaBlobObjectRecordV1 & { id: number },
+    ))
+  }
+  return refreshed
+}
+
+async function assertPreparedAdoptionUnchangedInTransaction(
+  verified: VerifiedAdoption,
+  commitBlobProofRows: ReadonlyMap<number, MediaBlobObjectRecordV1 & { id: number }>,
+): Promise<void> {
   const [production, build, artifacts, qualityReceipts] = await Promise.all([
     db.productProductions.get(verified.intent.productionId),
     db.productBuilds.get(verified.intent.buildId),
@@ -621,34 +957,52 @@ async function assertPreparedAdoptionUnchangedInTransaction(verified: VerifiedAd
     || !brief || brief.briefHash !== verified.intent.briefHash || brief.status !== 'authorized') {
     fail('adoption intent 在提交前发生变化')
   }
+  if (canonicalProductProductionJsonV2({ ...production, id: production.id ?? null })
+      !== verified.authoritySnapshot.productionRowJson
+    || canonicalProductProductionJsonV2({ ...build, id: build.id ?? null })
+      !== verified.authoritySnapshot.buildRowJson
+    || canonicalProductProductionJsonV2({ ...brief, id: brief.id ?? null })
+      !== verified.authoritySnapshot.briefRowJson) {
+    fail('Production/Build/Brief 权威行在提交前发生变化')
+  }
   const accepted = artifacts
     .filter(row => row.status === 'accepted' || row.status === 'carried-forward')
     .sort((left, right) => left.artifactKey.localeCompare(right.artifactKey) || left.version - right.version)
-  const binding = (rows: ProductBuildArtifactRecordV1[]) => rows.map(row => ({
-    id: row.id, artifactKey: row.artifactKey, version: row.version, status: row.status,
-    controlEpoch: row.controlEpoch, contentHash: row.contentHash, blobObjectId: row.blobObjectId,
-    mimeType: row.mimeType, byteSize: row.byteSize, producerReceiptHash: row.producerReceiptHash,
-  }))
-  if (canonicalProductProductionJsonV2(binding(accepted))
-    !== canonicalProductProductionJsonV2(binding(verified.artifacts))) {
+  if (canonicalRowsByIdV1(accepted) !== verified.authoritySnapshot.activeArtifactRowsJson) {
     fail('Artifact 集合在提交前发生变化')
   }
   const requiredGateHashes = [
     verified.intent.browserPerformanceReceiptHash,
     verified.intent.mainRoutePlaythroughReceiptHash,
-    verified.intent.humanPlaytestReceiptHash,
     verified.intent.mediaRuntimeReceiptHash,
-    verified.intent.humanVisualReviewReceiptHash,
   ].filter((value): value is string => value != null)
   const currentGateHashes = new Set(qualityReceipts.map(row => row.receiptHash))
   if (requiredGateHashes.some(hash => !currentGateHashes.has(hash))) fail('商业质量回执在提交前发生变化')
+  if (canonicalRowsByIdV1(qualityReceipts) !== verified.authoritySnapshot.qualityReceiptRowsJson) {
+    fail('商业质量回执权威行在提交前发生变化')
+  }
+  const currentBlobAuthorityRows: unknown[] = []
   for (const artifact of verified.mediaArtifacts.values()) {
     if (artifact.blobObjectId == null) fail(`媒资 Artifact 缺少 Blob:${artifact.artifactKey}`)
-    const blob = await db.mediaBlobObjects.get(artifact.blobObjectId)
-    if (!blob || blob.storageState !== 'ready' || blob.contentHash !== artifact.contentHash
-      || blob.mimeType !== artifact.mimeType || blob.byteSize !== artifact.byteSize) {
-      fail(`媒资物理对象在提交前发生变化:${artifact.artifactKey}`)
+    if (!commitBlobProofRows.has(artifact.blobObjectId)) {
+      fail(`Runtime 媒资未进入提交期 terminal 证明:${artifact.artifactKey}`)
     }
+  }
+  for (const [blobId, expectedProof] of commitBlobProofRows) {
+    const blob = await db.mediaBlobObjects.get(blobId)
+    if (!blob || blob.id == null || blob.storageState !== 'ready'
+      || canonicalProductProductionJsonV2(mediaBlobAuthorityRowV1(blob))
+        !== canonicalProductProductionJsonV2(mediaBlobAuthorityRowV1(expectedProof))
+      || (expectedProof.backend === 'indexeddb'
+        && !sameArrayBufferV1(expectedProof.data, blob.data))) {
+      fail(`terminal 物理字节在发布事务前发生变化:${blobId}`)
+    }
+    currentBlobAuthorityRows.push(mediaBlobAuthorityRowV1(blob))
+  }
+  if (canonicalProductProductionJsonV2(currentBlobAuthorityRows
+    .sort((left, right) => Number((left as { id: number }).id) - Number((right as { id: number }).id)))
+      !== verified.authoritySnapshot.mediaBlobRowsJson) {
+    fail('媒资 Blob 权威行在提交前发生变化')
   }
 }
 
@@ -657,6 +1011,7 @@ export async function publishProductProductionBuild(input: {
   productionId: number
   command: PublishCommandV1
   label?: string
+  creatorReleaseAuthorization?: TextOpenWorldCreatorReleaseAuthorizationV1
 }): Promise<ProductProductionPublishReceiptV1> {
   const scope = await resolveScope({ scope: input.scope })
   const command = parseProductProductionCommandV1(input.command)
@@ -677,13 +1032,141 @@ export async function publishProductProductionBuild(input: {
     || command.expectedManifestHash !== prepared.intent.manifestHash
     || command.adoptionIntentHash !== prepared.adoptionIntentHash) fail('publish command 与 adoption intent 不一致或已过期')
 
+  let creatorAuthorization: TextOpenWorldCreatorReleaseAuthorizationV1 | null = null
+  if (prepared.creatorReleaseAuthority) {
+    if (!input.creatorReleaseAuthorization || !command.creatorReleaseAuthorizationHash) {
+      fail('Creator双来源发布缺少作者最终发布授权')
+    }
+    const { validateTextOpenWorldCreatorReleaseAuthorizationV1 } = await import(
+      '../open-world/creator-release-contract'
+    )
+    creatorAuthorization = await validateTextOpenWorldCreatorReleaseAuthorizationV1(
+      input.creatorReleaseAuthorization,
+    )
+    if (creatorAuthorization.authorizationHash !== command.creatorReleaseAuthorizationHash
+      || creatorAuthorization.productInstanceKey !== prepared.intent.productionKey
+      || creatorAuthorization.buildNumber !== prepared.intent.buildNumber
+      || creatorAuthorization.adoptionIntentHash !== prepared.adoptionIntentHash
+      || creatorAuthorization.buildManifestHash !== prepared.intent.manifestHash
+      || creatorAuthorization.runtimePackageHash !== prepared.intent.packageHash
+      || creatorAuthorization.releaseQualityReceiptHash
+        !== prepared.creatorReleaseAuthority.releaseQuality.receiptHash
+      || input.label?.trim() !== creatorAuthorization.releaseLabel) {
+      fail('Creator发布授权与当前adoption intent、质量回执或发布名称不一致')
+    }
+  } else if (input.creatorReleaseAuthorization || command.creatorReleaseAuthorizationHash) {
+    fail('非Creator发布不得携带Creator发布授权')
+  }
+
   // All expensive canonical hashing, browser-receipt replay and physical blob
   // verification happen before acquiring the write transaction. The
   // transaction repeats a bounded field-level CAS over every locked authority
   // row, so it stays atomic without holding IndexedDB open across WebCrypto or
   // multi-megabyte byte verification.
+  const productionProvenance: NonNullable<ProductReleaseManifestV1['productionProvenance']> = {
+    productionKey: prepared.intent.productionKey,
+    buildNumber: prepared.intent.buildNumber,
+    buildManifestHash: prepared.intent.manifestHash,
+    rootTerminalReceiptHash: prepared.intent.rootTerminalReceiptHash,
+  }
+  let portableSourcePlan: ProductSourcePlanV1 | null = null
+  let sourceContracts: ProductReleaseManifestV1['sourceContracts']
+  if (prepared.creatorReleaseAuthority && creatorAuthorization) {
+    const { createTextOpenWorldCreatorReleaseSourceContractsV1 } = await import(
+      '../open-world/creator-release-contract'
+    )
+    sourceContracts = await createTextOpenWorldCreatorReleaseSourceContractsV1({
+      ...prepared.creatorReleaseAuthority,
+      artifactReceipts: prepared.artifacts.map(row => ({
+        artifactKey: row.artifactKey, version: row.version, contentHash: row.contentHash,
+        producerReceiptHash: row.producerReceiptHash,
+      })),
+      releaseAuthorization: creatorAuthorization,
+      runtimePackage: prepared.runtimePackage,
+    })
+  } else {
+    if (!prepared.sourcePlan || !prepared.confirmedBrief || !prepared.sourceManifest) {
+      fail('共享WorldRelease发布缺少正式来源合同')
+    }
+    portableSourcePlan = await portableProductSourcePlanV1(prepared.sourcePlan)
+    sourceContracts = {
+      sourcePlan: portableSourcePlan,
+      confirmedBrief: prepared.confirmedBrief,
+      sourceManifest: prepared.sourceManifest,
+    }
+  }
+  const identityBody: Omit<ProductReleaseManifestV1, 'releaseIdentityHash' | 'lineage'> = {
+    schema: 'storyforge.product-release',
+    version: 1,
+    productType: prepared.runtimePackage.productType,
+    sourceWorldRelease: { contentHash: prepared.runtimePackage.sourceWorld.contentHash },
+    runtimePackage: prepared.runtimePackage,
+    packageHash: await hashProductProductionValueV2(prepared.runtimePackage),
+    productionProvenance,
+    sourceContracts,
+  }
+  const releaseIdentityHash = await productReleaseIdentityHashV1(identityBody)
   const releaseCreatedAt = Date.now()
-  const { manifestJson, contentHash } = await composeProductReleaseManifestV1(prepared, releaseCreatedAt)
+  const releaseUid = productReleaseUidV1({
+    productType: prepared.productType,
+    productInstanceKey: prepared.intent.productionKey,
+    releaseVersion: prepared.releaseVersion,
+    releaseHash: releaseIdentityHash,
+  })
+  const buildLineage = {
+    buildUid: `GB-${encodeURIComponent(prepared.intent.productionKey)}-b${prepared.intent.buildNumber}-${prepared.intent.manifestHash.slice(0, 24)}`,
+    buildHash: prepared.intent.manifestHash,
+  }
+  const compatibility = {
+    status: prepared.compatibilityStatus,
+    protocolVersion: 1,
+    evidenceHashes: [prepared.compatibilityHash],
+  }
+  const lineage = prepared.creatorReleaseAuthority
+    ? await (async () => {
+        const { createTextOpenWorldCreatorReleaseLineageV1 } = await import(
+          '../open-world/creator-release-contract'
+        )
+        return createTextOpenWorldCreatorReleaseLineageV1({
+          sourceContracts: sourceContracts as TextOpenWorldCreatorReleaseSourceContractsV1,
+          releaseUid, releaseVersion: prepared.releaseVersion, releaseHash: releaseIdentityHash,
+          parentRelease: prepared.parentRelease, build: buildLineage,
+          qualityReceiptHashes: prepared.qualityReceiptHashes,
+          compatibility, createdAt: releaseCreatedAt,
+        })
+      })()
+    : await createProductReleaseLineageV1({
+        productType: prepared.productType,
+        productInstanceKey: prepared.intent.productionKey,
+        releaseUid,
+        releaseVersion: prepared.releaseVersion,
+        releaseHash: releaseIdentityHash,
+        parentRelease: prepared.parentRelease,
+        worldReference: prepared.sourcePlan!.worldReference,
+        sourcePlan: portableSourcePlan!,
+        sourceManifest: prepared.sourceManifest!,
+        confirmedBrief: prepared.confirmedBrief!,
+        build: buildLineage,
+        quality: { passed: true, receiptHashes: prepared.qualityReceiptHashes },
+        compatibility,
+        createdAt: releaseCreatedAt,
+      })
+  const releaseManifest = prepared.creatorReleaseAuthority
+    ? await verifyProductReleaseManifestV1({ ...identityBody, releaseIdentityHash, lineage })
+    : await createProductReleaseManifestV1({
+        runtimePackage: prepared.runtimePackage,
+        productionProvenance,
+        sourceContracts: sourceContracts as {
+          sourcePlan: ProductSourcePlanV1
+          confirmedBrief: ConfirmedProductBriefV1
+          sourceManifest: ProductSourceManifestV1
+        },
+        lineage: lineage as ProductReleaseLineageV1,
+      })
+  const manifestJson = canonicalProductProductionJsonV2(releaseManifest)
+  const contentHash = await hashProductProductionValueV2(releaseManifest)
+  const { assertProductBuildTerminalReadSetUnchangedV1 } = await import('./artifact-store')
+  const commitBlobProofRows = await refreshPreparedAdoptionMediaBlobProofsV1(prepared)
 
   let transactionStage = 'open'
   try {
@@ -691,10 +1174,14 @@ export async function publishProductProductionBuild(input: {
       db.productProductions, db.productProductionBriefs, db.productProductionCommands, db.productBuilds,
       db.productBuildArtifacts, db.mediaBlobObjects, db.productReleases,
       db.productMediaAssets, db.productMediaBlobs, db.productQualityGateReceipts,
+      db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints,
     ), async () => {
       const verified = prepared
       transactionStage = 'cas-authorities'
-      await assertPreparedAdoptionUnchangedInTransaction(verified)
+      await assertProductBuildTerminalReadSetUnchangedV1({
+        readSet: verified.terminalVerification.casReadSet,
+      })
+      await assertPreparedAdoptionUnchangedInTransaction(verified, commitBlobProofRows)
       transactionStage = 'claim-command'
       const duplicateCommand = await db.productProductionCommands
         .where('[productionId+commandId]').equals([input.productionId, command.commandId]).first()

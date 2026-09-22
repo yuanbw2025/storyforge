@@ -96,12 +96,15 @@ describe('R-15: character reference remap', () => {
     await db.stateCards.bulkAdd([
       {
         projectId, category: 'character', entityName: '主角色',
-        fields: stringifyFields([{ key: '位置', value: '主城' }]),
+        fields: stringifyFields([{ key: '位置', value: '' }]),
         createdAt: now, updatedAt: now,
       },
       {
         projectId, category: 'character', entityName: '别名角色',
-        fields: stringifyFields([{ key: '伤势', value: '轻伤' }]),
+        fields: stringifyFields([
+          { key: '位置', value: '主城' },
+          { key: '伤势', value: '轻伤' },
+        ]),
         createdAt: now, updatedAt: now,
       },
     ] as any[])
@@ -136,6 +139,7 @@ describe('R-15: character reference remap', () => {
     expect(cards).toHaveLength(1)
     expect(cards[0].entityName).toBe('主角色')
     expect(parseFields(cards[0].fields).map(f => f.key).sort()).toEqual(['伤势', '位置'])
+    expect(parseFields(cards[0].fields).find(f => f.key === '位置')?.value).toBe('主城')
     const fact = await db.temporalFacts.get(factId)
     expect(fact?.characterId).toBe(primaryId)
     expect(fact?.objectCharacterId).toBe(primaryId)
@@ -145,6 +149,73 @@ describe('R-15: character reference remap', () => {
     const item = await db.itemLedger.get(itemId)
     expect(item?.characterId).toBe(primaryId)
     expect(item?.heldByName).toBe('主角色')
+  })
+
+  it('promotes the source state card when the primary character has no existing card', async () => {
+    const now = Date.now()
+    const projectId = await seedCurrentProject({
+      name: 'R-15-promote-card', genres: [], description: '', targetWordCount: 0,
+      enableMultiWorld: false, createdAt: now, updatedAt: now,
+    } as any) as number
+    const primaryId = await db.characters.add(character(projectId, '无卡主角色', now)) as number
+    const aliasId = await db.characters.add(character(projectId, '有卡别名', now)) as number
+    const sourceCardId = await db.stateCards.add({
+      projectId, category: 'character', entityName: '有卡别名',
+      fields: stringifyFields([{ key: '位置', value: '盐港' }]),
+      createdAt: now, updatedAt: now,
+    } as any) as number
+    await db.stateCards.add({
+      projectId, category: 'character', entityName: '有卡别名',
+      fields: stringifyFields([{ key: '伤势', value: '无' }]),
+      createdAt: now, updatedAt: now,
+    } as any)
+
+    // 生命周期重映射必须容忍现存旧草稿中的脏 JSON/数组形态：它们不能让角色合并
+    // 事务失败，也不能被误改成另一个角色。这里同时覆盖无匹配引用的保留路径。
+    const outlineNodeId = await db.outlineNodes.add({
+      projectId, parentId: null, type: 'chapter', title: '脏引用容错', summary: '',
+      order: 0, createdAt: now, updatedAt: now,
+    } as any) as number
+    await db.detailedOutlines.bulkAdd([
+      {
+        projectId, outlineNodeId,
+        appearingCharacterIds: 'not-an-array',
+        scenes: [null, { title: '缺少角色数组' }, { title: '无关角色', characterIds: [primaryId] }],
+        createdAt: now, updatedAt: now,
+      },
+      {
+        projectId, outlineNodeId,
+        appearingCharacterIds: [], scenes: 'not-an-array',
+        createdAt: now, updatedAt: now,
+      },
+    ] as any[])
+    const planBase = {
+      projectId, name: '旧草稿', userHint: '', generatedVolumes: '[]',
+      status: 'draft', version: 1, parentPlanId: null, createdAt: now, updatedAt: now,
+    }
+    await db.characterDrivenPlans.bulkAdd([
+      { ...planBase, name: '坏 JSON', arcs: '[' },
+      { ...planBase, name: '非数组 JSON', arcs: '{}' },
+      { ...planBase, name: '无关数组项', arcs: JSON.stringify([null, { characterId: primaryId }]) },
+    ] as any[])
+
+    await db.transaction('rw', transactionTablesFor('importProject'), async () => {
+      await applyCharacterReferenceRemap({
+        projectId,
+        fromCharacterId: aliasId,
+        fromName: '有卡别名',
+        toCharacterId: primaryId,
+        toName: '无卡主角色',
+      })
+      await db.characters.delete(aliasId)
+    })
+
+    const promoted = await db.stateCards.get(sourceCardId)
+    expect(promoted?.entityName).toBe('无卡主角色')
+    expect(parseFields(promoted?.fields ?? '')).toEqual([{ key: '位置', value: '盐港' }])
+    expect(await db.stateCards.where('projectId').equals(projectId).count()).toBe(1)
+    expect((await db.characterDrivenPlans.where('projectId').equals(projectId).toArray()).map(plan => plan.arcs))
+      .toEqual(['[', '{}', JSON.stringify([null, { characterId: primaryId }])])
   })
 })
 

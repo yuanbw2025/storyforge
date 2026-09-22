@@ -21,8 +21,6 @@
  *   await deleteProject(123)  // 用户已备份或显式跳过备份
  */
 
-import { exportProjectJSON } from '../export/json-export'
-
 export interface RequireBackupOptions {
   /** 操作名称(显示给用户) */
   operation: string
@@ -168,6 +166,10 @@ async function promptUserChoiceFallback(options: RequireBackupOptions): Promise<
  * 导出项目 JSON 并触发浏览器下载。
  */
 async function downloadProjectBackup(projectId: number, operation: string): Promise<void> {
+  // 备份导出会装入完整 PROJECT_TABLES、Harness ledger 与所有产品运行合同。
+  // 只有用户真正选择“立即备份”时才需要这条闭包；DialogProvider 的全局
+  // 安全确认入口不得因此把所有游戏引擎静态回灌到首屏。
+  const { exportProjectJSON } = await import('../export/json-export')
   const data = await exportProjectJSON(projectId)
   const json = JSON.stringify(data, null, 2)
   const blob = new Blob([json], { type: 'application/json' })

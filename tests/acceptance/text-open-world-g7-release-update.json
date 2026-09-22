@@ -1,0 +1,75 @@
+{
+  "schema": "storyforge.text-open-world.g7-release-update-matrix",
+  "version": 1,
+  "profileStatus": "implementation-ready-awaiting-real-release-evidence",
+  "profileNote": "自动测试只证明发布后问题、修复授权、直接后继Release、真人复测和旧档策略的证据合同；不得由自动化、fixture、模型或开发脚本冒充G7-14真实发布更新。",
+  "requirements": {
+    "sourceOutcome": "repair-required",
+    "targetOutcome": "accepted",
+    "minimumPassingRating": 3,
+    "releaseLineage": "direct-child",
+    "saveModes": ["continued-on-source-release", "explicit-migration-child"]
+  },
+  "gates": [
+    {
+      "id": "TOW-G7-U01",
+      "title": "更新验证必须拥有独立的人类证据合同和不可变质量回执",
+      "evidenceFile": "src/lib/open-world/creator-quality-contract.ts",
+      "testName": "text-open-world.creator.update-verification"
+    },
+    {
+      "id": "TOW-G7-U02",
+      "title": "源Release必须先有真人发现问题的完整试玩修复态回执",
+      "evidenceFile": "src/lib/open-world/creator-quality.ts",
+      "testName": "已发布源版本缺少真人发现问题的完整试玩回执"
+    },
+    {
+      "id": "TOW-G7-U03",
+      "title": "修复Build必须绑定唯一已发布源版本和作者确认的修复授权",
+      "evidenceFile": "src/lib/open-world/creator-quality.ts",
+      "testName": "更新修复Build没有绑定唯一已发布源版本"
+    },
+    {
+      "id": "TOW-G7-U04",
+      "title": "修复Release必须是源Release的直接不可变后继而不是旁路版本",
+      "evidenceFile": "src/lib/open-world/creator-quality.ts",
+      "testName": "修复版Release没有形成源版本的直接不可变后继"
+    },
+    {
+      "id": "TOW-G7-U05",
+      "title": "源版本全部未闭合问题必须逐项绑定新版真人路线和复测说明",
+      "evidenceFile": "src/lib/open-world/creator-quality.ts",
+      "testName": "更新验证必须逐项覆盖源版本全部未闭合问题"
+    },
+    {
+      "id": "TOW-G7-U06",
+      "title": "源版本全部低分体验项必须在修复版中提升到通过线并逐项说明",
+      "evidenceFile": "src/lib/open-world/creator-quality.ts",
+      "testName": "更新验证必须逐项覆盖源版本全部低分项"
+    },
+    {
+      "id": "TOW-G7-U07",
+      "title": "每项修复结论必须绑定修复Release真实完成的双结局路线证据",
+      "evidenceFile": "src/lib/open-world/creator-quality.ts",
+      "testName": "每项修复结论必须绑定修复版完整试玩中的真实路线"
+    },
+    {
+      "id": "TOW-G7-U08",
+      "title": "旧档必须继续固定旧Release或通过兼容协议建立显式迁移子分支",
+      "evidenceFile": "src/lib/open-world/creator-quality-contract.ts",
+      "testName": "continued-on-source-release"
+    },
+    {
+      "id": "TOW-G7-U09",
+      "title": "创作者界面必须收齐原问题低分项旧档策略和四项真人声明",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD5-creator-quality-ui.test.tsx",
+      "testName": "正式修复Release逐项绑定原问题、真人路线和旧档策略后才能冻结更新回执"
+    },
+    {
+      "id": "TOW-G7-U10",
+      "title": "验收资料必须持续声明工程设施不能代替真实发布和真人复测",
+      "evidenceFile": "tests/acceptance/text-open-world-g7-release-update.json",
+      "testName": "不得由自动化、fixture、模型或开发脚本冒充G7-14真实发布更新"
+    }
+  ]
+}

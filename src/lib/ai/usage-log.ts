@@ -70,7 +70,15 @@ export function categoryMeta(category: string | undefined): CategoryMeta {
 
 // ── 价格表（每 1M token 的美元单价；按模型名子串匹配，估算值，可在页面调汇率） ──
 
-interface ModelPrice { input: number; output: number }
+export interface ModelPrice { input: number; output: number }
+
+/**
+ * Versioned engineering estimate catalog. These figures are not a provider
+ * invoice: production must bind the provider/model pair and make the author
+ * confirm a snapshot before any paid Build starts.
+ */
+export const AI_MODEL_PRICE_CATALOG_VERSION_V1 = 'storyforge-ai-price-catalog-2026-09-09' as const
+export const AI_MODEL_PRICE_CATALOG_AS_OF_V1 = '2026-09-09' as const
 
 const MODEL_PRICING: Array<{ match: (m: string) => boolean; price: ModelPrice }> = [
   { match: m => /^gemini-3\.5-flash$/i.test(m), price: { input: 1.5, output: 9.0 } },
@@ -103,6 +111,50 @@ export function modelPrice(model: string): ModelPrice {
  */
 export function knownModelPrice(model: string): ModelPrice | null {
   return MODEL_PRICING.find(p => p.match(model || ''))?.price ?? null
+}
+
+/**
+ * Only these provider-owned model IDs may use the built-in author-facing
+ * quote. Keep this deliberately narrower than MODEL_PRICING: that legacy
+ * table also powers best-effort usage displays, while a production preflight
+ * must fail closed when a new alias/version has not been reviewed.
+ */
+const PROVIDER_MODEL_PRICE_IDS: Partial<Record<AIProvider, ReadonlySet<string>>> = {
+  deepseek: new Set([
+    'deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-chat', 'deepseek-reasoner',
+  ]),
+  openai: new Set([
+    'gpt-4o-mini', 'gpt-4o', 'gpt-4.1', 'gpt-4.1-2025-04-14', 'o1', 'o3',
+  ]),
+  qwen: new Set(['qwen-max', 'qwen-plus']),
+  doubao: new Set(['doubao-1-5-pro-32k-250115']),
+  gemini: new Set([
+    'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro',
+    'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview', 'gemini-3.5-flash',
+    'gemini-3.5-flash-lite', 'gemini-3.7-flash',
+  ]),
+  kimi: new Set(['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k']),
+  claude: new Set([
+    'claude-3-haiku-20240307', 'claude-3-opus-20240229', 'claude-3-5-haiku-20241022',
+    'claude-3-5-sonnet-20240620', 'claude-3-5-sonnet-20241022',
+    'claude-3-7-sonnet-20250219', 'claude-sonnet-4-20250514', 'claude-opus-4-20250514',
+  ]),
+}
+
+/**
+ * Provider-aware lookup used for author-facing production quotes. A model name
+ * alone is insufficient because OpenAI-compatible gateways can expose the same
+ * model under a different commercial contract.
+ */
+export function knownProviderModelPrice(
+  provider: AIProvider,
+  model: string,
+): ModelPrice | null {
+  const normalizedModel = model.trim()
+  const ids = PROVIDER_MODEL_PRICE_IDS[provider]
+  if (!ids?.has(normalizedModel)) return null
+  const price = knownModelPrice(normalizedModel)
+  return price ? { ...price } : null
 }
 
 /** 按 token 数 + 模型计算美元费用 */

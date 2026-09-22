@@ -14,6 +14,12 @@ import { parseInteractionState, applyInteractionEvent, createInitialInteractionS
 import { evaluateNarrativeChoices } from './narrative-content'
 import { parseOpenWorldEvolutionState, applyOpenWorldEvolutionProductRuntimeEvent, openWorldEvolutionProjection, createInitialOpenWorldEvolutionState, rebaseOpenWorldEvolutionStateForBranch } from '../open-world/evolution-runtime'
 import { parseOpenWorldState, applyOpenWorldEvent, openWorldMainlineProjection, createInitialOpenWorldState, rebaseOpenWorldStateForBranch } from '../open-world/runtime'
+import {
+  createInitialTextOpenWorldSessionProjectionV1,
+  applyTextOpenWorldSessionEventV1,
+  parseTextOpenWorldSessionProjectionV1,
+  rebaseTextOpenWorldSessionProjectionForBranchV1,
+} from '../open-world/session-projection'
 import { assertInitialTtrpgProductStateV1 } from '../ttrpg/runtime'
 import { applyTtrpgRuntimeEventV1 } from '../ttrpg/runtime-event-reducer'
 import { cloneTtrpgRuntimeBranchExtensionsV1 } from '../ttrpg/runtime-branch'
@@ -36,7 +42,7 @@ export function parseProductOwnedRuntimeStateV1(
   value: ProductRuntimeState,
 ): Pick<
   ProductRuntimeState,
-  'ttrpg' | 'interaction' | 'adventure' | 'presentation' | 'openWorldEvolution' | 'openWorld' | 'town'
+  'ttrpg' | 'interaction' | 'adventure' | 'presentation' | 'openWorldEvolution' | 'openWorld' | 'town' | 'textOpenWorld'
 > {
   return {
     ttrpg: parseTtrpgState(value.ttrpg),
@@ -46,6 +52,9 @@ export function parseProductOwnedRuntimeStateV1(
     openWorldEvolution: parseOpenWorldEvolutionState(value.openWorldEvolution),
     openWorld: parseOpenWorldState(value.openWorld),
     town: parseAiTownStateV1(value.town),
+    textOpenWorld: value.textOpenWorld == null
+      ? null
+      : parseTextOpenWorldSessionProjectionV1(value.textOpenWorld),
   }
 }
 
@@ -74,6 +83,13 @@ export function applyProductOwnedRuntimeEventV1(
   event: ProductRuntimeEvent,
   payload: ProductRuntimeJsonObjectV1,
 ): ProductRuntimeState | null {
+  if (event.type.startsWith('text-open-world.')) {
+    if (state.textOpenWorld) {
+      state.textOpenWorld = applyTextOpenWorldSessionEventV1(state.textOpenWorld, event)
+    }
+    state.lastSequence = event.sequence
+    return state
+  }
   if (event.type.startsWith('ttrpg.')) {
     return applyTtrpgRuntimeEventV1(state, event, payload)
   }
@@ -314,33 +330,58 @@ export function assertFrozenProductRuntimeStateV1(input: {
   }
 
   if (runtimePackage.productType === 'text-open-world') {
-    const expectedInteraction = createInitialInteractionState({
-      playerKey: runtimePackage.interaction!.playerKey,
-      profiles: runtimePackage.interaction!.profiles,
-      sceneTemplates: runtimePackage.interaction!.sceneTemplates,
-    })
-    const expectedAdventure = createInitialAdventureState(runtimePackage.adventure!, runtimeSourceHash)
-    const expectedEvolution = createInitialOpenWorldEvolutionState(runtimePackage.openWorldEvolution!, runtimeSourceHash)
-    const expectedOpenWorld = createInitialOpenWorldState(runtimePackage.openWorld!, runtimeSourceHash)
-    const frozenMismatch = !initial.interaction
-      || !initial.adventure
-      || !initial.openWorldEvolution
-      || !initial.openWorld
-      || initial.adventure.contentHash !== runtimeSourceHash
-      || initial.openWorldEvolution.contentHash !== runtimeSourceHash
-      || initial.openWorld.contentHash !== runtimeSourceHash
-      || stableProductRuntimeJsonV1(initial.interaction.profiles) !== stableProductRuntimeJsonV1(expectedInteraction.profiles)
-      || stableProductRuntimeJsonV1(initial.interaction.sceneTemplates) !== stableProductRuntimeJsonV1(expectedInteraction.sceneTemplates)
-      || stableProductRuntimeJsonV1(initial.openWorld.mainlineQuestKeys) !== stableProductRuntimeJsonV1(expectedOpenWorld.mainlineQuestKeys)
-    const entryStateMismatch = input.origin !== 'branch'
-      && (
-        stableProductRuntimeJsonV1(initial.interaction) !== stableProductRuntimeJsonV1(expectedInteraction)
-        || stableProductRuntimeJsonV1(initial.adventure) !== stableProductRuntimeJsonV1(expectedAdventure)
-        || stableProductRuntimeJsonV1(initial.openWorldEvolution) !== stableProductRuntimeJsonV1(expectedEvolution)
-        || stableProductRuntimeJsonV1(initial.openWorld) !== stableProductRuntimeJsonV1(expectedOpenWorld)
-      )
-    if (frozenMismatch || entryStateMismatch) {
-      throw new Error('text-open-world 初始状态必须来自绑定 RuntimePackage 的全部冻结内容。')
+    const hasLegacyRuntime = runtimePackage.interaction != null
+      && runtimePackage.adventure != null
+      && runtimePackage.openWorldEvolution != null
+      && runtimePackage.openWorld != null
+    if (runtimePackage.textOpenWorldVNext) {
+      const expected = createInitialTextOpenWorldSessionProjectionV1(runtimePackage.textOpenWorldVNext)
+      const frozenMismatch = !initial.textOpenWorld
+        || (!hasLegacyRuntime && (
+          initial.interaction != null
+          || initial.adventure != null
+          || initial.openWorldEvolution != null
+          || initial.openWorld != null
+        ))
+        || stableProductRuntimeJsonV1(initial.textOpenWorld.runtimePackage)
+          !== stableProductRuntimeJsonV1(expected.runtimePackage)
+      const entryStateMismatch = input.origin !== 'branch'
+        && stableProductRuntimeJsonV1(initial.textOpenWorld) !== stableProductRuntimeJsonV1(expected)
+      if (frozenMismatch || entryStateMismatch) {
+        throw new Error('text-open-world vNext初始状态必须来自绑定RuntimePackage的统一投影。')
+      }
+    }
+    if (hasLegacyRuntime) {
+      const expectedInteraction = createInitialInteractionState({
+        playerKey: runtimePackage.interaction!.playerKey,
+        profiles: runtimePackage.interaction!.profiles,
+        sceneTemplates: runtimePackage.interaction!.sceneTemplates,
+      })
+      const expectedAdventure = createInitialAdventureState(runtimePackage.adventure!, runtimeSourceHash)
+      const expectedEvolution = createInitialOpenWorldEvolutionState(runtimePackage.openWorldEvolution!, runtimeSourceHash)
+      const expectedOpenWorld = createInitialOpenWorldState(runtimePackage.openWorld!, runtimeSourceHash)
+      const frozenMismatch = !initial.interaction
+        || !initial.adventure
+        || !initial.openWorldEvolution
+        || !initial.openWorld
+        || initial.adventure.contentHash !== runtimeSourceHash
+        || initial.openWorldEvolution.contentHash !== runtimeSourceHash
+        || initial.openWorld.contentHash !== runtimeSourceHash
+        || stableProductRuntimeJsonV1(initial.interaction.profiles) !== stableProductRuntimeJsonV1(expectedInteraction.profiles)
+        || stableProductRuntimeJsonV1(initial.interaction.sceneTemplates) !== stableProductRuntimeJsonV1(expectedInteraction.sceneTemplates)
+        || stableProductRuntimeJsonV1(initial.openWorld.mainlineQuestKeys) !== stableProductRuntimeJsonV1(expectedOpenWorld.mainlineQuestKeys)
+        || (!runtimePackage.textOpenWorldVNext && initial.textOpenWorld != null)
+      const entryStateMismatch = input.origin !== 'branch'
+        && (
+          stableProductRuntimeJsonV1(initial.interaction) !== stableProductRuntimeJsonV1(expectedInteraction)
+          || stableProductRuntimeJsonV1(initial.adventure) !== stableProductRuntimeJsonV1(expectedAdventure)
+          || stableProductRuntimeJsonV1(initial.openWorldEvolution) !== stableProductRuntimeJsonV1(expectedEvolution)
+          || stableProductRuntimeJsonV1(initial.openWorld) !== stableProductRuntimeJsonV1(expectedOpenWorld)
+          || (!runtimePackage.textOpenWorldVNext && initial.textOpenWorld != null)
+        )
+      if (frozenMismatch || entryStateMismatch) {
+        throw new Error('text-open-world 初始状态必须来自绑定 RuntimePackage 的全部冻结内容。')
+      }
     }
     return
   }
@@ -364,6 +405,9 @@ export function rebaseProductRuntimeStateForBranchV1(
   }
   if (state.openWorld) state.openWorld = rebaseOpenWorldStateForBranch(state.openWorld)
   if (state.town) state.town = rebaseAiTownStateForBranchV1(state.town)
+  if (state.textOpenWorld) {
+    state.textOpenWorld = rebaseTextOpenWorldSessionProjectionForBranchV1(state.textOpenWorld)
+  }
   return state
 }
 

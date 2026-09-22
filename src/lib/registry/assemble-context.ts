@@ -7,6 +7,7 @@ import type {
   AssembleContextSourceEvidence,
   ContextSource,
 } from './types'
+import { AtomicContextSourceBudgetErrorV1 } from './types'
 import { prepareContinuityContext } from '../ai/chapter-memory/continuity-context'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { db } from '../db/schema'
@@ -195,6 +196,9 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
     const scaledSourceBudget = Math.max(64, Math.floor(source.budgetTokens * sourceBudgetScale))
     const sourceBudgetTokens = Math.min(scaledSourceBudget, inputBudget)
     const originalTokens = estimateTokens(content)
+    if (source.atomic && originalTokens > sourceBudgetTokens) {
+      throw new AtomicContextSourceBudgetErrorV1(source.key, originalTokens, sourceBudgetTokens)
+    }
     const transformed = originalTokens > sourceBudgetTokens && input.sourceTransformer
       ? await input.sourceTransformer({
           source: {

@@ -1,0 +1,646 @@
+import type { TextOpenWorldObjectiveStatusV1, TextOpenWorldQuestStatusV1 } from './text-open-world-condition'
+import type { TextOpenWorldDirectorTriggerV1 } from './text-open-world-modules'
+
+/**
+ * Complete operation vocabulary understood by the current deterministic G2
+ * runtime. Production artifacts import this same list so an AI prompt cannot
+ * become a second, drifting Effect whitelist.
+ */
+export const TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 = [
+  'change-player-resource', 'grant-experience', 'apply-status', 'remove-status',
+  'grant-item', 'remove-item', 'equip-item', 'unequip-item',
+  'learn-skill', 'learn-recipe', 'change-currency',
+  'transition-quest', 'complete-objective', 'claim-quest-reward', 'track-quest', 'untrack-quest',
+  'change-morality', 'change-faction-affinity', 'set-story-modifier',
+  'reveal-knowledge', 'reveal-location', 'unlock-fast-travel',
+  'enter-location', 'start-travel', 'fast-travel', 'advance-time', 'settle-weather', 'settle-actor-schedules',
+  'start-combat', 'resolve-combat', 'initialize-combat', 'settle-combat-state', 'perform-combat-action', 'rest', 'respawn',
+  'perform-crafting', 'perform-transaction', 'settle-director',
+  'change-actor-state', 'change-region-state', 'set-world-flag',
+  'earn-achievement', 'unlock-ending', 'reach-ending',
+] as const
+
+export type TextOpenWorldEffectOperationV1 =
+  (typeof TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1)[number]
+
+export type TextOpenWorldEffectDefinitionV1 =
+  | { key: string; operation: 'change-player-resource'; payload: { resource: 'health' | 'skill-resource'; amount: number } }
+  | { key: string; operation: 'grant-experience'; payload: { amount: number } }
+  | { key: string; operation: 'apply-status' | 'remove-status'; payload: { statusKey: string } }
+  | { key: string; operation: 'grant-item'; payload: { itemKey: string; quantity: number } }
+  | { key: string; operation: 'remove-item'; payload: { itemKey: string; quantity: number; reason: 'consume' | 'drop' | 'sell' | 'craft' } }
+  | { key: string; operation: 'equip-item' | 'unequip-item'; payload: { itemKey: string } }
+  | { key: string; operation: 'learn-skill'; payload: { skillKey: string } }
+  | { key: string; operation: 'learn-recipe'; payload: { recipeKey: string } }
+  | { key: string; operation: 'change-currency'; payload: { amount: number } }
+  | { key: string; operation: 'transition-quest'; payload: { questKey: string; status: TextOpenWorldQuestStatusV1; stageKey: string | null } }
+  | { key: string; operation: 'complete-objective'; payload: { objectiveKey: string } }
+  | { key: string; operation: 'claim-quest-reward'; payload: { questKey: string; rewardKey: string } }
+  | { key: string; operation: 'track-quest' | 'untrack-quest'; payload: { slot: 'primary' | 'pinned' } }
+  | { key: string; operation: 'change-morality'; payload: { amount: number } }
+  | { key: string; operation: 'change-faction-affinity'; payload: { factionKey: string; amount: number } }
+  | { key: string; operation: 'set-story-modifier'; payload: { actorKey: string; value: number } }
+  | { key: string; operation: 'reveal-knowledge'; payload: { knowledgeKey: string; visibility: 'rumor' | 'known' } }
+  | { key: string; operation: 'reveal-location'; payload: { locationKey: string } }
+  | { key: string; operation: 'unlock-fast-travel'; payload: { fastTravelPointKey: string } }
+  | { key: string; operation: 'enter-location'; payload: { locationKey: string } }
+  | { key: string; operation: 'start-travel'; payload: { edgeKey: string; destinationLocationKey: string } }
+  | { key: string; operation: 'fast-travel'; payload: { timeRatioNumerator: number; timeRatioDenominator: number; minimumMinutes: number } }
+  | { key: string; operation: 'advance-time'; payload: { minutes: number } }
+  | { key: string; operation: 'settle-weather'; payload: Record<string, never> }
+  | { key: string; operation: 'settle-actor-schedules'; payload: Record<string, never> }
+  | { key: string; operation: 'start-combat'; payload: { encounterKey: string } }
+  | { key: string; operation: 'resolve-combat'; payload: { encounterKey: string; outcome: 'victory' | 'defeat' | 'escaped' } }
+  | { key: string; operation: 'initialize-combat'; payload: { encounterKey: string } }
+  | { key: string; operation: 'settle-combat-state'; payload: Record<string, never> }
+  | { key: string; operation: 'perform-combat-action'; payload: {
+      kind: TextOpenWorldCombatActionKindV1
+      skillKey: string | null
+      itemKey: string | null
+    } }
+  | { key: string; operation: 'perform-crafting'; payload: { recipeKey: string } }
+  | { key: string; operation: 'perform-transaction'; payload: { kind: 'buy' | 'sell'; vendorKey: string } }
+  | { key: string; operation: 'settle-director'; payload: Record<string, never> }
+  | { key: string; operation: 'rest'; payload: { healthRatio: number; skillResourceRatio: number; clearHarmfulStatuses: boolean } }
+  | { key: string; operation: 'respawn'; payload: { fastTravelPointKey: string; healthRatio: number } }
+  | { key: string; operation: 'change-actor-state'; payload: {
+      actorKey: string
+      alive: boolean | null
+      present: boolean | null
+      locationKey: string | null
+      cause: 'player-attack' | 'story' | 'random-event' | 'resolution' | 'legacy-system'
+    } }
+  | { key: string; operation: 'change-region-state'; payload: { regionKey: string; state: string } }
+  | { key: string; operation: 'set-world-flag'; payload: { flagKey: string; value: string | number | boolean | null } }
+  | { key: string; operation: 'earn-achievement'; payload: { achievementKey: string } }
+  | { key: string; operation: 'unlock-ending'; payload: { endingKey: string } }
+  | { key: string; operation: 'reach-ending'; payload: { endingKey: string } }
+
+export interface TextOpenWorldQuestInstanceV1 {
+  instanceKey: string
+  definitionKey: string
+  sourceKind: 'release' | 'director'
+  sourceInstanceKey: string
+  sourceContentHash: string
+  status: TextOpenWorldQuestStatusV1
+  currentStageKey: string | null
+  objectiveStatusByKey: Record<string, TextOpenWorldObjectiveStatusV1>
+  createdAtWorldMinute: number
+  offeredAtWorldMinute: number | null
+  acceptedAtWorldMinute: number | null
+  deadlineWorldMinute: number | null
+  terminalAtWorldMinute: number | null
+  rewardClaimKey: string | null
+  resultTag: string | null
+}
+
+export interface TextOpenWorldCombatRuntimeStateV1 {
+  version: 1
+  instanceKey: string
+  encounterKey: string
+  status: 'active' | 'victory' | 'defeat' | 'escaped'
+  phase: 'started' | 'round-start' | 'actor-turn' | 'action-resolved' | 'round-end' | 'terminal'
+  round: number
+  turnIndex: number | null
+  activeCombatantKey: string | null
+  playerInitiative: number
+  turnOrder: string[]
+  /** Added by Action v10; absent in immutable Action v9 event history. */
+  cooldownUntilRoundBySkillKey?: Record<string, number>
+  /** Added by Action v10; absent in immutable Action v9 event history. */
+  lastAction?: TextOpenWorldCombatActionRecordV1 | null
+  enemies: Array<{
+    combatantKey: string
+    groupKey: string
+    enemyKey: string
+    currentHealth: number
+    maximumHealth: number
+    initiative: number
+    defeated: boolean
+    /** Added by Action v10; absent in immutable Action v9 event history. */
+    cooldownUntilRoundBySkillKey?: Record<string, number>
+  }>
+}
+
+export type TextOpenWorldCombatModifierStatV2 =
+  | 'attack'
+  | 'defense'
+  | 'skillPower'
+  | 'criticalChanceBasisPoints'
+
+/** Integer-only combat modifier shared by status and passive-static mechanics. */
+export interface TextOpenWorldCombatStatModifierV2 {
+  stat: TextOpenWorldCombatModifierStatV2
+  operation: 'add-flat'
+  amount: number
+}
+
+/**
+ * One status definition may have at most one live instance on a combatant.
+ * Stacks are represented on that instance so refresh/reject/stack semantics
+ * cannot diverge between callers.
+ */
+export interface TextOpenWorldCombatStatusInstanceV2 {
+  statusKey: string
+  sourceCombatantKey: string
+  sourceSkillKey: string
+  stacks: number
+  appliedAtActorTurnOrdinal: number
+  expiresAfterTargetTurnOrdinal: number | null
+}
+
+/**
+ * Combat v4 runtime projection. Actor ordinals count turns that have begun;
+ * target-turn statuses are expired only after that same ordinal finishes.
+ */
+export interface TextOpenWorldCombatRuntimeStateV2
+  extends Omit<TextOpenWorldCombatRuntimeStateV1, 'version'> {
+  version: 2
+  actorTurnOrdinalByCombatantKey: Record<string, number>
+  statusInstancesByCombatantKey: Record<string, TextOpenWorldCombatStatusInstanceV2[]>
+}
+
+export type TextOpenWorldCombatActionKindV1 = 'basic-attack' | 'skill' | 'item' | 'escape' | 'enemy-skill'
+
+export interface TextOpenWorldCombatActionRecordV1 {
+  actionKey: string
+  actorCombatantKey: string
+  kind: TextOpenWorldCombatActionKindV1
+  skillKey: string | null
+  itemKey: string | null
+  targetCombatantKeys: string[]
+  round: number
+  turnIndex: number
+  /** Added by Action v11; absent in immutable Action v10 event history. */
+  targetResolutions?: Array<TextOpenWorldCombatTargetResolutionV1 | TextOpenWorldCombatTargetResolutionV2>
+  /** Added by Action v17 / Combat v4; absent in immutable older history. */
+  mechanicKind?: TextOpenWorldCombatActiveMechanicKindV2 | null
+  recoveryResolutions?: TextOpenWorldCombatRecoveryResolutionV2[]
+  resourceResolutions?: TextOpenWorldCombatResourceResolutionV2[]
+  statusResolutions?: TextOpenWorldCombatStatusResolutionV2[]
+  expiredStatusKeys?: string[]
+}
+
+export interface TextOpenWorldCombatTargetResolutionV1 {
+  targetCombatantKey: string
+  attack: number
+  defense: number
+  powerNumerator: number
+  powerDenominator: number
+  flatDamage: number
+  damageBeforeDefense: number
+  damageAfterDefense: number
+  criticalChanceBasisPoints: number
+  criticalDrawValue: number
+  critical: boolean
+  computedDamage: number
+  appliedDamage: number
+  beforeHealth: number
+  afterHealth: number
+  defeated: boolean
+}
+
+/** Action v17 additionally freezes the skill-power term used exactly once. */
+export interface TextOpenWorldCombatTargetResolutionV2 extends TextOpenWorldCombatTargetResolutionV1 {
+  skillPower: number
+}
+
+export type TextOpenWorldCombatActiveMechanicKindV2 = 'attack' | 'recovery' | 'resource' | 'status'
+
+export interface TextOpenWorldCombatRecoveryResolutionV2 {
+  targetCombatantKey: string
+  scalingAttribute: 'power' | 'vitality' | 'agility'
+  scalingValue: number
+  baseAmount: number
+  scalingNumerator: number
+  scalingDenominator: number
+  skillPower: number
+  requestedRecovery: number
+  appliedRecovery: number
+  maximumHealth: number
+  beforeHealth: number
+  afterHealth: number
+}
+
+export interface TextOpenWorldCombatResourceResolutionV2 {
+  targetCombatantKey: 'player'
+  scalingAttribute: 'power' | 'vitality' | 'agility'
+  scalingValue: number
+  baseAmount: number
+  scalingNumerator: number
+  scalingDenominator: number
+  skillPower: number
+  requestedRecovery: number
+  appliedRecovery: number
+  maximumSkillResource: number
+  beforeSkillResource: number
+  afterSkillResource: number
+}
+
+export interface TextOpenWorldCombatStatusResolutionV2 {
+  targetCombatantKey: string
+  statusKey: string
+  outcome: 'applied' | 'rejected' | 'refreshed' | 'stacked' | 'max-stacks'
+  beforeStatus: TextOpenWorldCombatStatusInstanceV2 | null
+  afterStatus: TextOpenWorldCombatStatusInstanceV2 | null
+}
+
+export interface TextOpenWorldLegacyCombatStateV1 {
+  encounterKey: string
+  status: 'active' | 'victory' | 'defeat' | 'escaped'
+}
+
+export interface TextOpenWorldDirectorHistoryEntryV1 {
+  drawNumber: number
+  worldMinute: number
+  regionKey: string
+  trigger: TextOpenWorldDirectorTriggerV1
+  outcomeKind: 'blank' | 'fixed-quest' | 'template-quest' | 'random-event'
+  sourceKey: string | null
+  questInstanceKey: string | null
+  variantTextKey: string | null
+  fingerprint: string | null
+  intensity: number
+}
+
+export interface TextOpenWorldDirectorRuntimeStateV1 {
+  drawCount: number
+  generatedQuestInstanceCount: number
+  revealedQuestInstanceKeys: string[]
+  activeQuestInstanceKeys: string[]
+  recentFingerprints: Array<{ fingerprint: string; worldMinute: number }>
+  lastDrawWorldMinuteByRegionKey: Record<string, number>
+  highIntensityStreak: number
+  lastResolvedWorldMinuteBySourceKey: Record<string, number>
+  lastRegionSettlementWorldMinuteByRegionKey: Record<string, number>
+  history: TextOpenWorldDirectorHistoryEntryV1[]
+}
+
+export interface TextOpenWorldKnowledgeHistoryEntryV1 {
+  kind: 'knowledge-revealed' | 'rumor-read' | 'achievement-earned' | 'random-event-seen'
+  targetKey: string
+  sourceKey: string
+  regionKey: string
+  worldMinute: number
+}
+
+export interface TextOpenWorldEffectStateV1 {
+  version: 1
+  player: {
+    level: number
+    experience: number
+    health: number
+    maximumHealth: number
+    skillResource: number
+    maximumSkillResource: number
+    attributes: { power: number; vitality: number; agility: number }
+    statusKeys: string[]
+    learnedSkillKeys: string[]
+  }
+  inventory: {
+    stackQuantities: Record<string, number>
+    itemInstances: Record<string, { itemKey: string; acquiredByClaimKey: string; stateTags: string[] }>
+    equippedItemInstanceIdBySlot: { weapon: string | null; armor: string | null; accessory: string | null }
+    knownRecipeKeys: string[]
+    currency: number
+  }
+  economy: {
+    /** Only finite or player-sold stock is stored here; unlimited stock remains Release-owned. */
+    limitedStockQuantitiesByVendorKey: Record<string, Record<string, number>>
+  }
+  director: TextOpenWorldDirectorRuntimeStateV1
+  quests: {
+    instancesByKey: Record<string, TextOpenWorldQuestInstanceV1>
+    resultTags: string[]
+    tracking: {
+      primaryInstanceKey: string | null
+      pinnedInstanceKeys: string[]
+    }
+  }
+  map: {
+    currentLocationKey: string
+    revealedLocationKeys: string[]
+    regionKnowledgeByKey: Record<string, 'unknown' | 'heard' | 'visited' | 'familiar'>
+    locationKnowledgeByKey: Record<string, 'unknown' | 'heard' | 'visited' | 'familiar'>
+    unlockedFastTravelPointKeys: string[]
+    openEdgeKeys: string[]
+    travel: { edgeKey: string; destinationLocationKey: string } | null
+  }
+  time: {
+    worldMinute: number
+    lastWeatherSettlementEpoch: number
+    lastActorScheduleSettlementWorldMinute: number
+    currentWeatherByRegionKey: Record<string, string>
+    deadlineWorldMinuteByKey: Record<string, number>
+  }
+  relationships: {
+    morality: number
+    factionAffinityByKey: Record<string, number>
+    storyModifierByActorKey: Record<string, number>
+  }
+  combat: TextOpenWorldCombatRuntimeStateV1 | TextOpenWorldCombatRuntimeStateV2 | TextOpenWorldLegacyCombatStateV1 | null
+  actors: Record<string, { alive: boolean; present: boolean; locationKey: string; scheduleState: string }>
+  world: {
+    regionStateByKey: Record<string, string>
+    regionPressureByKey: Record<string, number>
+    factionStateByKey: Record<string, string>
+    endingEligibleByKey: Record<string, boolean>
+    flags: Record<string, string | number | boolean | null>
+  }
+  knowledge: {
+    visibilityByKey: Record<string, 'hidden' | 'rumor' | 'known'>
+    readRumorKeys: string[]
+    earnedAchievementKeys: string[]
+    seenRandomEventKeys: string[]
+    history: TextOpenWorldKnowledgeHistoryEntryV1[]
+  }
+  endings: { unlockedKeys: string[]; reachedKey: string | null }
+  appliedClaimKeys: string[]
+}
+
+export type TextOpenWorldEffectImpactDomainV1 =
+  | 'player' | 'inventory' | 'quests' | 'map' | 'time' | 'relationships'
+  | 'combat' | 'actors' | 'world' | 'knowledge' | 'endings' | 'economy' | 'director'
+
+export interface TextOpenWorldEffectChangeV1 {
+  effectKey: string
+  domain: TextOpenWorldEffectImpactDomainV1
+  operation: TextOpenWorldEffectOperationV1
+  summary: string
+  before: unknown
+  after: unknown
+}
+
+export interface TextOpenWorldRewardAuthorizationV1 {
+  kind: 'reward'
+  rewardKey: string
+  sourceInstanceKey: string
+  randomRequests: Array<{ drawKey: string; minimumInclusive: number; maximumInclusive: number }>
+  drops: Array<{ dropTableKey: string; itemKey: string; quantity: number; effectKey: string }>
+}
+
+export type TextOpenWorldQuestTransitionIntentV1 =
+  | 'unlock' | 'reveal' | 'accept' | 'activate' | 'suspend' | 'resume'
+  | 'advance-stage' | 'complete' | 'fail' | 'abandon' | 'expire' | 'withdraw' | 'reoffer'
+
+export interface TextOpenWorldQuestTransitionAuthorizationV1 {
+  kind: 'quest-transition'
+  instanceKey: string
+  definitionKey: string
+  worldMinute: number
+  transitions: Array<{
+    intent: TextOpenWorldQuestTransitionIntentV1
+    actorKind: 'player' | 'system'
+    fromStatus: TextOpenWorldQuestStatusV1
+    toStatus: TextOpenWorldQuestStatusV1
+    stageKey: string | null
+  }>
+}
+
+export interface TextOpenWorldObjectiveAuthorizationV1 {
+  kind: 'quest-objective'
+  instanceKey: string
+  definitionKey: string
+  stageKey: string
+  objectiveKey: string
+  worldMinute: number
+  fromStatus: 'active'
+  toStatus: 'completed'
+}
+
+export interface TextOpenWorldQuestTrackingAuthorizationV1 {
+  kind: 'quest-tracking'
+  instanceKey: string
+  definitionKey: string
+  worldMinute: number
+  operation: 'track' | 'untrack'
+  slot: 'primary' | 'pinned'
+  beforePrimaryInstanceKey: string | null
+  beforePinnedInstanceKeys: string[]
+}
+
+export interface TextOpenWorldFastTravelAuthorizationV1 {
+  kind: 'fast-travel'
+  fastTravelPointKey: string
+  originLocationKey: string
+  destinationLocationKey: string
+  routeEdgeKeys: string[]
+  openEdgeKeys: string[]
+  baseWorldMinute: number
+  travelMinutes: number
+}
+
+export interface TextOpenWorldWeatherSettlementAuthorizationV1 {
+  kind: 'weather-settlement'
+  worldMinute: number
+  weatherEpoch: number
+  randomRequests: Array<{ drawKey: string; minimumInclusive: number; maximumInclusive: number }>
+  changes: Array<{
+    regionKey: string
+    fromWeatherKey: string
+    toWeatherKey: string
+    drawKey: string
+    drawValue: number
+  }>
+}
+
+export interface TextOpenWorldActorScheduleSettlementAuthorizationV1 {
+  kind: 'actor-schedule-settlement'
+  worldMinute: number
+  fromSettlementWorldMinute: number
+  toSettlementWorldMinute: number
+  timePeriodKey: string
+  changes: Array<{
+    actorKey: string
+    fromLocationKey: string
+    toLocationKey: string
+    fromScheduleState: string
+    toScheduleState: string
+  }>
+}
+
+export interface TextOpenWorldCrimeAuthorizationV1 {
+  kind: 'crime'
+  crimeKey: string
+  actionKey: string
+  crimeKind: 'steal' | 'deceive' | 'crime'
+  targetActorKey: string
+  locationKey: string
+  worldMinute: number
+  outcome: 'success' | 'failure'
+  successConditionResults: Array<{ conditionKey: string; satisfied: boolean }>
+  witnessActorKeys: string[]
+  effectKeys: string[]
+}
+
+export type TextOpenWorldCombatTransitionIntentV1 =
+  | 'begin-round' | 'begin-turn' | 'complete-turn' | 'advance-turn'
+  | 'finish-victory' | 'finish-defeat' | 'finish-escaped'
+
+export interface TextOpenWorldCombatTransitionAuthorizationV1 {
+  kind: 'combat-transition'
+  instanceKey: string
+  encounterKey: string
+  intent: TextOpenWorldCombatTransitionIntentV1
+  beforePhase: TextOpenWorldCombatRuntimeStateV1['phase']
+  beforeRound: number
+  beforeTurnIndex: number | null
+  beforeActiveCombatantKey: string | null
+  afterStatus: TextOpenWorldCombatRuntimeStateV1['status']
+  afterPhase: TextOpenWorldCombatRuntimeStateV1['phase']
+  afterRound: number
+  afterTurnIndex: number | null
+  afterActiveCombatantKey: string | null
+  /** Added by Action v11 / Combat v3; absent in older immutable history. */
+  removedPlayerStatusKeys?: string[]
+  /** Added by Action v17 / Combat v4 and recomputed during replay. */
+  combatRuntimeVersion?: 2
+  afterActorTurnOrdinalByCombatantKey?: Record<string, number>
+  afterStatusInstancesByCombatantKey?: Record<string, TextOpenWorldCombatStatusInstanceV2[]>
+}
+
+export interface TextOpenWorldCombatActionAuthorizationV1 {
+  kind: 'combat-action'
+  instanceKey: string
+  encounterKey: string
+  actionKey: string
+  actorKey: 'player' | 'system'
+  actorCombatantKey: string
+  actionKind: TextOpenWorldCombatActionKindV1
+  skillKey: string | null
+  itemKey: string | null
+  targetCombatantKeys: string[]
+  beforePhase: 'actor-turn'
+  beforeRound: number
+  beforeTurnIndex: number
+  beforeActiveCombatantKey: string
+  effectKeys: string[]
+  resourceCost: number
+  cooldownTurns: number
+  cooldownUntilRound: number
+  afterSkillResource: number
+  /** Added by Action v11 / Combat v3; absent in older immutable history. */
+  resolutionVersion?: 1 | 2
+  /** Frozen random requests whose resolved events prove every critical draw. */
+  randomRequests?: Array<{ drawKey: string; minimumInclusive: number; maximumInclusive: number }>
+  /** Deterministic numeric outcomes applied by perform-combat-action. */
+  targetResolutions?: Array<TextOpenWorldCombatTargetResolutionV1 | TextOpenWorldCombatTargetResolutionV2>
+  /** Predeclared status Effects included in the same atomic Action plan. */
+  statusEffectKeys?: string[]
+  /** Structured mechanics added by Action v17 / Progression v2 / Combat v4. */
+  mechanicKind?: TextOpenWorldCombatActiveMechanicKindV2 | null
+  recoveryResolutions?: TextOpenWorldCombatRecoveryResolutionV2[]
+  resourceResolutions?: TextOpenWorldCombatResourceResolutionV2[]
+  statusResolutions?: TextOpenWorldCombatStatusResolutionV2[]
+  expiredStatusKeys?: string[]
+  afterStatusInstancesByCombatantKey?: Record<string, TextOpenWorldCombatStatusInstanceV2[]>
+}
+
+export interface TextOpenWorldCraftingAuthorizationV1 {
+  kind: 'crafting'
+  recipeKey: string
+  quantity: number
+  locationKey: string
+  baseWorldMinute: number
+  timeCostMinutes: number
+  ingredients: Array<{
+    itemKey: string
+    quantity: number
+    beforeQuantity: number
+    afterQuantity: number
+  }>
+  outputs: Array<{
+    itemKey: string
+    quantity: number
+    beforeQuantity: number
+    afterQuantity: number
+  }>
+}
+
+export interface TextOpenWorldTransactionAuthorizationV1 {
+  kind: 'transaction'
+  transactionKind: 'buy' | 'sell'
+  vendorKey: string
+  vendorActorKey: string
+  itemKey: string
+  quantity: number
+  currencyKey: 'currency'
+  locationKey: string
+  worldMinute: number
+  attitude: 'bad' | 'neutral' | 'good'
+  price: {
+    baseValue: number
+    vendorMultiplierBasisPoints: number
+    relationshipMultiplierBasisPoints: number
+    rounding: 'ceil' | 'floor'
+    unitPrice: number
+    totalPrice: number
+  }
+  before: {
+    currency: number
+    playerItemQuantity: number
+    vendorStockQuantity: number | null
+  }
+  after: {
+    currency: number
+    playerItemQuantity: number
+    vendorStockQuantity: number | null
+  }
+}
+
+export interface TextOpenWorldDirectorSettlementAuthorizationV1 {
+  kind: 'director-settlement'
+  trigger: TextOpenWorldDirectorTriggerV1
+  regionKey: string
+  worldMinute: number
+  randomRequests: Array<{ drawKey: string; minimumInclusive: number; maximumInclusive: number }>
+  regionChanges: Array<{
+    regionKey: string
+    settledIntervals: number
+    fromSettlementWorldMinute: number
+    toSettlementWorldMinute: number
+    fromPressure: number
+    toPressure: number
+    fromState: string
+    toState: string
+  }>
+  selection: {
+    outcomeKind: 'blank' | 'fixed-quest' | 'template-quest' | 'random-event'
+    sourceKey: string | null
+    definitionKey: string | null
+    sourceInstanceKey: string | null
+    questInstanceKey: string | null
+    variantTextKey: string | null
+    fingerprint: string | null
+    intensity: number
+    effectKeys: string[]
+    rumorKey: string | null
+    reason: string
+  }
+  earnedAchievementKeys: string[]
+}
+
+export interface TextOpenWorldEffectPlanV1 {
+  schema: 'storyforge.text-open-world.effect-plan'
+  version: 1
+  claimKey: string
+  baseStateHash: string
+  resultingStateHash: string
+  effectKeys: string[]
+  effects: TextOpenWorldEffectDefinitionV1[]
+  authorization: TextOpenWorldRewardAuthorizationV1 | TextOpenWorldQuestTransitionAuthorizationV1 | TextOpenWorldObjectiveAuthorizationV1 | TextOpenWorldQuestTrackingAuthorizationV1 | TextOpenWorldFastTravelAuthorizationV1 | TextOpenWorldWeatherSettlementAuthorizationV1 | TextOpenWorldActorScheduleSettlementAuthorizationV1 | TextOpenWorldCrimeAuthorizationV1 | TextOpenWorldCombatTransitionAuthorizationV1 | TextOpenWorldCombatActionAuthorizationV1 | TextOpenWorldCraftingAuthorizationV1 | TextOpenWorldTransactionAuthorizationV1 | TextOpenWorldDirectorSettlementAuthorizationV1 | null
+  impactDomains: TextOpenWorldEffectImpactDomainV1[]
+  previewChanges: TextOpenWorldEffectChangeV1[]
+  planHash: string
+}
+
+export interface TextOpenWorldEffectReceiptV1 {
+  schema: 'storyforge.text-open-world.effect-receipt'
+  version: 1
+  claimKey: string
+  planHash: string
+  baseStateHash: string
+  resultingStateHash: string
+  impactDomains: TextOpenWorldEffectImpactDomainV1[]
+  changes: TextOpenWorldEffectChangeV1[]
+}
