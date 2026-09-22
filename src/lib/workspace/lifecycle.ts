@@ -24,6 +24,21 @@ function parseSimpleTarget(target: string): { tableName: string; field: string }
   return match ? { tableName: match[1], field: match[2] } : null
 }
 
+async function rowsReferencingField(
+  table: typeof PROJECT_TABLES[number]['table'],
+  field: string,
+  sourceId: number,
+): Promise<any[]> {
+  const dexieTable = table as any
+  const indexed = dexieTable.schema?.primKey?.keyPath === field
+    || dexieTable.schema?.idxByName?.[field] != null
+  if (indexed) return dexieTable.where(field).equals(sourceId).toArray()
+  // PROJECT_TABLES may govern semantically important but intentionally
+  // unindexed optional references. Deletion is rare and correctness is more
+  // important than forcing every nullable evidence pointer into the schema.
+  return (await dexieTable.toArray()).filter((row: Record<string, unknown>) => row[field] === sourceId)
+}
+
 export async function cascadeRegisteredReferences(
   sourceTableName: string,
   sourceId: number,
@@ -40,7 +55,7 @@ export async function cascadeRegisteredReferences(
     if (!target) throw new Error(`[workspace-lifecycle] 无效引用 ${sourceTableName} -> ${ref.target}`)
     const targetSpec = REGISTRY_BY_NAME.get(target.tableName)
     if (!targetSpec) throw new Error(`[workspace-lifecycle] 引用目标未登记 ${target.tableName}`)
-    const rows = await (targetSpec.table as any).where(target.field).equals(sourceId).toArray()
+    const rows = await rowsReferencingField(targetSpec.table, target.field, sourceId)
     for (const row of rows) {
       if (row.id == null) continue
       if (ref.onDelete === 'setNull') {

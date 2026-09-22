@@ -33,15 +33,6 @@ function productRoles(productType: ProductionProductKindV1): Record<string, stri
       locations: [key.location],
     }
   }
-  if (productType === 'text-open-world') {
-    return {
-      characters: [key.character],
-      regions: [key.location],
-      items: [key.artifact],
-      factions: [key.lore],
-      quests: [key.arc],
-    }
-  }
   return {
     participants: [key.character],
     locations: [key.location],
@@ -182,7 +173,7 @@ export function createCurrentProductBriefFixture(input: {
 }
 
 export function createCurrentRuntimePackageFixture(input: {
-  productType: Exclude<ProductionProductKindV1, 'ttrpg'>
+  productType: Exclude<ProductionProductKindV1, 'ttrpg' | 'text-open-world'>
   worldRelease: WorldRelease & { id: number }
   sourceCatalog: ProductProductionWorldSourceCatalogV2
 }): ProductRuntimePackageV1 {

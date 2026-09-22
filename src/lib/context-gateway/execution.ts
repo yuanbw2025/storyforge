@@ -134,7 +134,10 @@ function frozenScope(input: ExecuteContextGatewayInputV1): FrozenResourceScopeV1
   if (input.resourceScope) {
     if (input.resourceScope.projectId !== input.scope.projectId
       || (input.resourceScope.worldId != null && input.resourceScope.worldId !== input.scope.worldId)
-      || (input.resourceScope.workId != null && input.resourceScope.workId !== input.scope.workId)) {
+      || (input.resourceScope.workId != null && input.resourceScope.workId !== input.scope.workId)
+      || (input.resourceScope.productRuntimeSessionId != null
+        && (!Number.isSafeInteger(input.resourceScope.productRuntimeSessionId)
+          || input.resourceScope.productRuntimeSessionId < 1))) {
       fail('resource-scope', '冻结资源 scope 不属于当前 WorkspaceScope')
     }
     return { ...input.resourceScope }

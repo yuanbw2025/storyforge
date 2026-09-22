@@ -360,7 +360,7 @@ export async function verifyContextManifestIntegrityV1(value: unknown): Promise<
 
 function provenanceAuthorityV2(key: string): ContextManifestSourceV2['provenance']['authority'] {
   if (key === 'manualText' || key === 'ragSelection') return 'author-input'
-  if (['productRuntime', 'ttrpgRuntime', 'ttrpgNpcRuntime', 'ttrpgPublicNarration', 'ttrpgDirector', 'ttrpgPrivateGuidance', 'ttrpgPlayerRuntime', 'priorOutlineCandidate'].includes(key)) return 'runtime'
+  if (['productRuntime', 'openWorldRuntime', 'ttrpgRuntime', 'ttrpgNpcRuntime', 'ttrpgPublicNarration', 'ttrpgDirector', 'ttrpgPrivateGuidance', 'ttrpgPlayerRuntime', 'priorOutlineCandidate'].includes(key)) return 'runtime'
   if (/retrieval|search|summary|Passages|impact/i.test(key)) return 'derived'
   return 'accepted'
 }

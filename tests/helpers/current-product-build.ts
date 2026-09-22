@@ -3,6 +3,7 @@ import { hashProductProductionValueV2 } from '../../src/lib/product-production/h
 import { createProductBuildPreviewManifestV1 } from '../../src/lib/product-production/preview-manifest'
 import type {
   ProductBuildPreviewManifestV1,
+  ProductProductionBriefV3,
   ProductRuntimePackageV1,
   WorkspaceScope,
   WorldRelease,
@@ -22,10 +23,11 @@ export async function seedCurrentProductBuild(input: {
   worldGroupId?: number | null
   seed?: string
   mediaBindings?: ProductBuildPreviewManifestV1['mediaBindings']
+  brief?: ProductProductionBriefV3
 }) {
   const now = Date.now()
   const productionKey = `current-product-${input.scope.projectId}-${crypto.randomUUID().slice(0, 8)}`
-  const briefBody = {
+  const briefBody = input.brief ?? {
     schema: 'storyforge.test-product-brief',
     version: 1,
     productType: input.runtimePackage.productType,

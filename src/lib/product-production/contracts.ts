@@ -23,6 +23,10 @@ import { parseProductRuntimePackageV1, parseProductWorldSourceSelectionV1 } from
 import { parseTtrpgProductionBriefV2 } from '../ttrpg/production-brief'
 import { parseAiTownProductionBriefV1 } from '../ai-town/contracts'
 import { parseTextAdventureProductionBriefV1 } from '../adventure/production-brief'
+import {
+  parseTextOpenWorldCreatorBriefV1,
+  parseTextOpenWorldCreatorSourceLocatorV1,
+} from '../open-world/creator-brief-persistence'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -436,8 +440,27 @@ function expectedRevision(value: unknown): number {
 
 function parseResolution(value: unknown): ProductProductionBlockerResolutionV1 {
   const row = record(value, 'resolution')
-  exactKeys(row, ['action', 'note', ...(row.action === 'author-edit' ? ['authorDraftJson'] : [])], 'resolution')
+  const hasUnknownReservation = Object.prototype.hasOwnProperty.call(row, 'unknownResultReservation')
+  exactKeys(row, [
+    'action', 'note',
+    ...(row.action === 'author-edit' ? ['authorDraftJson'] : []),
+    ...(hasUnknownReservation ? ['unknownResultReservation'] : []),
+  ], 'resolution')
   if (row.action === 'author-edit') record(JSON.parse(text(row.authorDraftJson, 'resolution.authorDraftJson', 120000)), 'authorDraft')
+  const unknownResultReservation = hasUnknownReservation
+    ? (() => {
+        const reservation = record(row.unknownResultReservation, 'resolution.unknownResultReservation')
+        exactKeys(reservation, ['runId', 'attempt', 'controlEpoch', 'disposition'], 'resolution.unknownResultReservation')
+        return {
+          runId: positiveId(reservation.runId, 'resolution.unknownResultReservation.runId'),
+          attempt: positiveId(reservation.attempt, 'resolution.unknownResultReservation.attempt'),
+          controlEpoch: finite(reservation.controlEpoch, 'resolution.unknownResultReservation.controlEpoch', Number.MAX_SAFE_INTEGER, true),
+          disposition: enumValue(reservation.disposition, [
+            'confirmed-not-charged', 'charge-reservation-upper-bound',
+          ], 'resolution.unknownResultReservation.disposition'),
+        }
+      })()
+    : undefined
   return {
     action: enumValue(row.action, [
       'retry', 'author-edit', 'fallback', 'waive-soft-gate', 'change-capability',
@@ -445,6 +468,7 @@ function parseResolution(value: unknown): ProductProductionBlockerResolutionV1 {
     ], 'resolution.action'),
     note: text(row.note, 'resolution.note', 4000),
     ...(row.action === 'author-edit' ? { authorDraftJson: text(row.authorDraftJson, 'resolution.authorDraftJson', 120000) } : {}),
+    ...(unknownResultReservation ? { unknownResultReservation } : {}),
   }
 }
 
@@ -457,19 +481,200 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
     productType: enumValue(row.productType, PRODUCTION_PRODUCT_KINDS_V1, 'productType'),
     userText: text(row.userText, 'userText', 20_000),
   }
+  if (type === 'create-text-open-world-intent') {
+    const commandId = commandHeader(row, type, [
+      'productionKey', 'productType', 'sourceLocator', 'expectedSourceBindingHash', 'userText',
+    ])
+    if (row.productType !== 'text-open-world' || !isSha256Hash(row.expectedSourceBindingHash)) {
+      fail('文字开放世界 intent 的产品身份或来源 Hash 无效')
+    }
+    return {
+      type,
+      commandId,
+      productionKey: stableKey(row.productionKey, 'productionKey'),
+      productType: 'text-open-world',
+      sourceLocator: parseTextOpenWorldCreatorSourceLocatorV1(row.sourceLocator),
+      expectedSourceBindingHash: row.expectedSourceBindingHash,
+      userText: text(row.userText, 'userText', 20_000),
+    }
+  }
   if (type === 'save-brief-revision') return {
     type, commandId: commandHeader(row, type, ['expectedStateRevision', 'parentRevision', 'brief']),
     expectedStateRevision: expectedRevision(row.expectedStateRevision),
     parentRevision: row.parentRevision === null ? null : finite(row.parentRevision, 'parentRevision', Number.MAX_SAFE_INTEGER, true),
     brief: parseProductProductionBriefV3(row.brief),
   }
+  if (type === 'save-text-open-world-creator-brief') return {
+    type,
+    commandId: commandHeader(row, type, [
+      'expectedStateRevision', 'parentRevision', 'sourceLocator', 'candidateRunId', 'brief',
+    ]),
+    expectedStateRevision: expectedRevision(row.expectedStateRevision),
+    parentRevision: row.parentRevision === null
+      ? null
+      : finite(row.parentRevision, 'parentRevision', Number.MAX_SAFE_INTEGER, true),
+    sourceLocator: parseTextOpenWorldCreatorSourceLocatorV1(row.sourceLocator),
+    candidateRunId: positiveId(row.candidateRunId, 'candidateRunId'),
+    brief: parseTextOpenWorldCreatorBriefV1(row.brief),
+  }
   if (type === 'authorize-start') {
     const commandId = commandHeader(row, type, ['expectedStateRevision', 'briefRevision', 'briefHash', 'authorizationNonce'])
     if (!isSha256Hash(row.briefHash)) fail('briefHash 无效')
     return { type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision), briefRevision: positiveId(row.briefRevision, 'briefRevision'), briefHash: row.briefHash, authorizationNonce: stableKey(row.authorizationNonce, 'authorizationNonce') }
   }
+  if (type === 'authorize-text-open-world-creator-start') {
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision', 'briefRevision', 'briefHash', 'sourceLocator', 'preflight',
+      'confirmation', 'rightsBasis', 'rightsNote', 'authorizationNonce', 'expectedPlanHash',
+      'authorizedAt',
+    ])
+    if (!isSha256Hash(row.briefHash) || !isSha256Hash(row.expectedPlanHash)) {
+      fail('Creator start 的 briefHash/expectedPlanHash 无效')
+    }
+    if (!['author-owned', 'licensed', 'public-domain'].includes(String(row.rightsBasis))) {
+      fail('Creator start 的 rightsBasis 无效')
+    }
+    if (typeof row.rightsNote !== 'string' || !row.rightsNote.trim()
+      || row.rightsNote.trim().length > 2_000) {
+      fail('Creator start 的 rightsNote 无效')
+    }
+    record(row.preflight, 'command.preflight')
+    record(row.confirmation, 'command.confirmation')
+    return {
+      type,
+      commandId,
+      expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      briefRevision: positiveId(row.briefRevision, 'briefRevision'),
+      briefHash: row.briefHash,
+      sourceLocator: parseTextOpenWorldCreatorSourceLocatorV1(row.sourceLocator),
+      preflight: structuredClone(row.preflight) as Extract<
+        ProductProductionCommandV1,
+        { type: 'authorize-text-open-world-creator-start' }
+      >['preflight'],
+      confirmation: structuredClone(row.confirmation) as Extract<
+        ProductProductionCommandV1,
+        { type: 'authorize-text-open-world-creator-start' }
+      >['confirmation'],
+      rightsBasis: row.rightsBasis as 'author-owned' | 'licensed' | 'public-domain',
+      rightsNote: row.rightsNote.trim().normalize('NFC'),
+      authorizationNonce: stableKey(row.authorizationNonce, 'authorizationNonce'),
+      expectedPlanHash: row.expectedPlanHash,
+      authorizedAt: finite(row.authorizedAt, 'authorizedAt', Number.MAX_SAFE_INTEGER, true),
+    }
+  }
+  if (type === 'authorize-text-open-world-creator-repair') {
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision', 'baseBuildNumber', 'expectedBasePlanHash',
+      'expectedHandoffSetHash', 'expectedImpactPlanHash', 'expectedTargetPlanHash',
+      'authorizationNonce', 'authorizedAt',
+    ])
+    for (const key of [
+      'expectedBasePlanHash', 'expectedHandoffSetHash',
+      'expectedImpactPlanHash', 'expectedTargetPlanHash',
+    ] as const) {
+      if (!isSha256Hash(row[key])) fail(`Creator repair 的 ${key} 无效`)
+    }
+    return {
+      type,
+      commandId,
+      expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      baseBuildNumber: positiveId(row.baseBuildNumber, 'baseBuildNumber'),
+      expectedBasePlanHash: row.expectedBasePlanHash as string,
+      expectedHandoffSetHash: row.expectedHandoffSetHash as string,
+      expectedImpactPlanHash: row.expectedImpactPlanHash as string,
+      expectedTargetPlanHash: row.expectedTargetPlanHash as string,
+      authorizationNonce: stableKey(row.authorizationNonce, 'authorizationNonce'),
+      authorizedAt: finite(row.authorizedAt, 'authorizedAt', Number.MAX_SAFE_INTEGER, true),
+    }
+  }
+  if (type === 'authorize-text-open-world-creator-media') {
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision', 'baseBuildNumber', 'expectedBasePlanHash',
+      'expectedMediaPlanHash', 'expectedTargetPlanHash', 'mode',
+      'acknowledgement', 'authorizationNonce', 'authorizedAt',
+    ])
+    for (const key of [
+      'expectedBasePlanHash', 'expectedMediaPlanHash', 'expectedTargetPlanHash',
+    ] as const) {
+      if (!isSha256Hash(row[key])) fail(`Creator media 的 ${key} 无效`)
+    }
+    if (row.mode !== 'provider-generate' && row.mode !== 'author-import') {
+      fail('Creator media 的 mode 无效')
+    }
+    const acknowledgement = record(row.acknowledgement, 'command.acknowledgement')
+    exactKeys(acknowledgement, [
+      'completeBundle', 'rightsAndProvenance', 'costAndProvider', 'oldBuildImmutable',
+    ], 'command.acknowledgement')
+    if (Object.values(acknowledgement).some(value => value !== true)) {
+      fail('Creator media 的四项作者确认不完整')
+    }
+    return {
+      type,
+      commandId,
+      expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      baseBuildNumber: positiveId(row.baseBuildNumber, 'baseBuildNumber'),
+      expectedBasePlanHash: row.expectedBasePlanHash as string,
+      expectedMediaPlanHash: row.expectedMediaPlanHash as string,
+      expectedTargetPlanHash: row.expectedTargetPlanHash as string,
+      mode: row.mode,
+      acknowledgement: {
+        completeBundle: true,
+        rightsAndProvenance: true,
+        costAndProvider: true,
+        oldBuildImmutable: true,
+      },
+      authorizationNonce: stableKey(row.authorizationNonce, 'authorizationNonce'),
+      authorizedAt: finite(row.authorizedAt, 'authorizedAt', Number.MAX_SAFE_INTEGER, true),
+    }
+  }
   if (type === 'pause') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'reason']), expectedStateRevision: expectedRevision(row.expectedStateRevision), reason: text(row.reason, 'reason', 4000) }
-  if (type === 'resume') return { type, commandId: commandHeader(row, type, ['expectedStateRevision']), expectedStateRevision: expectedRevision(row.expectedStateRevision) }
+  if (type === 'resume') {
+    const hasPausedReservations = Object.prototype.hasOwnProperty.call(row, 'pausedReservationDispositions')
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision',
+      ...(hasPausedReservations ? ['pausedReservationDispositions'] : []),
+    ])
+    const pausedReservationDispositions = hasPausedReservations
+      ? (() => {
+          if (!Array.isArray(row.pausedReservationDispositions)
+            || row.pausedReservationDispositions.length < 1
+            || row.pausedReservationDispositions.length > 64) {
+            fail('resume.pausedReservationDispositions 必须是 1～64 项数组')
+          }
+          const seen = new Set<string>()
+          return row.pausedReservationDispositions.map((value, index) => {
+            const reservation = record(value, `resume.pausedReservationDispositions[${index}]`)
+            exactKeys(reservation, [
+              'taskKey', 'runId', 'attempt', 'controlEpoch', 'disposition',
+            ], `resume.pausedReservationDispositions[${index}]`)
+            const parsed = {
+              taskKey: stableKey(reservation.taskKey, `resume.pausedReservationDispositions[${index}].taskKey`),
+              runId: positiveId(reservation.runId, `resume.pausedReservationDispositions[${index}].runId`),
+              attempt: positiveId(reservation.attempt, `resume.pausedReservationDispositions[${index}].attempt`),
+              controlEpoch: finite(
+                reservation.controlEpoch,
+                `resume.pausedReservationDispositions[${index}].controlEpoch`,
+                Number.MAX_SAFE_INTEGER,
+                true,
+              ),
+              disposition: enumValue(reservation.disposition, [
+                'confirmed-not-charged', 'charge-reservation-upper-bound',
+              ], `resume.pausedReservationDispositions[${index}].disposition`),
+            }
+            const identity = `${parsed.runId}:${parsed.attempt}`
+            if (seen.has(identity)) fail('resume.pausedReservationDispositions 存在重复 attempt')
+            seen.add(identity)
+            return parsed
+          })
+        })()
+      : undefined
+    return {
+      type,
+      commandId,
+      expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      ...(pausedReservationDispositions ? { pausedReservationDispositions } : {}),
+    }
+  }
   if (type === 'stop') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'retention']), expectedStateRevision: expectedRevision(row.expectedStateRevision), retention: enumValue(row.retention, ['keep-build', 'discard-unreleased'], 'retention') }
   if (type === 'archive') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'reason']), expectedStateRevision: expectedRevision(row.expectedStateRevision), reason: text(row.reason, 'reason', 4000) }
   if (type === 'restore') return { type, commandId: commandHeader(row, type, ['expectedStateRevision']), expectedStateRevision: expectedRevision(row.expectedStateRevision) }
@@ -565,9 +770,23 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
     }
   }
   if (type === 'publish') {
-    const commandId = commandHeader(row, type, ['expectedStateRevision', 'buildNumber', 'expectedManifestHash', 'adoptionIntentHash'])
+    const creatorReleaseAuthorizationHash = row.creatorReleaseAuthorizationHash == null
+      ? undefined
+      : row.creatorReleaseAuthorizationHash
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision', 'buildNumber', 'expectedManifestHash', 'adoptionIntentHash',
+      ...(creatorReleaseAuthorizationHash == null ? [] : ['creatorReleaseAuthorizationHash']),
+    ])
     if (!isSha256Hash(row.expectedManifestHash) || !isSha256Hash(row.adoptionIntentHash)) fail('publish hash 无效')
-    return { type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision), buildNumber: positiveId(row.buildNumber, 'buildNumber'), expectedManifestHash: row.expectedManifestHash, adoptionIntentHash: row.adoptionIntentHash }
+    if (creatorReleaseAuthorizationHash != null && !isSha256Hash(creatorReleaseAuthorizationHash)) {
+      fail('creatorReleaseAuthorizationHash 无效')
+    }
+    return {
+      type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      buildNumber: positiveId(row.buildNumber, 'buildNumber'),
+      expectedManifestHash: row.expectedManifestHash, adoptionIntentHash: row.adoptionIntentHash,
+      ...(creatorReleaseAuthorizationHash == null ? {} : { creatorReleaseAuthorizationHash }),
+    }
   }
   const commandId = commandHeader(row, type, ['expectedStateRevision', 'base', 'userText', 'affectedLanes'])
   const affectedLanes = stringArray(row.affectedLanes, 'affectedLanes', EVOLUTION_LANES.length, true)

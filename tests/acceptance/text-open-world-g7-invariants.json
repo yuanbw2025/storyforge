@@ -1,0 +1,192 @@
+{
+  "schema": "storyforge.text-open-world.g7-invariant-matrix",
+  "version": 1,
+  "invariants": [
+    {
+      "id": "TOW-G7-I01",
+      "title": "任意合法序列后资源、数量、生命和时间都保持有限数值",
+      "evidence": [
+        {
+          "layer": "property",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD7-fixed-seed-invariants.test.ts",
+          "testName": "多组确定性属性序列始终保持资源有界"
+        }
+      ]
+    },
+    {
+      "id": "TOW-G7-I02",
+      "title": "物品实例和唯一物品所有权不会重复",
+      "evidence": [
+        {
+          "layer": "invariant",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD7-fixed-seed-invariants.test.ts",
+          "testName": "状态解析拒绝资源越界、非有限数值、唯一物品重复和单实例多槽占用"
+        },
+        {
+          "layer": "unit",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD2-inventory.test.ts",
+          "testName": "实例授予使用确定性ID与claim来源，唯一物品不能重复领取"
+        }
+      ]
+    },
+    {
+      "id": "TOW-G7-I03",
+      "title": "货币、材料、生命和商店库存不低于规则下限",
+      "evidence": [
+        {
+          "layer": "invariant",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD7-fixed-seed-invariants.test.ts",
+          "testName": "多组确定性属性序列始终保持资源有界"
+        },
+        {
+          "layer": "unit",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD2-economy.test.ts",
+          "testName": "购买和出售在一个EffectPlan中原子改变货币、背包与有限库存"
+        }
+      ]
+    },
+    {
+      "id": "TOW-G7-I04",
+      "title": "任务终态不能非法返回进行中状态",
+      "evidence": [
+        {
+          "layer": "unit",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD2-quest-state-machine.test.ts",
+          "testName": "不限时普通任务可放弃并重新揭示，失败则永久终结"
+        }
+      ]
+    },
+    {
+      "id": "TOW-G7-I05",
+      "title": "普通内容演化不会让受保护主线永久不可达",
+      "evidence": [
+        {
+          "layer": "integration",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD7-fixed-seed-invariants.test.ts",
+          "testName": "保持主线可达、命令幂等与Session隔离"
+        },
+        {
+          "layer": "integration",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD2-crime.test.ts",
+          "testName": "正式ProductRuntimeSession要求二次确认并原子提交偷窃后果"
+        }
+      ]
+    },
+    {
+      "id": "TOW-G7-I06",
+      "title": "关键NPC和关键道具保护统一失败关闭",
+      "evidence": [
+        {
+          "layer": "unit",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD2-inventory.test.ts",
+          "testName": "堆叠上限、关键物品保护和账本分区均为fail-closed"
+        },
+        {
+          "layer": "unit",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD2-actor-lifecycle.test.ts",
+          "testName": "Build拒绝关键NPC攻击合同、缺失替代服务和替代链"
+        }
+      ]
+    },
+    {
+      "id": "TOW-G7-I07",
+      "title": "同一commandId重试不产生第二次效果",
+      "evidence": [
+        {
+          "layer": "integration",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD7-fixed-seed-invariants.test.ts",
+          "testName": "保持主线可达、命令幂等与Session隔离"
+        },
+        {
+          "layer": "unit",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD2-command-envelope.test.ts",
+          "testName": "相同commandId重试返回原事件，不追加第二次效果"
+        }
+      ]
+    },
+    {
+      "id": "TOW-G7-I08",
+      "title": "同一Release、seed和事件序列产生相同重放Hash",
+      "evidence": [
+        {
+          "layer": "fixed-seed-replay",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD7-fixed-seed-invariants.test.ts",
+          "testName": "同一Release和固定seed的合法行动序列产生相同重放Hash"
+        },
+        {
+          "layer": "unit",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD2-event-protocol.test.ts",
+          "testName": "原子追加命令随机证据和Effect终态，并可从seed完整重放"
+        }
+      ]
+    },
+    {
+      "id": "TOW-G7-I09",
+      "title": "刷新和缓存重建不改变游戏状态",
+      "evidence": [
+        {
+          "layer": "integration",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD2-end-to-end.test.ts",
+          "testName": "刷新重放和检查点分支使用同一正式事件链"
+        }
+      ]
+    },
+    {
+      "id": "TOW-G7-I10",
+      "title": "可选模型失败不会阻断确定性玩法",
+      "evidence": [
+        {
+          "layer": "unit",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD4-player-resilience.test.ts",
+          "testName": "keeps optional model and network failures degraded without locking deterministic gameplay"
+        }
+      ]
+    },
+    {
+      "id": "TOW-G7-I11",
+      "title": "一个Session不能读取或修改另一个Session",
+      "evidence": [
+        {
+          "layer": "integration",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD7-fixed-seed-invariants.test.ts",
+          "testName": "保持主线可达、命令幂等与Session隔离"
+        }
+      ]
+    },
+    {
+      "id": "TOW-G7-I12",
+      "title": "运行期不能修改冻结的WorldRelease或ProductRelease",
+      "evidence": [
+        {
+          "layer": "invariant",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD2-release-session-binding.test.ts",
+          "testName": "正式Session由ProductRelease确定性开局，Release被篡改后fail-closed"
+        },
+        {
+          "layer": "integration",
+          "runner": "vitest",
+          "file": "tests/regression/R-OPEN-WORLD2-player-definition.test.ts",
+          "testName": "只从冻结WorldRelease复制角色，活数据漂移不改变结果，并冻结进Release与Session"
+        }
+      ]
+    }
+  ]
+}

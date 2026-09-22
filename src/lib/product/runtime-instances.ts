@@ -39,6 +39,7 @@ import { assertProductReleaseUnchanged } from './releases'
 import { createInitialAvgPresentationState } from '../avg/runtime'
 import { createInitialOpenWorldEvolutionState } from '../open-world/evolution-runtime'
 import { createInitialOpenWorldState } from '../open-world/runtime'
+import { createInitialTextOpenWorldSessionProjectionV1 } from '../open-world/session-projection'
 import { createInitialTtrpgProductStateV1 } from '../ttrpg/runtime'
 import { createInitialAiTownStateV1 } from '../ai-town/runtime'
 import { verifyProductRuntimeSource } from '../product-production/preview-source'
@@ -151,7 +152,7 @@ function initialNarrativeState(
   }
 }
 
-function productOwnedCanonSnapshot(input: {
+export function createProductRuntimeCanonSnapshotV1(input: {
   runtimePackage: ProductRuntimePackageV1
   runtimeSourceHash: string
 }): Record<string, unknown> {
@@ -164,7 +165,7 @@ function productOwnedCanonSnapshot(input: {
   }
 }
 
-function createProductInitialState(input: {
+export function createProductInitialStateV1(input: {
   runtimePackage: ProductRuntimePackageV1
   runtimeSourceHash: string
 }): ProductRuntimeState {
@@ -212,20 +213,31 @@ function createProductInitialState(input: {
     })
   }
   if (runtimePackage.productType === 'text-open-world') {
-    state.interaction = createInitialInteractionState({
-      playerKey: runtimePackage.interaction!.playerKey,
-      profiles: runtimePackage.interaction!.profiles,
-      sceneTemplates: runtimePackage.interaction!.sceneTemplates,
-    })
-    state.adventure = createInitialAdventureState(runtimePackage.adventure!, input.runtimeSourceHash)
-    state.openWorldEvolution = createInitialOpenWorldEvolutionState(
-      runtimePackage.openWorldEvolution!,
-      input.runtimeSourceHash,
-    )
-    state.openWorld = createInitialOpenWorldState(runtimePackage.openWorld!, input.runtimeSourceHash)
-    state = withAdventureNarrativeProjectionV1(state)
-    state = withOpenWorldEvolutionProjectionV1(state)
-    state = withOpenWorldNarrativeProjectionV1(state)
+    const hasLegacyRuntime = runtimePackage.interaction != null
+      && runtimePackage.adventure != null
+      && runtimePackage.openWorldEvolution != null
+      && runtimePackage.openWorld != null
+    if (runtimePackage.textOpenWorldVNext) {
+      state.textOpenWorld = createInitialTextOpenWorldSessionProjectionV1(
+        runtimePackage.textOpenWorldVNext,
+      )
+    }
+    if (hasLegacyRuntime) {
+      state.interaction = createInitialInteractionState({
+        playerKey: runtimePackage.interaction!.playerKey,
+        profiles: runtimePackage.interaction!.profiles,
+        sceneTemplates: runtimePackage.interaction!.sceneTemplates,
+      })
+      state.adventure = createInitialAdventureState(runtimePackage.adventure!, input.runtimeSourceHash)
+      state.openWorldEvolution = createInitialOpenWorldEvolutionState(
+        runtimePackage.openWorldEvolution!,
+        input.runtimeSourceHash,
+      )
+      state.openWorld = createInitialOpenWorldState(runtimePackage.openWorld!, input.runtimeSourceHash)
+      state = withAdventureNarrativeProjectionV1(state)
+      state = withOpenWorldEvolutionProjectionV1(state)
+      state = withOpenWorldNarrativeProjectionV1(state)
+    }
   }
   if (runtimePackage.productType === 'ttrpg') {
     state = createInitialTtrpgProductStateV1({
@@ -368,7 +380,7 @@ export async function createProductRuntimeInstance(
     throw new Error('[instance] 跨发布续团父产品发布不是 TTRPG')
   }
 
-  let initialState = createProductInitialState({
+  let initialState = createProductInitialStateV1({
     runtimePackage: runtimePackage,
     runtimeSourceHash: playable.runtimeSourceHash,
   })
@@ -417,7 +429,7 @@ export async function createProductRuntimeInstance(
     kind: input.kind,
     title: input.title,
     seed: input.seed,
-    canonSnapshot: productOwnedCanonSnapshot({
+    canonSnapshot: createProductRuntimeCanonSnapshotV1({
       runtimePackage: runtimePackage,
       runtimeSourceHash: playable.runtimeSourceHash,
     }),

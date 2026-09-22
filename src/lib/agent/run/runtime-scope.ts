@@ -370,6 +370,34 @@ export async function captureOpenWorldRuntimeHarnessBoundaryV1(input: {
   ) {
     fail("开放世界技能只能绑定正式 text-open-world 实例");
   }
+  const currentState = await readRuntimeState(session.id!);
+  if (currentState.textOpenWorld) {
+    const { loadTextOpenWorldRuntimeContextCatalogV1 } = await import(
+      "../../open-world/runtime-ai-context-provider"
+    );
+    const catalog = await loadTextOpenWorldRuntimeContextCatalogV1({
+      projectId: input.scope.projectId,
+      worldId: input.scope.worldId,
+      workId: input.scope.workId,
+      worldGroupId: session.worldGroupId ?? null,
+      productRuntimeSessionId: session.id!,
+    });
+    const runtime = {
+      productRuntimeSessionId: session.id!,
+      baseSequence: catalog.sequence,
+      stateHash: catalog.stateHash,
+      visibilityHash: catalog.visibilityHash,
+      releaseHash: catalog.runtimeSourceHash,
+    };
+    return {
+      scope: {
+        projectId: input.scope.projectId,
+        worldGroupId: session.worldGroupId ?? null,
+        runtime,
+      },
+      boundaryHash: await hashCanonicalValue(runtime),
+    };
+  }
   const [version, state, frozen] = await Promise.all([
     readRuntimeStateVersion(session.id!),
     readRuntimeState(session.id!),
@@ -431,7 +459,7 @@ export async function assertOpenWorldRuntimeHarnessFreshV1(input: {
     productRuntimeSessionId: expected.productRuntimeSessionId,
   });
   if (current.boundaryHash !== (await hashCanonicalValue(expected))) {
-    fail("开放世界区域、任务、叙事选择或发布来源已经变化");
+    fail("开放世界场景、任务、人物、知识、可用行动或发布来源已经变化");
   }
 }
 

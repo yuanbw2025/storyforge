@@ -15,6 +15,7 @@ import type { AvgRuntimePresentationState } from "./avg";
 import type { OpenWorldEvolutionState } from "./open-world-evolution";
 import type { OpenWorldRuntimeState } from "./open-world";
 import type { AiTownRuntimeStateV1 } from "./ai-town";
+import type { TextOpenWorldSessionProjectionV1 } from "./text-open-world-session";
 import type {
   TtrpgAbilityRuntimeStateV2,
   TtrpgDegreeV2,
@@ -35,6 +36,7 @@ export type ProductRuntimeKind = (typeof PRODUCT_RUNTIME_KINDS)[number];
 export const PRODUCT_RUNTIME_STATUSES = [
   "active",
   "paused",
+  "completed",
   "archived",
 ] as const;
 export type ProductRuntimeStatus =
@@ -1110,6 +1112,8 @@ export interface ProductRuntimeState {
   openWorld?: OpenWorldRuntimeState | null;
   /** AI Town owns time, schedules, presence, relationships and bounded life simulation. */
   town?: AiTownRuntimeStateV1 | null;
+  /** TEXT-OPEN-WORLD-2 vNext authoritative product projection; legacy sessions omit it. */
+  textOpenWorld?: TextOpenWorldSessionProjectionV1 | null;
   lastSequence: number;
 }
 
@@ -1149,6 +1153,10 @@ export type ProductRuntimeSession = ProductRuntimeSessionBase & (
 );
 
 export const PRODUCT_RUNTIME_EVENT_TYPES = [
+  "text-open-world.command.committed",
+  "text-open-world.random.resolved",
+  "text-open-world.effects.applied",
+  "text-open-world.memory.committed",
   "time.advanced",
   "entity.upserted",
   "entity.patched",
@@ -1298,6 +1306,17 @@ export interface ProductRuntimeEvent {
   createdAt: number;
 }
 
+/** Versioned, product-neutral reasons for freezing a runtime checkpoint. */
+export const PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1 = [
+  "manual",
+  "autosave",
+  "combat-retry",
+  "milestone",
+  "system",
+] as const;
+export type ProductRuntimeCheckpointPurposeV1 =
+  (typeof PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1)[number];
+
 export interface ProductRuntimeCheckpoint {
   id?: number;
   projectId: number;
@@ -1305,6 +1324,10 @@ export interface ProductRuntimeCheckpoint {
   sessionId: number;
   throughSequence: number;
   name: string;
+  /** Missing only on legacy rows, which readers normalize to `manual`. */
+  purpose?: ProductRuntimeCheckpointPurposeV1;
+  /** Required for combat/milestone lineage; forbidden for other purposes. */
+  subjectKey?: string | null;
   stateJson: string;
   stateHash: string;
   createdAt: number;
@@ -1324,5 +1347,6 @@ export const EMPTY_PRODUCT_RUNTIME_STATE: ProductRuntimeState = {
   openWorldEvolution: null,
   openWorld: null,
   town: null,
+  textOpenWorld: null,
   lastSequence: 0,
 };

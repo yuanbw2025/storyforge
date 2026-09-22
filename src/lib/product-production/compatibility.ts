@@ -1,4 +1,5 @@
 import type { ProductBuildCompatibilityReportV1, ProductRuntimePackageV1 } from '../types'
+import { TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1 } from '../types'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 
 interface RuntimePackageBuildRefV1 {
@@ -21,7 +22,12 @@ function stableValues(pkg: ProductRuntimePackageV1): Map<string, string> {
   add('runtime', 'contract', {
     schema: pkg.schema, version: pkg.version, productType: pkg.productType,
     capabilities: pkg.definition.enabledCapabilities, rulesetVersion: pkg.definition.rulesetVersion,
+    entryNodeKey: pkg.narrative.entryNodeKey,
+    narrativeModuleKind: pkg.narrative.moduleKind,
   })
+  for (const [key, value] of Object.entries(pkg.definition.initialVariables)) {
+    add('runtime.initial-variable', key, value)
+  }
   for (const node of pkg.narrative.nodes) add('narrative.node', node.key, {
     kind: node.kind, conditionJson: node.conditionJson, effectsJson: node.effectsJson,
     successorKeys: [...node.successorKeys],
@@ -60,6 +66,24 @@ function stableValues(pkg: ProductRuntimePackageV1): Map<string, string> {
   for (const thread of pkg.town?.lifeThreads ?? []) add('ai-town.thread', thread.key, thread)
   for (const seed of pkg.town?.eventSeeds ?? []) add('ai-town.event-seed', seed.key, seed)
   if (pkg.town) add('ai-town.economy', pkg.town.economy.sharedProject.key, pkg.town.economy)
+  if (pkg.textOpenWorldVNext) {
+    add('text-open-world', 'contract', {
+      rulesetKey: pkg.textOpenWorldVNext.metadata.rulesetKey,
+      rulesetVersion: pkg.textOpenWorldVNext.metadata.rulesetVersion,
+    })
+    for (const moduleKey of TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1) {
+      const envelope = pkg.textOpenWorldVNext.modules[moduleKey]
+      add('text-open-world.module', moduleKey, {
+        moduleKey: envelope.moduleKey,
+        schemaVersion: envelope.schemaVersion,
+        // Presentation payloads do not own runtime state. Text, map layout and
+        // media presentation may change while stable gameplay contracts remain
+        // identical; schema/dependency changes are still treated as breaking.
+        ...(moduleKey === 'presentation' ? {} : { contentHash: envelope.contentHash }),
+        dependencies: [...envelope.dependencies].sort(),
+      })
+    }
+  }
   return values
 }
 

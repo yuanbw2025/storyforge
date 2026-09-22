@@ -1,0 +1,81 @@
+{
+  "schema": "storyforge.text-open-world.g7-lifecycle-matrix",
+  "version": 1,
+  "backupVersion": 14,
+  "compatibilityPolicy": "current-only-backup-explicit-release-migration",
+  "profileNote": "项目备份只接受当前v14；旧存档继续绑定旧Release，只有通过兼容性预演和显式提交才能生成绑定新Release的子Session。",
+  "gates": [
+    {
+      "id": "TOW-G7-L01",
+      "title": "当前v14项目备份必须完整携带并重映射正式Release生产与运行闭包",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD7-release-lifecycle.test.ts",
+      "testName": "当前v14备份完整重映射Release、质量回执、媒资字节、事件、检查点和分支"
+    },
+    {
+      "id": "TOW-G7-L02",
+      "title": "质量门回执必须在导出与导入前验证严格结构索引字段和不可变Hash",
+      "evidenceFile": "src/lib/product-production/quality-receipts.ts",
+      "testName": "verifyProductQualityGateReceiptRecordV1"
+    },
+    {
+      "id": "TOW-G7-L03",
+      "title": "正式Release媒资必须连同内容寻址字节导出恢复并校验大小与Hash",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD7-release-lifecycle.test.ts",
+      "testName": "readProductMediaBlobData"
+    },
+    {
+      "id": "TOW-G7-L04",
+      "title": "Session事件检查点和分支父子引用必须在恢复后保持可重放可验",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD7-release-lifecycle.test.ts",
+      "testName": "inspectTextOpenWorldCheckpointV1"
+    },
+    {
+      "id": "TOW-G7-L05",
+      "title": "质量回执媒资或检查点被篡改时必须失败关闭且不留下半成品项目",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD7-release-lifecycle.test.ts",
+      "testName": "质量回执、媒资字节、检查点或备份版本被篡改时不留下任何导入项目"
+    },
+    {
+      "id": "TOW-G7-L06",
+      "title": "备份恢复只接受当前格式并明确拒绝把历史版本静默升级为当前结构",
+      "evidenceFile": "src/lib/export/backup-trust.ts",
+      "testName": "只接受当前备份版本"
+    },
+    {
+      "id": "TOW-G7-L07",
+      "title": "旧存档默认继续绑定不可变旧Release且迁移不能改写原Session事件进度",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD5-save-migration.test.ts",
+      "testName": "预演通过后创建绑定新Release的子Session，保留原分支、原事件与玩家进度"
+    },
+    {
+      "id": "TOW-G7-L08",
+      "title": "仅表现层兼容变更必须通过预演后显式创建绑定新Release的迁移子Session",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD5-save-migration.test.ts",
+      "testName": "预演通过后创建绑定新Release的子Session，保留原分支、原事件与玩家进度"
+    },
+    {
+      "id": "TOW-G7-L09",
+      "title": "语义变更跨Work非直接子版本和Build预览必须被迁移边界拒绝",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD5-save-migration.test.ts",
+      "testName": "不允许跨Work、非直接子版本或Build Preview进入迁移边界"
+    },
+    {
+      "id": "TOW-G7-L10",
+      "title": "迁移父子链必须可移植重绑且Canon或lineage篡改时保持零写入",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD5-save-migration.test.ts",
+      "testName": "迁移父子链可完整导出导入并重绑双Release，迁移Canon篡改时零写入拒绝"
+    },
+    {
+      "id": "TOW-G7-L11",
+      "title": "删除产品Work必须清理生产发布运行媒资而保留World拥有的WorldRelease",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD7-release-lifecycle.test.ts",
+      "testName": "deleteWork(importedOwnership.scope.workId)"
+    },
+    {
+      "id": "TOW-G7-L12",
+      "title": "删除单个玩家分支必须清理其私域数据并保留父Session和正式Release",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD7-release-lifecycle.test.ts",
+      "testName": "deleteProductRuntimeSession(importedBranch.id!)"
+    }
+  ]
+}

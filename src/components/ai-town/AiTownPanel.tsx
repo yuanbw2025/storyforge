@@ -75,9 +75,7 @@ export default function AiTownPanel(props: {
   const [mediaFailures, setMediaFailures] = useState<Array<{ assetKey: string; reason: string }>>([])
 
   useEffect(() => {
-    if (props.workspaceScope) void store.load(props.workspaceScope, props.worldGroupId).then(async () => {
-      if (props.initialSessionId != null) await store.select(props.initialSessionId)
-    })
+    if (props.workspaceScope) void store.load(props.workspaceScope, props.worldGroupId, props.initialSessionId)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.workspaceScope?.projectId, props.workspaceScope?.worldId, props.workspaceScope?.workId, props.worldGroupId, props.initialSessionId])
 

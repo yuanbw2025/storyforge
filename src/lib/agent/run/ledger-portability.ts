@@ -1,6 +1,7 @@
 import Dexie from 'dexie'
 import { db } from '../../db/schema'
 import type {
+  AgentRunProjectionV1,
   AgentRunCheckpointRecord,
   AgentRunEventRecord,
   AgentRunRecord,
@@ -17,6 +18,10 @@ import {
   portableizeAgentRunContractV1,
   rebindPortableAgentRunContractV1,
 } from './contract-portability'
+import {
+  AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1,
+  agentRunUtf8ByteLengthV1,
+} from './checkpoint-contract'
 
 type IdMaps = ReadonlyMap<string, ReadonlyMap<number, number>>
 type ExportRow = Record<string, any>
@@ -47,9 +52,9 @@ function rowsForRun(rows: ExportRow[], runKey: number): ExportRow[] {
     .sort((left, right) => left.sequence - right.sequence)
 }
 
-async function assertExportedRunProjection(run: ExportRow, events: ExportRow[]): Promise<void> {
+function exportedDomainEvents(run: ExportRow, events: ExportRow[]): AnyAgentRunEventV1[] {
   const worldGroupId = run._worldGroupExportId == null ? null : run._worldGroupExportId + 1
-  const domainEvents = events.map(event => parseAgentRunEventV1({
+  return events.map(event => parseAgentRunEventV1({
     version: 1,
     runId: run._exportId + 1,
     sequence: event.sequence,
@@ -61,6 +66,13 @@ async function assertExportedRunProjection(run: ExportRow, events: ExportRow[]):
     createdAt: event.createdAt,
     payload: parsePayload(event),
   }))
+}
+
+export async function verifyPortableAgentRunProjectionV1(
+  run: Record<string, any>,
+  events: Record<string, any>[],
+): Promise<{ projection: AgentRunProjectionV1; events: AnyAgentRunEventV1[] }> {
+  const domainEvents = exportedDomainEvents(run, events)
   const projection = replayAgentRunEventsV1(domainEvents)
   if (projection.errors.length > 0 || projection.state === 'recovery_required') {
     fail(`run ${run._exportId} 导出前事件不可重放：${projection.errors.join('；')}`)
@@ -81,8 +93,39 @@ async function assertExportedRunProjection(run: ExportRow, events: ExportRow[]):
     || projection.state !== run.status
     || projection.generation !== run.generation
     || projection.lastSequence !== run.lastSequence
+    || projection.contractHash !== run.contractHash
     || (projection.terminalReceiptHash ?? null) !== (run.terminalReceiptHash ?? null)
   ) fail(`run ${run._exportId} 导出前物化投影与事件不一致`)
+  return { projection, events: domainEvents }
+}
+
+/**
+ * A Creator Brief may point either at its freshly completed proof, or at the
+ * same proof after project import deliberately appended one scope-rebind stale
+ * event. Return the completed prefix that still proves the immutable Brief.
+ */
+export async function verifyPortableCompletedAgentRunEvidenceV1(
+  run: Record<string, any>,
+  events: Record<string, any>[],
+): Promise<{ projection: AgentRunProjectionV1; events: AnyAgentRunEventV1[] }> {
+  const verified = await verifyPortableAgentRunProjectionV1(run, events)
+  if (verified.projection.state === 'completed' && verified.projection.terminalReceiptHash) {
+    return verified
+  }
+  const last = verified.events[verified.events.length - 1]
+  if (verified.projection.state !== 'running'
+    || last?.type !== 'verification.staled'
+    || last.payload.reason !== 'project-import-scope-rebound') {
+    fail(`run ${run._exportId} 不含可接受的完成态证据`)
+  }
+  const completed = replayAgentRunEventsV1(verified.events.slice(0, -1))
+  if (completed.errors.length > 0
+    || completed.state !== 'completed'
+    || !completed.terminalReceiptHash
+    || completed.terminalReceiptHash !== last.payload.previousReceiptHash) {
+    fail(`run ${run._exportId} 的导入失效事件没有匹配完成态前缀`)
+  }
+  return { projection: completed, events: verified.events.slice(0, -1) }
 }
 
 async function portableGenerationHashes(input: {
@@ -138,7 +181,7 @@ export async function portableizeAgentRunLedgerExportV1(
     if (runEvents.some(event => event._worldGroupExportId !== run._worldGroupExportId)) {
       fail(`run ${run._exportId} 事件世界组与运行不一致`)
     }
-    await assertExportedRunProjection(run, runEvents)
+    await verifyPortableAgentRunProjectionV1(run, runEvents)
     const hashes = await portableGenerationHashes({ run, events: runEvents, idMaps })
     for (const event of runEvents) {
       const pair = hashes.get(event.generation)
@@ -157,6 +200,12 @@ export async function portableizeAgentRunLedgerExportV1(
       event.contractHash = pair.targetHash
     }
     for (const checkpoint of rowsForRun(checkpoints, run._exportId)) {
+      if (checkpoint.resumePayloadJson != null
+        && (typeof checkpoint.resumePayloadJson !== 'string'
+          || agentRunUtf8ByteLengthV1(checkpoint.resumePayloadJson)
+            > AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1)) {
+        fail(`run ${run._exportId} 检查点 ${checkpoint.throughSequence} 恢复载荷超过安全便携预算`)
+      }
       if (checkpoint._worldGroupExportId !== run._worldGroupExportId) {
         fail(`run ${run._exportId} 检查点世界组与运行不一致`)
       }
@@ -210,6 +259,10 @@ async function verifyImportedCheckpoint(
   }
   let resumePayload: unknown = null
   if (checkpoint.resumePayloadJson != null) {
+    if (agentRunUtf8ByteLengthV1(checkpoint.resumePayloadJson)
+      > AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1) {
+      fail(`检查点 ${checkpoint.throughSequence} 恢复载荷超过安全导入预算`)
+    }
     try {
       resumePayload = JSON.parse(checkpoint.resumePayloadJson)
     } catch {

@@ -1,0 +1,1336 @@
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Bell } from 'lucide-react'
+import { isAIConfigReady } from '../../lib/ai/config-readiness'
+import { parseTextOpenWorldModulesV1 } from '../../lib/open-world/modules'
+import { projectTextOpenWorldPlayerMediaV1 } from '../../lib/open-world/player-media'
+import { projectTextOpenWorldPlayerCombatV1 } from '../../lib/open-world/player-combat'
+import {
+  projectTextOpenWorldPlayerCraftingEconomyReceiptV1,
+  projectTextOpenWorldPlayerCraftingEconomyV1,
+  type TextOpenWorldPlayerCraftingEconomyExecuteRequestV1,
+} from '../../lib/open-world/player-crafting-economy'
+import { projectTextOpenWorldPlayerHudV1 } from '../../lib/open-world/player-hud'
+import { projectTextOpenWorldPlayerEndingV1 } from '../../lib/open-world/player-ending'
+import { textOpenWorldProjectionUnavailableIssueV1 } from '../../lib/open-world/player-resilience'
+import {
+  projectTextOpenWorldPlayerNotificationsV1,
+  type TextOpenWorldPlayerNotificationCategoryV1,
+} from '../../lib/open-world/player-notifications'
+import { projectTextOpenWorldPlayerWorldRecordV1 } from '../../lib/open-world/player-world-record'
+import {
+  generateTextOpenWorldRuntimeIntentV1,
+  type TextOpenWorldRuntimeIntentAuthorizationV1,
+} from '../../lib/open-world/runtime-intent'
+import {
+  createTextOpenWorldRuntimeDialogueFallbackV1,
+  generateTextOpenWorldRuntimeDialogueV1,
+  type TextOpenWorldRuntimeDialogueHistoryTurnV1,
+} from '../../lib/open-world/runtime-dialogue'
+import {
+  generateTextOpenWorldRuntimeExpressionV1,
+  type TextOpenWorldRuntimeExpressionPresentationV1,
+} from '../../lib/open-world/runtime-expression'
+import type { TextOpenWorldRuntimeMemoryDialogueTurnV1 } from '../../lib/open-world/runtime-memory'
+import {
+  generateTextOpenWorldRuntimeQuestPackagingV1,
+  projectTextOpenWorldRuntimeQuestPackagingSlotV1,
+  readTextOpenWorldRuntimeQuestPackagingPresentationsV1,
+  type TextOpenWorldRuntimeQuestPackagingPresentationV1,
+  type TextOpenWorldRuntimeQuestPackagingSlotV1,
+} from '../../lib/open-world/runtime-quest-packaging'
+import { createTextOpenWorldRuntimeAIPreferencesStoreV1 } from '../../lib/open-world/runtime-ai-preferences'
+import {
+  textOpenWorldRuntimeAIPlayerFailureV1,
+  type TextOpenWorldRuntimeAIFailureV1,
+} from '../../lib/open-world/runtime-ai-error'
+import type { TextOpenWorldRuntimeAIObservabilityV1 } from '../../lib/open-world/runtime-ai-observability'
+import { projectTextOpenWorldScenesV1 } from '../../lib/open-world/scene-projection'
+import { deriveTextOpenWorldContextsV1 } from '../../lib/open-world/session-projection'
+import {
+  productRuntimeSourceForSessionV1,
+  resolveProductRuntimeSource,
+} from '../../lib/product-production/preview-source'
+import type { ProductMediaResolverV1, TextOpenWorldCommandSourceV1 } from '../../lib/types'
+import {
+  selectTextOpenWorldVNextActions,
+  useTextOpenWorldPlayerStore,
+} from '../../stores/text-open-world-player'
+import { useAIConfigStore } from '../../stores/ai-config'
+import TextOpenWorldActorsPanel from './TextOpenWorldActorsPanel'
+import TextOpenWorldCharacterPanel from './TextOpenWorldCharacterPanel'
+import TextOpenWorldCombatPanel, { type TextOpenWorldCombatActionRequestV1 } from './TextOpenWorldCombatPanel'
+import TextOpenWorldCraftingEconomyPanel from './TextOpenWorldCraftingEconomyPanel'
+import TextOpenWorldEndingPanel from './TextOpenWorldEndingPanel'
+import TextOpenWorldGameShell from './TextOpenWorldGameShell'
+import TextOpenWorldInventoryPanel from './TextOpenWorldInventoryPanel'
+import TextOpenWorldMapPanel, { type TextOpenWorldMapTravelRequestV1 } from './TextOpenWorldMapPanel'
+import TextOpenWorldQuestLogPanel from './TextOpenWorldQuestLogPanel'
+import TextOpenWorldResultExpressionPanel from './TextOpenWorldResultExpressionPanel'
+import TextOpenWorldRuntimeAIStatusPanel from './TextOpenWorldRuntimeAIStatusPanel'
+import TextOpenWorldScenePanel, {
+  type TextOpenWorldSceneTutorialAvailabilityV1,
+} from './TextOpenWorldScenePanel'
+import TextOpenWorldSaveSettingsPanel from './TextOpenWorldSaveSettingsPanel'
+import TextOpenWorldWorldRecordPanel from './TextOpenWorldWorldRecordPanel'
+
+const QUEST_STATUS_LABELS = {
+  revealed: '可接取',
+  accepted: '已接受',
+  active: '进行中',
+  suspended: '等待玩家',
+  completed: '已完成',
+  failed: '已失败',
+  expired: '已过期',
+  abandoned: '已放弃',
+  withdrawn: '已撤回',
+} as const
+
+const NOTIFICATION_CATEGORY_LABELS: Record<TextOpenWorldPlayerNotificationCategoryV1, string> = {
+  player: '角色', inventory: '物品', quest: '任务', world: '世界', relationship: '关系',
+  combat: '战斗', achievement: '成就', 'random-event': '随机事件',
+}
+
+async function resolveRuntimeAIFailure(error: unknown): Promise<TextOpenWorldRuntimeAIFailureV1> {
+  const known = textOpenWorldRuntimeAIPlayerFailureV1(error)
+  if (known) return known
+  const { classifyTextOpenWorldRuntimeAIFailureV1 } = await import(
+    '../../lib/open-world/runtime-ai-resilience'
+  )
+  return classifyTextOpenWorldRuntimeAIFailureV1({ error })
+}
+
+export default function TextOpenWorldVNextPlayer() {
+  const store = useTextOpenWorldPlayerStore()
+  const aiConfig = useAIConfigStore(state => state.config)
+  const intentAbortController = useRef<AbortController | null>(null)
+  const expressionAbortController = useRef<AbortController | null>(null)
+  const questPackagingAbortController = useRef<AbortController | null>(null)
+  const memoryAbortController = useRef<AbortController | null>(null)
+  const [resultExpression, setResultExpression] = useState<TextOpenWorldRuntimeExpressionPresentationV1 | null>(null)
+  const [resultExpressionBusy, setResultExpressionBusy] = useState(false)
+  const [resultExpressionIssue, setResultExpressionIssue] = useState<TextOpenWorldRuntimeAIFailureV1 | null>(null)
+  const [questPackagingPresentations, setQuestPackagingPresentations] = useState<Record<string, TextOpenWorldRuntimeQuestPackagingPresentationV1>>({})
+  const [questPackagingBusyInstanceKey, setQuestPackagingBusyInstanceKey] = useState<string | null>(null)
+  const [questPackagingIssue, setQuestPackagingIssue] = useState<{
+    questInstanceKey: string
+    failure: TextOpenWorldRuntimeAIFailureV1
+  } | null>(null)
+  const [runtimeAIObservability, setRuntimeAIObservability] = useState<TextOpenWorldRuntimeAIObservabilityV1 | null>(null)
+  const [runtimeAIObservabilityLoading, setRuntimeAIObservabilityLoading] = useState(false)
+  const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({})
+  const [mediaFailures, setMediaFailures] = useState<Array<{ assetKey: string; reason: string }>>([])
+  const [mediaLoading, setMediaLoading] = useState(false)
+  const [dismissedCombatIdentity, setDismissedCombatIdentity] = useState<string | null>(null)
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    actionKey: string
+    targetKey: string | null
+    label: string
+    description: string
+    sessionId: number
+    baseSequence: number
+    source: TextOpenWorldCommandSourceV1
+    runtimeIntentAuthorization?: TextOpenWorldRuntimeIntentAuthorizationV1
+  } | null>(null)
+  const [liveAnnouncement, setLiveAnnouncement] = useState<{
+    sessionId: number
+    notificationId: string
+    text: string
+  } | null>(null)
+  const notificationCursor = useRef<{ sessionId: number; throughSequence: number } | null>(null)
+  const questMapRequestCounter = useRef(0)
+  const [questMapFocus, setQuestMapFocus] = useState<{
+    sessionKey: number | string
+    locationKey: string
+    requestId: number
+  } | null>(null)
+  const [sceneTutorialAvailability, setSceneTutorialAvailability] = useState<{
+    sessionKey: number | string | null
+    value: TextOpenWorldSceneTutorialAvailabilityV1
+  }>({
+    sessionKey: null,
+    value: { systemActions: false, fixedChoices: false, naturalInput: false, actionKeys: [] },
+  })
+  const projection = store.runtimeState.textOpenWorld
+  const storeIssue = store.issue
+  const runtimePackage = store.selectedManifest?.textOpenWorldVNext
+  const projectedActions = selectTextOpenWorldVNextActions(store)
+  const availableActions = projectedActions.filter(action => action.available)
+  const modules = useMemo(
+    () => runtimePackage ? parseTextOpenWorldModulesV1(runtimePackage) : null,
+    [runtimePackage],
+  )
+  const sceneProjection = useMemo(
+    () => projection ? projectTextOpenWorldScenesV1(projection) : null,
+    [projection],
+  )
+  const questPackagingSlots = useMemo(() => {
+    if (!projection || !runtimePackage) return {} as Record<string, TextOpenWorldRuntimeQuestPackagingSlotV1>
+    const slots: Record<string, TextOpenWorldRuntimeQuestPackagingSlotV1> = {}
+    for (const instance of Object.values(projection.state.quests.instancesByKey)) {
+      const slot = projectTextOpenWorldRuntimeQuestPackagingSlotV1({
+        runtimePackage,
+        projection,
+        questInstanceKey: instance.instanceKey,
+      })
+      if (slot) slots[slot.questInstanceKey] = slot
+    }
+    return slots
+  }, [projection, runtimePackage])
+  const session = store.selectedSession
+    ?? store.sessions.find(item => item.id === store.selectedSessionId)
+    ?? null
+  const selectedSessionId = session?.id ?? store.selectedSessionId
+  const sessionKey = session?.id
+    ?? store.selectedSessionId
+    ?? runtimePackage?.metadata.packageKey
+    ?? 'no-session'
+  const presentationAssets = useMemo(
+    () => store.selectedManifest?.presentation?.assets ?? [],
+    [store.selectedManifest],
+  )
+  const mediaAssetSignature = presentationAssets
+    .map(asset => `${asset.assetKey}@${asset.version}:${asset.contentHash}:${asset.byteSize}`)
+    .sort()
+    .join('|')
+  const mediaSlotAssetKeys = useMemo(() => modules
+    ? (() => {
+        const chosenSubjects = new Set<string>()
+        return [...modules.presentation.mediaSlots]
+          .filter(slot => slot.kind === 'background' || slot.kind === 'portrait')
+          .sort((left, right) => Number(right.required) - Number(left.required) || left.key.localeCompare(right.key))
+          .flatMap(slot => {
+            const subject = `${slot.kind}:${slot.subjectKind}:${slot.subjectKey}`
+            if (chosenSubjects.has(subject)) return []
+            chosenSubjects.add(subject)
+            return slot.assetKey == null ? [] : [slot.assetKey]
+          })
+      })()
+    : [], [modules])
+  const mediaSlotAssetSignature = mediaSlotAssetKeys.join('|')
+  useEffect(() => {
+    let cancelled = false
+    let resolver: ProductMediaResolverV1 | null = null
+    setMediaUrls({})
+    setMediaFailures([])
+    if (!store.scope || !session || presentationAssets.length === 0 || mediaSlotAssetKeys.length === 0) {
+      setMediaLoading(false)
+      return () => { cancelled = true }
+    }
+    setMediaLoading(true)
+    const expectedRuntimeSourceHash = session.runtimeSourceHash
+    void (async () => {
+      try {
+        const source = await productRuntimeSourceForSessionV1(session)
+        const resolved = await resolveProductRuntimeSource({ scope: store.scope!, source })
+        resolver = resolved.mediaResolver
+        if (cancelled) {
+          resolver.dispose()
+          resolver = null
+          return
+        }
+        if (resolved.runtimeSourceHash !== expectedRuntimeSourceHash) {
+          throw new Error('玩家媒资来源与当前存档绑定的不可变运行包不一致')
+        }
+        const result = await resolver.preload({
+          assetKeys: mediaSlotAssetKeys,
+          maximumBytes: 64 * 1024 * 1024,
+        })
+        if (cancelled) return
+        setMediaUrls(result.urls)
+        setMediaFailures(result.failures)
+      } catch (error) {
+        if (cancelled) return
+        resolver?.dispose()
+        resolver = null
+        const reason = error instanceof Error ? error.message : String(error)
+        setMediaFailures(mediaSlotAssetKeys.map(assetKey => ({ assetKey, reason })))
+      } finally {
+        if (!cancelled) setMediaLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+      resolver?.dispose()
+    }
+  }, [
+    mediaAssetSignature,
+    mediaSlotAssetKeys,
+    mediaSlotAssetSignature,
+    presentationAssets.length,
+    session,
+    store.scope,
+  ])
+  const playerMedia = useMemo(() => (
+    projection && modules
+      ? projectTextOpenWorldPlayerMediaV1({
+          modules,
+          assets: presentationAssets,
+          urls: mediaUrls,
+          currentLocationKey: projection.state.map.currentLocationKey,
+        })
+      : null
+  ), [mediaUrls, modules, presentationAssets, projection])
+  const feedbackReceiptHash = store.lastFeedback?.receiptHash ?? null
+  const productionKey = store.selectedManifest?.definition.productKey
+    ?? `unavailable-product:${sessionKey}`
+  const runtimeAIPreferencesStore = useMemo(
+    () => createTextOpenWorldRuntimeAIPreferencesStoreV1(productionKey),
+    [productionKey],
+  )
+  const runtimeAIPreferences = useSyncExternalStore(
+    runtimeAIPreferencesStore.subscribe,
+    runtimeAIPreferencesStore.getSnapshot,
+    runtimeAIPreferencesStore.getServerSnapshot,
+  )
+  const runtimeDirectionAIConfig = runtimeAIPreferences.directionEnabled && isAIConfigReady(aiConfig)
+    ? aiConfig
+    : undefined
+  const refreshRuntimeAIObservability = useCallback(async () => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    if (!liveStore.scope || liveSessionId == null) {
+      setRuntimeAIObservability(null)
+      return
+    }
+    setRuntimeAIObservabilityLoading(true)
+    try {
+      const { projectTextOpenWorldRuntimeAIObservabilityV1 } = await import(
+        '../../lib/open-world/runtime-ai-observability'
+      )
+      const value = await projectTextOpenWorldRuntimeAIObservabilityV1({
+        scope: liveStore.scope,
+        productRuntimeSessionId: liveSessionId,
+      })
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (currentSessionId === liveSessionId) setRuntimeAIObservability(value)
+    } finally {
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (currentSessionId === liveSessionId) setRuntimeAIObservabilityLoading(false)
+    }
+  }, [])
+  const handleSceneTutorialAvailability = useCallback((
+    value: TextOpenWorldSceneTutorialAvailabilityV1,
+  ) => {
+    setSceneTutorialAvailability(current => (
+      current.sessionKey === sessionKey
+        && current.value.systemActions === value.systemActions
+        && current.value.fixedChoices === value.fixedChoices
+        && current.value.naturalInput === value.naturalInput
+        && current.value.actionKeys.length === value.actionKeys.length
+        && current.value.actionKeys.every((key, index) => key === value.actionKeys[index])
+        ? current
+        : { sessionKey, value }
+    ))
+  }, [sessionKey])
+  const projectionSequence = projection?.lastEventSequence ?? null
+  // These are cheap, deterministic render projections. Recompute rather than
+  // caching by object identity so an externally restored mutable snapshot can
+  // never leave stale HUD facts on screen.
+  const hud = projection ? projectTextOpenWorldPlayerHudV1(projection) : null
+  const notificationProjection = useMemo((): {
+    ready: boolean
+    entries: ReturnType<typeof projectTextOpenWorldPlayerNotificationsV1>
+  } => {
+    if (!projection || projectionSequence == null || selectedSessionId == null) {
+      return { ready: true, entries: [] }
+    }
+    try {
+      return {
+        ready: true,
+        entries: projectTextOpenWorldPlayerNotificationsV1({
+          sessionId: selectedSessionId,
+          projection,
+          events: store.events,
+        }),
+      }
+    } catch {
+      // readDetails obtains state and events independently. A concurrent commit
+      // can briefly make one snapshot newer; wait for the next governed refresh
+      // instead of crashing or guessing a partial notification.
+      return { ready: false, entries: [] }
+    }
+  }, [projection, projectionSequence, selectedSessionId, store.events])
+  const notificationsReady = notificationProjection.ready
+  const notifications = notificationProjection.entries
+  const worldRecordProjectionResult = useMemo(() => {
+    if (!projection || projectionSequence == null || selectedSessionId == null) {
+      return { ready: true, value: null }
+    }
+    try {
+      return {
+        ready: true,
+        value: projectTextOpenWorldPlayerWorldRecordV1({
+          sessionId: selectedSessionId,
+          projection,
+          events: store.events,
+        }),
+      }
+    } catch {
+      return { ready: false, value: null }
+    }
+  }, [projection, projectionSequence, selectedSessionId, store.events])
+  const worldRecordProjection = worldRecordProjectionResult.value
+  const combatProjectionResult = useMemo((): {
+    ready: boolean
+    value: ReturnType<typeof projectTextOpenWorldPlayerCombatV1>
+  } => {
+    if (!projection?.state.combat || projectionSequence == null) return { ready: true, value: null }
+    if (selectedSessionId == null) return { ready: false, value: null }
+    try {
+      return {
+        ready: true,
+        value: projectTextOpenWorldPlayerCombatV1({
+          sessionId: selectedSessionId,
+          projection,
+          events: store.events,
+          projectedActions,
+          checkpoints: store.checkpoints,
+        }),
+      }
+    } catch {
+      // Projection and Event rows are loaded independently. Until the exact
+      // same-Session prefix aligns, combat remains read-only and fail-closed.
+      return { ready: false, value: null }
+    }
+  }, [projection, projectionSequence, projectedActions, selectedSessionId, store.checkpoints, store.events])
+  const combatProjection = combatProjectionResult.value
+  const craftingEconomyProjectionResult = useMemo(() => {
+    if (!projection || selectedSessionId == null) return { ready: true, value: null }
+    try {
+      return {
+        ready: true,
+        value: projectTextOpenWorldPlayerCraftingEconomyV1({
+          sessionId: selectedSessionId,
+          projection,
+          runtimeEventSequence: store.runtimeState.lastSequence,
+        }),
+      }
+    } catch {
+      return { ready: false, value: null }
+    }
+  }, [projection, selectedSessionId, store.runtimeState.lastSequence])
+  const craftingEconomyProjection = craftingEconomyProjectionResult.value
+  const endingProjectionResult = useMemo(() => {
+    if (!projection) return { ready: true, value: null }
+    try {
+      return {
+        ready: true,
+        value: projectTextOpenWorldPlayerEndingV1({
+          projection,
+          sessionStatus: session?.status ?? 'active',
+        }),
+      }
+    } catch {
+      return { ready: false, value: null }
+    }
+  }, [projection, session?.status])
+  const endingProjection = endingProjectionResult.value
+  const projectionIssue = !notificationsReady
+    || !combatProjectionResult.ready
+    || !worldRecordProjectionResult.ready
+    || !craftingEconomyProjectionResult.ready
+    || !endingProjectionResult.ready
+    ? textOpenWorldProjectionUnavailableIssueV1()
+    : null
+  const issue = storeIssue ?? projectionIssue
+  const interactionLocked = store.busy || store.loading
+    || issue?.gameplayAvailability !== undefined && issue.gameplayAvailability !== 'enabled'
+  const endingReached = endingProjection != null && endingProjection.phase !== 'in-progress'
+  const gameplayLocked = interactionLocked || endingReached || session?.status !== 'active'
+  const combatIdentity = combatProjection
+    ? `${combatProjection.operationIdentity.sessionId}:${combatProjection.operationIdentity.combatInstanceKey ?? 'legacy'}`
+    : null
+  const dismissConfirmation = useCallback(() => setPendingConfirmation(null), [])
+  const focusQuestLocation = useCallback((locationKey: string) => {
+    questMapRequestCounter.current += 1
+    setQuestMapFocus({ sessionKey, locationKey, requestId: questMapRequestCounter.current })
+  }, [sessionKey])
+
+  useEffect(() => {
+    setPendingConfirmation(null)
+    intentAbortController.current?.abort()
+    intentAbortController.current = null
+    memoryAbortController.current?.abort()
+    memoryAbortController.current = null
+    return () => {
+      intentAbortController.current?.abort()
+      intentAbortController.current = null
+      memoryAbortController.current?.abort()
+      memoryAbortController.current = null
+    }
+  }, [projectionSequence, sessionKey])
+
+  useEffect(() => {
+    setRuntimeAIObservability(null)
+    void refreshRuntimeAIObservability()
+  }, [projectionSequence, refreshRuntimeAIObservability, sessionKey])
+
+  useEffect(() => {
+    expressionAbortController.current?.abort()
+    expressionAbortController.current = null
+    setResultExpression(null)
+    setResultExpressionBusy(false)
+    setResultExpressionIssue(null)
+    return () => {
+      expressionAbortController.current?.abort()
+      expressionAbortController.current = null
+    }
+  }, [feedbackReceiptHash, sessionKey])
+
+  useEffect(() => {
+    questPackagingAbortController.current?.abort()
+    questPackagingAbortController.current = null
+    setQuestPackagingPresentations({})
+    setQuestPackagingBusyInstanceKey(null)
+    setQuestPackagingIssue(null)
+    return () => {
+      questPackagingAbortController.current?.abort()
+      questPackagingAbortController.current = null
+    }
+  }, [sessionKey])
+
+  useEffect(() => {
+    if (!store.scope || selectedSessionId == null) return
+    let cancelled = false
+    void readTextOpenWorldRuntimeQuestPackagingPresentationsV1({
+      scope: store.scope,
+      productRuntimeSessionId: selectedSessionId,
+    }).then(presentations => {
+      if (!cancelled) setQuestPackagingPresentations(presentations)
+    }).catch(() => {
+      // The canonical frozen quest presentation is already visible. Restore
+      // failures therefore remain a safe no-op instead of blocking play.
+    })
+    return () => { cancelled = true }
+  }, [selectedSessionId, sessionKey, store.scope])
+
+  useEffect(() => {
+    setQuestMapFocus(null)
+    setDismissedCombatIdentity(null)
+  }, [sessionKey])
+
+  useEffect(() => {
+    if (combatProjection?.result.status === 'none') setDismissedCombatIdentity(null)
+  }, [combatIdentity, combatProjection?.result.status])
+
+  useEffect(() => {
+    if (selectedSessionId == null || projectionSequence == null) {
+      notificationCursor.current = null
+      setLiveAnnouncement(null)
+      return
+    }
+    if (!notificationsReady) return
+    const cursor = notificationCursor.current
+    if (!cursor || cursor.sessionId !== selectedSessionId) {
+      // Loading or switching a Session establishes a baseline. Historical
+      // changes stay visible in the log but are never replayed as fresh alerts.
+      notificationCursor.current = {
+        sessionId: selectedSessionId,
+        throughSequence: projectionSequence,
+      }
+      setLiveAnnouncement(null)
+      return
+    }
+    if (projectionSequence <= cursor.throughSequence) return
+    const fresh = notifications.filter(notification => (
+      notification.effectsEventSequence > cursor.throughSequence
+      && notification.effectsEventSequence <= projectionSequence
+      && notification.origin === 'system'
+      && notification.priority !== 'normal'
+    ))
+    notificationCursor.current = {
+      sessionId: selectedSessionId,
+      throughSequence: Math.max(cursor.throughSequence, projectionSequence),
+    }
+    if (fresh.length) {
+      setLiveAnnouncement({
+        sessionId: selectedSessionId,
+        notificationId: fresh.map(notification => notification.id).join('|'),
+        text: fresh.map(notification => (
+          `${notification.headline}${notification.details[0] ? `：${notification.details[0]}` : ''}`
+        )).join('；'),
+      })
+    }
+  }, [notifications, notificationsReady, projectionSequence, selectedSessionId])
+
+  if (!projection || !runtimePackage || !modules || !sceneProjection || !hud) return null
+
+  const release = session?.productReleaseId == null
+    ? null
+    : store.releases.find(item => item.release.id === session.productReleaseId)?.release ?? null
+  const runtimeSourceEvidence = session?.runtimeSourceHash?.slice(0, 12) || '证据缺失'
+  const sourceLabel = store.selectedSessionSource === 'build-preview'
+    ? `TEXT-OPEN-WORLD vNEXT · BUILD PREVIEW · 非正式发布 · Build ID #${session?.productBuildId ?? '?'} · 包 ${runtimeSourceEvidence}`
+    : `TEXT-OPEN-WORLD vNEXT · PRODUCT RELEASE v${release?.version ?? '?'} · 已固定 · 包 ${runtimeSourceEvidence}`
+  const state = projection.state
+  const location = modules.world.locations.find(item => item.key === state.map.currentLocationKey)
+  const region = modules.world.regions.find(item => item.key === location?.regionKey)
+  const derived = deriveTextOpenWorldContextsV1(projection)
+
+  const run = async (operation: () => Promise<unknown>) => {
+    try {
+      await operation()
+    } catch {
+      // The governed store owns player-visible diagnostics.
+    }
+  }
+  const generateResultExpression = () => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    const receipt = liveStore.lastFeedback
+    if (!liveStore.scope || liveSessionId == null || !receipt
+      || receipt.sessionId !== liveSessionId || receipt.phase !== 'terminal'
+      || !receipt.outcomeCommitted || !receipt.commandId) return
+    expressionAbortController.current?.abort()
+    const controller = new AbortController()
+    const receiptHash = receipt.receiptHash
+    expressionAbortController.current = controller
+    setResultExpression(null)
+    setResultExpressionIssue(null)
+    setResultExpressionBusy(true)
+    void generateTextOpenWorldRuntimeExpressionV1({
+      scope: liveStore.scope,
+      productRuntimeSessionId: liveSessionId,
+      receipt,
+      aiConfig,
+      signal: controller.signal,
+    }).then(presentation => {
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (controller.signal.aborted || currentSessionId !== liveSessionId
+        || current.lastFeedback?.receiptHash !== receiptHash) return
+      setResultExpression(presentation)
+    }).catch(error => {
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (controller.signal.aborted || currentSessionId !== liveSessionId
+        || current.lastFeedback?.receiptHash !== receiptHash) return
+      const known = textOpenWorldRuntimeAIPlayerFailureV1(error)
+      if (known) setResultExpressionIssue(known)
+      else void resolveRuntimeAIFailure(error).then(failure => {
+        const latest = useTextOpenWorldPlayerStore.getState()
+        const latestSessionId = latest.selectedSession?.id ?? latest.selectedSessionId
+        if (latestSessionId === liveSessionId
+          && latest.lastFeedback?.receiptHash === receiptHash) setResultExpressionIssue(failure)
+      })
+    }).finally(() => {
+      if (expressionAbortController.current === controller) expressionAbortController.current = null
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (!controller.signal.aborted && currentSessionId === liveSessionId
+        && current.lastFeedback?.receiptHash === receiptHash) {
+        setResultExpressionBusy(false)
+        void refreshRuntimeAIObservability()
+      }
+    })
+  }
+  const generateQuestPackaging = (questInstanceKey: string) => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    const liveProjection = liveStore.runtimeState.textOpenWorld
+    const livePackage = liveStore.selectedManifest?.textOpenWorldVNext
+    if (!liveStore.scope || liveSessionId == null || !liveProjection || !livePackage) return
+    const slot = projectTextOpenWorldRuntimeQuestPackagingSlotV1({
+      runtimePackage: livePackage,
+      projection: liveProjection,
+      questInstanceKey,
+    })
+    if (!slot?.generation.available) return
+    questPackagingAbortController.current?.abort()
+    const controller = new AbortController()
+    questPackagingAbortController.current = controller
+    setQuestPackagingBusyInstanceKey(questInstanceKey)
+    setQuestPackagingIssue(null)
+    void generateTextOpenWorldRuntimeQuestPackagingV1({
+      scope: liveStore.scope,
+      productRuntimeSessionId: liveSessionId,
+      questInstanceKey,
+      aiConfig,
+      signal: controller.signal,
+    }).then(presentation => {
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      const currentProjection = current.runtimeState.textOpenWorld
+      const currentPackage = current.selectedManifest?.textOpenWorldVNext
+      if (controller.signal.aborted || currentSessionId !== liveSessionId || !currentProjection || !currentPackage) return
+      const currentSlot = projectTextOpenWorldRuntimeQuestPackagingSlotV1({
+        runtimePackage: currentPackage,
+        projection: currentProjection,
+        questInstanceKey,
+      })
+      if (!currentSlot || currentSlot.templateKey !== presentation.templateKey
+        || currentSlot.regionKey !== presentation.regionKey) return
+      setQuestPackagingPresentations(currentPresentations => ({
+        ...currentPresentations,
+        [questInstanceKey]: presentation,
+      }))
+      setQuestPackagingIssue(currentIssue => currentIssue?.questInstanceKey === questInstanceKey ? null : currentIssue)
+    }).catch(error => {
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (controller.signal.aborted || currentSessionId !== liveSessionId) return
+      const known = textOpenWorldRuntimeAIPlayerFailureV1(error)
+      if (known) setQuestPackagingIssue({ questInstanceKey, failure: known })
+      else void resolveRuntimeAIFailure(error).then(failure => {
+        const latest = useTextOpenWorldPlayerStore.getState()
+        const latestSessionId = latest.selectedSession?.id ?? latest.selectedSessionId
+        if (latestSessionId === liveSessionId) setQuestPackagingIssue({ questInstanceKey, failure })
+      })
+    }).finally(() => {
+      if (questPackagingAbortController.current === controller) questPackagingAbortController.current = null
+      const current = useTextOpenWorldPlayerStore.getState()
+      const currentSessionId = current.selectedSession?.id ?? current.selectedSessionId
+      if (!controller.signal.aborted && currentSessionId === liveSessionId) {
+        setQuestPackagingBusyInstanceKey(currentBusy => currentBusy === questInstanceKey ? null : currentBusy)
+        void refreshRuntimeAIObservability()
+      }
+    })
+  }
+  const executeProjectedAction = (
+    action: typeof projectedActions[number],
+    explicitTargetKey?: string | null,
+    source: TextOpenWorldCommandSourceV1 = 'system-action',
+    expectedBaseSequence?: number,
+    runtimeIntentAuthorization?: TextOpenWorldRuntimeIntentAuthorizationV1,
+  ) => {
+    if (gameplayLocked || !action.available) return
+    if (action.targetScope === 'combatant' && explicitTargetKey === undefined) return
+    const targetKey = explicitTargetKey !== undefined
+      ? explicitTargetKey
+      : action.targetScope === 'none' ? null : action.validTargetKeys[0] ?? null
+    if (action.confirmationRequired) {
+      const sessionId = session?.id ?? store.selectedSessionId
+      if (sessionId == null) return
+      setPendingConfirmation({
+        actionKey: action.action.key,
+        targetKey,
+        label: action.action.label,
+        description: action.action.description,
+        sessionId,
+        baseSequence: expectedBaseSequence ?? store.runtimeState.lastSequence,
+        source,
+        ...(runtimeIntentAuthorization ? { runtimeIntentAuthorization } : {}),
+      })
+      return
+    }
+    void run(() => source === 'system-action'
+      && expectedBaseSequence == null
+      && runtimeIntentAuthorization == null
+      && runtimeDirectionAIConfig == null
+      ? store.executeVNextAction(action.action.key, targetKey)
+      : store.executeVNextAction(action.action.key, targetKey, {
+          source,
+          ...(runtimeIntentAuthorization ? { runtimeIntentAuthorization } : {}),
+          ...(expectedBaseSequence == null ? {} : { expectedBaseSequence }),
+          ...(runtimeDirectionAIConfig ? { runtimeDirectionAIConfig } : {}),
+        }))
+  }
+
+  const interpretNaturalInput = async (request: {
+    utterance: string
+    selectedSceneKey: string
+    recentDialogue: readonly TextOpenWorldRuntimeDialogueHistoryTurnV1[]
+  }) => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    const liveProjection = liveStore.runtimeState.textOpenWorld
+    if (!liveStore.scope || liveSessionId == null || liveProjection == null
+      || liveSessionId !== selectedSessionId
+      || liveProjection.lastEventSequence !== projection.lastEventSequence
+      || liveStore.runtimeState.lastSequence !== store.runtimeState.lastSequence) {
+      throw new Error('当前场景已经变化，请重新输入。')
+    }
+    intentAbortController.current?.abort()
+    const controller = new AbortController()
+    intentAbortController.current = controller
+    try {
+      const intent = await generateTextOpenWorldRuntimeIntentV1({
+        scope: liveStore.scope,
+        productRuntimeSessionId: liveSessionId,
+        selectedSceneKey: request.selectedSceneKey,
+        utterance: request.utterance,
+        aiConfig,
+        signal: controller.signal,
+      })
+      if (intent.status !== 'reply-only') return intent
+      const liveScenes = projectTextOpenWorldScenesV1(liveProjection)
+      const selectedScene = liveScenes.status === 'ready'
+        ? liveScenes.scenes.find(item => item.key === request.selectedSceneKey)
+        : null
+      if (!selectedScene?.actor || selectedScene.sourceKind !== 'actor-dialogue') return intent
+      try {
+        const dialogue = await generateTextOpenWorldRuntimeDialogueV1({
+          scope: liveStore.scope,
+          productRuntimeSessionId: liveSessionId,
+          selectedSceneKey: request.selectedSceneKey,
+          utterance: request.utterance,
+          recentDialogue: request.recentDialogue,
+          aiConfig,
+          signal: controller.signal,
+        })
+        return { ...intent, dialogue }
+      } catch (error) {
+        if (controller.signal.aborted) throw error
+        const runtimeAIFailure = textOpenWorldRuntimeAIPlayerFailureV1(error)
+          ?? await resolveRuntimeAIFailure(error)
+        return {
+          ...intent,
+          dialogue: createTextOpenWorldRuntimeDialogueFallbackV1(selectedScene),
+          runtimeAIFailure,
+        }
+      }
+    } finally {
+      if (intentAbortController.current === controller) intentAbortController.current = null
+      void refreshRuntimeAIObservability()
+    }
+  }
+
+  const commitDialogueMemory = async (request: {
+    selectedSceneKey: string
+    actorKey: string
+    dialogue: readonly TextOpenWorldRuntimeMemoryDialogueTurnV1[]
+  }) => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    const liveProjection = liveStore.runtimeState.textOpenWorld
+    if (!liveStore.scope || liveSessionId == null || liveProjection == null
+      || liveSessionId !== selectedSessionId
+      || liveProjection.lastEventSequence !== projection.lastEventSequence
+      || liveStore.runtimeState.lastSequence !== store.runtimeState.lastSequence) {
+      throw new Error('当前场景已经变化，请重新形成长期记忆。')
+    }
+    if (!isAIConfigReady(aiConfig)) throw new Error('当前没有可用的文字模型配置。')
+    memoryAbortController.current?.abort()
+    const controller = new AbortController()
+    memoryAbortController.current = controller
+    try {
+      const { generateAndCommitTextOpenWorldRuntimeMemoryV1 } = await import('../../lib/open-world/runtime-memory')
+      const result = await generateAndCommitTextOpenWorldRuntimeMemoryV1({
+        scope: liveStore.scope,
+        productRuntimeSessionId: liveSessionId,
+        selectedSceneKey: request.selectedSceneKey,
+        actorKey: request.actorKey,
+        dialogue: request.dialogue,
+        terminalCommandIds: liveStore.lastFeedback?.phase === 'terminal'
+          && liveStore.lastFeedback.outcomeCommitted
+          && liveStore.lastFeedback.commandId
+          ? [liveStore.lastFeedback.commandId]
+          : [],
+        aiConfig,
+        signal: controller.signal,
+      })
+      await useTextOpenWorldPlayerStore.getState().select(liveSessionId)
+      return result
+    } finally {
+      if (memoryAbortController.current === controller) memoryAbortController.current = null
+      void refreshRuntimeAIObservability()
+    }
+  }
+
+  const trackedQuestContent = <section className="open-world-game-rail-card" aria-label="当前任务">
+    <small>当前任务</small>
+    {hud.primaryQuest ? <>
+      <strong>{hud.primaryQuest.title}</strong>
+      <span>
+        {QUEST_STATUS_LABELS[hud.primaryQuest.status]}
+        {hud.primaryQuest.currentStage ? ` · ${hud.primaryQuest.currentStage.title}` : ''}
+      </span>
+      {hud.primaryQuest.nextRequiredObjective && <p>
+        下一目标：{hud.primaryQuest.nextRequiredObjective.title}
+      </p>}
+      {hud.primaryQuest.deadline.label && <span className={hud.primaryQuest.deadline.expired ? 'text-danger' : 'text-warning'}>
+        {hud.primaryQuest.deadline.label}
+      </span>}
+    </> : <p>当前没有主追踪任务</p>}
+    {!!hud.pinnedQuests.length && <div className="open-world-game-pinned-quests" aria-label="钉选任务">
+      <small>钉选</small>
+      {hud.pinnedQuests.map(quest => <span key={quest.instanceKey}>
+        {quest.title}{quest.deadline.label ? ` · ${quest.deadline.label}` : ''}
+      </span>)}
+    </div>}
+  </section>
+
+  const handleCombatAction = (request: TextOpenWorldCombatActionRequestV1) => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    const liveProjection = liveStore.runtimeState.textOpenWorld
+    const liveCombat = liveProjection?.state.combat
+    if (request.sessionId !== liveSessionId
+      || liveProjection == null
+      || !liveCombat
+      || !('version' in liveCombat)
+      || request.combatInstanceKey !== liveCombat.instanceKey
+      || request.expectedBaseSequence !== liveStore.runtimeState.lastSequence
+      || request.expectedBaseSequence !== liveProjection.lastEventSequence) return
+    const liveActions = selectTextOpenWorldVNextActions(liveStore)
+    const action = liveActions.find(item => item.action.key === request.actionKey)
+    if (!action?.available) return
+    if (action.targetScope === 'combatant' && (!request.targetKey || !action.validTargetKeys.includes(request.targetKey))) return
+    if (action.targetScope === 'none' && request.targetKey != null) return
+    if (action.targetScope === 'item' && (!request.targetKey || !action.validTargetKeys.includes(request.targetKey))) return
+    executeProjectedAction(action, request.targetKey, 'system-action', request.expectedBaseSequence)
+  }
+
+  const handleCraftingEconomyAction = async (
+    request: TextOpenWorldPlayerCraftingEconomyExecuteRequestV1,
+  ) => {
+    const liveStore = useTextOpenWorldPlayerStore.getState()
+    const liveSessionId = liveStore.selectedSession?.id ?? liveStore.selectedSessionId
+    const liveProjection = liveStore.runtimeState.textOpenWorld
+    if (request.sessionId !== liveSessionId
+      || liveProjection == null
+      || request.expectedBaseSequence !== liveStore.runtimeState.lastSequence) {
+      throw new Error('制作或交易状态已经变化，请重新选择并确认。')
+    }
+
+    const liveScreen = projectTextOpenWorldPlayerCraftingEconomyV1({
+      sessionId: request.sessionId,
+      projection: liveProjection,
+      runtimeEventSequence: liveStore.runtimeState.lastSequence,
+    })
+    const executable = request.kind === 'craft'
+      ? (() => {
+          const recipe = liveScreen.crafting.learnedRecipes.find(candidate => (
+            candidate.operationTargetKey === request.targetKey
+          ))
+          return recipe?.available === true
+            && recipe.maximumQuantity >= request.quantity
+            && recipe.action?.available === true
+            && recipe.action.actionKey === request.actionKey
+            && recipe.action.targetKey === request.targetKey
+        })()
+      : (() => {
+          const vendor = liveScreen.vendors.find(candidate => (
+            candidate.operationTargetKey === request.targetKey
+          ))
+          const item = (request.kind === 'buy' ? vendor?.buy : vendor?.sell)?.find(candidate => (
+            candidate.operationItemKey === request.itemKey
+          ))
+          return vendor?.available === true
+            && item?.available === true
+            && item.maximumQuantity >= request.quantity
+            && item.action?.available === true
+            && item.action.actionKey === request.actionKey
+            && item.action.targetKey === request.targetKey
+            && item.action.itemKey === request.itemKey
+        })()
+    if (!executable) throw new Error('制作或交易条件已经变化，请重新选择并确认。')
+
+    // Receipt sanitization must compare the committed change with the exact
+    // pre-command state, not with the refreshed post-command projection.
+    const submissionProjection = structuredClone(liveProjection)
+    const feedback = await liveStore.executeVNextAction(
+      request.actionKey,
+      request.targetKey,
+      {
+        expectedBaseSequence: request.expectedBaseSequence,
+        quantity: request.quantity,
+        confirmed: true,
+        ...(runtimeDirectionAIConfig ? { runtimeDirectionAIConfig } : {}),
+        ...(request.kind === 'craft' ? {} : { itemKey: request.itemKey }),
+      },
+    )
+    return projectTextOpenWorldPlayerCraftingEconomyReceiptV1({
+      projection: submissionProjection,
+      runtimeEventSequence: request.expectedBaseSequence,
+      request,
+      receipt: feedback,
+    })
+  }
+
+  const combatSurfaceVisible = state.combat != null
+    && (!combatIdentity || dismissedCombatIdentity !== combatIdentity)
+  const combatTutorialAvailable = combatSurfaceVisible
+    && combatProjectionResult.ready
+    && combatProjection != null
+  const hasVisibleQuest = Object.values(state.quests.instancesByKey).some(instance => (
+    instance.offeredAtWorldMinute != null
+    && instance.status !== 'locked'
+    && instance.status !== 'available'
+  ))
+  const hasInventoryContent = Object.values(state.inventory.stackQuantities).some(quantity => quantity > 0)
+    || Object.keys(state.inventory.itemInstances).length > 0
+  const currentSceneTutorialAvailability = sceneTutorialAvailability.sessionKey === sessionKey
+    ? sceneTutorialAvailability.value
+    : { systemActions: false, fixedChoices: false, naturalInput: false, actionKeys: [] }
+  // The ScenePanel owns which of several eligible scenes is actually selected.
+  // Do not let a later global feature consume this render cycle before that
+  // child has reported the controls that are genuinely on screen.
+  const tutorialAvailabilityReady = combatSurfaceVisible
+    || sceneTutorialAvailability.sessionKey === sessionKey
+  const tutorialFeatureAvailability = {
+    scene: true,
+    'system-actions': !combatSurfaceVisible && currentSceneTutorialAvailability.systemActions,
+    'fixed-choices': !combatSurfaceVisible && currentSceneTutorialAvailability.fixedChoices,
+    'natural-input': !combatSurfaceVisible && currentSceneTutorialAvailability.naturalInput,
+    quests: hasVisibleQuest,
+    'map-travel': availableActions.some(action => (
+      action.action.category === 'travel' || action.action.category === 'fast-travel'
+    )),
+    combat: combatTutorialAvailable,
+    'inventory-equipment': hasInventoryContent,
+    crafting: (craftingEconomyProjection?.crafting.learnedRecipes.length ?? 0) > 0,
+    shop: craftingEconomyProjection?.vendors.some(vendor => vendor.available) ?? false,
+    character: true,
+    skills: modules.progression.skills.length > 0,
+    relationships: worldRecordProjection != null,
+    'world-status': true,
+    'formal-save': store.selectedSessionSource === 'release',
+    'settings-help': true,
+  } as const
+  const tutorialFeatureSupport = {
+    scene: true,
+    'system-actions': modules.narrative.scenes.some(scene => scene.actionKeys.length > 0),
+    'fixed-choices': modules.narrative.fixedChoices.length > 0,
+    'natural-input': sceneProjection.status !== 'unsupported',
+    quests: modules.quests.quests.length > 0,
+    'map-travel': modules.actions.actions.some(action => (
+      action.category === 'travel' || action.category === 'fast-travel'
+    )),
+    character: true,
+    skills: modules.progression.skills.length > 0,
+    combat: modules.combat.encounters.length > 0,
+    'inventory-equipment': modules.items.items.length > 0,
+    crafting: modules.crafting.recipes.length > 0,
+    shop: modules.economy.vendors.length > 0,
+    relationships: true,
+    'world-status': true,
+    'formal-save': store.selectedSessionSource === 'release',
+    'settings-help': true,
+  } as const
+  const allAvailableTutorialActionKeys = availableActions.map(action => action.action.key)
+  const sceneTutorialActionKeys = combatTutorialAvailable
+    ? combatProjection.actions.filter(action => action.available).map(action => action.actionKey)
+    : currentSceneTutorialAvailability.actionKeys
+  const sceneView = endingProjection && endingProjection.phase !== 'in-progress'
+    ? <TextOpenWorldEndingPanel projection={endingProjection} />
+    : <div className="space-y-3">
+    {combatSurfaceVisible ? <TextOpenWorldCombatPanel
+      projection={combatProjection}
+      synchronizing={!combatProjectionResult.ready}
+      busy={gameplayLocked}
+      onExecute={handleCombatAction}
+      onRetry={() => void run(() => store.retryDefeatedCombat())}
+      onDismissResult={() => {
+        if (combatIdentity) setDismissedCombatIdentity(combatIdentity)
+      }}
+    /> : <TextOpenWorldScenePanel
+      sessionKey={sessionKey}
+      eventSequence={projection.lastEventSequence}
+      projection={sceneProjection}
+      availableActions={availableActions}
+      feedback={store.lastFeedback}
+      busy={gameplayLocked}
+      fallback={{
+        regionTitle: region?.title ?? '未知区域',
+        locationTitle: location?.title ?? state.map.currentLocationKey,
+        description: location?.description || location?.earlyArrivalDescription || '这里的场景信息仍在展开。',
+        playerName: modules.actors.player.identity.name,
+      }}
+      background={playerMedia?.currentLocationBackground}
+      onExecute={(actionKey, targetKey, source, options) => {
+        const action = availableActions.find(item => item.action.key === actionKey)
+        if (action) executeProjectedAction(
+          action,
+          targetKey,
+          source,
+          options?.expectedBaseSequence,
+          options?.runtimeIntentAuthorization,
+        )
+      }}
+      onInterpretNaturalInput={interpretNaturalInput}
+      longTermMemories={projection.memory.records}
+      memoryAvailable={isAIConfigReady(aiConfig)}
+      onCommitMemory={commitDialogueMemory}
+      onTutorialAvailabilityChange={handleSceneTutorialAvailability}
+    />}
+  </div>
+
+  const questsView = selectedSessionId == null
+    ? <p className="text-xs text-text-muted">任务 Session 尚未就绪。</p>
+    : <TextOpenWorldQuestLogPanel
+        sessionId={selectedSessionId}
+        projection={projection}
+        events={store.events}
+        actions={projectedActions}
+        busy={gameplayLocked}
+        questPackagingSlots={questPackagingSlots}
+        questPackagingPresentations={questPackagingPresentations}
+        questPackagingBusyInstanceKey={questPackagingBusyInstanceKey}
+        questPackagingIssue={questPackagingIssue}
+        onGenerateQuestPackaging={generateQuestPackaging}
+        onExecute={(action, instanceKey) => executeProjectedAction(action, instanceKey)}
+        onFocusLocation={focusQuestLocation}
+      />
+
+  const characterView = <TextOpenWorldCharacterPanel projection={projection} />
+
+  const moreView = <div className="space-y-3">
+    {craftingEconomyProjection ? <TextOpenWorldCraftingEconomyPanel
+      sessionKey={sessionKey}
+      projection={craftingEconomyProjection}
+      busy={gameplayLocked}
+      onExecute={handleCraftingEconomyAction}
+    /> : <article
+      className="rounded border border-border bg-bg-surface p-4 text-xs text-text-muted"
+      role="status"
+      data-testid="text-open-world-crafting-economy-synchronizing"
+    >制作与交易状态核对中，完成前不会开放操作。</article>}
+    <TextOpenWorldInventoryPanel
+      sessionKey={sessionKey}
+      projection={projection}
+      busy={gameplayLocked}
+      feedback={store.lastFeedback}
+      onExecute={(actionKey, itemKey) => {
+        const action = projectedActions.find(item => item.action.key === actionKey)
+        if (action) executeProjectedAction(action, itemKey)
+      }}
+    />
+    {worldRecordProjection ? <TextOpenWorldWorldRecordPanel
+      sessionKey={sessionKey}
+      projection={worldRecordProjection}
+      onFocusLocation={focusQuestLocation}
+    /> : <article
+      className="rounded border border-border bg-bg-surface p-4 text-xs text-text-muted"
+      role="status"
+      data-testid="text-open-world-world-record-synchronizing"
+    >世界记录正在核对，完成前不会展示不完整或尚未揭示的内容。</article>}
+    <TextOpenWorldRuntimeAIStatusPanel
+      configured={isAIConfigReady(aiConfig)}
+      loading={runtimeAIObservabilityLoading}
+      value={runtimeAIObservability}
+      onRefresh={() => void refreshRuntimeAIObservability()}
+    />
+    <TextOpenWorldSaveSettingsPanel
+      sessionKey={sessionKey}
+      productionKey={productionKey}
+      formalSaveAvailable={store.selectedSessionSource === 'release'}
+      audioAvailable={false}
+      saves={store.saveProjection}
+      versions={store.versionCompatibility}
+      busy={interactionLocked}
+      onCreateManualSave={name => store.saveCheckpoint(name)}
+      onForkCurrent={title => store.forkCurrent(title)}
+      onForkCheckpoint={(checkpointId, title) => store.forkCheckpoint(checkpointId, title)}
+      onSelectBranch={sessionId => store.select(sessionId)}
+      onDeleteCheckpoint={checkpointId => store.deleteCheckpoint(checkpointId)}
+      onDeleteBranch={sessionId => store.remove(sessionId)}
+      onRepairCheckpoint={checkpointId => store.repairCheckpoint(checkpointId)}
+      onRepairRuntimeHead={sessionId => store.repairRuntimeHead(sessionId)}
+      onPreviewReleaseMigration={targetProductReleaseId => (
+        store.previewReleaseMigration(targetProductReleaseId)
+      )}
+      onMigrateRelease={(targetProductReleaseId, expectedPreviewHash) => (
+        store.migrateRelease(targetProductReleaseId, expectedPreviewHash)
+      )}
+      onRefresh={() => store.refreshSaveCenter()}
+    />
+  </div>
+
+  const context = <div className="space-y-3">
+    <article className="open-world-game-context-card">
+      <small>地点</small>
+      <strong>{location?.title ?? state.map.currentLocationKey}</strong>
+      <p>{location?.description || '地点资料尚未展开。'}</p>
+      <span>{region?.title ?? '未知区域'}{region?.theme ? ` · ${region.theme}` : ''}</span>
+    </article>
+    <TextOpenWorldActorsPanel
+      runtimePackage={runtimePackage}
+      state={state}
+      attitudeByActorKey={derived.condition.relations.attitudeByActorKey}
+      portraitByActorKey={playerMedia?.portraitByActorKey}
+    />
+    {presentationAssets.length > 0 && (mediaLoading || mediaFailures.length > 0) && <article
+      className="open-world-game-context-card"
+      role="status"
+      data-testid="text-open-world-media-status"
+    >
+      <small>场景媒资</small>
+      <strong>{mediaLoading ? '正在读取不可变媒资' : `${mediaFailures.length} 项已使用文字回退`}</strong>
+      <p>{mediaLoading
+        ? '玩法与文字内容保持可用。'
+        : '加载失败不会改变游戏状态；重新打开存档时会再次校验。'}</p>
+    </article>}
+    {!!notifications.length && <article
+      className="open-world-game-context-card open-world-game-notifications"
+      data-testid="text-open-world-important-changes"
+    >
+      <small><Bell aria-hidden="true" />近期变化</small>
+      <ol>
+        {notifications.slice(-3).reverse().map(notification => <li
+          key={notification.id}
+          data-notification-priority={notification.priority}
+          data-random-event-status={notification.randomEventStatus ?? undefined}
+        >
+          <span>{NOTIFICATION_CATEGORY_LABELS[notification.category]}</span>
+          <strong>{notification.headline}</strong>
+          {notification.details[0] && <p>{notification.details[0]}</p>}
+        </li>)}
+      </ol>
+    </article>}
+  </div>
+
+  const confirmationOverlay = pendingConfirmation && <section
+    role="alertdialog"
+    aria-modal="true"
+    aria-label="确认高风险行动"
+    className="open-world-game-confirmation"
+  >
+    <strong>确认“{pendingConfirmation.label}”</strong>
+    <p>{pendingConfirmation.description} 此操作会写入正式事件记录。</p>
+    <div>
+      <button type="button" disabled={store.busy} onClick={dismissConfirmation}>取消</button>
+      <button
+        type="button"
+        disabled={gameplayLocked}
+        onClick={() => {
+          const request = pendingConfirmation
+          const liveStore = useTextOpenWorldPlayerStore.getState()
+          const selectedSessionId = liveStore.selectedSessionId
+          const selectedSessionRowId = liveStore.selectedSession?.id ?? selectedSessionId
+          const liveProjection = liveStore.runtimeState.textOpenWorld
+          dismissConfirmation()
+          if (request.sessionId !== selectedSessionId
+            || selectedSessionRowId !== selectedSessionId
+            || liveProjection == null
+            || request.baseSequence !== liveStore.runtimeState.lastSequence) return
+          void run(() => liveStore.executeVNextAction(
+            request.actionKey,
+            request.targetKey,
+            {
+              confirmed: true,
+              source: request.source,
+              ...(request.runtimeIntentAuthorization
+                ? { runtimeIntentAuthorization: request.runtimeIntentAuthorization }
+                : {}),
+              ...(runtimeDirectionAIConfig ? { runtimeDirectionAIConfig } : {}),
+              expectedBaseSequence: request.baseSequence,
+            },
+          ))
+        }}
+      >
+        确认执行
+      </button>
+    </div>
+  </section>
+
+  return <div data-testid="text-open-world-vnext-runtime">
+    <div
+      className="open-world-game-live-announcement"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      data-testid="text-open-world-important-change-announcement"
+    >{store.recoveryNotice
+        ? <span key={`recovery:${projection.lastEventSequence}`}>{store.recoveryNotice}</span>
+        : liveAnnouncement?.sessionId === selectedSessionId
+          ? <span key={liveAnnouncement.notificationId}>{liveAnnouncement.text}</span>
+          : null}</div>
+    <TextOpenWorldGameShell
+      sessionKey={sessionKey}
+      preferenceProductionKey={productionKey}
+      viewRequest={questMapFocus?.sessionKey === sessionKey ? {
+        sessionKey,
+        requestId: questMapFocus.requestId,
+        view: 'map',
+      } : null}
+      gameTitle={runtimePackage.metadata.title}
+      locationTitle={`${region?.title ?? '未知区域'} · ${location?.title ?? state.map.currentLocationKey}`}
+      sourceLabel={sourceLabel}
+      tutorial={!endingReached && tutorialAvailabilityReady ? {
+        productionKey,
+        runtimeChannel: store.selectedSessionSource === 'build-preview' ? 'build-preview' : 'release',
+        cycleKey: projection.lastEventSequence,
+        featureAvailability: tutorialFeatureAvailability,
+        featureSupport: tutorialFeatureSupport,
+        availableActionKeys: allAvailableTutorialActionKeys,
+        availableActionKeysByView: { scene: sceneTutorialActionKeys },
+        authoredTutorials: modules.presentation.tutorials,
+      } : undefined}
+      views={{
+        scene: sceneView,
+        map: <TextOpenWorldMapPanel
+          projection={projection}
+          runtimeEventSequence={store.runtimeState.lastSequence}
+          busy={gameplayLocked}
+          sessionKey={sessionKey}
+          focusedLocationKey={questMapFocus?.sessionKey === sessionKey ? questMapFocus.locationKey : null}
+          focusedLocationRequestId={questMapFocus?.sessionKey === sessionKey ? questMapFocus.requestId : null}
+          onTravel={async (request: TextOpenWorldMapTravelRequestV1) => {
+            const liveStore = useTextOpenWorldPlayerStore.getState()
+            const liveSessionKey = liveStore.selectedSession?.id
+              ?? liveStore.selectedSessionId
+              ?? liveStore.selectedManifest?.textOpenWorldVNext?.metadata.packageKey
+              ?? 'no-session'
+            if (request.sessionKey !== liveSessionKey) return null
+            if (liveStore.runtimeState.lastSequence !== request.expectedBaseSequence) {
+              throw new Error('地图状态已经变化，请重新选择地点后再出发。')
+            }
+            return liveStore.executeVNextAction(
+              request.actionKey,
+              request.destinationLocationKey,
+              {
+                expectedBaseSequence: request.expectedBaseSequence,
+                ...(runtimeDirectionAIConfig ? { runtimeDirectionAIConfig } : {}),
+              },
+            )
+          }}
+        />,
+        quests: questsView,
+        character: characterView,
+        more: moreView,
+      }}
+      context={context}
+      status={<>
+        <span><strong>生命</strong>{hud.player.health}/{hud.player.maximumHealth}</span>
+        <span><strong>技能资源</strong>{hud.player.skillResource}/{hud.player.maximumSkillResource}</span>
+        <span><strong>地点</strong>{hud.location.title}</span>
+        {state.combat && <span data-testid="text-open-world-combat-status">
+          <strong>战斗</strong>{combatProjection?.phase.statusLabel ?? '记录核对中'}
+        </span>}
+        <span data-testid="text-open-world-clock-weather">
+          <strong>世界时间</strong>第 {hud.clockWeather.day} 天 · {hud.clockWeather.timePeriodLabel}
+          {' · '}{hud.clockWeather.weatherLabel} · {hud.clockWeather.weatherDescription}
+        </span>
+        <span><strong>时间线</strong>事件 #{projection.lastEventSequence}</span>
+        <span data-testid="text-open-world-journey-status">
+          <strong>旅程</strong>{endingProjection?.phase === 'completed'
+            ? '已完成'
+            : endingProjection?.phase === 'settling' ? '正在收束' : '进行中'}
+        </span>
+        <span data-testid="text-open-world-runtime-package-hash">
+          <strong>运行包</strong>{runtimeSourceEvidence}
+        </span>
+        <span><strong>保存状态</strong>{store.busy ? '正在结算' : issue ? '需要处理' : '事件已落盘'}</span>
+        {store.lastDirectionOutcome && <span data-testid="text-open-world-runtime-direction-status">
+          <strong>叙事导演</strong>{store.lastDirectionOutcome.status === 'adopted'
+            ? 'AI建议已在合法候选闭集中采用'
+            : store.lastDirectionOutcome.status === 'no-bias'
+              ? 'AI本轮不偏置，代码照常选择'
+              : 'AI不可用，已使用确定性选择'}
+        </span>}
+      </>}
+      navigationSupplement={trackedQuestContent}
+      resultSupplement={<TextOpenWorldResultExpressionPanel
+        feedback={store.lastFeedback}
+        presentation={resultExpression}
+        busy={resultExpressionBusy}
+        issue={resultExpressionIssue}
+        onGenerate={generateResultExpression}
+      />}
+      overlay={confirmationOverlay}
+      onDismissOverlay={dismissConfirmation}
+      issue={issue}
+      onRecover={() => void (store.recovery
+        ? store.recover()
+        : store.select(store.selectedSessionId))}
+      busy={store.busy}
+      viewStates={{
+        quests: hasVisibleQuest ? 'ready' : 'empty',
+      }}
+      onExit={() => void store.select(null)}
+    />
+  </div>
+}

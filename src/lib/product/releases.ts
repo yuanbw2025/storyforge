@@ -10,6 +10,7 @@ import type {
   ProductRelease,
   ProductRuntimePackageV1,
   CharacterInteractionProductRuntimePackageV1,
+  PlayableTextOpenWorldProductRuntimePackageV1,
   TextOpenWorldProductRuntimePackageV1,
   AiTownProductRuntimePackageV1,
 } from '../types'
@@ -18,6 +19,46 @@ export interface RuntimePlayerCharacterV2 {
   speakerKey: string
   name: string
   description: string
+}
+
+const TEXT_OPEN_WORLD_LEGACY_RUNTIME_KEYS = [
+  'interaction', 'adventure', 'openWorldEvolution', 'openWorld',
+] as const
+
+export type TextOpenWorldRuntimePackageShapeV1 = 'legacy-only' | 'hybrid' | 'vnext-only'
+
+/** Product-boundary shape guard; callers must not infer vNext-only from a partial legacy closure. */
+export function classifyTextOpenWorldRuntimePackageShapeV1(value: unknown): TextOpenWorldRuntimePackageShapeV1 {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('[text-open-world] RuntimePackage 无效')
+  }
+  const runtimePackage = value as Record<string, unknown>
+  if (runtimePackage.productType !== 'text-open-world') {
+    throw new Error('[text-open-world] 不是文字开放世界 RuntimePackage')
+  }
+  const legacyPresence = TEXT_OPEN_WORLD_LEGACY_RUNTIME_KEYS
+    .filter(key => Object.prototype.hasOwnProperty.call(runtimePackage, key)).length
+  if (legacyPresence > 0 && legacyPresence < TEXT_OPEN_WORLD_LEGACY_RUNTIME_KEYS.length) {
+    throw new Error('[text-open-world] 旧四运行模块必须完整存在或完整省略')
+  }
+  const hasVNext = Object.prototype.hasOwnProperty.call(runtimePackage, 'textOpenWorldVNext')
+    && runtimePackage.textOpenWorldVNext != null
+  if (legacyPresence === 0 && !hasVNext) {
+    throw new Error('[text-open-world] RuntimePackage 未提供可玩运行模块')
+  }
+  if (legacyPresence === 0) return 'vnext-only'
+  return hasVNext ? 'hybrid' : 'legacy-only'
+}
+
+function preflightTextOpenWorldReleaseShape(value: string): void {
+  let candidate: unknown
+  try { candidate = JSON.parse(value) } catch { return }
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return
+  const runtimePackage = (candidate as Record<string, unknown>).runtimePackage
+  if (!runtimePackage || typeof runtimePackage !== 'object' || Array.isArray(runtimePackage)) return
+  if ((runtimePackage as Record<string, unknown>).productType === 'text-open-world') {
+    classifyTextOpenWorldRuntimePackageShapeV1(runtimePackage)
+  }
 }
 
 /** Product-owned display names; runtime never reopens the source WorldRelease. */
@@ -97,13 +138,14 @@ export function parseAvgProductReleaseManifest(value: string): AvgProductRuntime
   return parsed as AvgProductRuntimePackageV1
 }
 
-export function parseTextOpenWorldProductReleaseManifest(value: string): TextOpenWorldProductRuntimePackageV1 {
+export function parseTextOpenWorldProductReleaseManifest(value: string): PlayableTextOpenWorldProductRuntimePackageV1 {
+  preflightTextOpenWorldReleaseShape(value)
   const parsed = parseAnyProductReleaseManifest(value)
-  if (parsed.productType !== 'text-open-world' || !parsed.interaction || !parsed.adventure
-    || !parsed.openWorldEvolution || !parsed.openWorld) {
+  if (parsed.productType !== 'text-open-world') {
     throw new Error('[text-open-world] 不是当前文字开放世界 ProductRelease')
   }
-  return parsed as TextOpenWorldProductRuntimePackageV1
+  classifyTextOpenWorldRuntimePackageShapeV1(parsed)
+  return parsed as PlayableTextOpenWorldProductRuntimePackageV1
 }
 
 export function parseAiTownProductReleaseManifest(value: string): AiTownProductRuntimePackageV1 {

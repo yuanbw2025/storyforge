@@ -1259,6 +1259,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'sessionId', remapVia: 'productRuntimeSessions',
         exportAs: '_productRuntimeSessionExportId', onUnmapped: 'require' },
     ],
+    exportRefRemap: [{
+      field: 'payloadJson', remapVia: 'productRuntimeSessions', kind: 'json-id-paths',
+      paths: ['envelope.sessionId'], exportAs: '_portablePayloadJson',
+    }],
     defaults: {
       actorKey: null, targetKey: null, commandId: null,
       baseSequence: null, baseStateHash: null, payloadJson: '{}',
@@ -1273,8 +1277,13 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       { field: 'sessionId', remapVia: 'productRuntimeSessions',
         exportAs: '_productRuntimeSessionExportId', onUnmapped: 'require' },
     ],
-    defaults: { throughSequence: 0, name: '检查点' },
-    note: 'PRODUCT-RUNTIME-1 可重建状态检查点；hash 异常时从初始状态与追加事件恢复' },
+    defaults: {
+      throughSequence: 0,
+      name: '检查点',
+      purpose: 'manual',
+      subjectKey: null,
+    },
+    note: 'PRODUCT-RUNTIME-1 可重建状态检查点；purpose 使用 v1 闭集，旧缺失值按 manual 读取，hash/序号/会话 lineage 异常时失败关闭' },
 
   // ───────────────────── NS-4 时序事实账本 ─────────────────────
   // 导出/导入：全部分类型 FK + 三个章节引用 + 自引用 supersedesFactId 都做 exportRemap，
@@ -1494,7 +1503,45 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
         remapVia: "productReleases",
         exportAs: "_currentProductReleaseExportId",
       },
+      {
+        field: "creatorSourceWorldReleaseId",
+        remapVia: "worldReleases",
+        exportAs: "_creatorSourceWorldReleaseExportId",
+        onUnmapped: "require",
+      },
+      {
+        field: "creatorSourceWorkId",
+        remapVia: "works",
+        exportAs: "_creatorSourceWorkExportId",
+        onUnmapped: "require",
+      },
+      {
+        field: "creatorSourceOutlineRootId",
+        remapVia: "outlineNodes",
+        exportAs: "_creatorSourceOutlineRootExportId",
+        onUnmapped: "require",
+      },
+      {
+        field: "creatorSourceStartChapterId",
+        remapVia: "chapters",
+        exportAs: "_creatorSourceStartChapterExportId",
+        onUnmapped: "require",
+      },
+      {
+        field: "creatorSourceEndChapterId",
+        remapVia: "chapters",
+        exportAs: "_creatorSourceEndChapterExportId",
+        onUnmapped: "require",
+      },
     ],
+    exportRefRemap: [{
+      field: "creatorSourceChapterIdsJson",
+      remapVia: "chapters",
+      kind: "id-array",
+      exportAs: "_creatorSourceChapterExportIds",
+      storage: "json-string",
+      onUnmapped: "require",
+    }],
     memoryClassification: {
       version: 1,
       classification: "editable",
@@ -1508,6 +1555,18 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       currentBriefRevision: null,
       currentBuildNumber: null,
       currentProductReleaseId: null,
+      creatorSourceKind: null,
+      creatorSourceWorldReleaseId: null,
+      creatorSourceWorkId: null,
+      creatorSourceSelectionMode: null,
+      creatorSourceOutlineRootId: null,
+      creatorSourceStartChapterId: null,
+      creatorSourceEndChapterId: null,
+      creatorSourceChapterIdsJson: "[]",
+      creatorSourceVersionHash: "",
+      creatorSourceBoundaryHash: "",
+      creatorSourceBindingJson: "{}",
+      creatorSourceBindingHash: "",
       lastErrorJson: "{}",
     },
     note: "PRODUCTPROD-1 多轮演化生产根；用户命令是唯一状态转换入口",
@@ -1545,6 +1604,58 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
         exportAs: "_sourceWorldReleaseExportId",
         onUnmapped: "require",
       },
+      {
+        field: "sourceWorkId",
+        remapVia: "works",
+        exportAs: "_sourceWorkExportId",
+        onUnmapped: "require",
+      },
+      {
+        field: "sourceOutlineRootId",
+        remapVia: "outlineNodes",
+        exportAs: "_sourceOutlineRootExportId",
+        onUnmapped: "require",
+      },
+      {
+        field: "sourceStartChapterId",
+        remapVia: "chapters",
+        exportAs: "_sourceStartChapterExportId",
+        onUnmapped: "require",
+      },
+      {
+        field: "sourceEndChapterId",
+        remapVia: "chapters",
+        exportAs: "_sourceEndChapterExportId",
+        onUnmapped: "require",
+      },
+      {
+        field: "candidateRunId",
+        remapVia: "agentRuns",
+        exportAs: "_candidateRunExportId",
+        onUnmapped: "require",
+      },
+    ],
+    exportRefRemap: [
+      {
+        field: "sourceChapterIdsJson",
+        remapVia: "chapters",
+        kind: "id-array",
+        exportAs: "_sourceChapterExportIds",
+        storage: "json-string",
+        onUnmapped: "require",
+      },
+      {
+        // The generic ProductSourcePlan keeps its remappable host locator in
+        // this nested path while excluding it from planHash. Creator source
+        // plans use a different portable schema with no WorldReference, so the
+        // path is optional but must map exactly whenever present.
+        field: "sourcePlanJson",
+        remapVia: "worldReleases",
+        kind: "json-id-paths",
+        paths: ["worldReference.localReleaseRecordId"],
+        exportAs: "_sourcePlanPortableJson",
+        onUnmapped: "require-if-present",
+      },
     ],
     memoryClassification: {
       version: 1,
@@ -1556,6 +1667,19 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     defaults: {
       parentRevision: null,
       status: "draft",
+      briefKind: "product-production-v3",
+      sourceKind: "world-release",
+      sourceWorkId: null,
+      sourceOutlineRootId: null,
+      sourceStartChapterId: null,
+      sourceEndChapterId: null,
+      sourceChapterIdsJson: "[]",
+      sourceSelectionMode: null,
+      sourceVersionHash: "",
+      sourceBoundaryHash: "",
+      sourceBindingJson: "{}",
+      sourceBindingHash: "",
+      candidateRunId: null,
       unresolvedJson: "[]",
       estimateJson: "{}",
       authorizedAt: null,
@@ -1588,6 +1712,19 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
         remapVia: "productProductions",
         exportAs: "_productionExportId",
         onUnmapped: "require",
+      },
+    ],
+    exportRefRemap: [
+      {
+        // Successful authorization/evolution command receipts identify the
+        // Build they created. The Build is inserted later, so import restores
+        // this polymorphic locator in the deferred JSON pass.
+        field: "resultJson",
+        remapVia: "productBuilds",
+        kind: "json-id-paths",
+        paths: ["buildId"],
+        exportAs: "_resultPortableJson",
+        onUnmapped: "require-if-present",
       },
     ],
     defaults: {
@@ -1661,6 +1798,32 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
         field: "releasedProductReleaseId",
         remapVia: "productReleases",
         exportAs: "_releasedProductReleaseExportId",
+      },
+    ],
+    exportRefRemap: [
+      {
+        // The scheduler ledger is a durable proof graph, not opaque JSON: all
+        // root/task/attempt Run IDs must follow the AgentRun table across a
+        // project round-trip. `*` traverses keyed task maps and the append-only
+        // v2 attempt array; import resolves this forward reference after
+        // AgentRuns have been inserted. Legacy charge/reservation paths remain
+        // for older exported projects.
+        field: "budgetLedgerJson",
+        remapVia: "agentRuns",
+        kind: "json-id-paths",
+        paths: [
+          "rootRunId",
+          "tasks.*.runId",
+          "attempts.*.runId",
+          "charges.*.runId",
+          "reservations.*.runId",
+        ],
+        keyedMaps: [
+          { path: "charges", keyFields: ["runId", "attempt"], separator: ":" },
+          { path: "reservations", keyFields: ["runId", "attempt"], separator: ":" },
+        ],
+        exportAs: "_budgetLedgerPortableJson",
+        onUnmapped: "require-if-present",
       },
     ],
     defaults: {

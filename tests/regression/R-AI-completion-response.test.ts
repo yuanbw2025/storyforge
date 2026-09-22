@@ -15,11 +15,21 @@ describe('HTTP 200 is not sufficient evidence of a usable model answer', () => {
   afterEach(() => { vi.unstubAllGlobals() })
 
   it('rejects an empty answer once, without turning it into a JSON repair', async () => {
-    const fetch = reply(completion(''))
+    const fetch = reply({
+      ...completion(''),
+      usage: { prompt_tokens: 31, completion_tokens: 4, total_tokens: 35 },
+    })
     vi.stubGlobal('fetch', fetch)
+    const result: ChatResult = {}
     let failure: unknown
-    try { await chat([{ role: 'user', content: 'private-author-request' }], config) } catch (error) { failure = error }
+    try {
+      await chat([{ role: 'user', content: 'private-author-request' }], config, undefined, undefined, result)
+    } catch (error) { failure = error }
     expect(failure).toBeInstanceOf(AICompletionResponseErrorV1)
+    expect(result).toMatchObject({
+      requestLifecycle: { phase: 'response-observed', responseStatus: 200 },
+      usage: { inputTokens: 31, outputTokens: 4, totalTokens: 35 },
+    })
     expect(await classifyHarnessFailureV1(failure)).toMatchObject({ failureClass: 'provider', code: 'provider_response_empty', retryable: false })
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(getLogs()[0]).toMatchObject({ type: 'chat', status: 'error', statusCode: 200 })
@@ -63,6 +73,32 @@ describe('HTTP 200 is not sufficient evidence of a usable model answer', () => {
 
   it('reports malformed HTTP 200 JSON as a non-retryable provider response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('not json', { status: 200 })))
-    await expect(chat([], config)).rejects.toMatchObject({ problem: 'invalid-json', retryable: false })
+    const result: ChatResult = {}
+    await expect(chat([], config, undefined, undefined, result)).rejects.toMatchObject({
+      problem: 'invalid-json', retryable: false,
+    })
+    expect(result).toMatchObject({
+      requestLifecycle: { phase: 'response-observed', responseStatus: 200 },
+    })
+    expect(result.usage).toBeUndefined()
+  })
+
+  it('marks context-window rejection as pre-dispatch and never invokes fetch', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    const constrained = { ...config, contextWindow: 128, maxTokens: 64 }
+    useAIConfigStore.setState({ config: constrained, taskRoutes: {} })
+    const result: ChatResult = {}
+    await expect(chat(
+      [{ role: 'user', content: 'x'.repeat(4_000) }],
+      constrained,
+      { contextOverflowPolicy: 'reject' },
+      undefined,
+      result,
+    )).rejects.toThrow('已拒绝静默裁剪')
+    expect(result).toMatchObject({
+      requestLifecycle: { phase: 'pre-dispatch', responseStatus: null },
+    })
+    expect(fetch).not.toHaveBeenCalled()
   })
 })

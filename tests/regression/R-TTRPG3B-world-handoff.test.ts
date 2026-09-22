@@ -19,6 +19,10 @@ describe('TTRPG-3B · WorldRelease to TTRPG production handoff', () => {
     const releasePanel = source('src/components/world-engine/WorldNarrativeReleasePanel.tsx')
     expect(releasePanel).toContain('交给跑团')
     expect(releasePanel).toContain("onClick={() => handoff('ttrpg')}")
+    expect(releasePanel).toContain('交给文字冒险')
+    expect(releasePanel).toContain("onClick={() => handoff('text-adventure')}")
+    expect(releasePanel).toContain('交给文字开放世界')
+    expect(releasePanel).toContain("onClick={() => handoff('text-open-world')}")
     expect(releasePanel).toContain('productType,')
     expect(releasePanel).toContain('worldReleaseId: selectedRelease.id')
     expect(releasePanel).toContain('worldContentHash: selectedRelease.contentHash')
@@ -27,5 +31,13 @@ describe('TTRPG-3B · WorldRelease to TTRPG production handoff', () => {
     expect(currentPage).toContain('worldContentHash')
     expect(currentPage).toContain('worldReleaseId')
     expect(source('src/pages/WorldEnginePage.tsx')).toContain('encodeURIComponent(JSON.stringify(value))')
+  })
+
+  it('文字开放世界交接继续使用同一冻结 release ID 与 hash 契约', () => {
+    const handoff = {
+      schema: 'storyforge.product-production-handoff', version: 1,
+      productType: 'text-open-world', worldReleaseId: 31, worldContentHash: 'b'.repeat(64),
+    } as const
+    expect(parseProductProductionHandoffV1(handoff)).toEqual(handoff)
   })
 })

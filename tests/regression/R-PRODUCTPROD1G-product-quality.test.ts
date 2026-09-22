@@ -12,9 +12,11 @@ import {
 } from '../helpers/current-product-world'
 import { createTextAdventureFoundationContentV2 } from '../helpers/text-adventure-v2-foundation'
 import { analyzeTextAdventureRouteQualityV1 } from '../../src/lib/adventure/quality-analysis'
+import { createTextOpenWorldProductRuntimePackageFixtureV1 } from '../helpers/text-open-world-product-session'
+import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
 
-const PRODUCTS: ProductionProductKindV1[] = [
-  'character-interaction', 'text-adventure', 'avg', 'text-open-world',
+const PRODUCTS: Array<Exclude<ProductionProductKindV1, 'ttrpg' | 'text-open-world'>> = [
+  'character-interaction', 'text-adventure', 'avg',
 ]
 
 function brief(productType: ProductionProductKindV1): ProductProductionBriefV3 {
@@ -76,7 +78,9 @@ function narrative(): ProductRuntimePackageV1['narrative'] {
   }
 }
 
-function runtime(productType: ProductionProductKindV1): ProductRuntimePackageV1 {
+function runtime(
+  productType: Exclude<ProductionProductKindV1, 'ttrpg' | 'text-open-world'>,
+): ProductRuntimePackageV1 {
   const currentBrief = brief(productType)
   const currentNarrative = narrative()
   const modules = buildUpperProductModulesV1({
@@ -89,19 +93,25 @@ function runtime(productType: ProductionProductKindV1): ProductRuntimePackageV1 
     narrative: currentNarrative,
     ...(modules.interaction ? { interaction: modules.interaction } : {}),
     ...(modules.adventure ? { adventure: modules.adventure } : {}),
-    ...(modules.openWorldEvolution ? { openWorldEvolution: modules.openWorldEvolution } : {}),
-    ...(modules.openWorld ? { openWorld: modules.openWorld } : {}),
     ...(productType === 'avg' ? { presentation: { version: 1 as const, cues: [], assets: [] } } : {}),
   })
 }
 
 describe('PRODUCT-PROD-1G · product-specific quality gates', () => {
-  it('四类现行非跑团产品必须各自具备玩法闭环，而非只通过共同 Narrative parser', () => {
+  it('三类通用非跑团产品具备各自玩法闭环，文字开放世界拒绝回退旧通用质量门', () => {
     for (const productType of PRODUCTS) {
       const report = evaluateProductRuntimeProductQualityV1({ runtimePackage: runtime(productType), brief: brief(productType) })
       expect(report, `${productType}: ${report.warnings.join(' | ')}`).toMatchObject({ productType, passed: true })
-      expect(report.gates.some(item => item.gateId.startsWith(`product.${productType === 'character-interaction' ? 'interaction' : productType === 'text-adventure' ? 'adventure' : productType === 'text-open-world' ? 'open-world' : productType}`))).toBe(true)
+      expect(report.gates.some(item => item.gateId.startsWith(`product.${productType === 'character-interaction' ? 'interaction' : productType === 'text-adventure' ? 'adventure' : productType}`))).toBe(true)
     }
+    const textOpenWorldBrief = brief('text-open-world')
+    const textOpenWorldPackage = createTextOpenWorldProductRuntimePackageFixtureV1(
+      createTextOpenWorldVNextFixture(),
+    )
+    expect(() => evaluateProductRuntimeProductQualityV1({
+      runtimePackage: textOpenWorldPackage,
+      brief: textOpenWorldBrief,
+    })).toThrow('必须使用专属V1/V2/QA质量链')
   })
 
   it('删除文字冒险的资源/能力后，产品质量门会失败，即使 Narrative 仍然有效', () => {

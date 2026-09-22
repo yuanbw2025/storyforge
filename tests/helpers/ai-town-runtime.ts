@@ -1,5 +1,9 @@
 import { AI_TOWN_DAY_SLOTS, type AiTownRuntimeContentV1, type ProductRuntimePackageV1 } from '../../src/lib/types'
 import { startAiTownInitialSceneV1 } from '../../src/lib/ai-town/runtime-api'
+import {
+  draftProductProductionBriefV3,
+  suggestProductStartingPoints,
+} from '../../src/lib/product-production/consultation'
 import { seedCurrentProductBuild } from './current-product-build'
 import {
   currentProductSelection,
@@ -176,11 +180,28 @@ export async function seedAiTownRuntimeFixture(options: { reverseInteractionProf
     },
     town,
   }
+  const suggestions = await suggestProductStartingPoints({
+    scope: owned.scope,
+    worldReleaseId: owned.release.id!,
+  })
+  const brief = await draftProductProductionBriefV3({
+    scope: owned.scope,
+    worldReleaseId: owned.release.id!,
+    suggestionKey: suggestions.suggestions[0].suggestionKey,
+    productType: 'ai-town',
+    qualityProfile: 'prototype',
+    scale: 'short-arc',
+    visualLevel: 'none',
+    audioLevel: 'none',
+    playerRole: '新居民',
+    openingSituation: town.premise,
+  })
   const built = await seedCurrentProductBuild({
     scope: owned.scope,
     worldRelease: owned.release as typeof owned.release & { id: number },
     runtimePackage,
     title: town.title,
+    brief,
   })
   await startAiTownInitialSceneV1({
     sessionId: built.session.id!,

@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { carryForwardProductBuildArtifactsAcrossBuildsV1 } from '../../src/lib/product-production/artifact-store'
+import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import type { ProductQualityGateReceiptV1 } from '../../src/lib/product-production/quality-receipts'
 import { deleteWork } from '../../src/lib/workspace/lifecycle'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
@@ -63,10 +65,22 @@ async function seedProductionGraph() {
     releasedProductReleaseId: null, failureJson: '{}', authorizedAt: now,
     startedAt: now, completedAt: null, createdAt: now, updatedAt: now,
   }) as number
+  const receiptBody: Omit<ProductQualityGateReceiptV1, 'receiptHash'> = {
+    schema: 'storyforge.product-quality-gate-receipt', version: 1,
+    gateId: 'browser.performance.desktop', gateVersion: '1',
+    verifierId: 'storyforge.playwright-browser-runtime', verifierVersion: '1',
+    verifierKind: 'browser-runtime', inputHashes: [HASH_B], environmentHash: null,
+    measuredJson: canonicalProductProductionJsonV2({ measured: false, reason: 'fixture failure' }),
+    status: 'failed', thresholdProfileId: 'storyforge.browser-performance.v1',
+    thresholdProfileVersion: '1', evidenceRefs: ['fixture'], createdAt: now,
+  }
+  const receipt: ProductQualityGateReceiptV1 = {
+    ...receiptBody, receiptHash: await hashProductProductionValueV2(receiptBody),
+  }
   await db.productQualityGateReceipts.add({
     projectId, worldId, workId, buildId, gateId: 'browser.performance.desktop', gateVersion: '1',
     verifierId: 'storyforge.playwright-browser-runtime', verifierVersion: '1', status: 'failed',
-    receiptJson: '{}', receiptHash: HASH_C, createdAt: now,
+    receiptJson: canonicalProductProductionJsonV2(receipt), receiptHash: receipt.receiptHash, createdAt: now,
   })
   const data = new Uint8Array([83, 70, 45, 71, 65, 77, 69]).buffer
   const contentHash = await sha256(data)

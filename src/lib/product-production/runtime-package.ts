@@ -3,6 +3,9 @@ import { parseAvgPresentationContent, validateAvgPresentation } from '../avg/run
 import { freezeProductMediaAsset } from './media-contracts'
 import { parseOpenWorldEvolutionContent, validateOpenWorldEvolutionContent } from '../open-world/evolution-runtime'
 import { parseOpenWorldContent, validateOpenWorldContent } from '../open-world/runtime'
+import { parseTextOpenWorldModulesV1 } from '../open-world/modules'
+import { deriveTextOpenWorldPlayerStatsFromModulesV1 } from '../open-world/player-stats'
+import { parseTextOpenWorldRuntimePackageV1 } from '../open-world/runtime-package'
 import { validateNarrativeContentGraph } from '../product/narrative-content'
 import { parseTtrpgCampaignContentV1 } from '../ttrpg/campaign'
 import { parseRulePackV1 } from '../ttrpg/rule-pack'
@@ -26,6 +29,8 @@ import type {
   ConfirmedProductBriefV1,
   ProductSourceManifestV1,
   ProductWorldSourceSelectionV1,
+  TextOpenWorldCreatorReleaseSourceContractsV1,
+  TextOpenWorldCreatorReleaseLineageV1,
 } from '../types'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import {
@@ -36,6 +41,31 @@ import {
 } from '../product/source-contracts'
 
 const PRODUCT_TYPES = new Set<ProductionProductKindV1>(PRODUCTION_PRODUCT_KINDS_V1)
+
+function isCreatorReleaseSourceContracts(
+  value: ProductReleaseManifestV1['sourceContracts'],
+): value is TextOpenWorldCreatorReleaseSourceContractsV1 {
+  return 'schema' in value
+    && value.schema === 'storyforge.text-open-world-creator-release-source-contracts'
+}
+
+export interface ProductProductionTerminalArtifactKeysV1 {
+  runtimePackage: string
+  qualityReport: string
+}
+
+/** Product-specific terminal Artifact names share one routing fact across the
+ * scheduler and atomic adoption path. */
+export function productProductionTerminalArtifactKeysV1(
+  productType: ProductionProductKindV1,
+): ProductProductionTerminalArtifactKeysV1 {
+  return productType === 'text-open-world'
+    ? {
+        runtimePackage: 'text-open-world.runtime-package',
+        qualityReport: 'text-open-world.quality-report',
+      }
+    : { runtimePackage: 'runtime.package', qualityReport: 'quality.report' }
+}
 
 const CAPABILITIES: Record<ProductionProductKindV1, string[]> = {
   'character-interaction': ['narrative', 'interaction'],
@@ -277,10 +307,26 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     || selectedProduct === 'text-adventure'
   )
     && Object.prototype.hasOwnProperty.call(pkg, 'presentation')
+  const hasTextOpenWorldVNext = selectedProduct === 'text-open-world'
+    && Object.prototype.hasOwnProperty.call(pkg, 'textOpenWorldVNext')
+  const textOpenWorldLegacyKeys = PRODUCT_MODULE_KEYS['text-open-world']
+  const hasAnyTextOpenWorldLegacy = selectedProduct === 'text-open-world'
+    && textOpenWorldLegacyKeys.some(key => Object.prototype.hasOwnProperty.call(pkg, key))
+  const hasTextOpenWorldLegacy = selectedProduct === 'text-open-world'
+    && textOpenWorldLegacyKeys.every(key => Object.prototype.hasOwnProperty.call(pkg, key))
+  if (hasAnyTextOpenWorldLegacy !== hasTextOpenWorldLegacy) {
+    fail('text-open-world旧模块必须完整存在或完整省略')
+  }
+  const hasTextOpenWorldPresentation = hasTextOpenWorldVNext
+    && Object.prototype.hasOwnProperty.call(pkg, 'presentation')
+  const productModuleKeys = hasTextOpenWorldVNext && !hasTextOpenWorldLegacy
+    ? [] : PRODUCT_MODULE_KEYS[selectedProduct]
   exactKeys(pkg, [
     'schema', 'version', 'productType', 'definition', 'sourceWorld', 'narrative',
-    ...PRODUCT_MODULE_KEYS[selectedProduct],
+    ...productModuleKeys,
     ...(hasOptionalPresentation ? ['presentation'] : []),
+    ...(hasTextOpenWorldPresentation ? ['presentation'] : []),
+    ...(hasTextOpenWorldVNext ? ['textOpenWorldVNext'] : []),
   ], 'package')
   if (pkg.schema !== 'storyforge.product-runtime-package' || pkg.version !== 1) fail('schema/version 无效')
 
@@ -289,8 +335,12 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     'productKey', 'title', 'description', 'enabledCapabilities', 'rulesetVersion', 'initialVariables',
   ], 'definition')
   const enabledCapabilities = stringArray(definition.enabledCapabilities, 'enabledCapabilities', 20)
-  const expectedCapabilities = hasOptionalPresentation
-    ? [...CAPABILITIES[selectedProduct], 'presentation'] : CAPABILITIES[selectedProduct]
+  const expectedCapabilities = hasTextOpenWorldVNext
+    ? hasTextOpenWorldLegacy
+      ? [...CAPABILITIES[selectedProduct], 'textOpenWorldVNext', ...(hasTextOpenWorldPresentation ? ['presentation'] : [])]
+      : ['narrative', 'textOpenWorldVNext', ...(hasTextOpenWorldPresentation ? ['presentation'] : [])]
+    : hasOptionalPresentation
+      ? [...CAPABILITIES[selectedProduct], 'presentation'] : CAPABILITIES[selectedProduct]
   if (enabledCapabilities.join(',') !== expectedCapabilities.join(',')) fail('enabledCapabilities 与 productType 不一致')
   const initialVariables = record(definition.initialVariables, 'initialVariables')
   canonicalProductProductionJsonV2(initialVariables)
@@ -328,9 +378,9 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     narrative: structuredClone(narrative),
   }
 
-  if (selectedProduct === 'character-interaction' || selectedProduct === 'ai-town' || selectedProduct === 'text-adventure'
-    || selectedProduct === 'text-open-world') parsed.interaction = validateInteraction(pkg.interaction)
-  if (selectedProduct === 'text-adventure' || selectedProduct === 'text-open-world') {
+  if ((!hasTextOpenWorldVNext || hasTextOpenWorldLegacy) && (selectedProduct === 'character-interaction' || selectedProduct === 'ai-town' || selectedProduct === 'text-adventure'
+    || selectedProduct === 'text-open-world')) parsed.interaction = validateInteraction(pkg.interaction)
+  if ((!hasTextOpenWorldVNext || hasTextOpenWorldLegacy) && (selectedProduct === 'text-adventure' || selectedProduct === 'text-open-world')) {
     parsed.adventure = parseAdventureContent(pkg.adventure as never)
     if (selectedProduct === 'text-open-world' && parsed.adventure.version !== 1) {
       fail('text-open-world 仍只接受隔离的 Adventure V1，不能复用文字冒险 V2 私域状态')
@@ -343,7 +393,7 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
       }
     }
   }
-  if (selectedProduct === 'avg' || hasOptionalPresentation) {
+  if (selectedProduct === 'avg' || hasOptionalPresentation || hasTextOpenWorldPresentation) {
     const presentation = record(pkg.presentation, 'presentation')
     if (!Array.isArray(presentation.assets)) fail('presentation.assets 无效')
     const content = parseAvgPresentationContent(presentation)
@@ -359,7 +409,7 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     if (!report.valid) fail(`presentation 无效:${report.errors.join('；')}`)
     parsed.presentation = { ...content, assets }
   }
-  if (selectedProduct === 'text-open-world') {
+  if (selectedProduct === 'text-open-world' && (!hasTextOpenWorldVNext || hasTextOpenWorldLegacy)) {
     const openWorldEvolution = parseOpenWorldEvolutionContent(pkg.openWorldEvolution)
     const report = validateOpenWorldEvolutionContent({
       content: openWorldEvolution,
@@ -368,7 +418,7 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     if (!report.valid) fail(`openWorldEvolution 无效:${report.errors.join('；')}`)
     parsed.openWorldEvolution = openWorldEvolution
   }
-  if (selectedProduct === 'text-open-world') {
+  if (selectedProduct === 'text-open-world' && (!hasTextOpenWorldVNext || hasTextOpenWorldLegacy)) {
     const adventure = parsed.adventure
     if (!adventure || adventure.version !== 1) fail('text-open-world 冒险兼容层必须是 V1')
     const openWorld = parseOpenWorldContent(pkg.openWorld)
@@ -382,6 +432,31 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     })
     if (!report.valid) fail(`openWorld 无效:${report.errors.join('；')}`)
     parsed.openWorld = openWorld
+  }
+  if (hasTextOpenWorldVNext) {
+    const textOpenWorldVNext = parseTextOpenWorldRuntimePackageV1(pkg.textOpenWorldVNext)
+    const textOpenWorldModules = parseTextOpenWorldModulesV1(textOpenWorldVNext)
+    deriveTextOpenWorldPlayerStatsFromModulesV1({
+      modules: textOpenWorldModules,
+      level: textOpenWorldModules.actors.player.build.initialLevel,
+      attributes: textOpenWorldModules.actors.player.build.attributes,
+      equippedItemKeyBySlot: { weapon: null, armor: null, accessory: null },
+    })
+    if (textOpenWorldVNext.sourceManifest.contentHash !== sourceWorld.contentHash
+      || textOpenWorldVNext.metadata.rulesetVersion !== parsed.definition.rulesetVersion) {
+      fail('textOpenWorldVNext 与 ProductRuntimePackage 来源或规则版本不一致')
+    }
+    // ProductRelease adoption reparses this package. Closing the product-local
+    // slot references here makes every bound vNext asset trace to exactly one
+    // frozen outer presentation asset, while unbound required slots retain the
+    // non-empty fallback already enforced by the module parser.
+    const boundSlotAssetKeys = textOpenWorldModules.presentation.mediaSlots
+      .flatMap(slot => slot.assetKey == null ? [] : [slot.assetKey]).sort()
+    const frozenAssetKeys = (parsed.presentation?.assets ?? []).map(asset => asset.assetKey).sort()
+    if (boundSlotAssetKeys.join('|') !== frozenAssetKeys.join('|')) {
+      fail('textOpenWorldVNext 媒资槽与 ProductRuntimePackage 资产不闭合')
+    }
+    parsed.textOpenWorldVNext = textOpenWorldVNext
   }
   if (selectedProduct === 'ttrpg') parsed.ttrpg = validateTtrpg(pkg.ttrpg, sourceWorld.contentHash)
   if (selectedProduct === 'ai-town') parsed.town = parseAiTownRuntimeContentV1(pkg.town)
@@ -423,8 +498,13 @@ export function parseProductReleaseManifestV1(value: string | unknown): ProductR
     rootTerminalReceiptHash: provenance.rootTerminalReceiptHash,
   }
   const sourceContracts = record(manifest.sourceContracts, 'sourceContracts')
-  exactKeys(sourceContracts, ['sourcePlan', 'confirmedBrief', 'sourceManifest'], 'sourceContracts')
-  const lineage = record(manifest.lineage, 'lineage') as unknown as ProductReleaseLineageV1
+  const creatorSourceContracts = sourceContracts.schema
+    === 'storyforge.text-open-world-creator-release-source-contracts'
+  if (!creatorSourceContracts) {
+    exactKeys(sourceContracts, ['sourcePlan', 'confirmedBrief', 'sourceManifest'], 'sourceContracts')
+  }
+  const lineage = record(manifest.lineage, 'lineage') as unknown as
+    ProductReleaseLineageV1 | TextOpenWorldCreatorReleaseLineageV1
   return {
     schema: 'storyforge.product-release',
     version: 1,
@@ -433,11 +513,13 @@ export function parseProductReleaseManifestV1(value: string | unknown): ProductR
     runtimePackage,
     packageHash: manifest.packageHash,
     productionProvenance,
-    sourceContracts: {
-      sourcePlan: sourceContracts.sourcePlan as ProductSourcePlanV1,
-      confirmedBrief: sourceContracts.confirmedBrief as ConfirmedProductBriefV1,
-      sourceManifest: sourceContracts.sourceManifest as ProductSourceManifestV1,
-    },
+    sourceContracts: creatorSourceContracts
+      ? structuredClone(sourceContracts) as unknown as TextOpenWorldCreatorReleaseSourceContractsV1
+      : {
+          sourcePlan: sourceContracts.sourcePlan as ProductSourcePlanV1,
+          confirmedBrief: sourceContracts.confirmedBrief as ConfirmedProductBriefV1,
+          sourceManifest: sourceContracts.sourceManifest as ProductSourceManifestV1,
+        },
     releaseIdentityHash: manifest.releaseIdentityHash,
     lineage,
   }
@@ -455,6 +537,21 @@ export async function verifyProductReleaseManifestV1(value: string | unknown): P
   if (manifest.productType === 'ttrpg' && manifest.runtimePackage.ttrpg
     && await hashProductProductionValueV2(manifest.runtimePackage.ttrpg.rulePack.content)
       !== manifest.runtimePackage.ttrpg.rulePack.contentHash) fail('TTRPG RulePack contentHash 校验失败')
+  if (isCreatorReleaseSourceContracts(manifest.sourceContracts)) {
+    const { verifyTextOpenWorldCreatorReleaseManifestBindingsV1 } = await import(
+      '../open-world/creator-release-contract'
+    )
+    await verifyTextOpenWorldCreatorReleaseManifestBindingsV1(manifest)
+    const { releaseIdentityHash, lineage: _lineage, ...identityBody } = manifest
+    const expectedIdentity = await productReleaseIdentityHashV1(identityBody)
+    if (releaseIdentityHash !== expectedIdentity || manifest.lineage.releaseHash !== expectedIdentity) {
+      fail('Creator Release identity或lineage hash不一致')
+    }
+    return manifest
+  }
+  if (manifest.lineage.schema !== 'storyforge.product-release-lineage') {
+    fail('共享WorldRelease来源必须使用共享lineage')
+  }
   const sourcePlan = await validateProductSourcePlanV1(manifest.sourceContracts.sourcePlan)
   const confirmedBrief = await validateConfirmedProductBriefV1({
     brief: manifest.sourceContracts.confirmedBrief,
@@ -487,7 +584,11 @@ export async function verifyProductReleaseManifestV1(value: string | unknown): P
 export async function createProductReleaseManifestV1(input: {
   runtimePackage: ProductRuntimePackageV1
   productionProvenance: ProductReleaseManifestV1['productionProvenance']
-  sourceContracts: ProductReleaseManifestV1['sourceContracts']
+  sourceContracts: {
+    sourcePlan: ProductSourcePlanV1
+    confirmedBrief: ConfirmedProductBriefV1
+    sourceManifest: ProductSourceManifestV1
+  }
   lineage: ProductReleaseLineageV1
 }): Promise<ProductReleaseManifestV1> {
   const runtimePackage = parseProductRuntimePackageV1(input.runtimePackage)

@@ -34,10 +34,12 @@ export async function seedCurrentTtrpgProduct(page: Page, input: CurrentTtrpgSee
       { seedCurrentProductWorld, loadCurrentProductWorldSourceCatalogV1 },
       { createCurrentTtrpgRuntimePackageFixture },
       { seedCurrentProductBuild },
+      { suggestProductStartingPoints, draftProductProductionBriefV3 },
     ] = await Promise.all([
       importer('/storyforge/tests/helpers/current-product-world.ts'),
       importer('/storyforge/tests/helpers/current-ttrpg-runtime-package.ts'),
       importer('/storyforge/tests/helpers/current-product-build.ts'),
+      importer('/storyforge/src/lib/product-production/consultation.ts'),
     ])
     const world = await seedCurrentProductWorld(seed.title)
     const release = world.release
@@ -56,11 +58,29 @@ export async function seedCurrentTtrpgProduct(page: Page, input: CurrentTtrpgSee
       ruleOrigin: seed.ruleOrigin,
       seats: seed.seats,
     })
+    const suggestions = await suggestProductStartingPoints({
+      scope: world.scope,
+      worldReleaseId: release.id,
+    })
+    const brief = await draftProductProductionBriefV3({
+      scope: world.scope,
+      worldReleaseId: release.id,
+      suggestionKey: suggestions.suggestions[0].suggestionKey,
+      productType: 'ttrpg',
+      qualityProfile: 'prototype',
+      scale: 'campaign',
+      visualLevel: 'none',
+      audioLevel: 'none',
+      playerRole: '调查队成员',
+      openingSituation: seed.title,
+      confirmTtrpgDefaultMappings: true,
+    })
     const built = await seedCurrentProductBuild({
       scope: world.scope,
       worldRelease: release,
       runtimePackage,
       title: seed.title,
+      brief,
     })
     return {
       projectId: world.scope.projectId,

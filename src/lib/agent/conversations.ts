@@ -37,28 +37,33 @@ export async function getOrCreateAgentConversation(input: {
   const scope = input.scope ?? await resolveScope({ projectId: input.projectId })
   const purpose = input.purpose.trim()
   if (!purpose) throw new Error('Agent 对话必须声明稳定 purpose。')
-  const rows = await readOwnedRows<AgentConversation>(scope, 'agentConversations', { owner: 'work' })
-  const current = rows
-    .filter(row => (
-      row.status === 'active'
-      && (row.worldGroupId ?? null) === input.worldGroupId
-      && row.purpose === purpose
-    ))
-    .sort((left, right) => right.updatedAt - left.updatedAt)[0]
-  if (current) return current
+  return db.transaction('rw', scopeTransactionTables(db.agentConversations), async () => {
+    // React StrictMode and fast repeated clicks may request the same durable
+    // conversation concurrently. Serialize the lookup/create pair so one
+    // purpose cannot split into parallel ledgers.
+    const rows = await readOwnedRows<AgentConversation>(scope, 'agentConversations', { owner: 'work' })
+    const current = rows
+      .filter(row => (
+        row.status === 'active'
+        && (row.worldGroupId ?? null) === input.worldGroupId
+        && row.purpose === purpose
+      ))
+      .sort((left, right) => right.updatedAt - left.updatedAt)[0]
+    if (current) return current
 
-  const now = Date.now()
-  const row = stampNewRecord(scope, 'agentConversations', {
-    projectId: input.projectId,
-    worldGroupId: input.worldGroupId,
-    purpose,
-    title: input.title?.trim() || '创作对话',
-    status: 'active',
-    createdAt: now,
-    updatedAt: now,
-  }, { owner: 'work' }) as AgentConversation
-  const id = await db.agentConversations.add(row) as number
-  return { ...row, id }
+    const now = Date.now()
+    const row = stampNewRecord(scope, 'agentConversations', {
+      projectId: input.projectId,
+      worldGroupId: input.worldGroupId,
+      purpose,
+      title: input.title?.trim() || '创作对话',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    }, { owner: 'work' }) as AgentConversation
+    const id = await db.agentConversations.add(row) as number
+    return { ...row, id }
+  })
 }
 
 export async function readAgentEvents(conversationId: number, scope?: WorkspaceScope): Promise<AgentEvent[]> {

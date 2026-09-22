@@ -155,7 +155,7 @@ describe('R-CTXG5 Context Gateway deterministic selector', () => {
       kind: 'character',
       title: index === 59 ? '末位航契守卫' : `目录角色 ${index + 1}`,
       tokens: 20,
-      revision: index + 1,
+      revision: 1,
     }))
     const result = await selectContextResourcesV1({
       taskKind: 'agent-world-origin',

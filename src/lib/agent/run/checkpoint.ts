@@ -21,6 +21,10 @@ import {
   hashAgentRunProjectionBodyV1,
   replayAgentRunEventsV1,
 } from './projection'
+import {
+  AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1,
+  agentRunUtf8ByteLengthV1,
+} from './checkpoint-contract'
 
 interface CheckpointHashBodyV1 {
   version: 1
@@ -47,6 +51,11 @@ export interface VerifiedAgentRunCheckpointV1 {
   projection: AgentRunProjectionV1
   resumePayload: unknown | null
   snapshot: AgentRunSnapshotV1
+}
+
+interface VerifiedCheckpointBodyV1 {
+  projection: AgentRunProjectionV1
+  resumePayload: unknown | null
 }
 
 function fail(code: string, message: string): never {
@@ -110,7 +119,8 @@ function recordToEvent(record: {
 async function verifyCheckpointAgainstSnapshot(
   checkpoint: AgentRunCheckpointRecord & { id: number },
   snapshot: AgentRunSnapshotV1,
-): Promise<AgentRunProjectionV1> {
+  options: { maximumResumePayloadBytes?: number } = {},
+): Promise<VerifiedCheckpointBodyV1> {
   if (
     checkpoint.runId !== snapshot.run.id
     || checkpoint.projectId !== snapshot.run.projectId
@@ -145,6 +155,15 @@ async function verifyCheckpointAgainstSnapshot(
     || replayProjectionHash !== checkpoint.projectionHash
   ) fail('checkpoint_projection_hash', '检查点投影与事件重放不一致')
 
+  const maximumResumePayloadBytes = options.maximumResumePayloadBytes
+    ?? AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1
+  if (!Number.isSafeInteger(maximumResumePayloadBytes) || maximumResumePayloadBytes < 0) {
+    fail('checkpoint_resume_budget', '检查点恢复载荷预算无效')
+  }
+  if (checkpoint.resumePayloadJson != null
+    && agentRunUtf8ByteLengthV1(checkpoint.resumePayloadJson) > maximumResumePayloadBytes) {
+    fail('checkpoint_resume_budget', '检查点恢复载荷超过安全读取预算')
+  }
   const resumePayload = parseResumePayload(checkpoint)
   const resumePayloadHash = resumePayload == null ? null : await waitForHash(resumePayload)
   if (resumePayloadHash !== (checkpoint.resumePayloadHash ?? null)) {
@@ -163,20 +182,22 @@ async function verifyCheckpointAgainstSnapshot(
     || checkpointEvent.payload.throughSequence !== checkpoint.throughSequence
     || checkpointEvent.payload.checkpointHash !== checkpoint.checkpointHash
   ) fail('checkpoint_event_mismatch', 'checkpoint.created 事件与检查点不一致')
-  return projection
+  return { projection, resumePayload }
 }
 
 async function latestCheckpoint(runId: number): Promise<(AgentRunCheckpointRecord & { id: number }) | null> {
-  const checkpoints = await db.agentRunCheckpoints.where('runId').equals(runId).sortBy('throughSequence')
-  return checkpoints.length > 0
-    ? checkpoints[checkpoints.length - 1] as AgentRunCheckpointRecord & { id: number }
-    : null
+  const checkpoint = await db.agentRunCheckpoints
+    .where('[runId+throughSequence]')
+    .between([runId, Dexie.minKey], [runId, Dexie.maxKey])
+    .last()
+  return checkpoint == null ? null : checkpoint as AgentRunCheckpointRecord & { id: number }
 }
 
 function recoveryPlan(
   checkpoint: AgentRunCheckpointRecord & { id: number },
   projection: AgentRunProjectionV1,
   snapshot: AgentRunSnapshotV1,
+  resumePayload: unknown | null,
 ): AgentRunRecoveryPlanV1 {
   return {
     checkpointId: checkpoint.id,
@@ -194,7 +215,7 @@ function recoveryPlan(
     committedAdoptionStepIds: Object.values(projection.steps)
       .filter(step => !!step.adoptionHash)
       .map(step => step.stepId),
-    resumePayload: parseResumePayload(checkpoint),
+    resumePayload,
     snapshot,
   }
 }
@@ -207,6 +228,10 @@ export async function createAgentRunCheckpointInTransactionV1(input: {
   const resumePayloadJson = input.resumePayload === undefined
     ? null
     : canonicalStringify(input.resumePayload)
+  if (resumePayloadJson != null
+    && agentRunUtf8ByteLengthV1(resumePayloadJson) > AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1) {
+    fail('checkpoint_resume_budget', '检查点恢复载荷超过安全写入预算')
+  }
   const resumePayloadHash = input.resumePayload === undefined
     ? null
     : await waitForHash(input.resumePayload)
@@ -312,7 +337,10 @@ export async function verifyAgentRunCheckpointV1(
 export async function readLatestVerifiedAgentRunCheckpointV1(
   scope: WorkspaceScope,
   runId: number,
-  options: { owner?: 'work' | 'instance' } = {},
+  options: {
+    owner?: 'work' | 'instance'
+    maximumResumePayloadBytes?: number
+  } = {},
 ): Promise<VerifiedAgentRunCheckpointV1 | null> {
   return db.transaction(
     'r',
@@ -323,11 +351,13 @@ export async function readLatestVerifiedAgentRunCheckpointV1(
       const snapshot = await readVerifiedAgentRunInTransactionV1(scope, runId)
       const checkpoint = await latestCheckpoint(runId)
       if (!checkpoint) return null
-      const projection = await verifyCheckpointAgainstSnapshot(checkpoint, snapshot)
+      const verified = await verifyCheckpointAgainstSnapshot(checkpoint, snapshot, {
+        maximumResumePayloadBytes: options.maximumResumePayloadBytes,
+      })
       return {
         checkpoint,
-        projection,
-        resumePayload: parseResumePayload(checkpoint),
+        projection: verified.projection,
+        resumePayload: verified.resumePayload,
         snapshot,
       }
     },
@@ -347,14 +377,15 @@ export async function beginAgentRunRecoveryV1(input: {
       const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
       const checkpoint = await latestCheckpoint(input.runId)
       if (!checkpoint) fail('checkpoint_missing', '运行没有可用检查点')
-      const checkpointProjection = await verifyCheckpointAgainstSnapshot(checkpoint, snapshot)
+      const verified = await verifyCheckpointAgainstSnapshot(checkpoint, snapshot)
+      const checkpointProjection = verified.projection
 
       if (snapshot.projection.state === 'recovering') {
         const last = snapshot.events[snapshot.events.length - 1]
         if (last?.type !== 'recovery.started' || last.payload.checkpointHash !== checkpoint.checkpointHash) {
           fail('recovery_state', '运行停在无法确认来源的 recovering 状态')
         }
-        return recoveryPlan(checkpoint, checkpointProjection, snapshot)
+        return recoveryPlan(checkpoint, checkpointProjection, snapshot, verified.resumePayload)
       }
       if (snapshot.projection.state !== 'paused') {
         fail('recovery_state', `只有 paused 运行可以恢复，当前为 ${snapshot.projection.state}`)
@@ -376,7 +407,7 @@ export async function beginAgentRunRecoveryV1(input: {
         createdAt: input.now ?? Date.now(),
       })
       const recovering = await appendPrivilegedAgentRunEventInTransactionV1(snapshot, event)
-      return recoveryPlan(checkpoint, checkpointProjection, recovering)
+      return recoveryPlan(checkpoint, checkpointProjection, recovering, verified.resumePayload)
     },
   ))
 }

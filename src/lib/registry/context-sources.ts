@@ -62,6 +62,12 @@ import {
   WORLD_RELEASE_PROVIDER_VERSION_V1,
   WORLD_RELEASE_RESOURCE_KINDS_V1,
 } from '../context-gateway/world-release-provider-contract'
+import {
+  TEXT_OPEN_WORLD_RUNTIME_CONTEXT_NORMALIZATION_VERSION_V1,
+  TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_ID_V1,
+  TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_VERSION_V1,
+  TEXT_OPEN_WORLD_RUNTIME_CONTEXT_RESOURCE_KINDS_V1,
+} from '../open-world/runtime-ai-context-provider-contract'
 import type {
   Chapter,
   Character,
@@ -138,6 +144,24 @@ const WORLD_RELEASE_RESOURCE_PROVIDER_PROXY_V1: ContextResourceProviderV1 = {
     .WORLD_RELEASE_RESOURCE_PROVIDER_V1.fingerprint(scope),
 }
 
+const TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_PROXY_V1: ContextResourceProviderV1 = {
+  version: 'context-resource-provider-v1',
+  providerId: TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_ID_V1,
+  providerVersion: TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_VERSION_V1,
+  normalizationVersion: TEXT_OPEN_WORLD_RUNTIME_CONTEXT_NORMALIZATION_VERSION_V1,
+  kinds: TEXT_OPEN_WORLD_RUNTIME_CONTEXT_RESOURCE_KINDS_V1,
+  listMetadata: async input => (await import('../open-world/runtime-ai-context-provider'))
+    .TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_V1.listMetadata(input),
+  searchMetadata: async input => (await import('../open-world/runtime-ai-context-provider'))
+    .TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_V1.searchMetadata(input),
+  read: async input => (await import('../open-world/runtime-ai-context-provider'))
+    .TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_V1.read(input),
+  readOriginal: async input => (await import('../open-world/runtime-ai-context-provider'))
+    .TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_V1.readOriginal(input),
+  fingerprint: async scope => (await import('../open-world/runtime-ai-context-provider'))
+    .TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_V1.fingerprint(scope),
+}
+
 // Upper-product readers are lazy for the same reason as adaptation readers:
 // their production Harnesses import the Skill registry, so eager imports here
 // would create CONTEXT_SOURCES -> product Harness -> Skill -> CONTEXT_SOURCES.
@@ -180,6 +204,76 @@ async function readShortNovelProductionContext(input: AssembleContextInput): Pro
 }
 async function readShortNovelManuscriptContext(input: AssembleContextInput): Promise<string> {
   return (await import('../short-novel/context')).readShortNovelManuscriptContextV1(input)
+}
+async function readTextOpenWorldSourcePinContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/source-curation')).readTextOpenWorldSourcePinContextV1(input)
+}
+async function readTextOpenWorldCreatorEditTargetContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/creator-artifact-edit-context'))
+    .readTextOpenWorldCreatorEditTargetContextV1(input)
+}
+async function readTextOpenWorldExperienceInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/experience-design')).readTextOpenWorldExperienceInputContextV1(input)
+}
+async function readTextOpenWorldGameplayRulesetInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/gameplay-ruleset')).readTextOpenWorldGameplayRulesetInputContextV1(input)
+}
+async function readTextOpenWorldPlayerBuildInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/player-build')).readTextOpenWorldPlayerBuildInputContextV1(input)
+}
+async function readTextOpenWorldStoryArchitectureInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/story-architecture')).readTextOpenWorldStoryArchitectureInputContextV1(input)
+}
+async function readTextOpenWorldRegionSkeletonInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/region-skeleton')).readTextOpenWorldRegionSkeletonInputContextV1(input)
+}
+async function readTextOpenWorldMainlineInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/mainline-production')).readTextOpenWorldMainlineInputContextV1(input)
+}
+async function readTextOpenWorldSignificantThreadsInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/significant-threads-production')).readTextOpenWorldSignificantThreadsInputContextV1(input)
+}
+async function readTextOpenWorldRegionNarrativePacksInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/region-narrative-packs-production')).readTextOpenWorldRegionNarrativePacksInputContextV1(input)
+}
+async function readTextOpenWorldQuestSkeletonsInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/quest-skeletons-production')).readTextOpenWorldQuestSkeletonsInputContextV1(input)
+}
+async function readTextOpenWorldProgressionCatalogsInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/progression-catalogs-production')).readTextOpenWorldProgressionCatalogsInputContextV1(input)
+}
+async function readTextOpenWorldEncounterCatalogInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/encounter-catalog-production')).readTextOpenWorldEncounterCatalogInputContextV1(input)
+}
+async function readTextOpenWorldItemRewardCatalogInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/item-reward-catalog-production')).readTextOpenWorldItemRewardCatalogInputContextV1(input)
+}
+async function readTextOpenWorldCraftingEconomyInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/crafting-economy-catalog-production')).readTextOpenWorldCraftingEconomyInputContextV1(input)
+}
+async function readTextOpenWorldNpcRuntimeInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/npc-runtime-catalog-production')).readTextOpenWorldNpcRuntimeInputContextV1(input)
+}
+async function readTextOpenWorldMapInteractionInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/map-interaction-catalog-production')).readTextOpenWorldMapInteractionInputContextV1(input)
+}
+async function readTextOpenWorldQuestFinalizeInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/quest-finalize-production')).readTextOpenWorldQuestFinalizeInputContextV1(input)
+}
+async function readTextOpenWorldSceneScriptsInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/scene-scripts-production')).readTextOpenWorldSceneScriptsInputContextV1(input)
+}
+async function readTextOpenWorldPresentationProfileInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/presentation-profile')).readTextOpenWorldPresentationProfileInputContextV1(input)
+}
+async function readTextOpenWorldSystemFinalizeInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/system-finalize-production')).readTextOpenWorldSystemFinalizeInputContextV1(input)
+}
+async function readTextOpenWorldBalanceReviewInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/quality-review-production')).readTextOpenWorldBalanceReviewInputContextV1(input)
+}
+async function readTextOpenWorldSemanticReviewInputContextV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../open-world/quality-review-production')).readTextOpenWorldSemanticReviewInputContextV1(input)
 }
 async function readTtrpgGmRuntimeContextV1(input: AssembleContextInput): Promise<string> {
   return (await import('../ttrpg/gm-context')).readTtrpgGmRuntimeContextV1(input)
@@ -737,6 +831,9 @@ async function readAdventureRuntimeContext(input: AssembleContextInput): Promise
     import('../adventure/runtime'),
   ])
   const runtimePackage = playable.runtimePackage
+  // vNext owns one dedicated player-view context. Do not expose the legacy
+  // adventure projection as a second, divergent view of the same session.
+  if (runtimePackage.textOpenWorldVNext) return ''
   if ((runtimePackage.productType !== 'text-adventure' && runtimePackage.productType !== 'text-open-world')
     || !runtimePackage.adventure || playable.runtimeSourceHash !== session.runtimeSourceHash) {
     throw new Error('文字冒险 RuntimePackage 校验失败。')
@@ -798,6 +895,8 @@ async function readTextOpenWorldEvolutionRuntimeContext(input: AssembleContextIn
     import('../open-world/evolution-runtime'),
   ])
   const runtimePackage = playable.runtimePackage
+  // The vNext context below owns its complete player-visible projection.
+  if (runtimePackage.textOpenWorldVNext) return ''
   if (runtimePackage.productType !== 'text-open-world'
     || !runtimePackage.openWorldEvolution || playable.runtimeSourceHash !== session.runtimeSourceHash) {
     throw new Error('文字开放世界内部状态演化 RuntimePackage 校验失败。')
@@ -839,12 +938,147 @@ async function readOpenWorldRuntimeContext(input: AssembleContextInput): Promise
     session,
   })
   const manifest = playable.runtimePackage
-  if (manifest.productType !== 'text-open-world' || !manifest.openWorld
+  if (manifest.productType !== 'text-open-world'
     || playable.runtimeSourceHash !== session.runtimeSourceHash) {
     throw new Error('开放世界 RuntimePackage 校验失败。')
   }
   const state = await readProductRuntimeStateForContext(session.id!)
+  if (manifest.textOpenWorldVNext) {
+    const [sessionProjection, modulesModule, actionModule, bindingModule, feedbackModule, skillsModule, lifeModule, inventoryModule, questModule, mapModule, mapViewModule, travelModule, weatherModule, actorsModule, directorContextModule] = await Promise.all([
+      import('../open-world/session-projection'),
+      import('../open-world/modules'),
+      import('../open-world/action-registry'),
+      import('../open-world/session-binding'),
+      import('../open-world/feedback'),
+      import('../open-world/skills'),
+      import('../open-world/life-cycle'),
+      import('../open-world/inventory'),
+      import('../open-world/quests'),
+      import('../open-world/map-topology'),
+      import('../open-world/map-view'),
+      import('../open-world/travel'),
+      import('../open-world/weather'),
+      import('../open-world/actors'),
+      import('../open-world/director-context'),
+    ])
+    if (!state.textOpenWorld) return ''
+    const binding = await bindingModule.verifyTextOpenWorldVNextSessionBindingV1(session)
+    const runtimePackage = binding.runtimePackage
+    const projection = sessionProjection.parseTextOpenWorldSessionProjectionV1(state.textOpenWorld)
+    bindingModule.assertTextOpenWorldVNextProjectionBindingV1(projection, binding)
+    const modules = modulesModule.parseTextOpenWorldModulesV1(runtimePackage)
+    const derived = sessionProjection.deriveTextOpenWorldContextsV1(projection)
+    const projectedActions = actionModule.createTextOpenWorldActionRegistryV1(runtimePackage).project(derived.action)
+    const availableActions = projectedActions.filter(item => item.available)
+    const runtime = projection.state
+    const inventoryQuantities = inventoryModule.deriveTextOpenWorldInventoryQuantitiesV1(modules, runtime.inventory)
+    const equippedItemKeys = inventoryModule.deriveTextOpenWorldEquippedItemKeysV1(modules, runtime.inventory)
+    const location = modules.world.locations.find(item => item.key === runtime.map.currentLocationKey)
+    if (!location) throw new Error('文字开放世界当前位置不在冻结ProductRelease/Build中。')
+    const region = modules.world.regions.find(item => item.key === location.regionKey)
+    if (!region) throw new Error('文字开放世界当前区域不在冻结ProductRelease/Build中。')
+    const itemByKey = new Map(modules.items.items.map(item => [item.key, item]))
+    const clockWeather = weatherModule.projectTextOpenWorldClockWeatherV1({ runtimePackage, state: runtime, parsedModules: modules })
+    const playerMap = mapViewModule.projectTextOpenWorldPlayerMapV1({ runtimePackage, state: runtime })
+    const visibleRegions = playerMap.regions
+    const visibleLocations = playerMap.locations
+    const travelOptions = travelModule.projectTextOpenWorldTravelOptionsV1(projection)
+    const fastTravelOptions = travelModule.projectTextOpenWorldFastTravelOptionsV1(projection)
+    const visibleConnections = mapModule.projectTextOpenWorldMapConnectionsV1({
+      runtimePackage,
+      currentLocationKey: location.key,
+      openEdgeKeys: runtime.map.openEdgeKeys,
+    }).filter(connection => visibleLocations.some(location => location.locationKey === connection.destinationLocationKey))
+    const visibleQuests = questModule.projectTextOpenWorldQuestInstancesV1(modules, runtime.quests)
+      .filter(item => !['locked', 'available'].includes(item.instance.status))
+    const questLines = visibleQuests.map(({ definition: quest, instance }) => {
+      const status = instance.status
+      const stageKey = instance.currentStageKey
+      const stage = stageKey ? modules.quests.stages.find(item => item.key === stageKey) : null
+      const objectives = stage
+        ? stage.objectiveKeys.map(key => {
+            const objective = modules.quests.objectives.find(item => item.key === key)
+            return `${objective?.title ?? key}=${instance.objectiveStatusByKey[key] ?? 'inactive'}`
+          })
+        : []
+      return `- ${instance.instanceKey}｜定义=${quest.key}｜${quest.type}｜${status}｜${quest.title}｜${quest.description}${stage ? `｜阶段=${stage.title}` : ''}${objectives.length ? `｜目标=${objectives.join('；')}` : ''}`
+    })
+    const presentActors = actorsModule.projectTextOpenWorldActorsV1({
+      runtimePackage,
+      state: runtime,
+      attitudeByActorKey: derived.condition.relations.attitudeByActorKey,
+    }).map(actor => {
+      const faction = actor.factionKey ? modules.actors.factions.find(item => item.key === actor.factionKey)?.title ?? actor.factionKey : '中立'
+      const portrayal = actor.portrayal ? `｜演绎=${actor.portrayal}` : ''
+      const services = actor.availableServices.length ? `｜当前服务=${actor.availableServices.map(service => `${service.key}:${service.title}`).join('、')}` : '｜当前服务=无'
+      return `- ${actor.key}:${actor.name}｜层级=${actor.tier}｜阵营=${faction}｜态度=${actor.attitude}｜当前活动=${actor.activity}${services}${portrayal}`
+    })
+    const knowledgeLines = modules.knowledge.entries.flatMap(entry => {
+      const visibility = runtime.knowledge.visibilityByKey[entry.key]
+      if (visibility === 'known') return [`- ${entry.key}｜已知｜${entry.title}：${entry.content}`]
+      if (visibility !== 'rumor') return []
+      const readRumors = modules.knowledge.rumors.filter(rumor => rumor.knowledgeKey === entry.key && runtime.knowledge.readRumorKeys.includes(rumor.key))
+      return readRumors.map(rumor => `- ${rumor.key}｜传闻｜${rumor.text}`)
+    })
+    const directorContext = directorContextModule.projectTextOpenWorldDirectorContextV1({
+      modules, state: runtime, regionKey: region.key, regionTitle: region.title,
+    })
+    const skillCatalog = skillsModule.createTextOpenWorldSkillCatalogV1(runtimePackage)
+    const skillLines = skillCatalog.project({
+      learnedSkillKeys: runtime.player.learnedSkillKeys,
+      skillResource: runtime.player.skillResource,
+      conditionResults: Object.fromEntries(Object.entries(derived.action.conditionResults).map(([key, result]) => [key, result.satisfied])),
+    }).filter(item => item.learned).map(item => {
+      const source = item.skill.unlockSources.map(value => value.kind === 'level' ? `等级${value.level}` : value.kind === 'quest' ? `任务${value.questKey}` : '初始').join('、')
+      return `- ${item.skill.key}:${item.skill.title}｜${item.skill.activation}/${item.skill.kind}｜目标=${item.skill.target}｜消耗=${item.skill.resourceCost}｜冷却=${item.skill.cooldownTurns}回合｜来源=${source}｜${item.available ? '当前可用' : `不可用=${item.unavailableReasons.join('、')}`}`
+    })
+    const statusLines = skillCatalog.projectStatuses(runtime.player.statusKeys).filter(item => item.active)
+      .map(item => `- ${item.status.key}:${item.status.title}｜${item.status.polarity}｜${item.status.description}`)
+    const recentCommandIds = [...new Set((await db.productRuntimeEvents.where('sessionId').equals(session.id!).sortBy('sequence'))
+      .filter(event => event.type === 'text-open-world.command.committed' && event.commandId)
+      .map(event => event.commandId!))].slice(-8)
+    const feedback = await Promise.all(recentCommandIds.map(commandId => feedbackModule.readTextOpenWorldFeedbackV1({ sessionId: session.id!, commandId })))
+    const life = lifeModule.deriveTextOpenWorldLifeProjectionV1({
+      runtimePackage, state: runtime,
+      checkpoints: await db.productRuntimeCheckpoints.where('sessionId').equals(session.id!).toArray(),
+    })
+    return [
+      `【文字开放世界vNext玩家视角】${session.title}｜事件序号=${projection.lastEventSequence}｜运行源=${playable.packageHash.slice(0, 16)}`,
+      `【体验边界】${runtimePackage.experienceContract.freedomBoundary}`,
+      `【当前位置】${region.title}／${location.title}｜${location.description}｜存在目的=${location.purpose}｜提前到达=${location.earlyArrivalDescription}`,
+      `【时间与天气】第${clockWeather.day}天｜${clockWeather.timePeriodLabel}｜${clockWeather.weatherLabel}｜${clockWeather.weatherDescription}`,
+      `【主角】${modules.actors.player.identity.name}｜等级=${runtime.player.level}/${derived.progression.maximumLevel}｜经验=${runtime.player.experience}${derived.progression.nextLevelThreshold == null ? '（满级）' : `/${derived.progression.nextLevelThreshold}`}｜生命=${runtime.player.health}/${derived.playerStats.maximumHealth}｜技能资源=${runtime.player.skillResource}/${derived.playerStats.maximumSkillResource}`,
+      `【生命状态】${life.phase}｜生命比例=${Math.round(life.healthRatio * 100)}%｜休息=${life.rest.available ? '可用' : life.rest.reason}｜复活点=${life.respawnPoints.map(point => `${point.fastTravelPointKey}:${point.title}`).join('、') || '无'}｜战前重试=${life.combatRetryCheckpointIds.length ? '可用' : '不可用'}`,
+      `【主角身份】称谓=${modules.actors.player.identity.pronouns || '未指定'}｜外观=${modules.actors.player.identity.appearance || '未指定'}｜背景=${modules.actors.player.identity.background || '未指定'}｜性格=${modules.actors.player.identity.personality || '未指定'}`,
+      `【主角目标】近期=${modules.actors.player.identity.shortGoal || '未指定'}｜长期=${modules.actors.player.identity.longGoal || '未指定'}｜演绎=${modules.actors.player.identity.portrayal || '未指定'}`,
+      `【主角自有知识】公开=${modules.actors.player.identity.publicKnowledge || '无'}｜私密=${modules.actors.player.identity.privateKnowledge || '无'}`,
+      `【属性】力量=${runtime.player.attributes.power}｜体质=${runtime.player.attributes.vitality}｜敏捷=${runtime.player.attributes.agility}｜道德=${runtime.relationships.morality}`,
+      `【派生战斗值】攻击=${derived.playerStats.attack}｜防御=${derived.playerStats.defense}｜暴击=${Math.round(derived.playerStats.criticalChance * 10_000) / 100}%｜先手=${derived.playerStats.initiative}`,
+      '【已学技能】', ...(skillLines.length ? skillLines : ['- 无']),
+      '【当前状态】', ...(statusLines.length ? statusLines : ['- 无']),
+      `【背包】${Object.entries(inventoryQuantities).filter(([, quantity]) => quantity > 0).map(([key, quantity]) => `${itemByKey.get(key)?.title ?? key}×${quantity}`).join('、') || '空'}｜货币=${runtime.inventory.currency}`,
+      `【装备】${Object.entries(equippedItemKeys).map(([slot, key]) => `${slot}=${key ? itemByKey.get(key)?.title ?? key : '空'}`).join('、')}`,
+      `【区域认知】${visibleRegions.map(item => `${item.title}=${item.knowledge}`).join('、') || '无'}`,
+      directorContext.regionStatus,
+      `【已发现地点】${visibleLocations.map(item => `${item.locationKey}:${item.title}=${item.knowledge}`).join('、') || '无'}｜布局=${playerMap.layoutSource}`,
+      '【玩家可知相邻道路】', ...(visibleConnections.length ? visibleConnections.map(connection => {
+        const destination = modules.world.locations.find(item => item.key === connection.destinationLocationKey)!
+        const travel = travelOptions.find(option => option.edgeKey === connection.edgeKey && option.destinationLocationKey === connection.destinationLocationKey)
+        return `- ${connection.edgeKey}｜前往=${destination.key}:${destination.title}｜${connection.travelMinutes}分钟｜风险=${connection.riskProfile}｜${travel?.available ? `可执行=${travel.actionKey}` : `不可执行=${travel?.unavailableReasons[0]?.message ?? '未开放'}`}`
+      }) : ['- 无']),
+      '【已解锁快速旅行】', ...(fastTravelOptions.length ? fastTravelOptions.map(option => `- ${option.fastTravelPointKey}｜目标=${option.destinationLocationKey}:${option.destinationTitle}｜${option.travelMinutes == null ? '路线阻断' : `${option.travelMinutes}分钟`}｜${option.available ? `可执行=${option.actionKey}` : `不可执行=${option.unavailableReasons[0]?.message ?? '当前不可用'}`}`) : ['- 无可前往目标']),
+      '【当前位置人物】', ...(presentActors.length ? presentActors : ['- 无']),
+      '【可见任务】', ...(questLines.length ? questLines : ['- 无']),
+      '【玩家已知事实】', ...(knowledgeLines.length ? knowledgeLines : ['- 无']),
+      '【近期区域内容】', ...(directorContext.recentContent.length ? directorContext.recentContent : ['- 暂无新发放或随机事件']),
+      '【已获成就】', ...(directorContext.achievements.length ? directorContext.achievements : ['- 无']),
+      '【当前可执行Action闭集】', ...(availableActions.length ? availableActions.map(item => `- ${item.action.key}｜${item.action.category}｜${item.action.label}｜目标=${item.validTargetKeys.join('、') || '无'}`) : ['- 无']),
+      '【最近正式结果】', ...(feedback.length ? feedback.map(item => `- ${item.commandId}｜${item.status}｜${item.presentation.headline}${item.presentation.details.length ? `｜${item.presentation.details.join('；')}` : ''}`) : ['- 无']),
+      '自由输入只能映射到当前可执行Action；模型只能叙述正式Feedback Receipt已经提交的结果。不得创造地点、任务、人物、物品、随机结果或状态变化，也不得透露未发现地点、锁定任务、隐藏知识、NPC小传、保护状态、完整日程表或未来行踪。',
+    ].join('\n')
+  }
   if (!state.openWorld) return ''
+  if (!manifest.openWorld) throw new Error('开放世界 RuntimePackage 缺少旧版运行模块。')
   const world = state.openWorld
   const region = manifest.openWorld.regions.find(item => item.key === world.currentRegionKey)
   const projection = world.regionalProjections.find(item => item.regionKey === world.currentRegionKey)
@@ -1802,6 +2036,301 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: readTextAdventureRepairFeedbackV1,
   },
   {
+    key: 'text-open-world.source-pin',
+    label: '文字开放世界冻结来源与本批读取单元',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldSourcePinContextV1,
+  },
+  {
+    key: 'text-open-world.creator-edit-target',
+    label: '文字开放世界 Creator Artifact 编辑目标',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isSafeInteger(input.productProductionId)
+      && Number(input.productProductionId) > 0
+      && Number.isSafeInteger(input.productBuildId)
+      && Number(input.productBuildId) > 0
+      && typeof input.textOpenWorldCreatorEditArtifactKey === 'string'
+      && !!input.textOpenWorldCreatorEditArtifactKey
+      && input.textOpenWorldCreatorEditArtifactKey === input.textOpenWorldCreatorEditArtifactKey.trim()
+      && Object.prototype.hasOwnProperty.call(input, 'textOpenWorldCreatorEditEntityIdentity')
+      && (input.textOpenWorldCreatorEditEntityIdentity === null
+        || (typeof input.textOpenWorldCreatorEditEntityIdentity === 'string'
+          && !!input.textOpenWorldCreatorEditEntityIdentity
+          && input.textOpenWorldCreatorEditEntityIdentity
+            === input.textOpenWorldCreatorEditEntityIdentity.trim()))
+      && typeof input.textOpenWorldCreatorEditExpectedSnapshotHash === 'string'
+      && /^[a-f0-9]{64}$/.test(input.textOpenWorldCreatorEditExpectedSnapshotHash),
+    read: readTextOpenWorldCreatorEditTargetContextV1,
+  },
+  {
+    key: 'text-open-world.experience-input',
+    label: '文字开放世界作者授权体验设计输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldExperienceInputContextV1,
+  },
+  {
+    key: 'text-open-world.gameplay-ruleset-input',
+    label: '文字开放世界已确认体验与玩法规则输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 40_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldGameplayRulesetInputContextV1,
+  },
+  {
+    key: 'text-open-world.presentation-profile-input',
+    label: '文字开放世界界面表现与文字降级输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 40_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldPresentationProfileInputContextV1,
+  },
+  {
+    key: 'text-open-world.player-build-input',
+    label: '文字开放世界已确认主角与玩法构筑输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 40_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldPlayerBuildInputContextV1,
+  },
+  {
+    key: 'text-open-world.story-architecture-input',
+    label: '文字开放世界全局故事架构输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldStoryArchitectureInputContextV1,
+  },
+  {
+    key: 'text-open-world.region-skeleton-input',
+    label: '文字开放世界来源与故事空间骨架输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldRegionSkeletonInputContextV1,
+  },
+  {
+    key: 'text-open-world.mainline-input',
+    label: '文字开放世界严格顺序主线生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldMainlineInputContextV1,
+  },
+  {
+    key: 'text-open-world.significant-threads-input',
+    label: '文字开放世界重要故事线生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldSignificantThreadsInputContextV1,
+  },
+  {
+    key: 'text-open-world.region-narrative-packs-input',
+    label: '文字开放世界地区叙事生态生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldRegionNarrativePacksInputContextV1,
+  },
+  {
+    key: 'text-open-world.quest-skeletons-input',
+    label: '文字开放世界任务骨架与内容需求生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldQuestSkeletonsInputContextV1,
+  },
+  {
+    key: 'text-open-world.progression-catalogs-input',
+    label: '文字开放世界成长与技能目录生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 80_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldProgressionCatalogsInputContextV1,
+  },
+  {
+    key: 'text-open-world.encounter-catalog-input',
+    label: '文字开放世界敌人与遭遇目录生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldEncounterCatalogInputContextV1,
+  },
+  {
+    key: 'text-open-world.item-reward-catalog-input',
+    label: '文字开放世界物品与奖励目录生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldItemRewardCatalogInputContextV1,
+  },
+  {
+    key: 'text-open-world.crafting-economy-input',
+    label: '文字开放世界配方与经济目录生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldCraftingEconomyInputContextV1,
+  },
+  {
+    key: 'text-open-world.npc-runtime-input',
+    label: '文字开放世界NPC运行规则目录生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldNpcRuntimeInputContextV1,
+  },
+  {
+    key: 'text-open-world.map-interaction-input',
+    label: '文字开放世界地图交互目录生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 100_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldMapInteractionInputContextV1,
+  },
+  {
+    key: 'text-open-world.quest-finalize-input',
+    label: '文字开放世界任务最终化与地区导演生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 180_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldQuestFinalizeInputContextV1,
+  },
+  {
+    key: 'text-open-world.scene-scripts-input',
+    label: '文字开放世界场景脚本与三类交互绑定生产输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 220_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldSceneScriptsInputContextV1,
+  },
+  {
+    key: 'text-open-world.system-finalize-input',
+    label: '文字开放世界系统配置、媒资槽与内容预算收口输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 180_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldSystemFinalizeInputContextV1,
+  },
+  {
+    key: 'text-open-world.balance-review-input',
+    label: '文字开放世界平衡评审输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 120_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldBalanceReviewInputContextV1,
+  },
+  {
+    key: 'text-open-world.semantic-review-input',
+    label: '文字开放世界叙事语义评审输入',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 220_000,
+    protectedFromTrim: true,
+    atomic: true,
+    enabled: input => Number.isInteger(input.productProductionId)
+      && Number.isInteger(input.productBuildId),
+    read: readTextOpenWorldSemanticReviewInputContextV1,
+  },
+  {
     key: 'product-production.quality-feedback',
     label: '上层产品生产质量反馈',
     scope: 'project',
@@ -2022,6 +2551,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 8000,
     protectedFromTrim: true,
     requiresProductRuntimeSessionId: true,
+    resources: TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_PROXY_V1,
     read: readOpenWorldRuntimeContext,
   },
   {

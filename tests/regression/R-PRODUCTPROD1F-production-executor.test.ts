@@ -4738,7 +4738,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     })
     await expect(exportCommunityPrototypeDistributionBundleV2({
       scope: owned.scope, productionId: owned.productionId,
-    })).rejects.toThrow(/社区原型媒资权利声明不完整/)
+    })).rejects.toThrow(/root terminal receipt 校验失败/)
     await db.productBuildArtifacts.update(firstMediaArtifact.id!, {
       rightsJson: JSON.stringify({
         ...JSON.parse(firstMediaArtifact.rightsJson),
@@ -4749,7 +4749,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     })
     await expect(prepareProductProductionAdoption({
       scope: owned.scope, productionId: owned.productionId,
-    })).rejects.toThrow(/媒资商业权利不完整/)
+    })).rejects.toThrow(/root terminal receipt 校验失败/)
+    // v2 terminal receipt freezes the complete Artifact row, including rights.
+    // Community packaging therefore cannot reinterpret rights by mutating a
+    // completed Build; restore the signed row before exercising export.
+    await db.productBuildArtifacts.update(firstMediaArtifact.id!, { rightsJson: originalRightsJson })
     const prototypeBundle = await exportCommunityPrototypeDistributionBundleV2({
       scope: owned.scope, productionId: owned.productionId,
     })
@@ -4759,7 +4763,6 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       sourceWorld: { contentHash: owned.brief.source.worldContentHash },
     })
     expect(prototypeBundle.media).toHaveLength(13)
-    await db.productBuildArtifacts.update(firstMediaArtifact.id!, { rightsJson: originalRightsJson })
     const preview = await startProductProductionPreviewV1({ scope: owned.scope, productionId: owned.productionId })
     expect((await readProductRuntimeState(preview.sessionId)).town?.content.title).toBe('潮门后日镇')
     const playable = await resolveProductRuntimeSource({
@@ -7769,9 +7772,9 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).count()).toBe(1)
   }, 120_000)
 
-  it('六种现行生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {
+  it('五种通用生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {
     const products: ProductionProductKindV1[] = [
-      'character-interaction', 'ai-town', 'text-adventure', 'avg', 'text-open-world', 'ttrpg',
+      'character-interaction', 'ai-town', 'text-adventure', 'avg', 'ttrpg',
     ]
     for (const productType of products) {
       const owned = await fixtureForProduct(productType)

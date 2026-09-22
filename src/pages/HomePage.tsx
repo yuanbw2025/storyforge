@@ -11,7 +11,7 @@ import { openHomeWork, readHomeResume, RUN_LABELS, runSummary, workLabel, workPa
 import { flushPendingEditsV1 } from '../lib/authoring/pending-edit-coordinator'
 import '../components/longform/longform.css'
 import '../components/home/home.css'
-const GlobalSettings=lazy(()=>import('../components/settings/SettingsPage'))
+const GlobalSettings=lazy(()=>import('../components/settings/SettingsPage').then(module=>({default:module.RoutedSettingsPage})))
 const NAV=[['today','今天',Compass],['library','作品总览',Library],['results','最近成果',BookOpen],['examples','示例作品',BookOpen],['tasks','任务中心',Clock],['worlds','我的世界',Globe2],['search','搜索',Search],['data','数据与备份',FolderOpen],['settings','设置',Settings]] as const
 const TITLES:Record<string,string>={examples:'示例作品',today:'今天',library:'作品总览',results:'最近成果',tasks:'任务中心',search:'搜索',settings:'通用设置',data:'数据与备份',detail:'作品详情',cover:'作品封面',products:'开始新的创作'}
 const PRODUCT_LABELS:Record<string,string>={ttrpg:'跑团','character-interaction':'角色聊天','ai-town':'AI 小镇',avg:'AVG','text-adventure':'文字冒险','open-world':'文字开放世界'}

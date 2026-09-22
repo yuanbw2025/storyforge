@@ -12,6 +12,10 @@ import type {
   ProductProductionCommandRecordV1,
   ProductProductionRecordV1,
   ProductionProductKindV1,
+  TextOpenWorldCreatorProductionPreflightConfirmationV1,
+  TextOpenWorldCreatorProductionPreflightV1,
+  TextOpenWorldCreatorSourceLocatorV1,
+  TextOpenWorldSourceRightsBasisV1,
   WorkspaceScope,
   WorldReferenceCatalogEntryV1,
 } from '../types'
@@ -28,7 +32,12 @@ import {
   isLegacyOversizedTextAdventureQualityReviewPlanV1,
   isRepairRetryableFailedProductBuildV1,
   isTextAdventureBuildLifetimeBudgetExhaustedV1,
+  type ProductProductionCommandReceiptV1,
 } from './commands'
+import {
+  inspectProductProductionBuildRecoveryPolicyV1,
+  readProductProductionRecoveryTaskKeyV1,
+} from './recovery-policy'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from './consultation'
 import { parseProductProductionBriefV3 } from './contracts'
 import {
@@ -40,8 +49,42 @@ import {
   createBuiltInProductionCapabilityBindingV1,
   createConfiguredProductProductionExecutorV1,
 } from './production-executor'
+import { createTextOpenWorldProductionExecutorV1 } from '../open-world/production-executor'
 import {
+  createTextOpenWorldCreatorStartPreparationV1,
+  type TextOpenWorldCreatorStartPreparationV1,
+} from '../open-world/creator-production-start'
+import { verifyTextOpenWorldCreatorProductionPreflightConfirmationV1 } from '../open-world/creator-production-preflight'
+import {
+  abandonTextOpenWorldCreatorArtifactEditUnknownModelOutcomeV1 as abandonTextOpenWorldCreatorArtifactEditUnknownModelOutcomeCoreV1,
+  cancelTextOpenWorldCreatorArtifactEditIntakeV1 as cancelTextOpenWorldCreatorArtifactEditIntakeCoreV1,
+  confirmTextOpenWorldCreatorArtifactEditIntentV1 as confirmTextOpenWorldCreatorArtifactEditIntentCoreV1,
+  generateTextOpenWorldCreatorArtifactEditCandidateV1 as generateTextOpenWorldCreatorArtifactEditCandidateCoreV1,
+  prepareTextOpenWorldCreatorArtifactEditV1 as prepareTextOpenWorldCreatorArtifactEditCoreV1,
+  readLatestTextOpenWorldCreatorArtifactEditStateV1 as readLatestTextOpenWorldCreatorArtifactEditStateCoreV1,
+  rejectTextOpenWorldCreatorArtifactEditCandidateV1 as rejectTextOpenWorldCreatorArtifactEditCandidateCoreV1,
+  resumeTextOpenWorldCreatorArtifactEditIntakeV1 as resumeTextOpenWorldCreatorArtifactEditIntakeCoreV1,
+  reviseTextOpenWorldCreatorArtifactEditCandidateV1 as reviseTextOpenWorldCreatorArtifactEditCandidateCoreV1,
+  type TextOpenWorldCreatorArtifactEditSelectionV1,
+} from '../open-world/creator-artifact-edit'
+import type { TextOpenWorldCreatorEditPatchOperationV1 } from '../open-world/creator-artifact-edit-contract'
+import { prepareTextOpenWorldCreatorArtifactRepairV1 as prepareTextOpenWorldCreatorArtifactRepairCoreV1 } from '../open-world/creator-artifact-repair'
+import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../open-world/creator-derived-authority'
+import {
+  inspectTextOpenWorldCreatorMediaWorkspaceV1 as inspectTextOpenWorldCreatorMediaWorkspaceCoreV1,
+  prepareTextOpenWorldCreatorMediaV1 as prepareTextOpenWorldCreatorMediaCoreV1,
+  type TextOpenWorldCreatorMediaImportInputV1,
+  type TextOpenWorldCreatorMediaPreparationV1,
+} from '../open-world/creator-media'
+import type {
+  TextOpenWorldCreatorMediaModeV1,
+} from '../open-world/creator-media-contract'
+import { detectProductImageDimensionsV1, detectProductMediaMimeTypeV1 } from './media-adapters'
+import { useAIConfigStore } from '../../stores/ai-config'
+import {
+  assertProductProductionBudgetLedgerV1,
   projectProductProductionSchedulerV1,
+  recoverImportedProductProductionProofsV1 as recoverImportedProductProductionProofsCoreV1,
   runProductProductionUntilBlockedV1,
   type ProductProductionCapabilityBindingV1,
   type ProductProductionSchedulerProjectionV1,
@@ -72,6 +115,9 @@ import { parseProductProductionPlanV3, textAdventureProductionBudgetFloorV1 } fr
 export interface ProductProductionDetailsV1 {
   production: ProductProductionRecordV1
   brief: ProductProductionBriefRecordV1 | null
+  /** Frozen scheduler/runtime envelope. Creator rows retain their own author
+   * Brief in `briefJson`; this projection is available only after start. */
+  executionBrief: ProductProductionBriefV3 | null
   build: ProductBuildRecordV1 | null
   artifactCount: number
   recentCommands: ProductProductionCommandRecordV1[]
@@ -80,6 +126,309 @@ export interface ProductProductionDetailsV1 {
 }
 
 export type ProductProductionProgressV1 = ProductProductionSchedulerProjectionV1
+
+/**
+ * Creator editing facade. Direct field edits are credential-free; Agent edits
+ * reuse the existing global/task-routed configuration without copying a secret
+ * into ProductProduction or its durable Run.
+ */
+export function prepareTextOpenWorldCreatorArtifactEditV1(
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1,
+) {
+  return prepareTextOpenWorldCreatorArtifactEditCoreV1(selection)
+}
+
+async function resolveTextOpenWorldCreatorMediaProviderV1(input: {
+  scope: WorkspaceScope
+  buildId: number
+  now?: number
+}): Promise<ResolvedProductMediaCapabilityV1> {
+  const authority = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+    scope: input.scope,
+    buildId: input.buildId,
+  })
+  const visualTask = authority.productionPlan.tasks.find(task => task.taskKey === 'media.visual')
+  const requirementKey = visualTask?.capabilityRequirementKeys[0]
+  const requirement = authority.contracts.executionBrief.capabilityRequirements.find(item => (
+    item.requirementKey === requirementKey && item.mediaClass === 'image'
+  ))
+  if (!visualTask || !requirement) {
+    throw new Error('[product-production-service] 当前 Creator Build 缺少图片生产能力合同')
+  }
+  const agnes = inspectConfiguredAgnesImageCapabilityV1({ projectId: input.scope.projectId })
+  if (agnes.ready) {
+    return resolveConfiguredAgnesImageCapabilityV1({
+      projectId: input.scope.projectId,
+      requirement,
+      now: input.now,
+    })
+  }
+  const relayUrl = configuredMediaRelayUrlV1()
+  if (relayUrl) {
+    return resolveTrustedRelayMediaCapabilityV1({ requirement, relayUrl, now: input.now })
+  }
+  throw new Error(`[product-production-service] capability-unbound: ${agnes.issue || '没有可用的图片 Provider 或可信 Relay。'}`)
+}
+
+/** Store one author-selected image in the product-owned content-addressed Blob
+ * store. The returned id is a local locator only and never enters the durable
+ * command/result contract. */
+export async function importTextOpenWorldCreatorMediaBlobV1(input: {
+  scope: WorkspaceScope
+  data: ArrayBuffer
+}): Promise<{
+  blobObjectId: number
+  contentHash: string
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp'
+  byteSize: number
+  width: number
+  height: number
+}> {
+  const mimeType = detectProductMediaMimeTypeV1(input.data)
+  const dimensions = detectProductImageDimensionsV1(input.data)
+  if (!mimeType || !['image/png', 'image/jpeg', 'image/webp'].includes(mimeType) || !dimensions) {
+    throw new Error('[product-production-service] 只允许导入可验证的 PNG、JPEG 或 WebP 图片')
+  }
+  const row = await putMediaBlobObject({ scope: input.scope, data: input.data, mimeType })
+  if (row.id == null) throw new Error('[product-production-service] 导入图片没有形成持久 Blob')
+  return {
+    blobObjectId: row.id,
+    contentHash: row.contentHash,
+    mimeType: mimeType as 'image/png' | 'image/jpeg' | 'image/webp',
+    byteSize: row.byteSize,
+    width: dimensions.width,
+    height: dimensions.height,
+  }
+}
+
+export function inspectTextOpenWorldCreatorMediaWorkspaceV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+  buildId: number
+}) {
+  return inspectTextOpenWorldCreatorMediaWorkspaceCoreV1(input)
+}
+
+export async function previewTextOpenWorldCreatorMediaV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+  buildId: number
+  mode: TextOpenWorldCreatorMediaModeV1
+  maximumCostUsd?: number
+  imports?: TextOpenWorldCreatorMediaImportInputV1[]
+  now?: number
+}): Promise<TextOpenWorldCreatorMediaPreparationV1> {
+  const provider = input.mode === 'provider-generate'
+    ? await resolveTextOpenWorldCreatorMediaProviderV1({
+        scope: input.scope,
+        buildId: input.buildId,
+        now: input.now,
+      })
+    : null
+  return prepareTextOpenWorldCreatorMediaCoreV1({
+    scope: input.scope,
+    productionId: input.productionId,
+    buildId: input.buildId,
+    mode: input.mode,
+    maximumCostUsd: input.maximumCostUsd,
+    provider,
+    imports: input.imports,
+  })
+}
+
+export async function authorizeTextOpenWorldCreatorMediaV1(input: {
+  prepared: TextOpenWorldCreatorMediaPreparationV1
+  acknowledgement: {
+    completeBundle: boolean
+    rightsAndProvenance: boolean
+    costAndProvider: boolean
+    oldBuildImmutable: boolean
+  }
+  authorizationNonce?: string
+  authorizedAt?: number
+}): Promise<ProductProductionCommandReceiptV1> {
+  if (Object.values(input.acknowledgement).some(value => value !== true)) {
+    throw new Error('[product-production-service] 创建媒资 Build 前必须完成四项显式确认')
+  }
+  const plan = input.prepared.mediaPlan
+  return executeProductProductionCommand({
+    scope: input.prepared.scope,
+    productionId: input.prepared.production.id,
+    preparedCreatorMedia: input.prepared,
+    command: {
+      type: 'authorize-text-open-world-creator-media',
+      commandId: `tow-creator-media:${crypto.randomUUID()}`,
+      expectedStateRevision: input.prepared.production.stateRevision,
+      baseBuildNumber: plan.baseBuild.buildNumber,
+      expectedBasePlanHash: plan.baseBuild.planHash,
+      expectedMediaPlanHash: plan.planHash,
+      expectedTargetPlanHash: input.prepared.targetPlanHash,
+      mode: plan.mode,
+      acknowledgement: {
+        completeBundle: true,
+        rightsAndProvenance: true,
+        costAndProvider: true,
+        oldBuildImmutable: true,
+      },
+      authorizationNonce: input.authorizationNonce ?? crypto.randomUUID(),
+      authorizedAt: input.authorizedAt ?? Date.now(),
+    },
+  })
+}
+
+export async function previewTextOpenWorldCreatorArtifactRepairV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+  buildId: number
+}) {
+  const prepared = await prepareTextOpenWorldCreatorArtifactRepairCoreV1(input)
+  return {
+    productionId: prepared.production.id,
+    productionStateRevision: prepared.production.stateRevision,
+    baseBuildId: prepared.baseBuild.id,
+    baseBuildNumber: prepared.baseBuild.buildNumber,
+    basePlanHash: prepared.baseBuild.planHash,
+    targetPlanHash: prepared.targetPlanHash,
+    impactPlan: prepared.impactPlan,
+  }
+}
+
+export async function authorizeTextOpenWorldCreatorArtifactRepairV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+  expectedStateRevision: number
+  baseBuildNumber: number
+  expectedBasePlanHash: string
+  expectedHandoffSetHash: string
+  expectedImpactPlanHash: string
+  expectedTargetPlanHash: string
+  authorizationNonce?: string
+  authorizedAt?: number
+}): Promise<ProductProductionCommandReceiptV1> {
+  return executeProductProductionCommand({
+    scope: input.scope,
+    productionId: input.productionId,
+    command: {
+      type: 'authorize-text-open-world-creator-repair',
+      commandId: `tow-creator-repair:${crypto.randomUUID()}`,
+      expectedStateRevision: input.expectedStateRevision,
+      baseBuildNumber: input.baseBuildNumber,
+      expectedBasePlanHash: input.expectedBasePlanHash,
+      expectedHandoffSetHash: input.expectedHandoffSetHash,
+      expectedImpactPlanHash: input.expectedImpactPlanHash,
+      expectedTargetPlanHash: input.expectedTargetPlanHash,
+      authorizationNonce: input.authorizationNonce ?? crypto.randomUUID(),
+      authorizedAt: input.authorizedAt ?? Date.now(),
+    },
+  })
+}
+
+export function generateTextOpenWorldCreatorArtifactEditCandidateV1(input:
+  | {
+    selection: TextOpenWorldCreatorArtifactEditSelectionV1
+    mode: 'direct'
+    operations: readonly TextOpenWorldCreatorEditPatchOperationV1[]
+    signal?: AbortSignal
+  }
+  | {
+    selection: TextOpenWorldCreatorArtifactEditSelectionV1
+    mode: 'agent'
+    authorInstruction: string
+    signal?: AbortSignal
+  }) {
+  return input.mode === 'direct'
+    ? generateTextOpenWorldCreatorArtifactEditCandidateCoreV1({
+        selection: input.selection,
+        mode: 'direct',
+        operations: input.operations,
+        signal: input.signal,
+      })
+    : generateTextOpenWorldCreatorArtifactEditCandidateCoreV1({
+        selection: input.selection,
+        mode: 'agent',
+        authorInstruction: input.authorInstruction,
+        signal: input.signal,
+        aiConfig: useAIConfigStore.getState().config,
+      })
+}
+
+export function readLatestTextOpenWorldCreatorArtifactEditStateV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+}) {
+  return readLatestTextOpenWorldCreatorArtifactEditStateCoreV1(input.selection)
+}
+
+export function resumeTextOpenWorldCreatorArtifactEditIntakeV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+  runId: number
+  signal?: AbortSignal
+}) {
+  return resumeTextOpenWorldCreatorArtifactEditIntakeCoreV1({
+    selection: input.selection,
+    runId: input.runId,
+    signal: input.signal,
+    aiConfig: useAIConfigStore.getState().config,
+  })
+}
+
+export function cancelTextOpenWorldCreatorArtifactEditIntakeV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+  runId: number
+}) {
+  return cancelTextOpenWorldCreatorArtifactEditIntakeCoreV1({
+    selection: input.selection,
+    runId: input.runId,
+  })
+}
+
+export function reviseTextOpenWorldCreatorArtifactEditCandidateV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+  runId: number
+  operations: readonly TextOpenWorldCreatorEditPatchOperationV1[]
+}) {
+  if (!input.operations.length) {
+    throw new Error('[product-production-service] 候选修订必须提供字段操作；Agent 不会隐式追加第二次模型调用')
+  }
+  return reviseTextOpenWorldCreatorArtifactEditCandidateCoreV1({
+    selection: input.selection,
+    runId: input.runId,
+    operations: input.operations,
+  })
+}
+
+export function abandonTextOpenWorldCreatorArtifactEditUnknownModelOutcomeV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+  runId: number
+  acknowledgePossibleCharge: true
+}) {
+  return abandonTextOpenWorldCreatorArtifactEditUnknownModelOutcomeCoreV1({
+    selection: input.selection,
+    runId: input.runId,
+    acknowledgePossibleCharge: true,
+  })
+}
+
+export function rejectTextOpenWorldCreatorArtifactEditCandidateV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+  runId: number
+}) {
+  return rejectTextOpenWorldCreatorArtifactEditCandidateCoreV1({
+    selection: input.selection,
+    runId: input.runId,
+  })
+}
+
+export function confirmTextOpenWorldCreatorArtifactEditIntentV1(input: {
+  selection: TextOpenWorldCreatorArtifactEditSelectionV1
+  runId: number
+  warningAcknowledgementCodes: readonly string[]
+}) {
+  return confirmTextOpenWorldCreatorArtifactEditIntentCoreV1({
+    selection: input.selection,
+    runId: input.runId,
+    warningAcknowledgementCodes: input.warningAcknowledgementCodes,
+  })
+}
 
 /** Author-only inspection of evidence already bound to the current Build task. */
 export async function readProductProductionTaskEvidenceV1(input: {
@@ -92,10 +441,30 @@ export async function readProductProductionTaskEvidenceV1(input: {
   const task = progress.tasks.find(item => item.taskKey === input.taskKey)
   if (!task?.runId) return []
   const snapshot = await readAgentRunV1(scope, task.runId)
-  if (snapshot.run.productBuildId !== progress.buildId) throw new Error('任务证据不属于当前 Build')
+  const boundary = snapshot.contract.scope.productProduction
+  if (snapshot.run.productBuildId !== progress.buildId
+    || snapshot.run.parentRunId !== progress.rootRunId
+    || snapshot.run.parentRelation !== `task:${input.taskKey}`
+    || !boundary
+    || boundary.productBuildId !== progress.buildId
+    || boundary.controlEpoch !== progress.controlEpoch
+    || boundary.planHash !== progress.planHash
+    || boundary.taskKey !== input.taskKey) {
+    throw new Error('任务证据不属于当前 Build/task Run')
+  }
+  const isCurrentGovernedAttempt = (stepId: string | undefined, attempt: number | undefined) => {
+    if (stepId == null || attempt == null) return false
+    const step = snapshot.projection.steps[stepId]
+    if (!step || step.attempt !== attempt) return false
+    if (stepId === input.taskKey) return true
+    return input.taskKey === 'p1.source-curation'
+      && stepId.startsWith(`${input.taskKey}.world.source-curation.batch.`)
+      && ['succeeded', 'failed'].includes(step.status)
+  }
   const result: Array<{ attempt: number; kind: string; content: string }> = []
   for (const event of snapshot.events) {
-    if (event.type === 'evidence.artifact.recorded' && event.payload.stepId === input.taskKey
+    if (event.type === 'evidence.artifact.recorded'
+      && isCurrentGovernedAttempt(event.payload.stepId, event.payload.attempt)
       && ['raw-response', 'source-snapshot', 'tool-result'].includes(event.payload.artifactKind)) {
       const content = await readAgentRunArtifactExactV1({
         projectId: scope.projectId, artifactKind: event.payload.artifactKind,
@@ -103,7 +472,8 @@ export async function readProductProductionTaskEvidenceV1(input: {
       })
       result.push({ attempt: event.payload.attempt ?? 0, kind: event.payload.artifactKind, content })
     }
-    if (event.type === 'step.failed' && event.payload.stepId === input.taskKey) {
+    if (event.type === 'step.failed'
+      && isCurrentGovernedAttempt(event.payload.stepId, event.payload.attempt)) {
       result.push({ attempt: event.payload.attempt, kind: 'failure', content: event.payload.code })
     }
   }
@@ -443,7 +813,7 @@ export function inspectProductProductionCapabilityReadinessV1(input: {
   return {
     text: inspectConfiguredTextCapabilityV1({
       projectId: input.projectId,
-      category: 'product-production.content',
+      category: 'product-production',
     }),
     image: inspectConfiguredAgnesImageCapabilityV1({ projectId: input.projectId }),
     authoredImagePackConfigured: authoredPack.configured,
@@ -501,6 +871,62 @@ export function listProductProductionMediaCapabilitiesV1(): ProductMediaProvider
 
 function commandId(prefix: string): string {
   return `${prefix}.${crypto.randomUUID()}`
+}
+
+export interface TextOpenWorldCreatorStartInputV1 {
+  scope: WorkspaceScope
+  productionId: number
+  briefRevision: number
+  briefHash: string
+  expectedStateRevision: number
+  sourceLocator: TextOpenWorldCreatorSourceLocatorV1
+  preflight: TextOpenWorldCreatorProductionPreflightV1
+  confirmation: TextOpenWorldCreatorProductionPreflightConfirmationV1
+  rightsBasis: TextOpenWorldSourceRightsBasisV1
+  rightsNote: string
+  authorizationNonce: string
+  authorizedAt: number
+}
+
+/** Zero-write deterministic plan preview shown before the author starts. */
+export async function previewTextOpenWorldCreatorProductionStartV1(
+  input: TextOpenWorldCreatorStartInputV1,
+): Promise<TextOpenWorldCreatorStartPreparationV1> {
+  const state = useAIConfigStore.getState()
+  return createTextOpenWorldCreatorStartPreparationV1({
+    ...input,
+    aiConfig: state.config,
+    rememberApiKey: state.rememberApiKey,
+  })
+}
+
+/** Repeats the full CAS and atomically freezes SourcePlan/Start/Plan/Build. */
+export async function authorizeTextOpenWorldCreatorProductionStartV1(
+  input: TextOpenWorldCreatorStartInputV1 & { expectedPlanHash: string },
+): Promise<ProductProductionCommandReceiptV1> {
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope,
+    productionId: input.productionId,
+    now: input.authorizedAt,
+    command: {
+      type: 'authorize-text-open-world-creator-start',
+      commandId: 'text-open-world.start.' + input.confirmation.confirmationHash.slice(0, 16)
+        + '.' + input.expectedPlanHash.slice(0, 12),
+      expectedStateRevision: input.expectedStateRevision,
+      briefRevision: input.briefRevision,
+      briefHash: input.briefHash,
+      sourceLocator: input.sourceLocator,
+      preflight: input.preflight,
+      confirmation: input.confirmation,
+      rightsBasis: input.rightsBasis,
+      rightsNote: input.rightsNote,
+      authorizationNonce: input.authorizationNonce,
+      expectedPlanHash: input.expectedPlanHash,
+      authorizedAt: input.authorizedAt,
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '文字开放世界启动失败'))
+  return receipt
 }
 
 export async function listProductProductionWorkspaceV1(
@@ -578,9 +1004,18 @@ export async function readProductProductionDetailsV1(
     }
     buildHistory.push(row)
   }
+  const executionBrief = brief?.briefKind === 'text-open-world-creator-v1'
+    ? brief.status === 'authorized' && build
+      ? (await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+          scope,
+          buildId: build.id!,
+        })).contracts.executionBrief
+      : null
+    : brief ? parseProductProductionBriefV3(brief.briefJson) : null
   return {
     production,
     brief: brief ?? null,
+    executionBrief,
     build: build ?? null,
     artifactCount: build?.id == null ? 0 : await db.productBuildArtifacts.where('buildId').equals(build.id).count(),
     recentCommands,
@@ -823,12 +1258,105 @@ export async function authorizeProductProductionStartV1(input: {
 export async function setProductProductionPausedV1(input: {
   scope: WorkspaceScope
   production: ProductProductionRecordV1
+  build?: ProductBuildRecordV1 | null
+  pausedReservationDisposition?: 'confirmed-not-charged' | 'charge-reservation-upper-bound'
 }): Promise<'paused' | 'resumed'> {
   const paused = input.production.status === 'paused'
+  let pausedReservationDispositions: Extract<
+    import('../types').ProductProductionCommandV1,
+    { type: 'resume' }
+  >['pausedReservationDispositions']
+  if (paused && input.build?.status === 'paused') {
+    let failure: Record<string, unknown>
+    try {
+      const parsed = JSON.parse(input.build.failureJson) as unknown
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid')
+      failure = parsed as Record<string, unknown>
+    } catch {
+      throw new Error('[product-production-service] 暂停恢复证据损坏')
+    }
+    if (failure!.code !== 'pause-provider-result-unknown') {
+      if (input.pausedReservationDisposition) {
+        throw new Error('[product-production-service] 普通暂停没有待结算 provider reservation')
+      }
+    } else if (!Array.isArray(failure!.pausedProviderReservations)
+      || failure!.pausedProviderReservations.length < 1) {
+      throw new Error('[product-production-service] 暂停 reservation 证据损坏')
+    } else {
+      assertProductProductionBudgetLedgerV1(input.build.budgetLedgerJson)
+      const ledger = input.build.budgetLedgerJson === '{}' || !input.build.budgetLedgerJson.trim()
+        ? {
+            version: 2,
+            attempts: [] as Array<Record<string, unknown>>,
+          }
+        : JSON.parse(input.build.budgetLedgerJson) as {
+            version: number
+            attempts?: Array<Record<string, unknown>>
+          }
+      const currentAttempts = ledger.version === 2 && Array.isArray(ledger.attempts)
+        ? ledger.attempts
+        : []
+      const unresolved = (failure!.pausedProviderReservations as unknown[]).flatMap((value, index) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          throw new Error(`[product-production-service] 暂停 reservation #${index + 1} 损坏`)
+        }
+        const reservation = value as Record<string, unknown>
+        if (typeof reservation.taskKey !== 'string'
+          || !Number.isSafeInteger(reservation.runId) || Number(reservation.runId) < 1
+          || !Number.isSafeInteger(reservation.attempt) || Number(reservation.attempt) < 1
+          || !Number.isSafeInteger(reservation.controlEpoch) || Number(reservation.controlEpoch) < 0) {
+          throw new Error(`[product-production-service] 暂停 reservation #${index + 1} 身份损坏`)
+        }
+        const matchingAttempts = currentAttempts.filter(current => (
+          current.runId === reservation.runId && current.attempt === reservation.attempt
+        ))
+        if (matchingAttempts.length > 1) {
+          throw new Error(`[product-production-service] 暂停 reservation #${index + 1} 重复封账`)
+        }
+        const current = matchingAttempts[0]
+        if (!current) {
+          throw new Error(`[product-production-service] 暂停 reservation #${index + 1} 缺少精确封账证据`)
+        }
+        if (current.taskKey !== reservation.taskKey
+          || current.runId !== reservation.runId
+          || current.attempt !== reservation.attempt
+          || current.controlEpoch !== reservation.controlEpoch) {
+          throw new Error(`[product-production-service] 暂停 reservation #${index + 1} 与当前账本不一致`)
+        }
+        if (current.usageKnown !== true && current.usageKnown !== false) {
+          throw new Error(`[product-production-service] 暂停 reservation #${index + 1} 当前账本损坏`)
+        }
+        if (current.usageKnown) return []
+        if (!current.usage || typeof current.usage !== 'object' || Array.isArray(current.usage)) {
+          throw new Error(`[product-production-service] 暂停 reservation #${index + 1} 缺少冻结预留上限`)
+        }
+        return [{
+          taskKey: reservation.taskKey,
+          runId: Number(reservation.runId),
+          attempt: Number(reservation.attempt),
+          controlEpoch: Number(reservation.controlEpoch),
+        }]
+      })
+      if (unresolved.length > 0 && !input.pausedReservationDisposition) {
+        throw new Error('[product-production-service] 恢复前请先结算暂停时仍在途的供应商请求')
+      }
+      pausedReservationDispositions = unresolved.length > 0
+        ? unresolved.map(reservation => ({
+            ...reservation,
+            disposition: input.pausedReservationDisposition!,
+          }))
+        : undefined
+    }
+  }
   const receipt = await executeProductProductionCommand({
     scope: input.scope, productionId: input.production.id!,
     command: paused
-      ? { type: 'resume', commandId: commandId('resume'), expectedStateRevision: input.production.stateRevision }
+      ? {
+          type: 'resume',
+          commandId: commandId('resume'),
+          expectedStateRevision: input.production.stateRevision,
+          ...(pausedReservationDispositions ? { pausedReservationDispositions } : {}),
+        }
       : {
           type: 'pause', commandId: commandId('pause'), expectedStateRevision: input.production.stateRevision,
           reason: '作者从制作工作台暂停',
@@ -887,30 +1415,105 @@ export async function retryProductProductionBlockerV1(input: {
   afterCapabilityChange?: boolean
   repairNote?: string
   authorDraftJson?: string
-}): Promise<void> {
+  unknownResultDisposition?: 'confirmed-not-charged' | 'charge-reservation-upper-bound'
+}): Promise<
+  | 'provider-actual-charge'
+  | 'author-confirmed-not-charged'
+  | 'author-charged-reservation-upper-bound'
+  | null
+> {
   if (!input.details.build || !canRetryProductProductionBlockerV1(input.details)) {
     throw new Error('[product-production-service] 当前 Build 没有可重试 blocker')
   }
-  let blockerKey = 'build-recovery'
-  try {
-    const failure = JSON.parse(input.details.build.failureJson) as { taskKey?: unknown }
-    if (typeof failure.taskKey === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(failure.taskKey)) {
-      blockerKey = failure.taskKey
+  const taskKey = readProductProductionRecoveryTaskKeyV1(input.details.build.failureJson)
+  const blockerKey = taskKey ?? 'build-recovery'
+  const repairNote = input.repairNote?.trim() || undefined
+  const authorDraftJson = input.authorDraftJson?.trim() || undefined
+  if (repairNote || authorDraftJson) {
+    if (!taskKey) throw new Error('[product-production-service] 当前 blocker 不支持作者引导修复')
+    const policy = inspectProductProductionBuildRecoveryPolicyV1({
+      productType: input.details.production.productType,
+      planJson: input.details.build.planJson,
+      taskKey,
+    })
+    if (repairNote && !policy.repairNoteAllowed) {
+      throw new Error('[product-production-service] 当前任务不支持作者修复要求')
     }
-  } catch { /* command still records a generic blocker key */ }
+    if (authorDraftJson && !policy.authorDraftAllowed) {
+      throw new Error('[product-production-service] 当前任务不支持作者完整 JSON 修订')
+    }
+  }
+  let unknownResultReservation: {
+    runId: number
+    attempt: number
+    controlEpoch: number
+    disposition: 'confirmed-not-charged' | 'charge-reservation-upper-bound'
+  } | undefined
+  let failure: Record<string, unknown> = {}
+  try {
+    const parsed = JSON.parse(input.details.build.failureJson) as unknown
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      failure = parsed as Record<string, unknown>
+    }
+  } catch { /* command boundary will reject corrupt failure evidence */ }
+  const providerReservationFailure = failure.code === 'unknown-result'
+    || failure.code === 'provider-response-uncheckpointed'
+  if (providerReservationFailure) {
+    if (!input.unknownResultDisposition) {
+      throw new Error(failure.code === 'provider-response-uncheckpointed'
+        ? '[product-production-service] 已收到供应商响应证据；请按冻结预留上限封账后重试'
+        : '[product-production-service] 结果未知；请先确认供应商是否计费')
+    }
+    if (failure.code === 'provider-response-uncheckpointed'
+      && input.unknownResultDisposition !== 'charge-reservation-upper-bound') {
+      throw new Error('[product-production-service] 已收到供应商响应证据，不能声明为未计费')
+    }
+    const provenance = failure.failureProvenance != null
+      && typeof failure.failureProvenance === 'object'
+      && !Array.isArray(failure.failureProvenance)
+      ? failure.failureProvenance as Record<string, unknown>
+      : null
+    if (!provenance
+      || !Number.isSafeInteger(provenance.runId) || Number(provenance.runId) < 1
+      || !Number.isSafeInteger(provenance.attempt) || Number(provenance.attempt) < 1
+      || !Number.isSafeInteger(provenance.controlEpoch) || Number(provenance.controlEpoch) < 0) {
+      throw new Error('[product-production-service] unknown-result 缺少可核对的 Run/attempt/epoch')
+    }
+    unknownResultReservation = {
+      runId: Number(provenance.runId),
+      attempt: Number(provenance.attempt),
+      controlEpoch: Number(provenance.controlEpoch),
+      disposition: input.unknownResultDisposition,
+    }
+  } else if (input.unknownResultDisposition) {
+    throw new Error('[product-production-service] 当前 blocker 不存在待结算 provider reservation')
+  }
   const receipt = await executeProductProductionCommand({
     scope: input.scope, productionId: input.details.production.id!,
     command: {
       type: 'resolve-blocker', commandId: commandId('resolve-blocker'),
       expectedStateRevision: input.details.production.stateRevision, blockerKey,
       resolution: {
-        action: input.authorDraftJson ? 'author-edit' : input.afterCapabilityChange ? 'change-capability' : 'retry',
-        ...(input.authorDraftJson ? { authorDraftJson: input.authorDraftJson } : {}),
-        note: input.repairNote?.trim() || (input.afterCapabilityChange ? '作者已调整全局能力配置并要求重试' : '作者从制作工作台要求重试'),
+        action: authorDraftJson ? 'author-edit' : input.afterCapabilityChange ? 'change-capability' : 'retry',
+        ...(authorDraftJson ? { authorDraftJson } : {}),
+        ...(unknownResultReservation ? { unknownResultReservation } : {}),
+        note: repairNote || (input.afterCapabilityChange ? '作者已调整全局能力配置并要求重试' : '作者从制作工作台要求重试'),
       },
     },
   })
   if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? 'blocker 重试失败'))
+  const accounting = receipt.result.unknownResultAccounting
+  if (accounting == null) return null
+  if (!accounting || typeof accounting !== 'object' || Array.isArray(accounting)) {
+    throw new Error('[product-production-service] unknown-result 结算回执损坏')
+  }
+  const effectiveDisposition = (accounting as Record<string, unknown>).effectiveDisposition
+  if (effectiveDisposition !== 'provider-actual-charge'
+    && effectiveDisposition !== 'author-confirmed-not-charged'
+    && effectiveDisposition !== 'author-charged-reservation-upper-bound') {
+    throw new Error('[product-production-service] unknown-result 结算回执缺少有效处置')
+  }
+  return effectiveDisposition
 }
 
 export async function resolveTextAdventureSourceDecisionV1(input: {
@@ -987,6 +1590,15 @@ export async function readProductProductionProgressV1(input: {
   return projectProductProductionSchedulerV1(input)
 }
 
+/** Re-seal a terminal Build after a trusted project import remapped local IDs.
+ * This path is deterministic and never resolves or calls an AI/media provider. */
+export async function recoverImportedProductProductionProofsV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+}): Promise<ProductProductionSchedulerProjectionV1> {
+  return recoverImportedProductProductionProofsCoreV1(input)
+}
+
 /**
  * Formal production entry. It reuses the existing global/task-routed AI
  * configuration and only freezes non-secret provider identity in the Build.
@@ -1007,12 +1619,49 @@ export async function runAuthorizedProductProductionV1(input: {
   if (['preview-ready', 'release-ready', 'released'].includes(details.build.status)) {
     return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
   }
-  const brief = parseProductProductionBriefV3(details.brief.briefJson)
+  const creatorAuthority = details.brief.briefKind === 'text-open-world-creator-v1'
+    ? await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+        scope,
+        buildId: details.build.id!,
+      })
+    : null
+  const creatorContracts = creatorAuthority?.contracts ?? null
+  if (creatorContracts) {
+    // Creator authorization freezes the complete non-secret route identity,
+    // pricing and generation settings. Re-prove it before every run/resume;
+    // resolving a fresh capability receipt alone would otherwise silently
+    // authorize whatever route happens to be configured now.
+    const aiState = useAIConfigStore.getState()
+    const confirmation = await verifyTextOpenWorldCreatorProductionPreflightConfirmationV1({
+      brief: creatorContracts.creatorBrief,
+      preflight: creatorContracts.start.preflight,
+      confirmation: creatorContracts.start.confirmation,
+      projectId: scope.projectId,
+      aiConfig: aiState.config,
+      rememberApiKey: aiState.rememberApiKey,
+    })
+    if (confirmation.confirmationHash !== creatorContracts.start.confirmation.confirmationHash) {
+      throw new Error('[product-production-service] Creator 模型授权已变化，请重新检查并确认生产')
+    }
+  }
+  const brief = creatorContracts?.executionBrief
+    ?? parseProductProductionBriefV3(details.brief.briefJson)
   if (brief.avgRevision) return (await import('../avg/revision-production')).runAvgRevisionV1({ ...input, scope, details, brief })
   const textRequirements = brief.capabilityRequirements.filter(requirement => requirement.mediaClass === 'text')
   if (textRequirements.length !== 1) throw new Error('[product-production-service] 正式制作需要唯一文本 capability requirement')
   const textCapability = await resolveConfiguredTextCapabilityV1({
     projectId: scope.projectId, category: 'product-production', requirementKey: textRequirements[0].requirementKey,
+    ...(creatorContracts ? {
+      expectedProviderIdentity: {
+        provider: creatorContracts.start.preflight.providerBinding.provider,
+        model: creatorContracts.start.preflight.providerBinding.model,
+        endpointOrigin: creatorContracts.start.preflight.providerBinding.endpointOrigin,
+        endpointRouteHash: creatorContracts.start.preflight.providerBinding.endpointRouteHash,
+        temperature: creatorContracts.start.preflight.providerBinding.temperature,
+        configuredMaxTokens: creatorContracts.start.preflight.providerBinding.maxTokens,
+        contextWindow: creatorContracts.start.preflight.providerBinding.contextWindow,
+      },
+    } : {}),
   })
   const capabilityBindings: ProductProductionCapabilityBindingV1[] = [{
     requirementKey: textRequirements[0].requirementKey,
@@ -1026,10 +1675,32 @@ export async function runAuthorizedProductProductionV1(input: {
   const authoredImagePackUrl = configuredAuthoredImagePackUrlV1()
   const authoredImagePackReadiness = inspectAuthoredImagePackConfigurationV1({ manifestUrl: authoredImagePackUrl })
   const agnesImageReadiness = inspectConfiguredAgnesImageCapabilityV1({ projectId: scope.projectId })
+  const creatorMediaPlan = creatorAuthority?.media?.authorization.plan ?? null
   const useExternalMedia = brief.qualityProfile !== 'prototype'
+    || creatorMediaPlan?.mode === 'provider-generate'
   for (const requirement of brief.capabilityRequirements) {
     if (!['image', 'music', 'sfx'].includes(requirement.mediaClass)) continue
     if (requirement.mediaClass === 'image'
+      && creatorMediaPlan?.mode === 'author-import'
+      && creatorMediaPlan.capability.requirementKey === requirement.requirementKey) {
+      capabilityBindings.push({
+        requirementKey: creatorMediaPlan.capability.requirementKey,
+        adapterId: creatorMediaPlan.capability.adapterId,
+        bindingHash: creatorMediaPlan.capability.bindingHash,
+      })
+    } else if (requirement.mediaClass === 'image'
+      && creatorMediaPlan?.mode === 'provider-generate'
+      && creatorMediaPlan.capability.requirementKey === requirement.requirementKey) {
+      const resolved = creatorMediaPlan.capability.adapterId === 'agnes.image-2.1-flash.v1'
+        ? await resolveConfiguredAgnesImageCapabilityV1({ projectId: scope.projectId, requirement })
+        : await resolveTrustedRelayMediaCapabilityV1({ requirement, relayUrl })
+      if (resolved.binding.adapterId !== creatorMediaPlan.capability.adapterId
+        || resolved.binding.bindingHash !== creatorMediaPlan.capability.bindingHash) {
+        throw new Error('[product-production-service] Creator 图片 Provider 身份已变化，请重新预览并授权媒资 Build')
+      }
+      mediaCapabilities.set(requirement.requirementKey, resolved)
+      capabilityBindings.push(resolved.binding)
+    } else if (requirement.mediaClass === 'image'
       && brief.intent.productType === 'ai-town'
       && brief.qualityProfile === 'internal'
       && authoredImagePackUrl != null
@@ -1038,9 +1709,7 @@ export async function runAuthorizedProductProductionV1(input: {
       mediaCapabilities.set(requirement.requirementKey, resolved)
       capabilityBindings.push(resolved.binding)
     } else if (requirement.mediaClass === 'image' && useExternalMedia && agnesImageReadiness.ready) {
-      const resolved = await resolveConfiguredAgnesImageCapabilityV1({
-        projectId: scope.projectId, requirement,
-      })
+      const resolved = await resolveConfiguredAgnesImageCapabilityV1({ projectId: scope.projectId, requirement })
       mediaCapabilities.set(requirement.requirementKey, resolved)
       capabilityBindings.push(resolved.binding)
     } else if (useExternalMedia && relayUrl != null) {
@@ -1061,9 +1730,14 @@ export async function runAuthorizedProductProductionV1(input: {
       }))
     }
   }
-  const executor = createConfiguredProductProductionExecutorV1({
-    production: details.production, brief, mediaCapabilities,
-  })
+  const executor = brief.intent.productType === 'text-open-world'
+    ? createTextOpenWorldProductionExecutorV1({
+      production: details.production, brief, mediaCapabilities,
+      textCapabilityReceipt: textCapability.receipt,
+    })
+    : createConfiguredProductProductionExecutorV1({
+      production: details.production, brief, mediaCapabilities,
+    })
   const projection = await runProductProductionUntilBlockedV1({
     scope, productionId: input.productionId, executor, capabilityBindings, signal: input.signal,
     async onDurableBoundary() {
@@ -1091,6 +1765,9 @@ export async function publishProductProductionV1(input: {
   productionId: number
 }) {
   const prepared = await prepareProductProductionAdoption(input)
+  if (prepared.creatorRelease) {
+    throw new Error('文字开放世界 Creator Build 必须经过专属作者发布确认，不能调用通用发布入口。')
+  }
   const receipt = await publishProductProductionBuild({
     ...input,
     command: {
@@ -1131,7 +1808,8 @@ export async function startProductProductionPreviewV1(input: {
   if (previewHash !== details.build.previewHash) {
     throw new Error('[product-production-service] Preview command 返回的 hash 已过期')
   }
-  const brief = parseProductProductionBriefV3(details.brief.briefJson)
+  const brief = details.executionBrief
+  if (!brief) throw new Error('[product-production-service] 当前 Build 缺少可验证执行 Brief')
   const session = await createProductRuntimeInstanceFromSource({
     scope: input.scope,
     source: { kind: 'build', productBuildId: details.build.id!, expectedPreviewHash: previewHash },

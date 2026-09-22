@@ -4,10 +4,12 @@ import type {
   WorldCapabilityArea,
 } from '../registry/types'
 import {
+  assertWorldReleaseIdentityCurrentV1,
   listAllWorldReleaseResourceDescriptorsV1,
   openWorldReleaseV1,
   readWorldResourceV1,
   type OpenWorldReleaseV1,
+  worldReleaseIdentityTransactionTablesV1,
 } from './world-release-provider'
 
 const MAX_RESOURCE_READ_TOKENS = 100_000
@@ -30,6 +32,22 @@ function hasWorldSemantic(
   worldSemantic: NonNullable<ContextResourceDescriptorV1['worldSemantic']>
 } {
   return descriptor.sourceKey === 'worldRelease' && descriptor.worldSemantic != null
+}
+
+/** Neutral, transaction-safe compare-and-swap. No physical WorldRelease row
+ * or manifest crosses this client boundary. */
+export async function assertWorldSemanticReleaseCurrentV1(input: {
+  localReleaseRecordId: number
+  expectedProjectId: number
+  expectedWorldId?: number
+  expectedReleaseHash: string
+}): Promise<void> {
+  await assertWorldReleaseIdentityCurrentV1(input)
+}
+
+/** Opaque transaction capability for the identity CAS above. */
+export function worldSemanticReleaseTransactionTablesV1() {
+  return worldReleaseIdentityTransactionTablesV1()
 }
 
 /** Neutral descriptor boundary for product requirement resolution. Physical

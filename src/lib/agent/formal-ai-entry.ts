@@ -127,9 +127,15 @@ export function parseFormalAIEntryRegistryV1(
     if (!ENTRY_KINDS.has(entryKind)) fail(`${entryId} entryKind 无效`)
     if (typeof record.adoptAllowed !== 'boolean') fail(`${entryId} adoptAllowed 必须是 boolean`)
     const adoptAllowed = record.adoptAllowed
+    // freezeFormalAIEntryBindingV1 serializes the normalized binding shape,
+    // including an explicit [] for entries that cannot adopt. Preserve that
+    // canonical frozen form while still requiring a non-empty list whenever
+    // adoption is enabled.
     const adoptionTargets = record.adoptionTargets === undefined
       ? []
-      : readStringArray(record, 'adoptionTargets', path)
+      : Array.isArray(record.adoptionTargets) && record.adoptionTargets.length === 0
+        ? []
+        : readStringArray(record, 'adoptionTargets', path)
 
     if (categories.includes('*') && (categories.length !== 1 || entryKind !== 'experimental')) {
       fail(`${entryId} 只有 experimental 入口可以使用单独的 * category`)
@@ -198,6 +204,7 @@ export async function freezeFormalAIEntryBindingV1(
 
 export async function assertFormalAIEntrySnapshotIntegrityV1(
   snapshot: AgentRunFormalAIEntryBindingV1,
+  skills: ReadonlyMap<string, AgentSkillDefinitionV1> = AGENT_SKILL_BY_ID,
 ): Promise<FormalAIEntryBindingV1> {
   if (snapshot.version !== 1 || snapshot.entryId.length === 0) fail('Run formal entry snapshot 版本无效')
   const parsed = JSON.parse(snapshot.bindingJson) as unknown
@@ -206,7 +213,7 @@ export async function assertFormalAIEntrySnapshotIntegrityV1(
     bindingVersion: 1,
     scope: 'formal-ai-execution-entry',
     entries: [parsed],
-  })
+  }, skills)
   const binding = registry.entries[0]
   const { version: _version, ...body } = binding
   if (binding.entryId !== snapshot.entryId) fail('Run formal entry snapshot 的 entryId 不匹配')
@@ -236,6 +243,39 @@ export async function executeRegisteredAIEntryV1(
 ): Promise<string> {
   const governedMeta: FormalAICallMetaV1 = { ...meta, formalEntryId: entryId }
   assertFormalAIEntryCallV1(governedMeta)
+  return chat(messages, config, governedMeta, signal, result, options, frozenResolution)
+}
+
+/**
+ * Execute a durable Run's frozen formal entry without consulting the live
+ * registry. Recovery must remain executable after a registry release changes,
+ * while still proving the frozen Skill, category and caller authority.
+ */
+export async function executeFrozenFormalAIEntryV1(
+  entryId: FormalAIEntryId,
+  snapshot: AgentRunFormalAIEntryBindingV1,
+  frozenSkill: AgentSkillDefinitionV1,
+  caller: string,
+  messages: ChatMessage[],
+  config: AIConfig,
+  meta: AICallMeta,
+  signal?: AbortSignal,
+  result?: ChatResult,
+  options?: ChatRequestOptions,
+  frozenResolution?: AIRequestConfigResolution,
+): Promise<string> {
+  const binding = await assertFormalAIEntrySnapshotIntegrityV1(
+    snapshot,
+    new Map([[frozenSkill.id, frozenSkill]]),
+  )
+  const category = meta.category ?? ''
+  if (binding.entryId !== entryId
+    || binding.skillId !== frozenSkill.id
+    || (!binding.categories.includes('*') && !binding.categories.includes(category))
+    || !binding.allowedCallers.includes(caller)) {
+    fail(`${entryId} 的冻结入口、Skill、category 或 caller 权限不匹配`)
+  }
+  const governedMeta: FormalAICallMetaV1 = { ...meta, formalEntryId: binding.entryId }
   return chat(messages, config, governedMeta, signal, result, options, frozenResolution)
 }
 

@@ -1,9 +1,14 @@
 import { lazy, Suspense } from 'react'
 import { BookOpen } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router'
 import AIConfigPanel from './AIConfigPanel'
 import CreativeReliabilityCommunityPanel from './CreativeReliabilityCommunityPanel'
 import ProjectStorageWorkspacePanel from './ProjectStorageWorkspacePanel'
 import type { Project } from '../../lib/types'
+import {
+  parseTextOpenWorldSettingsReturnV1,
+  type TextOpenWorldSettingsReturnV1,
+} from '../../lib/open-world/creator-settings-navigation'
 
 const HarnessEvalPanel = import.meta.env.DEV
   ? lazy(() => import('./HarnessEvalPanel'))
@@ -12,6 +17,8 @@ const HarnessEvalPanel = import.meta.env.DEV
 interface Props {
   project?: Project
   onOpenDataManagement?: () => void
+  textOpenWorldCreatorReturn?: TextOpenWorldSettingsReturnV1 | null
+  onReturnToTextOpenWorldCreator?: (resume: TextOpenWorldSettingsReturnV1) => void
 }
 
 /**
@@ -19,10 +26,20 @@ interface Props {
  * 「提示词管理」已升级为侧边栏一级菜单；这里保留 AI 配置和项目级本地偏好。
  * 项目内设置同时承载存储工作区；全局设置会诚实显示“先进入项目”。
  */
-export default function SettingsPage({ project, onOpenDataManagement }: Props) {
-
+export default function SettingsPage({
+  project,
+  onOpenDataManagement,
+  textOpenWorldCreatorReturn,
+  onReturnToTextOpenWorldCreator,
+}: Props) {
   return (
     <div className="h-full overflow-auto p-6">
+      {textOpenWorldCreatorReturn && onReturnToTextOpenWorldCreator && <button
+        type="button"
+        className="lf-action mb-4"
+        aria-label="返回开放世界制作"
+        onClick={() => onReturnToTextOpenWorldCreator(textOpenWorldCreatorReturn)}
+      >返回开放世界制作</button>}
       <AIConfigPanel />
       <div className="mt-6">
         <ProjectStorageWorkspacePanel project={project} onOpenDataManagement={onOpenDataManagement} />
@@ -53,4 +70,26 @@ export default function SettingsPage({ project, onOpenDataManagement }: Props) {
       </div>
     </div>
   )
+}
+
+/** Route-aware shell kept separate so embedded/test settings surfaces remain
+ * usable without requiring a Router provider. */
+export function RoutedSettingsPage(props: Props) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const creatorReturn = parseTextOpenWorldSettingsReturnV1(location.state)
+  return <SettingsPage
+    {...props}
+    textOpenWorldCreatorReturn={creatorReturn}
+    onReturnToTextOpenWorldCreator={(resume) => {
+      const params = new URLSearchParams({ mode: 'production' })
+      const sourceProjectId = resume.sourceKind === 'novel'
+        ? resume.activeWorkProjectId
+        : resume.activeWorldProjectId
+      if (sourceProjectId != null) params.set('project', String(sourceProjectId))
+      navigate(`/openworld/runtime?${params}`, {
+        state: { storyforgeProductHubReturn: resume },
+      })
+    }}
+  />
 }

@@ -74,6 +74,15 @@ export interface StreamResult {
 /** 可变容器，chat 写入非流式调用返回的真实 token 用量。 */
 export interface ChatResult {
   usage?: TokenUsage
+  /**
+   * Observable transport boundary for callers that must make durable retry
+   * and billing decisions. This records only delivery state and HTTP status;
+   * it never contains prompts, responses, headers or credentials.
+   */
+  requestLifecycle?: {
+    phase: 'pre-dispatch' | 'request-dispatched' | 'response-observed'
+    responseStatus: number | null
+  }
   /** Raw OpenAI-compatible tool_calls; the Agent protocol validates it. */
   toolCalls?: unknown
   toolCallsPresent?: boolean
@@ -325,6 +334,9 @@ export async function* streamChat(
     url: req.url,
     model: config.model,
     status: 'pending',
+  }, {
+    sensitiveValues: [config.apiKey],
+    baseUrl: config.baseUrl,
   })
 
   const startTime = Date.now()
@@ -429,6 +441,9 @@ export async function chat(
   options?: ChatRequestOptions,
   frozenResolution?: AIRequestConfigResolution,
 ): Promise<string> {
+  if (result) {
+    result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
+  }
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
   warnRouteFallback(resolved, meta)
   config = resolved.config
@@ -453,14 +468,23 @@ export async function chat(
   }
   const req = buildRequest(config, trimmed.messages, false, options)
   const startedAt = Date.now()
-  const log = createLog({ type: 'chat', provider: config.provider, model: config.model, url: req.url, status: 'pending' })
+  const log = createLog(
+    { type: 'chat', provider: config.provider, model: config.model, url: req.url, status: 'pending' },
+    { sensitiveValues: [config.apiKey], baseUrl: config.baseUrl },
+  )
   try {
+    if (result) {
+      result.requestLifecycle = { phase: 'request-dispatched', responseStatus: null }
+    }
     const response = await fetch(req.url, {
       method: 'POST',
       headers: req.headers,
       body: req.body,
       signal,
     })
+    if (result) {
+      result.requestLifecycle = { phase: 'response-observed', responseStatus: response.status }
+    }
 
     if (!response.ok) {
       const errorText = await response.text()

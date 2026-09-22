@@ -60,6 +60,63 @@
 .adventure-title-page .textgame-title-art { background: radial-gradient(circle at 31% 23%,rgba(226,181,106,.3),transparent 22%),radial-gradient(circle at 76% 82%,rgba(49,109,104,.45),transparent 38%),linear-gradient(145deg,#31534e,#132b31 58%,#0d181e); }
 .avg-game-title-page .textgame-title-art { background: radial-gradient(circle at 35% 23%,rgba(221,173,103,.3),transparent 23%),radial-gradient(circle at 75% 83%,rgba(72,102,126,.42),transparent 36%),linear-gradient(145deg,#344653,#172733 60%,#0b141c); }
 
+/* Text open world launcher: immutable releases and their independent save timelines. */
+.open-world-launcher { min-height: 720px; background: radial-gradient(circle at 18% 22%,rgba(53,117,99,.3),transparent 31%),radial-gradient(circle at 82% 76%,rgba(151,105,53,.24),transparent 34%),linear-gradient(145deg,#071116,#14282b 48%,#090e13 100%); }
+.open-world-launcher-atmosphere { opacity: .48; background: repeating-radial-gradient(circle at 22% 24%,transparent 0 62px,rgba(222,197,153,.06) 64px 65px),linear-gradient(119deg,transparent 47%,rgba(255,255,255,.055) 47.2% 47.35%,transparent 47.55%),radial-gradient(ellipse at bottom,#31554b 0%,transparent 58%); }
+.open-world-launcher-content { width: min(1040px,calc(100% - 64px)); }
+.open-world-launcher .avg-title-kicker { display: inline-flex; align-items: center; gap: 7px; }
+.open-world-launcher .avg-title-kicker svg { width: 15px; height: 15px; }
+.open-world-launcher-alert { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; margin: 0 0 18px; border: 1px solid rgba(218,126,111,.38); border-radius: 8px; }
+.open-world-launcher-alert svg { width: 16px; height: 16px; }
+.open-world-launcher-alert button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border: 1px solid rgba(255,255,255,.2); border-radius: 999px; background: rgba(255,255,255,.06); color: #fff; font-size: 9px; }
+.open-world-title-art,.open-world-catalog-icon { background: radial-gradient(circle at 35% 22%,rgba(229,186,111,.3),transparent 22%),radial-gradient(circle at 75% 82%,rgba(66,139,112,.4),transparent 37%),linear-gradient(145deg,#2d5548,#132d2e 58%,#0c171b); }
+.open-world-release-evidence { display: flex; flex-wrap: wrap; gap: 7px 12px; color: #819598; font-family: var(--font-mono); font-size: 8px; }
+.open-world-release-evidence span { display: inline-flex; align-items: center; gap: 4px; }
+.open-world-release-evidence svg { width: 12px; height: 12px; color: #c7a46c; }
+.open-world-release-error { padding: 9px 11px; border: 1px solid rgba(218,126,111,.3); border-radius: 7px; background: rgba(103,38,35,.24); color: #f0aaa0!important; line-height: 1.55; text-transform: none!important; }
+.open-world-release-versions { display: grid; gap: 6px; padding-top: 4px; }
+.open-world-release-versions>small { color: #819396; font-size: 8px; letter-spacing: .08em; }
+.open-world-release-versions>div { display: flex; flex-wrap: wrap; gap: 5px; }
+.open-world-release-versions button { padding: 5px 8px; border: 1px solid rgba(255,255,255,.13); border-radius: 999px; background: rgba(255,255,255,.035); color: #aab8b8; font-size: 8px; cursor: pointer; }
+.open-world-release-versions button[aria-pressed="true"] { border-color: #c9a362; background: rgba(174,126,61,.2); color: #f1dbb4; }
+.open-world-launcher button:disabled { opacity: .42; cursor: not-allowed; }
+.open-world-launcher-saves { margin-top: 34px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,.11); }
+.open-world-launcher-saves>header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 11px; color: #99aaab; }
+.open-world-launcher-saves>header>div { display: flex; align-items: center; gap: 9px; }
+.open-world-launcher-saves>header svg { width: 17px; height: 17px; color: #c9a66c; }
+.open-world-launcher-saves>header span { display: grid; gap: 2px; }
+.open-world-launcher-saves>header strong { color: #efe6d8; font-family: var(--font-serif); font-size: 16px; font-weight: 500; }
+.open-world-launcher-saves>header small { color: #849598; font-size: 8px; }
+.open-world-save-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.open-world-save-grid>article { display: grid; grid-template-columns: minmax(0,1fr) 38px; overflow: hidden; border: 1px solid rgba(255,255,255,.11); border-radius: 9px; background: rgba(7,15,19,.62); }
+.open-world-save-grid>article>button { border: 0; background: transparent; color: inherit; cursor: pointer; }
+.open-world-save-grid>article>button:last-child { display: grid; place-items: center; border-left: 1px solid rgba(255,255,255,.08); color: #798b8f; }
+.open-world-save-grid>article>button:last-child:hover { background: rgba(135,55,48,.2); color: #efaaa0; }
+.open-world-save-open { display: grid; gap: 4px; padding: 11px 13px; text-align: left; }
+.open-world-save-open>span { display: flex; min-width: 0; align-items: center; gap: 7px; }
+.open-world-save-open svg { width: 14px; height: 14px; flex: 0 0 auto; color: #c7a269; }
+.open-world-save-open strong { overflow: hidden; color: #f0e9dd; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.open-world-save-open p { margin: 0; color: #9cabac; font-size: 9px; }
+.open-world-save-open small { display: inline-flex; align-items: center; gap: 4px; color: #708489; font-size: 8px; }
+
+/* Text open world loading/error boundaries and shared player-facing recovery notices. */
+.open-world-player-boundary { display: grid; min-height: min(720px,100dvh); place-items: center; overflow: auto; }
+.open-world-player-boundary .open-world-launcher-content { display: grid; width: min(760px,calc(100% - 32px)); min-height: min(720px,100dvh); box-sizing: border-box; align-content: center; justify-items: start; padding: clamp(28px,8vh,72px) 0; }
+.open-world-player-boundary .open-world-launcher-content>svg { width: 28px; height: 28px; margin-bottom: 12px; color: #d5b77e; }
+.open-world-player-state-notice { display: grid; width: min(100%,760px); box-sizing: border-box; grid-template-columns: auto minmax(0,1fr); gap: 11px; margin: 0 0 18px; padding: 14px; border: 1px solid rgba(218,156,93,.5); border-radius: 10px; background: rgba(83,54,21,.3); color: #f5e4ca; box-shadow: 0 14px 36px rgba(0,0,0,.2); }
+.open-world-player-state-notice.is-compact { width: 100%; margin-bottom: 12px; padding: 11px 12px; }
+.open-world-player-state-notice[data-player-state="blocking-error"] { border-color: rgba(239,142,128,.62); background: rgba(104,37,32,.38); color: #ffd7d0; }
+.open-world-player-state-notice[data-player-state="degraded"] { border-color: rgba(119,189,161,.55); background: rgba(34,83,66,.34); color: #d7f4e8; }
+.open-world-player-state-notice>svg { width: 20px; height: 20px; margin-top: 1px; }
+.open-world-player-state-notice>div { display: grid; min-width: 0; gap: 5px; }
+.open-world-player-state-notice strong { overflow-wrap: anywhere; font-family: var(--font-serif); font-size: 15px; }
+.open-world-player-state-notice p,.open-world-player-state-notice small { overflow-wrap: anywhere; margin: 0; line-height: 1.6; }
+.open-world-player-state-notice p { color: inherit; font-size: 11px; }
+.open-world-player-state-notice small { color: #b8c4c1; font-size: 9px; }
+.open-world-player-state-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 3px; }
+.open-world-player-state-actions button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 6px; padding: 0 13px; border: 1px solid currentColor; border-radius: 7px; background: rgba(255,255,255,.06); color: inherit; cursor: pointer; }
+.open-world-player-state-actions button:focus-visible { outline: 2px solid #ffdf6b; outline-offset: 2px; }
+
 .avg-playing { position: fixed; z-index: 80; inset: 0; display: block; min-height: 0; background: #05090d; color: #f6efe4; }
 .avg-playing .avg-main { position: relative; display: block; width: 100%; height: 100%; }
 .avg-playing .avg-toolbar { position: absolute; z-index: 34; top: 0; right: 0; left: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 18px 22px 52px; background: linear-gradient(180deg,rgba(4,8,12,.88),rgba(4,8,12,.38) 56%,transparent); pointer-events: none; }
@@ -400,6 +457,7 @@
 
 @media (max-width: 780px) {
   .textgame-catalog-list>article>button { grid-template-columns: 54px minmax(0,1fr); gap: 11px; padding: 11px; }.textgame-catalog-icon { width: 54px; height: 54px; }.textgame-catalog-open { display: none; }.textgame-catalog-copy>p { white-space: normal; }.textgame-title-page { grid-template-columns: 1fr; }.textgame-title-art { min-height: 155px; margin: 8px 14px 0; }.textgame-title-copy { padding: 22px 19px 27px; }
+  .open-world-launcher-content { width: min(100% - 28px,1040px); padding-top: 36px; }.open-world-launcher-alert { grid-template-columns: auto 1fr; }.open-world-launcher-alert button { grid-column: 1/-1; justify-self: start; }.open-world-save-grid { grid-template-columns: 1fr; }.open-world-launcher-saves>header { align-items: flex-start; flex-direction: column; }
   .adventure-launcher-content { width: min(100% - 28px,1000px); padding-top: 36px; }.adventure-release-grid>article { grid-template-columns: 1fr; }.adventure-release-cover { min-height: 140px; }.adventure-launcher-saves { grid-template-columns: 1fr; }.adventure-gamebar { grid-template-columns: auto 1fr auto; padding: 0 10px; }.adventure-autosave,.adventure-gamebar nav { display: none; }.adventure-layout { display: block; padding-bottom: 60px; }.adventure-map-rail { display: none; }.adventure-scene-column { padding: 10px; }.adventure-scene { min-height: 330px; padding: 22px 17px; }.adventure-scene-characters article { min-width: min(100%,180px); }.adventure-actions>div { grid-template-columns: 1fr; }.adventure-mobile-dock { position: sticky; z-index: 28; bottom: 0; display: grid; grid-template-columns: repeat(5,1fr); border-top: 1px solid rgba(255,255,255,.1); background: rgba(8,16,22,.95); backdrop-filter: blur(12px); }.adventure-mobile-dock button { display: grid; place-items: center; gap: 3px; padding: 9px 2px; border: 0; background: transparent; color: #9ba9ab; font-size: 7px; }.adventure-panel-backdrop { inset: 64px 0 0; padding: 8px; }.adventure-panel { max-height: 91vh; }.adventure-inventory-grid,.adventure-system-grid { grid-template-columns: 1fr; }
   .adventure-console-shell { padding: 23px 15px 92px; }.adventure-console-prologue h1 { font-size: 34px; }.adventure-console-prologue>p { font-size: 16px; }.adventure-console-prose { font-size: calc(17px * var(--adventure-font-scale)); }.adventure-command-center { bottom: 56px; margin-right: -5px; margin-left: -5px; padding: 13px; }.adventure-command-center>header { display: block; }.adventure-command-center>header>span { display: block; margin-top: 5px; }.adventure-command-suggestions { max-height: 78px; overflow-y: auto; }.adventure-console-ending { grid-template-columns: 34px 1fr; }.adventure-console-ending>span { grid-column: 1/-1; justify-self: start; }
 }
