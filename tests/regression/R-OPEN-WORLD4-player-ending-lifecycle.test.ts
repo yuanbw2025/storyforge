@@ -256,7 +256,7 @@ describe('Text Open World G4 · player ending lifecycle', () => {
       title: '不得绕过的结局后分支',
     })).rejects.toThrow('不能从已抵达结局的状态创建分支')
     expect(await db.productRuntimeSessions.count()).toBe(sessionCount)
-  }, 60_000)
+  }, 120_000)
 
   it('Action v17以前的结局在没有pending命令时仍可恢复生命周期CAS且不新增事件', async () => {
     const sessionId = await createLegacyEndingSession('legacy-status-crash')

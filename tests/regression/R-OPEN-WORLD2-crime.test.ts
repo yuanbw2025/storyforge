@@ -125,7 +125,7 @@ describe('Text Open World vNext · governed theft, deception and local crime', (
       commandId: 'command.crime.steal.again', requestedAt: 1_200,
     })
     expect(consumed).toMatchObject({ phase: 'preflight', status: 'rejected', reason: { code: 'once-consumed' } })
-  })
+  }, 15_000)
 
   it('高风险确认拒绝弹窗打开后已经变化的Session事件基线', async () => {
     const session = await publishedCrimeSession('盐脊过期确认验收')

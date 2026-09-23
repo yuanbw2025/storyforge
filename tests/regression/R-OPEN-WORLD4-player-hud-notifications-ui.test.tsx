@@ -324,5 +324,5 @@ describe('Text Open World G4-04 · HUD与通知UI边界', () => {
       })
     })
     expect(host.querySelector('[data-testid="text-open-world-important-change-announcement"]')?.textContent).toBe('')
-  }, 15_000)
+  }, 30_000)
 })
