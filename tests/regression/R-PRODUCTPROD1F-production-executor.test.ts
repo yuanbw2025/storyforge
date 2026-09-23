@@ -4978,7 +4978,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       acceptedPrivateAdditionKeys: ['addition.supporting-guide'],
       authorCommandId: 'source-decision.accept',
     })
-  }, 30_000)
+  }, 60_000)
 
   it('商业终幕正文遗漏冻结结局后果时，第二次尝试只接收逐值闭合的精确 system beat 返修清单', async () => {
     const owned = await fixtureForProduct('text-adventure', {

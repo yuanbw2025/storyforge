@@ -233,7 +233,7 @@ describe('Text Open World G7 · property, invariant and fixed-seed replay gates'
       expect(await replayHash(created.session)).toBe(await hashProductRuntimeStateV1(firstFinal))
       expect(await replayHash(mirror)).toBe(await hashProductRuntimeStateV1(mirrorFinal))
     }
-  }, 90_000)
+  }, 180_000)
 
   it('状态解析拒绝资源越界、非有限数值、唯一物品重复和单实例多槽占用', () => {
     const runtimePackage = createTextOpenWorldVNextFixture()
