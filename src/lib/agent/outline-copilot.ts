@@ -1,3 +1,4 @@
+import { affirmativeAuthorActionsV1, parseAuthorOrdinalV1 } from './author-intent'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
 import { db } from '../db/schema'
@@ -79,6 +80,8 @@ export interface OutlineCopilotSnapshot {
   serialized: string
   existingTitles: string[]
   startingOrder: number
+  /** Frozen author-requested upper bound; absent on older candidates. */
+  maxItems?: number
 }
 
 export interface OutlineCopilotInput {
@@ -227,10 +230,18 @@ function determineMode(
 }
 
 function chooseTargetVolume(request: string, volumes: OutlineNode[]): OutlineNode | null {
-  const explicitlyNamed = volumes.find(volume => (
-    volume.title.trim().length > 0 && request.includes(volume.title.trim())
+  if (!volumes.length) return null
+  const targetRequest = affirmativeAuthorActionsV1(request)
+  const named = volumes.filter(volume => (
+    volume.title.trim().length > 0 && targetRequest.includes(volume.title.trim())
   ))
-  return explicitlyNamed ?? volumes[volumes.length - 1] ?? null
+  if (named.length > 1) throw new Error('要求中出现了多个卷名，请明确本次章纲写入哪一卷。')
+  const ordinalMatch = targetRequest.match(/第\s*([零〇一二两三四五六七八九十百千\d]+)\s*卷/)
+  const ordinal = ordinalMatch ? parseAuthorOrdinalV1(ordinalMatch[1]) : null
+  const numbered = ordinal == null ? undefined : volumes[ordinal - 1]
+  if (ordinalMatch && !numbered) throw new Error(`未找到指定的第${ordinalMatch[1]}卷，请选择已有卷；没有写入其他卷。`)
+  if (numbered && named[0] && numbered.id !== named[0].id) throw new Error('卷序号与卷名指向不同位置，请明确一个目标卷。')
+  return numbered ?? named[0] ?? volumes[volumes.length - 1] ?? null
 }
 
 export function parseOutlineCandidateDraft(draft: string): GeneratedOutlineItem[] {
@@ -290,6 +301,9 @@ function candidateIssues(
     })
   }
   const existing = new Set(snapshot.existingTitles)
+  if (snapshot.maxItems != null && output.length > snapshot.maxItems) {
+    issues.push({ code: 'outline-count-exceeded', message: `本轮只允许 ${snapshot.maxItems} 项，候选包含 ${output.length} 项。请删除多余项后再采纳。` })
+  }
   const duplicate = parsed?.find(item => existing.has(normalizeTitle(item.title)))
   if (duplicate) {
     issues.push({
@@ -346,7 +360,7 @@ async function adoptCandidate(input: {
       workspaceScope,
     )
     if (current.serialized !== input.snapshot.serialized) throw new OutlineCopilotStaleError()
-    const issues = candidateIssues(input.items, current)
+    const issues = candidateIssues(input.items, { ...current, maxItems: input.snapshot.maxItems })
     if (issues.length) throw new Error(issues.map(issue => issue.message).join('；'))
     const result = await adoptGeneratedOutlineItems({
       projectId: input.projectId,
@@ -442,6 +456,7 @@ export async function prepareOutlineCopilot(input: {
   })
   const currentNodes = await readOwnedRows<OutlineNode>(readScope, 'outlineNodes', { owner: 'work' })
   const snapshot = snapshotOf(currentNodes, worldGroupId, mode, parentVolumeId)
+  if (/只(?:拟定|创建|生成|规划)\s*(?:1|一)\s*个?\s*(?:卷|章)/.test(request)) snapshot.maxItems = 1
   if (before.serialized !== snapshot.serialized) throw new OutlineCopilotStaleError()
 
   const inputState = projectContextGatewayInputStateV1(

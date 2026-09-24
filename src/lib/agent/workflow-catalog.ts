@@ -1,4 +1,5 @@
 import type { AgentRunWorkflowKind } from '../types/agent-run'
+import { affirmativeAuthorActionsV1 } from './author-intent'
 import {
   getAgentSkillV1,
   resolveAgentSkillV1,
@@ -140,9 +141,10 @@ export function isMasterFanOutEnabledV1(): boolean {
 }
 
 export function classifyRequestedDomainIdsV1(request: string): Set<DomainAgentId> {
+  request = affirmativeAuthorActionsV1(request)
   const hasWorldGame = /(?:生成|创建|制作|演化|改编|开发|做成).{0,24}(?:文字游戏|分支互动叙事|分支叙事|文字冒险|AVG|视觉小说)|(?:文字游戏|分支互动叙事|分支叙事|文字冒险|AVG|视觉小说).{0,24}(?:生成|创建|制作|演化|改编|开发|做成)/i.test(request)
   const hasInspiration = /灵感|反推|碎片|脑洞/.test(request)
-  const hasProse = /正文|续写|接着写|继续写|写(?:作|出|完)?第\s*[零〇一二两三四五六七八九十\d]+\s*章/.test(request)
+  const hasProse = /正文|续写|接着写|继续写|写(?:作|出|完)?第\s*[零〇一二两三四五六七八九十百千\d]+\s*章|写.{0,12}(?:场景|片段|开头|一段|结尾)/.test(request)
   const outlineMention = /细纲|场景拆分|大纲|卷纲|章纲|章节规划|剧情结构|情节结构|故事线|主线|支线|复线/.test(request)
   const outlineAction = (
     /(?:生成|创建|新增|规划|设计|展开|补充|完善|修改|重做).{0,12}(?:细纲|场景拆分|大纲|卷纲|章纲|章节规划|剧情结构|情节结构|故事线|主线|支线|复线)/.test(request)
@@ -186,6 +188,7 @@ export function classifyRequestedDomainIdsV1(request: string): Set<DomainAgentId
 }
 
 export function selectAgentSkillIdV1(agentId: DomainAgentId, request: string): AgentSkillId {
+  request = affirmativeAuthorActionsV1(request)
   if (agentId === 'outline') {
     if (/细纲|场景拆分|拆.{0,8}场景/.test(request)) return 'outline.details'
     if (/(?:映射|分析|更新).{0,10}(?:本章|章节).{0,10}(?:故事线|进度|交汇)|(?:动态进度|故事线进度)/.test(request)) {

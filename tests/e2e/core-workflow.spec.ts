@@ -1341,6 +1341,7 @@ test('主 Agent 调度世界领域任务，拒绝零写入并精确采纳可见�
   await copilot.getByRole('button', { name: '确认计划并开始', exact: true }).click()
   await expect(candidate).toContainText(firstCandidate.value)
   await expect(copilot.getByText(/均衡 · ≈[\d,]+ tokens/)).toBeVisible()
+  await copilot.getByText('质量提示与运行详情', { exact: true }).click()
   await expect(copilot.getByText(/查看本次实际输入证据 · \d+ 个来源/)).toBeVisible()
   await expect(copilot.getByText(/本轮团队预算约 [\d,]+ \/ 160,000 tokens · 2\/7 次调用 · Canon 打回 1\/1/)).toBeVisible()
 
@@ -1996,6 +1997,8 @@ test('主 Agent 调度大纲领域任务，确认可见整批候选后同步到�
   await request.fill('规划全书两卷卷纲')
   await copilot.getByRole('button', { name: '讨论与规划', exact: true }).click()
   await copilot.getByRole('button', { name: '确认计划并开始', exact: true }).click()
+  await expect(copilot.getByRole('textbox', { name: '标题 · 候选 1', exact: true })).toHaveValue('第一卷：退潮')
+  await copilot.getByRole('button', { name: '查看原始结构', exact: true }).click()
   await expect(candidate).toContainText('第一卷：退潮')
   await copilot.getByRole('button', { name: '拒绝', exact: true }).click()
   await expect(page.locator('main').getByText('第一卷：退潮', { exact: true })).toHaveCount(0)
@@ -2007,6 +2010,7 @@ test('主 Agent 调度大纲领域任务，确认可见整批候选后同步到�
     { ...modelCandidate[0], summary: '作者确认版：守灯人发现从海床升起的浮空城。' },
     modelCandidate[1],
   ]
+  await copilot.getByRole('button', { name: '查看原始结构', exact: true }).click()
   await candidate.fill(JSON.stringify(edited, null, 2))
   await copilot.getByRole('button', { name: '采纳', exact: true }).click()
 

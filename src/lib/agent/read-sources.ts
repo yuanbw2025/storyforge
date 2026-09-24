@@ -96,6 +96,9 @@ export async function readAgentWorkStatus(input: AssembleContextInput): Promise<
     `角色：${characters}；大纲节点：${outlineNodes}；伏笔：${foreshadows}；参考资料：${references}`,
     `当前世界：${progress.volumes} 卷；${progress.rows.length} 个章纲；${progress.detailed} 章场景细纲；${progress.written} 章正文。`,
     `建议下一阶段（仅建议，须作者确认）：${progress.nextRequest}`,
+    '空白世界设定、故事核心、角色卡和细纲不是正文候选的必填项；作者可以跳写已有任意章节。新正文仍须明确章节保存位置，已有正文只能显式续写。',
+    ...progress.rows.slice(0, MAX_OUTLINE_NODES).map(row => `- 第${row.ordinal}章《${row.title}》：${row.written ? `已有正文 ${row.words} 字` : '正文空白'}；${row.hasSummary ? '已有章纲' : '章纲摘要留白'}；${row.hasDetails ? '已有细纲' : '细纲留白'}`),
+    ...(progress.rows.length > MAX_OUTLINE_NODES ? [`其余 ${progress.rows.length - MAX_OUTLINE_NODES} 章未在紧凑目录展开；不能据此判断它们不存在。`] : []),
     '单轮候选完成不代表全书完成；全书结局与修订需作者确认。',
   ].join('\n')
 }

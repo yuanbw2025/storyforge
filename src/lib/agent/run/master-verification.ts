@@ -132,14 +132,19 @@ export async function verifyMasterAgentRunV1(input: {
 }): Promise<MasterAgentVerificationResultV1> {
   maybeInjectHarnessFaultV1('terminal.before-verify')
   let snapshot = await readAgentRunV1(input.scope, input.runId)
+  if (!isMasterAgentRunWorkflowKindV1(snapshot.contract.workflowKind)) {
+    throw new Error('终态验证器只接受分步骤主 Agent run')
+  }
   if (snapshot.projection.state === 'completed') {
     return { accepted: true, codes: [], snapshot }
   }
+  // A staged run normally returns here after adopting one candidate and
+  // producing the next. Waiting for the author is not a failed verification.
+  if (snapshot.projection.state === 'awaiting_confirmation') {
+    return { accepted: false, codes: ['run-not-ready'], snapshot }
+  }
   if (snapshot.projection.state !== 'running') {
     throw new Error(`主 Agent run 当前状态 ${snapshot.projection.state} 不允许终态验证`)
-  }
-  if (!isMasterAgentRunWorkflowKindV1(snapshot.contract.workflowKind)) {
-    throw new Error('终态验证器只接受分步骤主 Agent run')
   }
   const candidateStepIds = snapshot.contract.acceptance
     .filter(item => item.kind === 'output-present')

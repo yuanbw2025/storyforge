@@ -606,7 +606,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
             : ''
         }`}
       >
-        <div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-bg-surface/70 px-4">
+        <div className={`${isLongform && longMode === 'agent' ? 'hidden' : 'flex'} h-11 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-bg-surface/70 px-4`}>
           <div className="flex min-w-0 items-center gap-2">
             <ContentTypeBadge contentType={getModuleContentType(activeModule)} showDescription />
             {activeWork && !embeddedProjectId && <WorkKindBadge work={activeWork} />}
@@ -614,6 +614,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
           <div className="flex items-center gap-1">
             <button
               onClick={() => {
+                if (isLongform && window.matchMedia('(max-width: 1050px)').matches) { changeLongMode('agent'); return }
                 setShowCopilot(value => {
                   if (!value) setShowProperties(false)
                   return !value
@@ -690,7 +691,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
             {isLongform && longSection === 'versions' && <nav className="lf-subtabs" aria-label="版本与导出">{([['version-history', '版本历史'], ['export', '导出与备份']] as const).map(([id, label]) => <button key={id} aria-current={activeModule === id ? 'page' : undefined} onClick={() => selectModule(id)}>{label}</button>)}</nav>}
             {isLongform && longSection === 'versions' && <><LongformCompletion project={project}/><ShortNovelHistory project={project}/></>}
             {isLongform && longSection === 'settings' && <nav className="lf-subtabs" aria-label="通用设置">{([['settings', '通用设置'], ['usage-stats', '用量统计']] as const).map(([id, label]) => <button key={id} aria-current={activeModule === id ? 'page' : undefined} onClick={() => selectModule(id)}>{label}</button>)}</nav>}
-            {isLongform && ['derive', 'community'].includes(longSection) ? <LongformWorlds project={project} community={longSection === 'community'} onOpen={id => navigate(`/workspace/${id}`)} /> : isLongform && longMode === 'agent' ? <ChatCopilotPanel embedded project={project} worldGroupId={copilotWorldGroupId} worldName={copilotWorldName} onClose={() => changeLongMode('steps')} /> : renderMainPanel()}
+            {isLongform && ['derive', 'community'].includes(longSection) ? <LongformWorlds project={project} community={longSection === 'community'} onOpen={id => navigate(`/workspace/${id}`)} /> : isLongform && longMode === 'agent' ? <ChatCopilotPanel embedded project={project} worldGroupId={copilotWorldGroupId} worldName={copilotWorldName} onClose={() => changeLongMode('steps')} onOpenModule={(module, chapter) => afterPendingEdits(() => navigate(`/workspace/${project.id}?module=${module}${chapter ? `&chapter=${chapter}` : ''}`), '编辑保存失败')} /> : renderMainPanel()}
           </Suspense>
         </div>
       </main>
@@ -713,6 +714,7 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
             worldGroupId={copilotWorldGroupId}
             worldName={copilotWorldName}
             onClose={() => setShowCopilot(false)}
+            onOpenModule={(module, chapter) => afterPendingEdits(() => navigate(`/workspace/${project.id}?module=${module}${chapter ? `&chapter=${chapter}` : ''}`), '编辑保存失败')}
           />
         </Suspense>
       )}
