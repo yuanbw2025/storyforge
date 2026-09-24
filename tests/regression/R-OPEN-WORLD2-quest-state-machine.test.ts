@@ -423,5 +423,5 @@ describe('Text Open World vNext · governed Quest lifecycle', () => {
     })
     expect(abandoned).toMatchObject({ status: 'succeeded', outcomeCommitted: true, evidenceEventSequences: [5, 6] })
     expect((await readProductRuntimeState(session.id!)).textOpenWorld?.state.quests.instancesByKey[ORDINARY_INSTANCE_KEY].status).toBe('abandoned')
-  })
+  }, 15_000)
 })

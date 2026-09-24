@@ -14,6 +14,11 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     setupFiles: ['./tests/setup.ts'],
+    // GitHub's shared runner is materially slower than local development under
+    // the two-fork coverage workload. Preserve the fast local feedback budget,
+    // while giving ordinary deterministic DB tests enough room in CI before a
+    // genuine hang is reported.
+    testTimeout: process.env.CI ? 20_000 : 5_000,
     // The suite contains several CPU-heavy 100/1000-step deterministic
     // simulations, IndexedDB lifecycles, long replays and UI cases. Capping
     // file workers prevents timer starvation and non-reproducible timeouts on

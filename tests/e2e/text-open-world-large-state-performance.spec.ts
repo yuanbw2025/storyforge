@@ -8,6 +8,15 @@ const BUDGET_MS = {
   mobileMapListRender: 5_000,
 } as const
 
+// Keep the authored local Chromium baseline exact. GitHub-hosted runners share
+// CPU and disk with other workloads, so CI receives a bounded 25% jitter
+// allowance while still recording both the baseline and effective budgets.
+const CI_BUDGET_MULTIPLIER = process.env.CI ? 1.25 : 1
+
+function effectiveBudgetMs(name: keyof typeof BUDGET_MS): number {
+  return Math.ceil(BUDGET_MS[name] * CI_BUDGET_MULTIPLIER)
+}
+
 async function measured(
   name: keyof typeof BUDGET_MS,
   operation: () => Promise<void>,
@@ -17,7 +26,8 @@ async function measured(
   await operation()
   const durationMs = Date.now() - startedAt
   results[name] = durationMs
-  expect(durationMs, `${name}超过当前Chromium自动化基线`).toBeLessThan(BUDGET_MS[name])
+  expect(durationMs, `${name}超过当前Chromium自动化基线及环境容差`)
+    .toBeLessThan(effectiveBudgetMs(name))
 }
 
 async function openTextOpenWorldPlayer(page: Page, projectId: number, title: string) {
@@ -55,7 +65,9 @@ test('大状态正式Release在桌面与390px移动端保持性能、等价地�
   await page.reload()
   await measured('formalSessionOpen', async () => {
     await openTextOpenWorldPlayer(page, seeded.projectId, seeded.title)
-    await expect(page.getByTestId('text-open-world-shell')).toBeVisible({ timeout: BUDGET_MS.formalSessionOpen })
+    await expect(page.getByTestId('text-open-world-shell')).toBeVisible({
+      timeout: effectiveBudgetMs('formalSessionOpen'),
+    })
   }, measurements)
 
   const desktopNavigation = page.getByTestId('text-open-world-navigation-rail')
@@ -147,6 +159,10 @@ test('大状态正式Release在桌面与390px移动端保持性能、等价地�
       profile: 'local-playwright-chromium-desktop-and-390x844',
       counts: seeded.counts,
       budgetsMs: BUDGET_MS,
+      effectiveBudgetsMs: Object.fromEntries(
+        Object.keys(BUDGET_MS).map(name => [name, effectiveBudgetMs(name as keyof typeof BUDGET_MS)]),
+      ),
+      ciBudgetMultiplier: CI_BUDGET_MULTIPLIER,
       measurements,
       accessibility,
     }, null, 2)),

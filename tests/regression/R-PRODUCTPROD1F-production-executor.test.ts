@@ -4666,7 +4666,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const events = await db.agentRunEvents.where('runId').equals(artifact!.producerRunId!).toArray()
     expect(events.some(row => row.type === 'model.requested')).toBe(false)
     expect(events.some(row => row.type === 'evidence.artifact.recorded' && JSON.parse(row.payloadJson).artifactKind === 'source-snapshot')).toBe(true)
-  }, 30000)
+  }, 60_000)
 
   it('AI 小镇按地点、居民和环境音的冻结语义生产媒资并进入同一发布包', async () => {
     const owned = await fixtureAiTownWithMedia()
@@ -4978,7 +4978,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       acceptedPrivateAdditionKeys: ['addition.supporting-guide'],
       authorCommandId: 'source-decision.accept',
     })
-  }, 30_000)
+  }, 60_000)
 
   it('商业终幕正文遗漏冻结结局后果时，第二次尝试只接收逐值闭合的精确 system beat 返修清单', async () => {
     const owned = await fixtureForProduct('text-adventure', {

@@ -25,6 +25,8 @@ const FIXTURE_SET = {
   evidence: ['early-fact', 'middle-foreshadow', 'recent-tail', 'perspective-knowledge', 'active-blueprint', 'target-detail'],
   isolation: ['other-world', 'future-outline'],
 }
+const LOCAL_MAX_ASSEMBLY_DURATION_MS = 30_000
+const CI_ASSEMBLY_DURATION_MULTIPLIER = process.env.CI ? 1.25 : 1
 
 async function addScoped(
   scope: WorkspaceScope,
@@ -231,6 +233,9 @@ describe.sequential('PHASE4 · 10万/30万/100万字符分步骤正文封闭规�
           { id: 'target-detail', table: 'detailedOutlines', recordId: fixture.detailId, expectedText: '目标细纲标记' },
         ],
         forbiddenText: ['其它世界泄漏标记', '未来泄漏标记'],
+        limits: {
+          maxAssemblyDurationMs: LOCAL_MAX_ASSEMBLY_DURATION_MS * CI_ASSEMBLY_DURATION_MULTIPLIER,
+        },
       })
       expect(artifact.status, artifact.checks.filter(check => !check.passed)).toBe('pass')
       expect(await verifyLongFormScaleGateArtifactV1(artifact)).toBe(true)
