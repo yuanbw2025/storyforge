@@ -37,9 +37,14 @@ export function parseAuthorOrdinalV1(value: string): number | null {
   let total = 0
   let digit = 0
   let lastUnit = 10000
+  let previousWasDigit = false
   for (const character of value) {
     if (character in digits) {
+      // Adjacent nonzero digits are not an unambiguous Chinese ordinal.
+      // Never turn "一二" / "一零三" into chapter 2 / 3 by dropping digits.
+      if (previousWasDigit && (digit !== 0 || digits[character] === 0)) return null
       digit = digits[character]
+      previousWasDigit = true
       continue
     }
     const unit = units[character]
@@ -47,6 +52,7 @@ export function parseAuthorOrdinalV1(value: string): number | null {
     total += (digit || 1) * unit
     digit = 0
     lastUnit = unit
+    previousWasDigit = false
   }
   return value ? total + digit : null
 }

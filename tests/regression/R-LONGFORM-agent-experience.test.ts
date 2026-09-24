@@ -95,6 +95,19 @@ describe('R-LONGFORM · 作者自由选写和目标保护', () => {
     ).rejects.toThrow('序号与标题')
   })
 
+  it('含糊中文章序不会截断成另一个真实章节，且不产生正式写入', async () => {
+    const { project, scope } = await fixture()
+    const before = await db.outlineNodes.toArray()
+    for (const ordinal of ['一二', '一零三', '一百二三']) {
+      await expect(prepareProseCopilot({
+        projectId: project.id!, scope, worldGroupId: null,
+        authorRequest: `写第${ordinal}章正文，邮差来到港口。`,
+      })).rejects.toThrow('未找到指定')
+    }
+    expect(await db.chapters.count()).toBe(0)
+    expect(await db.outlineNodes.toArray()).toEqual(before)
+  })
+
   it('明确第一卷不会回退最后一卷，不存在的卷不会默默创建', async () => {
     const { project, scope, volumeId } = await fixture()
     const now = Date.now()
@@ -141,6 +154,12 @@ describe('R-LONGFORM · 作者自由选写和目标保护', () => {
         skillId: 'outline.chapters',
       }),
     ).rejects.toThrow('卷序号与卷名')
+    await expect(
+      prepareOutlineCopilot({
+        projectId: project.id!, scope, worldGroupId: null,
+        authorRequest: '为第一二卷生成章纲', skillId: 'outline.chapters',
+      }),
+    ).rejects.toThrow('未找到指定')
   })
 
   it.each([
@@ -150,6 +169,10 @@ describe('R-LONGFORM · 作者自由选写和目标保护', () => {
     ['21', 21],
   ])('长篇中文章序 %s', (text, ordinal) => {
     expect(parseAuthorOrdinalV1(text)).toBe(ordinal)
+  })
+
+  it.each(['一二', '一零三', '一百二三'])('不截断含糊中文章序 %s', text => {
+    expect(parseAuthorOrdinalV1(text)).toBeNull()
   })
 
   it('模型以自然语言回答讨论时保留回复，绝不猜测写入', async () => {
