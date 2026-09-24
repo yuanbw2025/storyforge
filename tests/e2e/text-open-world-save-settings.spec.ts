@@ -150,8 +150,10 @@ test('正式开放世界存档中心保留分支与旧Release，并持久化本�
 
   const migrationTitle = `${childTitle} · v2迁移分支`
   await expect(page.getByTestId('text-open-world-shell')).toBeVisible()
+  // The persistent shell can still show v1 while migration and replay run.
+  // Await the new release with the same completion budget as its scene below.
   await expect(page.getByTestId('text-open-world-runtime-source'))
-    .toContainText('PRODUCT RELEASE v2 · 已固定')
+    .toContainText('PRODUCT RELEASE v2 · 已固定', { timeout: 20_000 })
   await expect(page.getByTestId('text-open-world-main-view'))
     .toHaveAttribute('data-open-world-view', 'scene', { timeout: 20_000 })
   panel = await openSaveSettings(page)
