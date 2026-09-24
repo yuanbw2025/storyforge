@@ -1,6 +1,6 @@
 # StoryForge 当前架构总览
 
-> 版本：2.8.0 · 更新：2026-09-10 · 权威层级：L1
+> 版本：2.9.0 · 更新：2026-09-25 · 权威层级：L1
 > 本文描述当前主干代码事实与目标架构接缝。产品边界以项目总纲为准；代码偏差见对齐审计。
 
 ## 1. 运行形态
@@ -12,7 +12,7 @@ StoryForge 当前是 React + TypeScript + Vite 的本地优先单页应用，核
 - `/`：真实首页 `HomePage`，聚合本地作品、世界、创作任务与发布记录；历史 `?tab=` 链接由兼容解析器转向当前产品入口，`legacy=1` 不再启用旧界面；
 - `/community/:pageId?`：新版外壳中的社区市场、发行与在线招募；保留服务成熟度闸门。
 - `/adventure/:pageId?`：文字冒险真实 S2/S3 生产、质量/媒资、发布与确定性玩家入口，明确标为可验证预览并继续受产品目录成熟度闸门限制。
-- `/openworld/runtime`：文字开放世界现有引擎的开发入口，明确标注非正式功能，生产环境仍受产品目录闸门限制。
+- `/openworld/:pageId?`：文字开放世界真实 S2/S3 Creator、质量/媒资、发布和确定性玩家入口；根路径、制作、定向与游玩深链均进入同一专属产品，明确标为可验证预览并继续受产品目录成熟度闸门限制。
 - `/home/:pageId?`：作品总览、对象详情、封面、搜索、任务、设置和备份；对象与业务仍由所属产品管理。
 - `/play`：社区跑团目录和本地存档；
 - `/play/mist-harbor`：雾港内置作品介绍、明确开始、恢复存档；使用现行世界封存、生产与产品发布链，无模型调用；
@@ -101,7 +101,7 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 1355 个文件 / 507309 行 | `tsconfig.json` |
+| TypeScript 生产源码 | 1354 个文件 / 507241 行 | `tsconfig.json` |
 | IndexedDB schema | v10 / 123 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
 | PROJECT_TABLES | 123 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 210 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |

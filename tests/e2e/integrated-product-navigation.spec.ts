@@ -34,11 +34,13 @@ test('adventure: real product entry persists across pages', async ({ page }) => 
  }
 })
 
-test('openworld: development notice persists across pages',async({page})=>{
- for(const section of ['library','vision','play']){
-  await page.goto(`./openworld/${section}`)
-  await expect(page.getByRole('note')).toContainText('尚在开发完善中，目前非正式功能')
+test('openworld: real product entry persists across pages', async ({ page }) => {
+ const pages = [['', '制作与试玩'], ['runtime', '制作与试玩'], ['vision', '产品定向'], ['play', '开始冒险']] as const
+ for (const [section, heading] of pages) {
+  await page.goto(`./openworld${section ? `/${section}` : ''}`)
+  await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
+  await expect(page.getByText('文字开放世界 · 可验证预览', { exact: true })).toBeVisible()
   await page.reload()
-  await expect(page.getByRole('note')).toContainText('尚未接入正式功能')
+  await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
  }
 })

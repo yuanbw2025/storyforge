@@ -1,6 +1,6 @@
 # AI 主导文字开放世界游戏 · 完整开发清单
 
-> 版本：1.1.126
+> 版本：1.1.127
 > 建立日期：2026-09-06
 > 对应总任务：`E-OPENWORLD-01`
 > 当前状态：`IN_PROGRESS`；用户已于2026-09-06明确下达完整产品开发指令
@@ -300,7 +300,7 @@ G7 盐脊验收、发布更新与旧入口收口
 | TOW-G7-12 | DONE | 导入导出、删除、版本兼容和迁移测试 | G5-11、G5-12、G7-01 | 建立12项版本化生命周期门：当前v10备份完整携带并重映射Creator Production/Build、不可变Release、质量回执、媒资元数据与字节、Session/Event/Checkpoint及分支；质量回执在导出和导入前严格验证结构、索引字段与Hash，媒资和检查点篡改、旧备份版本均零持久写入拒绝。旧存档继续绑定旧Release，仅表现兼容的新Release经预演和显式提交创建迁移子Session，语义变化、跨Work、非直接子版本、Build Preview、stale或迁移Canon篡改均失败关闭。删除单个分支保留父Session/Release，删除产品Work清理生产、发布、运行和媒资但保留World拥有的WorldRelease；同步修复注册表删除器对非索引可空引用误用Dexie索引、导致复杂Work无法删除的问题。7文件26项专项测试与TypeScript通过 |
 | TOW-G7-13 | BLOCKED | 真人完整游玩与问题分级 | G7-07～G7-12 | 工程设施已完成：当前Build的2～6条隔离路线必须全部到达结局且至少覆盖两个不同结局，合并覆盖六类核心循环；至少一次真实运行时AI请求/响应及可观测等待进入账本；作者逐项填写行动清晰、叙事节奏、成长、战斗、任务差异、地图/日志、自由输入、世界演化、时长和费用等待十项评价，并确认四项不可代签声明。服务商费用只允许填后台实值或明确不可获得；1～2分、阻断问题或未豁免问题自动形成`repair-required/needs-human`，问题集变化使旧结论失效。10项版本化验收门、服务/UI与12项专项测试通过。最终状态仍等待G7-11真实模型回执及作者本人完成两个结局，自动化、fixture、模型和开发脚本不得代签 |
 | TOW-G7-14 | BLOCKED | 发布修复版并验证真实更新流程 | G7-13 | 工程设施已完成：质量工作台现同时接受未发布Build Session与正式ProductRelease Session；已发布源版本必须先存在`repair-required`真人完整试玩回执，既有G5-06/G5-07修复授权生成直接后继Build，发布后再由修复Release完成`accepted`真人双结局试玩。系统逐项冻结源版本全部阻断/未豁免问题和1～2分体验项、作者复测说明及目标路线；复算RuntimePackage兼容报告并验证直接Release lineage。旧档只能继续固定源Release，或在`compatible`时绑定G5-11显式迁移子分支；Production/Build/RepairCommand/Release/QualityReceipt/Session/Event在同一事务CAS。10项版本化机器门、合同和UI正反例已完成。最终状态仍等待真实G7-13问题、实际修复发布和作者旧档复测回执，自动化不能制造这些外部事实 |
-| TOW-G7-15 | BLOCKED | 下线旧编译器、Agent契约和旧UI入口并完成交付 | G7-14、G0-06 | 工程退场已完成：通用产品Adapter、执行器与质量门显式拒绝文字开放世界，旧节点→地区/任务四模块编译代码已从生产源删除；正式生产和UI只进入专属Creator P0～P10/V1～V3与纯vNext包。历史旧四模块冻结为测试夹具，只允许不可变ProductRelease进入改名后的Legacy Compatibility Player，旧Build Preview被父入口阻断；已删除的`text-game/agent-contract.ts`由机器门持续防复活。12项退场矩阵及24项专项测试通过；17项开放世界隔离Chromium覆盖战斗、完整旅程、经济、Creator、玩家壳、运行时AI、存档、场景、教程与世界记录。按产品域拆分TTRPG规则与旧Release兼容reducer后，`runtime-core`由840.5KiB/223.1KiB gzip降至566.5KiB/151.9KiB gzip，未放宽600/180KiB预算且无循环chunk。最终全仓CI通过699个测试文件、3554项测试、84.49%语句覆盖率、生产构建与bundle闸门；最终DONE仅依赖G7-14真实更新完成，在此之前不把产品写入已完成能力索引，也不虚增117/121进度 |
+| TOW-G7-15 | BLOCKED | 下线旧编译器、Agent契约和旧UI入口并完成交付 | G7-14、G0-06 | 工程退场已完成：通用产品Adapter、执行器与质量门显式拒绝文字开放世界，旧节点→地区/任务四模块编译代码已从生产源删除；`/openworld/:pageId?`根路径及制作、定向、游玩深链只进入专属Creator P0～P10/V1～V3与纯vNext包，正式应用不再挂载静态UI预览桥接页。历史旧四模块冻结为测试夹具，只允许不可变ProductRelease进入改名后的Legacy Compatibility Player，旧Build Preview被父入口阻断；已删除的`text-game/agent-contract.ts`由机器门持续防复活。12项退场矩阵及24项专项测试通过；17项开放世界隔离Chromium覆盖战斗、完整旅程、经济、Creator、玩家壳、运行时AI、存档、场景、教程与世界记录。按产品域拆分TTRPG规则与旧Release兼容reducer后，`runtime-core`由840.5KiB/223.1KiB gzip降至566.5KiB/151.9KiB gzip，未放宽600/180KiB预算且无循环chunk。最终全仓CI通过699个测试文件、3554项测试、84.49%语句覆盖率、生产构建与bundle闸门；最终DONE仅依赖G7-14真实更新完成，在此之前不把产品写入已完成能力索引，也不虚增117/121进度 |
 
 阶段出口：至少一个正式Release由真人完整玩到两个结局，并通过新Release完成一次真实修复更新。
 
@@ -359,6 +359,7 @@ G7 盐脊验收、发布更新与旧入口收口
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.127 | 2026-09-25 | 在最新主干建立`feat/text-open-world-continuation`继续分支并完成合并后入口审计：移除正式应用中的静态`PreviewRoutePage`桥接，`/openworld`及其制作、定向、游玩深链统一进入真实文字开放世界S2/S3产品；同步更新首页成熟度文案、路由回归和当前能力基线。752个测试文件/3929项、86.32%语句覆盖率、生产构建、bundle预算及169项Chromium E2E通过；完整CI仅被8项既有Agent人工验证超过45天的仓库级时效门阻断，不伪造复验日期。G7-11、G7-13、G7-14仍须真实第二模型、作者真人双结局和实际修复发布证据，自动测试不代签，进度保持117/121。 |
 | 1.1.126 | 2026-09-21 | 完成G7-15最终自动化交付门：全仓CI通过699个测试文件、3554项测试和84.49%语句覆盖率，随后生产构建与bundle预算继续通过。G7-15不再存在代码、浏览器或自动化验证待项；状态仍依赖G7-14真实发布修复与旧档复测，因此保持BLOCKED且进度不变。 |
 | 1.1.125 | 2026-09-21 | 完成G7-15浏览器与包体交付门：旧Skill回归改为只绑定不可变历史Release，通用Build Preview只保留三类共享产品，开放世界入口改验专属Creator纯vNext会话；冻结旧包移入隔离E2E可携带的helper资产。17项开放世界Chromium全通过。按产品域拆分TTRPG规则内核和旧Release开放世界兼容reducer，`runtime-core`从840.5KiB/223.1KiB gzip降至566.5KiB/151.9KiB gzip，在不放宽600/180KiB预算且无循环chunk的前提下通过构建门。G7-15仍等待G7-14真实更新和最终全量CI，进度不变。 |
 | 1.1.124 | 2026-09-21 | 完成G7-15工程退场部分：删除通用节点开放世界编译与Adapter注册，通用执行器和旧四模块质量门fail-closed，专属夹具默认纯vNext；旧Agent契约和旧单页Player文件名由机器门防复活。历史旧包作为冻结测试证据保留，只有不可变Release可进入Legacy Compatibility Player，Build Preview被阻断。新增12项退场矩阵与24项专项回归；因G7-14真实更新、最终全量CI/E2E及既有包体预算尚未解除，G7-15保持BLOCKED，进度仍117/121。 |
