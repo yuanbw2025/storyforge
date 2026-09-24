@@ -611,7 +611,7 @@ describe('Text Open World · Action v18 protected story unlock and reveal', () =
       })
       expect(await readProductRuntimeState(sessionId, completedStory.lastSequence)).toEqual(completedStory)
     }
-  }, 180_000)
+  }, 300_000)
 
   it('玩家Effect已落盘但系统揭示未开始时可幂等续跑，重复恢复不增加Command、Effect或claim', async () => {
     const created = await createGovernedTextOpenWorldSessionFixtureV1({

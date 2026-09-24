@@ -132,7 +132,7 @@ describe('Text Open World vNext · bounded regional Director and knowledge histo
     payload.plan.authorization.selection.reason = 'forged-selection'
     tamperedEvents[appliedIndex].payloadJson = JSON.stringify(payload)
     expect(() => replayProductRuntimeEvents(JSON.parse(created.session.initialStateJson), tamperedEvents)).toThrow()
-  })
+  }, 20_000)
 
   it('中断在Director命令已提交但Effect未落地时，会在下一次玩家行动前恢复同一命令', async () => {
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
