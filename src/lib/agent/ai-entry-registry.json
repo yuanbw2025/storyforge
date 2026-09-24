@@ -2,6 +2,10 @@
   "version": 2,
   "bindingVersion": 1,
   "scope": "formal-ai-execution-entry",
+  "limitedTransports": [
+    { "entryId": "longform.voice.input", "boundary": "ephemeral-author-input", "adoptAllowed": false, "allowedCallers": ["src/lib/longform-voice/session.ts"], "reason": "浏览器或独立语音服务仅将显式录音转成可编辑输入，不自动发送、执行或采纳。" },
+    { "entryId": "longform.voice.output", "boundary": "read-only-audio", "adoptAllowed": false, "allowedCallers": ["src/lib/longform-voice/session.ts"], "reason": "仅朗读作者选择的可见文本；不读取数据库、检索上下文或写作品，音频播放后释放。" }
+  ],
   "entries": [
     { "entryId": "ai-town.authoring.consult", "skillId": "ai-town.consult.v1", "categories": ["authoring.ai-town-consult"], "runContractBuilderId": "ai-town-consult-v1", "executionBoundary": "durable-run", "entryKind": "auxiliary", "candidateKind": "ai-town-settings-preview", "adoptAllowed": false, "allowedCallers": ["src/lib/ai-town/consultation.ts"], "reason": "只生成可恢复的 S2 配置候选，不写世界或运行状态；作者确认后按普通方案编辑保存。" },
     { "entryId": "prose.chapter.generate", "skillId": "prose.generate", "categories": ["chapter.content"], "runContractBuilderId": "prose-generation-durable", "executionBoundary": "durable-run", "entryKind": "formal", "candidateKind": "chapter-draft", "adoptAllowed": true, "adoptionTargets": ["chapters"], "allowedCallers": ["src/lib/generation/chapter-generation-node.ts"], "reason": "正文先形成 durable 章节候选，作者确认后写入 chapters。" },

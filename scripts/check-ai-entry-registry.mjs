@@ -55,6 +55,8 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
   const registeredExecutors = new Set(['executeRegisteredAIEntryV1'])
   const frozenExecutors = new Set(['executeFrozenFormalAIEntryV1'])
   const streamExecutors = new Set(['streamRegisteredAIEntryV1'])
+  const voiceGuards = new Set(['assertVoiceTransport'])
+  const transports = []
   const calls = []
   const violations = []
   const typedAIStartFile = source.includes('UseAIStreamReturn') || source.includes('useAIStream')
@@ -64,6 +66,11 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
     const moduleName = statement.moduleSpecifier.text
     const clause = statement.importClause
     if (!clause?.namedBindings) continue
+    if (moduleName.endsWith('/contract') && ts.isNamedImports(clause.namedBindings)) {
+      for (const specifier of clause.namedBindings.elements) {
+        if ((specifier.propertyName?.text ?? specifier.name.text) === 'assertVoiceTransport') voiceGuards.add(specifier.name.text)
+      }
+    }
     if (moduleName.endsWith('/useAIStream') || moduleName.endsWith('hooks/useAIStream')) {
       if (ts.isNamedImports(clause.namedBindings)) {
         for (const specifier of clause.namedBindings.elements) {
@@ -135,6 +142,13 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
   function visit(node) {
     if (ts.isCallExpression(node)) {
       const expression = node.expression
+      if (ts.isIdentifier(expression) && voiceGuards.has(expression.text)) {
+        const ids = literalStrings(node.arguments[0])
+        const callers = literalStrings(node.arguments[1])
+        if (ids.length !== 1 || callers.length !== 1 || callers[0] !== file) {
+          violations.push(`${file}:${lineOf(ast, node)} 有限语音入口必须绑定字面量 entryId 和真实 caller`)
+        } else transports.push({ entryId: ids[0], file })
+      }
       if (ts.isIdentifier(expression) && registeredExecutors.has(expression.text)) {
         registerGovernedCall(node, node.arguments[0], node.arguments[3])
       } else if (ts.isIdentifier(expression) && frozenExecutors.has(expression.text)) {
@@ -166,7 +180,7 @@ export function analyzeAIEntrySource(source, file = 'entry.tsx') {
     ts.forEachChild(node, visit)
   }
   visit(ast)
-  return { calls, violations }
+  return { calls, transports, violations }
 }
 
 if (registry.version !== 2 || registry.bindingVersion !== 1
@@ -194,6 +208,7 @@ for (const entry of registry.entries ?? []) {
 }
 
 const actualCalls = []
+const actualTransports = []
 const scannedFiles = [
   ...['src/components', 'src/hooks', 'src/pages', 'src/lib/generation', 'src/lib/outline'].flatMap(dir => walk(dir)),
   // DETAIL-1: this service is itself a formal generation entry and must not
@@ -215,16 +230,36 @@ const scannedFiles = [
   // G7-11's independent release calibrator is an explicit paid eval-only call.
   // Its output may only become Build-bound quality evidence.
   'src/lib/open-world/creator-quality-calibration.ts',
+  ...walk('src/lib/longform-voice'),
 ]
 for (const file of [...new Set(scannedFiles)]) {
     if (file === 'src/lib/agent/formal-ai-entry.ts') continue
     const source = fs.readFileSync(path.join(root, file), 'utf8')
     const analysis = analyzeAIEntrySource(source, file)
     actualCalls.push(...analysis.calls)
+    actualTransports.push(...analysis.transports)
     failures.push(...analysis.violations)
 }
 
 const used = new Set()
+const limited = new Map()
+for (const entry of registry.limitedTransports ?? []) {
+  if (!entry.entryId || registered.has(entry.entryId) || limited.has(entry.entryId)
+    || entry.adoptAllowed !== false || entry.adoptionTargets?.length
+    || !['ephemeral-author-input', 'read-only-audio'].includes(entry.boundary)
+    || !entry.allowedCallers?.length || !entry.reason) {
+    failures.push('有限语音入口边界无效: ' + entry.entryId)
+  }
+  limited.set(entry.entryId, entry)
+}
+for (const call of actualTransports) {
+  if (!limited.get(call.entryId)?.allowedCallers.includes(call.file)) failures.push('未登记的有限语音调用: ' + call.entryId)
+}
+for (const entry of limited.values()) {
+  for (const caller of entry.allowedCallers) {
+    if (!actualTransports.some(call => call.entryId === entry.entryId && call.file === caller)) failures.push('语音入口缺少真实绑定: ' + entry.entryId)
+  }
+}
 for (const call of actualCalls) {
   const entry = registered.get(call.entryId)
   if (!entry) {
@@ -250,6 +285,11 @@ const memberSelfTest = analyzeAIEntrySource(
   "import { useAIStream } from '../hooks/useAIStream'; const ai = useAIStream(); ai.start([], undefined, { category: 'x' });",
   'src/components/Self.tsx',
 )
+const voiceSelfTest = analyzeAIEntrySource(
+  "import { assertVoiceTransport as guard } from './contract'; guard('voice', caller);",
+  'src/lib/longform-voice/fake.ts',
+)
+if (!voiceSelfTest.violations.some(item => item.includes('有限语音'))) failures.push('守卫自测失败：未阻断伪造语音 caller')
 if (!memberSelfTest.violations.some(item => item.includes('entryId'))) failures.push('守卫自测失败：未阻断缺 entryId 的 member start')
 const aliasSelfTest = analyzeAIEntrySource(
   "import { useAIStream as useModel } from '../hooks/useAIStream'; const { start: run } = useModel(); run([], undefined, { category: 'x' });",

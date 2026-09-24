@@ -12,6 +12,7 @@ import {
 import type { AIConfig, ChatMessage } from '../types'
 import type { AgentRunFormalAIEntryBindingV1 } from '../types/agent-run'
 import { canonicalStringify, hashCanonicalValue } from './run/hash'
+import { parseLimitedAITransports } from './limited-ai-transport'
 
 export type FormalAIEntryKindV1 = 'formal' | 'auxiliary' | 'evaluation' | 'experimental'
 export type FormalAIExecutionBoundaryV1 =
@@ -94,11 +95,14 @@ export function parseFormalAIEntryRegistryV1(
   const root = asRecord(value, 'registry')
   const rootKeys = Object.keys(root).sort()
   const expectedRootKeys = ['bindingVersion', 'entries', 'scope', 'version']
+  if ('limitedTransports' in root) expectedRootKeys.push('limitedTransports')
+  expectedRootKeys.sort()
   if (JSON.stringify(rootKeys) !== JSON.stringify(expectedRootKeys)) fail('registry 含未知或缺失字段')
   if (root.version !== 2 || root.bindingVersion !== 1 || root.scope !== 'formal-ai-execution-entry') {
     fail('registry 版本或 scope 无效')
   }
   if (!Array.isArray(root.entries) || root.entries.length === 0) fail('registry.entries 必须是非空数组')
+  const transports = 'limitedTransports' in root ? parseLimitedAITransports(root.limitedTransports) : []
 
   const ids = new Set<string>()
   const entries = root.entries.map((raw, index): FormalAIEntryBindingV1 => {
@@ -175,6 +179,8 @@ export function parseFormalAIEntryRegistryV1(
     }
   })
 
+  if (transports.some((entry) => ids.has(entry.entryId))) fail('有限语音入口不得与正式入口重名')
+  // Transports cannot enter a frozen creative binding or acquire its write authority.
   return { version: 2, bindingVersion: 1, scope: 'formal-ai-execution-entry', entries }
 }
 

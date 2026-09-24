@@ -8,9 +8,12 @@ import {
   ChevronDown,
   ChevronRight,
   Loader2,
+  Mic,
   RotateCcw,
   Send,
   Square,
+  Settings2,
+  Volume2,
   Trash2,
   X,
 } from 'lucide-react'
@@ -25,6 +28,10 @@ import CreativeArtifactSummary from './CreativeArtifactSummary'
 import HarnessEvidencePanel from './HarnessEvidencePanel'
 import type { HarnessLifecycleEvidenceV1 } from '../../lib/agent/harness-evidence'
 import { useActiveWork } from '../../hooks/useActiveWork'
+import { useCompanionStore } from '../../stores/companion'
+import CompanionPortrait, { companionPose, COMPANION_POSES } from './CompanionPortrait'
+import CompanionSettings from './CompanionSettings'
+import { useCompanionVoice } from './useCompanionVoice'
 
 interface Props {
   project: Project
@@ -57,9 +64,25 @@ export default function ChatCopilotPanel({
   const [planningSummary, setPlanningSummary] = useState('')
   const [mobilePane, setMobilePane] = useState<'dialogue' | 'draft'>('dialogue')
   const [elapsed, setElapsed] = useState(0)
+  const [showCompanionSettings, setShowCompanionSettings] = useState(false)
+  const [overflowTranscript, setOverflowTranscript] = useState('')
+  const companionVisible = useCompanionStore((state) => state.preferences.visible)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const followLatest = useRef(true)
   const messages = copilot.events.filter((event) => event.kind === 'message')
+  const latestReply = [...messages].reverse().find((event) => event.role === 'assistant')
+  const voice = useCompanionVoice(
+    `${project.id}:${activeWork?.id}:${worldGroupId}`,
+    copilot.loading, copilot.busy, latestReply,
+    (text) => {
+      const combined = [copilot.authorRequest.trim(), text].filter(Boolean).join('\n')
+      if (combined.length <= 2000) copilot.setAuthorRequest(combined)
+      else setOverflowTranscript(text)
+    },
+  )
+  const pose = companionPose(voice.state.phase, copilot.busy, copilot.pendingCandidates.length > 0, !!(copilot.error || voice.state.error))
+  const recording = ['requesting', 'listening', 'transcribing'].includes(voice.state.phase)
+  useEffect(() => { setOverflowTranscript('') }, [project.id, activeWork?.id, worldGroupId])
   const latestTasks = useMemo(() => {
     const result = new Map<string, { taskId: string; instruction: string; status: string; error?: string }>()
     const latestPlan = [...copilot.events]
@@ -121,15 +144,20 @@ export default function ChatCopilotPanel({
       className={`agent-workspace ${embedded ? 'lf-agent-page agent-workspace-embedded' : 'agent-workspace-side'}`}
     >
       <header className="agent-header">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <CompanionPortrait pose={pose} compact />
+          <div className="min-w-0">
           <div className="flex items-center gap-2 font-semibold">
-            <Bot className="h-4 w-4 text-accent" />主 Agent{' '}
-            <span className="text-[10px] font-normal text-text-muted">创作伙伴</span>
+            {!companionVisible && <Bot className="h-4 w-4 text-accent" />}主 Agent{' '}
+            <span className="text-[10px] font-normal text-text-muted">{companionVisible ? '墨灵 · ' + COMPANION_POSES[pose].label : '创作伙伴'}</span>
           </div>
           <p className="truncate text-xs text-text-muted" title={worldName}>
             {activeWork?.title ?? '当前作品'} · {worldName}
           </p>
+          </div>
         </div>
+        <div className="flex shrink-0 items-center">
+          <button type="button" aria-label="助手与语音设置" title="助手与语音设置" className="rounded p-2 hover:bg-bg-hover" onClick={() => { voice.cancel(); setShowCompanionSettings(true) }}><Settings2 className="h-4 w-4" /></button>
         <button
           type="button"
           aria-label="关闭主 Agent"
@@ -138,7 +166,9 @@ export default function ChatCopilotPanel({
         >
           <X className="h-4 w-4" />
         </button>
+        </div>
       </header>
+      {showCompanionSettings && <CompanionSettings onClose={() => setShowCompanionSettings(false)} />}
       {embedded && (
         <LongformAgentProgress
           project={project}
@@ -185,6 +215,9 @@ export default function ChatCopilotPanel({
                   className={`agent-message ${message.role === 'user' ? 'agent-message-user' : ''}`}
                 >
                   <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                  {message.role === 'assistant' && payload.kind !== 'harness-lifecycle' && (
+                    <button type="button" className="mt-2 flex items-center gap-1 text-[11px] text-text-muted hover:text-accent" onClick={() => voice.speak(message.content)} aria-label="朗读这条回复" title="朗读开头，最多 2000 字"><Volume2 size={13} />朗读</button>
+                  )}
                   {payload.kind === 'harness-lifecycle' && payload.lifecycle && (
                     <HarnessEvidencePanel lifecycle={payload.lifecycle} />
                   )}
@@ -319,6 +352,7 @@ export default function ChatCopilotPanel({
             className="agent-composer"
             onSubmit={(event) => {
               event.preventDefault()
+              voice.cancel()
               setElapsed(0)
               void copilot.discuss()
             }}
@@ -353,6 +387,23 @@ export default function ChatCopilotPanel({
                 {busyLabel} · {elapsed} 秒{elapsed >= 20 && ' · 仍在等待，可停止；不会自动重发'}
               </p>
             )}
+            {(voice.state.phase !== 'idle' || voice.state.error) && (
+              <div className="companion-voice-status" role={voice.state.error ? 'alert' : 'status'}>
+                <span>{voice.state.error || ({
+                  requesting: '请允许麦克风访问…', listening: '正在听，结束后可编辑文字',
+                  transcribing: '正在识别，可随时放弃', preparing: '正在准备声音…', speaking: '正在朗读',
+                  idle: '',
+                }[voice.state.phase])}</span>
+                {voice.state.preview && <p className="line-clamp-2">{voice.state.preview}</p>}
+                {voice.state.phase !== 'idle' && <button type="button" onClick={voice.cancel}>{recording ? '放弃本次语音' : '停止朗读'}</button>}
+              </div>
+            )}
+            {overflowTranscript && <div className="companion-voice-status">
+              <p>输入框空间不足，识别文字暂存在这里，请先整理输入框。</p>
+              <textarea aria-label="暂存的语音识别文字" value={overflowTranscript} onChange={(e) => setOverflowTranscript(e.target.value)} rows={2} />
+              <button type="button" disabled={copilot.busy || copilot.authorRequest.length + overflowTranscript.length + 1 > 2000} onClick={() => { copilot.setAuthorRequest([copilot.authorRequest, overflowTranscript].filter(Boolean).join('\n')); setOverflowTranscript('') }}>加入输入框</button>
+              <button type="button" onClick={() => setOverflowTranscript('')}>放弃这段识别文字</button>
+            </div>}
             <textarea
               aria-label="告诉主 Agent 你的目标"
               value={copilot.authorRequest}
@@ -368,6 +419,7 @@ export default function ChatCopilotPanel({
                   event.nativeEvent.keyCode !== 229
                 ) {
                   event.preventDefault()
+                  voice.cancel()
                   setElapsed(0)
                   void copilot.discuss()
                 }
@@ -380,7 +432,10 @@ export default function ChatCopilotPanel({
               className="w-full resize-none rounded border border-border bg-bg-base px-3 py-2 text-sm leading-6 outline-none focus:border-accent disabled:opacity-60"
             />
             <div className="mt-2 flex items-center justify-between gap-2">
-              <span className="text-[10px] text-text-muted">Enter 发送 · Shift+Enter 换行</span>
+              <div className="flex items-center gap-2">
+                <button type="button" className="companion-mic" disabled={copilot.loading || copilot.busy || (recording && voice.state.phase !== 'listening')} onClick={voice.state.phase === 'listening' ? voice.finish : voice.listen} aria-label={voice.state.phase === 'listening' ? '结束说话并识别' : '语音输入'}><Mic size={15} />{voice.state.phase === 'listening' ? '说完了' : '说话'}</button>
+                <span className="agent-keyboard-hint text-[10px] text-text-muted">Enter 发送</span>
+              </div>
               {copilot.busy ? (
                 <button
                   type="button"
@@ -421,6 +476,7 @@ export default function ChatCopilotPanel({
           </div>
           {!copilot.pendingCandidates.length && (
             <div className="agent-empty">
+              <CompanionPortrait pose={pose} />
               <h3>从你最想写的地方开始</h3>
               <p>一个场景、一位人物、一条设定，都可以。无需按顺序填完所有资料。</p>
               <p>先讨论想法，确认计划后，生成的候选会出现在这里。你可以编辑，满意后再采纳。</p>
@@ -471,6 +527,7 @@ export default function ChatCopilotPanel({
                 {candidate.payload.proseOperation === 'continue' ? ' · 追加到原文末尾' : ''}
                 。确认采纳前，作品原文保持不变。
               </p>
+              {candidate.payload.agentId === 'prose' && <button type="button" className="mb-2 flex items-center gap-1 text-xs text-accent" onClick={() => voice.speak(candidate.event.content)}><Volume2 size={14} />朗读正文开头（最多 2000 字）</button>}
               <CandidateDraftEditor
                 payload={candidate.payload}
                 value={candidate.event.content}
