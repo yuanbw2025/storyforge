@@ -31,7 +31,7 @@ for (const width of [1440, 1920, 768, 390]) {
     expect((await adventureMain.boundingBox())!.width).toBeGreaterThan(width - (width > 650 ? 155 : 2))
 
     await page.goto('./openworld/vision')
-    await expect(page.getByText('文字开放世界 · 可验证预览', { exact: true })).toBeVisible()
+    await expect(page.getByText('文字开放世界 · 展示作品与创作', { exact: true })).toBeVisible()
     const openWorldMain = page.locator('.lf-main').first()
     await expect(openWorldMain).toBeVisible()
     expect((await openWorldMain.boundingBox())!.width).toBeGreaterThan(width - (width > 650 ? 155 : 2))

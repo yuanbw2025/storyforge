@@ -204,6 +204,18 @@ Product-specific goal/config
 - 内容边界：文字冒险加入取证与三权接管检查，AVG 使用原美术与声明式 Cue；三结局可达，无运行时模型对话或配音。历史浏览器内三款生成结果未作为现行作品的数据来源。
 - 验证：`R-MIST-HARBOR-builtin` 覆盖安装、重复安装、跨产品隔离、三结局、前置条件反例、媒资损坏重试及完整备份恢复；`mist-harbor-builtin.spec` 覆盖真实入口、AVG 舞台与结局、刷新续玩、另建存档及移动端。
 
+## 12. 盐脊文字开放世界展示作品
+
+《盐脊：断流之夜》是 `text-open-world` 产品的内置纵向展示作品，不新增产品身份，也不替代作者从世界观或小说开始的正式 AI 生产链。它复用当前文字开放世界玩家、Action/Effect/Event、ProductRelease 和存档体系，用一段可完整通关的小型内容证明产品主路径，而不冒充 G7 规划中的 3—5 小时完整验收体量。
+
+- 入口：首页与文字开放世界产品页 → `/play/salt-ridge` → 明确“安装并开始”。介绍页只读；只有开始按钮创建本地内容。
+- S1：`salt-ridge-preset` 在稳定独立工作区安装 7 名来源角色、10 个地点、世界规则与 3 条故事弧，然后冻结 WorldRelease；重入按稳定工作区身份和已有 Release 复用，不覆盖来源。
+- S2/S3：内置 Brief 与 SourcePlan 仍从真实 WorldRelease 选择生成；确定性两任务生产计划把已校验的 Salt Ridge vNext 内容编译为共享 ProductRuntimePackage，经过 scheduler 和质量闸门后原子发布正式 ProductRelease。没有模型调用、外部 provider 或隐藏费用。
+- 所有权：世界只保存盐脊语义来源；任务、战斗、物品、制作、经济、关系、导演、双结局、会话和检查点全部属于文字开放世界产品。
+- 玩家闭环：双地区旅行、主线和模板任务、固定选择/系统 Action/受限自然语言、回合战斗、装备与物品、制作交易、关系反馈、双结局及正式存档使用现有玩家实现；从头开始另建时间线，旧档不被覆盖。
+- 能力口径：当前内置内容目标约 20—30 分钟，证明系统闭环和展示入口；`TEXT-OPEN-WORLD-SALT-RIDGE-BRIEF` 中 90—120 分钟主线、3—5 小时库存仍是后续完整验收世界合同，未因本展示自动完成。
+- 验证：`R-SALT-RIDGE-showcase-product` 覆盖来源复用、正式生产发布、重复安装、运行包闭环和真实 Session；`salt-ridge-showcase.spec` 覆盖首页入口、安装、正式 Release 启动、刷新续玩和移动端无横向溢出。
+
 ## AI 小镇作者界面（2026-09-15）
 
 AI 小镇入口 `/town/:pageId?` 使用自己的 `Work(kind=ai-town)` 与 `aiTownAuthoringDrafts`。旧 Production/存档按原 scope 继续使用，不迁移作品 owner。S2 草稿可在没有 WorldRelease 时填写、保存和讨论；开始制作前必须选择含结局与 4～8 名居民的冻结世界来源，确认 Brief 后仍需单独授权生产。

@@ -39,7 +39,7 @@ test('openworld: real product entry persists across pages', async ({ page }) => 
  for (const [section, heading] of pages) {
   await page.goto(`./openworld${section ? `/${section}` : ''}`)
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
-  await expect(page.getByText('文字开放世界 · 可验证预览', { exact: true })).toBeVisible()
+  await expect(page.getByText('文字开放世界 · 展示作品与创作', { exact: true })).toBeVisible()
   await page.reload()
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
  }

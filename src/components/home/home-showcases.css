@@ -1,0 +1,8 @@
+.home-app .home-builtin-openworld{
+  background:
+    radial-gradient(circle at 18% 18%,#d7c47c42 0 7%,transparent 8%),
+    linear-gradient(135deg,#4e5139,#252f2b 62%,#18231f);
+  color:#f6edda;
+}
+.home-app .home-builtin-openworld p,
+.home-app .home-builtin-openworld small{color:#d7ccb0}
