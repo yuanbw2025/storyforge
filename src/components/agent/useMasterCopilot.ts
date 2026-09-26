@@ -493,10 +493,10 @@ export function useMasterCopilot(input: {
         role: 'assistant',
           content: [
           `本阶段已生成 ${candidates.length} 份候选。请检查、编辑并决定是否采纳。`,
-          `本轮团队约使用 ${teamBudget.snapshot().usedTokens.toLocaleString()} / `
-          + `${teamBudget.snapshot().maxTokens.toLocaleString()} tokens，`
-          + `${teamBudget.snapshot().calls} 次调用，`
-          + `Canon 受控打回 ${teamBudget.snapshot().canonRetries} 次。`,
+          `本轮团队约使用 ${durable.budgetEvidence.usedTokens.toLocaleString()} / `
+          + `${durable.budgetEvidence.maxTokens.toLocaleString()} tokens，`
+          + `${durable.budgetEvidence.calls} 次调用，`
+          + `Canon 受控打回 ${durable.budgetEvidence.canonRetries} 次。`,
           ].join(' '),
           scope: workspaceScope,
       })

@@ -221,9 +221,13 @@ test('a blank work starts with one visible chapter plan and reaches saved prose 
         ],
       })
     } else if (text.includes('只拟定 1 个卷的简短标题')) {
+      expect(text).toContain('夜班邮差')
+      expect(text).toContain('三天后')
       calls.push('volume')
       content = JSON.stringify([{ title: '来信', summary: '一个邮差收到来自未来的信。' }])
     } else if (text.includes('只拟定 1 个章节标题')) {
+      expect(text).toContain('夜班邮差')
+      expect(text).toContain('三天后')
       calls.push('chapter')
       content = JSON.stringify([
         { title: '雨夜来信', summary: '邮差发现一封来自自己的信，决定核对日期并追查来源。' },
@@ -243,12 +247,13 @@ test('a blank work starts with one visible chapter plan and reaches saved prose 
   await agent(page)
   await page
     .getByRole('textbox', { name: '告诉主 Agent 你的目标' })
-    .fill('写第一章正文，一个邮差收到来自自己的信')
+    .fill('写第一章正文，夜班邮差收到自己三天后寄来的信')
   await page.getByRole('button', { name: '讨论与规划', exact: true }).click()
   await expect(page.getByRole('region', { name: '待确认创作计划' })).toContainText('只准备一个章节')
   expect((await storedCounts(page)).outlines).toHaveLength(0)
   await page.getByRole('button', { name: '确认计划并开始', exact: true }).click()
   await expect(page.getByRole('textbox', { name: '标题 · 候选 1', exact: true })).toHaveValue('来信')
+  await expect(page.getByText(/本轮团队约使用 [1-9][\d,]* \/ 160,000 tokens，1 次调用/)).toBeVisible()
   await page.getByRole('button', { name: '采纳', exact: true }).click()
   await expect(page.getByRole('textbox', { name: '标题 · 候选 1', exact: true })).toHaveValue('雨夜来信')
   await expect(page.getByRole('button', { name: '采纳', exact: true })).toBeEnabled()
@@ -274,6 +279,15 @@ test('a blank work starts with one visible chapter plan and reaches saved prose 
   expect(state.characters).toBe(0)
   expect(state.outlines).toHaveLength(2)
   expect(state.outlines.find((node: { type: string }) => node.type === 'chapter')?.title).toBe('作者改名：未来来信')
+  await expect(page.getByText(/本轮所有步骤均已通过终态校验/)).toBeVisible()
+  await page.getByRole('button', { name: '打开作品正文', exact: true }).click()
+  await page.getByRole('button', { name: '本次不运行', exact: true }).click()
+  await expect(page.getByText(/作者已跳过本轮章后任务/)).toBeVisible()
+  await expect(page.getByRole('button', { name: '继续章后处理', exact: true })).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByText(/作者已跳过本轮章后任务/)).toBeVisible()
+  await expect(page.getByRole('button', { name: '继续章后处理', exact: true })).toHaveCount(0)
+  expect(calls).toEqual(['plan', 'volume', 'chapter', 'prose'])
 })
 
 test('authorization failure explains the next step and never retries behind the author', async ({ page }) => {

@@ -1,14 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { classifyRequestedDomainIdsV1, selectAgentSkillIdV1 } from '../../src/lib/agent/workflow-catalog'
-import { createMasterAgentPlan } from '../../src/lib/agent/orchestrator'
+import { createMasterAgentPlan, executeMasterAgentPlan } from '../../src/lib/agent/orchestrator'
+import * as client from '../../src/lib/ai/client'
 import { prepareProseCopilot } from '../../src/lib/agent/prose-copilot'
 import { prepareOutlineCopilot } from '../../src/lib/agent/outline-copilot'
 import { readLongformProgressV1 } from '../../src/lib/agent/longform-progress'
 import { runGenerationNode } from '../../src/lib/generation/generation-node'
 import { parseAuthorOrdinalV1 } from '../../src/lib/agent/author-intent'
+import { seedCurrentMasterCandidate } from '../helpers/current-master-candidate'
+import { rejectMasterAgentCandidateV1 } from '../../src/lib/agent/run/master-adoption'
+import { findResumableMasterAgentRunV1, parseMasterAgentPlanV1, hashMasterAgentPlanV1 } from '../../src/lib/agent/run/master-durable'
 
 async function fixture() {
   const { project, scope } = await seedCurrentWorkspace('自由选写')
@@ -46,7 +50,76 @@ describe('R-LONGFORM · 作者自由选写和目标保护', () => {
     await db.delete()
     await db.open()
   })
-  afterEach(() => db.close())
+  afterEach(() => { vi.restoreAllMocks(); db.close() })
+
+  it('不存在的目标在规划前给出准确说明，不让模型要求补写中间章节', async () => {
+    const { project, scope } = await fixture()
+    const complete = vi.fn()
+    const plan = await createMasterAgentPlan({
+      projectId: project.id!, scope, worldGroupId: null, planningOnly: true,
+      request: '只写第八章正文，不要创建章节，不要改第一章。',
+    }, { complete })
+    expect(complete).not.toHaveBeenCalled()
+    expect(plan.tasks).toEqual([])
+    expect(plan.summary).toContain('未找到指定的第八章')
+    expect(plan.summary).toContain('不必先写完前面的章节')
+    expect(await db.chapters.count()).toBe(0)
+  })
+
+  it('保留多轮规划补充，但写入目标仍由作者原话决定', async () => {
+    const { project, scope, secondId } = await fixture()
+    const request = '按刚才的讨论写第二章正文，不要改第一章。'
+    const plan = await createMasterAgentPlan(
+      { projectId: project.id!, scope, worldGroupId: null, request, planningOnly: true },
+      { complete: async () => JSON.stringify({ summary: '续接讨论方向', tasks: [{
+        id: 'prose', agentId: 'prose', instruction: '写第一章正文：季禾是修钟师，遇到停在十三点的钟。', dependsOn: [],
+      }] }) },
+    )
+    delete plan.phase
+    const persisted = parseMasterAgentPlanV1(JSON.parse(JSON.stringify(plan)))
+    const calls = vi.spyOn(client, 'chat').mockResolvedValue('季禾推开钟铺的门，柜台后那只钟停在十三点。她伸手拨动指针，却听见柜台底下传来敲击声。掌柜说那不是钟声，让她别碰抽屉。季禾收回手，看见钥匙孔里冒出一丝白雾。她认得那股冷意，却想不起曾在何处遇见。')
+    const candidates = await executeMasterAgentPlan({ projectId: project.id!, scope, worldGroupId: null, plan: persisted })
+    expect(candidates[0].payload.proseOutlineNodeId).toBe(secondId)
+    const messages = calls.mock.calls[0][0].map(message => message.content).join('\n')
+    expect(messages).toContain(request)
+    expect(messages).toContain('季禾是修钟师')
+    expect(messages).toContain('规划解读只可补充原话未指明的内容')
+    expect(await db.chapters.count()).toBe(0)
+    const changed = structuredClone(persisted)
+    changed.tasks[0].requestContext!.originalRequest = '写第一章正文'
+    expect(await hashMasterAgentPlanV1(changed)).not.toBe(await hashMasterAgentPlanV1(persisted))
+  })
+
+  it('多任务保留原话，各任务仍保持独立目标，旧计划无需补字段', async () => {
+    const { project, scope } = await fixture()
+    const request = '先规划卷纲，再写第一章正文；主角是夜班邮差，来信出自三天后的自己。不要创建角色卡。'
+    const plan = await createMasterAgentPlan(
+      { projectId: project.id!, scope, worldGroupId: null, request },
+      { complete: async () => JSON.stringify({ summary: '分步生成', tasks: [
+        { id: 'outline', agentId: 'outline', instruction: '生成卷纲', dependsOn: [] },
+        { id: 'prose', agentId: 'prose', instruction: '写第一章正文', dependsOn: ['outline'] },
+      ] }) },
+    )
+    expect(plan.tasks.map(task => task.instruction)).toEqual(['生成卷纲', '写第一章正文'])
+    for (const task of parseMasterAgentPlanV1(plan).tasks) expect(task.requestContext?.originalRequest).toBe(request)
+    const legacy = structuredClone(plan)
+    for (const task of legacy.tasks) delete task.requestContext
+    expect(parseMasterAgentPlanV1(legacy)).toEqual(legacy)
+    const bad = structuredClone(plan)
+    Object.assign(bad.tasks[0].requestContext!, { unauthorizedTarget: 9 })
+    expect(() => parseMasterAgentPlanV1(bad)).toThrow()
+  })
+
+  it('作者拒绝候选后不会把该运行当成中断并提示恢复', async () => {
+    const { scope, conversation, candidate } = await seedCurrentMasterCandidate()
+    await rejectMasterAgentCandidateV1({
+      scope, worldGroupId: null, runId: candidate.payload.runId!,
+      candidateEventId: candidate.event.id!,
+    })
+    expect(await findResumableMasterAgentRunV1({ scope, conversationId: conversation.id! })).toBeNull()
+    expect(await db.agentRuns.count()).toBe(1)
+    expect(await db.characters.count()).toBe(0)
+  })
 
   it.each([
     ['只写第一个场景，不要补全世界设定和角色卡。', ['prose']],
@@ -93,6 +166,19 @@ describe('R-LONGFORM · 作者自由选写和目标保护', () => {
         authorRequest: '写第二章《雨夜来信》的正文',
       }),
     ).rejects.toThrow('序号与标题')
+  })
+
+  it('书名号中的未知卷章名不能回退到默认位置', async () => {
+    const { project, scope } = await fixture()
+    await expect(prepareProseCopilot({
+      projectId: project.id!, scope, worldGroupId: null,
+      authorRequest: '写《尚不存在》的正文，雨夜收信。',
+    })).rejects.toThrow('未找到指定章节《尚不存在》')
+    await expect(prepareOutlineCopilot({
+      projectId: project.id!, scope, worldGroupId: null, skillId: 'outline.chapters',
+      authorRequest: '生成《尚不存在》的章纲。',
+    })).rejects.toThrow('未找到指定卷《尚不存在》')
+    expect(await db.chapters.count()).toBe(0)
   })
 
   it('含糊中文章序不会截断成另一个真实章节，且不产生正式写入', async () => {
@@ -255,7 +341,7 @@ describe('R-LONGFORM · 作者自由选写和目标保护', () => {
         projectId: project.id!,
         scope,
         worldGroupId: null,
-        request: '只写第一个场景，邮差发现来自自己的信',
+        request: '只写第一个场景，夜班邮差林照发现自己三天后寄来的信；不要创建角色卡。开头拆信，结尾车站灯熄灭。',
         planningOnly: true,
       },
       {
@@ -280,6 +366,12 @@ describe('R-LONGFORM · 作者自由选写和目标保护', () => {
       'prose.generate',
     ])
     expect(plan.tasks[2].dependsOn).toEqual([plan.tasks[1].id])
+    for (const task of plan.tasks) {
+      expect(task.instruction).toContain('夜班邮差林照')
+      expect(task.instruction).toContain('三天后')
+      expect(task.instruction).toContain('不要创建角色卡')
+      expect(task.instruction).toContain('结尾车站灯熄灭')
+    }
     expect(await db.outlineNodes.count()).toBe(0)
     expect(await db.agentRuns.count()).toBe(0)
     const prepared = await prepareOutlineCopilot(
@@ -299,7 +391,30 @@ describe('R-LONGFORM · 作者自由选写和目标保护', () => {
       },
     )
     expect(prepared.snapshot.maxItems).toBe(1)
+    expect(prepared.prepared.messages.find(message => message.role === 'system')?.content)
+      .toContain('只输出 1 个 JSON 元素')
+    expect(prepared.prepared.messages.at(-1)?.content).toContain('一句话摘要')
+    expect(prepared.prepared.messages.at(-1)?.content).toContain('三天后')
     const result = await runGenerationNode(prepared.node, prepared.prepared)
     expect(result.gate.status).toBe('blocked')
+  })
+
+  it('单任务保留作者原话中的目标和长尾限制，不受规划改写或 1000 字裁剪影响', async () => {
+    const { project, scope } = await fixture()
+    const request = '只写第二章正文。' + '雨夜街道。'.repeat(210) + '结尾必须停在蓝色信封落地；不要写第一章。'
+    const plan = await createMasterAgentPlan(
+      { projectId: project.id!, scope, worldGroupId: null, request, planningOnly: true },
+      { complete: async () => JSON.stringify({
+        summary: '写一个场景',
+        tasks: [{ id: 'prose', agentId: 'prose', instruction: '写第一章正文', dependsOn: [] }],
+      }) },
+    )
+    expect(plan.tasks).toHaveLength(1)
+    expect(plan.tasks[0].instruction).toBe(request)
+    const prepared = await prepareProseCopilot({
+      projectId: project.id!, scope, worldGroupId: null, authorRequest: plan.tasks[0].instruction,
+    })
+    expect(prepared.prepared.messages.map(message => message.content).join('\n'))
+      .toContain('结尾必须停在蓝色信封落地')
   })
 })

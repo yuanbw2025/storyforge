@@ -1,5 +1,7 @@
 import * as entries from '../../src/lib/agent/formal-ai-entry'
-import { authorizeChapterPostAdoptionV1 } from '../../src/lib/agent/run/chapter-post-adoption-durable'
+import { authorizeChapterPostAdoptionV1, rejectChapterPostAdoptionAuthorizationV1, chapterPostAdoptionChainStateV1 } from '../../src/lib/agent/run/chapter-post-adoption-durable'
+import { buildChapterPostAdoptionResumePlanV1 } from '../../src/lib/agent/run/chapter-post-adoption-resume'
+import { prepareProseCopilot } from '../../src/lib/agent/prose-copilot'
 import { runChapterPostAdoptionV1 } from '../../src/lib/prose/post-adoption-runner'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
@@ -19,10 +21,11 @@ import { prepareMasterChapterPostAdoptionV1, recoverLongformPhaseHandoffV1 } fro
 import { readLatestChapterPostAdoptionRunV1, createChapterPostAdoptionDurableRunV1 } from '../../src/lib/agent/run/chapter-post-adoption-durable'
 import { hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { readLongformProgressV1 } from '../../src/lib/agent/longform-progress'
+import { readLatestChapterOrganizationRun } from '../../src/lib/agent/chapter-organization'
 
-async function prepare(memoryOnly = false) {
+async function prepare(memoryOnly: boolean | 'organization' = false) {
   const fixture = await seedCurrentWorkspace('主 Agent 章后交接')
-  if (memoryOnly) await db.works.update(fixture.scope.workId, { postAdoptionTaskTypes: ['memory'] })
+  if (memoryOnly) await db.works.update(fixture.scope.workId, { postAdoptionTaskTypes: [memoryOnly === 'organization' ? 'organization' : 'memory'] })
   await db.outlineNodes.add(stampNewRecord(fixture.scope, 'outlineNodes', { parentId: null, type: 'chapter', title: '第一章', summary: '守灯人沿潮痕寻找旧信，面对邮差拒绝承认的证据。', order: 0, createdAt: 1, updatedAt: 1 }, { owner: 'work' }) as OutlineNode)
   const plan = await createMasterAgentPlan({ projectId: fixture.project.id!, scope: fixture.scope, worldGroupId: null, request: '写第一章正文' })
   const conversation = await getOrCreateAgentConversation({ projectId: fixture.project.id!, scope: fixture.scope, worldGroupId: null, purpose: 'master-authoring' })
@@ -34,6 +37,70 @@ async function prepare(memoryOnly = false) {
 describe.sequential('longform main Agent chapter post-adoption handoff', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => { vi.restoreAllMocks(); db.close() })
+  it('skipping optional post-adoption is a persistent terminal choice, not a retryable failure', async () => {
+    const fixture = await prepare()
+    await commitMasterAgentCandidateAdoptionV1({ scope: fixture.scope, runId: fixture.result.runId, candidateEventId: fixture.result.candidates[0].event.id!, worldGroupId: null })
+    await verifyMasterAgentRunV1({ scope: fixture.scope, runId: fixture.result.runId })
+    await prepareMasterChapterPostAdoptionV1({ scope: fixture.scope, runId: fixture.result.runId })
+    const chapter = (await db.chapters.toArray())[0]
+    const child = (await readLatestChapterPostAdoptionRunV1({ scope: fixture.scope, chapterId: chapter.id! }))!
+    await db.outlineNodes.add(stampNewRecord(fixture.scope, 'outlineNodes', { parentId: null, type: 'chapter', title: '第二章', summary: '', order: 1, createdAt: 1, updatedAt: 1 }, { owner: 'work' }) as OutlineNode)
+    const nextChapter = { projectId: fixture.project.id!, scope: fixture.scope, worldGroupId: null, authorRequest: '写第二章正文，守灯人拆开旧信。' }
+    await expect(prepareProseCopilot(nextChapter)).rejects.toThrow('章后处理尚未完成')
+    await rejectChapterPostAdoptionAuthorizationV1({ scope: fixture.scope, snapshot: child })
+    const stored = await readAgentRunV1(fixture.scope, child.run.id)
+    expect(stored.projection.state).toBe('cancelled')
+    expect(chapterPostAdoptionChainStateV1(stored)).toBe('downstream-skipped')
+    expect(buildChapterPostAdoptionResumePlanV1(stored)).toMatchObject({ terminal: true, canResume: false })
+    const legacy = { ...stored, projection: { ...stored.projection, state: 'paused' as const } }
+    expect(chapterPostAdoptionChainStateV1(legacy)).toBe('downstream-skipped')
+    expect(buildChapterPostAdoptionResumePlanV1(legacy)).toMatchObject({ terminal: true, canResume: false })
+    const model = vi.spyOn(entries, 'executeRegisteredAIEntryV1')
+    await runChapterPostAdoptionV1({ project: fixture.project, aiConfig: useAIConfigStore.getState().config, task: { chapterId: chapter.id!, chapterTitle: chapter.title, chapterContent: chapter.content, chapterPlainText: htmlToPlainText(chapter.content), resumeRunId: child.run.id } })
+    expect(model).not.toHaveBeenCalled()
+    expect((await db.chapters.get(chapter.id!))?.content).toBe(chapter.content)
+    await expect(prepareProseCopilot(nextChapter)).resolves.toBeDefined()
+  })
+  it.each(['organization', 'memory'] as const)('retries only the failed %s step with matching attempt evidence', async taskType => {
+    const fixture = await prepare(taskType === 'memory' ? true : 'organization')
+    await commitMasterAgentCandidateAdoptionV1({ scope: fixture.scope, runId: fixture.result.runId, candidateEventId: fixture.result.candidates[0].event.id!, worldGroupId: null })
+    await verifyMasterAgentRunV1({ scope: fixture.scope, runId: fixture.result.runId })
+    await prepareMasterChapterPostAdoptionV1({ scope: fixture.scope, runId: fixture.result.runId })
+    const chapter = (await db.chapters.toArray())[0]
+    const child = (await readLatestChapterPostAdoptionRunV1({ scope: fixture.scope, chapterId: chapter.id! }))!
+    await authorizeChapterPostAdoptionV1({ scope: fixture.scope, snapshot: child, source: 'author-click' })
+    const model = vi.spyOn(entries, 'executeRegisteredAIEntryV1')
+      .mockRejectedValueOnce(new Error('临时服务错误'))
+      .mockResolvedValue(taskType === 'organization' ? '{}' : JSON.stringify({
+        summary: '守灯人在邮局查验旧信，发现邮戳异常。',
+        handoff: { finalScene: { location: '邮局', activeCharacters: ['守灯人'], lastAction: '听见敲门声' }, stateChanges: [], knowledgeChanges: [], commitments: [], openLoops: ['旧信是谁寄的'], immediateNextIntent: '查明敲门声', evidenceQuotes: [{ quote: '门外的钟声骤然中断，守灯人听见失踪亲人的敲门声。' }] },
+      }))
+    const errors: string[] = []
+    const phases: string[] = []
+    const input = {
+      project: fixture.project, aiConfig: useAIConfigStore.getState().config,
+      task: { chapterId: chapter.id!, chapterTitle: chapter.title, chapterContent: chapter.content, chapterPlainText: htmlToPlainText(chapter.content), resumeRunId: child.run.id },
+      callbacks: { onError: (error: string) => { errors.push(error) }, onPhase: (phase: string) => { phases.push(phase) } },
+    }
+    await runChapterPostAdoptionV1(input)
+    expect(model).toHaveBeenCalledOnce()
+    errors.length = 0
+    await runChapterPostAdoptionV1(input)
+    expect(errors).toEqual([])
+    expect(model).toHaveBeenCalledTimes(2)
+    const resumed = await readAgentRunV1(fixture.scope, child.run.id)
+    expect(resumed.projection.steps[`chapter-post-adoption:${taskType}`].attempt).toBe(2)
+    if (taskType === 'organization') {
+      const organization = await readLatestChapterOrganizationRun({ projectId: fixture.project.id!, chapterId: chapter.id! })
+      expect(organization?.candidate.durable?.attempt).toBe(2)
+    } else {
+      expect(resumed.projection.state).toBe('completed')
+      expect(phases).toEqual(['memory', 'idle', 'memory', 'idle'])
+    }
+    await runChapterPostAdoptionV1(input)
+    expect(model).toHaveBeenCalledTimes(2)
+    expect((await db.chapters.get(chapter.id!))?.content).toBe(chapter.content)
+  })
   it('requires phase verification, links the exact chapter, and repeated preparation makes no model call', async () => {
     const fixture = await prepare()
     await expect(prepareMasterChapterPostAdoptionV1({ scope: fixture.scope, runId: fixture.result.runId })).rejects.toThrow('尚未通过')

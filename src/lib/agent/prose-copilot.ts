@@ -1,4 +1,4 @@
-import { readLatestChapterPostAdoptionRunV1 } from './run/chapter-post-adoption-durable'
+import { chapterPostAdoptionChainStateV1, readLatestChapterPostAdoptionRunV1 } from './run/chapter-post-adoption-durable'
 import { readWorkPostAdoptionSettingsV1 } from '../prose/post-adoption-policy'
 import { affirmativeAuthorActionsV1, parseAuthorOrdinalV1 } from './author-intent'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -188,7 +188,7 @@ function scopedOutlineChapters(
     .filter(item => (item.worldGroupId ?? null) === worldGroupId)
 }
 
-function selectTarget(
+export function resolveProseChapterTargetV1(
   request: string,
   nodes: OutlineNode[],
   chapters: Chapter[],
@@ -199,9 +199,14 @@ function selectTarget(
   if (!candidates.length) throw new Error('还没有正文的保存位置。请打开“大纲与章纲”，添加一个卷和一个章节，再回来描述想写的场景即可；世界设定、角色卡与细纲可以留白。')
   const chaptersByOutline = buildBestChapterByOutlineMap(chapters)
   const targetRequest = affirmativeAuthorActionsV1(request)
+  const quotedTitle = targetRequest.match(/(?:写|生成)\s*(?:第[零〇一二两三四五六七八九十百千\d]+章)?\s*《([^》]+)》(?!\s*(?:的)?(?:文风|风格))/)?.[1]
+    ?? targetRequest.match(/《([^》]+)》\s*(?:的)?正文/)?.[1]
   const namedMatches = candidates.filter(item => (
-    item.outlineNode.title.trim() && targetRequest.includes(item.outlineNode.title.trim())
+    quotedTitle
+      ? item.outlineNode.title.trim() === quotedTitle.trim()
+      : item.outlineNode.title.trim() && targetRequest.includes(item.outlineNode.title.trim())
   ))
+  if (quotedTitle && !namedMatches.length) throw new Error(`未找到指定章节《${quotedTitle}》，请核对标题；没有改写其他章节。`)
   if (namedMatches.length > 1) throw new Error('多个章纲与指定标题匹配，请明确章节序号。')
   const named = namedMatches[0]
   const ordinalMatch = targetRequest.match(/第\s*([零〇一二两三四五六七八九十百千\d]+)\s*章/)
@@ -242,7 +247,7 @@ function selectTarget(
 }
 
 export function resolveUnwrittenChapterTargetV1(request: string, nodes: OutlineNode[], chapters: Chapter[], worldGroupId: number | null) {
-  return selectTarget(request, nodes, chapters, worldGroupId, 'generate')
+  return resolveProseChapterTargetV1(request, nodes, chapters, worldGroupId, 'generate')
 }
 
 async function snapshotOf(
@@ -544,14 +549,14 @@ export async function prepareProseCopilot(input: {
     readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
   ])
   const operation = operationFor(request, skill.executionMode)
-  const target = selectTarget(request, nodes, chapters, worldGroupId, operation)
+  const target = resolveProseChapterTargetV1(request, nodes, chapters, worldGroupId, operation)
   if ((await readWorkPostAdoptionSettingsV1(scope)).policy !== 'off') {
     const previousOutlines = scopedOutlineChapters(nodes, worldGroupId).filter(row => row.ordinal < target.ordinal)
     for (const previous of previousOutlines) {
       const chapter = buildBestChapterByOutlineMap(chapters).get(previous.outlineNode.id!)
       if (!chapter?.id) continue
       const downstream = await readLatestChapterPostAdoptionRunV1({ scope, chapterId: chapter.id })
-      if (downstream && downstream.projection.state !== 'completed') throw new Error(`《${chapter.title}》的章后处理尚未完成，请在正文页授权、确认或修复后再生成后续章节。`)
+      if (downstream && !['downstream-completed', 'downstream-skipped'].includes(chapterPostAdoptionChainStateV1(downstream))) throw new Error(`《${chapter.title}》的章后处理尚未完成，请在正文页授权、确认、跳过或修复后再生成后续章节。`)
     }
   }
   const perspectiveCharacterId = input.perspectiveCharacterId === undefined

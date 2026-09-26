@@ -208,6 +208,23 @@ describe('AGENT-1 27.2b · 整理本章 Agent', () => {
     db.close()
   })
 
+  it('空角色名单不授权状态写入；没有所选候选也能明确结束本次整理', async () => {
+    const { project, chapterId } = await seedProject()
+    const input = {
+      projectId: project.id!, chapterId, chapterTitle: '第一章 月纹', worldGroupId: null,
+      chapterText, sourceTextHash: await hashChapterText(chapterHtml),
+      characters: [], existingRelations: [], foreshadows: [],
+      budget: new AgentTeamBudgetTracker('economy').snapshot(),
+    }
+    expect(parseChapterOrganizationOutput({ ...input, raw: rawOrganizationOutput() })?.stateDiffs).toEqual([])
+    const candidate = parseChapterOrganizationOutput({ ...input, raw: '{}' })!
+    const run = await persistChapterOrganizationCandidate(candidate)
+    const resolved = await adoptChapterOrganizationSelection({ run, selection: selectAllChapterOrganizationCandidates(candidate) })
+    expect(Object.values(resolved.run.candidate.domainStatus).every(status => status === 'skipped')).toBe(true)
+    expect(Object.values(resolved.written).every(count => count === 0)).toBe(true)
+    expect(await db.stateCards.count()).toBe(0)
+  })
+
   it('一次调用复用既有解析器，伪造证据与未登记实体不能进入候选', async () => {
     const { project, chapterId, characters, foreshadow } = await seedProject()
     const budget = new AgentTeamBudgetTracker('economy')

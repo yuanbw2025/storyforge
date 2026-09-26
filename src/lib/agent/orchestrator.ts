@@ -20,6 +20,7 @@ import { db } from '../db/schema'
 import {
   adoptGenerationNodeOutput,
   type GenerationNode,
+  type PreparedGenerationNode,
 } from '../generation/generation-node'
 import {
   parseInspirationFragments,
@@ -59,6 +60,7 @@ import {
   adoptRestoredProseCandidate,
   parseProseCandidateDraft,
   prepareProseCopilot,
+  resolveProseChapterTargetV1,
   runProseCreativeReliabilityV1,
   type ProseCopilotOperation,
   type ProseCopilotSnapshot,
@@ -213,6 +215,8 @@ export interface MasterAgentTask {
   /** Every durable task freezes one exact current Skill identity. */
   skillId: AgentSkillId
   instruction: string
+  /** Frozen author wording and planner interpretation; never used as target selectors. */
+  requestContext?: { originalRequest: string; plannerInstruction: string }
   dependsOn: string[]
   /** 正文领域的显式叙事视角；缺省时正文不注入角色认知。 */
   perspectiveCharacterId?: number | null
@@ -503,7 +507,7 @@ function sanitizePlan(
     if (ids.has(id)) continue
     ids.add(id)
     const instruction = typeof source.instruction === 'string' && source.instruction.trim()
-      ? source.instruction.trim().slice(0, 1000)
+      ? source.instruction.trim()
       : request
     const perspectiveCharacterId = source.perspectiveCharacterId === null
       ? null
@@ -515,6 +519,7 @@ function sanitizePlan(
       agentId,
       skillId: selectAgentSkillIdV1(agentId, instruction),
       instruction,
+      requestContext: { originalRequest: request, plannerInstruction: instruction },
       dependsOn: Array.isArray(source.dependsOn)
         ? source.dependsOn.filter((value): value is string => typeof value === 'string').slice(0, 5)
         : [],
@@ -522,6 +527,16 @@ function sanitizePlan(
     })
   }
   if (!tasks.length) return fallbackPlan(request, workflow)
+  // A single task has no domain split to justify paraphrasing the author.
+  // Preserve names, quantities, prohibitions and explicit targets verbatim:
+  // the planner may have omitted them (or even selected another chapter).
+  if (tasks.length === 1) {
+    tasks[0].instruction = request
+    tasks[0].skillId = selectAgentSkillIdV1(tasks[0].agentId, request)
+  }
+  if (tasks.some(task => task.instruction.length > 8_000 || task.requestContext!.originalRequest.length > 8_000 || task.requestContext!.plannerInstruction.length > 8_000)) {
+    throw new Error('创作任务超过 8000 字符，请缩短后重试；不会截断作者要求。')
+  }
   const knownIds = new Set(tasks.map(task => task.id))
   tasks.forEach(task => {
     task.dependsOn = task.dependsOn.filter(id => id !== task.id && knownIds.has(id))
@@ -728,6 +743,24 @@ export async function createMasterAgentPlan(input: {
     model: config.model,
   })
   const planningScope = await resolveScope({ projectId: input.projectId, scope: input.scope })
+  const requestedDomains = classifyRequestedDomainIdsV1(request)
+  if (planningOnly && !input.readOnlyDiscussion && requestedDomains.size === 1
+    && requestedDomains.has('prose') && !/讨论|聊聊|比较|分析|解释/.test(request)) {
+    const [nodes, chapters] = await Promise.all([
+      readOwnedRows<import('../types').OutlineNode>(planningScope, 'outlineNodes', { owner: 'work' }),
+      readOwnedRows<import('../types').Chapter>(planningScope, 'chapters', { owner: 'work' }),
+    ])
+    try {
+      resolveProseChapterTargetV1(request, nodes, chapters, input.worldGroupId,
+        selectAgentSkillIdV1('prose', request) === 'prose.continue' ? 'continue' : 'generate')
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      // Empty works still use the author-confirmed minimal start plan below.
+      if (!reason.startsWith('还没有正文的保存位置')) {
+        return { phase: 'proposal', tasks: [], workflow, summary: `${reason} 你可以从任意已有的空白章节开始，不必先写完前面的章节或补齐世界、角色、细纲。` }
+      }
+    }
+  }
   const history = input.conversationId == null ? [] : await readPlanningConversationEvents(input.conversationId, planningScope)
   const conversationText = buildLongformPlanningDialogueV1(history)
   if (conversationText.length > 48000) throw new Error('当前会谈已超过本轮规划预算，请通过“整理需求摘要”保存已确认的方向后继续；原对话仍保留。')
@@ -970,6 +1003,30 @@ function scopeRuntimeAssumptionsV1(
   }))
 }
 
+async function attachMasterTaskRequestContextV1(
+  prepared: { prepared: PreparedGenerationNode; promptExecutionEvidence?: PromptExecutionEvidenceV1 },
+  task: MasterAgentTask,
+): Promise<void> {
+  if (!task.requestContext) return
+  prepared.prepared.messages.push({
+    role: 'user',
+    content: [
+      '【规划解读，仅供补充理解；不得当作已确认事实】',
+      task.requestContext.plannerInstruction,
+      '【作者本轮原话，完整保留】',
+      task.requestContext.originalRequest,
+      '【当前任务范围】',
+      task.instruction,
+      '只执行当前任务，其他任务留在各自步骤。人物身份、时间、数量、禁令等以作者原话为准；规划解读只可补充原话未指明的内容，不得覆盖作者约束或扩大写入目标。',
+    ].join('\n'),
+  })
+  // The frozen template is unchanged. Evidence binds the actual request,
+  // including the author context frozen in this task's plan hash.
+  if (prepared.promptExecutionEvidence) {
+    prepared.promptExecutionEvidence.renderedPromptHash = await hashCanonicalValue(prepared.prepared.messages)
+  }
+}
+
 async function executeSequentialMasterAgentPlan(
   input: ExecuteMasterAgentPlanInput,
   runtime: { requiredFutureModelCalls?: number } = {},
@@ -1058,6 +1115,7 @@ async function executeSequentialMasterAgentPlan(
             promptExecution: task.promptExecution,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           if (prepared.contextGatewayExecution) {
             await input.executionTrace?.contextGatewayPrepared?.(task, {
               execution: prepared.contextGatewayExecution,
@@ -1120,6 +1178,7 @@ async function executeSequentialMasterAgentPlan(
             promptExecution: task.promptExecution,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           if (prepared.contextGatewayExecution) {
             await input.executionTrace?.contextGatewayPrepared?.(task, {
               execution: prepared.contextGatewayExecution,
@@ -1179,6 +1238,7 @@ async function executeSequentialMasterAgentPlan(
             contextCompressionRuntime,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           const result = await runBudgetedGenerationNode({
             node: prepared.node,
             prepared: prepared.prepared,
@@ -1225,6 +1285,7 @@ async function executeSequentialMasterAgentPlan(
             contextProfile,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           await input.executionTrace?.contextGatewayPrepared?.(task, {
             execution: prepared.contextGatewayExecution,
             assembled: prepared.input.assembled,
@@ -1280,6 +1341,7 @@ async function executeSequentialMasterAgentPlan(
             contextCompressionRuntime,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           if (prepared.contextGatewayExecution) {
             await input.executionTrace?.contextGatewayPrepared?.(task, {
               execution: prepared.contextGatewayExecution,
@@ -1342,6 +1404,7 @@ async function executeSequentialMasterAgentPlan(
             promptExecution: task.promptExecution,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           if (prepared.contextGatewayExecution) {
             await input.executionTrace?.contextGatewayPrepared?.(task, {
               execution: prepared.contextGatewayExecution,
@@ -1418,6 +1481,7 @@ async function executeSequentialMasterAgentPlan(
           contextCompressionRuntime,
           signal: input.signal,
         })
+        await attachMasterTaskRequestContextV1(prepared, task)
         const result = await runBudgetedGenerationNode({
           node: prepared.node,
           prepared: prepared.prepared,
@@ -1452,6 +1516,7 @@ async function executeSequentialMasterAgentPlan(
       } else if (task.agentId === 'outline') {
         if (skill.executionMode === 'details') {
           const prepared = await prepareDetailedOutlineAuthoringV1({ projectId: input.projectId, scope, worldGroupId: input.worldGroupId, authorRequest: task.instruction, signal: input.signal })
+          await attachMasterTaskRequestContextV1(prepared, task)
           await input.executionTrace?.contextGatewayPrepared?.(task, { execution: prepared.assembled.contextGatewayExecution, assembled: prepared.assembled, renderedRequest: prepared.prepared.messages })
           const startedAt = Date.now()
           const result = await runBudgetedGenerationNode({ node: prepared.node, prepared: prepared.prepared, budget, callLabel: '场景细纲 Agent', maxOutputTokens: skill.maxOutputTokens })
@@ -1476,6 +1541,7 @@ async function executeSequentialMasterAgentPlan(
             contextCompressionRuntime,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           const result = await runBudgetedGenerationNode({
             node: prepared.node,
             prepared: prepared.prepared,
@@ -1522,6 +1588,7 @@ async function executeSequentialMasterAgentPlan(
             contextCompressionRuntime,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           const result = await runBudgetedGenerationNode({
             node: prepared.node,
             prepared: prepared.prepared,
@@ -1567,6 +1634,7 @@ async function executeSequentialMasterAgentPlan(
             contextCompressionRuntime,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           const result = await runBudgetedGenerationNode({
             node: prepared.node,
             prepared: prepared.prepared,
@@ -1617,6 +1685,7 @@ async function executeSequentialMasterAgentPlan(
             mutationRequest: task.storyArcMutationRequest,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           if (prepared.contextGatewayExecution) {
             await input.executionTrace?.contextGatewayPrepared?.(task, {
               execution: prepared.contextGatewayExecution,
@@ -1681,6 +1750,7 @@ async function executeSequentialMasterAgentPlan(
             inheritedAssumptions,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           await input.executionTrace?.contextGatewayPrepared?.(task, {
             execution: prepared.contextGatewayExecution,
             assembled: prepared.input.assembled,
@@ -1744,6 +1814,7 @@ async function executeSequentialMasterAgentPlan(
           perspectiveCharacterId: task.perspectiveCharacterId ?? null,
           signal: input.signal,
         })
+        await attachMasterTaskRequestContextV1(prepared, task)
         await input.executionTrace?.contextGatewayPrepared?.(task, {
           execution: prepared.contextGatewayExecution,
           assembled: prepared.input.assembled,

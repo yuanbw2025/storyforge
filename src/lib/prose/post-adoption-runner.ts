@@ -16,7 +16,7 @@ import { createContextManifestFromAssemblyV1 } from '../agent/run/context-manife
 import { readAgentRunV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
 import { classifyAgentRunFailureV1 } from '../agent/run/failure-policy'
 import { buildChapterPostAdoptionResumePlanV1, isChapterPostAdoptionStepRunnableV1 } from '../agent/run/chapter-post-adoption-resume'
-import { beginChapterPostAdoptionStepV1, createChapterPostAdoptionDurableRunV1, failChapterPostAdoptionStepV1, recordChapterPostAdoptionOutputV1, scheduleChapterPostAdoptionStepsV1, succeedChapterPostAdoptionStepV1, verifyChapterPostAdoptionRunV1, CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1, CHAPTER_POST_ADOPTION_STEP_IDS_V1, type ChapterPostAdoptionStepIdV1 } from '../agent/run/chapter-post-adoption-durable'
+import { nextChapterPostAdoptionAttemptV1, beginChapterPostAdoptionStepV1, createChapterPostAdoptionDurableRunV1, failChapterPostAdoptionStepV1, recordChapterPostAdoptionOutputV1, scheduleChapterPostAdoptionStepsV1, succeedChapterPostAdoptionStepV1, verifyChapterPostAdoptionRunV1, CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1, CHAPTER_POST_ADOPTION_STEP_IDS_V1, type ChapterPostAdoptionStepIdV1 } from '../agent/run/chapter-post-adoption-durable'
 import { rebuildChapterChunks, ensureChunkEmbeddings, rebuildProjectNarrativeSummaries } from '../retrieval/retrieval'
 import { isEmbeddingReady } from '../ai/adapters/embedding-adapter'
 
@@ -102,13 +102,12 @@ export async function runChapterPostAdoptionV1(input: {
     })
     const manifestFor = async (
       stepId: ChapterPostAdoptionStepIdV1,
-      attempt: number,
       sourceKeys: readonly string[],
       assembled: Awaited<ReturnType<typeof assembleContext>>,
     ) => createContextManifestFromAssemblyV1({
       runId: snapshot.run.id,
       stepId,
-      attempt,
+      attempt: nextChapterPostAdoptionAttemptV1(snapshot, stepId),
       projectId: project.id!,
       worldGroupId: transitionWorldGroupId,
       declaredSourceKeys: sourceKeys,
@@ -148,7 +147,6 @@ export async function runChapterPostAdoptionV1(input: {
       )
       const organizationManifest = await manifestFor(
         CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization,
-        1,
         CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.organization,
         organizationAssembly,
       )
@@ -208,7 +206,7 @@ export async function runChapterPostAdoptionV1(input: {
         durable: {
           runId: snapshot.run.id,
           stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization,
-          attempt: 1,
+          attempt: snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization].attempt,
           contextManifestHash: organizationManifest.manifestHash,
           candidateHash,
         },
@@ -247,6 +245,7 @@ export async function runChapterPostAdoptionV1(input: {
 
     // 2. summary + handoff 仍只调用一次模型，并由原子 CAS 写回 chapters。
     if (shouldRunStep(CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory)) try {
+      callbacks.onPhase?.('memory')
       await ensureFresh()
       const memoryAssembly = await assembledFor(
         CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.memory,
@@ -258,7 +257,6 @@ export async function runChapterPostAdoptionV1(input: {
         stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory,
         contextManifest: await manifestFor(
           CHAPTER_POST_ADOPTION_STEP_IDS_V1.memory,
-          1,
           CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.memory,
           memoryAssembly,
         ),
@@ -300,6 +298,8 @@ export async function runChapterPostAdoptionV1(input: {
         ...failure,
       }))
       callbacks.onError?.(error instanceof Error ? error.message : '章节记忆后处理失败')
+    } finally {
+      callbacks.onPhase?.('idle')
     }
 
     // 3. 记忆写回后再重建检索与层级摘要，避免把刚生成的可信摘要留在 pending 状态。
@@ -312,7 +312,6 @@ export async function runChapterPostAdoptionV1(input: {
         stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval,
         contextManifest: await manifestFor(
           CHAPTER_POST_ADOPTION_STEP_IDS_V1.retrieval,
-          1,
           CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.retrieval,
           retrievalAssembly,
         ),
@@ -356,7 +355,6 @@ export async function runChapterPostAdoptionV1(input: {
       const consistencyAssembly = await assembledFor(CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.consistency)
       const consistencyManifest = await manifestFor(
         CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency,
-        1,
         CHAPTER_POST_ADOPTION_STEP_SOURCE_KEYS_V1.consistency,
         consistencyAssembly,
       )
@@ -389,7 +387,7 @@ export async function runChapterPostAdoptionV1(input: {
         durable: {
           runId: snapshot.run.id,
           stepId: CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency,
-          attempt: 1,
+          attempt: snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.consistency].attempt,
           contextManifestHash: consistencyManifest.manifestHash,
           candidateHash,
         },

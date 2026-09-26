@@ -173,6 +173,8 @@ export function buildChapterPostAdoptionResumePlanV1(
     ? steps.find(step => step.action === 'blocked-dependency')
     : undefined)
   const terminal = snapshot.projection.state === 'completed'
+    || snapshot.projection.state === 'cancelled'
+    || snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.authorization]?.confirmation === 'reject'
   return {
     runId: snapshot.run.id,
     state: snapshot.projection.state,

@@ -232,9 +232,14 @@ function determineMode(
 function chooseTargetVolume(request: string, volumes: OutlineNode[]): OutlineNode | null {
   if (!volumes.length) return null
   const targetRequest = affirmativeAuthorActionsV1(request)
+  const quotedTitle = targetRequest.match(/《([^》]+)》\s*(?:卷)?(?:的)?(?:章纲|章节)/)?.[1]
+    ?? targetRequest.match(/第[零〇一二两三四五六七八九十百千\d]+卷\s*《([^》]+)》/)?.[1]
   const named = volumes.filter(volume => (
-    volume.title.trim().length > 0 && targetRequest.includes(volume.title.trim())
+    quotedTitle
+      ? volume.title.trim() === quotedTitle.trim()
+      : volume.title.trim().length > 0 && targetRequest.includes(volume.title.trim())
   ))
+  if (quotedTitle && !named.length) throw new Error(`未找到指定卷《${quotedTitle}》，请核对卷名；没有写入其他卷。`)
   if (named.length > 1) throw new Error('要求中出现了多个卷名，请明确本次章纲写入哪一卷。')
   const ordinalMatch = targetRequest.match(/第\s*([零〇一二两三四五六七八九十百千\d]+)\s*卷/)
   const ordinal = ordinalMatch ? parseAuthorOrdinalV1(ordinalMatch[1]) : null
@@ -338,6 +343,15 @@ function buildOutlineMessages(input: OutlineCopilotInput) {
     options: { parameterValues: input.parameterValues },
   })
   if (plan.status === 'skip') throw new Error(plan.reason)
+  if (input.snapshot.maxItems === 1) {
+    // Template defaults describe a whole book/volume. A scoped author request
+    // must not inherit their default counts, summary length or story expansion.
+    const system = plan.messages.find(message => message.role === 'system')
+    const constraint = '本次为作者指定的局部创作，只输出 1 个 JSON 元素。作者要求的范围、摘要长度和已有事实优先于模板中的全书规模、默认卷章数、4-6 句摘要、完整弧光或卷末钩子要求；不得为凑足模板而扩写后续情节。'
+    if (system) system.content += '\n\n' + constraint
+    else plan.messages.unshift({ role: 'system', content: constraint })
+    plan.messages.push({ role: 'user', content: '【本次范围，请以作者原话为准】\n' + input.authorRequest })
+  }
   return plan.messages
 }
 

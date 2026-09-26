@@ -128,6 +128,7 @@ export default function ChatCopilotPanel({
   }, [copilot.events.length, copilot.busy])
   useEffect(() => {
     if (!copilot.busy) return
+    setElapsed(0)
     const started = Date.now()
     const timer = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000)
     return () => clearInterval(timer)
@@ -518,7 +519,7 @@ export default function ChatCopilotPanel({
                   title={candidate.payload.contextSources.join('、')}
                 >
                   {candidate.payload.contextEvidence
-                    ? `${CONTEXT_PROFILE_LABELS[candidate.payload.contextEvidence.profile]} · ≈${candidate.payload.contextEvidence.estimatedInputTokens.toLocaleString()} tokens`
+                    ? `${CONTEXT_PROFILE_LABELS[candidate.payload.contextEvidence.profile]} · 资料 ≈${candidate.payload.contextEvidence.estimatedInputTokens.toLocaleString()} tokens`
                     : `${candidate.payload.contextSources.length} 个输入来源`}
                 </span>
               </div>

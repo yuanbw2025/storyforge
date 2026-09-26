@@ -55,6 +55,7 @@ export async function prepareLongformStartProposalV1(
               skillId: 'outline.volumes' as const,
               instruction: `只拟定 1 个卷的简短标题和一句话摘要，作为本次章节的容器；不要规划全书，不扩展其他设定。${authorGoal}`,
               dependsOn: [],
+              ...(prose.requestContext ? { requestContext: prose.requestContext } : {}),
             },
           ]
         : []),
@@ -64,6 +65,7 @@ export async function prepareLongformStartProposalV1(
         skillId: 'outline.chapters',
         instruction: `只拟定 1 个章节标题和简短场景摘要，供本次正文使用；不要生成多章或完整细纲。${authorGoal}`,
         dependsOn: volumes.length ? [] : [volumeId],
+        ...(prose.requestContext ? { requestContext: prose.requestContext } : {}),
       },
       { ...prose, dependsOn: [chapterId] },
     ],
