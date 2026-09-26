@@ -1674,7 +1674,7 @@ export const AGENT_SKILLS = [
       table: 'creativeRules',
       fields: ['writingStyle', 'atmosphere', 'specialRequirements'],
     }],
-    lastVerifiedAt: '2026-08-10',
+    lastVerifiedAt: '2026-09-26',
     regressionTests: [
       'R-HARNESS39-creative-rules-agent',
       'R-HARNESS39-creative-rules-panel-ui',
@@ -2098,7 +2098,7 @@ export const AGENT_SKILLS = [
       { table: 'storylineCrossings', fields: ['arcIdA', 'arcIdB', 'chapterId', 'chapterTitle', 'note', 'evidenceQuote'] },
       { table: 'storyArcs', fields: ['name', 'type', 'description', 'stages'] },
     ],
-    lastVerifiedAt: '2026-08-10',
+    lastVerifiedAt: '2026-09-26',
     regressionTests: ['R-HARNESS40-storyline-progress-agent', 'R-PHASE39-storyline-progress-ui'],
   },
   {
@@ -3095,7 +3095,7 @@ export const AGENT_SKILLS = [
     contextCompression: PROSE_CONSISTENCY_COMPRESSION_POLICY,
     maxOutputTokens: 1,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-10',
+    lastVerifiedAt: '2026-09-26',
     regressionTests: ['R-HARNESS41-consistency-post-adoption'],
   },
   {

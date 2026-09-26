@@ -1,11 +1,12 @@
 # StoryForge 当前施工路线
 
-> 版本：1.5.1 · 更新：2026-09-10 · 权威层级：L2
+> 版本：1.5.2 · 更新：2026-09-25 · 权威层级：L2
 > 顺序来自项目总纲 §11。任务只有进入本文件并满足前置，才是当前 backlog；旧阶段号不自动续用。
 
 ## 状态
 
 - `NEXT`：当前最近施工单元。
+- `IN_PROGRESS`：已经开工，仍有明确未完成项或外部验收门。
 - `QUEUED`：前置完成后进入。
 - `BLOCKED`：缺少产品决策或外部条件。
 - `LATER`：总纲明确后置。
@@ -53,7 +54,7 @@ Phase 5 已完成世界观/故事/角色/主支线/大纲/细纲/正文、候选
 | E-TOWN-01 | NEXT | 后日谈 AI 小镇纵切面完善 | 已接通冻结来源生产、发布、时间/地点/日程/关系/轻经营/离线演化和玩家界面；继续完成真实长期内容、媒资与商业验收 |
 | E-TEXTADV-01 | QUEUED | 文字冒险 | 选择/判定/资源/任务/结局和可玩发布 |
 | E-AVG-01 | QUEUED | AVG | 脚本/演出/立绘/背景/声音/UI 绑定与分支存档 |
-| E-OPENWORLD-01 | QUEUED | 文字开放世界 | 区域、动态任务、角色自治、按需模拟和持续有限循环 |
+| E-OPENWORLD-01 | IN_PROGRESS | 文字开放世界 | 专属 Creator、内容生产、vNext Runtime、区域演化和正式产品入口已形成工程闭环；继续取得真实第二模型质量/成本回执、真人双结局试玩以及问题→修复版→旧档复测证据 |
 
 每项必须能映射 `WorldReference → 产品专用 Brief/SourcePlan → production run ContextManifests → SourceManifest/ProductRelease → runtime` 的共同交接语义，但不要求共用相同配置表、规模单位、Agent 图或运行 schema。
 
