@@ -1345,7 +1345,7 @@ test('主 Agent 调度世界领域任务，拒绝零写入并精确采纳可见�
   await copilot.getByRole('button', { name: '讨论与规划', exact: true }).click()
   await copilot.getByRole('button', { name: '确认计划并开始', exact: true }).click()
   await expect(candidate).toContainText(firstCandidate.value)
-  await expect(copilot.getByText(/均衡 · ≈[\d,]+ tokens/)).toBeVisible()
+  await expect(copilot.getByText(/均衡 · 资料 ≈[\d,]+ tokens/)).toBeVisible()
   await copilot.getByText('质量提示与运行详情', { exact: true }).click()
   await expect(copilot.getByText(/查看本次实际输入证据 · \d+ 个来源/)).toBeVisible()
   await expect(copilot.getByText(/本轮团队预算约 [\d,]+ \/ 160,000 tokens · 2\/7 次调用 · Canon 打回 1\/1/)).toBeVisible()
