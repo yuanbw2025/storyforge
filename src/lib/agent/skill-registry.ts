@@ -1319,7 +1319,7 @@ export const AGENT_SKILLS = [
     contextCompression: WORLD_COMPRESSION_POLICY,
     maxOutputTokens: 3_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-09',
+    lastVerifiedAt: '2026-09-24',
     regressionTests: ['R-HARNESS27-master-candidate-semantic-review'],
   },
   {
@@ -1728,7 +1728,7 @@ export const AGENT_SKILLS = [
         ...CHARACTER_DIMENSIONS.map(dimension => dimension.key),
       ],
     }],
-    lastVerifiedAt: '2026-08-09',
+    lastVerifiedAt: '2026-09-24',
     regressionTests: ['R-AGENT1-chat-copilot-character', 'R-HARNESS33-character-panel-ui', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -1861,7 +1861,7 @@ export const AGENT_SKILLS = [
       table: 'characters',
       fields: CHARACTER_DIMENSIONS.map(dimension => dimension.key),
     }],
-    lastVerifiedAt: '2026-08-09',
+    lastVerifiedAt: '2026-09-24',
     regressionTests: ['R-HARNESS38-character-supplement-agent', 'R-HARNESS38-character-supplement-ui'],
   },
   {
@@ -2003,7 +2003,7 @@ export const AGENT_SKILLS = [
     contextCompression: INSPIRATION_COMPRESSION_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'inspirationWorkspaces', fields: ['versions'] }],
-    lastVerifiedAt: '2026-08-09',
+    lastVerifiedAt: '2026-09-24',
     regressionTests: ['R-AGENT1-chat-copilot-inspiration', 'R-CM1-inspiration-fusion-ui', 'R-HARNESS34-inspiration-entry', 'R-HARNESS34-inspiration-panel-ui', 'R-HARNESS2-master-terminal-verifier', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2023,7 +2023,7 @@ export const AGENT_SKILLS = [
     contextCompression: INSPIRATION_COMPRESSION_POLICY,
     maxOutputTokens: 3_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-09',
+    lastVerifiedAt: '2026-09-24',
     regressionTests: ['R-HARNESS27-master-candidate-semantic-review'],
   },
   {
@@ -2118,7 +2118,7 @@ export const AGENT_SKILLS = [
     contextCompression: OUTLINE_CHARACTER_DRIVEN_COMPRESSION_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'characterDrivenPlans', fields: ['generatedVolumes', 'status'] }],
-    lastVerifiedAt: '2026-08-09',
+    lastVerifiedAt: '2026-09-24',
     regressionTests: [
       'R-HARNESS35-character-driven-agent',
       'R-HARNESS35-character-driven-panel-ui',
@@ -2144,7 +2144,7 @@ export const AGENT_SKILLS = [
       { table: 'outlineNodes', fields: ['title', 'summary'] },
       { table: 'chapters', fields: ['title'] },
     ],
-    lastVerifiedAt: '2026-08-09',
+    lastVerifiedAt: '2026-09-24',
     regressionTests: [
       'R-HARNESS36-character-revision-agent',
       'R-HARNESS36-character-revision-panel-ui',
@@ -3075,7 +3075,7 @@ export const AGENT_SKILLS = [
       table: 'chapters',
       fields: ['summary', 'summarySourceTextHash', 'summaryTextNormalizationVersion', 'continuityHandoff', 'planReconciliation'],
     }],
-    lastVerifiedAt: '2026-08-08',
+    lastVerifiedAt: '2026-09-24',
     regressionTests: ['R-NS1-T3-chapter-memory-task', 'R-HARNESS20-chapter-post-adoption-durable'],
   },
   {

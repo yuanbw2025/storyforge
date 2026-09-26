@@ -213,8 +213,14 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
 
   return <ProductFrame product={base} title={title} page={page.label} navigation={navigation}>
     <section className="lf-paper">
-      <h3>{title} · 可验证预览</h3>
+      <h3>{title} · {openWorld ? '展示作品与创作' : '可验证预览'}</h3>
       <p>{decision.entry.maturityNote}</p>
+      {openWorld && <div className="home-actions">
+        <button className="lf-action lf-action-primary" onClick={() => navigate('/play/salt-ridge')}>
+          先试玩《盐脊：断流之夜》
+        </button>
+        <small>无需选择工作区或配置模型；首次开始会建立独立的正式发布与存档。</small>
+      </div>}
       {!decision.enterable
         ? <p>当前产品通道尚未开放此入口。</p>
         : <label>

@@ -26,6 +26,7 @@ test('approved home, every product and live longform share complete navigation',
     else if(product.id==='town') await expect(page.getByTestId('town-author-page')).toBeVisible()
     else if(product.id==='ttrpg') await expect(page.getByTestId('ttrpg-author-page')).toBeVisible()
     else if(product.id==='adventure') await expect(page.getByRole('navigation',{name:'文字冒险导航'})).toBeVisible()
+    else if(product.id==='openworld') await expect(page.getByRole('navigation',{name:'文字开放世界导航'})).toBeVisible()
     else await expect(page.getByTestId('approved-product-ui')).toBeVisible()
     const url = page.url()
     await page.reload()
