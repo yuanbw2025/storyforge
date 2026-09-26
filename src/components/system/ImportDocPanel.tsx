@@ -255,7 +255,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     }
     autoReportShown.current = null
     setReportSession(null)
-    await runSession({ sessionId: unfinished.id, projectId: project.id! })
+    await retryFailedChunks({ sessionId: unfinished.id, projectId: project.id! })
   }
 
   // ── 用当前上传的文件续跑（作为兜底） ─────────────────────
@@ -290,7 +290,7 @@ export default function ImportDocPanel({ project, onNavigate }: Props) {
     markBlobRestored()
     autoReportShown.current = null
     setReportSession(null)
-    await runSession({ sessionId: unfinished.id, projectId: project.id! })
+    await retryFailedChunks({ sessionId: unfinished.id, projectId: project.id! })
   }
 
   // ── Report Modal 里：重试失败块 / 关闭 / 清理 ─────────────

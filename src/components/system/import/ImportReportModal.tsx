@@ -151,7 +151,7 @@ export default function ImportReportModal({
             <div className="bg-error/5 border border-error/30 rounded-lg p-3">
               <div className="flex items-center gap-1.5 text-xs text-error mb-2">
                 <AlertTriangle className="w-3.5 h-3.5" />
-                <strong>{failedChunks.length} 个块重试 3 次后仍失败</strong>
+                <strong>{failedChunks.length} 个块解析失败或已停止</strong>
               </div>
               <div className="max-h-40 overflow-y-auto space-y-1 text-xs">
                 {failedChunks.map(c => (
@@ -166,7 +166,7 @@ export default function ImportReportModal({
                 ))}
               </div>
               <div className="mt-2 text-[11px] text-text-muted leading-relaxed">
-                点击下方「重试失败块」，仅会重新解析这 {failedChunks.length} 个块；已成功的块不会重复写入。
+                点击下方「重试失败块」，会重试失败块并继续尚未处理的块；已成功的块不会重复写入。
               </div>
             </div>
           )}

@@ -102,6 +102,8 @@ export interface ChatRequestOptions {
   tools?: readonly ChatToolDefinition[]
   toolChoice?: 'auto'
   responseFormat?: 'json_object'
+  /** Explicit DeepSeek mode for bounded structured extraction; other providers ignore it. */
+  thinkingMode?: 'enabled' | 'disabled'
   jsonSchema?: {
     name: string
     schema: Record<string, unknown>
@@ -174,11 +176,13 @@ function buildRequest(
   if (config.provider === 'poe') {
     // Poe: 不传额外参数
   } else if (config.provider === 'deepseek') {
-    const isThinkingModel = config.model.includes('v4-pro')
+    const isThinkingModel = options?.thinkingMode
+      ? options.thinkingMode === 'enabled' : config.model.includes('v4-pro')
     if (isThinkingModel) {
       body.thinking = { type: 'enabled' }
       body.reasoning_effort = 'high'
     } else {
+      if (options?.thinkingMode === 'disabled') body.thinking = { type: 'disabled' }
       if (config.temperature !== undefined) body.temperature = config.temperature
     }
     // maxTokens > 0 才传，0 = 不限制（由模型自身决定）

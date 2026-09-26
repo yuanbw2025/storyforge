@@ -31,6 +31,7 @@ import { useChunkedGeneration } from './useChunkedGeneration'
 import { useOutlineBatchGeneration } from './useOutlineBatchGeneration'
 import { useOutlineGenerationController } from './useOutlineGenerationController'
 import { useOutlineChapterCountEstimate } from './useOutlineChapterCountEstimate'
+import { useOutlineDragScroll } from './useOutlineDragScroll'
 import { useOutlineChapterDrag } from './useOutlineChapterDrag'
 import { decodeGenerationOperation, type OutlineGenerationRequest } from '../../lib/outline/generation-request'
 import { useInitialRecordTarget } from '../shared/initial-record-target'
@@ -58,6 +59,8 @@ export default function OutlinePanel({ project, onOpenChapter, initialNodeId }: 
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
   const [promptPanelOpen, setPromptPanelOpen] = useState(false)
+  const dragScrollRoot = useRef<HTMLDivElement>(null)
+  useOutlineDragScroll(dragScrollRoot)
   const { activeChapterDrag, beginChapterDrag, clearActiveChapterDrag, getActiveChapterDrag } = useOutlineChapterDrag()
 
   // 审校对话框
@@ -586,6 +589,7 @@ export default function OutlinePanel({ project, onOpenChapter, initialNodeId }: 
   // ── 右侧编辑区 ──
 
   return (
+    <div ref={dragScrollRoot} className="h-full min-h-0" data-testid="outline-drag-scroll">
     <PanelLayout
       sidebar={sidebarContent}
       sidebarTitle="📖 大纲"
@@ -712,5 +716,6 @@ export default function OutlinePanel({ project, onOpenChapter, initialNodeId }: 
         />
       </div>
     </PanelLayout>
+    </div>
   )
 }

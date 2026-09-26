@@ -122,6 +122,7 @@ export default function ChaptersListPanel({ project, initialNodeId }: Props) {
       {/* 统计 */}
       <div className="px-3 py-2 text-[10px] text-text-muted border-b border-border">
         共 {totalChapters} 章 · {totalWords.toLocaleString()} 字
+        <p className="mt-1">新增、删除与调整章节顺序，请到「大纲与章纲」。</p>
       </div>
 
       {/* 按卷分组的章节列表 */}

@@ -1,4 +1,5 @@
 import { CheckCircle, ScrollText, Wifi, WifiOff } from 'lucide-react'
+import { AI_PROXY_ENDPOINTS } from '../../lib/ai/proxy-endpoints'
 import type { AIProvider } from '../../lib/types'
 import type { TestResult } from '../../stores/ai-config'
 
@@ -25,7 +26,7 @@ export default function AIConnectionTestSection({
   onTest,
   onToggleLogs,
 }: Props) {
-  const showCorsHint = result && !result.ok && provider === 'deepseek'
+  const showCorsHint = result && !result.ok
     && (result.message.includes('CORS') || result.message.includes('网络错误'))
 
   return (
@@ -62,8 +63,10 @@ export default function AIConnectionTestSection({
       {showCorsHint && (
         <p className="text-xs text-amber-400 px-1">
           {isDevelopment
-            ? '💡 本地运行时，可点击「切换到本地代理」解决此问题'
-            : '💡 建议改用 Gemini（支持浏览器直调）或在本地运行此工具'}
+            ? AI_PROXY_ENDPOINTS[provider]
+              ? '可尝试已有的本地代理（仅转发到该服务商官方地址）。自定义中转站需由服务方允许当前网页来源的 CORS 预检。'
+              : '自定义中转站没有内置通用代理。请让服务方允许当前网页来源的 OPTIONS 预检，以及 Content-Type、Authorization 请求头；或使用你自己部署的同源反向代理。'
+            : '请检查网络和 Base URL。若控制台显示 CORS，需由服务方允许当前网页来源的 OPTIONS 预检及 Content-Type、Authorization 请求头，或配置你自己部署的同源反向代理。'}
         </p>
       )}
     </div>

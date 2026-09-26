@@ -5,7 +5,7 @@
  *
  * 一部超大文档（几十万字～千万字）一次性塞给 AI 必然被 maxTokens 截断；
  * 这里把文档按章节/段落切成若干 chunk，串行让 AI 解析，每块即时写 DB，
- * 失败自动重试 3 次，可暂停/恢复/断点续跑，每 10 块做一次 AI 跨块角色合并。
+ * 服务繁忙至多尝试 3 次，其他失败停止并保留手动重试，可暂停/恢复/断点续跑，每 10 块做一次 AI 跨块角色合并。
  *
  * 这张表存「任务本身」—— 文档哈希、chunk 列表、累计解析结果、状态；
  * 解析出来的具体数据照常写入 worldviews / characters / outlineNodes 表。
@@ -30,7 +30,7 @@ export type ChunkStatus =
   | 'pending'   // 等待处理
   | 'running'   // 处理中
   | 'done'      // 成功
-  | 'failed'    // 重试 3 次仍失败
+  | 'failed'    // 失败或停止，仍可手动重试
 
 /** 一个 chunk 的运行状态 */
 export interface ChunkState {

@@ -206,7 +206,7 @@ export default function ImportConfirmModal({
             </div>
             <div className="flex items-start gap-1.5">
               <Info className="w-3.5 h-3.5 text-accent mt-0.5 flex-shrink-0" />
-              <span><strong className="text-text-primary">自动重试</strong>：单块失败最多自动重 3 次。仍失败的块可在结束后单独再试。</span>
+              <span><strong className="text-text-primary">自动重试</strong>：仅服务明确繁忙（503）时至多尝试 3 次；解析失败、授权错误或结果未知会停止，调整后可手动重试。</span>
             </div>
             <div className="flex items-start gap-1.5">
               <Info className="w-3.5 h-3.5 text-accent mt-0.5 flex-shrink-0" />

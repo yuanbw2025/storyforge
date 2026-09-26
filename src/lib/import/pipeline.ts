@@ -3,7 +3,7 @@
  *
  * 设计目标：让百万字～千万字小说也能稳定解析入库，并保证：
  *   · 每块即时写库（标签切走、刷新页面、断电都不丢已解析数据）
- *   · 单块失败自动重试 3 次，全失败后整体失败仍可手动重试
+ *   · 明确的服务繁忙至多尝试 3 次；解析、授权和结果未知时停止，保留手动重试
  *   · 支持暂停 / 恢复 / 取消
  *   · 状态、进度、日志全程通过 useImportStatusStore 暴露给 UI
  *   · 每 N 块 + 终末跑一次 AI 跨块角色合并，避免"一个人多个名"
@@ -26,7 +26,8 @@ import { useImportStatusStore } from '../../stores/import-status'
 import { extractJSON, IMPORT_MAX_TOKENS } from '../ai/adapters/import-adapter'
 import type { UnifiedParseResult } from '../types'
 import type { AIConfig } from '../types'
-import { resolveRequestConfig } from '../ai/client'
+import { AIError } from '../types'
+import { resolveRequestConfig, type ChatResult } from '../ai/client'
 import type { ImportSession, ChunkState } from '../types'
 import {
   registerChunkTexts as _registerChunkTexts,
@@ -317,6 +318,18 @@ async function runChunk(
         status: 'pending',
         errorMessage: msg,
       })
+      // Only a definite service-unavailable response can be retried automatically.
+      // Parsed/empty answers already consumed tokens; transport failures may have
+      // completed remotely. Stop the session instead of billing the next chunks.
+      const retryable = err instanceof AIError && err.status === 503
+        && !('retryable' in err && err.retryable === false)
+      if (!retryable) {
+        await sessionStore.patchChunk(session.id!, chunkIndex, {
+          status: 'failed', finishedAt: Date.now(),
+        })
+        statusStore.markChunkFinished({ success: false })
+        throw new Error(`块 ${chunkIndex + 1} 已停止，未自动重发。${msg}；请查看设置中的模型日志，调整后手动重试。`)
+      }
       if (attempt < MAX_ATTEMPTS - 1) {
         await sleep(RETRY_DELAY_MS)
       } else {
@@ -367,8 +380,23 @@ async function parseChunkOnce(args: {
   const effectiveConfig = resolveRequestConfig(config, meta).config
   if (!isAIConfigReady(effectiveConfig)) throw new Error(getAIConfigRequiredMessage(effectiveConfig))
 
-  const output = await chatWithAbort(messages, config, args.signal, meta)
-  const obj = extractJSON(output) as UnifiedParseResult
+  const response: ChatResult = {}
+  const output = await chatWithAbort(messages, config, args.signal, meta, response,
+    effectiveConfig.provider === 'deepseek'
+      ? { responseFormat: 'json_object', thinkingMode: 'disabled' } : undefined)
+  let obj: UnifiedParseResult
+  try {
+    // Never adopt a partially repaired JSON when the provider reports truncation.
+    if (response.finishReason === 'length') throw new Error('模型输出达到 token 上限；请减小分块或提高输出上限')
+    const parsed = extractJSON(output)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('需要 JSON 对象')
+    obj = parsed as UnifiedParseResult
+  } catch {
+    const finish = ['stop', 'length', 'content_filter'].includes(response.finishReason ?? '')
+      ? response.finishReason : 'unknown'
+    throw new Error(`文档解析未返回完整 JSON 对象（回答 ${output.length} 字符，结束原因 ${finish}）。`
+      + (finish === 'length' ? '请减小分块或提高输出上限。' : '请检查模型是否支持 JSON 输出。'))
+  }
   return normalizeUnified(obj, {
     sourceText: args.rawDocument,
     chunkIndex: args.chunkIndex,
