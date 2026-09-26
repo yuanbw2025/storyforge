@@ -550,8 +550,8 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
       const error = err as Error
       let errorMsg: string
 
-      if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-        errorMsg = '网络错误 — 可能原因：1) 网络不通 2) 该平台不支持浏览器直接调用(CORS) 3) Base URL 错误'
+      if (error.name === 'TypeError' && /Failed to fetch|Load failed|NetworkError|network request failed/i.test(error.message)) {
+        errorMsg = '网络错误 — 浏览器未提供可读的 HTTP 响应，无法据此判断 Key 是否正确。请核对 Base URL 和网络；若控制台显示 CORS/预检失败，需要服务方放行当前网页来源。'
       } else if (error.name === 'AbortError') {
         errorMsg = '请求超时'
       } else {

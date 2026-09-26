@@ -88,7 +88,7 @@ function ChunkCell({ chunk, isActive, activeAttempts }: {
   } else if (chunk.status === 'failed') {
     Icon = XCircle
     color = 'text-error bg-error/10 border-error/30'
-    title += `\n✗ 失败（重试 ${chunk.attempts} 次）\n${chunk.errorMessage || ''}`
+    title += `\n✗ 失败（已尝试 ${chunk.attempts} 次）\n${chunk.errorMessage || ''}`
   } else if (chunk.status === 'running' || isActive) {
     Icon = Loader2
     color = 'text-accent bg-accent/20 border-accent animate-pulse'

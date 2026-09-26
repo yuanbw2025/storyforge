@@ -168,14 +168,25 @@ export function classifyRequestedDomainIdsV1(request: string): Set<DomainAgentId
     || new RegExp(`${worldObject}.{0,12}(?:创建|生成|设计|新增|建立|补充|完善|修改|重做)`).test(request)
   )
   const characterMention = /角色|人物|主角|配角|反派|npc/i.test(request)
-  const characterAction = (
-    /(?:创建|生成|设计|新增|塑造|补充|完善|修改|重做).{0,12}(?:角色|人物|主角|配角|反派|npc)/i.test(request)
-    || /(?:角色|人物|主角|配角|反派|npc).{0,12}(?:创建|生成|设计|新增|塑造|补充|完善|修改|重做)/i.test(request)
-  )
+  // A character mentioned as context for a world rule is not a character task.
+  // Keep independent actions in separate clauses, including explicit mixed requests.
+  const characterAction = request.split(/[，。；！？\n,;!?]|(?:并且|同时|然后|以及|并|再)(?=创建|生成|设计|新增|塑造|补充|完善|修改|调整|更新|重做)/).some(clause => {
+    const action = /(?:创建|生成|设计|新增|塑造|补充|完善|修改|调整|更新|重做)(.{0,12}?)(?:角色|人物|主角|配角|反派|npc)/i.exec(clause)
+    const contextualTarget = /世界|设定|力量|体系|规则|机制|大纲|正文/
+    const coordinatedObject = action && /(?:世界|世界观|世界设定)(?:和|与|及|、)(?:一个|一位)?$/.test(action[1])
+    const characterInWorld = action && /(?:世界|世界观|设定)(?:中|里|内)的?$/.test(action[1])
+    if (action && (!contextualTarget.test(action[1]) || coordinatedObject || characterInWorld)) {
+      const tail = clause.slice(action.index + action[0].length)
+      if (!/^(?:所?在|使用|遵守|受到|适用|相关|的).{0,12}(?:世界|设定|力量|体系|规则|机制)/.test(tail)) return true
+    }
+    // Subject-first requests: “主角的外貌需要修改”. Do not cross a world target.
+    const reverse = /(?:角色|人物|主角|配角|反派|npc)(.{0,12}?)(?:创建|生成|设计|新增|塑造|补充|完善|修改|调整|更新|重做)/i.exec(clause)
+    return !!reverse && !contextualTarget.test(reverse[1])
+  })
   if (/(?:创作|完成|写完|制作).{0,10}(?:整部|全书|一部|这部).{0,8}(?:长篇|小说|作品)|(?:从零|从头).{0,12}(?:写到完结|创作长篇)/.test(request)) return new Set<DomainAgentId>(['world-origin', 'character', 'outline', 'prose'])
   const downstreamWriting = hasOutline || hasProse
   const hasWorld = hasWorldGame ? false : downstreamWriting ? worldAction : worldMention
-  const hasCharacter = downstreamWriting ? characterAction : characterMention
+  const hasCharacter = downstreamWriting || hasWorld ? characterAction : characterMention
   return new Set<DomainAgentId>([
     ...(hasWorld ? ['world-origin' as const] : []),
     ...(hasCharacter ? ['character' as const] : []),
