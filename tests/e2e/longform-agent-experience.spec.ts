@@ -288,6 +288,12 @@ test('a blank work starts with one visible chapter plan and reaches saved prose 
   await expect(page.getByText(/作者已跳过本轮章后任务/)).toBeVisible()
   await expect(page.getByRole('button', { name: '继续章后处理', exact: true })).toHaveCount(0)
   expect(calls).toEqual(['plan', 'volume', 'chapter', 'prose'])
+  await page.getByRole('button', { name: '版本与导出', exact: true }).click()
+  await expect(page.getByText('现有章纲均已有正文，已持久化的创作运行没有待处理项。')).toBeVisible()
+  await page.getByRole('checkbox', { name: '我已核对全书目标、结局、卷章覆盖与必要修订，确认当前作品可以交付。' }).check()
+  await page.getByRole('button', { name: '确认作品完成并备份', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('已记录作品完成，并生成完稿前的完整备份')
+  expect(calls).toEqual(['plan', 'volume', 'chapter', 'prose'])
 })
 
 test('authorization failure explains the next step and never retries behind the author', async ({ page }) => {
