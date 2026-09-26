@@ -27,6 +27,12 @@ function assembled(entries: Array<[string, string]>): AssembleContextResult {
 }
 
 describe('CREL-7 · NarrativeBrief 运行时叙事任务合同', () => {
+  it('完整作者任务与任务合同的 8000 字符上限一致，长尾要求不裁剪', () => {
+    const request = '只准备一个章节。' + '场景约束。'.repeat(410) + '结尾停在灯熄灭。'
+    const brief = buildNarrativeBriefV1({ authorRequest: request, assembled: assembled([]) })
+    expect(parseNarrativeBriefV1(brief).creativeGoal).toBe(request)
+    expect(() => parseNarrativeBriefV1({ ...brief, creativeGoal: '字'.repeat(8001) })).toThrow('8000')
+  })
   it('只从已装配注册来源提取已知驱动力，缺失项保持显式开放', () => {
     const brief = buildNarrativeBriefV1({
       authorRequest: '规划一条围绕潮汐钟的主线',

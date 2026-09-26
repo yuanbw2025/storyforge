@@ -228,6 +228,8 @@ function parseStateCandidates(
   text: string,
   characterNames: string[],
 ): EvidencedStateDiff[] {
+  // An empty roster means no authorized character targets, not an open roster.
+  if (!characterNames.length) return []
   return withExactEvidence(value, text).flatMap(({ item, sourceQuote }) => {
     const { diffs } = parseStateDiffs(JSON.stringify([item]), characterNames)
     return diffs.map(diff => ({ ...diff as StateDiffItem, sourceQuote }))

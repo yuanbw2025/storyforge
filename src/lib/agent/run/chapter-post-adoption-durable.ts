@@ -131,6 +131,7 @@ export const CHAPTER_POST_ADOPTION_PARENT_RELATION_V1 = 'prose-post-adoption'
 export type ChapterPostAdoptionChainStateV1 =
   | 'prose-completed'
   | 'downstream-suggested'
+  | 'downstream-skipped'
   | 'downstream-processing'
   | 'downstream-awaiting-confirmation'
   | 'downstream-failed'
@@ -467,6 +468,7 @@ export function chapterPostAdoptionChainStateV1(
   if (!snapshot) return 'unlinked'
   if (snapshot.projection.state === 'completed' && snapshot.projection.terminalReceiptHash) return 'downstream-completed'
   const authorization = snapshot.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.authorization]
+  if (authorization?.confirmation === 'reject') return 'downstream-skipped'
   if (authorization?.status === 'awaiting_confirmation') return 'downstream-suggested'
   if (!snapshot.contract.lineage?.parent) return 'unlinked'
   const steps = Object.values(snapshot.projection.steps)
@@ -624,11 +626,18 @@ export async function rejectChapterPostAdoptionAuthorizationV1(input: {
   const stepId = CHAPTER_POST_ADOPTION_STEP_IDS_V1.authorization
   const step = input.snapshot.projection.steps[stepId]
   if (!authorization || !step || step.status !== 'awaiting_confirmation') return input.snapshot
-  return append(input.scope, input.snapshot, 'confirmation.recorded', {
+  const snapshot = await append(input.scope, input.snapshot, 'confirmation.recorded', {
     stepId,
     candidateHash: authorization.taskKey,
     decision: 'reject',
   })
+  return append(input.scope, snapshot, 'run.cancelled', { reason: 'author-skipped-post-adoption' })
+}
+
+export function nextChapterPostAdoptionAttemptV1(snapshot: AgentRunSnapshotV1, stepId: ChapterPostAdoptionStepIdV1): number {
+  const step = snapshot.projection.steps[stepId]
+  if (!step || !['scheduled', 'failed'].includes(step.status)) throw new Error(`正文后处理 step ${stepId} 当前不可启动。`)
+  return step.status === 'scheduled' ? 1 : step.attempt + 1
 }
 
 export async function beginChapterPostAdoptionStepV1(input: {
@@ -657,9 +666,7 @@ export async function beginChapterPostAdoptionStepV1(input: {
   if (!await verifyContextManifestIntegrityV1(input.contextManifest)) {
     throw new Error(`正文后处理 step ${input.stepId} Context Manifest 完整性校验失败。`)
   }
-  const step = input.snapshot.projection.steps[input.stepId]
-  if (!step || !['scheduled', 'failed'].includes(step.status)) throw new Error(`正文后处理 step ${input.stepId} 当前不可启动。`)
-  const attempt = step.status === 'scheduled' ? 1 : step.attempt + 1
+  const attempt = nextChapterPostAdoptionAttemptV1(input.snapshot, input.stepId)
   if (input.contextManifest.attempt !== attempt) {
     throw new Error(`正文后处理 step ${input.stepId} Context Manifest attempt 不匹配。`)
   }

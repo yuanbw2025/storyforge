@@ -506,7 +506,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
     assertKeysWithOptional(
       item,
       ['id', 'agentId', 'skillId', 'instruction', 'dependsOn'],
-      ['perspectiveCharacterId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest', 'characterSupplementRequest', 'characterLifecycleRequest', 'storylineProgressChapterId', 'storyArcMutationRequest', 'promptExecution'],
+      ['perspectiveCharacterId', 'inspirationFragmentIds', 'characterDrivenPlanId', 'characterRevisionRequest', 'characterSupplementRequest', 'characterLifecycleRequest', 'storylineProgressChapterId', 'storyArcMutationRequest', 'promptExecution', 'requestContext'],
       '主 Agent 计划任务 ' + (index + 1),
     )
     const id = readString(item.id, `主 Agent 计划任务 ${index + 1}.id`, MAX_TASK_ID_CHARS)
@@ -525,6 +525,15 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       fail(`主 Agent 计划任务 ${id}.dependsOn 无效`)
     }
     const dependsOn = [...new Set(item.dependsOn as string[])]
+    let requestContext: MasterAgentTask['requestContext']
+    if (item.requestContext !== undefined) {
+      if (!isRecord(item.requestContext)) fail('任务 requestContext 必须是对象')
+      assertExactKeys(item.requestContext, ['originalRequest', 'plannerInstruction'], '任务 requestContext')
+      requestContext = {
+        originalRequest: readString(item.requestContext.originalRequest, '任务原始要求', MAX_TASK_INSTRUCTION_CHARS),
+        plannerInstruction: readString(item.requestContext.plannerInstruction, '任务规划解读', MAX_TASK_INSTRUCTION_CHARS),
+      }
+    }
     if (dependsOn.includes(id)) fail(`主 Agent 计划任务 ${id} 不得依赖自身`)
     const perspectiveCharacterId = readOptionalPerspectiveCharacterId(item, '主 Agent 计划任务 ' + id)
     const skillId = readRequiredSkillId(item, agentId, '主 Agent 计划任务 ' + id)
@@ -581,6 +590,7 @@ export function parseMasterAgentPlanV1(value: unknown): MasterAgentPlan {
       skillId,
       instruction,
       dependsOn,
+      ...(requestContext ? { requestContext } : {}),
       ...(perspectiveCharacterId !== undefined ? { perspectiveCharacterId } : {}),
       ...(inspirationFragmentIds !== undefined ? { inspirationFragmentIds } : {}),
       ...(characterDrivenPlanId !== undefined ? { characterDrivenPlanId } : {}),
@@ -878,6 +888,7 @@ function taskStepId(taskId: string): string {
 
 function sameTaskIdentity(left: MasterAgentTask, right: MasterAgentTask): boolean {
   return left.id === right.id
+    && JSON.stringify(left.requestContext ?? null) === JSON.stringify(right.requestContext ?? null)
     && left.agentId === right.agentId
     && (left.skillId ?? null) === (right.skillId ?? null)
     && (left.perspectiveCharacterId ?? null) === (right.perspectiveCharacterId ?? null)
@@ -2934,6 +2945,9 @@ export async function findResumableMasterAgentRunV1(input: {
       const snapshot = await readAgentRunV1(input.scope, run.id)
       if (!isMasterAgentRunWorkflowKindV1(snapshot.contract.workflowKind)) continue
       if (!['paused', 'running'].includes(snapshot.projection.state)) continue
+      // Rejecting a candidate is an author decision, not an interrupted call.
+      // Keep its ledger, but never offer a generic resume that can retry it.
+      if (Object.values(snapshot.projection.steps).some(step => step.confirmation === 'reject')) continue
       if (Object.values(snapshot.projection.steps).some(step => (
         step.status === 'scheduled' || step.status === 'running' || step.status === 'failed'
       ))) return run.id

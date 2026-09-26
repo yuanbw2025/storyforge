@@ -6,10 +6,26 @@ import type { Chapter, OutlineNode, Character } from '../../src/lib/types'
 import { splitLongformPlanAtChapterV1 } from '../../src/lib/agent/longform-stage-queue'
 import { createMasterAgentPlan } from '../../src/lib/agent/orchestrator'
 import { readLongformCompletionV1, commitLongformCompletionV1 } from '../../src/lib/longform/completion'
+import { seedCurrentMasterCandidate } from '../helpers/current-master-candidate'
+import { rejectMasterAgentCandidateV1 } from '../../src/lib/agent/run/master-adoption'
 
 describe.sequential('longform phase boundaries and whole-work acceptance', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
+  it('explicit rejection does not trap manuscript completion; pending or corrupted evidence still blocks', async () => {
+    const fixture = await seedCurrentMasterCandidate('拒绝后的完稿验收')
+    const outlineNodeId = await db.outlineNodes.add(stampNewRecord(fixture.scope, 'outlineNodes', { type: 'chapter', parentId: null, order: 0, title: '终章', summary: '', createdAt: 1, updatedAt: 1 }, { owner: 'work' }) as OutlineNode)
+    await db.chapters.add(stampNewRecord(fixture.scope, 'chapters', { outlineNodeId, title: '终章', content: '<p>他终于回到故乡。</p>', wordCount: 8, status: 'final', order: 0, notes: '', createdAt: 1, updatedAt: 1 }, { owner: 'work' }) as Chapter)
+    expect((await readLongformCompletionV1(fixture.scope)).unfinishedRuns).toBe(1)
+    const runId = fixture.candidate.payload.runId!
+    await rejectMasterAgentCandidateV1({ scope: fixture.scope, worldGroupId: null, runId, candidateEventId: fixture.candidate.event.id! })
+    const ready = await readLongformCompletionV1(fixture.scope)
+    expect(ready).toMatchObject({ ready: true, unfinishedRuns: 0 })
+    await commitLongformCompletionV1(fixture.scope, ready.contentHash)
+    expect((await db.works.get(fixture.scope.workId))?.status).toBe('completed')
+    await db.agentRuns.update(runId, { projectionHash: 'tampered' })
+    expect((await readLongformCompletionV1(fixture.scope)).unfinishedRuns).toBe(1)
+  })
   it('retains every later task while splitting at the first chapter for post-adoption processing', () => {
     const result = splitLongformPlanAtChapterV1({ summary: '写两章', workflow: { version: 1, workflowId: 'staged-author-confirmed', reasonCodes: ['multiple-explicit-domains'] }, tasks: [
       { id: 'first', agentId: 'prose', skillId: 'prose.generate', instruction: '写第一章正文', dependsOn: [] },

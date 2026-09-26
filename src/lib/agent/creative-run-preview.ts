@@ -53,7 +53,7 @@ export function estimateCreativeRunPreviewV1(input: {
   const workflow = getMasterWorkflowV1(workflowSelection)
   const activeDomains: DomainAgentId[] = requested.length
     ? [...requested]
-    : ['character']
+    : []
   const deferredDomains: DomainAgentId[] = []
 
   // Outline + prose is an explicit author-confirmation barrier. The first run

@@ -312,3 +312,17 @@ export function buildLongformPlanningDialogueV1(events: AgentEvent[]): string {
   return events.filter(event => event.kind === 'message' && (!summary || event.sequence >= summary.sequence))
     .map(event => `${event.id === summary?.id ? '作者确认的历史需求摘要' : event.role ?? 'assistant'}: ${event.content}`).join('\n')
 }
+
+/** Pending drafts are conversation material, never confirmed project context. */
+export function buildPendingCandidateDiscussionV1(events: AgentEvent[]): string {
+  const resolved = new Set(events.filter(event => event.kind === 'confirmation').map(event => {
+    try { return JSON.parse(event.payload).candidateEventId as number } catch { return undefined }
+  }))
+  let remaining = 12000
+  return events.filter(event => event.kind === 'candidate' && !resolved.has(event.id))
+    .map(event => {
+      const excerpt = event.content.slice(0, remaining)
+      remaining = Math.max(0, remaining - excerpt.length)
+      return `【未采纳候选 #${event.id}，仅供讨论，不能视为正式设定】\n${excerpt}${excerpt.length < event.content.length ? '\n（超出会谈预算的部分未展开；不要推断未展示内容。）' : ''}`
+    }).join('\n')
+}

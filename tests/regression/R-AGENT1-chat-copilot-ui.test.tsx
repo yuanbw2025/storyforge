@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   showPendingCandidate: true,
   setAuthorRequest: vi.fn(),
   submit: vi.fn(),
+  discuss: vi.fn(),
   stop: vi.fn(),
   updateCandidate: vi.fn(),
   adoptCandidate: vi.fn(),
@@ -58,6 +59,7 @@ vi.mock('../../src/components/agent/useMasterCopilot', () => ({
     busy: false,
     loading: false,
     submit: mocks.submit,
+    discuss: mocks.discuss,
     stop: mocks.stop,
     updateCandidate: mocks.updateCandidate,
     adoptCandidate: mocks.adoptCandidate,
@@ -109,8 +111,10 @@ describe('AGENT-2 · 单一主 Agent 对话入口', () => {
 
     expect(host.querySelector('aside')?.getAttribute('aria-label')).toBe('主 Agent 创作副驾')
     expect(host.textContent).toContain('主 Agent')
-    expect(host.textContent).toContain('单一对话入口')
-    expect(host.textContent).toContain('幕后调度领域 Agent')
+    expect(host.textContent).toContain('墨灵')
+    expect(host.querySelector('.companion-portrait')?.getAttribute('data-pose')).toBe('ready')
+    expect(host.textContent).toContain('确认采纳前，作品原文保持不变')
+    expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="告诉主 Agent 你的目标"]')?.disabled).toBe(false)
     expect(host.textContent).toContain('待确认 · 世界来源')
     expect(host.textContent).toContain('2 个输入来源')
     expect(host.textContent).not.toContain('角色生成')
@@ -129,6 +133,11 @@ describe('AGENT-2 · 单一主 Agent 对话入口', () => {
     })
     expect(mocks.updateCandidate).toHaveBeenCalledWith(3, '作者修订后的候选')
 
+    const composer = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="告诉主 Agent 你的目标"]')!
+    await act(async () => composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true })))
+    expect(mocks.discuss).not.toHaveBeenCalled()
+    await act(async () => composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
+    expect(mocks.discuss).toHaveBeenCalledTimes(1)
     const buttons = Array.from(host.querySelectorAll('button'))
     await act(async () => buttons.find(button => button.textContent?.includes('拒绝'))!.click())
     await act(async () => buttons.find(button => button.textContent?.includes('采纳'))!.click())

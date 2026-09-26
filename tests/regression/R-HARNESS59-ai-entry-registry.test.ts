@@ -46,6 +46,19 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
     expect(nonFormal.every(entry => (entry.adoptionTargets?.length ?? 0) === 0)).toBe(true)
   })
 
+  it('有限语音扩展不进入正式执行器，旧冻结注册表仍可严格解析', () => {
+    const full = JSON.parse(JSON.stringify(registry))
+    expect(() => parseFormalAIEntryRegistryV1(full)).not.toThrow()
+    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some((entry) => entry.entryId.startsWith('longform.voice'))).toBe(false)
+    delete full.limitedTransports
+    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(47)
+    for (const patch of [{ adoptAllowed: true }, { adoptionTargets: ['chapters'] }, { boundary: 'durable-run' }]) {
+      const invalid = JSON.parse(JSON.stringify(registry))
+      Object.assign(invalid.limitedTransports[0], patch)
+      expect(() => parseFormalAIEntryRegistryV1(invalid)).toThrow(/有限语音/)
+    }
+  })
+
   it('unknown entry 和错配 category 在发起 provider 请求前 fail closed', () => {
     expect(() => assertFormalAIEntryCallV1({
       formalEntryId: 'unknown.entry',

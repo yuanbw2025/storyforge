@@ -2,7 +2,9 @@ import { CHARACTER_DIMENSIONS } from '../character/character-dimensions'
 import { useDetailedOutlineStore } from '../../stores/detailed-outline'
 import { prepareDetailedOutlineAuthoringV1, adoptDetailedOutlineAuthoringV1, type DetailedOutlineAuthoringSnapshotV1 } from './detailed-outline-authoring'
 import { createDetailedOutlineCreativeArtifactV1 } from './detailed-outline-copilot'
-import { buildLongformPlanningDialogueV1, readAgentEvents as readPlanningConversationEvents } from './conversations'
+import { buildLongformPlanningDialogueV1, buildPendingCandidateDiscussionV1, readAgentEvents as readPlanningConversationEvents } from './conversations'
+import { affirmativeAuthorActionsV1 } from './author-intent'
+import { prepareLongformStartProposalV1 } from './longform-start-plan'
 import JSON5 from 'json5'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { AGENT_ROLE_CATEGORIES } from '../ai/task-routing'
@@ -18,6 +20,7 @@ import { db } from '../db/schema'
 import {
   adoptGenerationNodeOutput,
   type GenerationNode,
+  type PreparedGenerationNode,
 } from '../generation/generation-node'
 import {
   parseInspirationFragments,
@@ -57,6 +60,7 @@ import {
   adoptRestoredProseCandidate,
   parseProseCandidateDraft,
   prepareProseCopilot,
+  resolveProseChapterTargetV1,
   runProseCreativeReliabilityV1,
   type ProseCopilotOperation,
   type ProseCopilotSnapshot,
@@ -211,6 +215,8 @@ export interface MasterAgentTask {
   /** Every durable task freezes one exact current Skill identity. */
   skillId: AgentSkillId
   instruction: string
+  /** Frozen author wording and planner interpretation; never used as target selectors. */
+  requestContext?: { originalRequest: string; plannerInstruction: string }
   dependsOn: string[]
   /** 正文领域的显式叙事视角；缺省时正文不注入角色认知。 */
   perspectiveCharacterId?: number | null
@@ -468,17 +474,11 @@ function fallbackPlan(
       ...(hasOutline ? ['outline-1'] : []),
     ],
   })
-  if (!tasks.length) tasks.push({
-    id: 'character-1',
-    agentId: 'character',
-    skillId: selectAgentSkillIdV1('character', request),
-    instruction: request,
-    dependsOn: [],
-  })
+  // Ambiguous or entirely negative requests never authorize a default write.
   return {
     summary: hasProse && hasOutline
       ? '先生成并确认章节大纲；确认进入正式数据后，再继续生成正文。'
-      : '根据用户要求调度相关创作领域。',
+      : tasks.length ? '根据用户要求调度相关创作领域。' : '本轮尚未明确要写入的内容。你可以指定一个角色、设定字段或章节，也可以先讨论想法。',
     tasks,
     workflow,
   }
@@ -507,7 +507,7 @@ function sanitizePlan(
     if (ids.has(id)) continue
     ids.add(id)
     const instruction = typeof source.instruction === 'string' && source.instruction.trim()
-      ? source.instruction.trim().slice(0, 1000)
+      ? source.instruction.trim()
       : request
     const perspectiveCharacterId = source.perspectiveCharacterId === null
       ? null
@@ -519,6 +519,7 @@ function sanitizePlan(
       agentId,
       skillId: selectAgentSkillIdV1(agentId, instruction),
       instruction,
+      requestContext: { originalRequest: request, plannerInstruction: instruction },
       dependsOn: Array.isArray(source.dependsOn)
         ? source.dependsOn.filter((value): value is string => typeof value === 'string').slice(0, 5)
         : [],
@@ -526,6 +527,16 @@ function sanitizePlan(
     })
   }
   if (!tasks.length) return fallbackPlan(request, workflow)
+  // A single task has no domain split to justify paraphrasing the author.
+  // Preserve names, quantities, prohibitions and explicit targets verbatim:
+  // the planner may have omitted them (or even selected another chapter).
+  if (tasks.length === 1) {
+    tasks[0].instruction = request
+    tasks[0].skillId = selectAgentSkillIdV1(tasks[0].agentId, request)
+  }
+  if (tasks.some(task => task.instruction.length > 8_000 || task.requestContext!.originalRequest.length > 8_000 || task.requestContext!.plannerInstruction.length > 8_000)) {
+    throw new Error('创作任务超过 8000 字符，请缩短后重试；不会截断作者要求。')
+  }
   const knownIds = new Set(tasks.map(task => task.id))
   tasks.forEach(task => {
     task.dependsOn = task.dependsOn.filter(id => id !== task.id && knownIds.has(id))
@@ -570,12 +581,15 @@ async function bindLongformPlanTargetsV1(plan: MasterAgentPlan, input: { project
   for (const task of plan.tasks) {
     if (task.agentId !== 'character' || task.skillId !== 'character.supplement') continue
     const characters = await readOwnedRows<import('../types').Character>(scope, 'characters', { owner: 'world' })
-    const matches = characters.filter(character => character.name.trim() && task.instruction.includes(character.name)
+    const affirmative = affirmativeAuthorActionsV1(task.instruction)
+    const matches = characters.filter(character => character.name.trim() && affirmative.includes(character.name)
       && (character.isCrossWorld || (character.homeWorldGroupId ?? null) === input.worldGroupId))
     if (matches.length !== 1 || !matches[0].id) throw new Error('补全已有角色需要明确一个角色姓名；请在对话中指定，避免误建或改错角色。')
     const character = matches[0]
-    const explicit = CHARACTER_DIMENSIONS.filter(dimension => dimension.label.split(/[/·(]/).some(label => label.length >= 2 && task.instruction.includes(label)))
-    const dimensions = (explicit.length ? explicit : CHARACTER_DIMENSIONS.filter(dimension => !String(character[dimension.key] ?? '').trim())).map(dimension => dimension.key)
+    const mentions = (label: string, text: string) => label.split(/[/·(]/).some(part => part.length >= 2 && text.includes(part))
+    const allowed = CHARACTER_DIMENSIONS.filter(dimension => !mentions(dimension.label, task.instruction) || mentions(dimension.label, affirmative))
+    const explicit = allowed.filter(dimension => mentions(dimension.label, affirmative))
+    const dimensions = (explicit.length ? explicit : allowed.filter(dimension => !String(character[dimension.key] ?? '').trim())).map(dimension => dimension.key)
     if (!dimensions.length) throw new Error(`${character.name} 已有完整字段，请明确要调整的维度。`)
     task.characterSupplementRequest = { characterId: character.id!, dimensions, useEvidence: true }
   }
@@ -589,6 +603,7 @@ export async function createMasterAgentPlan(input: {
   request: string
   conversationId?: number
   planningOnly?: boolean
+  readOnlyDiscussion?: boolean
   budget?: AgentTeamBudgetTracker
   signal?: AbortSignal
   pinnedTask?: PinnedMasterAgentTaskV1
@@ -728,12 +743,31 @@ export async function createMasterAgentPlan(input: {
     model: config.model,
   })
   const planningScope = await resolveScope({ projectId: input.projectId, scope: input.scope })
+  const requestedDomains = classifyRequestedDomainIdsV1(request)
+  if (planningOnly && !input.readOnlyDiscussion && requestedDomains.size === 1
+    && requestedDomains.has('prose') && !/讨论|聊聊|比较|分析|解释/.test(request)) {
+    const [nodes, chapters] = await Promise.all([
+      readOwnedRows<import('../types').OutlineNode>(planningScope, 'outlineNodes', { owner: 'work' }),
+      readOwnedRows<import('../types').Chapter>(planningScope, 'chapters', { owner: 'work' }),
+    ])
+    try {
+      resolveProseChapterTargetV1(request, nodes, chapters, input.worldGroupId,
+        selectAgentSkillIdV1('prose', request) === 'prose.continue' ? 'continue' : 'generate')
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      // Empty works still use the author-confirmed minimal start plan below.
+      if (!reason.startsWith('还没有正文的保存位置')) {
+        return { phase: 'proposal', tasks: [], workflow, summary: `${reason} 你可以从任意已有的空白章节开始，不必先写完前面的章节或补齐世界、角色、细纲。` }
+      }
+    }
+  }
   const history = input.conversationId == null ? [] : await readPlanningConversationEvents(input.conversationId, planningScope)
   const conversationText = buildLongformPlanningDialogueV1(history)
   if (conversationText.length > 48000) throw new Error('当前会谈已超过本轮规划预算，请通过“整理需求摘要”保存已确认的方向后继续；原对话仍保留。')
   const messages = [{
     role: 'system' as const,
-    content: `${planningOnly ? '当前为需求会谈与计划预览阶段，绝不执行生成。认真回答用户的问题，结合历史逐步明确题材、规模、故事方向与约束。需求未定或用户只要讨论时 tasks 返回空数组，summary 给出具体回复及需要澄清的问题。需求明确时可列出下一阶段任务供作者确认。' : ''}你是 StoryForge 面向用户的唯一主 Agent。你不直接生成作品，也不要求用户选择领域；
+    content: `${input.readOnlyDiscussion ? '当前有未处理候选，只回答作者的问题，解释候选或给修改建议；tasks 必须为空，不生成新任务，不宣称已修改或采纳候选。' : ''}${planningOnly ? '当前为需求会谈与计划预览阶段，绝不执行生成。认真回答用户的问题。需求未定或用户只要讨论时 tasks 返回空数组，summary 给出具体回复及必要的问题。需求明确时可列出下一阶段任务供作者确认。' : ''}你是 StoryForge 面向用户的唯一主 Agent。你不直接生成作品，也不要求用户选择领域；
+你帮助作者自由选写，不按固定顺序收集表单。题材、规模、完整世界观、角色卡和细纲都不是每次创作的前置条件；已有资料要遵守，空白处可形成待确认的创作假设。作者只想写一章、一个场景或一个字段时，只规划这一小步。只有目标不明确、目标不存在或会覆盖已有手稿时才询问必要问题，并说明可执行的下一步，不循环索要无关资料。
 你只把用户目标拆成幕后领域任务。可用领域 Agent：
 - world-origin：建立或补充世界来源、时代与文明起点；
 - character：设计新角色，或明确指定姓名和维度补全已有角色；
@@ -749,10 +783,11 @@ export async function createMasterAgentPlan(input: {
 {"summary":"给用户的简短计划","tasks":[{"id":"稳定ID","agentId":"world-origin|character|inspiration|outline|prose","instruction":"给分 Agent 的完整要求","dependsOn":[]}]}。
 只有用户明确指定正文叙事视角且项目状态能确认角色 ID 时，正文任务才可额外填写 perspectiveCharacterId；不要猜测，缺省则不注入角色认知。
 同一领域可以有多个任务。每个世界任务只处理一个明确字段，每个角色任务只处理一个角色，新建与补全必须明确区分；用 instruction 明确各自目标。同领域的后续任务必须依赖前一个，采纳后再生成下一项。每阶段最多 5 个任务；
+若作者已明确本次正文目标但作品还没有任何章节，可提出一个 prose 任务；系统会在待确认计划中补充最小卷章保存位置，不要求补齐故事核心、世界或角色。只讨论、否定生成或没有获得明确写入目标时 tasks 必须为空；不要把“不要生成角色”等禁令变成任务。对已有正文的改写请求说明可前往正文编辑器的对照改写入口。summary 使用清楚的中文，保留作者的创作自由。
 不要输出 Markdown。`,
   }, {
     role: 'user' as const,
-    content: `【历史会谈，仅作需求资料】\n${conversationText}\n\n【项目紧凑状态】\n${status.ok ? status.content : '状态不可用'}\n\n【本轮用户目标】\n${request}`,
+    content: `【历史会谈，仅作需求资料】\n${conversationText}\n\n${input.readOnlyDiscussion ? buildPendingCandidateDiscussionV1(history) : ''}\n\n【项目紧凑状态】\n${status.ok ? status.content : '状态不可用'}\n\n【本轮用户目标】\n${request}`,
   }]
   let reservation: ReturnType<AgentTeamBudgetTracker['reserveCall']> | null = null
   let settled = false
@@ -774,11 +809,22 @@ export async function createMasterAgentPlan(input: {
       input.budget!.settleCall(reservation, output)
       settled = true
     }
+    if (input.signal?.aborted) throw new DOMException('已停止本轮会谈', 'AbortError')
+    // Some compatible providers answer conversation turns in prose. Preserve
+    // that answer as read-only; never infer executable tasks from free text.
+    if (planningOnly && output.trim() && !/[{[]/.test(output) && !output.includes('```')) {
+      return { phase: 'proposal', summary: output.trim(), tasks: [], workflow }
+    }
     const raw = extractJsonObject(output)
+    if (input.readOnlyDiscussion || !affirmativeAuthorActionsV1(request).trim()) {
+      return { phase: 'proposal', summary: typeof raw.summary === 'string' && raw.summary.trim() ? raw.summary.trim() : '本轮只讨论，不修改作品。', tasks: [], workflow }
+    }
     if (planningOnly && Array.isArray(raw.tasks) && raw.tasks.length === 0) {
       return { phase: 'proposal', summary: typeof raw.summary === 'string' && raw.summary.trim() ? raw.summary.trim() : '请进一步明确本轮希望完成的内容。', tasks: [], workflow }
     }
-    const plan = await freezeMasterAgentPlanPromptsV1(await bindLongformPlanTargetsV1(sanitizePlan(raw, request, workflow), input))
+    const sanitized = sanitizePlan(raw, request, workflow)
+    const proposal = planningOnly ? await prepareLongformStartProposalV1(sanitized, planningScope, input.worldGroupId) : sanitized
+    const plan = await freezeMasterAgentPlanPromptsV1(await bindLongformPlanTargetsV1(proposal, input))
     return planningOnly ? { ...plan, phase: 'proposal' } : plan
   } catch (error) {
     if (reservation && !settled) input.budget!.settleFailedCall(reservation)
@@ -957,6 +1003,30 @@ function scopeRuntimeAssumptionsV1(
   }))
 }
 
+async function attachMasterTaskRequestContextV1(
+  prepared: { prepared: PreparedGenerationNode; promptExecutionEvidence?: PromptExecutionEvidenceV1 },
+  task: MasterAgentTask,
+): Promise<void> {
+  if (!task.requestContext) return
+  prepared.prepared.messages.push({
+    role: 'user',
+    content: [
+      '【规划解读，仅供补充理解；不得当作已确认事实】',
+      task.requestContext.plannerInstruction,
+      '【作者本轮原话，完整保留】',
+      task.requestContext.originalRequest,
+      '【当前任务范围】',
+      task.instruction,
+      '只执行当前任务，其他任务留在各自步骤。人物身份、时间、数量、禁令等以作者原话为准；规划解读只可补充原话未指明的内容，不得覆盖作者约束或扩大写入目标。',
+    ].join('\n'),
+  })
+  // The frozen template is unchanged. Evidence binds the actual request,
+  // including the author context frozen in this task's plan hash.
+  if (prepared.promptExecutionEvidence) {
+    prepared.promptExecutionEvidence.renderedPromptHash = await hashCanonicalValue(prepared.prepared.messages)
+  }
+}
+
 async function executeSequentialMasterAgentPlan(
   input: ExecuteMasterAgentPlanInput,
   runtime: { requiredFutureModelCalls?: number } = {},
@@ -1045,6 +1115,7 @@ async function executeSequentialMasterAgentPlan(
             promptExecution: task.promptExecution,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           if (prepared.contextGatewayExecution) {
             await input.executionTrace?.contextGatewayPrepared?.(task, {
               execution: prepared.contextGatewayExecution,
@@ -1107,6 +1178,7 @@ async function executeSequentialMasterAgentPlan(
             promptExecution: task.promptExecution,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           if (prepared.contextGatewayExecution) {
             await input.executionTrace?.contextGatewayPrepared?.(task, {
               execution: prepared.contextGatewayExecution,
@@ -1166,6 +1238,7 @@ async function executeSequentialMasterAgentPlan(
             contextCompressionRuntime,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           const result = await runBudgetedGenerationNode({
             node: prepared.node,
             prepared: prepared.prepared,
@@ -1212,6 +1285,7 @@ async function executeSequentialMasterAgentPlan(
             contextProfile,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           await input.executionTrace?.contextGatewayPrepared?.(task, {
             execution: prepared.contextGatewayExecution,
             assembled: prepared.input.assembled,
@@ -1267,6 +1341,7 @@ async function executeSequentialMasterAgentPlan(
             contextCompressionRuntime,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           if (prepared.contextGatewayExecution) {
             await input.executionTrace?.contextGatewayPrepared?.(task, {
               execution: prepared.contextGatewayExecution,
@@ -1329,6 +1404,7 @@ async function executeSequentialMasterAgentPlan(
             promptExecution: task.promptExecution,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           if (prepared.contextGatewayExecution) {
             await input.executionTrace?.contextGatewayPrepared?.(task, {
               execution: prepared.contextGatewayExecution,
@@ -1405,6 +1481,7 @@ async function executeSequentialMasterAgentPlan(
           contextCompressionRuntime,
           signal: input.signal,
         })
+        await attachMasterTaskRequestContextV1(prepared, task)
         const result = await runBudgetedGenerationNode({
           node: prepared.node,
           prepared: prepared.prepared,
@@ -1439,6 +1516,7 @@ async function executeSequentialMasterAgentPlan(
       } else if (task.agentId === 'outline') {
         if (skill.executionMode === 'details') {
           const prepared = await prepareDetailedOutlineAuthoringV1({ projectId: input.projectId, scope, worldGroupId: input.worldGroupId, authorRequest: task.instruction, signal: input.signal })
+          await attachMasterTaskRequestContextV1(prepared, task)
           await input.executionTrace?.contextGatewayPrepared?.(task, { execution: prepared.assembled.contextGatewayExecution, assembled: prepared.assembled, renderedRequest: prepared.prepared.messages })
           const startedAt = Date.now()
           const result = await runBudgetedGenerationNode({ node: prepared.node, prepared: prepared.prepared, budget, callLabel: '场景细纲 Agent', maxOutputTokens: skill.maxOutputTokens })
@@ -1463,6 +1541,7 @@ async function executeSequentialMasterAgentPlan(
             contextCompressionRuntime,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           const result = await runBudgetedGenerationNode({
             node: prepared.node,
             prepared: prepared.prepared,
@@ -1509,6 +1588,7 @@ async function executeSequentialMasterAgentPlan(
             contextCompressionRuntime,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           const result = await runBudgetedGenerationNode({
             node: prepared.node,
             prepared: prepared.prepared,
@@ -1554,6 +1634,7 @@ async function executeSequentialMasterAgentPlan(
             contextCompressionRuntime,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           const result = await runBudgetedGenerationNode({
             node: prepared.node,
             prepared: prepared.prepared,
@@ -1604,6 +1685,7 @@ async function executeSequentialMasterAgentPlan(
             mutationRequest: task.storyArcMutationRequest,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           if (prepared.contextGatewayExecution) {
             await input.executionTrace?.contextGatewayPrepared?.(task, {
               execution: prepared.contextGatewayExecution,
@@ -1668,6 +1750,7 @@ async function executeSequentialMasterAgentPlan(
             inheritedAssumptions,
             signal: input.signal,
           })
+          await attachMasterTaskRequestContextV1(prepared, task)
           await input.executionTrace?.contextGatewayPrepared?.(task, {
             execution: prepared.contextGatewayExecution,
             assembled: prepared.input.assembled,
@@ -1731,6 +1814,7 @@ async function executeSequentialMasterAgentPlan(
           perspectiveCharacterId: task.perspectiveCharacterId ?? null,
           signal: input.signal,
         })
+        await attachMasterTaskRequestContextV1(prepared, task)
         await input.executionTrace?.contextGatewayPrepared?.(task, {
           execution: prepared.contextGatewayExecution,
           assembled: prepared.input.assembled,

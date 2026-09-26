@@ -36,7 +36,7 @@ async function createWorkspace(label: string): Promise<{
   return { scope: { projectId, worldId, workId }, worldGroupId }
 }
 
-async function runWorldOrigin(label: string) {
+async function runWorldOrigin(label: string, adopt = true) {
   const fixture = await createWorkspace(label)
   const conversation = await getOrCreateAgentConversation({
     purpose: 'test:r-harness2-master-terminal-verifier:1',
@@ -102,8 +102,10 @@ async function runWorldOrigin(label: string) {
     candidateEventId: candidate.event.id!,
     worldGroupId: fixture.worldGroupId,
   }
-  await beginMasterAgentCandidateAdoptionV1(ref)
-  await commitMasterAgentCandidateAdoptionV1(ref)
+  if (adopt) {
+    await beginMasterAgentCandidateAdoptionV1(ref)
+    await commitMasterAgentCandidateAdoptionV1(ref)
+  }
   return { fixture, result, ref }
 }
 
@@ -114,6 +116,17 @@ describe.sequential('R-HARNESS2-master-terminal-verifier · 主 Agent 完成判�
   })
 
   afterEach(() => db.close())
+
+  it('等待作者确认是正常中间态，不写终验失败或完成回执', async () => {
+    const run = await runWorldOrigin('等待下一份候选', false)
+    const before = await readAgentRunV1(run.fixture.scope, run.result.runId)
+    const verified = await verifyMasterAgentRunV1({ scope: run.fixture.scope, runId: run.result.runId })
+    expect(verified.accepted).toBe(false)
+    expect(verified.codes).toEqual(['run-not-ready'])
+    expect(verified.receipt).toBeUndefined()
+    expect(verified.snapshot.projection.state).toBe('awaiting_confirmation')
+    expect(verified.snapshot.events).toEqual(before.events)
+  })
 
   it('所有采纳、上下文证据和正式状态一致时写入完整 receipt 并进入 completed', async () => {
     const run = await runWorldOrigin('终态通过')

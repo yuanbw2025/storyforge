@@ -215,8 +215,9 @@ export function useMasterCopilot(input: {
   ), [])
 
   const reload = useCallback(async (id: number) => {
-    setEvents(overlayLocalCandidateDrafts(await readAgentEvents(id, workspaceScope)))
-  }, [overlayLocalCandidateDrafts, workspaceScope])
+    const rows = await readAgentEvents(id, workspaceScope)
+    if (activeCandidateScope.current === scopeKey) setEvents(overlayLocalCandidateDrafts(rows))
+  }, [overlayLocalCandidateDrafts, scopeKey, workspaceScope])
 
   useEffect(() => {
     if (conversationId == null || typeof window === 'undefined') return
@@ -224,7 +225,9 @@ export function useMasterCopilot(input: {
       const detail = (event as CustomEvent<MasterCopilotSyncDetail>).detail
       if (detail?.scopeKey !== scopeKey) return
       setBusy(detail.busy)
-      void reload(conversationId)
+      void reload(conversationId).catch(cause => {
+        if (activeCandidateScope.current === scopeKey) setError(errorMessage(cause))
+      })
     }
     window.addEventListener(MASTER_COPILOT_SYNC_EVENT, handleSync)
     return () => window.removeEventListener(MASTER_COPILOT_SYNC_EVENT, handleSync)
@@ -244,13 +247,18 @@ export function useMasterCopilot(input: {
       payload: { taskId: task.id, agentId: task.agentId, status, error },
       scope: workspaceScope,
     })
-  }, [conversationId, project.id, workspaceScope])
+    notifyMasterCopilotSync(scopeKey)
+  }, [conversationId, project.id, scopeKey, workspaceScope])
 
   useEffect(() => {
     let active = true
     abortRef.current?.abort()
     runtimeCandidates.current.clear()
     localCandidateDrafts.current.clear()
+    setConversationId(null)
+    setEvents([])
+    setAuthorRequest('')
+    setActiveRequest(null)
     setBusy(MASTER_COPILOT_SCOPE_OWNERS.has(scopeKey))
     setRecoveryAvailable(false)
     setError(null)
@@ -382,10 +390,15 @@ export function useMasterCopilot(input: {
   ) => {
     const request = (requestOverride ?? authorRequest).trim()
     if (!request || busy || conversationId == null) return
-    if (pendingCandidates.length) return
+    if (pendingCandidates.length && !options?.planningOnly) return
     const scopeOwner = claimMasterCopilotScope(scopeKey)
     if (!scopeOwner) return
     const controller = new AbortController()
+    let planningTimedOut = false
+    const planningTimer = options?.planningOnly ? setTimeout(() => {
+      planningTimedOut = true
+      controller.abort()
+    }, 90000) : undefined
     abortRef.current?.abort()
     abortRef.current = controller
     setBusy(true)
@@ -394,6 +407,7 @@ export function useMasterCopilot(input: {
     if (requestOverride === undefined) setAuthorRequest('')
     try {
       await flushPendingEditsV1()
+      if (candidateDraftPrefix) await flushCandidateDraftsV1(candidateDraftPrefix)
       await appendAgentEvent({
         projectId: project.id!,
         conversationId,
@@ -415,8 +429,10 @@ export function useMasterCopilot(input: {
         signal: controller.signal,
         pinnedTask: options?.pinnedTask,
         planningOnly: options?.planningOnly,
+        readOnlyDiscussion: options?.planningOnly && pendingCandidates.length > 0,
         conversationId,
       })
+      if (controller.signal.aborted) throw new DOMException('会谈已停止', 'AbortError')
       if (!options?.confirmedPlan && (options?.planningOnly || plan.phase === 'proposal' || plan.tasks.length === 0)) {
         await appendAgentEvent({ projectId: project.id!, conversationId, kind: 'plan', content: plan.summary, payload: { type: 'longform-plan-draft-v1', plan }, scope: workspaceScope })
         await appendAgentEvent({ projectId: project.id!, conversationId, kind: 'message', role: 'assistant', content: plan.summary, scope: workspaceScope })
@@ -477,17 +493,23 @@ export function useMasterCopilot(input: {
         role: 'assistant',
           content: [
           `本阶段已生成 ${candidates.length} 份候选。请检查、编辑并决定是否采纳。`,
-          `本轮团队约使用 ${teamBudget.snapshot().usedTokens.toLocaleString()} / `
-          + `${teamBudget.snapshot().maxTokens.toLocaleString()} tokens，`
-          + `${teamBudget.snapshot().calls} 次调用，`
-          + `Canon 受控打回 ${teamBudget.snapshot().canonRetries} 次。`,
+          `本轮团队约使用 ${durable.budgetEvidence.usedTokens.toLocaleString()} / `
+          + `${durable.budgetEvidence.maxTokens.toLocaleString()} tokens，`
+          + `${durable.budgetEvidence.calls} 次调用，`
+          + `Canon 受控打回 ${durable.budgetEvidence.canonRetries} 次。`,
           ].join(' '),
           scope: workspaceScope,
       })
     } catch (error) {
-      if (!controller.signal.aborted) {
+      if (controller.signal.aborted) {
+        const message = planningTimedOut
+          ? '模型在 90 秒内没有完成回复，本次等待已停止，未自动重试。你的要求已保存在对话中；可以检查通用设置中的模型连接，再重新发送。'
+          : '本轮已停止。已保存的对话和候选仍保留，未自动重新调用模型。'
+        if (planningTimedOut && activeCandidateScope.current === scopeKey) setError(message)
+        await appendAgentEvent({ projectId: project.id!, conversationId, kind: 'message', role: 'assistant', content: message, scope: workspaceScope })
+      } else {
         const failure = await classifiedFailurePayload(error)
-        setError(failure.message)
+        if (activeCandidateScope.current === scopeKey) setError(failure.message)
         await appendAgentEvent({
           projectId: project.id!,
           conversationId,
@@ -506,13 +528,23 @@ export function useMasterCopilot(input: {
         })
       }
     } finally {
+      clearTimeout(planningTimer)
       if (abortRef.current === controller) abortRef.current = null
-      setActiveRequest(null)
       releaseMasterCopilotScope(scopeKey, scopeOwner)
-      await reload(conversationId)
+      if (activeCandidateScope.current === scopeKey) { setActiveRequest(null); setBusy(false) }
+      try {
+        await reload(conversationId)
+        if (workspaceScope) {
+          const resumable = await findResumableMasterAgentRunV1({ scope: workspaceScope, conversationId })
+          if (activeCandidateScope.current === scopeKey) setRecoveryAvailable(resumable != null)
+        }
+      } catch (cause) {
+        if (activeCandidateScope.current === scopeKey) setError(errorMessage(cause))
+      }
       notifyMasterCopilotSync(scopeKey)
     }
   }, [
+    candidateDraftPrefix,
     authorRequest,
     busy,
     conversationId,

@@ -2690,7 +2690,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         snapshot: await readAgentRunV1(scope, postAdoptionRunId),
       })
       updatePostAdoptionSnapshot(snapshot)
-      setTransitionError('已保留本地失效标记，未启动章后模型任务。')
+      setTransitionError('')
     } catch (error) {
       setTransitionError(error instanceof Error ? error.message : '章后建议拒绝失败')
     }
@@ -3380,6 +3380,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             <div className="mt-1">
               全链状态：{postAdoptionChainState === 'downstream-completed'
                 ? '正文与章后交接均已完成'
+                : postAdoptionChainState === 'downstream-skipped'
+                  ? '正文已完成，作者已跳过本轮章后任务；本地失效标记保留，未调用模型'
                 : postAdoptionChainState === 'downstream-suggested'
                   ? '正文已完成，章后任务等待作者启动'
                 : postAdoptionChainState === 'downstream-awaiting-confirmation'
@@ -3395,7 +3397,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
                           : '正文已完成，章后处理正在执行'}
             </div>
           )}
-          {organizationRun?.candidate.durable?.stepId === CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization && (
+          {organizationCurrent && organizationRun?.candidate.durable?.runId === postAdoptionRunId
+            && transitionSnapshotRef.current?.projection.steps[CHAPTER_POST_ADOPTION_STEP_IDS_V1.organization]?.status === 'awaiting_confirmation' && (
             <div className="mt-1">七域交接候选待作者确认，确认后才会写入状态、事实、物品、年表、关系、伏笔与故事线。</div>
           )}
           {transitionCandidate && transitionCandidate.stateDiffs.length > 0 && (

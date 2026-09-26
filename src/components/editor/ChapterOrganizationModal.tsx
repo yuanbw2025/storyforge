@@ -81,6 +81,7 @@ export default function ChapterOrganizationModal({
   const renderSection = (input: {
     domain: ChapterOrganizationDomain
     key: keyof ChapterOrganizationSelection
+    label?: string
     items: Array<{ title: string; detail: string; quote: string }>
   }) => {
     const status = candidate.domainStatus[input.domain]
@@ -90,7 +91,7 @@ export default function ChapterOrganizationModal({
         <div className="flex items-start justify-between gap-3 border-b border-border/60 px-4 py-3">
           <div>
             <div className="flex items-center gap-2">
-              <h4 className="text-sm font-semibold text-text-primary">{DOMAIN_META[input.domain].label}</h4>
+              <h4 className="text-sm font-semibold text-text-primary">{input.label ?? DOMAIN_META[input.domain].label}</h4>
               <span className="rounded-full bg-bg-elevated px-2 py-0.5 text-[10px] text-text-muted">
                 {input.items.length} 条
               </span>
@@ -236,6 +237,7 @@ export default function ChapterOrganizationModal({
           {renderSection({
             domain: 'storyline',
             key: 'storylineProgress',
+            label: '故事线推进',
             items: (candidate.storyline?.progress ?? []).map(item => ({
               title: `故事线 #${item.arcId} · ${item.status}`,
               detail: [item.currentStageId ? `阶段 ${item.currentStageId}` : '', item.progressNote].filter(Boolean).join(' · '),
@@ -245,6 +247,7 @@ export default function ChapterOrganizationModal({
           {renderSection({
             domain: 'storyline',
             key: 'storylineCrossings',
+            label: '故事线交汇',
             items: (candidate.storyline?.crossings ?? []).map(item => ({
               title: `故事线 #${item.arcIdA} × #${item.arcIdB}`,
               detail: item.note,
@@ -254,6 +257,7 @@ export default function ChapterOrganizationModal({
           {renderSection({
             domain: 'storyline',
             key: 'newStoryArcs',
+            label: '新故事线候选',
             items: (candidate.storyline?.newArcs ?? []).map(item => ({
               title: `候选${item.arcType === 'main' ? '主线' : '支线'} · ${item.name}`,
               detail: item.description,
@@ -275,10 +279,10 @@ export default function ChapterOrganizationModal({
               <RefreshCw className="h-4 w-4" /> 重新整理
             </button>
             <button onClick={() => onApply(selection)}
-              disabled={busy || !current || total === 0 || allResolved}
+              disabled={busy || !current || allResolved}
               className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              {busy ? '正在写入…' : `确认写入所选（${total}）`}
+              {busy ? '正在处理…' : total === 0 ? '本次不写入' : `确认写入所选（${total}）`}
             </button>
           </div>
         </footer>

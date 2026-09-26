@@ -46,10 +46,10 @@ function assertExactKeys(value: Record<string, unknown>, expected: readonly stri
   }
 }
 
-function readString(value: unknown, label: string): string {
+function readString(value: unknown, label: string, maxChars = MAX_FIELD_CHARS): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} 必须是非空字符串。`)
   const normalized = value.trim()
-  if (normalized.length > MAX_FIELD_CHARS) throw new Error(`${label} 超过 ${MAX_FIELD_CHARS} 字符。`)
+  if (normalized.length > maxChars) throw new Error(`${label} 超过 ${maxChars} 字符。`)
   return normalized
 }
 
@@ -80,7 +80,7 @@ export function parseNarrativeBriefV1(value: unknown): NarrativeBriefV1 {
   }
   return {
     version: 1,
-    creativeGoal: readString(value.creativeGoal, 'creativeGoal'),
+    creativeGoal: readString(value.creativeGoal, 'creativeGoal', 8_000),
     protagonistDesire: readString(value.protagonistDesire, 'protagonistDesire'),
     obstacle: readString(value.obstacle, 'obstacle'),
     stakes: readString(value.stakes, 'stakes'),

@@ -108,7 +108,10 @@ export async function prepareProseGatewayAssemblyV1(input: {
   if (!targetOutline?.ragDocumentId || !inWorld(targetOutline, input.worldGroupId)) {
     throw new Error('正文目标章纲缺失、越界或没有稳定资源身份。')
   }
-  if (!String(targetOutline.summary ?? '').trim()) throw new Error('正文生成前必须先确认目标章纲。')
+  if (!String(targetOutline.summary ?? '').trim()
+    && !(input.allowOutlineOnlyAgentDraft === true && input.authorRequest.trim().length >= 2)) {
+    throw new Error('正文生成前必须先确认目标章纲。')
+  }
   const perspectiveCharacterId = input.perspectiveCharacterId === undefined
     ? targetChapter?.perspectiveCharacterId ?? null
     : input.perspectiveCharacterId
