@@ -80,10 +80,10 @@ async function setInputValue(input: HTMLInputElement, value: string) {
   })
 }
 
-async function waitFor(assertion: () => void | Promise<void>) {
+async function waitFor(assertion: () => void | Promise<void>, timeoutMs = 12_000) {
   const started = Date.now()
   let last: unknown
-  while (Date.now() - started < 12_000) {
+  while (Date.now() - started < timeoutMs) {
     try {
       await act(async () => { await assertion() })
       return
@@ -317,10 +317,10 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
     await waitFor(() => {
       expect(useTextOpenWorldPlayerStore.getState().busy).toBe(false)
       expect(commandEnvelope('action.rest')).toMatchObject({ source: 'system-action', targetKey: null })
-    })
+    }, 25_000) // The formal showcase executes the full persisted action/effect chain under coverage.
     expect(useTextOpenWorldPlayerStore.getState().runtimeState.textOpenWorld?.state.time.worldMinute)
       .toBeGreaterThan(480)
-  }, 20_000)
+  }, 40_000)
 
   it.sequential('冻结例句仍由确定性映射直接进入正式Action，不调用模型', async () => {
     const created = await createGovernedTextOpenWorldSessionFixtureV1({
