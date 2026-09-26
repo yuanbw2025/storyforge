@@ -76,7 +76,8 @@ test('custom gateway network failure gives actionable guidance and HTTP auth err
   await expect(page.getByText(/❌.*Invalid API key/)).toBeVisible()
 })
 
-test('document upload stops on malformed output, persists the failure and resumes only on author action', async ({ page }) => {
+for (const failure of ['malformed', 'exhausted-503'] as const) test(`document upload recovers ${failure} only on author action after refresh`, async ({ page }) => {
+  const failedCalls = failure === 'exhausted-503' ? 3 : 1
   await createLongform(page, '解析隔离验收')
   await page.evaluate(async () => {
     const { useAIConfigStore } = await (new Function('return import("/storyforge/src/stores/ai-config.ts")'))()
@@ -87,24 +88,32 @@ test('document upload stops on malformed output, persists the failure and resume
   await page.route('https://parse.invalid/**', async route => {
     calls++
     expect(route.request().postDataJSON()).toMatchObject({ response_format: { type: 'json_object' }, thinking: { type: 'disabled' } })
+    if (!valid && failure === 'exhausted-503') {
+      await route.fulfill({ status: 503, body: 'Service unavailable' })
+      return
+    }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: valid ? '{"outline":[{"type":"volume","title":"海港","children":[{"type":"chapter","title":"归航"}]}]}' : 'not-json' } }], usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } }) })
   })
   await openLongformLeaf(page, '文档导入')
   await page.locator('input[type="file"]').first().setInputFiles({ name: 'harbor.txt', mimeType: 'text/plain', buffer: Buffer.from('第一章 归航\n海港有一座灯塔，夜里引导渔船归来。'.repeat(15)) })
   await page.getByRole('button', { name: '开始解析', exact: true }).click()
   await page.getByRole('button', { name: /导入当前项目（/ }).click()
-  await expect(page.getByText(/块 1 已停止，未自动重发/).last()).toBeVisible()
-  expect(calls).toBe(1)
+  if (failure === 'malformed') await expect(page.getByText(/块 1 已停止，未自动重发/).last()).toBeVisible()
+  await expect.poll(() => page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return (await db.importSessions.toArray())[0]?.status
+  })).toBe('failed')
+  expect(calls).toBe(failedCalls)
   await page.reload()
   await expect(page.getByText(/harbor.txt/).first()).toBeVisible()
-  expect(calls).toBe(1)
+  expect(calls).toBe(failedCalls)
   valid = true
   // The failed state is durable; restoring the original upload permits an
   // explicit resume and never silently reissues a paid model request.
   const resume = page.getByRole('button', { name: /续跑|继续解析|恢复/ }).first()
   await expect(resume).toBeVisible()
   await resume.click()
-  await expect.poll(() => calls).toBe(2)
+  await expect.poll(() => calls).toBe(failedCalls + 1)
   await expect.poll(() => page.evaluate(async () => {
     const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
     return (await db.importSessions.toArray())[0]?.status
