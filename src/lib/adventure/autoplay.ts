@@ -390,11 +390,13 @@ export function runTextAdventureAutoplayV1(input: {
   const quality = analyzeTextAdventureRouteQualityV1(input.runtimePackage)
   const routes = quality.routes
   const seed = `storyforge-autoplay-v1:${input.packageHash}`
+  const routeFailures = new Set<string>()
   const routeExecutes = (route: TextAdventureRouteEvidenceV1, forceFirstFailure = false) => {
     try {
       simulateRoute({ ...input, seed, choiceKeys: route.choiceKeys, forceFirstFailure })
       return true
-    } catch {
+    } catch (cause) {
+      if (routeFailures.size < 3) routeFailures.add(cause instanceof Error ? cause.message : String(cause))
       return false
     }
   }
@@ -418,7 +420,7 @@ export function runTextAdventureAutoplayV1(input: {
     ? routes.find(route => routeExecutes(route, true)) : undefined
   const cases: TextAdventureAutoplayCaseV1[] = [
     caseResult('golden-route', () => {
-      if (!golden) fail('没有可达路线')
+      if (!golden) fail(`没有可执行路线：${[...routeFailures].join('；')}`)
       const result = simulateRoute({ ...input, seed, choiceKeys: golden.choiceKeys })
       return { endingKeys: [result.endingKey], choiceCount: golden.choiceKeys.length, actionCount: result.actionCount,
         evidence: [`route=${golden.choiceKeys.join('>')}`, ...result.evidence] }

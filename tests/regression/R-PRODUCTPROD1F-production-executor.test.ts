@@ -8,6 +8,7 @@ import { db } from '../../src/lib/db/schema'
 import { getAgentSkillV1, TEXT_ADVENTURE_PRODUCTION_AGENT_IDS } from '../../src/lib/agent/skill-registry'
 import { prepareProductProductionAdoption } from '../../src/lib/product-production/adoption'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
+import { validateProductProductionRecoveryDirectiveV1, readTextAdventureRepairFeedbackV1, readTextAdventureVisualDirectionInputsV1, readTextAdventureVisualQualityInputsV1 } from '../../src/lib/product-production/context'
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
@@ -32,6 +33,7 @@ import {
   parseProductionModelJsonObjectV1,
   parseTextAdventureVisualQualityReviewArtifactV1,
   positiveImageRepairDirectiveV1,
+  glyphSafeTextAdventureProviderPromptV1,
   productMediaCharacterPresentationConstraintV1,
   productImageNegativePromptV1,
   productImageRequestNegativePromptV1,
@@ -41,7 +43,6 @@ import {
   textAdventureQuestScriptLocationRetryDirectiveV1,
   textAdventureQuestScriptResolutionRetryDirectiveV1,
   textAdventureQuestScriptRootRetryDirectiveV1,
-  applyTextAdventureQuestScriptOutcomeAnchorsV1,
   textAdventureArchitectureLocationRetryDirectiveV1,
   textAdventureEndingRoutePartitionRetryDirectiveV1,
   textAdventureRepairBaselineDirectiveV1,
@@ -62,8 +63,11 @@ import {
 } from '../../src/lib/product-production/production-executor'
 import { putMediaBlobObject, sha256MediaData } from '../../src/lib/product-production/media-blob-store'
 import {
+  assertProductProductionBudgetLedgerV1,
   executionBindingDriftInvalidatedTaskKeysV1,
+  prepareLegacyPausedProductBuildV1,
   runProductProductionUntilBlockedV1,
+  runProductProductionSchedulerCycleV1,
 } from '../../src/lib/product-production/scheduler'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { evaluateProductRuntimeProductQualityV1 } from '../../src/lib/product-production/product-quality'
@@ -1507,45 +1511,6 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     )).toBe('')
   })
 
-  it('任务脚本三档玩家文本由上游目标、地点和后果确定性装配，消除跨目标串台', () => {
-    const result = applyTextAdventureQuestScriptOutcomeAnchorsV1({
-      schema: 'storyforge.text-adventure-quest-script-artifact', version: 2,
-      mainObjectiveScripts: [{
-        objectiveKey: 'objective.archive', sceneKey: 'scene.007',
-        alternatives: [{
-          alternativeKey: 'alternative.archive.look', resolution: {}, timeCostMinutes: 8,
-          successText: '你在观潮台完成了另一个目标。',
-          costlySuccessText: '你仍在观潮台。', failureForwardText: '你去了观潮台。',
-        }],
-      }],
-      sideQuestScripts: [], ambientEventScripts: [],
-    }, [{
-      objectiveKey: 'objective.unrelated', objectiveTitle: '无关目标',
-      locationTitle: '观潮台', alternatives: [{
-        alternativeKey: 'alternative.unrelated', cost: '无',
-        successConsequence: '无关成功。', failureForwardConsequence: '无关失败。',
-      }],
-    }, {
-      objectiveKey: 'objective.archive', objectiveTitle: '找到原始供能记录',
-      locationTitle: '议会档案库',
-      alternatives: [{
-        alternativeKey: 'alternative.archive.look', cost: '消耗体力',
-        successConsequence: '你找到了原始记录，下一步需要去观潮台核对。',
-        failureForwardConsequence: '只找到残页，但线索没有中断。',
-      }],
-    }], ['议会档案库', '观潮台'])
-    const alternative = ((result.payload.mainObjectiveScripts as JsonRecord[])[0]
-      .alternatives as JsonRecord[])[0]
-    expect(alternative.successText).toContain('议会档案库')
-    expect(alternative.successText).toContain('找到原始供能记录')
-    expect(alternative.successText).toContain('后续地点核对')
-    expect(alternative.successText).not.toContain('观潮台')
-    expect(alternative.costlySuccessText).toContain('消耗体力为代价')
-    expect(alternative.failureForwardText).toContain('线索没有中断')
-    expect(alternative.successText).not.toContain('无关目标')
-    expect(result.anchoredFields).toHaveLength(3)
-  })
-
   it('文字冒险出图默认禁止文字，文字类返修同时下发双语强约束', () => {
     const ordinary = productImageNegativePromptV1('text-adventure')
     expect(ordinary).toContain('汉字')
@@ -1660,6 +1625,25 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     expect(constraint.negativePromptSuffix).toContain('second character')
   })
 
+  it('图片职责不能覆盖当前人物身份或把室内结局改成海上全景', () => {
+    const mentor = { key: 'character.mentor', name: '沉砾', role: 'major-npc' as const,
+      publicIdentity: '58 岁的修复师导师', visualAnchor: '高瘦、灰白胡茬，双臂健全，右手两根铜制义指，旧工装' }
+    const portrait = textAdventureVisualRepairCastConstraintV1({
+      mediaKind: 'character-pose', sceneTag: 'major-character-anchor',
+      anchorRefs: [mentor.key], characters: [mentor], repairEvidence: '',
+    })
+    expect(portrait.promptOverride).not.toMatch(/one-armed|tavern|silver bell|missing arm/)
+    expect(portrait.negativePromptSuffix).not.toContain('right arm')
+    const scene = '沉砾把灯拨近，岚舟合上笔记，窗外传来钟声。'
+    const ending = textAdventureVisualRepairCastConstraintV1({
+      mediaKind: 'cg', sceneTag: 'ending-consequence', scenePrompt: scene,
+      characters: [mentor, { key: 'character.player', name: '岚舟', role: 'player', publicIdentity: '学徒', visualAnchor: '深蓝工装' }],
+      repairEvidence: '纸张上出现了伪文字，需保持笔记合拢。',
+    })
+    expect(ending.promptOverride).not.toMatch(/aftermath|publicly restored names|anonymous back-facing/)
+    expect(ending.negativePromptSuffix).not.toMatch(/notebook|interior|hands|笔记本/)
+  })
+
   it('角色返修把彩色边缘和额外肩甲转成正向轮廓约束与负向禁止项', () => {
     const constraint = textAdventureVisualRepairCastConstraintV1({
       mediaKind: 'character-pose',
@@ -1699,13 +1683,13 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
         visualAnchor: '深褐色皮肤，失去右臂，腰间系一枚无字银铃',
       }],
     })
-    expect(portrait.promptOverride).toContain('right shoulder ends at the torso in a flat pinned triangular empty sleeve cap')
+    expect(portrait.promptOverride).toContain('right shoulder terminates at the torso in a small flat triangular sewn empty sleeve cap')
     expect(portrait.promptOverride).toContain("anatomical RIGHT side appears on the viewer's LEFT")
-    expect(portrait.promptOverride).toContain('exactly one visible arm total')
+    expect(portrait.promptOverride).toContain('exactly one visible arm in the entire image')
     expect(portrait.promptOverride).toContain('one visible left hand')
     expect(portrait.promptOverride).toContain('head to mid-thigh')
-    expect(portrait.promptOverride).toContain('weathered one-armed coastal tavern owner')
-    expect(portrait.promptOverride).toContain('A single smooth blank silver bell')
+    expect(portrait.promptOverride).toContain('涅洛, 退役领航员')
+    expect(portrait.promptOverride).toContain('腰间系一枚无字银铃')
     expect(portrait.promptOverride).toContain('No cup, cloth, tool')
     expect(portrait.promptOverride).not.toContain('wipes a plain clay cup')
     expect(portrait.negativePromptSuffix).toContain('two arms')
@@ -1768,77 +1752,52 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     expect(support.promptOverride).not.toContain('失去右臂')
   })
 
-  it('反复出现字形时按素材职责改用无字专用构图，且地图数量和边框建议可正向编译', () => {
-    const cover = textAdventureVisualRepairCastConstraintV1({
-      mediaKind: 'background', sceneTag: 'cover-opening',
-      scenePrompt: '远方隐约可见一座老潮钟。',
-      repairEvidence: '钟面出现可读罗马数字，违反无文字约束。', characters: [],
-    })
-    expect(cover.promptOverride).toContain('exactly one narrow asymmetric copper navigation beacon')
-    expect(cover.promptOverride).toContain('irregular vertical stack of rectangular slabs')
-    expect(cover.promptOverride).toContain('no front-facing ornamental surface')
-
-    const key = textAdventureVisualRepairCastConstraintV1({
-      mediaKind: 'cg', sceneTag: 'important-item-secondary',
-      repairEvidence: '物品变成带罗马数字的圆形钟面，不像调音钥匙。', characters: [],
-    })
-    expect(key.promptOverride).toContain('exactly one long slender antique brass tuning key')
-    expect(key.promptOverride).toContain('never a clock, watch, compass')
-    expect(positiveImageRepairDirectiveV1('仅保留三个主要岛屿，删除四个小型副岛。', 'composition'))
-      .toContain('严格只出现三个')
-    expect(positiveImageRepairDirectiveV1('移除所有冰晶边框装饰，保持海洋背景开阔无边缘元素。', 'style'))
-      .toContain('自然延伸到画布四边')
+  it('场景返修保留每个冻结动作和物品，地图约束仍可正向编译', () => {
+    const scenes = [
+      ['cover-opening', 'background', '远方隐约可见一座老潮钟。'],
+      ['important-item-secondary', 'cg', '一把调音钥匙放在布面上。'],
+      ['mainline-turn-act-1', 'cg', '档案员翻开登记册，露出缺名的空栏。'],
+      ['mainline-turn-act-2', 'cg', '学徒用纸与炭条辨认墙上旧凿痕。'],
+      ['mainline-turn-act-3', 'cg', '导师翻开工装，右手两根铜制义指碰到台面。'],
+      ['ending-consequence', 'cg', '导师拨近灯火，学徒合拢笔记，窗外传来钟声。'],
+    ] as const
+    for (const [sceneTag, mediaKind, scenePrompt] of scenes) {
+      const result = textAdventureVisualRepairCastConstraintV1({
+        sceneTag, mediaKind, scenePrompt, characters: [],
+        repairEvidence: '物件表面出现伪文字，保留动作与物品，去掉伪文字。',
+      })
+      expect(result.promptOverride).toContain(scenePrompt)
+      expect(result.promptOverride).not.toMatch(/one-armed|young woman|waking gaze|publicly restored names/)
+      expect(result.negativePromptSuffix).not.toMatch(/notebook|interior|standing at controls/)
+    }
     const map = textAdventureGlyphSafeMapRepairPromptV1({
-      originalPrompt: '无文字示意地图。中央、东端、西北端三片岛群，以虚线航道连接三座潮钟，并从东南角画出方向箭头。',
+      originalPrompt: '无文字示意地图，三个岛群通过一条航路连接；东南角一个方向箭头。',
       palette: ['#0a1a2e', '#3a5f7a', '#c8a86e'],
     })
-    expect(map).toContain('complete outer fifty percent and every corner show only the same opaque dark navy background')
-    expect(map).toContain('exactly one small pale-gold triangular arrowhead')
     expect(map).toContain('These three cloche pictograms are the complete symbol set')
+    expect(positiveImageRepairDirectiveV1('仅保留三个主要岛屿，删除四个小型副岛。', 'composition'))
+      .toContain('严格只出现三个')
+  })
 
-    const climax = textAdventureVisualRepairCastConstraintV1({
-      mediaKind: 'cg', sceneTag: 'mainline-turn-act-3',
-      scenePrompt: '岚舟的手指微微颤抖，她预感到接下来会揭示最终真相。',
-      repairEvidence: '画面站姿平静，缺少手指微微颤抖的行动瞬间，并出现未登记控制台。',
-      characters: [{
-        key: 'character.player', name: '岚舟', role: 'player', publicIdentity: '守灯人与修复师',
-        visualAnchor: '短黑发、盐灰发梢、深蓝修复工外套与铜扣护腕',
-      }],
+  it('两指义肢不能扩展为整手机械，无字媒资合同也约束姓名类正向提示', () => {
+    const characters = [{ key: 'mentor', name: '导师', role: 'major-npc' as const,
+      publicIdentity: '修复师', visualAnchor: '高瘦，右手两指为铜制义指，旧工装内衬缝满失去意义的名字' }]
+    const constraint = textAdventureVisualRepairCastConstraintV1({
+      repairEvidence: '仅保留两根铜义指', mediaKind: 'character-pose', anchorRefs: ['mentor'], characters,
     })
-    expect(climax.promptOverride).toContain('separated fingertips visibly tremble')
-    expect(climax.promptOverride).toContain('One small old oil lamp')
-    expect(climax.promptOverride).toContain('sparse chamber')
-
-    const packingClimax = textAdventureVisualRepairCastConstraintV1({
-      mediaKind: 'cg', sceneTag: 'mainline-turn-act-3',
-      scenePrompt: '岚舟走向门口，把图纸和笔记都揣进怀里。',
-      repairEvidence: '画面把角色画成空手举掌；必须清晰呈现把航线草图和笔记收入外套怀中的动作。',
-      characters: [{
-        key: 'character.player', name: '岚舟', role: 'player', publicIdentity: '守灯人与修复师',
-        visualAnchor: '短黑发、盐灰发梢、深蓝修复工外套与铜扣护腕',
-      }],
-    })
-    expect(packingClimax.promptOverride).toContain('slide two distinct blank paper objects')
-    expect(packingClimax.promptOverride).toContain('both papers remain half-visible')
-    expect(packingClimax.promptOverride).toContain('No hand is raised palm-out')
-    expect(packingClimax.promptOverride).not.toContain('fingertips visibly tremble')
-    expect(packingClimax.negativePromptSuffix).toContain('empty raised hand')
-
-    const ending = textAdventureVisualRepairCastConstraintV1({
-      mediaKind: 'cg', sceneTag: 'ending-consequence',
-      scenePrompt: '雾潮开始退散，被公开的名字重新获得力量。',
-      repairEvidence: '错误画成角色打开机械记忆匣的室内近景；必须改成雾潮消散、群岛重见天日的开阔结局远景。',
-      characters: [{
-        key: 'character.player', name: '岚舟', role: 'player', publicIdentity: '守灯人与修复师',
-        visualAnchor: '短黑发、盐灰发梢、深蓝修复工外套与铜扣护腕',
-      }],
-    })
-    expect(ending.promptOverride).toContain('Wide panoramic cinematic hand-painted ocean-fantasy aftermath')
-    expect(ending.promptOverride).toContain('dense blue-gray salt fog visibly parts')
-    expect(ending.promptOverride).toContain('final consequence landscape')
-    expect(ending.promptOverride).not.toContain('memory casket')
-    expect(ending.negativePromptSuffix).toContain('机械记忆匣')
-    expect(ending.negativePromptSuffix).toContain('opening an object')
+    expect(constraint.promptSuffix).toContain('exactly TWO copper finger prostheses')
+    expect(constraint.promptSuffix).toContain('other THREE fingers, entire palm')
+    expect(textAdventureVisualRepairCastConstraintV1({
+      repairEvidence: '', mediaKind: 'character-pose', characters: [{ ...characters[0], visualAnchor: '右手完整机械义肢' }],
+    }).promptSuffix).not.toContain('TWO copper')
+    const original = '旧工装内衬缝满失去意义的名字；写满人名的防水笔记；清晰可见密密麻麻的手写名字痕迹。'
+    const rendered = glyphSafeTextAdventureProviderPromptV1(original)
+    expect(rendered).not.toMatch(/缝满|写满|手写名字/)
+    expect(rendered).toContain('页面合拢的防水笔记')
+    expect(rendered).toContain('不成字的短线')
+    expect(glyphSafeTextAdventureProviderPromptV1('母亲名字被划掉的旧名牌')).toBe('表面自然磨损且完全空白的旧名牌')
+    expect(original).toContain('缝满失去意义的名字')
+    expect(glyphSafeTextAdventureProviderPromptV1('名字是故事的主题，导师站在灯塔里。')).toBe('名字是故事的主题，导师站在灯塔里。')
   })
 
   it('眉部细疤作为微细节不可单独阻塞 CG 或角色立绘', () => {
@@ -1864,6 +1823,22 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     })
     expect(cg).toMatchObject({ verdict: 'accept', issues: [{ severity: 'warning' }] })
     expect(portrait).toMatchObject({ verdict: 'accept', issues: [{ severity: 'warning' }] })
+  })
+
+  it('纯建议不能与必须返修结论矛盾，真实阻塞与人工复核仍保留', () => {
+    const base = {
+      artifactKey: 'media.visual.008', contentHash: 'b'.repeat(64), verdict: 'revise' as const,
+      scores: { requirementFit: 4, identityContinuity: 4, styleContinuity: 4, composition: 5, technicalCleanliness: 5 },
+      issues: [{ severity: 'warning' as const, category: 'identity' as const,
+        detail: '护腕可进一步简化。', recommendation: '可简化铜扣。' }],
+      reviewSource: 'multimodal-model' as const,
+    }
+    const normalize = (review: Parameters<typeof normalizeTextAdventureVisualReviewPolicyV1>[0]['reviews'][number]) =>
+      normalizeTextAdventureVisualReviewPolicyV1({ reviews: [review], requirements: [] })[0]
+    expect(normalize(base)).toMatchObject({ verdict: 'accept', issues: base.issues })
+    expect(normalize({ ...base, issues: [{ ...base.issues[0], severity: 'blocking' }] }).verdict).toBe('revise')
+    expect(normalize({ ...base, verdict: 'human-review' }).verdict).toBe('human-review')
+    expect(normalize({ ...base, reviewSource: 'deterministic-fallback', scores: null }).verdict).toBe('revise')
   })
 
   it('审图模型把可读文字误标为 warning 时，确定性策略仍升级为阻塞返修', () => {
@@ -3662,6 +3637,56 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     })).rejects.toThrow('mediaAnchorDecision schema/version/hash 无效')
   })
 
+  it('视觉单图审查只读取本批完整需求与审计，保留全局锚点且拒绝缺失或重复绑定', async () => {
+    const owned = await fixtureForProduct('text-adventure')
+    const build = (await db.productBuilds.where('productionId').equals(owned.productionId).first())!
+    const visual = Array.from({ length: 12 }, (_, index) => ({
+      artifactKey: `media.visual.${String(index + 1).padStart(3, '0')}`,
+      prompt: '保留全部当前画面动作与约束。'.repeat(400),
+    }))
+    const bible = { style: '统一水粉', characterAnchors: [{ characterKey: 'player', visualAnchor: '黑发' }] }
+    const payloads = {
+      'content.cast-bible': { characters: [{ key: 'player', name: '岚舟' }] },
+      'media.requirements': { visual },
+      'media.visual-bible': bible,
+      'media.audit': { requirementsHash: 'a'.repeat(64), visualBibleHash: 'b'.repeat(64), assets: visual.map(row => ({ artifactKey: row.artifactKey, status: 'fulfilled' })) },
+      'media.visual.001': {},
+    }
+    for (const [artifactKey, payload] of Object.entries(payloads)) {
+      await db.productBuildArtifacts.add({
+        projectId: owned.scope.projectId, worldId: owned.scope.worldId, workId: owned.scope.workId,
+        buildId: build.id!, artifactKey, requirementKey: null, version: 1,
+        kind: 'asset-manifest', mediaKind: null, status: 'accepted', producerRunId: null,
+        producerReceiptHash: null, controlEpoch: build.controlEpoch, inputHash: 'c'.repeat(64),
+        contentHash: await hashProductProductionValueV2(payload), payloadJson: JSON.stringify(payload),
+        metadataJson: '{}', qualityJson: '{}', rightsJson: '{}', blobObjectId: null,
+        mimeType: 'application/json', byteSize: 0, parentArtifactHash: null, carriedFrom: null,
+        createdAt: 1, updatedAt: 1,
+      })
+    }
+    const input = {
+      projectId: owned.scope.projectId, scope: owned.scope, productProductionId: owned.productionId,
+      productBuildId: build.id!, productProductionTaskKey: 'media.visual-quality-review.batch-1',
+      productArtifactKeys: Object.keys(payloads),
+    }
+    const packet = JSON.parse(await readTextAdventureVisualQualityInputsV1(input))
+    expect(packet.requirements).toEqual([visual[0]])
+    expect(packet.audit.assets).toEqual([{ artifactKey: visual[0].artifactKey, status: 'fulfilled' }])
+    expect(packet.visualBible.characterAnchors).toEqual(bible.characterAnchors)
+    expect(packet.sources).toHaveLength(5)
+    const requirement = (await db.productBuildArtifacts.where('[buildId+artifactKey]')
+      .equals([build.id!, 'media.requirements']).first())!
+    for (const invalid of [visual.slice(1), [...visual, visual[0]]]) {
+      await db.productBuildArtifacts.update(requirement.id!, { payloadJson: JSON.stringify({ visual: invalid }) })
+      await expect(readTextAdventureVisualQualityInputsV1(input)).rejects.toThrow('需求或审计证据缺失或重复')
+    }
+    await db.productBuildArtifacts.update(requirement.id!, { payloadJson: requirement.payloadJson })
+    const audit = (await db.productBuildArtifacts.where('[buildId+artifactKey]')
+      .equals([build.id!, 'media.audit']).first())!
+    await db.productBuildArtifacts.update(audit.id!, { payloadJson: JSON.stringify({ assets: [] }) })
+    await expect(readTextAdventureVisualQualityInputsV1(input)).rejects.toThrow('需求或审计证据缺失或重复')
+  })
+
   it('独立 Visual QA Director 实际接收冻结图片 key/hash，并由逐项证据派生审图结论', async () => {
     const owned = await fixtureForProduct('text-adventure', { visualLevel: 'key-scenes' })
     const briefHash = await hashProductProductionValueV2(owned.brief)
@@ -4108,6 +4133,97 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(sourceGrounded.visual[9].prompt).not.toContain('三个按钮')
     expect(sourceGrounded.visual[11].prompt).toContain('潮钟继续运转')
     expect(sourceGrounded.visual[11].prompt).not.toContain('感受到了变化')
+    const curatedNarrative = structuredClone(frozenNarrative)
+    curatedNarrative.beats.push(
+      { beatKey: 'beat.act-1.curated', nodeKey: 'node.001', kind: 'narration', speakerKey: null, text: '阿塔从抽屉里取出缺名档案，翻开到某一页。', order: 3 },
+      { beatKey: 'beat.act-3.curated-ending', nodeKey: 'node.003', kind: 'narration', speakerKey: null, text: '桌上的灯照亮合拢的笔记，窗外传来新的钟声。', order: 4 },
+    )
+    const curatedRequirements = structuredClone(modelHallucination)
+    curatedRequirements.visual[3].beatKey = 'beat.act-1.curated'
+    curatedRequirements.visual[4].beatKey = 'beat.act-2.001'
+    curatedRequirements.visual[11].beatKey = 'beat.act-3.curated-ending'
+    const curated = parseProductMediaRequirementsArtifactV2(
+      curatedRequirements, owned.brief, anchors, curatedNarrative as never,
+    )
+    expect(curated.visual[3].beatKey).toBe('beat.act-1.curated')
+    expect(curated.visual[3].prompt).toContain('阿塔从抽屉里取出缺名档案')
+    expect(curated.visual[3].characterAnchorRefs).toEqual(['character.npc.2'])
+    expect(curated.visual[4].beatKey).toBe('beat.act-2.001')
+    expect(curated.visual[11].beatKey).toBe('beat.act-3.curated-ending')
+    expect(curated.visual[11].prompt).toContain('窗外传来新的钟声')
+    // Quiet actions must survive the provider prompt; keyword-ranked top-two
+    // excerpts previously erased the opened coat, blank register and notebook.
+    const completeBeatNarrative = structuredClone(curatedNarrative)
+    completeBeatNarrative.nodes.push({
+      ...completeBeatNarrative.nodes[1], key: 'node.climax', title: '导师重逢',
+    })
+    completeBeatNarrative.beats.push({
+      beatKey: 'beat.act-3.coat', nodeKey: 'node.climax', kind: 'narration', speakerKey: null,
+      text: '沉砾站在工作台旁。旧工装内衬缝着密密的名字，他翻开衣角。右手两根铜制义指碰到台面，发出短促的轻响。他看见你手里的调音钥匙，先笑了一下，又低头认真看你的脸。', order: 0,
+    })
+    completeBeatNarrative.beats.find(beat => beat.beatKey === 'beat.act-1.curated')!.text =
+      '阿塔从抽屉里取出一本册子，翻开到某一页。某些行末尾的签名栏是空的。旁边的档案记载沉砾当年保存的记忆。'
+    completeBeatNarrative.beats.find(beat => beat.beatKey === 'beat.act-3.curated-ending')!.text =
+      '沉砾把灯拨近，让你能看清纸面。你读到第一次修钟的记录，知道那时自己曾紧张、曾笑过，却无法重新感觉那一刻。你合上笔记，没有再试图用多读一遍换回它。窗外的钟声传向岸边，下一次要怎样点亮，终于不再只由塔里的人说了算。'
+    const completeBeatRequirements = structuredClone(curatedRequirements)
+    completeBeatRequirements.visual[9].beatKey = 'beat.act-3.coat'
+    const completeBeatAnchors = anchors.map(anchor => anchor.characterKey === 'character.npc.1'
+      ? { ...anchor, name: '沉砾', publicIdentity: '58 岁的导师', visualAnchor: '灰白胡茬，右手两根铜制义指，旧工装' }
+      : anchor.characterKey === 'character.player'
+        ? { ...anchor, visualAnchor: `${anchor.visualAnchor}；随身物件：沉砾留下的铜制调音钥匙` }
+        : anchor)
+    const completeBeats = parseProductMediaRequirementsArtifactV2(
+      completeBeatRequirements, owned.brief, completeBeatAnchors, completeBeatNarrative as never,
+    )
+    expect(completeBeats.visual[3].prompt).toContain('签名栏是空的')
+    expect(completeBeats.visual[3].characterAnchorRefs).toEqual(['character.npc.2'])
+    expect(completeBeats.visual[9].prompt).toContain('他翻开衣角')
+    expect(completeBeats.visual[9].prompt).toContain('右手两根铜制义指碰到台面')
+    expect(completeBeats.visual[9].characterAnchorRefs).toEqual(['character.npc.1', 'character.player'])
+    expect(completeBeats.visual[11].prompt).toContain('沉砾把灯拨近')
+    expect(completeBeats.visual[11].prompt).toContain('你合上笔记')
+    expect(completeBeats.visual[11].prompt).toContain('却无法重新感觉那一刻')
+    expect(completeBeats.visual[11].prompt).toContain('回忆、猜测和内心感受不得改画成同场人物或新增事件')
+    expect(completeBeats.visual[11].characterAnchorRefs).toEqual(['character.npc.1', 'character.player'])
+    const providerRequirements = parseProductMediaRequirementsArtifactV2(completeBeats, owned.brief, completeBeatAnchors, null, 'frozen')
+    expect(providerRequirements.visual.map(row => row.prompt)).toEqual(completeBeats.visual.map(row => row.prompt))
+    expect(providerRequirements.visual[5].prompt).toContain('机械记忆匣')
+    expect(providerRequirements.visual[10].prompt).toContain('调音钥匙')
+    expect(providerRequirements.visual[9].characterAnchorRefs).toEqual(completeBeats.visual[9].characterAnchorRefs)
+    expect(providerRequirements.visual[11].characterAnchorRefs).toEqual(completeBeats.visual[11].characterAnchorRefs)
+    for (const text of [
+      '你猛地睁开眼睛，单膝跪在铁板上，掌心紧贴黄铜管。',
+      '你从怀里取出纸和炭笔，开始拓印。',
+      '你靠在铜轨栏杆上，拿起调音钥匙。',
+    ]) {
+      const secondPerson = structuredClone(completeBeatNarrative)
+      secondPerson.beats.find(beat => beat.beatKey === 'beat.act-1.curated')!.text = text
+      const parsed = parseProductMediaRequirementsArtifactV2(
+        completeBeatRequirements, owned.brief, completeBeatAnchors, secondPerson as never,
+      )
+      expect(parsed.visual[3].characterAnchorRefs, text).toEqual(['character.player'])
+    }
+    for (const text of ['你从未见过沉砾，只听说过他的名字。', '档案记载沉砾当年扶着台沿，支撑疲惫的身体。']) {
+      const historicalOnly = structuredClone(completeBeatNarrative)
+      historicalOnly.beats.find(beat => beat.beatKey === 'beat.act-1.curated')!.text = text
+      expect(parseProductMediaRequirementsArtifactV2(
+        completeBeatRequirements, owned.brief, completeBeatAnchors, historicalOnly as never,
+      ).visual[3].characterAnchorRefs, text).toEqual([])
+    }
+    const reunion = structuredClone(completeBeatNarrative)
+    reunion.beats.find(beat => beat.beatKey === 'beat.act-3.coat')!.text =
+      '你踏入地下的记忆海。沉砾仍然活着，只是疲惫得需要借助台沿支撑身体。'
+    expect(parseProductMediaRequirementsArtifactV2(
+      completeBeatRequirements, owned.brief, completeBeatAnchors, reunion as never,
+    ).visual[9].characterAnchorRefs).toEqual(['character.npc.1', 'character.player'])
+    // A real but cross-act or non-ending reference cannot override the role.
+    curatedRequirements.visual[3].beatKey = 'beat.act-2.003'
+    curatedRequirements.visual[11].beatKey = 'beat.act-1.curated'
+    const wrongScope = parseProductMediaRequirementsArtifactV2(
+      curatedRequirements, owned.brief, anchors, curatedNarrative as never,
+    )
+    expect(wrongScope.visual[3].beatKey).not.toBe('beat.act-2.003')
+    expect(wrongScope.visual[11].beatKey).not.toBe('beat.act-1.curated')
     const duplicateBeat = structuredClone(modelHallucination)
     duplicateBeat.visual[7].prompt = modelHallucination.visual[3].prompt
     duplicateBeat.visual[7].characterAnchorRefs = ['character.player', 'character.npc.1']
@@ -4619,7 +4735,113 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     ])
   }, 30_000)
 
-  it('作者修订走相同校验和持久回执，不伪造模型调用，并拒绝错任务或无效内容', async () => {
+  it.each(['content.product-module', 'content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-scenes', 'content.narrative-decision-plan', 'content.ending-route-plan', 'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2', 'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2', 'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2', 'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3'] as const)('%s 暂停后修订已验收内容：绑定命令与原稿，只使后代失效，作者正文零模型采纳', async (revisionKey) => {
+    const owned = await fixtureForProduct('text-adventure', { scale: 'short-arc', visualLevel: 'none', omitWorldArtifacts: true })
+    const requirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    const bindingHash = 'a'.repeat(64)
+    const capabilityBindings = [{ requirementKey: requirement.requirementKey, adapterId: 'configured-text.v1', bindingHash }]
+    const outputs = fullLengthTextAdventureOutputs(owned.brief) as Record<string, unknown>
+    const calls: string[] = []
+    let pauseOnce = true
+    const runText: ProductionTextRunnerV1 = async request => {
+      const key = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))!
+      calls.push(key)
+      if (key === ({ 'content.product-module': 'content.adventure-quality-review.act-1', 'content.story-bible': 'content.cast-bible', 'content.cast-bible': 'content.adventure-architecture', 'content.adventure-architecture': 'content.narrative-arc-scenes', 'content.narrative-arc-scenes': 'content.narrative-decision-plan', 'content.narrative-decision-plan': 'content.ending-route-plan', 'content.ending-route-plan': 'content.main-quest-plan', 'content.main-quest-plan': 'content.adventure-side-quests', 'content.adventure-side-quests': 'content.quest-script.main.act-1.single', 'content.adventure-ambient-events': 'content.quest-script.main.act-1.single', 'content.scene-script.act-1.part-1': 'content.adventure-quality-review.act-1', 'content.scene-script.act-1.part-2': 'content.adventure-quality-review.act-1', 'content.scene-script.act-2.part-1': 'content.adventure-quality-review.act-1', 'content.scene-script.act-2.part-2': 'content.adventure-quality-review.act-1', 'content.scene-script.act-3.part-1': 'content.adventure-quality-review.act-1', 'content.scene-script.act-3.part-2': 'content.adventure-quality-review.act-1', 'content.dialogue-pass.act-1': 'content.adventure-quality-review.act-1', 'content.dialogue-pass.act-2': 'content.adventure-quality-review.act-1', 'content.dialogue-pass.act-3': 'content.adventure-quality-review.act-1' }[revisionKey]) && pauseOnce) {
+        pauseOnce = false
+        expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+          command: { type: 'pause', commandId: 'story-revision.pause',
+            expectedStateRevision: (await db.productProductions.get(owned.productionId))!.stateRevision,
+            reason: '作者核对已完成的故事圣经' } })).ok).toBe(true)
+      }
+      return { output: JSON.stringify(key === 'media.requirements' ? { ...outputs[key] as object, visual: [], audio: [] } : outputs[key]),
+        usage: { inputTokens: 100, outputTokens: 100 }, bindingReceipt: {
+          schema: 'storyforge.provider-binding-receipt', version: 1, requirementKey: requirement.requirementKey,
+          adapterId: 'configured-text.v1', adapterVersion: 1, provider: 'fixture', model: 'fixture',
+          endpointOrigin: 'https://fixture.invalid', executionLocation: 'browser-direct', credentialSource: 'existing-ai-config',
+          credentialPresent: true, capabilityHash: bindingHash, boundAt: 1, receiptHash: 'b'.repeat(64),
+        } }
+    }
+    const execute = async () => runProductProductionUntilBlockedV1({ scope: owned.scope, productionId: owned.productionId, capabilityBindings,
+      executor: createConfiguredProductProductionExecutorV1({ production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText }) })
+    const first = await execute()
+    expect(first.buildStatus).toBe('paused')
+    const baseline = (await db.productBuildArtifacts.where('buildId').equals(first.buildId).toArray())
+      .find(row => row.artifactKey === revisionKey && row.status === 'accepted')!
+    expect(baseline).toBeTruthy()
+    const currentBuild = (await db.productBuilds.get(first.buildId))!
+    const currentProduction = (await db.productProductions.get(owned.productionId))!
+    const failure = JSON.parse((await prepareLegacyPausedProductBuildV1(owned.scope, currentBuild)).failureJson)
+    const edited = JSON.parse(baseline.payloadJson)
+    if (revisionKey === 'content.product-module') edited.resources.find((resource: { role: string }) => resource.role === 'clock').maximum += 4320
+    else if (revisionKey === 'content.story-bible') edited.emotionalPromise = '在保留真实代价的选择中学会共同承担。'
+    else if (revisionKey === 'content.cast-bible') edited.characters[1].voice = '用简短的句子回应，先询问来意再提出条件。'
+    else if (revisionKey === 'content.adventure-architecture') edited.regions[0].description = '潮汐推动的岛群，居民以互助维持航路。'
+    else if (revisionKey === 'content.narrative-arc-scenes') edited.acts[0].sceneCards[0].purpose = '先呈现可见风险，再让玩家选择实际行动。'
+    else if (revisionKey === 'content.narrative-decision-plan') edited.decisions[0].prompt = '两种行动都付出代价，你愿意先承担哪一种？'
+    else if (revisionKey === 'content.ending-route-plan') edited.routes[0].rationale = '此前的持续承诺使这个结局成为具体行动的结果。'
+    else if (revisionKey === 'content.main-quest-plan') edited.quests[0].description = '让此前的承诺在实际行动与代价中得到兑现。'
+    else if (revisionKey.startsWith('content.scene-script.')) edited.scenes[0].beats[0].text += '眼前的潮痕让你停下，重新核对手中的线索。'
+    else if (revisionKey.startsWith('content.dialogue-pass.')) { edited.beatReviews[0].revisedText = '先看清眼前的潮痕，再决定我们往哪里走。'; edited.beatReviews[0].verdict = 'revise'; edited.beatReviews[0].issueTags = ['exposition'] }
+    else edited.entries[0].description = '具体的援助留下可以追踪的后果。'
+    const revision = { artifactKey: revisionKey, expectedArtifactVersion: baseline.version,
+      expectedArtifactHash: baseline.contentHash, note: '纠正故事的情绪承诺，不改变世界事实',
+      authorDraftJson: JSON.stringify(edited) }
+    const command = { type: 'resume' as const, commandId: 'story-revision.resume', expectedStateRevision: currentProduction.stateRevision,
+      contentRevision: revision,
+      ...(failure.pausedProviderReservations?.length ? { pausedReservationDispositions: failure.pausedProviderReservations.map((r: {taskKey: string;runId: number;attempt: number;controlEpoch: number}) => ({
+        taskKey: r.taskKey, runId: r.runId, attempt: r.attempt, controlEpoch: r.controlEpoch, disposition: 'charge-reservation-upper-bound' as const,
+      })) } : {}),
+    }
+    const before = structuredClone(currentBuild)
+    assertProductProductionBudgetLedgerV1(before.budgetLedgerJson)
+    assertProductProductionBudgetLedgerV1((await prepareLegacyPausedProductBuildV1(owned.scope, currentBuild)).budgetLedgerJson)
+    expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { ...command, commandId: 'story-revision.stale', contentRevision: { ...revision, expectedArtifactHash: 'e'.repeat(64) } } })).ok).toBe(false)
+    expect(await db.productBuilds.get(first.buildId)).toEqual(before)
+    expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { ...command, commandId: 'story-revision.old-version', contentRevision: { ...revision, expectedArtifactVersion: baseline.version + 1 } } })).ok).toBe(false)
+    await db.productBuilds.update(first.buildId, { resumeState: 'preview-ready' })
+    expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { ...command, commandId: 'story-revision.wrong-stage' } })).ok).toBe(false)
+    await db.productBuilds.update(first.buildId, { resumeState: before.resumeState })
+    await db.productProductions.update(owned.productionId, { productType: 'avg' })
+    expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { ...command, commandId: 'story-revision.wrong-product' } })).ok).toBe(false)
+    await db.productProductions.update(owned.productionId, { productType: 'text-adventure' })
+    expect(await db.productBuilds.get(first.buildId)).toEqual(before)
+    const resumed = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId, command })
+    expect(resumed.ok, JSON.stringify(resumed)).toBe(true)
+    expect(resumed.result.revisionAuthorization).toEqual(command)
+    expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId, command })).replayed).toBe(true)
+    const verification = { scope: owned.scope, productProductionId: owned.productionId, productBuildId: first.buildId,
+      productProductionTaskKey: revisionKey, expectedState: 'resolved' as const }
+    expect((await validateProductProductionRecoveryDirectiveV1(verification)).snapshot).toBeNull()
+    const resumedBuild = (await db.productBuilds.get(first.buildId))!
+    const tampered = JSON.parse(resumedBuild.failureJson)
+    tampered.resolution.authorDraftJson = '{}'
+    await db.productBuilds.update(first.buildId, { failureJson: JSON.stringify(tampered) })
+    await expect(validateProductProductionRecoveryDirectiveV1(verification)).rejects.toThrow('候选已变化')
+    await db.productBuilds.update(first.buildId, { failureJson: resumedBuild.failureJson })
+    const beforeResumeCalls = [...calls]
+    const completed = await execute()
+    if (revisionKey === 'content.product-module') {
+      expect(calls.filter(key => beforeResumeCalls.includes(key) && !key.startsWith('content.adventure-quality-review') && key !== 'qa.playtest-strategy'))
+        .toEqual(beforeResumeCalls.filter(key => beforeResumeCalls.includes(key) && !key.startsWith('content.adventure-quality-review') && key !== 'qa.playtest-strategy'))
+    }
+    expect(completed, JSON.stringify(completed)).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    expect(calls.filter(key => key === 'content.story-bible')).toHaveLength(1)
+    expect(calls.filter(key => key === 'content.source-sufficiency')).toHaveLength(1)
+    const accepted = (await db.productBuildArtifacts.where('buildId').equals(first.buildId).toArray())
+      .find(row => row.artifactKey === revisionKey && row.controlEpoch === completed.controlEpoch)!
+    expect(JSON.parse(accepted.payloadJson)).toEqual(edited)
+    expect(JSON.parse(accepted.rightsJson).origin).toBe('author-revised-model-draft')
+    expect(JSON.parse(accepted.rightsJson).authorRevisionCommandId).toBe(command.commandId)
+    expect((await db.productBuildArtifacts.get(baseline.id!))!.payloadJson).toBe(baseline.payloadJson)
+    const events = await db.agentRunEvents.where('runId').equals(accepted.producerRunId!).toArray()
+    expect(events.some(event => event.type === 'model.requested')).toBe(false)
+  }, 60_000)
+
+  it.each(['content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-scenes', 'content.narrative-decision-plan', 'content.ending-route-plan', 'content.main-quest-plan', 'content.product-module', 'content.adventure-side-quests', 'content.adventure-ambient-events'])('%s 作者修订走相同校验和持久回执，不伪造模型调用，并拒绝错任务或无效内容', async (repairTaskKey) => {
     const owned = await fixtureForProduct('text-adventure', {
       scale: 'short-arc', visualLevel: 'none', omitWorldArtifacts: true,
     })
@@ -4635,7 +4857,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const runText: ProductionTextRunnerV1 = async request => {
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))!
       calls.push(taskKey)
-      return { output: JSON.stringify(taskKey === 'content.product-module' ? {} : taskKey === 'media.requirements' ? { ...outputs[taskKey], visual: [], audio: [] } : outputs[taskKey]),
+      return { output: JSON.stringify(taskKey === repairTaskKey ? {} : taskKey === 'media.requirements' ? { ...outputs[taskKey], visual: [], audio: [] } : outputs[taskKey]),
         usage: { inputTokens: 100, outputTokens: 100 }, bindingReceipt: {
           schema: 'storyforge.provider-binding-receipt', version: 1, requirementKey: requirement.requirementKey,
           adapterId: 'configured-text.v1', adapterVersion: 1, provider: 'fixture', model: 'fixture',
@@ -4647,21 +4869,33 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       executor: createConfiguredProductProductionExecutorV1({ production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText }) })
     const first = await execute()
     expect(first.buildStatus).toBe('recovery-required')
-    const repair = async (draft: unknown, taskKey = 'content.product-module') => executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+    const repair = async (draft: unknown, taskKey = repairTaskKey) => executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
       command: { type: 'resolve-blocker', commandId: `repair.${crypto.randomUUID()}`, expectedStateRevision: (await db.productProductions.get(owned.productionId))!.stateRevision,
         blockerKey: taskKey, resolution: { action: 'author-edit', note: '作者校订草稿', authorDraftJson: JSON.stringify(draft) } } })
-    expect((await repair(outputs['content.product-module'], 'content.design')).ok).toBe(false)
+    expect((await repair(outputs[repairTaskKey], 'content.design')).ok).toBe(false)
     expect((await repair({})).ok).toBe(true)
     expect((await execute()).buildStatus).toBe('recovery-required')
     // The professional DAG performs its two visible, bounded model attempts
     // before pausing. Author-edit recovery itself must add no model call.
-    expect(calls.filter(key => key === 'content.product-module')).toHaveLength(2)
-    expect((await repair(outputs['content.product-module'])).ok).toBe(true)
+    expect(calls.filter(key => key === repairTaskKey)).toHaveLength(2)
+    expect((await repair(outputs[repairTaskKey])).ok).toBe(true)
+    const feedbackInput = {
+      projectId: owned.scope.projectId, scope: owned.scope,
+      productProductionId: owned.productionId, productBuildId: first.buildId,
+      productProductionTaskKey: repairTaskKey,
+    }
+    const feedback = JSON.parse(await readTextAdventureRepairFeedbackV1(feedbackInput))
+    expect(feedback.authorRepairNote).toBe('作者校订草稿')
+    expect(feedback).not.toHaveProperty('authorDraftJson')
+    const otherFeedback = JSON.parse(await readTextAdventureRepairFeedbackV1({
+      ...feedbackInput, productProductionTaskKey: 'content.design',
+    }) || '{}')
+    expect(otherFeedback.authorRepairNote).toBeFalsy()
     const completed = await execute()
     expect(completed.buildStatus).toBe('release-ready')
-    expect(calls.filter(key => key === 'content.product-module')).toHaveLength(2)
+    expect(calls.filter(key => key === repairTaskKey)).toHaveLength(2)
     const artifact = await db.productBuildArtifacts.where('buildId').equals(completed.buildId)
-      .filter(row => row.artifactKey === 'content.product-module' && row.controlEpoch === completed.controlEpoch).first()
+      .filter(row => row.artifactKey === repairTaskKey && row.controlEpoch === completed.controlEpoch).first()
     expect(JSON.parse(artifact!.rightsJson).origin).toBe('author-revised-model-draft')
     const events = await db.agentRunEvents.where('runId').equals(artifact!.producerRunId!).toArray()
     expect(events.some(row => row.type === 'model.requested')).toBe(false)
@@ -5647,6 +5881,10 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       choices: [{ ...baselinePayload.choices[0], text: '立即敲响警钟' }],
     })
     expect(repaired.scenes[0]).toEqual(baselinePayload.scenes[0])
+    // The author workbench submits a complete, explicitly authorized bundle.
+    // Model output must still obey the bounded patch protocol in this context.
+    expect(() => applyTextAdventureSceneRepairPatchV1(taskKey, feedback, repaired)).toThrow('sceneRepairPatch')
+    expect(applyTextAdventureSceneRepairPatchV1(taskKey, feedback, repaired, 'author-draft')).toEqual(repaired)
     expect(() => applyTextAdventureSceneRepairPatchV1(taskKey, feedback, {
       schema: 'storyforge.text-adventure-scene-repair-patch-artifact', version: 1,
       patches: [{
@@ -6426,6 +6664,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const qualityReviewContexts = new Map<string, string[]>()
     let playtestSystem = ''
     let playtestContext = ''
+    let visualDirectionContext = ''
     let modelCallCount = 0
     const qualityReviewAttempts = new Map<string, number>()
     let ambientEventAttempt = 0
@@ -6485,6 +6724,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         playtestSystem = request.system
         playtestContext = request.contextText
       }
+      if (taskKey === 'media.requirements') visualDirectionContext = request.contextText
       const output = taskKey === 'content.adventure-quality-review.structure'
         && qualityReviewAttempts.get(taskKey) === 1
         ? {
@@ -6625,6 +6865,12 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       projection,
       `full-length text-adventure projection:\n${JSON.stringify(projection, null, 2)}\nfailure=${projectedBuild?.failureJson}`,
     ).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    // The formal executor must preserve provider-authored outcome prose;
+    // semantic validation cannot replace it with an upstream synopsis.
+    const authoredQuestPart = outputs['content.quest-script.main.act-1.single'] as { mainObjectiveScripts: unknown[] }
+    const adoptedQuestPart = (await db.productBuildArtifacts.where('buildId').equals(projection.buildId).toArray())
+      .find(row => row.artifactKey === 'content.quest-script.main.act-1.single' && row.status === 'accepted')!
+    expect(JSON.parse(adoptedQuestPart.payloadJson).mainObjectiveScripts).toEqual(authoredQuestPart.mainObjectiveScripts)
     expect(sceneScriptSystems).toHaveLength(7)
     const actOneSceneSystem = sceneScriptSystems.find(system => (
       system.includes('任务=content.scene-script.act-1.part-1')
@@ -6741,7 +6987,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(questScriptSystem).toContain('本 Run 每个主线目标的玩家可见结算锚点=')
     expect(questScriptSystem).toContain('objectiveTitle')
     expect(questScriptSystem).toContain('locationTitle')
-    expect(questScriptSystem).toContain('逐字包含该 objectiveTitle 和 locationTitle')
+    expect(questScriptSystem).toContain('不必重复完整任务标题，不得以套话代替场景表达')
     expect(dialoguePassSystems).toHaveLength(3)
     expect(dialoguePassSystems[0]).toContain('独立对白编辑，不是分场作者')
     expect(dialoguePassSystems[0]).toContain('使用序号差量协议')
@@ -6918,12 +7164,49 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
             echoes: expect.arrayContaining([expect.objectContaining({
               actionKey: expect.stringContaining('action.echo.decision.1.option.1.1.'),
               requiredConditionKey: expect.any(String),
-              successText: expect.stringContaining('只属于这条路线的回应'),
+              labelTextRef: expect.any(Number),
+              successTextRefs: expect.arrayContaining([expect.any(Number)]),
             })]),
           }),
         ]),
       }),
     ]))
+    const originalArcRow = (await db.productBuildArtifacts.where('buildId').equals(projection.buildId).toArray())
+      .filter(row => row.artifactKey === 'content.narrative-arc-plan')
+      .sort((left, right) => right.version - left.version)[0]
+    const originalArc = JSON.parse(originalArcRow.payloadJson)
+    const echoDictionary = structureProjection.graphFacts.echoTextDictionary
+    expect(new Set(echoDictionary).size).toBe(echoDictionary.length)
+    let expandedEchoCharacters = 0
+    for (const binding of structureProjection.graphFacts.decisionChoiceBindings) {
+      const decision = structureProjection.arcPlan.decisions.find(item => item.key === binding.decisionKey)!
+      for (const option of binding.options) {
+        const plannedOption = decision.options.find(item => item.key === option.optionKey)!
+        expect(option.echoes.map(echo => echo.sceneKey)).toEqual(plannedOption.echoSceneKeys)
+        for (const echo of option.echoes) {
+          const scene = structureProjection.arcPlan.acts.flatMap(act => act.sceneCards)
+            .find(item => item.key === echo.sceneKey)!
+          const expanded = echo.successTextRefs.map(index => echoDictionary[index]).join('')
+          // The act packet keeps a longer conflict than the structure scene
+          // card, so compare exact compiled strings against the original arc.
+          const originalScene = originalArc.acts.flatMap(act => act.sceneCards)
+            .find(item => item.key === echo.sceneKey)!
+          const expected = textAdventureDecisionEchoPresentationV1({
+            decisionPrompt: decision.prompt,
+            optionLabel: plannedOption.label,
+            optionCost: plannedOption.cost,
+            sceneTitle: scene.title,
+            sceneConflict: originalScene.conflict.length <= 100
+              ? originalScene.conflict : `${originalScene.conflict.slice(0, 100)}…`,
+          })
+          expect(echoDictionary[echo.labelTextRef]).toBe(expected.label)
+          expect(expanded).toBe(expected.successText)
+          expect(expanded).toContain('只属于这条路线的回应')
+          expandedEchoCharacters += expanded.length
+        }
+      }
+    }
+    expect(echoDictionary.join('').length).toBeLessThan(expandedEchoCharacters)
     expect(structureProjection.reviewScope.decisionKeys.length).toBeGreaterThan(0)
     expect(structureProjection.reviewScope.optionKeys.length).toBeGreaterThan(0)
     expect(structureProjection.reviewScope.alternativeKeys.length).toBeGreaterThan(0)
@@ -7020,6 +7303,71 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(playtestContext).toContain('"deterministicEvidence":["quality.autoplay","quality.report"]')
     expect(playtestContext).not.toContain('storyforge.product-production.artifact-inputs')
     const build = (await db.productBuilds.get(projection.buildId))!
+    expect(visualDirectionContext).toContain('storyforge.text-adventure-visual-direction-inputs')
+    expect(visualDirectionContext).not.toContain('storyforge.product-production.artifact-inputs')
+    const visualPacket = JSON.parse(visualDirectionContext.split('\n\n').find(segment => (
+      segment.includes('storyforge.text-adventure-visual-direction-inputs')
+    ))!)
+    const visualInputRows = await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray()
+    const narrativeRow = visualInputRows.filter(row => row.artifactKey === 'content.narrative')
+      .sort((left, right) => right.version - left.version)[0]
+    const acceptedNarrative = JSON.parse(narrativeRow.payloadJson)
+    // Art receives every final beat verbatim, including the last ending; it
+    // must not silently lose late text to a fixed-length summary.
+    expect(visualPacket.narrative.beats).toEqual(acceptedNarrative.beats)
+    expect(visualPacket.narrative.nodes).toEqual(acceptedNarrative.nodes)
+    expect(visualPacket.narrative.choices).toBeUndefined()
+    expect(visualPacket.sources).toContainEqual(expect.objectContaining({
+      artifactKey: 'content.narrative', version: narrativeRow.version,
+      contentHash: narrativeRow.contentHash, producerReceiptHash: narrativeRow.producerReceiptHash,
+    }))
+    expect(visualPacket.sources.map((source: { artifactKey: string }) => source.artifactKey)).toEqual([
+      'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+      'content.narrative', 'quality.adventure-review',
+    ])
+    expect(visualPacket.cast).toEqual(JSON.parse(visualInputRows.find(row => (
+      row.artifactKey === 'content.cast-bible'
+    ))!.payloadJson).characters.map((character: Record<string, unknown>) => ({
+      key: character.key, sourceResourceKey: character.sourceResourceKey,
+      name: character.name, role: character.role,
+      publicIdentity: character.publicIdentity, visualAnchor: character.visualAnchor,
+    })))
+    const visualContextInput = {
+      projectId: owned.scope.projectId, scope: owned.scope,
+      productProductionId: owned.productionId, productBuildId: build.id!,
+      productProductionTaskKey: 'media.requirements',
+      productArtifactKeys: visualPacket.sources.map((source: { artifactKey: string }) => source.artifactKey),
+    }
+    await expect(readTextAdventureVisualDirectionInputsV1({
+      ...visualContextInput, productProductionTaskKey: 'content.narrative',
+    })).rejects.toThrow('media.requirements taskKey')
+    await expect(readTextAdventureVisualDirectionInputsV1({
+      ...visualContextInput, productArtifactKeys: ['content.narrative'],
+    })).rejects.toThrow('Artifact 选择不完整')
+    await expect(readTextAdventureVisualDirectionInputsV1({
+      ...visualContextInput, scope: { ...owned.scope, workId: owned.scope.workId! + 999 },
+    })).rejects.toThrow('不存在或跨 Work')
+    const qualityRow = visualInputRows.find(row => row.artifactKey === 'quality.adventure-review')!
+    try {
+      await db.productBuildArtifacts.update(qualityRow.id!, {
+        payloadJson: JSON.stringify({ ...JSON.parse(qualityRow.payloadJson), passed: false }),
+      })
+      await expect(readTextAdventureVisualDirectionInputsV1(visualContextInput))
+        .rejects.toThrow('需要已通过的叙事审查')
+    } finally {
+      await db.productBuildArtifacts.update(qualityRow.id!, { payloadJson: qualityRow.payloadJson })
+    }
+    try {
+      await db.productBuildArtifacts.update(narrativeRow.id!, {
+        payloadJson: JSON.stringify({ ...acceptedNarrative, beats: [{
+          ...acceptedNarrative.beats[0], text: '完整末尾不能被截断'.repeat(30_000),
+        }] }),
+      })
+      await expect(readTextAdventureVisualDirectionInputsV1(visualContextInput))
+        .rejects.toThrow('完整正文未截断，未调用模型')
+    } finally {
+      await db.productBuildArtifacts.update(narrativeRow.id!, { payloadJson: narrativeRow.payloadJson })
+    }
     const qualityBatchRows = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
       .filter(row => row.artifactKey.startsWith('quality.adventure-review.'))
     expect(qualityBatchRows).toHaveLength(4)
@@ -7350,8 +7698,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(firstMainAlternative).toMatchObject({
       rule: { kind: 'random', abilityKey: 'ability.perception', difficulty: 10, costlySuccessFloor: 6 },
     })
-    expect(firstMainAlternative.successText).toContain('围绕“主线目标 1”')
-    expect(firstMainAlternative.successText).toContain('目标完成并让后续人物态度发生可见变化')
+    expect(firstMainAlternative.successText).toBe('你完成了主线目标 1，主线获得清晰进展。')
     expect(runtimePackage.adventure.items).toContainEqual(expect.objectContaining({
       key: 'item.product.field-notes', tags: expect.arrayContaining(['product-private']),
     }))
@@ -7551,10 +7898,15 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const repairedSceneContexts: string[] = []
     const repairedSceneSystems: string[] = []
     let failFirstRepairEpoch = true
+    let failRevisedNarrativeReview = true
     const runText: ProductionTextRunnerV1 = async request => {
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))
       if (!taskKey) throw new Error(`unknown blocking-review task:${request.system}`)
       taskCalls.set(taskKey, (taskCalls.get(taskKey) ?? 0) + 1)
+      if (!failFirstRepairEpoch && failRevisedNarrativeReview
+        && taskKey === 'content.adventure-quality-review.act-2') {
+        throw new Error('fixture revised narrative review empty response')
+      }
       if (taskKey === 'content.scene-script.act-1.part-1' && (taskCalls.get(taskKey) ?? 0) >= 2) {
         repairedSceneContexts.push(request.contextText)
         repairedSceneSystems.push(request.system)
@@ -7702,6 +8054,52 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         resolution: { action: 'retry', note: '保留原质量反馈并重试超时的主线修复' },
       },
     })
+    const reviewInterrupted = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText,
+      }),
+      capabilityBindings: [{
+        requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
+      }],
+    })
+    expect(reviewInterrupted.buildStatus).toBe('recovery-required')
+    const reviewInterruptedBuild = (await db.productBuilds.get(build.id!))!
+    expect(JSON.parse(reviewInterruptedBuild.failureJson).taskKey).toBe('content.adventure-quality-review.act-2')
+    const narrativeBeforeReviewRetry = (await db.productBuildArtifacts.where('[buildId+artifactKey]')
+      .equals([build.id!, 'content.narrative']).toArray())
+      .find(row => row.controlEpoch === reviewInterruptedBuild.controlEpoch && row.status === 'accepted')!
+    const callsBeforeReviewRetry = new Map(taskCalls)
+    failRevisedNarrativeReview = false
+    await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: {
+        type: 'resolve-blocker', commandId: 'text-adventure.quality-repair.retry-review-only',
+        expectedStateRevision: (await db.productProductions.get(owned.productionId))!.stateRevision,
+        blockerKey: 'content.adventure-quality-review.act-2', resolution: { action: 'retry', note: '仅恢复新版正文审查' },
+      },
+    })
+    await runProductProductionSchedulerCycleV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief, runText,
+      }),
+      capabilityBindings: [{ requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash }],
+    })
+    for (const type of ['pause', 'resume'] as const) {
+      const pauseFailure = JSON.parse((await db.productBuilds.get(build.id!))!.failureJson) as {
+        pausedProviderReservations?: Array<{ taskKey: string; runId: number; attempt: number; controlEpoch: number }>
+      }
+      await executeProductProductionCommand({
+        scope: owned.scope, productionId: owned.productionId,
+        command: { type, commandId: `quality-review-partial-carry.${type}`,
+          expectedStateRevision: (await db.productProductions.get(owned.productionId))!.stateRevision,
+          ...(type === 'pause' ? { reason: '审查重试开始前暂停，不能复活旧失败报告' }
+            : { pausedReservationDispositions: pauseFailure.pausedProviderReservations!.map(reservation => ({
+              ...reservation, disposition: 'charge-reservation-upper-bound' as const,
+            })) }) },
+      })
+    }
     const repaired = await runProductProductionUntilBlockedV1({
       scope: owned.scope, productionId: owned.productionId,
       executor: createConfiguredProductProductionExecutorV1({
@@ -7711,6 +8109,17 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
       }],
     })
+    for (const [taskKey, calls] of callsBeforeReviewRetry) {
+      if (taskKey.startsWith('content.scene-script.') || taskKey.startsWith('content.dialogue-pass.')) {
+        expect(taskCalls.get(taskKey), taskKey).toBe(calls)
+      }
+    }
+    const narrativeAfterReviewRetry = (await db.productBuildArtifacts.where('[buildId+artifactKey]')
+      .equals([build.id!, 'content.narrative']).toArray())
+      .find(row => row.controlEpoch === repaired.controlEpoch && row.status === 'accepted')
+    expect(narrativeAfterReviewRetry?.contentHash,
+      `projection=${JSON.stringify(repaired)} failure=${(await db.productBuilds.get(build.id!))?.failureJson}`,
+    ).toBe(narrativeBeforeReviewRetry.contentHash)
     expect(
       repaired,
       `quality repair projection=${JSON.stringify(repaired)} failure=${(await db.productBuilds.get(build.id!))?.failureJson}`,
@@ -7738,7 +8147,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       ['content.adventure-ambient-events', 1],
       ['content.adventure-quality-review.structure', 2],
       ['content.adventure-quality-review.act-1', 2],
-      ['content.adventure-quality-review.act-2', 2],
+      ['content.adventure-quality-review.act-2', 4],
       ['content.adventure-quality-review.act-3', 2],
       ['media.requirements', 1], ['qa.playtest-strategy', 1],
     ])

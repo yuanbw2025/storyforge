@@ -12,6 +12,8 @@ import {
   History,
   KeyRound,
   Loader2,
+  Maximize2,
+  Minimize2,
   Map,
   PackageOpen,
   Plus,
@@ -215,6 +217,7 @@ export default function AdventureGamePlayer(props: {
   const { config } = useAIConfigStore()
   const dialog = useDialog()
   const [panel, setPanel] = useState<AdventurePanel>(null)
+  const [immersive, setImmersive] = useState(false)
   const [commandText, setCommandText] = useState('')
   const [consoleResponse, setConsoleResponse] = useState<{ command: string; text: string } | null>(null)
   const [narrativePlayback, setNarrativePlayback] = useState<AdventureNarrativePlayback | null>(null)
@@ -671,7 +674,7 @@ export default function AdventureGamePlayer(props: {
   </div>
 
   return <div
-    className={`adventure-game adventure-player-v2${accessibility.highContrast ? ' adventure-high-contrast' : ''}${accessibility.reducedMotion ? ' adventure-reduced-motion' : ''}`}
+    className={`adventure-game adventure-player-v2${immersive ? ' adventure-immersive' : ''}${accessibility.highContrast ? ' adventure-high-contrast' : ''}${accessibility.reducedMotion ? ' adventure-reduced-motion' : ''}`}
     style={{
       '--adventure-font-scale': accessibility.fontScale,
       '--adventure-line-height': accessibility.lineHeight,
@@ -683,6 +686,7 @@ export default function AdventureGamePlayer(props: {
       <div><small>{presentationText(manifest.definition.title)}</small><strong>{locationTitle}</strong></div>
       <span className="adventure-autosave"><CircleDot />自动保存已开启</span>
       <nav aria-label="冒险功能">
+        <button onClick={() => setImmersive(value => !value)} aria-label={immersive ? '退出沉浸阅读' : '进入沉浸阅读'}>{immersive ? <Minimize2 /> : <Maximize2 />}沉浸</button>
         {adventureV2 && <button onClick={() => setPanel('character')}><CircleDot />角色</button>}
         {adventureV2 && <button onClick={() => setPanel('world')}><Map />地图</button>}
         <button onClick={() => setPanel('inventory')}><Backpack />背包 <b>{playerItems.reduce((sum, item) => sum + item.quantity, 0)}</b></button>
@@ -701,7 +705,7 @@ export default function AdventureGamePlayer(props: {
       <div className="adventure-console">
         {currentIllustrationAsset && mediaUrls[currentIllustrationAsset.assetKey] && <figure className="adventure-scene-illustration">
           <img src={mediaUrls[currentIllustrationAsset.assetKey]} alt={currentIllustrationAsset.altText} />
-          <figcaption>{currentIllustrationAsset.name}</figcaption>
+          <figcaption>{locationTitle}</figcaption>
         </figure>}
         {!!mediaFailures.length && <details className="adventure-media-fallback"><summary>插图已降级为纯文字</summary><p>{mediaFailures.map(item => `${item.assetKey}：${item.reason}`).join('；')}</p></details>}
         <section className="adventure-console-prologue">
@@ -717,7 +721,7 @@ export default function AdventureGamePlayer(props: {
         </section>
 
         <section className="adventure-console-log" role="log" aria-label="冒险文字记录" aria-live="polite">
-          {!transcript.length && <article className="adventure-console-system"><p>故事从这里开始。输入“帮助”查看命令，也可以直接描述你想做的事。</p></article>}
+          {!transcript.length && <article className="adventure-console-system"><p>先观察现场，收集线索或与在场角色交谈。完成当前目标后，关键选择会解锁。输入“帮助”可查看命令。</p></article>}
           {transcript.map(entry => {
             const generatedText = store.generatedNarrative?.evidenceEventSequences.includes(entry.eventSequence)
               ? store.generatedNarrative.narrative
@@ -750,6 +754,7 @@ export default function AdventureGamePlayer(props: {
               >{currentUnitComplete
                   ? playback.unitIndex < sequencedBlocks.length - 1 ? '继续' : '读完本段'
                   : '跳过打字'}<ChevronRight /></button>}
+              {playback && <button type="button" className="adventure-console-polish" onClick={() => setNarrativePlayback(null)}><BookOpenCheck />展开本场全文</button>}
               {!playback && !!entry.changes.length && <ul>{entry.changes.map((change, index) => <li key={`${entry.eventSequence}:${index}`}>{change}</li>)}</ul>}
               {!playback && entry.eventSequence === lastAction?.eventSequence && aiReady && <button className="adventure-console-polish" disabled={store.busy || generating} onClick={() => void run(() => store.narrateLastResult(resolved.config))}><Sparkles />让主 Agent 润色本次结果</button>}
             </article>
@@ -760,7 +765,7 @@ export default function AdventureGamePlayer(props: {
           {!!store.recoverableRunIds.length && <details className="adventure-console-recovery"><summary>恢复未完成的主 Agent 行动</summary><p>候选已经保存在统一 Harness 中，可以从原检查点继续，不会重复调用模型。</p>{store.recoverableRunIds.map(runId => <button key={runId} disabled={store.busy || generating} onClick={() => void run(() => store.resumeRun(runId))}>恢复行动 #{runId}</button>)}</details>}
         </section>
 
-        {!!progressionChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>关键推进已经解锁</small>{progressionChoices.map(choice => { const action = narrativeActionByChoice.get(choice.choiceKey); return <button key={choice.choiceKey} title={action && !action.available ? presentationText(action.reason) : undefined} disabled={store.busy || narrativeReading || (action != null && !action.available)} onClick={() => void run(() => store.choose(choice.choiceKey))}>{presentationText(choice.text)}<ChevronRight /></button> })}</section>}
+        {!!progressionChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>{progressionChoices.some(choice => narrativeActionByChoice.get(choice.choiceKey)?.available !== false) ? '选择接下来的行动' : '先完成现场探索，继续故事'}</small>{progressionChoices.map(choice => { const action = narrativeActionByChoice.get(choice.choiceKey); return <button key={choice.choiceKey} title={action && !action.available ? presentationText(action.reason) : undefined} disabled={store.busy || narrativeReading || (action != null && !action.available)} onClick={() => void run(() => store.choose(choice.choiceKey))}>{presentationText(choice.text)}<ChevronRight /></button> })}</section>}
         {!!endingChoices.length && !store.runtimeState.narrative?.completed && <section className="adventure-console-choices"><small>最终抉择已经解锁</small>{endingChoices.map(choice => { const action = narrativeActionByChoice.get(choice.choiceKey); return <button key={choice.choiceKey} title={action && !action.available ? presentationText(action.reason) : undefined} disabled={store.busy || narrativeReading || (action != null && !action.available)} onClick={() => void run(() => store.choose(choice.choiceKey))}>{presentationText(choice.text)}<ChevronRight /></button> })}</section>}
         {store.runtimeState.narrative?.completed && <section className="adventure-console-ending"><BookOpenCheck /><div><small>冒险结束</small><h2>{store.runtimeState.narrative.nodes.find(item => item.key === store.runtimeState.narrative?.endingKey)?.title}</h2><p>这条时间线已经完整保存。你可以回顾关键决定，或从检查点探索另一种结果。</p></div><span><button onClick={() => setPanel('ending')}><BookOpenCheck />结局因果</button><button onClick={() => setPanel('saves')}><GitBranch />查看时间线</button></span></section>}
 
@@ -871,7 +876,7 @@ export default function AdventureGamePlayer(props: {
       </section>)}</div>}
       {panel === 'relationships' && <div className="adventure-system-grid">{relationshipProfiles.map(({ profile, values, changes }) => <article key={profile.participantKey}><small>{profile.roleLabel || '同行者'}</small><strong>{profile.name}</strong><p>{values.length ? '关系由玩家行动的正式事件推进。' : '尚未形成可量化的关系变化。'}</p>{values.map(value => <dl key={`${value.dimensionKey}:${value.toParticipantKey}`}><div><dt>{value.label}</dt><dd>{value.value}</dd></div></dl>)}{changes.slice(-2).map(change => <span key={change.eventSequence}>{change.delta > 0 ? '+' : ''}{change.delta} · {change.reason}</span>)}</article>)}{!relationshipProfiles.length && <div className="adventure-empty">当前发布包没有可互动角色。</div>}</div>}
       {panel === 'ending' && <div className="adventure-ending-review"><header><small>抵达结局</small><strong>{store.runtimeState.narrative?.nodes.find(item => item.key === store.runtimeState.narrative?.endingKey)?.title ?? '尚未抵达结局'}</strong><p>以下只引用这条时间线已提交的选择与行动，不由 AI 临时补写。</p></header>{endingJourney.map((item, index) => <article key={item.eventSequence}><i>{index + 1}</i><div><small>选择 #{item.eventSequence}</small><strong>{item.label}</strong><p>进入：{item.targetTitle}</p></div></article>)}{!!adventure.conditions.length && <section><small>持久后果</small>{adventure.conditions.map(condition => <span key={`${condition.conditionKey}:${condition.appliedSequence}`}>{manifest.adventure.conditions.find(item => item.key === condition.conditionKey)?.title ?? condition.conditionKey}</span>)}</section>}{!endingJourney.length && <div className="adventure-empty">完成冒险后，这里会列出抵达结局的关键决定链。</div>}</div>}
-      {panel === 'accessibility' && <div className="adventure-accessibility"><label><span>正文字号</span><select aria-label="正文字号" value={accessibility.fontScale} onChange={event => setAccessibility(current => ({ ...current, fontScale: Number(event.target.value) }))}><option value={0.9}>较小</option><option value={1}>标准</option><option value={1.15}>较大</option><option value={1.3}>特大</option></select></label><label><span>正文行距</span><select aria-label="正文行距" value={accessibility.lineHeight} onChange={event => setAccessibility(current => ({ ...current, lineHeight: Number(event.target.value) }))}><option value={1.6}>紧凑</option><option value={1.9}>标准</option><option value={2.2}>宽松</option></select></label><label><span>高对比度</span><input type="checkbox" checked={accessibility.highContrast} onChange={event => setAccessibility(current => ({ ...current, highContrast: event.target.checked }))} /></label><label><span>减少动态效果</span><input type="checkbox" checked={accessibility.reducedMotion} onChange={event => setAccessibility(current => ({ ...current, reducedMotion: event.target.checked }))} /></label><button onClick={() => setAccessibility(DEFAULT_ACCESSIBILITY)}>恢复默认</button></div>}
+      {panel === 'accessibility' && <div className="adventure-accessibility"><label><span>沉浸阅读</span><input type="checkbox" checked={immersive} onChange={event => setImmersive(event.target.checked)} /></label><label><span>正文字号</span><select aria-label="正文字号" value={accessibility.fontScale} onChange={event => setAccessibility(current => ({ ...current, fontScale: Number(event.target.value) }))}><option value={0.9}>较小</option><option value={1}>标准</option><option value={1.15}>较大</option><option value={1.3}>特大</option></select></label><label><span>正文行距</span><select aria-label="正文行距" value={accessibility.lineHeight} onChange={event => setAccessibility(current => ({ ...current, lineHeight: Number(event.target.value) }))}><option value={1.6}>紧凑</option><option value={1.9}>标准</option><option value={2.2}>宽松</option></select></label><label><span>高对比度</span><input type="checkbox" checked={accessibility.highContrast} onChange={event => setAccessibility(current => ({ ...current, highContrast: event.target.checked }))} /></label><label><span>减少动态效果</span><input type="checkbox" checked={accessibility.reducedMotion} onChange={event => setAccessibility(current => ({ ...current, reducedMotion: event.target.checked }))} /></label><button onClick={() => setAccessibility(DEFAULT_ACCESSIBILITY)}>恢复默认</button></div>}
       {panel === 'journal' && <div className="adventure-journal">{[...adventure.actionHistory].reverse().map(item => <article key={item.eventSequence}><i>{item.eventSequence}</i><div><small>{ACTION_KIND[item.kind]} · {item.outcome === 'success' ? '成功' : item.outcome}</small><strong>{manifest.adventure.actions.find(value => value.key === item.actionKey)?.label ?? item.actionKey}</strong><p>{item.narrative}</p></div></article>)}{!adventure.actionHistory.length && <div className="adventure-empty">你的冒险还没有留下行动记录。</div>}</div>}
       {panel === 'saves' && <div className="adventure-save-panel"><section><h3><Save />保存检查点</h3><div><input value={checkpointName} onChange={event => setCheckpointName(event.target.value)} placeholder="为此刻命名" /><button disabled={!checkpointName.trim()} onClick={() => void run(async () => { await store.saveCheckpoint(checkpointName); setCheckpointName('') })}>保存</button></div></section><section><h3><GitBranch />已有检查点</h3>{store.checkpoints.map(item => <button key={item.id} onClick={() => void run(() => store.forkCheckpoint(item.id!))}><span><strong>{item.name}</strong><small>事件 #{item.throughSequence} · {formatTime(item.createdAt)}</small></span><b>从这里分支</b></button>)}{!store.checkpoints.length && <p>行动会自动保存；你也可以为重要时刻建立手动检查点。</p>}</section><section><h3><GitBranch />当前时间线分支</h3><div><input value={branchTitle} onChange={event => setBranchTitle(event.target.value)} placeholder="新时间线名称" /><button disabled={!branchTitle.trim()} onClick={() => void run(async () => { await store.forkCurrent(branchTitle); setBranchTitle(''); setPanel(null) })}>建立分支</button></div></section></div>}
       {panel === 'saves' && <section className="adventure-runtime-identity">

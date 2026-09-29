@@ -284,7 +284,7 @@ test('作者退回单图后从真实文件输入派生新 Build，并只在新 h
   ])
 })
 
-test('作者退回意见绑定旧图 hash 与失败回执，单图重生成只让图片任务消费 repair feedback', async ({ page }) => {
+for (const mode of ['single', 'batch'] as const) test(`作者退回意见绑定旧图 hash 与失败回执，${mode} 重生成只让图片任务消费 repair feedback`, async ({ page }) => {
   test.setTimeout(90_000)
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'text-adventure-author-repair-e2e')
@@ -314,12 +314,15 @@ test('作者退回意见绑定旧图 hash 与失败回执，单图重生成只�
   await expect(noteInput).toHaveValue(note)
   await first.getByRole('button', { name: '退回修改' }).click()
   await expect(first.getByRole('button', { name: '退回修改' })).toHaveAttribute('aria-pressed', 'true')
-  await second.getByRole('button', { name: '接受此图' }).click()
-  await expect(second.getByRole('button', { name: '接受此图' })).toHaveAttribute('aria-pressed', 'true')
+  await second.getByRole('button', { name: mode === 'batch' ? '退回修改' : '接受此图' }).click()
+  if (mode === 'batch') await second.getByRole('textbox').fill('第二张清除伪文字，保留原场景。')
+  await expect(second.getByRole('button', { name: mode === 'batch' ? '退回修改' : '接受此图' })).toHaveAttribute('aria-pressed', 'true')
   const freezeReview = media.getByRole('button', { name: '冻结本次逐图审查回执' })
   await expect(freezeReview).toBeEnabled()
   await freezeReview.click()
-  const regenerate = first.getByRole('button', { name: '按作者意见重生成' })
+  const regenerate = mode === 'batch'
+    ? media.getByRole('button', { name: '按已冻结意见批量返修 2 张' })
+    : first.getByRole('button', { name: '按作者意见重生成' })
   await expect(regenerate).toBeEnabled()
   await regenerate.click()
   await expect.poll(async () => page.evaluate(async productionId => {
@@ -349,13 +352,14 @@ test('作者退回意见绑定旧图 hash 与失败回执，单图重生成只�
       sourceReceiptHash: payload.sourceReview.gateReceiptHash,
       priorContentHash: payload.targets[0].priorContentHash,
       issue: payload.targets[0].issues[0],
+      targetCount: payload.targets.length,
       imageInputs: imageTask.inputArtifactKeys,
       qaConsumesFeedback: qaTasks.some((task: any) => task.inputArtifactKeys.includes('media.repair-feedback')),
       note,
     }
   }, { productionId: seeded.productionId, note })
   expect(repair).toMatchObject({
-    parentStatus: 'preview-ready', childNumber: 2,
+    parentStatus: 'preview-ready', childNumber: 2, targetCount: mode === 'batch' ? 2 : 1,
     receiptHash: expect.stringMatching(/^[a-f0-9]{64}$/),
     feedbackParentHash: repair.receiptHash, carriedFrom: null,
     sourceReceiptHash: repair.receiptHash,
@@ -364,4 +368,55 @@ test('作者退回意见绑定旧图 hash 与失败回执，单图重生成只�
     imageInputs: expect.arrayContaining(['media.repair-feedback']), qaConsumesFeedback: false,
   })
   expect(imageRequests).toBe(0)
+})
+
+test('Visual QA 阻塞时可直接上传同画幅高分辨率替换，旧 Build 与原图保持不变', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'visual-recovery-upload'))
+  await page.goto('./')
+  const seeded = await page.evaluate(async imageBase64 => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const fixture = await importer('/storyforge/tests/helpers/text-adventure-media-revision-workbench.ts')
+    const seeded = await fixture.seedTextAdventureMediaRevisionWorkbenchV1(imageBase64)
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const { hashProductProductionValueV2 } = await importer('/storyforge/src/lib/product-production/hash.ts')
+    const review = await db.productBuildArtifacts.where('[buildId+artifactKey]')
+      .equals([seeded.parentBuildId, 'quality.visual-review']).first()
+    const report = JSON.parse(review.payloadJson)
+    report.status = 'revision-required'
+    report.reviews[0].verdict = 'replace'
+    report.reviews[0].issues = [{ severity: 'blocking', category: 'identity', detail: '角色不一致', recommendation: '替换人物' }]
+    await db.productBuildArtifacts.update(review.id, { payloadJson: JSON.stringify(report), contentHash: await hashProductProductionValueV2(report) })
+    await db.productBuilds.update(seeded.parentBuildId, { status: 'recovery-required', failureJson: JSON.stringify({
+      taskKey: 'integration.package', detail: '商业候选的独立图片审查未通过:revision-required',
+    }) })
+    await db.productProductions.update(seeded.productionId, { status: 'producing' })
+    return seeded
+  }, solidPng(1280, 720, [20, 50, 80, 255]).toString('base64'))
+  await openTextAdventurePage(page, seeded.scope, 'production')
+  const media = page.getByTestId('text-adventure-media-authoring')
+  await expect(media).toContainText('Visual QA 退回 1 张图片')
+  const first = media.locator('article').filter({ hasText: 'media.visual.001' })
+  await expect(first.locator('input[type="file"]')).toBeEnabled()
+  await media.getByLabel('我确认允许商业使用').check()
+  await media.getByLabel('我确认允许随导出包与社区作品再分发').check()
+  await first.locator('input[type="file"]').setInputFiles({
+    name: 'corrected-image.png', mimeType: 'image/png', buffer: solidPng(1536, 864, [70, 100, 140, 255]),
+  })
+  await expect(page.getByTestId('product-production-command-activity')).toContainText('修订图片 · upload-replacement · succeeded')
+  const lineage = await page.evaluate(async ({ productionId, parentBuildId }) => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const child = await db.productBuilds.where('[productionId+buildNumber]').equals([productionId, 2]).first()
+    const old = await db.productBuildArtifacts.where('[buildId+artifactKey]').equals([parentBuildId, 'media.visual.001']).first()
+    const replaced = await db.productBuildArtifacts.where('[buildId+artifactKey]').equals([child.id, 'media.visual.001']).first()
+    return { parentStatus: (await db.productBuilds.get(parentBuildId)).status,
+      parentBuildNumber: child.parentBuildNumber, priorHash: replaced.parentArtifactHash,
+      originalHash: old.contentHash, newHash: replaced.contentHash, metadata: JSON.parse(replaced.metadataJson) }
+  }, seeded)
+  expect(lineage.parentStatus).toBe('recovery-required')
+  expect(lineage.parentBuildNumber).toBe(1)
+  expect(lineage.priorHash).toBe(lineage.originalHash)
+  expect(lineage.newHash).not.toBe(lineage.originalHash)
+  expect(lineage.metadata).toMatchObject({ width: 1536, height: 864, source: 'author-upload' })
 })

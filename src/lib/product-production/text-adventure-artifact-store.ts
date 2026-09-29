@@ -1,3 +1,4 @@
+import { readAgentRunV1 } from '../agent/run/event-store'
 import Dexie from 'dexie'
 import { db } from '../db/schema'
 import type {
@@ -193,6 +194,41 @@ export async function readAcceptedBuildArtifacts(input: {
  * the new scheduler records its reuse receipt in the Build ledger rather than
  * pretending that a newer Run produced the immutable bytes.
  */
+export async function verifiedHumanImportCarryProofsV1(input: { scope: WorkspaceScope; buildId: number; fromControlEpoch: number; artifactKeys: string[] }): Promise<Map<number, string>> {
+  const scope = input.scope
+  const keys = input.artifactKeys
+  // Human imports deliberately retain null producer pointers. Their completed
+  // zero-provider Run, rather than a fabricated producer, proves epoch reuse.
+  const importProofs = new Map<number, string>()
+  const rowsBeforeCarry = await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray()
+  const importRows = rowsBeforeCarry.filter(row => row.id != null && keys.includes(row.artifactKey)
+    && row.controlEpoch <= input.fromControlEpoch && row.producerRunId == null && row.producerReceiptHash == null)
+  if (importRows.length > 0) {
+    const runs = await db.agentRuns.where('productBuildId').equals(input.buildId).toArray()
+    for (const row of importRows) {
+      const expectedCandidate = await hashProductProductionValueV2([{
+        artifactKey: row.artifactKey, contentHash: row.contentHash,
+        carriedFrom: row.carriedFrom, parentArtifactHash: row.parentArtifactHash,
+      }])
+      for (const run of runs) {
+        if (run.id == null || run.status !== 'completed' || !isSha256Hash(run.terminalReceiptHash ?? '')) continue
+        const contract = JSON.parse(run.contractJson)
+        if (contract.scope?.productProduction?.taskKey !== row.artifactKey
+          || contract.scope?.productProduction?.controlEpoch !== row.controlEpoch) continue
+        const snapshot = await readAgentRunV1(scope, run.id)
+        if (snapshot.projection.state !== 'completed'
+          || snapshot.events.some(event => event.type === 'model.requested')
+          || !snapshot.events.some(event => event.type === 'verification.started'
+            && event.payload.verifierSetVersion === 'product-production-carried-task-v1')
+          || !snapshot.events.some(event => event.type === 'step.succeeded'
+            && event.payload.outputHash === expectedCandidate)) continue
+        importProofs.set(row.id!, canonicalProductProductionJsonV2(row))
+      }
+    }
+  }
+  return importProofs
+}
+
 export async function carryForwardProductBuildArtifactsToEpochV1(input: {
   scope: WorkspaceScope
   buildId: number
@@ -215,6 +251,9 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
   }
   const keys = [...new Set(input.artifactKeys.map(value => stableKey(value, 'artifactKey')))]
   if (keys.length !== input.artifactKeys.length) throw new Error('[product-production-artifact] carry-forward keys 重复')
+  const importProofs = await verifiedHumanImportCarryProofsV1(input)
+  const hasImportProof = (row: ProductBuildArtifactRecordV1) => row.id != null
+    && importProofs.get(row.id) === canonicalProductProductionJsonV2(row)
   return db.transaction('rw', scopeTransactionTables(
     db.productProductions, db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
   ), async () => {
@@ -234,18 +273,30 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
       const immediate = allRows.filter(row => row.artifactKey === artifactKey
         && row.controlEpoch === input.fromControlEpoch
         && isSha256Hash(row.contentHash)
-        && isSha256Hash(row.producerReceiptHash ?? '')
+        && (isSha256Hash(row.producerReceiptHash ?? '') || hasImportProof(row))
         && (row.status === 'accepted' || row.status === 'carried-forward'
           || (input.allowInvalidSourceAtFromEpoch === true && row.status === 'invalid')))
       if (immediate.length > 1) {
         throw new Error(`[product-production-artifact] carry-forward 当前来源 key 不唯一:${artifactKey}`)
       }
       let source = immediate[0]
+      // A previous recovery may have skipped an import solely because its
+      // producer pointers are intentionally null. Reuse only its verified
+      // zero-provider receipt; never substitute historical generated content.
+      if (!source) {
+        const imports = allRows.filter(row => row.artifactKey === artifactKey
+          && row.controlEpoch <= input.fromControlEpoch && hasImportProof(row))
+          .sort((left, right) => right.controlEpoch - left.controlEpoch || right.version - left.version)
+        if (imports.filter(row => row.controlEpoch === imports[0]?.controlEpoch).length > 1) {
+          throw new Error(`[product-production-artifact] import 来源不唯一:${artifactKey}`)
+        }
+        source = imports[0]
+      }
       if (!source && input.allowHistoricalInvalidSourceBeforeEpoch === true) {
         const historical = allRows.filter(row => row.artifactKey === artifactKey
           && row.controlEpoch <= input.fromControlEpoch
           && isSha256Hash(row.contentHash)
-          && isSha256Hash(row.producerReceiptHash ?? '')
+          && (isSha256Hash(row.producerReceiptHash ?? '') || hasImportProof(row))
           && (row.status === 'accepted' || row.status === 'carried-forward' || row.status === 'invalid'))
           .sort((left, right) => right.controlEpoch - left.controlEpoch || right.version - left.version)
         const latestEpoch = historical[0]?.controlEpoch

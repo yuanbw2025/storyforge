@@ -592,10 +592,16 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
 
   if (travelActionModule) {
     const travelActions = actionRows.filter(action => action.category === 'travel')
+    // Count the already validated keys once; scanning every action for every
+    // effect makes large frozen maps repeatedly block the player main thread.
+    const travelEffectOwnerCounts = new Map<string, number>()
     const routeKeys = travelActions.map(action => {
       const label = `travel action ${String(action.key)}`
       const origins = strings(action.locationKeys, `${label}.locationKeys`)
       const successEffectKeys = strings(action.successEffectKeys, `${label}.successEffectKeys`)
+      for (const effectKey of successEffectKeys) {
+        travelEffectOwnerCounts.set(effectKey, (travelEffectOwnerCounts.get(effectKey) ?? 0) + 1)
+      }
       const successEffects = successEffectKeys.map(effectKey => effects.find(effect => effect.key === effectKey)!)
       const operations = successEffects.map(effect => String(effect.operation))
       if (action.actorScope !== 'player' || action.targetScope !== 'location' || origins.length !== 1
@@ -624,8 +630,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     ])
     requireSameKeys(routeKeys, expectedRouteKeys, '普通旅行Action路线覆盖')
     effects.filter(effect => effect.operation === 'start-travel').forEach(effect => {
-      const owners = travelActions.filter(action => strings(action.successEffectKeys, `travel action ${String(action.key)} effects`).includes(String(effect.key)))
-      if (owners.length !== 1) fail(`start-travel Effect必须且只能属于一个普通旅行Action:${String(effect.key)}`)
+      if (travelEffectOwnerCounts.get(String(effect.key)) !== 1) fail(`start-travel Effect必须且只能属于一个普通旅行Action:${String(effect.key)}`)
     })
     actionRows.filter(action => action.category !== 'travel').forEach(action => {
       const referenced = [...strings(action.costEffectKeys, `action ${String(action.key)} costs`), ...strings(action.successEffectKeys, `action ${String(action.key)} success`), ...strings(action.failureEffectKeys, `action ${String(action.key)} failures`)]

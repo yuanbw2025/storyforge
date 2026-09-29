@@ -72,6 +72,7 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 
 ## 4. 预算与并发
 
+- 主线任务规划独立预留 42,240 输入 token（528k 基线）：实测完整 Brief/上游工件为 26,921，冻结世界上下文为 5,542，另保留请求封装余量。旧 32k 合同的合并输入失败可通过执行计划升级生成不可变子 Build，按 hash 携带已签收工件；不得原地改冻结计划或截断内容。
 - 总预算由 Brief 授权，再按故事规划、任务、正文、审校和媒资明确分配；正文任务按目标可见字量分配，不用一个超长主线调用吞掉全部预算。
 - `maxOutputTokens` 是 Skill 的可见生成上限，Plan reservation 是包含 Provider 隐藏推理的可计费用量上限，两者不得混为一谈。六个 Scene Writer Run 在 24k 可见上限外各预留有界 8k 推理余量；执行计划升级必须改变 task-local reservation，而不是只放大被固定 baseline 截住的 Brief 总预算。
 - 同一 Agent 的场景包可在不重叠的 subject lock 下并行；主线任务与系统完成前不得提前写场景。
@@ -96,3 +97,9 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 ## 6. 可观察性
 
 生产事件至少包含 `planned/ready/running/progress/candidate/validating/awaiting-author/accepted/stale/paused/failed/completed`。进度不是虚构百分比：每个阶段按已冻结子任务和权重计算，并显示事实，如“场景正文 4/12 完成”“角色锚点 2/5 已审”。刷新后从 durable ledger 恢复同一状态。
+
+### 累计时间容量修订
+
+在未发布 Build 的暂停态，可通过同一内容修订命令提高系统稿的 `clock.maximum`。命令绑定原稿版本、hash 和正式回执，只允许提高这一数值；初值、下限、资源 key、行动成本及其他字段变化均拒绝。系统稿仍经正式 parser 采纳；正文、任务文本和媒资保留，确定性运行包装配、自动试玩与发布质检重新执行。它修正累计分钟数的容量，不改变剧情中的行动代价或代替截止时间规则。
+
+作者上传图片的 producer 指针保持为空；跨 epoch 复用必须验证对应任务、epoch、候选 hash 与已完成的零模型调用 carried Run 回执。读取到的完整工件还须在写入事务内保持一致。此类明确导入的字节不因后续图片 Provider 绑定变化而重新生成；缺失或篡改证明仍拒绝复用。

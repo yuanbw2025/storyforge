@@ -240,6 +240,7 @@ function narrativeBlockForBeat(
   const entrySpeakerKey = entryDialogueSpeakerKey(manifest)
   const profile = beat.speakerKey ? profileForSpeaker(manifest, beat.speakerKey) : null
   const speaker = profile?.name
+    ?? (beat.speakerKey === 'character.player' && manifest.adventure.playerIdentity ? '你' : null)
     ?? (beat.speakerKey === entrySpeakerKey ? player?.name : null)
     ?? '人物'
   return { kind: 'dialogue', speaker, text: beat.text }

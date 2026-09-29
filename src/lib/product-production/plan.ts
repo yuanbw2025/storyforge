@@ -23,6 +23,9 @@ const FAILURE_POLICIES = ['fail-build', 'pause', 'fallback', 'skip-optional'] as
 // One image per Run keeps retries, receipts, budgets and repair lineage
 // truthful instead of treating provider batch cardinality as a prompt concern.
 export const TEXT_ADVENTURE_VISUAL_REVIEW_BATCH_SIZE_V1 = 1
+export const TEXT_ADVENTURE_SCENE_SCRIPT_INPUT_CEILING_V1 = 31_680
+export const TEXT_ADVENTURE_MAIN_QUEST_INPUT_CEILING_V1 = 42_240
+export const TEXT_ADVENTURE_QUALITY_REVIEW_TIMEOUT_MS_V1 = 360_000
 
 export type TextAdventureQualityReviewTaskKeyV1 =
   `content.adventure-quality-review.${TextAdventureQualityReviewScopeV1}`
@@ -579,9 +582,11 @@ export async function createProductProductionPlanV3(input: {
     // reviewed 200k baseline so hidden reasoning cannot invalidate an otherwise
     // bounded receipt; the Build-lifetime ledger remains the hard ceiling.
     'media.requirements': 0.035,
-    // One tiny real image-input request proves the configured text model can
-    // observe image bytes before any paid Agnes generation is admitted.
-    'media.vision-preflight': 0.002,
+    // The live four-color check returned 427 output tokens including provider
+    // reasoning; its old 400-token reservation rejected an otherwise valid
+    // observation. Reserve 2k at the reviewed baseline, still inside the same
+    // Build-lifetime envelope and with one bounded vision call.
+    'media.vision-preflight': 0.01,
     // Each bounded Visual QA Run reviews one frozen image. A live repair
     // review used 2,782 billable output tokens because the provider included
     // detailed issue evidence and recommendations. Reserve 4,000 at the
@@ -603,24 +608,25 @@ export async function createProductProductionPlanV3(input: {
   // ceiling while retaining aggregate input headroom for retries. The
   // append-only Build ledger below the Plan remains the hard authority.
   const textAdventureInputWeights: Record<string, number> = {
+    // Live flagship planning needs 26,921 tokens of exact Brief/artifacts
+    // plus 5,542 of frozen world context, before provider framing. Give the
+    // mainline its own ceiling instead of the generic 32k allocation.
+    'content.main-quest-plan': TEXT_ADVENTURE_MAIN_QUEST_INPUT_CEILING_V1 / 528_000,
     // Media direction reads the complete accepted narrative closure so every
     // illustration is traceable to a real scene beat. The 60-minute golden
     // fixture produces a 57,774-token exact packet; reserve 63,360 tokens at
     // the reviewed 528k baseline instead of truncating story-to-image evidence.
     'media.requirements': 0.12,
-    // Scene repair must carry the complete previously accepted prose bundle,
-    // not a lossy summary. A live baseline-preserving repair consumed 19,369
-    // input tokens after packet, repair evidence, full baseline, system schema
-    // and provider framing were accounted together. Reserve 23,760 in the
-    // reviewed 528k task baseline (22.7% measured headroom) for both initial
-    // and repair attempts; the append-only Build ledger remains the aggregate
-    // authority and charges actual usage only.
-    'content.scene-script.act-1.part-1': 0.045,
-    'content.scene-script.act-1.part-2': 0.045,
-    'content.scene-script.act-2.part-1': 0.045,
-    'content.scene-script.act-2.part-2': 0.045,
-    'content.scene-script.act-3.part-1': 0.045,
-    'content.scene-script.act-3.part-2': 0.045,
+    // Scene repair preserves the complete previous prose. A live v7 repair
+    // required 25,615 tokens before dispatch, exceeding the old 23,760 limit.
+    // Reserve 31,680 at the 528k baseline, keeping room for provider framing
+    // without trimming accepted prose or changing the aggregate Build limit.
+    'content.scene-script.act-1.part-1': TEXT_ADVENTURE_SCENE_SCRIPT_INPUT_CEILING_V1 / 528_000,
+    'content.scene-script.act-1.part-2': TEXT_ADVENTURE_SCENE_SCRIPT_INPUT_CEILING_V1 / 528_000,
+    'content.scene-script.act-2.part-1': TEXT_ADVENTURE_SCENE_SCRIPT_INPUT_CEILING_V1 / 528_000,
+    'content.scene-script.act-2.part-2': TEXT_ADVENTURE_SCENE_SCRIPT_INPUT_CEILING_V1 / 528_000,
+    'content.scene-script.act-3.part-1': TEXT_ADVENTURE_SCENE_SCRIPT_INPUT_CEILING_V1 / 528_000,
+    'content.scene-script.act-3.part-2': TEXT_ADVENTURE_SCENE_SCRIPT_INPUT_CEILING_V1 / 528_000,
     // A complete 60-minute third act produced a 17,425-token registered
     // Dialogue Editor packet before the system/schema/provider framing was
     // added. Keep the whole act together for character voice and knowledge
@@ -1143,7 +1149,7 @@ export async function createProductProductionPlanV3(input: {
         capabilityRequirementKeys: textCapabilities, concurrencyGroup: 'text-provider',
         subjectLockKeys: [artifactKey], priority: 78 - index,
         budgetReservation: modelBudget(taskKey),
-        maxAttempts: 2, timeoutMs: 360_000, failurePolicy: 'pause', fallbackTaskKey: null,
+        maxAttempts: 2, timeoutMs: TEXT_ADVENTURE_QUALITY_REVIEW_TIMEOUT_MS_V1, failurePolicy: 'pause', fallbackTaskKey: null,
         acceptanceGateIds: ['artifact.protocol', 'adventure.narrative-quality-review-batch'],
       }))
     })

@@ -159,7 +159,7 @@ Provider 的缓存必须同时绑定 release UID、content hash 与投影版本�
 - 世界切换、多世界切换和作品切换必须使缓存、Context Gateway 和候选失效。
 - immutable release 按 content hash 读取；不得读取“最新草稿”替代锁定版本。世界衍生产品还必须核对 `WorldReference`、`ProductSourcePlan`、`ProductSourceManifest` 与 ProductRelease 谱系一致。
 - 事务内不能等待可能导致 Dexie 提前提交的外部异步工作；先准备数据，再开启最小事务。
-- 导入不信任外部 JSON；先解析、校验、规划映射，再原子提交。
+- 导入不信任外部 JSON；先解析、校验、规划映射，再原子提交。首页与工作区的 JSON 文件入口复用 `readProjectJSONFile()` 分段读取；项目总大小不得退回单字符串读取或仅在首页设置额外上限。单记录限制与备份信任校验继续生效。
 
 ## 9. 验收
 

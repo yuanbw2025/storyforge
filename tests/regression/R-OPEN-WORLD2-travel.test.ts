@@ -102,6 +102,19 @@ describe('Text Open World vNext · governed ordinary travel and early arrival', 
     expect(parseTextOpenWorldModulesV1(legacy).actions.actions.some(action => action.category === 'travel')).toBe(false)
   })
 
+  it('每次解析重新核验旅行Effect归属，拒绝有效包后追加的无主行程', () => {
+    const runtimePackage = createTextOpenWorldVNextFixture()
+    expect(() => parseTextOpenWorldModulesV1(runtimePackage)).not.toThrow()
+    const actions = runtimePackage.modules.actions.payload as any
+    const orphan = structuredClone(actions.effects.find((effect: any) => effect.operation === 'start-travel'))
+    orphan.key = 'effect.travel-orphan-start'
+    actions.effects.push(orphan)
+    expect(() => parseTextOpenWorldModulesV1(runtimePackage))
+      .toThrow('start-travel Effect必须且只能属于一个普通旅行Action:effect.travel-orphan-start')
+    actions.effects.pop()
+    expect(() => parseTextOpenWorldModulesV1(runtimePackage)).not.toThrow()
+  })
+
   it('运行时再次拒绝关闭道路和单向道路的反向行程', async () => {
     const closed = createTextOpenWorldVNextFixture()
     const closedProjection = createInitialTextOpenWorldSessionProjectionV1(closed)

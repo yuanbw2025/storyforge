@@ -83,6 +83,7 @@ import { detectProductImageDimensionsV1, detectProductMediaMimeTypeV1 } from './
 import { useAIConfigStore } from '../../stores/ai-config'
 import {
   assertProductProductionBudgetLedgerV1,
+  prepareLegacyPausedProductBuildV1,
   projectProductProductionSchedulerV1,
   recoverImportedProductProductionProofsV1 as recoverImportedProductProductionProofsCoreV1,
   runProductProductionUntilBlockedV1,
@@ -555,6 +556,12 @@ export function canRetryProductProductionBlockerV1(details: ProductProductionDet
     || !!details.build && isRepairRetryableFailedProductBuildV1(details.build)
 }
 
+export function canRecoverTextAdventureProductionBudgetV1(details: ProductProductionDetailsV1): boolean {
+  return details.production.productType === 'text-adventure'
+    && details.production.status === 'producing'
+    && !!details.build && isTextAdventureBuildLifetimeBudgetExhaustedV1(details.build)
+}
+
 export function canUpgradeTextAdventureProductionPlanV1(details: ProductProductionDetailsV1): boolean {
   return details.production.productType === 'text-adventure'
     && details.production.status === 'producing'
@@ -776,6 +783,7 @@ export async function regenerateTextAdventureMediaAssetsV1(input: {
   scope: WorkspaceScope
   details: ProductProductionDetailsV1
   assets: TextAdventureMediaAssetV1[]
+  authorReview?: { sourceGateReceiptHash: string; sourceEvidenceHash: string }
 }): Promise<{ parentBuildNumber: number; buildNumber: number; artifactKeys: string[] }> {
   const build = input.details.build
   if (!build || input.details.production.productType !== 'text-adventure') {
@@ -793,6 +801,7 @@ export async function regenerateTextAdventureMediaAssetsV1(input: {
       type: 'revise-media-assets', commandId: commandId('media-batch-regenerate'),
       expectedStateRevision: input.details.production.stateRevision,
       buildNumber: build.buildNumber, action: 'regenerate', targets,
+      ...(input.authorReview ? { authorReview: input.authorReview } : {}),
     },
   })
   if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '批量媒资修复失败'))
@@ -1016,7 +1025,7 @@ export async function readProductProductionDetailsV1(
     production,
     brief: brief ?? null,
     executionBrief,
-    build: build ?? null,
+    build: build ? await prepareLegacyPausedProductBuildV1(scope, build) : null,
     artifactCount: build?.id == null ? 0 : await db.productBuildArtifacts.where('buildId').equals(build.id).count(),
     recentCommands,
     briefHistory,
@@ -1260,8 +1269,11 @@ export async function setProductProductionPausedV1(input: {
   production: ProductProductionRecordV1
   build?: ProductBuildRecordV1 | null
   pausedReservationDisposition?: 'confirmed-not-charged' | 'charge-reservation-upper-bound'
+  contentRevision?: import('../types').TextAdventureContentRevisionV1
 }): Promise<'paused' | 'resumed'> {
+  if (input.build) input = { ...input, build: await prepareLegacyPausedProductBuildV1(input.scope, input.build) }
   const paused = input.production.status === 'paused'
+  if (input.contentRevision && !paused) throw new Error('[product-production-service] 请先暂停制作再修订内容')
   let pausedReservationDispositions: Extract<
     import('../types').ProductProductionCommandV1,
     { type: 'resume' }
@@ -1356,6 +1368,7 @@ export async function setProductProductionPausedV1(input: {
           commandId: commandId('resume'),
           expectedStateRevision: input.production.stateRevision,
           ...(pausedReservationDispositions ? { pausedReservationDispositions } : {}),
+          ...(input.contentRevision ? { contentRevision: input.contentRevision } : {}),
         }
       : {
           type: 'pause', commandId: commandId('pause'), expectedStateRevision: input.production.stateRevision,

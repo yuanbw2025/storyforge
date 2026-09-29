@@ -12,7 +12,8 @@ import {
 } from '../adventure/language-quality'
 import { TEXT_ADVENTURE_QUALITY_REVIEW_SCORE_KEYS_BY_SCOPE_V1 } from '../adventure/production-artifacts'
 import { textAdventureDecisionEchoPresentationV1 } from '../adventure/production-compiler'
-import { isSha256Hash } from './hash'
+import { isSha256Hash, canonicalProductProductionJsonV2, hashProductProductionValueV2 } from './hash'
+import { parseProductProductionCommandV1 } from './contracts'
 import { textAdventureQualityReviewScopeFromTaskKeyV1 } from './plan'
 import {
   textAdventureQualityArcRepairTaskKeysV1,
@@ -111,7 +112,7 @@ export async function validateProductProductionRecoveryDirectiveV1(input: {
   requestedAction?: ProductProductionRecoveryActionV1
   allowLegacyRetry?: boolean
 }): Promise<ValidatedProductProductionRecoveryDirectiveV1> {
-  const { scope, build } = await productionAndBuild({
+  const { scope, production, build } = await productionAndBuild({
     projectId: input.scope.projectId,
     scope: input.scope,
     productProductionId: input.productProductionId,
@@ -147,6 +148,38 @@ export async function validateProductProductionRecoveryDirectiveV1(input: {
     throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 已解决 blocker 缺少合法恢复动作')
   }
   const action = resolvedDirective ? resolvedAction : input.requestedAction ?? null
+  if (failureState.code === 'author-revised-content') {
+    const command = parseProductProductionCommandV1(failureState.revisionCommand)
+    if (production.productType !== 'text-adventure' || input.expectedState === 'blocked'
+      || action !== 'author-edit' || !['content.product-module', 'content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-scenes', 'content.narrative-decision-plan', 'content.ending-route-plan', 'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2', 'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2', 'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2', 'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3'].includes(input.productProductionTaskKey)
+      || command.type !== 'resume' || !command.contentRevision || command.contentRevision.artifactKey !== input.productProductionTaskKey
+      || command.commandId !== failureState.commandId) {
+      throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 内容修订缺少准确的恢复命令')
+    }
+    const receipt = await db.productProductionCommands.where('[productionId+commandId]')
+      .equals([production.id!, command.commandId]).first()
+    const result = receipt ? JSON.parse(receipt.resultJson) : null
+    const revision = command.contentRevision
+    const expectedResolution = { action: 'author-edit', note: revision.note, authorDraftJson: revision.authorDraftJson }
+    const expectedSource = { artifactKey: revision.artifactKey, version: revision.expectedArtifactVersion, contentHash: revision.expectedArtifactHash }
+    if (!receipt || !await assertRecordInScope(scope, 'productProductionCommands', receipt, { owner: 'work' })
+      || receipt.type !== 'resume' || receipt.status !== 'succeeded'
+      || receipt.payloadHash !== await hashProductProductionValueV2(command)
+      || canonicalProductProductionJsonV2(result?.revisionAuthorization) !== canonicalProductProductionJsonV2(command)
+      || result?.buildNumber !== build.buildNumber || result?.controlEpoch !== build.controlEpoch
+      || canonicalProductProductionJsonV2(resolution) !== canonicalProductProductionJsonV2(expectedResolution)
+      || canonicalProductProductionJsonV2(failureState.revisionSource) !== canonicalProductProductionJsonV2(expectedSource)) {
+      throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 内容修订命令回执或候选已变化')
+    }
+    const baseline = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+      .find(row => row.artifactKey === revision.artifactKey && row.version === revision.expectedArtifactVersion
+        && row.contentHash === revision.expectedArtifactHash && row.controlEpoch < build.controlEpoch)
+    if (!baseline || !await assertRecordInScope(scope, 'productBuildArtifacts', baseline, { owner: 'work' })
+      || await hashProductProductionValueV2(JSON.parse(baseline.payloadJson)) !== baseline.contentHash) {
+      throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 内容修订原稿证据已变化')
+    }
+    return { resolvedDirective: true, resolution, previousFailure: null, snapshot: null, failedAttempt: null }
+  }
   const previousFailureValue = resolvedDirective ? failureState.previousFailure : failureState
   const previousFailure = previousFailureValue && typeof previousFailureValue === 'object'
     && !Array.isArray(previousFailureValue)
@@ -708,6 +741,61 @@ export async function readTextAdventureDialogueInputsV1(input: AssembleContextIn
  * image bytes are attached by the governed vision capability after this
  * registered projection and the Build Artifact hashes have been frozen.
  */
+/** Art direction consumes the accepted prose once, not its draft/script/review
+ * copies or runtime settlements. Beat identities and complete text stay exact
+ * so every illustration can still bind to the deterministic narrative owner. */
+export async function readTextAdventureVisualDirectionInputsV1(input: AssembleContextInput): Promise<string> {
+  if (input.productProductionTaskKey !== 'media.requirements') {
+    throw new Error('[product-production-context] 美术定向投影需要 media.requirements taskKey')
+  }
+  const { production } = await productionAndBuild(input)
+  if (production.productType !== 'text-adventure') {
+    throw new Error('[product-production-context] 美术定向投影只适用于文字冒险')
+  }
+  const { build, rows, payloadByKey } = await requiredContextArtifactsV1(input, {
+    label: '文字冒险美术定向投影',
+    requiredKeys: [
+      'content.story-bible', 'content.cast-bible', 'content.adventure-architecture',
+      'content.narrative', 'quality.adventure-review',
+    ],
+  })
+  const quality = payloadByKey.get('quality.adventure-review')!
+  if (quality.passed !== true) throw new Error('[product-production-context] 美术定向需要已通过的叙事审查')
+  const cast = payloadByKey.get('content.cast-bible')!
+  const narrative = payloadByKey.get('content.narrative')!
+  const packet = {
+    schema: 'storyforge.text-adventure-visual-direction-inputs', version: 1,
+    buildNumber: build.buildNumber, taskKey: input.productProductionTaskKey,
+    sources: rows.map(row => ({
+      artifactKey: row.artifactKey, version: row.version,
+      contentHash: row.contentHash, producerReceiptHash: row.producerReceiptHash,
+    })),
+    story: payloadByKey.get('content.story-bible'),
+    cast: contextRows(cast.characters).map(character => ({
+      key: character.key, sourceResourceKey: character.sourceResourceKey,
+      name: character.name, role: character.role,
+      publicIdentity: character.publicIdentity, visualAnchor: character.visualAnchor,
+    })),
+    architecture: payloadByKey.get('content.adventure-architecture'),
+    narrative: {
+      moduleTitle: narrative.moduleTitle, entryNodeKey: narrative.entryNodeKey,
+      nodes: narrative.nodes, beats: narrative.beats,
+    },
+    authorityBoundary: {
+      narrativeText: 'Complete accepted beat text; do not invent events or character presence.',
+      omitted: ['duplicate draft scripts', 'dialogue review copies', 'runtime quest settlement variants', 'choice execution effects'],
+      modelMay: ['select existing beat keys', 'describe composition and visual treatment'],
+      modelMayNot: ['rewrite prose', 'change frozen character identity', 'change image count or editorial roles', 'approve images'],
+    },
+  }
+  const serialized = JSON.stringify(packet)
+  const estimatedTokens = estimateTokens(serialized)
+  if (estimatedTokens > 51_500) {
+    throw new ProductProductionContextBudgetErrorV1(`[product-production-context] 美术定向投影超过登记预算:${estimatedTokens}/51500；完整正文未截断，未调用模型`)
+  }
+  return serialized
+}
+
 export async function readTextAdventureVisualQualityInputsV1(input: AssembleContextInput): Promise<string> {
   if (!/^media\.visual-quality-review\.batch-[1-9]\d*$/.test(input.productProductionTaskKey ?? '')) {
     throw new Error('[product-production-context] 视觉审查投影缺少有界批次 taskKey')
@@ -726,6 +814,15 @@ export async function readTextAdventureVisualQualityInputsV1(input: AssembleCont
   const visualBible = payloadByKey.get('media.visual-bible') ?? {}
   const cast = payloadByKey.get('content.cast-bible') ?? {}
   const audit = payloadByKey.get('media.audit') ?? {}
+  const visualKeySet = new Set(visualKeys)
+  const requirements = contextRows(mediaRequirements.visual)
+    .filter(requirement => visualKeySet.has(String(requirement.artifactKey)))
+  const auditAssets = contextRows(audit.assets)
+    .filter(asset => visualKeySet.has(String(asset.artifactKey)))
+  if (visualKeys.some(key => requirements.filter(row => row.artifactKey === key).length !== 1
+    || auditAssets.filter(row => row.artifactKey === key).length !== 1)) {
+    throw new Error('[product-production-context] 视觉审查批次的需求或审计证据缺失或重复')
+  }
   const packet = {
     schema: 'storyforge.text-adventure-visual-quality-inputs', version: 1,
     buildNumber: build.buildNumber,
@@ -740,10 +837,10 @@ export async function readTextAdventureVisualQualityInputsV1(input: AssembleCont
       key: character.key, name: character.name, role: character.role,
       publicIdentity: character.publicIdentity, visualAnchor: character.visualAnchor,
     })),
-    requirements: contextRows(mediaRequirements.visual),
+    requirements,
     audit: {
       requirementsHash: audit.requirementsHash, visualBibleHash: audit.visualBibleHash,
-      assets: audit.assets,
+      assets: auditAssets,
     },
     images: visualKeys.map(artifactKey => {
       const row = rowByKey.get(artifactKey)!
@@ -762,7 +859,7 @@ export async function readTextAdventureVisualQualityInputsV1(input: AssembleCont
   const serialized = JSON.stringify(packet)
   const estimatedTokens = estimateTokens(serialized)
   if (estimatedTokens > 12_000) {
-    throw new Error(`[product-production-context] 视觉审查投影超过登记预算:${estimatedTokens}/12000`)
+    throw new ProductProductionContextBudgetErrorV1(`[product-production-context] 视觉审查投影超过登记预算:${estimatedTokens}/12000`)
   }
   return serialized
 }
@@ -892,6 +989,20 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
     const sceneKey = contextText(scene.key, 200)
     return sceneKey ? [[sceneKey, scene] as const] : []
   }))
+  // Structure review visits every route echo. Intern repeated text segments so
+  // it retains the complete compiled prose without multiplying identical
+  // decision/cost sentences by every downstream scene. Joining the referenced
+  // strings in order is lossless, including author-supplied delimiter text.
+  const echoTextDictionary: string[] = []
+  const echoTextReferences = new Map<string, number>()
+  const internEchoText = (value: string): number => {
+    const existing = echoTextReferences.get(value)
+    if (existing != null) return existing
+    const index = echoTextDictionary.length
+    echoTextDictionary.push(value)
+    echoTextReferences.set(value, index)
+    return index
+  }
   const decisionChoiceBindings = decisions.map(decision => {
     const choiceKeys = outgoingChoiceKeysByNodeKey[contextText(decision.sceneKey, 200)] ?? []
     return {
@@ -917,20 +1028,14 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
             sceneKey: value,
             actionKey: `action.echo.${decision.key}.${option.key}.${value}`,
             requiredConditionKey: option.persistentEffectKey,
-            label: presentation.label,
-            // One exact primary success echo is the authored route evidence.
-            // description/costly/failure/unavailable are fixed compiler
-            // templates derived from the same option, not independent story
-            // content; repeating them across every scope obscures the prose
-            // the act reviewer actually owns.
-            // The structure reviewer needs the authored route echo, but not the
-            // same full local prose that the owning act reviewer receives. A
-            // real 60-minute flagship packet reached 31,962 estimated tokens
-            // against this registered source's 32k ceiling when every echo
-            // kept 180 characters. Keep a meaningful 120-character causal
-            // sample here; the act packet and accepted narrative retain the
-            // complete player-visible text under their own authority.
-            successText: contextText(presentation.successText, scope === 'structure' ? 120 : 260),
+            ...(scope === 'structure' ? {
+              labelTextRef: internEchoText(presentation.label),
+              successTextRefs: presentation.successText
+                .split(/(?=你先前面对|眼前的冲突)/u).map(internEchoText),
+            } : {
+              label: presentation.label,
+              successText: contextText(presentation.successText, 260),
+            }),
           }]
         }),
       })),
@@ -1256,6 +1361,10 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
       incomingChoiceKeysByNodeKey,
       outgoingChoiceKeysByNodeKey,
       decisionChoiceBindings,
+      ...(scope === 'structure' ? {
+        echoTextDictionary,
+        echoTextEncoding: 'labelTextRef indexes echoTextDictionary; successTextRefs indexes the same dictionary and concatenates in order with no separator to recover the complete exact successText. No echo text is omitted.',
+      } : {}),
       endingRouteRequirements,
       rule: '此处是冻结图事实。不得把已列出的入边、出边或 reachable node 误报为缺失；decisionChoiceBindings 是运行编译器按冻结顺序应用的 option→choice 精确绑定，options[].echoes 是将进入运行包的条件化玩家可见回响精确投影，不得自行猜测、交换、解绑或声称已列回响不存在。endingRouteRequirements 是已经过互斥、完备与可达性穷举验证的结局运行条件，最终场景 choice.availableConditionJson 不是结局资格 owner；不得要求用最终菜单覆盖或重复这些条件。只可评价实际玩家可见措辞、代价、差异和回响质量。',
     },
@@ -1331,7 +1440,9 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
       playerVisibleBeatText: scope === 'structure'
         ? 'one-beat-sample-per-node'
         : 'all-accepted-beats-without-node-summary-duplication',
-      routeEchoProjection: 'edge-authority-plus-primary-compiled-success-echo',
+      routeEchoProjection: scope === 'structure'
+        ? 'lossless-text-dictionary-plus-every-echo-binding'
+        : 'edge-authority-plus-primary-compiled-success-echo',
       castProjection: scope === 'structure'
         ? 'all-cast'
         : 'active-scene-ending-speakers',
@@ -1373,7 +1484,10 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
   }
   const serialized = JSON.stringify(packet)
   const estimatedTokens = estimateTokens(serialized)
-  if (estimatedTokens > 31_500) {
+  // The registered review source has a 40k envelope. The actual frozen Run
+  // input budget is still enforced by context assembly/Harness, so this does
+  // not enlarge a production's authorization or an individual task contract.
+  if (estimatedTokens > 39_500) {
     const sectionTokens: Record<string, number> = Object.fromEntries(Object.entries(packet).map(([key, value]) => [
       key,
       estimateTokens(JSON.stringify(value)),
@@ -1384,7 +1498,7 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
     sectionTokens['questScript.side'] = estimateTokens(JSON.stringify(packet.questScript.side))
     sectionTokens['questScript.ambient'] = estimateTokens(JSON.stringify(packet.questScript.ambient))
     throw new Error(
-      `[product-production-context] 文字冒险质量审查 ${scope} 投影超过登记预算:${estimatedTokens}/31500 sections=${JSON.stringify(sectionTokens)}`,
+      `[product-production-context] 文字冒险质量审查 ${scope} 投影超过登记预算:${estimatedTokens}/39500 sections=${JSON.stringify(sectionTokens)}`,
     )
   }
   return serialized
@@ -1458,7 +1572,16 @@ export async function readTextAdventurePlaytestInputsV1(input: AssembleContextIn
 export async function readTextAdventureRepairFeedbackV1(input: AssembleContextInput): Promise<string> {
   const { production, build } = await productionAndBuild(input)
   if (!build) throw new Error('[product-production-context] 文字冒险修复反馈需要 productBuildId')
-  const pending = [contextRecord(JSON.parse(build.failureJson))]
+  const failureState = contextRecord(JSON.parse(build.failureJson))
+  const resolution = contextRecord(failureState.resolution)
+  // Notes are bound to this exact resolved blocker. The executor receives the
+  // full authored JSON separately; duplicating drafts here exhausts the world
+  // gateway's protected context budget before a local revision can validate.
+  const authorRepairNote = failureState.blockerKey === input.productProductionTaskKey
+    && ['retry', 'author-edit'].includes(String(resolution.action))
+    && typeof resolution.note === 'string'
+    ? contextText(resolution.note, 4_000) : null
+  const pending = [failureState]
   const visitedFailures = new Set<Record<string, unknown>>()
   let failure: Record<string, unknown> | null = null
   const taskFailures = new Map<string, {
@@ -1503,8 +1626,9 @@ export async function readTextAdventureRepairFeedbackV1(input: AssembleContextIn
       if (Object.keys(row).length > 0) pending.push(row)
     }
   }
+  const buildArtifacts = await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray()
   const reviews = (failure || ['producing', 'paused'].includes(production.status))
-    ? (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+    ? buildArtifacts
     .filter(row => row.artifactKey === 'quality.adventure-review'
       && row.controlEpoch < build.controlEpoch)
     .sort((left, right) => right.controlEpoch - left.controlEpoch || right.version - left.version)
@@ -1519,7 +1643,7 @@ export async function readTextAdventureRepairFeedbackV1(input: AssembleContextIn
   const review = latestReview
     && contextRecord(JSON.parse(latestReview.payloadJson)).passed === false
     ? latestReview : undefined
-  if (!failure && taskFailures.size === 0 && !review) return ''
+  if (!failure && taskFailures.size === 0 && !review && !authorRepairNote) return ''
   const payload = review ? contextRecord(JSON.parse(review.payloadJson)) : {}
   const reviewEvidenceInvalid = textAdventureQualityReviewAuthorityViolationsV1(payload.issues).length > 0
     || textAdventureQualityReviewScopeViolationsV1(payload.issues).length > 0
@@ -1531,7 +1655,7 @@ export async function readTextAdventureRepairFeedbackV1(input: AssembleContextIn
     payload: unknown
   }>()
   const reviewedControlEpoch = review?.controlEpoch ?? Math.max(0, build.controlEpoch - 1)
-  for (const row of (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+  for (const row of buildArtifacts
     .filter(row => row.controlEpoch <= reviewedControlEpoch
       // `ensurePlan` invalidates stale descendants before the first repair
       // Agent assembles context. Historical status therefore cannot tell us
@@ -1877,17 +2001,34 @@ export async function readTextAdventureRepairFeedbackV1(input: AssembleContextIn
   ].map(issue => [
     `${issue.ownerArtifactKey}\n${issue.detail}\n${issue.recommendation}`, issue,
   ] as const)).values()].slice(0, 40)
-  if (blockingIssues.length === 0 && taskFailures.size === 0) return ''
-  const baselineArtifact = targetTaskKey == null ? null : latestArtifacts.get(targetTaskKey) ?? null
+  if (blockingIssues.length === 0 && taskFailures.size === 0 && !authorRepairNote) return ''
+  let baselineArtifact = targetTaskKey == null ? null : latestArtifacts.get(targetTaskKey) ?? null
+  // A historical draft is only a local-repair baseline while its upstream
+  // content is unchanged. Otherwise the strict copy-baseline instruction can
+  // silently undo an authored story/cast revision or restore an old scene map.
+  const changedBaselineInputs = baselineArtifact == null ? [] : (input.productArtifactKeys ?? []).flatMap(artifactKey => {
+    const signedRows = buildArtifacts.filter(row => row.artifactKey === artifactKey
+      && isSha256Hash(row.contentHash) && isSha256Hash(row.producerReceiptHash))
+      .sort((a, b) => b.controlEpoch - a.controlEpoch || b.version - a.version)
+    const previous = signedRows.find(row => row.controlEpoch <= baselineArtifact!.controlEpoch)
+    const current = signedRows.find(row => row.controlEpoch === build.controlEpoch
+      && (row.status === 'accepted' || row.status === 'carried-forward'))
+    return previous && current && previous.contentHash !== current.contentHash
+      ? [{ artifactKey, previousHash: previous.contentHash, currentHash: current.contentHash }] : []
+  })
+  if (changedBaselineInputs.length > 0) baselineArtifact = null
   return JSON.stringify({
     schema: 'storyforge.text-adventure-repair-feedback', version: 1,
-    targetTaskKey,
-    source: review ? {
+    targetTaskKey, authorRepairNote,
+    source: review && changedBaselineInputs.length === 0 ? {
       artifactKey: review.artifactKey, artifactVersion: review.version,
       contentHash: review.contentHash, producerReceiptHash: review.producerReceiptHash,
       controlEpoch: review.controlEpoch,
     } : null,
-    instruction: 'blockingIssues 已按 repairTaskKeys 精确投影给 targetTaskKey；只修复当前任务实际拥有的字段和 lastTaskFailures 中同 taskKey 的协议错误。ownerArtifactKey 是对外聚合工件，repairTaskKeys 才是专业返修职责。baselineArtifact 是上一轮已验收的完整本任务工件。分场质量返修使用执行器声明的精确字段补丁协议，由规则层合并底稿；补丁协议错误仍继续提交补丁，只有正文体量、图结构、身份或结局覆盖等底稿结构错误才提交完整工件。两种模式都必须保持冻结 Brief、架构、稳定 key 与未受影响内容。',
+    instruction: changedBaselineInputs.length > 0
+      ? '当前上游工件已改变，旧正文及基于旧正文的审查不能作为本次底稿。按当前冻结输入重新生成完整工件，并修复 lastTaskFailures 中本任务的协议错误；不得从历史版本恢复过期故事、角色或地点顺序。'
+      : 'blockingIssues 已按 repairTaskKeys 精确投影给 targetTaskKey；只修复当前任务实际拥有的字段和 lastTaskFailures 中同 taskKey 的协议错误。ownerArtifactKey 是对外聚合工件，repairTaskKeys 才是专业返修职责。baselineArtifact 是上一轮已验收的完整本任务工件。分场质量返修使用执行器声明的精确字段补丁协议，由规则层合并底稿；补丁协议错误仍继续提交补丁，只有正文体量、图结构、身份或结局覆盖等底稿结构错误才提交完整工件。两种模式都必须保持冻结 Brief、架构、稳定 key 与未受影响内容。',
+    ...(changedBaselineInputs.length > 0 ? { changedBaselineInputs } : {}),
     baselineArtifact: baselineArtifact == null ? null : {
       artifactKey: baselineArtifact.artifactKey,
       artifactVersion: baselineArtifact.version,
@@ -1895,8 +2036,8 @@ export async function readTextAdventureRepairFeedbackV1(input: AssembleContextIn
       contentHash: baselineArtifact.contentHash,
       payload: baselineArtifact.payload,
     },
-    scores: payload.scores,
-    blockingIssues,
+    scores: changedBaselineInputs.length > 0 ? undefined : payload.scores,
+    blockingIssues: changedBaselineInputs.length > 0 ? [] : blockingIssues,
     lastTaskFailures: [...taskFailures.values()].sort((left, right) => left.taskKey.localeCompare(right.taskKey)),
   })
 }

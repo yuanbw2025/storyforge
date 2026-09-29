@@ -1290,6 +1290,9 @@ export function textAdventureQualityReviewReferenceViolationsV1(
       const stableKey = fieldMarker
         ? normalizedValue.slice(0, fieldMarker.index)
         : normalizedValue
+      // A generic schema path (objective.key) names a field, not an instance.
+      // Unknown instance paths (objective.missing.key) must still fail.
+      if (fieldMarker && !stableKey.includes('.')) continue
       if (!known.has(stableKey)) violations.push(`${label} 引用未登记 key:${stableKey}`)
     }
   }

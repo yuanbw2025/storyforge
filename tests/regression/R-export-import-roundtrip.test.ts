@@ -6,8 +6,11 @@
  * Gist 云存档复用同一 ProjectExportData 格式,故此测试同时覆盖云存档。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { Blob as StreamableBlob } from 'node:buffer'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { createProjectJSONBlob, readProjectJSONFile } from '../../src/lib/export/json-file'
+import type { ProjectExportData } from '../../src/lib/export/json-export'
 import { parseWorldPortals } from '../../src/lib/utils/world-portals'
 import { CHAPTER_TEXT_NORMALIZATION_VERSION, hashChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { seedCurrentProject } from '../helpers/current-workspace'
@@ -105,7 +108,12 @@ describe('R-roundtrip · 全量内容导出→导入往返', () => {
   it('导出再导入:世界观/故事/大纲/细纲/正文/角色/状态/物品 全部还原且外键完整', async () => {
     const srcId = await seedFullProject()
     const exported = await exportProjectJSON(srcId)
-    const newId = await importProjectJSON(exported)
+    const file = createProjectJSONBlob(exported)
+    // happy-dom's Blob lacks stream(); preserve the actual downloaded bytes
+    // while exercising the file reader before the governed import boundary.
+    const readable = new StreamableBlob([await file.arrayBuffer()])
+    const parsed = await readProjectJSONFile(readable as unknown as Blob) as ProjectExportData
+    const newId = await importProjectJSON(parsed)
     expect(newId).not.toBe(srcId)
 
     // 各表内容都在新项目里

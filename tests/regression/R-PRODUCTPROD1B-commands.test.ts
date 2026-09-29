@@ -1,6 +1,8 @@
+import { carryForwardProductBuildArtifactsToEpochV1 } from '../../src/lib/product-production/artifact-store'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
+  canReviseTextAdventureVisualContractFromRecoveryV1,
   canReviseTextAdventureRuntimeCopyFromRecoveryV1,
   canUpgradeTextAdventureExecutionPlanV1,
   executeProductProductionCommand,
@@ -9,6 +11,7 @@ import {
 import { draftProductProductionBriefV3, suggestProductStartingPoints } from '../../src/lib/product-production/consultation'
 import {
   beginProductProductionEvolutionV1,
+  canRecoverTextAdventureProductionBudgetV1,
   readProductProductionDetailsV1,
   upgradeTextAdventureProductionPlanV1,
 } from '../../src/lib/product-production/service'
@@ -738,7 +741,7 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
     })
   })
 
-  it('预算耗尽时创建不可变恢复子 Build，并只继承已签收的专业生产工件', async () => {
+  it.each(['modelCalls=64/64', 'mediaCalls=13/12'])('预算耗尽 %s 时创建不可变恢复子 Build，并只继承已签收的专业生产工件', async exhaustedUsage => {
     const f = await fixture('text-adventure')
     const lowBudgetBrief = parseProductProductionBriefV3({
       ...f.brief,
@@ -794,9 +797,15 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       planJson: canonicalProductProductionJsonV2(parentPlan), planHash: parentPlanHash,
       failureJson: JSON.stringify({
         taskKey: 'content.dialogue-pass.act-3', code: 'task-executor-failed',
-        detail: 'Build lifetime budget 不足:modelCalls=64/64',
+        detail: `Build lifetime budget 不足:${exhaustedUsage}`,
       }),
     })
+
+    const exhaustedDetails = await readProductProductionDetailsV1(f.scope, created.productionId)
+    expect(canRecoverTextAdventureProductionBudgetV1(exhaustedDetails)).toBe(true)
+    expect(canRecoverTextAdventureProductionBudgetV1({ ...exhaustedDetails,
+      production: { ...exhaustedDetails.production, status: 'paused' },
+    })).toBe(false)
 
     const evolved = await beginProductProductionEvolutionV1({
       scope: f.scope, productionId: created.productionId,
@@ -986,6 +995,20 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       task.taskKey === 'content.adventure-quality-review.act-2'
     ))!
     expect(narrativeReviewer.budgetReservation.outputTokens).toBe(32_000)
+    const reviewerTimeout = (timeoutMs: number) => canonicalProductProductionJsonV2({
+      taskKey: narrativeReviewer.taskKey, code: 'task-timeout', attempt: 2,
+      detail: `[product-production-scheduler] ${narrativeReviewer.taskKey} 超过任务合同 ${timeoutMs}ms`,
+    })
+    expect(canUpgradeTextAdventureExecutionPlanV1({
+      ...candidate, failureJson: reviewerTimeout(narrativeReviewer.timeoutMs),
+    })).toBe(false)
+    expect(canUpgradeTextAdventureExecutionPlanV1({
+      ...candidate,
+      planJson: canonicalProductProductionJsonV2({ ...plan, tasks: plan.tasks.map(task => (
+        task.taskKey === narrativeReviewer.taskKey ? { ...task, timeoutMs: 180_000 } : task
+      )) }),
+      failureJson: reviewerTimeout(180_000),
+    })).toBe(true)
     expect(canUpgradeTextAdventureExecutionPlanV1({
       ...candidate,
       failureJson: canonicalProductProductionJsonV2({
@@ -1053,12 +1076,89 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
     })).toBe(true)
   })
 
+  it('仅允许实测旧正文输入容量不足升级，拒绝伪造容量、无溢出及现行容量仍不足', async () => {
+    const f = await fixture('text-adventure', 'key-scenes')
+    const briefHash = await hashProductProductionValueV2(f.brief)
+    const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief: f.brief })
+    const scene = plan.tasks.find(task => task.kind === 'text-adventure-scene-script-part')!
+    expect(scene.budgetReservation.inputTokens).toBe(31_680)
+    const legacyPlan = {
+      ...plan,
+      tasks: plan.tasks.map(task => task.taskKey === scene.taskKey ? {
+        ...task, budgetReservation: { ...task.budgetReservation, inputTokens: 23_760 },
+      } : task),
+    }
+    const failure = (required: number, budget = 23_760, taskKey = scene.taskKey) => (
+      canonicalProductProductionJsonV2({
+        taskKey, code: 'task-context-budget-exceeded', attempt: 2,
+        detail: '[product-production-context] 制作合同或依赖产物未完整进入任务预算'
+          + `（required=${required}, budget=${budget}, sources=unknown）；未调用模型，请缩小制作范围。`,
+      })
+    )
+    const candidate = {
+      status: 'recovery-required' as const, releasedProductReleaseId: null,
+      planJson: canonicalProductProductionJsonV2(legacyPlan), failureJson: failure(25_615),
+    }
+    expect(canUpgradeTextAdventureExecutionPlanV1(candidate)).toBe(true)
+    for (const failureJson of [
+      failure(23_760), failure(31_681), failure(25_615, 20_000),
+      failure(25_615, 23_760, 'content.dialogue-pass.act-1'),
+    ]) expect(canUpgradeTextAdventureExecutionPlanV1({ ...candidate, failureJson })).toBe(false)
+    expect(canUpgradeTextAdventureExecutionPlanV1({
+      ...candidate, planJson: canonicalProductProductionJsonV2(plan),
+      failureJson: failure(32_000, 31_680),
+    })).toBe(false)
+    expect(canUpgradeTextAdventureExecutionPlanV1({
+      ...candidate, releasedProductReleaseId: 91,
+    })).toBe(false)
+  })
+
+  it('主线完整世界输入溢出仅升级旧容量，保留实测范围及发布边界', async () => {
+    const f = await fixture('text-adventure', 'key-scenes')
+    const briefHash = await hashProductProductionValueV2(f.brief)
+    const plan = await createProductProductionPlanV3({ buildNumber: 1, briefHash, brief: f.brief })
+    const mainline = plan.tasks.find(task => task.taskKey === 'content.main-quest-plan')!
+    expect(mainline.budgetReservation.inputTokens).toBe(42_240)
+    const legacyPlan = {
+      ...plan, tasks: plan.tasks.map(task => task.taskKey === mainline.taskKey ? {
+        ...task, budgetReservation: { ...task.budgetReservation, inputTokens: 32_000 },
+      } : task),
+    }
+    const prefix = '[product-production-scheduler] Brief/Artifact 与冻结世界事实合并后超过任务输入预算'
+    const failure = (detail = prefix, taskKey = mainline.taskKey) => canonicalProductProductionJsonV2({
+      taskKey, code: 'task-preflight-failed', attempt: 1, detail,
+    })
+    const candidate = {
+      status: 'recovery-required' as const, releasedProductReleaseId: null,
+      planJson: canonicalProductProductionJsonV2(legacyPlan), failureJson: failure(),
+    }
+    expect(canUpgradeTextAdventureExecutionPlanV1(candidate)).toBe(true)
+    expect(canUpgradeTextAdventureExecutionPlanV1({
+      ...candidate, failureJson: failure(`${prefix}（required=32077, budget=32000）`),
+    })).toBe(true)
+    for (const failureJson of [
+      failure(`${prefix}（required=32000, budget=32000）`),
+      failure(`${prefix}（required=42241, budget=32000）`),
+      failure(`${prefix}（required=32077, budget=31000）`),
+      failure(`${prefix}其他错误`), failure(prefix, 'content.cast-bible'), failure('其他错误'),
+    ]) expect(canUpgradeTextAdventureExecutionPlanV1({ ...candidate, failureJson })).toBe(false)
+    expect(canUpgradeTextAdventureExecutionPlanV1({
+      ...candidate, planJson: canonicalProductProductionJsonV2(plan),
+    })).toBe(false)
+    expect(canUpgradeTextAdventureExecutionPlanV1({ ...candidate, releasedProductReleaseId: 91 })).toBe(false)
+    expect(canUpgradeTextAdventureExecutionPlanV1({ ...candidate, status: 'building' })).toBe(false)
+  })
+
   it('仅把缺少真实图片输入预检的旧锚点 Plan 识别为可升级，现行或伪造失败不得误放行', async () => {
     const f = await fixture('text-adventure', 'key-scenes')
     const briefHash = await hashProductProductionValueV2(f.brief)
     const currentPlan = await createProductProductionPlanV3({
       buildNumber: 52, controlEpoch: 3, briefHash, brief: f.brief,
     })
+    const visionPreflight = currentPlan.tasks.find(task => task.taskKey === 'media.vision-preflight')!
+    expect(visionPreflight.budgetReservation.outputTokens).toBeGreaterThanOrEqual(427)
+    expect(visionPreflight.budgetReservation.modelCalls).toBe(1)
+    expect(visionPreflight.maxAttempts).toBe(1)
     const legacyPlan = {
       ...currentPlan,
       tasks: currentPlan.tasks
@@ -1334,6 +1434,40 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       scope: f.scope, productionId: f.productionId,
     })).rejects.toThrow('叙事质量审查已经通过')
     expect(await db.productProductionBriefs.where('productionId').equals(f.productionId).count()).toBe(1)
+  })
+
+  it('美术输入超限仍走同 Build 重试，不强迫重建视觉 Brief；真实视觉合同失败保留恢复分支', async () => {
+    const f = await fixture('text-adventure', 'key-scenes')
+    const plan = await createProductProductionPlanV3({
+      buildNumber: 1, brief: f.brief, briefHash: await hashProductProductionValueV2(f.brief),
+    })
+    const build = {
+      status: 'recovery-required' as const, planJson: JSON.stringify(plan),
+      failureJson: JSON.stringify({
+        taskKey: 'media.requirements', code: 'task-context-budget-exceeded',
+        detail: '依赖输入超限；未调用模型',
+      }),
+    }
+    expect(canReviseTextAdventureVisualContractFromRecoveryV1(build)).toBe(false)
+    for (const code of ['task-preflight-failed', 'task-context-budget-exceeded']) {
+      expect(canReviseTextAdventureVisualContractFromRecoveryV1({
+        ...build, failureJson: JSON.stringify({
+          taskKey: 'media.visual-quality-review.batch-1', code,
+          detail: '[product-production-context] 视觉审查投影超过登记预算:13658/12000',
+        }),
+      })).toBe(false)
+    }
+    expect(canReviseTextAdventureVisualContractFromRecoveryV1({
+      ...build, failureJson: JSON.stringify({
+        taskKey: 'media.visual-quality-review.batch-1', code: 'task-executor-failed',
+        detail: '视觉身份与需求冲突',
+      }),
+    })).toBe(true)
+    expect(canReviseTextAdventureVisualContractFromRecoveryV1({
+      ...build, failureJson: JSON.stringify({
+        taskKey: 'media.requirements', code: 'task-executor-failed', detail: '角色锚点冲突',
+      }),
+    })).toBe(true)
   })
 
   it('视觉合同质量失败可派生 visual-only 恢复 Build，非视觉装配失败不能冒用该通道', async () => {
@@ -1761,9 +1895,24 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       },
     })).resolves.toMatchObject({ ok: false, errorCode: 'media-revision-invalid' })
     expect(await db.productBuilds.where('productionId').equals(f.productionId).count()).toBe(2)
+    await db.productBuilds.update(child!.id!, { status: 'building', controlEpoch: 2 })
+    await db.productBuildArtifacts.update(childTarget.id!, { status: 'invalid' })
+    const recovered = await carryForwardProductBuildArtifactsToEpochV1({
+      scope: f.scope, buildId: child!.id!, fromControlEpoch: 1, toControlEpoch: 2,
+      artifactKeys: [childTarget.artifactKey], allowHistoricalInvalidSourceBeforeEpoch: true,
+    })
+    expect(recovered).toHaveLength(1)
+    expect(recovered[0]).toMatchObject({ contentHash: childTarget.contentHash,
+      producerRunId: null, producerReceiptHash: null, status: 'carried-forward' })
+    await db.productBuildArtifacts.update(childTarget.id!, { contentHash: 'f'.repeat(64) })
+    await db.productBuilds.update(child!.id!, { controlEpoch: 3 })
+    expect(await carryForwardProductBuildArtifactsToEpochV1({
+      scope: f.scope, buildId: child!.id!, fromControlEpoch: 1, toControlEpoch: 3,
+      artifactKeys: [childTarget.artifactKey], allowHistoricalInvalidSourceBeforeEpoch: true,
+    })).toEqual([])
   })
 
-  it('校验作者上传图片的 Blob 与权利合同，并在新 Build 保存可追溯替换', async () => {
+  it.each(['preview', 'visual-recovery'] as const)('校验作者上传 Blob 与权利，并从 %s 保存可追溯替换与真实分辨率', async mode => {
     const f = await completedTextAdventureMediaFixture()
     const target = (await db.productBuildArtifacts.where('buildId').equals(f.build.id!).toArray())
       .find(row => row.artifactKey === 'media.visual.001')!
@@ -1793,7 +1942,7 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
         buildNumber: 1, artifactKey: target.artifactKey, expectedArtifactHash: target.contentHash,
         action: 'upload-replacement', replacement: {
           blobObjectId: replacementBlob.id!, contentHash: replacementBlob.contentHash,
-          mimeType: 'image/webp', byteSize: replacementBlob.byteSize, width: 1024, height: 576,
+          mimeType: 'image/webp', byteSize: replacementBlob.byteSize, width: 1024, height: 1024,
           altText: '作者替换图', license: 'author-license', commercialUse: true,
           redistribution: true, declaration: '拥有完整权利', attribution: '无需署名',
         },
@@ -1801,6 +1950,25 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
     })).resolves.toMatchObject({ ok: false, errorCode: 'media-revision-invalid' })
     expect(await db.productBuilds.where('productionId').equals(f.productionId).count()).toBe(1)
 
+    if (mode === 'visual-recovery') {
+      const review = (await db.productBuildArtifacts.where('buildId').equals(f.build.id!).toArray())
+        .find(row => row.artifactKey === 'quality.visual-review')!
+      const report = {
+        schema: 'storyforge.text-adventure-visual-quality-review-artifact', version: 1,
+        buildNumber: 1, status: 'revision-required',
+        reviews: [{ artifactKey: target.artifactKey, contentHash: target.contentHash,
+          verdict: 'replace', issues: [{ severity: 'blocking', category: 'identity',
+            detail: '角色不一致', recommendation: '替换为正确角色' }] }],
+      }
+      await db.productBuildArtifacts.update(review.id!, {
+        payloadJson: canonicalProductProductionJsonV2(report), contentHash: await hashProductProductionValueV2(report),
+      })
+      await db.productProductions.update(f.productionId, { status: 'producing' })
+      await db.productBuilds.update(f.build.id!, { status: 'recovery-required',
+        failureJson: canonicalProductProductionJsonV2({ taskKey: 'integration.package',
+          detail: '商业候选的独立图片审查未通过:revision-required' }),
+      })
+    }
     const receipt = await executeProductProductionCommand({
       scope: f.scope, productionId: f.productionId,
       command: {
@@ -1808,7 +1976,7 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
         buildNumber: 1, artifactKey: target.artifactKey, expectedArtifactHash: target.contentHash,
         action: 'upload-replacement', replacement: {
           blobObjectId: replacementBlob.id!, contentHash: replacementBlob.contentHash,
-          mimeType: 'image/webp', byteSize: replacementBlob.byteSize, width: 1280, height: 720,
+          mimeType: 'image/webp', byteSize: replacementBlob.byteSize, width: 1536, height: 864,
           altText: '作者绘制的雾港潮门', license: 'author-community-v1', commercialUse: true,
           redistribution: true, declaration: '作者确认拥有完整权利', attribution: '作者甲',
         },
@@ -1824,7 +1992,7 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       parentArtifactHash: target.contentHash,
     })
     expect(JSON.parse(replacement!.metadataJson)).toMatchObject({
-      source: 'author-upload', width: 1280, height: 720,
+      source: 'author-upload', width: 1536, height: 864,
       altText: '作者绘制的雾港潮门', license: 'author-community-v1',
       authorRevision: { action: 'upload-replacement', priorContentHash: target.contentHash },
     })
@@ -2062,6 +2230,68 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
         issues: [{ severity: 'blocking', category: 'author-direction', detail: note, recommendation: note }],
       }],
     })
+  })
+
+  it('批量作者返修复验同一冻结回执，拒绝接受项与陈旧证据并一次重做全部退回图片', async () => {
+    const seeded = await seedTextAdventureMediaRevisionWorkbenchV1(STRICT_VISUAL_REVIEW_PNG_BASE64)
+    const build = (await db.productBuilds.get(seeded.parentBuildId))!
+    const images = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+      .filter(row => row.kind === 'image').sort((a, b) => a.artifactKey.localeCompare(b.artifactKey))
+    expect(images).toHaveLength(2)
+    const freeze = (all: boolean) => recordTextAdventureHumanVisualReviewV1({
+      scope: seeded.scope, productBuildId: build.id!,
+      decisions: images.map((image, index) => ({
+        assetKey: String(JSON.parse(image.metadataJson).assetKey),
+        decision: all || index === 0 ? 'rejected' as const : 'approved' as const,
+        note: `第${index + 1}张：保留主体，清除伪文字并按冻结身份修复。`,
+      })),
+    })
+    let gate = await freeze(false)
+    const production = (await db.productProductions.get(seeded.productionId))!
+    const command = async (suffix: string) => ({
+      type: 'revise-media-assets' as const, commandId: `author-batch.${suffix}`,
+      expectedStateRevision: production.stateRevision, buildNumber: build.buildNumber,
+      action: 'regenerate' as const,
+      targets: images.map(image => ({ artifactKey: image.artifactKey, expectedArtifactHash: image.contentHash })),
+      authorReview: {
+        sourceGateReceiptHash: gate.gateReceipt.receiptHash,
+        sourceEvidenceHash: await hashProductProductionValueV2(gate.evidence),
+      },
+    })
+    const execute = (value: Awaited<ReturnType<typeof command>>) => executeProductProductionCommand({
+      scope: seeded.scope, productionId: seeded.productionId, command: value,
+    })
+    await expect(execute(await command('includes-approved')))
+      .resolves.toMatchObject({ ok: false, errorCode: 'media-revision-invalid' })
+    gate = await freeze(true)
+    const forged = await command('forged')
+    forged.authorReview.sourceGateReceiptHash = 'f'.repeat(64)
+    await expect(execute(forged)).resolves.toMatchObject({ ok: false, errorCode: 'media-revision-invalid' })
+    const staleEvidence = await command('stale-evidence')
+    staleEvidence.authorReview.sourceEvidenceHash = 'e'.repeat(64)
+    await expect(execute(staleEvidence)).resolves.toMatchObject({ ok: false, errorCode: 'source-stale' })
+    const staleImage = await command('stale-image')
+    staleImage.targets[1].expectedArtifactHash = 'd'.repeat(64)
+    await expect(execute(staleImage)).resolves.toMatchObject({ ok: false, errorCode: 'source-stale' })
+    expect(await db.productBuilds.where('productionId').equals(seeded.productionId).count()).toBe(1)
+    const acceptedCommand = await command('accepted')
+    const result = await execute(acceptedCommand)
+    expect(result).toMatchObject({ ok: true, result: { parentBuildNumber: 1, buildNumber: 2 } })
+    await expect(execute(acceptedCommand)).resolves.toMatchObject({ ok: true })
+    expect(await db.productBuilds.where('productionId').equals(seeded.productionId).count()).toBe(2)
+    const child = (await db.productBuilds.where('[productionId+buildNumber]').equals([seeded.productionId, 2]).first())!
+    const feedback = (await db.productBuildArtifacts.where('[buildId+artifactKey]').equals([child.id!, 'media.repair-feedback']).first())!
+    expect(JSON.parse(feedback.payloadJson).targets).toEqual(images.map((image, index) => ({
+      artifactKey: image.artifactKey, priorContentHash: image.contentHash,
+      verdict: 'human-review', scores: null,
+      issues: [{ severity: 'blocking', category: 'author-direction',
+        detail: gate.evidence.assets[index].note, recommendation: gate.evidence.assets[index].note }],
+    })))
+    const plan = parseProductProductionPlanV3(child.planJson)
+    for (const image of images) expect(plan.tasks.find(task => task.taskKey === image.artifactKey)?.reuse).toBeNull()
+    expect(plan.tasks.filter(task => task.kind === 'text-adventure-visual-quality-review-batch').every(task => !task.inputArtifactKeys.includes('media.repair-feedback'))).toBe(true)
+    expect(plan.tasks.find(task => task.taskKey === 'content.design')?.reuse).not.toBeNull()
+    expect((await db.productBuilds.get(build.id!))!.status).toBe('preview-ready')
   })
 
   it('单图重生成拒绝伪造回执、缺失回执、旧 Build、旧图片 hash 与缺失图片', async () => {

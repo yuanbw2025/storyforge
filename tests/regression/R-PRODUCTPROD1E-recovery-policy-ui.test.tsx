@@ -10,9 +10,12 @@ import {
 } from '../../src/lib/product-production/consultation'
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
+import { resolveProductProductionTaskRecoveryPolicyV1 } from '../../src/lib/product-production/recovery-policy'
+import { parseProductProductionPlanV3 } from '../../src/lib/product-production/plan'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import type { ProductProductionBriefV3, WorkspaceScope } from '../../src/lib/types'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
+import { seedTextAdventureMediaRevisionWorkbenchV1 } from '../helpers/text-adventure-media-revision-workbench'
 
 const serviceMocks = vi.hoisted(() => ({
   setPaused: vi.fn(async (): Promise<'paused' | 'resumed'> => 'resumed'),
@@ -254,6 +257,85 @@ describe('PRODUCT-PROD-1E · recovery policy UI', () => {
   })
 
   afterAll(() => db.close())
+
+  it.each(['content.quest-script.main.act-2.single', 'content.quest-script.supplemental', 'content.dialogue-pass.act-2'])('%s 失败后可提交完整修订稿，错误Skill身份不能获得修订权', async taskKey => {
+    const f = await seedTextAdventureMediaRevisionWorkbenchV1('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X8WgWQAAAABJRU5ErkJggg==')
+    const build = (await db.productBuilds.get(f.parentBuildId))!
+    const task = parseProductProductionPlanV3(build.planJson).tasks.find(row => row.taskKey === taskKey)!
+    expect(resolveProductProductionTaskRecoveryPolicyV1({ productType: 'text-adventure', task })).toMatchObject({
+      repairNoteAllowed: true, authorDraftAllowed: true, repairFeedbackContextAllowed: true,
+    })
+    expect(resolveProductProductionTaskRecoveryPolicyV1({ productType: 'text-adventure',
+      task: { ...task, skillId: 'text-adventure.scene-script.v1' },
+    }).authorDraftAllowed).toBe(false)
+    expect(resolveProductProductionTaskRecoveryPolicyV1({ productType: 'text-adventure',
+      task: { ...task, executionMode: 'deterministic' },
+    }).authorDraftAllowed).toBe(false)
+    await db.productBuilds.update(f.parentBuildId, {
+      status: 'recovery-required',
+      failureJson: JSON.stringify({ taskKey, code: 'task-executor-failed', detail: '结算文案偏离冻结目标' }),
+    })
+    await db.productProductions.update(f.productionId, { status: 'producing' })
+    await act(async () => root.render(createElement(ProductProductionStudio, {
+      scope: f.scope, initialProductionId: f.productionId,
+      initialProduct: 'text-adventure', allowedProducts: ['text-adventure'],
+    })))
+    await waitFor(() => expect(textarea(host, '作者修订的完整任务 JSON')).toBeTruthy())
+    await setTextareaValue(textarea(host, '作者修订的完整任务 JSON')!, '{"schema":"author-quest-candidate"}')
+    await act(async () => button(host, '修正后继续制作').click())
+    await waitFor(() => expect(serviceMocks.retryBlocker).toHaveBeenCalledWith(expect.objectContaining({
+      authorDraftJson: '{"schema":"author-quest-candidate"}',
+    })))
+  })
+
+  it('美术规划候选失败可在原 Build 修订 JSON，同时保留显式重建视觉合同入口', async () => {
+    const f = await seedTextAdventureMediaRevisionWorkbenchV1('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X8WgWQAAAABJRU5ErkJggg==')
+    await db.productBuilds.update(f.parentBuildId, {
+      status: 'recovery-required',
+      failureJson: JSON.stringify({ taskKey: 'media.requirements', code: 'task-executor-failed', detail: '角色槽位不匹配' }),
+    })
+    await db.productProductions.update(f.productionId, { status: 'producing' })
+    await act(async () => root.render(createElement(ProductProductionStudio, {
+      scope: f.scope, initialProductionId: f.productionId,
+      initialProduct: 'text-adventure', allowedProducts: ['text-adventure'],
+    })))
+    await waitFor(() => expect(textarea(host, '作者修订的完整任务 JSON')).toBeTruthy())
+    expect(button(host, '重建媒资规划 Brief')).toBeTruthy()
+    await setTextareaValue(textarea(host, '作者修订的完整任务 JSON')!, '{"schema":"author-media-candidate"}')
+    await act(async () => button(host, '修正后继续制作').click())
+    await waitFor(() => expect(serviceMocks.retryBlocker).toHaveBeenCalledWith(expect.objectContaining({
+      authorDraftJson: '{"schema":"author-media-candidate"}',
+    })))
+  })
+
+  it.each([['content.story-bible', '载入故事圣经'], ['content.adventure-architecture', '载入地点架构'], ['content.narrative-arc-scenes', '载入三幕场景计划'], ['content.narrative-decision-plan', '载入玩家决定'], ['content.ending-route-plan', '载入结局路线'], ['content.main-quest-plan', '载入主线任务'], ['content.adventure-side-quests', '载入支线任务'], ['content.adventure-ambient-events', '载入区域事件'], ['content.scene-script.act-1.part-1', '载入第1幕正文1'], ['content.scene-script.act-1.part-2', '载入第1幕正文2'], ['content.scene-script.act-2.part-1', '载入第2幕正文1'], ['content.scene-script.act-2.part-2', '载入第2幕正文2'], ['content.scene-script.act-3.part-1', '载入第3幕正文1'], ['content.scene-script.act-3.part-2', '载入第3幕正文2'], ['content.dialogue-pass.act-1', '载入第1幕对白审校'], ['content.dialogue-pass.act-2', '载入第2幕对白审校'], ['content.dialogue-pass.act-3', '载入第3幕对白审校']])('暂停中的 %s 编辑载入准确原稿，修改理由必填且提交绑定原hash', async (artifactKey, loadLabel) => {
+    const f = await seedTextAdventureMediaRevisionWorkbenchV1('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X8WgWQAAAABJRU5ErkJggg==')
+    const build = (await db.productBuilds.get(f.parentBuildId))!
+    await db.productBuilds.update(f.parentBuildId, {
+      status: 'paused', resumeState: 'building', controlEpoch: build.controlEpoch + 1,
+      failureJson: JSON.stringify({ code: 'user-paused', pausedFromControlEpoch: build.controlEpoch, reason: '编辑内容' }),
+    })
+    await db.productProductions.update(f.productionId, { status: 'paused', controlEpoch: build.controlEpoch + 1 })
+    const baseline = (await db.productBuildArtifacts.where('buildId').equals(f.parentBuildId).toArray())
+      .filter(row => row.artifactKey === artifactKey).sort((a, b) => b.version - a.version)[0]!
+    await act(async () => root.render(createElement(ProductProductionStudio, {
+      scope: f.scope, initialProduct: 'text-adventure', allowedProducts: ['text-adventure'], initialProductionId: f.productionId,
+    })))
+    await waitFor(() => expect(button(host, loadLabel).disabled).toBe(false))
+    await act(async () => button(host, loadLabel).click())
+    expect(JSON.parse(textarea(host, '修订后的完整内容 JSON')!.value)).toEqual(JSON.parse(baseline.payloadJson))
+    expect(button(host, '保存内容修订并继续').disabled).toBe(true)
+    await setTextareaValue(textarea(host, '内容修订说明')!, '纠正两次历史事件混淆')
+    await setTextareaValue(textarea(host, '修订后的完整内容 JSON')!, '{"revised":"明确区分两次事件"}')
+    await act(async () => button(host, '保存内容修订并继续').click())
+    await waitFor(() => expect(serviceMocks.setPaused).toHaveBeenCalledTimes(1))
+    expect((serviceMocks.setPaused.mock.calls[0] as unknown[] | undefined)?.[0]).toMatchObject({
+      scope: f.scope, contentRevision: {
+        artifactKey, expectedArtifactVersion: baseline.version, expectedArtifactHash: baseline.contentHash,
+        note: '纠正两次历史事件混淆', authorDraftJson: '{"revised":"明确区分两次事件"}',
+      },
+    })
+  }, 20_000)
 
   it('P1和V2只允许原输入重试，P2才显示并提交修复要求与作者JSON', async () => {
     const owned = await seedCurrentProductWorld('恢复策略 UI')

@@ -6,6 +6,7 @@ import {
   ShieldAlert, Stethoscope, RefreshCw, GitCompareArrows,
 } from 'lucide-react'
 import { exportProjectJSON, downloadJSON, importProjectJSON, type ProjectExportData } from '../../lib/export/json-export'
+import { readProjectJSONFile } from '../../lib/export/json-file'
 import { exportProjectMarkdown, exportProjectTXT, downloadTextFile } from '../../lib/export/text-export'
 import {
   isFSASupported, ensureFolderPermission, folderPermissionGranted,
@@ -147,7 +148,7 @@ function ExportTab({ project, onImported, onOpenStorageSettings }: Props) {
     if (!file) return
     try {
       show('loading', '正在导入项目...')
-      const data: ProjectExportData = JSON.parse(await file.text())
+      const data = await readProjectJSONFile(file) as ProjectExportData
       const report = inspectProjectBackup(data)
       setBackupReport(report)
       if (!report.valid) throw new Error(report.errors.join('；'))

@@ -14,8 +14,33 @@ const GENERIC_AUTHOR_REPAIR_TASKS = new Map<string, string>([
 ])
 
 const TEXT_ADVENTURE_AUTHOR_REPAIR_TASKS = new Map<string, string>([
+  ['content.story-bible', 'text-adventure.story-bible.v1'],
+  ['content.cast-bible', 'text-adventure.cast-bible.v1'],
+  ['content.adventure-architecture', 'text-adventure.production-architecture.v1'],
+  ['content.narrative-arc-scenes', 'text-adventure.narrative-design.v1'],
+  ['content.narrative-decision-plan', 'text-adventure.narrative-design.v1'],
+  ['content.ending-route-plan', 'text-adventure.ending-route-plan.v1'],
+  ['content.main-quest-plan', 'text-adventure.production-mainline.v1'],
   ['content.design', 'text-adventure.creative-direction.v1'],
   ['content.product-module', 'text-adventure.production-systems.v1'],
+  ['content.adventure-side-quests', 'text-adventure.production-side-quests.v1'],
+  ['content.adventure-ambient-events', 'text-adventure.production-ambient-events.v1'],
+  ['content.quest-script.main.act-1.single', 'text-adventure.quest-script.v1'],
+  ['content.quest-script.main.act-1.multi', 'text-adventure.quest-script.v1'],
+  ['content.quest-script.main.act-2.single', 'text-adventure.quest-script.v1'],
+  ['content.quest-script.main.act-2.multi', 'text-adventure.quest-script.v1'],
+  ['content.quest-script.main.act-3.single', 'text-adventure.quest-script.v1'],
+  ['content.quest-script.main.act-3.multi', 'text-adventure.quest-script.v1'],
+  ['content.quest-script.supplemental', 'text-adventure.quest-script.v1'],
+  ['content.scene-script.act-1.part-1', 'text-adventure.scene-script.v1'],
+  ['content.scene-script.act-1.part-2', 'text-adventure.scene-script.v1'],
+  ['content.scene-script.act-2.part-1', 'text-adventure.scene-script.v1'],
+  ['content.scene-script.act-2.part-2', 'text-adventure.scene-script.v1'],
+  ['content.scene-script.act-3.part-1', 'text-adventure.scene-script.v1'],
+  ['content.scene-script.act-3.part-2', 'text-adventure.scene-script.v1'],
+  ['content.dialogue-pass.act-1', 'text-adventure.dialogue-pass.v1'],
+  ['content.dialogue-pass.act-2', 'text-adventure.dialogue-pass.v1'],
+  ['content.dialogue-pass.act-3', 'text-adventure.dialogue-pass.v1'],
   ['media.requirements', 'text-adventure.visual-direction.v1'],
 ])
 

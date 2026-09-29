@@ -10,6 +10,7 @@ import type { AvgAuthoringDraftV1, AvgDraftMediaV1 } from '../avg/authoring-cont
  */
 import { deriveExportProjectJSON } from './registry-export'
 import { assertTrustedProjectBackup } from './backup-trust'
+import { createProjectJSONBlob } from './json-file'
 import type {
   Project, Worldview, StoryCore, PowerSystem,
   Character, OutlineNode, Chapter,
@@ -624,8 +625,7 @@ export async function exportProjectJSON(projectId: number): Promise<ProjectExpor
 
 /** 下载 JSON 文件 */
 export function downloadJSON(data: ProjectExportData, filename: string) {
-  const json = JSON.stringify(data, null, 2)
-  const blob = new Blob([json], { type: 'application/json' })
+  const blob = createProjectJSONBlob(data)
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

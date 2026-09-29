@@ -629,11 +629,28 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
   }
   if (type === 'pause') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'reason']), expectedStateRevision: expectedRevision(row.expectedStateRevision), reason: text(row.reason, 'reason', 4000) }
   if (type === 'resume') {
+    const hasContentRevision = Object.prototype.hasOwnProperty.call(row, 'contentRevision')
     const hasPausedReservations = Object.prototype.hasOwnProperty.call(row, 'pausedReservationDispositions')
     const commandId = commandHeader(row, type, [
       'expectedStateRevision',
       ...(hasPausedReservations ? ['pausedReservationDispositions'] : []),
+      ...(hasContentRevision ? ['contentRevision'] : []),
     ])
+    const contentRevision = hasContentRevision ? (() => {
+      const revision = record(row.contentRevision, 'resume.contentRevision')
+      exactKeys(revision, ['artifactKey', 'expectedArtifactVersion', 'expectedArtifactHash', 'note', 'authorDraftJson'], 'resume.contentRevision')
+      const expectedArtifactHash = text(revision.expectedArtifactHash, 'resume.contentRevision.expectedArtifactHash', 64)
+      if (!/^[a-f0-9]{64}$/.test(expectedArtifactHash)) fail('resume.contentRevision.expectedArtifactHash 无效')
+      const authorDraftJson = text(revision.authorDraftJson, 'resume.contentRevision.authorDraftJson', 120_000)
+      try { record(JSON.parse(authorDraftJson), 'resume.contentRevision.authorDraftJson') } catch { fail('resume.contentRevision.authorDraftJson 必须是 JSON 对象') }
+      return {
+        artifactKey: enumValue(revision.artifactKey, ['content.product-module', 'content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-scenes', 'content.narrative-decision-plan', 'content.ending-route-plan', 'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2', 'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2', 'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2', 'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3'], 'resume.contentRevision.artifactKey'),
+        expectedArtifactVersion: positiveId(revision.expectedArtifactVersion, 'resume.contentRevision.expectedArtifactVersion'),
+        expectedArtifactHash,
+        note: text(revision.note, 'resume.contentRevision.note', 2000),
+        authorDraftJson,
+      }
+    })() : undefined
     const pausedReservationDispositions = hasPausedReservations
       ? (() => {
           if (!Array.isArray(row.pausedReservationDispositions)
@@ -673,6 +690,7 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
       commandId,
       expectedStateRevision: expectedRevision(row.expectedStateRevision),
       ...(pausedReservationDispositions ? { pausedReservationDispositions } : {}),
+      ...(contentRevision ? { contentRevision } : {}),
     }
   }
   if (type === 'stop') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'retention']), expectedStateRevision: expectedRevision(row.expectedStateRevision), retention: enumValue(row.retention, ['keep-build', 'discard-unreleased'], 'retention') }
@@ -747,7 +765,17 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
   if (type === 'revise-media-assets') {
     const commandId = commandHeader(row, type, [
       'expectedStateRevision', 'buildNumber', 'action', 'targets',
+      ...(Object.prototype.hasOwnProperty.call(row, 'authorReview') ? ['authorReview'] : []),
     ])
+    let authorReview: Extract<ProductProductionCommandV1, { type: 'revise-media-assets' }>['authorReview']
+    if (row.authorReview != null) {
+      const review = record(row.authorReview, 'authorReview')
+      exactKeys(review, ['sourceGateReceiptHash', 'sourceEvidenceHash'], 'authorReview')
+      if (!isSha256Hash(review.sourceGateReceiptHash) || !isSha256Hash(review.sourceEvidenceHash)) {
+        fail('authorReview hash 无效')
+      }
+      authorReview = { sourceGateReceiptHash: review.sourceGateReceiptHash, sourceEvidenceHash: review.sourceEvidenceHash }
+    }
     if (row.action !== 'regenerate' || !Array.isArray(row.targets)
       || row.targets.length < 1 || row.targets.length > 24) {
       fail('批量媒资修订只允许 1–24 个 regenerate 目标')
@@ -767,6 +795,7 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
     return {
       type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision),
       buildNumber: positiveId(row.buildNumber, 'buildNumber'), action: 'regenerate', targets,
+      ...(authorReview ? { authorReview } : {}),
     }
   }
   if (type === 'publish') {

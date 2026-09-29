@@ -24,6 +24,7 @@ import {
 } from '../product/world-requirement-adapters'
 import { createWorldReferenceV1 } from '../world-engine/world-reference'
 import { resolveProductProductionWorldCompilationDescriptorsV2 } from './world-source'
+import { textAdventureMandatoryFullWorldResourcesV1 } from '../adventure/world-source-requirements'
 
 function unique<T extends string>(values: readonly T[]): T[] {
   return [...new Set(values)].sort() as T[]
@@ -257,7 +258,14 @@ export async function executeProductProductionWorldGatewayV1(input: {
       .map(descriptor => `${descriptor.worldSemantic!.area}/${descriptor.worldSemantic!.resourceKind}/${descriptor.resourceKey}`)
       .join(',')}`)
   }
-  const mandatoryResourceKeys = unique([...boundary.mandatoryResourceKeys, ...compilationResources])
+  const specialistFullResources = textAdventureMandatoryFullWorldResourcesV1({
+    productType: input.brief.intent.productType,
+    selection: input.brief.source.selection,
+    task: input.task,
+  })
+  const mandatoryResourceKeys = unique([
+    ...boundary.mandatoryResourceKeys, ...compilationResources, ...specialistFullResources,
+  ])
   return executeContextGatewayV1({
     skill,
     scope: input.scope,
@@ -265,7 +273,9 @@ export async function executeProductProductionWorldGatewayV1(input: {
     accessPolicyOverride: input.sourcePlan.gatewayPolicy,
     allowedResourceKeys: boundary.allowedResourceKeys,
     mandatoryResourceKeys,
-    mandatoryFullResourceKeys: unique([...boundary.mandatoryFullResourceKeys, ...compilationResources]),
+    mandatoryFullResourceKeys: unique([
+      ...boundary.mandatoryFullResourceKeys, ...compilationResources, ...specialistFullResources,
+    ]),
     mandatoryOriginalResourceKeys: unique(compilationResources),
     targetResourceKeys: unique([...boundary.targetResourceKeys, ...compilationResources]),
     query: productProductionWorldQueryV1(input.brief, input.task.taskKey),

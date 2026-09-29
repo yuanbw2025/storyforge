@@ -18,13 +18,16 @@ import {
 import { createProductProductionPlanV3 } from '../../src/lib/product-production/plan'
 import {
   assertProductProductionBudgetLedgerV1,
+  prepareLegacyPausedProductBuildV1,
   runProductProductionSchedulerCycleV1,
   runProductProductionUntilBlockedV1,
   ProductProductionDraftRejectedErrorV1,
   textAdventureInvalidQualityRollbackSourceV1,
   invalidTextAdventureQualityReviewRollbackEpochV1,
   textAdventureQualityRollbackAlreadyAppliedV1,
+  productProductionRecoveryHasNewerCompatibleRootV1,
   recoveryInvalidatedTaskKeys,
+  revisedNarrativeQualityRetryTaskV1,
   executionBindingDriftInvalidatedTaskKeysV1,
   effectiveTextProviderConcurrencyV1,
   textAdventureTaskFailures,
@@ -1918,6 +1921,51 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(invalidated).not.toContain('content.main-quest-plan')
   })
 
+  it('已装配新版正文后的审查中断只恢复审查，旧报告不再倒退重写；未改稿和损坏证据不享有该恢复', async () => {
+    const f = await textAdventureQualityRecoveryFixture('revised-narrative-review-retry')
+    await acceptProductBuildArtifact({
+      scope: f.scope, buildId: f.build.id!, controlEpoch: f.build.controlEpoch,
+      artifactKey: 'content.narrative', kind: 'narrative',
+      payload: { text: '旧的错误选项' }, inputHash: '5'.repeat(64), producerReceiptHash: '6'.repeat(64),
+    })
+    await acceptProductBuildArtifact({
+      scope: f.scope, buildId: f.build.id!, controlEpoch: f.build.controlEpoch,
+      artifactKey: 'quality.adventure-review', kind: 'playtest-report',
+      payload: failedTextAdventureReview({ issues: [{
+        severity: 'blocking', artifactKey: 'content.dialogue-pass.act-2',
+        detail: '选项动作与下一场开头不一致', recommendation: '修订选择描述',
+      }] }), inputHash: '7'.repeat(64), producerReceiptHash: '8'.repeat(64),
+    })
+    const source = (await db.productBuildArtifacts.where('[buildId+artifactKey]')
+      .equals([f.build.id!, 'content.narrative']).first())!
+    const payload = { text: '已修订且重新装配的选择动作' }
+    const revisedId = await db.productBuildArtifacts.add({
+      ...source, id: undefined, version: source.version + 1,
+      controlEpoch: f.build.controlEpoch + 1,
+      payloadJson: canonicalProductProductionJsonV2(payload), contentHash: await hashProductProductionValueV2(payload),
+    })
+    const failureJson = JSON.stringify({ previousFailure: {
+      taskKey: 'content.adventure-quality-review.act-2', code: 'task-executor-failed',
+      detail: 'HTTP 200 empty response finish=length',
+      repairCause: { taskKey: 'integration.package', detail: '文字冒险叙事质量审查未通过' },
+    } })
+    const retry = { buildId: f.build.id!, controlEpoch: f.build.controlEpoch + 1, failureJson }
+    expect(await revisedNarrativeQualityRetryTaskV1(retry)).toBe('content.adventure-quality-review.act-2')
+    const invalidated = await recoveryInvalidatedTaskKeys({
+      ...retry, previousControlEpoch: retry.controlEpoch,
+      plan: { ...f.recoveryPlan, controlEpoch: retry.controlEpoch + 1 },
+    })
+    expect(invalidated).toContain('content.adventure-quality-review.act-2')
+    expect(invalidated).toContain('integration.package')
+    expect(invalidated).not.toContain('content.dialogue-pass.act-2')
+    expect(invalidated).not.toContain('content.scene-script.act-2.part-2')
+    expect(invalidated).not.toContain('content.adventure-quality-review.act-1')
+    await db.productBuildArtifacts.update(revisedId, { payloadJson: source.payloadJson, contentHash: source.contentHash })
+    expect(await revisedNarrativeQualityRetryTaskV1(retry)).toBeNull()
+    await db.productBuildArtifacts.update(revisedId, { contentHash: '9'.repeat(64) })
+    expect(await revisedNarrativeQualityRetryTaskV1(retry)).toBeNull()
+  })
+
   it('审查字段路径保留 stable key owner，精确路由 choice.label 到对应幕对白', async () => {
     const f = await textAdventureQualityRecoveryFixture('quality-review-field-path-owner')
     await acceptProductBuildArtifact({
@@ -2006,6 +2054,20 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(invalidated).not.toContain('content.scene-script.act-3.part-1')
     expect(invalidated).not.toContain('content.dialogue-pass.act-1')
     expect(invalidated).not.toContain('content.dialogue-pass.act-3')
+  })
+
+  it('图片审查汇总结论修复只重算汇总和运行包，不重发图片或模型审查', async () => {
+    const f = await textAdventureQualityRecoveryFixture('visual-severity-reassembly')
+    const invalidated = await recoveryInvalidatedTaskKeys({
+      buildId: f.build.id!, previousControlEpoch: f.build.controlEpoch, plan: f.recoveryPlan,
+      failureJson: JSON.stringify({ blockerKey: 'integration.package', resolution: { action: 'retry' },
+        previousFailure: { taskKey: 'integration.package', code: 'task-executor-failed', attempt: 1,
+          detail: '商业候选的独立图片审查未通过:revision-required' } }),
+    })
+    expect(invalidated).toContain('media.visual-quality-review')
+    expect(invalidated).toContain('integration.package')
+    expect([...invalidated].some(key => /^media\.visual\.\d|^media\.visual-quality-review\.batch/.test(key))).toBe(false)
+    expect(invalidated).not.toContain('content.narrative')
   })
 
   it('叙事集成点名不兼容对白工件时只重跑对应幕 Dialogue Pass', async () => {
@@ -2236,6 +2298,43 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(build?.failureJson).toContain('task-context-budget-exceeded')
     await runProductProductionUntilBlockedV1(input)
     expect(calls.size).toBe(0)
+  })
+
+  it.each([false, true])('返修底稿服从当前上游 hash，变化=%s 时不恢复旧角色稿', async changed => {
+    const f = await textAdventureQualityRecoveryFixture(`repair-baseline-upstream-${changed}`)
+    const taskKey = 'content.cast-bible'
+    const put = async (artifactKey: string, controlEpoch: number, payload: object) => acceptProductBuildArtifact({
+      scope: f.scope, buildId: f.build.id!, controlEpoch, artifactKey, kind: 'product-design',
+      payload, inputHash: '1'.repeat(64), producerReceiptHash: '2'.repeat(64),
+    })
+    const story = await put('content.story-bible', f.build.controlEpoch, { fact: '旧故事' })
+    const cast = await put(taskKey, f.build.controlEpoch, { characters: [{ name: '旧角色', role: 'major-npc' }] })
+    await put('content.product-module', f.build.controlEpoch, { unrelated: '原值' })
+    const nextEpoch = f.build.controlEpoch + 1
+    await db.productBuilds.update(f.build.id!, { controlEpoch: nextEpoch })
+    const current = await put('content.story-bible', nextEpoch, { fact: changed ? '作者新故事' : '旧故事' })
+    await put('content.product-module', nextEpoch, { unrelated: '新值' })
+    const detail = '角色条目缺少 visualAnchor，须提交完整角色工件。'
+    await db.productBuilds.update(f.build.id!, { controlEpoch: nextEpoch,
+      failureJson: canonicalProductProductionJsonV2({ blockerKey: taskKey,
+        resolution: { action: 'retry', note: '按当前冻结故事修复' },
+        previousFailure: { taskKey, code: 'task-executor-failed', attempt: 1, detail } }) })
+    const feedback = JSON.parse(await readTextAdventureRepairFeedbackV1({
+      projectId: f.scope.projectId, scope: f.scope, productProductionId: f.productionId,
+      productBuildId: f.build.id!, productProductionTaskKey: taskKey,
+      productArtifactKeys: ['content.story-bible'],
+    }))
+    expect(feedback.lastTaskFailures).toEqual([expect.objectContaining({ taskKey, detail })])
+    if (changed) {
+      expect(feedback.baselineArtifact).toBeNull()
+      expect(feedback.changedBaselineInputs).toEqual([{ artifactKey: 'content.story-bible',
+        previousHash: story.contentHash, currentHash: current.contentHash }])
+      expect(JSON.stringify(feedback)).not.toContain('旧角色')
+      expect(feedback.instruction).toContain('按当前冻结输入重新生成完整工件')
+    } else {
+      expect(feedback.baselineArtifact.contentHash).toBe(cast.contentHash)
+      expect(feedback.changedBaselineInputs).toBeUndefined()
+    }
   })
 
   it('同一专业 task 跨多 epoch 失败时，修复上下文与调度投影都保留最新直接因果失败', async () => {
@@ -2830,6 +2929,127 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(cancellationPayload.reason.length).toBeLessThanOrEqual(1_000)
   }, 30_000)
 
+  it.each(['charge-reservation-upper-bound', 'confirmed-not-charged'] as const)(
+    '旧版暂停缺失 attempt 时从签名 Run 恢复预留，显式 %s 后才允许继续', async disposition => {
+      const owned = await fixture(`scheduler-legacy-pause-${disposition}`)
+      let rejectProvider!: (error: Error) => void
+      let started!: () => void
+      const providerStarted = new Promise<void>(resolve => { started = resolve })
+      const cycle = runProductProductionSchedulerCycleV1({
+        scope: owned.scope, productionId: owned.productionId,
+        executor: async () => {
+          started()
+          return new Promise<ProductProductionTaskExecutionResultV1>((_, reject) => { rejectProvider = reject })
+        },
+        capabilityBindings: [{
+          requirementKey: owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!.requirementKey,
+          adapterId: 'configured-text-provider.v1',
+          bindingHash: await hashProductProductionValueV2({ provider: 'configured' }),
+        }],
+      })
+      await providerStarted
+      const original = (await db.productBuilds.where('productionId').equals(owned.productionId).first())!
+      const originalLedger = JSON.parse(original.budgetLedgerJson)
+      const production = (await db.productProductions.get(owned.productionId))!
+      await executeProductProductionCommand({
+        scope: owned.scope, productionId: owned.productionId,
+        command: { type: 'pause', commandId: 'legacy.pause', expectedStateRevision: production.stateRevision, reason: 'test' },
+      })
+      rejectProvider(new Error('author-paused'))
+      await cycle
+      // Reproduce the former persisted format, preserving the real signed Run.
+      originalLedger.attempts = originalLedger.attempts.filter((attempt: { runId: number }) => (
+        attempt.runId !== originalLedger.tasks['content.design'].runId
+      ))
+      await db.productBuilds.update(original.id!, {
+        budgetLedgerJson: canonicalProductProductionJsonV2(originalLedger),
+        failureJson: JSON.stringify({
+          code: 'user-paused', pausedFromControlEpoch: original.controlEpoch,
+          previousFailure: { taskKey: 'content.design', code: 'task-executor-failed', detail: '保留原修复约束' },
+        }),
+      })
+      const persisted = (await db.productBuilds.get(original.id!))!
+      const prepared = await prepareLegacyPausedProductBuildV1(owned.scope, persisted)
+      const reservation = JSON.parse(prepared.failureJson).pausedProviderReservations[0]
+      expect(reservation).toMatchObject({ taskKey: 'content.design', controlEpoch: original.controlEpoch, attempt: 1 })
+      expect(await db.productBuilds.get(original.id!)).toEqual(persisted)
+      await expect(prepareLegacyPausedProductBuildV1(owned.scope, { ...persisted, planHash: '0'.repeat(64) }))
+        .rejects.toThrow('冻结 Plan')
+      const paused = (await db.productProductions.get(owned.productionId))!
+      const denied = await executeProductProductionCommand({
+        scope: owned.scope, productionId: owned.productionId,
+        command: { type: 'resume', commandId: 'legacy.no-decision', expectedStateRevision: paused.stateRevision },
+      })
+      expect(denied.ok).toBe(false)
+      expect((await db.productBuilds.get(original.id!))!.status).toBe('paused')
+      const command = {
+        type: 'resume' as const, commandId: 'legacy.resolved', expectedStateRevision: paused.stateRevision,
+        pausedReservationDispositions: [{ ...reservation, disposition }],
+      }
+      const resumed = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId, command })
+      expect(resumed.ok).toBe(true)
+      const final = (await db.productBuilds.get(original.id!))!
+      const attempts = JSON.parse(final.budgetLedgerJson).attempts
+      expect(attempts).toHaveLength(1)
+      expect(attempts[0]).toMatchObject({ runId: reservation.runId, usageKnown: true })
+      expect(attempts[0].usage.modelCalls).toBe(disposition === 'confirmed-not-charged' ? 0 : 1)
+      expect(JSON.parse(final.failureJson).pauseReceipt.legacyPauseReceipt.code).toBe('user-paused')
+      expect(textAdventureTaskFailures(final.failureJson).get('content.design')?.detail).toBe('保留原修复约束')
+      expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId, command })).replayed).toBe(true)
+      expect(JSON.parse((await db.productBuilds.get(original.id!))!.budgetLedgerJson).attempts).toEqual(attempts)
+    }, 30_000,
+  )
+
+  it('零模型装配任务暂停时按实际 Run 最小预算恢复，不增加模型调用', async () => {
+    const owned = await fixture('scheduler-deterministic-pause')
+    const base = executorFor(owned, new Map(), { active: 0, peak: 0 })
+    let rejectTask!: (error: Error) => void
+    let started!: () => void
+    const taskStarted = new Promise<void>(resolve => { started = resolve })
+    const cycle = runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: async request => {
+        if (request.task.taskKey !== 'integration.package') return base(request)
+        expect(request.task.executionMode).toBe('deterministic')
+        expect(request.task.budgetReservation).toMatchObject({ outputTokens: 0, modelCalls: 0 })
+        started()
+        return new Promise<ProductProductionTaskExecutionResultV1>((_, reject) => { rejectTask = reject })
+      },
+      capabilityBindings: [{
+        requirementKey: owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!.requirementKey,
+        adapterId: 'configured-text-provider.v1', bindingHash: await hashProductProductionValueV2({ provider: 'configured' }),
+      }],
+    })
+    await Promise.race([taskStarted, cycle.then(result => { throw new Error(JSON.stringify(result.tasks.filter(task => task.status === 'blocked').map(task => ({ taskKey: task.taskKey, blocker: task.blocker })))) })])
+    const original = (await db.productBuilds.where('productionId').equals(owned.productionId).first())!
+    const ledger = JSON.parse(original.budgetLedgerJson)
+    const entry = ledger.tasks['integration.package']
+    const run = (await db.agentRuns.get(entry.runId))!
+    expect(JSON.parse(run.contractJson).budget).toMatchObject({ maxOutputTokens: 1, maxModelCalls: 1 })
+    const production = (await db.productProductions.get(owned.productionId))!
+    expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'pause', commandId: 'deterministic.pause', expectedStateRevision: production.stateRevision, reason: '暂停装配' },
+    })).ok).toBe(true)
+    rejectTask(new Error('author-paused'))
+    await cycle
+    ledger.attempts = ledger.attempts.filter((attempt: { runId: number }) => attempt.runId !== entry.runId)
+    await db.productBuilds.update(original.id!, { budgetLedgerJson: canonicalProductProductionJsonV2(ledger),
+      failureJson: JSON.stringify({ code: 'user-paused', pausedFromControlEpoch: original.controlEpoch }),
+    })
+    const persisted = (await db.productBuilds.get(original.id!))!
+    const prepared = await prepareLegacyPausedProductBuildV1(owned.scope, persisted)
+    const settlement = JSON.parse(prepared.budgetLedgerJson).attempts.find((a: {runId: number}) => a.runId === entry.runId)
+    expect(settlement).toMatchObject({ usage: { modelCalls: 0, outputTokens: 0, costUsd: 0 } })
+    expect(JSON.parse(prepared.failureJson).pausedProviderReservations).toBeUndefined()
+    expect(await db.productBuilds.get(original.id!)).toEqual(persisted)
+    await expect(prepareLegacyPausedProductBuildV1(owned.scope, { ...persisted, planHash: '0'.repeat(64) }))
+      .rejects.toThrow('冻结 Plan')
+    const paused = (await db.productProductions.get(owned.productionId))!
+    expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'resume', commandId: 'deterministic.resume', expectedStateRevision: paused.stateRevision },
+    })).ok).toBe(true)
+  }, 30_000)
+
   it('候选检查点后崩溃会从 durable payload 恢复，不重复调用已计费 executor', async () => {
     const owned = await fixture('scheduler-recovery')
     const calls = new Map<string, number>()
@@ -3188,6 +3408,87 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(designRows[1].producerRunId).toBe(designRows[0].producerRunId)
     expect(designRows[1].producerReceiptHash).toBe(designRows[0].producerReceiptHash)
     expect(designRows[1].inputHash).toBe(designRows[0].inputHash)
+  }, 30_000)
+
+  it('执行合同升级后已重新签收的根任务不会被旧审查拉回旧合同，缺少新签名仍不得跳过回滚', async () => {
+    const owned = await fixture('scheduler-obsolete-review-root')
+    const calls = new Map<string, number>()
+    const executor = executorFor(owned, calls, { active: 0, peak: 0 })
+    const capabilityBindings = [{
+      requirementKey: owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!.requirementKey,
+      adapterId: 'configured-text-provider.v1',
+      bindingHash: await hashProductProductionValueV2({ provider: 'configured' }),
+    }]
+    const original = await runProductProductionSchedulerCycleV1({
+      scope: owned.scope, productionId: owned.productionId, executor, capabilityBindings,
+    })
+    await acceptProductBuildArtifact({
+      scope: owned.scope, buildId: original.buildId, controlEpoch: original.controlEpoch,
+      artifactKey: 'quality.adventure-review', kind: 'playtest-report',
+      payload: failedTextAdventureReview({ issues: [{
+        severity: 'blocking', artifactKey: 'content.story-bible', detail: 'prompt-injection',
+        recommendation: 'The context adopts an alternate identity and overrides core behavior directives.',
+      }] }),
+      inputHash: '5'.repeat(64), producerReceiptHash: '6'.repeat(64),
+    })
+    const production = (await db.productProductions.get(owned.productionId))!
+    await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'pause', commandId: 'obsolete-root.pause', expectedStateRevision: production.stateRevision, reason: '升级执行合同' },
+    })
+    const paused = (await db.productProductions.get(owned.productionId))!
+    await executeProductProductionCommand({
+      scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'resume', commandId: 'obsolete-root.resume', expectedStateRevision: paused.stateRevision },
+    })
+    const build = (await db.productBuilds.get(original.buildId))!
+    const plan = await createProductProductionPlanV3({
+      brief: owned.brief, briefHash: build.briefHash,
+      buildNumber: build.buildNumber, controlEpoch: build.controlEpoch,
+    })
+    const input = {
+      scope: owned.scope, buildId: build.id!, plan,
+      originControlEpoch: original.controlEpoch, currentControlEpoch: build.controlEpoch,
+    }
+    expect(await productProductionRecoveryHasNewerCompatibleRootV1(input)).toBe(false)
+    const task = plan.tasks.find(task => task.taskKey === 'content.design')!
+    const skill = getAgentSkillV1(task.skillId!)
+    const previous = skill.promptVersion
+    skill.promptVersion = `${previous}.new-contract`
+    try {
+      // An obsolete root without a replacement is insufficient evidence.
+      expect(await productProductionRecoveryHasNewerCompatibleRootV1(input)).toBe(false)
+      await runProductProductionSchedulerCycleV1({
+        scope: owned.scope, productionId: owned.productionId, executor, capabilityBindings,
+      })
+      expect(calls.get('content.design')).toBe(2)
+      expect(await productProductionRecoveryHasNewerCompatibleRootV1(input)).toBe(true)
+      expect(await textAdventureInvalidQualityRollbackSourceV1({
+        buildId: build.id!, declaredControlEpoch: build.controlEpoch,
+      })).toBeNull()
+      expect(await productProductionRecoveryHasNewerCompatibleRootV1({
+        ...input, originControlEpoch: build.controlEpoch,
+      })).toBe(false)
+      expect(await invalidTextAdventureQualityReviewRollbackEpochV1({
+        buildId: build.id!, beforeControlEpoch: build.controlEpoch + 1,
+      })).toBe(original.controlEpoch)
+      const current = (await db.productProductions.get(owned.productionId))!
+      await executeProductProductionCommand({
+        scope: owned.scope, productionId: owned.productionId,
+        command: { type: 'pause', commandId: 'obsolete-root.pause-again', expectedStateRevision: current.stateRevision, reason: '模拟后续恢复' },
+      })
+      const pausedAgain = (await db.productProductions.get(owned.productionId))!
+      await executeProductProductionCommand({
+        scope: owned.scope, productionId: owned.productionId,
+        command: { type: 'resume', commandId: 'obsolete-root.resume-again', expectedStateRevision: pausedAgain.stateRevision },
+      })
+      await runProductProductionSchedulerCycleV1({
+        scope: owned.scope, productionId: owned.productionId, executor, capabilityBindings,
+      })
+      expect(calls.get('content.design')).toBe(2)
+    } finally {
+      skill.promptVersion = previous
+    }
   }, 30_000)
 
   it('再次暂停发生在合成 carry Run 之前时，用保留的原生产 Run 验证 binding 而不误判为需付费重试', async () => {

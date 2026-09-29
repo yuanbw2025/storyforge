@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 132 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 133 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -100,8 +100,9 @@
 | `product-production.artifact-inputs` | 上层产品生产任务依赖 | project | L1 | 24000 |
 | `product-production.adventure-scene-script-inputs` | 文字冒险单幕分场写作投影 | project | L0 | 15100 |
 | `product-production.adventure-dialogue-inputs` | 文字冒险独立对白审校投影 | project | L0 | 12500 |
+| `product-production.adventure-visual-direction-inputs` | 文字冒险美术定向与完整正文投影 | project | L0 | 52000 |
 | `product-production.adventure-visual-quality-inputs` | 文字冒险独立图片审查投影 | project | L0 | 12500 |
-| `product-production.adventure-quality-inputs` | 文字冒险分区叙事质量审查投影 | project | L0 | 32000 |
+| `product-production.adventure-quality-inputs` | 文字冒险分区叙事质量审查投影 | project | L0 | 40000 |
 | `product-production.adventure-playtest-inputs` | 文字冒险试玩总监验收证据投影 | project | L0 | 8500 |
 | `product-production.adventure-repair-feedback` | 文字冒险上一轮质量修复反馈 | project | L0 | 6000 |
 | `text-open-world.source-pin` | 文字开放世界冻结来源与本批读取单元 | project | L0 | 100000 |
@@ -499,4 +500,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `63af22db`
+生成时间基准:commit `b8fc69d9`

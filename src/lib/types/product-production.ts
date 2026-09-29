@@ -704,6 +704,15 @@ export interface ProductProductionBlockerResolutionV1 {
   };
 }
 
+/** Explicit replacement bound to one accepted, registered content artifact. */
+export interface TextAdventureContentRevisionV1 {
+  artifactKey: 'content.product-module' | 'content.story-bible' | 'content.cast-bible' | 'content.adventure-architecture' | 'content.narrative-arc-scenes' | 'content.narrative-decision-plan' | 'content.ending-route-plan' | 'content.main-quest-plan' | 'content.adventure-side-quests' | 'content.adventure-ambient-events' | 'content.scene-script.act-1.part-1' | 'content.scene-script.act-1.part-2' | 'content.scene-script.act-2.part-1' | 'content.scene-script.act-2.part-2' | 'content.scene-script.act-3.part-1' | 'content.scene-script.act-3.part-2' | 'content.dialogue-pass.act-1' | 'content.dialogue-pass.act-2' | 'content.dialogue-pass.act-3';
+  expectedArtifactVersion: number;
+  expectedArtifactHash: string;
+  note: string;
+  authorDraftJson: string;
+}
+
 /**
  * Author accounting decision for one exact provider reservation that was still
  * in flight when a Production was paused. Every identity field is required so
@@ -836,6 +845,7 @@ export type ProductProductionCommandV1 =
       expectedStateRevision: number;
       /** Required only when pause froze one or more in-flight provider reservations. */
       pausedReservationDispositions?: ProductProductionPausedReservationDispositionV1[];
+      contentRevision?: TextAdventureContentRevisionV1;
     }
   | {
       type: "stop";
@@ -887,6 +897,8 @@ export type ProductProductionCommandV1 =
     }
   | {
       type: "revise-media-assets";
+      /** Optional frozen author rejection; absent retains Visual QA recovery. */
+      authorReview?: { sourceGateReceiptHash: string; sourceEvidenceHash: string };
       commandId: string;
       expectedStateRevision: number;
       buildNumber: number;

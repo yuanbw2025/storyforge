@@ -1,3 +1,4 @@
+import { hasFrozenAuthorUploadRightsV1 } from './media-rights'
 import { TTRPG_SCENARIO_PROMPT_V1 } from '../ttrpg/scenario-prompt'
 import { parseTtrpgAuthoredScenarioV1, type TtrpgAuthoredScenarioV1 } from '../ttrpg/scenario-authoring'
 import type { ChatResult } from '../ai/client'
@@ -72,7 +73,6 @@ import {
   parseTextAdventureNarrativeArcPlanArtifactV1,
   parseTextAdventureEndingRoutePlanArtifactV1,
   parseTextAdventureMediaAnchorDecisionArtifactV1,
-  normalizeTextAdventureQuestPlanLocationCopyV1,
   parseTextAdventureQuestPlanArtifactV1,
   parseTextAdventureQuestScriptArtifactV2,
   parseTextAdventureSourceDecisionArtifactV1,
@@ -2897,14 +2897,19 @@ function textAdventurePromptVisuallyDepictsCharacterV1(
   const referenceOnly = [
     new RegExp(`(?:证词|日志|档案|记录|回忆|记忆)[^。；\\n]{0,120}${name}`),
     new RegExp(`${name}(?:的(?:目击)?证词|的日志|的档案|的记录|的回忆|的记忆|留下|遗留|保存|曾经|当年)`),
-  ].some(pattern => pattern.test(prompt))
-  if (referenceOnly) return false
-  return [
-    new RegExp(`${name}[^。；\\n]{0,36}(?:将|把|站|坐|走|跑|跪|抵达|进入|发现|面对|转身|抬手|伸手|举起|拿|握|持|穿|靠|睁开眼|睁眼|醒来|苏醒|起身|收回手|触碰|触摸|捧|抱|感受|面向|凝视|表情|眼神|脸|面部|身影|侧面|正面|背影|手臂|双手)`),
+  ]
+  const presentAction = [
+    new RegExp(`${name}[^。；\\n]{0,36}(?:将|把|站|坐|走|跑|跪|抵达|进入|发现|面对|转身|抬手|伸手|举起|取出|翻开|递出|递给|写下|指向|拿|握|持|穿|靠|扶|支撑|睁开眼|睁眼|醒来|苏醒|起身|收回手|触碰|触摸|捧|抱|感受|面向|凝视|表情|眼神|脸|面部|身影|侧面|正面|背影|手臂|双手)`),
     new RegExp(`${name}在(?:画面|前景|中景|近景|远景|场景|房间|大厅|工坊|钟楼|灯塔|海岸|甲板|道路)`),
     new RegExp(`(?:画面|前景|中景|近景|远景|中心|构图)[^。；\\n]{0,64}${name}`),
     new RegExp(`${name}[^。；\\n]{0,24}(?:与|和|同)[^。；\\n]{0,24}(?:并肩|对峙|交谈|行动|站立)`),
-  ].some(pattern => pattern.test(prompt))
+  ]
+  // A historical mention in a different sentence (including an appended
+  // character anchor) must not erase an explicit action in the current scene.
+  return prompt.split(/[。；！？\n]/u).some(sentence => (
+    !referenceOnly.some(pattern => pattern.test(sentence))
+    && presentAction.some(pattern => pattern.test(sentence))
+  ))
 }
 
 function textAdventureNarrativeItemTermsV1(narrative: NarrativeArtifactV1): string[] {
@@ -2928,6 +2933,7 @@ function textAdventureItemTermForSceneV1(
 
 function textAdventureNarrativeBeatForVisualV1(input: {
   sceneTag: string
+  preferredBeatKey?: string
   prompt: string
   characterAnchorRefs: readonly string[]
   narrative: NarrativeArtifactV1
@@ -2936,6 +2942,18 @@ function textAdventureNarrativeBeatForVisualV1(input: {
   const visualBeats = input.narrative.beats.filter(beat => beat.kind === 'narration' || beat.kind === 'action')
   const usable = visualBeats.length > 0 ? visualBeats : input.narrative.beats
   const first = usable[0] ?? null
+  // A valid explicit editorial choice is stronger than a keyword score. The
+  // legacy heuristic remains a fallback for old placeholder requirements,
+  // but must not silently move a curated CG to another scene or ending.
+  const preferred = usable.find(beat => beat.beatKey === input.preferredBeatKey)
+  const editorialAct = /^mainline-turn-act-([123])$/.exec(input.sceneTag)?.[1]
+  if (preferred && editorialAct && nodeKind.get(preferred.nodeKey) !== 'ending'
+    && new RegExp(`(?:^|[.:-])act-${editorialAct}(?:[.:-]|$)`, 'i').test(preferred.beatKey)) return preferred
+  if (preferred && ['ending-consequence', 'alternate-ending-consequence'].includes(input.sceneTag)
+    && nodeKind.get(preferred.nodeKey) === 'ending') return preferred
+  if (preferred && input.sceneTag === 'secondary-region-anchor'
+    && nodeKind.get(preferred.nodeKey) !== 'ending'
+    && /(?:^|[.:-])act-2(?:[.:-]|$)/i.test(preferred.beatKey)) return preferred
   const pick = (beats: FrozenNarrativeBeat[], ratio: number) => (
     beats[Math.min(beats.length - 1, Math.max(0, Math.floor(beats.length * ratio)))] ?? first
   )
@@ -3011,21 +3029,6 @@ function textAdventureNarrativeBeatForVisualV1(input: {
   return first
 }
 
-function textAdventureVisualBeatExcerptV1(textValue: string): string {
-  const visualTerms = ['雾潮', '光', '海', '潮钟', '钟体', '钟楼', '灯塔', '齿轮', '记忆匣', '钥匙', '风雪', '冰', '门', '窗', '走', '站', '坐', '手', '火', '倒塌', '退去', '升起']
-  const excluded = /证词|说的是|知道|意味着|必须做出选择|三条可能的路|一是|二是|三是|愿意支付|将成为|代价是/u
-  const sentences = textValue.split(/(?<=[。！？])/u).map(value => value.trim()).filter(Boolean)
-  const ranked = sentences.map((sentence, index) => ({
-    sentence,
-    index,
-    score: visualTerms.reduce((score, term) => score + Number(sentence.includes(term)), 0),
-  })).filter(item => item.score > 0 && !excluded.test(item.sentence))
-    .sort((left, right) => right.score - left.score || left.index - right.index)
-    .slice(0, 2)
-    .sort((left, right) => left.index - right.index)
-  return ranked.length > 0 ? ranked.map(item => item.sentence).join('') : sentences[0] ?? textValue
-}
-
 function textAdventureCharacterFramingPromptV1(
   character: ProductMediaCharacterAnchorV1,
   editorialJob: string,
@@ -3085,7 +3088,8 @@ function normalizeTextAdventureVisualRequirementPromptV1(input: {
   }
   const narrativeGroundedPrompt = input.mediaKind === 'cg' && input.narrativeBeat
     ? `${input.blueprint?.prompt ?? '关键叙事事件的原创插图'}。` +
-      `冻结叙事节拍（唯一事件事实）：${textAdventureVisualBeatExcerptV1(input.narrativeBeat.text)}。` +
+      `冻结叙事节拍（唯一事件事实）：${input.narrativeBeat.text.trim()}。` +
+      '完整节拍用于核对动作、道具及其状态。只描绘当下场景，下方角色锚点以外的提及人物不得入画；记录、回忆、猜测和内心感受不得改画成同场人物或新增事件。' +
       '只把该节拍已经发生的人物、动作、地点、道具与后果转成一个明确画面；不得新增或改写人物身份、生死、道具、地点、选择与因果。'
     : input.prompt
   const glyphSafePrompt = glyphSafeTextAdventureScenePromptV1(
@@ -3112,6 +3116,7 @@ export function parseProductMediaRequirementsArtifactV2(
   brief: ProductProductionBriefV3,
   characterAnchors: readonly ProductMediaCharacterAnchorV1[] = [],
   narrative: NarrativeArtifactV1 | null = null,
+  interpretation: 'candidate' | 'frozen' = 'candidate',
 ): MediaRequirementsArtifactV1 {
   const row = record(value, 'mediaRequirements')
   exactKeys(row, ['schema', 'version', 'visual', 'audio'], 'mediaRequirements')
@@ -3149,6 +3154,7 @@ export function parseProductMediaRequirementsArtifactV2(
     const sourceBeat = brief.intent.productType === 'text-adventure' && narrative
       ? textAdventureNarrativeBeatForVisualV1({
           sceneTag: key(item.sceneTag, `visual[${index}].sceneTag`),
+          preferredBeatKey: key(item.beatKey, `visual[${index}].beatKey`),
           prompt: rawPrompt,
           characterAnchorRefs: suppliedCharacterRefs,
           narrative,
@@ -3194,13 +3200,12 @@ export function parseProductMediaRequirementsArtifactV2(
     // carry a new beatKey while retaining characters and narrative from the old
     // beat (the exact mismatch Visual QA cannot repair by resampling).
     const frozenVisualBeat = cueBeat ?? sourceBeat
-    // Character anchors must be derived from the same excerpt that is actually
-    // sent to the image provider. A later sentence may discuss an absent or
-    // historical person (for example, a lost mentor) without depicting them.
-    // Binding from the full beat while rendering only the excerpt creates a
-    // contradictory cast contract.
+    // Preserve the entire selected beat for both provider grounding and cast
+    // binding. Keyword-ranked excerpts dropped quiet but essential actions
+    // (opening a coat, closing a notebook). The literal-action classifier still
+    // excludes people who are only mentioned in records or memories.
     const characterGroundingPrompt = frozenVisualBeat && !isCharacter
-      ? textAdventureVisualBeatExcerptV1(frozenVisualBeat.text)
+      ? frozenVisualBeat.text.trim()
       : rawPrompt
     const groundedSuppliedRefs = brief.intent.productType === 'text-adventure'
       && !isCharacter && characterAnchors.length > 0
@@ -3214,14 +3219,15 @@ export function parseProductMediaRequirementsArtifactV2(
           textAdventurePromptVisuallyDepictsCharacterV1(characterGroundingPrompt, character.name)
         )).map(character => character.characterKey)
       : []
-    const secondPersonPlayerRefs = frozenVisualBeat && !isCharacter && /(?:^|[，。；！？\s])你(?:将|要|正|已|在|走|站|伸|拿|握|转|看|按|打开|选择|决定)/u.test(frozenVisualBeat.text)
+    const secondPersonPlayerRefs = !isCharacter && /(?:^|[，。；！？\s])你(?:猛地|缓缓|慢慢|轻轻|小心)?(?:将|要|正|已|在|走|踏|推|站|靠|跪|蹲|睁|伸|拿|握|转|看|按|打开|合上|取出|翻开|抬|低头|借|选择|决定)|你从[^。；！？]{0,16}(?:取出|拿出|抽出|掏出)|你(?:的)?(?:手(?:里|中)|脸)/u.test(characterGroundingPrompt)
       ? characterAnchors.filter(character => character.role === 'player').map(character => character.characterKey)
       : []
     const excludesCharactersByDesign = [
       'cover-opening', 'region-map', 'secondary-region-anchor',
       'important-item-primary', 'important-item-secondary', 'important-item-tertiary',
     ].includes(key(item.sceneTag, `visual[${index}].sceneTag`))
-    const characterAnchorRefs = excludesCharactersByDesign ? [] : [...new Set([
+    const characterAnchorRefs = excludesCharactersByDesign ? [] : interpretation === 'frozen'
+      ? [...new Set(suppliedCharacterRefs)].sort() : [...new Set([
       ...groundedSuppliedRefs,
       ...mentionedCharacterRefs,
       ...secondPersonPlayerRefs,
@@ -3268,7 +3274,9 @@ export function parseProductMediaRequirementsArtifactV2(
       mediaKind,
       sceneTag: key(item.sceneTag, `visual[${index}].sceneTag`),
       beatKey: frozenVisualBeat?.beatKey ?? key(item.beatKey, `visual[${index}].beatKey`),
-      prompt: brief.intent.productType === 'text-adventure'
+      // Candidate normalization is an authoring operation. Re-reading a frozen
+      // artifact must not erase quoted identities or rewrite its accepted beat.
+      prompt: brief.intent.productType === 'text-adventure' && interpretation === 'candidate'
         ? normalizeTextAdventureVisualRequirementPromptV1({
             prompt: rawPrompt,
             blueprint: textAdventureBlueprints[index] ?? null,
@@ -3672,6 +3680,8 @@ function textAdventureSceneScriptContract(input: {
     '冻结槽位中的每个 locationTitle 必须至少一次逐字出现在对应 scene 的 title、summary 或 beats.text 中；只写“工坊”“港口”“这里”等简称不能证明场景已经落实到冻结地点。' +
     '每个 scenes[] 对象只能包含 sceneKey、title、summary、beats 四个字段；choices 只能作为根对象的数组，严禁嵌入 scene 或 beat。' +
     '每个场景必须用多个 beats 完成环境建立、人物行动与有效对白、冲突升级、可行动信息和选择前铺垫；同源同目标的两个选择必须体现不同立场、代价与后续回响，不得是同义改写。' +
+    '实际播放顺序是：进入场景先呈现 summary 与全部 beats，再由玩家执行任务行动和选择。公共正文必须停在本场尚待解决的局面，不能预先完成当前目标，也不能替玩家执行、结算或不可逆承受任一 choice 专属行动。两个互斥选项的结果尤其不能同时出现在公共正文里。场景卡 exitState 是玩家完成行动后的设计目标，不是开场既成事实；当前任务脚本的 successText、costlySuccessText、failureForwardText 也只是尚未发生的条件结果。' +
+    '以充分的环境观察、可核验线索、角色对白、立场冲突和明确风险形成完整场景，而不是靠提前演完选项凑字数。choice.text/description 使用待执行的行动与预期代价；具体成败、资源变化与物品获得以确定性任务结算为准。多个分支汇合后的公共段落只可承认每条入路都成立的事实，不能默认玩家走了其中一条，不能用“你已经……”倒填未发生的选择。' +
     `玩家可见的 scene.summary、ending.summary 以及所有 narration/action 必须从头到尾统一用第二人称“你/你的”指代 player。玩家姓名「${input.playerName}」只允许出现在 NPC 说出的对白、闭合引号内的信件或记录原文中；绝对不得出现在 summary、narration 或 action 的叙述语句中，首次出场、场景开头和结局也不例外。不得用“他/她/该角色”等第三人称继续指代玩家。提交前逐个扫描 summary 与 narration/action.text：只要玩家姓名出现在非引号叙述中，必须改为“你/你的”并重读句子。NPC 仍按冻结角色身份使用一致姓名与称谓。` +
     '冻结 choices 中的 sourceLocationTitle/targetLocationTitle 只是转场核对证据，不得作为额外字段输出。对于 targetLocationTitle 非 null 的选择，text 与 description 合并文案必须至少一次逐字出现该 targetLocationTitle，并明确这是选择后立即进入的地点；不得把任何其他冻结地点写成立即目的地。目标是 ending 而 targetLocationTitle=null 时，则必须说清当下决断而不得伪造下一地点。' +
     `beat.kind 只能逐字使用 narration、dialogue、action、system 四种之一，不得使用 narrative、description、event、transition、reflection 或中文名称。全局 Cast key=${JSON.stringify(input.castKeys)}，但每场 dialogue.speakerKey 还必须逐字来自冻结槽位中该 scene 自己的 allowedSpeakerKeys；其他场景的已登记角色也不得跨场发言。allowedSpeakerKeys 为空或只有 player 时，不得为了凑对白发明守卫、管理员、店员、广播者等临时发言人；环境记录、留言和文件用 narration 表达，除非其真实来源已被当前 scene.castKeys 授权。禁止填写角色姓名、称谓、narrator、空字符串或 null 作为对白说话者；旁白不得伪装成 dialogue，必须使用 kind=narration 且 speakerKey=null。其他非 dialogue 的 speakerKey 也必须为 null。beatKey 必须在整个游戏内唯一，建议使用 beat.act-${input.actIndex + 1}.NNN；同一场景按 order 稳定排序。` +
@@ -4136,7 +4146,14 @@ export function applyTextAdventureSceneRepairPatchV1(
   taskKey: string,
   contextText: string,
   modelPayload: JsonRecord,
+  source: 'model' | 'author-draft' = 'model',
 ): JsonRecord {
+  // A signed author revision supplies a full bundle; its normal scene parser
+  // below still verifies identities, speakers, locations and consequences.
+  // Only model rewrites are restricted to the quality review's patch targets.
+  if (source === 'author-draft'
+    && /^content\.scene-script\.act-[1-3]\.part-[1-9]\d*$/.test(taskKey)
+    && modelPayload.schema === 'storyforge.text-adventure-scene-script-bundle-artifact') return modelPayload
   const plan = textAdventureSceneRepairPatchPlanV1(taskKey, contextText)
   if (!plan) {
     if (!/^content\.scene-script\.act-[1-3]\.part-[1-9]\d*$/.test(taskKey)) {
@@ -4983,70 +5000,6 @@ type TextAdventureQuestScriptOutcomeAnchorV1 = {
   }[]
 }
 
-export function applyTextAdventureQuestScriptOutcomeAnchorsV1(
-  payload: JsonRecord,
-  anchors: readonly TextAdventureQuestScriptOutcomeAnchorV1[],
-  locationTitles: readonly string[],
-): { payload: JsonRecord; anchoredFields: string[] } {
-  if (!Array.isArray(payload.mainObjectiveScripts) || anchors.length === 0) {
-    return { payload, anchoredFields: [] }
-  }
-  const anchoredFields: string[] = []
-  const sanitizeConsequence = (value: string, expectedLocation: string) => (
-    locationTitles.reduce((current, title) => (
-      title === expectedLocation ? current : current.split(title).join('后续地点')
-    ), value.trim())
-  )
-  const mainObjectiveScripts = payload.mainObjectiveScripts.map((script, scriptIndex) => {
-    if (!script || typeof script !== 'object' || Array.isArray(script)) return script
-    const scriptRecord = script as JsonRecord
-    const anchor = typeof scriptRecord.objectiveKey === 'string'
-      ? anchors.find(candidate => candidate.objectiveKey === scriptRecord.objectiveKey)
-      : anchors[scriptIndex]
-    if (!anchor) return script
-    const nextScript = { ...scriptRecord }
-    if (!Array.isArray(nextScript.alternatives)) return nextScript
-    nextScript.alternatives = nextScript.alternatives.map((alternative, alternativeIndex) => {
-      if (!alternative || typeof alternative !== 'object' || Array.isArray(alternative)) return alternative
-      const alternativeRecord = alternative as JsonRecord
-      const alternativeAnchor = typeof alternativeRecord.alternativeKey === 'string'
-        ? anchor.alternatives.find(candidate => (
-            candidate.alternativeKey === alternativeRecord.alternativeKey
-          ))
-        : anchor.alternatives[alternativeIndex]
-      if (!alternativeAnchor) return alternative
-      const nextAlternative = { ...alternativeRecord }
-      if (!['successText', 'costlySuccessText', 'failureForwardText'].every(
-        field => typeof nextAlternative[field] === 'string' && String(nextAlternative[field]).trim(),
-      )) return nextAlternative
-      const successConsequence = sanitizeConsequence(
-        alternativeAnchor.successConsequence, anchor.locationTitle,
-      )
-      const failureConsequence = sanitizeConsequence(
-        alternativeAnchor.failureForwardConsequence, anchor.locationTitle,
-      )
-      const prefix = `${anchor.locationTitle}，围绕“${anchor.objectiveTitle}”`
-      const outcomeValues = {
-        successText: `${prefix}，你达成了目标：${successConsequence}`,
-        costlySuccessText: alternativeAnchor.cost.trim() && alternativeAnchor.cost.trim() !== '无'
-          ? `${prefix}，你以${alternativeAnchor.cost.trim()}为代价达成了目标：${successConsequence}`
-          : `${prefix}，你在不利局面下勉强达成了目标：${successConsequence}`,
-        failureForwardText: `${prefix}的尝试受挫，但局面仍向前推进：${failureConsequence}`,
-      }
-      for (const [field, value] of Object.entries(outcomeValues)) {
-        if (nextAlternative[field] === value) continue
-        nextAlternative[field] = value
-        anchoredFields.push(
-          `mainObjectiveScripts[${scriptIndex}].alternatives[${alternativeIndex}].${field}`,
-        )
-      }
-      return nextAlternative
-    })
-    return nextScript
-  })
-  return { payload: { ...payload, mainObjectiveScripts }, anchoredFields }
-}
-
 export function textAdventureQuestScriptCountRetryDirectiveV1(
   taskKey: string,
   contextText: string,
@@ -5488,6 +5441,7 @@ function textSystem(
     '输出字段必须精确为：{"schema":"storyforge.text-adventure-production-supervision-artifact","version":1,"productionPromise":"...","stages":[{"key":"g1-source-and-direction|g2-architecture-and-quests|g3-scripts-and-dialogue|g4-quality-and-media|g5-assembly-and-automation|g6-human-validation-and-release","objective":"...","responsibleAgentIds":["text-adventure-showrunner"],"exitCriteria":["..."],"stopConditions":["..."]}],"risks":[{"key":"risk.some-key","severity":"warning|blocking","ownerAgentId":"text-adventure-showrunner","evidence":"...","mitigation":"..."}],"authorGates":[{"key":"gate.some-key","afterStageKey":"g1-source-and-direction","decision":"..."}],"nonGoals":["..."]}。stages 必须恰好六项且 key 顺序与枚举顺序一致；risks 至少三项，authorGates 至少三项，nonGoals 至少三项。'
   if (taskKey === 'content.source-sufficiency') return `${common}\n你是来源编辑，只审查冻结 SourcePlan 能否支撑这次文字冒险生产，不创作剧情正文。` +
     '逐域标记充分、部分、缺失或冲突；resourceKeys 只能引用授权清单。缺少但可在产品私域补齐的内容登记 privateAdditions。' +
+    '本岗位必须完整读取所有已选冻结资源后再判断缺口；索引或摘要未列出的字段不等于世界缺失。角色外貌、语言习惯、经历等已存在的事实必须沿用，不能把改写这些事实列为私域补充。未读、超出读取预算与来源真实缺失必须区分。' +
     '只有冻结来源彼此直接矛盾，或连世界前提、玩家身份、开局冲突这些不可由上层产品改写的锚点都完全缺失时，才允许 blocking。' +
     '角色弧、关系演变、秘密揭示顺序、证据/线索编排、任务钩子、结局触发条件、场景视觉锚点、游戏内通用物品与事件细节，均由后续故事、角色、任务、美术岗位在产品私域设计；它们缺失时只能是 warning/privateAdditions，绝不能据此阻断。' +
     'WorldRelease 允许只有稳定语义锚点而没有上层游戏脚本；当来源已经给出前提、主要人物、空间、规则和核心冲突时，应选择 ready-with-private-additions，让作者审查补充清单。' +
@@ -5704,7 +5658,7 @@ function textSystem(
       ? `本 Run 只编译支线与区域事件：mainObjectiveScripts 必须为空；sideQuestScripts 恰好 ${textAdventureQuestScriptIdentityPlan?.sideQuestScripts.length ?? 0} 项，ambientEventScripts 恰好 ${textAdventureQuestScriptIdentityPlan?.ambientEventScripts.length ?? 0} 项。按上游顺序建立全部 entry 后再填 stages，不得仅提交首条。`
       : `本 Run 只编译第 ${boundary.actIndex + 1} 幕${boundary.routeClass === 'single' ? '单解' : '多解'}主线目标：sideQuestScripts 和 ambientEventScripts 必须是空数组；mainObjectiveScripts 必须恰好输出冻结清单中的 ${textAdventureQuestScriptIdentityPlan?.mainObjectiveScripts.length ?? 0} 项，且每个目标的 alternatives 必须逐项覆盖 alternativeKeys，尤其不得把多解目标压成单解。`
     const outcomeAnchors = boundary == null ? ''
-      : `本 Run 每个主线目标的玩家可见结算锚点=${JSON.stringify(textAdventureQuestScriptOutcomeAnchors)}。这是只读输入约束，不是输出字段。逐目标先建立全部 alternatives 骨架；然后让每个 successText、costlySuccessText、failureForwardText 都自然地逐字包含该 objectiveTitle 和 locationTitle，且不得出现其他登记地点标题。successText/costlySuccessText 必须具体实现对应 successConsequence，failureForwardText 必须具体实现对应 failureForwardConsequence；不得把另一目标、另一地点或后续阶段的行动写成当前已完成结果。`
+      : `本 Run 每个主线目标的玩家可见结算锚点=${JSON.stringify(textAdventureQuestScriptOutcomeAnchors)}。这是只读输入约束，不是输出字段。逐目标先建立全部 alternatives 骨架；然后让每个 successText、costlySuccessText、failureForwardText 自然体现该目标的具体行动、发生地与对应后果，不必重复完整任务标题，不得以套话代替场景表达；不得把行动写在其他登记地点。successText/costlySuccessText 必须具体实现对应 successConsequence，failureForwardText 必须具体实现对应 failureForwardConsequence；不得把另一目标、另一地点或后续阶段的行动写成当前已完成结果。`
     return `${common}\n你是任务脚本工程师。你不设计新故事、不修改上游阶段或目标，也不直接写运行状态；你的职责是把已采纳的主线、支线和区域事件计划逐项翻译为受控的检查参数、时间成本与三档结算文本。` +
       runBoundary +
       outcomeAnchors +
@@ -5748,6 +5702,7 @@ function textSystem(
     return `${common}\n${scopeDuty}` +
       '输入证据包 version=3；narrative.beatColumns 固定为 [beatKey,order,kind,speakerKey,text]，每个 nodes[].beats[] 都按此列序排列。act 分包保留全部受审 beat 文本并省略重复 node summary，绝不能把空 summary 当作内容缺失。' +
       'graphFacts 是由已验收 content.narrative 和运行编译规则确定性投影的只读权威；其中 incomingChoiceKeysByNodeKey、outgoingChoiceKeysByNodeKey 与 reachableNodeKeys 已完成机器计算。不得把其中已经存在的入边、出边或可达节点报告为缺失，也不得建议重复新增相同连接。decisionChoiceBindings 是编译器按冻结顺序应用的 option→choice 精确绑定；必须按它核对 option.label/cost/effect 与对应 choice.label，不得按编号或语感自行交换绑定。你仍应审查这些连接的玩家可见措辞、代价、差异与后续回响质量。' +
+      'structure 投影中的 graphFacts.echoTextDictionary 是无损文本字典：labelTextRef 是标签索引，successTextRefs 按顺序取字典字符串、不加分隔符直接连接，得到完整 successText；必须先展开引用再评价每个 actionKey 的文案，不能把引用形式误报为缺少回响。' +
       '若 decisionChoiceBindings 中两个 option 分别绑定不同 choiceKey，即使两个 choice 汇流到相同 targetNodeKey，也不得声称“绑定同一 choice”。不同 persistentEffectKey 和 cost 是已登记的状态差异；options[].echoes 已列出运行编译器将生成的 condition-gated actionKey、出现 sceneKey 与逐字玩家可见文案。不得否认已登记的 choice、effect、cost 或 echo；如果认为后续回响质量仍然不足，必须引用某个已列 actionKey 及其实际 successText 中的具体缺陷。' +
       'graphFacts.endingRouteRequirements 是独立结局路线设计工件经规则穷举验证后投影到运行编译器的权威条件：每个 endingKey 的 requiredEffectKeys 会被编译为对应结局行动的前置条件。content.narrative 最终 choice 的 availableConditionJson 可以保持通用空条件，它不拥有结局资格，也不能覆盖 endingRouteRequirements。只有当某条已列路线的 requiredEffectKeys 与该结局 requiredConsequences/dramaticAnswer 在语义上矛盾时，才可把 owner 设为 content.ending-route-plan 并报告；不得因最终 choice 空条件或多条边从同一末场景汇出而误报结局无条件。' +
       `本批 scope=${qualityReviewScope}，只能评分固定维度=${JSON.stringify(scoreKeys)}；scores 必须且只能含这些 key，每个值只能是 JSON 整数 1–5。不得新增、遗漏或自行选择维度。` +
@@ -5835,7 +5790,8 @@ function textSystem(
     '当清单中已有独立角色立绘时，未携带角色锚点的 background 必须是无人物、无人形倒影、无人物剪影的纯空景；' +
     '它们必须携带示例中的角色锚点与完整 hardConstraints；background/cg 只有画面实际出现该冻结角色时才可携带同一合法合同，否则两个数组都必须为空；ui 的两个数组必须为空。' +
     (brief.intent.productType === 'text-adventure'
-      ? '每个 sceneTag 代表一个不可替代的编辑职责，必须全局唯一；禁止复用封面、地图、同一角色或同一事件来凑图片数量。前三个角色槽位应分别落实清单冻结的角色，不得全部改回主角。prompt 与角色圣经/硬约束冲突时必须重写 prompt，不能让发色、年龄、服饰、伤痕或身份自相矛盾。'
+      ? '登记的 storyforge.text-adventure-visual-direction-inputs 中，story 是故事圣经，cast 是角色外貌权威，architecture 是地点与视觉规则，narrative.beats 是已采纳的完整节拍正文；它们分别对应 content.story-bible、content.cast-bible、content.adventure-architecture 与 content.narrative，sources 绑定原稿版本与 hash。未提供的任务执行脚本和对白审校副本不属于本美术任务输入，不得要求重写或补造它们。'
+        + '每个 sceneTag 代表一个不可替代的编辑职责，必须全局唯一；禁止复用封面、地图、同一角色或同一事件来凑图片数量。前三个角色槽位应分别落实清单冻结的角色，不得全部改回主角。prompt 与角色圣经/硬约束冲突时必须重写 prompt，不能让发色、年龄、服饰、伤痕或身份自相矛盾。'
         + '所有叙事 CG 只能改编 content.narrative 中被 beatKey 引用的已采纳节拍，不得新增正文不存在的人名、遗骸、生死、道具、地点、选择或因果；确定性编译器会丢弃 CG 的模型剧情扩写并以真实节拍原文为事实权威。'
       : '')
 }
@@ -6736,10 +6692,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
             ambientEventScripts: supplementalPlan('content.adventure-ambient-events'),
           }
         }
-        const mainValue = normalizeTextAdventureQuestPlanLocationCopyV1({
-          value: artifactPayload(input, 'content.main-quest-plan'),
-          locationTitles: textAdventureLocationTitles,
-        }).value as JsonRecord
+        const mainValue = artifactPayload(input, 'content.main-quest-plan') as JsonRecord
         const quests = Array.isArray(mainValue.quests) ? mainValue.quests : []
         const mainQuest = quests[0] && typeof quests[0] === 'object' && !Array.isArray(quests[0])
           ? quests[0] as JsonRecord : {}
@@ -6810,10 +6763,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     questScriptModelTask && input.task.taskKey !== TEXT_ADVENTURE_QUEST_SCRIPT_SUPPLEMENTAL
       && textAdventureQuestScriptIdentityPlan
       ? (() => {
-          const mainValue = normalizeTextAdventureQuestPlanLocationCopyV1({
-            value: artifactPayload(input, 'content.main-quest-plan'),
-            locationTitles: textAdventureLocationTitles,
-          }).value as JsonRecord
+          const mainValue = artifactPayload(input, 'content.main-quest-plan') as JsonRecord
           const quests = Array.isArray(mainValue.quests) ? mainValue.quests : []
           const mainQuest = quests[0] && typeof quests[0] === 'object' && !Array.isArray(quests[0])
             ? quests[0] as JsonRecord : {}
@@ -7037,7 +6987,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
   try {
   const parsedRaw = parseProductionModelJsonObjectV1(output, input.task.taskKey)
   const repairMergedRaw = applyTextAdventureSceneRepairPatchV1(
-    input.task.taskKey, input.contextText, parsedRaw,
+    input.task.taskKey, input.contextText, parsedRaw, input.authorDraftJson ? 'author-draft' : 'model',
   )
   const legalized = legalizeProductionModelProtocolDefaultsV1(input.task.taskKey, repairMergedRaw, {
     narrativeStatePolicy: options.brief.intent.productType === 'text-adventure'
@@ -7085,14 +7035,9 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     sceneScriptChoiceFallbacks: textAdventureSceneScriptChoiceFallbacks,
     dialogueReviewContract: textAdventureDialogueReviewContract,
   })
-  const questScriptOutcomeAnchoring = questScriptModelTask
-    ? applyTextAdventureQuestScriptOutcomeAnchorsV1(
-        legalized.payload,
-        textAdventureQuestScriptOutcomeAnchors,
-        textAdventureLocationTitles,
-      )
-    : { payload: legalized.payload, anchoredFields: [] }
-  const raw = questScriptOutcomeAnchoring.payload
+  // Player-visible prose remains authored content. Validate mismatches below;
+  // never replace three outcome variants with a deterministic synopsis.
+  const raw = legalized.payload
   let payload: unknown
   let kind: ProductProductionTaskArtifactV1['kind']
   let quality: unknown
@@ -7242,12 +7187,8 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       storyBible,
       locationTitles: textAdventureLocationTitles,
     })
-    const locationCopyNormalization = normalizeTextAdventureQuestPlanLocationCopyV1({
-      value: raw,
-      locationTitles: textAdventureLocationTitles,
-    })
     const mainQuestPlan = parseTextAdventureQuestPlanArtifactV1({
-      value: locationCopyNormalization.value,
+      value: raw,
       brief: options.brief,
       arcPlan,
       cast,
@@ -7261,8 +7202,6 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       mainQuestPlanVerified: true,
       stageCount: mainQuestPlan.quests[0].stages.length,
       objectiveCount: mainQuestPlan.quests[0].objectives.length,
-      deterministicLocationCopyRepaired: locationCopyNormalization.repairedFields.length > 0,
-      deterministicLocationCopyRepairedFields: locationCopyNormalization.repairedFields,
     }
   } else if (questScriptModelTask) {
     if (!options.brief.textAdventure) fail('文字冒险任务脚本缺少专用 Brief')
@@ -7360,8 +7299,6 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
         : `main-act-${questScriptBoundary.actIndex + 1}-${questScriptBoundary.routeClass}`,
       mainObjectiveScriptCount: questScript.mainObjectiveScripts.length,
       supplementalScriptCount: questScript.sideQuestScripts.length + questScript.ambientEventScripts.length,
-      deterministicOutcomeAnchorsApplied: questScriptOutcomeAnchoring.anchoredFields.length > 0,
-      deterministicOutcomeAnchoredFields: questScriptOutcomeAnchoring.anchoredFields,
     }
   } else if (sceneScriptBoundary != null) {
     if (!options.brief.textAdventure) fail('文字冒险分场脚本缺少专用 Brief')
@@ -7760,7 +7697,12 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
   return {
     artifacts: [{
       artifactKey: input.task.outputArtifactKeys[0], kind, payload, quality,
-      rights: { origin: input.authorDraftJson ? 'author-revised-model-draft' : 'configured-text-model', containsThirdPartyMedia: false },
+      rights: {
+        origin: input.authorDraftJson ? 'author-revised-model-draft' : 'configured-text-model',
+        containsThirdPartyMedia: false,
+        ...(input.authorDraftJson && input.authorResolution
+          ? { authorRevisionCommandId: input.authorResolution.commandId } : {}),
+      },
     }],
     passedGateIds: [...input.task.acceptanceGateIds],
     usage: paidUsage,
@@ -8100,7 +8042,7 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
   const identityRepair = input.mediaKind === 'cg'
     && /对峙|角色身份|身份归属|无关角色|未登记角色|视觉锚点/.test(input.repairEvidence)
   const preferMentor = /导师|记忆|回忆|遗物/.test(`${input.scenePrompt ?? ''}\n${input.repairEvidence}`)
-  const player = input.characters.find(character => character.role === 'player') ?? null
+  const player = targetCharacters.find(character => character.role === 'player') ?? null
   const lostMentor = player
     ? input.characters.find(character => (
         character.role !== 'player'
@@ -8113,7 +8055,7 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
     && /缺席|遗漏|睁开眼|醒来|未出现|没有出现/.test(input.repairEvidence)
     && /无人物|静物|不应.{0,8}入画|仅通过.{0,12}(?:遗留物|遗物)|导师.{0,8}(?:缺席|不出现|不得出现)/.test(input.repairEvidence)
   const namedNpc = identityRepair && !playerOnlyLostMentorScene
-    ? input.characters
+    ? targetCharacters
         .filter(character => character.role !== 'player' && input.repairEvidence.includes(character.name))
         .map(character => ({
           character,
@@ -8140,38 +8082,13 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
     && targetCharacters.some(character => /(?:一把|单件)?折叠冰镐/.test(character.visualAnchor))
   const needsPureEnvironment = input.mediaKind === 'background'
     && /(?:无人物|纯环境|移除.{0,8}(?:人物|角色)|不得出现.{0,8}(?:人物|角色))/.test(input.repairEvidence)
-  const needsSmoothGlyphFreeRepair = /文字|字符|汉字|数字|字母|罗马|英文|符文|伪字|可读/.test(input.repairEvidence)
-  const needsPackingDocumentsIntoCoat = input.sceneTag === 'mainline-turn-act-3'
-    && /(?:图纸|笔记|航线草图).{0,32}(?:揣进怀|收入怀|放入怀|塞进怀|放进外套|收入外套)|(?:揣进怀|收入怀|放入怀|塞进怀|放进外套|收入外套).{0,32}(?:图纸|笔记|航线草图)/
-      .test(`${input.scenePrompt ?? ''}\n${input.repairEvidence}`)
-  const sceneSpecificPrompt = input.sceneTag === 'cover-opening' && needsSmoothGlyphFreeRepair
-    ? 'Wide cinematic ocean-fantasy establishing shot, full bleed. A vast foggy archipelago at twilight. Far away, exactly one narrow asymmetric copper navigation beacon appears only as a small side-view silhouette partly swallowed by dense salt fog. Its complete visible form is an irregular vertical stack of rectangular slabs, straight pipes, open lattice, and one angular amber lamp at the top. It has no front-facing ornamental surface. Sea, cloud, and mist fill all four corners. Every manufactured surface is broad, smooth, blank, and naturally weathered. No people.'
-    : input.sceneTag === 'protagonist-anchor' && targetCharacters.length === 1
-      ? `Transparent-background three-quarter-body concept art of exactly one character: ${targetCharacters[0].name}, ${targetCharacters[0].publicIdentity}. A young woman and ocean-fantasy mechanical repair apprentice with short black hair and subtle salt-gray tips, wearing a practical layered navy repair coat. Her face is clean, natural, healthy, and unpainted. Exactly one plain brass-buckle wrist guard is worn on the anatomical LEFT forearm; the right forearm has only a plain navy cloth sleeve. One small slender brass tuning key is held gently in the left hand while the left thumb touches its handle. Show head to mid-thigh with both hands visible, natural proportions, restrained expression, clean silhouette, and empty transparent surroundings.`
-    : input.sceneTag === 'major-character-anchor' && targetCharacters.length === 1
-      ? `Transparent-background frontal three-quarter-body identity concept art, head to mid-thigh, of exactly one character: ${targetCharacters[0].name}, a weathered one-armed coastal tavern owner with deep-brown skin. He faces the camera with only a slight turn, so anatomical left and right are unambiguous. His anatomical RIGHT side appears on the viewer's LEFT: the right shoulder ends at the torso in a flat pinned triangular empty sleeve cap, followed by a large uninterrupted column of transparent negative space from shoulder to mid-thigh. The character has exactly one visible arm total: his anatomical LEFT arm appears on the viewer's RIGHT, relaxed straight against his side, ending in one visible left hand. Both shoulders must remain visible. A single smooth blank silver bell hangs at his waist. He wears a collarless cream linen shirt, worn brown leather vest, dark waist apron, plain work trousers, and small brass buttons. No cup, cloth, tool, weapon, handheld object, hidden limb, crossed pose, or cropped shoulder. Use a reserved steady expression, natural proportions, a clean asymmetric silhouette, and otherwise empty transparent surroundings.`
-    : input.sceneTag === 'mainline-turn-act-1' && needsSmoothGlyphFreeRepair
-      ? 'Cinematic hand-painted medium shot inside an ocean-fantasy mechanical ruin. One young repair mechanic with short black hair and salt-gray tips wears a practical navy work coat and one plain brass-buckle wrist guard on the left forearm. The face is clean, natural, and unpainted. The mechanic holds one small slender brass tuning key near a fractured copper mechanism built from broad blank plates, straight pipes, and irregular asymmetric gears. Warm copper light crosses cold ocean-blue stone and drifting salt mist.'
-      : input.sceneTag === 'secondary-region-anchor' && Boolean(input.repairEvidence)
-        ? 'Wide cinematic hand-painted environment concept art of one remote frozen ocean archipelago during a pale storm dawn. Use one continuous icebound coastline, towering blue-white glacier walls, black volcanic rock, windblown sea spray, dense salt fog, scattered angular copper machine wreckage, and one distant narrow copper navigation beacon. The foreground is rough ice and abandoned machinery; the middle ground is frozen surf; the background is glacier and fog. The entire composition is an uninhabited natural-and-mechanical landscape with no staged foreground subject.'
-      : input.sceneTag === 'important-item-primary' && Boolean(input.repairEvidence)
-        ? 'Studio macro object portrait of exactly one open rectangular hinged brass mechanical memory casket on a plain matte dark-blue surface. It is unmistakably a box-shaped container with a lid, inner cavity, small latch, and asymmetric non-radial gears set inside the cavity. The exterior consists of broad smooth blank brass panels with natural wear. No circular body, ring, clock, watch, compass, medallion, disk, dial, scales, ticks, writing, letters, numbers, runes, labels, paper, tools, hands, people, or extra objects.'
-        : input.sceneTag === 'important-item-secondary' && Boolean(input.repairEvidence)
-          ? 'Studio macro object portrait of exactly one long slender antique brass tuning key on a plain matte dark-blue surface. The object has a straight narrow shaft, a simple T-shaped grip, and one asymmetric forked mechanical tip. It is unmistakably a key-shaped hand tool, never a clock, watch, compass, medallion, disk, badge, or circular dial. Every metal surface is smooth, blank, unengraved, and naturally worn. No people, hands, paper, labels, scales, ticks, symbols, background tools, or extra objects.'
-          : input.sceneTag === 'mainline-turn-act-2' && player && Boolean(input.repairEvidence)
-            ? 'Cinematic hand-painted close-medium ocean-fantasy story moment. Exactly one young woman and repair mechanic with short black hair and salt-gray tips sits upright on the dark-blue stone floor of a quiet copper workshop. Both dark-brown eyes are wide open, alert, and looking toward the warm light. This first waking gaze and one calm breath are the only action. Both empty hands rest naturally on the floor; one small slender brass tuning key hangs untouched from the belt. Use a practical navy work coat, one left-forearm brass wrist guard, warm worn copper pipes, irregular gears, cold stone, and thin salt mist. The face is clean and natural.'
-            : input.sceneTag === 'mainline-turn-act-3' && player && Boolean(input.repairEvidence)
-              ? needsPackingDocumentsIntoCoat
-                ? 'Cinematic hand-painted medium close side-view ocean-fantasy climax inside a sealed stone chamber beside a closed dark metal door. Exactly one young woman and repair mechanic with short black hair and salt-gray tips wears a practical navy work coat and one left-forearm brass wrist guard. Her torso and both hands are clearly visible. In one unmistakable continuous action, she uses both hands to slide two distinct blank paper objects—a torn route map and a small notebook—into the inside breast of her navy coat; both papers remain half-visible between her hands and the coat opening. Her shoulders and feet are already turned toward the door as if leaving. No hand is raised palm-out; no waving, reaching, reading, presenting, or holding papers away from the body. The action of stowing the route map and notebook into the coat is the visual focus. One small old oil lamp rests on a rough stone ledge; plain weathered stone walls, a few simple copper pipes, deep shadows, and cold blue floor light complete the sparse chamber.'
-                : 'Cinematic hand-painted close over-the-shoulder ocean-fantasy climax inside a sealed stone chamber. Exactly one young woman and repair mechanic with short black hair and salt-gray tips wears a practical navy work coat and one left-forearm brass wrist guard. Her raised left hand fills the near foreground: the separated fingertips visibly tremble in warm lamplight as she hesitates before paying the final cost. Her tense shoulders, held breath, and fixed gaze carry the weight of an irreversible decision. One small old oil lamp rests on a rough stone ledge; plain weathered stone walls, a closed dark metal door, a few simple copper pipes, deep shadows, and cold blue floor light complete the sparse chamber. The decisive trembling-hand action is the visual focus.'
-              : input.sceneTag === 'ending-consequence' && player && Boolean(input.repairEvidence)
-                ? 'Wide panoramic cinematic hand-painted ocean-fantasy aftermath at pale dawn, viewed from an elevated distant exterior vantage. ' +
-                  'The vast archipelago and open sea are the subject: dense blue-gray salt fog visibly parts into long translucent bands, revealing several distant island silhouettes and slender copper navigation beacons. ' +
-                  'Soft blue-gold light travels across the newly visible water and beacons as an abstract visual metaphor for publicly restored names and returning communal strength. ' +
-                  'Use an expansive horizon, deep atmospheric perspective, and a clear before-after boundary between retreating fog and revealed islands. ' +
-                  'This is a final consequence landscape, never an intermediate object interaction. No interior, workshop, room, foreground portrait, close-up, hands, box, chest, casket, container, key, notebook, paper, or character opening or holding any object. ' +
-                  'If a person is present at all, show only one tiny anonymous back-facing silhouette at the far edge of a cliff, subordinate to the landscape. Every manufactured surface remains blank and unmarked.'
-                : ''
+  // Scene tags name an editorial responsibility, never a character biography
+  // or a fixed action. Keep the accepted scene and let scoped feedback refine
+  // its rendering instead of substituting an unrelated canned composition.
+  const sceneSpecificPrompt = input.repairEvidence && input.scenePrompt && !needsPureEnvironment
+    && input.mediaKind !== 'character-pose' && input.mediaKind !== 'character-expression'
+    ? `${input.scenePrompt}\n只返修画面表现，保持上述冻结事件、人物与物品身份，不改变地点、行动或结局后果。`
+    : ''
   const characterPoseIdentityRepair = input.mediaKind === 'character-pose'
     && targetCharacters.length === 1
     && /身份|外观|锚点|错位|错误|缺失|不符/.test(input.repairEvidence)
@@ -8180,6 +8097,8 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
   const needsMechanicalCasketShape = /机械记忆匣/.test(`${input.scenePrompt ?? ''}\n${input.repairEvidence}`)
     && /(?:圆柱|圆盘|圆形|手持工具|钥匙|匣\/盒|盒形|可开合)/.test(input.repairEvidence)
   const promptSuffix = [
+    ...targetCharacters.filter(character => /右手.{0,4}(?:两|二|2)(?:根|个)?(?:手)?指.{0,8}铜/.test(character.visualAnchor))
+      .map(character => `「${character.name}」的右手结构必须清晰：仅两根手指是小型铜义指，其余三根手指、整个手掌、手背、手腕和前臂全部是自然人类皮肤。EXACT ANATOMY for ${character.name}: one ordinary human right hand with exactly TWO copper finger prostheses; the other THREE fingers, entire palm, back of hand, wrist and forearm are living human flesh. No metal glove, metal palm, mechanical hand or mechanical forearm. Keep all five fingers individually visible and separated.`),
     playerOnlyLostMentorScene && player && lostMentor
       ? `本次返修严格采用单角色构图，唯一可见角色是「${player.name}」：${player.publicIdentity}；` +
         `视觉锚点：${player.visualAnchor}。「${lostMentor.name}」是失踪导师，不得以人物、肖像、倒影、剪影或幻影入画，` +
@@ -8225,7 +8144,7 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
       ? `电影感横幅海洋奇幻与机械遗迹插画。叙事目标：${input.scenePrompt ?? '关键真相揭露的对峙时刻'}。` +
         `画面严格只有两名已登记角色：角色 A「${player.name}」，${player.publicIdentity}，${player.visualAnchor}；` +
         `角色 B「${namedNpc.name}」，${namedNpc.publicIdentity}，${namedNpc.visualAnchor}。` +
-        '两人面对面，或隔着发光的古旧机械记忆匣对峙，视线与手势相互呼应，真相正被揭开。' +
+        '人物姿态、动作和道具只依据上述冻结叙事，不额外制造对峙或加入新物件。' +
         '单一连续场景构图，不是海报、角色卡、拼贴画、分屏或群像。服饰、道具与背景全部服从冻结身份与视觉锚点。'
       : sceneSpecificPrompt
       ? sceneSpecificPrompt
@@ -8235,14 +8154,14 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
           return character
             ? `Transparent-background frontal three-quarter-body identity concept art of exactly one adult character, ${character.name}, ${character.publicIdentity}; ${character.visualAnchor}. ` +
               'Show the character from head to mid-thigh with both shoulders visible and only a slight turn, so anatomical left and right are unambiguous. The anatomical RIGHT side appears on the viewer\'s LEFT: the right shoulder terminates at the torso in a small flat triangular sewn empty sleeve cap. A large uninterrupted column of transparent negative space remains from that shoulder to mid-thigh. ' +
-              'The character has exactly one visible arm in the entire image: the anatomical LEFT arm appears on the viewer\'s RIGHT, relaxed against the side, ending in one visible left hand. Dress the character as a clean, weathered tavern owner in a simple shirt and waist apron. The belt carries exactly one small smooth blank silver bell and is otherwise completely empty. No cup, cloth, tool, weapon, handheld object, hidden limb, crossed pose, or cropped shoulder. Every cloth and bell surface is smooth and blank.'
+              'The character has exactly one visible arm in the entire image: the anatomical LEFT arm appears on the viewer\'s RIGHT, relaxed against the side, ending in one visible left hand. Clothing and props must match the frozen identity above, without adding any new item. No cup, cloth, tool, weapon, handheld object, hidden limb, crossed pose, or cropped shoulder. Every cloth and bell surface is smooth and blank.'
             : ''
         })()
       : characterPoseIdentityRepair
       ? characterPoseIdentityRepair
       : needsPureEnvironment
       ? `宽幅海洋奇幻环境概念图。${input.scenePrompt ?? '冰封岩礁、苍白盐雾与远处铜制机械潮钟塔组成北境环境。'}` +
-        '画面是无人到访的纯环境远景：前景、中景、远景全部只由岩石、浮冰、海水、盐雾、机械遗迹和一座远处潮钟塔组成。' +
+        '画面是无人到访的纯环境远景：前景、中景、远景全部服从上述已冻结地点、气候和物件，不新增地貌或建筑。' +
         '视觉重心是地貌、气候和机械遗迹，不设置可供人物站立的前景舞台，不出现角色、肖像、雕像、人形、剪影、倒影或照片。所有建筑与器物表面保持无字。'
       : '',
     negativePromptSuffix: [
@@ -8261,21 +8180,6 @@ export function textAdventureVisualRepairCastConstraintV1(input: {
         : []),
       ...(needsMissingRightArm
         ? ['右臂、右手、双臂、两条手臂、义肢、假肢、完整右衣袖、肩扛工具、冰镐、鹤嘴锄、斧、武器、第二枚银铃、刻字银铃、right arm, right hand, two arms, second arm, prosthetic arm, full right sleeve, shoulder tool, ice pick, pickaxe, axe, weapon, second bell, engraved bell']
-        : []),
-      ...(input.sceneTag === 'protagonist-anchor'
-        ? ['脸颊划痕、脸颊疤痕、交叉伤痕、红色面纹、第二个护腕、右臂护腕、厚重积雪、cheek scar, cheek mark, cross-shaped scar, face paint, second wrist guard, right-arm bracer, heavy snow']
-        : []),
-      ...(input.sceneTag === 'mainline-turn-act-2'
-        ? ['操作机械、使用钥匙、双手握钥匙、站立工作、控制面板、signboard, operating machinery, using a key, holding a key with both hands, standing at controls']
-        : []),
-      ...(input.sceneTag === 'mainline-turn-act-3'
-        ? ['开放海岸、海景、窗户、破墙、室外、长发、长袍、真人摄影、open coast, ocean view, window, broken wall, outdoors, long hair, robe, live-action photography']
-        : []),
-      ...(needsPackingDocumentsIntoCoat
-        ? ['空手举掌、掌心朝外、挥手、阅读图纸、展示图纸、双手把纸举离身体、empty raised hand, palm-out gesture, waving, reading papers, presenting papers, holding papers away from the coat']
-        : []),
-      ...(input.sceneTag === 'ending-consequence'
-        ? ['室内、工坊、房间、近景人物、人物肖像、手、箱子、宝箱、匣子、机械记忆匣、容器、钥匙、笔记本、纸张、打开物品、手持物品、interior, workshop, room, close-up character, portrait, hands, box, chest, casket, container, key, notebook, paper, opening an object, holding an object']
         : []),
       ...(needsPureEnvironment
         ? ['人物、角色、女性、男性、旅行者、观察者、人形、肖像、雕像、剪影、倒影、照片、character, person, woman, man, traveler, human figure, silhouette, portrait, statue, reflection']
@@ -8369,6 +8273,16 @@ export function positiveImageRepairDirectiveV1(recommendation: string, category:
     .join('；')
 }
 
+/** Render narrative text-bearing props without contradicting the frozen
+ * no-glyph image contract. The source facts and runtime prose stay intact. */
+export function glyphSafeTextAdventureProviderPromptV1(prompt: string): string {
+  return prompt
+    .replace(/(?:写满|写有|记满)(?:人名|名字|姓名)的防水笔记/gu, '封面空白且页面合拢的防水笔记')
+    .replace(/(?:缝满|缝着|写满)(?:失去意义的)?(?:名字|人名|姓名)/gu, '留有零散不成字的短线缝痕')
+    .replace(/(?:密密麻麻的)?手写(?:名字|人名|姓名)痕迹/gu, '零散不成字的短线痕迹')
+    .replace(/(?:母亲)?(?:名字|姓名)(?:被)?(?:划掉|划去|擦去)的旧名牌/gu, '表面自然磨损且完全空白的旧名牌')
+}
+
 export async function textAdventureVisualAnchorConfirmationHashV1(
   visualBible: TextAdventureVisualBibleArtifactV1,
 ): Promise<string> {
@@ -8398,14 +8312,16 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
   const requirements = parseProductMediaRequirementsArtifactV2(
     artifactPayload(input, 'media.requirements'),
     options.brief,
-    cast ? textAdventureCharacterAnchors(cast) : [],
+    cast ? textAdventureCharacterAnchors(cast) : [], null, 'frozen',
   )
+  let visualStyleContract = ''
   if (cast) {
     const visualBible = parseTextAdventureVisualBibleArtifactV1({
       value: artifactPayload(input, 'media.visual-bible'),
       cast,
       expectedAssetKeys: requirements.visual.map(requirement => requirement.artifactKey),
     })
+    visualStyleContract = `冻结美术风格：${visualBible.style}。色板：${visualBible.palette.join('、')}。构图：${visualBible.compositionRules.join('；')}。连续性：${visualBible.continuityRules.join('；')}。\n`
     parseTextAdventureMediaAnchorDecisionArtifactV1({
       value: artifactPayload(input, 'media.anchor-decision'),
       visualBible,
@@ -8535,12 +8451,13 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
       ? '地球、世界地图、地球仪、真实大陆、真实海岸线、北美洲、南美洲、欧洲、非洲、亚洲、大洋洲、罗盘玫瑰、第二个箭头、第二条路线、装饰边框、嵌套小图、雪花、冰晶、角花、刻度、圆盘、光晕、碎岛、卫星岛、Earth, world map, globe, real continent, real coastline, compass rose, duplicate arrow, second route, decorative border, inset map, snowflake, ice crystal, corner ornament, tick marks, dial, glow, satellite islet, extra island'
       : ''
     const providerPromptOverride = repairCastConstraint.promptOverride || glyphSafeMapPrompt
-    const providerPrompt = `${providerPromptOverride || baseProviderPrompt}` +
-      `${providerPromptOverride ? '' : repairInstruction}${repairCastConstraint.promptSuffix}` + (repairRequiresGlyphSuppression
+    const rawProviderPrompt = `${visualStyleContract}${providerPromptOverride || baseProviderPrompt}` +
+      `${repairInstruction}${repairCastConstraint.promptSuffix}` + (repairRequiresGlyphSuppression
       ? providerPromptOverride
         ? '\nABSOLUTE SURFACE DESIGN: every manufactured surface is one uninterrupted field of blank material. Communicate all information only through large non-repeating silhouettes, color blocks, light, volume, rivets, and natural wear.'
         : '\nABSOLUTE REPAIR CONSTRAINT: blank artifact surfaces; no readable text, letters, numbers, pseudo-text, runes, labels, logos, signatures, or character-like marks. Do not replace forbidden text with invented glyphs.'
       : '')
+    const providerPrompt = cast ? glyphSafeTextAdventureProviderPromptV1(rawProviderPrompt) : rawProviderPrompt
     if (repairFeedbackArtifact && requirement.sceneTag === 'region-map') {
       const bytes = await deterministicRegionMapPngV1(requirement)
       const blob = await putMediaBlobObject({
@@ -8682,7 +8599,7 @@ async function executeAudioTask(input: ProductProductionTaskExecutionInputV1, op
   mediaCapabilities: ReadonlyMap<string, ResolvedProductMediaCapabilityV1>
 }): Promise<ProductProductionTaskExecutionResultV1> {
   const startedAt = performance.now()
-  const requirements = parseProductMediaRequirementsArtifactV2(artifactPayload(input, 'media.requirements'), options.brief)
+  const requirements = parseProductMediaRequirementsArtifactV2(artifactPayload(input, 'media.requirements'), options.brief, [], null, 'frozen')
   const byKey = new Map(requirements.audio.map(item => [item.artifactKey, item]))
   const artifacts: ProductProductionTaskArtifactV1[] = []
   let storageBytes = 0
@@ -8894,7 +8811,7 @@ async function executeTextAdventureMediaAuditTask(
     allowedResourceKeys: options.brief.source.selection.resourceKeys,
   })
   const requirements = parseProductMediaRequirementsArtifactV2(
-    artifactPayload(input, 'media.requirements'), options.brief, textAdventureCharacterAnchors(cast),
+    artifactPayload(input, 'media.requirements'), options.brief, textAdventureCharacterAnchors(cast), null, 'frozen',
   )
   parseTextAdventureVisualBibleArtifactV1({
     value: artifactPayload(input, 'media.visual-bible'), cast,
@@ -9457,8 +9374,11 @@ export function normalizeTextAdventureVisualReviewPolicyV1(input: {
       downgradedMicrodetail = true
       return { ...issue, severity: 'warning' as const }
     })
-    if (!downgradedMicrodetail && !promotedGlyphViolation) return review
     const hasBlockingIssue = issues.some(issue => issue.severity === 'blocking')
+    const warningOnlyRevision = review.reviewSource === 'multimodal-model'
+      && review.scores !== null && review.verdict === 'revise'
+      && issues.length > 0 && !hasBlockingIssue
+    if (!downgradedMicrodetail && !promotedGlyphViolation && !warningOnlyRevision) return review
     return {
       ...review,
       issues,
@@ -9511,7 +9431,7 @@ async function executeTextAdventureVisualQualityReviewTask(
     allowedResourceKeys: options.brief.source.selection.resourceKeys,
   })
   const mediaRequirements = parseProductMediaRequirementsArtifactV2(
-    artifactPayload(input, 'media.requirements'), options.brief, textAdventureCharacterAnchors(cast),
+    artifactPayload(input, 'media.requirements'), options.brief, textAdventureCharacterAnchors(cast), null, 'frozen',
   )
   const requirementByArtifactKey = new Map(mediaRequirements.visual.map(requirement => (
     [requirement.artifactKey, requirement] as const
@@ -9643,7 +9563,8 @@ async function executeTextAdventureVisualQualityReviewTask(
       return {
         artifactKey: image.artifactKey, contentHash: image.contentHash,
         mediaKind: requirement.mediaKind, sceneTag: requirement.sceneTag,
-        prompt: requirement.prompt, altText: requirement.altText,
+        prompt: glyphSafeTextAdventureProviderPromptV1(requirement.prompt),
+        altText: glyphSafeTextAdventureProviderPromptV1(requirement.altText),
         requestedSize: [requirement.width, requirement.height],
         characterAnchorRefs: requirement.characterAnchorRefs,
         hardConstraints: requirement.hardConstraints,
@@ -9660,6 +9581,8 @@ async function executeTextAdventureVisualQualityReviewTask(
     const system = '你是独立于美术总监和图片生成 Provider 的文字冒险 Visual QA Director。' +
       '你必须实际观察随请求附带的每张图片，并依据登记上下文逐项检查：需求匹配、角色身份连续、整体风格连续、构图可读性、明显畸形或伪影、文字水印、剧情剧透和替代文本。' +
       '不得修改图片、世界事实、视觉圣经、权利或发布状态；不确定时使用 human-review。' +
+      '无文字约束禁止实际字母、数字、可读字词、伪文字、符文与签名，不禁止无标签的几何示意图、机械结构图或电路连线；不能仅因图形有可理解的工程含义就判作文字。若确实观察到字形，请指出其所在位置和具体形态，不要把约束原句当成像素证据。' +
+      '当来源道具包含名册、名牌或缝名，但同图合同明确禁字时，应接受保留该物件且用空白、磨损或抽象缝线呈现的无字方案；不得要求补回姓名或伪字来满足道具身份。写满人名的笔记可以合拢，封面必须空白；内容存在于未展示的内页，不得因封面没有人名而扣分或要求返修。被划掉的名牌以空白磨损表面呈现即合规，不需要人工另行确认禁字规则。' +
       '输出只能是一个 JSON 对象，字段精确为：' +
       '{"schema":"storyforge.text-adventure-visual-quality-model-output","version":1,"reviews":[{' +
       '"artifactKey":"media.visual.001","contentHash":"64位hash","verdict":"accept|revise|replace|human-review",' +
@@ -9753,7 +9676,9 @@ function executeTextAdventureVisualQualityReviewAssemblyTask(
   })
   const report = assembleTextAdventureVisualQualityReviewArtifactV1({
     buildNumber: input.buildNumber, mediaAuditHash: mediaAuditArtifact.contentHash,
-    reviews,
+    // Keep original batch evidence immutable; the deterministic aggregate applies
+    // the same severity policy as newly completed model reviews.
+    reviews: normalizeTextAdventureVisualReviewPolicyV1({ reviews, requirements: [] }),
     expectedAssets: mediaAudit.assets.map(asset => ({
       artifactKey: asset.artifactKey, contentHash: asset.contentHash,
     })),
@@ -10018,7 +9943,7 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
   const mediaRequirements = parseProductMediaRequirementsArtifactV2(
     artifactPayload(input, 'media.requirements'),
     options.brief,
-    textAdventureCast ? textAdventureCharacterAnchors(textAdventureCast) : [],
+    textAdventureCast ? textAdventureCharacterAnchors(textAdventureCast) : [], null, 'frozen',
   )
   let textAdventureMediaAuditHash = ''
   let textAdventureVisualReviewHash = ''
@@ -10255,7 +10180,11 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
     artifacts: [...ttrpgArtifacts, {
       artifactKey: 'runtime.package', kind: 'presentation', payload: parsed,
       quality: { parser: 'parseProductRuntimePackageV1', graphValidated: true },
-      rights: { mediaLicenses: assets.map(asset => ({ assetKey: asset.assetKey, license: asset.license })) },
+      rights: { mediaLicenses: media.map(({ asset }) => ({
+        assetKey: asset.assetKey, contentHash: asset.contentHash, source: asset.source, license: asset.license,
+        declaration: JSON.parse(input.inputArtifacts.find(row => row.contentHash === asset.contentHash
+          && row.blobObjectId != null && JSON.parse(row.metadataJson).assetKey === asset.assetKey)!.rightsJson),
+      })) },
     }],
     passedGateIds: [...input.task.acceptanceGateIds],
     usage: zeroUsage(elapsed(startedAt)),
@@ -10301,9 +10230,11 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
   const coveredKinds = new Set(assets.map(asset => asset.kind).filter(kind => requiredKinds.has(kind)))
   const mediaCoverage = requiredKinds.size === 0 ? 1 : coveredKinds.size / requiredKinds.size
   const productQuality = evaluateProductRuntimeProductQualityV1({ runtimePackage, brief: options.brief })
+  const frozenPackageRights = JSON.parse(artifactRecord(input, 'runtime.package').rightsJson)
   const commercialMediaValid = options.brief.qualityProfile !== 'commercial-candidate' || assets.every(asset => (
     asset.source === 'storyforge-deterministic-region-map-v1' && asset.license === 'CC0-1.0'
-    || !asset.source.startsWith('storyforge-procedural-') && asset.license.startsWith('rights-policy:')
+    || asset.source !== 'author-upload' && !asset.source.startsWith('storyforge-procedural-') && asset.license.startsWith('rights-policy:')
+    || hasFrozenAuthorUploadRightsV1(asset, frozenPackageRights)
   ))
   const commercialAdapterValid = options.brief.qualityProfile !== 'commercial-candidate'
     || runtimePackage.definition.initialVariables.productAdapterCommercialReady === true
@@ -10634,7 +10565,7 @@ async function executeTextAdventureVisualBibleTask(
     allowedResourceKeys: brief.source.selection.resourceKeys,
   })
   const requirements = parseProductMediaRequirementsArtifactV2(
-    artifactPayload(input, 'media.requirements'), brief, textAdventureCharacterAnchors(cast),
+    artifactPayload(input, 'media.requirements'), brief, textAdventureCharacterAnchors(cast), null, 'frozen',
   )
   const visualBible = compileTextAdventureVisualBibleV1({ architecture, cast, mediaRequirements: requirements })
   return {

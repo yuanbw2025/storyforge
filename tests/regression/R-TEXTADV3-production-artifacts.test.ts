@@ -6,7 +6,6 @@ import {
   parseTextAdventureNarrativeArcPlanArtifactV1,
   parseTextAdventureNarrativeDecisionPlanArtifactV1,
   parseTextAdventureQuestPlanArtifactV1,
-  normalizeTextAdventureQuestPlanLocationCopyV1,
   parseTextAdventureQuestScriptArtifactV2,
   parseTextAdventureSourceDecisionArtifactV1,
   parseTextAdventureSourceSufficiencyArtifactV1,
@@ -544,44 +543,24 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     wrongLocationCopy.quests[0].objectives[0].title = '在信号塔取得记录'
     wrongLocationCopy.quests[0].objectives[0].narrativePurpose = '去信号塔完成当前目标。'
     wrongLocationCopy.quests[0].objectives[0].alternatives[0].successConsequence = '在信号塔取得记录。'
-    const normalized = normalizeTextAdventureQuestPlanLocationCopyV1({
-      value: wrongLocationCopy,
-      locationTitles: ['潮门广场', '信号塔'],
-    })
-    expect(normalized.repairedFields).toEqual([
-      'quests[0].objectives[0].title',
-      'quests[0].objectives[0].narrativePurpose',
-      'quests[0].objectives[0].alternatives[0].successConsequence',
-    ])
-    const normalizedParsed = parseTextAdventureQuestPlanArtifactV1({
-      value: wrongLocationCopy,
-      brief: brief(),
-      arcPlan: arc,
-      cast,
-      expectedKind: 'main',
-      expectedQuestCount: 1,
-      locationTitles: ['潮门广场', '信号塔'],
-    })
-    expect(normalizedParsed.quests[0].objectives[0]).toMatchObject({
-      title: '在潮门广场取得记录',
-      narrativePurpose: '去潮门广场完成当前目标。',
-      alternatives: [{ successConsequence: '在后续地点取得记录。' }],
-    })
+    const originalWrongCopy = structuredClone(wrongLocationCopy)
+    expect(() => parseTextAdventureQuestPlanArtifactV1({
+      value: wrongLocationCopy, brief: brief(), arcPlan: arc, cast,
+      expectedKind: 'main', expectedQuestCount: 1, locationTitles: ['潮门广场', '信号塔'],
+    })).toThrow('文案与冻结地点不一致')
+    expect(wrongLocationCopy).toEqual(originalWrongCopy)
+    const crossLocationEvidence = structuredClone(value)
+    crossLocationEvidence.quests[0].objectives[0].narrativePurpose = '核对信号塔送来的记录，行动仍在当前地点。'
+    expect(parseTextAdventureQuestPlanArtifactV1({
+      value: crossLocationEvidence, brief: brief(), arcPlan: arc, cast,
+      expectedKind: 'main', expectedQuestCount: 1, locationTitles: ['潮门广场', '信号塔'],
+    }).quests[0].objectives[0].narrativePurpose).toBe(crossLocationEvidence.quests[0].objectives[0].narrativePurpose)
     const shorthandLocationCopy = structuredClone(value)
     shorthandLocationCopy.quests[0].objectives[0].title = '在档案库取得记录'
-    shorthandLocationCopy.quests[0].objectives[0].narrativePurpose = '前往灯塔顶端完成核对。'
-    const shorthandNormalized = normalizeTextAdventureQuestPlanLocationCopyV1({
-      value: shorthandLocationCopy,
-      locationTitles: ['潮门广场', '议会档案库', '主灯塔'],
-    })
-    expect(shorthandNormalized.repairedFields).toEqual([
-      'quests[0].objectives[0].title',
-      'quests[0].objectives[0].narrativePurpose',
-    ])
-    expect((shorthandNormalized.value as typeof value).quests[0].objectives[0]).toMatchObject({
-      title: '在潮门广场取得记录',
-      narrativePurpose: '前往潮门广场完成核对。',
-    })
+    expect(() => parseTextAdventureQuestPlanArtifactV1({
+      value: shorthandLocationCopy, brief: brief(), arcPlan: arc, cast,
+      expectedKind: 'main', expectedQuestCount: 1, locationTitles: ['潮门广场', '议会档案库'],
+    })).toThrow('文案与冻结地点不一致')
 
     const questScriptValue = {
       schema: 'storyforge.text-adventure-quest-script-artifact', version: 2,

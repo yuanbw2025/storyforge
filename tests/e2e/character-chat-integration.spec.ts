@@ -41,13 +41,12 @@ test('private reply stays hidden, messages persist, checkpoints and branches rem
     await page.goto(`./chat/play?${query}`);
     await page.getByPlaceholder('对当前场景中的角色说话…').fill('浏览器玩家消息');
     await page.getByRole('button', { name: '仅保存消息', exact: true }).click();
-    // A text locator also matches the pending textarea value. Wait for the saved
-    // message and completed send before reloading, not the busy disabled button.
-    await expect(page.locator('article').getByText('浏览器玩家消息', { exact: true })).toBeVisible({ timeout: 15000 });
+    // Wait for the persisted message and cleared composer before reloading.
+    await expect(page.getByRole('paragraph').filter({ hasText: /^浏览器玩家消息$/ })).toBeVisible({ timeout: 15000 });
     await expect(page.getByPlaceholder('对当前场景中的角色说话…')).toHaveValue('');
     await expect(page.getByRole('button', { name: '仅保存消息', exact: true })).toBeDisabled();
     await page.reload();
-    await expect(page.getByText('浏览器玩家消息', { exact: true })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('paragraph').filter({ hasText: /^浏览器玩家消息$/ })).toBeVisible({ timeout: 15000 });
     await page.evaluate(async (f) => { const load = new Function('p', 'return import(p)'); const h = await load('/storyforge/src/lib/character-interaction/harness.ts'); const s = (await load('/storyforge/src/stores/character-interaction-player.ts')).useCharacterInteractionPlayerStore; const g = await h.generateInteractionRuntimeCandidateV1({ scope: f.scope, productRuntimeSessionId: f.sessionId, participantKey: 'aria', skillId: 'character.interaction-reply', objective: '仅角色可见', replyToSequence: f.playerSequence, replyBudgetCost: 1, runAI: async () => JSON.stringify({ kind: 'character-reply', text: '角色秘密不应显示', replyToSequence: f.playerSequence, audienceKeys: ['aria'], budgetCost: 1, disclosures: [] }) }); await h.adoptInteractionRuntimeCandidateV1({ scope: f.scope, runId: g.snapshot.run.id }); await s.getState().select(f.sessionId); }, fixture);
     await expect(page.getByText('角色秘密不应显示', { exact: true })).toHaveCount(0);
     await page.getByRole('navigation', { name: '角色聊天页内目录' }).getByRole('button', { name: '会话与分支', exact: true }).click();
@@ -59,7 +58,7 @@ test('private reply stays hidden, messages persist, checkpoints and branches rem
     await page.getByRole('navigation',{name:'角色聊天页内目录'}).getByRole('button',{name:'开始对话',exact:true}).click();
     await page.getByRole('button',{name:'结束场景',exact:true}).click();
     await expect(page.getByText('当前场景已结束',{exact:false})).toBeVisible();
-    await expect(page.getByText('浏览器玩家消息',{exact:true})).toBeVisible();
+    await expect(page.getByRole('paragraph').filter({ hasText: /^浏览器玩家消息$/ })).toBeVisible();
 });
 test('S2 role settings reach the frozen production brief through the real confirmation UI', async ({ page }, info) => {
     test.setTimeout(120000);

@@ -32,8 +32,13 @@ import {
   createProductProductionPlanV3,
   parseProductProductionPlanV3,
   textAdventureProductionBudgetFloorV1,
+  TEXT_ADVENTURE_SCENE_SCRIPT_INPUT_CEILING_V1,
+  TEXT_ADVENTURE_MAIN_QUEST_INPUT_CEILING_V1,
+  TEXT_ADVENTURE_QUALITY_REVIEW_TIMEOUT_MS_V1,
 } from './plan'
 import { readMediaBlobObjectData } from './media-blob-store'
+import { isTextAdventureClockCapacityRevisionV1 } from './clock-capacity-revision'
+import { isProductImageDeliveryDimensionCompatibleV1 } from './media-adapters'
 import { parseTextAdventureQualityReviewArtifactV1 } from '../adventure/production-artifacts'
 import {
   verifyTextAdventureHumanVisualReviewReceiptV1,
@@ -61,6 +66,7 @@ import { verifyTextOpenWorldCreatorProductionPreflightConfirmationV1 } from '../
 import { useAIConfigStore } from '../../stores/ai-config'
 import {
   assertProductProductionBudgetLedgerV1,
+  prepareLegacyPausedProductBuildV1,
   resolveProductProductionUnknownResultReservationLedgerV2,
 } from './scheduler'
 import {
@@ -141,6 +147,12 @@ interface PausedLedgerReservationV1 {
   attempt: number
   controlEpoch: number
   providerCallPossible: boolean
+}
+
+interface PreparedPausedBuildV1 {
+  before: ProductBuildRecordV1 & { id: number }
+  after: ProductBuildRecordV1 & { id: number }
+  runs: Array<{ id: number; lastSequence: number; contractHash: string; projectionHash: string }>
 }
 
 interface PausedReservationAccountingV1 {
@@ -444,6 +456,10 @@ export function canUpgradeTextAdventureExecutionPlanV1(
       && typeof failure.detail === 'string'
       && failure.detail.includes('task usage 超出 Plan 预算预留')
     const measuredTimeoutDrift = failure.code === 'task-timeout'
+      // A current reviewer timeout is a transient provider failure. Creating
+      // a child with the same deadline cannot upgrade that contract.
+      && (task.kind !== 'text-adventure-quality-review-batch'
+        || task.timeoutMs < TEXT_ADVENTURE_QUALITY_REVIEW_TIMEOUT_MS_V1)
       && typeof failure.detail === 'string'
       && failure.detail.includes(
         `${task.taskKey} 超过任务合同 ${task.timeoutMs}ms`,
@@ -467,6 +483,40 @@ export function canUpgradeTextAdventureExecutionPlanV1(
           && registeredLimit === 16_500
           && measuredTokens > registeredLimit
       })()
+    const sceneRepairInputCapacityDrift = failure.code === 'task-context-budget-exceeded'
+      && task.kind === 'text-adventure-scene-script-part'
+      && typeof failure.detail === 'string'
+      && (() => {
+        const measured = /制作合同或依赖产物未完整进入任务预算（required=([0-9]+), budget=([0-9]+), sources=/
+          .exec(failure.detail)
+        if (!measured) return false
+        const required = Number(measured[1])
+        const reserved = Number(measured[2])
+        return Number.isSafeInteger(required)
+          && reserved === task.budgetReservation.inputTokens
+          && reserved < TEXT_ADVENTURE_SCENE_SCRIPT_INPUT_CEILING_V1
+          && required > reserved
+          && required <= TEXT_ADVENTURE_SCENE_SCRIPT_INPUT_CEILING_V1
+      })()
+    const mainQuestInputCapacityDrift = failure.code === 'task-preflight-failed'
+      && task.taskKey === 'content.main-quest-plan'
+      && task.kind === 'text-adventure-main-quest-plan'
+      && task.budgetReservation.inputTokens < TEXT_ADVENTURE_MAIN_QUEST_INPUT_CEILING_V1
+      && typeof failure.detail === 'string'
+      && (() => {
+        const prefix = '[product-production-scheduler] Brief/Artifact 与冻结世界事实合并后超过任务输入预算'
+        // Older receipts did not include measured sizes; retain this exact
+        // failure only for the old mainline contract, never arbitrary errors.
+        if (failure.detail === prefix) return true
+        const measured = /^（required=([0-9]+), budget=([0-9]+)）$/.exec(failure.detail.slice(prefix.length))
+        if (!failure.detail.startsWith(prefix) || !measured) return false
+        const required = Number(measured[1])
+        const reserved = Number(measured[2])
+        return Number.isSafeInteger(required)
+          && reserved === task.budgetReservation.inputTokens
+          && required > reserved
+          && required <= TEXT_ADVENTURE_MAIN_QUEST_INPUT_CEILING_V1
+      })()
     const legacyMultiImageReview = task.kind === 'text-adventure-visual-quality-review-batch'
       && task.inputArtifactKeys.filter(key => /^media\.visual\.\d{3}$/.test(key)).length > 1
     const missingVisionPreflight = failure.taskKey === 'media.anchor-author-gate'
@@ -481,6 +531,8 @@ export function canUpgradeTextAdventureExecutionPlanV1(
     ))
     return measuredReservationDrift || measuredTimeoutDrift || qualityReferenceContractDrift
       || dialogueProjectionCapacityDrift
+      || sceneRepairInputCapacityDrift
+      || mainQuestInputCapacityDrift
       || legacyMultiImageReview
       || missingVisionPreflight
       || missingEndingRoutePlan
@@ -500,6 +552,7 @@ export function canReviseTextAdventureVisualContractFromRecoveryV1(
   try {
     const failure = JSON.parse(build.failureJson) as {
       taskKey?: unknown
+      code?: unknown
       detail?: unknown
       blockerKey?: unknown
       resolution?: { action?: unknown }
@@ -512,6 +565,18 @@ export function canReviseTextAdventureVisualContractFromRecoveryV1(
     if (build.status !== 'recovery-required' && !rejectedAnchorBuild) return false
     const taskKey = rejectedAnchorBuild ? failure.previousFailure?.taskKey : failure.taskKey
     if (typeof taskKey !== 'string') return false
+    // A rejected input packet has not produced a visual contract. Keep the
+    // ordinary same-Build retry visible after its registered reader is fixed;
+    // it must not force a new Brief or discard already accepted narrative.
+    if (taskKey === 'media.requirements' && failure.code === 'task-context-budget-exceeded') return false
+    if (/^media\.visual-quality-review\.batch-\d+$/.test(taskKey)
+      && (failure.code === 'task-context-budget-exceeded'
+        || failure.code === 'task-preflight-failed' && typeof failure.detail === 'string'
+          && /^\[product-production-context\] 视觉审查投影超过登记预算:\d+\/12000$/.test(failure.detail))) {
+      // A rejected review packet is not a failed image contract. Retrying its
+      // corrected projection must preserve all already generated images.
+      return false
+    }
     const directlyVisual = taskKey === 'media.requirements'
       || taskKey === 'media.audit'
       || taskKey === 'media.visual-quality-review'
@@ -779,6 +844,7 @@ async function createMediaRevisionPlan(input: {
 }
 
 async function applyCommand(input: {
+  preparedPausedBuild?: PreparedPausedBuildV1 | null
   scope: WorkspaceScope
   production: ProductProductionRecordV1 & { id: number }
   command: ProductProductionCommandV1
@@ -1444,9 +1510,71 @@ async function applyCommand(input: {
 
   if (command.type === 'resume') {
     if (production.status !== 'paused') reject('invalid-state-transition', 'Production 不在暂停态')
-    const build = await currentBuild(production)
+    const persistedBuild = await currentBuild(production)
+    const prepared = input.preparedPausedBuild
+    if (!prepared || canonicalProductProductionJsonV2(persistedBuild)
+      !== canonicalProductProductionJsonV2(prepared.before)) {
+      reject('production-state-conflict', '暂停状态已变化，请重新核对恢复证据')
+    }
+    for (const guard of prepared.runs) {
+      const run = await db.agentRuns.get(guard.id)
+      if (!run || run.lastSequence !== guard.lastSequence || run.contractHash !== guard.contractHash
+        || run.projectionHash !== guard.projectionHash) {
+        reject('production-state-conflict', '暂停请求返回了新证据，请重新核对费用')
+      }
+    }
+    const build = prepared.after
     if (build.status !== 'paused' || !build.resumeState) {
       reject('invalid-state-transition', 'Build 没有可恢复状态')
+    }
+    const contentRevision = command.contentRevision
+    if (contentRevision) {
+      if (production.productType !== 'text-adventure' || (build.resumeState !== 'building'
+          && !(build.resumeState === 'recovery-required' && contentRevision.artifactKey === 'content.product-module'))
+        || build.releasedProductReleaseId != null) {
+        reject('invalid-state-transition', '内容修订只允许尚在构建的未发布文字冒险暂停态')
+      }
+      const plan = parseProductProductionPlanV3(build.planJson)
+      const task = plan.tasks.find(task => task.taskKey === contentRevision.artifactKey)
+      if (plan.productType !== 'text-adventure' || task?.skillId !== ({
+        'content.product-module': 'text-adventure.production-systems.v1',
+        'content.story-bible': 'text-adventure.story-bible.v1',
+        'content.cast-bible': 'text-adventure.cast-bible.v1',
+        'content.adventure-architecture': 'text-adventure.production-architecture.v1',
+        'content.narrative-arc-scenes': 'text-adventure.narrative-design.v1',
+        'content.narrative-decision-plan': 'text-adventure.narrative-design.v1',
+        'content.ending-route-plan': 'text-adventure.ending-route-plan.v1',
+        'content.main-quest-plan': 'text-adventure.production-mainline.v1',
+        'content.adventure-side-quests': 'text-adventure.production-side-quests.v1',
+        'content.adventure-ambient-events': 'text-adventure.production-ambient-events.v1',
+        'content.scene-script.act-1.part-1': 'text-adventure.scene-script.v1',
+        'content.scene-script.act-1.part-2': 'text-adventure.scene-script.v1',
+        'content.scene-script.act-2.part-1': 'text-adventure.scene-script.v1',
+        'content.scene-script.act-2.part-2': 'text-adventure.scene-script.v1',
+        'content.scene-script.act-3.part-1': 'text-adventure.scene-script.v1',
+        'content.scene-script.act-3.part-2': 'text-adventure.scene-script.v1',
+        'content.dialogue-pass.act-1': 'text-adventure.dialogue-pass.v1',
+        'content.dialogue-pass.act-2': 'text-adventure.dialogue-pass.v1',
+        'content.dialogue-pass.act-3': 'text-adventure.dialogue-pass.v1',
+      }[contentRevision.artifactKey])
+        || task.executionMode !== 'model' || task.failurePolicy !== 'pause'
+        || task.outputArtifactKeys.length !== 1 || task.outputArtifactKeys[0] !== contentRevision.artifactKey) {
+        reject('invalid-state-transition', '内容修订未命中登记的故事、角色、空间架构、叙事、任务计划、分段正文或对白审校岗位')
+      }
+      const baseline = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+        .filter(row => row.artifactKey === contentRevision.artifactKey && row.controlEpoch === plan.controlEpoch
+          && (row.status === 'accepted' || row.status === 'carried-forward'))
+        .sort((a, b) => b.version - a.version)[0]
+      if (!baseline || baseline.projectId !== scope.projectId || baseline.worldId !== scope.worldId
+        || baseline.workId !== scope.workId || baseline.version !== contentRevision.expectedArtifactVersion
+        || baseline.contentHash !== contentRevision.expectedArtifactHash || !baseline.producerReceiptHash
+        || !/^[a-f0-9]{64}$/.test(baseline.producerReceiptHash)) {
+        reject('source-stale', '内容原稿已变化或缺少已验收证据，请重新读取')
+      }
+      if (contentRevision.artifactKey === 'content.product-module'
+        && !isTextAdventureClockCapacityRevisionV1(JSON.parse(baseline.payloadJson), JSON.parse(contentRevision.authorDraftJson))) {
+        reject('invalid-state-transition', '时间上限修订只允许提高 clock.maximum，其他系统语义必须保持不变')
+      }
     }
     let budgetLedgerJson = build.budgetLedgerJson
     let pausedReservationAccountings: PausedReservationAccountingV1[] = []
@@ -1561,7 +1689,7 @@ async function applyCommand(input: {
     } else if (command.pausedReservationDispositions) {
       reject('invalid-state-transition', '普通暂停没有待处置 provider reservation')
     }
-    const restored = build.resumeState
+    const restored = contentRevision ? 'building' : build.resumeState
     const controlEpoch = production.controlEpoch + 1
     const stateRevision = production.stateRevision + 1
     const pausedFailure = readResult(build.failureJson)
@@ -1572,9 +1700,23 @@ async function applyCommand(input: {
       controlEpoch,
       stateRevision: build.stateRevision + 1,
       budgetLedgerJson,
-      failureJson: pausedReservationAccountings.length ? safeJson({
+      failureJson: contentRevision ? safeJson({
+        code: 'author-revised-content', commandId: command.commandId, revisionCommand: command,
+        blockerKey: contentRevision.artifactKey,
+        revisionSource: {
+          artifactKey: contentRevision.artifactKey,
+          version: contentRevision.expectedArtifactVersion,
+          contentHash: contentRevision.expectedArtifactHash,
+        },
+        resolution: { action: 'author-edit', note: contentRevision.note, authorDraftJson: contentRevision.authorDraftJson },
+        resumedFromControlEpoch: build.controlEpoch,
+        pauseReceipt: pausedFailure, pausedReservationAccountings, resolvedAt: now,
+      }) : pausedReservationAccountings.length ? safeJson({
         code: 'user-pause-resolved',
         previousFailureCode: 'pause-provider-result-unknown',
+        resumedFromControlEpoch: build.controlEpoch,
+        pauseReceipt: pausedFailure,
+        ...(Object.keys(previousFailure).length > 0 ? { previousFailure } : {}),
         pausedReservationAccountings,
         resolvedAt: now,
       }) : safeJson({
@@ -1597,6 +1739,7 @@ async function applyCommand(input: {
       controlEpoch,
       restored,
       pausedReservationAccountings,
+      ...(contentRevision ? { revisionAuthorization: command } : {}),
     } }
   }
 
@@ -1900,10 +2043,12 @@ async function applyCommand(input: {
       : [{ artifactKey: command.artifactKey, expectedArtifactHash: command.expectedArtifactHash }]
     const revisionAction: ReviseMediaCommandV1['action'] = batchRepair ? 'regenerate' : command.action
     const replacement = batchRepair ? null : command.replacement
-    const authorRepairFeedback = singleCommand?.repairFeedback ?? null
+    const authorRepairFeedback = singleCommand?.repairFeedback ?? (batchRepair ? command.authorReview : null)
+    const automaticBatchRepair = batchRepair && !authorRepairFeedback
+    const uploadRecovery = revisionAction === 'upload-replacement' && production.status === 'producing'
     if (production.productType !== 'text-adventure'
-      || (batchRepair ? production.status !== 'producing' : production.status !== 'preview-ready')) {
-      reject('invalid-state-transition', batchRepair
+      || (automaticBatchRepair || uploadRecovery ? production.status !== 'producing' : production.status !== 'preview-ready')) {
+      reject('invalid-state-transition', automaticBatchRepair
         ? '仅审图阻塞中的文字冒险 Production 可发起批量媒资修复'
         : '仅已完成预览的文字冒险 Production 可发起单项媒资修订')
     }
@@ -1911,13 +2056,13 @@ async function applyCommand(input: {
     if (parentBuild.buildNumber !== command.buildNumber || parentBuild.releasedProductReleaseId != null) {
       reject('invalid-state-transition', '只能从当前未发布 Build 派生媒资修订')
     }
-    if (batchRepair) {
+    if (automaticBatchRepair || uploadRecovery) {
       const failure = readResult(parentBuild.failureJson)
       if (parentBuild.status !== 'recovery-required'
         || failure.taskKey !== 'integration.package'
         || typeof failure.detail !== 'string'
         || !failure.detail.includes('独立图片审查未通过')) {
-        reject('invalid-state-transition', '批量重生成仅用于独立 Visual QA 阻塞的 Build')
+        reject('invalid-state-transition', '审图恢复修订仅用于独立 Visual QA 阻塞的 Build')
       }
     } else if (!['preview-ready', 'release-ready'].includes(parentBuild.status)) {
       reject('invalid-state-transition', '单项媒资修订只能从已完成预览的 Build 派生')
@@ -1969,7 +2114,7 @@ async function applyCommand(input: {
       sourceHash: string
       sourceArtifact: ProductBuildArtifactRecordV1 | null
     } | null = null
-    if (batchRepair) {
+    if (automaticBatchRepair || uploadRecovery) {
       const sourceArtifact = parentArtifacts.find(row => row.artifactKey === 'quality.visual-review')
       if (!sourceArtifact) reject('media-revision-invalid', 'Visual QA 阻塞 Build 缺少审查报告')
       const report = objectJson(sourceArtifact.payloadJson, 'quality.visual-review.payload')
@@ -2020,7 +2165,7 @@ async function applyCommand(input: {
         })
         const rejected = review.verdict === 'revise' || review.verdict === 'replace'
           || review.verdict === 'human-review' || issues.some(issue => issue.severity === 'blocking')
-        if (!rejected) reject('media-revision-invalid', `图片未被 Visual QA 退回:${target.artifactKey}`)
+        if (!rejected && !uploadRecovery) reject('media-revision-invalid', `图片未被 Visual QA 退回:${target.artifactKey}`)
         const verdict = rejected && review.verdict === 'accept' ? 'revise' : review.verdict
         return {
           artifactKey: target.artifactKey,
@@ -2037,7 +2182,7 @@ async function applyCommand(input: {
         sourceReview: report,
         targets: feedbackTargets.sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)),
       }
-      visualRepairFeedback = {
+      if (!uploadRecovery) visualRepairFeedback = {
         payload,
         inputHash: await hashProductProductionValueV2({
           schema: 'storyforge.text-adventure-visual-repair-feedback-input', version: 1,
@@ -2068,16 +2213,22 @@ async function applyCommand(input: {
       const evidenceHash = await hashProductProductionValueV2(evidence)
       if (evidenceHash !== authorRepairFeedback.sourceEvidenceHash
         || evidence.buildNumber !== parentBuild.buildNumber
-        || !singleCommand
-        || authorRepairFeedback.priorContentHash !== singleCommand.expectedArtifactHash) {
+        || singleCommand && singleCommand.repairFeedback?.priorContentHash !== singleCommand.expectedArtifactHash) {
         reject('source-stale', '作者退回证据与父 Build 或当前图片 hash 不一致')
       }
-      const rejected = evidence.assets.find(asset => asset.artifactKey === singleCommand.artifactKey)
-      if (!rejected || rejected.decision !== 'rejected'
-        || rejected.contentHash !== singleCommand.expectedArtifactHash
-        || rejected.note !== authorRepairFeedback.note.trim().normalize('NFC')) {
-        reject('media-revision-invalid', '作者退回证据未绑定目标图片与当前修订意见')
-      }
+      const authorTargets = revisionTargets.map(target => {
+        const rejected = evidence.assets.find(asset => asset.artifactKey === target.artifactKey)
+        if (!rejected || rejected.decision !== 'rejected'
+          || rejected.contentHash !== target.expectedArtifactHash || !rejected.note.trim()
+          || singleCommand && rejected.note !== singleCommand.repairFeedback?.note.trim().normalize('NFC')) {
+          reject('media-revision-invalid', '作者退回证据未绑定目标图片与当前修订意见')
+        }
+        return {
+          artifactKey: target.artifactKey, priorContentHash: target.expectedArtifactHash,
+          verdict: 'human-review', scores: null,
+          issues: [{ severity: 'blocking', category: 'author-direction', detail: rejected.note, recommendation: rejected.note }],
+        }
+      })
       const sourceReview = {
         schema: 'storyforge.text-adventure-author-visual-repair-source', version: 1,
         gateReceiptHash: gateReceipt.receiptHash, evidence,
@@ -2087,15 +2238,7 @@ async function applyCommand(input: {
         sourceBuildNumber: parentBuild.buildNumber,
         sourceReviewArtifactHash: await hashProductProductionValueV2(sourceReview),
         sourceReview,
-        targets: [{
-          artifactKey: singleCommand.artifactKey,
-          priorContentHash: singleCommand.expectedArtifactHash,
-          verdict: 'human-review', scores: null,
-          issues: [{
-            severity: 'blocking', category: 'author-direction',
-            detail: rejected.note, recommendation: rejected.note,
-          }],
-        }],
+        targets: authorTargets,
       }
       visualRepairFeedback = {
         payload,
@@ -2137,7 +2280,7 @@ async function applyCommand(input: {
       command: {
         commandId: command.commandId, action: revisionAction, targets: revisionTargets,
         includeVisualRepairFeedback: batchRepair || authorRepairFeedback != null,
-        includeRepairFeedbackInVisualReview: batchRepair,
+        includeRepairFeedbackInVisualReview: automaticBatchRepair,
       },
       buildNumber, controlEpoch, artifacts: parentArtifacts,
     })
@@ -2171,9 +2314,11 @@ async function applyCommand(input: {
       const frozenRequirement = oldPayload.request && typeof oldPayload.request === 'object'
         && !Array.isArray(oldPayload.request) ? oldPayload.request as Record<string, unknown> : null
       if (!frozenRequirement) reject('media-revision-invalid', '目标图片缺少冻结需求合同')
-      if (replacement && (replacement.width !== frozenRequirement.width
-        || replacement.height !== frozenRequirement.height)) {
-        reject('media-revision-invalid', '作者替换图片尺寸必须与冻结媒资需求一致')
+      if (replacement && !isProductImageDeliveryDimensionCompatibleV1({
+        requestedWidth: Number(frozenRequirement.width), requestedHeight: Number(frozenRequirement.height),
+        actualWidth: replacement.width, actualHeight: replacement.height,
+      })) {
+        reject('media-revision-invalid', '替换图片必须满足冻结媒资的画幅比例与最低分辨率')
       }
       const nextLocked = revisionAction === 'lock'
         ? true
@@ -2515,6 +2660,7 @@ async function applyCommand(input: {
 }
 
 async function executeTransaction(input: {
+  preparedPausedBuild?: PreparedPausedBuildV1 | null
   scope: WorkspaceScope
   productionId?: number
   command: ProductProductionCommandV1
@@ -2687,6 +2833,7 @@ async function executeTransaction(input: {
         preparedCreatorBrief: input.preparedCreatorBrief,
         preparedCreatorEvidence: input.preparedCreatorEvidence,
         preparedCreatorStart: transactionCreatorStart,
+        preparedPausedBuild: input.preparedPausedBuild,
         preparedCreatorRepair: input.preparedCreatorRepair,
         preparedCreatorRepairAuthorization: input.preparedCreatorRepairAuthorization,
         preparedCreatorMedia: input.preparedCreatorMedia,
@@ -3054,6 +3201,16 @@ export async function executeProductProductionCommand(input: {
       authorizedAt: command.authorizedAt,
     })
   }
+  let preparedPausedBuild: PreparedPausedBuildV1 | null = null
+  if (command.type === 'resume') {
+    const production = await productionInScope(scope, input.productionId!)
+    const before = await currentBuild(production)
+    const runs: PreparedPausedBuildV1['runs'] = []
+    const after = await prepareLegacyPausedProductBuildV1(scope, before, run => {
+      runs.push({ id: run.id, lastSequence: run.lastSequence, contractHash: run.contractHash, projectionHash: run.projectionHash })
+    })
+    preparedPausedBuild = { before, after, runs }
+  }
   const request = {
     scope,
     productionId: input.productionId,
@@ -3066,6 +3223,7 @@ export async function executeProductProductionCommand(input: {
     preparedCreatorBrief,
     preparedCreatorEvidence,
     preparedCreatorStart,
+    preparedPausedBuild,
     preparedCreatorRepair,
     preparedCreatorRepairAuthorization,
     preparedCreatorMedia,

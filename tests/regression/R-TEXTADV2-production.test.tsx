@@ -93,7 +93,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     ]))
     expect(getAgentSkillV1('text-adventure.cast-bible.v1')).toMatchObject({
       agentId: 'text-adventure-cast-director',
-      promptVersion: 'text-adventure-cast-bible-v2',
+      promptVersion: 'text-adventure-cast-bible-v3',
       maxOutputTokens: 16_000,
     })
     expect(getAgentSkillV1('text-adventure.narrative-design.v1')).toMatchObject({
@@ -147,6 +147,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
       .toBe(Math.floor(200_000 * 0.04))
     expect(taskByKey.get('content.main-quest-plan')?.budgetReservation.durationMs).toBe(420_000)
     expect(taskByKey.get('content.main-quest-plan')?.timeoutMs).toBe(420_000)
+    expect(taskByKey.get('content.main-quest-plan')?.budgetReservation.inputTokens).toBe(42_240)
     expect(taskByKey.get('content.quest-script.main.act-1.multi')?.budgetReservation.durationMs)
       .toBe(420_000)
     expect(taskByKey.get('content.quest-script.main.act-1.multi')?.timeoutMs).toBe(420_000)
@@ -167,7 +168,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     expect(taskByKey.get('content.dialogue-pass.act-1')?.budgetReservation.inputTokens)
       .toBe(Math.floor(528_000 * 0.05))
     expect(taskByKey.get('content.scene-script.act-1.part-1')?.budgetReservation.inputTokens)
-      .toBe(Math.floor(528_000 * 0.045))
+      .toBe(31_680)
     expect(taskByKey.get('content.scene-script.act-1.part-1')?.budgetReservation.outputTokens)
       .toBe(32_000)
     TEXT_ADVENTURE_QUALITY_REVIEW_SCOPES_V1.forEach(scope => {

@@ -180,6 +180,9 @@ async function readTextAdventureDialogueInputsV1(input: AssembleContextInput): P
 async function readTextAdventureVisualQualityInputsV1(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readTextAdventureVisualQualityInputsV1(input)
 }
+async function readTextAdventureVisualDirectionInputsV1(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTextAdventureVisualDirectionInputsV1(input)
+}
 async function readTextAdventureQualityInputsV1(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readTextAdventureQualityInputsV1(input)
 }
@@ -1984,6 +1987,19 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: readTextAdventureDialogueInputsV1,
   },
   {
+    key: 'product-production.adventure-visual-direction-inputs',
+    label: '文字冒险美术定向与完整正文投影',
+    scope: 'project',
+    layer: 'L0',
+    ownerFrom: 'work',
+    budgetTokens: 52_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId)
+      && input.productProductionTaskKey === 'media.requirements'
+      && !!input.productArtifactKeys?.length,
+    read: readTextAdventureVisualDirectionInputsV1,
+  },
+  {
     key: 'product-production.adventure-visual-quality-inputs',
     label: '文字冒险独立图片审查投影',
     scope: 'project',
@@ -2002,7 +2018,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     scope: 'project',
     layer: 'L0',
     ownerFrom: 'work',
-    budgetTokens: 32_000,
+    budgetTokens: 40_000,
     protectedFromTrim: true,
     enabled: input => Number.isInteger(input.productBuildId)
       && /^content\.adventure-quality-review(?:\.(?:structure|act-[123]))?$/.test(
