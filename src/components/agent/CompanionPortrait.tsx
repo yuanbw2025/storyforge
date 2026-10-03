@@ -23,7 +23,7 @@ export default function CompanionPortrait({ pose, compact = false }: { pose: Com
   if (!visible) return null
   return (
     <span
-      role="img" aria-label={'墨灵 · ' + COMPANION_POSES[pose].label}
+      role="img" aria-label={'炉娘 · ' + COMPANION_POSES[pose].label}
       className={`companion-portrait ${compact ? 'companion-portrait-compact' : ''} ${portrait ? 'companion-portrait-custom' : ''}`}
       data-pose={pose}
       style={{

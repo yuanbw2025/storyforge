@@ -150,7 +150,7 @@ export default function ChatCopilotPanel({
           <div className="min-w-0">
           <div className="flex items-center gap-2 font-semibold">
             {!companionVisible && <Bot className="h-4 w-4 text-accent" />}主 Agent{' '}
-            <span className="text-[10px] font-normal text-text-muted">{companionVisible ? '墨灵 · ' + COMPANION_POSES[pose].label : '创作伙伴'}</span>
+            <span className="text-[10px] font-normal text-text-muted">{companionVisible ? '炉娘 · ' + COMPANION_POSES[pose].label : '创作伙伴'}</span>
           </div>
           <p className="truncate text-xs text-text-muted" title={worldName}>
             {activeWork?.title ?? '当前作品'} · {worldName}

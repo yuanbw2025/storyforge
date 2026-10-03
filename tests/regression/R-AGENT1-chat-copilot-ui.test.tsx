@@ -111,7 +111,7 @@ describe('AGENT-2 · 单一主 Agent 对话入口', () => {
 
     expect(host.querySelector('aside')?.getAttribute('aria-label')).toBe('主 Agent 创作副驾')
     expect(host.textContent).toContain('主 Agent')
-    expect(host.textContent).toContain('墨灵')
+    expect(host.textContent).toContain('炉娘')
     expect(host.querySelector('.companion-portrait')?.getAttribute('data-pose')).toBe('ready')
     expect(host.textContent).toContain('确认采纳前，作品原文保持不变')
     expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="告诉主 Agent 你的目标"]')?.disabled).toBe(false)

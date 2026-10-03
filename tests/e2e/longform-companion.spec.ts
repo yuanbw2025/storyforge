@@ -29,7 +29,7 @@ async function setup(page: Page, browserVoice = true) {
       cancel: () => { probe.canceled++ },
     } })
   }, { browserVoice })
-  await createLongform(page, '墨灵隔离验收')
+  await createLongform(page, '炉娘隔离验收')
   await page.getByRole('navigation', { name: '工作台创作方式' }).getByRole('button', { name: 'Agent', exact: true }).click()
   await expect(page.getByRole('textbox', { name: '告诉主 Agent 你的目标' })).toBeEnabled()
 }
@@ -81,7 +81,7 @@ test('companion and settings fit mobile, hide persistently and preserve the auth
   const messageBounds = await page.locator('.agent-messages').boundingBox()
   expect(messageBounds!.height).toBeGreaterThan(260)
   await page.getByRole('button', { name: '助手与语音设置' }).click()
-  await expect(page.getByRole('dialog', { name: '墨灵 · 助手设置' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: '炉娘 · 助手设置' })).toBeVisible()
   await page.screenshot({ path: test.info().outputPath('companion-settings-mobile.png') })
   const dialog = await page.getByRole('dialog').boundingBox()
   expect(dialog!.width).toBeLessThan(390)

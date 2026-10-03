@@ -82,7 +82,7 @@ export default function CompanionSettings({ onClose }: { onClose: () => void }) 
   return (
     <dialog ref={dialog} className="companion-settings" aria-labelledby="companion-settings-title" onCancel={(e) => { e.preventDefault(); onClose() }}>
       <header>
-        <div><h2 id="companion-settings-title">墨灵 · 助手设置</h2><p>陪你构思，按你的决定落笔。</p></div>
+        <div><h2 id="companion-settings-title">炉娘 · 助手设置</h2><p>熔炉创作助手，陪你构思，按你的决定落笔。</p></div>
         <button type="button" onClick={onClose} aria-label="关闭助手设置" autoFocus><X size={18} /></button>
       </header>
       <div className="companion-settings-body">
@@ -92,7 +92,7 @@ export default function CompanionSettings({ onClose }: { onClose: () => void }) 
           <div className="flex flex-wrap items-center gap-3">
             <button type="button" onClick={() => portraitInput.current?.click()}>更换立绘（PNG / JPG / WebP）</button>
             <input ref={portraitInput} className="sr-only" aria-label="选择助手立绘" type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => { void choosePortrait(e.target.files?.[0]); e.target.value = '' }} />
-            {preferences.portrait && <button type="button" onClick={() => update({ portrait: '' })}>恢复墨灵原画</button>}
+            {preferences.portrait && <button type="button" onClick={() => update({ portrait: '' })}>恢复炉娘原画</button>}
           </div>
           <p>立绘只保存在此浏览器。自定义图片保留轻微动作；内置原画有六种状态。</p>
         </fieldset>
