@@ -1,3 +1,4 @@
+import { canonRowResourceKeysV1 } from '../context-gateway/canon-provider'
 import { db } from '../db/schema'
 import { assembleContextGatewayPacketV1, projectContextGatewayInputStateV1 } from '../agent/context-gateway-input'
 import { resolveAgentContextPolicy, type AgentContextProfile } from '../agent/context-policy'
@@ -95,18 +96,16 @@ export async function prepareDetailedOutlineGatewayAssemblyV1(input: {
   const outlineOriginals = unique([originalOutlineKeys(target), ...adjacent.map(originalOutlineKeys)].flat())
 
   const currentDetail = details.find(row => row.outlineNodeId === input.outlineNodeId)
-  const detailKeys = currentDetail?.ragDocumentId
-    ? [`detailed-outline:${currentDetail.ragDocumentId}`]
-    : []
-  const detailOriginalKeys = currentDetail?.ragDocumentId && Array.isArray(currentDetail.scenes) && currentDetail.scenes.length
-    ? [`detailed-outline:${currentDetail.ragDocumentId}:field:scenes`]
-    : []
+  const detailResources = await canonRowResourceKeysV1('detailedOutlines', currentDetail
+    ? { ...currentDetail, projectId: scope.projectId } : undefined)
+  const detailKeys = detailResources.record ? [detailResources.record] : []
+  const detailOriginalKeys = detailResources.fields.scenes ? [detailResources.fields.scenes] : []
 
   const currentArcs = arcs.filter(row => inWorld(row, input.worldGroupId) && row.ragDocumentId)
   const arcKeys = currentArcs.map(row => `story-arc:${row.ragDocumentId}`)
-  const arcStageOriginals = currentArcs
-    .filter(row => typeof row.stages === 'string' && row.stages.trim())
-    .map(row => `story-arc:${row.ragDocumentId}:field:stages`)
+  const arcStageOriginals = (await Promise.all(currentArcs.map(row =>
+    canonRowResourceKeysV1('storyArcs', { ...row, projectId: scope.projectId }),
+  ))).flatMap(keys => keys.fields.stages ? [keys.fields.stages] : [])
   const stageKeys = currentArcs.flatMap(row => typeof row.stages === 'string'
     ? parseStages(row.stages).map(stage => `story-arc:${row.ragDocumentId}:stage:${encodeURIComponent(stage.id)}`)
     : [])

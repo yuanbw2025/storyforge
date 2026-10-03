@@ -1,3 +1,4 @@
+import { canonRowResourceKeysV1 } from '../context-gateway/canon-provider'
 import { nanoid } from 'nanoid'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
@@ -1480,19 +1481,21 @@ export async function prepareStoryArcCopilot(
   const mandatoryTargetResourceKeys = targetArc?.ragDocumentId
     ? [`story-arc:${targetArc.ragDocumentId}`]
     : []
-  const mandatoryTargetFieldResourceKeys = targetArc?.ragDocumentId
-    ? ['name', 'type', 'description', 'stages']
-        .map(field => `story-arc:${targetArc.ragDocumentId}:field:${field}`)
-    : []
+  const targetResources = await canonRowResourceKeysV1('storyArcs', targetArc
+    ? { ...targetArc, id: targetArc.id ?? undefined, projectId: input.projectId } : undefined)
+  const mandatoryTargetFieldResourceKeys = ['name', 'type', 'description', 'stages']
+    .flatMap(field => targetResources.fields[field] ? [targetResources.fields[field]] : [])
   const mandatoryTargetProgressResourceKeys = targetArc
-    ? (before.progress ?? [])
+    ? (await Promise.all((before.progress ?? [])
         .filter(row => row.arcId === targetArc.id && row.ragDocumentId)
-        .map(row => `storyline-progress:${row.ragDocumentId}`)
+        .map(row => canonRowResourceKeysV1('storylineProgress', { ...row, projectId: input.projectId }))))
+        .flatMap(keys => keys.record ? [keys.record] : [])
     : []
   const mandatoryTargetCrossingResourceKeys = targetArc
-    ? (before.crossings ?? [])
+    ? (await Promise.all((before.crossings ?? [])
         .filter(row => (row.arcIdA === targetArc.id || row.arcIdB === targetArc.id) && row.ragDocumentId)
-        .map(row => `storyline-crossing:${row.ragDocumentId}`)
+        .map(row => canonRowResourceKeysV1('storylineCrossings', { ...row, projectId: input.projectId }))))
+        .flatMap(keys => keys.record ? [keys.record] : [])
     : []
   if (gatewayRequired && targetArc && mandatoryTargetResourceKeys.length === 0) {
     throw new Error('目标故事线缺少稳定资源身份，不能启动变换候选。')

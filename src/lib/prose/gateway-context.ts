@@ -1,3 +1,4 @@
+import { canonRowResourceKeysV1 } from '../context-gateway/canon-provider'
 import { db } from '../db/schema'
 import { assembleContextGatewayPacketV1, projectContextGatewayInputStateV1 } from '../agent/context-gateway-input'
 import { resolveAgentContextPolicy, type AgentContextProfile } from '../agent/context-policy'
@@ -31,17 +32,6 @@ function unique(values: readonly string[]): string[] {
 
 function inWorld(row: StableRow, worldGroupId: number | null): boolean {
   return (row.worldGroupId ?? null) === worldGroupId
-}
-
-function fieldKeys(prefix: string, row: StableRow | undefined, fields: readonly string[]): string[] {
-  if (!row?.ragDocumentId) return []
-  return fields
-    .filter(field => row[field] != null && String(row[field]).trim() && String(row[field]) !== '[]')
-    .map(field => `${prefix}:${row.ragDocumentId}:field:${encodeURIComponent(field)}`)
-}
-
-function recordKey(prefix: string, row: StableRow | undefined): string | null {
-  return row?.ragDocumentId ? `${prefix}:${row.ragDocumentId}` : null
 }
 
 export function proseGatewayExecutionFromAssemblyV1(
@@ -116,8 +106,10 @@ export async function prepareProseGatewayAssemblyV1(input: {
     ? targetChapter?.perspectiveCharacterId ?? null
     : input.perspectiveCharacterId
   const detail = details.find(row => row.outlineNodeId === input.outlineNodeId)
-  if (!detail?.ragDocumentId && input.allowOutlineOnlyAgentDraft !== true) {
-    throw new Error('正文生成前必须先建立目标章细纲。')
+  const detailResources = await canonRowResourceKeysV1('detailedOutlines', detail
+    ? { ...detail, projectId: scope.projectId } : undefined)
+  if (!detailResources.record && input.allowOutlineOnlyAgentDraft !== true) {
+    throw new Error('请先填写或生成目标章细纲，再生成正文。')
   }
 
   const { sequence } = resolveCanonicalChapterSequence(outlines, chapters)
@@ -137,12 +129,12 @@ export async function prepareProseGatewayAssemblyV1(input: {
     return index != null && index < targetIndex && String(entry.chapter.content ?? '').trim()
   })
 
-  const outlineOriginals = fieldKeys('outline-node', targetOutline, ['title', 'summary'])
-  const detailOriginals = fieldKeys('detailed-outline', detail, [
-    'scenes', 'openingHook', 'endingCliffhanger', 'prohibitions', 'emotionArc',
-  ])
-  const detailRecord = recordKey('detailed-outline', detail)
-  const targetOutlineRecord = recordKey('outline-node', targetOutline)!
+  const outlineResources = await canonRowResourceKeysV1('outlineNodes', { ...targetOutline, projectId: scope.projectId })
+  const outlineOriginals = ['title', 'summary'].flatMap(field => outlineResources.fields[field] ? [outlineResources.fields[field]] : [])
+  const detailOriginals = ['scenes', 'openingHook', 'endingCliffhanger', 'prohibitions', 'emotionArc']
+    .flatMap(field => detailResources.fields[field] ? [detailResources.fields[field]] : [])
+  const detailRecord = detailResources.record
+  const targetOutlineRecord = outlineResources.record!
   const previousContinuity = previous?.chapter.ragDocumentId
     ? [`chapter:${previous.chapter.ragDocumentId}:continuity-tail`]
     : []

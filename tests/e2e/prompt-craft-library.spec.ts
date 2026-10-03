@@ -36,6 +36,7 @@ test('工坊可搜索并指定到节点，刷新后仍使用指定模板与作�
   await page.getByLabel('待轻修的正文').fill('沈宁没有签字。三张船票压在账本下。她用不签字表示了拒绝。')
   await page.getByLabel('给 AI 的提示', { exact: true }).fill('必须保留三张与没有签字，禁止加下雨。')
   await page.getByRole('button', { name: /^保存/ }).click()
+  await expect(page.getByText('节点模式已保存', { exact: true })).toBeVisible()
   await page.reload()
   await openLongformLeaf(page, '提示词库')
   await page.getByRole('button', { name: '工作流', exact: true }).click()

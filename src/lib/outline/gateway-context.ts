@@ -1,3 +1,4 @@
+import { canonRowResourceKeysV1 } from '../context-gateway/canon-provider'
 import { db } from '../db/schema'
 import { executeContextGatewayV1, type ContextGatewayExecutionV1 } from '../context-gateway/execution'
 import { assembleContextGatewayPacketV1 } from '../agent/context-gateway-input'
@@ -146,9 +147,9 @@ export async function prepareOutlineGatewayAssemblyV1(input: {
 
   const currentArcs = arcs.filter(row => inWorld(row, input.worldGroupId) && row.ragDocumentId)
   const arcRecordKeys = currentArcs.map(row => `story-arc:${row.ragDocumentId}`)
-  const arcStagesOriginalKeys = currentArcs
-    .filter(row => typeof row.stages === 'string' && row.stages.trim())
-    .map(row => `story-arc:${row.ragDocumentId}:field:stages`)
+  const arcStagesOriginalKeys = (await Promise.all(currentArcs.map(row =>
+    canonRowResourceKeysV1('storyArcs', { ...row, projectId: scope.projectId }),
+  ))).flatMap(keys => keys.fields.stages ? [keys.fields.stages] : [])
   const stageKeys = currentArcs.flatMap(row => (
     typeof row.stages === 'string'
       ? parseStages(row.stages).map(stage => `story-arc:${row.ragDocumentId}:stage:${encodeURIComponent(stage.id)}`)

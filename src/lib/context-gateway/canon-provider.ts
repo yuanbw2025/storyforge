@@ -2,6 +2,7 @@ import { estimateTokens } from '../ai/context-budget'
 import { normalizeChapterText, sha256Text } from '../ai/chapter-memory/text-normalization'
 import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { db } from '../db/schema'
+import { getFactPredicate } from '../registry/fact-predicate-registry'
 import { FIELD_BY_TARGET } from '../registry/field-registry'
 import { PROJECT_TABLES, REGISTRY_BY_NAME } from '../registry/project-tables'
 import type {
@@ -44,7 +45,7 @@ import {
 } from './provider-cache'
 
 const PROVIDER_SOURCE_KEY = 'ragSelection'
-const PROVIDER_VERSION = 'canon-resource-provider-v2'
+const PROVIDER_VERSION = 'canon-resource-provider-v3'
 const NORMALIZATION_VERSION = 'canon-resource-normalization-v1'
 const MAX_PAGE_SIZE = 100
 const MAX_READ_TOKENS = 100_000
@@ -464,6 +465,37 @@ function fieldKey(spec: ResourceSpec, row: ResourceRow, key: string): string {
   return `${recordKey(spec, row)}:field:${encodeURIComponent(key)}`
 }
 
+/** Generic record/field publication only; callers must first resolve and scope
+ * their rows. This shares the Provider projection, not a second read authority.
+ * Nested resources and access/visibility remain the Gateway's responsibility. */
+export async function canonRowResourceKeysV1(tableName: string, row: ResourceRow | undefined): Promise<{
+  record: string | null
+  fields: Record<string, string>
+}> {
+  const spec = REGISTRY_BY_NAME.get(tableName)
+  if (!spec?.resourceIdentity) fail('resource-table', `${tableName} 没有登记资源身份`)
+  if (!row?.ragDocumentId) return { record: null, fields: {} }
+  const resourceSpec = spec as ResourceSpec
+  const fields = await fieldsForRow(resourceSpec, row)
+  return {
+    record: fields.length ? recordKey(resourceSpec, row) : null,
+    fields: Object.fromEntries(fields.map(field => [field.key, fieldKey(resourceSpec, row, field.key)])),
+  }
+}
+
+async function temporalFactTitle(row: ResourceRow): Promise<string> {
+  const predicate = getFactPredicate(String(row.predicate ?? ''))
+  const subject = exactValue(row.subjectName).trim() || '未命名主体'
+  const title = `${subject} ｜ ${predicate?.label ?? exactValue(row.predicate)}`
+  // Unknown/single-valued predicates remain conservative: differing values
+  // still share a title and must pass the existing conflict gate.
+  if (!predicate || (predicate.cardinality === 'single' && predicate.factKind === 'state')) return title
+  const source = typeof row.sourceChapterId === 'number' ? await db.chapters.get(row.sourceChapterId) : undefined
+  const sourceIdentity = source?.projectId === row.projectId && (source as typeof source & { workId?: number | null }).workId === row.workId
+    ? source.ragDocumentId : undefined
+  return `${title} ｜ ${exactValue(row.value)}${sourceIdentity ? ` ｜ 来源章 ${sourceIdentity}` : ''}`
+}
+
 function relationKind(field: string): ContextResourceRelationV1['kind'] {
   if (field === 'parentId' || field === 'moduleId') return 'parent'
   if (/CharacterId$/.test(field)) return 'same-entity'
@@ -617,7 +649,7 @@ async function genericResources(
 ): Promise<ProjectedResourceV1[]> {
   const fields = await fieldsForRow(spec, row)
   if (!fields.length) return []
-  const baseTitle = rowTitle(spec, row)
+  const baseTitle = spec.name === 'temporalFacts' ? await temporalFactTitle(row) : rowTitle(spec, row)
   const groupId = spec.homeWorldScoped
     ? (typeof row.homeWorldGroupId === 'number' ? row.homeWorldGroupId : null)
     : (typeof row.worldGroupId === 'number' ? row.worldGroupId : null)

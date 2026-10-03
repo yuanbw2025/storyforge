@@ -68,6 +68,22 @@ test('streamed scene details survive a burst of chunks and reload before adoptio
     await route.fulfill({ contentType: 'text/event-stream', body: `${chunks}data: [DONE]\n\n` })
   })
   await createLongform(page, '细纲流式验收')
+  await page.evaluate(async () => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const { resolveScope, stampNewRecord } = await importer('/storyforge/src/lib/workspace/scope.ts')
+    const project = await db.projects.toCollection().first()
+    const scope = await resolveScope({ projectId: project.id })
+    const base = { projectId: project.id, createdAt: Date.now(), updatedAt: Date.now() }
+    await db.storyArcs.add(stampNewRecord(scope, 'storyArcs', { ...base, name: '钟楼主线', type: 'main', description: '', stages: '[]' }, { owner: 'work' }))
+    for (const [predicate, value] of [['location', '海关钟楼'], ['healthStatus', '健康'], ['knows', '钟停了'], ['knows', '铜箔上有潮汐记录']]) {
+      await db.temporalFacts.add(stampNewRecord(scope, 'temporalFacts', {
+        ...base, subjectName: '沈砚', predicate, value, factKind: predicate === 'knows' ? 'event' : 'state',
+        sourceType: 'manual', status: 'confirmed', locked: false,
+        validFromChapterId: null, validToChapterId: null, sourceChapterId: null,
+      }, { owner: 'work' }))
+    }
+  })
   await page.getByRole('button', { name: '大纲与章纲', exact: true }).click()
   await page.getByRole('button', { name: '添加卷', exact: true }).click()
   await page.getByRole('button', { name: '添加章节', exact: true }).click()
