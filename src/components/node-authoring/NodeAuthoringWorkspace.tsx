@@ -354,7 +354,7 @@ function CharacterBindingSelector(props: {
     setLoading(true)
     void buildRagLibrary({ projectId: props.projectId, worldGroupId: props.worldGroupId })
       .then(next => {
-        if (active) setEntries(next.filter(entry => entry.tableName === 'characters' && entry.fieldKey === props.fieldKey))
+        if (active) setEntries(next.filter(entry => entry.tableName === 'characters'))
       })
       .catch(() => {
         if (active) setEntries([])

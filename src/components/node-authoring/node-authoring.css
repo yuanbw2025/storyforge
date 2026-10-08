@@ -21,6 +21,6 @@
   .node-flow-name { flex: 1; width: 160px; }
   .node-workspace { max-height: none; height: 740px; min-height: 500px; }
 }
-.node-library > aside { width: 100%; min-height: 0; }
+.node-library > aside { width: 100%; min-height: 0; flex: 1; }
 .node-workspace-header button { min-height: 32px; }
 .node-workspace[data-node-pane='results'] .node-results button { min-height: 32px; }

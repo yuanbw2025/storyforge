@@ -180,10 +180,11 @@ export async function resolveAuthoringBoundRecordId(input: {
   if (!ref?.documentId) return null
   const scope = input.scope ?? await resolveScopeLike(input.projectId)
   const entries = await buildRagLibrary({ projectId: input.projectId, scope, worldGroupId: input.worldGroupId })
+  // The portable document identifies the record. The target field may still be
+  // empty and therefore absent from the retrieval library.
   const matches = entries.filter(entry => (
     entry.tableName === input.target
     && entry.documentId === ref.documentId
-    && (!ref.fieldKey || entry.fieldKey === ref.fieldKey)
   ))
   const recordIds = [...new Set(matches.map(entry => entry.recordId))]
   return recordIds.length === 1 ? recordIds[0]! : null

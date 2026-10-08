@@ -141,8 +141,8 @@ test('bound character field offers adoption and updates only its selected charac
     const { AUTHORING_NODE_BY_ID, defaultConfigForTemplate, emptyAuthoringGraph } = await importer('/storyforge/src/lib/node-authoring/index.ts')
     const { useNodeFlowStore } = await importer('/storyforge/src/stores/node-flow.ts')
     await useCharacterStore.getState().addCharacter({ projectId, name: '先行者', shortDescription: '已有角色一', motivation: '原动机一', worldGroupId: null, homeWorldGroupId: null })
-    const secondId = await useCharacterStore.getState().addCharacter({ projectId, name: '潮汐测者', shortDescription: '已有角色二', motivation: '原动机二', worldGroupId: null, homeWorldGroupId: null })
-    const target = (await buildRagLibrary({ projectId, worldGroupId: null })).find((entry: any) => entry.tableName === 'characters' && entry.recordId === secondId && entry.fieldKey === 'motivation')
+    const secondId = await useCharacterStore.getState().addCharacter({ projectId, name: '潮汐测者', shortDescription: '已有角色二', motivation: '', worldGroupId: null, homeWorldGroupId: null })
+    const target = (await buildRagLibrary({ projectId, worldGroupId: null })).find((entry: any) => entry.tableName === 'characters' && entry.recordId === secondId)
     const template = AUTHORING_NODE_BY_ID.get('character.field.motivation')
     const flow = await db.nodeFlows.where('projectId').equals(projectId).first()
     await useNodeFlowStore.getState().saveFlow({ ...flow, graphJson: JSON.stringify({ ...emptyAuthoringGraph(), nodes: [{ id: 'motivation', templateId: template.id, templateVersion: 1, title: template.label, x: 30, y: 60, config: defaultConfigForTemplate(template), inputs: template.inputs, outputs: template.outputs, binding: { mode: 'snapshot', ref: { documentId: target.documentId, fieldKey: 'motivation', target: 'characters' } } }] }) })
@@ -167,6 +167,11 @@ test('bound character field offers adoption and updates only its selected charac
 
 test('node library searches formal actions and keeps experimental drafts hidden until selected', async ({ page }) => {
   await setup(page)
+  const library = page.locator('.node-library > aside')
+  expect(await library.evaluate(element => element.clientHeight < element.scrollHeight)).toBe(true)
+  await library.getByRole('button').last().scrollIntoViewIfNeeded()
+  expect(await library.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+  await library.evaluate(element => { element.scrollTop = 0 })
   await page.getByLabel('查找节点').fill('设计、埋设')
   await expect(page.getByText('没有匹配节点，试试其他关键词。')).toBeVisible()
   await page.getByLabel('显示实验草稿节点').check()
