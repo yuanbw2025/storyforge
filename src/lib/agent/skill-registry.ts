@@ -1363,7 +1363,7 @@ export const AGENT_SKILLS = [
       table: 'worldviews',
       fields: WORLDVIEW_GENERATABLE_FIELD_SPECS.map(spec => spec.field),
     }],
-    lastVerifiedAt: '2026-08-23',
+    lastVerifiedAt: '2026-10-08',
     regressionTests: [
       'R-WE1-worldview-generatable-contract',
       'R-HARNESS32-worldview-field-agent',
@@ -1417,7 +1417,7 @@ export const AGENT_SKILLS = [
     },
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-23',
+    lastVerifiedAt: '2026-10-08',
     regressionTests: ['R-MW1-world-link-governance'],
   },
   {
@@ -1648,7 +1648,7 @@ export const AGENT_SKILLS = [
       table: 'storyCores',
       fields: STORY_CORE_GENERATABLE_FIELD_SPECS.map(spec => spec.field),
     }],
-    lastVerifiedAt: '2026-08-23',
+    lastVerifiedAt: '2026-10-08',
     regressionTests: [
       'R-HARNESS31-story-core-agent',
       'R-HARNESS31-story-core-panel-ui',
@@ -1914,7 +1914,7 @@ export const AGENT_SKILLS = [
         'statusProducerContractHash', 'statusProducerCandidateHash',
       ],
     }],
-    lastVerifiedAt: '2026-08-23',
+    lastVerifiedAt: '2026-10-08',
     regressionTests: ['R-CHAR1-character-gateway-contract', 'R-CHAR1-character-lifecycle-ui'],
   },
   {
@@ -2071,7 +2071,7 @@ export const AGENT_SKILLS = [
         'lastAlignedHash', 'producerRunId', 'producerCandidateHash',
       ],
     }],
-    lastVerifiedAt: '2026-08-23',
+    lastVerifiedAt: '2026-10-08',
     regressionTests: [
       'R-HARNESS30-story-arc-agent',
       'R-HARNESS30-story-arc-panel-ui',
@@ -4406,7 +4406,7 @@ export const AGENT_SKILLS = [
     contextGateway: PRODUCT_PRODUCTION_WORLD_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-22',
+    lastVerifiedAt: '2026-10-08',
     regressionTests: ['R-TTRPG3M-campaign-proposal-harness'],
   },
   {
