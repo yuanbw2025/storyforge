@@ -235,7 +235,7 @@ export interface AuthoringRunSignature {
 
 export interface AuthoringCandidate {
   nodeId: string
-  status: 'draft' | 'candidate' | 'blocked' | 'adopted' | 'stale'
+  status: 'draft' | 'candidate' | 'blocked' | 'adopted' | 'stale' | 'rejected'
   output: string
   /** Multiple generations remain grouped under one node so the run record is still portable. */
   variants?: string[]

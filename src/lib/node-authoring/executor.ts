@@ -15,7 +15,7 @@ import {
   readAuthoringTargetFingerprint,
   resolveAuthoringBoundRecordId,
 } from './bindings'
-import { validateAuthoringGraph, topologicalAuthoringOrder } from './graph'
+import { authoringExecutionSubgraph, validateAuthoringGraph, topologicalAuthoringOrder } from './graph'
 import { parseAuthoringGraph } from './graph-codec'
 import type {
   AuthoringCandidate,
@@ -164,6 +164,22 @@ function graphControlNumber(
   return Number.isFinite(value) ? value : fallback
 }
 
+function emptyGraphForNode(node: AuthoringNodeInstance): AuthoringNodeGraph {
+  return { version: 2, nodes: [node], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }
+}
+
+export function authoringExecutionGraphHash(graph: AuthoringNodeGraph): string {
+  return hashAuthoringText(JSON.stringify({
+    version: graph.version,
+    nodes: graph.nodes.map(({ id, templateId, templateVersion, config, binding, inputs, outputs, disabled }) => ({ id, templateId, templateVersion, config, binding, inputs, outputs, disabled })),
+    edges: graph.edges,
+  }))
+}
+
+function executionGraphMatches(hash: string, graph: AuthoringNodeGraph): boolean {
+  return hash === authoringExecutionGraphHash(graph) || hash === hashAuthoringText(JSON.stringify(graph))
+}
+
 export function buildAuthoringExecutionPlan(input: {
   graph: AuthoringNodeGraph
   targetNodeId?: string | null
@@ -212,7 +228,7 @@ export function buildAuthoringExecutionPlan(input: {
   const orderedNodeIds = ordered.map(node => node.id)
   return {
     version: 1,
-    graphHash: hashAuthoringText(JSON.stringify(input.graph)),
+    graphHash: authoringExecutionGraphHash(input.graph),
     targetNodeId: input.targetNodeId ?? null,
     orderedNodeIds,
     completedNodeIds: [],
@@ -473,6 +489,7 @@ export async function adoptAuthoringCandidate(input: {
   flow: NodeFlow
   nodeId: string
   output: string
+  runId?: number
 }) {
   if (input.flow.id == null) throw new Error('请先保存节点图。')
   const scope = await resolveScopeLike(input.flow.projectId)
@@ -487,21 +504,22 @@ export async function adoptAuthoringCandidate(input: {
   const template = AUTHORING_NODE_BY_ID.get(node.templateId)
   const actionBinding = template ? authoringDomainActionBindingV1(template) : null
   const latestRuns = (await readOwnedRows<NodeRunRecord>(scope, 'nodeRuns', { owner: 'work' }))
-    .filter(run => run.flowId === input.flow.id)
+    .filter(run => run.flowId === input.flow.id && (input.runId == null || run.id === input.runId))
   latestRuns.sort((left, right) => right.startedAt - left.startedAt)
   let expectedSignature: AuthoringRunSignature | undefined
   let latestDomain: AuthoringCandidate['domain']
   for (const run of latestRuns) {
-    try {
-      const candidate = (JSON.parse(run.nodeResultsJson || '{}') as AuthoringCandidateMap)[input.nodeId]
-      if (candidate?.signature) {
-        expectedSignature = candidate.signature
-        latestDomain = candidate.domain
-        break
-      }
-    } catch {
-      // A damaged historical run does not replace the latest valid candidate evidence.
+    const { candidates } = parseRunMaps(run)
+    const candidate = candidates[input.nodeId]
+    if (!candidate?.signature) continue
+    if (candidate.status === 'adopted' || candidate.status === 'rejected') throw new Error('该候选已处理，请重新生成后再采纳。')
+    const originalNode = parseAuthoringGraph(run.graphSnapshotJson ?? input.flow.graphJson).nodes.find(item => item.id === node.id)
+    if (!originalNode || authoringExecutionGraphHash(emptyGraphForNode(originalNode)) !== authoringExecutionGraphHash(emptyGraphForNode(node))) {
+      throw new Error('节点参数或写入目标已变化；请重新运行后再采纳。')
     }
+    expectedSignature = candidate.signature
+    latestDomain = candidate.domain
+    break
   }
   if (expectedSignature?.targetHash && expectedSignature.executorVersion === 'FLOW-3B.2') {
     const currentTarget = await readAuthoringTargetFingerprint({
@@ -592,6 +610,59 @@ async function persistAuthoringRun(
   })
 }
 
+/** Recover durable evidence only. Continuing production requires a separate author action. */
+export async function recoverInterruptedAuthoringRun(input: { flow: NodeFlow; runId: number }): Promise<NodeRunRecord> {
+  const scope = await resolveScopeLike(input.flow.projectId)
+  const flow = await db.nodeFlows.get(input.flow.id!)
+  if (!flow || !await assertRecordInScope(scope, 'nodeFlows', flow, { owner: 'work' })) throw new Error('节点图不存在或不属于当前作品。')
+  return db.transaction('rw', db.nodeRuns, async () => {
+    const run = await db.nodeRuns.get(input.runId)
+    if (!run || run.flowId !== flow.id || !await assertRecordInScope(scope, 'nodeRuns', run, { owner: 'work' })) throw new Error('运行不存在或不属于当前作品。')
+    if (run.status !== 'running') return run
+    const plan = parseAuthoringExecutionPlan(run.executionPlanJson)
+    if (!plan) throw new Error('运行计划损坏，请保留记录并开始新的运行。')
+    parseRunMaps(run)
+    const recovered = { ...run, status: plan.pendingNodeIds.length ? 'paused' as const : 'completed' as const, updatedAt: Date.now() }
+    await db.nodeRuns.put(recovered)
+    return recovered
+  })
+}
+
+export async function reviseAuthoringCandidate(input: {
+  flow: NodeFlow
+  runId: number
+  nodeId: string
+  output?: string
+  selectedVariantIndex?: number
+  reject?: boolean
+}): Promise<NodeRunRecord> {
+  const scope = await resolveScopeLike(input.flow.projectId)
+  const flow = await db.nodeFlows.get(input.flow.id!)
+  if (!flow || !await assertRecordInScope(scope, 'nodeFlows', flow, { owner: 'work' })) throw new Error('节点图不存在或不属于当前作品。')
+  return db.transaction('rw', db.nodeRuns, async () => {
+    const run = await db.nodeRuns.get(input.runId)
+    if (!run || run.flowId !== input.flow.id || !await assertRecordInScope(scope, 'nodeRuns', run, { owner: 'work' })) throw new Error('候选运行不存在或不属于当前作品。')
+    if (run.status === 'running') throw new Error('运行尚未结束，请停止或等待后再修改候选。')
+    const { candidates } = parseRunMaps(run)
+    const candidate = candidates[input.nodeId]
+    if (!candidate || candidate.status === 'adopted' || candidate.status === 'rejected') throw new Error('候选不存在或已处理。')
+    if (input.reject) candidates[input.nodeId] = { ...candidate, status: 'rejected' }
+    else if (input.selectedVariantIndex != null) {
+      const index = input.selectedVariantIndex
+      const output = candidate.variants?.[index]
+      if (!Number.isInteger(index) || output == null) throw new Error('候选版本不存在。')
+      const artifact = candidate.creativeArtifacts?.[index]
+      candidates[input.nodeId] = { ...candidate, output: input.output ?? output, selectedVariantIndex: index, authorEditedAfterArtifact: input.output != null, status: input.output != null ? 'draft' : artifact?.status === 'blocked' || artifact?.status === 'manual-repair' ? 'blocked' : 'candidate' }
+    } else {
+      if (input.output == null) throw new Error('缺少候选修订内容。')
+      candidates[input.nodeId] = { ...candidate, output: input.output, status: 'draft', authorEditedAfterArtifact: true }
+    }
+    const updated = { ...run, nodeResultsJson: JSON.stringify(candidates), updatedAt: Date.now() }
+    await db.nodeRuns.put(updated)
+    return updated
+  })
+}
+
 /**
  * Called only after the normal domain adoption path succeeds. It records the
  * author's edited candidate without starting another model call, so a failed
@@ -624,7 +695,7 @@ export async function persistAdoptedAuthoringCandidate(input: {
     status: 'adopted',
     ...(edited || candidate.authorEditedAfterArtifact ? { authorEditedAfterArtifact: true } : {}),
   }
-  const stillBlocked = plan.completedNodeIds.some(nodeId => candidates[nodeId]?.status === 'blocked')
+  const stillBlocked = plan.completedNodeIds.some(nodeId => candidates[nodeId]?.status === 'blocked' || candidates[nodeId]?.status === 'rejected')
   const completed = plan.pendingNodeIds.length === 0 && !stillBlocked
   const updatedAt = Date.now()
   const status = completed ? 'completed' : run.status
@@ -657,15 +728,17 @@ export async function runAuthoringGraph(input: {
     throw new Error('节点图不存在或不属于当前作品。')
   }
   const graph = parseAuthoringGraph(input.flow.graphJson)
-  const issues = validateAuthoringGraph(graph)
+  const restoring = input.resumeRunId == null ? null : await db.nodeRuns.get(input.resumeRunId)
+  const targetNodeId = input.targetNodeId ?? parseAuthoringExecutionPlan(restoring?.executionPlanJson)?.targetNodeId
+  const issues = validateAuthoringGraph(authoringExecutionSubgraph(graph, targetNodeId))
   if (issues.length) throw new Error(issues.map(issue => issue.message).join('；'))
-  let ordered = topologicalAuthoringOrder(graph, input.targetNodeId)
+  let ordered = topologicalAuthoringOrder(graph, targetNodeId)
   if (input.runNodeIds) ordered = ordered.filter(node => input.runNodeIds?.has(node.id))
   if (!ordered.length) throw new Error('本次执行计划没有需要运行的节点。')
   const now = Date.now()
   let plan = buildAuthoringExecutionPlan({
     graph,
-    targetNodeId: input.targetNodeId,
+    targetNodeId,
     runNodeIds: input.runNodeIds,
   })
   let snapshots: AuthoringRunSnapshotMap = {}
@@ -683,12 +756,12 @@ export async function runAuthoringGraph(input: {
       throw new Error('只有已暂停或失败的运行可以从断点恢复。')
     }
     const previousPlan = parseAuthoringExecutionPlan(existing.executionPlanJson)
-    if (!previousPlan || previousPlan.graphHash !== plan.graphHash) {
+    if (!previousPlan || !executionGraphMatches(previousPlan.graphHash, graph)) {
       throw new Error('节点图已变化，不能继续旧断点；请开始一次新的运行。')
     }
     ;({ snapshots, candidates } = parseRunMaps(existing))
     const completed = new Set(previousPlan.completedNodeIds)
-    const unresolved = previousPlan.completedNodeIds.filter(nodeId => candidates[nodeId]?.status === 'blocked')
+    const unresolved = previousPlan.completedNodeIds.filter(nodeId => candidates[nodeId]?.status === 'blocked' || candidates[nodeId]?.status === 'rejected')
     if (unresolved.length) {
       throw new Error('上次运行保留了需要手动修复的候选；请先编辑并确认采纳，再继续下游节点。')
     }
@@ -717,7 +790,7 @@ export async function runAuthoringGraph(input: {
         throw new Error('过期重跑基线不存在或不属于当前节点图。')
       }
       const basePlan = parseAuthoringExecutionPlan(base.executionPlanJson)
-      if (!basePlan || basePlan.graphHash !== plan.graphHash) {
+      if (!basePlan || !executionGraphMatches(basePlan.graphHash, graph)) {
         throw new Error('节点图已变化，不能复用旧运行候选；请开始一次新的运行。')
       }
       ;({ snapshots, candidates } = parseRunMaps(base))
@@ -743,6 +816,14 @@ export async function runAuthoringGraph(input: {
   for (const node of ordered) {
     if (input.signal?.aborted) break
     const inputs = incomingFor(graph, node, candidates)
+    if (inputs.some(item => candidates[item.sourceNodeId]?.status === 'rejected')) {
+      const completedAt = Date.now()
+      candidates[node.id] = { nodeId: node.id, status: 'blocked', output: '', semantic: 'any', errors: ['上游候选已拒绝，请重新运行上游后再继续。'], createdAt: completedAt }
+      await persistAuthoringRun(runId, 'failed', snapshots, candidates, plan, completedAt)
+      const failed = { ...run, status: 'failed' as const, updatedAt: completedAt, completedAt, executionPlanJson: JSON.stringify(plan) }
+      emit(failed)
+      return { run: failed, snapshots, candidates }
+    }
     snapshots[node.id] = {
       nodeId: node.id,
       nodeTitle: node.title,

@@ -15,6 +15,7 @@ import {
 
 interface NodeFlowStore {
   projectId: number | null
+  workId: number | null
   flows: NodeFlow[]
   runs: NodeRunRecord[]
   loading: boolean
@@ -25,18 +26,27 @@ interface NodeFlowStore {
   loadRuns(scope: WorkspaceScopeLike, flowId?: number): Promise<void>
 }
 
+let loadGeneration = 0
+let runsGeneration = 0
+
 export const useNodeFlowStore = create<NodeFlowStore>((set, get) => ({
   projectId: null,
+  workId: null,
   flows: [],
   runs: [],
   loading: false,
 
   load: async scopeInput => {
+    const generation = ++loadGeneration
     set({ loading: true })
-    const scope = await resolveReadScopeLike(scopeInput)
-    const flows = await readOwnedRows<NodeFlow>(scope, 'nodeFlows', { owner: 'work' })
-    flows.sort((left, right) => right.updatedAt - left.updatedAt)
-    set({ projectId: scope.projectId, flows, loading: false })
+    try {
+      const scope = await resolveReadScopeLike(scopeInput)
+      const flows = await readOwnedRows<NodeFlow>(scope, 'nodeFlows', { owner: 'work' })
+      flows.sort((left, right) => right.updatedAt - left.updatedAt)
+      if (generation === loadGeneration) set({ projectId: scope.projectId, workId: scope.workId ?? null, flows, loading: false })
+    } finally {
+      if (generation === loadGeneration) set({ loading: false })
+    }
   },
 
   createFlow: async (projectId, worldGroupId, options) => {
@@ -74,7 +84,7 @@ export const useNodeFlowStore = create<NodeFlowStore>((set, get) => ({
       updatedAt: now,
     }, { owner: 'work' })
     const id = await db.nodeFlows.put(row) as number
-    await get().load(scope)
+    if (get().projectId === scope.projectId && get().workId === scope.workId) await get().load(scope)
     return id
   },
 
@@ -92,10 +102,11 @@ export const useNodeFlowStore = create<NodeFlowStore>((set, get) => ({
   },
 
   loadRuns: async (scopeInput, flowId) => {
+    const generation = ++runsGeneration
     const scope = await resolveReadScopeLike(scopeInput)
     const rows = (await readOwnedRows<NodeRunRecord>(scope, 'nodeRuns', { owner: 'work' }))
       .filter(row => flowId == null || row.flowId === flowId)
     rows.sort((left, right) => right.startedAt - left.startedAt)
-    set({ runs: rows })
+    if (generation === runsGeneration) set({ runs: rows })
   },
 }))
