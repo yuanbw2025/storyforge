@@ -547,7 +547,10 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
       }
     }
   }, [])
-  useEffect(() => registerPendingDraftFlusherV1(async () => { await save(); await flushCandidates() }), [save, flushCandidates])
+  useEffect(() => registerPendingDraftFlusherV1(async () => {
+    do { await save(); await flushCandidates() }
+    while (dirtyRef.current || pendingRevisions.current.size > 0)
+  }), [save, flushCandidates])
   useEffect(() => {
     if (!dirty) return
     const timer = window.setTimeout(() => { void save().catch(() => undefined) }, 700)

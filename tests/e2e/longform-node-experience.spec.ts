@@ -241,7 +241,7 @@ test('candidate revision restores into an independent copy and deleting its grap
   expect(state).toEqual({ originalFlows: 1, originalRuns: 1, restoredRuns: 0 })
 })
 
-test('save failure keeps author input and blocks mode switching until a successful retry', async ({ page }) => {
+test('save failure and delayed receipts preserve every edit before mode switching', async ({ page }) => {
   await setup(page); await selectOrigin(page)
   await page.evaluate(async () => {
     const importer = new Function('p', 'return import(p)') as (p: string) => Promise<any>
@@ -263,6 +263,30 @@ test('save failure keeps author input and blocks mode switching until a successf
   await page.getByRole('navigation', { name: '工作台创作方式' }).getByRole('button', { name: '分步骤模式', exact: true }).click()
   await openLongformLeaf(page, '节点模式'); await selectOrigin(page)
   await expect(page.getByRole('textbox', { name: '生成要求', exact: true })).toHaveValue('必须保留的作者要求。')
+  await page.evaluate(async () => {
+    const importer = new Function('p', 'return import(p)') as (p: string) => Promise<any>
+    const { flushPendingEditsV1 } = await importer('/storyforge/src/lib/authoring/pending-edit-coordinator.ts')
+    const { useNodeFlowStore } = await importer('/storyforge/src/stores/node-flow.ts')
+    await flushPendingEditsV1()
+    const save = useNodeFlowStore.getState().saveFlow
+    let delayOnce = true
+    useNodeFlowStore.setState({ saveFlow: async (flow: any) => {
+      if (delayOnce) {
+        delayOnce = false
+        await new Promise<void>(resolve => { (window as any).__releaseNodeSave = resolve })
+      }
+      return save(flow)
+    } })
+  })
+  await page.getByRole('textbox', { name: '生成要求', exact: true }).fill('正在保存的旧输入。')
+  await page.getByRole('navigation', { name: '工作台创作方式' }).getByRole('button', { name: '分步骤模式', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => typeof (window as any).__releaseNodeSave)).toBe('function')
+  await page.getByRole('textbox', { name: '生成要求', exact: true }).fill('保存延迟期间继续输入的新内容。')
+  await page.evaluate(() => (window as any).__releaseNodeSave())
+  await expect(page).not.toHaveURL(/module=visual-workflows/)
+  await openLongformLeaf(page, '节点模式'); await selectOrigin(page)
+  await expect(page.getByRole('textbox', { name: '生成要求', exact: true })).toHaveValue('保存延迟期间继续输入的新内容。')
+
 })
 
 
