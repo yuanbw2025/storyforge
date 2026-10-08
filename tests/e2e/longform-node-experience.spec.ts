@@ -264,3 +264,34 @@ test('save failure keeps author input and blocks mode switching until a successf
   await openLongformLeaf(page, '节点模式'); await selectOrigin(page)
   await expect(page.getByRole('textbox', { name: '生成要求', exact: true })).toHaveValue('必须保留的作者要求。')
 })
+
+
+test('another tab cannot recover or restart a flow while its original model call is active', async ({ page, context }) => {
+  let release: (() => void) | undefined
+  const pending = new Promise<void>(resolve => { release = resolve })
+  let requests = 0
+  await page.route('**/chat/completions', async route => {
+    requests += 1
+    await pending
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ field: 'worldOrigin', value: '原页面仍在生成的古城。' }) } }] }) })
+  })
+  await setup(page); await selectOrigin(page)
+  await page.getByRole('button', { name: '运行到此节点', exact: true }).click()
+  await expect.poll(() => requests).toBe(1)
+  const other = await context.newPage()
+  try {
+    await other.goto(page.url())
+    await expect(other.getByRole('button', { name: '恢复已保存结果', exact: true })).toBeVisible()
+    await other.getByRole('button', { name: '恢复已保存结果', exact: true }).click()
+    await expect(other.getByText(/节点图正在其他页面运行或恢复/).last()).toBeVisible()
+    // A concurrent fresh run is also rejected before it can invoke a second model.
+    await selectOrigin(other)
+    await other.getByRole('button', { name: '运行到此节点', exact: true }).click()
+    await expect(other.getByText(/节点图正在其他页面运行或恢复/).last()).toBeVisible()
+    expect(requests).toBe(1)
+  } finally { release!(); await other.close() }
+  await expect(page.getByLabel('候选输出')).toHaveValue(/原页面仍在生成/)
+  await page.getByRole('button', { name: '确认采纳', exact: true }).click()
+  await expect(page.getByRole('button', { name: '已采纳', exact: true })).toBeDisabled()
+  expect(requests).toBe(1)
+})

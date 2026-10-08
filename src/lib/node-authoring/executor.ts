@@ -610,8 +610,29 @@ async function persistAuthoringRun(
   })
 }
 
+// A flow has one executing owner across tabs. Recovery may only claim an idle flow.
+const activeAuthoringFlows = new Set<number>()
+async function withAuthoringExecutionOwner<T>(flowId: number, operation: () => Promise<T>, recovery = false): Promise<T> {
+  const busy = () => new Error('节点图正在其他页面运行或恢复，请先在原页面停止，避免重复生成。')
+  if (typeof navigator !== 'undefined' && navigator.locks?.request) {
+    return navigator.locks.request(`storyforge:authoring-flow:${flowId}`, { ifAvailable: true }, lock => {
+      if (!lock) throw busy()
+      return operation()
+    })
+  }
+  if (activeAuthoringFlows.has(flowId)) throw busy()
+  if (recovery && typeof window !== 'undefined') throw new Error('当前浏览器无法确认其他页面是否仍在运行；请保留记录并在支持安全恢复的浏览器重试。')
+  activeAuthoringFlows.add(flowId)
+  try { return await operation() } finally { activeAuthoringFlows.delete(flowId) }
+}
+
 /** Recover durable evidence only. Continuing production requires a separate author action. */
 export async function recoverInterruptedAuthoringRun(input: { flow: NodeFlow; runId: number }): Promise<NodeRunRecord> {
+  if (input.flow.id == null) throw new Error('请先保存节点图。')
+  return withAuthoringExecutionOwner(input.flow.id, () => recoverIdleAuthoringRun(input), true)
+}
+
+async function recoverIdleAuthoringRun(input: { flow: NodeFlow; runId: number }): Promise<NodeRunRecord> {
   const scope = await resolveScopeLike(input.flow.projectId)
   const flow = await db.nodeFlows.get(input.flow.id!)
   if (!flow || !await assertRecordInScope(scope, 'nodeFlows', flow, { owner: 'work' })) throw new Error('节点图不存在或不属于当前作品。')
@@ -721,6 +742,11 @@ export async function runAuthoringGraph(input: {
   signal?: AbortSignal
   onUpdate?: (update: AuthoringRunUpdate) => void
 }): Promise<AuthoringRunUpdate> {
+  if (input.flow.id == null) throw new Error('请先保存节点图。')
+  return withAuthoringExecutionOwner(input.flow.id, () => runOwnedAuthoringGraph(input))
+}
+
+async function runOwnedAuthoringGraph(input: Parameters<typeof runAuthoringGraph>[0]): Promise<AuthoringRunUpdate> {
   if (input.flow.id == null) throw new Error('请先保存节点图。')
   const scope = await resolveScopeLike(input.flow.projectId)
   const storedFlow = await db.nodeFlows.get(input.flow.id)
