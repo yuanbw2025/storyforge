@@ -649,6 +649,12 @@ async function recoverIdleAuthoringRun(input: { flow: NodeFlow; runId: number })
   })
 }
 
+function candidateNeedsAuthorRepair(candidate: AuthoringCandidate | undefined): boolean {
+  if (!candidate || candidate.status === 'adopted') return false
+  const artifact = candidate.creativeArtifacts?.[candidate.selectedVariantIndex ?? 0]
+  return candidate.status === 'blocked' || artifact?.status === 'blocked' || artifact?.status === 'manual-repair'
+}
+
 export async function reviseAuthoringCandidate(input: {
   flow: NodeFlow
   runId: number
@@ -673,10 +679,10 @@ export async function reviseAuthoringCandidate(input: {
       const output = candidate.variants?.[index]
       if (!Number.isInteger(index) || output == null) throw new Error('候选版本不存在。')
       const artifact = candidate.creativeArtifacts?.[index]
-      candidates[input.nodeId] = { ...candidate, output: input.output ?? output, selectedVariantIndex: index, authorEditedAfterArtifact: input.output != null, status: input.output != null ? 'draft' : artifact?.status === 'blocked' || artifact?.status === 'manual-repair' ? 'blocked' : 'candidate' }
+      candidates[input.nodeId] = { ...candidate, output: input.output ?? output, selectedVariantIndex: index, authorEditedAfterArtifact: input.output != null, status: artifact?.status === 'blocked' || artifact?.status === 'manual-repair' ? 'blocked' : input.output != null ? 'draft' : 'candidate' }
     } else {
       if (input.output == null) throw new Error('缺少候选修订内容。')
-      candidates[input.nodeId] = { ...candidate, output: input.output, status: 'draft', authorEditedAfterArtifact: true }
+      candidates[input.nodeId] = { ...candidate, output: input.output, status: candidateNeedsAuthorRepair(candidate) ? 'blocked' : 'draft', authorEditedAfterArtifact: true }
     }
     const updated = { ...run, nodeResultsJson: JSON.stringify(candidates), updatedAt: Date.now() }
     await db.nodeRuns.put(updated)
@@ -716,7 +722,7 @@ export async function persistAdoptedAuthoringCandidate(input: {
     status: 'adopted',
     ...(edited || candidate.authorEditedAfterArtifact ? { authorEditedAfterArtifact: true } : {}),
   }
-  const stillBlocked = plan.completedNodeIds.some(nodeId => candidates[nodeId]?.status === 'blocked' || candidates[nodeId]?.status === 'rejected')
+  const stillBlocked = plan.completedNodeIds.some(nodeId => candidateNeedsAuthorRepair(candidates[nodeId]) || candidates[nodeId]?.status === 'rejected')
   const completed = plan.pendingNodeIds.length === 0 && !stillBlocked
   const updatedAt = Date.now()
   const status = completed ? 'completed' : run.status
@@ -787,7 +793,7 @@ async function runOwnedAuthoringGraph(input: Parameters<typeof runAuthoringGraph
     }
     ;({ snapshots, candidates } = parseRunMaps(existing))
     const completed = new Set(previousPlan.completedNodeIds)
-    const unresolved = previousPlan.completedNodeIds.filter(nodeId => candidates[nodeId]?.status === 'blocked' || candidates[nodeId]?.status === 'rejected')
+    const unresolved = previousPlan.completedNodeIds.filter(nodeId => candidateNeedsAuthorRepair(candidates[nodeId]) || candidates[nodeId]?.status === 'rejected')
     if (unresolved.length) {
       throw new Error('上次运行保留了需要手动修复的候选；请先编辑并确认采纳，再继续下游节点。')
     }
@@ -842,9 +848,9 @@ async function runOwnedAuthoringGraph(input: Parameters<typeof runAuthoringGraph
   for (const node of ordered) {
     if (input.signal?.aborted) break
     const inputs = incomingFor(graph, node, candidates)
-    if (inputs.some(item => candidates[item.sourceNodeId]?.status === 'rejected')) {
+    if (inputs.some(item => candidates[item.sourceNodeId]?.status === 'rejected' || candidateNeedsAuthorRepair(candidates[item.sourceNodeId]))) {
       const completedAt = Date.now()
-      candidates[node.id] = { nodeId: node.id, status: 'blocked', output: '', semantic: 'any', errors: ['上游候选已拒绝，请重新运行上游后再继续。'], createdAt: completedAt }
+      candidates[node.id] = { nodeId: node.id, status: 'blocked', output: '', semantic: 'any', errors: ['上游候选已拒绝或仍需校验采纳，请重新运行上游或完成本地修复后再继续。'], createdAt: completedAt }
       await persistAuthoringRun(runId, 'failed', snapshots, candidates, plan, completedAt)
       const failed = { ...run, status: 'failed' as const, updatedAt: completedAt, completedAt, executionPlanJson: JSON.stringify(plan) }
       emit(failed)

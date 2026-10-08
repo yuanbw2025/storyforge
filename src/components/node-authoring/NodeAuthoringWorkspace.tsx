@@ -565,8 +565,8 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
     const index = patch.selectedVariantIndex
     const output = index == null ? patch.output ?? candidate.output : candidate.variants?.[index]
     if (output == null) return
-    const artifact = index == null ? undefined : candidate.creativeArtifacts?.[index]
-    setCandidates(value => ({ ...value, [nodeId]: { ...candidate, output, ...(index == null ? { status: 'draft', authorEditedAfterArtifact: true } : { status: artifact?.status === 'blocked' || artifact?.status === 'manual-repair' ? 'blocked' : 'candidate', selectedVariantIndex: index, authorEditedAfterArtifact: false }) } }))
+    const artifact = candidate.creativeArtifacts?.[index ?? candidate.selectedVariantIndex ?? 0]
+    setCandidates(value => ({ ...value, [nodeId]: { ...candidate, output, ...(index == null ? { status: candidate.status === 'blocked' || artifact?.status === 'blocked' || artifact?.status === 'manual-repair' ? 'blocked' : 'draft', authorEditedAfterArtifact: true } : { status: artifact?.status === 'blocked' || artifact?.status === 'manual-repair' ? 'blocked' : 'candidate', selectedVariantIndex: index, authorEditedAfterArtifact: false }) } }))
     const key = `${current.run.id}:${nodeId}`
     const previous = pendingRevisions.current.get(key)
     pendingRevisions.current.set(key, { flow: current.draft, runId: current.run.id, nodeId, ...(patch.selectedVariantIndex == null ? previous : {}), ...patch })
