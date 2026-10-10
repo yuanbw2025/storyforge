@@ -7,6 +7,8 @@
 
 StoryForge 当前是 React + TypeScript + Vite 的本地优先单页应用，核心业务数据保存在浏览器 IndexedDB，文件工作区可使用 File System Access / OPFS。AI 请求发送到用户配置的模型服务。应用没有自建核心业务后端，也没有 staging；`main` 进入生产发布链。
 
+本机 Codex 订阅连接作为可选文本传输，由 Vite 开发/预览服务调用官方 app-server，复用原生登录并保留有限的私有传输记录；不拥有业务数据，不改变浏览器 IndexedDB 和 Harness 的 owner。静态托管不包含该服务，边界见 [Codex 提供商契约](./roadmap/CODEX-PROVIDER.md)。
+
 路由壳入口：
 
 - `/`：真实首页 `HomePage`，聚合本地作品、世界、创作任务与发布记录；历史 `?tab=` 链接由兼容解析器转向当前产品入口，`legacy=1` 不再启用旧界面；
@@ -106,7 +108,7 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 1438 个文件 / 517575 行 | `tsconfig.json` |
+| TypeScript 生产源码 | 1440 个文件 / 517794 行 | `tsconfig.json` |
 | IndexedDB schema | v11 / 128 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
 | PROJECT_TABLES | 128 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 238 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |

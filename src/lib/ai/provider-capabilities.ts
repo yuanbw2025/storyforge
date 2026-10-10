@@ -13,6 +13,7 @@ export interface AIProviderCapabilityProfileV1 {
 }
 
 const NATIVE_TOOL_CALLS: Record<AIProvider, NativeToolCallsCapabilityV1> = {
+  codex: 'unsupported',
   openai: 'supported',
   deepseek: 'unverified',
   qwen: 'unverified',
@@ -41,6 +42,8 @@ const NATIVE_TOOL_CALLS: Record<AIProvider, NativeToolCallsCapabilityV1> = {
  * the strict text parser until it gains equivalent evidence.
  */
 const JSON_OBJECT_RESPONSE: Record<AIProvider, JsonObjectResponseCapabilityV1> = {
+  // The local adapter requires and validates an object before returning text.
+  codex: 'supported',
   openai: 'supported',
   deepseek: 'unverified',
   qwen: 'unverified',

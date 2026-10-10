@@ -1,3 +1,4 @@
+import { streamCodex } from '../lib/ai/codex-transport'
 import { create } from 'zustand'
 import type { AIConfig, AIProvider, AIConfigPreset, EmbeddingConfig } from '../lib/types'
 import { normalizeProviderModel, PROVIDER_PRESETS } from '../lib/types'
@@ -256,6 +257,7 @@ function loadInitialConfig(): { config: AIConfig; rememberApiKey: boolean } {
 }
 
 function normalizeConfigModel(config: AIConfig): AIConfig {
+  if (config.provider === 'codex') return { ...config, apiKey: '', baseUrl: '/storyforge/local-codex/v1' }
   const model = normalizeProviderModel(config.provider, config.model)
   return model === config.model ? config : { ...config, model }
 }
@@ -452,6 +454,19 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
 
   testConnection: async (): Promise<TestResult> => {
     const { config } = get()
+    if (config.provider === 'codex') {
+      const startedAt = Date.now()
+      const log = createLog({ type: 'test', provider: 'codex', model: config.model, url: config.baseUrl, status: 'pending' })
+      try {
+        let text = ''
+        for await (const delta of streamCodex([{ role: 'user', content: '仅回复：连接成功' }], config.model, AbortSignal.timeout(120_000))) text += delta
+        updateLog(log.id, { status: 'success', duration: Date.now() - startedAt })
+        return { ok: Boolean(text.trim()), message: 'Codex 最小生成成功，使用本机 ChatGPT 登录；消耗套餐额度，不代表长文或剩余额度充足。', duration: Date.now() - startedAt }
+      } catch (error) {
+        updateLog(log.id, { status: 'error', duration: Date.now() - startedAt, errorMessage: error instanceof Error ? error.message : 'Codex 连接失败' })
+        return { ok: false, message: error instanceof Error ? error.message : 'Codex 连接失败', duration: Date.now() - startedAt }
+      }
+    }
     const normalized = normalizeOpenAIBaseUrl(config.baseUrl)
     if (normalized.changed) {
       const newConfig = { ...config, baseUrl: normalized.baseUrl }

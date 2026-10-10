@@ -31,7 +31,7 @@ export default function TextOpenWorldRuntimeAIStatusPanel(
       <div><dt>模型配置</dt><dd>{props.configured ? '可用' : '尚未配置'}</dd></div>
       <div><dt>成功调用</dt><dd>{props.value?.successfulCalls ?? 0} 次</dd></div>
       <div><dt>输入 / 输出</dt><dd>{props.value ? `${props.value.inputTokens} / ${props.value.outputTokens} tokens` : '尚未读取'}</dd></div>
-      <div><dt>本项目运行时估算</dt><dd>${(props.value?.estimatedCostUsd ?? 0).toFixed(4)}</dd></div>
+      <div><dt>本项目运行时估算</dt><dd>{props.value?.estimatedCostUsd == null ? '费用未知 / 含订阅额度' : `$${props.value.estimatedCostUsd.toFixed(4)}`}</dd></div>
     </dl>
     <small>金额来自本机成功响应的 token 用量与 StoryForge 估算目录，不是服务商账单；结果未知的调用可能尚未计入。</small>
     {props.value && <details>

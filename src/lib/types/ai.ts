@@ -1,5 +1,6 @@
 /** AI 提供商 */
 export type AIProvider =
+  | 'codex'
   | 'deepseek'
   | 'openai'
   | 'qwen'
@@ -58,6 +59,11 @@ export interface AIConfigPreset {
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
+}
+
+/** Local subscription failures require inspection, never an automatic inference replay. */
+export class CodexRequestError extends Error {
+  constructor(message: string) { super(message); this.name = 'CodexRequestError' }
 }
 
 /** AI 错误 */
@@ -145,6 +151,7 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
 
 /** 提供商预设 */
 export const PROVIDER_PRESETS: Record<string, Partial<AIConfig>> = {
+  codex: { baseUrl: '/storyforge/local-codex/v1', model: '', apiKey: '', contextWindow: 32_768, maxTokens: 8_192 },
   deepseek: {
     baseUrl: 'https://api.deepseek.com/v1',
     model: 'deepseek-v4-flash',

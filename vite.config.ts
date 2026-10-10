@@ -1,6 +1,7 @@
 import { defineConfig, type ViteDevServer, type PreviewServer } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { localCodexPlugin } from './scripts/local-codex/bridge.mjs'
 import { execSync } from 'node:child_process'
 
 function resolveBuildSha(): string {
@@ -94,6 +95,7 @@ export default defineConfig({
     __STORYFORGE_BUILD_SHA__: JSON.stringify(resolveBuildSha()),
   },
   plugins: [
+    localCodexPlugin(),
     { name: 'storyforge-base-redirect', configureServer: installBaseRedirect, configurePreviewServer: installBaseRedirect },
     react(),
     VitePWA({
@@ -134,7 +136,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         globIgnores: ['ui-preview/**', 'assets/ui-preview-*', 'demo-assets/last-letter/**'],
         navigateFallback: '/storyforge/index.html',
-        navigateFallbackDenylist: [/^\/(?!storyforge)/, /^\/storyforge\/ui-preview(?:\/|$)/, /^\/storyforge\/demo-assets\/last-letter(?:\/|$)/],
+        navigateFallbackDenylist: [/^\/storyforge\/local-codex(?:\/|$)/, /^\/(?!storyforge)/, /^\/storyforge\/ui-preview(?:\/|$)/, /^\/storyforge\/demo-assets\/last-letter(?:\/|$)/],
         // 主 bundle 已随功能增多突破 2 MiB（pdf.js + mammoth + 分块流水线），
         // 放宽到 5 MiB 让它被精确预缓存而不是只靠 runtime cache。
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,

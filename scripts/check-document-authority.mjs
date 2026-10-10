@@ -73,6 +73,7 @@ const activeDocs = [
   'docs/products/TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md',
   'docs/products/TEXT-OPEN-WORLD-SALT-RIDGE-BRIEF.md',
   'docs/roadmap/README.md',
+  'docs/roadmap/CODEX-PROVIDER.md',
   'docs/roadmap/PLUGIN-WORKSHOP-V1.md',
   'docs/guides/PLUGIN-DEVELOPMENT.md',
   'docs/roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md',

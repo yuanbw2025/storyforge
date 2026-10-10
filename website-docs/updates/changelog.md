@@ -2,6 +2,10 @@
 
 本页按用户可感知的变化整理。**main 的功能更新不等于已经发布新版本**：当前 package 版本仍为 3.9.1，正式 Release 保持其发布时内容。在线部署可能有时差，见[版本与兼容说明](/updates/compatibility)。
 
+## 开发分支 · Codex 本机订阅提供商
+
+新增本机登录复用、模型选择、免 Key 任务预设、取消、断线记录和订阅用量区分。操作见[模型配置](/getting-started/model-config)，交付状态见[开发记录](/updates/development-status)。本条不代表新正式版本，也不表示线上静态站点可调用本机订阅。
+
 ## 开发预览 插件与创意工坊
 
 [PR #113](https://github.com/yuanbw2025/storyforge/pull/113) 提供插件体验版、安装与开发教程、AI 开发资料包和发布流程。先看[工坊指南](/workshop/)与[开发状态](/updates/development-status)；是否合并及部署以 [PR #113](https://github.com/yuanbw2025/storyforge/pull/113) 为准，入口仍需显式开启开发预览，不代表发布新的正式版本。

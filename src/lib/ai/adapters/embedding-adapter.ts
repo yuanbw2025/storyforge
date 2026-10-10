@@ -16,7 +16,7 @@ export function embeddingModelTag(cfg: EmbeddingConfig): string {
 
 /** 配置是否可用于真正发起嵌入调用。 */
 export function isEmbeddingReady(cfg: EmbeddingConfig | null | undefined): cfg is EmbeddingConfig {
-  return !!(cfg && cfg.enabled && cfg.baseUrl && cfg.model && (cfg.apiKey || cfg.provider === 'ollama'))
+  return !!(cfg && cfg.provider !== 'codex' && cfg.enabled && cfg.baseUrl && cfg.model && (cfg.apiKey || cfg.provider === 'ollama'))
 }
 
 const EMBED_TIMEOUT_MS = 60_000
@@ -31,6 +31,7 @@ export async function embedTexts(
   projectId?: number | null,
   signal?: AbortSignal,
 ): Promise<number[][]> {
+  if (cfg.provider === 'codex') throw new Error('Codex 本机订阅连接不提供向量嵌入；请配置独立的 Embedding API。')
   if (!texts.length) return []
   const baseUrl = cfg.baseUrl.replace(/\/+$/, '')
   const controller = new AbortController()

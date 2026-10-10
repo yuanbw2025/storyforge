@@ -55,6 +55,9 @@ jobs:
       - name: TypeScript 严格类型检查
         run: npx tsc --noEmit
 
+      - name: Codex 本机桥协议与隔离反例
+        run: npm run test:codex-bridge
+
       - name: 测试 + 覆盖率门槛
         run: npm run test:coverage
 
@@ -68,7 +71,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: 生产版模型与嵌入代理设置
-        run: PLAYWRIGHT_PRODUCTION_PREVIEW=1 npx playwright test tests/e2e/settings-proxy.spec.ts
+        run: PLAYWRIGHT_PRODUCTION_PREVIEW=1 npx playwright test tests/e2e/settings-proxy.spec.ts tests/e2e/codex-provider.spec.ts
 
       - name: 核心用户路径浏览器冒烟
         run: npm run ci:e2e

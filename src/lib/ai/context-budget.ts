@@ -28,6 +28,7 @@ export interface ModelContextPreset {
  * 键 = provider:model 或 provider（作为该 provider 的默认值）
  */
 export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
+  codex: { label: 'Codex 本地保守预算', maxContext: 32_768, maxOutput: 8_192 },
   // DeepSeek
   'deepseek': { label: 'DeepSeek V4 默认', maxContext: 1_000_000, maxOutput: 384_000 },
   'deepseek:deepseek-v4-flash': { label: 'DeepSeek V4 Flash', maxContext: 1_000_000, maxOutput: 384_000 },

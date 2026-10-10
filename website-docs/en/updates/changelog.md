@@ -2,6 +2,10 @@
 
 Changes are organized by user impact. **Main-branch updates do not mean a new version has been released.** The package version remains 3.9.1; tagged releases retain their original content. Live deployments may lag; see [compatibility](/en/updates/compatibility).
 
+## Development branch: local Codex subscription provider
+
+Adds local login reuse, model selection, keyless task presets, cancellation, recovery records, and subscription usage accounting. See [setup](/en/getting-started/model-config) and [development status](/en/updates/development-status). This is not a new release or a claim that the hosted site can use local subscriptions.
+
 ## Development preview Plugins and Workshop
 
 [PR #113](https://github.com/yuanbw2025/storyforge/pull/113) delivers the plugin preview, installation/development tutorials, AI development kit and publication workflow. See [Workshop guides](/en/workshop/) and [development status](/en/updates/development-status). Check [PR #113](https://github.com/yuanbw2025/storyforge/pull/113) for merge/deployment status; the feature still requires explicitly enabling the developer preview and is not a new tagged release.
