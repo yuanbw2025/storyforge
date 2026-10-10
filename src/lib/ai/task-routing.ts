@@ -160,20 +160,21 @@ export function resolveAIConfigForTask(args: {
   routes: AITaskRoutes
   explicitOverrides?: Partial<AIConfig>
 }): ResolvedAITaskConfig {
+  const requestedConfig = args.explicitOverrides ? { ...args.requestedConfig, ...args.explicitOverrides } : args.requestedConfig
   const taskKind = classifyAITask(args.category)
   if (!taskKind) {
-    return { config: args.requestedConfig, taskKind: null, presetId: null }
+    return { config: requestedConfig, taskKind: null, presetId: null }
   }
 
   const presetId = args.routes[taskKind]
   if (!presetId) {
-    return { config: args.requestedConfig, taskKind, presetId: null }
+    return { config: requestedConfig, taskKind, presetId: null }
   }
 
   const preset = args.presets.find(item => item.id === presetId)
   if (!preset) {
     return {
-      config: args.requestedConfig,
+      config: requestedConfig,
       taskKind,
       presetId: null,
       fallbackReason: 'missing-preset',
@@ -184,7 +185,7 @@ export function resolveAIConfigForTask(args: {
   if (!routed.apiKey && !aiProviderAllowsEmptyKey(routed.provider)) {
     if (!args.globalConfig.apiKey || !isSameConnection(routed, args.globalConfig)) {
       return {
-        config: args.requestedConfig,
+        config: requestedConfig,
         taskKind,
         presetId: null,
         fallbackReason: 'missing-api-key',

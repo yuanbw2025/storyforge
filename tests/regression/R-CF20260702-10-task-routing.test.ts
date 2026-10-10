@@ -366,4 +366,15 @@ describe('R-CF20260702-10 · route storage and client boundary', () => {
     )).resolves.toBe('ok')
     expect(fetchMock).toHaveBeenCalledOnce()
   })
+  it('未配置路由和回退分支也保留本次明确覆盖的生成参数', () => {
+    const explicitOverrides = { temperature: 0.2, maxTokens: 1234 }
+    for (const category of [undefined, 'worldview.dimension']) {
+      for (const routes of [{}, { creation: '不存在' }, { creation: 'empty-key' }]) {
+        const resolved = resolveAIConfigForTask({ category, requestedConfig: globalConfig, globalConfig, presets: [{ id: 'empty-key', name: '空密钥', config: { ...globalConfig, model: 'other', apiKey: '' } }], routes, explicitOverrides })
+        expect(resolved.config).toMatchObject(explicitOverrides)
+        expect(resolved.config.model).toBe(globalConfig.model)
+      }
+    }
+  })
+
 })
