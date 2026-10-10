@@ -6,9 +6,17 @@ This audit covers all 19 local branches (including this documentation-maintenanc
 
 ## 2026-10-10 addition: local Codex provider
 
-Implementation: [d492fe3e](https://github.com/yuanbw2025/storyforge/commit/d492fe3e); delivery and current checks: [draft PR #120](https://github.com/yuanbw2025/storyforge/pull/120).
+Implementation: [d492fe3e](https://github.com/yuanbw2025/storyforge/commit/d492fe3e); delivery and current checks: [PR #120](https://github.com/yuanbw2025/storyforge/pull/120).
 
 Branch `feat/codex-provider-20261010` adds an optional local text transport using Codex app-server. It reuses the detected ChatGPT login without an API key and leaves candidate review/adoption with existing StoryForge workflows. See [configuration](/en/getting-started/model-config). Merge, CI, and hosted documentation deployment must be checked separately; this entry does not update the older branch inventory below.
+
+## 2026-10-10 · Free node graph editing preview
+
+[PR #115](https://github.com/yuanbw2025/storyforge/pull/115) extends node maintenance with bidirectional port dragging, compatible-node search, canvas creation, reconnecting and prompt selection. This PR delivers node maintenance and free graph editing; use its latest full checks and merge state to assess delivery, and verify online deployment separately. See [node authoring](/en/features/nodes) for steps and limits.
+
+## October 8 · Historical longform node maintenance development record
+
+At the October 8 review, `feat/longform-node-experience-20261008` was validating author requirements, durable candidate edits and rejection, local execution, fixed-character adoption, interrupted-run recovery, and narrow-screen views in an independent worktree. The branch was unmerged at that time; PR #115 provides the current delivery state, and this historical snapshot does not establish an online update. Isolated browser tests cover cross-mode operations, invalid connections, and backup/deletion paths; complete production acceptance of every official longform template remains pending. See [node authoring](/en/features/nodes).
 
 ## October 9 targeted update Plugins and Workshop
 

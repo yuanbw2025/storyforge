@@ -350,7 +350,8 @@ async function executeCharacterRelation(input: DomainExecutionInput): Promise<Do
   const generated = await generateCharacterRelationshipCandidateV1({
     scope,
     worldGroupId: input.worldGroupId,
-    aiConfig: input.aiConfig,
+    aiConfig: { ...input.aiConfig, ...generationOverrides(input.node, input.inputs) },
+    authorRequest: configText(input.node, 'request'),
   })
   const binding = await domainBinding(input)
   const output = JSON.stringify(generated.candidate, null, 2)
@@ -569,7 +570,7 @@ async function executeDetail(input: DomainExecutionInput): Promise<DomainExecuti
   })
   const reliability = creativeReliabilitySettings(input)
   const narrativeBrief = buildNarrativeBriefV1({
-    authorRequest: `完善《${outline.title}》的场景、冲突、情绪变化和结尾压力。`,
+    authorRequest: requestFor(input.node, `完善《${outline.title}》的场景、冲突、情绪变化和结尾压力。`),
     assembled,
   })
   const baseMessages = buildEnhancedDetailPrompt(
@@ -770,6 +771,7 @@ async function executeChapterOrganization(input: DomainExecutionInput): Promise<
     existingRelations: visibleRelations,
     foreshadows,
   })
+  if (configText(input.node, 'request')) messages.push({ role: 'user', content: configText(input.node, 'request') })
   const trackerReservation = tracker.reserveCall({ label: '整理本章', messages, maxOutputTokens: 8_000 })
   let raw: string
   try {
@@ -837,6 +839,7 @@ async function executeFactNode(input: DomainExecutionInput): Promise<DomainExecu
   const chapterText = normalizeChapterText(chapterSegment(assembled, 'chapterContent') || chapter.content || '')
   if (!chapterText) throw new Error('目标章节没有可抽取事实的正文。')
   const messages = buildFactExtractPrompt({ chapterTitle: chapter.title, chapterContent: chapterText })
+  if (configText(input.node, 'request')) messages.push({ role: 'user', content: configText(input.node, 'request') })
   const raw = await chat(messages, input.aiConfig, {
     category: 'chapter.continuity',
     projectId: input.projectId,
@@ -857,6 +860,12 @@ async function executeFactNode(input: DomainExecutionInput): Promise<DomainExecu
 
 /** 领域节点专用执行器；返回 null 时由通用 FLOW-3 执行器处理。 */
 export async function executeDomainNode(input: DomainExecutionInput): Promise<DomainExecutionResult | null> {
+  // Preserve the formal action's schema prompt; the selected author template
+  // supplements its request instead of replacing the domain contract.
+  const prompt = inputControl(input.inputs, 'control.prompt')
+  if (prompt) {
+    input = { ...input, node: { ...input.node, config: { ...input.node.config, request: `${configText(input.node, 'request') || AUTHORING_NODE_BY_ID.get(input.node.templateId)?.description || ''}\n\n【作者选择的提示词】\n${prompt}` } } }
+  }
   if (input.node.templateId.startsWith('world.')) return executeWorldviewField(input)
   if (input.node.templateId.startsWith('story.') && input.node.templateId !== 'story.arc') {
     return executeStoryCoreField(input)

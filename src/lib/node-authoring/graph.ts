@@ -119,30 +119,28 @@ export function validateAuthoringGraph(graph: AuthoringNodeGraph): AuthoringGrap
   return issues
 }
 
+/** A local run validates its ancestors; unfinished unrelated branches remain editable. */
+export function authoringExecutionSubgraph(graph: AuthoringNodeGraph, targetNodeId?: string | null): AuthoringNodeGraph {
+  if (!targetNodeId) return graph
+  if (!graph.nodes.some(node => node.id === targetNodeId)) throw new Error('要运行的节点不存在。')
+  const included = new Set<string>()
+  const collect = (nodeId: string) => {
+    if (included.has(nodeId)) return
+    included.add(nodeId)
+    graph.edges.filter(edge => edge.targetNodeId === nodeId).forEach(edge => collect(edge.sourceNodeId))
+  }
+  collect(targetNodeId)
+  return { ...graph, nodes: graph.nodes.filter(node => included.has(node.id)), edges: graph.edges.filter(edge => included.has(edge.targetNodeId)) }
+}
+
 export function topologicalAuthoringOrder(
   graph: AuthoringNodeGraph,
   targetNodeId?: string | null,
 ): AuthoringNodeInstance[] {
-  const issues = validateAuthoringGraph(graph)
+  const selected = authoringExecutionSubgraph(graph, targetNodeId)
+  const issues = validateAuthoringGraph(selected)
   if (issues.length) throw new Error(issues.map(issue => issue.message).join('；'))
-
-  let included = new Set(graph.nodes.map(node => node.id))
-  if (targetNodeId) {
-    if (!included.has(targetNodeId)) throw new Error('要运行的节点不存在。')
-    const incoming = new Map<string, string[]>()
-    graph.edges.forEach(edge => {
-      const values = incoming.get(edge.targetNodeId) ?? []
-      values.push(edge.sourceNodeId)
-      incoming.set(edge.targetNodeId, values)
-    })
-    included = new Set<string>()
-    const collect = (nodeId: string) => {
-      if (included.has(nodeId)) return
-      included.add(nodeId)
-      for (const sourceId of incoming.get(nodeId) ?? []) collect(sourceId)
-    }
-    collect(targetNodeId)
-  }
+  const included = new Set(selected.nodes.map(node => node.id))
 
   const indegree = new Map<string, number>()
   const outgoing = new Map<string, string[]>()

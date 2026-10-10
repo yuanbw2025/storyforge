@@ -2,11 +2,15 @@
 
 Changes are organized by user impact. **Main-branch updates do not mean a new version has been released.** The package version remains 3.9.1; tagged releases retain their original content. Live deployments may lag; see [compatibility](/en/updates/compatibility).
 
-## Development branch: local Codex subscription provider
+## 2026-10-10 · Local Codex subscription provider
 
 Evidence: [implementation commit d492fe3e](https://github.com/yuanbw2025/storyforge/commit/d492fe3e), [PR #120](https://github.com/yuanbw2025/storyforge/pull/120).
 
 Adds local login reuse, model selection, keyless task presets, cancellation, recovery records, and subscription usage accounting. See [setup](/en/getting-started/model-config) and [development status](/en/updates/development-status). This is not a new release or a claim that the hosted site can use local subscriptions.
+
+## 2026-10-10 · Free node graph editing preview
+
+[PR #115](https://github.com/yuanbw2025/storyforge/pull/115) extends node maintenance with bidirectional port dragging, compatible-node search, canvas creation, reconnecting and prompt selection. This PR delivers node maintenance and free graph editing; use its latest full checks and merge state to assess delivery, and verify online deployment separately. See [node authoring](/en/features/nodes) for steps and limits.
 
 ## Development preview Plugins and Workshop
 

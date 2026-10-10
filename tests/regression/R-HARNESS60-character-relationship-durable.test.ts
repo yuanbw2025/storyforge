@@ -72,7 +72,10 @@ describe.sequential('R-HARNESS60 · 角色关系 durable 提取与采纳', () =>
     expect(assembled.text).toContain('旧港结盟')
     expect(assembled.text).toContain('共同守住潮门')
     const generated = await generateCharacterRelationshipCandidateV1({
-      scope: fixture.scope, worldGroupId: fixture.worldGroupId, runAI: async () => response(),
+      scope: fixture.scope, worldGroupId: fixture.worldGroupId, authorRequest: '关注守门结盟的动机。', runAI: async messages => {
+        expect(messages.map(message => message.content).join('\n')).toContain('关注守门结盟的动机')
+        return response()
+      },
     })
     expect(generated.snapshot.projection.state).toBe('awaiting_confirmation')
     expect(generated.candidate.relations).toMatchObject([{ fromCharacterId: fixture.firstId, toCharacterId: fixture.secondId }])

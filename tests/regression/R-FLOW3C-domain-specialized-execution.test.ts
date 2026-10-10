@@ -16,6 +16,7 @@ import { inspectAuthoringGraphFreshness } from '../../src/lib/node-authoring/fre
 import {
   adoptAuthoringCandidate,
   persistAdoptedAuthoringCandidate,
+  reviseAuthoringCandidate,
   runAuthoringGraph,
 } from '../../src/lib/node-authoring/executor'
 import { buildRagLibrary } from '../../src/lib/retrieval/rag-library'
@@ -216,6 +217,17 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
     const corrected = JSON.stringify([
       { title: '第一卷：潮门', summary: '主角发现海床城门并踏入旧文明。' },
     ])
+    const revised = await reviseAuthoringCandidate({ flow, runId: failed.run.id!, nodeId: graphNode.id, output: corrected })
+    expect(JSON.parse(revised.nodeResultsJson)[graphNode.id]).toMatchObject({ status: 'blocked', authorEditedAfterArtifact: true })
+    await expect(runAuthoringGraph({ flow, resumeRunId: failed.run.id! })).rejects.toThrow('请先编辑并确认采纳')
+    expect(chat).toHaveBeenCalledTimes(2)
+    // A portable candidate from an older editor may have incorrectly downgraded its status.
+    const legacyCandidates = JSON.parse(revised.nodeResultsJson)
+    legacyCandidates[graphNode.id].status = 'draft'
+    await db.nodeRuns.update(failed.run.id!, { nodeResultsJson: JSON.stringify(legacyCandidates) })
+    await expect(runAuthoringGraph({ flow, resumeRunId: failed.run.id! })).rejects.toThrow('请先编辑并确认采纳')
+    expect(chat).toHaveBeenCalledTimes(2)
+
     const adopted = await adoptAuthoringCandidate({ flow, nodeId: graphNode.id, output: corrected })
     expect(adopted.written).toHaveLength(1)
     const persisted = await persistAdoptedAuthoringCandidate({

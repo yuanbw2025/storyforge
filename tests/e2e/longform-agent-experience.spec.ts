@@ -17,6 +17,7 @@ async function setup(page: Page, name: string) {
         model: 'isolated-agent-test',
         temperature: 0,
         maxTokens: 4000,
+        contextWindow: 100000,
       }),
     )
   })

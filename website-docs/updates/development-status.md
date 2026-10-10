@@ -6,9 +6,17 @@
 
 ## 2026-10-10 专项补充 · Codex 本机提供商
 
-实现依据：[d492fe3e](https://github.com/yuanbw2025/storyforge/commit/d492fe3e)；交付与当前检查：[草稿 PR #120](https://github.com/yuanbw2025/storyforge/pull/120)。
+实现依据：[d492fe3e](https://github.com/yuanbw2025/storyforge/commit/d492fe3e)；交付与当前检查：[PR #120](https://github.com/yuanbw2025/storyforge/pull/120)。
 
 分支 `feat/codex-provider-20261010` 增加基于 Codex app-server 的可选本机文本传输。检测并复用现有 ChatGPT 登录，无需 API Key，候选审查与采纳继续由现有 StoryForge 流程管理。操作见[模型配置](/getting-started/model-config)。合并、CI 和官网文档部署需分别核对；本条不刷新下方旧分支清单。
+
+## 2026-10-10 · 节点自由编排预览
+
+[PR #115](https://github.com/yuanbw2025/storyforge/pull/115) 在原节点维护基础上补双向拖线、搜索兼容节点、画布新建、断线重连和提示词选择。节点维护与自由编排通过本 PR 交付；请按 PR 的最新完整检查和合并状态判断交付，在线部署需单独核对。操作与限制见[节点创作](/features/nodes)。
+
+## 10 月 8 日 · 长篇节点维护历史开发记录
+
+10 月 8 日核对时，`feat/longform-node-experience-20261008` 正在独立工作树验证节点作者要求、候选修改和拒绝的保存、局部执行、固定角色采纳、中断恢复与窄屏视图。当时该分支尚未合入主干；当前交付状态以 PR #115 为准，不能据历史快照声明线上已更新。跨模式、非法连接与备份删除路径由隔离浏览器验收；所有官方长篇模板的完整生产验收仍待完成。详见[节点创作](/features/nodes)。
 
 ## 2026年10月9日专项补充 插件与创意工坊
 

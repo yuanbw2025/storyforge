@@ -369,20 +369,20 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
 | `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
 | `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:26` |
-| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:776`<br/>`src/lib/node-authoring/domain-execution.ts:840` |
+| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:778`<br/>`src/lib/node-authoring/domain-execution.ts:843` |
 | `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1699` |
 | `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1677` |
 | `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1667` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
-| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:605` |
+| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:606` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:129` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
-| `node.creation` | `src/lib/node-authoring/executor.ts:360` |
+| `node.creation` | `src/lib/node-authoring/executor.ts:374` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:200`<br/>`src/lib/outline/generation-node.ts:61` |
 | `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:648` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:56` |
@@ -391,7 +391,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `outline.workshop.scan` | `src/lib/outline/workshop.ts:442` |
 | `outline.workshop.scenes` | `src/lib/outline/workshop.ts:461` |
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
-| `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:286` |
+| `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:288` |
 | `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:122` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
 | `review.quality` | `src/components/editor/ReviewPanel.tsx:112` |
@@ -438,7 +438,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/motion-drama/durable-production.ts:144 · chat`
-- `src/lib/node-authoring/executor.ts:417 · chat`
+- `src/lib/node-authoring/executor.ts:431 · chat`
 - `src/lib/open-world/evolution-harness.ts:246 · chat`
 - `src/lib/open-world/harness.ts:139 · chat`
 - `src/lib/product-production/authoring-consultation.ts:169 · chat`
@@ -504,4 +504,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `be30d3e0`
+生成时间基准:commit `4576b572`
