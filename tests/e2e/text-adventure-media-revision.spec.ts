@@ -430,3 +430,63 @@ test('Visual QA 阻塞时可直接上传同画幅高分辨率替换，旧 Build 
   expect(lineage.newHash).not.toBe(lineage.originalHash)
   expect(lineage.metadata).toMatchObject({ width: 1536, height: 864, source: 'author-upload' })
 })
+
+test('文字修订文件创建独立子版本并在刷新后保留原图与来源', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'text-revision-e2e'))
+  let imageRequests = 0
+  await page.route('**/images/generations', async route => {
+    imageRequests += 1
+    await route.fulfill({ status: 503, body: 'unexpected image generation' })
+  })
+  await page.goto('./')
+  const seeded = await page.evaluate(async imageBase64 => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const fixture = await importer('/storyforge/tests/helpers/text-adventure-media-revision-workbench.ts')
+    return fixture.seedTextAdventureMediaRevisionWorkbenchV1(imageBase64)
+  }, solidPng(1280, 720, [18, 39, 58, 255]).toString('base64'))
+  const evidence = await page.evaluate(async buildId => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const build = await db.productBuilds.get(buildId)
+    const rows = await db.productBuildArtifacts.where('buildId').equals(buildId).toArray()
+    const source = rows.find((row: any) => row.artifactKey === 'content.narrative-arc-scenes')
+    return { before: JSON.stringify(build), images: rows.filter((row: any) => row.kind === 'image').map((row: any) => ({
+      artifactKey: row.artifactKey, blobObjectId: row.blobObjectId, contentHash: row.contentHash, rightsJson: row.rightsJson,
+    })), file: JSON.stringify({ schema: 'storyforge.text-adventure-content-revision', version: 1,
+      buildNumber: build.buildNumber, revisions: [{ artifactKey: source.artifactKey,
+        expectedArtifactVersion: source.version, expectedArtifactHash: source.contentHash, note: '补充归港伤员的铺垫',
+        authorDraftJson: JSON.stringify({ ...JSON.parse(source.payloadJson), authorNote: '修订后的文字' }) }] }) }
+  }, seeded.parentBuildId)
+  await openTextAdventurePage(page, seeded.scope, 'production')
+  const panel = page.getByTestId('text-adventure-batch-content-revision')
+  await panel.locator('summary').click()
+  await panel.getByLabel('导入文字冒险修订文件').setInputFiles({ name: 'revision.json', mimeType: 'application/json', buffer: Buffer.from(evidence.file) })
+  await expect(panel).toContainText('已载入 1 项修改，将保留 2 张插图')
+  const submit = panel.getByRole('button', { name: '创建修订版并重新审校' })
+  await expect(submit).toBeDisabled()
+  await panel.getByRole('checkbox').check()
+  await submit.click()
+  await expect(page.getByTestId('product-production-command-activity')).toContainText('创建内容修订版 · succeeded')
+  await page.reload()
+  await expect(page.getByTestId('product-production-studio')).toContainText('#2')
+  const after = await page.evaluate(async seeded => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const parent = await db.productBuilds.get(seeded.parentBuildId)
+    const children = await db.productBuilds.where('[productionId+buildNumber]').equals([seeded.productionId, 2]).toArray()
+    const rows = await db.productBuildArtifacts.where('buildId').equals(children[0].id).toArray()
+    return { parent: JSON.stringify(parent), childCount: children.length,
+      parentBuildNumber: children[0].parentBuildNumber, previewHash: children[0].previewHash,
+      images: rows.filter((row: any) => row.kind === 'image').map((row: any) => ({
+        artifactKey: row.artifactKey, blobObjectId: row.blobObjectId, contentHash: row.contentHash, rightsJson: row.rightsJson,
+      })), mediaKeys: rows.filter((row: any) => row.kind === 'image').map((row: any) => JSON.parse(row.metadataJson).assetKey) }
+  }, seeded)
+  expect(after.parent).toBe(evidence.before)
+  expect(after.childCount).toBe(1)
+  expect(after.parentBuildNumber).toBe(1)
+  expect(after.previewHash).toBe('')
+  expect(after.images).toEqual(evidence.images)
+  expect(after.mediaKeys.every((key: string) => key.includes('.build-2.'))).toBe(true)
+  expect(imageRequests).toBe(0)
+})

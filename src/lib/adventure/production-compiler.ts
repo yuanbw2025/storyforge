@@ -1,3 +1,5 @@
+import type { TextAdventureQuestScriptArtifact } from './quest-settlement'
+import { compileTextAdventureResourceCostsV3 } from './quest-settlement'
 import type {
   AdventureActionDefinition,
   AdventureContentV2,
@@ -18,7 +20,6 @@ import type {
   TextAdventureEndingRoutePlanArtifactV1,
   TextAdventureNarrativeArcPlanArtifactV1,
   TextAdventureQuestPlanArtifactV1,
-  TextAdventureQuestScriptArtifactV2,
 } from './production-artifacts-v2'
 import { planTextAdventureNarrativeLocationsV1 } from './narrative-location-plan'
 import { textAdventurePublicPlayerDescriptionV1 } from '../product-production/public-copy'
@@ -33,7 +34,7 @@ export interface TextAdventureProductionCompilerInputV1 {
   arcPlan: TextAdventureNarrativeArcPlanArtifactV1
   endingRoutePlan: TextAdventureEndingRoutePlanArtifactV1
   mainQuestPlan: TextAdventureQuestPlanArtifactV1
-  questScript: TextAdventureQuestScriptArtifactV2
+  questScript: TextAdventureQuestScriptArtifact
   sideQuests: TextAdventureQuestBundleArtifactV2
   ambientEvents: TextAdventureQuestBundleArtifactV2
   sourceCatalog?: Pick<ProductProductionWorldSourceCatalogV2, 'artifacts'>
@@ -375,13 +376,28 @@ export function compileTextAdventureModuleV2(
     const previousObjective = orderedMainObjectives[objectiveIndex - 1]
     const itemActionKinds = new Set(objective.alternatives.map(alternative => alternative.actionKind))
     const needsQuestItem = [...itemActionKinds].some(kind => kind === 'take' || kind === 'give' || kind === 'use')
-    const questItemKey = needsQuestItem ? `item.main.${objective.key}` : null
-    if (questItemKey) {
+    const settlementObjective = input.questScript.version === 3
+      ? input.questScript.mainObjectiveScripts.find(script => script.objectiveKey === objective.key)
+      : null
+    if (input.questScript.version === 3 && !settlementObjective) fail(`缺少 V3 目标结算:${objective.key}`)
+    const itemBinding = settlementObjective?.itemBinding
+    let questItemKey = needsQuestItem ? `item.main.${objective.key}` : null
+    if (itemBinding?.kind === 'starter') questItemKey = itemBinding.itemKey
+    if (itemBinding?.kind === 'world') {
+      const sourceIndex = sourceArtifacts.findIndex(artifact => artifact.resourceKey === itemBinding.resourceKey)
+      if (sourceIndex < 0) fail(`冻结物品来源不存在:${itemBinding.resourceKey}`)
+      questItemKey = `item.world.${pad(sourceIndex)}`
+    }
+    const createsQuestItem = !settlementObjective || itemBinding?.kind === 'quest'
+    if (questItemKey && createsQuestItem) {
       const useAlternative = objective.alternatives.find(alternative => alternative.actionKind === 'use')
+      const itemTitle = itemBinding?.kind === 'quest' ? itemBinding.title : `任务物品 · ${objective.title}`
+      const itemDescription = itemBinding?.kind === 'quest' ? itemBinding.description
+        : `用于“${objective.title}”。收集后可在背包中查看，或用于对应的任务行动。`
       items.push({
         key: questItemKey,
-        title: `任务物品 · ${objective.title}`,
-        description: `用于“${objective.title}”。收集后可在背包中查看，或用于对应的任务行动。`,
+        title: itemTitle,
+        description: itemDescription,
         tags: ['quest', `objective:${objective.key}`],
         stackable: false,
         consumable: false,
@@ -394,16 +410,16 @@ export function compileTextAdventureModuleV2(
         key: `object.main.${objective.key}`,
         locationKey: scene.locationKey,
         sceneKey: scene.key,
-        title: `任务物品 · ${objective.title}`,
-        description: `完成“${objective.title}”前可以取得的任务物品。`,
+        title: itemTitle,
+        description: itemBinding?.kind === 'quest' ? itemDescription : `完成“${objective.title}”前可以取得的任务物品。`,
         tags: ['quest', `objective:${objective.key}`],
       })
       if (itemActionKinds.has('give') || itemActionKinds.has('use')) {
         registerAction({
           key: `action.prepare.${objective.key}`,
           kind: 'take',
-          label: '收集任务物品',
-          description: `先把完成“${objective.title}”所需的物品收入背包。`,
+          label: settlementObjective ? `取得：${itemTitle}` : '收集任务物品',
+          description: settlementObjective ? itemDescription : `先把完成“${objective.title}”所需的物品收入背包。`,
           locationKey: scene.locationKey,
           targetKey: `object.main.${objective.key}`,
           requirements: [
@@ -420,9 +436,9 @@ export function compileTextAdventureModuleV2(
             claimKey: `claim.main.${objective.key}`,
           }],
           costlySuccessEffects: [], failureEffects: [],
-          successText: `你把“${objective.title}”需要的任务物品收进背包。`,
-          costlySuccessText: `你付出代价，取得了“${objective.title}”需要的任务物品。`,
-          failureText: `你暂时无法取得“${objective.title}”需要的任务物品。`,
+          successText: settlementObjective ? `你把${itemTitle}收进背包。` : `你把“${objective.title}”需要的任务物品收进背包。`,
+          costlySuccessText: settlementObjective ? `你取得了${itemTitle}。` : `你付出代价，取得了“${objective.title}”需要的任务物品。`,
+          failureText: settlementObjective ? `你暂时无法取得${itemTitle}。` : `你暂时无法取得“${objective.title}”需要的任务物品。`,
           unavailableText: '该任务物品已经取得、目标尚未开放，或你不在对应场景。',
           repeatable: false, narrativeChoiceKey: null, interaction: null,
         }, scene.key)
@@ -432,6 +448,14 @@ export function compileTextAdventureModuleV2(
       const script = mainScriptByObjective.get(objective.key)?.alternatives
         .find(candidate => candidate.alternativeKey === alternative.key)
       if (!script) fail(`主线解法缺少 Quest Script:${alternative.key}`)
+      const settlement = settlementObjective?.alternatives.find(candidate => candidate.alternativeKey === alternative.key)
+      if (settlementObjective && !settlement) fail(`缺少 V3 解法结算:${alternative.key}`)
+      const costs = settlement ? compileTextAdventureResourceCostsV3(
+        settlement.resourceCosts, new Map(resources.map(resource => [resource.key, resource.minimum])),
+      ) : null
+      const recipientIndex = settlement?.recipientCharacterKey == null ? -1
+        : npcCharacters.findIndex(character => character.key === settlement.recipientCharacterKey)
+      if (settlement && alternative.actionKind === 'give' && recipientIndex < 0) fail(`交付对象不存在:${alternative.key}`)
       let interaction: AdventureActionDefinition['interaction'] = null
       if (alternative.actionKind === 'talk') {
         const npcIndex = npcCharacters.findIndex(character => character.key === alternative.targetCharacterKey)
@@ -455,7 +479,7 @@ export function compileTextAdventureModuleV2(
           op: 'transfer-item' as const,
           itemKey: questItemKey,
           quantity: 1,
-          toOwnerKey: 'quest-recipient',
+          toOwnerKey: settlement ? participantKeyForCastIndex(recipientIndex) : 'quest-recipient',
         }] : []),
         { op: 'complete-objective', questKey: mainQuestKey, objectiveKey: objective.key },
         { op: 'apply-condition', conditionKey: objectiveCompletionConditionKey(objective.key), duration: null },
@@ -478,6 +502,7 @@ export function compileTextAdventureModuleV2(
           { narrativePath: '__storyforge.currentNarrativeNodeKey', narrativeEquals: narrativeNodeForScene.get(scene.key)! },
           ...(questItemKey && (alternative.actionKind === 'give' || alternative.actionKind === 'use')
             ? [{ itemKey: questItemKey, itemQuantity: 1 }] : []),
+          ...(costs?.requirements ?? []),
         ],
         rule: script.resolution.mode === 'check'
           ? {
@@ -485,11 +510,14 @@ export function compileTextAdventureModuleV2(
               difficulty: script.resolution.difficulty!, costlySuccessFloor: script.resolution.costlySuccessFloor!,
             }
           : { kind: 'automatic' },
-        successEffects: completionEffects,
-        costlySuccessEffects: [...completionEffects, { op: 'change-resource', resourceKey: health.key, delta: -1 }],
+        successEffects: [...completionEffects, ...(costs?.effects.success ?? [])],
+        costlySuccessEffects: [...completionEffects, ...(costs?.effects.costlySuccess
+          ?? [{ op: 'change-resource' as const, resourceKey: health.key, delta: -1 }])],
         failureEffects: contract.narrative.failForward
-          ? [...completionEffects, { op: 'change-resource', resourceKey: health.key, delta: -1 }]
-          : [{ op: 'change-resource', resourceKey: clock.key, delta: 3 }],
+          ? [...completionEffects, ...(costs?.effects.failure
+              ?? [{ op: 'change-resource' as const, resourceKey: health.key, delta: -1 }])]
+          : [{ op: 'change-resource', resourceKey: clock.key, delta: costs ? script.timeCostMinutes : 3 },
+              ...(costs?.effects.failure ?? [])],
         successText: script.successText,
         costlySuccessText: script.costlySuccessText,
         failureText: script.failureForwardText,

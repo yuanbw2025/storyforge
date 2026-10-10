@@ -1876,6 +1876,18 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
         },
       }),
     })).resolves.toBeNull()
+    const automaticDecision = {
+      schema: 'storyforge.text-adventure-media-anchor-decision-artifact', version: 1,
+      decision: 'not-required-noncommercial', visualBibleHash,
+      confirmedCharacterKeys: [], authorCommandId: null, authorNote: null,
+    }
+    await db.productBuildArtifacts.where('buildId').equals(f.build.id!).and(row => (
+      row.controlEpoch === controlEpoch && row.artifactKey === 'media.anchor-decision'
+    )).modify({ payloadJson: canonicalProductProductionJsonV2(automaticDecision),
+      contentHash: await hashProductProductionValueV2(automaticDecision) })
+    await expect(latestConfirmedTextAdventureAnchorRecoveryEpochV1({
+      buildId: f.build.id!, beforeControlEpoch: controlEpoch + 3, failureJson,
+    })).resolves.toBeNull()
   })
 
   it('句读紧邻已登记 choice/scene key 时仍精确路由到对应幕对白，不误判为幽灵引用', async () => {
@@ -3309,6 +3321,33 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     releaseClaim()
     await abandonedCycle.catch(() => undefined)
     expect(abandonedProviderCalls).toBe(0)
+  }, 30_000)
+
+  it('保留视觉合同缺失时零调用失败并签收终态，刷新不会留下未启动的 child Run', async () => {
+    const owned = await fixture('scheduler-retained-visual-missing')
+    const calls = new Map<string, number>()
+    const executor = executorFor(owned, calls, { active: 0, peak: 0 })
+    const plan = await createProductProductionPlanV3({ buildNumber: 1,
+      briefHash: await hashProductProductionValueV2(owned.brief), brief: owned.brief })
+    const visual = plan.tasks.find(task => task.taskKey === 'media.requirements')!
+    visual.reuse = { sourceBuildNumber: 1, sourceArtifactKey: visual.outputArtifactKeys[0],
+      sourceContentHash: 'a'.repeat(64), reuseKey: 'b'.repeat(64), requiresRevalidation: true,
+      reason: '文字修订：作者明确保留原视觉合同与图片' }
+    const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    const capabilityBindings = [{ requirementKey: textRequirement.requirementKey,
+      adapterId: 'configured-text-provider.v1', bindingHash: await hashProductProductionValueV2({ provider: 'configured' }) }]
+    const input = { scope: owned.scope, productionId: owned.productionId, executor, capabilityBindings, suppliedPlan: plan }
+    const failed = await runProductProductionUntilBlockedV1(input)
+    expect(failed.buildStatus).toBe('recovery-required')
+    expect(calls.get('media.requirements')).toBeUndefined()
+    const task = failed.tasks.find(row => row.taskKey === 'media.requirements')!
+    const run = (await db.agentRuns.get(task.runId!))!
+    expect(JSON.parse(run.projectionJson)).toMatchObject({ state: 'failed',
+      steps: { 'media.requirements': { status: 'failed', failureCode: 'task-preflight-failed' } } })
+    expect((await db.agentRunEvents.where('runId').equals(run.id!).toArray()).some(row => row.type === 'model.requested')).toBe(false)
+    db.close(); await db.open()
+    expect((await runProductProductionSchedulerCycleV1(input)).buildStatus).toBe('recovery-required')
+    expect(calls.get('media.requirements')).toBeUndefined()
   }, 30_000)
 
   it('任务领取后输入工件丢失会落正式失败回执，不留下永久 running child Run', async () => {

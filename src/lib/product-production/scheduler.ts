@@ -1,3 +1,4 @@
+import { isTextRevisionRetainedVisualTaskV1, textRevisionRecoveryPreservesVisualContractV1, validateTextContentRevisionAuthorityV1, verifiedTextRevisionVisualCarryTaskKeysV1 } from './text-content-revision-authority'
 import { verifiedHumanImportCarryProofsV1 } from './text-adventure-artifact-store'
 import { isTextAdventureClockCapacityRevisionV1 } from './clock-capacity-revision'
 import { db } from '../db/schema'
@@ -42,6 +43,7 @@ import type {
 import { assertRecordInScope, resolveScope, scopeTransactionTables } from '../workspace/scope'
 import {
   acceptProductBuildArtifact,
+  assertProductBuildArtifactContentHashV1,
   acceptTextOpenWorldSourcePinBundleArtifactsV1,
   carryForwardProductBuildArtifactsAcrossBuildsV1,
   carryForwardProductBuildArtifactsToEpochV1,
@@ -59,6 +61,7 @@ import {
 } from './plan'
 import { createProductBuildPreviewManifestV1 } from './preview-manifest'
 import { createProductBuildRootTerminalReceiptV1 } from './receipts'
+import { readMediaBlobObjectData } from './media-blob-store'
 import {
   parseProductRuntimePackageV1,
   productProductionTerminalArtifactKeysV1,
@@ -2225,6 +2228,8 @@ async function ensurePlan(input: {
   const currentMediaRevisionPlan = currentPlan && currentPlan.tasks.some(task => (
     task.taskKey === 'media.repair-feedback'
       || task.reuse?.reason.startsWith('媒资修订 ') === true
+      || task.authorRevision != null
+      || task.reuse?.reason.startsWith('文字修订：') === true
   )) ? currentPlan : null
   let plan: ProductProductionPlanV3
   if (state.creatorContracts) {
@@ -2400,6 +2405,16 @@ async function ensurePlan(input: {
             buildId: state.build.id!, failureJson: state.build.failureJson,
             previousControlEpoch: currentPlan.controlEpoch, plan,
           })
+    const textRevisionReviewRecovery = plan.tasks.some(task => task.authorRevision)
+      && await textRevisionRecoveryPreservesVisualContractV1({ scope: input.scope, buildId: state.build.id!,
+        previousControlEpoch: recoveryArtifactSourceEpoch, failureJson: state.build.failureJson })
+    const retainedVisualTasks = pauseResumeRecovery || textRevisionReviewRecovery
+      ? await verifiedTextRevisionVisualCarryTaskKeysV1({ scope: input.scope, buildId: state.build.id!,
+          previousControlEpoch: recoveryArtifactSourceEpoch, tasks: plan.tasks })
+      : new Set<string>()
+    if (textRevisionReviewRecovery) {
+      for (const key of retainedVisualTasks) invalidatedTaskKeys.delete(key)
+    }
     // Parent quality rollback has its own frozen cross-Build lineage verifier
     // and deliberately bypasses the polluted child epoch. Same-Build recovery,
     // however, must prove the immediately preceding child Run binding.
@@ -2411,7 +2426,12 @@ async function ensurePlan(input: {
         plan,
         allowHistoricalProducerFallback: pauseResumeRecovery,
       })
-      for (const taskKey of executionBindingInvalidatedTaskKeys) invalidatedTaskKeys.add(taskKey)
+      // Incomplete authored text must resume; it cannot silently revoke the
+      // separate, hash-bound instruction to keep the parent's visual design.
+      // Explicit failures from recoveryInvalidatedTaskKeys remain invalid.
+      for (const taskKey of executionBindingInvalidatedTaskKeys) {
+        if (!retainedVisualTasks.has(taskKey)) invalidatedTaskKeys.add(taskKey)
+      }
     }
     if (parentQualityRollback) {
       const reusableArtifactKeys = textAdventureParentRollbackReusableArtifactKeysV1({
@@ -2452,19 +2472,31 @@ async function ensurePlan(input: {
         }
         const coherent = !invalidatedTaskKeys.has(task.taskKey) && previous != null
           && productProductionTaskReuseSemanticsEqualV1(previous, task)
-          && task.dependsOn.every(dependency => coherentTasks.has(dependency))
+          && (retainedVisualTasks.has(task.taskKey) || task.dependsOn.every(dependency => coherentTasks.has(dependency)))
         if (!coherent) continue
         coherentTasks.add(task.taskKey)
-        if ((task.executionMode !== 'deterministic' || carriesExplicitAuthorDecision)
+        if ((task.executionMode !== 'deterministic' || carriesExplicitAuthorDecision || retainedVisualTasks.has(task.taskKey))
           && canonicalProductProductionJsonV2(previous.outputArtifactKeys)
             === canonicalProductProductionJsonV2(task.outputArtifactKeys)) {
           reusableArtifactKeys.push(...task.outputArtifactKeys)
         }
       }
-      if (reusableArtifactKeys.length > 0) await carryForwardProductBuildArtifactsToEpochV1({
+      // These outputs have independent hash-bound author authorization. The
+      // parent copy also preserves imports before their first zero-call Run.
+      const retainedKeys = plan.tasks.filter(task => retainedVisualTasks.has(task.taskKey) && coherentTasks.has(task.taskKey))
+        .flatMap(task => task.outputArtifactKeys)
+      if (retainedKeys.length > 0) {
+        const parent = await db.productBuilds.where('[productionId+buildNumber]')
+          .equals([state.build.productionId, state.build.parentBuildNumber!]).first()
+        if (!parent?.id) throw new Error('[text-content-revision] 原视觉合同的父 Build 已丢失')
+        await carryForwardProductBuildArtifactsAcrossBuildsV1({ scope: input.scope, sourceBuildId: parent.id,
+          targetBuildId: state.build.id!, targetControlEpoch: plan.controlEpoch, artifactKeys: retainedKeys })
+      }
+      const epochCarryKeys = reusableArtifactKeys.filter(key => !retainedKeys.includes(key))
+      if (epochCarryKeys.length > 0) await carryForwardProductBuildArtifactsToEpochV1({
         scope: input.scope, buildId: state.build.id!,
         fromControlEpoch: recoveryArtifactSourceEpoch,
-        toControlEpoch: plan.controlEpoch, artifactKeys: reusableArtifactKeys,
+        toControlEpoch: plan.controlEpoch, artifactKeys: epochCarryKeys,
         allowInvalidSourceAtFromEpoch: reviewRollbackControlEpoch != null
           || regressedQualityPassEpoch != null
           || qualityRepairSourceEpoch != null
@@ -2787,6 +2819,7 @@ function wrappedTextAdventureFailureTaskKeyV1(
 }
 
 async function textAdventureAnchorDecisionMatchesBibleV1(input: {
+  confirmationRequired?: boolean
   anchor: ProductBuildArtifactRecordV1
   visualBible: ProductBuildArtifactRecordV1
 }): Promise<boolean> {
@@ -2804,8 +2837,11 @@ async function textAdventureAnchorDecisionMatchesBibleV1(input: {
   })
   return decision.schema === 'storyforge.text-adventure-media-anchor-decision-artifact'
     && decision.version === 1
-    && decision.decision === 'confirm-character-anchors'
     && decision.visualBibleHash === expectedHash
+    && (decision.decision === 'confirm-character-anchors'
+      || (input.confirmationRequired === false && decision.decision === 'not-required-noncommercial'
+        && Array.isArray(decision.confirmedCharacterKeys) && decision.confirmedCharacterKeys.length === 0
+        && decision.authorCommandId === null && decision.authorNote === null))
 }
 
 /**
@@ -3477,7 +3513,7 @@ export async function recoveryInvalidatedTaskKeys(input: {
     && !Array.isArray(recovery.resolution)
     ? recovery.resolution as Record<string, unknown> : null
   if (recovery.code === 'author-revised-content' && typeof recovery.blockerKey === 'string'
-    && ['content.product-module', 'content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-scenes', 'content.narrative-decision-plan', 'content.ending-route-plan', 'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2', 'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2', 'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2', 'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3'].includes(recovery.blockerKey)
+    && ['content.product-module', 'content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-scenes', 'content.narrative-decision-plan', 'content.ending-route-plan', 'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2', 'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2', 'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2', 'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'content.quest-script.main.act-1.single', 'content.quest-script.main.act-1.multi', 'content.quest-script.main.act-2.single', 'content.quest-script.main.act-2.multi', 'content.quest-script.main.act-3.single', 'content.quest-script.main.act-3.multi', 'content.quest-script.supplemental'].includes(recovery.blockerKey)
     && recoveryResolution?.action === 'author-edit') {
     if (recovery.blockerKey === 'content.product-module') {
       const source = recovery.revisionSource as { version?: number; contentHash?: string } | undefined
@@ -4137,12 +4173,13 @@ async function invalidateCarriedTaskClosureV1(input: {
 }
 
 async function carriedTextAdventureAnchorMatchesCurrentBibleV1(input: {
-  buildNumber: number
+  qualityProfile: ProductProductionBriefV3['qualityProfile']
   anchor: ProductBuildArtifactRecordV1
   visualBible: ProductBuildArtifactRecordV1 | undefined
 }): Promise<boolean> {
   if (!input.visualBible || input.anchor.carriedFrom == null) return false
   return textAdventureAnchorDecisionMatchesBibleV1({
+    confirmationRequired: input.qualityProfile === 'commercial-candidate',
     anchor: input.anchor,
     visualBible: input.visualBible,
   })
@@ -4171,6 +4208,7 @@ export function productProductionArtifactEligibleForSyntheticCarryV1(input: {
 
 async function ensureCarriedForwardTaskRuns(input: {
   scope: WorkspaceScope
+  qualityProfile: ProductProductionBriefV3['qualityProfile']
   build: { id: number; buildNumber: number; controlEpoch: number; planHash: string }
   root: AgentRunSnapshotV1
   plan: ProductProductionPlanV3
@@ -4204,7 +4242,7 @@ async function ensureCarriedForwardTaskRuns(input: {
         || task.dependsOn.some(dependency => !completed.has(dependency))) continue
       if (task.taskKey === 'media.anchor-author-gate'
         && !await carriedTextAdventureAnchorMatchesCurrentBibleV1({
-          buildNumber: input.build.buildNumber,
+          qualityProfile: input.qualityProfile,
           anchor: outputs[0],
           visualBible: artifacts.find(row => row.artifactKey === 'media.visual-bible'),
         })) {
@@ -4543,6 +4581,11 @@ async function runClaimedTaskCore(input: {
   const attempt = previous?.status === 'failed' ? previous.attempt + 1 : 1
   if (!previous) snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: input.task.taskKey })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: input.task.taskKey, attempt })
+  // A missing retained visual output is a recovery failure, never permission
+  // to generate a replacement design or spend on replacement images.
+  if (isTextRevisionRetainedVisualTaskV1(input.task) && input.task.reuse?.reason.startsWith('文字修订：')) {
+    throw new Error('[text-content-revision] 已授权保留的视觉合同缺失；请恢复原合同，不能隐式重新生成')
+  }
   const artifacts = await acceptedInputs(input.build.id, input.build.controlEpoch, input.task.inputArtifactKeys)
   const authorizedRepair = input.repairAuthority == null
     ? null
@@ -4558,7 +4601,9 @@ async function runClaimedTaskCore(input: {
         taskKey: input.task.taskKey,
       })
   const authorizedDirectResult = authorizedRepair ?? authorizedMediaImport
-  const attemptBudgetReservation = authorizedDirectResult == null
+  const authorRevisionAuthority = await validateTextContentRevisionAuthorityV1(input.scope, input.build, input.task)
+  const frozenAuthorRevision = authorRevisionAuthority?.revision
+  const attemptBudgetReservation = authorizedDirectResult == null && frozenAuthorRevision == null
       ? remainingTaskAttemptBudgetV1({
         task: input.task,
         ledger: parseLedger((await db.productBuilds.get(input.build.id))!.budgetLedgerJson),
@@ -4582,6 +4627,8 @@ async function runClaimedTaskCore(input: {
       : null,
   )
   const authorResolution = authorResolutionEvidence(input.build.failureJson, input.task.taskKey)
+    ?? (frozenAuthorRevision ? { commandId: frozenAuthorRevision.commandId, blockerKey: input.task.taskKey,
+      resolution: { action: 'author-edit' as const, note: frozenAuthorRevision.note }, resolvedAt: authorRevisionAuthority!.authorizedAt } : null)
   const dependencyRuns = await Promise.all(input.task.dependsOn.map(async taskKey => {
     const row = await db.agentRuns.where('[parentRunId+parentRelation]')
       .equals([snapshot.run.parentRunId!, `task:${taskKey}`]).first()
@@ -4806,7 +4853,7 @@ async function runClaimedTaskCore(input: {
     })
   }
   const authorDraftJson = repair.blockerKey === input.task.taskKey && repair.resolution?.action === 'author-edit'
-    ? repair.resolution.authorDraftJson as string : undefined
+    ? repair.resolution.authorDraftJson as string : frozenAuthorRevision?.authorDraftJson
   if (authorDraftJson || authorizedDirectResult) {
     const recorded = await recordAgentRunArtifactV1({
       scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
@@ -5449,6 +5496,7 @@ async function compileTerminalBuild(input: {
   root: AgentRunSnapshotV1
   plan: ProductProductionPlanV3
   brief: ProductProductionBriefV3
+  restoreImportedProofs?: boolean
 }): Promise<string> {
   const build = await db.productBuilds.get(input.buildId)
   const production = await db.productProductions.get(input.productionId)
@@ -5567,6 +5615,11 @@ async function compileTerminalBuild(input: {
     productionKey: production.productionKey, buildNumber: build.buildNumber,
     buildManifestHash: manifestHash, runtimePackage, mediaBindings, fallbackSummary,
   })
+  if (input.restoreImportedProofs && (manifestHash !== build.manifestHash
+    || packageHash !== build.packageHash || preview.previewHash !== build.previewHash
+    || qualityReportHash !== build.qualityReportHash)) {
+    throw new Error('[product-production-scheduler] 导入复验不得改变已封存 Build 内容或清单')
+  }
   const rootTerminalReceiptHash = await createProductBuildRootTerminalReceiptV1({
     planHash: build.planHash, manifestHash, packageHash, qualityReportHash,
     controlEpoch: build.controlEpoch, budgetLedgerJson: build.budgetLedgerJson, artifacts,
@@ -5610,16 +5663,19 @@ async function compileTerminalBuild(input: {
     // receipt service performs that later, evidence-bound promotion.
     const releaseReady = packageQualityReady && input.brief.qualityProfile !== 'commercial-candidate'
     await db.productBuilds.update(build.id!, {
-      status: releaseReady ? 'release-ready' : 'preview-ready',
+      status: input.restoreImportedProofs ? current.status : releaseReady ? 'release-ready' : 'preview-ready',
       stateRevision: current.stateRevision + 1,
       manifestJson: canonicalProductProductionJsonV2(manifest), manifestHash, packageHash,
       previewManifestJson: canonicalProductProductionJsonV2(preview), previewHash: preview.previewHash,
       qualityReportJson: canonicalProductProductionJsonV2(quality), qualityReportHash,
       compatibilityJson: canonicalProductProductionJsonV2(compatibility),
-      rootTerminalReceiptHash, completedAt: Date.now(), updatedAt: Date.now(),
+      rootTerminalReceiptHash,
+      completedAt: input.restoreImportedProofs ? current.completedAt : Date.now(),
+      updatedAt: Date.now(),
     })
     await db.productProductions.update(production.id!, {
-      status: 'preview-ready', stateRevision: currentProduction.stateRevision + 1, updatedAt: Date.now(),
+      status: input.restoreImportedProofs ? currentProduction.status : 'preview-ready',
+      stateRevision: currentProduction.stateRevision + 1, updatedAt: Date.now(),
     })
   })
   return rootTerminalReceiptHash
@@ -5797,7 +5853,10 @@ async function revalidateImportedCarriedTaskV1(input: {
   if (!previousReceiptHash) return null
   const build = await db.productBuilds.get(input.buildId)
   const ledger = build == null ? null : parseLedger(build.budgetLedgerJson).tasks[input.task.taskKey]
-  const executionIdentityHash = await productProductionTaskExecutionIdentityHashV1(input.task)
+  // Import restores the sealed execution, not a new run of today's Skill.
+  const executionIdentityHash = await frozenProductProductionTaskExecutionIdentityHashV1(
+    input.task, input.snapshot,
+  )
   const receiptHash = ledger == null ? '' : await hashProductProductionValueV2({
     schema: 'storyforge.product-production-carried-task-receipt', version: 1,
     taskKey: input.task.taskKey, inputHash: ledger.idempotencyKey,
@@ -5821,9 +5880,8 @@ async function revalidateImportedCarriedTaskV1(input: {
     || step?.status !== 'succeeded' || step.attempt !== 1
     || step.candidateHash != null || step.outputHash !== input.candidateHash
     || input.outputs.length !== input.task.outputArtifactKeys.length
-    || input.outputs.some(row => row.producerRunId !== input.snapshot.run.id
-      || row.producerReceiptHash !== receiptHash
-      || row.inputHash !== ledger.idempotencyKey)) {
+    || new Set(input.outputs.map(row => row.artifactKey)).size !== input.outputs.length
+    || input.outputs.some(row => !input.task.outputArtifactKeys.includes(row.artifactKey))) {
     throw new Error(
       `[product-production-scheduler] 导入 carried task 完成证据无法在新 scope 复验:${input.task.taskKey}`,
     )
@@ -5837,7 +5895,7 @@ async function revalidateImportedCarriedTaskV1(input: {
 
 /**
  * Complete project backup import deliberately invalidates cloned Harness
- * receipts after local IDs are rebound. A sealed text-open-world Build carries
+ * receipts after local IDs are rebound. A sealed text-adventure or text-open-world Build carries
  * every candidate checkpoint, Artifact envelope, ledger entry and root seal,
  * so the proof can be reconstructed locally without another provider call.
  */
@@ -5847,8 +5905,8 @@ export async function recoverImportedProductProductionProofsV1(input: {
 }): Promise<ProductProductionSchedulerProjectionV1> {
   const scope = await resolveScope({ scope: input.scope })
   const current = await currentProductionBuild(scope, input.productionId)
-  if (current.brief.intent.productType !== 'text-open-world') {
-    throw new Error('[product-production-scheduler] 当前产品不使用开放世界导入证明复验协议')
+  if (!['text-adventure', 'text-open-world'].includes(current.brief.intent.productType)) {
+    throw new Error('[product-production-scheduler] 当前产品不支持导入生产证明复验')
   }
   if (!['preview-ready', 'release-ready', 'released'].includes(current.build.status)) {
     throw new Error('[product-production-scheduler] 只有已封存的导入 Build 可以执行本地证明复验')
@@ -5871,6 +5929,25 @@ export async function recoverImportedProductProductionProofsV1(input: {
   if (children.size !== plan.tasks.length) {
     throw new Error('[product-production-scheduler] 导入 Build 的 task Run 集合不完整')
   }
+  const artifacts = (await db.productBuildArtifacts.where('buildId').equals(current.build.id!).toArray())
+    .filter(row => row.controlEpoch === current.build.controlEpoch
+      && (row.status === 'accepted' || row.status === 'carried-forward'))
+  // A candidate hash binds declared content hashes; independently verify the
+  // restored content and physical media before signing any recovered child.
+  for (const row of artifacts) {
+    if (!await assertRecordInScope(scope, 'productBuildArtifacts', row, { owner: 'work' })) {
+      throw new Error('[product-production-scheduler] 导入 Artifact 跨 Work')
+    }
+    if (row.blobObjectId != null) {
+      if (!row.mimeType) throw new Error('[product-production-scheduler] 导入媒资缺少 MIME')
+      await readMediaBlobObjectData({
+        scope, blobObjectId: row.blobObjectId,
+        expected: { contentHash: row.contentHash, mimeType: row.mimeType, byteSize: row.byteSize },
+      })
+    } else {
+      await assertProductBuildArtifactContentHashV1(row)
+    }
+  }
   let progressed = true
   while (progressed) {
     progressed = false
@@ -5887,9 +5964,13 @@ export async function recoverImportedProductProductionProofsV1(input: {
         .filter(row => row.controlEpoch === current.build.controlEpoch
           && task.outputArtifactKeys.includes(row.artifactKey)
           && (row.status === 'accepted' || row.status === 'carried-forward'))
-      const statuses = new Set(outputs.map(row => row.status))
+      // Reuse and author-import Runs sign the candidate in the ledger while
+      // preserving the Artifact's original producer/input provenance. Their
+      // accepted outputs need not have a model checkpoint, either.
+      const syntheticCarry = snapshot.events.some(event => event.type === 'verification.started'
+        && event.payload.verifierSetVersion === 'product-production-carried-task-v1')
       let recovered: AgentRunSnapshotV1 | null = null
-      if (statuses.size === 1 && statuses.has('accepted')) {
+      if (!syntheticCarry && outputs.every(row => row.status === 'accepted')) {
         const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(scope, snapshot.run.id)
         if (!checkpoint?.resumePayload) {
           throw new Error(
@@ -5908,7 +5989,7 @@ export async function recoverImportedProductProductionProofsV1(input: {
             current.build.controlEpoch,
           ),
         })
-      } else if (statuses.size === 1 && statuses.has('carried-forward')) {
+      } else if (syntheticCarry) {
         const candidateHash = await hashProductProductionValueV2(outputs.map(row => ({
           artifactKey: row.artifactKey,
           contentHash: row.contentHash,
@@ -5950,6 +6031,7 @@ export async function recoverImportedProductProductionProofsV1(input: {
     root,
     plan,
     brief: current.brief,
+    restoreImportedProofs: true,
   })
   return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
 }
@@ -6156,6 +6238,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
     }
   }
   await ensureCarriedForwardTaskRuns({
+    qualityProfile: state.brief.qualityProfile,
     scope, build: {
       id: state.build.id!, buildNumber: state.build.buildNumber,
       controlEpoch: state.build.controlEpoch, planHash: state.build.planHash,

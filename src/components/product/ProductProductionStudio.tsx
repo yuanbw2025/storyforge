@@ -1,3 +1,4 @@
+import TextAdventureContentRevisionPanel from './TextAdventureContentRevisionPanel'
 import type { ChatAuthoringSettingsV1 } from '../../lib/character-interaction/authoring-contract'
 import type { AvgAuthoringSettingsV1 } from '../../lib/avg/authoring-contract'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -35,6 +36,7 @@ import {
   readTextAdventureMediaAssetBytesV1,
   regenerateTextAdventureMediaAssetsV1,
   reviseTextAdventureMediaAssetV1,
+  reviseTextAdventureContentV1,
   retryTextAdventureSourceReviewV1,
   retryProductProductionBlockerV1,
   resolveTextAdventureMediaAnchorDecisionV1,
@@ -2178,6 +2180,14 @@ export default function ProductProductionStudio(props: {
         </section>}
         {details?.production.productType === 'text-adventure' && reviewArtifacts.length > 0 && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="text-adventure-author-workbench">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-sm font-semibold">文字冒险工件审查台</h2><p className="mt-1 text-[10px] leading-5 text-text-muted">每项均来自当前 Build 的已采纳或跨版本复用工件。展开可核对内容和来源 hash；试玩与发布仍是显式作者闸门。</p></div><span className="rounded bg-accent/10 px-2 py-1 text-[9px] text-accent">{reviewArtifacts.length} 项 · Build #{details.build?.buildNumber}</span></div>
+          {details.production.status === 'preview-ready' && details.build && details.build.releasedProductReleaseId == null
+            && <TextAdventureContentRevisionPanel key={details.build.buildNumber} buildNumber={details.build.buildNumber}
+              artifacts={reviewArtifacts} imageCount={mediaAssets.length} busy={busy || productionRunning}
+              onSubmit={revisions => { void run(async () => {
+                const result = await reviseTextAdventureContentV1({ scope: props.scope, details, revisions, assets: mediaAssets })
+                await refresh(details.production.id)
+                setMessage(`修订版 Build #${result.buildNumber} 已创建，正在重新校验和审校；原图保留。`)
+              }, '创建内容修订版') }} />}
           <div className="mt-4 grid gap-2">{reviewArtifacts.map(artifact => <details key={`${artifact.artifactKey}:${artifact.version}`} className="rounded border border-border bg-bg-base p-3">
             <summary className="cursor-pointer list-none"><span className="flex flex-wrap items-center justify-between gap-2"><strong className="text-xs">{reviewArtifactLabel(artifact.artifactKey)}</strong><span className="text-[9px] text-text-muted">v{artifact.version} · {artifact.status === 'carried-forward' ? '沿用前版' : '当前生成'} · {formatBytes(artifact.byteSize)}</span></span><span className="mt-1 block font-mono text-[9px] text-text-muted">{artifact.artifactKey} · {compactHash(artifact.contentHash)}</span></summary>
             <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded border border-border bg-bg-surface p-3 text-[9px] leading-5 text-text-muted">{JSON.stringify(artifact.payload, null, 2)}</pre>
@@ -2189,13 +2199,14 @@ export default function ProductProductionStudio(props: {
           && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="text-adventure-content-revision">
             <h2 className="text-sm font-semibold">修订故事、任务与正文</h2>
             <p className="mt-2 text-xs text-text-muted">保留原稿，只重新生成依赖本次修改的内容。新稿仍须通过原有规则校验。</p>
-            {!contentRevision && <div className="mt-3 flex flex-wrap gap-2">{(['content.product-module', 'content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-scenes', 'content.narrative-decision-plan', 'content.ending-route-plan', 'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2', 'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2', 'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2', 'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3'] as const).filter(artifactKey => details.build?.resumeState === 'building' || artifactKey === 'content.product-module').map(artifactKey =>
+            {!contentRevision && <div className="mt-3 flex flex-wrap gap-2">{(['content.product-module', 'content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-scenes', 'content.narrative-decision-plan', 'content.ending-route-plan', 'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2', 'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2', 'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2', 'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'content.quest-script.main.act-1.single', 'content.quest-script.main.act-1.multi', 'content.quest-script.main.act-2.single', 'content.quest-script.main.act-2.multi', 'content.quest-script.main.act-3.single', 'content.quest-script.main.act-3.multi', 'content.quest-script.supplemental'] as const).filter(artifactKey => details.build?.resumeState === 'building' || artifactKey === 'content.product-module'
+              || /^content\.dialogue-pass\.act-[123]$/.test(artifactKey)).map(artifactKey =>
               <button key={artifactKey} disabled={busy || productionRunning || !reviewArtifacts.some(row => row.artifactKey === artifactKey)}
                 onClick={() => {
                   const original = reviewArtifacts.filter(row => row.artifactKey === artifactKey).sort((a, b) => b.version - a.version)[0]
                   if (original) setContentRevision({ artifactKey, expectedArtifactVersion: original.version,
                     expectedArtifactHash: original.contentHash, authorDraftJson: JSON.stringify(original.payload, null, 2), note: '' })
-                }} className="rounded border border-border px-3 py-2 text-xs disabled:opacity-40">{{ 'content.product-module': '修订时间上限', 'content.story-bible': '载入故事圣经', 'content.cast-bible': '载入角色圣经', 'content.adventure-architecture': '载入地点架构', 'content.narrative-arc-scenes': '载入三幕场景计划', 'content.narrative-decision-plan': '载入玩家决定', 'content.ending-route-plan': '载入结局路线', 'content.main-quest-plan': '载入主线任务', 'content.adventure-side-quests': '载入支线任务', 'content.adventure-ambient-events': '载入区域事件', 'content.scene-script.act-1.part-1': '载入第1幕正文1', 'content.scene-script.act-1.part-2': '载入第1幕正文2', 'content.scene-script.act-2.part-1': '载入第2幕正文1', 'content.scene-script.act-2.part-2': '载入第2幕正文2', 'content.scene-script.act-3.part-1': '载入第3幕正文1', 'content.scene-script.act-3.part-2': '载入第3幕正文2', 'content.dialogue-pass.act-1': '载入第1幕对白审校', 'content.dialogue-pass.act-2': '载入第2幕对白审校', 'content.dialogue-pass.act-3': '载入第3幕对白审校' }[artifactKey]}</button>
+                }} className="rounded border border-border px-3 py-2 text-xs disabled:opacity-40">{{ 'content.product-module': '修订时间上限', 'content.story-bible': '载入故事圣经', 'content.cast-bible': '载入角色圣经', 'content.adventure-architecture': '载入地点架构', 'content.narrative-arc-scenes': '载入三幕场景计划', 'content.narrative-decision-plan': '载入玩家决定', 'content.ending-route-plan': '载入结局路线', 'content.main-quest-plan': '载入主线任务', 'content.adventure-side-quests': '载入支线任务', 'content.adventure-ambient-events': '载入区域事件', 'content.scene-script.act-1.part-1': '载入第1幕正文1', 'content.scene-script.act-1.part-2': '载入第1幕正文2', 'content.scene-script.act-2.part-1': '载入第2幕正文1', 'content.scene-script.act-2.part-2': '载入第2幕正文2', 'content.scene-script.act-3.part-1': '载入第3幕正文1', 'content.scene-script.act-3.part-2': '载入第3幕正文2', 'content.dialogue-pass.act-1': '载入第1幕对白审校', 'content.dialogue-pass.act-2': '载入第2幕对白审校', 'content.dialogue-pass.act-3': '载入第3幕对白审校', 'content.quest-script.main.act-1.single': '载入第1幕单解脚本', 'content.quest-script.main.act-1.multi': '载入第1幕多解脚本', 'content.quest-script.main.act-2.single': '载入第2幕单解脚本', 'content.quest-script.main.act-2.multi': '载入第2幕多解脚本', 'content.quest-script.main.act-3.single': '载入第3幕单解脚本', 'content.quest-script.main.act-3.multi': '载入第3幕多解脚本', 'content.quest-script.supplemental': '载入补充任务脚本' }[artifactKey]}</button>
             )}</div>}
             {contentRevision && <>
               <label className="mt-3 grid gap-2 text-xs">修改说明<textarea aria-label="内容修订说明" value={contentRevision.note} maxLength={2000}

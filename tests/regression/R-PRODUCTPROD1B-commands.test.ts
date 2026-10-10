@@ -1,3 +1,5 @@
+import { validateTextContentRevisionAuthorityV1, verifiedTextRevisionVisualCarryTaskKeysV1 } from '../../src/lib/product-production/text-content-revision-authority'
+import { parseTextAdventureRevisionFileV1 } from '../../src/components/product/TextAdventureContentRevisionPanel'
 import { carryForwardProductBuildArtifactsToEpochV1 } from '../../src/lib/product-production/artifact-store'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
@@ -1806,6 +1808,102 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
       },
     })).resolves.toMatchObject({ ok: false, errorCode: 'invalid-state-transition' })
   })
+
+  it('文字批量修订派生子 Build，保留图片字节及权利，重新审校且授权可刷新复验', async () => {
+    const f = await completedTextAdventureMediaFixture()
+    const before = (await db.productBuilds.get(f.build.id!))!
+    const originalRows = await db.productBuildArtifacts.where('buildId').equals(f.build.id!).toArray()
+    const source = originalRows.find(row => row.artifactKey === 'content.narrative-arc-scenes')!
+    const draft = { ...JSON.parse(source.payloadJson), note: '本次只修正文案，不改变视觉身份。' }
+    const revision = { artifactKey: 'content.narrative-arc-scenes' as const, expectedArtifactVersion: source.version,
+      expectedArtifactHash: source.contentHash, note: '修复叙事连续性', authorDraftJson: JSON.stringify(draft) }
+    const command = { type: 'revise-text-content' as const, commandId: 'content.revision.batch',
+      expectedStateRevision: 2, buildNumber: 1, revisions: [revision], preserveVisualContract: true,
+      retainedImages: originalRows.filter(row => row.kind === 'image').map(row => ({ artifactKey: row.artifactKey, expectedArtifactHash: row.contentHash })) }
+    const result = await executeProductProductionCommand({ scope: f.scope, productionId: f.productionId, command })
+    expect(result).toMatchObject({ ok: true, stateRevision: 3, result: { buildNumber: 2, parentBuildNumber: 1 } })
+    expect(await executeProductProductionCommand({ scope: f.scope, productionId: f.productionId, command }))
+      .toMatchObject({ ok: true, replayed: true, stateRevision: 3 })
+    expect(await db.productBuilds.get(f.build.id!)).toEqual(before)
+    expect(await db.productBuildArtifacts.where('buildId').equals(f.build.id!).toArray()).toEqual(originalRows)
+    const child = (await db.productBuilds.get(Number(result.result.buildId)))!
+    const plan = parseProductProductionPlanV3(child.planJson)
+    const task = plan.tasks.find(row => row.taskKey === revision.artifactKey)!
+    expect(task.authorRevision).toMatchObject({ ...revision, sourceBuildNumber: 1, commandId: command.commandId })
+    expect(task.reuse).toBeNull()
+    for (const task of plan.tasks.filter(task => /quality-review|dialogue-pass/.test(task.kind)
+      || task.taskKey.startsWith('qa.') || task.taskKey === 'media.audit' || task.taskKey === 'integration.package')) {
+      expect(task.reuse, task.taskKey).toBeNull()
+      expect(task.authorRevision, task.taskKey).toBeUndefined()
+    }
+    const rows = await db.productBuildArtifacts.where('buildId').equals(child.id!).toArray()
+    for (const image of originalRows.filter(row => row.kind === 'image')) {
+      const copied = rows.find(row => row.artifactKey === image.artifactKey)!
+      expect(copied).toMatchObject({ blobObjectId: image.blobObjectId, contentHash: image.contentHash,
+        rightsJson: image.rightsJson, status: 'carried-forward', parentArtifactHash: image.contentHash })
+      expect(JSON.parse(copied.metadataJson).assetKey).toContain('.build-2.')
+    }
+    expect(rows.some(row => row.artifactKey === 'runtime.package' || row.artifactKey.startsWith('quality.'))).toBe(false)
+    await expect(validateTextContentRevisionAuthorityV1(f.scope, child, task)).resolves.toMatchObject({ revision: task.authorRevision })
+    // Browser refresh is represented by fresh persisted reads, no component state.
+    db.close(); await db.open()
+    await expect(validateTextContentRevisionAuthorityV1(f.scope, (await db.productBuilds.get(child.id!))!, task)).resolves.toMatchObject({ revision: task.authorRevision })
+    await expect(validateTextContentRevisionAuthorityV1(f.scope, child, { ...task,
+      authorRevision: { ...task.authorRevision!, authorDraftJson: '{}' } })).rejects.toThrow('授权')
+    const carryProof = { scope: f.scope, buildId: child.id!, previousControlEpoch: child.controlEpoch + 2, tasks: plan.tasks }
+    const imageTask = plan.tasks.find(row => row.executionMode === 'human-import')!
+    // No image Run exists yet. Even if an older recovery lost its active rows,
+    // the original command and initial copy still prove the authorized import.
+    await db.productBuildArtifacts.where('buildId').equals(child.id!).modify({ status: 'invalid' })
+    expect([...(await verifiedTextRevisionVisualCarryTaskKeysV1(carryProof))]).toContain(imageTask.taskKey)
+    const changedPlan = structuredClone(plan)
+    changedPlan.tasks.find(row => row.taskKey === imageTask.taskKey)!.reuse!.sourceContentHash = 'a'.repeat(64)
+    expect((await verifiedTextRevisionVisualCarryTaskKeysV1({ ...carryProof, tasks: changedPlan.tasks })).size).toBe(0)
+    const imported = rows.find(row => row.artifactKey === imageTask.taskKey)!
+    expect(imported.producerReceiptHash).toBeNull()
+    await db.productBuildArtifacts.update(imported.id!, { rightsJson: '{}' })
+    expect((await verifiedTextRevisionVisualCarryTaskKeysV1(carryProof)).size).toBe(0)
+    await db.productBuildArtifacts.update(imported.id!, { rightsJson: imported.rightsJson, carriedFrom: null })
+    expect((await verifiedTextRevisionVisualCarryTaskKeysV1(carryProof)).size).toBe(0)
+    await db.productBuildArtifacts.update(imported.id!, { carriedFrom: imported.carriedFrom })
+    const receipt = (await db.productProductionCommands.where('[productionId+commandId]').equals([f.productionId, command.commandId]).first())!
+    await db.productProductionCommands.update(receipt.id!, { status: 'failed' })
+    expect((await verifiedTextRevisionVisualCarryTaskKeysV1(carryProof)).size).toBe(0)
+    await db.productProductionCommands.update(receipt.id!, { status: 'succeeded' })
+    expect([...(await verifiedTextRevisionVisualCarryTaskKeysV1(carryProof))]).toContain(imageTask.taskKey)
+    const manifest = JSON.stringify({ schema: 'storyforge.text-adventure-content-revision', version: 1, buildNumber: 1, revisions: [revision] })
+    expect(parseTextAdventureRevisionFileV1(manifest, 1)).toEqual([revision])
+    expect(() => parseTextAdventureRevisionFileV1(manifest, 2)).toThrow('版本')
+    await db.productBuildArtifacts.update(source.id!, { payloadJson: '{}' })
+    await expect(validateTextContentRevisionAuthorityV1(f.scope, child, task)).rejects.toThrow('原稿')
+  }, 30_000)
+
+  it.each(['stale', 'duplicate', 'identity', 'cast', 'wrong-work', 'missing-blob', 'corrupt-blob', 'rights', 'image-hash', 'published'] as const)(
+    '文字批量修订拒绝 %s 且不产生半个子 Build', async failure => {
+      const f = await completedTextAdventureMediaFixture()
+      const rows = await db.productBuildArtifacts.where('buildId').equals(f.build.id!).toArray()
+      const source = rows.find(row => row.artifactKey === (failure === 'cast' ? 'content.cast-bible' : 'content.narrative-arc-scenes'))!
+      const revision = { artifactKey: source.artifactKey, expectedArtifactVersion: source.version,
+        expectedArtifactHash: failure === 'stale' ? 'a'.repeat(64) : source.contentHash,
+        note: '修订', authorDraftJson: JSON.stringify({ ...JSON.parse(source.payloadJson),
+          ...(failure === 'identity' ? { sceneKey: 'different.scene' } : { note: '修复文字' }) }) }
+      const images = rows.filter(row => row.kind === 'image')
+      if (failure === 'wrong-work') await db.mediaBlobObjects.update(f.blob.id!, { workId: 99999 })
+      if (failure === 'missing-blob') await db.mediaBlobObjects.delete(f.blob.id!)
+      if (failure === 'corrupt-blob') await db.mediaBlobObjects.update(f.blob.id!, { data: new Uint8Array(f.blob.byteSize).buffer })
+      if (failure === 'rights') await db.productBuildArtifacts.update(images[0].id!, { rightsJson: '{}' })
+      if (failure === 'published') await db.productBuilds.update(f.build.id!, { releasedProductReleaseId: 7 })
+      const command = { type: 'revise-text-content', commandId: `bad.content.${failure}`, expectedStateRevision: 2,
+        buildNumber: 1, revisions: failure === 'duplicate' ? [revision, revision] : [revision], preserveVisualContract: true,
+        retainedImages: images.map(row => ({ artifactKey: row.artifactKey,
+          expectedArtifactHash: failure === 'image-hash' ? 'a'.repeat(64) : row.contentHash })) }
+      let accepted = false
+      try { accepted = (await executeProductProductionCommand({ scope: f.scope, productionId: f.productionId, command })).ok } catch { /* strict parse/preflight rejects before persistence */ }
+      expect(accepted).toBe(false)
+      expect(await db.productBuilds.where('productionId').equals(f.productionId).count()).toBe(1)
+      expect((await db.productProductions.get(f.productionId))?.currentBuildNumber).toBe(1)
+    }, 30_000,
+  )
 
   it('把图片锁定派生为不可变子 Build，并拒绝锁定素材绕过解锁直接重生成', async () => {
     const f = await completedTextAdventureMediaFixture()

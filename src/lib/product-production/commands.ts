@@ -1,3 +1,4 @@
+import { createTextContentRevisionPlanV1 } from './text-content-revision'
 import Dexie from 'dexie'
 import { db } from '../db/schema'
 import type {
@@ -36,7 +37,7 @@ import {
   TEXT_ADVENTURE_MAIN_QUEST_INPUT_CEILING_V1,
   TEXT_ADVENTURE_QUALITY_REVIEW_TIMEOUT_MS_V1,
 } from './plan'
-import { readMediaBlobObjectData } from './media-blob-store'
+import { readMediaBlobObjectData, readVerifiedMediaBlobObjectData } from './media-blob-store'
 import { isTextAdventureClockCapacityRevisionV1 } from './clock-capacity-revision'
 import { isProductImageDeliveryDimensionCompatibleV1 } from './media-adapters'
 import { parseTextAdventureQualityReviewArtifactV1 } from '../adventure/production-artifacts'
@@ -843,7 +844,154 @@ async function createMediaRevisionPlan(input: {
   return { plan, carriedArtifactKeys, targetTaskKeys: [...targetKeys].sort() }
 }
 
+async function prepareTextContentRevisionV1(scope: WorkspaceScope, productionId: number,
+  command: Extract<ProductProductionCommandV1, { type: 'revise-text-content' }>) {
+  const production = await productionInScope(scope, productionId)
+  if (production.stateRevision !== command.expectedStateRevision) reject('production-state-conflict', '当前版本已变化，请重新载入')
+  if (production.productType !== 'text-adventure' || production.status !== 'preview-ready') {
+    reject('invalid-state-transition', '内容修订只能从可预览文字冒险派生')
+  }
+  const parentBuild = await currentBuild(production)
+  if (parentBuild.buildNumber !== command.buildNumber || parentBuild.releasedProductReleaseId != null
+    || !['preview-ready', 'release-ready'].includes(parentBuild.status)
+    || parentBuild.briefRevision !== production.currentBriefRevision) {
+    reject('invalid-state-transition', '内容修订需要当前未发布 Build 与已授权 Brief')
+  }
+  const briefRow = await db.productProductionBriefs.where('[productionId+revision]')
+    .equals([production.id, parentBuild.briefRevision]).first()
+  if (!briefRow || briefRow.status !== 'authorized' || briefRow.briefHash !== parentBuild.briefHash) {
+    reject('brief-not-authorized', '内容修订缺少已授权 Brief')
+  }
+  const brief = parseProductProductionBriefV3(briefRow.briefJson)
+  const parentPlan = parseProductProductionPlanV3(parentBuild.planJson, brief, briefRow.briefHash)
+  if (await hashProductProductionValueV2(parentPlan) !== parentBuild.planHash) reject('source-stale', '父 Build Plan 已变化')
+  const artifacts = (await db.productBuildArtifacts.where('buildId').equals(parentBuild.id).toArray())
+    .filter(row => row.controlEpoch === parentBuild.controlEpoch && ['accepted', 'carried-forward'].includes(row.status))
+  const sourceByKey = new Map(artifacts.map(row => [row.artifactKey, row]))
+  if (sourceByKey.size !== artifacts.length) reject('source-stale', '父 Build 存在重复有效工件')
+  for (const artifact of artifacts) {
+    if (!await assertRecordInScope(scope, 'productBuildArtifacts', artifact, { owner: 'work' })
+      || (artifact.blobObjectId == null && await hashProductProductionValueV2(JSON.parse(artifact.payloadJson)) !== artifact.contentHash)) {
+      reject('source-stale', '父 Build 工件作用域或 hash 无效')
+    }
+  }
+  const images = artifacts.filter(row => row.kind === 'image')
+  if (images.length !== command.retainedImages.length || command.retainedImages.some(item =>
+    !images.some(row => row.artifactKey === item.artifactKey && row.contentHash === item.expectedArtifactHash))) {
+    reject('source-stale', '保留图片必须逐一匹配父 Build 的全部图片与 hash')
+  }
+  // Verify physical bytes before the write transaction, which rechecks every
+  // mutable row identity before sharing Blob references with the child.
+  const blobs: MediaBlobObjectRecordV1[] = []
+  for (const artifact of artifacts.filter(row => row.blobObjectId != null)) {
+    const blob = await db.mediaBlobObjects.get(artifact.blobObjectId!)
+    const rights = objectJson(artifact.rightsJson, `${artifact.artifactKey}.rights`)
+    if (!blob || !await assertRecordInScope(scope, 'mediaBlobObjects', blob, { owner: 'work' })
+      || blob.storageState !== 'ready' || blob.contentHash !== artifact.contentHash
+      || blob.byteSize !== artifact.byteSize || blob.mimeType !== artifact.mimeType) {
+      reject('media-revision-invalid', '保留媒资的 Blob 元数据已变化')
+    }
+    await readVerifiedMediaBlobObjectData(blob)
+    blobs.push(blob)
+    const payload = objectJson(artifact.payloadJson, artifact.artifactKey)
+    const metadata = objectJson(artifact.metadataJson, artifact.artifactKey)
+    if (payload.schema !== 'storyforge.generated-media-artifact' || payload.version !== 1
+      || typeof payload.assetKey !== 'string' || !payload.assetKey.trim()
+      || typeof metadata.assetKey !== 'string' || !metadata.assetKey.trim()) reject('media-revision-invalid', '媒资缺少稳定绑定')
+    if ((brief.qualityProfile === 'commercial-candidate' && rights.commercialUse !== true)
+      || (rights.origin === 'author-upload' && (rights.redistribution !== true
+        || typeof rights.declaration !== 'string' || !rights.declaration.trim()))
+      || typeof rights.origin !== 'string' || !rights.origin.trim()
+      || typeof rights.license !== 'string' || !rights.license.trim()) reject('rights-incomplete', '保留媒资缺少来源与商用再分发权利')
+  }
+  const buildNumber = await nextBuildNumber(production.id)
+  const controlEpoch = production.controlEpoch + 1
+  const base = await createProductProductionPlanV3({ brief, briefHash: briefRow.briefHash, buildNumber, controlEpoch })
+  const revisionPlan = await createTextContentRevisionPlanV1({ base, command, artifacts })
+  revisionPlan.plan = parseProductProductionPlanV3(revisionPlan.plan, brief, briefRow.briefHash)
+  const planHash = await hashProductProductionValueV2(revisionPlan.plan)
+  const authorRevisionHashes: Record<string, string> = {}
+  for (const task of revisionPlan.plan.tasks) if (task.authorRevision) {
+    authorRevisionHashes[task.taskKey] = await hashProductProductionValueV2(task.authorRevision)
+  }
+  return { production, parentBuild, briefRow, buildNumber, controlEpoch, planHash, revisionPlan,
+    artifacts, blobs, authorRevisionHashes }
+}
+
+async function createRevisionBuildWithCarriesV1(input: {
+  scope: WorkspaceScope
+  production: ProductProductionRecordV1 & { id: number }
+  parentBuild: ProductBuildRecordV1 & { id: number }
+  briefRow: ProductProductionBriefRecordV1
+  buildNumber: number
+  controlEpoch: number
+  planHash: string
+  emptyHash: string
+  command: Pick<ProductProductionCommandV1, 'commandId'>
+  revisionPlan: { plan: ProductProductionPlanV3; carriedArtifactKeys: string[] }
+  sourceByKey: Map<string, ProductBuildArtifactRecordV1>
+  now: number
+}): Promise<number> {
+  const { scope, production, parentBuild, briefRow, buildNumber, controlEpoch, planHash,
+    command, revisionPlan, sourceByKey, now } = input
+  const build = stampNewRecord(scope, 'productBuilds', {
+    projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+    productionId: production.id, buildNumber, briefRevision: briefRow.revision, briefHash: briefRow.briefHash,
+    parentBuildNumber: parentBuild.buildNumber, sourceProductReleaseId: parentBuild.sourceProductReleaseId,
+    status: 'building' as const, resumeState: null, stateRevision: 0, controlEpoch,
+    planRevision: 1, planJson: canonicalProductProductionJsonV2(revisionPlan.plan), planHash,
+    budgetLedgerJson: '{}', manifestJson: '{}', manifestHash: input.emptyHash,
+    packageHash: '', previewManifestJson: '{}', previewHash: '', qualityReportJson: '{}',
+    qualityReportHash: input.emptyHash, compatibilityJson: '{}', rootTerminalReceiptHash: null,
+    adoptionIntentHash: null, releasedProductReleaseId: null, failureJson: '{}',
+    authorizedAt: now, startedAt: now, completedAt: null, createdAt: now, updatedAt: now,
+  } satisfies ProductBuildRecordV1, { owner: 'work' })
+  const buildId = await db.productBuilds.add(build) as number
+  for (const artifactKey of revisionPlan.carriedArtifactKeys) {
+    const source = sourceByKey.get(artifactKey)!
+    let payloadJson = source.payloadJson
+    let metadataJson = source.metadataJson
+    let inputHash = source.inputHash
+    if (source.kind === 'image' || source.kind === 'audio') {
+      const payload = objectJson(source.payloadJson, `${artifactKey}.payload`)
+      const metadata = objectJson(source.metadataJson, `${artifactKey}.metadata`)
+      if (payload.schema !== 'storyforge.generated-media-artifact' || payload.version !== 1
+        || typeof payload.assetKey !== 'string' || !payload.assetKey.trim()
+        || typeof metadata.assetKey !== 'string' || !metadata.assetKey.trim()) {
+        reject('media-revision-invalid', `父 Build 媒资缺少可重绑定的生成合同:${artifactKey}`)
+      }
+      const assetKey = `${production.productionKey}.build-${buildNumber}.${artifactKey}`
+      payloadJson = canonicalProductProductionJsonV2({ ...payload, assetKey })
+      metadataJson = canonicalProductProductionJsonV2({ ...metadata, assetKey })
+      inputHash = await Dexie.waitFor(hashProductProductionValueV2({
+        schema: 'storyforge.text-adventure-carried-media-input', version: 1,
+        commandId: command.commandId, sourceBuildNumber: parentBuild.buildNumber,
+        targetBuildNumber: buildNumber, artifactKey, assetKey,
+        sourceInputHash: source.inputHash, contentHash: source.contentHash,
+      }))
+    }
+    await db.productBuildArtifacts.add(stampNewRecord(scope, 'productBuildArtifacts', {
+      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+      buildId, artifactKey, requirementKey: source.requirementKey, version: 1,
+      kind: source.kind, mediaKind: source.mediaKind, status: 'carried-forward' as const,
+      producerRunId: null, producerReceiptHash: source.producerReceiptHash, controlEpoch,
+      inputHash, contentHash: source.contentHash, payloadJson,
+      metadataJson, qualityJson: source.qualityJson, rightsJson: source.rightsJson,
+      blobObjectId: source.blobObjectId, mimeType: source.mimeType, byteSize: source.byteSize,
+      parentArtifactHash: source.contentHash,
+      carriedFrom: {
+        buildNumber: parentBuild.buildNumber, artifactKey, version: source.version,
+        contentHash: source.contentHash,
+      },
+      createdAt: now, updatedAt: now,
+    } satisfies ProductBuildArtifactRecordV1, { owner: 'work' }))
+  }
+
+  return buildId
+}
+
 async function applyCommand(input: {
+  preparedTextRevision?: Awaited<ReturnType<typeof prepareTextContentRevisionV1>> | null
   preparedPausedBuild?: PreparedPausedBuildV1 | null
   scope: WorkspaceScope
   production: ProductProductionRecordV1 & { id: number }
@@ -1530,7 +1678,8 @@ async function applyCommand(input: {
     const contentRevision = command.contentRevision
     if (contentRevision) {
       if (production.productType !== 'text-adventure' || (build.resumeState !== 'building'
-          && !(build.resumeState === 'recovery-required' && contentRevision.artifactKey === 'content.product-module'))
+          && !(build.resumeState === 'recovery-required' && (contentRevision.artifactKey === 'content.product-module'
+            || /^content\.dialogue-pass\.act-[123]$/.test(contentRevision.artifactKey))))
         || build.releasedProductReleaseId != null) {
         reject('invalid-state-transition', '内容修订只允许尚在构建的未发布文字冒险暂停态')
       }
@@ -1556,10 +1705,17 @@ async function applyCommand(input: {
         'content.dialogue-pass.act-1': 'text-adventure.dialogue-pass.v1',
         'content.dialogue-pass.act-2': 'text-adventure.dialogue-pass.v1',
         'content.dialogue-pass.act-3': 'text-adventure.dialogue-pass.v1',
+        'content.quest-script.main.act-1.single': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-1.multi': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-2.single': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-2.multi': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-3.single': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-3.multi': 'text-adventure.quest-script.v1',
+        'content.quest-script.supplemental': 'text-adventure.quest-script.v1',
       }[contentRevision.artifactKey])
         || task.executionMode !== 'model' || task.failurePolicy !== 'pause'
         || task.outputArtifactKeys.length !== 1 || task.outputArtifactKeys[0] !== contentRevision.artifactKey) {
-        reject('invalid-state-transition', '内容修订未命中登记的故事、角色、空间架构、叙事、任务计划、分段正文或对白审校岗位')
+        reject('invalid-state-transition', '内容修订未命中登记的故事、角色、空间架构、叙事、任务计划、任务脚本、分段正文或对白审校岗位')
       }
       const baseline = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
         .filter(row => row.artifactKey === contentRevision.artifactKey && row.controlEpoch === plan.controlEpoch
@@ -2034,6 +2190,48 @@ async function applyCommand(input: {
     return { production, result: { buildNumber: build.buildNumber, previewHash: build.previewHash, packageHash: build.packageHash } }
   }
 
+  if (command.type === 'revise-text-content') {
+    const prepared = input.preparedTextRevision
+    if (!prepared || canonicalProductProductionJsonV2(production) !== canonicalProductProductionJsonV2(prepared.production)) {
+      reject('production-state-conflict', '修订预检后 Production 已变化')
+    }
+    const { parentBuild, briefRow, buildNumber, controlEpoch, planHash, revisionPlan, authorRevisionHashes } = prepared
+    const persistedParent = await db.productBuilds.get(parentBuild.id)
+    const persistedBrief = await db.productProductionBriefs.get(briefRow.id!)
+    const artifacts = (await db.productBuildArtifacts.where('buildId').equals(parentBuild.id).toArray())
+      .filter(row => row.controlEpoch === parentBuild.controlEpoch && ['accepted', 'carried-forward'].includes(row.status))
+    if (canonicalProductProductionJsonV2(persistedParent ?? null) !== canonicalProductProductionJsonV2(parentBuild)
+      || canonicalProductProductionJsonV2(persistedBrief ?? null) !== canonicalProductProductionJsonV2(briefRow)
+      || canonicalProductProductionJsonV2(artifacts) !== canonicalProductProductionJsonV2(prepared.artifacts)
+      || await nextBuildNumber(production.id) !== buildNumber) reject('source-stale', '修订预检后原稿或 Brief 已变化')
+    for (const before of prepared.blobs) {
+      const current = await db.mediaBlobObjects.get(before.id!)
+      if (!current) reject('media-revision-invalid', '媒资 Blob 已删除')
+      const { data: oldBytes, ...oldMetadata } = before
+      const { data: newBytes, ...newMetadata } = current
+      const newView = newBytes ? new Uint8Array(newBytes) : null
+      if (canonicalProductProductionJsonV2(oldMetadata) !== canonicalProductProductionJsonV2(newMetadata)
+        || (oldBytes == null) !== (newBytes == null)
+        || (oldBytes != null && newBytes != null && (oldBytes.byteLength !== newBytes.byteLength
+          || new Uint8Array(oldBytes).some((byte, index) => byte !== newView![index])))) {
+        reject('media-revision-invalid', '修订预检后媒资 Blob 已变化')
+      }
+    }
+    const sourceByKey = new Map(artifacts.map(row => [row.artifactKey, row]))
+    const buildId = await createRevisionBuildWithCarriesV1({ scope, production, parentBuild, briefRow,
+      buildNumber, controlEpoch, planHash, emptyHash: input.emptyHash, command, revisionPlan, sourceByKey, now })
+
+    const stateRevision = production.stateRevision + 1
+    await db.productProductions.update(production.id, {
+      status: 'producing', currentBuildNumber: buildNumber, controlEpoch, stateRevision, lastErrorJson: '{}', updatedAt: now,
+    })
+    production = { ...production, status: 'producing', currentBuildNumber: buildNumber,
+      controlEpoch, stateRevision, lastErrorJson: '{}', updatedAt: now }
+    return { production, result: { buildId, buildNumber, parentBuildNumber: parentBuild.buildNumber,
+      controlEpoch, planHash, authorRevisionHashes, retainedImages: command.retainedImages,
+      carriedArtifactCount: revisionPlan.carriedArtifactKeys.length } }
+  }
+
   if (command.type === 'revise-media-asset' || command.type === 'revise-media-assets') {
     const batchRepair = command.type === 'revise-media-assets'
     const singleCommand: ReviseMediaCommandV1 | null = command.type === 'revise-media-asset'
@@ -2362,58 +2560,8 @@ async function applyCommand(input: {
         rightsJson: canonicalProductProductionJsonV2(rights),
       }
     }
-    const build = stampNewRecord(scope, 'productBuilds', {
-      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
-      productionId: production.id, buildNumber, briefRevision: briefRow.revision, briefHash: briefRow.briefHash,
-      parentBuildNumber: parentBuild.buildNumber, sourceProductReleaseId: parentBuild.sourceProductReleaseId,
-      status: 'building' as const, resumeState: null, stateRevision: 0, controlEpoch,
-      planRevision: 1, planJson: canonicalProductProductionJsonV2(revisionPlan.plan), planHash,
-      budgetLedgerJson: '{}', manifestJson: '{}', manifestHash: input.emptyHash,
-      packageHash: '', previewManifestJson: '{}', previewHash: '', qualityReportJson: '{}',
-      qualityReportHash: input.emptyHash, compatibilityJson: '{}', rootTerminalReceiptHash: null,
-      adoptionIntentHash: null, releasedProductReleaseId: null, failureJson: '{}',
-      authorizedAt: now, startedAt: now, completedAt: null, createdAt: now, updatedAt: now,
-    } satisfies ProductBuildRecordV1, { owner: 'work' })
-    const buildId = await db.productBuilds.add(build) as number
-    for (const artifactKey of revisionPlan.carriedArtifactKeys) {
-      const source = sourceByKey.get(artifactKey)!
-      let payloadJson = source.payloadJson
-      let metadataJson = source.metadataJson
-      let inputHash = source.inputHash
-      if (source.kind === 'image' || source.kind === 'audio') {
-        const payload = objectJson(source.payloadJson, `${artifactKey}.payload`)
-        const metadata = objectJson(source.metadataJson, `${artifactKey}.metadata`)
-        if (payload.schema !== 'storyforge.generated-media-artifact' || payload.version !== 1
-          || typeof payload.assetKey !== 'string' || !payload.assetKey.trim()
-          || typeof metadata.assetKey !== 'string' || !metadata.assetKey.trim()) {
-          reject('media-revision-invalid', `父 Build 媒资缺少可重绑定的生成合同:${artifactKey}`)
-        }
-        const assetKey = `${production.productionKey}.build-${buildNumber}.${artifactKey}`
-        payloadJson = canonicalProductProductionJsonV2({ ...payload, assetKey })
-        metadataJson = canonicalProductProductionJsonV2({ ...metadata, assetKey })
-        inputHash = await Dexie.waitFor(hashProductProductionValueV2({
-          schema: 'storyforge.text-adventure-carried-media-input', version: 1,
-          commandId: command.commandId, sourceBuildNumber: parentBuild.buildNumber,
-          targetBuildNumber: buildNumber, artifactKey, assetKey,
-          sourceInputHash: source.inputHash, contentHash: source.contentHash,
-        }))
-      }
-      await db.productBuildArtifacts.add(stampNewRecord(scope, 'productBuildArtifacts', {
-        projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
-        buildId, artifactKey, requirementKey: source.requirementKey, version: 1,
-        kind: source.kind, mediaKind: source.mediaKind, status: 'carried-forward' as const,
-        producerRunId: null, producerReceiptHash: source.producerReceiptHash, controlEpoch,
-        inputHash, contentHash: source.contentHash, payloadJson,
-        metadataJson, qualityJson: source.qualityJson, rightsJson: source.rightsJson,
-        blobObjectId: source.blobObjectId, mimeType: source.mimeType, byteSize: source.byteSize,
-        parentArtifactHash: source.contentHash,
-        carriedFrom: {
-          buildNumber: parentBuild.buildNumber, artifactKey, version: source.version,
-          contentHash: source.contentHash,
-        },
-        createdAt: now, updatedAt: now,
-      } satisfies ProductBuildArtifactRecordV1, { owner: 'work' }))
-    }
+    const buildId = await createRevisionBuildWithCarriesV1({ scope, production, parentBuild, briefRow,
+      buildNumber, controlEpoch, planHash, emptyHash: input.emptyHash, command, revisionPlan, sourceByKey, now })
 
     if (visualRepairFeedback) {
       await db.productBuildArtifacts.add(stampNewRecord(scope, 'productBuildArtifacts', {
@@ -2660,6 +2808,7 @@ async function applyCommand(input: {
 }
 
 async function executeTransaction(input: {
+  preparedTextRevision?: Awaited<ReturnType<typeof prepareTextContentRevisionV1>> | null
   preparedPausedBuild?: PreparedPausedBuildV1 | null
   scope: WorkspaceScope
   productionId?: number
@@ -2825,6 +2974,7 @@ async function executeTransaction(input: {
         }
       }
       const applied = await applyCommand({
+        preparedTextRevision: input.preparedTextRevision,
         scope, production, command,
         preparedBriefHash: input.preparedBriefHash,
         preparedSourcePlan: input.preparedSourcePlan,
@@ -2971,6 +3121,8 @@ export async function executeProductProductionCommand(input: {
   const preparedWorldReferenceHash = command.type === 'create-intent'
     ? (await createWorldReferenceV1(command.worldReleaseId)).referenceHash
     : null
+  const preparedTextRevision = command.type === 'revise-text-content'
+    ? await prepareTextContentRevisionV1(scope, input.productionId!, command) : null
   if (command.type === 'revise-media-asset' && command.replacement) {
     await readMediaBlobObjectData({
       scope,
@@ -3212,6 +3364,7 @@ export async function executeProductProductionCommand(input: {
     preparedPausedBuild = { before, after, runs }
   }
   const request = {
+    preparedTextRevision,
     scope,
     productionId: input.productionId,
     command,

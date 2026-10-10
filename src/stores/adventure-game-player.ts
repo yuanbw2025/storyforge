@@ -64,6 +64,7 @@ interface AdventurePlayerState {
   selectedManifest: AdventureProductRuntimePackageV1 | null
   selectedMediaResolver: ProductMediaResolverV1 | null
   selectedSourceSessionId: number | null
+  selectedBuildNumber: number | null
   pendingIntent: AdventureIntentCandidateV1 | null
   generatedNarrative: AdventureNarrationCandidateV1 | null
   generatingRunId: number | null
@@ -159,6 +160,8 @@ async function details(scope: WorkspaceScope, sessionId: number, current: {
     selectedManifest: playableManifest(playable.runtimePackage),
     selectedMediaResolver,
     selectedSourceSessionId: sessionId,
+    selectedBuildNumber: playable.source.kind === 'build'
+      ? (await db.productBuilds.get(playable.source.productBuildId))?.buildNumber ?? null : null,
     recoverableRunIds: resumableRows
       .filter(row => resumeCheckpoints.some(item => item.runId === row.id && item.resumePayloadJson != null))
       .map(row => row.id!),
@@ -234,7 +237,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
       set({
         releases, previews, sessions, completedSessionEndingKeys, selectedSessionId: null,
         events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
-        selectedManifest: null, selectedMediaResolver: null, selectedSourceSessionId: null,
+        selectedManifest: null, selectedMediaResolver: null, selectedSourceSessionId: null, selectedBuildNumber: null,
       })
     }
   }
@@ -247,14 +250,14 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
   return {
     scope: null, worldGroupId: null, releases: [], previews: [], sessions: [], completedSessionEndingKeys: {}, selectedSessionId: null,
     events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE), selectedManifest: null,
-    selectedMediaResolver: null, selectedSourceSessionId: null,
+    selectedMediaResolver: null, selectedSourceSessionId: null, selectedBuildNumber: null,
     pendingIntent: null, generatedNarrative: null, generatingRunId: null,
     loading: false, busy: false, error: '',
     load: async (scope, worldGroupId, openLibrary = false) => {
       const changed = get().scope?.workId !== scope.workId || get().worldGroupId !== worldGroupId
       if (changed) get().selectedMediaResolver?.dispose()
       set({ scope, worldGroupId, loading: true, error: '', ...(changed ? {
-        selectedSessionId: null, selectedMediaResolver: null, selectedSourceSessionId: null,
+        selectedSessionId: null, selectedMediaResolver: null, selectedSourceSessionId: null, selectedBuildNumber: null,
         completedSessionEndingKeys: {},
         pendingIntent: null, generatedNarrative: null,
       } : {}) })
@@ -269,7 +272,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
           set({
             selectedSessionId: null,
             events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
-            selectedManifest: null, selectedMediaResolver: null, selectedSourceSessionId: null,
+            selectedManifest: null, selectedMediaResolver: null, selectedSourceSessionId: null, selectedBuildNumber: null,
           })
         }
         else {

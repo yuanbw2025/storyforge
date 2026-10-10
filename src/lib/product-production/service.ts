@@ -702,6 +702,25 @@ async function decodeUploadedImageSize(file: File): Promise<{ width: number; hei
   })
 }
 
+export async function reviseTextAdventureContentV1(input: {
+  scope: WorkspaceScope
+  details: ProductProductionDetailsV1
+  revisions: import('../types').TextAdventureContentRevisionV1[]
+  assets: TextAdventureMediaAssetV1[]
+}): Promise<{ buildNumber: number }> {
+  if (!input.details.build) throw new Error('[product-production-service] 缺少已完成的 Build')
+  const receipt = await executeProductProductionCommand({
+    scope: input.scope, productionId: input.details.production.id!,
+    command: { type: 'revise-text-content', commandId: commandId('content-revision'),
+      expectedStateRevision: input.details.production.stateRevision,
+      buildNumber: input.details.build.buildNumber, revisions: input.revisions, preserveVisualContract: true,
+      retainedImages: input.assets.map(asset => ({ artifactKey: asset.artifactKey, expectedArtifactHash: asset.contentHash })),
+    },
+  })
+  if (!receipt.ok) throw new Error(String(receipt.result.message ?? receipt.errorCode ?? '内容修订失败'))
+  return { buildNumber: Number(receipt.result.buildNumber) }
+}
+
 export async function reviseTextAdventureMediaAssetV1(input: {
   scope: WorkspaceScope
   details: ProductProductionDetailsV1

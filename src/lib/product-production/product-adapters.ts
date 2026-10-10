@@ -1,3 +1,4 @@
+import type { TextAdventureQuestScriptArtifact } from '../adventure/quest-settlement'
 import {
   compileAdventureModuleV1,
   compileInteractionModulesV1,
@@ -17,7 +18,6 @@ import type {
   TextAdventureEndingRoutePlanArtifactV1,
   TextAdventureNarrativeArcPlanArtifactV1,
   TextAdventureQuestPlanArtifactV1,
-  TextAdventureQuestScriptArtifactV2,
 } from '../adventure/production-artifacts-v2'
 import type {
   AdventureContent,
@@ -51,7 +51,7 @@ export interface ProductAdapterBuildInputV1 {
     arcPlan: TextAdventureNarrativeArcPlanArtifactV1
     endingRoutePlan: TextAdventureEndingRoutePlanArtifactV1
     mainQuestPlan: TextAdventureQuestPlanArtifactV1
-    questScript: TextAdventureQuestScriptArtifactV2
+    questScript: TextAdventureQuestScriptArtifact
     sideQuests: TextAdventureQuestBundleArtifactV2
     ambientEvents: TextAdventureQuestBundleArtifactV2
   }

@@ -59,6 +59,8 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
     runtimePackage.interaction.profiles = runtimePackage.interaction.profiles.map((profile, index) => ({
       ...profile, characterKey: `generated:participant.${index + 1}`, name: `产品角色 ${index + 1}`,
     }))
+    await seedCurrentProductBuild({ scope: owned.scope, worldRelease: owned.release as typeof owned.release & { id: number },
+      runtimePackage, title: '另一个作品版本' })
     const built = await seedCurrentProductBuild({
       scope: owned.scope,
       worldRelease: owned.release as typeof owned.release & { id: number },
@@ -205,7 +207,9 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
     await clickNavigation('存档')
     const saves = host.querySelector('[aria-label="存档与时间线"]')
     expect(saves?.textContent).toContain('运行版本')
-    expect(saves?.textContent).toContain('Build 预览 #')
+    expect(built.buildId).not.toBe(1)
+    expect(saves?.textContent).toContain('Build 预览 #1')
+    expect(saves?.textContent).not.toContain(`Build 预览 #${built.buildId}`)
     expect(saves?.textContent).toContain('内容校验')
     expect(saves?.textContent).toContain('纯文字完整模式')
     await closePanel()
