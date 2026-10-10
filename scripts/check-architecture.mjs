@@ -1722,7 +1722,7 @@ if (!productRuntimeMediaLibrarySource.includes('productRuntimeSessionId: number'
   violations.push('[㉝B运行媒资隔离] 运行中新生成的媒资必须绑定具体 ProductRuntimeSession')
 }
 if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'")
-  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 10')
+  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 11')
   || !currentSchemaSource.includes('this.version(1).stores(STORYFORGE_STORES_V1)')
   || !currentSchemaSource.includes('this.version(2).stores(STORYFORGE_STORES_V2)')
   || !currentSchemaSource.includes('this.version(3).stores(STORYFORGE_STORES_V3)')
@@ -1731,11 +1731,12 @@ if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'"
   || !currentSchemaSource.includes('this.version(6).stores(STORYFORGE_STORES_V6)')
   || !currentSchemaSource.includes('this.version(7).stores(STORYFORGE_STORES_V7)')
   || !currentSchemaSource.includes('this.version(8).stores({ ...STORYFORGE_STORES_V8, chatAuthoringDrafts: STORYFORGE_STORES.chatAuthoringDrafts })')
+  || !currentSchemaSource.includes('this.version(10).stores(STORYFORGE_STORES_V10)')
   || !currentSchemaSource.includes('this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)')
-  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 10
+  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 11
   || currentSchemaSource.includes('.upgrade(')
   || !currentSchemaSource.includes("productMediaAssets: '++id, projectId, worldId, workId, ownerKind, productType, productReleaseId, productRuntimeSessionId, &[productReleaseId+assetKey+version], &[productRuntimeSessionId+assetKey+version]")) {
-  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v10、保留 v1/v2/v3/v4/v5/v6/v7/v8 加表迁移、零数据改写 upgrade，并保留当前根/媒资隔离索引')
+  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v11、保留 v1 至 v10 加表迁移、零数据改写 upgrade，并保留当前根/媒资隔离索引')
 }
 if (!deriveImportSrc.includes('ProductMedia 必须具有唯一、有效的产品所有者')
   || !deriveImportSrc.includes("asset.ownerKind === 'release'")

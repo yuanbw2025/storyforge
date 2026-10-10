@@ -11,7 +11,7 @@ interface StoryTimelineStore {
   loading: boolean
 
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
-  addEvent: (e: Omit<StoryTimelineEvent, 'id' | 'createdAt'>) => Promise<number>
+  addEvent: (e: Omit<StoryTimelineEvent, 'id' | 'createdAt'>, scope?: WorkspaceScopeLike) => Promise<number>
   addEvents: (es: Omit<StoryTimelineEvent, 'id' | 'createdAt'>[]) => Promise<void>
   updateEvent: (id: number, patch: Partial<StoryTimelineEvent>) => Promise<void>
   deleteEvent: (id: number) => Promise<void>
@@ -30,8 +30,8 @@ export const useStoryTimelineStore = create<StoryTimelineStore>((set, get) => ({
     set({ events, loading: false })
   },
 
-  addEvent: async (e) => {
-    const stamped = stampNewRecord(await resolveScopeLike(e.projectId), 'storyTimelineEvents', { ...e, createdAt: now() } as StoryTimelineEvent, { owner: 'work' }) as StoryTimelineEvent
+  addEvent: async (e, scopeInput) => {
+    const stamped = stampNewRecord(await resolveScopeLike(scopeInput ?? e.projectId), 'storyTimelineEvents', { ...e, createdAt: now() } as StoryTimelineEvent, { owner: 'work' }) as StoryTimelineEvent
     const id = await db.storyTimelineEvents.add(stamped) as number
     set({ events: [...get().events, { ...stamped, id }] })
     return id

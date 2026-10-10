@@ -67,6 +67,16 @@ const zhSidebar = [
     ],
   },
   {
+    text: '插件与创意工坊', collapsed: false, items: [
+      { text: '工坊能力与入口', link: '/workshop/' },
+      { text: '安装与使用插件', link: '/workshop/install' },
+      { text: '用 AI 开发插件', link: '/workshop/ai' },
+      { text: '开发第一个插件', link: '/workshop/develop' },
+      { text: '发布与维护插件', link: '/workshop/publish' },
+      { text: '插件故障与恢复', link: '/workshop/troubleshooting' },
+    ],
+  },
+  {
     text: '核心概念', collapsed: true, items: [
       { text: '核心概念概览', link: '/concepts/' },
       { text: '项目、作品与世界', link: '/concepts/work-world' },

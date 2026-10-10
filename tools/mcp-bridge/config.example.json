@@ -1,0 +1,11 @@
+{
+  "origin": "http://127.0.0.1:4186",
+  "port": 43127,
+  "servers": {
+    "reference": {
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/path/to/your-modern-mcp-server.mjs"],
+      "tools": ["lookup"]
+    }
+  }
+}

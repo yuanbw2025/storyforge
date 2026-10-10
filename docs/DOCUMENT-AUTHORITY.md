@@ -31,6 +31,10 @@
 
 ### 2.2 产品与计划
 
+- `tools/plugin-sdk/authoring/`：社区插件开发 Skill、通用指令与验收模板；从现行接口约定派生，不创造另一套接口权威。
+- `docs/guides/PLUGIN-DEVELOPMENT.md`：插件 SDK、包格式、数据生命周期与静态工坊目录。
+- `docs/roadmap/PLUGIN-WORKSHOP-V1.md`：插件体系与创意工坊一期施工契约。
+
 - `docs/products/README.md`
 - `docs/products/LONGFORM-AND-NODE.md`
 - `docs/products/INDEPENDENT-CREATION.md`

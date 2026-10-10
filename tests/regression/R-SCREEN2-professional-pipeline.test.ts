@@ -363,7 +363,7 @@ describe('SCREEN-2 · professional novel-to-screenplay pipeline', () => {
     expect(prompts.get('targeted-rewrite')).toContain('expectedSceneRevision 必须是大于 0 的 JSON 整数')
 
     const backup = await exportProjectJSON(item.source.scope.projectId)
-    expect(backup).toMatchObject({ version: 14 })
+    expect(backup).toMatchObject({ version: 15 })
     expect(backup.screenplayBeats).toHaveLength(1)
     expect(backup.screenplaySceneCards).toHaveLength(1)
     expect(backup.screenplayReviewIssues.length).toBeGreaterThanOrEqual(2)

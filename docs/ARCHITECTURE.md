@@ -22,6 +22,7 @@ StoryForge 当前是 React + TypeScript + Vite 的本地优先单页应用，核
 - `/play/aphelion`：内置《远日点：第七码头》，科幻调查、设备交互与分支结局；
 - `/play/:gameKey`：冻结社区模组的介绍与明确开始入口；
 - `/play/session/:sessionId`：绑定正式发布或受治理预览的沉浸跑团桌面；
+- `/workshop/:pageId?`：本地插件发现、安装、管理与工作台（实验性，默认隐藏）；
 - `/settings`：模型与应用设置；
 - `/long`：长篇作品库与产品内创建入口。
 - `/short/:pageId?`：短篇作品库、六阶段生产、版本导出与显式扩展；`project` 查询参数选择作品，未选择仍可浏览。
@@ -105,12 +106,12 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `3.9.1` | `package.json` |
-| TypeScript 生产源码 | 1410 个文件 / 515707 行 | `tsconfig.json` |
-| IndexedDB schema | v10 / 123 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
-| PROJECT_TABLES | 123 张表 | `project-tables.ts` |
+| TypeScript 生产源码 | 1438 个文件 / 517822 行 | `tsconfig.json` |
+| IndexedDB schema | v11 / 128 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
+| PROJECT_TABLES | 128 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 238 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
 | CONTEXT_SOURCES | 133 个上下文源 | `context-sources.ts` |
-| 写回治理 | 53 个通用 adopt target / 58 个领域扩展 | `adoption-schema.ts` |
+| 写回治理 | 54 个通用 adopt target / 59 个领域扩展 | `adoption-schema.ts` |
 <!-- project-metrics:end -->
 
 ## 4. 分层架构

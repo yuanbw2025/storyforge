@@ -1,3 +1,6 @@
+import { installReferenceExtensionRules } from '../helpers/extension-rule-pack'
+import { disablePackage, uninstallPackage } from '../../src/lib/extensions/store'
+import { createWorldWork, switchActiveWork } from '../../src/lib/workspace/works'
 import {DEFAULT_CHAT_SETTINGS} from '../../src/lib/character-interaction/authoring-contract'
 import {loadProductProductionConsultationSourceV2} from '../../src/lib/product-production/world-source'
 import { authoredScenarioFixture } from '../helpers/ttrpg-authored-scenario'
@@ -216,6 +219,7 @@ async function fixture(qualityProfile: 'prototype' | 'commercial-candidate' = 'p
 }
 
 async function fixtureForProduct(productType: ProductionProductKindV1, options?: {
+  pluginRules?: boolean
   scale?: 'scene' | 'short-arc' | 'chapter'
   visualLevel?: 'none' | 'key-scenes'
   omitWorldArtifacts?: boolean
@@ -226,6 +230,12 @@ async function fixtureForProduct(productType: ProductionProductKindV1, options?:
     `formal-${productType}`,
     productType === 'ai-town' ? { minimumCharacters: 4 } : {},
   )
+  let pluginRules: Awaited<ReturnType<typeof installReferenceExtensionRules>> | undefined
+  if (options?.pluginRules) {
+    const work = await createWorldWork(owned.scope.projectId, { title: '正式插件规则跑团', kind: 'ttrpg' })
+    owned.scope = await switchActiveWork(owned.scope.projectId, work.id!)
+    pluginRules = await installReferenceExtensionRules(owned.scope)
+  }
   const release = owned.release
   const suggestions = await suggestProductStartingPoints({ scope: owned.scope, worldReleaseId: release.id! })
   const chatCatalog = productType === 'character-interaction' ? await loadProductProductionConsultationSourceV2({scope:owned.scope,worldReleaseId:release.id!}) : null
@@ -238,6 +248,7 @@ async function fixtureForProduct(productType: ProductionProductKindV1, options?:
     requiredFacts: ['冻结世界事实保持一致'], forbiddenChanges: ['不得写回世界正式表'],
     ...(chatCatalog ? {characterChat:{...DEFAULT_CHAT_SETTINGS,characters:[{sourceKey:chatCatalog.selectionOptions.characters.find(c=>c.label==='林舟')!.resourceKey,voiceRules:'简短直接',privateKnowledge:'独自保管的暗号',initialTrust:24}]}} : {}),
     confirmTtrpgDefaultMappings: productType === 'ttrpg',
+    ...(pluginRules ? { ttrpg: { rules: { origin: 'saved-rule-pack' as const, savedRulePackId: pluginRules.ruleId } } } : {}),
     textAdventure: productType === 'text-adventure' ? { confirmAll: true } : undefined,
   })
   if (options?.maximumModelCalls != null) brief.productionBudget.maximumModelCalls = options.maximumModelCalls
@@ -274,7 +285,7 @@ async function fixtureForProduct(productType: ProductionProductKindV1, options?:
   if (!authorized.ok) {
     throw new Error(`authorize ${productType} failed: ${authorized.errorCode ?? 'unknown'} ${String(authorized.result.message ?? '')}`)
   }
-  return { ...owned, release, brief, productionId: created.productionId }
+  return { ...owned, release, brief, productionId: created.productionId, pluginRules }
 }
 
 async function fixtureAiTownWithMedia() {
@@ -8197,7 +8208,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       'character-interaction', 'ai-town', 'text-adventure', 'avg', 'ttrpg',
     ]
     for (const productType of products) {
-      const owned = await fixtureForProduct(productType)
+      const owned = await fixtureForProduct(productType, { pluginRules: productType === 'ttrpg' })
       const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
       expect(owned.brief.capabilityRequirements.filter(item => item.mediaClass !== 'text'))
         .toHaveLength(productType === 'text-adventure' ? 1 : 0)
@@ -8414,11 +8425,20 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       const published = await publishProductProductionV1({
         scope: owned.scope, productionId: owned.productionId,
       })
+      if (owned.pluginRules) {
+        await disablePackage(owned.pluginRules.profile)
+        await uninstallPackage(owned.pluginRules.pkg)
+      }
       const released = await resolveProductRuntimeSource({
         scope: owned.scope, source: { kind: 'release', productReleaseId: published.receipt.productReleaseId },
       })
       expect(released.packageHash).toBe(build.packageHash)
       expect(released.runtimePackage).toEqual(runtimePackage)
+      if (owned.pluginRules) {
+        expect(released.runtimePackage.ttrpg!.rulePack.contentHash).toBe(owned.pluginRules.hash)
+        expect(released.runtimePackage.ttrpg!.rulePack.content.ruleSystemId).toBe('storyforge.harbor-rules.harbor')
+        expect(released.runtimePackage.ttrpg!.rulePack.content.ruleSystemVersion).toBe('1.0.0')
+      }
       released.mediaResolver.dispose()
       if (productType === 'text-adventure') {
         const distribution = await exportProductDistributionBundleV2({

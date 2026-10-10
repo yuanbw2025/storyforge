@@ -81,6 +81,11 @@ export async function adopt(input: AdoptInput): Promise<AdoptResult> {
   const scope = await resolveScope(input)
   const scopedInput: AdoptInput = { ...input, projectId: scope.projectId, scope }
 
+  if (ADOPTION_BY_TARGET.get(input.target)?.writePolicy === 'extension-record-v1') {
+    const extensionPolicy = await Dexie.waitFor(import('../extensions/ai-registry'))
+    return extensionPolicy.adoptExtensionPayload(scopedInput)
+  }
+
   if (scopedInput.recordId != null) {
     return adoptCollectionRecord(scopedInput, fieldSpecs, tableSpec, result)
   }

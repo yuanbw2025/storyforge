@@ -1,3 +1,4 @@
+import { validateExtensionBackup } from '../extensions/portable'
 /**
  * 注册表派生的项目导入引擎(AUDIT-1)
  *
@@ -16,7 +17,7 @@ import { remapWorldPortalTargets } from '../utils/world-portals'
 import { transactionTablesFor } from '../registry/lifecycle'
 import type { ExportRefRemap, TableSpec } from '../registry/types'
 import type { ProjectExportData } from './json-export'
-import { CURRENT_BACKUP_VERSION } from './backup-trust'
+import { CURRENT_BACKUP_VERSION, normalizeProjectBackup } from './backup-trust'
 import { rebindPortableAgentRunContractV1 } from '../agent/run/contract-portability'
 import {
   finalizeImportedAgentRunLedgersV1,
@@ -852,6 +853,7 @@ async function validateCurrentBackup(data: ProjectExportData): Promise<void> {
       throw new Error(`[deriveImport] Work 分类非法：${error instanceof Error ? error.message : String(error)}`)
     }
   }
+  validateExtensionBackup(value)
   validateAdaptationBackup(value)
   validateScreenplayBackup(value)
   validateComicStoryboardBackup(value)
@@ -1537,6 +1539,7 @@ async function restorePortableSharedMediaObject(
  */
 export async function deriveImportProjectJSON(data: ProjectExportData): Promise<number> {
   if (!data.project) throw new Error('无效的导出文件格式')
+  data = normalizeProjectBackup(data)
   await validateCurrentBackup(data)
   const now = Date.now()
   const specs = PROJECT_TABLES.filter(s => s.exportable && s.name !== 'projects')
@@ -1625,6 +1628,22 @@ export async function deriveImportProjectJSON(data: ProjectExportData): Promise<
         }
         if (dropRow) continue
         restoreCurrentOwner(spec, obj, newIdMaps)
+        if (spec.name === 'extensionProfiles') obj.enabled = false
+        if (spec.name.startsWith('extension')) {
+          const extensionOwner = obj.worldId != null ? await db.worlds.get(obj.worldId) : await db.works.get(obj.workId)
+          if (!extensionOwner) throw new Error('插件数据缺少作用域根')
+          obj.ownerKey = `${obj.worldId != null ? 'world' : 'work'}:${extensionOwner.code}`
+          if (spec.name === 'extensionRecords') {
+            if (obj.chapterId != null) {
+              const referenced = await db.chapters.get(obj.chapterId) as unknown as { workId: number } | undefined
+              if (!referenced || referenced.workId !== obj.workId) throw new Error('插件章节引用跨作品')
+            }
+            if (obj.historyEventId != null) {
+              const referenced = await db.historicalTimelineEvents.get(obj.historyEventId) as unknown as { worldId: number } | undefined
+              if (!referenced || referenced.worldId !== obj.worldId) throw new Error('插件历史引用跨世界')
+            }
+          }
+        }
         if (spec.name === 'knowledgeLedger' && hasUnmappedKnowledgeRef && obj.status !== 'rejected') {
           obj.status = 'source-missing'
         }

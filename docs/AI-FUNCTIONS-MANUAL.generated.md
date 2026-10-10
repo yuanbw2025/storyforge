@@ -80,10 +80,11 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 133 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 134 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
+| `extensionRecords` | 插件冻结任务与自有记录 | project | L0 | 24000 |
 | `shortNovel.production` | 短篇已确认生产合同 | project | L0 | 8000 |
 | `shortNovel.manuscript` | 短篇当前结构与正文 | project | L0 | 64000 |
 | `worldRelease` | 冻结世界版本资源 | manual | L0 | 100000 |
@@ -247,6 +248,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `cultivationSystems` | `description` `name` `stages` `worldGroupId` |
 | `detailedOutlines` | `appearingCharacterIds` `emotionArc` `endingCliffhanger` `foreshadowIds` `lastUsedSummary` `openingHook` `outlineNodeId` `prohibitions` `sceneLocation` `scenes` |
 | `emotionBeatCards` | `beats` `chapterId` `chapterTitle` `overallArc` `source` |
+| `extensionRecords` | `payload` |
 | `foreshadows` | `description` `echoChapterIds` `expectedResolveChapterId` `importance` `name` `notes` `plantChapterId` `resolveChapterId` `status` `timelinePosition` `type` `urgency` |
 | `geographies` | `locations` `overview` `worldMapData` |
 | `historicalKeywords` | `aiBrainstorm` `aiConsult` |
@@ -293,6 +295,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 | ID | 目标表 | 领域策略注册表 | 唯一入口 | 复审日期 |
 |---|---|---|---|---|
+| `extension-record-lifecycle` | `extensionRecords` | `ExtensionRegistrySnapshot + PROJECT_TABLES + bounded DataSchema` | `src/lib/extensions/store.ts` | 2027-01-01 |
 | `reference-analysis-run-lifecycle` | `referenceAnalysisRuns` | `REFERENCE_ANALYSIS_RUN_POLICY + ADOPTION_SCHEMAS + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
 | `reference-analysis-source-lifecycle` | `referenceAnalysisSources` | `REFERENCE_ANALYSIS_RUN_POLICY + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
 | `reference-analysis-chunk-lifecycle` | `referenceChunkAnalysis` | `REFERENCE_ANALYSIS_RUN_POLICY + ADOPTION_SCHEMAS + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
@@ -446,10 +449,11 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 47 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
+共 48 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
+| `extensions.generate` | `extensions.generate` | `extension.generate` | formal / durable-run | `extension-record-candidate` | `extensionRecords` | `src/lib/extensions/ai-run.ts` |
 | `ai-town.authoring.consult` | `ai-town.consult.v1` | `authoring.ai-town-consult` | auxiliary / durable-run | `ai-town-settings-preview` | 禁止 | `src/lib/ai-town/consultation.ts` |
 | `prose.chapter.generate` | `prose.generate` | `chapter.content` | formal / durable-run | `chapter-draft` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
 | `prose.chapter.continue` | `prose.continue` | `chapter.continue` | formal / durable-run | `chapter-continuation-draft` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
@@ -500,4 +504,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `3dcfa45a`
+生成时间基准:commit `5d1f0105`

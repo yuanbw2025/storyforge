@@ -428,7 +428,8 @@ function parseAgentRunContractV1Base(
     permissionsRecord.contextSourceKeys,
     'contract.permissions.contextSourceKeys',
   ).map((item, index) => readString(item, `contract.permissions.contextSourceKeys[${index}]`, { max: 120 }))
-  if (contextSourceKeys.length === 0) {
+  const toolOnly = readRecord(record.budget, 'contract.budget').maxModelCalls === 0
+  if (contextSourceKeys.length === 0 && !toolOnly) {
     failSchema('invalid_permission', 'contract.permissions.contextSourceKeys', '不得为空')
   }
   assertUnique(contextSourceKeys, 'contract.permissions.contextSourceKeys')
@@ -442,6 +443,7 @@ function parseAgentRunContractV1Base(
     'contract.permissions.writeTargets',
   ).map((item, index) => readWriteTarget(item, `contract.permissions.writeTargets[${index}]`))
   assertUnique(writeTargets.map(target => target.table), 'contract.permissions.writeTargets')
+  if (toolOnly && (contextSourceKeys.length || writeTargets.length || (Array.isArray(record.executionBindings) && record.executionBindings.length))) failSchema('invalid_permission', 'contract.permissions', '零模型工具运行不得授予上下文、正式写回或模型执行绑定')
   const executionBindings = record.executionBindings === undefined
     ? undefined
     : readArray(record.executionBindings, 'contract.executionBindings')
@@ -672,10 +674,10 @@ function parseAgentRunContractV1Base(
     ...(candidateSemanticReviewPolicy ? { candidateSemanticReviewPolicy } : {}),
     ...(automationAuthorization ? { automationAuthorization } : {}),
     budget: {
-      maxModelCalls: readInteger(budgetRecord.maxModelCalls, 'contract.budget.maxModelCalls', { min: 1 }),
-      maxToolCalls: readInteger(budgetRecord.maxToolCalls, 'contract.budget.maxToolCalls', { min: 0 }),
-      maxInputTokens: readInteger(budgetRecord.maxInputTokens, 'contract.budget.maxInputTokens', { min: 1 }),
-      maxOutputTokens: readInteger(budgetRecord.maxOutputTokens, 'contract.budget.maxOutputTokens', { min: 1 }),
+      maxModelCalls: readInteger(budgetRecord.maxModelCalls, 'contract.budget.maxModelCalls', { min: 0 }),
+      maxToolCalls: readInteger(budgetRecord.maxToolCalls, 'contract.budget.maxToolCalls', { min: toolOnly ? 1 : 0 }),
+      maxInputTokens: readInteger(budgetRecord.maxInputTokens, 'contract.budget.maxInputTokens', { min: toolOnly ? 0 : 1, ...(toolOnly ? { max: 0 } : {}) }),
+      maxOutputTokens: readInteger(budgetRecord.maxOutputTokens, 'contract.budget.maxOutputTokens', { min: toolOnly ? 0 : 1, ...(toolOnly ? { max: 0 } : {}) }),
       maxAttemptsPerStep: readInteger(budgetRecord.maxAttemptsPerStep, 'contract.budget.maxAttemptsPerStep', { min: 1 }),
       ...(budgetRecord.maxReplans === undefined ? {} : {
         maxReplans: readInteger(budgetRecord.maxReplans, 'contract.budget.maxReplans', { min: 0 }),

@@ -1,0 +1,40 @@
+{
+  "format": 1,
+  "api": 1,
+  "id": "storyforge.tool-desk",
+  "version": "1.0.0",
+  "name": "MCP 工具台",
+  "description": "通过标准 MCP 连接本机工具。每次执行由作者确认，长任务与结果留在熔炉记录中。需要另行配置本机桥。",
+  "author": "StoryForge",
+  "license": "MIT",
+  "kind": "feature",
+  "owner": "work",
+  "entry": "main.js",
+  "dependencies": {},
+  "permissions": [
+    "mcp"
+  ],
+  "networkOrigins": [],
+  "views": [
+    {
+      "id": "tools",
+      "title": "MCP 工具台",
+      "target": "workbench",
+      "mode": "add"
+    }
+  ],
+  "provides": [],
+  "consumes": [],
+  "schemas": {},
+  "connectors": [
+    {
+      "id": "local",
+      "title": "本机资料工具",
+      "url": "http://127.0.0.1:43127/mcp/reference",
+      "protocol": "2026-07-28",
+      "tools": [
+        "lookup"
+      ]
+    }
+  ]
+}

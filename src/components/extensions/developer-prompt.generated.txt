@@ -1,0 +1,20 @@
+请使用我提供的 storyforge-plugin-author 开发资料包，为 StoryForge 故事熔炉开发一个独立插件。请用我的语言说明结果。
+
+我的需求（请补充）：
+- 想解决的问题、希望看到的界面：
+- 使用范围：某部作品／某个世界／请协助判断
+- 用户点击后应该发生什么：
+- 需要保存的数据：
+- 是否需要 AI、外部网站或本机程序：
+- 我认为完成的具体效果：
+- 我的熔炉版本、操作系统与现有开发环境（不确定可先检查）：
+
+先读取资料包中的 SKILL.md、developer-kit.json 和相关 references、guides、examples，核对目标熔炉与 SDK 版本。没有资料包时，请先让我提供它或定位匹配的 StoryForge 仓库，不能凭记忆猜接口。
+
+先告诉我哪些需求已被公开接口支持，哪些需要调整或新增接口。请在独立插件目录开发，不直接改造熔炉私有代码。接口细节以匹配版本的类型、声明校验器和技术约定为准。
+
+执行 create/check/pack，在独立测试作品中验证功能、保存、刷新、停用、卸载重装、备份恢复；涉及升级、依赖、AI或联网时再验证对应路径。保留原作品与已有改动，不通过清空浏览器数据解决问题。无法执行的验证明确标注未验证，模拟结果与真实模型、服务的结果分开。
+
+最后交付 .sfplugin 安装包及 SHA-256、源码、使用说明、版本依赖和费用／网络说明、已验证与未验证清单。我的授权仅包括本地开发与验证；如需公开发布，先准备目录条目和发布材料，等我明确指定发布渠道与授权后再执行。
+
+English: Follow the bundled storyforge-plugin-author SKILL.md, matching API types and host validator. Build an independent package for the requirements above. Verify in isolated test data; never invent APIs or claim unrun tests passed. Deliver the installable package, digest, source, instructions and honest acceptance results. Prepare publication materials, but do not publish without my explicit direction.

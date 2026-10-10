@@ -178,10 +178,10 @@ describe('TOW-G7-12 · 正式发布数据全生命周期', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
 
-  it('当前v14备份完整重映射Release、质量回执、媒资字节、事件、检查点和分支', async () => {
+  it('当前v15备份完整重映射Release、质量回执、媒资字节、事件、检查点和分支', async () => {
     const seeded = await seedPublishedCreatorWorkspace()
     const backup = await exportProjectJSON(seeded.fixture.scope.projectId)
-    expect(backup.version).toBe(14)
+    expect(backup.version).toBe(15)
     expect(backup.productQualityGateReceipts).toHaveLength(1)
     expect(backup.productMediaAssets).toHaveLength(1)
     expect(backup.productMediaBlobs).toHaveLength(1)
@@ -293,7 +293,7 @@ describe('TOW-G7-12 · 正式发布数据全生命周期', () => {
 
     const oldVersion = structuredClone(backup)
     oldVersion.version = 13
-    await expect(importProjectJSON(oldVersion)).rejects.toThrow(/只接受当前备份版本 v14/)
+    await expect(importProjectJSON(oldVersion)).rejects.toThrow(/只接受 v14 或当前备份版本 v15/)
     expect(await db.projects.count()).toBe(before)
   }, 120_000)
 })

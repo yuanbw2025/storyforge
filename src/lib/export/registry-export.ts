@@ -21,7 +21,7 @@ import { readVerifiedMediaBlobObjectData } from '../product-production/media-blo
 import type { ProductReleaseManifestV1, ProductRuntimeEvent } from '../types'
 
 /** 当前完整便携备份契约。 */
-export const CURRENT_EXPORT_VERSION = 14
+export const CURRENT_EXPORT_VERSION = 15
 
 export interface StrictProjectExportSnapshot {
   data: ProjectExportData

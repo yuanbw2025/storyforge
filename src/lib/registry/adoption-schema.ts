@@ -8,6 +8,7 @@ import type { AdoptionExtensionSpec, CollectionAdoptionSpec } from './types'
 import { REGISTRY_BY_NAME } from './project-tables'
 
 const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
+  { target: 'extensionRecords', identity: 'id', recordOnly: true, duplicatePolicy: 'error', required: ['payload'], autoStamps: [], writePolicy: 'extension-record-v1' },
   {
     target: 'projects',
     identity: 'id',
@@ -470,6 +471,7 @@ const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
 ]
 
 export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.freeze([
+  { id: 'extension-record-lifecycle', target: 'extensionRecords', entrypoints: ['src/lib/extensions/store.ts'], policyRegistry: 'ExtensionRegistrySnapshot + PROJECT_TABLES + bounded DataSchema', reason: '普通作者编辑、内容包、迁移与历史代恢复通过命名空间、schema 和 revision CAS；模型候选必须由 adopt 委托同一事务写入。', reviewAfter: '2027-01-01' },
   {
     id: 'reference-analysis-run-lifecycle',
     target: 'referenceAnalysisRuns',

@@ -4,6 +4,7 @@
 
 | 任务 | 阅读 |
 | --- | --- |
+| 安装插件、用 AI 开发和分享功能 | [插件与创意工坊](/workshop/) |
 | 接入自己的模型 | [模型与 API 配置](/getting-started/model-config) |
 | 导入小说、参考资料或备份 | [导入与参考资料](/guides/import) |
 | 理解生成、采纳、重试与恢复 | [AI 工作流程](/guides/ai-workflow) |

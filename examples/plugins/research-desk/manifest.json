@@ -1,0 +1,49 @@
+{
+  "format": 1,
+  "api": 1,
+  "id": "storyforge.research-desk",
+  "version": "1.0.0",
+  "name": "资料检索台",
+  "description": "通过公开百科接口查询资料；选中的链接可保存到当前作品自己的插件记录中。",
+  "author": "StoryForge",
+  "license": "MIT",
+  "kind": "feature",
+  "owner": "work",
+  "dependencies": {},
+  "permissions": [
+    "network",
+    "data"
+  ],
+  "networkOrigins": [
+    "https://en.wikipedia.org"
+  ],
+  "views": [
+    {
+      "id": "research",
+      "title": "资料检索台",
+      "target": "workbench",
+      "mode": "add"
+    }
+  ],
+  "schemas": {
+    "note": {
+      "version": 1,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 20000
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "provides": [],
+  "consumes": [],
+  "entry": "main.js"
+}

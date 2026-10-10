@@ -1,0 +1,12 @@
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
+import { previewWorldSemantics, publishWorldSemantics, previewExtensionRulePack, installExtensionRulePack } from '../../lib/extensions/publication'
+import type { ExtensionReviewRequest } from '../../lib/extensions/types'
+
+type Preview = {kind:'world';value:Awaited<ReturnType<typeof previewWorldSemantics>>}|{kind:'rule';value:Awaited<ReturnType<typeof previewExtensionRulePack>>}
+export default function PluginPublicationReview({request}:{request:ExtensionReviewRequest}) {
+  const [preview,setPreview]=useState<Preview>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[done,setDone]=useState(false)
+  useEffect(()=>{let active=true;const load=async():Promise<Preview>=>request.kind==='world-semantics'?{kind:'world',value:await previewWorldSemantics(request)}:{kind:'rule',value:await previewExtensionRulePack(request)};void load().then(value=>active&&setPreview(value)).catch(e=>active&&setError(String(e)));return()=>{active=false}},[request])
+  async function confirmImport(){if(!preview||busy)return;setBusy(true);setError('');try{if(preview.kind==='world')await publishWorldSemantics(request,preview.value.hash);else await installExtensionRulePack(request,preview.value.hash);setDone(true)}catch(e){setError(String(e))}finally{setBusy(false)}}
+  return <section className="sf-extension-surface"><h3>{request.kind==='world-semantics'?'确认世界语义':'确认跑团规则包'}</h3>{error&&<p role="alert">{error}</p>}{preview?.kind==='world'&&<><p>以下 {preview.value.entries.length} 条将作为正式词条加入世界。确认后仍可在世界页面编辑；插件中的后续修改不会自动同步。</p>{preview.value.entries.map(entry=><article key={entry.key}><h4>{entry.name}</h4><p>{entry.summary}</p><p>{entry.description}</p>{Object.entries(entry.fields).filter(([key])=>key!=='extensionSource').map(([key,value])=><p key={key}>{key}：{value}</p>)}</article>)}</>}{preview?.kind==='rule'&&<><h4>{preview.value.rulePack.title}</h4><p>版本 {preview.value.rulePack.ruleSystemVersion}，包含 {preview.value.rulePack.actions.length} 种行动。规则结构与内置验算已通过。</p><p>导入后请在跑团创作中选择此规则，再制作并发布新的版本。已发布团局与旧存档继续使用原来的规则。</p></>}{done?<p role="status">{preview?.kind==='world'?'世界语义已确认，可在世界出口封存。':'规则已导入当前作品，可在跑团制作中选择。'} <Link to={preview?.kind==='world'?`/world/worlds?project=${request.scope.projectId}`:`/ttrpg?project=${request.scope.projectId}&work=${request.scope.workId}`}>进入所属产品</Link></p>:<button disabled={busy||!preview} onClick={()=>void confirmImport()}>{busy?'正在确认…':'确认导入这些内容'}</button>}</section>
+}

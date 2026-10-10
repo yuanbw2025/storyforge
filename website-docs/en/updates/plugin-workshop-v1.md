@@ -2,8 +2,10 @@
 
 > Reviewed: 2026-10-08 · Development commit `53c276f3` · API 1 / SDK 0.1 (developer preview).
 
-::: warning Development-branch trial, not live
-At this review, [PR #113](https://github.com/yuanbw2025/storyforge/pull/113) remains an unmerged draft. A follow-up check at 16:14 (UTC+8) found that [remote CI](https://github.com/yuanbw2025/storyforge/actions/runs/37734889246) failed: 229 browser tests passed, 1 failed, and 2 were skipped. The complete text-open-world journey did not reach the expected combat result, including on retry. The cause still needs investigation; this result alone does not establish that plugins caused it. This page describes that branch and its local validation, not functionality already available in main, a tagged release, or the online application. “1.0” identifies the plugin and Workshop trial, not a new official StoryForge version.
+::: warning Historical acceptance snapshot from 2026-10-08
+This page preserves the 2026-10-08 review. See the [Workshop guides](/en/workshop/) for current instructions and the PR for latest delivery and check status.
+
+At that review, [PR #113](https://github.com/yuanbw2025/storyforge/pull/113) remained an unmerged draft. A follow-up check at 16:14 (UTC+8) found that [remote CI](https://github.com/yuanbw2025/storyforge/actions/runs/37734889246) failed: 229 browser tests passed, 1 failed, and 2 were skipped. The complete text-open-world journey did not reach the expected combat result, including on retry. The cause still needs investigation; this result alone does not establish that plugins caused it. This page describes that branch and its local validation, not functionality already available in main, a tagged release, or the online application. “1.0” identifies the plugin and Workshop trial, not a new official StoryForge version.
 :::
 
 Plugins let community authors deliver interfaces, processing logic, owned data, AI tasks, and external tools as independent packages, enabled per work or world. Workshop provides discovery, search, file installation, trust confirmation, enabling, disabling, uninstalling, and version management. This reduces the need to absorb every community feature into the core project. This iteration uses local management and static HTTPS catalogs, without an online authoring server.

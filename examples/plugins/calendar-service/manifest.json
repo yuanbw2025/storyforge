@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "api": 1,
+  "id": "storyforge.calendar",
+  "version": "1.0.0",
+  "name": "历法服务",
+  "description": "供其他插件组合使用的历法格式服务；没有独立面板。",
+  "author": "StoryForge",
+  "license": "MIT",
+  "kind": "feature",
+  "owner": "world",
+  "dependencies": {},
+  "permissions": [],
+  "networkOrigins": [],
+  "views": [],
+  "schemas": {},
+  "provides": [
+    "storyforge.calendar.format"
+  ],
+  "consumes": [],
+  "entry": "main.js"
+}

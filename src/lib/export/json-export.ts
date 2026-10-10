@@ -1,3 +1,4 @@
+import type { ExtensionProfile, ExtensionRecord, ExtensionContract, ExtensionOperation } from '../extensions/types'
 import type { AvgAuthoringDraftV1, AvgDraftMediaV1 } from '../avg/authoring-contract'
 /**
  * 项目 JSON 导出/导入 · 对外门面
@@ -111,7 +112,13 @@ type HomeWorldGroupExportRef = {
  *
  * 只表示当前完整备份协议；旧协议不会进入当前导入器。
  */
+type PortableExtension<T> = Omit<T, 'id' | 'projectId' | 'worldId' | 'workId' | 'profileId' | 'chapterId' | 'historyEventId'> & { _exportId: number; _worldExportId: number | null; _workExportId: number | null; _profileExportId?: number; _chapterExportId?: number | null; _historyEventExportId?: number | null }
+
 export interface ProjectExportData {
+  extensionProfiles: PortableExtension<ExtensionProfile>[]
+  extensionRecords: PortableExtension<ExtensionRecord>[]
+  extensionContracts: PortableExtension<ExtensionContract>[]
+  extensionOperations: PortableExtension<ExtensionOperation>[]
   version: number
   exportedAt: number
   ownership: {

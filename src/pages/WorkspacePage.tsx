@@ -1,3 +1,4 @@
+import ExtensionSurface from '../components/extensions/ExtensionOutlet'
 import { canonicalPowerModule } from '../lib/workspace/module-alias'
 import ShortNovelHistory from '../components/short-novel/ShortNovelHistory'
 import LongformCompletion from '../components/longform/LongformCompletion'
@@ -694,7 +695,9 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
             {isLongform && longSection === 'versions' && <nav className="lf-subtabs" aria-label="版本与导出">{([['version-history', '版本历史'], ['export', '导出与备份']] as const).map(([id, label]) => <button key={id} aria-current={activeModule === id ? 'page' : undefined} onClick={() => selectModule(id)}>{label}</button>)}</nav>}
             {isLongform && longSection === 'versions' && <><LongformCompletion project={project}/><ShortNovelHistory project={project}/></>}
             {isLongform && longSection === 'settings' && <nav className="lf-subtabs" aria-label="通用设置">{([['settings', '通用设置'], ['usage-stats', '用量统计']] as const).map(([id, label]) => <button key={id} aria-current={activeModule === id ? 'page' : undefined} onClick={() => selectModule(id)}>{label}</button>)}</nav>}
+            <ExtensionSurface projectId={project.id!} owner={activeModule === 'history' || project.workspacePurpose === 'world-engine' && activeModule !== 'story-timeline' ? 'world' : 'work'} workId={activeWork?.id} target={activeModule}>
             {isLongform && ['derive', 'community'].includes(longSection) ? <LongformWorlds project={project} community={longSection === 'community'} onOpen={id => navigate(`/workspace/${id}`)} /> : isLongform && longMode === 'agent' ? <ChatCopilotPanel embedded project={project} worldGroupId={copilotWorldGroupId} worldName={copilotWorldName} onClose={() => changeLongMode('steps')} onOpenModule={(module, chapter) => afterPendingEdits(() => navigate(`/workspace/${project.id}?module=${module}${chapter ? `&chapter=${chapter}` : ''}`), '编辑保存失败')} /> : renderMainPanel()}
+            </ExtensionSurface>
           </Suspense>
         </div>
       </main>

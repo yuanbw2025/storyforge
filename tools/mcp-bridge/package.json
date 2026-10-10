@@ -1,0 +1,1 @@
+{"name":"@storyforge/mcp-bridge","version":"0.1.0","private":true,"type":"module","engines":{"node":">=22"},"dependencies":{"@modelcontextprotocol/client":"2.3.1"}}

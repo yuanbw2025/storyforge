@@ -5,6 +5,11 @@ import {
 } from './schema'
 
 export const REQUIRED_TABLES = [
+  'extensionPackages',
+  'extensionProfiles',
+  'extensionRecords',
+  'extensionContracts',
+  'extensionOperations',
   'adaptationCausalEdges',
   'adaptationDecisions',
   'adaptationProjects',

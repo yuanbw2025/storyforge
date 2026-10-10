@@ -1,0 +1,74 @@
+{
+  "format": 1,
+  "api": 1,
+  "id": "storyforge.idea-cards",
+  "version": "1.0.0",
+  "name": "灵感卡片 AI",
+  "description": "独立声明自己的生成任务和数据格式。由熔炉保存候选、确认写入和历史回执，插件无需接触模型密钥。",
+  "author": "StoryForge",
+  "license": "MIT",
+  "kind": "feature",
+  "owner": "work",
+  "entry": "main.js",
+  "dependencies": {},
+  "permissions": [
+    "data",
+    "ai.tasks"
+  ],
+  "networkOrigins": [],
+  "views": [
+    {
+      "id": "ideas",
+      "title": "灵感卡片",
+      "target": "workbench",
+      "mode": "add"
+    }
+  ],
+  "schemas": {
+    "idea": {
+      "version": 1,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "灵感标题"
+          },
+          "premise": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "人物与起点"
+          },
+          "turn": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "人物选择带来的转折"
+          }
+        },
+        "required": [
+          "title",
+          "premise",
+          "turn"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "provides": [],
+  "consumes": [],
+  "aiTasks": [
+    {
+      "id": "brainstorm",
+      "title": "构思灵感卡片",
+      "instruction": "给作者一个具体、可写的情节灵感。title 是标题，premise 是起点和人物困境，turn 是由人物主动选择引起的转折。不要把建议当作已发生的故事。",
+      "outputSchema": "idea",
+      "contextSources": [
+        "storyCore"
+      ]
+    }
+  ]
+}

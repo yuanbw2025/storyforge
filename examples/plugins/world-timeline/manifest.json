@@ -1,0 +1,53 @@
+{
+  "format": 1,
+  "api": 1,
+  "id": "storyforge.world-timeline",
+  "version": "1.0.0",
+  "name": "世界历史工作台",
+  "description": "以可搜索的卡片年表替换历史面板，复用正式历史条目，并组合历法服务与独立设置。",
+  "author": "StoryForge",
+  "license": "MIT",
+  "kind": "feature",
+  "owner": "world",
+  "dependencies": {
+    "storyforge.calendar": "1.0.0"
+  },
+  "permissions": [
+    "history.read",
+    "history.write",
+    "data",
+    "ai.history"
+  ],
+  "networkOrigins": [],
+  "views": [
+    {
+      "id": "timeline",
+      "title": "世界历史工作台",
+      "target": "history",
+      "mode": "replace"
+    }
+  ],
+  "schemas": {
+    "settings": {
+      "version": 1,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 20000
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "provides": [],
+  "consumes": [
+    "storyforge.calendar.format"
+  ],
+  "entry": "main.js"
+}

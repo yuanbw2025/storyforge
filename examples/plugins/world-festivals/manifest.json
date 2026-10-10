@@ -1,0 +1,6 @@
+{
+  "format":1,"api":1,"id":"storyforge.world-festivals","version":"1.0.0","name":"世界节庆簿","description":"独立编辑节庆，将明确选择的文化设定确认到世界词条，再通过现有世界出口封存。界面布局不进入世界。","author":"StoryForge","license":"MIT","kind":"feature","owner":"world","entry":"main.js","dependencies":{},"permissions":["data","world.publish"],"networkOrigins":[],"views":[{"id":"festivals","title":"世界节庆簿","target":"workbench","mode":"add"}],"provides":[],"consumes":[],
+  "schemas":{"festival":{"version":1,"schema":{"type":"object","properties":{"name":{"type":"string","maxLength":200},"summary":{"type":"string","maxLength":2000},"customs":{"type":"string","maxLength":20000},"season":{"type":"string","maxLength":100},"layout":{"type":"string","maxLength":100}},"required":["name","summary","customs","season","layout"],"additionalProperties":false}}},
+  "worldSemantics":[{"id":"culture","title":"节庆文化","schemaId":"festival","domain":"humanity","titleField":"name","summaryField":"summary","descriptionField":"customs","fields":["season"]}],
+  "content":[{"key":"lantern-day","schemaId":"festival","payload":{"name":"归灯节","summary":"为尚未归航的人点亮一盏灯。","customs":"每年第一场海雾散去时，居民把刻着名字的灯放在岸边。没有亲人等待的船员也会获得一盏公共灯。","season":"春季海雾散去后","layout":"cards"}}]
+}

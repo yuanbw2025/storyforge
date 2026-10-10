@@ -1,0 +1,46 @@
+{
+  "format": 1,
+  "api": 1,
+  "id": "storyforge.writing-notes",
+  "version": "1.0.0",
+  "name": "创作便笺",
+  "description": "为每部作品保存独立便笺，验证插件自己的界面与数据；停用卸载后可重新安装找回。",
+  "author": "StoryForge",
+  "license": "MIT",
+  "kind": "feature",
+  "owner": "work",
+  "dependencies": {},
+  "permissions": [
+    "data"
+  ],
+  "networkOrigins": [],
+  "views": [
+    {
+      "id": "notes",
+      "title": "创作便笺",
+      "target": "workbench",
+      "mode": "add"
+    }
+  ],
+  "schemas": {
+    "note": {
+      "version": 1,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 20000
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "provides": [],
+  "consumes": [],
+  "entry": "main.js"
+}

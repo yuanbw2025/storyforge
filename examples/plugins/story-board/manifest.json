@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "api": 1,
+  "id": "storyforge.story-board",
+  "version": "1.0.0",
+  "name": "故事进程看板",
+  "description": "独立打包的故事事件看板；使用作品的正式时间线，保留 AI 提取与作者确认入口。",
+  "author": "StoryForge",
+  "license": "MIT",
+  "kind": "feature",
+  "owner": "work",
+  "dependencies": {},
+  "permissions": [
+    "history.read",
+    "history.write",
+    "ai.timeline"
+  ],
+  "networkOrigins": [],
+  "views": [
+    {
+      "id": "board",
+      "title": "故事进程看板",
+      "target": "story-timeline",
+      "mode": "replace"
+    }
+  ],
+  "schemas": {},
+  "provides": [],
+  "consumes": [],
+  "entry": "main.js"
+}

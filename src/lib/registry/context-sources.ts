@@ -4,6 +4,7 @@
  * 所有正式读取均由 assembleContext() 或 Context Gateway 解析这份注册；
  * 组件、Prompt 和产品适配器不得自行维护来源清单。
  */
+import Dexie from 'dexie'
 import { db } from '../db/schema'
 import { isAdventureActionPlayerVisible } from '../adventure/player-experience'
 import { resolveCanonicalChapterSequence } from '../ai/chapter-memory/canonical-chapter-sequence'
@@ -1817,6 +1818,9 @@ async function readCharacterPassages(projectId: number, name?: string, worldGrou
 }
 
 export const CONTEXT_SOURCES: ContextSource[] = [
+  { key: 'extensionRecords', label: '插件冻结任务与自有记录', scope: 'project', layer: 'L0', ownerFrom: 'work', budgetTokens: 24000, protectedFromTrim: true, atomic: true,
+    enabled: input => Boolean(input.extensionSnapshot),
+    read: async input => { const loading = import('../extensions/ai-registry'); const module = await (Dexie.currentTransaction ? Dexie.waitFor(loading) : loading); return module.readExtensionContext(input) } },
   {
     key: 'shortNovel.production',
     label: '短篇已确认生产合同',

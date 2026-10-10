@@ -287,8 +287,11 @@ test('制作页真实下载的文字冒险包可在全新 Work 上传、存档�
 
   await restoredPlayer.getByRole('button', { name: '存档', exact: true }).first().click()
   const restoredSaves = page.getByRole('region', { name: '存档与时间线' })
+  const beforeBranchUrl = page.url()
   await restoredSaves.getByRole('button', { name: /终局抉择前.*从这里分支/ }).click()
-  await expect(restoredSaves).toContainText('终局抉择前')
+  // The checkpoint was already visible before clicking. Wait for the durable fork
+  // and the owning route transition before reading the new child session.
+  await expect(page).not.toHaveURL(beforeBranchUrl)
   await restoredSaves.getByRole('button', { name: '关闭面板' }).click()
 
   const recovered = await page.evaluate(async ({ checkpointId, parentSessionId, throughSequence }) => {

@@ -356,6 +356,8 @@ export interface TableSpec<T = any> {
   refs?: RefSpec[]
   /** 是否纳入 JSON 备份导出 */
   exportable: boolean
+  /** First portable backup version containing this table; older imports use an explicit converter. */
+  introducedBackupVersion?: number
   /** 导出时需要的 ID 重映射 */
   exportRemap?: ExportRemapField[]
   /**
@@ -432,6 +434,7 @@ export interface CollectionAdoptionSpec {
   identity: 'id' | 'name' | CompositeIdentity
   /** 只允许通过 recordId 定点更新，禁止 AI 新增集合行。 */
   recordOnly?: boolean
+  writePolicy?: 'extension-record-v1'
   duplicatePolicy: 'skip' | 'update' | 'merge' | 'error'
   /** 必填字段;缺失则跳过该条 */
   required: string[]
@@ -463,6 +466,7 @@ export interface AdoptionExtensionSpec {
 }
 
 export interface AdoptInput {
+  extensionSnapshot?: import('../extensions/types').ExtensionRegistrySnapshot
   projectId: number
   /** Explicit logical read/write boundary. */
   scope?: WorkspaceScope
@@ -547,6 +551,7 @@ export type ContextSourceTransformer = (
 ) => Promise<ContextSourceTransformResult | undefined>
 
 export interface AssembleContextInput {
+  extensionSnapshot?: import('../extensions/types').ExtensionRegistrySnapshot
   projectId: number
   /** Explicit logical read boundary; callers should always provide current WorkspaceScope. */
   scope?: WorkspaceScope

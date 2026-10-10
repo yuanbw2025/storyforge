@@ -1,0 +1,155 @@
+{
+  "format": 1,
+  "name": "StoryForge 官方参考插件",
+  "entries": [
+    {
+      "id": "storyforge.calendar",
+      "version": "1.0.0",
+      "name": "历法服务",
+      "description": "供其他插件组合使用的历法格式服务；没有独立面板。",
+      "author": "StoryForge",
+      "kind": "feature",
+      "owner": "world",
+      "url": "packages/storyforge.calendar-1.0.0.sfplugin",
+      "digest": "b1c593204d61536f42ab15f4a6f5c21124de3847bc67914856fcf555dc74cfc5",
+      "dependencies": {}
+    },
+    {
+      "id": "storyforge.harbor-rules",
+      "version": "1.0.0",
+      "name": "雾港跑团规则",
+      "description": "独立规则包示例。导入跑团规则库后由现有确定性规则引擎执行，正式发布冻结规则，升级插件不更换旧存档规则。",
+      "author": "StoryForge",
+      "kind": "feature",
+      "owner": "work",
+      "url": "packages/storyforge.harbor-rules-1.0.0.sfplugin",
+      "digest": "4863c0bc14f8d158902629b2f298fef61007ea889ce09e8ca12c7f9d5ebae885",
+      "dependencies": {}
+    },
+    {
+      "id": "storyforge.idea-cards",
+      "version": "1.0.0",
+      "name": "灵感卡片 AI",
+      "description": "独立声明自己的生成任务和数据格式。由熔炉保存候选、确认写入和历史回执，插件无需接触模型密钥。",
+      "author": "StoryForge",
+      "kind": "feature",
+      "owner": "work",
+      "url": "packages/storyforge.idea-cards-1.0.0.sfplugin",
+      "digest": "cc486fffcf8b714f4315eea9a859512d58cf6ce4d9801984810b4fe919aa953e",
+      "dependencies": {}
+    },
+    {
+      "id": "storyforge.plot-flow",
+      "version": "1.0.0",
+      "name": "冲突驱动的情节流程",
+      "description": "把故事冲突与主线生成组合成一份可编辑流程，复用正式节点、候选确认和运行记录。",
+      "author": "StoryForge",
+      "kind": "feature",
+      "owner": "work",
+      "url": "packages/storyforge.plot-flow-1.0.0.sfplugin",
+      "digest": "d862984aac3b1488b5e1f4d7649134715a6a98c94ba910ea41afd75475833ee7",
+      "dependencies": {}
+    },
+    {
+      "id": "storyforge.prompt-cards",
+      "version": "1.0.0",
+      "name": "写作练习卡",
+      "description": "纯内容包：两张原创写作练习卡，不包含可执行代码。",
+      "author": "StoryForge",
+      "kind": "content",
+      "owner": "work",
+      "url": "packages/storyforge.prompt-cards-1.0.0.sfplugin",
+      "digest": "59b4a000d651020a9e97f0332569b793b21e5a15dfed5bdf02430994aacee8ba",
+      "dependencies": {}
+    },
+    {
+      "id": "storyforge.research-desk",
+      "version": "1.0.0",
+      "name": "资料检索台",
+      "description": "通过公开百科接口查询资料；选中的链接可保存到当前作品自己的插件记录中。",
+      "author": "StoryForge",
+      "kind": "feature",
+      "owner": "work",
+      "url": "packages/storyforge.research-desk-1.0.0.sfplugin",
+      "digest": "51f379fdccfb7bf7098f36d51b1ac4a95ecf5def90cff70a2f16ee4748638796",
+      "dependencies": {}
+    },
+    {
+      "id": "storyforge.story-board",
+      "version": "1.0.0",
+      "name": "故事进程看板",
+      "description": "独立打包的故事事件看板；使用作品的正式时间线，保留 AI 提取与作者确认入口。",
+      "author": "StoryForge",
+      "kind": "feature",
+      "owner": "work",
+      "url": "packages/storyforge.story-board-1.0.0.sfplugin",
+      "digest": "51f438670a44df73c170b1d7dba0cde3765c974c814b0ff4501f59113a8460b4",
+      "dependencies": {}
+    },
+    {
+      "id": "storyforge.tool-desk",
+      "version": "1.0.0",
+      "name": "MCP 工具台",
+      "description": "通过标准 MCP 连接本机工具。每次执行由作者确认，长任务与结果留在熔炉记录中。需要另行配置本机桥。",
+      "author": "StoryForge",
+      "kind": "feature",
+      "owner": "work",
+      "url": "packages/storyforge.tool-desk-1.0.0.sfplugin",
+      "digest": "103a2aea97157c30183b5e94f6dbff3b0134b4f3026f34b9c585172789367a52",
+      "dependencies": {}
+    },
+    {
+      "id": "storyforge.world-festivals",
+      "version": "1.0.0",
+      "name": "世界节庆簿",
+      "description": "独立编辑节庆，将明确选择的文化设定确认到世界词条，再通过现有世界出口封存。界面布局不进入世界。",
+      "author": "StoryForge",
+      "kind": "feature",
+      "owner": "world",
+      "url": "packages/storyforge.world-festivals-1.0.0.sfplugin",
+      "digest": "2e2348eedd50e8cc6ecd17d3d5f5e6e2bffb33af1a64aeedb2eae28419c56315",
+      "dependencies": {}
+    },
+    {
+      "id": "storyforge.world-timeline",
+      "version": "1.0.0",
+      "name": "世界历史工作台",
+      "description": "以可搜索的卡片年表替换历史面板，复用正式历史条目，并组合历法服务与独立设置。",
+      "author": "StoryForge",
+      "kind": "feature",
+      "owner": "world",
+      "url": "packages/storyforge.world-timeline-1.0.0.sfplugin",
+      "digest": "d7d061c53796d737e11322646bb1003db8d9382c0418d8a1415bd168f44187cb",
+      "dependencies": {
+        "storyforge.calendar": "1.0.0"
+      }
+    },
+    {
+      "id": "storyforge.writer-kit",
+      "version": "1.0.0",
+      "name": "写作起步组合包",
+      "description": "一次选择组合安装创作便笺与写作练习卡，依赖使用准确版本。",
+      "author": "StoryForge",
+      "kind": "bundle",
+      "owner": "work",
+      "url": "packages/storyforge.writer-kit-1.0.0.sfplugin",
+      "digest": "1ee08f05c40283e2a1be326280169109d21cb52fc18ad2686fd7032d3821fffa",
+      "dependencies": {
+        "storyforge.writing-notes": "1.0.0",
+        "storyforge.prompt-cards": "1.0.0"
+      }
+    },
+    {
+      "id": "storyforge.writing-notes",
+      "version": "1.0.0",
+      "name": "创作便笺",
+      "description": "为每部作品保存独立便笺，验证插件自己的界面与数据；停用卸载后可重新安装找回。",
+      "author": "StoryForge",
+      "kind": "feature",
+      "owner": "work",
+      "url": "packages/storyforge.writing-notes-1.0.0.sfplugin",
+      "digest": "2d479fbf79be0fc75a6034cdc591df67b3260da1f15a3595de266b66bb12946c",
+      "dependencies": {}
+    }
+  ]
+}

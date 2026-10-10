@@ -12,6 +12,8 @@ export async function saveTtrpgRulePackV1(input: {
   scope: WorkspaceScope
   rulePack: RulePackV1 | unknown
   status?: TtrpgRulePackRecordV1['status']
+  /** Immutable package imports cannot overwrite another implementation at the same identity. */
+  immutable?: boolean
 }): Promise<TtrpgRulePackRecordV1> {
   const scope = await resolveScope({ scope: input.scope })
   const rulePack = parseRulePackV1(input.rulePack)
@@ -29,6 +31,7 @@ export async function saveTtrpgRulePackV1(input: {
       .equals([scope.workId, rulePack.ruleSystemId, rulePack.ruleSystemVersion])
       .first()
     if (existing) {
+      if (input.immutable && existing.contentHash !== contentHash) throw new Error('[ttrpg-rule-pack] 相同规则版本已有不同内容，拒绝替换')
       const next = { ...existing, title: rulePack.title, status, rulePackJson, contentHash, updatedAt: now }
       await db.ttrpgRulePacks.put(next)
       return next

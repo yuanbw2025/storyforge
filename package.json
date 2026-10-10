@@ -23,7 +23,7 @@
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "check:dependencies": "npm audit --omit=dev --audit-level=moderate",
     "check:release-metadata": "node scripts/check-release-metadata.mjs",
-    "check:docs": "node scripts/check-document-authority.mjs && node scripts/check-independent-creation-plans.mjs",
+    "check:docs": "node scripts/check-document-authority.mjs && node scripts/check-independent-creation-plans.mjs && npm run plugins:check-kit",
     "check:roadmap": "node scripts/check-roadmap.mjs",
     "check:agent-context": "node scripts/check-agent-context.mjs",
     "check:agent-freshness": "node scripts/check-agent-freshness.mjs",
@@ -59,9 +59,15 @@
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "ci": "npm run check:required-tables && npm run check:ai-manual && npm run check:ai-entry-registry && npm run check:architecture && npm run check:text-open-world-player-paths && npm run check:text-open-world-invariants && npm run check:text-open-world-stress && npm run check:text-open-world-performance && npm run check:text-open-world-calibration && npm run check:text-open-world-human-playtest && npm run check:text-open-world-release-update && npm run check:text-open-world-lifecycle && npm run check:text-open-world-retirement && npm run check:source-reachability && npm run check:docs && npm run check:roadmap && npm run check:agent-context && npm run check:agent-freshness && npm run check:canon-coverage && npm run check:project-metrics && npm run check:dependencies && npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build && npm run check:bundle-size",
-    "ci:e2e": "PLAYWRIGHT_FROZEN_WORKSPACE=1 npm run test:e2e"
+    "ci:e2e": "PLAYWRIGHT_FROZEN_WORKSPACE=1 npm run test:e2e",
+    "plugins:build-examples": "node tools/plugin-sdk/build-examples.mjs",
+    "plugins:check": "node tools/plugin-sdk/cli.mjs check",
+    "plugins:build-kit": "node tools/plugin-sdk/build-developer-kit.mjs",
+    "plugins:check-kit": "node tools/plugin-sdk/build-developer-kit.mjs --check && node --test tools/plugin-sdk/catalog-entries.test.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/ext-tasks": "0.2.2",
     "@tiptap/core": "3.31.0",
     "@tiptap/extension-placeholder": "3.31.0",
     "@tiptap/extension-text-style": "3.31.0",

@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "api": 1,
+  "id": "storyforge.writer-kit",
+  "version": "1.0.0",
+  "name": "写作起步组合包",
+  "description": "一次选择组合安装创作便笺与写作练习卡，依赖使用准确版本。",
+  "author": "StoryForge",
+  "license": "MIT",
+  "kind": "bundle",
+  "owner": "work",
+  "dependencies": {
+    "storyforge.writing-notes": "1.0.0",
+    "storyforge.prompt-cards": "1.0.0"
+  },
+  "permissions": [],
+  "networkOrigins": [],
+  "views": [],
+  "schemas": {},
+  "provides": [],
+  "consumes": []
+}

@@ -1,3 +1,4 @@
+import { cascadeRegisteredReferences } from '../workspace/lifecycle'
 import { db } from '../db/schema'
 import { detachCultivationProgressForDeletedChapters } from '../cultivation/progress-lifecycle'
 import { detachTemporalFactsForDeletedChapters } from '../fact-ledger/lifecycle'
@@ -16,6 +17,7 @@ export async function cascadeDeleteChapterRecords(ids: readonly number[]): Promi
     await detachKnowledgeForDeletedChapters([...ids])
     await detachStorylineForDeletedChapters([...ids])
     await detachCultivationProgressForDeletedChapters([...ids])
+    for (const id of ids) await cascadeRegisteredReferences('chapters', id)
     await db.chapters.bulkDelete([...ids])
     const beatKeys = (await db.emotionBeatCards
       .where('chapterId').anyOf([...ids]).primaryKeys()) as number[]

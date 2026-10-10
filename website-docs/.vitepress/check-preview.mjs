@@ -21,7 +21,7 @@ const watch = page => {
     if (response.status() >= 400) errors.push('HTTP ' + response.status() + ' ' + response.url())
   })
 }
-const sourcePaths = ['/', '/getting-started/', '/features/longform/', '/features/comic', '/features/interactive/ttrpg', '/guides/backup-restore', '/prompts/', '/prompts/b/b-9', '/prompts/c/c-01', '/prompts/d/d-08', '/updates/changelog', '/feedback/', '/feedback/bug', '/feedback/feature', '/feedback/documentation']
+const sourcePaths = ['/workshop/', '/workshop/install', '/workshop/develop', '/workshop/ai', '/workshop/publish', '/workshop/troubleshooting', '/', '/getting-started/', '/features/longform/', '/features/comic', '/features/interactive/ttrpg', '/guides/backup-restore', '/prompts/', '/prompts/b/b-9', '/prompts/c/c-01', '/prompts/d/d-08', '/updates/changelog', '/feedback/', '/feedback/bug', '/feedback/feature', '/feedback/documentation']
 const paths = [...sourcePaths, ...sourcePaths.map(path => '/en' + path)]
 try {
   for (const width of [1440, 1024, 390]) {

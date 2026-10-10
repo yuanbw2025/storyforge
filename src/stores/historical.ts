@@ -1,3 +1,5 @@
+import { cascadeRegisteredReferences } from '../lib/workspace/lifecycle'
+import { transactionTablesForReferenceCascade } from '../lib/registry/lifecycle'
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { HistoricalTimelineEvent, HistoricalKeyword } from '../lib/types'
@@ -20,7 +22,7 @@ interface HistoricalStore {
   /** 加载某个项目的所有历史时间线事件（按数字化年份 year 升序排序） */
   loadEvents: (scope: WorkspaceScopeLike) => Promise<void>
   /** 添加历史事件 */
-  addEvent: (event: Omit<HistoricalTimelineEvent, 'createdAt' | 'updatedAt'>) => Promise<number>
+  addEvent: (event: Omit<HistoricalTimelineEvent, 'createdAt' | 'updatedAt'>, scope?: WorkspaceScopeLike) => Promise<number>
   /** 更新历史事件 */
   updateEvent: (id: number, patch: Partial<HistoricalTimelineEvent>) => Promise<void>
   /** 删除历史事件 */
@@ -60,17 +62,17 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
     }
   },
 
-  addEvent: async (event) => {
+  addEvent: async (event, scopeInput) => {
     const now = Date.now()
     const row = stampNewRecord(
-      await resolveScopeLike(event.projectId),
+      await resolveScopeLike(scopeInput ?? event.projectId),
       'historicalTimelineEvents',
       { ...event, createdAt: now, updatedAt: now },
       { owner: 'world' },
     ) as HistoricalTimelineEvent
     const id = await db.historicalTimelineEvents.add(row) as number
     // 刷新内存
-    await get().loadEvents(event.projectId)
+    await get().loadEvents(scopeInput ?? event.projectId)
     return id
   },
 
@@ -100,7 +102,10 @@ export const useHistoricalStore = create<HistoricalStore>((set, get) => ({
     const scope = await resolveScopeLike(existingRecord.projectId)
     const event = await db.historicalTimelineEvents.get(id)
     if (!event || !await assertRecordInScope(scope, 'historicalTimelineEvents', event, { owner: 'world' })) return
-    await db.historicalTimelineEvents.delete(id)
+    await db.transaction('rw', transactionTablesForReferenceCascade('historicalTimelineEvents'), async () => {
+      await cascadeRegisteredReferences('historicalTimelineEvents', id)
+      await db.historicalTimelineEvents.delete(id)
+    })
     await get().loadEvents(event.projectId)
   },
 

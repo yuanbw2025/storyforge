@@ -2,9 +2,13 @@
 
 本页按用户可感知的变化整理。**main 的功能更新不等于已经发布新版本**：当前 package 版本仍为 3.9.1，正式 Release 保持其发布时内容。在线部署可能有时差，见[版本与兼容说明](/updates/compatibility)。
 
+## 开发预览 插件与创意工坊
+
+[PR #113](https://github.com/yuanbw2025/storyforge/pull/113) 提供插件体验版、安装与开发教程、AI 开发资料包和发布流程。先看[工坊指南](/workshop/)与[开发状态](/updates/development-status)；是否合并及部署以 [PR #113](https://github.com/yuanbw2025/storyforge/pull/113) 为准，入口仍需显式开启开发预览，不代表发布新的正式版本。
+
 ## 2026-10-08 · 知识库新增开发简报
 
-新增[插件与创意工坊 1.0 体验版简报](/updates/plugin-workshop-v1)，整理试用方法、项目改动、数据保护、验收结果和限制。对应 PR #113 尚未合并，本条仅表示知识库内容更新，不计入下方主干已交付功能。
+新增[插件与创意工坊 1.0 体验版简报](/updates/plugin-workshop-v1)，整理试用方法、项目改动、数据保护、验收结果和限制。在 2026-10-08 核对时 PR #113 尚未合并，本条保留当时的知识库更新记录；当前状态见上方工坊指南与 PR。
 
 ## Unreleased / 当前主干
 

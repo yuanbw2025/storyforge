@@ -1,0 +1,55 @@
+{
+  "format": 1,
+  "api": 1,
+  "id": "storyforge.plot-flow",
+  "version": "1.0.0",
+  "name": "冲突驱动的情节流程",
+  "description": "把故事冲突与主线生成组合成一份可编辑流程，复用正式节点、候选确认和运行记录。",
+  "author": "StoryForge",
+  "license": "MIT",
+  "kind": "feature",
+  "owner": "work",
+  "dependencies": {},
+  "permissions": [
+    "flows"
+  ],
+  "networkOrigins": [],
+  "views": [
+    {
+      "id": "flow",
+      "title": "情节生成流程",
+      "target": "workbench",
+      "mode": "add"
+    }
+  ],
+  "schemas": {},
+  "provides": [],
+  "consumes": [],
+  "entry": "main.js",
+  "flows": [
+    {
+      "id": "conflict-to-plot",
+      "name": "从冲突到主线",
+      "nodes": [
+        {
+          "id": "conflict",
+          "templateId": "story.conflict",
+          "config": {}
+        },
+        {
+          "id": "plot",
+          "templateId": "story.main-plot",
+          "config": {}
+        }
+      ],
+      "edges": [
+        {
+          "source": "conflict",
+          "target": "plot",
+          "sourcePort": "candidate",
+          "targetPort": "context"
+        }
+      ]
+    }
+  ]
+}

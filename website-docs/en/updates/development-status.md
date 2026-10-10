@@ -8,6 +8,10 @@ This audit covers all 19 local branches (including this documentation-maintenanc
 
 `feat/longform-node-experience-20261008` is validating author requirements, durable candidate edits and rejection, local execution, fixed-character adoption, interrupted-run recovery, and narrow-screen views in an independent worktree. The branch has not merged into main and does not establish an online update. Isolated browser tests cover cross-mode operations, invalid connections, and backup/deletion paths; complete production acceptance of every official longform template remains pending. See [node authoring](/en/features/nodes).
 
+## October 9 targeted update Plugins and Workshop
+
+Plugin preview 1.0 is delivered through PR #113; the base implementation is [53c276f3](https://github.com/yuanbw2025/storyforge/commit/53c276f3). See [PR #113](https://github.com/yuanbw2025/storyforge/pull/113) for delivery and review. New [Workshop guides](/en/workshop/) cover capabilities, installation, development, an AI prompt and Skill kit, publishing, maintenance and recovery, with in-app help/download entry points. Use the latest PR checks and merge state to assess delivery; verify website deployment separately. The branch snapshot below preserves the 2026-10-08 review, so its unmerged status and old CI result do not describe the current state.
+
 ## Now in main
 
 - [PR #107](https://github.com/yuanbw2025/storyforge/pull/107): game-production responsibilities and lifecycle documentation, plus review protection until longform candidates are saved.

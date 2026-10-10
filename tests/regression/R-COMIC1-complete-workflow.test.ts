@@ -216,7 +216,7 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
     expect(svg).not.toContain('分镜占位 · page-1-panel-2')
 
     const backup = await exportProjectJSON(item.scope.projectId)
-    expect(backup.version).toBe(14); expect(backup.comicMediaAssets?.[0].rights.declaration).toContain('测试作者')
+    expect(backup.version).toBe(15); expect(backup.comicMediaAssets?.[0].rights.declaration).toContain('测试作者')
     const cyclic = structuredClone(backup)
     const firstAsset = cyclic.comicMediaAssets![0]
     firstAsset.referenceAssetKeys = ['cycle-copy']

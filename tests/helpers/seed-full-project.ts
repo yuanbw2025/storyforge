@@ -1503,6 +1503,20 @@ export async function seedFullProject() {
   await db.projects.put(restoredProject)
   await stampCurrentFixtureResourceUidsV1(projectId)
 
+  // Plugins travel as inert contracts and data, never installed executable bytes.
+  const pluginWork = await db.works.get(workId)
+  const extensionOwner = { projectId, worldId: null, workId, ownerKey: `work:${pluginWork!.code}` }
+  const pluginManifest = {
+    format: 1 as const, api: 1 as const, id: 'fixture.notes', version: '1.0.0', name: 'Fixture Notes', description: 'Portable fixture', author: 'StoryForge', license: 'MIT', kind: 'content' as const, owner: 'work' as const,
+    dependencies: {}, permissions: [], networkOrigins: [], views: [], provides: [], consumes: [], schemas: { note: {version:1,schema:{type:'object' as const,properties:{text:{type:'string' as const}},required:['text'],additionalProperties:false}} },
+  }
+  const extensionDigest = await hashCanonicalValue(pluginManifest)
+  const extensionProfile = await db.extensionProfiles.add({ ...extensionOwner, pluginId:pluginManifest.id,version:'1.0.0',digest:extensionDigest,enabled:false,generation:1,revision:1,updatedAt:now }) as number
+  await db.extensionContracts.add({ ...extensionOwner,profileId:extensionProfile,digest:extensionDigest,manifest:pluginManifest,createdAt:now })
+  await db.extensionRecords.add({ ...extensionOwner,profileId:extensionProfile,pluginId:pluginManifest.id,key:'main',schemaId:'note',schemaVersion:1,generation:1,revision:1,payload:{text:'跨备份保留的便笺'},chapterId:chapter,historyEventId:null,updatedAt:now })
+  await db.extensionOperations.add({ ...extensionOwner,profileId:extensionProfile,kind:'enable',fromGeneration:1,toGeneration:1,fromDigest:extensionDigest,toDigest:extensionDigest,detail:'fixture',createdAt:now })
+
+
   return {
     projectId, wgA, wgB, char1, char2, vol, chapNode, chapter, temporalFact, ref1,
     cat, subCat, rootWorld, mirrorWorld, locParent, cultivationSystem, codexEntry,

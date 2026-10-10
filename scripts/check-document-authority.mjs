@@ -1,6 +1,7 @@
 /* global console, process */
 
 import fs from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -72,6 +73,8 @@ const activeDocs = [
   'docs/products/TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md',
   'docs/products/TEXT-OPEN-WORLD-SALT-RIDGE-BRIEF.md',
   'docs/roadmap/README.md',
+  'docs/roadmap/PLUGIN-WORKSHOP-V1.md',
+  'docs/guides/PLUGIN-DEVELOPMENT.md',
   'docs/roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md',
   'docs/roadmap/TEXT-OPEN-WORLD-WORK-PACKAGE-CARDS.md',
   'docs/roadmap/CAPABILITY-BASELINE.md',
@@ -151,15 +154,8 @@ for (const file of publicReadmes) {
   }
 }
 
-const walk = directory => {
-  const result = []
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    const absolute = path.join(directory, entry.name)
-    if (entry.isDirectory()) result.push(...walk(absolute))
-    else result.push(path.relative(root, absolute).split(path.sep).join('/'))
-  }
-  return result
-}
+// Check deployable repository files, including new source; local ignored archives are not authority.
+const repositoryDocs = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', 'docs'], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean)
 
 for (const file of [...activeRootDocuments, ...activeDocs]) {
   if (!fs.existsSync(path.join(root, file))) failures.push(`missing active document: ${file}`)
@@ -189,7 +185,7 @@ for (const stageStep of ['S3.1 生产', 'S3.2 验收', 'S3.3 发布', 'S3.4 运�
   if (!masterCharter.includes(stageStep)) failures.push(`master charter missing product-execution locator: ${stageStep}`)
 }
 
-for (const file of walk(path.join(root, 'docs'))) {
+for (const file of repositoryDocs) {
   if (!activeSet.has(file)) failures.push(`unregistered file in active docs library: ${file}`)
 }
 

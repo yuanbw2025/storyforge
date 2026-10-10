@@ -1,4 +1,5 @@
 /** assembleContext · 当前唯一上下文装配入口。 */
+import Dexie from 'dexie'
 import { estimateTokens, getModelPreset, type ContextLayer, type ContextSegment } from '../ai/context-budget'
 import { CONTEXT_SOURCES, CONTEXT_SOURCE_BY_KEY } from './context-sources'
 import type {
@@ -40,6 +41,14 @@ export {
 
 /** 拿不到模型时的保守默认输入预算(原固定 24K 偏紧,放宽避免内部提前裁) */
 const FALLBACK_INPUT_BUDGET = 48_000
+
+/** Local adoption may recheck registered context under an atomic write lock.
+ * Only WebCrypto needs a keep-alive; wrapping DB reads in waitFor would deadlock. */
+function hashContextSource(content: string): Promise<string> {
+  const pending = sha256Text(content)
+  return Dexie.currentTransaction ? Dexie.waitFor(pending) : pending
+}
+
 const LAYERS_BY_TRIM_PRIORITY: ContextLayer[] = ['L3', 'L2', 'L1']
 
 interface KeyedContextSegment {
@@ -66,7 +75,7 @@ async function assertSourceTransformResult(
   if (
     evidence.version !== 1
     || evidence.promptVersion !== 'agent-context-compression-v1'
-    || evidence.sourceHash !== await sha256Text(input.content)
+    || evidence.sourceHash !== await hashContextSource(input.content)
     || evidence.targetTokens !== input.sourceBudgetTokens
     || !Number.isInteger(evidence.attempts)
     || evidence.attempts < 0
@@ -183,7 +192,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
       continue
     }
     const content = await source.read(resolvedInput)
-    const sourceHash = await sha256Text(content)
+    const sourceHash = await hashContextSource(content)
     if (!content.trim()) {
       omit(source.key, sourceHash)
       continue

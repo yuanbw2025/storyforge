@@ -35,6 +35,7 @@ export async function createCurrentTtrpgRuntimePackageFixture(input: {
   gmMode: 'human' | 'ai'
   title?: string
   ruleOrigin?: TtrpgProductionBriefV2['rules']['origin']
+  savedRulePackId?: number
   seats?: TtrpgProductionSeatV2[]
   authoredScenario?: boolean
 }): Promise<ProductRuntimePackageV1> {
@@ -63,7 +64,7 @@ export async function createCurrentTtrpgRuntimePackageFixture(input: {
     contentBoundaries: ['不生成未授权露骨内容'],
     confirmDefaultMappings: true,
     draft: {
-      rules: { origin: input.ruleOrigin ?? 'builtin-storyforge' },
+      rules: { origin: input.ruleOrigin ?? 'builtin-storyforge', ...(input.savedRulePackId ? {savedRulePackId:input.savedRulePackId} : {}) },
       gmMode: input.gmMode,
       seats: input.seats ?? [{
         seatKey: 'player.1', label: player.name,

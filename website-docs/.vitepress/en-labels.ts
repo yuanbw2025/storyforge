@@ -1,5 +1,12 @@
 // Keep navigation structure in config.mts; this dictionary only translates labels.
 export const enLabels: Record<string, string> = {
+  '插件与创意工坊': 'Plugins and Workshop',
+  '工坊能力与入口': 'Capabilities and entry points',
+  '安装与使用插件': 'Install and use plugins',
+  '用 AI 开发插件': 'Develop with your AI',
+  '开发第一个插件': 'Build your first plugin',
+  '发布与维护插件': 'Publish and maintain plugins',
+  '插件故障与恢复': 'Troubleshooting and recovery',
   '开始使用': 'Getting started',
   '概览': 'Overview',
   'StoryForge 是什么': 'What is StoryForge?',

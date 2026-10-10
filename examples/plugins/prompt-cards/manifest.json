@@ -1,0 +1,54 @@
+{
+  "format": 1,
+  "api": 1,
+  "id": "storyforge.prompt-cards",
+  "version": "1.0.0",
+  "name": "写作练习卡",
+  "description": "纯内容包：两张原创写作练习卡，不包含可执行代码。",
+  "author": "StoryForge",
+  "license": "MIT",
+  "kind": "content",
+  "owner": "work",
+  "dependencies": {},
+  "permissions": [
+    "data"
+  ],
+  "networkOrigins": [],
+  "views": [],
+  "schemas": {
+    "card": {
+      "version": 1,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 20000
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "provides": [],
+  "consumes": [],
+  "content": [
+    {
+      "schemaId": "card",
+      "key": "conflict",
+      "payload": {
+        "text": "一个人想守住的东西，与他必须完成的事发生冲突。写出他第一次选择回避的场面。"
+      }
+    },
+    {
+      "schemaId": "card",
+      "key": "place",
+      "payload": {
+        "text": "选择一个普通地点，用三处可观察的细节，让读者感到它刚刚发生过变化。"
+      }
+    }
+  ]
+}

@@ -161,6 +161,7 @@ export const STORY_CORE_GENERATABLE_FIELD_SPECS = [
 export type StoryCoreGeneratableField = typeof STORY_CORE_GENERATABLE_FIELD_SPECS[number]['field']
 
 export const FIELD_REGISTRY: FieldSpec[] = [
+  object('extensionRecords', 'payload'),
   // MEMORY-5: author-edited workspace roots. Stable identities, owner IDs,
   // active pointers and derived counters remain outside the editable surface.
   text('projects', 'name'),

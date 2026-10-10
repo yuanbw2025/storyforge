@@ -20,7 +20,8 @@ for (const file of source) {
   // Archives intentionally retain their Chinese originals through explicit English wrappers.
   if (file.startsWith('archive/') || file === 'updates/historical-feature-updates.md') continue
   for (const [, href] of en.matchAll(/(?:\]\(|href=")["']?(\/[^\s)"']+)/g)) {
-    if (!href.startsWith('/en/') && !href.startsWith('/assets/') && !href.startsWith('/images/') && !href.startsWith('/brand/')) errors.push('Nonlocalized link: ' + file + ' ' + href)
+    const sharedDownload = /^\/downloads\/workshop\/(?:storyforge-plugin-author\.zip|developer-prompt\.txt|developer-kit\.json)$/.test(href) && existsSync(resolve(root, 'public', href.slice(1)))
+    if (!sharedDownload && !href.startsWith('/en/') && !href.startsWith('/assets/') && !href.startsWith('/images/') && !href.startsWith('/brand/')) errors.push('Nonlocalized link: ' + file + ' ' + href)
   }
   if (file.startsWith('prompts/c/')) {
     for (const [, variable] of zh.matchAll(/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g)) {

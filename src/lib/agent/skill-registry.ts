@@ -165,6 +165,7 @@ export type AgentSkillExecutionModeV1 =
   | 'short-chapter-draft'
   | 'short-continuity-review'
   | 'short-targeted-rewrite'
+  | 'extension-generate'
 
 export interface AgentSkillWriteTargetV1 {
   table: string
@@ -1303,6 +1304,19 @@ function productProductionInputPolicy(sourceKeys: readonly string[]): AgentSkill
 
 export const AGENT_SKILLS = [
   {
+    version: 1, id: 'extensions.generate', agentId: 'prose', defaultForAgent: false,
+    label: '插件自有内容候选', owner: 'extension-host', promptVersion: 'extension-generate-v1', executionMode: 'extension-generate', contextTaskKind: 'agent-prose', readToolNames: [],
+    contextSourceKeys: ['extensionRecords'], optionalContextSourceKeys: ['worldview', 'storyCore', 'characters', 'historical', 'storyTimeline'],
+    inputPolicy: { sourceKeys: ['extensionRecords'], states: {
+      empty: { handling: 'require-upstream', instruction: '缺少冻结插件任务时停止。' },
+      partial: { handling: 'grounded-transform', instruction: '依据已登记来源创作，缺失资料不得当作既有事实。' },
+      complete: { handling: 'grounded-transform', instruction: '只形成符合冻结 schema 的插件候选，由作者确认。' },
+    } },
+    contextCompression: compressionPolicy(['extensionRecords']), maxOutputTokens: 8000,
+    writeTargets: [{ table: 'extensionRecords', fields: ['payload'], adoptionExtension: 'extension-record-lifecycle' }],
+    lastVerifiedAt: '2026-10-08', regressionTests: ['R-EXTENSION1-durable-ai'],
+  },
+  {
     version: 1,
     id: 'world-origin.review',
     agentId: 'world-origin',
@@ -1550,7 +1564,7 @@ export const AGENT_SKILLS = [
       table: 'codexEntries',
       fields: [...CODEX_CANDIDATE_WRITE_FIELDS],
     }],
-    lastVerifiedAt: '2026-08-24',
+    lastVerifiedAt: '2026-10-09',
     regressionTests: [
       'R-HARNESS70-codex-extraction-durable',
       'R-RACE5-codex-extraction-enrichment',
@@ -1604,7 +1618,7 @@ export const AGENT_SKILLS = [
       table: 'codexEntries',
       fields: [...CODEX_CANDIDATE_WRITE_FIELDS],
     }],
-    lastVerifiedAt: '2026-08-24',
+    lastVerifiedAt: '2026-10-09',
     regressionTests: ['R-RACE5-codex-extraction-enrichment', 'R-CODEX1-gateway-provenance'],
   },
   {
@@ -2631,7 +2645,7 @@ export const AGENT_SKILLS = [
     contextGateway: OUTLINE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['parentId', 'type', 'title', 'summary', 'order'] }],
-    lastVerifiedAt: '2026-08-24',
+    lastVerifiedAt: '2026-10-09',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS11-outline-batch-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2652,7 +2666,7 @@ export const AGENT_SKILLS = [
     contextGateway: OUTLINE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 8_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['parentId', 'type', 'title', 'summary', 'order'] }],
-    lastVerifiedAt: '2026-08-24',
+    lastVerifiedAt: '2026-10-09',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2673,7 +2687,7 @@ export const AGENT_SKILLS = [
     contextGateway: OUTLINE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 12_000,
     writeTargets: [{ table: 'outlineNodes', fields: ['parentId', 'type', 'title', 'summary', 'order'] }],
-    lastVerifiedAt: '2026-08-24',
+    lastVerifiedAt: '2026-10-09',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS14-workflow-classifier', 'R-AGENT1-chat-copilot-outline', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2720,7 +2734,7 @@ export const AGENT_SKILLS = [
         'lastUsedSummary',
       ],
     }],
-    lastVerifiedAt: '2026-08-24',
+    lastVerifiedAt: '2026-10-09',
     regressionTests: [
       'R-HARNESS8-detailed-outline-generation-durable',
       'R-HARNESS37-detailed-outline-entry',
@@ -2744,7 +2758,7 @@ export const AGENT_SKILLS = [
     contextGateway: PROSE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
-    lastVerifiedAt: '2026-08-24',
+    lastVerifiedAt: '2026-10-09',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS9-information-boundary', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2765,7 +2779,7 @@ export const AGENT_SKILLS = [
     contextGateway: PROSE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
-    lastVerifiedAt: '2026-08-24',
+    lastVerifiedAt: '2026-10-09',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS17-context-compression-eval', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -2786,7 +2800,7 @@ export const AGENT_SKILLS = [
     contextGateway: PROSE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
-    lastVerifiedAt: '2026-08-24',
+    lastVerifiedAt: '2026-10-09',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
@@ -3001,7 +3015,7 @@ export const AGENT_SKILLS = [
     contextGateway: { ...PROSE_CONTEXT_GATEWAY_POLICY, requiredWriteTargets: [] },
     maxOutputTokens: 3_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-24',
+    lastVerifiedAt: '2026-10-09',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS19-prose-semantic-review'],
   },
   {
@@ -3022,7 +3036,7 @@ export const AGENT_SKILLS = [
     contextGateway: { ...PROSE_CONTEXT_GATEWAY_POLICY, requiredWriteTargets: [] },
     maxOutputTokens: 16_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-08-24',
+    lastVerifiedAt: '2026-10-09',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS19-prose-semantic-review'],
   },
   {
@@ -3052,7 +3066,7 @@ export const AGENT_SKILLS = [
       { table: 'storylineCrossings', fields: ['arcIdA', 'arcIdB', 'chapterId', 'chapterTitle', 'note', 'evidenceQuote'] },
       { table: 'storyArcs', fields: ['name', 'type', 'description', 'stages'] },
     ],
-    lastVerifiedAt: '2026-08-24',
+    lastVerifiedAt: '2026-10-09',
     regressionTests: ['R-AGENT5-chapter-organization', 'R-HARNESS20-chapter-post-adoption-durable', 'R-PROGRESS1-post-adoption-policy'],
   },
   {
@@ -5252,7 +5266,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-source-analysis', 'adaptation-causal-graph', 'screenplay-adaptation-brief', 'screenplay-decision-pass', 'screenplay-beat-sheet', 'screenplay-scene-card', 'screenplay-grounding-review', 'screenplay-dramaturgy-review', 'comic-adaptation-brief', 'comic-decision-pass', 'comic-script-adaptation', 'comic-page-rhythm', 'comic-panel-plan', 'comic-visual-bible', 'comic-image-request', 'comic-visual-continuity-review', 'comic-targeted-repair', 'comic-page-review', 'motion-drama-series-bible', 'motion-drama-asset-bible', 'motion-drama-episode-outline', 'motion-drama-shot-design', 'motion-drama-image-prompts', 'motion-drama-video-prompts', 'motion-drama-quality-review', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),
-    prose: new Set(['auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'ai-town-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'text-open-world-runtime-intent', 'text-open-world-runtime-dialogue', 'text-open-world-runtime-expression', 'text-open-world-runtime-quest-packaging', 'text-open-world-runtime-direction', 'text-open-world-runtime-memory', 'screenplay-scene-draft', 'screenplay-targeted-rewrite', 'motion-drama-episode-script', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
+    prose: new Set(['extension-generate', 'auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'ai-town-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'text-open-world-runtime-intent', 'text-open-world-runtime-dialogue', 'text-open-world-runtime-expression', 'text-open-world-runtime-quest-packaging', 'text-open-world-runtime-direction', 'text-open-world-runtime-memory', 'screenplay-scene-draft', 'screenplay-targeted-rewrite', 'motion-drama-episode-script', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
     'text-adventure-showrunner': productProductionModes,
     'text-adventure-creative-director': productProductionModes,
     'text-adventure-source-editor': productProductionModes,

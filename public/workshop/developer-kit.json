@@ -1,0 +1,192 @@
+{
+  "format": 1,
+  "api": 1,
+  "sdk": "0.1.0",
+  "status": "development-preview",
+  "generator": "tools/plugin-sdk/build-developer-kit.mjs",
+  "generatorSha256": "09000d25ba0fcacf8c4ae7122f0b89a238c315fc9cc5d422413477bd02c9bc6c",
+  "hostContract": {
+    "src/lib/extensions/types.ts": "7c7730ab70c7601849f4c301a24730c83831e6a6232dbab13e4a111d3eafd0fc",
+    "src/lib/extensions/package.ts": "dcf92f12e6e366ac489b397e5652918d2aa58c467832c033b7d72676c1de35fc",
+    "src/lib/extensions/runtime.ts": "c74e42402cc9e52ff1537f1164d2b56b756f6977ec4bf656511b73890af09e19",
+    "tools/plugin-sdk/cli.mjs": "a951f3d92f24d8b1ed9adfc9d1db264ca5ffcacf27863f375e3b9cc15ca56730"
+  },
+  "sources": {
+    "SKILL.md": {
+      "source": "tools/plugin-sdk/authoring/SKILL.md",
+      "sha256": "1398bc1c13257057795f94b8ffb92ec807de7c856be88f2377bd70fa2ae12594"
+    },
+    "START-HERE.md": {
+      "source": "tools/plugin-sdk/authoring/START-HERE.md",
+      "sha256": "291dbb849883a3737e01332d05c31e9c63d7be985753d155a560e0db3271bda8"
+    },
+    "developer-prompt.txt": {
+      "source": "tools/plugin-sdk/authoring/developer-prompt.txt",
+      "sha256": "da74d0c01c9a195a4fe80283c3e79ac2e0c1bc887c6a86b61b35132fe2a2681a"
+    },
+    "references/ACCEPTANCE.md": {
+      "source": "tools/plugin-sdk/authoring/ACCEPTANCE.md",
+      "sha256": "97a13ff984ce5bfc643dd722b9c53d1f27dd29b24ff140eb6de6853d15b15ae9"
+    },
+    "references/PLUGIN-DEVELOPMENT.md": {
+      "source": "docs/guides/PLUGIN-DEVELOPMENT.md",
+      "sha256": "7fe5d68d168a93ebc907941592daeaec26a473b4313aa9d59eb4e077cddd1129"
+    },
+    "references/MCP-BRIDGE.md": {
+      "source": "tools/mcp-bridge/README.md",
+      "sha256": "b09f9c57450e19ce7d5feca537d6d6c80b0148b0e028ffccf3f1b63133b7f364"
+    },
+    "references/PLUGIN-WORKSHOP-V1.md": {
+      "source": "docs/roadmap/PLUGIN-WORKSHOP-V1.md",
+      "sha256": "2b4022560093bf99376b69c3598c39ce10a83e0b90324a84d3e22a576792d652"
+    },
+    "references/index.d.ts": {
+      "source": "tools/plugin-sdk/index.d.ts",
+      "sha256": "7c7730ab70c7601849f4c301a24730c83831e6a6232dbab13e4a111d3eafd0fc"
+    },
+    "LICENSE": {
+      "source": "LICENSE",
+      "sha256": "41d09918b94a1f0156b22a36a49a214c1773a6a85194274ec67cebe2f385f9c6"
+    },
+    "examples/calendar-service/manifest.json": {
+      "source": "examples/plugins/calendar-service/manifest.json",
+      "sha256": "c4cd70f89f925b9b70ab5ddac373212f796a5897fedf12e6f358e641e9c3f8cd"
+    },
+    "examples/calendar-service/src/index.tsx": {
+      "source": "examples/plugins/calendar-service/src/index.tsx",
+      "sha256": "3a402ad66dfc021b5facdec874de20574ab2fbb3b16767e198c4917c707cced6"
+    },
+    "examples/harbor-rules/assets/rules.json": {
+      "source": "examples/plugins/harbor-rules/assets/rules.json",
+      "sha256": "572572304bf0450fe1020cab9779ad8f32d8c639a425a266bae842753b75fb0e"
+    },
+    "examples/harbor-rules/manifest.json": {
+      "source": "examples/plugins/harbor-rules/manifest.json",
+      "sha256": "9c4b3f62cff4b9d9e2dde4a6ccfbaf821d3489fb62e23ad5fa5791bf5b8fce55"
+    },
+    "examples/harbor-rules/src/index.tsx": {
+      "source": "examples/plugins/harbor-rules/src/index.tsx",
+      "sha256": "b182ffbee3475eb739d500c98a3345ba3f116c06aa571d9da1be493ca3b41c08"
+    },
+    "examples/idea-cards/manifest.json": {
+      "source": "examples/plugins/idea-cards/manifest.json",
+      "sha256": "0076212f3a5aa436c045c269f92221ab0d28c0d31bc717f1dd3c8d6dd675cd4c"
+    },
+    "examples/idea-cards/src/index.tsx": {
+      "source": "examples/plugins/idea-cards/src/index.tsx",
+      "sha256": "256432b29bcd90bd53f9d703e112ace6452450390ea309ec31220dbde50db0c7"
+    },
+    "examples/plot-flow/manifest.json": {
+      "source": "examples/plugins/plot-flow/manifest.json",
+      "sha256": "8e382b3280602c2cba1a193a97a563fda9417eeca907437f3aaeedf099b8147c"
+    },
+    "examples/plot-flow/src/index.tsx": {
+      "source": "examples/plugins/plot-flow/src/index.tsx",
+      "sha256": "5220a0f1715166ef44ed9af80a65c591aca3da7f46a5547836409a4494740e52"
+    },
+    "examples/prompt-cards/manifest.json": {
+      "source": "examples/plugins/prompt-cards/manifest.json",
+      "sha256": "badab0ad5fb1b1ba5104dd594b84eac996fbbcb956616b3e34b55ec189eee5ae"
+    },
+    "examples/research-desk/manifest.json": {
+      "source": "examples/plugins/research-desk/manifest.json",
+      "sha256": "215831790f1a6deed83fe0a0da448357993818c9f4673c544c9e7a3230e64ccd"
+    },
+    "examples/research-desk/src/index.tsx": {
+      "source": "examples/plugins/research-desk/src/index.tsx",
+      "sha256": "98fb7ae421c18e63465448604863e85f160ea974c84b44d3650007cae1604e4a"
+    },
+    "examples/story-board/manifest.json": {
+      "source": "examples/plugins/story-board/manifest.json",
+      "sha256": "df86d299f4d32bd9a924d5d5d43418aee3dd9ed61415d75832bd1798775dad64"
+    },
+    "examples/story-board/src/index.tsx": {
+      "source": "examples/plugins/story-board/src/index.tsx",
+      "sha256": "d25cfd47297a759c5a19cb04fa12bdd23c2bbdd71177bbe04dd12cfda23d608b"
+    },
+    "examples/tool-desk/manifest.json": {
+      "source": "examples/plugins/tool-desk/manifest.json",
+      "sha256": "e8bd2e5f6645484b651aa4215701127ba7f98eb5e52e8f685fc56cacc9d9614b"
+    },
+    "examples/tool-desk/src/index.tsx": {
+      "source": "examples/plugins/tool-desk/src/index.tsx",
+      "sha256": "682e46d323da36da1c60d508e50b7125a223b08d90210f9bcca6b8d36a2e76d4"
+    },
+    "examples/world-festivals/manifest.json": {
+      "source": "examples/plugins/world-festivals/manifest.json",
+      "sha256": "80ac05a87ed409cd2ec51757d16aab5e641738a3606b0118c06b6b65011fe9b9"
+    },
+    "examples/world-festivals/src/index.tsx": {
+      "source": "examples/plugins/world-festivals/src/index.tsx",
+      "sha256": "785715399a102b6fbc8ceb870ddc5eda5637aa200d681897bcd1efb3e6e4527a"
+    },
+    "examples/world-timeline/manifest.json": {
+      "source": "examples/plugins/world-timeline/manifest.json",
+      "sha256": "5f8a9ef449293ed001a2eccff14009b9ccc1a0702ee618f1844e21fff41688f2"
+    },
+    "examples/world-timeline/src/index.tsx": {
+      "source": "examples/plugins/world-timeline/src/index.tsx",
+      "sha256": "a38a841d4afd788d860d35540fb87c129176c0054460ce964323dd78623f9539"
+    },
+    "examples/writer-bundle/manifest.json": {
+      "source": "examples/plugins/writer-bundle/manifest.json",
+      "sha256": "8e9dc7bc8a22845fe29ced5ad4da3404d23dca8d69061ad9e49c38e35449c5df"
+    },
+    "examples/writing-notes/manifest.json": {
+      "source": "examples/plugins/writing-notes/manifest.json",
+      "sha256": "0195676dfbcd5e00dbc01e9199bf7c166454f3f11d50f46d36427e105b52816a"
+    },
+    "examples/writing-notes/src/index.tsx": {
+      "source": "examples/plugins/writing-notes/src/index.tsx",
+      "sha256": "cc0448be2de98fcbd04366abed4cfb0261609eeed8e906acfe7d2cc0dd92ce2a"
+    },
+    "guides/ai.md": {
+      "source": "website-docs/workshop/ai.md",
+      "sha256": "74b86499ecfb1f2cff847756982859bc8a8716650bdc757e3c1e1d5d484075a4"
+    },
+    "guides/develop.md": {
+      "source": "website-docs/workshop/develop.md",
+      "sha256": "d27005a8d49153e4a6f151b98d8ec8c7e72c57a79491ea07c59cc9534eeed0c0"
+    },
+    "guides/index.md": {
+      "source": "website-docs/workshop/index.md",
+      "sha256": "c8056a49a687c68f0e019e958c51f4689968b1be07f24c2e491cee298c37da0f"
+    },
+    "guides/install.md": {
+      "source": "website-docs/workshop/install.md",
+      "sha256": "7c11575e6af5a1e77929281330b340c0351750769ac353f219fb0f6bc4630d39"
+    },
+    "guides/publish.md": {
+      "source": "website-docs/workshop/publish.md",
+      "sha256": "bc181aa4acb3c7f8a7f801e50ec60aa8476bc6db960c29cbf029dfccffc5e2fb"
+    },
+    "guides/troubleshooting.md": {
+      "source": "website-docs/workshop/troubleshooting.md",
+      "sha256": "b845412f19e3eb66553444fb4ad9831959a601a98259876e38babd85cb668368"
+    },
+    "guides/en/ai.md": {
+      "source": "website-docs/en/workshop/ai.md",
+      "sha256": "69b3f616aa3d422b5fae606205a931dbc127e049145a0b06865ef78b73a719f8"
+    },
+    "guides/en/develop.md": {
+      "source": "website-docs/en/workshop/develop.md",
+      "sha256": "62c10cdebf575537f5da1221dcf48d06cad477893ad01a147ec6defae4e9cbf4"
+    },
+    "guides/en/index.md": {
+      "source": "website-docs/en/workshop/index.md",
+      "sha256": "e5e15feea1a07238f3a8403a0db016e127413105e3643469885fbb8a8f44ecc8"
+    },
+    "guides/en/install.md": {
+      "source": "website-docs/en/workshop/install.md",
+      "sha256": "7472cbc663f6b3316cf5e1a0ecf88bae335e566adbb7acc674462592aaa98250"
+    },
+    "guides/en/publish.md": {
+      "source": "website-docs/en/workshop/publish.md",
+      "sha256": "3a7afbd306f5887614dbde31973d12da0345dc7a7d6a4acd716b6faeaabe45d7"
+    },
+    "guides/en/troubleshooting.md": {
+      "source": "website-docs/en/workshop/troubleshooting.md",
+      "sha256": "72da1ba1399d9273361f57388e135336674f4a14e6c111b884032ffa5717534d"
+    }
+  }
+}

@@ -2,8 +2,10 @@ import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useSearchParams } from 'react-router'
 
 import { retiredHomeDestination } from './components/navigation/retired-routes'
+import ProductExtensionEntry from './components/extensions/ProductExtensionEntry'
 import ResumeTracker from './components/home/ResumeTracker'
 
+const WorkshopPage = lazy(() => import('./pages/WorkshopPage'))
 const AiTownPage = lazy(() => import('./pages/AiTownPage'))
 const TtrpgPage = lazy(() => import('./pages/TtrpgPage'))
 const CharacterChatPage = lazy(() => import('./pages/CharacterChatPage'))
@@ -41,7 +43,9 @@ export default function App() {
   return (
     <>
     <ResumeTracker/>
+    <ProductExtensionEntry/>
     <Routes>
+      <Route path="/workshop/:pageId?" element={<Suspense fallback={<RouteFallback/>}><WorkshopPage/></Suspense>}/>
       <Route path="/community/:pageId?" element={<Suspense fallback={<RouteFallback/>}><CommunityPage/></Suspense>}/>
       <Route path="/adventure/:pageId?" element={<Suspense fallback={<RouteFallback/>}><TextGameDevelopmentPage/></Suspense>}/>
       <Route path="/openworld/:pageId?" element={<Suspense fallback={<RouteFallback/>}><TextGameDevelopmentPage openWorld/></Suspense>}/>

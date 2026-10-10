@@ -4,6 +4,7 @@ Find the task you want to complete:
 
 | Task | Read |
 | --- | --- |
+| Install plugins, develop with AI and share features | [Plugin Workshop](/en/workshop/) |
 | Connect your model | [Models and APIs](/en/getting-started/model-config) |
 | Import fiction, references, or backups | [Import and references](/en/guides/import) |
 | Understand generation, adoption, retries, and recovery | [AI workflow](/en/guides/ai-workflow) |

@@ -231,6 +231,7 @@ const scannedFiles = [
   // Its output may only become Build-bound quality evidence.
   'src/lib/open-world/creator-quality-calibration.ts',
   ...walk('src/lib/longform-voice'),
+  ...walk('src/lib/extensions'),
 ]
 for (const file of [...new Set(scannedFiles)]) {
     if (file === 'src/lib/agent/formal-ai-entry.ts') continue

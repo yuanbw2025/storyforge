@@ -50,6 +50,45 @@ type ProjectTableRegistration = Omit<TableSpec, 'memoryClassification'> & {
 }
 
 const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
+  { table: db.extensionPackages, name: 'extensionPackages', owner: 'global', exportable: false, note: '本机插件字节，不随作品备份执行或传递' },
+
+  { table: db.extensionProfiles, name: 'extensionProfiles', owner: 'project', exportable: true, exportIdField: true, introducedBackupVersion: 15,
+    domainOwner: WORLD_OR_WORK_DOMAIN_OWNER,
+    refs: [
+      { kind: 'simple', field: 'id', target: 'extensionRecords[profileId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'extensionContracts[profileId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'extensionOperations[profileId]', onDelete: 'cascade' },
+    ],
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+    ], note: '插件作用域数据；缺少插件时保留，导入不执行插件' },
+
+  { table: db.extensionRecords, name: 'extensionRecords', owner: 'project', exportable: true, exportIdField: true, introducedBackupVersion: 15,
+    domainOwner: WORLD_OR_WORK_DOMAIN_OWNER,
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'profileId', remapVia: 'extensionProfiles', exportAs: '_profileExportId', onUnmapped: 'require' },
+      { field: 'chapterId', remapVia: 'chapters', exportAs: '_chapterExportId', onUnmapped: 'require' },
+      { field: 'historyEventId', remapVia: 'historicalTimelineEvents', exportAs: '_historyEventExportId', onUnmapped: 'require' },
+    ], note: '插件作用域数据；缺少插件时保留，导入不执行插件' },
+
+  { table: db.extensionContracts, name: 'extensionContracts', owner: 'project', exportable: true, exportIdField: true, introducedBackupVersion: 15,
+    domainOwner: WORLD_OR_WORK_DOMAIN_OWNER,
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'profileId', remapVia: 'extensionProfiles', exportAs: '_profileExportId', onUnmapped: 'require' },
+    ], note: '插件作用域数据；缺少插件时保留，导入不执行插件' },
+
+  { table: db.extensionOperations, name: 'extensionOperations', owner: 'project', exportable: true, exportIdField: true, introducedBackupVersion: 15,
+    domainOwner: WORLD_OR_WORK_DOMAIN_OWNER,
+    exportRemap: [
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'profileId', remapVia: 'extensionProfiles', exportAs: '_profileExportId', onUnmapped: 'require' },
+    ], note: '插件作用域数据；缺少插件时保留，导入不执行插件' },
   // ───────────────────────── 项目根表 ─────────────────────────
   { table: db.projects, name: 'projects', owner: 'project', exportable: true,
     domainOwner: WORKSPACE_DOMAIN_OWNER,
@@ -72,6 +111,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       dependencyEmitter: 'world-root-impact-v1', schemaVersion: 1,
     },
     refs: [
+      { kind: 'simple', field: 'id', target: 'extensionProfiles[worldId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'extensionRecords[worldId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'extensionContracts[worldId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'extensionOperations[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'works[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'worldRevisions[worldId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'worldReleases[worldId]', onDelete: 'cascade' },
@@ -89,6 +132,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
       dependencyEmitter: 'work-root-impact-v1', schemaVersion: 1,
     },
     refs: [
+      { kind: 'simple', field: 'id', target: 'extensionProfiles[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'extensionRecords[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'extensionContracts[workId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'extensionOperations[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'workCharacterBindings[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'productReleases[workId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'productRuntimeSessions[workId]', onDelete: 'cascade' },
@@ -694,6 +741,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'portalsJSON 内含指向其它节点的引用' },
 
   { table: db.historicalTimelineEvents, name: 'historicalTimelineEvents', owner: 'project',
+    refs: [{ kind: 'simple', field: 'id', target: 'extensionRecords[historyEventId]', onDelete: 'setNull' }],
     resourceIdentity: RESOURCE_IDENTITY('historical-event', 'fact', '历史事件'),
     worldSemantic: { version: 1, area: 'foundation', resourceKind: 'historical-event', canonPolicy: 'authoritative-table' },
     domainOwner: WORLD_DOMAIN_OWNER,
@@ -797,6 +845,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     },
     selfIdPaths: ['continuityHandoff.chapterId', 'planReconciliation.chapterId'],
     refs: [
+      { kind: 'simple', field: 'id', target: 'extensionRecords[chapterId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'emotionBeatCards[chapterId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'characters[statusEvidenceChapterId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'adaptationProjects[sourceStartChapterId]', onDelete: 'setNull' },
