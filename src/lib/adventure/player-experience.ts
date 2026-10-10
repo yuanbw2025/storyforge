@@ -20,6 +20,7 @@ export type AdventurePlayerCommandResult =
   | { kind: 'unknown'; suggestions: string[] }
 
 export interface AdventureTranscriptEntry {
+  commandId: string
   eventSequence: number
   actionKey: string
   actionLabel: string
@@ -378,6 +379,7 @@ export function projectAdventureTranscript(
     const changes = settlement?.sequence === action.eventSequence && settlement.actionKey === action.actionKey
       ? settlement.changes : []
     return {
+      commandId: action.commandId,
       eventSequence: action.eventSequence,
       actionKey: action.actionKey,
       actionLabel: manifest.adventure.actions.find(item => item.key === action.actionKey)?.label ?? action.actionKey,

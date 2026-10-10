@@ -83,7 +83,7 @@ function initialAccessibilityPreferences(): AdventureAccessibilityPreferences {
 }
 
 interface AdventureNarrativePlayback {
-  eventSequence: number
+  commandId: string
   unitIndex: number
   visibleCharacters: number
 }
@@ -217,7 +217,7 @@ export default function AdventureGamePlayer(props: {
   const [accessibility, setAccessibility] = useState<AdventureAccessibilityPreferences>(initialAccessibilityPreferences)
   const playbackSessionRef = useRef<number | null>(null)
   const transcriptHydratedRef = useRef(false)
-  const knownTranscriptSequencesRef = useRef<Set<number>>(new Set())
+  const knownTranscriptCommandsRef = useRef<Set<string>>(new Set())
   const generatedNarrativeRef = useRef('')
   const mediaVerificationKeys = useRef(new Set<string>())
   const progressiveMedia = useRef(createProductProgressiveMediaRequestLedgerV1()).current
@@ -283,6 +283,10 @@ export default function AdventureGamePlayer(props: {
   const generating = store.generatingRunId != null
   const error = localError || store.error
   const lastAction = adventure?.actionHistory[adventure.actionHistory.length - 1] ?? null
+  const generatedNarrativeCommandId = lastAction && store.generatedNarrative
+    && store.generatedNarrative.productRuntimeSessionId === store.selectedSessionId
+    && store.generatedNarrative.evidenceEventSequences.includes(lastAction.eventSequence)
+    ? lastAction.commandId : null
   const playerItems = adventure?.inventory.filter(item => item.ownerKey === 'player') ?? []
   const currentArea = adventureV2?.areas.find(item => item.key === adventureV2.locations.find(location => location.key === adventure?.currentLocationKey)?.areaKey) ?? null
   const currentRegion = adventureV2?.regions.find(item => item.key === currentArea?.regionKey) ?? null
@@ -437,23 +441,23 @@ export default function AdventureGamePlayer(props: {
     if (playbackSessionRef.current === store.selectedSessionId) return
     playbackSessionRef.current = store.selectedSessionId
     transcriptHydratedRef.current = false
-    knownTranscriptSequencesRef.current = new Set()
+    knownTranscriptCommandsRef.current = new Set()
     generatedNarrativeRef.current = ''
     setNarrativePlayback(null)
   }, [store.selectedSessionId])
 
   useLayoutEffect(() => {
     if (store.loading) return
-    const sequences = new Set(transcript.map(entry => entry.eventSequence))
+    const commands = new Set(transcript.map(entry => entry.commandId))
     if (!transcriptHydratedRef.current) {
       transcriptHydratedRef.current = true
-      knownTranscriptSequencesRef.current = sequences
+      knownTranscriptCommandsRef.current = commands
       return
     }
-    const added = transcript.filter(entry => !knownTranscriptSequencesRef.current.has(entry.eventSequence))
-    knownTranscriptSequencesRef.current = sequences
+    const added = transcript.filter(entry => !knownTranscriptCommandsRef.current.has(entry.commandId))
+    knownTranscriptCommandsRef.current = commands
     const latestAdded = added[added.length - 1]
-    if (latestAdded) setNarrativePlayback({ eventSequence: latestAdded.eventSequence, unitIndex: 0, visibleCharacters: 0 })
+    if (latestAdded) setNarrativePlayback({ commandId: latestAdded.commandId, unitIndex: 0, visibleCharacters: 0 })
   }, [store.loading, store.selectedSessionId, transcript])
 
   useLayoutEffect(() => {
@@ -464,21 +468,21 @@ export default function AdventureGamePlayer(props: {
       return
     }
     generatedNarrativeRef.current = identity
-    if (candidate && lastAction && candidate.evidenceEventSequences.includes(lastAction.eventSequence)) {
-      setNarrativePlayback({ eventSequence: lastAction.eventSequence, unitIndex: 0, visibleCharacters: 0 })
+    if (candidate && lastAction && generatedNarrativeCommandId === lastAction.commandId) {
+      setNarrativePlayback({ commandId: lastAction.commandId, unitIndex: 0, visibleCharacters: 0 })
     }
-  }, [lastAction, store.generatedNarrative])
+  }, [lastAction, store.generatedNarrative, generatedNarrativeCommandId])
 
-  const playbackEventSequence = narrativePlayback?.eventSequence ?? null
+  const playbackCommandId = narrativePlayback?.commandId ?? null
   const activeNarrativeUnits = useMemo(() => {
-    if (playbackEventSequence == null) return []
-    const entry = transcript.find(item => item.eventSequence === playbackEventSequence)
+    if (playbackCommandId == null) return []
+    const entry = transcript.find(item => item.commandId === playbackCommandId)
     if (!entry) return []
-    const generatedText = store.generatedNarrative?.evidenceEventSequences.includes(entry.eventSequence)
+    const generatedText = store.generatedNarrative && generatedNarrativeCommandId === entry.commandId
       ? store.generatedNarrative.narrative
       : ''
     return sequenceNarrativeBlocks(generatedText ? parseAdventureNarrativeBlocks(generatedText) : entry.blocks)
-  }, [playbackEventSequence, store.generatedNarrative, transcript])
+  }, [playbackCommandId, store.generatedNarrative, generatedNarrativeCommandId, transcript])
   const activeNarrativeUnit = narrativePlayback ? activeNarrativeUnits[narrativePlayback.unitIndex] : null
   const narrativeReading = narrativePlayback != null && activeNarrativeUnit != null
 
@@ -486,7 +490,7 @@ export default function AdventureGamePlayer(props: {
     if (!narrativePlayback || !activeNarrativeUnit || narrativePlayback.visibleCharacters >= activeNarrativeUnit.text.length) return
     const timer = window.setTimeout(() => setNarrativePlayback(current => {
       if (!current
-        || current.eventSequence !== narrativePlayback.eventSequence
+        || current.commandId !== narrativePlayback.commandId
         || current.unitIndex !== narrativePlayback.unitIndex) return current
       return { ...current, visibleCharacters: Math.min(activeNarrativeUnit.text.length, current.visibleCharacters + 1) }
     }), 22)
@@ -653,11 +657,11 @@ export default function AdventureGamePlayer(props: {
         <section className="adventure-console-log" role="log" aria-label="冒险文字记录" aria-live="polite">
           {!transcript.length && <article className="adventure-console-system"><p>先观察现场，收集线索或与在场角色交谈。完成当前目标后，关键选择会解锁。输入“帮助”可查看命令。</p></article>}
           {transcript.map(entry => {
-            const generatedText = store.generatedNarrative?.evidenceEventSequences.includes(entry.eventSequence)
+            const generatedText = store.generatedNarrative && generatedNarrativeCommandId === entry.commandId
               ? store.generatedNarrative.narrative
               : ''
             const blocks = generatedText ? parseAdventureNarrativeBlocks(generatedText) : entry.blocks
-            const playback = narrativePlayback?.eventSequence === entry.eventSequence ? narrativePlayback : null
+            const playback = narrativePlayback?.commandId === entry.commandId ? narrativePlayback : null
             const sequencedBlocks = playback ? sequenceNarrativeBlocks(blocks) : blocks
             const visibleBlocks = playback
               ? sequencedBlocks.slice(0, playback.unitIndex + 1).map((block, index) => (
@@ -669,7 +673,7 @@ export default function AdventureGamePlayer(props: {
             const currentUnitComplete = playback != null
               && activeNarrativeUnit != null
               && playback.visibleCharacters >= activeNarrativeUnit.text.length
-            return <article className={`adventure-console-entry outcome-${entry.outcome}${playback ? ' is-playing' : ''}`} key={entry.eventSequence}>
+            return <article className={`adventure-console-entry outcome-${entry.outcome}${playback ? ' is-playing' : ''}`} key={entry.commandId}>
               <header className="adventure-player-command"><span>&gt;</span><strong>{presentationText(entry.actionLabel)}</strong><small>你 · {ACTION_KIND[manifest.adventure.actions.find(item => item.key === entry.actionKey)?.kind ?? 'look']}</small></header>
               <div className="adventure-console-prose" aria-live={playback ? 'off' : undefined}>{visibleBlocks.map((block, index) => block.kind === 'dialogue'
                 ? <blockquote className={block.speaker === playerIdentity?.name ? 'player-dialogue' : ''} key={index}><small>{block.speaker}</small><p>{block.text}{playback && index === playback.unitIndex && <span className="adventure-typewriter-caret" aria-hidden="true" />}</p></blockquote>
@@ -685,8 +689,8 @@ export default function AdventureGamePlayer(props: {
                   ? playback.unitIndex < sequencedBlocks.length - 1 ? '继续' : '读完本段'
                   : '跳过打字'}<ChevronRight /></button>}
               {playback && <button type="button" className="adventure-console-polish" onClick={() => setNarrativePlayback(null)}><BookOpenCheck />展开本场全文</button>}
-              {!playback && !!entry.changes.length && <ul>{entry.changes.map((change, index) => <li key={`${entry.eventSequence}:${index}`}>{change}</li>)}</ul>}
-              {!playback && entry.eventSequence === lastAction?.eventSequence && aiReady && <button className="adventure-console-polish" disabled={store.busy || generating} onClick={() => void run(() => store.narrateLastResult(resolved.config))}><Sparkles />让主 Agent 润色本次结果</button>}
+              {!playback && !!entry.changes.length && <ul>{entry.changes.map((change, index) => <li key={`${entry.commandId}:${index}`}>{change}</li>)}</ul>}
+              {!playback && entry.commandId === lastAction?.commandId && aiReady && <button className="adventure-console-polish" disabled={store.busy || generating} onClick={() => void run(() => store.narrateLastResult(resolved.config))}><Sparkles />让主 Agent 润色本次结果</button>}
             </article>
           })}
           {consoleResponse && <article className="adventure-console-entry adventure-console-response"><header className="adventure-player-command"><span>&gt;</span><strong>{consoleResponse.command}</strong><small>你 · 指令</small></header><div className="adventure-console-prose"><p className="adventure-system-response">{consoleResponse.text}</p></div></article>}
@@ -805,9 +809,9 @@ export default function AdventureGamePlayer(props: {
         })}
       </section>)}</div>}
       {panel === 'relationships' && <div className="adventure-system-grid">{relationshipProfiles.map(({ profile, values, changes }) => <article key={profile.participantKey}><small>{profile.roleLabel || '同行者'}</small><strong>{profile.name}</strong><p>{values.length ? '关系由玩家行动的正式事件推进。' : '尚未形成可量化的关系变化。'}</p>{values.map(value => <dl key={`${value.dimensionKey}:${value.toParticipantKey}`}><div><dt>{value.label}</dt><dd>{value.value}</dd></div></dl>)}{changes.slice(-2).map(change => <span key={change.eventSequence}>{change.delta > 0 ? '+' : ''}{change.delta} · {change.reason}</span>)}</article>)}{!relationshipProfiles.length && <div className="adventure-empty">当前发布包没有可互动角色。</div>}</div>}
-      {panel === 'ending' && <div className="adventure-ending-review"><header><small>抵达结局</small><strong>{store.runtimeState.narrative?.nodes.find(item => item.key === store.runtimeState.narrative?.endingKey)?.title ?? '尚未抵达结局'}</strong><p>以下只引用这条时间线已提交的选择与行动，不由 AI 临时补写。</p></header>{endingJourney.map((item, index) => <article key={item.eventSequence}><i>{index + 1}</i><div><small>选择 #{item.eventSequence}</small><strong>{item.label}</strong><p>进入：{item.targetTitle}</p></div></article>)}{!!adventure.conditions.length && <section><small>持久后果</small>{adventure.conditions.map(condition => <span key={`${condition.conditionKey}:${condition.appliedSequence}`}>{manifest.adventure.conditions.find(item => item.key === condition.conditionKey)?.title ?? condition.conditionKey}</span>)}</section>}{!endingJourney.length && <div className="adventure-empty">完成冒险后，这里会列出抵达结局的关键决定链。</div>}</div>}
+      {panel === 'ending' && <div className="adventure-ending-review"><header><small>抵达结局</small><strong>{store.runtimeState.narrative?.nodes.find(item => item.key === store.runtimeState.narrative?.endingKey)?.title ?? '尚未抵达结局'}</strong><p>以下只引用这条时间线已提交的选择与行动，不由 AI 临时补写。</p></header>{endingJourney.map((item, index) => <article key={`${index}:${item.choiceKey}`}><i>{index + 1}</i><div><small>选择 #{item.eventSequence}</small><strong>{item.label}</strong><p>进入：{item.targetTitle}</p></div></article>)}{!!adventure.conditions.length && <section><small>持久后果</small>{adventure.conditions.map(condition => <span key={`${condition.conditionKey}:${condition.appliedSequence}`}>{manifest.adventure.conditions.find(item => item.key === condition.conditionKey)?.title ?? condition.conditionKey}</span>)}</section>}{!endingJourney.length && <div className="adventure-empty">完成冒险后，这里会列出抵达结局的关键决定链。</div>}</div>}
       {panel === 'accessibility' && <div className="adventure-accessibility"><label><span>沉浸阅读</span><input type="checkbox" checked={immersive} onChange={event => setImmersive(event.target.checked)} /></label><label><span>正文字号</span><select aria-label="正文字号" value={accessibility.fontScale} onChange={event => setAccessibility(current => ({ ...current, fontScale: Number(event.target.value) }))}><option value={0.9}>较小</option><option value={1}>标准</option><option value={1.15}>较大</option><option value={1.3}>特大</option></select></label><label><span>正文行距</span><select aria-label="正文行距" value={accessibility.lineHeight} onChange={event => setAccessibility(current => ({ ...current, lineHeight: Number(event.target.value) }))}><option value={1.6}>紧凑</option><option value={1.9}>标准</option><option value={2.2}>宽松</option></select></label><label><span>高对比度</span><input type="checkbox" checked={accessibility.highContrast} onChange={event => setAccessibility(current => ({ ...current, highContrast: event.target.checked }))} /></label><label><span>减少动态效果</span><input type="checkbox" checked={accessibility.reducedMotion} onChange={event => setAccessibility(current => ({ ...current, reducedMotion: event.target.checked }))} /></label><button onClick={() => setAccessibility(DEFAULT_ACCESSIBILITY)}>恢复默认</button></div>}
-      {panel === 'journal' && <div className="adventure-journal">{[...adventure.actionHistory].reverse().map(item => <article key={item.eventSequence}><i>{item.eventSequence}</i><div><small>{ACTION_KIND[item.kind]} · {item.outcome === 'success' ? '成功' : item.outcome}</small><strong>{manifest.adventure.actions.find(value => value.key === item.actionKey)?.label ?? item.actionKey}</strong><p>{item.narrative}</p></div></article>)}{!adventure.actionHistory.length && <div className="adventure-empty">你的冒险还没有留下行动记录。</div>}</div>}
+      {panel === 'journal' && <div className="adventure-journal">{[...adventure.actionHistory].reverse().map(item => <article key={item.commandId}><i>{item.eventSequence}</i><div><small>{ACTION_KIND[item.kind]} · {item.outcome === 'success' ? '成功' : item.outcome}</small><strong>{manifest.adventure.actions.find(value => value.key === item.actionKey)?.label ?? item.actionKey}</strong><p>{item.narrative}</p></div></article>)}{!adventure.actionHistory.length && <div className="adventure-empty">你的冒险还没有留下行动记录。</div>}</div>}
       {panel === 'saves' && <div className="adventure-save-panel"><section><h3><Save />保存检查点</h3><div><input value={checkpointName} onChange={event => setCheckpointName(event.target.value)} placeholder="为此刻命名" /><button disabled={!checkpointName.trim()} onClick={() => void run(async () => { await store.saveCheckpoint(checkpointName); setCheckpointName('') })}>保存</button></div></section><section><h3><GitBranch />已有检查点</h3>{store.checkpoints.map(item => <button key={item.id} onClick={() => void run(async () => { const id = await store.forkCheckpoint(item.id!); props.onOpenSession?.(id) })}><span><strong>{item.name}</strong><small>事件 #{item.throughSequence} · {formatTime(item.createdAt)}</small></span><b>从这里分支</b></button>)}{!store.checkpoints.length && <p>行动会自动保存；你也可以为重要时刻建立手动检查点。</p>}</section><section><h3><GitBranch />当前时间线分支</h3><div><input value={branchTitle} onChange={event => setBranchTitle(event.target.value)} placeholder="新时间线名称" /><button disabled={!branchTitle.trim()} onClick={() => void run(async () => { const id = await store.forkCurrent(branchTitle); props.onOpenSession?.(id); setBranchTitle(''); setPanel(null) })}>建立分支</button></div></section></div>}
       {panel === 'saves' && <section className="adventure-runtime-identity">
         <h3><KeyRound />运行版本</h3>
