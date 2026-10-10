@@ -36,7 +36,16 @@ export async function validateTextContentRevisionAuthorityV1(
   return { revision, authorizedAt: command.completedAt! }
 }
 
-/** A paused draft is not a change to its explicitly retained visual contract. */
+export function isTextRevisionRetainedVisualTaskV1(task: ProductProductionPlanTaskV3): boolean {
+  return ['media.requirements', 'media.visual-bible.compile', 'media.anchor-author-gate'].includes(task.taskKey)
+    || (/^media\.visual\.\d{3}$/.test(task.taskKey) && task.executionMode === 'human-import')
+}
+
+/**
+ * The original successful author command authorizes the complete visual set,
+ * including imports with no AI producer. Recover from that immutable initial
+ * carry, not an incomplete later epoch whose image tasks never got to settle.
+ */
 export async function verifiedTextRevisionVisualCarryTaskKeysV1(input: {
   scope: WorkspaceScope
   buildId: number
@@ -50,11 +59,14 @@ export async function verifiedTextRevisionVisualCarryTaskKeysV1(input: {
   if (!build || !await assertRecordInScope(input.scope, 'productBuilds', build, { owner: 'work' })) return empty
   const receipt = await db.productProductionCommands.where('[productionId+commandId]')
     .equals([build.productionId, drafts[0].commandId]).first()
-  if (!receipt || receipt.type !== 'revise-text-content' || receipt.status !== 'succeeded'
+  if (!receipt || receipt.type !== 'revise-text-content' || receipt.status !== 'succeeded' || receipt.completedAt == null
     || !await assertRecordInScope(input.scope, 'productProductionCommands', receipt, { owner: 'work' })) return empty
-  const result = JSON.parse(receipt.resultJson) as { buildNumber?: number; parentBuildNumber?: number;
+  const result = JSON.parse(receipt.resultJson) as { buildNumber?: number; parentBuildNumber?: number; controlEpoch?: number;
     authorRevisionHashes?: Record<string, string>; retainedImages?: Array<{ artifactKey: string; expectedArtifactHash: string }> }
-  if (result.buildNumber !== build.buildNumber || result.parentBuildNumber !== build.parentBuildNumber || !Array.isArray(result.retainedImages)) return empty
+  if (result.buildNumber !== build.buildNumber || result.parentBuildNumber !== build.parentBuildNumber
+    || !Number.isSafeInteger(result.controlEpoch) || result.controlEpoch! < 0 || result.controlEpoch! > input.previousControlEpoch
+    || !Array.isArray(result.retainedImages)
+    || Object.keys(result.authorRevisionHashes ?? {}).length !== drafts.length) return empty
   for (const draft of drafts) if (result.authorRevisionHashes?.[draft.artifactKey] !== await hashProductProductionValueV2(draft)) return empty
   const parent = await db.productBuilds.where('[productionId+buildNumber]')
     .equals([build.productionId, build.parentBuildNumber!]).first()
@@ -63,18 +75,33 @@ export async function verifiedTextRevisionVisualCarryTaskKeysV1(input: {
   const parentRows = (await db.productBuildArtifacts.where('buildId').equals(parent.id).toArray())
     .filter(row => row.controlEpoch === parent.controlEpoch && ['accepted', 'carried-forward'].includes(row.status))
   const childRows = (await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray())
-    .filter(row => row.controlEpoch === input.previousControlEpoch && ['accepted', 'carried-forward'].includes(row.status))
-  const tasks = input.tasks.filter(task => ['media.requirements', 'media.visual-bible.compile', 'media.anchor-author-gate'].includes(task.taskKey)
-    || (/^media\.visual\.\d{3}$/.test(task.taskKey) && task.executionMode === 'human-import'))
+    .filter(row => row.controlEpoch === result.controlEpoch && ['accepted', 'carried-forward', 'invalid'].includes(row.status))
+  const tasks = input.tasks.filter(isTextRevisionRetainedVisualTaskV1)
+  const images = tasks.filter(task => /^media\.visual\.\d{3}$/.test(task.taskKey))
+  if (tasks.length !== images.length + 3 || images.length !== result.retainedImages.length
+    || new Set(result.retainedImages.map(image => image.artifactKey)).size !== images.length) return empty
   for (const task of tasks) for (const key of task.outputArtifactKeys) {
     const parents = parentRows.filter(row => row.artifactKey === key)
     const children = childRows.filter(row => row.artifactKey === key)
     if (parents.length !== 1 || children.length !== 1 || parents[0].contentHash !== children[0].contentHash
-      || !await assertRecordInScope(input.scope, 'productBuildArtifacts', children[0], { owner: 'work' })) return empty
+      || !await assertRecordInScope(input.scope, 'productBuildArtifacts', children[0], { owner: 'work' })
+      || !await assertRecordInScope(input.scope, 'productBuildArtifacts', parents[0], { owner: 'work' })
+      || children[0].parentArtifactHash !== parents[0].contentHash
+      || children[0].carriedFrom?.buildNumber !== parent.buildNumber
+      || children[0].carriedFrom?.version !== parents[0].version
+      || children[0].carriedFrom?.contentHash !== parents[0].contentHash
+      || children[0].carriedFrom?.artifactKey !== key
+      || task.outputArtifactKeys.length !== 1 || task.reuse?.sourceBuildNumber !== parent.buildNumber
+      || task.reuse.sourceArtifactKey !== key || task.reuse.sourceContentHash !== parents[0].contentHash
+      || task.reuse.reuseKey !== await hashProductProductionValueV2({
+        commandId: receipt.commandId, sourceBuildNumber: parent.buildNumber, targetBuildNumber: build.buildNumber,
+        taskKey: task.taskKey, artifacts: [{ key, hash: parents[0].contentHash }],
+      })) return empty
     if (children[0].kind === 'image') {
       if (!result.retainedImages.some(image => image.artifactKey === key && image.expectedArtifactHash === children[0].contentHash)
         || children[0].blobObjectId !== parents[0].blobObjectId || children[0].rightsJson !== parents[0].rightsJson) return empty
-    } else if (await hashProductProductionValueV2(JSON.parse(children[0].payloadJson)) !== parents[0].contentHash) return empty
+    } else if (await hashProductProductionValueV2(JSON.parse(children[0].payloadJson)) !== parents[0].contentHash
+      || await hashProductProductionValueV2(JSON.parse(parents[0].payloadJson)) !== parents[0].contentHash) return empty
   }
   return new Set(tasks.map(task => task.taskKey))
 }

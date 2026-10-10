@@ -8416,6 +8416,13 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const projection = await executeBuild()
     expect(projection.buildStatus).toBe('release-ready')
     const before = (await db.productBuilds.get(projection.buildId))!
+    // Represent a mixed parent library: author-imported images legitimately
+    // have no AI producer. The batch command must authorize their exact bytes.
+    const parentImages = (await db.productBuildArtifacts.where('buildId').equals(before.id!).toArray())
+      .filter(row => row.kind === 'image')
+    for (const [index, row] of parentImages.entries()) if (index % 2 === 0) {
+      await db.productBuildArtifacts.update(row.id!, { producerRunId: null, producerReceiptHash: null })
+    }
     const originals = (await db.productBuildArtifacts.where('buildId').equals(before.id!).toArray())
       .filter(row => row.controlEpoch === before.controlEpoch && ['accepted', 'carried-forward'].includes(row.status))
     const key = 'content.scene-script.act-1.part-1' as const
@@ -8486,6 +8493,17 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
           command: { type: 'resolve-blocker', commandId: 'formal.batch.retry', expectedStateRevision: current.stateRevision,
             blockerKey: 'content.adventure-quality-review.act-2', resolution: { action: 'retry', note: '明确重试空响应' } } })
         expect(retried.ok).toBe(true)
+      }
+      if (recoveryMode === 'dialogue-repair') {
+        // Fail again before any image task can create its zero-provider Run.
+        // A second recovery used to lose the entire visual-contract proof.
+        const failedAgain = await executeBuild()
+        expect(failedAgain.buildStatus).toBe('recovery-required')
+        const currentAgain = (await db.productProductions.get(owned.productionId))!
+        const retriedAgain = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+          command: { type: 'resolve-blocker', commandId: 'formal.batch.retry-again', expectedStateRevision: currentAgain.stateRevision,
+            blockerKey: 'content.adventure-quality-review.act-2', resolution: { action: 'retry', note: '再次明确重试空响应' } } })
+        expect(retriedAgain.ok).toBe(true)
       }
       failReview = false
     }

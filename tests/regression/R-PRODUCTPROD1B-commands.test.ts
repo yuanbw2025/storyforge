@@ -1,4 +1,4 @@
-import { validateTextContentRevisionAuthorityV1 } from '../../src/lib/product-production/text-content-revision-authority'
+import { validateTextContentRevisionAuthorityV1, verifiedTextRevisionVisualCarryTaskKeysV1 } from '../../src/lib/product-production/text-content-revision-authority'
 import { parseTextAdventureRevisionFileV1 } from '../../src/components/product/TextAdventureContentRevisionPanel'
 import { carryForwardProductBuildArtifactsToEpochV1 } from '../../src/lib/product-production/artifact-store'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -1850,6 +1850,27 @@ describe('PRODUCTPROD-1B · user command control plane', () => {
     await expect(validateTextContentRevisionAuthorityV1(f.scope, (await db.productBuilds.get(child.id!))!, task)).resolves.toMatchObject({ revision: task.authorRevision })
     await expect(validateTextContentRevisionAuthorityV1(f.scope, child, { ...task,
       authorRevision: { ...task.authorRevision!, authorDraftJson: '{}' } })).rejects.toThrow('授权')
+    const carryProof = { scope: f.scope, buildId: child.id!, previousControlEpoch: child.controlEpoch + 2, tasks: plan.tasks }
+    const imageTask = plan.tasks.find(row => row.executionMode === 'human-import')!
+    // No image Run exists yet. Even if an older recovery lost its active rows,
+    // the original command and initial copy still prove the authorized import.
+    await db.productBuildArtifacts.where('buildId').equals(child.id!).modify({ status: 'invalid' })
+    expect([...(await verifiedTextRevisionVisualCarryTaskKeysV1(carryProof))]).toContain(imageTask.taskKey)
+    const changedPlan = structuredClone(plan)
+    changedPlan.tasks.find(row => row.taskKey === imageTask.taskKey)!.reuse!.sourceContentHash = 'a'.repeat(64)
+    expect((await verifiedTextRevisionVisualCarryTaskKeysV1({ ...carryProof, tasks: changedPlan.tasks })).size).toBe(0)
+    const imported = rows.find(row => row.artifactKey === imageTask.taskKey)!
+    expect(imported.producerReceiptHash).toBeNull()
+    await db.productBuildArtifacts.update(imported.id!, { rightsJson: '{}' })
+    expect((await verifiedTextRevisionVisualCarryTaskKeysV1(carryProof)).size).toBe(0)
+    await db.productBuildArtifacts.update(imported.id!, { rightsJson: imported.rightsJson, carriedFrom: null })
+    expect((await verifiedTextRevisionVisualCarryTaskKeysV1(carryProof)).size).toBe(0)
+    await db.productBuildArtifacts.update(imported.id!, { carriedFrom: imported.carriedFrom })
+    const receipt = (await db.productProductionCommands.where('[productionId+commandId]').equals([f.productionId, command.commandId]).first())!
+    await db.productProductionCommands.update(receipt.id!, { status: 'failed' })
+    expect((await verifiedTextRevisionVisualCarryTaskKeysV1(carryProof)).size).toBe(0)
+    await db.productProductionCommands.update(receipt.id!, { status: 'succeeded' })
+    expect([...(await verifiedTextRevisionVisualCarryTaskKeysV1(carryProof))]).toContain(imageTask.taskKey)
     const manifest = JSON.stringify({ schema: 'storyforge.text-adventure-content-revision', version: 1, buildNumber: 1, revisions: [revision] })
     expect(parseTextAdventureRevisionFileV1(manifest, 1)).toEqual([revision])
     expect(() => parseTextAdventureRevisionFileV1(manifest, 2)).toThrow('版本')

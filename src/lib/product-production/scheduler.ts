@@ -1,4 +1,4 @@
-import { textRevisionRecoveryPreservesVisualContractV1, validateTextContentRevisionAuthorityV1, verifiedTextRevisionVisualCarryTaskKeysV1 } from './text-content-revision-authority'
+import { isTextRevisionRetainedVisualTaskV1, textRevisionRecoveryPreservesVisualContractV1, validateTextContentRevisionAuthorityV1, verifiedTextRevisionVisualCarryTaskKeysV1 } from './text-content-revision-authority'
 import { verifiedHumanImportCarryProofsV1 } from './text-adventure-artifact-store'
 import { isTextAdventureClockCapacityRevisionV1 } from './clock-capacity-revision'
 import { db } from '../db/schema'
@@ -2481,10 +2481,22 @@ async function ensurePlan(input: {
           reusableArtifactKeys.push(...task.outputArtifactKeys)
         }
       }
-      if (reusableArtifactKeys.length > 0) await carryForwardProductBuildArtifactsToEpochV1({
+      // These outputs have independent hash-bound author authorization. The
+      // parent copy also preserves imports before their first zero-call Run.
+      const retainedKeys = plan.tasks.filter(task => retainedVisualTasks.has(task.taskKey) && coherentTasks.has(task.taskKey))
+        .flatMap(task => task.outputArtifactKeys)
+      if (retainedKeys.length > 0) {
+        const parent = await db.productBuilds.where('[productionId+buildNumber]')
+          .equals([state.build.productionId, state.build.parentBuildNumber!]).first()
+        if (!parent?.id) throw new Error('[text-content-revision] 原视觉合同的父 Build 已丢失')
+        await carryForwardProductBuildArtifactsAcrossBuildsV1({ scope: input.scope, sourceBuildId: parent.id,
+          targetBuildId: state.build.id!, targetControlEpoch: plan.controlEpoch, artifactKeys: retainedKeys })
+      }
+      const epochCarryKeys = reusableArtifactKeys.filter(key => !retainedKeys.includes(key))
+      if (epochCarryKeys.length > 0) await carryForwardProductBuildArtifactsToEpochV1({
         scope: input.scope, buildId: state.build.id!,
         fromControlEpoch: recoveryArtifactSourceEpoch,
-        toControlEpoch: plan.controlEpoch, artifactKeys: reusableArtifactKeys,
+        toControlEpoch: plan.controlEpoch, artifactKeys: epochCarryKeys,
         allowInvalidSourceAtFromEpoch: reviewRollbackControlEpoch != null
           || regressedQualityPassEpoch != null
           || qualityRepairSourceEpoch != null
@@ -4564,6 +4576,11 @@ async function runClaimedTaskCore(input: {
   signal: AbortSignal
   onDurableBoundary?: (boundary: ProductProductionSchedulerBoundaryV1, snapshot: AgentRunSnapshotV1) => void | Promise<void>
 }): Promise<void> {
+  // A missing retained visual output is a recovery failure, never permission
+  // to generate a replacement design or spend on replacement images.
+  if (isTextRevisionRetainedVisualTaskV1(input.task) && input.task.reuse?.reason.startsWith('文字修订：')) {
+    throw new Error('[text-content-revision] 已授权保留的视觉合同缺失；请恢复原合同，不能隐式重新生成')
+  }
   let snapshot = input.snapshot
   const previous = snapshot.projection.steps[input.task.taskKey]
   const attempt = previous?.status === 'failed' ? previous.attempt + 1 : 1
