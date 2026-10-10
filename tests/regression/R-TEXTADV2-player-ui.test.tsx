@@ -56,6 +56,10 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
     legacyClock.maximum = 10_000
     runtimePackage.adventure.resources.find(resource => resource.role === 'skill-points')!.initial = 1
     runtimePackage.adventure.locations[0].title = '**封港仓房**'
+    // Visible ending choices still depend on their frozen adventure-action guards.
+    for (const choice of runtimePackage.narrative.choices.filter(item => item.targetNodeKey.startsWith('ending.'))) {
+      choice.availableConditionJson = '{}'
+    }
     runtimePackage.interaction.profiles = runtimePackage.interaction.profiles.map((profile, index) => ({
       ...profile, characterKey: `generated:participant.${index + 1}`, name: `产品角色 ${index + 1}`,
     }))
@@ -274,10 +278,14 @@ describe('TEXTADV-2 · 玩家界面纵切面', () => {
       await act(async () => useAdventureGamePlayerStore.getState().act(actionKey, `ui-complete:${actionKey}`))
     }
     await act(async () => useAdventureGamePlayerStore.getState().choose('choice.enter-core'))
+    expect(host.textContent).toContain('先完成现场探索，再作最终抉择')
+    expect(host.textContent).not.toContain('最终抉择已经解锁')
     await act(async () => useAdventureGamePlayerStore.getState().act(
       'action.prepare.rescue',
       'ui-complete:action.prepare.rescue',
     ))
+    expect(host.textContent).toContain('最终抉择已经解锁')
+    expect(host.textContent).not.toContain('先完成现场探索，再作最终抉择')
     await act(async () => useAdventureGamePlayerStore.getState().choose('choice.rescue'))
     expect(useAdventureGamePlayerStore.getState().runtimeState.narrative).toMatchObject({
       completed: true,
