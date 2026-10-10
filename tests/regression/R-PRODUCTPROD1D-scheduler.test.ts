@@ -1876,6 +1876,18 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
         },
       }),
     })).resolves.toBeNull()
+    const automaticDecision = {
+      schema: 'storyforge.text-adventure-media-anchor-decision-artifact', version: 1,
+      decision: 'not-required-noncommercial', visualBibleHash,
+      confirmedCharacterKeys: [], authorCommandId: null, authorNote: null,
+    }
+    await db.productBuildArtifacts.where('buildId').equals(f.build.id!).and(row => (
+      row.controlEpoch === controlEpoch && row.artifactKey === 'media.anchor-decision'
+    )).modify({ payloadJson: canonicalProductProductionJsonV2(automaticDecision),
+      contentHash: await hashProductProductionValueV2(automaticDecision) })
+    await expect(latestConfirmedTextAdventureAnchorRecoveryEpochV1({
+      buildId: f.build.id!, beforeControlEpoch: controlEpoch + 3, failureJson,
+    })).resolves.toBeNull()
   })
 
   it('句读紧邻已登记 choice/scene key 时仍精确路由到对应幕对白，不误判为幽灵引用', async () => {

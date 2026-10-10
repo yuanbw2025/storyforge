@@ -1,3 +1,4 @@
+import TextAdventureContentRevisionPanel from './TextAdventureContentRevisionPanel'
 import type { ChatAuthoringSettingsV1 } from '../../lib/character-interaction/authoring-contract'
 import type { AvgAuthoringSettingsV1 } from '../../lib/avg/authoring-contract'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -35,6 +36,7 @@ import {
   readTextAdventureMediaAssetBytesV1,
   regenerateTextAdventureMediaAssetsV1,
   reviseTextAdventureMediaAssetV1,
+  reviseTextAdventureContentV1,
   retryTextAdventureSourceReviewV1,
   retryProductProductionBlockerV1,
   resolveTextAdventureMediaAnchorDecisionV1,
@@ -2178,6 +2180,14 @@ export default function ProductProductionStudio(props: {
         </section>}
         {details?.production.productType === 'text-adventure' && reviewArtifacts.length > 0 && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="text-adventure-author-workbench">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-sm font-semibold">文字冒险工件审查台</h2><p className="mt-1 text-[10px] leading-5 text-text-muted">每项均来自当前 Build 的已采纳或跨版本复用工件。展开可核对内容和来源 hash；试玩与发布仍是显式作者闸门。</p></div><span className="rounded bg-accent/10 px-2 py-1 text-[9px] text-accent">{reviewArtifacts.length} 项 · Build #{details.build?.buildNumber}</span></div>
+          {details.production.status === 'preview-ready' && details.build && details.build.releasedProductReleaseId == null
+            && <TextAdventureContentRevisionPanel key={details.build.buildNumber} buildNumber={details.build.buildNumber}
+              artifacts={reviewArtifacts} imageCount={mediaAssets.length} busy={busy || productionRunning}
+              onSubmit={revisions => { void run(async () => {
+                const result = await reviseTextAdventureContentV1({ scope: props.scope, details, revisions, assets: mediaAssets })
+                await refresh(details.production.id)
+                setMessage(`修订版 Build #${result.buildNumber} 已创建，正在重新校验和审校；原图保留。`)
+              }, '创建内容修订版') }} />}
           <div className="mt-4 grid gap-2">{reviewArtifacts.map(artifact => <details key={`${artifact.artifactKey}:${artifact.version}`} className="rounded border border-border bg-bg-base p-3">
             <summary className="cursor-pointer list-none"><span className="flex flex-wrap items-center justify-between gap-2"><strong className="text-xs">{reviewArtifactLabel(artifact.artifactKey)}</strong><span className="text-[9px] text-text-muted">v{artifact.version} · {artifact.status === 'carried-forward' ? '沿用前版' : '当前生成'} · {formatBytes(artifact.byteSize)}</span></span><span className="mt-1 block font-mono text-[9px] text-text-muted">{artifact.artifactKey} · {compactHash(artifact.contentHash)}</span></summary>
             <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded border border-border bg-bg-surface p-3 text-[9px] leading-5 text-text-muted">{JSON.stringify(artifact.payload, null, 2)}</pre>

@@ -10789,6 +10789,10 @@ export function createConfiguredProductProductionExecutorV1(input: {
         usage: zeroUsage(0),
       }
     }
+    if (request.task.executionMode === 'human-import'
+      && (request.task.kind === 'image-asset' || request.task.kind === 'audio-asset')) {
+      fail('作者保留或导入的媒资缺失，必须显式修复；禁止自动调用 Provider 重生成')
+    }
     if (request.task.taskKey === 'media.vision-preflight') {
       return executeTextAdventureVisionCapabilityPreflightTask(request, options)
     }

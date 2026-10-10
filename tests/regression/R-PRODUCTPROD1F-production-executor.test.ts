@@ -1,3 +1,4 @@
+import { verifiedTextRevisionVisualCarryTaskKeysV1 } from '../../src/lib/product-production/text-content-revision-authority'
 import { installReferenceExtensionRules } from '../helpers/extension-rule-pack'
 import { disablePackage, uninstallPackage } from '../../src/lib/extensions/store'
 import { createWorldWork, switchActiveWork } from '../../src/lib/workspace/works'
@@ -8293,6 +8294,170 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
   // Each product owns an independent fixture and timeout. The unpublished
   // recovery path is already covered by the 60-minute adventure above;
   // this matrix additionally verifies recovery of the published adventure.
+  it('文字修订从完整生产 Build 派生，暂停刷新后零图片调用保留原图并采纳新正文', async () => {
+    const productType = 'text-adventure' as ProductionProductKindV1
+    const owned = await fixtureForProduct(productType, { pluginRules: productType === 'ttrpg' })
+    const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    expect(owned.brief.capabilityRequirements.filter(item => item.mediaClass !== 'text'))
+      .toHaveLength(productType === 'text-adventure' ? 1 : 0)
+    const bindingHash = await hashProductProductionValueV2({ provider: 'existing-global-config', productType })
+    const baseOutputs = modelOutputs(
+      owned.brief.source.worldContentHash,
+      productType,
+      firstCharacterAnchor(owned.brief),
+      owned.brief.intent.playerRole,
+    )
+    const professional = productType === 'text-adventure'
+      ? professionalTextAdventurePlanningOutputs(owned.brief) : null
+    const outputs = {
+      ...baseOutputs,
+      ...(professional ?? {}),
+      ...(professional ? professionalTextAdventureSceneScriptOutputs(
+        owned.brief,
+        professional,
+        ['潮门广场', '旧仓街', '信号塔'],
+      ) : {}),
+    }
+    if (professional) {
+      // Exercise the real governed compiler, publish and imported proof path with
+      // a named quest item and an explicit mana cost, not just empty V3 fields.
+      const objective = professional['content.main-quest-plan'].quests[0].objectives[0]
+      Object.assign(objective.alternatives[0], { actionKind: 'give', targetCharacterKey: null })
+      const objectiveScript = professional['content.quest-script'].mainObjectiveScripts[0]
+      Object.assign(objectiveScript, { itemBinding: { kind: 'quest', title: '钟座刻线拓片', description: '记录当前钟座刻线的纸质拓片，交给守钟人核验。' } })
+      const alternativeScript = objectiveScript.alternatives[0]
+      alternativeScript.recipientCharacterKey = 'character.npc.1' as never
+      alternativeScript.resourceCosts.success = [{ resourceKey: 'resource.mana', amount: 1 }] as never
+      alternativeScript.resourceCosts.costlySuccess.push({ resourceKey: 'resource.mana', amount: 1 })
+      alternativeScript.resourceCosts.failure.push({ resourceKey: 'resource.mana', amount: 1 })
+      // The split fixture and accepted assembled fixture share these same entries.
+    }
+    const modelTasks: string[] = []
+    const runText: ProductionTextRunnerV1 = async request => {
+      const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs
+      if (revisionPhase) modelTasks.push(taskKey)
+      if (!taskKey) throw new Error(`unknown ${productType} model task`)
+      if (productType === 'text-adventure' && [
+        'content.scene-script.act-1.part-1', 'content.adventure-quality-review.act-1',
+      ].includes(taskKey)) {
+        expect(request.contextText).toContain('钟座刻线拓片')
+        expect(request.contextText).toContain('"resourceCosts"')
+        expect(request.contextText).toContain('"recipientCharacterKey":"character.npc.1"')
+      }
+      let output: unknown = taskKey === 'media.requirements'
+        ? { ...outputs[taskKey], visual: productType === 'text-adventure' ? outputs[taskKey].visual : [], audio: [] }
+        : outputs[taskKey]
+      if (productType === 'ttrpg' && taskKey === 'content.product-module') {
+        const currentBuild = await db.productBuilds.where('productionId').equals(owned.productionId).last()
+        const narrative = await db.productBuildArtifacts.where('buildId').equals(currentBuild!.id!)
+          .filter(row => row.artifactKey === 'content.narrative' && row.status === 'accepted').first()
+        const rulePack = await resolveTtrpgProductionRulePackV2({ scope: owned.scope, brief: owned.brief.ttrpg! })
+        output = { ...outputs[taskKey], ttrpgScenario: authoredScenarioFixture({ brief: owned.brief.ttrpg!, rulePack,
+          nodes: JSON.parse(narrative!.payloadJson).nodes }) }
+      }
+      return {
+        output: JSON.stringify(output), usage: { inputTokens: 100, outputTokens: 100 },
+        bindingReceipt: {
+          schema: 'storyforge.provider-binding-receipt', version: 1,
+          requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', adapterVersion: 1,
+          provider: 'fixture', model: productType === 'text-adventure'
+            ? 'fixture-vision' : 'fixture-model', endpointOrigin: 'https://fixture.invalid',
+          executionLocation: 'browser-direct', credentialSource: 'existing-ai-config', credentialPresent: true,
+          capabilityHash: bindingHash, boundAt: 1, receiptHash: 'd'.repeat(64),
+        },
+      }
+    }
+    const runVision: ProductionVisionRunnerV1 = async request => ({
+      output: JSON.stringify({
+        schema: 'storyforge.text-adventure-vision-capability-preflight-model-output',
+        version: 1,
+        observedQuadrants: decodeVisionPreflightQuadrants(request.images[0].data),
+      }),
+      usage: { inputTokens: 50, outputTokens: 20 },
+      bindingReceipt: {
+        schema: 'storyforge.provider-binding-receipt', version: 1,
+        requirementKey: textRequirement.requirementKey,
+        adapterId: 'configured-text.v1', adapterVersion: 1,
+        provider: 'fixture', model: 'fixture-vision', endpointOrigin: 'https://fixture.invalid',
+        executionLocation: 'browser-direct', credentialSource: 'existing-ai-config', credentialPresent: true,
+        capabilityHash: bindingHash, boundAt: 1, receiptHash: 'e'.repeat(64),
+      },
+    })
+    let revisionPhase = false
+    const executeBuild = async () => runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief,
+        runText, runVision: productType === 'text-adventure' ? runVision : undefined,
+      }),
+      capabilityBindings: [
+        {
+          requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
+          ...(productType === 'text-adventure'
+            ? { provider: 'fixture', model: 'fixture-vision' }
+            : {}),
+        },
+        ...(productType === 'text-adventure' ? [await createBuiltInProductionCapabilityBindingV1({
+          requirementKey: owned.brief.capabilityRequirements.find(item => item.mediaClass === 'image')!.requirementKey,
+          adapterId: 'storyforge.procedural-svg.v1',
+        })] : []),
+      ],
+    })
+
+    const projection = await executeBuild()
+    expect(projection.buildStatus).toBe('release-ready')
+    const before = (await db.productBuilds.get(projection.buildId))!
+    const originals = (await db.productBuildArtifacts.where('buildId').equals(before.id!).toArray())
+      .filter(row => row.controlEpoch === before.controlEpoch && ['accepted', 'carried-forward'].includes(row.status))
+    const key = 'content.scene-script.act-1.part-1' as const
+    const original = originals.find(row => row.artifactKey === key)!
+    const edited = JSON.parse(original.payloadJson)
+    const marker = '灯塔旁的铜铃缓缓停下，她再次核对眼前的刻线。'
+    edited.scenes[0].beats.find((beat: { kind: string }) => beat.kind === 'narration').text += marker
+    const production = (await db.productProductions.get(owned.productionId))!
+    const revised = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'revise-text-content', commandId: 'formal.batch.revision', expectedStateRevision: production.stateRevision,
+        buildNumber: before.buildNumber, preserveVisualContract: true,
+        revisions: [{ artifactKey: key, expectedArtifactVersion: original.version, expectedArtifactHash: original.contentHash,
+          note: '补充刻线核对动作', authorDraftJson: JSON.stringify(edited) }],
+        retainedImages: originals.filter(row => row.kind === 'image').map(row => ({ artifactKey: row.artifactKey, expectedArtifactHash: row.contentHash })),
+      } })
+    expect(revised, JSON.stringify(revised)).toMatchObject({ ok: true })
+    const paused = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'pause', commandId: 'formal.batch.pause', expectedStateRevision: revised.stateRevision, reason: '刷新恢复验收' } })
+    expect(paused.ok).toBe(true)
+    db.close(); await db.open()
+    const resumed = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+      command: { type: 'resume', commandId: 'formal.batch.resume', expectedStateRevision: paused.stateRevision } })
+    expect(resumed.ok).toBe(true)
+    const resumedBuild = (await db.productBuilds.get(Number(revised.result.buildId)))!
+    const resumedPlan = JSON.parse(resumedBuild.planJson)
+    const visualProof = await verifiedTextRevisionVisualCarryTaskKeysV1({ scope: owned.scope,
+      buildId: resumedBuild.id!, previousControlEpoch: resumedPlan.controlEpoch, tasks: resumedPlan.tasks })
+    expect([...visualProof]).toContain('media.visual.001')
+    revisionPhase = true
+    const result = await executeBuild()
+    const child = (await db.productBuilds.get(result.buildId))!
+    expect(result, child.failureJson).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    const rows = (await db.productBuildArtifacts.where('buildId').equals(child.id!).toArray())
+      .filter(row => row.controlEpoch === child.controlEpoch && ['accepted', 'carried-forward'].includes(row.status))
+    expect(rows.find(row => row.artifactKey === key)?.payloadJson).toContain(marker)
+    expect(rows.find(row => row.artifactKey === 'runtime.package')?.payloadJson).toContain(marker)
+    expect(modelTasks).not.toContain(key)
+    expect(modelTasks).not.toContain('media.requirements')
+    expect(modelTasks).toContain('content.dialogue-pass.act-1')
+    expect(modelTasks).toContain('content.adventure-quality-review.act-1')
+    for (const original of originals.filter(row => row.kind === 'image')) {
+      const image = rows.find(row => row.artifactKey === original.artifactKey)!
+      expect(image).toMatchObject({ blobObjectId: original.blobObjectId, contentHash: original.contentHash, rightsJson: original.rightsJson })
+      const ledger = JSON.parse(child.budgetLedgerJson)
+      expect(ledger.tasks[original.artifactKey].usage.mediaCalls).toBe(0)
+    }
+    expect(await db.productBuilds.get(before.id!)).toEqual(before)
+    const originalPackage = originals.find(row => row.artifactKey === 'runtime.package')!
+    expect(originalPackage.payloadJson).not.toContain(marker)
+  }, 120_000)
+
   it.each([
     'character-interaction', 'ai-town', 'text-adventure', 'avg', 'ttrpg',
   ] as const)('通用生产产品 %s 经过正式生产、可玩 Build Preview 与同包原子发布', async (productType) => {

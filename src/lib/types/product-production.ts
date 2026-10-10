@@ -147,6 +147,7 @@ export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "request-preview",
   "revise-media-asset",
   "revise-media-assets",
+  "revise-text-content",
   "publish",
   "evolve",
   "archive",
@@ -575,6 +576,8 @@ export interface ProductProductionPlanTaskV3 {
   fallbackTaskKey: string | null;
   acceptanceGateIds: string[];
   reuse: ProductArtifactReuseDecisionV1 | null;
+  /** Exact author draft, authorized by a durable child-Build command. */
+  authorRevision?: TextAdventureContentRevisionV1 & { commandId: string; sourceBuildNumber: number };
 }
 
 export interface ProductProductionPlanV3 {
@@ -865,6 +868,16 @@ export type ProductProductionCommandV1 =
       commandId: string;
       expectedStateRevision: number;
       buildNumber: number;
+    }
+  | {
+      type: "revise-text-content";
+      commandId: string;
+      expectedStateRevision: number;
+      buildNumber: number;
+      revisions: TextAdventureContentRevisionV1[];
+      retainedImages: Array<{ artifactKey: string; expectedArtifactHash: string }>;
+      /** Preserve the parent's visual contract; independent review runs again. */
+      preserveVisualContract: true;
     }
   | {
       type: "revise-media-asset";

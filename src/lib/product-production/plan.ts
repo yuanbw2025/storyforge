@@ -5,7 +5,7 @@ import type {
   ProductTaskBudgetReservationV1,
 } from '../types'
 import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
-import { parseProductProductionBriefV3 } from './contracts'
+import { parseTextAdventureContentRevisionV1, parseProductProductionBriefV3 } from './contracts'
 import { hashProductProductionValueV2, isSha256Hash } from './hash'
 import { textAdventureSceneScriptPartSceneKeysV1 } from '../adventure/scene-script'
 import {
@@ -212,6 +212,7 @@ function parseTask(value: unknown, index: number): ProductProductionPlanTaskV3 {
     'inputArtifactKeys', 'outputArtifactKeys', 'requirementKeys', 'capabilityRequirementKeys',
     'concurrencyGroup', 'subjectLockKeys', 'priority', 'budgetReservation', 'maxAttempts',
     'timeoutMs', 'failurePolicy', 'fallbackTaskKey', 'acceptanceGateIds', 'reuse',
+    ...(Object.prototype.hasOwnProperty.call(row, 'authorRevision') ? ['authorRevision'] : []),
   ], label)
   if (!Array.isArray(row.requiredReceipts) || row.requiredReceipts.length > 1_000) fail(`${label}.requiredReceipts 无效`)
   const requiredReceipts = row.requiredReceipts.map((value, receiptIndex) => {
@@ -241,6 +242,17 @@ function parseTask(value: unknown, index: number): ProductProductionPlanTaskV3 {
       reason: candidate.reason.trim(),
     }
   }
+  let authorRevision: ProductProductionPlanTaskV3['authorRevision']
+  if (Object.prototype.hasOwnProperty.call(row, 'authorRevision')) {
+    const revision = record(row.authorRevision, `${label}.authorRevision`)
+    const { commandId, sourceBuildNumber, ...content } = revision
+    authorRevision = { ...parseTextAdventureContentRevisionV1(content),
+      commandId: key(commandId, `${label}.authorRevision.commandId`),
+      sourceBuildNumber: integer(sourceBuildNumber, `${label}.authorRevision.sourceBuildNumber`) }
+    if (sourceBuildNumber === 0 || row.executionMode !== 'model' || row.reuse != null
+      || authorRevision.artifactKey !== row.taskKey || !Array.isArray(row.outputArtifactKeys)
+      || row.outputArtifactKeys.length !== 1 || row.outputArtifactKeys[0] !== row.taskKey) fail(`${label}.authorRevision 任务不闭合`)
+  }
   return {
     taskKey: key(row.taskKey, `${label}.taskKey`),
     lane: enumValue(row.lane, LANES, `${label}.lane`),
@@ -265,6 +277,7 @@ function parseTask(value: unknown, index: number): ProductProductionPlanTaskV3 {
     fallbackTaskKey: row.fallbackTaskKey === null ? null : key(row.fallbackTaskKey, `${label}.fallbackTaskKey`),
     acceptanceGateIds: keys(row.acceptanceGateIds, `${label}.acceptanceGateIds`),
     reuse,
+    ...(authorRevision ? { authorRevision } : {}),
   }
 }
 
@@ -298,6 +311,7 @@ export function parseProductProductionPlanV3(
   if (Object.values(parsedConcurrency).some(value => value < 1)) fail('concurrency 必须大于零')
   if (!Array.isArray(row.tasks) || row.tasks.length < 1 || row.tasks.length > 100) fail('tasks 数量无效')
   const tasks = row.tasks.map(parseTask)
+  if (tasks.some(task => task.authorRevision) && productType !== 'text-adventure') fail('作者批量修订只用于文字冒险')
   const taskByKey = new Map(tasks.map(task => [task.taskKey, task]))
   if (taskByKey.size !== tasks.length) fail('taskKey 重复')
   const terminalTaskKey = key(row.terminalTaskKey, 'terminalTaskKey')

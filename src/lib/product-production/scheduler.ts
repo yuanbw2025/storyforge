@@ -1,3 +1,4 @@
+import { validateTextContentRevisionAuthorityV1, verifiedTextRevisionVisualCarryTaskKeysV1 } from './text-content-revision-authority'
 import { verifiedHumanImportCarryProofsV1 } from './text-adventure-artifact-store'
 import { isTextAdventureClockCapacityRevisionV1 } from './clock-capacity-revision'
 import { db } from '../db/schema'
@@ -2227,6 +2228,8 @@ async function ensurePlan(input: {
   const currentMediaRevisionPlan = currentPlan && currentPlan.tasks.some(task => (
     task.taskKey === 'media.repair-feedback'
       || task.reuse?.reason.startsWith('媒资修订 ') === true
+      || task.authorRevision != null
+      || task.reuse?.reason.startsWith('文字修订：') === true
   )) ? currentPlan : null
   let plan: ProductProductionPlanV3
   if (state.creatorContracts) {
@@ -2402,6 +2405,10 @@ async function ensurePlan(input: {
             buildId: state.build.id!, failureJson: state.build.failureJson,
             previousControlEpoch: currentPlan.controlEpoch, plan,
           })
+    const retainedVisualTasks = pauseResumeRecovery
+      ? await verifiedTextRevisionVisualCarryTaskKeysV1({ scope: input.scope, buildId: state.build.id!,
+          previousControlEpoch: recoveryArtifactSourceEpoch, tasks: plan.tasks })
+      : new Set<string>()
     // Parent quality rollback has its own frozen cross-Build lineage verifier
     // and deliberately bypasses the polluted child epoch. Same-Build recovery,
     // however, must prove the immediately preceding child Run binding.
@@ -2413,7 +2420,12 @@ async function ensurePlan(input: {
         plan,
         allowHistoricalProducerFallback: pauseResumeRecovery,
       })
-      for (const taskKey of executionBindingInvalidatedTaskKeys) invalidatedTaskKeys.add(taskKey)
+      // Incomplete authored text must resume; it cannot silently revoke the
+      // separate, hash-bound instruction to keep the parent's visual design.
+      // Explicit failures from recoveryInvalidatedTaskKeys remain invalid.
+      for (const taskKey of executionBindingInvalidatedTaskKeys) {
+        if (!retainedVisualTasks.has(taskKey)) invalidatedTaskKeys.add(taskKey)
+      }
     }
     if (parentQualityRollback) {
       const reusableArtifactKeys = textAdventureParentRollbackReusableArtifactKeysV1({
@@ -2454,10 +2466,10 @@ async function ensurePlan(input: {
         }
         const coherent = !invalidatedTaskKeys.has(task.taskKey) && previous != null
           && productProductionTaskReuseSemanticsEqualV1(previous, task)
-          && task.dependsOn.every(dependency => coherentTasks.has(dependency))
+          && (retainedVisualTasks.has(task.taskKey) || task.dependsOn.every(dependency => coherentTasks.has(dependency)))
         if (!coherent) continue
         coherentTasks.add(task.taskKey)
-        if ((task.executionMode !== 'deterministic' || carriesExplicitAuthorDecision)
+        if ((task.executionMode !== 'deterministic' || carriesExplicitAuthorDecision || retainedVisualTasks.has(task.taskKey))
           && canonicalProductProductionJsonV2(previous.outputArtifactKeys)
             === canonicalProductProductionJsonV2(task.outputArtifactKeys)) {
           reusableArtifactKeys.push(...task.outputArtifactKeys)
@@ -2789,6 +2801,7 @@ function wrappedTextAdventureFailureTaskKeyV1(
 }
 
 async function textAdventureAnchorDecisionMatchesBibleV1(input: {
+  confirmationRequired?: boolean
   anchor: ProductBuildArtifactRecordV1
   visualBible: ProductBuildArtifactRecordV1
 }): Promise<boolean> {
@@ -2806,8 +2819,11 @@ async function textAdventureAnchorDecisionMatchesBibleV1(input: {
   })
   return decision.schema === 'storyforge.text-adventure-media-anchor-decision-artifact'
     && decision.version === 1
-    && decision.decision === 'confirm-character-anchors'
     && decision.visualBibleHash === expectedHash
+    && (decision.decision === 'confirm-character-anchors'
+      || (input.confirmationRequired === false && decision.decision === 'not-required-noncommercial'
+        && Array.isArray(decision.confirmedCharacterKeys) && decision.confirmedCharacterKeys.length === 0
+        && decision.authorCommandId === null && decision.authorNote === null))
 }
 
 /**
@@ -4139,12 +4155,13 @@ async function invalidateCarriedTaskClosureV1(input: {
 }
 
 async function carriedTextAdventureAnchorMatchesCurrentBibleV1(input: {
-  buildNumber: number
+  qualityProfile: ProductProductionBriefV3['qualityProfile']
   anchor: ProductBuildArtifactRecordV1
   visualBible: ProductBuildArtifactRecordV1 | undefined
 }): Promise<boolean> {
   if (!input.visualBible || input.anchor.carriedFrom == null) return false
   return textAdventureAnchorDecisionMatchesBibleV1({
+    confirmationRequired: input.qualityProfile === 'commercial-candidate',
     anchor: input.anchor,
     visualBible: input.visualBible,
   })
@@ -4173,6 +4190,7 @@ export function productProductionArtifactEligibleForSyntheticCarryV1(input: {
 
 async function ensureCarriedForwardTaskRuns(input: {
   scope: WorkspaceScope
+  qualityProfile: ProductProductionBriefV3['qualityProfile']
   build: { id: number; buildNumber: number; controlEpoch: number; planHash: string }
   root: AgentRunSnapshotV1
   plan: ProductProductionPlanV3
@@ -4206,7 +4224,7 @@ async function ensureCarriedForwardTaskRuns(input: {
         || task.dependsOn.some(dependency => !completed.has(dependency))) continue
       if (task.taskKey === 'media.anchor-author-gate'
         && !await carriedTextAdventureAnchorMatchesCurrentBibleV1({
-          buildNumber: input.build.buildNumber,
+          qualityProfile: input.qualityProfile,
           anchor: outputs[0],
           visualBible: artifacts.find(row => row.artifactKey === 'media.visual-bible'),
         })) {
@@ -4560,7 +4578,9 @@ async function runClaimedTaskCore(input: {
         taskKey: input.task.taskKey,
       })
   const authorizedDirectResult = authorizedRepair ?? authorizedMediaImport
-  const attemptBudgetReservation = authorizedDirectResult == null
+  const authorRevisionAuthority = await validateTextContentRevisionAuthorityV1(input.scope, input.build, input.task)
+  const frozenAuthorRevision = authorRevisionAuthority?.revision
+  const attemptBudgetReservation = authorizedDirectResult == null && frozenAuthorRevision == null
       ? remainingTaskAttemptBudgetV1({
         task: input.task,
         ledger: parseLedger((await db.productBuilds.get(input.build.id))!.budgetLedgerJson),
@@ -4584,6 +4604,8 @@ async function runClaimedTaskCore(input: {
       : null,
   )
   const authorResolution = authorResolutionEvidence(input.build.failureJson, input.task.taskKey)
+    ?? (frozenAuthorRevision ? { commandId: frozenAuthorRevision.commandId, blockerKey: input.task.taskKey,
+      resolution: { action: 'author-edit' as const, note: frozenAuthorRevision.note }, resolvedAt: authorRevisionAuthority!.authorizedAt } : null)
   const dependencyRuns = await Promise.all(input.task.dependsOn.map(async taskKey => {
     const row = await db.agentRuns.where('[parentRunId+parentRelation]')
       .equals([snapshot.run.parentRunId!, `task:${taskKey}`]).first()
@@ -4808,7 +4830,7 @@ async function runClaimedTaskCore(input: {
     })
   }
   const authorDraftJson = repair.blockerKey === input.task.taskKey && repair.resolution?.action === 'author-edit'
-    ? repair.resolution.authorDraftJson as string : undefined
+    ? repair.resolution.authorDraftJson as string : frozenAuthorRevision?.authorDraftJson
   if (authorDraftJson || authorizedDirectResult) {
     const recorded = await recordAgentRunArtifactV1({
       scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
@@ -6193,6 +6215,7 @@ export async function runProductProductionSchedulerCycleV1(input: {
     }
   }
   await ensureCarriedForwardTaskRuns({
+    qualityProfile: state.brief.qualityProfile,
     scope, build: {
       id: state.build.id!, buildNumber: state.build.buildNumber,
       controlEpoch: state.build.controlEpoch, planHash: state.build.planHash,
