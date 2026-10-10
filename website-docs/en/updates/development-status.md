@@ -6,6 +6,8 @@ This audit covers all 19 local branches (including this documentation-maintenanc
 
 ## 2026-10-10 addition: local Codex provider
 
+Implementation: [d492fe3e](https://github.com/yuanbw2025/storyforge/commit/d492fe3e); delivery and current checks: [draft PR #120](https://github.com/yuanbw2025/storyforge/pull/120).
+
 Branch `feat/codex-provider-20261010` adds an optional local text transport using Codex app-server. It reuses the detected ChatGPT login without an API key and leaves candidate review/adoption with existing StoryForge workflows. See [configuration](/en/getting-started/model-config). Merge, CI, and hosted documentation deployment must be checked separately; this entry does not update the older branch inventory below.
 
 ## October 9 targeted update Plugins and Workshop

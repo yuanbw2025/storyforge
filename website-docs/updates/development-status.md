@@ -6,6 +6,8 @@
 
 ## 2026-10-10 专项补充 · Codex 本机提供商
 
+实现依据：[d492fe3e](https://github.com/yuanbw2025/storyforge/commit/d492fe3e)；交付与当前检查：[草稿 PR #120](https://github.com/yuanbw2025/storyforge/pull/120)。
+
 分支 `feat/codex-provider-20261010` 增加基于 Codex app-server 的可选本机文本传输。检测并复用现有 ChatGPT 登录，无需 API Key，候选审查与采纳继续由现有 StoryForge 流程管理。操作见[模型配置](/getting-started/model-config)。合并、CI 和官网文档部署需分别核对；本条不刷新下方旧分支清单。
 
 ## 2026年10月9日专项补充 插件与创意工坊

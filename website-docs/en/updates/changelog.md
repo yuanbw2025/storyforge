@@ -4,6 +4,8 @@ Changes are organized by user impact. **Main-branch updates do not mean a new ve
 
 ## Development branch: local Codex subscription provider
 
+Evidence: [implementation commit d492fe3e](https://github.com/yuanbw2025/storyforge/commit/d492fe3e), [PR #120](https://github.com/yuanbw2025/storyforge/pull/120).
+
 Adds local login reuse, model selection, keyless task presets, cancellation, recovery records, and subscription usage accounting. See [setup](/en/getting-started/model-config) and [development status](/en/updates/development-status). This is not a new release or a claim that the hosted site can use local subscriptions.
 
 ## Development preview Plugins and Workshop

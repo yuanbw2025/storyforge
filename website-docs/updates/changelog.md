@@ -4,6 +4,8 @@
 
 ## 开发分支 · Codex 本机订阅提供商
 
+依据：[实现提交 d492fe3e](https://github.com/yuanbw2025/storyforge/commit/d492fe3e)、[PR #120](https://github.com/yuanbw2025/storyforge/pull/120)。
+
 新增本机登录复用、模型选择、免 Key 任务预设、取消、断线记录和订阅用量区分。操作见[模型配置](/getting-started/model-config)，交付状态见[开发记录](/updates/development-status)。本条不代表新正式版本，也不表示线上静态站点可调用本机订阅。
 
 ## 开发预览 插件与创意工坊
