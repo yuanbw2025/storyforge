@@ -881,8 +881,8 @@ async function finalizePreparedContentHashV1(
   }
 }
 
-async function assertPreparedContentHashV1(
-  prepared: PreparedArtifactAcceptanceV1,
+export async function assertProductBuildArtifactContentHashV1(
+  prepared: Pick<ProductBuildArtifactRecordV1, 'kind' | 'payloadJson' | 'contentHash' | 'blobObjectId'>,
 ): Promise<void> {
   if (prepared.blobObjectId != null) return
   const payload = JSON.parse(prepared.payloadJson) as unknown
@@ -1392,7 +1392,7 @@ async function createVerifiedProducerCandidateV1(input: {
       mimeType: row.mimeType as string | null | undefined,
       byteSize: row.byteSize as number | undefined,
     }))
-    await assertPreparedContentHashV1(prepared)
+    await assertProductBuildArtifactContentHashV1(prepared)
     if (artifacts.has(prepared.artifactKey)) {
       throw new Error('[product-production-artifact] producer candidate Artifact key 重复')
     }
@@ -1494,7 +1494,7 @@ async function preparedStoredArtifactV1(
     throw new Error(`[product-production-artifact] terminal Artifact JSON 包络不规范:${row.artifactKey}`)
   }
   if (row.blobObjectId == null) {
-    await assertPreparedContentHashV1(prepared)
+    await assertProductBuildArtifactContentHashV1(prepared)
     if (new TextEncoder().encode(row.payloadJson).byteLength !== row.byteSize) {
       throw new Error(`[product-production-artifact] terminal Artifact byteSize 与完整 payload 不一致:${row.artifactKey}`)
     }
@@ -2357,7 +2357,7 @@ async function acceptTextOpenWorldProductBuildArtifact(
     throw new Error('[product-production-artifact] producer Run/receipt 必须同时存在或同时为空')
   }
   const prepared = await finalizePreparedContentHashV1(prepareArtifactAcceptanceV1(input))
-  await assertPreparedContentHashV1(prepared)
+  await assertProductBuildArtifactContentHashV1(prepared)
   const preliminaryBuild = await db.productBuilds.get(input.buildId)
   if (!preliminaryBuild || preliminaryBuild.id == null
     || !await assertRecordInScope(scope, 'productBuilds', preliminaryBuild, { owner: 'work' })) {
@@ -2550,7 +2550,7 @@ export async function acceptTextOpenWorldSourcePinBundleArtifactsV1(input: {
   const preparedRows: PreparedArtifactAcceptanceV1[] = []
   for (const acceptance of acceptanceInputs) {
     const prepared = await finalizePreparedContentHashV1(prepareArtifactAcceptanceV1(acceptance))
-    await assertPreparedContentHashV1(prepared)
+    await assertProductBuildArtifactContentHashV1(prepared)
     preparedRows.push(prepared)
   }
   const preliminaryBuild = await db.productBuilds.get(input.buildId)

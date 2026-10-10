@@ -42,6 +42,7 @@ import type {
 import { assertRecordInScope, resolveScope, scopeTransactionTables } from '../workspace/scope'
 import {
   acceptProductBuildArtifact,
+  assertProductBuildArtifactContentHashV1,
   acceptTextOpenWorldSourcePinBundleArtifactsV1,
   carryForwardProductBuildArtifactsAcrossBuildsV1,
   carryForwardProductBuildArtifactsToEpochV1,
@@ -59,6 +60,7 @@ import {
 } from './plan'
 import { createProductBuildPreviewManifestV1 } from './preview-manifest'
 import { createProductBuildRootTerminalReceiptV1 } from './receipts'
+import { readMediaBlobObjectData } from './media-blob-store'
 import {
   parseProductRuntimePackageV1,
   productProductionTerminalArtifactKeysV1,
@@ -5449,6 +5451,7 @@ async function compileTerminalBuild(input: {
   root: AgentRunSnapshotV1
   plan: ProductProductionPlanV3
   brief: ProductProductionBriefV3
+  restoreImportedProofs?: boolean
 }): Promise<string> {
   const build = await db.productBuilds.get(input.buildId)
   const production = await db.productProductions.get(input.productionId)
@@ -5567,6 +5570,11 @@ async function compileTerminalBuild(input: {
     productionKey: production.productionKey, buildNumber: build.buildNumber,
     buildManifestHash: manifestHash, runtimePackage, mediaBindings, fallbackSummary,
   })
+  if (input.restoreImportedProofs && (manifestHash !== build.manifestHash
+    || packageHash !== build.packageHash || preview.previewHash !== build.previewHash
+    || qualityReportHash !== build.qualityReportHash)) {
+    throw new Error('[product-production-scheduler] 导入复验不得改变已封存 Build 内容或清单')
+  }
   const rootTerminalReceiptHash = await createProductBuildRootTerminalReceiptV1({
     planHash: build.planHash, manifestHash, packageHash, qualityReportHash,
     controlEpoch: build.controlEpoch, budgetLedgerJson: build.budgetLedgerJson, artifacts,
@@ -5610,16 +5618,19 @@ async function compileTerminalBuild(input: {
     // receipt service performs that later, evidence-bound promotion.
     const releaseReady = packageQualityReady && input.brief.qualityProfile !== 'commercial-candidate'
     await db.productBuilds.update(build.id!, {
-      status: releaseReady ? 'release-ready' : 'preview-ready',
+      status: input.restoreImportedProofs ? current.status : releaseReady ? 'release-ready' : 'preview-ready',
       stateRevision: current.stateRevision + 1,
       manifestJson: canonicalProductProductionJsonV2(manifest), manifestHash, packageHash,
       previewManifestJson: canonicalProductProductionJsonV2(preview), previewHash: preview.previewHash,
       qualityReportJson: canonicalProductProductionJsonV2(quality), qualityReportHash,
       compatibilityJson: canonicalProductProductionJsonV2(compatibility),
-      rootTerminalReceiptHash, completedAt: Date.now(), updatedAt: Date.now(),
+      rootTerminalReceiptHash,
+      completedAt: input.restoreImportedProofs ? current.completedAt : Date.now(),
+      updatedAt: Date.now(),
     })
     await db.productProductions.update(production.id!, {
-      status: 'preview-ready', stateRevision: currentProduction.stateRevision + 1, updatedAt: Date.now(),
+      status: input.restoreImportedProofs ? currentProduction.status : 'preview-ready',
+      stateRevision: currentProduction.stateRevision + 1, updatedAt: Date.now(),
     })
   })
   return rootTerminalReceiptHash
@@ -5797,7 +5808,10 @@ async function revalidateImportedCarriedTaskV1(input: {
   if (!previousReceiptHash) return null
   const build = await db.productBuilds.get(input.buildId)
   const ledger = build == null ? null : parseLedger(build.budgetLedgerJson).tasks[input.task.taskKey]
-  const executionIdentityHash = await productProductionTaskExecutionIdentityHashV1(input.task)
+  // Import restores the sealed execution, not a new run of today's Skill.
+  const executionIdentityHash = await frozenProductProductionTaskExecutionIdentityHashV1(
+    input.task, input.snapshot,
+  )
   const receiptHash = ledger == null ? '' : await hashProductProductionValueV2({
     schema: 'storyforge.product-production-carried-task-receipt', version: 1,
     taskKey: input.task.taskKey, inputHash: ledger.idempotencyKey,
@@ -5821,9 +5835,8 @@ async function revalidateImportedCarriedTaskV1(input: {
     || step?.status !== 'succeeded' || step.attempt !== 1
     || step.candidateHash != null || step.outputHash !== input.candidateHash
     || input.outputs.length !== input.task.outputArtifactKeys.length
-    || input.outputs.some(row => row.producerRunId !== input.snapshot.run.id
-      || row.producerReceiptHash !== receiptHash
-      || row.inputHash !== ledger.idempotencyKey)) {
+    || new Set(input.outputs.map(row => row.artifactKey)).size !== input.outputs.length
+    || input.outputs.some(row => !input.task.outputArtifactKeys.includes(row.artifactKey))) {
     throw new Error(
       `[product-production-scheduler] 导入 carried task 完成证据无法在新 scope 复验:${input.task.taskKey}`,
     )
@@ -5837,7 +5850,7 @@ async function revalidateImportedCarriedTaskV1(input: {
 
 /**
  * Complete project backup import deliberately invalidates cloned Harness
- * receipts after local IDs are rebound. A sealed text-open-world Build carries
+ * receipts after local IDs are rebound. A sealed text-adventure or text-open-world Build carries
  * every candidate checkpoint, Artifact envelope, ledger entry and root seal,
  * so the proof can be reconstructed locally without another provider call.
  */
@@ -5847,8 +5860,8 @@ export async function recoverImportedProductProductionProofsV1(input: {
 }): Promise<ProductProductionSchedulerProjectionV1> {
   const scope = await resolveScope({ scope: input.scope })
   const current = await currentProductionBuild(scope, input.productionId)
-  if (current.brief.intent.productType !== 'text-open-world') {
-    throw new Error('[product-production-scheduler] 当前产品不使用开放世界导入证明复验协议')
+  if (!['text-adventure', 'text-open-world'].includes(current.brief.intent.productType)) {
+    throw new Error('[product-production-scheduler] 当前产品不支持导入生产证明复验')
   }
   if (!['preview-ready', 'release-ready', 'released'].includes(current.build.status)) {
     throw new Error('[product-production-scheduler] 只有已封存的导入 Build 可以执行本地证明复验')
@@ -5871,6 +5884,25 @@ export async function recoverImportedProductProductionProofsV1(input: {
   if (children.size !== plan.tasks.length) {
     throw new Error('[product-production-scheduler] 导入 Build 的 task Run 集合不完整')
   }
+  const artifacts = (await db.productBuildArtifacts.where('buildId').equals(current.build.id!).toArray())
+    .filter(row => row.controlEpoch === current.build.controlEpoch
+      && (row.status === 'accepted' || row.status === 'carried-forward'))
+  // A candidate hash binds declared content hashes; independently verify the
+  // restored content and physical media before signing any recovered child.
+  for (const row of artifacts) {
+    if (!await assertRecordInScope(scope, 'productBuildArtifacts', row, { owner: 'work' })) {
+      throw new Error('[product-production-scheduler] 导入 Artifact 跨 Work')
+    }
+    if (row.blobObjectId != null) {
+      if (!row.mimeType) throw new Error('[product-production-scheduler] 导入媒资缺少 MIME')
+      await readMediaBlobObjectData({
+        scope, blobObjectId: row.blobObjectId,
+        expected: { contentHash: row.contentHash, mimeType: row.mimeType, byteSize: row.byteSize },
+      })
+    } else {
+      await assertProductBuildArtifactContentHashV1(row)
+    }
+  }
   let progressed = true
   while (progressed) {
     progressed = false
@@ -5887,9 +5919,13 @@ export async function recoverImportedProductProductionProofsV1(input: {
         .filter(row => row.controlEpoch === current.build.controlEpoch
           && task.outputArtifactKeys.includes(row.artifactKey)
           && (row.status === 'accepted' || row.status === 'carried-forward'))
-      const statuses = new Set(outputs.map(row => row.status))
+      // Reuse and author-import Runs sign the candidate in the ledger while
+      // preserving the Artifact's original producer/input provenance. Their
+      // accepted outputs need not have a model checkpoint, either.
+      const syntheticCarry = snapshot.events.some(event => event.type === 'verification.started'
+        && event.payload.verifierSetVersion === 'product-production-carried-task-v1')
       let recovered: AgentRunSnapshotV1 | null = null
-      if (statuses.size === 1 && statuses.has('accepted')) {
+      if (!syntheticCarry && outputs.every(row => row.status === 'accepted')) {
         const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(scope, snapshot.run.id)
         if (!checkpoint?.resumePayload) {
           throw new Error(
@@ -5908,7 +5944,7 @@ export async function recoverImportedProductProductionProofsV1(input: {
             current.build.controlEpoch,
           ),
         })
-      } else if (statuses.size === 1 && statuses.has('carried-forward')) {
+      } else if (syntheticCarry) {
         const candidateHash = await hashProductProductionValueV2(outputs.map(row => ({
           artifactKey: row.artifactKey,
           contentHash: row.contentHash,
@@ -5950,6 +5986,7 @@ export async function recoverImportedProductProductionProofsV1(input: {
     root,
     plan,
     brief: current.brief,
+    restoreImportedProofs: true,
   })
   return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
 }

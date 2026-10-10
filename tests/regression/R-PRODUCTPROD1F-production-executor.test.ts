@@ -8,6 +8,8 @@ import { resolveTtrpgProductionRulePackV2 } from '../../src/lib/ttrpg/production
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { inflateSync } from 'node:zlib'
 import { db } from '../../src/lib/db/schema'
+import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
+import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { getAgentSkillV1, TEXT_ADVENTURE_PRODUCTION_AGENT_IDS } from '../../src/lib/agent/skill-registry'
 import { prepareProductProductionAdoption } from '../../src/lib/product-production/adoption'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
@@ -71,6 +73,7 @@ import {
   prepareLegacyPausedProductBuildV1,
   runProductProductionUntilBlockedV1,
   runProductProductionSchedulerCycleV1,
+  recoverImportedProductProductionProofsV1,
 } from '../../src/lib/product-production/scheduler'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { evaluateProductRuntimeProductQualityV1 } from '../../src/lib/product-production/product-quality'
@@ -136,6 +139,78 @@ import {
   type ProductionProductKindV1,
 } from '../../src/lib/types'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
+
+async function verifyTextAdventureBackupProofRecoveryV1(input: {
+  scope: Awaited<ReturnType<typeof seedCurrentProductWorld>>['scope']
+  productionId: number
+  buildId: number
+}) {
+  const original = (await db.productBuilds.get(input.buildId))!
+  const sourceProduction = (await db.productProductions.get(input.productionId))!
+  const importedProjectId = await importProjectJSON(await exportProjectJSON(input.scope.projectId))
+  const scope = (await resolveWorkspaceOwnership(importedProjectId)).scope
+  const production = (await db.productProductions.where('projectId').equals(importedProjectId)
+    .filter(row => row.productionKey === sourceProduction.productionKey).first())!
+  const build = (await db.productBuilds.where('[productionId+buildNumber]')
+    .equals([production.id!, original.buildNumber]).first())!
+  const artifacts = await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray()
+  const ledger = JSON.parse(build.budgetLedgerJson)
+  expect(build.id).not.toBe(original.id)
+  expect(ledger.rootRunId).not.toBe(JSON.parse(original.budgetLedgerJson).rootRunId)
+  expect((await db.agentRuns.get(ledger.rootRunId))!.status).not.toBe('completed')
+  await expect(recoverImportedProductProductionProofsV1({
+    scope: input.scope, productionId: production.id!,
+  })).rejects.toThrow()
+
+  const textArtifact = artifacts.find(row => row.blobObjectId == null)!
+  await db.productBuildArtifacts.update(textArtifact.id!, { payloadJson: '{"tampered":true}' })
+  await expect(recoverImportedProductProductionProofsV1({ scope, productionId: production.id! }))
+    .rejects.toThrow(/contentHash 与 payload 不一致/)
+  await db.productBuildArtifacts.put(textArtifact)
+  const mediaArtifact = artifacts.find(row => row.blobObjectId != null)
+  if (mediaArtifact) {
+    const blob = (await db.mediaBlobObjects.get(mediaArtifact.blobObjectId!))!
+    await db.mediaBlobObjects.update(blob.id!, { data: new ArrayBuffer(blob.byteSize) })
+    await expect(recoverImportedProductProductionProofsV1({ scope, productionId: production.id! }))
+      .rejects.toThrow(/媒资哈希不匹配/)
+    await db.mediaBlobObjects.put(blob)
+  }
+
+  // A rebound scope does not authorize a changed candidate. This also proves
+  // partially recovered children can be resumed after the failed local check.
+  const corruptLedger = structuredClone(ledger)
+  const taskKey = Object.keys(corruptLedger.tasks).at(-1)!
+  corruptLedger.tasks[taskKey].candidateHash = 'f'.repeat(64)
+  await db.productBuilds.update(build.id!, { budgetLedgerJson: JSON.stringify(corruptLedger) })
+  await expect(recoverImportedProductProductionProofsV1({ scope, productionId: production.id! }))
+    .rejects.toThrow(/导入.*完成证据/)
+  expect((await db.agentRuns.get(ledger.rootRunId))!.status).not.toBe('completed')
+  await db.productBuilds.update(build.id!, { budgetLedgerJson: build.budgetLedgerJson })
+
+  // Even a locally valid candidate cannot rewrite the sealed manifest during
+  // proof recovery. A failed root join must remain resumable after repair.
+  await db.productBuilds.update(build.id!, { manifestHash: 'e'.repeat(64) })
+  await expect(recoverImportedProductProductionProofsV1({ scope, productionId: production.id! }))
+    .rejects.toThrow(/不得改变已封存 Build/)
+  expect((await db.agentRuns.get(ledger.rootRunId))!.status).not.toBe('completed')
+  await db.productBuilds.update(build.id!, { manifestHash: build.manifestHash })
+
+  const recovered = await recoverImportedProductProductionProofsV1({ scope, productionId: production.id! })
+  expect(recovered).toMatchObject({ terminal: true, buildStatus: original.status })
+  expect(recovered.tasks.every(task => task.status === 'completed')).toBe(true)
+  expect(await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray()).toEqual(artifacts)
+  expect(await db.productBuilds.get(build.id!)).toMatchObject({
+    packageHash: original.packageHash, previewHash: original.previewHash,
+    manifestHash: original.manifestHash, budgetLedgerJson: build.budgetLedgerJson,
+  })
+  expect((await db.productProductions.get(production.id!))!.status).toBe(sourceProduction.status)
+  const eventsBefore = await db.agentRunEvents.where('runId').equals(ledger.rootRunId).count()
+  expect((await recoverImportedProductProductionProofsV1({ scope, productionId: production.id! })).terminal).toBe(true)
+  expect(await db.agentRunEvents.where('runId').equals(ledger.rootRunId).count()).toBe(eventsBefore)
+  const preview = await startProductProductionPreviewV1({ scope, productionId: production.id! })
+  expect((await readProductRuntimeState(preview.sessionId)).adventure?.version).toBe(2)
+  expect(await db.productBuilds.get(original.id!)).toEqual(original)
+}
 
 function crc32Fixture(bytes: Uint8Array): number {
   let crc = 0xffffffff
@@ -7867,6 +7942,10 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       'content.scene-script.act-1', 'content.scene-script.act-2', 'content.scene-script.act-3', 'media.visual-bible',
       'quality.adventure-review', 'quality.autoplay', 'quality.playtest-plan', 'quality.report', 'runtime.package',
     ])
+    await verifyTextAdventureBackupProofRecoveryV1({
+      scope: owned.scope, productionId: owned.productionId, buildId: reassembled.buildId,
+    })
+    expect(modelCallCount).toBe(modelCallCountBeforeReassembly + 1)
   }, 120_000)
 
   it('保留独立叙事审查证据，并在存在阻塞问题时拒绝装配可玩包', async () => {
@@ -8337,6 +8416,9 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
           'runtime.package', 'quality.report',
         ]))
         expect(reviewArtifacts.every(artifact => artifact.payload != null && artifact.contentHash.length === 64)).toBe(true)
+        await verifyTextAdventureBackupProofRecoveryV1({
+          scope: owned.scope, productionId: owned.productionId, buildId: build.id!,
+        })
       }
       if (productType === 'ttrpg') {
         expect(runtimePackage.ttrpg).toMatchObject({
@@ -8441,6 +8523,9 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       }
       released.mediaResolver.dispose()
       if (productType === 'text-adventure') {
+        await verifyTextAdventureBackupProofRecoveryV1({
+          scope: owned.scope, productionId: owned.productionId, buildId: build.id!,
+        })
         const distribution = await exportProductDistributionBundleV2({
           scope: owned.scope,
           productReleaseId: published.receipt.productReleaseId,
