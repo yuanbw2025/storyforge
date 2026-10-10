@@ -2,6 +2,12 @@
 
 本页按用户可感知的变化整理。**main 的功能更新不等于已经发布新版本**：当前 package 版本仍为 3.9.1，正式 Release 保持其发布时内容。在线部署可能有时差，见[版本与兼容说明](/updates/compatibility)。
 
+## 2026-10-10 · 未命名设定记录读取修复
+
+修复故事进程、穿越等多条未命名记录被同一类别标题误判为冲突的问题。AI 读取时按记录身份区分；作者命名记录的冲突检查和世界观标题保持原有规则，不需要迁移数据。操作见[长篇设定](/features/longform/planning)。
+
+依据：[修复提交 8ace5e6c](https://github.com/yuanbw2025/storyforge/commit/8ace5e6c)、[PR #118](https://github.com/yuanbw2025/storyforge/pull/118)，已进入 main；在线应用以部署为准。
+
 ## 2026-10-10 · Codex 本机订阅提供商
 
 依据：[实现提交 d492fe3e](https://github.com/yuanbw2025/storyforge/commit/d492fe3e)、[PR #120](https://github.com/yuanbw2025/storyforge/pull/120)。

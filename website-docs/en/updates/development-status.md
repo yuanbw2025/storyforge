@@ -1,5 +1,16 @@
 # Pending development and branch audit
 
+## Current review: October 10, 2026
+
+The baseline is remote main `6da4c2dc`. This round enumerated all 25 local branches (including this maintenance branch) and 44 worktrees. The October 8 snapshot below remains historical evidence.
+
+- PRs #113 (plugins and Workshop), #115 (node maintenance and free graph editing), #118 (unnamed Canon record conflicts), and #120 (local Codex provider) are merged into main. The Workshop, node, and model-configuration guides were published by [site deployment](https://github.com/yuanbw2025/storyforge/actions/runs/38046659880). Integration does not establish a new formal release or application deployment status.
+- `feat/text-adventure-delivery-20261010`: 12 commits outside main, none local-only; pushed to [draft PR #119](https://github.com/yuanbw2025/storyforge/pull/119), still unmerged. Development covers sealed production-proof recovery after backup import, actual task settlement, controlled final revisions, retaining authorized original images, durable failure when visual authority is missing, and verified work-version display in saves. Remote checks are still running; this round only reads their status and does not describe development as online functionality.
+- The one local-only commit on `feat/codex-provider-merge-20261010` is a merge of traffic archives. It has no unique ordinary patch and is not a missing feature. The actual provider branch is integrated through #120.
+- Other historical branch heads outside main are unchanged from the previous review. Existing deduplication conclusions for backups, migrated built-in games, and old open-world architecture still apply. Two development worktrees retain the same uncommitted scope, and one contains test cache only; this maintenance does not submit, push, or merge them again.
+
+## Historical snapshot (October 8, 2026)
+
 > Snapshot: 2026-10-08 15:07 (UTC+8) · Remote main `7629a7fa`. This page records development evidence, not a list of released features.
 
 This audit covers all 19 local branches (including this documentation-maintenance branch) and 41 registered worktrees, including detached worktrees and those moved into archives. Excluding maintenance, 8 of the remaining 18 branch heads are outside main. “Local-only commits” means commits not contained in any fetched origin branch; the count is not the number of missing features.
@@ -32,7 +43,7 @@ Plugin preview 1.0 is delivered through PR #113; the base implementation is [53c
 
 See the [changelog](/en/updates/changelog), [longform settings](/en/features/longform/planning), and [candidates and recovery](/en/guides/ai-workflow). Mainline integration, application deployment, and documentation deployment are checked separately; a merge date is not a version-release date.
 
-## Branches still outside main
+## Branches outside main in the historical snapshot (not current status)
 
 - `feat/plugin-workshop-v1-20261008`: 1 commit outside main, 0 local-only; clean worktree.
 

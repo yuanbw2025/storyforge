@@ -20,6 +20,8 @@ Maintain real or fictional rules, world origins, natural and cultural environmen
 
 For multiple worlds, define each world's scope and connecting passages. Misfiled records affect later retrieval; check the current world before editing.
 
+When multiple story-progress or crossing records have no name yet, retrieval distinguishes them by record identity instead of treating a shared category as a content conflict. Named records retain their existing conflict checks. Review the corresponding records before continuing generation when an actual duplicate or contradiction is reported.
+
 ## Where to edit power systems
 
 In the longform workspace, open World and settings → World origin → Power system (世界与设定 → 世界起源 → 力量体系). Maintain the overview, structured rules, and level entries on one page. Structured rules include the system name, description, level list, and cultivation constraints. World settings in the world engine uses the same entry.
