@@ -109,6 +109,9 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
 
+  // This integration journey produces six stages, publishes twice and round-trips
+  // three backups. Keep its bound separate from the 5s unit-test default so
+  // coverage instrumentation and concurrent CI do not abort valid transactions.
   it('六个阶段使用独立 Skill、闭集 schema 与作者确认写回', async () => {
     const ids = ['short.intent-brief', 'short.story-design', 'short.scene-plan', 'short.chapter-draft', 'short.continuity-review', 'short.targeted-rewrite']
     expect(ids.map(id => getAgentSkillV1(id).executionMode)).toEqual([
@@ -186,7 +189,7 @@ describe('R-SHORT2 · 专业短篇独立生产闭环', () => {
     delete (invalidExpanded.shortNovelProductions![0] as any).expandedFromShort
     await expect(importProjectJSON(invalidExpanded)).rejects.toThrow('ShortNovelProduction')
 
-  })
+  }, 20_000)
 
   it('把数字类型与英文枚举写入 provider 可执行协议，不依赖模型自行猜测合同', () => {
     const [system, objective] = buildShortNovelPromptV1({

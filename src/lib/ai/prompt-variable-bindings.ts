@@ -59,6 +59,7 @@ export interface AssembleBoundPromptInput {
 }
 
 export interface AssembleBoundPromptResult {
+  contextEvidence?: { included: string[]; omitted: string[]; trimmed: string[]; missing: string[] }
   variables: PromptVariableContext
   missingVariables: string[]
   missingScopes: ('project' | 'work' | 'world' | 'outline' | 'chapter')[]
@@ -159,6 +160,7 @@ export async function assembleBoundPrompt(input: AssembleBoundPromptInput): Prom
     missingScopes: [...missingScopes],
     messages,
     modelOverride: rendered.modelOverride,
+    contextEvidence: { included: assembled?.included ?? [], omitted: assembled?.omitted ?? [], trimmed: assembled?.trimmed ?? [], missing: missingVariables },
   }
 }
 

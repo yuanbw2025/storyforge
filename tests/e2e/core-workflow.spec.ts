@@ -1755,6 +1755,8 @@ test('分步骤角色面板通过 character.create Skill 生成、恢复并确�
       baseUrl: 'http://localhost:1234/v1',
       temperature: 0,
       maxTokens: 0,
+      // Mock model supports the Skill output reservation plus the complete input.
+      contextWindow: 100000,
     }))
   })
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
@@ -1855,6 +1857,8 @@ test('已有角色补全通过定向 Skill 恢复候选，确认后只写入所�
       baseUrl: 'http://localhost:1234/v1',
       temperature: 0,
       maxTokens: 0,
+      // Mock model supports the Skill output reservation plus the complete input.
+      contextWindow: 100000,
     }))
   })
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
@@ -1953,6 +1957,8 @@ test('主 Agent 调度大纲领域任务，确认可见整批候选后同步到�
       baseUrl: 'http://localhost:1234/v1',
       temperature: 0,
       maxTokens: 0,
+      // Mock model supports the Skill output reservation plus the complete input.
+      contextWindow: 100000,
     }))
   })
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
@@ -2059,6 +2065,8 @@ test('故事线面板通过主 Agent 生成 durable 候选，确认后才写入�
       baseUrl: 'http://localhost:1234/v1',
       temperature: 0,
       maxTokens: 0,
+      // Mock model supports the Skill output reservation plus the complete input.
+      contextWindow: 100000,
     }))
   })
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
@@ -2141,6 +2149,8 @@ test('主 Agent 为明确章纲生成正文，拒绝零写入并把可见修订�
       baseUrl: 'http://localhost:1234/v1',
       temperature: 0,
       maxTokens: 0,
+      // Mock model supports the Skill output reservation plus the complete input.
+      contextWindow: 100000,
     }))
   })
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
@@ -2613,6 +2623,8 @@ test('角色驱动 Skill 隔离选定方案，恢复确认后持久化并导入�
       baseUrl: 'http://localhost:1234/v1',
       temperature: 0,
       maxTokens: 0,
+      // Mock model supports the Skill output reservation plus the complete input.
+      contextWindow: 100000,
     }))
   })
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
@@ -2745,6 +2757,8 @@ test('角色中途重规划保护已写正文，只把审查后的 patch 应用�
       baseUrl: 'http://localhost:1234/v1',
       temperature: 0,
       maxTokens: 0,
+      // Mock model supports the Skill output reservation plus the complete input.
+      contextWindow: 100000,
     }))
   })
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
@@ -2909,6 +2923,8 @@ test('世界组六字段扩写只产生可恢复候选，作者确认后一次�
       baseUrl: 'http://localhost:1234/v1',
       temperature: 0,
       maxTokens: 0,
+      // Mock model supports the Skill output reservation plus the complete input.
+      contextWindow: 100000,
     }))
   })
   await page.route('http://localhost:1234/v1/chat/completions', async route => {
@@ -3120,6 +3136,8 @@ test('世界宪法扫描刷新恢复批次，确认后仍只写待确认事实',
       baseUrl: 'http://localhost:1234/v1',
       temperature: 0,
       maxTokens: 0,
+      // Mock model supports the Skill output reservation plus the complete input.
+      contextWindow: 100000,
     }))
   })
   await page.route('http://localhost:1234/v1/chat/completions', async route => {

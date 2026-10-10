@@ -4,6 +4,14 @@
 
 This audit covers all 19 local branches (including this documentation-maintenance branch) and 41 registered worktrees, including detached worktrees and those moved into archives. Excluding maintenance, 8 of the remaining 18 branch heads are outside main. “Local-only commits” means commits not contained in any fetched origin branch; the count is not the number of missing features.
 
+## 2026-10-10 · Free node graph editing preview
+
+[PR #115](https://github.com/yuanbw2025/storyforge/pull/115) extends node maintenance with bidirectional port dragging, compatible-node search, canvas creation, reconnecting and prompt selection. This PR delivers node maintenance and free graph editing; use its latest full checks and merge state to assess delivery, and verify online deployment separately. See [node authoring](/en/features/nodes) for steps and limits.
+
+## October 8 · Historical longform node maintenance development record
+
+At the October 8 review, `feat/longform-node-experience-20261008` was validating author requirements, durable candidate edits and rejection, local execution, fixed-character adoption, interrupted-run recovery, and narrow-screen views in an independent worktree. The branch was unmerged at that time; PR #115 provides the current delivery state, and this historical snapshot does not establish an online update. Isolated browser tests cover cross-mode operations, invalid connections, and backup/deletion paths; complete production acceptance of every official longform template remains pending. See [node authoring](/en/features/nodes).
+
 ## October 9 targeted update Plugins and Workshop
 
 Plugin preview 1.0 is delivered through PR #113; the base implementation is [53c276f3](https://github.com/yuanbw2025/storyforge/commit/53c276f3). See [PR #113](https://github.com/yuanbw2025/storyforge/pull/113) for delivery and review. New [Workshop guides](/en/workshop/) cover capabilities, installation, development, an AI prompt and Skill kit, publishing, maintenance and recovery, with in-app help/download entry points. Use the latest PR checks and merge state to assess delivery; verify website deployment separately. The branch snapshot below preserves the 2026-10-08 review, so its unmerged status and old CI result do not describe the current state.

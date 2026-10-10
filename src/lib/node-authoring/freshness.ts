@@ -1,3 +1,4 @@
+import { renderAuthoringPromptControl } from './prompt-control'
 import { estimateTokens } from '../ai/context-budget'
 import type { NodeFlow } from '../types'
 import { hashAuthoringText, readAuthoringCanonBinding } from './bindings'
@@ -74,14 +75,21 @@ export async function inspectAuthoringGraphFreshness(input: {
       reasons.push('connections-updated')
     }
     if (snapshot?.sourceHash && signature?.executorVersion === 'FLOW-3B.2') {
-      const current = await readAuthoringCanonBinding({
-        node,
-        projectId: input.flow.projectId,
-        worldGroupId: input.flow.worldGroupId ?? null,
-        contextBudget: typeof node.config.contextBudget === 'number' ? node.config.contextBudget : undefined,
-      })
-      if (current.missing.length) reasons.push('source-missing')
-      else if (current.sourceHash !== snapshot.sourceHash) reasons.push('source-updated')
+      if (node.templateId === 'control.prompt') {
+        try {
+          const current = await renderAuthoringPromptControl({ node, projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null })
+          if (current.sourceHash !== snapshot.sourceHash) reasons.push('source-updated')
+        } catch { reasons.push('source-missing') }
+      } else {
+        const current = await readAuthoringCanonBinding({
+          node,
+          projectId: input.flow.projectId,
+          worldGroupId: input.flow.worldGroupId ?? null,
+          contextBudget: typeof node.config.contextBudget === 'number' ? node.config.contextBudget : undefined,
+        })
+        if (current.missing.length) reasons.push('source-missing')
+        else if (current.sourceHash !== snapshot.sourceHash) reasons.push('source-updated')
+      }
     }
 
     const uniqueReasons = Array.from(new Set(reasons))

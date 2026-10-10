@@ -138,4 +138,41 @@ describe('FLOW-3B · 领域节点运行和显式采纳', () => {
     expect(adopted.written).toHaveLength(1)
     expect((await db.worldviews.where('projectId').equals(project.id!).first())?.worldOrigin).toContain('第一座城')
   })
+  it('选中的提示词版本和参数进入正式领域动作，模板不依赖全局数字 id，改动上游后拒绝旧稿采纳', async () => {
+    const prompt = node('control.prompt', 'prompt', { promptSnapshot: {
+      name: '海床版本', scope: 'user', moduleKey: 'worldview.dimension', promptType: 'generate',
+      systemPrompt: '使用{{pace}}节奏描写海床。', userPromptTemplate: '保留潮汐标记。', variables: [],
+      parameters: [{ key: 'pace', label: '节奏', type: 'select', options: ['缓慢', '急促'], default: '急促' }],
+      isActive: false, createdAt: 1, updatedAt: 1,
+    }, parameterValues: { pace: '缓慢' }, supplement: '只写三句。' })
+    const origin = node('world.origin', 'origin')
+    const graph = { ...emptyAuthoringGraph(), nodes: [prompt, origin], edges: [{ id: 'prompt-origin', sourceNodeId: 'prompt', sourcePortId: 'value', targetNodeId: 'origin', targetPortId: 'prompt' }] }
+    const flowId = await useNodeFlowStore.getState().createFlow(project.id!, null, { name: '提示词闭环', graph })
+    const flow = (await db.nodeFlows.get(flowId))!
+    const outcome = await runAuthoringGraph({ flow })
+    expect(outcome.run.status, JSON.stringify(outcome.candidates)).toBe('completed')
+    expect(vi.mocked(chat).mock.calls).toHaveLength(1)
+    expect(vi.mocked(chat).mock.calls[0][0].map(message => message.content).join('\n')).toContain('缓慢节奏')
+    expect(outcome.snapshots.origin.inputs[0].content).toContain('只写三句')
+    expect(await db.promptTemplates.count()).toBe(0)
+    prompt.config.parameterValues = { pace: '急促' }
+    const changed = { ...flow, graphJson: JSON.stringify(graph) }
+    await expect(adoptAuthoringCandidate({ flow: changed, nodeId: origin.id, output: outcome.candidates.origin.output, runId: outcome.run.id })).rejects.toThrow('节点参数或写入目标已变化')
+    expect(await db.worldviews.where('projectId').equals(project.id!).count()).toBe(0)
+  })
+
+  it('未选择提示词或缺少必需变量时在模型调用前阻断并保留错误证据', async () => {
+    for (const config of [{}, { promptSnapshot: { name: '必填模板', systemPrompt: '', userPromptTemplate: '{{topic}}', variables: ['topic'], variableBindings: [{ variable: 'topic', label: '主题', manual: true, required: true }] } }]) {
+      const prompt = node('control.prompt', 'prompt', config)
+      const origin = node('world.origin', 'origin')
+      const graph = { ...emptyAuthoringGraph(), nodes: [prompt, origin], edges: [{ id: 'prompt-origin', sourceNodeId: 'prompt', sourcePortId: 'value', targetNodeId: 'origin', targetPortId: 'prompt' }] }
+      const flowId = await useNodeFlowStore.getState().createFlow(project.id!, null, { name: '缺失提示词', graph })
+      const outcome = await runAuthoringGraph({ flow: (await db.nodeFlows.get(flowId))! })
+      expect(outcome.run.status).toBe('failed')
+      expect(outcome.candidates.prompt.status).toBe('blocked')
+      expect(outcome.candidates.prompt.errors?.join('')).toMatch(/提示词/)
+    }
+    expect(vi.mocked(chat)).not.toHaveBeenCalled()
+  })
+
 })
