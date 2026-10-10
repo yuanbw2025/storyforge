@@ -1556,10 +1556,17 @@ async function applyCommand(input: {
         'content.dialogue-pass.act-1': 'text-adventure.dialogue-pass.v1',
         'content.dialogue-pass.act-2': 'text-adventure.dialogue-pass.v1',
         'content.dialogue-pass.act-3': 'text-adventure.dialogue-pass.v1',
+        'content.quest-script.main.act-1.single': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-1.multi': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-2.single': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-2.multi': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-3.single': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-3.multi': 'text-adventure.quest-script.v1',
+        'content.quest-script.supplemental': 'text-adventure.quest-script.v1',
       }[contentRevision.artifactKey])
         || task.executionMode !== 'model' || task.failurePolicy !== 'pause'
         || task.outputArtifactKeys.length !== 1 || task.outputArtifactKeys[0] !== contentRevision.artifactKey) {
-        reject('invalid-state-transition', '内容修订未命中登记的故事、角色、空间架构、叙事、任务计划、分段正文或对白审校岗位')
+        reject('invalid-state-transition', '内容修订未命中登记的故事、角色、空间架构、叙事、任务计划、任务脚本、分段正文或对白审校岗位')
       }
       const baseline = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
         .filter(row => row.artifactKey === contentRevision.artifactKey && row.controlEpoch === plan.controlEpoch

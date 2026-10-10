@@ -87,9 +87,12 @@ import {
 } from '../../src/lib/product-production/text-adventure-quality'
 import { analyzeTextAdventureRouteQualityV1 } from '../../src/lib/adventure/quality-analysis'
 import {
+  compileTextAdventureModuleV2,
+  type TextAdventureProductionCompilerInputV1,
   conciseTextAdventureActionLabelV1,
   textAdventureDecisionEchoPresentationV1,
 } from '../../src/lib/adventure/production-compiler'
+import type { TextAdventureQuestScriptArtifactV3 } from '../../src/lib/adventure/quest-settlement'
 import { adventureNarrativeActionContext, availableAdventureActions } from '../../src/lib/adventure/runtime'
 import { commitAdventureAction, commitAdventureNarrativeChoice } from '../../src/lib/adventure/runtime-api'
 import { planTextAdventureNarrativeLocationsV1 } from '../../src/lib/adventure/narrative-location-plan'
@@ -481,7 +484,8 @@ async function completeTextAdventureSessionMainRoute(input: {
       }),
     ).filter(item => item.available)
     const objectiveAction = available.find(item => (
-      item.action.key.startsWith('action.main.') && item.action.kind !== 'talk'
+      (item.action.key.startsWith('action.main.') || item.action.key.startsWith('action.prepare.'))
+        && item.action.kind !== 'talk'
     ))
     if (objectiveAction) {
       const base = await readProductRuntimeStateVersion(input.sessionId)
@@ -608,7 +612,7 @@ function questScriptRunOutputs(
   brief: Awaited<ReturnType<typeof fixtureForProduct>>['brief'],
   questScript: {
     schema: 'storyforge.text-adventure-quest-script-artifact'
-    version: 2
+    version: 3
     mainObjectiveScripts: ReadonlyArray<{ sceneKey: string } & Record<string, unknown>>
     sideQuestScripts: ReadonlyArray<unknown>
     ambientEventScripts: ReadonlyArray<unknown>
@@ -1014,9 +1018,10 @@ function professionalTextAdventurePlanningOutputs(
     }],
   }
   const mainObjectiveScripts = mainQuestPlan.quests[0].objectives.map(objective => ({
-    objectiveKey: objective.key, sceneKey: objective.sceneKeys[0],
+    objectiveKey: objective.key, sceneKey: objective.sceneKeys[0], itemBinding: null,
     alternatives: objective.alternatives.map(alternative => ({
-      alternativeKey: alternative.key,
+      alternativeKey: alternative.key, recipientCharacterKey: null,
+      resourceCosts: { success: [], costlySuccess: alternative.actionKind === 'talk' ? [] : [{ resourceKey: 'resource.health', amount: 1 }], failure: alternative.actionKind === 'talk' ? [] : [{ resourceKey: 'resource.health', amount: 1 }] },
       resolution: alternative.actionKind === 'talk'
         ? { mode: 'automatic' as const, abilityKey: null, difficulty: null, costlySuccessFloor: null }
         : { mode: 'check' as const, abilityKey: 'ability.perception', difficulty: 10, costlySuccessFloor: 6 },
@@ -1028,7 +1033,7 @@ function professionalTextAdventurePlanningOutputs(
   }))
   const questScript = {
     schema: 'storyforge.text-adventure-quest-script-artifact' as const,
-    version: 2 as const,
+    version: 3 as const,
     mainObjectiveScripts,
     sideQuestScripts: [{
       entryKey: 'lost-lamp', stages: [{
@@ -1326,11 +1331,12 @@ function fullLengthTextAdventureOutputs(
     }))
   )
   const questScript = {
-    schema: 'storyforge.text-adventure-quest-script-artifact' as const, version: 2 as const,
+    schema: 'storyforge.text-adventure-quest-script-artifact' as const, version: 3 as const,
     mainObjectiveScripts: mainPlan.quests[0].objectives.map(objective => ({
-      objectiveKey: objective.key, sceneKey: objective.sceneKeys[0],
+      objectiveKey: objective.key, sceneKey: objective.sceneKeys[0], itemBinding: null,
       alternatives: objective.alternatives.map(alternative => ({
-        alternativeKey: alternative.key,
+        alternativeKey: alternative.key, recipientCharacterKey: null,
+        resourceCosts: { success: [], costlySuccess: alternative.actionKind === 'talk' ? [] : [{ resourceKey: 'resource.health', amount: 1 }], failure: alternative.actionKind === 'talk' ? [] : [{ resourceKey: 'resource.health', amount: 1 }] },
         resolution: alternative.actionKind === 'talk'
           ? { mode: 'automatic' as const, abilityKey: null, difficulty: null, costlySuccessFloor: null }
           : { mode: 'check' as const, abilityKey: 'ability.perception', difficulty: 10, costlySuccessFloor: 6 },
@@ -1578,7 +1584,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     )).toBe('')
   })
 
-  it('任务脚本根 schema/version 失败时冻结 v2 根身份', () => {
+  it('任务脚本根 schema/version 失败时冻结 v3 根身份', () => {
     const taskKey = 'content.quest-script.main.act-2.single'
     const feedback = JSON.stringify({
       schema: 'storyforge.text-adventure-repair-feedback', version: 1,
@@ -1590,7 +1596,7 @@ describe('R-PRODUCTPROD-1F · provider JSON response normalization', () => {
     })
     const directive = textAdventureQuestScriptRootRetryDirectiveV1(taskKey, feedback)
     expect(directive).toContain('storyforge.text-adventure-quest-script-artifact')
-    expect(directive).toContain('JSON 整数 2')
+    expect(directive).toContain('JSON 整数 3')
     expect(directive).toContain('五个字段')
     expect(textAdventureQuestScriptRootRetryDirectiveV1(
       'content.main-quest-plan', feedback,
@@ -4832,7 +4838,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     ])
   }, 30_000)
 
-  it.each(['content.product-module', 'content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-scenes', 'content.narrative-decision-plan', 'content.ending-route-plan', 'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2', 'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2', 'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2', 'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3'] as const)('%s 暂停后修订已验收内容：绑定命令与原稿，只使后代失效，作者正文零模型采纳', async (revisionKey) => {
+  it.each(['content.product-module', 'content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-scenes', 'content.narrative-decision-plan', 'content.ending-route-plan', 'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2', 'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2', 'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2', 'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'content.quest-script.main.act-1.multi', 'content.quest-script.supplemental'] as const)('%s 暂停后修订已验收内容：绑定命令与原稿，只使后代失效，作者正文零模型采纳', async (revisionKey) => {
     const owned = await fixtureForProduct('text-adventure', { scale: 'short-arc', visualLevel: 'none', omitWorldArtifacts: true })
     const requirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
     const bindingHash = 'a'.repeat(64)
@@ -4843,7 +4849,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const runText: ProductionTextRunnerV1 = async request => {
       const key = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`))!
       calls.push(key)
-      if (key === ({ 'content.product-module': 'content.adventure-quality-review.act-1', 'content.story-bible': 'content.cast-bible', 'content.cast-bible': 'content.adventure-architecture', 'content.adventure-architecture': 'content.narrative-arc-scenes', 'content.narrative-arc-scenes': 'content.narrative-decision-plan', 'content.narrative-decision-plan': 'content.ending-route-plan', 'content.ending-route-plan': 'content.main-quest-plan', 'content.main-quest-plan': 'content.adventure-side-quests', 'content.adventure-side-quests': 'content.quest-script.main.act-1.single', 'content.adventure-ambient-events': 'content.quest-script.main.act-1.single', 'content.scene-script.act-1.part-1': 'content.adventure-quality-review.act-1', 'content.scene-script.act-1.part-2': 'content.adventure-quality-review.act-1', 'content.scene-script.act-2.part-1': 'content.adventure-quality-review.act-1', 'content.scene-script.act-2.part-2': 'content.adventure-quality-review.act-1', 'content.scene-script.act-3.part-1': 'content.adventure-quality-review.act-1', 'content.scene-script.act-3.part-2': 'content.adventure-quality-review.act-1', 'content.dialogue-pass.act-1': 'content.adventure-quality-review.act-1', 'content.dialogue-pass.act-2': 'content.adventure-quality-review.act-1', 'content.dialogue-pass.act-3': 'content.adventure-quality-review.act-1' }[revisionKey]) && pauseOnce) {
+      if (key === ({ 'content.product-module': 'content.adventure-quality-review.act-1', 'content.story-bible': 'content.cast-bible', 'content.cast-bible': 'content.adventure-architecture', 'content.adventure-architecture': 'content.narrative-arc-scenes', 'content.narrative-arc-scenes': 'content.narrative-decision-plan', 'content.narrative-decision-plan': 'content.ending-route-plan', 'content.ending-route-plan': 'content.main-quest-plan', 'content.main-quest-plan': 'content.adventure-side-quests', 'content.adventure-side-quests': 'content.quest-script.main.act-1.single', 'content.adventure-ambient-events': 'content.quest-script.main.act-1.single', 'content.scene-script.act-1.part-1': 'content.adventure-quality-review.act-1', 'content.scene-script.act-1.part-2': 'content.adventure-quality-review.act-1', 'content.scene-script.act-2.part-1': 'content.adventure-quality-review.act-1', 'content.scene-script.act-2.part-2': 'content.adventure-quality-review.act-1', 'content.scene-script.act-3.part-1': 'content.adventure-quality-review.act-1', 'content.scene-script.act-3.part-2': 'content.adventure-quality-review.act-1', 'content.dialogue-pass.act-1': 'content.adventure-quality-review.act-1', 'content.dialogue-pass.act-2': 'content.adventure-quality-review.act-1', 'content.dialogue-pass.act-3': 'content.adventure-quality-review.act-1', 'content.quest-script.main.act-1.multi': 'content.adventure-quality-review.act-1', 'content.quest-script.supplemental': 'content.adventure-quality-review.act-1' }[revisionKey]) && pauseOnce) {
         pauseOnce = false
         expect((await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
           command: { type: 'pause', commandId: 'story-revision.pause',
@@ -4877,6 +4883,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     else if (revisionKey === 'content.narrative-decision-plan') edited.decisions[0].prompt = '两种行动都付出代价，你愿意先承担哪一种？'
     else if (revisionKey === 'content.ending-route-plan') edited.routes[0].rationale = '此前的持续承诺使这个结局成为具体行动的结果。'
     else if (revisionKey === 'content.main-quest-plan') edited.quests[0].description = '让此前的承诺在实际行动与代价中得到兑现。'
+    else if (revisionKey === 'content.quest-script.supplemental') edited.sideQuestScripts[0].stages[0].successText += '你核实了拓片上的刻线。'
+    else if (revisionKey.startsWith('content.quest-script.')) edited.mainObjectiveScripts[0].alternatives[0].resourceCosts.success = [{ resourceKey: 'resource.mana', amount: 1 }]
     else if (revisionKey.startsWith('content.scene-script.')) edited.scenes[0].beats[0].text += '眼前的潮痕让你停下，重新核对手中的线索。'
     else if (revisionKey.startsWith('content.dialogue-pass.')) { edited.beatReviews[0].revisedText = '先看清眼前的潮痕，再决定我们往哪里走。'; edited.beatReviews[0].verdict = 'revise'; edited.beatReviews[0].issueTags = ['exposition'] }
     else edited.entries[0].description = '具体的援助留下可以追踪的后果。'
@@ -8310,9 +8318,30 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         ['潮门广场', '旧仓街', '信号塔'],
       ) : {}),
     }
+    if (professional) {
+      // Exercise the real governed compiler, publish and imported proof path with
+      // a named quest item and an explicit mana cost, not just empty V3 fields.
+      const objective = professional['content.main-quest-plan'].quests[0].objectives[0]
+      Object.assign(objective.alternatives[0], { actionKind: 'give', targetCharacterKey: null })
+      const objectiveScript = professional['content.quest-script'].mainObjectiveScripts[0]
+      Object.assign(objectiveScript, { itemBinding: { kind: 'quest', title: '钟座刻线拓片', description: '记录当前钟座刻线的纸质拓片，交给守钟人核验。' } })
+      const alternativeScript = objectiveScript.alternatives[0]
+      alternativeScript.recipientCharacterKey = 'character.npc.1' as never
+      alternativeScript.resourceCosts.success = [{ resourceKey: 'resource.mana', amount: 1 }] as never
+      alternativeScript.resourceCosts.costlySuccess.push({ resourceKey: 'resource.mana', amount: 1 })
+      alternativeScript.resourceCosts.failure.push({ resourceKey: 'resource.mana', amount: 1 })
+      // The split fixture and accepted assembled fixture share these same entries.
+    }
     const runText: ProductionTextRunnerV1 = async request => {
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs
       if (!taskKey) throw new Error(`unknown ${productType} model task`)
+      if (productType === 'text-adventure' && [
+        'content.scene-script.act-1.part-1', 'content.adventure-quality-review.act-1',
+      ].includes(taskKey)) {
+        expect(request.contextText).toContain('钟座刻线拓片')
+        expect(request.contextText).toContain('"resourceCosts"')
+        expect(request.contextText).toContain('"recipientCharacterKey":"character.npc.1"')
+      }
       let output: unknown = taskKey === 'media.requirements'
         ? { ...outputs[taskKey], visual: productType === 'text-adventure' ? outputs[taskKey].visual : [], audio: [] }
         : outputs[taskKey]
@@ -8417,6 +8446,43 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         'runtime.package', 'quality.report',
       ]))
       expect(reviewArtifacts.every(artifact => artifact.payload != null && artifact.contentHash.length === 64)).toBe(true)
+      const payload = (key: string) => reviewArtifacts.find(artifact => artifact.artifactKey === key)!.payload
+      const compilation = {
+        brief: owned.brief, narrative: runtimePackage.narrative, interaction: runtimePackage.interaction!,
+        architecture: payload('content.adventure-architecture'), systems: payload('content.product-module'),
+        cast: payload('content.cast-bible'), arcPlan: payload('content.narrative-arc-plan'),
+        endingRoutePlan: payload('content.ending-route-plan'), mainQuestPlan: payload('content.main-quest-plan'),
+        questScript: payload('content.quest-script'), sideQuests: payload('content.adventure-side-quests'),
+        ambientEvents: payload('content.adventure-ambient-events'),
+        sourceCatalog: { artifacts: [{ resourceKey: 'artifact:bell-key', name: '原调音钥匙', description: '冻结来源中的唯一钥匙。' }] },
+      } as TextAdventureProductionCompilerInputV1
+      for (const binding of [
+        { kind: 'starter' as const, itemKey: compilation.systems.starterEquipment[0].key },
+        { kind: 'world' as const, resourceKey: 'artifact:bell-key' },
+      ]) {
+        const variant = structuredClone(compilation)
+        ;(variant.questScript as TextAdventureQuestScriptArtifactV3).mainObjectiveScripts.find(objective => objective.objectiveKey === 'objective.1')!.itemBinding = binding
+        const compiled = compileTextAdventureModuleV2(variant)
+        const expectedKey = binding.kind === 'starter' ? binding.itemKey : 'item.world.001'
+        expect(compiled.items.filter(item => item.key === expectedKey)).toHaveLength(1)
+        expect(compiled.items.some(item => item.key === 'item.main.objective.1')).toBe(false)
+        expect(compiled.actions.some(action => action.key === 'action.prepare.objective.1')).toBe(false)
+        expect(compiled.actions.find(action => action.key === 'action.main.alternative.1.1')!.successEffects)
+          .toContainEqual({ op: 'transfer-item', itemKey: expectedKey, quantity: 1, toOwnerKey: 'participant.cast.001' })
+      }
+      const missingSource = structuredClone(compilation)
+      ;(missingSource.questScript as TextAdventureQuestScriptArtifactV3).mainObjectiveScripts.find(objective => objective.objectiveKey === 'objective.1')!.itemBinding = { kind: 'world', resourceKey: 'character:not-an-item' }
+      expect(() => compileTextAdventureModuleV2(missingSource)).toThrow('冻结物品来源不存在')
+      const legacy = structuredClone(compilation)
+      const script = legacy.questScript as TextAdventureQuestScriptArtifactV3
+      legacy.questScript = { ...script, version: 2, mainObjectiveScripts: script.mainObjectiveScripts.map(({ itemBinding: _item, alternatives, ...objective }) => ({
+        ...objective, alternatives: alternatives.map(({ resourceCosts: _costs, recipientCharacterKey: _recipient, ...alternative }) => alternative),
+      })) }
+      const oldAction = compileTextAdventureModuleV2(legacy).actions.find(action => action.key === 'action.main.alternative.1.1')!
+      expect(oldAction.successEffects).toContainEqual({ op: 'transfer-item', itemKey: 'item.main.objective.1', quantity: 1, toOwnerKey: 'quest-recipient' })
+      expect(oldAction.requirements.some(requirement => requirement.resourceKey === 'resource.mana')).toBe(false)
+      expect(oldAction.failureEffects).toContainEqual({ op: 'change-resource', resourceKey: 'resource.health', delta: -1 })
+
     }
     if (productType === 'ttrpg') {
       expect(runtimePackage.ttrpg).toMatchObject({
@@ -8435,6 +8501,34 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(await db.productRuntimeSessions.get(preview.sessionId)).toMatchObject({
       productBuildId: build.id, productReleaseId: null, runtimeSourceHash: build.packageHash,
     })
+    if (productType === 'text-adventure') {
+      const adventure = runtimePackage.adventure!
+      const item = adventure.items.find(item => item.title === '钟座刻线拓片')!
+      expect(item).toBeDefined()
+      const give = adventure.actions.find(action => action.key === 'action.main.alternative.1.1')!
+      expect(give.requirements).toContainEqual({ resourceKey: 'resource.mana', resourceMinimum: 1 })
+      expect(give.successEffects).toContainEqual({ op: 'transfer-item', itemKey: item.key, quantity: 1, toOwnerKey: 'participant.cast.001' })
+      const prepare = adventure.actions.find(action => action.key === 'action.prepare.objective.1')!
+      expect(prepare.label).toContain('钟座刻线拓片')
+      const prepareBase = await readProductRuntimeStateVersion(preview.sessionId)
+      await commitAdventureAction({ sessionId: preview.sessionId, actionKey: prepare.key,
+        commandId: 'v3.take-rubbing', baseSequence: prepareBase.sequence, baseStateHash: prepareBase.stateHash })
+      const beforeGive = await readProductRuntimeState(preview.sessionId)
+      const giveBase = await readProductRuntimeStateVersion(preview.sessionId)
+      const giveCommand = { sessionId: preview.sessionId, actionKey: give.key,
+        commandId: 'v3.give-rubbing', baseSequence: giveBase.sequence, baseStateHash: giveBase.stateHash }
+      const first = await commitAdventureAction(giveCommand)
+      const repeat = await commitAdventureAction(giveCommand)
+      expect(repeat.id).toBe(first.id)
+      const afterGive = await readProductRuntimeState(preview.sessionId)
+      expect(afterGive.adventure!.resources['resource.mana']).toBe(beforeGive.adventure!.resources['resource.mana'] - 1)
+      expect(afterGive.adventure!.inventory.find(row => row.itemKey === item.key)).toMatchObject({ ownerKey: 'participant.cast.001', state: 'transferred', quantity: 1 })
+      expect(afterGive.adventure!.inventory.filter(row => row.itemKey !== item.key)).toEqual(beforeGive.adventure!.inventory.filter(row => row.itemKey !== item.key))
+      const completedBase = await readProductRuntimeStateVersion(preview.sessionId)
+      await expect(commitAdventureAction({ ...giveCommand, commandId: 'v3.give-twice',
+        baseSequence: completedBase.sequence, baseStateHash: completedBase.stateHash })).rejects.toThrow()
+      expect(await readProductRuntimeStateVersion(preview.sessionId)).toEqual(completedBase)
+    }
     if (productType === 'text-adventure') {
       await completeTextAdventureSessionMainRoute({
         sessionId: preview.sessionId,

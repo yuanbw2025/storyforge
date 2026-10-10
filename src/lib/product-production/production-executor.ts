@@ -1,3 +1,4 @@
+import { parseTextAdventureQuestScriptArtifact, textAdventureQuestRecipientsV3 } from '../adventure/quest-settlement'
 import { hasFrozenAuthorUploadRightsV1 } from './media-rights'
 import { TTRPG_SCENARIO_PROMPT_V1 } from '../ttrpg/scenario-prompt'
 import { parseTtrpgAuthoredScenarioV1, type TtrpgAuthoredScenarioV1 } from '../ttrpg/scenario-authoring'
@@ -74,7 +75,6 @@ import {
   parseTextAdventureEndingRoutePlanArtifactV1,
   parseTextAdventureMediaAnchorDecisionArtifactV1,
   parseTextAdventureQuestPlanArtifactV1,
-  parseTextAdventureQuestScriptArtifactV2,
   parseTextAdventureSourceDecisionArtifactV1,
   parseTextAdventureSourceSufficiencyArtifactV1,
   parseTextAdventureStoryBibleArtifactV1,
@@ -5111,7 +5111,7 @@ export function textAdventureQuestScriptResolutionRetryDirectiveV1(
   if (!rejectedResolutionShape && !rejectedCheckBinding && !rejectedAlternativeShape) return ''
   return '上一候选被确定性 resolution 门拒绝。本次逐项检查每个 mainObjectiveScripts[].alternatives[]：resolution 对象必须且只能含 mode、abilityKey、difficulty、costlySuccessFloor 四个字段；timeCostMinutes、successText、costlySuccessText、failureForwardText 必须是 alternative 对象中与 resolution 同级的四个字段。不得把任何同级字段嵌进 resolution，也不得把 resolution 的四个字段提升到 alternative。' +
     (rejectedAlternativeShape
-      ? '每个 alternative 对象必须且只能含 alternativeKey、resolution、timeCostMinutes、successText、costlySuccessText、failureForwardText 六个字段；这里的失败字段名必须逐字为 failureForwardText，严禁沿用上游任务计划字段 failureForwardConsequence，也不得同时输出两个名称。'
+      ? '每个 alternative 对象必须且只能含 alternativeKey、resolution、timeCostMinutes、successText、costlySuccessText、failureForwardText、resourceCosts、recipientCharacterKey 八个字段；这里的失败字段名必须逐字为 failureForwardText，严禁沿用上游任务计划字段 failureForwardConsequence，也不得同时输出两个名称。'
       : '') +
     (rejectedCheckBinding
       ? '凡 mode="check" 的 resolution，abilityKey 必须逐字复制系统提示列出的一个已登记能力 key，difficulty 必须是 2–30 的整数，costlySuccessFloor 必须是 1–29 且严格小于 difficulty；这三个字段都禁止为 null。只有 mode="automatic" 才允许后三个字段全部为 null。'
@@ -5136,11 +5136,12 @@ export function textAdventureQuestScriptRootRetryDirectiveV1(
       if (!value || typeof value !== 'object' || Array.isArray(value)) return false
       const row = value as JsonRecord
       return row.taskKey === taskKey && typeof row.detail === 'string'
-        && row.detail === '[text-adventure-production-artifact-v2] questScript schema/version 无效'
+        && (row.detail === '[text-adventure-production-artifact-v2] questScript schema/version 无效'
+          || row.detail.includes('当前任务脚本合同要求 version=3'))
     })
   }
   if (!rejectedRootIdentity) return ''
-  return '上一候选被任务脚本根身份门拒绝。根对象的 schema 必须逐字等于 "storyforge.text-adventure-quest-script-artifact"，version 必须是不带引号的 JSON 整数 2；严禁输出版本 1、字符串 "2"、省略任一字段或沿用上游 quest-plan/quest-bundle 的 schema。根对象仍必须且只能含 schema、version、mainObjectiveScripts、sideQuestScripts、ambientEventScripts 五个字段。'
+  return '上一候选被任务脚本根身份门拒绝。根对象的 schema 必须逐字等于 "storyforge.text-adventure-quest-script-artifact"，version 必须是不带引号的 JSON 整数 3；严禁输出旧版本 1/2、字符串 "3"、省略任一字段或沿用上游 quest-plan/quest-bundle 的 schema。根对象仍必须且只能含 schema、version、mainObjectiveScripts、sideQuestScripts、ambientEventScripts 五个字段。'
 }
 
 export function textAdventureQuestScriptOutcomeRetryDirectiveV1(
@@ -5663,9 +5664,11 @@ function textSystem(
       runBoundary +
       outcomeAnchors +
       (boundary == null ? '' : `这里的“第 ${boundary.actIndex + 1} 幕”由 objective.sceneKey 所属的正文分幕决定，不等于主线任务计划里的 stageKey 编号；即使某个目标的 stageKey 看起来属于上一阶段，只要它出现在本 Run 的冻结身份清单中就必须输出。冻结身份清单是本 Run 唯一的条目边界。`) +
-      '输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-script-artifact","version":2,"mainObjectiveScripts":[{"objectiveKey":"objective.some-key","sceneKey":"scene.001","alternatives":[{"alternativeKey":"alternative.some-key","resolution":{"mode":"automatic|check","abilityKey":null,"difficulty":null,"costlySuccessFloor":null},"timeCostMinutes":5,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}]}],"sideQuestScripts":[{"entryKey":"side-key","stages":[{"stageKey":"stage-one","actionKind":"inspect|attempt|use|quest-action","abilityKey":"ability.some-key","difficulty":10,"costlySuccessFloor":6,"timeCostMinutes":8,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}]}],"ambientEventScripts":[]}。' +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-quest-script-artifact","version":3,"mainObjectiveScripts":[{"objectiveKey":"objective.some-key","sceneKey":"scene.001","itemBinding":null,"alternatives":[{"alternativeKey":"alternative.some-key","resourceCosts":{"success":[],"costlySuccess":[],"failure":[]},"recipientCharacterKey":null,"resolution":{"mode":"automatic|check","abilityKey":null,"difficulty":null,"costlySuccessFloor":null},"timeCostMinutes":5,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}]}],"sideQuestScripts":[{"entryKey":"side-key","stages":[{"stageKey":"stage-one","actionKind":"inspect|attempt|use|quest-action","abilityKey":"ability.some-key","difficulty":10,"costlySuccessFloor":6,"timeCostMinutes":8,"successText":"...","costlySuccessText":"...","failureForwardText":"..."}]}],"ambientEventScripts":[]}。' +
       `上游已冻结的脚本身份与顺序=${JSON.stringify(textAdventureQuestScriptIdentityPlan)}；必须逐项原样复制 objectiveKey、sceneKey、alternativeKeys→alternativeKey，以及每个补充任务的 entryKey、stages[].stageKey/actionKind/abilityKey/difficulty/costlySuccessFloor/timeCostMinutes，不得重新命名、翻译、合并阶段、重设补充任务数值或按自己的理解排序。` +
-      (boundary == null ? '' : '主线每个 alternative 对象必须恰好含 alternativeKey、resolution、timeCostMinutes、successText、costlySuccessText、failureForwardText 六个字段；其中 resolution 必须且只能含 mode、abilityKey、difficulty、costlySuccessFloor，timeCostMinutes 与三档文本永远是 resolution 的同级字段。') +
+      (boundary == null ? '' : '主线每个 alternative 对象必须恰好含 alternativeKey、resolution、timeCostMinutes、successText、costlySuccessText、failureForwardText、resourceCosts、recipientCharacterKey 八个字段；其中 resolution 必须且只能含 mode、abilityKey、difficulty、costlySuccessFloor，timeCostMinutes 与三档文本永远是 resolution 的同级字段。') +
+      'V3 每个主线目标必须显式声明 itemBinding：没有 take/give/use 时为 null；产品私域任务物品用 {kind:"quest",title:"真实物品名称",description:"来源与用途"}，已有初始装备用 {kind:"starter",itemKey:"上游精确 key"}，冻结世界物品用 {kind:"world",resourceKey:"Brief 已选择的精确来源 key"}。禁止用任务标题或占位物品冒充正文中的关键钥匙。give 必须把 recipientCharacterKey 绑定到当前场景 nonPlayerCastKeys，其他行动为 null；交付会转移所有权，use 不消耗物品，take 只允许领取本目标产品物品。已有装备与世界物品沿原取得入口，不额外生成副本。' +
+      '每个主线解法 resourceCosts 必须含 success/costlySuccess/failure 三个数组，每项精确为 {resourceKey,amount}；只允许已登记 health/mana/stamina/currency，amount 为正整数，重复资源拒绝。这些数组就是三档结果实际扣除的全部资源，不会自动追加生命扣除；时间仍由 timeCostMinutes 单独结算。automatic 的 costlySuccess/failure 消耗必须为空。文字中承诺的每项资源代价必须进入对应数组；结算前按各资源最大可能消耗检查余额，不足则不执行、不部分扣款。保留可达的替代路径，不能用隐藏补给掩盖软锁。' +
       '补充任务的每个 sideQuestScripts[].stages[] 和 ambientEventScripts[].stages[] 必须恰好只有 stageKey、actionKind、abilityKey、difficulty、costlySuccessFloor、timeCostMinutes、successText、costlySuccessText、failureForwardText 这 9 个字段。补充任务的失败推进字段名也是 failureForwardText，不是上游任务计划使用的 failureText；严禁混用或同时输出两者。' +
       `check.resolution.abilityKey 只能逐字使用这些上游已登记能力=${JSON.stringify(textAdventureQuestScriptAbilityKeys)}；不得用能力标题、中文简称、动作类型或自造 key。` +
       'mainObjectiveScripts 必须按主线 stage.objectiveKeys 的顺序不重不漏覆盖全部目标，sceneKey 必须等于该目标首个 sceneKey，每个 alternatives 必须不重不漏覆盖计划解法。automatic 的三个检查参数必须全为 null；check 必须复用 systems.abilities 的 key，difficulty 为 2–30，costlySuccessFloor 为 1–29 且严格小于 difficulty。' +
@@ -7204,6 +7207,7 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       objectiveCount: mainQuestPlan.quests[0].objectives.length,
     }
   } else if (questScriptModelTask) {
+    if (raw.version !== 3) fail('当前任务脚本合同要求 version=3；旧 V2 仅用于读取已封存工件')
     if (!options.brief.textAdventure) fail('文字冒险任务脚本缺少专用 Brief')
     const systems = parseTextAdventureSystemsArtifactV1(
       artifactPayload(input, 'content.product-module'), options.brief.textAdventure,
@@ -7282,8 +7286,9 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
             ambientEvents: emptyQuestBundle('ambient'),
           }
         })()
-    const questScript = parseTextAdventureQuestScriptArtifactV2({
+    const questScript = parseTextAdventureQuestScriptArtifact({
       value: raw,
+      recipientKeysByScene: Object.fromEntries(textAdventureSceneConstraints.map(scene => [scene.sceneKey, scene.nonPlayerCastKeys ?? []])),
       brief: options.brief,
       systems,
       mainQuestPlan: projected.mainQuestPlan,
@@ -10014,9 +10019,10 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
           arcPlan: textAdventureArcPlan,
           endingRoutePlan: textAdventureEndingRoutePlan,
           mainQuestPlan: textAdventureMainQuestPlan,
-          questScript: parseTextAdventureQuestScriptArtifactV2({
+          questScript: parseTextAdventureQuestScriptArtifact({
             value: artifactPayload(input, 'content.quest-script'), brief: options.brief,
             systems, mainQuestPlan: textAdventureMainQuestPlan, sideQuests, ambientEvents,
+            recipientKeysByScene: textAdventureQuestRecipientsV3(textAdventureCast, textAdventureArcPlan),
             locationTitles: textAdventureLocationTitlesFromArchitectureV1(textAdventureArchitecture),
           }),
           sideQuests,
@@ -10515,10 +10521,12 @@ async function executeTextAdventureQuestScriptAssemblyTask(
   const supplemental = artifactPayload(
     input, TEXT_ADVENTURE_QUEST_SCRIPT_SUPPLEMENTAL,
   ) as JsonRecord
-  const assembled = parseTextAdventureQuestScriptArtifactV2({
+  const scriptVersions = new Set([...mainParts, supplemental].map(part => part.version))
+  if (scriptVersions.size !== 1 || ![2, 3].includes(Number(mainParts[0]?.version))) fail('任务脚本分片版本不一致，必须显式修订全部分片')
+  const assembled = parseTextAdventureQuestScriptArtifact({
     value: {
       schema: 'storyforge.text-adventure-quest-script-artifact',
-      version: 2,
+      version: mainParts[0].version,
       mainObjectiveScripts: mainParts.flatMap(part => (
         Array.isArray(part.mainObjectiveScripts) ? part.mainObjectiveScripts : []
       )),
@@ -10533,6 +10541,7 @@ async function executeTextAdventureQuestScriptAssemblyTask(
     sideQuests,
     ambientEvents,
     locationTitles,
+    recipientKeysByScene: textAdventureQuestRecipientsV3(cast, arcPlan),
   })
   return {
     artifacts: [{
