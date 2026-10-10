@@ -8282,309 +8282,306 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).count()).toBe(1)
   }, 120_000)
 
-  it('五种通用生产产品经过正式生产、可玩 Build Preview 与同包原子发布', async () => {
-    const products: ProductionProductKindV1[] = [
-      'character-interaction', 'ai-town', 'text-adventure', 'avg', 'ttrpg',
-    ]
-    for (const productType of products) {
-      const owned = await fixtureForProduct(productType, { pluginRules: productType === 'ttrpg' })
-      const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
-      expect(owned.brief.capabilityRequirements.filter(item => item.mediaClass !== 'text'))
-        .toHaveLength(productType === 'text-adventure' ? 1 : 0)
-      const bindingHash = await hashProductProductionValueV2({ provider: 'existing-global-config', productType })
-      const baseOutputs = modelOutputs(
-        owned.brief.source.worldContentHash,
-        productType,
-        firstCharacterAnchor(owned.brief),
-        owned.brief.intent.playerRole,
-      )
-      const professional = productType === 'text-adventure'
-        ? professionalTextAdventurePlanningOutputs(owned.brief) : null
-      const outputs = {
-        ...baseOutputs,
-        ...(professional ?? {}),
-        ...(professional ? professionalTextAdventureSceneScriptOutputs(
-          owned.brief,
-          professional,
-          ['潮门广场', '旧仓街', '信号塔'],
-        ) : {}),
+  // Each product owns an independent fixture and timeout. The unpublished
+  // recovery path is already covered by the 60-minute adventure above;
+  // this matrix additionally verifies recovery of the published adventure.
+  it.each([
+    'character-interaction', 'ai-town', 'text-adventure', 'avg', 'ttrpg',
+  ] as const)('通用生产产品 %s 经过正式生产、可玩 Build Preview 与同包原子发布', async (productType) => {
+    const owned = await fixtureForProduct(productType, { pluginRules: productType === 'ttrpg' })
+    const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
+    expect(owned.brief.capabilityRequirements.filter(item => item.mediaClass !== 'text'))
+      .toHaveLength(productType === 'text-adventure' ? 1 : 0)
+    const bindingHash = await hashProductProductionValueV2({ provider: 'existing-global-config', productType })
+    const baseOutputs = modelOutputs(
+      owned.brief.source.worldContentHash,
+      productType,
+      firstCharacterAnchor(owned.brief),
+      owned.brief.intent.playerRole,
+    )
+    const professional = productType === 'text-adventure'
+      ? professionalTextAdventurePlanningOutputs(owned.brief) : null
+    const outputs = {
+      ...baseOutputs,
+      ...(professional ?? {}),
+      ...(professional ? professionalTextAdventureSceneScriptOutputs(
+        owned.brief,
+        professional,
+        ['潮门广场', '旧仓街', '信号塔'],
+      ) : {}),
+    }
+    const runText: ProductionTextRunnerV1 = async request => {
+      const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs
+      if (!taskKey) throw new Error(`unknown ${productType} model task`)
+      let output: unknown = taskKey === 'media.requirements'
+        ? { ...outputs[taskKey], visual: productType === 'text-adventure' ? outputs[taskKey].visual : [], audio: [] }
+        : outputs[taskKey]
+      if (productType === 'ttrpg' && taskKey === 'content.product-module') {
+        const currentBuild = await db.productBuilds.where('productionId').equals(owned.productionId).last()
+        const narrative = await db.productBuildArtifacts.where('buildId').equals(currentBuild!.id!)
+          .filter(row => row.artifactKey === 'content.narrative' && row.status === 'accepted').first()
+        const rulePack = await resolveTtrpgProductionRulePackV2({ scope: owned.scope, brief: owned.brief.ttrpg! })
+        output = { ...outputs[taskKey], ttrpgScenario: authoredScenarioFixture({ brief: owned.brief.ttrpg!, rulePack,
+          nodes: JSON.parse(narrative!.payloadJson).nodes }) }
       }
-      const runText: ProductionTextRunnerV1 = async request => {
-        const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs
-        if (!taskKey) throw new Error(`unknown ${productType} model task`)
-        let output: unknown = taskKey === 'media.requirements'
-          ? { ...outputs[taskKey], visual: productType === 'text-adventure' ? outputs[taskKey].visual : [], audio: [] }
-          : outputs[taskKey]
-        if (productType === 'ttrpg' && taskKey === 'content.product-module') {
-          const currentBuild = await db.productBuilds.where('productionId').equals(owned.productionId).last()
-          const narrative = await db.productBuildArtifacts.where('buildId').equals(currentBuild!.id!)
-            .filter(row => row.artifactKey === 'content.narrative' && row.status === 'accepted').first()
-          const rulePack = await resolveTtrpgProductionRulePackV2({ scope: owned.scope, brief: owned.brief.ttrpg! })
-          output = { ...outputs[taskKey], ttrpgScenario: authoredScenarioFixture({ brief: owned.brief.ttrpg!, rulePack,
-            nodes: JSON.parse(narrative!.payloadJson).nodes }) }
-        }
-        return {
-          output: JSON.stringify(output), usage: { inputTokens: 100, outputTokens: 100 },
-          bindingReceipt: {
-            schema: 'storyforge.provider-binding-receipt', version: 1,
-            requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', adapterVersion: 1,
-            provider: 'fixture', model: productType === 'text-adventure'
-              ? 'fixture-vision' : 'fixture-model', endpointOrigin: 'https://fixture.invalid',
-            executionLocation: 'browser-direct', credentialSource: 'existing-ai-config', credentialPresent: true,
-            capabilityHash: bindingHash, boundAt: 1, receiptHash: 'd'.repeat(64),
-          },
-        }
-      }
-      const runVision: ProductionVisionRunnerV1 = async request => ({
-        output: JSON.stringify({
-          schema: 'storyforge.text-adventure-vision-capability-preflight-model-output',
-          version: 1,
-          observedQuadrants: decodeVisionPreflightQuadrants(request.images[0].data),
-        }),
-        usage: { inputTokens: 50, outputTokens: 20 },
+      return {
+        output: JSON.stringify(output), usage: { inputTokens: 100, outputTokens: 100 },
         bindingReceipt: {
           schema: 'storyforge.provider-binding-receipt', version: 1,
-          requirementKey: textRequirement.requirementKey,
-          adapterId: 'configured-text.v1', adapterVersion: 1,
-          provider: 'fixture', model: 'fixture-vision', endpointOrigin: 'https://fixture.invalid',
+          requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', adapterVersion: 1,
+          provider: 'fixture', model: productType === 'text-adventure'
+            ? 'fixture-vision' : 'fixture-model', endpointOrigin: 'https://fixture.invalid',
           executionLocation: 'browser-direct', credentialSource: 'existing-ai-config', credentialPresent: true,
-          capabilityHash: bindingHash, boundAt: 1, receiptHash: 'e'.repeat(64),
+          capabilityHash: bindingHash, boundAt: 1, receiptHash: 'd'.repeat(64),
+        },
+      }
+    }
+    const runVision: ProductionVisionRunnerV1 = async request => ({
+      output: JSON.stringify({
+        schema: 'storyforge.text-adventure-vision-capability-preflight-model-output',
+        version: 1,
+        observedQuadrants: decodeVisionPreflightQuadrants(request.images[0].data),
+      }),
+      usage: { inputTokens: 50, outputTokens: 20 },
+      bindingReceipt: {
+        schema: 'storyforge.provider-binding-receipt', version: 1,
+        requirementKey: textRequirement.requirementKey,
+        adapterId: 'configured-text.v1', adapterVersion: 1,
+        provider: 'fixture', model: 'fixture-vision', endpointOrigin: 'https://fixture.invalid',
+        executionLocation: 'browser-direct', credentialSource: 'existing-ai-config', credentialPresent: true,
+        capabilityHash: bindingHash, boundAt: 1, receiptHash: 'e'.repeat(64),
+      },
+    })
+    const projection = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: createConfiguredProductProductionExecutorV1({
+        production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief,
+        runText, runVision: productType === 'text-adventure' ? runVision : undefined,
+      }),
+      capabilityBindings: [
+        {
+          requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
+          ...(productType === 'text-adventure'
+            ? { provider: 'fixture', model: 'fixture-vision' }
+            : {}),
+        },
+        ...(productType === 'text-adventure' ? [await createBuiltInProductionCapabilityBindingV1({
+          requirementKey: owned.brief.capabilityRequirements.find(item => item.mediaClass === 'image')!.requirementKey,
+          adapterId: 'storyforge.procedural-svg.v1',
+        })] : []),
+      ],
+    })
+    const projectedBuild = await db.productBuilds.get(projection.buildId)
+    expect(
+      projection,
+      `${productType} production projection:\n${JSON.stringify(projection, null, 2)}\nfailure=${projectedBuild?.failureJson}`,
+    ).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
+    const build = projectedBuild!
+    const packageArtifact = await db.productBuildArtifacts
+      .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).first()
+    const runtimePackage = parseProductRuntimePackageV1(packageArtifact!.payloadJson)
+    expect(runtimePackage.productType).toBe(productType)
+    expect(runtimePackage.sourceWorld.selection).toEqual(owned.brief.source.selection)
+    if (productType === 'character-interaction') {
+      expect(runtimePackage.interaction!.profiles).toHaveLength(1)
+      expect(runtimePackage.interaction!.profiles[0]).toMatchObject({name:'林舟',voiceRules:expect.stringContaining('简短直接')})
+      expect(runtimePackage.interaction!.profiles[0].initialKnowledge).toContainEqual(expect.objectContaining({visibility:'private',content:'独自保管的暗号'}))
+      expect(runtimePackage.interaction!.profiles[0].relationshipDimensions[0].initial).toBe(24)
+      expect(runtimePackage.interaction!.sceneTemplates[0].directorBudget).toBe(120)
+    }
+    if (productType === 'ai-town') {
+      expect(runtimePackage.town).toMatchObject({
+        schema: 'storyforge.ai-town-runtime-content',
+        clock: { slots: [...AI_TOWN_DAY_SLOTS] },
+        offline: { maximumDays: 3 },
+      })
+      expect(runtimePackage.town?.residents).toHaveLength(4)
+    }
+    if (productType === 'text-adventure') {
+      expect(runtimePackage.adventure?.version).toBe(2)
+      expect(runtimePackage.presentation?.assets).toHaveLength(2)
+      expect(runtimePackage.adventure?.media.assetKeys).toEqual(
+        runtimePackage.presentation?.assets.map(asset => asset.assetKey),
+      )
+      expect(runtimePackage.narrative.choices.some(choice => (
+        choice.tags.some(tag => tag.startsWith('adventure-action:'))
+      ))).toBe(true)
+      const reviewArtifacts = await listProductProductionReviewArtifactsV1({
+        scope: owned.scope,
+        buildId: build.id!,
+      })
+      expect(reviewArtifacts.map(artifact => artifact.artifactKey)).toEqual(expect.arrayContaining([
+        'content.adventure-architecture', 'content.narrative', 'content.product-module',
+        'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
+        'quality.adventure-review', 'media.requirements',
+        'runtime.package', 'quality.report',
+      ]))
+      expect(reviewArtifacts.every(artifact => artifact.payload != null && artifact.contentHash.length === 64)).toBe(true)
+    }
+    if (productType === 'ttrpg') {
+      expect(runtimePackage.ttrpg).toMatchObject({
+        rulePack: { contentHash: owned.brief.ttrpg?.rules.effectiveContentHash },
+        campaign: { tags: expect.arrayContaining(['production-campaign-v2']) },
+      })
+      expect(await db.productBuildArtifacts
+        .where('[buildId+artifactKey]').equals([build.id!, 'ttrpg.rule-pack']).count()).toBe(1)
+      expect(await db.productBuildArtifacts
+        .where('[buildId+artifactKey]').equals([build.id!, 'ttrpg.campaign-pack']).count()).toBe(1)
+    }
+    const preview = await startProductProductionPreviewV1({
+      scope: owned.scope, productionId: owned.productionId,
+    })
+    expect(preview.productType).toBe(productType)
+    expect(await db.productRuntimeSessions.get(preview.sessionId)).toMatchObject({
+      productBuildId: build.id, productReleaseId: null, runtimeSourceHash: build.packageHash,
+    })
+    if (productType === 'text-adventure') {
+      await completeTextAdventureSessionMainRoute({
+        sessionId: preview.sessionId,
+        runtimePackage,
+        commandPrefix: 'six.text-adventure.preview',
+      })
+    }
+    if (productType === 'ttrpg') {
+      const beforeSessionZero = await readProductRuntimeState(preview.sessionId)
+      const beforeVersion = await readProductRuntimeStateVersion(preview.sessionId)
+      await db.productBuilds.update(build.id!, { previewHash: 'f'.repeat(64) })
+      await expect(completeTtrpgSessionZero({
+        sessionId: preview.sessionId,
+        commandId: 'six.ttrpg.preview.tampered',
+        baseSequence: beforeVersion.sequence,
+        baseStateHash: beforeVersion.stateHash,
+        acceptedItemKeys: beforeSessionZero.ttrpg!.product!.sessionZero.requiredItemKeys,
+        completedBy: 'gm',
+      })).rejects.toThrow(/Preview|运行源|hash/)
+      await db.productBuilds.update(build.id!, { previewHash: build.previewHash })
+      const initialParticipants = await readTtrpgSessionParticipantsV2(preview.sessionId)
+      for (const participant of initialParticipants) {
+        await configureTtrpgSessionParticipantV2({
+          sessionId: preview.sessionId,
+          seatKey: participant.seatKey,
+          expectedRevision: participant.revision,
+          commandId: `six.ttrpg.preview.disclose.${participant.seatKey}`,
+          requestedByViewerKey: 'viewer.gm',
+          consent: { aiIdentityDisclosed: true },
+        })
+      }
+      const sessionZero = await completeTtrpgSessionZero({
+        sessionId: preview.sessionId,
+        commandId: 'six.ttrpg.preview.session-zero',
+        baseSequence: beforeVersion.sequence,
+        baseStateHash: beforeVersion.stateHash,
+        acceptedItemKeys: beforeSessionZero.ttrpg!.product!.sessionZero.requiredItemKeys,
+        completedBy: 'gm',
+      })
+      expect(sessionZero.type).toBe('ttrpg.session-zero.completed')
+
+      let state = await readProductRuntimeState(preview.sessionId)
+      let version = await readProductRuntimeStateVersion(preview.sessionId)
+      const openedScene = await openTtrpgCampaignScene({
+        sessionId: preview.sessionId,
+        commandId: 'six.ttrpg.preview.opening',
+        baseSequence: version.sequence,
+        baseStateHash: version.stateHash,
+        sceneKey: state.ttrpg!.product!.openingSceneKey,
+      })
+      expect(openedScene.type).toBe('ttrpg.scene.opened')
+      state = await readProductRuntimeState(preview.sessionId)
+      version = await readProductRuntimeStateVersion(preview.sessionId)
+      const gm = (await readTtrpgSessionParticipantsV2(preview.sessionId))
+        .find(participant => participant.role === 'gm')!
+      const intent = await submitTtrpgActionIntentV2({
+        sessionId: preview.sessionId,
+        commandId: 'six.ttrpg.preview.intent',
+        baseSequence: version.sequence,
+        baseStateHash: version.stateHash,
+        intentKey: 'intent.preview.inspect',
+        actorKey: state.ttrpg!.activeActorKey!,
+        rawInput: '我观察潮门周围是否留下了可疑痕迹。',
+        submittedBy: { role: 'gm', viewerKey: gm.viewerKey },
+      })
+      expect(intent.type).toBe('ttrpg.intent.receipted')
+    }
+    const published = await publishProductProductionV1({
+      scope: owned.scope, productionId: owned.productionId,
+    })
+    if (owned.pluginRules) {
+      await disablePackage(owned.pluginRules.profile)
+      await uninstallPackage(owned.pluginRules.pkg)
+    }
+    const released = await resolveProductRuntimeSource({
+      scope: owned.scope, source: { kind: 'release', productReleaseId: published.receipt.productReleaseId },
+    })
+    expect(released.packageHash).toBe(build.packageHash)
+    expect(released.runtimePackage).toEqual(runtimePackage)
+    if (owned.pluginRules) {
+      expect(released.runtimePackage.ttrpg!.rulePack.contentHash).toBe(owned.pluginRules.hash)
+      expect(released.runtimePackage.ttrpg!.rulePack.content.ruleSystemId).toBe('storyforge.harbor-rules.harbor')
+      expect(released.runtimePackage.ttrpg!.rulePack.content.ruleSystemVersion).toBe('1.0.0')
+    }
+    released.mediaResolver.dispose()
+    if (productType === 'text-adventure') {
+      await verifyTextAdventureBackupProofRecoveryV1({
+        scope: owned.scope, productionId: owned.productionId, buildId: build.id!,
+      })
+      const distribution = await exportProductDistributionBundleV2({
+        scope: owned.scope,
+        productReleaseId: published.receipt.productReleaseId,
+      })
+      expect(distribution.productRelease.manifest.packageHash).toBe(build.packageHash)
+      expect(distribution.media).toHaveLength(runtimePackage.presentation?.assets.length ?? 0)
+      expect(distribution.media.every(item => item.dataBase64.length > 0)).toBe(true)
+      const importedWorkspace = await seedCurrentProductWorld('formal-text-adventure-import-target')
+      const importedRelease = await importMarketplaceProductDistributionV2({
+        scope: importedWorkspace.scope,
+        bundle: JSON.parse(JSON.stringify(distribution)),
+        provenance: {
+          listingId: `listing.formal-text-adventure.${build.id}`,
+          orderId: `order.formal-text-adventure.${build.id}`,
+          entitlementId: `entitlement.formal-text-adventure.${build.id}`,
+          license: {
+            licenseId: 'license.formal-text-adventure-fixture',
+            licenseVersion: '1.0.0',
+            allowOfflineExport: true,
+            allowRemix: true,
+            commercialReuse: false,
+            requiresAttribution: true,
+            termsUrl: 'https://storyforge.example/licenses/formal-text-adventure-fixture',
+          },
+          attribution: ['StoryForge 正式生产纵切面夹具'],
+          localCopyPreserved: true,
+          acquiredAt: 1_800_000_000_000,
         },
       })
-      const projection = await runProductProductionUntilBlockedV1({
-        scope: owned.scope, productionId: owned.productionId,
-        executor: createConfiguredProductProductionExecutorV1({
-          production: (await db.productProductions.get(owned.productionId))!, brief: owned.brief,
-          runText, runVision: productType === 'text-adventure' ? runVision : undefined,
-        }),
-        capabilityBindings: [
-          {
-            requirementKey: textRequirement.requirementKey, adapterId: 'configured-text.v1', bindingHash,
-            ...(productType === 'text-adventure'
-              ? { provider: 'fixture', model: 'fixture-vision' }
-              : {}),
-          },
-          ...(productType === 'text-adventure' ? [await createBuiltInProductionCapabilityBindingV1({
-            requirementKey: owned.brief.capabilityRequirements.find(item => item.mediaClass === 'image')!.requirementKey,
-            adapterId: 'storyforge.procedural-svg.v1',
-          })] : []),
-        ],
+      expect(importedRelease).toMatchObject({
+        productType: 'text-adventure',
+        contentHash: distribution.productRelease.contentHash,
+        distributionProvenance: {
+          source: 'marketplace',
+          listingId: `listing.formal-text-adventure.${build.id}`,
+        },
       })
-      const projectedBuild = await db.productBuilds.get(projection.buildId)
-      expect(
-        projection,
-        `${productType} production projection:\n${JSON.stringify(projection, null, 2)}\nfailure=${projectedBuild?.failureJson}`,
-      ).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
-      const build = projectedBuild!
-      const packageArtifact = await db.productBuildArtifacts
-        .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).first()
-      const runtimePackage = parseProductRuntimePackageV1(packageArtifact!.payloadJson)
-      expect(runtimePackage.productType).toBe(productType)
-      expect(runtimePackage.sourceWorld.selection).toEqual(owned.brief.source.selection)
-      if (productType === 'character-interaction') {
-        expect(runtimePackage.interaction!.profiles).toHaveLength(1)
-        expect(runtimePackage.interaction!.profiles[0]).toMatchObject({name:'林舟',voiceRules:expect.stringContaining('简短直接')})
-        expect(runtimePackage.interaction!.profiles[0].initialKnowledge).toContainEqual(expect.objectContaining({visibility:'private',content:'独自保管的暗号'}))
-        expect(runtimePackage.interaction!.profiles[0].relationshipDimensions[0].initial).toBe(24)
-        expect(runtimePackage.interaction!.sceneTemplates[0].directorBudget).toBe(120)
-      }
-      if (productType === 'ai-town') {
-        expect(runtimePackage.town).toMatchObject({
-          schema: 'storyforge.ai-town-runtime-content',
-          clock: { slots: [...AI_TOWN_DAY_SLOTS] },
-          offline: { maximumDays: 3 },
-        })
-        expect(runtimePackage.town?.residents).toHaveLength(4)
-      }
-      if (productType === 'text-adventure') {
-        expect(runtimePackage.adventure?.version).toBe(2)
-        expect(runtimePackage.presentation?.assets).toHaveLength(2)
-        expect(runtimePackage.adventure?.media.assetKeys).toEqual(
-          runtimePackage.presentation?.assets.map(asset => asset.assetKey),
-        )
-        expect(runtimePackage.narrative.choices.some(choice => (
-          choice.tags.some(tag => tag.startsWith('adventure-action:'))
-        ))).toBe(true)
-        const reviewArtifacts = await listProductProductionReviewArtifactsV1({
-          scope: owned.scope,
-          buildId: build.id!,
-        })
-        expect(reviewArtifacts.map(artifact => artifact.artifactKey)).toEqual(expect.arrayContaining([
-          'content.adventure-architecture', 'content.narrative', 'content.product-module',
-          'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.quest-script',
-          'quality.adventure-review', 'media.requirements',
-          'runtime.package', 'quality.report',
-        ]))
-        expect(reviewArtifacts.every(artifact => artifact.payload != null && artifact.contentHash.length === 64)).toBe(true)
-        await verifyTextAdventureBackupProofRecoveryV1({
-          scope: owned.scope, productionId: owned.productionId, buildId: build.id!,
-        })
-      }
-      if (productType === 'ttrpg') {
-        expect(runtimePackage.ttrpg).toMatchObject({
-          rulePack: { contentHash: owned.brief.ttrpg?.rules.effectiveContentHash },
-          campaign: { tags: expect.arrayContaining(['production-campaign-v2']) },
-        })
-        expect(await db.productBuildArtifacts
-          .where('[buildId+artifactKey]').equals([build.id!, 'ttrpg.rule-pack']).count()).toBe(1)
-        expect(await db.productBuildArtifacts
-          .where('[buildId+artifactKey]').equals([build.id!, 'ttrpg.campaign-pack']).count()).toBe(1)
-      }
-      const preview = await startProductProductionPreviewV1({
-        scope: owned.scope, productionId: owned.productionId,
+      const importedSource = await resolveProductRuntimeSource({
+        scope: importedWorkspace.scope,
+        source: { kind: 'release', productReleaseId: importedRelease.id! },
       })
-      expect(preview.productType).toBe(productType)
-      expect(await db.productRuntimeSessions.get(preview.sessionId)).toMatchObject({
-        productBuildId: build.id, productReleaseId: null, runtimeSourceHash: build.packageHash,
+      expect(importedSource.packageHash).toBe(build.packageHash)
+      expect(importedSource.runtimePackage).toEqual(runtimePackage)
+      for (const asset of importedSource.runtimePackage.presentation?.assets ?? []) {
+        const bytes = await importedSource.mediaResolver.read(asset.assetKey)
+        expect(bytes).toMatchObject({ type: asset.mimeType, size: asset.byteSize })
+      }
+      importedSource.mediaResolver.dispose()
+      const importedSession = await createProductRuntimeInstanceFromSource({
+        scope: importedWorkspace.scope,
+        source: { kind: 'release', productReleaseId: importedRelease.id! },
+        title: '正式生产分发包导入通关',
       })
-      if (productType === 'text-adventure') {
-        await completeTextAdventureSessionMainRoute({
-          sessionId: preview.sessionId,
-          runtimePackage,
-          commandPrefix: 'six.text-adventure.preview',
-        })
-      }
-      if (productType === 'ttrpg') {
-        const beforeSessionZero = await readProductRuntimeState(preview.sessionId)
-        const beforeVersion = await readProductRuntimeStateVersion(preview.sessionId)
-        await db.productBuilds.update(build.id!, { previewHash: 'f'.repeat(64) })
-        await expect(completeTtrpgSessionZero({
-          sessionId: preview.sessionId,
-          commandId: 'six.ttrpg.preview.tampered',
-          baseSequence: beforeVersion.sequence,
-          baseStateHash: beforeVersion.stateHash,
-          acceptedItemKeys: beforeSessionZero.ttrpg!.product!.sessionZero.requiredItemKeys,
-          completedBy: 'gm',
-        })).rejects.toThrow(/Preview|运行源|hash/)
-        await db.productBuilds.update(build.id!, { previewHash: build.previewHash })
-        const initialParticipants = await readTtrpgSessionParticipantsV2(preview.sessionId)
-        for (const participant of initialParticipants) {
-          await configureTtrpgSessionParticipantV2({
-            sessionId: preview.sessionId,
-            seatKey: participant.seatKey,
-            expectedRevision: participant.revision,
-            commandId: `six.ttrpg.preview.disclose.${participant.seatKey}`,
-            requestedByViewerKey: 'viewer.gm',
-            consent: { aiIdentityDisclosed: true },
-          })
-        }
-        const sessionZero = await completeTtrpgSessionZero({
-          sessionId: preview.sessionId,
-          commandId: 'six.ttrpg.preview.session-zero',
-          baseSequence: beforeVersion.sequence,
-          baseStateHash: beforeVersion.stateHash,
-          acceptedItemKeys: beforeSessionZero.ttrpg!.product!.sessionZero.requiredItemKeys,
-          completedBy: 'gm',
-        })
-        expect(sessionZero.type).toBe('ttrpg.session-zero.completed')
-
-        let state = await readProductRuntimeState(preview.sessionId)
-        let version = await readProductRuntimeStateVersion(preview.sessionId)
-        const openedScene = await openTtrpgCampaignScene({
-          sessionId: preview.sessionId,
-          commandId: 'six.ttrpg.preview.opening',
-          baseSequence: version.sequence,
-          baseStateHash: version.stateHash,
-          sceneKey: state.ttrpg!.product!.openingSceneKey,
-        })
-        expect(openedScene.type).toBe('ttrpg.scene.opened')
-        state = await readProductRuntimeState(preview.sessionId)
-        version = await readProductRuntimeStateVersion(preview.sessionId)
-        const gm = (await readTtrpgSessionParticipantsV2(preview.sessionId))
-          .find(participant => participant.role === 'gm')!
-        const intent = await submitTtrpgActionIntentV2({
-          sessionId: preview.sessionId,
-          commandId: 'six.ttrpg.preview.intent',
-          baseSequence: version.sequence,
-          baseStateHash: version.stateHash,
-          intentKey: 'intent.preview.inspect',
-          actorKey: state.ttrpg!.activeActorKey!,
-          rawInput: '我观察潮门周围是否留下了可疑痕迹。',
-          submittedBy: { role: 'gm', viewerKey: gm.viewerKey },
-        })
-        expect(intent.type).toBe('ttrpg.intent.receipted')
-      }
-      const published = await publishProductProductionV1({
-        scope: owned.scope, productionId: owned.productionId,
+      await completeTextAdventureSessionMainRoute({
+        sessionId: importedSession.id!,
+        runtimePackage,
+        commandPrefix: 'six.text-adventure.imported',
       })
-      if (owned.pluginRules) {
-        await disablePackage(owned.pluginRules.profile)
-        await uninstallPackage(owned.pluginRules.pkg)
-      }
-      const released = await resolveProductRuntimeSource({
-        scope: owned.scope, source: { kind: 'release', productReleaseId: published.receipt.productReleaseId },
-      })
-      expect(released.packageHash).toBe(build.packageHash)
-      expect(released.runtimePackage).toEqual(runtimePackage)
-      if (owned.pluginRules) {
-        expect(released.runtimePackage.ttrpg!.rulePack.contentHash).toBe(owned.pluginRules.hash)
-        expect(released.runtimePackage.ttrpg!.rulePack.content.ruleSystemId).toBe('storyforge.harbor-rules.harbor')
-        expect(released.runtimePackage.ttrpg!.rulePack.content.ruleSystemVersion).toBe('1.0.0')
-      }
-      released.mediaResolver.dispose()
-      if (productType === 'text-adventure') {
-        await verifyTextAdventureBackupProofRecoveryV1({
-          scope: owned.scope, productionId: owned.productionId, buildId: build.id!,
-        })
-        const distribution = await exportProductDistributionBundleV2({
-          scope: owned.scope,
-          productReleaseId: published.receipt.productReleaseId,
-        })
-        expect(distribution.productRelease.manifest.packageHash).toBe(build.packageHash)
-        expect(distribution.media).toHaveLength(runtimePackage.presentation?.assets.length ?? 0)
-        expect(distribution.media.every(item => item.dataBase64.length > 0)).toBe(true)
-        const importedWorkspace = await seedCurrentProductWorld('formal-text-adventure-import-target')
-        const importedRelease = await importMarketplaceProductDistributionV2({
-          scope: importedWorkspace.scope,
-          bundle: JSON.parse(JSON.stringify(distribution)),
-          provenance: {
-            listingId: `listing.formal-text-adventure.${build.id}`,
-            orderId: `order.formal-text-adventure.${build.id}`,
-            entitlementId: `entitlement.formal-text-adventure.${build.id}`,
-            license: {
-              licenseId: 'license.formal-text-adventure-fixture',
-              licenseVersion: '1.0.0',
-              allowOfflineExport: true,
-              allowRemix: true,
-              commercialReuse: false,
-              requiresAttribution: true,
-              termsUrl: 'https://storyforge.example/licenses/formal-text-adventure-fixture',
-            },
-            attribution: ['StoryForge 正式生产纵切面夹具'],
-            localCopyPreserved: true,
-            acquiredAt: 1_800_000_000_000,
-          },
-        })
-        expect(importedRelease).toMatchObject({
-          productType: 'text-adventure',
-          contentHash: distribution.productRelease.contentHash,
-          distributionProvenance: {
-            source: 'marketplace',
-            listingId: `listing.formal-text-adventure.${build.id}`,
-          },
-        })
-        const importedSource = await resolveProductRuntimeSource({
-          scope: importedWorkspace.scope,
-          source: { kind: 'release', productReleaseId: importedRelease.id! },
-        })
-        expect(importedSource.packageHash).toBe(build.packageHash)
-        expect(importedSource.runtimePackage).toEqual(runtimePackage)
-        for (const asset of importedSource.runtimePackage.presentation?.assets ?? []) {
-          const bytes = await importedSource.mediaResolver.read(asset.assetKey)
-          expect(bytes).toMatchObject({ type: asset.mimeType, size: asset.byteSize })
-        }
-        importedSource.mediaResolver.dispose()
-        const importedSession = await createProductRuntimeInstanceFromSource({
-          scope: importedWorkspace.scope,
-          source: { kind: 'release', productReleaseId: importedRelease.id! },
-          title: '正式生产分发包导入通关',
-        })
-        await completeTextAdventureSessionMainRoute({
-          sessionId: importedSession.id!,
-          runtimePackage,
-          commandPrefix: 'six.text-adventure.imported',
-        })
-      }
     }
   }, 180_000)
 })
