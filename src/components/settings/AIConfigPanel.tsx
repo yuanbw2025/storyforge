@@ -1,3 +1,4 @@
+import CodexConnectionCard from './CodexConnectionCard'
 import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 import { Eye, EyeOff, CheckCircle, RotateCcw, RefreshCw } from 'lucide-react'
 import { useAIConfigStore, type TestResult } from '../../stores/ai-config'
@@ -18,6 +19,7 @@ import AIConnectionTestSection from './AIConnectionTestSection'
 import ThemeSelector from './ThemeSelector'
 
 export const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean; hint: string }[] = [
+  { value: 'codex', label: 'Codex（本机 ChatGPT 登录）', cors: true, hint: '无需 API Key；复用本机 Codex 登录，需要 StoryForge 本地服务运行。' },
   { value: 'deepseek', label: 'DeepSeek', cors: false, hint: '官方 V4 Flash / Pro · 付费 API · 获取 Key: platform.deepseek.com → API Keys（直连受限时请查看下方代理说明）' },
   { value: 'qwen', label: '通义千问', cors: true, hint: '获取 Key: dashscope.console.aliyun.com → API-KEY 管理' },
   { value: 'doubao', label: '火山方舟（豆包 / DeepSeek）', cors: false, hint: '火山方舟文本生成 · 支持已开通的豆包与 DeepSeek 模型 · 获取 Key: console.volcengine.com → 方舟 → API Key（直连受限时请查看下方代理说明）' },
@@ -216,6 +218,7 @@ export default function AIConfigPanel() {
             )}
           </div>
 
+          {config.provider === 'codex' ? <CodexConnectionCard /> : <>
           <div>
             <label className="block text-sm text-text-secondary mb-1.5">API Key</label>
             <div className="relative">
@@ -429,6 +432,8 @@ export default function AIConfigPanel() {
               )}
             </div>
           </div>
+
+          </>}
 
           {/* FB-8: 上下文窗口(高级·可选) — 本地/自定义模型按实际填写,修"误报超出窗口" */}
           <div className="mb-4">

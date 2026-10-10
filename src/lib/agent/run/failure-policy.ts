@@ -1,4 +1,4 @@
-import { AIError } from '../../types'
+import { AIError, CodexRequestError } from '../../types'
 import { isProviderQuotaRejectionV1 } from '../../ai/provider-rejection'
 import type {
   AgentRunFailureActionV1,
@@ -30,6 +30,7 @@ function normalizedMessage(error: unknown): string {
 }
 
 function decision(error: unknown): Omit<AgentRunFailureEvidenceV1, 'fingerprint'> {
+  if (error instanceof CodexRequestError) return { code: 'codex_inspection_required', retryable: false, category: 'unknown', action: 'pause-for-author' }
   if (error instanceof AgentTeamBudgetExceededError) {
     return { code: 'team_budget_exhausted', retryable: false, category: 'budget', action: 'fail' }
   }

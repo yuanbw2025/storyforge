@@ -2,6 +2,12 @@
 
 本页按用户可感知的变化整理。**main 的功能更新不等于已经发布新版本**：当前 package 版本仍为 3.9.1，正式 Release 保持其发布时内容。在线部署可能有时差，见[版本与兼容说明](/updates/compatibility)。
 
+## 2026-10-10 · Codex 本机订阅提供商
+
+依据：[实现提交 d492fe3e](https://github.com/yuanbw2025/storyforge/commit/d492fe3e)、[PR #120](https://github.com/yuanbw2025/storyforge/pull/120)。
+
+新增本机登录复用、模型选择、免 Key 任务预设、取消、断线记录和订阅用量区分。操作见[模型配置](/getting-started/model-config)，交付状态见[开发记录](/updates/development-status)。本条不代表新正式版本，也不表示线上静态站点可调用本机订阅。
+
 ## 2026-10-10 · 节点自由编排预览
 
 [PR #115](https://github.com/yuanbw2025/storyforge/pull/115) 在原节点维护基础上补双向拖线、搜索兼容节点、画布新建、断线重连和提示词选择。节点维护与自由编排通过本 PR 交付；请按 PR 的最新完整检查和合并状态判断交付，在线部署需单独核对。操作与限制见[节点创作](/features/nodes)。

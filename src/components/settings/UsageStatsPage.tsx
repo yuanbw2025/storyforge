@@ -56,7 +56,7 @@ export default function UsageStatsPage({ project }: Props) {
       (acc, e) => {
         acc.input += e.inputTokens
         acc.output += e.outputTokens
-        acc.usd += e.costUsd
+        acc.usd += e.costUsd ?? 0
         acc.count += 1
         return acc
       },
@@ -119,7 +119,7 @@ export default function UsageStatsPage({ project }: Props) {
         <SummaryCard label="总输入 Token" value={totals.input.toLocaleString()} />
         <SummaryCard label="总输出 Token" value={totals.output.toLocaleString()} />
         <SummaryCard
-          label="总花费"
+          label="API 估算费用（不含订阅）"
           value={fmtUsd(totals.usd)}
           sub={fmtCny(totals.usd * rate)}
         />
@@ -169,8 +169,8 @@ export default function UsageStatsPage({ project }: Props) {
                   <td className="px-3 py-2 text-right text-text-secondary tabular-nums">{e.inputTokens.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right text-text-secondary tabular-nums">{e.outputTokens.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
-                    <div className="text-text-primary">{fmtUsd(e.costUsd)}</div>
-                    <div className="text-text-muted text-xs">{fmtCny(e.costUsd * rate)}</div>
+                    <div className="text-text-primary">{e.costUsd == null ? '订阅额度 / 费用未知' : fmtUsd(e.costUsd)}</div>
+                    <div className="text-text-muted text-xs">{e.costUsd == null ? '不计入 API 费用合计' : fmtCny(e.costUsd * rate)}</div>
                   </td>
                 </tr>
               )
@@ -180,7 +180,7 @@ export default function UsageStatsPage({ project }: Props) {
       </div>
 
       <p className="text-xs text-text-muted leading-relaxed">
-        说明：费用按模型估算单价 × token 计算（不同中转站实际价格不同，仅供参考）；可上方调整美元→人民币汇率。
+        Codex 订阅请求只记录 token，用量受套餐限制，不计入 API 费用合计，也不表示免费或无限。说明：其他费用按模型估算单价 × token 计算（不同中转站实际价格不同，仅供参考）；可上方调整美元→人民币汇率。
         消耗类型来自各 AI 行为标识，未标注的归「其他」（将随统一执行层逐步补全）。
       </p>
     </div>

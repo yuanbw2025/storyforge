@@ -1,5 +1,6 @@
+import { streamCodex, CODEX_BASE_URL } from './codex-transport'
 import type { AIConfig, ChatMessage } from '../types'
-import { AIError } from '../types'
+import { AIError, CodexRequestError } from '../types'
 import { createLog, updateLog, type TokenUsage } from './logger'
 import { recordUsage } from './usage-log'
 import { estimateTokens, trimMessagesToFit } from './context-budget'
@@ -255,6 +256,7 @@ export async function chatWithImagesV1(
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
   warnRouteFallback(resolved, meta)
   config = resolved.config
+  if (config.provider === 'codex') throw new CodexRequestError('Codex 本机连接目前只支持文本；图片审查请选择支持图片的 API 提供商。')
   const imageTokenReserve = parsedImages.reduce((sum, image) => sum + (image.detail === 'high' ? 1_200 : 300), 0)
   const trimmed = trimMessagesToFit(
     messages, config.provider, config.model, config.maxTokens, config.contextWindow,
@@ -329,6 +331,10 @@ export async function* streamChat(
   }
   if (!trimmed.protectedEnvelopePreserved) {
     throw new Error('当前模型上下文窗口无法容纳最低连续性保护块；请降低输出长度或改用更大上下文模型。')
+  }
+  if (config.provider === 'codex') {
+    yield* loggedCodex(trimmed.messages, config, resolved.taskKind, meta, signal, result)
+    return
   }
   const req = buildRequest(config, trimmed.messages, true)
 
@@ -470,6 +476,16 @@ export async function chat(
   if (!trimmed.protectedEnvelopePreserved) {
     throw new Error('当前模型上下文窗口无法容纳最低连续性保护块；请降低输出长度或改用更大上下文模型。')
   }
+  if (config.provider === 'codex') {
+    if (options?.tools?.length) throw new CodexRequestError('Codex 连接不支持原生 tool_calls；请使用 StoryForge 文本 Agent 协议。')
+    let text = ''
+    for await (const delta of loggedCodex(trimmed.messages, config, resolved.taskKind, meta, signal, result, options?.jsonSchema?.schema, options?.responseFormat)) text += delta
+    if (options?.responseFormat === 'json_object') {
+      try { const value: unknown = JSON.parse(text); if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('not object') }
+      catch { throw new CodexRequestError('Codex 没有返回有效 JSON 对象；保留请求记录，未自动重发。') }
+    }
+    return text
+  }
   const req = buildRequest(config, trimmed.messages, false, options)
   const startedAt = Date.now()
   const log = createLog(
@@ -531,5 +547,25 @@ export async function chat(
         : error instanceof AIError ? `模型服务返回 HTTP ${error.status}` : '模型请求失败或连接中断',
     })
     throw error
+  }
+}
+
+async function* loggedCodex(
+  messages: ChatMessage[], config: AIConfig, taskKind: AITaskKind | null,
+  meta?: AICallMeta, signal?: AbortSignal, result?: ChatResult, schema?: Record<string, unknown>, responseFormat?: 'json_object',
+): AsyncGenerator<string> {
+  if (meta?.category?.startsWith('eval.')) throw new CodexRequestError('Codex 订阅暂不支持当前带 API 金额统计的模型评测；请显式选择 API 评测预设。')
+  const startedAt = Date.now()
+  const receipt = result ?? {}
+  const log = createLog({ type: 'chat', provider: 'codex', model: config.model, url: CODEX_BASE_URL, status: 'pending' })
+  try {
+    yield* streamCodex(messages, config.model, signal, receipt, schema, responseFormat)
+    updateLog(log.id, { status: 'success', duration: Date.now() - startedAt, usage: receipt.usage })
+  } catch (error) {
+    updateLog(log.id, { status: 'error', duration: Date.now() - startedAt, errorMessage: error instanceof Error ? error.message : 'Codex 连接失败' })
+    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    throw new CodexRequestError(error instanceof Error ? error.message : 'Codex 连接失败')
+  } finally {
+    if (receipt.usage) void recordUsage(usageEntry(meta, config, taskKind, receipt.usage))
   }
 }

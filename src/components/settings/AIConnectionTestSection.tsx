@@ -58,7 +58,7 @@ export default function AIConnectionTestSection({
         </div>
       )}
       <p className="px-1 text-[10px] text-text-muted">
-        只验证当前 Key、Base URL 和模型能完成一次极短请求；不代表长输出、批量评测或剩余额度充足。
+        {provider === 'codex' ? '测试将消耗少量 Codex 套餐额度，只验证当前登录和所选模型能完成短请求。' : '只验证当前 Key、Base URL 和模型能完成一次极短请求；不代表长输出、批量评测或剩余额度充足。'}
       </p>
       {showCorsHint && (
         <p className="text-xs text-amber-400 px-1">

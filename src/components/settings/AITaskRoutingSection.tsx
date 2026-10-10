@@ -118,7 +118,7 @@ export default function AITaskRoutingSection({
       <div className="mb-2">
         <h4 className="text-sm font-medium text-text-secondary">任务模型路由</h4>
         <p className="mt-1 text-[11px] text-text-muted">
-          按任务自动使用已保存预设；未绑定、预设被删除或专用预设缺少 API Key 时，回退到当前全局模型。云端预设会接收对应任务的提示词与上下文。
+          按任务自动使用已保存预设；未绑定、预设被删除或专用预设缺少 API Key 时，回退到当前全局模型。Codex 预设无需 Key；其登录或连接失败会停止，不会回退到付费 API。云端预设会接收对应任务的提示词与上下文。
         </p>
       </div>
       {renderRoutes(GENERAL_AI_TASK_KINDS)}

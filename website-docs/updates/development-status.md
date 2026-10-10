@@ -4,6 +4,12 @@
 
 本轮完整核对 19 个本地分支（含本次知识库维护分支）和 41 个已登记工作区，包含 detached 与已移入归档目录的工作区。排除维护分支后，18 个分支中有 8 个 head 仍在主干之外。“仅本地提交”指未被已获取的任何 origin 分支包含的提交，不能直接当作遗漏功能数量。
 
+## 2026-10-10 专项补充 · Codex 本机提供商
+
+实现依据：[d492fe3e](https://github.com/yuanbw2025/storyforge/commit/d492fe3e)；交付与当前检查：[PR #120](https://github.com/yuanbw2025/storyforge/pull/120)。
+
+分支 `feat/codex-provider-20261010` 增加基于 Codex app-server 的可选本机文本传输。检测并复用现有 ChatGPT 登录，无需 API Key，候选审查与采纳继续由现有 StoryForge 流程管理。操作见[模型配置](/getting-started/model-config)。合并、CI 和官网文档部署需分别核对；本条不刷新下方旧分支清单。
+
 ## 2026-10-10 · 节点自由编排预览
 
 [PR #115](https://github.com/yuanbw2025/storyforge/pull/115) 在原节点维护基础上补双向拖线、搜索兼容节点、画布新建、断线重连和提示词选择。节点维护与自由编排通过本 PR 交付；请按 PR 的最新完整检查和合并状态判断交付，在线部署需单独核对。操作与限制见[节点创作](/features/nodes)。

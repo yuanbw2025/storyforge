@@ -1,6 +1,6 @@
 import type { AIConfig, AIProvider } from '../types'
 
-const EMPTY_KEY_COMPATIBLE_PROVIDERS = new Set<AIProvider>(['ollama', 'custom'])
+const EMPTY_KEY_COMPATIBLE_PROVIDERS = new Set<AIProvider>(['ollama', 'custom', 'codex'])
 
 export function aiProviderAllowsEmptyKey(provider: AIProvider): boolean {
   return EMPTY_KEY_COMPATIBLE_PROVIDERS.has(provider)
@@ -11,6 +11,7 @@ export function isAIConfigReady(config: Pick<AIConfig, 'apiKey' | 'provider'>): 
 }
 
 export function getAIConfigRequiredMessage(config: Pick<AIConfig, 'provider'>): string {
+  if (config.provider === 'codex') return '请在「设置」中连接本机 Codex 并选择模型。'
   return aiProviderAllowsEmptyKey(config.provider)
     ? '请先在「设置」中配置模型服务地址和模型名称。'
     : '请先在「设置」中配置 AI API Key。'

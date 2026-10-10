@@ -46,7 +46,7 @@ export interface TextOpenWorldRuntimeAIObservabilityV1 {
   successfulCalls: number
   inputTokens: number
   outputTokens: number
-  estimatedCostUsd: number
+  estimatedCostUsd: number | null
   latestUsageAt: number | null
   recentRuns: TextOpenWorldRuntimeAIRecentRunV1[]
   refreshedAt: number
@@ -99,7 +99,7 @@ export async function projectTextOpenWorldRuntimeAIObservabilityV1(input: {
     successfulCalls: usageRows.length,
     inputTokens: usageRows.reduce((sum, row) => sum + row.inputTokens, 0),
     outputTokens: usageRows.reduce((sum, row) => sum + row.outputTokens, 0),
-    estimatedCostUsd: usageRows.reduce((sum, row) => sum + row.costUsd, 0),
+    estimatedCostUsd: usageRows.some(row => row.costUsd == null) ? null : usageRows.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
     latestUsageAt: usageRows.reduce<number | null>((latest, row) => (
       latest == null || row.timestamp > latest ? row.timestamp : latest
     ), null),

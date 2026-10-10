@@ -24,7 +24,7 @@ export interface AIUsageEntry {
   inputTokens: number
   outputTokens: number
   /** 计算所得费用（美元） */
-  costUsd: number
+  costUsd: number | null
 }
 
 // ── 消耗类型 → 友好标签 + 配色 ────────────────────────────────
@@ -195,7 +195,7 @@ export function setUsageLoggingEnabled(on: boolean) { _enabled = on }
 export async function recordUsage(entry: Omit<AIUsageEntry, 'id' | 'costUsd'> & { costUsd?: number }): Promise<void> {
   if (!_enabled) return
   try {
-    const costUsd = entry.costUsd ?? computeCostUsd(entry.model, entry.inputTokens, entry.outputTokens)
+    const costUsd = entry.provider === 'codex' ? null : entry.costUsd ?? computeCostUsd(entry.model, entry.inputTokens, entry.outputTokens)
     await db.aiUsageLog.add({ ...entry, costUsd })
   } catch (err) {
     console.warn('[UsageLog] 记录失败（不影响生成）:', err)

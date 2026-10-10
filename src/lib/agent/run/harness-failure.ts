@@ -1,4 +1,4 @@
-import { AIError } from '../../types'
+import { AIError, CodexRequestError } from '../../types'
 import { isProviderQuotaRejectionV1 } from '../../ai/provider-rejection'
 import { AICompletionResponseErrorV1 } from '../../ai/completion-response'
 import { AgentTeamBudgetExceededError } from '../team-budget'
@@ -102,6 +102,7 @@ function decide(
   if (error instanceof AICompletionResponseErrorV1) {
     return { failureClass: 'provider', code: `provider_response_${error.problem}`, retryable: false }
   }
+  if (error instanceof CodexRequestError) return { failureClass: 'provider', code: 'codex_inspection_required', retryable: false }
   if (error instanceof AIError) {
     const quotaRejected = isProviderQuotaRejectionV1({
       status: error.status,

@@ -4,6 +4,12 @@
 
 This audit covers all 19 local branches (including this documentation-maintenance branch) and 41 registered worktrees, including detached worktrees and those moved into archives. Excluding maintenance, 8 of the remaining 18 branch heads are outside main. “Local-only commits” means commits not contained in any fetched origin branch; the count is not the number of missing features.
 
+## 2026-10-10 addition: local Codex provider
+
+Implementation: [d492fe3e](https://github.com/yuanbw2025/storyforge/commit/d492fe3e); delivery and current checks: [PR #120](https://github.com/yuanbw2025/storyforge/pull/120).
+
+Branch `feat/codex-provider-20261010` adds an optional local text transport using Codex app-server. It reuses the detected ChatGPT login without an API key and leaves candidate review/adoption with existing StoryForge workflows. See [configuration](/en/getting-started/model-config). Merge, CI, and hosted documentation deployment must be checked separately; this entry does not update the older branch inventory below.
+
 ## 2026-10-10 · Free node graph editing preview
 
 [PR #115](https://github.com/yuanbw2025/storyforge/pull/115) extends node maintenance with bidirectional port dragging, compatible-node search, canvas creation, reconnecting and prompt selection. This PR delivers node maintenance and free graph editing; use its latest full checks and merge state to assess delivery, and verify online deployment separately. See [node authoring](/en/features/nodes) for steps and limits.
