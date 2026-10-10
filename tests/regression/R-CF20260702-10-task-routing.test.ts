@@ -332,6 +332,30 @@ describe('R-CF20260702-10 · route storage and client boundary', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
+  it('无路由时输出预留真实参与窗口检查；小窗口拒绝发送，大窗口发送完整请求', async () => {
+    const { useAIConfigStore } = await import('../../src/stores/ai-config')
+    const config: AIConfig = {
+      ...globalConfig, provider: 'ollama', apiKey: '', model: 'isolated-budget-test',
+      baseUrl: 'http://localhost:11434/v1', maxTokens: 0, contextWindow: 8_000,
+    }
+    useAIConfigStore.setState({ config, presets: [], taskRoutes: {} })
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      expect(body.max_tokens).toBe(16_000)
+      expect(body.messages).toEqual([{ role: 'user', content: '作者要求：保留完整输入。' }])
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { chat } = await import('../../src/lib/ai/client')
+    const messages = [{ role: 'user' as const, content: '作者要求：保留完整输入。' }]
+    const meta = { category: 'chapter.content', configOverrides: { maxTokens: 16_000 }, contextOverflowPolicy: 'reject' as const }
+
+    await expect(chat(messages, config, meta)).rejects.toThrow('上下文窗口不足')
+    expect(fetchMock).not.toHaveBeenCalled()
+    await expect(chat(messages, { ...config, contextWindow: 100_000 }, meta)).resolves.toBe('ok')
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
   it('routes through an inactive session-only preset without leaking its Key to localStorage', async () => {
     const { useAIConfigStore } = await import('../../src/stores/ai-config')
     useAIConfigStore.getState().setConfig({
@@ -366,4 +390,15 @@ describe('R-CF20260702-10 · route storage and client boundary', () => {
     )).resolves.toBe('ok')
     expect(fetchMock).toHaveBeenCalledOnce()
   })
+  it('未配置路由和回退分支也保留本次明确覆盖的生成参数', () => {
+    const explicitOverrides = { temperature: 0.2, maxTokens: 1234 }
+    for (const category of [undefined, 'worldview.dimension']) {
+      for (const routes of [{}, { creation: '不存在' }, { creation: 'empty-key' }]) {
+        const resolved = resolveAIConfigForTask({ category, requestedConfig: globalConfig, globalConfig, presets: [{ id: 'empty-key', name: '空密钥', config: { ...globalConfig, model: 'other', apiKey: '' } }], routes, explicitOverrides })
+        expect(resolved.config).toMatchObject(explicitOverrides)
+        expect(resolved.config.model).toBe(globalConfig.model)
+      }
+    }
+  })
+
 })

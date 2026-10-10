@@ -250,6 +250,7 @@ export async function generateCharacterRelationshipCandidateV1(input: {
   worldGroupId: number | null
   runAI?: RunAI
   aiConfig?: AIConfig
+  authorRequest?: string
 }): Promise<CharacterRelationshipCandidateRunV1> {
   const before = await baseline(input.scope, input.worldGroupId)
   if (before.characters.length < 2) throw new Error('至少需要两个当前 World 的角色。')
@@ -277,6 +278,7 @@ export async function generateCharacterRelationshipCandidateV1(input: {
     outlineSummary: assembled.segments.find(segment => segment.label === '大纲标题与摘要（分析）')?.content ?? '',
     chapterContent: assembled.segments.find(segment => segment.label === '已写章节正文（分析摘录）')?.content ?? '',
   })
+  if (input.authorRequest?.trim()) messages.push({ role: 'user', content: input.authorRequest.trim() })
   const binding = snapshot.contract.executionBindings?.[0]
   snapshot = await append(input.scope, snapshot, 'model.requested', {
     stepId: CHARACTER_RELATIONSHIP_STEP_ID_V1, attempt: 1, bindingHash: await hashCanonicalValue(binding),

@@ -83,6 +83,7 @@ function fieldTemplate(input: FieldTemplateInput): AuthoringNodeTemplate {
     reads: { sourceKeys: [input.sourceKey], allowExactFields: true },
     writes: { target: input.target, fields: [input.field], mode: 'replace' },
     promptModuleKey: input.promptModuleKey,
+    parameters: [{ key: 'request', label: '生成要求', type: 'text', defaultValue: '' }],
     recommendedBefore: input.recommendedBefore,
     recommendedAfter: input.recommendedAfter,
   }
