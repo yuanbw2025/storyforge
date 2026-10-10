@@ -4576,16 +4576,16 @@ async function runClaimedTaskCore(input: {
   signal: AbortSignal
   onDurableBoundary?: (boundary: ProductProductionSchedulerBoundaryV1, snapshot: AgentRunSnapshotV1) => void | Promise<void>
 }): Promise<void> {
-  // A missing retained visual output is a recovery failure, never permission
-  // to generate a replacement design or spend on replacement images.
-  if (isTextRevisionRetainedVisualTaskV1(input.task) && input.task.reuse?.reason.startsWith('文字修订：')) {
-    throw new Error('[text-content-revision] 已授权保留的视觉合同缺失；请恢复原合同，不能隐式重新生成')
-  }
   let snapshot = input.snapshot
   const previous = snapshot.projection.steps[input.task.taskKey]
   const attempt = previous?.status === 'failed' ? previous.attempt + 1 : 1
   if (!previous) snapshot = await append(input.scope, snapshot, 'step.scheduled', { stepId: input.task.taskKey })
   snapshot = await append(input.scope, snapshot, 'step.started', { stepId: input.task.taskKey, attempt })
+  // A missing retained visual output is a recovery failure, never permission
+  // to generate a replacement design or spend on replacement images.
+  if (isTextRevisionRetainedVisualTaskV1(input.task) && input.task.reuse?.reason.startsWith('文字修订：')) {
+    throw new Error('[text-content-revision] 已授权保留的视觉合同缺失；请恢复原合同，不能隐式重新生成')
+  }
   const artifacts = await acceptedInputs(input.build.id, input.build.controlEpoch, input.task.inputArtifactKeys)
   const authorizedRepair = input.repairAuthority == null
     ? null
