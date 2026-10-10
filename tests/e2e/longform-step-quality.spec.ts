@@ -127,11 +127,35 @@ test('step prose honors the author request in the wire prompt and adopts edited 
   await page.getByRole('textbox', { name: '一句话场景概要...', exact: true }).fill('沈砚找到铜箔，听到敲门声后没有开门。')
   await page.getByRole('button', { name: '正文', exact: true }).click()
   await page.getByRole('textbox', { name: '自定义指令...', exact: true }).fill(authorRequest)
+  await page.evaluate(async () => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const { resolveScope, stampNewRecord } = await importer('/storyforge/src/lib/workspace/scope.ts')
+    const project = await db.projects.toCollection().first()
+    const scope = await resolveScope({ projectId: project.id })
+    const base = { projectId: project.id, createdAt: Date.now(), updatedAt: Date.now() }
+    const arcs = []
+    for (const name of ['调查主线', '铜箔支线']) {
+      arcs.push(await db.storyArcs.add(stampNewRecord(scope, 'storyArcs', { ...base, name, type: 'sub', description: '', stages: '[]' }, { owner: 'work' })))
+    }
+    for (const [index, arcId] of arcs.entries()) {
+      await db.storylineProgress.add(stampNewRecord(scope, 'storylineProgress', {
+        ...base, arcId, status: 'active', progressNote: `已确认进度 ${index}`, involvedEntities: '[]', evidenceQuote: `调查线索 ${index}`,
+      }, { owner: 'work' }))
+      await db.storylineCrossings.add(stampNewRecord(scope, 'storylineCrossings', {
+        ...base, arcIdA: arcs[0], arcIdB: arcs[1], chapterId: null, chapterTitle: '', note: `已确认交汇 ${index}`, evidenceQuote: `两线相遇 ${index}`,
+      }, { owner: 'work' }))
+    }
+  })
   await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
   const draft = page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })
   await expect(draft).toHaveValue(generated)
   expect(requests).toHaveLength(1)
   expect(requests[0].messages.map(message => message.content).join('\n')).toContain(authorRequest)
+  for (const index of [0, 1]) {
+    expect(requests[0].messages.map(message => message.content).join('\n')).toContain(`已确认进度 ${index}`)
+    expect(requests[0].messages.map(message => message.content).join('\n')).toContain(`已确认交汇 ${index}`)
+  }
   expect(requests[0].messages.map(message => message.content).join('\n')).toContain('本轮作者明确指定的篇幅、文风、章节收尾和禁止事项优先于模板默认值')
   await page.reload()
   await expect(draft).toHaveValue(generated)

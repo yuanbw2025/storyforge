@@ -37,9 +37,9 @@ Node authoring in the longform workbench uses formal domain nodes. The workflow 
 
 Prompt workflows can use [Forge Writing Workshop](/en/guides/using-prompts) templates. Specify variables when connecting upstream material; a connection alone does not supply missing inputs.
 
-## Maintenance in the October 8 development branch
+## Node maintenance and recovery
 
-The following changes are being validated in an independent development branch. They do not yet establish an online deployment:
+The following changes are delivered through [PR #115](https://github.com/yuanbw2025/storyforge/pull/115). Use its full checks and merge state to assess delivery, and verify online deployment separately:
 
 - Single-field nodes offer generation requirements (生成要求). The node library supports search, with experimental drafts hidden by default.
 - Run to this node (运行到此节点) handles the selected node and its required ancestors. Other unfinished branches can remain drafts.
@@ -50,9 +50,9 @@ The following changes are being validated in an independent development branch. 
 
 Automated tests use isolated model responses and do not establish literary quality. Full cross-mode acceptance of every official longform template remains pending. See [development status](/en/updates/development-status).
 
-## Free graph editing in the October 10 development branch
+## Free graph editing and prompt selection
 
-These changes remain development work in PR #115; online deployment is not confirmed.
+These operations are node preview improvements in PR #115; the online version depends on the corresponding deployment result.
 
 1. Click or drag a node from the library, or right-click/double-click empty canvas space to search and create one.
 2. Drag backward from an input port or forward from an output port. Release on empty canvas space, search compatible nodes and select one: the chosen port is connected automatically. You can also drag directly to a compatible port on an existing node.

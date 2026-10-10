@@ -45,7 +45,7 @@ import {
 } from './provider-cache'
 
 const PROVIDER_SOURCE_KEY = 'ragSelection'
-const PROVIDER_VERSION = 'canon-resource-provider-v3'
+const PROVIDER_VERSION = 'canon-resource-provider-v4'
 const NORMALIZATION_VERSION = 'canon-resource-normalization-v1'
 const MAX_PAGE_SIZE = 100
 const MAX_READ_TOKENS = 100_000
@@ -338,7 +338,9 @@ function rowTitle(spec: ResourceSpec, row: ResourceRow): string {
   if (spec.name === 'worldviews') {
     return row.worldGroupId == null ? '主世界观' : '当前世界观'
   }
-  return spec.resourceIdentity.label
+  // A table label is not an author-supplied name. Distinguish unnamed records
+  // with their portable identity so ID remapping does not change the projection.
+  return `${spec.resourceIdentity.label} · ${row.ragDocumentId}`
 }
 
 function revisionOf(row: ResourceRow): number {
