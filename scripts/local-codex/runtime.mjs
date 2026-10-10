@@ -15,6 +15,12 @@ export const ISOLATION = {
     'multi_agent', 'multi_agent_v2', 'code_mode', 'code_mode_host', 'browser_use',
     'browser_use_external', 'computer_use', 'image_generation', 'in_app_browser',
     'in_app_local_automation', 'workspace_dependencies', 'goals',
+    'in_app_chat', 'in_app_voice', 'in_app_dictation', 'in_app_updates', 'realtime_conversation',
+    'tool_suggest', 'sleep_tool', 'skill_search', 'skill_mcp_dependency_install', 'view_image',
+    'daemon_auto_start', 'unbounded_connection_retries', 'worktrees', 'auth_elicitation',
+    'enable_mcp_apps', 'request_permissions_tool', 'shell_snapshot', 'unified_exec_tty',
+    'browser_use_full_cdp_access', 'browser_annotation_api', 'multi_agent_v2_dynamic_tools',
+    'external_agent_memory_import', 'guardian_conversation_history_tools', 'tool_call_mcp_elicitation',
   ].map(key => [key, false])),
 }
 function toml(value) {

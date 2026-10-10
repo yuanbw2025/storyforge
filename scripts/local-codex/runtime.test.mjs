@@ -50,6 +50,7 @@ test('reuses native auth, isolates thread, disables tools/retries, preserves sch
   assert.deepEqual(calls.find(v => v.method === 'turn/start').params.outputSchema, input.outputSchema)
   assert.equal(spawned[0].options.env.OPENAI_API_KEY, undefined)
   assert.equal(thread.config.model_providers['storyforge-subscription'].stream_max_retries, 0)
+  for (const key of ['skill_search', 'view_image', 'sleep_tool', 'unbounded_connection_retries', 'daemon_auto_start']) assert.equal(thread.config.features[key], false)
 })
 test('API-key or absent login cannot dispatch or fall back', async t => {
   for (const account of [null, { type: 'apiKey' }]) {
