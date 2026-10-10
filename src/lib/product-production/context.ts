@@ -954,6 +954,11 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
     irreversibleTurn: contextText(act.irreversibleTurn, 160),
     sceneCards: contextRows(act.sceneCards).map(projectSceneCard),
   }))
+  // Keep authored prose in graphFacts only; do not duplicate it in arcPlan.
+  const authoredEchoTexts = new Map(contextRows(arcPlan.decisions).flatMap(decision =>
+    contextRows(decision.options).map(option => [option.key,
+      option.echoTextByScene && typeof option.echoTextByScene === 'object'
+        ? option.echoTextByScene as Record<string, string> : undefined] as const)))
   const decisions = contextRows(arcPlan.decisions)
     .filter(decision => scope === 'structure' || activeSceneKeys.has(contextText(decision.sceneKey, 200)))
     .map(projectDecision)
@@ -1028,6 +1033,7 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
             optionCost: contextText(option.cost, 90),
             sceneTitle: contextText(sceneCard.title, 80),
             sceneConflict: contextText(sceneCard.conflict, 100),
+            authoredText: authoredEchoTexts.get(option.key)?.[value],
           })
           return [{
             sceneKey: value,
@@ -1039,7 +1045,7 @@ export async function readTextAdventureQualityInputsV1(input: AssembleContextInp
                 .split(/(?=你先前面对|眼前的冲突)/u).map(internEchoText),
             } : {
               label: presentation.label,
-              successText: contextText(presentation.successText, 260),
+              successText: authoredEchoTexts.get(option.key)?.[value] ?? contextText(presentation.successText, 260),
             }),
           }]
         }),

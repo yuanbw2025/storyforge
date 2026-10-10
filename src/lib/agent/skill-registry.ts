@@ -4585,7 +4585,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '文字冒险叙事弧、场景卡与选择回响设计',
     owner: 'text-adventure-narrative-designer',
-    promptVersion: 'text-adventure-narrative-design-v2',
+    promptVersion: 'text-adventure-narrative-design-v3',
     executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
@@ -4597,7 +4597,7 @@ export const AGENT_SKILLS = [
     ]),
     maxOutputTokens: 20_000,
     writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
-    lastVerifiedAt: '2026-09-06',
+    lastVerifiedAt: '2026-10-10',
     regressionTests: ['R-TEXTADV3-agent-team', 'R-TEXTADV3-production-artifacts'],
   },
   {

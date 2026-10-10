@@ -735,6 +735,8 @@ export interface TextAdventureNarrativeArcPlanArtifactV1 {
       cost: string
       persistentEffectKey: string
       echoSceneKeys: string[]
+      /** Optional for immutable legacy artifacts; when present covers every echo scene. */
+      echoTextByScene?: Record<string, string>
     }>
   }>
   endings: Array<{ endingKey: string; sceneKey: string }>
@@ -859,12 +861,19 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
     }
     const options = array(item.options, `decisions[${index}].options`, 2, 2).map((value, optionIndex) => {
       const option = record(value, `decisions[${index}].options[${optionIndex}]`)
-      exactKeys(option, ['key', 'label', 'cost', 'persistentEffectKey', 'echoSceneKeys'], `decisions[${index}].options[${optionIndex}]`)
+      exactKeys(option, ['key', 'label', 'cost', 'persistentEffectKey', 'echoSceneKeys',
+        ...(option.echoTextByScene === undefined ? [] : ['echoTextByScene'])], `decisions[${index}].options[${optionIndex}]`)
       const echoSceneKeys = keyArray(option.echoSceneKeys, `decisions[${index}].options[${optionIndex}].echoSceneKeys`, 2, 20)
       if (echoSceneKeys.some(value => !sceneKeys.has(value))) fail(`decisions[${index}] 回响场景不存在`)
       const decisionSceneIndex = skeleton.sceneKeys.indexOf(sceneKey)
       if (echoSceneKeys.some(value => skeleton.sceneKeys.indexOf(value) <= decisionSceneIndex)) {
         fail(`decisions[${index}] 回响必须位于决定场景之后`)
+      }
+      const echoTextByScene = option.echoTextByScene === undefined ? undefined
+        : record(option.echoTextByScene, `decisions[${index}].options[${optionIndex}].echoTextByScene`)
+      if (echoTextByScene && (Object.keys(echoTextByScene).length !== echoSceneKeys.length
+        || Object.keys(echoTextByScene).some(key => !echoSceneKeys.includes(key)))) {
+        fail(`decisions[${index}] 回响正文必须精确覆盖 echoSceneKeys`)
       }
       return {
         key: key(option.key, `decisions[${index}].options[${optionIndex}].key`),
@@ -872,6 +881,9 @@ export function parseTextAdventureNarrativeArcPlanArtifactV1(input: {
         cost: text(option.cost, `decisions[${index}].options[${optionIndex}].cost`, 1_000),
         persistentEffectKey: key(option.persistentEffectKey, `decisions[${index}].options[${optionIndex}].persistentEffectKey`),
         echoSceneKeys,
+        ...(echoTextByScene ? { echoTextByScene: Object.fromEntries(echoSceneKeys.map(sceneKey => [
+          sceneKey, text(echoTextByScene[sceneKey], `echoTextByScene.${sceneKey}`, 600),
+        ])) } : {}),
       }
     })
     if (new Set(options.map(option => option.key)).size !== options.length

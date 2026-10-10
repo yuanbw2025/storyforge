@@ -5523,10 +5523,10 @@ function textSystem(
       ),
     }))
     return `${common}\n你是同一位叙事设计师的决定设计 Run，只负责为已经冻结的三幕场景卡设计玩家决定，不得改写场景、地点或结局。` +
-      '输出字段必须精确为：{"schema":"storyforge.text-adventure-narrative-decision-plan-artifact","version":1,"decisions":[{"key":"decision.some-key","sceneKey":"scene.001","prompt":"...","options":[{"key":"option.some-key","label":"...","cost":"...","persistentEffectKey":"flag.some-key","echoSceneKeys":["scene.002","scene.003"]}]}]}。' +
+      '输出字段必须精确为：{"schema":"storyforge.text-adventure-narrative-decision-plan-artifact","version":1,"decisions":[{"key":"decision.some-key","sceneKey":"scene.001","prompt":"...","options":[{"key":"option.some-key","label":"...","cost":"...","persistentEffectKey":"flag.some-key","echoSceneKeys":["scene.002","scene.003"],"echoTextByScene":{"scene.002":"本路线在此处发生的具体回响正文","scene.003":"另一个后续场景中的具体回响正文"}}]}]}。' +
       `decisions 必须恰好 ${decisionSceneKeys.length} 项；稳定身份冻结映射=${JSON.stringify(decisionIdentityPlan)}，必须逐项复制 decisionKey→key、sceneKey、optionKeys→两个 option.key、persistentEffectKeys→两个 option.persistentEffectKey，不得错位、跳号或自造身份。系统还会按数组序号再次冻结这些纯机器身份；它们不得承载世界事实。` +
       '逐项以 sceneKey 对照已冻结场景卡的 title、purpose、conflict、entryState 与 exitState：prompt 只能描述该场已经成立的情境，label/cost 只能回应这个当场冲突，不得提前搬用后续地点、人物发现或终局抉择。若返修建议要求移动 decision.sceneKey，必须保留冻结 sceneKey，改写错位的 prompt、label、cost 与回响，使语义回到该场；反馈编号与引用摘录冲突时，以引用的实际内容为线索审查全部 decisions，不能误改本来正确的条目。' +
-      `每个决定恰好两个立场、代价或手段显著不同的选项；每个 option.echoSceneKeys 必须包含至少两个在该 decision.sceneKey 之后出现的冻结场景 key，禁止引用决定当场或已经走过的场景。冻结场景顺序=${JSON.stringify(skeleton.sceneKeys)}。prompt、label、cost 必须简洁具体，不得输出场景正文、背景复述或系统解释。`
+      `每个决定恰好两个立场、代价或手段显著不同的选项；每个 option.echoSceneKeys 必须包含至少两个在该 decision.sceneKey 之后出现的冻结场景 key，禁止引用决定当场或已经走过的场景。冻结场景顺序=${JSON.stringify(skeleton.sceneKeys)}。prompt、label、cost 必须简洁具体。每个 option.echoTextByScene 的键必须精确覆盖 echoSceneKeys，每段最多600字，直接写玩家在该场景观察到的具体反应或记起的细节，因不同选择而异。不得套用“后果显现”“只属于这条路线的回应”等占位模板，不得在回响里宣告尚未执行的任务成功、凭空发放物品或替玩家选择。正文必须适用于持有本 option 条件的全部后续路径，不得假定其他决定的取值。`
   }
   if (taskKey === 'content.ending-route-plan') {
     if (!adventure) return `${common}\n缺少文字冒险专用 Brief，停止。`

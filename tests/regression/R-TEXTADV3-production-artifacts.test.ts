@@ -398,6 +398,25 @@ describe('TEXTADV-3 · 专业生产工件合同', () => {
     }
     const parsed = parseTextAdventureNarrativeArcPlanArtifactV1({ value, brief: brief(), cast, storyBible: story })
     expect(parsed.acts.flatMap(act => act.sceneCards)).toHaveLength(3)
+    expect(parsed.decisions[0].options[0]).not.toHaveProperty('echoTextByScene')
+    const authored = structuredClone(parsed)
+    authored.decisions[0].options[0].echoTextByScene = {
+      'scene.002': '信使松开遮住信封的手，指向你刚刚公开的那行名字。',
+      'scene.003': '钟声里，你仍记得信使离去前回头的神情。',
+    }
+    expect(parseTextAdventureNarrativeArcPlanArtifactV1({ value: authored, brief: brief(), cast, storyBible: story })
+      .decisions[0].options[0].echoTextByScene).toEqual(authored.decisions[0].options[0].echoTextByScene)
+    for (const echoTextByScene of [
+      { 'scene.002': '缺少另一个回响' },
+      { 'scene.002': '有效', 'scene.001': '错误的场景' },
+      { 'scene.002': '', 'scene.003': '有效' },
+      { 'scene.002': '字'.repeat(601), 'scene.003': '有效' },
+      { 'scene.002': { effects: [] }, 'scene.003': '有效' },
+    ]) {
+      const invalid = structuredClone(authored)
+      Object.assign(invalid.decisions[0].options[0], { echoTextByScene })
+      expect(() => parseTextAdventureNarrativeArcPlanArtifactV1({ value: invalid, brief: brief(), cast, storyBible: story })).toThrow()
+    }
     const richerArchitectureValue = structuredClone(value)
     richerArchitectureValue.acts[0].sceneCards[0].title = '潮门·开场'
     richerArchitectureValue.acts[1].sceneCards[0].title = '旧仓街·转折'

@@ -1,4 +1,4 @@
-import { createTextContentRevisionPlanV1 } from './text-content-revision'
+import { canReviseTextContentBuildV1, createTextContentRevisionPlanV1 } from './text-content-revision'
 import Dexie from 'dexie'
 import { db } from '../db/schema'
 import type {
@@ -848,12 +848,9 @@ async function prepareTextContentRevisionV1(scope: WorkspaceScope, productionId:
   command: Extract<ProductProductionCommandV1, { type: 'revise-text-content' }>) {
   const production = await productionInScope(scope, productionId)
   if (production.stateRevision !== command.expectedStateRevision) reject('production-state-conflict', '当前版本已变化，请重新载入')
-  if (production.productType !== 'text-adventure' || production.status !== 'preview-ready') {
-    reject('invalid-state-transition', '内容修订只能从可预览文字冒险派生')
-  }
   const parentBuild = await currentBuild(production)
-  if (parentBuild.buildNumber !== command.buildNumber || parentBuild.releasedProductReleaseId != null
-    || !['preview-ready', 'release-ready'].includes(parentBuild.status)
+  if (!canReviseTextContentBuildV1(production, parentBuild)
+    || parentBuild.buildNumber !== command.buildNumber
     || parentBuild.briefRevision !== production.currentBriefRevision) {
     reject('invalid-state-transition', '内容修订需要当前未发布 Build 与已授权 Brief')
   }
@@ -873,6 +870,18 @@ async function prepareTextContentRevisionV1(scope: WorkspaceScope, productionId:
     if (!await assertRecordInScope(scope, 'productBuildArtifacts', artifact, { owner: 'work' })
       || (artifact.blobObjectId == null && await hashProductProductionValueV2(JSON.parse(artifact.payloadJson)) !== artifact.contentHash)) {
       reject('source-stale', '父 Build 工件作用域或 hash 无效')
+    }
+  }
+  if (parentBuild.status === 'recovery-required') {
+    const review = sourceByKey.get('quality.adventure-review')
+    const result = review ? objectJson(review.payloadJson, 'quality.adventure-review') : null
+    const ledger = objectJson(parentBuild.budgetLedgerJson, 'budgetLedger')
+    if (!result || result.schema !== 'storyforge.text-adventure-quality-review-artifact'
+      || result.passed !== false || !Array.isArray(result.issues)
+      || !result.issues.some(issue => issue && typeof issue === 'object' && issue.severity === 'blocking')
+      || !Array.isArray(ledger.attempts) || ledger.attempts.some(attempt => !attempt || typeof attempt !== 'object'
+        || (!attempt.usageKnown && attempt.resolution == null))) {
+      reject('invalid-state-transition', '返修子 Build 需要已签收的叙事退回报告且所有供应商调用均已结算')
     }
   }
   const images = artifacts.filter(row => row.kind === 'image')

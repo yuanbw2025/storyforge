@@ -1315,7 +1315,7 @@ export function textAdventureQualityReviewReferenceViolationsV1(
       if (!decisionKeys.has(compactDecision) || !optionKeys.has(compactOption)
         || !(index.decisionOptionKeysByKey[compactDecision] ?? []).includes(compactOption)) return false
       const suffix = segments.slice(3).join('.')
-      return !suffix || ['key', 'label', 'cost', 'persistentEffectKey', 'echoSceneKeys']
+      return !suffix || ['key', 'label', 'cost', 'persistentEffectKey', 'echoSceneKeys', 'echoTextByScene']
         .some(field => suffix === field || suffix.startsWith(`${field}.`))
     }))
     const nestedDecisionReferences = new Set(decisionReferences.filter(reference => {
@@ -1328,7 +1328,7 @@ export function textAdventureQualityReviewReferenceViolationsV1(
         if (remainder === optionKey) return true
         if (!remainder.startsWith(`${optionKey}.`)) return false
         const field = remainder.slice(optionKey.length + 1)
-        return ['key', 'label', 'cost', 'persistentEffectKey', 'echoSceneKeys']
+        return ['key', 'label', 'cost', 'persistentEffectKey', 'echoSceneKeys', 'echoTextByScene']
           .some(allowed => field === allowed || field.startsWith(`${allowed}.`))
       })
     }))
@@ -1337,7 +1337,7 @@ export function textAdventureQualityReviewReferenceViolationsV1(
     )), decisionKeys,
       ['sceneKey', 'prompt', 'options'])
     unknown('审查', evidence.match(/option\.[A-Za-z0-9._:-]+/g) ?? [], optionKeys,
-      ['key', 'label', 'cost', 'persistentEffectKey', 'echoSceneKeys'])
+      ['key', 'label', 'cost', 'persistentEffectKey', 'echoSceneKeys', 'echoTextByScene'])
     unknown('审查', evidence.match(/choice\.[A-Za-z0-9._:-]+/g) ?? [], choiceKeys,
       ['choiceKey', 'sourceNodeKey', 'targetNodeKey', 'text', 'label', 'description', 'unavailableReason',
         'displayCondition', 'availableCondition', 'effects', 'tags', 'order'])

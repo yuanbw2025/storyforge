@@ -1,3 +1,4 @@
+import { canReviseTextContentBuildV1 } from '../../lib/product-production/text-content-revision'
 import TextAdventureContentRevisionPanel from './TextAdventureContentRevisionPanel'
 import type { ChatAuthoringSettingsV1 } from '../../lib/character-interaction/authoring-contract'
 import type { AvgAuthoringSettingsV1 } from '../../lib/avg/authoring-contract'
@@ -2180,7 +2181,7 @@ export default function ProductProductionStudio(props: {
         </section>}
         {details?.production.productType === 'text-adventure' && reviewArtifacts.length > 0 && <section className="mt-5 rounded border border-border bg-bg-elevated p-5" data-testid="text-adventure-author-workbench">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-sm font-semibold">文字冒险工件审查台</h2><p className="mt-1 text-[10px] leading-5 text-text-muted">每项均来自当前 Build 的已采纳或跨版本复用工件。展开可核对内容和来源 hash；试玩与发布仍是显式作者闸门。</p></div><span className="rounded bg-accent/10 px-2 py-1 text-[9px] text-accent">{reviewArtifacts.length} 项 · Build #{details.build?.buildNumber}</span></div>
-          {details.production.status === 'preview-ready' && details.build && details.build.releasedProductReleaseId == null
+          {canReviseTextContentBuildV1(details.production, details.build) && details.build
             && <TextAdventureContentRevisionPanel key={details.build.buildNumber} buildNumber={details.build.buildNumber}
               artifacts={reviewArtifacts} imageCount={mediaAssets.length} busy={busy || productionRunning}
               onSubmit={revisions => { void run(async () => {

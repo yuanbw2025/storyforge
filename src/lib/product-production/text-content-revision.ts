@@ -1,8 +1,23 @@
 import type {
-  ProductBuildArtifactRecordV1, ProductProductionCommandV1, ProductProductionPlanV3,
+  ProductBuildArtifactRecordV1, ProductBuildRecordV1, ProductProductionRecordV1, ProductProductionCommandV1, ProductProductionPlanV3,
   TextAdventureContentRevisionV1,
 } from '../types'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from './hash'
+
+/** A failed package may be repaired in an immutable child once all calls are settled. */
+export function canReviseTextContentBuildV1(
+  production: Pick<ProductProductionRecordV1, 'productType' | 'status' | 'currentBuildNumber'>,
+  build: Pick<ProductBuildRecordV1, 'buildNumber' | 'status' | 'releasedProductReleaseId' | 'failureJson'> | null,
+): boolean {
+  if (production.productType !== 'text-adventure' || !build
+    || build.buildNumber !== production.currentBuildNumber || build.releasedProductReleaseId != null) return false
+  if (production.status === 'preview-ready') return ['preview-ready', 'release-ready'].includes(build.status)
+  if (production.status !== 'producing' || build.status !== 'recovery-required') return false
+  try {
+    const failure = JSON.parse(build.failureJson) as Record<string, unknown>
+    return failure.code === 'task-executor-failed' && failure.taskKey === 'integration.package'
+  } catch { return false }
+}
 
 /** This command preserves cast, locations, art direction and frozen world. */
 export function isTextContentRevisionKeyV1(key: string): key is TextAdventureContentRevisionV1['artifactKey'] {

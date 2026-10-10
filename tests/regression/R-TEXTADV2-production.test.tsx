@@ -98,7 +98,7 @@ describe('R-TEXTADV2-production · 文字冒险正式生产契约与工作台', 
     })
     expect(getAgentSkillV1('text-adventure.narrative-design.v1')).toMatchObject({
       agentId: 'text-adventure-narrative-designer',
-      promptVersion: 'text-adventure-narrative-design-v2',
+      promptVersion: 'text-adventure-narrative-design-v3',
     })
     expect(getAgentSkillV1('text-adventure.scene-script.v1')).toMatchObject({
       agentId: 'text-adventure-scene-writer',

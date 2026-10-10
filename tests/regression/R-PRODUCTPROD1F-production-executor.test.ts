@@ -8294,7 +8294,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
   // Each product owns an independent fixture and timeout. The unpublished
   // recovery path is already covered by the 60-minute adventure above;
   // this matrix additionally verifies recovery of the published adventure.
-  it.each(['pause', 'review-retry', 'dialogue-repair', 'quality-repair'] as const)('文字修订从完整生产 Build 派生，%s 恢复后零图片调用保留原图并采纳新正文', async recoveryMode => {
+  it.each(['pause', 'review-retry', 'dialogue-repair', 'quality-repair', 'quality-child-revision'] as const)('文字修订从完整生产 Build 派生，%s 恢复后零图片调用保留原图并采纳新正文', async recoveryMode => {
     const productType = 'text-adventure' as ProductionProductKindV1
     const owned = await fixtureForProduct(productType, { pluginRules: productType === 'ttrpg' })
     const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
@@ -8337,7 +8337,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const runText: ProductionTextRunnerV1 = async request => {
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs
       if (revisionPhase) modelTasks.push(taskKey)
-      if (revisionPhase && failReview && recoveryMode !== 'quality-repair' && taskKey === 'content.adventure-quality-review.act-2') {
+      if (revisionPhase && failReview && !recoveryMode.startsWith('quality-') && taskKey === 'content.adventure-quality-review.act-2') {
         throw new Error('Fixture review provider returned no usable answer')
       }
       if (!taskKey) throw new Error(`unknown ${productType} model task`)
@@ -8351,7 +8351,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       let output: unknown = taskKey === 'media.requirements'
         ? { ...outputs[taskKey], visual: productType === 'text-adventure' ? outputs[taskKey].visual : [], audio: [] }
         : outputs[taskKey]
-      if (revisionPhase && failReview && recoveryMode === 'quality-repair' && taskKey === 'content.adventure-quality-review.act-1') {
+      if (revisionPhase && failReview && recoveryMode.startsWith('quality-') && taskKey === 'content.adventure-quality-review.act-1') {
         output = { ...outputs[taskKey], passed: false, issues: [{ severity: 'blocking', artifactKey: 'content.dialogue-pass.act-1',
           detail: '[owningKey=scene.001] 当前对白的观察结论缺少核对过程，因果不连贯。',
           recommendation: '保留场景、人物与稳定编号，为当前说话者补充核对事实的第一人称台词。' }] }
@@ -8457,7 +8457,30 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       const failed = await executeBuild()
       expect(failed.buildStatus).toBe('recovery-required')
       const current = (await db.productProductions.get(owned.productionId))!
-      if (recoveryMode === 'dialogue-repair' || recoveryMode === 'quality-repair') {
+      if (recoveryMode === 'quality-child-revision') {
+        const rejectedParent = (await db.productBuilds.get(failed.buildId))!
+        const retained = (await db.productBuildArtifacts.where('buildId').equals(failed.buildId).toArray())
+          .filter(row => row.controlEpoch === rejectedParent.controlEpoch && ['accepted', 'carried-forward'].includes(row.status))
+        const source = retained.find(row => row.artifactKey === key)!
+        const command = { type: 'revise-text-content' as const, commandId: 'formal.batch.quality-child',
+          expectedStateRevision: current.stateRevision, buildNumber: rejectedParent.buildNumber,
+          preserveVisualContract: true as const,
+          revisions: [{ artifactKey: key, expectedArtifactVersion: source.version, expectedArtifactHash: source.contentHash,
+            note: '修订退回稿并保留原图', authorDraftJson: source.payloadJson }],
+          retainedImages: retained.filter(row => row.kind === 'image').map(row => ({ artifactKey: row.artifactKey, expectedArtifactHash: row.contentHash })),
+        }
+        const pending = JSON.parse(rejectedParent.budgetLedgerJson)
+        pending.attempts.push({ taskKey: 'content.dialogue-pass.act-1', usageKnown: false, resolution: null })
+        await db.productBuilds.update(failed.buildId, { budgetLedgerJson: JSON.stringify(pending) })
+        await expect(executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+          command: { ...command, commandId: 'formal.batch.quality-child.pending' } }))
+          .rejects.toThrow('所有供应商调用均已结算')
+        await db.productBuilds.put(rejectedParent)
+        const repaired = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId, command })
+        expect(repaired, JSON.stringify(repaired)).toMatchObject({ ok: true })
+        expect(Number(repaired.result.buildNumber)).toBe(rejectedParent.buildNumber + 1)
+        expect(await db.productBuilds.get(failed.buildId)).toEqual(rejectedParent)
+      } else if (recoveryMode === 'dialogue-repair' || recoveryMode === 'quality-repair') {
         const paused = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
           command: { type: 'pause', commandId: 'formal.batch.repair.pause', expectedStateRevision: current.stateRevision, reason: '定点修复已采纳对白' } })
         expect(paused.ok).toBe(true)
@@ -8556,6 +8579,10 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       ) : {}),
     }
     if (professional) {
+      const option = professional['content.narrative-arc-plan'].decisions[0].options[0]
+      Object.assign(option, { echoTextByScene: Object.fromEntries(option.echoSceneKeys.map(sceneKey => [
+        sceneKey, `在${sceneKey}，信使看见你保留下来的刻线，松开了遮住信封的手。`,
+      ])) })
       // Exercise the real governed compiler, publish and imported proof path with
       // a named quest item and an explicit mana cost, not just empty V3 fields.
       const objective = professional['content.main-quest-plan'].quests[0].objectives[0]
@@ -8578,6 +8605,9 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         expect(request.contextText).toContain('钟座刻线拓片')
         expect(request.contextText).toContain('"resourceCosts"')
         expect(request.contextText).toContain('"recipientCharacterKey":"character.npc.1"')
+      }
+      if (professional && ['content.adventure-quality-review.structure', 'content.adventure-quality-review.act-1'].includes(taskKey)) {
+        expect(request.contextText).toContain('信使看见你保留下来的刻线，松开了遮住信封的手。')
       }
       let output: unknown = taskKey === 'media.requirements'
         ? { ...outputs[taskKey], visual: productType === 'text-adventure' ? outputs[taskKey].visual : [], audio: [] }
@@ -8693,6 +8723,14 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         ambientEvents: payload('content.adventure-ambient-events'),
         sourceCatalog: { artifacts: [{ resourceKey: 'artifact:bell-key', name: '原调音钥匙', description: '冻结来源中的唯一钥匙。' }] },
       } as TextAdventureProductionCompilerInputV1
+      const echoedOption = compilation.arcPlan.decisions[0].options[0]
+      for (const sceneKey of echoedOption.echoSceneKeys) {
+        const action = runtimePackage.adventure!.actions.find(action => action.key ===
+          `action.echo.${compilation.arcPlan.decisions[0].key}.${echoedOption.key}.${sceneKey}`)!
+        expect(action.successText).toBe(echoedOption.echoTextByScene![sceneKey])
+        expect(action.requirements).toContainEqual({ conditionKey: echoedOption.persistentEffectKey, conditionPresent: true })
+        expect(action.successEffects).toEqual([])
+      }
       for (const binding of [
         { kind: 'starter' as const, itemKey: compilation.systems.starterEquipment[0].key },
         { kind: 'world' as const, resourceKey: 'artifact:bell-key' },

@@ -81,13 +81,14 @@ export function textAdventureDecisionEchoPresentationV1(input: {
   optionCost: string
   sceneTitle: string
   sceneConflict: string
+  authoredText?: string
 }): TextAdventureDecisionEchoPresentationV1 {
   const cost = /[。！？]$/u.test(input.optionCost.trim())
     ? input.optionCost.trim() : `${input.optionCost.trim()}。`
   return {
     label: `回响：${input.optionLabel}`,
     description: `此前的决定正在改变「${input.sceneTitle}」的局面。`,
-    successText: `来到「${input.sceneTitle}」，你先前面对“${input.decisionPrompt}”时选择“${input.optionLabel}”的后果显现。${cost}眼前的冲突“${input.sceneConflict}”因此出现了只属于这条路线的回应。`,
+    successText: input.authoredText ?? `来到「${input.sceneTitle}」，你先前面对“${input.decisionPrompt}”时选择“${input.optionLabel}”的后果显现。${cost}眼前的冲突“${input.sceneConflict}”因此出现了只属于这条路线的回应。`,
     costlySuccessText: `「${input.sceneTitle}」再次让你感到“${input.optionLabel}”留下的代价。`,
     failureText: '这段回响没有发生。',
     unavailableText: '只有作出对应决定后，才能看见这段回响。',
@@ -620,6 +621,7 @@ export function compileTextAdventureModuleV2(
         optionCost: option.cost,
         sceneTitle: scene.title,
         sceneConflict: sceneCard.conflict,
+        authoredText: option.echoTextByScene?.[echoSceneKey],
       })
       registerAction({
         key: `action.echo.${decision.key}.${option.key}.${echoSceneKey}`,
