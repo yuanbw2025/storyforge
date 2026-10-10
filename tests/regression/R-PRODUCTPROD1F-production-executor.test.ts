@@ -8294,7 +8294,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
   // Each product owns an independent fixture and timeout. The unpublished
   // recovery path is already covered by the 60-minute adventure above;
   // this matrix additionally verifies recovery of the published adventure.
-  it.each(['pause', 'review-retry', 'dialogue-repair'] as const)('文字修订从完整生产 Build 派生，%s 恢复后零图片调用保留原图并采纳新正文', async recoveryMode => {
+  it.each(['pause', 'review-retry', 'dialogue-repair', 'quality-repair'] as const)('文字修订从完整生产 Build 派生，%s 恢复后零图片调用保留原图并采纳新正文', async recoveryMode => {
     const productType = 'text-adventure' as ProductionProductKindV1
     const owned = await fixtureForProduct(productType, { pluginRules: productType === 'ttrpg' })
     const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
@@ -8337,7 +8337,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     const runText: ProductionTextRunnerV1 = async request => {
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs
       if (revisionPhase) modelTasks.push(taskKey)
-      if (revisionPhase && failReview && taskKey === 'content.adventure-quality-review.act-2') {
+      if (revisionPhase && failReview && recoveryMode !== 'quality-repair' && taskKey === 'content.adventure-quality-review.act-2') {
         throw new Error('Fixture review provider returned no usable answer')
       }
       if (!taskKey) throw new Error(`unknown ${productType} model task`)
@@ -8351,6 +8351,11 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       let output: unknown = taskKey === 'media.requirements'
         ? { ...outputs[taskKey], visual: productType === 'text-adventure' ? outputs[taskKey].visual : [], audio: [] }
         : outputs[taskKey]
+      if (revisionPhase && failReview && recoveryMode === 'quality-repair' && taskKey === 'content.adventure-quality-review.act-1') {
+        output = { ...outputs[taskKey], passed: false, issues: [{ severity: 'blocking', artifactKey: 'content.dialogue-pass.act-1',
+          detail: '[owningKey=scene.001] 当前对白的观察结论缺少核对过程，因果不连贯。',
+          recommendation: '保留场景、人物与稳定编号，为当前说话者补充核对事实的第一人称台词。' }] }
+      }
       if (productType === 'ttrpg' && taskKey === 'content.product-module') {
         const currentBuild = await db.productBuilds.where('productionId').equals(owned.productionId).last()
         const narrative = await db.productBuildArtifacts.where('buildId').equals(currentBuild!.id!)
@@ -8445,7 +8450,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       const failed = await executeBuild()
       expect(failed.buildStatus).toBe('recovery-required')
       const current = (await db.productProductions.get(owned.productionId))!
-      if (recoveryMode === 'dialogue-repair') {
+      if (recoveryMode === 'dialogue-repair' || recoveryMode === 'quality-repair') {
         const paused = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
           command: { type: 'pause', commandId: 'formal.batch.repair.pause', expectedStateRevision: current.stateRevision, reason: '定点修复已采纳对白' } })
         expect(paused.ok).toBe(true)
@@ -8491,7 +8496,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       .filter(row => row.controlEpoch === child.controlEpoch && ['accepted', 'carried-forward'].includes(row.status))
     expect(rows.find(row => row.artifactKey === key)?.payloadJson).toContain(marker)
     expect(rows.find(row => row.artifactKey === 'runtime.package')?.payloadJson).toContain(marker)
-    if (recoveryMode === 'dialogue-repair') expect(rows.find(row => row.artifactKey === 'runtime.package')?.payloadJson).toContain('我会再核对一次。')
+    if (recoveryMode === 'dialogue-repair' || recoveryMode === 'quality-repair') expect(rows.find(row => row.artifactKey === 'runtime.package')?.payloadJson).toContain('我会再核对一次。')
     expect(modelTasks).not.toContain(key)
     expect(modelTasks).not.toContain('media.requirements')
     expect(modelTasks).toContain('content.dialogue-pass.act-1')
