@@ -357,13 +357,26 @@ export function projectAdventureTranscript(
   history: AdventureActionHistoryEntry[],
   events: ProductRuntimeEvent[],
 ): AdventureTranscriptEntry[] {
-  let previousActionSequence = 0
+  // A fork inherits parent history, but its own event ledger starts at 1.
+  // Anchor effects to local committed commands before joining that history;
+  // sequence alone can both hide child costs and attach them to a parent row.
+  const settlements = new Map<string, { sequence: number; actionKey: unknown; changes: string[] }>()
+  let pendingChanges: string[] = []
+  for (const event of [...events].sort((left, right) => left.sequence - right.sequence)) {
+    const change = eventChange(event, manifest)
+    if (change != null) pendingChanges.push(change)
+    if (event.type !== 'adventure.action.committed') continue
+    const body = payload(event)
+    const commandId = typeof body.commandId === 'string' ? body.commandId : event.commandId
+    if (commandId) settlements.set(commandId, {
+      sequence: event.sequence, actionKey: body.actionKey, changes: pendingChanges,
+    })
+    pendingChanges = []
+  }
   return history.map(action => {
-    const changes = events
-      .filter(event => event.sequence > previousActionSequence && event.sequence <= action.eventSequence)
-      .map(event => eventChange(event, manifest))
-      .filter((value): value is string => value != null)
-    previousActionSequence = action.eventSequence
+    const settlement = settlements.get(action.commandId)
+    const changes = settlement?.sequence === action.eventSequence && settlement.actionKey === action.actionKey
+      ? settlement.changes : []
     return {
       eventSequence: action.eventSequence,
       actionKey: action.actionKey,

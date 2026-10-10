@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { projectAdventureTranscript } from '../../src/lib/adventure/player-experience'
 import { db } from '../../src/lib/db/schema'
-import type { AdventureActionHistoryEntry, AdventureProductRuntimePackageV1 } from '../../src/lib/types'
+import type { AdventureActionHistoryEntry, AdventureProductRuntimePackageV1, ProductRuntimeEvent } from '../../src/lib/types'
 import { loadCurrentProductWorldSourceCatalogV1, seedCurrentProductWorld } from '../helpers/current-product-world'
 import { createTextAdventureFoundationRuntimePackageV2 } from '../helpers/text-adventure-v2-foundation'
 
@@ -89,5 +89,32 @@ describe('TEXTADV · 行动正文只读取明确绑定的叙事场景', () => {
     const blocks = transcript(action.key)
     expect(blocks.map(block => block.text)).toContain('新透镜嵌入灯芯。两条互相冲突的光路同时亮起。')
     expect(blocks.map(block => block.text)).not.toContain('雾潮已经漫过外港石阶，废弃灯塔仍在远处一明一灭。')
+  })
+
+  it('检查点分支重置事件序号后，代价归属本次行动，不泄漏到继承的父历史', () => {
+    const actionKey = 'action.equip.cloak'
+    const history = (commandId: string, eventSequence: number): AdventureActionHistoryEntry => ({
+      commandId, eventSequence, resultingSequence: eventSequence, actionKey,
+      kind: 'use', outcome: 'costly-success', narrative: '本次行动已经完成。',
+    })
+    const event = (sequence: number, type: ProductRuntimeEvent['type'], body: object, commandId: string | null = null): ProductRuntimeEvent => ({
+      projectId: 1, worldGroupId: null, sessionId: 21, sequence, type, actorKey: 'player',
+      targetKey: null, commandId, baseSequence: null, baseStateHash: null,
+      payloadJson: JSON.stringify(body), createdAt: 1,
+    })
+    const events = [
+      event(1, 'adventure.resource.changed', { resourceKey: 'resource.mana', delta: -1, after: 9 }),
+      event(2, 'adventure.action.committed', { commandId: 'child:first', actionKey }, 'child:first'),
+      event(3, 'adventure.resource.changed', { resourceKey: 'resource.health', delta: -1, after: 13 }),
+      event(4, 'adventure.action.committed', { commandId: 'child:second', actionKey }, 'child:second'),
+    ]
+    const projected = projectAdventureTranscript(manifest, [
+      history('parent:collision', 2), history('parent:last', 154),
+      history('child:first', 2), history('child:second', 4),
+    ], events)
+    expect(projected[0].changes).toEqual([])
+    expect(projected[1].changes).toEqual([])
+    expect(projected[2].changes).toEqual(['法力 -1（9）'])
+    expect(projected[3].changes).toEqual(['生命 -1（13）'])
   })
 })
