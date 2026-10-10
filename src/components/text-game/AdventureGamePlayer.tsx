@@ -241,7 +241,10 @@ export default function AdventureGamePlayer(props: {
     : null
   const runtimeSourceLabel = selectedRelease
     ? 'ProductRelease v' + selectedRelease.version
-    : selected?.productBuildId != null ? 'Build 预览 #' + selected.productBuildId : '未绑定运行来源'
+    : selected?.productBuildId != null
+      ? store.selectedSourceSessionId === selected.id && store.selectedBuildNumber != null
+        ? 'Build 预览 #' + store.selectedBuildNumber : 'Build 预览 · 版本待核验'
+      : '未绑定运行来源'
   const adventure = store.runtimeState.adventure
   const manifest = store.selectedManifest
   const adventureV2 = manifest?.adventure.version === 2 ? manifest.adventure : null
