@@ -11,6 +11,7 @@ import {
   reviseAgentRunContractV1,
 } from '../../src/lib/agent/run/event-store'
 import { createAgentRunCheckpointV1, verifyAgentRunCheckpointV1 } from '../../src/lib/agent/run/checkpoint'
+import { portableizeAgentRunLedgerExportV1 } from '../../src/lib/agent/run/ledger-portability'
 import { seedFullProject } from '../helpers/seed-full-project'
 import type { WorkspaceScope } from '../../src/lib/types'
 import { seedCurrentWorkspace } from '../helpers/current-workspace'
@@ -139,6 +140,76 @@ describe('R-HARNESS1-project-lifecycle · run 全生命周期', () => {
       .where('runId').equals(importedRun!.id!).first()
     expect(await verifyAgentRunCheckpointV1(scope, importedCheckpoint!.id!)).toBe(true)
   })
+
+  it('多 Run 乱序账本只线性读取关联键，保留导出行顺序并完整恢复检查点', async () => {
+    const fixture = await createSmallWorkspace()
+    const runCount = 16
+    for (let index = 0; index < runCount; index++) {
+      const snapshot = await createAgentRunV1({
+        scope: fixture.scope,
+        worldGroupId: fixture.worldGroupId,
+        contract: runContract({
+          projectId: fixture.scope.projectId,
+          worldGroupId: fixture.worldGroupId,
+          outlineNodeId: fixture.outlineNodeId,
+        }),
+      })
+      await appendAgentRunEventV1({
+        scope: fixture.scope,
+        runId: snapshot.run.id,
+        type: 'step.scheduled',
+        payload: { stepId: `outline.generate.${index}` },
+      })
+      await createAgentRunCheckpointV1({ scope: fixture.scope, runId: snapshot.run.id })
+    }
+    const exported = await exportProjectJSON(fixture.scope.projectId)
+    // Interleave runs and reverse sequence order to exercise per-run replay sorting.
+    exported.agentRunEvents.sort((left, right) => (
+      right.sequence - left.sequence || left._agentRunExportId - right._agentRunExportId
+    ))
+    exported.agentRunCheckpoints.reverse()
+    const eventOrder = [...exported.agentRunEvents]
+    const checkpointOrder = [...exported.agentRunCheckpoints]
+    let keyReads = 0
+    for (const row of [...eventOrder, ...checkpointOrder]) {
+      const runKey = row._agentRunExportId
+      Object.defineProperty(row, '_agentRunExportId', {
+        enumerable: true,
+        configurable: true,
+        get: () => { keyReads++; return runKey },
+      })
+    }
+    // Re-export the portable IDs to themselves; verify the real hook without
+    // elapsed-time assertions that depend on machine speed or CI contention.
+    const idMaps = new Map([
+      ['worldGroups', new Map([[1, 0]])],
+      ['outlineNodes', new Map([[1, 0]])],
+    ])
+    await portableizeAgentRunLedgerExportV1(exported, idMaps)
+    expect(keyReads).toBeLessThanOrEqual(2 * (eventOrder.length + checkpointOrder.length))
+    eventOrder.forEach((row, index) => expect(exported.agentRunEvents[index]).toBe(row))
+    checkpointOrder.forEach((row, index) => expect(exported.agentRunCheckpoints[index]).toBe(row))
+
+    for (const table of ['agentRunEvents', 'agentRunCheckpoints'] as const) {
+      const corrupt = structuredClone(exported)
+      corrupt[table][0]._worldGroupExportId = 99
+      await expect(portableizeAgentRunLedgerExportV1(corrupt, idMaps))
+        .rejects.toThrow('世界组与运行不一致')
+    }
+
+    const importedProjectId = await importProjectJSON(exported)
+    const scope = await importedScope(importedProjectId)
+    const importedRuns = await db.agentRuns.where('projectId').equals(importedProjectId).toArray()
+    expect(importedRuns).toHaveLength(runCount)
+    for (const run of importedRuns) {
+      const snapshot = await readAgentRunV1(scope, run.id!)
+      expect(snapshot.projection.errors).toEqual([])
+      expect(snapshot.events.map(event => event.sequence)).toEqual([1, 2, 3, 4])
+      const checkpoints = await db.agentRunCheckpoints.where('runId').equals(run.id!).toArray()
+      expect(checkpoints).toHaveLength(1)
+      expect(await verifyAgentRunCheckpointV1(scope, checkpoints[0].id!)).toBe(true)
+    }
+  }, 30_000)
 
   it('run、世界组、Work 和项目删除都不会遗留事件或检查点', async () => {
     const source = await seedFullProject()

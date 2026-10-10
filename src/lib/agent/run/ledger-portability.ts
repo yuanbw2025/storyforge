@@ -46,10 +46,18 @@ function parsePayload(row: ExportRow): Record<string, any> {
   }
 }
 
-function rowsForRun(rows: ExportRow[], runKey: number): ExportRow[] {
-  return rows
-    .filter(row => row._agentRunExportId === runKey)
-    .sort((left, right) => left.sequence - right.sequence)
+function indexRowsByRun(rows: ExportRow[]): Map<unknown, ExportRow[]> {
+  const index = new Map<unknown, ExportRow[]>()
+  for (const row of rows) {
+    const runKey: unknown = row._agentRunExportId
+    const bucket = index.get(runKey)
+    if (bucket) bucket.push(row)
+    else index.set(runKey, [row])
+  }
+  for (const bucket of index.values()) {
+    bucket.sort((left, right) => left.sequence - right.sequence)
+  }
+  return index
 }
 
 function exportedDomainEvents(run: ExportRow, events: ExportRow[]): AnyAgentRunEventV1[] {
@@ -175,9 +183,13 @@ export async function portableizeAgentRunLedgerExportV1(
   const runs = (data.agentRuns ?? []) as ExportRow[]
   const events = (data.agentRunEvents ?? []) as ExportRow[]
   const checkpoints = (data.agentRunCheckpoints ?? []) as ExportRow[]
+  // Large production histories must not rescan the entire ledger for each run.
+  // Buckets retain row identity while leaving the exported arrays in their original order.
+  const eventsByRun = indexRowsByRun(events)
+  const checkpointsByRun = indexRowsByRun(checkpoints)
   for (const run of runs) {
     if (!Number.isInteger(run._exportId)) fail('agentRuns 缺少便携 _exportId')
-    const runEvents = rowsForRun(events, run._exportId)
+    const runEvents = eventsByRun.get(run._exportId) ?? []
     if (runEvents.some(event => event._worldGroupExportId !== run._worldGroupExportId)) {
       fail(`run ${run._exportId} 事件世界组与运行不一致`)
     }
@@ -199,7 +211,7 @@ export async function portableizeAgentRunLedgerExportV1(
       }
       event.contractHash = pair.targetHash
     }
-    for (const checkpoint of rowsForRun(checkpoints, run._exportId)) {
+    for (const checkpoint of checkpointsByRun.get(run._exportId) ?? []) {
       if (checkpoint.resumePayloadJson != null
         && (typeof checkpoint.resumePayloadJson !== 'string'
           || agentRunUtf8ByteLengthV1(checkpoint.resumePayloadJson)
