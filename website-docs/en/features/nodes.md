@@ -1,7 +1,7 @@
 ---
 productId: authoring.nodes
 status: preview
-lastVerified: 2026-10-08
+lastVerified: 2026-10-10
 ---
 # Node authoring
 
@@ -49,3 +49,16 @@ The following changes are being validated in an independent development branch. 
 - On phones, the library, canvas, node settings, and candidates/evidence have separate views. Switching views retains edits.
 
 Automated tests use isolated model responses and do not establish literary quality. Full cross-mode acceptance of every official longform template remains pending. See [development status](/en/updates/development-status).
+
+## Free graph editing in the October 10 development branch
+
+These changes remain development work in PR #115; online deployment is not confirmed.
+
+1. Click or drag a node from the library, or right-click/double-click empty canvas space to search and create one.
+2. Drag backward from an input port or forward from an output port. Release on empty canvas space, search compatible nodes and select one: the chosen port is connected automatically. You can also drag directly to a compatible port on an existing node.
+3. Select a node and disconnect an edge under Connected edges (已连接的线) before reconnecting it. Escape cancels the picker. Canvas controls zoom in/out or restore 100%.
+4. Drag from a generation node's Prompt input to add a Prompt template (Prompt 模板) node. Search built-in or personal templates, adjust template parameters, fill required variables and supplementary instructions, or expand the node-local prompt editor.
+5. The selected version and adjustments save with the graph and do not change global templates. Click Save (保存), confirm Saved (已保存), then refresh. Required inputs must be supplied before model calls.
+6. Temperature, output-token limits and candidate-count controls take effect through their corresponding ports. Rerun after upstream changes; old candidates cannot be adopted over new work.
+
+The picker only lists compatible registered nodes. Experimental drafts require explicit opt-in and cannot write directly into the formal work.

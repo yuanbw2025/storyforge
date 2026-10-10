@@ -1,3 +1,4 @@
+import PromptControlEditor from './PromptControlEditor'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
@@ -45,7 +46,7 @@ import {
   type AuthoringNodeTemplate,
 } from '../../lib/node-authoring/contracts'
 import { parseAuthoringGraph } from '../../lib/node-authoring/graph-codec'
-import { suggestAuthoringConnections, authoringPortsCompatible } from '../../lib/node-authoring/compatibility'
+import { suggestAuthoringConnections } from '../../lib/node-authoring/compatibility'
 import { authoringExecutionSubgraph, topologicalAuthoringOrder, validateAuthoringGraph } from '../../lib/node-authoring/graph'
 import {
   adoptAuthoringCandidate,
@@ -110,9 +111,9 @@ function addEdge(graph: AuthoringNodeGraph, sourceNodeId: string, sourcePortId: 
 function portPosition(node: AuthoringNodeInstance, direction: 'input' | 'output', index: number, zoom: number) {
   return {
     x: node.x + (direction === 'output' ? NODE_WIDTH : 0),
-    y: node.y + HEADER_HEIGHT + index * PORT_HEIGHT + PORT_HEIGHT / 2,
+    y: node.y + HEADER_HEIGHT + index * PORT_HEIGHT + 16,
     screenX: (node.x + (direction === 'output' ? NODE_WIDTH : 0)) * zoom,
-    screenY: (node.y + HEADER_HEIGHT + index * PORT_HEIGHT + PORT_HEIGHT / 2) * zoom,
+    screenY: (node.y + HEADER_HEIGHT + index * PORT_HEIGHT + 16) * zoom,
   }
 }
 
@@ -180,7 +181,7 @@ function NodeLibrary(props: {
             <h3 className="mb-1 px-1 text-[10px] font-semibold tracking-wide text-text-muted">{category}</h3>
             <div className="space-y-1">
               {available.filter(template => template.category === category).map(template => (
-                <button key={template.id} type="button" onClick={() => props.onAdd(template)} className="group flex w-full items-start gap-2 rounded border border-transparent px-2 py-1.5 text-left hover:border-accent/40 hover:bg-bg-hover">
+                <button key={template.id} type="button" draggable onDragStart={event => { event.dataTransfer.setData('application/storyforge-node', template.id); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => props.onAdd(template)} className="group flex w-full items-start gap-2 rounded border border-transparent px-2 py-1.5 text-left hover:border-accent/40 hover:bg-bg-hover">
                   <GripVertical className="mt-0.5 h-3 w-3 shrink-0 text-text-muted group-hover:text-accent" />
                   <span className="min-w-0"><span className="block truncate text-[11px] font-medium text-text-primary">{template.label}{authoringDomainActionBindingV1(template)?.mode === 'experimental-draft' ? ' · 实验草稿' : ''}</span><span className="mt-0.5 block text-[9px] leading-3 text-text-muted">{template.description}</span></span>
                 </button>
@@ -204,7 +205,9 @@ function AuthoringCanvas(props: {
   onToggleFavorite: (id: string) => void
   onChange: (graph: AuthoringNodeGraph) => void
   onBeginConnection: (nodeId: string, portId: string, direction: 'input' | 'output') => void
-  onCanvasConnection: (x: number, y: number) => void
+  onCanvasConnection: (x: number, y: number, menuX: number, menuY: number) => void
+  onCancelConnection: () => void
+  onAddTemplate: (template: AuthoringNodeTemplate, position: { x: number; y: number }) => void
   onRemoveNode: (id: string) => void
 }) {
   const dragRef = useRef<{ nodeId: string; startX: number; startY: number; nodeX: number; nodeY: number } | null>(null)
@@ -212,12 +215,22 @@ function AuthoringCanvas(props: {
   const selectionMovedRef = useRef(false)
   const canvasRef = useRef<HTMLDivElement>(null)
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+  const portDrag = useRef<{ nodeId: string; portId: string; direction: 'input' | 'output'; startX: number; startY: number; moved: boolean } | null>(null)
+  const [wire, setWire] = useState<{ from: { x: number; y: number }; to: { x: number; y: number } } | null>(null)
+  const portDown = (event: React.PointerEvent<HTMLButtonElement>, nodeId: string, portId: string, direction: 'input' | 'output') => {
+    if (event.button !== 0) return
+    event.stopPropagation()
+    portDrag.current = { nodeId, portId, direction, startX: event.clientX, startY: event.clientY, moved: false }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    props.onBeginConnection(nodeId, portId, direction)
+  }
+  const blankCanvas = (target: EventTarget) => target instanceof Element && !target.closest('[data-authoring-node-template], button, input')
   const zoom = props.graph.viewport.zoom
   const height = 120 + Math.max(0, ...props.graph.nodes.map(node => node.y + HEADER_HEIGHT + Math.max(node.inputs.length, node.outputs.length) * PORT_HEIGHT))
   const width = Math.max(1900, 180 + Math.max(0, ...props.graph.nodes.map(node => node.x + NODE_WIDTH)))
   const bounds = authoringGraphBounds(props.graph)
 
-  const canvasPoint = (event: React.PointerEvent<HTMLDivElement>) => {
+  const canvasPoint = (event: { clientX: number; clientY: number }) => {
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) return { x: 0, y: 0 }
     return {
@@ -239,15 +252,27 @@ function AuthoringCanvas(props: {
   return (
     <div
       ref={canvasRef}
+      data-authoring-canvas
+      onDragOver={event => { if (event.dataTransfer.types.includes('application/storyforge-node')) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }}
+      onDrop={event => { const template = AUTHORING_NODE_BY_ID.get(event.dataTransfer.getData('application/storyforge-node')); if (!template) return; event.preventDefault(); props.onAddTemplate(template, canvasPoint(event)) }}
+      onKeyDown={event => { if (event.key === 'Escape') { portDrag.current = null; setWire(null); props.onCancelConnection() } }}
       className="relative min-w-0 flex-1 overflow-auto bg-[#f7f7f5]"
       onPointerDown={event => {
-        if (event.button !== 0 || event.target !== event.currentTarget) return
+        if (event.button !== 0 || !blankCanvas(event.target)) return
         const point = canvasPoint(event)
         selectionRef.current = point
         selectionMovedRef.current = false
         event.currentTarget.setPointerCapture(event.pointerId)
       }}
       onPointerMove={event => {
+        const drag = portDrag.current
+        if (drag) {
+          drag.moved ||= Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 5
+          const node = props.graph.nodes.find(item => item.id === drag.nodeId)
+          const index = (drag.direction === 'input' ? node?.inputs : node?.outputs)?.findIndex(port => port.id === drag.portId) ?? -1
+          if (node && index >= 0) setWire({ from: portPosition(node, drag.direction, index, 1), to: canvasPoint(event) })
+          return
+        }
         moveNode(event)
         if (!selectionRef.current) return
         const point = canvasPoint(event)
@@ -257,6 +282,24 @@ function AuthoringCanvas(props: {
         setSelectionBox(box)
       }}
       onPointerUp={event => {
+        const drag = portDrag.current
+        if (drag) {
+          portDrag.current = null
+          setWire(null)
+          if (drag.moved) {
+            const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-authoring-port]')
+            if (target && target.dataset.direction !== drag.direction && target.dataset.nodeId !== drag.nodeId) {
+              props.onBeginConnection(target.dataset.nodeId!, target.dataset.authoringPort!, target.dataset.direction as 'input' | 'output')
+            } else {
+              const rect = canvasRef.current!.getBoundingClientRect()
+              if (event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom && !target) {
+                const point = canvasPoint(event)
+                props.onCanvasConnection(point.x, point.y, event.clientX - rect.left, event.clientY - rect.top)
+              } else props.onCancelConnection()
+            }
+          }
+          return
+        }
         if (selectionRef.current) {
           const point = canvasPoint(event)
           const start = selectionRef.current
@@ -274,12 +317,16 @@ function AuthoringCanvas(props: {
         }
         dragRef.current = null
       }}
-      onPointerLeave={() => { dragRef.current = null; selectionRef.current = null; setSelectionBox(null) }}
+      onPointerCancel={() => { portDrag.current = null; dragRef.current = null; selectionRef.current = null; setWire(null); setSelectionBox(null); props.onCancelConnection() }}
+      onPointerLeave={event => { if (!event.buttons) { dragRef.current = null; selectionRef.current = null; setSelectionBox(null) } }}
+      onContextMenu={event => { if (!blankCanvas(event.target)) return; event.preventDefault(); props.onCancelConnection(); const rect = canvasRef.current!.getBoundingClientRect(); const point = canvasPoint(event); props.onCanvasConnection(point.x, point.y, event.clientX - rect.left, event.clientY - rect.top) }}
+      onDoubleClick={event => { if (!blankCanvas(event.target)) return; const rect = canvasRef.current!.getBoundingClientRect(); const point = canvasPoint(event); props.onCanvasConnection(point.x, point.y, event.clientX - rect.left, event.clientY - rect.top) }}
       onClick={event => {
-        if (event.target !== event.currentTarget || selectionMovedRef.current) return
+        if (!blankCanvas(event.target) || selectionMovedRef.current || portDrag.current) return
         const rect = canvasRef.current?.getBoundingClientRect()
         if (!rect) return
-        props.onCanvasConnection((event.clientX - rect.left - props.graph.viewport.x) / zoom, (event.clientY - rect.top - props.graph.viewport.y) / zoom)
+        const point = canvasPoint(event)
+        props.onCanvasConnection(point.x, point.y, event.clientX - rect.left, event.clientY - rect.top)
       }}
     >
       <div className="relative" style={{ width, height, transform: `translate(${props.graph.viewport.x}px, ${props.graph.viewport.y}px) scale(${zoom})`, transformOrigin: 'top left' }}>
@@ -293,6 +340,7 @@ function AuthoringCanvas(props: {
           return <div key={group.id} className="pointer-events-none absolute rounded-lg border border-dashed border-accent/30 bg-accent/5" style={{ left, top, width: right - left, height: bottom - top }}><span className="absolute -top-5 left-1 text-[10px] font-semibold text-accent">{group.title}</span></div>
         })}
         <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
+          {wire && <path data-authoring-wire-preview d={`M ${wire.from.x} ${wire.from.y} C ${wire.from.x + 60} ${wire.from.y}, ${wire.to.x - 60} ${wire.to.y}, ${wire.to.x} ${wire.to.y}`} fill="none" stroke="var(--accent)" strokeWidth="2" strokeDasharray="5 3" />}
           {props.graph.edges.map(edge => {
             const source = props.graph.nodes.find(node => node.id === edge.sourceNodeId)
             const target = props.graph.nodes.find(node => node.id === edge.targetNodeId)
@@ -315,16 +363,16 @@ function AuthoringCanvas(props: {
             ? freshness.reasons.includes('source-missing') ? '来源缺失' : '需要重跑'
             : freshness?.status === 'fresh' ? '输入未变化' : undefined
           return (
-            <div key={node.id} data-authoring-node-template={node.templateId} role="button" tabIndex={0} aria-label={`节点 ${node.title}`} className={`absolute rounded-md border shadow-sm ${templateColor(template)} ${props.selectedNodeIds.has(node.id) ? 'ring-2 ring-accent ring-offset-1' : ''}`} style={{ left: node.x, top: node.y, width: NODE_WIDTH }} onClick={event => { event.stopPropagation(); props.onSelectNode(node.id) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); props.onSelectNode(node.id) } }}>
+            <div key={node.id} data-authoring-node-template={node.templateId} role="button" tabIndex={0} aria-label={`节点 ${node.title}`} className={`absolute rounded-md border shadow-sm ${templateColor(template)} ${props.selectedNodeIds.has(node.id) ? 'ring-2 ring-accent ring-offset-1' : ''}`} style={{ left: node.x, top: node.y, width: NODE_WIDTH }} onClick={event => { event.stopPropagation(); props.onSelectNode(node.id) }} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); props.onSelectNode(node.id) } }}>
               <div
-                className="flex h-[38px] cursor-grab items-center gap-2 rounded-t-md border-b border-black/10 px-2 active:cursor-grabbing"
+                data-authoring-node-header className="flex h-[38px] cursor-grab items-center gap-2 rounded-t-md border-b border-black/10 px-2 active:cursor-grabbing"
                 onPointerDown={event => { event.stopPropagation(); dragRef.current = { nodeId: node.id, startX: event.clientX, startY: event.clientY, nodeX: node.x, nodeY: node.y }; event.currentTarget.setPointerCapture(event.pointerId) }}
               >
                 <GripVertical className="h-3.5 w-3.5 text-text-muted" /><span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-text-primary">{node.title}</span><button type="button" title={node.favorite ? '取消收藏节点' : '收藏节点'} aria-label={node.favorite ? '取消收藏节点' : '收藏节点'} onClick={event => { event.stopPropagation(); props.onToggleFavorite(node.id) }} className={`rounded p-0.5 ${node.favorite ? 'text-amber-600' : 'text-text-muted'} hover:bg-amber-100`}><Star className="h-3 w-3" fill={node.favorite ? 'currentColor' : 'none'} /></button><button type="button" title="删除节点" onClick={event => { event.stopPropagation(); props.onRemoveNode(node.id) }} className="rounded p-0.5 text-text-muted hover:bg-error/10 hover:text-error"><X className="h-3 w-3" /></button>
               </div>
               <div className="grid grid-cols-2 gap-2 px-1 py-1.5">
-                <div className="space-y-1">{node.inputs.map(port => <button key={port.id} type="button" onClick={event => { event.stopPropagation(); props.onBeginConnection(node.id, port.id, 'input') }} className="flex w-full items-center gap-1 text-left text-[9px] text-text-secondary hover:text-accent"><span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-accent bg-white" /><span className="truncate">{port.label}{port.required ? ' *' : ''}</span></button>)}</div>
-                <div className="space-y-1">{node.outputs.map(port => <button key={port.id} type="button" onClick={event => { event.stopPropagation(); props.onBeginConnection(node.id, port.id, 'output') }} className="flex w-full items-center justify-end gap-1 text-right text-[9px] text-text-secondary hover:text-accent"><span className="truncate">{port.label}</span><span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-accent bg-white" /></button>)}</div>
+                <div className="space-y-1">{node.inputs.map(port => <button key={port.id} type="button" aria-label={`输入 ${node.title} · ${port.label}`} style={{ height: PORT_HEIGHT - 4 }} data-authoring-port={port.id} data-node-id={node.id} data-direction="input" onPointerDown={event => portDown(event, node.id, port.id, 'input')} onClick={event => { event.stopPropagation(); if (event.detail === 0) props.onBeginConnection(node.id, port.id, 'input') }} className="flex w-full items-center gap-1 text-left text-[9px] text-text-secondary hover:text-accent"><span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-accent bg-white" /><span className="truncate">{port.label}{port.required ? ' *' : ''}</span></button>)}</div>
+                <div className="space-y-1">{node.outputs.map(port => <button key={port.id} type="button" aria-label={`输出 ${node.title} · ${port.label}`} style={{ height: PORT_HEIGHT - 4 }} data-authoring-port={port.id} data-node-id={node.id} data-direction="output" onPointerDown={event => portDown(event, node.id, port.id, 'output')} onClick={event => { event.stopPropagation(); if (event.detail === 0) props.onBeginConnection(node.id, port.id, 'output') }} className="flex w-full items-center justify-end gap-1 text-right text-[9px] text-text-secondary hover:text-accent"><span className="truncate">{port.label}</span><span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-accent bg-white" /></button>)}</div>
               </div>
               <div className={`border-t border-black/10 px-2 py-1 text-[9px] ${freshness?.status === 'stale' ? 'text-error' : 'text-text-muted'}`}>{result ? (result.status === 'blocked' ? '运行阻塞' : result.status === 'adopted' ? '已采纳 / 资料快照' : result.status === 'rejected' ? '已拒绝' : `${result.output.length.toLocaleString()} 字候选${freshnessLabel ? ` · ${freshnessLabel}` : ''}`) : `${template.category} · ${template.capability}`}</div>
             </div>
@@ -424,25 +472,54 @@ function NodeInspector(props: { node: AuthoringNodeInstance | null; graph: Autho
           <div className="max-h-48 space-y-1 overflow-y-auto">{CONTEXT_SOURCES.filter(source => source.key !== 'ragSelection').map(source => <label key={source.key} className="flex items-start gap-2 text-[10px] text-text-secondary"><input type="checkbox" checked={sourceKeys.includes(source.key)} onChange={() => updateConfig('sourceKeys', sourceKeys.includes(source.key) ? sourceKeys.filter(item => item !== source.key) : [...sourceKeys, source.key])} className="mt-0.5 accent-[var(--accent)]" /><span><span className="block">{source.label}</span><span className="block text-[9px] text-text-muted">{source.key}</span></span></label>)}</div>
         </section>}
       </section>}
-      <div className="space-y-3">{(template.parameters ?? []).map(parameter => {
+      {node.templateId === 'control.prompt' && <PromptControlEditor key={node.id} node={node} onChange={config => updateNode({ config })} />}
+      <div className="space-y-3">{(node.templateId === 'control.prompt' ? [] : template.parameters ?? []).map(parameter => {
         const value = node.config[parameter.key] ?? parameter.defaultValue ?? ''
         if (parameter.key === 'presetId') return <label key={parameter.key} className="block"><span className="mb-1 block text-[10px] text-text-secondary">{parameter.label}</span><select value={String(value)} onChange={event => updateConfig(parameter.key, event.target.value)} className="w-full rounded border border-border bg-bg-base px-2 py-1.5 text-[11px] text-text-primary"><option value="">使用全局配置</option>{presets.map(preset => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select></label>
         if (parameter.type === 'text') return <label key={parameter.key} className="block"><span className="mb-1 block text-[10px] text-text-secondary">{parameter.label}</span><textarea rows={parameter.key === 'text' || parameter.key === 'instruction' || parameter.key === 'template' ? 6 : 3} value={String(value)} onChange={event => updateConfig(parameter.key, event.target.value)} className="w-full resize-y rounded border border-border bg-bg-base px-2 py-1.5 text-[11px] leading-4 text-text-primary outline-none focus:border-accent" /></label>
+        if (parameter.type === 'select') return <label key={parameter.key} className="block">{parameter.label}<select aria-label={parameter.label} value={String(value)} onChange={event => updateConfig(parameter.key, event.target.value)} className="w-full rounded border border-border bg-bg-base p-2">{parameter.options?.map(option => <option key={option}>{option}</option>)}</select></label>
         if (parameter.type === 'boolean') return <label key={parameter.key} className="flex items-center gap-2 text-[11px] text-text-secondary"><input type="checkbox" checked={Boolean(value)} onChange={event => updateConfig(parameter.key, event.target.checked)} className="accent-[var(--accent)]" />{parameter.label}</label>
-        return <label key={parameter.key} className="block"><span className="mb-1 flex justify-between text-[10px] text-text-secondary"><span>{parameter.label}</span><span className="text-text-muted">{String(value)}</span></span><input type="number" min={parameter.min} max={parameter.max} step={parameter.step} value={Number(value)} onChange={event => updateConfig(parameter.key, Number(event.target.value))} className="w-full rounded border border-border bg-bg-base px-2 py-1.5 text-[11px] text-text-primary outline-none focus:border-accent" /></label>
+        return <label key={parameter.key} className="block"><span className="mb-1 flex justify-between text-[10px] text-text-secondary"><span>{parameter.label}</span><span className="text-text-muted">{String(value)}</span></span><input aria-label={parameter.label} type="number" min={parameter.min} max={parameter.max} step={parameter.step} value={Number(value)} onChange={event => updateConfig(parameter.key, Number(event.target.value))} className="w-full rounded border border-border bg-bg-base px-2 py-1.5 text-[11px] text-text-primary outline-none focus:border-accent" /></label>
       })}</div>
+      {props.graph.edges.some(edge => edge.sourceNodeId === node.id || edge.targetNodeId === node.id) && <section className="mt-4 border-t border-border pt-3"><p className="mb-2 text-xs font-semibold">已连接的线</p>{props.graph.edges.filter(edge => edge.sourceNodeId === node.id || edge.targetNodeId === node.id).map(edge => <button key={edge.id} type="button" aria-label={`断开连线 ${edge.id}`} onClick={() => props.onChange({ ...props.graph, edges: props.graph.edges.filter(item => item.id !== edge.id) })} className="mb-1 block w-full rounded border border-border p-2 text-left text-xs hover:bg-bg-hover">{props.graph.nodes.find(item => item.id === edge.sourceNodeId)?.title} → {props.graph.nodes.find(item => item.id === edge.targetNodeId)?.title} · 断开</button>)}</section>}
       <div className="mt-5 border-t border-border pt-3"><p className="mb-2 text-[10px] font-semibold text-text-secondary">输入端口</p>{node.inputs.length ? node.inputs.map(port => <div key={port.id} className="flex items-center justify-between border-b border-border/60 py-1.5 text-[10px]"><span className="text-text-secondary">{port.label}{port.required ? ' *' : ''}</span><span className="text-text-muted">{props.graph.edges.some(edge => edge.targetNodeId === node.id && edge.targetPortId === port.id) ? '已连接' : port.required ? '需要连接上游' : '可留空'}</span></div>) : <p className="text-[10px] text-text-muted">无输入</p>}<p className="mb-2 mt-3 text-[10px] font-semibold text-text-secondary">输出端口</p>{node.outputs.map(port => <div key={port.id} className="flex items-center justify-between border-b border-border/60 py-1.5 text-[10px]"><span className="text-text-secondary">{port.label}</span><span className="text-text-muted">{port.semantic}</span></div>)}</div>
     </aside>
   )
 }
 
-function SmartConnectionMenu(props: { anchor: { nodeId: string; portId: string; direction: 'input' | 'output'; x: number; y: number }; graph: AuthoringNodeGraph; onPick: (template: AuthoringNodeTemplate) => void; onClose: () => void }) {
-  const node = props.graph.nodes.find(item => item.id === props.anchor.nodeId)
+function SmartConnectionMenu(props: {
+  anchor: { nodeId: string; portId: string; direction: 'input' | 'output' } | null
+  position: { x: number; y: number }
+  graph: AuthoringNodeGraph
+  onPick: (template: AuthoringNodeTemplate, portId?: string) => void
+  onClose: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const [experimental, setExperimental] = useState(false)
+  const element = useRef<HTMLDivElement>(null)
+  const search = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    search.current?.focus()
+    const menu = element.current
+    const parent = menu?.parentElement
+    if (menu && parent) {
+      menu.style.left = `${Math.max(8, Math.min(props.position.x, parent.clientWidth - menu.offsetWidth - 8))}px`
+      menu.style.top = `${Math.max(8, Math.min(props.position.y, parent.clientHeight - menu.offsetHeight - 8))}px`
+    }
+  }, [props.position.x, props.position.y])
+  const node = props.anchor ? props.graph.nodes.find(item => item.id === props.anchor!.nodeId) : undefined
   const template = node ? AUTHORING_NODE_BY_ID.get(node.templateId) : undefined
-  const port = node ? [...node.inputs, ...node.outputs].find(item => item.id === props.anchor.portId) : undefined
-  if (!node || !template || !port) return null
-  const suggestions = suggestAuthoringConnections({ catalog: AUTHORING_NODE_CATALOG, anchorTemplate: template, anchorPort: port, direction: props.anchor.direction === 'output' ? 'after' : 'before' }).slice(0, 10)
-  return <div className="absolute z-20 w-64 rounded-md border border-border bg-bg-surface p-2 shadow-xl" style={{ left: props.anchor.x, top: props.anchor.y }}><div className="mb-1 flex items-center justify-between"><p className="text-[10px] font-semibold text-text-secondary">{props.anchor.direction === 'output' ? '添加后置节点' : '添加前置节点'}</p><button type="button" onClick={props.onClose} className="text-text-muted hover:text-text-primary"><X className="h-3 w-3" /></button></div>{suggestions.length ? suggestions.map(item => <button key={`${item.template.id}:${item.port.id}`} type="button" onClick={() => props.onPick(item.template)} className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left hover:bg-bg-hover"><ChevronRight className="mt-0.5 h-3 w-3 text-accent" /><span><span className="block text-[10px] text-text-primary">{item.template.label}</span><span className="block text-[9px] text-text-muted">{item.reason === 'recommended' ? '推荐连接' : '语义兼容'} · {item.port.label}</span></span></button>) : <p className="p-2 text-[10px] text-text-muted">没有找到兼容节点</p>}</div>
+  const port = node && props.anchor ? (props.anchor.direction === 'input' ? node.inputs : node.outputs).find(item => item.id === props.anchor!.portId) : undefined
+  const catalog = AUTHORING_NODE_CATALOG.filter(item => experimental || authoringDomainActionBindingV1(item)?.mode !== 'experimental-draft')
+  const choices = port && props.anchor
+    ? suggestAuthoringConnections({ catalog, anchorTemplate: template, anchorPort: port, direction: props.anchor.direction === 'output' ? 'after' : 'before', query })
+    : catalog.filter(item => `${item.label} ${item.description} ${item.category}`.toLowerCase().includes(query.toLowerCase())).map(item => ({ template: item, port: undefined, reason: '' }))
+  return <div ref={element} role="dialog" aria-label="选择节点" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); props.onClose() } }} className="absolute z-20 flex max-h-[calc(100%-16px)] w-72 max-w-[calc(100%-16px)] flex-col rounded-md border border-border bg-bg-surface p-3 shadow-xl" style={{ left: props.position.x, top: props.position.y }}>
+    <div className="mb-2 flex items-center justify-between"><p className="text-sm font-semibold">{props.anchor ? props.anchor.direction === 'output' ? '添加后置节点' : '添加前置节点' : '新建节点'}</p><button type="button" aria-label="关闭节点选择" onClick={props.onClose}><X className="h-4 w-4" /></button></div>
+    <input ref={search} aria-label="搜索可选节点" value={query} onChange={event => setQuery(event.target.value)} placeholder="名称、用途或领域" className="mb-2 rounded border border-border bg-bg-base p-2 text-sm" />
+    <label className="mb-2 flex items-center gap-2 text-xs"><input type="checkbox" checked={experimental} onChange={event => setExperimental(event.target.checked)} />包含实验草稿</label>
+    <div className="min-h-0 overflow-y-auto">{choices.length ? choices.map(item => <button key={`${item.template.id}:${item.port?.id ?? ''}`} type="button" onClick={() => props.onPick(item.template, item.port?.id)} className="flex w-full items-start gap-2 rounded px-2 py-2 text-left hover:bg-bg-hover"><ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-accent" /><span><span className="block text-xs">{item.template.label}{authoringDomainActionBindingV1(item.template)?.mode === 'experimental-draft' ? ' · 实验草稿' : ''}</span><span className="block text-[11px] text-text-muted">{item.reason === 'recommended' ? '推荐连接 · ' : ''}{item.port?.label ?? item.template.category}</span></span></button>) : <p className="p-2 text-xs text-text-muted">没有匹配的兼容节点，试试其他关键词。</p>}</div>
+  </div>
 }
 
 export default function NodeAuthoringWorkspace(props: { project: Project; worldGroupId: number | null }) {
@@ -469,7 +546,7 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
   const [candidates, setCandidates] = useState<AuthoringCandidateMap>({})
   const [freshness, setFreshness] = useState<AuthoringFreshnessMap>({})
   const [connection, setConnection] = useState<{ nodeId: string; portId: string; direction: 'input' | 'output' } | null>(null)
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; nodeX: number; nodeY: number } | null>(null)
   const [showRuns, setShowRuns] = useState(true)
   const [showTemplates, setShowTemplates] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
@@ -683,32 +760,34 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
     if (draft) setDraft({ ...draft, name: template.name, description: template.description })
     setShowTemplates(false)
   }
-  const beginConnection = (nodeId: string, portId: string, direction: 'input' | 'output') => { if (connection && connection.direction === 'output' && direction === 'input' && connection.nodeId !== nodeId) { const next = addEdge(graph, connection.nodeId, connection.portId, nodeId, portId); const issue = validateAuthoringGraph(next).find(item => item.code === 'cycle' || item.code === 'type-mismatch' || item.code === 'duplicate-edge'); if (issue) toast.error(issue.message); else changeGraph(next); setConnection(null); setMenu(null); return } setConnection({ nodeId, portId, direction }); setMenu(null) }
-  const openConnectionMenu = (x: number, y: number) => { if (connection) setMenu({ x, y }) }
-  const pickConnectionTemplate = (template: AuthoringNodeTemplate) => {
-    if (!connection) return
+  const beginConnection = (nodeId: string, portId: string, direction: 'input' | 'output') => {
+    if (connection && connection.direction !== direction && connection.nodeId !== nodeId) {
+      const source = direction === 'input' ? connection : { nodeId, portId }
+      const target = direction === 'input' ? { nodeId, portId } : connection
+      const next = addEdge(graph, source.nodeId, source.portId, target.nodeId, target.portId)
+      const issue = validateAuthoringGraph(next).find(item => item.code === 'cycle' || item.code === 'type-mismatch' || item.code === 'duplicate-edge' || item.code === 'single-port')
+      if (issue) toast.error(issue.message)
+      else changeGraph(next)
+      setConnection(null); setMenu(null)
+      return
+    }
+    setConnection({ nodeId, portId, direction }); setMenu(null)
+  }
+  const openConnectionMenu = (nodeX: number, nodeY: number, x: number, y: number) => setMenu({ x, y, nodeX, nodeY })
+  const pickConnectionTemplate = (template: AuthoringNodeTemplate, portId?: string) => {
+    if (!connection) { addTemplate(template, { x: Math.max(20, menu?.nodeX ?? 30), y: Math.max(20, menu?.nodeY ?? 30) }); setMenu(null); return }
     const anchorNode = graph.nodes.find(node => node.id === connection.nodeId)
     if (!anchorNode) return
     const node = nodeFromTemplate(template, graph.nodes.length)
-    node.x = Math.max(30, anchorNode.x + (connection.direction === 'output' ? 330 : -330))
-    node.y = anchorNode.y
-    const anchorPort = [...anchorNode.inputs, ...anchorNode.outputs].find(port => port.id === connection.portId)
-    const newPort = connection.direction === 'output'
-      ? template.inputs.find(port => anchorPort && authoringPortsCompatible(anchorPort, port))
-      : template.outputs.find(port => anchorPort && authoringPortsCompatible(port, anchorPort))
-    const graphWithNode = { ...graph, nodes: [...graph.nodes, node] }
-    changeGraph(anchorPort && newPort
-      ? addEdge(
-          graphWithNode,
-          connection.direction === 'output' ? anchorNode.id : node.id,
-          connection.direction === 'output' ? anchorPort.id : newPort.id,
-          connection.direction === 'output' ? node.id : anchorNode.id,
-          connection.direction === 'output' ? newPort.id : anchorPort.id,
-        )
-      : graphWithNode)
-    setSelectedNodeId(node.id)
-    setConnection(null)
-    setMenu(null)
+    node.x = Math.max(20, menu?.nodeX ?? anchorNode.x + (connection.direction === 'output' ? 330 : -330))
+    node.y = Math.max(20, menu?.nodeY ?? anchorNode.y)
+    const anchorPort = (connection.direction === 'output' ? anchorNode.outputs : anchorNode.inputs).find(port => port.id === connection.portId)
+    const newPort = (connection.direction === 'output' ? template.inputs : template.outputs).find(port => port.id === portId)
+    if (!anchorPort || !newPort) { toast.error('请选择兼容的节点端口。'); return }
+    const next = addEdge({ ...graph, nodes: [...graph.nodes, node] }, connection.direction === 'output' ? anchorNode.id : node.id, connection.direction === 'output' ? anchorPort.id : newPort.id, connection.direction === 'output' ? node.id : anchorNode.id, connection.direction === 'output' ? newPort.id : anchorPort.id)
+    const issue = validateAuthoringGraph(next).find(item => item.code === 'cycle' || item.code === 'type-mismatch' || item.code === 'duplicate-edge' || item.code === 'single-port')
+    if (issue) { toast.error(issue.message); return }
+    changeGraph(next); setSelectedNodeId(node.id); setSelectedNodeIds([node.id]); setConnection(null); setMenu(null)
   }
   const staleNodeIds = useMemo(() => new Set(Object.values(freshness).filter(item => candidates[item.nodeId]?.status !== 'rejected' && (item.status === 'stale' || item.status === 'never-run' || item.status === 'blocked')).map(item => item.nodeId)), [freshness, candidates])
   const graphDiff = useMemo(() => compareAuthoringGraphs(savedGraph, graph), [savedGraph, graph])
@@ -855,11 +934,11 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
   const selectedArtifact = selectedCandidate?.creativeArtifacts?.[selectedVariantIndex]
   return <div data-node-pane={mobilePane} className="node-workspace flex h-[760px] min-h-[560px] max-h-[calc(100vh-180px)] flex-col overflow-hidden bg-bg-base">
     <header className="node-workspace-header flex min-h-12 shrink-0 items-center gap-2 border-b border-border bg-bg-surface px-3"><Workflow className="h-4 w-4 text-accent" /><input aria-label="节点图名称" value={draft.name} onChange={event => { setDraft({ ...draft, name: event.target.value }); setDirty(true); dirtyRef.current = true }} className="node-flow-name w-56 rounded border border-transparent bg-transparent px-2 py-1 text-sm font-medium text-text-primary hover:border-border focus:border-accent focus:outline-none" /><span className="text-[10px] text-text-muted">{saving ? '保存中…' : dirty ? '待保存' : '已保存'}</span><div className="ml-auto flex items-center gap-2"><button type="button" onClick={() => void save(true).catch(() => undefined)} className="inline-flex items-center gap-1 rounded px-2 py-1.5 text-xs text-text-secondary hover:bg-bg-hover"><Save className="h-3.5 w-3.5" />保存</button>{isRunning ? <><button type="button" onClick={pauseRun} title="暂停运行" aria-label="暂停运行" className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-1.5 text-xs text-amber-800"><Pause className="h-3.5 w-3.5" />暂停</button><button type="button" onClick={cancelRun} title="取消运行" aria-label="取消运行" className="inline-flex items-center gap-1 rounded bg-error/10 px-2 py-1.5 text-xs text-error"><CircleStop className="h-3.5 w-3.5" />取消</button></> : run?.status === 'running' ? <button type="button" onClick={() => void recoverRun()} className="rounded bg-accent px-3 py-1.5 text-xs text-white">恢复已保存结果</button> : run?.status === 'paused' || run?.status === 'failed' ? <button type="button" onClick={() => void runGraph(undefined, 'resume')} className="inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"><RotateCcw className="h-3.5 w-3.5" />继续运行</button> : <button type="button" onClick={() => void runGraph()} className="inline-flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"><Play className="h-3.5 w-3.5" />运行全部</button>}</div></header>
-    <section className="flex flex-wrap items-center gap-1 border-b border-border bg-bg-surface px-3 py-1.5 text-[10px] text-text-muted"><button type="button" title="选择官方模板" aria-label="选择官方模板" onClick={() => setShowTemplates(value => !value)} className="inline-flex items-center gap-1 rounded px-2 py-1 text-text-secondary hover:bg-bg-hover"><LayoutTemplate className="h-3 w-3" />模板</button><button type="button" title="自动布局" aria-label="自动布局" onClick={() => changeGraph(autoLayoutAuthoringGraph(graph))} className="inline-flex items-center gap-1 rounded px-2 py-1 text-text-secondary hover:bg-bg-hover"><LayoutDashboard className="h-3 w-3" />自动布局</button><button type="button" title="复制选区" aria-label="复制选区" onClick={copySelection} className="inline-flex items-center gap-1 rounded px-2 py-1 text-text-secondary hover:bg-bg-hover"><Copy className="h-3 w-3" />复制</button><button type="button" title="水平对齐" aria-label="水平对齐" onClick={() => alignSelection('y')} className="rounded p-1 text-text-secondary hover:bg-bg-hover"><AlignCenterHorizontal className="h-3 w-3" /></button><button type="button" title="垂直对齐" aria-label="垂直对齐" onClick={() => alignSelection('x')} className="rounded p-1 text-text-secondary hover:bg-bg-hover"><AlignCenterVertical className="h-3 w-3" /></button><button type="button" title="分组" aria-label="分组" onClick={groupSelection} className="inline-flex items-center gap-1 rounded px-2 py-1 text-text-secondary hover:bg-bg-hover"><Users className="h-3 w-3" />分组</button><span className="ml-auto">选中 {selectedNodeIds.length} · 节点 {graph.nodes.length} · 连线 {graph.edges.length} · 变更 {graphDiff.nodesChanged + graphDiff.nodesAdded + graphDiff.nodesRemoved + graphDiff.edgesAdded + graphDiff.edgesRemoved}</span>{showTemplates && <div className="absolute z-30 mt-32 grid w-80 gap-1 rounded border border-border bg-bg-surface p-2 shadow-xl sm:grid-cols-2">{AUTHORING_OFFICIAL_TEMPLATES.map(template => <button key={template.id} type="button" onClick={() => void applyOfficialTemplate(template.id)} className="rounded p-2 text-left hover:bg-bg-hover"><span className="block text-[10px] font-semibold text-text-primary">{template.name}</span><span className="mt-0.5 block text-[9px] text-text-muted">{template.description}</span></button>)}</div>}</section>
+    <section className="flex flex-wrap items-center gap-1 border-b border-border bg-bg-surface px-3 py-1.5 text-[10px] text-text-muted"><button type="button" title="选择官方模板" aria-label="选择官方模板" onClick={() => setShowTemplates(value => !value)} className="inline-flex items-center gap-1 rounded px-2 py-1 text-text-secondary hover:bg-bg-hover"><LayoutTemplate className="h-3 w-3" />模板</button><button type="button" title="自动布局" aria-label="自动布局" onClick={() => changeGraph(autoLayoutAuthoringGraph(graph))} className="inline-flex items-center gap-1 rounded px-2 py-1 text-text-secondary hover:bg-bg-hover"><LayoutDashboard className="h-3 w-3" />自动布局</button><button type="button" title="复制选区" aria-label="复制选区" onClick={copySelection} className="inline-flex items-center gap-1 rounded px-2 py-1 text-text-secondary hover:bg-bg-hover"><Copy className="h-3 w-3" />复制</button><button type="button" title="水平对齐" aria-label="水平对齐" onClick={() => alignSelection('y')} className="rounded p-1 text-text-secondary hover:bg-bg-hover"><AlignCenterHorizontal className="h-3 w-3" /></button><button type="button" title="垂直对齐" aria-label="垂直对齐" onClick={() => alignSelection('x')} className="rounded p-1 text-text-secondary hover:bg-bg-hover"><AlignCenterVertical className="h-3 w-3" /></button><button type="button" title="分组" aria-label="分组" onClick={groupSelection} className="inline-flex items-center gap-1 rounded px-2 py-1 text-text-secondary hover:bg-bg-hover"><Users className="h-3 w-3" />分组</button><div className="ml-auto flex items-center gap-1"><button type="button" aria-label="缩小画布" onClick={() => changeGraph({ ...graph, viewport: { ...graph.viewport, zoom: Math.max(0.3, Number((graph.viewport.zoom - 0.1).toFixed(1))) } })} className="rounded border border-border px-2 py-1">−</button><button type="button" aria-label="重置画布缩放" onClick={() => changeGraph({ ...graph, viewport: { ...graph.viewport, zoom: 1 } })} className="px-2">{Math.round(graph.viewport.zoom * 100)}%</button><button type="button" aria-label="放大画布" onClick={() => changeGraph({ ...graph, viewport: { ...graph.viewport, zoom: Math.min(2, Number((graph.viewport.zoom + 0.1).toFixed(1))) } })} className="rounded border border-border px-2 py-1">+</button></div><span>选中 {selectedNodeIds.length} · 节点 {graph.nodes.length} · 连线 {graph.edges.length} · 变更 {graphDiff.nodesChanged + graphDiff.nodesAdded + graphDiff.nodesRemoved + graphDiff.edgesAdded + graphDiff.edgesRemoved}</span>{showTemplates && <div className="absolute z-30 mt-32 grid w-80 gap-1 rounded border border-border bg-bg-surface p-2 shadow-xl sm:grid-cols-2">{AUTHORING_OFFICIAL_TEMPLATES.map(template => <button key={template.id} type="button" onClick={() => void applyOfficialTemplate(template.id)} className="rounded p-2 text-left hover:bg-bg-hover"><span className="block text-[10px] font-semibold text-text-primary">{template.name}</span><span className="mt-0.5 block text-[9px] text-text-muted">{template.description}</span></button>)}</div>}</section>
     {run?.status === 'running' && !isRunning && <p role="status" className="border-b border-border p-3 text-sm text-warning">上次运行中断。先恢复已保存结果，再决定是否继续；刷新不会重新调用模型。</p>}
     {saveError && <div role="alert" className="p-3 text-sm text-error">{saveError}<button type="button" onClick={() => void flushPendingEditsV1().catch(() => undefined)} className="ml-3 underline">重试保存</button></div>}
     <nav aria-label="节点工作区视图" className="node-pane-nav">{[['library', '节点库'], ['canvas', '画布'], ['inspector', '节点设置'], ['results', '候选与证据']].map(([key, label]) => <button key={key} type="button" aria-pressed={mobilePane === key} onClick={() => { setMobilePane(key); if (key === 'results') setShowRuns(true) }}>{label}</button>)}</nav>
-    <div className="node-workspace-body flex min-h-0 flex-1"><div className="node-library flex w-60 shrink-0 flex-col border-r border-border bg-bg-surface"><div className="border-b border-border p-3"><div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-semibold tracking-wide text-text-muted">我的节点图</span><div className="flex items-center gap-1"><button type="button" title="删除当前节点图" aria-label="删除当前节点图" onClick={() => void removeFlow()} className="rounded p-1 text-text-muted hover:bg-error/10 hover:text-error"><Trash2 className="h-3.5 w-3.5" /></button><button type="button" title="从项目生成概览" aria-label="从项目生成概览" onClick={() => void createOverview()} className="rounded p-1 text-text-muted hover:bg-bg-hover"><LayoutTemplate className="h-3.5 w-3.5" /></button><button type="button" title="新建节点图" aria-label="新建节点图" onClick={() => void createFlow()} className="rounded p-1 text-accent hover:bg-accent/10"><Plus className="h-3.5 w-3.5" /></button></div></div>{flows.map(flow => <button key={flow.id} type="button" onClick={() => void switchFlow(flow.id!)} className={`mb-1 w-full truncate rounded px-2 py-1.5 text-left text-[11px] ${flow.id === selectedFlowId ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:bg-bg-hover'}`}>{flow.name}</button>)}</div><NodeLibrary graph={graph} onAdd={template => addTemplate(template)} onSelectNode={selectNode} /></div><div className="node-canvas relative flex min-w-0 flex-1"><AuthoringCanvas graph={graph} selectedNodeId={selectedNodeId} selectedNodeIds={selectedNodeSet} candidates={candidates} freshness={freshness} onSelectNode={selectNode} onSelectionChange={selectMany} onToggleFavorite={toggleFavorite} onChange={changeGraph} onBeginConnection={beginConnection} onCanvasConnection={openConnectionMenu} onRemoveNode={removeNode} />{connection && menu && <SmartConnectionMenu anchor={{ ...connection, x: menu.x, y: menu.y }} graph={graph} onPick={pickConnectionTemplate} onClose={() => { setConnection(null); setMenu(null) }} />}</div><div className="node-inspector"><NodeInspector node={selectedNode} graph={graph} projectId={projectId} worldGroupId={props.worldGroupId} onChange={changeGraph} onRemove={() => selectedNode && removeNode(selectedNode.id)} onRun={nodeId => void runGraph(nodeId)} /></div></div>
+    <div className="node-workspace-body flex min-h-0 flex-1"><div className="node-library flex w-60 shrink-0 flex-col border-r border-border bg-bg-surface"><div className="border-b border-border p-3"><div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-semibold tracking-wide text-text-muted">我的节点图</span><div className="flex items-center gap-1"><button type="button" title="删除当前节点图" aria-label="删除当前节点图" onClick={() => void removeFlow()} className="rounded p-1 text-text-muted hover:bg-error/10 hover:text-error"><Trash2 className="h-3.5 w-3.5" /></button><button type="button" title="从项目生成概览" aria-label="从项目生成概览" onClick={() => void createOverview()} className="rounded p-1 text-text-muted hover:bg-bg-hover"><LayoutTemplate className="h-3.5 w-3.5" /></button><button type="button" title="新建节点图" aria-label="新建节点图" onClick={() => void createFlow()} className="rounded p-1 text-accent hover:bg-accent/10"><Plus className="h-3.5 w-3.5" /></button></div></div>{flows.map(flow => <button key={flow.id} type="button" onClick={() => void switchFlow(flow.id!)} className={`mb-1 w-full truncate rounded px-2 py-1.5 text-left text-[11px] ${flow.id === selectedFlowId ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:bg-bg-hover'}`}>{flow.name}</button>)}</div><NodeLibrary graph={graph} onAdd={template => addTemplate(template)} onSelectNode={selectNode} /></div><div className="node-canvas relative flex min-w-0 flex-1"><AuthoringCanvas graph={graph} selectedNodeId={selectedNodeId} selectedNodeIds={selectedNodeSet} candidates={candidates} freshness={freshness} onSelectNode={selectNode} onSelectionChange={selectMany} onToggleFavorite={toggleFavorite} onChange={changeGraph} onBeginConnection={beginConnection} onCanvasConnection={openConnectionMenu} onAddTemplate={addTemplate} onCancelConnection={() => { setConnection(null); setMenu(null) }} onRemoveNode={removeNode} />{menu && <SmartConnectionMenu key={`${connection?.nodeId}:${connection?.portId}:${menu.x}:${menu.y}`} anchor={connection} position={menu} graph={graph} onPick={pickConnectionTemplate} onClose={() => { setConnection(null); setMenu(null) }} />}</div><div className="node-inspector"><NodeInspector node={selectedNode} graph={graph} projectId={projectId} worldGroupId={props.worldGroupId} onChange={changeGraph} onRemove={() => selectedNode && removeNode(selectedNode.id)} onRun={nodeId => void runGraph(nodeId)} /></div></div>
     <section className="node-results shrink-0 border-t border-border bg-bg-surface">
       <button type="button" onClick={() => setShowRuns(value => !value)} className="flex h-9 w-full items-center gap-2 px-4 text-left text-[11px] text-text-secondary hover:bg-bg-hover">
         <History className="h-3.5 w-3.5" />

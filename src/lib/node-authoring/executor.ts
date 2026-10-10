@@ -1,3 +1,4 @@
+import { renderAuthoringPromptControl } from './prompt-control'
 import { estimateTokens } from '../ai/context-budget'
 import { chat } from '../ai/client'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -164,10 +165,6 @@ function graphControlNumber(
   return Number.isFinite(value) ? value : fallback
 }
 
-function emptyGraphForNode(node: AuthoringNodeInstance): AuthoringNodeGraph {
-  return { version: 2, nodes: [node], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }
-}
-
 export function authoringExecutionGraphHash(graph: AuthoringNodeGraph): string {
   return hashAuthoringText(JSON.stringify({
     version: graph.version,
@@ -329,6 +326,7 @@ async function executeNode(input: {
       semantic: node.outputs[0]?.semantic ?? template.outputs[0]?.semantic ?? 'any',
     }
   }
+  if (node.templateId === 'control.prompt') return renderAuthoringPromptControl(input)
   if (node.templateId === 'input.manual-text') {
     return { output: stringConfig(node, 'text'), semantic: 'text' }
   }
@@ -513,8 +511,9 @@ export async function adoptAuthoringCandidate(input: {
     const candidate = candidates[input.nodeId]
     if (!candidate?.signature) continue
     if (candidate.status === 'adopted' || candidate.status === 'rejected') throw new Error('该候选已处理，请重新生成后再采纳。')
-    const originalNode = parseAuthoringGraph(run.graphSnapshotJson ?? input.flow.graphJson).nodes.find(item => item.id === node.id)
-    if (!originalNode || authoringExecutionGraphHash(emptyGraphForNode(originalNode)) !== authoringExecutionGraphHash(emptyGraphForNode(node))) {
+    const originalGraph = parseAuthoringGraph(run.graphSnapshotJson ?? input.flow.graphJson)
+    const originalNode = originalGraph.nodes.find(item => item.id === node.id)
+    if (!originalNode || authoringExecutionGraphHash(authoringExecutionSubgraph(originalGraph, node.id)) !== authoringExecutionGraphHash(authoringExecutionSubgraph(graph, node.id))) {
       throw new Error('节点参数或写入目标已变化；请重新运行后再采纳。')
     }
     expectedSignature = candidate.signature

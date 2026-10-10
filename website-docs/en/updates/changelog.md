@@ -2,6 +2,10 @@
 
 Changes are organized by user impact. **Main-branch updates do not mean a new version has been released.** The package version remains 3.9.1; tagged releases retain their original content. Live deployments may lag; see [compatibility](/en/updates/compatibility).
 
+## 2026-10-10 · Free node graph editing in development
+
+[PR #115](https://github.com/yuanbw2025/storyforge/pull/115) extends node maintenance with bidirectional port dragging, compatible-node search, canvas creation, reconnecting and prompt selection. Remote CI passed for the October 8 commit; the added interactions are being validated and are not merged or confirmed online. See [node authoring](/en/features/nodes) for steps and limits.
+
 ## Development preview Plugins and Workshop
 
 [PR #113](https://github.com/yuanbw2025/storyforge/pull/113) delivers the plugin preview, installation/development tutorials, AI development kit and publication workflow. See [Workshop guides](/en/workshop/) and [development status](/en/updates/development-status). Check [PR #113](https://github.com/yuanbw2025/storyforge/pull/113) for merge/deployment status; the feature still requires explicitly enabling the developer preview and is not a new tagged release.
