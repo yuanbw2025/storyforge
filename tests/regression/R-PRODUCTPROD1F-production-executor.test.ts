@@ -1,4 +1,4 @@
-import { verifiedTextRevisionVisualCarryTaskKeysV1 } from '../../src/lib/product-production/text-content-revision-authority'
+import { textRevisionRecoveryPreservesVisualContractV1, verifiedTextRevisionVisualCarryTaskKeysV1 } from '../../src/lib/product-production/text-content-revision-authority'
 import { installReferenceExtensionRules } from '../helpers/extension-rule-pack'
 import { disablePackage, uninstallPackage } from '../../src/lib/extensions/store'
 import { createWorldWork, switchActiveWork } from '../../src/lib/workspace/works'
@@ -8294,7 +8294,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
   // Each product owns an independent fixture and timeout. The unpublished
   // recovery path is already covered by the 60-minute adventure above;
   // this matrix additionally verifies recovery of the published adventure.
-  it('文字修订从完整生产 Build 派生，暂停刷新后零图片调用保留原图并采纳新正文', async () => {
+  it.each(['pause', 'review-retry', 'dialogue-repair'] as const)('文字修订从完整生产 Build 派生，%s 恢复后零图片调用保留原图并采纳新正文', async recoveryMode => {
     const productType = 'text-adventure' as ProductionProductKindV1
     const owned = await fixtureForProduct(productType, { pluginRules: productType === 'ttrpg' })
     const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
@@ -8332,10 +8332,14 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       alternativeScript.resourceCosts.failure.push({ resourceKey: 'resource.mana', amount: 1 })
       // The split fixture and accepted assembled fixture share these same entries.
     }
+    let failReview = recoveryMode !== 'pause'
     const modelTasks: string[] = []
     const runText: ProductionTextRunnerV1 = async request => {
       const taskKey = Object.keys(outputs).find(key => request.system.includes(`任务=${key}。`)) as keyof typeof outputs
       if (revisionPhase) modelTasks.push(taskKey)
+      if (revisionPhase && failReview && taskKey === 'content.adventure-quality-review.act-2') {
+        throw new Error('Fixture review provider returned no usable answer')
+      }
       if (!taskKey) throw new Error(`unknown ${productType} model task`)
       if (productType === 'text-adventure' && [
         'content.scene-script.act-1.part-1', 'content.adventure-quality-review.act-1',
@@ -8423,19 +8427,63 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
         retainedImages: originals.filter(row => row.kind === 'image').map(row => ({ artifactKey: row.artifactKey, expectedArtifactHash: row.contentHash })),
       } })
     expect(revised, JSON.stringify(revised)).toMatchObject({ ok: true })
-    const paused = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
-      command: { type: 'pause', commandId: 'formal.batch.pause', expectedStateRevision: revised.stateRevision, reason: '刷新恢复验收' } })
-    expect(paused.ok).toBe(true)
-    db.close(); await db.open()
-    const resumed = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
-      command: { type: 'resume', commandId: 'formal.batch.resume', expectedStateRevision: paused.stateRevision } })
-    expect(resumed.ok).toBe(true)
-    const resumedBuild = (await db.productBuilds.get(Number(revised.result.buildId)))!
-    const resumedPlan = JSON.parse(resumedBuild.planJson)
-    const visualProof = await verifiedTextRevisionVisualCarryTaskKeysV1({ scope: owned.scope,
-      buildId: resumedBuild.id!, previousControlEpoch: resumedPlan.controlEpoch, tasks: resumedPlan.tasks })
-    expect([...visualProof]).toContain('media.visual.001')
     revisionPhase = true
+    if (recoveryMode === 'pause') {
+      const paused = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+        command: { type: 'pause', commandId: 'formal.batch.pause', expectedStateRevision: revised.stateRevision, reason: '刷新恢复验收' } })
+      expect(paused.ok).toBe(true)
+      db.close(); await db.open()
+      const resumed = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+        command: { type: 'resume', commandId: 'formal.batch.resume', expectedStateRevision: paused.stateRevision } })
+      expect(resumed.ok).toBe(true)
+      const resumedBuild = (await db.productBuilds.get(Number(revised.result.buildId)))!
+      const resumedPlan = JSON.parse(resumedBuild.planJson)
+      const visualProof = await verifiedTextRevisionVisualCarryTaskKeysV1({ scope: owned.scope,
+        buildId: resumedBuild.id!, previousControlEpoch: resumedPlan.controlEpoch, tasks: resumedPlan.tasks })
+      expect([...visualProof]).toContain('media.visual.001')
+    } else {
+      const failed = await executeBuild()
+      expect(failed.buildStatus).toBe('recovery-required')
+      const current = (await db.productProductions.get(owned.productionId))!
+      if (recoveryMode === 'dialogue-repair') {
+        const paused = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+          command: { type: 'pause', commandId: 'formal.batch.repair.pause', expectedStateRevision: current.stateRevision, reason: '定点修复已采纳对白' } })
+        expect(paused.ok).toBe(true)
+        const row = (await db.productBuildArtifacts.where('buildId').equals(failed.buildId).toArray())
+          .find(row => row.artifactKey === 'content.dialogue-pass.act-1' && row.status === 'accepted')!
+        const draft = JSON.parse(row.payloadJson)
+        draft.beatReviews[0] = { ...draft.beatReviews[0], verdict: 'revise', issueTags: ['unnatural'],
+          revisedText: `${draft.beatReviews[0].revisedText}我会再核对一次。`, rationale: '修复当前对白，不改变发言者与场景。' }
+        const pausedFailure = JSON.parse((await db.productBuilds.get(failed.buildId))!.failureJson) as {
+          pausedProviderReservations?: Array<{ taskKey: string; runId: number; attempt: number; controlEpoch: number }>
+        }
+        const repaired = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+          command: { type: 'resume', commandId: 'formal.batch.dialogue.repair', expectedStateRevision: paused.stateRevision,
+            ...(pausedFailure.pausedProviderReservations?.length ? { pausedReservationDispositions: pausedFailure.pausedProviderReservations.map(r => ({
+              taskKey: r.taskKey, runId: r.runId, attempt: r.attempt, controlEpoch: r.controlEpoch,
+              disposition: 'charge-reservation-upper-bound' as const,
+            })) } : {}),
+            contentRevision: { artifactKey: 'content.dialogue-pass.act-1', expectedArtifactVersion: row.version,
+              expectedArtifactHash: row.contentHash, note: '只修改已接受的对白文字', authorDraftJson: JSON.stringify(draft) } } })
+        expect(repaired, JSON.stringify(repaired)).toMatchObject({ ok: true })
+        const repairedBuild = (await db.productBuilds.get(failed.buildId))!
+        const proofInput = { scope: owned.scope, buildId: failed.buildId,
+          previousControlEpoch: JSON.parse(repairedBuild.planJson).controlEpoch, failureJson: repairedBuild.failureJson }
+        await expect(textRevisionRecoveryPreservesVisualContractV1(proofInput)).resolves.toBe(true)
+        const changedIdentity = JSON.parse(repairedBuild.failureJson)
+        const changedDraft = JSON.parse(changedIdentity.resolution.authorDraftJson)
+        changedDraft.beatReviews[0].speakerKey = 'character.unregistered'
+        changedIdentity.resolution.authorDraftJson = JSON.stringify(changedDraft)
+        await expect(textRevisionRecoveryPreservesVisualContractV1({ ...proofInput,
+          failureJson: JSON.stringify(changedIdentity) })).resolves.toBe(false)
+      } else {
+        const retried = await executeProductProductionCommand({ scope: owned.scope, productionId: owned.productionId,
+          command: { type: 'resolve-blocker', commandId: 'formal.batch.retry', expectedStateRevision: current.stateRevision,
+            blockerKey: 'content.adventure-quality-review.act-2', resolution: { action: 'retry', note: '明确重试空响应' } } })
+        expect(retried.ok).toBe(true)
+      }
+      failReview = false
+    }
     const result = await executeBuild()
     const child = (await db.productBuilds.get(result.buildId))!
     expect(result, child.failureJson).toMatchObject({ terminal: true, buildStatus: 'release-ready' })
@@ -8443,6 +8491,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       .filter(row => row.controlEpoch === child.controlEpoch && ['accepted', 'carried-forward'].includes(row.status))
     expect(rows.find(row => row.artifactKey === key)?.payloadJson).toContain(marker)
     expect(rows.find(row => row.artifactKey === 'runtime.package')?.payloadJson).toContain(marker)
+    if (recoveryMode === 'dialogue-repair') expect(rows.find(row => row.artifactKey === 'runtime.package')?.payloadJson).toContain('我会再核对一次。')
     expect(modelTasks).not.toContain(key)
     expect(modelTasks).not.toContain('media.requirements')
     expect(modelTasks).toContain('content.dialogue-pass.act-1')
@@ -8456,7 +8505,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     expect(await db.productBuilds.get(before.id!)).toEqual(before)
     const originalPackage = originals.find(row => row.artifactKey === 'runtime.package')!
     expect(originalPackage.payloadJson).not.toContain(marker)
-  }, 120_000)
+  }, 240_000)
 
   it.each([
     'character-interaction', 'ai-town', 'text-adventure', 'avg', 'ttrpg',

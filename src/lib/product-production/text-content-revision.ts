@@ -24,7 +24,7 @@ export function textContentRevisionClosureV1(plan: ProductProductionPlanV3, root
 }
 
 /** Stable media bindings cannot be removed or repurposed by a text-only edit. */
-function assertStableMediaBindings(before: unknown, after: unknown): void {
+export function assertStableMediaBindings(before: unknown, after: unknown): void {
   const project = (value: unknown): unknown => {
     const bindings: Record<string, unknown> = {}
     const visit = (value: unknown, path: string) => {

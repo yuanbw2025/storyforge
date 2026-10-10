@@ -1678,7 +1678,8 @@ async function applyCommand(input: {
     const contentRevision = command.contentRevision
     if (contentRevision) {
       if (production.productType !== 'text-adventure' || (build.resumeState !== 'building'
-          && !(build.resumeState === 'recovery-required' && contentRevision.artifactKey === 'content.product-module'))
+          && !(build.resumeState === 'recovery-required' && (contentRevision.artifactKey === 'content.product-module'
+            || /^content\.dialogue-pass\.act-[123]$/.test(contentRevision.artifactKey))))
         || build.releasedProductReleaseId != null) {
         reject('invalid-state-transition', '内容修订只允许尚在构建的未发布文字冒险暂停态')
       }

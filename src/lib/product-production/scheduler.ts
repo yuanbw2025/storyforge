@@ -1,4 +1,4 @@
-import { validateTextContentRevisionAuthorityV1, verifiedTextRevisionVisualCarryTaskKeysV1 } from './text-content-revision-authority'
+import { textRevisionRecoveryPreservesVisualContractV1, validateTextContentRevisionAuthorityV1, verifiedTextRevisionVisualCarryTaskKeysV1 } from './text-content-revision-authority'
 import { verifiedHumanImportCarryProofsV1 } from './text-adventure-artifact-store'
 import { isTextAdventureClockCapacityRevisionV1 } from './clock-capacity-revision'
 import { db } from '../db/schema'
@@ -2405,10 +2405,16 @@ async function ensurePlan(input: {
             buildId: state.build.id!, failureJson: state.build.failureJson,
             previousControlEpoch: currentPlan.controlEpoch, plan,
           })
-    const retainedVisualTasks = pauseResumeRecovery
+    const textRevisionReviewRecovery = plan.tasks.some(task => task.authorRevision)
+      && await textRevisionRecoveryPreservesVisualContractV1({ scope: input.scope, buildId: state.build.id!,
+        previousControlEpoch: recoveryArtifactSourceEpoch, failureJson: state.build.failureJson })
+    const retainedVisualTasks = pauseResumeRecovery || textRevisionReviewRecovery
       ? await verifiedTextRevisionVisualCarryTaskKeysV1({ scope: input.scope, buildId: state.build.id!,
           previousControlEpoch: recoveryArtifactSourceEpoch, tasks: plan.tasks })
       : new Set<string>()
+    if (textRevisionReviewRecovery) {
+      for (const key of retainedVisualTasks) invalidatedTaskKeys.delete(key)
+    }
     // Parent quality rollback has its own frozen cross-Build lineage verifier
     // and deliberately bypasses the polluted child epoch. Same-Build recovery,
     // however, must prove the immediately preceding child Run binding.

@@ -2,7 +2,7 @@ import { db } from '../db/schema'
 import type { ProductBuildRecordV1, ProductProductionPlanTaskV3, WorkspaceScope } from '../types'
 import { assertRecordInScope } from '../workspace/scope'
 import { hashProductProductionValueV2 } from './hash'
-import { isTextContentRevisionKeyV1 } from './text-content-revision'
+import { assertStableMediaBindings, isTextContentRevisionKeyV1 } from './text-content-revision'
 
 /** Re-check the durable authorization on every dispatch, including recovery. */
 export async function validateTextContentRevisionAuthorityV1(
@@ -77,4 +77,26 @@ export async function verifiedTextRevisionVisualCarryTaskKeysV1(input: {
     } else if (await hashProductProductionValueV2(JSON.parse(children[0].payloadJson)) !== parents[0].contentHash) return empty
   }
   return new Set(tasks.map(task => task.taskKey))
+}
+
+/** Only review retries and identity-preserving dialogue edits cross this boundary. */
+export async function textRevisionRecoveryPreservesVisualContractV1(input: {
+  scope: WorkspaceScope; buildId: number; previousControlEpoch: number; failureJson: string
+}): Promise<boolean> {
+  const failure = JSON.parse(input.failureJson)
+  if (failure.resolution?.action === 'retry'
+    && /^content\.adventure-quality-review(?:\.|$)/.test(failure.blockerKey ?? '')) return true
+  if (failure.code !== 'author-revised-content' || failure.resolution?.action !== 'author-edit'
+    || !/^content\.dialogue-pass\.act-[123]$/.test(failure.blockerKey ?? '')
+    || typeof failure.resolution.authorDraftJson !== 'string') return false
+  const originals = (await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray())
+    .filter(row => row.controlEpoch === input.previousControlEpoch && row.artifactKey === failure.blockerKey
+      && row.contentHash === failure.revisionSource?.contentHash && row.version === failure.revisionSource?.version
+      && ['accepted', 'carried-forward'].includes(row.status))
+  if (originals.length !== 1 || !await assertRecordInScope(input.scope, 'productBuildArtifacts', originals[0], { owner: 'work' })
+    || await hashProductProductionValueV2(JSON.parse(originals[0].payloadJson)) !== originals[0].contentHash) return false
+  try {
+    assertStableMediaBindings(JSON.parse(originals[0].payloadJson), JSON.parse(failure.resolution.authorDraftJson))
+    return true
+  } catch { return false }
 }

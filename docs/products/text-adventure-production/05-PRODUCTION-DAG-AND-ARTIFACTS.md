@@ -116,3 +116,5 @@ WorldRelease + Confirmed Brief + Frozen SourcePlan
 对白审校、叙事质量、媒资审计、独立审图、确定性装配、自动游玩和试玩计划重新执行。保留的图片以当前 Build 的 assetKey 重新绑定，物理 Blob、来源和权利原样保留，任务封为零 Provider 调用的人工指定输入；缺失或失效时阻塞，不能偷偷重新生成。旧质量报告、性能门、作者逐图和真人试玩回执均不得迁移到子 Build。
 
 此路径复用既有 `productBuilds` / `productBuildArtifacts` / `productProductionCommands`、已登记 Context Gateway、候选采纳与 Blob 生命周期，不建立第二套存储或世界写回路径。形式校验和自动游玩通过仍不代表真实作品已完成专业审校或真人验收。
+
+审查 Provider 失败后，可以在暂停的 `recovery-required` 状态定点修订已经签收的三幕对白；仍须绑定原稿版本、hash 和失败前 Plan，不允许修改质量报告。文字修订子 Build 的审查重试，以及 beat/choice/speaker 身份完全不变的对白修订，可以跨越纯执行依赖失效保留已明确授权的视觉合同；必须重新完成叙事、审图和运行质量闭包。改变发言者或稳定绑定、缺少原稿证据、图片或权利漂移时，不得应用这条保留边界。
