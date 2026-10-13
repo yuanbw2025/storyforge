@@ -28,6 +28,7 @@ import { prepareProseGatewayAssemblyV1 } from '../../src/lib/prose/gateway-conte
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { createWorkspace as createWorkspaceRoot } from '../../src/lib/workspace/create-workspace'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
+import { normalizeProseForEditorV1, plainTextToHtml } from '../../src/lib/utils/html'
 
 async function createWorkspace(label: string): Promise<{
   scope: WorkspaceScope
@@ -203,6 +204,26 @@ describe.sequential('R-HARNESS7 · 正文生成 durable run', { timeout: 15_000 
     expect(result.snapshot.projection.state).toBe('completed')
     expect(result.snapshot.events.filter(event => event.type === 'candidate.revised')).toHaveLength(1)
     expect((await db.chapters.get(pending.fixture.chapterId))?.content).toBe(contentHtml)
+  })
+
+  it.each(['generate', 'continue'] as const)('%s 候选中的字面标签与实体保留原文，并通过正式采纳', async operation => {
+    const pending = await preparePending('字面文本采纳', operation)
+    const outputText = '门牌写着 <潮门>，价签是 2 < 3。\r\n\r\n保留 </think> 和字面 &lt;铜箔&gt;。'
+    const candidate = await reviseProseGenerationCandidateV1({
+      scope: pending.fixture.scope, candidate: pending.candidate, outputText,
+    })
+    const fullText = operation === 'continue'
+      ? [normalizeChapterText(pending.fixture.content), normalizeProseForEditorV1(outputText)].join('\n')
+      : normalizeProseForEditorV1(outputText)
+    const contentHtml = plainTextToHtml(fullText)
+    expect(candidate.expectedContentHash).toBe(await hashChapterText(contentHtml))
+    expect(normalizeChapterText(contentHtml)).toBe(fullText)
+    const result = await commitProseGenerationAdoptionV1({
+      scope: pending.fixture.scope, runId: candidate.durable.runId, candidate,
+      contentHtml, wordCount: fullText.replace(/\s/g, '').length,
+    })
+    expect(result.snapshot.projection.state).toBe('completed')
+    expect(normalizeChapterText((await db.chapters.get(pending.fixture.chapterId))!.content)).toBe(fullText)
   })
 
   it('正文候选修订拒绝空内容、跨作品、过期和重复旧版本', async () => {

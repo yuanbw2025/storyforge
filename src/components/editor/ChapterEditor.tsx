@@ -252,7 +252,6 @@ interface PendingChapterGeneration {
   operation: ChapterGenerationOperation
   category: ChapterGenerationCategory
   prepared: PreparedGenerationNode
-  backgroundMemoryIds: number[]
   assembled: Awaited<ReturnType<typeof assembleContext>>
   generationBinding: AgentSkillExecutionBindingV2
   informationBoundary: InformationBoundaryManifestV1
@@ -1163,8 +1162,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
   }
 
-  const prepareContinuityBeforeGeneration = async (): Promise<number[]> => {
-    if (!currentChapter?.id) return []
+  const prepareContinuityBeforeGeneration = async (): Promise<void> => {
+    if (!currentChapter?.id) return
     const snapshot = await prepareContinuityContext({
       projectId: project.id!,
       chapterId: currentChapter.id,
@@ -1177,16 +1176,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       // 直接前驱优先且同步补建；失败仍由真实 tail 保底。
       await rebuildChapterMemoryById(predecessorId)
     }
-    return snapshot.memoryRebuildCandidateIds
+    const recentMemoryIds = snapshot.memoryRebuildCandidateIds
       .filter(id => id !== predecessorId)
       .slice(-4)
-  }
-
-  const scheduleRecentMemoryRebuild = (chapterIds: number[]) => {
-    if (!chapterIds.length) return
-    void (async () => {
-      for (const chapterId of chapterIds) await rebuildChapterMemoryById(chapterId)
-    })()
+    // 先完成有界记忆补建，再冻结正文来源；后台写入会让刚生成的候选过期。
+    for (const chapterId of recentMemoryIds) await rebuildChapterMemoryById(chapterId)
   }
 
   const buildFullWorldCtx = async (
@@ -1380,14 +1374,15 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             outputText,
             outputTextHash: await hashCanonicalValue(outputText),
             gatewayEvidenceVersion: 3 as const,
-            expectedContentHash: await hashChapterText(
+            // 纯文本按编辑器相同的 HTML 转义计算 hash，保留字面标签与实体。
+            expectedContentHash: await hashChapterText(plainTextToHtml(
               input.operation === 'continue'
                 ? [
                     normalizeChapterText(sourceChapter.content ?? ''),
                     normalizeProseForEditorV1(outputText),
                   ].filter(Boolean).join('\n')
                 : normalizeProseForEditorV1(outputText),
-            ),
+            )),
             informationBoundaryHash: input.informationBoundary.manifestHash,
             perspectiveCharacterId,
             perspectiveFromChapter: true,
@@ -1457,7 +1452,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     operation: ChapterGenerationOperation,
     category: ChapterGenerationCategory,
     prepared: PreparedGenerationNode,
-    backgroundMemoryIds: number[],
     messages?: ChatMessage[],
     assembled?: Awaited<ReturnType<typeof assembleContext>>,
     generationBinding?: AgentSkillExecutionBindingV2,
@@ -1484,14 +1478,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       console.error('[ChapterEditor] 生成节点执行失败:', error)
       setProseGenerationError(error instanceof Error ? error.message : '正文生成执行失败。')
     })
-    scheduleRecentMemoryRebuild(backgroundMemoryIds)
   }
 
   const prepareOrRunChapterGeneration = (
     operation: ChapterGenerationOperation,
     category: ChapterGenerationCategory,
     messages: ChatMessage[],
-    backgroundMemoryIds: number[],
     assembled: Awaited<ReturnType<typeof assembleContext>>,
     generationBinding: AgentSkillExecutionBindingV2,
     informationBoundary: InformationBoundaryManifestV1,
@@ -1505,7 +1497,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         operation,
         category,
         prepared,
-        backgroundMemoryIds,
         assembled,
         generationBinding,
         informationBoundary,
@@ -1518,7 +1509,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       operation,
       category,
       prepared,
-      backgroundMemoryIds,
       undefined,
       assembled,
       generationBinding,
@@ -1538,7 +1528,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
     try {
       await persistCurrentEditorContent()
-      const backgroundMemoryIds = await prepareContinuityBeforeGeneration()
+      await prepareContinuityBeforeGeneration()
       const scope = await resolveScopeLike(project.id!)
       const contentRevision = await captureWorkspaceContentRevisionV1({
         scope,
@@ -1591,7 +1581,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         'generate',
         'chapter.content',
         messages,
-        backgroundMemoryIds,
         assembled,
         generationBinding,
         informationBoundary,
@@ -1612,7 +1601,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       return
     }
     await persistCurrentEditorContent()
-    const backgroundMemoryIds = await prepareContinuityBeforeGeneration()
+    await prepareContinuityBeforeGeneration()
     const scope = await resolveScopeLike(project.id!)
     const contentRevision = await captureWorkspaceContentRevisionV1({
       scope,
@@ -1651,7 +1640,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       'continue',
       'chapter.continue',
       messages,
-      backgroundMemoryIds,
       assembled,
       generationBinding,
       informationBoundary,
@@ -3236,7 +3224,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
                 pending.operation,
                 pending.category,
                 pending.prepared,
-                pending.backgroundMemoryIds,
                 messages,
                 pending.assembled,
                 pending.generationBinding,

@@ -108,7 +108,8 @@ test('step prose honors the author request in the wire prompt and adopts edited 
     localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', baseUrl: 'https://step-prose.invalid/v1', model: 'step-test', maxTokens: 4000, temperature: 0 }))
   })
   const generated = '沈砚取出铜箔，核对上面的日期，藏好维修本。'.repeat(12)
-  const revised = '沈砚将铜箔夹进维修本，门外响起三声叩击。他没有开门。'
+    + '\n门牌写着 <海关钟楼>，旁注保留字面 &lt;潮汐&gt;。'
+  const revised = '沈砚将铜箔夹进 <维修本>，门外响起三声叩击。他没有开门。纸上保留 &lt;三声&gt;。'
   const authorRequest = '只写600字，结尾停在敲门声，不要开门。'
   const requests: Array<{ messages: Array<{ content: string }> }> = []
   await page.route('https://step-prose.invalid/**', async route => {
@@ -159,6 +160,24 @@ test('step prose honors the author request in the wire prompt and adopts edited 
   expect(requests[0].messages.map(message => message.content).join('\n')).toContain('本轮作者明确指定的篇幅、文风、章节收尾和禁止事项优先于模板默认值')
   await page.reload()
   await expect(draft).toHaveValue(generated)
+  const hashes = await page.evaluate(async () => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const [{ db }, { resolveScopeLike }, { readLatestProseGenerationCandidateV1 },
+      { hashChapterText }, { normalizeProseForEditorV1, plainTextToHtml }] = await Promise.all([
+      importer('/storyforge/src/lib/db/schema.ts'), importer('/storyforge/src/lib/workspace/scope.ts'),
+      importer('/storyforge/src/lib/agent/run/prose-generation-durable.ts'),
+      importer('/storyforge/src/lib/ai/chapter-memory/text-normalization.ts'),
+      importer('/storyforge/src/lib/utils/html.ts'),
+    ])
+    const chapter = await db.chapters.toCollection().first()
+    const scope = await resolveScopeLike(chapter.projectId)
+    const candidate = await readLatestProseGenerationCandidateV1({ scope, chapterId: chapter.id })
+    return {
+      expected: candidate.expectedContentHash,
+      editor: await hashChapterText(plainTextToHtml(normalizeProseForEditorV1(candidate.outputText))),
+    }
+  })
+  expect(hashes.expected).toBe(hashes.editor)
   await draft.fill(revised)
   await page.getByRole('button', { name: '采纳', exact: true }).click()
   await expect(draft).toHaveCount(0)
@@ -188,4 +207,69 @@ test('step prose honors the author request in the wire prompt and adopts edited 
   await page.reload()
   await page.getByRole('button', { name: /^2 仅大纲 第2章/ }).click()
   await expect(page.locator('.tiptap-editor')).toHaveText(secondText)
+})
+
+test('older chapter memory settles before prose freezes its context and remains adoptable', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', baseUrl: 'https://step-memory.invalid/v1', model: 'step-test', maxTokens: 4000, temperature: 0 }))
+  })
+  const memory = JSON.stringify({ summary: '沈砚将铜箔藏进维修本。', handoff: {
+    finalScene: { location: '钟楼', activeCharacters: ['沈砚'], lastAction: '藏好铜箔' },
+    evidenceQuotes: [{ quote: '沈砚将铜箔藏进维修本。' }],
+  } })
+  const generated = '沈砚把维修本放在桌上，核对铜箔日期，仍未开门。'.repeat(12)
+  let memoryCalls = 0
+  let proseCalls = 0
+  let releaseMemory!: () => void
+  const heldMemory = new Promise<void>(resolve => { releaseMemory = resolve })
+  await page.route('https://step-memory.invalid/**', async route => {
+    const body = route.request().postDataJSON()
+    const isMemory = body.messages.some((message: { content: string }) => message.content.includes('章节连续性记忆抽取器'))
+    if (isMemory) { memoryCalls++; await heldMemory } else { proseCalls++ }
+    await route.fulfill(isMemory
+      ? { contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: memory }, finish_reason: 'stop' }] }) }
+      : { contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: generated } }] })}\n\ndata: [DONE]\n\n` })
+  })
+  await createLongform(page, '记忆与正文来源快照验收')
+  const fixture = await page.evaluate(async () => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const [{ db }, { resolveScopeLike, stampNewRecord }, { runChapterMemoryTask }] = await Promise.all([
+      importer('/storyforge/src/lib/db/schema.ts'), importer('/storyforge/src/lib/workspace/scope.ts'),
+      importer('/storyforge/src/lib/ai/chapter-memory/run-chapter-memory.ts'),
+    ])
+    const project = await db.projects.toCollection().first()
+    const scope = await resolveScopeLike(project.id)
+    const base = { projectId: project.id, createdAt: Date.now(), updatedAt: Date.now() }
+    const add = (table: string, value: Record<string, unknown>) => db.table(table).add(stampNewRecord(scope, table, { ...base, ...value }, { owner: 'work' }))
+    const volumeId = await add('outlineNodes', { parentId: null, type: 'volume', title: '钟楼', summary: '维修钟楼', order: 0, worldGroupId: null })
+    const chapters = []
+    for (const [order, text] of ['沈砚将铜箔藏进维修本。', '沈砚听见三声叩门声。', ''].entries()) {
+      const nodeId = await add('outlineNodes', { parentId: volumeId, type: 'chapter', title: `第${order + 1}章`, summary: order === 2 ? '沈砚保持门关闭，先核对日期。' : text, order, worldGroupId: null })
+      const chapterId = await add('chapters', { outlineNodeId: nodeId, title: `第${order + 1}章`, content: text ? `<p>${text}</p>` : '', wordCount: text.length, status: 'draft', order, notes: '' })
+      chapters.push({ nodeId, chapterId, text })
+    }
+    await add('detailedOutlines', { outlineNodeId: chapters[2].nodeId,
+      scenes: [{ sceneId: 'verify-date', title: '核对日期', summary: '沈砚把维修本放在桌上，核对铜箔日期，仍未开门。', characterIds: [], location: '钟楼', conflict: '门外有人叩门', pace: 'medium', estimatedWords: 600 }],
+      openingHook: '承接叩门声。', endingCliffhanger: '日期仍未核实。', lastUsedSummary: '沈砚保持门关闭，先核对日期。',
+    })
+    const prior = chapters[1]
+    const result = await runChapterMemoryTask({ projectId: project.id, chapterId: prior.chapterId, chapterTitle: '第2章', chapterContent: `<p>${prior.text}</p>`, call: async () => JSON.stringify({ summary: prior.text, handoff: { finalScene: { lastAction: '听见叩门' }, evidenceQuotes: [{ quote: prior.text }] } }) })
+    if (result.status !== 'written') throw new Error('隔离前驱记忆没有准备完成')
+    return { projectId: project.id, nodeId: chapters[2].nodeId }
+  })
+  await page.goto(`./workspace/${fixture.projectId}?module=chapters-list&chapter=${fixture.nodeId}`)
+  await expect(page.locator('[data-workspace-ready=longform]')).toBeVisible()
+  await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
+  try {
+    await expect.poll(() => memoryCalls).toBe(1)
+    expect(proseCalls).toBe(0)
+  } finally { releaseMemory() }
+  const draft = page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })
+  await expect(draft).toHaveValue(generated)
+  await page.getByRole('button', { name: '采纳', exact: true }).click()
+  await expect(draft).toHaveCount(0)
+  await page.reload()
+  await expect(page.locator('.tiptap-editor')).toHaveText(generated)
+  expect(memoryCalls).toBe(1)
+  expect(proseCalls).toBe(1)
 })

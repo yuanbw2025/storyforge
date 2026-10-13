@@ -1,5 +1,5 @@
 import { db } from '../../db/schema'
-import { normalizeProseForEditorV1 } from '../../utils/html'
+import { normalizeProseForEditorV1, plainTextToHtml } from '../../utils/html'
 import { adopt } from '../../registry/adopt'
 import { hashChapterText, normalizeChapterText, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../../ai/chapter-memory/text-normalization'
 import type { AgentConversation, AgentEvent, Chapter, ChatMessage, WorkspaceScope } from '../../types'
@@ -897,9 +897,9 @@ export async function reviseProseGenerationCandidateV1(input: {
     ...previous,
     outputText,
     outputTextHash,
-    expectedContentHash: await hashChapterText(previous.operation === 'continue'
+    expectedContentHash: await hashChapterText(plainTextToHtml(previous.operation === 'continue'
       ? [normalizeChapterText(chapter.content ?? ''), normalizeProseForEditorV1(outputText)].filter(Boolean).join('\n')
-      : normalizeProseForEditorV1(outputText)),
+      : normalizeProseForEditorV1(outputText))),
     durable: { ...previous.durable, candidateHash: outputTextHash },
   }
   if (!await isProseGenerationCandidateCurrentV1(revised)) {

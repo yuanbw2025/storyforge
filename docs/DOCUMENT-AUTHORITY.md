@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：2.4.0 · 生效：2026-09-29
+> 版本：2.4.1 · 生效：2026-10-13
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -66,6 +66,7 @@
 - `docs/ROADMAP.md`
 - `docs/roadmap/README.md`
 - `docs/roadmap/CAPABILITY-BASELINE.md`
+- `docs/roadmap/LONGFORM-SYSTEM-FICTION-QUALITY-PLAN.md`：系统文长篇质量增量的研究、十个施工单元、进度和验收入口；复用分步骤与节点同源主链，不宣称文学或平台验收完成。
 - `docs/roadmap/INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md`
 - `docs/roadmap/SHORT-NOVEL-DEVELOPMENT-PLAN.md`
 - `docs/roadmap/NOVEL-TO-SCREENPLAY-DEVELOPMENT-PLAN.md`
@@ -82,6 +83,7 @@
 - `docs/AI-FUNCTIONS-MANUAL.semantic.md`：生成清单的人工语义注解。
 - `docs/CONSISTENCY-COVERAGE-MAP.md`：Canon 一致性反例状态。
 - `docs/audits/NOVEL-PROMPT-CRAFT-20260927.md`：小说工坊提示词公开来源比较、原创内容设计与验证记录；不替代产品契约或模型质量认证。
+- `docs/audits/SYSTEM-FICTION-Q01-BASELINE.md`：系统文 Q01 原创样本、模型与预算、评价锚点、实际请求和完成门；是实验协议与证据，不替代真人文学或平台验收。
 - `docs/audits/CURRENT-ARCHITECTURE-AUDIT-20260903.md`：当前代码树的项目级架构闭环审计；不替代具体产品方案和质量认证。
 - `docs/roadmap/INDEPENDENT-CREATION-PLAN-AUDIT.md`：三份独立创作专项方案的边界、共享底座和分支隔离审查证据；不替代专项方案。
 - `docs/roadmap/MOTION-DRAMA-PLAN-AUDIT.md`：漫剧前期生产方案对当前行业流程的交叉审查与修订证据。
