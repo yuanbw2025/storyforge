@@ -24,6 +24,10 @@ import type {
   ProductionProductKindV1,
   ProductReleaseManifestV1,
   ProductRuntimePackageV1,
+  ProductRuntimePackageV2,
+  ProductReleaseManifestV2,
+  AnyProductRuntimePackage,
+  AnyProductReleaseManifest,
   ProductReleaseLineageV1,
   ProductSourcePlanV1,
   ConfirmedProductBriefV1,
@@ -463,7 +467,85 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
   return parsed
 }
 
+/** Inspect the exact outer protocol before dispatching; never fall back to V1. */
+export function productProtocolVersion(value: string | unknown, schema: string): 1 | 2 {
+  let raw: unknown = value
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw) } catch { fail('不是合法 JSON') }
+  }
+  const envelope = record(raw, 'protocol')
+  if (envelope.schema !== schema || (envelope.version !== 1 && envelope.version !== 2)) {
+    fail(`${schema} schema/version 不支持`)
+  }
+  return envelope.version
+}
+
+/** BASE-00A admits only the shared core; an unregistered module fails closed. */
+export function parseProductRuntimePackageV2(value: string | unknown): ProductRuntimePackageV2 {
+  productProtocolVersion(value, 'storyforge.product-runtime-package')
+  const pkg = record(typeof value === 'string' ? JSON.parse(value) : value, 'package')
+  exactKeys(pkg, ['schema', 'version', 'productType', 'definition', 'sourceWorld', 'narrative', 'modules'], 'package V2')
+  if (pkg.version !== 2 || pkg.productType !== 'avg') fail('V2 只支持已声明的 AVG 载体')
+  if (!Array.isArray(pkg.modules) || pkg.modules.length !== 0) fail('V2 包含未登记模块')
+  const definition = record(pkg.definition, 'definition')
+  exactKeys(definition, ['productKey', 'title', 'description', 'enabledCapabilities', 'rulesetVersion', 'initialVariables'], 'definition')
+  const enabledCapabilities = stringArray(definition.enabledCapabilities, 'enabledCapabilities', 20)
+  if (enabledCapabilities.join(',') !== 'narrative') fail('V2 启用了未登记能力')
+  const initialVariables = record(definition.initialVariables, 'initialVariables')
+  canonicalProductProductionJsonV2(initialVariables)
+  const sourceWorld = record(pkg.sourceWorld, 'sourceWorld')
+  exactKeys(sourceWorld, ['contentHash', 'selection'], 'sourceWorld')
+  if (!isSha256Hash(sourceWorld.contentHash)) fail('sourceWorld.contentHash 无效')
+  const selection = parseProductWorldSourceSelectionV1(sourceWorld.selection)
+  if (selection.productType !== 'avg') fail('source selection 与 V2 package 来源不一致')
+  const narrative = parseFrozenNarrative(pkg.narrative)
+  const graph = validateNarrativeContentGraph({
+    entryNodeKey: narrative.entryNodeKey, nodes: narrative.nodes, beats: narrative.beats, choices: narrative.choices,
+  })
+  if (!graph.valid) fail(`narrative 图无效:${graph.errors.join('；')}`)
+  return {
+    schema: 'storyforge.product-runtime-package', version: 2, productType: 'avg',
+    definition: {
+      productKey: requiredText(definition.productKey, 'productKey', 500),
+      title: requiredText(definition.title, 'title', 2_000),
+      description: optionalText(definition.description, 'description'), enabledCapabilities,
+      rulesetVersion: integer(definition.rulesetVersion, 'rulesetVersion', 1),
+      initialVariables: structuredClone(initialVariables),
+    },
+    sourceWorld: { contentHash: sourceWorld.contentHash, selection },
+    narrative: structuredClone(narrative), modules: [],
+  }
+}
+
+export function parseProductRuntimePackage(value: string | unknown): AnyProductRuntimePackage {
+  return productProtocolVersion(value, 'storyforge.product-runtime-package') === 1
+    ? parseProductRuntimePackageV1(value) : parseProductRuntimePackageV2(value)
+}
+
+/** Protocol support is distinct from runtime capability support. */
+export function requirePlayableProductRuntimePackageV1(pkg: AnyProductRuntimePackage): ProductRuntimePackageV1 {
+  if (pkg.version !== 1) fail('V2 载体尚未登记可玩模块；不能启动运行或降级为 V1')
+  return pkg
+}
+
 export function parseProductReleaseManifestV1(value: string | unknown): ProductReleaseManifestV1 {
+  const manifest = parseProductReleaseManifestAtVersion(value, 1)
+  if (manifest.version !== 1) fail('ProductRelease V1 分派失败')
+  return manifest
+}
+
+export function parseProductReleaseManifestV2(value: string | unknown): ProductReleaseManifestV2 {
+  const manifest = parseProductReleaseManifestAtVersion(value, 2)
+  if (manifest.version !== 2) fail('ProductRelease V2 分派失败')
+  return manifest
+}
+
+export function parseProductReleaseManifest(value: string | unknown): AnyProductReleaseManifest {
+  return productProtocolVersion(value, 'storyforge.product-release') === 1
+    ? parseProductReleaseManifestV1(value) : parseProductReleaseManifestV2(value)
+}
+
+function parseProductReleaseManifestAtVersion(value: string | unknown, version: 1 | 2): AnyProductReleaseManifest {
   let raw: unknown = value
   if (typeof raw === 'string') {
     try { raw = JSON.parse(raw) } catch { fail('Release v3 不是合法 JSON') }
@@ -473,12 +555,13 @@ export function parseProductReleaseManifestV1(value: string | unknown): ProductR
     'schema', 'version', 'productType', 'sourceWorldRelease', 'runtimePackage', 'packageHash',
     'productionProvenance', 'sourceContracts', 'releaseIdentityHash', 'lineage',
   ], 'release')
-  if (manifest.schema !== 'storyforge.product-release' || manifest.version !== 1) fail('ProductRelease schema/version 无效')
+  if (manifest.schema !== 'storyforge.product-release' || manifest.version !== version) fail('ProductRelease schema/version 无效')
   const selectedProduct = productType(manifest.productType)
   const sourceWorldRelease = record(manifest.sourceWorldRelease, 'sourceWorldRelease')
   exactKeys(sourceWorldRelease, ['contentHash'], 'sourceWorldRelease')
   if (!isSha256Hash(sourceWorldRelease.contentHash)) fail('sourceWorldRelease.contentHash 无效')
-  const runtimePackage = parseProductRuntimePackageV1(manifest.runtimePackage)
+  const runtimePackage = version === 1
+    ? parseProductRuntimePackageV1(manifest.runtimePackage) : parseProductRuntimePackageV2(manifest.runtimePackage)
   if (runtimePackage.productType !== selectedProduct
     || runtimePackage.sourceWorld.contentHash !== sourceWorldRelease.contentHash) fail('Release v3 与 RuntimePackage 来源不一致')
   if (!isSha256Hash(manifest.packageHash)) fail('packageHash 无效')
@@ -505,6 +588,22 @@ export function parseProductReleaseManifestV1(value: string | unknown): ProductR
   }
   const lineage = record(manifest.lineage, 'lineage') as unknown as
     ProductReleaseLineageV1 | TextOpenWorldCreatorReleaseLineageV1
+  if (runtimePackage.version === 2) {
+    if (creatorSourceContracts || lineage.schema !== 'storyforge.product-release-lineage') {
+      fail('V2 只接受共享 WorldRelease 来源合同与 lineage')
+    }
+    return {
+      schema: 'storyforge.product-release', version: 2, productType: 'avg',
+      sourceWorldRelease: { contentHash: sourceWorldRelease.contentHash }, runtimePackage,
+      packageHash: manifest.packageHash, productionProvenance,
+      sourceContracts: {
+        sourcePlan: sourceContracts.sourcePlan as ProductSourcePlanV1,
+        confirmedBrief: sourceContracts.confirmedBrief as ConfirmedProductBriefV1,
+        sourceManifest: sourceContracts.sourceManifest as ProductSourceManifestV1,
+      },
+      releaseIdentityHash: manifest.releaseIdentityHash, lineage,
+    }
+  }
   return {
     schema: 'storyforge.product-release',
     version: 1,
@@ -532,18 +631,22 @@ export async function productReleaseIdentityHashV1(body: ProductReleaseIdentityB
 }
 
 export async function verifyProductReleaseManifestV1(value: string | unknown): Promise<ProductReleaseManifestV1> {
-  const manifest = parseProductReleaseManifestV1(value)
+  return verifyProductReleaseManifestBindings(parseProductReleaseManifestV1(value))
+}
+
+async function verifyProductReleaseManifestBindings<T extends AnyProductReleaseManifest>(manifest: T): Promise<T> {
   if (await hashProductProductionValueV2(manifest.runtimePackage) !== manifest.packageHash) fail('packageHash 校验失败')
   if (manifest.productType === 'ttrpg' && manifest.runtimePackage.ttrpg
     && await hashProductProductionValueV2(manifest.runtimePackage.ttrpg.rulePack.content)
       !== manifest.runtimePackage.ttrpg.rulePack.contentHash) fail('TTRPG RulePack contentHash 校验失败')
   if (isCreatorReleaseSourceContracts(manifest.sourceContracts)) {
+    if (manifest.version !== 1) fail('V2 不接受未登记的 Creator 来源合同')
     const { verifyTextOpenWorldCreatorReleaseManifestBindingsV1 } = await import(
       '../open-world/creator-release-contract'
     )
     await verifyTextOpenWorldCreatorReleaseManifestBindingsV1(manifest)
     const { releaseIdentityHash, lineage: _lineage, ...identityBody } = manifest
-    const expectedIdentity = await productReleaseIdentityHashV1(identityBody)
+    const expectedIdentity = await hashProductProductionValueV2(identityBody)
     if (releaseIdentityHash !== expectedIdentity || manifest.lineage.releaseHash !== expectedIdentity) {
       fail('Creator Release identity或lineage hash不一致')
     }
@@ -563,7 +666,7 @@ export async function verifyProductReleaseManifestV1(value: string | unknown): P
   })
   const lineage = await validateProductReleaseLineageV1(manifest.lineage)
   const { releaseIdentityHash, lineage: _lineage, ...identityBody } = manifest
-  const expectedIdentity = await productReleaseIdentityHashV1(identityBody)
+  const expectedIdentity = await hashProductProductionValueV2(identityBody)
   if (releaseIdentityHash !== expectedIdentity || lineage.releaseHash !== expectedIdentity
     || lineage.productType !== manifest.productType
     || lineage.productInstanceKey !== sourcePlan.productInstanceKey
@@ -612,4 +715,36 @@ export async function createProductReleaseManifestV1(input: {
     lineage: input.lineage,
   })
   return verifyProductReleaseManifestV1(manifest)
+}
+
+export async function verifyProductReleaseManifest(value: string | unknown): Promise<AnyProductReleaseManifest> {
+  return verifyProductReleaseManifestBindings(parseProductReleaseManifest(value))
+}
+
+export async function verifyProductReleaseManifestV2(value: string | unknown): Promise<ProductReleaseManifestV2> {
+  return verifyProductReleaseManifestBindings(parseProductReleaseManifestV2(value))
+}
+
+export async function productReleaseIdentityHashV2(
+  body: Omit<ProductReleaseManifestV2, 'releaseIdentityHash' | 'lineage'>,
+): Promise<string> {
+  return hashProductProductionValueV2(body)
+}
+
+export async function createProductReleaseManifestV2(input: {
+  runtimePackage: ProductRuntimePackageV2
+  productionProvenance: ProductReleaseManifestV2['productionProvenance']
+  sourceContracts: ProductReleaseManifestV2['sourceContracts']
+  lineage: ProductReleaseLineageV1
+}): Promise<ProductReleaseManifestV2> {
+  const runtimePackage = parseProductRuntimePackageV2(input.runtimePackage)
+  const identityBody: Omit<ProductReleaseManifestV2, 'releaseIdentityHash' | 'lineage'> = {
+    schema: 'storyforge.product-release', version: 2, productType: 'avg',
+    sourceWorldRelease: { contentHash: runtimePackage.sourceWorld.contentHash }, runtimePackage,
+    packageHash: await hashProductProductionValueV2(runtimePackage),
+    productionProvenance: input.productionProvenance, sourceContracts: input.sourceContracts,
+  }
+  const releaseIdentityHash = await productReleaseIdentityHashV2(identityBody)
+  if (input.lineage.releaseHash !== releaseIdentityHash) fail('lineage.releaseHash 与 V2 Release identity 不一致')
+  return verifyProductReleaseManifestV2({ ...identityBody, releaseIdentityHash, lineage: input.lineage })
 }

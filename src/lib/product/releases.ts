@@ -1,8 +1,9 @@
 import { db } from '../db/schema'
 import { hashProductProductionValueV2 } from '../product-production/hash'
 import {
-  parseProductReleaseManifestV1,
-  verifyProductReleaseManifestV1,
+  parseProductReleaseManifest,
+  verifyProductReleaseManifest,
+  requirePlayableProductRuntimePackageV1,
 } from '../product-production/runtime-package'
 import type {
   AdventureProductRuntimePackageV1,
@@ -88,7 +89,7 @@ export function runtimePackagePlayerCharacter(runtimePackage: ProductRuntimePack
 export async function assertProductReleaseUnchanged(productReleaseId: number): Promise<ProductRelease> {
   const release = await db.productReleases.get(productReleaseId)
   if (!release) throw new Error('[product-release] ProductRelease 不存在')
-  const manifest = await verifyProductReleaseManifestV1(release.manifestJson)
+  const manifest = await verifyProductReleaseManifest(release.manifestJson)
   if (release.productType !== manifest.productType
     || release.productType !== manifest.runtimePackage.productType) {
     throw new Error('[product-release] 发布根记录与冻结清单的产品身份不一致')
@@ -102,7 +103,7 @@ export async function assertProductReleaseUnchanged(productReleaseId: number): P
 }
 
 export function parseAnyProductReleaseManifest(value: string): ProductRuntimePackageV1 {
-  return parseProductReleaseManifestV1(value).runtimePackage
+  return requirePlayableProductRuntimePackageV1(parseProductReleaseManifest(value).runtimePackage)
 }
 
 export function parseInteractionProductReleaseManifest(value: string): CharacterInteractionProductRuntimePackageV1 {

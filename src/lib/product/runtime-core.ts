@@ -9,7 +9,7 @@ import { assertProductRuntimeIntegerV1, isProductRuntimeJsonObjectV1, stableProd
 import { parseNarrativeCondition, parseNarrativeEffects, evaluateNarrativeCondition, applyNarrativeEffects } from "../narrative/blueprint";
 import { transactionTablesForReferenceCascade } from "../registry/lifecycle";
 import { type ProductRuntimeKind, type ProductRuntimeState, type FrozenNarrativeBeat, NARRATIVE_BEAT_KINDS, type FrozenNarrativeChoice, type ProductNarrativeRuntimeNodeSnapshot, NARRATIVE_NODE_KINDS, type ProductNarrativeRuntimeState, NARRATIVE_MODULE_KINDS, type NarrativeChoiceHistoryEntry, type RuntimeAttributes, type RuntimeEntityState, RUNTIME_ENTITY_KINDS, RUNTIME_LIFECYCLE_STATUSES, type RuntimeMemory, type ProductRuntimeEvent, PRODUCT_RUNTIME_EVENT_TYPES, type ProductRuntimeSession, PRODUCT_RUNTIME_KINDS, EMPTY_PRODUCT_RUNTIME_STATE, type ProductRuntimePackageV1, type ProductRuntimeEventType, type ProductRelease, type ProductBuildRecordV1, type ProductProductionRecordV1, type ProductProductionBriefRecordV1, type ProductRuntimeCheckpoint, PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1, type ProductRuntimeCheckpointPurposeV1 } from "../types";
-import { verifyProductReleaseManifestV1 } from "../product-production/runtime-package";
+import { verifyProductReleaseManifest, requirePlayableProductRuntimePackageV1 } from "../product-production/runtime-package";
 import { verifyProductRuntimeSource, verifyProductRuntimeSessionSourceV1 } from "../product-production/preview-source";
 import {
   applyProductOwnedRuntimeEventV1,
@@ -1027,10 +1027,11 @@ export async function prepareReleasedProductRuntimeSessionRecordV1(
   ) {
     throw new Error("上层产品的 ProductRelease 绑定无效。");
   }
-  const manifest = await verifyProductReleaseManifestV1(productRelease.manifestJson);
+  const manifest = await verifyProductReleaseManifest(productRelease.manifestJson);
+  const runtimePackage = requirePlayableProductRuntimePackageV1(manifest.runtimePackage);
   validateFrozenRuntimePackageSession({
     session: input,
-    runtimePackage: manifest.runtimePackage,
+    runtimePackage,
     runtimeSourceHash: manifest.packageHash,
     origin: input.origin,
   });
@@ -1040,7 +1041,7 @@ export async function prepareReleasedProductRuntimeSessionRecordV1(
     productReleaseId: input.productReleaseId,
     productBuildId: null,
     runtimeSourceHash: manifest.packageHash,
-  }, manifest.runtimePackage.definition.rulesetVersion);
+  }, runtimePackage.definition.rulesetVersion);
   preparedProductRuntimeSessionsV1.add(session);
   return session;
 }

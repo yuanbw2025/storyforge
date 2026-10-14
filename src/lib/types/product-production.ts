@@ -1,4 +1,4 @@
-import type { ProductRuntimePackageV1 } from "./product-release";
+import type { AnyProductRuntimePackage, ProductRuntimePackageV1, ProductRuntimePackageV2 } from "./product-release";
 import type { ProductMediaKind } from "./product-media";
 import type { ProductionProductKindV1 } from "./product-identity";
 import type { AiTownProductionBriefV1 } from "./ai-town";
@@ -38,6 +38,24 @@ export interface ProductBuildPreviewManifestV1 {
 export type ProductRuntimeSourceV1 =
   | { kind: "release"; productReleaseId: number }
   | { kind: "build"; productBuildId: number; expectedPreviewHash: string };
+
+/** V2 carries the new package without reinterpreting V1 media bindings. */
+export interface ProductBuildPreviewManifestV2 extends Omit<ProductBuildPreviewManifestV1,
+  'version' | 'runtimePackage' | 'mediaBindings'> {
+  version: 2;
+  runtimePackage: ProductRuntimePackageV2;
+  mediaBindings: never[];
+}
+
+export type AnyProductBuildPreviewManifest = ProductBuildPreviewManifestV1 | ProductBuildPreviewManifestV2;
+
+/** Verified protocol inspection; this is not a playable-source admission. */
+export interface VerifiedProductRuntimeSourceEnvelope {
+  source: ProductRuntimeSourceV1;
+  runtimePackage: AnyProductRuntimePackage;
+  packageHash: string;
+  runtimeSourceHash: string;
+}
 
 export interface ResolvedProductRuntimeSourceV1 {
   source: ProductRuntimeSourceV1;

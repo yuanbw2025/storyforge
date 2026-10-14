@@ -1,10 +1,10 @@
 import { db } from '../db/schema'
-import type { ProductRuntimeSourceV1, ResolvedProductRuntimeSourceV1, ProductRuntimeSession, WorkspaceScope } from '../types'
+import type { ProductRuntimeSourceV1, ResolvedProductRuntimeSourceV1, ProductRuntimeSession, VerifiedProductRuntimeSourceEnvelope, WorkspaceScope } from '../types'
 import { assertProductReleaseUnchanged } from '../product/releases'
 import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { createBuildProductMediaResolver, createReleaseProductMediaResolver } from './media-resolver'
-import { verifyProductBuildPreviewManifestV1 } from './preview-manifest'
-import { verifyProductReleaseManifestV1 } from './runtime-package'
+import { verifyProductBuildPreviewManifestV1, verifyProductBuildPreviewManifest } from './preview-manifest'
+import { verifyProductReleaseManifest, requirePlayableProductRuntimePackageV1 } from './runtime-package'
 
 export async function productRuntimeSourceForSessionV1(session: ProductRuntimeSession): Promise<ProductRuntimeSourceV1> {
   if (session.productReleaseId != null) return { kind: 'release', productReleaseId: session.productReleaseId }
@@ -56,13 +56,23 @@ export async function verifyProductRuntimeSource(input: {
   scope: WorkspaceScope
   source: ProductRuntimeSourceV1
 }): Promise<Omit<ResolvedProductRuntimeSourceV1, 'mediaResolver'>> {
+  const verified = await verifyProductRuntimeSourceEnvelope(input)
+  return { ...verified, runtimePackage: requirePlayableProductRuntimePackageV1(verified.runtimePackage) }
+}
+
+/** Version-aware inspection preserves the actual package hash and source pin.
+ * Runtime admission remains explicit and does not downgrade the V2 carrier. */
+export async function verifyProductRuntimeSourceEnvelope(input: {
+  scope: WorkspaceScope
+  source: ProductRuntimeSourceV1
+}): Promise<VerifiedProductRuntimeSourceEnvelope> {
   const scope = await resolveScope({ scope: input.scope })
   if (input.source.kind === 'release') {
     const release = await assertProductReleaseUnchanged(input.source.productReleaseId)
     if (!await assertRecordInScope(scope, 'productReleases', release, { owner: 'work' })) {
       throw new Error('[product-runtime-source] ProductRelease 不属于当前 Work')
     }
-    const parsed = await verifyProductReleaseManifestV1(release.manifestJson)
+    const parsed = await verifyProductReleaseManifest(release.manifestJson)
     const runtimePackage = parsed.runtimePackage
     const packageHash = parsed.packageHash
     return {
@@ -84,10 +94,13 @@ export async function verifyProductRuntimeSource(input: {
     db.productProductions.get(build.productionId),
     db.productProductionBriefs.where('[productionId+revision]').equals([build.productionId, build.briefRevision]).first(),
   ])
-  if (!production || !brief || production.workId !== scope.workId || brief.briefHash !== build.briefHash) {
+  if (!production || !brief
+    || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })
+    || !await assertRecordInScope(scope, 'productProductionBriefs', brief, { owner: 'work' })
+    || brief.briefHash !== build.briefHash) {
     throw new Error('[product-runtime-source] Build 的 Production/Brief 绑定损坏')
   }
-  const preview = await verifyProductBuildPreviewManifestV1(build.previewManifestJson)
+  const preview = await verifyProductBuildPreviewManifest(build.previewManifestJson)
   if (preview.previewHash !== input.source.expectedPreviewHash || preview.previewHash !== build.previewHash
     || preview.packageHash !== build.packageHash || preview.buildManifestHash !== build.manifestHash
     || preview.productionKey !== production.productionKey || preview.buildNumber !== build.buildNumber

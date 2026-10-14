@@ -258,7 +258,42 @@ export type PlayableTextOpenWorldProductRuntimePackageV1 =
   | TextOpenWorldHybridProductRuntimePackageV1
   | TextOpenWorldVNextOnlyProductRuntimePackageV1
 
-export type AnyProductReleaseManifest = ProductReleaseManifestV1
+/** Shared V2 carrier. Product-owned modules are admitted only by registered
+ * typed codecs. BASE-00A deliberately admits no module and no runnable V2 game. */
+export interface ProductRuntimePackageV2 {
+  schema: 'storyforge.product-runtime-package'
+  version: 2
+  productType: 'avg'
+  definition: ProductRuntimePackageV1['definition']
+  sourceWorld: ProductRuntimePackageV1['sourceWorld']
+  narrative: FrozenProductNarrativeV1
+  modules: never[]
+  presentation?: undefined
+  interaction?: undefined
+  adventure?: undefined
+  openWorldEvolution?: undefined
+  openWorld?: undefined
+  textOpenWorldVNext?: undefined
+  ttrpg?: undefined
+  town?: undefined
+}
+
+export type AnyProductRuntimePackage = ProductRuntimePackageV1 | ProductRuntimePackageV2
+
+export interface ProductReleaseManifestV2 extends Omit<ProductReleaseManifestV1,
+  'version' | 'productType' | 'runtimePackage' | 'sourceContracts' | 'lineage'> {
+  version: 2
+  productType: 'avg'
+  runtimePackage: ProductRuntimePackageV2
+  sourceContracts: {
+    sourcePlan: import('./world-product-contracts').ProductSourcePlanV1
+    confirmedBrief: import('./world-product-contracts').ConfirmedProductBriefV1
+    sourceManifest: import('./world-product-contracts').ProductSourceManifestV1
+  }
+  lineage: import('./world-product-contracts').ProductReleaseLineageV1
+}
+
+export type AnyProductReleaseManifest = ProductReleaseManifestV1 | ProductReleaseManifestV2
 
 export interface ProductReleaseMarketplaceProvenanceV1 {
   source: 'marketplace' | 'community-bundle'
