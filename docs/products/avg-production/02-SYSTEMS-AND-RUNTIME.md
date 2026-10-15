@@ -1,7 +1,7 @@
 # AVG 游戏系统、演出与恢复协议
 
-> L2 · 版本：1.4.0 · 生效：2026-10-15 · 受 [AVG 产品契约](../AVG.md)约束。
-> 以下为目标协议；当前 V1 的叙事/Cue/checkpoint 底座不能据此宣称已有物品、消息或完整语音协调能力。
+> L2 · 版本：1.5.0 · 生效：2026-10-15 · 受 [AVG 产品契约](../AVG.md)约束。
+> 目标协议与当前原生增量分开记账；旧 V1 底座不因此自动拥有新物件、消息或完整语音协调能力。
 
 ## 0 当前研发顺序与规则接缝
 
@@ -28,14 +28,14 @@
 | 当前原生字段 | 类型/职责 | 冻结约束 |
 |---|---|---|
 | schema / version | `storyforge.avg.runtime-module` / 2 | 精确版本分派，旧 inert 模块不自动启用 |
-| systemPlan | `AvgSystemPlanV1` | 确定性生成规则图/初值，范围与身份引用闭合 |
+| systemPlan | `AvgSystemPlanV1` / 显式 V2 inventory | 确定性生成规则图/初值，范围与身份引用闭合 |
 | lines | scene/line/speaker/text/revision/locale | 一句一 Beat，脚本 revision 真实进入 textRevision；每场含规范句 |
 | choices | choiceKey / text | 表达文本归脚本，行动身份与规则后果独立；仅改措辞不会改结果 |
 | aspectRatio | 16:9 / 4:3 | 原生字段，不偷塞入剧情变量 |
 | stage | 既有 Cue protocol 1 + 冻结 assets | 复用同一 renderer/解析器；未知 Cue 字段/缺资源/错误用途拒绝 |
-| enabled capabilities | narrative / presentation / avg.rules | 与 Package 声明精确一致，未知/未支持可选模块拒绝 |
+| enabled capabilities | narrative / presentation / avg.rules；规则 V2 再声明 avg.inventory | 与 Package 声明精确一致，未知/未支持可选模块拒绝 |
 
-`avgModuleNarrativeV2` 从规则和规范文本派生共享 Frozen Narrative，包解析时与 narrative/初值逐项比对。规则不从台词或图案猜结果，导演 Cue 不能写规则。当前消费现有 Cue/资产键；00B 的消费者/媒资家族绑定 DTO 不因此自动生效，物件/各消费槽/自动媒资工厂另行接入。
+`avgModuleNarrativeV2` 从规则和规范文本派生共享 Frozen Narrative，包解析时与 narrative/初值逐项比对。规则不从台词或图案猜结果，导演 Cue 不能写规则。当前消费现有 Cue/资产键，以及下文物件 icon/detail 的严格资产引用；00B 的通用消费者/媒资家族绑定 DTO 不因此自动生效，其余消费槽/自动媒资工厂继续另验。
 
 `compileConfirmedAvgBuildV2` 原子读取当前活动 Build 的已确认规则和全部场景脚本，验证脚本实际依赖当前规则 revision、作者命令与源/版本/hash。输入的产品 key 必须匹配 Production；输出为规范包候选，stage 参数仍是明确的演出草稿。实际导演/媒资采用、生产 planner、durable 根回执及正式冻结由后续生产集成器完成，不从编译器签发 Preview/Release。
 
@@ -111,6 +111,20 @@ Cue 必须来自 renderer 支持的有限目录，带 cueKey、line/event 引用
 | change-state / remove | 定义中的合法转换、数量及来源；非合法转换拒绝 |
 
 inventory 列表消费 icon，证据详情消费 detail，剧情特写消费 CG/stage binding。遮掩的姓名/日期等来自公开 UI 字段与当前知识，不直接把生图文字当案件事实。物件拥有者、玩家已知内容与物件真实秘密分别保存/投影。
+
+### 5.1.1 当前原生物件增量
+
+`AvgSystemPlanV2` 明确增加 `storyforge.avg.inventory-plan@1`，旧 system-plan@1 的严格 parser、字节和能力不变。只有嵌套规则 V2 的原生 Package V2 声明 `avg.inventory`，definition.rulesetVersion 与规则版本精确匹配；未知版本/未声明能力拒绝。仍由冻结 human-import 任务暂存/正式确认 `avg.system.plan`，不启用专业 AI。会话规则 envelope@1 按嵌套 plan 的真实版本分派。
+
+本轮采用有限实例模型：定义声明 unique/stack 上限、合法状态/转换、公开视图/有条件变体与 icon/detail 引用；每个实例有稳定 key、holder/quantity/state/inspected。唯一物件只能声明一个实例；holder 为 player、已声明人物或 `@none`，后者与零数量必须成对。不支持运行时任意生成实例、隐式合并堆叠或从图案推测知识。状态在 `avg.inventory.instances.<key>.*`，一次操作证据在 `avg.inventory.actions.<key>.performed`；无独立物品表。
+
+有限物件操作声明 verb、准确 target、适用场景、visible/enabled、once、effects 和 feedback；代码校验 gain/transfer/change-state/remove 的实际后果。inspect 只能首次获得奖励、不能顺便改变持有物件；重新打开详情为只读。present/use 仅执行明确效果，出示不会自动消耗。所有 effects 仍复用共享 set/increment/unset 和类型槽检查；逐效果检查范围/合法状态转换，整批结束检查 holder/quantity 一致性，配对的数量/持有人写入只有一个原子提交。
+
+`commitAvgInventoryActionV1` 是唯一新增持久命令：验证实际冻结来源、active 会话、CAS 基线、操作/目标和命令身份；相同命令幂等，重复奖励/错目标/过期基线/非法后果不追加事件。`avg.inventory.action.committed` 在同一产品 adapter 重放，随后重算剧情选择；不进入场景、不伪造剧情选择历史、不重复入场/Cue。脚本/规则不能自行写 inspected/performed 系统证据。
+
+玩家投影仅返回当前持有且可见的物件；首次匹配的公开变体决定名称/描述/媒体。未知描述、他人持有物件、隐藏变体和回应正文不出现在 inventory API/UI 中；冻结本地包本身不是加密的防剧透容器。图标复用 `ui` 媒资 kind，详情复用 `ui/cg`，两者必须存在于实际冻结目录，Blob/hash/owner/Preview 物理绑定沿现有 resolver。显示图片不改变任何知识。切换分支时只有 resolver 与其 source session 已就绪才预加载，响应按 resolver 身份重新消费；取消的旧请求不签运行测量，释放中不新建 URL。
+
+背包菜单只在存在可用物件投影时出现；旧来源缺省隐藏。列表/详情、操作原因/回应、键盘按钮与移动布局复用玩家面板，打开面板暂停自动/快进推进。物件、知识和操作证据随现有 checkpoint/分支/备份/重映射/删除恢复；不建第二存档体系。真实图像技术验证使用原创固定 SVG 几何与隔离 Blob，不作为商业美术或自动生图能力证据。
 
 ### 5.2 其他模块
 

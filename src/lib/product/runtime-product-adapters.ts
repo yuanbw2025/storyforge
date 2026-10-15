@@ -7,6 +7,7 @@
  * this explicit composition root prevents product code from growing back into
  * the shared runtime engine.
  */
+import { applyAvgInventoryActionV1 } from '../avg/inventory-runtime'
 import { parseAdventureState, adventureNarrativeProjection, applyAdventureEvent, createInitialAdventureState } from '../adventure/runtime'
 import { adventureNarrativeActionCommandIdV1 } from '../adventure/command-identity'
 import { parseAvgPresentationState, applyAvgPresentationEvent, createInitialAvgPresentationState } from '../avg/runtime'
@@ -87,6 +88,13 @@ export function applyProductOwnedRuntimeEventV1(
   event: ProductRuntimeEvent,
   payload: ProductRuntimeJsonObjectV1,
 ): ProductRuntimeState | null {
+  if (event.type.startsWith('avg.inventory.')) {
+    if (event.type !== 'avg.inventory.action.committed' || event.actorKey !== 'player' || event.targetKey !== payload.actionKey) throw new Error('[avg-inventory] 事件身份无效')
+    applyAvgInventoryActionV1(state, payload)
+    refreshNarrativeChoices(state)
+    state.lastSequence = event.sequence
+    return state
+  }
   if (state.avgRules && event.type === 'presentation.beat.reached' && payload.snapshotKey != null) assertAvgSnapshotKeyV1(payload.snapshotKey)
   if (state.avgRules && event.type === 'narrative.choice.committed') {
     const plan = state.avgRules.systemPlan

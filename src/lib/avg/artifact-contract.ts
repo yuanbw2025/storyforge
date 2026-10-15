@@ -1,7 +1,7 @@
 import type { ProductBuildArtifactKindV1 } from '../types/product-production'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../product-production/hash'
 import { avgEnum, avgHash, avgKey, avgKeys, avgList, avgProtocolBody, avgRecord, avgText, avgUnique } from './protocol-validation'
-import { parseAvgSystemPlanV1, type AvgSystemPlanV1 } from './system-contract'
+import { parseAvgSystemPlan, type AvgSystemPlan } from './system-contract'
 
 /** Reserved role contracts do not register an AI call or assert professional competence. */
 export const AVG_PROFESSIONAL_OUTPUTS_V1 = [
@@ -57,7 +57,7 @@ export type AvgReviewIssuesV1 = Schema<'review-issues'> & {
   targetKey: string; observations: Array<'text' | 'visual' | 'audio' | 'interaction'>; unobserved: string[]
   issues: Array<{ issueKey: string; locationKey: string; evidence: string; severity: 'blocking' | 'major' | 'minor'; owner: 'content' | 'system' | 'media'; allowedChange: string; impact: string; recheck: string }>
 }
-export type AvgProfessionalArtifactV1 = AvgProductionPlanV1 | AvgSourceAuditV1 | AvgStoryBibleV1 | AvgCastBibleV1 | AvgRoutePlanV1 | AvgSceneScriptV1 | AvgDialoguePatchV1 | AvgReviewIssuesV1 | AvgSystemPlanV1
+export type AvgProfessionalArtifactV1 = AvgProductionPlanV1 | AvgSourceAuditV1 | AvgStoryBibleV1 | AvgCastBibleV1 | AvgRoutePlanV1 | AvgSceneScriptV1 | AvgDialoguePatchV1 | AvgReviewIssuesV1 | AvgSystemPlan
 
 function texts(value: unknown, label: string): string[] { return avgList(value, label, avgText, 1000) }
 function nullableKey(value: unknown, label: string): string | null { return value === null ? null : avgKey(value, label) }
@@ -68,9 +68,9 @@ export function parseAvgProfessionalArtifactV1(value: unknown): AvgProfessionalA
   const raw = avgProtocolBody(value)
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('[avg] artifact 必须为对象')
   const header = raw as Record<string, unknown>
+  if (header.schema === 'storyforge.avg.system-plan') return parseAvgSystemPlan(raw)
   if (header.version !== 1 || typeof header.schema !== 'string') throw new Error('[avg] artifact schema/version 无效')
   switch (header.schema) {
-    case 'storyforge.avg.system-plan': return parseAvgSystemPlanV1(raw)
     case 'storyforge.avg.production-plan': {
       const row = payloadRow(raw, header.schema, ['goal','requiredOutputKeys','dependencySuggestions','stopReasons'])
       const requiredOutputKeys = avgKeys(row.requiredOutputKeys, 'requiredOutputKeys')

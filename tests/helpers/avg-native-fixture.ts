@@ -14,10 +14,13 @@ import { fixture as carrierFixture } from './avg-carrier-fixture'
 import { createAvgDraftV1 } from '../../src/lib/avg/draft-service'
 import { createProductReleaseManifestV2, productReleaseIdentityHashV2 } from '../../src/lib/product-production/runtime-package'
 import { createProductReleaseLineageV1, productReleaseUidV1 } from '../../src/lib/product/source-contracts'
+import type { FrozenRuntimeMediaAssetV2 } from '../../src/lib/types'
+import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
+import { acceptProductBuildArtifact } from '../../src/lib/product-production/artifact-store'
+import type { AvgSystemPlan } from '../../src/lib/avg/system-contract'
 import type { AvgSceneScriptV1 } from '../../src/lib/avg/artifact-contract'
 
-export function avgNativeScripts(): AvgSceneScriptV1[] {
-  const plan = avgSystemFixture()
+export function avgNativeScripts(plan: AvgSystemPlan = avgSystemFixture()): AvgSceneScriptV1[] {
   return plan.scenes.map(scene => ({ schema: 'storyforge.avg.scene-script', version: 1, sceneKey: scene.key,
     lines: [{ lineKey: `line.${scene.key}`, beatKey: `line.${scene.key}`, speakerKey: scene.key === 'desk' ? 'keeper' : null,
       text: scene.key === 'desk' ? '封口仍在。' : scene.key === 'wait' ? '你把信封放回桌上。' : '保管员收下信封。', informationKeys: [], actionKeys: [] }],
@@ -30,12 +33,13 @@ export function avgNativePackage() {
 
 /** Controlled preparation of a real AVG Work/start/author receipt closure.
  * The final Preview freeze is fixture-only, not a claim of a live new planner. */
-export async function seedAvgNativePreview(systemPlan = avgSystemFixture()) {
+export async function seedAvgNativePreview(systemPlan: AvgSystemPlan = avgSystemFixture(), media: Array<{ asset: FrozenRuntimeMediaAssetV2; data: ArrayBuffer }> = []) {
   const s = await seedAvgAuthorSystem()
   const rule = s.plan.tasks[0]
-  const tasks = [rule, ...avgNativeScripts().map(script => ({ ...rule, taskKey: `script.${script.sceneKey}`, lane: 'content' as const,
+  const tasks = [rule, ...avgNativeScripts(systemPlan).map(script => ({ ...rule, taskKey: `script.${script.sceneKey}`, lane: 'content' as const,
     kind: 'avg-author-scene-script', outputArtifactKeys: [`avg.content.scene-script.${script.sceneKey}`],
     subjectLockKeys: [`avg.content.scene-script.${script.sceneKey}`], dependsOn: [rule.taskKey], requiredReceipts: [{ taskKey: rule.taskKey, receiptHash: null }], inputArtifactKeys: ['avg.system.plan'] }))]
+  for (const [index] of media.entries()) tasks.push({ ...rule, taskKey: `media.${index}`, lane: 'visual', kind: 'fixture-original-media', outputArtifactKeys: [`avg.media.${index}`], subjectLockKeys: [`avg.media.${index}`], dependsOn: [rule.taskKey], requiredReceipts: [{ taskKey: rule.taskKey, receiptHash: null }], inputArtifactKeys: ['avg.system.plan'] })
   const join = { ...rule, taskKey: 'fixture.join', lane: 'integration' as const, executionMode: 'deterministic' as const,
     outputArtifactKeys: ['fixture.join'], subjectLockKeys: ['fixture.join'], dependsOn: tasks.slice(1).map(task => task.taskKey),
     requiredReceipts: tasks.slice(1).map(task => ({ taskKey: task.taskKey, receiptHash: null })), inputArtifactKeys: tasks.map(task => task.outputArtifactKeys[0]) }
@@ -49,19 +53,23 @@ export async function seedAvgNativePreview(systemPlan = avgSystemFixture()) {
     if (!result.ok) throw new Error(JSON.stringify(result.result))
   }
   await adopt(rules)
-  for (const script of avgNativeScripts()) {
+  for (const script of avgNativeScripts(systemPlan)) {
     const latest = (await db.productBuilds.get(s.buildId))!
     await adopt(await stageAvgAuthorArtifactV1({ scope: s.scope, buildId: s.buildId, expectedBuildRevision: latest.stateRevision,
       controlEpoch: latest.controlEpoch, taskKey: `script.${script.sceneKey}`, artifactKey: `avg.content.scene-script.${script.sceneKey}`,
       kind: 'narrative', payload: script, declaration: '作者原创测试句；工程场景，不是文学/商业验收' }))
   }
+  for (const [index, { asset, data }] of media.entries()) {
+    const blob = await putMediaBlobObject({ scope: s.scope, data, mimeType: asset.mimeType, expectedContentHash: asset.contentHash, backend: 'indexeddb', sanitizedSvg: true })
+    await acceptProductBuildArtifact({ scope: s.scope, buildId: s.buildId, controlEpoch: build.controlEpoch, artifactKey: `avg.media.${index}`, kind: 'image', mediaKind: asset.kind, payload: { assetKey: asset.assetKey }, metadata: asset, inputHash: await hashProductProductionValueV2(asset), contentHash: blob.contentHash, blobObjectId: blob.id!, mimeType: blob.mimeType, byteSize: blob.byteSize, rights: { origin: 'original-fixture', license: asset.license } })
+  }
   const latest = (await db.productBuilds.get(s.buildId))!
   const compiled = await compileConfirmedAvgBuildV2({ scope: s.scope, buildId: s.buildId, expectedBuildRevision: latest.stateRevision,
     controlEpoch: latest.controlEpoch, product: { key: 'avg.author.fixture', title: '规则与舞台试验', description: '原创工程测试场景' },
-    stage: { version: 1, cues: [{ cueKey: 'tone.desk', beatKey: 'line.desk', type: 'set-tone', tone: 'night', phase: 'before', durationMs: 0, order: 0, easing: 'linear' }], assets: [] }, aspectRatio: '16:9' })
+    stage: { version: 1, cues: [{ cueKey: 'tone.desk', beatKey: 'line.desk', type: 'set-tone', tone: 'night', phase: 'before', durationMs: 0, order: 0, easing: 'linear' }], assets: media.map(m => m.asset) }, aspectRatio: '16:9' })
   const manifestHash = await hashProductProductionValueV2({ fixture: 'author-inputs', source: compiled.source })
   const preview = await createProductBuildPreviewManifestV2({ runtimePackage: compiled.runtimePackage,
-    productionKey: 'avg.author.fixture', buildNumber: latest.buildNumber, buildManifestHash: manifestHash })
+    productionKey: 'avg.author.fixture', buildNumber: latest.buildNumber, buildManifestHash: manifestHash, mediaBindings: media.map((m, index) => ({ assetKey: m.asset.assetKey, artifactKey: `avg.media.${index}`, blobContentHash: m.asset.blobContentHash })) })
   await db.productBuilds.update(s.buildId, { status: 'preview-ready', manifestHash, previewManifestJson: canonicalProductProductionJsonV2(preview), previewHash: preview.previewHash, packageHash: preview.packageHash })
   return { ...s, plan, preview, runtimePackage: compiled.runtimePackage }
 }

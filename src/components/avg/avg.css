@@ -240,3 +240,23 @@
 .avg-app .lf-sidebar nav button[aria-current]:hover{background:linear-gradient(95deg,var(--skin-selected, #cbdcc6),var(--skin-selected, #e0e5ce));color:var(--skin-selected-ink, #244842)}
 .avg-app .avg-phases [aria-current=step]{background:var(--skin-selected, #d9e6d1);border-color:var(--skin-border, #abc4a8);color:var(--skin-ink, #285748)}
 @media (min-width:901px) and (max-width:1200px){.avg-app .lf-with-steps .avg-consult{grid-template-columns:1fr}}
+
+/* Inventory shares the existing player panel and media resolver. */
+.avg-panel .avg-inventory { min-height: 0; overflow-y: auto; padding: 20px 22px 28px; display: grid; grid-template-columns: minmax(150px, .8fr) minmax(0, 1.5fr); gap: 24px; }
+.avg-inventory nav { display: flex; flex-direction: column; gap: 10px; }
+.avg-inventory nav button { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; text-align: left; padding: 14px; border: 1px solid #746347; border-radius: 8px; background: #211e18; color: #f3e9d6; }
+.avg-inventory nav button[aria-pressed="true"] { border-color: #e9c78b; background: #413326; }
+.avg-inventory nav img { width: 48px; height: 48px; object-fit: contain; grid-row: span 2; }
+.avg-inventory nav small { grid-column: 2; color: #bcae96; }
+.avg-inventory article { min-width: 0; padding: 8px 0; }
+.avg-panel .avg-inventory article h3 { color: #f3e7d1; margin: 0 0 16px; font-size: 22px; line-height: 1.4; }
+.avg-panel .avg-inventory article > small { color: #bcae96; }
+.avg-panel .avg-inventory article p { color: #d8dfe2; white-space: pre-wrap; line-height: 1.8; }
+.avg-inventory-detail-image { max-width: 100%; max-height: 260px; object-fit: contain; }
+.avg-inventory-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.avg-inventory-actions > div { display: grid; gap: 5px; }
+.avg-inventory-actions button { padding: 10px 16px; color: #f5e7cf; background: #3c3025; border: 1px solid #b69a6a; border-radius: 6px; }
+.avg-panel .avg-inventory-feedback { flex-shrink: 0; margin: 0; color: #f0dfc2; padding: 12px 22px; border-left: 2px solid #d2b27b; background: #302820; }
+.avg-inventory-actions small { color: #bcae96; }
+.avg-inventory button:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 600px) { .avg-panel .avg-inventory { padding: 16px; grid-template-columns: 1fr; gap: 14px; } .avg-inventory nav { flex-direction: row; overflow-x: auto; } .avg-inventory nav button { flex: 0 0 145px; } }

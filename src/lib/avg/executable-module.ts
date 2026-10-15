@@ -1,6 +1,6 @@
 import type { AnyProductRuntimePackage, AvgPresentationContentV1, FrozenNarrativeBeat, FrozenRuntimeMediaAssetV2, ProductMediaAsset } from '../types'
-import type { AvgSystemPlanV1 } from './system-contract'
-import { parseAvgSystemPlanV1 } from './system-contract'
+import type { AvgSystemPlan } from './system-contract'
+import { parseAvgSystemPlan } from './system-contract'
 import { buildAvgSystemGraphV1 } from './system-graph'
 import { parseAvgPresentationContent, validateAvgPresentation } from './runtime'
 import { freezeProductMediaAsset } from '../product-production/media-contracts'
@@ -8,13 +8,16 @@ import { canonicalProductProductionJsonV2 } from '../product-production/hash'
 import { avgEnum, avgHash, avgKey, avgList, avgNumber, avgProtocolBody, avgRecord, avgText, avgUnique } from './protocol-validation'
 
 export const AVG_EXECUTABLE_CAPABILITIES_V1 = ['narrative','presentation','avg.rules'] as const
+export function avgExecutableCapabilities(module: Pick<AvgRuntimeModuleV2, 'systemPlan'>): string[] {
+  return [...AVG_EXECUTABLE_CAPABILITIES_V1, ...(module.systemPlan.version === 2 ? ['avg.inventory'] : [])]
+}
 export type AvgExecutableStageV1 = AvgPresentationContentV1 & { assets: FrozenRuntimeMediaAssetV2[] }
 /** Native V2 module: V1's inert module/consumer codec is never reinterpreted.
  * The stage deliberately reuses the supported Cue protocol and renderer. */
 export interface AvgRuntimeModuleV2 {
   schema: 'storyforge.avg.runtime-module'
   version: 2
-  systemPlan: AvgSystemPlanV1
+  systemPlan: AvgSystemPlan
   lines: Array<{ lineKey: string; sceneKey: string; speakerKey: string | null; text: string; textRevision: number; locale: 'zh-CN' }>
   choices: Array<{ choiceKey: string; text: string }>
   aspectRatio: '16:9' | '4:3'
@@ -23,7 +26,7 @@ export interface AvgRuntimeModuleV2 {
 export interface AvgRuntimeRulesStateV1 {
   schema: 'storyforge.avg.rules-state'
   version: 1
-  systemPlan: AvgSystemPlanV1
+  systemPlan: AvgSystemPlan
 }
 export function assertAvgSnapshotKeyV1(value: unknown): string {
   const key = avgKey(value, 'snapshotKey')
@@ -33,7 +36,7 @@ export function assertAvgSnapshotKeyV1(value: unknown): string {
 export function parseAvgRuntimeRulesStateV1(value: unknown): AvgRuntimeRulesStateV1 {
   const row = avgRecord(value, ['schema','version','systemPlan'], 'AVG rules state')
   if (row.schema !== 'storyforge.avg.rules-state' || row.version !== 1) throw new Error('[avg] rules state schema/version 无效')
-  return { schema: 'storyforge.avg.rules-state', version: 1, systemPlan: parseAvgSystemPlanV1(row.systemPlan) }
+  return { schema: 'storyforge.avg.rules-state', version: 1, systemPlan: parseAvgSystemPlan(row.systemPlan) }
 }
 export function avgModuleBeatsV2(module: Pick<AvgRuntimeModuleV2, 'lines'>): FrozenNarrativeBeat[] {
   return module.lines.map((line, order) => ({ beatKey: line.lineKey, nodeKey: line.sceneKey, speakerKey: line.speakerKey,
@@ -83,6 +86,12 @@ export function parseAvgRuntimeModuleV2(value: unknown): AvgRuntimeModuleV2 {
     if (frozen.contentHash !== blobContentHash || canonicalProductProductionJsonV2({ ...frozen, blobContentHash }) !== canonicalProductProductionJsonV2(raw)) throw new Error('[avg] stage asset 字段/hash 无效')
     return { ...frozen, blobContentHash }
   }, 10_000), asset => asset.assetKey, 'stage.assets')
+  if (systemPlan.version === 2) {
+    for (const item of systemPlan.inventory.items) for (const view of [item, ...item.variants]) {
+      if (view.iconAssetKey && !assets.some(a => a.assetKey === view.iconAssetKey && a.kind === 'ui')
+        || view.detailAssetKey && !assets.some(a => a.assetKey === view.detailAssetKey && ['ui','cg'].includes(a.kind))) throw new Error('[avg-inventory] 物件媒体引用缺失或类型不匹配')
+    }
+  }
   const report = validateAvgPresentation({ content, beats: avgModuleBeatsV2({ lines }), assets })
   if (!report.valid) throw new Error(`[avg] stage 无效:${report.errors.join('；')}`)
   return { schema: 'storyforge.avg.runtime-module', version: 2, systemPlan, lines, choices,

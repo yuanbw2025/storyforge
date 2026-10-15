@@ -1762,6 +1762,7 @@ const PRODUCT_RUNTIME_SESSION_WRITERS = new Set([
   'src/lib/ai-town/runtime-commands.ts',
   'src/lib/adventure/runtime-commands.ts',
   'src/lib/avg/runtime-commands.ts',
+  'src/lib/avg/inventory-commands.ts',
   'src/lib/open-world/runtime-commands.ts',
 ])
 for (const file of walk('src')) {

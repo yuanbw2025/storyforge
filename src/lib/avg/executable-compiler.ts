@@ -5,7 +5,7 @@ import { canonicalProductProductionJsonV2 } from '../product-production/hash'
 import { parseProductRuntimePackageV2 } from '../product-production/runtime-package'
 import { avgKey, avgList, avgUnique, avgNumber, avgRecord } from './protocol-validation'
 import { buildAvgSystemGraphV1 } from './system-graph'
-import { avgModuleNarrativeV2, AVG_EXECUTABLE_CAPABILITIES_V1, parseAvgRuntimeModuleV2, type AvgExecutableStageV1 } from './executable-module'
+import { avgModuleNarrativeV2, avgExecutableCapabilities, parseAvgRuntimeModuleV2, type AvgExecutableStageV1 } from './executable-module'
 import { readAvgSystemPlanForCompilationV1 } from './author-artifacts'
 
 /** Deterministic assembly only. Rules own outcomes; scripts supply canonical
@@ -42,7 +42,7 @@ export function compileAvgExecutablePackageV2(input: {
       speakerKey: line.speakerKey, text: line.text, textRevision: avgNumber(revisions[script.sceneKey], 'script revision', 1, 1_000_000), locale: 'zh-CN' }))) })
   return parseProductRuntimePackageV2({ schema: 'storyforge.product-runtime-package', version: 2, productType: 'avg',
     definition: { productKey: avgKey(input.product.key, 'productKey'), title: input.product.title, description: input.product.description,
-      enabledCapabilities: [...AVG_EXECUTABLE_CAPABILITIES_V1], rulesetVersion: 1, initialVariables: compiled.initialVariables },
+      enabledCapabilities: avgExecutableCapabilities(module), rulesetVersion: compiled.plan.version, initialVariables: compiled.initialVariables },
     sourceWorld: input.sourceWorld, narrative: avgModuleNarrativeV2(module), modules: [module] })
 }
 

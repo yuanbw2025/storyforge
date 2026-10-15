@@ -2,12 +2,12 @@ import type { FrozenProductNarrativeV1, ProductNarrativeRuntimeState } from '../
 import { advanceFrozenNarrativeChoice, enterFrozenNarrativeNode } from '../product/runtime-core'
 import { hashProductProductionValueV2 } from '../product-production/hash'
 import { avgKey, avgList } from './protocol-validation'
-import { avgSystemStateSlotsV1, type AvgSystemPlanV1 } from './system-contract'
+import { avgSystemStateSlotsV1, type AvgSystemPlan } from './system-contract'
 import { assertAvgSystemStateV1, previewAvgSystemEffectsV1 } from './system-state'
 import { buildAvgSystemGraphV1 } from './system-graph'
 
 export interface CompiledAvgSystemV1 {
-  plan: AvgSystemPlanV1
+  plan: AvgSystemPlan
   planHash: string
   contentHash: string
   narrative: FrozenProductNarrativeV1

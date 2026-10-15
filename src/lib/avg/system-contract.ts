@@ -1,5 +1,6 @@
 import type { NarrativeCondition, NarrativeEffect, NarrativeScalar } from '../types'
 import { parseNarrativeCondition, parseNarrativeEffects } from '../narrative/blueprint'
+import { parseAvgInventoryPlanV1, avgInventoryStateSlotsV1, type AvgInventoryPlanV1 } from './inventory-contract'
 import { avgBoolean, avgEnum, avgKey, avgList, avgNumber, avgProtocolBody, avgRecord, avgText, avgUnique } from './protocol-validation'
 
 export type AvgVariableV1 = { key: string; optional: boolean } & (
@@ -23,6 +24,9 @@ export interface AvgSystemPlanV1 {
   actions: Array<{ key: string; fromSceneKey: string; toSceneKey: string; label: string; description: string; unavailableReason: string; visibleWhen: NarrativeCondition; enabledWhen: NarrativeCondition; effects: NarrativeEffect[] }>
 }
 
+export type AvgSystemPlanV2 = Omit<AvgSystemPlanV1, 'version'> & { version: 2; inventory: AvgInventoryPlanV1 }
+export type AvgSystemPlan = AvgSystemPlanV1 | AvgSystemPlanV2
+
 /** Paths are generated from semantic identities, never supplied by a model or UI. */
 function segment(value: unknown, label: string): string {
   const key = avgKey(value, label)
@@ -34,8 +38,9 @@ export function avgKnowledgePathV1(holderKey: string, factKey: string): string {
 export function avgRelationshipPathV1(characterKey: string, dimensionKey: string): string { return `avg.relationships.${segment(characterKey, 'characterKey')}.${segment(dimensionKey, 'dimensionKey')}` }
 
 export interface AvgStateSlotV1 { path: string; definition: AvgVariableV1 }
-export function avgSystemStateSlotsV1(plan: AvgSystemPlanV1): AvgStateSlotV1[] {
+export function avgSystemStateSlotsV1(plan: AvgSystemPlan): AvgStateSlotV1[] {
   return [
+    ...(plan.version === 2 ? avgInventoryStateSlotsV1(plan.inventory, plan.characters.map(c => c.key)) : []),
     ...plan.variables.map(definition => ({ path: avgVariablePathV1(definition.key), definition })),
     ...plan.knowledge.map(fact => ({ path: avgKnowledgePathV1(fact.holderKey, fact.factKey), definition: { key: fact.factKey, kind: 'boolean' as const, initial: fact.initial, optional: false } })),
     ...plan.relationships.map(relation => ({ path: avgRelationshipPathV1(relation.characterKey, relation.dimensionKey), definition: {
@@ -94,8 +99,16 @@ function effects(value: unknown): NarrativeEffect[] {
 
 /** Canonical rules codec only. It grants no AI/adoption or playable-package admission. */
 export function parseAvgSystemPlanV1(value: unknown): AvgSystemPlanV1 {
-  const row = avgRecord(avgProtocolBody(value), ['schema','version','key','title','storyMode','characters','variables','knowledge','relationships','entrySceneKey','scenes','actions'], 'system plan')
-  if (row.schema !== 'storyforge.avg.system-plan' || row.version !== 1) throw new Error('[avg-system] 未登记 system plan schema/version')
+  const plan = parseAvgSystemPlan(value)
+  if (plan.version !== 1) throw new Error('[avg-system] V1 不接受其他规则版本')
+  return plan
+}
+export function parseAvgSystemPlan(value: unknown): AvgSystemPlan {
+  const header = avgProtocolBody(value) as Record<string, unknown> | null
+  const version = header?.version
+  if (version !== 1 && version !== 2) throw new Error('[avg-system] 未登记 system plan schema/version')
+  const row = avgRecord(avgProtocolBody(value), ['schema','version','key','title','storyMode','characters','variables','knowledge','relationships','entrySceneKey','scenes','actions',...(version === 2 ? ['inventory'] : [])], 'system plan')
+  if (row.schema !== 'storyforge.avg.system-plan' || row.version !== version) throw new Error('[avg-system] 未登记 system plan schema/version')
   const characters = avgUnique(avgList(row.characters, 'characters', value => {
     const char = avgRecord(value, ['key','displayName'], 'character')
     const key = segment(char.key, 'characterKey')
@@ -128,7 +141,8 @@ export function parseAvgSystemPlanV1(value: unknown): AvgSystemPlanV1 {
       label: avgText(action.label, 'action.label', 1000), description: avgText(action.description, 'action.description', 2000, true), unavailableReason: avgText(action.unavailableReason, 'unavailableReason', 1000, true),
       visibleWhen: condition(action.visibleWhen), enabledWhen: condition(action.enabledWhen), effects: effects(action.effects) }
   }, 5000), entry => entry.key, 'actions')
-  const plan: AvgSystemPlanV1 = { schema: 'storyforge.avg.system-plan', version: 1, key: avgKey(row.key, 'planKey'), title: avgText(row.title, 'title', 200), storyMode: avgEnum(row.storyMode, ['linear','branching'] as const, 'storyMode'), characters, variables, knowledge, relationships, entrySceneKey: avgKey(row.entrySceneKey, 'entrySceneKey'), scenes, actions }
+  const base: AvgSystemPlanV1 = { schema: 'storyforge.avg.system-plan', version: 1, key: avgKey(row.key, 'planKey'), title: avgText(row.title, 'title', 200), storyMode: avgEnum(row.storyMode, ['linear','branching'] as const, 'storyMode'), characters, variables, knowledge, relationships, entrySceneKey: avgKey(row.entrySceneKey, 'entrySceneKey'), scenes, actions }
+  const plan: AvgSystemPlan = version === 1 ? base : { ...base, version: 2, inventory: parseAvgInventoryPlanV1(row.inventory, { condition, effects }) }
   const slots = new Map(avgSystemStateSlotsV1(plan).map(slot => [slot.path, slot.definition]))
   const sceneKeys = new Set(scenes.map(scene => scene.key))
   const actionKeys = new Set(actions.map(action => action.key))
@@ -149,6 +163,7 @@ export function parseAvgSystemPlanV1(value: unknown): AvgSystemPlanV1 {
     for (const effect of list) {
       const definition = slots.get(effect.path)
       if (!definition) throw new Error(`[avg-system] 效果写入未声明状态:${effect.path}`)
+      if (effect.path.startsWith('avg.inventory.actions.') || effect.path.startsWith('avg.inventory.instances.') && effect.path.endsWith('.inspected')) throw new Error('[avg-inventory] 检查/操作回执由确定性系统维护')
       if (effect.op === 'set') assertAvgSlotValueV1(definition, effect.value)
       else if (effect.op === 'unset') { if (!definition.optional) throw new Error('[avg-system] 必需状态不得 unset') }
       else if (definition.kind !== 'number' || (definition.integer && !Number.isSafeInteger(effect.value))) throw new Error('[avg-system] increment 类型不匹配')
@@ -158,6 +173,17 @@ export function parseAvgSystemPlanV1(value: unknown): AvgSystemPlanV1 {
   for (const action of actions) { validateCondition(action.visibleWhen); validateCondition(action.enabledWhen); validateEffects(action.effects) }
   for (const action of actions) if (Object.keys(action.enabledWhen).length && !action.unavailableReason.trim()) {
     throw new Error('[avg-system] 受限行动必须提供不可用原因')
+  }
+  if (plan.version === 2) {
+    const inventory = plan.inventory
+    for (const slot of avgInventoryStateSlotsV1(inventory, characters.map(c => c.key))) assertAvgSlotValueV1(slot.definition, slot.definition.initial)
+    for (const i of inventory.instances) if ((i.quantity === 0) !== (i.holderKey === '@none')) throw new Error('[avg-inventory] 数量/持有人不一致')
+    for (const item of inventory.items) { validateCondition(item.visibleWhen); item.variants.forEach(v => validateCondition(v.when)) }
+    for (const a of inventory.actions) {
+      if (a.sceneKeys.some(k => !sceneKeys.has(k))) throw new Error('[avg-inventory] 操作引用未知场景')
+      if (a.target && !(a.target.kind === 'character' ? characterKeys.has(a.target.key) : a.target.kind === 'scene' ? sceneKeys.has(a.target.key) : inventory.instances.some(i => i.key === a.target!.key))) throw new Error('[avg-inventory] 操作引用未知目标')
+      validateCondition(a.visibleWhen); validateCondition(a.enabledWhen); validateEffects(a.effects)
+    }
   }
   return plan
 }

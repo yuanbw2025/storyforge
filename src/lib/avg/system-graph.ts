@@ -2,12 +2,12 @@ import type { FrozenProductNarrativeV1 } from '../types'
 import { applyNarrativeEffects } from '../narrative/blueprint'
 import { validateNarrativeContentGraph } from '../product/narrative-content'
 import { canonicalProductProductionJsonV2 } from '../product-production/hash'
-import { avgSystemStateSlotsV1, parseAvgSystemPlanV1 } from './system-contract'
+import { avgSystemStateSlotsV1, parseAvgSystemPlan } from './system-contract'
 import { assertAvgSystemStateV1 } from './system-state'
 
 /** Pure, synchronous graph lowering shared by package codecs and the compiler. */
 export function buildAvgSystemGraphV1(value: unknown) {
-  const plan = parseAvgSystemPlanV1(value)
+  const plan = parseAvgSystemPlan(value)
   if (plan.scenes.filter(scene => scene.kind === 'entry').length !== 1
     || plan.scenes.find(scene => scene.key === plan.entrySceneKey)?.kind !== 'entry') throw new Error('[avg-system] 必须有唯一且匹配的入口场景')
   const narrative: FrozenProductNarrativeV1 = {

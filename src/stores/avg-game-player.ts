@@ -1,3 +1,5 @@
+import { commitAvgInventoryActionV1 } from '../lib/avg/runtime-api'
+import type { AvgInventoryPlanV1 } from '../lib/avg/inventory-contract'
 import { avgRuntimeStage } from '../lib/avg/executable-module'
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
@@ -16,6 +18,7 @@ interface AvgGamePlayerState {
   selectedSourceSessionId: number | null; speakerNames: Record<string, string>; loading: boolean; busy: boolean; error: string
   load(scope: WorkspaceScope, worldGroupId: number | null, openLibrary?: boolean): Promise<void>; select(id: number | null): Promise<void>
   start(releaseId: number, title?: string): Promise<number>; reachBeat(beatKey: string): Promise<void>; choose(choiceKey: string): Promise<void>
+  actOnItem(actionKey: string, target: AvgInventoryPlanV1['actions'][number]['target']): Promise<void>
   preloadMedia(maximumBytes?: number): Promise<{ urls: Record<string, string>; failures: Array<{ assetKey: string; reason: string }> }>
   recordMediaFailures(failures: Array<{ assetKey: string; reason: string }>): Promise<void>
   saveCheckpoint(name: string): Promise<void>; forkCheckpoint(id: number, title?: string): Promise<number>; remove(id: number): Promise<void>
@@ -113,6 +116,7 @@ export const useAvgGamePlayerStore = create<AvgGamePlayerState>((set, get) => {
     },
     reachBeat: async beatKey => act(async () => { const id = get().selectedSessionId; if (id == null || !get().scope) throw new Error('[avg] 请先开始游戏'); await assertSession(get().scope!, id); const base = await readProductRuntimeStateVersion(id); const nodeKey = get().runtimeState.narrative?.currentNodeKey ?? 'unknown'; const visit = get().runtimeState.narrative?.visitedNodeKeys.filter(key => key === nodeKey).length ?? 0; await reachAvgPresentationBeat({ sessionId: id, beatKey, commandId: `avg:beat:${id}:${nodeKey}:${visit}:${beatKey}`, baseSequence: base.sequence, baseStateHash: base.stateHash, snapshotKey: `node:${nodeKey}:visit:${visit}` }); await details(id) }),
     choose: async choiceKey => act(async () => { const id = get().selectedSessionId; if (id == null || !get().scope) throw new Error('[avg] 请先开始游戏'); await assertSession(get().scope!, id); const base = await readProductRuntimeStateVersion(id); await commitNarrativeChoice({ sessionId: id, choiceKey, commandId: `avg:choice:${id}:${crypto.randomUUID()}`, baseSequence: base.sequence, baseStateHash: base.stateHash }); await ensureAutomaticCheckpoint(id); await details(id) }),
+    actOnItem: async (actionKey, target) => act(async () => { const id = get().selectedSessionId; if (id == null || !get().scope) throw new Error('[avg] 请先开始游戏'); await assertSession(get().scope!, id); const base = await readProductRuntimeStateVersion(id); await commitAvgInventoryActionV1({ sessionId: id, actionKey, target, commandId: `avg:item:${id}:${crypto.randomUUID()}`, baseSequence: base.sequence, baseStateHash: base.stateHash }); await details(id) }),
     recordMediaFailures: async failures => {
       const id = get().selectedSessionId
       const manifest = get().selectedManifest

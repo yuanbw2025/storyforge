@@ -1,7 +1,7 @@
 import { parseAdventureContent } from '../adventure/runtime'
 import { parseAvgPresentationContent, validateAvgPresentation } from '../avg/runtime'
 import { parseAvgRuntimeModuleV1 } from '../avg/runtime-contract-v2'
-import { avgExecutableModule, avgModuleNarrativeV2, AVG_EXECUTABLE_CAPABILITIES_V1, parseAvgRuntimeModuleV2 } from '../avg/executable-module'
+import { avgExecutableModule, avgModuleNarrativeV2, avgExecutableCapabilities, parseAvgRuntimeModuleV2 } from '../avg/executable-module'
 import { buildAvgSystemGraphV1 } from '../avg/system-graph'
 import { freezeProductMediaAsset } from './media-contracts'
 import { parseOpenWorldEvolutionContent, validateOpenWorldEvolutionContent } from '../open-world/evolution-runtime'
@@ -495,8 +495,8 @@ export function parseProductRuntimePackageV2(value: string | unknown): ProductRu
   exactKeys(definition, ['productKey', 'title', 'description', 'enabledCapabilities', 'rulesetVersion', 'initialVariables'], 'definition')
   const enabledCapabilities = stringArray(definition.enabledCapabilities, 'enabledCapabilities', 20)
   const executable = modules.find(module => module.version === 2)
-  if (executable && definition.rulesetVersion !== 1) fail('AVG 规则版本未支持')
-  if (enabledCapabilities.join(',') !== (executable ? AVG_EXECUTABLE_CAPABILITIES_V1.join(',') : 'narrative')) fail('V2 启用了未登记能力')
+  if (executable && definition.rulesetVersion !== executable.systemPlan.version) fail('AVG 规则版本未支持')
+  if (enabledCapabilities.join(',') !== (executable ? avgExecutableCapabilities(executable).join(',') : 'narrative')) fail('V2 启用了未登记能力')
   const initialVariables = record(definition.initialVariables, 'initialVariables')
   canonicalProductProductionJsonV2(initialVariables)
   const sourceWorld = record(pkg.sourceWorld, 'sourceWorld')

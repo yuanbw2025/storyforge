@@ -1,8 +1,10 @@
+import { InventoryPanel } from '../avg/InventoryPanel'
+import { projectAvgInventoryV1 } from '../../lib/avg/inventory-runtime'
 import { avgExecutableModule, avgRuntimeStage } from '../../lib/avg/executable-module'
 import StageAudio from '../avg/StageAudio'
 import { avgCueTimeline } from '../../lib/avg/cue-timeline'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, BookOpen, ChevronRight, Eye, EyeOff, FastForward, Gauge, GitBranch, History, ImageOff, Maximize2, Play, Plus, RotateCcw, Save, Settings2, SkipForward, Trash2, Volume2, VolumeX, X } from 'lucide-react'
+import { ArrowLeft, BookOpen, BriefcaseBusiness, ChevronRight, Eye, EyeOff, FastForward, Gauge, GitBranch, History, ImageOff, Maximize2, Play, Plus, RotateCcw, Save, Settings2, SkipForward, Trash2, Volume2, VolumeX, X } from 'lucide-react'
 import type { FrozenNarrativeChoice, Project, WorkspaceScope } from '../../lib/types'
 import { useAvgGamePlayerStore } from '../../stores/avg-game-player'
 import { applyAvgCue } from '../../lib/avg/runtime'
@@ -13,7 +15,7 @@ import { useDialog } from '../shared/Dialog'
 import './player-roadshow.css'
 
 interface Preferences { muted: boolean; reducedMotion: boolean; images: boolean; auto: boolean; fast: boolean; textSpeed: number; volume: number }
-type PlayerPanel = 'history' | 'saves' | null
+type PlayerPanel = 'history' | 'saves' | 'inventory' | null
 const DEFAULTS: Preferences = { muted: false, reducedMotion: false, images: true, auto: false, fast: false, textSpeed: 35, volume: .8 }
 
 export async function loadAvgPlayerInitialSelectionV1(input: {
@@ -86,13 +88,12 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
     let cancelled = false
     const manifest = store.selectedManifest
     const session = store.sessions.find(row => row.id === store.selectedSessionId) ?? null
-    if (!manifest) { setMediaUrls({}); setMediaFailures([]); return }
+    if (!manifest || !store.selectedMediaResolver || store.selectedSourceSessionId !== store.selectedSessionId) { setMediaUrls({}); setMediaFailures([]); return }
     void store.preloadMedia().then(result => {
-      if (!cancelled) {
-        setMediaUrls(result.urls)
-        setMediaFailures(result.failures)
-        void store.recordMediaFailures(result.failures).catch(() => undefined)
-      }
+      if (cancelled) return
+      setMediaUrls(result.urls)
+      setMediaFailures(result.failures)
+      void store.recordMediaFailures(result.failures).catch(() => undefined)
       if (session?.productBuildId == null || avgRuntimeStage(manifest)!.assets.length === 0) return
       const verificationKey = `${session.productBuildId}:${avgRuntimeStage(manifest)!.assets
         .map(asset => `${asset.assetKey}:${asset.contentHash}`).sort().join('|')}`
@@ -116,8 +117,9 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
       })
     })
     return () => { cancelled = true }
-  }, [mediaCacheKey, props.scope.projectId, props.scope.worldId, props.scope.workId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mediaCacheKey, store.selectedMediaResolver, store.selectedSourceSessionId, props.scope.projectId, props.scope.worldId, props.scope.workId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const inventory = projectAvgInventoryV1(store.runtimeState)
   const narrative = store.runtimeState.narrative
   const presentation = store.runtimeState.presentation
   const node = narrative?.nodes.find(item => item.key === narrative.currentNodeKey)
@@ -192,16 +194,16 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
     setAfterIdentity(beatIdentity)
   }
   useEffect(() => {
-    if (!prefs.auto || !currentBeat || store.busy || !textComplete || finishingBeat || !cueWaitComplete) return
+    if (panel || !prefs.auto || !currentBeat || store.busy || !textComplete || finishingBeat || !cueWaitComplete) return
     const timer = window.setTimeout(() => advance(true), 650)
     return () => window.clearTimeout(timer)
-  }, [prefs.auto, currentBeat?.beatKey, store.busy, textComplete, finishingBeat, cueWaitComplete]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [panel, prefs.auto, currentBeat?.beatKey, store.busy, textComplete, finishingBeat, cueWaitComplete]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!prefs.fast || !currentBeat || store.busy || finishingBeat || !cueWaitComplete) return
+    if (panel || !prefs.fast || !currentBeat || store.busy || finishingBeat || !cueWaitComplete) return
     if (!presentation?.readBeatKeys.includes(currentBeat.beatKey)) { setPrefs(value => ({ ...value, fast: false })); return }
     const timer = window.setTimeout(() => advance(true), 80)
     return () => window.clearTimeout(timer)
-  }, [prefs.fast, beatIdentity, presentation?.readBeatKeys, store.busy, finishingBeat, cueWaitComplete]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [panel, prefs.fast, beatIdentity, presentation?.readBeatKeys, store.busy, finishingBeat, cueWaitComplete]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (!store.selectedSessionId || store.busy || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
@@ -270,6 +272,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
         <div className="avg-game-title"><small>VISUAL NOVEL</small><strong>{store.selectedManifest?.definition.title ?? 'AVG / Galgame'}</strong></div>
         <nav aria-label="游玩控制">
           <button className="avg-exit-game" title="退出游戏" aria-label="退出游戏" onClick={leaveToTitle}><ArrowLeft /><span>退出游戏</span></button>
+          {inventory.enabled && <button title="物品与证据" aria-label="物品与证据" onClick={() => setPanel(panel === 'inventory' ? null : 'inventory')}><BriefcaseBusiness /><span>物件</span></button>}
           <button title="历史" aria-label="历史" onClick={() => setPanel(panel === 'history' ? null : 'history')}><History /><span>历史</span></button>
           <button title="存读档" aria-label="存读档" onClick={() => setPanel(panel === 'saves' ? null : 'saves')}><Save /><span>存读档</span></button>
           <button title="快速存档" aria-label="快速存档" disabled={store.busy} onClick={() => void quickSave()}><Save /><span>快速存档</span></button>
@@ -321,9 +324,9 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
       </div>
 
       {panel && <div className="avg-panel-backdrop" onMouseDown={() => setPanel(null)}>
-        <section className="avg-panel" role="dialog" aria-modal="true" aria-label={panel === 'history' ? '历史回看' : '存读档'} onMouseDown={event => event.stopPropagation()}>
-          <header><div><small>{panel === 'history' ? 'DIALOGUE LOG' : 'SAVE & LOAD'}</small><h2>{panel === 'history' ? '历史回看' : '存档与时间线'}</h2></div><button aria-label="关闭" onClick={() => setPanel(null)}><X /></button></header>
-          {panel === 'history' ? <div className="avg-history">{historyBeats.map(beat => { const attributed = splitAttributedText(beat.text); return <article key={beat.beatKey}><strong>{beat.kind === 'dialogue' ? store.speakerNames[beat.speakerKey ?? ''] ?? attributed?.speaker ?? '未知角色' : attributed?.speaker ?? '旁白'}</strong><p>{attributed?.text ?? beat.text}</p></article> })}{historyBeats.length === 0 && <p>还没有可以回看的对白。</p>}</div> : <div className="avg-saves">
+        <section className="avg-panel" role="dialog" aria-modal="true" aria-label={panel === 'inventory' ? '物品与证据' : panel === 'history' ? '历史回看' : '存读档'} onMouseDown={event => event.stopPropagation()}>
+          <header><div><small>{panel === 'inventory' ? 'INVENTORY & EVIDENCE' : panel === 'history' ? 'DIALOGUE LOG' : 'SAVE & LOAD'}</small><h2>{panel === 'inventory' ? '物品与证据' : panel === 'history' ? '历史回看' : '存档与时间线'}</h2></div><button aria-label="关闭" onClick={() => setPanel(null)}><X /></button></header>
+          {panel === 'inventory' ? <InventoryPanel entries={inventory.entries} mediaUrls={prefs.images ? mediaUrls : {}} busy={store.busy} onAction={async action => { await store.actOnItem(action.key, action.target); const plan = store.runtimeState.avgRules?.systemPlan; return (plan?.version === 2 ? plan.inventory.actions.find(a => a.key === action.key)?.feedback : '') || '操作完成' }} /> : panel === 'history' ? <div className="avg-history">{historyBeats.map(beat => { const attributed = splitAttributedText(beat.text); return <article key={beat.beatKey}><strong>{beat.kind === 'dialogue' ? store.speakerNames[beat.speakerKey ?? ''] ?? attributed?.speaker ?? '未知角色' : attributed?.speaker ?? '旁白'}</strong><p>{attributed?.text ?? beat.text}</p></article> })}{historyBeats.length === 0 && <p>还没有可以回看的对白。</p>}</div> : <div className="avg-saves">
             <div className="avg-save-actions"><button disabled={store.busy} onClick={() => void quickSave()}><Save />保存当前进度</button></div>
             <h3>时间线检查点</h3>
             {store.checkpoints.map(checkpoint => <article key={checkpoint.id}><div><strong>{checkpoint.name}</strong><small>事件 #{checkpoint.throughSequence}</small></div><button disabled={store.busy} onClick={() => void run(async () => { await store.forkCheckpoint(checkpoint.id!); setPanel(null) })}><GitBranch />从这里开始新分支</button></article>)}
