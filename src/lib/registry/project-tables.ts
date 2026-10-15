@@ -1161,6 +1161,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'Agent 追加事件流：消息/计划/任务/候选/确认/错误；durableRunId 由 PROJECT_TABLES 统一重映射，未确认候选不属于 Canon' },
 
   { table: db.agentRuns, name: 'agentRuns', owner: 'project',
+    // portableWorldContextBindingsJson is opaque hash/UID evidence: row lifecycle
+    // carries it unchanged; it contains no local ID requiring reference remapping.
+    // portableRuntimeOriginJson likewise preserves historical bytes. Its original
+    // numeric identities are evidence only and MUST NOT be remapped or used as locators.
     domainOwner: {
       allowed: ['work', 'instance'], defaultOwner: 'work',
       locator: { kind: 'exclusive-work-instance', workField: 'workId', instanceField: 'productRuntimeSessionId' },

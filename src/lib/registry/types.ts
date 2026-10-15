@@ -708,6 +708,8 @@ export interface ContextResourceDescriptorV1 {
     /** Exact upper-product instance when the resource is derived from a
      * ProductRuntimeSession rather than mutable authoring Canon. */
     productRuntimeSessionId?: number
+    /** Stable instance actor POV. Membership and read authority are checked by the owning provider. */
+    runtimeActorKey?: string
     /** Immutable release locator when the resource comes from WorldReference. */
     worldReleaseId?: number
     worldReleaseHash?: string
@@ -741,6 +743,8 @@ export interface FrozenResourceScopeV1 {
    * provider fingerprint still freezes Release/sequence/state/visibility; an
    * id by itself never grants access to another WorkspaceScope. */
   productRuntimeSessionId?: number
+  /** Stable instance actor POV; this string never grants permission by itself. */
+  runtimeActorKey?: string
   /** Optional operation boundary. Providers may expose target-specific
    * aggregate resources without materializing one aggregate for every chapter. */
   chapterId?: number
@@ -820,6 +824,8 @@ export interface ContextResourceProviderV1 {
   read(input: ResourceReadInputV1): Promise<ContextResourceReadV1>
   readOriginal(input: OriginalEvidenceReadInputV1): Promise<OriginalEvidenceReadV1>
   fingerprint(scope: FrozenResourceScopeV1): Promise<string>
+  /** Optional owner-created immutable read view; executor MUST verify freshness before using its result. */
+  openReadSession?(scope: FrozenResourceScopeV1): Promise<{ provider: ContextResourceProviderV1; assertCurrent(): Promise<void> }>
 }
 
 export interface ContextAccessPolicyV1 {
@@ -979,6 +985,8 @@ export interface ContextSource {
   enabled?: (input: AssembleContextInput) => boolean | Promise<boolean>
   /** CTXG resource navigation extension. It is the only Provider registration point. */
   resources?: ContextResourceProviderV1
+  /** Instance role providers refuse broad reads without the kernel's exact resource allow-list. */
+  requiresResourceKeyAllowList?: boolean
   read: (input: AssembleContextInput) => Promise<string>
 }
 
