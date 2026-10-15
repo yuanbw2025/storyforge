@@ -68,6 +68,7 @@ async function authority(scope: WorkspaceScope, buildId: number, forCompilation 
     || briefRow.briefHash !== build.briefHash || production.currentBriefRevision !== build.briefRevision) throw new Error('[avg] Brief 授权已 stale')
   const brief = parseProductProductionBriefV3(briefRow.briefJson)
   if (brief.intent.productType !== 'avg' || await hash(brief) !== build.briefHash) throw new Error('[avg] Brief 内容/hash 不一致')
+  if (!forCompilation && brief.avgAssembly && Object.keys((JSON.parse(build.budgetLedgerJson) as { tasks?: object }).tasks ?? {}).length) throw new Error('[avg] 组装已开始执行；请保留旧版本并创建新 Build 修订')
   const sourcePlan = await Dexie.waitFor(parseProductProductionSourcePlanV1(briefRow))
   const confirmed = await Dexie.waitFor(parseConfirmedProductBriefV1({ row: briefRow, sourcePlan }))
   if (sourcePlan.productType !== 'avg' || sourcePlan.productInstanceKey !== production.productionKey
@@ -124,6 +125,12 @@ function authorTask(context: Awaited<ReturnType<typeof authority>>, taskKey: str
 }
 
 function assertSourceReferences(context: Awaited<ReturnType<typeof authority>>, payload: AuthorPayload) {
+  if (context.brief.avgAssembly) {
+    const expected = context.brief.avgAssembly
+    const same = (a: string[], b: string[]) => canonicalProductProductionJsonV2([...a].sort()) === canonicalProductProductionJsonV2([...b].sort())
+    if (payload.schema === 'storyforge.avg.system-plan' && !same(expected.sceneKeys, payload.scenes.map(scene => scene.key))
+      || payload.schema === 'storyforge.avg.author-stage' && !same(expected.mediaAssetKeys, payload.stage.assets.map(asset => asset.assetKey))) throw new Error('[avg] 场景或媒资目录超出冻结 Brief；请创建新 Build')
+  }
   const references = payload.schema === 'storyforge.avg.source-audit' ? payload.facts.flatMap(fact => fact.resourceKeys)
     : payload.schema === 'storyforge.avg.cast-bible' ? payload.characters.flatMap(character => character.sourceResourceKey ? [character.sourceResourceKey] : []) : []
   const frozen = new Set(context.sourcePlan.initialResourceKeys)

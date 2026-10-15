@@ -1,4 +1,5 @@
 import { parseChatAuthoringSettingsV1 } from '../character-interaction/authoring-contract'
+import { parseAvgAssemblyBriefV1, AVG_ASSEMBLY_GATE_IDS_V1 } from '../avg/assembly-contract'
 import { parseAvgSettingsForLegacyProduction } from '../avg/settings-v2'
 import type {
   TextAdventureContentRevisionV1,
@@ -273,6 +274,7 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     ...(Object.prototype.hasOwnProperty.call(row, 'characterChat') ? ['characterChat'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'avg') ? ['avg'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'avgRevision') ? ['avgRevision'] : []),
+    ...(Object.prototype.hasOwnProperty.call(row, 'avgAssembly') ? ['avgAssembly'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'ttrpg') ? ['ttrpg'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'aiTown') ? ['aiTown'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'textAdventure') ? ['textAdventure'] : []),
@@ -309,6 +311,7 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
   }
   const parsed: ProductProductionBriefV3 = {
     ...(avgRevision ? { avgRevision } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'avgAssembly') ? { avgAssembly: parseAvgAssemblyBriefV1(row.avgAssembly) } : {}),
     ...(row.characterChat ? { characterChat: parseChatAuthoringSettingsV1(row.characterChat) } : {}),
     ...(row.avg ? { avg: parseAvgSettingsForLegacyProduction(row.avg) } : {}),
     schema: 'storyforge.product-production-brief', version: 3,
@@ -361,6 +364,12 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     ...(Object.prototype.hasOwnProperty.call(row, 'evolution')
       ? { evolution: parseEvolutionImpact(row.evolution) }
       : {}),
+  }
+  if (parsed.avgAssembly && (productType !== 'avg' || parsed.avgRevision || parsed.qualityProfile === 'commercial-candidate'
+    || parsed.capabilityRequirements.length || parsed.productionBudget.maximumModelCalls !== 0 || parsed.productionBudget.maximumMediaCalls !== 0
+    || parsed.productionBudget.maximumOutputTokens !== 0 || parsed.productionBudget.maximumCostUsd !== 0
+    || canonicalProductProductionJsonV2([...parsed.completionContract.requiredGateIds].sort()) !== canonicalProductProductionJsonV2([...AVG_ASSEMBLY_GATE_IDS_V1].sort()))) {
+    fail('AVG 作者组装必须使用独立零 Provider 预算、准确技术门与 prototype/internal 质量边界')
   }
   if (parsed.intent.protagonistRefs.some(ref => !parsed.source.startingPoint.protagonistRefs.includes(ref))) {
     fail('intent.protagonistRefs 必须来自 startingPoint 候选')

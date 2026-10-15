@@ -1,6 +1,6 @@
 # AVG 工作包开工卡
 
-> L2 · 版本：1.11.0 · 生效：2026-10-15 · 产品：AVG/Galgame · 上位条目：E-AVG-01。
+> L2 · 版本：1.12.0 · 生效：2026-10-15 · 产品：AVG/Galgame · 上位条目：E-AVG-01。
 > [产品契约](../products/AVG.md)裁决边界，[实施计划](AVG-IMPLEMENTATION-PLAN.md)裁决顺序。AVG-00 已设计交付，AVG-BASE-00A/00B 已分支验收，当前按作者指令先做系统/表现框架，02A1 确定性内核施工中，专业剧情生产后置；详见实施计划的当前状态。
 
 ## 0 所有代码包的共同交付约束
@@ -104,13 +104,13 @@
 
 ### 6.1 当前内核增量证据
 
-分支 `feat/avg-system-presentation-framework-20261015`；实现位置为 `src/lib/avg/system-contract.ts` / `system-compiler.ts`。只读 headless 编译/模拟，不启用新玩家、专业 AI 或正式 system-plan 采用。当前定向 5 文件 / 52 测试通过（内核 10 项）；architecture、required-tables、ai-manual、source-reachability、文档、定向 lint、TypeScript、build、diff 检查通过。完整 CI 尚待共享槽位验证，当前不标记全包验收。两套工程配置均无商业素材/文学评测声明。整个 02A1 仍施工中，不能将内核通过写成全部正式生产已完成。
+分支 `feat/avg-system-presentation-framework-20261015`；实现位置为 `src/lib/avg/system-contract.ts` / `system-compiler.ts`。只读 headless 编译/模拟，不启用新玩家、专业 AI 或正式 system-plan 采用。当前定向 5 文件 / 52 测试通过（内核 10 项）；architecture、required-tables、ai-manual、source-reachability、文档、定向 lint、TypeScript、build、diff 检查通过。冻结内核 d99d56c5 的完整串行 CI 已通过（795 文件 / 4,393 测试，exit 0）；后继采用/玩家/工作台各自验证，当前不标记全包验收。两套工程配置均无商业素材/文学评测声明。整个 02A1 仍施工中，不能将内核通过写成全部正式生产已完成。
 
 ### 6.2 当前作者规则接缝
 
 内核 `d99d56c5` / PR #143 之后，`feat/avg-rules-adoption-20261015` 接 `avg.system.plan` 的 `product-module` 作者候选、实际确认/校验证据和正式编译读取。只复用既有三注册表写口/表与命令；不启用专业设计 AI。规则候选@2 与其校验证据由系统生成/重验，旧工件候选@1 不变；pending 不得作为正式编译输入，修订失效闭包/备份/恢复/删除均验证。
 
-定向 6 文件 / 57 测试及隔离 Chromium 7 条 E2E 通过；最终治理、类型、lint、构建、文档/统计和 diff 检查通过；完整 CI 待串行验证。此增量验证受控冻结 human-import 任务的 API 接缝，尚无新作者工作台或实际生产 planner；只有后续联合编译/播放器接入后才能完成整条用户路径。02A1 工程完成门为规则/模拟/作者采用及编译读取，待完整 CI 后独立验收；专业设计岗位后置，02A2/播放器不是本包的循环前置。
+定向 6 文件 / 57 测试及隔离 Chromium 7 条 E2E 通过；最终治理、类型、lint、构建、文档/统计和 diff 检查通过；冻结提交 00222d28 的完整串行 CI 已通过（796 文件 / 4,398 测试，exit 0），PR #145 保持 Draft。此增量验证受控冻结 human-import 任务的 API 接缝，尚无新作者工作台或实际生产 planner；只有后续联合编译/播放器接入后才能完成整条用户路径。02A1 工程完成门为规则/模拟/作者采用及编译读取，待完整 CI 后独立验收；专业设计岗位后置，02A2/播放器不是本包的循环前置。
 
 ### 6.3 当前原生编译/玩家接缝
 
@@ -177,7 +177,7 @@
 
 ## 11 AVG-05 · 三线工作台与局部返修
 
-- **状态/前置**：聚合包；AVG-05A 已开工，已有 portable 编辑草稿、实际媒体解码导入、演出候选/确认/失效及只读已采用编译接缝；planner、根 Run/Preview 与可操作工作台继续施工，不标整包完成。AVG-05B 等 AVG-PILOT-01B。作者生产/修订，AVG Work owner。
+- **状态/前置**：聚合包；AVG-05A 已开工，已有 portable 编辑草稿、真实媒体导入和逐项作者采用；原生固定 planner/确定性 executor/真实根回执/Preview V2 与显式实验工作台已接通并完成定向 UI 验证，完整 CI/正式 Release 与整体门继续核对，不标整包完成。AVG-05B 等 AVG-PILOT-01B。作者生产/修订，AVG Work owner。
 
 | 单元 | 限定输出 | 独立完成门 |
 |---|---|---|
@@ -189,6 +189,14 @@
 - **体验岗位落点**：AVG-05B 登记 `avg-experience-reviewer / avg.experience-review.v1`，只读取准确 Build/实际路径与 `avg.review-inputs`，写 `avg.review.experience.<buildKey>` 问题工件；不写原剧情/规则/媒体、不自报人类试玩。05A/Pilot 的人类问题可先走同一合法问题入口，不要求该后置 Skill 已实现。
 - **正反例**：改句→旧 voice stale、换表情→家族/合成重验且背景保留、改规则→路线/consumer 重验；拒绝锁定遮盖 stale、复制父 Build 质量/玩家回执；刷新继续候选/repair，旧 release/档不变，跨线隔离 E2E。
 - **非范围**：不另建第四创意生产线、不自动发布、不过早扩完整作；不能只给问题单而未接实际返修消费。
+
+### 11.1 当前 AVG-05A 原生工作台增量
+
+`feat/avg-production-assembly-20261015` 依赖 b73afe34 / PR #151，复用正式 Production/Brief/SourcePlan/开始命令、固定 human-import 任务、候选/adopt、调度器与会话。新增 assembly Brief 限定场景/媒体域、父包、零 provider 预算和严格 DAG；实际任务产生 runtime.package/媒体/技术 QA，根/子终态回执齐备才生成 Preview。无新表/迁移/专业 AI/模型调用，世界只读。
+
+作者可编辑固定文本/变量/Cue，实际解码导入、配置物件图/演出/准确台词 voice，独立查看/确认每个候选后组装试玩。换图创建新 Build、旧来源和会话保留；失败后明确停止/重建、刷新继续候选/执行。原生包变化 pin-old-save；修订时旧 Plan 按其自己的已授权 Brief 读取。开始执行前原子锁定作者输入；shared mediaRef 生命周期检查保留所有仍引用的上传。
+
+native 定向 8 项与累计 AVG/媒体 121 项通过；真实工作台隔离浏览器 2 条通过，覆盖导入/确认/真实根回执、voice ended/物件图与出示、快速存档/刷新、新图修订留旧档、另一线性配置及实际色调。旧 V1/作者导入/声音浏览器另 14 条通过，工作台/换图舞台/线性截图已查看；治理/类型/lint/build/包体与文档/统计通过。系统与视听联动已有技术证据，共享调用回归与完整 CI 继续单列；正式 Release、cache、设备/可访问性、完整质量/问题单等门仍待交付，不以程序校准图/音签商业艺术或专业配音。
 
 ## 12 AVG-PILOT-01 · 第一场完整戏
 

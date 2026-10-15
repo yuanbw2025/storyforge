@@ -293,20 +293,22 @@ export async function discardUnreferencedMediaBlobObjectsV1(input: {
   const scope = await resolveScope({ scope: input.scope })
   const ids = [...new Set(input.blobObjectIds.filter(id => Number.isInteger(id) && id > 0))]
   const deleted: number[] = []
+  const referenceSpecs = registeredMediaReferenceSpecs()
   for (const id of ids) {
     const claimed = await db.transaction(
       'rw',
-      [db.mediaBlobObjects, db.productBuildArtifacts, db.productMediaBlobs],
+      [db.mediaBlobObjects, db.productBuildArtifacts, db.productMediaBlobs, ...referenceSpecs.map(spec=>spec.table)],
       async () => {
         const current = await db.mediaBlobObjects.get(id)
         if (!current || !await assertRecordInScope(scope, 'mediaBlobObjects', current, { owner: 'work' })
           || current.storageState === 'pending-write' || (current.leaseExpiresAt ?? 0) > Date.now()) return null
-        const [artifactRef, productRef] = await Promise.all([
+        const [artifactRef, productRef, ...registeredRefs] = await Promise.all([
           db.productBuildArtifacts.where('blobObjectId').equals(id)
             .filter(row => row.status === 'accepted' || row.status === 'carried-forward').first(),
           db.productMediaBlobs.where('blobObjectId').equals(id).first(),
+          ...referenceSpecs.map(spec=>spec.table.where(spec.mediaRef!.field).equals(id).first()),
         ])
-        if (artifactRef || productRef) return null
+        if (artifactRef || productRef || registeredRefs.some(Boolean)) return null
         await db.mediaBlobObjects.update(id, { storageState: 'pending-delete', updatedAt: Date.now() })
         return current
       },

@@ -154,6 +154,10 @@
 .avg-stage[data-tone="cold"] .avg-stage-scene { filter: saturate(.82) hue-rotate(8deg); }
 .avg-stage[data-tone="warm"] .avg-stage-scene { filter: sepia(.18) saturate(1.12); }
 .avg-stage[data-tone="dark"] .avg-stage-scene { filter: brightness(.68) contrast(1.08); }
+.avg-playing .avg-stage[data-tone="night"] { background: radial-gradient(circle at center,#15243b,#03060d 72%); }
+.avg-playing .avg-stage[data-tone="day"] { background: radial-gradient(circle at center,#c7c4ac,#637783 82%); }
+.avg-stage[data-tone="night"] .avg-stage-scene { filter: brightness(.72) saturate(.82) hue-rotate(8deg); }
+.avg-stage[data-tone="day"] .avg-stage-scene { filter: brightness(1.08) saturate(1.04); }
 .avg-mask { position: absolute; z-index: 11; inset: 0; background: radial-gradient(circle at center,transparent 42%,rgba(0,0,0,.82)); pointer-events: none; }
 .avg-flash { position: absolute; z-index: 21; inset: 0; background: #fff; animation: avg-flash .55s ease-out both; pointer-events: none; }
 .avg-effect-transition .avg-background { animation: avg-crossfade .65s ease both; }

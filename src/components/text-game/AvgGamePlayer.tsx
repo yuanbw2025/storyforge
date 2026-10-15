@@ -61,7 +61,7 @@ function currentBrowserEnvironment() {
   }
 }
 
-export default function AvgGamePlayer(props: { project: Project; scope: WorkspaceScope; worldGroupId: number | null; initialSessionId?: number | null; initialPanel?: PlayerPanel }) {
+export default function AvgGamePlayer(props: { project: Project; scope: WorkspaceScope; worldGroupId: number | null; initialSessionId?: number | null; initialPanel?: PlayerPanel; onReturnToWorkbench?:()=>void }) {
   const store = useAvgGamePlayerStore()
   const dialog = useDialog()
   const [prefs, setPrefs] = useState(loadAvgReaderPreferencesV1)
@@ -251,10 +251,16 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
     if (document.fullscreenElement) void document.exitFullscreen()
     void store.select(null)
   }
+  const returnToWorkbench = () => {
+    setPrefs(value=>({...value,auto:false,fast:false}))
+    if(document.fullscreenElement)void document.exitFullscreen()
+    props.onReturnToWorkbench?.()
+  }
 
   if (!store.selectedSessionId) return <div className="avg-player avg-title-screen" data-testid="avg-player">
     <div className="avg-title-atmosphere" aria-hidden="true" />
     <main className="avg-title-content">
+      {props.onReturnToWorkbench&&<button type="button" className="textgame-catalog-back" onClick={returnToWorkbench}><ArrowLeft/>返回制作台</button>}
       <span className="avg-title-kicker">STORYFORGE VISUAL NOVEL</span>
       <h2>{catalogRelease ? '作品详情' : 'AVG 游戏库'}</h2>
       <p>{catalogRelease ? '确认故事、美术与演出规模，然后从标题页正式开演。' : '先选择作品，再进入独立标题页开始或继续；舞台、立绘和对白不会提前挤进游戏目录。'}</p>
@@ -285,6 +291,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
       <header className="avg-toolbar">
         <div className="avg-game-title"><small>VISUAL NOVEL</small><strong>{store.selectedManifest?.definition.title ?? 'AVG / Galgame'}</strong></div>
         <nav aria-label="游玩控制">
+          {props.onReturnToWorkbench&&<button title="返回制作台" aria-label="返回制作台" onClick={returnToWorkbench}><ArrowLeft/><span>制作台</span></button>}
           <button className="avg-exit-game" title="退出游戏" aria-label="退出游戏" onClick={leaveToTitle}><ArrowLeft /><span>退出游戏</span></button>
           {inventory.enabled && <button title="物品与证据" aria-label="物品与证据" onClick={() => setPanel(panel === 'inventory' ? null : 'inventory')}><BriefcaseBusiness /><span>物件</span></button>}
           <button title="历史" aria-label="历史" onClick={() => setPanel(panel === 'history' ? null : 'history')}><History /><span>历史</span></button>
