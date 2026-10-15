@@ -1088,6 +1088,9 @@ export interface ProductNarrativeRuntimeState {
 }
 
 export interface ProductRuntimeState {
+  /** Omitted for legacy sources so their serialized state/hash is unchanged. */
+  avgReading?: import('../avg/reading-contract').AvgReadingRuntimeStateV1;
+  avgRules?: import('../avg/executable-module').AvgRuntimeRulesStateV1;
   version: 1;
   clock: number;
   entities: Record<string, RuntimeEntityState>;
@@ -1229,6 +1232,9 @@ export const PRODUCT_RUNTIME_EVENT_TYPES = [
   "adventure.narrative.synced",
   "adventure.action.committed",
   "adventure.action.rejected",
+  "avg.reading.voice.started",
+  "avg.reading.voice.observed",
+  "avg.inventory.action.committed",
   "presentation.beat.reached",
   "presentation.media.failed",
   "open-world-evolution.turn.started",

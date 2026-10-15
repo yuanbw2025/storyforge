@@ -1,3 +1,4 @@
+import { deriveAvgAssemblyRecoveryBaseV1 } from '../avg/assembly-recovery'
 import { canReviseTextContentBuildV1, createTextContentRevisionPlanV1 } from './text-content-revision'
 import Dexie from 'dexie'
 import { db } from '../db/schema'
@@ -85,6 +86,7 @@ import {
   type TextOpenWorldCreatorMediaPreparationV1,
 } from '../open-world/creator-media'
 import type { TextOpenWorldCreatorMediaAuthorizationV1 } from '../open-world/creator-media-contract'
+import { applyAvgAuthorArtifactAdoptionV1, AvgAuthorArtifactErrorV1 } from '../avg/author-artifacts'
 
 export type ProductProductionErrorCodeV1 =
   | 'production-not-found'
@@ -107,6 +109,7 @@ export type ProductProductionErrorCodeV1 =
   | 'preview-stale'
   | 'publication-intent-stale'
   | 'media-revision-invalid'
+  | 'avg-artifact-invalid'
   | 'publication-transaction-failed'
 
 export interface ProductProductionCommandReceiptV1 {
@@ -1038,6 +1041,14 @@ async function applyCommand(input: {
     reject('production-state-conflict', `Production revision 已从 ${command.expectedStateRevision} 变为 ${production.stateRevision}`)
   }
 
+  if (command.type === 'adopt-avg-artifact') {
+    try { return await applyAvgAuthorArtifactAdoptionV1({ scope, production, command, now }) }
+    catch (cause) {
+      if (cause instanceof AvgAuthorArtifactErrorV1) reject('avg-artifact-invalid', cause.message)
+      throw cause
+    }
+  }
+
   if (command.type === 'create-intent') {
     if (command.productType !== production.productType) {
       reject('production-state-conflict', 'productionKey 已绑定其他产品，不能跨产品复用')
@@ -1913,9 +1924,12 @@ async function applyCommand(input: {
     if (build.status === 'released' || production.status === 'released') reject('invalid-state-transition', '已发布 Build 不允许 stop 回滚')
     const controlEpoch = production.controlEpoch + 1
     const stateRevision = production.stateRevision + 1
+    const stoppedBrief = production.productType === 'avg' ? await db.productProductionBriefs.where('[productionId+revision]').equals([production.id,build.briefRevision]).first() : null
+    const nativeFailure = stoppedBrief && parseProductProductionBriefV3(stoppedBrief.briefJson).avgAssembly && build.failureJson !== '{}'
+      ? { priorFailureJson: build.failureJson } : {}
     await db.productBuilds.update(build.id, {
       status: 'cancelled', resumeState: null, controlEpoch, stateRevision: build.stateRevision + 1,
-      failureJson: safeJson({ code: 'user-stopped', retention: command.retention }), completedAt: now, updatedAt: now,
+      failureJson: safeJson({ code: 'user-stopped', retention: command.retention, ...nativeFailure }), completedAt: now, updatedAt: now,
     })
     if (command.retention === 'discard-unreleased') {
       await db.productBuildArtifacts.where('buildId').equals(build.id).filter(row => row.status !== 'orphaned').modify({ status: 'orphaned', updatedAt: now })
@@ -2664,9 +2678,25 @@ async function applyCommand(input: {
     && affectedLanes.includes('content') && affectedLanes.includes('visual')
   const runtimeCopyRecovery = recoveryBase != null
     && affectedLanes.length === 1 && affectedLanes[0] === 'runtime'
-  const recoveryEvolution = budgetRecovery || planUpgradeRecovery || visualContractRecovery
+  let nativeRecovery = false
+  if (recoveryBase && production.productType === 'avg'
+    && canonicalProductProductionJsonV2([...affectedLanes].sort()) === canonicalProductProductionJsonV2(['audio','content','product','visual'])) {
+    const base = await db.productBuilds.where('[productionId+buildNumber]').equals([production.id,recoveryBase.buildNumber]).first()
+    const briefRow = base ? await db.productProductionBriefs.where('[productionId+revision]').equals([production.id,base.briefRevision]).first() : null
+    if (!base || !briefRow || production.currentBuildNumber !== base.buildNumber || production.currentBriefRevision !== base.briefRevision
+      || briefRow.status !== 'authorized' || briefRow.authorizedAt !== base.authorizedAt
+      || !await assertRecordInScope(scope,'productBuilds',base,{owner:'work'}) || !await assertRecordInScope(scope,'productProductionBriefs',briefRow,{owner:'work'})) reject('source-stale','AVG 恢复基线已变化')
+    try {
+      nativeRecovery = canonicalProductProductionJsonV2(await deriveAvgAssemblyRecoveryBaseV1(base,parseProductProductionBriefV3(briefRow.briefJson))) === canonicalProductProductionJsonV2(recoveryBase)
+    } catch { reject('source-stale','AVG 恢复基线缺少准确的零 Provider 来源证据') }
+    if (!nativeRecovery) reject('source-stale','AVG 恢复请求与当前冻结基线不一致')
+  }
+  const recoveryEvolution = nativeRecovery || budgetRecovery || planUpgradeRecovery || visualContractRecovery
     || preMediaContentRecovery || runtimeCopyRecovery
-  if (recoveryEvolution) {
+  if (nativeRecovery) {
+    // Native recovery keeps every old byte/receipt and requires a new start.
+  } else if (recoveryEvolution) {
+    if (!recoveryBase) reject('source-stale', '恢复版本缺少冻结基线')
     if (production.productType !== 'text-adventure'
       || production.currentBuildNumber !== recoveryBase.buildNumber) {
       reject('invalid-state-transition', '只有当前文字冒险恢复 Build 可以升级生产预算、执行计划或视觉合同')
@@ -2752,7 +2782,7 @@ async function applyCommand(input: {
     generationPolicy = original
   }
   const publicSemanticsAffected = contentAffected || runtimeCopyRecovery
-  const budgetFloor = recoveryEvolution ? textAdventureProductionBudgetFloorV1(priorBrief) : null
+  const budgetFloor = recoveryEvolution && production.productType === 'text-adventure' ? textAdventureProductionBudgetFloorV1(priorBrief) : null
   if (budgetRecovery && budgetFloor
     && !isTextAdventureBuildLifetimeBudgetExhaustedV1(
       (await db.productBuilds.where('[productionId+buildNumber]')
@@ -2854,6 +2884,7 @@ async function executeTransaction(input: {
     db.productReleases,
     db.productProductions, db.productProductionBriefs, db.productProductionCommands,
     db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects, db.productQualityGateReceipts,
+    ...(command.type === 'adopt-avg-artifact' ? [db.avgDraftMedia] : []),
     db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, db.agentRunArtifacts,
     ...(command.type === 'authorize-text-open-world-creator-start'
       // Creator source adapters expose only opaque transaction capabilities;

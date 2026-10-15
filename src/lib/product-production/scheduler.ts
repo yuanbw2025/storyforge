@@ -1,3 +1,5 @@
+import { parseProductRuntimePackage } from './runtime-package'
+import { createProductBuildPreviewManifestV2 } from './preview-manifest'
 import { isTextRevisionRetainedVisualTaskV1, textRevisionRecoveryPreservesVisualContractV1, validateTextContentRevisionAuthorityV1, verifiedTextRevisionVisualCarryTaskKeysV1 } from './text-content-revision-authority'
 import { verifiedHumanImportCarryProofsV1 } from './text-adventure-artifact-store'
 import { isTextAdventureClockCapacityRevisionV1 } from './clock-capacity-revision'
@@ -49,6 +51,7 @@ import {
   carryForwardProductBuildArtifactsToEpochV1,
 } from './artifact-store'
 import { parseProductBuildQualityReportV1 } from './adoption'
+import { avgRuntimeStage } from '../avg/executable-module'
 import { createProductBuildCompatibilityReportV1 } from './compatibility'
 import { parseProductProductionBriefV3 } from './contracts'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
@@ -63,7 +66,6 @@ import { createProductBuildPreviewManifestV1 } from './preview-manifest'
 import { createProductBuildRootTerminalReceiptV1 } from './receipts'
 import { readMediaBlobObjectData } from './media-blob-store'
 import {
-  parseProductRuntimePackageV1,
   productProductionTerminalArtifactKeysV1,
 } from './runtime-package'
 import { parseTextOpenWorldModulesV1 } from '../open-world/modules'
@@ -2278,7 +2280,7 @@ async function ensurePlan(input: {
   // that a deterministic failure can invalidate a carried parent artifact.
   // Re-applying parent reuse here would resurrect the exact stale artifact
   // that the recovery closure just proved unsuitable.
-  if (!state.creatorContracts && !input.suppliedPlan && !currentMediaRevisionPlan
+  if (!state.creatorContracts && !state.brief.avgAssembly && !input.suppliedPlan && !currentMediaRevisionPlan
     && currentPlan == null && state.build.planRevision === 0) {
     const reuse = await applyCrossBuildEvolutionReuseV1({
       scope: input.scope, build: state.build, brief: state.brief, plan,
@@ -5519,7 +5521,8 @@ async function compileTerminalBuild(input: {
   const packageArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.runtimePackage)
   const qualityArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.qualityReport)
   if (!packageArtifact || !qualityArtifact) throw new Error('[product-production-scheduler] terminal package/quality Artifact 缺失')
-  const runtimePackage = parseProductRuntimePackageV1(packageArtifact.payloadJson)
+  const runtimePackage = parseProductRuntimePackage(packageArtifact.payloadJson)
+  if (runtimePackage.version === 2 && !input.brief.avgAssembly) throw new Error('[avg] 原生终态必须来自冻结的 AVG 组装计划')
   const packageHash = await hashProductProductionValueV2(runtimePackage)
   if (packageArtifact.contentHash !== packageHash) throw new Error('[product-production-scheduler] package Artifact hash 不一致')
   let previousPackage: Parameters<typeof createProductBuildCompatibilityReportV1>[0]['previous'] = null
@@ -5561,7 +5564,7 @@ async function compileTerminalBuild(input: {
         throw new Error('[product-production-scheduler] compatibility parent package Artifact 缺失')
       }
       const parentArtifact = parentArtifacts[0]
-      const parentRuntimePackage = parseProductRuntimePackageV1(parentArtifact.payloadJson)
+      const parentRuntimePackage = parseProductRuntimePackage(parentArtifact.payloadJson)
       if (await hashProductProductionValueV2(parentRuntimePackage) !== parentBuild.packageHash) {
         throw new Error('[product-production-scheduler] compatibility parent package hash 不一致')
       }
@@ -5571,6 +5574,7 @@ async function compileTerminalBuild(input: {
       }
     }
   }
+  if (input.brief.avgAssembly && input.brief.avgAssembly.basePackageHash !== (previousPackage?.packageHash ?? null)) throw new Error('[avg] 组装修订基线与实际 Build 谱系不一致')
   const compatibility = await createProductBuildCompatibilityReportV1({
     previous: previousPackage,
     current: { buildNumber: build.buildNumber, packageHash, runtimePackage },
@@ -5596,7 +5600,7 @@ async function compileTerminalBuild(input: {
     artifactKey: row.artifactKey, version: row.version, contentHash: row.contentHash,
     producerReceiptHash: row.producerReceiptHash,
   }))
-  const fallbackSummary = runtimePackage.textOpenWorldVNext == null
+  const fallbackSummary = runtimePackage.version !== 1 || runtimePackage.textOpenWorldVNext == null
     ? []
     : parseTextOpenWorldModulesV1(runtimePackage.textOpenWorldVNext).presentation.mediaSlots
       .filter(slot => slot.assetKey == null)
@@ -5610,17 +5614,21 @@ async function compileTerminalBuild(input: {
     artifactReceipts, completedGateIds, fallbackSummary,
   }
   const manifestHash = await hashProductProductionValueV2(manifest)
-  const mediaBindings = (runtimePackage.presentation?.assets ?? []).map(asset => {
-    const artifact = artifacts.find(row => row.blobObjectId != null && row.contentHash === asset.blobContentHash)
+  const mediaBindings = (avgRuntimeStage(runtimePackage)?.assets ?? []).map(asset => {
+    const artifact = artifacts.find(row => row.blobObjectId != null && row.contentHash === asset.blobContentHash
+      && (runtimePackage.version === 1 || canonicalProductProductionJsonV2(JSON.parse(row.metadataJson)) === canonicalProductProductionJsonV2(asset)))
     if (!artifact || artifact.mimeType !== asset.mimeType || artifact.byteSize !== asset.byteSize) {
       throw new Error(`[product-production-scheduler] RuntimePackage 媒资未绑定 accepted Artifact:${asset.assetKey}`)
     }
     return { assetKey: asset.assetKey, artifactKey: artifact.artifactKey, blobContentHash: asset.blobContentHash }
   })
-  const preview = await createProductBuildPreviewManifestV1({
+  const previewInput = {
     productionKey: production.productionKey, buildNumber: build.buildNumber,
-    buildManifestHash: manifestHash, runtimePackage, mediaBindings, fallbackSummary,
-  })
+    buildManifestHash: manifestHash, mediaBindings, fallbackSummary,
+  }
+  const preview = runtimePackage.version === 1
+    ? await createProductBuildPreviewManifestV1({ ...previewInput, runtimePackage })
+    : await createProductBuildPreviewManifestV2({ ...previewInput, runtimePackage })
   if (input.restoreImportedProofs && (manifestHash !== build.manifestHash
     || packageHash !== build.packageHash || preview.previewHash !== build.previewHash
     || qualityReportHash !== build.qualityReportHash)) {
@@ -6240,6 +6248,24 @@ export async function runProductProductionSchedulerCycleV1(input: {
       || child.projection.steps[task.taskKey]?.candidateHash)) {
       await recoverCompletedOrCheckpointed({
         scope, buildId: state.build.id!, controlEpoch: state.build.controlEpoch, task, snapshot: child,
+      })
+    }
+  }
+  if (state.brief.avgAssembly) {
+    const authorTasks = state.plan.tasks.filter(task => task.executionMode === 'human-import')
+    const artifacts = await db.productBuildArtifacts.where('buildId').equals(state.build.id!).toArray()
+    const ready = authorTasks.every(task => task.outputArtifactKeys.every(key => artifacts.filter(row => row.artifactKey === key
+      && row.status === 'accepted' && row.controlEpoch === state.build.controlEpoch).length === 1))
+    if (!ready) return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
+    if (state.build.status !== 'integrating') {
+      await db.transaction('rw', scopeTransactionTables(db.productBuilds, db.productBuildArtifacts, db.productProductions), async () => {
+        const current = await db.productBuilds.get(state.build.id!)
+        const production = await db.productProductions.get(input.productionId)
+        const rows = await db.productBuildArtifacts.where('buildId').equals(state.build.id!).toArray()
+        if (!current || !production || production.status !== 'producing' || production.currentBuildNumber !== current.buildNumber
+          || current.stateRevision !== state.build.stateRevision || current.controlEpoch !== state.build.controlEpoch
+          || canonicalProductProductionJsonV2(rows) !== canonicalProductProductionJsonV2(artifacts)) throw new Error('[avg] 组装输入已变化，请刷新后重新开始')
+        await db.productBuilds.update(current.id!, { status: 'integrating', stateRevision: current.stateRevision + 1, updatedAt: Date.now() })
       })
     }
   }

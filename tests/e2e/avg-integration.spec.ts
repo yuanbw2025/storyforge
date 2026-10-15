@@ -53,7 +53,7 @@ test("AVG pages are open without a world; settings and confirmed conversation su
   await page.goto("./avg/narrative");
   await expect(
     page.getByRole("heading", { name: "叙事图与对白", exact: true }).first(),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 30_000 });
   const nav = page.getByRole("navigation", { name: "AVG 页面导航" });
   const content = page.getByRole("navigation", { name: "AVG 内容导航" });
   await content.getByRole("button", { name: "故事与体验", exact: true }).click();

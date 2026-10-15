@@ -4,9 +4,10 @@ import type {
   ProductProductionPlanV3,
   ProductTaskBudgetReservationV1,
 } from '../types'
+import { buildAvgAssemblyPlanV1 } from '../avg/assembly-plan'
 import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
 import { parseTextAdventureContentRevisionV1, parseProductProductionBriefV3 } from './contracts'
-import { hashProductProductionValueV2, isSha256Hash } from './hash'
+import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { textAdventureSceneScriptPartSceneKeysV1 } from '../adventure/scene-script'
 import {
   TEXT_ADVENTURE_QUALITY_REVIEW_SCOPES_V1,
@@ -411,12 +412,16 @@ export function parseProductProductionPlanV3(
       fail('Plan 输入预算切片不是当前生产协议')
     }
   }
-  return {
+  const parsed: ProductProductionPlanV3 = {
     schema: 'storyforge.product-production-plan', version: 3,
     buildNumber: integer(row.buildNumber, 'buildNumber'), productType,
     briefHash: row.briefHash, controlEpoch: integer(row.controlEpoch, 'controlEpoch'),
     concurrency: parsedConcurrency, tasks, terminalTaskKey,
   }
+  if (brief?.avgAssembly && canonicalProductProductionJsonV2(parsed) !== canonicalProductProductionJsonV2(buildAvgAssemblyPlanV1({
+    brief, briefHash: parsed.briefHash, buildNumber: parsed.buildNumber, controlEpoch: parsed.controlEpoch,
+  }))) fail('AVG 组装 Plan 不得替换冻结的作者输入、任务或写域')
+  return parsed
 }
 
 function reservation(input: Partial<ProductTaskBudgetReservationV1>): ProductTaskBudgetReservationV1 {
@@ -453,6 +458,8 @@ export async function createProductProductionPlanV3(input: {
   if (await hashProductProductionValueV2(brief) !== input.briefHash) fail('briefHash 与 Brief 内容不一致')
   const controlEpoch = input.controlEpoch ?? 0
   if (!Number.isInteger(controlEpoch) || controlEpoch < 0) fail('controlEpoch 无效')
+
+  if (brief.avgAssembly) return parseProductProductionPlanV3(buildAvgAssemblyPlanV1({ ...input, brief, controlEpoch }), brief, input.briefHash)
 
   const capabilityKeys = (classes: Array<ProductProductionBriefV3['capabilityRequirements'][number]['mediaClass']>) => (
     brief.capabilityRequirements

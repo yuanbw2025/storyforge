@@ -197,3 +197,18 @@ export async function ensureAvgProductionDraftV1(scope:WorkspaceScope,production
 export async function archiveAvgConversationV1(scope:WorkspaceScope,revision:number){
  return db.transaction('rw',scopeTransactionTables(db.avgAuthoringDrafts),async()=>{const row=await readAvgDraftV1(scope);if(row.revision!==revision)throw new Error('会谈已变化，请刷新后重试');const turns=JSON.parse(row.conversationJson) as AvgConversationTurnV1[];await db.avgAuthoringDrafts.put({...row,conversationJson:JSON.stringify(turns.map(t=>({...t,archived:true}))),revision:revision+1,updatedAt:Date.now()})})
 }
+
+/** A Work-owned pointer only; production records stay in their registered command lifecycle. */
+export async function bindAvgDraftProductionV1(scope: WorkspaceScope, revision: number, productionId: number) {
+  const production = await db.productProductions.get(productionId)
+  if (!production || production.productType !== 'avg' || !await assertRecordInScope(scope,'productProductions',production,{owner:'work'})) throw new Error('AVG 制作记录不属于当前作品')
+  return db.transaction('rw',scopeTransactionTables(db.avgAuthoringDrafts),async () => {
+    const row = await readAvgDraftV1(scope)
+    if (row.revision !== revision) throw new Error('作者草稿已变化，请刷新后再连接制作记录')
+    if (row.productionId === productionId) return row
+    if (row.productionId != null) throw new Error('作者草稿已有制作记录，不能静默替换')
+    const next = { ...row,productionId,revision:revision+1,updatedAt:Date.now() }
+    await db.avgAuthoringDrafts.put(next)
+    return next
+  })
+}

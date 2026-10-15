@@ -1,4 +1,5 @@
 import { parseTextAdventureQuestScriptArtifact, textAdventureQuestRecipientsV3 } from '../adventure/quest-settlement'
+import { createAvgAssemblyExecutorV1 } from '../avg/assembly-executor'
 import { hasFrozenAuthorUploadRightsV1 } from './media-rights'
 import { TTRPG_SCENARIO_PROMPT_V1 } from '../ttrpg/scenario-prompt'
 import { parseTtrpgAuthoredScenarioV1, type TtrpgAuthoredScenarioV1 } from '../ttrpg/scenario-authoring'
@@ -10753,6 +10754,7 @@ export function createConfiguredProductProductionExecutorV1(input: {
   runVision?: ProductionVisionRunnerV1
   mediaCapabilities?: ReadonlyMap<string, ResolvedProductMediaCapabilityV1>
 }): ProductProductionTaskExecutorV1 {
+  if (input.brief.avgAssembly) return createAvgAssemblyExecutorV1(input)
   if (input.brief.intent.productType === 'text-open-world') {
     fail('文字开放世界已下线通用生产执行器；必须使用专属 Creator P0-P10 / V1-V3 执行器')
   }

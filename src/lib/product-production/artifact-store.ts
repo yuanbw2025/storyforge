@@ -16,6 +16,7 @@ import type {
   ProductProductionBriefV3,
   ProductProductionBriefRecordV1,
   ProductProductionRecordV1,
+  ProductProductionCommandRecordV1,
   ProductTaskBudgetReservationV1,
   TextOpenWorldSourcePinBundleV1,
   WorkspaceScope,
@@ -1842,6 +1843,8 @@ export interface ProductBuildTerminalCasReadSetV1 {
   eventRows: Array<AgentRunEventRecord & { id: number }>
   checkpointRows: Array<AgentRunCheckpointRecord & { id: number }>
   blobRows: Array<MediaBlobObjectRecordV1 & { id: number }>
+  /** Only native author-input publication consumes these command receipts. */
+  authorCommandRows?: ProductProductionCommandRecordV1[]
 }
 
 function recordRowsJsonV1(rows: unknown[]): string {
@@ -1945,6 +1948,7 @@ function terminalCasReadSetFingerprintJsonV1(readSet: ProductBuildTerminalCasRea
     eventRows: readSet.eventRows,
     checkpointRows: readSet.checkpointRows,
     blobRows: readSet.blobRows.map(blobMetadataForCasV1),
+    ...(readSet.authorCommandRows ? { authorCommandRows: readSet.authorCommandRows } : {}),
   })
 }
 
@@ -1957,6 +1961,12 @@ export async function assertProductBuildTerminalReadSetUnchangedV1(input: {
 }): Promise<void> {
   const mutableRuns = new Set(input.mutableRunIds ?? [])
   const expectedProduction = input.readSet.productionRow
+  if (input.readSet.authorCommandRows) {
+    const commands = await db.productProductionCommands.where('productionId').equals(expectedProduction.id).toArray()
+    if (recordRowsJsonV1(commands) !== recordRowsJsonV1(input.readSet.authorCommandRows)) {
+      throw new Error('[product-production-artifact] terminal CAS 作者命令 proof set 已变化')
+    }
+  }
   const currentProduction = await db.productProductions.get(expectedProduction.id)
   if (!currentProduction
     || canonicalProductProductionJsonV2(currentProduction)
@@ -2108,6 +2118,17 @@ export async function verifyProductBuildTerminalArtifactSetV1(input: {
     throw new Error('[product-production-artifact] terminal root Run 边界或 checkpoint 不合法')
   }
   const physicalBlobProofRows = await verifiedBlobProofsV1({ scope, artifacts, label: 'terminal' })
+  const briefRow = casReadSet.briefRows.find(row => row.revision === build.briefRevision && row.briefHash === build.briefHash)
+  const nativeAuthorReceipts = new Map<string, string>()
+  if (production.productType === 'avg' && briefRow && parseProductProductionBriefV3(briefRow.briefJson).avgAssembly) {
+    casReadSet.authorCommandRows = (await db.productProductionCommands.where('productionId').equals(production.id).toArray())
+      .sort((left,right) => (left.id ?? 0) - (right.id ?? 0))
+    const { verifyFrozenAvgAuthorInputsV1 } = await import('../avg/author-artifacts')
+    const author = await verifyFrozenAvgAuthorInputsV1({ scope, buildId:build.id, expectedBuildRevision:build.stateRevision, controlEpoch:build.controlEpoch })
+    nativeAuthorReceipts.set(author.artifact.artifactKey, author.authorReceiptHash)
+    for (const script of author.scripts) nativeAuthorReceipts.set(script.artifact.artifactKey, script.authorReceiptHash)
+    if (author.authorStage) nativeAuthorReceipts.set(author.authorStage.artifact.artifactKey, author.authorStage.authorReceiptHash)
+  }
   const proofMembers: unknown[] = []
   for (const task of plan.tasks) {
     const siblings = task.outputArtifactKeys.map(key => artifacts.find(row => row.artifactKey === key)!)
@@ -2120,6 +2141,13 @@ export async function verifyProductBuildTerminalArtifactSetV1(input: {
       throw new Error(`[product-production-artifact] terminal task siblings/ledger 不闭合:${task.taskKey}`)
     }
     if (siblings[0].status === 'accepted') {
+      const authorReceiptHash = nativeAuthorReceipts.get(siblings[0].artifactKey)
+      if (authorReceiptHash) {
+        const { verifyAvgAuthorTaskTerminalV1 } = await import('../avg/author-terminal-proof')
+        proofMembers.push(await verifyAvgAuthorTaskTerminalV1({ scope, build, rootRunId, task, siblings, ledger, ledgerRunId,
+          dependencies:task.dependsOn.map(taskKey => ({ taskKey, receiptHash:ledgerByTask.get(taskKey)!.terminalReceiptHash })), authorReceiptHash }))
+        continue
+      }
       const producerRunIds = new Set(siblings.map(row => row.producerRunId))
       const receiptHashes = new Set(siblings.map(row => row.producerReceiptHash))
       const inputHashes = new Set(siblings.map(row => row.inputHash))

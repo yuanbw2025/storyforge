@@ -9,6 +9,7 @@ import type {
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { parseProductProductionPlanV3 } from './plan'
+import { assertAvgProfessionalArtifactAdmissionV1, isAvgProfessionalArtifactV1 } from '../avg/artifact-admission'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -112,8 +113,10 @@ export async function acceptProductBuildArtifact(input: {
   if (!Number.isInteger(byteSize) || byteSize < 0 || byteSize > 100 * 1024 * 1024) {
     throw new Error('[product-production-artifact] byteSize 无效')
   }
+  const professional = isAvgProfessionalArtifactV1({ artifactKey, payload: input.payload, metadata: input.metadata })
   return db.transaction('rw', scopeTransactionTables(
     db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects, db.agentRuns,
+    ...(professional ? [db.productProductions] : []),
   ), async () => {
     const build = await db.productBuilds.get(input.buildId)
     if (!build || !await assertRecordInScope(scope, 'productBuilds', build, { owner: 'work' })) {
@@ -121,6 +124,14 @@ export async function acceptProductBuildArtifact(input: {
     }
     if (build.controlEpoch !== input.controlEpoch || ['paused', 'cancelled', 'failed', 'archived', 'released'].includes(build.status)) {
       throw new Error('[product-production-artifact] Build epoch 已过期或不可写')
+    }
+    if (professional) {
+      const production = await db.productProductions.get(build.productionId)
+      if (!production || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
+        throw new Error('[product-production-artifact] Production 不存在或跨 Work')
+      }
+      assertAvgProfessionalArtifactAdmissionV1({ productType: production.productType, artifactKey,
+        kind: input.kind, payload: input.payload, metadata: input.metadata ?? {} })
     }
     if (input.producerRunId != null) {
       const run = await db.agentRuns.get(input.producerRunId)
