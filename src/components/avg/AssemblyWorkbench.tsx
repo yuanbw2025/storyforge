@@ -10,6 +10,7 @@ import { canonicalProductProductionJsonV2 } from '../../lib/product-production/h
 import { exportProjectJSON, downloadJSON } from '../../lib/export/json-export'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import PrototypeReleasePanel from './PrototypeReleasePanel'
+import { AVG_MODULE_CONTRACTS_V1, avgNativeModuleSwitchesV1 } from '../../lib/avg/module-capabilities'
 
 type View = Awaited<ReturnType<typeof readAvgAssemblyWorkspaceV1>>
 type Section = 'dialogue' | 'system' | 'stage' | 'media' | 'production'
@@ -99,6 +100,7 @@ export default function AssemblyWorkbench({scope,productionId,page,onSource,onPr
   const script=model.scripts.find(script=>script.sceneKey===currentScene?.key)
   const lines=model.scripts.flatMap(script=>script.lines)
   const assets=model.presentation.stage.assets
+  const moduleSwitches=avgNativeModuleSwitchesV1({systemPlan:model.systemPlan,reading:model.presentation.reading})
   const accepted=(key:string)=>view?.artifacts.find(row=>row.artifactKey===key&&row.status==='accepted')
   const humanKeys=details?.executionBrief?.avgAssembly?['avg.system.plan',...details.executionBrief.avgAssembly.sceneKeys.map(key=>`avg.content.scene-script.${key}`),'avg.author.stage']:[]
   const allAccepted=humanKeys.length>0&&humanKeys.every(key=>!!accepted(key))
@@ -179,6 +181,11 @@ export default function AssemblyWorkbench({scope,productionId,page,onSource,onPr
       }}><option value="custom" disabled>自定义配置</option>{AVG_AUTHORING_PRESETS_V1.map(preset=><option key={preset.key} value={preset.key}>{preset.label}</option>)}</select></label>
       <nav className="avg-actions" aria-label="组装编辑分区">{SECTIONS.map(([key,label])=><button className="lf-action" key={key} aria-current={section===key?'page':undefined} onClick={()=>setSection(key)}>{label}</button>)}</nav></>}
     </section>
+    {view&&<section className="lf-paper" aria-label="模块能力"><details><summary>当前草稿的模块能力</summary>
+      <p>状态根据规则与演出配置读取，保存和采用时仍须完整校验。规划中的模块保持关闭；当前作品的正式能力以冻结版本为准。</p>
+      <ul>{moduleSwitches.map(module=><li key={module.name}><label><input type="checkbox" checked={module.enabled} disabled/>{AVG_MODULE_CONTRACTS_V1[module.name].label} · {module.reason==='not-implemented'?'规划中，未实现':module.enabled?'已配置':'未配置'}</label></li>)}</ul>
+      <p>物品与证据由系统规则配置；阅读与配音由演出配置，关闭配置后不会在新版本声明相应能力。旧版本与旧存档保持原配置。</p>
+    </details></section>}
     {view&&<>
       {section==='dialogue'&&<section className="lf-paper"><h4>规范对白与选项</h4><fieldset disabled={busy||jsonPending}>
         <label>场景<select value={currentScene?.key??''} onChange={event=>setSceneKey(event.target.value)}>{model.systemPlan.scenes.map(scene=><option key={scene.key} value={scene.key}>{scene.title}</option>)}</select></label>

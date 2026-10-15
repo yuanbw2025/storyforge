@@ -1,12 +1,13 @@
 import { DEFAULT_AVG_SETTINGS, parseAvgAuthoringSettingsV1, type AvgAuthoringSettingsV1 } from './authoring-contract'
 import { avgBoolean, avgEnum, avgHash, avgKeys, avgList, avgNumber, avgProtocolBody, avgRecord, avgText, avgUnique } from './protocol-validation'
+import { AVG_MODULE_NAMES_V1, type AvgModuleNameV1 } from './module-capabilities'
 
 /** An author's desired scope, never a claim that a compiler, renderer or provider is ready. */
 export interface AvgAuthoringSettingsV2 {
   version: 2
   intent: Omit<AvgAuthoringSettingsV1, 'version'>
   storyMode: 'linear' | 'branching'
-  modules: Array<{ name: 'narrative' | 'inventory' | 'evidence' | 'hotspots' | 'topics' | 'messages' | 'archive' | 'gallery' | 'progress' | 'assist'; version: 1 }>
+  modules: Array<{ name: AvgModuleNameV1; version: 1 }>
   viewpoint: { perspective: 'first-person' | 'third-person-limited' | 'external'; anchorSubjectKey: string | null; allowSwitch: boolean }
   cameraGrammar: 'fixed-stage' | 'cinematic-static'
   presentation: { visualMode: 'text' | 'static'; voice: 'off' | 'key-lines' | 'full'; referencePolicy: 'original-only' | 'authorized-reference' }
@@ -24,7 +25,7 @@ export interface AvgAuthoringSettingsV2 {
   /** A derivation pins the original bytes without changing the original settings or save. */
   derivedFrom: { version: 1; settingsHash: string } | null
 }
-const MODULES = ['narrative','inventory','evidence','hotspots','topics','messages','archive','gallery','progress','assist'] as const
+const MODULES = AVG_MODULE_NAMES_V1
 function optionalLimit(value: unknown, label: string): number | null {
   return value === null ? null : avgNumber(value, label, 0, 1_000_000, false)
 }

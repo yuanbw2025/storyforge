@@ -1,6 +1,10 @@
 import { selectAvgSceneMediaWindowV1 } from '../../lib/avg/scene-media-window'
+import { avgPlayerSourceMatchesV1, sameAvgPlayerScopeV1 } from '../../lib/avg/player-source-identity'
 import { loadAvgReaderPreferencesV1, saveAvgReaderPreferencesV1 } from '../../lib/avg/reader-preferences'
 import { NativeVoice } from '../avg/NativeVoice'
+import { NativeVisualCue } from '../avg/NativeVisualCue'
+import { useStageCssPause } from '../avg/useStageCssPause'
+import { selectAvgTransientCuesV1,avgVisibleCueDurationsV1 } from '../../lib/avg/visual-cues'
 import { ReadingHistory } from '../avg/ReadingHistory'
 import { useCueClock } from '../avg/useCueClock'
 import { avgVoiceReadyV1 } from '../../lib/avg/reading-runtime'
@@ -29,7 +33,9 @@ export async function loadAvgPlayerInitialSelectionV1(input: {
   load: (scope: WorkspaceScope, worldGroupId: number | null, openLibrary?: boolean) => Promise<void>
   select: (sessionId: number | null) => Promise<void>
   cancelled?: () => boolean
+  isAlreadySelected?:()=>boolean
 }): Promise<void> {
+  if(input.initialSessionId!=null&&input.isAlreadySelected?.())return
   // Always load the library without auto-selecting an arbitrary existing
   // session. Direct Build Preview then performs exactly one explicit select.
   // This prevents the first resolver from being disposed halfway through a
@@ -62,7 +68,8 @@ function currentBrowserEnvironment() {
   }
 }
 
-export default function AvgGamePlayer(props: { project: Project; scope: WorkspaceScope; worldGroupId: number | null; initialSessionId?: number | null; initialPanel?: PlayerPanel; onReturnToWorkbench?:()=>void }) {
+export default function AvgGamePlayer(props: { project: Project; scope: WorkspaceScope; worldGroupId: number | null; initialSessionId?: number | null; initialPanel?: PlayerPanel; onReturnToWorkbench?:()=>void; onSessionChanged?:(id:number|null)=>void }) {
+  const {onSessionChanged}=props
   const store = useAvgGamePlayerStore()
   const dialog = useDialog()
   const [prefs, setPrefs] = useState(loadAvgReaderPreferencesV1)
@@ -80,24 +87,38 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
   const [historyRequest,setHistoryRequest]=useState<{sessionId:number;assetKey:string;attempt:number}|null>(null)
   useEffect(()=>{if(panel!=='history'||historyRequest?.sessionId!==store.selectedSessionId)setHistoryRequest(null)},[panel,store.selectedSessionId]) // eslint-disable-line react-hooks/exhaustive-deps
   const [visibleCharacters, setVisibleCharacters] = useState(0)
+  const typingLine=useRef<{beat:string;text:string}|null>(null)
   const [sceneTitleVisible, setSceneTitleVisible] = useState(false)
   const [notice, setNotice] = useState('')
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null)
   const mediaVerificationKeys = useRef(new Set<string>())
+  const stageRef=useRef<HTMLDivElement>(null)
+  const initializing = useRef(false)
 
   useEffect(() => {
     let cancelled = false
+    const alreadySelected=()=>props.initialSessionId!=null&&avgPlayerSourceMatchesV1({scope:props.scope,worldGroupId:props.worldGroupId,sessionId:props.initialSessionId},useAvgGamePlayerStore.getState())
+    if(alreadySelected()){initializing.current=false;return}
+    initializing.current=true
     setCatalogReleaseId(null)
+    setPanel(props.initialPanel??null)
     void loadAvgPlayerInitialSelectionV1({
       scope: props.scope, worldGroupId: props.worldGroupId, initialSessionId: props.initialSessionId,
-      load: store.load, select: store.select, cancelled: () => cancelled,
-    }).catch(() => undefined)
+      load: store.load, select: store.select, cancelled: () => cancelled,isAlreadySelected:alreadySelected,
+    }).catch(() => undefined).finally(()=>{if(!cancelled)initializing.current=false})
     return () => { cancelled = true }
   }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.worldGroupId, props.initialSessionId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{setPanel(props.initialPanel??null)},[props.initialPanel])
+  useEffect(()=>{
+    if(initializing.current||store.loading||store.error||!sameAvgPlayerScopeV1(props.scope,store.scope)||props.worldGroupId!==store.worldGroupId
+      ||store.selectedSessionId!==store.selectedSourceSessionId||store.selectedSessionId===(props.initialSessionId??null))return
+    onSessionChanged?.(store.selectedSessionId)
+  },[store.loading,store.error,store.scope,store.worldGroupId,store.selectedSessionId,store.selectedSourceSessionId,props.scope,props.worldGroupId,props.initialSessionId,onSessionChanged])
   const catalog = useMemo(() => currentPlayerReleases(store.releases), [store.releases])
   const catalogRelease = catalog.find(item => item.release.id === catalogReleaseId) ?? null
   const nativeReading = store.runtimeState.avgReading
-  const pausedTransport = !!nativeReading && (!!panel || settingsOpen || !foreground || store.loading || store.selectedSourceSessionId !== store.selectedSessionId)
+  const nativeModule=store.selectedManifest?avgExecutableModule(store.selectedManifest):null
+  const pausedTransport = !!nativeModule && (!!panel || settingsOpen || !foreground || store.loading || store.selectedSourceSessionId !== store.selectedSessionId)
   const voiceReady = avgVoiceReadyV1(store.runtimeState)
   const inventory = projectAvgInventoryV1(store.runtimeState)
   const narrative = store.runtimeState.narrative
@@ -130,7 +151,12 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
     const visible = [...initial,...timeline.entries.filter(entry=>entry.at<=elapsed).map(entry=>entry.cue)]
     return visible.reduce((next,cue)=>applyAvgCue(next,cue,presentation.assets,presentation.snapshots),stage)
   }, [stage,presentation,currentBeat,finishingBeat,elapsed]) // eslint-disable-line react-hooks/exhaustive-deps
+  useStageCssPause({ target:stageRef, enabled:!!nativeModule, paused:pausedTransport, stage:visualStage,
+    images:prefs.images, reducedMotion:prefs.reducedMotion })
   const activeCueEntries = [...(finishingBeat ? avgCueTimeline(currentCues,false).entries : []),...timeline.entries.filter(e => e.at <= elapsed)]
+  const activeCues=activeCueEntries.map(entry=>entry.cue)
+  const transientCues=nativeModule?selectAvgTransientCuesV1(activeCues):[]
+  const visibleDurations=avgVisibleCueDurationsV1(activeCues)
   const cueDuration = Math.max(240, ...currentCues.map(cue => cue.durationMs))
   const attributedText = currentBeat ? splitAttributedText(currentBeat.text) : null
   const dialogueText = attributedText?.text ?? currentBeat?.text ?? ''
@@ -194,10 +220,14 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
   const run = async (fn: () => Promise<unknown>) => { try { await fn() } catch { /* store exposes error */ } }
 
   useEffect(() => {
+    const identity={beat:beatIdentity,text:dialogueText}
+    const changed=typingLine.current?.beat!==identity.beat||typingLine.current?.text!==identity.text
+    typingLine.current=identity
     if (!hasCurrentBeat) { setVisibleCharacters(0); return }
     if (prefs.reducedMotion) { setVisibleCharacters(dialogueText.length); return }
-    setVisibleCharacters(0)
+    if(changed)setVisibleCharacters(0)
     const interval = window.setInterval(() => setVisibleCharacters(value => {
+      if(typingLine.current!==identity){window.clearInterval(interval);return value}
       if (value >= dialogueText.length) { window.clearInterval(interval); return value }
       return Math.min(dialogueText.length, value + 1)
     }), Math.max(12, Math.round(1000 / prefs.textSpeed)))
@@ -218,7 +248,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
     if (!voiceReady && nativeReading) {
       const c = nativeReading.current
       if (nativeReading.plan.manualVoice === 'interrupt' && c?.lineKey === currentBeat.beatKey) {
-        void store.voiceCommand({ type: 'observe', lineKey: currentBeat.beatKey, visit: narrative!.visitedNodeKeys.length-1, generation: c.generation, outcome: 'interrupted', reason: '用户手动推进/已读快进', playedMs: Math.max(0, Math.round(((document.querySelector('audio[data-channel="voice"]') as HTMLAudioElement | null)?.currentTime ?? 0)*1000)) }).then(() => setAfterIdentity(beatIdentity)).catch(() => undefined)
+        void store.voiceCommand({ type: 'observe', expectedSessionId:store.selectedSessionId!, lineKey: currentBeat.beatKey, visit: narrative!.visitedNodeKeys.length-1, generation: c.generation, outcome: 'interrupted', reason: '用户手动推进/已读快进', playedMs: Math.max(0, Math.round(((document.querySelector('audio[data-channel="voice"]') as HTMLAudioElement | null)?.currentTime ?? 0)*1000)) }).then(() => setAfterIdentity(beatIdentity)).catch(() => undefined)
       }
       return
     }
@@ -284,6 +314,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
       <span className="avg-title-kicker">STORYFORGE VISUAL NOVEL</span>
       <h2>{catalogRelease ? '作品详情' : 'AVG 游戏库'}</h2>
       <p>{catalogRelease ? '确认故事、美术与演出规模，然后从标题页正式开演。' : '先选择作品，再进入独立标题页开始或继续；舞台、立绘和对白不会提前挤进游戏目录。'}</p>
+      {store.loading&&<p role="status">正在读取作品与存档…</p>}
       {store.error && <div role="alert" className="avg-alert">{store.error}</div>}
       {catalogRelease ? <section className="textgame-title-page avg-game-title-page" aria-label="AVG 游戏详情">
         <button type="button" className="textgame-catalog-back" onClick={() => setCatalogReleaseId(null)}><ArrowLeft />返回全部游戏</button>
@@ -341,29 +372,29 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
         if (event.target instanceof HTMLElement && event.target.closest('button, input, summary, details')) return
         if (currentBeat && !panel) advance()
       }} aria-label={background ? `背景 ${presentation?.assets.find(asset=>asset.assetKey===background)?.name??'场景'}` : '纯文字降级舞台'}>
-        <div className={`avg-stage-scene avg-effect-${visualStage?.lastTransition ?? 'none'}`} style={{ transform: `translate(${(visualStage?.camera.x ?? 0) * -2}%, ${(visualStage?.camera.y ?? 0) * -2}%) scale(${visualStage?.camera.scale ?? 1})`, transitionDuration: `${cueDuration}ms` }}>
+        <div ref={stageRef} className={`avg-stage-scene${nativeModule?'':` avg-effect-${visualStage?.lastTransition ?? 'none'}`}`} style={{ transform: `translate(${(visualStage?.camera.x ?? 0) * -2}%, ${(visualStage?.camera.y ?? 0) * -2}%) scale(${visualStage?.camera.scale ?? 1})`, transitionDuration: nativeModule?`${visibleDurations.cameraMs}ms,${visibleDurations.toneMs}ms`:`${cueDuration}ms` }}>
           {background && <div key={background} className="avg-background" data-asset-key={background}>{mediaUrls[background] ? <img src={mediaUrls[background]} alt={presentation?.assets.find(asset => asset.assetKey === background)?.altText || background} /> : <span>{mediaLoading?'正在读取背景…':'背景暂不可用'}</span>}</div>}
           {prefs.images && visualStage?.cgAssetKey && <div key={visualStage.cgAssetKey} className="avg-cg" data-asset-key={visualStage.cgAssetKey}>{mediaUrls[visualStage.cgAssetKey] ? <img src={mediaUrls[visualStage.cgAssetKey]} alt={presentation?.assets.find(asset => asset.assetKey === visualStage.cgAssetKey)?.altText || visualStage.cgAssetKey} /> : <span>{mediaLoading?'正在读取插图…':'插图暂不可用'}</span>}</div>}
           {prefs.images && visualStage?.actors.map((actor) => {
             const speaking = !!activeSpeakerKey && actor.actorKey === activeSpeakerKey
             const displaySlot = actor.slot
-            return <div key={`${actor.actorKey}:${actor.assetKey}`} className={`avg-actor avg-slot-${displaySlot} ${activeSpeakerKey ? speaking ? 'is-speaking' : 'is-listening' : ''}`} style={{ opacity: actor.opacity, transform: `translate(calc(-50% + ${actor.x * 20}px),${actor.y * 20}px) scale(${actor.scale})`, transitionDuration: `${cueDuration}ms` }} aria-label={`角色 ${actor.actorKey}`}>{mediaUrls[actor.assetKey] ? <img src={mediaUrls[actor.assetKey]} alt={presentation?.assets.find(asset => asset.assetKey === actor.assetKey)?.altText || actor.actorKey} /> : <span>{mediaLoading?'正在读取角色图像…':'角色图像暂不可用'}</span>}</div>
+            return <div key={`${actor.actorKey}:${actor.assetKey}`} className={`avg-actor avg-slot-${displaySlot} ${activeSpeakerKey ? speaking ? 'is-speaking' : 'is-listening' : ''}`} style={{ opacity: actor.opacity, transform: `translate(calc(-50% + ${actor.x * 20}px),${actor.y * 20}px) scale(${actor.scale})`, transitionDuration: `${nativeModule?visibleDurations.actors.get(actor.actorKey)??0:cueDuration}ms` }} aria-label={`角色 ${actor.actorKey}`}>{mediaUrls[actor.assetKey] ? <img src={mediaUrls[actor.assetKey]} alt={presentation?.assets.find(asset => asset.assetKey === actor.assetKey)?.altText || actor.actorKey} /> : <span>{mediaLoading?'正在读取角色图像…':'角色图像暂不可用'}</span>}</div>
           })}
           {prefs.images && visualStage?.overlayAssetKey && <div className="avg-overlay" data-asset-key={visualStage.overlayAssetKey}>{mediaUrls[visualStage.overlayAssetKey] ? <img src={mediaUrls[visualStage.overlayAssetKey]} alt={presentation?.assets.find(asset => asset.assetKey === visualStage.overlayAssetKey)?.altText || visualStage.overlayAssetKey} /> : <span>{mediaLoading?'正在读取叠加图像…':'叠加图像暂不可用'}</span>}</div>}
         </div>
         {visualStage?.mask && <div className="avg-mask" data-mask={visualStage.mask} />}
-        {visualStage?.lastTransition === 'flash' && <div key={`flash:${currentBeat?.beatKey}`} className="avg-flash" />}
+        {nativeModule?transientCues.map(cue=><NativeVisualCue key={`${beatIdentity}:${cue.cueKey}`} cue={cue} stageRef={stageRef} paused={pausedTransport} reducedMotion={prefs.reducedMotion}/>):visualStage?.lastTransition === 'flash' && <div key={`flash:${currentBeat?.beatKey}`} className="avg-flash" />}
         {sceneTitleVisible && node?.title && <div key={`scene:${node.key}`} className="avg-scene-title" aria-label={`场景 ${node.title}`}><span>SCENE</span><strong>{node.title}</strong></div>}
-        {!prefs.muted && visualStage?.activeAudio.filter(audio => !nativeReading || audio.channel !== 'voice' && (audio.channel !== 'sfx' || activeCueEntries.some(e => e.cue.type === 'play-audio' && e.cue.assetKey === audio.assetKey))).map(audio => mediaUrls[audio.assetKey] ? <StageAudio key={`${audio.channel}:${audio.assetKey}:${nativeReading && audio.channel === 'sfx' ? `${beatIdentity}:${activeCueEntries.filter(e => e.cue.type === 'play-audio' && e.cue.assetKey === audio.assetKey).slice(-1)[0]?.cue.cueKey ?? ''}` : ''}`} src={mediaUrls[audio.assetKey]} loop={audio.loop} channel={audio.channel} paused={pausedTransport} volume={audio.volume * prefs.volume * prefs[`${audio.channel}Volume`]} /> : null)}
-        {nativeReading && currentBeat && nativeReading.plan.voices.some(v => v.lineKey === currentBeat.beatKey) && <NativeVoice key={beatIdentity} lineKey={currentBeat.beatKey} visit={narrative!.visitedNodeKeys.length-1} plan={nativeReading.plan} current={nativeReading.current} src={mediaUrls[nativeReading.plan.voices.find(v => v.lineKey === currentBeat.beatKey)!.assetKey]} missing={mediaFailures.some(f => f.assetKey === nativeReading.plan.voices.find(v => v.lineKey === currentBeat.beatKey)!.assetKey)} paused={pausedTransport} muted={prefs.muted} volume={prefs.volume * prefs.voiceVolume} />}
+        {visualStage?.activeAudio.filter(audio => (!nativeReading || audio.channel !== 'voice') && (!nativeModule || !['sfx','voice'].includes(audio.channel) || activeCueEntries.some(e => e.cue.type === 'play-audio' && e.cue.assetKey === audio.assetKey))).map(audio => mediaUrls[audio.assetKey] ? <StageAudio key={`${audio.channel}:${audio.assetKey}:${nativeModule && ['sfx','voice'].includes(audio.channel) ? `${beatIdentity}:${activeCueEntries.filter(e => e.cue.type === 'play-audio' && e.cue.assetKey === audio.assetKey).slice(-1)[0]?.cue.cueKey ?? ''}` : ''}`} src={mediaUrls[audio.assetKey]} loop={audio.loop} channel={audio.channel} paused={pausedTransport} volume={(prefs.muted ? 0 : audio.volume) * prefs.volume * prefs[`${audio.channel}Volume`]} /> : null)}
+        {nativeReading && currentBeat && nativeReading.plan.voices.some(v => v.lineKey === currentBeat.beatKey) && <NativeVoice key={beatIdentity} sessionId={store.selectedSessionId!} lineKey={currentBeat.beatKey} visit={narrative!.visitedNodeKeys.length-1} plan={nativeReading.plan} current={nativeReading.current} src={mediaUrls[nativeReading.plan.voices.find(v => v.lineKey === currentBeat.beatKey)!.assetKey]} missing={mediaFailures.some(f => f.assetKey === nativeReading.plan.voices.find(v => v.lineKey === currentBeat.beatKey)!.assetKey)} paused={pausedTransport} muted={prefs.muted} volume={prefs.volume * prefs.voiceVolume} />}
 
         {(prefs.muted || prefs.reducedMotion) && <div className="avg-stage-status"><span>{prefs.muted ? '静音' : ''}</span><span>{prefs.reducedMotion ? '减少动态' : ''}</span></div>}
         <section key={`dialogue:${currentBeat?.beatKey ?? narrative?.currentNodeKey}`} className={`avg-dialogue ${speakerLabel ? 'is-dialogue' : 'is-narration'} ${!currentBeat ? 'is-choice' : ''}`} aria-live="polite">
           {currentBeat ? <>
             {speakerLabel && <strong className="avg-speaker">{speakerLabel}</strong>}
             <p>{visibleText}<span className={`avg-text-cursor ${textComplete ? 'is-complete' : ''}`} aria-hidden="true" /></p>
-            <button className="avg-continue" aria-label="继续" disabled={store.busy || finishingBeat || !cueWaitComplete} onClick={() => advance(!nativeReading)}><SkipForward /><span className="avg-visually-hidden">继续</span></button>
-          </> : narrative?.completed ? <div className="avg-ending"><small>ENDING</small><h2>{node?.title}</h2><p>故事已完结。</p></div> : <div className="avg-choices"><small>选择你的行动</small>{choices.map(choice => <button key={choice.choiceKey} disabled={store.busy || !narrative?.availableChoiceKeys?.includes(choice.choiceKey)} onClick={() => void run(() => store.choose(choice.choiceKey))}>{choice.text}</button>)}</div>}
+            <button className="avg-continue" aria-label="继续" disabled={store.busy || finishingBeat || !cueWaitComplete || pausedTransport} onClick={() => advance(!nativeReading)}><SkipForward /><span className="avg-visually-hidden">继续</span></button>
+          </> : narrative?.completed ? <div className="avg-ending"><small>ENDING</small><h2>{node?.title}</h2><p>故事已完结。</p></div> : <div className="avg-choices"><small>选择你的行动</small>{choices.map(choice => <button key={choice.choiceKey} disabled={store.busy || pausedTransport || !narrative?.availableChoiceKeys?.includes(choice.choiceKey)} onClick={() => void run(() => store.choose(choice.choiceKey))}>{choice.text}</button>)}</div>}
         </section>
         {notice && <div className="avg-notice" role="status">{notice}</div>}
       </div>

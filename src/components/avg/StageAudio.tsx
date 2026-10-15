@@ -19,9 +19,9 @@ export default function StageAudio({
   useEffect(() => {
     const audio = ref.current
     if (!audio) return
-    if (paused) audio.pause(); else void audio.play().catch(() => undefined)
+    if (paused) audio.pause(); else if (loop || !audio.ended) void audio.play().catch(() => undefined)
     return () => audio.pause()
-  }, [src, paused]);
+  }, [src, paused, loop]);
   return (
     <audio
       ref={ref}

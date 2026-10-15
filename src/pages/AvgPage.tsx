@@ -62,7 +62,7 @@ export default function AvgPage() {
   useEffect(() => {
     contentNavRef.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView({block:'nearest'});
   }, [pageId, contentMenu]);
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const nativeFlushRef = useRef<(()=>Promise<void>)|null>(null);
   const registerNativeFlush = useCallback((flush:(()=>Promise<void>)|null)=>{nativeFlushRef.current=flush},[]);
   const navigate = useNavigate();
@@ -846,12 +846,13 @@ export default function AvgPage() {
                 ) : page[0] === "play" || page[0] === "history" ? (
                   scope && row ? (
                     <Player
-                      key={`${scope.workId}:${sessionId ?? ""}`}
+                      key={scope.workId}
                       project={row.project}
                       scope={scope}
                       worldGroupId={null}
                       initialSessionId={sessionId}
                       initialPanel={page[0] === "history" ? "saves" : null}
+                      onSessionChanged={id=>{const next=new URLSearchParams(params);if(id==null)next.delete('session');else next.set('session',String(id));setParams(next,{replace:true})}}
                       onReturnToWorkbench={nativeAssembly?()=>go('production'):undefined}
                     />
                   ) : (

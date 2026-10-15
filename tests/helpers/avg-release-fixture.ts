@@ -8,7 +8,7 @@ import { prepareAvgAssemblyBriefV1, runAvgAssemblyV1 } from '../../src/lib/avg/a
 import { startNativeAvgAssembly, confirmNativeAvgInputs } from './avg-production-assembly-fixture';
 import { avgReadingAudioFixture } from './avg-reading-fixture';
 import { startProductProductionPreviewV1 } from '../../src/lib/product-production/service';
-export async function prepareAvgMediaReleasePreview() {
+export async function prepareAvgMediaReleasePreview(customize?: (workspace:ReturnType<typeof createAvgAuthoringPresetV1>, context:{scope:Parameters<typeof importAvgMediaForAssemblyV1>[0]['scope']})=>void|Promise<void>) {
     const owner = await createAvgDraftV1('原生 AVG 本地原型版本验收'), world = await createMistHarborWorld();
     const draft = await selectAvgWorldV1(owner.scope, 0, world.worldReleaseId);
     const workspace = createAvgAuthoringPresetV1('linear');
@@ -37,6 +37,7 @@ export async function prepareAvgMediaReleasePreview() {
     workspace.presentation.stage.cues.push(...[dark, light].map((asset, index) => ({ cueKey: `background.${index}`, beatKey: index ? 'line.light' : 'line.dark', type: 'set-background' as const, assetKey: asset.assetKey, phase: 'before' as const, durationMs: 0, order: 2 + index, easing: 'linear' as const })), { cueKey: 'music', beatKey: 'line.dark', type: 'play-audio', assetKey: music.assetKey, phase: 'before', durationMs: 0, order: 4, easing: 'linear', loop: true, volume: 0.3 });
     workspace.presentation.reading = { schema: 'storyforge.avg.reading-plan', version: 1, manualVoice: 'wait', voiceFailure: 'pause', maximumVoiceWaitMs: 10000, autoDelayMs: 200,
         voices: workspace.scripts.flatMap(script => script.lines.map(line => ({ lineKey: line.lineKey, text: line.text, textRevision: 1, speakerKey: line.speakerKey, locale: 'zh-CN', assetKey: voice.assetKey }))) };
+    await customize?.(workspace, {scope:owner.scope})
     await saveAvgAuthorWorkspaceV1(owner.scope, draft.revision, workspace);
     const details = await prepareAvgAssemblyBriefV1({ scope: owner.scope, expectedDraftRevision: draft.revision + 1 });
     const s = await startNativeAvgAssembly({ ...owner, productionId: details.production.id!, details });

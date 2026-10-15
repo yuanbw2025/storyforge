@@ -1,4 +1,5 @@
 import { parseAvgReadingStateV1 } from '../avg/reading-contract'
+import { createAvgBranchOriginV1, verifyAvgBranchOriginV1 } from '../avg/branch-origin'
 import { applyAvgVoiceEventV1, recordAvgReadingHistoryV1, createAvgReadingStateV1, assertAvgReadingHistoryV1 } from '../avg/reading-runtime'
 /**
  * Composition root for product-owned runtime adapters.
@@ -43,6 +44,29 @@ import {
   stableProductRuntimeJsonV1,
   type ProductRuntimeJsonObjectV1,
 } from './runtime-values'
+
+/** Only native AVG snapshots need portable detached-branch admission. Legacy
+ * and other products keep their existing contract and serialized bytes. */
+export async function verifyProductOwnedBranchOriginV1(input: {
+  kind: string; initialState: unknown; canonSnapshotJson: string; runtimeSourceHash: string
+}): Promise<boolean> {
+  if (input.kind !== 'avg') return false
+  return verifyAvgBranchOriginV1(input)
+}
+
+export async function createProductOwnedBranchOriginV1(input: {
+  parent: ProductRuntimeSession; state: ProductRuntimeState; events: ProductRuntimeEvent[]; throughSequence: number
+}): Promise<Record<string, unknown>> {
+  const canon = JSON.parse(input.parent.canonSnapshotJson) as Record<string, unknown>
+  if (input.parent.kind !== 'avg' || (!input.state.avgRules && !input.state.avgReading)) return canon
+  canon.avgBranchOrigin = await createAvgBranchOriginV1({
+    runtimeSourceHash: input.parent.runtimeSourceHash, initialState: input.state,
+    parentInitialState: JSON.parse(input.parent.initialStateJson), parentThroughSequence: input.throughSequence,
+    parentEventPrefix: input.events.filter(event => event.sequence <= input.throughSequence)
+      .map(({ sequence, type, payloadJson }) => ({ sequence, type, payloadJson })),
+  })
+  return canon
+}
 
 export function parseProductOwnedRuntimeStateV1(
   value: ProductRuntimeState,

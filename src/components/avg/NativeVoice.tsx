@@ -4,7 +4,7 @@ import { useAvgGamePlayerStore } from '../../stores/avg-game-player'
 
 /** One controller per session/visit/line. Its generation is issued by the
  * durable command; stale DOM callbacks can never settle a later attempt. */
-export function NativeVoice(props: { lineKey: string; visit: number; plan: AvgReadingPlanV1; current: AvgVoiceReceiptV1 | null
+export function NativeVoice(props: { sessionId:number; lineKey: string; visit: number; plan: AvgReadingPlanV1; current: AvgVoiceReceiptV1 | null
   src: string | undefined; missing: boolean; paused: boolean; muted: boolean; volume: number }) {
   const [retry, setRetry] = useState(0), [generation, setGeneration] = useState<string | null>(null), [error, setError] = useState('')
   const starts = useRef(new Map<number, Promise<string>>()), audio = useRef<HTMLAudioElement>(null)
@@ -16,7 +16,7 @@ export function NativeVoice(props: { lineKey: string; visit: number; plan: AvgRe
     let active = true
     let request = starts.current.get(retry)
     if (!request) {
-      request = useAvgGamePlayerStore.getState().voiceCommand({ type: 'start', lineKey: props.lineKey, visit: props.visit })
+      request = useAvgGamePlayerStore.getState().voiceCommand({ type: 'start', lineKey: props.lineKey, visit: props.visit, expectedSessionId:props.sessionId })
       starts.current.set(retry, request)
     }
     void request.then(value => { if (active) { setGeneration(value); setError('') } }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : String(cause)) })
@@ -32,7 +32,7 @@ export function NativeVoice(props: { lineKey: string; visit: number; plan: AvgRe
     const report = (outcome: 'ended' | 'failed' | 'interrupted', reason: string) => {
       if (!active || sent) return
       sent = true; element.pause()
-      void useAvgGamePlayerStore.getState().voiceCommand({ type: 'observe', lineKey: props.lineKey, visit: props.visit, generation, outcome, reason, playedMs: Math.max(0, Math.round((Number.isFinite(element.currentTime) ? element.currentTime : 0)*1000)) })
+      void useAvgGamePlayerStore.getState().voiceCommand({ type: 'observe', lineKey: props.lineKey, visit: props.visit, expectedSessionId:props.sessionId, generation, outcome, reason, playedMs: Math.max(0, Math.round((Number.isFinite(element.currentTime) ? element.currentTime : 0)*1000)) })
         .catch(cause => { if (active) setError(cause instanceof Error ? cause.message : String(cause)) })
     }
     const ended = () => report('ended', '')
@@ -53,7 +53,7 @@ export function NativeVoice(props: { lineKey: string; visit: number; plan: AvgRe
     {failed && <div className="avg-voice-recovery" role="status"><span>{error || c?.reason || '配音无法播放'}</span>
       <button type="button" onClick={() => { audio.current?.pause(); setError(''); setGeneration(null); setRetry(n => n+1) }}>重试配音</button>
       {props.plan.manualVoice === 'interrupt' && c?.generation && <button type="button" onClick={() => {
-        void useAvgGamePlayerStore.getState().voiceCommand({ type: 'observe', lineKey: props.lineKey, visit: props.visit, generation: c.generation, outcome: 'interrupted', reason: '用户确认静音继续', playedMs: c.playedMs ?? 0 }).catch(cause => setError(String(cause)))
+        void useAvgGamePlayerStore.getState().voiceCommand({ type: 'observe', expectedSessionId:props.sessionId, lineKey: props.lineKey, visit: props.visit, generation: c.generation, outcome: 'interrupted', reason: '用户确认静音继续', playedMs: c.playedMs ?? 0 }).catch(cause => setError(String(cause)))
       }}>静音继续</button>}
     </div>}
   </div>

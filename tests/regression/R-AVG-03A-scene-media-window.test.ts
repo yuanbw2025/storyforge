@@ -43,13 +43,17 @@ describe('AVG current scene media read window',()=>{
     expect(keys).toEqual(['voice.calibration','voice.wait','ui.envelope','cg.seal-detail','bg.desk'])
     expect(keys).not.toContain('bg.wait')
   })
-  it('honors image/audio preferences while retaining native voice for a real muted transport receipt',async()=>{
+  it('mutes by retaining only current transports and native voice, while skipping future scene sounds',async()=>{
     const input=await fixture();input.images=false;input.audio=false;input.stage.backgroundAssetKey='bg.wait'
     input.stage.activeAudio=[{channel:'bgm',assetKey:'music.persisted',volume:.5,loop:true}]
     // A known music kind is needed to apply the audio policy.
     const module=input.runtimePackage.modules[0]
     if(module.version!==2)throw new Error('native fixture missing')
     module.stage.assets.push({...module.stage.assets.find(asset=>asset.kind==='voice')!,kind:'bgm',assetKey:'music.persisted'})
+    module.stage.assets.push({...module.stage.assets.find(asset=>asset.kind==='voice')!,kind:'bgm',assetKey:'music.future'})
+    module.stage.cues.push({cueKey:'music.future',beatKey:'line.desk',type:'play-audio',assetKey:'music.future',loop:true,volume:1,phase:'after',durationMs:0,order:1,easing:'linear'})
+    expect(selectAvgSceneMediaWindowV1(input)).toEqual(['voice.calibration','music.persisted'])
+    input.stage.activeAudio=[]
     expect(selectAvgSceneMediaWindowV1(input)).toEqual(['voice.calibration'])
   })
   it('returns legacy control to the existing V1 catalog path',async()=>{

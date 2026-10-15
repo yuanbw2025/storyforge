@@ -7,10 +7,11 @@ import { validateAvgPresentation } from './runtime'
 import { parseAvgExecutableStageV1, type AvgExecutableStageV1 } from './stage-contract'
 export type { AvgExecutableStageV1 } from './stage-contract'
 import { avgEnum, avgKey, avgList, avgNumber, avgProtocolBody, avgRecord, avgText, avgUnique } from './protocol-validation'
+import { AVG_NATIVE_CORE_CAPABILITIES_V1, avgNativeExecutableCapabilitiesV1 } from './module-capabilities'
 
-export const AVG_EXECUTABLE_CAPABILITIES_V1 = ['narrative','presentation','avg.rules'] as const
+export const AVG_EXECUTABLE_CAPABILITIES_V1 = AVG_NATIVE_CORE_CAPABILITIES_V1
 export function avgExecutableCapabilities(module: Pick<AvgRuntimeModuleV2, 'systemPlan' | 'reading'>): string[] {
-  return [...AVG_EXECUTABLE_CAPABILITIES_V1, ...(module.systemPlan.version === 2 ? ['avg.inventory'] : []), ...(module.reading ? ['avg.reading'] : [])]
+  return avgNativeExecutableCapabilitiesV1(module)
 }
 /** Native V2 module: V1's inert module/consumer codec is never reinterpreted.
  * The stage deliberately reuses the supported Cue protocol and renderer. */

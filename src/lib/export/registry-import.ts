@@ -1,6 +1,7 @@
 import { assertFrozenRuntimePackageSessionV1, parseProductRuntimeState } from '../product/runtime-core'
 import type { AnyProductBuildPreviewManifest } from '../types'
 import { avgExecutableModule } from '../avg/executable-module'
+import { verifyAvgBranchOriginV1 } from '../avg/branch-origin'
 import { validateExtensionBackup } from '../extensions/portable'
 /**
  * 注册表派生的项目导入引擎(AUDIT-1)
@@ -513,9 +514,11 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
       if (!sourceRow) throw new Error('[deriveImport] AVG 会话来源缺失')
       sameOwner(session, sourceRow, 'AVG runtime')
       if (session.runtimeSourceHash !== avgSource.packageHash) throw new Error('[avg] 备份会话来源 hash 不一致')
+      const branchOrigin = await verifyAvgBranchOriginV1({ canonSnapshotJson: session.canonSnapshotJson,
+        initialState: JSON.parse(session.initialStateJson), runtimeSourceHash: avgSource.packageHash })
       assertFrozenRuntimePackageSessionV1({ session: { kind: session.kind, initialState: parseProductRuntimeState(session.initialStateJson) },
         runtimePackage: avgSource.runtimePackage, runtimeSourceHash: avgSource.packageHash,
-        origin: session._parentSessionExportId != null ? 'branch' : releaseId != null ? 'release' : 'preview' })
+        origin: session._parentSessionExportId != null || branchOrigin ? 'branch' : releaseId != null ? 'release' : 'preview' })
     }
     const sourceProductType = releaseId != null
       ? releases.get(releaseId)?.productType

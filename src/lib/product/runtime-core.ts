@@ -19,6 +19,8 @@ import {
   cloneProductRuntimeBranchExtensionsV1,
   parseProductOwnedRuntimeStateV1,
   rebaseProductRuntimeStateForBranchV1,
+  createProductOwnedBranchOriginV1,
+  verifyProductOwnedBranchOriginV1,
 } from "./runtime-product-adapters";
 export type JsonObject = ProductRuntimeJsonObjectV1;
 export const stableJson = stableProductRuntimeJsonV1;
@@ -1018,6 +1020,19 @@ const preparedProductRuntimeSessionsV1 = new WeakSet<object>();
  * caller opens the atomic session/event transaction. No WebCrypto work is left
  * for the commit phase.
  */
+async function assertNewProductRuntimeBranchOrigin(
+  input: CreateProductRuntimeSessionInput & { origin: 'release' | 'preview' | 'branch' }, runtimeSourceHash: string,
+): Promise<void> {
+  if (input.kind !== 'avg') return;
+  const branchOrigin = await verifyProductOwnedBranchOriginV1({
+    kind: input.kind, initialState: input.initialState,
+    canonSnapshotJson: stableJson(input.canonSnapshot ?? { version: 1, sources: [] }), runtimeSourceHash,
+  });
+  const native = input.initialState?.avgRules != null || input.initialState?.avgReading != null;
+  if (branchOrigin && (input.origin !== 'branch' || !native)) throw new Error('[avg-branch-origin] 新游戏不能携带分支记录');
+  if (native && input.origin === 'branch' && !branchOrigin) throw new Error('[avg-branch-origin] 新分支缺少来源记录');
+}
+
 export async function prepareReleasedProductRuntimeSessionRecordV1(
   input: CreateReleasedProductRuntimeSessionInput,
 ): Promise<ProductRuntimeSession> {
@@ -1037,6 +1052,7 @@ export async function prepareReleasedProductRuntimeSessionRecordV1(
     runtimeSourceHash: manifest.packageHash,
     origin: input.origin,
   });
+  await assertNewProductRuntimeBranchOrigin(input, manifest.packageHash);
   const session = await prepareProductRuntimeSessionRecord(input, {
     worldId: input.worldId,
     workId: input.workId,
@@ -1073,6 +1089,7 @@ export async function preparePreviewProductRuntimeSessionRecordV1(
     runtimeSourceHash: verified.runtimeSourceHash,
     origin: input.origin,
   });
+  await assertNewProductRuntimeBranchOrigin(input, verified.runtimeSourceHash);
   const session = await prepareProductRuntimeSessionRecord(input, {
     worldId: input.worldId,
     workId: input.workId,
@@ -1294,9 +1311,10 @@ async function verifyNativeAvgInitialSnapshot(session: ProductRuntimeSession): P
   if (!Object.prototype.hasOwnProperty.call(initial, 'avgRules') && !Object.prototype.hasOwnProperty.call(initial, 'avgReading') && canon.packageVersion !== 2) return false
   const source = await verifyProductRuntimeSessionSourceV1({ scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId }, session })
   if (session.runtimeSourceHash !== source.packageHash) throw new Error('[avg] 运行来源 hash 不一致')
+  const branchOrigin = await verifyProductOwnedBranchOriginV1({ ...session, initialState: initial })
   assertFrozenRuntimePackageSessionV1({ session: { kind: session.kind, initialState: parseProductRuntimeState(session.initialStateJson) },
     runtimePackage: source.runtimePackage, runtimeSourceHash: source.packageHash,
-    origin: session.parentSessionId != null ? 'branch' : session.productBuildId != null ? 'preview' : 'release' })
+    origin: session.parentSessionId != null || branchOrigin ? 'branch' : session.productBuildId != null ? 'preview' : 'release' })
   return true
 }
 
@@ -2104,6 +2122,7 @@ async function branchProductRuntimeSessionInternal(
 ): Promise<ProductRuntimeSession> {
   const parent = await db.productRuntimeSessions.get(input.parentSessionId);
   if (!parent) throw new Error("父产品运行会话不存在。");
+  await verifyNativeAvgInitialSnapshot(parent);
   const events = await readSessionEvents(parent);
   const latest = events.reduce(
     (max, event) => Math.max(max, event.sequence),
@@ -2128,7 +2147,7 @@ async function branchProductRuntimeSessionInternal(
     kind: parent.kind,
     title: input.title,
     seed: input.seed,
-    canonSnapshot: parseJsonObject(parent.canonSnapshotJson, "Canon 冻结快照"),
+    canonSnapshot: await createProductOwnedBranchOriginV1({ parent, state, events, throughSequence: input.throughSequence }),
     initialState: state,
   };
   let child: ProductRuntimeSession;
@@ -2198,6 +2217,30 @@ export async function deleteProductRuntimeSession(
         .where("parentSessionId")
         .equals(sessionId)
         .toArray();
+      // A nullable parent locator cannot be the only branch admission evidence.
+      // Materialize old native AVG branches from the real parent/event prefix
+      // before the registry clears that locator. A mismatch aborts deletion.
+      for (const child of children) {
+        if (child.kind !== 'avg') continue;
+        const initial = parseProductRuntimeState(child.initialStateJson);
+        if (!initial.avgRules && !initial.avgReading) continue;
+        if (await verifyProductOwnedBranchOriginV1({ ...child, initialState: initial })) continue;
+        const parent = await db.productRuntimeSessions.get(sessionId);
+        if (!parent || ['projectId', 'worldId', 'workId', 'worldGroupId', 'kind', 'runtimeSourceHash', 'productBuildId', 'productReleaseId']
+          .some(key => (parent[key as keyof ProductRuntimeSession] ?? null) !== (child[key as keyof ProductRuntimeSession] ?? null)))
+          throw new Error('[avg-branch-origin] 父会话来源或作用域不一致，保留存档');
+        const events = await readSessionEvents(parent);
+        const through = child.parentThroughSequence;
+        const latest = events.reduce((max, event) => Math.max(max, event.sequence), 0);
+        if (through == null || !Number.isSafeInteger(through) || through < 0 || through > latest)
+          throw new Error('[avg-branch-origin] 分叉序号无效，保留存档');
+        const expected = replayProductRuntimeEvents(parseProductRuntimeState(parent.initialStateJson), events, through);
+        rebaseProductRuntimeStateForBranchV1(expected, through);
+        expected.lastSequence = 0;
+        if (stableJson(expected) !== stableJson(initial)) throw new Error('[avg-branch-origin] 父事件无法重建分支初态，保留存档');
+        const canon = await createProductOwnedBranchOriginV1({ parent, state: initial, events, throughSequence: through });
+        await db.productRuntimeSessions.update(child.id!, { canonSnapshotJson: stableJson(canon) });
+      }
       // PROJECT_TABLES is authoritative for runtime-owned extensions such as the
       // unified Harness ledger. Cascading the registered references keeps this
       // lifecycle complete without a second hand-written run/event table list.

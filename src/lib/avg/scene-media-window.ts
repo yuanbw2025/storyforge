@@ -19,19 +19,21 @@ export function selectAvgSceneMediaWindowV1(input: {
   if(!module)return null
   const assets=new Map(module.stage.assets.map(asset=>[asset.assetKey,asset]))
   const selected=new Set<string>()
-  const add=(key:string|null|undefined)=>{
+  const add=(key:string|null|undefined,retainMutedTransport=false)=>{
     if(!key)return
     const asset=assets.get(key)
     if(asset?.mimeType.startsWith('image/')&&!input.images)return
-    // Native voice still has a real transport/receipt when the reader mutes it.
-    if(asset?.mimeType.startsWith('audio/')&&asset.kind!=='voice'&&!input.audio)return
+    // Mute changes gain, not Cue identity or a current transport's source.
+    // Future non-voice sounds can stay unloaded; active channels and native
+    // voice retain their bounded resources and real transport position.
+    if(asset?.mimeType.startsWith('audio/')&&asset.kind!=='voice'&&!input.audio&&!retainMutedTransport)return
     selected.add(key)
   }
   // Actual currently playing voice and the requested replay take priority.
   add(module.reading?.voices.find(voice=>voice.lineKey===input.currentLineKey)?.assetKey)
   add(input.historyAssetKey)
   for(const sound of input.stage?.activeAudio??[]){
-    if(sound.channel!=='voice'||!module.reading)add(sound.assetKey)
+    if(sound.channel!=='voice'||!module.reading)add(sound.assetKey,true)
   }
   add(input.stage?.backgroundAssetKey);add(input.stage?.cgAssetKey);add(input.stage?.overlayAssetKey)
   for(const actor of input.stage?.actors??[])add(actor.assetKey)
