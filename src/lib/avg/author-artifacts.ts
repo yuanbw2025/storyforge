@@ -37,7 +37,7 @@ function validateSystem(value: unknown) {
     : validateAvgSystemPlanForAuthorV1(value)
 }
 
-async function authority(scope: WorkspaceScope, buildId: number) {
+async function authority(scope: WorkspaceScope, buildId: number, forCompilation = false) {
   const build = await db.productBuilds.get(buildId)
   if (!build || !await assertRecordInScope(scope, 'productBuilds', build, { owner: 'work' })) throw new Error('[avg] Build 不存在或跨 Work')
   const production = await db.productProductions.get(build.productionId)
@@ -45,7 +45,7 @@ async function authority(scope: WorkspaceScope, buildId: number) {
   if (!production?.id || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })
     || production.productType !== 'avg' || work?.kind !== 'avg') throw new Error('[avg] 必须属于当前 AVG Work/Production')
   if (production.status !== 'producing' || production.currentBuildNumber !== build.buildNumber
-    || production.controlEpoch !== build.controlEpoch || !['authorized','building'].includes(build.status)
+    || production.controlEpoch !== build.controlEpoch || !(forCompilation ? ['authorized','building','integrating'] : ['authorized','building']).includes(build.status)
     || build.packageHash || build.previewHash || build.releasedProductReleaseId != null) throw new Error('[avg] 当前 Build 不可采用；已冻结版本须建立新 Build')
   const briefRow = await db.productProductionBriefs.where('[productionId+revision]').equals([production.id, build.briefRevision]).first()
   if (!briefRow || !await assertRecordInScope(scope, 'productProductionBriefs', briefRow, { owner: 'work' })
@@ -70,7 +70,7 @@ async function authority(scope: WorkspaceScope, buildId: number) {
   if (plan.productType !== 'avg' || plan.buildNumber !== build.buildNumber || plan.controlEpoch !== build.controlEpoch
     || build.planRevision < 1 || await hash(plan) !== build.planHash
     || canonicalProductProductionJsonV2(plan) !== build.planJson) throw new Error('[avg] 冻结 Plan/hash 已 stale')
-  return { build, production: production as ProductProductionRecordV1 & { id: number }, briefRow, plan, sourcePlan }
+  return { build, production: production as ProductProductionRecordV1 & { id: number }, briefRow, brief, plan, sourcePlan }
 }
 
 async function acceptedInputs(scope: WorkspaceScope, buildId: number, epoch: number, keys: string[]) {
@@ -254,11 +254,11 @@ async function prepareAdoption(scope: WorkspaceScope, production: ProductProduct
 /** Only a current, confirmed rule revision can enter formal Build compilation.
  * Pure engineering previews remain available without this persistence receipt. */
 export async function readAvgSystemPlanForCompilationV1(input: {
-  scope: WorkspaceScope; buildId: number; expectedBuildRevision: number; controlEpoch: number
+  scope: WorkspaceScope; buildId: number; expectedBuildRevision: number; controlEpoch: number; includeSceneScripts?: boolean
 }) {
   const scope = await resolveScope({ scope: input.scope })
   return db.transaction('r', scopeTransactionTables(db.productProductions, db.productProductionBriefs, db.productProductionCommands, db.productBuilds, db.productBuildArtifacts), async () => {
-    const context = await authority(scope, input.buildId)
+    const context = await authority(scope, input.buildId, true)
     if (context.build.stateRevision !== input.expectedBuildRevision || context.build.controlEpoch !== input.controlEpoch) throw new Error('[avg] 规则编译 Build revision/epoch 已 stale')
     const [artifact] = await acceptedInputs(scope, input.buildId, input.controlEpoch, ['avg.system.plan'])
     const prepared = prepareAvgProfessionalArtifactV1({ artifactKey: artifact.artifactKey, kind: artifact.kind, payload: artifact.payloadJson, allowedOutputKeys: ['avg.system.plan'] })
@@ -266,8 +266,17 @@ export async function readAvgSystemPlanForCompilationV1(input: {
     const validation = await validateSystem(prepared.payload)
     const receipt = JSON.parse(artifact.metadataJson) as { candidate: AuthorCandidate; receiptHash: string }
     if (receipt.candidate.version !== 2 || canonicalProductProductionJsonV2(receipt.candidate.systemValidation) !== canonicalProductProductionJsonV2(validation)) throw new Error('[avg] 规则编译证据缺失、版本不匹配或已 stale')
-    return { plan: prepared.payload, artifact: ref(artifact), validation, authorReceiptHash: receipt.receiptHash,
-      build: { buildNumber: context.build.buildNumber, stateRevision: context.build.stateRevision, controlEpoch: context.build.controlEpoch, planRevision: context.build.planRevision, planHash: context.build.planHash } }
+    const scriptKeys = input.includeSceneScripts ? prepared.payload.scenes.map(scene => `avg.content.scene-script.${scene.key}`) : []
+    const scriptRows = await acceptedInputs(scope, input.buildId, input.controlEpoch, scriptKeys)
+    const scripts = scriptRows.map(row => {
+      const parsed = prepareAvgProfessionalArtifactV1({ artifactKey: row.artifactKey, kind: row.kind, payload: row.payloadJson, allowedOutputKeys: scriptKeys }).payload
+      const scriptReceipt = JSON.parse(row.metadataJson) as { candidate: AuthorCandidate; receiptHash: string }
+      if (parsed.schema !== 'storyforge.avg.scene-script' || !scriptReceipt.candidate.inputs.some(source => source.artifactKey === artifact.artifactKey && source.version === artifact.version && source.contentHash === artifact.contentHash)) throw new Error('[avg] 脚本缺少当前正式规则依赖')
+      return { payload: parsed, artifact: ref(row), authorReceiptHash: scriptReceipt.receiptHash }
+    })
+    return { plan: prepared.payload, artifact: ref(artifact), validation, authorReceiptHash: receipt.receiptHash, scripts,
+      sourceWorld: { contentHash: context.brief.source.worldContentHash, selection: context.brief.source.selection },
+      build: { productionKey: context.production.productionKey, buildNumber: context.build.buildNumber, stateRevision: context.build.stateRevision, controlEpoch: context.build.controlEpoch, planRevision: context.build.planRevision, planHash: context.build.planHash } }
   })
 }
 

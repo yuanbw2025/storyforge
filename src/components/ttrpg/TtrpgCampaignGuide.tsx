@@ -427,6 +427,7 @@ export default function TtrpgCampaignGuide(props: {
           scope,
           source: playableSource,
         });
+        if (resolved.runtimePackage.productType !== 'ttrpg') throw new Error('冻结来源不是 TTRPG 运行包')
         runtimePackage = resolved.runtimePackage;
       } else {
         throw new Error("TTRPG 会话没有绑定 ProductRelease 或 Build Preview。");

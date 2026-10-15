@@ -65,6 +65,9 @@ const entrypoints = [
   // G6-01 exposes the governed vNext runtime AI provider gateway as a headless
   // product-runtime API. Player routes adopt its candidates only in later G6 slices.
   'src/lib/open-world/runtime-ai-execution.ts',
+  // AVG deterministic Build assembly consumes confirmed author revisions;
+  // the production planner/workbench connects this API in its own increment.
+  'src/lib/avg/executable-compiler.ts',
 ].map(file => path.resolve(root, file))
 
 const graph = new Map()

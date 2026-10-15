@@ -1,6 +1,7 @@
 import type { AnyProductBuildPreviewManifest, ProductBuildPreviewManifestV1, ProductBuildPreviewManifestV2, ProductBuildRecordV1 } from '../types'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { parseProductRuntimePackageV1, parseProductRuntimePackageV2, productProtocolVersion } from './runtime-package'
+import { avgExecutableModule } from '../avg/executable-module'
 
 function fail(message: string): never {
   throw new Error(`[product-build-preview] ${message}`)
@@ -157,16 +158,27 @@ export function parseProductBuildPreviewManifestV2(value: string | unknown): Pro
     'packageHash', 'mediaBindings', 'fallbackSummary', 'previewHash',
   ], 'manifest V2')
   if (manifest.version !== 2) fail('schema/version 无效')
-  if (!Array.isArray(manifest.mediaBindings) || manifest.mediaBindings.length !== 0) {
-    fail('V2 包含未登记媒资绑定')
-  }
+  const runtimePackage = parseProductRuntimePackageV2(manifest.runtimePackage)
+  const executable = avgExecutableModule(runtimePackage)
+  if (!executable && (!Array.isArray(manifest.mediaBindings) || manifest.mediaBindings.length !== 0)) fail('V2 包含未登记媒资绑定')
+  const assets = executable?.stage.assets ?? []
+  if (!Array.isArray(manifest.mediaBindings) || manifest.mediaBindings.length !== assets.length) fail('V2 媒资绑定未闭合')
+  const mediaBindings = manifest.mediaBindings.map(value => {
+    const row = record(value, 'V2 media binding')
+    exactKeys(row, ['assetKey','artifactKey','blobContentHash'], 'V2 media binding')
+    const binding = { assetKey: text(row.assetKey, 'assetKey', 200), artifactKey: text(row.artifactKey, 'artifactKey', 200), blobContentHash: hash(row.blobContentHash, 'blobContentHash') }
+    if (!assets.some(asset => asset.assetKey === binding.assetKey && asset.blobContentHash === binding.blobContentHash)) fail('V2 媒资绑定与包不一致')
+    return binding
+  })
+  if (new Set(mediaBindings.map(binding => binding.assetKey)).size !== mediaBindings.length
+    || canonicalProductProductionJsonV2([...mediaBindings].sort((a,b) => a.assetKey.localeCompare(b.assetKey) || a.artifactKey.localeCompare(b.artifactKey))) !== canonicalProductProductionJsonV2(mediaBindings)) fail('V2 媒资绑定重复或未排序')
   return {
     schema: 'storyforge.product-build-preview', version: 2,
     productionKey: text(manifest.productionKey, 'productionKey', 500),
     buildNumber: integer(manifest.buildNumber, 'buildNumber'),
     buildManifestHash: hash(manifest.buildManifestHash, 'buildManifestHash'),
-    runtimePackage: parseProductRuntimePackageV2(manifest.runtimePackage),
-    packageHash: hash(manifest.packageHash, 'packageHash'), mediaBindings: [],
+    runtimePackage,
+    packageHash: hash(manifest.packageHash, 'packageHash'), mediaBindings,
     fallbackSummary: parseFallbackSummary(manifest.fallbackSummary),
     previewHash: hash(manifest.previewHash, 'previewHash'),
   }
@@ -183,13 +195,14 @@ export async function createProductBuildPreviewManifestV2(input: {
   buildManifestHash: string
   runtimePackage: ProductBuildPreviewManifestV2['runtimePackage']
   fallbackSummary?: string[]
+  mediaBindings?: ProductBuildPreviewManifestV2['mediaBindings']
 }): Promise<ProductBuildPreviewManifestV2> {
   const runtimePackage = parseProductRuntimePackageV2(input.runtimePackage)
   const body: Omit<ProductBuildPreviewManifestV2, 'previewHash'> = {
     schema: 'storyforge.product-build-preview', version: 2,
     productionKey: input.productionKey.trim().normalize('NFC'), buildNumber: input.buildNumber,
     buildManifestHash: input.buildManifestHash, runtimePackage,
-    packageHash: await hashProductProductionValueV2(runtimePackage), mediaBindings: [],
+    packageHash: await hashProductProductionValueV2(runtimePackage), mediaBindings: [...(input.mediaBindings ?? [])].sort((a,b) => a.assetKey.localeCompare(b.assetKey) || a.artifactKey.localeCompare(b.artifactKey)),
     fallbackSummary: [...new Set(input.fallbackSummary ?? [])].sort(),
   }
   return parseProductBuildPreviewManifestV2({ ...body, previewHash: await hashProductProductionValueV2(body) })

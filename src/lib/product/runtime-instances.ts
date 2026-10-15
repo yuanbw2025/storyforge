@@ -17,7 +17,7 @@ import {
   EMPTY_PRODUCT_RUNTIME_STATE,
   type FrozenNarrativeBeat,
   type FrozenNarrativeChoice,
-  type ProductRuntimePackageV1,
+  type AnyProductRuntimePackage,
   type ProductRuntimeSourceV1,
   type ProductNarrativeRuntimeNodeSnapshot,
   type ProductNarrativeRuntimeState,
@@ -37,6 +37,8 @@ import {
 import { evaluateNarrativeChoices } from './narrative-content'
 import { assertProductReleaseUnchanged } from './releases'
 import { createInitialAvgPresentationState } from '../avg/runtime'
+import { avgExecutableModule, avgRuntimeStage } from '../avg/executable-module'
+import { previewAvgSystemEffectsV1 } from '../avg/system-state'
 import { createInitialOpenWorldEvolutionState } from '../open-world/evolution-runtime'
 import { createInitialOpenWorldState } from '../open-world/runtime'
 import { createInitialTextOpenWorldSessionProjectionV1 } from '../open-world/session-projection'
@@ -73,7 +75,7 @@ export interface CreateProductRuntimeInstanceInput {
 
 interface FrozenNarrativeDefinition {
   version: 2
-  moduleKind: ProductRuntimePackageV1['narrative']['moduleKind']
+  moduleKind: AnyProductRuntimePackage['narrative']['moduleKind']
   moduleTitle: string
   entryNodeKey: string
   nodes: ProductNarrativeRuntimeNodeSnapshot[]
@@ -86,7 +88,7 @@ interface FrozenNarrativeDefinition {
 
 function productReleaseNarrativeDefinition(
   runtimeSourceHash: string,
-  runtimePackage: ProductRuntimePackageV1,
+  runtimePackage: AnyProductRuntimePackage,
 ): FrozenNarrativeDefinition {
   return {
     version: 2,
@@ -103,7 +105,7 @@ function productReleaseNarrativeDefinition(
 }
 
 function sessionKindForProduct(
-  productType: ProductRuntimePackageV1['productType'],
+  productType: AnyProductRuntimePackage['productType'],
 ): ProductRuntimeKind {
   return productType
 }
@@ -153,12 +155,13 @@ function initialNarrativeState(
 }
 
 export function createProductRuntimeCanonSnapshotV1(input: {
-  runtimePackage: ProductRuntimePackageV1
+  runtimePackage: AnyProductRuntimePackage
   runtimeSourceHash: string
 }): Record<string, unknown> {
   return {
     schema: 'storyforge.product-runtime-source',
     version: 1,
+    ...(input.runtimePackage.version === 2 ? { packageVersion: 2 } : {}),
     productType: input.runtimePackage.productType,
     runtimeSourceHash: input.runtimeSourceHash,
     sourceWorldContentHash: input.runtimePackage.sourceWorld.contentHash,
@@ -166,7 +169,7 @@ export function createProductRuntimeCanonSnapshotV1(input: {
 }
 
 export function createProductInitialStateV1(input: {
-  runtimePackage: ProductRuntimePackageV1
+  runtimePackage: AnyProductRuntimePackage
   runtimeSourceHash: string
 }): ProductRuntimeState {
   const runtimePackage = input.runtimePackage
@@ -205,10 +208,16 @@ export function createProductInitialStateV1(input: {
     state = withAdventureNarrativeProjectionV1(state)
   }
   if (runtimePackage.productType === 'avg') {
+    const module = avgExecutableModule(runtimePackage)
+    if (module) {
+      state.avgRules = { schema: 'storyforge.avg.rules-state', version: 1, systemPlan: structuredClone(module.systemPlan) }
+      const entry = module.systemPlan.scenes.find(scene => scene.key === module.systemPlan.entrySceneKey)!
+      previewAvgSystemEffectsV1(module.systemPlan, runtimePackage.definition.initialVariables, entry.onEnter)
+    }
     state.presentation = createInitialAvgPresentationState({
       contentHash: input.runtimeSourceHash,
-      assets: runtimePackage.presentation!.assets,
-      content: runtimePackage.presentation!,
+      assets: avgRuntimeStage(runtimePackage)!.assets,
+      content: avgRuntimeStage(runtimePackage)!,
       entryNodeKey: runtimePackage.narrative.entryNodeKey,
     })
   }

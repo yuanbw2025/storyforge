@@ -1,3 +1,6 @@
+import { assertFrozenRuntimePackageSessionV1, parseProductRuntimeState } from '../product/runtime-core'
+import type { AnyProductBuildPreviewManifest } from '../types'
+import { avgExecutableModule } from '../avg/executable-module'
 /**
  * 注册表派生的项目导出引擎(AUDIT-1)
  *
@@ -53,6 +56,8 @@ async function assertProductRuntimeExportIntegrityV1(
   const buildsById = new Map<number, any>()
   const productionsById = new Map((rowsByTable.get('productProductions') ?? []).map(row => [row.id, row]))
   const buildPreviewVersions = new Map<number, 1 | 2>()
+  const executableAvgBuilds = new Set<number>()
+  const executableAvgPreviews = new Map<number, AnyProductBuildPreviewManifest>()
   const previewCodec = builds.length ? await import('../product-production/preview-manifest') : null
   for (const build of builds) {
     if (!Number.isSafeInteger(build.id) || build.id < 1 || buildsById.has(build.id)) {
@@ -68,6 +73,7 @@ async function assertProductRuntimeExportIntegrityV1(
           || build.projectId !== production.projectId || build.worldId !== production.worldId
           || build.workId !== production.workId) throw new Error('production-mismatch')
         buildPreviewVersions.set(build.id, preview.version)
+        if (avgExecutableModule(preview.runtimePackage)) { executableAvgBuilds.add(build.id); executableAvgPreviews.set(build.id, preview) }
       }
     } catch (error) {
       throw new Error(`[deriveExport] ProductBuild Preview 无效:${error instanceof Error ? error.message : String(error)}`)
@@ -119,10 +125,19 @@ async function assertProductRuntimeExportIntegrityV1(
     if (!Number.isSafeInteger(session.id) || session.id < 1 || sessionsById.has(session.id)) {
       throw new Error('[deriveExport] ProductRuntimeSession 本地主键无效')
     }
-    if ((session.productReleaseId != null
-      && releaseManifestsById.get(session.productReleaseId)?.version === 2)
-      || (session.productBuildId != null && buildPreviewVersions.get(session.productBuildId) === 2)) {
+    if ((session.productReleaseId != null && releaseManifestsById.get(session.productReleaseId)?.version === 2
+      && !avgExecutableModule(releaseManifestsById.get(session.productReleaseId)!.runtimePackage))
+      || (session.productBuildId != null && buildPreviewVersions.get(session.productBuildId) === 2 && !executableAvgBuilds.has(session.productBuildId))) {
       throw new Error('[deriveExport] V2 未登记可玩模块，不能包含运行会话')
+    }
+    const avgSource = (session.productReleaseId != null ? releaseManifestsById.get(session.productReleaseId) : executableAvgPreviews.get(session.productBuildId))
+    if (avgSource && avgExecutableModule(avgSource.runtimePackage)) {
+      const sourceRow = session.productReleaseId != null ? releasesById.get(session.productReleaseId) : buildsById.get(session.productBuildId)
+      if (!sourceRow || ['projectId','worldId','workId'].some(key => session[key] !== sourceRow[key])) throw new Error('[deriveExport] AVG 会话跨 owner')
+      if (session.runtimeSourceHash !== avgSource.packageHash) throw new Error('[avg] 备份会话来源 hash 不一致')
+      assertFrozenRuntimePackageSessionV1({ session: { kind: session.kind, initialState: parseProductRuntimeState(session.initialStateJson) },
+        runtimePackage: avgSource.runtimePackage, runtimeSourceHash: avgSource.packageHash,
+        origin: session.parentSessionId != null ? 'branch' : session.productReleaseId != null ? 'release' : 'preview' })
     }
     sessionsById.set(session.id, session)
   }

@@ -10,6 +10,7 @@ import type { AdventureContentV1 } from './adventure'
 import type { AdventureContent } from './adventure-v2'
 import type { AvgPresentationContentV1 } from './avg'
 import type { AvgRuntimeModuleV1 } from '../avg/runtime-contract-v2'
+import type { AvgRuntimeModuleV2 } from '../avg/executable-module'
 import type { FrozenProductMediaAsset } from './product-media'
 import type { OpenWorldEvolutionContentV1 } from './open-world-evolution'
 import type { OpenWorldContentV1 } from './open-world'
@@ -268,7 +269,7 @@ export interface ProductRuntimePackageV2 {
   definition: ProductRuntimePackageV1['definition']
   sourceWorld: ProductRuntimePackageV1['sourceWorld']
   narrative: FrozenProductNarrativeV1
-  modules: AvgRuntimeModuleV1[]
+  modules: Array<AvgRuntimeModuleV1 | AvgRuntimeModuleV2>
   presentation?: undefined
   interaction?: undefined
   adventure?: undefined
@@ -346,3 +347,6 @@ export interface ProductRelease {
   createdAt: number
   distributionProvenance?: ProductReleaseDistributionProvenanceV1
 }
+
+/** Player view preserves the actual package version; no V2-to-V1 conversion. */
+export type AvgPlayableRuntimePackage = AvgProductRuntimePackageV1 | ProductRuntimePackageV2

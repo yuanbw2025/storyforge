@@ -44,7 +44,7 @@ export interface ProductBuildPreviewManifestV2 extends Omit<ProductBuildPreviewM
   'version' | 'runtimePackage' | 'mediaBindings'> {
   version: 2;
   runtimePackage: ProductRuntimePackageV2;
-  mediaBindings: never[];
+  mediaBindings: ProductBuildPreviewManifestV1['mediaBindings'];
 }
 
 export type AnyProductBuildPreviewManifest = ProductBuildPreviewManifestV1 | ProductBuildPreviewManifestV2;
@@ -59,7 +59,7 @@ export interface VerifiedProductRuntimeSourceEnvelope {
 
 export interface ResolvedProductRuntimeSourceV1 {
   source: ProductRuntimeSourceV1;
-  runtimePackage: ProductRuntimePackageV1;
+  runtimePackage: AnyProductRuntimePackage;
   packageHash: string;
   runtimeSourceHash: string;
   mediaResolver: ProductMediaResolverV1;

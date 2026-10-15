@@ -1,3 +1,4 @@
+import { avgExecutableModule, avgRuntimeStage } from '../../lib/avg/executable-module'
 import StageAudio from '../avg/StageAudio'
 import { avgCueTimeline } from '../../lib/avg/cue-timeline'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -80,7 +81,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
   }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.worldGroupId, props.initialSessionId]) // eslint-disable-line react-hooks/exhaustive-deps
   const catalog = useMemo(() => currentPlayerReleases(store.releases), [store.releases])
   const catalogRelease = catalog.find(item => item.release.id === catalogReleaseId) ?? null
-  const mediaCacheKey = `${store.selectedSessionId ?? 'title'}:${store.selectedManifest?.presentation.assets.map(asset => `${asset.assetKey}@${asset.version}:${asset.contentHash}`).join('|') ?? ''}`
+  const mediaCacheKey = `${store.selectedSessionId ?? 'title'}:${(store.selectedManifest ? avgRuntimeStage(store.selectedManifest)?.assets ?? [] : []).map(asset => `${asset.assetKey}@${asset.version}:${asset.contentHash}`).join('|') ?? ''}`
   useEffect(() => {
     let cancelled = false
     const manifest = store.selectedManifest
@@ -92,13 +93,13 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
         setMediaFailures(result.failures)
         void store.recordMediaFailures(result.failures).catch(() => undefined)
       }
-      if (session?.productBuildId == null || manifest.presentation.assets.length === 0) return
-      const verificationKey = `${session.productBuildId}:${manifest.presentation.assets
+      if (session?.productBuildId == null || avgRuntimeStage(manifest)!.assets.length === 0) return
+      const verificationKey = `${session.productBuildId}:${avgRuntimeStage(manifest)!.assets
         .map(asset => `${asset.assetKey}:${asset.contentHash}`).sort().join('|')}`
       if (mediaVerificationKeys.current.has(verificationKey)) return
       mediaVerificationKeys.current.add(verificationKey)
       void verifyProductMediaRuntimeUrlsV1({
-        assets: manifest.presentation.assets.map(asset => ({
+        assets: avgRuntimeStage(manifest)!.assets.map(asset => ({
           assetKey: asset.assetKey, contentHash: asset.contentHash, mimeType: asset.mimeType,
           width: asset.width, height: asset.height, durationMs: asset.durationMs,
         })),
@@ -249,13 +250,13 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
           <small>AVG / 视觉小说 · 当前可玩版本</small>
           <h3>{catalogRelease.manifest?.definition.title ?? catalogRelease.release.label}</h3>
           <p>{catalogRelease.manifest?.definition.description || '一部等待开演的视觉小说。'}</p>
-          {catalogRelease.manifest && <div className="textgame-title-stats"><span>{catalogRelease.manifest.narrative.nodes.length} 个场景</span><span>{catalogRelease.manifest.narrative.beats.length} 段对白</span><span>{catalogRelease.manifest.presentation.assets.length} 项美术</span><span>{catalogRelease.manifest.presentation.cues.length} 个演出指令</span></div>}
+          {catalogRelease.manifest && <div className="textgame-title-stats"><span>{catalogRelease.manifest.narrative.nodes.length} 个场景</span><span>{catalogRelease.manifest.narrative.beats.length} 段对白</span><span>{avgRuntimeStage(catalogRelease.manifest)!.assets.length} 项美术</span><span>{avgRuntimeStage(catalogRelease.manifest)!.cues.length} 个演出指令</span></div>}
           {catalogRelease.error ? <small>{catalogRelease.error}</small> : <div className="textgame-title-actions"><button type="button" className="textgame-start" disabled={!catalogRelease.manifest || store.busy} onClick={() => void run(() => store.start(catalogRelease.release.id!))}><Plus />开始新游戏</button>{store.sessions.find(session => session.productReleaseId === catalogRelease.release.id) && <button type="button" onClick={() => void store.select(store.sessions.find(session => session.productReleaseId === catalogRelease.release.id)!.id!)}><Save />继续上次进度</button>}</div>}
         </div>
       </section> : <>
         <div className="textgame-catalog-heading"><span>全部游戏</span><small>{catalog.length} 部可游玩作品</small></div>
         <section className="textgame-catalog-list" aria-label="AVG 游戏列表">
-          {catalog.map(item => <article key={item.release.id}><button type="button" aria-label={`查看游戏：${item.manifest?.definition.title ?? item.release.label}`} onClick={() => setCatalogReleaseId(item.release.id!)}><span className="textgame-catalog-icon"><BookOpen /></span><span className="textgame-catalog-copy"><small>AVG / 视觉小说</small><strong>{item.manifest?.definition.title ?? item.release.label}</strong><p>{item.manifest?.definition.description || '一部等待开演的视觉小说。'}</p>{item.manifest && <i>{item.manifest.narrative.nodes.length} 场景 · {item.manifest.narrative.beats.length} 对白 · {item.manifest.presentation.assets.length} 美术 · {item.manifest.presentation.cues.length} 演出</i>}</span><span className="textgame-catalog-open">查看详情<ChevronRight /></span></button></article>)}
+          {catalog.map(item => <article key={item.release.id}><button type="button" aria-label={`查看游戏：${item.manifest?.definition.title ?? item.release.label}`} onClick={() => setCatalogReleaseId(item.release.id!)}><span className="textgame-catalog-icon"><BookOpen /></span><span className="textgame-catalog-copy"><small>AVG / 视觉小说</small><strong>{item.manifest?.definition.title ?? item.release.label}</strong><p>{item.manifest?.definition.description || '一部等待开演的视觉小说。'}</p>{item.manifest && <i>{item.manifest.narrative.nodes.length} 场景 · {item.manifest.narrative.beats.length} 对白 · {avgRuntimeStage(item.manifest)!.assets.length} 美术 · {avgRuntimeStage(item.manifest)!.cues.length} 演出</i>}</span><span className="textgame-catalog-open">查看详情<ChevronRight /></span></button></article>)}
           {!catalog.length && <div className="avg-title-empty"><BookOpen /><span>还没有可游玩的 AVG</span></div>}
         </section>
         {store.sessions.length > 0 && <section className="avg-title-sessions" aria-label="已有存档"><h3>继续游戏</h3>{store.sessions.map(session => <button onClick={() => void store.select(session.id!)} key={session.id}><span>{session.title}</span><small>继续时间线</small></button>)}</section>}
@@ -290,7 +291,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
         </nav>
       </header>
       {store.error && <div role="alert" className="avg-alert">{store.error}</div>}
-      <div className="avg-stage" style={{aspectRatio:store.selectedManifest?.definition.initialVariables.avgAspectRatio === "4:3" ? "4 / 3" : "16 / 9"}} data-tone={visualStage?.tone ?? 'normal'} data-transition={visualStage?.lastTransition ?? 'none'} onClick={event => {
+      <div className="avg-stage" style={{aspectRatio:(store.selectedManifest && (avgExecutableModule(store.selectedManifest)?.aspectRatio ?? store.selectedManifest.definition.initialVariables.avgAspectRatio)) === "4:3" ? "4 / 3" : "16 / 9"}} data-tone={visualStage?.tone ?? 'normal'} data-transition={visualStage?.lastTransition ?? 'none'} onClick={event => {
         if (event.target instanceof HTMLElement && event.target.closest('button, input, summary, details')) return
         if (currentBeat && !panel) advance()
       }} aria-label={background ? `背景 ${background}` : '纯文字降级舞台'}>

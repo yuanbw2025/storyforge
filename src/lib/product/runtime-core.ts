@@ -1,3 +1,4 @@
+import { assertProductOwnedRuntimeInvariantsV1 } from './runtime-product-adapters'
 /** Product-neutral session, event-log, checkpoint and projection infrastructure. */
 import Dexie from "dexie";
 import { assertProductReleaseUnchanged } from "./releases";
@@ -8,8 +9,8 @@ import { normalizeProductRuntimeCommandIdV1 } from "./runtime-command-id";
 import { assertProductRuntimeIntegerV1, isProductRuntimeJsonObjectV1, stableProductRuntimeJsonV1, type ProductRuntimeJsonObjectV1 } from "./runtime-values";
 import { parseNarrativeCondition, parseNarrativeEffects, evaluateNarrativeCondition, applyNarrativeEffects } from "../narrative/blueprint";
 import { transactionTablesForReferenceCascade } from "../registry/lifecycle";
-import { type ProductRuntimeKind, type ProductRuntimeState, type FrozenNarrativeBeat, NARRATIVE_BEAT_KINDS, type FrozenNarrativeChoice, type ProductNarrativeRuntimeNodeSnapshot, NARRATIVE_NODE_KINDS, type ProductNarrativeRuntimeState, NARRATIVE_MODULE_KINDS, type NarrativeChoiceHistoryEntry, type RuntimeAttributes, type RuntimeEntityState, RUNTIME_ENTITY_KINDS, RUNTIME_LIFECYCLE_STATUSES, type RuntimeMemory, type ProductRuntimeEvent, PRODUCT_RUNTIME_EVENT_TYPES, type ProductRuntimeSession, PRODUCT_RUNTIME_KINDS, EMPTY_PRODUCT_RUNTIME_STATE, type ProductRuntimePackageV1, type ProductRuntimeEventType, type ProductRelease, type ProductBuildRecordV1, type ProductProductionRecordV1, type ProductProductionBriefRecordV1, type ProductRuntimeCheckpoint, PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1, type ProductRuntimeCheckpointPurposeV1 } from "../types";
-import { verifyProductReleaseManifest, requirePlayableProductRuntimePackageV1 } from "../product-production/runtime-package";
+import { type ProductRuntimeKind, type ProductRuntimeState, type FrozenNarrativeBeat, NARRATIVE_BEAT_KINDS, type FrozenNarrativeChoice, type ProductNarrativeRuntimeNodeSnapshot, NARRATIVE_NODE_KINDS, type ProductNarrativeRuntimeState, NARRATIVE_MODULE_KINDS, type NarrativeChoiceHistoryEntry, type RuntimeAttributes, type RuntimeEntityState, RUNTIME_ENTITY_KINDS, RUNTIME_LIFECYCLE_STATUSES, type RuntimeMemory, type ProductRuntimeEvent, PRODUCT_RUNTIME_EVENT_TYPES, type ProductRuntimeSession, PRODUCT_RUNTIME_KINDS, EMPTY_PRODUCT_RUNTIME_STATE, type AnyProductRuntimePackage, type ProductRuntimeEventType, type ProductRelease, type ProductBuildRecordV1, type ProductProductionRecordV1, type ProductProductionBriefRecordV1, type ProductRuntimeCheckpoint, PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1, type ProductRuntimeCheckpointPurposeV1 } from "../types";
+import { verifyProductReleaseManifest, requirePlayableProductRuntimePackage } from "../product-production/runtime-package";
 import { verifyProductRuntimeSource, verifyProductRuntimeSessionSourceV1 } from "../product-production/preview-source";
 import {
   applyProductOwnedRuntimeEventV1,
@@ -725,7 +726,7 @@ function reduceProductRuntimeEvent(
   }
   const payload = parseEventPayload(event);
   const productState = applyProductOwnedRuntimeEventV1(state, event, payload);
-  if (productState) return productState;
+  if (productState) { assertProductOwnedRuntimeInvariantsV1(productState); return productState; }
   switch (event.type) {
     case "time.advanced": {
       const amount = assertFiniteInteger(
@@ -931,6 +932,7 @@ function reduceProductRuntimeEvent(
     }
   }
   state.lastSequence = event.sequence;
+  assertProductOwnedRuntimeInvariantsV1(state);
   return state;
 }
 
@@ -1028,8 +1030,8 @@ export async function prepareReleasedProductRuntimeSessionRecordV1(
     throw new Error("上层产品的 ProductRelease 绑定无效。");
   }
   const manifest = await verifyProductReleaseManifest(productRelease.manifestJson);
-  const runtimePackage = requirePlayableProductRuntimePackageV1(manifest.runtimePackage);
-  validateFrozenRuntimePackageSession({
+  const runtimePackage = requirePlayableProductRuntimePackage(manifest.runtimePackage);
+  assertFrozenRuntimePackageSessionV1({
     session: input,
     runtimePackage,
     runtimeSourceHash: manifest.packageHash,
@@ -1065,7 +1067,7 @@ export async function preparePreviewProductRuntimeSessionRecordV1(
   if (verified.runtimeSourceHash !== input.runtimeSourceHash) {
     throw new Error("上层产品的 Build Preview 冻结绑定无效。");
   }
-  validateFrozenRuntimePackageSession({
+  assertFrozenRuntimePackageSessionV1({
     session: input,
     runtimePackage: verified.runtimePackage,
     runtimeSourceHash: verified.runtimeSourceHash,
@@ -1095,14 +1097,14 @@ export async function insertPreparedProductRuntimeSessionV1(
 }
 
 function sessionKindForProduct(
-  productType: ProductRuntimePackageV1["productType"],
+  productType: AnyProductRuntimePackage["productType"],
 ): ProductRuntimeKind {
   return productType;
 }
 
-function validateFrozenRuntimePackageSession(input: {
-  session: CreateProductRuntimeSessionInput;
-  runtimePackage: ProductRuntimePackageV1;
+export function assertFrozenRuntimePackageSessionV1(input: {
+  session: Pick<CreateProductRuntimeSessionInput, "kind" | "initialState">;
+  runtimePackage: AnyProductRuntimePackage;
   runtimeSourceHash: string;
   origin: "release" | "preview" | "branch";
 }): void {
@@ -1285,13 +1287,28 @@ export async function completeProductRuntimeSessionV1(input: {
   );
 }
 
+async function verifyNativeAvgInitialSnapshot(session: ProductRuntimeSession): Promise<boolean> {
+  if (session.kind !== 'avg') return false
+  const initial = parseJsonObject(session.initialStateJson, 'initialStateJson')
+  const canon = parseJsonObject(session.canonSnapshotJson, 'canonSnapshotJson')
+  if (!Object.prototype.hasOwnProperty.call(initial, 'avgRules') && canon.packageVersion !== 2) return false
+  const source = await verifyProductRuntimeSessionSourceV1({ scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId }, session })
+  if (session.runtimeSourceHash !== source.packageHash) throw new Error('[avg] 运行来源 hash 不一致')
+  assertFrozenRuntimePackageSessionV1({ session: { kind: session.kind, initialState: parseProductRuntimeState(session.initialStateJson) },
+    runtimePackage: source.runtimePackage, runtimeSourceHash: source.packageHash,
+    origin: session.parentSessionId != null ? 'branch' : session.productBuildId != null ? 'preview' : 'release' })
+  return true
+}
+
 export async function readVerifiedProductRuntimeHeadV1(
   session: ProductRuntimeSession,
 ): Promise<ProductRuntimeHeadV1> {
   const latestSequence = await readLatestSessionEventSequenceV1(session.id!);
   const cachedJson = session.runtimeHeadStateJson;
   const cachedHash = session.runtimeHeadStateHash;
+  const nativeAvg = await verifyNativeAvgInitialSnapshot(session)
   if (
+    !nativeAvg &&
     session.runtimeHeadSequence === latestSequence &&
     typeof cachedJson === "string" &&
     typeof cachedHash === "string" &&
@@ -1339,6 +1356,7 @@ export async function readProductRuntimeState(
   if (throughSequence === Number.MAX_SAFE_INTEGER) {
     return (await readVerifiedProductRuntimeHeadV1(session)).state;
   }
+  await verifyNativeAvgInitialSnapshot(session)
   const events = await readSessionEvents(session, throughSequence);
   return replayProductRuntimeEvents(
     parseProductRuntimeState(session.initialStateJson),
@@ -1466,7 +1484,7 @@ export async function readProductRuntimeStateVersion(sessionId: number): Promise
 }
 
 export type VerifiedFormalRuntimeSourceV1 = {
-  runtimePackage: ProductRuntimePackageV1;
+  runtimePackage: AnyProductRuntimePackage;
   packageHash: string;
   source:
     | { kind: "release"; release: ProductRelease & { id: number } }
@@ -1485,7 +1503,7 @@ export type VerifiedFormalRuntimeSourceV1 = {
  */
 export async function verifyFormalRuntimeSourceV1(
   session: ProductRuntimeSession,
-  allowedProductTypes: readonly ProductRuntimePackageV1["productType"][],
+  allowedProductTypes: readonly AnyProductRuntimePackage["productType"][],
 ): Promise<VerifiedFormalRuntimeSourceV1> {
   const sourceCount = [session.productReleaseId, session.productBuildId]
     .filter((value) => value != null).length;

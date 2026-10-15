@@ -12,6 +12,9 @@ import { adventureNarrativeActionCommandIdV1 } from '../adventure/command-identi
 import { parseAvgPresentationState, applyAvgPresentationEvent, createInitialAvgPresentationState } from '../avg/runtime'
 import { parseInteractionState, applyInteractionEvent, createInitialInteractionState, rebaseInteractionStateForBranch } from '../character-interaction/runtime'
 import { evaluateNarrativeChoices } from './narrative-content'
+import { assertAvgSnapshotKeyV1, avgExecutableModule, avgRuntimeStage, parseAvgRuntimeRulesStateV1 } from '../avg/executable-module'
+import { assertAvgSystemStateV1, previewAvgSystemEffectsV1 } from '../avg/system-state'
+import { buildAvgSystemGraphV1 } from '../avg/system-graph'
 import { parseOpenWorldEvolutionState, applyOpenWorldEvolutionProductRuntimeEvent, openWorldEvolutionProjection, createInitialOpenWorldEvolutionState, rebaseOpenWorldEvolutionStateForBranch } from '../open-world/evolution-runtime'
 import { parseOpenWorldState, applyOpenWorldEvent, openWorldMainlineProjection, createInitialOpenWorldState, rebaseOpenWorldStateForBranch } from '../open-world/runtime'
 import {
@@ -27,7 +30,7 @@ import { parseTtrpgState } from '../ttrpg/runtime-state'
 import { applyAiTownEventV1, createInitialAiTownStateV1, parseAiTownStateV1, rebaseAiTownStateForBranchV1 } from '../ai-town/runtime'
 import type {
   ProductRuntimeEvent,
-  ProductRuntimePackageV1,
+  AnyProductRuntimePackage,
   ProductRuntimeSession,
   ProductRuntimeState,
   FrozenNarrativeChoice,
@@ -42,9 +45,10 @@ export function parseProductOwnedRuntimeStateV1(
   value: ProductRuntimeState,
 ): Pick<
   ProductRuntimeState,
-  'ttrpg' | 'interaction' | 'adventure' | 'presentation' | 'openWorldEvolution' | 'openWorld' | 'town' | 'textOpenWorld'
+  'ttrpg' | 'interaction' | 'adventure' | 'presentation' | 'openWorldEvolution' | 'openWorld' | 'town' | 'textOpenWorld' | 'avgRules'
 > {
   return {
+    ...(Object.prototype.hasOwnProperty.call(value, 'avgRules') ? { avgRules: parseAvgRuntimeRulesStateV1(value.avgRules) } : {}),
     ttrpg: parseTtrpgState(value.ttrpg),
     interaction: parseInteractionState(value.interaction),
     adventure: parseAdventureState(value.adventure),
@@ -83,6 +87,15 @@ export function applyProductOwnedRuntimeEventV1(
   event: ProductRuntimeEvent,
   payload: ProductRuntimeJsonObjectV1,
 ): ProductRuntimeState | null {
+  if (state.avgRules && event.type === 'presentation.beat.reached' && payload.snapshotKey != null) assertAvgSnapshotKeyV1(payload.snapshotKey)
+  if (state.avgRules && event.type === 'narrative.choice.committed') {
+    const plan = state.avgRules.systemPlan
+    const action = plan.actions.find(action => action.key === payload.choiceKey && action.fromSceneKey === state.narrative?.currentNodeKey)
+    const target = action && plan.scenes.find(scene => scene.key === action.toSceneKey)
+    if (!action || !target || !state.narrative) throw new Error('[avg] 规则行动与当前场景不一致')
+    const afterAction = previewAvgSystemEffectsV1(plan, state.narrative.variables, action.effects)
+    previewAvgSystemEffectsV1(plan, afterAction, target.onEnter)
+  }
   if (event.type.startsWith('text-open-world.')) {
     if (state.textOpenWorld) {
       state.textOpenWorld = applyTextOpenWorldSessionEventV1(state.textOpenWorld, event)
@@ -243,11 +256,23 @@ export function withOpenWorldNarrativeProjectionV1(
 
 export function assertFrozenProductRuntimeStateV1(input: {
   initial: ProductRuntimeState
-  runtimePackage: ProductRuntimePackageV1
+  runtimePackage: AnyProductRuntimePackage
   runtimeSourceHash: string
   origin: 'release' | 'preview' | 'branch'
 }): void {
   const { initial, runtimePackage, runtimeSourceHash } = input
+  const avgModule = avgExecutableModule(runtimePackage)
+  if (initial.avgRules && !avgModule) throw new Error('[avg] 旧来源不得注入新规则状态')
+  if (avgModule) {
+    if (!initial.avgRules || stableProductRuntimeJsonV1(initial.avgRules.systemPlan) !== stableProductRuntimeJsonV1(avgModule.systemPlan) || !initial.narrative) throw new Error('[avg] 规则状态与冻结来源不一致')
+    assertAvgSystemStateV1(avgModule.systemPlan, initial.narrative.variables)
+    if (input.origin !== 'branch') {
+      const compiled = buildAvgSystemGraphV1(avgModule.systemPlan)
+      const entry = avgModule.systemPlan.scenes.find(scene => scene.key === avgModule.systemPlan.entrySceneKey)!
+      const expected = previewAvgSystemEffectsV1(avgModule.systemPlan, compiled.initialVariables, entry.onEnter)
+      if (stableProductRuntimeJsonV1(expected) !== stableProductRuntimeJsonV1(initial.narrative.variables)) throw new Error('[avg] 入口规则状态与冻结初值不一致')
+    }
+  }
   if (runtimePackage.productType === 'character-interaction') {
     const interaction = initial.interaction
     const expected = createInitialInteractionState({
@@ -313,8 +338,8 @@ export function assertFrozenProductRuntimeStateV1(input: {
     const presentation = initial.presentation
     const expected = createInitialAvgPresentationState({
       contentHash: runtimeSourceHash,
-      assets: runtimePackage.presentation!.assets,
-      content: runtimePackage.presentation!,
+      assets: avgRuntimeStage(runtimePackage)!.assets,
+      content: avgRuntimeStage(runtimePackage)!,
       entryNodeKey: runtimePackage.narrative.entryNodeKey,
     })
     const frozenMismatch = !presentation
@@ -460,4 +485,12 @@ export async function cloneProductRuntimeBranchExtensionsV1(input: {
 }): Promise<void> {
   if (input.parent.kind !== 'ttrpg') return
   await cloneTtrpgRuntimeBranchExtensionsV1(input)
+}
+
+/** Product-owned guards apply equally to live commands and event replay. */
+export function assertProductOwnedRuntimeInvariantsV1(state: ProductRuntimeState): void {
+  if (state.avgRules) {
+    if (!state.narrative) throw new Error('[avg] 规则状态缺少叙事投影')
+    assertAvgSystemStateV1(state.avgRules.systemPlan, state.narrative.variables)
+  }
 }

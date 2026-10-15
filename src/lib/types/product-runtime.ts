@@ -1088,6 +1088,8 @@ export interface ProductNarrativeRuntimeState {
 }
 
 export interface ProductRuntimeState {
+  /** Omitted for legacy sources so their serialized state/hash is unchanged. */
+  avgRules?: import('../avg/executable-module').AvgRuntimeRulesStateV1;
   version: 1;
   clock: number;
   entities: Record<string, RuntimeEntityState>;

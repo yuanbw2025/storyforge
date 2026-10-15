@@ -1,6 +1,6 @@
 # AVG 游戏系统、演出与恢复协议
 
-> L2 · 版本：1.3.0 · 生效：2026-10-15 · 受 [AVG 产品契约](../AVG.md)约束。
+> L2 · 版本：1.4.0 · 生效：2026-10-15 · 受 [AVG 产品契约](../AVG.md)约束。
 > 以下为目标协议；当前 V1 的叙事/Cue/checkpoint 底座不能据此宣称已有物品、消息或完整语音协调能力。
 
 ## 0 当前研发顺序与规则接缝
@@ -19,23 +19,29 @@
 
 暂存前验证图、类型/范围和入口；确认事务内重新执行并重建候选哈希、来源/上游/基线与校验证据，不信任调用方自报的校验 JSON。校验仅执行纯数据与哈希，使用单个事务存活等待包裹、内部不访问 DB，避免嵌套 crypto 等待形成自依赖。篡改或错误版本拒绝，命令失败留实际回执；相同命令幂等，规则变更使实际依赖旧 revision 的脚本/工件失效，旧 payload 保留。
 
-`readAvgSystemPlanForCompilationV1` 只为当前活动 Build 返回有作者确认回执的唯一正式规则 revision，校验 Work/Production/明确开始/Brief/SourcePlan/Plan、Build revision/epoch、内容 hash、作者命令和实际校验证据。返回准确规则/工件版本/哈希/回执，候选不能通过此入口进入正式编译。API 接缝与受控任务夹具不表示当前工作台已提供规则输入按钮；生产计划入口、联合编译和新玩家分别接入验收。
+`readAvgSystemPlanForCompilationV1` 只为当前活动 Build 返回有作者确认回执的唯一正式规则 revision，校验 Work/Production/明确开始/Brief/SourcePlan/Plan、Build revision/epoch、内容 hash、作者命令和实际校验证据。返回准确规则/工件版本/哈希/回执，候选不能通过此入口进入正式编译。API 接缝与受控任务夹具不表示当前工作台已提供规则输入按钮；生产计划/工作台入口仍待接入；原生编译与玩家接缝见下节，分别保留其验收边界。
 
 ## 1 模块边界与版本
 
-`AvgRuntimeModuleV1` 是新包 V2 中的 AVG 专用模块，不是跨产品万能规则对象。其逻辑字段如下，精确 TypeScript/codec 由 AVG-BASE-00 落实：
+00B 的 `AvgRuntimeModuleV1` 是不可玩的私有承载，空状态/行动/Cue 仍保持原义。原生可执行模块使用 **`AvgRuntimeModuleV2`**，Package/Preview/Release 的 envelope 仍为真实 V2，禁止转换为带伪造 `version:1` 的旧包。
 
-| 字段 | 类型/职责 | 冻结约束 |
+| 当前原生字段 | 类型/职责 | 冻结约束 |
 |---|---|---|
-| schema / version | `storyforge.avg.runtime-module` / 1 | 未知版本拒绝 |
-| storyMode / capabilities | linear 或 branching；模块名、版本与依赖清单 | 必需模块须由 compiler/player 同时支持；不静默忽略 |
-| subjects / lines | 人物、地点、物件稳定目录；规范句/Beat 与 scene、speaker、text revision | 身份唯一，引用闭合；显示名不是角色主键 |
-| stateDefinitions | 类型化变量、知识、关系、物品、话题、消息、热点定义 | 与冻结来源、Brief、正式 system-plan 对齐 |
-| actions / transitions | 有限命令、可用条件、效果、目标和反馈引用 | 只能通过命令执行，不接受任意 JS、SQL 或模型回调 |
-| presentation | `AvgPresentationContentV2`，Cue/消费者/等待与打断规则 | 只改变展示，不直接写剧情状态 |
-| mediaBindings | `AvgMediaBindingV1` 清单 | 引用被采纳且实际存在的字节与消费者 |
-| progressPolicy / assistPolicy | 已读/鉴赏与辅助规则 | 与当前会话知识分开；辅助可见、可关闭且有确定性后果 |
-| build provenance | 来源/输入/编译版本和 hash 的系统证据 | 复用既有 envelope，不接受模型自报 |
+| schema / version | `storyforge.avg.runtime-module` / 2 | 精确版本分派，旧 inert 模块不自动启用 |
+| systemPlan | `AvgSystemPlanV1` | 确定性生成规则图/初值，范围与身份引用闭合 |
+| lines | scene/line/speaker/text/revision/locale | 一句一 Beat，脚本 revision 真实进入 textRevision；每场含规范句 |
+| choices | choiceKey / text | 表达文本归脚本，行动身份与规则后果独立；仅改措辞不会改结果 |
+| aspectRatio | 16:9 / 4:3 | 原生字段，不偷塞入剧情变量 |
+| stage | 既有 Cue protocol 1 + 冻结 assets | 复用同一 renderer/解析器；未知 Cue 字段/缺资源/错误用途拒绝 |
+| enabled capabilities | narrative / presentation / avg.rules | 与 Package 声明精确一致，未知/未支持可选模块拒绝 |
+
+`avgModuleNarrativeV2` 从规则和规范文本派生共享 Frozen Narrative，包解析时与 narrative/初值逐项比对。规则不从台词或图案猜结果，导演 Cue 不能写规则。当前消费现有 Cue/资产键；00B 的消费者/媒资家族绑定 DTO 不因此自动生效，物件/各消费槽/自动媒资工厂另行接入。
+
+`compileConfirmedAvgBuildV2` 原子读取当前活动 Build 的已确认规则和全部场景脚本，验证脚本实际依赖当前规则 revision、作者命令与源/版本/hash。输入的产品 key 必须匹配 Production；输出为规范包候选，stage 参数仍是明确的演出草稿。实际导演/媒资采用、生产 planner、durable 根回执及正式冻结由后续生产集成器完成，不从编译器签发 Preview/Release。
+
+原生会话增加可选 `avgRules: storyforge.avg.rules-state@1` 冻结规则，规则变量仍在共享 narrative 投影中。旧来源省略该字段，保留原 JSON/哈希；新会话从包生成准确初值，事件重放和实时选择执行同一逐效果范围/类型检查，失败无半个事件。原生来源标记 packageVersion:2；读取时复核初始快照并从事件重放，不信任被重新计算哈希的派生 head。非法/被删除的规则、错源或跨 owner 的备份在导入写入前拒绝。
+
+Preview V2 的媒体绑定只有在原生可执行目录中才开放：每个资产恰有一个 artifactKey/blobHash，目录/MIME/内容 hash 和物理 resolver 的 owner 检查继续复用。旧 inert V2 仍只准空绑定。原生 Build 与 Release、同来源分支/存档、备份重映射与删除接入现有入口；跨 Release 的 AVG 迁移尚未声明，不借文字开放世界迁移协议放行。
 
 共享包/Preview/Release Manifest V2 只增加承载和版本分派，AVG 语义保留在 AVG 模块。包内引用使用 portable 语义 key/版本/hash，不带 Dexie id、作者凭据、二进制字节或 Build/Release id；内部 producer/Run/数据库 owner 证据不复制进 runtime 模块。legacy V1 走原有受限读取路径，不伪造新模块、物品状态或逐句语音完成事件；旧字节/hash 不重写。
 

@@ -1,6 +1,8 @@
 import { parseAdventureContent } from '../adventure/runtime'
 import { parseAvgPresentationContent, validateAvgPresentation } from '../avg/runtime'
 import { parseAvgRuntimeModuleV1 } from '../avg/runtime-contract-v2'
+import { avgExecutableModule, avgModuleNarrativeV2, AVG_EXECUTABLE_CAPABILITIES_V1, parseAvgRuntimeModuleV2 } from '../avg/executable-module'
+import { buildAvgSystemGraphV1 } from '../avg/system-graph'
 import { freezeProductMediaAsset } from './media-contracts'
 import { parseOpenWorldEvolutionContent, validateOpenWorldEvolutionContent } from '../open-world/evolution-runtime'
 import { parseOpenWorldContent, validateOpenWorldContent } from '../open-world/runtime'
@@ -488,11 +490,13 @@ export function parseProductRuntimePackageV2(value: string | unknown): ProductRu
   exactKeys(pkg, ['schema', 'version', 'productType', 'definition', 'sourceWorld', 'narrative', 'modules'], 'package V2')
   if (pkg.version !== 2 || pkg.productType !== 'avg') fail('V2 只支持已声明的 AVG 载体')
   if (!Array.isArray(pkg.modules) || pkg.modules.length > 1) fail('V2 包含未登记模块或重复模块')
-  const modules = pkg.modules.map(parseAvgRuntimeModuleV1)
+  const modules = pkg.modules.map(value => record(value, 'AVG module').version === 2 ? parseAvgRuntimeModuleV2(value) : parseAvgRuntimeModuleV1(value))
   const definition = record(pkg.definition, 'definition')
   exactKeys(definition, ['productKey', 'title', 'description', 'enabledCapabilities', 'rulesetVersion', 'initialVariables'], 'definition')
   const enabledCapabilities = stringArray(definition.enabledCapabilities, 'enabledCapabilities', 20)
-  if (enabledCapabilities.join(',') !== 'narrative') fail('V2 启用了未登记能力')
+  const executable = modules.find(module => module.version === 2)
+  if (executable && definition.rulesetVersion !== 1) fail('AVG 规则版本未支持')
+  if (enabledCapabilities.join(',') !== (executable ? AVG_EXECUTABLE_CAPABILITIES_V1.join(',') : 'narrative')) fail('V2 启用了未登记能力')
   const initialVariables = record(definition.initialVariables, 'initialVariables')
   canonicalProductProductionJsonV2(initialVariables)
   const sourceWorld = record(pkg.sourceWorld, 'sourceWorld')
@@ -507,6 +511,12 @@ export function parseProductRuntimePackageV2(value: string | unknown): ProductRu
   if (!graph.valid) fail(`narrative 图无效:${graph.errors.join('；')}`)
   const beatsByKey = new Map(narrative.beats.map(beat => [beat.beatKey, beat]))
   for (const module of modules) {
+    if (module.version === 2) {
+      const compiled = buildAvgSystemGraphV1(module.systemPlan)
+      if (canonicalProductProductionJsonV2(initialVariables) !== canonicalProductProductionJsonV2(compiled.initialVariables)
+        || canonicalProductProductionJsonV2(narrative) !== canonicalProductProductionJsonV2(avgModuleNarrativeV2(module))) fail('AVG 可执行规则、规范句与 narrative/初值不一致')
+      continue
+    }
     if (module.lines.length !== narrative.beats.length
       || module.lines.some(line => {
         const beat = beatsByKey.get(line.lineKey)
@@ -538,6 +548,12 @@ export function parseProductRuntimePackage(value: string | unknown): AnyProductR
 /** Protocol support is distinct from runtime capability support. */
 export function requirePlayableProductRuntimePackageV1(pkg: AnyProductRuntimePackage): ProductRuntimePackageV1 {
   if (pkg.version !== 1) fail('V2 载体尚未登记可玩模块；不能启动运行或降级为 V1')
+  return pkg
+}
+
+/** Native version-aware admission. An inert V2 carrier remains unplayable. */
+export function requirePlayableProductRuntimePackage(pkg: AnyProductRuntimePackage): AnyProductRuntimePackage {
+  if (pkg.version === 2 && !avgExecutableModule(pkg)) fail('V2 载体尚未登记可玩模块；不能启动运行或降级为 V1')
   return pkg
 }
 
@@ -593,6 +609,7 @@ function parseProductReleaseManifestAtVersion(value: string | unknown, version: 
     buildManifestHash: provenance.buildManifestHash,
     rootTerminalReceiptHash: provenance.rootTerminalReceiptHash,
   }
+  if (avgExecutableModule(runtimePackage) && runtimePackage.definition.productKey !== productionProvenance.productionKey) fail('AVG Release 产品身份与生产来源不一致')
   const sourceContracts = record(manifest.sourceContracts, 'sourceContracts')
   const creatorSourceContracts = sourceContracts.schema
     === 'storyforge.text-open-world-creator-release-source-contracts'

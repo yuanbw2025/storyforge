@@ -1,17 +1,18 @@
+import { avgRuntimeStage } from '../lib/avg/executable-module'
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import { branchProductRuntimeSession, commitNarrativeChoice, createProductRuntimeCheckpoint, deleteProductRuntimeSession, reachAvgPresentationBeat, readProductRuntimeState, readProductRuntimeStateVersion, recordAvgMediaFailure, verifyProductRuntimeCheckpoint } from '../lib/avg/runtime-api'
 import { assertProductReleaseUnchanged, parseAvgProductReleaseManifest, runtimePackageSpeakerNames } from '../lib/product/releases'
 import { assertInstanceBinding, createAvgGameInstance, readBoundInstances } from '../lib/product/runtime-instances'
 import { resolveProductRuntimeSource } from '../lib/product-production/preview-source'
-import type { AvgProductRuntimePackageV1, ProductMediaResolverV1, ProductRelease, ProductRuntimePackageV1, ProductRuntimeCheckpoint, ProductRuntimeEvent, ProductRuntimeState, ProductRuntimeSession, WorkspaceScope } from '../lib/types'
+import type { AvgPlayableRuntimePackage, ProductMediaResolverV1, ProductRelease, AnyProductRuntimePackage, ProductRuntimeCheckpoint, ProductRuntimeEvent, ProductRuntimeState, ProductRuntimeSession, WorkspaceScope } from '../lib/types'
 import { EMPTY_PRODUCT_RUNTIME_STATE } from '../lib/types'
 
-export interface AvgLibraryItem { release: ProductRelease; manifest: AvgProductRuntimePackageV1 | null; error: string }
+export interface AvgLibraryItem { release: ProductRelease; manifest: AvgPlayableRuntimePackage | null; error: string }
 interface AvgGamePlayerState {
   scope: WorkspaceScope | null; worldGroupId: number | null; releases: AvgLibraryItem[]; sessions: ProductRuntimeSession[]
   selectedSessionId: number | null; events: ProductRuntimeEvent[]; checkpoints: ProductRuntimeCheckpoint[]; runtimeState: ProductRuntimeState
-  selectedManifest: AvgProductRuntimePackageV1 | null; selectedMediaResolver: ProductMediaResolverV1 | null
+  selectedManifest: AvgPlayableRuntimePackage | null; selectedMediaResolver: ProductMediaResolverV1 | null
   selectedSourceSessionId: number | null; speakerNames: Record<string, string>; loading: boolean; busy: boolean; error: string
   load(scope: WorkspaceScope, worldGroupId: number | null, openLibrary?: boolean): Promise<void>; select(id: number | null): Promise<void>
   start(releaseId: number, title?: string): Promise<number>; reachBeat(beatKey: string): Promise<void>; choose(choiceKey: string): Promise<void>
@@ -20,11 +21,11 @@ interface AvgGamePlayerState {
   saveCheckpoint(name: string): Promise<void>; forkCheckpoint(id: number, title?: string): Promise<number>; remove(id: number): Promise<void>
 }
 
-function playableManifest(runtimePackage: ProductRuntimePackageV1): AvgProductRuntimePackageV1 {
-  if (runtimePackage.productType !== 'avg' || !runtimePackage.presentation) {
+function playableManifest(runtimePackage: AnyProductRuntimePackage): AvgPlayableRuntimePackage {
+  if (runtimePackage.productType !== 'avg' || !avgRuntimeStage(runtimePackage)) {
     throw new Error('[avg] 当前可玩来源不是完整 AVG RuntimePackage')
   }
-  return structuredClone(runtimePackage) as AvgProductRuntimePackageV1
+  return structuredClone(runtimePackage) as AvgPlayableRuntimePackage
 }
 
 async function library(scope: WorkspaceScope): Promise<AvgLibraryItem[]> {
@@ -104,7 +105,8 @@ export const useAvgGamePlayerStore = create<AvgGamePlayerState>((set, get) => {
     start: async (releaseId, title) => { let id = 0; await act(async () => { const item = get().releases.find(row => row.release.id === releaseId); if (!item?.manifest || !get().scope) throw new Error('[avg] 请选择有效发布'); const session = await createAvgGameInstance({ scope: get().scope!, productReleaseId: releaseId, title: title || `${item.manifest.definition.title} · 新游戏`, worldGroupId: get().worldGroupId }); id = session.id!; await ensureAutomaticCheckpoint(id); await reload(id) }); return id },
     preloadMedia: async (maximumBytes = 64 * 1024 * 1024) => {
       const resolver = get().selectedMediaResolver
-      const assets = get().selectedManifest?.presentation.assets ?? []
+      const selected = get().selectedManifest
+      const assets = selected ? avgRuntimeStage(selected)?.assets ?? [] : []
       if (!resolver) return { urls: {}, failures: assets.map(asset => ({ assetKey: asset.assetKey, reason: '可玩媒资解析器未就绪' })) }
       const result = await resolver.preload({ assetKeys: assets.map(asset => asset.assetKey), maximumBytes })
       return { urls: result.urls, failures: result.failures }
@@ -120,7 +122,7 @@ export const useAvgGamePlayerStore = create<AvgGamePlayerState>((set, get) => {
       await act(async () => {
         await assertSession(get().scope!, id)
         for (const failure of pending) {
-          const asset = manifest.presentation.assets.find(item => item.assetKey === failure.assetKey)
+          const asset = avgRuntimeStage(manifest)!.assets.find(item => item.assetKey === failure.assetKey)
           if (!asset) continue
           await recordAvgMediaFailure({ sessionId: id, assetKey: failure.assetKey, reason: failure.reason, commandId: `avg:media-failed:${id}:${failure.assetKey}:${asset.version}` })
         }

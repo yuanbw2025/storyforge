@@ -3,8 +3,9 @@ import type { ProductRuntimeSourceV1, ResolvedProductRuntimeSourceV1, ProductRun
 import { assertProductReleaseUnchanged } from '../product/releases'
 import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { createBuildProductMediaResolver, createReleaseProductMediaResolver } from './media-resolver'
-import { verifyProductBuildPreviewManifestV1, verifyProductBuildPreviewManifest } from './preview-manifest'
-import { verifyProductReleaseManifest, requirePlayableProductRuntimePackageV1 } from './runtime-package'
+import { verifyProductBuildPreviewManifest } from './preview-manifest'
+import { verifyProductReleaseManifest, requirePlayableProductRuntimePackage } from './runtime-package'
+import { avgExecutableModule } from '../avg/executable-module'
 
 export async function productRuntimeSourceForSessionV1(session: ProductRuntimeSession): Promise<ProductRuntimeSourceV1> {
   if (session.productReleaseId != null) return { kind: 'release', productReleaseId: session.productReleaseId }
@@ -40,7 +41,7 @@ export async function resolveProductRuntimeSource(input: {
     : await createBuildProductMediaResolver({
       scope: input.scope,
       productBuildId: input.source.productBuildId,
-      preview: await verifyProductBuildPreviewManifestV1(
+      preview: await verifyProductBuildPreviewManifest(
         (await db.productBuilds.get(input.source.productBuildId))?.previewManifestJson ?? '',
       ),
     })
@@ -57,7 +58,7 @@ export async function verifyProductRuntimeSource(input: {
   source: ProductRuntimeSourceV1
 }): Promise<Omit<ResolvedProductRuntimeSourceV1, 'mediaResolver'>> {
   const verified = await verifyProductRuntimeSourceEnvelope(input)
-  return { ...verified, runtimePackage: requirePlayableProductRuntimePackageV1(verified.runtimePackage) }
+  return { ...verified, runtimePackage: requirePlayableProductRuntimePackage(verified.runtimePackage) }
 }
 
 /** Version-aware inspection preserves the actual package hash and source pin.
@@ -101,6 +102,7 @@ export async function verifyProductRuntimeSourceEnvelope(input: {
     throw new Error('[product-runtime-source] Build 的 Production/Brief 绑定损坏')
   }
   const preview = await verifyProductBuildPreviewManifest(build.previewManifestJson)
+  if (avgExecutableModule(preview.runtimePackage) && preview.runtimePackage.definition.productKey !== production.productionKey) throw new Error('[product-runtime-source] AVG 产品身份与 Production 不一致')
   if (preview.previewHash !== input.source.expectedPreviewHash || preview.previewHash !== build.previewHash
     || preview.packageHash !== build.packageHash || preview.buildManifestHash !== build.manifestHash
     || preview.productionKey !== production.productionKey || preview.buildNumber !== build.buildNumber
