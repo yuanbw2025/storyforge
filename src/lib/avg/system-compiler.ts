@@ -92,3 +92,21 @@ export async function simulateAvgSystemPlanV1(input: { plan: unknown; actionKeys
   }
   return { planHash: compiled.planHash, contentHash: compiled.contentHash, steps, completed: state.completed }
 }
+
+export interface AvgSystemValidationV1 {
+  schema: 'storyforge.avg.system-validation'
+  version: 1
+  compilerVersion: 1
+  coverage: 'structure-and-entry'
+  planHash: string
+  contentHash: string
+  initialStateHash: string
+}
+
+/** System-generated evidence of exactly the checks performed. It is neither
+ * all-path coverage nor a playable/production-quality acceptance receipt. */
+export async function validateAvgSystemPlanForAuthorV1(value: unknown): Promise<AvgSystemValidationV1> {
+  const result = await simulateAvgSystemPlanV1({ plan: value, actionKeys: [] })
+  return { schema: 'storyforge.avg.system-validation', version: 1, compilerVersion: 1, coverage: 'structure-and-entry',
+    planHash: result.planHash, contentHash: result.contentHash, initialStateHash: await hashProductProductionValueV2(result.steps[0].variables) }
+}

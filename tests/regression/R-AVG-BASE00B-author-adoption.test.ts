@@ -18,6 +18,8 @@ describe('AVG-BASE-00B · author candidate, durable confirmation and revision pe
     const s = await seedAvgAuthorArtifacts()
     const candidate = await stageAuthorFixture(s, 0)
     expect(candidate.status).toBe('pending')
+    expect(JSON.parse(candidate.metadataJson).version).toBe(1)
+    expect(JSON.parse(candidate.metadataJson)).not.toHaveProperty('systemValidation')
     expect(await stageAuthorFixture(s, 0)).toEqual(candidate)
     expect(await db.productBuildArtifacts.filter(row => row.status === 'accepted').count()).toBe(0)
     const command = await authorFixtureCommand(s, candidate, 'author.confirm')

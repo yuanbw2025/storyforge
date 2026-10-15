@@ -1,6 +1,6 @@
 # AVG 游戏系统、演出与恢复协议
 
-> L2 · 版本：1.2.0 · 生效：2026-10-15 · 受 [AVG 产品契约](../AVG.md)约束。
+> L2 · 版本：1.3.0 · 生效：2026-10-15 · 受 [AVG 产品契约](../AVG.md)约束。
 > 以下为目标协议；当前 V1 的叙事/Cue/checkpoint 底座不能据此宣称已有物品、消息或完整语音协调能力。
 
 ## 0 当前研发顺序与规则接缝
@@ -11,7 +11,15 @@
 
 规则 compiler 输出既有 Frozen Narrative，条件/效果及转移复用共享确定性执行器；不复制状态机。`simulateAvgSystemPlanV1` 最多执行 1,000 个明确行动，并限制状态槽数 × 逐效果/路径检查总工作量为 1,000,000，返回准确规则/内容 hash、实际逐步状态和结束标记；越界或非法目标整次失败，输入和此前预览不变。图检查是结构校验，不替代条件可满足性、全路径覆盖或真实游玩。空 Beat 的规则预览不构成可玩包，不能用于绕过正式会话源验证。
 
-本内核不访问 DB/世界/模型，不创建候选或授权专业写入。上述 system-plan schema 是后续正式接缝的唯一类型来源；专业工件 parser/admission 暂不开放它。已验收 `AvgRuntimeModuleV1` 的空状态/行动语义不被悄悄改写；实际接入规则须明确模块版本、严格分派与正反例，再开对应玩家能力。
+纯编译内核不访问 DB/世界/模型。system-plan 是唯一规则类型来源，专业工件 codec 已可解析它，但这不授权专业 AI 写入：作者输入仅在已冻结的 `human-import` 任务中，以 `avg.system.plan` / `product-module` 暂存，再由实际 `adopt-avg-artifact` 命令确认。通用 AI/Artifact 写口继续拒绝新专业工件。已验收 `AvgRuntimeModuleV1` 的空状态/行动语义不被悄悄改写；实际接入规则须明确模块版本、严格分派与正反例，再开对应玩家能力。
+
+### 0.1 作者规则候选与编译输入
+
+作者规则候选采用 `storyforge.avg.author-candidate@2`，只给 system-plan 增加系统实际生成的 `storyforge.avg.system-validation@1`；其他作者工件继续原 candidate@1 字节/哈希语义，不升级旧记录。验证证据包含 compilerVersion、planHash、contentHash、initialStateHash，coverage 固定为 `structure-and-entry`。它只证明结构图与入口状态检查，不能自报全路径、可玩、专业内容或商业质量通过。
+
+暂存前验证图、类型/范围和入口；确认事务内重新执行并重建候选哈希、来源/上游/基线与校验证据，不信任调用方自报的校验 JSON。校验仅执行纯数据与哈希，使用单个事务存活等待包裹、内部不访问 DB，避免嵌套 crypto 等待形成自依赖。篡改或错误版本拒绝，命令失败留实际回执；相同命令幂等，规则变更使实际依赖旧 revision 的脚本/工件失效，旧 payload 保留。
+
+`readAvgSystemPlanForCompilationV1` 只为当前活动 Build 返回有作者确认回执的唯一正式规则 revision，校验 Work/Production/明确开始/Brief/SourcePlan/Plan、Build revision/epoch、内容 hash、作者命令和实际校验证据。返回准确规则/工件版本/哈希/回执，候选不能通过此入口进入正式编译。API 接缝与受控任务夹具不表示当前工作台已提供规则输入按钮；生产计划入口、联合编译和新玩家分别接入验收。
 
 ## 1 模块边界与版本
 

@@ -1,6 +1,6 @@
 # AVG 工作包开工卡
 
-> L2 · 版本：1.6.0 · 生效：2026-10-15 · 产品：AVG/Galgame · 上位条目：E-AVG-01。
+> L2 · 版本：1.7.0 · 生效：2026-10-15 · 产品：AVG/Galgame · 上位条目：E-AVG-01。
 > [产品契约](../products/AVG.md)裁决边界，[实施计划](AVG-IMPLEMENTATION-PLAN.md)裁决顺序。AVG-00 已设计交付，AVG-BASE-00A/00B 已分支验收，当前按作者指令先做系统/表现框架，02A1 确定性内核施工中，专业剧情生产后置；详见实施计划的当前状态。
 
 ## 0 所有代码包的共同交付约束
@@ -105,6 +105,12 @@
 ### 6.1 当前内核增量证据
 
 分支 `feat/avg-system-presentation-framework-20261015`；实现位置为 `src/lib/avg/system-contract.ts` / `system-compiler.ts`。只读 headless 编译/模拟，不启用新玩家、专业 AI 或正式 system-plan 采用。当前定向 5 文件 / 52 测试通过（内核 10 项）；architecture、required-tables、ai-manual、source-reachability、文档、定向 lint、TypeScript、build、diff 检查通过。完整 CI 尚待共享槽位验证，当前不标记全包验收。两套工程配置均无商业素材/文学评测声明。整个 02A1 仍施工中，不能将内核通过写成全部正式生产已完成。
+
+### 6.2 当前作者规则接缝
+
+内核 `d99d56c5` / PR #143 之后，`feat/avg-rules-adoption-20261015` 接 `avg.system.plan` 的 `product-module` 作者候选、实际确认/校验证据和正式编译读取。只复用既有三注册表写口/表与命令；不启用专业设计 AI。规则候选@2 与其校验证据由系统生成/重验，旧工件候选@1 不变；pending 不得作为正式编译输入，修订失效闭包/备份/恢复/删除均验证。
+
+定向 6 文件 / 57 测试及隔离 Chromium 7 条 E2E 通过；最终治理、类型、lint、构建、文档/统计和 diff 检查通过；完整 CI 待串行验证。此增量验证受控冻结 human-import 任务的 API 接缝，尚无新作者工作台或实际生产 planner；只有后续联合编译/播放器接入后才能完成整条用户路径。02A1 工程完成门为规则/模拟/作者采用及编译读取，待完整 CI 后独立验收；专业设计岗位后置，02A2/播放器不是本包的循环前置。
 
 ## 7 AVG-02B · 可选交互与证据系统
 

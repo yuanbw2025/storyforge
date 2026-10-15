@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：2.5.1 · 生效：2026-10-13
+> 版本：2.5.2 · 生效：2026-10-15
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -80,7 +80,7 @@
 - `docs/roadmap/MOTION-DRAMA-CONTENT-PRODUCTION-FLOW.md`
 - `docs/roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md`：文字开放世界完整开发清单与当前进度口径。
 - `docs/roadmap/TEXT-OPEN-WORLD-WORK-PACKAGE-CARDS.md`：文字开放世界 G1/G2 功能开工卡与风险台账。
-- `docs/roadmap/AVG-IMPLEMENTATION-PLAN.md`：E-AVG-01 的增量依赖、早期校准、基础协议升级与兼容切换；下一代码单元 AVG-BASE-00A。
+- `docs/roadmap/AVG-IMPLEMENTATION-PLAN.md`：E-AVG-01 的系统与表现优先队列、增量依赖、校准、协议升级与兼容切换；当前状态以该计划为准，专业故事生产后置。
 - `docs/roadmap/AVG-WORK-PACKAGE-CARDS.md`：AVG 每包的入口/读取/候选采用/生命周期/消费者/正反例与完成边界。
 - `docs/roadmap/COMPLETED.md`
 

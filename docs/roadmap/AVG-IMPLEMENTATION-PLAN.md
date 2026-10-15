@@ -1,6 +1,6 @@
 # AVG 实施计划与依赖顺序
 
-> L2 · 版本：1.6.0 · 生效：2026-10-15 · 上位条目：E-AVG-01。
+> L2 · 版本：1.7.0 · 生效：2026-10-15 · 上位条目：E-AVG-01。
 > 唯一产品施工入口：[AVG.md](../products/AVG.md)；逐包开工与验收：[工作包卡](AVG-WORK-PACKAGE-CARDS.md)。
 > 正式设计已交付并经内容复审；公共/私有版本接缝已通过分支工程验收；真实生成、质量校准与首戏尚未通过。产品仍为 partial。
 
@@ -95,15 +95,27 @@ V2 可承载至多一个已登记 AVG 基础模块，逐句身份/文本与公�
 
 最终采用增量于 2026-10-15 核对通过：定向 10 文件 / 72 测试通过；隔离 Chromium 的 AVG 草稿/修订/版本/采用/恢复 6 条 E2E 通过；完整串行 `CI=1 npm run ci` 为 794 文件 / 4,383 测试、全部治理检查、类型/代码检查、生产构建及包体检查通过，exit 0。此结果覆盖采用代码 `29371705` 和文档 `aa44eae6`，不借用前一协议子增量结果；本轮没有重新运行全仓浏览器套件，不能把旧 255/2 计作新代码全量 E2E。00B 限定的采用/序列化接缝通过分支工程验收，允许下一基础包施工；专业生产、艺术/人工/玩家质量与 V2 可玩能力仍按后续包验收。
 
-### 2.3 系统优先开工与当前增量
+### 2.3 系统优先开工：内核增量
 
 复用独立工作树 `avg-base01-20261015`，从准备分支另建 `feat/avg-system-presentation-framework-20261015`；基线为最新已取证主干 `5147924e` + 00B `13ce6792` + 准备文档 `8440ddbd`。主检出与已验收 00A/00B 工作树不承担新包修改。
 
-本增量是 AVG-02A1 的**确定性内核**：`system-contract.ts` 严格解析变量/知识/关系、场景/行动、有限条件效果与安全路径；`system-state.ts` 约束逐效果状态，`system-compiler.ts` 将其编译为现有 Frozen Narrative，复用 `enterFrozenNarrativeNode/advanceFrozenNarrativeChoice` 作有界只读模拟。没有故事正文或媒体字节，空 Beat 明确表示规则预览；不能启动 V2 玩家、冻结正式作品或签发运行/质量 receipt。专业 `avg.system-plan.v1` Skill、AI 写域和作者正式采用尚未启用。
+本增量是 AVG-02A1 的**确定性内核**：`system-contract.ts` 严格解析变量/知识/关系、场景/行动、有限条件效果与安全路径；`system-state.ts` 约束逐效果状态，`system-compiler.ts` 将其编译为现有 Frozen Narrative，复用 `enterFrozenNarrativeNode/advanceFrozenNarrativeChoice` 作有界只读模拟。没有故事正文或媒体字节，空 Beat 明确表示规则预览；不能启动 V2 玩家、冻结正式作品或签发运行/质量 receipt。此内核提交未启用专业 `avg.system-plan.v1` Skill、AI 写域或作者正式采用；后继作者接缝见 §2.4。
 
 输入/输出均在内存中；不读 WorldRelease、不调用模型、不写表/候选/会话、不新增 CONTEXT_SOURCES / FIELD_REGISTRY / PROJECT_TABLES 或迁移。对下游交付规范 system-plan、编译图、准确 hash 和逐步状态；之后必须经受治理的作者输入/采用、V2 模块版本升级及玩家准入才能运行。V1 字节和现有关闭门保持原义。
 
-验证范围包括两套原创规则配置、玩家/角色知识隔离、已选行动/访问条件、可见与可用分离、关系/变量范围、原子失败与输入不变、未知字段/安全路径、死路/循环/孤立/悬空引用。结构可达不表示所有状态路径均可通关；只读模拟仅验证实际执行的路径，未覆盖路径不得自报通过。当前定向 5 文件 / 52 测试通过（内核 10 项）；治理/必需表/AI Manual、源码可达、文档、定向 lint、TypeScript、build 和 diff 检查通过。完整 CI 待共享槽位运行；当前仅完成内核实现及定向验收，02A1 全包与本轮框架均未完成。
+验证范围包括两套原创规则配置、玩家/角色知识隔离、已选行动/访问条件、可见与可用分离、关系/变量范围、原子失败与输入不变、未知字段/安全路径、死路/循环/孤立/悬空引用。结构可达不表示所有状态路径均可通关；只读模拟仅验证实际执行的路径，未覆盖路径不得自报通过。当前定向 5 文件 / 52 测试通过（内核 10 项）；治理/必需表/AI Manual、源码可达、文档、定向 lint、TypeScript、build 和 diff 检查通过。内核代码提交 `d99d56c5` / [PR #143](https://github.com/yuanbw2025/storyforge/pull/143) 保持 Draft，完整 CI 待共享槽位运行；当前仅完成内核实现及定向验收，02A1 全包与本轮框架均未完成。
+
+### 2.4 当前作者规则接缝增量
+
+独立工作树 `avg-rules-adoption-20261015` / 分支 `feat/avg-rules-adoption-20261015` 从内核 `d99d56c5` 建立；前一工作树保持不变，供已排队 CI 验证。当前生命周期为 AVG 产品研发，完善 S3 作者输入/采用/编译读取；规则与工件归 AVG Work，世界只读来源不回写，媒资/玩家未改变。
+
+`avg.system.plan` 以 `product-module` 通过既有严格工件 codec 和作者暂存/确认命令。图与入口检查由代码实际执行并生成 candidate@2 校验证据；确认时重新验证，拒绝伪造校验或 stale，正式 revision 才能交给 `readAvgSystemPlanForCompilationV1`。继续复用 FIELD_REGISTRY/Adoption extension 和 PROJECT_TABLES 的 production/build/artifact/command 生命周期，未新增 Context Source、AI 字段、表/迁移或模型调用。旧非规则作者 candidate@1 保留原义。
+
+02A1 本轮工程完成门是规范规则、确定性编译/模拟、受治理作者采用与编译读取；专业设计 Agent 后置，02A2 的联合编译和播放器不是 02A1 的循环前置。
+
+闭包：规范规则 → 冻结 human-import 任务写域 → pending → 实际作者命令 claim/CAS/幂等 → 校验与正式 revision → 受校验的编译读取；规则修订使旧依赖失效且保留字节；备份重映射/恢复/删除沿注册表。受控测试任务不冒充已经实现的生产 planner/工作台；专业 AI、联合编译、V2 玩家仍未启用。
+
+当前包含旧调用方的定向回归 6 文件 / 57 测试通过；隔离 Chromium 的规则候选/确认/刷新/备份/篡改与旧 AVG 路径 7 条通过。纯规则校验以单个事务等待保活，内部计算不进入 DB 事务，避免嵌套哈希等待自依赖；测试时限未放宽。architecture、required-tables、ai-manual、源码可达、文档、统计、定向 lint、TypeScript、生产 build 和 diff 检查通过；完整 CI 待串行执行，尚不标记工程包验收完成。
 
 ## 3 调整后的依赖
 

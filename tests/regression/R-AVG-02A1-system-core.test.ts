@@ -3,6 +3,7 @@ import { parseAvgSystemPlanV1, avgKnowledgePathV1, avgVariablePathV1 } from '../
 import { compileAvgSystemPlanV1, simulateAvgSystemPlanV1 } from '../../src/lib/avg/system-compiler'
 import { assertAvgSystemStateV1, previewAvgSystemEffectsV1 } from '../../src/lib/avg/system-state'
 import { parseAvgProfessionalArtifactV1 } from '../../src/lib/avg/artifact-contract'
+import { assertAvgProfessionalArtifactAdmissionV1 } from '../../src/lib/avg/artifact-admission'
 import { parseAvgRuntimeModuleV1 } from '../../src/lib/avg/runtime-contract-v2'
 import { avgLinearSystemFixture, avgSystemFixture } from '../helpers/avg-system-fixture'
 
@@ -16,7 +17,8 @@ describe('AVG-02A1 deterministic system core, independent of story production', 
     expect(compiled.narrative.choices.map(choice => choice.choiceKey)).toEqual(['inspect','share','wait'])
     const revised = structuredClone(plan); revised.actions[0].label = '观察封口'
     expect((await compileAvgSystemPlanV1(revised)).planHash).not.toBe(compiled.planHash)
-    expect(() => parseAvgProfessionalArtifactV1(plan)).toThrow(/尚未就绪/)
+    expect(parseAvgProfessionalArtifactV1(plan)).toEqual(plan)
+    expect(() => assertAvgProfessionalArtifactAdmissionV1({ productType: 'avg', artifactKey: 'avg.system.plan', kind: 'product-module', payload: plan, metadata: {} })).toThrow(/尚未就绪/)
     expect(() => parseAvgRuntimeModuleV1(plan)).toThrow()
   })
 
