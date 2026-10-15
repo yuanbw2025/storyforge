@@ -768,6 +768,8 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   { ...longtext('productProductionBriefs', 'userIntentSummary'), candidateId: 'productProduction.startingPointSuggestions' },
   { ...json('productProductionBriefs', 'briefJson'), candidateId: 'productProduction.briefCandidate' },
   { ...json('productBuilds', 'planJson'), candidateId: 'productProduction.planCandidate' },
+  // AVG professional payloads reuse this field, with schema/key/role validation
+  // at the adoption extension. Reserved roles do not gain write authority.
   { ...json('productBuildArtifacts', 'payloadJson'), candidateId: 'productProduction.contentArtifactCandidate' },
   { ...json('productBuildArtifacts', 'metadataJson'), candidateId: 'productProduction.mediaRequirementCandidate' },
   { ...json('productBuilds', 'compatibilityJson'), candidateId: 'productProduction.evolutionImpactCandidate' },

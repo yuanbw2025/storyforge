@@ -155,6 +155,7 @@ export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "save-brief-revision",
   "save-text-open-world-creator-brief",
   "authorize-start",
+  "adopt-avg-artifact",
   "authorize-text-open-world-creator-start",
   "authorize-text-open-world-creator-repair",
   "authorize-text-open-world-creator-media",
@@ -853,6 +854,17 @@ export type ProductProductionCommandV1 =
       };
       authorizationNonce: string;
       authorizedAt: number;
+    }
+  | {
+      type: "adopt-avg-artifact";
+      commandId: string;
+      expectedStateRevision: number;
+      expectedBuildRevision: number;
+      controlEpoch: number;
+      buildNumber: number;
+      artifactKey: string;
+      candidateVersion: number;
+      candidateHash: string;
     }
   | {
       type: "pause";

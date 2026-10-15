@@ -1,6 +1,6 @@
 # AVG 媒资需求、真实生产与自动绑定
 
-> L2 · 版本：1.1.0 · 生效：2026-10-13 · 受 [AVG 产品契约](../AVG.md)约束。
+> L2 · 版本：1.2.0 · 生效：2026-10-14 · 受 [AVG 产品契约](../AVG.md)约束。
 > 目标合同覆盖从用途/参考到实际字节及消费者；当前只有 Prompt/文本锚点的路径不能宣称参考生图或配音已实现。
 
 ## 1 需求先于生成
@@ -56,6 +56,19 @@
 结果未知时先查询既有 operation/receipt；无法判定则停在未知，禁止自动再发一笔。网络瞬断、有界重试、授权/余额/4xx 和单次计费分别按 Harness 处理。收费尝试、参考处理和废弃候选都计入成本；无价格/用量证据不记零。
 
 研究中列出的参考生图/语音接口仅是技术候选，本设计不锁定供应商、报价或商用效果。[研究记录](../../audits/AVG-PROFESSIONAL-METHODS-20261013.md)中的非商用研究代码不能作为商业默认生产底座；外部服务的权利需按实际输入、账户/套餐和输出条款核验。
+
+### 3.1 开工前复核的接入基线
+
+2026-10-14 对当前仓库的核对只描述本项目接入，不据此限制服务商的全部能力：
+
+| 项 | 当前代码证据 | BASE-01/02 的验收缺口 |
+|---|---|---|
+| Agnes 图片 | `agnes.image-2.1-flash.v1` 只有 generate、每次 1 张；实际 body 为文字 prompt、1K/ratio、base64 返回 | 真实参考字节/crop/mask/edit 尚未传输，不能靠描述参考图判作身份受控 |
+| 异步结果 | 当前图片路径接收带 data 的完整响应；task_id 只作为元数据/请求标识 | 尚无只返回 operation 的查询/恢复闭环，结果未知不能重新 POST 掩盖 |
+| 费用 | candidate receipt 保留 usage/costUsd；estimate 的现金可以为 null | null 为未知；需要实际账号/路由/计费证据，授权无总上限不使未知变零 |
+| 配音 | 公共 V1 媒体类别是 image/music/sfx | voice 的文本/演法/真实 clip 和能力/权利回执仍待 BASE-02，不借 BGM 冒充 |
+
+依据为 [`media-adapters.ts`](../../../src/lib/product-production/media-adapters.ts) 的请求/响应合同及 [`media-transport.ts`](../../../src/lib/product-production/media-transport.ts) 的连接检查；本轮未读取凭据或调用 provider。Agnes [官网](https://agnes-ai.com/)的公开功能宣传不构成所需参数、当前账号可用性、实际费用或 AVG 家族质量证据；具体端点/模型应在 BASE-01 的小批次前重新冻结，不静默替换作者路由。
 
 ## 4 候选、加工与采用
 

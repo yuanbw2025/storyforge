@@ -1,5 +1,5 @@
 import { parseChatAuthoringSettingsV1 } from '../character-interaction/authoring-contract'
-import { parseAvgAuthoringSettingsV1 } from '../avg/authoring-contract'
+import { parseAvgSettingsForLegacyProduction } from '../avg/settings-v2'
 import type {
   TextAdventureContentRevisionV1,
   ProductConsultationBudgetV1,
@@ -310,7 +310,7 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
   const parsed: ProductProductionBriefV3 = {
     ...(avgRevision ? { avgRevision } : {}),
     ...(row.characterChat ? { characterChat: parseChatAuthoringSettingsV1(row.characterChat) } : {}),
-    ...(row.avg ? { avg: parseAvgAuthoringSettingsV1(row.avg) } : {}),
+    ...(row.avg ? { avg: parseAvgSettingsForLegacyProduction(row.avg) } : {}),
     schema: 'storyforge.product-production-brief', version: 3,
     source: {
       worldReleaseId: positiveId(source.worldReleaseId, 'source.worldReleaseId'),
@@ -538,6 +538,15 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
     const commandId = commandHeader(row, type, ['expectedStateRevision', 'briefRevision', 'briefHash', 'authorizationNonce'])
     if (!isSha256Hash(row.briefHash)) fail('briefHash 无效')
     return { type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision), briefRevision: positiveId(row.briefRevision, 'briefRevision'), briefHash: row.briefHash, authorizationNonce: stableKey(row.authorizationNonce, 'authorizationNonce') }
+  }
+  if (type === 'adopt-avg-artifact') {
+    const commandId = commandHeader(row, type, ['expectedStateRevision', 'expectedBuildRevision', 'controlEpoch',
+      'buildNumber', 'artifactKey', 'candidateVersion', 'candidateHash'])
+    if (!isSha256Hash(row.candidateHash)) fail('AVG candidateHash 无效')
+    return { type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      expectedBuildRevision: expectedRevision(row.expectedBuildRevision), controlEpoch: expectedRevision(row.controlEpoch),
+      buildNumber: positiveId(row.buildNumber, 'buildNumber'), artifactKey: stableKey(row.artifactKey, 'artifactKey'),
+      candidateVersion: positiveId(row.candidateVersion, 'candidateVersion'), candidateHash: row.candidateHash }
   }
   if (type === 'authorize-text-open-world-creator-start') {
     const commandId = commandHeader(row, type, [

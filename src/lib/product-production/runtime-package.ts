@@ -1,5 +1,6 @@
 import { parseAdventureContent } from '../adventure/runtime'
 import { parseAvgPresentationContent, validateAvgPresentation } from '../avg/runtime'
+import { parseAvgRuntimeModuleV1 } from '../avg/runtime-contract-v2'
 import { freezeProductMediaAsset } from './media-contracts'
 import { parseOpenWorldEvolutionContent, validateOpenWorldEvolutionContent } from '../open-world/evolution-runtime'
 import { parseOpenWorldContent, validateOpenWorldContent } from '../open-world/runtime'
@@ -480,13 +481,14 @@ export function productProtocolVersion(value: string | unknown, schema: string):
   return envelope.version
 }
 
-/** BASE-00A admits only the shared core; an unregistered module fails closed. */
+/** Registered AVG carriers remain distinct from playable runtime capability. */
 export function parseProductRuntimePackageV2(value: string | unknown): ProductRuntimePackageV2 {
   productProtocolVersion(value, 'storyforge.product-runtime-package')
   const pkg = record(typeof value === 'string' ? JSON.parse(value) : value, 'package')
   exactKeys(pkg, ['schema', 'version', 'productType', 'definition', 'sourceWorld', 'narrative', 'modules'], 'package V2')
   if (pkg.version !== 2 || pkg.productType !== 'avg') fail('V2 只支持已声明的 AVG 载体')
-  if (!Array.isArray(pkg.modules) || pkg.modules.length !== 0) fail('V2 包含未登记模块')
+  if (!Array.isArray(pkg.modules) || pkg.modules.length > 1) fail('V2 包含未登记模块或重复模块')
+  const modules = pkg.modules.map(parseAvgRuntimeModuleV1)
   const definition = record(pkg.definition, 'definition')
   exactKeys(definition, ['productKey', 'title', 'description', 'enabledCapabilities', 'rulesetVersion', 'initialVariables'], 'definition')
   const enabledCapabilities = stringArray(definition.enabledCapabilities, 'enabledCapabilities', 20)
@@ -503,6 +505,17 @@ export function parseProductRuntimePackageV2(value: string | unknown): ProductRu
     entryNodeKey: narrative.entryNodeKey, nodes: narrative.nodes, beats: narrative.beats, choices: narrative.choices,
   })
   if (!graph.valid) fail(`narrative 图无效:${graph.errors.join('；')}`)
+  const beatsByKey = new Map(narrative.beats.map(beat => [beat.beatKey, beat]))
+  for (const module of modules) {
+    if (module.lines.length !== narrative.beats.length
+      || module.lines.some(line => {
+        const beat = beatsByKey.get(line.lineKey)
+        return !beat || beat.nodeKey !== line.sceneKey || beat.speakerKey !== line.speakerKey || beat.text !== line.text
+      })) {
+      fail('AVG module lines 与规范 narrative 不一致')
+    }
+    if (module.storyMode === 'linear' && narrative.choices.length) fail('linear AVG module 不得嵌入分支 choice')
+  }
   return {
     schema: 'storyforge.product-runtime-package', version: 2, productType: 'avg',
     definition: {
@@ -513,7 +526,7 @@ export function parseProductRuntimePackageV2(value: string | unknown): ProductRu
       initialVariables: structuredClone(initialVariables),
     },
     sourceWorld: { contentHash: sourceWorld.contentHash, selection },
-    narrative: structuredClone(narrative), modules: [],
+    narrative: structuredClone(narrative), modules,
   }
 }
 

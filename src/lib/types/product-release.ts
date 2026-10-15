@@ -9,6 +9,7 @@ import type {
 import type { AdventureContentV1 } from './adventure'
 import type { AdventureContent } from './adventure-v2'
 import type { AvgPresentationContentV1 } from './avg'
+import type { AvgRuntimeModuleV1 } from '../avg/runtime-contract-v2'
 import type { FrozenProductMediaAsset } from './product-media'
 import type { OpenWorldEvolutionContentV1 } from './open-world-evolution'
 import type { OpenWorldContentV1 } from './open-world'
@@ -259,7 +260,7 @@ export type PlayableTextOpenWorldProductRuntimePackageV1 =
   | TextOpenWorldVNextOnlyProductRuntimePackageV1
 
 /** Shared V2 carrier. Product-owned modules are admitted only by registered
- * typed codecs. BASE-00A deliberately admits no module and no runnable V2 game. */
+ * typed codecs. BASE-00B admits an inert AVG module; V2 runtime remains closed. */
 export interface ProductRuntimePackageV2 {
   schema: 'storyforge.product-runtime-package'
   version: 2
@@ -267,7 +268,7 @@ export interface ProductRuntimePackageV2 {
   definition: ProductRuntimePackageV1['definition']
   sourceWorld: ProductRuntimePackageV1['sourceWorld']
   narrative: FrozenProductNarrativeV1
-  modules: never[]
+  modules: AvgRuntimeModuleV1[]
   presentation?: undefined
   interaction?: undefined
   adventure?: undefined

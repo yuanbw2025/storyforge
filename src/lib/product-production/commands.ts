@@ -85,6 +85,7 @@ import {
   type TextOpenWorldCreatorMediaPreparationV1,
 } from '../open-world/creator-media'
 import type { TextOpenWorldCreatorMediaAuthorizationV1 } from '../open-world/creator-media-contract'
+import { applyAvgAuthorArtifactAdoptionV1, AvgAuthorArtifactErrorV1 } from '../avg/author-artifacts'
 
 export type ProductProductionErrorCodeV1 =
   | 'production-not-found'
@@ -107,6 +108,7 @@ export type ProductProductionErrorCodeV1 =
   | 'preview-stale'
   | 'publication-intent-stale'
   | 'media-revision-invalid'
+  | 'avg-artifact-invalid'
   | 'publication-transaction-failed'
 
 export interface ProductProductionCommandReceiptV1 {
@@ -1036,6 +1038,14 @@ async function applyCommand(input: {
   if (command.type !== 'create-intent' && command.type !== 'create-text-open-world-intent'
     && command.expectedStateRevision !== production.stateRevision) {
     reject('production-state-conflict', `Production revision 已从 ${command.expectedStateRevision} 变为 ${production.stateRevision}`)
+  }
+
+  if (command.type === 'adopt-avg-artifact') {
+    try { return await applyAvgAuthorArtifactAdoptionV1({ scope, production, command, now }) }
+    catch (cause) {
+      if (cause instanceof AvgAuthorArtifactErrorV1) reject('avg-artifact-invalid', cause.message)
+      throw cause
+    }
   }
 
   if (command.type === 'create-intent') {
