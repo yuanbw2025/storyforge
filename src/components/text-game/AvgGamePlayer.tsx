@@ -1,3 +1,4 @@
+import { selectAvgSceneMediaWindowV1 } from '../../lib/avg/scene-media-window'
 import { loadAvgReaderPreferencesV1, saveAvgReaderPreferencesV1 } from '../../lib/avg/reader-preferences'
 import { NativeVoice } from '../avg/NativeVoice'
 import { ReadingHistory } from '../avg/ReadingHistory'
@@ -10,7 +11,7 @@ import StageAudio from '../avg/StageAudio'
 import { avgCueTimeline } from '../../lib/avg/cue-timeline'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, BookOpen, BriefcaseBusiness, ChevronRight, Eye, EyeOff, FastForward, Gauge, GitBranch, History, ImageOff, Maximize2, Play, Plus, RotateCcw, Save, Settings2, SkipForward, Trash2, Volume2, VolumeX, X } from 'lucide-react'
-import type { FrozenNarrativeChoice, Project, WorkspaceScope } from '../../lib/types'
+import type { FrozenNarrativeChoice, Project, WorkspaceScope, ProductMediaResolverV1 } from '../../lib/types'
 import { useAvgGamePlayerStore } from '../../stores/avg-game-player'
 import { applyAvgCue } from '../../lib/avg/runtime'
 import { currentPlayerReleases } from '../../lib/text-game/player-library'
@@ -71,8 +72,13 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
   useEffect(() => { const update = () => setForeground(!document.hidden); document.addEventListener('visibilitychange', update); return () => document.removeEventListener('visibilitychange', update) }, [])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [uiHidden, setUiHidden] = useState(false)
-  const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({})
-  const [mediaFailures, setMediaFailures] = useState<Array<{ assetKey: string; reason: string }>>([])
+  const [mediaView,setMediaView]=useState<{resolver:ProductMediaResolverV1|null;sessionId:number|null;urls:Record<string,string>;failures:Array<{assetKey:string;reason:string}>;loading:boolean}>({resolver:null,sessionId:null,urls:{},failures:[],loading:false})
+  const currentMedia=mediaView.resolver===store.selectedMediaResolver&&mediaView.sessionId===store.selectedSessionId?mediaView:null
+  const mediaUrls=currentMedia?.urls??{},mediaFailures=currentMedia?.failures??[]
+  const mediaLoading=currentMedia?.loading??!!store.selectedSessionId
+  const [mediaRetry,setMediaRetry]=useState(0)
+  const [historyRequest,setHistoryRequest]=useState<{sessionId:number;assetKey:string;attempt:number}|null>(null)
+  useEffect(()=>{if(panel!=='history'||historyRequest?.sessionId!==store.selectedSessionId)setHistoryRequest(null)},[panel,store.selectedSessionId]) // eslint-disable-line react-hooks/exhaustive-deps
   const [visibleCharacters, setVisibleCharacters] = useState(0)
   const [sceneTitleVisible, setSceneTitleVisible] = useState(false)
   const [notice, setNotice] = useState('')
@@ -90,42 +96,6 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
   }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.worldGroupId, props.initialSessionId]) // eslint-disable-line react-hooks/exhaustive-deps
   const catalog = useMemo(() => currentPlayerReleases(store.releases), [store.releases])
   const catalogRelease = catalog.find(item => item.release.id === catalogReleaseId) ?? null
-  const mediaCacheKey = `${store.selectedSessionId ?? 'title'}:${(store.selectedManifest ? avgRuntimeStage(store.selectedManifest)?.assets ?? [] : []).map(asset => `${asset.assetKey}@${asset.version}:${asset.contentHash}`).join('|') ?? ''}`
-  useEffect(() => {
-    let cancelled = false
-    const manifest = store.selectedManifest
-    const session = store.sessions.find(row => row.id === store.selectedSessionId) ?? null
-    if (!manifest || !store.selectedMediaResolver || store.selectedSourceSessionId !== store.selectedSessionId) { setMediaUrls({}); setMediaFailures([]); return }
-    void store.preloadMedia().then(result => {
-      if (cancelled) return
-      setMediaUrls(result.urls)
-      setMediaFailures(result.failures)
-      void store.recordMediaFailures(result.failures).catch(() => undefined)
-      if (session?.productBuildId == null || avgRuntimeStage(manifest)!.assets.length === 0) return
-      const verificationKey = `${session.productBuildId}:${avgRuntimeStage(manifest)!.assets
-        .map(asset => `${asset.assetKey}:${asset.contentHash}`).sort().join('|')}`
-      if (mediaVerificationKeys.current.has(verificationKey)) return
-      mediaVerificationKeys.current.add(verificationKey)
-      void verifyProductMediaRuntimeUrlsV1({
-        assets: avgRuntimeStage(manifest)!.assets.map(asset => ({
-          assetKey: asset.assetKey, contentHash: asset.contentHash, mimeType: asset.mimeType,
-          width: asset.width, height: asset.height, durationMs: asset.durationMs,
-        })),
-        urls: result.urls,
-        environment: currentBrowserEnvironment(),
-      }).then(measurement => recordProductMediaRuntimeMeasurementV1({
-        scope: props.scope, productBuildId: session.productBuildId!, measurement,
-      })).then(verified => {
-        if (!verified.evidence.passed) mediaVerificationKeys.current.delete(verificationKey)
-      }).catch(() => {
-        // The existing media failure UI remains the user-facing surface. A failed
-        // or interrupted measurement may be retried when this Preview is reopened.
-        mediaVerificationKeys.current.delete(verificationKey)
-      })
-    })
-    return () => { cancelled = true }
-  }, [mediaCacheKey, store.selectedMediaResolver, store.selectedSourceSessionId, props.scope.projectId, props.scope.worldId, props.scope.workId]) // eslint-disable-line react-hooks/exhaustive-deps
-
   const nativeReading = store.runtimeState.avgReading
   const pausedTransport = !!nativeReading && (!!panel || settingsOpen || !foreground || store.loading || store.selectedSourceSessionId !== store.selectedSessionId)
   const voiceReady = avgVoiceReadyV1(store.runtimeState)
@@ -170,6 +140,53 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
   const activeSpeakerKey = currentBeat?.kind === 'dialogue'
     ? currentBeat.speakerKey
     : attributedText ? Object.entries(store.speakerNames).find(([, name]) => name === attributedText.speaker)?.[0] ?? null : null
+  const windowKeys=store.selectedManifest?selectAvgSceneMediaWindowV1({runtimePackage:store.selectedManifest,
+    sceneKey:narrative?.currentNodeKey??null,currentLineKey:currentBeat?.beatKey??null,stage:visualStage??null,
+    images:prefs.images,audio:!prefs.muted,inventoryEntries:panel==='inventory'?inventory.entries:[],
+    historyAssetKey:panel==='history'&&historyRequest?.sessionId===store.selectedSessionId?historyRequest.assetKey:null}):null
+  const mediaCacheKey = `${store.selectedSessionId??'title'}:${(presentation?.assets??[]).map(asset=>`${asset.assetKey}@${asset.version}:${asset.contentHash}`).join('|')}:${JSON.stringify(windowKeys)}:${mediaRetry}:${panel==='history'?historyRequest?.attempt??0:0}`
+  useEffect(()=>{
+    let cancelled=false
+    const manifest=store.selectedManifest,resolver=store.selectedMediaResolver,sessionId=store.selectedSessionId
+    const session=store.sessions.find(row=>row.id===sessionId)??null
+    const isCurrent=()=>{const current=useAvgGamePlayerStore.getState();return !cancelled&&current.selectedSessionId===sessionId&&current.selectedSourceSessionId===sessionId&&current.selectedMediaResolver===resolver}
+    if(!manifest||!resolver||store.selectedSourceSessionId!==sessionId){setMediaView({resolver:null,sessionId:null,urls:{},failures:[],loading:false});return}
+    const keys=windowKeys??(avgRuntimeStage(manifest)?.assets??[]).map(asset=>asset.assetKey)
+    setMediaView(previous=>({resolver,sessionId,urls:previous.resolver===resolver&&previous.sessionId===sessionId?previous.urls:{},failures:[],loading:keys.length>0}))
+    void store.preloadMedia(undefined,windowKeys??undefined).then(result=>{
+      if(!isCurrent())return
+      setMediaView({resolver,sessionId,urls:result.urls,failures:result.failures,loading:false})
+      void store.recordMediaFailures(result.failures).catch(()=>undefined)
+      // Scene windows cannot sign a whole-package media quality gate. The
+      // explicit full Build/Release qualification is a separate operation.
+      if(windowKeys!==null)return
+      if (session?.productBuildId == null || avgRuntimeStage(manifest)!.assets.length === 0) return
+      const verificationKey = `${session.productBuildId}:${avgRuntimeStage(manifest)!.assets
+        .map(asset => `${asset.assetKey}:${asset.contentHash}`).sort().join('|')}`
+      if (mediaVerificationKeys.current.has(verificationKey)) return
+      mediaVerificationKeys.current.add(verificationKey)
+      void verifyProductMediaRuntimeUrlsV1({
+        assets: avgRuntimeStage(manifest)!.assets.map(asset => ({
+          assetKey: asset.assetKey, contentHash: asset.contentHash, mimeType: asset.mimeType,
+          width: asset.width, height: asset.height, durationMs: asset.durationMs,
+        })),
+        urls: result.urls,
+        environment: currentBrowserEnvironment(),
+      }).then(measurement => recordProductMediaRuntimeMeasurementV1({
+        scope: props.scope, productBuildId: session.productBuildId!, measurement,
+      })).then(verified => {
+        if (!verified.evidence.passed) mediaVerificationKeys.current.delete(verificationKey)
+      }).catch(() => {
+        // The existing media failure UI remains the user-facing surface. A failed
+        // or interrupted measurement may be retried when this Preview is reopened.
+        mediaVerificationKeys.current.delete(verificationKey)
+      })
+    }).catch(cause=>{
+      if(isCurrent())setMediaView({resolver,sessionId,urls:{},failures:keys.map(assetKey=>({assetKey,reason:cause instanceof Error?cause.message:String(cause)})),loading:false})
+    })
+    return()=>{cancelled=true}
+  },[mediaCacheKey,store.selectedMediaResolver,store.selectedSourceSessionId,props.scope.projectId,props.scope.worldId,props.scope.workId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const background = prefs.images && visualStage?.backgroundAssetKey ? visualStage.backgroundAssetKey : null
   const textComplete = !currentBeat || visibleCharacters >= dialogueText.length
   const visibleText = dialogueText.slice(0, visibleCharacters)
@@ -226,11 +243,14 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
         else if (uiHidden) setUiHidden(false)
         return
       }
+      // Enter/Space on a control belongs to that control, including the
+      // settings menu. Global reading shortcuts must not eat its native click.
+      if (settingsOpen || event.target instanceof Element && event.target.closest('button, summary, select, a, [role="button"], [contenteditable]')) return
       if ((event.key === ' ' || event.key === 'Enter') && currentBeat && !panel) { event.preventDefault(); advance() }
     }
     window.addEventListener('keydown', keydown)
     return () => window.removeEventListener('keydown', keydown)
-  }, [store.selectedSessionId, store.busy, beatIdentity, textComplete, panel, uiHidden, voiceReady, nativeReading?.current?.generation]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [store.selectedSessionId, store.busy, beatIdentity, textComplete, panel, settingsOpen, uiHidden, voiceReady, nativeReading?.current?.generation]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fullscreen = () => {
     if (document.fullscreenElement) { void document.exitFullscreen(); return }
@@ -317,19 +337,19 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
         </nav>
       </header>
       {store.error && <div role="alert" className="avg-alert">{store.error}</div>}
-      <div className="avg-stage" style={{aspectRatio:(store.selectedManifest && (avgExecutableModule(store.selectedManifest)?.aspectRatio ?? store.selectedManifest.definition.initialVariables.avgAspectRatio)) === "4:3" ? "4 / 3" : "16 / 9"}} data-tone={visualStage?.tone ?? 'normal'} data-transition={visualStage?.lastTransition ?? 'none'} onClick={event => {
+      <div className="avg-stage" aria-busy={mediaLoading} style={{aspectRatio:(store.selectedManifest && (avgExecutableModule(store.selectedManifest)?.aspectRatio ?? store.selectedManifest.definition.initialVariables.avgAspectRatio)) === "4:3" ? "4 / 3" : "16 / 9"}} data-tone={visualStage?.tone ?? 'normal'} data-transition={visualStage?.lastTransition ?? 'none'} onClick={event => {
         if (event.target instanceof HTMLElement && event.target.closest('button, input, summary, details')) return
         if (currentBeat && !panel) advance()
-      }} aria-label={background ? `背景 ${background}` : '纯文字降级舞台'}>
+      }} aria-label={background ? `背景 ${presentation?.assets.find(asset=>asset.assetKey===background)?.name??'场景'}` : '纯文字降级舞台'}>
         <div className={`avg-stage-scene avg-effect-${visualStage?.lastTransition ?? 'none'}`} style={{ transform: `translate(${(visualStage?.camera.x ?? 0) * -2}%, ${(visualStage?.camera.y ?? 0) * -2}%) scale(${visualStage?.camera.scale ?? 1})`, transitionDuration: `${cueDuration}ms` }}>
-          {background && <div key={background} className="avg-background" data-asset-key={background}>{mediaUrls[background] ? <img src={mediaUrls[background]} alt={presentation?.assets.find(asset => asset.assetKey === background)?.altText || background} /> : <span>{background}</span>}</div>}
-          {prefs.images && visualStage?.cgAssetKey && <div key={visualStage.cgAssetKey} className="avg-cg" data-asset-key={visualStage.cgAssetKey}>{mediaUrls[visualStage.cgAssetKey] ? <img src={mediaUrls[visualStage.cgAssetKey]} alt={presentation?.assets.find(asset => asset.assetKey === visualStage.cgAssetKey)?.altText || visualStage.cgAssetKey} /> : visualStage.cgAssetKey}</div>}
+          {background && <div key={background} className="avg-background" data-asset-key={background}>{mediaUrls[background] ? <img src={mediaUrls[background]} alt={presentation?.assets.find(asset => asset.assetKey === background)?.altText || background} /> : <span>{mediaLoading?'正在读取背景…':'背景暂不可用'}</span>}</div>}
+          {prefs.images && visualStage?.cgAssetKey && <div key={visualStage.cgAssetKey} className="avg-cg" data-asset-key={visualStage.cgAssetKey}>{mediaUrls[visualStage.cgAssetKey] ? <img src={mediaUrls[visualStage.cgAssetKey]} alt={presentation?.assets.find(asset => asset.assetKey === visualStage.cgAssetKey)?.altText || visualStage.cgAssetKey} /> : <span>{mediaLoading?'正在读取插图…':'插图暂不可用'}</span>}</div>}
           {prefs.images && visualStage?.actors.map((actor) => {
             const speaking = !!activeSpeakerKey && actor.actorKey === activeSpeakerKey
             const displaySlot = actor.slot
-            return <div key={`${actor.actorKey}:${actor.assetKey}`} className={`avg-actor avg-slot-${displaySlot} ${activeSpeakerKey ? speaking ? 'is-speaking' : 'is-listening' : ''}`} style={{ opacity: actor.opacity, transform: `translate(calc(-50% + ${actor.x * 20}px),${actor.y * 20}px) scale(${actor.scale})`, transitionDuration: `${cueDuration}ms` }} aria-label={`角色 ${actor.actorKey}`}>{mediaUrls[actor.assetKey] ? <img src={mediaUrls[actor.assetKey]} alt={presentation?.assets.find(asset => asset.assetKey === actor.assetKey)?.altText || actor.actorKey} /> : actor.assetKey}</div>
+            return <div key={`${actor.actorKey}:${actor.assetKey}`} className={`avg-actor avg-slot-${displaySlot} ${activeSpeakerKey ? speaking ? 'is-speaking' : 'is-listening' : ''}`} style={{ opacity: actor.opacity, transform: `translate(calc(-50% + ${actor.x * 20}px),${actor.y * 20}px) scale(${actor.scale})`, transitionDuration: `${cueDuration}ms` }} aria-label={`角色 ${actor.actorKey}`}>{mediaUrls[actor.assetKey] ? <img src={mediaUrls[actor.assetKey]} alt={presentation?.assets.find(asset => asset.assetKey === actor.assetKey)?.altText || actor.actorKey} /> : <span>{mediaLoading?'正在读取角色图像…':'角色图像暂不可用'}</span>}</div>
           })}
-          {prefs.images && visualStage?.overlayAssetKey && <div className="avg-overlay" data-asset-key={visualStage.overlayAssetKey}>{mediaUrls[visualStage.overlayAssetKey] ? <img src={mediaUrls[visualStage.overlayAssetKey]} alt={presentation?.assets.find(asset => asset.assetKey === visualStage.overlayAssetKey)?.altText || visualStage.overlayAssetKey} /> : visualStage.overlayAssetKey}</div>}
+          {prefs.images && visualStage?.overlayAssetKey && <div className="avg-overlay" data-asset-key={visualStage.overlayAssetKey}>{mediaUrls[visualStage.overlayAssetKey] ? <img src={mediaUrls[visualStage.overlayAssetKey]} alt={presentation?.assets.find(asset => asset.assetKey === visualStage.overlayAssetKey)?.altText || visualStage.overlayAssetKey} /> : <span>{mediaLoading?'正在读取叠加图像…':'叠加图像暂不可用'}</span>}</div>}
         </div>
         {visualStage?.mask && <div className="avg-mask" data-mask={visualStage.mask} />}
         {visualStage?.lastTransition === 'flash' && <div key={`flash:${currentBeat?.beatKey}`} className="avg-flash" />}
@@ -351,7 +371,8 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
       {panel && <div className="avg-panel-backdrop" onMouseDown={() => setPanel(null)}>
         <section className="avg-panel" role="dialog" aria-modal="true" aria-label={panel === 'inventory' ? '物品与证据' : panel === 'history' ? '历史回看' : '存读档'} onMouseDown={event => event.stopPropagation()}>
           <header><div><small>{panel === 'inventory' ? 'INVENTORY & EVIDENCE' : panel === 'history' ? 'DIALOGUE LOG' : 'SAVE & LOAD'}</small><h2>{panel === 'inventory' ? '物品与证据' : panel === 'history' ? '历史回看' : '存档与时间线'}</h2></div><button aria-label="关闭" onClick={() => setPanel(null)}><X /></button></header>
-          {panel === 'inventory' ? <InventoryPanel entries={inventory.entries} mediaUrls={prefs.images ? mediaUrls : {}} busy={store.busy} onAction={async action => { await store.actOnItem(action.key, action.target); const plan = store.runtimeState.avgRules?.systemPlan; return (plan?.version === 2 ? plan.inventory.actions.find(a => a.key === action.key)?.feedback : '') || '操作完成' }} /> : panel === 'history' && nativeReading ? <ReadingHistory entries={nativeReading.history} urls={mediaUrls} volume={prefs.muted ? 0 : prefs.volume * prefs.voiceVolume} paused={!foreground} /> : panel === 'history' ? <div className="avg-history">{historyBeats.map(beat => { const attributed = splitAttributedText(beat.text); return <article key={beat.beatKey}><strong>{beat.kind === 'dialogue' ? store.speakerNames[beat.speakerKey ?? ''] ?? attributed?.speaker ?? '未知角色' : attributed?.speaker ?? '旁白'}</strong><p>{attributed?.text ?? beat.text}</p></article> })}{historyBeats.length === 0 && <p>还没有可以回看的对白。</p>}</div> : <div className="avg-saves">
+          {panel === 'inventory' ? <InventoryPanel entries={inventory.entries} mediaUrls={prefs.images ? mediaUrls : {}} busy={store.busy} onAction={async action => { await store.actOnItem(action.key, action.target); const plan = store.runtimeState.avgRules?.systemPlan; return (plan?.version === 2 ? plan.inventory.actions.find(a => a.key === action.key)?.feedback : '') || '操作完成' }} /> : panel === 'history' && nativeReading ? <ReadingHistory key={store.selectedSessionId} entries={nativeReading.history} urls={mediaUrls} volume={prefs.muted ? 0 : prefs.volume * prefs.voiceVolume} paused={!foreground}
+            failedAssetKeys={mediaFailures.map(failure=>failure.assetKey)} onReplayRequested={assetKey=>setHistoryRequest(previous=>assetKey&&store.selectedSessionId?{sessionId:store.selectedSessionId,assetKey,attempt:(previous?.attempt??0)+1}:null)}/> : panel === 'history' ? <div className="avg-history">{historyBeats.map(beat => { const attributed = splitAttributedText(beat.text); return <article key={beat.beatKey}><strong>{beat.kind === 'dialogue' ? store.speakerNames[beat.speakerKey ?? ''] ?? attributed?.speaker ?? '未知角色' : attributed?.speaker ?? '旁白'}</strong><p>{attributed?.text ?? beat.text}</p></article> })}{historyBeats.length === 0 && <p>还没有可以回看的对白。</p>}</div> : <div className="avg-saves">
             <div className="avg-save-actions"><button disabled={store.busy} onClick={() => void quickSave()}><Save />保存当前进度</button></div>
             <h3>时间线检查点</h3>
             {store.checkpoints.map(checkpoint => <article key={checkpoint.id}><div><strong>{checkpoint.name}</strong><small>事件 #{checkpoint.throughSequence}</small></div><button disabled={store.busy} onClick={() => void run(async () => { await store.forkCheckpoint(checkpoint.id!); setPanel(null) })}><GitBranch />从这里开始新分支</button></article>)}
@@ -364,7 +385,7 @@ export default function AvgGamePlayer(props: { project: Project; scope: Workspac
         </section>
       </div>}
       {!prefs.images && <div className="avg-degraded"><ImageOff />图片关闭：纯文字剧情与选择保持可玩。</div>}
-      {mediaFailures.length > 0 && <div className="avg-degraded" role="status"><ImageOff />{mediaFailures.length} 项媒资缺失，已使用文字/静默降级。</div>}
+      {mediaFailures.length > 0 && <div className="avg-degraded" role="status"><ImageOff />{mediaFailures.length} 项媒资缺失，已使用文字/静默降级。<button type="button" onClick={()=>setMediaRetry(value=>value+1)}>重试资源</button></div>}
       {uiHidden && <button className="avg-ui-restore" onClick={() => setUiHidden(false)} aria-label="显示界面"><Eye />显示界面</button>}
     </section>
   </div>

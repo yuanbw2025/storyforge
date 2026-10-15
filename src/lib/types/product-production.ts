@@ -75,6 +75,8 @@ export interface ProductMediaResolverV1 {
   preload(input: {
     assetKeys: string[];
     maximumBytes: number;
+    /** Opt-in bounded window; legacy callers retain their cached catalog. */
+    retainOnlyRequested?: boolean;
   }): Promise<ResolvedMediaCatalogV1>;
   read(assetKey: string): Promise<Blob>;
   dispose(): void;
