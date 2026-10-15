@@ -65,6 +65,9 @@ const entrypoints = [
   // G6-01 exposes the governed vNext runtime AI provider gateway as a headless
   // product-runtime API. Player routes adopt its candidates only in later G6 slices.
   'src/lib/open-world/runtime-ai-execution.ts',
+  // AVG-02A1 deterministic rules compiler/preview is a headless authoring API.
+  // It reuses the shared reducer; no new player or professional AI entry is open.
+  'src/lib/avg/system-compiler.ts',
 ].map(file => path.resolve(root, file))
 
 const graph = new Map()

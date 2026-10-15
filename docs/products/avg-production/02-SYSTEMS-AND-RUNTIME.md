@@ -1,7 +1,17 @@
 # AVG 游戏系统、演出与恢复协议
 
-> L2 · 版本：1.1.0 · 生效：2026-10-13 · 受 [AVG 产品契约](../AVG.md)约束。
+> L2 · 版本：1.2.0 · 生效：2026-10-15 · 受 [AVG 产品契约](../AVG.md)约束。
 > 以下为目标协议；当前 V1 的叙事/Cue/checkpoint 底座不能据此宣称已有物品、消息或完整语音协调能力。
+
+## 0 当前研发顺序与规则接缝
+
+系统/表现框架先于专业剧情生产施工。AVG-02A1 的确定性内核提供 `AvgSystemPlanV1` / `storyforge.avg.system-plan@1`：characters、类型化 variables、带 holder 的 knowledge、按角色/维度的 relationships、entrySceneKey、scenes、actions。可使用固定原创场景独立编译和模拟；完整剧情、专业 system-designer/performance-director、AI 采用与实际 V2 玩家仍分别验收。
+
+状态路径由身份确定性生成：`avg.variables.<key>`、`avg.knowledge.<holderKey>.<factKey>`、`avg.relationships.<characterKey>.<dimensionKey>`。路径段只接受安全标识，不允许点号层级注入或原型属性；`player` 为玩家知识保留身份。只接受已声明槽位与匹配类型的条件/效果，必需状态不能 unset。boolean、数值范围/整数、枚举和字符串长度均由代码检查；关系有界，知识逐持有人保存。
+
+规则 compiler 输出既有 Frozen Narrative，条件/效果及转移复用共享确定性执行器；不复制状态机。`simulateAvgSystemPlanV1` 最多执行 1,000 个明确行动，并限制状态槽数 × 逐效果/路径检查总工作量为 1,000,000，返回准确规则/内容 hash、实际逐步状态和结束标记；越界或非法目标整次失败，输入和此前预览不变。图检查是结构校验，不替代条件可满足性、全路径覆盖或真实游玩。空 Beat 的规则预览不构成可玩包，不能用于绕过正式会话源验证。
+
+本内核不访问 DB/世界/模型，不创建候选或授权专业写入。上述 system-plan schema 是后续正式接缝的唯一类型来源；专业工件 parser/admission 暂不开放它。已验收 `AvgRuntimeModuleV1` 的空状态/行动语义不被悄悄改写；实际接入规则须明确模块版本、严格分派与正反例，再开对应玩家能力。
 
 ## 1 模块边界与版本
 

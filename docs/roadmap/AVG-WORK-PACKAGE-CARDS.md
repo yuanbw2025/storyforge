@@ -1,7 +1,7 @@
 # AVG 工作包开工卡
 
-> L2 · 版本：1.5.0 · 生效：2026-10-15 · 产品：AVG/Galgame · 上位条目：E-AVG-01。
-> [产品契约](../products/AVG.md)裁决边界，[实施计划](AVG-IMPLEMENTATION-PLAN.md)裁决顺序。AVG-00 已设计交付，AVG-BASE-00A/00B 已分支验收，CAL-00 正在准备，下一代码包为 BASE-01；详见实施计划的当前状态。
+> L2 · 版本：1.6.0 · 生效：2026-10-15 · 产品：AVG/Galgame · 上位条目：E-AVG-01。
+> [产品契约](../products/AVG.md)裁决边界，[实施计划](AVG-IMPLEMENTATION-PLAN.md)裁决顺序。AVG-00 已设计交付，AVG-BASE-00A/00B 已分支验收，当前按作者指令先做系统/表现框架，02A1 确定性内核施工中，专业剧情生产后置；详见实施计划的当前状态。
 
 ## 0 所有代码包的共同交付约束
 
@@ -18,7 +18,7 @@
 | 施工范围 | 必须有的负责单元 | 首戏范围/后置条件 |
 |---|---|---|
 | 作者定向、来源与规范主体 | AVG-BASE-00B, AVG-01A | S2/开始/预算/设备/语言/视角均冻结，不需要先有最终剧本 |
-| 故事、路线、正式规则与分场 | AVG-01A, AVG-02A1, AVG-01B | 先意图→骨架→分场；返修新 revision，不形成开工循环 |
+| 故事、路线、正式规则与分场 | AVG-01A, AVG-02A1, AVG-01B | 本轮先骨架与固定文本验证；专业故事/分场后置，返修仍需新 revision |
 | 舞台/导演与联合编译 | AVG-02A2 | 声明式能力与实际消费；不要求完整自动媒资工厂 |
 | 对话、声音、存档、偏好与资源 | AVG-03A | 完整单会话与授权音频即可；性能、失败和真正恢复必验 |
 | 物件/知识/消费 | AVG-02B1 | 第一批完整模块，不混装所有 optional 系统 |
@@ -56,7 +56,7 @@
 
 ## 3 AVG-BASE-01 · 实际参考与媒体传输
 
-- **状态/前置**：开工准备；00A/00B 已分支验收。独立 `avg-base01-20261015` 工作树从 `origin/main 5147924e` 建立并接入 00B `13ce6792`；当前尚无新媒体实现/真实生成，详细范围见实施计划 §2.3。S3 产品媒资输入/候选 owner 不变。
+- **状态/前置**：按需排队；00A/00B 已分支验收。原 BASE-01 基线准备复用于系统优先分支，当前尚无新媒体实现/真实生成；参考传输不阻塞合法导入和播放器。S3 产品媒资输入/候选 owner 不变。
 - **入口/闭包**：`product-media.ts/media-contracts.ts` → `media-adapters.ts/media-transport.ts` → Harness receipt → `media-blob-store.ts/artifact-store.ts` → adoption/binding。读取合法参考 Blob 和冻结媒体需求，不重读整个世界。
 - **交付**：请求 V2 的 ReferenceInput、purpose/mask/crop、能力快照/费用上界、真实参考字节 hash/处理版本、async 查询/结果未知策略与 bounded attempt。共享升级须证明 AVG + 至少另一真实调用方需求，否则 AVG adapter 扩展。
 - **注册表/采用**：参考/数据政策走登记 Context 投影；需求 metadata 与真实候选沿现行写口，权利/传输/hash 为系统证据；不新增第二素材库。
@@ -75,7 +75,7 @@
 
 ## 5 AVG-01 · 专业内容与会谈
 
-- **状态/前置**：聚合包；AVG-01A 等 BASE-00B/CAL-00，AVG-01B 等 01A/02A1。S2/S3 分开，AVG Work owner 不变。
+- **状态/前置**：LATER；AVG-01A 等 BASE-00B/CAL-00，AVG-01B 等 01A/02A1；两者均不阻塞当前系统/表现框架。S2/S3 分开，AVG Work owner 不变。
 
 | 单元 | 限定输出 | 独立完成门 |
 |---|---|---|
@@ -90,17 +90,21 @@
 
 ## 6 AVG-02A · 基础规则、导演与舞台
 
-- **状态/前置**：聚合包；AVG-02A1 等 01A，AVG-02A2 等 01B/02A1。S3 系统候选与 AVG runtime。
+- **状态/前置**：当前主线；02A1 确定性内核等已验收 BASE-00B，02A2 等 02A1 与固定/已采用输入；专业故事/设计/导演 Agent 后置。产品研发；接正式作品时再验证 S3 候选和 AVG runtime。
 
 | 单元 | 限定输出 | 独立完成门 |
 |---|---|---|
-| AVG-02A1 | system-designer、变量/知识/关系/选择/行动的类型化骨架与状态模拟 | 无需最终剧本/导演即可检测类型、条件/效果、知识/可达性；输出为 01B 可消费的正式规则引用 |
-| AVG-02A2 | performance-director、M04、实际编译/有限 Cue/舞台/消费槽 | 采用剧本和骨架进 V2 编译，实际选择/演出与 state 一致；可用授权导入媒体，不等自动工厂 |
-- **入口/闭包**：已采用路线/脚本 → system-designer/performance-director → rule/direction 候选 → typed adopt → AVG compiler/runtime commands → 舞台/选择。`narrative-blueprint.ts` 有限条件/效果与现有 Cue 基础复用。
+| AVG-02A1 | 当前先做确定性 system-plan、类型化变量/知识/关系/选择和共享执行器模拟；专业设计岗位后置 | 两套配置、结构图与实际路径、类型/范围/身份/原子失败检查；正式采用和运行准入另验，不以只读预览关闭全包 |
+| AVG-02A2 | 当前先做有限导演合同、编译/舞台/Cue/消费槽；专业导演岗位后置 | 固定/已采用文本和规则进 V2，实际规则/演出一致；合法导入可验工程，不等待专业故事/自动工厂 |
+- **入口/闭包**：当前为固定原创规则/文本 → 严格 codec → 确定性 compiler/只读模拟 → 后续受治理采用/V2 runtime/舞台；专业岗位接入后再扩上下文和候选闭包。`narrative-blueprint.ts` 有限条件/效果与现有 Cue 基础复用。
 - **交付**：类型化变量/知识/关系、选择/回响/结束、无环模块依赖和声明式 Cue；actor 身份/外观/构图/消费者；不可跳过/超时/打断规则。规则状态只由合法命令推进，导演无副作用。
-- **注册表/生命周期**：`avg.system-inputs` 与两个核心 Skill；system/direction payload 独立写域；正式规则冻结在包，会话复用 events/checkpoint，暂不新增表。consumer 目录由确定性编译生成。
+- **注册表/生命周期**：本次纯内存内核无新增源/AI 字段/表，不读世界、不持久化；未来专业岗位须登记 `avg.system-inputs`/核心 Skill/独立写域，正式规则冻结在包，会话复用 events/checkpoint。consumer 目录由确定性编译生成。
 - **正反例**：两种选择即时/后续差异、纯文字逻辑等价、事件重放；拒绝类型越界、未知操作、任意代码、未知角色/Beat、知识泄漏、Cue 偷写状态/无界等待；舞台/点击/选择 E2E 真正生效。
 - **兼容/非范围**：V1 旧演出与存档回归；不默认引入 live AI、RPG 战斗/经营或可动角色。renderer 缺能力与关键知识冲突阻止对应 Build。
+
+### 6.1 当前内核增量证据
+
+分支 `feat/avg-system-presentation-framework-20261015`；实现位置为 `src/lib/avg/system-contract.ts` / `system-compiler.ts`。只读 headless 编译/模拟，不启用新玩家、专业 AI 或正式 system-plan 采用。当前定向 5 文件 / 52 测试通过（内核 10 项）；architecture、required-tables、ai-manual、source-reachability、文档、定向 lint、TypeScript、build、diff 检查通过。完整 CI 尚待共享槽位验证，当前不标记全包验收。两套工程配置均无商业素材/文学评测声明。整个 02A1 仍施工中，不能将内核通过写成全部正式生产已完成。
 
 ## 7 AVG-02B · 可选交互与证据系统
 
@@ -132,7 +136,7 @@
 
 ## 9 AVG-04A · 视觉生产、家族与自动绑定
 
-- **状态/前置**：QUEUED；BASE-01、01B、02A2、CAL-01 对应视觉质量分项。S3 媒资 owner 为 AVG 产品；确认的物件槽还需 02B1。
+- **状态/前置**：QUEUED；BASE-01、02A2、CAL-00 对应视觉质量分项；固定/已采用输入即可，不等专业剧情。S3 媒资 owner 为 AVG 产品；确认的物件槽还需 02B1。
 - **入口/闭包**：art/character/environment/prop/UI/key-art Skill → media requirements/参考 → 实际 provider/import → 加工/visual review → author adopt → typed stage/dialogue/inventory/detail/menu/gallery binding → Build。
 - **注册表/工件**：`avg.media-inputs/avg.review-inputs`、岗位核心 Skill、media-brief/visual-bible/review schema 与闭集 key；需求 metadata、制作 payload 及实际 Blob 复用，rights/hash/费用/真实观察为系统/人类证据。
 - **交付/正反例**：人物/地点/物件连续家族和小图/合成审查；接受合法同物件 icon/detail，拒绝错身份、变状态、泄密文字、假参考、wrong consumer、把所有 ui 当 overlay、非法宣传图入 runtime、stale family。
@@ -141,7 +145,7 @@
 
 ## 10 AVG-04B · 声音与配音生产
 
-- **状态/前置**：QUEUED；BASE-02、01B、02A2、CAL-01 对应音频质量分项；等待准确脚本/演法。S3 产品音频 owner。
+- **状态/前置**：QUEUED；BASE-02、02A2、CAL-00 对应音频质量分项；使用固定/已采用准确台词和演法，不等专业剧情。S3 产品音频 owner。
 - **入口/闭包**：sound-director/voice-director → sound/voice-plan → 真实音乐/环境/SFX/voice → audio review/author listen → typed channel/line binding → AVG-03 的连续播放。
 - **注册表/生命周期**：三个核心 Skill 及 media/review 投影；payload/需求与现有音频 Blob/adoption/rights 复用，不把 wave 检查写成听感通过；text/performance/preset 版本和原片段/裁段 lineage 保留。
 - **交付/正反例**：关键对白真实 clip、准确读音/声线/演法/对齐、BGM/雨声/SFX 与混音；错句/漏词、speaker/locale 错、字数猜 timing、循环截断、旧文配音、不可听 reviewer 判通过均拒绝。
@@ -149,7 +153,7 @@
 
 ## 11 AVG-05 · 三线工作台与局部返修
 
-- **状态/前置**：聚合包；AVG-05A 等 01B/02A2/03A，AVG-05B 等 AVG-PILOT-01B。作者生产/修订，AVG Work owner。
+- **状态/前置**：聚合包；AVG-05A 等 02A2/03A，AVG-05B 等 AVG-PILOT-01B。作者生产/修订，AVG Work owner。
 
 | 单元 | 限定输出 | 独立完成门 |
 |---|---|---|
@@ -177,7 +181,7 @@
 
 ## 13 AVG-06 · 切片、真实对照与独立玩家
 
-- **状态/前置**：QUEUED；PILOT-01B/05B blocking 清零，所选模块全部就绪。产品质量校准与独立作品生产分账，复用所有既有表/Run/receipt，不新增旁路评测写口。
+- **状态/前置**：LATER；PILOT-01B/05B blocking 清零，所选模块全部就绪。产品质量校准与独立作品生产分账，复用所有既有表/Run/receipt，不新增旁路评测写口。
 - **交付**：CAL-01 的 9 样本试验有收益后补另两类 Brief 的 18 样本，合计 27；15～30 分钟作品及两个真实结果、作者修改、对应经验的内容/美术/声音评审与至少 8 名目标读者试点。通关/4分不代替商业参照比较，未补九场/音频继续记缺口。
 - **输入/正反例**：同源/同要求/总预算、所有 raw/拒绝/人工工时、不同 provider+model 才叫独立；统计原始 n/N、assist/退出和理解口述，不筛掉坏样本、机器人或同模型自评冒充玩家。
 - **闭环验收**：准确版本问题→owner/最小返修→新 Build/后继 release→旧档复测；质量回执 stale 不借用。试点阈值按规格 04 冻结，不代表销量/统计证明。
@@ -185,7 +189,7 @@
 
 ## 14 AVG-07 · 玩家交付与指定分发
 
-- **状态/前置**：QUEUED；06、实际用到的鉴赏/档案模块与冻结分发目标。release/外部分发生命周期，批准发布与渠道动作分别处理。
+- **状态/前置**：LATER；06、实际用到的鉴赏/档案模块与冻结分发目标。release/外部分发生命周期，批准发布与渠道动作分别处理。
 - **入口/闭包**：已验收 Build/SourceManifest → immutable release → 正式 Blob closure/导出 → 隔离安装/离线玩家 → save/profile/版本/资源 pin。复用既有 Release/export/import，不把作者备份当独立播放器。
 - **交付**：封面/开始继续/必要内容提示、正确解锁的鉴赏/回顾、可用离线包与语言设备范围；按实际渠道准备 Demo/说明和当前权利/政策 evidence。
 - **注册表/正反例**：PROJECT_TABLES 派生完整包/remap/delete；不包含凭据、作者设置、源世界全部秘密或未采用候选；缺 Blob/错 MIME/hash、锁定 CG、损坏/旧档及新版安装反例，浏览器/分发目标实测。
@@ -209,7 +213,7 @@
 
 ## 17 AVG-CAL-01 · 提前检验专业化收益
 
-- **状态/前置**：QUEUED；CAL-00、01B 的最小专业内容路径。图/音分项另等 BASE-01/02 的实际能力；一个分项通过不放行另一个 unknown 分项。
+- **状态/前置**：LATER；CAL-00、01B 的最小专业内容路径；文学试验不阻塞系统与表现框架。图/音分项另等 BASE-01/02 的实际能力；一个分项通过不放行另一个 unknown 分项。
 - **交付/读取**：先 1 Brief × 通用/专业/分离编辑三路径 × 每路径 3 样本；同来源/要求/预算，保留所有原始/拒绝/修改。参考家族与关键 voice 用小批次真实验收回执评身份/演法/人工/费用，在完整工厂前发现不可用路由。
 - **调用/写域**：复用注册 Skill/Harness、媒体 gateway/候选/Blob/receipt；读取冻结输入投影。评测专用调用须在 AI 入口登记 evaluation 边界，不能从组件另发请求；不为了复评盲目重跑已经足够的 provider 验收样本。
 - **验收/反例**：无 blocking，专业路径的选用须有质量/采用/人工或总投入的实际收益理由；若预算内无收益，修方法/粒度再测，不能机械启用全部 22 岗位。不同 provider+model 才叫独立模型，observer 不可观察则 unknown；未知成本不记零，坏样本不丢。
