@@ -14,7 +14,7 @@ import { fixture as carrierFixture } from './avg-carrier-fixture'
 import { createAvgDraftV1 } from '../../src/lib/avg/draft-service'
 import { createProductReleaseManifestV2, productReleaseIdentityHashV2 } from '../../src/lib/product-production/runtime-package'
 import { createProductReleaseLineageV1, productReleaseUidV1 } from '../../src/lib/product/source-contracts'
-import type { FrozenRuntimeMediaAssetV2 } from '../../src/lib/types'
+import type { AvgPresentationCue, FrozenRuntimeMediaAssetV2 } from '../../src/lib/types'
 import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
 import { acceptProductBuildArtifact } from '../../src/lib/product-production/artifact-store'
 import type { AvgSystemPlan } from '../../src/lib/avg/system-contract'
@@ -33,13 +33,13 @@ export function avgNativePackage() {
 
 /** Controlled preparation of a real AVG Work/start/author receipt closure.
  * The final Preview freeze is fixture-only, not a claim of a live new planner. */
-export async function seedAvgNativePreview(systemPlan: AvgSystemPlan = avgSystemFixture(), media: Array<{ asset: FrozenRuntimeMediaAssetV2; data: ArrayBuffer }> = []) {
+export async function seedAvgNativePreview(systemPlan: AvgSystemPlan = avgSystemFixture(), media: Array<{ asset: FrozenRuntimeMediaAssetV2; data: ArrayBuffer }> = [], reading?: unknown, extraCues: AvgPresentationCue[] = []) {
   const s = await seedAvgAuthorSystem()
   const rule = s.plan.tasks[0]
   const tasks = [rule, ...avgNativeScripts(systemPlan).map(script => ({ ...rule, taskKey: `script.${script.sceneKey}`, lane: 'content' as const,
     kind: 'avg-author-scene-script', outputArtifactKeys: [`avg.content.scene-script.${script.sceneKey}`],
     subjectLockKeys: [`avg.content.scene-script.${script.sceneKey}`], dependsOn: [rule.taskKey], requiredReceipts: [{ taskKey: rule.taskKey, receiptHash: null }], inputArtifactKeys: ['avg.system.plan'] }))]
-  for (const [index] of media.entries()) tasks.push({ ...rule, taskKey: `media.${index}`, lane: 'visual', kind: 'fixture-original-media', outputArtifactKeys: [`avg.media.${index}`], subjectLockKeys: [`avg.media.${index}`], dependsOn: [rule.taskKey], requiredReceipts: [{ taskKey: rule.taskKey, receiptHash: null }], inputArtifactKeys: ['avg.system.plan'] })
+  for (const [index, { asset }] of media.entries()) tasks.push({ ...rule, taskKey: `media.${index}`, lane: asset.mimeType.startsWith('audio/') ? 'audio' : 'visual', kind: 'fixture-original-media', outputArtifactKeys: [`avg.media.${index}`], subjectLockKeys: [`avg.media.${index}`], dependsOn: [rule.taskKey], requiredReceipts: [{ taskKey: rule.taskKey, receiptHash: null }], inputArtifactKeys: ['avg.system.plan'] })
   const join = { ...rule, taskKey: 'fixture.join', lane: 'integration' as const, executionMode: 'deterministic' as const,
     outputArtifactKeys: ['fixture.join'], subjectLockKeys: ['fixture.join'], dependsOn: tasks.slice(1).map(task => task.taskKey),
     requiredReceipts: tasks.slice(1).map(task => ({ taskKey: task.taskKey, receiptHash: null })), inputArtifactKeys: tasks.map(task => task.outputArtifactKeys[0]) }
@@ -61,12 +61,12 @@ export async function seedAvgNativePreview(systemPlan: AvgSystemPlan = avgSystem
   }
   for (const [index, { asset, data }] of media.entries()) {
     const blob = await putMediaBlobObject({ scope: s.scope, data, mimeType: asset.mimeType, expectedContentHash: asset.contentHash, backend: 'indexeddb', sanitizedSvg: true })
-    await acceptProductBuildArtifact({ scope: s.scope, buildId: s.buildId, controlEpoch: build.controlEpoch, artifactKey: `avg.media.${index}`, kind: 'image', mediaKind: asset.kind, payload: { assetKey: asset.assetKey }, metadata: asset, inputHash: await hashProductProductionValueV2(asset), contentHash: blob.contentHash, blobObjectId: blob.id!, mimeType: blob.mimeType, byteSize: blob.byteSize, rights: { origin: 'original-fixture', license: asset.license } })
+    await acceptProductBuildArtifact({ scope: s.scope, buildId: s.buildId, controlEpoch: build.controlEpoch, artifactKey: `avg.media.${index}`, kind: asset.mimeType.startsWith('audio/') ? 'audio' : 'image', mediaKind: asset.kind, payload: { assetKey: asset.assetKey }, metadata: asset, inputHash: await hashProductProductionValueV2(asset), contentHash: blob.contentHash, blobObjectId: blob.id!, mimeType: blob.mimeType, byteSize: blob.byteSize, rights: { origin: 'original-fixture', license: asset.license } })
   }
   const latest = (await db.productBuilds.get(s.buildId))!
   const compiled = await compileConfirmedAvgBuildV2({ scope: s.scope, buildId: s.buildId, expectedBuildRevision: latest.stateRevision,
     controlEpoch: latest.controlEpoch, product: { key: 'avg.author.fixture', title: '规则与舞台试验', description: '原创工程测试场景' },
-    stage: { version: 1, cues: [{ cueKey: 'tone.desk', beatKey: 'line.desk', type: 'set-tone', tone: 'night', phase: 'before', durationMs: 0, order: 0, easing: 'linear' }], assets: media.map(m => m.asset) }, aspectRatio: '16:9' })
+    ...(reading === undefined ? {} : { reading }), stage: { version: 1, cues: [{ cueKey: 'tone.desk', beatKey: 'line.desk', type: 'set-tone', tone: 'night', phase: 'before', durationMs: 0, order: 0, easing: 'linear' }, ...extraCues], assets: media.map(m => m.asset) }, aspectRatio: '16:9' })
   const manifestHash = await hashProductProductionValueV2({ fixture: 'author-inputs', source: compiled.source })
   const preview = await createProductBuildPreviewManifestV2({ runtimePackage: compiled.runtimePackage,
     productionKey: 'avg.author.fixture', buildNumber: latest.buildNumber, buildManifestHash: manifestHash, mediaBindings: media.map((m, index) => ({ assetKey: m.asset.assetKey, artifactKey: `avg.media.${index}`, blobContentHash: m.asset.blobContentHash })) })

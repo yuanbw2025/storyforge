@@ -1291,7 +1291,7 @@ async function verifyNativeAvgInitialSnapshot(session: ProductRuntimeSession): P
   if (session.kind !== 'avg') return false
   const initial = parseJsonObject(session.initialStateJson, 'initialStateJson')
   const canon = parseJsonObject(session.canonSnapshotJson, 'canonSnapshotJson')
-  if (!Object.prototype.hasOwnProperty.call(initial, 'avgRules') && canon.packageVersion !== 2) return false
+  if (!Object.prototype.hasOwnProperty.call(initial, 'avgRules') && !Object.prototype.hasOwnProperty.call(initial, 'avgReading') && canon.packageVersion !== 2) return false
   const source = await verifyProductRuntimeSessionSourceV1({ scope: { projectId: session.projectId, worldId: session.worldId, workId: session.workId }, session })
   if (session.runtimeSourceHash !== source.packageHash) throw new Error('[avg] 运行来源 hash 不一致')
   assertFrozenRuntimePackageSessionV1({ session: { kind: session.kind, initialState: parseProductRuntimeState(session.initialStateJson) },
@@ -1426,6 +1426,7 @@ export async function appendProductRuntimeEvent(input: {
       "受治理的文字冒险事件只能通过 commitAdventureAction() 生成。",
     );
   }
+  if (input.type.startsWith("avg.reading.")) throw new Error("受治理的 AVG 播放观察只能通过专用命令 API 生成。");
   if (input.type.startsWith("avg.inventory.")) throw new Error("受治理的 AVG 物件事件只能通过专用命令 API 生成。");
   if (input.type.startsWith("presentation.")) {
     throw new Error("受治理的 AVG 演出事件只能通过对应的专用命令 API 生成。");

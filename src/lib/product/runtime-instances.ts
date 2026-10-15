@@ -1,3 +1,4 @@
+import { createAvgReadingStateV1 } from '../avg/reading-runtime'
 import { db } from '../db/schema'
 import {
   applyProductRuntimeEvent,
@@ -211,6 +212,7 @@ export function createProductInitialStateV1(input: {
     const module = avgExecutableModule(runtimePackage)
     if (module) {
       state.avgRules = { schema: 'storyforge.avg.rules-state', version: 1, systemPlan: structuredClone(module.systemPlan) }
+      if (module.reading) state.avgReading = createAvgReadingStateV1(module)
       const entry = module.systemPlan.scenes.find(scene => scene.key === module.systemPlan.entrySceneKey)!
       previewAvgSystemEffectsV1(module.systemPlan, runtimePackage.definition.initialVariables, entry.onEnter)
     }

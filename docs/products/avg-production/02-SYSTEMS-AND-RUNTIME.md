@@ -1,6 +1,6 @@
 # AVG 游戏系统、演出与恢复协议
 
-> L2 · 版本：1.5.0 · 生效：2026-10-15 · 受 [AVG 产品契约](../AVG.md)约束。
+> L2 · 版本：1.6.0 · 生效：2026-10-15 · 受 [AVG 产品契约](../AVG.md)约束。
 > 目标协议与当前原生增量分开记账；旧 V1 底座不因此自动拥有新物件、消息或完整语音协调能力。
 
 ## 0 当前研发顺序与规则接缝
@@ -33,7 +33,7 @@
 | choices | choiceKey / text | 表达文本归脚本，行动身份与规则后果独立；仅改措辞不会改结果 |
 | aspectRatio | 16:9 / 4:3 | 原生字段，不偷塞入剧情变量 |
 | stage | 既有 Cue protocol 1 + 冻结 assets | 复用同一 renderer/解析器；未知 Cue 字段/缺资源/错误用途拒绝 |
-| enabled capabilities | narrative / presentation / avg.rules；规则 V2 再声明 avg.inventory | 与 Package 声明精确一致，未知/未支持可选模块拒绝 |
+| enabled capabilities | narrative / presentation / avg.rules；规则 V2 再声明 avg.inventory，显式 reading 再声明 avg.reading | 与 Package 声明精确一致，未知/未支持可选模块拒绝 |
 
 `avgModuleNarrativeV2` 从规则和规范文本派生共享 Frozen Narrative，包解析时与 narrative/初值逐项比对。规则不从台词或图案猜结果，导演 Cue 不能写规则。当前消费现有 Cue/资产键，以及下文物件 icon/detail 的严格资产引用；00B 的通用消费者/媒资家族绑定 DTO 不因此自动生效，其余消费槽/自动媒资工厂继续另验。
 
@@ -85,6 +85,20 @@ Preview V2 的媒体绑定只有在原生可执行目录中才开放：每个资
 | 回听 | 打开当前历史条目的真实 clip，不执行 Cue/效果，不改变剧情位置或伪造新阅读事件 |
 
 auto delay、快进速度、音量等是偏好；剧情规定的不可跳过演出是包规则。字幕先显示合法文本，不能因声音语言缺失而读另一语言的未知内容。声音同步合同见[媒资规格](03-MEDIA-PRODUCTION-AND-BINDING.md)。
+
+### 3.1 当前原生阅读/播放增量
+
+`AvgRuntimeModuleV2.reading` 是显式可选的 `storyforge.avg.reading-plan@1`；缺省省略字段/能力，不升级旧 V1 或既有无 reading 的原生包。它冻结手动 wait/interrupt、失败 pause/continue、有界最大等待、默认阅读余量，以及 line/asset/text/textRevision/speaker/locale 的准确逐句绑定。编译拒绝旧文本/版本/人物/语言、缺音频、错误 kind/MIME/时长，以及同一句同时走旧 voice Cue 的双重播放。一次性 SFX 不准循环，持续环境声音使用自己的声道。当前 reading 参数仍为明确组装草稿，正式声音采用/生产集成不从此 codec 自动获得授权。
+
+会话仅在该能力启用时增加 `avgReading: storyforge.avg.reading-state@1`，保存冻结阅读计划/句目录、当前播放请求/结果与有序历史；来源/初值/备份继续校验实际不可变包，缺失或替换阅读状态拒绝。旧 JSON 缺省不增加字段；无新表/迁移、Context Source、AI 写域或模型调用。
+
+`commitAvgVoiceCommandV1` 是新的受治理 CAS 命令。start 只记录播放请求；generation 由系统单调递增，不能由旧 DOM 回调重用。observe 分别记录 ended、failed 或作者允许的 interrupted，以及真实媒体 currentTime 观察得到的 playedMs/原因。过期句/visit/generation、越权打断、已终结回调和通用 append 绕过均拒绝，不留半个事件。它证明传输结果，不证明听见了声音、配音内容正确或艺术质量通过。自动阅读等规范句文本、显式 Cue 等待和合法 voice 结果；后端到句命令也执行声音屏障，不能只靠 UI 计时。
+
+播放控制器按 session/visit/line 取消旧 generation，菜单/后台暂停实际 Audio 与活动等待时钟；恢复继续当前位置，读档中断则新 generation 从句首开始，已完成声音不因刷新重播。play() 权限失败、解码错误、资源缺失和最大活动等待超时是具体失败，按计划暂停或允许继续；重试产生新 generation，静音继续/手动推进只有作者允许时写 interrupted，不能冒充 ended。各个显式 SFX Cue 使用独立播放身份，同一 clip 的后续 Cue 可重播；已结算的历史 SFX 不随旧档无条件重放。音乐/环境仍从持续舞台目标恢复。
+
+文本历史按实际结算的 line 和 choice 追加，保留 visit、规范文本/版本、当时说话人、音频引用/结果/播放位置；重复访问不去重。历史随 checkpoint/分支/备份恢复，当前版本有 100,000 条显式保护上限。回听只加载已读条目的真实 clip，不调用规则、Cue 或阅读命令；菜单退出即取消回听。读者设置使用浏览器独立偏好键，分别保存主音量/音乐/环境/音效/配音、文字速度/图像/减少动态/静音和阅读余量；自动播放/快进不持久启动，不写 Work/Project 或世界。
+
+当前技术验证使用原创 PCM 校准音及有意损坏的测试字节，真实浏览器解码/ended/暂停/重试/超时，不能冒充专业人声、TTS、连续混音或长作品性能验收。按场景有界资源 cache、完整可访问性/设备与整作规模、正式作者工作台、实际声音生产/采用仍需后续工作，不因本增量关闭整个 03A 或框架目标。
 
 ## 4 舞台与声明式导演
 

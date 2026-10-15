@@ -260,3 +260,8 @@
 .avg-inventory-actions small { color: #bcae96; }
 .avg-inventory button:disabled { opacity: .5; cursor: not-allowed; }
 @media (max-width: 600px) { .avg-panel .avg-inventory { padding: 16px; grid-template-columns: 1fr; gap: 14px; } .avg-inventory nav { flex-direction: row; overflow-x: auto; } .avg-inventory nav button { flex: 0 0 145px; } }
+
+.avg-voice-transport { position: absolute; top: 80px; left: 20px; right: 20px; z-index: 33; pointer-events: none; }
+.avg-voice-recovery { pointer-events: auto; position: relative; z-index: 42; display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 16px; background: #302820; color: #f0dfc2; }
+.avg-voice-recovery button,.avg-history button { border: 1px solid #b69a6a; border-radius: 6px; padding: 6px 10px; background: #3c3025; color: #f5e7cf; }
+.avg-history-choice { border-left: 2px solid #b69a6a; padding-left: 12px !important; }

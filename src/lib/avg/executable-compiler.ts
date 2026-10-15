@@ -17,6 +17,7 @@ export function compileAvgExecutablePackageV2(input: {
   scripts: unknown
   stage: AvgExecutableStageV1
   aspectRatio: '16:9' | '4:3'
+  reading?: unknown
   scriptRevisions?: Record<string, number>
 }): ProductRuntimePackageV2 {
   const compiled = buildAvgSystemGraphV1(input.systemPlan)
@@ -37,7 +38,7 @@ export function compileAvgExecutablePackageV2(input: {
     }
   }
   const module = parseAvgRuntimeModuleV2({ schema: 'storyforge.avg.runtime-module', version: 2,
-    systemPlan: compiled.plan, aspectRatio: input.aspectRatio, stage: input.stage, choices: ordered.flatMap(script => script.choices.map(choice => ({ choiceKey: choice.choiceKey, text: choice.text }))),
+    systemPlan: compiled.plan, aspectRatio: input.aspectRatio, stage: input.stage, ...(input.reading === undefined ? {} : { reading: input.reading }), choices: ordered.flatMap(script => script.choices.map(choice => ({ choiceKey: choice.choiceKey, text: choice.text }))),
     lines: ordered.flatMap(script => script.lines.map(line => ({ lineKey: line.lineKey, sceneKey: script.sceneKey,
       speakerKey: line.speakerKey, text: line.text, textRevision: avgNumber(revisions[script.sceneKey], 'script revision', 1, 1_000_000), locale: 'zh-CN' }))) })
   return parseProductRuntimePackageV2({ schema: 'storyforge.product-runtime-package', version: 2, productType: 'avg',
@@ -50,7 +51,7 @@ export function compileAvgExecutablePackageV2(input: {
  * into an in-memory package candidate. Director/media adoption and actual
  * Preview/Release freezing remain production-integrator responsibilities. */
 export async function compileConfirmedAvgBuildV2(input: Parameters<typeof readAvgSystemPlanForCompilationV1>[0] & {
-  product: { key: string; title: string; description: string }; stage: AvgExecutableStageV1; aspectRatio: '16:9' | '4:3'
+  product: { key: string; title: string; description: string }; stage: AvgExecutableStageV1; aspectRatio: '16:9' | '4:3'; reading?: unknown
 }) {
   const source = await readAvgSystemPlanForCompilationV1({ ...input, includeSceneScripts: true })
   if (input.product.key !== source.build.productionKey) throw new Error('[avg] 编译产品身份与当前 Production 不一致')
