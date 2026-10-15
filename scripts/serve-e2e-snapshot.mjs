@@ -11,6 +11,7 @@ const port = Number.isInteger(configuredPort) && configuredPort > 0 ? configured
 const snapshotEntries = [
   'scripts/local-codex',
   'scripts/distribution/proxies.mjs',
+  'scripts/distribution/diagnostics.mjs',
   'data',
   'showcase/short-novel',
   'showcase/screenplay',

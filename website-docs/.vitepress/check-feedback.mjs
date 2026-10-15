@@ -1,9 +1,9 @@
-/* global console, document, File, DataTransfer, DragEvent, ClipboardEvent, Event */
+/* global console, document, File, DataTransfer, DragEvent, ClipboardEvent, Event, process, location */
 import { Buffer } from 'node:buffer'
 import { chromium, expect } from '@playwright/test'
 
-const browser = await chromium.launch()
-const base = 'http://127.0.0.1:4173'
+const browser = await chromium.launch({ ...(process.env.PLAYWRIGHT_USE_SYSTEM_CHROME === '1' ? { channel: 'chrome' } : {}) })
+const base = process.env.DOCS_PREVIEW_URL || 'http://127.0.0.1:4173'
 try {
   const page = await browser.newPage()
   let requests = [], response = { status: 200, payload: { ok: true, issueNumber: 123 } }
@@ -13,6 +13,16 @@ try {
     if (release) await release
     await route.fulfill({ status: response.status, contentType: 'application/json', body: JSON.stringify(response.payload) })
   })
+  for (const locale of ['', '/en']) {
+    const summary = { format: 'storyforge-failure-summary', version: 1, application: 'v4.0.0+local',
+      platform: 'Windows', browser: 'Chrome 140', errors: [], launcher: null, secret: 'DO-NOT-IMPORT' }
+    const count = requests.length
+    await page.goto(base + locale + '/feedback/bug#storyforge-report=' + encodeURIComponent(JSON.stringify(summary)))
+    await expect(page.locator('#bug-version')).toHaveValue('v4.0.0+local')
+    const extra = await page.locator('#bug-extra').inputValue()
+    if (!extra.includes('storyforge-failure-summary') || extra.includes('DO-NOT-IMPORT')) throw new Error('Unsafe diagnostic handoff')
+    if (await page.evaluate(() => location.hash) !== '' || requests.length !== count) throw new Error('Handoff leaked or submitted automatically')
+  }
   for (const locale of ['', '/en']) for (const type of ['bug', 'feature', 'documentation']) {
     await page.goto(base + locale + '/feedback/' + type)
     await page.locator('#' + type + '-title').fill('Local mock only')

@@ -600,7 +600,7 @@ function ExportTab({ project, onImported, onOpenStorageSettings }: Props) {
       <SectionCard
         icon={<Stethoscope className="w-5 h-5 text-teal-400" />}
         title="本地诊断信息"
-        desc="仅包含应用/浏览器版本、数据库表记录数量和本次页面会话的错误位置；不包含作品正文、设定、API Key 或 localStorage 内容，也不会自动上传。"
+        desc="仅包含应用/浏览器版本、数据库表记录数量和最近 7 天最多 20 条错误的位置；不包含作品正文、设定、API Key 或其他 localStorage 内容，也不会自动上传。问题反馈入口位于通用设置。"
       >
         <ActionButton onClick={handleDownloadDiagnostics} disabled={status === 'loading'} variant="default">
           <Download className="w-4 h-4" /> 下载诊断信息

@@ -1,15 +1,15 @@
 # 安装与启动
 
-推荐从 [最新版本下载页](https://github.com/yuanbw2025/storyforge/releases/latest) 获取本地便携包。v4.0.0 包含本次发布时的主干功能、界面和内置媒资，不再要求普通用户先安装开发环境。旧 Release 保留为历史版本；固定发行不会自动跟随之后的主干开发。
+推荐从 [最新版本下载页](https://github.com/yuanbw2025/storyforge/releases/latest) 获取本地便携包。最新便携包包含发布时冻结的主干功能、界面和内置媒资，不再要求普通用户先安装开发环境。旧 Release 保留为历史版本；固定发行不会自动跟随之后的主干开发。
 
 ## 便携包：无需安装 Node.js
 
 | 电脑 | 选择的 ZIP | 解压后的启动文件 |
 |---|---|---|
-| Windows 64 位 | `StoryForge-v4.0.0-windows-x64.zip` | 双击 `Start-StoryForge.cmd` |
-| Mac，M 系列芯片 | `StoryForge-v4.0.0-macos-arm64.zip` | 双击 `Start-StoryForge.command` |
-| Mac，Intel 芯片 | `StoryForge-v4.0.0-macos-x64.zip` | 双击 `Start-StoryForge.command` |
-| Linux x64 | `StoryForge-v4.0.0-linux-x64.zip` | 在解压目录运行 `bash Start-StoryForge.sh` |
+| Windows 64 位 | `StoryForge-vX.Y.Z-windows-x64.zip` | 双击 `Start-StoryForge.cmd` |
+| Mac，M 系列芯片 | `StoryForge-vX.Y.Z-macos-arm64.zip` | 双击 `Start-StoryForge.command` |
+| Mac，Intel 芯片 | `StoryForge-vX.Y.Z-macos-x64.zip` | 双击 `Start-StoryForge.command` |
+| Linux x64 | `StoryForge-vX.Y.Z-linux-x64.zip` | 在解压目录运行 `bash Start-StoryForge.sh` |
 
 1. 下载适合电脑的 ZIP，**先解压整个文件夹**，不要在压缩包内直接启动。
 2. 打开对应启动文件。包内已包含 Node.js 和构建好的界面，不需要运行 `npm install`。

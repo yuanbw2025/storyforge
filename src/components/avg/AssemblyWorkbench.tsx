@@ -9,6 +9,7 @@ import { startProductProductionPreviewV1 } from '../../lib/product-production/se
 import { canonicalProductProductionJsonV2 } from '../../lib/product-production/hash'
 import { exportProjectJSON, downloadJSON } from '../../lib/export/json-export'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
+import PrototypeReleasePanel from './PrototypeReleasePanel'
 
 type View = Awaited<ReturnType<typeof readAvgAssemblyWorkspaceV1>>
 type Section = 'dialogue' | 'system' | 'stage' | 'media' | 'production'
@@ -267,7 +268,7 @@ export default function AssemblyWorkbench({scope,productionId,page,onSource,onPr
           <button className="lf-action" disabled={busy} onClick={()=>void run(async()=>{downloadJSON(await exportProjectJSON(scope.projectId),'avg-workspace-backup.json')})}>导出完整备份</button>
         </div>
         {build&&<><p>Build #{build.buildNumber} · {build.status}{build.previewHash?` · 预览 ${build.previewHash.slice(0,12)}`:''}</p>{build.failureJson!=='{}'&&<pre role="status">{build.failureJson}</pre>}<details><summary>版本与验收证据</summary><p>根回执：{build.rootTerminalReceiptHash||'待组装完成'}</p><pre>{build.qualityReportJson}</pre></details></>}
-        <p>当前提供技术预览；正式发布、艺术与专业配音验收继续按专项流程完成。</p>
+        {frozen&&details?.production.id&&<PrototypeReleasePanel key={`${scope.workId}:${build!.id}:${build!.previewHash}`} scope={scope} productionId={details.production.id} build={build!} disabled={busy||dirty||jsonPending} onChanged={reload} onStarted={onPreviewStarted} onBusyChange={value=>{busyRef.current=value;setBusy(value)}}/>}
       </section>}
       <section className="lf-paper"><details><summary>高级配置：完整规则、脚本与演出</summary><p>配置作为编辑草稿保存；正式采用前会严格校验，不能写入脚本代码或未登记模块。</p>
         <textarea aria-label="高级组装配置" className="avg-assembly-json" spellCheck={false} disabled={busy} value={advanced} onChange={event=>{setAdvanced(event.target.value);setJsonPending(true)}}/>

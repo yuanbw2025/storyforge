@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { textOpenWorldUnsupportedRuntimeIssueV1 } from '../../lib/open-world/player-resilience'
 import TextOpenWorldPlayerStateNotice from './TextOpenWorldPlayerStateNotice'
+import { recordRuntimeDiagnosticError } from '../../lib/diagnostics/runtime-errors'
 
 export interface TextOpenWorldPlayerErrorBoundaryProps {
   resetKey: number | string
@@ -28,6 +29,7 @@ export default class TextOpenWorldPlayerErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
+    recordRuntimeDiagnosticError(error, 'react')
     if (import.meta.env.DEV) {
       // Render exceptions can contain provider text or opaque runtime keys.
       // Keep development telemetry useful without echoing the raw message.

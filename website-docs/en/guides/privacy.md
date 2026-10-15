@@ -31,3 +31,9 @@ The website, knowledge base, and hosted project preview share page views (PV) an
 UV uses a first-party random cookie valid for 30 days and renewed on visits, restricted to the metrics endpoint. It is not an account or login credential. The website and knowledge base share it. The server stores date-specific deduplication digests for about 31 days, not raw cookies. Aggregates are retained and random retry receipts expire after about a day. No account, IP, browser fingerprint, page URL, query parameters, manuscript, or API key is submitted. Different browsers/devices or cookie deletion create a new identity, so UV is not a count of real people. Blocked cookies still permit PV without inventing UV; disabled scripts, blocked requests, or network errors can undercount.
 
 Continue: [Backup and recovery](/en/guides/backup-restore) · [Model configuration](/en/getting-started/model-config).
+
+## Local errors and explicit feedback
+
+The browser retains at most twenty error types, timestamps, and filtered code locations from the last seven days. The portable launcher separately retains bounded failure and session metadata. These local operational diagnostics are not work-library records, world releases, or project backups, and do not measure first launch, daily activity, or retention.
+
+Diagnostics, screenshots, works, model inputs/outputs, and credentials are not automatically sent. After previewing a summary and opening the official form, you can edit or remove it before explicitly submitting. Submissions enter public Issues; browser errors can be cleared in General settings. See [failure reporting](/en/guides/troubleshooting#problems-and-failure-reports-in-downloaded-builds).

@@ -13,6 +13,7 @@ import { parseAvgAuthorStageV1, type AvgAuthorStageV1 } from './author-workspace
 import { validateAvgAuthorAssemblyV1, type AvgAssemblyValidationV1 } from './author-stage-validation'
 import { avgKey, avgText } from './protocol-validation'
 import { validateAvgSystemPlanForAuthorV1, type AvgSystemValidationV1 } from './system-compiler'
+import { buildAvgAssemblyPlanV1 } from './assembly-plan'
 
 type Ref = { artifactKey: string; version: number; contentHash: string }
 interface AuthorCandidateBase {
@@ -52,22 +53,25 @@ async function validateAssembly(context: Awaited<ReturnType<typeof authority>>, 
     sourceWorld: { contentHash: context.brief.source.worldContentHash, selection: context.brief.source.selection } })
 }
 
-async function authority(scope: WorkspaceScope, buildId: number, forCompilation = false) {
+async function authority(scope: WorkspaceScope, buildId: number, forCompilation = false, frozenVerification = false) {
   const build = await db.productBuilds.get(buildId)
   if (!build || !await assertRecordInScope(scope, 'productBuilds', build, { owner: 'work' })) throw new Error('[avg] Build 不存在或跨 Work')
   const production = await db.productProductions.get(build.productionId)
   const work = await db.works.get(scope.workId)
   if (!production?.id || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })
     || production.productType !== 'avg' || work?.kind !== 'avg') throw new Error('[avg] 必须属于当前 AVG Work/Production')
-  if (production.status !== 'producing' || production.currentBuildNumber !== build.buildNumber
+  if (!frozenVerification && (production.status !== 'producing' || production.currentBuildNumber !== build.buildNumber
     || production.controlEpoch !== build.controlEpoch || !(forCompilation ? ['authorized','building','integrating'] : ['authorized','building']).includes(build.status)
-    || build.packageHash || build.previewHash || build.releasedProductReleaseId != null) throw new Error('[avg] 当前 Build 不可采用；已冻结版本须建立新 Build')
+    || build.packageHash || build.previewHash || build.releasedProductReleaseId != null)) throw new Error('[avg] 当前 Build 不可采用；已冻结版本须建立新 Build')
+  if (frozenVerification && (!['building','validating','preview-ready','release-ready','released'].includes(build.status)
+    || !build.packageHash || !build.previewHash || !build.rootTerminalReceiptHash)) throw new Error('[avg] 只读作者验证要求已封存的原生 Build')
   const briefRow = await db.productProductionBriefs.where('[productionId+revision]').equals([production.id, build.briefRevision]).first()
   if (!briefRow || !await assertRecordInScope(scope, 'productProductionBriefs', briefRow, { owner: 'work' })
     || briefRow.status !== 'authorized' || briefRow.authorizedAt !== build.authorizedAt
-    || briefRow.briefHash !== build.briefHash || production.currentBriefRevision !== build.briefRevision) throw new Error('[avg] Brief 授权已 stale')
+    || briefRow.briefHash !== build.briefHash || !frozenVerification && production.currentBriefRevision !== build.briefRevision) throw new Error('[avg] Brief 授权已 stale')
   const brief = parseProductProductionBriefV3(briefRow.briefJson)
   if (brief.intent.productType !== 'avg' || await hash(brief) !== build.briefHash) throw new Error('[avg] Brief 内容/hash 不一致')
+  if (frozenVerification && !brief.avgAssembly) throw new Error('[avg] 只读作者验证只接受原生组装合同')
   if (!forCompilation && brief.avgAssembly && Object.keys((JSON.parse(build.budgetLedgerJson) as { tasks?: object }).tasks ?? {}).length) throw new Error('[avg] 组装已开始执行；请保留旧版本并创建新 Build 修订')
   const sourcePlan = await Dexie.waitFor(parseProductProductionSourcePlanV1(briefRow))
   const confirmed = await Dexie.waitFor(parseConfirmedProductBriefV1({ row: briefRow, sourcePlan }))
@@ -86,6 +90,8 @@ async function authority(scope: WorkspaceScope, buildId: number, forCompilation 
   if (plan.productType !== 'avg' || plan.buildNumber !== build.buildNumber || plan.controlEpoch !== build.controlEpoch
     || build.planRevision < 1 || await hash(plan) !== build.planHash
     || canonicalProductProductionJsonV2(plan) !== build.planJson) throw new Error('[avg] 冻结 Plan/hash 已 stale')
+  if (frozenVerification && canonicalProductProductionJsonV2(buildAvgAssemblyPlanV1({ brief, briefHash:build.briefHash,
+    buildNumber:build.buildNumber, controlEpoch:build.controlEpoch })) !== build.planJson) throw new Error('[avg] 原生作者 Plan 不是冻结的固定组装拓扑')
   return { build, production: production as ProductProductionRecordV1 & { id: number }, briefRow, brief, plan, sourcePlan }
 }
 
@@ -277,13 +283,32 @@ async function prepareAdoption(scope: WorkspaceScope, production: ProductProduct
 
 /** Only a current, confirmed rule revision can enter formal Build compilation.
  * Pure engineering previews remain available without this persistence receipt. */
-export async function readAvgSystemPlanForCompilationV1(input: {
+async function readAuthorInputs(input: {
   scope: WorkspaceScope; buildId: number; expectedBuildRevision: number; controlEpoch: number; includeSceneScripts?: boolean; includeAuthorStage?: boolean
-}) {
+}, frozenVerification = false) {
   const scope = await resolveScope({ scope: input.scope })
   return db.transaction('r', scopeTransactionTables(db.productProductions, db.productProductionBriefs, db.productProductionCommands, db.productBuilds, db.productBuildArtifacts, db.avgDraftMedia, db.mediaBlobObjects), async () => {
-    const context = await authority(scope, input.buildId, true)
+    const context = await authority(scope, input.buildId, true, frozenVerification)
     if (context.build.stateRevision !== input.expectedBuildRevision || context.build.controlEpoch !== input.controlEpoch) throw new Error('[avg] 规则编译 Build revision/epoch 已 stale')
+    if (frozenVerification) {
+      for (const task of context.plan.tasks.filter(task => task.executionMode === 'human-import')) {
+        const [row] = await acceptedInputs(scope, input.buildId, input.controlEpoch, task.outputArtifactKeys)
+        const envelope = JSON.parse(row.metadataJson) as { candidate: AuthorCandidate }
+        const { candidateHash, ...body } = envelope.candidate
+        const upstream = await acceptedInputs(scope, input.buildId, input.controlEpoch, task.inputArtifactKeys)
+        if (row.producerRunId !== null || row.producerReceiptHash !== null || row.carriedFrom !== null
+          || body.schema !== 'storyforge.avg.author-candidate' || body.origin !== 'author-import'
+          || body.productionKey !== context.production.productionKey || body.buildNumber !== context.build.buildNumber
+          || body.briefRevision !== context.build.briefRevision || body.briefHash !== context.build.briefHash
+          || body.confirmedBriefHash !== context.briefRow.confirmedBriefHash || body.sourcePlanHash !== context.briefRow.sourcePlanHash
+          || body.planRevision !== context.build.planRevision || body.planHash !== context.build.planHash || body.controlEpoch !== input.controlEpoch
+          || body.taskKey !== task.taskKey || body.artifactKey !== row.artifactKey || body.kind !== row.kind
+          || body.payloadHash !== row.contentHash || candidateHash !== await hash(body)
+          || row.inputHash !== await hash({ ...body, payloadHash: null })
+          || row.parentArtifactHash !== (body.base?.contentHash ?? null)
+          || canonicalProductProductionJsonV2(body.inputs) !== canonicalProductProductionJsonV2(upstream.map(ref))) throw new Error(`[avg] 冻结作者输入来源/候选不闭合:${task.taskKey}`)
+      }
+    }
     const [artifact] = await acceptedInputs(scope, input.buildId, input.controlEpoch, ['avg.system.plan'])
     const prepared = prepareAuthorInput({ artifactKey: artifact.artifactKey, kind: artifact.kind, payload: artifact.payloadJson, allowedOutputKeys: ['avg.system.plan'] })
     if (prepared.payload.schema !== 'storyforge.avg.system-plan') throw new Error('[avg] 不是正式系统规则')
@@ -314,6 +339,16 @@ export async function readAvgSystemPlanForCompilationV1(input: {
       sourceWorld: { contentHash: context.brief.source.worldContentHash, selection: context.brief.source.selection },
       build: { productionKey: context.production.productionKey, buildNumber: context.build.buildNumber, stateRevision: context.build.stateRevision, controlEpoch: context.build.controlEpoch, planRevision: context.build.planRevision, planHash: context.build.planHash } }
   })
+}
+
+export function readAvgSystemPlanForCompilationV1(input: Parameters<typeof readAuthorInputs>[0]) {
+  return readAuthorInputs(input)
+}
+
+/** Read-only proof of the original author receipts on an immutable Build.
+ * It deliberately grants no adoption or compilation authority to old Builds. */
+export function verifyFrozenAvgAuthorInputsV1(input: Omit<Parameters<typeof readAuthorInputs>[0], 'includeSceneScripts' | 'includeAuthorStage'>) {
+  return readAuthorInputs({ ...input, includeSceneScripts: true, includeAuthorStage: true }, true)
 }
 
 /** Called only inside the registered production command transaction. The

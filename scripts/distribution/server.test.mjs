@@ -18,7 +18,7 @@ test('portable package serves deep links/assets, preserves origin and rejects fo
   const dir = mkdtempSync(join(tmpdir(), 'sf-distribution-')); const web = join(dir, 'web'); mkdirSync(web)
   writeFileSync(join(web, 'index.html'), '<html>current release</html>'); writeFileSync(join(web, 'app.js'), 'current app'); writeFileSync(join(web, 'worker.mjs'), 'module worker')
   writeFileSync(join(dir, 'private.txt'), 'private')
-  const server = createPortableServer({ webRoot: web }); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  const server = createPortableServer({ webRoot: web, readDiagnostics: () => ({ occurredAt: '2026-10-15T01:00:00.000Z', kind: 'error', code: 'EADDRINUSE' }) }); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const port = server.address().port
   try {
     assert.equal((await get(port, '/')).headers.location, '/storyforge/')
@@ -34,6 +34,11 @@ test('portable package serves deep links/assets, preserves origin and rejects fo
     assert.equal((await get(port, '/storyforge/', {}, 'POST')).status, 405)
     assert.equal((await get(port, '/deepseek-proxy/v1/models', {}, 'DELETE')).status, 405)
     assert.equal((await get(port, '/storyforge/local-codex/v1/status')).status, 403)
+    const diagnostics = await get(port, '/storyforge/local-diagnostics/launcher')
+    assert.equal(JSON.parse(diagnostics.body).code, 'EADDRINUSE')
+    assert.equal(diagnostics.headers['cache-control'], 'no-store')
+    assert.equal((await get(port, '/storyforge/local-diagnostics/launcher', { origin: 'https://attacker.example' })).status, 403)
+    assert.equal((await get(port, '/storyforge/local-diagnostics/launcher', {}, 'POST')).status, 405)
     if (process.platform !== 'win32') {
       symlinkSync(join(dir, 'private.txt'), join(web, 'escape.txt'))
       assert.equal((await get(port, '/storyforge/escape.txt')).status, 403)

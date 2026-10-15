@@ -302,6 +302,12 @@ for (const mode of ['single', 'batch'] as const) test(`作者退回意见绑定�
     return fixture.seedTextAdventureMediaRevisionWorkbenchV1(imageBase64)
   }, parentImage.toString('base64'))
   await openTextAdventurePage(page, seeded.scope, 'production')
+  // Navigation's DOMContentLoaded does not mean the async application/bootstrap
+  // and scoped production view have finished loading. Assert the real workspace
+  // first, just as the author-upload scenario above does.
+  const studio = page.getByTestId('product-production-studio')
+  await expect(studio).toBeVisible({ timeout: 15_000 })
+  await expect(studio).toContainText('潮门灯塔 · 媒资修订验收')
   const media = page.getByTestId('text-adventure-media-authoring')
   await expect(media).toContainText('2 张冻结图片')
   await expect(page.getByTestId('text-adventure-visual-review-layers')).toContainText('已实际观察并通过')

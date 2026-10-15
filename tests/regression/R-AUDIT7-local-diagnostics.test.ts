@@ -75,7 +75,7 @@ describe('AUDIT-7 · 本地隐私诊断包', () => {
     const serialized = JSON.stringify(report.recentErrors)
 
     expect(report.recentErrors[0]).toMatchObject({ source: 'react', name: 'TypeError' })
-    expect(report.recentErrors[0].frames).toEqual(['at render (app.js:12:3)'])
+    expect(report.recentErrors[0].frames).toEqual(['app.js:12:3'])
     expect(serialized).not.toContain('用户正文-SENTINEL')
   })
 })

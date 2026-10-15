@@ -4,9 +4,9 @@
 
 本轮增量核对至 **2026-10-14，main 基线 cfc5ed3f**；从上次成功维护基线 `ce1cfd6c` 补查用户可见变化。各产品状态仍以自己的指南标记为准，不因维护日期提高成熟度。
 
-当前 package 版本为 **4.0.0**。[v4.0.0 正式发布](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.0)于 2026-10-13，固定在 `78416965`；其后 [PR #119](https://github.com/yuanbw2025/storyforge/pull/119) 的文字冒险恢复、保图修订与独立网页导出进入 main，**尚不在这批固定下载包中**。更新文档不会重打发行包，也不会替换独立部署的官网体验。
+当前源码 package 版本为 **4.0.1**；[最新发行页](https://github.com/yuanbw2025/storyforge/releases/latest)列出实际可下载的固定附件。v4.0.1 构建包含主动故障反馈，以及 [PR #119](https://github.com/yuanbw2025/storyforge/pull/119) 的文字冒险恢复、保图修订和独立网页导出；操作与捕获限制见[故障排查](/guides/troubleshooting#下载版的问题与故障反馈)。
 
-因此“版本号同样是 4.0.0”不代表代码完全相同。排查问题时一起提供构建 commit、访问地址和日期。
+历史 [v4.0.0 正式发布](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.0)于 2026-10-13，固定在 `78416965`，不包含上述后续改动。更新知识库不会修改已下载的旧包，也不会替换独立部署的官网体验。排查问题时一起提供版本、构建 commit、访问地址和日期。
 
 在线站点可能有部署时差；[固定 Releases](https://github.com/yuanbw2025/storyforge/releases)不会自动包含后续 main 功能。
 

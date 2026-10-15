@@ -185,7 +185,7 @@ npm run dev
 
 打开终端显示的地址，应用路径为 `/storyforge/`。例如默认端口可用时是 `http://localhost:5173/storyforge/`；端口被占用时以终端输出为准。使用期间保持终端运行，退出时按 `Ctrl+C`。
 
-**不想安装开发环境：**打开[最新版本下载页](https://github.com/yuanbw2025/storyforge/releases/latest)，选择对应电脑的 v4.0.0 便携 ZIP，解压整个文件夹后启动 `Start-StoryForge`。包内已包含当前界面、内置媒资和 Node.js，无需安装 npm 依赖。Windows 双击 `.cmd`，Mac 双击 `.command`，Linux 运行 `.sh`；详细步骤见[安装指南](https://docs.storyforge-lab.com/getting-started/install)。AI 创作需要自行配置模型服务，预览产品仍保留预览标记。
+**不想安装开发环境：**打开[最新版本下载页](https://github.com/yuanbw2025/storyforge/releases/latest)，选择对应电脑的最新便携 ZIP，解压整个文件夹后启动 `Start-StoryForge`。包内已包含当前界面、内置媒资和 Node.js，无需安装 npm 依赖。Windows 双击 `.cmd`，Mac 双击 `.command`，Linux 运行 `.sh`；详细步骤见[安装指南](https://docs.storyforge-lab.com/getting-started/install)。AI 创作需要自行配置模型服务，预览产品仍保留预览标记。
 
 不使用 Git 也可以[下载最新 main 源码 ZIP](https://github.com/yuanbw2025/storyforge/archive/refs/heads/main.zip)，解压后在项目目录运行 `npm ci` 和 `npm run dev`。
 

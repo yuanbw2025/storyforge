@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import { providerProxies } from './proxies.mjs'
 import { localCodexPlugin } from '../local-codex/bridge.mjs'
+import { readLauncherFailure, recordLauncherFailure, beginLauncherSession, monitorLauncherFailures } from './diagnostics.mjs'
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.woff': 'font/woff', '.pdf': 'application/pdf', '.mp4': 'video/mp4' }
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -14,7 +15,7 @@ function finish(res, status, text) {
   res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' })
   res.end(text)
 }
-export function createPortableServer({ webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../web'), proxies = providerProxies, requestProvider = httpsRequest } = {}) {
+export function createPortableServer({ webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../web'), proxies = providerProxies, requestProvider = httpsRequest, readDiagnostics = readLauncherFailure } = {}) {
   const middleware = []
   const server = createServer((req, res) => {
     void handle(req, res).catch(() => { if (!res.headersSent) finish(res, 500, 'Local service error.'); else res.destroy() })
@@ -27,6 +28,12 @@ export function createPortableServer({ webRoot = resolve(dirname(fileURLToPath(i
     try { url = new URL(req.url, `http://${req.headers.host}`) } catch { return finish(res, 400, 'Invalid URL.') }
     if (!LOOPBACK.has(req.socket.remoteAddress) || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return finish(res, 403, 'Localhost only.')
     if ((req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) || ['cross-site', 'same-site'].includes(req.headers['sec-fetch-site'])) return finish(res, 403, 'Same-origin only.')
+    if (url.pathname === '/storyforge/local-diagnostics/launcher') {
+      if (req.method !== 'GET') return finish(res, 405, 'Method not allowed.')
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' })
+      res.end(JSON.stringify(readDiagnostics()))
+      return
+    }
     if (url.pathname.startsWith('/storyforge/local-codex/')) return middleware[0](req, res, () => finish(res, 404, 'Unknown bridge route.'))
     const route = Object.keys(proxies).find(prefix => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`))
     if (route) {
@@ -71,9 +78,12 @@ export function createPortableServer({ webRoot = resolve(dirname(fileURLToPath(i
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  monitorLauncherFailures()
   const server = createPortableServer()
-  server.on('error', error => { console.error(error.code === 'EADDRINUSE' ? 'Port 1111 is already in use. Close the previous StoryForge window/service and try again. The port will not change, preserving browser storage.' : 'Unable to start the local service.'); process.exitCode = 1 })
+  server.on('error', error => { recordLauncherFailure(error); console.error(error.code === 'EADDRINUSE' ? 'Port 1111 is already in use. Close the previous StoryForge window/service and try again. The port will not change, preserving browser storage.' : 'Unable to start the local service.'); process.exitCode = 1 })
+  let endSession = () => {}
   server.listen(1111, '127.0.0.1', () => {
+    endSession = beginLauncherSession()
     const url = 'http://localhost:1111/storyforge/'
     console.log(`StoryForge: ${url}\nKeep this window open. Press Ctrl+C to stop.\nYour works remain in this browser; export a backup before switching browser or address.`)
     if (!process.argv.includes('--no-open')) {
@@ -82,8 +92,10 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       const child = spawn(command, args, { stdio: 'ignore', detached: true }); child.on('error', () => console.log('Open the address above in your browser.')); child.unref()
     }
   })
-  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => {
+    endSession()
     server.close()
     server.closeAllConnections() // Closing an active stream must also cancel its provider request.
   })
+  process.on('exit', () => { if (!process.exitCode) endSession() })
 }

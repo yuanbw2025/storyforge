@@ -3,15 +3,10 @@ import { db } from '../db/schema'
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { APP_BUILD_ID } from '../version'
 
-const MAX_RUNTIME_ERRORS = 20
-const MAX_STACK_FRAMES = 8
-
-export interface RuntimeDiagnosticError {
-  occurredAt: string
-  source: 'react' | 'window.error' | 'unhandledrejection'
-  name: string
-  frames: string[]
-}
+import { readRuntimeDiagnosticErrors } from './runtime-errors'
+import type { RuntimeDiagnosticError } from './runtime-errors'
+export { recordRuntimeDiagnosticError, installRuntimeDiagnostics, resetRuntimeDiagnostics } from './runtime-errors'
+export type { RuntimeDiagnosticError } from './runtime-errors'
 
 export interface LocalDiagnosticReport {
   format: 'storyforge-local-diagnostics'
@@ -44,47 +39,6 @@ export interface LocalDiagnosticReport {
     includesLocalStorage: false
     automaticallyUploaded: false
   }
-}
-
-const runtimeErrors: RuntimeDiagnosticError[] = []
-let installed = false
-
-function normalizeErrorName(value: unknown): string {
-  const name = value instanceof Error ? value.name : ''
-  return /^[A-Za-z][A-Za-z0-9]*Error$/.test(name) || name === 'Error' ? name : 'Error'
-}
-
-function safeStackFrames(value: unknown): string[] {
-  if (!(value instanceof Error) || !value.stack) return []
-  return value.stack
-    .split('\n')
-    .slice(1, MAX_STACK_FRAMES + 1)
-    .map(frame => frame.trim().replace(/[?#].*$/, '').slice(0, 240))
-    .filter(Boolean)
-}
-
-export function recordRuntimeDiagnosticError(
-  value: unknown,
-  source: RuntimeDiagnosticError['source'],
-): void {
-  runtimeErrors.push({
-    occurredAt: new Date().toISOString(),
-    source,
-    name: normalizeErrorName(value),
-    frames: safeStackFrames(value),
-  })
-  if (runtimeErrors.length > MAX_RUNTIME_ERRORS) runtimeErrors.shift()
-}
-
-export function installRuntimeDiagnostics(): void {
-  if (installed || typeof window === 'undefined') return
-  installed = true
-  window.addEventListener('error', event => {
-    recordRuntimeDiagnosticError(event.error, 'window.error')
-  })
-  window.addEventListener('unhandledrejection', event => {
-    recordRuntimeDiagnosticError(event.reason, 'unhandledrejection')
-  })
 }
 
 async function readTableCounts(
@@ -143,7 +97,7 @@ export async function buildLocalDiagnosticReport(): Promise<LocalDiagnosticRepor
       schemaVersion: db.verno,
       tableCounts: await readTableCounts(PROJECT_TABLES),
     },
-    recentErrors: runtimeErrors.map(error => ({ ...error, frames: [...error.frames] })),
+    recentErrors: readRuntimeDiagnosticErrors(),
     privacy: {
       includesRecordContents: false,
       includesApiKeys: false,
@@ -151,8 +105,4 @@ export async function buildLocalDiagnosticReport(): Promise<LocalDiagnosticRepor
       automaticallyUploaded: false,
     },
   }
-}
-
-export function resetRuntimeDiagnostics(): void {
-  runtimeErrors.length = 0
 }

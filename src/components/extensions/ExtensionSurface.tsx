@@ -7,6 +7,7 @@ import { safeStartup, startExtensions, type ExtensionSession } from '../../lib/e
 import type { ExtensionReviewRequest, RegisteredView } from '../../lib/extensions/types'
 import './extensions.css'
 import type { Project } from '../../lib/types'
+import { recordRuntimeDiagnosticError } from '../../lib/diagnostics/runtime-errors'
 const PluginTools = lazy(() => import('./PluginTools'))
 const PluginPublicationReview = lazy(() => import('./PluginPublicationReview'))
 const PluginAITasks = lazy(() => import('./PluginAITasks'))
@@ -15,6 +16,7 @@ const StoryTimelinePanel = lazy(() => import('../timeline/StoryTimelinePanel'))
 class PluginBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
   state = { failed: false }
   static getDerivedStateFromError() { return { failed: true } }
+  componentDidCatch(error: Error) { recordRuntimeDiagnosticError(error, 'react') }
   render() { return this.state.failed ? <section className="sf-extension-error" role="alert"><p>插件界面发生错误，已恢复默认内容。可以在工坊停用插件。</p>{this.props.fallback}</section> : this.props.children }
 }
 export default function ExtensionSurface({ projectId, owner, workId, target = 'workbench', children }: { projectId: number; owner: 'world' | 'work'; workId?: number; target?: string; children?: ReactNode }) {

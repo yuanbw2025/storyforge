@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useData } from 'vitepress'
+import { FAILURE_REPORT_FRAGMENT, readFailureHandoff } from '../../../../src/lib/diagnostics/failure-summary'
 
 const { lang } = useData()
 const t = (zh: string, en: string): string => lang.value.startsWith('en') ? en : zh
@@ -90,6 +91,20 @@ const fields = reactive<FeedbackFields>({
   solution: '',
   correction: '',
   extra: '',
+})
+
+const importedDiagnostics = ref(false)
+onMounted(() => {
+  if (props.type !== 'bug' || !location.hash.startsWith(FAILURE_REPORT_FRAGMENT)) return
+  const summary = readFailureHandoff(location.hash)
+  // Fragments are local to the browser; remove the handoff from visible history.
+  history.replaceState(history.state, '', location.pathname + location.search)
+  if (!summary) return
+  fields.version = summary.application
+  fields.os = summary.platform
+  fields.browser = summary.browser
+  fields.extra = JSON.stringify(summary, null, 2)
+  importedDiagnostics.value = true
 })
 
 const attachments = ref<Attachment[]>([])
@@ -308,6 +323,7 @@ async function submit(): Promise<void> {
     }
 
     const number = result.issueNumber
+    importedDiagnostics.value = false
     successMessage.value = number === undefined ? t('反馈已提交', 'Feedback submitted') : t(`反馈已提交，编号 #${number}`, `Feedback submitted, #${number}`)
     attachments.value = []
     Object.keys(fields).forEach((key) => {
@@ -323,6 +339,7 @@ async function submit(): Promise<void> {
 
 <template>
   <section class="feedback-form-shell" :aria-label="typeMeta.label">
+    <p v-if="importedDiagnostics" class="feedback-notice">{{ t('已带入本机故障摘要，尚未发送。请补充问题描述和复现步骤，检查“补充信息”并删除不想公开的内容。提交后将成为项目公开反馈；请勿填写手稿或密钥。', 'A local failure summary has been imported but not sent. Add a description and reproduction steps, inspect Additional information, and remove anything you do not want public. Submission creates public project feedback; do not include manuscripts or secrets.') }}</p>
     <p class="feedback-form-intro">{{ typeMeta.intro }}</p>
 
     <div v-if="successMessage" class="feedback-notice feedback-notice--success" role="status" aria-live="polite">

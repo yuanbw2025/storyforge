@@ -1,15 +1,15 @@
 # Install and launch
 
-Get a local portable package from the [latest release page](https://github.com/yuanbw2025/storyforge/releases/latest). Version 4.0.0 includes the main-branch features, interface and bundled media at release time; ordinary users no longer need a development setup. Older releases remain historical snapshots. A fixed release does not automatically receive later main-branch changes.
+Get a local portable package from the [latest release page](https://github.com/yuanbw2025/storyforge/releases/latest). The latest portable version includes the main-branch features, interface and bundled media at release time; ordinary users no longer need a development setup. Older releases remain historical snapshots. A fixed release does not automatically receive later main-branch changes.
 
 ## Portable packages: no Node.js installation
 
 | Computer | ZIP to download | Launcher after extraction |
 |---|---|---|
-| Windows 64-bit | `StoryForge-v4.0.0-windows-x64.zip` | Double-click `Start-StoryForge.cmd` |
-| Mac with an M-series chip | `StoryForge-v4.0.0-macos-arm64.zip` | Double-click `Start-StoryForge.command` |
-| Intel Mac | `StoryForge-v4.0.0-macos-x64.zip` | Double-click `Start-StoryForge.command` |
-| Linux x64 | `StoryForge-v4.0.0-linux-x64.zip` | Run `bash Start-StoryForge.sh` in the extracted folder |
+| Windows 64-bit | `StoryForge-vX.Y.Z-windows-x64.zip` | Double-click `Start-StoryForge.cmd` |
+| Mac with an M-series chip | `StoryForge-vX.Y.Z-macos-arm64.zip` | Double-click `Start-StoryForge.command` |
+| Intel Mac | `StoryForge-vX.Y.Z-macos-x64.zip` | Double-click `Start-StoryForge.command` |
+| Linux x64 | `StoryForge-vX.Y.Z-linux-x64.zip` | Run `bash Start-StoryForge.sh` in the extracted folder |
 
 1. Download the ZIP matching your computer and **extract the entire folder** before launching. Do not launch from inside the ZIP.
 2. Open the launcher. Node.js and the built interface are included; there is no need to run `npm install`.

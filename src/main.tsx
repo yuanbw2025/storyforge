@@ -13,13 +13,14 @@ import { openCurrentSchema } from './lib/db/ensure-schema'
 import { validateRegistry } from './lib/registry/validate'
 import { applyStoryForgeTheme, resolveStoryForgeTheme } from './lib/theme-bootstrap'
 import { registerStoryForgeServiceWorker } from './lib/pwa/register-service-worker'
-import { installRuntimeDiagnostics } from './lib/diagnostics/local-diagnostic-report'
+import { installRuntimeDiagnostics, recordRuntimeDiagnosticError } from './lib/diagnostics/runtime-errors'
+import FailureFeedbackPanel from './components/shared/FailureFeedbackPanel'
 import './index.css'
 
 // 从当前主题闭集恢复；未知值回到默认主题。
 applyStoryForgeTheme(resolveStoryForgeTheme(localStorage.getItem('storyforge-theme')))
 if (!IS_SHOWCASE) registerStoryForgeServiceWorker()
-installRuntimeDiagnostics()
+if (!IS_SHOWCASE) installRuntimeDiagnostics()
 
 /**
  * FB-11 数据持久 · 启动期申请「持久化存储」。
@@ -82,6 +83,7 @@ async function bootstrap() {
 }
 
 void bootstrap().catch((error: unknown) => {
+  if (!IS_SHOWCASE) recordRuntimeDiagnosticError(error, 'bootstrap')
   console.error('[bootstrap] application startup blocked:', error)
   const message = error instanceof Error ? error.message : String(error)
   const root = document.getElementById('root')
@@ -94,6 +96,7 @@ void bootstrap().catch((error: unknown) => {
           当前版本只支持由当前架构创建的数据，应用已在任何 Store 初始化之前停止。
         </p>
         <pre className="mt-4 overflow-auto rounded bg-bg-elevated p-3 text-xs">{message}</pre>
+        {!IS_SHOWCASE && <FailureFeedbackPanel />}
       </div>
     </main>,
   )

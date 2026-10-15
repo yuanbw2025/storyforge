@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router'
 import AIConfigPanel from './AIConfigPanel'
 import CreativeReliabilityCommunityPanel from './CreativeReliabilityCommunityPanel'
 import ProjectStorageWorkspacePanel from './ProjectStorageWorkspacePanel'
+import FailureFeedbackPanel from '../shared/FailureFeedbackPanel'
 import type { Project } from '../../lib/types'
 import {
   parseTextOpenWorldSettingsReturnV1,
@@ -45,6 +46,7 @@ export default function SettingsPage({
         <ProjectStorageWorkspacePanel project={project} onOpenDataManagement={onOpenDataManagement} />
       </div>
       <CreativeReliabilityCommunityPanel />
+      <FailureFeedbackPanel />
       {HarnessEvalPanel && (
         <Suspense fallback={null}>
           <HarnessEvalPanel />

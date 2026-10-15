@@ -1,6 +1,12 @@
 # Changelog
 
-Changes are organized by user impact. **Main-branch updates do not mean a new version has been released.** The package version is 4.0.0; tagged releases retain their original content, and later main-branch changes do not automatically enter downloaded archives. Live deployments may lag; see [compatibility](/en/updates/compatibility).
+Changes are organized by user impact. **Main-branch updates do not mean a new version has been released.** The package version is 4.0.1; tagged releases retain their original content, and later main-branch changes do not automatically enter downloaded archives. Live deployments may lag; see [compatibility](/en/updates/compatibility).
+
+## October 15, 2026 · v4.0.1 failure-feedback builds
+
+General settings, rendering fallbacks, and blocked startup offer a summary preview and official feedback entry. Browser errors survive refresh; the portable launcher retains bounded startup failures and uncertain interruption records. Users inspect the summary before taking it to the official form, which never submits automatically. Works, Prompts, and credentials are not automatically uploaded. See [troubleshooting and capture limits](/en/guides/troubleshooting#problems-and-failure-reports-in-downloaded-builds). This applies to v4.0.1 and later portable builds; check the [latest release](https://github.com/yuanbw2025/storyforge/releases/latest) for published archives. Fixed v4.0.0 downloads remain unchanged. This does not add launch/activity/retention statistics.
+
+Source: [failure-feedback implementation 80e48bc9](https://github.com/yuanbw2025/storyforge/commit/80e48bc9) · [PR #144](https://github.com/yuanbw2025/storyforge/pull/144).
 
 ## October 14, 2026 · Knowledge-base scrolling
 

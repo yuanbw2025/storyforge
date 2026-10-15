@@ -1,6 +1,7 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
-import { recordRuntimeDiagnosticError } from '../../lib/diagnostics/local-diagnostic-report'
+import { recordRuntimeDiagnosticError } from '../../lib/diagnostics/runtime-errors'
+import FailureFeedbackPanel from './FailureFeedbackPanel'
 
 interface Props {
   children: ReactNode
@@ -48,6 +49,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           >
             <RefreshCw className="w-4 h-4" /> 重试
           </button>
+          <FailureFeedbackPanel />
         </div>
       )
     }

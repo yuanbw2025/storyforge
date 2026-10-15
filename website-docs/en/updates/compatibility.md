@@ -4,9 +4,9 @@
 
 This incremental review covers **main baseline cfc5ed3f on October 14, 2026**, checking user-visible changes since the last successful maintenance baseline `ce1cfd6c`. Each product retains its own guide status; the maintenance date does not raise maturity.
 
-The package version is **4.0.0**. The [formal v4.0.0 release](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.0) was published on October 13, 2026 at fixed commit `78416965`. The later main-branch changes from [PR #119](https://github.com/yuanbw2025/storyforge/pull/119), including text-adventure recovery, image-preserving revisions, and standalone web export, are **not in those fixed downloads**. Documentation maintenance does not rebuild releases or replace the separately deployed hosted experience.
+The source package version is **4.0.1**; the [latest release page](https://github.com/yuanbw2025/storyforge/releases/latest) lists the fixed archives actually available for download. Builds of v4.0.1 include explicit failure feedback and the text-adventure recovery, image-preserving revisions, and standalone web export from [PR #119](https://github.com/yuanbw2025/storyforge/pull/119). See [troubleshooting and capture limits](/en/guides/troubleshooting#problems-and-failure-reports-in-downloaded-builds).
 
-Two builds both labeled 4.0.0 need not contain identical code. Include the build commit, address, and date when reporting issues.
+The historical [formal v4.0.0 release](https://github.com/yuanbw2025/storyforge/releases/tag/v4.0.0) was published on October 13, 2026 at fixed commit `78416965`; it does not include those later changes. Knowledge-base updates do not alter old downloaded archives or replace the separately deployed hosted experience. Include the version, build commit, address, and date when reporting issues.
 
 Live sites may lag deployment. [Tagged releases](https://github.com/yuanbw2025/storyforge/releases) do not automatically gain later main-branch features.
 
