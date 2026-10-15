@@ -1,18 +1,17 @@
-import type { AnyProductRuntimePackage, AvgPresentationContentV1, FrozenNarrativeBeat, FrozenRuntimeMediaAssetV2, ProductMediaAsset } from '../types'
+import type { AnyProductRuntimePackage, FrozenNarrativeBeat } from '../types'
 import { parseAvgReadingPlanV1, type AvgReadingPlanV1 } from './reading-contract'
 import type { AvgSystemPlan } from './system-contract'
 import { parseAvgSystemPlan } from './system-contract'
 import { buildAvgSystemGraphV1 } from './system-graph'
-import { parseAvgPresentationContent, validateAvgPresentation } from './runtime'
-import { freezeProductMediaAsset } from '../product-production/media-contracts'
-import { canonicalProductProductionJsonV2 } from '../product-production/hash'
-import { avgEnum, avgHash, avgKey, avgList, avgNumber, avgProtocolBody, avgRecord, avgText, avgUnique } from './protocol-validation'
+import { validateAvgPresentation } from './runtime'
+import { parseAvgExecutableStageV1, type AvgExecutableStageV1 } from './stage-contract'
+export type { AvgExecutableStageV1 } from './stage-contract'
+import { avgEnum, avgKey, avgList, avgNumber, avgProtocolBody, avgRecord, avgText, avgUnique } from './protocol-validation'
 
 export const AVG_EXECUTABLE_CAPABILITIES_V1 = ['narrative','presentation','avg.rules'] as const
 export function avgExecutableCapabilities(module: Pick<AvgRuntimeModuleV2, 'systemPlan' | 'reading'>): string[] {
   return [...AVG_EXECUTABLE_CAPABILITIES_V1, ...(module.systemPlan.version === 2 ? ['avg.inventory'] : []), ...(module.reading ? ['avg.reading'] : [])]
 }
-export type AvgExecutableStageV1 = AvgPresentationContentV1 & { assets: FrozenRuntimeMediaAssetV2[] }
 /** Native V2 module: V1's inert module/consumer codec is never reinterpreted.
  * The stage deliberately reuses the supported Cue protocol and renderer. */
 export interface AvgRuntimeModuleV2 {
@@ -71,25 +70,10 @@ export function parseAvgRuntimeModuleV2(value: unknown): AvgRuntimeModuleV2 {
     return { choiceKey: avgKey(choice.choiceKey, 'choiceKey'), text: avgText(choice.text, 'choice.text', 1000) }
   }, 5000), choice => choice.choiceKey, 'choices')
   if (choices.length !== systemPlan.actions.length || choices.some(choice => !systemPlan.actions.some(action => action.key === choice.choiceKey))) throw new Error('[avg] 选择标签与规则行动未闭合')
-  const stageRow = avgRecord(row.stage, ['version','cues','assets'], 'stage')
-  const rawCues = avgList(stageRow.cues, 'stage.cues', value => value, 50_000)
-  const content = parseAvgPresentationContent(stageRow)
-  rawCues.forEach((value, index) => {
-    if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !Object.prototype.hasOwnProperty.call(content.cues[index], key))) throw new Error('[avg] Cue 含未知字段')
-    const cue = content.cues[index]
-    if (cue.snapshotKey != null) assertAvgSnapshotKeyV1(cue.snapshotKey)
+  const { assets, ...content } = parseAvgExecutableStageV1(row.stage)
+  for (const cue of content.cues) {
     if (cue.actorKey && !characterKeys.has(cue.actorKey)) throw new Error('[avg] Cue 角色不在目录')
-  })
-  const assets = avgUnique(avgList(stageRow.assets, 'stage.assets', value => {
-    if (!value || typeof value !== 'object') throw new Error('[avg] stage asset 无效')
-    const raw = value as Record<string, unknown>
-    const blobContentHash = avgHash(raw.blobContentHash, 'blobContentHash')
-    const frozen = freezeProductMediaAsset(raw as unknown as ProductMediaAsset)
-    avgKey(frozen.assetKey, 'assetKey')
-    if (['constructor','prototype'].includes(frozen.assetKey)) throw new Error('[avg] assetKey 为保留键')
-    if (frozen.contentHash !== blobContentHash || canonicalProductProductionJsonV2({ ...frozen, blobContentHash }) !== canonicalProductProductionJsonV2(raw)) throw new Error('[avg] stage asset 字段/hash 无效')
-    return { ...frozen, blobContentHash }
-  }, 10_000), asset => asset.assetKey, 'stage.assets')
+  }
   if (systemPlan.version === 2) {
     for (const item of systemPlan.inventory.items) for (const view of [item, ...item.variants]) {
       if (view.iconAssetKey && !assets.some(a => a.assetKey === view.iconAssetKey && a.kind === 'ui')

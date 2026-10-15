@@ -1,6 +1,6 @@
 # AVG 游戏系统、演出与恢复协议
 
-> L2 · 版本：1.6.0 · 生效：2026-10-15 · 受 [AVG 产品契约](../AVG.md)约束。
+> L2 · 版本：1.7.0 · 生效：2026-10-15 · 受 [AVG 产品契约](../AVG.md)约束。
 > 目标协议与当前原生增量分开记账；旧 V1 底座不因此自动拥有新物件、消息或完整语音协调能力。
 
 ## 0 当前研发顺序与规则接缝
@@ -15,11 +15,21 @@
 
 ### 0.1 作者规则候选与编译输入
 
-作者规则候选采用 `storyforge.avg.author-candidate@2`，只给 system-plan 增加系统实际生成的 `storyforge.avg.system-validation@1`；其他作者工件继续原 candidate@1 字节/哈希语义，不升级旧记录。验证证据包含 compilerVersion、planHash、contentHash、initialStateHash，coverage 固定为 `structure-and-entry`。它只证明结构图与入口状态检查，不能自报全路径、可玩、专业内容或商业质量通过。
+作者规则候选采用 `storyforge.avg.author-candidate@2`，只给 system-plan 增加系统实际生成的 `storyforge.avg.system-validation@1`；演出组装使用下述显式 candidate@3；其他作者工件继续原 candidate@1 字节/哈希语义，不升级旧记录。验证证据包含 compilerVersion、planHash、contentHash、initialStateHash，coverage 固定为 `structure-and-entry`。它只证明结构图与入口状态检查，不能自报全路径、可玩、专业内容或商业质量通过。
 
 暂存前验证图、类型/范围和入口；确认事务内重新执行并重建候选哈希、来源/上游/基线与校验证据，不信任调用方自报的校验 JSON。校验仅执行纯数据与哈希，使用单个事务存活等待包裹、内部不访问 DB，避免嵌套 crypto 等待形成自依赖。篡改或错误版本拒绝，命令失败留实际回执；相同命令幂等，规则变更使实际依赖旧 revision 的脚本/工件失效，旧 payload 保留。
 
 `readAvgSystemPlanForCompilationV1` 只为当前活动 Build 返回有作者确认回执的唯一正式规则 revision，校验 Work/Production/明确开始/Brief/SourcePlan/Plan、Build revision/epoch、内容 hash、作者命令和实际校验证据。返回准确规则/工件版本/哈希/回执，候选不能通过此入口进入正式编译。API 接缝与受控任务夹具不表示当前工作台已提供规则输入按钮；生产计划/工作台入口仍待接入；原生编译与玩家接缝见下节，分别保留其验收边界。
+
+### 0.2 作者演出组装与可移植编辑草稿
+
+`storyforge.avg.author-workspace@1` 复用 `avgAuthoringDrafts.editorJson`，保存规则、规范场景脚本和 `storyforge.avg.author-stage@1`（aspectRatio、现行 Cue/冻结资产目录、可选 reading-plan），basePreviewHash 仅作修订基线。保存只改作者草稿，不开始生产、不正式采用；旧 V1 草稿与新草稿相互保护，不能由另一个编辑入口静默覆盖。协议严格拒绝未知字段/版本，JSON 不含 Build/Blob/Work 本地 ID；实际媒体仍由既有 `avgDraftMedia → mediaBlobObjects` 生命周期管理。
+
+演出输入为冻结 `human-import` 输出 `avg.author.stage / presentation`，依赖当前正式规则及全部场景脚本。它是作者组装合同，不宣称已启用专业 performance-director Skill。暂存产生 candidate@3，附系统实际重算的 `assembly-validation@1.moduleHash`；确认事务重新检查当前 Build/Plan/开始回执、所有上游 revision/hash、规则/文本/Cue/准确语音绑定和真实 Work 媒体。该 hash 证明此组装模块的确定性闭合，不是正式 Preview/Release 哈希，不代表听感/美术或商业质量。通用 AI/Artifact 写入口保持关闭。
+
+`importAvgMediaForAssemblyV1` 从输入快照验证 MIME 签名与种类，使用真实浏览器解码得到尺寸/时长，并释放临时 URL；失败不创建 AVG 媒体引用，单文件 32 MiB、解码等待 15 秒、音频最长 600 秒。当前作者组装最多 128 项/64 MiB，和实际播放器预加载边界一致；更大作品须在有界场景 cache 交付后另验，不能绕过此门。导入没有生成服务调用，也没有把素材提前采用。stage 确认必须逐个匹配已导入的完整不可变元数据、来源与授权，再从当前 Work 的物理 Blob 验证大小、MIME、hash，并在暂存/确认/正式编译读取时实际解码重查尺寸与时长（1ms 容差）；即使备份中的导入元数据与候选一起被改写也不能跳过。单次组装校验最多 60 秒，不能只给自报文件名/hash/尺寸。OPFS I/O/哈希使用单个纯读取事务存活等待。
+
+`compileAdoptedAvgBuildV2` 只读取有真实作者确认回执的规则、脚本和演出，重新校验依赖和实际媒体，返回待组装运行包及来源证据。上游变更会使已采用演出失效，旧候选也不能借新 revision 确认；旧 payload 保留。备份只重映射既有媒体表的物理引用，portable 编辑/候选/回执字节不变。此增量不直接冻结 Preview、不复制生产调度器，也未交付工作台或正式 planner 入口；完整 05A 继续施工。
 
 ## 1 模块边界与版本
 

@@ -9,6 +9,8 @@ import { parseProductProductionBriefV3 } from '../product-production/contracts'
 import { parseProductProductionPlanV3 } from '../product-production/plan'
 import { parseConfirmedProductBriefV1, parseProductProductionSourcePlanV1 } from '../product-production/source-contracts'
 import { applyAvgDialoguePatchV1, prepareAvgProfessionalArtifactV1, type AvgProfessionalArtifactV1 } from './artifact-contract'
+import { parseAvgAuthorStageV1, type AvgAuthorStageV1 } from './author-workspace-contract'
+import { validateAvgAuthorAssemblyV1, type AvgAssemblyValidationV1 } from './author-stage-validation'
 import { avgKey, avgText } from './protocol-validation'
 import { validateAvgSystemPlanForAuthorV1, type AvgSystemValidationV1 } from './system-compiler'
 
@@ -20,7 +22,7 @@ interface AuthorCandidateBase {
   controlEpoch: number; taskKey: string; artifactKey: string; kind: ProductBuildArtifactRecordV1['kind']
   payloadHash: string; base: Ref | null; inputs: Ref[]; declaration: string
 }
-type AuthorCandidateBody = AuthorCandidateBase & ({ version: 1 } | { version: 2; systemValidation: AvgSystemValidationV1 })
+type AuthorCandidateBody = AuthorCandidateBase & ({ version: 1 } | { version: 2; systemValidation: AvgSystemValidationV1 } | { version: 3; assemblyValidation: AvgAssemblyValidationV1 })
 type AuthorCandidate = AuthorCandidateBody & { candidateHash: string }
 type AdoptCommand = Extract<ProductProductionCommandV1, { type: 'adopt-avg-artifact' }>
 
@@ -35,6 +37,19 @@ function validateSystem(value: unknown) {
   return Dexie.currentTransaction
     ? Dexie.waitFor(Dexie.ignoreTransaction(() => validateAvgSystemPlanForAuthorV1(value)))
     : validateAvgSystemPlanForAuthorV1(value)
+}
+
+type AuthorPayload = AvgProfessionalArtifactV1 | AvgAuthorStageV1
+function prepareAuthorInput(input: Parameters<typeof prepareAvgProfessionalArtifactV1>[0]): { payload: AuthorPayload; payloadJson: string } {
+  if (input.artifactKey !== 'avg.author.stage') return prepareAvgProfessionalArtifactV1(input)
+  if (input.kind !== 'presentation' || !input.allowedOutputKeys.includes(input.artifactKey)) throw new Error('[avg] 作者演出超出冻结写域或 kind 无效')
+  const payload = parseAvgAuthorStageV1(input.payload)
+  return { payload, payloadJson: canonicalProductProductionJsonV2(payload) }
+}
+async function validateAssembly(context: Awaited<ReturnType<typeof authority>>, scope: WorkspaceScope, payload: AuthorPayload, inputs: ProductBuildArtifactRecordV1[]) {
+  if (payload.schema !== 'storyforge.avg.author-stage') return undefined
+  return validateAvgAuthorAssemblyV1({ scope, payload, inputs, productKey: context.production.productionKey,
+    sourceWorld: { contentHash: context.brief.source.worldContentHash, selection: context.brief.source.selection } })
 }
 
 async function authority(scope: WorkspaceScope, buildId: number, forCompilation = false) {
@@ -108,7 +123,7 @@ function authorTask(context: Awaited<ReturnType<typeof authority>>, taskKey: str
   return task
 }
 
-function assertSourceReferences(context: Awaited<ReturnType<typeof authority>>, payload: AvgProfessionalArtifactV1) {
+function assertSourceReferences(context: Awaited<ReturnType<typeof authority>>, payload: AuthorPayload) {
   const references = payload.schema === 'storyforge.avg.source-audit' ? payload.facts.flatMap(fact => fact.resourceKeys)
     : payload.schema === 'storyforge.avg.cast-bible' ? payload.characters.flatMap(character => character.sourceResourceKey ? [character.sourceResourceKey] : []) : []
   const frozen = new Set(context.sourcePlan.initialResourceKeys)
@@ -117,16 +132,16 @@ function assertSourceReferences(context: Awaited<ReturnType<typeof authority>>, 
 
 function candidateBody(context: Awaited<ReturnType<typeof authority>>, input: {
   taskKey: string; artifactKey: string; kind: ProductBuildArtifactRecordV1['kind']; payloadHash: string
-  base: Ref | null; inputs: Ref[]; declaration: string; systemValidation?: AvgSystemValidationV1
+  base: Ref | null; inputs: Ref[]; declaration: string; systemValidation?: AvgSystemValidationV1; assemblyValidation?: AvgAssemblyValidationV1
 }): AuthorCandidateBody {
-  const { systemValidation, ...payload } = input
+  const { systemValidation, assemblyValidation, ...payload } = input
   const base: AuthorCandidateBase = { schema: 'storyforge.avg.author-candidate', origin: 'author-import',
     productionKey: context.production.productionKey, buildNumber: context.build.buildNumber,
     briefRevision: context.build.briefRevision, briefHash: context.build.briefHash,
     confirmedBriefHash: context.briefRow.confirmedBriefHash, sourcePlanHash: context.briefRow.sourcePlanHash,
     planRevision: context.build.planRevision, planHash: context.build.planHash, controlEpoch: context.build.controlEpoch,
     ...payload }
-  return systemValidation ? { ...base, version: 2, systemValidation } : { ...base, version: 1 }
+  return assemblyValidation ? { ...base, version: 3, assemblyValidation } : systemValidation ? { ...base, version: 2, systemValidation } : { ...base, version: 1 }
 }
 
 /** Stores only a pending candidate, never an author receipt or accepted content.
@@ -138,10 +153,10 @@ export async function stageAvgAuthorArtifactV1(input: {
   const scope = await resolveScope({ scope: input.scope })
   const taskKey = avgKey(input.taskKey, 'taskKey'); const artifactKey = avgKey(input.artifactKey, 'artifactKey')
   const declaration = avgText(input.declaration, 'author declaration', 2000)
-  const prepared = prepareAvgProfessionalArtifactV1({ ...input, artifactKey, allowedOutputKeys: [artifactKey] })
+  const prepared = prepareAuthorInput({ ...input, artifactKey, allowedOutputKeys: [artifactKey] })
   const systemValidation = prepared.payload.schema === 'storyforge.avg.system-plan'
     ? await validateSystem(prepared.payload) : undefined
-  return db.transaction('rw', scopeTransactionTables(db.productProductions, db.productProductionBriefs, db.productProductionCommands, db.productBuilds, db.productBuildArtifacts), async () => {
+  return db.transaction('rw', scopeTransactionTables(db.productProductions, db.productProductionBriefs, db.productProductionCommands, db.productBuilds, db.productBuildArtifacts, db.avgDraftMedia, db.mediaBlobObjects), async () => {
     const context = await authority(scope, input.buildId)
     if (context.build.stateRevision !== input.expectedBuildRevision || context.build.controlEpoch !== input.controlEpoch) throw new Error('[avg] Build revision/epoch 已 stale')
     const task = authorTask(context, taskKey, artifactKey)
@@ -158,9 +173,10 @@ export async function stageAvgAuthorArtifactV1(input: {
       if (!script) throw new Error('[avg] 表达补丁缺少冻结的正式脚本输入')
       await applyAvgDialoguePatchV1(script.payloadJson, prepared.payload)
     }
+    const assemblyValidation = await validateAssembly(context, scope, prepared.payload, inputs)
     const contentHash = await hash(prepared.payload)
     const body = candidateBody(context, { taskKey, artifactKey, kind: input.kind, payloadHash: contentHash,
-      base, inputs: inputs.map(ref), declaration, systemValidation })
+      base, inputs: inputs.map(ref), declaration, systemValidation, assemblyValidation })
     const candidateHash = await hash(body)
     const metadataJson = canonicalProductProductionJsonV2({ ...body, candidateHash } satisfies AuthorCandidate)
     const existing = rows.find(row => row.artifactKey === artifactKey && row.status === 'pending' && row.metadataJson === metadataJson)
@@ -197,7 +213,7 @@ async function prepareAdoption(scope: WorkspaceScope, production: ProductProduct
     || candidate.blobObjectId !== null || candidate.mediaKind !== null || candidate.mimeType !== null) throw new Error('[avg] 不是可采用的作者候选')
   const envelope = JSON.parse(candidate.metadataJson) as AuthorCandidate
   const task = authorTask(context, envelope.taskKey, command.artifactKey)
-  const prepared = prepareAvgProfessionalArtifactV1({ artifactKey: candidate.artifactKey, kind: candidate.kind,
+  const prepared = prepareAuthorInput({ artifactKey: candidate.artifactKey, kind: candidate.kind,
     payload: candidate.payloadJson, allowedOutputKeys: task.outputArtifactKeys })
   const systemValidation = prepared.payload.schema === 'storyforge.avg.system-plan'
     ? await validateSystem(prepared.payload) : undefined
@@ -206,9 +222,10 @@ async function prepareAdoption(scope: WorkspaceScope, production: ProductProduct
   const bases = rows.filter(row => row.artifactKey === candidate.artifactKey && row.status === 'accepted')
   if (bases.length > 1) throw new Error('[avg] 正式 revision 不唯一')
   if (bases[0]) await acceptedInputs(scope, build.id, command.controlEpoch, [candidate.artifactKey])
+  const assemblyValidation = await validateAssembly(context, scope, prepared.payload, inputs)
   const body = candidateBody(context, { taskKey: task.taskKey, artifactKey: candidate.artifactKey, kind: candidate.kind,
     payloadHash: await hash(prepared.payload), base: bases[0] ? ref(bases[0]) : null, inputs: inputs.map(ref),
-    declaration: avgText(envelope.declaration, 'author declaration', 2000), systemValidation })
+    declaration: avgText(envelope.declaration, 'author declaration', 2000), systemValidation, assemblyValidation })
   const candidateHash = await hash(body)
   if (candidateHash !== command.candidateHash || envelope.candidateHash !== candidateHash
     || canonicalProductProductionJsonV2({ ...body, candidateHash }) !== candidate.metadataJson
@@ -254,19 +271,19 @@ async function prepareAdoption(scope: WorkspaceScope, production: ProductProduct
 /** Only a current, confirmed rule revision can enter formal Build compilation.
  * Pure engineering previews remain available without this persistence receipt. */
 export async function readAvgSystemPlanForCompilationV1(input: {
-  scope: WorkspaceScope; buildId: number; expectedBuildRevision: number; controlEpoch: number; includeSceneScripts?: boolean
+  scope: WorkspaceScope; buildId: number; expectedBuildRevision: number; controlEpoch: number; includeSceneScripts?: boolean; includeAuthorStage?: boolean
 }) {
   const scope = await resolveScope({ scope: input.scope })
-  return db.transaction('r', scopeTransactionTables(db.productProductions, db.productProductionBriefs, db.productProductionCommands, db.productBuilds, db.productBuildArtifacts), async () => {
+  return db.transaction('r', scopeTransactionTables(db.productProductions, db.productProductionBriefs, db.productProductionCommands, db.productBuilds, db.productBuildArtifacts, db.avgDraftMedia, db.mediaBlobObjects), async () => {
     const context = await authority(scope, input.buildId, true)
     if (context.build.stateRevision !== input.expectedBuildRevision || context.build.controlEpoch !== input.controlEpoch) throw new Error('[avg] 规则编译 Build revision/epoch 已 stale')
     const [artifact] = await acceptedInputs(scope, input.buildId, input.controlEpoch, ['avg.system.plan'])
-    const prepared = prepareAvgProfessionalArtifactV1({ artifactKey: artifact.artifactKey, kind: artifact.kind, payload: artifact.payloadJson, allowedOutputKeys: ['avg.system.plan'] })
+    const prepared = prepareAuthorInput({ artifactKey: artifact.artifactKey, kind: artifact.kind, payload: artifact.payloadJson, allowedOutputKeys: ['avg.system.plan'] })
     if (prepared.payload.schema !== 'storyforge.avg.system-plan') throw new Error('[avg] 不是正式系统规则')
     const validation = await validateSystem(prepared.payload)
     const receipt = JSON.parse(artifact.metadataJson) as { candidate: AuthorCandidate; receiptHash: string }
     if (receipt.candidate.version !== 2 || canonicalProductProductionJsonV2(receipt.candidate.systemValidation) !== canonicalProductProductionJsonV2(validation)) throw new Error('[avg] 规则编译证据缺失、版本不匹配或已 stale')
-    const scriptKeys = input.includeSceneScripts ? prepared.payload.scenes.map(scene => `avg.content.scene-script.${scene.key}`) : []
+    const scriptKeys = input.includeSceneScripts || input.includeAuthorStage ? prepared.payload.scenes.map(scene => `avg.content.scene-script.${scene.key}`) : []
     const scriptRows = await acceptedInputs(scope, input.buildId, input.controlEpoch, scriptKeys)
     const scripts = scriptRows.map(row => {
       const parsed = prepareAvgProfessionalArtifactV1({ artifactKey: row.artifactKey, kind: row.kind, payload: row.payloadJson, allowedOutputKeys: scriptKeys }).payload
@@ -274,7 +291,19 @@ export async function readAvgSystemPlanForCompilationV1(input: {
       if (parsed.schema !== 'storyforge.avg.scene-script' || !scriptReceipt.candidate.inputs.some(source => source.artifactKey === artifact.artifactKey && source.version === artifact.version && source.contentHash === artifact.contentHash)) throw new Error('[avg] 脚本缺少当前正式规则依赖')
       return { payload: parsed, artifact: ref(row), authorReceiptHash: scriptReceipt.receiptHash }
     })
-    return { plan: prepared.payload, artifact: ref(artifact), validation, authorReceiptHash: receipt.receiptHash, scripts,
+    let authorStage: { payload: AvgAuthorStageV1; artifact: Ref; authorReceiptHash: string; validation: AvgAssemblyValidationV1 } | null = null
+    if (input.includeAuthorStage) {
+      const [stageRow] = await acceptedInputs(scope, input.buildId, input.controlEpoch, ['avg.author.stage'])
+      const payload = parseAvgAuthorStageV1(stageRow.payloadJson)
+      const stageReceipt = JSON.parse(stageRow.metadataJson) as { candidate: AuthorCandidate; receiptHash: string }
+      const upstream = [artifact, ...scriptRows].map(ref)
+      if (canonicalProductProductionJsonV2([...stageReceipt.candidate.inputs].sort((a,b) => a.artifactKey.localeCompare(b.artifactKey))) !== canonicalProductProductionJsonV2(upstream.sort((a,b) => a.artifactKey.localeCompare(b.artifactKey)))) throw new Error('[avg] 作者演出未绑定当前规则及全部脚本')
+      const validation = await validateAssembly(context, scope, payload, [artifact, ...scriptRows])
+      if (!validation || stageReceipt.candidate.version !== 3
+        || canonicalProductProductionJsonV2(stageReceipt.candidate.assemblyValidation) !== canonicalProductProductionJsonV2(validation)) throw new Error('[avg] 作者演出组装证据缺失或 stale')
+      authorStage = { payload, artifact: ref(stageRow), authorReceiptHash: stageReceipt.receiptHash, validation }
+    }
+    return { plan: prepared.payload, artifact: ref(artifact), validation, authorReceiptHash: receipt.receiptHash, scripts, ...(input.includeAuthorStage ? { authorStage } : {}),
       sourceWorld: { contentHash: context.brief.source.worldContentHash, selection: context.brief.source.selection },
       build: { productionKey: context.production.productionKey, buildNumber: context.build.buildNumber, stateRevision: context.build.stateRevision, controlEpoch: context.build.controlEpoch, planRevision: context.build.planRevision, planHash: context.build.planHash } }
   })
