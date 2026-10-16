@@ -1,0 +1,148 @@
+# AVG 游戏系统、演出与恢复协议
+
+> L2 · 版本：1.1.0 · 生效：2026-10-13 · 受 [AVG 产品契约](../AVG.md)约束。
+> 以下为目标协议；当前 V1 的叙事/Cue/checkpoint 底座不能据此宣称已有物品、消息或完整语音协调能力。
+
+## 1 模块边界与版本
+
+`AvgRuntimeModuleV1` 是新包 V2 中的 AVG 专用模块，不是跨产品万能规则对象。其逻辑字段如下，精确 TypeScript/codec 由 AVG-BASE-00 落实：
+
+| 字段 | 类型/职责 | 冻结约束 |
+|---|---|---|
+| schema / version | `storyforge.avg.runtime-module` / 1 | 未知版本拒绝 |
+| storyMode / capabilities | linear 或 branching；模块名、版本与依赖清单 | 必需模块须由 compiler/player 同时支持；不静默忽略 |
+| subjects / lines | 人物、地点、物件稳定目录；规范句/Beat 与 scene、speaker、text revision | 身份唯一，引用闭合；显示名不是角色主键 |
+| stateDefinitions | 类型化变量、知识、关系、物品、话题、消息、热点定义 | 与冻结来源、Brief、正式 system-plan 对齐 |
+| actions / transitions | 有限命令、可用条件、效果、目标和反馈引用 | 只能通过命令执行，不接受任意 JS、SQL 或模型回调 |
+| presentation | `AvgPresentationContentV2`，Cue/消费者/等待与打断规则 | 只改变展示，不直接写剧情状态 |
+| mediaBindings | `AvgMediaBindingV1` 清单 | 引用被采纳且实际存在的字节与消费者 |
+| progressPolicy / assistPolicy | 已读/鉴赏与辅助规则 | 与当前会话知识分开；辅助可见、可关闭且有确定性后果 |
+| build provenance | 来源/输入/编译版本和 hash 的系统证据 | 复用既有 envelope，不接受模型自报 |
+
+共享包/Preview/Release Manifest V2 只增加承载和版本分派，AVG 语义保留在 AVG 模块。包内引用使用 portable 语义 key/版本/hash，不带 Dexie id、作者凭据、二进制字节或 Build/Release id；内部 producer/Run/数据库 owner 证据不复制进 runtime 模块。legacy V1 走原有受限读取路径，不伪造新模块、物品状态或逐句语音完成事件；旧字节/hash 不重写。
+
+必需模块缺失阻止 Build；可选模块只在作者明确移出 Brief 或接受降级后重新编译。启用了库存却没有可用 inventory renderer，不属于纯文字降级。
+
+## 2 规范身份、状态和执行
+
+一条可独立显示/配音的句以稳定 `lineKey` 标识；现有一 Beat 一句时直接使用 `beatKey`，不再维护两个不同身份。多句 Beat 必须显式拆分/映射，不能用数组序号作长期语音或存档身份。
+
+句数据至少包括 scene/line、speakerKey 或 narrator、displayName policy、locale、text、textRevision/hash、可公开知识范围及内容引用。匿名、别名、身份揭示只影响显示投影；实际角色身份和此前已读事件保持可追踪。
+
+当前会话投影至少包含：当前位置/访问序号、已选行动、变量、角色/玩家知识、关系、物品实例、话题、消息、热点、结束/路线状态及可恢复演出状态。复用同一 `productRuntimeSessions/events/checkpoints`，不借用跑团或文字冒险表。
+
+| 状态域 | 合同 | 正反例 |
+|---|---|---|
+| 变量 | boolean、bounded number、enum 或 bounded string；初值、范围和作用域冻结 | 无声明值/越界 increment 拒绝；不能把无限 JSON 塞入变量 |
+| 条件 | 复用现有有限谓词并补充类型化 AVG 引用 | 检查值类型/目录；未知操作和跨 Work 引用拒绝 |
+| 效果 | 合法 set/increment/unset 与模块专用操作 | unset 只允许可选字段；原子应用全部效果，失败不留下半个库存 |
+| 知识 | factKey、holder、获得事件、可见范围 | 玩家知道邮戳不等于角色知道；看图不自动知道信封内容 |
+| 关系 | dimensionKey、范围、依据事件、显示策略 | 选择可改变信任；不将“持有证物”写成好感数值 |
+| 选择/路线 | choiceKey、合法选项、条件、代价、即时反馈、后续消费与结局 | 汇流保留已发生后果；禁用选项须解释或按作品政策隐藏 |
+
+每个命令冻结 commandId、session/release、expected event sequence、actor/target 和合法 actionKey；验证后原子追加事件并更新投影。相同 commandId 不重复消费物品或加关系；过期序号返回冲突，由客户端刷新，不能猜测重做。
+
+事件保存实际行动、版本、前后差异和原因，规则重放与 checkpoint 恢复一致。任意文本回听、舞台重绘或打开菜单均无规则副作用。禁止模型修改会话事实、条件计算和“为方便体验”解锁未知信息。
+
+## 3 对话推进、历史与语音协调
+
+目标阅读状态机：`entering → revealing → waiting → settled → next/choice/ending`。cue、文本、voice 观察事件携带 line/visit、playback generation，过期回调不能完成新句。实际停留时间取运行观测，不由文本长度假装语音时长。
+
+| 操作/屏障 | 规定 |
+|---|---|
+| 手动推进 | 第一次点击显全文；文本已显且强制 Cue 完成后才可下一句。是否同时打断配音由作者/玩家明确策略决定 |
+| 自动阅读 | 等待 TextComplete、必需 CueComplete，以及启用 voice 时的 VoiceEnded 或声明的失败/允许中断结果，再等待配置阅读余量 |
+| 无声/播放失败 | 记录具体 clip/error；按声明可继续或暂停提示。不能无限等待不存在的 ended；不能伪报已听完 |
+| 已读快进 | 只经过当前 release/text 版本已实际读过的句；停止于未读、选择、需输入模块、结局或不可跳过屏障 |
+| 跳过未读 | 默认关闭；作者允许且玩家显式开启才可用，不写“完整阅读”回执 |
+| 自动答题/故事辅助 | 独立开关及作者冻结路径；显示提示或确定性执行已声明行动，记录 assistUsed；自动阅读不选答案 |
+| 菜单/窗口后台 | 退出、加载、换句、失焦按策略取消/暂停旧音频与计时；回来只恢复合法当前位置，禁止多份音频重叠 |
+| 文本历史 | 按实际事件顺序和 visit 序号记录正文版本、说话人显示、所选行动及配音引用；重复访问保留重复记录，不按 readBeatKeys 去重/排序 |
+| 回听 | 打开当前历史条目的真实 clip，不执行 Cue/效果，不改变剧情位置或伪造新阅读事件 |
+
+auto delay、快进速度、音量等是偏好；剧情规定的不可跳过演出是包规则。字幕先显示合法文本，不能因声音语言缺失而读另一语言的未知内容。声音同步合同见[媒资规格](03-MEDIA-PRODUCTION-AND-BINDING.md)。
+
+## 4 舞台与声明式导演
+
+导演消费已采用脚本与系统规则，输出注意目标/景别/空间、角色/外观、背景/CG、光影、转场、镜头、声音/静默和等待依赖；不能修改台词事实、知识或分支后果。
+
+`ActorPlacement` 目标字段：actorKey、appearance/pose/expression variant、assetBinding、anchor、crop/safe region、position/scale、facing、layer/coordinate space、visible、transition。坐标/层域和朝向白名单冻结；缺少组件能力时采用作者允许的完整 PNG 替代，不能声称已实现可动角色。
+
+Cue 必须来自 renderer 支持的有限目录，带 cueKey、line/event 引用、起止/等待、最大时长、打断及恢复语义。可复用现有 Cue 的功能，但新增语义须新版本 parser/编译测试；模型不能嵌入任意动画/网页代码。
+
+短动画、相机移动和一次性声音恢复到约定安全边界；持续背景/角色/BGM/环境有状态快照。voice/SFX 不默认从中途毫秒重播；保存和恢复粒度在下一节明确。纯文字预览执行相同规则而省略允许的表现，不能跳过必须观察的行动条件。
+
+## 5 物品、证据与其他可选系统
+
+### 5.1 物件定义与实例
+
+物件定义最小字段：itemKey、公开名称/描述、category、unique/stack policy、合法状态、owner policy、可见/可查看条件、actions、icon/detail/剧情特写 consumer refs；实例保存 instanceKey、definitionKey、holder、quantity 或唯一存在、state、获得/变化事件。未开封/已开封是正式状态，不从不同图案猜状态。
+
+| 命令目标语义 | 校验和结果 |
+|---|---|
+| gain / transfer | 合法来源/目标、唯一/数量上限和权利；不重复发唯一信封 |
+| inspect | 当前允许查看的描述/细节，记录检查及明确的知识变化；重复检查不会重复奖励 |
+| use | 目标类型、位置/状态/前置、消耗规则、效果和反馈；不默认所有物品都会消耗 |
+| present | 指定人物/问题/证据槽、合法回应和结果；出示证物默认不等于丢弃，消耗须明确写入规则 |
+| change-state / remove | 定义中的合法转换、数量及来源；非合法转换拒绝 |
+
+inventory 列表消费 icon，证据详情消费 detail，剧情特写消费 CG/stage binding。遮掩的姓名/日期等来自公开 UI 字段与当前知识，不直接把生图文字当案件事实。物件拥有者、玩家已知内容与物件真实秘密分别保存/投影。
+
+### 5.2 其他模块
+
+| 模块 | 目录/状态 | 有限行动与反馈 |
+|---|---|---|
+| 热点/地点 | locationKey、region/label、可见/可用条件、已检查、目标消费槽 | inspect/move；键盘可选列表与触屏同结果；区域失效不能继续点击旧对象 |
+| 话题/关键词 | topicKey、discover/known、合法人物或思考对象、已用状态 | ask/think；回应引用正式场景/效果，未知关键词不能泄露回答 |
+| 消息/手机 | thread/messageKey、发件显示、已投递/已读、合法回复/期限和影响 | open/reply；投递由冻结事件触发，重载不重复投递；不引入真实通讯 |
+| 档案/鉴赏 | entryKey、文本/图/音消费者、解锁事件和防剧透条件 | read/replay，只读隔离；未解锁项不返回隐藏 payload/媒体 |
+| 路线回顾 | 已体验节点/结果、可展示标签、允许重访方式 | 回放用独立只读投影；重开游玩则明确创建新会话 |
+| 提示/辅助 | hintKey、分层提示、使用/重试政策、正式 solutionAction refs | reveal/assist；不调用模型临时解题；模式切换有事件和进度标记 |
+
+菜单组件只有对应模块启用、包里引用闭合并存在可用数据时出现。小游戏/计时审判/3D 物件检视需要后置专项能力，不能用上述按钮和一张静图宣称支持。
+
+## 6 存档、跨周目进度与偏好
+
+存档身份 pin 到准确 ProductRelease 或受治理 Build Preview 的 package/hash，不只保存 sceneKey。槽是同一 checkpoint 的用户标签/缩略图/时间/位置引用；自动、手动、快速操作复用 checkpoint API，不能各建一套状态。
+
+| 保存域 | 保存/恢复策略 |
+|---|---|
+| 当前剧情 | 位置/visit、选择、变量、知识、关系、物件、消息、热点和结局，同一事务 checkpoint |
+| 持续表现 | 背景/角色/合法变体、镜头稳定状态、BGM/环境目标；恢复前取消旧 transport/playback |
+| 阅读位置 | 安全句/Beat 边界和显示状态；存档请求遇到未提交效果先结算或明确等待，不捕获半个事务 |
+| 一次性媒体 | 不保存 DOM/Audio 对象；目标按声明从句首恢复 voice，或保持已完成状态；SFX/动画不无条件重复 |
+| 作品进度 | `avgPlayerProgress` 的已读/结局/鉴赏是跨周目域；从真实事件派生，读旧档不抹除已解锁，也不把解锁变成角色知识 |
+| 玩家偏好 | voice/BGM/SFX 音量、文字速度、auto/skip、减少动态、语言；在应用本地设置单独持久化 |
+
+目标跨周目作用域是 Work + 本地 profileKey + portable productKey，记录语义 key/version、实际 release 与事件来源。产品版本之间仅合并经兼容检查的已读/解锁；改过正文的句不沿用旧“已读”。导入到新 Work 按注册表 remap；默认不混入另一读者的进度，进度导出/清理须明确选项与隔离验证。
+
+加载验证 owner、package/hash、codec、checkpoint 完整性和资产闭包；失败保留原档并说明缺口。缺媒体按作品声明降级，损坏规则状态不“尽量恢复”。V1 存档继续绑定 V1；没有受审的显式 migration 就不能给 V2 使用或静默升级。
+
+回退/重访单独声明政策：首批只从合法 checkpoint 创建新分支会话，不把历史回听或直接跳 scene 当作状态回退。可选路线图任意跳转、逐句 rollback 和跨 release migration 后置，需明确物件/知识/消息/解锁与一次性声音的语义。旧 V1 的正常新游戏/继续/保存/分支恢复仍回归，禁止改写旧包不意味着禁用这些操作。
+
+线性、分支及启用物件的会话分别回归：选择前后、出示前后、消息投递前后、重复检查、auto/快进/后台切换、失败恢复、刷新及离线资源缺失。解锁导入、删除一个 Work 和多个 profile 的反例属于数据生命周期验收。
+
+## 7 渲染消费与技术验收
+
+stage、dialogue avatar/voice、inventory、evidence detail、menu、gallery、archive 都声明自己的 consumer contract。renderer 只接收冻结且当前有权可见的数据；未知 consumer/kind、跨作品资产、遗漏必需图或旧文本配音均拒绝进入新 Build。打开详情失败不会改变库存或知识。
+
+验收证据须包含：有限规则正反例、路径/结局可达、事件重放等于 checkpoint、幂等/过期命令、句/声音打断、隐私/知识投影、各消费槽实际显示及真实保存恢复。无图/静音只证明允许的降级路径，不证明有声视听效果。
+
+当前接入点：`src/lib/avg/authoring-contract.ts`、`src/lib/types/avg.ts`、`src/lib/types/narrative-blueprint.ts`、`src/lib/types/product-release.ts`、`src/lib/product-production/product-adapters.ts`、`src/stores/avg-game-player.ts`、`src/components/text-game/AvgGamePlayer.tsx`、`src/components/avg/StageAudio.tsx`。路径存在性和具体调用方由工作包开工时复核；共享类型改变先经 AVG-BASE-00，不另建发布/runtime 框架。
+
+## 8 性能、资源、设备与语言边界
+
+现行 player 向 resolver 传全部资产，默认压缩字节预算为 64 MiB；这不等于解码图像/音频、DOM 或总 RAM 都受同一上限。商业候选不能靠增大这个数加载全作。03A 提供按当前场景/合法相邻路径的有限预加载、必需资源 pin、旧 object URL/Audio 释放及有界 cache；画廊/未选路线按用途加载，异步旧结果不能覆盖新位置。
+
+| 项目 | 设计验收 |
+|---|---|
+| 设备/性能 | CAL-00 冻结真实硬件/OS/browser、画幅/语言/资源大小、cold/warm 条件与数值上限；首戏暂定本地冷启动 ≤5s、已就绪资源下操作确认 p95≤100ms，排除作者声明的阅读/Cue 等待；实际测量后保留 pass/fail/unknown |
+| 内存/资源 | 分别记录编码 cache 上限、解码规模/实际可测峰值、重进场/连续换图/回听时释放；未测 RAM 不宣称低内存，不能只验单张 PNG |
+| 存储/配额 | 导入/生产前检查必要 Blob 闭包与可用空间；配额失败不删除旧档/已采用资产、不留半包正式 release，保留重试/清理说明 |
+| UI/输入 | 键盘/触屏/focus/关闭菜单/静音/减少动态、安全区/长句/字号、窗口 resize 和背景切换；实际目标设备各测，不由 desktop E2E 代证全部设备 |
+| 本地化 | 首批 zh-CN；未来 text/voice locale 分开冻结，稳定 line 关联 locale 文本/hash/读音/clip、姓名/字体及 fallback；缺/旧翻译不可静默串到另一语言 |
+| 离线/故障 | 本地包真实缺 Blob/解码失败/慢加载/声音权限/刷新/离线安装；显示有限结果，不用永久 loading 或隐藏模型请求恢复 |
+
+数值是拟定 Pilot 工程目标，不是已达成绩或全设备承诺，最终条件由对应 Brief/CAL-00 冻结。02A2 声明布局/消费能力，03A 负责加载/运行与观测，07 负责实际交付环境；新增语言制作/高级 renderer 需独立 typed schema/权限/回归，不在 Settings 中选上就算支持。
+
+接口取舍参考 [Naninovel 1.21 资源/内存政策](https://naninovel.com/guide/resource-providers)与 [Ren'Py 8.5.4 保存/回退文档](https://www.renpy.org/doc/html/save_load_rollback.html)（2026-10-13 核对）：本方案采用按消费者/场景控制资源及明确恢复边界；不引入这两套引擎，也不推定它们或 StoryForge 跨版本档案必然兼容。
