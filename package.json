@@ -59,7 +59,7 @@
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "test:codex-bridge": "node --test scripts/local-codex/*.test.mjs",
-    "ci": "npm run test:codex-bridge && npm run check:required-tables && npm run check:ai-manual && npm run check:ai-entry-registry && npm run check:architecture && npm run check:text-open-world-player-paths && npm run check:text-open-world-invariants && npm run check:text-open-world-stress && npm run check:text-open-world-performance && npm run check:text-open-world-calibration && npm run check:text-open-world-human-playtest && npm run check:text-open-world-release-update && npm run check:text-open-world-lifecycle && npm run check:text-open-world-retirement && npm run check:source-reachability && npm run check:docs && npm run check:roadmap && npm run check:agent-context && npm run check:agent-freshness && npm run check:canon-coverage && npm run check:project-metrics && npm run check:dependencies && npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build && npm run check:bundle-size",
+    "ci": "npm run test:temp-lifecycle && npm run test:codex-bridge && npm run check:required-tables && npm run check:ai-manual && npm run check:ai-entry-registry && npm run check:architecture && npm run check:text-open-world-player-paths && npm run check:text-open-world-invariants && npm run check:text-open-world-stress && npm run check:text-open-world-performance && npm run check:text-open-world-calibration && npm run check:text-open-world-human-playtest && npm run check:text-open-world-release-update && npm run check:text-open-world-lifecycle && npm run check:text-open-world-retirement && npm run check:source-reachability && npm run check:docs && npm run check:roadmap && npm run check:agent-context && npm run check:agent-freshness && npm run check:canon-coverage && npm run check:project-metrics && npm run check:dependencies && npm run lint && npx tsc --noEmit && npm run test:coverage && npm run build && npm run check:bundle-size",
     "ci:e2e": "PLAYWRIGHT_FROZEN_WORKSPACE=1 npm run test:e2e",
     "plugins:build-examples": "node tools/plugin-sdk/build-examples.mjs",
     "plugins:check": "node tools/plugin-sdk/cli.mjs check",
@@ -69,7 +69,8 @@
     "test:showcase": "playwright test --config playwright.showcase.config.ts",
     "build:adventure-player": "node scripts/build-adventure-player.mjs",
     "build:portable": "tsc -b && tsc -p ui-preview/tsconfig.json && npm run build:adventure-player && vite build --mode portable",
-    "test:distribution": "node --test scripts/distribution/*.test.mjs"
+    "test:distribution": "node --test scripts/distribution/*.test.mjs",
+    "test:temp-lifecycle": "node --test scripts/test-temp-lifecycle.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.3.1",

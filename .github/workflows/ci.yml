@@ -55,6 +55,9 @@ jobs:
       - name: TypeScript 严格类型检查
         run: npx tsc --noEmit
 
+      - name: 测试临时目录退出与隔离生命周期
+        run: npm run test:temp-lifecycle
+
       - name: Codex 本机桥协议与隔离反例
         run: npm run test:codex-bridge
 

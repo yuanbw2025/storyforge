@@ -77,6 +77,7 @@ StoryForge 是 React + TypeScript + IndexedDB 的本地优先生产项目。用�
 验证按风险递增：
 
 1. 先跑改动对应的定向测试或检查器。
+   临时目录按协作 §8.1 托管。
 2. 代码提交前至少通过 `npm run check:architecture`、`npm run check:required-tables`、
    `npm run check:ai-manual`、`npx tsc --noEmit`、相关测试和 `npm run build`。
 3. 交付单元运行 `npm run ci`；外部依赖审计若受上游公告阻塞，单独报告，其余闸门仍须完成。
