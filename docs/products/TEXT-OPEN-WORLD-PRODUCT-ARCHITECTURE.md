@@ -1,7 +1,7 @@
 # AI 主导文字开放世界游戏 · 整体产品与游戏系统施工规格
 
-> 规格版本：1.1.91
-> 生效日期：2026-09-06
+> 规格版本：1.1.92
+> 生效日期：2026-10-13
 > 文档层级：L2 文字开放世界整体产品施工入口
 > 当前状态：目标架构已冻结并进入分阶段实现；实际完成度以完整开发清单为准
 > 对应任务：阶段 E / `E-OPENWORLD-01`
@@ -47,6 +47,22 @@ PROJECT_TABLES / owner / migration / export / delete
 ```
 
 ---
+
+### 0.2 产品化三线合同（W1～W7）
+
+产品研发位于 S3.1/S3.2；世界版本只读，生产与图片属于文字开放世界，统计属于当前 Session 的只读投影。`responsibility-contract.ts` 从正式任务/产物推导 `game-content`、`product-system`、`media`，保留原 planning/content/visual/audio/integration/qa 调度 lane。任务有主责任；跨线输出由各 Artifact 的唯一 owner 管理，并列出实际消费者。P8 系统目录仍可在 content lane 执行，语义归产品系统配置。V3/QA 是汇合点，不构成三线进入装配前的自依赖。
+
+`responsibility-progress.ts` 结合冻结计划、durable scheduler 及产物治理证据计算 not-started/running/blocked/failed/ready/stale。必需集合来自本 Build 的正式输出，未知任务、重复 owner、缺件、旧 epoch、仅完整性验证而无正式验收证据均不能 ready；费用按任务主责任只计一次，未知费用保留 null。选用的图片和声音任务成为其冻结计划的必需集合；静音、纯程序或文本降级必须在冻结 media-requirements 中声明，不能临时删除引用。
+
+返修继续使用原依赖闭包和 child Build，不重写执行 DAG。系统目录/Action 改动继续传递至绑定、脚本、P10、V3/QA；稳定键改动使实际消费者失效；图片替换只影响 media.visual、V3、QA，不修改故事事实或旧 Release。未知结果沿 Harness 原边界处理，不提供隐藏重试。
+
+V3 增加精确输入集合、scope/Build/epoch/status 校验；原 schema、Hash、运行模块、绑定与权利检查通过后，在 integration-report **v2** 中冻结三条线的来源/输入 Hash 和唯一 owner 快照。v1 报告按旧合同继续读取，分类本身不改变历史 Plan、Artifact 或 Release Hash。旧客户端没有 v2 校验器时应拒绝新格式；回退使用原 v1 Build/Release，不降写或覆盖 v2 证据。没有新增表、Schema 字段或迁移；版本化 JSON 复用 `productBuildArtifacts`、`productQualityGateReceipts` 及其已有 PROJECT_TABLES 生命周期，无新 FIELD_REGISTRY 写目标或 CONTEXT_SOURCES AI 读取源。
+
+新 v2 Build 有图片时，最终 Creator 发布质量门还需当前 Build 的逐图人工回执。基础一致性检查验证显式角色身份、主体绑定、尺寸/MIME/alt/来源/许可证；不推测背景人物或声称自动测量视觉相似度。图片字节核验并成功解码后才可逐图选择接受/退回，默认不代填人工确认。回执绑定 Build 和图片集合 Hash，保存前复查产物及 Blob；退回或图片变化使通过结论无效，新发布质量 evidence v2 显式保存校准/逐图回执 Hash，可移植校验按版本重建完整引用链；v1 继续保留原字节语义。生成、导入、供应商配置、预算、超时和未知结果继续走原媒资命令；本轮没有真实图片供应商质量验收。
+
+玩家“更多”提供本地体验记录与分类反馈。只读当前分支 Event 与已核验意图候选：主线推进、支线接取/完成、放弃/过期、战败/逃跑/复活、到访/快旅、映射/边界提示、同来源/同指纹重复；缺失的 AI 证据单独计数。主线耗时为首末推进的墙钟间隔（含停留/离线），边界提示后主线推进仅是时序关联，同指纹不是语义相似度。分支继承状态与本分支行动次数分开。主动导出的反馈文件含分类、玩家自行填写的描述、聚合统计和 Hash，不会自动附带世界正文、原始输入或模型回应；玩家自行填写的描述由本人确认不含原文或敏感信息，未导出表单不承诺持久化，不上传或代签灰盒/G7 验收，也不写运行事件或世界。
+
+工程证据登记在实施计划 W0～W8；G7-11/13/14 和依赖它们的 G7-15 仍保留外部验收边界。
 
 ## 1. 产品定义
 
@@ -171,6 +187,8 @@ PROJECT_TABLES / owner / migration / export / delete
 当前P0实现进一步明确了两类来源的差异：WorldRelease只把便携引用、作者选择和真实目录读取证据带入产品，全文读取留给后续受控Run；小说没有可复用的不可变Release，因此把选定故事核心、大纲和正文完整复制为产品私有、可分片的SourcePinUnit。两类来源共同绑定来源版本、选择边界、Brief/开始revision、nonce Hash、rights、读取permission和证据Hash；同一Build不得静默换源。SourcePin复用Build Artifact生命周期，不为来源另建平行数据库。
 
 当前P1实现继续区分“已冻结”和“模型已读”：小说只通过登记Context Source向单个模型批次交付精确选择的完整私有单元；WorldRelease只通过Context Gateway读取SourcePin已经授权的冻结资源并校验交付Hash。SourceManifest记录逐单元实读状态，SourceLedger要求每项模型结论绑定可复现的逐字证据和偏移，SourceGapReport由代码从实际读集与证据覆盖生成。三件产物都属于文字开放世界Build候选，不回写世界引擎，也不建立第二套产品数据库。
+
+P1 的新模型草稿使用 v2 引文协议：模型只从已读单元复制逐字 `quote`，系统在该单元内唯一定位并计算 UTF-16 `start/end`，随后仍经原 SourceLedger 的来源 Hash、逐字切片与证据 Hash 复验。空白、缺失、重复歧义、未读单元和模型自行提供偏移均拒绝；不会修补或采纳已失败的旧响应。历史 v1 草稿继续按原精确偏移合同校验恢复。置信度保持 0～100 整数，实体键保持稳定键闭集格式。供应商已响应但正文为空、拒绝或其他不可重试错误，保留真实用量并停止自动尝试；不能因包装已付调用而丢失 Harness 的不可重试分类。原始响应、有限预算和候选采纳边界保持不变。
 
 当前P2实现把“作者确认”和“AI设计”明确分层：现有`ConfirmedProductBrief`继续负责作者授权，专属Context Source把同一次授权、SourcePin和P1证据编成完整Hash保护的输入；确定性代码据此生成GameBrief，冻结首版主线、自由度、交互、战斗、演化、媒资、预算和发布边界。模型只能补充ExperienceContract中的体验语义与ProtagonistAsset中的人物叙事，且来源角色必须引用绑定所选角色单元的Ledger事实。P2不会回读活动来源，数值型PlayerBuild也不会提前于GameplayRuleset生成。
 
@@ -2311,6 +2329,8 @@ Creator Brief确认后的G5-03生产准备页复用全局AI配置、任务路由
 
 作者逐项确认凭证政策、模型绑定、报价预算和媒资边界后，准备页只得到内存中的确认Hash，仍不创建Build、SourcePlan或任何费用。运行时Verifier不把可重算Hash当成外部真实性：确认时必须重新解析当前任务路由、AIConfig和实际凭证来源，并逐字段比对Brief、模型、端点路径Hash、报价、预算与四个精确确认键；设置页往返也携带无密钥的精确会谈、产品和来源身份，目标失效时不得误选“最近会谈”。正式启动在同一原子授权边界重新读取并CAS这些事实，不能把页面内存确认当作durable授权。全局AI日志在create/update/read/format四个出口统一脱敏：日志URL只保留HTTP(S) origin，调用方Key、认证头、常见凭证字段和嵌入式URL敏感部分全部清除；余额、欠费、授权、限流、超时、网络和未知结果只显示安全分类与显式恢复动作，不把原始供应商响应送入页面，也不隐藏重发。
 
+Agnes 官方连接另支持作者明确确认当前账户的本次文本调用免计费。该选择生成 `author-confirmed-account-zero` 报价，保留来源说明、核对日期、精确模型与端点绑定；它是作者的账户说明，不是全平台免费声明，也不能用于其他供应商或中转端点。远程凭证仍为必需项，调用、token、时长、存储及失败恢复保护不变；配置变化清除免计费确认。未选择这项说明的人工双零报价继续被拒绝，现有付费报价和本地零费用合同保持有效。该扩展不新增表，不改变来源、作品或媒资 owner；报价随既有 Creator Start/Brief 的注册生命周期导出导入。
+
 G5-04已经落地专属Creator生产启动。作者先选择`author-owned`、`licensed`或`public-domain`权利依据并填写说明；零写入预览把当前Creator Brief确定性投影为不含本地ID的便携Creator SourcePlan、共享scheduler兼容执行Brief和精确动态DAG，显示依赖、并行组、模型、预算、完成条件及Plan Hash。兼容Brief中的`worldReleaseId=1`是非定位占位值，真实读取只允许走专属SourcePlan与注册表治理的locator。正式开始再次核验Production state revision、Creator Brief revision/Hash、WorldRelease或小说版本与边界、当前AI任务路由/凭证来源、规范完整route、生成参数、模型绑定、报价、预算、四项确认和预览Plan Hash，并让实际模型调用复用同一份已核对resolution，避免下层二次解析发生TOCTOU。覆盖Production、Brief、Command、Build及来源存储的同一事务写入命令claim/receipt、授权Brief的Creator SourcePlan和Creator Start、不可变Plan与授权Build，再推进Production为`producing`。这个边界不调用provider；相同确定性command ID重放只读取已冻结receipt，不重建授权。Creator Brief仍是作者意图权威，`ProductProductionBriefV3`只是共享scheduler兼容投影，不能反向覆盖Creator Brief。
 
 启动成功后，专属工作流把精确`productionId`交给`productionOnly`工作台；不展示通用新建/最近Production回退，锁定ID不存在、被过滤或失效时停止队列并明确报错。每个任务显示依赖、lane/并行组、最大尝试、超时、当前step/attempt、尝试历史、最新durable边界、checkpoint验证状态、stale原因和预算实耗；scheduler同时以必需receipt和subject lock计算真正可运行集合。P1来源批次和P9场景分片通过登记的有界多调用协议执行，只重跑未完成分片；响应先计账再解析，作者P9聚合稿不调用模型。pause/resume先持久递增control epoch，旧执行者不能继续写入；新epoch只重绑control epoch并复用已验收Artifact，冻结DAG、预算与Creator Start字节不变。同一Build/task的paid charge与结果未知reservation跨Run/epoch累计，恢复不能重置调用、token、费用、时长或存储；durable请求标记之后、真正调用executor之前再次复核当前Production/Build，跨标签页pause/stop不会越过本地可阻止的dispatch边界。v10备份则在导入事务前验证SourcePin/Unit payload、contentHash、owner和闭包，并重映射通用SourcePlan内嵌locator。媒资费用仍由G5-08实际排产，本次Creator Start保持`mediaCostAuthorized: false`。
@@ -3229,6 +3249,7 @@ Session中的高频状态优先作为Event和可重建Projection存在，不建�
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| 1.1.92 | 2026-10-13 | 增加产品化三线合同：从正式任务/产物推导职责、唯一 owner、完成门与局部返修闭包，保留原调度 lane 和历史 Plan；V3 integration-report v2 冻结三线来源快照，发布质量 evidence v2 绑定校准和逐图人工回执；玩家体验统计与分类反馈保持本地只读。无新表、迁移或 AI 权限扩展，旧 v1 按原合同读取。工程验证见实施计划 W0～W8；真实模型、真人及修复发布证据边界保持。 |
 | 1.1.91 | 2026-09-25 | 完成合并后交付复验：8项共享Agent维护条目按登记的18组回归重新验证，完整`npm run ci`通过；继续保留752个测试文件/3929项、86.32%语句覆盖率、生产构建、bundle预算与169项Chromium E2E证据。维护复验不等于真实模型质量验收，G7-11、G7-13与G7-14仍等待作者外部证据。 |
 | 1.1.90 | 2026-09-25 | 合并后正式入口收口：`/openworld/:pageId?`统一进入专属Creator与玩家产品，删除静态UI预览桥接；752个测试文件/3929项、86.32%语句覆盖率、生产构建、bundle预算和169项Chromium E2E通过。完整CI仅受8项既有Agent人工验证时效过期阻断；真实第二模型、真人双结局和修复发布证据仍不得由自动化代签。 |
 | 1.1.89 | 2026-09-21 | 完成G7-15最终自动化交付验证：全仓CI通过699个测试文件、3554项测试、84.49%语句覆盖率、生产构建和bundle闸门。工程与自动化已无待项，最终产品完成仍等待G7-14真实更新证据。 |

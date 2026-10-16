@@ -70,6 +70,12 @@ Eight worktrees have uncommitted status: the five active worktrees above (includ
 
 This run maintains the knowledge base and performs only necessary documentation checks. Product-branch acceptance, model quality, and complete-game quality are outside this run's validation scope. All dated material below remains historical and does not override this section.
 
+## 2026-10-13 · Text open world productization (pending merge)
+
+Branch `feat/text-open-world-productization-20261013` starts at `45c541e9`; audit commit `351bb52f`. Implementation commits: `614fe1ca`, `3216158f`, `ae1b3f3a`, `2505ef9d`, `404f5cf0`. This work adds responsibility and blocker summaries to the existing workspace, versioned assembly reports with source hashes, explicit per-image human review, and local experience-feedback exports. See [Text open world](/en/features/interactive/open-world). There are no new business tables or migrations. Historical v1 reports and releases are preserved; new publication-quality evidence uses v2 to retain calibration and visual-review receipt references.
+
+This is a development branch, not confirmation of a main merge, website deployment, or a new released version. G7-11 independent-model calibration, G7-13 human completion of two endings, and G7-14 a real issue-driven successor release with old-save retesting still require external evidence; G7-15 remains dependent on G7-14. The WPS cloud knowledge base is outside this synchronization.
+
 ## October 12, 2026 · Website experience and navigation delivery
 
 [PR #122](https://github.com/yuanbw2025/storyforge/pull/122) delivers the source for the real website experience: a separate showcase build reuses the project interface, workspaces and examples while isolating browser storage and disabling model configuration and AI calls. The downloaded application retains its creation capabilities. No business tables, migrations or ownership changes are introduced. Website entry points, the teal landscape theme and the public Workshop platform are delivered to the main branch through [platform PR #2](https://github.com/yuanbw2025/storyforge-platform/pull/2).

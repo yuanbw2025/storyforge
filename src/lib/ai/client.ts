@@ -104,7 +104,7 @@ export interface ChatRequestOptions {
   tools?: readonly ChatToolDefinition[]
   toolChoice?: 'auto'
   responseFormat?: 'json_object'
-  /** Explicit DeepSeek mode for bounded structured extraction; other providers ignore it. */
+  /** Explicit mode for bounded extraction on DeepSeek and documented Agnes Flash models. */
   thinkingMode?: 'enabled' | 'disabled'
   jsonSchema?: {
     name: string
@@ -202,6 +202,12 @@ function buildRequest(
     }
     if (config.maxTokens && config.maxTokens > 0) body.max_tokens = config.maxTokens
   } else {
+    // Agnes documents this boolean extension for 2.5/3.0 Flash. Keep it
+    // opt-in so ordinary calls and other providers retain their own defaults.
+    if (config.provider === 'agnes' && options?.thinkingMode
+      && ['agnes-2.5-flash', 'agnes-3.0-flash'].includes(config.model)) {
+      body.chat_template_kwargs = { enable_thinking: options.thinkingMode === 'enabled' }
+    }
     if (config.temperature !== undefined) body.temperature = config.temperature
     // maxTokens > 0 才传，0 = 不限制（由模型自身决定）
     if (config.maxTokens && config.maxTokens > 0) body.max_tokens = config.maxTokens

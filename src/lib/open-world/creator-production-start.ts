@@ -36,6 +36,7 @@ import {
   TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1,
 } from './production-contract'
 import { TEXT_OPEN_WORLD_REQUIRED_KEY_PORTRAIT_COUNT_V1 } from './product-config'
+import { textOpenWorldProductionEstimateProfileV1 } from './production-budget'
 import {
   assertTextOpenWorldNovelSourceCasWitnessCurrentV1,
   createTextOpenWorldNovelSourceCasWitnessV1,
@@ -147,9 +148,10 @@ function sameJson(left: unknown, right: unknown): boolean {
   return canonicalProductProductionJsonV2(left) === canonicalProductProductionJsonV2(right)
 }
 
-async function nestedHashValid(value: unknown, hashKey: string, expectedSchema: string): Promise<boolean> {
+async function nestedHashValid(value: unknown, hashKey: string, expectedSchema: string, versions = [1]): Promise<boolean> {
   const row = record(value, expectedSchema)
-  if (row.schema !== expectedSchema || row.version !== 1 || !isSha256Hash(row[hashKey])) return false
+  if (row.schema !== expectedSchema || typeof row.version !== 'number'
+    || !versions.includes(row.version) || !isSha256Hash(row[hashKey])) return false
   const body = Object.fromEntries(Object.entries(row).filter(([key]) => key !== hashKey))
   return await hashProductProductionValueV2(body) === row[hashKey]
 }
@@ -499,7 +501,7 @@ export async function parseTextOpenWorldCreatorProductionStartV1(input: {
   if (!await nestedHashValid(preflight, 'preflightHash', 'storyforge.text-open-world-creator-production-preflight')
     || !await nestedHashValid(preflight.providerBinding, 'bindingHash', 'storyforge.text-open-world-creator-provider-binding')
     || !await nestedHashValid(preflight.priceQuote, 'quoteHash', 'storyforge.text-open-world-creator-price-quote')
-    || !await nestedHashValid(preflight.estimate, 'estimateHash', 'storyforge.text-open-world-creator-production-estimate')
+    || !await nestedHashValid(preflight.estimate, 'estimateHash', 'storyforge.text-open-world-creator-production-estimate', [1, 2])
     || !await nestedHashValid(confirmation, 'confirmationHash', 'storyforge.text-open-world-creator-production-preflight-confirmation')) {
     fail('Start 内的生产准备快照 Hash 无效')
   }
@@ -652,6 +654,7 @@ export async function createTextOpenWorldCreatorStartPreparationV1(input: {
   const rows = await db.productBuilds.where('productionId').equals(production.id).toArray()
   const buildNumber = Math.max(0, ...rows.map(row => row.buildNumber)) + 1
   const plan = await createTextOpenWorldProductionPlanV1({
+    budgetProfile: textOpenWorldProductionEstimateProfileV1(input.preflight.estimate),
     buildNumber,
     controlEpoch: production.controlEpoch,
     brief: executionBrief,

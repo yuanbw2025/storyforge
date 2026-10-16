@@ -37,6 +37,12 @@ This review confirms that [PR #119](https://github.com/yuanbw2025/storyforge/pul
 
 See [Text adventure](/en/features/interactive/text-adventure), [Backup and restore](/en/guides/backup-restore), and [Compatibility](/en/updates/compatibility). Technical cases and merged code do not establish human acceptance or public release of specific works such as Tidal Bell Isles.
 
+## 2026-10-13 · Text open world productization branch preview
+
+The development branch adds three production responsibility summaries, missing-artifact and usage details, versioned assembly source snapshots, per-image human review, and local player experience records with categorized feedback exports. See the [feature guide](/en/features/interactive/open-world) and [pending work](/en/updates/development-status).
+
+Implementation baseline: `45c541e9`; W0 audit commit: `351bb52f`. Implementation: [614fe1ca](https://github.com/yuanbw2025/storyforge/commit/614fe1ca), [3216158f](https://github.com/yuanbw2025/storyforge/commit/3216158f), [ae1b3f3a](https://github.com/yuanbw2025/storyforge/commit/ae1b3f3a), [2505ef9d](https://github.com/yuanbw2025/storyforge/commit/2505ef9d), [404f5cf0](https://github.com/yuanbw2025/storyforge/commit/404f5cf0). This entry describes branch development, not a merge, deployment, real-model validation, or human acceptance.
+
 ## October 13, 2026 · v4.0.0 local portable release
 
 The [latest release page](https://github.com/yuanbw2025/storyforge/releases/latest) provides Windows x64, Apple Silicon/Intel Mac and Linux x64 portable packages containing the interface, media and Node.js frozen for that release. Extract and launch without npm installation, at the fixed `http://localhost:1111/storyforge/` address. Website and README download links point to the latest release; older releases remain historical records.

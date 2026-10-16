@@ -442,7 +442,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/open-world/evolution-harness.ts:246 · chat`
 - `src/lib/open-world/harness.ts:139 · chat`
 - `src/lib/product-production/authoring-consultation.ts:169 · chat`
-- `src/lib/product-production/capabilities.ts:314 · chat`
+- `src/lib/product-production/capabilities.ts:323 · chat`
 - `src/lib/screenplay/durable-production.ts:449 · chat`
 - `src/lib/ttrpg/gm-actor-harness.ts:481 · chat`
 - `src/lib/ttrpg/gm-harness.ts:542 · chat`
@@ -502,6 +502,18 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `text-open-world.runtime.direction` | `prose.text-open-world-runtime-direction` | `runtime.text-open-world.direction` | formal / product-runtime | `storyforge.text-open-world.runtime-direction-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
 | `text-open-world.runtime.memory` | `prose.text-open-world-runtime-memory` | `runtime.text-open-world.memory` | formal / product-runtime | `storyforge.text-open-world.runtime-memory-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
 
+### 文字开放世界：三线职责与人工边界
+
+从 `src/lib/open-world/responsibility-contract.ts` 生成任务主责；跨线产物的唯一 owner 和消费者以同文件矩阵为准。责任线不是新增 Agent，也不改写原六类调度 lane、冻结计划或模型权限。
+
+| 责任线 | 主责任任务（可选媒资任务仅在冻结计划选用时执行） |
+|---|---|
+| 游戏内容制作 / `game-content` | `p0.source-lock`、`p1.source-curation`、`p2.experience-design`、`p3.story-architecture`、`p4.region-skeleton`、`p5.mainline`、`p6.significant-threads`、`p7.region-narrative-packs`、`p8.quest-skeletons`、`p8f.quest-finalize`、`p9.scene-scripts`、`v2.semantic-review` |
+| 产品系统配置 / `product-system` | `p2.gameplay-ruleset`、`p2.presentation-profile`、`p4.player-build`、`p8.catalog.progression`、`p8.catalog.encounters`、`p8.catalog.items-rewards`、`p8.catalog.crafting-economy`、`p8.catalog.npc-runtime`、`p8.catalog.map-interactions`、`p10.system-finalize`、`v1.deterministic-preflight`、`v2.balance-review`、`v3.runtime-package`、`qa.release` |
+| 媒资生产 / `media` | `media.visual`、`media.audio` |
+
+三线状态只读正式 scheduler/Artifact 证据，V3 在既有校验后冻结来源 Hash。逐图图片确认由作者明确操作，不能由模型或统计代签；本地体验统计只读取当前分支事件与已核验意图候选，不新增模型调用、运行写入或世界回写。参见 [产品化实施计划](roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md)。
+
 ---
 
-生成时间基准:commit `e8ce0a0d`
+生成时间基准:commit `e1dca0d0`

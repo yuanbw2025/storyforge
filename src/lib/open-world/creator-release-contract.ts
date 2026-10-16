@@ -287,15 +287,18 @@ async function validatePortableReleaseQuality(
     verifierKind: 'deterministic' as const,
     inputHashes: [
       evidence.build.packageHash, evidence.build.previewHash, evidence.hardGateReceiptHash,
+      ...(evidence.version === 2 ? [evidence.calibrationReceiptHash!] : []),
       evidence.semanticDecisionReceiptHash, evidence.grayboxReceiptHash, evidence.issueSetHash,
+      ...(evidence.visualReviewReceiptHash ? [evidence.visualReviewReceiptHash] : []),
     ],
     environmentHash: null,
     measuredJson: canonicalProductProductionJsonV2(evidence), status: 'passed' as const,
     thresholdProfileId: RELEASE_QUALITY_POLICY_ID, thresholdProfileVersion: '1',
     evidenceRefs: [
-      evidence.hardGateReceiptHash, evidence.semanticDecisionReceiptHash,
+      evidence.hardGateReceiptHash, ...(evidence.version === 2 ? [evidence.calibrationReceiptHash!] : []), evidence.semanticDecisionReceiptHash,
       evidence.grayboxReceiptHash, ...evidence.issueReceiptHashes,
       ...evidence.issueWaiverReceiptHashes,
+      ...(evidence.visualReviewReceiptHash ? [evidence.visualReviewReceiptHash] : []),
     ],
     createdAt: evidence.completedAt,
   }
@@ -422,6 +425,18 @@ export async function validateTextOpenWorldCreatorReleaseSourceContractsV1(
     || !sameJson(innerSource.resourceHashes, expectedResourceHashes)
     || integrationReport.sourcePinHash !== sourcePin.pinHash) {
     fail('RuntimePackage没有消费精确双来源与SourcePin单元集合')
+  }
+  if (integrationReport.version === 2) {
+    const snapshot = integrationReport.responsibilitySnapshot!
+    for (const track of snapshot.tracks) for (const input of track.inputs) {
+      const receipt = receiptByKey(artifactReceipts, input.artifactKey)
+      if (receipt.version !== input.version || receipt.contentHash !== input.contentHash) {
+        fail('三线快照与冻结 Artifact receipt 不一致')
+      }
+    }
+    if (releaseQuality.evidence.version !== 2
+      || (integrationReport.generatedBindings.generatedMediaArtifactKeys.some(key => key.includes('.visual.'))
+        && !releaseQuality.evidence.visualReviewReceiptHash)) fail('新版装配缺少可移植的校准或逐图人工确认')
   }
   const artifactMatches = (artifactKey: string, contentHash: string) => (
     receiptByKey(artifactReceipts, artifactKey).contentHash === contentHash

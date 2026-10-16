@@ -205,6 +205,13 @@ test('玩家从正式 Release 目录走完整旅程，并在结局刷新后保�
     const attack = combat.getByRole('button', { name: /普通攻击/ })
     await expect(attack).toBeEnabled({ timeout: 60_000 })
     await attack.click()
+    // Victory is durable before the player store finishes its follow-ups and refresh.
+    // Match the combat suite's bounded settlement wait without repeating the action.
+    await expect(page.getByTestId('text-open-world-shell')).not.toHaveAttribute(
+      'aria-busy',
+      'true',
+      { timeout: 120_000 },
+    )
     const result = page.getByTestId('text-open-world-combat-result')
     await expect(result).toContainText('通向断流点的道路恢复安静', { timeout: 60_000 })
     await expect(result).toContainText('渠口伏兽奖励')

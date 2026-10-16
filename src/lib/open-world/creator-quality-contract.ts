@@ -413,7 +413,10 @@ export interface TextOpenWorldCreatorIssueWaiverEvidenceV1 {
 
 export interface TextOpenWorldCreatorReleaseQualityEvidenceV1 {
   schema: 'storyforge.text-open-world-creator-release-quality-evidence'
-  version: 1
+  version: 1 | 2
+  /** Version 2 freezes the calibration and optional visual join for portable verification. */
+  calibrationReceiptHash?: string
+  visualReviewReceiptHash?: string | null
   build: TextOpenWorldCreatorBuildBindingV1
   hardGateReceiptHash: string
   semanticDecisionReceiptHash: string
@@ -1142,11 +1145,16 @@ export function parseTextOpenWorldCreatorReleaseQualityEvidenceV1(value: unknown
     'schema', 'version', 'build', 'hardGateReceiptHash', 'semanticDecisionReceiptHash',
     'grayboxReceiptHash', 'issueReceiptHashes', 'issueWaiverReceiptHashes', 'issueSetHash',
     'status', 'completedAt',
+    ...(row.version === 2 ? ['calibrationReceiptHash', 'visualReviewReceiptHash'] : []),
   ], 'release quality evidence')
-  if (row.schema !== 'storyforge.text-open-world-creator-release-quality-evidence' || row.version !== 1
+  if (row.schema !== 'storyforge.text-open-world-creator-release-quality-evidence' || (row.version !== 1 && row.version !== 2)
     || row.status !== 'passed') fail('release quality evidence 身份或状态无效')
   return {
-    schema: 'storyforge.text-open-world-creator-release-quality-evidence', version: 1,
+    schema: 'storyforge.text-open-world-creator-release-quality-evidence', version: row.version as 1 | 2,
+    ...(row.version === 2 ? {
+      calibrationReceiptHash: hash(row.calibrationReceiptHash, 'calibrationReceiptHash'),
+      visualReviewReceiptHash: row.visualReviewReceiptHash === null ? null : hash(row.visualReviewReceiptHash, 'visualReviewReceiptHash'),
+    } : {}),
     build: parseTextOpenWorldCreatorBuildBindingV1(row.build),
     hardGateReceiptHash: hash(row.hardGateReceiptHash, 'hardGateReceiptHash'),
     semanticDecisionReceiptHash: hash(row.semanticDecisionReceiptHash, 'semanticDecisionReceiptHash'),

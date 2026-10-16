@@ -128,7 +128,9 @@ import {
   readProductProductionRecoveryTaskKeyV1,
 } from '../../lib/product-production/recovery-policy'
 import TextOpenWorldCreatorArtifactBrowser from '../text-game/TextOpenWorldCreatorArtifactBrowser'
+import TextOpenWorldResponsibilityOverview from '../text-game/TextOpenWorldResponsibilityOverview'
 import TextOpenWorldCreatorMediaStudio from '../text-game/TextOpenWorldCreatorMediaStudio'
+import TextOpenWorldVisualReview from '../text-game/TextOpenWorldVisualReview'
 import TextOpenWorldCreatorQualityStudio from '../text-game/TextOpenWorldCreatorQualityStudio'
 import TextOpenWorldCreatorReleaseStudio from '../text-game/TextOpenWorldCreatorReleaseStudio'
 type SupportedProduct = ProductionProductKindV1
@@ -693,6 +695,9 @@ export default function ProductProductionStudio(props: {
   const [campaignProposalRunning, setCampaignProposalRunning] = useState(false)
   const [progress, setProgress] = useState<ProductProductionProgressV1 | null>(null)
   const [taskEvidence, setTaskEvidence] = useState<{ taskKey: string; text: string } | null>(null)
+  const [responsibilityArtifactFocus, setResponsibilityArtifactFocus] = useState<{
+    productionId: number; artifactKey: string; requestId: number
+  } | null>(null)
   const [repairNote, setRepairNote] = useState('')
   const [authorDraftJson, setAuthorDraftJson] = useState('')
   const [contentRevision, setContentRevision] = useState<import('../../lib/types').TextAdventureContentRevisionV1 | null>(null)
@@ -2156,7 +2161,22 @@ export default function ProductProductionStudio(props: {
           <p className="mt-2 text-xs text-text-muted">完整游戏包包含已发布的剧情、角色、规则和图片。玩家存档、制作记录与 API 配置不会进入分发包。</p>
           <button disabled={busy || productionRunning} onClick={exportCommunityGame} className="mt-3 flex items-center gap-2 rounded border border-accent/40 px-4 py-2 text-xs text-accent"><Download className="h-4 w-4" />导出社区游戏包</button>
         </section>}
-        {progress && progress.tasks.length > 0 && <section aria-live="polite" className="mt-5 rounded border border-border bg-bg-elevated p-5">
+        {isTextOpenWorldCreator && details.build && <TextOpenWorldResponsibilityOverview
+          scope={props.scope} productionId={selectedProductionId!} buildId={details.build.id!}
+          refreshToken={`${details.build.id}:${details.build.stateRevision}:${progress?.controlEpoch ?? 0}:${progress?.tasks.map(task => `${task.taskKey}:${task.status}:${task.attempt}`).join('|') ?? ''}`}
+          onInspectTask={taskKey => {
+            void inspectTaskEvidence(taskKey)
+            document.getElementById('open-world-task-evidence')?.scrollIntoView({ block: 'start' })
+          }}
+          onInspectArtifact={artifactKey => {
+            setResponsibilityArtifactFocus(current => ({ productionId: selectedProductionId!,
+              artifactKey, requestId: (current?.requestId ?? 0) + 1 }))
+            const browser = document.getElementById('open-world-artifact-browser')
+            browser?.scrollIntoView({ block: 'start' })
+            browser?.focus({ preventScroll: true })
+          }}
+        />}
+        {progress && progress.tasks.length > 0 && <section id="open-world-task-evidence" aria-live="polite" className="mt-5 rounded border border-border bg-bg-elevated p-5">
           <div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold">自动制作任务</h2><code className="text-[9px] text-text-muted">Build #{progress.buildNumber} · epoch {progress.controlEpoch}</code></div>
           <div className="mt-4 rounded border border-border bg-bg-base p-3" data-testid="product-production-overall-progress"><span className="flex items-center justify-between gap-3 text-[10px]"><strong>总任务进度 {overallTaskProgress.percent}%</strong><span className="text-text-muted">{overallTaskProgress.completed}/{overallTaskProgress.total} 个 durable task 已签收</span></span><progress aria-label="文字冒险总任务进度" className="mt-2 w-full" max={100} value={overallTaskProgress.percent}>{overallTaskProgress.percent}%</progress><p className="mt-2 text-[9px] text-text-muted">{overallTaskProgress.active.length > 0 ? `正在执行：${overallTaskProgress.active.join('、')}` : progress.terminal ? '全部计划任务已完成，等待后续人工发布门。' : '等待依赖或作者处理当前闸门。'}{overallTaskProgress.totalVisual > 0 ? ` · 视觉素材 ${overallTaskProgress.completedVisual}/${overallTaskProgress.totalVisual} 已生成并签收` : ''}</p></div>
           <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3" data-testid="product-production-lane-progress">{laneProgress.map(lane => {
@@ -2267,22 +2287,25 @@ export default function ProductProductionStudio(props: {
           {commercialHumanVisualRequired && <div className="mt-4 rounded border border-border bg-bg-base p-4 text-[10px]" data-testid="text-adventure-human-visual-review"><strong className="block">冻结作者逐图审查</strong><p className="mt-1 leading-5 text-text-muted">回执绑定当前 Build、Preview、需求审计、独立 Visual QA、每张 Artifact/Blob hash。任何图片修订都会使旧回执失效。退回决定也会保存，但不会解锁发布。</p>{!humanVisualReviewReady && <p className="mt-2 text-accent">正在核对当前 Build 的逐图回执…</p>}{humanVisualGateError && <p className="mt-2 text-error">当前回执无法复验：{humanVisualGateError}</p>}{humanVisualGate && <p className={`mt-2 ${humanVisualGate.evidence.passed ? 'text-success' : 'text-error'}`}>最新回执：{humanVisualGate.evidence.passed ? '全部接受' : `${humanVisualGate.evidence.assets.filter(asset => asset.decision === 'rejected').length} 张退回`} · {compactHash(humanVisualGate.gateReceipt.receiptHash)}</p>}<button disabled={busy || productionRunning || !humanVisualReviewReady || visualReviewStatus !== 'passed' || !mediaAuditPassed || !humanVisualDecisionsComplete} onClick={confirmHumanVisualReview} className="mt-3 rounded bg-accent px-4 py-2 text-xs text-white disabled:opacity-40">冻结本次逐图审查回执</button></div>}
         </section>}
         {canEvolve && <section className="mt-5 rounded border border-border bg-bg-elevated p-5"><div className="flex items-center gap-2"><GitBranch className="h-4 w-4 text-accent" /><h2 className="text-sm font-semibold">继续演化下一版</h2></div><p className="mt-2 text-[10px] leading-5 text-text-muted">描述希望增加、延续或改变的体验。旧 Build、Release 和存档不会被改写；提交后先生成新的可审查 Brief，不会直接调用模型。</p><textarea value={evolutionGoal} onChange={event => setEvolutionGoal(event.target.value)} maxLength={2000} rows={4} placeholder="例如：从当前结局继续，让配角成为新主角，增加一条调查旧港失踪案的支线，并保留已经发生的选择后果。" className="mt-4 w-full rounded border border-border bg-bg-base p-3 text-xs text-text-primary" /><fieldset className="mt-3 flex flex-wrap gap-3 text-[10px] text-text-muted"><legend className="mb-2">本轮影响范围（未勾选且依赖未变化的产物可复用）</legend>{([['content', '剧情内容'], ['product', '玩法模块'], ['visual', '美术'], ['audio', '音乐/音效'], ['runtime', '装配/运行时']] as const).map(([lane, label]) => <label key={lane} className="flex items-center gap-1.5"><input type="checkbox" checked={evolutionLanes.includes(lane)} onChange={event => setEvolutionLanes(current => event.target.checked ? [...new Set([...current, lane])] : current.filter(item => item !== lane))} />{label}</label>)}</fieldset><button disabled={busy || productionRunning || !evolutionGoal.trim() || evolutionLanes.length === 0} onClick={evolve} className="mt-3 flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-accent disabled:opacity-40"><GitBranch className="h-3.5 w-3.5" />生成下一轮 Brief</button></section>}
-        {isTextOpenWorldCreator && details.build && <TextOpenWorldCreatorArtifactBrowser
+        {isTextOpenWorldCreator && details.build && <div id="open-world-artifact-browser" tabIndex={-1}><TextOpenWorldCreatorArtifactBrowser
           scope={props.scope}
           productionId={selectedProductionId!}
+          focusArtifact={responsibilityArtifactFocus?.productionId === selectedProductionId ? responsibilityArtifactFocus : null}
           refreshToken={`${details.build.id}:${details.build.stateRevision}:${progress?.controlEpoch ?? 0}:${progress?.tasks.map(task => `${task.taskKey}:${task.status}:${task.attempt}`).join('|') ?? ''}`}
           onRepairBuildCreated={() => refresh(details.production.id)}
-        />}
+        /></div>}
         {isTextOpenWorldCreator && details.build
           && details.production.status === 'preview-ready'
           && ['preview-ready', 'release-ready'].includes(details.build.status)
-          && <TextOpenWorldCreatorMediaStudio
+          && <><TextOpenWorldCreatorMediaStudio
             scope={props.scope}
             productionId={selectedProductionId!}
             buildId={details.build.id!}
             disabled={busy || productionRunning}
             onChanged={() => refresh(details.production.id)}
-          />}
+          /><TextOpenWorldVisualReview scope={props.scope} productionId={selectedProductionId!}
+            buildId={details.build.id!} disabled={busy || productionRunning}
+            onChanged={() => refresh(details.production.id)} /></>}
         {isTextOpenWorldCreator && details.build
           && ((details.production.status === 'preview-ready'
             && ['preview-ready', 'release-ready'].includes(details.build.status))

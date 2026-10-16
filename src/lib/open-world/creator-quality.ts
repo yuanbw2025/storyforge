@@ -1,4 +1,14 @@
 import { db } from '../db/schema'
+import { readMediaBlobObjectData } from '../product-production/media-blob-store'
+import {
+  inspectTextOpenWorldVisualConsistencyV1,
+  parseTextOpenWorldVisualReviewEvidenceV1,
+  TEXT_OPEN_WORLD_VISUAL_REVIEW_GATE_V1,
+  TEXT_OPEN_WORLD_VISUAL_REVIEW_POLICY_V1,
+  type TextOpenWorldVisualDecisionV1,
+  type TextOpenWorldVisualReviewAssetV1,
+  type TextOpenWorldVisualReviewEvidenceV1,
+} from './creator-visual-review-contract'
 import { resolveRequestConfig } from '../ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -1531,6 +1541,7 @@ async function readReleaseQualityReceipt(input: {
   semanticReceipt: VerifiedReceiptV1<TextOpenWorldCreatorSemanticDecisionEvidenceV1> | null
   grayboxReceipt: VerifiedReceiptV1<TextOpenWorldCreatorGrayboxEvidenceV1> | null
   issueSet: Awaited<ReturnType<typeof currentIssueSet>>
+  visual: Awaited<ReturnType<typeof visualReviewGate>>
 }): Promise<VerifiedReceiptV1<TextOpenWorldCreatorReleaseQualityEvidenceV1> | null> {
   const receipt = await latestFixedReceipt({
     authority: input.authority, gateId: TEXT_OPEN_WORLD_CREATOR_RELEASE_QUALITY_GATE_ID_V1,
@@ -1538,9 +1549,13 @@ async function readReleaseQualityReceipt(input: {
     statuses: ['passed'], parseEvidence: parseTextOpenWorldCreatorReleaseQualityEvidenceV1,
   })
   if (!receipt || !input.hardReceipt || !input.calibrationReceipt
-    || input.calibrationReceipt.status !== 'passed' || !input.semanticReceipt || !input.grayboxReceipt) return null
+    || input.calibrationReceipt.status !== 'passed' || !input.semanticReceipt || !input.grayboxReceipt
+    || (input.visual.required && input.visual.receipt?.status !== 'passed')) return null
   const evidence = receipt.evidence
   if (!bindingEquals(evidence.build, input.authority.buildBinding)
+    || (input.visual.required && evidence.version !== 2)
+    || (evidence.version === 2 && (evidence.calibrationReceiptHash !== input.calibrationReceipt.receiptHash
+      || evidence.visualReviewReceiptHash !== (input.visual.receipt?.receiptHash ?? null)))
     || evidence.hardGateReceiptHash !== input.hardReceipt.receiptHash
     || evidence.semanticDecisionReceiptHash !== input.semanticReceipt.receiptHash
     || evidence.grayboxReceiptHash !== input.grayboxReceipt.receiptHash
@@ -1552,11 +1567,13 @@ async function readReleaseQualityReceipt(input: {
       input.authority.build.packageHash, input.authority.build.previewHash,
       input.hardReceipt.receiptHash, input.calibrationReceipt.receiptHash, input.semanticReceipt.receiptHash,
       input.grayboxReceipt.receiptHash, input.issueSet.issueSetHash,
+      ...(input.visual.receipt ? [input.visual.receipt.receiptHash] : []),
     ])
     || !stringListsEqual(receipt.gateReceipt.evidenceRefs, [
       input.hardReceipt.receiptHash, input.calibrationReceipt.receiptHash, input.semanticReceipt.receiptHash,
       input.grayboxReceipt.receiptHash, ...input.issueSet.issueReceiptHashes,
       ...input.issueSet.issueWaiverReceiptHashes,
+      ...(input.visual.receipt ? [input.visual.receipt.receiptHash] : []),
     ])
     || receipt.gateReceipt.environmentHash !== null
     || receipt.gateReceipt.createdAt !== evidence.completedAt) return null
@@ -1566,6 +1583,7 @@ async function readReleaseQualityReceipt(input: {
 async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): Promise<{
   workspace: TextOpenWorldCreatorQualityWorkspaceV1
   internal: {
+    visual: Awaited<ReturnType<typeof visualReviewGate>>
     issues: Awaited<ReturnType<typeof readIssues>>
     hardReceipt: VerifiedReceiptV1<TextOpenWorldCreatorHardGateEvidenceV1> | null
     calibrationReceipt: VerifiedReceiptV1<TextOpenWorldCreatorCalibrationEvidenceV1> | null
@@ -1605,6 +1623,7 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
     readCalibrationReceipt(authority), readSemanticDecisionReceipt(authority), readGrayboxReceipt(authority),
   ])
   const issueSet = await currentIssueSet(issues)
+  const visual = await visualReviewGate(authority)
   const fullPlaytestReceipt = await readFullPlaytestReceipt({ authority, calibrationReceipt, issueSet })
   const updateState = await updateVerificationContextV1({
     authority, targetFullPlaytest: fullPlaytestReceipt,
@@ -1613,10 +1632,11 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
     authority, context: updateState.context,
   })
   const releaseReceipt = await readReleaseQualityReceipt({
-    authority, hardReceipt, calibrationReceipt, semanticReceipt, grayboxReceipt, issueSet,
+    authority, hardReceipt, calibrationReceipt, semanticReceipt, grayboxReceipt, issueSet, visual,
   })
   const modelFindings = authority.reviews.flatMap(review => review.findings)
   const blockers: string[] = []
+  if (visual.required && visual.receipt?.status !== 'passed') blockers.push('当前 Build 的逐图人工确认尚未通过，请在媒资审查中处理')
   if (authority.hardChecks.some(check => !check.passed)) blockers.push('存在未通过且不可豁免的代码硬门')
   if (authority.reviews.some(review => review.verdict !== 'pass')) blockers.push('平衡或叙事模型评审仍要求新Build修复')
   if (!calibrationReceipt) blockers.push(calibrationState.readiness.ready
@@ -1658,7 +1678,7 @@ async function readQualityWorkspaceWithAuthority(authority: BuildAuthorityV1): P
       blockers,
     },
     internal: {
-      issues, hardReceipt, calibrationReceipt, semanticReceipt, grayboxReceipt,
+      issues, hardReceipt, calibrationReceipt, semanticReceipt, grayboxReceipt, visual,
       fullPlaytestReceipt, updateContext: updateState.context, updateVerificationReceipt,
       releaseReceipt, issueSet,
     },
@@ -2450,6 +2470,9 @@ export async function finalizeTextOpenWorldCreatorQualityV1(input: {
   if (authority.reviews.some(review => review.verdict !== 'pass'
     || review.findings.some(finding => finding.severity === 'blocking'))) fail('模型评审仍有阻断项，必须创建新Build修复')
   const before = await readQualityWorkspaceWithAuthority(authority)
+  if (before.internal.visual.required && before.internal.visual.receipt?.status !== 'passed') {
+    fail('必须先完成当前 Build 全部图片的人工确认')
+  }
   if (!before.internal.calibrationReceipt || before.internal.calibrationReceipt.status !== 'passed') {
     fail('必须先通过当前Build的独立叙事、重复度、时长与成本校准')
   }
@@ -2506,7 +2529,9 @@ export async function finalizeTextOpenWorldCreatorQualityV1(input: {
     createdAt: confirmedAt,
   })
   const releaseEvidence = parseTextOpenWorldCreatorReleaseQualityEvidenceV1({
-    schema: 'storyforge.text-open-world-creator-release-quality-evidence', version: 1,
+    schema: 'storyforge.text-open-world-creator-release-quality-evidence', version: 2,
+    calibrationReceiptHash: before.internal.calibrationReceipt.receiptHash,
+    visualReviewReceiptHash: before.internal.visual.receipt?.receiptHash ?? null,
     build: authority.buildBinding,
     hardGateReceiptHash: hardReceipt.receiptHash,
     semanticDecisionReceiptHash: semanticReceipt.receiptHash,
@@ -2521,11 +2546,13 @@ export async function finalizeTextOpenWorldCreatorQualityV1(input: {
     verifierId: 'storyforge.creator-release-quality-join', verifierKind: 'deterministic',
     inputHashes: [authority.build.packageHash, authority.build.previewHash, hardReceipt.receiptHash,
       before.internal.calibrationReceipt.receiptHash, semanticReceipt.receiptHash,
-      before.internal.grayboxReceipt.receiptHash, before.internal.issueSet.issueSetHash],
+      before.internal.grayboxReceipt.receiptHash, before.internal.issueSet.issueSetHash,
+      ...(before.internal.visual.receipt ? [before.internal.visual.receipt.receiptHash] : [])],
     environmentHash: null, evidence: releaseEvidence, status: 'passed', policyId: RELEASE_QUALITY_POLICY_ID,
     evidenceRefs: [hardReceipt.receiptHash, before.internal.calibrationReceipt.receiptHash, semanticReceipt.receiptHash,
       before.internal.grayboxReceipt.receiptHash, ...before.internal.issueSet.issueReceiptHashes,
-      ...before.internal.issueSet.issueWaiverReceiptHashes],
+      ...before.internal.issueSet.issueWaiverReceiptHashes,
+      ...(before.internal.visual.receipt ? [before.internal.visual.receipt.receiptHash] : [])],
     createdAt: confirmedAt,
   })
   const pendingRows = [hardReceipt, semanticReceipt, releaseReceipt].map(receipt => pendingReceiptRow(authority, receipt))
@@ -2539,6 +2566,12 @@ export async function finalizeTextOpenWorldCreatorQualityV1(input: {
   ), async () => {
     await assertAuthorityRowsUnchangedInTransaction(authority)
     const currentAll = await db.productQualityGateReceipts.where('buildId').equals(authority.build.id).toArray()
+    if (before.internal.visual.required) {
+      const latestVisual = currentAll.filter(row => row.gateId === TEXT_OPEN_WORLD_VISUAL_REVIEW_GATE_V1)
+        .sort((a, b) => b.createdAt - a.createdAt || (b.id ?? -1) - (a.id ?? -1))[0]
+      if (!latestVisual || latestVisual.status !== 'passed'
+        || latestVisual.receiptHash !== before.internal.visual.receipt?.receiptHash) fail('逐图确认在冻结发布质量前变化')
+    }
     const currentIssues = currentAll.filter(row => row.gateId.startsWith(TEXT_OPEN_WORLD_CREATOR_ISSUE_GATE_PREFIX_V1)
       || row.gateId.startsWith(TEXT_OPEN_WORLD_CREATOR_ISSUE_WAIVER_GATE_PREFIX_V1))
     if (canonicalRows(currentIssues) !== issueRowsSnapshot) fail('问题/豁免集合在冻结发布质量前变化')
@@ -2587,4 +2620,136 @@ export function portableTextOpenWorldCreatorIssueJsonV1(issue: TextOpenWorldCrea
     waiver: issue.waiver ? parseTextOpenWorldCreatorIssueWaiverEvidenceV1(issue.waiver.evidence) : null,
     waiverReceiptHash: issue.waiver?.receiptHash ?? null,
   })
+}
+
+async function visualReviewInputs(authority: BuildAuthorityV1) {
+  if (!authority.hardChecks.find(check => check.gateKey === 'creator-artifacts.production-validated')?.passed) {
+    fail('图片审查需要当前 Build 的完整产物验证')
+  }
+  const requirementRow = authority.artifacts.find(row => row.artifactKey === 'text-open-world.media-requirements')
+    ?? fail('图片审查缺少冻结媒资需求')
+  const requirements = JSON.parse(requirementRow.payloadJson) as import('../types').TextOpenWorldMediaRequirementsV1
+  const rows = authority.artifacts.filter(row => row.controlEpoch === authority.build.controlEpoch
+    && /^text-open-world\.media\.visual\.\d{3}$/.test(row.artifactKey))
+    .sort((a, b) => a.artifactKey.localeCompare(b.artifactKey))
+  const assets = rows.map(row => {
+    const metadata = object(JSON.parse(row.metadataJson), 'media metadata')
+    const slot = requirements.slots.find(item => item.subjectKey === metadata.sceneTag
+      && ['character-portrait', 'scene-background', 'ui-skin'].includes(item.kind))
+      ?? fail(`图片没有内容主体绑定:${row.artifactKey}`)
+    if (row.blobObjectId == null || !row.mimeType) fail('图片缺少物理媒资')
+    if (slot.subjectKind === 'actor' && metadata.characterTag && metadata.characterTag !== slot.subjectKey) {
+      fail(`角色图片身份与消费绑定不一致:${row.artifactKey}`)
+    }
+    const characterKey = slot.subjectKind === 'actor' ? slot.subjectKey
+      : requirements.coverage.requiredActorKeys.includes(String(metadata.characterTag)) ? String(metadata.characterTag) : null
+    const evidence: TextOpenWorldVisualReviewAssetV1 = {
+      artifactKey: row.artifactKey, contentHash: row.contentHash, subjectKey: slot.subjectKey,
+      characterKey, alt: String(metadata.altText ?? ''), width: Number(metadata.width),
+      height: Number(metadata.height), mimeType: row.mimeType, source: String(metadata.source ?? ''),
+      license: String(metadata.license ?? ''),
+    }
+    return { ...evidence, blobObjectId: row.blobObjectId, byteSize: row.byteSize }
+  })
+  const consistency = await inspectTextOpenWorldVisualConsistencyV1(assets.map(({ blobObjectId: _blob, byteSize: _bytes, ...asset }) => asset))
+  return { assets, consistency }
+}
+
+async function readVisualReview(authority: BuildAuthorityV1, visual: Awaited<ReturnType<typeof visualReviewInputs>>) {
+  const assetsHash = visual.consistency.assetsHash
+  const receipt = await latestFixedReceipt({
+    authority, gateId: TEXT_OPEN_WORLD_VISUAL_REVIEW_GATE_V1,
+    verifierId: 'storyforge.author-visual-review', policyId: TEXT_OPEN_WORLD_VISUAL_REVIEW_POLICY_V1,
+    statuses: ['passed', 'failed'], parseEvidence: parseTextOpenWorldVisualReviewEvidenceV1,
+  })
+  if (receipt && (!bindingEquals(receipt.evidence.build, authority.buildBinding)
+    || receipt.evidence.assetsHash !== assetsHash || receipt.gateReceipt.verifierKind !== 'human-evidence'
+    || !stringListsEqual(receipt.gateReceipt.inputHashes, [authority.build.packageHash, assetsHash])
+    || receipt.status !== (receipt.evidence.passed ? 'passed' : 'failed')
+    || receipt.createdAt !== receipt.evidence.confirmedAt || receipt.row.createdAt !== receipt.createdAt
+    || receipt.gateReceipt.environmentHash !== null
+    || !stringListsEqual(receipt.evidence.decisions.map(item => item.artifactKey), visual.assets.map(item => item.artifactKey))
+    || !stringListsEqual(receipt.gateReceipt.evidenceRefs, [...new Set(visual.assets.map(item => item.contentHash))]))) fail('逐图回执已失效或绑定错误')
+  return receipt
+}
+
+async function visualReviewGate(authority: BuildAuthorityV1) {
+  const integration = authority.artifacts.find(row => row.artifactKey === 'text-open-world.integration-report')
+  const required = !!integration && JSON.parse(integration.payloadJson).version === 2
+    && authority.artifacts.some(row => row.artifactKey.startsWith('text-open-world.media.visual.'))
+  if (!required) return { required: false, receipt: null }
+  const visual = await visualReviewInputs(authority)
+  const receipt = await readVisualReview(authority, visual)
+  return { required: true, receipt: visual.consistency.issues.length ? null : receipt }
+}
+
+export async function readTextOpenWorldVisualReviewWorkspaceV1(input: {
+  scope: WorkspaceScope; productionId: number; buildId: number
+}) {
+  const authority = await loadBuildAuthority({ ...input, expectedBuildId: input.buildId })
+  const visual = await visualReviewInputs(authority)
+  const receipt = await readVisualReview(authority, visual)
+  return {
+    build: authority.buildBinding, ...visual, receipt: publicReceipt(receipt),
+    immutableRelease: authority.build.status === 'released',
+  }
+}
+
+export async function recordTextOpenWorldVisualReviewV1(input: {
+  scope: WorkspaceScope; productionId: number; buildId: number
+  expectedAssetsHash: string
+  decisions: TextOpenWorldVisualDecisionV1[]
+  characterConsistencyConfirmed: true
+  imagesActuallyViewed: true
+  noAutomationProxy: true
+}) {
+  const authority = await loadBuildAuthority({ ...input, expectedBuildId: input.buildId })
+  if (authority.build.status === 'released') fail('已发布 Build 的视觉确认保留原回执；需要变更请创建子 Build')
+  const visual = await visualReviewInputs(authority)
+  if (input.expectedAssetsHash !== visual.consistency.assetsHash || visual.consistency.issues.length > 0) {
+    fail('图片集合已变化或基础一致性检查未通过')
+  }
+  const decisionKeys = input.decisions.map(item => item.artifactKey).sort((left, right) => left.localeCompare(right))
+  if (!stringListsEqual(decisionKeys, visual.assets.map(item => item.artifactKey))) {
+    fail('必须对当前全部图片逐一确认，不能漏项或重复')
+  }
+  const evidence = parseTextOpenWorldVisualReviewEvidenceV1({
+    schema: 'storyforge.text-open-world-visual-review', version: 1, build: authority.buildBinding,
+    assetsHash: visual.consistency.assetsHash,
+    decisions: input.decisions.map(item => ({ ...item, note: item.note.trim() }))
+      .sort((a, b) => a.artifactKey.localeCompare(b.artifactKey)),
+    characterConsistencyConfirmed: input.characterConsistencyConfirmed,
+    imagesActuallyViewed: input.imagesActuallyViewed, noAutomationProxy: input.noAutomationProxy,
+    passed: input.decisions.every(item => item.decision === 'approved'), confirmedAt: Date.now(),
+  } satisfies TextOpenWorldVisualReviewEvidenceV1)
+  const blobs = await Promise.all(visual.assets.map(async asset => {
+    const bytes = await readMediaBlobObjectData({ scope: authority.scope, blobObjectId: asset.blobObjectId,
+      expected: { contentHash: asset.contentHash, mimeType: asset.mimeType, byteSize: asset.byteSize } })
+    const row = await db.mediaBlobObjects.get(asset.blobObjectId) ?? fail('图片物理数据不存在')
+    return { row, bytes, expectedBytes: new Uint8Array(bytes) }
+  }))
+  const receipt = await createGateReceipt({
+    gateId: TEXT_OPEN_WORLD_VISUAL_REVIEW_GATE_V1, verifierId: 'storyforge.author-visual-review',
+    verifierKind: 'human-evidence', inputHashes: [authority.build.packageHash, evidence.assetsHash],
+    environmentHash: null, evidence, status: evidence.passed ? 'passed' : 'failed',
+    policyId: TEXT_OPEN_WORLD_VISUAL_REVIEW_POLICY_V1, evidenceRefs: visual.assets.map(asset => asset.contentHash),
+    createdAt: evidence.confirmedAt,
+  })
+  const pending = pendingReceiptRow(authority, receipt)
+  await db.transaction('rw', scopeTransactionTables(db.productProductions, db.productProductionBriefs,
+    db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects, db.productQualityGateReceipts), async () => {
+    await assertAuthorityRowsUnchangedInTransaction(authority)
+    for (const witness of blobs) {
+      const row = await db.mediaBlobObjects.get(witness.row.id!)
+      const { data: _expectedData, ...expectedMetadata } = witness.row
+      const { data: _currentData, ...currentMetadata } = row ?? {}
+      if (!row || canonicalProductProductionJsonV2(currentMetadata) !== canonicalProductProductionJsonV2(expectedMetadata)
+        || (row.backend === 'indexeddb' && (!row.data || row.data.byteLength !== witness.bytes.byteLength
+          || new Uint8Array(row.data).some((value, index) => value !== witness.expectedBytes[index])))) {
+        fail('逐图确认前媒资已变化')
+      }
+    }
+    await db.productQualityGateReceipts.add(pending)
+  })
+  return readTextOpenWorldVisualReviewWorkspaceV1(input)
 }

@@ -32,6 +32,10 @@ import {
 import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
 import { validateTextOpenWorldSourceCurationArtifactsV1 } from './source-curation'
 import { TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1 } from './production-contract'
+import {
+  hasTextOpenWorldBoundedRepairBudgetV1,
+  textOpenWorldProductionResourceProfileV1,
+} from './production-budget'
 import type {
   ProductBuildArtifactRecordV1,
   ProductProductionBriefV3,
@@ -1227,7 +1231,17 @@ export function createTextOpenWorldExperienceDesignExecutorV1(options: {
     if (!binding) fail('P2缺少文本capability binding')
     const context = await parseExperienceContext(execution.contextText)
     const createdAt = timestamp(now(), 'createdAt')
-    const gameBrief = await compileGameBrief({ context, calibration, createdAt })
+    const effectiveCalibration = structuredClone(calibration)
+    if (options.calibration == null && hasTextOpenWorldBoundedRepairBudgetV1(context.brief.productionBudget)) {
+      const profile = textOpenWorldProductionResourceProfileV1('bounded-repair-v1')
+      effectiveCalibration.aiBudget.production = {
+        maximumCalls: profile.maximumCalls,
+        maximumInputTokens: profile.maximumInputTokens,
+        maximumOutputTokens: profile.maximumOutputTokens,
+        maximumEstimatedCostUsd: profile.maximumEstimatedCostUsd,
+      }
+    }
+    const gameBrief = await compileGameBrief({ context, calibration: effectiveCalibration, createdAt })
     const startedAt = performance.now()
     const response = await runModel({
       projectId: execution.scope.projectId,

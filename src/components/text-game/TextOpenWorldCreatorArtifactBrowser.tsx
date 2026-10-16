@@ -37,6 +37,7 @@ export interface TextOpenWorldCreatorArtifactBrowserProps {
   scope: WorkspaceScope
   productionId: number
   refreshToken?: string | number
+  focusArtifact?: { artifactKey: string; requestId: number } | null
   onRepairBuildCreated?: (result: {
     productionId: number
     baseBuildNumber: number
@@ -304,6 +305,17 @@ export function TextOpenWorldCreatorArtifactBrowser(
     setSelectedLocator(null)
     setMobileDetail(false)
   }, [identityKey])
+
+  useEffect(() => {
+    if (!props.focusArtifact) return
+    setMode('artifacts')
+    setQuery(props.focusArtifact.artifactKey)
+    setKind('all')
+    setStatus('all')
+    setPageNumber(1)
+    setSelectedLocator(null)
+    setMobileDetail(false)
+  }, [props.focusArtifact])
 
   useEffect(() => {
     void load()

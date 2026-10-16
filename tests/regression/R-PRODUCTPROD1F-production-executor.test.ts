@@ -6748,6 +6748,8 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
     ])
   }, 60_000)
 
+  // This exercises the full production DAG, runtime traversal and reassembly.
+  // Match the full revision scenarios below in CI, where coverage exceeds the local wall-clock budget.
   it('60 分钟文字冒险按 Brief 产出足量主线、空间、支线、区域事件并通过内容量硬门', async () => {
     const owned = await fixtureForProduct('text-adventure', {
       scale: 'short-arc', visualLevel: 'none', omitWorldArtifacts: true,
@@ -7955,7 +7957,7 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       scope: owned.scope, productionId: owned.productionId, buildId: reassembled.buildId,
     })
     expect(modelCallCount).toBe(modelCallCountBeforeReassembly + 1)
-  }, 120_000)
+  }, process.env.CI ? 240_000 : 120_000)
 
   it('保留独立叙事审查证据，并在存在阻塞问题时拒绝装配可玩包', async () => {
     const owned = await fixtureForProduct('text-adventure', { visualLevel: 'none', maximumModelCalls: 64 })
@@ -8291,12 +8293,30 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).count()).toBe(1)
   }, 120_000)
 
-  // Each product owns an independent fixture and timeout. The unpublished
-  // recovery path is already covered by the 60-minute adventure above;
-  // this matrix additionally verifies recovery of the published adventure.
+  // Produce a complete parent through the real DAG once. Each later recovery
+  // case restores its own database through the public backup/import and durable
+  // proof-recovery paths, instead of repeating identical parent model work.
+  // A filtered standalone case still creates the full parent itself.
+  let revisionParent: {
+    backup: Awaited<ReturnType<typeof exportProjectJSON>>
+    productionKey: string
+    packageHash: string | null
+    manifestHash: string | null
+  } | null = null
   it.each(['pause', 'review-retry', 'dialogue-repair', 'quality-repair', 'quality-child-revision'] as const)('文字修订从完整生产 Build 派生，%s 恢复后零图片调用保留原图并采纳新正文', async recoveryMode => {
     const productType = 'text-adventure' as ProductionProductKindV1
-    const owned = await fixtureForProduct(productType, { pluginRules: productType === 'ttrpg' })
+    const restoreParent = revisionParent
+    const owned = await (async () => {
+      if (!restoreParent) return fixtureForProduct(productType, { pluginRules: productType === 'ttrpg' })
+      const projectId = await importProjectJSON(structuredClone(restoreParent.backup))
+      const scope = (await resolveWorkspaceOwnership(projectId)).scope
+      const production = await db.productProductions.where('projectId').equals(projectId)
+        .filter(row => row.productionKey === restoreParent.productionKey).first()
+      expect(production).toMatchObject({ worldId: scope.worldId, workId: scope.workId })
+      const brief = await db.productProductionBriefs.where('[productionId+revision]')
+        .equals([production!.id!, production!.currentBriefRevision!]).first()
+      return { scope, productionId: production!.id!, brief: parseProductProductionBriefV3(brief!.briefJson) }
+    })()
     const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
     expect(owned.brief.capabilityRequirements.filter(item => item.mediaClass !== 'text'))
       .toHaveLength(productType === 'text-adventure' ? 1 : 0)
@@ -8413,9 +8433,21 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       ],
     })
 
-    const projection = await executeBuild()
+    const projection = restoreParent
+      ? await recoverImportedProductProductionProofsV1({ scope: owned.scope, productionId: owned.productionId })
+      : await executeBuild()
     expect(projection.buildStatus).toBe('release-ready')
     const before = (await db.productBuilds.get(projection.buildId))!
+    if (restoreParent) {
+      expect(before).toMatchObject({ packageHash: restoreParent.packageHash, manifestHash: restoreParent.manifestHash })
+    } else {
+      revisionParent = {
+        backup: await exportProjectJSON(owned.scope.projectId),
+        productionKey: (await db.productProductions.get(owned.productionId))!.productionKey,
+        packageHash: before.packageHash,
+        manifestHash: before.manifestHash,
+      }
+    }
     // Represent a mixed parent library: author-imported images legitimately
     // have no AI producer. The batch command must authorize their exact bytes.
     const parentImages = (await db.productBuildArtifacts.where('buildId').equals(before.id!).toArray())

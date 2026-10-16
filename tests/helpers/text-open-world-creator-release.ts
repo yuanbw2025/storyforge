@@ -1,4 +1,7 @@
 import { db } from '../../src/lib/db/schema'
+import { TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1 } from '../../src/lib/open-world/production-contract'
+import { freezeTextOpenWorldResponsibilitySnapshotV1 } from '../../src/lib/open-world/responsibility-assembly'
+import type { ProductProductionTaskExecutionInputV1 } from '../../src/lib/product-production/scheduler'
 import {
   createTextOpenWorldCreatorReleaseAuthorizationV1,
   createTextOpenWorldCreatorReleaseLineageV1,
@@ -71,6 +74,7 @@ function sortedReceipts(rows: TextOpenWorldCreatorReleaseArtifactReceiptV1[]) {
 
 export async function createTextOpenWorldCreatorReleaseFixtureV1(
   sourceKind: 'world-release' | 'novel' = 'world-release',
+  qualityVersion: 1 | 2 = 1,
 ) {
   const sourceWorkspace = sourceKind === 'world-release'
     ? await seedCurrentProductWorld(`Creator Release World ${crypto.randomUUID()}`)
@@ -192,8 +196,30 @@ export async function createTextOpenWorldCreatorReleaseFixtureV1(
     runtimePackageHash, sourcePinHash: pinBundle.pin.pinHash, ...reportHashes,
     coverageEvidenceHash, rightsEvidenceHash,
   })
+  // Version 2 exercises the assembly-to-portable-release join as well as quality.
+  // Hash-only synthetic artifact witnesses are not author production evidence.
+  const assemblyTask = TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1.find(task => task.taskKey === 'v3.runtime-package')!
+  const inputHashes: Record<string, string> = {
+    'text-open-world.source-pin': pinBundle.pin.pinHash,
+    'text-open-world.system-configs': reportHashes.systemConfigsHash,
+    'text-open-world.deterministic-preflight': reportHashes.deterministicPreflightHash,
+    'text-open-world.balance-review': reportHashes.balanceReviewHash,
+    'text-open-world.semantic-review': reportHashes.semanticReviewHash,
+  }
+  const assemblyReceipts = qualityVersion === 2 ? assemblyTask.inputArtifactKeys.map(artifactKey => ({
+    artifactKey, version: 1, contentHash: inputHashes[artifactKey] ?? '0'.repeat(64), producerReceiptHash: 'd'.repeat(64),
+  })) : []
+  const build = (await db.productBuilds.get(creator.buildId))!
+  const responsibilitySnapshot = qualityVersion === 2 ? await freezeTextOpenWorldResponsibilitySnapshotV1({
+    scope: creator.scope, buildId: creator.buildId, controlEpoch: build.controlEpoch, planHash: build.planHash,
+    task: assemblyTask,
+    inputArtifacts: assemblyReceipts.map(receipt => ({ ...receipt, ...creator.scope,
+      buildId: creator.buildId, controlEpoch: build.controlEpoch, status: 'accepted', inputHash: 'a'.repeat(64),
+    })),
+  } as unknown as ProductProductionTaskExecutionInputV1, pinBundle.pin.pinHash) : undefined
   const reportBody: Omit<TextOpenWorldIntegrationReportV1, 'integrationReportHash'> = {
-    schema: 'storyforge.text-open-world-integration-report', version: 1,
+    schema: 'storyforge.text-open-world-integration-report', version: qualityVersion,
+    ...(responsibilitySnapshot ? { responsibilitySnapshot } : {}),
     productType: 'text-open-world', productInstanceKey: creator.productionKey,
     runtimePackageHash, sourcePinHash: pinBundle.pin.pinHash, ...reportHashes,
     modules: moduleRows,
@@ -224,7 +250,8 @@ export async function createTextOpenWorldCreatorReleaseFixtureV1(
   }
   const completedAt = frozenAt + 3
   const qualityEvidence: TextOpenWorldCreatorReleaseQualityEvidenceV1 = {
-    schema: 'storyforge.text-open-world-creator-release-quality-evidence', version: 1,
+    schema: 'storyforge.text-open-world-creator-release-quality-evidence', version: qualityVersion,
+    ...(qualityVersion === 2 ? { calibrationReceiptHash: '2'.repeat(64), visualReviewReceiptHash: '3'.repeat(64) } : {}),
     build: buildBinding, hardGateReceiptHash: '9'.repeat(64),
     semanticDecisionReceiptHash: 'a'.repeat(64), grayboxReceiptHash: 'b'.repeat(64),
     issueReceiptHashes: [], issueWaiverReceiptHashes: [], issueSetHash: 'c'.repeat(64),
@@ -236,12 +263,15 @@ export async function createTextOpenWorldCreatorReleaseFixtureV1(
     verifierId: 'storyforge.creator-release-quality-join', verifierVersion: '1',
     verifierKind: 'deterministic' as const,
     inputHashes: [runtimePackageHash, buildBinding.previewHash, qualityEvidence.hardGateReceiptHash,
-      qualityEvidence.semanticDecisionReceiptHash, qualityEvidence.grayboxReceiptHash, qualityEvidence.issueSetHash],
+      ...(qualityVersion === 2 ? [qualityEvidence.calibrationReceiptHash!] : []),
+      qualityEvidence.semanticDecisionReceiptHash, qualityEvidence.grayboxReceiptHash, qualityEvidence.issueSetHash,
+      ...(qualityVersion === 2 ? [qualityEvidence.visualReviewReceiptHash!] : [])],
     environmentHash: null, measuredJson: canonicalProductProductionJsonV2(qualityEvidence),
     status: 'passed' as const, thresholdProfileId: RECEIPT_POLICY_ID,
     thresholdProfileVersion: '1',
-    evidenceRefs: [qualityEvidence.hardGateReceiptHash, qualityEvidence.semanticDecisionReceiptHash,
-      qualityEvidence.grayboxReceiptHash], createdAt: completedAt,
+    evidenceRefs: [qualityEvidence.hardGateReceiptHash,
+      ...(qualityVersion === 2 ? [qualityEvidence.calibrationReceiptHash!] : []), qualityEvidence.semanticDecisionReceiptHash,
+      qualityEvidence.grayboxReceiptHash, ...(qualityVersion === 2 ? [qualityEvidence.visualReviewReceiptHash!] : [])], createdAt: completedAt,
   }
   const releaseQuality = {
     rowId: 1, gateId: TEXT_OPEN_WORLD_CREATOR_RELEASE_QUALITY_GATE_ID_V1,
@@ -249,6 +279,7 @@ export async function createTextOpenWorldCreatorReleaseFixtureV1(
     evidence: qualityEvidence, createdAt: completedAt,
   }
   const artifactReceipts = sortedReceipts([
+    ...assemblyReceipts.filter(receipt => receipt.artifactKey !== 'text-open-world.source-pin'),
     { artifactKey: 'text-open-world.source-pin', version: 1, contentHash: pinBundle.pin.pinHash, producerReceiptHash: 'd'.repeat(64) },
     { artifactKey: 'text-open-world.source-manifest', version: 1, contentHash: sourceManifest.manifestHash, producerReceiptHash: 'e'.repeat(64) },
     { artifactKey: 'text-open-world.integration-report', version: 1, contentHash: integrationReport.integrationReportHash, producerReceiptHash: 'f'.repeat(64) },

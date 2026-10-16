@@ -14,6 +14,7 @@ import {
 } from '../../src/lib/open-world/production-contract'
 import { AGENT_RUN_MAXIMUM_RESUME_PAYLOAD_BYTES_V1 } from '../../src/lib/agent/run/checkpoint-contract'
 import { inspectTextOpenWorldProductionPlanAuthorityV1 } from '../../src/lib/open-world/production-authority'
+import { textOpenWorldProductionResourceProfileV1 } from '../../src/lib/open-world/production-budget'
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { createProductProductionPlanV3 } from '../../src/lib/product-production/plan'
@@ -152,6 +153,40 @@ function recoveryDetails(
 }
 
 describe('R-OPEN-WORLD3 · product production contract and P0-P10 DAG', () => {
+  it('显式修复档位拥有实际重试调用预算，旧计划保持不变且混合档位不能获得authority', async () => {
+    const legacyBrief = brief()
+    const legacy = await createTextOpenWorldProductionPlanV1({
+      buildNumber: 1, brief: legacyBrief, briefHash: await hashProductProductionValueV2(legacyBrief),
+    })
+    const resources = textOpenWorldProductionResourceProfileV1('bounded-repair-v1')
+    const extendedBrief = brief({ maximumModelCalls: resources.maximumCalls })
+    Object.assign(extendedBrief.productionBudget, {
+      maximumInputTokens: resources.maximumInputTokens, maximumOutputTokens: resources.maximumOutputTokens,
+      maximumCostUsd: resources.maximumEstimatedCostUsd, maximumDurationMs: resources.maximumDurationMs,
+      maximumStorageBytes: resources.maximumStorageBytes,
+    })
+    const extended = await createTextOpenWorldProductionPlanV1({
+      buildNumber: 1, brief: extendedBrief, briefHash: await hashProductProductionValueV2(extendedBrief),
+      budgetProfile: 'bounded-repair-v1',
+    })
+    expect(inspectTextOpenWorldProductionPlanAuthorityV1(extended).valid).toBe(true)
+    expect(inspectTextOpenWorldProductionPlanAuthorityV1(legacy).valid).toBe(true)
+    for (const task of extended.tasks.filter(task => task.executionMode === 'model')) {
+      const old = legacy.tasks.find(item => item.taskKey === task.taskKey)!
+      expect(task.maxAttempts).toBe(old.maxAttempts)
+      expect(task.budgetReservation.modelCalls).toBe(old.budgetReservation.modelCalls * old.maxAttempts)
+    }
+    extended.tasks.find(task => task.taskKey === 'p2.experience-design')!.budgetReservation.modelCalls = 1
+    expect(inspectTextOpenWorldProductionPlanAuthorityV1(extended).valid).toBe(false)
+    expect(await createTextOpenWorldProductionPlanV1({
+      buildNumber: 1, brief: legacyBrief, briefHash: await hashProductProductionValueV2(legacyBrief),
+    })).toEqual(legacy)
+    await expect(createTextOpenWorldProductionPlanV1({
+      buildNumber: 1, brief: legacyBrief, briefHash: await hashProductProductionValueV2(legacyBrief),
+      budgetProfile: 'bounded-repair-v1',
+    })).rejects.toThrow(/完整资源上限/)
+  })
+
   it('为每个阶段、Artifact和Run边界声明唯一事实源', () => {
     const tasks = validateTextOpenWorldProductionTaskContractsV1()
     const blueprint = createTextOpenWorldProductionRunContractBlueprintV1()

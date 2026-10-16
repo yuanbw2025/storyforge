@@ -391,6 +391,18 @@ describe('TOW-G5-03 · production readiness UI', () => {
     expect(JSON.stringify(onConfirmed.mock.calls[0]?.[0])).not.toContain(SECRET_KEY)
     expect(host.textContent).toContain('Build 仍为 0')
     await expect(productionCounts()).resolves.toEqual(before)
+    await act(async () => {
+      const selector = host.querySelector<HTMLSelectElement>('select[aria-label="生产预算档位"]')!
+      selector.value = 'bounded-repair-v1'
+      selector.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await waitFor(() => expect(host.textContent).toContain('374 / 400'))
+    expect(host.textContent).toContain('6,000,000')
+    expect(host.textContent).toContain('1,800,000')
+    expect(checkbox(host, '我已核对价格来源').checked).toBe(false)
+    expect(button(host, '确认当前模型与预算').disabled).toBe(true)
+    expect(onConfirmed).toHaveBeenCalledTimes(1)
+    await expect(productionCounts()).resolves.toEqual(before)
   })
 
   it('未知 provider/model 默认要求手工报价并以 blocker 关闭确认', async () => {
@@ -425,6 +437,38 @@ describe('TOW-G5-03 · production readiness UI', () => {
     for (const secret of [SECRET_KEY, SECRET_USER, SECRET_PASSWORD, '/v1', SECRET_QUERY]) {
       expect(host.innerHTML).not.toContain(secret)
     }
+    await expect(productionCounts()).resolves.toEqual(before)
+  })
+
+  it('Agnes 账户免计费需显式选择，配置变化会撤销确认且预检不写入生产', async () => {
+    const currentConfig = {
+      ...useAIConfigStore.getState().config,
+      provider: 'agnes' as const, model: 'agnes-2.5-flash', baseUrl: 'https://apihub.agnes-ai.com/v1',
+    }
+    useAIConfigStore.setState({ config: currentConfig })
+    const before = await productionCounts()
+    const onConfirmed = vi.fn()
+    await act(async () => root.render(createElement(TextOpenWorldCreatorProductionReadiness, {
+      session: await session(), onBack: vi.fn(), onConfirmed,
+    })))
+    const label = '我确认当前 Agnes 账户的本次文本调用免计费'
+    await waitFor(() => expect(checkbox(host, label).checked).toBe(false))
+    expect(button(host, '确认当前模型与预算').disabled).toBe(true)
+    await act(async () => checkbox(host, label).click())
+    await waitFor(() => expect(host.textContent).toContain('$0.0000 / $30.00'))
+    expect(host.textContent).toContain('不代表供应商对所有账户永久免费')
+    expect(host.textContent).toContain('187 / 200')
+    for (const acknowledgement of [
+      '我理解 Key 只由全局凭证设置持有', '我确认当前提供商、模型、安全端点域名',
+      '我已核对价格来源', '我理解本次金额只覆盖文本模型',
+    ]) await act(async () => checkbox(host, acknowledgement).click())
+    await act(async () => button(host, '确认当前模型与预算').click())
+    await waitFor(() => expect(onConfirmed).toHaveBeenCalledTimes(1))
+    expect(onConfirmed.mock.calls[0]?.[1].priceQuote.source).toBe('author-confirmed-account-zero')
+    await act(async () => useAIConfigStore.setState({ config: { ...currentConfig, model: 'agnes-2.5-pro' } }))
+    await waitFor(() => expect(checkbox(host, label).checked).toBe(false))
+    expect(button(host, '确认当前模型与预算').disabled).toBe(true)
+    expect(host.innerHTML).not.toContain(SECRET_KEY)
     await expect(productionCounts()).resolves.toEqual(before)
   })
 

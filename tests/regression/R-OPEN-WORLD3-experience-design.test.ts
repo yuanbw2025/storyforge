@@ -377,7 +377,7 @@ function experienceRunner(options: { forgedClaim?: boolean } = {}): TextOpenWorl
   }
 }
 
-async function fixture() {
+async function fixture(productionBudget: Partial<ProductProductionBriefV3['productionBudget']> = {}) {
   const owned = await seedCurrentProductWorld(`TOW P2 ${crypto.randomUUID()}`)
   const suggestions = await suggestProductStartingPoints({
     scope: owned.scope,
@@ -402,6 +402,7 @@ async function fixture() {
     tone: ['边地悬疑', '成长冒险'],
   })
   draft.scale.targetEndingCount = 2
+  Object.assign(draft.productionBudget, productionBudget)
   const brief = parseProductProductionBriefV3(draft)
   const productionKey = `tow.p2.${crypto.randomUUID()}`
   const created = await executeProductProductionCommand({
@@ -3180,6 +3181,22 @@ async function executeQualityReview(
 describe('R-OPEN-WORLD3 · P2 GameBrief / ExperienceContract / ProtagonistAsset', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
+
+  it('完整有限修复预算能进入P2，单独抬高输入上限仍被拒绝', async () => {
+    const productionBudget = {
+      maximumModelCalls: 400, maximumInputTokens: 6_000_000, maximumOutputTokens: 1_800_000,
+      maximumCostUsd: 100, maximumDurationMs: 21_600_000, maximumStorageBytes: 200_000_000,
+    }
+    const input = await fixture(productionBudget)
+    expect(resultArtifacts(await executeP2(input)).gameBrief.effectiveProductionBudget).toMatchObject(productionBudget)
+    const mixed = await fixture({ maximumInputTokens: 6_000_000 })
+    let calls = 0
+    await expect(executeP2(mixed, async request => {
+      calls += 1
+      return experienceRunner()(request)
+    })).rejects.toThrow(/产品硬上限/)
+    expect(calls).toBe(0)
+  })
 
   it('从作者授权Brief和P1证据编译固定产品边界，再由模型补充体验语义', async () => {
     const input = await fixture()
@@ -6511,11 +6528,13 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
     let p1Calls = 0
     let p1ModelAttempts = 0
     const p1OutputBudgets: number[] = []
+    const p1Systems: string[] = []
     const groundedCuration = curationRunner(input.brief.intent.protagonistRefs[0]!)
     const p1Executor = createTextOpenWorldSourceCurationExecutorV1({
       runModel: async request => {
         p1ModelAttempts += 1
         p1OutputBudgets.push(request.maximumOutputTokens)
+        p1Systems.push(request.system)
         const response = await groundedCuration(request)
         return p1ModelAttempts === 1
           ? { ...response, output: JSON.stringify({ schema: 'invalid-first-p1-response' }) }
@@ -6574,6 +6593,9 @@ describe('R-OPEN-WORLD3 · V3运行包装配与QA', () => {
       },
     })).rejects.toThrow('injected-open-world-process-crash')
     expect(p1Calls).toBe(2)
+    expect(p1Systems[0]).not.toContain('<validation-feedback>')
+    expect(p1Systems[1]).toContain('<validation-feedback>')
+    expect(p1Systems[1]).toContain('curation')
     expect(p1OutputBudgets[1]).toBeLessThan(p1OutputBudgets[0]!)
     let projection
     try {

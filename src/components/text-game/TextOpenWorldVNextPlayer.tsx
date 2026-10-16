@@ -72,6 +72,7 @@ import TextOpenWorldScenePanel, {
 } from './TextOpenWorldScenePanel'
 import TextOpenWorldSaveSettingsPanel from './TextOpenWorldSaveSettingsPanel'
 import TextOpenWorldWorldRecordPanel from './TextOpenWorldWorldRecordPanel'
+import TextOpenWorldExperienceFeedback from './TextOpenWorldExperienceFeedback'
 
 const QUEST_STATUS_LABELS = {
   revealed: '可接取',
@@ -1097,6 +1098,8 @@ export default function TextOpenWorldVNextPlayer() {
       role="status"
       data-testid="text-open-world-world-record-synchronizing"
     >世界记录正在核对，完成前不会展示不完整或尚未揭示的内容。</article>}
+    {session?.id != null && <TextOpenWorldExperienceFeedback key={session.id} sessionId={session.id}
+      scope={{ projectId: session.projectId, worldId: session.worldId, workId: session.workId }} />}
     <TextOpenWorldRuntimeAIStatusPanel
       configured={isAIConfigReady(aiConfig)}
       loading={runtimeAIObservabilityLoading}

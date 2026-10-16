@@ -5,6 +5,7 @@ import {
   resolveRequestConfig,
   type AIRequestConfigResolution,
   type ChatResult,
+  type ChatRequestOptions,
 } from '../ai/client'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../ai/config-readiness'
 import type { AIConfig, ChatMessage } from '../types'
@@ -48,6 +49,7 @@ interface CapabilityDependenciesV1 {
     meta: { category: string; projectId: number; maxTokens: number },
     signal?: AbortSignal,
     result?: ChatResult,
+    options?: ChatRequestOptions,
   ) => Promise<string>
 }
 
@@ -283,6 +285,7 @@ export async function runConfiguredProductionTextV1(input: {
   signal?: AbortSignal
   result?: ChatResult
   responseFormat?: 'json_object'
+  thinkingMode?: ChatRequestOptions['thinkingMode']
 }, dependencies: CapabilityDependenciesV1 = {}): Promise<{
   output: string
   bindingReceipt: ProviderBindingReceiptV1
@@ -292,6 +295,12 @@ export async function runConfiguredProductionTextV1(input: {
   }
   const category = normalizeProductProductionTextCategoryV1(input.category)
   const resolved = await resolveConfiguredTextCapabilityV1({ ...input, category }, dependencies)
+  const requestOptions: ChatRequestOptions | undefined = input.responseFormat || input.thinkingMode
+    ? {
+        ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}),
+        ...(input.thinkingMode ? { thinkingMode: input.thinkingMode } : {}),
+      }
+    : undefined
   let output: string
   if (dependencies.runAI) {
     if (input.result) {
@@ -299,7 +308,7 @@ export async function runConfiguredProductionTextV1(input: {
     }
     output = await dependencies.runAI(input.messages, resolved.config, {
       category, projectId: input.projectId, maxTokens: input.maximumOutputTokens,
-    }, input.signal, input.result)
+    }, input.signal, input.result, requestOptions)
     if (input.result) {
       input.result.requestLifecycle = { phase: 'response-observed', responseStatus: 200 }
     }
@@ -316,7 +325,7 @@ export async function runConfiguredProductionTextV1(input: {
       projectId: input.projectId,
       configOverrides: { maxTokens: input.maximumOutputTokens },
       contextOverflowPolicy: 'reject',
-    }, input.signal, input.result, input.responseFormat ? { responseFormat: input.responseFormat } : undefined,
+    }, input.signal, input.result, requestOptions,
     frozenResolution)
   }
   return { output, bindingReceipt: resolved.receipt }

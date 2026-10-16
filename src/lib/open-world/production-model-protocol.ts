@@ -195,6 +195,7 @@ export const runTextOpenWorldConfiguredProductionModelV1: TextOpenWorldProductio
     signal: input.signal,
     result,
     responseFormat: 'json_object',
+    thinkingMode: 'disabled',
   })
   return {
     output: response.output,

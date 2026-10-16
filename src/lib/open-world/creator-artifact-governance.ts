@@ -2089,8 +2089,10 @@ async function projectTextOpenWorldArtifactGovernanceTrustedV1(
     }
     view.schema = typeof payloadRecord.schema === 'string' ? payloadRecord.schema : null
     const expectedSchema = expectedArtifactSchema(row.kind)
-    if (payloadRecord.schema !== expectedSchema || payloadRecord.version !== 1) {
-      artifactIssue(view, 'artifact.schema', `Artifact payload 应为 ${expectedSchema} v1`)
+    const supportedVersion = payloadRecord.version === 1
+      || (row.kind === 'text-open-world.integration-report' && payloadRecord.version === 2)
+    if (payloadRecord.schema !== expectedSchema || !supportedVersion) {
+      artifactIssue(view, 'artifact.schema', `Artifact payload 的 ${expectedSchema} 版本不受支持`)
       continue
     }
     if (typeof payloadRecord.productInstanceKey === 'string'

@@ -2252,6 +2252,31 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     })).rejects.toThrow()
   })
 
+  it('已知派发前阻断保留零新增用量，不生成未知费用预留或自动重发', async () => {
+    const owned = await fixture('scheduler-before-dispatch-budget')
+    let executions = 0
+    const result = await runProductProductionUntilBlockedV1({
+      scope: owned.scope, productionId: owned.productionId,
+      executor: async () => {
+        executions++
+        throw new ProductProductionDraftRejectedErrorV1('P1 剩余预算不足，请重新规划', {
+          modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0,
+          costUsd: 0, durationMs: 0, storageBytes: 0,
+        })
+      },
+      capabilityBindings: [{ requirementKey: owned.brief.capabilityRequirements[0].requirementKey,
+        adapterId: 'configured-text-provider.v1', bindingHash: 'a'.repeat(64) }],
+    })
+    expect(executions).toBe(1)
+    expect(result.budget.usage).toMatchObject({ modelCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 })
+    const build = await db.productBuilds.get(result.buildId)
+    const ledger = JSON.parse(build!.budgetLedgerJson)
+    expect(ledger.attempts).toEqual([expect.objectContaining({
+      outcome: 'failed', usageKnown: true, errorCode: 'task-draft-rejected',
+      usage: expect.objectContaining({ modelCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 }),
+    })])
+  })
+
   it.each([
     new AIError(401, 'invalid token'),
     new AICompletionResponseErrorV1('empty', 'content=0; finish=length'),

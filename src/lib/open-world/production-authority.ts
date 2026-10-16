@@ -20,7 +20,9 @@ import {
   TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1,
   TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1,
   createTextOpenWorldProductionPlanV1,
+  textOpenWorldProductionTaskContractsForBudgetV1,
 } from './production-contract'
+import { textOpenWorldProductionEstimateProfileV1 } from './production-budget'
 import { readTextOpenWorldCreatorExecutionBriefV1 } from './creator-production-start'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
@@ -139,7 +141,13 @@ export function inspectTextOpenWorldProductionPlanAuthorityV1(
   plan: ProductProductionPlanV3,
 ): TextOpenWorldProductionPlanAuthorityV1 {
   const result = new Map<string, TextOpenWorldProductionTaskAuthorityV1>()
-  const contracts = TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1
+  const repairContracts = textOpenWorldProductionTaskContractsForBudgetV1('bounded-repair-v1')
+  // Recognize one complete official profile, never a task-by-task mixture.
+  // Durable authority below still rebuilds it from the signed Start estimate.
+  const contracts = repairContracts.filter(task => task.executionMode === 'model').every(contract => (
+    plan.tasks.find(task => task.taskKey === contract.taskKey)?.budgetReservation.modelCalls
+      === contract.recommendedModelCalls
+  )) ? repairContracts : TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1
   const contractByKey = new Map(contracts.map(contract => [contract.taskKey, contract]))
   const taskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))
   const extras = plan.tasks.filter(task => !contractByKey.has(task.taskKey))
@@ -316,6 +324,7 @@ async function verifyTextOpenWorldProductionPlanAuthorityV1(input: {
       planJson: build.planJson,
     })
     const expectedInitialPlan = await createTextOpenWorldProductionPlanV1({
+      budgetProfile: textOpenWorldProductionEstimateProfileV1(contracts.start.preflight.estimate),
       buildNumber: build.buildNumber,
       controlEpoch: contracts.start.productionPlanControlEpoch,
       brief: contracts.executionBrief,

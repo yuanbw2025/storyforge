@@ -567,6 +567,7 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     const integrationReport = await validateTextOpenWorldIntegrationReportV1({
       runtimePackage: preview.runtimePackage,
       report: integrationValue as TextOpenWorldIntegrationReportV1,
+      expectedPlanHash: build.planHash,
     })
     if (sourceManifestArtifact.contentHash !== creatorSourceManifest.manifestHash
       || integrationArtifact.contentHash !== integrationReport.integrationReportHash) {
@@ -672,6 +673,8 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     creatorReleaseAuthority?.releaseQuality.evidence.hardGateReceiptHash ?? null,
     creatorReleaseAuthority?.releaseQuality.evidence.semanticDecisionReceiptHash ?? null,
     creatorReleaseAuthority?.releaseQuality.evidence.grayboxReceiptHash ?? null,
+    creatorReleaseAuthority?.releaseQuality.evidence.calibrationReceiptHash ?? null,
+    creatorReleaseAuthority?.releaseQuality.evidence.visualReviewReceiptHash ?? null,
     ...(creatorReleaseAuthority?.releaseQuality.evidence.issueReceiptHashes ?? []),
     ...(creatorReleaseAuthority?.releaseQuality.evidence.issueWaiverReceiptHashes ?? []),
   ].filter((value): value is string => value != null)

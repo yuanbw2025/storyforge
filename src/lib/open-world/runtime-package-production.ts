@@ -1,6 +1,11 @@
 import { hashProductProductionValueV2, isSha256Hash } from '../product-production/hash'
 import { parseProductBuildQualityReportV1 } from '../product-production/adoption'
 import { parseProductProductionBriefV3 } from '../product-production/contracts'
+import {
+  assertTextOpenWorldAssemblyInputsV1,
+  freezeTextOpenWorldResponsibilitySnapshotV1,
+  validateTextOpenWorldResponsibilitySnapshotV1,
+} from './responsibility-assembly'
 import { readMediaBlobObjectData } from '../product-production/media-blob-store'
 import { parseProductRuntimePackageV1 } from '../product-production/runtime-package'
 import { db } from '../db/schema'
@@ -1108,6 +1113,7 @@ export async function compileTextOpenWorldRuntimePackageV1(input: {
   execution: ProductProductionTaskExecutionInputV1
   createdAt?: number
 }): Promise<{ runtimePackage: ProductRuntimePackageV1; report: TextOpenWorldIntegrationReportV1 }> {
+  assertTextOpenWorldAssemblyInputsV1(input.execution)
   await validateV3ArtifactClosure(input.execution)
   const artifacts = readV3Artifacts(input.execution)
   validateV3HashChain(artifacts)
@@ -1286,7 +1292,8 @@ export async function compileTextOpenWorldRuntimePackageV1(input: {
     rightsEvidenceHash: rightsReport.rightsEvidenceHash,
   })
   const reportBody: Omit<TextOpenWorldIntegrationReportV1, 'integrationReportHash'> = {
-    schema: 'storyforge.text-open-world-integration-report', version: 1,
+    schema: 'storyforge.text-open-world-integration-report', version: 2,
+    responsibilitySnapshot: await freezeTextOpenWorldResponsibilitySnapshotV1(input.execution, artifacts.sourcePin.pinHash),
     productType: 'text-open-world', productInstanceKey: artifacts.gameBrief.productInstanceKey,
     runtimePackageHash, sourcePinHash: artifacts.sourcePin.pinHash,
     systemConfigsHash: artifacts.system.systemConfigsHash,
@@ -1333,9 +1340,10 @@ function qddHasStart(qdd: TextOpenWorldQuestDesignDocumentsV1): true {
 export async function validateTextOpenWorldIntegrationReportV1(input: {
   runtimePackage: ProductRuntimePackageV1
   report: TextOpenWorldIntegrationReportV1
+  expectedPlanHash?: string
 }): Promise<TextOpenWorldIntegrationReportV1> {
   const { runtimePackage, report } = input
-  if (report.schema !== 'storyforge.text-open-world-integration-report' || report.version !== 1
+  if (report.schema !== 'storyforge.text-open-world-integration-report' || ![1, 2].includes(report.version)
     || report.productType !== 'text-open-world' || !runtimePackage.textOpenWorldVNext
     || report.productInstanceKey !== runtimePackage.definition.productKey) fail('IntegrationReport身份无效')
   const reportBody = { ...report }
@@ -1346,6 +1354,13 @@ export async function validateTextOpenWorldIntegrationReportV1(input: {
   }
   const packageHash = await hashProductProductionValueV2(runtimePackage)
   if (packageHash !== report.runtimePackageHash) fail('IntegrationReport与RuntimePackage Hash不一致')
+  if (report.version === 2) {
+    if (input.expectedPlanHash && report.responsibilitySnapshot?.planHash !== input.expectedPlanHash) fail('三线快照不属于当前冻结计划')
+    await validateTextOpenWorldResponsibilitySnapshotV1(report.responsibilitySnapshot, {
+      sourcePinHash: report.sourcePinHash,
+      generatedMediaArtifactKeys: report.generatedBindings.generatedMediaArtifactKeys,
+    })
+  } else if (report.responsibilitySnapshot !== undefined) fail('旧版 IntegrationReport 不得冒充三线快照')
   const parsedModules = parseTextOpenWorldModulesV1(runtimePackage.textOpenWorldVNext)
   const moduleKeys = new Set(report.modules.map(item => item.moduleKey))
   if (report.modules.length !== TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1.length
@@ -1473,6 +1488,7 @@ export function createTextOpenWorldReleaseQaExecutorV1(): ProductProductionTaskE
     const report = await validateTextOpenWorldIntegrationReportV1({
       runtimePackage,
       report: payload<TextOpenWorldIntegrationReportV1>(execution, 'text-open-world.integration-report'),
+      expectedPlanHash: execution.planHash,
     })
     const packageHash = await hashProductProductionValueV2(runtimePackage)
     const hardEvidence: Record<string, { passed: boolean; evidence: string[] }> = {

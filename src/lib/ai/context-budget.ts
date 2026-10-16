@@ -92,8 +92,12 @@ export const MODEL_CONTEXT_PRESETS: Record<string, ModelContextPreset> = {
   // Agnes AI（官方模型目录 2026-07-30；2.0 的临时 1M 窗口已撤回）
   'agnes': { label: 'Agnes 默认', maxContext: 524_288, maxOutput: 65_536 },
   'agnes:agnes-2.5-flash': { label: 'Agnes 2.5 Flash', maxContext: 524_288, maxOutput: 65_536 },
+  // https://agnes-ai.com/en/docs/agnes-30-flash (verified 2026-10-17)
+  'agnes:agnes-3.0-flash': { label: 'Agnes 3.0 Flash', maxContext: 524_288, maxOutput: 65_536 },
   'agnes:agnes-2.5-pro': { label: 'Agnes 2.5 Pro', maxContext: 524_288, maxOutput: 65_536 },
   'agnes:agnes-2.5-pro-alpha': { label: 'Agnes 2.5 Pro Alpha', maxContext: 524_288, maxOutput: 65_536 },
+  // https://agnes-ai.com/en/docs/agnes-25-pro-beta (verified 2026-10-17)
+  'agnes:agnes-2.5-pro-beta': { label: 'Agnes 2.5 Pro Beta', maxContext: 1_000_000, maxOutput: 65_536 },
   'agnes:agnes-2.0-flash': { label: 'Agnes 2.0 Flash', maxContext: 262_144, maxOutput: 65_536 },
 
   // LongCat(美团 · OpenAI 兼容 · 1M 上下文)

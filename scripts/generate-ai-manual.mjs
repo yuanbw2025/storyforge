@@ -269,6 +269,25 @@ function extractFormalAIEntries() {
   return registry.entries
 }
 
+function extractOpenWorldResponsibilities() {
+  const source = parseSource('src/lib/open-world/responsibility-contract.ts')
+  const objects = new Map()
+  visit(source, node => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)
+      && node.initializer && ts.isObjectLiteralExpression(node.initializer)) {
+      objects.set(node.name.text, node.initializer)
+    }
+  })
+  const labels = objects.get('TEXT_OPEN_WORLD_RESPONSIBILITY_LABELS_V1')
+  const tasks = objects.get('TASK_TRACKS')
+  if (!labels || !tasks) throw new Error('开放世界责任合同缺少可生成的标签或任务映射')
+  return labels.properties.map(property => {
+    const key = propertyName(property)
+    return { key, label: stringValue(property.initializer), tasks: tasks.properties
+      .filter(task => stringValue(task.initializer) === key).map(propertyName) }
+  })
+}
+
 function buildMarkdown() {
   const keys = extractModuleKeys()
   const seeds = extractSeeds()
@@ -383,6 +402,19 @@ function buildMarkdown() {
     const callers = entry.allowedCallers.map(item => `\`${item}\``).join('<br/>')
     lines.push(`| \`${entry.entryId}\` | \`${entry.skillId}\` | ${categories} | ${entry.entryKind} / ${entry.executionBoundary} | \`${entry.candidateKind}\` | ${targets} | ${callers} |`)
   }
+  lines.push('')
+
+  lines.push('### 文字开放世界：三线职责与人工边界')
+  lines.push('')
+  lines.push('从 `src/lib/open-world/responsibility-contract.ts` 生成任务主责；跨线产物的唯一 owner 和消费者以同文件矩阵为准。责任线不是新增 Agent，也不改写原六类调度 lane、冻结计划或模型权限。')
+  lines.push('')
+  lines.push('| 责任线 | 主责任任务（可选媒资任务仅在冻结计划选用时执行） |')
+  lines.push('|---|---|')
+  for (const track of extractOpenWorldResponsibilities()) {
+    lines.push('| ' + track.label + ' / `' + track.key + '` | ' + track.tasks.map(key => '`' + key + '`').join('、') + ' |')
+  }
+  lines.push('')
+  lines.push('三线状态只读正式 scheduler/Artifact 证据，V3 在既有校验后冻结来源 Hash。逐图图片确认由作者明确操作，不能由模型或统计代签；本地体验统计只读取当前分支事件与已核验意图候选，不新增模型调用、运行写入或世界回写。参见 [产品化实施计划](roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md)。')
   lines.push('')
 
   lines.push('---')

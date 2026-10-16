@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { createTextOpenWorldInstance } from '../../src/lib/product/runtime-instances'
+import { validateTextOpenWorldCreatorReleaseSourceContractsV1 } from '../../src/lib/open-world/creator-release-contract'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { verifyProductReleaseManifestV1 } from '../../src/lib/product-production/runtime-package'
 import type { ProductRelease } from '../../src/lib/types'
@@ -16,6 +17,22 @@ afterAll(async () => {
 })
 
 describe('TOW-G5-10 · Creator不可变Release合同', () => {
+  it('version 2 assembly and quality retain exact artifact versions and review hashes through portable verification', async () => {
+    const fixture = await createTextOpenWorldCreatorReleaseFixtureV1('world-release', 2)
+    expect(fixture.integrationReport.version).toBe(2)
+    expect(fixture.integrationReport.responsibilitySnapshot?.tracks).toHaveLength(3)
+    await expect(verifyProductReleaseManifestV1(fixture.manifest)).resolves.toEqual(fixture.manifest)
+    const mismatched = structuredClone(fixture.sourceContracts)
+    mismatched.artifactReceipts.find(row => row.artifactKey === 'text-open-world.system-configs')!.version++
+    mismatched.artifactSetHash = await hashProductProductionValueV2(mismatched.artifactReceipts)
+    await expect(validateTextOpenWorldCreatorReleaseSourceContractsV1(mismatched, fixture.runtimePackage))
+      .rejects.toThrow('三线快照与冻结 Artifact receipt 不一致')
+    const original = JSON.stringify(fixture.manifest)
+    fixture.manifest.sourceContracts.releaseQuality.evidence.visualReviewReceiptHash = null
+    await expect(verifyProductReleaseManifestV1(fixture.manifest)).rejects.toThrow()
+    await expect(verifyProductReleaseManifestV1(JSON.parse(original))).resolves.toBeDefined()
+  }, 60_000)
+
   it.each(['world-release', 'novel'] as const)(
     '冻结 %s 来源、Artifact、装配、质量和作者授权，并能从Release创建正式Session',
     async sourceKind => {

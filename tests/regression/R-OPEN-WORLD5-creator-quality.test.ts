@@ -1,7 +1,10 @@
+import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
   finalizeTextOpenWorldCreatorQualityV1,
+  readTextOpenWorldVisualReviewWorkspaceV1,
+  recordTextOpenWorldVisualReviewV1,
   portableTextOpenWorldCreatorIssueJsonV1,
   readTextOpenWorldCreatorQualityWorkspaceV1,
   recordTextOpenWorldCreatorFullPlaytestV1,
@@ -864,5 +867,81 @@ describe('TOW-G5-09 · Creator质量、灰盒和问题回执', () => {
         migrationPreviewHash: '5'.repeat(64),
       },
     })).toThrow(/破坏性更新不能声明存档迁移/)
+  })
+})
+
+// Synthetic receipts exercise persistence only; no real human acceptance is claimed.
+describe('W6 versioned visual review gate', () => {
+  async function visualFixture(imageCount = 1) {
+    const seeded = await fixture({ advisories: false })
+    const template = (await db.productBuildArtifacts.where('buildId').equals(seeded.buildId).first())!
+    const blob = await putMediaBlobObject({ scope: seeded.scope, mimeType: 'image/png', backend: 'indexeddb',
+      data: new Uint8Array([137, 80, 78, 71, 1, 2, 3]).buffer })
+    const actorKeys = Array.from({ length: imageCount }, (_, index) => index === 0 ? 'actor.guide' : `actor.guide-${index + 1}`)
+    const inputs = [
+      { artifactKey: 'text-open-world.integration-report', payload: { version: 2 } },
+      { artifactKey: 'text-open-world.media-requirements', payload: { slots: actorKeys.map(subjectKey => ({ subjectKind: 'actor', subjectKey, kind: 'character-portrait' })), coverage: { requiredActorKeys: actorKeys } } },
+      ...actorKeys.map((_, index) => ({ artifactKey: `text-open-world.media.visual.${String(index + 1).padStart(3, '0')}`, payload: {} })),
+    ]
+    for (const item of inputs) {
+      const { id: _id, ...base } = template
+      const media = item.artifactKey.includes('.visual.')
+      const actorKey = actorKeys[Number(item.artifactKey.split('.').at(-1)) - 1]
+      await db.productBuildArtifacts.add({ ...base, artifactKey: item.artifactKey, kind: item.artifactKey,
+        contentHash: media ? blob.contentHash : await hashProductProductionValueV2(item.payload),
+        payloadJson: JSON.stringify(item.payload), blobObjectId: media ? blob.id! : null,
+        mimeType: media ? 'image/png' : null, byteSize: media ? blob.byteSize : 1,
+        metadataJson: media ? JSON.stringify({ sceneTag: actorKey, characterTag: actorKey, altText: '向导头像',
+          width: 16, height: 16, source: 'synthetic-test', license: 'test-only' }) : '{}',
+      })
+      governance.artifactKeys.push(item.artifactKey)
+    }
+    return seeded
+  }
+  it('accepts a complete review in the author selection order but still rejects missing or duplicate decisions', async () => {
+    const seeded = await visualFixture(2)
+    const workspace = await readTextOpenWorldVisualReviewWorkspaceV1(seeded)
+    const decisions = workspace.assets.map(asset => ({ artifactKey: asset.artifactKey, decision: 'approved' as const, note: '' })).reverse()
+    const input = { ...seeded, expectedAssetsHash: workspace.consistency.assetsHash, decisions,
+      characterConsistencyConfirmed: true as const, imagesActuallyViewed: true as const, noAutomationProxy: true as const }
+    await expect(recordTextOpenWorldVisualReviewV1({ ...input, decisions: decisions.slice(0, 1) })).rejects.toThrow('全部图片')
+    await expect(recordTextOpenWorldVisualReviewV1({ ...input, decisions: [decisions[0], decisions[0]] })).rejects.toThrow('全部图片')
+    expect(await db.productQualityGateReceipts.where('buildId').equals(seeded.buildId).count()).toBe(0)
+    const saved = await recordTextOpenWorldVisualReviewV1(input)
+    expect(saved.receipt?.status).toBe('passed')
+    expect(decisions.map(decision => decision.artifactKey)).toEqual(['text-open-world.media.visual.002', 'text-open-world.media.visual.001'])
+    const receipt = (await db.productQualityGateReceipts.where('buildId').equals(seeded.buildId).first())!
+    const evidence = JSON.parse(JSON.parse(receipt.receiptJson).measuredJson)
+    expect(evidence.decisions.map((decision: { artifactKey: string }) => decision.artifactKey)).toEqual(workspace.assets.map(asset => asset.artifactKey))
+  })
+  it('requires explicit decisions, persists immutable human evidence, and fails closed on changed images', async () => {
+    const seeded = await visualFixture()
+    const before = await db.productBuilds.get(seeded.buildId)
+    const workspace = await readTextOpenWorldVisualReviewWorkspaceV1(seeded)
+    expect(workspace.receipt).toBeNull()
+    expect(workspace.consistency.characterGroups[0].artifactKeys).toEqual(['text-open-world.media.visual.001'])
+    const input = { ...seeded, expectedAssetsHash: workspace.consistency.assetsHash,
+      decisions: [{ artifactKey: 'text-open-world.media.visual.001', decision: 'approved' as const, note: '' }],
+      characterConsistencyConfirmed: true as const, imagesActuallyViewed: true as const, noAutomationProxy: true as const }
+    await expect(recordTextOpenWorldVisualReviewV1({ ...input, decisions: [] })).rejects.toThrow('全部图片')
+    await expect(recordTextOpenWorldVisualReviewV1({ ...input, expectedAssetsHash: 'a'.repeat(64) })).rejects.toThrow('图片集合')
+    const saved = await recordTextOpenWorldVisualReviewV1(input)
+    expect(saved.receipt?.status).toBe('passed')
+    expect(await db.productBuilds.get(seeded.buildId)).toEqual(before)
+    const row = (await db.productBuildArtifacts.where('buildId').equals(seeded.buildId).toArray()).find(row => row.artifactKey.includes('.visual.'))!
+    await db.productBuildArtifacts.update(row.id!, { metadataJson: row.metadataJson.replace('向导头像', '修改后的头像') })
+    await expect(readTextOpenWorldVisualReviewWorkspaceV1(seeded)).rejects.toThrow('失效')
+    expect(await db.productQualityGateReceipts.where('buildId').equals(seeded.buildId).count()).toBe(1)
+  })
+  it('a rejection stays failed and blocks version 2 quality readiness', async () => {
+    const seeded = await visualFixture()
+    const workspace = await readTextOpenWorldVisualReviewWorkspaceV1(seeded)
+    const saved = await recordTextOpenWorldVisualReviewV1({ ...seeded, expectedAssetsHash: workspace.consistency.assetsHash,
+      decisions: [{ artifactKey: 'text-open-world.media.visual.001', decision: 'rejected', note: '工程模拟：人物外观不一致' }],
+      characterConsistencyConfirmed: true, imagesActuallyViewed: true, noAutomationProxy: true })
+    expect(saved.receipt?.status).toBe('failed')
+    const quality = await readTextOpenWorldCreatorQualityWorkspaceV1(seeded)
+    expect(quality.releaseQualityReady).toBe(false)
+    expect(quality.blockers.some(value => value.includes('逐图'))).toBe(true)
   })
 })

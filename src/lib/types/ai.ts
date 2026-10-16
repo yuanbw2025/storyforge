@@ -130,8 +130,10 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
   ],
   agnes: [
     { value: 'agnes-2.5-flash', label: 'Agnes 2.5 Flash', desc: '512K 上下文·Agent/推理推荐' },
+    { value: 'agnes-3.0-flash', label: 'Agnes 3.0 Flash', desc: '512K 上下文·新一代文本与工具调用' },
     { value: 'agnes-2.5-pro', label: 'Agnes 2.5 Pro', desc: '服务实时目录·高质量独立评审' },
     { value: 'agnes-2.5-pro-alpha', label: 'Agnes 2.5 Pro Alpha', desc: '服务实时目录·实验性' },
+    { value: 'agnes-2.5-pro-beta', label: 'Agnes 2.5 Pro Beta', desc: '1M 上下文·推理模型' },
     { value: 'agnes-2.0-flash', label: 'Agnes 2.0 Flash', desc: '256K 上下文·备用模型' },
   ],
   longcat: [

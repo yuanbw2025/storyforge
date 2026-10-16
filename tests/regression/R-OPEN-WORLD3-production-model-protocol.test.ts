@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as configuredCapabilities from '../../src/lib/product-production/capabilities'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import {
   ProductProductionDraftRejectedErrorV1,
@@ -14,6 +15,7 @@ import {
 import { AIError } from '../../src/lib/types'
 import {
   executeTextOpenWorldProductionModelProtocolV1,
+  runTextOpenWorldConfiguredProductionModelV1,
   type TextOpenWorldProductionDomainExecutorFactoryV1,
   type TextOpenWorldProductionModelResponseV1,
   type TextOpenWorldProductionModelTransportV1,
@@ -164,6 +166,23 @@ function expectUsage(error: unknown, expected: Partial<ProductProductionTaskUsag
 }
 
 describe('R-OPEN-WORLD3 · shared production model protocol', () => {
+  it('正式结构化生产显式关闭可选thinking并保留有限输出预算与JSON约束', async () => {
+    const receipt = await bindingReceipt()
+    const configured = vi.spyOn(configuredCapabilities, 'runConfiguredProductionTextWithOutcomeV1')
+      .mockResolvedValue({ output: '{"draft":true}', bindingReceipt: receipt })
+    try {
+      await runTextOpenWorldConfiguredProductionModelV1({
+        projectId: 17, requirementKey: REQUIREMENT_KEY, expectedCapabilityHash: receipt.capabilityHash,
+        category: 'text-open-world.production.experience-design', system: 'schema', contextText: CONTEXT_TEXT,
+        maximumOutputTokens: 4096, signal: new AbortController().signal,
+      })
+      expect(configured).toHaveBeenCalledWith(expect.objectContaining({
+        maximumOutputTokens: 4096, responseFormat: 'json_object', thinkingMode: 'disabled',
+        expectedCapabilityHash: receipt.capabilityHash,
+      }))
+    } finally { configured.mockRestore() }
+  })
+
   it('保持原子上下文和隔离修复数据，并在领域解析前持久化模型原文', async () => {
     const receipt = await bindingReceipt()
     const events: string[] = []

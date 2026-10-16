@@ -3606,7 +3606,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '文字开放世界来源拆解与证据账本',
     owner: 'text-open-world-production',
-    promptVersion: 'text-open-world-source-curation-v1',
+    promptVersion: 'text-open-world-source-curation-v2',
     executionMode: 'product-production',
     contextTaskKind: 'agent-outline',
     readToolNames: [],
