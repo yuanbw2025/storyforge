@@ -13,8 +13,32 @@ export type ScenePace =
   | 'fast'      // 快节奏：冲突/动作
   | 'climax'    // 高潮：决战/反转
 
+/** 可选的写作任务，不要求每场景使用同一公式或必须发生冲突。 */
+export const DETAILED_SCENE_TASK_FIELDS = [
+  { key: 'entryState', label: '进入状态' },
+  { key: 'goal', label: '本场目标' },
+  { key: 'keyChoice', label: '关键选择' },
+  { key: 'outcome', label: '行动后果' },
+  { key: 'exitState', label: '退出状态' },
+  { key: 'sceneFunction', label: '场景功能与读者期待' },
+] as const
+
+export type DetailedSceneTaskV1 = Partial<Record<typeof DETAILED_SCENE_TASK_FIELDS[number]['key'], string>>
+
+/** 缺失仍为缺失；不补旧记录、不裁剪作者原文。 */
+export function parseDetailedSceneTaskFieldsV1(value: Record<string, unknown>): DetailedSceneTaskV1 {
+  const result: DetailedSceneTaskV1 = {}
+  for (const { key, label } of DETAILED_SCENE_TASK_FIELDS) {
+    if (value[key] === undefined) continue
+    if (typeof value[key] !== 'string') throw new Error(`场景${label}必须是文本，允许留白`)
+    if (value[key].length > 8000) throw new Error(`场景${label}超过 8000 字符`)
+    result[key] = value[key]
+  }
+  return result
+}
+
 /** 场景 */
-export interface DetailedScene {
+export interface DetailedScene extends DetailedSceneTaskV1 {
   /** UUID（前端生成） */
   sceneId: string
   title: string
@@ -35,7 +59,13 @@ export function normalizeDetailedScenes(value: unknown): DetailedScene[] {
   if (value.some(scene => !scene || typeof scene !== 'object' || Array.isArray(scene))) {
     throw new Error('细纲 scenes 包含非法场景项')
   }
+  value.forEach(scene => parseDetailedSceneTaskFieldsV1(scene))
   return value as DetailedScene[]
+}
+
+/** 保存记录不等于完成规划；默认场景标题或空壳都不能冒充已规划。 */
+export function hasDetailedOutlinePlanV1(detail?: Pick<DetailedOutline, 'scenes'>): boolean {
+  return detail?.scenes.some(scene => [scene.summary, scene.conflict, scene.notes, ...DETAILED_SCENE_TASK_FIELDS.map(({ key }) => scene[key])].some(value => typeof value === 'string' && value.trim().length > 0)) ?? false
 }
 
 /** 情绪走向 */
@@ -45,6 +75,8 @@ export type EmotionArc = 'rising' | 'falling' | 'flat' | 'wave' | 'climax'
 export interface DetailedOutline {
   id?: number
   projectId: number
+  /** 当前表由 Work owner 门盖章。 */
+  workId?: number
   /** 关联的章节大纲节点（对应 outlineNodes 表中 type='chapter' 的节点） */
   outlineNodeId: number
   /** 场景列表（按顺序） */

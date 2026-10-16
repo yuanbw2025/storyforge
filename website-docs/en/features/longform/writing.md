@@ -12,6 +12,8 @@
 
 ## Recommended sequence
 
+Optional scene tasks, whole-chapter review, and scoped revision in the development branch are not included in the current release. See the [longform quality trial](/en/updates/development-status) for steps and evidence limits.
+
 1. Select a volume or chapter in Outline and chapter plans (大纲与章纲); establish the current level.
 2. Write or generate outline candidates; check continuity with completed content before confirming.
 3. In Scene beats (场景细纲), check characters, locations, conflicts, turns, and the chapter ending.

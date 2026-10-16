@@ -3,6 +3,7 @@ import type { TableSpec } from '../registry/types'
 import type { WorkspaceScope } from '../types'
 import { assertRecordInScope, readOwnedRows } from '../workspace/scope'
 import { hashCanonicalValue } from '../agent/run/hash'
+import Dexie from 'dexie'
 
 export interface WorkspaceContentRevisionEntryV1 {
   table: string
@@ -104,14 +105,14 @@ export async function captureWorkspaceContentRevisionV1(input: {
     entries.push({
       table: spec.name,
       rowCount: rows.length,
-      contentHash: await hashCanonicalValue(rows),
+      contentHash: await Dexie.waitFor(hashCanonicalValue(rows)),
     })
   }
   const body = {
     version: 1 as const,
     entries,
   }
-  return { ...body, vectorHash: await hashCanonicalValue(vectorBody(body)) }
+  return { ...body, vectorHash: await Dexie.waitFor(hashCanonicalValue(vectorBody(body))) }
 }
 
 export async function verifyWorkspaceContentRevisionV1(
@@ -119,10 +120,10 @@ export async function verifyWorkspaceContentRevisionV1(
   input: { scope: WorkspaceScope; worldGroupId: number | null },
 ): Promise<{ fresh: boolean; current: WorkspaceContentRevisionVectorV1; changedTables: string[] }> {
   const parsed = parseWorkspaceContentRevisionV1(frozen)
-  const expectedFrozenHash = await hashCanonicalValue(vectorBody({
+  const expectedFrozenHash = await Dexie.waitFor(hashCanonicalValue(vectorBody({
     version: parsed.version,
     entries: parsed.entries,
-  }))
+  })))
   if (expectedFrozenHash !== parsed.vectorHash) throw new Error('内容修订向量完整性校验失败')
   const current = await captureWorkspaceContentRevisionV1({
     scope: input.scope,

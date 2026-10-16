@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { getAgentToolSchemaSnapshotV1 } from '../../src/lib/agent/tool-registry'
+import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { db } from '../../src/lib/db/schema'
 import { getOrCreateAgentConversation } from '../../src/lib/agent/conversations'
 import {
@@ -120,6 +122,7 @@ describe.sequential('R-HARNESS18 · Skill、Prompt 与 Tool 执行版本绑定',
     })
     expect(binding.toolSchemaVersion).toBe(AGENT_TOOL_SCHEMA_VERSION_V1)
     expect(binding.toolSchemaHash).toBe(AGENT_TOOL_SCHEMA_HASH_V1)
+    expect(await hashCanonicalValue(getAgentToolSchemaSnapshotV1())).toBe(AGENT_TOOL_SCHEMA_HASH_V1)
     expect(await verifyAgentToolSchemaBindingV1()).toBe(true)
 
     const accepted = await acceptAgentRunContractV1(current)

@@ -39,19 +39,21 @@ import {
   type AgentSkillId,
 } from './skill-registry'
 import { parseStructuredOutputV1 } from './structured-output-pipeline'
+import type { SystemFictionElementsV1 } from '../types/creative-rules'
+import { createSystemFictionElementsV1, parseSystemFictionElementsV1 } from '../prose/system-fiction-contract'
 
 export const CREATIVE_RULES_FIELDS = [
   'writingStyle',
   'atmosphere',
   'specialRequirements',
+  'systemFictionElements',
 ] as const
 
 export type CreativeRulesField = typeof CREATIVE_RULES_FIELDS[number]
 
-export interface CreativeRulesCopilotCandidateV1 {
-  field: CreativeRulesField
-  value: string
-}
+export type CreativeRulesCopilotCandidateV1 =
+  | { field: Exclude<CreativeRulesField, 'systemFictionElements'>; value: string }
+  | { field: 'systemFictionElements'; value: SystemFictionElementsV1 }
 
 export interface CreativeRulesCopilotSnapshotV1 {
   id: number | null
@@ -100,12 +102,14 @@ const FIELD_LABELS: Record<CreativeRulesField, string> = {
   writingStyle: '写作风格',
   atmosphere: '基调和氛围',
   specialRequirements: '特殊创作要求',
+  systemFictionElements: '系统文元素',
 }
 
 const FIELD_MAX_CHARS: Record<CreativeRulesField, number> = {
   writingStyle: 12_000,
   atmosphere: 8_000,
   specialRequirements: 20_000,
+  systemFictionElements: 40_000,
 }
 
 export class CreativeRulesCopilotStaleError extends Error {
@@ -124,6 +128,7 @@ function valuesOf(row: CreativeRules | null): Record<CreativeRulesField, string>
     writingStyle: asText(row?.writingStyle),
     atmosphere: asText(row?.atmosphere),
     specialRequirements: asText(row?.specialRequirements),
+    systemFictionElements: row?.systemFictionElements === undefined ? '' : JSON.stringify(parseSystemFictionElementsV1(row.systemFictionElements)),
   }
 }
 
@@ -135,7 +140,7 @@ function snapshotOf(row: CreativeRules | null): CreativeRulesCopilotSnapshotV1 {
     serialized: JSON.stringify({
       id: row?.id ?? null,
       updatedAt: row?.updatedAt ?? null,
-      values,
+      values: { ...values, systemFictionElements: row?.systemFictionElements === undefined ? undefined : values.systemFictionElements },
       narrativePOV: asText(row?.narrativePOV),
       prohibitions: asText(row?.prohibitions),
       consistencyRules: asText(row?.consistencyRules),
@@ -163,11 +168,12 @@ function assertAuthorRequest(value: string): string {
 }
 
 export function resolveCreativeRulesFieldV1(request: string): CreativeRulesField {
-  const explicit = /目标字段\s*=\s*(writingStyle|atmosphere|specialRequirements)\b/i.exec(request)?.[1]
+  const explicit = /目标字段\s*=\s*(writingStyle|atmosphere|specialRequirements|systemFictionElements)\b/i.exec(request)?.[1]
   if (explicit) {
     return CREATIVE_RULES_FIELDS.find(field => field.toLowerCase() === explicit.toLowerCase())!
   }
   const aliases: Array<[CreativeRulesField, RegExp]> = [
+    ['systemFictionElements', /系统文元素|系统文(?:机制|设置|写作)/],
     ['writingStyle', /写作风格|文风/],
     ['atmosphere', /基调(?:和|与)?氛围|基调|氛围/],
     ['specialRequirements', /特殊创作要求|特殊要求/],
@@ -187,7 +193,7 @@ export function parseCreativeRulesCandidateDraftV1(
       schemaId: 'creative-rules-candidate.v1',
       target: 'creativeRules.field',
       root: 'object',
-      maxChars: 25_000,
+      maxChars: 45_000,
       allowedRootFields: ['field', 'value'],
       requiredRootFields: ['field', 'value'],
       unknownRootFieldMessage: '创作规则候选只能包含 field 和 value。',
@@ -199,6 +205,7 @@ export function parseCreativeRulesCandidateDraftV1(
         throw new Error('创作规则候选 field 不在允许范围。')
       }
       const field = source.field as CreativeRulesField
+      if (field === 'systemFictionElements') return { field, value: parseSystemFictionElementsV1(source.value) }
       if (typeof source.value !== 'string' || source.value.trim().length < 2) {
         throw new Error(`创作规则候选 ${field}.value 至少需要 2 个字符。`)
       }
@@ -231,7 +238,8 @@ function candidateIssues(
       message: `本轮只允许修改 ${input.targetField}，候选却请求修改 ${parsed.field}。`,
     })
   }
-  if (parsed.value === input.snapshot.values[input.targetField].trim()) {
+  const candidateValue = parsed.field === 'systemFictionElements' ? JSON.stringify(parsed.value) : parsed.value
+  if (candidateValue === input.snapshot.values[input.targetField].trim()) {
     issues.push({ code: 'creative-rules-unchanged', message: '候选与目标字段当前内容完全相同。' })
   }
   return issues
@@ -258,7 +266,9 @@ function buildMessages(input: CreativeRulesCopilotInputV1): ChatMessage[] {
     `1. 本轮目标字段是 ${input.targetField}（${FIELD_LABELS[input.targetField]}），只允许建议这个字段。`,
     '2. 世界观、故事核心和其它已确认创作规则都是约束；缺失内容可以做最小建议，但不得声称已经成为 Canon。',
     '3. 建议必须具体、可执行，同时写清应做什么和应避免什么；不得顺手改写其它规则字段。',
-    `4. 只输出严格 JSON 对象，不输出 Markdown 围栏、解释或额外字段：{"field":"${input.targetField}","value":"候选正文"}`,
+    input.targetField === 'systemFictionElements'
+      ? `4. 只输出严格 JSON 对象：{"field":"systemFictionElements","value":${JSON.stringify(createSystemFictionElementsV1())}}。value 为当前版本对象，五项允许留白，不改已确认事实。默认 enabled=false；作者确认后自行启用。不要附解释或其它字段。当前元素（仅供本字段编辑参考）：${input.snapshot.values.systemFictionElements || '未设置'}。`
+      : `4. 只输出严格 JSON 对象，不输出 Markdown 围栏、解释或额外字段：{"field":"${input.targetField}","value":"候选正文"}`,
   ].join('\n\n')))
 }
 
@@ -318,7 +328,8 @@ export function creativeRulesCandidateMatchesRowV1(
   candidate: CreativeRulesCopilotCandidateV1,
   row: CreativeRules | null | undefined,
 ): boolean {
-  return valuesOf(row ?? null)[candidate.field] === candidate.value
+  const value = candidate.field === 'systemFictionElements' ? JSON.stringify(candidate.value) : candidate.value
+  return valuesOf(row ?? null)[candidate.field] === value
 }
 
 export async function prepareCreativeRulesCopilotV1(

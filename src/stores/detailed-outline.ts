@@ -1,9 +1,14 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
-import type { DetailedOutline } from '../lib/types'
+import type { DetailedOutline, DetailedScene } from '../lib/types'
 import { normalizeDetailedScenes } from '../lib/types/detailed-outline'
-import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { assertRecordInScope, readOwnedRows, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
+
+export type DetailedSceneEditV1 =
+  | { kind: 'add'; scene: DetailedScene }
+  | { kind: 'patch'; sceneId: string; patch: Partial<Omit<DetailedScene, 'sceneId'>> }
+  | { kind: 'remove'; sceneId: string }
 
 interface DetailedOutlineStore {
   detailedOutlines: DetailedOutline[]
@@ -12,7 +17,9 @@ interface DetailedOutlineStore {
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   /** 获取或创建某章节的细纲 */
   getOrCreate: (scope: WorkspaceScopeLike, outlineNodeId: number) => Promise<DetailedOutline>
-  save: (id: number, patch: Partial<DetailedOutline>) => Promise<void>
+  save: (id: number, patch: Partial<DetailedOutline>, scope?: WorkspaceScopeLike) => Promise<void>
+  /** 人工操作在同一队列内读取最新数组再合并，不从过期 UI 数组重写其它场景。 */
+  editScene: (id: number, edit: DetailedSceneEditV1, scope: WorkspaceScopeLike, chapterSummary: string) => Promise<void>
   remove: (id: number) => Promise<void>
 }
 
@@ -57,22 +64,53 @@ export const useDetailedOutlineStore = create<DetailedOutlineStore>((set, get) =
     return withId
   },
 
-  save: async (id, patch) => {
+  save: async (id, patch, scopeInput) => {
     await coordinatePendingEditV1({
       key: `detailed-outline:${id}`,
       persist: async () => {
         const initial = await db.detailedOutlines.get(id)
         if (!initial) return
-        const scope = await resolveScopeLike(initial.projectId)
+        const scope = await resolveScopeLike(scopeInput ?? initial.projectId)
         const current = await db.detailedOutlines.get(id)
         if (!current || !await assertRecordInScope(scope, 'detailedOutlines', current, { owner: 'work' })) return
         const updated = { ...patch, updatedAt: now() }
+        if (patch.scenes !== undefined) normalizeDetailedScenes(patch.scenes)
         await db.detailedOutlines.update(id, updated)
         set({
           detailedOutlines: get().detailedOutlines.map(d =>
             d.id === id ? { ...d, ...updated } : d
           ),
         })
+      },
+    })
+  },
+
+  editScene: async (id, edit, scopeInput, chapterSummary) => {
+    await coordinatePendingEditV1({
+      key: `detailed-outline:${id}`,
+      persist: async () => {
+        const scope = await resolveScopeLike(scopeInput)
+        const updated = await db.transaction('rw', scopeTransactionTables(db.detailedOutlines, db.outlineNodes), async () => {
+          const row = await db.detailedOutlines.get(id)
+          if (!row || !await assertRecordInScope(scope, 'detailedOutlines', row, { owner: 'work' })) throw new Error('细纲已删除或不属于指定作品，编辑未写入')
+          const node = await db.outlineNodes.get(row.outlineNodeId)
+          if (!node || node.type !== 'chapter' || !await assertRecordInScope(scope, 'outlineNodes', node, { owner: 'work' })) throw new Error('细纲的章纲目标无效，编辑未写入')
+          const scenes = normalizeDetailedScenes(row.scenes)
+          let next: DetailedScene[]
+          if (edit.kind === 'add') {
+            if (!edit.scene.sceneId || scenes.some(scene => scene.sceneId === edit.scene.sceneId)) throw new Error('新增场景标识无效或重复')
+            next = [...scenes, edit.scene]
+          } else {
+            if (!scenes.some(scene => scene.sceneId === edit.sceneId)) throw new Error('场景已变化或删除，编辑未写入')
+            if (edit.kind === 'patch' && 'sceneId' in edit.patch) throw new Error('场景编辑不能改变稳定标识')
+            next = edit.kind === 'remove' ? scenes.filter(scene => scene.sceneId !== edit.sceneId) : scenes.map(scene => scene.sceneId === edit.sceneId ? { ...scene, ...edit.patch } : scene)
+          }
+          normalizeDetailedScenes(next)
+          const data = { scenes: next, lastUsedSummary: row.lastUsedSummary ?? chapterSummary, updatedAt: now() }
+          await db.detailedOutlines.update(id, data)
+          return data
+        })
+        set({ detailedOutlines: get().detailedOutlines.map(row => row.id === id ? { ...row, ...updated } : row) })
       },
     })
   },

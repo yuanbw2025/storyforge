@@ -19,7 +19,7 @@ import {
   isContextResourceDiscoverableV1,
 } from './contracts'
 
-export const CONTEXT_SELECTOR_VERSION_V1 = 'context-selector-v1'
+export const CONTEXT_SELECTOR_VERSION_V1 = 'context-selector-v2'
 
 export const CONTEXT_SELECTOR_CATEGORIES_V1 = [
   'world', 'character', 'story-planning', 'prose-fact', 'reference',
@@ -377,11 +377,11 @@ function selectDepth(
   fail('no-readable-depth', `${descriptor.resourceKey} 没有 Policy 允许的非原文读取深度`)
 }
 
-function estimatedTokens(descriptor: ContextResourceDescriptorV1, depth: ContextResourceDepthV1): number {
+function estimatedTokens(descriptor: ContextResourceDescriptorV1, depth: ContextResourceDepthV1, mandatoryWhole = false): number {
   const estimate = descriptor.tokenEstimate[depth] ?? descriptor.tokenEstimate.index ?? 0
   // Explicit original escalation is governed by the Gateway's total budget and
   // must not silently inherit the lossy per-resource discovery cap.
-  if (depth === 'original') return Math.max(0, estimate)
+  if (depth === 'original' || mandatoryWhole) return Math.max(0, estimate)
   return Math.max(0, Math.min(estimate, descriptor.tokenCap ?? Number.MAX_SAFE_INTEGER))
 }
 
@@ -635,7 +635,7 @@ export async function selectContextResourcesV1(input: ContextSelectorInputV1): P
       kind: entry.descriptor.kind,
       category: category(entry.descriptor),
       depth,
-      estimatedTokens: estimatedTokens(entry.descriptor, depth),
+      estimatedTokens: estimatedTokens(entry.descriptor, depth, mandatoryFullSet.has(entry.descriptor.resourceKey)),
       hardRequirement: entry.hard,
       reasonCodes: [...entry.reasons].sort(),
       contentRevision: entry.descriptor.contentRevision,

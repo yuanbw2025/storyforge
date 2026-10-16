@@ -6,6 +6,7 @@ import type {
   ContextManifestV1,
   ContextManifestV2,
   ContextManifestV3,
+  AgentRunRecord,
 } from '../../types/agent-run'
 import {
   appendAgentEvent,
@@ -619,10 +620,14 @@ export async function recordDetailedOutlineGenerationCandidateV1(input: {
   })
 }
 
-export async function readLatestDetailedOutlineGenerationCandidateV1(input: {
+async function readPendingDetailedOutlineCandidatesV1(input: {
   scope: WorkspaceScope
-  outlineNodeId: number
-}): Promise<{ candidate: DetailedOutlineGenerationCandidateV1; event: AgentEvent & { id: number }; snapshot: AgentRunSnapshotV1 } | null> {
+  outlineNodeId?: number
+  recover: boolean
+}): Promise<Array<{ candidate: DetailedOutlineGenerationCandidateV1; event: AgentEvent & { id: number } }>> {
+  // 在任何异步 hash/验证事务前读取注册的运行元数据，使 liveQuery 确实观察状态变更。
+  const runStates = new Map((await readOwnedRows<Pick<AgentRunRecord, 'id' | 'status'>>(input.scope, 'agentRuns', { owner: 'work' }))
+    .filter(row => row.id != null).map(row => [row.id!, row.status]))
   const conversations = (await readOwnedRows<AgentConversation>(input.scope, 'agentConversations', { owner: 'work' }))
     .filter(row => row.purpose === DETAILED_OUTLINE_GENERATION_CONVERSATION_PURPOSE_V1)
   const candidates: Array<{ candidate: DetailedOutlineGenerationCandidateV1; event: AgentEvent & { id: number } }> = []
@@ -658,24 +663,39 @@ export async function readLatestDetailedOutlineGenerationCandidateV1(input: {
           candidateHash: raw.candidateHash,
         },
       } as DetailedOutlineGenerationCandidateV1
-      if (!isCandidate(candidate) || candidate.outlineNodeId !== input.outlineNodeId) continue
+      if (!isCandidate(candidate) || (input.outlineNodeId !== undefined && candidate.outlineNodeId !== input.outlineNodeId)) continue
+      if (['completed', 'failed', 'cancelled'].includes(runStates.get(candidate.durable.runId) ?? '')) continue
       const expected = await hashDetailedOutlineGenerationCandidateV1(candidate)
       if (expected !== candidate.durable.candidateHash) continue
       let snapshot = await readAgentRunV1(input.scope, candidate.durable.runId)
       assertDetailedOutlineGenerationExecutionBindingV1(snapshot)
       const step = snapshot.projection.steps[DETAILED_OUTLINE_GENERATION_STEP_ID_V1]
-      if (step?.status === 'running' && step.candidateHash == null) {
+      if (input.recover && step?.status === 'running' && step.candidateHash == null) {
         snapshot = await recoverDetailedOutlineGenerationCandidateV1({
           scope: input.scope,
           candidate,
         }) ?? snapshot
       }
       const recoveredStep = snapshot.projection.steps[DETAILED_OUTLINE_GENERATION_STEP_ID_V1]
-      if (recoveredStep?.status === 'awaiting_confirmation' && recoveredStep.candidateHash === candidate.durable.candidateHash) {
+      if ((recoveredStep?.status === 'awaiting_confirmation' && recoveredStep.candidateHash === candidate.durable.candidateHash)
+        || (!input.recover && step?.status === 'running' && step.candidateHash == null)) {
         candidates.push({ candidate, event: event as AgentEvent & { id: number } })
       }
     }
   }
+  return candidates
+}
+
+/** 侧栏只读索引：不 checkpoint、不恢复运行、不发模型请求。 */
+export async function readPendingDetailedOutlineNodeIdsV1(scope: WorkspaceScope): Promise<Set<number>> {
+  return new Set((await readPendingDetailedOutlineCandidatesV1({ scope, recover: false })).map(row => row.candidate.outlineNodeId))
+}
+
+export async function readLatestDetailedOutlineGenerationCandidateV1(input: {
+  scope: WorkspaceScope
+  outlineNodeId: number
+}): Promise<{ candidate: DetailedOutlineGenerationCandidateV1; event: AgentEvent & { id: number }; snapshot: AgentRunSnapshotV1 } | null> {
+  const candidates = await readPendingDetailedOutlineCandidatesV1({ ...input, recover: true })
   const latest = candidates.sort((left, right) => (right.event.sequence ?? 0) - (left.event.sequence ?? 0))[0]
   if (!latest) return null
   return {

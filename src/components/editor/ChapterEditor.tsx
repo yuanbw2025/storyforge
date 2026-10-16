@@ -9,11 +9,9 @@ import { useCharacterStore } from '../../stores/character'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { useAutoSave } from '../../hooks/useAutoSave'
-import { buildChapterStatusPatchV1, shouldPersistChapterEditorContentV1 } from '../../lib/authoring/chapter-editor-save'
+import { buildChapterStatusPatchV1, createChapterEditorDraftBufferV1, shouldPersistChapterEditorContentV1 } from '../../lib/authoring/chapter-editor-save'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
-import { useActiveWork } from '../../hooks/useActiveWork'
-import { buildChapterContentPrompt, buildContinuePrompt, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
-import { buildReviewRevisePrompt, type ReviewResult } from '../../lib/ai/adapters/review-adapter'
+import { buildChapterContentRequestV1, buildContinueRequestV1, buildPolishPrompt, buildExpandPrompt, buildDeAIPrompt } from '../../lib/ai/adapters/chapter-adapter'
 import { propagateChapterEditStale, buildEditImpactGraphV1, type EditImpactGraphV1 } from '../../lib/consistency/impact-analysis'
 import {
   buildImpactRemediationPlanV1,
@@ -27,12 +25,12 @@ import { runChapterMemoryTask } from '../../lib/ai/chapter-memory/run-chapter-me
 import { prepareContinuityContext } from '../../lib/ai/chapter-memory/continuity-context'
 import { isPlanReconciliationCurrent } from '../../lib/ai/chapter-memory/plan-reconciliation'
 import { findNextCanonicalChapter, findPreviousCanonicalChapter } from '../../lib/ai/chapter-memory/canonical-chapter-sequence'
-import { resolveRequestConfig } from '../../lib/ai/client'
+import { resolveRequestConfig, describeResolvedAIRequestSettingsV1, type AIRequestConfigResolution, type StreamResult } from '../../lib/ai/client'
+import { observeProseLengthV1, proseLengthExpectationV1 } from '../../lib/prose/length-observation'
+import { observeSeparatedProseFrameV1 } from '../../lib/prose/provider-frame-observation'
 import { executeRegisteredAIEntryV1 } from '../../lib/agent/formal-ai-entry'
 import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config-readiness'
 import { db } from '../../lib/db/schema'
-import { buildGenreConstraintContext } from '../../lib/ai/genre-metadata'
-import { buildStylePromptInjection } from '../../lib/ai/writing-styles'
 import { assembleContext } from '../../lib/registry/assemble-context'
 import { prepareProseGatewayAssemblyV1 } from '../../lib/prose/gateway-context'
 import { resolveChapterDisplayMeta } from '../../lib/outline/chapter-display'
@@ -63,6 +61,7 @@ import {
 } from '../../lib/generation/generation-node'
 import {
   createChapterGenerationNode,
+  InterruptedChapterGenerationErrorV1,
   type ChapterGenerationCategory,
   type ChapterGenerationOperation,
 } from '../../lib/generation/chapter-generation-node'
@@ -141,7 +140,7 @@ import { createContextManifestFromAssemblyV1 } from '../../lib/agent/run/context
 import { readAgentRunV1, type AgentRunSnapshotV1 } from '../../lib/agent/run/event-store'
 import { hashChapterText, normalizeChapterText } from '../../lib/ai/chapter-memory/text-normalization'
 import { hashCanonicalValue } from '../../lib/agent/run/hash'
-import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 import {
   assertWorkspaceContentRevisionFreshV1,
   captureWorkspaceContentRevisionV1,
@@ -209,6 +208,8 @@ import {
   recordProseGenerationCandidateV1,
   rejectProseGenerationCandidateV1,
   recoverProseGenerationCandidateV1,
+  recordInterruptedProseGenerationV1,
+  readLatestInterruptedProseGenerationV1,
   resolveProseGenerationExecutionBindingV2,
   PROSE_GENERATION_STEP_ID_V1,
   type ProseGenerationCandidateV1,
@@ -249,10 +250,10 @@ function LazyPanelFallback() {
 type MemoryTaskType = 'write' | 'plan' | 'review'
 
 interface PendingChapterGeneration {
+  generationOverrides?: { temperature?: number; maxTokens?: number }
   operation: ChapterGenerationOperation
   category: ChapterGenerationCategory
   prepared: PreparedGenerationNode
-  backgroundMemoryIds: number[]
   assembled: Awaited<ReturnType<typeof assembleContext>>
   generationBinding: AgentSkillExecutionBindingV2
   informationBoundary: InformationBoundaryManifestV1
@@ -266,7 +267,6 @@ interface Props {
 
 export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const navigate = useNavigate()
-  const activeWork = useActiveWork(project)
   const {
     chapters,
     currentChapter: storeChapter,
@@ -299,6 +299,46 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [savedContent, setSavedContent] = useState('')
   const [manualSaving, setManualSaving] = useState(false)
   const [manualSaveError, setManualSaveError] = useState('')
+  const [hasPendingChapterDrafts, setHasPendingChapterDrafts] = useState(false)
+  const editorChapterIdRef = useRef(currentChapter?.id)
+  const loadedEditorChapterIdRef = useRef<number | null>(null)
+  editorChapterIdRef.current = currentChapter?.id
+  const chapterDraftsRef = useRef<ReturnType<typeof createChapterEditorDraftBufferV1> | null>(null)
+  if (!chapterDraftsRef.current) {
+    const projectId = project.id
+    chapterDraftsRef.current = createChapterEditorDraftBufferV1(async draft => {
+      const before = await db.chapters.get(draft.chapterId)
+      if (!before || before.projectId !== projectId) throw new Error('原章节已不存在或不属于当前作品；修改仍保留在编辑器中。')
+      const wordCount = countWords(draft.plainText)
+      if (shouldPersistChapterEditorContentV1(before, draft.html, wordCount)) {
+        await updateChapter(draft.chapterId, { content: draft.html, wordCount })
+      }
+      const saved = await db.chapters.get(draft.chapterId)
+      if (!saved || saved.content !== draft.html || saved.wordCount !== wordCount) {
+        throw new Error('正文尚未保存成功；修改已保留，请重试保存。')
+      }
+      if (editorChapterIdRef.current === draft.chapterId) setSavedContent(draft.html)
+    })
+  }
+  const chapterDrafts = chapterDraftsRef.current
+  const flushChapterDrafts = useCallback(async () => {
+    try {
+      await chapterDrafts.flush()
+      setHasPendingChapterDrafts(chapterDrafts.hasPending())
+    }
+    catch (error) {
+      setManualSaveError(error instanceof Error ? error.message : '正文保存失败；修改已保留。')
+      throw error
+    }
+  }, [chapterDrafts])
+  useEffect(() => registerPendingDraftFlusherV1(flushChapterDrafts), [flushChapterDrafts])
+  const stageEditorDraft = useCallback((html: string, plain: string) => {
+    if (currentChapter?.id) chapterDrafts.stage({ chapterId: currentChapter.id, html, plainText: plain })
+    setHasPendingChapterDrafts(chapterDrafts.hasPending())
+    setContent(html)
+    setPlainText(plain)
+    setManualSaveError('')
+  }, [chapterDrafts, currentChapter?.id])
   const [editorWorkspaceScope, setEditorWorkspaceScope] = useState<WorkspaceScope | null>(null)
   const [showContext, setShowContext] = useState(false)
   const [customInstruction, setCustomInstruction] = useState('')
@@ -356,7 +396,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const consistencyRunRef = useRef<ConsistencyAgentRun | null>(null)
   const memoryRebuildInFlightRef = useRef(new Set<number>())
   const creatingChapterForOutlineRef = useRef(new Set<number>())
-  const reviseReportRef = useRef<ReviewResult | null>(null)  // G8：记住上次"按报告修改"的报告，供重试
   // Phase A1: 自动流程标记
   const [autoProcessing, setAutoProcessing] = useState<'idle' | 'extracting' | 'memory'>('idle')
   const [showOutlinePreview, setShowOutlinePreview] = useState(false)
@@ -613,13 +652,18 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         scope,
         chapterId,
       })
-      if (!active || !candidate) return
-      const recovered = await recoverProseGenerationCandidateV1({ scope, candidate })
-      if (!active || !recovered || recovered.projection.state !== 'awaiting_confirmation') return
-      setProseCandidate(candidate)
-      proseCandidateRef.current = candidate
-      restoreAI({ output: candidate.outputText, operation: candidate.operation })
-      proseSnapshotRef.current = recovered
+      if (!active) return
+      const recovered = candidate ? await recoverProseGenerationCandidateV1({ scope, candidate }) : null
+      if (!active) return
+      if (candidate && recovered?.projection.state === 'awaiting_confirmation') {
+        setProseCandidate(candidate)
+        proseCandidateRef.current = candidate
+        restoreAI({ output: candidate.outputText, operation: candidate.operation })
+        proseSnapshotRef.current = recovered
+        return
+      }
+      const interrupted = await readLatestInterruptedProseGenerationV1({ scope, chapterId })
+      if (active && interrupted) restoreAI({ output: interrupted.outputText, operation: interrupted.operation, error: interrupted.message })
     })().catch(error => {
       if (active) console.warn('[ProseGeneration] durable candidate 恢复失败:', error)
     })
@@ -630,7 +674,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const wordCount = useMemo(() => countWords(plainText), [plainText])
 
   // 有未保存内容时阻止页面关闭
-  useBeforeUnload(content !== savedContent && plainText.length > 0)
+  useBeforeUnload(hasPendingChapterDrafts || (content !== savedContent && plainText.length > 0))
 
   useEffect(() => { loadChapters(project.id!) }, [project.id, loadChapters])
   useEffect(() => { loadStateCards(project.id!) }, [project.id, loadStateCards])
@@ -822,16 +866,19 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }, [outlineNodeId, chapters, selectChapter, nodes, getOrCreateByOutlineNode, project.id])
 
   const persistCurrentEditorContent = useCallback(async (): Promise<{ html: string; plain: string; wordCount: number } | null> => {
+    await flushChapterDrafts()
     if (!currentChapter?.id) return null
     const html = editorRef.current?.getHTML() ?? content
     const plain = editorRef.current?.getPlainText() ?? htmlToPlainText(html)
     const wc = countWords(plain)
-    await updateChapter(currentChapter.id, { content: html, wordCount: wc })
+    if (shouldPersistChapterEditorContentV1(currentChapter, html, wc)) {
+      await updateChapter(currentChapter.id, { content: html, wordCount: wc })
+    }
     setContent(html)
     setPlainText(plain)
     setSavedContent(html)
     return { html, plain, wordCount: wc }
-  }, [content, currentChapter?.id, updateChapter])
+  }, [content, currentChapter, updateChapter, flushChapterDrafts])
 
   const handleManualSave = useCallback(async () => {
     if (manualSaving) return
@@ -850,6 +897,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!currentChapter?.id) return
     setManualSaveError('')
     try {
+      await flushChapterDrafts()
       const html = editorRef.current?.getHTML() ?? content
       const plain = editorRef.current?.getPlainText() ?? htmlToPlainText(html)
       const wc = countWords(plain)
@@ -860,14 +908,38 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     } catch (error) {
       setManualSaveError(error instanceof Error ? error.message : String(error))
     }
-  }, [content, currentChapter?.id, updateChapter])
+  }, [content, currentChapter?.id, updateChapter, flushChapterDrafts])
 
   // 切换章节：同步到本地 state（RichEditor 会基于 value 重建内容）
   useEffect(() => {
+    const draft = currentChapter?.id == null ? null : chapterDrafts.read(currentChapter.id)
+    if (draft) {
+      setContent(draft.html)
+      setPlainText(draft.plainText)
+      return
+    }
+    if (!currentChapter && chapterDrafts.hasPending()) return
     const raw = currentChapter?.content || ''
-    setContent(raw)
-    setPlainText(htmlToPlainText(raw))
-  }, [currentChapter])
+    if (!currentChapter?.id || loadedEditorChapterIdRef.current !== currentChapter.id) {
+      loadedEditorChapterIdRef.current = currentChapter?.id ?? null
+      setContent(raw)
+      setPlainText(htmlToPlainText(raw))
+      return
+    }
+    // A list refresh may resolve with a row read before our save. Verify later
+    // store notifications against the actual record before replacing the editor.
+    let active = true
+    void db.chapters.get(currentChapter.id).then(latest => {
+      if (!active || !latest || latest.projectId !== project.id) return
+      const pending = chapterDrafts.read(latest.id!)
+      const html = pending?.html ?? latest.content ?? ''
+      setContent(html)
+      setPlainText(pending?.plainText ?? htmlToPlainText(html))
+    }).catch(error => {
+      if (active) setManualSaveError(error instanceof Error ? error.message : '正文读取失败；编辑器内容已保留。')
+    })
+    return () => { active = false }
+  }, [currentChapter, chapterDrafts, project.id])
 
   // 切换章节时同步 savedContent（只在章节 id 变化时）
   useEffect(() => {
@@ -892,14 +964,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }, [project.id, currentChapter])
 
   // 自动保存
-  useAutoSave(content, useCallback(async (html: string) => {
-    if (currentChapter?.id) {
-      const wc = countWords(htmlToPlainText(html))
-      if (!shouldPersistChapterEditorContentV1(currentChapter, html, wc)) return
-      await updateChapter(currentChapter.id, { content: html, wordCount: wc })
-      setSavedContent(html)
-    }
-  }, [currentChapter, updateChapter]))
+  // Debounce only author-staged buffers. A cleanup's older React value must
+  // never overwrite a newer buffer that the navigation barrier already saved.
+  useAutoSave(content, useCallback(async () => {
+    await flushChapterDrafts().catch(() => undefined)
+  }, [flushChapterDrafts]))
 
   const outlineNode = currentChapter ? nodes.find(n => n.id === currentChapter.outlineNodeId) : null
   const chapterDisplay = useMemo(() => {
@@ -1163,8 +1232,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
   }
 
-  const prepareContinuityBeforeGeneration = async (): Promise<number[]> => {
-    if (!currentChapter?.id) return []
+  const prepareContinuityBeforeGeneration = async (): Promise<void> => {
+    if (!currentChapter?.id) return
     const snapshot = await prepareContinuityContext({
       projectId: project.id!,
       chapterId: currentChapter.id,
@@ -1177,16 +1246,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       // 直接前驱优先且同步补建；失败仍由真实 tail 保底。
       await rebuildChapterMemoryById(predecessorId)
     }
-    return snapshot.memoryRebuildCandidateIds
+    const recentMemoryIds = snapshot.memoryRebuildCandidateIds
       .filter(id => id !== predecessorId)
       .slice(-4)
-  }
-
-  const scheduleRecentMemoryRebuild = (chapterIds: number[]) => {
-    if (!chapterIds.length) return
-    void (async () => {
-      for (const chapterId of chapterIds) await rebuildChapterMemoryById(chapterId)
-    })()
+    // 先完成有界记忆补建，再冻结正文来源；后台写入会让刚生成的候选过期。
+    for (const chapterId of recentMemoryIds) await rebuildChapterMemoryById(chapterId)
   }
 
   const buildFullWorldCtx = async (
@@ -1219,19 +1283,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
     console.log(`[ContextGateway] ${taskType} 模式 — path:${assembled.contextGatewayExecution.path} selected:${assembled.contextGatewayExecution.retrievalTrace.mandatory.length + assembled.contextGatewayExecution.retrievalTrace.autoSelected.length} tokens:${assembled.totalInputTokens}`)
 
-    // Phase E: 题材约束 + 写作风格注入
-    const genreCtx = buildGenreConstraintContext(activeWork?.genres ?? [])
-    const styleCtx = activeWork?.writingStyleId ? buildStylePromptInjection(activeWork.writingStyleId) : ''
-
-    const parts = [assembled.text]
-    if (genreCtx) parts.push(genreCtx)
-    if (styleCtx) parts.push(styleCtx)
     const maxContext = aiConfig.contextWindow && aiConfig.contextWindow > 0
       ? aiConfig.contextWindow
       : getModelPreset(aiConfig.provider, aiConfig.model).maxContext
     const continuityBudgetTokens = maxContext <= 8_192 ? 3000 : maxContext <= 32_768 ? 6000 : 10_000
     return {
-      text: parts.filter(Boolean).join('\n\n'),
+      text: assembled.text,
       segments: assembled.segments,
       assembled,
       generationBinding,
@@ -1251,12 +1308,15 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     operation: ChapterGenerationOperation,
     category: ChapterGenerationCategory,
     informationBoundary: InformationBoundaryManifestV1,
+    generationOverrides?: { temperature?: number; maxTokens?: number },
+    frozenResolution?: AIRequestConfigResolution,
+    streamResult?: StreamResult,
   ) => createChapterGenerationNode({
     operation,
     category,
     projectId: project.id!,
     chapterIdentity: currentChapter?.id ?? outlineNodeId ?? 'unselected',
-    ai,
+    ai, generationOverrides, frozenResolution, streamResult,
     gate: output => {
       const issues = validateProseInformationBoundaryV1(output, informationBoundary)
       return { status: issues.length ? 'blocked' : 'pass', issues }
@@ -1266,13 +1326,13 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const runDurableChapterGeneration = async (input: {
     operation: ChapterGenerationOperation
     category: ChapterGenerationCategory
-    node: ReturnType<typeof createChapterGenerationNode>
     prepared: PreparedGenerationNode
     messages?: ChatMessage[]
     assembled?: Awaited<ReturnType<typeof assembleContext>>
     generationBinding: AgentSkillExecutionBindingV2
     informationBoundary: InformationBoundaryManifestV1
     contentRevision: WorkspaceContentRevisionVectorV1
+    generationOverrides?: { temperature?: number; maxTokens?: number }
   }): Promise<void> => {
     if (!currentChapter?.id || !input.assembled) {
       throw new Error('正文生成缺少章节或受控上下文快照。')
@@ -1289,13 +1349,17 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     if (!sourceChapter) throw new Error('正文生成开始前找不到章节。')
     const sourceTextHash = await hashChapterText(sourceChapter.content ?? '')
     const actualMessages = input.messages ?? input.prepared.messages
+    const frozenResolution = resolveRequestConfig(aiConfig, { category: input.category, projectId: project.id!, configOverrides: input.generationOverrides })
+    const requestSettings = describeResolvedAIRequestSettingsV1(frozenResolution, true)
+    const streamResult: StreamResult = {}
+    const frozenNode = chapterGenerationNode(input.operation, input.category, input.informationBoundary, input.generationOverrides, frozenResolution, streamResult)
     const budget = new AgentTeamBudgetTracker(
       useAIConfigStore.getState().agentTeamBudgetProfile,
     )
     const generationReservation = budget.reserveCall({
       label: input.operation === 'continue' ? '正文续写' : '正文生成',
       messages: actualMessages,
-      maxOutputTokens: 16_000,
+      maxOutputTokens: input.generationOverrides?.maxTokens && input.generationOverrides.maxTokens > 0 ? input.generationOverrides.maxTokens : 16_000,
     })
     let generationSettled = false
 
@@ -1327,6 +1391,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       outlineNodeId: sourceChapter.outlineNodeId,
       assembled: input.assembled,
       messages: actualMessages,
+      requestSettings,
       binding: {
         operation: input.operation,
         sourceTextHash,
@@ -1345,7 +1410,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     let persistedCandidate: ProseGenerationCandidateV1 | null = null
     let result
     try {
-      result = await runGenerationNode(input.node, input.prepared, {
+      result = await runGenerationNode(frozenNode, input.prepared, {
         messages: input.messages,
         deferStepSucceeded: true,
         shadowTrace: {
@@ -1358,6 +1423,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             snapshot,
             attempt: gatewayAttempt,
             output: String(output ?? ''),
+            lengthObservation: observeProseLengthV1(String(output ?? ''), proseLengthExpectationV1(customInstruction), streamResult.finishReason ?? null),
             usedTokens: generationReservation.estimatedInputTokens + estimateTokens(String(output ?? '')),
           })
           snapshot = finalized.snapshot
@@ -1368,6 +1434,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           const outputText = String(output ?? '')
           if (!outputText.trim()) throw new Error('模型没有返回可采纳的正文候选。')
           const baseCandidate = {
+            lengthObservation: observeProseLengthV1(outputText, proseLengthExpectationV1(customInstruction), streamResult.finishReason ?? null),
             version: 1 as const,
             type: 'prose-generation-candidate' as const,
             projectId: project.id!,
@@ -1380,14 +1447,15 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             outputText,
             outputTextHash: await hashCanonicalValue(outputText),
             gatewayEvidenceVersion: 3 as const,
-            expectedContentHash: await hashChapterText(
+            // 纯文本按编辑器相同的 HTML 转义计算 hash，保留字面标签与实体。
+            expectedContentHash: await hashChapterText(plainTextToHtml(
               input.operation === 'continue'
                 ? [
                     normalizeChapterText(sourceChapter.content ?? ''),
                     normalizeProseForEditorV1(outputText),
                   ].filter(Boolean).join('\n')
                 : normalizeProseForEditorV1(outputText),
-            ),
+            )),
             informationBoundaryHash: input.informationBoundary.manifestHash,
             perspectiveCharacterId,
             perspectiveFromChapter: true,
@@ -1419,13 +1487,22 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         },
         stepSucceeded: async () => {},
         stepFailed: async failure => {
+          if (failure.error instanceof InterruptedChapterGenerationErrorV1) {
+            snapshot = await recordInterruptedProseGenerationV1({
+              scope, snapshot,
+              response: { version: 'prose-interrupted-response-v1', outputText: failure.error.output, completion: failure.error.completion, message: failure.error.message },
+            })
+          }
           snapshot = await failProseGenerationStepV1({
             scope,
             snapshot,
             code: failure.error instanceof Error ? failure.error.message : `${failure.phase}_failed`,
-            retryable: true,
+            retryable: !(failure.error instanceof InterruptedChapterGenerationErrorV1),
           })
           proseSnapshotRef.current = snapshot
+          if (failure.error instanceof InterruptedChapterGenerationErrorV1 && failure.error.completion !== 'failed') {
+            restoreAI({ output: failure.error.output, operation: input.operation, error: failure.error.message })
+          }
         },
         onTraceError: error => { traceError = error },
         },
@@ -1457,47 +1534,44 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     operation: ChapterGenerationOperation,
     category: ChapterGenerationCategory,
     prepared: PreparedGenerationNode,
-    backgroundMemoryIds: number[],
     messages?: ChatMessage[],
     assembled?: Awaited<ReturnType<typeof assembleContext>>,
     generationBinding?: AgentSkillExecutionBindingV2,
     informationBoundary?: InformationBoundaryManifestV1,
     contentRevision?: WorkspaceContentRevisionVectorV1,
+    generationOverrides?: { temperature?: number; maxTokens?: number },
   ) => {
     if (!informationBoundary || !generationBinding || !contentRevision) {
       setProseGenerationError('正文生成缺少 Skill 或信息边界快照，已阻止模型调用。')
       return
     }
     ai.setOperation(operation)
-    const node = chapterGenerationNode(operation, category, informationBoundary)
     void runDurableChapterGeneration({
       operation,
       category,
-      node,
       prepared,
       messages,
       assembled,
       generationBinding,
       informationBoundary,
-      contentRevision,
+      contentRevision, generationOverrides,
     }).catch(error => {
       console.error('[ChapterEditor] 生成节点执行失败:', error)
       setProseGenerationError(error instanceof Error ? error.message : '正文生成执行失败。')
     })
-    scheduleRecentMemoryRebuild(backgroundMemoryIds)
   }
 
   const prepareOrRunChapterGeneration = (
     operation: ChapterGenerationOperation,
     category: ChapterGenerationCategory,
     messages: ChatMessage[],
-    backgroundMemoryIds: number[],
     assembled: Awaited<ReturnType<typeof assembleContext>>,
     generationBinding: AgentSkillExecutionBindingV2,
     informationBoundary: InformationBoundaryManifestV1,
     contentRevision: WorkspaceContentRevisionVectorV1,
+    generationOverrides?: { temperature?: number; maxTokens?: number },
   ) => {
-    const node = chapterGenerationNode(operation, category, informationBoundary)
+    const node = chapterGenerationNode(operation, category, informationBoundary, generationOverrides)
     const prepared = prepareGenerationNode(node, messages)
     if (transparentMode) {
       ai.setOperation(operation)
@@ -1505,11 +1579,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         operation,
         category,
         prepared,
-        backgroundMemoryIds,
         assembled,
         generationBinding,
         informationBoundary,
-        contentRevision,
+        contentRevision, generationOverrides,
       })
       return
     }
@@ -1518,12 +1591,11 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       operation,
       category,
       prepared,
-      backgroundMemoryIds,
       undefined,
       assembled,
       generationBinding,
       informationBoundary,
-      contentRevision,
+      contentRevision, generationOverrides,
     )
   }
 
@@ -1538,7 +1610,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     }
     try {
       await persistCurrentEditorContent()
-      const backgroundMemoryIds = await prepareContinuityBeforeGeneration()
+      await prepareContinuityBeforeGeneration()
       const scope = await resolveScopeLike(project.id!)
       const contentRevision = await captureWorkspaceContentRevisionV1({
         scope,
@@ -1565,7 +1637,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         worldGroupId: chapterWorldGroupId ?? null,
         perspectiveCharacterId,
       })
-      const messages = buildChapterContentPrompt(
+      const promptRequest = buildChapterContentRequestV1(
         outlineNode.title,
         outlineNode.summary,
         fullCtx,
@@ -1575,9 +1647,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
           .filter(Boolean)
           .join('\n'),
-        { continuity, continuityBudgetTokens },
+        { continuity, continuityBudgetTokens, requiredGatewayContext: assembled.text },
       )
 
+      const messages = promptRequest.messages
       // Phase 21.3: 计算上下文预算
       const segments = analyzeContextSegments([
         { label: 'System Prompt', content: messages.find(m => m.role === 'system')?.content || '', layer: 'L0' },
@@ -1591,11 +1664,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         'generate',
         'chapter.content',
         messages,
-        backgroundMemoryIds,
         assembled,
         generationBinding,
         informationBoundary,
-        contentRevision,
+        contentRevision, promptRequest.modelOverride,
       )
     } catch (error) {
       setProseGenerationError(error instanceof Error ? error.message : '正文生成准备失败。')
@@ -1612,7 +1684,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       return
     }
     await persistCurrentEditorContent()
-    const backgroundMemoryIds = await prepareContinuityBeforeGeneration()
+    await prepareContinuityBeforeGeneration()
     const scope = await resolveScopeLike(project.id!)
     const contentRevision = await captureWorkspaceContentRevisionV1({
       scope,
@@ -1638,24 +1710,23 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       perspectiveCharacterId,
     })
     const ctxWithChars = characterContext ? `${fullCtx}\n\n【角色设定】\n${characterContext}` : fullCtx
-    const messages = buildContinuePrompt(
+    const promptRequest = buildContinueRequestV1(
       plainText,
       outlineNode.summary,
       ctxWithChars,
       [buildInformationBoundaryInstructionV1(informationBoundary), customInstruction.trim()]
         .filter(Boolean)
         .join('\n'),
-      { continuity, continuityBudgetTokens },
+      { continuity, continuityBudgetTokens, requiredGatewayContext: assembled.text },
     )
     prepareOrRunChapterGeneration(
       'continue',
       'chapter.continue',
-      messages,
-      backgroundMemoryIds,
+      promptRequest.messages,
       assembled,
       generationBinding,
       informationBoundary,
-      contentRevision,
+      contentRevision, promptRequest.modelOverride,
     )
   }
 
@@ -1698,34 +1769,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     ai.setOperation(isFull ? 'deai-full' : 'deai')
     ai.start(messages, undefined, {
       formalEntryId: 'prose.selection.deai', category: 'chapter.deai', projectId: project.id!,
-    })
-  }
-
-  // G8：按审校报告让 AI 改全文 —— 走和「生成正文」相同的预览→采纳/关闭流程
-  const handleReviseByReport = async (report: ReviewResult) => {
-    if (!plainText.trim() || !currentChapter?.id || !outlineNode?.id) return
-    const ok = await dialog.confirm({
-      title: '按审校报告让 AI 改全文？',
-      message: `将依据本章审校报告修改整章正文（约 ${countWords(plainText)} 字），篇幅与原文保持相近。改写结果会先预览，确认后才替换原文。`,
-      confirmText: '开始修改',
-    })
-    if (!ok) return
-    reviseReportRef.current = report
-    await persistCurrentEditorContent()
-    const assembled = await prepareProseGatewayAssemblyV1({
-      projectId: project.id!,
-      worldGroupId: chapterWorldGroupId ?? null,
-      chapterId: currentChapter.id,
-      outlineNodeId: outlineNode.id,
-      operation: 'revise',
-      authorRequest: `按审校报告修订本章：${JSON.stringify(report)}`,
-      perspectiveCharacterId,
-      config: aiConfig,
-    })
-    const messages = buildReviewRevisePrompt(plainText, report, assembled.text, '')
-    ai.setOperation('revise-full')
-    ai.start(messages, undefined, {
-      formalEntryId: 'prose.chapter.revise', category: 'review.revise', projectId: project.id!,
     })
   }
 
@@ -2731,6 +2774,10 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleAcceptAI = async (text: string) => {
+    if (ai.operation === 'revise-full') {
+      await dialog.alert({ title: '旧修订预览只读', message: '请从质量审校重新选择问题与可改范围。旧报告输出不能直接写回当前章节。' })
+      return
+    }
     if (!editorRef.current || !currentChapter?.id) return
     const acceptedChapterId = currentChapter.id
     const acceptedChapterTitle = outlineNode?.title || currentChapter.title || '未知章节'
@@ -2821,13 +2868,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
     if (aiAction === 'continue') {
       editorRef.current.appendContent(html)
-    } else if (aiAction === 'generate' || aiAction === 'deai-full' || aiAction === 'revise-full') {
+    } else if (aiAction === 'generate' || aiAction === 'deai-full') {
       // generate / 整章去AI味 / 按报告修改：替换全文
       editorRef.current.setContent(html)
       // setContent 不触发 onChange，这里手动同步
       const newHtml = editorRef.current.getHTML()
-      setContent(newHtml)
-      setPlainText(editorRef.current.getPlainText())
+      stageEditorDraft(newHtml, editorRef.current.getPlainText())
     } else {
       // polish/expand/deai（选区）：替换选区（若无选区则插入在光标处）
       editorRef.current.replaceSelection(html)
@@ -3099,7 +3145,6 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
               foreshadowContext={currentChapter?.id ? buildForeshadowContext(currentChapter.id, chapters, nodes) : ''}
               stateContext={stateCards.slice(0, 10).map(sc => `${sc.category}:${sc.entityName} — ${sc.fields?.slice(0, 50)}`).join('\n')}
               onClose={() => setShowReviewPanel(false)}
-              onReviseByReport={handleReviseByReport}
               consistencyRun={consistencyRun}
               consistencyCurrent={consistencyCurrent}
               onConsistencyRun={run => {
@@ -3108,6 +3153,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
               }}
               onBeforeConsistencyRun={async () => {
                 await persistCurrentEditorContent()
+              }}
+              onQualityRevisionAdopted={async () => {
+                await loadChapters(project.id!)
               }}
             />
           </Suspense>
@@ -3236,12 +3284,12 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
                 pending.operation,
                 pending.category,
                 pending.prepared,
-                pending.backgroundMemoryIds,
                 messages,
                 pending.assembled,
                 pending.generationBinding,
                 pending.informationBoundary,
                 pending.contentRevision,
+                pending.generationOverrides,
               )
             }}
           />
@@ -3263,6 +3311,14 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
       {(ai.output || ai.isStreaming || ai.error) && (
         <div className="mb-3">
+          {!ai.isStreaming && proseCandidate && (ai.operation === 'generate' || ai.operation === 'continue') && observeSeparatedProseFrameV1(ai.output) && <div role="alert" className="mb-2 rounded border border-warning/30 bg-warning/5 p-3 text-xs text-text-secondary">
+            <p>{observeSeparatedProseFrameV1(ai.output)!.message}</p>
+            <button type="button" className="mt-2 rounded border border-border px-2 py-1" onClick={() => {
+              const frame = observeSeparatedProseFrameV1(ai.output)
+              if (frame) restoreAI({ output: ai.output.slice(frame.afterSeparator).trim(), operation: ai.operation })
+            }}>保留分隔后的正文供核对</button>
+          </div>}
+          {proseCandidate?.lengthObservation?.message && <p role="status" className="mb-2 rounded border border-warning/30 bg-warning/5 p-3 text-xs text-text-secondary">生成时：{proseCandidate.lengthObservation.message}</p>}
           <AIStreamOutput output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
             editable={!!proseCandidate && !proseCandidate.semanticReview}
             onStop={ai.stop}
@@ -3276,13 +3332,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
               else if (ai.operation === 'polish') handlePolish()
               else if (ai.operation === 'expand') handleExpand()
               else if (ai.operation === 'deai' || ai.operation === 'deai-full') handleDeAI()
-              else if (ai.operation === 'revise-full') {
-                const cachedReport = currentChapter?.id
-                  ? useReviewResultStore.getState().byChapter[currentChapter.id]?.review
-                  : null
-                const report = reviseReportRef.current ?? cachedReport
-                if (report) handleReviseByReport(report)
-              }
+
             }} />
         </div>
       )}
@@ -3506,11 +3556,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
         <RichEditor
           ref={editorRef}
           value={content}
-          onChange={(html, plain) => {
-            setContent(html)
-            setPlainText(plain)
-            setManualSaveError('')
-          }}
+          onChange={stageEditorDraft}
           placeholder="开始写作..."
           minHeight={560}
           className="sf-manuscript-editor border-0 bg-transparent shadow-none"

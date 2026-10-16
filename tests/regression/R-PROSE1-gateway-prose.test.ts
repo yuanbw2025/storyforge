@@ -242,7 +242,7 @@ describe.sequential('PROSE-1 · 正文 Gateway 单一上下文与 exact adoption
     expect(assembled.text).toContain('原文尾部（最多 4000 字符）')
     expect(assembled.text).toContain('不得让守灯人提前知道月井密钥')
     expect(assembled.text).not.toContain('不应泄漏')
-    expect(assembled.sourceEvidence?.map(item => item.key)).toEqual(['ragSelection'])
+    expect(assembled.sourceEvidence?.map(item => item.key)).toEqual(['ragSelection', 'workAuthoringIntent'])
     expect(assembled.contextGatewayExecution.contextPacket.sourceRefs.some(ref => ref.table === 'narrativeBeats')).toBe(true)
     expect(assembled.contextGatewayExecution.contextPacket.sourceRefs.some(ref => ref.table === 'narrativeChoices')).toBe(true)
   })

@@ -8,11 +8,14 @@ import { normalizeParsedScenes, parseEnhancedDetailResult } from '../../lib/ai/a
 import { batchGenerateDetails, type BatchProgress } from '../../lib/ai/batch-detail-runner'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import { nanoid } from '../../lib/utils/id'
-import type { Project, DetailedOutline, DetailedScene, EmotionArc } from '../../lib/types'
+import type { Project, DetailedOutline, DetailedScene, EmotionArc, WorkspaceScope } from '../../lib/types'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { db } from '../../lib/db/schema'
+import { liveQuery } from 'dexie'
 import { resolveScopeLike } from '../../lib/workspace/scope'
 import {
   hashDetailedOutlineSourceSummaryV1,
+  readPendingDetailedOutlineNodeIdsV1,
   type DetailedOutlineGenerationOperationV1,
 } from '../../lib/agent/run/detailed-outline-generation-durable'
 import {
@@ -40,6 +43,8 @@ interface Props {
   project: Project
   /** 外部影响交接指定的章纲节点；仍通过既有细纲面板处理。 */
   initialNodeId?: number | null
+  onOpenChapter?: (nodeId: number) => void
+  onOpenOutline?: (nodeId: number) => void
 }
 
 const EMOTION_LABELS: Record<EmotionArc, string> = {
@@ -55,22 +60,40 @@ export function filterExistingIds(ids: number[], validIds: Set<number>): number[
 }
 
 /** v3 §2.1 — 创作区.细纲（场景拆分 + AI） */
-export default function DetailedOutlinePanel({ project, initialNodeId }: Props) {
+export default function DetailedOutlinePanel(props: Props) {
+  return <ScopedDetailedOutlinePanel key={`${props.project.id}:${props.project.activeWorldId}:${props.project.activeWorkId}`} {...props} />
+}
+
+function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onOpenOutline }: Props) {
   const toast = useToast()
-  const { nodes, loadAll: loadOutline } = useOutlineStore()
-  const { detailedOutlines, loadAll: loadDetailed, getOrCreate, save } = useDetailedOutlineStore()
+  const scope = useMemo<WorkspaceScope>(() => ({ projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! }), [project.id, project.activeWorldId, project.activeWorkId])
+  const { nodes: cachedNodes, loadAll: loadOutline } = useOutlineStore()
+  const nodes = cachedNodes.filter(node => node.projectId === scope.projectId && node.workId === scope.workId)
+  const { detailedOutlines: cachedDetails, loadAll: loadDetailed, getOrCreate, save, editScene } = useDetailedOutlineStore()
+  const detailedOutlines = cachedDetails.filter(detail => detail.projectId === scope.projectId && detail.workId === scope.workId)
   const { characters, loadAll: loadCharacters } = useCharacterStore()
   const { foreshadows, loadAll: loadForeshadows } = useForeshadowStore()
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(initialNodeId ?? null)
   const [pendingBatchCandidate, setPendingBatchCandidate] = useState<DetailedOutlineBatchCandidateV1 | null>(null)
+  const [ready, setReady] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [pendingNodeIds, setPendingNodeIds] = useState<ReadonlySet<number>>(new Set())
+  const [pendingReadError, setPendingReadError] = useState<string | null>(null)
   const batchDecisionRef = useRef<((decision: 'adopt' | 'reject') => void) | null>(null)
 
   useEffect(() => {
-    loadOutline(project.id!)
-    loadDetailed(project.id!)
-    loadForeshadows(project.id!)
-    loadCharacters(project.id!)
-  }, [project.id, loadOutline, loadDetailed, loadForeshadows, loadCharacters])
+    let active = true
+    void Promise.all([loadOutline(scope), loadDetailed(scope), loadForeshadows(scope), loadCharacters(scope)]).then(() => { if (active) setReady(true) }).catch(error => { if (active) setLoadError(error instanceof Error ? error.message : '细纲资料读取失败') })
+    return () => { active = false }
+  }, [scope, loadOutline, loadDetailed, loadForeshadows, loadCharacters])
+
+  useEffect(() => {
+    const subscription = liveQuery(() => readPendingDetailedOutlineNodeIdsV1(scope)).subscribe({
+      next: ids => { setPendingNodeIds(ids); setPendingReadError(null) },
+      error: error => setPendingReadError(error instanceof Error ? error.message : '待确认候选状态无法读取'),
+    })
+    return () => subscription.unsubscribe()
+  }, [scope])
 
   // 章节节点列表（按 order 排序）
   const chapterNodes = useMemo(() =>
@@ -94,7 +117,7 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
     () => new Set(foreshadows.map(f => f.id).filter((id): id is number => id != null)),
     [foreshadows],
   )
-  const reloadDetailed = useCallback(() => loadDetailed(project.id!), [loadDetailed, project.id])
+  const reloadDetailed = useCallback(() => loadDetailed(scope), [loadDetailed, scope])
   const detailGeneration = useDetailedOutlineGenerationController({
     projectId: project.id!,
     outlineNodeId: selectedNodeId,
@@ -126,8 +149,7 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
     let active = true
     void (async () => {
       try {
-        const scope = await resolveScopeLike(project.id!)
-        const candidate = await readLatestRecoverableDetailedOutlineBatchCandidateV1({ scope })
+        const candidate = await readLatestRecoverableDetailedOutlineBatchCandidateV1({ scope: await resolveScopeLike(scope) })
         if (!active || !candidate) return
         clearPendingCandidate()
         setPendingBatchCandidate(candidate)
@@ -141,17 +163,11 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
       }
     })()
     return () => { active = false }
-  }, [clearPendingCandidate, project.id, restoreEnhanced])
+  }, [clearPendingCandidate, scope, restoreEnhanced])
 
   const ensureDetailed = async () => {
-    if (!currentChapter) return null
-    return await getOrCreate(project.id!, currentChapter.id!)
-  }
-
-  const updateScenes = async (scenes: DetailedScene[]) => {
-    const dt = await ensureDetailed()
-    if (!dt?.id) return
-    await save(dt.id, { scenes })
+    if (!ready || !currentChapter) throw new Error('当前作品的章纲尚未就绪')
+    return await getOrCreate(scope, currentChapter.id!)
   }
 
   const addScene = async () => {
@@ -163,20 +179,17 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
       characterIds: [], location: '', conflict: '',
       pace: 'medium', estimatedWords: 0, notes: '',
     }
-    await updateScenes([...(dt.scenes || []), newScene])
+    await editScene(dt.id!, { kind: 'add', scene: newScene }, scope, currentChapter!.summary)
   }
 
   const updateScene = async (sceneId: string, patch: Partial<DetailedScene>) => {
-    if (!currentDetailed) return
-    const next = currentDetailed.scenes.map(s =>
-      s.sceneId === sceneId ? { ...s, ...patch } : s
-    )
-    await updateScenes(next)
+    if (!ready || !currentDetailed || !currentChapter) throw new Error('当前作品的细纲尚未就绪')
+    await editScene(currentDetailed.id!, { kind: 'patch', sceneId, patch }, scope, currentChapter.summary)
   }
 
   const deleteScene = async (sceneId: string) => {
-    if (!currentDetailed) return
-    await updateScenes(currentDetailed.scenes.filter(s => s.sceneId !== sceneId))
+    if (!ready || !currentDetailed || !currentChapter) throw new Error('当前作品的细纲尚未就绪')
+    await editScene(currentDetailed.id!, { kind: 'remove', sceneId }, scope, currentChapter.summary)
   }
 
   const handleAIGenerate = async () => {
@@ -327,7 +340,7 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
   const isSyncStale = useMemo(() => {
     if (!currentDetailed || !currentChapter) return false
     // 只有曾经生成过细纲（有 lastUsedSummary）才检测
-    if (!currentDetailed.lastUsedSummary) return false
+    if (currentDetailed.lastUsedSummary === undefined) return false
     const currentSummary = currentChapter.summary || ''
     return currentDetailed.lastUsedSummary !== currentSummary
   }, [currentDetailed, currentChapter])
@@ -335,8 +348,8 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
   /** 标记同步：将当前大纲摘要快照写入细纲 */
   const markSynced = useCallback(async () => {
     if (!currentDetailed?.id || !currentChapter) return
-    await save(currentDetailed.id, { lastUsedSummary: currentChapter.summary || '' })
-  }, [currentDetailed, currentChapter, save])
+    await save(currentDetailed.id, { lastUsedSummary: currentChapter.summary || '' }, scope)
+  }, [currentDetailed, currentChapter, save, scope])
 
   // Phase 30.1: 批量生成细纲
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null)
@@ -348,11 +361,11 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
     batchAbortRef.current = ac
 
     try {
-      const scope = await resolveScopeLike(project.id!)
+      const frozenScope = await resolveScopeLike(scope)
       const result = await batchGenerateDetails({
         chapters: chapterNodes,
         existingDetails: detailedOutlines,
-        scope,
+        scope: frozenScope,
         onCandidate: ({ chapter, candidate }) => new Promise(resolve => {
           setSelectedNodeId(chapter.id!)
           clearPendingCandidate()
@@ -385,7 +398,7 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
 
       if (!result.cancelled) {
         // 刷新列表
-        await loadDetailed(project.id!)
+        await loadDetailed(scope)
       }
     } finally {
       batchAbortRef.current = null
@@ -393,7 +406,7 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
       // 3 秒后清除进度信息
       setTimeout(() => setBatchProgress(null), 3000)
     }
-  }, [adoptDetailedPatch, batchProgress, chapterNodes, clearPendingCandidate, detailedOutlines, loadDetailed, project.id, restoreEnhanced])
+  }, [adoptDetailedPatch, batchProgress, chapterNodes, clearPendingCandidate, detailedOutlines, loadDetailed, scope, restoreEnhanced])
 
   const handleBatchStop = useCallback(() => {
     batchAbortRef.current?.abort()
@@ -413,7 +426,9 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
         detailedOutlines={detailedOutlines}
         selectedNodeId={selectedNodeId}
         batchProgress={batchProgress}
-        onSelect={setSelectedNodeId}
+        onSelect={nodeId => { void flushPendingEditsV1().then(() => setSelectedNodeId(nodeId)).catch(error => toast.error(error instanceof Error ? error.message : '保存失败，已阻止切章')) }}
+        pendingNodeIds={new Set([...pendingNodeIds, ...[pendingDetailedCandidate?.candidate.outlineNodeId, pendingBatchCandidate?.outlineNodeId].filter((id): id is number => id != null)])}
+        pendingStateUnknown={pendingReadError != null}
         onBatchStart={() => { void handleBatchDetail() }}
         onBatchStop={handleBatchStop}
       />
@@ -425,7 +440,8 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
           currentChapter?.id === initialNodeId ? INITIAL_RECORD_TARGET_CLASS : ''
         }`}
       >
-        {!currentChapter ? (
+        {pendingReadError && <p role="alert" className="mb-3 text-xs text-error">待确认候选状态无法核对：{pendingReadError}</p>}
+        {loadError ? <p role="alert" className="text-error">{loadError}</p> : !ready ? <p role="status">正在读取本作品细纲…</p> : !currentChapter ? (
           <div className="h-full flex items-center justify-center text-text-muted text-sm">
             从左侧选一个章节开始编辑细纲。
           </div>
@@ -437,6 +453,10 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
               <p className="text-sm text-text-muted">
                 {currentChapter.summary || '（章节大纲未填写）'}
               </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {onOpenOutline && <button type="button" className="text-xs text-accent" onClick={() => onOpenOutline(currentChapter.id!)}>查看本章章纲</button>}
+                {onOpenChapter && <button type="button" className="text-xs text-accent" onClick={() => onOpenChapter(currentChapter.id!)}>写本章正文</button>}
+              </div>
               {currentDetailed && currentDetailed.scenes.length > 0 && (
                 <p className="text-xs text-text-muted mt-1">
                   {currentDetailed.scenes.length} 个场景 · 估算 {totalWords.toLocaleString()} 字
@@ -458,7 +478,7 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
                   onClick={markSynced}
                   className="flex-shrink-0 text-[11px] px-2 py-0.5 rounded bg-warning/20 text-warning hover:bg-warning/30"
                 >
-                  忽略
+                  我已复核
                 </button>
               </div>
             )}
@@ -466,7 +486,7 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
             {/* 操作栏 */}
             <div className="flex flex-wrap items-center gap-2 mb-4">
               <button
-                onClick={addScene}
+                onClick={() => { void addScene().catch(error => toast.error(error instanceof Error ? error.message : '场景添加失败')) }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white text-sm rounded hover:bg-accent-hover"
               >
                 <Plus className="w-4 h-4" /> 添加场景
@@ -601,8 +621,8 @@ export default function DetailedOutlinePanel({ project, initialNodeId }: Props) 
                     key={s.sceneId}
                     scene={s}
                     index={idx}
-                    onUpdate={patch => { void updateScene(s.sceneId, patch) }}
-                    onDelete={() => { void deleteScene(s.sceneId) }}
+                    onUpdate={patch => updateScene(s.sceneId, patch)}
+                    onDelete={() => { void deleteScene(s.sceneId).catch(error => toast.error(error instanceof Error ? error.message : '场景删除失败')) }}
                   />
                 ))}
               </div>

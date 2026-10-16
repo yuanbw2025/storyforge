@@ -455,12 +455,13 @@ describe('FLOW-3C · 领域节点专用执行器', () => {
         expect(result.candidates[nodeId]?.creativeArtifacts?.[0].callEvidence.length).toBeLessThanOrEqual(2)
       }
       const adopted = await adoptAuthoringCandidate({ flow, nodeId, output: result.candidates[nodeId].output })
-      await persistAdoptedAuthoringCandidate({
+      const confirmed = await persistAdoptedAuthoringCandidate({
         flow,
         runId: result.run.id!,
         nodeId,
         output: result.candidates[nodeId].output,
       })
+      expect(JSON.parse(confirmed.nodeResultsJson)[nodeId].canonReceipt, JSON.stringify(adopted.written)).toBeDefined()
       baseRunId = result.run.id!
       return adopted
     }

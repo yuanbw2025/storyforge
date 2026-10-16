@@ -22,6 +22,7 @@ interface ChapterRowProps {
   onUpdate: (id: number, patch: Record<string, string>) => void
   onDelete: (id: number) => void
   onOpen?: (id: number) => void
+  onOpenDetail?: (id: number) => void
   dnd?: ItemDnD
   onInsertAfter?: () => void
   onGenerate?: () => void
@@ -40,6 +41,7 @@ export function OutlineChapterRow({
   onUpdate,
   onDelete,
   onOpen,
+  onOpenDetail,
   dnd,
   onInsertAfter,
   onGenerate,
@@ -142,7 +144,7 @@ export function OutlineChapterRow({
         />
       </div>
       <div className={`flex items-center gap-0.5 transition-opacity shrink-0 mt-1 ${
-        !ch.summary.trim() && onGenerate ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        !ch.summary.trim() && onGenerate ? 'opacity-100' : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
       }`}>
         {!ch.summary.trim() && onGenerate && (
           <button onClick={onGenerate} className="p-1 text-text-muted hover:text-accent rounded" title="AI 生成本章章纲">
@@ -159,6 +161,7 @@ export function OutlineChapterRow({
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         )}
+        {onOpenDetail && <button type="button" onClick={() => onOpenDetail(ch.id!)} className="rounded px-2 py-1 text-xs text-accent" title="编辑本章细纲">细纲</button>}
         <button onClick={() => onDelete(ch.id!)} className="p-1 text-text-muted hover:text-error rounded">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
@@ -175,6 +178,7 @@ export function OutlineStoryBlockSection({
   onDeleteNode,
   onAddChapter,
   onOpenChapter,
+  onOpenDetailedOutline,
   onReorder,
   onInsertAfter,
   onGenerateChapter,
@@ -191,6 +195,7 @@ export function OutlineStoryBlockSection({
   onDeleteNode: (id: number) => void
   onAddChapter: () => void
   onOpenChapter?: (id: number) => void
+  onOpenDetailedOutline?: (id: number) => void
   onReorder: (orderedIds: number[]) => void
   onInsertAfter: (chapterId: number) => void
   onGenerateChapter: (chapterId: number) => void
@@ -283,6 +288,7 @@ export function OutlineStoryBlockSection({
                 onUpdate={onUpdateNode}
                 onDelete={onDeleteNode}
                 onOpen={onOpenChapter}
+                onOpenDetail={onOpenDetailedOutline}
                 dnd={blockChaptersDnD.itemDnD(chapter.id)}
                 onInsertAfter={() => onInsertAfter(chapter.id!)}
                 onGenerate={() => onGenerateChapter(chapter.id!)}

@@ -214,6 +214,8 @@ const scannedFiles = [
   // DETAIL-1: this service is itself a formal generation entry and must not
   // remain outside the UI/generation scanners merely because it predates them.
   'src/lib/ai/batch-detail-runner.ts',
+  // Q07/Q08: step and node review/revision share this formal provider service.
+  'src/lib/prose/quality-transport.ts',
   'src/lib/ai-town/consultation.ts',
   // G5-02 creator consultation is a formal durable service rather than a UI
   // hook; keep its literal entry/category binding under the same machine gate.

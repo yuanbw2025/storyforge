@@ -1,10 +1,12 @@
 import { renderAuthoringPromptControl } from './prompt-control'
 import { estimateTokens } from '../ai/context-budget'
 import type { NodeFlow } from '../types'
-import { hashAuthoringText, readAuthoringCanonBinding } from './bindings'
+import { authoringConnectionsHash, hashAuthoringText, isAuthoringCanonReceiptCurrent, readAuthoringCanonBinding } from './bindings'
 import type { AuthoringCandidateMap, AuthoringRunSnapshotMap } from './executor'
 import { downstreamAuthoringNodeIds } from './graph'
 import { parseAuthoringGraph } from './graph-codec'
+import { isQualityAuthoringReportCurrentV1, readQualityAuthoringRevisionV1 } from './quality-execution'
+import { resolveScopeLike } from '../workspace/scope'
 
 export type AuthoringFreshnessReason =
   | 'never-run'
@@ -50,6 +52,7 @@ export async function inspectAuthoringGraphFreshness(input: {
   candidates: AuthoringCandidateMap
 }): Promise<AuthoringFreshnessMap> {
   const graph = parseAuthoringGraph(input.flow.graphJson)
+  const scope = await resolveScopeLike(input.flow.projectId)
   const result: AuthoringFreshnessMap = {}
   const staleRoots = new Set<string>()
 
@@ -67,14 +70,29 @@ export async function inspectAuthoringGraphFreshness(input: {
     }
 
     const reasons: AuthoringFreshnessReason[] = []
+    if (candidate.domain?.kind === 'quality-review') {
+      try {
+        if (!await isQualityAuthoringReportCurrentV1({ projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null, node, mode: candidate.domain.mode, reportHash: candidate.domain.reportHash })) reasons.push('source-updated')
+      } catch { reasons.push('source-missing') }
+    }
+    if (candidate.domain?.kind === 'quality-revision') {
+      try {
+        const { chapter, view } = await readQualityAuthoringRevisionV1({ projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null, node, domain: candidate.domain })
+        if (!view.current && !(view.state === 'completed' && chapter.content === view.draft.contentHtml)) reasons.push('source-updated')
+      } catch { reasons.push('source-missing') }
+    }
     const signature = candidate.signature
+    const confirmedCanon = candidate.status === 'adopted' && candidate.canonReceipt
+    if (confirmedCanon && !await isAuthoringCanonReceiptCurrent({ scope, candidate, node })) reasons.push('source-updated')
     if (!signature || signature.nodeConfigHash !== hashAuthoringText(JSON.stringify(node.config))) {
       reasons.push('config-updated')
     }
-    if (!signature || signature.upstreamHash !== currentUpstreamHash(graph, node.id, input.candidates)) {
+    if (confirmedCanon
+      ? candidate.canonReceipt!.connectionsHash !== authoringConnectionsHash(graph, node.id)
+      : !signature || signature.upstreamHash !== currentUpstreamHash(graph, node.id, input.candidates)) {
       reasons.push('connections-updated')
     }
-    if (snapshot?.sourceHash && signature?.executorVersion === 'FLOW-3B.2') {
+    if (!confirmedCanon && snapshot?.sourceHash && signature?.executorVersion === 'FLOW-3B.2') {
       if (node.templateId === 'control.prompt') {
         try {
           const current = await renderAuthoringPromptControl({ node, projectId: input.flow.projectId, worldGroupId: input.flow.worldGroupId ?? null })

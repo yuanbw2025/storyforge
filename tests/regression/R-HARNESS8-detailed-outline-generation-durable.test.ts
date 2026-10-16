@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { adoptChapterOutlineWorkshopResult } from '../../src/lib/outline/adopt-workshop'
-import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
+import { appendAgentRunEventV1, readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import {
   beginDetailedOutlineGenerationStepV1,
@@ -15,6 +15,8 @@ import {
   recordDetailedOutlineGenerationCandidateV1,
   recordDetailedOutlineGenerationModelOutputV1,
   readLatestDetailedOutlineGenerationCandidateV1,
+  readPendingDetailedOutlineNodeIdsV1,
+  rejectDetailedOutlineGenerationCandidateV1,
   DETAILED_OUTLINE_GENERATION_SOURCE_KEYS_V1,
   DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
   type DetailedOutlineGenerationCandidateV1,
@@ -165,8 +167,23 @@ describe.sequential('R-HARNESS8 · 细纲生成 durable run', { timeout: 15_000 
 
   afterEach(() => db.close())
 
+  it('已拒绝的步骤与已取消的运行都不再进入只读候选索引或刷新恢复', async () => {
+    const rejected = await pendingCandidate('拒绝索引')
+    await rejectDetailedOutlineGenerationCandidateV1({ scope: rejected.fixture.scope, runId: rejected.candidate.durable.runId, candidate: rejected.candidate })
+    expect(await readPendingDetailedOutlineNodeIdsV1(rejected.fixture.scope)).toEqual(new Set())
+    expect(await readLatestDetailedOutlineGenerationCandidateV1({ scope: rejected.fixture.scope, outlineNodeId: rejected.fixture.outlineNodeId })).toBeNull()
+    const cancelled = await pendingCandidate('取消索引')
+    const snapshot = await readAgentRunV1(cancelled.fixture.scope, cancelled.candidate.durable.runId)
+    await appendAgentRunEventV1({ scope: cancelled.fixture.scope, runId: cancelled.candidate.durable.runId, expectedLastSequence: snapshot.projection.lastSequence, type: 'run.cancelled', payload: { reason: '作者停止此运行' } })
+    expect(await readPendingDetailedOutlineNodeIdsV1(cancelled.fixture.scope)).toEqual(new Set())
+    expect(await readLatestDetailedOutlineGenerationCandidateV1({ scope: cancelled.fixture.scope, outlineNodeId: cancelled.fixture.outlineNodeId })).toBeNull()
+  })
+
   it('候选先停在 durable ledger，作者确认后经 adopt 写回并签发 receipt', async () => {
     const pending = await pendingCandidate('细纲 durable')
+    const beforeIndex = await readAgentRunV1(pending.fixture.scope, pending.candidate.durable.runId)
+    expect(await readPendingDetailedOutlineNodeIdsV1(pending.fixture.scope)).toEqual(new Set([pending.fixture.outlineNodeId]))
+    expect(await readAgentRunV1(pending.fixture.scope, pending.candidate.durable.runId)).toEqual(beforeIndex)
     const formalEntrySnapshot = pending.snapshot.contract.executionBindings?.[0]?.formalEntry
     expect(formalEntrySnapshot?.entryId).toBe('outline.detail.enhance')
     const formalEntry = await assertFormalAIEntrySnapshotIntegrityV1(formalEntrySnapshot!)
@@ -205,6 +222,7 @@ describe.sequential('R-HARNESS8 · 细纲生成 durable run', { timeout: 15_000 
       ),
     })
     expect(adopted.snapshot.projection.state).toBe('completed')
+    expect(await readPendingDetailedOutlineNodeIdsV1(pending.fixture.scope)).toEqual(new Set())
     expect(adopted.receiptHash).toMatch(/^[a-f0-9]{64}$/)
     expect((await db.detailedOutlines.where('outlineNodeId').equals(pending.fixture.outlineNodeId).first())?.scenes)
       .toHaveLength(1)

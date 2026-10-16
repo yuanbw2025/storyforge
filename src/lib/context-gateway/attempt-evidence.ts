@@ -119,7 +119,7 @@ async function assertContextPacketIntegrity(packet: ContextPacketV1): Promise<vo
 }
 
 async function assertSelectorIntegrity(selector: ContextSelectorResultV1): Promise<void> {
-  if (selector.version !== 'context-selector-v1' || !HASH.test(selector.selectorHash)
+  if (!['context-selector-v1', 'context-selector-v2'].includes(selector.version) || !HASH.test(selector.selectorHash)
     || !HASH.test(selector.inventoryHash) || !Array.isArray(selector.selected)
     || !Array.isArray(selector.omitted) || !Array.isArray(selector.categoryBudgets)) {
     fail('selector-contract', 'Context Selector Result 合同非法')

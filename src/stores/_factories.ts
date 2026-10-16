@@ -43,7 +43,7 @@ export type ProjectSingletonStore<K extends string, T extends ProjectScopedRecor
   /** 当前加载的世界组（null = 单世界 / 未指定，Phase 25.4） */
   activeWorldGroupId: number | null
   loadAll: (scope: WorkspaceScopeLike, worldGroupId?: number | null) => Promise<void>
-  save: (data: Partial<T>) => Promise<void>
+  save: (data: Partial<T>, scope?: WorkspaceScopeLike) => Promise<void>
 } & { [P in K]: T | null }
 
 interface FactoryOptions<K extends string, T extends ProjectScopedRecord> {
@@ -103,7 +103,7 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
         set({ [key]: record ?? null, loading: false } as unknown as Partial<State> as State)
       },
 
-      save: async (data: Partial<T>) => {
+      save: async (data: Partial<T>, targetScope?: WorkspaceScopeLike) => {
         const state = get()
         const memoryCurrent = (state as unknown as Record<string, T | null>)[key]
         const activeWorldGroupId = (state as unknown as { activeWorldGroupId: number | null }).activeWorldGroupId
@@ -111,20 +111,29 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
         await coordinatePendingEditV1({
           key: `project-singleton:${String(table)}:${pendingProjectId ?? 'unknown'}:${activeWorldGroupId ?? 'default'}`,
           persist: async () => {
-            let current = (get() as unknown as Record<string, T | null>)[key]
-
-            // 以 DB 为准定位既有记录，避免内存为 null/陈旧时误新增重复记录
-            // （与 saveWorldview 同类修复：单例表应每 (projectId, worldGroupId) 仅一条）
-            const projectId = data.projectId ?? (current as { projectId?: number } | null)?.projectId
-            if (!current?.id && projectId != null) {
-              const scope = await resolveScopeLike(projectId)
-              const owner = getTableSpec(String(table)).domainOwner?.defaultOwner
-              const all = await readOwnedRows<T>(scope, String(table), {
-                owner: owner === 'world' || owner === 'work' ? owner : undefined,
-              })
-              current = (activeWorldGroupId == null
-                ? (all.find(r => ((r as { worldGroupId?: number | null }).worldGroupId ?? null) === null) ?? all[0])
-                : all.find(r => (r as { worldGroupId?: number | null }).worldGroupId === activeWorldGroupId)) ?? null
+            const projectId = pendingProjectId
+            if (projectId == null) return
+            const scope = await resolveScopeLike(targetScope ?? projectId)
+            if (scope.projectId !== projectId) throw new Error('单例保存目标与工作区作用域不一致')
+            const spec = getTableSpec(String(table))
+            const owner = spec.domainOwner?.defaultOwner
+            const groupId = spec.worldScoped ? activeWorldGroupId : null
+            // 缓存只能供界面展示；每次写入都从指定 owner 作用域定位真实单例。
+            const all = await readOwnedRows<T>(scope, String(table), {
+              owner: owner === 'world' || owner === 'work' ? owner : undefined,
+            })
+            const current = (groupId == null
+              ? (all.find(r => ((r as { worldGroupId?: number | null }).worldGroupId ?? null) === null) ?? all[0])
+              : all.find(r => (r as { worldGroupId?: number | null }).worldGroupId === groupId)) ?? null
+            if (data.id != null && data.id !== current?.id) {
+              throw new Error('单例保存记录不属于指定作用域')
+            }
+            const ownerField = owner === 'world' ? 'worldId' : owner === 'work' ? 'workId' : null
+            if (ownerField) {
+              const supplied = (data as Record<string, unknown>)[ownerField]
+              if (supplied != null && supplied !== scope[ownerField]) {
+                throw new Error('单例保存不能更改数据 owner')
+              }
             }
 
             if (current?.id) {
@@ -141,12 +150,11 @@ export function createProjectSingletonStore<K extends string, T extends ProjectS
 
             if (data.projectId) {
               const ts = now()
-              const scope = await resolveScopeLike(data.projectId)
               const toInsert = stampNewRecord(scope, String(table), {
                 ...(defaults as object),
                 projectId: data.projectId,
                 // 多世界模式下盖章当前世界组（单世界时为 null，不影响）
-                ...(activeWorldGroupId != null ? { worldGroupId: activeWorldGroupId } : {}),
+                ...(groupId != null ? { worldGroupId: groupId } : {}),
                 createdAt: ts,
                 updatedAt: ts,
                 ...data,

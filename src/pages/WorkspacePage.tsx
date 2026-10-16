@@ -1,5 +1,6 @@
 import ExtensionSurface from '../components/extensions/ExtensionOutlet'
 import { canonicalPowerModule } from '../lib/workspace/module-alias'
+import { resolveLongformChapterNavigationV1, type LongformChapterModuleV1 } from '../lib/authoring/longform-chapter-navigation'
 import ShortNovelHistory from '../components/short-novel/ShortNovelHistory'
 import LongformCompletion from '../components/longform/LongformCompletion'
 import { worldModulePath } from '../components/world-engine/navigation'
@@ -131,12 +132,12 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
   const activeWorldGroupId = useWorldGroupStore(state => state.activeGroupId)
   const worldGroups = useWorldGroupStore(state => state.groups)
 
-  const afterPendingEdits = useCallback((action: () => void, failureMessage: string) => {
+  const afterPendingEdits = useCallback((action: () => void | Promise<void>, failureMessage: string) => {
     const transition = navigationTail.current
       .catch(() => undefined)
       .then(async () => {
         await flushPendingEditsV1()
-        action()
+        await action()
       })
     navigationTail.current = transition
     void transition.catch(error => {
@@ -302,13 +303,18 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
     )
   }
 
-  const handleOpenChapter = (nodeId: number) => {
-    afterPendingEdits(() => {
+  const handleOpenChapterModule = (module: LongformChapterModuleV1, nodeId: number) => {
+    const scope = { projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! }
+    afterPendingEdits(async () => {
+      const target = await resolveLongformChapterNavigationV1({ scope, module, outlineNodeId: nodeId })
       setEditorNodeId(nodeId)
-      setActiveModule('chapters-list')
-      navigate(`/workspace/${projectId}?module=chapters-list&chapter=${nodeId}`)
+      setActiveModule(module)
+      navigate(target)
     }, '当前编辑未能保存，已阻止打开章节')
   }
+  const handleOpenChapter = (nodeId: number) => handleOpenChapterModule('chapters-list', nodeId)
+  const handleOpenDetailedOutline = (nodeId: number) => handleOpenChapterModule('detailed-outline', nodeId)
+  const handleOpenOutline = (nodeId: number) => handleOpenChapterModule('outline', nodeId)
 
 
   const immersiveModules = new Set<SidebarModule>([
@@ -382,6 +388,9 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
 
   /** 根据当前模块渲染主面板内容 */
   const renderMainPanel = () => {
+    if (['outline', 'detailed-outline', 'chapters-list', 'editor'].includes(activeModule) && query.has('work') && Number(query.get('work')) !== project.activeWorkId) {
+      return <p role="alert" className="p-4 text-error">章节跳转属于其它作品，请从当前作品的章纲重新打开。</p>
+    }
     switch (activeModule) {
       case 'info':
         return <ProjectInfoPanel project={project} onUpdate={() => useProjectStore.getState().loadProjects()} />
@@ -481,9 +490,10 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
         return <OutlinePanel
           project={project}
           onOpenChapter={handleOpenChapter}
+          onOpenDetailedOutline={handleOpenDetailedOutline}
           initialNodeId={impactHandoff?.targetModule === 'outline' && impactHandoffTarget?.table === 'outlineNodes'
             ? impactHandoffTarget.moduleRecordId
-            : null}
+            : editorNodeId}
         />
       case 'character-driven-plot':
         return <CharacterDrivenPlotPanel project={project} worldGroupId={copilotWorldGroupId} />
@@ -494,12 +504,14 @@ export default function WorkspacePage({ embeddedProjectId, embeddedModule }: { e
       case 'detailed-outline':
         return <DetailedOutlinePanel
           project={project}
+          onOpenChapter={handleOpenChapter}
+          onOpenOutline={handleOpenOutline}
           initialNodeId={impactHandoff?.targetModule === 'detailed-outline'
             ? impactHandoffTarget?.moduleRecordId ?? null
-            : null}
+            : editorNodeId}
         />
       case 'chapters-list':
-        return <ChaptersListPanel project={project} initialNodeId={handoffChapterNodeId ?? editorNodeId} />
+        return <ChaptersListPanel key={`${project.id}:${project.activeWorkId}`} project={project} initialNodeId={handoffChapterNodeId ?? editorNodeId} onOpenDetailedOutline={handleOpenDetailedOutline} />
       case 'editor':
         return <div className="h-full flex flex-col"><section className="p-4 border-b border-border"><h3 className="text-xl">改稿影响</h3><p className="mt-2 text-sm text-text-secondary">选择需要修改的章节，使用编辑器中的“改稿影响”检查事实、记忆和后续章节，再逐项确认修正。</p></section><div className="min-h-0 flex-1"><ChaptersListPanel project={project} initialNodeId={handoffChapterNodeId ?? editorNodeId} /></div></div>
       case 'foreshadow':

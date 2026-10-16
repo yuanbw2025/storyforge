@@ -1,5 +1,38 @@
 # Pending development and branch audit
 
+## October 15, 2026 · Longform quality development trial {#longform-quality-trial}
+
+This section reviews only system-fiction longform Q02–Q10; other products' snapshots below are unchanged. The product source in [draft PR #141](https://github.com/yuanbw2025/storyforge/pull/141) is `c2836ba8`, unmerged and undeployed. Existing v4.0.0 downloads and the hosted experience do not include these additions. The instructions below apply to that development branch. Node mode remains a preview.
+
+### From elements to prose
+
+1. Select the genre in Work information (作品概况). Open Story design → Creative rules → System-fiction elements (故事设计 → 创作规则 → 系统文元素) and enter the protagonist's situation and goal, system mechanism, rewards and growth, limits and costs, and opposition and relationships. Check Enable these system-fiction author requirements (启用这些系统文作者要求), click Save elements (保存元素), and confirm Elements saved (元素已保存). Fields may be blank. Disabling retains the text; planned rewards do not become acquired items, and your selected prompt template is retained.
+2. Select the chapter in Outline and chapter plans (大纲与章纲), then open Scene beats (场景细纲). Expand Optional scene tasks (场景任务（可选，可留白）) to specify entry state, scene goal, key choice, consequences, exit state, and scene function/reader expectations as needed. Everyday, quiet, and ending scenes are supported; enemies and penalties are optional.
+3. Use the links between this chapter's scene beats and prose. Wait for edits to save before moving to the same chapter. If saving fails, retain and retry the current input. Write or generate prose, inspect the content and candidate, then decide whether to adopt. A word-count target is not a guarantee of exact length.
+
+### Whole-chapter review and scoped revision
+
+1. Open Quality review (质量审校) in the prose toolbar, choose Review (审校), Expression and repetition (表达与重复), or Read-through appeal (追读力), then Start detection (开始检测). Reports cover the current saved prose and show full-input and quotation evidence. Detection is blocked when the complete input cannot be sent. Sending the full chapter does not guarantee that the model notices every issue.
+2. Select issues for this revision. Only their paragraphs are editable by default. Expand Select other editable paragraphs (选择其它可改段落) when necessary; enter one exact sentence per line in Protected original sentences (保护原句).
+3. Click Generate revision and recheck (生成修订并复核). This round allows one revision and one recheck: at most two additional model requests. Wait for the recheck, compare both texts, then Confirm adoption (确认采纳修订) or Abandon revision (放弃修订). A failed recheck retains a preview without writing to the prose.
+4. Reopening reads saved reports and decisions without automatically resending requests. Changes to prose or relevant materials can make old reports and candidates stale. Resolve changes before explicitly starting another round. Suggestions, a clean report, or “the model considers this improved” do not replace author judgment.
+
+### The same workflow in node mode
+
+Connect Whole-chapter review and revision (全文评审与修订) to Scoped revision and recheck (定向修订与复核). Select issues and scope in the revision node; Prompt, temperature, output limit, and AI configuration can be connected. Wait for the actual candidate and full recheck, adopt or reject in the run results, then verify the same prose and formatting in step mode.
+
+Continuing downstream after upstream adoption rereads current materials and reuses confirmed content that remains valid. Changes to materials, targets, or connections can still invalidate old candidates. Recovering after refresh does not automatically generate again.
+
+### Returning formal reading files
+
+The organizer assigns one formal HTML per reader and genre. Do not assign the same packet code to multiple people. Open it in a browser, select participation details and reading answers, click Save completed HTML (保存已填写 HTML), and return the new HTML with `result` in its filename. Answers are embedded: open the saved file offline or on another device to continue, without importing separate data. The original blank file is not overwritten automatically. If group-chat previews cannot operate the form, use a browser or computer.
+
+You may return the first pair and finish later. The first pair is estimated at 19–37 minutes; all ten pairs take approximately 197–453 minutes depending on genre. These are text-length estimates. The actual author receives a separate repair HTML, edits four manuscripts, and saves the revisions and timing; the estimate is 66–137 minutes. Authors must edit prose, while readers need not type comments. Automatic website collection is not deployed.
+
+### Evidence and remaining work
+
+The formal comparison is frozen at 60 chapters / 30 pairs across three genres, with three additional pairs from another model. Evidence includes 1,900 exact main-study checks and backup, import, and deletion across six workspaces. [Four Linux review/revision paths](https://github.com/yuanbw2025/storyforge/actions/runs/38682424600) passed. Product source `c2836ba8` passed [core CI](https://github.com/yuanbw2025/storyforge/actions/runs/38682961173) and the [complete CLI checks](https://github.com/yuanbw2025/storyforge/actions/runs/38682961091/job/116251468491); core CI included the full browser suite with 288 passes, one pass after retry, and two skips. A separate full browser run retained one failure and two passes after retry: original traces show that automation had not actually cleared the text and combat operations were still settling. A three-file test synchronization patch preserves result assertions and overall deadlines; its five related paths passed locally. Linux and final-version full validation after that patch remain pending. Independent reader returns and actual author-repair results are still zero. Literary improvement, platform acceptance, and Q10 completion are not established.
+
 ## October 14, 2026 review
 
 Incremental range: last successful baseline `ce1cfd6c` → latest remote main `cfc5ed3f`. This review enumerated **51 local branches (including this maintenance branch) and 68 associated worktrees**, including detached ones. Twenty-three branch heads are not main ancestors. These are Git identities, not 23 missing features. Author worktrees were inspected read-only; the following is a point-in-time snapshot and later commits or PR states may change.

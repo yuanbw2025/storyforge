@@ -159,6 +159,6 @@ describe('R-HARNESS13 · Agent Skill 单一事实源', () => {
     ])
     expect(resolveAgentSkillContextSourceKeysV1(prose)).not.toContain('characterKnowledge')
     expect(resolveAgentSkillContextSourceKeysV1(prose, { includeOptional: true }))
-      .toEqual(['ragSelection'])
+      .toEqual(['ragSelection', 'workAuthoringIntent'])
   })
 })

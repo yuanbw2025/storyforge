@@ -2,6 +2,7 @@ import type { ChatMessage, DetailedScene, ScenePace } from '../../types'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
 import { nanoid } from '../../utils/id'
+import { parseDetailedSceneTaskFieldsV1, type DetailedSceneTaskV1 } from '../../types/detailed-outline'
 
 /** 细纲场景生成 */
 export function buildDetailSceneGeneratePrompt(
@@ -108,7 +109,7 @@ export function parseEnhancedDetailResult(raw: string): {
   appearingCharacterIds?: number[]
   foreshadowIds?: number[]
   prohibitions?: string[]
-  scenes?: Array<{
+  scenes?: Array<DetailedSceneTaskV1 & {
     title: string
     summary: string
     location: string
@@ -116,6 +117,7 @@ export function parseEnhancedDetailResult(raw: string): {
     pace: string
     characterIds: number[]
     estimatedWords: number
+    notes?: string
   }>
 } | null {
   const trimmed = raw.trim()
@@ -160,7 +162,8 @@ export function normalizeParsedScenes(
         conflict: scene.conflict?.trim() || '',
         pace,
         estimatedWords: Number.isFinite(scene.estimatedWords) ? Math.max(0, Math.round(scene.estimatedWords)) : 0,
-        notes: '',
+        notes: scene.notes ?? '',
+        ...parseDetailedSceneTaskFieldsV1(scene as unknown as Record<string, unknown>),
       }
     })
 }

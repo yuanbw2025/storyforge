@@ -101,6 +101,8 @@ export async function buildLongTermConsistencyDossierV1(input: {
   boundaryChapterId: number
   query?: string
   maxTokens?: number
+  /** undefined 为作者审计全体；null 不读角色私有认知；数字只读该视角。 */
+  perspectiveCharacterId?: number | null
   authorizeGenerativeReview?: boolean
 }): Promise<LongTermConsistencyDossierV1> {
   const scope = await resolveReadScopeLike(input.scope)
@@ -140,17 +142,22 @@ export async function buildLongTermConsistencyDossierV1(input: {
   const boundaryOutline = outlines.find(row => row.id === boundary.outlineNodeId)
   const boundaryWorldGroupId = boundaryOutline?.worldGroupId ?? null
   const relevantFacts = facts.filter(row => {
-    if (row.worldGroupId != null && row.worldGroupId !== boundaryWorldGroupId) return false
+    if ((row.worldGroupId ?? null) !== boundaryWorldGroupId) return false
     if (!['confirmed', 'superseded', 'stale', 'source-missing', 'invalid-range'].includes(row.status)) return false
     const from = row.validFromChapterId == null ? -1 : orderOf.get(row.validFromChapterId)
     if (from == null || from > boundaryOrder) return false
+    if (!beforeOrAt(orderOf, row.sourceChapterId, boundaryOrder)) return false
     const to = row.validToChapterId == null ? null : orderOf.get(row.validToChapterId)
+    if (row.validToChapterId != null && to == null) return false
     return to == null || to > boundaryOrder || STALE_STATUSES.has(row.status)
   })
   const relevantKnowledge = knowledge.filter(row => (
     ['confirmed', 'source-missing', 'invalid-range'].includes(row.status)
+    && (row.worldGroupId ?? null) === boundaryWorldGroupId
+    && (input.perspectiveCharacterId === undefined || row.characterId === input.perspectiveCharacterId)
     && beforeOrAt(orderOf, row.sourceChapterId, boundaryOrder)
   ))
+  const relevantStates = states.filter(row => beforeOrAt(orderOf, row.lastChapterId, boundaryOrder))
   const relevantItems = items.filter(row => beforeOrAt(orderOf, row.chapterId, boundaryOrder))
   const relevantTimeline = timeline
     .filter(row => beforeOrAt(orderOf, row.chapterId, boundaryOrder))
@@ -179,7 +186,7 @@ export async function buildLongTermConsistencyDossierV1(input: {
   const characterKnowledge = relevantKnowledge
     .filter(row => row.status === 'confirmed')
     .map(row => `${row.characterName}｜${row.action}｜${row.knowledgeKey}：${row.belief || row.statement}`)
-  const currentStates = states.map(row => (
+  const currentStates = relevantStates.map(row => (
     `${row.category}/${row.entityName}｜${parseFields(row.fields).map(field => `${field.key}=${field.value}`).join('；')}`
   ))
   const inventory = aggregateInventory(relevantItems)
@@ -191,7 +198,7 @@ export async function buildLongTermConsistencyDossierV1(input: {
   const sourceRows: Array<[string, Array<{ id?: number; status?: string }>, ConsistencyDossierSourceRefV1['authority']]> = [
     ['temporalFacts', relevantFacts, 'author-confirmed'],
     ['knowledgeLedger', relevantKnowledge, 'author-confirmed'],
-    ['stateCards', states, 'accepted-evidence'],
+    ['stateCards', relevantStates, 'accepted-evidence'],
     ['itemLedger', relevantItems, 'accepted-evidence'],
     ['storyTimelineEvents', relevantTimeline, 'accepted-evidence'],
     ['retrievalChunks', keywordChunks, 'derived-cache'],
@@ -298,6 +305,6 @@ export function formatLongTermConsistencyDossierV1(dossier: LongTermConsistencyD
     ...section('故事时间线', dossier.timeline),
     ...section('历史正文关键词证据（仅供核对）', dossier.keywordEvidence),
     ...section('待处理一致性项', dossier.findings.map(item => `${item.level}/${item.severity}｜${item.message}`)),
-    `预算：${dossier.tokenBudget.estimatedTokens}/${dossier.tokenBudget.maxTokens} tokens；模型调用=${dossier.tokenBudget.modelCalls}`,
+    `预算：${dossier.tokenBudget.estimatedTokens}/${dossier.tokenBudget.maxTokens} tokens；${dossier.tokenBudget.truncated ? '部分档案未装入，覆盖不完整；' : ''}模型调用=${dossier.tokenBudget.modelCalls}`,
   ].join('\n')
 }

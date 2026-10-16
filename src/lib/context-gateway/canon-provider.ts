@@ -45,7 +45,7 @@ import {
 } from './provider-cache'
 
 const PROVIDER_SOURCE_KEY = 'ragSelection'
-const PROVIDER_VERSION = 'canon-resource-provider-v4'
+const PROVIDER_VERSION = 'canon-resource-provider-v6'
 const NORMALIZATION_VERSION = 'canon-resource-normalization-v1'
 const MAX_PAGE_SIZE = 100
 const MAX_READ_TOKENS = 100_000
@@ -258,6 +258,7 @@ function semanticFieldAllowed(key: string, value: unknown): boolean {
 }
 
 async function fieldsForRow(spec: ResourceSpec, row: ResourceRow): Promise<FieldProjectionV1[]> {
+  if (spec.resourceIdentity.enabledField && row[spec.resourceIdentity.enabledField] !== true) return []
   const registered = spec.resourceIdentity.descriptorMode === 'registered-fields'
     ? (FIELD_BY_TARGET.get(spec.name) ?? [])
     : null
@@ -271,6 +272,8 @@ async function fieldsForRow(spec: ResourceSpec, row: ResourceRow): Promise<Field
     if (!semanticFieldAllowed(definition.key, value)) continue
     const exact = exactValue(value)
     if (!isMeaningful(value, exact)) continue
+    const contextRule = definition.field ?? FIELD_BY_TARGET.get(spec.name)?.find(field => field.field === definition.key)
+    if (contextRule?.contextEnabled && !contextRule.contextEnabled(value)) continue
     projected.push({
       key: definition.key,
       label: labelForField(definition.field, definition.key),
@@ -869,6 +872,7 @@ async function nestedConsistencyDossier(
       workId: frozenScope.workId!,
     },
     boundaryChapterId: row.id,
+    perspectiveCharacterId: frozenScope.characterId,
     maxTokens: 5_500,
   })
   const refs: ContextSourceRefV1[] = []

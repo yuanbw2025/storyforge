@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { resolveRequestConfig, type StreamResult } from '../lib/ai/client'
+import { resolveRequestConfig, type StreamResult, type AIRequestConfigResolution } from '../lib/ai/client'
 import {
   streamRegisteredAIEntryV1,
   type FormalAICallMetaV1,
@@ -30,7 +30,7 @@ export interface UseAIStreamReturn {
    * @param messages 聊天消息
    * @param overrideConfig 临时覆盖的配置片段（例如导入面板需要 maxTokens=16384）
    */
-  start: (messages: ChatMessage[], overrideConfig: Partial<AIConfig> | undefined, meta: FormalAICallMetaV1) => Promise<string>
+  start: (messages: ChatMessage[], overrideConfig: Partial<AIConfig> | undefined, meta: FormalAICallMetaV1, resolution?: AIRequestConfigResolution, result?: StreamResult) => Promise<string>
   /** 停止生成 */
   stop: () => void
   /** 重置状态 */
@@ -38,7 +38,7 @@ export interface UseAIStreamReturn {
   /** 设置当前会话的操作类型。 */
   setOperation: (operation: string | null) => void
   /** 从持久化候选恢复已完成输出；不会发起模型调用。 */
-  restore: (session: Pick<AIGenerationSession, 'output' | 'operation'>) => void
+  restore: (session: Pick<AIGenerationSession, 'output' | 'operation'> & Partial<Pick<AIGenerationSession, 'error'>>) => void
 }
 
 const sharedAbortControllers = new Map<string, AbortController>()
@@ -101,13 +101,13 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
     }
   }, [sessionKey, patchShared])
 
-  const restore = useCallback((session: Pick<AIGenerationSession, 'output' | 'operation'>) => {
+  const restore = useCallback((session: Pick<AIGenerationSession, 'output' | 'operation'> & Partial<Pick<AIGenerationSession, 'error'>>) => {
     stop()
     if (sessionKey) {
       patchShared({
         output: session.output,
         operation: session.operation,
-        error: null,
+        error: session.error ?? null,
         tokenUsage: null,
         isStreaming: false,
       })
@@ -115,7 +115,7 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
     }
     setOutput(session.output)
     setLocalOperation(session.operation)
-    setError(null)
+    setError(session.error ?? null)
     setTokenUsage(null)
     setIsStreaming(false)
   }, [patchShared, sessionKey, stop])
@@ -124,6 +124,8 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
     messages: ChatMessage[],
     overrideConfig: Partial<AIConfig> | undefined,
     meta: FormalAICallMetaV1,
+    frozenResolution?: AIRequestConfigResolution,
+    providedResult?: StreamResult,
   ): Promise<string> => {
     // 重置状态
     if (sessionKey) {
@@ -146,7 +148,7 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
       ? { ...baseConfig, ...overrideConfig }
       : baseConfig
     meta = overrideConfig ? { ...meta, configOverrides: overrideConfig } : meta
-    const effectiveConfig = resolveRequestConfig(config, meta).config
+    const effectiveConfig = (frozenResolution ?? resolveRequestConfig(config, meta)).config
 
     if (!isAIConfigReady(effectiveConfig)) {
       const errMsg = getAIConfigRequiredMessage(effectiveConfig)
@@ -162,7 +164,10 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
     }
 
     let accumulated = ''
-    const streamResult: StreamResult = {}
+    const streamResult: StreamResult = providedResult ?? {}
+    delete streamResult.completion
+    delete streamResult.finishReason
+    delete streamResult.usage
     // A provider can deliver hundreds of deltas in one network read. Publishing
     // every delta to Zustand synchronously can exhaust React's nested-update
     // limit and cut off the model output. Coalesce only the view; retain every
@@ -182,7 +187,7 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
     }
 
     try {
-      const stream = streamRegisteredAIEntryV1(messages, config, meta, controller.signal, streamResult)
+      const stream = streamRegisteredAIEntryV1(messages, config, meta, controller.signal, streamResult, frozenResolution)
       for await (const chunk of stream) {
         if (controller.signal.aborted) break
         accumulated += chunk
@@ -191,7 +196,9 @@ export function useAIStream(sessionKey?: string): UseAIStreamReturn {
         }
         if (publishTimer == null) publishTimer = setTimeout(publishOutput, 32)
       }
+      if (controller.signal.aborted || !ownsRequest()) streamResult.completion = 'cancelled'
     } catch (err: unknown) {
+      streamResult.completion = controller.signal.aborted || (err as Error).name === 'AbortError' ? 'cancelled' : 'failed'
       if ((err as Error).name === 'AbortError') {
         // 用户主动停止，不算错误
       } else if (!controller.signal.aborted && ownsRequest()) {

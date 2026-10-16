@@ -291,7 +291,8 @@ export async function* streamRegisteredAIEntryV1(
   meta: FormalAICallMetaV1,
   signal?: AbortSignal,
   result?: StreamResult,
+  frozenResolution?: AIRequestConfigResolution,
 ): AsyncGenerator<string> {
   assertFormalAIEntryCallV1(meta)
-  yield* streamChat(messages, config, signal, result, meta)
+  yield* streamChat(messages, config, signal, result, meta, frozenResolution)
 }

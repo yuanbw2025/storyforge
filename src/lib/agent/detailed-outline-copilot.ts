@@ -1,4 +1,5 @@
 import type { DetailedOutline, DetailedScene, EmotionArc, ScenePace } from '../types'
+import { DETAILED_SCENE_TASK_FIELDS, parseDetailedSceneTaskFieldsV1, type DetailedSceneTaskV1 } from '../types/detailed-outline'
 import { normalizeParsedScenes } from '../ai/adapters/detail-scene-adapter'
 import { estimateTokens } from '../ai/context-budget'
 import { computeKnownCostUsd } from '../ai/usage-log'
@@ -34,6 +35,8 @@ const SCENE_KEYS = [
   'pace',
   'estimatedWords',
   'characterIds',
+  'notes',
+  ...DETAILED_SCENE_TASK_FIELDS.map(({ key }) => key),
 ] as const
 
 const SCENE_ACTIONS = ['retain', 'modify', 'add', 'delete'] as const
@@ -51,7 +54,7 @@ export interface DetailedOutlineCopilotDraftV1 {
   foreshadowIds?: number[]
   prohibitions?: string[]
   scenePlanMode: DetailedScenePlanModeV1
-  scenes: Array<{
+  scenes: Array<DetailedSceneTaskV1 & {
     action: DetailedSceneActionV1
     sceneId?: string
     title?: string
@@ -61,6 +64,7 @@ export interface DetailedOutlineCopilotDraftV1 {
     pace?: ScenePace
     estimatedWords?: number
     characterIds?: number[]
+    notes?: string
   }>
 }
 
@@ -140,7 +144,7 @@ function parseScenes(value: unknown): DetailedOutlineCopilotDraftV1['scenes'] {
     const summary = text(scene.summary, `scenes[${index}].summary`, 4_000)
     const location = text(scene.location, `scenes[${index}].location`, 1_000)
     const conflict = text(scene.conflict, `scenes[${index}].conflict`, 2_000)
-    if (!title || !summary || !conflict) fail(`scenes[${index}] 的 title、summary、conflict 不能为空`)
+    if (!title || !summary) fail(`scenes[${index}] 的 title、summary 不能为空；冲突允许留白`)
     if (!VALID_PACES.includes(scene.pace as ScenePace)) fail(`scenes[${index}].pace 不在允许范围`)
     if (!Number.isInteger(scene.estimatedWords) || (scene.estimatedWords as number) < 0 || (scene.estimatedWords as number) > 100_000) {
       fail(`scenes[${index}].estimatedWords 必须是 0 到 100000 的整数`)
@@ -154,9 +158,9 @@ function parseScenes(value: unknown): DetailedOutlineCopilotDraftV1['scenes'] {
       conflict,
       pace: scene.pace as ScenePace,
       estimatedWords: scene.estimatedWords as number,
-      characterIds: scene.characterIds === undefined
-        ? []
-        : integerIds(scene.characterIds, `scenes[${index}].characterIds`),
+      ...(scene.characterIds === undefined ? {} : { characterIds: integerIds(scene.characterIds, `scenes[${index}].characterIds`) }),
+      ...(scene.notes === undefined ? {} : { notes: text(scene.notes, `scenes[${index}].notes`, 8000) }),
+      ...parseDetailedSceneTaskFieldsV1(scene),
     }
   })
 }
@@ -328,6 +332,8 @@ function sceneContent(
     pace: operation.pace ?? 'medium',
     estimatedWords: operation.estimatedWords ?? 0,
     characterIds: operation.characterIds ?? [],
+    notes: operation.notes,
+    ...parseDetailedSceneTaskFieldsV1(operation as unknown as Record<string, unknown>),
   }], ids => filterIds(ids, validCharacterIds))[0]
   if (!normalized) fail('场景正文无法归一化')
   const { sceneId: _sceneId, ...content } = normalized
@@ -351,6 +357,8 @@ function mergeDetailedScenesV1(input: {
       pace: operation.pace ?? 'medium',
       estimatedWords: operation.estimatedWords ?? 0,
       characterIds: operation.characterIds ?? [],
+      notes: operation.notes,
+      ...parseDetailedSceneTaskFieldsV1(operation as unknown as Record<string, unknown>),
     })), ids => filterIds(ids, input.validCharacterIds))
   }
   if (input.planMode !== 'merge-proposal') {
@@ -366,6 +374,8 @@ function mergeDetailedScenesV1(input: {
         title: operation.title ?? '', summary: operation.summary ?? '', location: operation.location ?? '',
         conflict: operation.conflict ?? '', pace: operation.pace ?? 'medium',
         estimatedWords: operation.estimatedWords ?? 0, characterIds: operation.characterIds ?? [],
+        notes: operation.notes,
+        ...parseDetailedSceneTaskFieldsV1(operation as unknown as Record<string, unknown>),
       }], ids => filterIds(ids, input.validCharacterIds))[0]
       if (!normalized) fail('新增场景无法归一化')
       additions.push(normalized)
@@ -382,7 +392,10 @@ function mergeDetailedScenesV1(input: {
     const decision = decisions.get(scene.sceneId)!
     if (decision.action === 'delete') return []
     if (decision.action === 'retain') return [{ ...scene }]
-    return [{ sceneId: scene.sceneId, ...sceneContent(decision, input.validCharacterIds) }]
+    return [{ ...scene, ...sceneContent(decision, input.validCharacterIds), sceneId: scene.sceneId,
+      ...(decision.notes === undefined ? { notes: scene.notes } : {}),
+      ...(decision.characterIds === undefined ? { characterIds: scene.characterIds } : {}),
+    }]
   }).concat(additions)
   const signatures = merged.map(scene => [scene.title, scene.summary, scene.location, scene.conflict]
     .map(value => value.trim().toLocaleLowerCase()).join('\u0000'))
@@ -394,12 +407,13 @@ export function buildDetailedOutlineSceneMergeGuidanceV1(
   currentScenes: readonly DetailedScene[],
 ): string {
   if (!currentScenes.length) {
-    return '场景协议：输出 scenePlanMode="replace"；每个 scenes 项声明 action="add"，不得提供 sceneId。'
+    return '场景协议：输出 scenePlanMode="replace"；每个 scenes 项声明 action="add"，不得提供 sceneId。可选文本字段 entryState（进入状态）、goal（目标）、keyChoice（关键选择）、outcome（后果）、exitState（退出状态）、sceneFunction（场景功能与读者期待）、notes（备注）；按需填写，允许留白。conflict 也允许留白，日常和缓冲场景不强制添加阻力。'
   }
   return [
     '场景协议：已有场景时输出 scenePlanMode="merge-proposal"。',
     '必须对下面每个 sceneId 恰好声明一次 action="retain"|"modify"|"delete"；新增场景用 action="add" 且不得提供 sceneId。',
     'retain/delete 只需 action 与 sceneId；modify/add 还需完整 title/summary/location/conflict/pace/estimatedWords/characterIds。',
+    '可选任务字段：entryState/goal/keyChoice/outcome/exitState/sceneFunction；notes 为作者备注。修改时省略的任务字段和备注保留原值；需要清空必须显式输出空字符串。允许安静场景，conflict 可留白。',
     `已有场景：${JSON.stringify(currentScenes)}`,
   ].join('\n')
 }

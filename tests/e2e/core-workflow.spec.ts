@@ -1514,7 +1514,8 @@ test('创作规则建议通过固定 Skill 刷新恢复，拒绝重生后编辑�
   await expect(page.getByRole('heading', { name: /创作规则/ })).toBeVisible()
 
   const writingStyle = page.getByPlaceholder(/描述期望的写作风格/)
-  await page.getByRole('button', { name: 'AI 建议', exact: true }).first().click()
+  const writingStyleSuggestion = page.locator('label').filter({ hasText: /^写作风格$/ }).locator('..').getByRole('button', { name: 'AI 建议', exact: true })
+  await writingStyleSuggestion.click()
   const candidate = page.getByRole('textbox', { name: '写作风格候选内容' })
   await expect(candidate).toHaveValue(modelCandidate.value)
   await expect(writingStyle).toHaveValue('')
@@ -1528,7 +1529,7 @@ test('创作规则建议通过固定 Skill 刷新恢复，拒绝重生后编辑�
   await expect(candidate).toHaveCount(0)
   expect(generationCalls).toBe(1)
 
-  await page.getByRole('button', { name: 'AI 建议', exact: true }).first().click()
+  await writingStyleSuggestion.click()
   const edited = '作者确认：用克制短句和可见动作呈现压力，只写视角人物能够感知的信息。'
   await candidate.fill(edited)
   await page.getByRole('button', { name: '确认写入', exact: true }).click()

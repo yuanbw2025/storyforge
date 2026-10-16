@@ -4,7 +4,7 @@
  * 展示并编辑某章节的细纲场景列表，支持 AI 一键拆场景。
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, Trash2, Sparkles, ChevronDown, ChevronRight, Wand2 } from 'lucide-react'
+import { Plus, Sparkles, ChevronDown, ChevronRight, Wand2 } from 'lucide-react'
 import { useDetailedOutlineStore } from '../../stores/detailed-outline'
 import { useOutlineStore } from '../../stores/outline'
 import { useCharacterStore } from '../../stores/character'
@@ -12,25 +12,12 @@ import { useForeshadowStore } from '../../stores/foreshadow'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import { nanoid } from '../../lib/utils/id'
 import { useToast } from '../shared/Toast'
-import type { DetailedScene, Project, ScenePace } from '../../lib/types'
+import type { DetailedScene, Project, WorkspaceScope } from '../../lib/types'
 import ChapterOutlineWorkshop from './ChapterOutlineWorkshop'
 import { adoptChapterOutlineWorkshopResult } from '../../lib/outline/adopt-workshop'
 import { useDetailedOutlineGenerationController } from './useDetailedOutlineGenerationController'
 import CreativeArtifactSummary from '../agent/CreativeArtifactSummary'
-
-const PACE_LABELS: Record<ScenePace, string> = {
-  slow:   '🐢 慢',
-  medium: '🚶 中',
-  fast:   '🏃 快',
-  climax: '⚡ 高潮',
-}
-
-const PACE_COLORS: Record<ScenePace, string> = {
-  slow:   'bg-info/10 text-info',
-  medium: 'bg-text-muted/10 text-text-secondary',
-  fast:   'bg-warning/10 text-warning',
-  climax: 'bg-error/10 text-error',
-}
+import DetailedSceneCard from './DetailedSceneCard'
 
 interface Props {
   project: Project
@@ -41,7 +28,8 @@ interface Props {
 
 export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapterSummary }: Props) {
   const projectId = project.id!
-  const { detailedOutlines, loadAll, getOrCreate, save } = useDetailedOutlineStore()
+  const scope = useMemo<WorkspaceScope>(() => ({ projectId, worldId: project.activeWorldId!, workId: project.activeWorkId! }), [projectId, project.activeWorldId, project.activeWorkId])
+  const { detailedOutlines, loadAll, getOrCreate, editScene } = useDetailedOutlineStore()
   const nodes = useOutlineStore(state => state.nodes)
   const { characters, loadAll: loadCharacters } = useCharacterStore()
   const { foreshadows, loadAll: loadForeshadows } = useForeshadowStore()
@@ -50,13 +38,11 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
   const [showWorkshop, setShowWorkshop] = useState(false)
 
   useEffect(() => {
-    loadAll(projectId)
-    loadCharacters(projectId)
-    loadForeshadows(projectId)
-  }, [loadAll, loadCharacters, loadForeshadows, projectId])
+    void Promise.all([loadAll(scope), loadCharacters(scope), loadForeshadows(scope)]).catch(error => toast.error(error instanceof Error ? error.message : '场景资料读取失败'))
+  }, [loadAll, loadCharacters, loadForeshadows, scope, toast])
   useEffect(() => { setShowWorkshop(false) }, [outlineNodeId])
 
-  const detailed = detailedOutlines.find(d => d.outlineNodeId === outlineNodeId)
+  const detailed = detailedOutlines.find(d => d.workId === scope.workId && d.projectId === scope.projectId && d.outlineNodeId === outlineNodeId)
   const scenes = detailed?.scenes || []
   const hasScenes = scenes.length > 0
   const chapterNode = nodes.find(node => node.id === outlineNodeId && node.type === 'chapter')
@@ -68,7 +54,7 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
     () => new Set(foreshadows.map(item => item.id).filter((id): id is number => id != null)),
     [foreshadows],
   )
-  const reloadDetailed = useCallback(() => loadAll(projectId), [loadAll, projectId])
+  const reloadDetailed = useCallback(() => loadAll(scope), [loadAll, scope])
   const {
     ai,
     enhanceAI,
@@ -92,13 +78,7 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
   })
 
   const ensureDetailed = async () => {
-    return await getOrCreate(projectId, outlineNodeId)
-  }
-
-  const updateScenes = async (nextScenes: DetailedScene[]) => {
-    const dt = await ensureDetailed()
-    if (!dt?.id) return
-    await save(dt.id, { scenes: nextScenes })
+    return await getOrCreate(scope, outlineNodeId)
   }
 
   const addScene = async () => {
@@ -110,21 +90,18 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
       characterIds: [], location: '', conflict: '',
       pace: 'medium', estimatedWords: 0, notes: '',
     }
-    await updateScenes([...(dt.scenes || []), newScene])
+    await editScene(dt.id!, { kind: 'add', scene: newScene }, scope, chapterSummary)
     setExpanded(true)
   }
 
   const updateScene = async (sceneId: string, patch: Partial<DetailedScene>) => {
-    if (!detailed) return
-    const next = detailed.scenes.map(s =>
-      s.sceneId === sceneId ? { ...s, ...patch } : s
-    )
-    await updateScenes(next)
+    if (!detailed) throw new Error('当前作品的场景细纲尚未就绪')
+    await editScene(detailed.id!, { kind: 'patch', sceneId, patch }, scope, chapterSummary)
   }
 
   const deleteScene = async (sceneId: string) => {
-    if (!detailed) return
-    await updateScenes(detailed.scenes.filter(s => s.sceneId !== sceneId))
+    if (!detailed) throw new Error('当前作品的场景细纲尚未就绪')
+    await editScene(detailed.id!, { kind: 'remove', sceneId }, scope, chapterSummary)
   }
 
   const handleAIGenerate = async () => {
@@ -295,67 +272,10 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
               还没有场景。点「+」或「✨」开始。
             </div>
           ) : (
-            scenes.map((s, idx) => (
-              <div key={s.sceneId} className="bg-bg-base border border-border rounded-lg p-2.5 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-text-muted text-xs">#{idx + 1}</span>
-                  <input
-                    value={s.title}
-                    onChange={e => updateScene(s.sceneId, { title: e.target.value })}
-                    placeholder="场景标题..."
-                    className="flex-1 px-2 py-1 bg-transparent border border-border rounded text-xs font-medium text-text-primary focus:outline-none focus:border-accent"
-                  />
-                  <select
-                    value={s.pace}
-                    onChange={e => updateScene(s.sceneId, { pace: e.target.value as ScenePace })}
-                    className={`px-1.5 py-0.5 text-[10px] rounded border-0 ${PACE_COLORS[s.pace]}`}
-                  >
-                    {Object.entries(PACE_LABELS).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    value={s.estimatedWords || ''}
-                    onChange={e => updateScene(s.sceneId, { estimatedWords: parseInt(e.target.value) || 0 })}
-                    placeholder="字数"
-                    className="w-16 px-1.5 py-0.5 bg-transparent border border-border rounded text-[10px] text-text-primary focus:outline-none focus:border-accent"
-                  />
-                  <button onClick={() => deleteScene(s.sceneId)} className="p-0.5 text-text-muted hover:text-error">
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-                <textarea
-                  value={s.summary}
-                  onChange={e => updateScene(s.sceneId, { summary: e.target.value })}
-                  placeholder="一句话场景概要..."
-                  rows={1}
-                  className="w-full px-2 py-1 bg-transparent border border-border rounded text-xs text-text-primary resize-none focus:outline-none focus:border-accent"
-                />
-                <div className="grid grid-cols-2 gap-1.5">
-                  <input
-                    value={s.location}
-                    onChange={e => updateScene(s.sceneId, { location: e.target.value })}
-                    placeholder="📍 地点"
-                    className="px-2 py-0.5 bg-transparent border border-border rounded text-[10px] text-text-primary focus:outline-none focus:border-accent"
-                  />
-                  <input
-                    value={s.conflict}
-                    onChange={e => updateScene(s.sceneId, { conflict: e.target.value })}
-                    placeholder="⚔ 核心冲突"
-                    className="px-2 py-0.5 bg-transparent border border-border rounded text-[10px] text-text-primary focus:outline-none focus:border-accent"
-                  />
-                </div>
-                {s.notes && (
-                  <textarea
-                    value={s.notes}
-                    onChange={e => updateScene(s.sceneId, { notes: e.target.value })}
-                    placeholder="备注 / AI 建议..."
-                    rows={2}
-                    className="w-full px-2 py-1 bg-transparent border border-border rounded text-[10px] text-text-muted resize-y focus:outline-none focus:border-accent"
-                  />
-                )}
-              </div>
+            scenes.map((scene, index) => (
+              <DetailedSceneCard key={scene.sceneId} scene={scene} index={index}
+                onUpdate={patch => updateScene(scene.sceneId, patch)}
+                onDelete={() => { void deleteScene(scene.sceneId).catch(error => toast.error(error instanceof Error ? error.message : '场景删除失败')) }} />
             ))
           )}
         </div>

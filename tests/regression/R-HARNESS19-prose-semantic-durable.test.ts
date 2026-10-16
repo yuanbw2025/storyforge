@@ -137,7 +137,7 @@ describe.sequential('R-HARNESS19 · 正文语义评审 durable 主路径', () =>
       worldGroupId: null,
       perspectiveCharacterId: null,
     })
-    const messages = [{ role: 'user' as const, content: '写潮门正文' }]
+    const messages = [{ role: 'user' as const, content: `受控资料：\n${generationAssembled.text}\n\n写潮门正文` }]
     const begun = await beginProseGenerationGatewayStepV1({
       scope: fixture.scope,
       snapshot,

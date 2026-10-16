@@ -79,6 +79,9 @@ test('玩家从正式存档进入双敌战斗，显式选敌并完成四类操�
   }))).toEqual({ viewportWidth: 390, documentWidth: 390 })
 
   await panel.getByRole('button', { name: /重击/ }).click()
+  await expect(page.getByTestId('text-open-world-shell')).not.toHaveAttribute(
+    'aria-busy', 'true', { timeout: 120_000 },
+  )
   const combatLog = panel.locator('[aria-label="本场战斗记录"]')
   await expect(combatLog).toContainText('来客使用重击', { timeout: 30_000 })
 
@@ -98,6 +101,9 @@ test('玩家从正式存档进入双敌战斗，显式选敌并完成四类操�
   )
   await expect(escape).toBeEnabled({ timeout: 20_000 })
   await escape.click()
+  await expect(page.getByTestId('text-open-world-shell')).not.toHaveAttribute(
+    'aria-busy', 'true', { timeout: 120_000 },
+  )
   const result = page.getByTestId('text-open-world-combat-result')
   await expect(result).toContainText('已经脱离战斗', { timeout: 30_000 })
   await expect(result.getByRole('button', { name: '返回当前场景', exact: true })).toBeEnabled()

@@ -103,6 +103,7 @@ export type AgentSkillExecutionModeV1 =
   | 'selection-check'
   | 'review'
   | 'revise'
+  | 'quality-revise'
   | 'organize'
   | 'memory'
   | 'consistency'
@@ -615,7 +616,7 @@ export const OUTLINE_IMPACT_REGENERATION_CONTEXT_SOURCE_KEYS = [
 
 export const OUTLINE_DETAIL_CONTEXT_SOURCE_KEYS = ['ragSelection'] as const
 
-const PROSE_CONTEXT_SOURCE_KEYS = ['ragSelection'] as const
+const PROSE_CONTEXT_SOURCE_KEYS = ['ragSelection', 'workAuthoringIntent'] as const
 
 const PROSE_EMOTION_BEAT_CONTEXT_SOURCE_KEYS = [
   'chapterOutline',
@@ -936,6 +937,10 @@ const OUTLINE_DETAIL_INPUT_POLICY = {
 
 const PROSE_INPUT_POLICY = {
   sourceKeys: [
+    'workAuthoringIntent',
+    'userStyleProfile',
+    'storyCore',
+    'creativeRules',
     'chapterOutline',
     'detailedOutline',
     'storyArcs',
@@ -1129,13 +1134,13 @@ const OUTLINE_IMPACT_REGENERATION_COMPRESSION_POLICY = compressionPolicy(
   OUTLINE_IMPACT_REGENERATION_CONTEXT_SOURCE_KEYS,
 )
 const OUTLINE_DETAIL_COMPRESSION_POLICY = compressionPolicy(['ragSelection'])
-const PROSE_COMPRESSION_POLICY = compressionPolicy(['ragSelection'])
+const PROSE_COMPRESSION_POLICY = compressionPolicy(['ragSelection', 'workAuthoringIntent'])
 
 const PROSE_CONTEXT_GATEWAY_POLICY = {
   version: 1 as const,
   rollout: 'required' as const,
   requiredWriteTargets: ['chapters.content', 'chapters.wordCount'],
-  providerSourceKeys: ['ragSelection'],
+  providerSourceKeys: ['ragSelection', 'workAuthoringIntent'],
   allowedResourceKinds: [
     'world', 'worldview-field', 'story-core-field', 'character',
     'character-relation', 'story-arc', 'storyline-progress', 'outline-node',
@@ -1686,7 +1691,7 @@ export const AGENT_SKILLS = [
     maxOutputTokens: 4_000,
     writeTargets: [{
       table: 'creativeRules',
-      fields: ['writingStyle', 'atmosphere', 'specialRequirements'],
+      fields: ['writingStyle', 'atmosphere', 'specialRequirements', 'systemFictionElements'],
     }],
     lastVerifiedAt: '2026-09-26',
     regressionTests: [
@@ -2747,7 +2752,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: true,
     label: '章节正文生成与续写',
     owner: 'prose-agent',
-    promptVersion: 'prose-copilot-v1',
+    promptVersion: 'prose-copilot-v4',
     executionMode: 'auto',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
@@ -2758,8 +2763,8 @@ export const AGENT_SKILLS = [
     contextGateway: PROSE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
-    lastVerifiedAt: '2026-10-09',
-    regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS9-information-boundary', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
+    lastVerifiedAt: '2026-10-16',
+    regressionTests: ['R-LFQ6-scene-feedback', 'R-WEH0-skill-runtime-contract', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS9-information-boundary', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
     version: 1,
@@ -2768,7 +2773,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '章节正文生成',
     owner: 'prose-agent',
-    promptVersion: 'prose-copilot-v2',
+    promptVersion: 'prose-copilot-v4',
     executionMode: 'generate',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
@@ -2779,8 +2784,8 @@ export const AGENT_SKILLS = [
     contextGateway: PROSE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
-    lastVerifiedAt: '2026-10-09',
-    regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS17-context-compression-eval', 'R-HARNESS18-execution-version-freshness'],
+    lastVerifiedAt: '2026-10-16',
+    regressionTests: ['R-LFQ6-scene-feedback', 'R-WEH0-skill-runtime-contract', 'R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS17-context-compression-eval', 'R-HARNESS18-execution-version-freshness'],
   },
   {
     version: 1,
@@ -2789,7 +2794,7 @@ export const AGENT_SKILLS = [
     defaultForAgent: false,
     label: '章节正文续写',
     owner: 'prose-agent',
-    promptVersion: 'prose-copilot-v2',
+    promptVersion: 'prose-copilot-v4',
     executionMode: 'continue',
     contextTaskKind: 'agent-prose',
     readToolNames: [],
@@ -2800,8 +2805,8 @@ export const AGENT_SKILLS = [
     contextGateway: PROSE_CONTEXT_GATEWAY_POLICY,
     maxOutputTokens: 16_000,
     writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
-    lastVerifiedAt: '2026-10-09',
-    regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
+    lastVerifiedAt: '2026-10-16',
+    regressionTests: ['R-LFQ6-scene-feedback', 'R-WEH0-skill-runtime-contract', 'R-HARNESS14-workflow-classifier', 'R-HARNESS7-prose-generation-durable', 'R-HARNESS16-semantic-context-compression', 'R-HARNESS18-execution-version-freshness'],
   },
   {
     version: 1,
@@ -3017,6 +3022,69 @@ export const AGENT_SKILLS = [
     writeTargets: [],
     lastVerifiedAt: '2026-10-09',
     regressionTests: ['R-WEH0-skill-runtime-contract', 'R-HARNESS19-prose-semantic-review'],
+  },
+  {
+    version: 1,
+    id: 'prose.quality-review',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '全章阅读质量建议',
+    owner: 'prose-agent',
+    promptVersion: 'whole-chapter-quality-review-v7',
+    executionMode: 'review',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_INPUT_POLICY,
+    contextCompression: PROSE_COMPRESSION_POLICY,
+    contextGateway: { ...PROSE_CONTEXT_GATEWAY_POLICY, requiredWriteTargets: [] },
+    maxOutputTokens: 16_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-10-16',
+    regressionTests: ['R-LFQ6-scene-feedback', 'R-LFQ7-whole-review-contract', 'R-LFQ7-durable-review'],
+  },
+  {
+    version: 1,
+    id: 'prose.quality-revise',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '作者选题的范围修订',
+    owner: 'prose-agent',
+    promptVersion: 'quality-revision-patches-v3',
+    executionMode: 'quality-revise',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_INPUT_POLICY,
+    contextCompression: PROSE_COMPRESSION_POLICY,
+    contextGateway: PROSE_CONTEXT_GATEWAY_POLICY,
+    maxOutputTokens: 16_000,
+    writeTargets: [{ table: 'chapters', fields: ['content', 'wordCount'] }],
+    lastVerifiedAt: '2026-10-16',
+    regressionTests: ['R-LFQ6-scene-feedback', 'R-LFQ8-selected-revision-contract', 'R-LFQ8-rich-revision'],
+  },
+  {
+    version: 1,
+    id: 'prose.quality-recheck',
+    agentId: 'prose',
+    defaultForAgent: false,
+    label: '范围修订的一次复核',
+    owner: 'prose-agent',
+    promptVersion: 'quality-revision-recheck-v6',
+    executionMode: 'review',
+    contextTaskKind: 'agent-prose',
+    readToolNames: [],
+    contextSourceKeys: PROSE_CONTEXT_SOURCE_KEYS,
+    optionalContextSourceKeys: [],
+    inputPolicy: PROSE_INPUT_POLICY,
+    contextCompression: PROSE_COMPRESSION_POLICY,
+    contextGateway: { ...PROSE_CONTEXT_GATEWAY_POLICY, requiredWriteTargets: [] },
+    maxOutputTokens: 16_000,
+    writeTargets: [],
+    lastVerifiedAt: '2026-10-16',
+    regressionTests: ['R-LFQ6-scene-feedback', 'R-LFQ8-selected-revision-contract'],
   },
   {
     version: 1,
@@ -5266,7 +5334,7 @@ export function validateAgentSkillDefinitionsV1(
     character: new Set(['create', 'supplement', 'lifecycle', 'relationships', 'character-reply', 'memory-curator']),
     inspiration: new Set(['reference-summary', 'reference-characters', 'reverse', 'review']),
     outline: new Set(['auto', 'story-arcs', 'foreshadow-suggestions', 'storyline-progress', 'character-driven', 'character-revision', 'impact-summary-regenerate', 'volumes', 'chapters', 'details', 'adaptation-source-analysis', 'adaptation-causal-graph', 'screenplay-adaptation-brief', 'screenplay-decision-pass', 'screenplay-beat-sheet', 'screenplay-scene-card', 'screenplay-grounding-review', 'screenplay-dramaturgy-review', 'comic-adaptation-brief', 'comic-decision-pass', 'comic-script-adaptation', 'comic-page-rhythm', 'comic-panel-plan', 'comic-visual-bible', 'comic-image-request', 'comic-visual-continuity-review', 'comic-targeted-repair', 'comic-page-review', 'motion-drama-series-bible', 'motion-drama-asset-bible', 'motion-drama-episode-outline', 'motion-drama-shot-design', 'motion-drama-image-prompts', 'motion-drama-video-prompts', 'motion-drama-quality-review', 'short-intent-brief', 'short-story-design', 'short-scene-plan', 'short-continuity-review', 'character-interaction-production', 'product-production']),
-    prose: new Set(['extension-generate', 'auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'organize', 'memory', 'consistency', 'scene-director', 'ai-town-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'text-open-world-runtime-intent', 'text-open-world-runtime-dialogue', 'text-open-world-runtime-expression', 'text-open-world-runtime-quest-packaging', 'text-open-world-runtime-direction', 'text-open-world-runtime-memory', 'screenplay-scene-draft', 'screenplay-targeted-rewrite', 'motion-drama-episode-script', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
+    prose: new Set(['extension-generate', 'auto', 'generate', 'continue', 'emotion-beats', 'inventory-extraction', 'story-timeline-extraction', 'cultivation-progress-extraction', 'style-learn', 'selection-edit', 'selection-check', 'review', 'revise', 'quality-revise', 'organize', 'memory', 'consistency', 'scene-director', 'ai-town-director', 'adventure-intent', 'adventure-narrator', 'open-world-briefing', 'open-world-advisor', 'open-world-outcome-narrator', 'open-world-actor-suggestion', 'open-world-expression', 'open-world-narration', 'text-open-world-runtime-intent', 'text-open-world-runtime-dialogue', 'text-open-world-runtime-expression', 'text-open-world-runtime-quest-packaging', 'text-open-world-runtime-direction', 'text-open-world-runtime-memory', 'screenplay-scene-draft', 'screenplay-targeted-rewrite', 'motion-drama-episode-script', 'short-chapter-draft', 'short-targeted-rewrite', 'ttrpg-gm-narrator', 'ttrpg-gm-actor-intent', 'ttrpg-director', 'ttrpg-private-guidance', 'ttrpg-player-intent']),
     'text-adventure-showrunner': productProductionModes,
     'text-adventure-creative-director': productProductionModes,
     'text-adventure-source-editor': productProductionModes,

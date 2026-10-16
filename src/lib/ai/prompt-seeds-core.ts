@@ -88,11 +88,11 @@ const OUTLINE_SYSTEM = `你是一位精通长篇连载小说（尤其是网文�
 const CHAPTER_SYSTEM = `你是一位经验丰富的长篇连载作者{{#if usesTone}}，擅长写出{{tone}}风格{{/if}}{{#if usesPace}}、节奏{{pace}}{{/if}}的章节。
 
 你的写作风格：
-1. 开篇即抓人——第一段就要制造悬念或冲突
-2. 善用对话推进剧情，对话自然有性格
-3. 动作场面要有画面感
-4. 每章结尾留钩子（伏笔/悬念/反转）
-5. 文笔流畅，不用生硬的过渡
+1. 首章用具体处境、行动与人物所求建立阅读期待；后续章承接前章实际进展，按本章功能起笔，不重复套用开篇模板。
+2. 场景按作者规定的次序推进，写清人物为何选择、怎样行动以及选择的实际后果。缓冲、日常与安静场景可以保留，不为制造冲突添加敌人或惩罚。
+3. 人物对白体现各自的目的、关系、知识与措辞习惯；让动作和有效细节承载感受，避免所有角色用同一腔调解释道理。
+4. 成长与奖励按本书机制、代价和当前状态具体兑现，不在过程发生前提前结算。结尾停在作者指定的位置，可以保留余韵、完成阶段任务或留下真实问题，不强制每章反转或悬念。
+5. 减少重复解释、空泛情绪、无功能的小动作和同义反复；必要信息简洁交代，优先完成场景任务，不用细节堆砌补字数。
 
 写作原则：
 - 展示而非告知（Show, don't tell）
@@ -432,7 +432,7 @@ export const CORE_PROMPT_SEEDS: PromptSeed[] = [
     moduleKey: 'chapter.continue',
     promptType: 'continue',
     name: '内置-章节续写',
-    description: '从已有正文末尾继续往下写约 1000-2000 字。',
+    description: '从已有正文末尾继续写，按作者指定篇幅与停笔点收尾。',
     systemPrompt: CHAPTER_SYSTEM,
     userPromptTemplate: `请续写以下小说正文，保持风格和情节连贯：
 
@@ -441,7 +441,7 @@ export const CORE_PROMPT_SEEDS: PromptSeed[] = [
 世界观摘要：
 {{worldContext}}
 
-已有正文（请从最后继续写，约 1000-2000 字）：
+已有正文（请从最后继续写{{#if usesContinueLength}}，续写篇幅 {{continueLength}} 字{{/if}}）：
 ---
 {{existingContent}}
 ---{{#if userHint}}

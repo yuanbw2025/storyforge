@@ -640,7 +640,13 @@ function normalizeAndValidate(
 }
 
 function validateAndCoerce(spec: FieldSpec, value: unknown, result: AdoptResult): unknown {
-  const raw = spec.sanitize ? spec.sanitize(value) : value
+  let raw: unknown
+  try {
+    raw = spec.sanitize ? spec.sanitize(value) : value
+  } catch (error) {
+    result.typeErrors.push({ field: spec.field, expected: spec.type, got: error instanceof Error ? error.message : '字段结构无效' })
+    return undefined
+  }
   if (spec.type === 'string' || spec.type === 'longtext') {
     if (typeof raw === 'string') return raw
     result.typeErrors.push({ field: spec.field, expected: spec.type, got: typeof value })

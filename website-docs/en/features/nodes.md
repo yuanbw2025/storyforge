@@ -7,6 +7,8 @@ lastVerified: 2026-10-10
 
 > Preview. Full cross-mode interoperability and real user paths are still being validated.
 
+See the [longform quality trial](/en/updates/development-status) for development-branch whole-chapter review, independent scoped revision, and downstream continuation after adoption. These changes are unmerged and undeployed, and are not included in existing downloads.
+
 Entry: Longform → Workbench → Node authoring (长篇 → 长篇工作台 → 节点创作). Nodes place inputs, generation steps, and intermediate results on a canvas for inspection and composition.
 
 ## When to use it

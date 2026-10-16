@@ -8,6 +8,10 @@
 
 依据：[故障反馈实现 80e48bc9](https://github.com/yuanbw2025/storyforge/commit/80e48bc9) · [PR #144](https://github.com/yuanbw2025/storyforge/pull/144)。
 
+## 2026-10-15 · 长篇质量开发分支使用说明（未发布）
+
+[草稿 PR #141](https://github.com/yuanbw2025/storyforge/pull/141) 的系统文元素、可选场景任务、全章评审与范围修订已有[试用操作说明](/updates/development-status)，并说明返回含答案 HTML 的方式。产品源码 `c2836ba8` 尚未合并或部署，完整工程与独立真人验收仍待完成；本条是开发文档更新，不改变 v4.0.0 下载包或官网体验。
+
 ## 2026-10-14 · 知识库滚动阅读
 
 顶部标题栏与导航统一采用随浅色、深色主题切换的不透明背景，滚动正文时不再与导航文字叠在一起；桌面和窄屏继续保留常驻页签。

@@ -867,6 +867,7 @@ async function validateCurrentBackup(data: ProjectExportData): Promise<void> {
     if (!Array.isArray(rows)) continue
     for (const row of rows) {
       if (!row || typeof row !== 'object') throw new Error(`[deriveImport] ${spec.name} 包含非法记录`)
+      spec.validateImportRow?.(row)
       if ('worldId' in row || 'workId' in row) throw new Error(`[deriveImport] ${spec.name} 泄露本地主键 owner`)
       const shadow = strictOwnerShadow(spec, row)
       if (!shadow) continue

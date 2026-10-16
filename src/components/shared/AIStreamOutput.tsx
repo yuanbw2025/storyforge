@@ -110,8 +110,9 @@ export default function AIStreamOutput({
       <div className={`${isStructured && acceptMode === 'preview' && !isStreaming ? '' : 'min-h-[200px]'} max-h-[500px] overflow-y-auto p-4 bg-accent-soft`}>
         {error ? (
           <div className="text-error text-sm">
-            <p className="font-medium mb-1">⚠️ 生成失败</p>
+            <p className="font-medium mb-1">⚠️ {error.includes('生成已停止') ? '生成已停止' : error.includes('未收到模型完成确认') ? '生成结果未确认' : '生成失败'}</p>
             <p className="text-text-muted">{error}</p>
+            {hasOutput && <details open className="mt-3 text-text-primary"><summary>已收到的片段（未完成）</summary><div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{displayedOutput}</div></details>}
             {error.includes('Failed to fetch') && (
               <p className="mt-2 text-xs text-warning bg-warning/5 p-2 rounded">
                 💡 可能的解决方法：<br />

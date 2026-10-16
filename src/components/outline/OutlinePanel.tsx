@@ -42,10 +42,11 @@ import { useActiveWork } from '../../hooks/useActiveWork'
 interface Props {
   project: Project
   onOpenChapter?: (nodeId: number) => void
+  onOpenDetailedOutline?: (nodeId: number) => void
   initialNodeId?: number | null
 }
 
-export default function OutlinePanel({ project, onOpenChapter, initialNodeId }: Props) {
+export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOutline, initialNodeId }: Props) {
   const dialog = useDialog()
   const toast = useToast()
   const activeWork = useActiveWork(project)
@@ -701,6 +702,7 @@ export default function OutlinePanel({ project, onOpenChapter, initialNodeId }: 
           onInsertChapterAfter={(chapterId, parentId) => { void handleInsertChapterAfter(chapterId, parentId) }}
           onGenerateChapter={chapterId => { void generation.prepare({ kind: 'single-chapter', chapterId }) }}
           onOpenChapter={onOpenChapter}
+          onOpenDetailedOutline={onOpenDetailedOutline}
           onReorderNodes={orderedIds => { void reorderNodes(orderedIds) }}
           onMoveChapter={handleMoveChapter}
           onReviewChapters={() => setReviewDialogOpen(true)}

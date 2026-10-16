@@ -22,6 +22,7 @@ export const STORY_STRUCTURES: Record<StoryStructure, { label: string; blocks: s
 export interface OutlineNode extends RagDocumentMetadata {
   id?: number
   projectId: number
+  workId?: number
   parentId: number | null    // null = 顶层
   type: OutlineNodeType
   title: string

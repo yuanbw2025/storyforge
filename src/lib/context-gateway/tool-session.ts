@@ -33,6 +33,8 @@ export interface ContextGatewayToolSessionV1 {
   /** Optional product-contract narrowing. It can only remove catalog resources;
    * source/kind/depth authority still comes from the hashed access policy. */
   readonly resourceKeyAllowList: ReadonlySet<string> | null
+  /** Adapter narrowing of a record plus its field/aggregate descendants. */
+  readonly resourceKeyDenyList: ReadonlySet<string>
   readonly usage: { readCalls: number; retrievedTokens: number }
   readonly capabilities: Map<string, SourceRefCapabilityV1>
 }
@@ -52,6 +54,7 @@ export async function createContextGatewayToolSessionV1(input: {
   scope: FrozenResourceScopeV1
   policy: ContextAccessPolicyV1
   allowedResourceKeys?: readonly string[]
+  excludedRecordResourceKeys?: readonly string[]
 }): Promise<ContextGatewayToolSessionV1> {
   const policy = normalizeContextAccessPolicyV1(input.policy, CONTEXT_SOURCES)
   Object.freeze(policy.mandatorySourceKeys)
@@ -77,6 +80,8 @@ export async function createContextGatewayToolSessionV1(input: {
     || [...allowedResourceKeys].some(key => !key.trim()))) {
     fail('resource-allow-list', '资源 allow-list 含重复或空 key')
   }
+  const excluded = new Set(input.excludedRecordResourceKeys ?? [])
+  if (excluded.size !== (input.excludedRecordResourceKeys ?? []).length || [...excluded].some(key => !key.trim())) fail('resource-deny-list', '资源排除清单含重复或空 key')
   return {
     version: 'context-gateway-tool-session-v1',
     scope: Object.freeze({ ...input.scope }),
@@ -85,6 +90,7 @@ export async function createContextGatewayToolSessionV1(input: {
     policyHash: await hashCanonicalValue(policy),
     providers: Object.freeze(providers),
     resourceKeyAllowList: allowedResourceKeys,
+    resourceKeyDenyList: excluded,
     usage: { readCalls: 0, retrievedTokens: 0 },
     capabilities: new Map(),
   }
@@ -94,7 +100,8 @@ export function isContextGatewayResourceAllowedV1(
   session: ContextGatewayToolSessionV1,
   resourceKey: string,
 ): boolean {
-  return session.resourceKeyAllowList == null || session.resourceKeyAllowList.has(resourceKey)
+  return ![...session.resourceKeyDenyList].some(key => resourceKey === key || resourceKey.startsWith(`${key}:`))
+    && (session.resourceKeyAllowList == null || session.resourceKeyAllowList.has(resourceKey))
 }
 
 export function claimContextGatewayReadCallV1(session: ContextGatewayToolSessionV1): void {

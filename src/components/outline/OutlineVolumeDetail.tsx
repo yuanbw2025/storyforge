@@ -33,6 +33,7 @@ interface Props {
   onInsertChapterAfter: (chapterId: number, parentId: number) => void
   onGenerateChapter: (chapterId: number) => void
   onOpenChapter?: (chapterId: number) => void
+  onOpenDetailedOutline?: (chapterId: number) => void
   onReorderNodes: (orderedIds: number[]) => void
   onMoveChapter: (chapterId: number, targetParentId: number, index: number) => Promise<void>
   onReviewChapters: () => void
@@ -60,6 +61,7 @@ export default function OutlineVolumeDetail({
   onInsertChapterAfter,
   onGenerateChapter,
   onOpenChapter,
+  onOpenDetailedOutline,
   onReorderNodes,
   onMoveChapter,
   onReviewChapters,
@@ -203,6 +205,7 @@ export default function OutlineVolumeDetail({
                   onDeleteNode={onDeleteNode}
                   onAddChapter={() => onAddChapter(block.id!)}
                   onOpenChapter={onOpenChapter}
+                  onOpenDetailedOutline={onOpenDetailedOutline}
                   onReorder={onReorderNodes}
                   onInsertAfter={chapterId => onInsertChapterAfter(chapterId, block.id!)}
                   onGenerateChapter={onGenerateChapter}
@@ -239,6 +242,7 @@ export default function OutlineVolumeDetail({
                   onUpdate={onUpdateNode}
                   onDelete={onDeleteNode}
                   onOpen={onOpenChapter}
+                  onOpenDetail={onOpenDetailedOutline}
                   dnd={directChaptersDnD.itemDnD(chapter.id)}
                   onInsertAfter={() => onInsertChapterAfter(chapter.id!, volume.id!)}
                   onGenerate={() => onGenerateChapter(chapter.id!)}

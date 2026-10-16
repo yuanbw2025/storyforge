@@ -12,6 +12,8 @@
  */
 import { db } from '../db/schema'
 import type { DomainOwnershipSpec, TableSpec, WorkspaceMemoryClassificationV1 } from './types'
+import { parseSystemFictionElementsV1 } from '../prose/system-fiction-contract'
+import { normalizeDetailedScenes } from '../types/detailed-outline'
 
 const WORKSPACE_DOMAIN_OWNER = {
   allowed: ['workspace'], defaultOwner: 'workspace', locator: { kind: 'workspace' },
@@ -859,6 +861,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     ] },
 
   { table: db.detailedOutlines, name: 'detailedOutlines', owner: 'project', exportable: true,
+    validateImportRow: row => { normalizeDetailedScenes(row.scenes) },
     resourceIdentity: RESOURCE_IDENTITY('detailed-outline', 'detailed-outline', '细纲'),
     worldSemantic: { version: 1, area: 'detailed-outline', resourceKind: 'detailed-outline', canonPolicy: 'authoritative-table' },
     domainOwner: WORLD_OR_WORK_DOMAIN_OWNER,
@@ -1075,6 +1078,9 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     domainOwner: WORK_DOMAIN_OWNER },
 
   { table: db.creativeRules, name: 'creativeRules', owner: 'project', exportable: true,
+    validateImportRow: row => {
+      if (row.systemFictionElements !== undefined) parseSystemFictionElementsV1(row.systemFictionElements)
+    },
     resourceIdentity: RESOURCE_IDENTITY('creative-rules', 'reference', '创作规则'),
     domainOwner: WORK_DOMAIN_OWNER,
     workspaceProjection: {
@@ -1126,7 +1132,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
 
   // ───────────────────── 文风学习（FB-5） ─────────────────────
   { table: db.userStyleProfiles, name: 'userStyleProfiles', owner: 'project', exportable: true,
-    resourceIdentity: RESOURCE_IDENTITY('user-style', 'reference', '作者文风'),
+    resourceIdentity: { ...RESOURCE_IDENTITY('user-style', 'reference', '作者文风'), enabledField: 'enabled' },
     domainOwner: WORK_DOMAIN_OWNER,
     note: '每个 Work 一份作者文风画像；由 projectId/worldId/workId 共同证明当前作用域' },
 

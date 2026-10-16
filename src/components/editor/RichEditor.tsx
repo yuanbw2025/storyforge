@@ -4,15 +4,7 @@ import { getHTMLFromFragment } from '@tiptap/core'
 import type { EditorView } from '@tiptap/pm/view'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
-import StarterKit from '@tiptap/starter-kit'
-import Placeholder from '@tiptap/extension-placeholder'
-import {
-  BackgroundColor,
-  Color,
-  FontFamily,
-  FontSize,
-  TextStyle,
-} from '@tiptap/extension-text-style'
+import { richEditorExtensionsV1 } from '../../lib/editor/rich-editor-schema'
 import { countWords } from '../../lib/utils/html'
 import { loadEditorTypography, saveEditorTypography, applyEditorTypography, type EditorTypography } from '../../lib/editor-typography'
 import {
@@ -20,7 +12,6 @@ import {
   type EditorEntityReference,
 } from '../../lib/editor/entity-reference'
 import {
-  BlockSpacing,
   resolveColorForInput,
   type PendingTextStyle,
 } from '../../lib/editor/rich-editor-theme'
@@ -145,18 +136,7 @@ const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEditor(
   }
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [2, 3, 4] },
-      }),
-      TextStyle,
-      Color,
-      BackgroundColor,
-      FontFamily,
-      FontSize,
-      BlockSpacing,
-      Placeholder.configure({ placeholder }),
-    ],
+    extensions: richEditorExtensionsV1(placeholder),
     content: value,
     editable: !disabled,
     editorProps: {

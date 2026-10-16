@@ -18,7 +18,7 @@
 | `outline.volume` | 8 | 内置-卷级大纲生成 | 基于世界观与故事核心生成全书的卷级大纲。 | `projectName` `genres` `targetWordCount` `worldContext` `storyCore` `characterContext` `worldRulesContext` `existingVolumesContext` `userHint` |
 | `outline.chapter` | 1 | 内置-章节大纲展开 | 将单卷展开为 15-25 章的章节大纲。 | `volumeTitle` `volumeSummary` `worldContext` `prevVolumeSummary` `characterContext` `worldRulesContext` `userHint` |
 | `chapter.content` | 22 | 内置-长篇连载（默认） | 通用男频网文风格的章节正文生成，支持基调/节奏/字数三个可调参数。 | `chapterTitle` `chapterSummary` `worldContext` `characters` `previousChapterEnding` `worldRulesContext` `userHint` |
-| `chapter.continue` | 6 | 内置-章节续写 | 从已有正文末尾继续往下写约 1000-2000 字。 | `chapterSummary` `worldContext` `existingContent` `userHint` |
+| `chapter.continue` | 6 | 内置-章节续写 | 从已有正文末尾继续写，按作者指定篇幅与停笔点收尾。 | `chapterSummary` `worldContext` `existingContent` `userHint` |
 | `chapter.memory` | 1 | 内置-章节连续性记忆 | 一次调用同时提取章节摘要、下一章承接 handoff 与计划正文对账；引文 offset 由系统回查，不信任模型位置。 | `chapterTitle` `chapterPlan` `nextChapterPlan` `chapterText` |
 | `chapter.polish` | 1 | 内置-文本润色 | 按用户指令润色文本，保持原意不变。 | `instruction` `text` |
 | `chapter.expand` | 1 | 内置-文本扩写 | 将文本扩展丰富，增加细节、心理与环境，情节走向不变。 | `userHint` `text` |
@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 134 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 135 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -160,6 +160,7 @@
 | `worldGroups` | 世界组目录 | project | L2 | 1500 |
 | `outlineTree` | 大纲树 | world | L2 | 6000 |
 | `searchResults` | 项目内搜索结果 | world | L2 | 2200 |
+| `workAuthoringIntent` | 作者确认的作品意图与文风 | project | L0 | 6000 |
 | `ragSelection` | 作者选择的资料字段 | manual | L0 | 100000 |
 | `manualText` | 用户指定内容 | manual | L0 | 100000 |
 | `codexExtractionBaseline` | Codex 目标分类与既有词条闭集 | world | L0 | 8000 |
@@ -243,7 +244,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `comicReviewIssues` | `assetKey` `category` `evidence` `pageKey` `panelKey` `problem` `severity` `sourceUnitKeys` `subjectKey` `suggestion` |
 | `comicScriptBeats` | `causalFactKeys` `decisionKeys` `dialogueIntent` `emotion` `narrativeFunction` `sectionKey` `sourceUnitKeys` `visualAction` |
 | `comicVisualSubjects` | `design` `label` `sourceUnitIds` |
-| `creativeRules` | `atmosphere` `citedInsightIds` `citedReferenceIds` `consistencyRules` `narrativePOV` `prohibitions` `specialRequirements` `writingStyle` |
+| `creativeRules` | `atmosphere` `citedInsightIds` `citedReferenceIds` `consistencyRules` `narrativePOV` `prohibitions` `specialRequirements` `systemFictionElements` `writingStyle` |
 | `cultivationProgress` | `characterId` `characterName` `cultivationSystemId` `cultivationSystemName` `sourceChapterId` `sourceChapterTitle` `sourceOffset` `sourceQuote` `stageId` `stageName` `status` `transition` `trigger` `worldGroupId` |
 | `cultivationSystems` | `description` `name` `stages` `worldGroupId` |
 | `detailedOutlines` | `appearingCharacterIds` `emotionArc` `endingCliffhanger` `foreshadowIds` `lastUsedSummary` `openingHook` `outlineNodeId` `prohibitions` `sceneLocation` `scenes` |
@@ -357,7 +358,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 43 个 category。
+共 39 个 category。
 未分类调用: 0 个。动态 category 调用: 38 个。
 
 | category | 触发文件 |
@@ -367,22 +368,22 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
 | `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:429` |
 | `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
-| `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
-| `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:26` |
-| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:778`<br/>`src/lib/node-authoring/domain-execution.ts:843` |
-| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1699` |
-| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1677` |
-| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1667` |
+| `chapter.content` | `src/lib/generation/chapter-generation-node.ts:41` |
+| `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:42` |
+| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:779`<br/>`src/lib/node-authoring/domain-execution.ts:844` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1770` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1748` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1738` |
 | `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
 | `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
-| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:606` |
+| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:607` |
 | `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
 | `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:129` |
 | `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
 | `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
 | `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
-| `node.creation` | `src/lib/node-authoring/executor.ts:374` |
+| `node.creation` | `src/lib/node-authoring/executor.ts:387` |
 | `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:200`<br/>`src/lib/outline/generation-node.ts:61` |
 | `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:648` |
 | `outline.volume` | `src/lib/outline/generation-node.ts:56` |
@@ -392,11 +393,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `outline.workshop.scenes` | `src/lib/outline/workshop.ts:461` |
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
 | `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:288` |
-| `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:122` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
-| `review.quality` | `src/components/editor/ReviewPanel.tsx:112` |
-| `review.readability` | `src/components/editor/ReviewPanel.tsx:133` |
-| `review.revise` | `src/components/editor/ChapterEditor.tsx:1727` |
 | `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:271` |
 | `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:134` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:310` |
@@ -408,7 +405,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ### 动态 category 调用
 
-- `src/components/editor/ReviewPanel.tsx:160 · ai.start`
+- `src/components/editor/ReviewPanel.tsx:200 · ai.start`
 - `src/lib/adventure/harness.ts:383 · chat`
 - `src/lib/agent/character-copilot.ts:515 · chat`
 - `src/lib/agent/character-driven-copilot.ts:505 · chat`
@@ -416,13 +413,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/character-revision-copilot.ts:727 · chat`
 - `src/lib/agent/character-supplement-copilot.ts:578 · chat`
 - `src/lib/agent/context-compression.ts:333 · chat`
-- `src/lib/agent/creative-rules-copilot.ts:437 · chat`
+- `src/lib/agent/creative-rules-copilot.ts:448 · chat`
 - `src/lib/agent/inspiration-copilot.ts:345 · chat`
 - `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
 - `src/lib/agent/outline-copilot.ts:522 · chat`
 - `src/lib/agent/outline-copilot.ts:772 · chat`
-- `src/lib/agent/prose-copilot.ts:658 · chat`
-- `src/lib/agent/prose-copilot.ts:924 · chat`
+- `src/lib/agent/prose-copilot.ts:705 · chat`
+- `src/lib/agent/prose-copilot.ts:984 · chat`
 - `src/lib/agent/run/codex-extraction-durable.ts:779 · chat`
 - `src/lib/agent/run/history-agent-durable.ts:514 · chat`
 - `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
@@ -438,7 +435,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
 - `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
 - `src/lib/motion-drama/durable-production.ts:144 · chat`
-- `src/lib/node-authoring/executor.ts:431 · chat`
+- `src/lib/node-authoring/executor.ts:444 · chat`
 - `src/lib/open-world/evolution-harness.ts:246 · chat`
 - `src/lib/open-world/harness.ts:139 · chat`
 - `src/lib/product-production/authoring-consultation.ts:169 · chat`
@@ -449,7 +446,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 48 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
+共 49 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
@@ -460,12 +457,13 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `prose.selection.polish` | `prose.selection-edit` | `chapter.polish` | auxiliary / authoring-draft | `selection-polish-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
 | `prose.selection.expand` | `prose.selection-edit` | `chapter.expand` | auxiliary / authoring-draft | `selection-expand-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
 | `prose.selection.deai` | `prose.selection-edit` | `chapter.deai` | auxiliary / authoring-draft | `selection-rewrite-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
-| `prose.chapter.revise` | `prose.revise` | `review.revise` | auxiliary / authoring-draft | `chapter-revision-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
 | `prose.chapter.memory` | `prose.memory` | `chapter.memory` | formal / durable-run | `chapter-memory-candidate` | `chapters` | `src/components/editor/ChapterEditor.tsx`<br/>`src/lib/prose/post-adoption-runner.ts` |
 | `prose.chapter.organize` | `prose.organize` | `chapter.organize` | formal / durable-run | `chapter-organization-candidate` | `stateCards`<br/>`temporalFacts`<br/>`itemLedger`<br/>`storyTimelineEvents`<br/>`characterRelations`<br/>`foreshadows`<br/>`storylineProgress`<br/>`storylineCrossings`<br/>`storyArcs` | `src/components/editor/ChapterEditor.tsx`<br/>`src/lib/prose/post-adoption-runner.ts` |
-| `prose.review.quality` | `prose.review` | `review.quality` | auxiliary / read-only | `quality-review-report` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
-| `prose.review.anti-ai` | `prose.review` | `review.anti-ai` | auxiliary / read-only | `anti-ai-review-report` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
-| `prose.review.readability` | `prose.review` | `review.readability` | auxiliary / read-only | `readability-review-report` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
+| `prose.review.quality` | `prose.quality-review` | `review.quality` | auxiliary / durable-run | `quality-review-report` | 禁止 | `src/lib/prose/quality-transport.ts` |
+| `prose.review.anti-ai` | `prose.quality-review` | `review.anti-ai` | auxiliary / durable-run | `anti-ai-review-report` | 禁止 | `src/lib/prose/quality-transport.ts` |
+| `prose.review.readability` | `prose.quality-review` | `review.readability` | auxiliary / durable-run | `readability-review-report` | 禁止 | `src/lib/prose/quality-transport.ts` |
+| `prose.chapter.quality-revise` | `prose.quality-revise` | `review.revise` | formal / durable-run | `prose-generation-candidate` | `chapters` | `src/lib/prose/quality-transport.ts` |
+| `prose.review.recheck` | `prose.quality-recheck` | `review.quality` | auxiliary / durable-run | `quality-revision-recheck` | 禁止 | `src/lib/prose/quality-transport.ts` |
 | `prose.review.consistency` | `prose.review` | `review.consistency.fast`<br/>`review.consistency.deep` | auxiliary / durable-run | `consistency-audit-report` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
 | `world.map.concept` | `world-origin.map-config` | `geography.concept-map` | auxiliary / authoring-draft | `concept-map-svg` | 禁止 | `src/components/geography/GeographyPanel.tsx` |
 | `world.setting.lookup.qa` | `world-origin.review` | `setting-qa` | auxiliary / read-only | `setting-qa-answer` | 禁止 | `src/components/editor/SettingLookupPanel.tsx` |
@@ -504,4 +502,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `e8ce0a0d`
+生成时间基准:commit `7791c86c`

@@ -1,0 +1,1538 @@
+{
+  "schemaVersion": 1,
+  "kind": "system-fiction-q01-original-inputs",
+  "preparedAt": "2026-10-13",
+  "baselineCodeRef": "646beba1+adoption-hash-and-memory-order-fixes",
+  "inputStatus": "frozen-for-execution",
+  "ownership": "isolated-experimental-longform-works",
+  "modelSelection": "agnes/agnes-2.5-flash",
+  "fixtureRules": [
+    "这些是原创实验输入和规划预期，不是模型生成正文，也不是文学质量金标准。",
+    "plannerOnlyResourceBefore/After 为规划检查点，不得直接作为当前事实写入正文或章后状态。",
+    "当前章只读取当前章任务；后章计划不得进入正文事实来源。",
+    "临时 key 必须经作品作用域适配为实际身份；本文件不是可直接导入的 DB 备份。",
+    "后续状态以实际已采纳正文和有证据的章后候选为准，偏离规划应记录而非自动改稿。",
+    "基线选择首次可用候选；不为挑选最好结果隐藏重生成，不用合成响应替代真实请求。"
+  ],
+  "samples": [
+    {
+      "sampleId": "q01-urban",
+      "title": "旧街小灶",
+      "genres": [
+        "xitong",
+        "dushi"
+      ],
+      "premise": "供应链经理陈禾回到旧街，父亲病休的小饭店欠租，只剩十天拿出续租方案。她得到回味账本，能从真实消费后的自愿反馈中找出一个可验证的改进点，却无法凭空获得食材、资金或顾客。",
+      "readerPromise": "靠观察、手艺和可信的选择救活小店；有经营突破，也有合作、信用和家庭关系的代价。",
+      "tone": "有烟火气的轻松经营，竞争有实际利益，避免围观人群反复称赞。",
+      "protagonist": "chenhe",
+      "resource": {
+        "name": "回味点",
+        "initial": 0,
+        "rule": "真实消费后的有效反馈完成验证才增加；观察功能消耗对应点数，不能购买现实食材或直接换钱。"
+      },
+      "systemRules": [
+        "只接受实际消费后的自愿反馈，不接受刷单或主角自己编造的评价。",
+        "每次只给一个可验证的改进方向，不保证结果，也不替代人的判断。",
+        "观察功能需要回味点；没有足够点数时不得开启。",
+        "奖励为观察或操作方法，不能凭空提供食材、顾客、资金或改变他人意愿。",
+        "点数、配方来源和现实成本分别记录；剧情中的竞争者也会学习并调整策略。"
+      ],
+      "characters": [
+        {
+          "key": "chenhe",
+          "name": "陈禾",
+          "goal": "十天内保住店并提出可持续的经营方案",
+          "pressure": "想证明自己的方法，却容易把顾客当成可计算的数据",
+          "voice": "说话简短具体，谈方案习惯报条件，面对父亲会迟疑"
+        },
+        {
+          "key": "chenshan",
+          "name": "陈山",
+          "goal": "让老顾客吃到熟悉的饭，不让女儿替自己背债",
+          "pressure": "病休中不能掌勺，担心改菜单会丢掉老店身份",
+          "voice": "常用做饭和旧街的具体事解释自己的判断"
+        },
+        {
+          "key": "liangshan",
+          "name": "梁珊",
+          "goal": "守住小供应商的现金流和稳定订单",
+          "pressure": "愿意帮老店，但不能无限赊账",
+          "voice": "谈生意先问交货、回款和数量，不许诺空头人情"
+        },
+        {
+          "key": "hanqi",
+          "name": "韩启",
+          "goal": "经营邻街新店并争取企业午餐订单",
+          "pressure": "规模大但回款慢，需要控制采购成本",
+          "voice": "重视流程和利润，愿意竞争也愿意交换信息"
+        }
+      ],
+      "initialFacts": [
+        "陈禾有供应链工作经验，但不能熟练完成父亲的招牌菜。",
+        "陈山仍在世，因病休不能掌勺，未将店的经营权无条件交给陈禾。",
+        "续租方案须在十天后提交；房东未承诺降租。",
+        "梁珊只同意现款交易；任何赊账都须另行谈定。",
+        "回味点初始为零，系统不能赠送现实食材或现金。"
+      ],
+      "protectedProhibitions": [
+        "不能把陈山写成已故或突然康复掌勺",
+        "不能用系统直接生成顾客或现金",
+        "不能让梁珊无条件提供无限赊账",
+        "不能在前章泄露后续订单与合伙安排"
+      ],
+      "chapters": [
+        {
+          "title": "锅里剩下的半碗汤",
+          "goal": "在午市关门前让一位常客愿意说出问题",
+          "obstacle": "陈禾照自己的标准改了汤，却忽略常客的习惯",
+          "choice": "先承认自己的失误，再用现有原料做一份小样请对方自愿比较",
+          "plannedOutcome": "验证一个盐味问题，收到首次有效反馈获得五点；常客只答应明天再来",
+          "endingHook": "房东送来十天后的续租期限",
+          "plannedResourceDelta": 5,
+          "pace": "medium",
+          "chapterKey": "q01-urban-c01",
+          "number": 1,
+          "plannerOnlyResourceBefore": 0,
+          "plannerOnlyResourceAfter": 5,
+          "legacyScenes": [
+            {
+              "key": "q01-urban-c01-s1",
+              "title": "入场与阻力",
+              "summary": "在午市关门前让一位常客愿意说出问题",
+              "conflict": "陈禾照自己的标准改了汤，却忽略常客的习惯",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-urban-c01-s2",
+              "title": "选择与行动",
+              "summary": "先承认自己的失误，再用现有原料做一份小样请对方自愿比较",
+              "conflict": "陈禾照自己的标准改了汤，却忽略常客的习惯",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-urban-c01-s3",
+              "title": "结果与承接",
+              "summary": "验证一个盐味问题，收到首次有效反馈获得五点；常客只答应明天再来",
+              "conflict": "房东送来十天后的续租期限",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "两块钱买不到一锅汤",
+          "goal": "查清午市出餐慢的原因",
+          "obstacle": "系统观察需要两点，厨房却同时缺一位熟练帮手",
+          "choice": "花两点观察一次流程，亲自试着调整备料顺序而非增加菜品",
+          "plannedOutcome": "回味点剩三点；出餐更稳，但陈禾的操作仍会失误",
+          "endingHook": "梁珊提出下一批货要先结清旧款",
+          "plannedResourceDelta": -2,
+          "pace": "medium",
+          "chapterKey": "q01-urban-c02",
+          "number": 2,
+          "plannerOnlyResourceBefore": 5,
+          "plannerOnlyResourceAfter": 3,
+          "legacyScenes": [
+            {
+              "key": "q01-urban-c02-s1",
+              "title": "入场与阻力",
+              "summary": "查清午市出餐慢的原因",
+              "conflict": "系统观察需要两点，厨房却同时缺一位熟练帮手",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-urban-c02-s2",
+              "title": "选择与行动",
+              "summary": "花两点观察一次流程，亲自试着调整备料顺序而非增加菜品",
+              "conflict": "系统观察需要两点，厨房却同时缺一位熟练帮手",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-urban-c02-s3",
+              "title": "结果与承接",
+              "summary": "回味点剩三点；出餐更稳，但陈禾的操作仍会失误",
+              "conflict": "梁珊提出下一批货要先结清旧款",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "只做二十份",
+          "goal": "做一个能真实执行的小批量午餐承诺",
+          "obstacle": "预算不足以同时保住旧菜单和新增套餐",
+          "choice": "限定二十份并公开售罄规则，为常客留出原有菜品",
+          "plannedOutcome": "有效反馈验证套餐改进，增加四点至七点；没有凭空增加产能",
+          "endingHook": "新店也盯上了同一条街的办公午餐",
+          "plannedResourceDelta": 4,
+          "pace": "medium",
+          "chapterKey": "q01-urban-c03",
+          "number": 3,
+          "plannerOnlyResourceBefore": 3,
+          "plannerOnlyResourceAfter": 7,
+          "legacyScenes": [
+            {
+              "key": "q01-urban-c03-s1",
+              "title": "入场与阻力",
+              "summary": "做一个能真实执行的小批量午餐承诺",
+              "conflict": "预算不足以同时保住旧菜单和新增套餐",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-urban-c03-s2",
+              "title": "选择与行动",
+              "summary": "限定二十份并公开售罄规则，为常客留出原有菜品",
+              "conflict": "预算不足以同时保住旧菜单和新增套餐",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-urban-c03-s3",
+              "title": "结果与承接",
+              "summary": "有效反馈验证套餐改进，增加四点至七点；没有凭空增加产能",
+              "conflict": "新店也盯上了同一条街的办公午餐",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "招牌上的那道字",
+          "goal": "决定招牌菜要不要进入套餐",
+          "obstacle": "父亲担心品质失控，陈禾想提高销量",
+          "choice": "花三点观察准备条件，暂时放弃量产，先与父亲讨论可检验的标准",
+          "plannedOutcome": "回味点剩四点；父女首次明确分工，销量没有立即暴涨",
+          "endingHook": "一位老顾客提出要给工地订餐",
+          "plannedResourceDelta": -3,
+          "pace": "slow",
+          "chapterKey": "q01-urban-c04",
+          "number": 4,
+          "plannerOnlyResourceBefore": 7,
+          "plannerOnlyResourceAfter": 4,
+          "legacyScenes": [
+            {
+              "key": "q01-urban-c04-s1",
+              "title": "入场与阻力",
+              "summary": "决定招牌菜要不要进入套餐",
+              "conflict": "父亲担心品质失控，陈禾想提高销量",
+              "pace": "slow",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-urban-c04-s2",
+              "title": "选择与行动",
+              "summary": "花三点观察准备条件，暂时放弃量产，先与父亲讨论可检验的标准",
+              "conflict": "父亲担心品质失控，陈禾想提高销量",
+              "pace": "slow",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-urban-c04-s3",
+              "title": "结果与承接",
+              "summary": "回味点剩四点；父女首次明确分工，销量没有立即暴涨",
+              "conflict": "一位老顾客提出要给工地订餐",
+              "pace": "slow",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "订单也会把店压垮",
+          "goal": "判断工地订单是否值得接",
+          "obstacle": "一次性大量订单会占用常客午市，回款条件还不明确",
+          "choice": "拒绝不透明的数量和账期，提出分批试单",
+          "plannedOutcome": "点数仍为四；得到可承受的试单，却失去一部分看起来很大的收入",
+          "endingHook": "韩启愿意接走剩余订单，但要求同步交付时间",
+          "plannedResourceDelta": 0,
+          "pace": "medium",
+          "chapterKey": "q01-urban-c05",
+          "number": 5,
+          "plannerOnlyResourceBefore": 4,
+          "plannerOnlyResourceAfter": 4,
+          "legacyScenes": [
+            {
+              "key": "q01-urban-c05-s1",
+              "title": "入场与阻力",
+              "summary": "判断工地订单是否值得接",
+              "conflict": "一次性大量订单会占用常客午市，回款条件还不明确",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-urban-c05-s2",
+              "title": "选择与行动",
+              "summary": "拒绝不透明的数量和账期，提出分批试单",
+              "conflict": "一次性大量订单会占用常客午市，回款条件还不明确",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-urban-c05-s3",
+              "title": "结果与承接",
+              "summary": "点数仍为四；得到可承受的试单，却失去一部分看起来很大的收入",
+              "conflict": "韩启愿意接走剩余订单，但要求同步交付时间",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "灶台前的两张单",
+          "goal": "完成试单并守住常客承诺",
+          "obstacle": "备料和送餐时间相撞，供应商不会免费补货",
+          "choice": "先减掉一项套餐配菜并征得客户同意，再自己承担配送协调",
+          "plannedOutcome": "验证新的交付方法增加五点至九点；回款条件写清但利润不高",
+          "endingHook": "一条差评质疑店里把常客排在后面",
+          "plannedResourceDelta": 5,
+          "pace": "fast",
+          "chapterKey": "q01-urban-c06",
+          "number": 6,
+          "plannerOnlyResourceBefore": 4,
+          "plannerOnlyResourceAfter": 9,
+          "legacyScenes": [
+            {
+              "key": "q01-urban-c06-s1",
+              "title": "入场与阻力",
+              "summary": "完成试单并守住常客承诺",
+              "conflict": "备料和送餐时间相撞，供应商不会免费补货",
+              "pace": "fast",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-urban-c06-s2",
+              "title": "选择与行动",
+              "summary": "先减掉一项套餐配菜并征得客户同意，再自己承担配送协调",
+              "conflict": "备料和送餐时间相撞，供应商不会免费补货",
+              "pace": "fast",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-urban-c06-s3",
+              "title": "结果与承接",
+              "summary": "验证新的交付方法增加五点至九点；回款条件写清但利润不高",
+              "conflict": "一条差评质疑店里把常客排在后面",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "差评不是敌人",
+          "goal": "找到差评对应的真实失约",
+          "obstacle": "自动辩解会伤信用，系统也无法鉴定顾客的善恶",
+          "choice": "花四点观察订单时间，承认一次漏单，按现有资金提出补偿",
+          "plannedOutcome": "点数剩五；问题解决而信誉需要慢慢恢复，配角有自己的判断",
+          "endingHook": "梁珊提出一份有风险但能降低损耗的联合采购方案",
+          "plannedResourceDelta": -4,
+          "pace": "medium",
+          "chapterKey": "q01-urban-c07",
+          "number": 7,
+          "plannerOnlyResourceBefore": 9,
+          "plannerOnlyResourceAfter": 5,
+          "legacyScenes": [
+            {
+              "key": "q01-urban-c07-s1",
+              "title": "入场与阻力",
+              "summary": "找到差评对应的真实失约",
+              "conflict": "自动辩解会伤信用，系统也无法鉴定顾客的善恶",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-urban-c07-s2",
+              "title": "选择与行动",
+              "summary": "花四点观察订单时间，承认一次漏单，按现有资金提出补偿",
+              "conflict": "自动辩解会伤信用，系统也无法鉴定顾客的善恶",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-urban-c07-s3",
+              "title": "结果与承接",
+              "summary": "点数剩五；问题解决而信誉需要慢慢恢复，配角有自己的判断",
+              "conflict": "梁珊提出一份有风险但能降低损耗的联合采购方案",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "谁替谁垫钱",
+          "goal": "决定联合采购的边界",
+          "obstacle": "采购便宜但两家需求不同，库存风险会落到具体人身上",
+          "choice": "与梁珊分别列出各自承担的数量，不让私人关系代替合同",
+          "plannedOutcome": "验证损耗改进增加三点至八点；合作成立，但不能解决租金缺口",
+          "endingHook": "韩启的企业订单突然需要备用出餐点",
+          "plannedResourceDelta": 3,
+          "pace": "medium",
+          "chapterKey": "q01-urban-c08",
+          "number": 8,
+          "plannerOnlyResourceBefore": 5,
+          "plannerOnlyResourceAfter": 8,
+          "legacyScenes": [
+            {
+              "key": "q01-urban-c08-s1",
+              "title": "入场与阻力",
+              "summary": "决定联合采购的边界",
+              "conflict": "采购便宜但两家需求不同，库存风险会落到具体人身上",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-urban-c08-s2",
+              "title": "选择与行动",
+              "summary": "与梁珊分别列出各自承担的数量，不让私人关系代替合同",
+              "conflict": "采购便宜但两家需求不同，库存风险会落到具体人身上",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-urban-c08-s3",
+              "title": "结果与承接",
+              "summary": "验证损耗改进增加三点至八点；合作成立，但不能解决租金缺口",
+              "conflict": "韩启的企业订单突然需要备用出餐点",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "把名字写在协议上",
+          "goal": "谈出互利而非依附的新店合作",
+          "obstacle": "韩启需要备用产能，陈禾需要稳定订单，双方都怕失去顾客",
+          "choice": "花五点检验自身承载量，用限量合作保护招牌和常客",
+          "plannedOutcome": "点数剩三；合作条款明确，能否交付仍由人负责",
+          "endingHook": "试运行恰好撞上父亲最在意的旧街聚餐",
+          "plannedResourceDelta": -5,
+          "pace": "fast",
+          "chapterKey": "q01-urban-c09",
+          "number": 9,
+          "plannerOnlyResourceBefore": 8,
+          "plannerOnlyResourceAfter": 3,
+          "legacyScenes": [
+            {
+              "key": "q01-urban-c09-s1",
+              "title": "入场与阻力",
+              "summary": "谈出互利而非依附的新店合作",
+              "conflict": "韩启需要备用产能，陈禾需要稳定订单，双方都怕失去顾客",
+              "pace": "fast",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-urban-c09-s2",
+              "title": "选择与行动",
+              "summary": "花五点检验自身承载量，用限量合作保护招牌和常客",
+              "conflict": "韩启需要备用产能，陈禾需要稳定订单，双方都怕失去顾客",
+              "pace": "fast",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-urban-c09-s3",
+              "title": "结果与承接",
+              "summary": "点数剩三；合作条款明确，能否交付仍由人负责",
+              "conflict": "试运行恰好撞上父亲最在意的旧街聚餐",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "旧街还在吃晚饭",
+          "goal": "完成合作试运行并提交续租方案",
+          "obstacle": "同一天必须兼顾合同交付、老顾客聚餐和有限人手",
+          "choice": "将两批服务错开并公开暂停临时加单，把信用置于账面最大收入之前",
+          "plannedOutcome": "增加六点至九点；房东接受继续谈判，店得到可持续机会而非一夜暴富",
+          "endingHook": "新的稳定订单要求她培养第二个能独立掌勺的人",
+          "plannedResourceDelta": 6,
+          "pace": "climax",
+          "chapterKey": "q01-urban-c10",
+          "number": 10,
+          "plannerOnlyResourceBefore": 3,
+          "plannerOnlyResourceAfter": 9,
+          "legacyScenes": [
+            {
+              "key": "q01-urban-c10-s1",
+              "title": "入场与阻力",
+              "summary": "完成合作试运行并提交续租方案",
+              "conflict": "同一天必须兼顾合同交付、老顾客聚餐和有限人手",
+              "pace": "climax",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-urban-c10-s2",
+              "title": "选择与行动",
+              "summary": "将两批服务错开并公开暂停临时加单，把信用置于账面最大收入之前",
+              "conflict": "同一天必须兼顾合同交付、老顾客聚餐和有限人手",
+              "pace": "climax",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-urban-c10-s3",
+              "title": "结果与承接",
+              "summary": "增加六点至九点；房东接受继续谈判，店得到可持续机会而非一夜暴富",
+              "conflict": "新的稳定订单要求她培养第二个能独立掌勺的人",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        }
+      ],
+      "targetWordsPerChapter": {
+        "min": 2200,
+        "max": 2800,
+        "stopAtPlannedEnding": true
+      }
+    },
+    {
+      "sampleId": "q01-cultivation",
+      "title": "缺页问剑",
+      "genres": [
+        "xitong",
+        "xianxia"
+      ],
+      "premise": "抄经弟子许照只能看见手中残卷的一个局部缺口，必须以材料和实际修炼证据验证推断。宗门准备淘汰一批低效旧法，他想证明师父留下的残页有用，却没有实力替所有问题提供答案。",
+      "readerPromise": "在可验证的规则内用观察和选择突破，不靠临时改规则获胜；每次公开证明都会改变对手和合作关系。",
+      "tone": "清晰克制的成长与智斗，实力证明有过程，反派有正当资源诉求。",
+      "protagonist": "xuzhao",
+      "resource": {
+        "name": "校验点",
+        "initial": 4,
+        "rule": "识别残卷缺口消耗校验点；对公开可复验的推断获得验证时增加，不直接提升修为。"
+      },
+      "systemRules": [
+        "只分析实际看见的文字和本人可取得的修炼记录，不读取他人内心或未见的完整功法。",
+        "每次指出一个局部缺口和验证方向，不输出完整新功法。",
+        "识别消耗校验点；材料和修为不由系统凭空提供。",
+        "验证失败必须保留错误记录，系统建议不是宗门认可的证据。",
+        "校验点不会转换成修为；对手可根据公开结果调整应对方式。"
+      ],
+      "characters": [
+        {
+          "key": "xuzhao",
+          "name": "许照",
+          "goal": "证明残页能安全使用并取得继续修习资格",
+          "pressure": "过于依赖自己看见的局部信息，害怕承认师父留下的记录有错",
+          "voice": "先描述观察再下判断，不会每次都说玄奥大道"
+        },
+        {
+          "key": "wenhe",
+          "name": "闻鹤",
+          "goal": "在预算内淘汰危险或低效旧法",
+          "pressure": "作为试炼主持者须对弟子受伤和材料浪费负责",
+          "voice": "问证据、边界与复验条件，不无理由羞辱弱者"
+        },
+        {
+          "key": "luqi",
+          "name": "陆祁",
+          "goal": "获得有限的试验材料名额",
+          "pressure": "技能成熟但家庭需要稳定资源，不愿因新法失去机会",
+          "voice": "擅长提出技术反问，在利益受损时直说条件"
+        },
+        {
+          "key": "shenlu",
+          "name": "沈鹿",
+          "goal": "修复自己不稳定的行气习惯",
+          "pressure": "愿意合作，但不肯把身体交给未经验证的猜测",
+          "voice": "用自己的感受和记录质疑方案，不是称赞主角的工具"
+        }
+      ],
+      "initialFacts": [
+        "许照是抄经弟子，修为低，不会因为看懂文字就立即跨级获胜。",
+        "师父留下的是残页，并非已证实无误的完整秘籍。",
+        "校验点初始为四点，系统只处理已取得的局部证据。",
+        "试炼主持闻鹤有安全责任，淘汰旧法的意见有事实依据。",
+        "沈鹿尚未同意参与试验，陆祁尚不知道残页的具体缺口。"
+      ],
+      "protectedProhibitions": [
+        "不能让校验点直接变成修为",
+        "不能读取未见功法或其他角色心声",
+        "不能省略材料与复验条件",
+        "不能把对手写成永远不会调整的围观者"
+      ],
+      "chapters": [
+        {
+          "title": "纸边的一道墨痕",
+          "goal": "在旧法淘汰前提出一个可检验的疑点",
+          "obstacle": "残页缺字而主持者只接受证据，许照没有资格空口争辩",
+          "choice": "花一点检查本人见到的残页，把疑点限定为一处行气顺序",
+          "plannedOutcome": "校验点剩三；争取到小范围复验机会，未获得新修为",
+          "endingHook": "复验需要的材料名额与陆祁相冲突",
+          "plannedResourceDelta": -1,
+          "pace": "medium",
+          "chapterKey": "q01-cultivation-c01",
+          "number": 1,
+          "plannerOnlyResourceBefore": 4,
+          "plannerOnlyResourceAfter": 3,
+          "legacyScenes": [
+            {
+              "key": "q01-cultivation-c01-s1",
+              "title": "入场与阻力",
+              "summary": "在旧法淘汰前提出一个可检验的疑点",
+              "conflict": "残页缺字而主持者只接受证据，许照没有资格空口争辩",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-cultivation-c01-s2",
+              "title": "选择与行动",
+              "summary": "花一点检查本人见到的残页，把疑点限定为一处行气顺序",
+              "conflict": "残页缺字而主持者只接受证据，许照没有资格空口争辩",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-cultivation-c01-s3",
+              "title": "结果与承接",
+              "summary": "校验点剩三；争取到小范围复验机会，未获得新修为",
+              "conflict": "复验需要的材料名额与陆祁相冲突",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "先写失败的条件",
+          "goal": "取得沈鹿对小范围试验的知情同意",
+          "obstacle": "沈鹿不相信只报好结果的试验，失败会伤害她",
+          "choice": "先写明终止条件与失败记录，再用低风险的现有动作验证",
+          "plannedOutcome": "增加四点至七点；证实局部效果，不能证明整个旧法可靠",
+          "endingHook": "闻鹤要求把结果交给别人复验",
+          "plannedResourceDelta": 4,
+          "pace": "medium",
+          "chapterKey": "q01-cultivation-c02",
+          "number": 2,
+          "plannerOnlyResourceBefore": 3,
+          "plannerOnlyResourceAfter": 7,
+          "legacyScenes": [
+            {
+              "key": "q01-cultivation-c02-s1",
+              "title": "入场与阻力",
+              "summary": "取得沈鹿对小范围试验的知情同意",
+              "conflict": "沈鹿不相信只报好结果的试验，失败会伤害她",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-cultivation-c02-s2",
+              "title": "选择与行动",
+              "summary": "先写明终止条件与失败记录，再用低风险的现有动作验证",
+              "conflict": "沈鹿不相信只报好结果的试验，失败会伤害她",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-cultivation-c02-s3",
+              "title": "结果与承接",
+              "summary": "增加四点至七点；证实局部效果，不能证明整个旧法可靠",
+              "conflict": "闻鹤要求把结果交给别人复验",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "缺的不是一个字",
+          "goal": "解释复验者出现的不同结果",
+          "obstacle": "许照想保护师父的记录，却发现证据支持另一种解释",
+          "choice": "花三点检查已有记录，承认自己的原先判断过窄",
+          "plannedOutcome": "点数剩四；找出适用边界，沈鹿的信任建立在承认错误上",
+          "endingHook": "陆祁提出一个会暴露边界的公开问题",
+          "plannedResourceDelta": -3,
+          "pace": "medium",
+          "chapterKey": "q01-cultivation-c03",
+          "number": 3,
+          "plannerOnlyResourceBefore": 7,
+          "plannerOnlyResourceAfter": 4,
+          "legacyScenes": [
+            {
+              "key": "q01-cultivation-c03-s1",
+              "title": "入场与阻力",
+              "summary": "解释复验者出现的不同结果",
+              "conflict": "许照想保护师父的记录，却发现证据支持另一种解释",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-cultivation-c03-s2",
+              "title": "选择与行动",
+              "summary": "花三点检查已有记录，承认自己的原先判断过窄",
+              "conflict": "许照想保护师父的记录，却发现证据支持另一种解释",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-cultivation-c03-s3",
+              "title": "结果与承接",
+              "summary": "点数剩四；找出适用边界，沈鹿的信任建立在承认错误上",
+              "conflict": "陆祁提出一个会暴露边界的公开问题",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "不够漂亮的答案",
+          "goal": "在公开讨论中证明局部结果值得保留",
+          "obstacle": "准确答案不如夸张效果吸引人，许照又缺乏经验",
+          "choice": "把不能解决的问题一并公开，用实际动作展示已有变化",
+          "plannedOutcome": "增加两点至六点；保住试验资格但未压倒全部异议",
+          "endingHook": "剩余材料只够两个方案中的一个",
+          "plannedResourceDelta": 2,
+          "pace": "slow",
+          "chapterKey": "q01-cultivation-c04",
+          "number": 4,
+          "plannerOnlyResourceBefore": 4,
+          "plannerOnlyResourceAfter": 6,
+          "legacyScenes": [
+            {
+              "key": "q01-cultivation-c04-s1",
+              "title": "入场与阻力",
+              "summary": "在公开讨论中证明局部结果值得保留",
+              "conflict": "准确答案不如夸张效果吸引人，许照又缺乏经验",
+              "pace": "slow",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-cultivation-c04-s2",
+              "title": "选择与行动",
+              "summary": "把不能解决的问题一并公开，用实际动作展示已有变化",
+              "conflict": "准确答案不如夸张效果吸引人，许照又缺乏经验",
+              "pace": "slow",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-cultivation-c04-s3",
+              "title": "结果与承接",
+              "summary": "增加两点至六点；保住试验资格但未压倒全部异议",
+              "conflict": "剩余材料只够两个方案中的一个",
+              "pace": "slow",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "两份申请一份药",
+          "goal": "在资源竞争中选择验证路线",
+          "obstacle": "陆祁的方案更稳，许照的方案潜力大但风险高",
+          "choice": "花四点缩小试验问题，选择较小的公开验证而非抢占全部材料",
+          "plannedOutcome": "点数剩二；换得有限材料，也接受自己的成果不能马上独占",
+          "endingHook": "陆祁开始研究如何针对他已公开的方法",
+          "plannedResourceDelta": -4,
+          "pace": "medium",
+          "chapterKey": "q01-cultivation-c05",
+          "number": 5,
+          "plannerOnlyResourceBefore": 6,
+          "plannerOnlyResourceAfter": 2,
+          "legacyScenes": [
+            {
+              "key": "q01-cultivation-c05-s1",
+              "title": "入场与阻力",
+              "summary": "在资源竞争中选择验证路线",
+              "conflict": "陆祁的方案更稳，许照的方案潜力大但风险高",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-cultivation-c05-s2",
+              "title": "选择与行动",
+              "summary": "花四点缩小试验问题，选择较小的公开验证而非抢占全部材料",
+              "conflict": "陆祁的方案更稳，许照的方案潜力大但风险高",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-cultivation-c05-s3",
+              "title": "结果与承接",
+              "summary": "点数剩二；换得有限材料，也接受自己的成果不能马上独占",
+              "conflict": "陆祁开始研究如何针对他已公开的方法",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "不催动的那一息",
+          "goal": "承接前次消耗并稳住人物关系",
+          "obstacle": "许照想急于证明更多，沈鹿需要休息与可预测的训练",
+          "choice": "暂不开启系统，核对手写记录并解释下一次试验的风险",
+          "plannedOutcome": "点数仍二；维持已证实的能力边界，关系前进而修为不飞跃",
+          "endingHook": "陆祁带来一个针对原方法的新应对",
+          "plannedResourceDelta": 0,
+          "pace": "slow",
+          "chapterKey": "q01-cultivation-c06",
+          "number": 6,
+          "plannerOnlyResourceBefore": 2,
+          "plannerOnlyResourceAfter": 2,
+          "legacyScenes": [
+            {
+              "key": "q01-cultivation-c06-s1",
+              "title": "入场与阻力",
+              "summary": "承接前次消耗并稳住人物关系",
+              "conflict": "许照想急于证明更多，沈鹿需要休息与可预测的训练",
+              "pace": "slow",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-cultivation-c06-s2",
+              "title": "选择与行动",
+              "summary": "暂不开启系统，核对手写记录并解释下一次试验的风险",
+              "conflict": "许照想急于证明更多，沈鹿需要休息与可预测的训练",
+              "pace": "slow",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-cultivation-c06-s3",
+              "title": "结果与承接",
+              "summary": "点数仍二；维持已证实的能力边界，关系前进而修为不飞跃",
+              "conflict": "陆祁带来一个针对原方法的新应对",
+              "pace": "slow",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "对手已经学会了",
+          "goal": "面对新应对完成一次有效能力证明",
+          "obstacle": "原来的演示不能再次直接获胜",
+          "choice": "利用已公开边界改变动作选择，接受比预期更小的收益",
+          "plannedOutcome": "增加五点至七点；证明能在边界内调整，闻鹤认可新的复验记录",
+          "endingHook": "更高层的试炼把协作而非个人胜负列为目标",
+          "plannedResourceDelta": 5,
+          "pace": "fast",
+          "chapterKey": "q01-cultivation-c07",
+          "number": 7,
+          "plannerOnlyResourceBefore": 2,
+          "plannerOnlyResourceAfter": 7,
+          "legacyScenes": [
+            {
+              "key": "q01-cultivation-c07-s1",
+              "title": "入场与阻力",
+              "summary": "面对新应对完成一次有效能力证明",
+              "conflict": "原来的演示不能再次直接获胜",
+              "pace": "fast",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-cultivation-c07-s2",
+              "title": "选择与行动",
+              "summary": "利用已公开边界改变动作选择，接受比预期更小的收益",
+              "conflict": "原来的演示不能再次直接获胜",
+              "pace": "fast",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-cultivation-c07-s3",
+              "title": "结果与承接",
+              "summary": "增加五点至七点；证明能在边界内调整，闻鹤认可新的复验记录",
+              "conflict": "更高层的试炼把协作而非个人胜负列为目标",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "把半页交出去",
+          "goal": "形成有实际分工的试炼合作",
+          "obstacle": "合作伙伴要证据，许照又怕残页成果被全部拿走",
+          "choice": "花五点核对可公开与不能外推的部分，分享必要条件并明确责任",
+          "plannedOutcome": "点数剩二；获得合作而非追随者，仍需本人完成训练",
+          "endingHook": "沈鹿的记录暴露出团队动作不一致的隐患",
+          "plannedResourceDelta": -5,
+          "pace": "medium",
+          "chapterKey": "q01-cultivation-c08",
+          "number": 8,
+          "plannerOnlyResourceBefore": 7,
+          "plannerOnlyResourceAfter": 2,
+          "legacyScenes": [
+            {
+              "key": "q01-cultivation-c08-s1",
+              "title": "入场与阻力",
+              "summary": "形成有实际分工的试炼合作",
+              "conflict": "合作伙伴要证据，许照又怕残页成果被全部拿走",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-cultivation-c08-s2",
+              "title": "选择与行动",
+              "summary": "花五点核对可公开与不能外推的部分，分享必要条件并明确责任",
+              "conflict": "合作伙伴要证据，许照又怕残页成果被全部拿走",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-cultivation-c08-s3",
+              "title": "结果与承接",
+              "summary": "点数剩二；获得合作而非追随者，仍需本人完成训练",
+              "conflict": "沈鹿的记录暴露出团队动作不一致的隐患",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "谁来改第一步",
+          "goal": "在试炼中解决团队动作问题",
+          "obstacle": "主角的方案需要改变同伴习惯，独自正确不足以让团队成功",
+          "choice": "先调整自己的动作给同伴留空间，再在已知限制内配合",
+          "plannedOutcome": "增加三点至五点；共同完成一个关口，成果由团队承担",
+          "endingHook": "最后的关口会检验他们是否真的遵守公开边界",
+          "plannedResourceDelta": 3,
+          "pace": "fast",
+          "chapterKey": "q01-cultivation-c09",
+          "number": 9,
+          "plannerOnlyResourceBefore": 2,
+          "plannerOnlyResourceAfter": 5,
+          "legacyScenes": [
+            {
+              "key": "q01-cultivation-c09-s1",
+              "title": "入场与阻力",
+              "summary": "在试炼中解决团队动作问题",
+              "conflict": "主角的方案需要改变同伴习惯，独自正确不足以让团队成功",
+              "pace": "fast",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-cultivation-c09-s2",
+              "title": "选择与行动",
+              "summary": "先调整自己的动作给同伴留空间，再在已知限制内配合",
+              "conflict": "主角的方案需要改变同伴习惯，独自正确不足以让团队成功",
+              "pace": "fast",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-cultivation-c09-s3",
+              "title": "结果与承接",
+              "summary": "增加三点至五点；共同完成一个关口，成果由团队承担",
+              "conflict": "最后的关口会检验他们是否真的遵守公开边界",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "残页仍有空白",
+          "goal": "完成阶段证明并明确下一阶段问题",
+          "obstacle": "一次成功诱惑许照将局部结果说成完整新法",
+          "choice": "花两点校验关键证据，在最终演示中同时说明成功条件和未知部分",
+          "plannedOutcome": "剩三点后获得八点验证奖励，总计十一点；取得继续修习资格，不成为全知强者",
+          "endingHook": "新材料中的一条记录与师父的旧注解不一致",
+          "plannedResourceDelta": 6,
+          "pace": "climax",
+          "chapterKey": "q01-cultivation-c10",
+          "number": 10,
+          "plannerOnlyResourceBefore": 5,
+          "plannerOnlyResourceAfter": 11,
+          "legacyScenes": [
+            {
+              "key": "q01-cultivation-c10-s1",
+              "title": "入场与阻力",
+              "summary": "完成阶段证明并明确下一阶段问题",
+              "conflict": "一次成功诱惑许照将局部结果说成完整新法",
+              "pace": "climax",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-cultivation-c10-s2",
+              "title": "选择与行动",
+              "summary": "花两点校验关键证据，在最终演示中同时说明成功条件和未知部分",
+              "conflict": "一次成功诱惑许照将局部结果说成完整新法",
+              "pace": "climax",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-cultivation-c10-s3",
+              "title": "结果与承接",
+              "summary": "剩三点后获得八点验证奖励，总计十一点；取得继续修习资格，不成为全知强者",
+              "conflict": "新材料中的一条记录与师父的旧注解不一致",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        }
+      ],
+      "targetWordsPerChapter": {
+        "min": 2200,
+        "max": 2800,
+        "stopAtPlannedEnding": true
+      }
+    },
+    {
+      "sampleId": "q01-survival",
+      "title": "雨停之前",
+      "genres": [
+        "xitong",
+        "moshi"
+      ],
+      "premise": "暴雨灾变后，排水维护员周弥带着六人小队寻找可持续的避雨与净水点。流量预报只能利用已到达地点的观测预测六小时内的局部风险，消耗观测电量；团队必须在信息不足时决定路线和合作条件。",
+      "readerPromise": "有限信息下有根据的生存判断、合作与互信；系统提供优势却保留未知，获救会带来资源和关系的新责任。",
+      "tone": "紧张但有喘息的团队生存，避免系统全知和无限物资，重要选择落实到人。",
+      "protagonist": "zhoumi",
+      "resource": {
+        "name": "观测电量",
+        "initial": 10,
+        "rule": "观测消耗电量，现实充电增加；系统不自动回血、无限充电或复制物资。"
+      },
+      "systemRules": [
+        "只能根据本人实际取得的观测，给出六小时内的局部风险范围，不预知远处所有地点。",
+        "缺少观测时显示不确定，概率不等于已经发生的事实。",
+        "每次观测消耗明确电量，补充电量需要现实可解释的充电来源。",
+        "没有电量时不提供新预测；系统不能生成食物、水、滤芯或替人达成合作。",
+        "同伴的知识以已交流的信息为准，主角未说明的预测不能自动被全队获知。"
+      ],
+      "characters": [
+        {
+          "key": "zhoumi",
+          "name": "周弥",
+          "goal": "带队找到能持续停留的净水与避雨点",
+          "pressure": "倾向把技术判断当成共同决定，忽略别人承担的风险",
+          "voice": "先报看到的事实和不确定范围，紧张时会省略解释"
+        },
+        {
+          "key": "zhengyu",
+          "name": "郑雨",
+          "goal": "保证队员没有被当成探路耗材",
+          "pressure": "曾因别人不说明风险而受过损失",
+          "voice": "遇到指令先问谁承担后果，不无理由反对每个方案"
+        },
+        {
+          "key": "taoran",
+          "name": "陶然",
+          "goal": "带回能修复净水设备的滤芯",
+          "pressure": "手艺有用但不知道所有电路，担心承诺超出能力",
+          "voice": "指出自己能修和不能修的部分，喜欢用实物说明"
+        },
+        {
+          "key": "gaocheng",
+          "name": "高澄",
+          "goal": "守住另一支队伍的据点和储备",
+          "pressure": "愿意合作但需要公平分担守备与净水工作",
+          "voice": "谈交换先列双方投入，不会因主角展示系统就无条件服从"
+        }
+      ],
+      "initialFacts": [
+        "小队共六人，包括周弥、郑雨、陶然和三名随队成员，没有现成无限物资。",
+        "系统初始观测电量十格，预测只涉及实际取得观测的局部地点与六小时内风险。",
+        "周弥的专业是排水维护，不能据此自动精通所有电气或医疗问题。",
+        "团队初始有两个滤芯，其中一个损耗明显；没有第三个隐藏滤芯。",
+        "团队尚未与高澄接触，也不知道他的据点与库存。"
+      ],
+      "protectedProhibitions": [
+        "不能用空电量继续预测",
+        "不能提前知道未到达地点的可靠细节",
+        "不能无来源获得物资或充电",
+        "不能让所有人自动知道主角没有说过的信息"
+      ],
+      "chapters": [
+        {
+          "title": "水位线上的粉笔",
+          "goal": "在涨水前选择第一个短时避雨点",
+          "obstacle": "路线图过时，系统只能处理已经看到的现场",
+          "choice": "花两格观测当前街区，明确告诉同伴未知处，再共同选择较短路线",
+          "plannedOutcome": "电量剩八；全队暂时脱险，未获得远处安全据点的知识",
+          "endingHook": "陶然发现现有滤芯的损耗比预计严重",
+          "plannedResourceDelta": -2,
+          "pace": "fast",
+          "chapterKey": "q01-survival-c01",
+          "number": 1,
+          "plannerOnlyResourceBefore": 10,
+          "plannerOnlyResourceAfter": 8,
+          "legacyScenes": [
+            {
+              "key": "q01-survival-c01-s1",
+              "title": "入场与阻力",
+              "summary": "在涨水前选择第一个短时避雨点",
+              "conflict": "路线图过时，系统只能处理已经看到的现场",
+              "pace": "fast",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-survival-c01-s2",
+              "title": "选择与行动",
+              "summary": "花两格观测当前街区，明确告诉同伴未知处，再共同选择较短路线",
+              "conflict": "路线图过时，系统只能处理已经看到的现场",
+              "pace": "fast",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-survival-c01-s3",
+              "title": "结果与承接",
+              "summary": "电量剩八；全队暂时脱险，未获得远处安全据点的知识",
+              "conflict": "陶然发现现有滤芯的损耗比预计严重",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "六个人的同意",
+          "goal": "为寻找替换滤芯分配行动",
+          "obstacle": "派人探路会把风险转给信息最少的人",
+          "choice": "花一格核对眼前路线，说明预测限制，保留拒绝与退出条件",
+          "plannedOutcome": "电量剩七；小队按知情条件分工，郑雨的质疑改变了方案",
+          "endingHook": "屋顶的一块旧太阳能板也许能充电",
+          "plannedResourceDelta": -1,
+          "pace": "medium",
+          "chapterKey": "q01-survival-c02",
+          "number": 2,
+          "plannerOnlyResourceBefore": 8,
+          "plannerOnlyResourceAfter": 7,
+          "legacyScenes": [
+            {
+              "key": "q01-survival-c02-s1",
+              "title": "入场与阻力",
+              "summary": "为寻找替换滤芯分配行动",
+              "conflict": "派人探路会把风险转给信息最少的人",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-survival-c02-s2",
+              "title": "选择与行动",
+              "summary": "花一格核对眼前路线，说明预测限制，保留拒绝与退出条件",
+              "conflict": "派人探路会把风险转给信息最少的人",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-survival-c02-s3",
+              "title": "结果与承接",
+              "summary": "电量剩七；小队按知情条件分工，郑雨的质疑改变了方案",
+              "conflict": "屋顶的一块旧太阳能板也许能充电",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "充电不是一束光",
+          "goal": "取得可解释的充电机会",
+          "obstacle": "设备损坏，陶然不能保证维修成功",
+          "choice": "先检查接线条件并等待可用光照，放弃立即满电的幻想",
+          "plannedOutcome": "现实充电增加三格至十；只恢复部分电量，不刷新预测范围",
+          "endingHook": "别的小队也发现同一处设备",
+          "plannedResourceDelta": 3,
+          "pace": "slow",
+          "chapterKey": "q01-survival-c03",
+          "number": 3,
+          "plannerOnlyResourceBefore": 7,
+          "plannerOnlyResourceAfter": 10,
+          "legacyScenes": [
+            {
+              "key": "q01-survival-c03-s1",
+              "title": "入场与阻力",
+              "summary": "取得可解释的充电机会",
+              "conflict": "设备损坏，陶然不能保证维修成功",
+              "pace": "slow",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-survival-c03-s2",
+              "title": "选择与行动",
+              "summary": "先检查接线条件并等待可用光照，放弃立即满电的幻想",
+              "conflict": "设备损坏，陶然不能保证维修成功",
+              "pace": "slow",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-survival-c03-s3",
+              "title": "结果与承接",
+              "summary": "现实充电增加三格至十；只恢复部分电量，不刷新预测范围",
+              "conflict": "别的小队也发现同一处设备",
+              "pace": "slow",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "看不见的那一段路",
+          "goal": "在共享设备冲突中保护队伍",
+          "obstacle": "另一支队伍的意图未知，系统无法读取人心",
+          "choice": "花三格观察附近水路，把设备用途与可交换工作摆出来谈判",
+          "plannedOutcome": "电量剩七；获得与高澄接触的机会，而不是直接取得他的库存",
+          "endingHook": "高澄要求先共同排查据点的回流水路",
+          "plannedResourceDelta": -3,
+          "pace": "medium",
+          "chapterKey": "q01-survival-c04",
+          "number": 4,
+          "plannerOnlyResourceBefore": 10,
+          "plannerOnlyResourceAfter": 7,
+          "legacyScenes": [
+            {
+              "key": "q01-survival-c04-s1",
+              "title": "入场与阻力",
+              "summary": "在共享设备冲突中保护队伍",
+              "conflict": "另一支队伍的意图未知，系统无法读取人心",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-survival-c04-s2",
+              "title": "选择与行动",
+              "summary": "花三格观察附近水路，把设备用途与可交换工作摆出来谈判",
+              "conflict": "另一支队伍的意图未知，系统无法读取人心",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-survival-c04-s3",
+              "title": "结果与承接",
+              "summary": "电量剩七；获得与高澄接触的机会，而不是直接取得他的库存",
+              "conflict": "高澄要求先共同排查据点的回流水路",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "先把坏消息说完",
+          "goal": "决定是否承接回流水路排查",
+          "obstacle": "主角知道预测不完整，队友仍把他的判断当保证",
+          "choice": "花两格补充局部观测，在行动前公开模型不能判断的部分",
+          "plannedOutcome": "电量剩五；队伍接受有限任务，合作建立在边界而非神迹上",
+          "endingHook": "行动时间与下一次充电窗口冲突",
+          "plannedResourceDelta": -2,
+          "pace": "medium",
+          "chapterKey": "q01-survival-c05",
+          "number": 5,
+          "plannerOnlyResourceBefore": 7,
+          "plannerOnlyResourceAfter": 5,
+          "legacyScenes": [
+            {
+              "key": "q01-survival-c05-s1",
+              "title": "入场与阻力",
+              "summary": "决定是否承接回流水路排查",
+              "conflict": "主角知道预测不完整，队友仍把他的判断当保证",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-survival-c05-s2",
+              "title": "选择与行动",
+              "summary": "花两格补充局部观测，在行动前公开模型不能判断的部分",
+              "conflict": "主角知道预测不完整，队友仍把他的判断当保证",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-survival-c05-s3",
+              "title": "结果与承接",
+              "summary": "电量剩五；队伍接受有限任务，合作建立在边界而非神迹上",
+              "conflict": "行动时间与下一次充电窗口冲突",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "这一小时留下来",
+          "goal": "处理任务间歇中的疲劳和分歧",
+          "obstacle": "周弥想继续赶路，郑雨认为信息和休息都不够",
+          "choice": "暂缓出发并用现场记录核对计划，利用已有设备补充一格电量",
+          "plannedOutcome": "电量六；并未消除全部风险，队伍形成更明确的讨论习惯",
+          "endingHook": "新的水位变化迫使他们提前调整约定路线",
+          "plannedResourceDelta": 1,
+          "pace": "slow",
+          "chapterKey": "q01-survival-c06",
+          "number": 6,
+          "plannerOnlyResourceBefore": 5,
+          "plannerOnlyResourceAfter": 6,
+          "legacyScenes": [
+            {
+              "key": "q01-survival-c06-s1",
+              "title": "入场与阻力",
+              "summary": "处理任务间歇中的疲劳和分歧",
+              "conflict": "周弥想继续赶路，郑雨认为信息和休息都不够",
+              "pace": "slow",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-survival-c06-s2",
+              "title": "选择与行动",
+              "summary": "暂缓出发并用现场记录核对计划，利用已有设备补充一格电量",
+              "conflict": "周弥想继续赶路，郑雨认为信息和休息都不够",
+              "pace": "slow",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-survival-c06-s3",
+              "title": "结果与承接",
+              "summary": "电量六；并未消除全部风险，队伍形成更明确的讨论习惯",
+              "conflict": "新的水位变化迫使他们提前调整约定路线",
+              "pace": "slow",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "谁把绳子带回去",
+          "goal": "在路线变化时兑现合作责任",
+          "obstacle": "只救自己会失去据点合作，停留又会增加风险",
+          "choice": "花两格核对近处变化，按现有器材分工完成约定工作",
+          "plannedOutcome": "电量剩四；获得部分净水合作资格，器材损耗真实存在",
+          "endingHook": "可用的观测电量不足以检查所有后续路线",
+          "plannedResourceDelta": -2,
+          "pace": "fast",
+          "chapterKey": "q01-survival-c07",
+          "number": 7,
+          "plannerOnlyResourceBefore": 6,
+          "plannerOnlyResourceAfter": 4,
+          "legacyScenes": [
+            {
+              "key": "q01-survival-c07-s1",
+              "title": "入场与阻力",
+              "summary": "在路线变化时兑现合作责任",
+              "conflict": "只救自己会失去据点合作，停留又会增加风险",
+              "pace": "fast",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-survival-c07-s2",
+              "title": "选择与行动",
+              "summary": "花两格核对近处变化，按现有器材分工完成约定工作",
+              "conflict": "只救自己会失去据点合作，停留又会增加风险",
+              "pace": "fast",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-survival-c07-s3",
+              "title": "结果与承接",
+              "summary": "电量剩四；获得部分净水合作资格，器材损耗真实存在",
+              "conflict": "可用的观测电量不足以检查所有后续路线",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "只照亮一条路",
+          "goal": "选择最后一次大范围观测的用途",
+          "obstacle": "两条路线都缺信息，三格电量只能支持一次关键观测",
+          "choice": "把三格用于队伍最难人工判断的局部，其余部分用现场线索慢慢确认",
+          "plannedOutcome": "电量剩一；放弃一条看起来更快的路线，得到有限而可解释的优势",
+          "endingHook": "高澄的合作条件要求他们在到达后继续承担维护",
+          "plannedResourceDelta": -3,
+          "pace": "medium",
+          "chapterKey": "q01-survival-c08",
+          "number": 8,
+          "plannerOnlyResourceBefore": 4,
+          "plannerOnlyResourceAfter": 1,
+          "legacyScenes": [
+            {
+              "key": "q01-survival-c08-s1",
+              "title": "入场与阻力",
+              "summary": "选择最后一次大范围观测的用途",
+              "conflict": "两条路线都缺信息，三格电量只能支持一次关键观测",
+              "pace": "medium",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-survival-c08-s2",
+              "title": "选择与行动",
+              "summary": "把三格用于队伍最难人工判断的局部，其余部分用现场线索慢慢确认",
+              "conflict": "两条路线都缺信息，三格电量只能支持一次关键观测",
+              "pace": "medium",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-survival-c08-s3",
+              "title": "结果与承接",
+              "summary": "电量剩一；放弃一条看起来更快的路线，得到有限而可解释的优势",
+              "conflict": "高澄的合作条件要求他们在到达后继续承担维护",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "预报停在这里",
+          "goal": "在电量耗尽后完成进入据点的最后一段",
+          "obstacle": "队伍习惯了预测，但最后一格只能核对一个眼前问题",
+          "choice": "用一格确认近处回流后关闭系统，依靠同伴的观察决定下一步",
+          "plannedOutcome": "电量零；系统没有继续提供信息，队伍用可见证据完成接近",
+          "endingHook": "据点能否持续净水取决于他们兑现维护承诺",
+          "plannedResourceDelta": -1,
+          "pace": "fast",
+          "chapterKey": "q01-survival-c09",
+          "number": 9,
+          "plannerOnlyResourceBefore": 1,
+          "plannerOnlyResourceAfter": 0,
+          "legacyScenes": [
+            {
+              "key": "q01-survival-c09-s1",
+              "title": "入场与阻力",
+              "summary": "在电量耗尽后完成进入据点的最后一段",
+              "conflict": "队伍习惯了预测，但最后一格只能核对一个眼前问题",
+              "pace": "fast",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-survival-c09-s2",
+              "title": "选择与行动",
+              "summary": "用一格确认近处回流后关闭系统，依靠同伴的观察决定下一步",
+              "conflict": "队伍习惯了预测，但最后一格只能核对一个眼前问题",
+              "pace": "fast",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-survival-c09-s3",
+              "title": "结果与承接",
+              "summary": "电量零；系统没有继续提供信息，队伍用可见证据完成接近",
+              "conflict": "据点能否持续净水取决于他们兑现维护承诺",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        },
+        {
+          "title": "雨还没有停",
+          "goal": "完成维护与资源合作，形成阶段落脚点",
+          "obstacle": "避雨不等于长期安全，双方都需要公平分担工作",
+          "choice": "按约定共同检修并登记资源使用，从据点设备取得可解释的充电",
+          "plannedOutcome": "电量五；获得阶段落脚点和合作职责，仍不掌握远处局势",
+          "endingHook": "新的来访队伍提出另一种资源分配诉求",
+          "plannedResourceDelta": 5,
+          "pace": "climax",
+          "chapterKey": "q01-survival-c10",
+          "number": 10,
+          "plannerOnlyResourceBefore": 0,
+          "plannerOnlyResourceAfter": 5,
+          "legacyScenes": [
+            {
+              "key": "q01-survival-c10-s1",
+              "title": "入场与阻力",
+              "summary": "完成维护与资源合作，形成阶段落脚点",
+              "conflict": "避雨不等于长期安全，双方都需要公平分担工作",
+              "pace": "climax",
+              "estimatedWords": 700,
+              "notes": "围绕当前目标展开，世界和角色背景按实际需要披露。"
+            },
+            {
+              "key": "q01-survival-c10-s2",
+              "title": "选择与行动",
+              "summary": "按约定共同检修并登记资源使用，从据点设备取得可解释的充电",
+              "conflict": "避雨不等于长期安全，双方都需要公平分担工作",
+              "pace": "climax",
+              "estimatedWords": 1200,
+              "notes": "写清尝试、判断和代价；系统提示不替代人物行动。"
+            },
+            {
+              "key": "q01-survival-c10-s3",
+              "title": "结果与承接",
+              "summary": "电量五；获得阶段落脚点和合作职责，仍不掌握远处局势",
+              "conflict": "新的来访队伍提出另一种资源分配诉求",
+              "pace": "medium",
+              "estimatedWords": 600,
+              "notes": "表现本章实际变化，结尾承接只建立新问题，不展开下一章事件。"
+            }
+          ]
+        }
+      ],
+      "targetWordsPerChapter": {
+        "min": 2200,
+        "max": 2800,
+        "stopAtPlannedEnding": true
+      }
+    }
+  ],
+  "modelParameters": {
+    "temperature": 0.7,
+    "globalMaxTokens": 0,
+    "contextWindow": null,
+    "effectiveProseMaxTokens": 16000
+  },
+  "baselineCodePatchHash": "0f0746149a38f4a7e726d8eb6dc112c385e2d6d8531de627e7ee84d0df86fd2e"
+}

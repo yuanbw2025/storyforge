@@ -24,15 +24,15 @@ import {
 } from '../../src/lib/outline/harness'
 
 describe('WEH-0A · Skill → formal Run 单向派生', () => {
-  it('正文只声明 Gateway 单一来源，Blueprint 与 POV 认知由同一 packet 投影', async () => {
+  it('正文的 Work 与 Canon Provider 进入同一 Gateway packet，Blueprint 与 POV 认知由该 packet 投影', async () => {
     const withoutPerspective = await resolveProseGenerationExecutionBindingV2({ operation: 'generate' })
     const withPerspective = await resolveProseGenerationExecutionBindingV2({
       operation: 'generate',
       perspectiveCharacterId: 7,
     })
 
-    expect(withoutPerspective.contextSourceKeys).toEqual(['ragSelection'])
-    expect(withPerspective.contextSourceKeys).toEqual(['ragSelection'])
+    expect([...withoutPerspective.contextSourceKeys].sort()).toEqual(['ragSelection', 'workAuthoringIntent'])
+    expect([...withPerspective.contextSourceKeys].sort()).toEqual(['ragSelection', 'workAuthoringIntent'])
     expect(withPerspective.optionalContextActivations).toEqual([])
     expect(getAgentSkillV1('prose.generate').inputPolicy.sourceKeys).toContain('activeNarrativeBlueprint')
     expect(getAgentSkillV1('prose.generate').inputPolicy.sourceKeys).toContain('characterKnowledge')

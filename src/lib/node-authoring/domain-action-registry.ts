@@ -10,6 +10,8 @@ export type AuthoringDomainActionIdV1 =
   | 'outline-copilot'
   | 'detailed-outline-copilot'
   | 'prose-copilot'
+  | 'prose-quality-review-durable'
+  | 'prose-quality-revision-durable'
   | 'chapter-organization-durable'
   | 'fact-extraction-durable'
 
@@ -34,6 +36,16 @@ export type AuthoringDomainActionBindingV1 =
   | ExperimentalAuthoringDraftBindingV1
 
 const FORMAL_EXACT = new Map<string, Omit<FormalAuthoringDomainActionBindingV1, 'version' | 'mode'>>([
+  ['chapter.quality-review', {
+    actionId: 'prose-quality-review-durable',
+    skillId: 'prose.quality-review',
+    adoptionBoundary: 'read-only-report',
+  }],
+  ['chapter.quality-revision', {
+    actionId: 'prose-quality-revision-durable',
+    skillId: 'prose.quality-revise',
+    adoptionBoundary: 'adoptQualityRevisionV1',
+  }],
   ['character.profile', {
     actionId: 'character-profile-copilot',
     skillId: 'character.create',

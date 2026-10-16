@@ -1,5 +1,5 @@
 import { CTextarea } from '../shared/CompositionInput'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Check, Loader2, Microscope, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
 import { useCreativeRulesStore } from '../../stores/project-singletons'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -10,7 +10,10 @@ import {
   type CreativeRulesField,
 } from '../../lib/agent/creative-rules-copilot'
 import { useMasterCopilot, type PendingMasterCandidate } from '../agent/useMasterCopilot'
-import type { Project, NarrativePOV } from '../../lib/types'
+import type { Project, NarrativePOV, WorkspaceScope } from '../../lib/types'
+import type { SystemFictionElementsV1 } from '../../lib/types/creative-rules'
+import { createSystemFictionElementsV1, parseSystemFictionElementsV1 } from '../../lib/prose/system-fiction-contract'
+import SystemFictionElementsEditor from './SystemFictionElementsEditor'
 import {
   INITIAL_RECORD_TARGET_CLASS,
   initialRecordTargetAttributes,
@@ -32,8 +35,18 @@ interface Props {
 }
 
 export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
+  return <ScopedCreativeRulesPanel key={`${project.id}:${project.activeWorldId}:${project.activeWorkId}`} project={project} initialRulesId={initialRulesId} />
+}
+
+function ScopedCreativeRulesPanel({ project, initialRulesId }: Props) {
   const activeWork = useActiveWork(project)
-  const { creativeRules, loadAll, save } = useCreativeRulesStore()
+  const { creativeRules: cachedRules, loadAll, save } = useCreativeRulesStore()
+  const scope = useMemo<WorkspaceScope | null>(() => (
+    project.id != null && project.activeWorldId != null && project.activeWorkId != null
+      ? { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }
+      : null
+  ), [project.id, project.activeWorldId, project.activeWorkId])
+  const creativeRules = cachedRules?.projectId === scope?.projectId && cachedRules?.workId === scope?.workId ? cachedRules : null
   const { references, loadAll: loadRefs } = useReferenceStore()
   const activeGroupId = useWorldGroupStore(state => state.activeGroupId)
   const copilot = useMasterCopilot({
@@ -47,12 +60,24 @@ export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
   const [consistencyRules, setConsistencyRules] = useState<string[]>([])
   const [specialRequirements, setSpecialRequirements] = useState('')
   const [citedRefIds, setCitedRefIds] = useState<number[]>([])
+  const [elements, setElements] = useState(createSystemFictionElementsV1)
+  const [elementsDirty, setElementsDirty] = useState(false)
+  const elementsDirtyRef = useRef(false)
+  const [ready, setReady] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [savingElements, setSavingElements] = useState(false)
   useInitialRecordTarget(initialRulesId, creativeRules?.id === initialRulesId)
 
   useEffect(() => {
-    loadAll(project.id!)
-    loadRefs(project.id!)
-  }, [project.id, loadAll, loadRefs])
+    if (!scope) return
+    let active = true
+    void Promise.all([loadAll(scope), loadRefs(scope.projectId)]).then(() => {
+      if (active) setReady(true)
+    }).catch(error => {
+      if (active) setSaveError(error instanceof Error ? error.message : '资料加载失败，请重试')
+    })
+    return () => { active = false }
+  }, [scope, loadAll, loadRefs])
 
   useEffect(() => {
     if (creativeRules) {
@@ -63,12 +88,41 @@ export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
       try { setProhibitions(JSON.parse(creativeRules.prohibitions || '[]')) } catch { setProhibitions([]) }
       try { setConsistencyRules(JSON.parse(creativeRules.consistencyRules || '[]')) } catch { setConsistencyRules([]) }
       try { setCitedRefIds(JSON.parse(creativeRules.citedReferenceIds || '[]')) } catch { setCitedRefIds([]) }
+      if (!elementsDirtyRef.current) {
+        try { setElements(creativeRules.systemFictionElements === undefined ? createSystemFictionElementsV1() : parseSystemFictionElementsV1(creativeRules.systemFictionElements)) }
+        catch (error) { setSaveError(error instanceof Error ? error.message : '系统文元素无法读取，原数据已保留') }
+      }
     }
   }, [creativeRules])
 
   const saveField = useCallback(async (data: Record<string, unknown>) => {
-    await save({ projectId: project.id!, ...data })
-  }, [project.id, save])
+    if (!scope || !ready) return
+    try {
+      await save({ projectId: scope.projectId, ...data }, scope)
+      setSaveError(null)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : '保存失败，当前输入已保留')
+    }
+  }, [scope, ready, save])
+
+  const changeElements = (next: SystemFictionElementsV1) => {
+    elementsDirtyRef.current = true
+    setElementsDirty(true)
+    setElements(next)
+  }
+  const saveElements = async () => {
+    if (!scope || !ready) return
+    setSavingElements(true)
+    try {
+      const validated = parseSystemFictionElementsV1(elements)
+      await save({ projectId: scope.projectId, systemFictionElements: validated }, scope)
+      elementsDirtyRef.current = false
+      setElementsDirty(false)
+      setSaveError(null)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : '保存失败，当前输入已保留')
+    } finally { setSavingElements(false) }
+  }
 
   const pendingRulesCandidates = copilot.pendingCandidates.filter(candidate => (
     candidate.payload.skillId === 'world-origin.creative-rules'
@@ -76,7 +130,7 @@ export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
   const hasOtherPendingCandidates = copilot.pendingCandidates.some(candidate => (
     candidate.payload.skillId !== 'world-origin.creative-rules'
   ))
-  const generationBlocked = copilot.loading
+  const generationBlocked = !ready || !scope || elementsDirty || copilot.loading
     || copilot.busy
     || copilot.pendingCandidates.length > 0
     || (project.enableMultiWorld === true && activeGroupId == null)
@@ -100,7 +154,7 @@ export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
 
   const adoptCandidate = async (candidate: PendingMasterCandidate) => {
     const adopted = await copilot.adoptCandidate(candidate)
-    if (adopted) await loadAll(project.id!)
+    if (adopted && scope) await loadAll(scope)
   }
 
   /* ---- 列表操作通用 ---- */
@@ -216,6 +270,24 @@ export default function CreativeRulesPanel({ project, initialRulesId }: Props) {
           {copilot.error}
         </p>
       )}
+
+      {saveError && <p role="alert" className="mb-4 rounded border border-error/30 px-3 py-2 text-xs text-error">{saveError}</p>}
+
+      <section aria-label="系统文元素配置" className="mb-6 space-y-3 rounded-lg border border-border p-4">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-text-primary">系统文元素</h3>
+          <button type="button" onClick={() => { void generateField('systemFictionElements') }} disabled={generationBlocked} className="flex items-center gap-1 text-xs text-accent disabled:opacity-50">
+            <Sparkles className="h-3 w-3" /> AI 建议
+          </button>
+        </div>
+        <p className="text-xs text-text-secondary">题材与呈现风格：{activeWork?.genres.join('、') || '在作品概况设置题材'}。文风和氛围使用下方现有字段；不会切换已激活的提示词模板。</p>
+        <SystemFictionElementsEditor value={elements} onChange={changeElements} disabled={!ready || savingElements} />
+        <div className="flex items-center justify-end gap-3">
+          <span role="status" className="text-xs text-text-muted">{elementsDirty ? '元素尚未保存' : creativeRules?.systemFictionElements ? '元素已保存' : '尚未设置，可按需填写'}</span>
+          <button type="button" onClick={() => { void saveElements() }} disabled={!ready || !elementsDirty || savingElements} className="rounded bg-accent px-3 py-1.5 text-xs text-white disabled:opacity-50">{savingElements ? '保存中…' : '保存元素'}</button>
+        </div>
+        <CreativeRulesCandidate candidate={candidateFor('systemFictionElements')} copilot={copilot} onAdopt={adoptCandidate} />
+      </section>
 
       {hasOtherPendingCandidates && (
         <p className="mb-4 rounded border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-text-secondary">
@@ -412,7 +484,7 @@ function CreativeRulesCandidate({
   } catch {
     // Keep the raw editor available so a malformed restored candidate can be repaired or rejected.
   }
-  const updateValue = (value: string) => {
+  const updateValue = (value: string | SystemFictionElementsV1) => {
     if (!candidate.payload.creativeRulesField) return
     void copilot.updateCandidate(candidate.event.id!, JSON.stringify({
       field: candidate.payload.creativeRulesField,
@@ -429,7 +501,9 @@ function CreativeRulesCandidate({
             : `${candidate.payload.contextSources.length} 个输入来源`}
         </span>
       </div>
-      {parsed ? (
+      {parsed?.field === 'systemFictionElements' ? (
+        <SystemFictionElementsEditor value={parsed.value} onChange={updateValue} disabled={copilot.busy} label="系统文元素候选" />
+      ) : parsed ? (
         <CTextarea
           aria-label={`${candidate.payload.label}候选内容`}
           value={parsed.value}

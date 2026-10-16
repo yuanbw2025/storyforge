@@ -8,6 +8,7 @@ const INPUT_SOURCE_BY_TABLE: Readonly<Record<string, string>> = {
   powerSystems: 'powerSystem',
   cultivationSystems: 'powerSystem',
   storyCores: 'storyCore',
+  creativeRules: 'creativeRules',
   characters: 'characters',
   storyArcs: 'storyArcs',
   storylineProgress: 'storylineProgress',
@@ -15,6 +16,7 @@ const INPUT_SOURCE_BY_TABLE: Readonly<Record<string, string>> = {
   detailedOutlines: 'detailedOutline',
   chapters: 'writtenChapterProgress',
   codexEntries: 'codex',
+  userStyleProfiles: 'userStyleProfile',
 }
 
 /** Shared projection from the exact Gateway packet into the registered assembly contract. */
@@ -23,30 +25,34 @@ export function assembleContextGatewayPacketV1(
   inputBudget: number,
 ): AssembleContextResult {
   const content = execution.contextPacket.content
-  const included = content.trim() ? ['ragSelection'] : []
-  const omitted = included.length ? [] : ['ragSelection']
+  const providerKeys = execution.session?.providers.map(binding => binding.source.key) ?? ['ragSelection']
+  const blocks = execution.sourceBlocks ?? [{ sourceKey: 'ragSelection', content, contentHash: execution.contextPacket.contentHash, tokenCount: execution.contextPacket.tokenCount }]
+  const bySource = new Map(blocks.map(block => [block.sourceKey, block]))
+  const included = content.trim() ? providerKeys.filter(key => bySource.has(key)) : []
+  const omitted = providerKeys.filter(key => !included.includes(key))
   return {
     text: content,
-    segments: included.length ? [{
-      label: 'Context Gateway 精确选取资料',
+    segments: included.map(key => ({
+      label: execution.session?.providers.find(binding => binding.source.key === key)?.source.label ?? 'Context Gateway 精确选取资料',
       layer: 'L0',
-      content,
-      tokens: execution.contextPacket.tokenCount,
+      content: bySource.get(key)!.content,
+      tokens: bySource.get(key)!.tokenCount,
       trimmable: false,
-    }] : [],
+    })),
     included,
     omitted,
     trimmed: [],
-    sourceEvidence: [{
-      key: 'ragSelection',
-      status: included.length ? 'included' : 'omitted',
-      delivery: included.length ? 'full' : 'none',
-      sourceHash: execution.contextPacket.contentHash,
-      originalCharacters: content.length,
-      inputCharacters: content.length,
-      originalTokens: execution.contextPacket.tokenCount,
-      inputTokens: execution.contextPacket.tokenCount,
-    }],
+    // Evidence is split by Provider; the model still receives the single exact packet.
+    sourceEvidence: providerKeys.map(key => ({
+      key,
+      status: included.includes(key) ? 'included' as const : 'omitted' as const,
+      delivery: included.includes(key) ? 'full' as const : 'none' as const,
+      sourceHash: bySource.get(key)?.contentHash,
+      originalCharacters: bySource.get(key)?.content.length ?? 0,
+      inputCharacters: bySource.get(key)?.content.length ?? 0,
+      originalTokens: bySource.get(key)?.tokenCount ?? 0,
+      inputTokens: bySource.get(key)?.tokenCount ?? 0,
+    })),
     totalInputTokens: execution.contextPacket.tokenCount,
     inputBudget,
     overBudgetBeforeTrim: false,
@@ -61,6 +67,9 @@ export function contextGatewayInputStateSourceKeysV1(
   const available = new Set(execution.contextPacket.sourceRefs
     .map(ref => INPUT_SOURCE_BY_TABLE[ref.table])
     .filter((key): key is string => Boolean(key)))
+  for (const snapshot of execution.sourceSnapshots ?? []) {
+    if (snapshot.sourceKey && skill.inputPolicy.sourceKeys.includes(snapshot.sourceKey)) available.add(snapshot.sourceKey)
+  }
   if (
     skill.inputPolicy.sourceKeys.includes('targetCharacter')
     && execution.contextPacket.sourceRefs.some(ref => ref.table === 'characters')

@@ -2,9 +2,13 @@ import { assembleContext } from '../registry/assemble-context'
 import { AUTHORING_NODE_BY_ID } from './catalog'
 import { buildRagLibrary, makeRagEntryKey } from '../retrieval/rag-library'
 import { createRagSelectionTrace, type RagLibraryEntry } from '../types/rag-library'
-import type { AuthoringNodeInstance } from './contracts'
+import type { AuthoringCandidate, AuthoringNodeGraph, AuthoringNodeInstance } from './contracts'
 import type { WorkspaceScope } from '../types/world-ownership'
 import { readOwnedRows, resolveScopeLike } from '../workspace/scope'
+import { REGISTRY_BY_NAME } from '../registry/project-tables'
+import { FIELD_BY_TARGET } from '../registry/field-registry'
+import type { AdoptResult } from '../registry/types'
+import { isPortableResourceUidV1 } from '../context-gateway/resource-uid'
 
 /**
  * FLOW-3 Canon binding adapter.
@@ -36,6 +40,87 @@ export function hashAuthoringText(value: string): string {
     hash = Math.imul(hash, 16777619)
   }
   return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+export function authoringConnectionsHash(graph: AuthoringNodeGraph, nodeId: string): string {
+  return hashAuthoringText(JSON.stringify(graph.edges.filter(edge => edge.targetNodeId === nodeId)))
+}
+
+/** Registered, scoped Canon records; numeric ids never enter a portable receipt. */
+export async function readAuthoringReceiptRows(scope: WorkspaceScope, target: string) {
+  if (!REGISTRY_BY_NAME.get(target)?.resourceIdentity) return []
+  return readOwnedRows<Record<string, unknown>>(scope, target)
+}
+
+function receiptRecordHash(row: Record<string, unknown>, fields: string[]): string {
+  return hashAuthoringText(JSON.stringify(fields.map(field => [field, row[field] ?? null])))
+}
+
+export function assertAuthoringCanonReceipt(receipt: NonNullable<AuthoringCandidate['canonReceipt']>): void {
+  const identity = receipt && REGISTRY_BY_NAME.get(receipt.target)?.resourceIdentity
+  const allowed = new Set((FIELD_BY_TARGET.get(receipt?.target) ?? []).map(field => field.field))
+  const hash = (value: unknown) => typeof value === 'string' && /^[a-f0-9]{8}$/.test(value)
+  if (!identity || receipt.version !== 1 || !hash(receipt.outputHash) || !hash(receipt.connectionsHash)
+    || !Array.isArray(receipt.records) || !receipt.records.length
+    || receipt.records.some(record => !record || !isPortableResourceUidV1(record.documentId, identity.resourceKind)
+      || !hash(record.hash) || !Array.isArray(record.fields) || !record.fields.length
+      || record.fields.some(field => !allowed.has(field)) || new Set(record.fields).size !== record.fields.length)
+    || new Set(receipt.records.map(record => record.documentId)).size !== receipt.records.length) {
+    throw new Error('节点正式采纳回执无效。')
+  }
+}
+
+export async function captureAuthoringCanonReceipt(input: {
+  scope: WorkspaceScope
+  target: string
+  beforeIds: Set<number>
+  result: AdoptResult
+  output: string
+  graph: AuthoringNodeGraph
+  nodeId: string
+}): Promise<AuthoringCandidate['canonReceipt']> {
+  if (!input.result.written.length || input.result.unknown.length || input.result.typeErrors.length
+    || input.result.fkErrors.length || input.result.skipped.length) return undefined
+  const rows = await readAuthoringReceiptRows(input.scope, input.target)
+  const knownIds = new Set(input.result.written.filter(item => item.id > 0).map(item => item.id))
+  // The shared outline adapter reports the first id and count. Resolve its other
+  // newly created records from the scoped table, without inventing ids or content.
+  const written = rows.filter(row => typeof row.id === 'number'
+    && (knownIds.has(row.id) || !input.beforeIds.has(row.id)))
+  if (written.length !== input.result.written.length) return undefined
+  const allowed = new Set((FIELD_BY_TARGET.get(input.target) ?? []).map(field => field.field))
+  const commonFields = [...new Set(input.result.written.flatMap(item => item.fields))].filter(field => allowed.has(field)).sort()
+  const records: NonNullable<AuthoringCandidate['canonReceipt']>['records'] = []
+  for (const row of written) {
+    const fields = [...new Set(input.result.written.find(item => item.id === row.id)?.fields ?? commonFields)]
+      .filter(field => allowed.has(field)).sort()
+    if (!isPortableResourceUidV1(row.ragDocumentId, REGISTRY_BY_NAME.get(input.target)!.resourceIdentity!.resourceKind)
+      || !fields.length) return undefined
+    records.push({ documentId: row.ragDocumentId, fields, hash: receiptRecordHash(row, fields) })
+  }
+  return { version: 1, target: input.target, outputHash: hashAuthoringText(input.output),
+    connectionsHash: authoringConnectionsHash(input.graph, input.nodeId), records }
+}
+
+export async function isAuthoringCanonReceiptCurrent(input: {
+  scope: WorkspaceScope
+  candidate: AuthoringCandidate
+  node: AuthoringNodeInstance
+}): Promise<boolean> {
+  const receipt = input.candidate.canonReceipt
+  if (!receipt) return false
+  try { assertAuthoringCanonReceipt(receipt) } catch { return false }
+  if (receipt.target !== AUTHORING_NODE_BY_ID.get(input.node.templateId)?.writes?.target
+    || receipt.outputHash !== hashAuthoringText(input.candidate.output)
+    || !Array.isArray(receipt.records) || !receipt.records.length) return false
+  const allowed = new Set((FIELD_BY_TARGET.get(receipt.target) ?? []).map(field => field.field))
+  const rows = await readAuthoringReceiptRows(input.scope, receipt.target)
+  return receipt.records.every(record => {
+    const matches = rows.filter(row => row.ragDocumentId === record.documentId)
+    return matches.length === 1 && Array.isArray(record.fields) && record.fields.length > 0
+      && record.fields.every(field => allowed.has(field))
+      && receiptRecordHash(matches[0], record.fields) === record.hash
+  })
 }
 
 function arrayConfig(node: AuthoringNodeInstance, key: string): string[] {

@@ -383,6 +383,30 @@ describe('CTXG-7 · Gateway fast/complex execution', () => {
     })).rejects.toThrow('candidate-manifest-required')
   })
 
+  it('mandatory full reads ignore discovery caps, obey the whole budget, and reject a truncated provider result', async () => {
+    const fixture = await seedWorkspace('完整资料与总预算')
+    const tail = '[MANDATORY-FULL-TAIL:只能在结尾兑现]'
+    await addScoped(fixture.scope, 'worldviews', {
+      worldGroupId: null,
+      races: `${'潮民的航季、亲族和盐路契约形成共同身份。'.repeat(400)}${tail}`,
+    }, 'world')
+    const target = (await descriptors(fixture.scope)).find(item => item.sourceRefs.some(ref => ref.field === 'races'))!
+    expect(target.tokenEstimate.full).toBeGreaterThan(target.tokenCap!)
+    const input = {
+      skill: worldviewSkill(), scope: fixture.scope, worldGroupId: null,
+      allowedResourceKeys: [target.resourceKey], mandatoryResourceKeys: [target.resourceKey],
+      mandatoryFullResourceKeys: [target.resourceKey], targetResourceKeys: [target.resourceKey],
+      additionalReadsEnabled: false,
+    }
+    const exact = await executeContextGatewayV1({ ...input, budgetTokens: 12_000 })
+    expect(exact.contextPacket.content).toContain(tail)
+    expect(exact.retrievalTrace.mandatory[0]?.contentHash).toBe(target.contentHash)
+    await expect(executeContextGatewayV1({ ...input, budgetTokens: 1000 })).rejects.toThrow('hard-sufficiency')
+    const read = CANON_RESOURCE_PROVIDER_V1.read.bind(CANON_RESOURCE_PROVIDER_V1)
+    vi.spyOn(CANON_RESOURCE_PROVIDER_V1, 'read').mockImplementation(args => read({ ...args, maxTokens: 100 }))
+    await expect(executeContextGatewayV1({ ...input, budgetTokens: 12_000 })).rejects.toThrow('mandatory-full-incomplete')
+  })
+
   it('feeds the exact CTXG-7 output into V3 and blocks adoption after Canon becomes stale', async () => {
     const fixture = await seedWorkspace()
     const worldviewId = await addScoped(fixture.scope, 'worldviews', {

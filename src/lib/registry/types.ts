@@ -347,6 +347,8 @@ export interface TableSpec<T = any> {
     label: string
     /** registered-fields follows FIELD_REGISTRY; semantic-fields derives safe row fields. */
     descriptorMode: 'registered-fields' | 'semantic-fields'
+    /** An explicit author switch controls every resource derived from this row. */
+    enabledField?: string
   }
   /** MEMORY-10: every table receives one registry-derived disk-memory policy. */
   memoryClassification: WorkspaceMemoryClassificationV1
@@ -356,6 +358,8 @@ export interface TableSpec<T = any> {
   refs?: RefSpec[]
   /** 是否纳入 JSON 备份导出 */
   exportable: boolean
+  /** 注册表拥有的嵌套结构校验，在正式导入事务前执行，不修改原备份。 */
+  validateImportRow?: (row: Record<string, unknown>) => void
   /** First portable backup version containing this table; older imports use an explicit converter. */
   introducedBackupVersion?: number
   /** 导出时需要的 ID 重映射 */
@@ -403,6 +407,8 @@ export interface FieldSpec {
   /** 仅用于界面和上下文展示的自然语言标签；不得作为写入字段名。 */
   labels?: string[]
   sanitize?: (val: unknown) => unknown
+  /** 保存的意图配置可停用；仅影响语义上下文投影，不删除作者原数据。 */
+  contextEnabled?: (val: unknown) => boolean
   label?: string
   /**
    * AI generation is opt-in. A registered writable field is not automatically

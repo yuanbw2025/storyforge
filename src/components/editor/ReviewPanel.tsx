@@ -3,14 +3,12 @@
  *
  * 集成三套质量检测：审校(F1)、去AI味(F2)、追读力(F3)
  */
-import { useEffect, useState } from 'react'
-import { X, ShieldCheck, Bot, TrendingUp, Loader2, AlertTriangle, AlertCircle, Info, Wand2, ScanSearch } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { liveQuery } from 'dexie'
+import { X, ShieldCheck, Bot, TrendingUp, Loader2, ScanSearch } from 'lucide-react'
 import { useAIStream } from '../../hooks/useAIStream'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { useReviewResultStore, selectChapterReview, type ReviewTab } from '../../stores/review-result'
-import { buildReviewPrompt, parseReviewResult, REVIEW_DIMENSION_LABELS, type ReviewResult } from '../../lib/ai/adapters/review-adapter'
-import { buildAntiAIPrompt, parseAntiAIResult, ANTI_AI_DIMENSION_LABELS, extractHighFreqWords, type AntiAIResult } from '../../lib/ai/adapters/anti-ai-adapter'
-import { buildReadabilityPrompt, parseReadabilityResult, READABILITY_DIMENSION_LABELS, type ReadabilityResult } from '../../lib/ai/adapters/readability-adapter'
 import {
   type ConsistencyAuditMode,
   type ConsistencyAuditResult,
@@ -23,7 +21,13 @@ import { AgentTeamBudgetTracker } from '../../lib/agent/team-budget'
 import { runDurableConsistencyAuditV1 } from '../../lib/agent/run/consistency-audit-durable'
 import { resolveScopeLike } from '../../lib/workspace/scope'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { prepareProseGatewayAssemblyV1 } from '../../lib/prose/gateway-context'
+import { runWholeChapterQualityReviewV1, readLatestWholeChapterQualityReviewV1, type DurableQualityReviewV1 } from '../../lib/agent/run/quality-review-durable'
+import type { QualityReviewModeV1 } from '../../lib/prose/quality-review'
+import { captureWorkspaceContentRevisionV1 } from '../../lib/authoring/content-revision'
+import { db } from '../../lib/db/schema'
+import { createWholeChapterQualityCallV1, createQualityRevisionCallV1 } from '../../lib/prose/quality-transport'
+import { WholeQualityReportView, QualityRevisionScopeControls, QualityRevisionComparisonView } from './QualityReviewViews'
+import { runQualityRevisionV1, readLatestQualityRevisionV1, adoptQualityRevisionV1, rejectQualityRevisionV1, abandonQualityRevisionV1, type QualityRevisionViewV1 } from '../../lib/agent/run/quality-revision-durable'
 
 interface Props {
   projectId: number
@@ -41,12 +45,14 @@ interface Props {
   foreshadowContext: string
   stateContext: string
   onClose: () => void
-  /** G8：按审校报告让 AI 改全文（交给 ChapterEditor 走标准生成→采纳流程） */
-  onReviseByReport?: (report: ReviewResult) => void
   consistencyRun?: ConsistencyAgentRun | null
   consistencyCurrent?: boolean
   onConsistencyRun?: (run: ConsistencyAgentRun) => void
   onBeforeConsistencyRun?: () => Promise<void>
+  onQualityRevisionAdopted?: () => Promise<void>
+  qualityConfigOverride?: import('../../lib/types').AIConfig
+  qualityGenerationOverrides?: { temperature?: number; maxTokens?: number }
+  qualityAuthorRequest?: string
 }
 
 type TabType = ReviewTab
@@ -54,13 +60,13 @@ type TabType = ReviewTab
 const TABS: { key: TabType; label: string; icon: typeof ShieldCheck }[] = [
   { key: 'consistency', label: '一致性', icon: ScanSearch },
   { key: 'review', label: '审校', icon: ShieldCheck },
-  { key: 'antiAI', label: '去AI味', icon: Bot },
+  { key: 'antiAI', label: '表达与重复', icon: Bot },
   { key: 'readability', label: '追读力', icon: TrendingUp },
 ]
 
 export default function ReviewPanel(props: Props) {
   const { projectId, chapterId, outlineNodeId, worldGroupId, chapterContent, chapterTitle,
-    prevChapterSummary, nextChapterSummary, onClose, onReviseByReport } = props
+    onClose } = props
 
   const ai = useAIStream(createAISessionKey(projectId, 'review.run', chapterId))
   const [auditMode, setAuditMode] = useState<ConsistencyAuditMode>('fast')
@@ -73,15 +79,9 @@ export default function ReviewPanel(props: Props) {
   // 结果与当前标签都存 store（按 chapterId），故收起再展开 / 切一级标签回来都还在
   const cached = useReviewResultStore(selectChapterReview(chapterId))
   const {
-    review: reviewResult,
-    antiAI: antiAIResult,
-    readability: readabilityResult,
     consistency: consistencyResult,
     activeTab,
   } = cached
-  const setReview = useReviewResultStore(s => s.setReview)
-  const setAntiAI = useReviewResultStore(s => s.setAntiAI)
-  const setReadability = useReviewResultStore(s => s.setReadability)
   const setConsistency = useReviewResultStore(s => s.setConsistency)
   const setActiveTab = (tab: TabType) => useReviewResultStore.getState().setActiveTab(chapterId, tab)
 
@@ -92,49 +92,89 @@ export default function ReviewPanel(props: Props) {
     }
   }, [chapterId, props.consistencyRun, setConsistency])
 
-  const handleRunReview = async () => {
-    if (outlineNodeId == null) throw new Error('正文审查缺少目标章纲。')
-    await props.onBeforeConsistencyRun?.()
-    const config = useAIConfigStore.getState().config
-    const assembled = await prepareProseGatewayAssemblyV1({
-      projectId,
-      worldGroupId: worldGroupId ?? null,
-      chapterId,
-      outlineNodeId,
-      operation: 'review',
-      authorRequest: `审查《${chapterTitle}》当前正文的质量与一致性`,
-      config,
-    })
-    const messages = buildReviewPrompt(
-      chapterContent, chapterTitle, assembled.text,
-      '', '', '', ''
-    )
-    const output = await ai.start(messages, undefined, {
-      formalEntryId: 'prose.review.quality', category: 'review.quality',
-    })
-    const result = parseReviewResult(output)
-    if (result) setReview(chapterId, result)
-  }
+  const [qualityReports, setQualityReports] = useState<Partial<Record<QualityReviewModeV1, DurableQualityReviewV1>>>({})
+  const [qualityRunning, setQualityRunning] = useState(false)
+  const [qualityError, setQualityError] = useState('')
+  const qualityGeneration = useRef(0)
+  const qualityTarget = useRef('')
+  const qualityAbort = useRef<AbortController | null>(null)
+  useEffect(() => () => qualityAbort.current?.abort(), [projectId, chapterId])
+  qualityTarget.current = `${projectId}:${chapterId}`
+  const [revisionHash, setRevisionHash] = useState('')
+  useEffect(() => {
+    let active = true
+    let unsubscribe: (() => void) | undefined
+    void (async () => {
+      const scope = await resolveScopeLike(projectId)
+      if (!active) return
+      const subscription = liveQuery(() => Promise.all([
+        db.works.get(scope.workId),
+        captureWorkspaceContentRevisionV1({ scope, worldGroupId: worldGroupId ?? null }),
+      ])).subscribe({
+        next: ([work, revision]) => { if (active) setRevisionHash(`${revision.vectorHash}:${JSON.stringify(work)}`) },
+        error: error => { if (active) setQualityError(error instanceof Error ? error.message : '作品版本读取失败。') },
+      })
+      unsubscribe = () => subscription.unsubscribe()
+    })().catch(error => { if (active) setQualityError(error instanceof Error ? error.message : '作品版本读取失败。') })
+    return () => { active = false; unsubscribe?.() }
+  }, [projectId, worldGroupId])
+  const mode: QualityReviewModeV1 = activeTab === 'antiAI' ? 'style' : activeTab === 'readability' ? 'readability' : 'quality'
+  const reviewRequestKey = `${projectId}:${chapterId}:${mode}`
+  const reviewRequestSource = props.qualityAuthorRequest ?? ''
+  const [reviewRequests, setReviewRequests] = useState<Record<string, { source: string; text: string }>>({})
+  const reviewRequestDraft = reviewRequests[reviewRequestKey]
+  const reviewAuthorRequest = reviewRequestDraft?.source === reviewRequestSource ? reviewRequestDraft.text : reviewRequestSource
+  const [selectedIssues, setSelectedIssues] = useState<string[]>([])
+  const [extraParagraphs, setExtraParagraphs] = useState<number[]>([])
+  const [protectedText, setProtectedText] = useState('')
+  const [revisionView, setRevisionView] = useState<QualityRevisionViewV1 | null>(null)
+  const [revisionBusy, setRevisionBusy] = useState(false)
+  const [revisionError, setRevisionError] = useState('')
+  const selectedReportHash = qualityReports[mode]?.report.artifactHash
+  const revisionRequestKey = `${reviewRequestKey}:${selectedReportHash ?? ''}`
+  const [revisionRequests, setRevisionRequests] = useState<Record<string, string>>({})
+  const revisionAuthorRequest = revisionRequests[revisionRequestKey] ?? ''
+  useEffect(() => { setSelectedIssues([]); setExtraParagraphs([]); setProtectedText('') }, [chapterId, selectedReportHash])
+  useEffect(() => {
+    if (revisionBusy) return
+    let active = true
+    void resolveScopeLike(projectId).then(scope => readLatestQualityRevisionV1({ scope, chapterId }))
+      .then(view => { if (active) setRevisionView(view) })
+      .catch(error => { if (active) setRevisionError(error instanceof Error ? error.message : '修订记录恢复失败。') })
+    return () => { active = false }
+  }, [projectId, chapterId, chapterContent, revisionHash, revisionBusy])
+  useEffect(() => {
+    if (qualityRunning) return
+    let active = true
+    const generation = ++qualityGeneration.current
+    setQualityReports({})
+    void (async () => {
+      const scope = await resolveScopeLike(projectId)
+      const reports = await Promise.all((['quality', 'style', 'readability'] as const).map(async reviewMode => [reviewMode, await readLatestWholeChapterQualityReviewV1({ scope, chapterId, mode: reviewMode })] as const))
+      if (active && generation === qualityGeneration.current) setQualityReports(Object.fromEntries(reports.filter(([, report]) => report)))
+    })().catch(error => { if (active) setQualityError(error instanceof Error ? error.message : '报告恢复失败。') })
+    return () => { active = false }
+  }, [projectId, chapterId, chapterContent, qualityRunning, revisionHash])
 
-  const handleRunAntiAI = async () => {
-    const highFreq = extractHighFreqWords(chapterContent)
-    const messages = buildAntiAIPrompt(chapterContent, highFreq.map(w => w.replace(/\(\d+次\)/, '')))
-    const output = await ai.start(messages, undefined, {
-      formalEntryId: 'prose.review.anti-ai', category: 'review.anti-ai',
-    })
-    const result = parseAntiAIResult(output)
-    if (result) setAntiAI(chapterId, result)
-  }
-
-  const handleRunReadability = async () => {
-    const messages = buildReadabilityPrompt(
-      chapterContent, chapterTitle, prevChapterSummary, nextChapterSummary
-    )
-    const output = await ai.start(messages, undefined, {
-      formalEntryId: 'prose.review.readability', category: 'review.readability',
-    })
-    const result = parseReadabilityResult(output)
-    if (result) setReadability(chapterId, result)
+  const handleRunQuality = async () => {
+    if (qualityAbort.current) return
+    const controller = new AbortController()
+    qualityAbort.current = controller
+    const generation = ++qualityGeneration.current
+    const target = qualityTarget.current
+    setQualityError(''); setQualityRunning(true)
+    try {
+      if (outlineNodeId == null) throw new Error('全文评审缺少目标章纲。')
+      await props.onBeforeConsistencyRun?.()
+      if (qualityTarget.current !== target || controller.signal.aborted) return
+      const scope = await resolveScopeLike(projectId)
+      const result = await runWholeChapterQualityReviewV1({ scope, chapterId, outlineNodeId, worldGroupId: worldGroupId ?? null, mode,
+        configOverride: props.qualityConfigOverride, generationOverrides: props.qualityGenerationOverrides, authorRequest: reviewAuthorRequest, signal: controller.signal,
+        call: createWholeChapterQualityCallV1(projectId, mode, controller.signal),
+      })
+      if (generation === qualityGeneration.current && qualityTarget.current === target) setQualityReports(value => ({ ...value, [mode]: result }))
+    } catch (error) { if (generation === qualityGeneration.current && qualityTarget.current === target) setQualityError(controller.signal.aborted ? '评审已停止，未自动重发。' : error instanceof Error ? error.message : '全文评审未完成。') }
+    finally { if (qualityAbort.current === controller) qualityAbort.current = null; setQualityRunning(false) }
   }
 
   const handleRunConsistency = async () => {
@@ -177,16 +217,43 @@ export default function ReviewPanel(props: Props) {
 
   const handleRun = () => {
     if (activeTab === 'consistency') void handleRunConsistency()
-    else if (activeTab === 'review') handleRunReview()
-    else if (activeTab === 'antiAI') handleRunAntiAI()
-    else handleRunReadability()
+    else void handleRunQuality()
+  }
+  const qualityResult = qualityReports[mode]
+  const currentResult = activeTab === 'consistency' ? consistencyResult : qualityResult
+  const consistencyMeta = localConsistencyRun?.candidate
+
+  const handleRevision = async () => {
+    if (qualityAbort.current || !qualityResult?.current || outlineNodeId == null) return
+    const controller = new AbortController(); qualityAbort.current = controller
+    const target = qualityTarget.current
+    setRevisionBusy(true); setRevisionError('')
+    try {
+      await props.onBeforeConsistencyRun?.()
+      if (qualityTarget.current !== target || controller.signal.aborted) return
+      const scope = await resolveScopeLike(projectId)
+      const view = await runQualityRevisionV1({ scope, chapterId, outlineNodeId, worldGroupId: worldGroupId ?? null, mode, reportRunId: qualityResult.runId, reportHash: qualityResult.report.artifactHash, selectedIssueIds: selectedIssues, additionalParagraphs: extraParagraphs, protectedQuotes: protectedText.split('\n').filter(line => line.trim()), authorRequest: revisionAuthorRequest, signal: controller.signal, configOverride: props.qualityConfigOverride, generationOverrides: props.qualityGenerationOverrides,
+        revise: createQualityRevisionCallV1(projectId, 'revision', controller.signal),
+        recheck: createQualityRevisionCallV1(projectId, 'recheck', controller.signal),
+      })
+      if (qualityTarget.current === target) setRevisionView(view)
+    } catch (error) { if (qualityTarget.current === target) setRevisionError(error instanceof Error ? error.message : '范围修订未完成。') }
+    finally { if (qualityAbort.current === controller) qualityAbort.current = null; setRevisionBusy(false) }
   }
 
-  const currentResult = activeTab === 'consistency' ? consistencyResult
-    : activeTab === 'review' ? reviewResult
-    : activeTab === 'antiAI' ? antiAIResult : readabilityResult
-
-  const consistencyMeta = localConsistencyRun?.candidate
+  const decideRevision = async (adopt: boolean) => {
+    const candidate = revisionView?.candidate
+    if (!candidate || revisionBusy) return
+    setRevisionBusy(true); setRevisionError('')
+    try {
+      await props.onBeforeConsistencyRun?.()
+      const scope = await resolveScopeLike(projectId)
+      if (adopt) { await adoptQualityRevisionV1({ scope, candidate }); await props.onQualityRevisionAdopted?.() }
+      else await rejectQualityRevisionV1({ scope, candidate })
+      setRevisionView(await readLatestQualityRevisionV1({ scope, chapterId }))
+    } catch (error) { setRevisionError(error instanceof Error ? error.message : '作者决定未保存。') }
+    finally { setRevisionBusy(false) }
+  }
 
   return (
     <div className="bg-bg-surface border border-border rounded-xl overflow-hidden shadow-lg">
@@ -209,27 +276,15 @@ export default function ReviewPanel(props: Props) {
           ))}
         </div>
         <div className="flex items-center gap-2">
-          {/* G8：审校出报告后，一键让 AI 按报告改全文（改稿在下方生成区预览，确认才替换原文） */}
-          {activeTab === 'review' && reviewResult && onReviseByReport && (
-            <button
-              onClick={() => onReviseByReport(reviewResult)}
-              disabled={ai.isStreaming || consistencyRunning}
-              title="让 AI 按上面的审校报告修改全文，结果会先预览"
-              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-emerald-500/10 text-emerald-400 rounded-md hover:bg-emerald-500/20 disabled:opacity-50 transition-colors"
-            >
-              <Wand2 className="w-3 h-3" />
-              按报告 AI 修改
-            </button>
-          )}
           <button
             onClick={handleRun}
-            disabled={ai.isStreaming || consistencyRunning || !chapterContent}
+            disabled={ai.isStreaming || consistencyRunning || qualityRunning || revisionBusy || !chapterContent}
             className="flex items-center gap-1 px-3 py-1.5 text-xs bg-accent text-white rounded-md hover:bg-accent-hover disabled:opacity-50 transition-colors"
           >
-            {ai.isStreaming || consistencyRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-            {ai.isStreaming || consistencyRunning ? '检测中...' : '开始检测'}
+            {ai.isStreaming || consistencyRunning || qualityRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+            {ai.isStreaming || consistencyRunning || qualityRunning ? '检测中...' : '开始检测'}
           </button>
-          <button onClick={onClose} className="p-1 text-text-muted hover:text-text-primary rounded">
+          <button aria-label="关闭质量审校" onClick={() => { qualityAbort.current?.abort(); onClose() }} className="p-1 text-text-muted hover:text-text-primary rounded">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -237,6 +292,9 @@ export default function ReviewPanel(props: Props) {
 
       {/* 内容区 */}
       <div className="p-4 max-h-[50vh] overflow-y-auto">
+        {activeTab !== 'consistency' && <label className="mb-3 block text-xs">本轮评审补充要求（可选）
+          <textarea aria-label="本轮评审补充要求" maxLength={16000} rows={3} className="mt-1 w-full rounded border border-border bg-bg-base p-2" value={reviewAuthorRequest} disabled={qualityRunning || revisionBusy} placeholder="写下你担心的问题、评审重点或希望保留的写法。" onChange={event => setReviewRequests(value => ({ ...value, [reviewRequestKey]: { source: reviewRequestSource, text: event.target.value } }))} />
+        </label>}
         {activeTab === 'consistency' && (
           <div className="mb-3 flex gap-2">
             {([
@@ -275,19 +333,19 @@ export default function ReviewPanel(props: Props) {
             )}
           </div>
         )}
-        {(ai.error || consistencyError) && (
+        {((activeTab === 'consistency' && ai.error) || consistencyError || qualityError) && (
           <div className="text-xs text-error bg-error/10 px-3 py-2 rounded-lg mb-3">
-            {consistencyError || ai.error}
+            {qualityError || consistencyError || ai.error}
           </div>
         )}
 
-        {!currentResult && !ai.isStreaming && !consistencyRunning && (
+        {!currentResult && !ai.isStreaming && !consistencyRunning && !qualityRunning && (
           <div className="text-center py-8 text-text-muted text-sm">
-            点击「开始检测」运行{activeTab === 'consistency' ? (auditMode === 'fast' ? ' Fast Guard' : ' Deep Audit') : activeTab === 'review' ? '审校' : activeTab === 'antiAI' ? '去AI味检测' : '追读力评估'}
+            点击「开始检测」运行{activeTab === 'consistency' ? (auditMode === 'fast' ? ' Fast Guard' : ' Deep Audit') : activeTab === 'review' ? '审校' : activeTab === 'antiAI' ? '表达与重复评审' : '追读力评估'}
           </div>
         )}
 
-        {ai.isStreaming && (
+        {(ai.isStreaming || qualityRunning) && (
           <div className="flex items-center justify-center py-8 gap-2 text-text-muted text-sm">
             <Loader2 className="w-4 h-4 animate-spin" />
             AI 正在分析...
@@ -306,20 +364,27 @@ export default function ReviewPanel(props: Props) {
           <ConsistencyResultView result={consistencyResult} />
         )}
 
-        {/* F1: 审校结果 */}
-        {activeTab === 'review' && reviewResult && !ai.isStreaming && (
-          <ReviewResultView result={reviewResult} />
-        )}
-
-        {/* F2: 去AI味结果 */}
-        {activeTab === 'antiAI' && antiAIResult && !ai.isStreaming && (
-          <AntiAIResultView result={antiAIResult} />
-        )}
-
-        {/* F3: 追读力结果 */}
-        {activeTab === 'readability' && readabilityResult && !ai.isStreaming && (
-          <ReadabilityResultView result={readabilityResult} />
-        )}
+        {activeTab !== 'consistency' && qualityResult && !qualityRunning && !ai.isStreaming && <>
+          <WholeQualityReportView result={qualityResult} selected={selectedIssues} disabled={revisionBusy || !qualityResult.current} toggle={id => setSelectedIssues(value => value.includes(id) ? value.filter(item => item !== id) : [...value, id])} />
+          {qualityResult.current && qualityResult.report.issues.length > 0 && <div className="mt-4 space-y-3 rounded border border-border p-3">
+            <p className="text-sm font-medium">按选中问题修稿</p>
+            <p className="text-xs text-text-muted">默认只允许修改问题所在段落。你可以增加相关段落，并保护要保留的原句；本轮再调用最多两次模型，先看修订与复核结果，再确认写回。</p>
+            <QualityRevisionScopeControls chapterText={chapterContent} extraParagraphs={extraParagraphs} protectedText={protectedText} disabled={revisionBusy} setExtraParagraphs={setExtraParagraphs} setProtectedText={setProtectedText} />
+            <label className="block text-xs">本轮修稿要求（可选）
+              <textarea aria-label="本轮修稿要求" maxLength={16000} rows={3} className="mt-1 w-full rounded border border-border bg-bg-base p-2" value={revisionAuthorRequest} disabled={revisionBusy || qualityRunning} placeholder="说明选中问题要怎样修改，以及要保留的动作、人物表达或收尾。" onChange={event => setRevisionRequests(value => ({ ...value, [revisionRequestKey]: event.target.value }))} />
+            </label>
+            <button className="rounded bg-accent px-3 py-2 text-xs text-white disabled:opacity-50" disabled={revisionBusy || qualityRunning || !selectedIssues.length} onClick={() => void handleRevision()}>{revisionBusy ? '修订与复核中…' : '生成修订并复核'}</button>
+          </div>}
+        </>}
+        {revisionError && <p className="mt-3 rounded bg-error/10 p-3 text-xs text-error">{revisionError}</p>}
+        {revisionView && <QualityRevisionComparisonView view={revisionView}>
+          {revisionView.current && revisionView.candidate && revisionView.state === 'awaiting_confirmation' && <div className="flex gap-2"><button disabled={revisionBusy} className="rounded bg-accent px-3 py-2 text-xs text-white disabled:opacity-50" onClick={() => void decideRevision(true)}>确认采纳修订</button><button disabled={revisionBusy} className="rounded border border-border px-3 py-2 text-xs disabled:opacity-50" onClick={() => void decideRevision(false)}>放弃修订</button></div>}
+          {['running', 'paused', 'recovery_required'].includes(revisionView.state) && !revisionBusy && <button className="rounded border border-border px-3 py-2 text-xs" onClick={() => {
+            setRevisionBusy(true); setRevisionError('')
+            void resolveScopeLike(projectId).then(async scope => { await abandonQualityRevisionV1({ scope, chapterId, runId: revisionView.runId }); setRevisionView(await readLatestQualityRevisionV1({ scope, chapterId })) })
+              .catch(error => setRevisionError(error instanceof Error ? error.message : '运行未能结束。')).finally(() => setRevisionBusy(false))
+          }}>结束未完成运行</button>}
+        </QualityRevisionComparisonView>}
       </div>
     </div>
   )
@@ -352,181 +417,6 @@ function ConsistencyResultView({ result }: { result: ConsistencyAuditResult }) {
           {finding.suggestion && <p className="mt-1 text-xs text-accent">建议：{finding.suggestion}</p>}
         </div>
       ))}
-    </div>
-  )
-}
-
-// ── 评分徽章 ──
-
-function ScoreBadge({ score, size = 'md' }: { score: number; size?: 'sm' | 'md' }) {
-  const color = score >= 80 ? 'text-success bg-success/10'
-    : score >= 60 ? 'text-warning bg-warning/10'
-    : 'text-error bg-error/10'
-
-  const sizeClass = size === 'sm' ? 'text-xs px-1.5 py-0.5' : 'text-lg font-bold px-3 py-1.5'
-
-  return <span className={`rounded-full ${color} ${sizeClass}`}>{score}</span>
-}
-
-// ── 严重度图标 ──
-
-function SeverityIcon({ severity }: { severity: string }) {
-  if (severity === 'critical') return <AlertCircle className="w-3.5 h-3.5 text-error" />
-  if (severity === 'warning') return <AlertTriangle className="w-3.5 h-3.5 text-warning" />
-  return <Info className="w-3.5 h-3.5 text-info" />
-}
-
-// ── F1: 审校结果视图 ──
-
-function ReviewResultView({ result }: { result: ReviewResult }) {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <ScoreBadge score={result.overallScore} />
-        <span className="text-sm text-text-primary font-medium">综合评分</span>
-      </div>
-
-      {result.issues.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide">发现的问题</h4>
-          {result.issues.map((issue, idx) => (
-            <div key={idx} className="flex items-start gap-2 bg-bg-base rounded-lg p-3">
-              <SeverityIcon severity={issue.severity} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] px-1.5 py-0.5 bg-bg-elevated rounded text-text-muted">
-                    {REVIEW_DIMENSION_LABELS[issue.dimension] || issue.dimension}
-                  </span>
-                </div>
-                <p className="text-xs text-text-primary mt-1">{issue.description}</p>
-                {issue.quote && (
-                  <p className="text-[10px] text-text-muted mt-1 italic border-l-2 border-border pl-2">{issue.quote}</p>
-                )}
-                <p className="text-xs text-accent mt-1">💡 {issue.suggestion}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {result.suggestions.length > 0 && (
-        <div>
-          <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1.5">总体建议</h4>
-          <ul className="space-y-1">
-            {result.suggestions.map((s, i) => (
-              <li key={i} className="text-xs text-text-secondary flex items-start gap-1.5">
-                <span className="text-accent mt-0.5">•</span>
-                {s}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── F2: 去AI味结果视图 ──
-
-function AntiAIResultView({ result }: { result: AntiAIResult }) {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <ScoreBadge score={result.overallScore} />
-        <span className="text-sm text-text-primary font-medium">人味指数（越高越好）</span>
-      </div>
-
-      {result.dimensions.length > 0 && (
-        <div className="space-y-2">
-          {result.dimensions.map((dim, idx) => (
-            <div key={idx} className="bg-bg-base rounded-lg p-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-medium text-text-primary">
-                  {ANTI_AI_DIMENSION_LABELS[dim.dimension] || dim.dimension}
-                </span>
-                <ScoreBadge score={dim.score} size="sm" />
-              </div>
-              {dim.markers.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-1.5">
-                  {dim.markers.slice(0, 5).map((m, i) => (
-                    <span key={i} className="text-[10px] px-1.5 py-0.5 bg-error/10 text-error rounded">
-                      {m.slice(0, 30)}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <p className="text-xs text-accent">💡 {dim.suggestion}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {result.highFreqWords.length > 0 && (
-        <div>
-          <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1.5">高频词警告</h4>
-          <div className="flex flex-wrap gap-1">
-            {result.highFreqWords.map((w, i) => (
-              <span key={i} className="text-[10px] px-2 py-1 bg-warning/10 text-warning rounded-full">{w}</span>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── F3: 追读力结果视图 ──
-
-function ReadabilityResultView({ result }: { result: ReadabilityResult }) {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <ScoreBadge score={result.overallScore} />
-        <span className="text-sm text-text-primary font-medium">追读力评分</span>
-      </div>
-
-      {result.dimensions.length > 0 && (
-        <div className="grid grid-cols-2 gap-2">
-          {result.dimensions.map((dim, idx) => {
-            const meta = READABILITY_DIMENSION_LABELS[dim.dimension]
-            return (
-              <div key={idx} className="bg-bg-base rounded-lg p-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-text-primary">
-                    {meta?.emoji} {meta?.label || dim.dimension}
-                  </span>
-                  <ScoreBadge score={dim.score} size="sm" />
-                </div>
-                <p className="text-[10px] text-text-muted">{dim.description}</p>
-                <p className="text-[10px] text-accent mt-1">💡 {dim.suggestion}</p>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-3">
-        {result.highlights.length > 0 && (
-          <div>
-            <h4 className="text-xs font-semibold text-success mb-1">✨ 亮点</h4>
-            <ul className="space-y-0.5">
-              {result.highlights.map((h, i) => (
-                <li key={i} className="text-[10px] text-text-secondary">• {h}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {result.weaknesses.length > 0 && (
-          <div>
-            <h4 className="text-xs font-semibold text-warning mb-1">⚠️ 薄弱</h4>
-            <ul className="space-y-0.5">
-              {result.weaknesses.map((w, i) => (
-                <li key={i} className="text-[10px] text-text-secondary">• {w}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
     </div>
   )
 }

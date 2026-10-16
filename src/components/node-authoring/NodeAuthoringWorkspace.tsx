@@ -1,4 +1,6 @@
 import PromptControlEditor from './PromptControlEditor'
+import QualityNodeActions from './QualityNodeActions'
+import RevisionNodeSelection from './RevisionNodeSelection'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
@@ -44,6 +46,7 @@ import {
   type AuthoringNodeGraph,
   type AuthoringNodeInstance,
   type AuthoringNodeTemplate,
+  type AuthoringInputEnvelope,
 } from '../../lib/node-authoring/contracts'
 import { parseAuthoringGraph } from '../../lib/node-authoring/graph-codec'
 import { suggestAuthoringConnections } from '../../lib/node-authoring/compatibility'
@@ -51,6 +54,7 @@ import { authoringExecutionSubgraph, topologicalAuthoringOrder, validateAuthorin
 import {
   adoptAuthoringCandidate,
   buildAuthoringExecutionPlan,
+  canRefreshAuthoringNodeLocally,
   parseAuthoringExecutionPlan,
   persistAdoptedAuthoringCandidate,
   reviseAuthoringCandidate,
@@ -445,7 +449,7 @@ function CharacterBindingSelector(props: {
   )
 }
 
-function NodeInspector(props: { node: AuthoringNodeInstance | null; graph: AuthoringNodeGraph; projectId: number; worldGroupId: number | null; onChange: (graph: AuthoringNodeGraph) => void; onRemove: () => void; onRun: (nodeId: string) => void }) {
+function NodeInspector(props: { node: AuthoringNodeInstance | null; graph: AuthoringNodeGraph; projectId: number; worldGroupId: number | null; onChange: (graph: AuthoringNodeGraph) => void; onRemove: () => void; onRun: (nodeId: string) => void; qualityInputs: AuthoringInputEnvelope[]; qualityReady: boolean }) {
   const presets = useAIConfigStore(state => state.presets)
   if (!props.node) return <aside className="flex w-80 shrink-0 items-center justify-center border-l border-border bg-bg-surface p-6 text-center text-xs text-text-muted">选择节点后编辑参数、上下文来源和端口。</aside>
   const node = props.node
@@ -472,6 +476,8 @@ function NodeInspector(props: { node: AuthoringNodeInstance | null; graph: Autho
           <div className="max-h-48 space-y-1 overflow-y-auto">{CONTEXT_SOURCES.filter(source => source.key !== 'ragSelection').map(source => <label key={source.key} className="flex items-start gap-2 text-[10px] text-text-secondary"><input type="checkbox" checked={sourceKeys.includes(source.key)} onChange={() => updateConfig('sourceKeys', sourceKeys.includes(source.key) ? sourceKeys.filter(item => item !== source.key) : [...sourceKeys, source.key])} className="mt-0.5 accent-[var(--accent)]" /><span><span className="block">{source.label}</span><span className="block text-[9px] text-text-muted">{source.key}</span></span></label>)}</div>
         </section>}
       </section>}
+      {node.templateId === 'chapter.quality-revision' && <RevisionNodeSelection projectId={props.projectId} worldGroupId={props.worldGroupId} node={node} onConfigChange={config => updateNode({ config })} />}
+      {node.templateId === 'chapter.quality-review' && <QualityNodeActions projectId={props.projectId} worldGroupId={props.worldGroupId} node={node} inputs={props.qualityInputs} ready={props.qualityReady} />}
       {node.templateId === 'control.prompt' && <PromptControlEditor key={node.id} node={node} onChange={config => updateNode({ config })} />}
       <div className="space-y-3">{(node.templateId === 'control.prompt' ? [] : template.parameters ?? []).map(parameter => {
         const value = node.config[parameter.key] ?? parameter.defaultValue ?? ''
@@ -806,15 +812,13 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
       const reusableTargetRun = mode === 'normal' && targetNodeId && run?.id != null
         ? topologicalAuthoringOrder(graph, targetNodeId).slice(0, -1).every(node => {
             const candidate = candidates[node.id]
-            const state = freshness[node.id]?.status
-            return Boolean(candidate)
+            // Current source reads are local work. Let the shared executor
+            // validate saved candidates instead of falling back to rerunning AI.
+            return canRefreshAuthoringNodeLocally(node) || Boolean(candidate)
               && candidate.status !== 'blocked'
               && candidate.status !== 'stale'
               && candidate.status !== 'draft'
               && candidate.status !== 'rejected'
-              && state !== 'blocked'
-              && state !== 'stale'
-              && state !== 'never-run'
           })
         : false
       const result = await runAuthoringGraph({
@@ -938,7 +942,7 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
     {run?.status === 'running' && !isRunning && <p role="status" className="border-b border-border p-3 text-sm text-warning">上次运行中断。先恢复已保存结果，再决定是否继续；刷新不会重新调用模型。</p>}
     {saveError && <div role="alert" className="p-3 text-sm text-error">{saveError}<button type="button" onClick={() => void flushPendingEditsV1().catch(() => undefined)} className="ml-3 underline">重试保存</button></div>}
     <nav aria-label="节点工作区视图" className="node-pane-nav">{[['library', '节点库'], ['canvas', '画布'], ['inspector', '节点设置'], ['results', '候选与证据']].map(([key, label]) => <button key={key} type="button" aria-pressed={mobilePane === key} onClick={() => { setMobilePane(key); if (key === 'results') setShowRuns(true) }}>{label}</button>)}</nav>
-    <div className="node-workspace-body flex min-h-0 flex-1"><div className="node-library flex w-60 shrink-0 flex-col border-r border-border bg-bg-surface"><div className="border-b border-border p-3"><div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-semibold tracking-wide text-text-muted">我的节点图</span><div className="flex items-center gap-1"><button type="button" title="删除当前节点图" aria-label="删除当前节点图" onClick={() => void removeFlow()} className="rounded p-1 text-text-muted hover:bg-error/10 hover:text-error"><Trash2 className="h-3.5 w-3.5" /></button><button type="button" title="从项目生成概览" aria-label="从项目生成概览" onClick={() => void createOverview()} className="rounded p-1 text-text-muted hover:bg-bg-hover"><LayoutTemplate className="h-3.5 w-3.5" /></button><button type="button" title="新建节点图" aria-label="新建节点图" onClick={() => void createFlow()} className="rounded p-1 text-accent hover:bg-accent/10"><Plus className="h-3.5 w-3.5" /></button></div></div>{flows.map(flow => <button key={flow.id} type="button" onClick={() => void switchFlow(flow.id!)} className={`mb-1 w-full truncate rounded px-2 py-1.5 text-left text-[11px] ${flow.id === selectedFlowId ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:bg-bg-hover'}`}>{flow.name}</button>)}</div><NodeLibrary graph={graph} onAdd={template => addTemplate(template)} onSelectNode={selectNode} /></div><div className="node-canvas relative flex min-w-0 flex-1"><AuthoringCanvas graph={graph} selectedNodeId={selectedNodeId} selectedNodeIds={selectedNodeSet} candidates={candidates} freshness={freshness} onSelectNode={selectNode} onSelectionChange={selectMany} onToggleFavorite={toggleFavorite} onChange={changeGraph} onBeginConnection={beginConnection} onCanvasConnection={openConnectionMenu} onAddTemplate={addTemplate} onCancelConnection={() => { setConnection(null); setMenu(null) }} onRemoveNode={removeNode} />{menu && <SmartConnectionMenu key={`${connection?.nodeId}:${connection?.portId}:${menu.x}:${menu.y}`} anchor={connection} position={menu} graph={graph} onPick={pickConnectionTemplate} onClose={() => { setConnection(null); setMenu(null) }} />}</div><div className="node-inspector"><NodeInspector node={selectedNode} graph={graph} projectId={projectId} worldGroupId={props.worldGroupId} onChange={changeGraph} onRemove={() => selectedNode && removeNode(selectedNode.id)} onRun={nodeId => void runGraph(nodeId)} /></div></div>
+    <div className="node-workspace-body flex min-h-0 flex-1"><div className="node-library flex w-60 shrink-0 flex-col border-r border-border bg-bg-surface"><div className="border-b border-border p-3"><div className="mb-2 flex items-center justify-between"><span className="text-[10px] font-semibold tracking-wide text-text-muted">我的节点图</span><div className="flex items-center gap-1"><button type="button" title="删除当前节点图" aria-label="删除当前节点图" onClick={() => void removeFlow()} className="rounded p-1 text-text-muted hover:bg-error/10 hover:text-error"><Trash2 className="h-3.5 w-3.5" /></button><button type="button" title="从项目生成概览" aria-label="从项目生成概览" onClick={() => void createOverview()} className="rounded p-1 text-text-muted hover:bg-bg-hover"><LayoutTemplate className="h-3.5 w-3.5" /></button><button type="button" title="新建节点图" aria-label="新建节点图" onClick={() => void createFlow()} className="rounded p-1 text-accent hover:bg-accent/10"><Plus className="h-3.5 w-3.5" /></button></div></div>{flows.map(flow => <button key={flow.id} type="button" onClick={() => void switchFlow(flow.id!)} className={`mb-1 w-full truncate rounded px-2 py-1.5 text-left text-[11px] ${flow.id === selectedFlowId ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:bg-bg-hover'}`}>{flow.name}</button>)}</div><NodeLibrary graph={graph} onAdd={template => addTemplate(template)} onSelectNode={selectNode} /></div><div className="node-canvas relative flex min-w-0 flex-1"><AuthoringCanvas graph={graph} selectedNodeId={selectedNodeId} selectedNodeIds={selectedNodeSet} candidates={candidates} freshness={freshness} onSelectNode={selectNode} onSelectionChange={selectMany} onToggleFavorite={toggleFavorite} onChange={changeGraph} onBeginConnection={beginConnection} onCanvasConnection={openConnectionMenu} onAddTemplate={addTemplate} onCancelConnection={() => { setConnection(null); setMenu(null) }} onRemoveNode={removeNode} />{menu && <SmartConnectionMenu key={`${connection?.nodeId}:${connection?.portId}:${menu.x}:${menu.y}`} anchor={connection} position={menu} graph={graph} onPick={pickConnectionTemplate} onClose={() => { setConnection(null); setMenu(null) }} />}</div><div className="node-inspector"><NodeInspector qualityInputs={selectedNodeId ? snapshots[selectedNodeId]?.inputs ?? [] : []} qualityReady={Boolean(selectedNodeId && candidates[selectedNodeId]?.domain?.kind === 'quality-review' && freshness[selectedNodeId]?.status === 'fresh')} node={selectedNode} graph={graph} projectId={projectId} worldGroupId={props.worldGroupId} onChange={changeGraph} onRemove={() => selectedNode && removeNode(selectedNode.id)} onRun={nodeId => void runGraph(nodeId)} /></div></div>
     <section className="node-results shrink-0 border-t border-border bg-bg-surface">
       <button type="button" onClick={() => setShowRuns(value => !value)} className="flex h-9 w-full items-center gap-2 px-4 text-left text-[11px] text-text-secondary hover:bg-bg-hover">
         <History className="h-3.5 w-3.5" />
@@ -979,9 +983,9 @@ export default function NodeAuthoringWorkspace(props: { project: Project; worldG
             </div>
             {selectedNodeId && freshness[selectedNodeId]?.status === 'stale' && <p role="status" className="mb-2 text-sm text-warning">输入或来源已变化；旧结果保留，请核对后重新运行。</p>}
             {selectedCandidate ? <>
-              <p className="mb-2 text-xs text-text-secondary">{selectedNode?.binding?.mode === 'live' ? '当前资料的读取快照' : selectedCandidate.status === 'adopted' ? '已写入作品；再次修改请生成新候选。' : selectedCandidate.status === 'rejected' ? '已拒绝；保留原始证据，未写入作品。' : '候选尚未写入作品，修改会自动保存。'}</p>
+              <p className="mb-2 text-xs text-text-secondary">{selectedNode?.binding?.mode === 'live' ? '当前资料的读取快照' : selectedCandidate.domain?.kind === 'quality-review' ? '阅读报告只读；在节点设置中打开问题与修订。' : selectedCandidate.domain?.kind === 'quality-revision' ? (selectedCandidate.status === 'adopted' ? '已写入作品；再次修改请生成新候选。' : selectedCandidate.status === 'rejected' ? '已拒绝；原稿保留。' : '范围修订候选只读；前后对照与复核在节点设置中。确认采纳后才写回。') : selectedCandidate.status === 'adopted' ? '已写入作品；再次修改请生成新候选。' : selectedCandidate.status === 'rejected' ? '已拒绝；保留原始证据，未写入作品。' : '候选尚未写入作品，修改会自动保存。'}</p>
               {selectedCandidate.errors?.length ? <div role="alert" className="mb-2 text-sm text-error">{selectedCandidate.errors.join('；')}</div> : null}
-              <textarea aria-label="候选输出" value={selectedCandidate.output} readOnly={isRunning || adopting || selectedNode?.binding?.mode === 'live' || selectedCandidate.status === 'adopted' || selectedCandidate.status === 'rejected'} onChange={event => reviseCandidate(selectedCandidate.nodeId, { output: event.target.value })} className="h-48 w-full resize-y rounded border border-border bg-bg-base p-3 text-sm leading-6 text-text-primary outline-none focus:border-accent" />
+              <textarea aria-label="候选输出" value={selectedCandidate.output} readOnly={isRunning || adopting || selectedNode?.binding?.mode === 'live' || (selectedCandidate.domain?.kind === 'quality-review' || selectedCandidate.domain?.kind === 'quality-revision') || selectedCandidate.status === 'adopted' || selectedCandidate.status === 'rejected'} onChange={event => reviseCandidate(selectedCandidate.nodeId, { output: event.target.value })} className="h-48 w-full resize-y rounded border border-border bg-bg-base p-3 text-sm leading-6 text-text-primary outline-none focus:border-accent" />
               {selectedArtifact && <>
                 <CreativeArtifactSummary artifact={selectedArtifact} />
                 {selectedCandidate.authorEditedAfterArtifact && <p className="mt-1 text-[9px] text-warning">上方证据对应模型原稿；当前内容已由作者修改，点击“本地校验并采纳”时会按正式领域合同重新验证，不会追加模型调用。</p>}

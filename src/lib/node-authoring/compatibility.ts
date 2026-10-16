@@ -21,6 +21,7 @@ const CONTENT_SEMANTICS = new Set<AuthoringSemantic>([
   'outline.chapter',
   'outline.plan',
   'chapter.prose',
+  'chapter.quality-review',
   'continuity.foreshadow',
   'continuity.location',
   'continuity.state',

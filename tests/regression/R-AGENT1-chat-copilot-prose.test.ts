@@ -133,7 +133,7 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
 
     expect(prepared.operation).toBe('generate')
     expect(prepared.outlineNodeId).toBe(firstId)
-    expect(prepared.contextSources).toEqual(['ragSelection'])
+    expect(prepared.contextSources).toEqual(['ragSelection', 'workAuthoringIntent'])
     expect(prepared.contextGatewayExecution.retrievalTrace.mandatory.length).toBeGreaterThan(0)
     expect(prepared.contextEvidence.inputState).toMatchObject({
       state: 'partial',
@@ -252,6 +252,25 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
       })
     })
     expect(await db.chapters.count()).toBe(0)
+  })
+
+  it('不同开篇的分隔稿保留作者编辑自由并给共享提示，不追加模型修复；手动核对后仍可选择全文或后段', async () => {
+    const { project } = await seedProject()
+    const first = '守灯人决定放下工具，回到屋里，把未核对的账册合上。'.repeat(20)
+    const second = '门外的风停了，他走到岸边，决定收好钥匙，在关灯处结束今晚的工作。'.repeat(20)
+    const raw = `${first}\n</think>\n${second}`
+    const runAI = vi.fn().mockResolvedValue(raw)
+    const prepared = await prepareProseCopilot({ projectId: project.id!, worldGroupId: null, authorRequest: '写第一章正文' }, { runAI })
+    const result = await runProseCreativeReliabilityV1({ prepared, budget: new AgentTeamBudgetTracker('balanced'), qualityMode: 'balanced' })
+    expect(runAI).toHaveBeenCalledTimes(1)
+    expect(result.draft).toBe(raw)
+    expect(result.artifact.issues).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'prose-separated-provider-frame', disposition: 'advisory', suggestedAction: 'edit' })]))
+    const kept = revalidateProseCreativeDraftV1({ draft: raw, informationBoundary: prepared.informationBoundary, previousArtifact: result.artifact })
+    expect(kept.status).toBe('usable-with-warnings')
+    const selected = revalidateProseCreativeDraftV1({ draft: second, informationBoundary: prepared.informationBoundary, previousArtifact: result.artifact })
+    expect(selected.issues.some(issue => issue.code === 'prose-separated-provider-frame')).toBe(false)
+    expect(await db.chapters.count()).toBe(0)
+    expect(runAI).toHaveBeenCalledTimes(1)
   })
 
   it('平衡模式对过短正文只做一次定向修复并交付可采纳正文', async () => {
@@ -375,7 +394,7 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
     })
 
     expect(prepared.perspectiveCharacterId).toBeNull()
-    expect(prepared.contextSources).toEqual(['ragSelection'])
+    expect(prepared.contextSources).toEqual(['ragSelection', 'workAuthoringIntent'])
     expect(prepared.prepared.messages.map(message => message.content).join('\n'))
       .toContain('未指定视角角色')
   })
@@ -446,7 +465,7 @@ describe('AGENT-1 27.1-d · ChatCopilot 正文闭环', () => {
     })
     const context = prepared.prepared.messages.map(message => message.content).join('\n')
     expect(prepared.perspectiveCharacterId).toBe(mainId)
-    expect(prepared.contextSources).toEqual(['ragSelection'])
+    expect(prepared.contextSources).toEqual(['ragSelection', 'workAuthoringIntent'])
     expect(context).toContain('主角知道潮门会在黎明前关闭')
     expect(context).not.toContain('配角知道钟芯其实被藏在井底')
     expect(prepared.snapshot.perspectiveCharacterId).toBe(mainId)

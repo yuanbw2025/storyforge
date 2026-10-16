@@ -65,6 +65,10 @@ PR 至少包含：
 
 ## 6. 合并 main
 
+需要完整远端交付验证的 PR 可添加 `full-delivery` 标签。可选工作流在两个独立环境中分别运行
+`npm run ci` 和 `npm run ci:e2e`，固定检出该 PR 的 head SHA；浏览器检查保留失败截图和 trace。
+它按标签启用，不替代现有 CI。每次 head 更新需要核对对应 SHA 的新结果，不能用旧结果宣称新提交通过。
+
 1. 获取最新 `origin/main`，确认没有新的生产提交遗漏。
 2. 通过普通 merge/rebase 解决冲突；不丢双方功能、注册表、迁移或测试。
 3. 在最终合并树运行 `npm run ci`；适用时运行 `npm run ci:e2e`。

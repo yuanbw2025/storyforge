@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getModelPreset } from '../../src/lib/ai/context-budget'
-import { PROVIDER_MODELS, PROVIDER_PRESETS } from '../../src/lib/types'
+import { getModelPreset, MODEL_CONTEXT_PRESETS } from '../../src/lib/ai/context-budget'
+import { normalizeProviderModel, PROVIDER_MODELS, PROVIDER_PRESETS } from '../../src/lib/types'
 
 const CONFIG_KEY = 'storyforge-ai-config'
 const SESSION_KEY = 'storyforge-ai-api-key-session'
@@ -189,6 +189,8 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
       'agnes-2.5-flash',
       'agnes-2.5-pro',
       'agnes-2.5-pro-alpha',
+      'agnes-2.5-pro-beta',
+      'agnes-3.0-flash',
       'agnes-2.0-flash',
     ])
 
@@ -203,6 +205,17 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     useAIConfigStore.getState().switchProvider('agnes')
     expect(useAIConfigStore.getState().config.baseUrl).toBe('https://apihub.agnes-ai.com/v1')
     expect(useAIConfigStore.getState().config.model).toBe('agnes-2.5-flash')
+  })
+
+  it.each(['agnes-2.5-pro-beta', 'agnes-3.0-flash'])('%s 在保存和刷新后保持原型号，未登记型号仍按原规则处理', async model => {
+    expect(normalizeProviderModel('agnes', model)).toBe(model)
+    expect(normalizeProviderModel('agnes', 'not-a-registered-model')).toBe(PROVIDER_PRESETS.agnes.model)
+    const useAIConfigStore = await freshStore()
+    useAIConfigStore.getState().switchProvider('agnes')
+    useAIConfigStore.getState().setConfig({ model })
+    expect(useAIConfigStore.getState().config.model).toBe(model)
+    expect((await freshStore()).getState().config.model).toBe(model)
+    expect(getModelPreset('agnes', model)).toEqual(MODEL_CONTEXT_PRESETS.agnes)
   })
 
   it('DeepSeek、Gemini 与 NVIDIA 使用 2026-08 官方端点、模型 ID 和窗口', async () => {

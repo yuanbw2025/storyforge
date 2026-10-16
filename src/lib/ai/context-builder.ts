@@ -1,4 +1,5 @@
 import type { Worldview, StoryCore, PowerSystem, Character, CreativeRules } from '../types'
+import { formatSystemFictionElementsV1 } from '../prose/system-fiction-contract'
 import type { HistoricalKeyword, HistoricalKeywordCategory } from '../types/history'
 import { KEYWORD_CATEGORY_LABELS } from '../types/history'
 import { DIMENSION_LABELS, ANALYSIS_DIMENSIONS } from '../types/reference'
@@ -37,19 +38,21 @@ const POV_LABELS: Record<string, string> = {
 export function buildCreativeRulesContext(rules: CreativeRules | null): string {
   if (!rules) return ''
   const parts: string[] = []
-  if (rules.writingStyle) parts.push(`写作风格：${rules.writingStyle.slice(0, 200)}`)
+  if (rules.writingStyle) parts.push(`写作风格：${rules.writingStyle}`)
   const pov = rules.narrativePOV
   if (pov) parts.push(`叙事视角：${POV_LABELS[pov] || pov}`)
-  if (rules.atmosphere) parts.push(`基调氛围：${rules.atmosphere.slice(0, 150)}`)
-  if (rules.specialRequirements) parts.push(`特殊要求：${rules.specialRequirements.slice(0, 200)}`)
+  if (rules.atmosphere) parts.push(`基调氛围：${rules.atmosphere}`)
+  if (rules.specialRequirements) parts.push(`特殊要求：${rules.specialRequirements}`)
   try {
     const proh: string[] = JSON.parse(rules.prohibitions || '[]')
-    if (proh.length) parts.push(`禁止事项：${proh.join('；').slice(0, 200)}`)
+    if (proh.length) parts.push(`禁止事项：${proh.join('；')}`)
   } catch { /* ignore */ }
   try {
     const cons: string[] = JSON.parse(rules.consistencyRules || '[]')
-    if (cons.length) parts.push(`一致性规则：${cons.join('；').slice(0, 200)}`)
+    if (cons.length) parts.push(`一致性规则：${cons.join('；')}`)
   } catch { /* ignore */ }
+  const systemFiction = formatSystemFictionElementsV1(rules.systemFictionElements)
+  if (systemFiction) parts.push(systemFiction)
   if (!parts.length) return ''
   return `【创作规则】（务必遵守）\n${parts.join('\n')}`
 }

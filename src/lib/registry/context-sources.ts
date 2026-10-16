@@ -57,6 +57,7 @@ import {
 import { readForeshadowSuggestionBaselineContextV1 } from '../foreshadow/suggestions'
 import { readStyleLearningBaselineContextV1 } from '../style/learning-agent'
 import { CANON_RESOURCE_PROVIDER_V1 } from '../context-gateway/canon-provider'
+import { WORK_AUTHORING_INTENT_PROVIDER_V1, readWorkAuthoringIntentV1 } from '../context-gateway/work-intent-provider'
 import {
   WORLD_RELEASE_NORMALIZATION_VERSION_V1,
   WORLD_RELEASE_PROVIDER_ID_V1,
@@ -2665,6 +2666,20 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: readAgentSearchResults,
   },
   {
+    key: 'workAuthoringIntent',
+    label: '作者确认的作品意图与文风',
+    scope: 'project',
+    ownerFrom: 'work',
+    layer: 'L0',
+    budgetTokens: 6000,
+    protectedFromTrim: true,
+    resources: WORK_AUTHORING_INTENT_PROVIDER_V1,
+    read: async input => readWorkAuthoringIntentV1({
+      ...await resolveScope({ projectId: input.projectId, scope: input.scope }),
+      worldGroupId: input.worldGroupId ?? null,
+    }),
+  },
+  {
     // RAG-1: 作者在可见资料库/节点中精确选择的记录字段。正文仍实时读取 Canon，
     // 稳定选择键和实际纳入证据分别由源记录元数据与节点运行快照保存。
     key: 'ragSelection',
@@ -2962,6 +2977,7 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       await buildLongTermConsistencyDossierV1({
         scope: input.scope!,
         boundaryChapterId: input.chapterId!,
+        perspectiveCharacterId: input.characterId,
         query: input.stateReferenceText,
         maxTokens: 5_500,
       }),

@@ -181,13 +181,13 @@ describe.sequential('R-HARNESS1-master-durable-orchestrator · 主 Agent durable
       worldGroupId: fixture.worldGroupId,
       plan: withPerspective,
       budgetEvidence,
-    }).permissions.contextSourceKeys).toEqual(['ragSelection'])
+    }).permissions.contextSourceKeys).toEqual(['ragSelection', 'workAuthoringIntent'])
     expect(buildMasterAgentRunContractV1({
       scope: fixture.scope,
       worldGroupId: fixture.worldGroupId,
       plan: withoutPerspective,
       budgetEvidence,
-    }).permissions.contextSourceKeys).toEqual(['ragSelection'])
+    }).permissions.contextSourceKeys).toEqual(['ragSelection', 'workAuthoringIntent'])
     expect(() => parseMasterAgentPlanV1({
       summary: '无效视角。',
       tasks: [{

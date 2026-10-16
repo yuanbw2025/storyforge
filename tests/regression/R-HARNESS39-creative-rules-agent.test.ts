@@ -114,7 +114,7 @@ describe.sequential('R-HARNESS39 · 创作规则 Agent Skill 与受治理采纳'
       contextSourceKeys: ['workStatus', 'worldview', 'storyCore', 'creativeRules'],
       writeTargets: [{
         table: 'creativeRules',
-        fields: ['writingStyle', 'atmosphere', 'specialRequirements'],
+        fields: ['writingStyle', 'atmosphere', 'specialRequirements', 'systemFictionElements'],
       }],
     })
   })

@@ -8,6 +8,8 @@ In Story core (故事核心), specify the protagonist, goal, resistance, cost, a
 
 In Creative rules (创作规则), add viewpoint, style, tone, prohibitions, and consistency requirements. “Do not change the protagonist's identity” is more testable than “write better.”
 
+System-fiction element configuration in the development branch is not included in the current release. See the [longform quality trial](/en/updates/development-status) for its entry, saving, and disabling steps.
+
 ## Start from an idea or existing material
 
 Short ideas suit Inspiration reverse-building (灵感反推); a novel manuscript suits Document import (文档导入); a reference work suits Project references and analysis (项目参考与分析). See [import and references](/en/guides/import).

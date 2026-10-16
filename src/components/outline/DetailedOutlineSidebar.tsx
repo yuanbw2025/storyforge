@@ -1,6 +1,7 @@
 import { ChevronRight, Square, Zap } from 'lucide-react'
 import type { BatchProgress } from '../../lib/ai/batch-detail-runner'
 import type { DetailedOutline, OutlineNode } from '../../lib/types'
+import { hasDetailedOutlinePlanV1 } from '../../lib/types/detailed-outline'
 
 interface Props {
   chapters: OutlineNode[]
@@ -10,6 +11,8 @@ interface Props {
   onSelect: (nodeId: number) => void
   onBatchStart: () => void
   onBatchStop: () => void
+  pendingNodeIds?: ReadonlySet<number>
+  pendingStateUnknown?: boolean
 }
 
 export default function DetailedOutlineSidebar({
@@ -20,8 +23,10 @@ export default function DetailedOutlineSidebar({
   onSelect,
   onBatchStart,
   onBatchStop,
+  pendingNodeIds,
+  pendingStateUnknown,
 }: Props) {
-  const detailedNodeIds = new Set(detailedOutlines.map(detail => detail.outlineNodeId))
+  const detailsByNode = new Map(detailedOutlines.map(detail => [detail.outlineNodeId, detail]))
 
   return (
     <div className="w-full max-h-44 md:max-h-none md:w-64 flex-shrink-0 border-b md:border-b-0 md:border-r border-border overflow-y-auto p-3">
@@ -30,9 +35,16 @@ export default function DetailedOutlineSidebar({
         <div className="text-xs text-text-muted px-2 py-4">还没有章节节点。先去「大纲」里建几章。</div>
       ) : (
         <div className="space-y-0.5">
-          {chapters.map(chapter => (
+          {chapters.map(chapter => {
+            const detail = detailsByNode.get(chapter.id!)
+            const status = pendingStateUnknown ? '候选状态待核对' : pendingNodeIds?.has(chapter.id!) ? '有待确认候选'
+              : detail?.lastUsedSummary !== undefined && detail.lastUsedSummary !== chapter.summary ? '章纲变化待复核'
+                : hasDetailedOutlinePlanV1(detail) ? '已保存细纲' : '未规划'
+            return (
             <button
               key={chapter.id}
+              aria-label={chapter.title}
+              aria-description={status}
               onClick={() => { if (chapter.id != null) onSelect(chapter.id) }}
               aria-pressed={selectedNodeId === chapter.id}
               className={`w-full flex items-center gap-1.5 px-2 py-1.5 text-left text-sm rounded transition-colors ${
@@ -43,11 +55,9 @@ export default function DetailedOutlineSidebar({
             >
               <ChevronRight className="w-3 h-3 flex-shrink-0" />
               <span className="truncate flex-1">{chapter.title}</span>
-              {chapter.id != null && detailedNodeIds.has(chapter.id) && (
-                <span className="w-1.5 h-1.5 rounded-full bg-success flex-shrink-0" title="有细纲" />
-              )}
+              <span className={`shrink-0 text-[10px] ${status === '已保存细纲' ? 'text-success' : status === '未规划' ? 'text-text-muted' : 'text-warning'}`} title={status}>{status}</span>
             </button>
-          ))}
+          )})}
         </div>
       )}
 

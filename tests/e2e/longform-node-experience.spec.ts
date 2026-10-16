@@ -42,6 +42,49 @@ async function runOrigin(page: Page) {
   await expect(page.getByLabel('候选输出')).toHaveValue(/海床古城/)
 }
 
+test('confirmed upstream Canon continues after reload with current source reads; external edits block reuse without another model call', async ({ page }) => {
+  const requests: string[] = []
+  await page.route('**/chat/completions', async route => {
+    requests.push(route.request().postData() ?? '')
+    const value = requests.length === 1
+      ? { field: 'worldOrigin', value: '潮汐退去后升起的古城。' }
+      : { field: 'concept', value: '测潮者追索古城留下的真相。' }
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(value) }, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 24, total_tokens: 36 } }) })
+  })
+  const projectId = await setup(page)
+  await page.evaluate(async projectId => {
+    const importer = new Function('p', 'return import(p)') as (p: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const { buildAuthoringCreationChainGraph } = await importer('/storyforge/src/lib/node-authoring/creation-chain.ts')
+    const { graph, nodeIds } = buildAuthoringCreationChainGraph()
+    const selected = new Set([nodeIds.context, nodeIds.world, nodeIds.concept])
+    const flow = await db.nodeFlows.where('projectId').equals(projectId).first()
+    const small = { ...graph, groups: [], nodes: graph.nodes.filter((n: any) => selected.has(n.id)).map((n: any, index: number) => ({ ...n, x: index * 260 + 20, y: 40 })), edges: graph.edges.filter((edge: any) => selected.has(edge.sourceNodeId) && selected.has(edge.targetNodeId)) }
+    await db.nodeFlows.update(flow.id, { graphJson: JSON.stringify(small) })
+  }, projectId)
+  await page.reload()
+  await page.locator('[data-authoring-node-template="world.origin"]').click()
+  await page.getByRole('button', { name: '运行到此节点', exact: true }).click()
+  await expect(page.getByLabel('候选输出')).toHaveValue(/潮汐退去后升起/)
+  await page.getByRole('button', { name: '确认采纳', exact: true }).click()
+  await expect(page.getByRole('button', { name: '已采纳', exact: true })).toBeDisabled()
+  await page.reload()
+  await page.locator('[data-authoring-node-template="story.concept"]').click()
+  await page.getByRole('button', { name: '运行到此节点', exact: true }).click()
+  await expect(page.getByLabel('候选输出')).toHaveValue(/测潮者追索古城/)
+  expect(requests).toHaveLength(2)
+  expect(requests[1]).toContain('潮汐退去后升起的古城')
+  await page.evaluate(async projectId => {
+    const importer = new Function('p', 'return import(p)') as (p: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const worldview = await db.worldviews.where('projectId').equals(projectId).first()
+    await db.worldviews.update(worldview.id, { worldOrigin: '作者在分步骤中改成了沙漠古城。', updatedAt: Date.now() })
+  }, projectId)
+  await page.getByRole('button', { name: '运行到此节点', exact: true }).click()
+  await expect(page.getByText(/要复用的上游节点、连线或来源已变化/)).toBeVisible()
+  expect(requests).toHaveLength(2)
+})
+
 test('selected node runs despite unfinished siblings; author revision survives rapid mode switch and reload then appears in step mode', async ({ page }) => {
   const requests = await mockOrigin(page)
   await setup(page, true)

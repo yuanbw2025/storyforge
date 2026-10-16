@@ -91,6 +91,8 @@ export interface ExecuteContextGatewayInputV1 {
   accessPolicyOverride?: ContextAccessPolicyV1
   /** Exact resource permission derived from ProductSourcePlan selectors. */
   allowedResourceKeys?: readonly string[]
+  /** Deterministic adapter boundary; excludes a record and all field/aggregate resources. */
+  excludedRecordResourceKeys?: readonly string[]
   /** Omit to disable extra planning calls while preserving deterministic selection. */
   additionalReadModel?: AgentModelAdapter
   additionalReadsEnabled?: boolean
@@ -106,6 +108,8 @@ export interface ContextGatewayExecutionV1 {
   retrievalTrace: RetrievalTraceV1
   contextPacket: ContextPacketV1
   sourceSnapshots: ContextGatewaySourceSnapshotInputV1[]
+  /** Actual packet blocks by registered provider, for per-source manifest evidence. */
+  sourceBlocks?: Array<{ sourceKey: string; content: string; contentHash: string; tokenCount: number }>
   toolTranscript: ContextGatewayToolTranscriptInputV1[]
   metrics: {
     catalogPages: number
@@ -177,9 +181,11 @@ function hardFailure(report: ContextSufficiencyReportV1): ContextSufficiencyObli
 
 async function collectCatalog(session: ContextGatewayToolSessionV1): Promise<{
   descriptors: ContextResourceDescriptorV1[]
+  omitted: Array<{ resourceKey: string; sourceKey: string; reasonCode: string; tokenEstimate: number }>
   pages: number
 }> {
   const descriptors: ContextResourceDescriptorV1[] = []
+  const omitted: Array<{ resourceKey: string; sourceKey: string; reasonCode: string; tokenEstimate: number }> = []
   const keys = new Set<string>()
   let pages = 0
   for (const binding of session.providers) {
@@ -204,7 +210,10 @@ async function collectCatalog(session: ContextGatewayToolSessionV1): Promise<{
         policy: session.policy,
       })
       for (const descriptor of page.items) {
-        if (!isContextGatewayResourceAllowedV1(session, descriptor.resourceKey)) continue
+        if (!isContextGatewayResourceAllowedV1(session, descriptor.resourceKey)) {
+          omitted.push({ resourceKey: descriptor.resourceKey, sourceKey: descriptor.sourceKey, reasonCode: 'adapter-resource-boundary', tokenEstimate: descriptor.tokenEstimate.index ?? 0 })
+          continue
+        }
         if (keys.has(descriptor.resourceKey)) fail('duplicate-resource', `目录重复 ${descriptor.resourceKey}`)
         keys.add(descriptor.resourceKey)
         descriptors.push(descriptor)
@@ -214,6 +223,7 @@ async function collectCatalog(session: ContextGatewayToolSessionV1): Promise<{
   }
   return {
     descriptors: descriptors.sort((left, right) => left.resourceKey.localeCompare(right.resourceKey)),
+    omitted: omitted.sort((left, right) => left.resourceKey.localeCompare(right.resourceKey)),
     pages,
   }
 }
@@ -384,6 +394,7 @@ export async function executeContextGatewayV1(
     scope: frozenScope(input),
     policy: accessPolicy,
     allowedResourceKeys: input.allowedResourceKeys,
+    excludedRecordResourceKeys: input.excludedRecordResourceKeys,
   })
   const catalog = await collectCatalog(session)
   const readsAllowed = input.additionalReadsEnabled !== false
@@ -430,6 +441,7 @@ export async function executeContextGatewayV1(
   const deterministicReads: RetrievalDecisionV1[] = []
   const sourceSnapshots: ContextGatewaySourceSnapshotInputV1[] = []
   const packetBlocks: string[] = []
+  const packetBlockSources: string[] = []
   const deterministicDecisions = [...selector.selected].sort((left, right) => (
     Number(mandatoryOriginalKeys.has(right.resourceKey))
     - Number(mandatoryOriginalKeys.has(left.resourceKey))
@@ -475,6 +487,7 @@ export async function executeContextGatewayV1(
         content: read.content,
       })
       packetBlocks.push(`【${read.descriptor.kind}｜${read.descriptor.title}｜original】\n${read.content}`)
+      packetBlockSources.push(decision.sourceKey)
       continue
     }
     if (decision.depth === 'original') {
@@ -486,6 +499,9 @@ export async function executeContextGatewayV1(
       depth: decision.depth,
       maxTokens: Math.max(1, Math.min(remaining, decision.estimatedTokens || remaining)),
     })
+    if (input.mandatoryFullResourceKeys?.includes(decision.resourceKey) && read.contentHash !== descriptor.contentHash) {
+      fail('mandatory-full-incomplete', `${decision.resourceKey} 完整资料超出检索或模型预算，拒绝静默截断`)
+    }
     if (descriptor.contentHash !== decision.contentHash
       || descriptor.policyHash !== decision.policyHash
       || read.descriptor.contentHash !== decision.contentHash
@@ -503,6 +519,7 @@ export async function executeContextGatewayV1(
       content: read.content,
     })
     packetBlocks.push(`【${read.descriptor.kind}｜${read.descriptor.title}｜${decision.depth}】\n${read.content}`)
+    packetBlockSources.push(decision.sourceKey)
   }
 
   const agentReads = new Map<string, RetrievalDecisionV1>()
@@ -575,10 +592,14 @@ export async function executeContextGatewayV1(
               && !agentReads.has(parsed.decision.resourceKey)) {
               agentReads.set(parsed.decision.resourceKey, parsed.decision)
               packetBlocks.push(`【追加读取｜${parsed.decision.resourceKey}｜${parsed.decision.depth}】\n${parsed.content ?? ''}`)
+              packetBlockSources.push(parsed.decision.sourceKey)
               added++
             }
           } else if (item.result.meta.gateway?.operation === 'original' && item.result.ok) {
             packetBlocks.push(`【原文回查｜${resourceKey ?? 'unknown'}】\n${(await validatedAgentRead(item.result, descriptorByKey)).content ?? ''}`)
+            const sourceKey = descriptorByKey.get(resourceKey ?? '')?.sourceKey
+            if (!sourceKey) fail('packet-source', '原文回查缺少已登记 Provider 身份')
+            packetBlockSources.push(sourceKey)
           }
         }
         liveSufficiency = await reconcileSufficiency({
@@ -623,12 +644,12 @@ export async function executeContextGatewayV1(
     mandatory: deterministicReads.filter(item => mandatoryKeys.has(item.resourceKey)),
     autoSelected: deterministicReads.filter(item => !mandatoryKeys.has(item.resourceKey)),
     agentReads: [...agentReads.values()].sort((left, right) => left.resourceKey.localeCompare(right.resourceKey)),
-    omitted: selector.omitted.map(item => ({
+    omitted: [...catalog.omitted, ...selector.omitted.map(item => ({
       resourceKey: item.resourceKey,
       sourceKey: item.sourceKey,
       reasonCode: item.reasonCode,
       tokenEstimate: item.estimatedTokens,
-    })),
+    }))],
     queries: queryTrace,
     fallbackUsed: path === 'deterministic-fallback',
   })
@@ -652,6 +673,22 @@ export async function executeContextGatewayV1(
     content,
     sourceRefs: [...deterministicReads, ...agentReads.values()].flatMap(item => item.sourceRefs),
   })
+  const groupedBlocks = new Map<string, string[]>()
+  for (const [index, block] of packetBlocks.entries()) {
+    const sourceKey = packetBlockSources[index]
+    if (!sourceKey) fail('packet-source', '实际 packet block 缺少已登记 Provider 身份')
+    groupedBlocks.set(sourceKey, [...groupedBlocks.get(sourceKey) ?? [], block])
+  }
+  const sourceBlocks = await Promise.all([...groupedBlocks].map(async ([sourceKey, blocks]) => {
+    const text = blocks.join('\n\n')
+    return { sourceKey, content: text, contentHash: await sha256Text(text), tokenCount: estimateTokens(text) }
+  }))
+  // Grouping can shift estimator rounding by a few tokens. Preserve the exact
+  // whole-packet total used by the request budget and manifest contract.
+  const estimatedTotal = sourceBlocks.reduce((sum, block) => sum + block.tokenCount, 0)
+  const largest = sourceBlocks.reduce((best, block) => !best || block.tokenCount > best.tokenCount ? block : best, undefined as typeof sourceBlocks[number] | undefined)
+  if (largest) largest.tokenCount += contextPacket.tokenCount - estimatedTotal
+  if (sourceBlocks.some(block => block.tokenCount < 0)) fail('packet-source-tokens', 'Provider token accounting 超出实际 packet')
   return {
     version: 'context-gateway-execution-v1',
     path,
@@ -661,6 +698,7 @@ export async function executeContextGatewayV1(
     retrievalTrace,
     contextPacket,
     sourceSnapshots,
+    sourceBlocks,
     toolTranscript,
     metrics: {
       catalogPages: catalog.pages,

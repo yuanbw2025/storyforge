@@ -2,10 +2,14 @@ import { chapterPostAdoptionChainStateV1, readLatestChapterPostAdoptionRunV1 } f
 import { readWorkPostAdoptionSettingsV1 } from '../prose/post-adoption-policy'
 import { affirmativeAuthorActionsV1, parseAuthorOrdinalV1 } from './author-intent'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { buildChapterContentPrompt, buildContinuePrompt } from '../ai/adapters/chapter-adapter'
-import { chat, resolveRequestConfig, type ChatResult } from '../ai/client'
+import { buildChapterContentRequestV1, buildContinueRequestV1, type ChapterPromptRequestV1 } from '../ai/adapters/chapter-adapter'
+import { chat, resolveRequestConfig, describeResolvedAIRequestSettingsV1, type ChatResult, type AIRequestSettingsV1 } from '../ai/client'
+import { proseRenderedRequestV1, type ProseRenderedRequestV1 } from '../prose/request-evidence'
+import { observeProseLengthV1, proseLengthExpectationV1 } from '../prose/length-observation'
+import { observeDuplicatedProseFrameV1, observeSeparatedProseFrameV1 } from '../prose/provider-frame-observation'
 import { buildBestChapterByOutlineMap } from '../chapters/selectors'
 import { db } from '../db/schema'
+import { verifyWorkspaceContentRevisionV1, captureWorkspaceContentRevisionV1, contentRevisionTableSpecsV1, type WorkspaceContentRevisionVectorV1 } from '../authoring/content-revision'
 import type {
   GenerationGateIssue,
   GenerationNode,
@@ -81,6 +85,9 @@ export const PROSE_COPILOT_SOURCE_KEYS = resolveAgentSkillContextSourceKeysV1(
 export type ProseCopilotOperation = 'generate' | 'continue'
 
 export interface ProseCopilotSnapshot {
+  requestSettings?: AIRequestSettingsV1
+  /** 新候选冻结原注册表内容向量，缺失保留旧恢复协议的兼容性。 */
+  contentRevision?: WorkspaceContentRevisionVectorV1
   outlineNodeId: number
   outlineUpdatedAt: number
   chapterId: number | null
@@ -122,6 +129,8 @@ export interface ProseCopilotInput {
 }
 
 export interface PreparedProseCopilot {
+  renderedRequest: ProseRenderedRequestV1
+  lastFinishReason: () => string | null
   node: GenerationNode<ProseCopilotInput, string, { chapterId: number }>
   prepared: PreparedGenerationNode
   contextSources: string[]
@@ -148,9 +157,20 @@ const MIN_PROSE_CHARS = 80
 const MAX_PROSE_CHARS = 200_000
 
 export class ProseCopilotStaleError extends Error {
-  constructor() {
-    super('目标章节或正文已在候选生成后发生变化。为保护作者手稿，请重新生成候选。')
+  constructor(message = '目标章节或正文已在候选生成后发生变化。为保护作者手稿，请重新生成候选。') {
+    super(message)
     this.name = 'ProseCopilotStaleError'
+  }
+}
+
+async function assertProseContentRevisionFreshV1(
+  frozen: WorkspaceContentRevisionVectorV1 | undefined,
+  input: { scope: WorkspaceScope; worldGroupId: number | null },
+): Promise<void> {
+  if (!frozen) return
+  const result = await verifyWorkspaceContentRevisionV1(frozen, input)
+  if (!result.fresh) {
+    throw new ProseCopilotStaleError(`候选生成后项目内容已变化，必须重新生成。变化表：${result.changedTables.join('、') || '未知'}`)
   }
 }
 
@@ -166,6 +186,8 @@ function fingerprintContent(value: string): string {
 }
 
 export function parseProseCandidateDraft(draft: string): string {
+  const frame = observeDuplicatedProseFrameV1(draft)
+  if (frame) throw new Error(frame.message)
   const value = draft.replace(/^```(?:markdown|text)?\s*/i, '').replace(/\s*```$/, '').trim()
   if (value.length < MIN_PROSE_CHARS) throw new Error(`正文候选至少需要 ${MIN_PROSE_CHARS} 个字符。`)
   if (value.length > MAX_PROSE_CHARS) throw new Error(`正文候选不能超过 ${MAX_PROSE_CHARS} 个字符。`)
@@ -342,21 +364,21 @@ function candidateIssues(
   }
 }
 
-function buildProseMessages(input: ProseCopilotInput) {
+function buildProseRequest(input: ProseCopilotInput): ChapterPromptRequestV1 {
   const perspectiveBoundary = buildInformationBoundaryInstructionV1(input.informationBoundary)
   const charactersIndex = input.assembled.included.indexOf('characters')
   const characters = charactersIndex >= 0
     ? input.assembled.segments[charactersIndex]?.content ?? ''
     : ''
-  const world = input.assembled.segments
-    .filter((_, index) => index !== charactersIndex)
-    .map(segment => segment.content)
-    .filter(Boolean)
-    .join('\n\n')
+  const world = input.assembled.text
   const supplemental = input.supplementalContext.trim()
     ? `\n\n【本轮上游候选（尚未采纳，不属于 Canon）】\n${input.supplementalContext.trim()}`
     : ''
   const targetWordCount = Number(input.parameterValues?.wordCount)
+  const parameterValues = input.parameterValues ? { ...input.parameterValues } : undefined
+  if (parameterValues && Object.prototype.hasOwnProperty.call(parameterValues, 'wordCount')) {
+    parameterValues[input.operation === 'continue' ? 'continueLength' : 'chapterLength'] = Number.isFinite(targetWordCount) && targetWordCount > 0 ? Math.floor(targetWordCount) : ''
+  }
   const wordCountHint = Number.isFinite(targetWordCount) && targetWordCount > 0
     ? `\n\n【节点字数目标】正文候选尽量接近 ${Math.floor(targetWordCount)} 字。`
     : ''
@@ -367,15 +389,16 @@ function buildProseMessages(input: ProseCopilotInput) {
   ].join('\n\n')
   if (input.operation === 'continue') {
     const context = characters ? `${world}\n\n${characters}` : world
-    return buildContinuePrompt(
+    return buildContinueRequestV1(
       htmlToPlainText(input.chapter?.content ?? ''),
       input.outlineNode.summary,
       perspectiveBoundary + '\n' + context,
       hint,
+      { requiredGatewayContext: input.assembled.text, parameterValues },
     )
   }
   const worldRulesIndex = input.assembled.included.indexOf('worldRules')
-  return buildChapterContentPrompt(
+  return buildChapterContentRequestV1(
     input.outlineNode.title,
     input.outlineNode.summary,
     world,
@@ -383,7 +406,20 @@ function buildProseMessages(input: ProseCopilotInput) {
     input.previousTail,
     worldRulesIndex >= 0 ? input.assembled.segments[worldRulesIndex]?.content ?? '' : '',
     perspectiveBoundary + '\n' + hint,
+    { requiredGatewayContext: input.assembled.text, parameterValues },
   )
+}
+
+function buildProseMessages(input: ProseCopilotInput) {
+  return buildProseRequest(input).messages
+}
+
+function proseRequestOverridesV1(request: ChapterPromptRequestV1, supplied: ProseCopilotInput['generationOverrides']) {
+  const temperature = supplied?.temperature ?? request.modelOverride?.temperature
+  return {
+    maxTokens: supplied?.maxTokens ?? request.modelOverride?.maxTokens ?? 16_000,
+    ...(temperature == null ? {} : { temperature }),
+  }
 }
 
 async function adoptCandidate(input: {
@@ -416,8 +452,10 @@ async function adoptCandidate(input: {
       db.outlineNodes,
       db.retrievalChunks,
       db.narrativeSummaryNodes,
+      ...(input.snapshot.contentRevision ? contentRevisionTableSpecsV1().map(spec => spec.table) : []),
     ),
     async () => {
+      await assertProseContentRevisionFreshV1(input.snapshot.contentRevision, { scope: workspaceScope, worldGroupId: input.worldGroupId })
       const current = await readSnapshot(
         workspaceScope,
         input.snapshot,
@@ -592,6 +630,7 @@ export async function prepareProseCopilot(input: {
     informationBoundary.manifestHash,
     perspectiveFromChapter,
   )
+  snapshot.contentRevision = await captureWorkspaceContentRevisionV1({ scope, worldGroupId })
   const assembled = await prepareProseGatewayAssemblyV1({
     projectId: input.projectId,
     scope,
@@ -607,6 +646,7 @@ export async function prepareProseCopilot(input: {
     signal: input.signal,
   })
   const current = await readSnapshot(scope, snapshot, worldGroupId)
+  await assertProseContentRevisionFreshV1(snapshot.contentRevision, { scope, worldGroupId })
   if (!sameSnapshot(current, snapshot)) throw new ProseCopilotStaleError()
   const inputState = projectContextGatewayInputStateV1(
     skill,
@@ -650,22 +690,20 @@ export async function prepareProseCopilot(input: {
     routingCategory,
     signal: input.signal,
   }
+  const promptRequest = buildProseRequest(nodeInput)
+  nodeInput.generationOverrides = proseRequestOverridesV1(promptRequest, input.generationOverrides)
+  const requestMeta = { category: routingCategory, projectId: input.projectId, configOverrides: nodeInput.generationOverrides, contextOverflowPolicy: 'reject' as const }
+  const frozenResolution = resolveRequestConfig(config, requestMeta)
+  const requestSettings = describeResolvedAIRequestSettingsV1(frozenResolution, false)
+  snapshot.requestSettings = requestSettings
+  let finishReason: string | null = null
   const runRaw = async (messages: ChatMessage[]): Promise<CreativeRawModelResultV1> => {
     const startedAt = Date.now()
     const result: ChatResult = {}
     const output = dependencies.runAI
       ? await dependencies.runAI(messages)
-      : await chat(messages, config, {
-          category: routingCategory,
-          projectId: input.projectId,
-          configOverrides: {
-            maxTokens: input.generationOverrides?.maxTokens ?? 16_000,
-            ...(input.generationOverrides?.temperature != null
-              ? { temperature: input.generationOverrides.temperature }
-              : {}),
-          },
-          contextOverflowPolicy: 'reject',
-        }, input.signal, result)
+      : await chat(messages, config, { ...requestMeta, category: routingCategory }, input.signal, result, undefined, frozenResolution)
+    finishReason = result.finishReason ?? null
     return {
       output,
       ...(result.usage ? { usage: result.usage } : {}),
@@ -675,10 +713,13 @@ export async function prepareProseCopilot(input: {
   const node = createProseCopilotNode(nodeInput, {
     ...dependencies,
     runAI: async messages => (await runRaw(messages)).output,
-  })
+  }, promptRequest)
+  const preparedNode = prepareGenerationNode(node, nodeInput)
   return {
+    get renderedRequest() { return proseRenderedRequestV1(preparedNode.messages, requestSettings) },
+    lastFinishReason: () => finishReason,
     node,
-    prepared: prepareGenerationNode(node, nodeInput),
+    prepared: preparedNode,
     contextSources: assembled.included,
     snapshot,
     operation,
@@ -688,7 +729,7 @@ export async function prepareProseCopilot(input: {
     informationBoundary,
     contextGatewayExecution: assembled.contextGatewayExecution,
     input: nodeInput,
-    modelIdentity: { provider: config.provider, model: config.model },
+    modelIdentity: { provider: frozenResolution.config.provider, model: frozenResolution.config.model },
     runRaw,
     label: operation === 'continue'
       ? `续写《${target.outline.title}》`
@@ -737,6 +778,16 @@ function parseProseCreativeOutcomeV1(
       disposition: 'blocking',
       action: 'repair-once',
     }))
+    const length = observeProseLengthV1(output, proseLengthExpectationV1(prepared.input.authorRequest, prepared.input.parameterValues?.wordCount), prepared.lastFinishReason())
+    if (length.message) issues.push(createCreativeIssueV1({
+      code: `prose-length-${length.status}`, path: '$', message: length.message,
+      severity: 'warning', disposition: 'advisory', action: 'none', deterministic: true,
+    }))
+    const frame = observeSeparatedProseFrameV1(output)
+    if (frame?.kind === 'separated-answer-frame') issues.push(createCreativeIssueV1({
+      code: 'prose-separated-provider-frame', path: '$', message: frame.message,
+      severity: 'warning', disposition: 'advisory', action: 'edit', deterministic: true,
+    }))
     if (!PROSE_MOTION_SIGNAL.test(output)) {
       issues.push(createCreativeIssueV1({
         code: 'prose-narrative-motion-weak',
@@ -766,10 +817,12 @@ function parseProseCreativeOutcomeV1(
       assumptions: prepared.input.narrativeBrief.assumptions,
     }
   } catch (error) {
+    const duplicatedFrame = observeDuplicatedProseFrameV1(raw)
     const issue = createCreativeIssueV1({
-      code: 'prose-response-invalid',
+      code: duplicatedFrame ? 'prose-duplicate-provider-frame' : 'prose-response-invalid',
       path: '$',
       message: error instanceof Error ? error.message : '正文响应无效。',
+      ...(duplicatedFrame ? { action: 'edit' as const } : {}),
     })
     return {
       status: 'manual-repair',
@@ -855,6 +908,11 @@ export function revalidateProseCreativeDraftV1(input: {
       disposition: 'blocking',
       action: 'edit',
     }))
+    const frame = observeSeparatedProseFrameV1(output)
+    if (frame?.kind === 'separated-answer-frame') issues.push(createCreativeIssueV1({
+      code: 'prose-separated-provider-frame', path: '$', message: frame.message,
+      severity: 'warning', disposition: 'advisory', action: 'edit', deterministic: true,
+    }))
     if (!PROSE_MOTION_SIGNAL.test(output)) {
       issues.push(createCreativeIssueV1({
         code: 'prose-narrative-motion-weak',
@@ -909,7 +967,9 @@ export function revalidateProseCreativeDraftV1(input: {
 export function createProseCopilotNode(
   input: ProseCopilotInput,
   dependencies: ProseCopilotDependencies = {},
+  promptRequest: ChapterPromptRequestV1 = buildProseRequest(input),
 ): PreparedProseCopilot['node'] {
+  const generationOverrides = proseRequestOverridesV1(promptRequest, input.generationOverrides)
   const readCurrent = dependencies.readCurrent
     ?? (() => readSnapshot(input.scope, input.snapshot, input.worldGroupId))
   const save = dependencies.save ?? (draft => adoptCandidate({
@@ -924,25 +984,21 @@ export function createProseCopilotNode(
   const runAI = dependencies.runAI ?? (messages => chat(messages, input.config, {
     category: input.routingCategory ?? (input.operation === 'continue' ? 'chapter.continue' : 'chapter.content'),
     projectId: input.project.id!,
-    configOverrides: {
-      maxTokens: input.generationOverrides?.maxTokens ?? 16_000,
-      ...(input.generationOverrides?.temperature != null
-        ? { temperature: input.generationOverrides.temperature }
-        : {}),
-    },
+    configOverrides: generationOverrides,
     contextOverflowPolicy: 'reject',
   }, input.signal))
   return {
     id: `agent.chat-copilot.prose:${input.project.id}:${input.outlineNode.id}:${input.operation}:${input.snapshot.chapterUpdatedAt ?? 'new'}`,
     kind: input.operation === 'continue' ? 'chapter.continue' : 'chapter.content',
     editableInput: true,
-    assembleInput: buildProseMessages,
+    assembleInput: () => promptRequest.messages.map(message => ({ ...message })),
     run: async messages => parseProseCandidateDraft(await runAI(messages)),
     gate: output => {
       const issues = candidateIssues(output, input.informationBoundary)
       return { status: issues.length ? 'blocked' : 'pass', issues }
     },
     adopt: async output => {
+      await assertProseContentRevisionFreshV1(input.snapshot.contentRevision, { scope: input.scope, worldGroupId: input.worldGroupId })
       const current = await readCurrent()
       if (!sameSnapshot(current, input.snapshot)) throw new ProseCopilotStaleError()
       return save(parseProseCandidateDraft(output))

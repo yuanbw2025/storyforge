@@ -1,4 +1,5 @@
 import { canonRowResourceKeysV1 } from '../context-gateway/canon-provider'
+import { workAuthoringIntentResourceKeyV1 } from '../context-gateway/work-intent-provider'
 import { db } from '../db/schema'
 import { assembleContextGatewayPacketV1, projectContextGatewayInputStateV1 } from '../agent/context-gateway-input'
 import { resolveAgentContextPolicy, type AgentContextProfile } from '../agent/context-policy'
@@ -53,6 +54,10 @@ export async function prepareProseGatewayAssemblyV1(input: {
   chapterId?: number | null
   outlineNodeId: number
   operation: ProseGatewayOperationV1
+  /** Reading advice has its own registered prompt contract; fact auditing retains prose.review. */
+  qualityReview?: boolean
+  qualityRevision?: boolean
+  qualityRecheck?: boolean
   authorRequest: string
   perspectiveCharacterId?: number | null
   citedReferenceIds?: readonly number[]
@@ -65,13 +70,15 @@ export async function prepareProseGatewayAssemblyV1(input: {
   signal?: AbortSignal
 }): Promise<ProseGatewayAssemblyV1> {
   const scope = await resolveScope({ projectId: input.projectId, scope: input.scope })
-  const skill = resolveAgentSkillV1('prose', `prose.${input.operation}`)
+  const skill = resolveAgentSkillV1('prose', input.operation === 'revise' && input.qualityRevision ? 'prose.quality-revise'
+    : input.operation === 'review' && input.qualityRecheck ? 'prose.quality-recheck'
+      : input.operation === 'review' && input.qualityReview ? 'prose.quality-review' : `prose.${input.operation}`)
   if (skill.contextGateway?.rollout !== 'required') {
     throw new Error(`prose.${input.operation} 尚未进入 required Context Gateway。`)
   }
   const policy = resolveAgentContextPolicy(skill.contextTaskKind, input.contextProfile ?? 'full')
   const budget = Math.min(policy.maxInputTokens, skill.contextGateway.maxRetrievedTokens)
-  const [outlines, details, chapters, arcs, progress, facts, knowledge, characters, modules, nodes, beats, choices, references, work] = await Promise.all([
+  const [outlines, details, chapters, arcs, progress, facts, knowledge, characters, modules, nodes, beats, choices, references, work, rulesRows, storyCoreRows, states, items, timeline, cultivation, styleProfiles] = await Promise.all([
     readOwnedRows<OutlineNode & StableRow>(scope, 'outlineNodes', { owner: 'work' }),
     readOwnedRows<StableRow>(scope, 'detailedOutlines', { owner: 'work' }),
     readOwnedRows<Chapter & StableRow>(scope, 'chapters', { owner: 'work' }),
@@ -86,7 +93,19 @@ export async function prepareProseGatewayAssemblyV1(input: {
     readOwnedRows<StableRow>(scope, 'narrativeChoices', { owner: 'work' }),
     readOwnedRows<StableRow>(scope, 'references', { owner: 'work' }),
     db.works.get(scope.workId),
+    readOwnedRows<StableRow>(scope, 'creativeRules', { owner: 'work' }),
+    readOwnedRows<StableRow>(scope, 'storyCores', { owner: 'work' }),
+    readOwnedRows<StableRow>(scope, 'stateCards', { owner: 'work' }),
+    readOwnedRows<StableRow>(scope, 'itemLedger', { owner: 'work' }),
+    readOwnedRows<StableRow>(scope, 'storyTimelineEvents', { owner: 'work' }),
+    readOwnedRows<StableRow>(scope, 'cultivationProgress', { owner: 'work' }),
+    readOwnedRows<StableRow>(scope, 'userStyleProfiles', { owner: 'work' }),
   ])
+  if (!work || work.projectId !== scope.projectId || work.worldId !== scope.worldId) throw new Error('正文的作品意图缺少当前 Work。')
+  const authorIntentKey = workAuthoringIntentResourceKeyV1(work)
+  const enabledStyles = styleProfiles.filter(row => row.enabled === true && typeof row.profile === 'string' && row.profile.trim())
+  const styleKeys = await Promise.all(enabledStyles.map(row => canonRowResourceKeysV1('userStyleProfiles', { ...row, projectId: scope.projectId })))
+  const styleOriginals = unique(styleKeys.flatMap(keys => ['profile', 'revisionPairs', 'calibrationFeedback'].map(field => keys.fields[field] ?? '')))
   const targetChapter = input.chapterId == null
     ? undefined
     : chapters.find(row => row.id === input.chapterId)
@@ -133,6 +152,10 @@ export async function prepareProseGatewayAssemblyV1(input: {
   const outlineOriginals = ['title', 'summary'].flatMap(field => outlineResources.fields[field] ? [outlineResources.fields[field]] : [])
   const detailOriginals = ['scenes', 'openingHook', 'endingCliffhanger', 'prohibitions', 'emotionArc']
     .flatMap(field => detailResources.fields[field] ? [detailResources.fields[field]] : [])
+  const rulesResources = await canonRowResourceKeysV1('creativeRules', rulesRows[0] ? { ...rulesRows[0], projectId: scope.projectId } : undefined)
+  const storyCoreResources = await canonRowResourceKeysV1('storyCores', storyCoreRows[0] ? { ...storyCoreRows[0], projectId: scope.projectId } : undefined)
+  const rulesOriginals = Object.values(rulesResources.fields)
+  const storyCoreOriginals = Object.values(storyCoreResources.fields)
   const detailRecord = detailResources.record
   const targetOutlineRecord = outlineResources.record!
   const previousContinuity = previous?.chapter.ragDocumentId
@@ -147,16 +170,23 @@ export async function prepareProseGatewayAssemblyV1(input: {
   const stageKeys = worldArcs.flatMap(row => typeof row.stages === 'string'
     ? parseStages(row.stages).map(stage => `story-arc:${row.ragDocumentId}:stage:${encodeURIComponent(stage.id)}`)
     : [])
-  const progressKeys = progress
+  const visibleProgress = progress
     .filter(row => row.ragDocumentId && worldArcs.some(arc => arc.id === row.arcId))
+    .filter(row => row.lastActiveChapterId == null || (typeof row.lastActiveChapterId === 'number' && chapterOrder.has(row.lastActiveChapterId) && chapterOrder.get(row.lastActiveChapterId)! <= targetIndex))
+  const progressKeys = visibleProgress
     .map(row => `storyline-progress:${row.ragDocumentId}`)
 
-  const factKeys = facts.filter(row => {
+  const visibleFacts = facts.filter(row => {
     if (!row.ragDocumentId || !inWorld(row, input.worldGroupId) || row.status !== 'confirmed') return false
+    for (const field of ['validFromChapterId', 'validToChapterId', 'sourceChapterId']) {
+      if (row[field] != null && (typeof row[field] !== 'number' || !chapterOrder.has(row[field] as number))) return false
+    }
     const from = typeof row.validFromChapterId === 'number' ? chapterOrder.get(row.validFromChapterId) : undefined
     const to = typeof row.validToChapterId === 'number' ? chapterOrder.get(row.validToChapterId) : undefined
-    return (from == null || from <= targetIndex) && (to == null || targetIndex < to)
-  }).map(row => `fact:${row.ragDocumentId}`)
+    const source = typeof row.sourceChapterId === 'number' ? chapterOrder.get(row.sourceChapterId) : undefined
+    return (from == null || from <= targetIndex) && (to == null || targetIndex < to) && (source == null || source <= targetIndex)
+  })
+  const factKeys = visibleFacts.map(row => `fact:${row.ragDocumentId}`)
 
   const perspective = perspectiveCharacterId == null
     ? undefined
@@ -165,11 +195,30 @@ export async function prepareProseGatewayAssemblyV1(input: {
     throw new Error('视角角色缺失、越界或没有稳定资源身份。')
   }
   const perspectiveKeys = perspective?.ragDocumentId ? [`character:${perspective.ragDocumentId}`] : []
-  const knowledgeKeys = perspectiveCharacterId == null ? [] : knowledge.filter(row => {
-    if (!row.ragDocumentId || row.characterId !== perspectiveCharacterId || row.status !== 'confirmed') return false
+  const visibleKnowledge = perspectiveCharacterId == null ? [] : knowledge.filter(row => {
+    if (!row.ragDocumentId || !inWorld(row, input.worldGroupId) || row.characterId !== perspectiveCharacterId || row.status !== 'confirmed') return false
+    if (row.sourceChapterId != null && (typeof row.sourceChapterId !== 'number' || !chapterOrder.has(row.sourceChapterId))) return false
     const sourceIndex = typeof row.sourceChapterId === 'number' ? chapterOrder.get(row.sourceChapterId) : undefined
     return sourceIndex == null || sourceIndex <= targetIndex
-  }).map(row => `fact:${row.ragDocumentId}`)
+  })
+  const knowledgeKeys = visibleKnowledge.map(row => `fact:${row.ragDocumentId}`)
+  const futureLedgerRows = [
+    ...states.map(row => ({ table: 'stateCards', row, boundary: row.lastChapterId })),
+    ...items.map(row => ({ table: 'itemLedger', row, boundary: row.chapterId })),
+    ...timeline.map(row => ({ table: 'storyTimelineEvents', row, boundary: row.chapterId })),
+    ...cultivation.map(row => ({ table: 'cultivationProgress', row, boundary: row.sourceChapterId })),
+  ].filter(({ row, boundary }) => row.ragDocumentId && boundary != null
+    && (typeof boundary !== 'number' || !chapterOrder.has(boundary) || chapterOrder.get(boundary)! > targetIndex))
+  const futureLedgerKeys = await Promise.all(futureLedgerRows.map(async ({ table, row }) => (
+    (await canonRowResourceKeysV1(table, { ...row, projectId: scope.projectId })).record ?? ''
+  )))
+  const excludedRecordResourceKeys = unique([
+    ...futureLedgerKeys,
+    ...facts.filter(row => row.ragDocumentId && !visibleFacts.includes(row)).map(row => `fact:${row.ragDocumentId}`),
+    ...knowledge.filter(row => row.ragDocumentId && !visibleKnowledge.includes(row)).map(row => `fact:${row.ragDocumentId}`),
+    ...progress.filter(row => row.ragDocumentId && !visibleProgress.includes(row)).map(row => `storyline-progress:${row.ragDocumentId}`),
+    ...chapters.filter(row => row.ragDocumentId && (row.id == null || !chapterOrder.has(row.id) || chapterOrder.get(row.id)! > targetIndex)).map(row => `chapter:${row.ragDocumentId}`),
+  ])
 
   const activeModuleId = work?.activeNarrativeModuleId ?? null
   const activeModule = activeModuleId == null ? undefined : modules.find(row => row.id === activeModuleId)
@@ -197,8 +246,12 @@ export async function prepareProseGatewayAssemblyV1(input: {
   const citedReferenceKeys = references
     .filter(row => row.ragDocumentId && input.citedReferenceIds?.includes(Number(row.id)))
     .map(row => `reference:${row.ragDocumentId}`)
-  const mandatoryOriginalResourceKeys = unique([...outlineOriginals, ...detailOriginals])
+  const targetTextResources = targetChapter && (input.operation === 'review' || input.operation === 'revise')
+    ? await canonRowResourceKeysV1('chapters', { ...targetChapter, projectId: scope.projectId }) : null
+  const targetTextOriginal = targetTextResources?.fields.content
+  const mandatoryOriginalResourceKeys = unique([...outlineOriginals, ...detailOriginals, ...rulesOriginals, ...storyCoreOriginals, ...styleOriginals, ...(targetTextOriginal ? [targetTextOriginal] : [])])
   const mandatoryFullResourceKeys = unique([
+    authorIntentKey,
     targetOutlineRecord,
     ...(detailRecord ? [detailRecord] : []),
     ...previousContinuity,
@@ -222,7 +275,7 @@ export async function prepareProseGatewayAssemblyV1(input: {
     characterId: perspectiveCharacterId,
     query: [
       input.authorRequest,
-      `正文${input.operation}：落实本章章纲、细纲和禁止项，遵守当前故事阶段、直接连续性、视角角色认知、已确认事实和激活叙事蓝图；按需召回长尾世界设定、早期伏笔与远章原文。`,
+      `正文${input.operation}：读取本作品创作规则与故事核心，按场景顺序落实本章章纲、细纲和禁止项，遵守当前故事阶段、直接连续性、视角角色认知、已确认事实和激活叙事蓝图；场景退出状态、奖励与成长是计划，尚未成为已发生事实。按需召回长尾世界设定、早期伏笔与远章原文。`,
       String(targetOutline.title ?? ''),
       String(targetOutline.summary ?? ''),
     ].filter(Boolean).join('\n'),
@@ -230,12 +283,16 @@ export async function prepareProseGatewayAssemblyV1(input: {
     mandatoryResourceKeys,
     mandatoryFullResourceKeys,
     mandatoryOriginalResourceKeys,
+    excludedRecordResourceKeys,
     targetResourceKeys: unique([
+      authorIntentKey,
       targetOutlineRecord,
       ...(detailRecord ? [detailRecord] : []),
       ...(dossierKey ? [dossierKey] : []),
       ...perspectiveKeys,
       ...arcKeys,
+      ...rulesOriginals,
+      ...storyCoreOriginals,
     ]),
     entityKeys: perspectiveKeys,
     storyArcKeys: arcKeys,

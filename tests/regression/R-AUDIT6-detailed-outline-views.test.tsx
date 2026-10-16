@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import DetailedOutlineSidebar from '../../src/components/outline/DetailedOutlineSidebar'
 import DetailedSceneCard from '../../src/components/outline/DetailedSceneCard'
 import type { DetailedOutline, DetailedScene, OutlineNode } from '../../src/lib/types'
+import { flushPendingEditsV1, resetPendingEditCoordinatorForTestsV1 } from '../../src/lib/authoring/pending-edit-coordinator'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -15,6 +16,7 @@ afterEach(async () => {
     await act(async () => item.root.unmount())
     item.host.remove()
   }
+  resetPendingEditCoordinatorForTestsV1()
 })
 
 async function mount(component: ReturnType<typeof createElement>) {
@@ -63,6 +65,41 @@ const scene: DetailedScene = {
 }
 
 describe('AUDIT-6 / HEALTH-4 · 细纲受控视图', () => {
+  it('场景本地输入不会被旧回执抹去，保存失败阻止导航，完整重试才解除错误', async () => {
+    const onUpdate = vi.fn().mockRejectedValueOnce(new Error('模拟保存失败')).mockResolvedValue(undefined)
+    const host = await mount(createElement(DetailedSceneCard, { scene, index: 0, onUpdate, onDelete: vi.fn() }))
+    const goal = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="场景1 · 本场目标"]')!
+    await act(async () => setControlValue(goal, '作者尚未保存的目标'))
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('模拟保存失败')
+    expect(goal.value).toBe('作者尚未保存的目标')
+    await expect(flushPendingEditsV1()).rejects.toThrow('模拟保存失败')
+    const notes = host.querySelector<HTMLTextAreaElement>('textarea[placeholder="备注 / AI 建议..."]')!
+    await act(async () => setControlValue(notes, '随后修改的备注'))
+    expect(host.querySelector('[role="alert"]')).not.toBeNull()
+    expect(goal.value).toBe('作者尚未保存的目标')
+    const retry = Array.from(host.querySelectorAll('button')).find(button => button.textContent === '重试保存')!
+    await act(async () => retry.click())
+    expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ goal: '作者尚未保存的目标', notes: '随后修改的备注' }))
+    expect(onUpdate.mock.lastCall?.[0]).not.toHaveProperty('sceneId')
+    expect(host.querySelector('[role="alert"]')).toBeNull()
+    await expect(flushPendingEditsV1()).resolves.toMatchObject({ version: 1 })
+  })
+
+  it('输入期间仍可继续编辑，待保存写入成功后才放行正式跳转', async () => {
+    let release!: () => void
+    const pending = new Promise<void>(resolve => { release = resolve })
+    const host = await mount(createElement(DetailedSceneCard, { scene, index: 0, onUpdate: () => pending, onDelete: vi.fn() }))
+    const goal = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="场景1 · 本场目标"]')!
+    await act(async () => setControlValue(goal, '等待保存的目标'))
+    expect(goal.value).toBe('等待保存的目标')
+    let flushed = false
+    const flush = flushPendingEditsV1().then(() => { flushed = true })
+    await Promise.resolve()
+    expect(flushed).toBe(false)
+    await act(async () => { release(); await flush })
+    expect(flushed).toBe(true)
+  })
+
   it('章节侧栏标识已有细纲并转发选择与批量命令', async () => {
     const onSelect = vi.fn()
     const onBatchStart = vi.fn()
@@ -77,7 +114,8 @@ describe('AUDIT-6 / HEALTH-4 · 细纲受控视图', () => {
     }))
 
     expect(host.querySelector('button[aria-pressed="true"]')?.textContent).toContain('第一章')
-    expect(host.querySelector('[title="有细纲"]')?.parentElement?.textContent).toContain('第二章')
+    expect(host.querySelector('[title="已保存细纲"]')).toBeNull()
+    expect(Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('第二章'))?.textContent).toContain('未规划')
     const second = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('第二章'))!
     await act(async () => second.click())
     expect(onSelect).toHaveBeenCalledWith(12)

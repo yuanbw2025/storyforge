@@ -1,7 +1,8 @@
 import { db } from '../../db/schema'
-import { normalizeProseForEditorV1 } from '../../utils/html'
+import { observeDuplicatedProseFrameV1 } from '../../prose/provider-frame-observation'
+import { normalizeProseForEditorV1, plainTextToHtml } from '../../utils/html'
 import { adopt } from '../../registry/adopt'
-import { hashChapterText, normalizeChapterText, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../../ai/chapter-memory/text-normalization'
+import { hashChapterText, normalizeChapterText, sha256Text, CHAPTER_TEXT_NORMALIZATION_VERSION } from '../../ai/chapter-memory/text-normalization'
 import type { AgentConversation, AgentEvent, Chapter, ChatMessage, WorkspaceScope } from '../../types'
 import type {
   AgentRunFormalAIEntryBindingV1,
@@ -51,6 +52,7 @@ import type {
   AgentRunContractV2,
   AgentRunContractV3,
   AgentRunStepExecutionBindingV2,
+  AgentRunRecord,
   AgentSkillExecutionBindingV1,
   AgentSkillExecutionBindingV2,
 } from '../../types/agent-run'
@@ -66,11 +68,18 @@ import {
 import {
   finalizeContextGatewayAttemptEvidenceV1,
   recordContextGatewayPreflightEvidenceV1,
+  verifyContextGatewayCandidateEvidenceV1,
   type ContextGatewayPreflightEvidenceV1,
 } from '../../context-gateway/attempt-evidence'
 import type { ContextGatewayExecutionV1 } from '../../context-gateway/execution'
 import { assertContextGatewayCandidateAdoptableV1 } from '../../context-gateway/execution'
 import { proseGatewayExecutionFromAssemblyV1 } from '../../prose/gateway-context'
+import { proseRenderedRequestV1 } from '../../prose/request-evidence'
+import type { AIRequestSettingsV1 } from '../../ai/client'
+import { parseProseLengthObservationV1, type ProseLengthObservationV1 } from '../../prose/length-observation'
+import { recordAgentRunArtifactV1, readAgentRunArtifactExactV1 } from '../../memory/artifact-store'
+import { QUALITY_RECHECK_STEP_V1, verifyQualityRevisionEvidenceV1, type QualityRevisionEvidenceV1 } from '../../prose/quality-revision-evidence'
+import { parseQualityRecheckV1 } from '../../prose/quality-recheck'
 
 export const PROSE_GENERATION_STEP_ID_V1 = 'prose-generation'
 export const PROSE_SEMANTIC_REVIEW_STEP_ID_V1 = 'prose-semantic-review'
@@ -80,10 +89,10 @@ export const PROSE_GENERATION_VERIFIER_SET_V2 = 'prose-generation-terminal-v2-in
 export const PROSE_GENERATION_VERIFIER_SET_V3 = 'prose-generation-terminal-v3-semantic-review'
 export const PROSE_GENERATION_CANDIDATE_TYPE_V1 = 'prose-generation-candidate'
 
-export type ProseGenerationOperationV1 = 'generate' | 'continue'
+export type ProseGenerationOperationV1 = 'generate' | 'continue' | 'quality-revise'
 
 export function proseGenerationFormalEntryIdV1(operation: ProseGenerationOperationV1): string {
-  return operation === 'continue' ? 'prose.chapter.continue' : 'prose.chapter.generate'
+  return operation === 'quality-revise' ? 'prose.chapter.quality-revise' : operation === 'continue' ? 'prose.chapter.continue' : 'prose.chapter.generate'
 }
 
 export async function resolveProseGenerationExecutionBindingV2(input: {
@@ -120,6 +129,7 @@ export interface ProseGenerationSemanticReviewEvidenceV1 {
 }
 
 export interface ProseGenerationCandidateV1 {
+  lengthObservation?: ProseLengthObservationV1
   version: 1
   type: typeof PROSE_GENERATION_CANDIDATE_TYPE_V1
   projectId: number
@@ -141,6 +151,7 @@ export interface ProseGenerationCandidateV1 {
   perspectiveFromChapter?: boolean
   /** Absent on candidates created before HARNESS-19. */
   semanticReview?: ProseGenerationSemanticReviewEvidenceV1
+  qualityRevision?: QualityRevisionEvidenceV1
   createdAt: number
   durable: ProseGenerationDurableEvidenceV1
 }
@@ -155,14 +166,14 @@ export function buildProseGenerationRunContractV1(input: {
 }) {
   const semanticReview = input.semanticReview === true
   const generationSkill = getAgentSkillV1(
-    input.operation === 'continue' ? 'prose.continue' : 'prose.generate',
+    `prose.${input.operation}`,
     'prose',
   )
   const reviewSkill = getAgentSkillV1('prose.review', 'prose')
   const revisionSkill = getAgentSkillV1('prose.revise', 'prose')
   return {
     version: 1 as const,
-    objective: `${input.operation === 'continue' ? '续写' : '生成'}章节 #${input.chapterId} 正文候选，并等待作者确认后写回`,
+    objective: `${input.operation === 'quality-revise' ? '定向修订' : input.operation === 'continue' ? '续写' : '生成'}章节 #${input.chapterId} 正文候选，并等待作者确认后写回`,
     workflowKind: semanticReview ? 'generate-verify-revise' as const : 'long-running-resumable' as const,
     scope: {
       projectId: input.projectId,
@@ -303,9 +314,10 @@ function requiresSemanticReview(snapshot: AgentRunSnapshotV1): boolean {
 export function assertProseGenerationExecutionBindingsV1(snapshot: AgentRunSnapshotV1): void {
   const executionBindings = snapshot.contract.executionBindings
   if (!executionBindings) throw new Error('正文生成 RunContract 缺少当前 execution bindings。')
-  const operation = snapshot.contract.objective.startsWith('续写') ? 'continue' : 'generate'
+  const operation = snapshot.contract.executionBindings?.find(binding => binding.stepId === PROSE_GENERATION_STEP_ID_V1)?.skillId === 'prose.quality-revise' ? 'quality-revise' : snapshot.contract.objective.startsWith('续写') ? 'continue' : 'generate'
   const expected = new Map<string, ReturnType<typeof getAgentSkillV1>>([
     [PROSE_GENERATION_STEP_ID_V1, getAgentSkillV1(`prose.${operation}`, 'prose')],
+    ...(operation === 'quality-revise' ? [[QUALITY_RECHECK_STEP_V1, getAgentSkillV1('prose.quality-recheck', 'prose')]] as const : []),
     ...(requiresSemanticReview(snapshot) ? [
       [PROSE_SEMANTIC_REVIEW_STEP_ID_V1, getAgentSkillV1('prose.review', 'prose')],
       [PROSE_SEMANTIC_REVISION_STEP_ID_V1, getAgentSkillV1('prose.revise', 'prose')],
@@ -423,6 +435,31 @@ function verifySemanticReviewDurableEvidence(
   })
 }
 
+function verifyQualityRevisionDurableEvidence(snapshot: AgentRunSnapshotV1, candidate: ProseGenerationCandidateV1): boolean {
+  if (candidate.operation !== 'quality-revise') return candidate.qualityRevision === undefined
+  const evidence = candidate.qualityRevision
+  const step = snapshot.projection.steps[QUALITY_RECHECK_STEP_V1]
+  return !!evidence && snapshot.contract.runtimeBindingHash === evidence.plan.planHash
+    && step?.status === 'succeeded' && step.outputHash === evidence.recheck.artifactHash
+    && snapshot.events.some(event => event.type === 'context.assembled' && event.payload.stepId === QUALITY_RECHECK_STEP_V1 && event.payload.manifestHash === evidence.recheckManifestHash)
+}
+
+async function verifyQualityRevisionGatewayEvidence(scope: WorkspaceScope, candidate: ProseGenerationCandidateV1): Promise<boolean> {
+  try {
+    const metadata = candidate.qualityRevision!
+    const verified = await verifyContextGatewayCandidateEvidenceV1({ scope, runId: candidate.durable.runId, stepId: QUALITY_RECHECK_STEP_V1, attempt: 1, candidateHash: metadata.recheck.artifactHash })
+    if (verified.manifest.manifestHash !== metadata.recheckManifestHash) return false
+    const rawRef = verified.manifest.artifacts.find(ref => ref.role === 'raw-response')!
+    const requestRef = verified.manifest.artifacts.find(ref => ref.role === 'rendered-request')!
+    const raw = JSON.parse(await readAgentRunArtifactExactV1({ projectId: scope.projectId, artifactKind: 'raw-response', contentHash: rawRef.contentHash }))
+    const request = JSON.parse(await readAgentRunArtifactExactV1({ projectId: scope.projectId, artifactKind: 'rendered-request', contentHash: requestRef.contentHash }))
+    if (raw.version !== 'quality-recheck-response-v1' || raw.recheck.artifactHash !== metadata.recheck.artifactHash
+      || await hashCanonicalValue(request.messages) !== await hashCanonicalValue(metadata.recheckMessages)) return false
+    const parsed = await parseQualityRecheckV1({ raw: raw.raw, plan: metadata.plan, candidateText: candidate.outputText, messages: request.messages, settings: request.settings, completion: 'complete', createdAt: metadata.recheck.review.createdAt })
+    return parsed.artifactHash === metadata.recheck.artifactHash
+  } catch { return false }
+}
+
 export async function createProseGenerationDurableRunV1(input: {
   scope: WorkspaceScope
   worldGroupId: number | null
@@ -502,6 +539,7 @@ export async function beginProseGenerationGatewayStepV1(input: {
   outlineNodeId: number
   assembled: AssembleContextResult
   messages: ChatMessage[]
+  requestSettings?: AIRequestSettingsV1
   binding: {
     operation: ProseGenerationOperationV1
     sourceTextHash: string
@@ -518,6 +556,9 @@ export async function beginProseGenerationGatewayStepV1(input: {
   }
   const execution = proseGatewayExecutionFromAssemblyV1(input.assembled)
   if (!execution) throw new Error('正式正文生成缺少 required Context Gateway 执行结果。')
+  if (!input.messages.some(message => message.content.includes(execution.contextPacket.content))) {
+    throw new Error('正文请求未完整包含已冻结的必读资料，已阻止模型调用。')
+  }
   const formalEntry = frozen?.formalEntry
   if (!formalEntry) throw new Error('正文生成 RunContract 缺少 FormalAIEntry snapshot。')
   const entry = await assertFormalAIEntrySnapshotIntegrityV1(formalEntry)
@@ -545,7 +586,7 @@ export async function beginProseGenerationGatewayStepV1(input: {
     attempt: 1,
     contextPacket: execution.contextPacket,
     selector: execution.selector,
-    renderedRequest: input.messages,
+    renderedRequest: input.requestSettings ? proseRenderedRequestV1(input.messages, input.requestSettings) : input.messages,
     sourceSnapshots: execution.sourceSnapshots,
     toolTranscript: execution.toolTranscript,
     expectedLastSequence: snapshot.projection.lastSequence,
@@ -572,6 +613,7 @@ export async function finalizeProseGenerationGatewayStepV1(input: {
   snapshot: AgentRunSnapshotV1
   attempt: ProseGatewayAttemptV1
   output: string
+  lengthObservation?: ProseLengthObservationV1
   usedTokens?: number
 }): Promise<{ snapshot: AgentRunSnapshotV1; manifest: ContextManifestV3 }> {
   const outputHash = await hashCanonicalValue(input.output)
@@ -600,7 +642,7 @@ export async function finalizeProseGenerationGatewayStepV1(input: {
     retrievalTrace: input.attempt.execution.retrievalTrace,
     gatewayVersionHash: input.attempt.execution.contextPacket.gatewayVersionHash,
     policyHash: input.attempt.execution.contextPacket.policyHash,
-    rawResponse: input.output,
+    rawResponse: input.lengthObservation ? { version: 'prose-observed-response-v1', text: input.output, length: parseProseLengthObservationV1(input.lengthObservation) } : input.output,
     candidateHash: outputHash,
     expectedLastSequence: snapshot.projection.lastSequence,
   })
@@ -718,7 +760,7 @@ function isProseGenerationCandidate(value: unknown): value is ProseGenerationCan
     && candidate.type === PROSE_GENERATION_CANDIDATE_TYPE_V1
     && typeof candidate.projectId === 'number'
     && typeof candidate.chapterId === 'number'
-    && (candidate.operation === 'generate' || candidate.operation === 'continue')
+    && (candidate.operation === 'generate' || candidate.operation === 'continue' || (candidate.operation === 'quality-revise' && candidate.qualityRevision?.version === 1))
     && typeof candidate.sourceTextHash === 'string'
     && typeof candidate.outputText === 'string'
     && typeof candidate.outputTextHash === 'string'
@@ -741,6 +783,7 @@ function isProseGenerationCandidate(value: unknown): value is ProseGenerationCan
   if (!valid) return false
   try {
     candidate.contentRevision = parseWorkspaceContentRevisionV1(candidate.contentRevision)
+    if (candidate.lengthObservation !== undefined) candidate.lengthObservation = parseProseLengthObservationV1(candidate.lengthObservation)
   } catch {
     return false
   }
@@ -750,6 +793,7 @@ function isProseGenerationCandidate(value: unknown): value is ProseGenerationCan
 export async function hashProseGenerationCandidateV1(
   candidate: Omit<ProseGenerationCandidateV1, 'durable'>,
 ): Promise<string> {
+  if (candidate.operation === 'quality-revise') return hashCanonicalValue(candidate)
   // ContextManifestV3 already binds the exact response/candidate hash. Using
   // outputTextHash avoids a circular hash through durable.contextManifestHash.
   return candidate.outputTextHash
@@ -762,6 +806,12 @@ export async function persistProseGenerationCandidateV1(input: {
   const { durable, ...candidateBody } = input.candidate
   if (await hashProseGenerationCandidateV1(candidateBody) !== durable.candidateHash) {
     throw new Error('正文生成候选 hash 不匹配。')
+  }
+  if (input.candidate.operation === 'quality-revise') {
+    const snapshot = await readAgentRunV1(input.scope, durable.runId)
+    if (!input.candidate.qualityRevision || !await verifyQualityRevisionEvidenceV1(input.candidate.qualityRevision, input.candidate.outputText)
+      || !verifyQualityRevisionDurableEvidence(snapshot, input.candidate)
+      || !await verifyQualityRevisionGatewayEvidence(input.scope, input.candidate)) throw new Error('范围修订候选没有完整的保护与复核证据。')
   }
   if (input.candidate.semanticReview && !await verifySemanticReviewEvidence(input.candidate)) {
     throw new Error('正文生成候选的语义评审证据无效。')
@@ -858,6 +908,7 @@ export async function recordProseGenerationCandidateV1(input: {
 export async function readLatestProseGenerationCandidateV1(input: {
   scope: WorkspaceScope
   chapterId: number
+  operations?: ProseGenerationOperationV1[]
 }): Promise<ProseGenerationCandidateV1 | null> {
   const events = await readOwnedRows<AgentEvent>(input.scope, 'agentEvents', { owner: 'work' })
   const matches = events
@@ -869,9 +920,67 @@ export async function readLatestProseGenerationCandidateV1(input: {
       && isProseGenerationCandidate(value.value)
       && value.value.chapterId === input.chapterId
       && value.value.projectId === input.scope.projectId
+      && (input.operations ?? ['generate', 'continue']).includes(value.value.operation)
     ))
     .sort((left, right) => right.event.createdAt - left.event.createdAt)
   return matches[0]?.value ?? null
+}
+
+export interface InterruptedProseGenerationV1 {
+  version: 'prose-interrupted-response-v1'
+  outputText: string
+  completion: 'cancelled' | 'failed' | 'unknown'
+  message: string
+}
+
+/** Keep the received bytes as run evidence. This is never a candidate or an adoption. */
+export async function recordInterruptedProseGenerationV1(input: {
+  scope: WorkspaceScope
+  snapshot: AgentRunSnapshotV1
+  response: InterruptedProseGenerationV1
+}): Promise<AgentRunSnapshotV1> {
+  const step = input.snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
+  if (!step || step.status !== 'running') throw new Error('中断片段缺少正在执行的正文步骤。')
+  const recorded = await recordAgentRunArtifactV1({
+    scope: input.scope,
+    runId: input.snapshot.run.id,
+    stepId: PROSE_GENERATION_STEP_ID_V1,
+    attempt: step.attempt,
+    artifactKind: 'raw-response',
+    content: JSON.stringify(input.response),
+    expectedLastSequence: input.snapshot.projection.lastSequence,
+  })
+  return recorded.snapshot
+}
+
+/** A historical fragment may be read after refresh, with no write authority. */
+export async function readLatestInterruptedProseGenerationV1(input: {
+  scope: WorkspaceScope
+  chapterId: number
+}): Promise<(InterruptedProseGenerationV1 & { operation: ProseGenerationOperationV1 }) | null> {
+  const chapter = await db.chapters.get(input.chapterId)
+  if (!chapter || !await assertRecordInScope(input.scope, 'chapters', chapter, { owner: 'work' })) return null
+  const runs = await readOwnedRows<AgentRunRecord>(input.scope, 'agentRuns', { owner: 'work' })
+  const matching = runs.filter(run => {
+    try {
+      const contract = JSON.parse(run.contractJson)
+      return contract.scope?.chapterIds?.length === 1 && contract.scope.chapterIds[0] === input.chapterId
+        && contract.executionBindings?.some((binding: { stepId: string }) => binding.stepId === PROSE_GENERATION_STEP_ID_V1)
+    } catch { return false }
+  }).sort((left, right) => right.createdAt - left.createdAt || (right.id ?? 0) - (left.id ?? 0))
+  const latest = matching[0]
+  if (!latest?.id) return null
+  const snapshot = await readAgentRunV1(input.scope, latest.id)
+  if (snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]?.status !== 'failed') return null
+  const evidence = [...snapshot.events].reverse().find(event => event.type === 'evidence.artifact.recorded'
+    && event.payload.artifactKind === 'raw-response' && event.payload.stepId === PROSE_GENERATION_STEP_ID_V1)
+  if (!evidence || evidence.type !== 'evidence.artifact.recorded') return null
+  const content = await readAgentRunArtifactExactV1({ projectId: input.scope.projectId, artifactKind: 'raw-response', contentHash: evidence.payload.contentHash })
+  let row: InterruptedProseGenerationV1
+  try { row = JSON.parse(content) } catch { return null }
+  if (!row || row.version !== 'prose-interrupted-response-v1' || typeof row.outputText !== 'string'
+    || !['cancelled', 'failed', 'unknown'].includes(row.completion) || typeof row.message !== 'string') return null
+  return { ...row, operation: snapshot.contract.objective.startsWith('续写') ? 'continue' : 'generate' }
 }
 
 /** Preserve the generation receipt and append an explicit author revision before adoption. */
@@ -881,6 +990,7 @@ export async function reviseProseGenerationCandidateV1(input: {
   outputText: string
 }): Promise<ProseGenerationCandidateV1> {
   const previous = input.candidate
+  if (previous.operation === 'quality-revise') throw new Error('范围修订不能直接编辑整章候选；请在作者原稿中修改或重新选择修订范围。')
   const outputText = input.outputText
   if (!normalizeProseForEditorV1(outputText).trim()) throw new Error('正文候选不能为空。')
   if (outputText === previous.outputText) return previous
@@ -897,9 +1007,9 @@ export async function reviseProseGenerationCandidateV1(input: {
     ...previous,
     outputText,
     outputTextHash,
-    expectedContentHash: await hashChapterText(previous.operation === 'continue'
+    expectedContentHash: await hashChapterText(plainTextToHtml(previous.operation === 'continue'
       ? [normalizeChapterText(chapter.content ?? ''), normalizeProseForEditorV1(outputText)].filter(Boolean).join('\n')
-      : normalizeProseForEditorV1(outputText)),
+      : normalizeProseForEditorV1(outputText))),
     durable: { ...previous.durable, candidateHash: outputTextHash },
   }
   if (!await isProseGenerationCandidateCurrentV1(revised)) {
@@ -948,6 +1058,9 @@ export async function isProseGenerationCandidateCurrentV1(
 ): Promise<boolean> {
   const chapter = await db.chapters.get(candidate.chapterId)
   if (!chapter || await hashChapterText(chapter.content ?? '') !== candidate.sourceTextHash) return false
+  if (candidate.operation === 'quality-revise' && (!candidate.qualityRevision
+    || candidate.qualityRevision.sourceHtmlHash !== await sha256Text(chapter.content ?? '')
+    || !await verifyQualityRevisionEvidenceV1(candidate.qualityRevision, candidate.outputText))) return false
   const { durable, ...candidateBody } = candidate
   if (await hashProseGenerationCandidateV1(candidateBody) !== durable.candidateHash) return false
   if (candidate.semanticReview && !await verifySemanticReviewEvidence(candidate)) return false
@@ -957,6 +1070,15 @@ export async function isProseGenerationCandidateCurrentV1(
     await readAgentRunV1(scope, candidate.durable.runId)
   } catch {
     return false
+  }
+  if (candidate.operation === 'quality-revise') {
+    const snapshot = await readAgentRunV1(scope, candidate.durable.runId)
+    if (!verifyQualityRevisionDurableEvidence(snapshot, candidate)
+      || !await verifyQualityRevisionGatewayEvidence(scope, candidate)
+      || candidate.qualityRevision!.plan.scope.workId !== scope.workId
+      || candidate.qualityRevision!.plan.scope.worldId !== scope.worldId
+      || candidate.qualityRevision!.plan.chapterId !== candidate.chapterId) return false
+    try { await assertWorkspaceContentRevisionFreshV1(candidate.contentRevision, { scope, worldGroupId: candidate.worldGroupId }) } catch { return false }
   }
   if (candidate.semanticReview) {
     try {
@@ -1104,6 +1226,9 @@ export async function commitProseGenerationAdoptionV1(input: {
   contentHtml: string
   wordCount: number
 }): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1 }> {
+  const frame = observeDuplicatedProseFrameV1(input.candidate.outputText)
+  if (frame) throw new Error(frame.message)
+  if (input.candidate.operation === 'quality-revise' && input.contentHtml !== input.candidate.qualityRevision?.contentHtml) throw new Error('范围修订待写回的富文本与冻结候选不一致。')
   try {
     await assertWorkspaceContentRevisionFreshV1(input.candidate.contentRevision, {
       scope: input.scope,
@@ -1193,6 +1318,7 @@ export async function commitProseGenerationAdoptionV1(input: {
       compareAndSet: {
         kind: 'chapter-source-text-hash',
         expectedHash: input.candidate.sourceTextHash,
+        ...(input.candidate.qualityRevision ? { expectedContentHash: input.candidate.qualityRevision.sourceHtmlHash } : {}),
         textNormalizationVersion: CHAPTER_TEXT_NORMALIZATION_VERSION,
       },
     })
@@ -1250,6 +1376,12 @@ export async function verifyProseGenerationRunV1(input: {
   candidate: ProseGenerationCandidateV1
   snapshot?: AgentRunSnapshotV1
 }): Promise<{ snapshot: AgentRunSnapshotV1; receiptHash: string; receipt?: VerificationReceiptV1 }> {
+  if (input.candidate.operation === 'quality-revise') {
+    const state = input.snapshot ?? await readAgentRunV1(input.scope, input.runId)
+    if (!input.candidate.qualityRevision || !await verifyQualityRevisionEvidenceV1(input.candidate.qualityRevision, input.candidate.outputText)
+      || !verifyQualityRevisionDurableEvidence(state, input.candidate)
+      || !await verifyQualityRevisionGatewayEvidence(input.scope, input.candidate)) throw new Error('范围修订保护与复核证据不一致，不能通过终验。')
+  }
   let snapshot = input.snapshot ?? await readAgentRunV1(input.scope, input.runId)
   if (snapshot.projection.state === 'completed' && snapshot.run.terminalReceiptHash) {
     return { snapshot, receiptHash: snapshot.run.terminalReceiptHash }
@@ -1317,6 +1449,7 @@ export async function verifyProseGenerationRunV1(input: {
     contractHash: snapshot.projection.contractHash,
     contextManifestHashes: [...new Set([
       input.candidate.durable.contextManifestHash,
+      ...(input.candidate.qualityRevision ? [input.candidate.qualityRevision.recheckManifestHash] : []),
       ...(input.candidate.semanticReview ? [
         input.candidate.semanticReview.initial.contextManifestHash,
         input.candidate.semanticReview.final.contextManifestHash,
@@ -1351,6 +1484,10 @@ export async function verifyProseGenerationRunV1(input: {
         ],
       }] : []),
       { id: 'prose-generation.confirmed', status: 'passed', evidenceRefs: [`run:${input.runId}:confirmation`] },
+      ...(input.candidate.qualityRevision ? [
+        { id: 'quality-revision.scope', status: 'passed' as const, evidenceRefs: [`plan:${input.candidate.qualityRevision.plan.planHash}`] },
+        { id: 'quality-revision.recheck', status: 'passed' as const, evidenceRefs: [`recheck:${input.candidate.qualityRevision.recheck.artifactHash}`] },
+      ] : []),
       { id: 'prose-generation.adopted', status: 'passed', evidenceRefs: [`event:${adoptionRecord.id}`] },
       { id: 'prose-generation.post-state', status: 'passed', evidenceRefs: [`post-state:${postStateHash}`] },
     ],

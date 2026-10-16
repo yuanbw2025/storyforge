@@ -1,11 +1,24 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createChapterGenerationNode } from '../../src/lib/generation/chapter-generation-node'
+import { createChapterGenerationNode, InterruptedChapterGenerationErrorV1 } from '../../src/lib/generation/chapter-generation-node'
+import type { StreamResult } from '../../src/lib/ai/client'
 import {
   prepareGenerationNode,
   runGenerationNode,
 } from '../../src/lib/generation/generation-node'
 
 describe('PIPELINE-1 · 正文生成节点', () => {
+  it.each(['cancelled', 'failed', 'unknown'] as const)('%s 的片段停在读取边界，不进入候选或采纳，不再请求', async completion => {
+    const streamResult: StreamResult = { completion }
+    const start = vi.fn(async () => '收到的半段正文')
+    const candidateReady = vi.fn()
+    const node = createChapterGenerationNode({ operation: 'generate', category: 'chapter.content', projectId: 17, chapterIdentity: 31, ai: { start }, streamResult })
+    await expect(runGenerationNode(node, prepareGenerationNode(node, [{ role: 'user', content: '正文任务' }]), {
+      shadowTrace: { beforeModel: vi.fn(), modelResponded: vi.fn(), candidateReady, stepSucceeded: vi.fn(), stepFailed: vi.fn() },
+    })).rejects.toBeInstanceOf(InterruptedChapterGenerationErrorV1)
+    expect(candidateReady).not.toHaveBeenCalled()
+    expect(start).toHaveBeenCalledTimes(1)
+  })
+
   it('正文生成保持原 category/project 元数据并发送装配后的消息', async () => {
     const start = vi.fn(async () => '正文')
     const node = createChapterGenerationNode({
@@ -26,7 +39,9 @@ describe('PIPELINE-1 · 正文生成节点', () => {
       formalEntryId: 'prose.chapter.generate',
       category: 'chapter.content',
       projectId: 17,
-    })
+      contextOverflowPolicy: 'reject',
+      transportRetryPolicy: 'none',
+    }, undefined, undefined)
   })
 
   it('续写透明覆盖只改变本次发送内容', async () => {
@@ -49,6 +64,9 @@ describe('PIPELINE-1 · 正文生成节点', () => {
       { role: 'user', content: '作者本次调整后的续写提示词' },
     ])
     expect(prepared.messages[0].content).toBe('原续写提示词')
+    expect(start).toHaveBeenCalledWith([{ role: 'user', content: '作者本次调整后的续写提示词' }], undefined, {
+      formalEntryId: 'prose.chapter.continue', category: 'chapter.continue', projectId: 17, contextOverflowPolicy: 'reject', transportRetryPolicy: 'none',
+    }, undefined, undefined)
   })
 
   it('durable 候选可延迟 step success，等待作者采纳后再由 runner 完成', async () => {
