@@ -4,9 +4,11 @@ import type {
   ProductProductionPlanV3,
   ProductTaskBudgetReservationV1,
 } from '../types'
+import { buildAvgNativeAssemblyPlan } from '../avg/assembly-plan'
+import { buildAvgVisualPlanningPlanV4 } from '../avg/visual-planning-plan'
 import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
 import { parseTextAdventureContentRevisionV1, parseProductProductionBriefV3 } from './contracts'
-import { hashProductProductionValueV2, isSha256Hash } from './hash'
+import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { textAdventureSceneScriptPartSceneKeysV1 } from '../adventure/scene-script'
 import {
   TEXT_ADVENTURE_QUALITY_REVIEW_SCOPES_V1,
@@ -213,6 +215,7 @@ function parseTask(value: unknown, index: number): ProductProductionPlanTaskV3 {
     'concurrencyGroup', 'subjectLockKeys', 'priority', 'budgetReservation', 'maxAttempts',
     'timeoutMs', 'failurePolicy', 'fallbackTaskKey', 'acceptanceGateIds', 'reuse',
     ...(Object.prototype.hasOwnProperty.call(row, 'authorRevision') ? ['authorRevision'] : []),
+    ...(Object.prototype.hasOwnProperty.call(row, 'contextProfile') ? ['contextProfile'] : []),
   ], label)
   if (!Array.isArray(row.requiredReceipts) || row.requiredReceipts.length > 1_000) fail(`${label}.requiredReceipts 无效`)
   const requiredReceipts = row.requiredReceipts.map((value, receiptIndex) => {
@@ -278,6 +281,8 @@ function parseTask(value: unknown, index: number): ProductProductionPlanTaskV3 {
     acceptanceGateIds: keys(row.acceptanceGateIds, `${label}.acceptanceGateIds`),
     reuse,
     ...(authorRevision ? { authorRevision } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'contextProfile')
+      ? { contextProfile: enumValue(row.contextProfile, ['avg-task-v1', 'avg-visual-planning-v4'] as const, `${label}.contextProfile`) } : {}),
   }
 }
 
@@ -338,6 +343,16 @@ export function parseProductProductionPlanV3(
     if (task.failurePolicy !== 'fallback' && task.fallbackTaskKey !== null) fail(`${task.taskKey} 非 fallback 任务声明 fallbackTaskKey`)
     if (task.executionMode === 'model' && task.skillId === null) fail(`${task.taskKey} 模型任务缺少 skillId`)
     if (task.executionMode === 'deterministic' && task.skillId !== null) fail(`${task.taskKey} 确定性任务不应绑定 skillId`)
+    if (task.contextProfile === 'avg-task-v1' && (productType !== 'avg' || task.executionMode !== 'deterministic'
+      || !['avg-assembly-integrate', 'avg-assembly-verify', 'avg-media-image-process', 'avg-media-image-reuse', 'avg-media-voice-reuse'].includes(task.kind))) {
+      fail(`${task.taskKey} 上下文投影只用于准确 AVG 确定性任务`)
+    }
+    if (task.contextProfile === 'avg-visual-planning-v4' && (productType !== 'avg' || task.executionMode !== 'deterministic'
+      || !['avg-v4-visual-requirements-compile','avg-v4-visual-proposal-reuse'].includes(task.kind))) fail(`${task.taskKey} V4 投影只用于准确需求编译或方案复验任务`)
+    if (task.kind === 'avg-v4-visual-proposal-reuse' && (productType !== 'avg' || task.executionMode !== 'deterministic'
+      || task.contextProfile !== 'avg-visual-planning-v4' || task.skillId !== null || task.capabilityRequirementKeys.length !== 0
+      || task.budgetReservation.modelCalls !== 0 || task.budgetReservation.mediaCalls !== 0 || task.budgetReservation.maximumCostUsd !== 0
+      || task.maxAttempts !== 1 || task.reuse !== null)) fail(`${task.taskKey} 方案复验必须为单次零调用任务，不能借用供应商或通用沿用权限`)
   }
   const visiting = new Set<string>(); const visited = new Set<string>()
   const visit = (taskKey: string) => {
@@ -411,12 +426,19 @@ export function parseProductProductionPlanV3(
       fail('Plan 输入预算切片不是当前生产协议')
     }
   }
-  return {
+  const parsed: ProductProductionPlanV3 = {
     schema: 'storyforge.product-production-plan', version: 3,
     buildNumber: integer(row.buildNumber, 'buildNumber'), productType,
     briefHash: row.briefHash, controlEpoch: integer(row.controlEpoch, 'controlEpoch'),
     concurrency: parsedConcurrency, tasks, terminalTaskKey,
   }
+  if (brief?.avgVisualPlanning && canonicalProductProductionJsonV2(parsed) !== canonicalProductProductionJsonV2(buildAvgVisualPlanningPlanV4({
+    brief: { ...brief, avgVisualPlanning: brief.avgVisualPlanning }, briefHash: parsed.briefHash, buildNumber: parsed.buildNumber, controlEpoch: parsed.controlEpoch,
+  }))) fail('AVG 专业视觉 Plan 必须等于冻结的候选/作者采用/需求消费拓扑')
+  if (brief?.avgAssembly && canonicalProductProductionJsonV2(parsed) !== canonicalProductProductionJsonV2(buildAvgNativeAssemblyPlan({
+    brief, briefHash: parsed.briefHash, buildNumber: parsed.buildNumber, controlEpoch: parsed.controlEpoch,
+  }))) fail('AVG 组装 Plan 不得替换冻结的作者输入、任务或写域')
+  return parsed
 }
 
 function reservation(input: Partial<ProductTaskBudgetReservationV1>): ProductTaskBudgetReservationV1 {
@@ -453,6 +475,9 @@ export async function createProductProductionPlanV3(input: {
   if (await hashProductProductionValueV2(brief) !== input.briefHash) fail('briefHash 与 Brief 内容不一致')
   const controlEpoch = input.controlEpoch ?? 0
   if (!Number.isInteger(controlEpoch) || controlEpoch < 0) fail('controlEpoch 无效')
+
+  if (brief.avgVisualPlanning) return parseProductProductionPlanV3(buildAvgVisualPlanningPlanV4({ ...input, brief: { ...brief, avgVisualPlanning: brief.avgVisualPlanning }, controlEpoch }), brief, input.briefHash)
+  if (brief.avgAssembly) return parseProductProductionPlanV3(buildAvgNativeAssemblyPlan({ ...input, brief, controlEpoch }), brief, input.briefHash)
 
   const capabilityKeys = (classes: Array<ProductProductionBriefV3['capabilityRequirements'][number]['mediaClass']>) => (
     brief.capabilityRequirements

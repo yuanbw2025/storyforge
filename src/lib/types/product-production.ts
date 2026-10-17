@@ -1,4 +1,4 @@
-import type { ProductRuntimePackageV1 } from "./product-release";
+import type { AnyProductRuntimePackage, ProductRuntimePackageV1, ProductRuntimePackageV2 } from "./product-release";
 import type { ProductMediaKind } from "./product-media";
 import type { ProductionProductKindV1 } from "./product-identity";
 import type { AiTownProductionBriefV1 } from "./ai-town";
@@ -39,9 +39,27 @@ export type ProductRuntimeSourceV1 =
   | { kind: "release"; productReleaseId: number }
   | { kind: "build"; productBuildId: number; expectedPreviewHash: string };
 
+/** V2 carries the new package without reinterpreting V1 media bindings. */
+export interface ProductBuildPreviewManifestV2 extends Omit<ProductBuildPreviewManifestV1,
+  'version' | 'runtimePackage' | 'mediaBindings'> {
+  version: 2;
+  runtimePackage: ProductRuntimePackageV2;
+  mediaBindings: ProductBuildPreviewManifestV1['mediaBindings'];
+}
+
+export type AnyProductBuildPreviewManifest = ProductBuildPreviewManifestV1 | ProductBuildPreviewManifestV2;
+
+/** Verified protocol inspection; this is not a playable-source admission. */
+export interface VerifiedProductRuntimeSourceEnvelope {
+  source: ProductRuntimeSourceV1;
+  runtimePackage: AnyProductRuntimePackage;
+  packageHash: string;
+  runtimeSourceHash: string;
+}
+
 export interface ResolvedProductRuntimeSourceV1 {
   source: ProductRuntimeSourceV1;
-  runtimePackage: ProductRuntimePackageV1;
+  runtimePackage: AnyProductRuntimePackage;
   packageHash: string;
   runtimeSourceHash: string;
   mediaResolver: ProductMediaResolverV1;
@@ -57,6 +75,8 @@ export interface ProductMediaResolverV1 {
   preload(input: {
     assetKeys: string[];
     maximumBytes: number;
+    /** Opt-in bounded window; legacy callers retain their cached catalog. */
+    retainOnlyRequested?: boolean;
   }): Promise<ResolvedMediaCatalogV1>;
   read(assetKey: string): Promise<Blob>;
   dispose(): void;
@@ -137,6 +157,7 @@ export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "save-brief-revision",
   "save-text-open-world-creator-brief",
   "authorize-start",
+  "adopt-avg-artifact",
   "authorize-text-open-world-creator-start",
   "authorize-text-open-world-creator-repair",
   "authorize-text-open-world-creator-media",
@@ -517,6 +538,9 @@ export interface ProductProductionBriefV3 {
   characterChat?: import('../character-interaction/authoring-contract').ChatAuthoringSettingsV1;
   avg?: import('../avg/authoring-contract').AvgAuthoringSettingsV1;
   avgRevision?: { version: 1; basePackageHash: string; runtimePackage: import('./product-release').ProductRuntimePackageV1 };
+  avgAssembly?: import('../avg/assembly-contract').AvgAssemblyBrief;
+  /** Explicit next AVG contract; mutually exclusive with legacy assembly. */
+  avgVisualPlanning?: import('../avg/visual-planning-brief').AvgVisualPlanningBriefV4;
   ttrpg?: TtrpgProductionBriefV2;
   /** Closed AI Town construction contract; required exactly when productType=ai-town. */
   aiTown?: AiTownProductionBriefV1;
@@ -578,6 +602,8 @@ export interface ProductProductionPlanTaskV3 {
   reuse: ProductArtifactReuseDecisionV1 | null;
   /** Exact author draft, authorized by a durable child-Build command. */
   authorRevision?: TextAdventureContentRevisionV1 & { commandId: string; sourceBuildNumber: number };
+  /** Exact registered input projection for deterministic AVG V3 tasks. */
+  contextProfile?: "avg-task-v1" | "avg-visual-planning-v4";
 }
 
 export interface ProductProductionPlanV3 {
@@ -835,6 +861,17 @@ export type ProductProductionCommandV1 =
       };
       authorizationNonce: string;
       authorizedAt: number;
+    }
+  | {
+      type: "adopt-avg-artifact";
+      commandId: string;
+      expectedStateRevision: number;
+      expectedBuildRevision: number;
+      controlEpoch: number;
+      buildNumber: number;
+      artifactKey: string;
+      candidateVersion: number;
+      candidateHash: string;
     }
   | {
       type: "pause";

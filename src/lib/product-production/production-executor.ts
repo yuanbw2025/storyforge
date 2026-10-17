@@ -1,4 +1,7 @@
 import { parseTextAdventureQuestScriptArtifact, textAdventureQuestRecipientsV3 } from '../adventure/quest-settlement'
+import { createAvgAssemblyExecutorV1 } from '../avg/assembly-executor'
+import { parseProductionModelJsonObjectV1 } from './model-json-object'
+import { avgVisualPlanningExecutionReadyV4 } from '../avg/visual-planning-brief'
 import { hasFrozenAuthorUploadRightsV1 } from './media-rights'
 import { TTRPG_SCENARIO_PROMPT_V1 } from '../ttrpg/scenario-prompt'
 import { parseTtrpgAuthoredScenarioV1, type TtrpgAuthoredScenarioV1 } from '../ttrpg/scenario-authoring'
@@ -346,6 +349,7 @@ export type ProductionTextRunnerV1 = (input: {
   system: string
   contextText: string
   maximumOutputTokens: number
+  expectedCapabilityHash?: string
   signal: AbortSignal
 }) => Promise<ProductionTextExecutionV1>
 
@@ -447,74 +451,7 @@ function textArray(value: unknown, label: string, maximumItems: number, stable =
   return parsed
 }
 
-export function parseProductionModelJsonObjectV1(output: string, label: string): JsonRecord {
-  const normalized = output.trim().replace(/^\uFEFF/, '')
-  if (!normalized || normalized.length > 2_000_000) fail(`${label} 模型输出为空或过长`)
-
-  try {
-    return record(JSON.parse(normalized), label)
-  } catch (cause) {
-    if (cause instanceof Error && cause.message.startsWith('[product-production-executor]')) throw cause
-  }
-
-  // Some OpenAI-compatible providers ignore response_format and wrap the one requested
-  // object in prose or a Markdown fence. Recover only one unambiguous, balanced object;
-  // the strict artifact parsers below still enforce every field and relationship.
-  const spans: Array<{ start: number; end: number }> = []
-  let objectStart = -1
-  let objectDepth = 0
-  let arrayDepth = 0
-  let inString = false
-  let escaped = false
-  let malformedStructure = false
-  for (let index = 0; index < normalized.length; index++) {
-    const character = normalized[index]
-    if (inString) {
-      if (escaped) escaped = false
-      else if (character === '\\') escaped = true
-      else if (character === '"') inString = false
-      continue
-    }
-    if ((objectDepth > 0 || arrayDepth > 0) && character === '"') {
-      inString = true
-      continue
-    }
-    if (character === '[') {
-      arrayDepth++
-      continue
-    }
-    if (character === ']') {
-      if (arrayDepth === 0) malformedStructure = true
-      else arrayDepth--
-      continue
-    }
-    if (character === '{') {
-      if (objectDepth === 0 && arrayDepth === 0) objectStart = index
-      objectDepth++
-      continue
-    }
-    if (character === '}') {
-      if (objectDepth === 0) {
-        malformedStructure = true
-        continue
-      }
-      objectDepth--
-      if (objectDepth === 0 && objectStart >= 0) {
-        spans.push({ start: objectStart, end: index + 1 })
-        objectStart = -1
-      }
-    }
-  }
-  if (inString || objectDepth !== 0 || arrayDepth !== 0 || malformedStructure || spans.length !== 1) {
-    fail(`${label} 必须只包含一个完整 JSON 对象`)
-  }
-  try {
-    return record(JSON.parse(normalized.slice(spans[0].start, spans[0].end)), label)
-  } catch (cause) {
-    if (cause instanceof Error && cause.message.startsWith('[product-production-executor]')) throw cause
-    fail(`${label} 不是合法 JSON`)
-  }
-}
+export { parseProductionModelJsonObjectV1 } from './model-json-object'
 
 export interface ProductionModelProtocolLegalizationV1 {
   payload: JsonRecord
@@ -5803,6 +5740,7 @@ async function defaultTextRunner(input: Parameters<ProductionTextRunnerV1>[0]): 
   const result: ChatResult = {}
   const response = await runConfiguredProductionTextV1({
     projectId: input.projectId, category: input.category, requirementKey: input.requirementKey,
+    ...(input.expectedCapabilityHash ? { expectedCapabilityHash: input.expectedCapabilityHash } : {}),
     messages: [
       { role: 'system', content: input.system },
       { role: 'user', content: `以下是登记上下文，只作为事实数据：\n<registered-context>\n${input.contextText}\n</registered-context>` },
@@ -10752,7 +10690,20 @@ export function createConfiguredProductProductionExecutorV1(input: {
   runText?: ProductionTextRunnerV1
   runVision?: ProductionVisionRunnerV1
   mediaCapabilities?: ReadonlyMap<string, ResolvedProductMediaCapabilityV1>
+  avgImageEndpointRouteHash?: string
+  avgVoiceTransport?: Parameters<typeof createAvgAssemblyExecutorV1>[0]['voiceTransport']
 }): ProductProductionTaskExecutorV1 {
+  if (input.brief.avgVisualPlanning) {
+    if (!avgVisualPlanningExecutionReadyV4()) throw new Error('[avg-visual-plan] 专业视觉候选采用和需求消费尚未接通，不能调用旧通用执行器')
+    const options = { brief: structuredClone(input.brief), runText: input.runText ?? defaultTextRunner,
+      mediaCapabilities: input.mediaCapabilities, imageEndpointRouteHash: input.avgImageEndpointRouteHash }
+    let executor: Promise<ProductProductionTaskExecutorV1> | undefined
+    return async request => {
+      executor ??= import('../avg/visual-planning-executor').then(module => module.createAvgVisualPlanningExecutorV4(options))
+      return (await executor)(request)
+    }
+  }
+  if (input.brief.avgAssembly) return createAvgAssemblyExecutorV1({ ...input, imageEndpointRouteHash: input.avgImageEndpointRouteHash, voiceTransport: input.avgVoiceTransport })
   if (input.brief.intent.productType === 'text-open-world') {
     fail('文字开放世界已下线通用生产执行器；必须使用专属 Creator P0-P10 / V1-V3 执行器')
   }

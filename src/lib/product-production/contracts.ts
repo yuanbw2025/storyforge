@@ -1,5 +1,11 @@
 import { parseChatAuthoringSettingsV1 } from '../character-interaction/authoring-contract'
-import { parseAvgAuthoringSettingsV1 } from '../avg/authoring-contract'
+import { parseAvgAssemblyBrief, AVG_ASSEMBLY_GATE_IDS_V1 } from '../avg/assembly-contract'
+import { assertAvgVisualProductionPolicyV2 } from '../avg/media-production-policy'
+import { parseAvgStoredAssemblyBriefV3 } from '../avg/voice-assembly-storage'
+import { assertAvgVoiceProductionPolicyV3 } from '../avg/voice-production-policy'
+import { parseAvgSettingsForLegacyProduction } from '../avg/settings-v2'
+import { parseAvgVisualPlanningBriefV4 } from '../avg/visual-planning-brief'
+import { assertAvgVisualPlanningPolicyV4 } from '../avg/visual-planning-policy'
 import type {
   TextAdventureContentRevisionV1,
   ProductConsultationBudgetV1,
@@ -273,6 +279,8 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     ...(Object.prototype.hasOwnProperty.call(row, 'characterChat') ? ['characterChat'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'avg') ? ['avg'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'avgRevision') ? ['avgRevision'] : []),
+    ...(Object.prototype.hasOwnProperty.call(row, 'avgAssembly') ? ['avgAssembly'] : []),
+    ...(Object.prototype.hasOwnProperty.call(row, 'avgVisualPlanning') ? ['avgVisualPlanning'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'ttrpg') ? ['ttrpg'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'aiTown') ? ['aiTown'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'textAdventure') ? ['textAdventure'] : []),
@@ -309,8 +317,10 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
   }
   const parsed: ProductProductionBriefV3 = {
     ...(avgRevision ? { avgRevision } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'avgAssembly') ? { avgAssembly: parseAvgAssemblyBrief(row.avgAssembly) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'avgVisualPlanning') ? { avgVisualPlanning: parseAvgVisualPlanningBriefV4(row.avgVisualPlanning) } : {}),
     ...(row.characterChat ? { characterChat: parseChatAuthoringSettingsV1(row.characterChat) } : {}),
-    ...(row.avg ? { avg: parseAvgAuthoringSettingsV1(row.avg) } : {}),
+    ...(row.avg ? { avg: parseAvgSettingsForLegacyProduction(row.avg) } : {}),
     schema: 'storyforge.product-production-brief', version: 3,
     source: {
       worldReleaseId: positiveId(source.worldReleaseId, 'source.worldReleaseId'),
@@ -361,6 +371,18 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     ...(Object.prototype.hasOwnProperty.call(row, 'evolution')
       ? { evolution: parseEvolutionImpact(row.evolution) }
       : {}),
+  }
+  if (parsed.avgVisualPlanning) assertAvgVisualPlanningPolicyV4(parsed)
+  if (parsed.avgAssembly?.version === 2) assertAvgVisualProductionPolicyV2(parsed)
+  if (parsed.avgAssembly?.version === 3) {
+    const { assembly } = parseAvgStoredAssemblyBriefV3(parsed.avgAssembly)
+    assertAvgVoiceProductionPolicyV3({ ...parsed, avgAssembly: assembly })
+  }
+  if (parsed.avgAssembly?.version === 1 && (productType !== 'avg' || parsed.avgRevision || parsed.qualityProfile === 'commercial-candidate'
+    || parsed.capabilityRequirements.length || parsed.productionBudget.maximumModelCalls !== 0 || parsed.productionBudget.maximumMediaCalls !== 0
+    || parsed.productionBudget.maximumOutputTokens !== 0 || parsed.productionBudget.maximumCostUsd !== 0
+    || canonicalProductProductionJsonV2([...parsed.completionContract.requiredGateIds].sort()) !== canonicalProductProductionJsonV2([...AVG_ASSEMBLY_GATE_IDS_V1].sort()))) {
+    fail('AVG 作者组装必须使用独立零 Provider 预算、准确技术门与 prototype/internal 质量边界')
   }
   if (parsed.intent.protagonistRefs.some(ref => !parsed.source.startingPoint.protagonistRefs.includes(ref))) {
     fail('intent.protagonistRefs 必须来自 startingPoint 候选')
@@ -538,6 +560,15 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
     const commandId = commandHeader(row, type, ['expectedStateRevision', 'briefRevision', 'briefHash', 'authorizationNonce'])
     if (!isSha256Hash(row.briefHash)) fail('briefHash 无效')
     return { type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision), briefRevision: positiveId(row.briefRevision, 'briefRevision'), briefHash: row.briefHash, authorizationNonce: stableKey(row.authorizationNonce, 'authorizationNonce') }
+  }
+  if (type === 'adopt-avg-artifact') {
+    const commandId = commandHeader(row, type, ['expectedStateRevision', 'expectedBuildRevision', 'controlEpoch',
+      'buildNumber', 'artifactKey', 'candidateVersion', 'candidateHash'])
+    if (!isSha256Hash(row.candidateHash)) fail('AVG candidateHash 无效')
+    return { type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      expectedBuildRevision: expectedRevision(row.expectedBuildRevision), controlEpoch: expectedRevision(row.controlEpoch),
+      buildNumber: positiveId(row.buildNumber, 'buildNumber'), artifactKey: stableKey(row.artifactKey, 'artifactKey'),
+      candidateVersion: positiveId(row.candidateVersion, 'candidateVersion'), candidateHash: row.candidateHash }
   }
   if (type === 'authorize-text-open-world-creator-start') {
     const commandId = commandHeader(row, type, [

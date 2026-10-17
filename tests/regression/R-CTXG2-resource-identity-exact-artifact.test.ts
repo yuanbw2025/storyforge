@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import Dexie from 'dexie'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
@@ -140,6 +141,56 @@ describe('CTXG-2 · stable resource identity and pure catalog', () => {
 describe('CTXG-2 · exact artifact lifecycle', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(async () => { vi.restoreAllMocks(); db.close() })
+
+  it('keeps exact-body verification and repeated reads inside the caller transaction across native hashing', async () => {
+    const fixture = await seedWorkspace('Transactional exact evidence')
+    const run = await createAgentRunV1({ scope: fixture.scope, contract: runContract(fixture.projectId) })
+    const content = '事务中的准确原始响应\ne\u0301'
+    const { artifact } = await recordAgentRunArtifactV1({
+      scope: fixture.scope, runId: run.run.id, artifactKind: 'raw-response', content,
+    })
+    const target = { projectId: fixture.projectId, artifactKind: 'raw-response' as const, contentHash: artifact.contentHash }
+    const digest = crypto.subtle.digest.bind(crypto.subtle)
+    vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (algorithm, data) => {
+      // Preserve real WebCrypto while deterministically exposing an inactive
+      // transaction between hashing and the next physical database read.
+      await new Promise(resolve => setTimeout(resolve, 10))
+      return digest(algorithm, data)
+    })
+
+    await db.transaction('rw', db.agentRunArtifacts, async () => {
+      const transaction = Dexie.currentTransaction
+      expect(transaction).not.toBeNull()
+      for (let index = 0; index < 2; index++) {
+        expect(await inspectAgentRunArtifactAvailabilityV1(target)).toMatchObject({ state: 'available' })
+        expect(await readAgentRunArtifactExactV1(target)).toBe(content)
+        expect(Dexie.currentTransaction).toBe(transaction)
+        await db.agentRunArtifacts.update(artifact.id, { updatedAt: artifact.updatedAt + index + 1 })
+      }
+    })
+    expect((await db.agentRunArtifacts.get(artifact.id))?.updatedAt).toBe(artifact.updatedAt + 2)
+  })
+
+  it('rejects corrupt exact bytes and rolls back the caller write instead of committing a partial decision', async () => {
+    const fixture = await seedWorkspace('Atomic corrupt evidence')
+    const run = await createAgentRunV1({ scope: fixture.scope, contract: runContract(fixture.projectId) })
+    const { artifact } = await recordAgentRunArtifactV1({
+      scope: fixture.scope, runId: run.run.id, artifactKind: 'raw-response', content: '原始正文',
+    })
+    await db.agentRunArtifacts.update(artifact.id, { content: '已篡改正文' })
+    const target = { projectId: fixture.projectId, artifactKind: 'raw-response' as const, contentHash: artifact.contentHash }
+    const digest = crypto.subtle.digest.bind(crypto.subtle)
+    vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (algorithm, data) => {
+      await new Promise(resolve => setTimeout(resolve, 10))
+      return digest(algorithm, data)
+    })
+
+    await expect(db.transaction('rw', db.agentRunArtifacts, async () => {
+      await db.agentRunArtifacts.update(artifact.id, { updatedAt: artifact.updatedAt + 100 })
+      await readAgentRunArtifactExactV1(target)
+    })).rejects.toMatchObject({ code: 'corrupt' })
+    expect((await db.agentRunArtifacts.get(artifact.id))?.updatedAt).toBe(artifact.updatedAt)
+  })
 
   it('stores exact bytes before the ledger ref, deduplicates, round-trips and reports availability', async () => {
     const fixture = await seedWorkspace('Exact evidence')

@@ -25,47 +25,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: 表注册完整性(REQUIRED_TABLES vs schema)
-        run: npm run check:required-tables
-
-      - name: AI 说明书与代码一致(防 prompt key 漂移)
-        run: npm run check:ai-manual
-
-      - name: 架构铁律(三注册表反模式守护)
-        run: npm run check:architecture
-
-      - name: 源码可达性(防孤儿文件回潮)
-        run: npm run check:source-reachability
-
-      - name: 公共 README 语言入口与文档权威一致性
-        run: npm run check:docs
-
-      - name: 路线图迁移与文档链接完整性
-        run: npm run check:roadmap
-
-      - name: Blueprint 实时规模与代码一致
-        run: npm run check:project-metrics
-
-      - name: 生产依赖漏洞门槛
-        run: npm run check:dependencies
-
-      - name: ESLint 零 warning
-        run: npm run lint
-
-      - name: TypeScript 严格类型检查
-        run: npx tsc --noEmit
-
-      - name: Codex 本机桥协议与隔离反例
-        run: npm run test:codex-bridge
-
-      - name: 测试 + 覆盖率门槛
-        run: npm run test:coverage
-
-      - name: 生产构建
-        run: npm run build
-
-      - name: 构建产物体积预算
-        run: npm run check:bundle-size
+      # package.json is the single verification entrypoint; new governance
+      # gates must reach local and hosted CI together.
+      - name: 完整工程闸门（npm run ci）
+        run: npm run ci
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
@@ -75,3 +38,71 @@ jobs:
 
       - name: 核心用户路径浏览器冒烟
         run: npm run ci:e2e
+
+  avg-media-experimental:
+    name: AVG 媒资实验路径（隔离浏览器）
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VITE_STORYFORGE_AVG_MEDIA_PRODUCTION: '1'
+      VITE_STORYFORGE_AVG_VOICE_PRODUCTION: '1'
+      VITE_STORYFORGE_AVG_VISUAL_PLANNING: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: 检查 AVG 与共享应用输入
+        id: scope
+        env:
+          AVG_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          AVG_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess
+          base, head = os.environ['AVG_BASE_SHA'], os.environ['AVG_HEAD_SHA']
+          if any(not re.fullmatch(r'[0-9a-f]{40,64}', sha) for sha in (base, head)):
+              raise SystemExit('Missing exact PR commit identities')
+          for sha in (base, head):
+              found = subprocess.run(['git', 'cat-file', '-e', sha + '^{commit}'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+              if found.returncode:
+                  subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin', sha], check=True)
+          paths = subprocess.check_output(['git', 'diff', '--no-renames', '--name-only', '-z', base, head]).decode('utf-8', errors='surrogateescape').split('\0')
+          prefixes = ('src/', 'tests/e2e/avg-', 'tests/helpers/avg-', 'tests/regression/R-AVG-')
+          exact = {'package.json', 'package-lock.json', 'playwright.config.ts', '.github/workflows/ci.yml',
+                   'scripts/serve-e2e-snapshot.mjs', 'scripts/build-adventure-player.mjs'}
+          needed = any(path.startswith(prefixes) or path in exact for path in paths if path)
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write('enabled=' + ('true' if needed else 'false') + '\n')
+          print('AVG experimental browser suite required' if needed else 'No AVG or shared application inputs changed')
+          PY
+
+      - name: Setup Node
+        if: steps.scope.outputs.enabled == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.scope.outputs.enabled == 'true'
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        if: steps.scope.outputs.enabled == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: 验证全部 AVG 原生路径（含图片与配音实验）
+        if: steps.scope.outputs.enabled == 'true'
+        run: npm run ci:e2e -- -- --project=chromium tests/e2e/avg- --output test-results/avg-media
+
+      - name: 保存 AVG 浏览器验收证据
+        if: always() && steps.scope.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: avg-media-browser-evidence
+          path: test-results/avg-media/
+          if-no-files-found: warn
+          retention-days: 7

@@ -92,6 +92,41 @@ async function planFixture() {
 }
 
 describe('R-PRODUCTPROD-1C · bounded parallel production plan', () => {
+  async function visualReuseProjectionFixture() {
+    const { plan, briefHash } = await planFixture()
+    const task = plan.tasks.find(t => t.executionMode === 'deterministic' && t.taskKey !== plan.terminalTaskKey)!
+    task.kind = 'avg-v4-visual-proposal-reuse'
+    task.contextProfile = 'avg-visual-planning-v4'
+    task.capabilityRequirementKeys = []
+    task.budgetReservation = { ...task.budgetReservation, modelCalls: 0, mediaCalls: 0, maximumCostUsd: 0 }
+    task.maxAttempts = 1
+    task.reuse = null
+    return { plan, briefHash, task }
+  }
+
+  it('allows only the named zero-provider AVG projection shape; native Brief authorization and the executor remain separate gates', async () => {
+    const { plan, briefHash, task } = await visualReuseProjectionFixture()
+    const parsed = parseProductProductionPlanV3(plan, undefined, briefHash)
+    expect(parsed.tasks.find(t => t.taskKey === task.taskKey)).toMatchObject({
+      kind: 'avg-v4-visual-proposal-reuse', executionMode: 'deterministic', skillId: null,
+      contextProfile: 'avg-visual-planning-v4', budgetReservation: { modelCalls: 0, mediaCalls: 0 },
+    })
+  })
+
+  it.each(['foreign-product','model','media-provider','arbitrary-kind','missing-projection','model-reservation','media-reservation','cash-reservation','capability','retry'] as const)('refuses %s use of the private visual reuse context projection', async invalid => {
+    const { plan, briefHash, task } = await visualReuseProjectionFixture()
+    if (invalid === 'foreign-product') plan.productType = 'text-adventure'
+    else if (invalid === 'arbitrary-kind') task.kind = 'unregistered.visual.reuse'
+    else if (invalid === 'missing-projection') delete task.contextProfile
+    else if (invalid === 'model-reservation') task.budgetReservation.modelCalls = 1
+    else if (invalid === 'media-reservation') task.budgetReservation.mediaCalls = 1
+    else if (invalid === 'cash-reservation') task.budgetReservation.maximumCostUsd = 1
+    else if (invalid === 'capability') task.capabilityRequirementKeys = ['text.runtime-package']
+    else if (invalid === 'retry') task.maxAttempts = 2
+    else task.executionMode = invalid
+    expect(() => parseProductProductionPlanV3(plan, undefined, briefHash)).toThrow()
+  })
+
   it('把 Provider 可见输出上限与含隐藏推理的 task 计费预留分开', () => {
     const budgetReservation = {
       modelCalls: 1, inputTokens: 23_760, outputTokens: 32_000,

@@ -68,7 +68,9 @@ export interface MediaTransportResponseV1 {
 
 export interface MediaProviderTransportV1 {
   executionLocation: MediaExecutionLocationV1
-  request(input: RedactedMediaTransportRequestV1, signal: AbortSignal): Promise<MediaTransportResponseV1>
+  rawResponseEvidence?: 'utf8-text-v1'
+  request(input: RedactedMediaTransportRequestV1, signal: AbortSignal,
+    onRawResponse?: (response: { status: number; contentType: string | null; providerRequestId: string | null; text: string }) => Promise<void>): Promise<MediaTransportResponseV1>
   fetchExternalAsset?(input: { url: string; maximumBytes: number }, signal: AbortSignal): Promise<ArrayBuffer>
 }
 

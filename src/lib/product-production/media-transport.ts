@@ -264,6 +264,14 @@ function agnesImageEndpoint(baseUrl: string): URL {
   return endpoint
 }
 
+/** Non-secret exact route identity for products that freeze provider routes.
+ * Existing capability receipts keep their V1 bytes and identity semantics. */
+export async function configuredAgnesImageEndpointHashV1(input: { projectId: number; config?: AIConfig }): Promise<string> {
+  const endpoint = agnesImageEndpoint(configuredAgnesConfig(input.projectId, input.config).baseUrl)
+  return hashProductProductionValueV2({ schema: 'storyforge.agnes-image-route', version: 1,
+    method: 'POST', origin: endpoint.origin, path: endpoint.pathname, model: 'agnes-image-2.1-flash' })
+}
+
 export function inspectConfiguredAgnesImageCapabilityV1(input: {
   projectId: number
   config?: AIConfig
@@ -299,9 +307,10 @@ function responseRequestId(response: Response, json?: unknown): string | null {
   return null
 }
 
-async function readAgnesJson(response: Response): Promise<unknown> {
+async function readAgnesJson(response: Response, onRawResponse?: Parameters<MediaProviderTransportV1['request']>[2]): Promise<unknown> {
   boundedContentLength(response)
   const text = await response.text()
+  await onRawResponse?.({ status: response.status, contentType: response.headers.get('content-type'), providerRequestId: responseRequestId(response), text })
   if (new TextEncoder().encode(text).byteLength > MAX_RELAY_RESPONSE_BYTES) fail('Agnes 图片响应过大')
   try { return text ? JSON.parse(text) : null } catch { fail('Agnes 图片响应不是合法 JSON') }
 }
@@ -325,7 +334,8 @@ function createConfiguredAgnesImageTransportV1(input: {
   }
   return {
     executionLocation: 'browser-direct',
-    async request(request: RedactedMediaTransportRequestV1, signal: AbortSignal) {
+    rawResponseEvidence: 'utf8-text-v1',
+    async request(request: RedactedMediaTransportRequestV1, signal: AbortSignal, onRawResponse?: Parameters<MediaProviderTransportV1['request']>[2]) {
       if (request.adapterId !== 'agnes.image-2.1-flash.v1' || !SAFE_ID.test(request.requestId)
         || request.method !== 'POST' || request.endpoint !== '/v1/images/generations'
         || request.allowedDataClasses.some(item => !SAFE_ID.test(item))) {
@@ -343,7 +353,7 @@ function createConfiguredAgnesImageTransportV1(input: {
         },
         body: JSON.stringify(request.body),
       })
-      const json = await readAgnesJson(response)
+      const json = await readAgnesJson(response, onRawResponse)
       const usage = json && typeof json === 'object' && !Array.isArray(json)
         ? (json as Record<string, unknown>).usage ?? null
         : null

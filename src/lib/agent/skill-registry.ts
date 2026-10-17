@@ -26,6 +26,7 @@ import {
 } from '../registry/types'
 import { AGENT_TOOL_BY_NAME } from './tool-registry'
 import { WORLD_RELEASE_RESOURCE_KINDS_V1 } from '../context-gateway/world-release-provider-contract'
+import { AVG_VISUAL_PLANNING_AGENT_IDS_V1, AVG_VISUAL_PLANNING_CONTEXT_V1, AVG_COMPILED_IMAGE_AGENT_V4 } from '../avg/visual-planning-roles'
 
 export const DOMAIN_AGENT_IDS = ['world-origin', 'character', 'inspiration', 'outline', 'prose'] as const
 export type DomainAgentId = typeof DOMAIN_AGENT_IDS[number]
@@ -58,7 +59,7 @@ export const TEXT_ADVENTURE_PRODUCTION_AGENT_IDS = [
   'text-adventure-playtest-director',
 ] as const
 export type TextAdventureProductionAgentId = typeof TEXT_ADVENTURE_PRODUCTION_AGENT_IDS[number]
-export const REGISTERED_AGENT_IDS = [...DOMAIN_AGENT_IDS, ...TEXT_ADVENTURE_PRODUCTION_AGENT_IDS] as const
+export const REGISTERED_AGENT_IDS = [...DOMAIN_AGENT_IDS, ...TEXT_ADVENTURE_PRODUCTION_AGENT_IDS, ...AVG_VISUAL_PLANNING_AGENT_IDS_V1, AVG_COMPILED_IMAGE_AGENT_V4] as const
 export type RegisteredAgentId = typeof REGISTERED_AGENT_IDS[number]
 
 export type AgentSkillExecutionModeV1 =
@@ -3229,7 +3230,7 @@ export const AGENT_SKILLS = [
     contextCompression: ADVENTURE_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 1_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3249,7 +3250,7 @@ export const AGENT_SKILLS = [
     contextCompression: ADVENTURE_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3269,7 +3270,7 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_EVOLUTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3289,7 +3290,7 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_EVOLUTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3309,7 +3310,7 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_EVOLUTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3329,7 +3330,7 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_EVOLUTION_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3349,7 +3350,7 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3369,7 +3370,7 @@ export const AGENT_SKILLS = [
     contextCompression: OPEN_WORLD_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME2-product-skills'],
   },
   {
@@ -3532,7 +3533,7 @@ export const AGENT_SKILLS = [
     contextCompression: compressionPolicy(['ttrpgPublicNarration']),
     maxOutputTokens: 2_000,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME3-ttrpg-skills'],
   },
   {
@@ -3552,7 +3553,7 @@ export const AGENT_SKILLS = [
     contextCompression: TTRPG_PLAYER_RUNTIME_COMPRESSION_POLICY,
     maxOutputTokens: 1_200,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME3-ttrpg-skills'],
   },
   {
@@ -3572,7 +3573,7 @@ export const AGENT_SKILLS = [
     contextCompression: compressionPolicy(['ttrpgNpcRuntime']),
     maxOutputTokens: 1_200,
     writeTargets: [],
-    lastVerifiedAt: '2026-09-01',
+    lastVerifiedAt: '2026-10-17',
     regressionTests: ['R-HARNESS-RUNTIME3-ttrpg-skills'],
   },
   {
@@ -4978,6 +4979,70 @@ export const AGENT_SKILLS = [
   },
   {
     version: 1,
+    id: 'avg.media-request.v1',
+    agentId: 'outline', defaultForAgent: false,
+    label: 'AVG 单项媒资请求', owner: 'outline-agent',
+    promptVersion: 'avg-media-request-v1', executionMode: 'product-production',
+    contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: ['product-production.avg-task-inputs'], optionalContextSourceKeys: [],
+    inputPolicy: productProductionInputPolicy(['product-production.avg-task-inputs']),
+    contextCompression: compressionPolicy(['product-production.avg-task-inputs']),
+    maxOutputTokens: 4_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: [], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-10-17', regressionTests: ['R-AVG-BASE02-task-context', 'R-AVG-BASE02-voice-harness'],
+  },
+  {
+    version: 1, id: 'avg.compiled-image-request.v1', agentId: 'avg-image-operator', defaultForAgent: true,
+    label: 'AVG 已编译图片请求', owner: 'avg-image-operator', promptVersion: 'avg-compiled-image-request-v1',
+    executionMode: 'product-production', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: [AVG_VISUAL_PLANNING_CONTEXT_V1], optionalContextSourceKeys: [],
+    inputPolicy: productProductionInputPolicy([AVG_VISUAL_PLANNING_CONTEXT_V1]),
+    contextCompression: compressionPolicy([AVG_VISUAL_PLANNING_CONTEXT_V1]), maxOutputTokens: 4_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: [], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-10-17', regressionTests: ['R-AVG-04A5-professional-roles', 'R-AVG-04A5-visual-planning-harness'],
+  },
+  {
+    version: 1, id: 'avg.visual-bible.v1', agentId: 'avg-art-director', defaultForAgent: true,
+    label: 'AVG 美术方向', owner: 'avg-art-director', promptVersion: 'avg.visual-bible.v1-method-v3',
+    executionMode: 'product-production', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: [AVG_VISUAL_PLANNING_CONTEXT_V1], optionalContextSourceKeys: [],
+    inputPolicy: productProductionInputPolicy([AVG_VISUAL_PLANNING_CONTEXT_V1]),
+    contextCompression: compressionPolicy([AVG_VISUAL_PLANNING_CONTEXT_V1]), maxOutputTokens: 16_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-10-17', regressionTests: ['R-AVG-04A5-professional-roles'],
+  },
+  {
+    version: 1, id: 'avg.character-assets.v1', agentId: 'avg-character-designer', defaultForAgent: true,
+    label: 'AVG 人物视觉方案', owner: 'avg-character-designer', promptVersion: 'avg.character-assets.v1-method-v3',
+    executionMode: 'product-production', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: [AVG_VISUAL_PLANNING_CONTEXT_V1], optionalContextSourceKeys: [],
+    inputPolicy: productProductionInputPolicy([AVG_VISUAL_PLANNING_CONTEXT_V1]),
+    contextCompression: compressionPolicy([AVG_VISUAL_PLANNING_CONTEXT_V1]), maxOutputTokens: 12_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-10-17', regressionTests: ['R-AVG-04A5-professional-roles'],
+  },
+  {
+    version: 1, id: 'avg.environment-assets.v1', agentId: 'avg-environment-designer', defaultForAgent: true,
+    label: 'AVG 场景视觉方案', owner: 'avg-environment-designer', promptVersion: 'avg.environment-assets.v1-method-v3',
+    executionMode: 'product-production', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: [AVG_VISUAL_PLANNING_CONTEXT_V1], optionalContextSourceKeys: [],
+    inputPolicy: productProductionInputPolicy([AVG_VISUAL_PLANNING_CONTEXT_V1]),
+    contextCompression: compressionPolicy([AVG_VISUAL_PLANNING_CONTEXT_V1]), maxOutputTokens: 12_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-10-17', regressionTests: ['R-AVG-04A5-professional-roles'],
+  },
+  {
+    version: 1, id: 'avg.prop-assets.v1', agentId: 'avg-prop-designer', defaultForAgent: true,
+    label: 'AVG 物件视觉方案', owner: 'avg-prop-designer', promptVersion: 'avg.prop-assets.v1-method-v3',
+    executionMode: 'product-production', contextTaskKind: 'agent-outline', readToolNames: [],
+    contextSourceKeys: [AVG_VISUAL_PLANNING_CONTEXT_V1], optionalContextSourceKeys: [],
+    inputPolicy: productProductionInputPolicy([AVG_VISUAL_PLANNING_CONTEXT_V1]),
+    contextCompression: compressionPolicy([AVG_VISUAL_PLANNING_CONTEXT_V1]), maxOutputTokens: 12_000,
+    writeTargets: [{ table: 'productBuildArtifacts', fields: ['payloadJson'], adoptionExtension: 'product-production-artifacts' }],
+    lastVerifiedAt: '2026-10-17', regressionTests: ['R-AVG-04A5-professional-roles'],
+  },
+  {
+    version: 1,
     id: 'product-production.integrate.v1',
     agentId: 'outline',
     defaultForAgent: false,
@@ -5286,6 +5351,11 @@ export function validateAgentSkillDefinitionsV1(
     'text-adventure-visual-qa-director': productProductionModes,
     'text-adventure-continuity-editor': productProductionModes,
     'text-adventure-playtest-director': productProductionModes,
+    'avg-art-director': productProductionModes,
+    'avg-character-designer': productProductionModes,
+    'avg-environment-designer': productProductionModes,
+    'avg-prop-designer': productProductionModes,
+    'avg-image-operator': productProductionModes,
   }
   const ids = new Set<string>()
   const defaultAgents = new Set<RegisteredAgentId>()

@@ -1,3 +1,5 @@
+import { canonicalProductProductionJsonV2 } from './hash'
+import { deriveAvgAssemblyRecoveryBaseV1 } from '../avg/assembly-recovery'
 import { db } from '../db/schema'
 import { readAgentRunV1 } from '../agent/run/event-store'
 import { readAgentRunArtifactExactV1 } from '../memory/artifact-store'
@@ -861,17 +863,20 @@ export function inspectProductProductionCapabilityReadinessV1(input: {
  * capability required by that frozen Brief is bound.
  */
 export function evaluateProductProductionAuthorizationReadinessV1(input: {
-  brief: Pick<ProductProductionBriefV3, 'capabilityRequirements' | 'avgRevision'>
+  brief: Pick<ProductProductionBriefV3, 'capabilityRequirements' | 'avgRevision' | 'avgAssembly'>
   readiness: ProductProductionCapabilityReadinessV1
 }): ProductProductionAuthorizationReadinessV1 {
   const blockerMessages: string[] = []
-  if (!input.brief.avgRevision && !input.readiness.text.ready) {
+  if (!input.brief.avgRevision && !input.brief.avgAssembly && !input.readiness.text.ready) {
     blockerMessages.push(input.readiness.text.issue || '设置中的文本生成能力尚未就绪。')
   }
   const requiredMediaRequirementKeys = input.brief.capabilityRequirements
     .filter(requirement => requirement.required && ['image', 'music', 'sfx'].includes(requirement.mediaClass))
     .map(requirement => requirement.requirementKey)
-  const requiresImage = input.brief.capabilityRequirements
+  const image = input.brief.avgAssembly?.version === 3 ? input.brief.avgAssembly.image
+    : input.brief.avgAssembly?.version === 2 ? input.brief.avgAssembly : null
+  const retainedOnly = image?.imageRecovery?.rerunRequirementKeys.length === 0
+  const requiresImage = !retainedOnly&&input.brief.capabilityRequirements
     .some(requirement => requirement.required && requirement.mediaClass === 'image')
   const requiresAudio = input.brief.capabilityRequirements
     .some(requirement => requirement.required && ['music', 'sfx'].includes(requirement.mediaClass))
@@ -1679,6 +1684,11 @@ export async function runAuthorizedProductProductionV1(input: {
   const brief = creatorContracts?.executionBrief
     ?? parseProductProductionBriefV3(details.brief.briefJson)
   if (brief.avgRevision) return (await import('../avg/revision-production')).runAvgRevisionV1({ ...input, scope, details, brief })
+  if (brief.avgAssembly) {
+    const projection = await (await import('../avg/assembly-service')).runAvgAssemblyV1({ scope, productionId: input.productionId, signal: input.signal })
+    if (input.onProgress) await input.onProgress(projection)
+    return projection
+  }
   const textRequirements = brief.capabilityRequirements.filter(requirement => requirement.mediaClass === 'text')
   if (textRequirements.length !== 1) throw new Error('[product-production-service] 正式制作需要唯一文本 capability requirement')
   const textCapability = await resolveConfiguredTextCapabilityV1({
@@ -1908,9 +1918,14 @@ export async function beginProductProductionEvolutionV1(input: {
     && affectedLanes.includes('content') && affectedLanes.includes('visual')
   const runtimeCopyRecovery = currentTextAdventureRecovery
     && affectedLanes.length === 1 && affectedLanes[0] === 'runtime'
+  const nativeRecovery = details.executionBrief?.avgAssembly && !details.build.previewHash
+    && ['cancelled','failed','recovery-required'].includes(details.build.status)
+    && canonicalProductProductionJsonV2([...affectedLanes].sort()) === canonicalProductProductionJsonV2(['audio','content','product','visual'])
   const recoveryEvolution = budgetRecovery || planUpgradeRecovery || visualContractRecovery
     || preMediaContentRecovery || runtimeCopyRecovery
-  if (recoveryEvolution) {
+  if (nativeRecovery) {
+    base = await deriveAvgAssemblyRecoveryBaseV1(details.build,details.executionBrief!)
+  } else if (recoveryEvolution) {
     const rejectedAnchorRecovery = rejectedAnchorRecoveryCandidate
     if (details.production.productType !== 'text-adventure'
       || (!rejectedAnchorRecovery && (details.production.status !== 'producing'

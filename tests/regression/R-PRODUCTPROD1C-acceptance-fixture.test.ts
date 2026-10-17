@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
   textOpenWorldProductArtifactStoreV1,
+  verifyAcceptedProductBuildArtifactV1,
 } from '../../src/lib/product-production/artifact-store'
 import { prepareProductProductionAdoption, publishProductProductionBuild } from '../../src/lib/product-production/adoption'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
@@ -20,6 +21,7 @@ import { runCurrentProductProductionAcceptanceFixture } from '../helpers/current
 import { createProductRuntimeInstanceFromSource } from '../../src/lib/product/runtime-instances'
 import { seedCurrentProductWorld } from '../helpers/current-product-world'
 import { installFakeOpfsV1 } from '../helpers/fake-opfs'
+import { scopeTransactionTables } from '../../src/lib/workspace/scope'
 
 async function authorizedProduction(input: {
   name: string
@@ -167,6 +169,44 @@ describe('R-PRODUCTPROD-1C · authorized deterministic acceptance fixture', () =
     await db.open()
   })
   afterEach(() => db.close())
+
+  it('下游选择只读准确 producer/原始字节证明，拒绝伪接受、错版本和被改写的媒资', async () => {
+    const owned = await authorizedProduction({ name: 'verified-media-choice', visualLevel: 'key-scenes' })
+    await runCurrentProductProductionAcceptanceFixture({ scope: owned.scope, productionId: owned.productionId })
+    const artifact = (await db.productBuildArtifacts.where('buildId').equals(owned.buildId).toArray()).find(row => row.kind === 'image')!
+    const input = { scope: owned.scope, buildId: owned.buildId, artifactKey: artifact.artifactKey, version: artifact.version, contentHash: artifact.contentHash }
+    expect(await verifyAcceptedProductBuildArtifactV1(input)).toEqual(artifact)
+    const foreign = await seedCurrentProductWorld('foreign-proof')
+    await expect(verifyAcceptedProductBuildArtifactV1({ ...input, scope: foreign.scope })).rejects.toThrow(/跨 Work/)
+    await expect(verifyAcceptedProductBuildArtifactV1({ ...input, version: artifact.version + 1 })).rejects.toThrow(/revision/)
+    await expect(verifyAcceptedProductBuildArtifactV1({ ...input, contentHash: 'f'.repeat(64) })).rejects.toThrow(/revision/)
+    await db.productBuildArtifacts.update(artifact.id!, { metadataJson: '{"forged":true}' })
+    await expect(verifyAcceptedProductBuildArtifactV1(input)).rejects.toThrow(/candidate/)
+    await db.productBuildArtifacts.put(artifact)
+    await db.productBuildArtifacts.update(artifact.id!, { producerReceiptHash: 'f'.repeat(64) })
+    await expect(verifyAcceptedProductBuildArtifactV1(input)).rejects.toThrow(/receipt|producer/)
+    await db.productBuildArtifacts.put(artifact)
+    const build = (await db.productBuilds.get(owned.buildId))!, ledger = JSON.parse(build.budgetLedgerJson)
+    const entry = Object.values(ledger.tasks).find((entry: any) => entry.runId === artifact.producerRunId) as { status: string }
+    entry.status = 'reserved'
+    await db.productBuilds.update(build.id!, { budgetLedgerJson: canonicalProductProductionJsonV2(ledger) })
+    await expect(verifyAcceptedProductBuildArtifactV1(input)).rejects.toThrow(/ledger/)
+    await db.productBuilds.put(build)
+    const blob = (await db.mediaBlobObjects.get(artifact.blobObjectId!))!
+    if (!blob.data) throw new Error('fixture must use IndexedDB bytes')
+    const changed = blob.data.slice(0); new Uint8Array(changed)[0] ^= 1
+    await db.mediaBlobObjects.update(blob.id!, { data: changed })
+    await expect(verifyAcceptedProductBuildArtifactV1(input)).rejects.toThrow()
+    await db.mediaBlobObjects.put(blob)
+    // Same proof in a write transaction fences the downstream choice without
+    // granting any new write target or changing the accepted raw Artifact.
+    const before = await db.productBuildArtifacts.count()
+    await db.transaction('rw', scopeTransactionTables(db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
+      db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, db.agentRunArtifacts), async () => {
+      expect(await verifyAcceptedProductBuildArtifactV1(input)).toEqual(artifact)
+    })
+    expect(await db.productBuildArtifacts.count()).toBe(before)
+  }, 15_000)
 
   it('从冻结 WorldRelease 生成唯一清单、可玩 AVG 预览与可验证 SVG，并可幂等重入', async () => {
     const owned = await authorizedProduction({ name: 'vertical-avg', productType: 'avg', visualLevel: 'key-scenes' })

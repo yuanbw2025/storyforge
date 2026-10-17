@@ -1,3 +1,7 @@
+import { assertFrozenRuntimePackageSessionV1, parseProductRuntimeState } from '../product/runtime-core'
+import type { AnyProductBuildPreviewManifest } from '../types'
+import { avgExecutableModule } from '../avg/executable-module'
+import { verifyAvgBranchOriginV1 } from '../avg/branch-origin'
 import { validateExtensionBackup } from '../extensions/portable'
 /**
  * 注册表派生的项目导入引擎(AUDIT-1)
@@ -54,12 +58,14 @@ import type {
   ComicMediaAsset,
   CreationReleaseV1,
   ProductQualityGateReceiptRecordV1,
-  ProductReleaseManifestV1,
+  ProductBuildRecordV1,
+  AnyProductReleaseManifest,
   ProductRuntimeEvent,
   ScreenplayBlock,
   Work,
 } from '../types'
 import { PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1, PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
+import { verifyStoredProductBuildPreview } from '../product-production/preview-manifest'
 import { parseAndVerifyCreationReleaseManifestV1 } from '../creation-release/contracts'
 import { assertMotionDramaReleaseManifestV1 } from '../motion-drama/release-contracts'
 import {
@@ -86,7 +92,7 @@ import {
 } from '../open-world/source-pin'
 import { hashProductProductionValueV2 } from '../product-production/hash'
 import { verifyProductQualityGateReceiptRecordV1 } from '../product-production/quality-receipts'
-import { verifyProductReleaseManifestV1 } from '../product-production/runtime-package'
+import { verifyProductReleaseManifest } from '../product-production/runtime-package'
 import {
   replayTextOpenWorldMigrationSourceStateHashV1,
   verifyTextOpenWorldSaveMigrationBranchV1,
@@ -437,10 +443,24 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     if (!production) throw new Error('[deriveImport] v12 ProductCommand 生产引用越界')
     sameOwner(command, production, 'ProductCommand')
   }
+  const buildPreviewVersions = new Map<number, 1 | 2>()
+  const executableAvgBuilds = new Set<number>()
+  const executableAvgPreviews = new Map<number, AnyProductBuildPreviewManifest>()
   for (const build of builds.values()) {
     const production = productions.get(build._productionExportId)
     if (!production) throw new Error('[deriveImport] v12 ProductBuild 生产引用越界')
     sameOwner(build, production, 'ProductBuild')
+    try {
+      const preview = await verifyStoredProductBuildPreview(build as ProductBuildRecordV1)
+      if (preview) {
+        if (preview.productionKey !== production.productionKey
+          || preview.runtimePackage.productType !== production.productType) throw new Error('production-mismatch')
+        buildPreviewVersions.set(build._exportId, preview.version)
+        if (avgExecutableModule(preview.runtimePackage)) { executableAvgBuilds.add(build._exportId); executableAvgPreviews.set(build._exportId, preview) }
+      }
+    } catch (error) {
+      throw new Error(`[deriveImport] ProductBuild Preview 无效:${error instanceof Error ? error.message : String(error)}`)
+    }
   }
   for (const row of [...artifacts, ...receipts]) {
     const build = builds.get(row._buildExportId)
@@ -458,13 +478,13 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     }
   }
   await validateTextOpenWorldSourcePinArtifactsV10({ artifacts, builds, productions })
-  const releaseManifests = new Map<number, ProductReleaseManifestV1>()
+  const releaseManifests = new Map<number, AnyProductReleaseManifest>()
   for (const release of releases.values()) {
     if (!productKinds.has(release.productType) || !/^[a-f0-9]{64}$/.test(String(release.contentHash ?? ''))) {
       throw new Error('[deriveImport] v12 ProductRelease 身份或 hash 无效')
     }
     try {
-      const manifest = await verifyProductReleaseManifestV1(String(release.manifestJson ?? ''))
+      const manifest = await verifyProductReleaseManifest(String(release.manifestJson ?? ''))
       if (await hashProductProductionValueV2(manifest) !== release.contentHash
         || manifest.productType !== release.productType
         || manifest.productionProvenance.productionKey !== release.productionKey
@@ -482,6 +502,23 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     if (!productKinds.has(session.kind) || (releaseId == null) === (buildId == null)
       || !/^[a-f0-9]{64}$/.test(String(session.runtimeSourceHash ?? ''))) {
       throw new Error('[deriveImport] v12 ProductRuntime 必须具有唯一、有效的产品来源')
+    }
+    if ((releaseId != null && releaseManifests.get(releaseId)?.version === 2
+      && !avgExecutableModule(releaseManifests.get(releaseId)!.runtimePackage))
+      || (buildId != null && buildPreviewVersions.get(buildId) === 2 && !executableAvgBuilds.has(buildId))) {
+      throw new Error('[deriveImport] V2 未登记可玩模块，不能导入运行会话')
+    }
+    const avgSource = (releaseId != null ? releaseManifests.get(releaseId) : executableAvgPreviews.get(buildId))
+    if (avgSource && avgExecutableModule(avgSource.runtimePackage)) {
+      const sourceRow = releaseId != null ? releases.get(releaseId) : builds.get(buildId)
+      if (!sourceRow) throw new Error('[deriveImport] AVG 会话来源缺失')
+      sameOwner(session, sourceRow, 'AVG runtime')
+      if (session.runtimeSourceHash !== avgSource.packageHash) throw new Error('[avg] 备份会话来源 hash 不一致')
+      const branchOrigin = await verifyAvgBranchOriginV1({ canonSnapshotJson: session.canonSnapshotJson,
+        initialState: JSON.parse(session.initialStateJson), runtimeSourceHash: avgSource.packageHash })
+      assertFrozenRuntimePackageSessionV1({ session: { kind: session.kind, initialState: parseProductRuntimeState(session.initialStateJson) },
+        runtimePackage: avgSource.runtimePackage, runtimeSourceHash: avgSource.packageHash,
+        origin: session._parentSessionExportId != null || branchOrigin ? 'branch' : releaseId != null ? 'release' : 'preview' })
     }
     const sourceProductType = releaseId != null
       ? releases.get(releaseId)?.productType
@@ -572,7 +609,8 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     const childRelease = releases.get(session._productReleaseExportId)
     const parentManifest = releaseManifests.get(parent._productReleaseExportId)
     const childManifest = releaseManifests.get(session._productReleaseExportId)
-    if (!parentRelease || !childRelease || !parentManifest || !childManifest) {
+    if (!parentRelease || !childRelease || !parentManifest || !childManifest
+      || parentManifest.version !== 1 || childManifest.version !== 1) {
       throw new Error('[deriveImport] v10 ProductRuntime 迁移Release缺失')
     }
     try {
