@@ -5,6 +5,9 @@ import type {
   TtrpgSessionConsentPolicyV2,
   TtrpgSessionParticipantRecordV2,
 } from "../types";
+import type { TtrpgCampaignContentV2 } from "./open-contract";
+
+type ParticipantCampaign = TtrpgCampaignContentV1 | TtrpgCampaignContentV2;
 
 function fail(message: string): never {
   throw new Error(`[ttrpg-participants] ${message}`);
@@ -95,7 +98,7 @@ function assertParticipant(
 
 export function buildInitialTtrpgParticipantsV2(input: {
   session: ProductRuntimeSession;
-  campaign: TtrpgCampaignContentV1;
+  campaign: ParticipantCampaign;
   now?: number;
 }): TtrpgSessionParticipantRecordV2[] {
   if (
@@ -112,7 +115,9 @@ export function buildInitialTtrpgParticipantsV2(input: {
   const gmMode = input.campaign.gmMode ?? "human";
   const hasAi =
     gmMode !== "human" ||
-    playerTemplates.some((character) => character.controller === "ai");
+    playerTemplates.some(
+      (character) => character.controller === "ai" || character.controller === "hybrid",
+    );
   const common = {
     projectId: input.session.projectId,
     worldGroupId: input.session.worldGroupId ?? null,
@@ -173,7 +178,7 @@ export function buildInitialTtrpgParticipantsV2(input: {
         activation: controller === "ai" ? "initiative" : "manual",
         substitutionPolicy: "never",
         aiProfile:
-          controller === "ai"
+          controller === "ai" || controller === "hybrid"
             ? {
                 agency: "balanced",
                 riskTolerance: "balanced",
@@ -197,7 +202,7 @@ export function buildInitialTtrpgParticipantsV2(input: {
 
 export async function installInitialTtrpgParticipantsV2(input: {
   session: ProductRuntimeSession;
-  campaign: TtrpgCampaignContentV1;
+  campaign: ParticipantCampaign;
 }): Promise<TtrpgSessionParticipantRecordV2[]> {
   const records = buildInitialTtrpgParticipantsV2(input);
   const existing = await db.ttrpgSessionParticipants
@@ -481,6 +486,7 @@ export async function carryTtrpgContinuationParticipantsV2(input: {
 export async function cloneTtrpgSessionParticipantsV2(input: {
   parentSessionId: number;
   child: ProductRuntimeSession;
+  parentSessionKey?: string;
 }): Promise<void> {
   const parentRows = await db.ttrpgSessionParticipants
     .where("sessionId")
@@ -504,9 +510,9 @@ export async function cloneTtrpgSessionParticipantsV2(input: {
       workId: input.child.workId!,
       sessionId: input.child.id!,
       revision: 1,
-      lastCommandId: `branch-from.${input.parentSessionId}`,
+      lastCommandId: input.parentSessionKey ? 'branch-initialization' : `branch-from.${input.parentSessionId}`,
       lastCommandFingerprint: stableJson({
-        parentSessionId: input.parentSessionId,
+        ...(input.parentSessionKey ? { parentSessionKey: input.parentSessionKey } : { parentSessionId: input.parentSessionId }),
         seatKey: row.seatKey,
       }),
       createdAt: now,

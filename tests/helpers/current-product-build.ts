@@ -9,6 +9,8 @@ import type {
   WorldRelease,
 } from '../../src/lib/types'
 import { createProductRuntimeInstanceFromSource } from '../../src/lib/product/runtime-instances'
+import type { ProductRuntimePackageWithTtrpgV2 } from '../../src/lib/ttrpg/content-version'
+import { parseProductRuntimePackageV1, type ProductTtrpgProtocol2ReaderV1 } from '../../src/lib/product-production/runtime-package'
 
 /**
  * Minimal current-only Product Build fixture. Tests that need a formal runtime
@@ -18,13 +20,13 @@ import { createProductRuntimeInstanceFromSource } from '../../src/lib/product/ru
 export async function seedCurrentProductBuild(input: {
   scope: WorkspaceScope
   worldRelease: WorldRelease & { id: number }
-  runtimePackage: ProductRuntimePackageV1
+  runtimePackage: ProductRuntimePackageV1 | ProductRuntimePackageWithTtrpgV2
   title: string
   worldGroupId?: number | null
   seed?: string
   mediaBindings?: ProductBuildPreviewManifestV1['mediaBindings']
   brief?: ProductProductionBriefV3
-}) {
+}, reader?: ProductTtrpgProtocol2ReaderV1) {
   const now = Date.now()
   const productionKey = `current-product-${input.scope.projectId}-${crypto.randomUUID().slice(0, 8)}`
   const briefBody = input.brief ?? {
@@ -85,13 +87,16 @@ export async function seedCurrentProductBuild(input: {
     buildNumber: 1,
   }
   const manifestHash = await hashProductProductionValueV2(buildManifest)
-  const preview = await createProductBuildPreviewManifestV1({
+  const previewInput = {
     productionKey,
     buildNumber: 1,
     buildManifestHash: manifestHash,
     runtimePackage: input.runtimePackage,
     mediaBindings: input.mediaBindings,
-  })
+  }
+  const preview = reader
+    ? await createProductBuildPreviewManifestV1(previewInput, reader)
+    : await createProductBuildPreviewManifestV1({ ...previewInput, runtimePackage: parseProductRuntimePackageV1(input.runtimePackage) })
   const planBody = { schema: 'storyforge.test-build-plan', version: 1, tasks: [] }
   const planHash = await hashProductProductionValueV2(planBody)
   const buildId = await db.productBuilds.add({

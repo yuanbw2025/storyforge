@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ProductProductionSourceOptionsV1, ProductProductionSourceSelectionV1, TtrpgRulePackRecordV1, WorkspaceScope } from "../../lib/types";
 import { listValidatedTtrpgRulePacksV1 } from "../../lib/ttrpg/rule-pack-library";
+import TtrpgOpenRuleImport from './TtrpgOpenRuleImport';
 import type { TtrpgProductionWizardValueV2, SeatDraft } from "../../lib/ttrpg/authoring-settings";
 export { createDefaultTtrpgProductionWizardValueV2, toTtrpgProductionBriefDraftInputV2 } from "../../lib/ttrpg/authoring-settings";
 export type { TtrpgProductionWizardValueV2 } from "../../lib/ttrpg/authoring-settings";
@@ -22,6 +23,7 @@ const labelClass = "grid gap-2 text-[10px] text-text-muted";
 
 export default function TtrpgProductionWizard(props: {
   scope: WorkspaceScope | null;
+  runFormat?: 'scripted' | 'open';
   activeStep?: number;
   onStepChange?: (step: number) => void;
   value: TtrpgProductionWizardValueV2;
@@ -295,6 +297,12 @@ export default function TtrpgProductionWizard(props: {
                 </select>
               </label>
             )}
+            {props.runFormat === 'open' && props.scope && <TtrpgOpenRuleImport
+              key={`${props.scope.projectId}:${props.scope.worldId}:${props.scope.workId}`} scope={props.scope}
+              onSaved={record => {
+                setRulePacks(prior => [...prior.filter(row => row.id !== record.id),record]);
+                patch({ ruleOrigin: 'saved-rule-pack',savedRulePackId: record.id! });
+              }} />}
             {(value.ruleOrigin === "builtin-storyforge" ||
               value.ruleOrigin === "builtin-rank-lite") && (
               <label className={labelClass}>

@@ -18,10 +18,11 @@ import { resolveWorkspaceOwnership } from '../workspace/ownership'
 import { portableizeAgentRunLedgerExportV1 } from '../agent/run/ledger-portability'
 import { assertAgentRunArtifactRecordIntegrityV1 } from '../memory/artifact-record'
 import { readVerifiedMediaBlobObjectData } from '../product-production/media-blob-store'
-import type { ProductReleaseManifestV1, ProductRuntimeEvent } from '../types'
+import type { ProductRuntimeEvent } from '../types'
+import type { ProductReleaseManifestWithTtrpgV2 } from '../ttrpg/content-version'
 
 /** 当前完整便携备份契约。 */
-export const CURRENT_EXPORT_VERSION = 15
+export const CURRENT_EXPORT_VERSION = 16
 
 export interface StrictProjectExportSnapshot {
   data: ProjectExportData
@@ -49,7 +50,7 @@ async function assertProductRuntimeExportIntegrityV1(
   const checkpoints = rowsByTable.get('productRuntimeCheckpoints') ?? []
   const releases = rowsByTable.get('productReleases') ?? []
   const releasesById = new Map<number, any>()
-  const releaseManifestsById = new Map<number, ProductReleaseManifestV1>()
+  const releaseManifestsById = new Map<number, ProductReleaseManifestWithTtrpgV2>()
   const buildsById = new Map<number, any>()
   for (const build of builds) {
     if (!Number.isSafeInteger(build.id) || build.id < 1 || buildsById.has(build.id)) {
@@ -83,7 +84,7 @@ async function assertProductRuntimeExportIntegrityV1(
         throw new Error('[deriveExport] ProductRelease 本地主键无效')
       }
       try {
-        const manifest = await runtimePackage.verifyProductReleaseManifestV1(release.manifestJson)
+        const manifest = await runtimePackage.verifyProductReleaseManifestV1(release.manifestJson,{ ttrpgProtocol: 2 })
         if (await productionHash.hashProductProductionValueV2(manifest) !== release.contentHash
           || release.productType !== manifest.productType
           || release.productionKey !== manifest.productionProvenance.productionKey
@@ -168,6 +169,7 @@ async function assertProductRuntimeExportIntegrityV1(
     }
     try {
       migrationContract ??= await import('../open-world/player-save-migration-contract')
+      const { parseProductReleaseManifestV1 } = await import('../product-production/runtime-package')
       const sourceStateHash = await migrationContract.replayTextOpenWorldMigrationSourceStateHashV1({
         session: parent,
         events: eventsBySession.get(parent.id) ?? [],
@@ -178,8 +180,8 @@ async function assertProductRuntimeExportIntegrityV1(
         childSession: session,
         parentRelease,
         childRelease,
-        parentManifest,
-        childManifest,
+        parentManifest: parseProductReleaseManifestV1(parentManifest),
+        childManifest: parseProductReleaseManifestV1(childManifest),
         sourceStateHash,
       })
     } catch (error) {
@@ -556,9 +558,9 @@ async function captureProjectExport(projectId: number, version: number, strictOw
   return { data: captured.data, exportIds: captured.exportIds }
 }
 
-async function portableizeSnapshot(snapshot: StrictProjectExportSnapshot): Promise<StrictProjectExportSnapshot> {
+async function portableizeSnapshot(snapshot: StrictProjectExportSnapshot, options: { freezeContextEvidence?: boolean } = {}): Promise<StrictProjectExportSnapshot> {
   if (PROJECT_TABLES.some(spec => spec.portableData?.kind === 'agent-run-root')) {
-    const portableLedger = portableizeAgentRunLedgerExportV1(snapshot.data, snapshot.exportIds)
+    const portableLedger = portableizeAgentRunLedgerExportV1(snapshot.data, snapshot.exportIds, options)
     if (Dexie.currentTransaction) await Dexie.waitFor(portableLedger)
     else await portableLedger
   }
@@ -675,7 +677,9 @@ export async function deriveStrictExportProjectSnapshotInCurrentTransaction(
   // inside Dexie.waitFor prevents a real browser from auto-committing the
   // caller-owned revision transaction between the final export read and the
   // subsequent worldRevisions write.
-  const snapshot = await Dexie.waitFor(portableizeSnapshot(captured))
+  // World封存只保存语义；完整工作区备份才向生产/运行 owner 冻结新的搬运证明。
+  // Existing opaque origin records travel unchanged, without entering runtime readers in this transaction.
+  const snapshot = await Dexie.waitFor(portableizeSnapshot(captured, { freezeContextEvidence: false }))
   const worldExportId = snapshot.exportIds.get('worlds')?.get(ownership.worldId)
   const workExportId = snapshot.exportIds.get('works')?.get(ownership.workId)
   if (worldExportId == null || workExportId == null) {

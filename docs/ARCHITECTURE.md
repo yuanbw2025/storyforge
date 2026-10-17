@@ -108,12 +108,12 @@ flowchart TB
 | 当前事实 | 数值 | 单一事实源 |
 |---|---:|---|
 | 应用语义版本 | `4.0.2` | `package.json` |
-| TypeScript 生产源码 | 1470 个文件 / 520323 行 | `tsconfig.json` |
-| IndexedDB schema | v11 / 128 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
-| PROJECT_TABLES | 128 张表 | `project-tables.ts` |
+| TypeScript 生产源码 | 1755 个文件 / 561902 行 | `tsconfig.json` |
+| IndexedDB schema | v12 / 129 张 required tables | `schema.ts` / `REQUIRED_TABLES` |
+| PROJECT_TABLES | 129 张表 | `project-tables.ts` |
 | Prompt 主线 | 65 个 moduleKey / 238 条内置模板 | `PromptModuleKey` / `prompt-seeds*.ts` |
-| CONTEXT_SOURCES | 133 个上下文源 | `context-sources.ts` |
-| 写回治理 | 54 个通用 adopt target / 59 个领域扩展 | `adoption-schema.ts` |
+| CONTEXT_SOURCES | 152 个上下文源 | `context-sources.ts` |
+| 写回治理 | 54 个通用 adopt target / 60 个领域扩展 | `adoption-schema.ts` |
 <!-- project-metrics:end -->
 
 ## 4. 分层架构
@@ -210,6 +210,10 @@ flowchart LR
 ## 9. 失败与恢复
 
 Durable Harness 将运行状态写入 ledger/checkpoint；provider 调用有 attempt identity；候选保存输入/目标 revision；采纳使用事务和 post-state。网络结果未知、认证/配额、stale、协议错误和不可恢复错误分开处理。
+
+开放跑团的内部意图服务通过角色专用 `ttrpgOpenAuthority` / `ttrpgOpenKnowledge` Provider 与 Context Gateway 冻结实际读取。发送前持久化 selector、packet、来源原文、完整请求及 V2 输入 manifest；V3 Run 保存 Skill 和正式入口快照，产品调用账本在事务中复验真实证据，只有首次派发返回发送许可。响应原文先留存、用量先入账，再检查既有 `TtrpgOpenIntentV1` 和生成 CreativeArtifact；响应后才形成完整 V3 Context Manifest。候选能回读且需要后续真人决定，不能自动裁定规则、扣资源或推进时间。实际账单金额未知时保持 null 和预留额度，不把价格估算标成实际收费。此链尚未接通公共 open 界面与候选正式采用，实际 provider 和联合玩家验收仍单独记录。
+
+开放跑团的候选增量还增加独立队友目的和结算后 KP 目的。队友使用其自身玩家投影；KP 通过 `ttrpgOpenKpInput` 只读取实际接收者共同可见内容及公开结算结果。它们共用原 Harness，叙述采用只写 session 叙述账本；规则/事实/知识仍由既有唯一 owner 提交。Session Zero 预授权与逐次真人批准分别留证；有限交接不发送请求、不重开授权窗口。完整恢复入口 `resumeTtrpgOpenPlayV1` 遇选择、审批、收束、质量门与叙述确认明确停止。该候选尚未连接公共 open 玩家界面。
 
 UI 刷新后必须从 durable 状态恢复。没有 checkpoint 的辅助调用只能返回内存结果或只读报告，不得静默写正式数据。
 

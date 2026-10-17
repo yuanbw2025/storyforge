@@ -545,14 +545,27 @@ export async function aggregateProductSourceManifestFromExactRunsV1(input: {
       attempt: pointer.attempt,
     })
     const manifest = restored.manifest
+    const scopeRebound = manifest.gateway.scopeFingerprint !== gatewaySession.scopeFingerprint
+      && plan.productType === 'ttrpg'
+      && await (await import('./world-context-portability')).verifyImportedWorldContextBindingV1({
+        snapshot: restored.snapshot,manifestHash: manifest.manifestHash,sourceScopeFingerprint: manifest.gateway.scopeFingerprint,
+        worldReleaseUid: plan.worldReference.releaseUid,worldReleaseHash: plan.worldReference.releaseHash,
+      })
     if (manifest.manifestHash !== pointer.manifestHash
       || manifest.gateway.policyHash !== plan.gatewayPolicyHash
-      || manifest.gateway.scopeFingerprint !== gatewaySession.scopeFingerprint) {
+      || manifest.gateway.scopeFingerprint !== gatewaySession.scopeFingerprint && !scopeRebound) {
       fail('run-manifest-binding', `Run ${pointerKey} 未绑定 SourcePlan 的 release/policy`)
     }
     for (const decision of traceDecisions(manifest)) {
       if (decision.sourceKey !== 'worldRelease') continue
       const descriptor = await descriptorForTrace({ scope: sourceScope, resourceKey: decision.resourceKey })
+      if (scopeRebound) {
+        const portableRefs = (refs: typeof decision.sourceRefs) => refs.map(({ recordId: _localLocator,...ref }) => ref)
+        if (decision.sourceRefs.some(ref => ref.table !== 'worldReleases' || ref.revision !== plan.worldReference.releaseUid)
+          || await hashCanonicalValue(portableRefs(decision.sourceRefs)) !== await hashCanonicalValue(portableRefs(descriptor.sourceRefs))) {
+          fail('run-manifest-binding', '导入的世界读取 SourceRefs 与实际冻结版本不一致')
+        }
+      }
       if (!resourceAllowed(plan, descriptor) || !plan.permission.allowedDepths.includes(decision.depth)) {
         fail('permission', `Run ${pointerKey} 越过 SourcePlan 读取 ${decision.resourceKey}`)
       }

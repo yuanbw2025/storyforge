@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { db } from '../db/schema'
 import type {
@@ -172,7 +173,8 @@ export async function inspectAgentRunArtifactAvailabilityV1(input: {
       pruneReceiptHash: row.pruneReceiptHash,
     }
   }
-  if (row.content == null || await sha256Text(row.content) !== row.contentHash || byteLength(row.content) !== row.byteLength) {
+  const contentHash = row.content == null ? null : await (Dexie.currentTransaction ? Dexie.waitFor(sha256Text(row.content)) : sha256Text(row.content))
+  if (row.content == null || contentHash !== row.contentHash || byteLength(row.content) !== row.byteLength) {
     return {
       artifactKind: row.artifactKind,
       contentHash: row.contentHash,

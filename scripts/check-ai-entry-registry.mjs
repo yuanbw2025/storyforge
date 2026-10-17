@@ -224,6 +224,11 @@ const scannedFiles = [
   // G6-01 owns the only frozen provider gateway for all six vNext open-world
   // runtime AI skills. Later UI work must call this governed service.
   'src/lib/open-world/runtime-ai-execution.ts',
+  // Open TTRPG has its own actor-scoped, one-send governed transport boundary.
+  'src/lib/ttrpg/open-intent-harness.ts',
+  // Fixed-fixture offline speech evaluation is a limited transport, never a
+  // creative binding or an application/provider fallback.
+  'scripts/ttrpg-local-tts/evaluate.mjs',
   // G6-10's independent semantic grader is an eval-only formal model entry.
   // It may judge redacted observations, but can never adopt product content.
   'src/lib/evals/open-world-runtime/judge.ts',
@@ -247,9 +252,13 @@ const limited = new Map()
 for (const entry of registry.limitedTransports ?? []) {
   if (!entry.entryId || registered.has(entry.entryId) || limited.has(entry.entryId)
     || entry.adoptAllowed !== false || entry.adoptionTargets?.length
-    || !['ephemeral-author-input', 'read-only-audio'].includes(entry.boundary)
+    || !['ephemeral-author-input', 'read-only-audio', 'offline-fixture-audio-eval'].includes(entry.boundary)
     || !entry.allowedCallers?.length || !entry.reason) {
     failures.push('有限语音入口边界无效: ' + entry.entryId)
+  }
+  if (entry.boundary === 'offline-fixture-audio-eval'
+    && entry.allowedCallers.some(caller => !/^scripts\/ttrpg-local-tts\/[a-z-]+\.mjs$/.test(caller))) {
+    failures.push('离线语音评测不能成为产品入口: ' + entry.entryId)
   }
   limited.set(entry.entryId, entry)
 }

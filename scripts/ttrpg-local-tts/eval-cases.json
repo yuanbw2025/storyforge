@@ -1,0 +1,42 @@
+{
+  "schema": "storyforge.ttrpg-local-tts-eval-cases",
+  "version": 2,
+  "cases": [
+    {
+      "id": "narration-zh",
+      "text": "港口的钟声穿过薄雾。你推开木门，屋里的灯还亮着。",
+      "expectation": "audio",
+      "expectedNormalizedText": "港口的钟声穿过薄雾.你推开木门,屋里的灯还亮着."
+    },
+    {
+      "id": "numbers-zh",
+      "text": "现在是晚上八点二十分。你还有三次机会，背包里放着十二枚银币。",
+      "expectation": "audio",
+      "expectedNormalizedText": "现在是晚上八点二十分.你还有三次机会,背包里放着十二枚银币."
+    },
+    {
+      "id": "long-zh",
+      "text": "雨停以后，你们沿着石阶走到旧码头。守夜人抬起灯，仔细看了看每个人的脸，却没有立刻开口。远处传来两下缓慢的钟声，一只小船正从黑暗里靠近。你可以先问清来人的身份，再决定是否登船。",
+      "expectation": "audio",
+      "expectedNormalizedText": "雨停以后,你们沿着石阶走到旧码头.守夜人抬起灯,仔细看了看每个人的脸,却没有立刻开口.远处传来两下缓慢的钟声,一只小船正从黑暗里靠近.你可以先问清来人的身份,再决定是否登船."
+    },
+    {
+      "id": "mixed-script-rejection",
+      "text": "角色的HP还剩十二点。",
+      "expectation": "unsupported-script",
+      "expectedNormalizedText": null
+    },
+    {
+      "id": "numbers-arabic",
+      "text": "现在是晚上8点20分。你还有3次机会，背包里放着12枚银币。",
+      "expectation": "audio",
+      "expectedNormalizedText": "现在是晚上八点二十分.你还有三次机会,背包里放着十二枚银币."
+    },
+    {
+      "id": "paragraphs-zh",
+      "text": "港口的钟声穿过薄雾。\n\n你推开木门，屋里的灯还亮着。",
+      "expectation": "audio",
+      "expectedNormalizedText": "港口的钟声穿过薄雾...你推开木门,屋里的灯还亮着."
+    }
+  ]
+}

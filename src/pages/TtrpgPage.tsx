@@ -585,6 +585,7 @@ export default function TtrpgPage() {
                         <div className="ttrpg-wizard">
                           <Wizard
                             scope={scope}
+                            runFormat={settings.runFormat}
                             value={settings.wizard}
                             sourceOptions={sources?.sourceOptions ?? null}
                             sourceSelection={selection}
@@ -826,7 +827,7 @@ export default function TtrpgPage() {
                   </>
                 ) : page[0] === "agent" ? (
                   scope && productionId ? (
-                    <Proposal scope={scope} productionId={productionId} />
+                    <Proposal scope={scope} productionId={productionId} onProduction={() => go('production')} />
                   ) : (
                     <section className="lf-paper">
                       <h3>把想法整理成可以比较的战役方案</h3>

@@ -22,6 +22,7 @@ import { PRODUCT_MEDIA_KINDS, PRODUCT_PRODUCTION_COMMAND_TYPES, PRODUCTION_PRODU
 import { isSha256Hash, canonicalProductProductionJsonV2 } from './hash'
 import { parseProductRuntimePackageV1, parseProductWorldSourceSelectionV1 } from './runtime-package'
 import { parseTtrpgProductionBriefV2 } from '../ttrpg/production-brief'
+import { parseTtrpgProductionBriefContentShapeV3 } from '../ttrpg/production-brief-v3'
 import { parseAiTownProductionBriefV1 } from '../ai-town/contracts'
 import { parseTextAdventureProductionBriefV1 } from '../adventure/production-brief'
 import {
@@ -274,6 +275,7 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     ...(Object.prototype.hasOwnProperty.call(row, 'avg') ? ['avg'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'avgRevision') ? ['avgRevision'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'ttrpg') ? ['ttrpg'] : []),
+    ...(Object.prototype.hasOwnProperty.call(row, 'ttrpgOpen') ? ['ttrpgOpen'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'aiTown') ? ['aiTown'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'textAdventure') ? ['textAdventure'] : []),
     ...(Object.prototype.hasOwnProperty.call(row, 'authorConfirmations') ? ['authorConfirmations'] : []),
@@ -340,6 +342,9 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
     ...(Object.prototype.hasOwnProperty.call(row, 'ttrpg')
       ? { ttrpg: parseTtrpgProductionBriefV2(row.ttrpg) }
       : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'ttrpgOpen')
+      ? { ttrpgOpen: parseTtrpgProductionBriefContentShapeV3(row.ttrpgOpen) }
+      : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'aiTown')
       ? { aiTown: parseAiTownProductionBriefV1(row.aiTown) }
       : {}),
@@ -365,8 +370,21 @@ export function parseProductProductionBriefV3(value: unknown): ProductProduction
   if (parsed.intent.protagonistRefs.some(ref => !parsed.source.startingPoint.protagonistRefs.includes(ref))) {
     fail('intent.protagonistRefs 必须来自 startingPoint 候选')
   }
-  if ((parsed.intent.productType === 'ttrpg') !== (parsed.ttrpg != null)) {
-    fail('ttrpg 产品与 TtrpgProductionBriefV2 不闭合')
+  if ((parsed.intent.productType === 'ttrpg') !== (parsed.ttrpg != null || parsed.ttrpgOpen != null)
+    || (parsed.ttrpg != null && parsed.ttrpgOpen != null)) {
+    fail('ttrpg 产品必须且只能绑定一个 scripted/open 制作契约')
+  }
+  if (parsed.ttrpgOpen) {
+    const open = parsed.ttrpgOpen
+    if (open.worldReference.localReleaseRecordId !== parsed.source.worldReleaseId
+      || open.worldReference.releaseHash !== parsed.source.worldContentHash
+      || open.worldReference.referenceHash !== parsed.source.selection.worldReferenceHash
+      || open.sourcePlan.productType !== parsed.intent.productType
+      || open.settings.openingSituation !== parsed.intent.openingSituation
+      || open.settings.playerRole !== parsed.intent.playerRole
+      || parsed.scale.targetEndingCount !== 0) {
+      fail('open 跑团方向/来源与共同制作合同不一致，不能伪造结局下限')
+    }
   }
   if ((parsed.intent.productType === 'ai-town') !== (parsed.aiTown != null)) {
     fail('ai-town 产品与 AiTownProductionBriefV1 不闭合')

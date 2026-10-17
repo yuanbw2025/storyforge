@@ -1032,6 +1032,17 @@ export async function readProductProductionDetailsV1(
     }
     buildHistory.push(row)
   }
+  const storedOpenTtrpgBrief = (() => {
+    if (!brief || brief.briefKind === 'text-open-world-creator-v1') return false
+    try {
+      const value = JSON.parse(brief.briefJson) as Record<string, unknown>
+      return value.schema === 'storyforge.ttrpg-production-brief'
+        && value.version === 3
+        && value.runFormat === 'open'
+    } catch {
+      return false
+    }
+  })()
   const executionBrief = brief?.briefKind === 'text-open-world-creator-v1'
     ? brief.status === 'authorized' && build
       ? (await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
@@ -1039,7 +1050,7 @@ export async function readProductProductionDetailsV1(
           buildId: build.id!,
         })).contracts.executionBrief
       : null
-    : brief ? parseProductProductionBriefV3(brief.briefJson) : null
+    : storedOpenTtrpgBrief ? null : brief ? parseProductProductionBriefV3(brief.briefJson) : null
   return {
     production,
     brief: brief ?? null,

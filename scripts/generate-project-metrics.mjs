@@ -86,7 +86,7 @@ function metrics() {
     projectTables: declaredArrayLength('src/lib/registry/project-tables.ts', 'PROJECT_TABLES'),
     promptModuleKeys: promptKeys.size,
     promptTemplates,
-    contextSources: countMatches(read('src/lib/registry/context-sources.ts'), /\n\s*key:\s*'[^']+'/g),
+    contextSources: declaredArrayLength('src/lib/registry/context-sources.ts', 'CONTEXT_SOURCES'),
     adoptionTargets: declaredArrayLength('src/lib/registry/adoption-schema.ts', 'ADOPTION_SCHEMAS'),
     adoptionExtensions: declaredArrayLength('src/lib/registry/adoption-schema.ts', 'ADOPTION_EXTENSIONS'),
   }

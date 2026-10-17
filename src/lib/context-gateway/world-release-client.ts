@@ -26,6 +26,13 @@ export interface WorldSemanticResourceCatalogV1 extends OpenWorldReleaseV1 {
   resources: ContextResourceDescriptorV1[]
 }
 
+/** Neutral release metadata only; avoids projecting every semantic row for a scope identity check. */
+export function describeWorldSemanticReleaseV1(input: {
+  localReleaseRecordId: number; expectedProjectId: number; expectedWorldId?: number
+}): Promise<OpenWorldReleaseV1> {
+  return openWorldReleaseV1(input)
+}
+
 function hasWorldSemantic(
   descriptor: ContextResourceDescriptorV1,
 ): descriptor is ContextResourceDescriptorV1 & {

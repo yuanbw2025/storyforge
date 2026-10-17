@@ -221,6 +221,16 @@ export interface TtrpgRuntimeState {
   campaign: TtrpgRuntimeCampaignState;
   /** Formal ProductRelease projection. */
   product: TtrpgRuntimeProductStateV1;
+  /**
+   * Protocol-2/open sessions add this key only after the explicit
+   * `ttrpg.open.run.started` event. Legacy scripted readers must keep this
+   * field out of their exact-key parser.
+   */
+  openRun?: unknown;
+  /** Explicit protocol-2 child identity/authority; never inserted into V1 JSON. */
+  sessionKey?: string;
+  authorization?: unknown;
+  epochBudget?: unknown;
 }
 
 export interface TtrpgRuntimeProductStateV1 {
@@ -1181,6 +1191,7 @@ export const PRODUCT_RUNTIME_EVENT_TYPES = [
   "ttrpg.character.customized",
   "ttrpg.character.advanced",
   "ttrpg.session-zero.completed",
+  "ttrpg.memory.recorded",
   "ttrpg.safety.changed",
   "ttrpg.clue.discovered",
   "ttrpg.intent.receipted",
@@ -1196,6 +1207,73 @@ export const PRODUCT_RUNTIME_EVENT_TYPES = [
   "ttrpg.media.available",
   "ttrpg.media.failed",
   "ttrpg.media.cancelled",
+  "ttrpg.audio.voice.reserved",
+  "ttrpg.audio.voice.cancelled",
+  "ttrpg.audio.cue.applied",
+  "ttrpg.open.run.started",
+  "ttrpg.open.epoch.started",
+  "ttrpg.open.epoch.closed",
+  "ttrpg.open.hosting.delegated",
+  "ttrpg.open.hosting.stopped",
+  "ttrpg.open.call.reserved",
+  "ttrpg.open.call.dispatched",
+  "ttrpg.open.call.finished",
+  "ttrpg.open.source.inherited",
+  "ttrpg.open.operation.started",
+  "ttrpg.open.operation.step.completed",
+  "ttrpg.open.operation.completed",
+  "ttrpg.open.intent.disposed",
+  "ttrpg.open.intent.previewed",
+  "ttrpg.open.intent.confirmed",
+  "ttrpg.open.choice.disclosed",
+  "ttrpg.open.table-message.posted",
+  "ttrpg.oracle.consulted",
+  "ttrpg.open.oracle.reviewed",
+  "ttrpg.fact.asserted",
+  "ttrpg.fact.retired",
+  "ttrpg.open.knowledge.discovered",
+  "ttrpg.open.knowledge.shared",
+  "ttrpg.open.knowledge.identity-confirmed",
+  "ttrpg.open.knowledge.identity-shared",
+  "ttrpg.world-turn.advanced",
+  "ttrpg.open.pressure.planned",
+  "ttrpg.open.pressure.settled",
+  "ttrpg.open.pressure.effect.confirmed",
+  "ttrpg.open.pressure.effect.applied",
+  "ttrpg.open.pressure.situation.completed",
+  "ttrpg.open.situations.planned",
+  "ttrpg.open.situations.changed",
+  "ttrpg.open.situations.settled",
+  "ttrpg.open.situations.effect.confirmed",
+  "ttrpg.open.situations.effect.applied",
+  "ttrpg.clock.ticked",
+  "ttrpg.front.telegraphed",
+  "ttrpg.front.advanced",
+  "ttrpg.situation.changed",
+  "ttrpg.front.defeated",
+  "ttrpg.open.stage.closed",
+  "ttrpg.open.stage.clock.advanced",
+  "ttrpg.open.stage.settled",
+  "ttrpg.open.stage.effect.confirmed",
+  "ttrpg.open.stage.effect.applied",
+  "ttrpg.open.gates.evaluated",
+  "ttrpg.open.terminal.evaluated",
+  "ttrpg.open.handoff.offered",
+  "ttrpg.open.narration.recorded",
+  "ttrpg.open.narration.accepted",
+  "ttrpg.open.situation.accepted",
+  "ttrpg.open.entity.proposed",
+  "ttrpg.open.entity.model-proposed",
+  "ttrpg.open.entity.confirmed",
+  "ttrpg.open.entity.materialized",
+  "ttrpg.open.entity.disposed",
+  "ttrpg.open.situation.activated",
+  "ttrpg.open.intent.rejected",
+  "ttrpg.open.companion.preauthorized",
+  "ttrpg.open.gates.settled",
+  "ttrpg.open.gates.recovered",
+  "ttrpg.open.gates.recovery-stopped",
+  "ttrpg.open.failure.logged",
   "interaction.scene.started",
   "interaction.scene.ended",
   "interaction.participant.joined",

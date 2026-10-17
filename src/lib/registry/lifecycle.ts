@@ -29,6 +29,11 @@ export function exportableTables(): TableSpec[] {
   return PROJECT_TABLES.filter(s => s.exportable)
 }
 
+/** Runtime side tables are selected by their declared owner, including newly registered extensions. */
+export function runtimeInstanceTablesV1(): Table[] {
+  return PROJECT_TABLES.filter(spec => spec.domainOwner?.allowed.includes('instance')).map(spec => spec.table)
+}
+
 /**
  * 某个生命周期操作需要的 Dexie 事务表清单。
  * 防止事务声明漏表。

@@ -6,6 +6,9 @@ import type {
 } from '../types'
 import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
 import { parseTextAdventureContentRevisionV1, parseProductProductionBriefV3 } from './contracts'
+import { buildTtrpgOpenProductionPlanV3 } from '../ttrpg/open-production-plan'
+import { createCommonProductMediaBundleTasksV3 } from './media-plan-tasks'
+import { validateTtrpgProductionBriefContentV3 } from '../ttrpg/production-brief-v3'
 import { hashProductProductionValueV2, isSha256Hash } from './hash'
 import { textAdventureSceneScriptPartSceneKeysV1 } from '../adventure/scene-script'
 import {
@@ -366,6 +369,16 @@ export function parseProductProductionPlanV3(
     requirement.required && !tasks.some(task => task.capabilityRequirementKeys.includes(requirement.requirementKey))
   ))) fail('必需 capability 未覆盖')
   if (brief) {
+    if (brief.ttrpgOpen) {
+      const expected = buildTtrpgOpenProductionPlanV3({ brief, briefHash: row.briefHash as string,
+        buildNumber: Number(row.buildNumber), controlEpoch: Number(row.controlEpoch) })
+      // Reuse is separately authorized against the exact parent proof. It must
+      // not change the product's task graph, budgets or execution contracts.
+      if (JSON.stringify(tasks.map(task => ({ ...task, reuse: null }))) !== JSON.stringify(expected.tasks) || terminalTaskKey !== expected.terminalTaskKey
+        || JSON.stringify(parsedConcurrency) !== JSON.stringify(expected.concurrency)) {
+        fail('open 跑团计划必须绑定专属任务、真实依赖与授权预算，不能偷换 scripted DAG')
+      }
+    }
     const totals = tasks.reduce((sum, task) => ({
       modelCalls: sum.modelCalls + task.budgetReservation.modelCalls,
       inputTokens: sum.inputTokens + task.budgetReservation.inputTokens,
@@ -453,6 +466,11 @@ export async function createProductProductionPlanV3(input: {
   if (await hashProductProductionValueV2(brief) !== input.briefHash) fail('briefHash 与 Brief 内容不一致')
   const controlEpoch = input.controlEpoch ?? 0
   if (!Number.isInteger(controlEpoch) || controlEpoch < 0) fail('controlEpoch 无效')
+  if (brief.ttrpgOpen) {
+    await validateTtrpgProductionBriefContentV3(brief.ttrpgOpen)
+    return parseProductProductionPlanV3(buildTtrpgOpenProductionPlanV3({ brief, briefHash: input.briefHash,
+      buildNumber: input.buildNumber, controlEpoch }), brief, input.briefHash)
+  }
 
   const capabilityKeys = (classes: Array<ProductProductionBriefV3['capabilityRequirements'][number]['mediaClass']>) => (
     brief.capabilityRequirements
@@ -1239,7 +1257,13 @@ export async function createProductProductionPlanV3(input: {
     acceptanceGateIds: ['artifact.protocol', 'media.character-anchors-authorized'],
   }))
   const mediaDependencies: string[] = []
-  if (activeVisual) {
+  if (!textAdventure) {
+    const mediaTasks = createCommonProductMediaBundleTasksV3({ brief, dependsOn: ['media.requirements'],
+      inputArtifactKeys: ['media.requirements'], visualArtifactKeys, audioArtifactKeys,
+      durationMs: perDuration, storageBytes: mediaStorage, maximumCostUsd: perCost })
+    tasks.push(...mediaTasks); mediaDependencies.push(...mediaTasks.map(task => task.taskKey))
+  }
+  if (textAdventure && activeVisual) {
     const taskKeys = textAdventure ? visualArtifactKeys : ['media.visual']
     mediaDependencies.push(...taskKeys)
     for (const taskKey of taskKeys) tasks.push(productionTask({
@@ -1262,7 +1286,7 @@ export async function createProductProductionPlanV3(input: {
       fallbackTaskKey: null, acceptanceGateIds: ['media.integrity', 'media.rights'],
     }))
   }
-  if (activeAudio) {
+  if (textAdventure && activeAudio) {
     const taskKeys = textAdventure ? audioArtifactKeys : ['media.audio']
     mediaDependencies.push(...taskKeys)
     for (const taskKey of taskKeys) tasks.push(productionTask({

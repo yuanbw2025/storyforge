@@ -2,12 +2,12 @@
  * 便携备份预检（PRODUCT-1）。
  *
  * 这是导入边界的只读检查：表清单来自 PROJECT_TABLES，不复制一套导出枚举，也不访问
- * IndexedDB。接受当前架构与经严格校验的 v14；仅 normalizeProjectBackup 执行明确的 v14→v15 转换。
+ * IndexedDB。接受当前架构与经严格校验的 v14/v15；仅 normalizeProjectBackup 添加对应新增空表。
  */
 import { PROJECT_TABLES } from '../registry/project-tables'
 import { isCurrentWorldCode } from '../workspace/identity'
 
-export const CURRENT_BACKUP_VERSION = 15
+export const CURRENT_BACKUP_VERSION = 16
 
 export interface BackupTrustReport {
   valid: boolean
@@ -79,7 +79,8 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
   const warnings: string[] = []
   // 根项目记录在便携格式里使用 `project` 单独承载，其余表才是数组键。
   const exportableTables = PROJECT_TABLES
-    .filter(spec => spec.exportable && spec.name !== 'projects' && (!isRecord(input) || input.version !== 14 || (spec.introducedBackupVersion ?? 1) <= 14))
+    .filter(spec => spec.exportable && spec.name !== 'projects' && (!isRecord(input)
+      || ![14, 15].includes(input.version as number) || (spec.introducedBackupVersion ?? 1) <= (input.version as number)))
     .map(spec => spec.name)
 
   if (!isRecord(input)) {
@@ -98,15 +99,15 @@ export function inspectProjectBackup(input: unknown): BackupTrustReport {
   const version = typeof input.version === 'number' && Number.isInteger(input.version)
     ? input.version
     : null
-  if (version !== CURRENT_BACKUP_VERSION && version !== 14) {
-    errors.push(`只接受 v14 或当前备份版本 v${CURRENT_BACKUP_VERSION}。`)
+  if (version !== CURRENT_BACKUP_VERSION && version !== 14 && version !== 15) {
+    errors.push(`只接受 v14、v15 或当前备份版本 v${CURRENT_BACKUP_VERSION}。`)
   }
 
-  if (version === 14) {
-    for (const spec of PROJECT_TABLES.filter(spec => spec.introducedBackupVersion === 15)) {
-      if (spec.name in input) errors.push(`v14 不允许携带 v15 插件表 ${spec.name}。`)
+  if (version === 14 || version === 15) {
+    for (const spec of PROJECT_TABLES.filter(spec => spec.exportable && (spec.introducedBackupVersion ?? 1) > version)) {
+      if (spec.name in input) errors.push(`v${version} 不允许携带 v${spec.introducedBackupVersion} 新增表 ${spec.name}。`)
     }
-    warnings.push('已验证的 v14 备份将在导入时转换为 v15；不运行插件。')
+    warnings.push(`已验证的 v${version} 备份将在导入时转换为 v${CURRENT_BACKUP_VERSION}；只增加新表空数组，不运行插件。`)
   }
   const project = input.project
   const projectName = isRecord(project) && typeof project.name === 'string' && project.name.trim()
@@ -210,12 +211,12 @@ export function assertTrustedProjectBackup(input: unknown): asserts input is Rec
   if (!report.valid) throw new Error(`备份预检失败：${report.errors.join('；')}`)
 }
 
-/** The sole supported conversion: validate exact v14 first, then add only v15 tables. */
+/** Validate the exact supported legacy contract before adding only later empty tables. */
 export function normalizeProjectBackup<T extends { version: number }>(input: T): T {
   assertTrustedProjectBackup(input)
-  if (input.version !== 14) return input
+  if (input.version !== 14 && input.version !== 15) return input
   const next = { ...input, version: CURRENT_BACKUP_VERSION } as T & Record<string, unknown>
-  for (const spec of PROJECT_TABLES) if (spec.exportable && spec.introducedBackupVersion === 15) {
+  for (const spec of PROJECT_TABLES) if (spec.exportable && (spec.introducedBackupVersion ?? 1) > input.version) {
     Object.defineProperty(next, spec.name, { value: [], enumerable: true, writable: true, configurable: true })
   }
   return next

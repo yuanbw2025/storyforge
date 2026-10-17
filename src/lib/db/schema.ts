@@ -2,6 +2,7 @@ import { IS_SHOWCASE, SHOWCASE_DATABASE } from '../showcase/policy'
 import { IS_ADVENTURE_WEB_PLAYER, adventureWebPlayerIdentity, adventureWebPlayerStorageName } from '../adventure/web-player-policy'
 import type { ExtensionPackage, ExtensionProfile, ExtensionRecord, ExtensionContract, ExtensionOperation } from '../extensions/types'
 import type { TtrpgAuthoringDraftV1 } from "../ttrpg/authoring-contract";
+import type { TtrpgNarrativeMemoryV1 } from '../ttrpg/narrative-memory'
 import type { ChatAuthoringDraftV1 } from '../character-interaction/authoring-contract'
 import type { AvgAuthoringDraftV1, AvgDraftMediaV1 } from '../avg/authoring-contract'
 import Dexie, { type Table } from 'dexie'
@@ -127,7 +128,7 @@ import type { RetrievalChunk } from '../types/retrieval-chunk'
 import type { TemporalFact } from '../types/temporal-fact'
 
 export const STORYFORGE_DATABASE_NAME = 'storyforge-core'
-export const STORYFORGE_SCHEMA_VERSION = 11
+export const STORYFORGE_SCHEMA_VERSION = 12
 
 /** The hard-cutover baseline released before independent creation releases. */
 export const STORYFORGE_STORES_V1 = {
@@ -300,13 +301,18 @@ export const STORYFORGE_STORES_V10 = {
   chatAuthoringDrafts: '++id, projectId, worldId, &workId, worldReleaseId, productionId, updatedAt',
 } as const satisfies Record<string, string>
 
-export const STORYFORGE_STORES = {
+export const STORYFORGE_STORES_V11 = {
   ...STORYFORGE_STORES_V10,
   extensionPackages: '++id, &[pluginId+version], digest, installedAt',
   extensionProfiles: '++id, projectId, worldId, workId, pluginId, &[projectId+ownerKey+pluginId], updatedAt',
   extensionRecords: '++id, projectId, worldId, workId, profileId, &[profileId+generation+key], updatedAt',
   extensionContracts: '++id, projectId, worldId, workId, profileId, &[profileId+digest]',
   extensionOperations: '++id, projectId, worldId, workId, profileId, createdAt',
+} as const satisfies Record<string, string>
+
+export const STORYFORGE_STORES = {
+  ...STORYFORGE_STORES_V11,
+  ttrpgNarrativeMemories: '++id, projectId, worldGroupId, worldId, workId, sessionId, &[sessionId+revisionKey], [sessionId+reliability], [sessionId+stale], sourceSessionId, fromEventSequence, toEventSequence, derivedFromHash, updatedAt',
 } as const satisfies Record<string, string>
 
 export class StoryForgeDB extends Dexie {
@@ -417,6 +423,7 @@ export class StoryForgeDB extends Dexie {
   productRuntimeEvents!: Table<ProductRuntimeEvent, number>
   productRuntimeCheckpoints!: Table<ProductRuntimeCheckpoint, number>
   ttrpgSessionParticipants!: Table<TtrpgSessionParticipantRecordV2, number>
+  ttrpgNarrativeMemories!: Table<TtrpgNarrativeMemoryV1, number>
   ttrpgRuntimeAssetRequests!: Table<TtrpgRuntimeAssetRequestRecordV1, number>
   shortNovelProductions!: Table<ShortNovelProductionV1, number>
   creationReleases!: Table<CreationReleaseV1, number>
@@ -453,6 +460,7 @@ export class StoryForgeDB extends Dexie {
     // through the v9 bridge; v10 adds it for databases already running town v9.
     this.version(9).stores({ ...STORYFORGE_STORES_V9, chatAuthoringDrafts: STORYFORGE_STORES.chatAuthoringDrafts })
     this.version(10).stores(STORYFORGE_STORES_V10)
+    this.version(11).stores(STORYFORGE_STORES_V11)
     this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)
   }
 }

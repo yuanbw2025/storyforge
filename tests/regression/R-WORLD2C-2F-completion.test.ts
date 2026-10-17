@@ -1,3 +1,4 @@
+import { CURRENT_BACKUP_VERSION } from '../../src/lib/export/backup-trust'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
@@ -99,7 +100,7 @@ describe('WORLD-2C C4/C5 · strict ownership and lifecycle completion', () => {
     } as any)
     await stampCurrentFixtureResourceUidsV1(ownership.scope.projectId)
     const backup = await exportProjectJSON(ownership.scope.projectId)
-    expect(backup.version).toBe(15)
+    expect(backup.version).toBe(CURRENT_BACKUP_VERSION)
     const beforeProjects = await db.projects.count()
     const damaged = structuredClone(backup) as any
     damaged.storyCores[0]._workOwnerExportId = 999999

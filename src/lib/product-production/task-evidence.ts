@@ -155,6 +155,8 @@ export interface ProductProductionCarriedReceiptInputV1 {
   dependencies: ProductProductionCarriedDependencyV1[]
   passedGateIds: string[]
   controlEpoch: number
+  /** Absent only on older frozen receipts; current synthetic runs bind executable semantics. */
+  executionIdentityHash?: string
 }
 
 /** Shared proof primitive for a normal task candidate checkpoint. */
@@ -210,6 +212,7 @@ export function hashProductProductionCarriedReceiptV1(
     dependencies: input.dependencies,
     passedGateIds: input.passedGateIds,
     controlEpoch: input.controlEpoch,
+    ...(input.executionIdentityHash ? { executionIdentityHash: input.executionIdentityHash } : {}),
   })
 }
 

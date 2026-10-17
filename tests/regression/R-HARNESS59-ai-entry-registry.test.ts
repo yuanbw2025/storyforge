@@ -24,19 +24,45 @@ const registry = JSON.parse(readFileSync('src/lib/agent/ai-entry-registry.json',
 describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
   it('AST 守卫证明实际 member/alias/wrapper 调用均携带登记 entryId', () => {
     const output = execFileSync(process.execPath, ['scripts/check-ai-entry-registry.mjs'], { encoding: 'utf8' })
-    expect(output).toContain('48 bindings / 52 calls')
-    expect(output).toContain('formal 25, auxiliary 16, evaluation 6, experimental 1')
+    expect(output).toContain('58 bindings / 62 calls')
+    expect(output).toContain('formal 35, auxiliary 16, evaluation 6, experimental 1')
   })
 
   it('唯一注册表严格解析且每项连接 Skill、执行器、候选和调用方', () => {
     expect(registry.version).toBe(2)
-    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(48)
+    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(58)
     for (const entry of FORMAL_AI_ENTRY_REGISTRY_V1.entries) {
       expect(entry.skillId).not.toBe('')
       expect(entry.runContractBuilderId).not.toBe('')
       expect(entry.candidateKind).not.toBe('')
       expect(entry.allowedCallers.length).toBeGreaterThan(0)
     }
+  })
+
+  it('跑团七个正式入口仅通过唯一 Harness 输出候选，没有模型自行采纳权限', () => {
+    for (const purpose of ['intent', 'companion', 'kp', 'oracle-interpret', 'fact-normalize', 'brief', 'situation-propose']) {
+      const entry = FORMAL_AI_ENTRY_REGISTRY_V1.entries.find(entry => entry.entryId === `ttrpg.open.${purpose}`)!
+      expect(entry).toMatchObject({ entryKind: 'formal', executionBoundary: 'product-runtime', adoptAllowed: false,
+        categories: [`runtime.ttrpg-open.${purpose}`], allowedCallers: ['src/lib/ttrpg/open-intent-harness.ts'] })
+      expect(entry.adoptionTargets).toEqual([])
+      expect(entry.skillId).toBe(`prose.ttrpg-open-${purpose}`)
+      expect(entry.candidateKind).toBe(['intent', 'companion'].includes(purpose) ? 'storyforge.ttrpg-open-intent-candidate' : purpose === 'kp' ? 'storyforge.ttrpg-open-kp-candidate' : purpose === 'brief' ? 'storyforge.ttrpg-open-brief-candidate' : purpose === 'situation-propose' ? 'storyforge.ttrpg-open-situation-candidate' : 'storyforge.ttrpg-open-oracle-candidate')
+    }
+  })
+  it('新增共同局势和实体入口仍仅输出各自候选，不继承机械采用权限', () => {
+    for (const [purpose, candidateKind] of [['public-situation-propose', 'storyforge.ttrpg-open-public-situation-candidate'], ['entity-propose', 'storyforge.ttrpg-open-entity-candidate']]) {
+      const entry = FORMAL_AI_ENTRY_REGISTRY_V1.entries.find(e => e.entryId === `ttrpg.open.${purpose}`)
+      expect(entry).toMatchObject({ skillId: `prose.ttrpg-open-${purpose}`, candidateKind,
+        entryKind: 'formal', executionBoundary: 'product-runtime', adoptAllowed: false, adoptionTargets: [],
+        categories: [`runtime.ttrpg-open.${purpose}`], allowedCallers: ['src/lib/ttrpg/open-intent-harness.ts'] })
+    }
+  })
+  it('共同 Oracle 解释使用自己的只读候选入口，不能借用私域解释或作者采纳权限', () => {
+    const entry = FORMAL_AI_ENTRY_REGISTRY_V1.entries.find(e => e.entryId === 'ttrpg.open.common-oracle-interpret')
+    expect(entry).toMatchObject({ skillId: 'prose.ttrpg-open-common-oracle-interpret', candidateKind: 'storyforge.ttrpg-open-common-oracle-candidate',
+      entryKind: 'formal', executionBoundary: 'product-runtime', adoptAllowed: false, adoptionTargets: [],
+      categories: ['runtime.ttrpg-open.common-oracle-interpret'], allowedCallers: ['src/lib/ttrpg/open-intent-harness.ts'] })
+    expect(() => assertFormalAIEntryCallV1({ formalEntryId: 'ttrpg.open.common-oracle-interpret', category: 'runtime.ttrpg-open.oracle-interpret' })).toThrow(/不允许 category/)
   })
 
   it('辅助、评测和实验入口由机器权限证明不可采纳', () => {
@@ -51,7 +77,9 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
     expect(() => parseFormalAIEntryRegistryV1(full)).not.toThrow()
     expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some((entry) => entry.entryId.startsWith('longform.voice'))).toBe(false)
     delete full.limitedTransports
-    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(48)
+    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(58)
+    const legacy = { ...full, entries: full.entries.filter((entry: Entry) => !['ttrpg.open.brief', 'ttrpg.open.situation-propose', 'ttrpg.open.public-situation-propose', 'ttrpg.open.entity-propose', 'ttrpg.open.common-oracle-interpret'].includes(entry.entryId)) }
+    expect(parseFormalAIEntryRegistryV1(legacy).entries).toHaveLength(53)
     for (const patch of [{ adoptAllowed: true }, { adoptionTargets: ['chapters'] }, { boundary: 'durable-run' }]) {
       const invalid = JSON.parse(JSON.stringify(registry))
       Object.assign(invalid.limitedTransports[0], patch)

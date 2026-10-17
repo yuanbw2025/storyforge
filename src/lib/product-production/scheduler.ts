@@ -1,7 +1,9 @@
 import { isTextRevisionRetainedVisualTaskV1, textRevisionRecoveryPreservesVisualContractV1, validateTextContentRevisionAuthorityV1, verifiedTextRevisionVisualCarryTaskKeysV1 } from './text-content-revision-authority'
+import { ttrpgOpenEvolutionReuseEnvelopeV1, ttrpgOpenEvolutionTaskLaneV1 } from '../ttrpg/open-production-plan'
 import { verifiedHumanImportCarryProofsV1 } from './text-adventure-artifact-store'
 import { isTextAdventureClockCapacityRevisionV1 } from './clock-capacity-revision'
 import { db } from '../db/schema'
+import { hashProductProductionCarriedReceiptV1 } from './task-evidence'
 import { createAgentSkillExecutionBindingV1 } from '../agent/execution-binding'
 import { getAgentSkillV1 } from '../agent/skill-registry'
 import { classifyHarnessFailureV1 } from '../agent/run/harness-failure'
@@ -1386,6 +1388,8 @@ async function currentProductionBuild(scope: WorkspaceScope, productionId: numbe
 export function productProductionEvolutionTaskLaneV1(
   taskKey: string,
 ): 'content' | 'product' | 'visual' | 'audio' | null {
+  const openLane = ttrpgOpenEvolutionTaskLaneV1(taskKey)
+  if (openLane) return openLane
   if (taskKey.startsWith('content.scene-script.act-')
     || taskKey.startsWith('content.dialogue-pass.act-')
     || taskKey === 'production.supervision'
@@ -1669,7 +1673,7 @@ export async function applyCrossBuildEvolutionReuseV1(input: {
     .where('[productionId+revision]').equals([input.build.productionId, parentBuild.briefRevision]).first()
   if (!parentBriefRow) throw new Error('[product-production-scheduler] 演化 parent Brief 缺失')
   const parentBrief = parseProductProductionBriefV3(parentBriefRow.briefJson)
-  const immutableEnvelope = (brief: ProductProductionBriefV3) => ({
+  const immutableEnvelope = (brief: ProductProductionBriefV3) => brief.ttrpgOpen ? ttrpgOpenEvolutionReuseEnvelopeV1(brief) : ({
     sourceWorldContentHash: brief.source.worldContentHash,
     productType: brief.intent.productType,
     scale: brief.scale,
@@ -1711,6 +1715,8 @@ export async function applyCrossBuildEvolutionReuseV1(input: {
         || (qualityRollback != null && row.status === 'invalid')))
   const artifactByKey = new Map(parentArtifacts.map(row => [row.artifactKey, row]))
   const affected = new Set(evolution.affectedLanes)
+  const staleOpenTasks = input.brief.ttrpgOpen ? await executionBindingDriftInvalidatedTaskKeysV1({ scope: input.scope,
+    buildId: parentBuild.id,previousControlEpoch: sourceControlEpoch,plan: input.plan,allowHistoricalProducerFallback: true }) : new Set<string>()
   const rollbackInvalidatedTaskKeys = qualityRollback == null
     ? new Set<string>() : textAdventureQualityRollbackInvalidatedTaskKeysV1(input.plan)
   const reusableTasks = new Set<string>()
@@ -1842,10 +1848,11 @@ export async function applyCrossBuildEvolutionReuseV1(input: {
       })
       continue
     }
-    const canReuse = !rollbackInvalidatedTaskKeys.has(task.taskKey)
+    const canReuse = !rollbackInvalidatedTaskKeys.has(task.taskKey) && !staleOpenTasks.has(task.taskKey)
       && task.executionMode !== 'deterministic' && lane != null && !affected.has(lane)
-      && !(task.taskKey === 'media.requirements' && affected.has('audio'))
+      && !(['media.requirements','ttrpg.open.media-plan'].includes(task.taskKey) && affected.has('audio'))
       && !!parentTask && requirementsUnchanged
+      && (!input.brief.ttrpgOpen || productProductionTaskReuseSemanticsEqualV1(parentTask, task))
       && canonicalProductProductionJsonV2(parentTask.outputArtifactKeys) === canonicalProductProductionJsonV2(task.outputArtifactKeys)
       && task.dependsOn.every(dependency => reusableTasks.has(dependency))
       && outputs.every(Boolean)
@@ -2288,6 +2295,7 @@ async function ensurePlan(input: {
       await carryForwardProductBuildArtifactsAcrossBuildsV1({
         scope: input.scope, sourceBuildId: reuse.sourceBuildId, targetBuildId: state.build.id!,
         targetControlEpoch: state.build.controlEpoch, artifactKeys: reuse.reusableArtifactKeys,
+        ...(state.brief.ttrpgOpen ? { pendingPlan: { plan, planHash: await hashProductProductionValueV2(plan) } } : {}),
         recoverySource: state.brief.evolution?.base.kind === 'recovery-build'
           ? {
               briefHash: state.brief.evolution.base.briefHash,
@@ -2503,6 +2511,7 @@ async function ensurePlan(input: {
         scope: input.scope, buildId: state.build.id!,
         fromControlEpoch: recoveryArtifactSourceEpoch,
         toControlEpoch: plan.controlEpoch, artifactKeys: epochCarryKeys,
+        ...(state.production.productType === 'ttrpg' ? { pendingPlan: { plan,planHash } } : {}),
         allowInvalidSourceAtFromEpoch: reviewRollbackControlEpoch != null
           || regressedQualityPassEpoch != null
           || qualityRepairSourceEpoch != null
@@ -4327,8 +4336,7 @@ async function ensureCarriedForwardTaskRuns(input: {
       snapshot = await append(input.scope, snapshot, 'verification.started', {
         verifierSetVersion: 'product-production-carried-task-v1',
       })
-      const receiptHash = await hashProductProductionValueV2({
-        schema: 'storyforge.product-production-carried-task-receipt', version: 1,
+      const receiptHash = await hashProductProductionCarriedReceiptV1({
         taskKey: task.taskKey, inputHash, candidateHash, dependencies,
         executionIdentityHash,
         passedGateIds: task.acceptanceGateIds, controlEpoch: input.build.controlEpoch,
@@ -4666,6 +4674,8 @@ async function runClaimedTaskCore(input: {
   const executorOwnsWorldGateway = productProductionTaskOwnsWorldGatewayV1(input.task)
   const worldGatewayRequired = worldGatewayUsed && !executorOwnsWorldGateway
   const requiresExactContext = worldGatewayUsed || input.task.executionMode === 'model'
+    || (input.task.executionMode === 'media-provider' && input.task.skillId === 'product-production.media-request.v1'
+      && input.task.inputArtifactKeys.includes('ttrpg.open.situation-layer'))
   // The gateway below receives the declared budget minus the context actually
   // assembled here. A fixed percentage cap would reject a valid, exact Brief
   // and artifact set before the remaining world budget can even be measured.
@@ -5519,7 +5529,11 @@ async function compileTerminalBuild(input: {
   const packageArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.runtimePackage)
   const qualityArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.qualityReport)
   if (!packageArtifact || !qualityArtifact) throw new Error('[product-production-scheduler] terminal package/quality Artifact 缺失')
-  const runtimePackage = parseProductRuntimePackageV1(packageArtifact.payloadJson)
+  const runtimePackage = parseProductRuntimePackageV1(packageArtifact.payloadJson, { ttrpgProtocol: 2 })
+  if (input.brief.intent.productType === 'ttrpg'
+    && (runtimePackage.ttrpg?.campaign.version === 2) !== Boolean(input.brief.ttrpgOpen)) {
+    throw new Error('[product-production-scheduler] terminal 跑团协议与冻结制作格式不一致')
+  }
   const packageHash = await hashProductProductionValueV2(runtimePackage)
   if (packageArtifact.contentHash !== packageHash) throw new Error('[product-production-scheduler] package Artifact hash 不一致')
   let previousPackage: Parameters<typeof createProductBuildCompatibilityReportV1>[0]['previous'] = null
@@ -5561,7 +5575,7 @@ async function compileTerminalBuild(input: {
         throw new Error('[product-production-scheduler] compatibility parent package Artifact 缺失')
       }
       const parentArtifact = parentArtifacts[0]
-      const parentRuntimePackage = parseProductRuntimePackageV1(parentArtifact.payloadJson)
+      const parentRuntimePackage = parseProductRuntimePackageV1(parentArtifact.payloadJson, { ttrpgProtocol: 2 })
       if (await hashProductProductionValueV2(parentRuntimePackage) !== parentBuild.packageHash) {
         throw new Error('[product-production-scheduler] compatibility parent package hash 不一致')
       }
@@ -5620,7 +5634,7 @@ async function compileTerminalBuild(input: {
   const preview = await createProductBuildPreviewManifestV1({
     productionKey: production.productionKey, buildNumber: build.buildNumber,
     buildManifestHash: manifestHash, runtimePackage, mediaBindings, fallbackSummary,
-  })
+  }, { ttrpgProtocol: 2 })
   if (input.restoreImportedProofs && (manifestHash !== build.manifestHash
     || packageHash !== build.packageHash || preview.previewHash !== build.previewHash
     || qualityReportHash !== build.qualityReportHash)) {
@@ -5662,6 +5676,21 @@ async function compileTerminalBuild(input: {
     const currentArtifacts = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
       .filter(row => row.controlEpoch === build.controlEpoch && (row.status === 'accepted' || row.status === 'carried-forward'))
     if (currentArtifacts.length !== artifacts.length) throw new Error('[product-production-scheduler] terminal commit Artifact 集合变化')
+    // TTRPG preserves its published Build envelope during proof recovery.
+    // Other products retain their existing receipt-rebinding lifecycle.
+    if (current.status === 'released' && production.productType === 'ttrpg') {
+      if (canonicalProductProductionJsonV2(current) !== canonicalProductProductionJsonV2(build)
+        || current.manifestHash !== manifestHash || current.packageHash !== packageHash || current.previewHash !== preview.previewHash
+        || current.qualityReportHash !== qualityReportHash || current.rootTerminalReceiptHash !== rootTerminalReceiptHash
+        || current.manifestJson !== canonicalProductProductionJsonV2(manifest)
+        || current.previewManifestJson !== canonicalProductProductionJsonV2(preview)
+        || current.qualityReportJson !== canonicalProductProductionJsonV2(quality)
+        || current.compatibilityJson !== canonicalProductProductionJsonV2(compatibility)
+        || canonicalProductProductionJsonV2([...currentArtifacts].sort((a,b) => a.artifactKey.localeCompare(b.artifactKey) || a.version-b.version)) !== canonicalProductProductionJsonV2(artifacts)) {
+        throw new Error('[product-production-scheduler] 已发布 Build 的封存内容不一致，只读复验不得改写')
+      }
+      return // Reconfirm imported Run evidence while preserving every published Build/Production byte.
+    }
     const packageQualityReady = quality.playable && quality.releaseReady
       && quality.hardGateResults.every(gate => gate.passed)
     // A commercial Build is playable after package QA, but it is not release
@@ -5794,6 +5823,7 @@ async function revalidateImportedCheckpointedTaskV1(input: {
   task: ProductProductionPlanTaskV3
   snapshot: AgentRunSnapshotV1
   candidate: ResumeCandidateV1
+  historicalOrigin?: boolean
 }): Promise<AgentRunSnapshotV1 | null> {
   const previousReceiptHash = importedScopeReboundReceiptV1(input.snapshot)
   if (!previousReceiptHash) return null
@@ -5807,28 +5837,33 @@ async function revalidateImportedCheckpointedTaskV1(input: {
     controlEpoch: input.controlEpoch,
   })
   const build = await db.productBuilds.get(input.buildId)
-  const ledger = build == null ? null : parseLedger(build.budgetLedgerJson).tasks[input.task.taskKey]
+  const parsedLedger = build == null ? null : parseLedger(build.budgetLedgerJson)
+  const ledger = parsedLedger?.tasks[input.task.taskKey]
+  const originAttempt = input.historicalOrigin ? parsedLedger?.attempts.find(a => a.controlEpoch === input.controlEpoch
+    && a.runId === input.snapshot.run.id && a.taskKey === input.task.taskKey && a.attempt === input.candidate.attempt) : null
   const rows = build == null ? [] : (await db.productBuildArtifacts
     .where('buildId').equals(input.buildId).toArray())
     .filter(row => row.controlEpoch === input.controlEpoch
-      && row.status === 'accepted'
+      && (input.historicalOrigin ? row.status === 'invalid' && row.carriedFrom === null : row.status === 'accepted')
       && input.task.outputArtifactKeys.includes(row.artifactKey))
   const expectedKeys = [...input.task.outputArtifactKeys].sort()
   const actualKeys = rows.map(row => row.artifactKey).sort()
-  if (!build || build.controlEpoch !== input.controlEpoch
+  const boundary = input.snapshot.contract.scope.productProduction
+  const ledgerMatches = input.historicalOrigin ? originAttempt?.outcome === 'settled' && originAttempt.usageKnown
+    && originAttempt.idempotencyKey === input.candidate.inputHash && originAttempt.errorCode === null
+    && canonicalProductProductionJsonV2(originAttempt.usage) === canonicalProductProductionJsonV2(input.candidate.result.usage)
+    : ledger?.status === 'settled' && ledger.runId === input.snapshot.run.id && ledger.attempt === input.candidate.attempt
+      && ledger.idempotencyKey === input.candidate.inputHash && ledger.candidateHash === candidateHash
+      && ledger.terminalReceiptHash === receiptHash && ledger.errorCode === null
+      && canonicalProductProductionJsonV2(ledger.passedGateIds) === canonicalProductProductionJsonV2(input.candidate.result.passedGateIds)
+      && canonicalProductProductionJsonV2(ledger.usage) === canonicalProductProductionJsonV2(input.candidate.result.usage)
+  if (!build || !input.historicalOrigin && build.controlEpoch !== input.controlEpoch
+    || input.snapshot.run.productBuildId !== input.buildId || boundary?.productBuildId !== input.buildId
+    || boundary.controlEpoch !== input.controlEpoch || boundary.taskKey !== input.task.taskKey
+    || input.snapshot.run.parentRelation !== `task:${input.task.taskKey}`
     || candidateHash !== input.candidate.candidateHash
     || receiptHash !== previousReceiptHash
-    || ledger?.status !== 'settled'
-    || ledger.runId !== input.snapshot.run.id
-    || ledger.attempt !== input.candidate.attempt
-    || ledger.idempotencyKey !== input.candidate.inputHash
-    || ledger.candidateHash !== candidateHash
-    || ledger.terminalReceiptHash !== receiptHash
-    || ledger.errorCode !== null
-    || canonicalProductProductionJsonV2(ledger.passedGateIds)
-      !== canonicalProductProductionJsonV2(input.candidate.result.passedGateIds)
-    || canonicalProductProductionJsonV2(ledger.usage)
-      !== canonicalProductProductionJsonV2(input.candidate.result.usage)
+    || !ledgerMatches
     || rows.length !== expectedKeys.length
     || expectedKeys.some((key, index) => key !== actualKeys[index])
     || rows.some(row => row.producerRunId !== input.snapshot.run.id
@@ -5858,13 +5893,13 @@ async function revalidateImportedCarriedTaskV1(input: {
   const previousReceiptHash = importedScopeReboundReceiptV1(input.snapshot)
   if (!previousReceiptHash) return null
   const build = await db.productBuilds.get(input.buildId)
+  const preserveOrigin = build != null && (await db.productProductions.get(build.productionId))?.productType === 'ttrpg'
   const ledger = build == null ? null : parseLedger(build.budgetLedgerJson).tasks[input.task.taskKey]
   // Import restores the sealed execution, not a new run of today's Skill.
   const executionIdentityHash = await frozenProductProductionTaskExecutionIdentityHashV1(
     input.task, input.snapshot,
   )
-  const receiptHash = ledger == null ? '' : await hashProductProductionValueV2({
-    schema: 'storyforge.product-production-carried-task-receipt', version: 1,
+  const receiptHash = ledger == null ? '' : await hashProductProductionCarriedReceiptV1({
     taskKey: input.task.taskKey, inputHash: ledger.idempotencyKey,
     candidateHash: input.candidateHash, dependencies: input.dependencies,
     executionIdentityHash,
@@ -5887,7 +5922,8 @@ async function revalidateImportedCarriedTaskV1(input: {
     || step.candidateHash != null || step.outputHash !== input.candidateHash
     || input.outputs.length !== input.task.outputArtifactKeys.length
     || new Set(input.outputs.map(row => row.artifactKey)).size !== input.outputs.length
-    || input.outputs.some(row => !input.task.outputArtifactKeys.includes(row.artifactKey))) {
+    || input.outputs.some(row => !input.task.outputArtifactKeys.includes(row.artifactKey)
+      || preserveOrigin && (row.carriedFrom == null || !isSha256Hash(row.producerReceiptHash ?? '')))) {
     throw new Error(
       `[product-production-scheduler] 导入 carried task 完成证据无法在新 scope 复验:${input.task.taskKey}`,
     )
@@ -5899,9 +5935,31 @@ async function revalidateImportedCarriedTaskV1(input: {
   return snapshot
 }
 
+/** Reconfirm the actual historical byte producer before the imported current reuse Run. */
+async function recoverImportedTtrpgOriginProducersV1(input: {
+  scope: WorkspaceScope; buildId: number; controlEpoch: number; plan: ProductProductionPlanV3
+}): Promise<void> {
+  const rows = await db.productBuildArtifacts.where('buildId').equals(input.buildId).toArray()
+  const origins = new Set(rows.filter(r => r.controlEpoch === input.controlEpoch && r.status === 'carried-forward')
+    .map(r => r.producerRunId).filter((id): id is number => id != null))
+  for (const runId of origins) {
+    const snapshot = await readAgentRunV1(input.scope,runId)
+    if (!importedScopeReboundReceiptV1(snapshot)) continue
+    const boundary = snapshot.contract.scope.productProduction
+    const task = input.plan.tasks.find(t => t.taskKey === boundary?.taskKey)
+    const originRows = rows.filter(r => r.producerRunId === runId && r.controlEpoch === boundary?.controlEpoch && r.status === 'invalid' && r.carriedFrom === null)
+    if (!task || !boundary || boundary.productBuildId !== input.buildId || boundary.controlEpoch >= input.controlEpoch
+      || originRows.length !== task.outputArtifactKeys.length) throw new Error('[product-production-scheduler] 导入跑团原始生产来源不完整，保留备份等待复核')
+    const checkpoint = await readLatestVerifiedAgentRunCheckpointV1(input.scope,runId)
+    if (!checkpoint?.resumePayload) throw new Error('[product-production-scheduler] 导入跑团原始生产候选缺失，不能重造来源')
+    await revalidateImportedCheckpointedTaskV1({ ...input,controlEpoch: boundary.controlEpoch,task,snapshot,
+      candidate: parseResumeCandidate(checkpoint.resumePayload,task,boundary.controlEpoch),historicalOrigin: true })
+  }
+}
+
 /**
  * Complete project backup import deliberately invalidates cloned Harness
- * receipts after local IDs are rebound. A sealed text-adventure or text-open-world Build carries
+ * receipts after local IDs are rebound. Sealed text-adventure, text-open-world and TTRPG Builds carry
  * every candidate checkpoint, Artifact envelope, ledger entry and root seal,
  * so the proof can be reconstructed locally without another provider call.
  */
@@ -5911,7 +5969,7 @@ export async function recoverImportedProductProductionProofsV1(input: {
 }): Promise<ProductProductionSchedulerProjectionV1> {
   const scope = await resolveScope({ scope: input.scope })
   const current = await currentProductionBuild(scope, input.productionId)
-  if (!['text-adventure', 'text-open-world'].includes(current.brief.intent.productType)) {
+  if (!['text-adventure', 'text-open-world', 'ttrpg'].includes(current.brief.intent.productType)) {
     throw new Error('[product-production-scheduler] 当前产品不支持导入生产证明复验')
   }
   if (!['preview-ready', 'release-ready', 'released'].includes(current.build.status)) {
@@ -5954,6 +6012,7 @@ export async function recoverImportedProductProductionProofsV1(input: {
       await assertProductBuildArtifactContentHashV1(row)
     }
   }
+  if (current.production.productType === 'ttrpg') await recoverImportedTtrpgOriginProducersV1({ scope,buildId: current.build.id!,controlEpoch: current.build.controlEpoch,plan })
   let progressed = true
   while (progressed) {
     progressed = false

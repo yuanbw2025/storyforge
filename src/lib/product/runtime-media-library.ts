@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 import { db } from '../db/schema'
 import type { ProductMediaAsset, ProductMediaBlob, ProductMediaKind, WorkspaceScope } from '../types'
 import { PRODUCT_MEDIA_KINDS } from '../types'
@@ -5,8 +6,38 @@ import { sanitizeSvg } from '../utils/sanitize-svg'
 import { resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { sha256BinaryV1 } from '../media/blob-store'
 import { putMediaBlobObject } from '../product-production/media-blob-store'
+import { stableProductRuntimeJsonV1 as stable } from './runtime-values'
 
 const STABLE_ASSET_KEY = /^[a-zA-Z0-9._:-]+$/
+
+/** Branch lifecycle only. The product hook supplies cutpoint membership; this
+ * shared writer verifies owners and exact rows, preserving immutable versions
+ * and a strong binding to the same content-addressed physical object. */
+export async function cloneProductRuntimeMediaBindingV1(input: {
+  asset: ProductMediaAsset; binding: ProductMediaBlob; targetSessionId: number
+}): Promise<void> {
+  if (!Dexie.currentTransaction) throw new Error('[product-runtime-media] 分支媒资复制必须处于原分支事务中')
+  const source = input.asset.productRuntimeSessionId == null ? null : await db.productRuntimeSessions.get(input.asset.productRuntimeSessionId)
+  const target = await db.productRuntimeSessions.get(input.targetSessionId)
+  const current = input.asset.id == null ? null : await db.productMediaAssets.get(input.asset.id)
+  const binding = input.binding.id == null ? null : await db.productMediaBlobs.get(input.binding.id)
+  const object = binding ? await db.mediaBlobObjects.get(binding.blobObjectId) : null
+  if (!source?.id || !target?.id || target.status !== 'active' || target.parentSessionId !== source.id || target.parentThroughSequence === null
+    || target.kind !== source.kind || target.runtimeSourceHash !== source.runtimeSourceHash || target.projectId !== source.projectId
+    || target.worldId !== source.worldId || target.workId !== source.workId || input.asset.ownerKind !== 'runtime' || input.asset.productReleaseId !== null
+    || input.asset.productType !== source.kind || input.asset.projectId !== source.projectId || input.asset.worldId !== source.worldId || input.asset.workId !== source.workId
+    || input.binding.mediaAssetId !== input.asset.id || input.binding.projectId !== source.projectId || input.binding.worldId !== source.worldId || input.binding.workId !== source.workId
+    || stable(current) !== stable(input.asset) || stable(binding) !== stable(input.binding)
+    || !object || object.storageState !== 'ready' || object.projectId !== source.projectId || object.worldId !== source.worldId || object.workId !== source.workId
+    || object.contentHash !== input.asset.contentHash || object.byteSize !== input.asset.byteSize || object.mimeType !== input.asset.mimeType
+    || object.backend === 'indexeddb' && object.data === null || object.backend === 'opfs' && !object.opfsPath) throw new Error('[product-runtime-media] 分支媒资 owner、原版本或物理绑定已变化')
+  const existing = await db.productMediaAssets.where('productRuntimeSessionId').equals(target.id)
+    .filter(row => row.assetKey === input.asset.assetKey && row.version === input.asset.version).toArray()
+  if (existing.length) throw new Error('[product-runtime-media] 子分支已有相同媒资版本，不能覆盖')
+  const { id: _assetId, ...fields } = input.asset, { id: _bindingId, ...blobFields } = input.binding
+  const now = Date.now(), id = await db.productMediaAssets.add({ ...fields, productRuntimeSessionId: target.id, createdAt: now, updatedAt: now })
+  await db.productMediaBlobs.add({ ...blobFields, mediaAssetId: id, createdAt: now })
+}
 
 function assetKey(value: string): string {
   const normalized = value.trim()

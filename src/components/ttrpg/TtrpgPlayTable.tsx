@@ -1,7 +1,8 @@
+import TtrpgOpenPlayTable, { type TtrpgPlayTablePropsV1 } from './TtrpgOpenPlayTable'
 import { ttrpgCampaignNavigationV1 } from '../../lib/ttrpg/campaign-navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, BookOpen, Check, Compass, Dices, Flag, LockKeyhole, Pause, Play, Save, Send, Sparkles, Users, X } from 'lucide-react'
-import type { ProductRuntimeSession, ProductRuntimeState, TtrpgSessionParticipantRecordV2, WorkspaceScope } from '../../lib/types'
+import type { TtrpgSessionParticipantRecordV2 } from '../../lib/types'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { loadTtrpgRuntimeContentV1 } from '../../lib/ttrpg/runtime-content'
 import { createTtrpgViewerProjectionV1 } from '../../lib/ttrpg/viewer-projection'
@@ -16,14 +17,13 @@ const phaseLabels: Record<TtrpgKpPhaseV1, string> = { opening: '灯亮了，故�
 const outcomeLabels: Record<string, string> = { automatic: '直接完成', success: '成功', 'partial-success': '成功，伴随代价', failure: '受挫',
   'critical-success': '大成功', 'critical-failure': '大失败', 'hard-success': '困难成功', 'extreme-success': '极难成功', hidden: '暗骰' }
 
-export default function TtrpgPlayTable(props: {
-  session: ProductRuntimeSession
-  state: ProductRuntimeState
-  scope: WorkspaceScope
-  onChanged: () => Promise<void>
-  onCheckpoint: (name: string) => Promise<void>
-  onBusyChange?: (busy: boolean) => void
-}) {
+export default function TtrpgPlayTable(props: TtrpgPlayTablePropsV1) {
+  if (props.state.ttrpg && 'runFormat' in props.state.ttrpg && props.state.ttrpg.runFormat === 'open') return import.meta.env.VITE_ENABLE_TTRPG_OPEN_PREVIEW === '1'
+    ? <TtrpgOpenPlayTable key={props.session.id} {...props} />
+    : <section role="status"><h2>此冒险尚未开放游玩</h2><p>开放跑团仍在开发验证中，已有存档会保留。</p></section>
+  return <ScriptedTtrpgPlayTable {...props} />
+}
+function ScriptedTtrpgPlayTable(props: TtrpgPlayTablePropsV1) {
   const config = useAIConfigStore(store => store.config)
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadTtrpgRuntimeContentV1>> | null>(null)
   const [seats, setSeats] = useState<TtrpgSessionParticipantRecordV2[]>([])

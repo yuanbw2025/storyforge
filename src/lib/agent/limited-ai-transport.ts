@@ -2,7 +2,7 @@ import registry from './ai-entry-registry.json'
 
 export interface LimitedAITransport {
   entryId: string
-  boundary: 'ephemeral-author-input' | 'read-only-audio'
+  boundary: 'ephemeral-author-input' | 'read-only-audio' | 'offline-fixture-audio-eval'
   adoptAllowed: false
   allowedCallers: string[]
   reason: string
@@ -17,10 +17,11 @@ export function parseLimitedAITransports(value: unknown): LimitedAITransport[] {
     if (Object.keys(entry).sort().join(',') !== 'adoptAllowed,allowedCallers,boundary,entryId,reason'
       || typeof entry.entryId !== 'string' || !/^[a-z0-9]+(?:[.-][a-z0-9]+)*$/.test(entry.entryId)
       || ids.has(entry.entryId) || entry.adoptAllowed !== false
-      || !['ephemeral-author-input', 'read-only-audio'].includes(String(entry.boundary))
+      || !['ephemeral-author-input', 'read-only-audio', 'offline-fixture-audio-eval'].includes(String(entry.boundary))
       || typeof entry.reason !== 'string' || !entry.reason.trim()
       || !Array.isArray(entry.allowedCallers) || !entry.allowedCallers.length
-      || entry.allowedCallers.some((item) => typeof item !== 'string' || !item.startsWith('src/'))
+      || entry.allowedCallers.some((item) => typeof item !== 'string' || (entry.boundary === 'offline-fixture-audio-eval'
+        ? !/^scripts\/ttrpg-local-tts\/[a-z-]+\.mjs$/.test(item) : !item.startsWith('src/')))
       || new Set(entry.allowedCallers).size !== entry.allowedCallers.length) throw new Error('有限语音入口边界无效')
     ids.add(entry.entryId)
     return { entryId: entry.entryId, boundary: entry.boundary as LimitedAITransport['boundary'], adoptAllowed: false,

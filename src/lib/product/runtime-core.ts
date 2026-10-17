@@ -7,17 +7,19 @@ import { evaluateNarrativeChoices, applyNarrativeChoiceEffects } from "./narrati
 import { normalizeProductRuntimeCommandIdV1 } from "./runtime-command-id";
 import { assertProductRuntimeIntegerV1, isProductRuntimeJsonObjectV1, stableProductRuntimeJsonV1, type ProductRuntimeJsonObjectV1 } from "./runtime-values";
 import { parseNarrativeCondition, parseNarrativeEffects, evaluateNarrativeCondition, applyNarrativeEffects } from "../narrative/blueprint";
-import { transactionTablesForReferenceCascade } from "../registry/lifecycle";
+import { transactionTablesForReferenceCascade, runtimeInstanceTablesV1 } from "../registry/lifecycle";
 import { type ProductRuntimeKind, type ProductRuntimeState, type FrozenNarrativeBeat, NARRATIVE_BEAT_KINDS, type FrozenNarrativeChoice, type ProductNarrativeRuntimeNodeSnapshot, NARRATIVE_NODE_KINDS, type ProductNarrativeRuntimeState, NARRATIVE_MODULE_KINDS, type NarrativeChoiceHistoryEntry, type RuntimeAttributes, type RuntimeEntityState, RUNTIME_ENTITY_KINDS, RUNTIME_LIFECYCLE_STATUSES, type RuntimeMemory, type ProductRuntimeEvent, PRODUCT_RUNTIME_EVENT_TYPES, type ProductRuntimeSession, PRODUCT_RUNTIME_KINDS, EMPTY_PRODUCT_RUNTIME_STATE, type ProductRuntimePackageV1, type ProductRuntimeEventType, type ProductRelease, type ProductBuildRecordV1, type ProductProductionRecordV1, type ProductProductionBriefRecordV1, type ProductRuntimeCheckpoint, PRODUCT_RUNTIME_CHECKPOINT_PURPOSES_V1, type ProductRuntimeCheckpointPurposeV1 } from "../types";
 import { verifyProductReleaseManifestV1 } from "../product-production/runtime-package";
 import { verifyProductRuntimeSource, verifyProductRuntimeSessionSourceV1 } from "../product-production/preview-source";
+type ProductRuntimePackageWithTtrpgV2 = Awaited<ReturnType<typeof verifyProductRuntimeSessionSourceV1>>['runtimePackage'];
 import {
   applyProductOwnedRuntimeEventV1,
   assertProductNarrativeChoiceReadyV1,
   assertFrozenProductRuntimeStateV1,
   cloneProductRuntimeBranchExtensionsV1,
   parseProductOwnedRuntimeStateV1,
-  rebaseProductRuntimeStateForBranchV1,
+  prepareProductRuntimeStateForBranchV1,
+  consumeProductRuntimeBranchPreparationV1,
 } from "./runtime-product-adapters";
 export type JsonObject = ProductRuntimeJsonObjectV1;
 export const stableJson = stableProductRuntimeJsonV1;
@@ -1019,7 +1021,7 @@ const preparedProductRuntimeSessionsV1 = new WeakSet<object>();
 export async function prepareReleasedProductRuntimeSessionRecordV1(
   input: CreateReleasedProductRuntimeSessionInput,
 ): Promise<ProductRuntimeSession> {
-  const productRelease = await assertProductReleaseUnchanged(input.productReleaseId);
+  const productRelease = await assertProductReleaseUnchanged(input.productReleaseId, { ttrpgProtocol: 2 });
   if (
     productRelease.projectId !== input.projectId ||
     productRelease.worldId !== input.worldId ||
@@ -1027,7 +1029,11 @@ export async function prepareReleasedProductRuntimeSessionRecordV1(
   ) {
     throw new Error("上层产品的 ProductRelease 绑定无效。");
   }
-  const manifest = await verifyProductReleaseManifestV1(productRelease.manifestJson);
+  const manifest = await verifyProductReleaseManifestV1(
+    productRelease.manifestJson,
+    { ttrpgProtocol: 2 },
+  );
+  if (input.origin === 'branch') await consumeProductRuntimeBranchPreparationV1(input.initialState, manifest.packageHash);
   validateFrozenRuntimePackageSession({
     session: input,
     runtimePackage: manifest.runtimePackage,
@@ -1060,10 +1066,12 @@ export async function preparePreviewProductRuntimeSessionRecordV1(
       productBuildId: input.productBuildId,
       expectedPreviewHash: input.expectedPreviewHash,
     },
+    ttrpgProtocol: 2,
   });
   if (verified.runtimeSourceHash !== input.runtimeSourceHash) {
     throw new Error("上层产品的 Build Preview 冻结绑定无效。");
   }
+  if (input.origin === 'branch') await consumeProductRuntimeBranchPreparationV1(input.initialState, verified.runtimeSourceHash);
   validateFrozenRuntimePackageSession({
     session: input,
     runtimePackage: verified.runtimePackage,
@@ -1101,7 +1109,7 @@ function sessionKindForProduct(
 
 function validateFrozenRuntimePackageSession(input: {
   session: CreateProductRuntimeSessionInput;
-  runtimePackage: ProductRuntimePackageV1;
+  runtimePackage: ProductRuntimePackageWithTtrpgV2;
   runtimeSourceHash: string;
   origin: "release" | "preview" | "branch";
 }): void {
@@ -1465,7 +1473,7 @@ export async function readProductRuntimeStateVersion(sessionId: number): Promise
 }
 
 export type VerifiedFormalRuntimeSourceV1 = {
-  runtimePackage: ProductRuntimePackageV1;
+  runtimePackage: ProductRuntimePackageWithTtrpgV2;
   packageHash: string;
   source:
     | { kind: "release"; release: ProductRelease & { id: number } }
@@ -1503,6 +1511,7 @@ export async function verifyFormalRuntimeSourceV1(
       workId: session.workId,
     },
     session,
+    ttrpgProtocol: session.kind === "ttrpg" ? 2 : undefined,
   });
   if (
     playable.packageHash !== session.runtimeSourceHash ||
@@ -2094,12 +2103,12 @@ async function branchProductRuntimeSessionInternal(
     input.throughSequence > latest
   )
     throw new Error("分支序号不在父会话事件范围内。");
-  const state = replayProductRuntimeEvents(
+  const cutpoint = replayProductRuntimeEvents(
     parseProductRuntimeState(parent.initialStateJson),
     events,
     input.throughSequence,
   );
-  rebaseProductRuntimeStateForBranchV1(state, input.throughSequence);
+  const state = await prepareProductRuntimeStateForBranchV1({ parent, state: cutpoint, events, throughSequence: input.throughSequence });
   state.lastSequence = 0;
   const childInput: CreateProductRuntimeSessionInput = {
     projectId: parent.projectId,
@@ -2110,6 +2119,33 @@ async function branchProductRuntimeSessionInternal(
     canonSnapshot: parseJsonObject(parent.canonSnapshotJson, "Canon 冻结快照"),
     initialState: state,
   };
+  if (state.ttrpg && 'runFormat' in state.ttrpg && state.ttrpg.runFormat === 'open') {
+    const release = parent.productReleaseId == null ? null : await db.productReleases.get(parent.productReleaseId);
+    const build = parent.productBuildId == null ? null : await db.productBuilds.get(parent.productBuildId);
+    const prepared = release
+      ? await prepareReleasedProductRuntimeSessionRecordV1({ ...childInput, worldId: parent.worldId, workId: parent.workId,
+        productReleaseId: parent.productReleaseId!, origin: 'branch' })
+      : build ? await preparePreviewProductRuntimeSessionRecordV1({ ...childInput, worldId: parent.worldId, workId: parent.workId,
+        productBuildId: parent.productBuildId!, expectedPreviewHash: build.previewHash!, runtimeSourceHash: parent.runtimeSourceHash!, origin: 'branch' })
+      : (() => { throw new Error('open 分支冻结运行源不存在'); })();
+    prepared.parentSessionId = parent.id!; prepared.parentThroughSequence = input.throughSequence;
+    const cutEvents = events.filter(event => event.sequence <= input.throughSequence).sort((a, b) => a.sequence - b.sequence);
+    // The product hook can clone cutpoint-owned media bindings. Include both
+    // instance descendants and shared content-addressed parents from the registry.
+    const branchTables = [...new Set([db.productReleases, db.productBuilds, ...runtimeInstanceTablesV1(),
+      ...transactionTablesForReferenceCascade('productRuntimeSessions'), ...transactionTablesForReferenceCascade('mediaBlobObjects')])];
+    return db.transaction('rw', branchTables, async () => {
+      const currentParent = await db.productRuntimeSessions.get(parent.id!);
+      const currentSource = release ? await db.productReleases.get(release.id!) : await db.productBuilds.get(build!.id!);
+      const currentEvents = (await db.productRuntimeEvents.where('sessionId').equals(parent.id!).toArray())
+        .filter(event => event.sequence <= input.throughSequence).sort((a, b) => a.sequence - b.sequence);
+      if (stableJson(currentParent) !== stableJson(parent) || stableJson(currentSource) !== stableJson(release ?? build)
+        || stableJson(currentEvents) !== stableJson(cutEvents)) throw new Error('open 分支创建期间父切点或冻结来源已变化');
+      const child = await insertPreparedProductRuntimeSessionV1(prepared);
+      await cloneProductRuntimeBranchExtensionsV1({ parent, child, throughSequence: input.throughSequence, state, events });
+      return child;
+    });
+  }
   let child: ProductRuntimeSession;
   if (parent.productReleaseId != null) {
     child = await createReleasedProductRuntimeSession({

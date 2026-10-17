@@ -179,6 +179,7 @@ async function portableGenerationHashes(input: {
 export async function portableizeAgentRunLedgerExportV1(
   data: ProjectExportData,
   idMaps: IdMaps,
+  options: { freezeContextEvidence?: boolean } = {},
 ): Promise<void> {
   const runs = (data.agentRuns ?? []) as ExportRow[]
   const events = (data.agentRunEvents ?? []) as ExportRow[]
@@ -187,6 +188,7 @@ export async function portableizeAgentRunLedgerExportV1(
   // Buckets retain row identity while leaving the exported arrays in their original order.
   const eventsByRun = indexRowsByRun(events)
   const checkpointsByRun = indexRowsByRun(checkpoints)
+  const localRunIds = new Map([...(idMaps.get('agentRuns') ?? [])].map(([local,portable]) => [portable,local]))
   for (const run of runs) {
     if (!Number.isInteger(run._exportId)) fail('agentRuns 缺少便携 _exportId')
     const runEvents = eventsByRun.get(run._exportId) ?? []
@@ -194,6 +196,18 @@ export async function portableizeAgentRunLedgerExportV1(
       fail(`run ${run._exportId} 事件世界组与运行不一致`)
     }
     await verifyPortableAgentRunProjectionV1(run, runEvents)
+    // World封存 preserves existing upper-product evidence as data; only a full
+    // workspace backup may enter those owners to freeze additional proof.
+    if (options.freezeContextEvidence !== false) {
+      const localRunId = localRunIds.get(run._exportId)
+      if (localRunId == null) fail(`run ${run._exportId} 缺少原始导出映射`)
+      const { freezeTtrpgWorldContextBindingsForExportV1 } = await import('../../product/world-context-portability')
+      const worldBindings = await freezeTtrpgWorldContextBindingsForExportV1(localRunId)
+      if (worldBindings !== undefined) run.portableWorldContextBindingsJson = worldBindings
+      const { freezeTtrpgOpenRunOriginForExportV1 } = await import('../../ttrpg/open-run-portability')
+      const runtimeOrigin = await freezeTtrpgOpenRunOriginForExportV1(localRunId, { contractHash: run.contractHash, lastSequence: run.lastSequence })
+      if (runtimeOrigin !== undefined) run.portableRuntimeOriginJson = runtimeOrigin
+    }
     const hashes = await portableGenerationHashes({ run, events: runEvents, idMaps })
     for (const event of runEvents) {
       const pair = hashes.get(event.generation)
@@ -352,6 +366,12 @@ export async function finalizeImportedAgentRunLedgersV1(input: {
   for (const runId of input.runIds) {
     const run = await db.agentRuns.get(runId)
     if (!run || run.id == null) fail(`导入 run ${runId} 不存在`)
+    if (run.portableWorldContextBindingsJson !== undefined) {
+      await Dexie.waitFor((async () => {
+        const { assertPortableWorldContextBindingsV1 } = await import('../../product/world-context-portability')
+        await assertPortableWorldContextBindingsV1(run.portableWorldContextBindingsJson)
+      })())
+    }
     const events = await db.agentRunEvents.where('runId').equals(runId).sortBy('sequence')
     const hashes = await Dexie.waitFor(rebindGenerationHashes({
       run: run as AgentRunRecord & { id: number },
@@ -468,5 +488,10 @@ export async function finalizeImportedAgentRunLedgersV1(input: {
       // cancellation event that changes the durable run lifecycle.
       updatedAt: appendedImportTerminalEvent ? Date.now() : run.updatedAt,
     })
+    if (run.portableRuntimeOriginJson !== undefined) {
+      const { readTtrpgOpenRunOriginV1 } = await Dexie.waitFor(import('../../ttrpg/open-run-portability'))
+      await readTtrpgOpenRunOriginV1(runId, 'archive')
+    }
+
   }
 }

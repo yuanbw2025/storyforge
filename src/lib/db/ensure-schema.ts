@@ -5,6 +5,7 @@ import {
 } from './schema'
 
 export const REQUIRED_TABLES = [
+  'ttrpgNarrativeMemories',
   'extensionPackages',
   'extensionProfiles',
   'extensionRecords',

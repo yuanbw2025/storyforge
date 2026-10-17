@@ -518,6 +518,8 @@ export interface ProductProductionBriefV3 {
   avg?: import('../avg/authoring-contract').AvgAuthoringSettingsV1;
   avgRevision?: { version: 1; basePackageHash: string; runtimePackage: import('./product-release').ProductRuntimePackageV1 };
   ttrpg?: TtrpgProductionBriefV2;
+  /** Open construction uses the same production budgets and lifecycle, with its own frozen content contract. */
+  ttrpgOpen?: import('../ttrpg/production-brief-v3').TtrpgProductionBriefContentV3;
   /** Closed AI Town construction contract; required exactly when productType=ai-town. */
   aiTown?: AiTownProductionBriefV1;
   /** Closed text-adventure construction contract; required exactly for text-adventure. */

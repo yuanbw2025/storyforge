@@ -66,6 +66,10 @@ function assertScope(scope: ContextResourceDescriptorV1['scope']): void {
     fail('invalid-scope', 'worldReleaseId 非法')
   }
   if (scope.worldReleaseHash != null) requireHash(scope.worldReleaseHash, 'scope.worldReleaseHash')
+  if (scope.runtimeActorKey !== undefined && (scope.productRuntimeSessionId == null
+    || typeof scope.runtimeActorKey !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(scope.runtimeActorKey))) {
+    fail('invalid-scope', 'runtimeActorKey 必须属于明确 instance 并使用合法稳定 key')
+  }
 }
 
 export function contextSourceRefOwnerV1(ref: ContextSourceRefV1): DomainOwnershipSpec {

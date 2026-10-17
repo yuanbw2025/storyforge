@@ -546,6 +546,10 @@ export interface AgentRunRecord {
   contractVersion: 1 | 2 | 3
   contractJson: string
   contractHash: string
+  /** Export-frozen world read identity. Portable hashes/UIDs only; no local IDs or new AI authority. */
+  portableWorldContextBindingsJson?: string
+  /** Exact historical TTRPG Run/event bytes; original numbers are provenance, never current locators or authority. */
+  portableRuntimeOriginJson?: string
   generation: number
   lastSequence: number
   projectionJson: string

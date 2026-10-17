@@ -31,6 +31,7 @@ import {
   hashMemoryArtifactIndexV1,
 } from '../../memory/settlement-core'
 import { pruneUnreferencedAgentRunArtifactsInCurrentTransactionV1 } from '../../memory/artifact-retention-store'
+import { exactArtifactOwnerTablesV1 } from '../../memory/artifact-root-registry'
 
 export class AgentRunStoreError extends Error {
   constructor(public readonly code: string, message: string) {
@@ -1019,6 +1020,7 @@ export async function deleteAgentRunV1(
       db.agentRunEvents,
       db.agentRunCheckpoints,
       db.agentRunArtifacts,
+      ...exactArtifactOwnerTablesV1(),
     ),
     async () => {
       const run = await db.agentRuns.get(runId)
