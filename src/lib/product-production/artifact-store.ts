@@ -2453,9 +2453,10 @@ async function acceptSealedProducerArtifactV1(
   }
   // After V4 author inputs are complete the shared scheduler revisits already
   // settled semantic/image checkpoints while integrating. This is an exact read,
-  // never permission to admit a new proposal/compilation in that phase.
+  // never permission to admit a new proposal, compilation or processed image.
   let v4CheckpointRead=avgVisualPlanningAdmission
-  if(avgMediaRawAdmission&&preliminaryBuild.status==='integrating'&&input.artifactKey.startsWith('avg.media.raw.')){
+  if(avgMediaRawAdmission&&preliminaryBuild.status==='integrating'
+    &&(input.artifactKey.startsWith('avg.media.raw.')||input.artifactKey.startsWith('avg.media.processed.'))){
     const briefRow=await db.productProductionBriefs.where('[productionId+revision]')
       .equals([preliminaryBuild.productionId,preliminaryBuild.briefRevision]).first()
     const stored=briefRow?JSON.parse(briefRow.briefJson) as {avgVisualPlanning?:unknown}:null

@@ -1673,6 +1673,7 @@ describe('AVG V4 actual visual planning Harness and explicit author boundary', (
       changed.contentHash=await hashProductProductionValueV2(changed.payload)
       await expect(acceptProductBuildArtifact(changed)).rejects.toThrow(/只能复核/)
       await expect(acceptProductBuildArtifact({...input(raw),quality:{...JSON.parse(raw.qualityJson),decoderVerified:true}})).rejects.toThrow(/只能复核/)
+      await expect(acceptProductBuildArtifact({...input(raw),artifactKey:raw.artifactKey.replace('avg.media.raw.','avg.media.processed.')})).rejects.toThrow(/只能复核/)
       await expect(acceptProductBuildArtifact({...input(compiled),artifactKey:'avg.proposal.unapproved'})).rejects.toThrow(/只能复核/)
       await expect(acceptProductBuildArtifact({...input(compiled),producerRunId:raw.producerRunId})).rejects.toThrow(/只能复核/)
       expect(await db.productBuildArtifacts.where('buildId').equals(s.buildId).count()).toBe(count)
