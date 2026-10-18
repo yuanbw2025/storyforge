@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：2.4.0 · 生效：2026-09-29
+> 版本：2.5.1 · 生效：2026-10-13
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -45,6 +45,12 @@
 - `docs/products/UPPER-PRODUCTS.md`
 - `docs/products/TTRPG-AI-KP.md`：跑团 AI KP 专项产品契约。
 - `docs/products/TEXT-ADVENTURE.md`：AI 主导文字冒险专项产品契约。
+- `docs/products/AVG.md`：AVG/Galgame 整体产品的唯一施工入口；正式目标设计不提升当前 partial 能力或作品成熟度。
+- `docs/products/avg-production/README.md`：AVG 三线生产、系统/媒资与验收规格的目录；以下四份子文档受 AVG.md 约束。
+- `docs/products/avg-production/01-AGENT-SKILLS-AND-ARTIFACTS.md`：AVG 专业岗位、唯一 Skill/工件写域、依赖、来源与有界执行。
+- `docs/products/avg-production/02-SYSTEMS-AND-RUNTIME.md`：AVG 对话/选择/演出、物件及可选交互、版本/消费/存档恢复目标。
+- `docs/products/avg-production/03-MEDIA-PRODUCTION-AND-BINDING.md`：AVG 真实参考、媒资家族/配音、加工/采用及 typed 消费绑定。
+- `docs/products/avg-production/04-QUALITY-REPAIR-AND-FIRST-SCENE.md`：AVG 分层质量、真实校准、首场景、切片与最小返修验证设计。
 - `docs/products/TEXT-OPEN-WORLD-PRODUCT-ARCHITECTURE.md`：文字开放世界整体产品与游戏系统的唯一施工入口。
 - `docs/products/TEXT-OPEN-WORLD-NARRATIVE-BASE-ARCHITECTURE.md`：文字开放世界叙事生产子系统规格；受整体产品入口约束。
 - `docs/products/TEXT-OPEN-WORLD-VISION-AND-EVOLUTION.md`：文字开放世界愿景、答疑与方案演进记录；不能单独作为施工完成证明。
@@ -74,6 +80,8 @@
 - `docs/roadmap/MOTION-DRAMA-CONTENT-PRODUCTION-FLOW.md`
 - `docs/roadmap/TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md`：文字开放世界完整开发清单与当前进度口径。
 - `docs/roadmap/TEXT-OPEN-WORLD-WORK-PACKAGE-CARDS.md`：文字开放世界 G1/G2 功能开工卡与风险台账。
+- `docs/roadmap/AVG-IMPLEMENTATION-PLAN.md`：E-AVG-01 的增量依赖、早期校准、基础协议升级与兼容切换；下一代码单元 AVG-BASE-00A。
+- `docs/roadmap/AVG-WORK-PACKAGE-CARDS.md`：AVG 每包的入口/读取/候选采用/生命周期/消费者/正反例与完成边界。
 - `docs/roadmap/COMPLETED.md`
 
 ### 2.3 机器事实与质量证据
@@ -87,6 +95,11 @@
 - `docs/roadmap/MOTION-DRAMA-PLAN-AUDIT.md`：漫剧前期生产方案对当前行业流程的交叉审查与修订证据。
 - `docs/audits/TEXT-OPEN-WORLD-CAPABILITY-AUDIT-20260906.md`：文字开放世界开工时的能力审计快照；只作实施证据，当前实现以代码、测试与能力基线为准。
 - `docs/audits/GAME-PRODUCT-LIFECYCLE-COMPLETENESS-REVIEW-20260927.md`：游戏产品双生命周期、现行 S1/S2/S3 全流程、横切缺口、采纳决议与后续验证任务；七项原则已进入 L0/L1/L2，本文继续作为 L4 论证和实现审计证据，不替代上位规则或宣称实现完成。
+- `docs/audits/AVG-PRODUCTION-RESEARCH-20261013.md`：AVG 三条生产流程的历史追溯、头部成品对标、代码基线、专业方法、能力矩阵与评测研究；属于 L4，施工转由 AVG.md 及专项计划/工作包卡，不宣称生成效果或作品商业验收完成。
+- `docs/audits/AVG-PROFESSIONAL-METHODS-20261013.md`：AVG 主创方法访谈、官方宣传帧观察、生成方法/参考图接口与许可、专业 Skill 方法草案和原创正反例；属于 L4 研究与未校准提案，不能作为已注册岗位、完整游戏场景研究或真实生成/作品验收证明。
+- `docs/audits/evidence/avg-scenes-20261013/public-frame-observations.json`：上述 AVG 研究的公开视频来源、时间码、帧 hash 与观察范围索引；不含商业源图像，不是产品媒资清单、生成 receipt 或作品验收。
+- `docs/audits/AVG-SYSTEMS-AND-MEDIA-RESEARCH-20261013.md`：AVG 对话、物品/证据、存档及可选交互的商业机制对照，完整媒资家族、真实参考/配音和自动配置的基线、合同草案与验证任务；L4 研究，不证明专属系统、自动生成或商业验收已完成。
+- `docs/audits/evidence/avg-systems-media-20261013/official-manual-observation.json`：大逆转裁判 PS4 官方操作图的来源、hash 和观察范围索引；不含原图，不是实际游戏操作或产品验收 receipt。
 
 ### 2.4 用户、维护与法律资料
 
@@ -165,3 +178,9 @@
 本次 2.3.0 复审确认总纲 1.9.0 与上层产品契约 2.6.0 正式采纳全生命周期审查的七项长期原则，并同步开发入口、上下文路由、数据治理和 Harness 标准：双生命周期、可玩切片与局部返修、确定性 Build Integrator、分层验收成熟度、运行时 AI 契约、发布后维护和横切治理。该修订不新增 S4/S5、第四条创意泳道、万能 schema 或产品身份，也不把原则采纳误报为具体功能已经实现。
 
 本次 2.4.0 复审登记仓库 `website-docs/` 为“项目知识库”的唯一源目录，明确其通过部署工作流发布到官方知识库站点，并区分内部 `docs/`、公开项目知识库和 WPS 知识库“StoryForge故事熔炉”。同时登记用户更新日志与反馈入口的正确路径，区分仓库中的反馈表单定义和外部系统持有的实际提交记录。该修订只统一名称、路由、权威和同步证据，不复制知识库正文，也不改变任何产品能力状态。
+
+本次 2.4.1 增量登记 AVG 三条生产流程商业对标与研发路线研究，保留其 L4 证据层级；研究建议不自动进入施工队列，不修改总纲、产品 owner、阶段或当前实现状态。
+
+本次 2.5.0 复审登记 AVG 整体产品契约、四份子规格、实施计划和工作包卡，共八份 L2 文档。AVG.md 是唯一整体施工入口，L4 研究保留论据和观察限制；设计明确三线岗位/工件、系统/存档、真实媒资/配音/消费者、版本兼容、质量与依赖。仅完成设计交付，产品仍为 partial，真实调用/首场景/作者玩家及商业证据未因登记而完成；总纲、产品 owner 和其他产品优先级不变。
+
+2.5.1 随 AVG 方案 1.1.0 细化近期施工增量：意图→规则骨架→分场→导演无循环前置，导入首戏先于完整工厂/工作台/跨周目，专业化及图/音实际校准提前，补充 S2 V2 选择、设备/资源与商业参照质量/投入门。后置模块/渠道/规模仍需按真实选用范围细化；不把岗位数、文档检查或短戏通过当作商业效果。

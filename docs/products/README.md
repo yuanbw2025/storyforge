@@ -10,6 +10,7 @@
 | [`WORLD-ENGINE.md`](./WORLD-ENGINE.md) | 世界语义内容、编号、版本、封存和数据出口 |
 | [`UPPER-PRODUCTS.md`](./UPPER-PRODUCTS.md) | 跑团、角色聊天、AI 小镇和文字游戏共同遵守的 `S1 世界封存 → S2 产品定向 → S3 产品执行` 架构、交接物与扩展槽位；具体功能另行设计 |
 | [`TEXT-ADVENTURE.md`](./TEXT-ADVENTURE.md) | AI 主导文字冒险的通用内核、确定性运行、产品私域、媒资与发布契约；专业生产方案由其路由到 [`text-adventure-production/README.md`](./text-adventure-production/README.md) |
+| [`AVG.md`](./AVG.md) | AVG/Galgame 整体产品、三条生产线与系统/媒资合同；子规格由 [`avg-production/README.md`](./avg-production/README.md) 路由，实施依赖与逐包验收见专项计划/工作包卡；当前 partial，新增能力尚未实现 |
 
 实现状态统一看 [`../roadmap/CAPABILITY-BASELINE.md`](../roadmap/CAPABILITY-BASELINE.md)，下一步看
 [`../roadmap/README.md`](../roadmap/README.md)。
