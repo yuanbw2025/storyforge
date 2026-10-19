@@ -203,6 +203,7 @@ export async function loadTtrpgGmRuntimeViewV1(input: {
         expectedPreviewHash: build.previewHash,
       },
     });
+    if (playable.runtimePackage.productType !== 'ttrpg') fail('冻结来源不是 TTRPG 运行包')
     runtimePackage = playable.runtimePackage;
     packageHash = playable.packageHash;
     sourceIdentityHash = build.previewHash;

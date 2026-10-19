@@ -1,0 +1,29 @@
+{
+  "schema": "storyforge.research.avg-official-manual-observation",
+  "version": 1,
+  "researchDate": "2026-10-13",
+  "codeBaseline": "097ba563fd690ad773facb482814121ad03fcfe1",
+  "work": "The Great Ace Attorney Chronicles",
+  "platform": "PlayStation 4",
+  "language": "English",
+  "manualUrl": "https://game.capcom.com/manual/daigyakutensaiban1_2/en/ps4/1/",
+  "sourceImageUrl": "https://game.capcom.com/manual/daigyakutensaiban1_2/img/manual/en/ps4/1.jpg",
+  "privateArchiveId": "avg-systems-media-20261013",
+  "archiveFile": "great-ace-attorney-ps4-manual.jpg",
+  "sha256": "5507f2873749e06e3dcb831e6fa368b3bed6f3fc21c54e2bdbee99eeb2b35ecd",
+  "sourceWidth": 3508,
+  "sourceHeight": 2481,
+  "viewedImageCount": 1,
+  "observer": "Codex assistant visual inspection; not a human expert playtest",
+  "observationScope": [
+    "input mapping and menus",
+    "evidence and profile tabs",
+    "investigation and presentation actions",
+    "different behaviors of autoplay and story mode",
+    "options mention saving and loading"
+  ],
+  "actualGameOperationPerformed": false,
+  "audioListeningPerformed": false,
+  "commercialSourceAssetsIncludedInRepository": false,
+  "scope": "Research source index; not a gameplay, media-generation, ProductRelease or acceptance receipt"
+}

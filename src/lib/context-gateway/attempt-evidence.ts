@@ -370,6 +370,31 @@ async function readAndVerifyArtifactBodyV1(
   return body
 }
 
+/** Read only the original pre-dispatch request and packet of the currently
+ * running attempt. It grants no candidate/adoption or World read authority.
+ * Consumers can compare fresh registered inputs through the existing
+ * scheduler composition without dropping the Gateway contribution. */
+export async function readRunningContextGatewayRequestV1(input: {
+  scope: WorkspaceScope; runId: number; stepId: string; attempt: number
+}) {
+  const snapshot = await readEvidenceRunV1(input.scope, input.runId), step = snapshot.projection.steps[input.stepId]
+  if (!step || step.status !== 'running' || step.attempt !== input.attempt) fail('running-request', '只读预检必须属于当前running step/attempt')
+  const exact = async (kind: 'rendered-request' | 'context-packet') => {
+    const matches = snapshot.events.filter(e => e.type === 'evidence.artifact.recorded' && e.payload.stepId === input.stepId
+      && e.payload.attempt === input.attempt && e.payload.artifactKind === kind)
+    if (matches.length !== 1 || matches[0].type !== 'evidence.artifact.recorded') fail('running-request', `原${kind}事件缺失或不唯一`)
+    const event = matches[0], body = await readAndVerifyArtifactBodyV1(input.scope.projectId,
+      { role: kind, artifactKind: kind, contentHash: event.payload.contentHash, byteLength: event.payload.byteLength })
+    if (await sha256Text(body) !== event.payload.contentHash) fail('running-request', '原预检字节hash不一致')
+    return { body, contentHash: event.payload.contentHash }
+  }
+  const request = await exact('rendered-request'), packet = await exact('context-packet')
+  const current = await readEvidenceRunV1(input.scope, input.runId)
+  if (current.projection.lastSequence !== snapshot.projection.lastSequence) fail('running-request', '原预检读取期间Run已推进')
+  return { renderedRequestJson: request.body, renderedRequestHash: request.contentHash,
+    contextPacket: JSON.parse(packet.body) as ContextPacketV1, contextPacketArtifactHash: packet.contentHash }
+}
+
 async function assertGatewayEvidenceCoherence(input: {
   preflight: ContextGatewayPreflightEvidenceV1
   selector: ContextSelectorResultV1

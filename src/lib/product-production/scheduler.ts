@@ -1,3 +1,6 @@
+import { parseProductRuntimePackage } from './runtime-package'
+import { avgMediaProductionEnabledV2, avgVoiceProductionEnabledV3 } from '../avg/assembly-contract'
+import { createProductBuildPreviewManifestV2 } from './preview-manifest'
 import { isTextRevisionRetainedVisualTaskV1, textRevisionRecoveryPreservesVisualContractV1, validateTextContentRevisionAuthorityV1, verifiedTextRevisionVisualCarryTaskKeysV1 } from './text-content-revision-authority'
 import { verifiedHumanImportCarryProofsV1 } from './text-adventure-artifact-store'
 import { isTextAdventureClockCapacityRevisionV1 } from './clock-capacity-revision'
@@ -49,6 +52,7 @@ import {
   carryForwardProductBuildArtifactsToEpochV1,
 } from './artifact-store'
 import { parseProductBuildQualityReportV1 } from './adoption'
+import { avgRuntimeStage } from '../avg/executable-module'
 import { createProductBuildCompatibilityReportV1 } from './compatibility'
 import { parseProductProductionBriefV3 } from './contracts'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
@@ -63,7 +67,6 @@ import { createProductBuildPreviewManifestV1 } from './preview-manifest'
 import { createProductBuildRootTerminalReceiptV1 } from './receipts'
 import { readMediaBlobObjectData } from './media-blob-store'
 import {
-  parseProductRuntimePackageV1,
   productProductionTerminalArtifactKeysV1,
 } from './runtime-package'
 import { parseTextOpenWorldModulesV1 } from '../open-world/modules'
@@ -218,17 +221,27 @@ export interface ProductProductionTaskExecutionResultV1 {
 
 /** A received draft failed validation; repeating the same request is not a repair. */
 export class ProductProductionDraftRejectedErrorV1 extends Error {
+  // The existing executor-error usage contract also survives module reloads
+  // or realm boundaries where instanceof cannot identify this constructor.
+  declare readonly productProductionUsage: ProductProductionTaskUsageV1
+
   constructor(message: string, readonly usage: ProductProductionTaskUsageV1) {
     super(message)
     this.name = 'ProductProductionDraftRejectedErrorV1'
+    Object.defineProperty(this, 'productProductionUsage', { value: usage, enumerable: false })
   }
 }
 
 /** A safely repeatable executor failure with fully observed paid usage. */
 export class ProductProductionRetryableExecutionErrorV1 extends Error {
+  // The existing executor-error usage contract also survives module reloads
+  // or realm boundaries where instanceof cannot identify this constructor.
+  declare readonly productProductionUsage: ProductProductionTaskUsageV1
+
   constructor(message: string, readonly usage: ProductProductionTaskUsageV1) {
     super(message)
     this.name = 'ProductProductionRetryableExecutionErrorV1'
+    Object.defineProperty(this, 'productProductionUsage', { value: usage, enumerable: false })
   }
 }
 
@@ -264,6 +277,9 @@ export interface ProductProductionTaskExecutionInputV1 {
   signal: AbortSignal
   /** Persist the received model text before parsing, including rejected drafts. */
   onModelOutput?: (output: string) => Promise<void | 'discarded-stale'>
+  /** Exact bounded provider response evidence, before media parsing. It uses
+   * the registered raw-response store, never prompt/context or a second call. */
+  onMediaOutput?: (output: string) => Promise<void | 'discarded-stale'>
   /** Re-fence a bounded protocol before every paid call after the first. */
   beforeAdditionalModelRequest?: () => Promise<void | 'discarded-stale'>
   authorDraftJson?: string
@@ -687,6 +703,13 @@ export function assertProductProductionBudgetLedgerV1(value: string): void {
   parseLedger(value)
 }
 
+/** Recorded Build-lifetime usage, independent of the active Brief pointer.
+ * This pure read grants no execution, retry, adoption or billing settlement.
+ * Failed and held attempts keep the scheduler's existing accounting meaning. */
+export function projectProductProductionRecordedUsageV1(value:string):ProductProductionTaskUsageV1{
+  return sumTaskUsage(parseLedger(value).attempts.flatMap(entry=>entry.usage?[entry.usage]:[]))
+}
+
 /**
  * Close one conservatively held result-unknown attempt without changing the
  * mainline append-only attempt ledger. The unknown attempt already stores its
@@ -1068,6 +1091,10 @@ function taskContextSourceKeys(
   task: ProductProductionPlanTaskV3,
   excludeRepairFeedback = false,
 ): string[] {
+  if (task.contextProfile === 'avg-task-v1') return ['product-production.avg-task-inputs']
+  if (task.contextProfile === 'avg-visual-planning-v4') return ['product-production.avg-visual-planning-inputs']
+  if (task.contextProfile === 'avg-visual-planning-v5') return ['product-production.avg-visual-planning-inputs-v5']
+  if (task.contextProfile === 'avg-sound-planning-v1') return ['product-production.avg-sound-planning-inputs']
   // The deterministic runtime compiler receives immutable artifact rows via
   // inputArtifacts and binds their hashes in structuralInput. Re-serializing
   // the same full payload into a model-style context duplicates tens of
@@ -1089,6 +1116,10 @@ function taskContextSourceKeys(
 }
 
 function taskRequiredContextSourceKeys(task: ProductProductionPlanTaskV3): string[] {
+  if (task.contextProfile === 'avg-task-v1') return ['product-production.avg-task-inputs']
+  if (task.contextProfile === 'avg-visual-planning-v4') return ['product-production.avg-visual-planning-inputs']
+  if (task.contextProfile === 'avg-visual-planning-v5') return ['product-production.avg-visual-planning-inputs-v5']
+  if (task.contextProfile === 'avg-sound-planning-v1') return ['product-production.avg-sound-planning-inputs']
   if (task.executionMode === 'deterministic' && task.kind === 'runtime-package') {
     return ['product-production.brief']
   }
@@ -1096,7 +1127,8 @@ function taskRequiredContextSourceKeys(task: ProductProductionPlanTaskV3): strin
     const skill = getAgentSkillV1(task.skillId)
     return [...new Set([
       ...skill.contextSourceKeys,
-      ...(task.inputArtifactKeys.length > 0 ? ['product-production.artifact-inputs'] : []),
+      ...(task.inputArtifactKeys.length > 0 && !skill.contextSourceKeys.some(key => ['product-production.avg-task-inputs', 'product-production.avg-visual-planning-inputs', 'product-production.avg-visual-planning-inputs-v5', 'product-production.avg-sound-planning-inputs'].includes(key))
+        ? ['product-production.artifact-inputs'] : []),
     ])]
   }
   return ['product-production.brief', ...(task.inputArtifactKeys.length > 0 ? ['product-production.artifact-inputs'] : [])]
@@ -1112,7 +1144,7 @@ function taskContractContextSourceKeys(task: ProductProductionPlanTaskV3): strin
   ])]
 }
 
-function combineProductProductionContextV1(input: {
+export function combineProductProductionContextV1(input: {
   assembled: AssembleContextResult
   worldContent: string
   worldContentHash: string
@@ -1286,6 +1318,7 @@ function productProductionTaskExecutionIdentityPayloadV1(
     taskKind: task.kind,
     executionMode: task.executionMode,
     executionBindings,
+    ...(task.contextProfile ? { contextProfile: task.contextProfile } : {}),
   }
 }
 
@@ -2278,7 +2311,7 @@ async function ensurePlan(input: {
   // that a deterministic failure can invalidate a carried parent artifact.
   // Re-applying parent reuse here would resurrect the exact stale artifact
   // that the recovery closure just proved unsuitable.
-  if (!state.creatorContracts && !input.suppliedPlan && !currentMediaRevisionPlan
+  if (!state.creatorContracts && !state.brief.avgAssembly && !state.brief.avgSoundPlanning && !input.suppliedPlan && !currentMediaRevisionPlan
     && currentPlan == null && state.build.planRevision === 0) {
     const reuse = await applyCrossBuildEvolutionReuseV1({
       scope: input.scope, build: state.build, brief: state.brief, plan,
@@ -4666,6 +4699,8 @@ async function runClaimedTaskCore(input: {
   const executorOwnsWorldGateway = productProductionTaskOwnsWorldGatewayV1(input.task)
   const worldGatewayRequired = worldGatewayUsed && !executorOwnsWorldGateway
   const requiresExactContext = worldGatewayUsed || input.task.executionMode === 'model'
+    || normalSourceKeys.includes('product-production.avg-task-inputs') || normalSourceKeys.includes('product-production.avg-visual-planning-inputs')
+    || normalSourceKeys.includes('product-production.avg-sound-planning-inputs')
   // The gateway below receives the declared budget minus the context actually
   // assembled here. A fixed percentage cap would reject a valid, exact Brief
   // and artifact set before the remaining world budget can even be measured.
@@ -4943,6 +4978,15 @@ async function runClaimedTaskCore(input: {
   if (input.signal.aborted) abortFromParent()
   else input.signal.addEventListener('abort', abortFromParent, { once: true })
   let timeoutHandle: ReturnType<typeof globalThis.setTimeout> | null = null
+  const recordRawOutput = async (output: string): Promise<void | 'discarded-stale'> => {
+    if (!await refreshExecutionAttemptAuthority()) return 'discarded-stale'
+    const recorded = await recordAgentRunArtifactV1({
+      scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
+      artifactKind: 'raw-response', content: output,
+      expectedLastSequence: snapshot.projection.lastSequence,
+    })
+    snapshot = recorded.snapshot
+  }
   const timeoutPromise = new Promise<never>((_resolve, reject) => {
     timeoutHandle = globalThis.setTimeout(() => {
       timedOut = true
@@ -4971,15 +5015,8 @@ async function runClaimedTaskCore(input: {
         beforeAdditionalModelRequest: async () => {
           if (!await refreshExecutionAttemptAuthority()) return 'discarded-stale'
         },
-        onModelOutput: async output => {
-          if (!await refreshExecutionAttemptAuthority()) return 'discarded-stale'
-          const recorded = await recordAgentRunArtifactV1({
-            scope: input.scope, runId: snapshot.run.id, stepId: input.task.taskKey, attempt,
-            artifactKind: 'raw-response', content: output,
-            expectedLastSequence: snapshot.projection.lastSequence,
-          })
-          snapshot = recorded.snapshot
-        },
+        onModelOutput: recordRawOutput,
+        ...(input.task.executionMode === 'media-provider' ? { onMediaOutput: recordRawOutput } : {}),
       }),
       timeoutPromise,
     ])
@@ -5519,7 +5556,8 @@ async function compileTerminalBuild(input: {
   const packageArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.runtimePackage)
   const qualityArtifact = artifacts.find(row => row.artifactKey === terminalArtifactKeys.qualityReport)
   if (!packageArtifact || !qualityArtifact) throw new Error('[product-production-scheduler] terminal package/quality Artifact 缺失')
-  const runtimePackage = parseProductRuntimePackageV1(packageArtifact.payloadJson)
+  const runtimePackage = parseProductRuntimePackage(packageArtifact.payloadJson)
+  if (runtimePackage.version === 2 && !input.brief.avgAssembly&&!input.brief.avgVisualPlanning&&!input.brief.avgSoundPlanning) throw new Error('[avg] 原生终态必须来自冻结的 AVG 组装计划')
   const packageHash = await hashProductProductionValueV2(runtimePackage)
   if (packageArtifact.contentHash !== packageHash) throw new Error('[product-production-scheduler] package Artifact hash 不一致')
   let previousPackage: Parameters<typeof createProductBuildCompatibilityReportV1>[0]['previous'] = null
@@ -5561,7 +5599,7 @@ async function compileTerminalBuild(input: {
         throw new Error('[product-production-scheduler] compatibility parent package Artifact 缺失')
       }
       const parentArtifact = parentArtifacts[0]
-      const parentRuntimePackage = parseProductRuntimePackageV1(parentArtifact.payloadJson)
+      const parentRuntimePackage = parseProductRuntimePackage(parentArtifact.payloadJson)
       if (await hashProductProductionValueV2(parentRuntimePackage) !== parentBuild.packageHash) {
         throw new Error('[product-production-scheduler] compatibility parent package hash 不一致')
       }
@@ -5571,6 +5609,8 @@ async function compileTerminalBuild(input: {
       }
     }
   }
+  const avgAssembly=input.brief.avgAssembly??input.brief.avgVisualPlanning?.assembly??input.brief.avgSoundPlanning?.assembly
+  if (avgAssembly && avgAssembly.basePackageHash !== (previousPackage?.packageHash ?? null)) throw new Error('[avg] 组装修订基线与实际 Build 谱系不一致')
   const compatibility = await createProductBuildCompatibilityReportV1({
     previous: previousPackage,
     current: { buildNumber: build.buildNumber, packageHash, runtimePackage },
@@ -5596,7 +5636,7 @@ async function compileTerminalBuild(input: {
     artifactKey: row.artifactKey, version: row.version, contentHash: row.contentHash,
     producerReceiptHash: row.producerReceiptHash,
   }))
-  const fallbackSummary = runtimePackage.textOpenWorldVNext == null
+  const fallbackSummary = runtimePackage.version !== 1 || runtimePackage.textOpenWorldVNext == null
     ? []
     : parseTextOpenWorldModulesV1(runtimePackage.textOpenWorldVNext).presentation.mediaSlots
       .filter(slot => slot.assetKey == null)
@@ -5610,17 +5650,21 @@ async function compileTerminalBuild(input: {
     artifactReceipts, completedGateIds, fallbackSummary,
   }
   const manifestHash = await hashProductProductionValueV2(manifest)
-  const mediaBindings = (runtimePackage.presentation?.assets ?? []).map(asset => {
-    const artifact = artifacts.find(row => row.blobObjectId != null && row.contentHash === asset.blobContentHash)
+  const mediaBindings = (avgRuntimeStage(runtimePackage)?.assets ?? []).map(asset => {
+    const artifact = artifacts.find(row => row.blobObjectId != null && row.contentHash === asset.blobContentHash
+      && (runtimePackage.version === 1 || canonicalProductProductionJsonV2(JSON.parse(row.metadataJson)) === canonicalProductProductionJsonV2(asset)))
     if (!artifact || artifact.mimeType !== asset.mimeType || artifact.byteSize !== asset.byteSize) {
       throw new Error(`[product-production-scheduler] RuntimePackage 媒资未绑定 accepted Artifact:${asset.assetKey}`)
     }
     return { assetKey: asset.assetKey, artifactKey: artifact.artifactKey, blobContentHash: asset.blobContentHash }
   })
-  const preview = await createProductBuildPreviewManifestV1({
+  const previewInput = {
     productionKey: production.productionKey, buildNumber: build.buildNumber,
-    buildManifestHash: manifestHash, runtimePackage, mediaBindings, fallbackSummary,
-  })
+    buildManifestHash: manifestHash, mediaBindings, fallbackSummary,
+  }
+  const preview = runtimePackage.version === 1
+    ? await createProductBuildPreviewManifestV1({ ...previewInput, runtimePackage })
+    : await createProductBuildPreviewManifestV2({ ...previewInput, runtimePackage })
   if (input.restoreImportedProofs && (manifestHash !== build.manifestHash
     || packageHash !== build.packageHash || preview.previewHash !== build.previewHash
     || qualityReportHash !== build.qualityReportHash)) {
@@ -5755,18 +5799,7 @@ export async function projectProductProductionSchedulerV1(input: {
   // Build-lifetime accounting includes every terminal attempt, including
   // failed retries and previous recovery epochs. Current task projection is
   // intentionally not a source of budget truth.
-  const settledUsage = ledger.attempts.flatMap(entry => entry.usage ? [entry.usage] : [])
-  const knownCosts = settledUsage.map(usage => usage.costUsd)
-  const usage: ProductProductionTaskUsageV1 = {
-    modelCalls: settledUsage.reduce((sum, item) => sum + item.modelCalls, 0),
-    inputTokens: settledUsage.reduce((sum, item) => sum + item.inputTokens, 0),
-    outputTokens: settledUsage.reduce((sum, item) => sum + item.outputTokens, 0),
-    mediaCalls: settledUsage.reduce((sum, item) => sum + item.mediaCalls, 0),
-    costUsd: knownCosts.some(value => value == null)
-      ? null : knownCosts.reduce<number>((sum, value) => sum + (value ?? 0), 0),
-    durationMs: settledUsage.reduce((sum, item) => sum + item.durationMs, 0),
-    storageBytes: settledUsage.reduce((sum, item) => sum + item.storageBytes, 0),
-  }
+  const usage = projectProductProductionRecordedUsageV1(build.budgetLedgerJson)
   return {
     productionId: input.productionId, buildId: build.id!, buildNumber: build.buildNumber,
     buildStatus: build.status, controlEpoch: build.controlEpoch, planHash: build.planHash,
@@ -5911,7 +5944,9 @@ export async function recoverImportedProductProductionProofsV1(input: {
 }): Promise<ProductProductionSchedulerProjectionV1> {
   const scope = await resolveScope({ scope: input.scope })
   const current = await currentProductionBuild(scope, input.productionId)
-  if (!['text-adventure', 'text-open-world'].includes(current.brief.intent.productType)) {
+  const avgVisual=current.brief.intent.productType==='avg'&&!!current.brief.avgVisualPlanning
+  const avgSound=current.brief.intent.productType==='avg'&&!!current.brief.avgSoundPlanning
+  if (!['text-adventure', 'text-open-world'].includes(current.brief.intent.productType)&&!avgVisual&&!avgSound) {
     throw new Error('[product-production-scheduler] 当前产品不支持导入生产证明复验')
   }
   if (!['preview-ready', 'release-ready', 'released'].includes(current.build.status)) {
@@ -5952,6 +5987,14 @@ export async function recoverImportedProductProductionProofsV1(input: {
       })
     } else {
       await assertProductBuildArtifactContentHashV1(row)
+    }
+    if(avgVisual&&row.artifactKey.startsWith('avg.proposal.')){
+      const {readAvgVisualProposalEvidence}=await import('../avg/visual-planning-evidence')
+      await readAvgVisualProposalEvidence(scope,row)
+    }
+    if (avgSound && row.artifactKey === 'avg.proposal.sound-plan') {
+      const { readAvgSoundProposalEvidenceV1 } = await import('../avg/sound-planning-evidence')
+      await readAvgSoundProposalEvidenceV1(scope, row)
     }
   }
   let progressed = true
@@ -6028,6 +6071,14 @@ export async function recoverImportedProductProductionProofsV1(input: {
   if ([...children.values()].some(child => child.projection.state !== 'completed'
     || !child.projection.terminalReceiptHash)) {
     throw new Error('[product-production-scheduler] 导入 task 依赖闭包无法完成本地复验')
+  }
+  // Only completed imported prefixes were revalidated above. Check the full
+  // V4 author/compiler/original-byte closure before re-sealing its root; no
+  // executor, current provider capability or author adoption is invoked.
+  if(avgVisual || avgSound){
+    const {verifyProductBuildTerminalArtifactSetV1}=await import('./artifact-store')
+    await verifyProductBuildTerminalArtifactSetV1({scope,productionId:input.productionId,buildId:current.build.id!,
+      expectedControlEpoch:current.build.controlEpoch,expectedPlanHash:current.build.planHash})
   }
   root = await readAgentRunV1(scope, root.run.id)
   await compileTerminalBuild({
@@ -6218,6 +6269,13 @@ export async function runProductProductionSchedulerCycleV1(input: {
 }): Promise<ProductProductionSchedulerProjectionV1> {
   const scope = await resolveScope({ scope: input.scope })
   const current = await currentProductionBuild(scope, input.productionId)
+  if (current.brief.avgSoundPlanning && ['preview-ready', 'release-ready', 'released'].includes(current.build.status)) {
+    if (input.suppliedPlan && canonicalProductProductionJsonV2(input.suppliedPlan) !== current.build.planJson) throw new Error('[avg-sound] 已封存版本不能接受不同Plan')
+    const { verifyProductBuildTerminalArtifactSetV1 } = await import('./artifact-store')
+    await verifyProductBuildTerminalArtifactSetV1({ scope, productionId: input.productionId, buildId: current.build.id!,
+      expectedControlEpoch: current.build.controlEpoch, expectedPlanHash: current.build.planHash })
+    return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
+  }
   if (['paused', 'cancelled', 'failed', 'recovery-required', 'archived', 'released'].includes(current.build.status)) {
     await cancelNonTerminalBuildRunsAfterStopV1({
       scope, buildId: current.build.id!, controlEpoch: current.build.controlEpoch,
@@ -6240,6 +6298,31 @@ export async function runProductProductionSchedulerCycleV1(input: {
       || child.projection.steps[task.taskKey]?.candidateHash)) {
       await recoverCompletedOrCheckpointed({
         scope, buildId: state.build.id!, controlEpoch: state.build.controlEpoch, task, snapshot: child,
+      })
+    }
+  }
+  const pendingAvgHumanTasks = new Set<string>()
+  if (state.brief.avgAssembly || state.brief.avgVisualPlanning || state.brief.avgSoundPlanning) {
+    const authorTasks = state.plan.tasks.filter(task => task.executionMode === 'human-import')
+    const artifacts = await db.productBuildArtifacts.where('buildId').equals(state.build.id!).toArray()
+    const accepted = (task: ProductProductionPlanTaskV3) => task.outputArtifactKeys.every(key => artifacts.filter(row => row.artifactKey === key
+      && row.status === 'accepted' && row.controlEpoch === state.build.controlEpoch).length === 1)
+    const ready = authorTasks.every(accepted)
+    if (!ready && (state.brief.avgAssembly?.version === 1 || authorTasks.filter(task => !['avg-author-media-choice', 'avg-author-stage','avg-author-visual-review','avg-author-voice-review','avg-author-voice-choice',
+      ...(state.brief.avgVisualPlanning ? ['avg-author-visual-bible', 'avg-author-media-brief'] : []),
+      ...(state.brief.avgSoundPlanning ? ['avg-author-sound-plan', 'avg-author-sound-review', 'avg-author-sound-choice'] : [])].includes(task.kind)).some(task => !accepted(task)))) {
+      return projectProductProductionSchedulerV1({ scope, productionId: input.productionId })
+    }
+    for (const task of authorTasks) if (!accepted(task)) pendingAvgHumanTasks.add(task.taskKey)
+    if (ready && state.build.status !== 'integrating') {
+      await db.transaction('rw', scopeTransactionTables(db.productBuilds, db.productBuildArtifacts, db.productProductions), async () => {
+        const current = await db.productBuilds.get(state.build.id!)
+        const production = await db.productProductions.get(input.productionId)
+        const rows = await db.productBuildArtifacts.where('buildId').equals(state.build.id!).toArray()
+        if (!current || !production || production.status !== 'producing' || production.currentBuildNumber !== current.buildNumber
+          || current.stateRevision !== state.build.stateRevision || current.controlEpoch !== state.build.controlEpoch
+          || canonicalProductProductionJsonV2(rows) !== canonicalProductProductionJsonV2(artifacts)) throw new Error('[avg] 组装输入已变化，请刷新后重新开始')
+        await db.productBuilds.update(current.id!, { status: 'integrating', stateRevision: current.stateRevision + 1, updatedAt: Date.now() })
       })
     }
   }
@@ -6310,6 +6393,10 @@ export async function runProductProductionSchedulerCycleV1(input: {
   const locked = new Set(activeTasks.flatMap(task => task.subjectLockKeys))
   const ready = state.plan.tasks
     .filter(task => {
+      if (pendingAvgHumanTasks.has(task.taskKey)) return false
+      if (state.brief.avgAssembly?.version === 3 && task.kind === 'avg-media-voice-generate'
+        && (!avgMediaProductionEnabledV2() || !avgVoiceProductionEnabledV3())) return false
+      if (state.brief.avgAssembly?.version === 2 && task.kind === 'avg-media-image-generate' && !avgMediaProductionEnabledV2()) return false
       const child = children.get(task.taskKey)
       if (child && ['failed', 'cancelled', 'recovery_required', 'paused'].includes(child.projection.state)) return false
       const retryReady = child?.projection.steps[task.taskKey]?.status === 'failed'

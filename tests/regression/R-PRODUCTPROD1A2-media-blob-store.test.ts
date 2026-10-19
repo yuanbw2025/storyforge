@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import {
@@ -7,9 +7,12 @@ import {
   putMediaBlobObject,
   readMediaBlobObjectData,
   recoverInterruptedMediaBlobObjects,
+  discardUnreferencedMediaBlobObjectsV1,
 } from '../../src/lib/product-production/media-blob-store'
 import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
 import { seedCurrentProject } from '../helpers/current-workspace'
+import { createAvgDraftV1 } from '../../src/lib/avg/draft-service'
+import { importAvgMediaV1 } from '../../src/lib/avg/editor-service'
 
 async function workspace(name: string) {
   const now = Date.now()
@@ -27,6 +30,17 @@ function bytes(value: string): ArrayBuffer {
 describe('R-PRODUCTPROD-1A2 · shared media blob store', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
+
+  it('failed-candidate cleanup retains registry-owned author uploads, then removes only the explicitly unreferenced object',async()=>{
+    const owner=await createAvgDraftV1('注册媒体清理隔离探针')
+    const asset=await importAvgMediaV1({scope:owner.scope,data:bytes('opaque lifecycle fixture, not a decoded image'),mimeType:'image/png',
+      name:'清理生命周期夹具',kind:'background',license:'原创生命周期测试数据',altText:'',characterTag:''})
+    const reference=(await db.avgDraftMedia.where('workId').equals(owner.scope.workId).first())!
+    expect(await discardUnreferencedMediaBlobObjectsV1({scope:owner.scope,blobObjectIds:[reference.blobObjectId]})).toEqual([])
+    expect((await db.mediaBlobObjects.get(reference.blobObjectId))!.contentHash).toBe(asset.contentHash)
+    await db.avgDraftMedia.delete(reference.id!)
+    expect(await discardUnreferencedMediaBlobObjectsV1({scope:owner.scope,blobObjectIds:[reference.blobObjectId]})).toEqual([reference.blobObjectId])
+  })
 
   it('同一 Work 按 contentHash 去重，跨 Work 不共享，预期 hash 错误零写入', async () => {
     const first = await workspace('媒资 Work A')
@@ -46,6 +60,26 @@ describe('R-PRODUCTPROD-1A2 · shared media blob store', () => {
       expectedContentHash: one.contentHash,
     })).rejects.toThrow(/哈希与预期不一致/)
     expect(await db.mediaBlobObjects.count()).toBe(2)
+  })
+
+  it('publishes IndexedDB bytes atomically when another consumer reads the same hash before the first insert returns', async () => {
+    const owned = await workspace('parallel physical bytes'), data = bytes('same audio for independent consumers')
+    let enter!: () => void, release!: () => void
+    const inserted = new Promise<void>(resolve => { enter = resolve }), hold = new Promise<void>(resolve => { release = resolve })
+    const add = db.mediaBlobObjects.add.bind(db.mediaBlobObjects)
+    const spy = vi.spyOn(db.mediaBlobObjects, 'add').mockImplementationOnce(async (...args) => {
+      const id = await add(...args); enter(); await hold; return id
+    })
+    const first = putMediaBlobObject({ scope: owned.scope, data, mimeType: 'audio/ogg', backend: 'indexeddb' })
+    await inserted
+    const second = await Promise.allSettled([putMediaBlobObject({ scope: owned.scope, data, mimeType: 'audio/ogg', backend: 'indexeddb' })])
+    release(); spy.mockRestore()
+    const original = await first
+    expect(second[0].status).toBe('fulfilled')
+    if (second[0].status !== 'fulfilled') throw second[0].reason
+    expect(second[0].value.id).toBe(original.id)
+    expect(await readMediaBlobObjectData({ scope: owned.scope, blobObjectId: original.id! })).toEqual(data)
+    expect(await db.mediaBlobObjects.count()).toBe(1)
   })
 
   it('lease 和正式链接阻止 GC；释放且移除引用后两阶段回收对象', async () => {

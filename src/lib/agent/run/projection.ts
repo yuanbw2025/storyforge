@@ -399,6 +399,21 @@ export function replayAgentRunEventsV1(values: readonly unknown[]): AgentRunProj
   return projection
 }
 
+/** Read historical evidence only. An exact final import-scope stale event may
+ * retain its completed prefix; it never makes the current Run completed or
+ * grants adoption, retry or write authority. Other stale reasons/tails fail. */
+export function completedAgentRunEvidencePrefixV1(events: readonly AnyAgentRunEventV1[]): AgentRunProjectionV1 | null {
+  if (!events.length) return null
+  const current = replayAgentRunEventsV1(events)
+  if (current.errors.length) return null
+  if (current.state === 'completed' && current.terminalReceiptHash) return current
+  const last = events[events.length - 1]!
+  if (current.state !== 'running' || last.type !== 'verification.staled'
+    || last.payload.reason !== 'project-import-scope-rebound') return null
+  const prefix = replayAgentRunEventsV1(events.slice(0, -1))
+  return prefix.errors.length === 0 && prefix.state === 'completed' && prefix.terminalReceiptHash === last.payload.previousReceiptHash ? prefix : null
+}
+
 export async function hashAgentRunProjectionV1(projection: AgentRunProjectionV1): Promise<string> {
   return hashCanonicalValue(projection)
 }

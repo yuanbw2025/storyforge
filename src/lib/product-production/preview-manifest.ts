@@ -1,6 +1,7 @@
-import type { ProductBuildPreviewManifestV1 } from '../types'
+import type { AnyProductBuildPreviewManifest, ProductBuildPreviewManifestV1, ProductBuildPreviewManifestV2, ProductBuildRecordV1 } from '../types'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
-import { parseProductRuntimePackageV1 } from './runtime-package'
+import { parseProductRuntimePackageV1, parseProductRuntimePackageV2, productProtocolVersion } from './runtime-package'
+import { avgExecutableModule } from '../avg/executable-module'
 
 function fail(message: string): never {
   throw new Error(`[product-build-preview] ${message}`)
@@ -32,6 +33,18 @@ function integer(value: unknown, label: string): number {
 function hash(value: unknown, label: string): string {
   if (!isSha256Hash(value)) fail(`${label} 不是 SHA-256`)
   return value
+}
+
+function parseFallbackSummary(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > 2_000) {
+    fail('fallbackSummary 必须是有界数组')
+  }
+  const fallbackSummary = value.map((value, index) => text(value, `fallbackSummary[${index}]`))
+  if (new Set(fallbackSummary).size !== fallbackSummary.length
+    || [...fallbackSummary].sort().join('\u0000') !== fallbackSummary.join('\u0000')) {
+    fail('fallbackSummary 必须唯一且排序')
+  }
+  return fallbackSummary
 }
 
 function previewHashBody(manifest: Omit<ProductBuildPreviewManifestV1, 'previewHash'>) {
@@ -77,14 +90,7 @@ export function parseProductBuildPreviewManifestV1(value: string | unknown): Pro
   if (canonicalProductProductionJsonV2(sortedBindings) !== canonicalProductProductionJsonV2(mediaBindings)) {
     fail('mediaBindings 必须按 assetKey/artifactKey 排序')
   }
-  if (!Array.isArray(manifest.fallbackSummary) || manifest.fallbackSummary.length > 2_000) {
-    fail('fallbackSummary 必须是有界数组')
-  }
-  const fallbackSummary = manifest.fallbackSummary.map((value, index) => text(value, `fallbackSummary[${index}]`))
-  if (new Set(fallbackSummary).size !== fallbackSummary.length
-    || [...fallbackSummary].sort().join('\u0000') !== fallbackSummary.join('\u0000')) {
-    fail('fallbackSummary 必须唯一且排序')
-  }
+  const fallbackSummary = parseFallbackSummary(manifest.fallbackSummary)
   const runtimePackage = parseProductRuntimePackageV1(manifest.runtimePackage)
   const knownAssets = new Map((runtimePackage.presentation?.assets ?? []).map(asset => [asset.assetKey, asset]))
   for (const binding of mediaBindings) {
@@ -142,4 +148,96 @@ export async function verifyProductBuildPreviewManifestV1(value: string | unknow
   const { previewHash: _previewHash, ...body } = manifest
   if (await hashProductProductionValueV2(previewHashBody(body)) !== manifest.previewHash) fail('previewHash 校验失败')
   return manifest
+}
+
+export function parseProductBuildPreviewManifestV2(value: string | unknown): ProductBuildPreviewManifestV2 {
+  productProtocolVersion(value, 'storyforge.product-build-preview')
+  const manifest = record(typeof value === 'string' ? JSON.parse(value) : value, 'manifest')
+  exactKeys(manifest, [
+    'schema', 'version', 'productionKey', 'buildNumber', 'buildManifestHash', 'runtimePackage',
+    'packageHash', 'mediaBindings', 'fallbackSummary', 'previewHash',
+  ], 'manifest V2')
+  if (manifest.version !== 2) fail('schema/version 无效')
+  const runtimePackage = parseProductRuntimePackageV2(manifest.runtimePackage)
+  const executable = avgExecutableModule(runtimePackage)
+  if (!executable && (!Array.isArray(manifest.mediaBindings) || manifest.mediaBindings.length !== 0)) fail('V2 包含未登记媒资绑定')
+  const assets = executable?.stage.assets ?? []
+  if (!Array.isArray(manifest.mediaBindings) || manifest.mediaBindings.length !== assets.length) fail('V2 媒资绑定未闭合')
+  const mediaBindings = manifest.mediaBindings.map(value => {
+    const row = record(value, 'V2 media binding')
+    exactKeys(row, ['assetKey','artifactKey','blobContentHash'], 'V2 media binding')
+    const binding = { assetKey: text(row.assetKey, 'assetKey', 200), artifactKey: text(row.artifactKey, 'artifactKey', 200), blobContentHash: hash(row.blobContentHash, 'blobContentHash') }
+    if (!assets.some(asset => asset.assetKey === binding.assetKey && asset.blobContentHash === binding.blobContentHash)) fail('V2 媒资绑定与包不一致')
+    return binding
+  })
+  if (new Set(mediaBindings.map(binding => binding.assetKey)).size !== mediaBindings.length
+    || canonicalProductProductionJsonV2([...mediaBindings].sort((a,b) => a.assetKey.localeCompare(b.assetKey) || a.artifactKey.localeCompare(b.artifactKey))) !== canonicalProductProductionJsonV2(mediaBindings)) fail('V2 媒资绑定重复或未排序')
+  return {
+    schema: 'storyforge.product-build-preview', version: 2,
+    productionKey: text(manifest.productionKey, 'productionKey', 500),
+    buildNumber: integer(manifest.buildNumber, 'buildNumber'),
+    buildManifestHash: hash(manifest.buildManifestHash, 'buildManifestHash'),
+    runtimePackage,
+    packageHash: hash(manifest.packageHash, 'packageHash'), mediaBindings,
+    fallbackSummary: parseFallbackSummary(manifest.fallbackSummary),
+    previewHash: hash(manifest.previewHash, 'previewHash'),
+  }
+}
+
+export function parseProductBuildPreviewManifest(value: string | unknown): AnyProductBuildPreviewManifest {
+  return productProtocolVersion(value, 'storyforge.product-build-preview') === 1
+    ? parseProductBuildPreviewManifestV1(value) : parseProductBuildPreviewManifestV2(value)
+}
+
+export async function createProductBuildPreviewManifestV2(input: {
+  productionKey: string
+  buildNumber: number
+  buildManifestHash: string
+  runtimePackage: ProductBuildPreviewManifestV2['runtimePackage']
+  fallbackSummary?: string[]
+  mediaBindings?: ProductBuildPreviewManifestV2['mediaBindings']
+}): Promise<ProductBuildPreviewManifestV2> {
+  const runtimePackage = parseProductRuntimePackageV2(input.runtimePackage)
+  const body: Omit<ProductBuildPreviewManifestV2, 'previewHash'> = {
+    schema: 'storyforge.product-build-preview', version: 2,
+    productionKey: input.productionKey.trim().normalize('NFC'), buildNumber: input.buildNumber,
+    buildManifestHash: input.buildManifestHash, runtimePackage,
+    packageHash: await hashProductProductionValueV2(runtimePackage), mediaBindings: [...(input.mediaBindings ?? [])].sort((a,b) => a.assetKey.localeCompare(b.assetKey) || a.artifactKey.localeCompare(b.artifactKey)),
+    fallbackSummary: [...new Set(input.fallbackSummary ?? [])].sort(),
+  }
+  return parseProductBuildPreviewManifestV2({ ...body, previewHash: await hashProductProductionValueV2(body) })
+}
+
+export async function verifyProductBuildPreviewManifestV2(value: string | unknown): Promise<ProductBuildPreviewManifestV2> {
+  const manifest = parseProductBuildPreviewManifestV2(value)
+  if (await hashProductProductionValueV2(manifest.runtimePackage) !== manifest.packageHash) fail('packageHash 校验失败')
+  const { previewHash: _previewHash, ...body } = manifest
+  if (await hashProductProductionValueV2(body) !== manifest.previewHash) fail('previewHash 校验失败')
+  return manifest
+}
+
+export async function verifyProductBuildPreviewManifest(value: string | unknown): Promise<AnyProductBuildPreviewManifest> {
+  return productProtocolVersion(value, 'storyforge.product-build-preview') === 1
+    ? verifyProductBuildPreviewManifestV1(value) : verifyProductBuildPreviewManifestV2(value)
+}
+
+/** Verify a persisted preview without changing its JSON bytes. Legacy backup
+ * placeholders ({}, {version: 1}) remain opaque; neither is a runtime source.
+ * Any full or newer envelope must pass strict version dispatch. */
+export async function verifyStoredProductBuildPreview(build: Pick<ProductBuildRecordV1,
+  'previewManifestJson' | 'previewHash' | 'packageHash' | 'manifestHash' | 'buildNumber'>,
+): Promise<AnyProductBuildPreviewManifest | null> {
+  let raw: unknown
+  try { raw = JSON.parse(build.previewManifestJson) } catch { fail('Build Preview 不是合法 JSON') }
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const keys = Object.keys(raw)
+    if (keys.length === 0 || (keys.length === 1 && keys[0] === 'version'
+      && (raw as Record<string, unknown>).version === 1)) return null
+  }
+  const preview = await verifyProductBuildPreviewManifest(raw)
+  if (preview.previewHash !== build.previewHash || preview.packageHash !== build.packageHash
+    || preview.buildManifestHash !== build.manifestHash || preview.buildNumber !== build.buildNumber) {
+    fail('Build Preview 指针或 hash 不一致')
+  }
+  return preview
 }

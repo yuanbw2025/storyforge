@@ -1,6 +1,6 @@
 # StoryForge 当前施工路线
 
-> 版本：1.5.2 · 更新：2026-09-25 · 权威层级：L2
+> 版本：1.6.1 · 更新：2026-10-13 · 权威层级：L2
 > 顺序来自项目总纲 §11。任务只有进入本文件并满足前置，才是当前 backlog；旧阶段号不自动续用。
 
 ## 状态
@@ -55,10 +55,12 @@ Phase 5 已完成世界观/故事/角色/主支线/大纲/细纲/正文、候选
 | E-CHAT-01 | QUEUED | 单/多角色聊天完整产品 | 可见性、导演、长期记忆、关系、生产与不可变 release |
 | E-TOWN-01 | NEXT | 后日谈 AI 小镇纵切面完善 | 已接通冻结来源生产、发布、时间/地点/日程/关系/轻经营/离线演化和玩家界面；继续完成真实长期内容、媒资与商业验收 |
 | E-TEXTADV-01 | QUEUED | 文字冒险 | 选择/判定/资源/任务/结局和可玩发布 |
-| E-AVG-01 | QUEUED | AVG | 脚本/演出/立绘/背景/声音/UI 绑定与分支存档 |
+| E-AVG-01 | IN_PROGRESS | AVG 正式设计与后续三线完善 | AVG-00 已形成正式方案；新代码包尚未实施，当前 partial；按专项包取得专业内容、规则/物件/存档、真实媒资/voice/绑定及作者/玩家证据 |
 | E-OPENWORLD-01 | IN_PROGRESS | 文字开放世界 | 专属 Creator、内容生产、vNext Runtime、区域演化和正式产品入口已形成工程闭环；继续取得真实第二模型质量/成本回执、真人双结局试玩以及问题→修复版→旧档复测证据 |
 
 每项必须能映射 `WorldReference → 产品专用 Brief/SourcePlan → production run ContextManifests → SourceManifest/ProductRelease → runtime` 的共同交接语义，但不要求共用相同配置表、规模单位、Agent 图或运行 schema。
+
+AVG 以 [整体产品契约](../products/AVG.md)为唯一施工入口，[实施计划](AVG-IMPLEMENTATION-PLAN.md)与[工作包卡](AVG-WORK-PACKAGE-CARDS.md)登记 E-AVG-01 子队列。该子队列下一代码单元为 **AVG-BASE-00A**，同期先冻结 **AVG-CAL-00** 的质量/能力/投入边界，最小专业路径就绪后先测收益；本次只交付设计，不启动代码/作品生产，也不变更其他产品的优先级。
 
 短篇/改编与各上层产品可以并行，但共享改动必须遵守以下集成顺序：
 

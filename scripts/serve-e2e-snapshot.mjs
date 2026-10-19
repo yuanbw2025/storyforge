@@ -12,6 +12,10 @@ const snapshotEntries = [
   'scripts/local-codex',
   'scripts/distribution/proxies.mjs',
   'scripts/distribution/diagnostics.mjs',
+  // Browser sound contracts import these pinned public metadata files. Copy
+  // only JSON, never local weights, runtimes, provider journals or credentials.
+  'scripts/avg-local-music/model-source.json',
+  'scripts/avg-local-music/library-source.json',
   'data',
   'showcase/short-novel',
   'showcase/screenplay',

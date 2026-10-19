@@ -32,6 +32,9 @@ const entrypoints = [
   'src/lib/context-gateway/index.ts',
   // Neutral world-to-product source contracts are a headless architecture API.
   'src/lib/product/source.ts',
+  // AVG-04B exposes pure sound preparation for headless creator tooling.
+  // Real provider/Harness/adoption remains gated until the product slice joins.
+  'src/lib/avg/sound-production.ts',
   // Text-open-world owns this headless durable expression Harness. It is an
   // internal capability boundary, never a product route or session identity.
   'src/lib/open-world/evolution-harness.ts',
@@ -65,6 +68,12 @@ const entrypoints = [
   // G6-01 exposes the governed vNext runtime AI provider gateway as a headless
   // product-runtime API. Player routes adopt its candidates only in later G6 slices.
   'src/lib/open-world/runtime-ai-execution.ts',
+  // AVG deterministic Build assembly consumes confirmed author revisions;
+  // the production planner/workbench connects this API in its own increment.
+  'src/lib/avg/executable-compiler.ts',
+  // AVG R4b1 is the independently testable, headless versioned intent/compiler/request API.
+  // It has no dispatch/adoption authority; the future formal Brief/producer/UI must register first.
+  'src/lib/avg/media-production-v2.ts',
 ].map(file => path.resolve(root, file))
 
 const graph = new Map()

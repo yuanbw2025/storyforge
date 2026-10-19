@@ -3,3 +3,6 @@
 # git 检出与 GitHub「下载 ZIP」都会得到 CRLF，且防止编辑器/工具再把它写回 LF。
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# Preserve the verbatim upstream CC0 notice, including its original line endings.
+tests/fixtures/avg-audio/KENNEY-LICENSE.txt -text -diff

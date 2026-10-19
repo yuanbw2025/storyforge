@@ -9,6 +9,8 @@ import type {
 import type { AdventureContentV1 } from './adventure'
 import type { AdventureContent } from './adventure-v2'
 import type { AvgPresentationContentV1 } from './avg'
+import type { AvgRuntimeModuleV1 } from '../avg/runtime-contract-v2'
+import type { AvgRuntimeModuleV2 } from '../avg/executable-module'
 import type { FrozenProductMediaAsset } from './product-media'
 import type { OpenWorldEvolutionContentV1 } from './open-world-evolution'
 import type { OpenWorldContentV1 } from './open-world'
@@ -258,7 +260,42 @@ export type PlayableTextOpenWorldProductRuntimePackageV1 =
   | TextOpenWorldHybridProductRuntimePackageV1
   | TextOpenWorldVNextOnlyProductRuntimePackageV1
 
-export type AnyProductReleaseManifest = ProductReleaseManifestV1
+/** Shared V2 carrier. Product-owned modules are admitted only by registered
+ * typed codecs. BASE-00B admits an inert AVG module; V2 runtime remains closed. */
+export interface ProductRuntimePackageV2 {
+  schema: 'storyforge.product-runtime-package'
+  version: 2
+  productType: 'avg'
+  definition: ProductRuntimePackageV1['definition']
+  sourceWorld: ProductRuntimePackageV1['sourceWorld']
+  narrative: FrozenProductNarrativeV1
+  modules: Array<AvgRuntimeModuleV1 | AvgRuntimeModuleV2>
+  presentation?: undefined
+  interaction?: undefined
+  adventure?: undefined
+  openWorldEvolution?: undefined
+  openWorld?: undefined
+  textOpenWorldVNext?: undefined
+  ttrpg?: undefined
+  town?: undefined
+}
+
+export type AnyProductRuntimePackage = ProductRuntimePackageV1 | ProductRuntimePackageV2
+
+export interface ProductReleaseManifestV2 extends Omit<ProductReleaseManifestV1,
+  'version' | 'productType' | 'runtimePackage' | 'sourceContracts' | 'lineage'> {
+  version: 2
+  productType: 'avg'
+  runtimePackage: ProductRuntimePackageV2
+  sourceContracts: {
+    sourcePlan: import('./world-product-contracts').ProductSourcePlanV1
+    confirmedBrief: import('./world-product-contracts').ConfirmedProductBriefV1
+    sourceManifest: import('./world-product-contracts').ProductSourceManifestV1
+  }
+  lineage: import('./world-product-contracts').ProductReleaseLineageV1
+}
+
+export type AnyProductReleaseManifest = ProductReleaseManifestV1 | ProductReleaseManifestV2
 
 export interface ProductReleaseMarketplaceProvenanceV1 {
   source: 'marketplace' | 'community-bundle'
@@ -310,3 +347,6 @@ export interface ProductRelease {
   createdAt: number
   distributionProvenance?: ProductReleaseDistributionProvenanceV1
 }
+
+/** Player view preserves the actual package version; no V2-to-V1 conversion. */
+export type AvgPlayableRuntimePackage = AvgProductRuntimePackageV1 | ProductRuntimePackageV2

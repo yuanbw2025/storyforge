@@ -20,6 +20,7 @@ import {
   recordContextGatewayPreflightEvidenceV1,
   summarizeContextGatewayManifestForAuthorV1,
   verifyContextGatewayCandidateEvidenceV1,
+  readRunningContextGatewayRequestV1,
 } from '../../src/lib/context-gateway/attempt-evidence'
 import { CANON_RESOURCE_PROVIDER_V1 } from '../../src/lib/context-gateway/canon-provider'
 import { selectContextResourcesV1 } from '../../src/lib/context-gateway/selector'
@@ -214,6 +215,27 @@ async function completeAttempt() {
 describe('CTXG-6 · Manifest V3 and exact attempt evidence', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => db.close())
+
+  it('reads an original in-flight request/packet without writing a candidate or advancing its running attempt', async () => {
+    const f = await beginAttempt(), events = await db.agentRunEvents.where('runId').equals(f.snapshot.run.id).count()
+    const original = await readRunningContextGatewayRequestV1({ scope: f.scope, runId: f.snapshot.run.id, stepId: 'races', attempt: 1 })
+    expect(JSON.parse(original.renderedRequestJson)).toEqual(f.renderedRequest)
+    expect(original.contextPacket).toEqual(f.packet)
+    expect(original.renderedRequestHash).toBe(f.preflight.promptHash)
+    expect(await db.agentRunEvents.where('runId').equals(f.snapshot.run.id).count()).toBe(events)
+    await expect(readRunningContextGatewayRequestV1({ scope: f.scope, runId: f.snapshot.run.id, stepId: 'races', attempt: 2 })).rejects.toThrow(/running/)
+  })
+
+  it('refuses missing or duplicate original in-flight requests instead of reconstructing or choosing a replacement', async () => {
+    const missing = await beginAttempt(), ref = missing.preflight.artifacts.find(a => a.role === 'rendered-request')!
+    const row = await db.agentRunArtifacts.where('[projectId+artifactKind+contentHash]').equals([missing.projectId, ref.artifactKind, ref.contentHash]).first()
+    await db.agentRunArtifacts.delete(row!.id!)
+    await expect(readRunningContextGatewayRequestV1({ scope: missing.scope, runId: missing.snapshot.run.id, stepId: 'races', attempt: 1 })).rejects.toThrow()
+    const duplicate = await beginAttempt()
+    await recordAgentRunArtifactV1({ scope: duplicate.scope, runId: duplicate.snapshot.run.id, stepId: 'races', attempt: 1,
+      artifactKind: 'rendered-request', content: JSON.stringify({ substituted: 'a different request' }), expectedLastSequence: duplicate.snapshot.projection.lastSequence })
+    await expect(readRunningContextGatewayRequestV1({ scope: duplicate.scope, runId: duplicate.snapshot.run.id, stepId: 'races', attempt: 1 })).rejects.toThrow(/不唯一/)
+  })
 
   it('persists exact preflight before the model boundary and replays one candidate from its immutable V3 chain', async () => {
     const fixture = await completeAttempt()

@@ -4,6 +4,7 @@ import {
   hashAgentRunProjectionV1,
   isAgentRunCompletedV1,
   replayAgentRunEventsV1,
+  completedAgentRunEvidencePrefixV1,
 } from '../../src/lib/agent/run/projection'
 
 const CONTRACT_HASH = 'a'.repeat(64)
@@ -122,6 +123,29 @@ describe('R-HARNESS0-event-projection · 严格事件回放', () => {
     expect(projection.state).toBe('running')
     expect(projection.terminalReceiptHash).toBeUndefined()
     expect(isAgentRunCompletedV1(projection)).toBe(false)
+  })
+
+  it('历史完成前缀只认准确的最后一条导入失效事件，不把当前 Run 恢复为完成', () => {
+    const complete = [...successfulStepEvents(),
+      event(7, 'verification.started', { verifierSetVersion: 'terminal-v1' }),
+      event(8, 'verification.accepted', { receiptHash: RECEIPT_HASH }),
+    ].map(parseAgentRunEventV1)
+    const stale = parseAgentRunEventV1(event(9, 'verification.staled', { previousReceiptHash: RECEIPT_HASH, reason: 'project-import-scope-rebound' }))
+    const imported = [...complete, stale]
+    expect(completedAgentRunEvidencePrefixV1(complete)?.terminalReceiptHash).toBe(RECEIPT_HASH)
+    expect(completedAgentRunEvidencePrefixV1(imported)?.terminalReceiptHash).toBe(RECEIPT_HASH)
+    expect(replayAgentRunEventsV1(imported).state).toBe('running')
+    expect(replayAgentRunEventsV1(imported).terminalReceiptHash).toBeUndefined()
+    expect(completedAgentRunEvidencePrefixV1([])).toBeNull()
+    expect(completedAgentRunEvidencePrefixV1([...complete, parseAgentRunEventV1(event(9, 'verification.staled', {
+      previousReceiptHash: RECEIPT_HASH, reason: '正式来源变化',
+    }))])).toBeNull()
+    expect(completedAgentRunEvidencePrefixV1([...complete, parseAgentRunEventV1(event(9, 'verification.staled', {
+      previousReceiptHash: OUTPUT_HASH, reason: 'project-import-scope-rebound',
+    }))])).toBeNull()
+    expect(completedAgentRunEvidencePrefixV1([...imported, parseAgentRunEventV1(event(10, 'verification.started', {
+      verifierSetVersion: 'a-new-verification',
+    }))])).toBeNull()
   })
 
   it('拒绝未知事件、未知字段和版本', () => {
