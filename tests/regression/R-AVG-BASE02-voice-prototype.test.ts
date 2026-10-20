@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
+import { assertAvgPrototypeBuildWriteEnabledV1 } from '../../src/lib/avg/prototype-write-guard'
 import { isAvgAuthorPrototypeBriefV1 } from '../../src/lib/avg/prototype-contract'
 import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
 import { encodeAvgStoredAssemblyBriefV3 } from '../../src/lib/avg/voice-assembly-storage'
@@ -7,7 +8,7 @@ import { avgVoicePolicyFixtureV3 } from '../helpers/avg-voice-production-fixture
 import { prepareNativeAvgAssembly } from '../helpers/avg-production-assembly-fixture'
 
 beforeEach(async () => { await db.delete(); await db.open() })
-afterEach(() => db.close())
+afterEach(() => { vi.unstubAllEnvs(); db.close() })
 
 async function brief(withImage: boolean) {
   const owner = await prepareNativeAvgAssembly(), policy = await avgVoicePolicyFixtureV3(withImage)
@@ -23,6 +24,22 @@ describe('AVG native prototype qualification for stored generated-voice briefs',
     const value = await brief(withImage)
     expect(isAvgAuthorPrototypeBriefV1(value)).toBe(true)
     expect(value.completionContract.requiredGateIds).toContain('avg.voice.review.recorded.keeper.line')
+  })
+
+  it.each([false, true])('fences actual voice writes with both original switches while stored qualification remains readable (with image %s)', async withImage => {
+    const value = await brief(withImage), original = JSON.stringify(value)
+    const before = { gates: await db.productQualityGateReceipts.count(), commands: await db.productProductionCommands.count(), releases: await db.productReleases.count() }
+    for (const flag of ['VITE_STORYFORGE_AVG_MEDIA_PRODUCTION', 'VITE_STORYFORGE_AVG_VOICE_PRODUCTION']) vi.stubEnv(flag, '1')
+    await expect(assertAvgPrototypeBuildWriteEnabledV1({ projectId: 1, worldId: 1, workId: 1 }, 0, value)).resolves.toBeDefined()
+    for (const flag of ['VITE_STORYFORGE_AVG_MEDIA_PRODUCTION', 'VITE_STORYFORGE_AVG_VOICE_PRODUCTION']) {
+      vi.stubEnv(flag, '0')
+      expect(isAvgAuthorPrototypeBriefV1(value)).toBe(true)
+      await expect(assertAvgPrototypeBuildWriteEnabledV1({ projectId: 1, worldId: 1, workId: 1 }, 0, value), flag).rejects.toThrow(/配音.*尚未启用/)
+      vi.stubEnv(flag, '1')
+    }
+    expect(JSON.stringify(value)).toBe(original)
+    expect({ gates: await db.productQualityGateReceipts.count(), commands: await db.productProductionCommands.count(),
+      releases: await db.productReleases.count() }).toEqual(before)
   })
 
   it('refuses internal/commercial/other-product paths, missing consent/review and extra calls without qualifying a prototype', async () => {

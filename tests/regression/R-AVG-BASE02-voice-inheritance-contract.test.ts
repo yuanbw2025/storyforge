@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { db } from '../../src/lib/db/schema'
+import { parseProductProductionBriefV3 } from '../../src/lib/product-production/contracts'
+import { assertAvgPrototypeBuildWriteEnabledV1 } from '../../src/lib/avg/prototype-write-guard'
+import { prepareNativeAvgAssembly, startNativeAvgAssembly, confirmNativeAvgInputs } from '../helpers/avg-production-assembly-fixture'
 import { canonicalProductProductionJsonV2 } from '../../src/lib/product-production/hash'
 import { parseAvgAuthorStageV1 } from '../../src/lib/avg/author-workspace-contract'
 import { applyAvgVoiceChoicesToDraftV1 } from '../../src/lib/avg/voice-configuration'
@@ -22,7 +26,51 @@ async function fixture() {
   return { workspace, asset, requirement: r, source, entry: { assetKey: asset.assetKey, source, declaration: '结构值，未授予任何采用或实际媒资权限。' } }
 }
 
+beforeEach(async () => { await db.delete(); await db.open() })
+afterEach(() => { vi.unstubAllEnvs(); db.close() })
+
+// Adversarial metadata isolation only. A full real public V3/Sound/visual
+// command chain is covered separately by the combined lifecycle regression.
+// The altered row below deliberately grants no producer or author authority.
+async function inheritedWriteInput() {
+  const f = await fixture(), s = await startNativeAvgAssembly(await prepareNativeAvgAssembly())
+  await confirmNativeAvgInputs(s)
+  const stage = (await db.productBuildArtifacts.where('[buildId+artifactKey]').equals([s.buildId, 'avg.author.stage']).filter(row => row.status === 'accepted').first())!
+  const payload = parseAvgAuthorStageV1({ ...f.workspace.presentation, inheritedVoices: [f.entry] })
+  await db.productBuildArtifacts.update(stage.id!, { payloadJson: canonicalProductProductionJsonV2(payload) })
+  return { ...s, stage, payload, brief: parseProductProductionBriefV3(s.details.brief!.briefJson) }
+}
+
 describe('AVG inherited voice portable locators and exact target consumers', () => {
+  it('requires both switches for inherited generated voice writes, retaining legacy manual imports and read-only Stage parsing', async () => {
+    const s = await inheritedWriteInput()
+    for (const flag of ['VITE_STORYFORGE_AVG_MEDIA_PRODUCTION', 'VITE_STORYFORGE_AVG_VOICE_PRODUCTION']) vi.stubEnv(flag, '1')
+    expect((await assertAvgPrototypeBuildWriteEnabledV1(s.scope, s.buildId, s.brief)).usesOriginalVoice).toBe(true)
+    const row = await db.productBuildArtifacts.get(s.stage.id!)
+    for (const flag of ['VITE_STORYFORGE_AVG_MEDIA_PRODUCTION', 'VITE_STORYFORGE_AVG_VOICE_PRODUCTION']) {
+      vi.stubEnv(flag, '0')
+      expect(parseAvgAuthorStageV1(s.payload)).toEqual(s.payload)
+      await expect(assertAvgPrototypeBuildWriteEnabledV1(s.scope, s.buildId, s.brief), flag).rejects.toThrow(/配音.*尚未启用/)
+      vi.stubEnv(flag, '1')
+    }
+    expect(await db.productBuildArtifacts.get(s.stage.id!)).toEqual(row)
+    const manual = structuredClone(s.payload); delete manual.inheritedVoices
+    await db.productBuildArtifacts.update(s.stage.id!, { payloadJson: canonicalProductProductionJsonV2(manual) })
+    vi.stubEnv('VITE_STORYFORGE_AVG_MEDIA_PRODUCTION', '0'); vi.stubEnv('VITE_STORYFORGE_AVG_VOICE_PRODUCTION', '0')
+    expect((await assertAvgPrototypeBuildWriteEnabledV1(s.scope, s.buildId, s.brief)).usesOriginalVoice).toBe(false)
+    expect(await db.productQualityGateReceipts.count()).toBe(0); expect(await db.productReleases.count()).toBe(0)
+  })
+
+  it('keeps the inherited-voice fence for carried-forward Stage and refuses a different Work before interpreting it', async () => {
+    const s = await inheritedWriteInput()
+    await db.productBuildArtifacts.update(s.stage.id!, { status: 'carried-forward' })
+    vi.stubEnv('VITE_STORYFORGE_AVG_MEDIA_PRODUCTION', '1'); vi.stubEnv('VITE_STORYFORGE_AVG_VOICE_PRODUCTION', '0')
+    await expect(assertAvgPrototypeBuildWriteEnabledV1(s.scope, s.buildId, s.brief)).rejects.toThrow(/配音.*尚未启用/)
+    vi.stubEnv('VITE_STORYFORGE_AVG_VOICE_PRODUCTION', '1')
+    await expect(assertAvgPrototypeBuildWriteEnabledV1({ ...s.scope, workId: s.scope.workId + 1000 }, s.buildId, s.brief)).rejects.toThrow(/跨作品/)
+    expect(await db.productQualityGateReceipts.count()).toBe(0); expect(await db.productReleases.count()).toBe(0)
+  })
+
   it('preserves old stage bytes when absent and round-trips an explicit optional source without local IDs', async () => {
     const f = await fixture(), before = canonicalProductProductionJsonV2(f.workspace.presentation)
     expect(canonicalProductProductionJsonV2(parseAvgAuthorStageV1(before))).toBe(before)

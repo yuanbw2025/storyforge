@@ -105,6 +105,7 @@ export default function AssemblyWorkbench({scope,productionId,page,onSource,onPr
   const build=view?.details?.build,details=view?.details
   const frozen=!!build?.previewHash
   const inheritedSound=!!model.presentation.inheritedSounds?.length
+  const inheritedVoice=!!model.presentation.inheritedVoices?.length
   const canAdopt=!!build&&['authorized','building'].includes(build.status)&&(!details?.executionBrief?.avgSoundPlanning&&!inheritedSound||avgSoundProductionExecutionReadyV1())
   const activeBuild=!!build&&!frozen&&details?.production.status!=='brief-ready'
   const canEditMediaDomain=!activeBuild
@@ -235,6 +236,7 @@ export default function AssemblyWorkbench({scope,productionId,page,onSource,onPr
       {error&&<p role="alert" className="avg-assembly-error">{error}</p>}{notice&&<p role="status">{notice}</p>}
       {progressReadError&&<p role="status" aria-label="制作进度读取状态">进度暂未更新：{progressReadError}。已接收的结果保留。</p>}
       {(soundPlanning||inheritedSound)&&!avgSoundProductionExecutionReadyV1()&&<p role="status">声音制作处于实验阶段，已有记录和产物保留；当前生成、采用与本地原型验收关闭，已有原声音和版本可只读播放。</p>}
+      {(voiceBatch||inheritedVoice)&&!avgVoiceProductionEnabledV3()&&<p role="status">配音原型验收与发布关闭；已有配音与版本可只读播放。</p>}
       {!view?<p>{error?'当前工作区无法打开，请按错误提示处理或返回作品库。':'读取作者工作区…'}</p>:<><div className="avg-actions">
         <button className="lf-action lf-action-primary" disabled={busy||jsonPending||mediaPending} onClick={()=>void run(persist)}>保存编辑草稿</button>
         <button className="lf-action" disabled={busy||dirty||jsonPending||mediaPending} onClick={()=>void run(reload)}>读取已保存版本</button>
@@ -406,7 +408,7 @@ export default function AssemblyWorkbench({scope,productionId,page,onSource,onPr
         {frozen&&visualPlanning&&<p>{visualPrototype?'专业视觉预览已冻结。后续修改须建立新版本并保留原来源；本地原型仍需完整路线、全部媒资解码与独立确认，艺术和商业质量另验。':'专业视觉预览已冻结。本路径的本地原型发布尚待交付，当前可试玩和导出完整备份。'}</p>}
         {visualPlanning?.version===5&&!avgVisualPlanningExecutionReadyV5()&&<p role="status">专业视觉原型验收与发布关闭；已有原图片、加工图和版本可只读播放。</p>}
         {visualProofRecoveryRequired&&<p role="status">导入的视觉制作证明尚待显式复验；已发布版本可从版本区直接开始新存档，原制作与媒资不自动改写。</p>}
-        {frozen&&(!visualPlanning||visualPrototype)&&(!soundPlanning||soundPrototype)&&details?.production.id&&<PrototypeReleasePanel key={`${scope.workId}:${build!.id}:${build!.previewHash}`} scope={scope} productionId={details.production.id} build={build!} disabled={busy||dirty||jsonPending} writesEnabled={!visualProofRecoveryRequired&&((!soundPlanning&&!inheritedSound)||avgSoundProductionExecutionReadyV1())&&(!visualPlanning||visualPrototype&&avgVisualPlanningExecutionReadyV5())} onChanged={reload} onStarted={onPreviewStarted} onBusyChange={value=>{busyRef.current=value;setBusy(value)}}/>}
+        {frozen&&(!visualPlanning||visualPrototype)&&(!soundPlanning||soundPrototype)&&details?.production.id&&<PrototypeReleasePanel key={`${scope.workId}:${build!.id}:${build!.previewHash}`} scope={scope} productionId={details.production.id} build={build!} disabled={busy||dirty||jsonPending} writesEnabled={(!voiceBatch&&!inheritedVoice||avgVoiceProductionEnabledV3())&&!visualProofRecoveryRequired&&((!soundPlanning&&!inheritedSound)||avgSoundProductionExecutionReadyV1())&&(!visualPlanning||visualPrototype&&avgVisualPlanningExecutionReadyV5())} onChanged={reload} onStarted={onPreviewStarted} onBusyChange={value=>{busyRef.current=value;setBusy(value)}}/>}
       </section>}
       <section className="lf-paper"><details><summary>高级配置：完整规则、脚本与演出</summary><p>配置作为编辑草稿保存；正式采用前会严格校验，不能写入脚本代码或未登记模块。</p>
         <textarea aria-label="高级组装配置" className="avg-assembly-json" spellCheck={false} disabled={busy||mediaPending} value={advanced} onChange={event=>{setAdvanced(event.target.value);setJsonPending(true)}}/>

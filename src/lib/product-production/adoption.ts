@@ -1,6 +1,6 @@
 import { assertAvgPrototypeBuildWriteEnabledV1 } from '../avg/prototype-write-guard'
 import { avgRuntimeStage } from '../avg/executable-module'
-import { classifyAvgAuthorPrototypeBriefV1, assertAvgSoundPrototypeWriteEnabledV1, assertAvgVisualPrototypeWriteEnabledV5, avgPrototypeTechnicalQualitySatisfiedV1 } from '../avg/prototype-contract'
+import { classifyAvgAuthorPrototypeBriefV1, assertAvgSoundPrototypeWriteEnabledV1, assertAvgVoicePrototypeWriteEnabledV3, assertAvgVisualPrototypeWriteEnabledV5, avgPrototypeTechnicalQualitySatisfiedV1 } from '../avg/prototype-contract'
 import { parseProductBuildQualityReportV1 } from './quality-contract'
 export { parseProductBuildQualityReportV1 } from './quality-contract'
 import { db } from '../db/schema'
@@ -141,6 +141,7 @@ interface VerifiedAdoption extends PreparedProductProductionAdoptionV1 {
   nativePrototype: boolean
   prototypeKind: ReturnType<typeof classifyAvgAuthorPrototypeBriefV1>
   usesOriginalSound: boolean
+  usesOriginalVoice: boolean
   artifacts: ProductBuildArtifactRecordV1[]
   mediaArtifacts: Map<string, ProductBuildArtifactRecordV1>
   /** In-memory physical-byte witnesses. They are never serialized into a
@@ -383,7 +384,7 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     || preview.buildNumber !== build.buildNumber || preview.runtimePackage.sourceWorld.contentHash !== brief.source.worldContentHash) {
     fail('Preview 与 Build/Brief 不闭合')
   }
-  const { prototypeKind, usesOriginalSound } = await assertAvgPrototypeBuildWriteEnabledV1(scope,build.id!,brief)
+  const { prototypeKind, usesOriginalSound, usesOriginalVoice } = await assertAvgPrototypeBuildWriteEnabledV1(scope,build.id!,brief)
   const nativePrototype=prototypeKind!==null&&preview.version===2
   if(preview.version===2&&!nativePrototype)fail('V2 当前只支持已登记的 AVG 作者本地原型发布')
   const mediaRuntimeRequired = (avgRuntimeStage(preview.runtimePackage)?.assets.length??0)>0 || brief.media.requiredMediaKinds.length > 0
@@ -733,7 +734,7 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     }
   }
   return {
-    nativePrototype,prototypeKind,usesOriginalSound,scope, intent, adoptionIntentHash: await hashProductProductionValueV2(intent),
+    nativePrototype,prototypeKind,usesOriginalSound,usesOriginalVoice,scope, intent, adoptionIntentHash: await hashProductProductionValueV2(intent),
     productType: preview.runtimePackage.productType, title: preview.runtimePackage.definition.title,
     mediaAssetKeys: runtimeAssets.map(asset => asset.assetKey).sort(),
     creatorRelease,
@@ -1182,6 +1183,7 @@ export async function publishProductProductionBuild(input: {
         .where('[productionId+commandId]').equals([input.productionId, command.commandId]).first()
       if (duplicateCommand) fail('publish command 已被并发 claim')
       if (verified.usesOriginalSound) assertAvgSoundPrototypeWriteEnabledV1()
+      if (verified.usesOriginalVoice) assertAvgVoicePrototypeWriteEnabledV3()
       if (verified.prototypeKind === 'visual-v5') assertAvgVisualPrototypeWriteEnabledV5()
       const now = releaseCreatedAt
       const claim = stampNewRecord(scope, 'productProductionCommands', {

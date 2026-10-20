@@ -1,6 +1,6 @@
 import type { AnyProductRuntimePackage, ProductBuildQualityReportV1, ProductProductionBriefV3 } from '../types';
 import { avgExecutableModule } from './executable-module';
-import { parseAvgAssemblyBriefV2, type AvgAssemblyBrief } from './assembly-contract';
+import { avgVoiceProductionEnabledV3, parseAvgAssemblyBriefV2, type AvgAssemblyBrief } from './assembly-contract';
 import { assertAvgVisualProductionPolicyV2 } from './media-production-policy';
 import { parseAvgStoredAssemblyBriefV3 } from './voice-assembly-storage';
 import { assertAvgVoiceProductionPolicyV3 } from './voice-production-policy';
@@ -55,6 +55,11 @@ export function classifyAvgAuthorPrototypeBriefV1(brief: ProductProductionBriefV
  * source/Release reads and successful command replay remain independent. */
 export function assertAvgSoundPrototypeWriteEnabledV1(): void {
     if (!avgSoundProductionExecutionReadyV1()) throw new Error('[avg-sound] 声音原型验收与发布尚未启用，已有声音与版本仍可只读播放');
+}
+/** Generated-voice prototype writes require both existing media and voice
+ * switches. Stored contracts and immutable playback remain readable. */
+export function assertAvgVoicePrototypeWriteEnabledV3(): void {
+    if (!avgVoiceProductionEnabledV3()) throw new Error('[avg-voice] 配音原型验收与发布尚未启用，已有配音与版本仍可只读播放');
 }
 /** The two existing image/planning switches fence actual prototype writes;
  * classification and immutable original reads do not require an open factory. */
