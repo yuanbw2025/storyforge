@@ -1,5 +1,10 @@
 import { avgEnum, avgKey, avgList, avgProtocolBody, avgRecord, avgText, avgUnique } from './protocol-validation'
 
+// Independent local-processing contracts. The semantic V1 sound plan stays
+// strict and cannot acquire processing, provider or author authority.
+export { parseAvgAudioProcessingRecipeV1, parseAvgAudioProcessingReceiptV1, assertAvgAudioProcessingReceiptV1 } from './audio-processing-contract'
+export type { AvgAudioProcessingRecipeV1, AvgAudioProcessingReceiptV1 } from './audio-processing-contract'
+
 /** Semantic proposal only. A plan cannot grant a source licence, edit a Cue,
  * choose a provider, approve sound quality or adopt an audio asset. */
 export interface AvgSoundPlanV1 {

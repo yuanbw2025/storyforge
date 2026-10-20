@@ -35,6 +35,8 @@ const entrypoints = [
   // AVG-04B exposes pure sound preparation for headless creator tooling.
   // Real provider/Harness/adoption remains gated until the product slice joins.
   'src/lib/avg/sound-production.ts',
+  // Fixed dedicated PCM Worker bootstrap, never imported into the main window.
+  'src/lib/avg/audio-gain.worker.ts',
   // Text-open-world owns this headless durable expression Harness. It is an
   // internal capability boundary, never a product route or session identity.
   'src/lib/open-world/evolution-harness.ts',

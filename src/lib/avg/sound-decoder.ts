@@ -3,6 +3,10 @@ import { sha256MediaData } from '../product-production/media-blob-store'
 import { avgHash, avgKey, avgNumber, avgRecord } from './protocol-validation'
 import { inspectAvgVoiceWaveV1 } from './voice-wave'
 
+// Headless processing and byte inspection only; the existing decoder and
+// sound admission do not automatically invoke or accept these candidates.
+export { processAvgAudioPcmWaveV1, processAvgAudioPcmWaveWithWorkerV1, assertAvgAudioProcessingWaveBytesV1 } from './audio-processing'
+
 export function parseAvgSoundByteMeasurementV1(value: unknown) {
   const r = avgRecord(value, ['schema', 'version', 'decoder', 'contentHash', 'mimeType', 'byteSize', 'durationMs', 'channelCount',
     'decodedSampleRateHz', 'integratedLufs', 'truePeakDbtp', 'loopSeamDbfs'], 'sound byte measurement')
