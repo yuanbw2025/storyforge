@@ -4,6 +4,9 @@ import { avgBoolean, avgEnum, avgHash, avgKey, avgList, avgNumber, avgProtocolBo
 import { parseAvgExecutableStageV1 } from './stage-contract'
 import { readAvgImageDefinitionV3 } from './media-production-definition'
 import type { AvgVisualProductionRequirementV1 } from './media-production-contract'
+import { parseAvgForegroundPolicyV1, type AvgForegroundPolicyV1 } from './image-foreground-contract'
+export { parseAvgForegroundPolicyV1, compileAvgForegroundRequirementV1, assertAvgForegroundRequirementBindingV1 } from './image-foreground-contract'
+export type { AvgForegroundPolicyV1 } from './image-foreground-contract'
 
 export const AVG_IMAGE_PROCESSOR_V1 = 'storyforge.avg.local-canvas.v1' as const
 export const AVG_IMAGE_PROCESSING_PIXEL_LIMIT_V1 = 16 * 1024 * 1024
@@ -22,6 +25,18 @@ export interface AvgImageProcessingPlanV1 {
   schema: 'storyforge.avg.image-processing-plan'; version: 1
   entries: Array<{ requirementKey: string; recipe: AvgImageProcessingRecipeV1 }>
 }
+/** Explicit foreground capability. V1 codecs remain strict and unchanged. */
+export interface AvgImageProcessingRecipeV2 extends Omit<AvgImageProcessingRecipeV1, 'version'> {
+  version: 2
+  foreground: AvgForegroundPolicyV1
+}
+export type AvgImageProcessingRecipe = AvgImageProcessingRecipeV1 | AvgImageProcessingRecipeV2
+export interface AvgImageProcessingPlanV2 {
+  schema: 'storyforge.avg.image-processing-plan'
+  version: 2
+  entries: Array<{ requirementKey: string; recipe: AvgImageProcessingRecipe }>
+}
+export type AvgImageProcessingPlan = AvgImageProcessingPlanV1 | AvgImageProcessingPlanV2
 export interface AvgImageProcessingGeometryV1 {
   source: { x: number; y: number; width: number; height: number }
   destination: { x: number; y: number; width: number; height: number }
@@ -71,6 +86,38 @@ export function parseAvgImageProcessingPlanV1(value: unknown): AvgImageProcessin
   }, 8), e => e.requirementKey, 'processing entries')
   if (!entries.length) throw new Error('[avg-process] 加工方案不能是空数组；不加工时省略整个字段')
   return { schema: r.schema, version: 1, entries }
+}
+export function parseAvgImageProcessingRecipeV2(value: unknown): AvgImageProcessingRecipeV2 {
+  const r = avgRecord(avgProtocolBody(value), ['schema', 'version', 'crop', 'width', 'height', 'fit', 'anchor', 'background', 'declaration', 'foreground'], 'foreground processing recipe')
+  if (r.schema !== 'storyforge.avg.image-processing-recipe' || r.version !== 2) throw new Error('[avg-process] 未登记的前景加工配方')
+  const { foreground, ...fields } = r
+  const base = parseAvgImageProcessingRecipeV1({ ...fields, version: 1 })
+  if (base.background !== null) throw new Error('[avg-process] 前景分离配方不能以画布底色覆盖实际 alpha')
+  return { ...base, version: 2, foreground: parseAvgForegroundPolicyV1(foreground) }
+}
+export function parseAvgImageProcessingRecipe(value: unknown): AvgImageProcessingRecipe {
+  const body = avgProtocolBody(value)
+  const version = body && typeof body === 'object' && 'version' in body ? body.version : null
+  if (version === 1) return parseAvgImageProcessingRecipeV1(body)
+  if (version === 2) return parseAvgImageProcessingRecipeV2(body)
+  throw new Error('[avg-process] 未登记的加工配方版本')
+}
+export function parseAvgImageProcessingPlanV2(value: unknown): AvgImageProcessingPlanV2 {
+  const r = avgRecord(avgProtocolBody(value), ['schema', 'version', 'entries'], 'foreground processing plan')
+  if (r.schema !== 'storyforge.avg.image-processing-plan' || r.version !== 2) throw new Error('[avg-process] 未登记的前景加工方案')
+  const entries = avgUnique(avgList(r.entries, 'processing.entries', value => {
+    const e = avgRecord(value, ['requirementKey', 'recipe'], 'processing entry')
+    return { requirementKey: avgKey(e.requirementKey, 'processing.requirementKey'), recipe: parseAvgImageProcessingRecipe(e.recipe) }
+  }, 8), e => e.requirementKey, 'processing entries')
+  if (!entries.some(e => e.recipe.version === 2)) throw new Error('[avg-process] 前景加工方案必须包含明确的新版本配方')
+  return { schema: r.schema, version: 2, entries }
+}
+export function parseAvgImageProcessingPlan(value: unknown): AvgImageProcessingPlan {
+  const body = avgProtocolBody(value)
+  const version = body && typeof body === 'object' && 'version' in body ? body.version : null
+  if (version === 1) return parseAvgImageProcessingPlanV1(body)
+  if (version === 2) return parseAvgImageProcessingPlanV2(body)
+  throw new Error('[avg-process] 未登记的加工方案版本')
 }
 /** The same physical output constraints for each actual product definition;
  * this is not a synthetic legacy Brief or any execution authority. */
