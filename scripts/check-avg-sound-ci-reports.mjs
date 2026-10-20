@@ -7,9 +7,10 @@ import { resolve, basename } from 'node:path'
 const modes = [
   { directory: 'sound-closed', file: 'avg-sound-requirements.spec.ts', minimumExecuted: 1, minimumSkipped: 3 },
   { directory: 'sound-preparation', file: 'avg-sound-requirements.spec.ts', minimumExecuted: 3, minimumSkipped: 1 },
-  { directory: 'sound-production', file: 'avg-sound-production.spec.ts', minimumExecuted: 5, minimumSkipped: 0,
-    requiredTitle: 'native publisher-page V2 original audio keeps unknown hearing through actual decoding, playback and portable raw recovery without a Key or music request' },
-  { directory: 'sound-frozen', file: 'avg-sound-prototype-read.spec.ts', minimumExecuted: 1, minimumSkipped: 0 },
+  { directory: 'sound-production', file: 'avg-sound-production.spec.ts', minimumExecuted: 6, minimumSkipped: 0,
+    requiredTitles: ["native publisher-page V2 original audio keeps unknown hearing through actual decoding, playback and portable raw recovery without a Key or music request", "native publisher-page V2 engineering choice independently configures ambience Stage and original Release for exact closed-factory export without generating music", "native original sound plan, actual continuous audition, independent author choices and original Preview remain usable without a text Key", "native explicit sound inheritance creates a separately adopted revision and release with original audio and no generation requests", "native loop boundary failure survives interruption and refresh as blocking evidence, with no selection or duplicate dispatch", "native mute/unmute cannot turn a partial generation into a passing observation and page switching stops its source"] },
+  { directory: 'sound-frozen', file: 'avg-sound-prototype-read.spec.ts', minimumExecuted: 2, minimumSkipped: 0,
+    requiredTitles: ["original published Sound backup remains natively playable with both factory switches closed, without credentials or new producer/quality writes", "published publisher-page V2 original ambience restores exact grant and Release bytes with both sound factories closed and no producer or quality writes"] },
 ]
 const maximumBytes = 8 * 1024 * 1024
 const fail = message => { throw new Error(message) }
@@ -38,9 +39,9 @@ async function verifyMode(root, mode) {
   if (!Array.isArray(report.errors) || report.errors.length) fail(`${mode.directory} 有运行级失败`)
   const counts = { expected: 0, flaky: 0, unexpected: 0, skipped: 0 }
   const tests = testsIn(report.suites, mode.file)
-  if (mode.requiredTitle) {
-    const actual = tests.filter(test => test.specTitle === mode.requiredTitle)
-    if (actual.length !== 1 || !['expected', 'flaky'].includes(actual[0].status)) fail('缺少准确原发布页许可V2的实际原生用例，其他通过数量不能代验')
+  for (const title of mode.requiredTitles ?? []) {
+    const actual = tests.filter(test => test.specTitle === title)
+    if (actual.length !== 1 || !['expected', 'flaky'].includes(actual[0].status)) fail(`${mode.directory} 缺少准确实际原生用例：${title}；其他通过数量不能代验`)
   }
   for (const test of tests) {
     if (test.projectName !== 'chromium' || !Object.hasOwn(counts, test.status)) fail('报告项目或用例终态无效')

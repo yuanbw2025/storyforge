@@ -4,7 +4,7 @@ import { runProductProductionSchedulerCycleV1 } from '../../src/lib/product-prod
 import { configureAvgChosenSoundDraftV1, stageAvgWorkspaceInputV1 } from '../../src/lib/avg/assembly-service'
 import { readAvgDraftV1 } from '../../src/lib/avg/draft-service'
 import { avgSoundReviewHarnessFixtureV1, adoptAvgSoundReviewFixtureV3, avgSoundAuthorChoiceFixtureV1 } from './avg-sound-review-fixture'
-import { adoptAvgSoundArtifactV1, confirmAvgSoundCandidateV1 } from './avg-sound-harness-fixture'
+import { adoptAvgSoundArtifactV1, confirmAvgSoundCandidateV1, type AvgSoundHarnessFixtureV1 } from './avg-sound-harness-fixture'
 
 /** Actual bounded source/model/raw/author/CAS/Stage commands. HTTP/decoder and
  * hearing declarations remain explicitly controlled engineering observations. */
@@ -22,7 +22,7 @@ export async function avgSoundRuntimeStageFixtureV1() {
   if (!adopted.ok) throw new Error(JSON.stringify(adopted))
   return { ...s, configured }
 }
-export async function finishAvgSoundRuntimeFixtureV1(s: Awaited<ReturnType<typeof avgSoundRuntimeStageFixtureV1>>) {
+export async function finishAvgSoundRuntimeFixtureV1(s: Pick<AvgSoundHarnessFixtureV1, 'scope' | 'productionId' | 'buildId' | 'executor' | 'capabilityBindings'>) {
   for (let i = 0; i < 12; i++) {
     const build = (await db.productBuilds.get(s.buildId))!
     if (build.status === 'preview-ready') return readProductProductionDetailsV1(s.scope, s.productionId, ['avg'])

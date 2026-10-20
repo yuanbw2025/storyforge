@@ -133,8 +133,7 @@ async function confirmObservation(panel: Locator) {
   await panel.getByRole('button', { name: '确认这份声音观察', exact: true }).click()
   await expect(panel.getByText(/已确认声音观察 v\d+/)).toBeVisible()
 }
-async function passed(panel: Locator, channel: 'bgm' | 'sfx' | 'ambience') {
-  const loop = channel !== 'sfx'
+async function passed(panel: Locator, channel: 'bgm' | 'sfx' | 'ambience', loop = channel !== 'sfx') {
   await panel.getByRole('button', { name: '从头审听原声音', exact: true }).click()
   await expect(panel.getByRole('status').filter({ hasText: `原声音已完整原速播放 ${loop ? 2 : 1} 遍` })).toBeVisible({ timeout: 40_000 })
   const labels = ['符合用途', '噪音与失真', '首尾完整', ...(channel === 'bgm' ? ['纯器乐无歌词'] : []), ...(loop ? ['循环接缝'] : [])]
@@ -199,6 +198,81 @@ test('native publisher-page V2 original audio keeps unknown hearing through actu
   expect(lifecycle.copyHash).toBe(actual.source.memberHash); expect(lifecycle.rawSource).toEqual(actual.source); expect(lifecycle.providerResult).toEqual(actual.result)
   expect(lifecycle.originalUnchanged).toBe(true); expect(lifecycle.releases).toBe(0)
   expect(s.counts).toEqual({ text: 1, music: 0, library: 1, capabilities: 0, unknown: [] })
+})
+
+test('native publisher-page V2 engineering choice independently configures ambience Stage and original Release for exact closed-factory export without generating music', async ({ page }, info) => {
+  const s = await produced(page, true), actual = avgSoundPublisherFixtureV2(), observation = await review(page, 'ambience')
+  await expect(observation.getByRole('combobox', { name: '符合用途', exact: true })).toHaveValue('unknown')
+  await expect(observation.getByRole('button', { name: '将原声音列为待确认选择', exact: true })).toBeDisabled()
+  // These are explicit isolated ENGINEERING author declarations. They test
+  // current-use authority after actual playback, never this sample's real
+  // hearing/commercial acceptance or the author's existing real workspace.
+  await passed(observation, 'ambience', false)
+  await s.panel.getByRole('button', { name: '将已采用声音配置到演出草稿', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: '已采用声音已配置到准确台词触发拍和通道' })).toBeVisible()
+  await tab(page, '制作与试玩'); await adopt(page, '演出与媒资')
+  await page.getByRole('button', { name: '执行组装并生成新预览', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: '新预览已冻结' })).toBeVisible({ timeout: 60_000 })
+  await page.getByRole('button', { name: '试玩此预览', exact: true }).click()
+  await expect(page).toHaveURL(/[?&]session=[1-9]\d*(?:&|$)/)
+  const previewSession = Number(new URL(page.url()).searchParams.get('session'))
+  await expect.poll(() => page.locator('audio[data-channel="ambience"]').evaluateAll(rows => rows.some(a => !(a as HTMLAudioElement).paused && (a as HTMLAudioElement).currentTime > .1))).toBe(true)
+  await expect(page.locator('.avg-text-cursor')).toHaveClass(/is-complete/)
+  await page.getByRole('button', { name: '继续', exact: true }).click()
+  await page.getByRole('button', { name: '打开灯光', exact: true }).click()
+  await expect(page.locator('.avg-dialogue p')).toContainText('灯光亮起')
+  await expect(page.locator('.avg-text-cursor')).toHaveClass(/is-complete/)
+  await page.getByRole('button', { name: '继续', exact: true }).click()
+  await expect.poll(() => page.evaluate(async id => {
+    const load = new Function('p', 'return import(p)') as (p: string) => Promise<any>
+    return (await (await load('/storyforge/src/lib/product/runtime-core.ts')).readProductRuntimeState(id)).narrative.completed
+  }, previewSession)).toBe(true)
+  await page.goto(`./avg/production?project=${s.scope.projectId}&work=${s.scope.workId}&assembly=1`)
+  await tab(page, '制作与试玩')
+  const release = page.getByRole('region', { name: '本地原型版本验收', exact: true })
+  await release.getByRole('checkbox', { name: '我已核对此预览存档的完整路线，确认系统与演出结果', exact: true }).check()
+  await release.getByRole('button', { name: '确认此预览的完整路线', exact: true }).click()
+  await expect(release.getByText(/完整路线：已确认/)).toBeVisible()
+  await release.getByRole('button', { name: '验证全部冻结媒资', exact: true }).click()
+  await expect(release.getByRole('status').filter({ hasText: '全部冻结媒资已实际解码' })).toBeVisible({ timeout: 60_000 })
+  await release.getByRole('button', { name: '准备本地原型版本', exact: true }).click()
+  await expect(release.getByRole('status').filter({ hasText: '本地原型版本已准备，请核对后保存。' })).toBeVisible({ timeout: 60_000 })
+  await expect(release.getByRole('button', { name: '确认保存本地原型版本', exact: true })).toBeDisabled()
+  await release.getByRole('checkbox', { name: '我已核对版本，将它保存为本地原型', exact: true }).check()
+  await release.getByRole('button', { name: '确认保存本地原型版本', exact: true }).click()
+  await expect(release.getByText('此版本已冻结；后续修改请创建新 Build。', { exact: true })).toBeVisible({ timeout: 60_000 })
+  const exported = await page.evaluate(async scope => {
+    const load = new Function('p', 'return import(p)') as (p: string) => Promise<any>
+    const [{ db }, files, pkg, module, config] = await Promise.all([load('/storyforge/src/lib/db/schema.ts'), load('/storyforge/src/lib/export/json-export.ts'),
+      load('/storyforge/src/lib/product-production/runtime-package.ts'), load('/storyforge/src/lib/avg/executable-module.ts'), load('/storyforge/src/stores/ai-config.ts')])
+    const build = await db.productBuilds.where('workId').equals(scope.workId).first(), record = await db.productReleases.get(build.releasedProductReleaseId)
+    const manifest = await pkg.verifyProductReleaseManifest(record.manifestJson), raw = await db.productBuildArtifacts.where('[buildId+artifactKey]').equals([build.id,'avg.sound.raw.native.ambience']).first()
+    const body = JSON.parse(raw.payloadJson), final = await db.productBuildArtifacts.where('[buildId+artifactKey]').equals([build.id,'avg.media.0']).first()
+    return { backup: await files.exportProjectJSON(scope.projectId), expected: { scope, releaseId: record.id, releaseUid: manifest.lineage.releaseUid,
+      manifestJson: record.manifestJson, assets: module.avgRuntimeStage(manifest.runtimePackage).assets, originalSource: body.requirement.dispatch.source,
+      providerResult: body.providerResult, finalRights: JSON.parse(final.rightsJson), sameBlob: final.blobObjectId === raw.blobObjectId,
+      frozenQA: JSON.parse(build.qualityReportJson).releaseReady, hasKey: !!config.useAIConfigStore.getState().config.apiKey } }
+  }, s.scope)
+  expect(exported.expected.originalSource).toEqual(actual.source); expect(exported.expected.providerResult).toEqual(actual.result)
+  expect(exported.expected.finalRights.originalRights.source).toEqual(actual.source)
+  expect(exported.expected.sameBlob).toBe(true); expect(exported.expected.frozenQA).toBe(false); expect(exported.expected.hasKey).toBe(false)
+  expect(exported.expected.assets).toHaveLength(1); expect(exported.expected.assets[0]).toMatchObject({ kind: 'ambience', blobContentHash: actual.source.memberHash, license: 'CC0-1.0' })
+  await release.getByRole('button', { name: '从此版本开始新存档', exact: true }).click()
+  await expect(page).toHaveURL(/[?&]session=[1-9]\d*(?:&|$)/)
+  await expect.poll(() => page.locator('audio[data-channel="ambience"]').evaluateAll(rows => rows.some(a => !(a as HTMLAudioElement).paused && (a as HTMLAudioElement).currentTime > .1))).toBe(true)
+  const releasedSession = Number(new URL(page.url()).searchParams.get('session'))
+  const pinned = await page.evaluate(async id => {
+    const load = new Function('p', 'return import(p)') as (p: string) => Promise<any>
+    return (await load('/storyforge/src/lib/db/schema.ts')).db.productRuntimeSessions.get(id)
+  }, releasedSession)
+  expect(pinned.productReleaseId).toBe(exported.expected.releaseId); expect(pinned.productBuildId).toBeNull()
+  expect(releasedSession).not.toBe(previewSession)
+  await page.screenshot({ path: info.outputPath('native-publisher-original-release.png') })
+  expect(s.counts).toEqual({ text: 1, music: 0, library: 1, capabilities: 0, unknown: [] })
+  const exportPath = process.env.AVG_SOUND_PUBLISHER_RELEASE_BACKUP_FILE ?? info.outputPath('publisher-original-release.json')
+  await mkdir(dirname(exportPath), { recursive: true })
+  await writeFile(exportPath, JSON.stringify({ schema: 'storyforge.avg.publisher-audio-release-native-test-export', version: 1, ...exported,
+    backupSHA256: createHash('sha256').update(JSON.stringify(exported.backup)).digest('hex') }), { flag: 'wx' })
 })
 
 test('native original sound plan, actual continuous audition, independent author choices and original Preview remain usable without a text Key', async ({ page }, info) => {

@@ -120,6 +120,7 @@ jobs:
           VITE_STORYFORGE_AVG_SOUND_PRODUCTION: '1'
           PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/avg-media/sound-production/report.json
           AVG_SOUND_RELEASE_BACKUP_FILE: test-results/avg-media/sound-production/original-sound-native-release.json
+          AVG_SOUND_PUBLISHER_RELEASE_BACKUP_FILE: test-results/avg-media/sound-production/publisher-original-release.json
         run: npm run ci:e2e -- -- --project=chromium tests/e2e/avg-sound-production.spec.ts --reporter=github,json --output test-results/avg-media/sound-production
 
       - name: 验证声音工厂关闭后的原版本恢复与播放
@@ -130,6 +131,7 @@ jobs:
           VITE_STORYFORGE_AVG_SOUND_PRODUCTION: '0'
           PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/avg-media/sound-frozen/report.json
           AVG_SOUND_RELEASE_BACKUP_FILE: test-results/avg-media/sound-production/original-sound-native-release.json
+          AVG_SOUND_PUBLISHER_RELEASE_BACKUP_FILE: test-results/avg-media/sound-production/publisher-original-release.json
         run: npm run ci:e2e -- -- --project=chromium tests/e2e/avg-sound-prototype-read.spec.ts --reporter=github,json --output test-results/avg-media/sound-frozen
 
       - name: 验证全部 AVG 原生路径（含图片与配音实验）
