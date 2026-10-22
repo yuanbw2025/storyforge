@@ -1,10 +1,11 @@
 import type { FrozenRuntimeMediaAssetV2,ProductBuildArtifactRecordV1,ProductProductionPlanTaskV3 } from '../types'
 import type { AvgVisualProductionRequirementV1 } from './media-production-contract'
 import { canonicalProductProductionJsonV2 } from '../product-production/hash'
-import { assertAvgProcessedImageArtifactFromDefinitionV1,type AvgProcessedImageArtifactFieldsV1 } from './image-processing-contract'
+import type { AvgProcessedImageArtifactFieldsV1 } from './image-processing-contract'
+import { assertAvgProcessedImageArtifactFromDefinition } from './image-processing-contract-v2'
 import { avgHash,avgRecord } from './protocol-validation'
 
-type Definition<R extends Omit<AvgVisualProductionRequirementV1,'references'>> = Parameters<typeof assertAvgProcessedImageArtifactFromDefinitionV1<R>>[0]
+type Definition<R extends Omit<AvgVisualProductionRequirementV1,'references'>> = Parameters<typeof assertAvgProcessedImageArtifactFromDefinition<R>>[0]
 export interface AvgVisualProcessingBinding {
   compilation:{artifactKey:string;version:number;contentHash:string}
   rule:{artifactKey:string;version:number;contentHash:string}
@@ -22,7 +23,7 @@ export async function inspectAvgVisualProcessingBinding<R extends Omit<AvgVisual
   original:FrozenRuntimeMediaAssetV2;task:ProductProductionPlanTaskV3|undefined;
   artifact:AvgProcessedImageArtifactFieldsV1&Pick<ProductBuildArtifactRecordV1,'qualityJson'|'requirementKey'>
 }){
-  const {task,raw,artifact:a,version}=input,image=await assertAvgProcessedImageArtifactFromDefinitionV1<R>(input.definition,a)
+  const {task,raw,artifact:a,version}=input,image=await assertAvgProcessedImageArtifactFromDefinition<R>(input.definition,a)
   const same=(a:unknown,b:unknown)=>canonicalProductProductionJsonV2(a)===canonicalProductProductionJsonV2(b)
   const q=avgRecord(JSON.parse(a.qualityJson),['schema','version','noProviderRequest','decoderVerified','processingReceiptHash','rawProducerReceiptHash',
     'sourceCompilation','sourceRule','sourceScripts','sourceContextHash'],version===1?'V4 processing evidence':'V5 processing evidence')

@@ -5,7 +5,7 @@ import { parseAvgExecutableStageV1, type AvgExecutableStageV1 } from './stage-co
 import { avgEnum, avgHash, avgList, avgProtocolBody, avgRecord, avgUnique } from './protocol-validation'
 import { parseAvgVisualProductionBatchV1, type AvgVisualProductionBatchV1 } from './media-production-contract'
 import { parseAvgInheritedStageImagesV1, type AvgInheritedStageImageV1 } from './stage-image-source-contract'
-import { parseAvgImageProcessingPlanV1, type AvgImageProcessingPlanV1 } from './image-processing-contract'
+import { parseAvgImageProcessingPlan, assertAvgImageProcessingRequirements, type AvgImageProcessingPlan } from './image-processing-contract'
 import { readAvgVoiceDraftV1 } from './voice-draft-contract'
 import type { AvgVoiceExactStorageV1 } from './voice-exact-storage'
 import { parseAvgInheritedStageVoicesV1, type AvgInheritedStageVoiceV1 } from './stage-voice-source-contract'
@@ -51,7 +51,7 @@ export interface AvgAuthorWorkspaceV1 {
   scripts: AvgSceneScriptV1[]
   presentation: AvgAuthorStageV1
   mediaBatch?: AvgVisualProductionBatchV1
-  imageProcessing?: AvgImageProcessingPlanV1
+  imageProcessing?: AvgImageProcessingPlan
   voiceProduction?: AvgVoiceExactStorageV1
   soundProduction?: AvgSoundProductionDraftV1
 }
@@ -68,9 +68,10 @@ export function parseAvgAuthorWorkspaceV1(value: unknown): AvgAuthorWorkspaceV1 
     if (script.schema !== 'storyforge.avg.scene-script') throw new Error('[avg] 工作区需要场景脚本')
     return script
   }), script => script.sceneKey, 'workspace scripts')
-  const mediaBatch=hasBatch?parseAvgVisualProductionBatchV1(row.mediaBatch):undefined,imageProcessing=hasProcessing?parseAvgImageProcessingPlanV1(row.imageProcessing):undefined
+  const mediaBatch=hasBatch?parseAvgVisualProductionBatchV1(row.mediaBatch):undefined,imageProcessing=hasProcessing?parseAvgImageProcessingPlan(row.imageProcessing):undefined
   const voiceProduction=hasVoice?readAvgVoiceDraftV1(row.voiceProduction).packet:undefined
   if(imageProcessing&&(!mediaBatch?.visualReviewPolicy||imageProcessing.entries.some(e=>!mediaBatch.requirements.some(r=>r.requirementKey===e.requirementKey))))throw new Error('[avg-process] 加工草稿缺少准确需求与独立视觉评审')
+  if(imageProcessing?.version===2&&mediaBatch)assertAvgImageProcessingRequirements(imageProcessing,mediaBatch.requirements)
   return { schema: row.schema, version: 1, basePreviewHash: row.basePreviewHash === null ? null : avgHash(row.basePreviewHash, 'basePreviewHash'),
     systemPlan: parseAvgSystemPlan(row.systemPlan), scripts, presentation: parseAvgAuthorStageV1(row.presentation),
     ...(mediaBatch?{mediaBatch}:{}),...(imageProcessing?{imageProcessing}:{}),...(voiceProduction?{voiceProduction}:{}),

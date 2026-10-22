@@ -6,7 +6,8 @@ import { readAvgCompiledImageDefinitionV5 } from './visual-planning-image-defini
 import { readAvgVisualPlanningExecutionSourcesV5 } from './visual-planning-task-source-v5'
 import { assertAvgRawImageArtifactFromDefinitionV2,assertAvgRawImageReceptionV2 } from './media-raw-contract-v2'
 import { executeAvgBoundedImageProcessingV1 } from './image-processing-execution-kernel'
-import { assertAvgProcessedImageArtifactFromDefinitionV1,type AvgProcessedImageArtifactFieldsV1 } from './image-processing-contract'
+import type { AvgProcessedImageArtifactFieldsV1 } from './image-processing-contract'
+import { assertAvgProcessedImageArtifactFromDefinition } from './image-processing-contract-v2'
 import { inspectAvgProcessedImageBytesV1 } from './image-processing-source'
 import { avgVisualProcessingQuality,inspectAvgVisualProcessingBinding } from './visual-processing-binding'
 
@@ -51,7 +52,7 @@ export async function executeAvgVisualImageProcessingTaskV5(input:ProductProduct
       return {row,...await inspectAvgCompiledRawImageV5(compiled,row)}
     }
     const raw=await readRaw(),sourceContextHash=await hashProductProductionValueV2(input.contextText)
-    return await executeAvgBoundedImageProcessingV1({request:input,started,raw,entry,task,
+    return await executeAvgBoundedImageProcessingV1({request:input,started,raw,entry,task,requirement:raw.requirement,
       recheck:async()=>{await readRaw();await readAvgVisualPlanningExecutionSourcesV5(input,brief)},
       quality:receiptHash=>avgVisualProcessingQuality(2,binding(compiled),raw.row,receiptHash,sourceContextHash)})
   }catch(error){throw new ProductProductionDraftRejectedErrorV1(error instanceof Error?error.message:'[avg-process] 本地加工失败',usage())}
@@ -65,7 +66,7 @@ export async function readAvgVisualProcessingEvidenceV5(input:{scope:WorkspaceSc
   const boundary={scope:input.scope,buildId:build.id!,expectedBuildRevision:build.stateRevision,expectedBriefHash:build.briefHash,
     expectedPlanHash:build.planHash,sourceControlEpoch:compiled.plan.controlEpoch}
   const processing=await verifyHistoricalAvgImageProcessingProducerV1({...boundary,...input.artifact})
-  const payload=await assertAvgProcessedImageArtifactFromDefinitionV1(compiled.definition,processing.artifact)
+  const payload=await assertAvgProcessedImageArtifactFromDefinition(compiled.definition,processing.artifact)
   const rawProof=await verifyHistoricalAvgVisualImageProducerV5({...boundary,...payload.payload.raw})
   const checked=await inspectAvgVisualProcessedImageV5({compiled,raw:rawProof.artifact,artifact:processing.artifact})
   const image=await inspectAvgProcessedImageBytesV1({scope:input.scope,raw:rawProof.artifact,processed:processing.artifact,image:checked})

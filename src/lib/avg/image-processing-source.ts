@@ -6,7 +6,8 @@ import { canonicalProductProductionJsonV2 } from '../product-production/hash'
 import { readVerifiedMediaBlobObjectData } from '../product-production/media-blob-store'
 import { verifyAcceptedProductBuildArtifactV1,verifyAvgProcessedImageArtifactV1 } from '../product-production/artifact-store'
 import { assertAvgRawImageArtifactV1 } from './media-raw-contract'
-import { assertAvgProcessedImageArtifactV1, avgProcessedImageArtifactKeyV1,type AvgProcessedImagePayloadV1 } from './image-processing-contract'
+import { avgProcessedImageArtifactKeyV1 } from './image-processing-contract'
+import { assertAvgProcessedImageArtifact,type AvgProcessedImagePayload } from './image-processing-contract-v2'
 import { inspectAvgImageBytesV1 } from './image-decoder'
 import { readAvgImageRecoverySourceV1 } from './media-recovery'
 import { parseProductProductionBriefV3 } from '../product-production/contracts'
@@ -14,7 +15,7 @@ import { readAvgImageDefinitionV3 } from './media-production-definition'
 import type { AvgVisualProductionRequirementV1 } from './media-production-contract'
 
 export interface AvgInspectedProcessedImageV1<R extends Omit<AvgVisualProductionRequirementV1,'references'>=AvgVisualProductionRequirementV1> {
-  payload:AvgProcessedImagePayloadV1;asset:FrozenRuntimeMediaAssetV2;requirement:R
+  payload:AvgProcessedImagePayload;asset:FrozenRuntimeMediaAssetV2;requirement:R
   row:ProductBuildArtifactRecordV1;measured:Awaited<ReturnType<typeof inspectAvgImageBytesV1>>
 }
 
@@ -30,7 +31,7 @@ export async function inspectAvgProcessedImageSourceV1(input:{scope:WorkspaceSco
     const image=await inspectAvgVisualProcessedImageV4({scope:input.scope,compiled,raw:input.raw,artifact:input.processed})
     return inspectAvgProcessedImageBytesV1({...input,image})
   }
-  const image=await assertAvgProcessedImageArtifactV1(input.brief,input.processed),raw=await assertAvgRawImageArtifactV1(input.brief,input.raw)
+  const image=await assertAvgProcessedImageArtifact(input.brief,input.processed),raw=await assertAvgRawImageArtifactV1(input.brief,input.raw)
   if(canonicalProductProductionJsonV2(image.payload.sourceAsset)!==canonicalProductProductionJsonV2(raw.asset))throw new Error('[avg-process] 加工原图元数据已变化')
   return inspectAvgProcessedImageBytesV1({...input,image})
 }

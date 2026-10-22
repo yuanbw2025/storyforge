@@ -74,6 +74,9 @@ const entrypoints = [
   // AVG R4b1 is the independently testable, headless versioned intent/compiler/request API.
   // It has no dispatch/adoption authority; the future formal Brief/producer/UI must register first.
   'src/lib/avg/media-production-v2.ts',
+  // AVG foreground processing starts this dedicated Worker through a fixed
+  // new URL(..., import.meta.url), not a main-window module import.
+  'src/lib/avg/image-foreground.worker.ts',
 ].map(file => path.resolve(root, file))
 
 const graph = new Map()

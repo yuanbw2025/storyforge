@@ -8,6 +8,7 @@ import { composeAvgCharacterFamilyRequirementsV1, hashAvgCharacterFamilyProposal
 import { freezeAvgVisualProductionBatchV1, hashAvgMediaSourceInputV1 } from './media-source'
 import { validateAvgGeneratedReferencesV1 } from './media-generated-reference'
 import { verifyAvgReferenceBytesV1 } from './media-reference-contract'
+import { parseAvgImageProcessingPlan,assertAvgImageProcessingRequirements,type AvgImageProcessingPlan } from './image-processing-contract'
 
 /** Replace only the current same-family draft's automatic actor cues. Custom
  * uses of those pictures need an explicit author edit, never a guessed rewrite. */
@@ -45,8 +46,11 @@ export async function prepareAvgCharacterFamilyProposalV1(input:{scope:Workspace
 /** Saves a reviewed finite family batch into the ordinary author draft. Only
  * the existing Brief/start/Skill/choice/stage-adopt path may produce or use it. */
 export async function saveAvgCharacterFamilyBatchDraftV1(input:{scope:WorkspaceScope;expectedDraftRevision:number;proposal:AvgCharacterFamilyProposalV1;
+  imageProcessing?:AvgImageProcessingPlan|null;
   approval:{proposalHash:string;providerInputAllowed:boolean;derivativeUseAllowed:boolean;declaration:string}}){
   const family=parseAvgCharacterFamilyBatchV1({proposal:input.proposal,approval:input.approval})
+  const processingSpecified=Object.prototype.hasOwnProperty.call(input,'imageProcessing')
+  const processing=processingSpecified?(input.imageProcessing===null?null:parseAvgImageProcessingPlan(input.imageProcessing)):undefined
   const fresh=await prepareAvgCharacterFamilyProposalV1({scope:input.scope,expectedDraftRevision:input.expectedDraftRevision,plan:family.proposal.plan})
   if(canonicalProductProductionJsonV2(fresh)!==canonicalProductProductionJsonV2(family.proposal))throw new Error('[avg-family] 提案或编辑草稿已变化，请重新核对准确方案')
   const draft=await readAvgDraftV1(input.scope)
@@ -55,5 +59,7 @@ export async function saveAvgCharacterFamilyBatchDraftV1(input:{scope:WorkspaceS
   if(await hashAvgMediaSourceInputV1(next)!==family.proposal.sourceInputHash)throw new Error('[avg-family] 来源已变化')
   next.mediaBatch=await freezeAvgVisualProductionBatchV1({schema:'storyforge.avg.visual-production-batch',version:1,batchKey:`family.${family.proposal.plan.familyKey}`,
     revision:(workspace.mediaBatch?.revision??0)+1,requirements:composeAvgCharacterFamilyRequirementsV1(family.proposal.plan),characterFamily:family,visualReviewPolicy:'author-visual-v1'},next)
+  if(processing)assertAvgImageProcessingRequirements(processing,next.mediaBatch.requirements)
+  if(processingSpecified){if(processing===null)delete next.imageProcessing;else next.imageProcessing=processing}
   return saveAvgAuthorWorkspaceV1(input.scope,draft.revision,next)
 }

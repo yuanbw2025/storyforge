@@ -3206,9 +3206,9 @@ async function verifyAvgMediaEvidenceV1(input: AvgHistoricalMediaEvidenceInputV1
     if (Dexie.currentTransaction) await Dexie.waitFor(Dexie.ignoreTransaction(validate), 20_000)
     else await validate()
   } else if (processed) {
-    const contract = import('../avg/image-processing-contract')
-    const { assertAvgProcessedImageArtifactV1 } = Dexie.currentTransaction ? await Dexie.waitFor(contract) : await contract
-    await assertAvgProcessedImageArtifactV1(brief, row)
+    const contract = import('../avg/image-processing-contract-v2')
+    const { assertAvgProcessedImageArtifact } = Dexie.currentTransaction ? await Dexie.waitFor(contract) : await contract
+    await assertAvgProcessedImageArtifact(brief, row)
   } else {
     const rawContract = import('../avg/media-raw-contract')
     const { assertAvgRawImageArtifactV1 } = Dexie.currentTransaction ? await Dexie.waitFor(rawContract) : await rawContract

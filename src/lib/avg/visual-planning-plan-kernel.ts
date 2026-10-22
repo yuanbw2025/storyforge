@@ -2,7 +2,7 @@ import type { ProductProductionBriefV3,ProductProductionPlanTaskV3,ProductProduc
 import { buildAvgImageAssemblyTopologyV1 } from './assembly-plan'
 import { avgMediaBriefArtifactKeyV1,type AvgVisualDesignKindV1,type AvgVisualPlanningScopeV1 } from './visual-planning-contract'
 import type { AvgAssemblyBriefV1 } from './assembly-contract'
-import type { AvgImageProcessingPlanV1 } from './image-processing-contract'
+import type { AvgImageProcessingPlan } from './image-processing-contract'
 import { avgKey } from './protocol-validation'
 import { AVG_VISUAL_TEXT_CAPABILITY_V4 } from './visual-planning-roles'
 import { avgVisualPlanningTargetKeysV4 } from './visual-planning-reuse-contract'
@@ -18,7 +18,7 @@ export interface AvgVisualPlanningPlanProtocolV1 {
  * their real contract and batch; this kernel owns no metadata authorization. */
 export function buildAvgVisualPlanningTopologyV1(input:{
   brief:Pick<ProductProductionBriefV3,'capabilityRequirements'>;briefHash:string;buildNumber:number;controlEpoch:number
-},v:{assembly:AvgAssemblyBriefV1;scope:Pick<AvgVisualPlanningScopeV1,'templates'>;imageProcessing?:AvgImageProcessingPlanV1;
+},v:{assembly:AvgAssemblyBriefV1;scope:Pick<AvgVisualPlanningScopeV1,'templates'>;imageProcessing?:AvgImageProcessingPlan;
   proposalReuse?:Array<{buildNumber:number;artifact:{artifactKey:string}}>;
   rawReuse?:Array<{requirementKey:string;raw:{buildNumber:number}}>},
   mediaBatch:Parameters<typeof buildAvgImageAssemblyTopologyV1>[0]['declaration']['mediaBatch'],protocol:AvgVisualPlanningPlanProtocolV1):ProductProductionPlanV3 {

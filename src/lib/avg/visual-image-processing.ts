@@ -7,7 +7,8 @@ import { readAvgCompiledImageDefinitionV4 } from './visual-planning-image-defini
 import { readAvgVisualPlanningExecutionSourcesV4 } from './visual-planning-task-source'
 import { inspectAvgCompiledRawImageV4,type AvgVerifiedCompiledImageDefinitionV4 } from './visual-image-revalidation'
 import { executeAvgBoundedImageProcessingV1 } from './image-processing-execution-kernel'
-import { assertAvgProcessedImageArtifactFromDefinitionV1,type AvgProcessedImageArtifactFieldsV1 } from './image-processing-contract'
+import type { AvgProcessedImageArtifactFieldsV1 } from './image-processing-contract'
+import { assertAvgProcessedImageArtifactFromDefinition } from './image-processing-contract-v2'
 import { avgVisualProcessingQuality,inspectAvgVisualProcessingBinding } from './visual-processing-binding'
 import { inspectAvgProcessedImageBytesV1 } from './image-processing-source'
 
@@ -35,7 +36,7 @@ export async function readAvgVisualProcessingEvidenceV4(input:{scope:WorkspaceSc
   const boundary={scope:input.scope,buildId:build.id!,expectedBuildRevision:build.stateRevision,expectedBriefHash:build.briefHash,
     expectedPlanHash:build.planHash,sourceControlEpoch:compiled.plan.controlEpoch}
   const processing=await verifyHistoricalAvgImageProcessingProducerV1({...boundary,...input.artifact})
-  const payload=await assertAvgProcessedImageArtifactFromDefinitionV1(compiled.definition,processing.artifact)
+  const payload=await assertAvgProcessedImageArtifactFromDefinition(compiled.definition,processing.artifact)
   const original=compiled.planning.rawReuse?.find(s=>s.requirementKey===payload.payload.requirementKey)
   const rawProof=original?await verifyHistoricalAvgImageRevalidationProducerV1({...boundary,...payload.payload.raw})
     :await verifyHistoricalAvgVisualImageProducerV4({...boundary,...payload.payload.raw})
@@ -63,7 +64,7 @@ export async function executeAvgVisualImageProcessingTaskV4(input:ProductProduct
       return {row,...await inspectAvgCompiledRawImageV4({scope:input.scope,compiled,artifact:row})}
     }
     const raw=await readRaw(),sourceContextHash=await hashProductProductionValueV2(input.contextText)
-    return await executeAvgBoundedImageProcessingV1({request:input,started,raw,entry,task,
+    return await executeAvgBoundedImageProcessingV1({request:input,started,raw,entry,task,requirement:raw.requirement,
       recheck:async()=>{await readRaw();await readAvgVisualPlanningExecutionSourcesV4(input,brief)},
       quality:receiptHash=>quality(compiled,raw.row,receiptHash,sourceContextHash)})
   }catch(error){throw new ProductProductionDraftRejectedErrorV1(error instanceof Error?error.message:'[avg-process] 本地加工失败',usage())}

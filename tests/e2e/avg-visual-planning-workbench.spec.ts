@@ -25,6 +25,16 @@ async function saveProcessingRecipe(page:Page){
   await expect(page.getByRole('status').filter({hasText:'加工配方已保存到尚未开始的专业制作方案'})).toBeVisible()
 }
 
+async function saveForegroundRecipe(page:Page,boundaryUnmix=false){
+  const form=page.getByRole('region',{name:'本地图像加工配方',exact:true})
+  await form.getByRole('checkbox',{name:'生成时使用纯品红底色，并在本地移除底色（实验性）',exact:true}).check()
+  if(boundaryUnmix)await form.getByRole('combobox',{name:'前景边缘处理',exact:true}).selectOption('2')
+  await form.getByLabel('保留底色与主体用色声明',{exact:true}).fill('原创工程家族的纯品红只作底色，人物服装和主体禁用该色；准许本地分离，仍须逐张查看。')
+  await form.getByLabel('允许的加工与用途说明',{exact:true}).fill('整幅原图先移除声明的底色，再完整放入相同画布；不得裁掉主体，不签艺术通过。')
+  await form.getByRole('button',{name:'保存本项加工配方',exact:true}).click()
+  await expect(page.getByRole('status').filter({hasText:'加工配方已保存到尚未开始的专业制作方案'})).toBeVisible()
+}
+
 async function adoptProfessionalDesign(page:Page,label:string){
   const panel=page.getByRole('region',{name:'专业视觉策划（实验）',exact:true})
   const card=panel.getByRole('article',{name:`专业方案：${label}`,exact:true})
@@ -499,7 +509,7 @@ for(const nativeAncestor of [false,true])test(nativeAncestor?'author refusal aft
   await info.attach('avg-professional-refusal-exact-parent',{path:proof,contentType:'application/json'})
 })
 
-async function prepareProfessionalFamily(page:Page,options:{propReference?:boolean;version?:4|5;processing?:boolean;processingTargetIndex?:number}={}){
+async function prepareProfessionalFamily(page:Page,options:{propReference?:boolean;version?:4|5;processing?:boolean;processingTargetIndex?:number;reservedForeground?:boolean;boundaryUnmix?:boolean}={}){
   await page.addInitScript(()=>localStorage.setItem('storyforge_guide_completed','e2e'))
   await page.goto('./avg/library')
   const origin=new URL(page.url()).origin,calls:string[]=[]
@@ -568,8 +578,15 @@ async function prepareProfessionalFamily(page:Page,options:{propReference?:boole
   await expect(expression.getByLabel('图像宽度',{exact:true})).toHaveValue('704')
   await panel.getByRole('button',{name:'撤销未保存的专业用途',exact:true}).click()
   if(options.processing){
-    if(options.processingTargetIndex!==undefined)await page.getByRole('region',{name:'本地图像加工配方',exact:true}).getByLabel('加工目标',{exact:true}).selectOption({index:options.processingTargetIndex})
-    await saveProcessingRecipe(page)
+    if(options.reservedForeground){
+      for(const index of [1,2]){
+        await page.getByRole('region',{name:'本地图像加工配方',exact:true}).getByLabel('加工目标',{exact:true}).selectOption({index})
+        await saveForegroundRecipe(page,options.boundaryUnmix===true)
+      }
+    }else{
+      if(options.processingTargetIndex!==undefined)await page.getByRole('region',{name:'本地图像加工配方',exact:true}).getByLabel('加工目标',{exact:true}).selectOption({index:options.processingTargetIndex})
+      await saveProcessingRecipe(page)
+    }
   }
   await page.getByRole('button',{name:'制作与试玩',exact:true}).click()
   await page.getByRole('button',{name:'确认方案并开始组装',exact:true}).click()
@@ -618,15 +635,15 @@ test('fresh V5 native family form preserves reference content policies and start
   await page.screenshot({path:info.outputPath('avg-v5-professional-family-scope.png'),fullPage:true})
 })
 
-for(const [visualVersion,noKeyBeforeProcessing] of [[4,false],[5,false],[5,true]] as const)test(noKeyBeforeProcessing?'V5 native received images resume local processing after key removal and refresh without any new request':visualVersion===4?'professional family images use exact references, alpha and five consumers through native Preview and portable restore':'V5 native family images preserve policy2, local derivatives and five consumers through Source5/6 Preview and portable restore',async({page},info)=>{
+for(const [visualVersion,noKeyBeforeProcessing,reservedForeground,boundaryUnmix] of [[4,false,false,false],[5,false,false,false],[5,true,false,false],[5,false,true,false],[5,false,true,true]] as const)test(boundaryUnmix?'V5 native boundary-unmix2 family preserves originals and clean edges through producer, Stage, Release, reference and portable restore':reservedForeground?'V5 native declared foreground family removes both opaque backdrops through actual producer, Preview, reference provenance and portable restore':noKeyBeforeProcessing?'V5 native received images resume local processing after key removal and refresh without any new request':visualVersion===4?'professional family images use exact references, alpha and five consumers through native Preview and portable restore':'V5 native family images preserve policy2, local derivatives and five consumers through Source5/6 Preview and portable restore',async({page},info)=>{
   let publishedV5Backup: Record<string, unknown> | undefined
   // Hosted trace: full portable proof alone took 132.7s, with all assertions
   // still passing. Keep the existing 30s UI phase bounds and allow the whole
   // five-image author/preview/restore/delete slice to finish on that runner.
   test.setTimeout(420_000)
   test.skip(process.env.VITE_STORYFORGE_AVG_MEDIA_PRODUCTION!=='1'||process.env.VITE_STORYFORGE_AVG_VISUAL_PLANNING!=='1','Both default-off visual experiments must be explicit')
-  const {source,panel,calls}=await prepareProfessionalFamily(page,{propReference:true,version:visualVersion,processing:visualVersion===5,...(noKeyBeforeProcessing?{processingTargetIndex:4}:{})})
-  const fixture=await page.evaluate(async scope=>{
+  const {source,panel,calls}=await prepareProfessionalFamily(page,{propReference:true,version:visualVersion,processing:visualVersion===5,reservedForeground,boundaryUnmix,...(noKeyBeforeProcessing?{processingTargetIndex:4}:{})})
+  const fixture=await page.evaluate(async({scope,reservedForeground})=>{
     const load=new Function('p','return import(p)') as (p:string)=>Promise<any>
     const view=await(await load('/storyforge/src/lib/avg/assembly-service.ts')).readAvgAssemblyWorkspaceV1(scope)
     const planning=view.details.executionBrief.avgVisualPlanning
@@ -635,6 +652,7 @@ for(const [visualVersion,noKeyBeforeProcessing] of [[4,false],[5,false],[5,true]
     const images=planning.scope.templates.map((t:any,index:number)=>{
       const p=t.parameters,canvas=document.createElement('canvas');canvas.width=p.width;canvas.height=p.height;const c=canvas.getContext('2d')!
       if(t.subjectKind==='character'){
+        if(reservedForeground){c.fillStyle='#ff00ff';c.fillRect(0,0,p.width,p.height)}
         c.fillStyle='#537a72';c.fillRect(p.width*.28,p.height*.31,p.width*.44,p.height*.65)
         c.fillStyle='#c89563';c.beginPath();c.ellipse(p.width*.5,p.height*.19,p.width*.13,p.height*.13,0,0,Math.PI*2);c.fill()
         c.strokeStyle='#26384e';c.lineWidth=5;c.beginPath();c.moveTo(p.width*.45,p.height*.22);c.lineTo(p.width*.55,p.height*(p.mediaKind==='character-expression'?.24:.22));c.stroke()
@@ -646,8 +664,10 @@ for(const [visualVersion,noKeyBeforeProcessing] of [[4,false],[5,false],[5,true]
       c.fillStyle='#e8d7a0';c.font='14px sans-serif';c.fillText(`ENGINEERING ${index+1}`,12,22)
       return {key:p.requirementKey,png:canvas.toDataURL('image/png').split(',')[1]}
     })
-    return {templates:planning.scope.templates,catalog:planning.scope.referenceCatalog,processing:planning.imageProcessing,images}
-  },source.scope)
+    const foreground=reservedForeground?await load('/storyforge/src/lib/avg/image-foreground-contract.ts'):null
+    return {templates:planning.scope.templates,catalog:planning.scope.referenceCatalog,processing:planning.imageProcessing,images,
+      foregroundMarkers:foreground?[foreground.AVG_RESERVED_MAGENTA_INVARIANT_V1,foreground.AVG_RESERVED_MAGENTA_FORBIDDEN_V1]:[]}
+  },{scope:source.scope,reservedForeground})
   expect(calls).toEqual([])
   const referenceBytes=new Map(source.references.map((r:any)=>[createHash('sha256').update(Buffer.from(r.png,'base64')).digest('hex'),`data:image/png;base64,${r.png}`]))
   const models:any[]=[],images:Array<{key:string;references:string[]}>=[]
@@ -671,6 +691,7 @@ for(const [visualVersion,noKeyBeforeProcessing] of [[4,false],[5,false],[5,true]
     expect(expected.every((r:unknown)=>typeof r==='string')).toBe(true)
     expect(body.extra_body.image).toEqual(expected)
     if(visualVersion===5){expect(body.prompt).toContain('发光按钮');expect(body.prompt).toContain('只取用本次已确认的配色、主体比例与公开造型')}
+    if(reservedForeground&&template.subjectKind==='character')for(const marker of fixture.foregroundMarkers)expect(body.prompt).toContain(marker)
     const image=fixture.images.find((i:any)=>i.key===key)!
     images.push({key:key!,references:body.extra_body.image})
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({data:[{b64_json:image.png}]})})
@@ -731,15 +752,61 @@ for(const [visualVersion,noKeyBeforeProcessing] of [[4,false],[5,false],[5,true]
   }
   for(const t of fixture.templates)await expect(page.getByRole('article',{name:`图片候选：${t.parameters.name}`,exact:true}).getByText('原图已接收，等待作者选择',{exact:false})).toBeVisible({timeout:60_000})
   expect(images).toHaveLength(5);expect(images.map(i=>i.references.length).sort()).toEqual([1,2,2,2,2])
-  const measured=await page.evaluate(async({scope,visualVersion})=>{
+  const measured=await page.evaluate(async({scope,visualVersion,reservedForeground})=>{
     const load=new Function('p','return import(p)') as (p:string)=>Promise<any>
     const [service,decoder]=await Promise.all([load('/storyforge/src/lib/avg/assembly-service.ts'),load('/storyforge/src/lib/avg/image-decoder.ts')])
     const view=await service.readAvgAssemblyWorkspaceV1(scope),result=[]
     const preview=visualVersion===5?await load('/storyforge/src/lib/avg/media-candidate-preview-v5.ts'):service
-    for(const r of view.imageDefinition.mediaBatch.requirements){const row=view.artifacts.find((a:any)=>a.artifactKey===`avg.media.raw.${r.requirementKey}`),bytes=await (visualVersion===5?preview.readAvgRawImageCandidateBytesV5:preview.readAvgRawImageCandidateBytesV2)({scope,productionId:view.details.production.id,requirementKey:r.requirementKey,version:row.version,contentHash:row.contentHash});result.push({key:r.requirementKey,...await decoder.inspectAvgImageBytesV1({data:bytes.data,...bytes.asset,requireAlpha:r.alpha==='required'})})}
+    for(const r of view.imageDefinition.mediaBatch.requirements){const row=view.artifacts.find((a:any)=>a.artifactKey===`avg.media.raw.${r.requirementKey}`),bytes=await (visualVersion===5?preview.readAvgRawImageCandidateBytesV5:preview.readAvgRawImageCandidateBytesV2)({scope,productionId:view.details.production.id,requirementKey:r.requirementKey,version:row.version,contentHash:row.contentHash});result.push({key:r.requirementKey,...await decoder.inspectAvgImageBytesV1({data:bytes.data,...bytes.asset,requireAlpha:reservedForeground?false:r.alpha==='required'})})}
     return result
-  },{scope:source.scope,visualVersion})
-  expect(measured.filter((r:any)=>r.hasAlpha)).toHaveLength(2)
+  },{scope:source.scope,visualVersion,reservedForeground})
+  expect(measured.filter((r:any)=>r.hasAlpha)).toHaveLength(reservedForeground?0:2)
+  if(reservedForeground){
+    const observations=await page.evaluate(async scope=>{
+      const load=new Function('p','return import(p)') as(p:string)=>Promise<any>
+      const [service,preview,contracts,blobs]=await Promise.all([load('/storyforge/src/lib/avg/assembly-service.ts'),load('/storyforge/src/lib/avg/media-candidate-preview-v5.ts'),
+        load('/storyforge/src/lib/avg/image-processing-contract-v2.ts'),load('/storyforge/src/lib/product-production/media-blob-store.ts')])
+      const view=await service.readAvgAssemblyWorkspaceV1(scope),results=[]
+      const pixel=async(data:ArrayBuffer,width:number,height:number,x:number,y:number)=>{
+        const image=await createImageBitmap(new Blob([data],{type:'image/png'})),canvas=document.createElement('canvas');canvas.width=width;canvas.height=height
+        const context=canvas.getContext('2d')!;context.drawImage(image,0,0);image.close();return Array.from(context.getImageData(x,y,1,1).data)
+      }
+      const fringe=async(data:ArrayBuffer,width:number,height:number)=>{
+        const image=await createImageBitmap(new Blob([data],{type:'image/png'})),canvas=document.createElement('canvas');canvas.width=width;canvas.height=height
+        const ctx=canvas.getContext('2d')!;ctx.drawImage(image,0,0);image.close();const rgba=ctx.getImageData(0,0,width,height).data
+        let count=0;for(let y=32;y<height;y++)for(let x=0;x<width;x++){const at=(y*width+x)*4;if(rgba[at+3]>=16&&rgba[at]>=rgba[at+1]+25&&rgba[at+2]>=rgba[at+1]+25)count++}
+        return count
+      }
+      for(const target of view.imageDefinition.mediaBatch.requirements.filter((r:any)=>r.mediaKind==='character-pose'||r.mediaKind==='character-expression')){
+        const row=view.artifacts.find((a:any)=>a.artifactKey===`avg.media.processed.${target.requirementKey}`)
+        if(!row)throw new Error('Missing actual family foreground producer')
+        const payload=await contracts.parseAvgProcessedImagePayloadV2(row.payloadJson)
+        const raw=await preview.readAvgRawImageCandidateBytesV5({scope,productionId:view.details.production.id,requirementKey:target.requirementKey,version:payload.raw.version,contentHash:payload.raw.contentHash})
+        const derived=await preview.readAvgProcessedImageCandidateBytesV5({scope,productionId:view.details.production.id,requirementKey:target.requirementKey,version:row.version,contentHash:row.contentHash})
+        results.push({key:target.requirementKey,receipt:payload.receipt,policyVersion:payload.recipe.foreground.version,
+          outputFringeOutsideMarkerBand:await fringe(derived.data,target.width,target.height),sourceCorner:await pixel(raw.data,target.width,target.height,0,0),
+          outputCorner:await pixel(derived.data,target.width,target.height,0,0),
+          sourceBody:await pixel(raw.data,target.width,target.height,Math.floor(target.width*.5),Math.floor(target.height*.5)),
+          outputBody:await pixel(derived.data,target.width,target.height,Math.floor(target.width*.5),Math.floor(target.height*.5)),
+          rawPreserved:await blobs.sha256MediaData(raw.data)===payload.receipt.source.contentHash,
+          outputHashMatches:await blobs.sha256MediaData(derived.data)===payload.receipt.output.contentHash})
+      }
+      return results
+    },source.scope)
+    expect(observations).toHaveLength(2)
+    for(const observation of observations){
+      expect(observation.sourceCorner).toEqual([255,0,255,255]);expect(observation.outputCorner).toEqual([0,0,0,0])
+      expect(observation.sourceBody).toEqual([83,122,114,255]);expect(observation.outputBody).toEqual(observation.sourceBody)
+      expect(observation.rawPreserved&&observation.outputHashMatches).toBe(true)
+      expect(observation.receipt).toMatchObject({version:2,processor:'storyforge.avg.local-foreground-canvas.v2',output:{hasAlpha:true},foreground:{reservedBorderRatio:1}})
+      expect(observation.receipt.foreground.clearedPixelCount).toBeGreaterThan(0)
+      expect(observation.receipt.foreground.opaquePixelCount).toBeGreaterThan(0)
+      expect(observation.receipt.foreground.sourcePixelHash).not.toBe(observation.receipt.foreground.cutoutPixelHash)
+      if(boundaryUnmix){expect(observation.policyVersion).toBe(2);expect(observation.receipt.foreground).toMatchObject({version:2,algorithm:'storyforge.avg.foreground.declared-magenta-boundary-unmix.v2'});expect(observation.outputFringeOutsideMarkerBand).toBe(0)}
+      else expect(observation.policyVersion).toBe(1)
+    }
+    await info.attach('native-family-both-foreground-producer-pixels.json',{body:JSON.stringify(observations,null,2),contentType:'application/json'})
+  }
   const readMeasurements:Array<{name:string;elapsedMs:number;explicitRereads:number;initialReadErrors:string[]}>=[]
   for(const t of fixture.templates){
     const name=t.parameters.name,card=page.getByRole('article',{name:`图片候选：${name}`,exact:true})
@@ -935,7 +1002,7 @@ for(const [visualVersion,noKeyBeforeProcessing] of [[4,false],[5,false],[5,true]
     await proof.verifyProductBuildTerminalArtifactSetV1({scope,productionId:build.productionId,buildId:build.id,expectedControlEpoch:build.controlEpoch,expectedPlanHash:build.planHash})
     return workspace.parseAvgAuthorWorkspaceV1(draft.editorJson).presentation.inheritedImages.map((entry:any)=>({assetKey:entry.assetKey,version:entry.source.version,originalHash:entry.source.raw.contentHash}))
   },source.scope)
-  expect(retained).toHaveLength(5);expect(retained.map((entry:any)=>entry.version).sort()).toEqual(visualVersion===5?[5,5,5,5,6]:[2,2,2,2,2])
+  expect(retained).toHaveLength(5);expect(retained.map((entry:any)=>entry.version).sort()).toEqual(visualVersion===5?(reservedForeground?[5,5,5,6,6]:[5,5,5,5,6]):[2,2,2,2,2])
   await page.getByRole('button',{name:'试玩此预览',exact:true}).click()
   await expect.poll(()=>page.locator('.avg-stage img').evaluateAll((imgs:HTMLImageElement[])=>imgs.length>0&&imgs.every(i=>i.complete&&i.naturalWidth>0))).toBe(true)
   await expect(page.locator('.avg-actor img')).toHaveAttribute('alt',pose.altText)
@@ -989,7 +1056,7 @@ for(const [visualVersion,noKeyBeforeProcessing] of [[4,false],[5,false],[5,true]
       return {number:build.buildNumber,status:build.status,planRevision:build.planRevision,rawCount:await db.productBuildArtifacts.where('buildId').equals(build.id).filter((a:any)=>a.artifactKey.startsWith('avg.media.raw.')).count(),sources:JSON.parse(draft.editorJson).presentation.inheritedImages.map((e:any)=>({version:e.source.version,build:e.source.raw.buildNumber,hash:e.source.raw.contentHash}))}
     },source.scope)
     expect(empty).toMatchObject({number:later.priorNumber+1,status:'cancelled',planRevision:1,rawCount:0})
-    expect(empty.sources.map((e:any)=>e.version).sort()).toEqual([5,5,5,5,6]);expect(empty.sources.every((e:any)=>e.build===1)).toBe(true)
+    expect(empty.sources.map((e:any)=>e.version).sort()).toEqual(reservedForeground?[5,5,5,6,6]:[5,5,5,5,6]);expect(empty.sources.every((e:any)=>e.build===1)).toBe(true)
     await page.evaluate(async()=>{const load=new Function('p','return import(p)') as (p:string)=>Promise<any>;const {useAIConfigStore}=await load('/storyforge/src/stores/ai-config.ts');useAIConfigStore.getState().setConfig({apiKey:''})})
     await page.reload();await page.getByRole('button',{name:'素材',exact:true}).click()
     await page.getByRole('button',{name:'保留专业演出图并准备新方案',exact:true}).click()

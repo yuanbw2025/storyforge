@@ -1,7 +1,7 @@
 import { avgHash, avgKey, avgKeys, avgProtocolBody, avgRecord, avgText } from './protocol-validation'
 import { parseAvgVisualProductionBatchV1, type AvgVisualProductionBatchV1 } from './media-production-contract'
 import { parseAvgImageRecoveryV1, type AvgImageRecoveryV1 } from './media-recovery-contract'
-import { parseAvgImageProcessingPlanV1,assertAvgImageProcessingRequirementsV1, type AvgImageProcessingPlanV1 } from './image-processing-contract'
+import { parseAvgImageProcessingPlan,assertAvgImageProcessingRequirements, type AvgImageProcessingPlan } from './image-processing-contract'
 import { parseAvgStoredAssemblyBriefV3, type AvgStoredAssemblyBriefV3 } from './voice-assembly-storage'
 
 /** Frozen output domain for author assembly. Canonical rules/text remain adopted artifacts. */
@@ -20,7 +20,7 @@ export interface AvgAssemblyBriefV2 extends Omit<AvgAssemblyBriefV1, 'version'> 
   mediaBatch: AvgVisualProductionBatchV1
   imageBinding: { requirementKey: string; adapterId: 'agnes.image-2.1-flash.v1'; bindingHash: string; endpointRouteHash: string }
   imageRecovery?: AvgImageRecoveryV1
-  imageProcessing?: AvgImageProcessingPlanV1
+  imageProcessing?: AvgImageProcessingPlan
 }
 export type AvgAssemblyBrief = AvgAssemblyBriefV1 | AvgAssemblyBriefV2 | AvgStoredAssemblyBriefV3
 /** Experimental production is opt-in. Codecs still read existing records when
@@ -38,7 +38,7 @@ export const AVG_ASSEMBLY_GATE_IDS_V1 = [
   'avg.rules.confirmed','avg.scripts.confirmed','avg.stage.confirmed',
   'runtime.package.valid','avg.media.bytes.valid','avg.rights.declared',
 ] as const
-export function avgMediaAssemblyGateIdsV2(batch: {requirements:Array<{requirementKey:string}>;visualReviewPolicy?:AvgVisualProductionBatchV1['visualReviewPolicy']}, processing?: AvgImageProcessingPlanV1): string[] {
+export function avgMediaAssemblyGateIdsV2(batch: {requirements:Array<{requirementKey:string}>;visualReviewPolicy?:AvgVisualProductionBatchV1['visualReviewPolicy']}, processing?: AvgImageProcessingPlan): string[] {
   return [...AVG_ASSEMBLY_GATE_IDS_V1, ...batch.requirements.flatMap(r => [
     ...(batch.visualReviewPolicy?[`avg.media.review.recorded.${r.requirementKey}`]:[]),
     ...(processing?.entries.some(e=>e.requirementKey===r.requirementKey)?[`avg.media.processed.received.${r.requirementKey}`]:[]),
@@ -71,9 +71,9 @@ export function parseAvgAssemblyBriefV2(value: unknown): AvgAssemblyBriefV2 {
   const { mediaBatch: rawBatch, imageBinding: rawBinding, imageRecovery, imageProcessing: rawProcessing, ...baseInput } = r
   const base = parseAvgAssemblyBriefV1({ ...baseInput, version: 1 })
   const mediaBatch = parseAvgVisualProductionBatchV1(rawBatch)
-  const imageProcessing = hasProcessing ? parseAvgImageProcessingPlanV1(rawProcessing) : undefined
+  const imageProcessing = hasProcessing ? parseAvgImageProcessingPlan(rawProcessing) : undefined
   if (imageProcessing && (!mediaBatch.visualReviewPolicy || imageProcessing.entries.some(e => !mediaBatch.requirements.some(r => r.requirementKey === e.requirementKey)))) throw new Error('[avg-process] 加工必须有准确冻结需求和独立视觉评审')
-  if(imageProcessing)assertAvgImageProcessingRequirementsV1(imageProcessing,mediaBatch.requirements)
+  if(imageProcessing)assertAvgImageProcessingRequirements(imageProcessing,mediaBatch.requirements)
   if (base.sceneKeys.length + 4 + (mediaBatch.visualReviewPolicy?3:2) * mediaBatch.requirements.length + (imageProcessing?.entries.length ?? 0) > 100) throw new Error('[avg-media] 场景、原始候选、加工、视觉评审、作者选择与终态 join 超过共享 100 任务上限')
   for (const requirement of mediaBatch.requirements) {
     const included = base.mediaAssetKeys.includes(requirement.assetKey)

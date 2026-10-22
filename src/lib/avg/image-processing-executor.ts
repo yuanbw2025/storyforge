@@ -7,8 +7,9 @@ import { putMediaBlobObject, readVerifiedMediaBlobObjectData } from '../product-
 import { ProductProductionDraftRejectedErrorV1, type ProductProductionTaskExecutionInputV1, type ProductProductionTaskExecutionResultV1 } from '../product-production/scheduler'
 import { assertAvgRawImageArtifactV1 } from './media-raw-contract'
 import { assertAvgRawImageOriginV1 } from './media-recovery'
-import { processAvgImageBytesV1 } from './image-processing'
-import { AVG_IMAGE_PROCESSOR_V1, avgProcessedImageArtifactKeyV1, type AvgProcessedImagePayloadV1 } from './image-processing-contract'
+import { processAvgImageBytesV1,processAvgImageBytesV2 } from './image-processing'
+import { avgProcessedImageArtifactKeyV1 } from './image-processing-contract'
+import { parseAvgProcessedImagePayload } from './image-processing-contract-v2'
 import { assertAvgImageProductionDefinitionV3 } from './media-production-definition'
 
 export async function executeAvgImageProcessingTaskV1(input:ProductProductionTaskExecutionInputV1,brief:ProductProductionBriefV3):Promise<ProductProductionTaskExecutionResultV1>{
@@ -29,13 +30,16 @@ export async function executeAvgImageProcessingTaskV1(input:ProductProductionTas
     }
     const raw=await readRaw(),blob=raw.row.blobObjectId===null?null:await db.mediaBlobObjects.get(raw.row.blobObjectId)
     if(!blob||!await assertRecordInScope(input.scope,'mediaBlobObjects',blob,{owner:'work'})||blob.contentHash!==raw.asset.contentHash)throw new Error('[avg-process] 原图字节缺失或跨作品')
-    const result=await processAvgImageBytesV1({data:await readVerifiedMediaBlobObjectData(blob),source:{contentHash:raw.asset.contentHash,mimeType:raw.asset.mimeType,width:raw.asset.width!,height:raw.asset.height!},recipe:entry.recipe,signal:input.signal})
+    const pixels={data:await readVerifiedMediaBlobObjectData(blob),source:{contentHash:raw.asset.contentHash,mimeType:raw.asset.mimeType,width:raw.asset.width!,height:raw.asset.height!},signal:input.signal}
+    const result=entry.recipe.version===1?await processAvgImageBytesV1({...pixels,recipe:entry.recipe})
+      :await processAvgImageBytesV2({...pixels,recipe:entry.recipe,frozenRequirement:raw.payload.requirement})
     await readRaw()
     if(input.signal.aborted)throw new Error('[avg-process] 加工已停止，未调用供应商')
+    const payload=await parseAvgProcessedImagePayload({schema:'storyforge.avg.processed-image',version:entry.recipe.version,requirementKey:entry.requirementKey,
+      raw:{artifactKey:raw.row.artifactKey,version:raw.row.version,contentHash:raw.row.contentHash,producerReceiptHash:raw.row.producerReceiptHash!},sourceAsset:raw.asset,recipe:entry.recipe,receipt:result.receipt})
+    if(input.signal.aborted)throw new Error('[avg-process] 加工已停止，未接收新字节')
     const output=await putMediaBlobObject({scope:input.scope,data:result.data,mimeType:'image/png',expectedContentHash:result.receipt.output.contentHash})
-    const asset:FrozenRuntimeMediaAssetV2={...raw.asset,version:raw.asset.version+1,contentHash:output.contentHash,blobContentHash:output.contentHash,mimeType:'image/png',byteSize:output.byteSize,width:entry.recipe.width,height:entry.recipe.height,source:AVG_IMAGE_PROCESSOR_V1}
-    const payload:AvgProcessedImagePayloadV1={schema:'storyforge.avg.processed-image',version:1,requirementKey:entry.requirementKey,
-      raw:{artifactKey:raw.row.artifactKey,version:raw.row.version,contentHash:raw.row.contentHash,producerReceiptHash:raw.row.producerReceiptHash!},sourceAsset:raw.asset,recipe:entry.recipe,receipt:result.receipt}
+    const asset:FrozenRuntimeMediaAssetV2={...raw.asset,version:raw.asset.version+1,contentHash:output.contentHash,blobContentHash:output.contentHash,mimeType:'image/png',byteSize:output.byteSize,width:entry.recipe.width,height:entry.recipe.height,source:result.receipt.processor}
     return {artifacts:[{artifactKey:avgProcessedImageArtifactKeyV1(entry.requirementKey),kind:'image',mediaKind:raw.asset.kind,payload,metadata:asset,
       contentHash:output.contentHash,blobObjectId:output.id!,mimeType:'image/png',byteSize:output.byteSize,
       quality:{processingReceiptHash:result.receipt.receiptHash,rawProducerReceiptHash:raw.row.producerReceiptHash,noProviderRequest:true,decoderVerified:true},

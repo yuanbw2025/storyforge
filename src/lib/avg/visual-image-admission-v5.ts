@@ -10,7 +10,7 @@ import { AVG_COMPILED_IMAGE_SKILL_V5 } from './visual-planning-plan-v5'
 import { AVG_VISUAL_PLANNING_CONTEXT_V5 } from './visual-planning-roles-v5'
 import { hashAvgTaskRuntimeBindingV1 } from './task-claim'
 import { assertAvgOriginalImageResponseV1 } from './media-response-proof'
-import { parseAvgProcessedImagePayloadV1 } from './image-processing-contract'
+import { parseAvgProcessedImagePayload } from './image-processing-contract-v2'
 import { verifyAcceptedProductBuildArtifactV1 } from '../product-production/artifact-store'
 import { inspectAvgVisualProcessedImageV5 } from './visual-image-processing-v5'
 
@@ -21,7 +21,7 @@ export async function assertAvgCompiledImageProducerAdmissionV5(input:Parameters
     controlEpoch:input.build.controlEpoch,expectedBrief:brief}),task=input.task,a=input.artifact
   const same=(a:unknown,b:unknown)=>canonicalProductProductionJsonV2(a)===canonicalProductProductionJsonV2(b)
   if(a.artifactKey.startsWith('avg.media.processed.')){
-    const payload=await parseAvgProcessedImagePayloadV1(a.payloadJson)
+    const payload=await parseAvgProcessedImagePayload(a.payloadJson)
     const raw=await verifyAcceptedProductBuildArtifactV1({scope:input.scope,buildId:input.build.id,...payload.raw})
     const processed=await inspectAvgVisualProcessedImageV5({compiled:d,raw,artifact:a})
     const run=await db.agentRuns.get(input.producerRunId)

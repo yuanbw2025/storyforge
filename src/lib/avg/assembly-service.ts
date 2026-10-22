@@ -47,7 +47,9 @@ import { validateAvgGeneratedReferencesV1 } from './media-generated-reference'
 import { prepareAvgInheritedStageDraftV1, readAvgInheritedStageImagesV1 } from './stage-image-sources'
 import { prepareAvgInheritedVoiceDraftV1 } from './stage-voice-sources'
 import { prepareAvgInheritedSoundDraftV1, readAvgInheritedStageSoundsV1 } from './stage-sound-sources'
-import { parseAvgImageProcessingPlanV1, assertAvgProcessedImageArtifactV1, avgProcessedImageArtifactKeyV1, type AvgImageProcessingPlanV1 } from './image-processing-contract'
+import { assertAvgProcessedImageArtifact } from './image-processing-contract-v2'
+import { parseAvgImageProcessingPlan, compileAvgImageProcessingRequirementDeclarations, assertAvgImageProcessingRequirements,
+  avgProcessedImageArtifactKeyV1, type AvgImageProcessingPlan } from './image-processing-contract'
 import { inspectAvgProcessedImageSourceV1, readAvgProcessedImageSourceV1,verifyAvgRecoveryPlaceholderV1 } from './image-processing-source'
 import { assertAvgImageProductionDefinitionV3, readAvgOptionalImageDefinitionV3 } from './media-production-definition'
 import type { ProductProductionCapabilityBindingV1 } from '../product-production/scheduler'
@@ -77,7 +79,7 @@ function unstartedAvgVisualPlanningScopesV5(details:Awaited<ReturnType<typeof re
 
 /** A new Build freezes this separately from the original provider request.
  * Saving does not execute processing, adopt an image or change an old Build. */
-export async function saveAvgImageProcessingDraftV1(input:{scope:WorkspaceScope;expectedDraftRevision:number;plan:AvgImageProcessingPlanV1|null}){
+export async function saveAvgImageProcessingDraftV1(input:{scope:WorkspaceScope;expectedDraftRevision:number;plan:AvgImageProcessingPlan|null}){
   return db.transaction('rw',scopeTransactionTables(db.avgAuthoringDrafts,db.productProductions,db.productBuilds),async()=>{
   const draft=await readAvgDraftV1(input.scope)
   if(draft.revision!==input.expectedDraftRevision)throw new Error('[avg-process] 加工草稿已变化')
@@ -91,8 +93,17 @@ export async function saveAvgImageProcessingDraftV1(input:{scope:WorkspaceScope;
     }
   }
   const workspace=parseAvgAuthorWorkspaceV1(draft.editorJson)
-  if(input.plan===null)delete workspace.imageProcessing
-  else workspace.imageProcessing=parseAvgImageProcessingPlanV1(input.plan)
+  const nextPlan=input.plan===null?null:parseAvgImageProcessingPlan(input.plan)
+  if(workspace.mediaBatch){
+    if(workspace.mediaBatch.characterFamily){
+      // Family approval is over its exact original proposal. Recipe saving
+      // cannot rewrite or re-sign that proposal or its provider permissions.
+      if(nextPlan)assertAvgImageProcessingRequirements(nextPlan,workspace.mediaBatch.requirements)
+    }else workspace.mediaBatch.requirements=compileAvgImageProcessingRequirementDeclarations(
+      workspace.mediaBatch.requirements,nextPlan,workspace.imageProcessing)
+  }
+  if(nextPlan===null)delete workspace.imageProcessing
+  else workspace.imageProcessing=nextPlan
   return saveAvgAuthorWorkspaceV1(input.scope,draft.revision,workspace)
   })
 }
@@ -271,7 +282,7 @@ export async function readAvgProcessedImageCandidateBytesV1(input:{scope:Workspa
   }
   const boundary={scope:input.scope,buildId:build.id,expectedBuildRevision:build.stateRevision,expectedBriefHash:build.briefHash,expectedPlanHash:build.planHash,sourceControlEpoch:plan.controlEpoch}
   const proved=await verifyAvgProcessedImageArtifactV1({...boundary,artifactKey:avgProcessedImageArtifactKeyV1(input.requirementKey),version:input.version,contentHash:input.contentHash})
-  const p=(await assertAvgProcessedImageArtifactV1(brief,proved.artifact)).payload
+  const p=(await assertAvgProcessedImageArtifact(brief,proved.artifact)).payload
   const raw=await verifyAvgReferenceRawImageArtifactV1({...boundary,...p.raw})
   await assertAvgRawImageOriginV1({scope:input.scope,productionId:input.productionId,brief,build,artifact:raw.artifact,requirementKey:input.requirementKey,taskKey:raw.provenance.taskKey},[build.buildNumber])
   const image=await inspectAvgProcessedImageSourceV1({scope:input.scope,brief,raw:raw.artifact,processed:proved.artifact})

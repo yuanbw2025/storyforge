@@ -14,7 +14,7 @@ import { canonicalProductProductionJsonV2 } from '../product-production/hash'
 import { assertAvgOriginalImageResponseV1 } from './media-response-proof'
 import { readAvgImageRecoverySourceV1 } from './media-recovery'
 import { validateAvgGeneratedReferencesV1 } from './media-generated-reference'
-import { assertAvgProcessedImageArtifactV1 } from './image-processing-contract'
+import { assertAvgProcessedImageArtifact } from './image-processing-contract-v2'
 import { verifyAcceptedProductBuildArtifactV1 } from '../product-production/artifact-store'
 import { assertAvgRawImageOriginV1 } from './media-recovery'
 import { readAvgCompiledImageDefinitionV4 } from './visual-planning-image-definition'
@@ -25,7 +25,7 @@ import { avgRecord } from './protocol-validation'
 import { assembleContext } from '../registry/assemble-context'
 import { preserveProductProductionContextV1 } from '../product-production/context'
 import { inspectAvgVisualProcessedImageV4 } from './visual-image-processing'
-import { parseAvgProcessedImagePayloadV1 } from './image-processing-contract'
+import { parseAvgProcessedImagePayload } from './image-processing-contract-v2'
 import { assertAvgCompiledImageProducerAdmissionV5 } from './visual-image-admission-v5'
 
 /** Extra product admission inside the shared sealed-producer transaction.
@@ -47,7 +47,7 @@ export async function assertAvgMediaRawProducerAdmissionV2(input: {
     targetBuild: input.build, checkProspectiveRequests: false })
   if (await hashProductProductionValueV2(brief) !== input.build.briefHash) throw new Error('[avg-media] 原图 Brief 已 stale')
   if(input.artifact.artifactKey.startsWith('avg.media.processed.')){
-    const image=await assertAvgProcessedImageArtifactV1(brief,input.artifact),task=input.task,p=image.payload
+    const image=await assertAvgProcessedImageArtifact(brief,input.artifact),task=input.task,p=image.payload
     const raw=await verifyAcceptedProductBuildArtifactV1({scope:input.scope,buildId:input.build.id,...p.raw})
     const original=await assertAvgRawImageArtifactV1(brief,raw)
     await assertAvgRawImageOriginV1({scope:input.scope,productionId:input.build.productionId,brief,build:input.build,artifact:raw,requirementKey:p.requirementKey,taskKey:`avg.media.generate.${p.requirementKey}`},[input.build.buildNumber])
@@ -110,7 +110,7 @@ async function assertAvgCompiledImageProducerAdmissionV4(input: Parameters<typeo
     expectedBuildRevision: input.build.stateRevision, controlEpoch: input.build.controlEpoch, expectedBrief: brief })
   const task = input.task, a = input.artifact
   if(a.artifactKey.startsWith('avg.media.processed.')){
-    const payload=await parseAvgProcessedImagePayloadV1(a.payloadJson)
+    const payload=await parseAvgProcessedImagePayload(a.payloadJson)
     const raw=await verifyAcceptedProductBuildArtifactV1({scope:input.scope,buildId:input.build.id,...payload.raw})
     const processed=await inspectAvgVisualProcessedImageV4({scope:input.scope,compiled:d,raw,artifact:a})
     const run=await db.agentRuns.get(input.producerRunId)

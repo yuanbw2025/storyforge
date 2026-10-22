@@ -5,7 +5,7 @@ import { parseAvgVisualPlanningScopeV1, type AvgVisualPlanningScopeV1 } from './
 import { avgMediaProductionEnabledV2 } from './assembly-contract'
 import { parseAvgVisualProposalReuseSourcesV4, type AvgVisualProposalReuseSourceV4 } from './visual-planning-reuse-contract'
 import { avgImageReferenceCapabilityV2,type AvgImageAdapterIdV4 } from './media-reference-contract'
-import { parseAvgImageProcessingPlanV1,assertAvgImageProcessingRequirementsV1,type AvgImageProcessingPlanV1 } from './image-processing-contract'
+import { parseAvgImageProcessingPlan,assertAvgImageProcessingRequirements,type AvgImageProcessingPlan } from './image-processing-contract'
 
 export interface AvgVisualImageBindingV4 extends Omit<AvgAssemblyBriefV2['imageBinding'],'adapterId'> {adapterId:AvgImageAdapterIdV4}
 
@@ -19,7 +19,7 @@ export interface AvgVisualPlanningBriefV4 {
   imageBinding: AvgVisualImageBindingV4
   proposalReuse?: AvgVisualProposalReuseSourceV4[]
   rawReuse?: AvgVisualRawReuseSourceV4[]
-  imageProcessing?:AvgImageProcessingPlanV1
+  imageProcessing?:AvgImageProcessingPlan
 }
 
 export function parseAvgVisualPlanningBriefV4(value: unknown): AvgVisualPlanningBriefV4 {
@@ -31,8 +31,8 @@ export function parseAvgVisualPlanningBriefV4(value: unknown): AvgVisualPlanning
     ...(hasReuse?['proposalReuse']:[]),...(hasRawReuse?['rawReuse']:[]),...(hasProcessing?['imageProcessing']:[])], 'visual planning Brief')
   if (r.schema !== 'storyforge.avg.visual-planning-brief' || r.version !== 4) throw new Error('[avg-visual-plan] 专业视觉 Brief 版本无效')
   const assembly = parseAvgAssemblyBriefV1(r.assembly), scope = parseAvgVisualPlanningScopeV1(r.scope)
-  const imageProcessing=hasProcessing?parseAvgImageProcessingPlanV1(r.imageProcessing):undefined
-  if(imageProcessing)assertAvgImageProcessingRequirementsV1(imageProcessing,scope.templates.map(t=>t.parameters))
+  const imageProcessing=hasProcessing?parseAvgImageProcessingPlan(r.imageProcessing):undefined
+  if(imageProcessing)assertAvgImageProcessingRequirements(imageProcessing,scope.templates.map(t=>({...t.parameters,invariants:t.requiredDetails,forbiddenDepictions:t.forbiddenDepictions})))
   const imageBinding=parseAvgVisualImageBindingV4(r.imageBinding)
   assertAvgVisualPlanningAssemblyTargetsV1(assembly,scope)
   return { schema: r.schema, version: 4, assembly, scope, imageBinding,
