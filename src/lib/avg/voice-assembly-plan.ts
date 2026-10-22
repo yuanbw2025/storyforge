@@ -4,13 +4,26 @@ import { AVG_VOICE_CAPABILITY_REQUIREMENT_KEY_V1, assertAvgVoiceCapabilityDeclar
   avgVoiceChoiceArtifactKeyV1, avgVoiceReviewArtifactKeyV1, avgVoiceAssemblyGateIdsV3, parseAvgAssemblyBriefV3,
   type AvgAssemblyBriefV3 } from './voice-assembly-contract'
 import { AVG_VOICE_TASK_TIMEOUT_MS_V1 } from './voice-request-contract'
+import { avgAudioProcessingForVoiceV3, avgAudioProcessingVoiceTargetsV3 } from './audio-production-brief'
+import { buildAvgAudioProcessingTopologyV1 } from './audio-production-topology'
+
+export { proposeAvgAudioProcessingTopologyV1 } from './audio-production-topology'
 
 /** Private fixed topology, not registered dispatch. Every clip waits for exact
  * adopted rules/scripts, then a separate human audition and explicit choice.
  * The existing stage/package/QA joins own the final playable result.
  */
 export function buildAvgVoiceAssemblyPlanV3(input: {
-  brief: Pick<ProductProductionBriefV3, 'capabilityRequirements'> & { avgAssembly: AvgAssemblyBriefV3 }
+  brief: Pick<ProductProductionBriefV3, 'capabilityRequirements' | 'avgAudioProcessing'> & { avgAssembly: AvgAssemblyBriefV3 }
+  briefHash: string; buildNumber: number; controlEpoch: number
+}): ProductProductionPlanV3 {
+  const sourcePlan = buildAvgVoiceAssemblyBasePlanV3(input)
+  if (!input.brief.avgAudioProcessing) return sourcePlan
+  const processing = avgAudioProcessingForVoiceV3(input.brief.avgAudioProcessing, input.brief.avgAssembly)
+  return buildAvgAudioProcessingTopologyV1({ sourcePlan, processing, targets: avgAudioProcessingVoiceTargetsV3(input.brief.avgAssembly) }).plan
+}
+function buildAvgVoiceAssemblyBasePlanV3(input: {
+  brief: Pick<ProductProductionBriefV3, 'capabilityRequirements' | 'avgAudioProcessing'> & { avgAssembly: AvgAssemblyBriefV3 }
   briefHash: string; buildNumber: number; controlEpoch: number
 }): ProductProductionPlanV3 {
   const assembly = parseAvgAssemblyBriefV3(input.brief.avgAssembly)

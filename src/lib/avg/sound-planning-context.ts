@@ -11,6 +11,8 @@ import { parseAvgSoundPlanningBriefV1 } from './sound-production-brief'
 import { AVG_SOUND_COMPILED_KEY_V1, AVG_SOUND_PROPOSAL_KEY_V1 } from './sound-production-plan'
 import { compileAvgSoundRequirementsV1 } from './sound-requirements'
 import { verifyAcceptedProductBuildArtifactV1 } from '../product-production/artifact-store'
+import { avgAudioProcessingForSoundV1 } from './audio-production-brief'
+import { avgAudioProcessingTaskKeyV1 } from './audio-production-contract'
 
 /** The complete canonical rules/scripts are used only to verify freshness.
  * Default model input contains the explicitly declared sound purposes and
@@ -55,16 +57,20 @@ export async function readAvgSoundPlanningContextV1(input: AssembleContextInput)
     && task.contextProfile === 'avg-sound-planning-v1' && canonicalProductProductionJsonV2(task.outputArtifactKeys) === canonicalProductProductionJsonV2([AVG_SOUND_COMPILED_KEY_V1])
   const raw = ['avg-sound-music-generate', 'avg-sound-library-import'].includes(task.kind)
     && task.outputArtifactKeys.length === 1 && task.outputArtifactKeys[0].startsWith('avg.sound.raw.')
+  const processing = task.kind === 'avg-audio-process' && task.executionMode === 'deterministic' && task.skillId === null
+    && task.contextProfile === 'avg-sound-planning-v1' && !!brief.avgAudioProcessing
+  const processingEntry = processing ? avgAudioProcessingForSoundV1(brief.avgAudioProcessing, brief.avgSoundPlanning).entries
+    .find(e => task.taskKey === avgAudioProcessingTaskKeyV1(e.domain, e.requirementKey)) : undefined
   const assembly = ['avg-assembly-integrate', 'avg-assembly-verify'].includes(task.kind) && task.executionMode === 'deterministic'
     && task.skillId === null && task.contextProfile === 'avg-sound-planning-v1'
-  if (!proposal && !compilation && !raw && !assembly || frozen && !raw) throw new Error('[avg-sound-context] 当前任务不属于准确声音生产；封存读取仅重验原音频来源，不授予执行权')
+  if (!proposal && !compilation && !raw && !assembly && !processingEntry || frozen && !raw) throw new Error('[avg-sound-context] 当前任务不属于准确声音生产；封存读取仅重验原音频来源，不授予执行权')
   // This existing reader checks actual start command, SourcePlan/confirmed
   // Brief, author candidates/receipts and physical source hashes in its own
   // complete snapshot. It does not inherit another Build's adoption authority.
   const sourceInput = { scope, buildId: build.id!, expectedBuildRevision: build.stateRevision, controlEpoch: build.controlEpoch }
   const source = frozen ? await readAvgFrozenSoundSourceInputsV1(sourceInput)
     : await readAvgSystemPlanForCompilationV1({ ...sourceInput, includeSceneScripts: true, includeAuthorStage: assembly })
-  const adopted = compilation || raw ? await readAvgConfirmedSoundPlanV1(sourceInput, frozen) : assembly ? source.soundPlan : null
+  const adopted = compilation || raw || processingEntry ? await readAvgConfirmedSoundPlanV1(sourceInput, frozen) : assembly ? source.soundPlan : null
   const refs = [source.artifact, ...source.scripts.map(s => s.artifact), ...(assembly ? source.authorStage ? [source.authorStage.artifact] : [] : adopted ? [adopted.artifact] : [])]
   if (assembly) {
     if (!source.authorStage || !adopted || source.soundChoices?.length !== brief.avgSoundPlanning.scope.templates.length) throw new Error('[avg-sound-context] 组装需要全部真实已采用声音及演出')
@@ -78,7 +84,8 @@ export async function readAvgSoundPlanningContextV1(input: AssembleContextInput)
   }
   let requirement: Awaited<ReturnType<typeof compileAvgSoundRequirementsV1>>['requirements'][number] | undefined
   let soundPlanHash: string | undefined
-  if (raw) {
+  let rawForProcessing: { artifactKey: string; version: number; contentHash: string; producerReceiptHash: string } | undefined
+  if (raw || processingEntry) {
     const compiled = await compileAvgSoundRequirementsV1(brief.avgSoundPlanning.scope, adopted!.payload)
     soundPlanHash = compiled.planHash
     const rows = await db.productBuildArtifacts.where('[buildId+artifactKey]').equals([build.id!, AVG_SOUND_COMPILED_KEY_V1])
@@ -87,9 +94,21 @@ export async function readAvgSoundPlanningContextV1(input: AssembleContextInput)
     if (rows.length !== 1 || !row || canonicalProductProductionJsonV2(compiled) !== row.payloadJson) throw new Error('[avg-sound-context] 需要原producer的准确已编译声音需求')
     await verifyAcceptedProductBuildArtifactV1({ scope, buildId: build.id!, artifactKey: row.artifactKey, version: row.version, contentHash: row.contentHash })
     refs.push({ artifactKey: row.artifactKey, version: row.version, contentHash: row.contentHash })
-    requirement = compiled.requirements.find(r => task.taskKey === `avg.sound.generate.${r.template.requirementKey}`)
-    if (!requirement || task.outputArtifactKeys[0] !== `avg.sound.raw.${requirement.template.requirementKey}`
-      || (requirement.dispatch.operation === 'generate-music') !== (task.kind === 'avg-sound-music-generate')) throw new Error('[avg-sound-context] 原声音任务与准确编译项不一致')
+    requirement = compiled.requirements.find(r => processingEntry ? processingEntry.requirementKey === r.template.requirementKey
+      : task.taskKey === `avg.sound.generate.${r.template.requirementKey}`)
+    if (!requirement || raw && (task.outputArtifactKeys[0] !== `avg.sound.raw.${requirement.template.requirementKey}`
+      || (requirement.dispatch.operation === 'generate-music') !== (task.kind === 'avg-sound-music-generate'))) throw new Error('[avg-sound-context] 原声音任务与准确编译项不一致')
+    if (processingEntry) {
+      const key = `avg.sound.raw.${processingEntry.requirementKey}`
+      const matches = await db.productBuildArtifacts.where('[buildId+artifactKey]').equals([build.id!, key])
+        .filter(r => r.status === 'accepted' && r.controlEpoch === build.controlEpoch).toArray()
+      if (matches.length !== 1) throw new Error('[avg-sound-context] 加工原音频缺失或不唯一')
+      const original = await verifyAcceptedProductBuildArtifactV1({ scope, buildId: build.id!, artifactKey: key,
+        version: matches[0].version, contentHash: matches[0].contentHash })
+      if (!original.producerReceiptHash) throw new Error('[avg-sound-context] 加工缺少原始producer回执')
+      rawForProcessing = { artifactKey: key, version: original.version, contentHash: original.contentHash, producerReceiptHash: original.producerReceiptHash }
+      refs.push({ artifactKey: key, version: original.version, contentHash: original.contentHash })
+    }
   }
   if (refs.length !== task.inputArtifactKeys.length || refs.some(r => !task.inputArtifactKeys.includes(r.artifactKey))) throw new Error('[avg-sound-context] 已采用规则/脚本未覆盖准确任务输入')
   const projected = await projectAvgSoundPlanningInputsV1(brief.avgSoundPlanning, { systemPlan: source.plan,
@@ -100,7 +119,10 @@ export async function readAvgSoundPlanningContextV1(input: AssembleContextInput)
     stage: source.authorStage!.artifact, soundChoices: source.soundChoices!.map(c => ({ choice: c.artifact, authorReceiptHash: c.authorReceiptHash,
       raw: { artifactKey: c.raw.artifactKey, version: c.raw.version, contentHash: c.raw.contentHash }, rawReceiptHash: c.raw.producerReceiptHash,
       compiled: c.validation.compiled, review: c.review.artifact, reviewReceiptHash: c.review.authorReceiptHash })) } : raw ? { schema: projected.schema, version: projected.version, sourceInputHash: projected.sourceInputHash,
-    scopeHash: projected.scopeHash, operation: 'produce-compiled-sound', soundPlanHash, requirement } : adopted ? { schema: projected.schema, version: projected.version, sourceInputHash: projected.sourceInputHash,
+    scopeHash: projected.scopeHash, operation: 'produce-compiled-sound', soundPlanHash, requirement } : processingEntry ? {
+    schema: projected.schema, version: projected.version, sourceInputHash: projected.sourceInputHash, scopeHash: projected.scopeHash,
+    operation: 'process-compiled-sound', soundPlanHash, requirement, processing: processingEntry, raw: rawForProcessing,
+  } : adopted ? { schema: projected.schema, version: projected.version, sourceInputHash: projected.sourceInputHash,
     scopeHash: projected.scopeHash, operation: 'compile-adopted-sound-requirements', soundPlan: adopted.payload } : projected
   const current = await db.productBuilds.get(build.id!), owner = await db.productProductions.get(production.id!)
   if (!current || !owner || current.stateRevision !== build.stateRevision || current.controlEpoch !== build.controlEpoch

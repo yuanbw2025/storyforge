@@ -8,6 +8,7 @@ import { buildAvgNativeAssemblyPlan } from '../avg/assembly-plan'
 import { AVG_VISUAL_REQUIREMENTS_ARTIFACT_V4, buildAvgVisualPlanningPlanV4 } from '../avg/visual-planning-plan'
 import { buildAvgVisualPlanningPlanV5 } from '../avg/visual-planning-plan-v5'
 import { buildAvgSoundProductionPlanV1 } from '../avg/sound-production-plan'
+import { assertAvgAudioProcessingTaskShapeV1 } from '../avg/audio-production-topology'
 import { PRODUCTION_PRODUCT_KINDS_V1 } from '../types'
 import { parseTextAdventureContentRevisionV1, parseProductProductionBriefV3 } from './contracts'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
@@ -346,13 +347,14 @@ export function parseProductProductionPlanV3(
     if (task.executionMode === 'model' && task.skillId === null) fail(`${task.taskKey} 模型任务缺少 skillId`)
     if (task.executionMode === 'deterministic' && task.skillId !== null) fail(`${task.taskKey} 确定性任务不应绑定 skillId`)
     if (task.contextProfile === 'avg-task-v1' && (productType !== 'avg' || task.executionMode !== 'deterministic'
-      || !['avg-assembly-integrate', 'avg-assembly-verify', 'avg-media-image-process', 'avg-media-image-reuse', 'avg-media-voice-reuse'].includes(task.kind))) {
+      || !['avg-assembly-integrate', 'avg-assembly-verify', 'avg-media-image-process', 'avg-media-image-reuse', 'avg-media-voice-reuse', 'avg-audio-process'].includes(task.kind))) {
       fail(`${task.taskKey} 上下文投影只用于准确 AVG 确定性任务`)
     }
     if (task.contextProfile === 'avg-sound-planning-v1' && (productType !== 'avg' || task.executionMode !== 'deterministic'
-      || !['avg-sound-requirements-compile', 'avg-sound-library-import', 'avg-assembly-integrate', 'avg-assembly-verify'].includes(task.kind))) {
+      || !['avg-sound-requirements-compile', 'avg-sound-library-import', 'avg-assembly-integrate', 'avg-assembly-verify', 'avg-audio-process'].includes(task.kind))) {
       fail(`${task.taskKey} 声音投影只允许准确声音合同的确定性任务`)
     }
+    if (task.kind === 'avg-audio-process') assertAvgAudioProcessingTaskShapeV1(task, tasks, productType)
     if(task.contextProfile==='avg-visual-planning-v5'&&(productType!=='avg'||task.executionMode!=='deterministic'
       ||!['avg-v5-visual-requirements-compile','avg-media-image-process'].includes(task.kind)))fail(`${task.taskKey} V5 投影只用于准确新需求编译或加工`)
     if (task.contextProfile === 'avg-visual-planning-v4' && (productType !== 'avg' || task.executionMode !== 'deterministic'

@@ -44,6 +44,9 @@ export function parseAvgSoundPlanV1(value: unknown): AvgSoundPlanV1 {
 }
 
 export const AVG_SOUND_CHANNELS_V1 = ['bgm', 'ambience', 'sfx'] as const
+export { parseAvgAudioProductionProcessingPlanV1, assertAvgAudioProcessingPlanTargetsV1,
+  avgProcessedAudioArtifactKeyV1, avgAudioProcessingTaskKeyV1,
+  type AvgAudioProductionProcessingPlanV1, type AvgAudioProcessingDomainV1 } from './audio-production-contract'
 export type AvgSoundChannelV1 = typeof AVG_SOUND_CHANNELS_V1[number]
 export function parseAvgSoundChannelV1(value: unknown): AvgSoundChannelV1 {
   return avgEnum(value, AVG_SOUND_CHANNELS_V1, 'sound channel')

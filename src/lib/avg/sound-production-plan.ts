@@ -2,15 +2,27 @@ import type { ProductProductionBriefV3, ProductProductionPlanTaskV3, ProductProd
 import { buildAvgAuthorAssemblyTopologyV1 } from './assembly-plan'
 import { AVG_SOUND_MUSIC_CAPABILITY_V1, AVG_SOUND_TEXT_CAPABILITY_V1, parseAvgSoundPlanningBriefV1 } from './sound-production-brief'
 import { avgKey } from './protocol-validation'
+import { avgAudioProcessingForSoundV1, avgAudioProcessingSoundTargetsV1 } from './audio-production-brief'
+import { buildAvgAudioProcessingTopologyV1 } from './audio-production-topology'
+
+export { proposeAvgAudioProcessingTopologyV1 } from './audio-production-topology'
 
 export const AVG_SOUND_PROPOSAL_KEY_V1 = 'avg.proposal.sound-plan'
 export const AVG_SOUND_PLAN_KEY_V1 = 'avg.media.sound-plan'
 export const AVG_SOUND_COMPILED_KEY_V1 = 'avg.media.compiled-sound-requirements'
-export type AvgSoundTopologyInputV1 = Pick<ProductProductionBriefV3, 'avgSoundPlanning' | 'capabilityRequirements'>
+export type AvgSoundTopologyInputV1 = Pick<ProductProductionBriefV3, 'avgSoundPlanning' | 'capabilityRequirements' | 'avgAudioProcessing'>
 
 /** Fixed production graph. It declares every real cost and author boundary;
  * construction does not dispatch or manufacture producer/adoption evidence. */
 export function buildAvgSoundProductionPlanV1(input: { brief: AvgSoundTopologyInputV1;
+  briefHash: string; buildNumber: number; controlEpoch: number }): ProductProductionPlanV3 {
+  const sourcePlan = buildAvgSoundProductionBasePlanV1(input)
+  if (!input.brief.avgAudioProcessing) return sourcePlan
+  const sound = parseAvgSoundPlanningBriefV1(input.brief.avgSoundPlanning)
+  const processing = avgAudioProcessingForSoundV1(input.brief.avgAudioProcessing, sound)
+  return buildAvgAudioProcessingTopologyV1({ sourcePlan, processing, targets: avgAudioProcessingSoundTargetsV1(sound) }).plan
+}
+function buildAvgSoundProductionBasePlanV1(input: { brief: AvgSoundTopologyInputV1;
   briefHash: string; buildNumber: number; controlEpoch: number }): ProductProductionPlanV3 {
   const declaration = parseAvgSoundPlanningBriefV1(input.brief.avgSoundPlanning)
   const musicCount = declaration.scope.templates.filter(t => t.source.kind === 'generate-music').length

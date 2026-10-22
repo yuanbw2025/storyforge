@@ -4,6 +4,7 @@ import { parseProductionModelJsonObjectV1 } from './model-json-object'
 import { avgVisualPlanningExecutionReadyV4 } from '../avg/visual-planning-brief'
 import { avgVisualPlanningExecutionReadyV5 } from '../avg/visual-planning-brief-v5'
 import { avgSoundProductionExecutionReadyV1 } from '../avg/sound-production-brief'
+import { avgAudioProcessingExecutionReadyV1 } from '../avg/audio-production-brief'
 import { hasFrozenAuthorUploadRightsV1 } from './media-rights'
 import { TTRPG_SCENARIO_PROMPT_V1 } from '../ttrpg/scenario-prompt'
 import { parseTtrpgAuthoredScenarioV1, type TtrpgAuthoredScenarioV1 } from '../ttrpg/scenario-authoring'
@@ -10695,6 +10696,7 @@ export function createConfiguredProductProductionExecutorV1(input: {
   avgImageEndpointRouteHash?: string
   avgVoiceTransport?: Parameters<typeof createAvgAssemblyExecutorV1>[0]['voiceTransport']
 }): ProductProductionTaskExecutorV1 {
+  if (input.brief.avgAudioProcessing && !avgAudioProcessingExecutionReadyV1()) throw new Error('[avg-audio-process] 本地声音加工链尚未就绪，不能创建执行器或回退到原音频任务')
   if (input.brief.avgSoundPlanning) {
     if (!avgSoundProductionExecutionReadyV1()) throw new Error('[avg-sound] 声音实际生产、审听和采用闭环尚未接通，不能创建执行器或回退通用任务')
     const options = { brief: structuredClone(input.brief), runText: input.runText ?? defaultTextRunner }

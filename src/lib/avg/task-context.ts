@@ -14,6 +14,8 @@ import type { AvgAssemblyBriefV3 } from './voice-assembly-contract'
 import type { AvgVoiceSpeechRequestV1 } from './voice-request-contract'
 import { stringifyAvgExactJsonV1 } from './voice-exact-storage'
 import { validateAvgVoiceRecoveryV1 } from './voice-recovery'
+import { avgAudioProcessingForVoiceV3 } from './audio-production-brief'
+import { avgAudioProcessingTaskKeyV1, type AvgAudioProductionProcessingPlanV1 } from './audio-production-contract'
 
 export const AVG_TASK_CONTEXT_SOURCE_V1 = 'product-production.avg-task-inputs'
 export const AVG_MEDIA_REQUEST_SKILL_V1 = 'avg.media-request.v1'
@@ -22,8 +24,19 @@ export const AVG_MEDIA_REQUEST_SKILL_V1 = 'avg.media-request.v1'
  * provider or adoption authority. The full frozen Brief remains authoritative. */
 export function projectAvgTaskRequirementV1(input: {
   assembly: AvgAssemblyBriefV3; task: ProductProductionPlanTaskV3; requests: AvgVoiceSpeechRequestV1[]
+  processing?: AvgAudioProductionProcessingPlanV1
 }) {
   const { assembly, task } = input
+  if (task.kind === 'avg-audio-process') {
+    const plan = input.processing && avgAudioProcessingForVoiceV3(input.processing, assembly)
+    const entry = plan?.entries.find(e => task.taskKey === avgAudioProcessingTaskKeyV1(e.domain, e.requirementKey))
+    const requirement = assembly.voice.batch.requirements.find(r => r.requirementKey === entry?.requirementKey)
+    const request = input.requests.find(r => r.requirementKey === requirement?.requirementKey)
+    if (!entry || !requirement || !request) throw new Error('[avg-context] 加工缺少准确冻结配方或逐句原请求身份')
+    return { kind: 'audio-processing' as const, domain: 'voice' as const, sourceInputHash: assembly.voice.batch.sourceInputHash,
+      requirementKey: requirement.requirementKey, rawArtifactKey: `avg.voice.raw.${requirement.requirementKey}`,
+      processing: entry, request: { requirementKey: request.requirementKey, identityHash: request.identityHash, requestBodyHash: request.requestBodyHash } }
+  }
   if (task.kind === 'avg-media-voice-generate' || task.kind === 'avg-media-voice-reuse') {
     const requirement = assembly.voice.batch.requirements.find(r => task.taskKey === `avg.voice.generate.${r.requirementKey}`)
     const request = input.requests.find(r => r.requirementKey === requirement?.requirementKey)
@@ -132,7 +145,7 @@ export async function readAvgTaskExecutionContextV1(input: AssembleContextInput)
     productionKey: production.productionKey, buildNumber: build.buildNumber, controlEpoch: build.controlEpoch,
     planHash: build.planHash, taskKey: task.taskKey, briefRevision: row.revision, briefHash: row.briefHash,
     voicePacketHash: resolved.stored.voice.contentHash, sourceWorldContentHash: row.sourceWorldContentHash,
-    requirement: projectAvgTaskRequirementV1({ ...resolved, task }), artifacts,
+    requirement: projectAvgTaskRequirementV1({ ...resolved, task, processing: brief.avgAudioProcessing }), artifacts,
     capabilities: brief.capabilityRequirements.filter(c => task.capabilityRequirementKeys.includes(c.requirementKey)),
     taskBudget: task.budgetReservation })
 }

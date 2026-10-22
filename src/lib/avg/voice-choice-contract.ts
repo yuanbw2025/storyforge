@@ -3,6 +3,8 @@ import { avgHash, avgKey, avgNumber, avgProtocolBody, avgRecord, avgText } from 
 import { parseAvgExecutableStageV1 } from './stage-contract'
 import { avgRawVoiceArtifactKeyV1, avgVoiceReviewArtifactKeyV1 } from './voice-assembly-contract'
 
+export { parseAvgAuthorVoiceChoiceV2, type AvgAuthorVoiceChoiceV2 } from './processed-audio-choice-contract'
+
 export interface AvgAuthorVoiceChoiceV1 {
   schema: 'storyforge.avg.voice-choice'
   version: 1

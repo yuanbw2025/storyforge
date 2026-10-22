@@ -95,6 +95,7 @@ import {
 } from './scheduler'
 import { createProductRuntimeInstanceFromSource } from '../product/runtime-instances'
 import { avgSoundProductionExecutionReadyV1 } from '../avg/sound-production-brief'
+import { avgAudioProcessingExecutionReadyV1 } from '../avg/audio-production-brief'
 import { startAiTownInitialSceneV1 } from '../ai-town/runtime-api'
 import {
   listProductMediaProviderCapabilitiesV1,
@@ -865,10 +866,11 @@ export function inspectProductProductionCapabilityReadinessV1(input: {
  * capability required by that frozen Brief is bound.
  */
 export function evaluateProductProductionAuthorizationReadinessV1(input: {
-  brief: Pick<ProductProductionBriefV3, 'capabilityRequirements' | 'avgRevision' | 'avgAssembly' | 'avgVisualPlanning' | 'avgSoundPlanning'>
+  brief: Pick<ProductProductionBriefV3, 'capabilityRequirements' | 'avgRevision' | 'avgAssembly' | 'avgVisualPlanning' | 'avgSoundPlanning' | 'avgAudioProcessing'>
   readiness: ProductProductionCapabilityReadinessV1
 }): ProductProductionAuthorizationReadinessV1 {
   const blockerMessages: string[] = []
+  if (input.brief.avgAudioProcessing && !avgAudioProcessingExecutionReadyV1()) blockerMessages.push('本地声音加工链尚未就绪，原件和当前方案保留。')
   if (input.brief.avgSoundPlanning && !avgSoundProductionExecutionReadyV1()) blockerMessages.push('声音正式制作尚未开放，已保存需求与原有产物保留。')
   // The parsed V4 Brief derives this requirement from its unreused roles.
   // A missing text configuration must not block an entirely local role plan.

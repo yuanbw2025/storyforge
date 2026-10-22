@@ -8,17 +8,25 @@ import { AVG_VOICE_CAPABILITY_REQUIREMENT_KEY_V1, assertAvgVoiceCapabilityDeclar
   avgVoiceAssemblyGateIdsV3, parseAvgAssemblyBriefV3, type AvgAssemblyBriefV3 } from './voice-assembly-contract'
 import { AVG_VOICE_TASK_TIMEOUT_MS_V1 } from './voice-request-contract'
 import type { AvgStoredAssemblyBriefV3 } from './voice-assembly-storage'
+import { avgAudioProcessingForVoiceV3, addAvgAudioProcessingBudgetV1, avgAudioProcessingGateIdsV1 } from './audio-production-brief'
+import type { AvgAudioProductionProcessingPlanV1 } from './audio-production-contract'
 
 export type AvgVoiceProductionBriefV3 = Omit<ProductProductionBriefV3, 'avgAssembly'> & { avgAssembly: AvgStoredAssemblyBriefV3 }
 export type AvgVoiceProductionPolicyInputV3 = Omit<AvgVisualProductionPolicyInputV2, 'avgAssembly'> & {
   avgAssembly: AvgAssemblyBriefV3
   media: ProductProductionBriefV3['media']
+  avgAudioProcessing?: AvgAudioProductionProcessingPlanV1
 }
 const same = (a: unknown, b: unknown) => canonicalProductProductionJsonV2(a) === canonicalProductProductionJsonV2(b)
 
 /** Finite resources per batch even when the author has no total cash ceiling.
  * Image retention/processing keeps the established V2 resource accounting. */
-export function avgVoiceProductionBudgetV3(value: AvgAssemblyBriefV3, maximumCostUsd: number | null = null): ProductProductionBudgetV3 {
+export function avgVoiceProductionBudgetV3(value: AvgAssemblyBriefV3, maximumCostUsd: number | null = null,
+  processing?: AvgAudioProductionProcessingPlanV1): ProductProductionBudgetV3 {
+  const base = avgVoiceProductionBaseBudgetV3(value, maximumCostUsd)
+  return processing ? addAvgAudioProcessingBudgetV1(base, avgAudioProcessingForVoiceV3(processing, value), 'voice') : base
+}
+function avgVoiceProductionBaseBudgetV3(value: AvgAssemblyBriefV3, maximumCostUsd: number | null = null): ProductProductionBudgetV3 {
   const a = parseAvgAssemblyBriefV3(value), count = a.voice.batch.requirements.length
   if (maximumCostUsd !== null && (!Number.isFinite(maximumCostUsd) || maximumCostUsd < 0 || maximumCostUsd > Number.MAX_SAFE_INTEGER)) {
     throw new Error('[avg-voice] 配音费用边界无效')
@@ -49,7 +57,7 @@ export function assertAvgVoiceProductionPolicyV3(brief: AvgVoiceProductionPolicy
   }
   if (brief.media.audioLevel !== 'full' || brief.media.voiceLineCount < a.voice.batch.requirements.length
     || !brief.media.requiredMediaKinds.includes('voice')) throw new Error('[avg-voice] 产品媒资目录须明确包含本批逐句配音')
-  const budget = avgVoiceProductionBudgetV3(a, brief.productionBudget.maximumCostUsd)
+  const budget = avgVoiceProductionBudgetV3(a, brief.productionBudget.maximumCostUsd, brief.avgAudioProcessing)
   if (a.voice.recovery) {
     const recovery = a.voice.recovery, base = brief.evolution?.base
     if (base?.kind !== 'recovery-build' || base.buildNumber !== recovery.sourceBuildNumber
@@ -77,7 +85,8 @@ export function assertAvgVoiceProductionPolicyV3(brief: AvgVoiceProductionPolicy
   }
   if (brief.fallbackPolicy.allowTextOnly || brief.fallbackPolicy.allowProceduralAudio || !brief.fallbackPolicy.allowExistingProjectMedia
     || brief.fallbackPolicy.onRequiredCapabilityMissing !== 'pause') throw new Error('[avg-voice] 缺少配音能力必须暂停，不能静默换模型、程序音或无声完成')
-  if (!same([...brief.completionContract.requiredGateIds].sort(), avgVoiceAssemblyGateIdsV3(a).sort())
+  const processingGates = brief.avgAudioProcessing ? avgAudioProcessingGateIdsV1(avgAudioProcessingForVoiceV3(brief.avgAudioProcessing, a)) : []
+  if (!same([...brief.completionContract.requiredGateIds].sort(), [...avgVoiceAssemblyGateIdsV3(a), ...processingGates].sort())
     || !brief.completionContract.requiresPlayablePreview || brief.completionContract.minimumMediaCoverage !== 1
     || brief.completionContract.allowSoftWaivers) throw new Error('[avg-voice] 配音完成须包含逐句原始音频、审听、作者选择和可玩技术门')
   if (a.image) {

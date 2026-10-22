@@ -878,6 +878,9 @@ function prepareArtifactAcceptanceV1(
     | 'metadata' | 'quality' | 'rights' | 'contentHash' | 'blobObjectId'
     | 'mimeType' | 'byteSize'>,
 ): PreparedArtifactAcceptanceV1 {
+  if (typeof input.artifactKey === 'string' && (input.artifactKey.startsWith('avg.voice.processed.') || input.artifactKey.startsWith('avg.sound.processed.'))) {
+    throw new Error('[avg-audio-process] 加工音频专用producer准入尚未就绪，不能回退通用工件写口')
+  }
   const artifactKey = stableKey(input.artifactKey, 'artifactKey')
   const requirementKey = input.requirementKey == null ? null : stableKey(input.requirementKey, 'requirementKey')
   if (!isProductBuildArtifactKindV1(input.kind)) {
@@ -3693,6 +3696,9 @@ export async function acceptProductBuildArtifact(
   input: ProductBuildArtifactAcceptanceInputV1,
 ): Promise<ProductBuildArtifactRecordV1> {
   const productType = await productTypeForBuildV1(input.buildId)
+  if (typeof input.artifactKey === 'string' && (input.artifactKey.startsWith('avg.voice.processed.') || input.artifactKey.startsWith('avg.sound.processed.'))) {
+    throw new Error('[avg-audio-process] 加工音频专用producer准入尚未就绪，不能回退通用工件写口')
+  }
   // AVG raw/processed image and raw voice candidates use sealed admission. Human choices,
   // V1 assembly and every other product keep their existing writer semantics.
   if (productType === 'avg' && (input.artifactKey === 'avg.proposal.sound-plan' || input.artifactKey === 'avg.media.compiled-sound-requirements' || input.artifactKey.startsWith('avg.sound.raw.'))) return acceptSealedProducerArtifactV1(input, false, false, true)

@@ -543,6 +543,8 @@ export interface ProductProductionBriefV3 {
   avgVisualPlanning?: import('../avg/visual-planning-brief-codec').AvgVisualPlanningBrief;
   /** Frozen sound-production declaration; execution requires its own readiness. */
   avgSoundPlanning?: import('../avg/sound-production-brief').AvgSoundPlanningBriefV1;
+  /** AVG-only explicit frozen local processing; no raw-request or author authority. */
+  avgAudioProcessing?: import('../avg/audio-production-contract').AvgAudioProductionProcessingPlanV1;
   ttrpg?: TtrpgProductionBriefV2;
   /** Closed AI Town construction contract; required exactly when productType=ai-town. */
   aiTown?: AiTownProductionBriefV1;
