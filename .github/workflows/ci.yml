@@ -155,6 +155,33 @@ jobs:
         if: always() && steps.scope.outputs.enabled == 'true'
         run: node scripts/check-avg-visual-release-ci-reports.mjs test-results/avg-media
 
+      - name: 验证同作品九媒资组合制作与独立发布
+        id: avg-combined-production
+        if: steps.scope.outputs.enabled == 'true'
+        env:
+          VITE_STORYFORGE_AVG_SOUND_PREPARATION: '1'
+          VITE_STORYFORGE_AVG_SOUND_PRODUCTION: '1'
+          PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/avg-media/combined-production/report.json
+          AVG_COMBINED_RELEASE_BACKUP_FILE: test-results/avg-media/combined-release.json
+        run: npm run ci:e2e -- -- --project=chromium tests/e2e/avg-combined-media-production.spec.ts --reporter=github,json --output test-results/avg-media/combined-production
+
+      - name: 验证全部工厂关闭后的同一九媒资成功备份
+        id: avg-combined-frozen
+        if: always() && steps.scope.outputs.enabled == 'true'
+        env:
+          VITE_STORYFORGE_AVG_MEDIA_PRODUCTION: '0'
+          VITE_STORYFORGE_AVG_VISUAL_PLANNING: '0'
+          VITE_STORYFORGE_AVG_VOICE_PRODUCTION: '0'
+          VITE_STORYFORGE_AVG_SOUND_PREPARATION: '0'
+          VITE_STORYFORGE_AVG_SOUND_PRODUCTION: '0'
+          PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/avg-media/combined-frozen/report.json
+          AVG_COMBINED_RELEASE_BACKUP_FILE: test-results/avg-media/combined-release.json
+        run: npm run ci:e2e -- -- --project=chromium tests/e2e/avg-combined-prototype-read.spec.ts --reporter=github,json --output test-results/avg-media/combined-frozen
+
+      - name: 核验九媒资组合实际执行与同一成功备份消费
+        if: always() && steps.scope.outputs.enabled == 'true'
+        run: node scripts/check-avg-combined-ci-reports.mjs test-results/avg-media
+
       - name: 核验声音模式实际执行及报告留存
         if: always() && steps.scope.outputs.enabled == 'true'
         run: node scripts/check-avg-sound-ci-reports.mjs test-results/avg-media

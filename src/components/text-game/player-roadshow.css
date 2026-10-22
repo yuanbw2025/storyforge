@@ -239,7 +239,7 @@
   .avg-title-sessions { grid-template-columns: 1fr; }
   .avg-game-title { display: none; }
   .avg-playing .avg-toolbar { justify-content: flex-end; }
-  .avg-playing .avg-toolbar nav { width: auto; overflow: visible; }
+  .avg-playing .avg-toolbar nav { width: 100%; flex-wrap: wrap; justify-content: flex-end; overflow: visible; }
   .avg-playing .avg-actor { width: 52vw; height: 78%; }
   .avg-playing .avg-slot-left { left: 27%; }.avg-playing .avg-slot-right { left: 73%; }
   .avg-playing .avg-dialogue { right: 12px; bottom: 12px; left: 12px; min-height: 96px; padding: 22px 18px 18px; }
