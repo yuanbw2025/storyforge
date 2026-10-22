@@ -182,14 +182,24 @@ export async function assertAvgImageProcessingReceiptV1(recipeInput: AvgImagePro
 export async function parseAvgProcessedImagePayloadV1(value: unknown): Promise<AvgProcessedImagePayloadV1> {
   const r = avgRecord(avgProtocolBody(value), ['schema', 'version', 'requirementKey', 'raw', 'sourceAsset', 'recipe', 'receipt'], 'processed image')
   if (r.schema !== 'storyforge.avg.processed-image' || r.version !== 1) throw new Error('[avg-process] 加工图工件版本无效')
-  const requirementKey = avgKey(r.requirementKey, 'requirementKey'), raw = avgRecord(r.raw, ['artifactKey', 'version', 'contentHash', 'producerReceiptHash'], 'processing raw')
-  if (raw.artifactKey !== `avg.media.raw.${requirementKey}`) throw new Error('[avg-process] 加工来源与准确原图不一致')
-  const sourceAsset = parseAvgExecutableStageV1({ version: 1, cues: [], assets: [r.sourceAsset] }).assets[0]!
+  const source = parseAvgProcessedImageSourceFieldsV1({ requirementKey: r.requirementKey, raw: r.raw, sourceAsset: r.sourceAsset })
   const recipe = parseAvgImageProcessingRecipeV1(r.recipe), receipt = await assertAvgImageProcessingReceiptV1(recipe, r.receipt)
+  assertAvgImageProcessingSourceFieldsV1(source, receipt)
+  return { schema: r.schema, version: 1, ...source, recipe, receipt }
+}
+export type AvgProcessedImageSourceFieldsV1 = Pick<AvgProcessedImagePayloadV1, 'requirementKey' | 'raw' | 'sourceAsset'>
+/** Common portable source fields only; no recipe, Run or adoption authority. */
+export function parseAvgProcessedImageSourceFieldsV1(value: { requirementKey: unknown; raw: unknown; sourceAsset: unknown }): AvgProcessedImageSourceFieldsV1 {
+  const requirementKey = avgKey(value.requirementKey, 'requirementKey'), raw = avgRecord(value.raw, ['artifactKey', 'version', 'contentHash', 'producerReceiptHash'], 'processing raw')
+  if (raw.artifactKey !== `avg.media.raw.${requirementKey}`) throw new Error('[avg-process] 加工来源与准确原图不一致')
+  const sourceAsset = parseAvgExecutableStageV1({ version: 1, cues: [], assets: [value.sourceAsset] }).assets[0]!
+  return { requirementKey, raw: { artifactKey: raw.artifactKey, version: avgNumber(raw.version, 'raw.version', 1, 1e9),
+    contentHash: avgHash(raw.contentHash, 'raw.contentHash'), producerReceiptHash: avgHash(raw.producerReceiptHash, 'raw.producerReceiptHash') }, sourceAsset }
+}
+export function assertAvgImageProcessingSourceFieldsV1(source: AvgProcessedImageSourceFieldsV1, receipt: Pick<AvgImageProcessingReceiptV1, 'source'>) {
+  const { sourceAsset, raw } = source
   if (sourceAsset.contentHash !== raw.contentHash || !same(receipt.source, { contentHash: sourceAsset.contentHash, mimeType: sourceAsset.mimeType,
     byteSize: sourceAsset.byteSize, width: sourceAsset.width, height: sourceAsset.height })) throw new Error('[avg-process] 加工来源字节、尺寸或元数据不一致')
-  return { schema: r.schema, version: 1, requirementKey, raw: { artifactKey: raw.artifactKey, version: avgNumber(raw.version, 'raw.version', 1, 1e9),
-    contentHash: avgHash(raw.contentHash, 'raw.contentHash'), producerReceiptHash: avgHash(raw.producerReceiptHash, 'raw.producerReceiptHash') }, sourceAsset, recipe, receipt }
 }
 /** Producer authority and physical bytes are verified by the caller. */
 export type AvgProcessedImageArtifactFieldsV1=Pick<ProductBuildArtifactRecordV1,
@@ -205,14 +215,27 @@ export async function assertAvgProcessedImageArtifactFromDefinitionV1<R extends 
   const payload = await parseAvgProcessedImagePayloadV1(row.payloadJson)
   const entry = a.imageProcessing?.entries.find(e => e.requirementKey === payload.requirementKey)
   const requirement = a.mediaBatch.requirements.find(r => r.requirementKey === payload.requirementKey)
+  const metadata = assertAvgProcessedImageArtifactMetadataV1({ payload, entry, requirement, row, processor: AVG_IMAGE_PROCESSOR_V1 })
+  return { payload, ...metadata }
+}
+/** Pure common metadata comparison. Versioned callers choose a fixed processor
+ * after their exact codecs; producer, scope and physical byte checks stay separate. */
+export function assertAvgProcessedImageArtifactMetadataV1<R extends Omit<AvgVisualProductionRequirementV1, 'references'>>(input: {
+  payload: AvgProcessedImageSourceFieldsV1 & { recipe: unknown; receipt: Pick<AvgImageProcessingReceiptV1, 'output'> }
+  entry: { recipe: { declaration: string } } | undefined
+  requirement: R | undefined
+  row: AvgProcessedImageArtifactFieldsV1
+  processor: string
+}) {
+  const { payload, entry, requirement, row, processor } = input
   if (!entry || !requirement || !same(entry.recipe, payload.recipe) || payload.sourceAsset.assetKey !== requirement.assetKey || payload.sourceAsset.kind !== requirement.mediaKind
     || row.artifactKey !== avgProcessedImageArtifactKeyV1(payload.requirementKey) || row.kind !== 'image' || row.mediaKind !== requirement.mediaKind) throw new Error('[avg-process] 加工图不属于冻结需求和配方')
   const asset = parseAvgExecutableStageV1({ version: 1, cues: [], assets: [JSON.parse(row.metadataJson)] }).assets[0]!
   const output = payload.receipt.output
   const expected = { ...payload.sourceAsset, version: payload.sourceAsset.version + 1, contentHash: output.contentHash, blobContentHash: output.contentHash,
-    byteSize: output.byteSize, mimeType: output.mimeType, width: output.width, height: output.height, source: AVG_IMAGE_PROCESSOR_V1 }
+    byteSize: output.byteSize, mimeType: output.mimeType, width: output.width, height: output.height, source: processor }
   if (!same(asset, expected) || row.contentHash !== output.contentHash || row.mimeType !== output.mimeType || row.byteSize !== output.byteSize
     || !row.blobObjectId || !same(JSON.parse(row.rightsJson), { origin: 'local-processing', sourceContentHash: payload.raw.contentHash,
       sourceLicense: payload.sourceAsset.license, declaration: entry.recipe.declaration })) throw new Error('[avg-process] 加工输出元数据或权利记录不一致')
-  return { payload, asset, requirement }
+  return { asset, requirement }
 }
