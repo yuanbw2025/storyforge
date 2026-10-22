@@ -1,15 +1,15 @@
 {
   "schema": "storyforge.text-open-world.g7-lifecycle-matrix",
   "version": 1,
-  "backupVersion": 15,
+  "backupVersion": 16,
   "compatibilityPolicy": "validated-v14-conversion-explicit-release-migration",
-  "profileNote": "项目备份导出当前v15，仅接受完整v14经显式校验转换；旧存档继续绑定旧Release，只有通过兼容性预演和显式提交才能生成绑定新Release的子Session。",
+  "profileNote": "项目备份导出当前v16，接受完整v14/v15经显式校验转换；旧存档继续绑定旧Release，只有通过兼容性预演和显式提交才能生成绑定新Release的子Session。",
   "gates": [
     {
       "id": "TOW-G7-L01",
-      "title": "当前v15项目备份必须完整携带并重映射正式Release生产与运行闭包",
+      "title": "当前v16项目备份必须完整携带并重映射正式Release生产与运行闭包",
       "evidenceFile": "tests/regression/R-OPEN-WORLD7-release-lifecycle.test.ts",
-      "testName": "当前v15备份完整重映射Release、质量回执、媒资字节、事件、检查点和分支"
+      "testName": "当前格式备份完整重映射Release、质量回执、媒资字节、事件、检查点和分支"
     },
     {
       "id": "TOW-G7-L02",

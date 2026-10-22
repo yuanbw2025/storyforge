@@ -309,17 +309,22 @@ export async function createAgentRunCheckpointV1(input: {
 export async function verifyAgentRunCheckpointV1(
   scope: WorkspaceScope,
   checkpointId: number,
+  options: { productRuntimeSessionId?: number } = {},
 ): Promise<boolean> {
+  const productRuntimeSessionId = options.productRuntimeSessionId
   try {
     const run = await db.agentRunCheckpoints.get(checkpointId)
     if (!run) fail('checkpoint_not_found', '检查点不存在')
     return await db.transaction(
       'r',
-      agentRunScopeTransactionTablesV1(run.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+      productRuntimeSessionId == null
+        ? agentRunScopeTransactionTablesV1(run.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints)
+        : scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
       async () => {
         const checkpoint = await db.agentRunCheckpoints.get(checkpointId)
         if (!checkpoint || checkpoint.id == null) fail('checkpoint_not_found', '检查点不存在')
         const snapshot = await readVerifiedAgentRunInTransactionV1(scope, checkpoint.runId)
+        if (productRuntimeSessionId != null && snapshot.run.productRuntimeSessionId !== productRuntimeSessionId) fail('checkpoint_scope', '检查点核验的实例 owner 不匹配')
         await verifyCheckpointAgainstSnapshot(
           checkpoint as AgentRunCheckpointRecord & { id: number },
           snapshot,
@@ -367,14 +372,19 @@ export async function readLatestVerifiedAgentRunCheckpointV1(
 export async function beginAgentRunRecoveryV1(input: {
   scope: WorkspaceScope
   runId: number
+  productRuntimeSessionId?: number
   expectedLastSequence?: number
   now?: number
 }): Promise<AgentRunRecoveryPlanV1> {
+  const productRuntimeSessionId = input.productRuntimeSessionId
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
-    agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+    productRuntimeSessionId == null
+      ? agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints)
+      : scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
+      if (productRuntimeSessionId != null && snapshot.run.productRuntimeSessionId !== productRuntimeSessionId) fail('checkpoint_scope', '恢复开始的实例 owner 不匹配')
       const checkpoint = await latestCheckpoint(input.runId)
       if (!checkpoint) fail('checkpoint_missing', '运行没有可用检查点')
       const verified = await verifyCheckpointAgainstSnapshot(checkpoint, snapshot)
@@ -415,15 +425,20 @@ export async function beginAgentRunRecoveryV1(input: {
 export async function completeAgentRunRecoveryV1(input: {
   scope: WorkspaceScope
   runId: number
+  productRuntimeSessionId?: number
   checkpointHash: string
   expectedLastSequence?: number
   now?: number
 }): Promise<AgentRunSnapshotV1> {
+  const productRuntimeSessionId = input.productRuntimeSessionId
   return withAgentRunMutationLockV1(input.runId, () => db.transaction(
     'rw',
-    agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
+    productRuntimeSessionId == null
+      ? agentRunScopeTransactionTablesV1(input.runId, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints)
+      : scopeTransactionTables(db.productRuntimeSessions, db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints),
     async () => {
       const snapshot = await readVerifiedAgentRunInTransactionV1(input.scope, input.runId)
+      if (productRuntimeSessionId != null && snapshot.run.productRuntimeSessionId !== productRuntimeSessionId) fail('checkpoint_scope', '恢复完成的实例 owner 不匹配')
       if (snapshot.projection.state !== 'recovering') {
         fail('recovery_state', `运行当前不是 recovering，而是 ${snapshot.projection.state}`)
       }

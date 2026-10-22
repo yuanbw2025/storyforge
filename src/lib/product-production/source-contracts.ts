@@ -25,6 +25,8 @@ import {
 import { createWorldReferenceV1 } from '../world-engine/world-reference'
 import { resolveProductProductionWorldCompilationDescriptorsV2 } from './world-source'
 import { textAdventureMandatoryFullWorldResourcesV1 } from '../adventure/world-source-requirements'
+import { validateTtrpgProductionBriefContentV3 } from '../ttrpg/production-brief-v3'
+import { verifyTtrpgOpenAuthoringSourceProvenanceV1 } from '../ttrpg/open-source-provenance'
 
 function unique<T extends string>(values: readonly T[]): T[] {
   return [...new Set(values)].sort() as T[]
@@ -74,9 +76,13 @@ export async function createProductProductionSourcePlanV1(input: {
   productionKey: string
   brief: ProductProductionBriefV3
   createdAt?: number
+  /** Registry-remapped locator of an already persisted immutable open Brief; content bytes/hashes stay unchanged. */
+  verifiedSourcePlan?: ProductSourcePlanV1
 }): Promise<ProductSourcePlanV1> {
+  const openPlan = input.brief.ttrpgOpen
+    ? await validateProductSourcePlanV1(input.verifiedSourcePlan ?? input.brief.ttrpgOpen.sourcePlan) : null
   const catalog = await openWorldSemanticResourceCatalogV1({
-    localReleaseRecordId: input.brief.source.worldReleaseId,
+    localReleaseRecordId: openPlan?.worldReference.localReleaseRecordId ?? input.brief.source.worldReleaseId,
     expectedProjectId: input.scope.projectId,
     expectedWorldId: input.scope.worldId,
   })
@@ -86,6 +92,24 @@ export async function createProductProductionSourcePlanV1(input: {
   const descriptors = selectedDescriptors({ brief: input.brief, descriptors: catalog.resources })
   if (!descriptors.length) {
     throw new Error('[product-production-source] 正式产品至少需要一个作者冻结的世界资源')
+  }
+  if (input.brief.ttrpgOpen) {
+    const open = await validateTtrpgProductionBriefContentV3(input.brief.ttrpgOpen)
+    const plan = openPlan!
+    const currentReference = await createWorldReferenceV1(plan.worldReference.localReleaseRecordId)
+    if (plan.planHash !== open.sourcePlan.planHash || plan.worldReference.referenceHash !== open.worldReference.referenceHash
+      || plan.productInstanceKey !== input.productionKey
+      || open.worldReference.referenceHash !== currentReference.referenceHash) {
+      throw new Error('[product-production-source] open 来源计划不属于当前 Production/真实世界版本')
+    }
+    const boundary = await resolveProductSourceReadBoundaryV1(plan)
+    const allowed = new Set(boundary.allowedResourceKeys)
+    if (descriptors.some(descriptor => !allowed.has(descriptor.resourceKey))) {
+      throw new Error('[product-production-source] open 制作选择越过已确认 SourcePlan 权限')
+    }
+    await verifyTtrpgOpenAuthoringSourceProvenanceV1({ sourcePlan: plan,
+      facts: open.settings.openAuthoring.factPolicy.map(item => item.fact) })
+    return plan
   }
   const adapter = getUpperProductWorldRequirementAdapterV1(input.brief.intent.productType)
   const roleAnchors = Object.values(input.brief.source.selection.roleBindings)
@@ -150,9 +174,18 @@ export async function createConfirmedProductBriefV1(input: {
   authorStartRevision: number
   confirmedAt?: number
 }): Promise<ConfirmedProductBriefV1> {
-  const parsedBrief = JSON.parse(input.briefRow.briefJson) as ProductProductionBriefV3
+  const parsedBrief = JSON.parse(input.briefRow.briefJson) as ProductProductionBriefV3 | {
+    schema: 'storyforge.ttrpg-production-brief'
+    version: 3
+    runFormat: 'open'
+  }
+  const productType = parsedBrief.schema === 'storyforge.ttrpg-production-brief'
+    && parsedBrief.version === 3
+    && parsedBrief.runFormat === 'open'
+    ? 'ttrpg'
+    : (parsedBrief as ProductProductionBriefV3).intent.productType
   return createConfirmedProductBriefContractV1({
-    productType: parsedBrief.intent.productType,
+    productType,
     productInstanceKey: input.productionKey,
     sourcePlan: input.sourcePlan,
     briefRevision: input.briefRow.revision,
@@ -265,6 +298,8 @@ export async function executeProductProductionWorldGatewayV1(input: {
   })
   const mandatoryResourceKeys = unique([
     ...boundary.mandatoryResourceKeys, ...compilationResources, ...specialistFullResources,
+    ...(input.brief.ttrpgOpen && ['ttrpg.open.source-facts', 'ttrpg.open.rule-system', 'ttrpg.open.situation-layer']
+      .includes(input.task.taskKey) ? input.brief.source.selection.resourceKeys : []),
   ])
   return executeContextGatewayV1({
     skill,
@@ -275,6 +310,8 @@ export async function executeProductProductionWorldGatewayV1(input: {
     mandatoryResourceKeys,
     mandatoryFullResourceKeys: unique([
       ...boundary.mandatoryFullResourceKeys, ...compilationResources, ...specialistFullResources,
+      ...(input.brief.ttrpgOpen && ['ttrpg.open.source-facts', 'ttrpg.open.rule-system', 'ttrpg.open.situation-layer']
+        .includes(input.task.taskKey) ? input.brief.source.selection.resourceKeys : []),
     ]),
     mandatoryOriginalResourceKeys: unique(compilationResources),
     targetResourceKeys: unique([...boundary.targetResourceKeys, ...compilationResources]),

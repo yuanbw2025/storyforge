@@ -83,6 +83,7 @@ import { detectProductImageDimensionsV1, detectProductMediaMimeTypeV1 } from './
 import { useAIConfigStore } from '../../stores/ai-config'
 import {
   assertProductProductionBudgetLedgerV1,
+  productProductionFailureNeedsProviderAccountingV1,
   prepareLegacyPausedProductBuildV1,
   projectProductProductionSchedulerV1,
   recoverImportedProductProductionProofsV1 as recoverImportedProductProductionProofsCoreV1,
@@ -1032,6 +1033,17 @@ export async function readProductProductionDetailsV1(
     }
     buildHistory.push(row)
   }
+  const storedOpenTtrpgBrief = (() => {
+    if (!brief || brief.briefKind === 'text-open-world-creator-v1') return false
+    try {
+      const value = JSON.parse(brief.briefJson) as Record<string, unknown>
+      return value.schema === 'storyforge.ttrpg-production-brief'
+        && value.version === 3
+        && value.runFormat === 'open'
+    } catch {
+      return false
+    }
+  })()
   const executionBrief = brief?.briefKind === 'text-open-world-creator-v1'
     ? brief.status === 'authorized' && build
       ? (await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
@@ -1039,7 +1051,7 @@ export async function readProductProductionDetailsV1(
           buildId: build.id!,
         })).contracts.executionBrief
       : null
-    : brief ? parseProductProductionBriefV3(brief.briefJson) : null
+    : storedOpenTtrpgBrief ? null : brief ? parseProductProductionBriefV3(brief.briefJson) : null
   return {
     production,
     brief: brief ?? null,
@@ -1447,6 +1459,7 @@ export async function retryProductProductionBlockerV1(input: {
   afterCapabilityChange?: boolean
   repairNote?: string
   authorDraftJson?: string
+  originalResponseSource?: import('../types').ProductProductionBlockerResolutionV1['originalResponseSource']
   unknownResultDisposition?: 'confirmed-not-charged' | 'charge-reservation-upper-bound'
 }): Promise<
   | 'provider-actual-charge'
@@ -1461,6 +1474,8 @@ export async function retryProductProductionBlockerV1(input: {
   const blockerKey = taskKey ?? 'build-recovery'
   const repairNote = input.repairNote?.trim() || undefined
   const authorDraftJson = input.authorDraftJson?.trim() || undefined
+  if (input.originalResponseSource && (!authorDraftJson || input.details.production.productType !== 'ttrpg'
+    || input.afterCapabilityChange || input.unknownResultDisposition)) throw new Error('[product-production-service] 原回答来源只用于已核对的明确作者修订，不能混用其他费用或能力处置')
   if (repairNote || authorDraftJson) {
     if (!taskKey) throw new Error('[product-production-service] 当前 blocker 不支持作者引导修复')
     const policy = inspectProductProductionBuildRecoveryPolicyV1({
@@ -1488,9 +1503,8 @@ export async function retryProductProductionBlockerV1(input: {
       failure = parsed as Record<string, unknown>
     }
   } catch { /* command boundary will reject corrupt failure evidence */ }
-  const providerReservationFailure = failure.code === 'unknown-result'
-    || failure.code === 'provider-response-uncheckpointed'
-  if (providerReservationFailure) {
+  const providerReservationFailure = productProductionFailureNeedsProviderAccountingV1(input.details.build)
+  if (providerReservationFailure && !input.originalResponseSource) {
     if (!input.unknownResultDisposition) {
       throw new Error(failure.code === 'provider-response-uncheckpointed'
         ? '[product-production-service] 已收到供应商响应证据；请按冻结预留上限封账后重试'
@@ -1528,6 +1542,7 @@ export async function retryProductProductionBlockerV1(input: {
       resolution: {
         action: authorDraftJson ? 'author-edit' : input.afterCapabilityChange ? 'change-capability' : 'retry',
         ...(authorDraftJson ? { authorDraftJson } : {}),
+        ...(input.originalResponseSource ? { originalResponseSource: input.originalResponseSource } : {}),
         ...(unknownResultReservation ? { unknownResultReservation } : {}),
         note: repairNote || (input.afterCapabilityChange ? '作者已调整全局能力配置并要求重试' : '作者从制作工作台要求重试'),
       },

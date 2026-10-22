@@ -1,3 +1,4 @@
+import { CURRENT_BACKUP_VERSION } from '../../src/lib/export/backup-trust'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
@@ -255,7 +256,7 @@ describe('ADAPT-CORE-1A · 来源冻结、stale 与生命周期', () => {
     const source = await sourceWorkspace()
     const result = await createAdaptation({ sourceScope: source.scope, sourceWorkId: source.scope.workId, title: '可移植剧本', sourceSelection: { mode: 'entire-work' }, medium: 'screenplay', targetSpec: screenplaySpec })
     const backup = await exportProjectJSON(source.scope.projectId)
-    expect(backup.version).toBe(15)
+    expect(backup.version).toBe(CURRENT_BACKUP_VERSION)
     expect(backup.adaptationProjects).toHaveLength(1)
     expect(backup.adaptationSourceUnits?.length).toBeGreaterThan(1)
     const importedId = await importProjectJSON(structuredClone(backup))

@@ -9,6 +9,14 @@ import { parseTextOpenWorldRuntimePackageV1 } from '../open-world/runtime-packag
 import { validateNarrativeContentGraph } from '../product/narrative-content'
 import { parseTtrpgCampaignContentV1 } from '../ttrpg/campaign'
 import { parseRulePackV1 } from '../ttrpg/rule-pack'
+import {
+  createTtrpgVerifiedContentViewV1,
+  parseTtrpgRuntimeContentVersionedV1,
+  verifyTtrpgFrozenContentHashesV1,
+  type ProductRuntimePackageWithTtrpgV2,
+  type ProductReleaseManifestWithTtrpgV2,
+} from '../ttrpg/content-version'
+import { validateTtrpgOpenNarrativeEnvelopeV1 } from '../ttrpg/open-narrative-envelope'
 import { parseAiTownRuntimeContentV1 } from '../ai-town/runtime'
 import {
   NARRATIVE_BEAT_KINDS,
@@ -294,7 +302,17 @@ function validateInteraction(value: unknown): ProductRuntimePackageV1['interacti
   return structuredClone(interaction)
 }
 
-export function parseProductRuntimePackageV1(value: string | unknown): ProductRuntimePackageV1 {
+export interface ProductTtrpgProtocol2ReaderV1 {
+  ttrpgProtocol: 2
+}
+
+export function parseProductRuntimePackageV1(value: string | unknown): ProductRuntimePackageV1
+export function parseProductRuntimePackageV1(
+  value: string | unknown, reader: ProductTtrpgProtocol2ReaderV1,
+): ProductRuntimePackageWithTtrpgV2
+export function parseProductRuntimePackageV1(
+  value: string | unknown, reader?: ProductTtrpgProtocol2ReaderV1,
+): ProductRuntimePackageWithTtrpgV2 {
   let raw: unknown = value
   if (typeof raw === 'string') {
     try { raw = JSON.parse(raw) } catch { fail('不是合法 JSON') }
@@ -353,8 +371,34 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     fail('source selection 与 package 来源不一致')
   }
 
+  // The product discriminator is validated before choosing narrative semantics.
+  // Protocol-1 callers keep the exact original parser and canonical representation.
+  const ttrpg = selectedProduct === 'ttrpg'
+    ? reader?.ttrpgProtocol === 2
+      ? parseTtrpgRuntimeContentVersionedV1(pkg.ttrpg, sourceWorld.contentHash, 2)
+      : validateTtrpg(pkg.ttrpg, sourceWorld.contentHash)
+    : undefined
+  if (ttrpg?.campaign.version === 2) {
+    const allowedResources = new Set(selection.resourceKeys)
+    const sourceResources = [
+      ...ttrpg.campaign.frozenWorldPredicateIndex.entries.flatMap(entry => [
+        ...entry.sourceResourceRefs, ...entry.sourceFieldRefs.map(ref => ref.resourceKey),
+      ]),
+      ...ttrpg.campaign.entityBindings.flatMap(binding => [
+        ...(binding.sourceResourceRef === null ? [] : [binding.sourceResourceRef]),
+        ...binding.sourceFieldRefs.map(ref => ref.resourceKey),
+      ]),
+    ]
+    if (sourceResources.some(key => !allowedResources.has(key))) {
+      fail('open 内容来源超出冻结的世界资源选择')
+    }
+  }
   const narrative = parseFrozenNarrative(pkg.narrative)
-  const graph = validateNarrativeContentGraph({
+  const graph = ttrpg?.campaign.version === 2
+    ? validateTtrpgOpenNarrativeEnvelopeV1(
+        narrative, new Set(ttrpg.campaign.characterTemplates.map(character => character.characterKey)),
+      )
+    : validateNarrativeContentGraph({
     entryNodeKey: narrative.entryNodeKey,
     nodes: narrative.nodes,
     beats: narrative.beats,
@@ -362,7 +406,7 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
   })
   if (!graph.valid) fail(`narrative 图无效:${graph.errors.join('；')}`)
 
-  const parsed: ProductRuntimePackageV1 = {
+  const parsed: ProductRuntimePackageWithTtrpgV2 = {
     schema: 'storyforge.product-runtime-package',
     version: 1,
     productType: selectedProduct,
@@ -458,12 +502,18 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     }
     parsed.textOpenWorldVNext = textOpenWorldVNext
   }
-  if (selectedProduct === 'ttrpg') parsed.ttrpg = validateTtrpg(pkg.ttrpg, sourceWorld.contentHash)
+  if (selectedProduct === 'ttrpg') parsed.ttrpg = ttrpg
   if (selectedProduct === 'ai-town') parsed.town = parseAiTownRuntimeContentV1(pkg.town)
   return parsed
 }
 
-export function parseProductReleaseManifestV1(value: string | unknown): ProductReleaseManifestV1 {
+export function parseProductReleaseManifestV1(value: string | unknown): ProductReleaseManifestV1
+export function parseProductReleaseManifestV1(
+  value: string | unknown, reader: ProductTtrpgProtocol2ReaderV1,
+): ProductReleaseManifestWithTtrpgV2
+export function parseProductReleaseManifestV1(
+  value: string | unknown, reader?: ProductTtrpgProtocol2ReaderV1,
+): ProductReleaseManifestWithTtrpgV2 {
   let raw: unknown = value
   if (typeof raw === 'string') {
     try { raw = JSON.parse(raw) } catch { fail('Release v3 不是合法 JSON') }
@@ -478,7 +528,9 @@ export function parseProductReleaseManifestV1(value: string | unknown): ProductR
   const sourceWorldRelease = record(manifest.sourceWorldRelease, 'sourceWorldRelease')
   exactKeys(sourceWorldRelease, ['contentHash'], 'sourceWorldRelease')
   if (!isSha256Hash(sourceWorldRelease.contentHash)) fail('sourceWorldRelease.contentHash 无效')
-  const runtimePackage = parseProductRuntimePackageV1(manifest.runtimePackage)
+  const runtimePackage = reader
+    ? parseProductRuntimePackageV1(manifest.runtimePackage, reader)
+    : parseProductRuntimePackageV1(manifest.runtimePackage)
   if (runtimePackage.productType !== selectedProduct
     || runtimePackage.sourceWorld.contentHash !== sourceWorldRelease.contentHash) fail('Release v3 与 RuntimePackage 来源不一致')
   if (!isSha256Hash(manifest.packageHash)) fail('packageHash 无效')
@@ -525,23 +577,33 @@ export function parseProductReleaseManifestV1(value: string | unknown): ProductR
   }
 }
 
-type ProductReleaseIdentityBodyV1 = Omit<ProductReleaseManifestV1, 'releaseIdentityHash' | 'lineage'>
+type ProductReleaseIdentityBodyV1 = Omit<ProductReleaseManifestWithTtrpgV2, 'releaseIdentityHash' | 'lineage'>
 
 export async function productReleaseIdentityHashV1(body: ProductReleaseIdentityBodyV1): Promise<string> {
   return hashProductProductionValueV2(body)
 }
 
-export async function verifyProductReleaseManifestV1(value: string | unknown): Promise<ProductReleaseManifestV1> {
-  const manifest = parseProductReleaseManifestV1(value)
+export function verifyProductReleaseManifestV1(value: string | unknown): Promise<ProductReleaseManifestV1>
+export function verifyProductReleaseManifestV1(
+  value: string | unknown, reader: ProductTtrpgProtocol2ReaderV1,
+): Promise<ProductReleaseManifestWithTtrpgV2>
+export async function verifyProductReleaseManifestV1(
+  value: string | unknown, reader?: ProductTtrpgProtocol2ReaderV1,
+): Promise<ProductReleaseManifestWithTtrpgV2> {
+  const manifest = reader
+    ? parseProductReleaseManifestV1(value, reader)
+    : parseProductReleaseManifestV1(value)
   if (await hashProductProductionValueV2(manifest.runtimePackage) !== manifest.packageHash) fail('packageHash 校验失败')
-  if (manifest.productType === 'ttrpg' && manifest.runtimePackage.ttrpg
-    && await hashProductProductionValueV2(manifest.runtimePackage.ttrpg.rulePack.content)
-      !== manifest.runtimePackage.ttrpg.rulePack.contentHash) fail('TTRPG RulePack contentHash 校验失败')
+  if (manifest.productType === 'ttrpg' && manifest.runtimePackage.ttrpg) {
+    await verifyTtrpgFrozenContentHashesV1(manifest.runtimePackage.ttrpg)
+  }
   if (isCreatorReleaseSourceContracts(manifest.sourceContracts)) {
     const { verifyTextOpenWorldCreatorReleaseManifestBindingsV1 } = await import(
       '../open-world/creator-release-contract'
     )
-    await verifyTextOpenWorldCreatorReleaseManifestBindingsV1(manifest)
+    // The creator contract belongs only to text-open-world. Reparse through the
+    // legacy entry before handing it to that product; no open TTRPG cast or bypass.
+    await verifyTextOpenWorldCreatorReleaseManifestBindingsV1(parseProductReleaseManifestV1(manifest))
     const { releaseIdentityHash, lineage: _lineage, ...identityBody } = manifest
     const expectedIdentity = await productReleaseIdentityHashV1(identityBody)
     if (releaseIdentityHash !== expectedIdentity || manifest.lineage.releaseHash !== expectedIdentity) {
@@ -581,7 +643,28 @@ export async function verifyProductReleaseManifestV1(value: string | unknown): P
   return manifest
 }
 
-export async function createProductReleaseManifestV1(input: {
+/** Identity validation precedes all compatibility or mechanical projection. */
+export async function verifyProductReleaseRuntimeViewV1(
+  value: string | unknown,
+  reader: ProductTtrpgProtocol2ReaderV1,
+) {
+  const rawManifest = await verifyProductReleaseManifestV1(value, reader)
+  const rawRuntimePackage = rawManifest.runtimePackage
+  return {
+    rawManifest,
+    rawRuntimePackage,
+    validatedHashes: {
+      packageHash: rawManifest.packageHash,
+      releaseIdentityHash: rawManifest.releaseIdentityHash,
+      ruleContentHash: rawRuntimePackage.ttrpg?.rulePack.contentHash ?? null,
+    },
+    runtimeView: rawRuntimePackage.ttrpg
+      ? await createTtrpgVerifiedContentViewV1(rawRuntimePackage.ttrpg)
+      : null,
+  }
+}
+
+interface ProductReleaseManifestInputV1 {
   runtimePackage: ProductRuntimePackageV1
   productionProvenance: ProductReleaseManifestV1['productionProvenance']
   sourceContracts: {
@@ -590,8 +673,20 @@ export async function createProductReleaseManifestV1(input: {
     sourceManifest: ProductSourceManifestV1
   }
   lineage: ProductReleaseLineageV1
-}): Promise<ProductReleaseManifestV1> {
-  const runtimePackage = parseProductRuntimePackageV1(input.runtimePackage)
+}
+type ProductReleaseManifestInputWithTtrpgV2 =
+  Omit<ProductReleaseManifestInputV1, 'runtimePackage'> & { runtimePackage: ProductRuntimePackageWithTtrpgV2 }
+
+export function createProductReleaseManifestV1(input: ProductReleaseManifestInputV1): Promise<ProductReleaseManifestV1>
+export function createProductReleaseManifestV1(
+  input: ProductReleaseManifestInputWithTtrpgV2, reader: ProductTtrpgProtocol2ReaderV1,
+): Promise<ProductReleaseManifestWithTtrpgV2>
+export async function createProductReleaseManifestV1(
+  input: ProductReleaseManifestInputWithTtrpgV2, reader?: ProductTtrpgProtocol2ReaderV1,
+): Promise<ProductReleaseManifestWithTtrpgV2> {
+  const runtimePackage = reader
+    ? parseProductRuntimePackageV1(input.runtimePackage, reader)
+    : parseProductRuntimePackageV1(input.runtimePackage)
   const identityBody: ProductReleaseIdentityBodyV1 = {
     schema: 'storyforge.product-release',
     version: 1,
@@ -606,10 +701,12 @@ export async function createProductReleaseManifestV1(input: {
   if (input.lineage.releaseHash !== releaseIdentityHash) {
     fail('lineage.releaseHash 与 Release identity 不一致')
   }
-  const manifest = parseProductReleaseManifestV1({
+  const manifest = {
     ...identityBody,
     releaseIdentityHash,
     lineage: input.lineage,
-  })
-  return verifyProductReleaseManifestV1(manifest)
+  }
+  return reader
+    ? verifyProductReleaseManifestV1(manifest, reader)
+    : verifyProductReleaseManifestV1(manifest)
 }

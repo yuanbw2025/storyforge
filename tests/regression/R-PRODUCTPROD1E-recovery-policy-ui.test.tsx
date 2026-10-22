@@ -492,7 +492,7 @@ describe('PRODUCT-PROD-1E · recovery policy UI', () => {
     })
   }, 25_000)
 
-  it('unknown-result 必须显式选择结算方式，并展示命令采用的真实有效结算', async () => {
+  it.each(['unknown-result', 'task-result-unknown', 'provider-result-unknown', 'task-timeout'])('%s 必须显式选择结算方式，并展示命令采用的真实有效结算', async failureCode => {
     const owned = await seedCurrentProductWorld('结果未知结算 UI')
     const fixture = await createRecoveryProduction({
       scope: owned.scope,
@@ -505,7 +505,7 @@ describe('PRODUCT-PROD-1E · recovery policy UI', () => {
     await db.productBuilds.update(fixture.buildId, {
       failureJson: JSON.stringify({
         taskKey: 'p2.experience-design',
-        code: 'unknown-result',
+        code: failureCode,
         detail: '供应商请求已发出，但结果和计费状态未知',
         failureProvenance: {
           runId: 102,
@@ -515,6 +515,13 @@ describe('PRODUCT-PROD-1E · recovery policy UI', () => {
           attempt: 1,
         },
       }),
+    })
+    if (failureCode === 'task-timeout') await db.productBuilds.update(fixture.buildId, {
+      budgetLedgerJson: JSON.stringify({ schema: 'storyforge.product-production-budget-ledger', version: 2,
+        rootRunId: null, rootClaim: null, tasks: {}, attempts: [{ taskKey: 'p2.experience-design', runId: 102,
+          attempt: 1, controlEpoch: fixture.controlEpoch, idempotencyKey: '', outcome: 'failed', usageKnown: false,
+          errorCode: 'task-timeout', usage: { modelCalls: 1, inputTokens: 100, outputTokens: 100, mediaCalls: 0,
+            costUsd: 0.05, durationMs: 30000, storageBytes: 0 } }] }),
     })
     serviceMocks.retryBlocker.mockResolvedValueOnce('provider-actual-charge')
     await act(async () => {

@@ -36,7 +36,7 @@ test('community entry downloads matching Skill references and copies complete AI
   await page.getByRole('button', { name: '复制 AI 开发指令', exact: true }).click()
   await expect(page.getByRole('status').filter({ hasText: '已复制。' })).toBeVisible()
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await zip.file(root + 'developer-prompt.txt')!.async('string'))
-  await page.screenshot({ path: '/tmp/storyforge-plugin-authoring-desktop.png', fullPage: true })
+  await page.screenshot({ path: test.info().outputPath('plugin-authoring-desktop.png'), fullPage: true })
 })
 
 test('manual instruction fallback and help remain usable on narrow screens without model setup', async ({ page }) => {
@@ -48,7 +48,7 @@ test('manual instruction fallback and help remain usable on narrow screens witho
   await page.getByText('查看并手动复制指令', { exact: true }).click()
   await expect(page.getByLabel('AI 插件开发指令')).toHaveValue(await readFile('tools/plugin-sdk/authoring/developer-prompt.txt', 'utf8'))
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(392)
-  await page.screenshot({ path: '/tmp/storyforge-plugin-authoring-mobile.png', fullPage: true })
+  await page.screenshot({ path: test.info().outputPath('plugin-authoring-mobile.png'), fullPage: true })
   await page.getByRole('link', { name: '我想先了解怎么安装', exact: true }).click()
   expect(new URL(page.url()).searchParams.get('owner')).toBe('world')
   await expect(page.getByRole('heading', { name: '你的数据保存在哪里', exact: true })).toBeVisible()
@@ -83,7 +83,10 @@ test('documented public SDK recipe yields a separately installable, upgradable a
   await openHelp(page, `./workshop/installed?project=${project}&owner=work`)
   await expect(page.getByLabel('安装插件文件')).toBeEnabled()
   await page.getByLabel('安装插件文件').setInputFiles(v1)
-  const card = (version: string) => page.locator('.sf-workshop-card').filter({ has: page.getByRole('heading', { name: '章节检查便笺', exact: true }) }).filter({ hasText: version })
+  // Card text includes hidden manifests and recovery history; the visible
+  // version label identifies the intended package while live queries refresh.
+  const card = (version: string) => page.locator('.sf-workshop-card').filter({ has: page.getByRole('heading', { name: '章节检查便笺', exact: true }) })
+    .filter({ has: page.getByText(`v${version} · Community reader`, { exact: true }) })
   await card('0.1.0').getByRole('button', { name: '启用', exact: true }).click()
   await page.getByRole('button', { name: '信任并启用', exact: true }).click()
   const notes = async () => {
@@ -103,7 +106,10 @@ test('documented public SDK recipe yields a separately installable, upgradable a
   await expect(page.getByLabel('安装插件文件')).toBeEnabled()
   await page.getByLabel('安装插件文件').setInputFiles(v2)
   await card('0.2.0').getByRole('button', { name: '切换到此版本', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '升级到 0.2.0？', exact: true })).toBeVisible()
   await page.getByRole('button', { name: '信任并升级', exact: true }).click()
+  await expect(page.getByText('升级完成；请重新启用。旧数据代已保留。', { exact: true })).toBeVisible()
+  await expect(card('0.2.0').getByRole('button', { name: '启用', exact: true })).toBeEnabled()
   await card('0.2.0').getByRole('button', { name: '启用', exact: true }).click()
   await page.getByRole('button', { name: '信任并启用', exact: true }).click()
   await notes()

@@ -1,0 +1,33 @@
+{
+  "recordedSourceHead": "9fc121994326ddb683724b45deb5487c4a2db840",
+  "provenance": "Prior ordinary native synthetic repair fixture; no real author/provider content.",
+  "structuralInput": {
+    "artifacts": [
+      {
+        "artifactKey": "ttrpg.open.rule-system",
+        "contentHash": "80627bbc392a63e84119a6ebfce0562a60768a95cd29290ab7bb4ef2088ca269"
+      },
+      {
+        "artifactKey": "ttrpg.open.situation-layer",
+        "contentHash": "c3fcaa06548ba06fb193ee239bf61e33a17c69471c3c152d5561dbfc586557f1"
+      }
+    ],
+    "authorResolution": null,
+    "capabilityBindings": [],
+    "controlEpoch": 2,
+    "dependencies": [
+      {
+        "receiptHash": "a8b363b7fcd16918a1fc1d7c7bb80bf009f1058e587bd90a4030c500bd6ab07f",
+        "taskKey": "ttrpg.open.rule-system"
+      },
+      {
+        "receiptHash": "d5122cf42502a801c029ec01c649956a0a22a8e7197bde2713889f71f0f674dd",
+        "taskKey": "ttrpg.open.situation-layer"
+      }
+    ],
+    "executionIdentityHash": "e4d8431979322171301882adf35f4c049933a613694124e4ff3478ae690c9553",
+    "planHash": "145a6e3223dc637a4232267e93b98be2ff7e6b5d14ff14cebbd3a980f69e4079",
+    "taskKey": "ttrpg.open.media-plan"
+  },
+  "expectedInputHash": "c5128fd45f2952d8d4d0925a32d037cc6f8eef2a8449cce9013ccc4a3b559c2b"
+}

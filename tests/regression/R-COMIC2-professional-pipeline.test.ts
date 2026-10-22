@@ -1,3 +1,4 @@
+import { CURRENT_BACKUP_VERSION } from '../../src/lib/export/backup-trust'
 import {readComicReleaseBookV1} from '../../src/lib/comic/release-book'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
@@ -137,6 +138,6 @@ describe('COMIC-2 · professional novel-to-comic pipeline', () => {
     expect(await db.comicMediaAssets.get(disposable.id!)).toBeUndefined()
     expect(await db.mediaBlobObjects.get(disposable.blobObjectId)).toBeUndefined()
     expect((await readComicReleaseBookV1(item.scope,visual.id)).book.pages).toHaveLength(1)
-    const backup = await exportProjectJSON(item.scope.projectId); expect(backup.version).toBe(15); expect(backup.creationReleaseAssets).toHaveLength(1); const imported = await importProjectJSON(structuredClone(backup)); expect(await db.creationReleaseAssets.where('projectId').equals(imported).count()).toBe(1); expect(await db.mediaBlobObjects.where('projectId').equals(imported).count()).toBe(1)
+    const backup = await exportProjectJSON(item.scope.projectId); expect(backup.version).toBe(CURRENT_BACKUP_VERSION); expect(backup.creationReleaseAssets).toHaveLength(1); const imported = await importProjectJSON(structuredClone(backup)); expect(await db.creationReleaseAssets.where('projectId').equals(imported).count()).toBe(1); expect(await db.mediaBlobObjects.where('projectId').equals(imported).count()).toBe(1)
   })
 })

@@ -486,6 +486,9 @@ export interface VerificationReceiptV1 {
     model: string
     promptVersion: string
   }
+  /** Deterministic zero-model commit only. The full canonical contract proves
+   * that an empty Context Manifest list cannot waive a model Run's evidence. */
+  zeroModelCommit?: { contractJson: string; inputArtifactHashes: string[] }
   criteria: VerificationCriterionReceiptV1[]
   acceptedAt: number
   receiptHash: string
@@ -546,6 +549,12 @@ export interface AgentRunRecord {
   contractVersion: 1 | 2 | 3
   contractJson: string
   contractHash: string
+  /** Export-frozen world read identity. Portable hashes/UIDs only; no local IDs or new AI authority. */
+  portableWorldContextBindingsJson?: string
+  /** Exact historical TTRPG Run/event bytes; original numbers are provenance, never current locators or authority. */
+  portableRuntimeOriginJson?: string
+  /** Opaque original published RootV2 preimage. Historical Run numbers are evidence, never locators. */
+  portablePublishedRootOriginJson?: string
   generation: number
   lastSequence: number
   projectionJson: string

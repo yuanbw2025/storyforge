@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ProductProductionSourceOptionsV1, ProductProductionSourceSelectionV1, TtrpgRulePackRecordV1, WorkspaceScope } from "../../lib/types";
-import { listValidatedTtrpgRulePacksV1 } from "../../lib/ttrpg/rule-pack-library";
+import { listValidatedTtrpgRulePacksV1, listValidatedTtrpgRulePacksV2 } from "../../lib/ttrpg/rule-pack-library";
+import TtrpgOpenRuleImport from './TtrpgOpenRuleImport';
 import type { TtrpgProductionWizardValueV2, SeatDraft } from "../../lib/ttrpg/authoring-settings";
 export { createDefaultTtrpgProductionWizardValueV2, toTtrpgProductionBriefDraftInputV2 } from "../../lib/ttrpg/authoring-settings";
 export type { TtrpgProductionWizardValueV2 } from "../../lib/ttrpg/authoring-settings";
@@ -22,6 +23,7 @@ const labelClass = "grid gap-2 text-[10px] text-text-muted";
 
 export default function TtrpgProductionWizard(props: {
   scope: WorkspaceScope | null;
+  runFormat?: 'scripted' | 'open';
   activeStep?: number;
   onStepChange?: (step: number) => void;
   value: TtrpgProductionWizardValueV2;
@@ -33,28 +35,36 @@ export default function TtrpgProductionWizard(props: {
   const [localStep, setLocalStep] = useState(0);
   const step = props.activeStep ?? localStep;
   const setStep = (value: number | ((prior: number) => number)) => { const next = typeof value === "function" ? value(step) : value; setLocalStep(next); props.onStepChange?.(next); };
-  const [rulePacks, setRulePacks] = useState<TtrpgRulePackRecordV1[]>([]);
+  const [rulePackList, setRulePackList] = useState<{ key: string; rows: TtrpgRulePackRecordV1[]; error: string }>({ key: '', rows: [], error: '' });
   const scopeProjectId = props.scope?.projectId;
   const scopeWorldId = props.scope?.worldId;
   const scopeWorkId = props.scope?.workId;
+  const open = props.runFormat === 'open';
+  const ruleScopeKey = `${open ? 'open' : 'scripted'}:${scopeProjectId}:${scopeWorldId}:${scopeWorkId}`;
+  const rulePacks = rulePackList.key === ruleScopeKey ? rulePackList.rows : [];
   useEffect(() => {
     if (scopeProjectId == null || scopeWorldId == null || scopeWorkId == null) return;
     let active = true;
-    void listValidatedTtrpgRulePacksV1({
+    setRulePackList({ key: ruleScopeKey, rows: [], error: '' });
+    const list = open ? listValidatedTtrpgRulePacksV2 : listValidatedTtrpgRulePacksV1;
+    void list({
       projectId: scopeProjectId,
       worldId: scopeWorldId,
       workId: scopeWorkId,
     })
       .then((result) => {
-        if (active) setRulePacks(result);
+        if (active) setRulePackList(prior => ({ key: ruleScopeKey,
+          // A rule explicitly saved while the initial list was pending wins.
+          rows: [...result.filter(row => !prior.rows.some(saved => prior.key === ruleScopeKey && saved.id === row.id)),
+            ...(prior.key === ruleScopeKey ? prior.rows : [])], error: '' }));
       })
-      .catch(() => {
-        if (active) setRulePacks([]);
+      .catch(error => {
+        if (active) setRulePackList(prior => ({ key: ruleScopeKey, rows: prior.key === ruleScopeKey ? prior.rows : [], error: String(error) }));
       });
     return () => {
       active = false;
     };
-  }, [scopeProjectId, scopeWorldId, scopeWorkId]);
+  }, [scopeProjectId, scopeWorldId, scopeWorkId, open, ruleScopeKey]);
   const value = props.value;
   const patch = (next: Partial<TtrpgProductionWizardValueV2>) =>
     props.onChange({ ...value, ...next });
@@ -107,7 +117,7 @@ export default function TtrpgProductionWizard(props: {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <small className="font-mono text-[9px] text-accent">
-            TTRPG BRIEF V2 · 9 STEPS
+            跑团制作配置 · 9 步
           </small>
           <h3 className="mt-1 text-sm font-semibold">
             {step + 1}. {STEPS[step]}
@@ -256,7 +266,8 @@ export default function TtrpgProductionWizard(props: {
                   })
                 }
               >
-                <option value="builtin-storyforge">
+                {open && value.ruleOrigin !== 'saved-rule-pack' && <option value={value.ruleOrigin} disabled>已保存的旧格式选择，请改选开放规则包</option>}
+                {!open && <><option value="builtin-storyforge">
                   StoryForge 2d6 叙事规则
                 </option>
                 <option value="builtin-rank-lite">
@@ -267,7 +278,7 @@ export default function TtrpgProductionWizard(props: {
                 </option>
                 <option value="builtin-d100-investigation">
                   StoryForge 调查 · d100 百分检定
-                </option>
+                </option></>}
                 <option value="saved-rule-pack">
                   已验证自定义 / 兼容规则包
                 </option>
@@ -286,6 +297,7 @@ export default function TtrpgProductionWizard(props: {
                   }
                 >
                   <option value="">请选择 validated RulePack</option>
+                  {value.savedRulePackId != null && !rulePacks.some(pack => pack.id === value.savedRulePackId) && <option value={value.savedRulePackId} disabled>已保存规则暂不可用，请核对作品与规则格式</option>}
                   {rulePacks.map((pack) => (
                     <option key={pack.id} value={pack.id}>
                       {pack.title} · {pack.ruleSystemId}@
@@ -295,7 +307,15 @@ export default function TtrpgProductionWizard(props: {
                 </select>
               </label>
             )}
-            {(value.ruleOrigin === "builtin-storyforge" ||
+            {rulePackList.key === ruleScopeKey && rulePackList.error && <p role="alert">无法读取本作品的规则：{rulePackList.error}</p>}
+            {props.runFormat === 'open' && props.scope && <TtrpgOpenRuleImport
+              key={`${props.scope.projectId}:${props.scope.worldId}:${props.scope.workId}`} scope={props.scope}
+              onSaved={record => {
+                setRulePackList(prior => ({ key: ruleScopeKey, rows: [...(prior.key === ruleScopeKey ? prior.rows : []).filter(row => row.id !== record.id),record], error: '' }));
+                patch({ ruleOrigin: 'saved-rule-pack',savedRulePackId: record.id! });
+              }} />}
+            {open && <p>开放模式使用本作品已保存的开放规则。请先保存作品，再预览内置规则或导入规则文件，核对后确认使用。</p>}
+            {!open && (value.ruleOrigin === "builtin-storyforge" ||
               value.ruleOrigin === "builtin-rank-lite") && (
               <label className={labelClass}>
                 核心骰面数（2～100）
@@ -713,7 +733,7 @@ export default function TtrpgProductionWizard(props: {
                 <input
                   aria-label="目标场景数"
                   type="number"
-                  min={1}
+                  min={props.runFormat === 'open' ? 0 : 1}
                   max={1000}
                   className={inputClass}
                   value={value.targetSceneCount}
@@ -735,7 +755,7 @@ export default function TtrpgProductionWizard(props: {
                 <input
                   aria-label="目标结局数"
                   type="number"
-                  min={1}
+                  min={props.runFormat === 'open' ? 0 : 1}
                   max={100}
                   className={inputClass}
                   value={value.targetEndingCount}
@@ -894,8 +914,7 @@ export default function TtrpgProductionWizard(props: {
                 桌型：{value.gmMode} KP · {value.seats.length} 席
               </span>
               <span>
-                剧情：{value.structure} · {value.targetSceneCount} 场景 ·{" "}
-                {value.targetEndingCount} 结局
+                {props.runFormat === 'open' ? '开放局势与阶段续团' : <>剧情：{value.structure} · {value.targetSceneCount} 场景 · {value.targetEndingCount} 结局</>}
               </span>
               <span>
                 媒资：{mediaCount} 类 · 上限 {value.maximumGeneratedAssets}

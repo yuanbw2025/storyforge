@@ -1,0 +1,440 @@
+{
+  "schema": "storyforge.ttrpg-native-voice-fixture-eval",
+  "version": 1,
+  "entryId": "ttrpg.local-voice.native-fixture-eval",
+  "productInvocationAllowed": false,
+  "adoptionAllowed": false,
+  "network": "disabled",
+  "maxCalls": 4,
+  "timeoutMs": 240000,
+  "cpuThreads": 2,
+  "sampleRate": 24000,
+  "maxSecondsPerVoice": 60,
+  "speed": 0.9,
+  "fixture": "雨停以后，你们沿着石阶走到旧码头。守夜人抬起灯，仔细看了看每个人的脸，却没有立刻开口。远处传来两下缓慢的钟声，一只小船正从黑暗里靠近。你可以先问清来人的身份，再决定是否登船。",
+  "voices": [
+    "zm_010",
+    "zf_001",
+    "zm_011",
+    "zf_017"
+  ],
+  "sharedPythonAssetProfileSha256": "8a73ace3bf7e56dd8acd281d0e1600b1364611fa6a194d402129eae213994bf8",
+  "sourceFiles": [
+    {
+      "path": "kokoro/__init__.py",
+      "revision": "dfb907a02bba8152ca444717ca5d78747ccb4bec",
+      "gitBlobSha1": "9156e5c5a699f735e000083a8f1c5165e08d58c1",
+      "sha256": "9ef0313aea8ce55a6949240d71c5fd4371ad3245e4df4473fcf61ea24bb10a96"
+    },
+    {
+      "path": "kokoro/model.py",
+      "revision": "dfb907a02bba8152ca444717ca5d78747ccb4bec",
+      "gitBlobSha1": "a7622ba923d0b8b9fc559057cfc5e90b90846231",
+      "sha256": "301c55350a068c4ed3b4cbd1209d2afb848bebca72db5657405e47e9dfb604db"
+    },
+    {
+      "path": "kokoro/modules.py",
+      "revision": "dfb907a02bba8152ca444717ca5d78747ccb4bec",
+      "gitBlobSha1": "f183bd374e317d2090ea621f9ce1a36d5681a644",
+      "sha256": "6e14dadc706efc9a8d90e8b4919d45d57342555b242c642cd26f26c65eedc085"
+    },
+    {
+      "path": "kokoro/istftnet.py",
+      "revision": "dfb907a02bba8152ca444717ca5d78747ccb4bec",
+      "gitBlobSha1": "f1c536e16e9d19986c599726e3b4d09813f250d1",
+      "sha256": "66515cb3369d1c0bbb2015ad7293d019fb1f80fefcb2d56e70e73b6b146af11c"
+    },
+    {
+      "path": "kokoro/custom_stft.py",
+      "revision": "dfb907a02bba8152ca444717ca5d78747ccb4bec",
+      "gitBlobSha1": "c9cf0d21f7d8e7583eafa685a7902c3cd46ffc25",
+      "sha256": "94fed3f9ac22bba31135bf8c4ea795762c7ab3ff44f1984d11e7babf27462d69"
+    },
+    {
+      "path": "misaki/__init__.py",
+      "revision": "fba1236595f2d2bf21d414ba6e57d25256afada3",
+      "gitBlobSha1": "4033697d9ac102288af0550730dfa1da3f388cf4",
+      "sha256": "3ebbe9b05a7115f57ef4291eaea1fcc3d6a3ee3a78e19ce5436d855dfe483889"
+    },
+    {
+      "path": "misaki/zh_frontend.py",
+      "revision": "fba1236595f2d2bf21d414ba6e57d25256afada3",
+      "gitBlobSha1": "7576524a9b0df137b6eb7e30a4a79baf945866c4",
+      "sha256": "002023955e31c692cea2dcd0dea1836df84a9ff8dab966f5ae43ce276bdd1c0c"
+    },
+    {
+      "path": "misaki/tone_sandhi.py",
+      "revision": "fba1236595f2d2bf21d414ba6e57d25256afada3",
+      "gitBlobSha1": "91082721987023e9df78362a1a782d30d94ed1c2",
+      "sha256": "2a0adc3854c137759f304417d844582d7fd902c57d84733d94137a4bc756c301"
+    },
+    {
+      "path": "misaki/token.py",
+      "revision": "fba1236595f2d2bf21d414ba6e57d25256afada3",
+      "gitBlobSha1": "ae00682439d56b4a968beec5e8b4ae2377a733ad",
+      "sha256": "5ff6ce45da6766cdc1e3d5c91b0b2b093d912b8df6f2da327af56f88ad43f073"
+    }
+  ],
+  "patches": [
+    {
+      "path": "kokoro/__init__.py",
+      "sha256": "46514c54d2f008760020223021da3c5dae1e0bc392efb8dd01a6cb6b8faa790c",
+      "edits": [
+        {
+          "old": "from .pipeline import KPipeline\n",
+          "new": ""
+        }
+      ]
+    },
+    {
+      "path": "kokoro/model.py",
+      "sha256": "f50aa4583fbeb6b1b70cbb53941cf354deb363a27b30fab4955c2696ea02b986",
+      "edits": [
+        {
+          "old": "        for key, state_dict in torch.load(model, map_location='cpu', weights_only=True).items():\n            assert hasattr(self, key), key\n            try:\n                getattr(self, key).load_state_dict(state_dict)\n            except:\n                logger.debug(f\"Did not load {key} from state_dict\")\n                state_dict = {k[7:]: v for k, v in state_dict.items()}\n                getattr(self, key).load_state_dict(state_dict, strict=False)\n",
+          "new": "        weights = torch.load(model, map_location='cpu', weights_only=True)\n        expected = {'bert', 'bert_encoder', 'predictor', 'text_encoder', 'decoder'}\n        if set(weights) != expected: raise ValueError('Unexpected model components')\n        for key, state_dict in weights.items():\n            if all(k.startswith('module.') for k in state_dict):\n                state_dict = {k[7:]: v for k, v in state_dict.items()}\n            getattr(self, key).load_state_dict(state_dict, strict=True)\n"
+        },
+        {
+          "old": "        indices = torch.repeat_interleave",
+          "new": "        if not torch.isfinite(duration).all() or int(pred_dur.sum()) > 3000:\n            raise ValueError('Predicted speech exceeds fixed evaluation limit')\n        indices = torch.repeat_interleave"
+        },
+        {
+          "old": "        input_ids = list(filter(lambda i: i is not None, map(lambda p: self.vocab.get(p), phonemes)))",
+          "new": "        if any(p not in self.vocab for p in phonemes): raise ValueError('Unknown phoneme; do not drop text')\n        input_ids = [self.vocab[p] for p in phonemes]"
+        }
+      ]
+    },
+    {
+      "path": "kokoro/modules.py",
+      "sha256": "6e14dadc706efc9a8d90e8b4919d45d57342555b242c642cd26f26c65eedc085",
+      "edits": []
+    },
+    {
+      "path": "kokoro/istftnet.py",
+      "sha256": "0421024f0a28720b1e0a8695ea8e1cbf3fcc7fd670825c257db69102398193a8",
+      "edits": [
+        {
+          "old": "self.norm = nn.InstanceNorm1d(num_features, affine=True)",
+          "new": "self.norm = nn.InstanceNorm1d(num_features, affine=False)"
+        }
+      ]
+    },
+    {
+      "path": "kokoro/custom_stft.py",
+      "sha256": "eaabad302aed584c7bcee61ef0d43990abae76a9741101f3f5423f9e29c1097b",
+      "edits": [
+        {
+          "old": "from attr import attr\n",
+          "new": ""
+        }
+      ]
+    },
+    {
+      "path": "misaki/__init__.py",
+      "sha256": "3ebbe9b05a7115f57ef4291eaea1fcc3d6a3ee3a78e19ce5436d855dfe483889",
+      "edits": []
+    },
+    {
+      "path": "misaki/zh_frontend.py",
+      "sha256": "eabf14aba42639292dcf89dfc848cc0d1102899dfed23ebb23bb14a29215629a",
+      "edits": [
+        {
+          "old": "from pypinyin_dict.phrase_pinyin_data import large_pinyin\n",
+          "new": ""
+        },
+        {
+          "old": "        large_pinyin.load()\n",
+          "new": ""
+        }
+      ]
+    },
+    {
+      "path": "misaki/tone_sandhi.py",
+      "sha256": "2a0adc3854c137759f304417d844582d7fd902c57d84733d94137a4bc756c301",
+      "edits": []
+    },
+    {
+      "path": "misaki/token.py",
+      "sha256": "5ff6ce45da6766cdc1e3d5c91b0b2b093d912b8df6f2da327af56f88ad43f073",
+      "edits": []
+    }
+  ],
+  "overlayFiles": [
+    {
+      "path": "loguru/__init__.py",
+      "sha256": "196e5e0ff9f2234516dcb9385ccbf6524c0a6d72b0a97ca5c81bd225a7c3df19",
+      "bytes": 627
+    },
+    {
+      "path": "loguru/__init__.pyi",
+      "sha256": "be163b821fa2578b753cc99c42cbae8f2057f3e1cfb8d8fc011fcecade1ba633",
+      "bytes": 11658
+    },
+    {
+      "path": "loguru/_asyncio_loop.py",
+      "sha256": "2daf17ccb8ef458a4d8b295990e1702ca81df9644c5f34d9640a04ce52faf306",
+      "bytes": 597
+    },
+    {
+      "path": "loguru/_better_exceptions.py",
+      "sha256": "20f2376022ac6cbded0f44e984f8529e9c8172941c81238ab24355f04243f10c",
+      "bytes": 21516
+    },
+    {
+      "path": "loguru/_colorama.py",
+      "sha256": "e48737715229a7341aee6cf65db2892e68e288fa479b80156ea85289729522cd",
+      "bytes": 1735
+    },
+    {
+      "path": "loguru/_colorizer.py",
+      "sha256": "b078c95d14406b209e17a7ad812314a40f21309e5520691e13300d3afb1e9bdc",
+      "bytes": 14930
+    },
+    {
+      "path": "loguru/_contextvars.py",
+      "sha256": "2e7b3817163f065daa9cb7772e657b087fedd69d34e728e40ffcec740776bf96",
+      "bytes": 321
+    },
+    {
+      "path": "loguru/_ctime_functions.py",
+      "sha256": "33cb728b1d3db3b0a195a31009f80d4fcf9424282c877b7645c80db2dcde94d1",
+      "bytes": 1527
+    },
+    {
+      "path": "loguru/_datetime.py",
+      "sha256": "fe68a0f6c4fed1b08f7bcb4450a54ea88f2be4e08c73517c36dd2dd48c5e2195",
+      "bytes": 5380
+    },
+    {
+      "path": "loguru/_defaults.py",
+      "sha256": "4ca5edeae7f0f72bb4d333add0a6b0a049957a7bd1a7a12476bd52fe7d6f8ab7",
+      "bytes": 3007
+    },
+    {
+      "path": "loguru/_error_interceptor.py",
+      "sha256": "1d19bd1317d956b149fae26bd6e18abdbb1469ba4a0a3d2bb2d39f826ec2e418",
+      "bytes": 1107
+    },
+    {
+      "path": "loguru/_file_sink.py",
+      "sha256": "3246ec2bfe0774729d0e72270cfdaabb5c77bf905d83b26c0b7e69896a63515a",
+      "bytes": 14404
+    },
+    {
+      "path": "loguru/_filters.py",
+      "sha256": "cffff6abc93f5c03b5a8b7f739ea9b377518378b195af7a5dbfe6c8db9179fb8",
+      "bytes": 618
+    },
+    {
+      "path": "loguru/_get_frame.py",
+      "sha256": "51c4cc5e379297722187559eb0be1e965e1330364df4f5be48f772895610b658",
+      "bytes": 458
+    },
+    {
+      "path": "loguru/_handler.py",
+      "sha256": "0529f45bd00a3524891e2415bb7005c57f0684ad2844a92084762d1619e97607",
+      "bytes": 12634
+    },
+    {
+      "path": "loguru/_locks_machinery.py",
+      "sha256": "00f105834631ee98e708b8a0e58327052652c39c9ff31c9b9b6a5de2e1b8e2bc",
+      "bytes": 1307
+    },
+    {
+      "path": "loguru/_logger.py",
+      "sha256": "569946c9f694f27227c06bf108add2dd8866efc562c779a47e5e01aaaa4f6960",
+      "bytes": 97856
+    },
+    {
+      "path": "loguru/_recattrs.py",
+      "sha256": "8efe77b3d9d252043419c61623213f719e540ede0d57311319a89346da62ac31",
+      "bytes": 2884
+    },
+    {
+      "path": "loguru/_simple_sinks.py",
+      "sha256": "899d5792f9f17dec3f0158db6761d9d3f730f1ad7df786021a71f95e62fdf2c4",
+      "bytes": 3818
+    },
+    {
+      "path": "loguru/_string_parsers.py",
+      "sha256": "1315374e15cab45a52eca672aa3c67fb30fdb2a6eee56874b60af59d0f1d68aa",
+      "bytes": 4811
+    },
+    {
+      "path": "loguru/py.typed",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "loguru-0.7.3.dist-info/WHEEL",
+      "sha256": "0a950253178741b44de54191407611268acee407fe432fdf1cc72d710f034862",
+      "bytes": 82
+    },
+    {
+      "path": "loguru-0.7.3.dist-info/METADATA",
+      "sha256": "3a371f8b089014fdaee055edc440d448242847926ad67613621af402f9975fd9",
+      "bytes": 22596
+    },
+    {
+      "path": "loguru-0.7.3.dist-info/RECORD",
+      "sha256": "af8d04df636e994a766aa581b8ce278c9a939ff0e156aad9db6882c3c7bbbc84",
+      "bytes": 1841
+    },
+    {
+      "path": "addict/__init__.py",
+      "sha256": "c6694d898615a000f7fc57e681f38cd9c737c08d7b19282c3013836c546cfe66",
+      "bytes": 233
+    },
+    {
+      "path": "addict/addict.py",
+      "sha256": "49c39f72568033bba0c99a17396d871cbf60097b7f5cf7be8b96d32e263cb9f5",
+      "bytes": 4901
+    },
+    {
+      "path": "addict-2.4.0.dist-info/LICENSE",
+      "sha256": "ca488d33c512d0b226142090af90e89ae266a901a293f89fd642dfec931e22c1",
+      "bytes": 1085
+    },
+    {
+      "path": "addict-2.4.0.dist-info/METADATA",
+      "sha256": "66320967996f85fa211f1216a7bf5f921d13b41b0de5db97f389daddbc54eaf4",
+      "bytes": 1028
+    },
+    {
+      "path": "addict-2.4.0.dist-info/WHEEL",
+      "sha256": "11546323af45e6a5639bf620a9c4d73e74c0bf705f494af4595007b923f75e8a",
+      "bytes": 92
+    },
+    {
+      "path": "addict-2.4.0.dist-info/top_level.txt",
+      "sha256": "1867d02accf537e6d2458ccda72a7c198f2e004aa1dd259a5d16c09c150a8c70",
+      "bytes": 7
+    },
+    {
+      "path": "addict-2.4.0.dist-info/RECORD",
+      "sha256": "df5806c70ddb71cbd56837630199664a7acc3a5269a5058e270d6f948b89ad81",
+      "bytes": 527
+    }
+  ],
+  "wheels": [
+    {
+      "name": "loguru",
+      "version": "0.7.3",
+      "filename": "loguru-0.7.3-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/0c/29/0348de65b8cc732daa3e33e67806420b2ae89bdce2b04af740289c5c6c8c/loguru-0.7.3-py3-none-any.whl",
+      "sha256": "31a33c10c8e1e10422bfd431aeb5d351c7cf7fa671e3c4df004162264b28220c",
+      "bytes": 61595
+    },
+    {
+      "name": "addict",
+      "version": "2.4.0",
+      "filename": "addict-2.4.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/6a/00/b08f23b7d7e1e14ce01419a467b583edbb93c6cdb8654e54a9cc579cd61f/addict-2.4.0-py3-none-any.whl",
+      "sha256": "249bb56bbfd3cdc2a004ea0ff4c2b6ddc84d53bc2194761636eb314d5cfa5dfc",
+      "bytes": 3832
+    }
+  ],
+  "modelFiles": [
+    {
+      "type": "file",
+      "oid": "efeb6a4788497bcf992422ad9c28251235806758",
+      "size": 6006,
+      "path": "README.md"
+    },
+    {
+      "type": "file",
+      "oid": "ca3cdb357c0dc8a6b67692ea96d9130cfacc25b6",
+      "size": 3228,
+      "path": "config.json"
+    },
+    {
+      "type": "file",
+      "oid": "c7c4608f491272939bfe47c47672de8320b3ef92",
+      "size": 327247856,
+      "lfs": {
+        "oid": "b1d8410fa44dfb5c15471fd6c4225ea6b4e9ac7fa03c98e8bea47a9928476e2b",
+        "size": 327247856,
+        "pointerSize": 134
+      },
+      "xetHash": "4ac6de3e3c17a5e9841560dc51c7a0f7c910c3739236adb0d9929ead4bf8ba0f",
+      "path": "kokoro-v1_1-zh.pth"
+    },
+    {
+      "type": "file",
+      "oid": "8f9ddad71103126fb6dcb5f93ee3ba3aade29cfe",
+      "size": 3271,
+      "path": "samples/make_zh.py"
+    },
+    {
+      "type": "file",
+      "oid": "aeeae47319ef99ed2bdb766ed7e9c00eb1375e45",
+      "size": 523331,
+      "lfs": {
+        "oid": "d2eeba86192eee269f600ca6821038034abd017532a1fe68ff7b0e86c2983b2a",
+        "size": 523331,
+        "pointerSize": 131
+      },
+      "xetHash": "ef83cfd1359fd8de3934a8d8603c8ae7889f80d575ff6bfe6810a81095d6373d",
+      "path": "voices/zm_010.pt"
+    },
+    {
+      "type": "file",
+      "oid": "0a61697556cda0926d71f85198d451bdc08d81f1",
+      "size": 523331,
+      "lfs": {
+        "oid": "9bdc9a87e13e9bb1ea3e7803259c2ecbfebaeeb2ff80b5d0c76df1a464c1c962",
+        "size": 523331,
+        "pointerSize": 131
+      },
+      "xetHash": "176ac32123a9fba3445bc2382d8b238b6d9b674f037d6f2e8a4884a50b99e6f7",
+      "path": "voices/zf_001.pt"
+    },
+    {
+      "type": "file",
+      "oid": "c232157173ab6481f192c7371815aaa7f75827f6",
+      "size": 523331,
+      "lfs": {
+        "oid": "978f00b0485869b2461249235429352767c661b0eeef65c37ae393a5c1531f46",
+        "size": 523331,
+        "pointerSize": 131
+      },
+      "xetHash": "1739dc3bf572ae78a5a4ee4ad741d42a24085f7cca9c21ac9073d066dfa50cba",
+      "path": "voices/zm_011.pt"
+    },
+    {
+      "type": "file",
+      "oid": "aebe90a119392bd0af0897345808fa3e5b7dd33d",
+      "size": 523331,
+      "lfs": {
+        "oid": "e507bb858a75f0518f08918827740530a656a008e3c057435a17b3a95f267624",
+        "size": 523331,
+        "pointerSize": 131
+      },
+      "xetHash": "1513f270e19201fff9823c1f981df15629e390a271f5e2bcb2bcf3f49e5a72ef",
+      "path": "voices/zf_017.pt"
+    }
+  ],
+  "licenses": [
+    {
+      "path": "kokoro-LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "misaki-LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "StyleTTS2-LICENSE",
+      "sha256": "7f023c12a1d6b25583506f6fc77f5287c7c71b65c0f886922f14153bcc07dfa9"
+    },
+    {
+      "path": "loguru-LICENSE",
+      "sha256": "b35d026cc7aca9d5859a02eb87ddf7a386a24c986838651bd1f283f94e003327"
+    }
+  ],
+  "model": {
+    "repo": "hexgrad/Kokoro-82M-v1.1-zh",
+    "revision": "01e7505bd6a7a2ac4975463114c3a7650a9f7218",
+    "license": "Apache-2.0"
+  }
+}

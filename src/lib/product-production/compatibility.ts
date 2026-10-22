@@ -1,18 +1,19 @@
-import type { ProductBuildCompatibilityReportV1, ProductRuntimePackageV1 } from '../types'
+import type { ProductBuildCompatibilityReportV1 } from '../types'
+import type { ProductRuntimePackageWithTtrpgV2 } from '../ttrpg/content-version'
 import { TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1 } from '../types'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 
 interface RuntimePackageBuildRefV1 {
   buildNumber: number
   packageHash: string
-  runtimePackage: ProductRuntimePackageV1
+  runtimePackage: ProductRuntimePackageWithTtrpgV2
 }
 
 function fail(message: string): never {
   throw new Error(`[product-production-compatibility] ${message}`)
 }
 
-function stableValues(pkg: ProductRuntimePackageV1): Map<string, string> {
+function stableValues(pkg: ProductRuntimePackageWithTtrpgV2): Map<string, string> {
   const values = new Map<string, string>()
   const add = (prefix: string, key: string, value: unknown) => {
     const stableKey = `${prefix}:${key}`
@@ -24,7 +25,15 @@ function stableValues(pkg: ProductRuntimePackageV1): Map<string, string> {
     capabilities: pkg.definition.enabledCapabilities, rulesetVersion: pkg.definition.rulesetVersion,
     entryNodeKey: pkg.narrative.entryNodeKey,
     narrativeModuleKind: pkg.narrative.moduleKind,
+    ...(pkg.ttrpg?.campaign.version === 2 ? { ttrpgProtocol: 2, runFormat: 'open' } : {}),
   })
+  if (pkg.ttrpg?.campaign.version === 2) {
+    // Conservative until an explicit open-save migration contract is available.
+    // No rule, owner, knowledge, pressure or source change may be mislabeled as cosmetic.
+    add('ttrpg-open', 'rule-pack', pkg.ttrpg.rulePack)
+    add('ttrpg-open', 'campaign', pkg.ttrpg.campaign)
+    add('ttrpg-open', 'source', pkg.sourceWorld)
+  }
   for (const [key, value] of Object.entries(pkg.definition.initialVariables)) {
     add('runtime.initial-variable', key, value)
   }

@@ -20,12 +20,12 @@ interface ResolverLease {
 // never produces a false "other reader" degradation.
 let buildResolverLeaseReleaseBarrier: Promise<void> = Promise.resolve()
 
-function assetCatalog(runtimePackage: ProductRuntimePackageV1): Map<string, FrozenRuntimeMediaAssetV2> {
+function assetCatalog(runtimePackage: Pick<ProductRuntimePackageV1, 'presentation'>): Map<string, FrozenRuntimeMediaAssetV2> {
   return new Map((runtimePackage.presentation?.assets ?? []).map(asset => [asset.assetKey, asset]))
 }
 
 function createResolver(input: {
-  runtimePackage: ProductRuntimePackageV1
+  runtimePackage: Pick<ProductRuntimePackageV1, 'presentation'>
   readBytes(asset: FrozenRuntimeMediaAssetV2): Promise<ArrayBuffer>
   releaseAll(): Promise<void>
 }): ProductMediaResolverV1 {
@@ -90,7 +90,7 @@ function createResolver(input: {
 export async function createReleaseProductMediaResolver(input: {
   scope: WorkspaceScope
   productReleaseId: number
-  runtimePackage: ProductRuntimePackageV1
+  runtimePackage: Pick<ProductRuntimePackageV1, 'presentation'>
 }): Promise<ProductMediaResolverV1> {
   const scope = await resolveScope({ scope: input.scope })
   return createResolver({
@@ -112,7 +112,7 @@ export async function createReleaseProductMediaResolver(input: {
 export async function createBuildProductMediaResolver(input: {
   scope: WorkspaceScope
   productBuildId: number
-  preview: ProductBuildPreviewManifestV1
+  preview: Pick<ProductBuildPreviewManifestV1, 'mediaBindings'> & { runtimePackage: Pick<ProductRuntimePackageV1, 'presentation'> }
 }): Promise<ProductMediaResolverV1> {
   const scope = await resolveScope({ scope: input.scope })
   // A browser Work is one logical read owner. React StrictMode, HMR and quick

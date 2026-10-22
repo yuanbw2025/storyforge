@@ -3,6 +3,7 @@ import type {
   ProductionProductKindV1,
 } from '../types'
 import { parseProductProductionPlanV3 } from './plan'
+import { isTtrpgOpenProductionTaskV2, isTtrpgOpenProductionTaskV3 } from '../ttrpg/open-production-bindings'
 
 const STABLE_TASK_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 
@@ -11,6 +12,13 @@ const GENERIC_AUTHOR_REPAIR_TASKS = new Map<string, string>([
   ['content.narrative', 'product-production.content.v1'],
   ['content.product-module', 'product-production.content.v1'],
   ['media.requirements', 'product-production.media-requirements.v1'],
+])
+
+const TTRPG_OPEN_AUTHOR_REPAIR_TASKS = new Map<string, string>([
+  ['ttrpg.open.source-facts', 'product-production.ttrpg-open-source-facts.v1'],
+  ['ttrpg.open.rule-system', 'product-production.ttrpg-open-rule-system.v1'],
+  ['ttrpg.open.situation-layer', 'product-production.ttrpg-open-situation-layer.v1'],
+  ['ttrpg.open.media-plan', 'product-production.media-requirements.v1'],
 ])
 
 const TEXT_ADVENTURE_AUTHOR_REPAIR_TASKS = new Map<string, string>([
@@ -90,6 +98,8 @@ function supportsGenericAuthorRepair(
 ): boolean {
   if (productType === 'text-open-world' || task.executionMode !== 'model' || task.failurePolicy !== 'pause') return false
   return GENERIC_AUTHOR_REPAIR_TASKS.get(task.taskKey) === task.skillId
+    || (productType === 'ttrpg' && (TTRPG_OPEN_AUTHOR_REPAIR_TASKS.get(task.taskKey) === task.skillId
+      || isTtrpgOpenProductionTaskV2(task) || isTtrpgOpenProductionTaskV3(task)))
     || (productType === 'text-adventure'
       && TEXT_ADVENTURE_AUTHOR_REPAIR_TASKS.get(task.taskKey) === task.skillId)
 }

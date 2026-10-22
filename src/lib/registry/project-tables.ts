@@ -953,6 +953,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.productMediaAssets, name: 'productMediaAssets', owner: 'project',
     exportable: true, exportIdField: true,
     domainOwner: { allowed: ['work'], defaultOwner: 'work', locator: { kind: 'field', owner: 'work', field: 'workId' } },
+    exactArtifactRoots: [{ field: 'exactArtifactRefsJson', path: [] }],
     refs: [
       { kind: 'simple', field: 'id', target: 'productMediaBlobs[mediaAssetId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'ttrpgRuntimeAssetRequests[mediaAssetId]', onDelete: 'setNull' },
@@ -1167,6 +1168,12 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     note: 'Agent 追加事件流：消息/计划/任务/候选/确认/错误；durableRunId 由 PROJECT_TABLES 统一重映射，未确认候选不属于 Canon' },
 
   { table: db.agentRuns, name: 'agentRuns', owner: 'project',
+    // portableWorldContextBindingsJson is opaque hash/UID evidence: row lifecycle
+    // carries it unchanged; it contains no local ID requiring reference remapping.
+    // portableRuntimeOriginJson likewise preserves historical bytes. Its original
+    // numeric identities are evidence only and MUST NOT be remapped or used as locators.
+    // portablePublishedRootOriginJson carries the exact historical published RootV2
+    // preimage unchanged; strict backup hooks validate it, not reference remapping.
     domainOwner: {
       allowed: ['work', 'instance'], defaultOwner: 'work',
       locator: { kind: 'exclusive-work-instance', workField: 'workId', instanceField: 'productRuntimeSessionId' },
@@ -1279,12 +1286,33 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.productRuntimeSessions, name: 'productRuntimeSessions', owner: 'project',
     domainOwner: { allowed: ['instance'], defaultOwner: 'instance', locator: { kind: 'field', owner: 'instance', field: 'id' } },
     worldScoped: true, exportable: true, exportIdField: true,
+    exactArtifactRoots: [
+      { field: 'initialStateJson', path: ['ttrpg', 'openRun', 'situationReceipts', '*', 'artifactRefs'], when: { field: 'kind', equals: 'ttrpg' } },
+      { field: 'runtimeHeadStateJson', path: ['ttrpg', 'openRun', 'situationReceipts', '*', 'artifactRefs'], when: { field: 'kind', equals: 'ttrpg' } },
+      // Voice intents survive source Run/session deletion at branch cutpoints.
+      ...['initialStateJson', 'runtimeHeadStateJson'].flatMap(field => [
+        { field, path: ['ttrpg', 'openRun', 'voiceRequests', '*', 'artifactRefs'], when: { field: 'kind', equals: 'ttrpg' } },
+        { field, path: ['ttrpg', 'branchLineage', 'ancestors', '*', 'snapshot', 'openRun', 'voiceRequests', '*', 'artifactRefs'], when: { field: 'kind', equals: 'ttrpg' } },
+      ]),
+      // Accepted generated audio is an independent evidence owner, including cutpoint snapshots.
+      ...['initialStateJson', 'runtimeHeadStateJson'].flatMap(field => [
+        { field, path: ['ttrpg', 'openRun', 'audioReceipts', '*', 'generated', 'artifactRefs'], when: { field: 'kind', equals: 'ttrpg' } },
+        { field, path: ['ttrpg', 'branchLineage', 'ancestors', '*', 'snapshot', 'openRun', 'audioReceipts', '*', 'generated', 'artifactRefs'], when: { field: 'kind', equals: 'ttrpg' } },
+      ]),
+      // Versioned model-origin entity plans retain exact evidence independently of the source Run.
+      ...['initialStateJson', 'runtimeHeadStateJson'].flatMap(field => [
+        { field, path: ['ttrpg', 'openRun', 'entityOperations', '*', 'plan', 'modelOrigin', 'artifactRefs'], when: { field: 'kind', equals: 'ttrpg' } },
+        { field, path: ['ttrpg', 'branchLineage', 'ancestors', '*', 'snapshot', 'openRun', 'entityOperations', '*', 'plan', 'modelOrigin', 'artifactRefs'], when: { field: 'kind', equals: 'ttrpg' } },
+      ]),
+    ],
     tree: { parentField: 'parentSessionId' },
     refs: [
       { kind: 'simple', field: 'id', target: 'productRuntimeSessions[parentSessionId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'productRuntimeEvents[sessionId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'productRuntimeCheckpoints[sessionId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'ttrpgSessionParticipants[sessionId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'ttrpgNarrativeMemories[sessionId]', onDelete: 'cascade' },
+      { kind: 'simple', field: 'id', target: 'ttrpgNarrativeMemories[sourceSessionId]', onDelete: 'setNull' },
       { kind: 'simple', field: 'id', target: 'ttrpgRuntimeAssetRequests[sessionId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'productMediaAssets[productRuntimeSessionId]', onDelete: 'cascade' },
       { kind: 'simple', field: 'id', target: 'agentRuns[productRuntimeSessionId]', onDelete: 'cascade' },
@@ -1309,6 +1337,12 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.productRuntimeEvents, name: 'productRuntimeEvents', owner: 'project',
     domainOwner: { allowed: ['instance'], defaultOwner: 'instance', locator: { kind: 'parent', owner: 'instance', table: 'productRuntimeSessions', field: 'sessionId' } },
     worldScoped: true, exportable: true, exportIdField: true,
+    exactArtifactRoots: [
+      { field: 'payloadJson', path: ['request', 'artifactRefs'], when: { field: 'type', equals: 'ttrpg.audio.voice.reserved' } },
+      { field: 'payloadJson', path: ['receipt', 'generated', 'artifactRefs'], when: { field: 'type', equals: 'ttrpg.audio.cue.applied' } },
+      { field: 'payloadJson', path: ['receipt', 'artifactRefs'], when: { field: 'type', equals: 'ttrpg.open.situation.accepted' } },
+      { field: 'payloadJson', path: ['plan', 'modelOrigin', 'artifactRefs'], when: { field: 'type', equals: 'ttrpg.open.entity.model-proposed' } },
+    ],
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
       { field: 'sessionId', remapVia: 'productRuntimeSessions',
@@ -1327,6 +1361,10 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   { table: db.productRuntimeCheckpoints, name: 'productRuntimeCheckpoints', owner: 'project',
     domainOwner: { allowed: ['instance'], defaultOwner: 'instance', locator: { kind: 'parent', owner: 'instance', table: 'productRuntimeSessions', field: 'sessionId' } },
     worldScoped: true, exportable: true, exportIdField: true,
+    exactArtifactRoots: [
+      { field: 'stateJson', path: ['ttrpg', 'openRun', 'audioReceipts', '*', 'generated', 'artifactRefs'] },
+      { field: 'stateJson', path: ['ttrpg', 'branchLineage', 'ancestors', '*', 'snapshot', 'openRun', 'audioReceipts', '*', 'generated', 'artifactRefs'] },
+    ],
     exportRemap: [
       { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
       { field: 'sessionId', remapVia: 'productRuntimeSessions',
@@ -2031,6 +2069,27 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
     },
     defaults: { status: "draft", rulePackJson: "{}", contentHash: "" },
     note: "TTRPG-2A Work-owned 声明式规则包、许可、版本、夹具和验证 hash；禁止任意脚本",
+  },
+
+  {
+    table: db.ttrpgNarrativeMemories,
+    name: 'ttrpgNarrativeMemories',
+    owner: 'project',
+    domainOwner: { allowed: ['instance'], defaultOwner: 'instance',
+      locator: { kind: 'parent', owner: 'instance', table: 'productRuntimeSessions', field: 'sessionId' } },
+    worldScoped: true,
+    exportable: true,
+    exportIdField: true,
+    introducedBackupVersion: 16,
+    exportRemap: [
+      { field: 'worldGroupId', remapVia: 'worldGroups', exportAs: '_worldGroupExportId' },
+      { field: 'worldId', remapVia: 'worlds', exportAs: '_worldExportId', onUnmapped: 'require' },
+      { field: 'workId', remapVia: 'works', exportAs: '_workExportId', onUnmapped: 'require' },
+      { field: 'sessionId', remapVia: 'productRuntimeSessions', exportAs: '_productRuntimeSessionExportId', onUnmapped: 'require' },
+      { field: 'sourceSessionId', remapVia: 'productRuntimeSessions', exportAs: '_sourceSessionExportId', onUnmapped: 'require' },
+    ],
+    defaults: { sourceSessionId: null, stale: false },
+    note: 'TTRPG P8 唯一实例叙事记忆表；原事件区间与来源 hash 不改写。当前仅治理基础，尚无正式记忆读写入口；后续须先验证真实事件与候选采纳，不能把导入结构通过视为规则事实。',
   },
 
   {

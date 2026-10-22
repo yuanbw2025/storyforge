@@ -1,0 +1,2852 @@
+{
+  "schema": "storyforge.ttrpg-qwen-native-fixture-eval",
+  "version": 3,
+  "entryId": "ttrpg.local-voice.native-fixture-eval",
+  "productInvocationAllowed": false,
+  "adoptionAllowed": false,
+  "network": "disabled",
+  "maxCalls": 2,
+  "maxCodecTokensPerVoice": 512,
+  "timeoutMs": 300000,
+  "maxSecondsPerVoice": 60,
+  "sampleRate": 24000,
+  "gpuMemoryLimitBytes": 6442450944,
+  "fixture": "雨停以后，你们沿着石阶走到旧码头。守夜人抬起灯，仔细看了看每个人的脸，却没有立刻开口。远处传来两下缓慢的钟声，一只小船正从黑暗里靠近。你可以先问清来人的身份，再决定是否登船。",
+  "voices": [
+    "uncle_fu",
+    "serena"
+  ],
+  "instructAllowed": false,
+  "referenceVoiceAllowed": false,
+  "stream": false,
+  "sharedPythonAssetProfileSha256": "8a73ace3bf7e56dd8acd281d0e1600b1364611fa6a194d402129eae213994bf8",
+  "sourceRevision": "1865f49cc9a40de9b5e4fcf55952b9812d751f1d",
+  "sourceFiles": [
+    {
+      "path": "mlx_audio/__init__.py",
+      "gitBlobSha1": "7454db0413dec03b697603f29f71f87dbc018825",
+      "sha256": "073f6435c675ac1d88884b6dcff150604f217a25cfe12f4fcba2ce23ef82d3b5",
+      "bytes": 156
+    },
+    {
+      "path": "mlx_audio/codec/__init__.py",
+      "gitBlobSha1": "25199f75059eb77b9105d5b1f6c5b06f3b095e2e",
+      "sha256": "98103f4d6371359ab920568d59e09506d9efdf35d3e576f0682627ec2ccef759",
+      "bytes": 391
+    },
+    {
+      "path": "mlx_audio/codec/models/__init__.py",
+      "gitBlobSha1": "081e98a41188d80053ad5ef343b6478122b59f03",
+      "sha256": "6a5e5aaab5cdf0d36ef90e6c06c8fef80d614c8ccd65c25005b2f58f22dbf7d3",
+      "bytes": 585
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/__init__.py",
+      "gitBlobSha1": "134b3ad0e10f0115a8ef19df6e0a8c59488ed5c2",
+      "sha256": "03f01392f23179661165271b1c82d725f2fb3d44a112d63a5e7d0b7e88d6d384",
+      "bytes": 45
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/mimi.py",
+      "gitBlobSha1": "d25323fa65190cc9b640ef32ab01d2baef0776ef",
+      "sha256": "7abf09e8e5ceb4f811e237540a58814dc31e448951fe77bc41f1b88db59db934",
+      "bytes": 10298
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/modules/__init__.py",
+      "gitBlobSha1": "1c9ed3441b09424de12d7269a929a588263e265a",
+      "sha256": "5faec770c9ae224b8bf7dc710025bfe5d8506d1803e36b27b20a312d583bb9fa",
+      "bytes": 697
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/modules/conv.py",
+      "gitBlobSha1": "5aa453d2c6d11fdcf89e9f203b31d8bfc6ad08e0",
+      "sha256": "7d9a634d1c5ef7fb7bc568ad2c9e21afc74f4a5d9d915651d708ddff966d7a0f",
+      "bytes": 10943
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/modules/quantization.py",
+      "gitBlobSha1": "6b87f3ffb0f57cdc79595641d5def38512763fb0",
+      "sha256": "e4be697044d50aa0b13850bfa80e766d1c0abf949cb916ee3afb0318fffbbfd5",
+      "bytes": 6409
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/modules/seanet.py",
+      "gitBlobSha1": "38675683b6a67622e9abe3d264726ffc0d1169b2",
+      "sha256": "07565848e1aab8cf7df03539338685be50d2970444a42d9e626ff2fdaf3de722",
+      "bytes": 9342
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/modules/transformer.py",
+      "gitBlobSha1": "3e4a853d766b353aeabe4ba741bb7fb4c0aa0c83",
+      "sha256": "79f1beb99c168becb7baae080fe7b859e22372b0b9dc1655793de3ba750c53c3",
+      "bytes": 8159
+    },
+    {
+      "path": "mlx_audio/dsp.py",
+      "gitBlobSha1": "c474a94dc0f38c430df87e1d074a61986e0d2056",
+      "sha256": "c47da00eea77f3bce396d4eb36c694211f40d9e5571393b685eda77f8978b98c",
+      "bytes": 32649
+    },
+    {
+      "path": "mlx_audio/lm/__init__.py",
+      "gitBlobSha1": "35f79ffea88028f4bb6220f39d801da0284072bc",
+      "sha256": "75384fb45d4f62f15691f190049958761d28ad75571f35964e4aa0aa7e46b9e0",
+      "bytes": 78
+    },
+    {
+      "path": "mlx_audio/lm/models/__init__.py",
+      "gitBlobSha1": "2d5529dfeb69a2fc9c68e1a565388072c50bbfdb",
+      "sha256": "7930599d6189bc7343f54a4fc101428a634fb32548788f38428bd1d8bface034",
+      "bytes": 65
+    },
+    {
+      "path": "mlx_audio/lm/models/base.py",
+      "gitBlobSha1": "07372a4269ffddf966f465b6c8ade6e079f0c841",
+      "sha256": "0cac9ce6bf366622934f11eab4cc5eb2d394f46ac702cdd507c9c23c18fc1b96",
+      "bytes": 2048
+    },
+    {
+      "path": "mlx_audio/lm/models/cache.py",
+      "gitBlobSha1": "eb371d464e77dc301fa6f5005c28d29eed65305d",
+      "sha256": "ab41054c4564784e7e131d7bd9c9e42a91b951bb4478d3a7ce8017ed3028e632",
+      "bytes": 25346
+    },
+    {
+      "path": "mlx_audio/lm/sample_utils.py",
+      "gitBlobSha1": "44e67394cc3d4d13f27df3bca9dce6308cd94e48",
+      "sha256": "9a6a7279c7aff850cdf80dd7f77ece1c31c3441ddacee595fbf83d013f60cc41",
+      "bytes": 12950
+    },
+    {
+      "path": "mlx_audio/registry.py",
+      "gitBlobSha1": "ea44e7c5b2bf4f55d3784dca40b20df84f81901c",
+      "sha256": "d3fcc464f2c897fb0da98239e8939672abf6b665d80200f7b33e0fd2332b704a",
+      "bytes": 5669
+    },
+    {
+      "path": "mlx_audio/tts/__init__.py",
+      "gitBlobSha1": "229700e0ef0660c88febcda389879ff6dea5cef8",
+      "sha256": "98f4aa5a8ece4a088d91382e6fb4fb8e9fcea87ffcad34c7c311147a49ef23c9",
+      "bytes": 70
+    },
+    {
+      "path": "mlx_audio/tts/continuous.py",
+      "gitBlobSha1": "3f5d0730ba40ef700b1187aa3f3bea04680efc3d",
+      "sha256": "b0245a0aaddb31126da5a83b810896bc77ea3fbe7d3af6245049318b0a2b510b",
+      "bytes": 1420
+    },
+    {
+      "path": "mlx_audio/tts/models/__init__.py",
+      "gitBlobSha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "mlx_audio/tts/models/base.py",
+      "gitBlobSha1": "b29bf0ac5447e57a197a15182c56ca2f72ca28bd",
+      "sha256": "6fb902515978db0e5024b8fc4c7eea1a25902bf16eb7276170fd6e7cc1fccc70",
+      "bytes": 2531
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/__init__.py",
+      "gitBlobSha1": "6c020a744c3e274094e77609dcd050e6b68a981b",
+      "sha256": "ceabfeadabf291e2284f9fb276be056960ace161b62797718c3979e94d22366d",
+      "bytes": 78
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/config.py",
+      "gitBlobSha1": "f40bdb4d33b69b2de0c074c2ee211d4a9fbf7def",
+      "sha256": "25e947faf6163764bce2d2061afe508801352b6b821479f570fd410dd493d9fe",
+      "bytes": 8685
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/continuous_batching.py",
+      "gitBlobSha1": "9c59e5485bd63bece6e4dd1ec1f737fa14dc1600",
+      "sha256": "4c7ef219721b9974634146151bb769e07f6b11a324aecba76949a90d632d90d6",
+      "bytes": 12660
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/qwen3_tts.py",
+      "gitBlobSha1": "6cd244c522460e0a5b1b00a4a5d3b54affbf6ba7",
+      "sha256": "cf264ff51fa16c232cca5ded3ce052af6f4f1137d1371b86ba9f4e2a1a526f0a",
+      "bytes": 113843
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/speaker_encoder.py",
+      "gitBlobSha1": "1774dbf1e76070f338e0ec222c2108e31d3e9bb4",
+      "sha256": "2670d94d67e189514b5eab30d0aada63dd2648092964cadf4d5ad9ad13fdfe4e",
+      "bytes": 10520
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/speech_tokenizer.py",
+      "gitBlobSha1": "0a4c93dabd511f7cedccc5dc0822aca9e4b860a7",
+      "sha256": "527a0fb912988fc5f70676229ec0c4a77d92dd5c2504a4ad3f575166ee5aaa07",
+      "bytes": 54223
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/talker.py",
+      "gitBlobSha1": "817b6a2bb0db4a63f4ef811d117f9e77204edaff",
+      "sha256": "68fd1a980dd9dc4fae6346b26919957642f3fb04b65ab32d4e8bcee3f84fd02e",
+      "bytes": 28173
+    },
+    {
+      "path": "mlx_audio/tts/utils.py",
+      "gitBlobSha1": "9c25bec47431003e395980d4fc2ff7206029a4c4",
+      "sha256": "0ebdf1f95ed7aa76227ce7f70f3d1f8c53cc08b59ea687c5d58d23213ac0763b",
+      "bytes": 10147
+    },
+    {
+      "path": "mlx_audio/utils.py",
+      "gitBlobSha1": "6b9ca607c04e10d8b85edff55334e0f507640d74",
+      "sha256": "8886ec6595c2d1d7a6353d8878aadee6cfa3c37ace8a6ed0b3565331687dd463",
+      "bytes": 26224
+    }
+  ],
+  "patches": [
+    {
+      "path": "mlx_audio/__init__.py",
+      "sha256": "073f6435c675ac1d88884b6dcff150604f217a25cfe12f4fcba2ce23ef82d3b5",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/codec/__init__.py",
+      "sha256": "1cd513bdced59341b1f7edc53d2c65faefa7c005d8442f61f9aa2939df48f8c7",
+      "edits": [
+        {
+          "old": "from .models import (\n    DAC,\n    EcapaTdnnBackbone,\n    Encodec,\n    Mimi,\n    MiMoAudioTokenizer,\n    MossAudioTokenizer,\n    NemotronVoiceChatCodec,\n    StepAudio2Token2Wav,\n    Vocos,\n)\n\n__all__ = [\n    \"DAC\",\n    \"EcapaTdnnBackbone\",\n    \"Encodec\",\n    \"Mimi\",\n    \"MiMoAudioTokenizer\",\n    \"MossAudioTokenizer\",\n    \"NemotronVoiceChatCodec\",\n    \"StepAudio2Token2Wav\",\n    \"Vocos\",\n]\n",
+          "new": "\"\"\"Only pinned Qwen/Mimi modules are available in this evaluation.\"\"\"\n"
+        }
+      ]
+    },
+    {
+      "path": "mlx_audio/codec/models/__init__.py",
+      "sha256": "1cd513bdced59341b1f7edc53d2c65faefa7c005d8442f61f9aa2939df48f8c7",
+      "edits": [
+        {
+          "old": "from .descript import DAC\nfrom .ecapa_tdnn import EcapaTdnnBackbone\nfrom .encodec import Encodec\nfrom .mimi import Mimi\nfrom .mimo_audio_tokenizer import MiMoAudioTokenizer\nfrom .moss_audio_tokenizer import MossAudioTokenizer\nfrom .nemotron_voicechat import NemotronVoiceChatCodec\nfrom .snac import SNAC\nfrom .stepaudio2 import StepAudio2Token2Wav\nfrom .vocos import Vocos\n\n__all__ = [\n    \"DAC\",\n    \"EcapaTdnnBackbone\",\n    \"Encodec\",\n    \"Mimi\",\n    \"MiMoAudioTokenizer\",\n    \"MossAudioTokenizer\",\n    \"NemotronVoiceChatCodec\",\n    \"SNAC\",\n    \"StepAudio2Token2Wav\",\n    \"Vocos\",\n]\n",
+          "new": "\"\"\"Only pinned Qwen/Mimi modules are available in this evaluation.\"\"\"\n"
+        }
+      ]
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/__init__.py",
+      "sha256": "03f01392f23179661165271b1c82d725f2fb3d44a112d63a5e7d0b7e88d6d384",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/mimi.py",
+      "sha256": "7abf09e8e5ceb4f811e237540a58814dc31e448951fe77bc41f1b88db59db934",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/modules/__init__.py",
+      "sha256": "5faec770c9ae224b8bf7dc710025bfe5d8506d1803e36b27b20a312d583bb9fa",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/modules/conv.py",
+      "sha256": "7d9a634d1c5ef7fb7bc568ad2c9e21afc74f4a5d9d915651d708ddff966d7a0f",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/modules/quantization.py",
+      "sha256": "e4be697044d50aa0b13850bfa80e766d1c0abf949cb916ee3afb0318fffbbfd5",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/modules/seanet.py",
+      "sha256": "07565848e1aab8cf7df03539338685be50d2970444a42d9e626ff2fdaf3de722",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/codec/models/mimi/modules/transformer.py",
+      "sha256": "79f1beb99c168becb7baae080fe7b859e22372b0b9dc1655793de3ba750c53c3",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/dsp.py",
+      "sha256": "c47da00eea77f3bce396d4eb36c694211f40d9e5571393b685eda77f8978b98c",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/lm/__init__.py",
+      "sha256": "75384fb45d4f62f15691f190049958761d28ad75571f35964e4aa0aa7e46b9e0",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/lm/models/__init__.py",
+      "sha256": "7930599d6189bc7343f54a4fc101428a634fb32548788f38428bd1d8bface034",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/lm/models/base.py",
+      "sha256": "0cac9ce6bf366622934f11eab4cc5eb2d394f46ac702cdd507c9c23c18fc1b96",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/lm/models/cache.py",
+      "sha256": "ab41054c4564784e7e131d7bd9c9e42a91b951bb4478d3a7ce8017ed3028e632",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/lm/sample_utils.py",
+      "sha256": "9a6a7279c7aff850cdf80dd7f77ece1c31c3441ddacee595fbf83d013f60cc41",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/registry.py",
+      "sha256": "d3fcc464f2c897fb0da98239e8939672abf6b665d80200f7b33e0fd2332b704a",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/tts/__init__.py",
+      "sha256": "98f4aa5a8ece4a088d91382e6fb4fb8e9fcea87ffcad34c7c311147a49ef23c9",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/tts/continuous.py",
+      "sha256": "b0245a0aaddb31126da5a83b810896bc77ea3fbe7d3af6245049318b0a2b510b",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/tts/models/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/tts/models/base.py",
+      "sha256": "6fb902515978db0e5024b8fc4c7eea1a25902bf16eb7276170fd6e7cc1fccc70",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/__init__.py",
+      "sha256": "ceabfeadabf291e2284f9fb276be056960ace161b62797718c3979e94d22366d",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/config.py",
+      "sha256": "25e947faf6163764bce2d2061afe508801352b6b821479f570fd410dd493d9fe",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/continuous_batching.py",
+      "sha256": "4c7ef219721b9974634146151bb769e07f6b11a324aecba76949a90d632d90d6",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/qwen3_tts.py",
+      "sha256": "c8e57d8a1b1ff9638dd420c69013429eb1cd01cb970a033bd31a945eefd405f0",
+      "edits": [
+        {
+          "old": "    def _generate_with_instruct(\n        self,\n        text: str,\n        speaker: Optional[str],\n        language: str,\n        instruct: Optional[str],\n        temperature: float,\n        max_tokens: int,\n        top_k: int,\n        top_p: float,\n        repetition_penalty: float,\n        verbose: bool,\n        stream: bool = False,\n        streaming_interval: float = 2.0,\n        streaming_context_size: int = 25,\n    ) -> Generator[GenerationResult, None, None]:\n        \"\"\"Internal method for generation with instruct support.\"\"\"\n        if self.speech_tokenizer is None:\n            raise ValueError(\"Speech tokenizer not loaded\")\n\n        start_time = time.time()\n\n        # Prepare inputs with instruct\n        input_embeds, trailing_text_hidden, tts_pad_embed = (\n            self._prepare_generation_inputs(\n                text=text,\n                language=language,\n                speaker=speaker,\n                instruct=instruct,\n            )\n        )\n\n        # Honor the caller-provided max_tokens; matches the base generation path.\n        # A text-length-derived cap could clip slow or expressive utterances.\n        effective_max_tokens = max_tokens\n\n        # Initialize cache\n        cache = self.talker.make_cache()\n        code_cache = self.talker.code_predictor.make_cache()\n        generated_codes = []\n        generated_token_ids = []\n        config = self.config.talker_config\n        eos_token_id = config.codec_eos_token_id\n        suppress_tokens = [\n            i\n            for i in range(config.vocab_size - 1024, config.vocab_size)\n            if i != eos_token_id\n        ]\n        trailing_idx = 0\n\n        # Initialize streaming state\n        if stream:\n            streaming_chunk_size = max(1, int(streaming_interval * 12.5))\n            decoded_tokens = 0\n            chunk_start_time = time.time()\n            self.speech_tokenizer.decoder.reset_streaming_state()\n\n        # Create progress bar for token generation\n        pbar = tqdm(\n            total=effective_max_tokens,\n            desc=\"Generating\",\n            unit=\"tokens\",\n            disable=not verbose,\n            leave=False,\n        )\n\n        for step in range(effective_max_tokens):\n            # Forward pass through talker\n            logits, hidden = self.talker(input_embeds, cache=cache)\n\n            # Sample first codebook token\n            next_token = self._sample_token(\n                logits,\n                temperature=temperature,\n                top_k=top_k,\n                top_p=top_p,\n                repetition_penalty=repetition_penalty,\n                generated_tokens=(generated_token_ids if generated_token_ids else None),\n                suppress_tokens=suppress_tokens,\n            )\n\n            # Lazy EOS check — defer sync to batch with input_embeds eval\n            is_eos = next_token[0, 0] == eos_token_id\n\n            # Generate remaining codebook tokens with code predictor\n            code_tokens = [next_token]\n            code_hidden = hidden[:, -1:, :]\n\n            # Reset code cache (reuse allocation instead of make_cache/del)\n            for c in code_cache:\n                c.keys = None\n                c.values = None\n                c.offset = 0\n\n            for code_idx in range(config.num_code_groups - 1):\n                if code_idx == 0:\n                    code_0_embed = self.talker.get_input_embeddings()(next_token)\n                    code_input = mx.concatenate([code_hidden, code_0_embed], axis=1)\n                else:\n                    code_embed = self.talker.code_predictor.codec_embedding[\n                        code_idx - 1\n                    ](code_tokens[-1])\n                    code_input = code_embed\n\n                code_logits, code_cache, _ = self.talker.code_predictor(\n                    code_input,\n                    cache=code_cache,\n                    generation_step=code_idx,\n                )\n\n                next_code = self._sample_token(\n                    code_logits,\n                    temperature=temperature,\n                    top_k=top_k,\n                    top_p=top_p,\n                )\n                code_tokens.append(next_code)\n\n            # Stack all codebook tokens\n            all_codes = mx.concatenate(code_tokens, axis=1)\n\n            # Prepare next input\n            if trailing_idx < trailing_text_hidden.shape[1]:\n                text_embed = trailing_text_hidden[:, trailing_idx : trailing_idx + 1, :]\n                trailing_idx += 1\n            else:\n                text_embed = tts_pad_embed\n\n            codec_embed = self.talker.get_input_embeddings()(next_token)\n            for i, code in enumerate(code_tokens[1:]):\n                codec_embed = codec_embed + self.talker.code_predictor.codec_embedding[\n                    i\n                ](code)\n\n            input_embeds = text_embed + codec_embed\n\n            # Single sync point — evaluate input_embeds and EOS check together\n            mx.eval(input_embeds, is_eos)\n\n            if is_eos.item():\n                break\n\n            generated_token_ids.append(int(next_token[0, 0]))\n            generated_codes.append(all_codes)\n\n            pbar.update(1)\n\n            # Streaming: incrementally decode only new tokens\n            if stream and len(generated_codes) - decoded_tokens >= streaming_chunk_size:\n                new_tokens = len(generated_codes) - decoded_tokens\n                codes_chunk = mx.stack(generated_codes[decoded_tokens:], axis=1)\n                codes_for_decoder = mx.transpose(codes_chunk, (0, 2, 1))\n                mx.eval(codes_for_decoder)\n\n                wav = self.speech_tokenizer.decoder.streaming_step(codes_for_decoder)\n                audio_chunk = wav.squeeze(1)[0]\n                mx.eval(audio_chunk)\n\n                decoded_tokens = len(generated_codes)\n\n                chunk_elapsed = time.time() - chunk_start_time\n                chunk_audio_dur = audio_chunk.shape[0] / self.sample_rate\n                chunk_rtf = chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0\n\n                yield GenerationResult(\n                    audio=audio_chunk,\n                    samples=audio_chunk.shape[0],\n                    sample_rate=self.sample_rate,\n                    segment_idx=0,\n                    token_count=new_tokens,\n                    audio_duration=format_duration(chunk_audio_dur),\n                    real_time_factor=chunk_rtf,\n                    prompt={\n                        \"tokens\": new_tokens,\n                        \"tokens-per-sec\": (\n                            new_tokens / chunk_elapsed if chunk_elapsed > 0 else 0\n                        ),\n                    },\n                    audio_samples={\n                        \"samples\": audio_chunk.shape[0],\n                        \"samples-per-sec\": (\n                            audio_chunk.shape[0] / chunk_elapsed\n                            if chunk_elapsed > 0\n                            else 0\n                        ),\n                    },\n                    processing_time_seconds=chunk_elapsed,\n                    peak_memory_usage=mx.get_peak_memory() / 1e9,\n                    is_streaming_chunk=True,\n                )\n\n                chunk_start_time = time.time()\n\n        pbar.close()\n\n        # Yield any remaining tokens and clean up streaming state\n        if stream:\n            if len(generated_codes) > decoded_tokens:\n                codes_chunk = mx.stack(generated_codes[decoded_tokens:], axis=1)\n                codes_for_decoder = mx.transpose(codes_chunk, (0, 2, 1))\n                mx.eval(codes_for_decoder)\n\n                wav = self.speech_tokenizer.decoder.streaming_step(codes_for_decoder)\n                audio_chunk = wav.squeeze(1)[0]\n                mx.eval(audio_chunk)\n\n                new_tokens = len(generated_codes) - decoded_tokens\n\n                chunk_elapsed = time.time() - chunk_start_time\n                chunk_audio_dur = audio_chunk.shape[0] / self.sample_rate\n                chunk_rtf = chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0\n\n                yield GenerationResult(\n                    audio=audio_chunk,\n                    samples=audio_chunk.shape[0],\n                    sample_rate=self.sample_rate,\n                    segment_idx=0,\n                    token_count=new_tokens,\n                    audio_duration=format_duration(chunk_audio_dur),\n                    real_time_factor=chunk_rtf,\n                    prompt={\n                        \"tokens\": new_tokens,\n                        \"tokens-per-sec\": (\n                            new_tokens / chunk_elapsed if chunk_elapsed > 0 else 0\n                        ),\n                    },\n                    audio_samples={\n                        \"samples\": audio_chunk.shape[0],\n                        \"samples-per-sec\": (\n                            audio_chunk.shape[0] / chunk_elapsed\n                            if chunk_elapsed > 0\n                            else 0\n                        ),\n                    },\n                    processing_time_seconds=chunk_elapsed,\n                    peak_memory_usage=mx.get_peak_memory() / 1e9,\n                    is_streaming_chunk=True,\n                    is_final_chunk=True,\n                )\n            self.speech_tokenizer.decoder.reset_streaming_state()\n            mx.clear_cache()\n            return\n\n        if not generated_codes:\n            mx.clear_cache()\n            return\n\n        # Stack all generated codes\n        codes = mx.stack(generated_codes, axis=1)\n\n        # Non-streaming: decode all at once\n        audio, audio_lengths = self.speech_tokenizer.decode(codes)\n        audio = audio[0]  # Remove batch dim\n\n        # Trim to valid length\n        valid_len = int(audio_lengths[0])\n        if valid_len > 0 and valid_len < audio.shape[0]:\n            audio = audio[:valid_len]\n\n        mx.eval(audio)\n\n        elapsed_time = time.time() - start_time\n        samples = audio.shape[0]\n        token_count = len(generated_codes)\n\n        duration_seconds = samples / self.sample_rate\n        rtf = duration_seconds / elapsed_time if elapsed_time > 0 else 0\n\n        yield GenerationResult(\n            audio=audio,\n            samples=samples,\n            sample_rate=self.sample_rate,\n            segment_idx=0,\n            token_count=token_count,\n            audio_duration=format_duration(duration_seconds),\n            real_time_factor=rtf,\n            prompt={\n                \"tokens\": token_count,\n                \"tokens-per-sec\": token_count / elapsed_time if elapsed_time > 0 else 0,\n            },\n            audio_samples={\n                \"samples\": samples,\n                \"samples-per-sec\": samples / elapsed_time if elapsed_time > 0 else 0,\n            },\n            processing_time_seconds=elapsed_time,\n            peak_memory_usage=mx.get_peak_memory() / 1e9,\n        )\n\n        mx.clear_cache()\n",
+          "new": "    def _generate_with_instruct(\n        self,\n        text: str,\n        speaker: Optional[str],\n        language: str,\n        instruct: Optional[str],\n        temperature: float,\n        max_tokens: int,\n        top_k: int,\n        top_p: float,\n        repetition_penalty: float,\n        verbose: bool,\n        stream: bool = False,\n        streaming_interval: float = 2.0,\n        streaming_context_size: int = 25,\n    ) -> Generator[GenerationResult, None, None]:\n        \"\"\"Internal method for generation with instruct support.\"\"\"\n        if self.speech_tokenizer is None:\n            raise ValueError(\"Speech tokenizer not loaded\")\n\n        start_time = time.time()\n        self._fixture_eos_seen = False\n        self._fixture_resource_guard(\"before-generation\")\n\n        # Prepare inputs with instruct\n        input_embeds, trailing_text_hidden, tts_pad_embed = (\n            self._prepare_generation_inputs(\n                text=text,\n                language=language,\n                speaker=speaker,\n                instruct=instruct,\n            )\n        )\n\n        # Honor the caller-provided max_tokens; matches the base generation path.\n        # A text-length-derived cap could clip slow or expressive utterances.\n        effective_max_tokens = max_tokens\n\n        # Initialize cache\n        cache = self.talker.make_cache()\n        code_cache = self.talker.code_predictor.make_cache()\n        generated_codes = []\n        generated_token_ids = []\n        config = self.config.talker_config\n        eos_token_id = config.codec_eos_token_id\n        suppress_tokens = [\n            i\n            for i in range(config.vocab_size - 1024, config.vocab_size)\n            if i != eos_token_id\n        ]\n        trailing_idx = 0\n\n        # Initialize streaming state\n        if stream:\n            streaming_chunk_size = max(1, int(streaming_interval * 12.5))\n            decoded_tokens = 0\n            chunk_start_time = time.time()\n            self.speech_tokenizer.decoder.reset_streaming_state()\n\n        # Create progress bar for token generation\n        pbar = tqdm(\n            total=effective_max_tokens,\n            desc=\"Generating\",\n            unit=\"tokens\",\n            disable=not verbose,\n            leave=False,\n        )\n\n        for step in range(effective_max_tokens):\n            # Forward pass through talker\n            logits, hidden = self.talker(input_embeds, cache=cache)\n\n            # Sample first codebook token\n            next_token = self._sample_token(\n                logits,\n                temperature=temperature,\n                top_k=top_k,\n                top_p=top_p,\n                repetition_penalty=repetition_penalty,\n                generated_tokens=(generated_token_ids if generated_token_ids else None),\n                suppress_tokens=suppress_tokens,\n            )\n\n            # Lazy EOS check — defer sync to batch with input_embeds eval\n            is_eos = next_token[0, 0] == eos_token_id\n\n            # Generate remaining codebook tokens with code predictor\n            code_tokens = [next_token]\n            code_hidden = hidden[:, -1:, :]\n\n            # Reset code cache (reuse allocation instead of make_cache/del)\n            for c in code_cache:\n                c.keys = None\n                c.values = None\n                c.offset = 0\n\n            for code_idx in range(config.num_code_groups - 1):\n                if code_idx == 0:\n                    code_0_embed = self.talker.get_input_embeddings()(next_token)\n                    code_input = mx.concatenate([code_hidden, code_0_embed], axis=1)\n                else:\n                    code_embed = self.talker.code_predictor.codec_embedding[\n                        code_idx - 1\n                    ](code_tokens[-1])\n                    code_input = code_embed\n\n                code_logits, code_cache, _ = self.talker.code_predictor(\n                    code_input,\n                    cache=code_cache,\n                    generation_step=code_idx,\n                )\n\n                next_code = self._sample_token(\n                    code_logits,\n                    temperature=temperature,\n                    top_k=top_k,\n                    top_p=top_p,\n                )\n                code_tokens.append(next_code)\n\n            # Stack all codebook tokens\n            all_codes = mx.concatenate(code_tokens, axis=1)\n\n            # Prepare next input\n            if trailing_idx < trailing_text_hidden.shape[1]:\n                text_embed = trailing_text_hidden[:, trailing_idx : trailing_idx + 1, :]\n                trailing_idx += 1\n            else:\n                text_embed = tts_pad_embed\n\n            codec_embed = self.talker.get_input_embeddings()(next_token)\n            for i, code in enumerate(code_tokens[1:]):\n                codec_embed = codec_embed + self.talker.code_predictor.codec_embedding[\n                    i\n                ](code)\n\n            input_embeds = text_embed + codec_embed\n\n            # Single sync point — evaluate input_embeds and EOS check together\n            mx.eval(input_embeds, is_eos)\n            self._fixture_resource_guard(\"codec-step\")\n\n            if is_eos.item():\n                self._fixture_eos_seen = True\n                break\n\n            generated_token_ids.append(int(next_token[0, 0]))\n            generated_codes.append(all_codes)\n\n            pbar.update(1)\n\n            # Streaming: incrementally decode only new tokens\n            if stream and len(generated_codes) - decoded_tokens >= streaming_chunk_size:\n                new_tokens = len(generated_codes) - decoded_tokens\n                codes_chunk = mx.stack(generated_codes[decoded_tokens:], axis=1)\n                codes_for_decoder = mx.transpose(codes_chunk, (0, 2, 1))\n                mx.eval(codes_for_decoder)\n\n                wav = self.speech_tokenizer.decoder.streaming_step(codes_for_decoder)\n                audio_chunk = wav.squeeze(1)[0]\n                mx.eval(audio_chunk)\n\n                decoded_tokens = len(generated_codes)\n\n                chunk_elapsed = time.time() - chunk_start_time\n                chunk_audio_dur = audio_chunk.shape[0] / self.sample_rate\n                chunk_rtf = chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0\n\n                yield GenerationResult(\n                    audio=audio_chunk,\n                    samples=audio_chunk.shape[0],\n                    sample_rate=self.sample_rate,\n                    segment_idx=0,\n                    token_count=new_tokens,\n                    audio_duration=format_duration(chunk_audio_dur),\n                    real_time_factor=chunk_rtf,\n                    prompt={\n                        \"tokens\": new_tokens,\n                        \"tokens-per-sec\": (\n                            new_tokens / chunk_elapsed if chunk_elapsed > 0 else 0\n                        ),\n                    },\n                    audio_samples={\n                        \"samples\": audio_chunk.shape[0],\n                        \"samples-per-sec\": (\n                            audio_chunk.shape[0] / chunk_elapsed\n                            if chunk_elapsed > 0\n                            else 0\n                        ),\n                    },\n                    processing_time_seconds=chunk_elapsed,\n                    peak_memory_usage=mx.get_peak_memory() / 1e9,\n                    is_streaming_chunk=True,\n                )\n\n                chunk_start_time = time.time()\n\n        pbar.close()\n\n        # Yield any remaining tokens and clean up streaming state\n        if stream:\n            if len(generated_codes) > decoded_tokens:\n                codes_chunk = mx.stack(generated_codes[decoded_tokens:], axis=1)\n                codes_for_decoder = mx.transpose(codes_chunk, (0, 2, 1))\n                mx.eval(codes_for_decoder)\n\n                wav = self.speech_tokenizer.decoder.streaming_step(codes_for_decoder)\n                audio_chunk = wav.squeeze(1)[0]\n                mx.eval(audio_chunk)\n\n                new_tokens = len(generated_codes) - decoded_tokens\n\n                chunk_elapsed = time.time() - chunk_start_time\n                chunk_audio_dur = audio_chunk.shape[0] / self.sample_rate\n                chunk_rtf = chunk_audio_dur / chunk_elapsed if chunk_elapsed > 0 else 0\n\n                yield GenerationResult(\n                    audio=audio_chunk,\n                    samples=audio_chunk.shape[0],\n                    sample_rate=self.sample_rate,\n                    segment_idx=0,\n                    token_count=new_tokens,\n                    audio_duration=format_duration(chunk_audio_dur),\n                    real_time_factor=chunk_rtf,\n                    prompt={\n                        \"tokens\": new_tokens,\n                        \"tokens-per-sec\": (\n                            new_tokens / chunk_elapsed if chunk_elapsed > 0 else 0\n                        ),\n                    },\n                    audio_samples={\n                        \"samples\": audio_chunk.shape[0],\n                        \"samples-per-sec\": (\n                            audio_chunk.shape[0] / chunk_elapsed\n                            if chunk_elapsed > 0\n                            else 0\n                        ),\n                    },\n                    processing_time_seconds=chunk_elapsed,\n                    peak_memory_usage=mx.get_peak_memory() / 1e9,\n                    is_streaming_chunk=True,\n                    is_final_chunk=True,\n                )\n            self.speech_tokenizer.decoder.reset_streaming_state()\n            mx.clear_cache()\n            return\n\n        if not self._fixture_eos_seen:\n            raise ValueError(\"Fixed fixture reached codec cap without EOS; preserve failure\")\n\n        if not generated_codes:\n            mx.clear_cache()\n            return\n\n        # Stack all generated codes\n        codes = mx.stack(generated_codes, axis=1)\n\n        # Non-streaming: decode all at once\n        audio, audio_lengths = self.speech_tokenizer.decode(codes)\n        audio = audio[0]  # Remove batch dim\n\n        # Trim to valid length\n        valid_len = int(audio_lengths[0])\n        if valid_len > 0 and valid_len < audio.shape[0]:\n            audio = audio[:valid_len]\n\n        mx.eval(audio)\n\n        elapsed_time = time.time() - start_time\n        samples = audio.shape[0]\n        token_count = len(generated_codes)\n\n        duration_seconds = samples / self.sample_rate\n        rtf = duration_seconds / elapsed_time if elapsed_time > 0 else 0\n\n        yield GenerationResult(\n            audio=audio,\n            samples=samples,\n            sample_rate=self.sample_rate,\n            segment_idx=0,\n            token_count=token_count,\n            audio_duration=format_duration(duration_seconds),\n            real_time_factor=rtf,\n            prompt={\n                \"tokens\": token_count,\n                \"tokens-per-sec\": token_count / elapsed_time if elapsed_time > 0 else 0,\n            },\n            audio_samples={\n                \"samples\": samples,\n                \"samples-per-sec\": samples / elapsed_time if elapsed_time > 0 else 0,\n            },\n            processing_time_seconds=elapsed_time,\n            peak_memory_usage=mx.get_peak_memory() / 1e9,\n        )\n\n        mx.clear_cache()\n"
+        }
+      ]
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/speaker_encoder.py",
+      "sha256": "2670d94d67e189514b5eab30d0aada63dd2648092964cadf4d5ad9ad13fdfe4e",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/speech_tokenizer.py",
+      "sha256": "f345689f3daa91989374f3d4a7faf1529a6beef8aa69bf7e1acc1e81db27c296",
+      "edits": [
+        {
+          "old": "        wav = self.decoder.chunked_decode(codes).squeeze(1)",
+          "new": "        wav = self.decoder.chunked_decode(codes, chunk_size=100).squeeze(1)"
+        },
+        {
+          "old": "            wav_chunk = self(codes_chunk)\n            wavs.append",
+          "new": "            wav_chunk = self(codes_chunk)\n            mx.eval(wav_chunk)\n            self._fixture_resource_guard(\"decode-chunk\")\n            mx.clear_cache()\n            wavs.append"
+        },
+        {
+          "old": "        audio_lengths = (audio_codes[..., 0] > 0).sum(",
+          "new": "        audio_lengths = (audio_codes[..., 0].astype(mx.int32) > -1).sum("
+        }
+      ]
+    },
+    {
+      "path": "mlx_audio/tts/models/qwen3_tts/talker.py",
+      "sha256": "68fd1a980dd9dc4fae6346b26919957642f3fb04b65ab32d4e8bcee3f84fd02e",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/tts/utils.py",
+      "sha256": "0ebdf1f95ed7aa76227ce7f70f3d1f8c53cc08b59ea687c5d58d23213ac0763b",
+      "edits": []
+    },
+    {
+      "path": "mlx_audio/utils.py",
+      "sha256": "8886ec6595c2d1d7a6353d8878aadee6cfa3c37ace8a6ed0b3565331687dd463",
+      "edits": []
+    }
+  ],
+  "overlayFiles": [
+    {
+      "path": "mlx/__array_api_info.py",
+      "bytes": 2623,
+      "sha256": "67bd1bf52f853f2ea96fd6d4f0c64435899f36292290e3d528327a799f863912"
+    },
+    {
+      "path": "mlx/__main__.py",
+      "bytes": 578,
+      "sha256": "957f513bd1c40f9b8d6cf51d676aa66618bf59b40fa1278ba339a87799c318de"
+    },
+    {
+      "path": "mlx/_distributed_utils/common.py",
+      "bytes": 3927,
+      "sha256": "2a10084afd692b972b116df6c7b9e48f3219865f5af2506d446d7e2a9d1a7f3b"
+    },
+    {
+      "path": "mlx/_distributed_utils/config.py",
+      "bytes": 20365,
+      "sha256": "827c650332d7bec9fb4decd5a79940e708c5cdf95ad5b90321166247a62122d9"
+    },
+    {
+      "path": "mlx/_distributed_utils/launch.py",
+      "bytes": 19035,
+      "sha256": "0d4c03293e1dd0b7536d207792310c55f49b01a4001aee3bd868f2549280bbb8"
+    },
+    {
+      "path": "mlx/_reprlib_fix.py",
+      "bytes": 321,
+      "sha256": "f748ea4f10995bf30ed6ba76ed3539f23c18cdf541031e1c0968dd60dc98f723"
+    },
+    {
+      "path": "mlx/core/__init__.pyi",
+      "bytes": 179060,
+      "sha256": "bcdbd51e4d664df491b5537cfb2d36102f3c49614ca2aba4497fdc99102e7f1e"
+    },
+    {
+      "path": "mlx/core/cuda.pyi",
+      "bytes": 97,
+      "sha256": "51680dd9bf29185130309264cefe7a811494e767230b5f6fe586c4d9b1db23c3"
+    },
+    {
+      "path": "mlx/core/distributed.pyi",
+      "bytes": 9116,
+      "sha256": "82c2d62feeb04572be299524ba45a4e4708895cad2135e415cbb0924817138e1"
+    },
+    {
+      "path": "mlx/core/fast.pyi",
+      "bytes": 14364,
+      "sha256": "e6ead453b46633174ef101388f4e6b7c02ed837fbee91db16aa3be39ea6f2d4b"
+    },
+    {
+      "path": "mlx/core/fft.pyi",
+      "bytes": 18429,
+      "sha256": "8b17da68805ad71f5d379531ef9dcace6161c458deccbaa6aa1fac41ae191b5e"
+    },
+    {
+      "path": "mlx/core/linalg.pyi",
+      "bytes": 21435,
+      "sha256": "7d06d9eede4a0f30ac9af5f36009ce60ddb7feb8a58d5c8066f3e57c8814e7f0"
+    },
+    {
+      "path": "mlx/core/metal.pyi",
+      "bytes": 717,
+      "sha256": "aecdeb33b024ad2096af9e8e584c679bbdd05d375770418351cbea410353b2b9"
+    },
+    {
+      "path": "mlx/core/random.pyi",
+      "bytes": 10116,
+      "sha256": "cc48e32ebb1a266e7af981c83e400cf880c3f7d0ed4a3296ab7d08c722d724b0"
+    },
+    {
+      "path": "mlx/core.cpython-312-darwin.so",
+      "bytes": 1662280,
+      "sha256": "033602300fe065cef095911690ce64f50b93efe25383fe575df10ab9d181260d"
+    },
+    {
+      "path": "mlx/extension.py",
+      "bytes": 25265,
+      "sha256": "e5db8a77ecfab314a31cde50d7934af9a6037fb0186785b80f2ece331fd50bd6"
+    },
+    {
+      "path": "mlx/include/jaccl/group.h",
+      "bytes": 1545,
+      "sha256": "2f30dfe0acbfde764a4547c62a06a8da6b54837ca7662ac1e14a17994e8b0129"
+    },
+    {
+      "path": "mlx/include/jaccl/jaccl.h",
+      "bytes": 2882,
+      "sha256": "6d37bb30ed633b4724bbf26b073d2e8ef75b8f11dfc8f9a2b56ed4a133505876"
+    },
+    {
+      "path": "mlx/include/jaccl/mesh.h",
+      "bytes": 2466,
+      "sha256": "43d53e2642fb0cae15c56a10b1aad5291c8419d0966d37b3b03bdd4eb4d396e5"
+    },
+    {
+      "path": "mlx/include/jaccl/mesh_impl.h",
+      "bytes": 20870,
+      "sha256": "acac6b7a1347ed4c6353d176f6a1c17ee11dc1c04349c1a229433a8376d4115d"
+    },
+    {
+      "path": "mlx/include/jaccl/rdma.h",
+      "bytes": 9491,
+      "sha256": "dbe318131a2d1daa3614b5a48c5be6a31fd8405ebfa394138172d9bb1b7d9f94"
+    },
+    {
+      "path": "mlx/include/jaccl/reduction_ops.h",
+      "bytes": 6039,
+      "sha256": "2cc0bfe9f15ef380ebbc195809b639e0d5aee300f8d372bfd702d81b85ee6752"
+    },
+    {
+      "path": "mlx/include/jaccl/ring.h",
+      "bytes": 2478,
+      "sha256": "e60b76398bac1961b5013e74598aef3ac7066f151a97074ffbc8c7a9b963e9fc"
+    },
+    {
+      "path": "mlx/include/jaccl/ring_impl.h",
+      "bytes": 27489,
+      "sha256": "474542faf2788d19cd621049ca5a6d1447ff1389ae3502c4ecff2b47d2746817"
+    },
+    {
+      "path": "mlx/include/jaccl/tcp.h",
+      "bytes": 1362,
+      "sha256": "9450af7593270876dc1eed59e2a4111b70f81e3c01505ecbbdd003dfa13734a8"
+    },
+    {
+      "path": "mlx/include/jaccl/threadpool.h",
+      "bytes": 4472,
+      "sha256": "ca375bc5bf8828860a49f961a364fd03073fc9e836bdf3137de15fbfc594a37e"
+    },
+    {
+      "path": "mlx/include/jaccl/types.h",
+      "bytes": 6204,
+      "sha256": "3c3ac5455b3e44ebdbc4ce174de17062204272a0951b186cb8a50a6faf8245f2"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/Foundation.hpp",
+      "bytes": 1808,
+      "sha256": "ec1d753dfaf58e4248aaf9dde3a54471356ef4283cab247509606c4b7b719d97"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSArray.hpp",
+      "bytes": 5261,
+      "sha256": "25eb26d690825d4aabc72a4b6e1d209b632247ebbfeab95a37ad2ea1726c06ea"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSAutoreleasePool.hpp",
+      "bytes": 3302,
+      "sha256": "72d1fa22f1a3a0dbc83d887123a491e6c05c18313648151530a33449d1d33337"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSBundle.hpp",
+      "bytes": 16933,
+      "sha256": "af70ff47e145e6c7a1cbf45039cecb9b8f23e7045545286e5112259df3902b8d"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSData.hpp",
+      "bytes": 2198,
+      "sha256": "95a8a9697bed80390db8204e8bdd8b09bb09385675ff7a4e7a1eab3fec653fee"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSDate.hpp",
+      "bytes": 2085,
+      "sha256": "77f861daab4145cae94a8fb7071b5f43b56aa909bda36b01f357da4b22f0b5c9"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSDefines.hpp",
+      "bytes": 2203,
+      "sha256": "9939db894bd737c3bb9a979bc7269e125fde6d6dbad248d38ab7019a9d42aa35"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSDictionary.hpp",
+      "bytes": 5738,
+      "sha256": "008415fff23f8011018ada7afba56dbbb4e6a1d2f2d7e753bdca94f86d457feb"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSEnumerator.hpp",
+      "bytes": 3141,
+      "sha256": "89952f6564ab13a0ca3a8abef24c3547291cf1d7e6b2c46f83257118593c8ab5"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSError.hpp",
+      "bytes": 7802,
+      "sha256": "d62669f4eb89c5003cb51b8b740dd9b34ff542fa97e854a1cfb0348a70eb5bfa"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSLock.hpp",
+      "bytes": 4350,
+      "sha256": "639be538d8d8d2e4bf8c61446f3f988db7250a3ef7d8c09ff6773a7b86bbb3c7"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSNotification.hpp",
+      "bytes": 4696,
+      "sha256": "df2b60a482a4884b63fa8e63e5d74974cc8f7e7c2c90ce7dc337987dbb3917d2"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSNumber.hpp",
+      "bytes": 22098,
+      "sha256": "21c7714596e4ea47451640b228ef6eccd7499ffc314ffa4cdf521a4ef69fbc85"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSObjCRuntime.hpp",
+      "bytes": 1665,
+      "sha256": "430704881295374181345a1bf415f2c5bb39438ec22ac0a6cf38a0bb98573bc8"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSObject.hpp",
+      "bytes": 11113,
+      "sha256": "0e517a51d40679f476aec9b63079550138f0711c38f05a9c197ee8880bf538fb"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSPrivate.hpp",
+      "bytes": 20957,
+      "sha256": "d961736b4fa673a9657dd4c301b7cf8826574c29bd6b9ebee568145972eb68a6"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSProcessInfo.hpp",
+      "bytes": 18438,
+      "sha256": "de67e06a7043b78e4362e7cf2889e34d92312fa4d6df0cddcd123f76e418b250"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSRange.hpp",
+      "bytes": 3147,
+      "sha256": "dc8f1a32bd948f100884fbd14d7436b50b566494e70ecd346e6f4fac632d5ead"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSSet.hpp",
+      "bytes": 3368,
+      "sha256": "eaa27914936c1c81509d186bd6935882fa49f329e6e822f6668dbc3c66ba9702"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSSharedPtr.hpp",
+      "bytes": 8718,
+      "sha256": "0dea8b2ec04c9fbabfc4a105a372ec2750789ad83ff4b878b78814a81bc2c6fa"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSString.hpp",
+      "bytes": 11001,
+      "sha256": "ae8fef6fdafaabafbc41cd09ddfe45db21f2e79be444c17c7235678114d66d22"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSTypes.hpp",
+      "bytes": 1893,
+      "sha256": "79258aaf92c78a98e83854e5562440b61e5cee9481afbbc35b6746a54a97eec9"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Foundation/NSURL.hpp",
+      "bytes": 3668,
+      "sha256": "c0759aa18814aa17153c682c2502a1af507266941cd4f9458550c3ca30bee4bd"
+    },
+    {
+      "path": "mlx/include/metal_cpp/LICENSE.txt",
+      "bytes": 11344,
+      "sha256": "f4e92c7fe2aa066e294c0da9d08683dc9fb741ee6e6debbfad99a0c96e07c1f2"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4AccelerationStructure.hpp",
+      "bytes": 64196,
+      "sha256": "432c3703d0dca855b0594f0c69fbc14f2388dfa82ab96bc77914512e72400039"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4Archive.hpp",
+      "bytes": 4322,
+      "sha256": "237a474f89280f01fe9e43e0e02a3ad5ee40b88501a3cbdfd1ebdedabc17c4c3"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4ArgumentTable.hpp",
+      "bytes": 6905,
+      "sha256": "cc4a1e470e4bb0ad7f80f2786065243426753a7cc198a653d9af1478ce144736"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4BinaryFunction.hpp",
+      "bytes": 1601,
+      "sha256": "05b212760277260448882baaa00724fb62b8789354c3bba9c7365c9bf60d765b"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4BinaryFunctionDescriptor.hpp",
+      "bytes": 3405,
+      "sha256": "5681f85656bd137f171d13af46f81301523d6e8adc3080e6e7b204a513c5ec52"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4CommandAllocator.hpp",
+      "bytes": 2928,
+      "sha256": "bfbb35f7e7d3a4df6ddf4af4f9e20670ffb0c34326c8021bb4cdbe490dae1b4c"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4CommandBuffer.hpp",
+      "bytes": 7416,
+      "sha256": "3e9f1fa8abfa9de7165b0f5b3895ada6f2e9a304c1c6f4a34947804028328871"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4CommandEncoder.hpp",
+      "bytes": 4941,
+      "sha256": "a087e9df744da4bcf01d7cf5acec364abd8d8cfe29dbd6d05b9229e2e41d592b"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4CommandQueue.hpp",
+      "bytes": 10787,
+      "sha256": "0baed858768d09c9a53167351013fb208491f99931a051f84326ef350e609d77"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4CommitFeedback.hpp",
+      "bytes": 1994,
+      "sha256": "496525f9a057f9f6de01dd8918a4198402281612de6c7059137651b0c4382fdc"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4Compiler.hpp",
+      "bytes": 22244,
+      "sha256": "d98975f1d90c7707a725f23fc5534f51cabac94888fc13aa603c1b7b072f87b8"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4CompilerTask.hpp",
+      "bytes": 1973,
+      "sha256": "83ca143218609c9c93a5a8907d0817ce0a2cb1740efc602bcc620090bcf61c66"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4ComputeCommandEncoder.hpp",
+      "bytes": 20708,
+      "sha256": "698165e80990fdb6ed97c0fdab9d61b9c161d451199cbfdbdb8b9234596244ac"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4ComputePipeline.hpp",
+      "bytes": 6722,
+      "sha256": "911ad00516a2dbee147196af5ac6c64459953cb192df092c029e9f40cd0ae230"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4Counters.hpp",
+      "bytes": 4113,
+      "sha256": "27ef10c9638492543e2c3f4636f125884e426c456edfaafa18b66577816e86e4"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4FunctionDescriptor.hpp",
+      "bytes": 1610,
+      "sha256": "d96fc1710ea3d9e49741c6aae2a71871ab2fa46ba19cc552f40a1239cd1a75f2"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4LibraryDescriptor.hpp",
+      "bytes": 2939,
+      "sha256": "8d41f9404d87dd7251d6e93908b1e70b9294092875c3d3f8d919741a0b1f6c57"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4LibraryFunctionDescriptor.hpp",
+      "bytes": 2712,
+      "sha256": "0ddabe9d2d9417c7217b2c64575171ac180a47cef173164a1763539f6f2cdb73"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4LinkingDescriptor.hpp",
+      "bytes": 8333,
+      "sha256": "64ae68f9526333e3fd7a5d785b74145d8f4210d15fccaccc4cb3d66f85986529"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4MachineLearningCommandEncoder.hpp",
+      "bytes": 2220,
+      "sha256": "59a09f1b8d323b0cf937a7ef5740e20b8a0774d92922c62fc6fc55247a5834fe"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4MachineLearningPipeline.hpp",
+      "bytes": 6503,
+      "sha256": "8b6015f9c5c3e2cfa0a60d73a41e44a3d72caedeb3b9a63897930330ed62c926"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4MeshRenderPipeline.hpp",
+      "bytes": 19215,
+      "sha256": "3cb93620709e8797191932a4fd295edb43ee2ecab40767b1c23f8b319ca16dd7"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4PipelineDataSetSerializer.hpp",
+      "bytes": 3404,
+      "sha256": "3243c002a4842b43147f0c7afd8b12df53545505d14c5f2af418bee01b6a8249"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4PipelineState.hpp",
+      "bytes": 4733,
+      "sha256": "d2083f2abd227be1c555569f459cc00f5f31ab9dfbd12d6e66d2c03976f67b84"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4RenderCommandEncoder.hpp",
+      "bytes": 17268,
+      "sha256": "ed389a35b934de65e24002ca7b810684174333d326ce39de7df02d76695a316b"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4RenderPass.hpp",
+      "bytes": 11430,
+      "sha256": "fb07940350b3df49a180a6b6a84537a99ecc7746eb658e0714a551f1263d2813"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4RenderPipeline.hpp",
+      "bytes": 25786,
+      "sha256": "4453a3f3e49b5bc8f87645f86680a34b07de8df4971281ecd7ee33a736005237"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4SpecializedFunctionDescriptor.hpp",
+      "bytes": 3689,
+      "sha256": "be3b04a87c1af9e5fea455a1c7c61c7236444191a454bdd880b9bdc91d7fc1f6"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4StitchedFunctionDescriptor.hpp",
+      "bytes": 2993,
+      "sha256": "e21bc69181a5d3d28c805e4216335e874cf374d6864697feae434447b05518e5"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTL4TileRenderPipeline.hpp",
+      "bytes": 7204,
+      "sha256": "86c887455a228fc5a30907ad7c982f1c63965e8a43ec4ac10c098f9a6dd9d854"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLAccelerationStructure.hpp",
+      "bytes": 86999,
+      "sha256": "45cf7128fefbf7079b8c69b17ac500a1cb5197fd543d235166233ae8b0c33b66"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLAccelerationStructureCommandEncoder.hpp",
+      "bytes": 15114,
+      "sha256": "0fb13e04d26eacb951287c01e9b5fa0ce5ea628015c8a1285ad26b897c2553d9"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLAccelerationStructureTypes.hpp",
+      "bytes": 9304,
+      "sha256": "1c3d9cd0e2e84589fb8017e6eebf78dd0fb78a9d2e9d707bf877d8234d524879"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLAllocation.hpp",
+      "bytes": 1366,
+      "sha256": "4083450bbfe4f76f92b47bd9650aed00785dde128d0d3234b37ef2c7da6a0bd4"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLArgument.hpp",
+      "bytes": 22225,
+      "sha256": "862ecf5c34b7206f4305ebc7358b66a9e9e9d723a4ab2dc14fd72690d9f3bdf4"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLArgumentEncoder.hpp",
+      "bytes": 10596,
+      "sha256": "ae11dfb17605fd120dfe3c702a1c5b4af5117e9bb06f56095f85828e2988476f"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLBinaryArchive.hpp",
+      "bytes": 5827,
+      "sha256": "fd5a827c107aee7b752322fc34361b0f33b7149bcc1b8c72d1ec3f41c7ad98a4"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLBlitCommandEncoder.hpp",
+      "bytes": 15575,
+      "sha256": "b4a74aea9d5ca3d936f623543f237a4e2e4b7a5338e16e9b2096dc477b09463e"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLBlitPass.hpp",
+      "bytes": 6665,
+      "sha256": "9592786e4d93fed66b92bbd375499bc7d5f7b7fe5f2042a919fba100e9b609fe"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLBuffer.hpp",
+      "bytes": 4027,
+      "sha256": "3eee7d7359d018f12be988a603c4ad7135cd5d5a2dee97704d03babf7cc95e14"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLCaptureManager.hpp",
+      "bytes": 7328,
+      "sha256": "6d0e946094caed3989121296746775cfc96cf075d41c531f851e82c42275fdb6"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLCaptureScope.hpp",
+      "bytes": 3697,
+      "sha256": "2d425c654e36de6b2ea6f64c5f815ae6f7fd233ea8b3f8e55367d30cb22a19cd"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLCommandBuffer.hpp",
+      "bytes": 17639,
+      "sha256": "d019ae3947b57f64e59aeaa312f776d80c8a028a8f08997f463e6bc90ba9dd38"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLCommandEncoder.hpp",
+      "bytes": 3536,
+      "sha256": "9515e979dc056b81b57578fd77efd6ac8598ffa936494a7b5529a7aebf038211"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLCommandQueue.hpp",
+      "bytes": 5596,
+      "sha256": "938bd6131792975723c3a44458e6fd40b6dfe816dfe65c7cec869bfb40997e44"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLComputeCommandEncoder.hpp",
+      "bytes": 15568,
+      "sha256": "da5278517fbe987551f08e8e941b1ab200bfc36535b263e5ef805b46cd4f82a1"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLComputePass.hpp",
+      "bytes": 7443,
+      "sha256": "86801d66c64f77782e12b5eae51005bee68f69520db38f03c6fe62338999a5d3"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLComputePipeline.hpp",
+      "bytes": 17245,
+      "sha256": "07e1903f91380ca6ba32835fe7656992dee6b96c11474029801607e40c9eaf29"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLCounters.hpp",
+      "bytes": 8982,
+      "sha256": "a0edb4af79155ad05102fe968d9f3a3a3b7b86bf341c33671d5e908c59279a09"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLDataType.hpp",
+      "bytes": 3706,
+      "sha256": "2d8d2c77a568c797d1dad15831a8f92f7896b8aeee4069247669406798e76da3"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLDefines.hpp",
+      "bytes": 1900,
+      "sha256": "fa8890775325ef4a2f83d419c012467124dd63bd732e0cfb8fce75af11fb7ed4"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLDepthStencil.hpp",
+      "bytes": 9530,
+      "sha256": "ee4db0dcb4ee9121816b291e2801e95d925108a2f2bd2744563d618d49d2e4ea"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLDevice.hpp",
+      "bytes": 68378,
+      "sha256": "47cfd1da0eb3a096192c2a7decade418ca6dd9e881d797d2564da94343bf0b5a"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLDrawable.hpp",
+      "bytes": 3080,
+      "sha256": "f30836f5103149cdf6664859a7325e6d57ffb77e1196b04f41499c17181a9b2d"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLDynamicLibrary.hpp",
+      "bytes": 2515,
+      "sha256": "a88b092ef7c0ee0cb423f5041b52c30214e295ac9462c9c0ccd6594dc2205cb2"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLEvent.hpp",
+      "bytes": 5948,
+      "sha256": "f0c675e47a21289f7eb33bbd37dac0f3f13caafa03bfbe64b9d58ec84f391729"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLFence.hpp",
+      "bytes": 1694,
+      "sha256": "be05f6be5b558d77764f8c8940922c2a8077332efa244610880e9f0249c1324b"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLFunctionConstantValues.hpp",
+      "bytes": 2894,
+      "sha256": "895adb1ea95140fc71ac1f8005d1bb6da6649f856c85cf12dfce721510f09739"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLFunctionDescriptor.hpp",
+      "bytes": 5303,
+      "sha256": "cf94121392bbf337e1aa6b3834fbc33ec51ac45639c38b7b8632c0f0899d40da"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLFunctionHandle.hpp",
+      "bytes": 2007,
+      "sha256": "8e051de6a482fe63b4d0ccd302719cf6ce6bc050d83f1dffbbfa9fc6c472731e"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLFunctionLog.hpp",
+      "bytes": 3072,
+      "sha256": "93855c66fb216fc2e9f1a92ee2bf2b50b9ad5a3321f3b125438b365fd9831d3f"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLFunctionStitching.hpp",
+      "bytes": 11985,
+      "sha256": "cbc47ee5f659c6aff05c38acf859a2d0df0af2042a01d3a0198ac07b016bef44"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLGPUAddress.hpp",
+      "bytes": 1116,
+      "sha256": "3fd54bab34210465d6b518e8354a6ef458b6446720a376edd10252fe3e6c4510"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLHeaderBridge.hpp",
+      "bytes": 137415,
+      "sha256": "b39e42649ec9e5f687f76fd837465573b7f7f673732311e7cb8734e58065a813"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLHeap.hpp",
+      "bytes": 11340,
+      "sha256": "b92bdb5e2eb345f16a67b58e49f1c486f7891598ae4271e54cadccd4b0556728"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLIOCommandBuffer.hpp",
+      "bytes": 6846,
+      "sha256": "bd3ee8ab3eb3940c1085a5db99399c7c77e7345378fe48127f5129dc2c3248f8"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLIOCommandQueue.hpp",
+      "bytes": 7109,
+      "sha256": "c6bd9373325cdf55fa40d66b5a7ab6995f4fd72666c4729f28e15769126a0e40"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLIOCompressor.hpp",
+      "bytes": 3050,
+      "sha256": "c5ca68b3d0c254f70b65c2984571814c7ab225e264d879b560745240065c7264"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLIndirectCommandBuffer.hpp",
+      "bytes": 15243,
+      "sha256": "b48970b2477aa8f7f1776732e6576b9c9b258de7b294e416b64ac569203a1239"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLIndirectCommandEncoder.hpp",
+      "bytes": 13877,
+      "sha256": "a8fdb8d393444bb1dd161493bbd964ab270ce9f10109caae9ea88894496c2723"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLIntersectionFunctionTable.hpp",
+      "bytes": 7831,
+      "sha256": "e4b5906d828f0fca12300aec34ea65f9db0c76f59d445459da3aa7bd52859287"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLLibrary.hpp",
+      "bytes": 26980,
+      "sha256": "78ba446354af69f65dd57ffb03564cc90ce4e2f88358e497db8cd1ed7c192638"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLLinkedFunctions.hpp",
+      "bytes": 3630,
+      "sha256": "41d05ea1afa80e47ed7fdf639f8a86e61605d4279ec0ccdf62bfced2bf223213"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLLogState.hpp",
+      "bytes": 3713,
+      "sha256": "c5dd1f4fef883539609de9f720d6637cce08778f9b2386753418967e288e92fc"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLParallelRenderCommandEncoder.hpp",
+      "bytes": 3618,
+      "sha256": "3e9e0dec18ed5683dd726b1615ac5ee0768527f3ced2779b9455529dc9543e32"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLPipeline.hpp",
+      "bytes": 3731,
+      "sha256": "351b12718bd0b882b6f74c84cbcca6248adcd04d1d3021c4122f06ffa5b600b2"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLPixelFormat.hpp",
+      "bytes": 5948,
+      "sha256": "206d5c1d1c6771b43f9fd4987c491af6ae456bb195343cdf4743d50cf657a929"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLPrivate.hpp",
+      "bytes": 5881,
+      "sha256": "351cf6ad5a9effa1bd31e95df03ad373446e3c8b2b8d11582485ae9950bd24df"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLRasterizationRate.hpp",
+      "bytes": 14067,
+      "sha256": "575966d4ac3953f6c1d8b82c6d3792ae1a44334401a5dec64a00b006b81e9d89"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLRenderCommandEncoder.hpp",
+      "bytes": 54867,
+      "sha256": "5897c9c5c78b7ccbd1d471467ae6173beefddb0c9fd03655911a9905ac3814c5"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLRenderPass.hpp",
+      "bytes": 32454,
+      "sha256": "3355cac7506da24a50d4960ac9bd387fe0d254da935e326400e13a89c74d3c2e"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLRenderPipeline.hpp",
+      "bytes": 78603,
+      "sha256": "2fb8c3cede2747600a9b950b2a64111809e35f11981534cea350b7bb881b1740"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLResidencySet.hpp",
+      "bytes": 5688,
+      "sha256": "0e4039b9ff3c99fa65e54f8e300c2838e8a0b900acfabafb995c00792d612403"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLResource.hpp",
+      "bytes": 5591,
+      "sha256": "a4a77dec0cd9410f1fd880fa7f145a9c92662d46702cc878630516bede6b07d3"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLResourceStateCommandEncoder.hpp",
+      "bytes": 4986,
+      "sha256": "b4e6310b208e82e487aa105b3116505c6224c21dbeb295fab9b9b032c2d0e441"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLResourceStatePass.hpp",
+      "bytes": 7286,
+      "sha256": "d337d01d64f57bed4dda144297cbf7e16264af78b47931cb7681777cccd65df5"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLResourceViewPool.hpp",
+      "bytes": 4090,
+      "sha256": "88685e1d1ac1cfe6b46e775b975772a66fc0b53566908141c45f8e6030a5cb07"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLSampler.hpp",
+      "bytes": 11248,
+      "sha256": "3b6c8600eb2a4fb7847aa643605ebc1034aaf1ebc17db3c52331bd68bacc6480"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLStageInputOutputDescriptor.hpp",
+      "bytes": 12316,
+      "sha256": "10809f2656b58ddeae70feafce5e584e98bc3f9d6f92eced3dfde5d9db892d5f"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLTensor.hpp",
+      "bytes": 9777,
+      "sha256": "e1e53dff5de4c44f4583fe274ab61a65492b09f808954a9c4a54c435d7b7781c"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLTexture.hpp",
+      "bytes": 28056,
+      "sha256": "c51f6b6fc1af18d0e6e84ee84b6ab5027e7c9c66a2fa9ef64876e69cb53c39fe"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLTextureViewPool.hpp",
+      "bytes": 2668,
+      "sha256": "910a10744f5a57823bc28ce7b6329288336902fcdca249ba6146b0a65424239d"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLTypes.hpp",
+      "bytes": 4352,
+      "sha256": "4b58e60df4848ce15af3fabecd9fdd3b0adb705db08f7937aa4267aee0d5d55f"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLVersion.hpp",
+      "bytes": 1510,
+      "sha256": "af122cd49711e22c210b1f923afb364cd311028de122ea5b8876e15613a849a5"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLVertexDescriptor.hpp",
+      "bytes": 11386,
+      "sha256": "5d12ca9a79eb073ee588313b76659e12b8984c3329feca43155cf8c787b0f921"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/MTLVisibleFunctionTable.hpp",
+      "bytes": 3636,
+      "sha256": "dc4cd28c5bdcb92443869b28c265a1efdf8992206fbd9c7b78e1cb69045d11e4"
+    },
+    {
+      "path": "mlx/include/metal_cpp/Metal/Metal.hpp",
+      "bytes": 4471,
+      "sha256": "50ccc245b51aeb038b3639e5ee9f3f1dec0f7a2aa348f30e1fde24ae3500994b"
+    },
+    {
+      "path": "mlx/include/metal_cpp/MetalFX/MTL4FXFrameInterpolator.hpp",
+      "bytes": 2026,
+      "sha256": "aa44585cf77fbafd1a0ade86517c1f5fcf578b134dfdebd836a7d5e40cdba2ee"
+    },
+    {
+      "path": "mlx/include/metal_cpp/MetalFX/MTL4FXSpatialScaler.hpp",
+      "bytes": 2161,
+      "sha256": "b8361c751c0eb809f8330d40571d12392f7376d11cfedaa1afaf693a0666d67b"
+    },
+    {
+      "path": "mlx/include/metal_cpp/MetalFX/MTL4FXTemporalDenoisedScaler.hpp",
+      "bytes": 2083,
+      "sha256": "8d7a9649bfcd2fa8da91f2c65b1ec8bff5a876076e3d40da9fbe06104559b5b5"
+    },
+    {
+      "path": "mlx/include/metal_cpp/MetalFX/MTL4FXTemporalScaler.hpp",
+      "bytes": 2167,
+      "sha256": "a9ae20bc1b9e236bde41d3f447af17255c7bb89bf05e7bf37610bfccc6af94aa"
+    },
+    {
+      "path": "mlx/include/metal_cpp/MetalFX/MTLFXDefines.hpp",
+      "bytes": 2104,
+      "sha256": "f20218f90e571bcc3204baee3dcf5cdffa1f60ee208ca092bd3bbbad08fd9ee9"
+    },
+    {
+      "path": "mlx/include/metal_cpp/MetalFX/MTLFXFrameInterpolator.hpp",
+      "bytes": 35056,
+      "sha256": "cab36b388a90c3cd418d70e8bb061ca50e645439ca3b3ced2d2891b0f07a798e"
+    },
+    {
+      "path": "mlx/include/metal_cpp/MetalFX/MTLFXPrivate.hpp",
+      "bytes": 27464,
+      "sha256": "1b065d00cd455f8e0d172f111425846e9e13cff410d5385f35c614905e2ba060"
+    },
+    {
+      "path": "mlx/include/metal_cpp/MetalFX/MTLFXSpatialScaler.hpp",
+      "bytes": 19782,
+      "sha256": "cd0245baf31325c187b8d25682396f190217f46b45045c87ad1bc9f9d7786507"
+    },
+    {
+      "path": "mlx/include/metal_cpp/MetalFX/MTLFXTemporalDenoisedScaler.hpp",
+      "bytes": 67805,
+      "sha256": "c561fee35a3981eaee473306833eab92ab00cbff4ada63930145f25e3ca91c65"
+    },
+    {
+      "path": "mlx/include/metal_cpp/MetalFX/MTLFXTemporalScaler.hpp",
+      "bytes": 40503,
+      "sha256": "105154b387ae7d31d04210a37fa249252991df6db177b62e1ca29f66aba327e0"
+    },
+    {
+      "path": "mlx/include/metal_cpp/MetalFX/MetalFX.hpp",
+      "bytes": 1586,
+      "sha256": "3948e4e3f50d092b6dc9c70dd6b11e2efd32ff0fe6be3e365a83f41884627151"
+    },
+    {
+      "path": "mlx/include/metal_cpp/QuartzCore/CADefines.hpp",
+      "bytes": 1895,
+      "sha256": "cad006ef1e67ee4a7759daf9c84b7a48d056e4820957d1feb8fae35858f4a854"
+    },
+    {
+      "path": "mlx/include/metal_cpp/QuartzCore/CAMetalDrawable.hpp",
+      "bytes": 2363,
+      "sha256": "9a117b71c120b3c19eaf7f30dd5170fd4a7c42b19b6191e5f0412d156852b8a2"
+    },
+    {
+      "path": "mlx/include/metal_cpp/QuartzCore/CAMetalLayer.hpp",
+      "bytes": 9278,
+      "sha256": "4a229ce6c4b505fb1a791de58b1856e08c75c711d2d969c5478309c2b92dd6a0"
+    },
+    {
+      "path": "mlx/include/metal_cpp/QuartzCore/CAPrivate.hpp",
+      "bytes": 5781,
+      "sha256": "90d09439df7793de6dda8911d0f03726d65cf59c730ca24dd1f443cd81072101"
+    },
+    {
+      "path": "mlx/include/metal_cpp/QuartzCore/QuartzCore.hpp",
+      "bytes": 1346,
+      "sha256": "6f04260a5cac3b042adee63cd26b4a8f5e1f6f8e6c0a2e165714272f52afc2d8"
+    },
+    {
+      "path": "mlx/include/metal_cpp/README.md",
+      "bytes": 14849,
+      "sha256": "3ba513bd569420bc843fa2064d7d82bf9edeb17261ab3b9678b7cda55bd5d9d5"
+    },
+    {
+      "path": "mlx/include/metal_cpp/SingleHeader/MakeSingleHeader.py",
+      "bytes": 8984,
+      "sha256": "5b87e3f4aebe564025f5e4120258a797ea77fdc92c0b5a2d7bf84e835769ad5a"
+    },
+    {
+      "path": "mlx/include/mlx/3rdparty/pocketfft.h",
+      "bytes": 110508,
+      "sha256": "0eaea21304bf324639ff11022ee63faf48a8fab64afe5c3c2d1efefbe1d7dfa6"
+    },
+    {
+      "path": "mlx/include/mlx/allocator.h",
+      "bytes": 3135,
+      "sha256": "4b2070a458c8e8417c515fc79f9addb70332b9871bcccdd30e5ae2c86f83901d"
+    },
+    {
+      "path": "mlx/include/mlx/api.h",
+      "bytes": 625,
+      "sha256": "ac310e1af49988056d043e1f5b2f52fe1717f746698c416ee07bcbe6affb83f9"
+    },
+    {
+      "path": "mlx/include/mlx/array.h",
+      "bytes": 17699,
+      "sha256": "997716aa5c07907092d087f26809a9c4b4dcb21b219c653cc3a11c6e62039b58"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/binary.h",
+      "bytes": 2625,
+      "sha256": "f134638fed541c81059782f1d3b8edb67bacd0381bcd8b822eec68f62b94f203"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/broadcasting.h",
+      "bytes": 165,
+      "sha256": "2e62b9f188f0012defcf19f8932daeea199ea93f81cb03ac1fb2b9a468d9f002"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/buffer_cache.h",
+      "bytes": 3738,
+      "sha256": "a4b4ea74476ad681a9a5db2063ae3939108a60b0df2014b590338bd1cccf0205"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/compiled.h",
+      "bytes": 2963,
+      "sha256": "daa4b060e367b44b5ab3787550fda37664cacdebc22df96d17bc4875f5e58ccc"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/copy.h",
+      "bytes": 1245,
+      "sha256": "00207f79724accd838d340b0b5dc082eb4e1b7114080cdfc12fcdab45521d862"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/hadamard.h",
+      "bytes": 2378,
+      "sha256": "9fe5c5c7a386cc74266ed031dc95a106f330d8b6e2f76dc20137c546c01ddfb7"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/matmul.h",
+      "bytes": 1930,
+      "sha256": "64acb020ff379311275f69ab2157cb914dd818df30ff87e4b76b9c63d11e8137"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/metal_kernel.h",
+      "bytes": 560,
+      "sha256": "b64ca4cebcba530d8ec1e0a0f23b57313507a37d05e3615ded3796b563cc83fc"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/quantized.h",
+      "bytes": 407,
+      "sha256": "e5bfbb9a3d2459b3dab6e50c90c1d7a22b55ac84e372e1dc22ef9429f872d4a7"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/reduce.h",
+      "bytes": 1776,
+      "sha256": "6ab5363bc9e692b3461a37347e4973217f14cec0f23d0ab4234eed78689a6c33"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/slicing.h",
+      "bytes": 497,
+      "sha256": "c7c1b984d9b1d617ef9129c9fb0e50b5b08dbb38024efa1f91def9f10f00492b"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/ternary.h",
+      "bytes": 2475,
+      "sha256": "6bd18ec2f45f8fa95d81204b9524a7532a7bdd29f441c98c954df095376c3cd3"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/unary.h",
+      "bytes": 631,
+      "sha256": "fb10cc928604f2ef0e320c19972a82aad10b57c483713c0f370e3e39743ba9d4"
+    },
+    {
+      "path": "mlx/include/mlx/backend/common/utils.h",
+      "bytes": 6758,
+      "sha256": "5b2a8ce595ffbcc2f2f6e8f95a59cb944805d18bda67723dcd0244e904424661"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/arange.h",
+      "bytes": 585,
+      "sha256": "3cb34b71aaee160c6f09e2af823f7f1e618bf15934a6ca613cb2d3cc5dc0dacd"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/binary.h",
+      "bytes": 11364,
+      "sha256": "9d5a715df2f9873fc91535be831ef51c64d532356d817037f8ba23c745171712"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/binary_ops.h",
+      "bytes": 3301,
+      "sha256": "aa1bea00bd9e8710b18efca5e1733a3d04229ca9b8329001c0f2902b4af9a64a"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/binary_two.h",
+      "bytes": 3860,
+      "sha256": "5bcffdec3392025c4fc69cfffd7738496986600979b5251abe413cbd9755b213"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/compiled_preamble.h",
+      "bytes": 271,
+      "sha256": "791426dbb4547f5088ab7fea6f8862cb176d024143582cd43c5c23f348d6a5a6"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/copy.h",
+      "bytes": 900,
+      "sha256": "d782288e4cace26e86b40241b0b85c33ca107eda19855e5819b3b941e65329db"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/device_info.h",
+      "bytes": 499,
+      "sha256": "f9d4a8d81f4d45f0a030b4c4676fa0550dd937410a3a3dc6e7b0f2263575ab1b"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/encoder.h",
+      "bytes": 1962,
+      "sha256": "d1a822b4293fbfe884cdd71df0dbdecf3501636b9e24b02e6d2810d53cd4e0ef"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/eval.h",
+      "bytes": 267,
+      "sha256": "e48643f9df49502f13ec5b74db6385b50cf320113e298beb82224ea3b94ebbba"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/gemm.h",
+      "bytes": 461,
+      "sha256": "74a2ec082561142fc383c3324b85b78f2cc32d73fd876b5e8e6a79b9dab08d53"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/gemms/simd_gemm.h",
+      "bytes": 4450,
+      "sha256": "fa2e8df60e3c13be436675f9f37b88ac1672ea5edeaf4105b4764c399cff1a22"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/jit_compiler.h",
+      "bytes": 933,
+      "sha256": "af82cdadf25959ddff728abd63acc0ca6b9a3853ae2f333f73769605c9ea5fde"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/lapack.h",
+      "bytes": 3183,
+      "sha256": "dd51d42638da3dd64ef91562f5a670c5fad913c3989c4de81273004a065ada61"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/simd/accelerate_fp16_simd.h",
+      "bytes": 1726,
+      "sha256": "813b3c0779a3f6da27e2a2d3cf3d9803705397442016d5e281a95cee33dd744f"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/simd/accelerate_simd.h",
+      "bytes": 10719,
+      "sha256": "8254e794a50322a46d49c0f5130c99d8408e110e26963673ea67d1953f1e59e6"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/simd/base_simd.h",
+      "bytes": 9342,
+      "sha256": "0744e49251854bd06125e50c7d2da92ab12c54470dc7926b41f48f655277e82c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/simd/math.h",
+      "bytes": 6938,
+      "sha256": "5dbe79caa33a228d1354b2621876dc0fb3629dd6733c8ee4ebd0471790b0a94a"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/simd/neon_fp16_simd.h",
+      "bytes": 6987,
+      "sha256": "9453481dd47f7094de8ebb3566c8e46c51b10db4de86f5257a1115b357266d23"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/simd/simd.h",
+      "bytes": 92,
+      "sha256": "ec4622a304f806c250ae1514f4b601e5262446b79e3ea4e3a778ca088c9fae44"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/simd/type.h",
+      "bytes": 257,
+      "sha256": "f15fe949578c2f0638ba183f2084955367964fad7d4160121fc423f36e353e2c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/slicing.h",
+      "bytes": 387,
+      "sha256": "5a3c07a3ca4af4419a28632b7a2c3234b039cd157e1572219527e297d661e94a"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/ternary.h",
+      "bytes": 3689,
+      "sha256": "67f8e7d68b7007a0a580bf3d410222c2b596092a9c39561f57023f95687fec35"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/threefry.h",
+      "bytes": 572,
+      "sha256": "b174dd5054408045dfefcf6eec8856223ee7f86b73c28e078905c303a0701725"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/unary.h",
+      "bytes": 6588,
+      "sha256": "a2d759d85fda2e9a0d9707fb6f6c13b5a8934b640f17d1940f0fbb26d4740b6a"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cpu/unary_ops.h",
+      "bytes": 4571,
+      "sha256": "6988ff5fab977e45b4f7ebcbcd3da67633c2c19398eaed3ea21c0fa1324561a3"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/allocator.h",
+      "bytes": 2249,
+      "sha256": "e4a3bc91ef1673f9dfd682dc2cb1452813841f755336f883ef9493f83247e05b"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/conv/conv.h",
+      "bytes": 3043,
+      "sha256": "3d9301821fc5127a6e55714341aa9b9e50238818336df8f0280c9fdd581f32aa"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/cublas_utils.h",
+      "bytes": 2387,
+      "sha256": "64fa5ab1f7bc4b9cc66e357a6303a1f52fd0ff878e10aff5e90557c9c03f7e65"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/cuda.h",
+      "bytes": 433,
+      "sha256": "d37adcd45d525e58f7a22037f9b0f04b13053f4308107099d4765c446fe217e9"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/cuda_utils.h",
+      "bytes": 2007,
+      "sha256": "46e67dd486ccc6f2ff352950eb6a964a0ebb4546ae91760ba50086e65fae3c2a"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/cudnn_utils.h",
+      "bytes": 5904,
+      "sha256": "134dc7e73d3be6f85083048fa3c22940691d2adb7b01145ca71a1fb1cb4409ea"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/cusolver_utils.h",
+      "bytes": 392,
+      "sha256": "a504a08536234c20e2edb5723320c44f22064475d771e83b8694f108f59c449f"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/device/config.h",
+      "bytes": 388,
+      "sha256": "53b984f67faeb81fe51dc2156b27947e64bd79142200d6887b84247042b0b0c2"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/device.h",
+      "bytes": 5620,
+      "sha256": "f36285b12414835deb03d65472b93fc256d8b9467410c9e331a500472c758fd9"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/event.h",
+      "bytes": 2414,
+      "sha256": "8f89414d84ca057da7cba6b2d017c4b7605e2597dc5763f0ad3b496543c50353"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/gemms/block_mask.h",
+      "bytes": 524,
+      "sha256": "9bd78a341618ac24d3880535ba94e8e18a4e4f5e2ea820fcf8ee7fa64cb18bd3"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/gemms/cublas_gemm.h",
+      "bytes": 2583,
+      "sha256": "2ae2ab855aa2ec96261fa0c0bf567b99e3ffc671c5286c3cf11158f01a0fcd6d"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/gemms/gather_gemm.h",
+      "bytes": 362,
+      "sha256": "65cd8ff5c836944cdfad742c337ce4d3f767db7de43514c1832d9cd31bb6cd61"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/gemms/gemv.h",
+      "bytes": 701,
+      "sha256": "e33ea8260d1d2f7287a11933cfe42a0f5603df3f851d285897974173172ef9eb"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/gemms/grouped_gemm.h",
+      "bytes": 657,
+      "sha256": "aad27ad3bdfb771bdfd2b9cac8529b4cc42dba4964eeaf19cce61481d5ba9c69"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/jit_module.h",
+      "bytes": 2876,
+      "sha256": "73832e1cf5af1f03905c23a130132fcc18aa0e86388ff2afe4d95667b20e7ff4"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/lru_cache.h",
+      "bytes": 4731,
+      "sha256": "26ee582df3cefd16df57978a40ecb597880414d6d78295b4b20ae3311f6ed34c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/quantized/cublas_qqmm.h",
+      "bytes": 2258,
+      "sha256": "3a680e3693cd4cea4a8a4330d5a3213f4a493c29b589e6510a493a91f4197147"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/quantized/qmm/qmm.h",
+      "bytes": 4252,
+      "sha256": "dcb674c8e504c3ebdc70d4493ad6bf9bd53a7b6d01ec963c7317838bb9578b8c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/quantized/qmm/qmm_utils.h",
+      "bytes": 2251,
+      "sha256": "1db30c1cd4e83719c29aa40edb805ca41cab17abc40be455a69c548cb3878691"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/quantized/qqmm_impl.h",
+      "bytes": 685,
+      "sha256": "01f239e61fa106dccc493e67ca55863808192363229d2d6a83d0ecd509e46a43"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/quantized/qqmm_utils.h",
+      "bytes": 1931,
+      "sha256": "db852080c9687208b7baf708ae2a4e366ba776791f1f90d2d392ff8e3e6a2ec1"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/quantized/quantized.h",
+      "bytes": 1133,
+      "sha256": "623e4b309325949fd57b223348d138266798745df3248514a4d9b11074007f0f"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/quantized/quantized_utils.h",
+      "bytes": 1153,
+      "sha256": "41d725d97498f7ceca039354dcca7f02a3b13dc1a9e7dc0b491df18e40ade2fd"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/utils.h",
+      "bytes": 1325,
+      "sha256": "803ca8b824e976ba08ddcc87e12653d9c25c0de2282b7b2bb99d1287ba635efc"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/wddm.h",
+      "bytes": 648,
+      "sha256": "2bae656572ee228d6505b70fc906b6ca87ae0dc1670137f408e03ccfe78f92b3"
+    },
+    {
+      "path": "mlx/include/mlx/backend/cuda/worker.h",
+      "bytes": 1370,
+      "sha256": "9dc4107113c697184241d7023d3eaf4237c3a7447ba59f3390d231fe150b0a22"
+    },
+    {
+      "path": "mlx/include/mlx/backend/gpu/copy.h",
+      "bytes": 1657,
+      "sha256": "ec5de8e2acaaa509aa4b1e42a6c6e478a189d8aae44a02f04b7d757ce8a2bc51"
+    },
+    {
+      "path": "mlx/include/mlx/backend/gpu/device_info.h",
+      "bytes": 929,
+      "sha256": "fbcd6fcc3df6a4ba0d8f9c1a3ad7a7fb3a1048ddba1b62eb1ec9415cea300a44"
+    },
+    {
+      "path": "mlx/include/mlx/backend/gpu/eval.h",
+      "bytes": 375,
+      "sha256": "8c18ac14ca85348cda4ccf6fb87badf30fbc5723b2f35254145871c2444bdbe3"
+    },
+    {
+      "path": "mlx/include/mlx/backend/gpu/scan.h",
+      "bytes": 283,
+      "sha256": "e2f1044e850dd17222b93149e194b2f443da3761396534c11d080e66e2ce7058"
+    },
+    {
+      "path": "mlx/include/mlx/backend/gpu/slicing.h",
+      "bytes": 668,
+      "sha256": "6a2dceaf7ab89fe1c019875fc6f8ccb27508da4d11c79c159c49d028a114fb45"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/allocator.h",
+      "bytes": 1969,
+      "sha256": "5ca3b085cc210f23c719175960921b51c39aed823a10736f95edd5b9bfbb0fff"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/binary.h",
+      "bytes": 637,
+      "sha256": "b32b7e290ffac891e5831a0efdc3c520fce67fc94728f7bd2f5c15450392dd5c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/device.h",
+      "bytes": 8118,
+      "sha256": "74f52636ec2c3639f88e3261cf70ad76390780aa97b34842b43e8d415dba47ff"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/event.h",
+      "bytes": 548,
+      "sha256": "451574670929f8ea29f7dbc0ea1242b0684e5b084462c336abc77d97e5a491e2"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/jit/includes.h",
+      "bytes": 1627,
+      "sha256": "efeea985755baffc6e1a6b310218f89e0e2b7c629bf57f125899c734dcab54a9"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/jit/indexing.h",
+      "bytes": 2721,
+      "sha256": "1b38dbdf3120eca3e5266ffd6d69691591c9432c0b5acece4c5ab2de7a9e802f"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/arange.h",
+      "bytes": 244,
+      "sha256": "f0dfe5df2e06e9028a4a9beebdb6b7fa639df43dcddc6291ad1c25ef44a1e61c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/atomic.h",
+      "bytes": 10123,
+      "sha256": "4c35ea2798a2335502865247aee878149fc9ada0d7e84c05d771baef0c7fcc60"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/bf16.h",
+      "bytes": 306,
+      "sha256": "abd87446a310b77ac530ef52a324feae5cb285d03ec9613e3a88ebb71410fdcb"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/bf16_math.h",
+      "bytes": 26024,
+      "sha256": "1f374f8380f756eb89acf6a847741cb8fecbe642945e159fb6208d804cc06496"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/binary.h",
+      "bytes": 5965,
+      "sha256": "9a367967a48907ac6792be685bab4cc062f3ad916cccacb441c627d87a4b7898"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/binary_ops.h",
+      "bytes": 7613,
+      "sha256": "6dbe789faafbf7259f411c7fab7c0fcdd192df47a78f8f0bd408228f7a30e5c7"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/binary_two.h",
+      "bytes": 7026,
+      "sha256": "af26413a6161c1b37667fc5c3a802510d8b425074ee2ca0a8fd7e31646f52cd8"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/cexpf.h",
+      "bytes": 3639,
+      "sha256": "88b6e15a52a5800d98d9bc6da840ca5cf70bf572fda136409580c1f17b1e0aab"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/complex.h",
+      "bytes": 9184,
+      "sha256": "06031fa9f78e4abe5031924d403e5281d3c02c26e7e893e35a833e588acf1938"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/copy.h",
+      "bytes": 9772,
+      "sha256": "a9fad1b262ffc25f4ccda4e09d0c76821cd580f12871acd2a0daa98151e1587c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/cross_entropy.h",
+      "bytes": 4158,
+      "sha256": "1e53903b9a713faafd55932f0c039552f18f6108e223dadba0a3ec2245ecab39"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/defines.h",
+      "bytes": 888,
+      "sha256": "a6c2c824e855078cd092fd9592457616f995755f0e865475c3f006a3f5d6bf1d"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/dot.h",
+      "bytes": 1724,
+      "sha256": "24ca982ca5558e43100be7d6dc08722b512b06461c8460d14134eb78f52431ba"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/erf.h",
+      "bytes": 2723,
+      "sha256": "31d88004390bbe08636c5f64a3cb3180ebc8d79a89267347de9f6c33aba0e9f9"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/expm1f.h",
+      "bytes": 3278,
+      "sha256": "dbdf551f45723639da54d72e327008bde6ef01a2f1ed561bb065e251ab6c9f1a"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/fft/radix.h",
+      "bytes": 10784,
+      "sha256": "e6d2aaa314822f546d9c5f5230185577642da5b8a18b4ebb094e8e7ce06fb206"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/fft/readwrite.h",
+      "bytes": 22980,
+      "sha256": "0f38957ced3346cf67d7c28207b0bbc629ac7f490ade67b3d193aa8c1938a559"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/fft.h",
+      "bytes": 19416,
+      "sha256": "fba2fbfd998e437cbe6db4842fcd75ae995ca1eda891057db76caba376367cda"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/fp4.h",
+      "bytes": 1066,
+      "sha256": "e3159945d7e5ae24f7a1ca9c4875b2a5d15cfb6952405df24a0df1bb2622a93a"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/fp8.h",
+      "bytes": 2520,
+      "sha256": "9a9d77a6295f66b4ada4311c3b855b6ecb7a2b38f28623109e3c61d2e17e81ae"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/fp_quantized.h",
+      "bytes": 69880,
+      "sha256": "fb4bf0919642717c5e36cfa7be0628e651844586cae1b405c27b2057a17dd1c8"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/fp_quantized_nax.h",
+      "bytes": 28771,
+      "sha256": "8a712870dc17493ddf05daa706481d52867b29e9141d2ecb76dccf47f04c8b42"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/gated_delta_nax_ops.h",
+      "bytes": 25480,
+      "sha256": "6b4d31735e51a72ba7202d71082a35fbc2611db44a3e24b55bd115204b2192fb"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/gated_delta_update.h",
+      "bytes": 17238,
+      "sha256": "ca081d5bf13e2a5379cfc12306da779cbe1ea73e346aa68e6d68ab814a284597"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/gated_delta_update_nax.h",
+      "bytes": 8405,
+      "sha256": "3d7f4fbb936abfa4d5aab48b7d5049057515615a50ffbf43152915285c0d924d"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/gated_delta_update_nax_vjp.h",
+      "bytes": 59036,
+      "sha256": "dafad2750d2c5528c3b8d7d8f7d8be158feb3260ba2ebbfb614d033e8ab18886"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/gated_delta_update_vjp.h",
+      "bytes": 6119,
+      "sha256": "717aa81794efca14c589371c83a16e86f2d0b5e0660778b0e09e34abe46e63c6"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/gemv.h",
+      "bytes": 35874,
+      "sha256": "296ef622ea3c67d7485aa7cdf102bbfcb582e07bd3207793179a9d1e65ee5a65"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/gemv_masked.h",
+      "bytes": 27041,
+      "sha256": "ba6f011977248caaceaec4b46135605f8da429852a279def4372e4b602d9fa20"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/hadamard.h",
+      "bytes": 4959,
+      "sha256": "9c4b749b4d2985203416c2da42dbdf7d59070c6c49c81f6112907b6ce407edc5"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/indexing/gather.h",
+      "bytes": 1804,
+      "sha256": "3b2f5b21cd2e71427c9641368a457840f5cb131e202095cd1352f983ce7541ce"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/indexing/gather_axis.h",
+      "bytes": 1502,
+      "sha256": "e1a745391ff4990f3f1ad75c5687c3b102dcdc4833d8fbbac38e10f54af29af4"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/indexing/gather_front.h",
+      "bytes": 723,
+      "sha256": "64aacebf6576dfcd389383564fa1214bc87f2a091dd33cc64c598c5367ecab96"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/indexing/indexing.h",
+      "bytes": 487,
+      "sha256": "e820b8ee2b5132a97122780c12433ebb5100d8078d31e211d0429400a11415bb"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/indexing/masked_scatter.h",
+      "bytes": 1191,
+      "sha256": "2f8452b864aba8266e2178816ab18b83e0a911efc41f1550df47947fbe1a3b33"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/indexing/scatter.h",
+      "bytes": 4347,
+      "sha256": "f419bc468396024b2bf368781277fc69880541f393850329c1a831892d9e5bca"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/indexing/scatter_axis.h",
+      "bytes": 1610,
+      "sha256": "43eabd0216101f8e32f5cdd19ce40b7f954564be27fad98a5e0fe345e7b94ce5"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/logging.h",
+      "bytes": 511,
+      "sha256": "197d9d81944146bea274ebcbc17b2b97b39c7478c0316a3166a08b3fb2467e4b"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/logsumexp.h",
+      "bytes": 4235,
+      "sha256": "233f9a7072bed21f2b71f522c41aa5e86208e3bcfd18fafc87cf28a7d7f13154"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/quantized.h",
+      "bytes": 90998,
+      "sha256": "040ee89ae58555104ff0edfbb1546f15bca4e372fab4350ed613f66ab3c2d393"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/quantized_nax.h",
+      "bytes": 52776,
+      "sha256": "1af9bdcee1bf2e199f9846d4b7817ca6f1d4dc2286c654d6eef144c5b7aba2b9"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/quantized_utils.h",
+      "bytes": 2318,
+      "sha256": "a12841b57d505f6cca81631901b845dbf76bc90dfc099e7f40c763b2cc838c51"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/reduce.h",
+      "bytes": 254,
+      "sha256": "2b4ca93fd1f43ee91129440359b18c0fa49bc70098bd4ca3033c6550b2c07d94"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/reduce_utils.h",
+      "bytes": 146,
+      "sha256": "2cb64d9796e9eac8bced8f35337de9c7fea4db3840a3e398eca21e7fbdd9758c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/reduction/ops.h",
+      "bytes": 7669,
+      "sha256": "78d06730fc9564a73944e7f1fe3897d25c8789b28a939bf418e1968db311da41"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/reduction/reduce_all.h",
+      "bytes": 1822,
+      "sha256": "44ea27207c4d976524960ae615de4889c8e5998bf5e88b88850398cc293b1abb"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/reduction/reduce_col.h",
+      "bytes": 13787,
+      "sha256": "47d47a9a8b52e3dfd15b195f40cdb3623583e00f5ac11378cdc0a7fe49fe17cf"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/reduction/reduce_init.h",
+      "bytes": 284,
+      "sha256": "2efff9a359069d38767eb764c9e15129e6ac07e4271f4cac0b190628824b8a4a"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/reduction/reduce_row.h",
+      "bytes": 11321,
+      "sha256": "8045c77cb0dde4f97a77ddcdcfad825ccf855928d31369a1dc1832629a63da50"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/scan.h",
+      "bytes": 15522,
+      "sha256": "735e545d1296f48d0bddffaff289c4e4ef77c5f76cb2bace861a706c43fc24a0"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/sdpa_blocked.h",
+      "bytes": 1407,
+      "sha256": "665d98c389b042a2cbdfae9d95263d7d4ae56d9fc1dfe903b914940c82c8a4f3"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/sdpa_vector.h",
+      "bytes": 19690,
+      "sha256": "32146cdd4b9982723ee696da1ad8d146682d84d2ee40098a4063a25b8a1ec322"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/searchsorted.h",
+      "bytes": 960,
+      "sha256": "4e80cde60cf0d79cee2e630a86e517b8d77589ba93eca3312d8e2c607963d093"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/softmax.h",
+      "bytes": 6010,
+      "sha256": "cb233fe42a7358f5f658c9a1ef52cd2ee9dd3786ddfad01793a976d58f4d4051"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/sort.h",
+      "bytes": 21778,
+      "sha256": "3171f47dabf2cf501dffc2e388e3d66446d6f71712e8d070028258a084b63574"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/attn/attn.h",
+      "bytes": 8532,
+      "sha256": "67722214ff487ec95df675e2f135ccd7fbe639b6eb6ab98b14bcefa58d66ba95"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/attn/kernels/steel_attention.h",
+      "bytes": 17398,
+      "sha256": "0519f2ec5f6b2917a7685df85ecc5555ca8acd7e070a14c9945ad28adadec36c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/attn/kernels/steel_attention_nax.h",
+      "bytes": 28663,
+      "sha256": "6903e4c8e1b76542be27b6af0c41f573c849ff12a5f0782ec157c3b37f8aad70"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/attn/loader.h",
+      "bytes": 7512,
+      "sha256": "e435f413d71d44ca4ad72a59d192046be77388f63936179c58882286f4cc5dab"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/attn/mma.h",
+      "bytes": 21767,
+      "sha256": "6f22866c76a1f15cf27681d3a8700f3419412a954d00e0810c87f7dac82ddeab"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/attn/nax.h",
+      "bytes": 25621,
+      "sha256": "fb10bcae44095e9fed5c81213d03527dd5fe5ac11be11ec7784bd357c6f317ec"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/attn/params.h",
+      "bytes": 1225,
+      "sha256": "f03c6ed73d7298fa69b75a49e7eec54954b6fafd59530a1f175934215412ed80"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/attn/transforms.h",
+      "bytes": 1714,
+      "sha256": "6479114663c5923a7ee2f9fc1cf9d5e99e680d47d793251749989056a8a63141"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/conv/conv.h",
+      "bytes": 372,
+      "sha256": "e469f51289eff2f632335c634bb5d346667a61f81e515f42159a1ebffd3dd4df"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/conv/kernels/steel_conv.h",
+      "bytes": 4827,
+      "sha256": "ace697d131946606d80ef29bd5593b8ac57b0623303e996cc5a2a902db5968a3"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/conv/kernels/steel_conv_3d.h",
+      "bytes": 3861,
+      "sha256": "d785d7032d460d8ac1277b1a0707b43bfc6fd3e4e3aeb87d33771d920bf920c5"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/conv/kernels/steel_conv_general.h",
+      "bytes": 6593,
+      "sha256": "b32896cde594e22340dd53cc861f35b761cd9985174b265fc67ad1652b4e6b8c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/conv/loader.h",
+      "bytes": 196,
+      "sha256": "a82850d760638c71a9ae8c3e426082bf6e2091822abae82583576aa129d1150f"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/conv/loaders/loader_channel_l.h",
+      "bytes": 25542,
+      "sha256": "db9ffcf5dea237b24c86123d932e3c3bec6f70cddf44803275816820d587a6bb"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/conv/loaders/loader_channel_n.h",
+      "bytes": 8695,
+      "sha256": "8ffd0830fba21578e4b937ab848f14854ab62cdcd40e4d2bafaf294c1f969669"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/conv/loaders/loader_general.h",
+      "bytes": 10609,
+      "sha256": "bfe90b792ed3f5b1c8d498873d48f0b07f90acd615499789b2322784b8d45ad6"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/conv/params.h",
+      "bytes": 2255,
+      "sha256": "354a832c5bf37791f4ad42ddc3ca9456a9c1ebbf3216650bb4a10c18110e03a8"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/defines.h",
+      "bytes": 231,
+      "sha256": "b03cea6a7d5cfe814e6838d8536e2aacdcafd2744cb408e954fda336ce21759a"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/gemm.h",
+      "bytes": 8475,
+      "sha256": "c84af31e2c57154f2a8a24fa7f9fe2449765cce9a66f3f035846ed3c03b6a8b0"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/gemm_nax.h",
+      "bytes": 3580,
+      "sha256": "8f8d11f3c29e30dbfcaa6799963edd5fb71b81f912c4f3494e294d3002e3d337"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/kernels/steel_gemm_fused.h",
+      "bytes": 9957,
+      "sha256": "ed49c8b9c73957f0cbc9dea30f484cf84fb821aece68233d6d1967856200d5c7"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/kernels/steel_gemm_fused_nax.h",
+      "bytes": 6437,
+      "sha256": "149ffe9006edd26daf8c1379ced976f39d929c2cf7cdb57d075be24fc1779765"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/kernels/steel_gemm_gather.h",
+      "bytes": 11492,
+      "sha256": "317e226d116fd64752fc44527c8a846c9947e5d89ade2abf2a3bdb70e1de7907"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/kernels/steel_gemm_gather_nax.h",
+      "bytes": 2792,
+      "sha256": "8b4a3d1c3f2e897668e02ffdaabd0be4850d753e1e8e1e31ad0e4674e6f53385"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/kernels/steel_gemm_masked.h",
+      "bytes": 21578,
+      "sha256": "f6fffe176321a9c4691825e7ddd5f4df09fab06bb1730699fca09a4bb2ebea2f"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/kernels/steel_gemm_segmented.h",
+      "bytes": 8830,
+      "sha256": "bf8b3e9a491a4a4146d5169111ee2b98e21413574193e53f2a4796182cf26ee1"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/kernels/steel_gemm_segmented_nax.h",
+      "bytes": 3728,
+      "sha256": "52c56ff98a85e219656fc1fb4c97f035a7df232445257aadd88496a02018704b"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/kernels/steel_gemm_splitk.h",
+      "bytes": 6279,
+      "sha256": "2ada2a7ea548f6c4b0e7962b4a2f163e8a212620ecc46e078a06647df12b0635"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/kernels/steel_gemm_splitk_nax.h",
+      "bytes": 4692,
+      "sha256": "9486b177261f657bceae6437a18d412a0e361c3e6b418c78b4c067b463c84597"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/kernels/steel_gemm_thin_nax.h",
+      "bytes": 7412,
+      "sha256": "522427d40a251eb5d4bd5055d255d8eab7aa545ae6b97133027de388174870ba"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/loader.h",
+      "bytes": 3864,
+      "sha256": "c1b82153670b1e18371a6e88fdbcf440af692957775c2f837700315ab8a5112e"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/mma.h",
+      "bytes": 33958,
+      "sha256": "9b37709de40c3acaa5411875e52c8d26e6de093261741f671fbdab9c39a852b7"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/nax.h",
+      "bytes": 25621,
+      "sha256": "fb10bcae44095e9fed5c81213d03527dd5fe5ac11be11ec7784bd357c6f317ec"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/params.h",
+      "bytes": 1136,
+      "sha256": "6711e72e32310eafb088895d5a6d20fcfca814158f5b38eb72b6e69d9d773e43"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/gemm/transforms.h",
+      "bytes": 1760,
+      "sha256": "73487e29beab5af9478bc931c49b5e8d66937c2fa2651499867f47ac5529afc2"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/utils/integral_constant.h",
+      "bytes": 3700,
+      "sha256": "886eccaac4f8f00eab5a10551fdb5315df7ab7462aba13d69bb95765c1a4735e"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/utils/type_traits.h",
+      "bytes": 1145,
+      "sha256": "4766c5a3809d3cf7740e63acc5703ef76b6b4e85d8baf16602c9d517a2fd426c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/steel/utils.h",
+      "bytes": 1073,
+      "sha256": "d4c36298145d1c5617a94f07dbfabf6ac932afe2fd7ea0c9291f1fb385c5404a"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/ternary.h",
+      "bytes": 4582,
+      "sha256": "1ad7ebbd7c6bb028b7d9a883ac72c549d218e1696cafa6a97c442f4e91af7e43"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/ternary_ops.h",
+      "bytes": 179,
+      "sha256": "afef5c3048963f9d3d4301ff40e8d5322dc07a3b3ec307c175262566091e5c11"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/unary.h",
+      "bytes": 1885,
+      "sha256": "fb952a2c30a6d0cd01f6c61e852cc15e426b286475de8ff139bb65b8d9001c8c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/unary_ops.h",
+      "bytes": 9282,
+      "sha256": "af710925f066b029f67289a0bbe4edd0ba6c5e7f51c9df609abb111216fa963f"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/kernels/utils.h",
+      "bytes": 16804,
+      "sha256": "e40473c36e2f2e7ba250b29e8dbbe3c150ce207379e57a2818e916b343e9f2cf"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/matmul.h",
+      "bytes": 3701,
+      "sha256": "944de954ed2628617eb7c473a5b84b2e9585f5df2eb9697c1ff5a3df9ca01c29"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/metal.h",
+      "bytes": 775,
+      "sha256": "80762515d31b24b29f8af5dbca766d0e7713447b9a7af588ad8e08820856d40c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/reduce.h",
+      "bytes": 914,
+      "sha256": "9030eb8a03d28ba733465cc7f5a57b08bed82b4f763e596042e1465c6a33a8b9"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/resident.h",
+      "bytes": 4553,
+      "sha256": "72fcce57bca7d819a0bd8ae81ad8aed617051457b221f3f92bd173a736554e59"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/ternary.h",
+      "bytes": 363,
+      "sha256": "8979425a845a425d1bd2b2a5a9a6e4a3a2bce2ab04fa50138ee71bf4c222fbc2"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/unary.h",
+      "bytes": 359,
+      "sha256": "8a923a12fdeaf7ee25ba908493bae036efb8994d0e2e005fa314684ac631ce0c"
+    },
+    {
+      "path": "mlx/include/mlx/backend/metal/utils.h",
+      "bytes": 2886,
+      "sha256": "2b57319453758b5f7c776de946375701f97f84deabca02a1ef024f0153599c70"
+    },
+    {
+      "path": "mlx/include/mlx/backend/no_gpu/apple_memory.h",
+      "bytes": 263,
+      "sha256": "517b609eeafe15e44dd8524a26c32bb62e088b0fb4ff61f9178ce3b0e356b348"
+    },
+    {
+      "path": "mlx/include/mlx/backend/no_gpu/linux_memory.h",
+      "bytes": 290,
+      "sha256": "3ff89f53d639d03ef660266a6bff675a6ab46a17bceec8d9f65ccbb28ca2d024"
+    },
+    {
+      "path": "mlx/include/mlx/compile.h",
+      "bytes": 1363,
+      "sha256": "d6405672fe2470b9c304a9816644b94b1bd79981f430799dbd2ac2dc2cdbf739"
+    },
+    {
+      "path": "mlx/include/mlx/compile_impl.h",
+      "bytes": 2329,
+      "sha256": "8eb09a9112f3d4d432acf2fd71664a292d06ca98a808889ac648c800dad9b0fb"
+    },
+    {
+      "path": "mlx/include/mlx/device.h",
+      "bytes": 1735,
+      "sha256": "cd273c84524887d9563ced874d0f1546bd40dfbc91754e68286a90d47f181e5a"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/distributed.h",
+      "bytes": 2766,
+      "sha256": "6e501505a96c4f534fe54dccc63653c7f22b0453b21e98c0ecdc7cbf2644e309"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/distributed_impl.h",
+      "bytes": 2056,
+      "sha256": "292a9af7a1faee6d59b34fc9d210fddae40f042af82c1b78c1a62437e8995a0b"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/jaccl/jaccl.h",
+      "bytes": 406,
+      "sha256": "76976b8c7c54711c14e64f56ad50a5b358e66c85b0ad796f73bacf876e1a9887"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/jaccl/lib/jaccl/group.h",
+      "bytes": 1545,
+      "sha256": "2f30dfe0acbfde764a4547c62a06a8da6b54837ca7662ac1e14a17994e8b0129"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/jaccl/lib/jaccl/jaccl.h",
+      "bytes": 2882,
+      "sha256": "6d37bb30ed633b4724bbf26b073d2e8ef75b8f11dfc8f9a2b56ed4a133505876"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/jaccl/lib/jaccl/mesh.h",
+      "bytes": 2466,
+      "sha256": "43d53e2642fb0cae15c56a10b1aad5291c8419d0966d37b3b03bdd4eb4d396e5"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/jaccl/lib/jaccl/mesh_impl.h",
+      "bytes": 20870,
+      "sha256": "acac6b7a1347ed4c6353d176f6a1c17ee11dc1c04349c1a229433a8376d4115d"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/jaccl/lib/jaccl/rdma.h",
+      "bytes": 9491,
+      "sha256": "dbe318131a2d1daa3614b5a48c5be6a31fd8405ebfa394138172d9bb1b7d9f94"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/jaccl/lib/jaccl/reduction_ops.h",
+      "bytes": 6039,
+      "sha256": "2cc0bfe9f15ef380ebbc195809b639e0d5aee300f8d372bfd702d81b85ee6752"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/jaccl/lib/jaccl/ring.h",
+      "bytes": 2478,
+      "sha256": "e60b76398bac1961b5013e74598aef3ac7066f151a97074ffbc8c7a9b963e9fc"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/jaccl/lib/jaccl/ring_impl.h",
+      "bytes": 27489,
+      "sha256": "474542faf2788d19cd621049ca5a6d1447ff1389ae3502c4ecff2b47d2746817"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/jaccl/lib/jaccl/tcp.h",
+      "bytes": 1362,
+      "sha256": "9450af7593270876dc1eed59e2a4111b70f81e3c01505ecbbdd003dfa13734a8"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/jaccl/lib/jaccl/threadpool.h",
+      "bytes": 4472,
+      "sha256": "ca375bc5bf8828860a49f961a364fd03073fc9e836bdf3137de15fbfc594a37e"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/jaccl/lib/jaccl/types.h",
+      "bytes": 6204,
+      "sha256": "3c3ac5455b3e44ebdbc4ce174de17062204272a0951b186cb8a50a6faf8245f2"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/mpi/mpi.h",
+      "bytes": 297,
+      "sha256": "428bd6dd484af7a5ddebbad409a12d0506f21362b3d81b43eb18102fa20fdf94"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/mpi/mpi_declarations.h",
+      "bytes": 641,
+      "sha256": "67d3260f085a24686521a85dab45256c6f7c64c8ef8fb82998b4b8695972e0f8"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/nccl/nccl.h",
+      "bytes": 299,
+      "sha256": "469d658e2195b37aef652dbc8c200abd44b2d012a80fd0fddc0390d301d5acc8"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/ops.h",
+      "bytes": 1236,
+      "sha256": "9e1c8d57f8cdeb189c32dcbd9a3ba8f7b03626ede8d902679fe2849b431196a9"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/primitives.h",
+      "bytes": 4307,
+      "sha256": "161235f2134ef59e936ce24cf9b2d79319b5552da09fde031cfa891929ef1ba3"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/reduction_ops.h",
+      "bytes": 735,
+      "sha256": "9051d0606bdaa02935037a6f37b9c0fecc4608d0a8a297fa974fc7fd8e07f03a"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/ring/ring.h",
+      "bytes": 299,
+      "sha256": "479128ad5372e19caf560965dd6f81b1584b8780d310a72ff810d718eb806fc2"
+    },
+    {
+      "path": "mlx/include/mlx/distributed/utils.h",
+      "bytes": 1412,
+      "sha256": "0087545e63f90df75ec270e0c121759c54a0e2345a1f5e4f0c48369d24c34bf5"
+    },
+    {
+      "path": "mlx/include/mlx/dtype.h",
+      "bytes": 3133,
+      "sha256": "a9b6c8719deae53015cfcf0452b570b2620c8c24b409b93e80ffd8ecb4537748"
+    },
+    {
+      "path": "mlx/include/mlx/dtype_utils.h",
+      "bytes": 3615,
+      "sha256": "72667384d30d7ca44645b66553cbe2b74256ccaa20a4d7c283de65ee04683b0c"
+    },
+    {
+      "path": "mlx/include/mlx/einsum.h",
+      "bytes": 494,
+      "sha256": "92a0cfa2a87a9f5b1678df89924865f3fa4687f8f6880ad0395f878417af88ff"
+    },
+    {
+      "path": "mlx/include/mlx/error.h",
+      "bytes": 990,
+      "sha256": "bd82ce0966cfefcb43f79f9910004af77427aff9f3fed260a652d6bc6f536689"
+    },
+    {
+      "path": "mlx/include/mlx/event.h",
+      "bytes": 1832,
+      "sha256": "56d49e3c5d71ffa94e484ef55762b25e627b4a9114ad1c138534b7a83826c8fb"
+    },
+    {
+      "path": "mlx/include/mlx/export.h",
+      "bytes": 3890,
+      "sha256": "8ba254c1f790b7c16064da5b91a68c872f2a5a6f2a1e3cf00e2c1109ca352173"
+    },
+    {
+      "path": "mlx/include/mlx/export_impl.h",
+      "bytes": 3315,
+      "sha256": "c1bb2baf17c51489ffbe6dc886d7c578b3d2f6c9407e82c5578cffb905fb7521"
+    },
+    {
+      "path": "mlx/include/mlx/fast.h",
+      "bytes": 3444,
+      "sha256": "083a318115d86865417befc6ce24d5ef89bd0ae45d63d583977ab4e217bc2dd8"
+    },
+    {
+      "path": "mlx/include/mlx/fast_primitives.h",
+      "bytes": 15170,
+      "sha256": "9fa2ebc4b42a2457c78f8644528629e683a66454014b1b851d875da8e29ad8bf"
+    },
+    {
+      "path": "mlx/include/mlx/fence.h",
+      "bytes": 1139,
+      "sha256": "bac79a564aca1a3b07f83d892f054fb0d28bcd5b4b70bb70c80570ea814e014a"
+    },
+    {
+      "path": "mlx/include/mlx/fft.h",
+      "bytes": 7403,
+      "sha256": "6b7d8151158bb8beededb0e69e3a5dc9bf71fbeb9ba8c6d83d752ef418c60e3b"
+    },
+    {
+      "path": "mlx/include/mlx/graph_utils.h",
+      "bytes": 1834,
+      "sha256": "4a67fb3ebdceb1608a5e2d89298d7742eb22afc97d2df353db51f60604f2aeb9"
+    },
+    {
+      "path": "mlx/include/mlx/io/gguf.h",
+      "bytes": 386,
+      "sha256": "77263f0baee1424c70e57825c09b520f4bfa5a5a4fe6e6e58842ebc7b1265678"
+    },
+    {
+      "path": "mlx/include/mlx/io/load.h",
+      "bytes": 5347,
+      "sha256": "65fd4f1c215515d42ce98266ad31d6505e437b5391b96899af0c298ab0943548"
+    },
+    {
+      "path": "mlx/include/mlx/io.h",
+      "bytes": 1951,
+      "sha256": "66638ade7531b8c34fc7abf9c156c2987372ee467ae93d5eefd125fbad3f9217"
+    },
+    {
+      "path": "mlx/include/mlx/linalg.h",
+      "bytes": 3460,
+      "sha256": "a2dc3b198403e1f61a3765306db0f84a2322c1f03436a697e7302d1e16400872"
+    },
+    {
+      "path": "mlx/include/mlx/memory.h",
+      "bytes": 2722,
+      "sha256": "dfe012ac8f2dff5d3d9a677b1f124556bb91614119979d8f290b0d41293f9636"
+    },
+    {
+      "path": "mlx/include/mlx/mlx.h",
+      "bytes": 610,
+      "sha256": "aa56f7087ad501c5575081752b0da4b7494df0cdc485c5a28bcf57dd870184a2"
+    },
+    {
+      "path": "mlx/include/mlx/ops.h",
+      "bytes": 59457,
+      "sha256": "388db415359c68273c697d1d03504c8f5293bffcd47b74c7f74d66d163e14f32"
+    },
+    {
+      "path": "mlx/include/mlx/primitives.h",
+      "bytes": 71859,
+      "sha256": "a3d6ee1d3df34e36e46ba55dbd709dc7b87890a2cac012883ba5fdc73e2373b1"
+    },
+    {
+      "path": "mlx/include/mlx/random.h",
+      "bytes": 7662,
+      "sha256": "50c2c46491837ea152d16774cbdc9f3b4d191ee920b008febd45881c53bc5caa"
+    },
+    {
+      "path": "mlx/include/mlx/scheduler.h",
+      "bytes": 2780,
+      "sha256": "9b44de7e593a8612b63522c5fc17220b03f3550f2ad3d6efe9425448c207ee1a"
+    },
+    {
+      "path": "mlx/include/mlx/small_vector.h",
+      "bytes": 15531,
+      "sha256": "2fd7d2a423a74b7857ae886ddae0b6c4183f5b9f1d6b8f8d3ba8db38a5ad4677"
+    },
+    {
+      "path": "mlx/include/mlx/stream.h",
+      "bytes": 1886,
+      "sha256": "f9ce8fe170e788e379729f2daf7345f5c97b4fb57bd7ec63e83fb4d4a358b8fd"
+    },
+    {
+      "path": "mlx/include/mlx/threadpool.h",
+      "bytes": 3656,
+      "sha256": "e22e3eb7a2ee0b06b0ea69e8a49375761de9b799dd96b06e7ae9e778d9820667"
+    },
+    {
+      "path": "mlx/include/mlx/transforms.h",
+      "bytes": 8459,
+      "sha256": "ea33fdb876367c6d33f261e9e01f1b0990c96decfa6ff825e3806c98e79550fa"
+    },
+    {
+      "path": "mlx/include/mlx/transforms_impl.h",
+      "bytes": 2703,
+      "sha256": "c72434abe8c94c916bd09aa66c77abd88f9fadc6f425eee300a39063659416de"
+    },
+    {
+      "path": "mlx/include/mlx/types/bf16.h",
+      "bytes": 6816,
+      "sha256": "a279b39030b406eda06a42069abd660ad24fced7b1cfe33378b236b2ce1e786f"
+    },
+    {
+      "path": "mlx/include/mlx/types/complex.h",
+      "bytes": 4976,
+      "sha256": "86922be81d30c71e826fcc6e7ca5470b311a3099b8df6110c3fb7aaa1785fd57"
+    },
+    {
+      "path": "mlx/include/mlx/types/fp16.h",
+      "bytes": 8381,
+      "sha256": "b63e769ec5794e19d338081727b212405355c3f47328b0e0817e61d2500ea6f7"
+    },
+    {
+      "path": "mlx/include/mlx/types/half_types.h",
+      "bytes": 1657,
+      "sha256": "670ed6dd08d1211ff4f9c4f7b6152fc6e70cef8a3c0f1513b19cbcc8691f784b"
+    },
+    {
+      "path": "mlx/include/mlx/types/limits.h",
+      "bytes": 1613,
+      "sha256": "5cd57c680e25df6ca4a9f0944f67ae0e4ebd7e2a9044e5ed30d8311285f5ceae"
+    },
+    {
+      "path": "mlx/include/mlx/utils.h",
+      "bytes": 7083,
+      "sha256": "f09f97894bf9479410082e59850289a03e852e0215a9ddefd5c4855e2d99458f"
+    },
+    {
+      "path": "mlx/include/mlx/version.h",
+      "bytes": 509,
+      "sha256": "aa9bc89918174150c2346bdbc85572fcff6585902e9d04e719d6f334f973abf0"
+    },
+    {
+      "path": "mlx/lib/cmake/jaccl/jacclTargets-release.cmake",
+      "bytes": 839,
+      "sha256": "e19765f738eba661a50e7f6ba6595c9f1ab38ab9c0eb6aa7515fa76045e0a674"
+    },
+    {
+      "path": "mlx/lib/cmake/jaccl/jacclTargets.cmake",
+      "bytes": 4174,
+      "sha256": "ec1ea9f74ef00349d0eb47b870d2e82d769418ab08eb0f730ced6add0f2fb57b"
+    },
+    {
+      "path": "mlx/lib/libjaccl.dylib",
+      "bytes": 2131168,
+      "sha256": "7890e84a96e3121c8c1c2f351e41e46ba4d92e7b7bc6275fc2b38c2773891032"
+    },
+    {
+      "path": "mlx/lib/libmlx.dylib",
+      "bytes": 21720704,
+      "sha256": "d8c9393d584e781393c3effccfccd8ba85ad0c70264edaf9f897dca9875375c6"
+    },
+    {
+      "path": "mlx/lib/mlx.metallib",
+      "bytes": 214156448,
+      "sha256": "c6d7a3facb83568f6e4cb2cf4a8c736ee29302571a48343cb9a3a4d1cd3e3893"
+    },
+    {
+      "path": "mlx/nn/__init__.py",
+      "bytes": 164,
+      "sha256": "6d578784bfe696a3ba6eca2a559c87e9fd1ec5eaa5e6d4e199e6e959ebe0a492"
+    },
+    {
+      "path": "mlx/nn/init.py",
+      "bytes": 14659,
+      "sha256": "c6ef640bf114039d5c6c5f2d0d9e53675c171ba1456beba20278c9cc12922831"
+    },
+    {
+      "path": "mlx/nn/layers/__init__.py",
+      "bytes": 2092,
+      "sha256": "1eb646e38a87579eb63201100c3f9b038e2466d7fbad509c2f32841bc1f2a007"
+    },
+    {
+      "path": "mlx/nn/layers/activations.py",
+      "bytes": 16792,
+      "sha256": "244a4acb0f77fac196e3e355dcae0a5195691b7f9f12d6c5aeb243c6cb021ae1"
+    },
+    {
+      "path": "mlx/nn/layers/base.py",
+      "bytes": 26326,
+      "sha256": "cefa99a579f3c2016b70e15c183ae5e8bbef103ce9a0d89cb3789d9aedb23503"
+    },
+    {
+      "path": "mlx/nn/layers/containers.py",
+      "bytes": 618,
+      "sha256": "29ef203c13d9bebb6b8cad6aadb44d1ad495e2bbc19184ca5415b6a505eb36f6"
+    },
+    {
+      "path": "mlx/nn/layers/convolution.py",
+      "bytes": 7889,
+      "sha256": "dbcffc87c082fedeba9611d6f0028517b1ae3425641ff64164c9882001dfaf1a"
+    },
+    {
+      "path": "mlx/nn/layers/convolution_transpose.py",
+      "bytes": 8209,
+      "sha256": "b879cc91dc655ded2b5876c4828f93516c2211b72099d72921995224ae4628ec"
+    },
+    {
+      "path": "mlx/nn/layers/distributed.py",
+      "bytes": 25317,
+      "sha256": "d1166464c6e3bab613881a71e045754d22647e97544a395996c274b2c59eb3c2"
+    },
+    {
+      "path": "mlx/nn/layers/dropout.py",
+      "bytes": 4713,
+      "sha256": "b5630720b002f7ab16d4c9db3b94102ce5e4f3c301d5574af04e41c9e95e7264"
+    },
+    {
+      "path": "mlx/nn/layers/embedding.py",
+      "bytes": 1669,
+      "sha256": "b1eb18c3fa00e37741a3a180cb08fbe622da1f729084eb4057396153d7707cab"
+    },
+    {
+      "path": "mlx/nn/layers/linear.py",
+      "bytes": 5888,
+      "sha256": "20514004a56ecfed5e03d43a7ca618a0f54ff7bca038ec565e3e9af76aa1f639"
+    },
+    {
+      "path": "mlx/nn/layers/normalization.py",
+      "bytes": 13953,
+      "sha256": "d038fced58d7bf972e80e5ea508c9285e81bd9d523773deb50c5a935b25af9af"
+    },
+    {
+      "path": "mlx/nn/layers/pooling.py",
+      "bytes": 15014,
+      "sha256": "0b4bf256c9cd70113b4cb7d4dc0738d12d740b139f0c401a8beb72f4b0874538"
+    },
+    {
+      "path": "mlx/nn/layers/positional_encoding.py",
+      "bytes": 7751,
+      "sha256": "e02215591daa503f99bdd2f6b38c9641fdf381bac36641225da0911a6704ef4c"
+    },
+    {
+      "path": "mlx/nn/layers/quantized.py",
+      "bytes": 15026,
+      "sha256": "8ca4574a212f14cbec4c446826474583ef0bf1e2cb1630574fd730c77af03b33"
+    },
+    {
+      "path": "mlx/nn/layers/recurrent.py",
+      "bytes": 8789,
+      "sha256": "553738db5ffede77d4d97a6b431ac82475b99c34902a9a32e05b940a95f34ae7"
+    },
+    {
+      "path": "mlx/nn/layers/transformer.py",
+      "bytes": 12539,
+      "sha256": "0661d4b2f0e21638d051e6707d700a6a82c659a4f942535f5793a7d25f4ab0c8"
+    },
+    {
+      "path": "mlx/nn/layers/upsample.py",
+      "bytes": 17162,
+      "sha256": "c50aff4aca3cf11f7b8def94be5f0ecfb386504a89da480fab7f9a6b4a202650"
+    },
+    {
+      "path": "mlx/nn/losses.py",
+      "bytes": 21733,
+      "sha256": "221ce6a2395cddb065049bf66212620945e50a8f592bb131fa1c21b8341d8f31"
+    },
+    {
+      "path": "mlx/nn/utils.py",
+      "bytes": 7505,
+      "sha256": "a5ab60f6731a7a8d3821b7e44ad96961ef848ae0315090f47a895627ede102a8"
+    },
+    {
+      "path": "mlx/optimizers/__init__.py",
+      "bytes": 117,
+      "sha256": "289a7bcf845366d2f823be75cb25cd8745ad9d8b2692ba1fd7b72a084f71dd42"
+    },
+    {
+      "path": "mlx/optimizers/optimizers.py",
+      "bytes": 36429,
+      "sha256": "a649eeb65133d1a21eec61ab83529badd0ec50938ee6476b1e59f7ee36def1f2"
+    },
+    {
+      "path": "mlx/optimizers/schedulers.py",
+      "bytes": 5083,
+      "sha256": "327c7e9df5253b234c464a833070c87a3bfcd7c3fccb1980ca453c2f5ccb1510"
+    },
+    {
+      "path": "mlx/py.typed",
+      "bytes": 1,
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "mlx/share/cmake/MLX/FindCUDNN.cmake",
+      "bytes": 5928,
+      "sha256": "7a945752c982bc7cb029629eac833033944bd71a0d688d73ad71ff5a365c6173"
+    },
+    {
+      "path": "mlx/share/cmake/MLX/FindNCCL.cmake",
+      "bytes": 1712,
+      "sha256": "56f2f345777a4573e588833022631f53f35c4b4cf835d5e0d99cef64cd979fc9"
+    },
+    {
+      "path": "mlx/share/cmake/MLX/Findnvpl.cmake",
+      "bytes": 211,
+      "sha256": "bcbe636df969eb1b3d463559cd0bb149cceea3de0fa4f50803e421dca62f0de3"
+    },
+    {
+      "path": "mlx/share/cmake/MLX/MLXConfig.cmake",
+      "bytes": 2751,
+      "sha256": "8bc05615f53253e43f28d7973a2b083be4370a36589b6ac0ae03324a4717a5fa"
+    },
+    {
+      "path": "mlx/share/cmake/MLX/MLXConfigVersion.cmake",
+      "bytes": 2765,
+      "sha256": "9c6b1f0c6a469e04e6549c8c7d33082314d843e28bafaeb4b1926b1cb718f04d"
+    },
+    {
+      "path": "mlx/share/cmake/MLX/MLXTargets-release.cmake",
+      "bytes": 847,
+      "sha256": "f38bbf6b6f2496585639c0045aba284d8bd83d620a71a61aab93c08f01139e9e"
+    },
+    {
+      "path": "mlx/share/cmake/MLX/MLXTargets.cmake",
+      "bytes": 4788,
+      "sha256": "7ef9efb6c3320109e0c715456dbe83c7454d0266925599828fb33fb4b1e01e62"
+    },
+    {
+      "path": "mlx/share/cmake/MLX/extension.cmake",
+      "bytes": 4897,
+      "sha256": "e73066249ec3bff3f01a07faf1fa023c0da9c05bc93c86462f327408adf4db97"
+    },
+    {
+      "path": "mlx/utils.py",
+      "bytes": 12124,
+      "sha256": "e55d7c63e7b706a0d31728343760f3f98d90e44d34054be4cf076586fdbe1616"
+    },
+    {
+      "path": "mlx-0.32.4.dist-info/METADATA",
+      "bytes": 5863,
+      "sha256": "6dc55fc01204e315150f5153b414a8d299708511895069686d0d62ae15694f13"
+    },
+    {
+      "path": "mlx-0.32.4.dist-info/RECORD",
+      "bytes": 3863,
+      "sha256": "842cf288252b04aa5f6964a799a335f6d5ed6313d29129575968f44b42f9dc69"
+    },
+    {
+      "path": "mlx-0.32.4.dist-info/WHEEL",
+      "bytes": 109,
+      "sha256": "e98238154fc1d69541ea8014d5f084c6ddfb76748b77463d26d3ca5f20168dbd"
+    },
+    {
+      "path": "mlx-0.32.4.dist-info/entry_points.txt",
+      "bytes": 126,
+      "sha256": "f8b58871dec54866b2eaae9af0ab1cb60d70bf78689a98368f2d39ee9f61f3e2"
+    },
+    {
+      "path": "mlx-0.32.4.dist-info/licenses/LICENSE",
+      "bytes": 1066,
+      "sha256": "ccfab7ccb2ea306f71531c8ca77bb55507606cd90768b1e32b8b52ab5b48cf01"
+    },
+    {
+      "path": "mlx-0.32.4.dist-info/top_level.txt",
+      "bytes": 10,
+      "sha256": "bf646b6db060264b0055ccd9c7902efb280630a0f451381822e295d9b10f4121"
+    },
+    {
+      "path": "mlx_metal-0.32.4.dist-info/METADATA",
+      "bytes": 5108,
+      "sha256": "7f9177a2aa757749046d35ce83833d5e28dce7834c987b75ef753e5b69a68f1a"
+    },
+    {
+      "path": "mlx_metal-0.32.4.dist-info/RECORD",
+      "bytes": 42595,
+      "sha256": "a2d33011e2bd3b95d7558e3385264320c248b7200f2ee27ba57ac95e9f989b8a"
+    },
+    {
+      "path": "mlx_metal-0.32.4.dist-info/WHEEL",
+      "bytes": 106,
+      "sha256": "bb78e5ac3096d3d689e64d3f9f59070817712afd12b1e586857365fbd5467857"
+    },
+    {
+      "path": "mlx_metal-0.32.4.dist-info/licenses/LICENSE",
+      "bytes": 1066,
+      "sha256": "ccfab7ccb2ea306f71531c8ca77bb55507606cd90768b1e32b8b52ab5b48cf01"
+    },
+    {
+      "path": "mlx_metal-0.32.4.dist-info/top_level.txt",
+      "bytes": 4,
+      "sha256": "342559cf29acfa86cf943ab649afbe9b7a327e79e62e66b7f0a0a713a8267051"
+    }
+  ],
+  "licenses": [
+    {
+      "path": "LICENSE",
+      "sha256": "11d27e0259dec3a323fa6c04c330621d0950ab96c6760d5aac3e2e97229e6f22"
+    },
+    {
+      "path": "mlx-lm-LICENSE",
+      "sha256": "ccfab7ccb2ea306f71531c8ca77bb55507606cd90768b1e32b8b52ab5b48cf01"
+    },
+    {
+      "path": "moshi-LICENSE-MIT",
+      "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+    },
+    {
+      "path": "Qwen-LICENSE",
+      "sha256": "a44a6081c73ad75f0255bb2bb5cab74ef1829565a895a24e53a4f11290ab7655"
+    }
+  ],
+  "wheels": [
+    {
+      "name": "mlx",
+      "version": "0.32.4",
+      "filename": "mlx-0.32.4-cp312-cp312-macosx_26_0_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/af/44/90bbdc3cdd120e1181f7c4f617ff996530159f2ea3ba3c08b83b08314d21/mlx-0.32.4-cp312-cp312-macosx_26_0_arm64.whl",
+      "bytes": 667622,
+      "sha256": "7928869076db6267ab3ebdb253b2c80be1e738b3032c783170bd1d59d460c578",
+      "licenseMetadata": "MIT"
+    },
+    {
+      "name": "mlx-metal",
+      "version": "0.32.4",
+      "filename": "mlx_metal-0.32.4-py3-none-macosx_26_0_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/2a/d6/4340ed6e184f71693d7f531c9ae55d677451351245760d71f8dd714dcbe5/mlx_metal-0.32.4-py3-none-macosx_26_0_arm64.whl",
+      "bytes": 78106861,
+      "sha256": "514df92d41a286895d2564b4b18f4da45096bd7a4a0c47e1042f345ad5a7f936",
+      "licenseMetadata": "MIT"
+    }
+  ],
+  "model": {
+    "repo": "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
+    "revision": "049ef77fe8816b536193c0c25f9a214d17921282",
+    "license": "Apache-2.0",
+    "sourceRepo": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+    "sourceRevisionReviewed": "85e237c12c027371202489a0ec509ded67b5e4b5",
+    "conversionPublisherClaim": "MLX Audio 0.3.0 conversion of linked official model; no original commit attestation provided"
+  },
+  "modelFiles": [
+    {
+      "type": "file",
+      "oid": "a6344aac8c09253b3b630fb776ae94478aa0275b",
+      "size": 1519,
+      "path": ".gitattributes"
+    },
+    {
+      "type": "file",
+      "oid": "4b233d49b2b0b30ff7b81200946e5f56a6c1676e",
+      "size": 1068,
+      "path": "README.md"
+    },
+    {
+      "type": "file",
+      "oid": "f41acc3813e68cfa5e683412db8baeb97dbd5c29",
+      "size": 6058,
+      "path": "config.json"
+    },
+    {
+      "type": "file",
+      "oid": "1872b16d4535564abf2db5d6debe6cddd82b7f2e",
+      "size": 245,
+      "path": "generation_config.json"
+    },
+    {
+      "type": "file",
+      "oid": "20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0",
+      "size": 1671839,
+      "path": "merges.txt"
+    },
+    {
+      "type": "file",
+      "oid": "e18d8cca59a3a6c873c3f563a6974e6c35035a0b",
+      "size": 1286743170,
+      "lfs": {
+        "oid": "3bcb2c4a127e6243e81a30b7126c7865f686d3559de4f938e5d3b150c6a9560d",
+        "size": 1286743170,
+        "pointerSize": 135
+      },
+      "xetHash": "4203266e01e634d07046abfd5e76f5a4535a04d82b1ae8c4999c95dd22fb4496",
+      "path": "model.safetensors"
+    },
+    {
+      "type": "file",
+      "oid": "052700b2b4b0904b445ed8167fbeb47826f07f25",
+      "size": 71447,
+      "path": "model.safetensors.index.json"
+    },
+    {
+      "type": "file",
+      "oid": "0525dd953bb9241912f7147666f0d535165d5d4f",
+      "size": 127,
+      "path": "preprocessor_config.json"
+    },
+    {
+      "type": "file",
+      "oid": "06cc8dc4c5ec8a1929086b71b98c313020d9268b",
+      "size": 2336,
+      "path": "speech_tokenizer/config.json"
+    },
+    {
+      "type": "file",
+      "oid": "ab58e2eaf53cd14a1a2a7527d9261ceea93a24cd",
+      "size": 76,
+      "path": "speech_tokenizer/configuration.json"
+    },
+    {
+      "type": "file",
+      "oid": "026d66bfb5d730dcfd56450c5e9e51b3ef4e0712",
+      "size": 682293092,
+      "lfs": {
+        "oid": "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258",
+        "size": 682293092,
+        "pointerSize": 134
+      },
+      "xetHash": "7aa53fdcc3e45f61e82ffc7bceea9098fdd5af143033df2dc722f91c67d17020",
+      "path": "speech_tokenizer/model.safetensors"
+    },
+    {
+      "type": "file",
+      "oid": "ba40914f4f49ab98a8ca545d4892ef7291a39592",
+      "size": 234,
+      "path": "speech_tokenizer/preprocessor_config.json"
+    },
+    {
+      "type": "file",
+      "oid": "6ff9fd60cc623bb54bbd603cbd418c97a11528d7",
+      "size": 7344,
+      "path": "tokenizer_config.json"
+    },
+    {
+      "type": "file",
+      "oid": "4783fe10ac3adce15ac8f358ef5462739852c569",
+      "size": 2776833,
+      "path": "vocab.json"
+    }
+  ],
+  "decoderChunkTokens": 100,
+  "decoderLeftContextTokens": 25,
+  "memoryLimitSemantics": "allocation guideline plus explicit observed-peak acceptance checks; not an OS hard ceiling",
+  "decodeUpsampleRate": 1920,
+  "codecClockSemantics": "actual unpadded nonnegative codec frames, including valid code0, times1920samples; -1 is padding per official source"
+}

@@ -3,6 +3,7 @@ import type {
   TtrpgAbilityRuntimeStateV2,
   TtrpgResetTriggerV2,
   TtrpgUsagePoolStateV2,
+  RulePackV1,
 } from '../types'
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
@@ -116,6 +117,28 @@ export function parseTtrpgUsagePoolStateV2(value: unknown): TtrpgUsagePoolStateV
     poolKey: key(row.poolKey, 'poolKey'), maximum, remaining,
     lastChangedEventId: nullableKey(row.lastChangedEventId, 'lastChangedEventId'),
   }
+}
+
+/** Open releases declare each pool maximum; legacy packs retain their existing policy. */
+export function createTtrpgOpenUsagePoolsV1(actions: readonly RulePackV1['actions'][number][]): Record<string, TtrpgUsagePoolStateV2> {
+  const pools: Record<string, TtrpgUsagePoolStateV2> = {}
+  const resetPolicies = new Map<string, string>()
+  for (const action of actions) {
+    const usage = action.usage
+    if (usage.mode !== 'shared-pool') continue
+    if (usage.maximum === null || usage.sharedPoolKey === null || usage.cost === null || usage.cost > usage.maximum) {
+      fail('open 共享次数池必须声明可支付的冻结 maximum/cost')
+    }
+    const reset = [...usage.reset].sort().join(',')
+    const previous = pools[usage.sharedPoolKey]
+    if (previous && (previous.maximum !== usage.maximum || resetPolicies.get(usage.sharedPoolKey) !== reset)) {
+      fail('同一 open 共享次数池的 maximum/reset 必须一致')
+    }
+    pools[usage.sharedPoolKey] = { poolKey: usage.sharedPoolKey, maximum: usage.maximum,
+      remaining: usage.maximum, lastChangedEventId: null }
+    resetPolicies.set(usage.sharedPoolKey, reset)
+  }
+  return pools
 }
 
 export function consumeTtrpgAbilityV2(input: {

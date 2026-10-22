@@ -1,0 +1,18 @@
+{
+  "schema": "storyforge.ttrpg-local-tts-reading-profile",
+  "version": 1,
+  "profileId": "melo-zh-reading-v1",
+  "assetProfileId": "melo-zh-eval-v1",
+  "assetProfileSha256": "8a73ace3bf7e56dd8acd281d0e1600b1364611fa6a194d402129eae213994bf8",
+  "normalizerPath": "melo/text/chinese_mix.py",
+  "normalizerSha256": "23f8ff3596da116dc0bbb2acad82339449994742a14a9f9a486c94b99cc60802",
+  "cn2anVersion": "0.5.24",
+  "maxSourceUtf16": 2000,
+  "maxReadingUtf16": 4000,
+  "maxOverrides": 64,
+  "maxReportedIssues": 64,
+  "timeoutMs": 10000,
+  "maxPayloadBytes": 65536,
+  "modelInvocationAllowed": false,
+  "adoptionAllowed": false
+}

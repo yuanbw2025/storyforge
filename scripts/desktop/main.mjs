@@ -31,7 +31,8 @@ else {
   })
   app.on('second-instance', () => { window?.restore(); window?.focus() })
   app.whenReady().then(async () => {
-    server = createPortableServer({ webRoot: join(root, '../../dist') })
+    server = createPortableServer({ webRoot: join(root, '../../dist'),
+      ...(app.isPackaged ? { localTtsRoot: join(process.resourcesPath, 'local-tts') } : {}) })
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen(17831, '127.0.0.1', resolve) })
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(permission === 'persistent-storage'))
     window = new BrowserWindow({

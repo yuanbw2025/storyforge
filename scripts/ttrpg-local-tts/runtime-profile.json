@@ -1,0 +1,448 @@
+{
+  "schema": "storyforge.ttrpg-local-tts-runtime-profile",
+  "version": 1,
+  "productInvocationAllowed": false,
+  "profileId": "melo-zh-eval-v1",
+  "platform": "darwin-arm64",
+  "pythonMinor": "3.12",
+  "maxInstalledBytes": 4294967296,
+  "minimumFreeBytes": 8589934592,
+  "source": {
+    "repo": "myshell-ai/MeloTTS",
+    "revision": "209145371cff8fc3bd60d7be902ea69cbdb7965a",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "LICENSE",
+        "bytes": 1053,
+        "sha256": "88a50e5a02bbc2a5c2f084dc19da751aa97b1690f5fda76cd8005c8634d1ca70"
+      },
+      {
+        "path": "melo/__init__.py",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "melo/commons.py",
+        "bytes": 4956,
+        "sha256": "046943d265635c3d9c99195562e703564a26300981a7db5b87d4cd3fd180ae0d"
+      },
+      {
+        "path": "melo/models.py",
+        "bytes": 34027,
+        "sha256": "f96eef52845224b5797e54008013a5b6a5fafad2035713dc5181a5db8bf8bef4"
+      },
+      {
+        "path": "melo/modules.py",
+        "bytes": 18975,
+        "sha256": "de80baee7dc8d89d621c541b899a84193df4bb3ef95f5e6d076cc37b6bb10bf6"
+      },
+      {
+        "path": "melo/attentions.py",
+        "bytes": 15936,
+        "sha256": "5261b73e4945651e9f7133375f4f83c1532a30f8227f6249c7006d696a737353"
+      },
+      {
+        "path": "melo/transforms.py",
+        "bytes": 7253,
+        "sha256": "e6798989a0d75cbec45e7e24e3697e1c4886b3664c6a80a452645ef1d2a93f9c"
+      },
+      {
+        "path": "melo/monotonic_align/__init__.py",
+        "bytes": 563,
+        "sha256": "bcd65a2cd9a27974b095ba187f160966c76f8ae99eb967fc365f0f12947718bc"
+      },
+      {
+        "path": "melo/monotonic_align/core.py",
+        "bytes": 1270,
+        "sha256": "c8c4ad29ba99479164a51a36191ebc2372d4686d8e84b45a0d8e0d7b89b0f2e5"
+      },
+      {
+        "path": "melo/text/__init__.py",
+        "bytes": 1477,
+        "sha256": "eca8c17764c4dcd57d3a71185775d1c6e4d53689d6a9a54708ec63577a2ac8ba"
+      },
+      {
+        "path": "melo/text/symbols.py",
+        "bytes": 4329,
+        "sha256": "4c1f3839f7e209b5da45daeb269f955b302d0d4c0df6dbf9be88d534b25ceea2"
+      },
+      {
+        "path": "melo/text/chinese.py",
+        "bytes": 5823,
+        "sha256": "ba92f22d3cb72a22b13aa92a86eabe6b220582b9c00a71502e056ef000860d51"
+      },
+      {
+        "path": "melo/text/chinese_mix.py",
+        "bytes": 8571,
+        "sha256": "23f8ff3596da116dc0bbb2acad82339449994742a14a9f9a486c94b99cc60802"
+      },
+      {
+        "path": "melo/text/tone_sandhi.py",
+        "bytes": 23396,
+        "sha256": "230ba9ffe13dadc5f80c117ea3234f88512380a7d45069a08861e24fc2a33aa9"
+      },
+      {
+        "path": "melo/text/opencpop-strict.txt",
+        "bytes": 4084,
+        "sha256": "d66bbb1380a8ebf17d7ace5bf4b459f3728a469eea2aaeae2aeb3969b88223ff"
+      }
+    ]
+  },
+  "models": [
+    {
+      "repo": "myshell-ai/MeloTTS-Chinese",
+      "revision": "af5d207a364ea4208c6f589c89f57f88414bdd16",
+      "license": "mit",
+      "files": [
+        {
+          "path": "checkpoint.pth",
+          "bytes": 207770124,
+          "sha256": "a74e9eadffff065c75eb6dfa040efa72cad23e72cfea70d39190bc174fb97093",
+          "gitBlobSha1": "4edf51dd728337da20d71695407a7ed350decc57"
+        },
+        {
+          "path": "config.json",
+          "bytes": 2296,
+          "sha256": null,
+          "gitBlobSha1": "14ecf9a310de2ef70c444451f671d14106211e94"
+        }
+      ],
+      "role": "speech"
+    },
+    {
+      "repo": "google-bert/bert-base-multilingual-uncased",
+      "revision": "7cbf9a625e29989f6b9c6c2fa68234c304f7e38f",
+      "license": "apache-2.0",
+      "files": [
+        {
+          "path": "config.json",
+          "bytes": 625,
+          "sha256": null,
+          "gitBlobSha1": "28dbff2d6ef29e813e012041b13a9a9eb618ad21"
+        },
+        {
+          "path": "model.safetensors",
+          "bytes": 672247920,
+          "sha256": "b33adb2b700b7029a64a4a14ddec6bda8555d2ca879e80a75789fd9542a6290e",
+          "gitBlobSha1": "4552308e038715f59fb6e54ed442414077f94662"
+        },
+        {
+          "path": "tokenizer.json",
+          "bytes": 1715180,
+          "sha256": null,
+          "gitBlobSha1": "23bc0b1c246323483af59827fab707d26b831456"
+        },
+        {
+          "path": "tokenizer_config.json",
+          "bytes": 48,
+          "sha256": null,
+          "gitBlobSha1": "e5c73d8a50df1f56fb5b0b8002d7cf4010afdccb"
+        },
+        {
+          "path": "vocab.txt",
+          "bytes": 871891,
+          "sha256": null,
+          "gitBlobSha1": "03c53303f0ef6535e93372a93be2db71ec46a1e3"
+        }
+      ],
+      "role": "textEncoder"
+    }
+  ],
+  "pythonPackages": [
+    {
+      "name": "annotated-doc",
+      "version": "0.0.5",
+      "licenseMetadata": "MIT",
+      "url": "https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl",
+      "sha256": "117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101"
+    },
+    {
+      "name": "anyio",
+      "version": "4.15.1",
+      "licenseMetadata": "MIT",
+      "url": "https://files.pythonhosted.org/packages/12/b8/4bd346e22b28902df4d651910f5242c28d84e4a5c2435ca5c3f797ed7e2e/anyio-4.15.1-py3-none-any.whl",
+      "sha256": "6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101"
+    },
+    {
+      "name": "click",
+      "version": "8.5.0",
+      "licenseMetadata": "BSD-3-Clause",
+      "url": "https://files.pythonhosted.org/packages/58/50/6c0d534c5f134586a8e1ba4e330569e32f057e33372ae556463212fb4cd3/click-8.5.0-py3-none-any.whl",
+      "sha256": "255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360"
+    },
+    {
+      "name": "cn2an",
+      "version": "0.5.24",
+      "licenseMetadata": "MIT License",
+      "url": "https://files.pythonhosted.org/packages/8c/e6/f3436a83c6dddc306ee8d6cf7dc1b90a5a3496ae66d9392100c0c5c3f578/cn2an-0.5.24-py3-none-any.whl",
+      "sha256": "3d57d862a56133070ba6a737b8095bfc94716b41b7684e7a98d2d5b049495db7"
+    },
+    {
+      "name": "filelock",
+      "version": "4.2.0",
+      "licenseMetadata": "MIT",
+      "url": "https://files.pythonhosted.org/packages/8e/a3/9bc26acff301fe1aaea1cc3d82a1d57e0a34df3e1cadbfa91ac2dbcdde5c/filelock-4.2.0-py3-none-any.whl",
+      "sha256": "2ff5690882e8cdb00ef31fb3d01a3094c29f30985426c59495afb1733f3b7238"
+    },
+    {
+      "name": "fsspec",
+      "version": "2026.9.0",
+      "licenseMetadata": "BSD-3-Clause",
+      "url": "https://files.pythonhosted.org/packages/6c/c0/a98505f18594f1bce828bb159cec0fcf9860562f1a2c85913409fc8f3d9e/fsspec-2026.9.0-py3-none-any.whl",
+      "sha256": "8dd6e646e99ea382bd85f97a45e6b526a442d79423a7dc673f1e2756d05fcb5f"
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0",
+      "licenseMetadata": "MIT",
+      "url": "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl",
+      "sha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86"
+    },
+    {
+      "name": "hf-xet",
+      "version": "1.7.0",
+      "licenseMetadata": "Apache-2.0",
+      "url": "https://files.pythonhosted.org/packages/c3/47/a26ebdce7056a61e931f228439bc0ab08cbec239d1690f965e5e637cba79/hf_xet-1.7.0-cp38-abi3-macosx_11_0_arm64.whl",
+      "sha256": "59fba37039233c7fcbe196817d6cdcf1b40dfb17b410f229d85b0cf0a1848da4"
+    },
+    {
+      "name": "httpcore2",
+      "version": "2.13.1",
+      "licenseMetadata": "BSD-3-Clause",
+      "url": "https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl",
+      "sha256": "e1e05d4f25f7d7d496bfb96748f6f4b67657b03da069b3a68c36069f3db73d0a"
+    },
+    {
+      "name": "httpx2",
+      "version": "2.13.1",
+      "licenseMetadata": "BSD-3-Clause",
+      "url": "https://files.pythonhosted.org/packages/d8/9c/6fe8931fd9f381042a9e4c7d5a7b4cbf7016b252bec0c99a49fce42c3326/httpx2-2.13.1-py3-none-any.whl",
+      "sha256": "6dff50fabc270ee5fd25d845d0b078ed20564579744d6d962850975996d2f9a4"
+    },
+    {
+      "name": "huggingface_hub",
+      "version": "2.2.0",
+      "licenseMetadata": "Apache-2.0",
+      "url": "https://files.pythonhosted.org/packages/eb/b0/0f7b430fd100b3a3b037fdbb314878200241082e607b3383c63d91a13a72/huggingface_hub-2.2.0-py3-none-any.whl",
+      "sha256": "1667f145dc56dc210d60966069397df9ecfca9607a5d43db88b308c89dae56b3"
+    },
+    {
+      "name": "idna",
+      "version": "3.20",
+      "licenseMetadata": "BSD-3-Clause",
+      "url": "https://files.pythonhosted.org/packages/58/a2/bb081bab032533a855d44de1d56f8e8426114ff1ba5d1f07a438a0a654f8/idna-3.20-py3-none-any.whl",
+      "sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c"
+    },
+    {
+      "name": "jieba",
+      "version": "0.42.1",
+      "licenseMetadata": "MIT",
+      "url": "https://files.pythonhosted.org/packages/c6/cb/18eeb235f833b726522d7ebed54f2278ce28ba9438e3135ab0278d9792a2/jieba-0.42.1.tar.gz",
+      "sha256": "055ca12f62674fafed09427f176506079bc135638a14e23e25be909131928db2"
+    },
+    {
+      "name": "Jinja2",
+      "version": "3.1.6",
+      "licenseMetadata": "License :: OSI Approved :: BSD License",
+      "url": "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl",
+      "sha256": "85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67"
+    },
+    {
+      "name": "llvmlite",
+      "version": "0.50.0",
+      "licenseMetadata": "BSD-2-Clause AND Apache-2.0 WITH LLVM-exception",
+      "url": "https://files.pythonhosted.org/packages/d9/1f/2576416b3e9b73f77b8331b7f2e41ce5ae7bbff0489eb16d98099a71693c/llvmlite-0.50.0-cp312-cp312-macosx_12_0_arm64.whl",
+      "sha256": "55f50a6b7c0b8de88b05d6bc407d70a60486ce024013997dc97e202bd187c75b"
+    },
+    {
+      "name": "markdown-it-py",
+      "version": "4.2.0",
+      "licenseMetadata": "License :: OSI Approved :: MIT License",
+      "url": "https://files.pythonhosted.org/packages/b3/81/4da04ced5a082363ecfa159c010d200ecbd959ae410c10c0264a38cac0f5/markdown_it_py-4.2.0-py3-none-any.whl",
+      "sha256": "9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a"
+    },
+    {
+      "name": "MarkupSafe",
+      "version": "3.0.4",
+      "licenseMetadata": "BSD-3-Clause",
+      "url": "https://files.pythonhosted.org/packages/a2/f0/d6613774d86fbf6d145751d43c59875e47a6f9f17daee0aef173bd36d90e/markupsafe-3.0.4-cp312-cp312-macosx_11_0_arm64.whl",
+      "sha256": "0930db9bdc62d22944e10b066448bb65dc9abe9112880c7cab8da54db4284d5f"
+    },
+    {
+      "name": "mdurl",
+      "version": "0.1.2",
+      "licenseMetadata": "License :: OSI Approved :: MIT License",
+      "url": "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl",
+      "sha256": "84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8"
+    },
+    {
+      "name": "mpmath",
+      "version": "1.3.0",
+      "licenseMetadata": "BSD",
+      "url": "https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl",
+      "sha256": "a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c"
+    },
+    {
+      "name": "networkx",
+      "version": "3.7",
+      "licenseMetadata": "BSD-3-Clause",
+      "url": "https://files.pythonhosted.org/packages/7e/cd/fe58041e9011f307c490e3e17dd48cc516448f7c698a3f2d9d9d65d7e6a8/networkx-3.7-py3-none-any.whl",
+      "sha256": "e3fd2c13a7814cee3746340d8d7f8598a67f16a58bf47fb7f8793fab6efca1b0"
+    },
+    {
+      "name": "numba",
+      "version": "0.68.0",
+      "licenseMetadata": "BSD",
+      "url": "https://files.pythonhosted.org/packages/c5/cb/b6a39189f1f342baa04ad1055bb5f63ec4061ec1f80f6b34e90c68fe1e7f/numba-0.68.0-cp312-cp312-macosx_12_0_arm64.whl",
+      "sha256": "0fdaa2f0256862ebbcd9632ef01ba2a4b94e6d116029e5051a92340d4050a501"
+    },
+    {
+      "name": "numpy",
+      "version": "2.5.4",
+      "licenseMetadata": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0",
+      "url": "https://files.pythonhosted.org/packages/31/2f/5ea3570fcb8ccd0882bea99436a513b2c85dad8f774a2057849130a8fb99/numpy-2.5.4-cp312-cp312-macosx_14_0_arm64.whl",
+      "sha256": "9cb18a327b49c5c337f972b03682f6a49855525faaf3c0d3e9c96cd0fd8880a8"
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "licenseMetadata": "Apache-2.0 OR BSD-2-Clause",
+      "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+      "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+    },
+    {
+      "name": "proces",
+      "version": "0.1.7",
+      "licenseMetadata": "MIT License",
+      "url": "https://files.pythonhosted.org/packages/6f/88/06cc0c7d890ed8d7e16ef0e56880dea516a21643fb1f3a69a50f4cc6f716/proces-0.1.7-py3-none-any.whl",
+      "sha256": "308325bbc96877263f06e57e5e9c760c4b42cc722887ad60be6b18fc37d68762"
+    },
+    {
+      "name": "Pygments",
+      "version": "2.21.0",
+      "licenseMetadata": "BSD-2-Clause",
+      "url": "https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl",
+      "sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9"
+    },
+    {
+      "name": "pypinyin",
+      "version": "0.55.0",
+      "licenseMetadata": "MIT",
+      "url": "https://files.pythonhosted.org/packages/b9/7b/4cabc76fcc21c3c7d5c671d8783984d30ac9d3bb387c4ba784fca3cdfa3a/pypinyin-0.55.0-py2.py3-none-any.whl",
+      "sha256": "d53b1e8ad2cdb815fb2cb604ed3123372f5a28c6f447571244aca36fc62a286f"
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.3",
+      "licenseMetadata": "MIT",
+      "url": "https://files.pythonhosted.org/packages/89/a0/6cf41a19a1f2f3feab0e9c0b74134aa2ce6849093d5517a0c550fe37a648/pyyaml-6.0.3-cp312-cp312-macosx_11_0_arm64.whl",
+      "sha256": "fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0"
+    },
+    {
+      "name": "regex",
+      "version": "2026.9.29",
+      "licenseMetadata": "Apache-2.0 AND CNRI-Python",
+      "url": "https://files.pythonhosted.org/packages/37/14/f3f0ba083d2094392d5eabf56db5ea6ba469fd6e927afd187042054ea68a/regex-2026.9.29-cp312-cp312-macosx_11_0_arm64.whl",
+      "sha256": "f57dc6b8fef170f105d2cf5cdce254f47b137d7755086cf7050f47e16582abba"
+    },
+    {
+      "name": "rich",
+      "version": "15.0.0",
+      "licenseMetadata": "MIT",
+      "url": "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl",
+      "sha256": "33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb"
+    },
+    {
+      "name": "safetensors",
+      "version": "0.8.0",
+      "licenseMetadata": "License :: OSI Approved :: Apache Software License",
+      "url": "https://files.pythonhosted.org/packages/f5/b1/fa7c600e7dceae12e9606c7578cbc9ff1e1ed55844883ee5c92205e86226/safetensors-0.8.0-cp310-abi3-macosx_11_0_arm64.whl",
+      "sha256": "c80201d22cbf405b80647a60ada77bba06c8fba2da2743ba1e89cdcc39a81f25"
+    },
+    {
+      "name": "setuptools",
+      "version": "80.9.0",
+      "licenseMetadata": "MIT",
+      "url": "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl",
+      "sha256": "062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922"
+    },
+    {
+      "name": "shellingham",
+      "version": "1.5.4",
+      "licenseMetadata": "ISC License",
+      "url": "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl",
+      "sha256": "7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686"
+    },
+    {
+      "name": "sympy",
+      "version": "1.14.0",
+      "licenseMetadata": "BSD",
+      "url": "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl",
+      "sha256": "e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5"
+    },
+    {
+      "name": "tokenizers",
+      "version": "0.23.3",
+      "licenseMetadata": "License :: OSI Approved :: Apache Software License",
+      "url": "https://files.pythonhosted.org/packages/b2/72/01e49f032bb346e5aaf06c10c74fe8aeec847173adbadd66eb7c53054bf2/tokenizers-0.23.3-cp310-abi3-macosx_11_0_arm64.whl",
+      "sha256": "68649e97d5b43c44c031d8d848874a6eecae8f8fe40ea989aa777a5a83aca716"
+    },
+    {
+      "name": "torch",
+      "version": "2.14.1",
+      "licenseMetadata": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT",
+      "url": "https://files.pythonhosted.org/packages/4b/3c/379349820e9a6e713826de3d0b88f07728541bdcabe2a3afd128871cdc4b/torch-2.14.1-cp312-cp312-macosx_14_0_arm64.whl",
+      "sha256": "420dbf314c180ee4b86e9bc00aee5746a7d6e5bacdd7df925af671ed393f0b2e"
+    },
+    {
+      "name": "tqdm",
+      "version": "4.70.1",
+      "licenseMetadata": "MPL-2.0 AND MIT",
+      "url": "https://files.pythonhosted.org/packages/a7/03/921a3d3c75785aca9ebfbfcabfbc3a1be12e2ab5265deb026d55a5a3f83e/tqdm-4.70.1-py3-none-any.whl",
+      "sha256": "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73"
+    },
+    {
+      "name": "transformers",
+      "version": "5.20.1",
+      "licenseMetadata": "Apache 2.0 License",
+      "url": "https://files.pythonhosted.org/packages/ae/ba/057af605774c3c7a9228ce61d88040749134ef320426403b31bb73755d43/transformers-5.20.1-py3-none-any.whl",
+      "sha256": "5f51ce444193e5d0a751e3fa489ddbc2224ff12f6675a5cfefd4044b09757c19"
+    },
+    {
+      "name": "truststore",
+      "version": "0.10.5",
+      "licenseMetadata": "MIT",
+      "url": "https://files.pythonhosted.org/packages/51/e9/3a7820be2bb0fe53b6bc9c3be26d3d1158004e4c3ab953aa6840b955b1e9/truststore-0.10.5-py3-none-any.whl",
+      "sha256": "9aaaedaefaf06d8b206278cf8b5012bc897f485a874503501e12d776df78951c"
+    },
+    {
+      "name": "typer",
+      "version": "0.27.3",
+      "licenseMetadata": "MIT",
+      "url": "https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/typer-0.27.3-py3-none-any.whl",
+      "sha256": "e50022f28b82a86313e54501317a1db64bf8f8d036ff8cfe5ca7e47675454aff"
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "licenseMetadata": "PSF-2.0",
+      "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+      "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+    },
+    {
+      "name": "wheel",
+      "version": "0.45.1",
+      "licenseMetadata": null,
+      "url": "https://files.pythonhosted.org/packages/0b/2c/87f3254fd8ffd29e4c02732eee68a83a1d3c346ae39bc6822dcbcb697f2b/wheel-0.45.1-py3-none-any.whl",
+      "sha256": "708e7481cc80179af0e556bbf0cc00b8444c7321e2700b8d8580231d13017248"
+    }
+  ],
+  "frontendScope": "Chinese-only fixed evaluation fixtures; Latin/mixed script is explicitly rejected before the model.",
+  "patches": [
+    "Remove the unused all-language BERT dispatcher from melo/text/__init__.py.",
+    "Replace the English frontend import with an explicit unsupported-script failure.",
+    "Bind the tokenizer to the verified local encoder directory; no online model resolution.",
+    "Disable the unused upstream feature loader; extract CPU features in the owning evaluation engine."
+  ]
+}

@@ -1,5 +1,15 @@
 import type { ProductProductionSourceOptionsV1, ProductProductionSourceSelectionV1, TtrpgProductionSeatV2 } from "../types";
 import type { TtrpgProductionBriefDraftInputV2 } from "./production-brief";
+import type { TtrpgAuthoringSettings, TtrpgAuthoringSettingsV1 } from "./authoring-contract";
+import type { TtrpgAuthoringSettingsV2 } from "./authoring-contract-v2";
+
+/** P2a deliberately has no open production DAG. Guard before dropping to wizard-only input. */
+export function assertTtrpgScriptedAuthoringSettings(
+  settings: TtrpgAuthoringSettings,
+): asserts settings is TtrpgAuthoringSettingsV1 | Extract<TtrpgAuthoringSettingsV2, { runFormat: "scripted" }> {
+  if (settings.runFormat === "open")
+    throw new Error("P2a 尚未开放 open 生产，不能编译为 scripted Brief V2");
+}
 export type SeatDraft = Omit<TtrpgProductionSeatV2, "sourceCharacterResourceKey"> & {
   sourceCharacterResourceKey: string | null;
 };

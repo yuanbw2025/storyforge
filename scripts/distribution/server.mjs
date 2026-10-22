@@ -3,7 +3,7 @@ import { request as httpsRequest } from 'node:https'
 import { createReadStream, realpathSync } from 'node:fs'
 import { stat, realpath } from 'node:fs/promises'
 import { resolve, dirname, sep, extname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawn } from 'node:child_process'
 import { providerProxies } from './proxies.mjs'
 import { localCodexPlugin } from '../local-codex/bridge.mjs'
@@ -15,13 +15,43 @@ function finish(res, status, text) {
   res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' })
   res.end(text)
 }
-export function createPortableServer({ webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../web'), proxies = providerProxies, requestProvider = httpsRequest, readDiagnostics = readLauncherFailure } = {}) {
-  const middleware = []
+export function createPortableServer({ webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../web'), proxies = providerProxies, requestProvider = httpsRequest, readDiagnostics = readLauncherFailure,
+  localTtsRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..') } = {}) {
+  const codexMiddleware = []
   const server = createServer((req, res) => {
     void handle(req, res).catch(() => { if (!res.headersSent) finish(res, 500, 'Local service error.'); else res.destroy() })
   })
   // Reuse the governed, lazy Codex bridge; never create a second AI transport.
-  localCodexPlugin().configureServer({ middlewares: { use: fn => middleware.push(fn) }, httpServer: server })
+  localCodexPlugin().configureServer({ middlewares: { use: fn => codexMiddleware.push(fn) }, httpServer: server })
+  // Desktop supplies its fixed, unpacked resource root. Python cannot execute
+  // a worker inside app.asar. Browser requests never select modules or paths.
+  const ttsModule = pathToFileURL(resolve(localTtsRoot, 'scripts/ttrpg-local-tts/product-bridge.mjs')).href
+  let ttsReady, closed = false
+  server.once('close', () => { closed = true })
+  async function localTts(req, res) {
+    const send = (code, error) => {
+      if (res.destroyed || res.writableEnded) return
+      res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' })
+      res.end(JSON.stringify({ error, automaticRetryAllowed: false }))
+    }
+    if (req.headers['x-storyforge-tts'] !== '1' || req.headers['sec-fetch-site'] && req.headers['sec-fetch-site'] !== 'same-origin') return send(403, 'local-origin-required')
+    if (closed || !process.env.STORYFORGE_TTRPG_LOCAL_TTS_RUNTIME_DIR) return send(503, 'selected-local-voice-unavailable')
+    try {
+      // Loading/checking the original bridge never starts inference. Its job
+      // claims, explicit start, lease, cancellation and raw readers are shared
+      // with development; failed initialization is not invisibly retried.
+      ttsReady ??= import(ttsModule).then(({ localTtsPlugin }) => {
+        if (closed) throw new Error('Local service closed')
+        const middleware = []
+        localTtsPlugin().configureServer({ middlewares: { use: fn => middleware.push(fn) }, httpServer: server })
+        if (middleware.length !== 1) throw new Error('Local voice is not configured')
+        return middleware[0]
+      })
+      const middleware = await ttsReady
+      if (closed || req.aborted || res.destroyed || res.writableEnded) return
+      return await middleware(req, res, () => send(404, 'not-found'))
+    } catch { return send(503, 'selected-local-voice-unavailable') }
+  }
   const root = resolve(webRoot)
   async function handle(req, res) {
     let url
@@ -34,7 +64,8 @@ export function createPortableServer({ webRoot = resolve(dirname(fileURLToPath(i
       res.end(JSON.stringify(readDiagnostics()))
       return
     }
-    if (url.pathname.startsWith('/storyforge/local-codex/')) return middleware[0](req, res, () => finish(res, 404, 'Unknown bridge route.'))
+    if (url.pathname.startsWith('/storyforge/local-codex/')) return codexMiddleware[0](req, res, () => finish(res, 404, 'Unknown bridge route.'))
+    if (url.pathname === '/storyforge/local-tts' || url.pathname.startsWith('/storyforge/local-tts/')) return localTts(req, res)
     const route = Object.keys(proxies).find(prefix => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`))
     if (route) {
       if (!['GET', 'POST', 'OPTIONS'].includes(req.method)) return finish(res, 405, 'Method not allowed.')

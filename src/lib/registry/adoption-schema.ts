@@ -8,6 +8,8 @@ import type { AdoptionExtensionSpec, CollectionAdoptionSpec } from './types'
 import { REGISTRY_BY_NAME } from './project-tables'
 
 const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
+  { target: 'ttrpgAuthoringDrafts', identity: 'id', recordOnly: true, duplicatePolicy: 'error', required: ['settingsJson'],
+    autoStamps: [], ownerFrom: 'work', writePolicy: 'ttrpg-open-authoring-design-v1' },
   // Existing singleton records also support exact author edits by ID. Creation
   // still uses the singleton boundary; these entries never permit collection adds.
   { target: 'worldviews', identity: 'id', recordOnly: true, duplicatePolicy: 'error', required: [], autoStamps: ['updatedAt'] },
@@ -476,6 +478,16 @@ const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
 ]
 
 export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.freeze([
+  { id: 'ttrpg-authoring-draft-lifecycle', target: 'ttrpgAuthoringDrafts', entrypoints: ['src/lib/ttrpg/authoring-service.ts'],
+    policyRegistry: 'parseTtrpgSettings + revision CAS + PROJECT_TABLES + ttrpg-open-authoring-design-v1 adopt writePolicy',
+    reason: '原人工配置、出口选择和制作指针生命周期继续由领域服务处理；模型设计必须经原始回答/来源证明、作者确认和adopt事务委托同一保存服务。', reviewAfter: '2027-04-19' },
+  {
+    id: 'ttrpg-human-memory-lifecycle', target: 'ttrpgNarrativeMemories',
+    entrypoints: ['src/lib/ttrpg/runtime-commands.ts', 'src/lib/ttrpg/runtime-branch.ts'],
+    policyRegistry: 'parseTtrpgOpenMemoryReceipt + verifyTtrpgOpenBriefCandidateProofV1 + verifyTtrpgOpenMemoryReceiptsV1 + E15 + PROJECT_TABLES',
+    reason: '同一表唯一领域治理入口：原人工 V1 只接受手写来源；模型 V2 必须经正式 CreativeArtifact、真人明确确认与实际来源证明，E15和唯一记忆投影原子追加。分支只复制切点前已确认记录；原始观察者/可靠性与model-reviewed保留，不授予规则、知识或世界权威。',
+    reviewAfter: '2027-08-21',
+  },
   { id: 'extension-record-lifecycle', target: 'extensionRecords', entrypoints: ['src/lib/extensions/store.ts'], policyRegistry: 'ExtensionRegistrySnapshot + PROJECT_TABLES + bounded DataSchema', reason: '普通作者编辑、内容包、迁移与历史代恢复通过命名空间、schema 和 revision CAS；模型候选必须由 adopt 委托同一事务写入。', reviewAfter: '2027-01-01' },
   {
     id: 'reference-analysis-run-lifecycle',

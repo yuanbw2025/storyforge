@@ -25,6 +25,7 @@ import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewReco
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { parseProductBuildManifestV1, parseProductBuildQualityReportV1 } from './adoption'
 import { parseProductProductionBriefV3 } from './contracts'
+import { ttrpgOpenEvolutionReuseEnvelopeV1, ttrpgOpenEvolutionTaskLaneV1 } from '../ttrpg/open-production-plan'
 import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../open-world/creator-derived-authority'
 import { readVerifiedMediaBlobObjectData } from './media-blob-store'
 import { parseProductProductionPlanV3 } from './plan'
@@ -33,6 +34,7 @@ import {
   verifyProductBuildRootTerminalReceiptV1,
 } from './receipts'
 import { productProductionTerminalArtifactKeysV1 } from './runtime-package'
+import { verifyImportedPublishedRootOriginV1 } from './published-root-origin'
 import {
   hashProductProductionCarriedCandidateV1,
   hashProductProductionCarriedReceiptV1,
@@ -269,6 +271,8 @@ async function frozenParentProofHash(input: {
   }
   const producer = await readAgentRunV1(input.scope, input.source.producerRunId)
   const producerBoundary = producer.contract.scope.productProduction
+  const historicalOrigin = producerBoundary && producerBoundary.controlEpoch < input.source.controlEpoch
+    && input.source.carriedFrom != null && await productTypeForBuildV1(input.expectedBuildId) === 'ttrpg'
   if (producer.run.parentRunId == null) {
     throw new Error(`[product-production-artifact] carry-forward 父证明不完整:${input.source.artifactKey}`)
   }
@@ -282,7 +286,8 @@ async function frozenParentProofHash(input: {
     || producer.run.parentRelation == null
     || producerBoundary?.productBuildId !== input.expectedBuildId
     || producerBoundary.buildNumber !== rootBoundary?.buildNumber
-    || producerBoundary.controlEpoch !== input.source.controlEpoch
+    || producerBoundary.controlEpoch > input.source.controlEpoch
+    || producerBoundary.controlEpoch !== input.source.controlEpoch && !historicalOrigin
     || producerBoundary.planHash !== rootBoundary?.planHash
     || producerBoundary.taskKey === '$root'
     || producer.run.parentRelation !== `task:${producerBoundary.taskKey}`
@@ -292,7 +297,7 @@ async function frozenParentProofHash(input: {
     || root.run.parentRunId != null || root.run.parentRelation != null
     || rootBoundary?.productBuildId !== input.expectedBuildId
     || rootBoundary.taskKey !== '$root'
-    || rootBoundary.controlEpoch !== input.source.controlEpoch) {
+    || rootBoundary.controlEpoch !== producerBoundary.controlEpoch) {
     throw new Error(`[product-production-artifact] carry-forward 父证明不完整:${input.source.artifactKey}`)
   }
   const producerWitness = parentRunWitness(producer.run)
@@ -417,6 +422,7 @@ interface SealedBuildProofContextV1 {
     producerReceiptHash: string | null
   }>
   blobProofs: Map<number, MediaBlobObjectRecordV1 & { id: number }>
+  originPreservingProof: VerifiedProductBuildTerminalArtifactSetV1 | null
 }
 
 async function sealedBuildProofContextV1(input: {
@@ -424,6 +430,7 @@ async function sealedBuildProofContextV1(input: {
   production: ProductProductionRecordV1
   build: ProductBuildRecordV1 & { id: number }
   activeRows: ProductBuildArtifactRecordV1[]
+  verificationAncestors?: readonly number[]
 }): Promise<SealedBuildProofContextV1> {
   const { production, build } = input
   if (!['preview-ready', 'release-ready', 'released'].includes(build.status)
@@ -491,7 +498,13 @@ async function sealedBuildProofContextV1(input: {
     artifacts: activeRows,
   }
   const rootReceipt = await createProductBuildRootTerminalReceiptV1(rootReceiptInput)
-  if (rootReceipt !== build.rootTerminalReceiptHash) {
+  let importedPublishedOrigin = false
+  if (rootReceipt !== build.rootTerminalReceiptHash && production.productType === 'ttrpg' && build.status === 'released') {
+    const rootRunId = Number(JSON.parse(build.budgetLedgerJson).rootRunId)
+    const root = await readAgentRunV1(input.scope, rootRunId)
+    importedPublishedOrigin = await verifyImportedPublishedRootOriginV1({ scope: input.scope, production, build, root, receiptInput: rootReceiptInput })
+  }
+  if (rootReceipt !== build.rootTerminalReceiptHash && !importedPublishedOrigin) {
     const compatibility = await verifyProductBuildRootTerminalReceiptV1({
       ...rootReceiptInput,
       expectedReceiptHash: build.rootTerminalReceiptHash ?? '',
@@ -523,6 +536,14 @@ async function sealedBuildProofContextV1(input: {
     controlEpoch: build.controlEpoch,
     portableTaskLedger,
   })
+  // Open copies retain their byte producer while their own ledger records a
+  // separate synthetic receipt. Revalidate both layers before sealing reuse.
+  const originPreservingProof = production.productType === 'ttrpg'
+    ? await verifyProductBuildTerminalArtifactSetWithAncestorsV1({
+      scope: input.scope, productionId: build.productionId, buildId: build.id,
+      expectedControlEpoch: build.controlEpoch, expectedPlanHash: build.planHash,
+    }, input.verificationAncestors ?? [])
+    : null
   return {
     production,
     build,
@@ -531,6 +552,7 @@ async function sealedBuildProofContextV1(input: {
     portableRootSealHash,
     manifestReceipts: new Map(manifest.artifactReceipts.map(row => [row.artifactKey, row])),
     blobProofs,
+    originPreservingProof,
   }
 }
 
@@ -546,8 +568,9 @@ async function sealedParentProofHashV1(input: {
     : input.context.portableTaskLedger.find(row => row.taskKey === ownerTask.taskKey)
   const manifestMember = input.context.manifestReceipts.get(input.source.artifactKey)
   if (ownerTasks.length !== 1 || !ownerTask || !ownerLedger || !manifestMember
-    || ownerLedger.idempotencyKey !== input.source.inputHash
-    || ownerLedger.terminalReceiptHash !== input.source.producerReceiptHash
+    || (!(input.context.originPreservingProof && input.source.status === 'carried-forward')
+      && (ownerLedger.idempotencyKey !== input.source.inputHash
+        || ownerLedger.terminalReceiptHash !== input.source.producerReceiptHash))
     || ownerTask.acceptanceGateIds.some(gate => !ownerLedger.passedGateIds.includes(gate))
     || manifestMember.version !== input.source.version
     || manifestMember.contentHash !== input.source.contentHash
@@ -582,6 +605,7 @@ async function crossBuildCarryAuthorizationV1(input: {
   targetBuild: ProductBuildRecordV1 & { id: number }
   sources: ProductBuildArtifactRecordV1[]
   artifactKeys: string[]
+  pendingPlan?: { plan: ProductProductionPlanV3; planHash: string }
 }): Promise<CrossBuildCarryAuthorizationV1> {
   const briefRow = await db.productProductionBriefs
     .where('[productionId+revision]')
@@ -600,22 +624,38 @@ async function crossBuildCarryAuthorizationV1(input: {
       })
     : null
   const brief = creatorAuthority?.contracts.executionBrief ?? parseProductProductionBriefV3(briefRow.briefJson)
+  if (input.pendingPlan && (input.production.productType !== 'ttrpg' || !brief.ttrpgOpen
+    || briefRow.status !== 'authorized' || input.targetBuild.planRevision !== 0)) {
+    throw new Error('[product-production-artifact] pending cross-build Plan 没有初始 open Build 授权')
+  }
   const plan = creatorAuthority?.productionPlan ?? parseProductProductionPlanV3(
-    input.targetBuild.planJson,
+    input.pendingPlan?.plan ?? input.targetBuild.planJson,
     brief,
     input.targetBuild.briefHash,
   )
   const reuseImpact = creatorAuthority?.repair?.authorization.impactPlan.targetTaskKeys
     ?? creatorAuthority?.media?.authorization.plan.targetTaskKeys
     ?? brief.evolution?.affectedLanes
-  if (canonicalProductProductionJsonV2(plan) !== input.targetBuild.planJson
-    || await hashProductProductionValueV2(plan) !== input.targetBuild.planHash
+  if ((!input.pendingPlan && canonicalProductProductionJsonV2(plan) !== input.targetBuild.planJson)
+    || await hashProductProductionValueV2(plan) !== (input.pendingPlan?.planHash ?? input.targetBuild.planHash)
     || plan.productType !== input.production.productType
     || plan.buildNumber !== input.targetBuild.buildNumber
     || plan.controlEpoch !== input.targetBuild.controlEpoch
     || input.targetBuild.parentBuildNumber !== input.sourceBuild.buildNumber
     || !reuseImpact) {
     throw new Error('[product-production-artifact] cross-build 目标 Plan/Brief 未冻结复用授权')
+  }
+  if (brief.ttrpgOpen) {
+    const sourceBriefRow = await db.productProductionBriefs.where('[productionId+revision]')
+      .equals([input.sourceBuild.productionId, input.sourceBuild.briefRevision]).first()
+    const sourceBrief = sourceBriefRow ? parseProductProductionBriefV3(sourceBriefRow.briefJson) : null
+    if (!sourceBrief?.ttrpgOpen || sourceBriefRow!.briefHash !== input.sourceBuild.briefHash
+      || await hashProductProductionValueV2(sourceBrief) !== input.sourceBuild.briefHash
+      || input.sourceBuild.buildNumber >= input.targetBuild.buildNumber
+      || canonicalProductProductionJsonV2(ttrpgOpenEvolutionReuseEnvelopeV1(sourceBrief))
+        !== canonicalProductProductionJsonV2(ttrpgOpenEvolutionReuseEnvelopeV1(brief))) {
+      throw new Error('[product-production-artifact] cross-build open 输入或来源已变化')
+    }
   }
   const sourceByKey = new Map(input.sources.map(row => [row.artifactKey, row]))
   const requested = new Set(input.artifactKeys)
@@ -628,6 +668,13 @@ async function crossBuildCarryAuthorizationV1(input: {
     ownerTasks.set(owners[0].taskKey, owners[0])
   }
   for (const task of ownerTasks.values()) {
+    if (brief.ttrpgOpen) {
+      const lane = ttrpgOpenEvolutionTaskLaneV1(task.taskKey)
+      if (!lane || reuseImpact.includes(lane) || reuseImpact.includes('world-source')
+        || task.taskKey === 'ttrpg.open.media-plan' && reuseImpact.includes('audio')) {
+        throw new Error(`[product-production-artifact] cross-build open task 受本轮修订影响:${task.taskKey}`)
+      }
+    }
     const expectedKeys = [...task.outputArtifactKeys].sort()
     const requestedTaskKeys = expectedKeys.filter(key => requested.has(key))
     if (requestedTaskKeys.length !== expectedKeys.length
@@ -648,6 +695,7 @@ async function crossBuildCarryAuthorizationV1(input: {
       version: 1,
       sourceBuildNumber: input.sourceBuild.buildNumber,
       targetBuildNumber: input.targetBuild.buildNumber,
+      ...(brief.ttrpgOpen ? { sourceControlEpoch: input.sourceBuild.controlEpoch, invalidQualityReviewContentHash: null } : {}),
       taskKey: task.taskKey,
       userImpact: reuseImpact,
       artifacts: sources.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })),
@@ -1671,6 +1719,20 @@ async function verifyHistoricalCarriedTaskV1(input: {
       || row.producerReceiptHash !== anchor.producerReceiptHash)) {
     throw new Error(`[product-production-artifact] terminal historical carried identity 不闭合:${input.task.taskKey}`)
   }
+  const snapshot = await readAgentRunV1(input.scope, anchor.producerRunId)
+  const boundary = snapshot.contract.scope.productProduction
+  if (boundary && boundary.controlEpoch < anchor.controlEpoch && await productTypeForBuildV1(input.build.id) === 'ttrpg') {
+    // Origin-preserving copies have no new byte producer. The caller follows
+    // every immutable parent/proof until the actual accepted origin below.
+    if (snapshot.run.status !== 'completed' || snapshot.projection.state !== 'completed'
+      || snapshot.run.productBuildId !== input.build.id || boundary.taskKey !== input.task.taskKey
+      || snapshot.run.terminalReceiptHash !== anchor.producerReceiptHash
+      || snapshot.projection.terminalReceiptHash !== anchor.producerReceiptHash
+      || input.siblings.some(row => row.producerRunId !== anchor.producerRunId)) {
+      throw new Error(`[product-production-artifact] terminal historical origin producer 不闭合:${input.task.taskKey}`)
+    }
+    return
+  }
   const dependencies = input.task.dependsOn.map(taskKey => {
     const dependency = input.plan.tasks.find(task => task.taskKey === taskKey)!
     const rows = input.allBuildRows.filter(row => row.controlEpoch === anchor.controlEpoch
@@ -1691,8 +1753,6 @@ async function verifyHistoricalCarriedTaskV1(input: {
     passedGateIds: input.task.acceptanceGateIds,
     controlEpoch: anchor.controlEpoch,
   })
-  const snapshot = await readAgentRunV1(input.scope, anchor.producerRunId)
-  const boundary = snapshot.contract.scope.productProduction
   const terminalStep = snapshot.projection.steps[input.task.taskKey]
   const checkpoint = await latestCheckpointForFingerprintV1(anchor.producerRunId)
   if (receiptHash !== anchor.producerReceiptHash
@@ -1726,6 +1786,7 @@ async function verifySameBuildCarriedLineageV1(input: {
   target: ProductBuildArtifactRecordV1
   allBuildRows: ProductBuildArtifactRecordV1[]
 }): Promise<void> {
+  const preserveOrigin = await productTypeForBuildV1(input.build.id) === 'ttrpg'
   let current = input.target
   const visited = new Set<string>()
   for (let depth = 0; depth < TERMINAL_SAME_BUILD_LINEAGE_DEPTH_LIMIT; depth += 1) {
@@ -1745,6 +1806,8 @@ async function verifySameBuildCarriedLineageV1(input: {
       || parent.projectId !== input.scope.projectId || parent.worldId !== input.scope.worldId
       || parent.workId !== input.scope.workId || parent.status !== 'invalid'
       || parent.version >= current.version || parent.controlEpoch >= current.controlEpoch
+      || preserveOrigin && (current.producerRunId !== parent.producerRunId
+        || current.producerReceiptHash !== parent.producerReceiptHash || current.inputHash !== parent.inputHash)
       || !sameCarriedArtifactEnvelopeV1(current, parent)) {
       throw new Error(`[product-production-artifact] terminal same-build envelope/status 不闭合:${current.artifactKey}`)
     }
@@ -1842,6 +1905,83 @@ export interface ProductBuildTerminalCasReadSetV1 {
   eventRows: Array<AgentRunEventRecord & { id: number }>
   checkpointRows: Array<AgentRunCheckpointRecord & { id: number }>
   blobRows: Array<MediaBlobObjectRecordV1 & { id: number }>
+  sealedParentReadSets?: ProductBuildTerminalCasReadSetV1[]
+}
+
+/** Read-only same-Build content proof. Preparation runs outside IndexedDB's
+ * write transaction; assertCurrent closes the exact raw read set inside it.
+ * This exposes the existing producer/lineage verifier, not a new acceptance path. */
+export async function prepareTtrpgOpenContentRevisionSourceV1(input: {
+  scope: WorkspaceScope
+  build: ProductBuildRecordV1 & { id: number }
+  artifactKey: string
+  version: number
+  contentHash: string
+  historical?: boolean
+}) {
+  const { scope, build } = input
+  const plan = parseProductProductionPlanV3(build.planJson)
+  const production = await db.productProductions.get(build.productionId)
+  const brief = await db.productProductionBriefs.where('[productionId+revision]')
+    .equals([build.productionId, build.briefRevision]).first()
+  if (!production || production.productType !== 'ttrpg' || plan.productType !== 'ttrpg'
+    || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })
+    || !await assertRecordInScope(scope, 'productBuilds', build, { owner: 'work' })
+    || await hashProductProductionValueV2(plan) !== build.planHash
+    || plan.briefHash !== build.briefHash || plan.buildNumber !== build.buildNumber
+    || !['ttrpg.open.source-facts', 'ttrpg.open.rule-system', 'ttrpg.open.situation-layer'].includes(input.artifactKey)) {
+    throw new Error('[ttrpg-content-revision] 原稿不属于准确的跑团制作计划')
+  }
+  if (!brief || !await assertRecordInScope(scope, 'productProductionBriefs', brief, { owner: 'work' })
+    || brief.briefHash !== build.briefHash || brief.status !== 'authorized') {
+    throw new Error('[ttrpg-content-revision] 原稿没有准确的已授权方案')
+  }
+  const parsedBrief = parseProductProductionBriefV3(brief.briefJson)
+  if (!parsedBrief.ttrpgOpen || await hashProductProductionValueV2(parsedBrief) !== build.briefHash) {
+    throw new Error('[ttrpg-content-revision] 原稿的冻结方案已变化')
+  }
+  parseProductProductionPlanV3(build.planJson, parsedBrief, build.briefHash)
+  const tasks = plan.tasks.filter(task => task.outputArtifactKeys.includes(input.artifactKey))
+  const task = tasks[0]
+  if (tasks.length !== 1 || task.taskKey !== input.artifactKey || task.executionMode !== 'model'
+    || task.reuse !== null || task.outputArtifactKeys.length !== 1) {
+    throw new Error('[ttrpg-content-revision] 原稿没有唯一的本轮内容生产者')
+  }
+  const rows = await db.productBuildArtifacts.where('buildId').equals(build.id).toArray()
+  const matches = rows.filter(row => row.artifactKey === input.artifactKey
+    && row.version === input.version && row.contentHash === input.contentHash)
+  const artifact = matches[0]
+  if (matches.length !== 1 || artifact.id == null
+    || !await assertRecordInScope(scope, 'productBuildArtifacts', artifact, { owner: 'work' })
+    || artifact.blobObjectId != null
+    || (input.historical ? !['accepted', 'carried-forward', 'invalid'].includes(artifact.status)
+      || artifact.controlEpoch >= build.controlEpoch
+      : artifact.controlEpoch !== plan.controlEpoch || !['accepted', 'carried-forward'].includes(artifact.status))
+    || artifact.carriedFrom != null && artifact.carriedFrom.buildNumber !== build.buildNumber) {
+    throw new Error('[ttrpg-content-revision] 原稿版本、状态、来源或作用域已变化')
+  }
+  const readSet = await collectSameBuildCarryParentReadSetV1([artifact])
+  await preparedStoredArtifactV1(artifact)
+  if (artifact.carriedFrom) {
+    await verifySameBuildCarriedLineageV1({ scope, build, plan, target: artifact, allBuildRows: rows })
+  } else {
+    await verifyHistoricalAcceptedTaskV1({ scope, build, task, siblings: [artifact] })
+  }
+  const proofHash = await frozenParentProofHash({ scope, source: artifact, expectedBuildId: build.id })
+  const assertCurrent = async () => {
+    const current = await db.productBuilds.get(build.id)
+    const currentProduction = await db.productProductions.get(build.productionId)
+    const currentRows = await db.productBuildArtifacts.where('buildId').equals(build.id).toArray()
+    if (canonicalProductProductionJsonV2(current) !== canonicalProductProductionJsonV2(build)
+      || canonicalProductProductionJsonV2(currentProduction) !== canonicalProductProductionJsonV2(production)
+      || canonicalProductProductionJsonV2(await db.productProductionBriefs.get(brief.id!)) !== canonicalProductProductionJsonV2(brief)
+      || !sameStoredArtifactRowsV1(rows, currentRows)) {
+      throw new Error('[ttrpg-content-revision] 原稿证明读取后制作状态已变化')
+    }
+    await assertSameBuildCarryParentReadSetUnchangedV1(readSet)
+  }
+  await assertCurrent()
+  return { artifact, proofHash, assertCurrent }
 }
 
 function recordRowsJsonV1(rows: unknown[]): string {
@@ -1945,6 +2085,9 @@ function terminalCasReadSetFingerprintJsonV1(readSet: ProductBuildTerminalCasRea
     eventRows: readSet.eventRows,
     checkpointRows: readSet.checkpointRows,
     blobRows: readSet.blobRows.map(blobMetadataForCasV1),
+    ...(readSet.sealedParentReadSets?.length ? {
+      sealedParentReadSets: readSet.sealedParentReadSets.map(terminalCasReadSetFingerprintJsonV1),
+    } : {}),
   })
 }
 
@@ -1954,8 +2097,11 @@ export async function assertProductBuildTerminalReadSetUnchangedV1(input: {
   readSet: ProductBuildTerminalCasReadSetV1
   mutableTargetBuild?: boolean
   mutableRunIds?: number[]
+  mutableBuildIds?: readonly number[]
 }): Promise<void> {
   const mutableRuns = new Set(input.mutableRunIds ?? [])
+  const mutableBuilds = new Set(input.mutableBuildIds ?? [])
+  if (input.mutableTargetBuild) mutableBuilds.add(input.readSet.targetBuildId)
   const expectedProduction = input.readSet.productionRow
   const currentProduction = await db.productProductions.get(expectedProduction.id)
   if (!currentProduction
@@ -1965,9 +2111,9 @@ export async function assertProductBuildTerminalReadSetUnchangedV1(input: {
   }
   const currentBuildRows = (await db.productBuilds.where('productionId')
     .equals(expectedProduction.id).toArray())
-    .filter(row => !(input.mutableTargetBuild && row.id === input.readSet.targetBuildId))
+    .filter(row => !mutableBuilds.has(row.id!))
   const expectedBuildRows = input.readSet.buildRows
-    .filter(row => !(input.mutableTargetBuild && row.id === input.readSet.targetBuildId))
+    .filter(row => !mutableBuilds.has(row.id!))
   if (recordRowsJsonV1(currentBuildRows) !== recordRowsJsonV1(expectedBuildRows)) {
     throw new Error('[product-production-artifact] terminal CAS Build proof set 已变化')
   }
@@ -2008,6 +2154,11 @@ export async function assertProductBuildTerminalReadSetUnchangedV1(input: {
       throw new Error(`[product-production-artifact] terminal CAS Blob proof 已变化:${expectedBlob.id}`)
     }
   }
+  for (const readSet of input.readSet.sealedParentReadSets ?? []) {
+    await assertProductBuildTerminalReadSetUnchangedV1({
+      readSet, mutableBuildIds: [...mutableBuilds], mutableRunIds: input.mutableRunIds,
+    })
+  }
 }
 
 export interface VerifiedProductBuildTerminalArtifactSetV1 {
@@ -2039,6 +2190,20 @@ export async function verifyProductBuildTerminalArtifactSetV1(input: {
   expectedControlEpoch: number
   expectedPlanHash: string
 }): Promise<VerifiedProductBuildTerminalArtifactSetV1> {
+  return verifyProductBuildTerminalArtifactSetWithAncestorsV1(input, [])
+}
+
+async function verifyProductBuildTerminalArtifactSetWithAncestorsV1(input: {
+  scope: WorkspaceScope
+  productionId: number
+  buildId: number
+  expectedControlEpoch: number
+  expectedPlanHash: string
+}, ancestors: readonly number[]): Promise<VerifiedProductBuildTerminalArtifactSetV1> {
+  if (ancestors.includes(input.buildId) || ancestors.length >= 128) {
+    throw new Error('[product-production-artifact] cross-build lineage 循环或超过安全上限')
+  }
+  const verificationAncestors = [...ancestors, input.buildId]
   const scope = await resolveScope({ scope: input.scope })
   const [productionRow, buildRow] = await Promise.all([
     db.productProductions.get(input.productionId),
@@ -2182,13 +2347,14 @@ export async function verifyProductBuildTerminalArtifactSetV1(input: {
     const producerRunIds = new Set(siblings.map(row => row.producerRunId))
     const receiptHashes = new Set(siblings.map(row => row.producerReceiptHash))
     const inputHashes = new Set(siblings.map(row => row.inputHash))
-    const producerRunId = siblings[0].producerRunId
-    const receiptHash = siblings[0].producerReceiptHash
-    const inputHash = siblings[0].inputHash
+    // Immutable bytes retain their original producer. The current epoch's
+    // independent synthetic Run proves reuse and is owned by its ledger.
+    const producerRunId = ledgerRunId
+    const receiptHash = ledger.terminalReceiptHash
+    const inputHash = ledger.idempotencyKey
     const lineageBuildNumbers = new Set(siblings.map(row => row.carriedFrom?.buildNumber))
     if (producerRunIds.size !== 1 || receiptHashes.size !== 1 || inputHashes.size !== 1
-      || producerRunId == null || receiptHash == null || producerRunId !== ledgerRunId
-      || receiptHash !== ledger.terminalReceiptHash || inputHash !== ledger.idempotencyKey
+      || siblings.some(row => row.carriedFrom == null || !isSha256Hash(row.producerReceiptHash ?? '') || !isSha256Hash(row.inputHash))
       || rawLedger.attempt !== 1
       || canonicalProductProductionJsonV2(rawLedger.passedGateIds)
         !== canonicalProductProductionJsonV2(task.acceptanceGateIds)
@@ -2204,6 +2370,7 @@ export async function verifyProductBuildTerminalArtifactSetV1(input: {
       receiptHash: ledgerByTask.get(taskKey)!.terminalReceiptHash,
     }))
     const candidateHash = await hashProductProductionCarriedCandidateV1(siblings)
+    const { productProductionTaskExecutionIdentityHashV1 } = await import('./scheduler')
     const expectedReceiptHash = await hashProductProductionCarriedReceiptV1({
       taskKey: task.taskKey,
       inputHash,
@@ -2211,6 +2378,7 @@ export async function verifyProductBuildTerminalArtifactSetV1(input: {
       dependencies,
       passedGateIds: task.acceptanceGateIds,
       controlEpoch: build.controlEpoch,
+      executionIdentityHash: await productProductionTaskExecutionIdentityHashV1(task),
     })
     const snapshot = await readAgentRunV1(scope, producerRunId)
     const boundary = snapshot.contract.scope.productProduction
@@ -2281,7 +2449,12 @@ export async function verifyProductBuildTerminalArtifactSetV1(input: {
       production,
       build: sourceBuild,
       activeRows: activeSourceRows,
+      verificationAncestors,
     })
+    if (context.originPreservingProof) {
+      casReadSet.sealedParentReadSets ??= []
+      casReadSet.sealedParentReadSets.push(context.originPreservingProof.casReadSet)
+    }
     mergeBlobProofRowsV1({
       target: physicalBlobProofRows,
       source: context.blobProofs,
@@ -2762,6 +2935,7 @@ async function carryForwardTextOpenWorldProductBuildArtifactsToEpochV1(input: {
   artifactKeys: string[]
   allowInvalidSourceAtFromEpoch?: boolean
   allowHistoricalInvalidSourceBeforeEpoch?: boolean
+  pendingPlan?: { plan: ProductProductionPlanV3; planHash: string }
 }): Promise<ProductBuildArtifactRecordV1[]> {
   const scope = await resolveScope({ scope: input.scope })
   if (!Number.isInteger(input.fromControlEpoch) || !Number.isInteger(input.toControlEpoch)
@@ -2772,16 +2946,23 @@ async function carryForwardTextOpenWorldProductBuildArtifactsToEpochV1(input: {
   if (keys.length !== input.artifactKeys.length) throw new Error('[product-production-artifact] carry-forward keys 重复')
   if (keys.length === 0) return []
   const buildRow = await db.productBuilds.get(input.buildId)
+  const pendingAuthorRecovery = input.pendingPlan && await productTypeForBuildV1(input.buildId) === 'ttrpg'
+    && buildRow && ['preview-ready','release-ready'].includes(buildRow.status)
   if (!buildRow || buildRow.id == null
     || !await assertRecordInScope(scope, 'productBuilds', buildRow, { owner: 'work' })
     || buildRow.controlEpoch !== input.toControlEpoch
-    || !['authorized', 'building'].includes(buildRow.status)) {
+    || !['authorized', 'building'].includes(buildRow.status) && !pendingAuthorRecovery) {
     throw new Error('[product-production-artifact] carry-forward Build/epoch 不可写')
   }
   const build = buildRow as ProductBuildRecordV1 & { id: number }
-  const plan = parseProductProductionPlanV3(build.planJson, undefined, build.briefHash)
-  if (canonicalProductProductionJsonV2(plan) !== build.planJson
-    || await hashProductProductionValueV2(plan) !== build.planHash
+  const preserveOrigin = await productTypeForBuildV1(build.id) === 'ttrpg'
+  const pendingBrief = input.pendingPlan ? await db.productProductionBriefs.where('[productionId+revision]').equals([build.productionId,build.briefRevision]).first() : null
+  if (input.pendingPlan && (!preserveOrigin || !pendingBrief || pendingBrief.status !== 'authorized' || pendingBrief.briefHash !== build.briefHash
+    || !await assertRecordInScope(scope,'productProductionBriefs',pendingBrief,{ owner: 'work' }))) throw new Error('[product-production-artifact] pending Plan 没有真实授权 Brief')
+  const plan = parseProductProductionPlanV3(input.pendingPlan?.plan ?? build.planJson,
+    pendingBrief ? parseProductProductionBriefV3(pendingBrief.briefJson) : undefined,build.briefHash)
+  if ((!input.pendingPlan && canonicalProductProductionJsonV2(plan) !== build.planJson)
+    || await hashProductProductionValueV2(plan) !== (input.pendingPlan?.planHash ?? build.planHash)
     || plan.buildNumber !== build.buildNumber || plan.controlEpoch !== build.controlEpoch) {
     throw new Error('[product-production-artifact] carry-forward 目标 Plan 未持久化或损坏')
   }
@@ -2793,17 +2974,22 @@ async function carryForwardTextOpenWorldProductBuildArtifactsToEpochV1(input: {
     ownerTasks.set(owners[0].taskKey, owners[0])
   }
   for (const task of ownerTasks.values()) {
-    if (task.executionMode === 'deterministic' || task.reuse !== null
+    const carriesAuthorDecision = task.taskKey === 'source.author-gate' || task.taskKey === 'media.anchor-author-gate'
+    if (task.executionMode === 'deterministic' && !carriesAuthorDecision || task.reuse !== null
       || task.outputArtifactKeys.some(key => !requested.has(key))) {
       throw new Error(`[product-production-artifact] carry-forward task 未授权完整 epoch reuse:${task.taskKey}`)
     }
   }
   const allRows = await db.productBuildArtifacts.where('buildId').equals(build.id).toArray()
   const sourceRows = keys.flatMap(artifactKey => {
-    const exact = allRows.filter(row => row.artifactKey === artifactKey
-      && row.controlEpoch === input.fromControlEpoch
-      && (row.status === 'accepted' || row.status === 'carried-forward'
-        || (input.allowInvalidSourceAtFromEpoch === true && row.status === 'invalid')))
+    const exact = allRows.filter(row => {
+      const alreadyCarried = allRows.some(c => c.controlEpoch === input.toControlEpoch && c.status === 'carried-forward'
+        && c.carriedFrom?.buildNumber === build.buildNumber && c.carriedFrom.artifactKey === row.artifactKey
+        && c.carriedFrom.version === row.version && c.carriedFrom.contentHash === row.contentHash)
+      return row.artifactKey === artifactKey && row.controlEpoch === input.fromControlEpoch
+        && (row.status === 'accepted' || row.status === 'carried-forward'
+          || row.status === 'invalid' && (input.allowInvalidSourceAtFromEpoch === true || alreadyCarried))
+    })
     if (exact.length > 1) {
       throw new Error(`[product-production-artifact] carry-forward 当前来源 key 不唯一:${artifactKey}`)
     }
@@ -2826,6 +3012,9 @@ async function carryForwardTextOpenWorldProductBuildArtifactsToEpochV1(input: {
     throw new Error('[product-production-artifact] carry-forward 来源 key 不完整或不唯一')
   }
   const initialParentReadSet = await collectSameBuildCarryParentReadSetV1(sourceRows)
+  if (preserveOrigin) for (const source of sourceRows) if (source.carriedFrom) {
+    await verifySameBuildCarriedLineageV1({ scope,build,plan,target: source,allBuildRows: allRows })
+  }
   const blobProofs = await verifiedBlobProofsV1({ scope, artifacts: sourceRows, label: 'carry-forward' })
   const proofHashes = new Map<string, string>()
   for (const source of sourceRows) proofHashes.set(source.artifactKey, await frozenParentProofHash({
@@ -2852,7 +3041,7 @@ async function carryForwardTextOpenWorldProductBuildArtifactsToEpochV1(input: {
   })
   const frozenBuildJson = canonicalProductProductionJsonV2(build)
   return db.transaction('rw', scopeTransactionTables(
-    db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects,
+    db.productBuilds, db.productProductionBriefs, db.productBuildArtifacts, db.mediaBlobObjects,
     db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints,
   ), async () => {
     const [currentBuild, currentRows] = await Promise.all([
@@ -2863,6 +3052,7 @@ async function carryForwardTextOpenWorldProductBuildArtifactsToEpochV1(input: {
       || !sameStoredArtifactRowsV1(allRows, currentRows)) {
       throw new Error('[product-production-artifact] carry-forward 证明读取后 Build 或 Artifact 已变化')
     }
+    if (pendingBrief && canonicalProductProductionJsonV2(await db.productProductionBriefs.get(pendingBrief.id!)) !== canonicalProductProductionJsonV2(pendingBrief)) throw new Error('[product-production-artifact] pending Plan 的 Brief 已变化')
     await assertSameBuildCarryParentReadSetUnchangedV1(commitParentReadSet)
     for (const [blobId, expectedBlob] of commitBlobProofs) {
       const currentBlob = await db.mediaBlobObjects.get(blobId)
@@ -2906,7 +3096,7 @@ async function carryForwardTextOpenWorldProductBuildArtifactsToEpochV1(input: {
         projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
         buildId: build.id!, artifactKey: source.artifactKey, requirementKey: source.requirementKey,
         version, kind: source.kind, mediaKind: source.mediaKind, status: 'carried-forward' as const,
-        producerRunId: null, producerReceiptHash: source.producerReceiptHash,
+        producerRunId: preserveOrigin ? source.producerRunId : null, producerReceiptHash: source.producerReceiptHash,
         controlEpoch: input.toControlEpoch, inputHash: source.inputHash, contentHash: source.contentHash,
         payloadJson: source.payloadJson, metadataJson: source.metadataJson,
         qualityJson: source.qualityJson, rightsJson: source.rightsJson,
@@ -2984,6 +3174,7 @@ async function carryForwardTextOpenWorldProductBuildArtifactsAcrossBuildsV1(inpu
   targetBuildId: number
   targetControlEpoch: number
   artifactKeys: string[]
+  pendingPlan?: { plan: ProductProductionPlanV3; planHash: string }
   recoverySource?: {
     briefHash: string
     planHash: string
@@ -3051,6 +3242,7 @@ async function carryForwardTextOpenWorldProductBuildArtifactsAcrossBuildsV1(inpu
     targetBuild,
     sources,
     artifactKeys: keys,
+    pendingPlan: input.pendingPlan,
   })
   const blobProofs = sealedContext.blobProofs
   const proofHashes = new Map<string, string>()
@@ -3076,7 +3268,11 @@ async function carryForwardTextOpenWorldProductBuildArtifactsAcrossBuildsV1(inpu
   return db.transaction('rw', scopeTransactionTables(
     db.productProductions, db.productProductionBriefs, db.productBuilds,
     db.productBuildArtifacts, db.mediaBlobObjects, db.productProductionCommands,
+    db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints,
   ), async () => {
+    if (sealedContext.originPreservingProof) {
+      await assertProductBuildTerminalReadSetUnchangedV1({ readSet: sealedContext.originPreservingProof.casReadSet })
+    }
     const [currentSourceBuild, currentTargetBuild, currentProduction, currentBrief, currentSourceRows, currentTargetRows, currentRepairCommands] = await Promise.all([
       db.productBuilds.get(sourceBuild.id),
       db.productBuilds.get(targetBuild.id),
@@ -3185,7 +3381,7 @@ export const textOpenWorldProductArtifactStoreV1 = Object.freeze({
 })
 
 /**
- * The text-open-world product owns the stricter sealed-proof implementation
+ * Text-open-world and TTRPG use the stricter sealed-proof implementation
  * above. Existing products retain the current mainline store while that proof
  * contract is integrated product by product; a feature branch must not silently
  * replace the persistence semantics of unrelated products.
@@ -3193,7 +3389,7 @@ export const textOpenWorldProductArtifactStoreV1 = Object.freeze({
 export async function acceptProductBuildArtifact(
   input: ProductBuildArtifactAcceptanceInputV1,
 ): Promise<ProductBuildArtifactRecordV1> {
-  return await productTypeForBuildV1(input.buildId) === 'text-open-world'
+  return ['text-open-world','ttrpg'].includes(await productTypeForBuildV1(input.buildId))
     ? textOpenWorldProductArtifactStoreV1.acceptProductBuildArtifact(input)
     : textAdventureArtifactStoreV1.acceptProductBuildArtifact(input)
 }
@@ -3206,8 +3402,9 @@ export async function carryForwardProductBuildArtifactsToEpochV1(input: {
   artifactKeys: string[]
   allowInvalidSourceAtFromEpoch?: boolean
   allowHistoricalInvalidSourceBeforeEpoch?: boolean
+  pendingPlan?: { plan: ProductProductionPlanV3; planHash: string }
 }): Promise<ProductBuildArtifactRecordV1[]> {
-  return await productTypeForBuildV1(input.buildId) === 'text-open-world'
+  return ['text-open-world','ttrpg'].includes(await productTypeForBuildV1(input.buildId))
     ? textOpenWorldProductArtifactStoreV1.carryForwardProductBuildArtifactsToEpochV1(input)
     : textAdventureArtifactStoreV1.carryForwardProductBuildArtifactsToEpochV1(input)
 }
@@ -3218,6 +3415,7 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
   targetBuildId: number
   targetControlEpoch: number
   artifactKeys: string[]
+  pendingPlan?: { plan: ProductProductionPlanV3; planHash: string }
   recoverySource?: {
     briefHash: string
     planHash: string
@@ -3228,7 +3426,7 @@ export async function carryForwardProductBuildArtifactsAcrossBuildsV1(input: {
     }
   }
 }): Promise<ProductBuildArtifactRecordV1[]> {
-  return await productTypeForBuildV1(input.targetBuildId) === 'text-open-world'
+  return ['text-open-world','ttrpg'].includes(await productTypeForBuildV1(input.targetBuildId))
     ? textOpenWorldProductArtifactStoreV1.carryForwardProductBuildArtifactsAcrossBuildsV1(input)
     : textAdventureArtifactStoreV1.carryForwardProductBuildArtifactsAcrossBuildsV1(input)
 }

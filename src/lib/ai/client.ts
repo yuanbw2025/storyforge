@@ -1,5 +1,5 @@
 import { assertGenerationAvailable } from '../showcase/policy'
-import { streamCodex, CODEX_BASE_URL } from './codex-transport'
+import { streamCodex, CODEX_BASE_URL, type CodexRequestRefV1 } from './codex-transport'
 import type { AIConfig, ChatMessage } from '../types'
 import { AIError, CodexRequestError } from '../types'
 import { createLog, updateLog, type TokenUsage } from './logger'
@@ -118,6 +118,12 @@ export interface StreamResult {
 /** 可变容器，chat 写入非流式调用返回的真实 token 用量。 */
 export interface ChatResult {
   usage?: TokenUsage
+  /** Optional durable caller hook. Must finish saving the exact local request
+   * reference before its single POST. Failure prevents dispatch; no retry.
+   * Opt-in receipts are held until this owner saves and acknowledges them.
+   * This is transport metadata only, not candidate or adoption authority. */
+  onCodexRequestPrepared?: (request: Readonly<CodexRequestRefV1>) => Promise<void>
+  localCodexRequest?: Readonly<CodexRequestRefV1>
   /**
    * Observable transport boundary for callers that must make durable retry
    * and billing decisions. This records only delivery state and HTTP status;

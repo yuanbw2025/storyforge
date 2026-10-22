@@ -27,6 +27,14 @@
 
 裁剪必须留下 `omitted`/`insufficient` 证据。`missing` 表示冻结世界中不存在满足要求的资源；`omitted` 表示资源存在但没有选入某个 release/plan/run；`partial-selection` 表示该语义域仅选入部分资源。调用方不得混淆三者，不得把未读取内容当作不存在，也不得让固定前缀或“前 N 条”成为主要检索算法。
 
+生产任务的修复反馈按准确的 Build/任务读取。作者的修复意见和完整修订 JSON 只属于其明确指向的 blocker；旧格式的明确 taskKey 仍可定位同一任务。其他任务只读取自己的既有失败证据，不继承兄弟任务的作者修订或私密角色资料。完整原记录继续留在原 owner，不因过滤模型输入而删除或改写；读取反馈不创建推理、候选或采用。
+
+
+跑团当前失败任务的完整原本机回答可以通过独立保留证明核对原用量：`book-original-response` 在原 Work/Production/Build 的命令事务中复验原 Plan、epoch、Run/attempt、保留终验和完整原文字节，只更新精确原尝试与结构化记账历史。实际 token、观测时长、未报告费用和明确保守上限分别留证；原预留在历史记录中保留，真实超限仍记账并阻止旧授权继续。该动作不生成、不采用、不推进执行阶段。相关 JSON 中 `portable:false` 的原本机证明保持原 opaque 历史，导入重映射不得重获传输或记账权限；备份仍保留原文与既有费用，接受后正式内容继续由原采用/产品来源契约承担。
+
+
+已独立核对费用的跑团原完整回答，可由当前作者通过既有 `author-edit` 命令明确引用保留终验。系统冻结原模型文本与本次作者修订的不同 hash、准确原 Run/attempt/Plan/epoch、原成功记账命令和来源证据；事务前复验，执行时再核对。正式产物沿原候选/产品采用保存来源 hash，不把原模型响应写成新响应，也不让这项零模型修订再次结算原请求。修订退回后的来源传承仅来自造成当前失败 epoch/任务的成功作者命令，逐次记录前一证明 hash。证明保持不可搬运的本机执行边界；备份保留原文/费用/正式材料和历史，导入不能重新获得本机请求或待执行修订权限。世界来源继续由原登记 Gateway、Context Manifest 和发布 SourceManifest 校验，不由文本来源证明取代。
+
 ## 3. 候选与正式写入
 
 模型输出首先是候选，不是 Canon。正式采纳必须：
@@ -116,6 +124,8 @@ readOriginalEvidence(release ref, resource id) → immutable original text + has
 
 Provider 的缓存必须同时绑定 release UID、content hash 与投影版本，并设置明确容量上限；世界切换或 hash 不符时不得复用。多世界目录通过冻结的稳定关系导航，不得退回读取可变底表。规模门应覆盖千级目录检索和单项详情/原文读取，避免逐行 IndexedDB cursor/事务链形成二次方退化。
 
+跑团完整作品备份的本地编号重绑不得重写原 Context Manifest、scope fingerprint 或原 Brief hash。导出 owner 可在移除本地编号前，从实际已验证的世界读取冻结 `portableWorldContextBindingsJson`：只含 exact manifest hash、原 scope fingerprint、世界 release UID/hash 与确定性证明 hash，没有本地主键。它沿 `agentRuns` 的既有注册表生命周期搬运；只在真实导入失效事件之后、原候选/运行证明已显式本地复验、当前 SourcePlan 指向同一 UID/hash 且每项读取的版本/字段/内容及权限仍一致时，允许聚合原读取证据。本地定位使用已重映射的 Brief 行指针与 WorldReference，原 Brief 内的旧编号仅保留为历史输入。此证明不代表新读取，不授权换世界、改权限或绕过必读约束；缺失证明的旧备份保持可保存和只读，不补造来源或自动获得发布权。此路径当前限于跑团，其他产品仍沿各自契约。
+
 ### 5.7 ProductRelease 谱系
 
 - `ProductRelease` 必须不可变，并记录 product instance、父 ProductRelease（如有）、来源 Brief revision、source plan/manifest hash、build/quality evidence、运行时 AI 契约引用、验收成熟度和兼容策略。
@@ -141,10 +151,10 @@ Provider 的缓存必须同时绑定 release UID、content hash 与投影版本�
 
 ## 7. schema 支持窗口与演进门
 
-当前应用写入 schema v4，并支持从已发布 v1、v2、v3 原位纯加表升级到 v4；升级不改写已有记录。v3 新增的来源事实、因果边和改编决策由目标 Work 独占；v4 新增剧本 Beat、Scene Card 与 Review Issue，全部按冻结 source manifest 版本隔离并由剧本目标 Work 拥有。任何 schema 或 owner 改动至少验证：
+当前开发分支写入 schema v12，保留已发布 v1–v11 的纯加表升级步骤；升级不改写已有记录。v11 的插件表快照固定为 `STORYFORGE_STORES_V11`，v12 只增加实例拥有的 `ttrpgNarrativeMemories` 空表。原 Work-owned 创作与改编数据的 owner 和版本隔离不变。任何 schema 或 owner 改动至少验证：
 
 1. 新建数据库；
-2. v1/v2/v3→v4 原位迁移保留作者记录，未来版本和不在支持窗口内的版本被明确拒绝且不被改写；
+2. v1–v11→v12 原位迁移保留作者记录，未来版本和不在支持窗口内的版本被明确拒绝且不被改写；
 3. 缺字段、空值、旧字段和异常引用被明确拒绝；
 4. 项目/世界/作品/产品实例删除；
 5. 完整导出 → 新库导入 → 内容/引用/hash 往返；
@@ -160,7 +170,7 @@ Provider 的缓存必须同时绑定 release UID、content hash 与投影版本�
 - 世界切换、多世界切换和作品切换必须使缓存、Context Gateway 和候选失效。
 - immutable release 按 content hash 读取；不得读取“最新草稿”替代锁定版本。世界衍生产品还必须核对 `WorldReference`、`ProductSourcePlan`、`ProductSourceManifest` 与 ProductRelease 谱系一致。
 - 事务内不能等待可能导致 Dexie 提前提交的外部异步工作；先准备数据，再开启最小事务。
-- 插件底座使用 schema v11 与备份 v15。v14 只有通过全部旧表及当前 owner 校验后，才可明确转换为空插件作用域的 v15；其他历史版本、缺表或篡改文件拒绝。导入插件数据强制停用，保留声明与记录，不携带或执行安装包。
+- 当前开发分支的 schema v12 / 备份 v16 增加跑团记忆空表；v11 插件快照保持。仅接受当前 v16，以及通过完整旧表与 owner 校验的 v14/v15，明确补齐该版本之后引入的新表空数组。不得给旧版本夹带后续表，缺表或篡改文件拒绝。导入插件数据强制停用，保留声明与记录，不携带或执行安装包。
 - 导入不信任外部 JSON；先解析、校验、规划映射，再原子提交。首页与工作区的 JSON 文件入口复用 `readProjectJSONFile()` 分段读取；项目总大小不得退回单字符串读取或仅在首页设置额外上限。单记录限制与备份信任校验继续生效。
 
 ## 9. 验收
@@ -176,3 +186,54 @@ npm run build
 ```
 
 交付运行完整 `npm run ci`；涉及真实迁移、备份恢复或跨产品版本引用时，增加隔离数据库往返和 E2E。
+
+
+### TTRPG P7 的来源与单次只读会话（2026-10-15）
+
+`ttrpgOpenActorContext`、`ttrpgOpenPartyContext`、`ttrpgOpenGmContext` 是现行注册的 runtime 实例来源；角色/接收范围在元数据暴露前校验，作者策略引用依赖不能冒充事实 provenance 或知识授予。可选 Provider `openReadSession` 只复用同次执行中 owner 建立的完整读取视图，登记来源/版本/种类不得变化，执行器须在使用结果前调用 `assertCurrent`；常规独立读取不借用该视图。E14 保存于既有 Run 工件与证据事件，世界和游戏机械 owner 不变。编号重映射后的 prepared 请求恢复仍待独立协议修复，不自动续发。
+
+
+### 跑团运行证明的备份交接（2026-10-15）
+
+`agentRuns.portableRuntimeOriginJson` 是完整备份 owner 冻结的历史原文/事件证明，沿原 Run 表生命周期保留；原数字是历史身份，不是可解析的当前外键。当前 owner、原输入 Manifest/工件与严格事件前缀共同验证来源，当前 Project/Instance 定位和 Workspace UID 变化不重写原证据。证明不授予发送、采纳或用量改写权限；仅明确未发送的请求可在当前玩家确认后沿原取消状态机终结，原 slot 记录保留，新调用另需授权。裁剪证明可归档搬运，恢复仍要求原文。世界封存保留已有上层证明，生成新证明仅属于完整工作区备份，避免世界语义事务进入上层运行读取。细节和未完成边界见跑团现行方案 §35.49。
+
+
+### Context Gateway 的 owner 读取会话与逐字证据事务
+
+Provider 可按冻结 scope 返回本次装配专用的只读视图及 assertCurrent。视图必须保持登记的 provider 身份、版本与资源种类；Gateway 在本次实际读取结束后执行 owner 的版本核验，变化则不返回可用上下文包。会话只在一次装配内使用，不作为跨调用或跨 owner 的全局缓存。要求内核资源 allow-list 的来源不能由宽泛读取入口绕过；明确的空列表不授予读取权限。角色 POV 必须同时绑定实例，字符串本身不授予角色权限。
+
+AgentRun 的可选历史来源 JSON 仅携带不可变证据，不是当前数据库 locator、发送许可或写入许可；拥有者在使用前校验，搬运不能生成权限。逐字工件在 caller-owned IndexedDB 事务内核对原文摘要时，仅对纯摘要计算保活，不把包含数据库读取的整个流程包进等待。原文损坏仍须明确拒绝，不能以保持事务为由跳过完整性校验。
+
+
+### P8 记忆存储治理基础（2026-10-15）
+
+`ttrpgNarrativeMemories` 是实例拥有的唯一计划记忆表，登记导出、导入、实例/上级作用域删除和两个实例引用的重映射。记忆的 `worldGroupId` 与当前实例一致允许 null；不为已移除的世界分组虚构编号。`sourceSessionId` 是可空本地定位，源实例删除可清除此指针，不能把它当作稳定来源证明。
+
+当前单元只提供表、迁移和便携结构边界。导入须核验闭集字段、观察者/可信度、所属实例/World/Work、原始实例范围、版本唯一性和非未来区间。结构有效不等于真实事件或正式采用已验证；在后续事件/候选采纳与祖先证据、分支切点和删除后来源恢复合同接通前，不开放正式记忆写入或模型召回，不新增 FIELD_REGISTRY/CONTEXT_SOURCES 旁路。
+
+
+### P8 人工记忆确认的事件与投影（2026-10-15）
+
+E15 原事件和稳定回执是确认依据，唯一记忆表是可核对的查询投影；openRun 的回执只作为回放与祖先审计证明，不形成第二个可独立修改的记忆 owner。具名人工命令及分支写入口登记在 ADOPTION_EXTENSIONS，AI 候选仍须走单独登记的 Field/CreativeArtifact/adopt，当前无模型记忆入口。
+
+源事件区间在事务外计算 hash、事务内比对原记录，事件/记忆行/head 同时提交。分支保留已经确认的切点记录；本地 sourceSessionId 可空，稳定 sessionKey、原事件区间和封存祖先继续裁决来源。备份在写入前回放真实事件、核验源证明和表投影，结构通过不再作为已确认记忆的充分条件。所有摘要的规则资格为 false，观察与事实裁定保持原台账 owner。
+
+
+## 已确认产物的逐字证据保留
+
+已确认产物依赖的逐字 Run 工件不能只依靠源 Run 的存活保留。拥有者可在 `PROJECT_TABLES.exactArtifactRoots` 声明本表 JSON 字段内的只读证据引用路径；路径仅含具名字段及数组通配符，终点为闭集 `{artifactKind, contentHash}` 数组。拥有者先按本领域原始证据验证，再原子持久化引用；此登记只防误清理，不赋予读取、发送或采用权限，不新增工件副本或表。
+
+共享清理器只从注册表派生拥有者表和事务闭包，按当前 project 读取全部声明路径；缺失/空路径不补造引用，损坏的已声明引用须中止清理。当前已确认拥有者仍引用的工件既不进入 mark-and-sweep，也不能被通用显式保留期裁剪；应先通过拥有者的生命周期明确删除/释放依赖。删除源 Run 不删除仍被拥有者引用的证据。导出/导入与拥有者删除继续由 PROJECT_TABLES 派生；产品在相应提交登记实际路径并验证父删除、清理、完整备份后的可读性。所有旧无声明表与 Run 自身的原保留规则保持。
+
+`productMediaAssets.exactArtifactRefsJson` 是可选的逐字证据引用数组，沿上述注册表作为媒资自己的保留根。旧记录与无证据导入不补字段、不改默认值，不新增表或索引。运行媒资导入者可明确提供最多 64 个闭集引用，先冻结参数并检查本项目准确原文，再在媒资绑定事务内重验可用性；相同文件/版本不能换一套证据或给旧人工素材补造来源。同页同原导入串行，跨页原生锁忙时明确拒绝、没有后台重试；绑定事务重读现有版本，无原生锁的物理写竞争也不能被当作已成功，原操作完成后须明确继续。此字段只保留证据，不代表已听、已采用、可播放或可分发；具体产品仍须独立确认原候选、权限、许可、实际文件和运行回执。分支复制沿原媒资行带走引用，备份不重写内容 hash；源 Run 或父实例删除后，只要仍有媒资拥有者，原证据继续受保留根保护。
+
+跑团生成音轨的采用回执另以 `audioReceipts[].generated.artifactRefs` 声明准确原文证据。`productRuntimeSessions` 的初始/当前状态及祖先切点、`productRuntimeEvents` 的 `ttrpg.audio.cue.applied` 回执、`productRuntimeCheckpoints.stateJson` 的当前/祖先快照均通过同一注册表保留这些引用，不要求源 Run 或媒资行继续存活。检查点的通用状态只读取其中的 `ttrpg` 路径，其他产品合法 JSON 无该路径时不产生引用；已声明 JSON 或引用损坏时清理失败关闭。旧人工音轨和无 `generated` 的状态不补字段、不改 hash；此基础登记本身不证明新音轨已确认、已采用或可播放，生成来源与 E16 仍须由产品的版本合同独立验证。
+
+
+### 跑团已发布 RootV2 的备份身份（2026-10-20）
+
+完整工作区备份可在移除原本地主键前，由原 Work-owned 生产 root 冻结 `agentRuns.portablePublishedRootOriginJson`。它保存原 RootV2 的完整 preimage、原终态 hash、productionKey 和 Build 版本；原数字仅为历史证据，沿既有 Run 生命周期原样保存，不作为当前 locator，也不授予发送、采用、费用改写或新发布权限。世界封存不生成该上层证明。
+
+首次冻结必须由实际已发布 Build、原完成 root/join 与同一不可变 ProductRelease 闭合；已重绑但缺少证明的旧备份保持可保存、只读，不从残留编号补造原身份。结构导入只校验闭集、容量、原 hash 和 Work/Build/root owner，不代表正式复验通过。
+
+显式本地复验须有严格重放的原完成前缀和真实 project-import-scope-rebound 事件。所有 Artifact envelope 与原终态指针保持一致；整个预算账包括历史 attempt、未知费用处置、用量、费用及非引用字段逐值相等，仅允许 PROJECT_TABLES 已登记的预算 Run 引用双射重绑，并独立核对当前作用域、Build、任务、epoch、attempt、root/child 关系。当前 root 的复验沿原 Harness 追加专用 verifier 与既有记忆结算；原已发布 Build、Production、Release 的字段和原 hash 全部保留。连续备份继续携带相同原证明；复制 JSON、缺失前缀、别名冲突、跨域或原文/元数据/权利变化均不能取得该关联。

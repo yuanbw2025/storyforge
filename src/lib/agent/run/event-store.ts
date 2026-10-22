@@ -31,6 +31,7 @@ import {
   hashMemoryArtifactIndexV1,
 } from '../../memory/settlement-core'
 import { pruneUnreferencedAgentRunArtifactsInCurrentTransactionV1 } from '../../memory/artifact-retention-store'
+import { exactArtifactOwnerTablesV1 } from '../../memory/artifact-root-registry'
 
 export class AgentRunStoreError extends Error {
   constructor(public readonly code: string, message: string) {
@@ -56,6 +57,9 @@ export interface CreateAgentRunV1Input {
   scope: WorkspaceScope
   /** Runtime runs are Instance-owned; omitted runs remain Work-owned. */
   productRuntimeSessionId?: number | null
+  /** Optional creation precondition, checked atomically against the complete
+   * Instance owner row. Never persisted in or added to the RunContract. */
+  expectedRuntimeSessionHash?: string
   /** Production runs stay Work-owned but are additionally bound to one immutable Build. */
   productBuildId?: number | null
   worldGroupId?: number | null
@@ -623,6 +627,11 @@ export async function verifyRecordedMemorySettlementV1(input: {
 }
 
 export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<AgentRunSnapshotV1> {
+  const expectedRuntimeSessionHash = input.expectedRuntimeSessionHash
+  if (expectedRuntimeSessionHash !== undefined && (typeof expectedRuntimeSessionHash !== 'string'
+    || !/^[a-f0-9]{64}$/.test(expectedRuntimeSessionHash) || input.productRuntimeSessionId == null)) {
+    fail('runtime_snapshot_precondition', '实例创建快照要求准确 hash 和 Instance owner')
+  }
   const accepted = await acceptAgentRunContract(input.contract)
   const worldGroupId = input.worldGroupId ?? null
   if (!sameNullableId(worldGroupId, accepted.contract.scope.worldGroupId)) {
@@ -657,6 +666,12 @@ export async function createAgentRunV1(input: CreateAgentRunV1Input): Promise<Ag
     async () => {
       await assertContractScope(input.scope, accepted.contract, worldGroupId, productRuntimeSessionId, productBuildId)
       await assertOptionalConversationScope(input.scope, conversationId, worldGroupId)
+      if (expectedRuntimeSessionHash !== undefined) {
+        const session = await db.productRuntimeSessions.get(productRuntimeSessionId!)
+        if (!session || await waitForHash(session) !== expectedRuntimeSessionHash) {
+          fail('runtime_snapshot_stale', '实例快照在创建运行前已变化；未创建新的运行或事件')
+        }
+      }
       await assertParentRelationForCreationV1(input.scope, accepted.contract, productRuntimeSessionId, productBuildId)
 
       const parent = contractParent(accepted.contract)
@@ -1019,6 +1034,7 @@ export async function deleteAgentRunV1(
       db.agentRunEvents,
       db.agentRunCheckpoints,
       db.agentRunArtifacts,
+      ...exactArtifactOwnerTablesV1(),
     ),
     async () => {
       const run = await db.agentRuns.get(runId)

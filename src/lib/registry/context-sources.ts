@@ -165,11 +165,122 @@ const TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_PROXY_V1: ContextResourceProvider
     .TEXT_OPEN_WORLD_RUNTIME_CONTEXT_PROVIDER_V1.fingerprint(scope),
 }
 
+function ttrpgCommonIdentityProvider(): ContextResourceProviderV1 {
+  const load = async () => (await import('../ttrpg/open-common-identity-context')).createTtrpgOpenCommonIdentityProviderV1()
+  return { version: 'context-resource-provider-v1', providerId: 'storyforge.ttrpgOpenCommonIdentities',
+    providerVersion: 'ttrpg-open-common-identities-provider-v1', normalizationVersion: 'ttrpg-open-common-identities-json-v1', kinds: ['fact'],
+    listMetadata: async input => (await load()).listMetadata(input), searchMetadata: async input => (await load()).searchMetadata(input),
+    read: async input => (await load()).read(input), readOriginal: async input => (await load()).readOriginal(input),
+    fingerprint: async scope => (await load()).fingerprint(scope), openReadSession: async scope => (await load()).openReadSession!(scope) }
+}
+function ttrpgLearnedIdentityProvider(): ContextResourceProviderV1 {
+  const load = async () => (await import('../ttrpg/open-identity-knowledge-context')).createTtrpgOpenLearnedIdentityProviderV1()
+  return { version: 'context-resource-provider-v1', providerId: 'storyforge.ttrpgOpenLearnedIdentities',
+    providerVersion: 'ttrpg-open-learned-identities-provider-v1', normalizationVersion: 'ttrpg-open-learned-identities-json-v1', kinds: ['fact'],
+    listMetadata: async input => (await load()).listMetadata(input), searchMetadata: async input => (await load()).searchMetadata(input),
+    read: async input => (await load()).read(input), readOriginal: async input => (await load()).readOriginal(input),
+    fingerprint: async scope => (await load()).fingerprint(scope), openReadSession: async scope => (await load()).openReadSession!(scope) }
+}
+function ttrpgOpenProvider(sourceKey: 'ttrpgOpenAuthority' | 'ttrpgOpenKnowledge' | 'ttrpgOpenOracleHistory' | 'ttrpgOpenFacts' | 'ttrpgOpenGmOracleInput' | 'ttrpgOpenKpInput'): ContextResourceProviderV1 {
+  const load = async () => {
+    const module = await import('../ttrpg/open-context-provider')
+    if (sourceKey === 'ttrpgOpenKpInput') return module.TTRPG_OPEN_KP_INPUT_PROVIDER_V1
+    return sourceKey === 'ttrpgOpenAuthority' ? module.TTRPG_OPEN_AUTHORITY_PROVIDER_V1
+      : sourceKey === 'ttrpgOpenKnowledge' ? module.TTRPG_OPEN_KNOWLEDGE_PROVIDER_V1
+        : sourceKey === 'ttrpgOpenOracleHistory' ? module.TTRPG_OPEN_ORACLE_HISTORY_PROVIDER_V1
+          : sourceKey === 'ttrpgOpenFacts' ? module.TTRPG_OPEN_FACTS_PROVIDER_V1 : module.TTRPG_OPEN_GM_ORACLE_INPUT_PROVIDER_V1
+  }
+  return { version: 'context-resource-provider-v1', providerId: `storyforge.${sourceKey}`,
+    providerVersion: sourceKey === 'ttrpgOpenAuthority' ? 'ttrpg-open-actor-provider-v3' : sourceKey === 'ttrpgOpenKpInput' ? 'ttrpg-open-kp-provider-v2' : 'ttrpg-open-actor-provider-v1', normalizationVersion: 'ttrpg-open-actor-json-v1', kinds: ['fact'],
+    listMetadata: async input => (await load()).listMetadata(input), searchMetadata: async input => (await load()).searchMetadata(input),
+    read: async input => (await load()).read(input), readOriginal: async input => (await load()).readOriginal(input),
+    fingerprint: async scope => (await load()).fingerprint(scope),
+    openReadSession: async scope => (await load()).openReadSession!(scope) }
+}
+
+function ttrpgOpenGuidanceProvider(consumer: 'actor' | 'party-narrator' | 'gm-assistant', sourceKey: string): ContextResourceProviderV1 {
+  const load = async () => (await import('../ttrpg/open-context-guidance-provider')).createTtrpgOpenGuidanceProviderV1(consumer)
+  return { version: 'context-resource-provider-v1', providerId: `storyforge.${sourceKey}`,
+    providerVersion: 'ttrpg-open-guidance-provider-v1', normalizationVersion: 'ttrpg-open-guidance-json-v1', kinds: ['fact', 'reference'],
+    listMetadata: async input => (await load()).listMetadata(input), searchMetadata: async input => (await load()).searchMetadata(input),
+    read: async input => (await load()).read(input), readOriginal: async input => (await load()).readOriginal(input),
+    fingerprint: async scope => (await load()).fingerprint(scope),
+    openReadSession: async scope => (await load()).openReadSession!(scope) }
+}
+
+function ttrpgOpenMemoryProvider(consumer: 'actor' | 'party-narrator', sourceKey: string): ContextResourceProviderV1 {
+  const load = async () => (await import('../ttrpg/open-memory-context-provider')).createTtrpgOpenMemoryContextProviderV1(consumer)
+  return { version: 'context-resource-provider-v1', providerId: `storyforge.${sourceKey}`,
+    providerVersion: 'ttrpg-open-memory-provider-v1', normalizationVersion: 'ttrpg-open-memory-json-v1', kinds: ['fact', 'reference'],
+    listMetadata: async input => (await load()).listMetadata(input), searchMetadata: async input => (await load()).searchMetadata(input),
+    read: async input => (await load()).read(input), readOriginal: async input => (await load()).readOriginal(input),
+    fingerprint: async scope => (await load()).fingerprint(scope),
+    openReadSession: async scope => (await load()).openReadSession!(scope) }
+}
+
+function ttrpgOpenBriefProvider(): ContextResourceProviderV1 {
+  const load = async () => (await import('../ttrpg/open-brief-context')).createTtrpgOpenBriefContextProviderV1()
+  return { version: 'context-resource-provider-v1', providerId: 'storyforge.ttrpgOpenBriefInput',
+    providerVersion: 'ttrpg-open-brief-provider-v1', normalizationVersion: 'ttrpg-open-brief-json-v1', kinds: ['fact', 'reference'],
+    listMetadata: async input => (await load()).listMetadata(input), searchMetadata: async input => (await load()).searchMetadata(input),
+    read: async input => (await load()).read(input), readOriginal: async input => (await load()).readOriginal(input),
+    fingerprint: async scope => (await load()).fingerprint(scope),
+    openReadSession: async scope => (await load()).openReadSession!(scope) }
+}
+
+function ttrpgOpenSituationProvider(): ContextResourceProviderV1 {
+  const load = async () => (await import('../ttrpg/open-generated-situation-context')).createTtrpgOpenSituationContextProviderV1()
+  return { version: 'context-resource-provider-v1', providerId: 'storyforge.ttrpgOpenSituationInput',
+    providerVersion: 'ttrpg-open-situation-provider-v1', normalizationVersion: 'ttrpg-open-situation-json-v1', kinds: ['fact', 'reference'],
+    listMetadata: async input => (await load()).listMetadata(input), searchMetadata: async input => (await load()).searchMetadata(input),
+    read: async input => (await load()).read(input), readOriginal: async input => (await load()).readOriginal(input),
+    fingerprint: async scope => (await load()).fingerprint(scope),
+    openReadSession: async scope => (await load()).openReadSession!(scope) }
+}
+function ttrpgOpenPublicSituationProvider(): ContextResourceProviderV1 {
+  const load = async () => (await import('../ttrpg/open-public-situation-context')).createTtrpgOpenPublicSituationContextProviderV1()
+  return { version: 'context-resource-provider-v1', providerId: 'storyforge.ttrpgOpenPublicSituationInput',
+    providerVersion: 'ttrpg-open-public-situation-provider-v1', normalizationVersion: 'ttrpg-open-public-situation-json-v1', kinds: ['fact', 'reference'],
+    listMetadata: async input => (await load()).listMetadata(input), searchMetadata: async input => (await load()).searchMetadata(input),
+    read: async input => (await load()).read(input), readOriginal: async input => (await load()).readOriginal(input),
+    fingerprint: async scope => (await load()).fingerprint(scope),
+    openReadSession: async scope => (await load()).openReadSession!(scope) }
+}
+function ttrpgOpenCommonOracleProvider(): ContextResourceProviderV1 {
+  const load = async () => (await import('../ttrpg/open-common-oracle-context')).createTtrpgOpenCommonOracleContextProviderV1()
+  return { version: 'context-resource-provider-v1', providerId: 'storyforge.ttrpgOpenCommonOracleInput',
+    providerVersion: 'ttrpg-open-common-oracle-provider-v1', normalizationVersion: 'ttrpg-open-common-oracle-json-v1', kinds: ['fact', 'reference'],
+    listMetadata: async input => (await load()).listMetadata(input), searchMetadata: async input => (await load()).searchMetadata(input),
+    read: async input => (await load()).read(input), readOriginal: async input => (await load()).readOriginal(input),
+    fingerprint: async scope => (await load()).fingerprint(scope),
+    openReadSession: async scope => (await load()).openReadSession!(scope) }
+}
+function ttrpgOpenEntityProvider(): ContextResourceProviderV1 {
+  const load = async () => (await import('../ttrpg/open-entity-context')).createTtrpgOpenEntityContextProviderV1()
+  return { version: 'context-resource-provider-v1', providerId: 'storyforge.ttrpgOpenEntityInput',
+    providerVersion: 'ttrpg-open-entity-provider-v1', normalizationVersion: 'ttrpg-open-entity-json-v1', kinds: ['fact', 'reference'],
+    listMetadata: async input => (await load()).listMetadata(input), searchMetadata: async input => (await load()).searchMetadata(input),
+    read: async input => (await load()).read(input), readOriginal: async input => (await load()).readOriginal(input),
+    fingerprint: async scope => (await load()).fingerprint(scope),
+    openReadSession: async scope => (await load()).openReadSession!(scope) }
+}
+
 // Upper-product readers are lazy for the same reason as adaptation readers:
 // their production Harnesses import the Skill registry, so eager imports here
 // would create CONTEXT_SOURCES -> product Harness -> Skill -> CONTEXT_SOURCES.
 async function readProductProductionBriefContext(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionBriefContext(input)
+}
+async function ttrpgOpenProductionTaskProjectionEnabledV3(input: AssembleContextInput): Promise<boolean> {
+  if (!Number.isSafeInteger(input.productProductionId) || !Number.isSafeInteger(input.productBuildId)
+    || !input.productProductionTaskKey?.startsWith('ttrpg.open.')) return false
+  return (await import('../product-production/context')).canReadTtrpgOpenProductionTaskProjectionV3(input)
+}
+async function readTtrpgOpenProductionTaskBriefContextV3(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTtrpgOpenProductionTaskBriefContextV3(input)
+}
+async function readTtrpgOpenProductionMediaInputsV3(input: AssembleContextInput): Promise<string> {
+  return (await import('../product-production/context')).readTtrpgOpenProductionMediaInputsV3(input)
 }
 async function readProductProductionArtifactInputs(input: AssembleContextInput): Promise<string> {
   return (await import('../product-production/context')).readProductProductionArtifactInputs(input)
@@ -1874,6 +1985,137 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: readTtrpgGmRuntimeContextV1,
   },
   {
+    key: 'ttrpgOpenVoiceText', label: 'open 跑团原预留配音的准确朗读片段',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 8000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    enabled: input => !!input.ttrpgVoiceRequest,
+    read: async input => (await import('../ttrpg/open-voice-context')).readTtrpgOpenVoiceTextSourceV1(input),
+  },
+  {
+    key: 'ttrpgOpenAuthority', label: 'open 跑团角色权限与机械状态',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 10_000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenProvider('ttrpgOpenAuthority'),
+    read: async () => { throw new Error('[ttrpg-open-context] 角色来源只经有明确 POV/allow-list 的 Context Gateway 渐进读取') },
+  },
+  {
+    key: 'ttrpgOpenKnowledge', label: 'open 跑团当前角色知识',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 10_000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenProvider('ttrpgOpenKnowledge'),
+    read: async () => { throw new Error('[ttrpg-open-context] 角色来源只经有明确 POV/allow-list 的 Context Gateway 渐进读取') },
+  },
+  {
+    key: 'ttrpgOpenCommonIdentities', label: 'open 跑团全体当前队员共同身份与原可靠性',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 6000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgCommonIdentityProvider(),
+    read: async () => { throw new Error('[ttrpg-common-identities] 共同身份只经全体现队员交集与完整资源 allow-list 读取') },
+  },
+  {
+    key: 'ttrpgOpenLearnedIdentities', label: 'open 跑团角色已识别身份与原可靠性',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 6000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgLearnedIdentityProvider(),
+    read: async () => { throw new Error('[ttrpg-identities] 身份知识只经本人 POV 与完整资源 allow-list 读取') },
+  },
+  {
+    key: 'ttrpgOpenOracleHistory', label: 'open 跑团角色可读 Oracle 历史',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 6000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenProvider('ttrpgOpenOracleHistory'),
+    read: async () => { throw new Error('[ttrpg-open-context] Oracle 历史只经明确 POV/allow-list 的 Context Gateway 读取') },
+  },
+  {
+    key: 'ttrpgOpenFacts', label: 'open 跑团角色可读会话叙事事实',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 10000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenProvider('ttrpgOpenFacts'),
+    read: async () => { throw new Error('[ttrpg-open-context] 会话事实只经明确 POV/allow-list 的 Context Gateway 读取') },
+  },
+  {
+    key: 'ttrpgOpenKpInput', label: 'open 跑团共同可见结算叙述输入', scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 16000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true, requiresResourceKeyAllowList: true, resources: ttrpgOpenProvider('ttrpgOpenKpInput'),
+    read: async () => { throw new Error('[ttrpg-kp] KP 只经登记 Skill、实际叙述步骤与冻结共同可见 allow-list 读取') },
+  },
+  {
+    key: 'ttrpgOpenGmOracleInput', label: 'open 跑团受限 GM Oracle 解释输入',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 16000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenProvider('ttrpgOpenGmOracleInput'),
+    read: async () => { throw new Error('[ttrpg-open-gm] 主持解释只经登记 Skill、明确 GM POV 和冻结单个 Oracle allow-list 读取') },
+  },
+  {
+    key: 'ttrpgOpenActorContext', label: 'open 跑团角色情境指引与已保存叙述',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 16000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenGuidanceProvider('actor', 'ttrpgOpenActorContext'),
+    read: async () => { throw new Error('[ttrpg-open-context] 情境只经准确消费角色、冻结 allow-list 与完整 JSON 渐进读取') },
+  },
+  {
+    key: 'ttrpgOpenPartyContext', label: 'open 跑团共同叙述情境指引与已保存叙述',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 16000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenGuidanceProvider('party-narrator', 'ttrpgOpenPartyContext'),
+    read: async () => { throw new Error('[ttrpg-open-context] 情境只经准确消费角色、冻结 allow-list 与完整 JSON 渐进读取') },
+  },
+  {
+    key: 'ttrpgOpenGmContext', label: 'open 跑团GM 助手情境指引与已保存叙述',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 16000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenGuidanceProvider('gm-assistant', 'ttrpgOpenGmContext'),
+    read: async () => { throw new Error('[ttrpg-open-context] 情境只经准确消费角色、冻结 allow-list 与完整 JSON 渐进读取') },
+  },
+  {
+    key: 'ttrpgOpenMemory', label: 'open 跑团活动角色获准接收的记忆',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 8000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenMemoryProvider('actor', 'ttrpgOpenMemory'),
+    read: async () => { throw new Error('[ttrpg-memory] 记忆只经准确角色、冻结 allow-list 与完整 JSON 渐进读取') },
+  },
+  {
+    key: 'ttrpgOpenPartyMemory', label: 'open 跑团全队共同可见的记忆',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 8000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenMemoryProvider('party-narrator', 'ttrpgOpenPartyMemory'),
+    read: async () => { throw new Error('[ttrpg-memory] 共同记忆只经全队接收者交集、冻结 allow-list 与完整 JSON 渐进读取') },
+  },
+  {
+    key: 'ttrpgOpenBriefInput', label: 'open 跑团阶段复盘的全队共同资料',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 16000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenBriefProvider(),
+    read: async () => { throw new Error('[ttrpg-brief] 复盘只经准确本桌交集、冻结 allow-list 和实际交付来源读取') },
+  },
+  {
+    key: 'ttrpgOpenSituationInput', label: 'open 跑团独立局势生成的模型 GM 资料',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 16000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenSituationProvider(),
+    read: async () => { throw new Error('[ttrpg-situation] 局势资料只经本桌独立生成窗口、模型 GM 权限与完整 JSON 资源读取') },
+  },
+  {
+    key: 'ttrpgOpenPublicSituationInput', label: 'open 跑团共同局势的全体玩家资料交集',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 16000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenPublicSituationProvider(),
+    read: async () => { throw new Error('[ttrpg-public-situation] 共同局势只经真实全体交集、冻结 allow-list 与完整来源读取') },
+  },
+  {
+    key: 'ttrpgOpenEntityInput', label: 'open 跑团原咨询下的分范围实体提案资料',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 16000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenEntityProvider(),
+    read: async () => { throw new Error('[ttrpg-entity] 实体提案只经原咨询、单一接收者范围和完整模板/地点资源读取') },
+  },
+  {
+    key: 'ttrpgOpenCommonOracleInput', label: 'open 跑团共同 Oracle 事实的全体玩家资料交集',
+    scope: 'runtime', layer: 'L0', ownerFrom: 'instance', budgetTokens: 16000,
+    protectedFromTrim: true, atomic: true, requiresProductRuntimeSessionId: true,
+    requiresResourceKeyAllowList: true, resources: ttrpgOpenCommonOracleProvider(),
+    read: async () => { throw new Error('[ttrpg-common-oracle] 共同事实只经真实全体交集、冻结单个 Oracle allow-list 与完整来源读取') },
+  },
+  {
     key: 'ttrpgPrivateGuidance', label: '正式 TTRPG 单角色私密指引', scope: 'runtime', layer: 'L0', ownerFrom: 'work',
     budgetTokens: 8000, protectedFromTrim: true, requiresProductRuntimeSessionId: true,
     read: async input => (await import('../ttrpg/private-guidance')).readTtrpgPrivateGuidanceContextV1(input),
@@ -1920,6 +2162,12 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: readTtrpgPlayerRuntimeContextV1,
   },
   {
+    key: 'ttrpg.open.authoring-design', label: '开放跑团作者设计的准确草稿与冻结来源', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 24000, protectedFromTrim: true, atomic: true,
+    enabled: input => Number.isSafeInteger(input.ttrpgAuthoringDesignRevision),
+    read: async input => (await import('../ttrpg/open-authoring-design-context')).readTtrpgOpenAuthoringDesignContextV1(input),
+  },
+  {
     key: 'ai-town.authoring', label: 'AI 小镇 作者方案与会谈', scope: 'project', layer: 'L0', ownerFrom: 'work',
     budgetTokens: 16000, protectedFromTrim: true,
     read: async input => {
@@ -1959,6 +2207,22 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     protectedFromTrim: true,
     enabled: input => Number.isInteger(input.productProductionId),
     read: readProductProductionBriefContext,
+  },
+  {
+    key: 'product-production.ttrpg-open-task-brief', label: '开放跑团 V3 原授权任务方案投影',
+    // A complete frozen author policy must not hit an unrelated 8k atom cap.
+    // The atomic source is still bounded by this ceiling AND the exact task input budget.
+    scope: 'project', layer: 'L0', ownerFrom: 'work', budgetTokens: 100_000,
+    protectedFromTrim: true, atomic: true,
+    enabled: ttrpgOpenProductionTaskProjectionEnabledV3,
+    read: readTtrpgOpenProductionTaskBriefContextV3,
+  },
+  {
+    key: 'product-production.ttrpg-open-media-inputs', label: '开放跑团已采纳的媒资槽位与身份锚点',
+    scope: 'project', layer: 'L0', ownerFrom: 'work', budgetTokens: 16000,
+    protectedFromTrim: true, atomic: true,
+    enabled: async input => input.productProductionTaskKey === 'ttrpg.open.media-plan' && await ttrpgOpenProductionTaskProjectionEnabledV3(input),
+    read: readTtrpgOpenProductionMediaInputsV3,
   },
   {
     key: 'product-production.artifact-inputs',

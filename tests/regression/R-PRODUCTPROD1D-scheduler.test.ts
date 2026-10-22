@@ -3177,6 +3177,7 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
       },
     })
     await abandonedCycle.catch(() => undefined)
+    const unknownProvenance = JSON.parse(blockedBuild.failureJson).failureProvenance
 
     const production = (await db.productProductions.get(owned.productionId))!
     await executeProductProductionCommand({
@@ -3187,7 +3188,9 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
         commandId: 'scheduler-provider-result-unknown.resolve',
         expectedStateRevision: production.stateRevision,
         blockerKey: 'content.design',
-        resolution: { action: 'retry', note: '作者确认未知结果不会被采用，并同意新 epoch 重试' },
+        resolution: { action: 'retry', note: '作者确认未知结果不会被采用，并按原预留上限记账后在新 epoch 重试',
+          unknownResultReservation: { runId: unknownProvenance.runId, attempt: unknownProvenance.attempt,
+            controlEpoch: unknownProvenance.controlEpoch, disposition: 'charge-reservation-upper-bound' } },
       },
     })
     const retryCalls = new Map<string, number>()
@@ -3390,6 +3393,10 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(JSON.parse(child!.projectionJson)).toMatchObject({
       state: 'failed',
       steps: { 'content.narrative': { status: 'failed', failureCode: 'task-preflight-failed' } },
+    })
+    const attempts = JSON.parse((await db.productBuilds.get(first.buildId))!.budgetLedgerJson).attempts
+    expect(attempts.find((entry: { runId: number }) => entry.runId === child!.id)).toMatchObject({
+      usageKnown: true, usage: { modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0, costUsd: 0 },
     })
     expect((await db.productBuilds.get(first.buildId))!.status).toBe('recovery-required')
   }, 30_000)
@@ -4034,7 +4041,7 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(() => assertProductProductionBudgetLedgerV1(build!.budgetLedgerJson)).not.toThrow()
   }, 30_000)
 
-  it('即使 provider 忽略 abort 也按任务合同强制结算超时，并保存 task-timeout 恢复证据', async () => {
+  it('即使 provider 忽略 abort 也按任务合同停止等待，并保存未知用量占用而不重发', async () => {
     const owned = await fixture('scheduler-task-timeout')
     const basePlan = await createProductProductionPlanV3({
       buildNumber: 1,
@@ -4070,7 +4077,9 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     })
     expect(aborted).toBe(true)
     expect(blocked.buildStatus).toBe('recovery-required')
-    expect((await db.productBuilds.get(blocked.buildId))?.failureJson).toContain('task-timeout')
+    expect((await db.productBuilds.get(blocked.buildId))?.failureJson).toContain('task-result-unknown')
+    expect(JSON.parse((await db.productBuilds.get(blocked.buildId))!.budgetLedgerJson).attempts
+      .some((entry: { usageKnown: boolean }) => entry.usageKnown === false)).toBe(true)
   })
 
   it('拒绝带未知字段或伪造结算数据的 budget ledger', () => {

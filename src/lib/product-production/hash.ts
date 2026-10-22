@@ -78,3 +78,19 @@ export async function hashProductProductionValueV2(value: unknown): Promise<stri
 export function isSha256Hash(value: unknown): value is string {
   return typeof value === 'string' && HASH_PATTERN.test(value)
 }
+
+/** Exact existing task-input preimage, shared by dispatch and historical proof. */
+export function hashProductProductionTaskInputV1(input: {
+  structuralInput: Record<string, unknown>
+  sourcePlanHash: string | null
+  confirmedBriefHash: string | null
+  contextPacketHash: string | null
+  ttrpgOpenRequestHash?: string | null
+  creatorDerivedAuthorizationHash: string | null
+}) {
+  return hashProductProductionValueV2({ ...input.structuralInput,
+    sourcePlanHash: input.sourcePlanHash, confirmedBriefHash: input.confirmedBriefHash,
+    contextPacketHash: input.contextPacketHash,
+    ...(input.ttrpgOpenRequestHash ? { ttrpgOpenRequestHash: input.ttrpgOpenRequestHash } : {}),
+    creatorDerivedAuthorizationHash: input.creatorDerivedAuthorizationHash })
+}

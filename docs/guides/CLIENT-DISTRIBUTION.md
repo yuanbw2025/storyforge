@@ -64,6 +64,18 @@ Android 禁用系统自动云备份，避免把用户选择保存的密钥交给
 
 ## 验收与当前限制
 
+### 跑团本机配音的安装包接入（开发候选）
+
+桌面端和浏览器便携版复用现有 `/storyforge/local-tts/v1` 产品 bridge。操作者须在启动应用的进程中明确配置已有的 `STORYFORGE_TTRPG_LOCAL_TTS_RUNTIME_DIR`；使用 Qwen 时还须配置已完成独立资产准入的 `STORYFORGE_TTRPG_QWEN_TTS_RUNTIME_DIR`。运行库安装、资产核验与许可边界见 [本机语音说明](../../scripts/ttrpg-local-tts/README.md)。本增量不下载模型、不安装 Python、不调用模型或自动采用音轨；当前固定运行库仅在 macOS Apple Silicon 验证，不因 Windows/Linux 包含脚本就宣称这些平台支持新生成。Android 和静态网页不提供本机 Python 服务，已采用音频的播放另按原媒资兼容路径验收。
+
+`local-tts-files.cjs` 从三个当前 product profile 派生同一份精确源码闭包，逐文件校验原 SHA-256，并携带必要的描述、登记证明及许可。便携包保留相对路径；Electron 把同一闭包放在 `resources/local-tts/`，由固定的主进程路径加载，使 Python 能读取实际文件。相关 TypeScript/AI 登记文件只用于原有实现核验，不需要作者的仓库、Git 或 npm 依赖，也不通过网页提供。模型、运行库、任务目录、个人路径和浏览器资料不打入资源包。
+
+未配置或初始化失败时接口返回明确的 JSON 不可用结果，普通应用仍能启动。接口继续要求 loopback、同源和 `X-StoryForge-TTS: 1`；查询及创建等待任务不启动语音，启动、租约、停止、原始结果核查仍沿原唯一任务。初始化失败不在后台反复重试；修正配置后重新启动应用。不能通过修改包中脚本绕过原 profile 校验或为旧任务取得新执行权。
+
+打包回归覆盖独立资源目录的三 profile 核验、真实便携复制函数、Electron 资源路径、同源 HTTP、等待任务幂等与取消后不能启动；使用合成运行库记录，模型调用为零。`smoke-package.py` 再用包内 Node 核验物理资源。实际安装后的 Qwen 生成、两种声线听感、权利确认、采用与完整游戏仍须单独验证，不能以这些工程检查代替。
+
+### 客户端通用验收
+
 - `npm run test:clients`：更新状态、原生确认门、非法 IPC、网络异常、SSE 分块/取消、网页不出现客户端更新入口。
 - `node scripts/desktop/smoke.mjs`：独立临时 profile 中启动、renderer 无 Node 权限、重启后 IndexedDB/localStorage 保留。Windows Actions 对真正的解包程序执行此检查。
 - Android `testDebugUnitTest`：稳定版本顺序、下载来源白名单与反例。

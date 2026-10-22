@@ -188,7 +188,8 @@ describe('MOTION-DRAMA-1 · independent preproduction pipeline', () => {
 
   it('八岗位提示词和 durable 候选保持作者确认边界，并拒绝 stale 候选', async () => {
     const item = await fixture()
-    expect(STORYFORGE_SCHEMA_VERSION).toBe(11)
+    // This product requires its v11 stores; later additive product migrations remain compatible.
+    expect(STORYFORGE_SCHEMA_VERSION).toBeGreaterThanOrEqual(11)
     for (const stage of ['series-bible', 'asset-bible', 'episode-outline', 'episode-script', 'shot-design', 'image-prompts', 'video-prompts', 'quality-review'] as MotionDramaPromptStageV1[]) {
       const definition = getMotionDramaPromptDefinitionV1(stage)
       expect(definition.instruction).toContain('不针对任何比赛')

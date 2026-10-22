@@ -77,6 +77,12 @@ import {
 import { saveMotionDramaPromptOverrideV1 } from '../../src/lib/motion-drama/prompts'
 import { compileMotionDramaPromptPackV1 } from '../../src/lib/motion-drama/prompt-pack'
 import { publishMotionDramaReleaseV1 } from '../../src/lib/motion-drama/release'
+import { openRuntimePackageFixture } from './ttrpg-open-package'
+import { seedCurrentProductBuild } from './current-product-build'
+import { configureOpenSeatsV1, openEnvelopeV1, OPEN_HUMAN_VIEWER } from './open-ttrpg-session'
+import { completeTtrpgOpenSessionZeroV1, startTtrpgOpenRunV1, recordTtrpgOpenNarrativeMemoryV1 } from '../../src/lib/ttrpg/runtime-commands'
+import { hashTtrpgFrozenPredicateIndexV1 } from '../../src/lib/ttrpg/content-version'
+import { readProductRuntimeState } from '../../src/lib/product/runtime-core'
 
 const now = 1_700_000_000_000 // 固定时间戳,保证派生/手写两版导出可逐字段比对
 
@@ -1516,6 +1522,30 @@ export async function seedFullProject() {
   await db.extensionRecords.add({ ...extensionOwner,profileId:extensionProfile,pluginId:pluginManifest.id,key:'main',schemaId:'note',schemaVersion:1,generation:1,revision:1,payload:{text:'跨备份保留的便笺'},chapterId:chapter,historyEventId:null,updatedAt:now })
   await db.extensionOperations.add({ ...extensionOwner,profileId:extensionProfile,kind:'enable',fromGeneration:1,toGeneration:1,fromDigest:extensionDigest,toDigest:extensionDigest,detail:'fixture',createdAt:now })
 
+
+  // Seed the registered memory table through a genuine confirmation, so the full
+  // workspace safety net also checks its E15 proof instead of importing an orphan row.
+  const memoryPackage = await openRuntimePackageFixture()
+  const memoryCampaign = memoryPackage.ttrpg!.campaign
+  if (memoryCampaign.version !== 2) throw new Error('Full memory fixture requires the open contract')
+  memoryPackage.sourceWorld.contentHash = worldReleaseRecord.contentHash
+  memoryCampaign.sourceWorld.contentHash = worldReleaseRecord.contentHash
+  memoryCampaign.sourceWorld.bundleHash = worldReleaseRecord.contentHash
+  memoryCampaign.frozenWorldPredicateIndex.worldReleaseHash = worldReleaseRecord.contentHash
+  memoryCampaign.frozenWorldPredicateIndex.indexHash = await hashTtrpgFrozenPredicateIndexV1(memoryCampaign.frozenWorldPredicateIndex)
+  const memoryRuntime = await seedCurrentProductBuild({ scope: { projectId, worldId, workId },
+    worldRelease: { ...worldReleaseRecord, id: worldRelease }, runtimePackage: memoryPackage,
+    title: '全表往返的真实记忆', seed: 'full-project-memory' }, { ttrpgProtocol: 2 })
+  const memorySessionId = memoryRuntime.session.id!
+  await configureOpenSeatsV1(memorySessionId)
+  const memoryInitial = await readProductRuntimeState(memorySessionId)
+  await completeTtrpgOpenSessionZeroV1({ ...await openEnvelopeV1(memorySessionId, 'full.memory.zero'), viewerKey: OPEN_HUMAN_VIEWER,
+    acceptedItemKeys: memoryInitial.ttrpg!.product.sessionZero.requiredItemKeys, selectedCharacterKeys: ['hero', 'companion.1', 'companion.2'] })
+  await startTtrpgOpenRunV1({ ...await openEnvelopeV1(memorySessionId, 'full.memory.start'), viewerKey: OPEN_HUMAN_VIEWER })
+  const memoryEnvelope = await openEnvelopeV1(memorySessionId, 'full.memory.confirm')
+  await recordTtrpgOpenNarrativeMemoryV1({ ...memoryEnvelope, viewerKey: OPEN_HUMAN_VIEWER,
+    draft: { revisionKey: 'full.memory.hero', observerKey: 'hero', reliability: 'observed', audience: 'public', knownBy: [],
+      summary: '我已来到河港，准备与伙伴展开调查。', fromEventSequence: 1, toEventSequence: memoryEnvelope.baseSequence } })
 
   return {
     projectId, wgA, wgB, char1, char2, vol, chapNode, chapter, temporalFact, ref1,

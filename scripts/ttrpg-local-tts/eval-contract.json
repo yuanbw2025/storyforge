@@ -1,0 +1,9 @@
+{
+  "schema": "storyforge.ttrpg-local-tts-eval-contract",
+  "version": 2,
+  "entryId": "ttrpg.local-voice.eval",
+  "fixtureSha256": "1cc2cc37430f28005842b1cfe882df8b509b341583a137e5f0c6f2020d39ae4b",
+  "maxChars": 300,
+  "maxAudioSeconds": 60,
+  "timeoutMs": 120000
+}

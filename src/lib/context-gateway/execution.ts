@@ -136,6 +136,10 @@ function fail(code: string, message: string): never {
 
 function frozenScope(input: ExecuteContextGatewayInputV1): FrozenResourceScopeV1 {
   if (input.resourceScope) {
+    if (input.resourceScope.runtimeActorKey !== undefined && (input.resourceScope.productRuntimeSessionId == null
+      || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(input.resourceScope.runtimeActorKey))) {
+      fail('resource-scope', 'runtimeActorKey 必须绑定明确 instance')
+    }
     if (input.resourceScope.projectId !== input.scope.projectId
       || (input.resourceScope.worldId != null && input.resourceScope.worldId !== input.scope.worldId)
       || (input.resourceScope.workId != null && input.resourceScope.workId !== input.scope.workId)
@@ -394,6 +398,7 @@ export async function executeContextGatewayV1(
     scope: frozenScope(input),
     policy: accessPolicy,
     allowedResourceKeys: input.allowedResourceKeys,
+    freezeProviderReads: true,
     excludedRecordResourceKeys: input.excludedRecordResourceKeys,
   })
   const catalog = await collectCatalog(session)
@@ -664,6 +669,7 @@ export async function executeContextGatewayV1(
     normalizationVersion: 'context-gateway-execution-v1',
   })
   const content = packetBlocks.join('\n\n')
+  for (const assertCurrent of session.readSessionGuards ?? []) await assertCurrent()
   const contextPacket = await createContextPacketV1({
     scopeFingerprint: session.scopeFingerprint,
     gatewayVersionHash: contract.gateway.versionHash,

@@ -42,6 +42,9 @@ export interface ProductMediaAsset {
   altText: string
   characterTag: string
   sceneTag: string
+  /** Opt-in exact Run evidence retention. Absent on legacy/manual assets;
+   * pointers confer no generation, read, adoption or playback permission. */
+  exactArtifactRefsJson?: string | null
   createdAt: number
   updatedAt: number
 }
