@@ -53,9 +53,9 @@ StoryForge 是 React + TypeScript + IndexedDB 的本地优先生产项目。用�
 
 ## 任务开始方式
 
-1. 查看 `git status --short --branch`、相关提交和任务描述，保护现有改动。
+1. 查看 `git status --short --branch` 及相关提交，保护现有改动。
 2. 用 `rg` 定位入口、符号、调用方、三注册表行、schema/migration 与测试，建立“入口 → 读取 → 候选/写回 → 生命周期 → 下游 → 测试”的关联闭包。
-3. 按 `docs/CONTEXT-ROUTING.md` 读取命中的现行文档；历史原因从 Git 与 WPS 归档取证，不恢复旧文档权威。
+3. 按 `docs/CONTEXT-ROUTING.md` 读取现行片段；总纲协同见 `docs/COLLAB-WORKFLOW.md` §2.2，本地 API 见 `docs/LOCAL-API-CONFIG.md`，真实配置必须在仓库外。
 4. 新体系或完整功能先核对当前能力基线与路线图；复用已经存在的基础设施，不按旧任务标题重复开发。
 5. 在独立分支工作，使用 `feat/`、`fix/` 或 `refactor/`；不得直接 push `main`。
 
