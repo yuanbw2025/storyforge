@@ -5,3 +5,5 @@
 [`CONTEXT-ROUTING.md`](./CONTEXT-ROUTING.md) 读取任务所需文档。
 
 旧 Blueprint、施工卡、旧路线图和评测流水已从主干文档库移除；历史位置、哈希与恢复规则见文档权威索引。
+
+总纲与公共开发规则的专用分支、治理提交同步方式见 [协作流程 §2.2](./COLLAB-WORKFLOW.md#22-总纲与本地-api-治理分支)。各工作树需要本地 API 时，从 [本地 API 配置规则](./LOCAL-API-CONFIG.md) 查找统一的仓库外入口；真实配置不进入仓库。
