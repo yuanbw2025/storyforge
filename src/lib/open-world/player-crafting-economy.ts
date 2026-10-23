@@ -837,7 +837,24 @@ function successfulReceiptCopy(input: {
     const marker = input.modules.actions.actions.find(action => action.key === request.actionKey)?.successEffectKeys
       .map(effectKey => input.modules.actions.effects.find(effect => effect.key === effectKey))
       .find(effect => effect?.operation === 'perform-crafting')
-    const change = input.receipt.changes.length === 1 ? input.receipt.changes[0] : null
+    const changes = input.receipt.changes
+    const change = changes[0]
+    if (input.modules.actions.version >= 19) {
+      const proofKey = `effect.fulfillment.recipe.${request.targetKey}`
+      const flagKey = `flag.fulfillment.recipe.${request.targetKey}`
+      const proof = input.modules.actions.effects.find(effect => effect.key === proofKey)
+      const proofChange = changes[1]
+      const before = Object.prototype.hasOwnProperty.call(input.projection.state.world.flags, flagKey)
+        ? input.projection.state.world.flags[flagKey] : null
+      if (changes.length !== 2 || proof?.operation !== 'set-world-flag'
+        || proof.payload.flagKey !== flagKey || proof.payload.value !== true
+        || !proofChange || proofChange.effectKey !== proofKey
+        || proofChange.operation !== 'set-world-flag' || proofChange.domain !== 'world'
+        || proofChange.summary !== `世界标记:${flagKey}`
+        || proofChange.before !== before || proofChange.after !== true) {
+        fail('制作回执证明与提交时授权不一致')
+      }
+    } else if (changes.length !== 1) fail('旧制作回执不能附加新操作证据')
     const expectedBefore = {
       worldMinute: authorization.baseWorldMinute,
       ingredients: Object.fromEntries(authorization.ingredients.map(item => [item.itemKey, item.beforeQuantity])),
@@ -889,7 +906,15 @@ function successfulReceiptCopy(input: {
   const marker = input.modules.actions.actions.find(action => action.key === request.actionKey)?.successEffectKeys
     .map(effectKey => input.modules.actions.effects.find(effect => effect.key === effectKey))
     .find(effect => effect?.operation === 'perform-transaction')
-  const change = input.receipt.changes.length === 1 ? input.receipt.changes[0] : null
+  const purchaseProof = input.modules.actions.version >= 20 && request.kind === 'buy'
+  const change = input.receipt.changes.length === (purchaseProof ? 2 : 1) ? input.receipt.changes[0] : null
+  if (purchaseProof) {
+    const proof = input.receipt.changes[1]
+    const flagKey = `flag.fulfillment.purchase.${vendor.key}.${item.key}`
+    if (proof?.effectKey !== `effect.fulfillment.purchase.${vendor.key}` || proof.operation !== 'prove-purchase' || proof.domain !== 'world'
+      || proof.summary !== `购买证据:${vendor.key}:${item.key}` || proof.after !== true
+      || proof.before !== (input.projection.state.world.flags[flagKey] ?? null)) fail('购买证据回执不匹配本次交易')
+  }
   if (marker?.operation !== 'perform-transaction' || !change
     || change.effectKey !== marker.key || change.operation !== 'perform-transaction'
     || change.summary !== `${request.kind === 'buy' ? '购买' : '出售'}:${request.itemKey}×${request.quantity}`

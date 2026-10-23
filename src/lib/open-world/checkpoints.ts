@@ -6,7 +6,7 @@ import {
   hashProductRuntimeStateV1,
   normalizeProductRuntimeCheckpointPurposeV1,
   parseProductRuntimeState,
-  replayProductRuntimeEvents,
+  replayProductRuntimeEventsVerifiedAsyncV1,
   updateProductRuntimeSessionHeadV1,
 } from '../product/runtime-core'
 import type {
@@ -28,12 +28,32 @@ async function eventsFor(session: ProductRuntimeSession, throughSequence = Numbe
   return events.filter(event => event.sequence <= throughSequence)
 }
 function isVNext(state: ProductRuntimeState) { return state.textOpenWorld != null }
-async function canonical(session: ProductRuntimeSession, throughSequence = Number.MAX_SAFE_INTEGER) {
-  const events = await eventsFor(session, throughSequence)
+async function canonical(session: ProductRuntimeSession, throughSequence = Number.MAX_SAFE_INTEGER, eventSnapshot?: ProductRuntimeEvent[]) {
+  const events = eventSnapshot ?? await eventsFor(session, throughSequence)
   const protocol = await replayTextOpenWorldEventProtocolV1(events, session.seed)
-  const state = replayProductRuntimeEvents(parseProductRuntimeState(session.initialStateJson), events, throughSequence)
+  const state = await replayProductRuntimeEventsVerifiedAsyncV1(parseProductRuntimeState(session.initialStateJson), events, throughSequence)
   if (!isVNext(state)) fail('Session不是文字开放世界vNext')
   return { events, protocol, state, stateJson: JSON.stringify(state), stateHash: await hashProductRuntimeStateV1(state) }
+}
+
+// Only remember successful read-only inspections, keyed by freshly read raw
+// evidence. No cached Session head or checkpoint body is accepted as authority.
+// Retain hashes only: large runtime packages and historical states are not kept.
+const verifiedCheckpointEvidenceV1 = new Set<string>()
+async function checkpointEvidenceKey(snapshot: unknown): Promise<string | null> {
+  try {
+    // Reject exotic/non-JSON values before memoization, but hash the original
+    // bytes rather than the canonical serializer's NFC-normalized strings.
+    canonicalProductProductionJsonV2(snapshot)
+    return await sha256Text(JSON.stringify(snapshot))
+  } catch { return null }
+}
+function rememberCheckpointEvidence(key: string) {
+  verifiedCheckpointEvidenceV1.delete(key)
+  verifiedCheckpointEvidenceV1.add(key)
+  if (verifiedCheckpointEvidenceV1.size > 64) {
+    verifiedCheckpointEvidenceV1.delete(verifiedCheckpointEvidenceV1.values().next().value!)
+  }
 }
 
 /** Reports why a derived runtime head was ignored instead of silently collapsing every failure into a cache miss. */
@@ -106,7 +126,29 @@ export async function inspectTextOpenWorldCheckpointV1(checkpointId: number): Pr
   }
   if (await sha256Text(checkpoint.stateJson) !== checkpoint.stateHash) return { ...base, code: 'checkpoint-hash-mismatch', detail: '检查点正文与Hash不一致。', valid: false }
   let verified: Awaited<ReturnType<typeof canonical>>
-  try { verified = await canonical(session, checkpoint.throughSequence) } catch (cause) { return { ...base, code: 'event-protocol-invalid', detail: cause instanceof Error ? cause.message : String(cause), valid: false } }
+  let evidenceKey: string | null
+  const valid = { ...base, code: 'valid' as const, detail: '检查点Hash、序号、协议和重放状态一致。', valid: true }
+  try {
+    // Read and scope-check the live event rows even on a hit. Include every
+    // replay input and the entire checkpoint; append-only future events need
+    // not invalidate a previously verified historical prefix.
+    const events = await eventsFor(session, checkpoint.throughSequence)
+    evidenceKey = await checkpointEvidenceKey({
+      checkpoint,
+      session: {
+        id: session.id, projectId: session.projectId, worldId: session.worldId, workId: session.workId,
+        worldGroupId: session.worldGroupId ?? null, kind: session.kind,
+        productBuildId: session.productBuildId, productReleaseId: session.productReleaseId,
+        runtimeSourceHash: session.runtimeSourceHash, seed: session.seed, initialStateJson: session.initialStateJson,
+      },
+      events,
+    })
+    if (evidenceKey !== null && verifiedCheckpointEvidenceV1.has(evidenceKey)) {
+      rememberCheckpointEvidence(evidenceKey)
+      return valid
+    }
+    verified = await canonical(session, checkpoint.throughSequence, events)
+  } catch (cause) { return { ...base, code: 'event-protocol-invalid', detail: cause instanceof Error ? cause.message : String(cause), valid: false } }
   const latestTextOpenWorldSequence = [...verified.events].reverse()
     .find(event => event.type.startsWith('text-open-world.'))?.sequence ?? 0
   if (saved.lastSequence !== checkpoint.throughSequence
@@ -115,7 +157,8 @@ export async function inspectTextOpenWorldCheckpointV1(checkpointId: number): Pr
   }
   if (verified.protocol.pendingCommandId) return { ...base, code: 'event-protocol-invalid', detail: `检查点停在未终结命令:${verified.protocol.pendingCommandId}`, valid: false }
   if (canonicalProductProductionJsonV2(saved) !== canonicalProductProductionJsonV2(verified.state)) return { ...base, code: 'replay-mismatch', detail: '检查点状态与事件重放结果不一致。', valid: false }
-  return { ...base, code: 'valid', detail: '检查点Hash、序号、协议和重放状态一致。', valid: true }
+  if (evidenceKey !== null) rememberCheckpointEvidence(evidenceKey)
+  return valid
 }
 
 export async function createTextOpenWorldCheckpointV1(input: {

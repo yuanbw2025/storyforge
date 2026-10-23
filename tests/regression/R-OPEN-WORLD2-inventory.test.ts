@@ -88,6 +88,31 @@ describe('Text Open World vNext · governed item definitions and inventory ledge
     })).rejects.toThrow('重复授予唯一物品')
   })
 
+  it('明确的证物保有策略首次补发，已持有时保留原实例和来源，旧授予仍拒绝重复', async () => {
+    const fixture = fixtureWithEffects([
+      { key: 'effect.ensure-seal', operation: 'grant-item', payload: { itemKey: 'item.canal-seal', quantity: 1, ifAbsent: true } },
+      { key: 'effect.ensure-salt', operation: 'grant-item', payload: { itemKey: 'item.salt-crystal', quantity: 1, ifAbsent: true } },
+      { key: 'effect.legacy-seal', operation: 'grant-item', payload: { itemKey: 'item.canal-seal', quantity: 1 } },
+    ])
+    const catalog = createTextOpenWorldEffectCatalogV1(fixture)
+    const state = createInitialTextOpenWorldSessionProjectionV1(fixture).state
+    const firstPlan = await catalog.plan({ effectKeys: ['effect.ensure-seal', 'effect.ensure-salt'], claimKey: 'claim.first-evidence', state })
+    const first = await catalog.apply({ plan: firstPlan, state })
+    const nextPlan = await catalog.plan({ effectKeys: ['effect.ensure-seal', 'effect.ensure-salt'], claimKey: 'claim.next-stage', state: first.state })
+    const next = await catalog.apply({ plan: nextPlan, state: first.state })
+    expect(next.state.inventory).toEqual(first.state.inventory)
+    expect(next.state.appliedClaimKeys).toContain('claim.next-stage')
+    expect(nextPlan.previewChanges.every(change => JSON.stringify(change.before) === JSON.stringify(change.after))).toBe(true)
+    await expect(catalog.plan({ effectKeys: ['effect.legacy-seal'], claimKey: 'claim.old-grant', state: next.state }))
+      .rejects.toThrow('重复授予唯一物品')
+    const invalid = structuredClone(fixture)
+    const invalidEffect = (invalid.modules.actions.payload as { effects: TextOpenWorldEffectDefinitionV1[] }).effects
+      .find(effect => effect.key === 'effect.ensure-seal')!
+    if (invalidEffect.operation !== 'grant-item') throw new Error('wrong fixture')
+    invalidEffect.payload.quantity = 2
+    expect(() => createTextOpenWorldEffectCatalogV1(invalid)).toThrow()
+  })
+
   it('堆叠上限、关键物品保护和账本分区均为fail-closed', async () => {
     const fixture = fixtureWithEffects([
       { key: 'effect.grant-salt-overflow', operation: 'grant-item', payload: { itemKey: 'item.salt-crystal', quantity: 1 } },

@@ -30,6 +30,8 @@ export interface TextOpenWorldCreatorWorkflowProps {
   initialView?: 'brief' | 'readiness'
   initialResumeTarget?: TextOpenWorldCreatorBriefResumeTargetV1 | null
   onOpenSettings?: (target: TextOpenWorldCreatorBriefResumeTargetV1) => void
+  onPreviewStarted?: (scope: WorkspaceScope, sessionId: number) => void
+  onPublished?: (scope: WorkspaceScope) => void
 }
 
 type WorkflowViewV1 = 'recovering' | 'source' | 'brief' | 'readiness' | 'plan' | 'production'
@@ -120,7 +122,7 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
       if (recovered && matchesExplicitHandoff(recovered, explicitHandoff, worldScope)) {
         setSession(recovered)
         setSelection(recovered.selection)
-        setView(recovered.production.currentBuildNumber != null
+        setView(recovered.production.currentBuildNumber != null && recovered.production.status !== 'brief-ready'
           ? 'production'
           : props.initialView === 'readiness' && recovered.confirmedBrief ? 'readiness' : 'brief')
         return
@@ -212,6 +214,22 @@ export function TextOpenWorldCreatorWorkflow(props: TextOpenWorldCreatorWorkflow
       initialProduct="text-open-world"
       initialProductionId={session.production.id}
       productionOnly
+      onPreviewStarted={(_, sessionId) => props.onPreviewStarted?.(session.scope, sessionId)}
+      onPublished={() => props.onPublished?.(session.scope)}
+      onReviseCreatorBrief={async productionId => {
+        const recovered = await recoverTextOpenWorldCreatorBriefSessionByIdentityV1([session.scope], {
+          conversationId: session.conversation.id,
+          productInstanceKey: session.productInstanceKey,
+          sourceBindingHash: session.sourceBindingHash,
+          sourceBinding: session.sourceBinding,
+        })
+        if (!recovered || recovered.production.id !== productionId || recovered.production.status !== 'stopped') {
+          throw new Error('当前制作状态已变化，请刷新后重试。')
+        }
+        setSession(recovered)
+        setReadinessResult(null)
+        setView('brief')
+      }}
     />
   }
 

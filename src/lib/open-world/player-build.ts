@@ -557,6 +557,7 @@ function systemPrompt(context: TextOpenWorldPlayerBuildInputContextV1): string {
     '身份必须服从protagonistAsset，不得更名、改变核心目标或增加与上游冲突的秘密。来源没有给出的代词、外观或秘密可以输出空字符串。',
     `主角=${context.protagonistAsset.displayName}；GameplayRulesetHash=${context.gameplayRuleset.gameplayRulesetHash}。`,
     '只输出一个JSON对象，字段必须精确为：',
+    '返回前清点全部11个根字段；basicAttack、signatureSkill、starterWeapon、recoveryConsumable四项必须分别完整输出，不能只给基础攻击或省略结构末尾。',
     '{"schema":"storyforge.text-open-world-player-build-draft","version":1,"identity":{"pronouns":"","appearance":"...","background":"...","personality":"...","publicKnowledge":"...","privateKnowledge":"","shortGoal":"...","longGoal":"...","portrayal":"..."},"playstyleTitle":"...","playstyleSummary":"...","primaryAttribute":"power","secondaryAttribute":"agility","basicAttack":{"title":"...","description":"..."},"signatureSkill":{"title":"...","description":"...","combatPurpose":"burst-damage"},"starterWeapon":{"title":"...","description":"..."},"recoveryConsumable":{"title":"...","description":"..."}}',
   ].join('\n')
 }
@@ -608,7 +609,7 @@ export function createTextOpenWorldPlayerBuildExecutorV1(options: {
       projectId: execution.scope.projectId,
       requirementKey,
       expectedCapabilityHash: binding.bindingHash,
-      category: 'text-open-world.production.player-build',
+      category: SKILL_ID,
       system: prompt,
       contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(8_000, execution.task.budgetReservation.outputTokens)),

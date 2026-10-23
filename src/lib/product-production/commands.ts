@@ -1,6 +1,13 @@
+import {
+  prepareTextOpenWorldPausedRevisionV1,
+  assertTextOpenWorldPausedRevisionPreparationCurrentV1,
+  textOpenWorldRevisionPendingAtPauseV1,
+  type TextOpenWorldPausedRevisionPreparationV1,
+} from '../open-world/production-content-revision'
 import { canReviseTextContentBuildV1, createTextContentRevisionPlanV1 } from './text-content-revision'
 import Dexie from 'dexie'
 import { db } from '../db/schema'
+import { assertTextOpenWorldCreatorBriefLifecycleV1 } from '../open-world/creator-brief-lifecycle'
 import type {
   ConfirmedProductBriefV1,
   MediaBlobObjectRecordV1,
@@ -45,7 +52,7 @@ import {
   verifyTextAdventureHumanVisualReviewReceiptV1,
 } from './quality-receipts'
 import { isTextAdventureReadableGlyphViolationV1 } from './text-adventure-quality'
-import { inspectProductProductionBuildRecoveryPolicyV1 } from './recovery-policy'
+import { inspectProductProductionBuildRecoveryPolicyV1, isRepairRetryableFailedProductBuildV1 } from './recovery-policy'
 import { validateProductProductionRecoveryDirectiveV1 } from './context'
 import { readAgentRunV1 } from '../agent/run/event-store'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
@@ -84,6 +91,10 @@ import {
   prepareTextOpenWorldCreatorMediaV1,
   type TextOpenWorldCreatorMediaPreparationV1,
 } from '../open-world/creator-media'
+import { prepareTextOpenWorldBudgetRecoveryV1, createTextOpenWorldBudgetRecoveryAuthorizationV1,
+  assertTextOpenWorldBudgetRecoveryPreparationCurrentV1,
+  type TextOpenWorldBudgetRecoveryPreparationV1, type TextOpenWorldBudgetRecoveryAuthorizationV1,
+} from '../open-world/creator-budget-recovery'
 import type { TextOpenWorldCreatorMediaAuthorizationV1 } from '../open-world/creator-media-contract'
 
 export type ProductProductionErrorCodeV1 =
@@ -309,12 +320,25 @@ function compactRecoveryFailure(value: Record<string, unknown>): Record<string, 
   const failures = new Map<string, Record<string, unknown>>()
   let direct: Record<string, unknown> | null = null
   let repairCause: Record<string, unknown> | null = null
+  const compactProvenance = (value: unknown) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+    const row = value as Record<string, unknown>
+    // These bounded identity fields are required again after the command's
+    // epoch transition. Dropping them turns a verified failure into a legacy
+    // retry and loses the exact rejected draft from the repair packet.
+    return {
+      runId: row.runId, rootRunId: row.rootRunId, controlEpoch: row.controlEpoch,
+      planHash: row.planHash, attempt: row.attempt,
+    }
+  }
   const compactNode = (node: Record<string, unknown>): Record<string, unknown> => ({
     ...(typeof node.taskKey === 'string' ? { taskKey: node.taskKey.slice(0, 200) } : {}),
     ...(typeof node.code === 'string' ? { code: node.code.slice(0, 120) } : {}),
     ...(typeof node.attempt === 'number' && Number.isSafeInteger(node.attempt)
       ? { attempt: node.attempt } : {}),
     ...(typeof node.detail === 'string' ? { detail: node.detail.slice(0, 2_000) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(node, 'failureProvenance')
+      ? { failureProvenance: compactProvenance(node.failureProvenance) } : {}),
   })
   for (let inspected = 0; inspected < 256 && pending.length > 0; inspected += 1) {
     const current = pending.shift()!
@@ -355,17 +379,7 @@ function compactRecoveryFailure(value: Record<string, unknown>): Record<string, 
   return result
 }
 
-/** Compatibility path for Builds made before deterministic assembly failures became recoverable blockers. */
-export function isRepairRetryableFailedProductBuildV1(
-  build: Pick<ProductBuildRecordV1, 'status' | 'failureJson'>,
-): boolean {
-  if (build.status !== 'failed') return false
-  try {
-    const failure = JSON.parse(build.failureJson) as { taskKey?: unknown; code?: unknown }
-    return (failure.taskKey === 'integration.package' || failure.taskKey === 'qa.release')
-      && (failure.code === 'task-executor-failed' || failure.code === 'task-timeout')
-  } catch { return false }
-}
+export { isRepairRetryableFailedProductBuildV1 } from './recovery-policy'
 
 /** A child Build may reset the same per-Build limits only after proven exhaustion. */
 export function isTextAdventureBuildLifetimeBudgetExhaustedV1(
@@ -1002,6 +1016,7 @@ async function createRevisionBuildWithCarriesV1(input: {
 async function applyCommand(input: {
   preparedTextRevision?: Awaited<ReturnType<typeof prepareTextContentRevisionV1>> | null
   preparedPausedBuild?: PreparedPausedBuildV1 | null
+  preparedOpenWorldRevision?: { prepared: TextOpenWorldPausedRevisionPreparationV1 | null; error: string | null } | null
   scope: WorkspaceScope
   production: ProductProductionRecordV1 & { id: number }
   command: ProductProductionCommandV1
@@ -1024,6 +1039,8 @@ async function applyCommand(input: {
   } | null
   preparedCreatorStart?: TextOpenWorldCreatorStartPreparationV1 | null
   preparedCreatorRepair?: TextOpenWorldCreatorRepairPreparationV1 | null
+  preparedCreatorBudgetRecovery?: TextOpenWorldBudgetRecoveryPreparationV1 | null
+  preparedCreatorBudgetRecoveryAuthorization?: TextOpenWorldBudgetRecoveryAuthorizationV1 | null
   preparedCreatorRepairAuthorization?: TextOpenWorldCreatorRepairAuthorizationV1 | null
   preparedCreatorMedia?: TextOpenWorldCreatorMediaPreparationV1 | null
   preparedCreatorMediaAuthorization?: TextOpenWorldCreatorMediaAuthorizationV1 | null
@@ -1109,6 +1126,7 @@ async function applyCommand(input: {
   }
 
   if (command.type === 'save-text-open-world-creator-brief') {
+    await assertTextOpenWorldCreatorBriefLifecycleV1({ scope, production, phase: 'revise' })
     const brief = input.preparedCreatorBrief
     const source = input.preparedCreatorSource
     if (production.productType !== 'text-open-world' || !brief || !source) {
@@ -1251,10 +1269,12 @@ async function applyCommand(input: {
   }
 
   if (command.type === 'authorize-text-open-world-creator-start') {
-    if (production.currentBriefRevision !== command.briefRevision || production.status !== 'brief-ready'
-      || production.currentBuildNumber != null) {
+    if (production.currentBriefRevision !== command.briefRevision || production.status !== 'brief-ready') {
       reject('brief-not-authorized', '当前文字开放世界 Production 没有待授权 Creator Brief')
     }
+    await assertTextOpenWorldCreatorBriefLifecycleV1({ scope, production, phase: 'start' })
+    const restartParent = production.currentBuildNumber == null ? null : await db.productBuilds
+      .where('[productionId+buildNumber]').equals([production.id, production.currentBuildNumber]).first()
     const briefRow = await db.productProductionBriefs
       .where('[productionId+revision]').equals([production.id, command.briefRevision]).first()
     const prepared = input.preparedCreatorStart
@@ -1320,6 +1340,10 @@ async function applyCommand(input: {
         sourcePlanHash: prepared.sourcePlan.planHash,
         planHash: prepared.start.productionPlanHash,
         startHash: prepared.start.startHash,
+        ...(restartParent ? {
+          parentBuildNumber: restartParent.buildNumber,
+          parentBriefHash: restartParent.briefHash,
+        } : {}),
       },
     }
   }
@@ -1355,6 +1379,9 @@ async function applyCommand(input: {
     const controlEpoch = production.controlEpoch + 1
     const stateRevision = production.stateRevision + 1
     const previousFailure = compactRecoveryFailure(readResult(build.failureJson))
+    const pendingOpenWorldRevision = production.productType === 'text-open-world'
+      ? await textOpenWorldRevisionPendingAtPauseV1(build)
+      : undefined
     await db.productBuilds.update(build.id, {
       status: 'paused',
       resumeState: build.status,
@@ -1366,12 +1393,15 @@ async function applyCommand(input: {
         detail: '暂停时仍有供应商请求未返回；恢复前必须逐项封账。',
         reason: command.reason,
         pausedProviderReservations: providerReservations,
+        ...(Object.keys(previousFailure).length > 0 ? { previousFailure } : {}),
+        ...(pendingOpenWorldRevision ? { pendingOpenWorldRevision } : {}),
         automaticallySettledReservations,
       } : {
         code: 'user-paused',
         reason: command.reason,
         automaticallySettledReservations,
         pausedFromControlEpoch: build.controlEpoch,
+        ...(pendingOpenWorldRevision ? { pendingOpenWorldRevision } : {}),
         ...(Object.keys(previousFailure).length > 0 ? { previousFailure } : {}),
       }),
       updatedAt: now,
@@ -1386,6 +1416,43 @@ async function applyCommand(input: {
       pausedProviderReservations: providerReservations,
       automaticallySettledReservations,
     } }
+  }
+
+  if (command.type === 'authorize-text-open-world-creator-budget-recovery') {
+    const prepared = input.preparedCreatorBudgetRecovery
+    const authorization = input.preparedCreatorBudgetRecoveryAuthorization
+    if (!prepared || !authorization || production.productType !== 'text-open-world'
+      || production.status !== 'producing' || production.currentBuildNumber !== command.baseBuildNumber
+      || production.currentBriefRevision !== prepared.source.build.briefRevision
+      || production.stateRevision !== command.expectedStateRevision
+      || production.controlEpoch !== prepared.targetPlan.controlEpoch
+      || prepared.source.production.id !== production.id
+      || authorization.prefixHash !== command.expectedPrefixHash
+      || authorization.basePlanHash !== command.expectedBasePlanHash
+      || authorization.targetPlanHash !== command.expectedTargetPlanHash) {
+      reject('repair-impact-stale', '预算续建已过期')
+    }
+    const buildNumber = await nextBuildNumber(production.id)
+    if (buildNumber !== prepared.targetPlan.buildNumber) reject('production-state-conflict', '续建序号已变化')
+    await db.productBuilds.add(stampNewRecord(scope, 'productBuilds', {
+      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+      productionId: production.id, buildNumber,
+      briefRevision: prepared.source.build.briefRevision, briefHash: prepared.source.build.briefHash,
+      parentBuildNumber: prepared.source.build.buildNumber,
+      sourceProductReleaseId: prepared.source.build.sourceProductReleaseId,
+      status: 'authorized' as const, resumeState: null, stateRevision: 0,
+      controlEpoch: prepared.targetPlan.controlEpoch, planRevision: 1,
+      planJson: canonicalProductProductionJsonV2(prepared.targetPlan), planHash: prepared.targetPlanHash,
+      budgetLedgerJson: '{}', manifestJson: '{}', manifestHash: input.emptyHash, packageHash: '',
+      previewManifestJson: '{}', previewHash: '', qualityReportJson: '{}', qualityReportHash: input.emptyHash,
+      compatibilityJson: '{}', rootTerminalReceiptHash: null, adoptionIntentHash: null,
+      releasedProductReleaseId: null, failureJson: '{}', authorizedAt: authorization.authorizedAt,
+      startedAt: null, completedAt: null, createdAt: now, updatedAt: now,
+    } satisfies ProductBuildRecordV1, { owner: 'work' }))
+    production = { ...production, currentBuildNumber: buildNumber,
+      stateRevision: production.stateRevision + 1, updatedAt: now }
+    await db.productProductions.put(production)
+    return { production, result: { ...authorization } }
   }
 
   if (command.type === 'authorize-text-open-world-creator-repair') {
@@ -1685,6 +1752,24 @@ async function applyCommand(input: {
       reject('invalid-state-transition', 'Build 没有可恢复状态')
     }
     const contentRevision = command.contentRevision
+    const openWorldContentRevision = command.openWorldContentRevision
+    if (production.productType === 'text-open-world' && readResult(build.failureJson).pendingOpenWorldRevision && !openWorldContentRevision) {
+      reject('invalid-state-transition', '尚未签收的内容修订必须随恢复命令继续，不能静默丢弃')
+    }
+    if (openWorldContentRevision) {
+      try {
+        const revisionPreparation = input.preparedOpenWorldRevision
+        if (!revisionPreparation?.prepared || revisionPreparation.error) {
+          reject('source-stale', revisionPreparation?.error ?? '内容修订缺少事务外校验结果')
+        }
+        await assertTextOpenWorldPausedRevisionPreparationCurrentV1({
+          productionId: production.id, buildId: build.id!, revision: openWorldContentRevision,
+          prepared: revisionPreparation.prepared,
+        })
+      } catch (cause) {
+        reject('source-stale', cause instanceof Error ? cause.message : String(cause))
+      }
+    }
     if (contentRevision) {
       if (production.productType !== 'text-adventure' || (build.resumeState !== 'building'
           && !(build.resumeState === 'recovery-required' && (contentRevision.artifactKey === 'content.product-module'
@@ -1854,7 +1939,7 @@ async function applyCommand(input: {
     } else if (command.pausedReservationDispositions) {
       reject('invalid-state-transition', '普通暂停没有待处置 provider reservation')
     }
-    const restored = contentRevision ? 'building' : build.resumeState
+    const restored = contentRevision || openWorldContentRevision ? 'building' : build.resumeState
     const controlEpoch = production.controlEpoch + 1
     const stateRevision = production.stateRevision + 1
     const pausedFailure = readResult(build.failureJson)
@@ -1865,7 +1950,14 @@ async function applyCommand(input: {
       controlEpoch,
       stateRevision: build.stateRevision + 1,
       budgetLedgerJson,
-      failureJson: contentRevision ? safeJson({
+      failureJson: openWorldContentRevision ? safeJson({
+        code: 'author-revised-content', commandId: command.commandId, revisionCommand: command,
+        blockerKey: openWorldContentRevision.taskKey,
+        revisionSource: { planHash: openWorldContentRevision.expectedPlanHash,
+          controlEpoch: openWorldContentRevision.expectedControlEpoch, artifacts: openWorldContentRevision.expectedArtifacts },
+        resolution: { action: 'author-edit', note: openWorldContentRevision.note, authorDraftJson: openWorldContentRevision.authorDraftJson },
+        resumedFromControlEpoch: build.controlEpoch, pauseReceipt: pausedFailure, pausedReservationAccountings, resolvedAt: now,
+      }) : contentRevision ? safeJson({
         code: 'author-revised-content', commandId: command.commandId, revisionCommand: command,
         blockerKey: contentRevision.artifactKey,
         revisionSource: {
@@ -1876,6 +1968,13 @@ async function applyCommand(input: {
         resolution: { action: 'author-edit', note: contentRevision.note, authorDraftJson: contentRevision.authorDraftJson },
         resumedFromControlEpoch: build.controlEpoch,
         pauseReceipt: pausedFailure, pausedReservationAccountings, resolvedAt: now,
+      }) : restored === 'recovery-required' && typeof previousFailure.taskKey === 'string' ? safeJson({
+        // Resuming a failed Build restores its blocker; it does not authorize
+        // another provider call. Keep the original Run/epoch/attempt unchanged.
+        // Recovery validates every intervening pause/resume receipt separately.
+        ...previousFailure,
+        resumedFromControlEpoch: build.controlEpoch,
+        pausedReservationAccountings,
       }) : pausedReservationAccountings.length ? safeJson({
         code: 'user-pause-resolved',
         previousFailureCode: 'pause-provider-result-unknown',
@@ -1904,7 +2003,7 @@ async function applyCommand(input: {
       controlEpoch,
       restored,
       pausedReservationAccountings,
-      ...(contentRevision ? { revisionAuthorization: command } : {}),
+      ...(contentRevision || openWorldContentRevision ? { revisionAuthorization: command } : {}),
     } }
   }
 
@@ -2009,7 +2108,8 @@ async function applyCommand(input: {
   if (command.type === 'resolve-blocker') {
     const build = await currentBuild(production)
     const previousFailure = readResult(build.failureJson)
-    const compactPreviousFailure = compactRecoveryFailure(previousFailure)
+    let compactPreviousFailure = compactRecoveryFailure(previousFailure)
+    let recoveredFailureProvenance = false
     const repairingLegacyFailure = isRepairRetryableFailedProductBuildV1(build)
     if (!['recovery-required', 'paused'].includes(build.status) && !repairingLegacyFailure) {
       reject('invalid-state-transition', '当前 Build 没有待处理 blocker')
@@ -2057,15 +2157,21 @@ async function applyCommand(input: {
     if (['retry', 'author-edit', 'change-capability'].includes(command.resolution.action)
       && !sourceReviewRetry) {
       try {
-        await validateProductProductionRecoveryDirectiveV1({
+        const recovery = await validateProductProductionRecoveryDirectiveV1({
           scope,
           productProductionId: production.id,
           productBuildId: build.id!,
           productProductionTaskKey: command.blockerKey,
           expectedState: 'blocked',
           requestedAction: command.resolution.action as 'retry' | 'author-edit' | 'change-capability',
-          allowLegacyRetry: true,
+          allowLegacyRetry: command.blockerKey !== 'v3.runtime-package',
         })
+        if (recovery.recoveredFailureProvenance && recovery.previousFailure) {
+          // Preserve the verified source identity across the new epoch. The
+          // execution reader must validate it again, after task slots change.
+          compactPreviousFailure = compactRecoveryFailure(recovery.previousFailure)
+          recoveredFailureProvenance = true
+        }
       } catch {
         reject('invalid-state-transition', '当前 blocker 缺少与失败 Run/epoch/attempt 一致的恢复证据')
       }
@@ -2188,6 +2294,7 @@ async function applyCommand(input: {
     return { production, result: {
       buildNumber: build.buildNumber, blockerKey: command.blockerKey,
       action: command.resolution.action, controlEpoch, unknownResultAccounting,
+      ...(recoveredFailureProvenance ? { recoveryProofSource: 'verified-orphan-run-ledger' } : {}),
     } }
   }
 
@@ -2819,6 +2926,7 @@ async function applyCommand(input: {
 async function executeTransaction(input: {
   preparedTextRevision?: Awaited<ReturnType<typeof prepareTextContentRevisionV1>> | null
   preparedPausedBuild?: PreparedPausedBuildV1 | null
+  preparedOpenWorldRevision?: { prepared: TextOpenWorldPausedRevisionPreparationV1 | null; error: string | null } | null
   scope: WorkspaceScope
   productionId?: number
   command: ProductProductionCommandV1
@@ -2842,6 +2950,8 @@ async function executeTransaction(input: {
   } | null
   preparedCreatorStart?: TextOpenWorldCreatorStartPreparationV1 | null
   preparedCreatorRepair?: TextOpenWorldCreatorRepairPreparationV1 | null
+  preparedCreatorBudgetRecovery?: TextOpenWorldBudgetRecoveryPreparationV1 | null
+  preparedCreatorBudgetRecoveryAuthorization?: TextOpenWorldBudgetRecoveryAuthorizationV1 | null
   preparedCreatorRepairAuthorization?: TextOpenWorldCreatorRepairAuthorizationV1 | null
   preparedCreatorMedia?: TextOpenWorldCreatorMediaPreparationV1 | null
   preparedCreatorMediaAuthorization?: TextOpenWorldCreatorMediaAuthorizationV1 | null
@@ -2958,6 +3068,16 @@ async function executeTransaction(input: {
           reject('source-stale', 'source-stale：Creator 来源、模型或冻结计划在原子授权边界发生变化')
         }
       }
+      if (command.type === 'authorize-text-open-world-creator-budget-recovery') {
+        if (!input.preparedCreatorBudgetRecovery || !input.preparedCreatorBudgetRecoveryAuthorization) {
+          reject('repair-impact-stale', '预算续建缺少已验证前缀和作者授权')
+        }
+        try {
+          await assertTextOpenWorldBudgetRecoveryPreparationCurrentV1(input.preparedCreatorBudgetRecovery)
+        } catch {
+          reject('repair-impact-stale', '预算续建的父 Build、成果、用量或命令链已变化')
+        }
+      }
       if (command.type === 'authorize-text-open-world-creator-repair') {
         if (!input.preparedCreatorRepair || !input.preparedCreatorRepairAuthorization) {
           throw new Error('[product-production] Creator repair 缺少事务外完整影响计划')
@@ -2993,7 +3113,10 @@ async function executeTransaction(input: {
         preparedCreatorEvidence: input.preparedCreatorEvidence,
         preparedCreatorStart: transactionCreatorStart,
         preparedPausedBuild: input.preparedPausedBuild,
+        preparedOpenWorldRevision: input.preparedOpenWorldRevision,
         preparedCreatorRepair: input.preparedCreatorRepair,
+        preparedCreatorBudgetRecovery: input.preparedCreatorBudgetRecovery,
+        preparedCreatorBudgetRecoveryAuthorization: input.preparedCreatorBudgetRecoveryAuthorization,
         preparedCreatorRepairAuthorization: input.preparedCreatorRepairAuthorization,
         preparedCreatorMedia: input.preparedCreatorMedia,
         preparedCreatorMediaAuthorization: input.preparedCreatorMediaAuthorization,
@@ -3124,6 +3247,8 @@ export async function executeProductProductionCommand(input: {
   } | null = null
   let preparedCreatorStart: TextOpenWorldCreatorStartPreparationV1 | null = null
   let preparedCreatorRepair: TextOpenWorldCreatorRepairPreparationV1 | null = null
+  let preparedCreatorBudgetRecovery: TextOpenWorldBudgetRecoveryPreparationV1 | null = null
+  let preparedCreatorBudgetRecoveryAuthorization: TextOpenWorldBudgetRecoveryAuthorizationV1 | null = null
   let preparedCreatorRepairAuthorization: TextOpenWorldCreatorRepairAuthorizationV1 | null = null
   let preparedCreatorMedia: TextOpenWorldCreatorMediaPreparationV1 | null = input.preparedCreatorMedia ?? null
   let preparedCreatorMediaAuthorization: TextOpenWorldCreatorMediaAuthorizationV1 | null = null
@@ -3292,6 +3417,23 @@ export async function executeProductProductionCommand(input: {
         authorStartRevision: command.expectedStateRevision,
       })
     }
+  } else if (command.type === 'authorize-text-open-world-creator-budget-recovery') {
+    if (!Number.isInteger(input.productionId)) throw new Error('Creator budget recovery 缺少 productionId')
+    const production = await productionInScope(scope, input.productionId!)
+    const source = await db.productBuilds.where('[productionId+buildNumber]')
+      .equals([production.id, command.baseBuildNumber]).first()
+    if (!source?.id) throw new Error('Creator budget recovery base Build 不存在')
+    preparedCreatorBudgetRecovery = await prepareTextOpenWorldBudgetRecoveryV1({ scope,
+      productionId: production.id, buildId: source.id })
+    if (preparedCreatorBudgetRecovery.source.build.planHash !== command.expectedBasePlanHash
+      || preparedCreatorBudgetRecovery.prefix.prefixHash !== command.expectedPrefixHash
+      || preparedCreatorBudgetRecovery.targetPlanHash !== command.expectedTargetPlanHash) {
+      throw new Error('Creator budget recovery 预览已变化')
+    }
+    preparedCreatorBudgetRecoveryAuthorization = await createTextOpenWorldBudgetRecoveryAuthorizationV1({
+      prepared: preparedCreatorBudgetRecovery, expectedStateRevision: command.expectedStateRevision,
+      authorizationNonce: command.authorizationNonce, authorizedAt: command.authorizedAt,
+    })
   } else if (command.type === 'authorize-text-open-world-creator-repair') {
     if (!Number.isInteger(input.productionId)) {
       throw new Error('[product-production] Creator repair 缺少 productionId')
@@ -3363,6 +3505,7 @@ export async function executeProductProductionCommand(input: {
     })
   }
   let preparedPausedBuild: PreparedPausedBuildV1 | null = null
+  let preparedOpenWorldRevision: { prepared: TextOpenWorldPausedRevisionPreparationV1 | null; error: string | null } | null = null
   if (command.type === 'resume') {
     const production = await productionInScope(scope, input.productionId!)
     const before = await currentBuild(production)
@@ -3371,6 +3514,15 @@ export async function executeProductProductionCommand(input: {
       runs.push({ id: run.id, lastSequence: run.lastSequence, contractHash: run.contractHash, projectionHash: run.projectionHash })
     })
     preparedPausedBuild = { before, after, runs }
+    if (command.openWorldContentRevision) {
+      try {
+        preparedOpenWorldRevision = { prepared: await prepareTextOpenWorldPausedRevisionV1({
+          scope, production, build: after, revision: command.openWorldContentRevision,
+        }), error: null }
+      } catch (cause) {
+        preparedOpenWorldRevision = { prepared: null, error: cause instanceof Error ? cause.message : String(cause) }
+      }
+    }
   }
   const request = {
     preparedTextRevision,
@@ -3386,7 +3538,10 @@ export async function executeProductProductionCommand(input: {
     preparedCreatorEvidence,
     preparedCreatorStart,
     preparedPausedBuild,
+    preparedOpenWorldRevision,
     preparedCreatorRepair,
+    preparedCreatorBudgetRecovery,
+    preparedCreatorBudgetRecoveryAuthorization,
     preparedCreatorRepairAuthorization,
     preparedCreatorMedia,
     preparedCreatorMediaAuthorization,

@@ -463,9 +463,14 @@ async function structuralEvidence(
   artifacts: readonly TextOpenWorldCreatorAuthorEditableArtifactV1[],
 ): Promise<Pick<TextOpenWorldCreatorAuthorEditableProjectionV1,
   'stableStructureHash' | 'identitySequence' | 'identitySequenceHash' | 'referenceSlots' | 'referenceHash'>> {
-  const identitySequence = collectIdentitySequence(artifacts)
-  const referenceSlots = collectReferenceSlots(artifacts)
-  const stableStructureSlots = collectStableStructureSlots(artifacts)
+  // Match persisted Artifact JSON ordering without changing entity or reference-array order.
+  const canonicalArtifacts = artifacts.map(artifact => ({
+    ...artifact,
+    payload: JSON.parse(canonicalProductProductionJsonV2(artifact.payload)) as unknown,
+  }))
+  const identitySequence = collectIdentitySequence(canonicalArtifacts)
+  const referenceSlots = collectReferenceSlots(canonicalArtifacts)
+  const stableStructureSlots = collectStableStructureSlots(canonicalArtifacts)
   const identitySequenceHash = await hashProductProductionValueV2(identitySequence)
   const referenceHash = await hashProductProductionValueV2(referenceSlots)
   return {

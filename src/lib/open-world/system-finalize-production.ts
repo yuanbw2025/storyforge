@@ -173,7 +173,7 @@ export interface TextOpenWorldSystemFinalizeInputContextV1 {
    * Action v15. Versions 17+ also select Progression v2 and Combat v4;
    * v18 adds the protected-story reveal graph.
    */
-  questLifecycleActionVersion?: 15 | 16 | 17 | 18
+  questLifecycleActionVersion?: 15 | 16 | 17 | 18 | 19 | 20
   /** Missing from historical P10 contexts, whose Knowledge sources stay byte-stable. */
   knowledgeProgressContract?: 'governed-v1'
   quests: Array<Pick<TextOpenWorldQuestDesignDocumentsV1['quests'][number], 'key' | 'type' | 'title' | 'regionKeys' | 'estimatedMinutes' | 'lifecyclePolicy' | 'timePolicy'>>
@@ -502,7 +502,11 @@ async function buildContext(scope: WorkspaceScope, buildId: number): Promise<Tex
     })),
     regions: artifacts.map.regions.map(region => ({ key: region.key, title: region.title, description: region.description })),
     actors: artifacts.npcs.actors.map(actor => ({ key: actor.key, name: actor.name, portrayal: actor.portrayal, regionKey: actor.regionKey })),
-    ...(artifacts.quests.governance.protectedStoryRevealActionsReady === true
+    ...(artifacts.quests.governance.actionPathEvidenceReady === true
+      ? { questLifecycleActionVersion: 20 as const }
+      : artifacts.quests.governance.fixedObjectiveFulfillmentReady === true
+      ? { questLifecycleActionVersion: 19 as const }
+      : artifacts.quests.governance.protectedStoryRevealActionsReady === true
       ? { questLifecycleActionVersion: 18 as const }
       : artifacts.quests.governance.structuredCombatMechanicsReady === true
       ? { questLifecycleActionVersion: 17 as const }
@@ -560,7 +564,8 @@ async function parseContext(value: string): Promise<TextOpenWorldSystemFinalizeI
     && context.questLifecycleActionVersion !== 15
     && context.questLifecycleActionVersion !== 16
     && context.questLifecycleActionVersion !== 17
-    && context.questLifecycleActionVersion !== 18) {
+    && context.questLifecycleActionVersion !== 18
+    && context.questLifecycleActionVersion !== 19 && context.questLifecycleActionVersion !== 20) {
     fail('任务生命周期Action版本无效')
   }
   if (context.knowledgeProgressContract !== undefined
@@ -1065,6 +1070,11 @@ export async function createTextOpenWorldDeterministicPreflightV1(input: {
         ...route.eligibility.requiredRecipeKeys.map(recipeKey => ({
           op: 'inventory-recipe-known' as const, recipeKey, known: true,
         })),
+        ...(quests.fulfillmentSelections?.endings[ending.routes.indexOf(route)]?.requiredInteractionNumbers ?? []).map(number => ({
+          op: 'world-flag' as const,
+          flagKey: `flag.fulfillment.interaction.${quests.catalogBindings.interactions[number - 1]?.interactionKey}`,
+          value: true,
+        })),
       ],
     }
     const expectedRequirementConditionKeys = [
@@ -1102,9 +1112,15 @@ export async function createTextOpenWorldDeterministicPreflightV1(input: {
   const actionModuleVersion = system.runtimeModules.find(module => module.moduleKey === 'actions')?.schemaVersion
     ?? fail('预检缺少Action模块版本')
   const protectedRevealReady = quests.governance.protectedStoryRevealActionsReady === true
-  if ((actionModuleVersion === 18) !== protectedRevealReady) {
+  if ((actionModuleVersion >= 18) !== protectedRevealReady) {
     fail('预检Action v18与受保护故事揭示治理声明不一致')
   }
+  if ((actionModuleVersion >= 19) !== (quests.governance.fixedObjectiveFulfillmentReady === true)
+    || (quests.fulfillmentSelections !== undefined) !== (quests.governance.fixedObjectiveFulfillmentReady === true)) {
+    fail('预检Action v19与固定目标操作证据声明不一致')
+  }
+  if ((actionModuleVersion === 20) !== (quests.governance.actionPathEvidenceReady === true)
+    || (quests.fulfillmentSelections?.version === 2) !== (quests.governance.actionPathEvidenceReady === true)) fail('预检Action v20与路径证据合同不一致')
   const unorderedMainline = quests.quests.filter(quest => quest.type === 'mainline')
   let mainline = [...unorderedMainline].sort((a, b) => a.order - b.order)
   const protectedWaitQuests = quests.quests.filter(quest => (

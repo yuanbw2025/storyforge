@@ -286,6 +286,9 @@ describe('Text Open World G4-03 · 场景与三类输入集成', () => {
     expect(receipt?.getAttribute('role')).toBe('status')
     expect(receipt?.getAttribute('aria-live')).toBe('polite')
     expect(receipt?.getAttribute('aria-atomic')).toBe('true')
+    expect(receipt?.textContent).toContain('任务更新')
+    expect(receipt?.textContent).not.toContain('quest-instance')
+    expect(receipt?.textContent).not.toContain('quest.main.1')
     expect(host.textContent).toContain('盐壳下的水痕')
   }, 20_000)
 

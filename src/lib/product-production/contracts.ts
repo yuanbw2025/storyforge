@@ -2,6 +2,7 @@ import { parseChatAuthoringSettingsV1 } from '../character-interaction/authoring
 import { parseAvgAuthoringSettingsV1 } from '../avg/authoring-contract'
 import type {
   TextAdventureContentRevisionV1,
+  TextOpenWorldContentRevisionV1,
   ProductConsultationBudgetV1,
   ProductProductionBlockerResolutionV1,
   ProductProductionBriefV3,
@@ -489,6 +490,28 @@ export function parseTextAdventureContentRevisionV1(value: unknown): TextAdventu
   }
 }
 
+export function parseTextOpenWorldContentRevisionV1(value: unknown): TextOpenWorldContentRevisionV1 {
+  const revision = record(value, 'openWorldContentRevision')
+  exactKeys(revision, ['taskKey', 'expectedPlanHash', 'expectedControlEpoch', 'expectedArtifacts', 'note', 'authorDraftJson'], 'openWorldContentRevision')
+  const expectedPlanHash = text(revision.expectedPlanHash, 'openWorldContentRevision.expectedPlanHash', 64)
+  if (!isSha256Hash(expectedPlanHash)) fail('openWorldContentRevision.expectedPlanHash 无效')
+  const authorDraftJson = text(revision.authorDraftJson, 'openWorldContentRevision.authorDraftJson', 120_000)
+  try { record(JSON.parse(authorDraftJson), 'openWorldContentRevision.authorDraftJson') } catch { fail('完整修订稿必须是 JSON 对象') }
+  if (!Array.isArray(revision.expectedArtifacts) || !revision.expectedArtifacts.length || revision.expectedArtifacts.length > 64) fail('修订必须绑定 1～64 个原稿输出')
+  const expectedArtifacts = revision.expectedArtifacts.map(value => {
+    const item = record(value, 'openWorldContentRevision.expectedArtifacts')
+    exactKeys(item, ['artifactKey', 'version', 'contentHash'], 'openWorldContentRevision.expectedArtifacts')
+    const contentHash = text(item.contentHash, 'expectedArtifacts.contentHash', 64)
+    if (!isSha256Hash(contentHash)) fail('expectedArtifacts.contentHash 无效')
+    return { artifactKey: stableKey(item.artifactKey, 'expectedArtifacts.artifactKey'),
+      version: positiveId(item.version, 'expectedArtifacts.version'), contentHash }
+  })
+  if (new Set(expectedArtifacts.map(item => item.artifactKey)).size !== expectedArtifacts.length) fail('修订原稿输出重复')
+  return { taskKey: stableKey(revision.taskKey, 'openWorldContentRevision.taskKey'), expectedPlanHash,
+    expectedControlEpoch: finite(revision.expectedControlEpoch, 'openWorldContentRevision.expectedControlEpoch', Number.MAX_SAFE_INTEGER, true),
+    expectedArtifacts, note: text(revision.note, 'openWorldContentRevision.note', 2000), authorDraftJson }
+}
+
 export function parseProductProductionCommandV1(value: unknown): ProductProductionCommandV1 {
   const row = record(value, 'command')
   const type = enumValue(row.type, PRODUCT_PRODUCTION_COMMAND_TYPES, 'command.type')
@@ -604,6 +627,23 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
       authorizedAt: finite(row.authorizedAt, 'authorizedAt', Number.MAX_SAFE_INTEGER, true),
     }
   }
+  if (type === 'authorize-text-open-world-creator-budget-recovery') {
+    const commandId = commandHeader(row, type, [
+      'expectedStateRevision', 'baseBuildNumber', 'expectedBasePlanHash',
+      'expectedPrefixHash', 'expectedTargetPlanHash', 'authorizationNonce', 'authorizedAt',
+    ])
+    for (const key of ['expectedBasePlanHash', 'expectedPrefixHash', 'expectedTargetPlanHash'] as const) {
+      if (!isSha256Hash(row[key])) fail(`Creator budget recovery 的 ${key} 无效`)
+    }
+    return { type, commandId, expectedStateRevision: expectedRevision(row.expectedStateRevision),
+      baseBuildNumber: positiveId(row.baseBuildNumber, 'baseBuildNumber'),
+      expectedBasePlanHash: row.expectedBasePlanHash as string,
+      expectedPrefixHash: row.expectedPrefixHash as string,
+      expectedTargetPlanHash: row.expectedTargetPlanHash as string,
+      authorizationNonce: stableKey(row.authorizationNonce, 'authorizationNonce'),
+      authorizedAt: finite(row.authorizedAt, 'authorizedAt', Number.MAX_SAFE_INTEGER, true),
+    }
+  }
   if (type === 'authorize-text-open-world-creator-media') {
     const commandId = commandHeader(row, type, [
       'expectedStateRevision', 'baseBuildNumber', 'expectedBasePlanHash',
@@ -647,13 +687,17 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
   if (type === 'pause') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'reason']), expectedStateRevision: expectedRevision(row.expectedStateRevision), reason: text(row.reason, 'reason', 4000) }
   if (type === 'resume') {
     const hasContentRevision = Object.prototype.hasOwnProperty.call(row, 'contentRevision')
+    const hasOpenWorldRevision = Object.prototype.hasOwnProperty.call(row, 'openWorldContentRevision')
+    if (hasContentRevision && hasOpenWorldRevision) fail('一次恢复不能混用两个产品的修订')
     const hasPausedReservations = Object.prototype.hasOwnProperty.call(row, 'pausedReservationDispositions')
     const commandId = commandHeader(row, type, [
       'expectedStateRevision',
       ...(hasPausedReservations ? ['pausedReservationDispositions'] : []),
       ...(hasContentRevision ? ['contentRevision'] : []),
+      ...(hasOpenWorldRevision ? ['openWorldContentRevision'] : []),
     ])
     const contentRevision = hasContentRevision ? parseTextAdventureContentRevisionV1(row.contentRevision) : undefined
+    const openWorldContentRevision = hasOpenWorldRevision ? parseTextOpenWorldContentRevisionV1(row.openWorldContentRevision) : undefined
     const pausedReservationDispositions = hasPausedReservations
       ? (() => {
           if (!Array.isArray(row.pausedReservationDispositions)
@@ -694,6 +738,7 @@ export function parseProductProductionCommandV1(value: unknown): ProductProducti
       expectedStateRevision: expectedRevision(row.expectedStateRevision),
       ...(pausedReservationDispositions ? { pausedReservationDispositions } : {}),
       ...(contentRevision ? { contentRevision } : {}),
+      ...(openWorldContentRevision ? { openWorldContentRevision } : {}),
     }
   }
   if (type === 'stop') return { type, commandId: commandHeader(row, type, ['expectedStateRevision', 'retention']), expectedStateRevision: expectedRevision(row.expectedStateRevision), retention: enumValue(row.retention, ['keep-build', 'discard-unreleased'], 'retention') }

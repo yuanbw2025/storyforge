@@ -12,7 +12,10 @@ import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnex
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 function createProjection(): TextOpenWorldSessionProjectionV1 {
-  return createInitialTextOpenWorldSessionProjectionV1(createTextOpenWorldVNextFixture())
+  const runtime = createTextOpenWorldVNextFixture()
+  const actions = runtime.modules.actions.payload as { actions: Array<{ key: string; label: string }> }
+  actions.actions.find(action => action.key === 'action.travel-port-ridge')!.label = '前往location.ridge-channel'
+  return createInitialTextOpenWorldSessionProjectionV1(runtime)
 }
 
 function ridgeSvgNode(host: ParentNode): SVGElement {
@@ -67,7 +70,7 @@ function feedback(
       mayNarrateSuccess: true,
     },
     evidenceEventIds: [],
-    evidenceEventSequences: [],
+    evidenceEventSequences: [1, 2],
     receiptHash: 'c'.repeat(64),
   }
 }
@@ -117,6 +120,8 @@ describe('Text Open World G4-06 · 玩家 SVG 地图与确定性旅行 UI', () =
     expect(onTravel).not.toHaveBeenCalled()
 
     const travel = detailTravelButton(host)
+    expect(travel.getAttribute('aria-label')).toContain('前往断脊渠口')
+    expect(travel.getAttribute('aria-label')).not.toContain('location.')
     await act(async () => {
       travel.click()
       travel.click()
@@ -261,6 +266,11 @@ describe('Text Open World G4-06 · 玩家 SVG 地图与确定性旅行 UI', () =
           runtimeEventSequence: 0,
           busy: false,
           sessionKey,
+          notifications: [{
+            id: `map-notification-${sessionKey}`, sessionId: sessionKey, effectsEventSequence: 2,
+            origin: 'player', category: 'world', priority: 'normal', headline: '新 Session 旅行成功',
+            details: [], worldMinute: null, randomEventStatus: null,
+          }],
           onTravel,
         }))
       })

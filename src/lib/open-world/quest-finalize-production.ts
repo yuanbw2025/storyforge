@@ -1,8 +1,10 @@
 import type { ChatResult } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
+import { resolveTextOpenWorldVendorServiceV1 } from './npc-runtime-catalog-production'
 import { db } from '../db/schema'
 import { readAcceptedBuildArtifacts } from '../product-production/artifact-store'
 import { runConfiguredProductionTextV1, type ProviderBindingReceiptV1 } from '../product-production/capabilities'
+import { ProductProductionContextBudgetErrorV1 } from '../product-production/context'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from '../product-production/hash'
 import { parseProductionModelJsonObjectV1 } from '../product-production/production-executor'
 import type { ProductProductionTaskExecutionResultV1, ProductProductionTaskExecutorV1 } from '../product-production/scheduler'
@@ -17,12 +19,14 @@ import type {
   TextOpenWorldEffectDefinitionV1,
   TextOpenWorldEnemyEncounterCatalogV1,
   TextOpenWorldItemRewardCatalogV1,
+  TextOpenWorldItemAcquisitionSelectionV1,
   TextOpenWorldMainlineThreadV1,
   TextOpenWorldMapInteractionCatalogV1,
   TextOpenWorldNpcRuntimeCatalogV1,
   TextOpenWorldProgressionCatalogsV1,
   TextOpenWorldQuestBindingDefinitionKindV1,
   TextOpenWorldQuestDesignDocumentsV1,
+  TextOpenWorldQuestFulfillmentSelectionsV1,
   TextOpenWorldQuestSkeletonsV1,
   TextOpenWorldRegionNarrativePacksV1,
   TextOpenWorldSignificantThreadsV1,
@@ -35,6 +39,14 @@ import {
   compileTextOpenWorldStatusDefinitionV2,
 } from './combat-mechanics-production'
 import { validateTextOpenWorldKnowledgeProductionClosureV1 } from './knowledge-production'
+import {
+  buildTextOpenWorldObjectiveFulfillmentDemandsV1,
+  compileTextOpenWorldObjectiveFulfillmentV1,
+  parseTextOpenWorldQuestFulfillmentSelectionsV1,
+  projectTextOpenWorldObjectiveFulfillmentTableV1,
+} from './objective-fulfillment-production'
+import { compileTextOpenWorldItemAcquisitionsV1, parseTextOpenWorldItemAcquisitionsV1 } from './item-acquisition-production'
+import { assertTextOpenWorldItemSourceClosureV1 } from './item-source-production'
 
 const SKILL_ID = 'text-open-world.production.quest-finalize.v1'
 const MAX_CONTEXT_CHARS = 700_000
@@ -114,6 +126,14 @@ export interface TextOpenWorldQuestFinalizeInputContextV1 {
   achievementBindingCandidates?: AchievementBindingCandidateV1[]
   /** Missing from pre-G7 durable contexts; omission preserves the historical ending/consequence graph. */
   storyOutcomeContract?: 'governed-v19'
+  /** Fresh contexts require draft v3; frozen v19 contexts may explicitly opt in. */
+  objectiveFulfillmentContract?: 'fixed-objectives-v1'
+  /** Fresh v4 drafts declare actual pickup paths; old frozen requests omit it. */
+  itemAcquisitionContract?: 'fixed-objective-items-v1'
+  /** Fresh v5 drafts preserve unique items already granted by another reward. */
+  uniqueRewardGrantContract?: 'preserve-held-v1'
+  /** New requests only; historical frozen Contexts keep draft v1-v5 semantics. */
+  objectiveEvidenceContract?: 'action-paths-v2'
   endingEligibilityDemands?: EndingEligibilityDemandV1[]
   contextSelectionHash: string
 }
@@ -143,6 +163,14 @@ export type TextOpenWorldQuestFinalizeModelRunnerV1 = (input: {
 }) => Promise<TextOpenWorldQuestFinalizeModelExecutionV1>
 
 interface QuestFinalizeDraftV1 {
+  fulfillmentSelections?: TextOpenWorldQuestFulfillmentSelectionsV1
+  itemAcquisitionSelections?: TextOpenWorldItemAcquisitionSelectionV1[]
+  uniqueRewardGrantPolicy?: 'preserve-held-v1'
+  consequenceSelections?: Array<{
+    consequenceNumber: number
+    direction: 'increase' | 'decrease' | 'change'
+    targetCandidateNumbers: number[]
+  }>
   quests: Array<{ questNumber: number; description: string; tags: string[] }>
   objectives: Array<{
     objectiveNumber: number
@@ -467,7 +495,82 @@ function buildEndingEligibilityDemands(context: QuestFinalizeContextWithoutHashV
     }))
 }
 
+/** P6 reserves semantics, not final catalog identities. Never infer people from a thread number. */
+function buildStoryConsequenceDemands(context: QuestFinalizeContextWithoutHashV1) {
+  let consequenceNumber = 0
+  return context.significantThreads.stages.flatMap(stage => stage.localConsequencePlans.map(plan => {
+    const thread = context.significantThreads.threads.find(item => item.key === stage.threadKey)
+      ?? fail(`重要故事后果缺少来源故事:${plan.key}`)
+    const storyQuestKeys = new Set(context.questSkeletons.quests
+      .filter(quest => quest.storylineKey === thread.key).map(quest => quest.key))
+    const objectiveKeys = new Set(context.questSkeletons.objectives
+      .filter(objective => storyQuestKeys.has(objective.questKey)).map(objective => objective.key))
+    const itemRequirementKeys = new Set(context.contentRequirementManifest.requirements
+      .filter(requirement => requirement.kind === 'item' && requirement.consumerRefs.some(ref => (
+        ref.kind === 'quest-objective' && objectiveKeys.has(ref.consumerKey)
+      ))).map(requirement => requirement.key))
+    const candidates: Array<{ kind: 'actor' | 'faction' | 'region' | 'morality' | 'currency' | 'item'; key: string; title: string }> = []
+    if (plan.kind === 'npc-attitude') {
+      context.npcRuntimeCatalog.actors.filter(actor => actor.demandKind !== 'service-replacement'
+        && thread.regionKeys.includes(actor.regionKey)).forEach(actor => candidates.push({ kind: 'actor', key: actor.key, title: actor.name }))
+    } else if (plan.kind === 'faction-affinity') {
+      context.npcRuntimeCatalog.factions.forEach(faction => candidates.push({ kind: 'faction', key: faction.key, title: faction.title }))
+    } else if (plan.kind === 'regional-state') {
+      context.mapInteractionCatalog.regions.filter(region => thread.regionKeys.includes(region.key))
+        .forEach(region => candidates.push({ kind: 'region', key: region.key, title: region.title }))
+    } else if (plan.kind === 'morality') {
+      candidates.push({ kind: 'morality', key: 'player.morality', title: '玩家道德倾向' })
+    } else {
+      candidates.push({ kind: 'currency', key: 'player.currency', title: '玩家货币（仅适用于明确的金钱得失）' })
+      // Story evidence is an inventory item, not currency. Only this story's declared items
+      // may be granted; removals are excluded to avoid an unguarded completion cost.
+      if (plan.direction !== 'decrease') context.itemRewardCatalog.items
+        .filter(item => item.fulfilledRequirementKeys.some(key => itemRequirementKeys.has(key)))
+        .forEach(item => candidates.push({ kind: 'item', key: item.key, title: item.title }))
+    }
+    if (!candidates.length) fail(`重要故事后果缺少可绑定的目录目标:${plan.key}`)
+    return {
+      consequenceNumber: ++consequenceNumber, consequencePlanKey: plan.key, kind: plan.kind,
+      description: plan.description,
+      allowedDirections: plan.direction === 'change' && plan.kind !== 'regional-state'
+        ? ['increase', 'decrease'] as const : [plan.direction],
+      targetCandidates: candidates.map((candidate, index) => ({ ...candidate, candidateNumber: index + 1 })),
+    }
+  }))
+}
+
+function projectStoryConsequenceTable(context: QuestFinalizeContextWithoutHashV1) {
+  const fields = ['consequenceNumber', 'consequencePlanKey', 'kind', 'description', 'allowedDirections', 'targetCandidateSet'] as const
+  const candidateFields = ['candidateNumber', 'kind', 'key', 'title'] as const
+  const candidateSets: unknown[][][] = []
+  const encodedSets: string[] = []
+  const rows = buildStoryConsequenceDemands(context).map(demand => {
+    const candidates = demand.targetCandidates.map(candidate => candidateFields.map(key => candidate[key]))
+    const encoded = canonicalProductProductionJsonV2(candidates)
+    let targetCandidateSet = encodedSets.indexOf(encoded)
+    if (targetCandidateSet < 0) {
+      targetCandidateSet = candidateSets.length
+      candidateSets.push(candidates); encodedSets.push(encoded)
+    }
+    return fields.map(field => field === 'targetCandidateSet' ? targetCandidateSet : demand[field])
+  })
+  return { format: 'story-consequence-table-v1', fields, candidateFields, candidateSets, rows }
+}
+
 async function validateUpstream(context: Omit<TextOpenWorldQuestFinalizeInputContextV1, 'contextSelectionHash'>): Promise<void> {
+  if (context.uniqueRewardGrantContract !== undefined
+    && (context.uniqueRewardGrantContract !== 'preserve-held-v1'
+      || context.itemAcquisitionContract !== 'fixed-objective-items-v1'
+      || context.objectiveFulfillmentContract !== 'fixed-objectives-v1'
+      || context.storyOutcomeContract !== 'governed-v19')) {
+    fail('唯一物品奖励合同缺少有效的固定任务获取基线')
+  }
+  if (context.objectiveEvidenceContract !== undefined && (context.objectiveEvidenceContract !== 'action-paths-v2'
+    || context.uniqueRewardGrantContract !== 'preserve-held-v1')) fail('实际操作路径合同缺少唯一物品保护基线')
+  if (context.objectiveFulfillmentContract !== undefined
+    && (context.objectiveFulfillmentContract !== 'fixed-objectives-v1' || context.storyOutcomeContract !== 'governed-v19')) {
+    fail('固定任务操作证据合同无效')
+  }
   if (context.questLifecycleContract !== undefined && context.questLifecycleContract !== 'governed-v16') {
     fail('Quest生命周期生产合同无效')
   }
@@ -510,9 +613,6 @@ async function validateUpstream(context: Omit<TextOpenWorldQuestFinalizeInputCon
           || consequence.runtimeBinding.conditionKeys.length
           || consequence.runtimeBinding.effectKeys.length) {
           fail(`重要故事后果已经被上游越权绑定:${consequence.key}`)
-        }
-        if (consequence.direction === 'change') {
-          fail(`重要故事后果必须明确增加或减少方向:${consequence.key}`)
         }
       }
     }
@@ -644,6 +744,10 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     body.achievementBindingCandidates = knowledgeProduction.achievementBindingCandidates
   }
   body.storyOutcomeContract = 'governed-v19'
+  body.objectiveFulfillmentContract = 'fixed-objectives-v1'
+  body.itemAcquisitionContract = 'fixed-objective-items-v1'
+  body.uniqueRewardGrantContract = 'preserve-held-v1'
+  body.objectiveEvidenceContract = 'action-paths-v2'
   body.endingEligibilityDemands = buildEndingEligibilityDemands(body)
   await validateUpstream(body)
   const context = { ...body, contextSelectionHash: await hashProductProductionValueV2(body) }
@@ -653,7 +757,10 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
 
 export async function readTextOpenWorldQuestFinalizeInputContextV1(input: AssembleContextInput): Promise<string> {
   if (!input.scope || !Number.isSafeInteger(input.productProductionId) || !Number.isSafeInteger(input.productBuildId)) fail('Context读取缺少scope/production/build selector')
-  return canonicalProductProductionJsonV2(await loadContext({ scope: input.scope, productionId: input.productProductionId!, buildId: input.productBuildId! }))
+  const context = await loadContext({ scope: input.scope, productionId: input.productProductionId!, buildId: input.productBuildId! })
+  const text = canonicalProductProductionJsonV2(context)
+  if (context.objectiveEvidenceContract) assertModelInputBudget(context, text, input.inputBudgetTokens ?? input.inputBudgetMaxTokens)
+  return text
 }
 
 async function parseContext(value: string): Promise<TextOpenWorldQuestFinalizeInputContextV1> {
@@ -677,12 +784,30 @@ function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputCont
     fail('Knowledge与成就模型选择字段必须同时存在或同时缺失')
   }
   const explicitKnowledgeSelections = governedKnowledge && hasKnowledgeSelections && hasAchievementSelections
+  const actionEvidence = context.objectiveEvidenceContract === 'action-paths-v2'
+  if (actionEvidence !== (root.version === 6)) fail('实际操作路径合同必须使用精确对应的draft v6')
+  const preserveUniqueRewards = governedStoryOutcome && (root.version === 5 || actionEvidence)
+  const explicitAcquisitions = governedStoryOutcome && (root.version === 4 || preserveUniqueRewards)
+  const explicitFulfillment = governedStoryOutcome && (root.version === 3 || explicitAcquisitions)
+  if (context.objectiveFulfillmentContract && !explicitFulfillment) fail('固定任务操作证据合同必须使用draft v3')
+  if (context.itemAcquisitionContract && !explicitAcquisitions) fail('任务物品获取合同必须使用draft v4')
+  if (context.uniqueRewardGrantContract && !preserveUniqueRewards) fail('唯一物品奖励合同必须使用draft v5')
+  if (explicitFulfillment && (context.questLifecycleContract !== 'governed-v16'
+    || context.combatMechanicsContract !== 'governed-v17' || !governedKnowledge)) {
+    fail('固定任务操作证据需要完整的受治理生命周期、战斗与Knowledge基线')
+  }
+  const explicitConsequences = governedStoryOutcome && (root.version === 2
+    || explicitFulfillment && Object.prototype.hasOwnProperty.call(root, 'consequenceSelections'))
   exactKeys(root, [
     'schema', 'version', 'quests', 'objectives', 'decks', 'templates', 'randomEvents',
     ...(explicitKnowledgeSelections ? ['knowledgeSelections', 'achievementCandidateNumbers'] : []),
     ...(governedStoryOutcome ? ['endingEligibilitySelections'] : []),
+    ...(explicitConsequences ? ['consequenceSelections'] : []),
+    ...(explicitFulfillment ? ['fulfillmentSelections'] : []),
+    ...(explicitAcquisitions ? ['itemAcquisitionSelections'] : []),
   ], 'draft')
-  if (root.schema !== 'storyforge.text-open-world-quest-finalize-draft' || root.version !== 1) fail('draft schema/version无效')
+  if (root.schema !== 'storyforge.text-open-world-quest-finalize-draft'
+    || (root.version !== 1 && !explicitConsequences && !explicitFulfillment)) fail('draft schema/version无效')
   if (!Array.isArray(root.quests) || root.quests.length !== context.questSkeletons.quests.length) fail(`quests必须与${context.questSkeletons.quests.length}项骨架一一对应`)
   const quests = root.quests.map((value, index) => {
     const row = record(value, `quests[${index}]`); exactKeys(row, ['questNumber', 'description', 'tags'], `quests[${index}]`)
@@ -778,6 +903,42 @@ function parseDraft(value: unknown, context: TextOpenWorldQuestFinalizeInputCont
   })
   if (randomEvents.some((event, index) => event.seedNumber !== index + 1)) fail('randomEvents必须按序精确覆盖')
   const baseDraft: QuestFinalizeDraftV1 = { quests, objectives, decks, templates, randomEvents }
+  if (preserveUniqueRewards) baseDraft.uniqueRewardGrantPolicy = 'preserve-held-v1'
+  if (explicitFulfillment) baseDraft.fulfillmentSelections = parseTextOpenWorldQuestFulfillmentSelectionsV1(root.fulfillmentSelections, context)
+  if (explicitAcquisitions) baseDraft.itemAcquisitionSelections = parseTextOpenWorldItemAcquisitionsV1(
+    root.itemAcquisitionSelections, context, baseDraft.fulfillmentSelections!,
+  )
+  if (explicitConsequences) {
+    const demands = buildStoryConsequenceDemands(context)
+    if (!Array.isArray(root.consequenceSelections) || root.consequenceSelections.length !== demands.length) {
+      fail(`consequenceSelections必须逐项覆盖${demands.length}条故事后果`)
+    }
+    baseDraft.consequenceSelections = root.consequenceSelections.map((value, index) => {
+      const label = `consequenceSelections[${index}]`; const row = record(value, label)
+      exactKeys(row, ['consequenceNumber', 'direction', 'targetCandidateNumbers'], label)
+      const demand = demands[index]!
+      if (row.consequenceNumber !== demand.consequenceNumber) fail(`${label}必须按来源顺序精确覆盖`)
+      const direction = enumValue(row.direction, demand.allowedDirections, `${label}.direction`)
+      if (!Array.isArray(row.targetCandidateNumbers) || !row.targetCandidateNumbers.length
+        || row.targetCandidateNumbers.length > (['faction-affinity', 'resource', 'regional-state'].includes(demand.kind) ? 3 : 1)) {
+        fail(`${label}目录目标数量无效`)
+      }
+      const targetCandidateNumbers = row.targetCandidateNumbers.map((number, targetIndex) => (
+        integer(number, `${label}.targetCandidateNumbers[${targetIndex}]`, 1, demand.targetCandidates.length)
+      ))
+      if (targetCandidateNumbers.some((number, targetIndex) => targetIndex > 0 && number <= targetCandidateNumbers[targetIndex - 1]!)) {
+        fail(`${label}目录目标必须严格升序且不重复`)
+      }
+      const targets = targetCandidateNumbers.map(number => demand.targetCandidates[number - 1]!)
+      if (targets.some(target => target.kind === 'item') && (direction !== 'increase'
+        || targets.some(target => target.kind !== 'item'))) fail(`${label}物品后果只能增加已声明物品，不能混入货币或扣除物品`)
+      return { consequenceNumber: demand.consequenceNumber, direction, targetCandidateNumbers }
+    })
+  } else if (governedStoryOutcome && context.significantThreads.stages.some(stage => (
+    stage.localConsequencePlans.some(plan => plan.direction === 'change')
+  ))) {
+    fail('未明确方向的故事后果必须通过draft v2 consequenceSelections显式收口')
+  }
   if (governedStoryOutcome) {
     const demands = context.endingEligibilityDemands ?? fail('结局资格选择缺少候选合同')
     if (!Array.isArray(root.endingEligibilitySelections)
@@ -1164,7 +1325,7 @@ function supportActionsForDefinitions(input: {
     const encounter = input.context.enemyEncounterCatalog.encounters.find(item => item.key === key)
       ?? (enemy ? input.context.enemyEncounterCatalog.encounters.find(item => item.enemyGroups.some(group => group.enemyKey === enemy.key)) : null)
     if (encounter) result.push(`action.start.${encounter.key}`)
-    if (input.context.progressionCatalogs.skills.some(item => item.key === key)) result.push(`action.combat.${key}`)
+    if (input.context.progressionCatalogs.skills.some(item => item.key === key && item.activation === 'active')) result.push(`action.combat.${key}`)
     const item = input.context.itemRewardCatalog.items.find(candidate => candidate.key === key)
     if (item?.consumable) result.push(`action.use.${key}`)
     if (item?.kind === 'equipment') result.push(`action.equip.${key}`)
@@ -1279,11 +1440,20 @@ async function createArtifacts(input: {
     }
     reward.grants.items.forEach((grant, index) => {
       const key = `effect.reward.${reward.key}.item.${String(index + 1).padStart(3, '0')}`
-      addEffect({ key, operation: 'grant-item', payload: { itemKey: grant.itemKey, quantity: grant.quantity } }); rewardEffects.push(key)
+      const definition = input.context.itemRewardCatalog.items.find(item => item.key === grant.itemKey)!
+      const alreadyAcquirable = input.draft.itemAcquisitionSelections?.some(selection => selection.items.some(item => (
+        input.context.itemRewardCatalog.items[item.itemNumber - 1]!.key === grant.itemKey
+      ))) && definition.unique
+      const preserveHeldUnique = input.draft.uniqueRewardGrantPolicy === 'preserve-held-v1' && definition.unique
+      if (preserveHeldUnique && grant.quantity !== 1) fail(`唯一物品奖励数量必须为1:${reward.key}:${grant.itemKey}`)
+      addEffect({ key, operation: 'grant-item', payload: {
+        itemKey: grant.itemKey, quantity: grant.quantity,
+        ...(alreadyAcquirable || preserveHeldUnique ? { ifAbsent: true as const } : {}),
+      } }); rewardEffects.push(key)
     })
     reward.grants.skillKeys.forEach((skillKey, index) => {
       const key = `effect.reward.${reward.key}.skill.${String(index + 1).padStart(3, '0')}`
-      addEffect({ key, operation: 'learn-skill', payload: { skillKey } }); rewardEffects.push(key)
+      addEffect({ key, operation: 'learn-skill', payload: { skillKey, ...(input.context.objectiveEvidenceContract ? { ifUnknown: true as const } : {}) } }); rewardEffects.push(key)
     })
     if (reward.sourceKind === 'combat') {
       const key = `effect.reward.${reward.key}.victory-flag`
@@ -1424,21 +1594,33 @@ async function createArtifacts(input: {
   })
 
   const vendorBindings: TextOpenWorldQuestDesignDocumentsV1['catalogBindings']['vendors'] = input.context.craftingEconomyCatalog.vendors.map(vendor => {
-    const actorRequirementKey = vendor.runtimeBinding.actorRequirementKey
-    const actor = input.context.npcRuntimeCatalog.actors.find(item => item.sourceDemandKey === actorRequirementKey || item.key === actorRequirementKey)
-      ?? fail(`商店Actor预留未兑现:${vendor.key}`)
-    const buyEffect = `effect.buy.${vendor.key}`; const sellEffect = `effect.sell.${vendor.key}`
-    addEffect({ key: buyEffect, operation: 'perform-transaction', payload: { kind: 'buy', vendorKey: vendor.key } })
-    addEffect({ key: sellEffect, operation: 'perform-transaction', payload: { kind: 'sell', vendorKey: vendor.key } })
-    addAction(action({ key: `action.buy.${vendor.key}`, category: 'buy', label: `向${vendor.title}购买`, description: vendor.description, targetScope: 'vendor', locationKeys: [vendor.locationKey], successEffectKeys: [buyEffect] }))
-    addAction(action({ key: `action.sell.${vendor.key}`, category: 'sell', label: `向${vendor.title}出售`, description: vendor.description, targetScope: 'vendor', locationKeys: [vendor.locationKey], successEffectKeys: [sellEffect] }))
-    return { vendorKey: vendor.key, actorKey: actor.key, factionKey: actor.factionKey, availabilityConditionKeys: [], buyActionKey: `action.buy.${vendor.key}`, sellActionKey: `action.sell.${vendor.key}` }
+    const { actor, replacement } = resolveTextOpenWorldVendorServiceV1(input.context.npcRuntimeCatalog, {
+      ...vendor, actorRequirementKey: vendor.runtimeBinding.actorRequirementKey,
+    })
+    const bindService = (vendorKey: string, actorKey: string, title: string) => {
+      const buyEffect = `effect.buy.${vendorKey}`; const sellEffect = `effect.sell.${vendorKey}`
+      const buyActionKey = `action.buy.${vendorKey}`; const sellActionKey = `action.sell.${vendorKey}`
+      addEffect({ key: buyEffect, operation: 'perform-transaction', payload: { kind: 'buy', vendorKey } })
+      addEffect({ key: sellEffect, operation: 'perform-transaction', payload: { kind: 'sell', vendorKey } })
+      addAction(action({ key: buyActionKey, category: 'buy', label: `向${title}购买`, description: vendor.description, targetScope: 'vendor', locationKeys: [vendor.locationKey], successEffectKeys: [buyEffect] }))
+      addAction(action({ key: sellActionKey, category: 'sell', label: `向${title}出售`, description: vendor.description, targetScope: 'vendor', locationKeys: [vendor.locationKey], successEffectKeys: [sellEffect] }))
+      return { vendorKey, actorKey, buyActionKey, sellActionKey }
+    }
+    const original = bindService(vendor.key, actor.key, vendor.title)
+    return {
+      ...original, factionKey: actor.factionKey, availabilityConditionKeys: [],
+      ...(replacement ? { replacement: bindService(`vendor.replacement.${vendor.key}`, replacement.key, `${vendor.title}接替服务`) } : {}),
+    }
   })
 
   const actorBindings: TextOpenWorldQuestDesignDocumentsV1['catalogBindings']['actors'] = input.context.npcRuntimeCatalog.actors.map(actor => {
     const talkActionKey = `action.talk.${actor.key}`
     addAction(action({ key: talkActionKey, category: 'talk', label: `与${actor.name}交谈`, description: actor.portrayal, targetScope: 'actor', locationKeys: [actor.homeLocationKey] }))
-    return { actorKey: actor.key, questKeys: actor.questConsumerKeys, actionKeys: [talkActionKey] }
+    const serviceActions = input.context.npcRuntimeCatalog.vendorIdentityContract
+      ? vendorBindings.flatMap(binding => [binding, ...(binding.replacement ? [binding.replacement] : [])])
+        .filter(binding => binding.actorKey === actor.key).flatMap(binding => [binding.buyActionKey, binding.sellActionKey])
+      : []
+    return { actorKey: actor.key, questKeys: actor.questConsumerKeys, actionKeys: [talkActionKey, ...serviceActions] }
   })
 
   const interactionBindings: TextOpenWorldQuestDesignDocumentsV1['catalogBindings']['interactions'] = input.context.mapInteractionCatalog.interactions.map(interaction => {
@@ -1502,6 +1684,14 @@ async function createArtifacts(input: {
   const stageRows: TextOpenWorldQuestDesignDocumentsV1['stages'] = []
   const objectiveRows: TextOpenWorldQuestDesignDocumentsV1['objectives'] = []
   const storyOutcomeBindings: NonNullable<TextOpenWorldQuestDesignDocumentsV1['storyOutcomeBindings']> = []
+  const consequenceSelections = new Map(input.draft.consequenceSelections
+    ? buildStoryConsequenceDemands(input.context).map((demand, index) => {
+      const selection = input.draft.consequenceSelections![index]!
+      return [demand.consequencePlanKey, {
+        direction: selection.direction,
+        targets: selection.targetCandidateNumbers.map(number => demand.targetCandidates[number - 1]!),
+      }]
+    }) : [])
   input.context.questSkeletons.objectives.forEach((objective, index) => {
     const draft = input.draft.objectives[index]!
     const definitions = requirementBindings.filter(binding => objective.requirementKeys.includes(binding.requirementKey)).flatMap(binding => binding.definitionKeys)
@@ -1580,9 +1770,21 @@ async function createArtifacts(input: {
       sourceStage.localConsequencePlans.forEach(plan => {
         const outcomeEffectKey = `effect.story-outcome.${plan.key}`
         const unsignedAmount = plan.magnitude === 'minor' ? 5 : plan.magnitude === 'moderate' ? 10 : 20
-        const amount = plan.direction === 'decrease' ? -unsignedAmount : unsignedAmount
+        const selection = consequenceSelections.get(plan.key)
+        const direction = selection?.direction ?? plan.direction
+        const amount = direction === 'decrease' ? -unsignedAmount : unsignedAmount
         const outcomeEffects: TextOpenWorldEffectDefinitionV1[] = []
-        if (plan.kind === 'morality') {
+        if (selection) {
+          selection.targets.forEach((target, index) => {
+            const key = selection.targets.length > 1 ? `${outcomeEffectKey}.${String(index + 1).padStart(3, '0')}` : outcomeEffectKey
+            if (target.kind === 'actor') outcomeEffects.push({ key, operation: 'set-story-modifier', payload: { actorKey: target.key, value: amount } })
+            else if (target.kind === 'faction') outcomeEffects.push({ key, operation: 'change-faction-affinity', payload: { factionKey: target.key, amount } })
+            else if (target.kind === 'region') outcomeEffects.push({ key, operation: 'change-region-state', payload: { regionKey: target.key, state: `story-outcome.${direction}.${plan.magnitude}` } })
+            else if (target.kind === 'morality') outcomeEffects.push({ key, operation: 'change-morality', payload: { amount } })
+            else if (target.kind === 'item') outcomeEffects.push({ key, operation: 'grant-item', payload: { itemKey: target.key, quantity: 1, ifAbsent: true } })
+            else outcomeEffects.push({ key, operation: 'change-currency', payload: { amount } })
+          })
+        } else if (plan.kind === 'morality') {
           if (plan.targetSemanticKey !== 'player.morality') fail(`道德后果目标无效:${plan.key}`)
           outcomeEffects.push({ key: outcomeEffectKey, operation: 'change-morality', payload: { amount } })
         } else if (plan.kind === 'faction-affinity') {
@@ -1637,6 +1839,7 @@ async function createArtifacts(input: {
           questStageKey: stage.key,
           consequencePlanKey: plan.key,
           effectKeys: outcomeEffects.map(effect => effect.key),
+          ...(selection ? { selection: { direction: selection.direction, targetKeys: selection.targets.map(target => target.key) } } : {}),
         })
       })
     }
@@ -2112,6 +2315,21 @@ async function createArtifacts(input: {
       })
     })
   }
+  if (input.draft.fulfillmentSelections) compileTextOpenWorldObjectiveFulfillmentV1({
+    context: input.context, selections: input.draft.fulfillmentSelections,
+    conditions, effects, actions, objectives: objectiveRows,
+    interactions: interactionBindings, endings: endingRouteBindings, actors: actorBindings,
+  })
+  if (input.draft.itemAcquisitionSelections) compileTextOpenWorldItemAcquisitionsV1({
+    context: input.context, selections: input.draft.itemAcquisitionSelections,
+    fulfillment: input.draft.fulfillmentSelections!, conditions, effects, actions, interactions: interactionBindings,
+  })
+  assertTextOpenWorldItemSourceClosureV1({ catalog: input.context.itemRewardCatalog, economy: input.context.craftingEconomyCatalog,
+    acquisitions: (input.draft.itemAcquisitionSelections ?? []).flatMap(selection => selection.items.map(item => ({
+      itemKey: input.context.itemRewardCatalog.items[item.itemNumber - 1]!.key,
+      objectiveKey: input.context.questSkeletons.objectives[selection.objectiveNumber - 1]!.key,
+    }))),
+  })
   const questBody: Omit<TextOpenWorldQuestDesignDocumentsV1, 'questDesignDocumentsHash'> = {
     schema: 'storyforge.text-open-world-quest-design-documents', version: 1, productType: 'text-open-world',
     productInstanceKey: input.context.productInstanceKey, mainlineThreadHash: input.context.mainlineThread.mainlineThreadHash,
@@ -2128,6 +2346,9 @@ async function createArtifacts(input: {
     requirementBindings, quests: questRows, stages: stageRows, objectives: objectiveRows, conditions, effects, actions,
     ...(governedKnowledge ? { knowledgeBindings, achievementBindings } : {}),
     ...(governedStoryOutcome ? { storyOutcomeBindings } : {}),
+    ...(input.draft.fulfillmentSelections ? { fulfillmentSelections: input.draft.fulfillmentSelections } : {}),
+    ...(input.draft.itemAcquisitionSelections ? { itemAcquisitionSelections: input.draft.itemAcquisitionSelections } : {}),
+    ...(input.draft.uniqueRewardGrantPolicy ? { uniqueRewardGrantPolicy: input.draft.uniqueRewardGrantPolicy } : {}),
     endingBindings,
     catalogBindings: {
       skills: skillBindings, enemies: enemyBindings, encounters: encounterBindings, items: itemBindings,
@@ -2171,6 +2392,8 @@ async function createArtifacts(input: {
         knowledgeProgressReady: true as const,
       } : {}),
       ...(governedStoryOutcome ? { storyOutcomesRuntimeBound: true as const } : {}),
+      ...(input.draft.fulfillmentSelections ? { fixedObjectiveFulfillmentReady: true as const } : {}),
+      ...(input.draft.fulfillmentSelections?.version === 2 ? { actionPathEvidenceReady: true as const } : {}),
       ...(governedProtectedStoryReveal ? { protectedStoryRevealActionsReady: true as const } : {}),
       allCatalogBindingsResolved: true,
       allEndingsRuntimeBound: true, sceneBindingsDeferred: true, questAndEncounterBindingsReady: true,
@@ -2600,7 +2823,7 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
     || canonicalProductProductionJsonV2(selectionReady?.expression) !== canonicalProductProductionJsonV2({
       op: 'quest-status', questKey: finalQuest.key, statuses: ['completed'],
     })) fail('结局选择入口没有绑定最终主线完成条件')
-  artifact.endingBindings.routes.forEach(binding => {
+  artifact.endingBindings.routes.forEach((binding, routeIndex) => {
     const condition = artifact.conditions.find(item => item.key === binding.conditionKey)
     const eligibilityCondition = binding.eligibilityConditionKey === undefined
       ? undefined
@@ -2637,6 +2860,11 @@ function assertQuestArtifact(artifact: Omit<TextOpenWorldQuestDesignDocumentsV1,
         })),
         ...binding.eligibility.requiredRecipeKeys.map(recipeKey => ({
           op: 'inventory-recipe-known' as const, recipeKey, known: true,
+        })),
+        ...(artifact.fulfillmentSelections?.endings[routeIndex]?.requiredInteractionNumbers ?? []).map(number => ({
+          op: 'world-flag' as const,
+          flagKey: `flag.fulfillment.interaction.${artifact.catalogBindings.interactions[number - 1]?.interactionKey}`,
+          value: true,
         })),
       ],
     }
@@ -2748,7 +2976,8 @@ function assertCrossArtifacts(artifacts: TextOpenWorldQuestFinalizeArtifactsV1):
       .some(key => key !== null && !actionKeys.has(key)))
     || quest.catalogBindings.recipes.some(binding => !actionKeys.has(binding.craftActionKey)
       || (binding.learnActionKey !== null && !actionKeys.has(binding.learnActionKey)))
-    || quest.catalogBindings.vendors.some(binding => !actionKeys.has(binding.buyActionKey) || !actionKeys.has(binding.sellActionKey))
+    || quest.catalogBindings.vendors.some(binding => !actionKeys.has(binding.buyActionKey) || !actionKeys.has(binding.sellActionKey)
+      || (binding.replacement && (!actionKeys.has(binding.replacement.buyActionKey) || !actionKeys.has(binding.replacement.sellActionKey))))
     || quest.catalogBindings.interactions.some(binding => !actionKeys.has(binding.actionKey))
     || quest.catalogBindings.edges.some(binding => !actionKeys.has(binding.forwardActionKey)
       || (binding.reverseActionKey !== null && !actionKeys.has(binding.reverseActionKey)))
@@ -2806,6 +3035,34 @@ function draftFromArtifacts(
         : artifacts.directorDecks.templates.findIndex(template => template.key === event.upgradeTemplateKey) + 1,
     })),
   }
+  const outcomeBindings = artifacts.questDesignDocuments.storyOutcomeBindings ?? []
+  if (outcomeBindings.some(binding => binding.selection !== undefined)) {
+    if (context.storyOutcomeContract !== 'governed-v19' || outcomeBindings.some(binding => binding.selection === undefined)) {
+      fail('故事后果显式选择必须整组存在，不能与legacy绑定混用')
+    }
+    body.version = 2
+    body.consequenceSelections = buildStoryConsequenceDemands(context).map(demand => {
+      const binding = outcomeBindings.find(item => item.consequencePlanKey === demand.consequencePlanKey)
+      const selection = binding?.selection ?? fail(`故事后果显式选择缺失:${demand.consequencePlanKey}`)
+      return {
+        consequenceNumber: demand.consequenceNumber,
+        direction: selection.direction,
+        targetCandidateNumbers: selection.targetKeys.map(key => (
+          demand.targetCandidates.find(candidate => candidate.key === key)?.candidateNumber ?? 0
+        )),
+      }
+    })
+  }
+  if (artifacts.questDesignDocuments.fulfillmentSelections) {
+    body.version = 3
+    body.fulfillmentSelections = artifacts.questDesignDocuments.fulfillmentSelections
+  }
+  if (artifacts.questDesignDocuments.itemAcquisitionSelections) {
+    body.version = 4
+    body.itemAcquisitionSelections = artifacts.questDesignDocuments.itemAcquisitionSelections
+  }
+  if (artifacts.questDesignDocuments.uniqueRewardGrantPolicy) body.version = 5
+  if (artifacts.questDesignDocuments.fulfillmentSelections?.version === 2) body.version = 6
   if (context.storyOutcomeContract === 'governed-v19') {
     const demands = context.endingEligibilityDemands ?? fail('结局资格反向验证缺少候选合同')
     body.endingEligibilitySelections = demands.map((demand, index) => {
@@ -2938,9 +3195,24 @@ export async function rebuildTextOpenWorldQuestFinalizeFromAuthorEditableDraftV1
 }
 
 function prompts(context: TextOpenWorldQuestFinalizeInputContextV1) {
-  const system = [
-    '你是StoryForge文字开放世界的任务最终化与地区导演设计师。只能返回JSON。',
-    '所有稳定键、目录引用、数值奖励、生命周期、Action、Condition和Effect由代码生成；你只写任务/目标可玩语义与有界发牌参数。',
+  const explicitConsequences = context.storyOutcomeContract === 'governed-v19'
+  const explicitFulfillment = context.objectiveFulfillmentContract === 'fixed-objectives-v1'
+  const explicitAcquisitions = context.itemAcquisitionContract === 'fixed-objective-items-v1'
+  const preserveUniqueRewards = context.uniqueRewardGrantContract === 'preserve-held-v1'
+  const system = context.objectiveEvidenceContract ? [
+    'Return only the required JSON, with narrative text in the accepted world language. Code owns IDs, catalog references, rewards, lifecycle and Action/Condition/Effect. Write quest/objective semantics and bounded dealing parameters only.',
+    'Mainline and significant stories wait for the player; never abandon or expire them. Arrival alone cannot trigger critical progress. Random events cannot block mainline.',
+    'Select Knowledge and achievements only from the input candidate numbers. Never rewrite facts, rumors, reliability or provenance, or create stable keys. Every deck carrying Knowledge propagation must include rest in triggerKinds.',
+    'Ending eligibility uses its own closed candidate set; never add quests, factions, recipes or keys, or require the final mainline quest itself. Use distinguishable eligibility combinations for different endings. Code compiles Conditions and local story consequences; never output Effects.',
+    'P6 targetSemanticKey is an early semantic placeholder, not a runtime person. Never infer people from thread numbers. consequenceSelections must select actual catalog targets. Resolve numerical change to increase/decrease, while regional change may remain; preserve every already explicit direction.',
+    'Evidence and records are declared story items. Select currency only for explicit monetary gain/loss. Consequences cannot create undeclared items or remove items.',
+  ].join('\n') : [
+    ...(preserveUniqueRewards ? [
+      'Return only the required JSON. Code owns IDs, catalog references, rewards, lifecycle and Action/Condition/Effect; write quest/objective semantics and bounded dealing parameters.',
+    ] : [
+      '你是StoryForge文字开放世界的任务最终化与地区导演设计师。只能返回JSON。',
+      '所有稳定键、目录引用、数值奖励、生命周期、Action、Condition和Effect由代码生成；你只写任务/目标可玩语义与有界发牌参数。',
+    ]),
     '主线与重要故事必须等待玩家、不可放弃或过期；不得用地点抵达作为唯一关键触发。随机事件不得阻断主线。',
     ...(context.knowledgeProgressContract === 'governed-v18' ? [
       'Knowledge与成就只能从输入候选编号中选择；不得改写事实、传闻、可靠度、来源或创建稳定键。',
@@ -2949,25 +3221,77 @@ function prompts(context: TextOpenWorldQuestFinalizeInputContextV1) {
     ...(context.storyOutcomeContract === 'governed-v19' ? [
       '每个结局的资格只能从该结局输入的闭集候选编号中选择；不得新增任务、阵营、配方、稳定键或把最终主线自身当作资格。',
       '不同结局必须采用可区分的资格组合。代码会把选择编译为Condition；重要故事局部后果由代码绑定，模型不得输出Effect。',
+      'P6后果targetSemanticKey只是早期语义占位，不能按故事编号猜运行人物。用consequenceSelections逐项选择实际目录目标；数值change必须明确增减，地区change可保留。不得改写既有明确方向。',
+      '资源后果如指证物或记录，应选择该故事已声明物品；只有明确的钱款得失才能选择货币。不能凭后果新增物品或移除物品。',
     ] : []),
   ].join('\n')
   const user = [
     '以下用户消息将提供已登记、已验签且字段精确的QuestFinalize输入合同。',
     `quests按${context.questSkeletons.quests.length}项顺序输出questNumber/description/tags；objectives按${context.objectiveBindingDemands.length}项顺序输出objectiveNumber/description/successDescription/timeCostMinutes(0-60)。`,
-    `decks按${context.mapInteractionCatalog.regions.length}个地区顺序输出regionNumber、非空triggerKinds、maximumRevealed(1-4)、maximumActive(1-3且不大于revealed)、cooldownMinutes(60-1440)、blankWeight(1-100)。`,
+    `decks按${context.mapInteractionCatalog.regions.length}个地区顺序输出regionNumber、非空triggerKinds（只选${TRIGGERS.join('|')}）、maximumRevealed(1-4)、maximumActive(1-3且不大于revealed)、cooldownMinutes(60-1440)、blankWeight(1-100)。`,
     `templates按${context.questSkeletons.quests.filter(quest => quest.type === 'template').length}项顺序输出templateNumber/category/help|resource|exploration|conflict|mystery、intensity(1-6)、weight(1-100)、cooldownMinutes(60-10080)。`,
     `randomEvents按${context.regionNarrativePacks.packs.flatMap(pack => pack.randomEventSeeds).length}项顺序输出seedNumber/description/kind(${context.knowledgeProgressContract === 'governed-v18' ? 'atmosphere|resource|encounter|quest-upgrade' : 'atmosphere|resource|encounter|clue|quest-upgrade'})/intensity/weight/cooldownMinutes/upgradeTemplateNumber；只有quest-upgrade必须且只能选择本地区模板编号。`,
     ...(context.knowledgeProgressContract === 'governed-v18' ? [
-      `knowledgeSelections按${context.knowledgeBindingDemands?.length ?? 0}条传闻顺序输出rumorNumber/propagationLocationNumber/confirmationCandidateNumbers；传播地点只能选本条location候选编号，确认必须严格升序选择1到3个本条候选编号。`,
-      `achievementCandidateNumbers严格升序选择3到6个输入候选编号，并同时包含至少一个任务奖励来源和一个结局来源。`,
+      context.objectiveEvidenceContract
+        ? `knowledgeSelections covers all ${context.knowledgeBindingDemands?.length ?? 0} rumors in order: rumorNumber/propagationLocationNumber/confirmationCandidateNumbers. Select the location from this rumor's location candidates and 1..3 confirmation candidates in strictly ascending order.`
+        : `knowledgeSelections按${context.knowledgeBindingDemands?.length ?? 0}条传闻顺序输出rumorNumber/propagationLocationNumber/confirmationCandidateNumbers；传播地点只能选本条location候选编号，确认必须严格升序选择1到3个本条候选编号。`,
+      context.objectiveEvidenceContract
+        ? 'achievementCandidateNumbers selects 3..6 input candidates in strictly ascending order, including both a quest-reward source and an ending source.'
+        : `achievementCandidateNumbers严格升序选择3到6个输入候选编号，并同时包含至少一个任务奖励来源和一个结局来源。`,
     ] : []),
     ...(context.storyOutcomeContract === 'governed-v19' ? [
       `endingEligibilitySelections按${context.endingEligibilityDemands?.length ?? 0}个结局顺序输出endingNumber、requiredQuestCandidateNumbers、anyQuestCandidateGroups、requiredFactionAffinities(candidateNumber/minimum)、requiredRecipeCandidateNumbers。阵营minimum必须高于初始亲合度且不超过目录上限；所有编号数组严格升序；替代任务组至少两个候选；每条路线至少一项资格。`,
+      context.objectiveEvidenceContract
+        ? 'consequenceSelections covers these closed demands in order: consequenceNumber, direction from allowedDirections, and strictly ascending demand-local targetCandidateNumbers. Select 1 actor/moral target or 1..3 region/faction/same-kind resource targets. Items permit increase only and cannot mix with currency.'
+        : 'consequenceSelections按下列闭集需求顺序输出consequenceNumber、direction（只选allowedDirections）和targetCandidateNumbers（本条候选编号，严格升序）。人物/道德选择1个；地区、阵营或同类资源选择1到3个，物品只能increase且不可混合货币。',
+      ...(context.objectiveEvidenceContract ? ['story-consequence-demands rows follow fields. targetCandidateSet is a zero-based index into candidateSets; each candidate row follows candidateFields. Candidate numbers remain local to each consequence.'] : []),
+      `<story-consequence-demands>${canonicalProductProductionJsonV2(context.objectiveEvidenceContract ? projectStoryConsequenceTable(context) : buildStoryConsequenceDemands(context))}</story-consequence-demands>`,
+    ] : []),
+    ...(explicitFulfillment ? [
+      ...(context.objectiveEvidenceContract ? ['v6必须包含fulfillmentSelections:{version:2,objectives:[{objectiveNumber,anyActionGroups,groupItems,items:[{itemNumber,quantity,consume}]}],interactions:[{interactionNumber,consumedItems:[{itemNumber,quantity}]}],endings:[{endingNumber,requiredInteractionNumbers}]}。顺序精确覆盖，编号严格升序。'] : ['draft v3/v4必须包含fulfillmentSelections:{version:1,objectives:[{objectiveNumber,anyActionGroups,items:[{itemNumber,quantity,consume}]}],interactions:[{interactionNumber,consumedItems:[{itemNumber,quantity}]}],endings:[{endingNumber,requiredInteractionNumbers}]}。所有数组精确按输入顺序覆盖；编号数组严格升序。']),
+      'objectives: cover fixed demands only, no templates. anyActionGroups: at most 4 OR paths of 1..8 demand-local candidateNumbers, all actions within each path required. Each craft path needs recipe proof; interaction goals need action proof. Possession is not crafting. items: only demand.itemNumbers; collect requires held items; consume specifies delivery/removal. Required recipes unlock on accept/restart, proof only on successful crafting.',
+      context.objectiveEvidenceContract
+        ? 'interactions covers mapInteractionCatalog.interactions in order; consumedItems=[] if none. itemNumber indexes itemRewardCatalog.items from 1; quantity is bounded by stack limit (1 for instances). Consume only noncritical stacks or nonunique, noncritical, unequipped equipment. Repairs require their materials, consume atomically and cannot charge twice. Prose alone is not consumption or repair. Shared template interactions cannot use global one-time costs.'
+        : 'interactions逐mapInteractionCatalog.interactions条目声明一次性实体操作消耗，无消耗时填[]；itemNumber是一基itemRewardCatalog.items序号，数量不得超过堆叠上限，禁止消耗critical物品或实例装备。一次性修复有材料才能执行，成功后不得重复扣料。不要仅在文案宣称消耗或修复。模板共用交互不得绑定全局一次性扣料。',
+      context.objectiveEvidenceContract
+        ? 'endings covers thread.endingKeys in order with all required interaction numbers across locations, or [] if none. Express alternative routes with objective action groups and ending eligibility. Preserve the accepted story.'
+        : 'endings逐thread.endingKeys声明实体结局所必需的交互序号；需要完成多个地点的操作时逐项绑定，替代路线通过不同目标操作组和结局条件表示。没有实体前置时填[]。不得为补齐结构改变已确认故事。',
+      ...(context.objectiveEvidenceContract ? ['objective-fulfillment-demands uses a lossless table: each rows entry follows objectiveFields; its candidates rows follow candidateFields. null means an absent optional field. All candidate numbers remain demand-local.'] : []),
+      `<objective-fulfillment-demands>${canonicalProductProductionJsonV2(context.objectiveEvidenceContract ? projectTextOpenWorldObjectiveFulfillmentTableV1(context) : buildTextOpenWorldObjectiveFulfillmentDemandsV1(context))}</objective-fulfillment-demands>`,
+    ] : []),
+    ...(explicitAcquisitions ? [
+      ...(context.objectiveEvidenceContract ? ['v6 includes itemAcquisitionSelections:[{objectiveNumber,interactionNumber,items:[{itemNumber,quantity}],replacementPolicy}], [] if none. Unique ascending global interactionNumbers; only exclusive fixed collect/interact/investigate interactions and their declared quest/misc items, quantity 1..min(8,stack limit). No templates/shared/consumptive interactions or new assets.'] : ['v4 requires itemAcquisitionSelections:[{objectiveNumber,interactionNumber,items:[{itemNumber,quantity}]}], [] if none. Sort global interactionNumbers ascending, unique. Only an exclusive fixed collect/interact/investigate interaction and its declared quest/misc items; quantity 1..min(8,stack limit). No templates, shared/consumptive interactions or new assets.']),
+      ...(context.objectiveEvidenceContract ? ['Pickups grant the item before completion. The same batch checks active quest/stage, preceding required objectives, permits and planned source, then grants and proves pickup. Only declared missing-ordinary replacement may repeat after loss/restart; critical/unique pickups remain one-time.'] : ['Pickups, borrowed records and comparison copies must grant the required item BEFORE objective completion, not only in that quest/later rewards. Pickup checks active stage, earlier required objectives and other required items, then atomically grants items with one-time proof. Restart cannot farm pickups; lost ordinary items rely on existing shops. Preserve story and critical-item protection.']),
+      ...(context.itemRewardCatalog.itemSourceContract ? [
+        context.objectiveEvidenceContract
+          ? 'Realize every acquisition itemSourcePlan exactly through itemAcquisitionSelections: sourceKey identifies the objective; itemKey maps to its existing item number. No omissions, unplanned pickups, completion rewards replacing pickups, or duplicate delivery grants. Plans do not grant items; only the actual exclusive interaction does.'
+          : 'itemSourcePlans中kind=acquisition的来源必须由itemAcquisitionSelections精确兑现；sourceKey是对应目标的稳定引用，itemKey对应既有物品编号。禁止遗漏、增添未计划领取、以完成奖励替代领取或为普通交付再次发放物品。来源计划本身不产生物品，只有通过实际独占交互才能领取。',
+      ] : []),
+    ] : []),
+    ...(context.objectiveEvidenceContract ? [
+      'draft v6: fulfillmentSelections.version=2; each objectives row includes groupItems, parallel to anyActionGroups, with {itemNumber,quantity} entries that check possession without consuming. Central component x1 OR branch components x2 belong to separate paths. Installation consumes in the interaction only, never again at objective completion. purchase requires the candidate item at a candidate vendor; teaching performs the lesson; skill checks actual learned state; dialogue performs the declared conversation.',
+      'Each itemAcquisitionSelections row includes replacementPolicy:never|missing-ordinary (default never). Replacement requires one unsellable, noncritical, nonunique parcel/tool for an ordinary quest and exactly one later consuming delivery in that quest. Regrant only while missing and delivery unfinished; no duplicate while held. Equipment delivery requires a nonunique, noncritical, unequipped instance. Keep narrative text in the accepted world language.',
+    ] : []),
+    ...(preserveUniqueRewards && !context.objectiveEvidenceContract ? [
+      'v5 keeps v4 fields; code retains held unique rewards. Do not promise duplicate items or emit reward policy/Effects.',
     ] : []),
     '不要输出敌人、物品、角色、地点、奖励、Action、Condition、Effect、Quest键或任何未要求字段。',
-    `返回：{"schema":"storyforge.text-open-world-quest-finalize-draft","version":1,"quests":[...],"objectives":[...],"decks":[...],"templates":[...],"randomEvents":[...]${context.knowledgeProgressContract === 'governed-v18' ? ',"knowledgeSelections":[...],"achievementCandidateNumbers":[...]' : ''}${context.storyOutcomeContract === 'governed-v19' ? ',"endingEligibilitySelections":[...]' : ''}}`,
+    `返回：{"schema":"storyforge.text-open-world-quest-finalize-draft","version":${context.objectiveEvidenceContract ? 6 : preserveUniqueRewards ? 5 : explicitAcquisitions ? 4 : explicitFulfillment ? 3 : explicitConsequences ? 2 : 1},"quests":[...],"objectives":[...],"decks":[...],"templates":[...],"randomEvents":[...]${context.knowledgeProgressContract === 'governed-v18' ? ',"knowledgeSelections":[...],"achievementCandidateNumbers":[...]' : ''}${explicitConsequences ? ',"endingEligibilitySelections":[...],"consequenceSelections":[...]' : ''}${explicitFulfillment ? ',"fulfillmentSelections":{...}' : ''}${explicitAcquisitions ? ',"itemAcquisitionSelections":[...]' : ''}}`,
   ].join('\n')
   return { system, user }
+}
+
+function modelInput(contextText: string): string {
+  return `以下是QuestFinalize输入合同：\n<quest-finalize-input>\n${contextText}\n</quest-finalize-input>`
+}
+
+function assertModelInputBudget(context: TextOpenWorldQuestFinalizeInputContextV1, text: string, budget: number | undefined): number {
+  const prompt = prompts(context)
+  const tokens = estimateTokens(`${prompt.system}\n${prompt.user}` + modelInput(text))
+  if (budget !== undefined && tokens > budget) {
+    throw new ProductProductionContextBudgetErrorV1(`[text-open-world-quest-finalize] 完整输入含提示词需要 ${tokens} tokens，超过本任务输入预算 ${budget}；未调用模型。`)
+  }
+  return tokens
 }
 
 async function defaultRunner(input: Parameters<TextOpenWorldQuestFinalizeModelRunnerV1>[0]): Promise<TextOpenWorldQuestFinalizeModelExecutionV1> {
@@ -2975,7 +3299,7 @@ async function defaultRunner(input: Parameters<TextOpenWorldQuestFinalizeModelRu
   const response = await runConfiguredProductionTextV1({
     projectId: input.projectId, requirementKey: input.requirementKey,
     expectedCapabilityHash: input.expectedCapabilityHash, category: input.category,
-    messages: [{ role: 'system', content: input.system }, { role: 'user', content: `以下是QuestFinalize输入合同：\n<quest-finalize-input>\n${input.contextText}\n</quest-finalize-input>` }],
+    messages: [{ role: 'system', content: input.system }, { role: 'user', content: modelInput(input.contextText) }],
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result, responseFormat: 'json_object',
   })
   return { output: response.output, bindingReceipt: response.bindingReceipt, usage: result.usage ?? null }
@@ -2996,6 +3320,9 @@ export function createTextOpenWorldQuestFinalizeExecutorV1(options: {
     if (!binding) fail('P8F缺少文本capability binding')
     const context = await parseContext(execution.contextText)
     const prompt = prompts(context); const started = performance.now()
+    const inputTokens = context.objectiveEvidenceContract
+      ? assertModelInputBudget(context, execution.contextText, (execution.attemptBudgetReservation ?? execution.task.budgetReservation).inputTokens)
+      : estimateTokens(prompt.system + prompt.user + execution.contextText)
     const model = await runModel({
       projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
       category: SKILL_ID,
@@ -3027,7 +3354,7 @@ export function createTextOpenWorldQuestFinalizeExecutorV1(options: {
         },
       ],
       usage: {
-        modelCalls: 1, inputTokens: model.usage?.inputTokens ?? estimateTokens(prompt.system + prompt.user + execution.contextText),
+        modelCalls: 1, inputTokens: model.usage?.inputTokens ?? inputTokens,
         outputTokens: model.usage?.outputTokens ?? estimateTokens(model.output), mediaCalls: 0,
         costUsd: null, durationMs, storageBytes: 0,
       },

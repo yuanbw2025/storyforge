@@ -1,12 +1,16 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { putMediaBlobObject } from '../../src/lib/product-production/media-blob-store'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
   finalizeTextOpenWorldCreatorQualityV1,
+  readTextOpenWorldVisualReviewWorkspaceV1,
+  recordTextOpenWorldVisualReviewV1,
   portableTextOpenWorldCreatorIssueJsonV1,
   readTextOpenWorldCreatorQualityWorkspaceV1,
   recordTextOpenWorldCreatorFullPlaytestV1,
   recordTextOpenWorldCreatorGrayboxV1,
   recordTextOpenWorldCreatorIssueV1,
+  recordTextOpenWorldCreatorCalibrationV1,
   requirePassedTextOpenWorldCreatorQualityGateV1,
   waiveTextOpenWorldCreatorAdvisoryIssueV1,
 } from '../../src/lib/open-world/creator-quality'
@@ -20,6 +24,9 @@ import {
   parseTextOpenWorldCreatorGrayboxEvidenceV1,
   parseTextOpenWorldCreatorUpdateVerificationEvidenceV1,
 } from '../../src/lib/open-world/creator-quality-contract'
+import * as calibration from '../../src/lib/open-world/creator-quality-calibration'
+import * as calibrationUsage from '../../src/lib/open-world/creator-calibration-usage'
+import type { TextOpenWorldCreatorCalibrationUsageSourceV1 } from '../../src/lib/open-world/creator-quality-contract'
 import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../../src/lib/open-world/creator-derived-authority'
 import {
   canonicalProductProductionJsonV2,
@@ -161,7 +168,7 @@ async function fixture(input: { advisories?: boolean } = {}): Promise<FixtureV1>
   for (const artifactKey of [
     'text-open-world.mainline-thread', 'text-open-world.significant-threads',
     'text-open-world.region-narrative-packs', 'text-open-world.scene-scripts',
-    'text-open-world.content-budget',
+    'text-open-world.content-budget', 'text-open-world.quest-skeletons', 'text-open-world.director-decks',
   ] as const) {
     const payload = { schema: `storyforge.fixture.${artifactKey}`, version: 1, artifactKey }
     const payloadJson = canonicalProductProductionJsonV2(payload)
@@ -278,7 +285,9 @@ async function insertGrayboxReceipt(input: FixtureV1): Promise<string> {
   return receipt.receiptHash
 }
 
-async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
+async function insertCalibrationReceipt(input: FixtureV1, options: {
+  reviewInputHash?: string; score?: number; failedUsage?: boolean
+} = {}): Promise<string> {
   const [build, derived, artifacts] = await Promise.all([
     db.productBuilds.get(input.buildId),
     readTextOpenWorldCreatorDerivedBuildAuthorityV1({ scope: input.scope, buildId: input.buildId }),
@@ -290,14 +299,17 @@ async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
   const semantic = JSON.parse(semanticRow.payloadJson)
   const artifactHash = (key: string) => artifacts.find(row => row.artifactKey === key)!.contentHash
   const ledgerHash = await hashProductProductionValueV2(JSON.parse(build.budgetLedgerJson))
-  const inputHash = await hashProductProductionValueV2({ calibration: 'input', buildId: input.buildId })
+  const inputHash = options.reviewInputHash
+    ?? await hashProductProductionValueV2({ calibration: 'input', buildId: input.buildId })
   const outputHash = await hashProductProductionValueV2({ calibration: 'output', buildId: input.buildId })
   const evaluatedAt = Date.now()
   const checks = [
     'real-independent-provider-identities', 'production-semantic-release-line',
     'independent-narrative-release-line', 'three-distinct-variants-per-template',
     'authored-duration-inventory', 'production-call-usage-observed', 'production-budget-and-cost',
-  ].map(key => ({ key, passed: true, summary: `${key} fixture evidence` }))
+  ].map(key => ({ key, passed: !(key === 'production-call-usage-observed' && options.failedUsage)
+    && !(key === 'independent-narrative-release-line' && (options.score ?? 90) < 70),
+  summary: `${key} fixture evidence` }))
   const evidence = parseTextOpenWorldCreatorCalibrationEvidenceV1({
     schema: 'storyforge.text-open-world-creator-calibration-evidence', version: 1,
     build: input.buildBinding,
@@ -308,11 +320,13 @@ async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
     },
     independentReview: {
       provider: 'claude', model: 'claude-sonnet-4-20250514',
-      promptVersion: 'text-open-world-release-calibration-grader.v1',
+      promptVersion: options.reviewInputHash
+        ? calibration.TEXT_OPEN_WORLD_CREATOR_CALIBRATION_PROMPT_VERSION_V1
+        : 'text-open-world-release-calibration-grader.v1',
       inputHash, outputHash, inputTokens: 100, outputTokens: 50,
       finishReason: 'stop', durationMs: 100,
       scores: [
-        { metricKey: 'mainline-quality', score: 90, rationale: '主线结构清晰完整。' },
+        { metricKey: 'mainline-quality', score: options.score ?? 90, rationale: '主线结构清晰完整。' },
         { metricKey: 'significant-stories', score: 90, rationale: '重要故事冲突完整。' },
         { metricKey: 'template-differentiation', score: 90, rationale: '模板变体有明确差异。' },
       ], findings: [],
@@ -337,7 +351,7 @@ async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
       budgetMaximumOutputTokens: 360_000, budgetMaximumDurationMs: 86_400_000,
       budgetMaximumCostUsd: 30,
     },
-    checks, passed: true, evaluatedAt,
+    checks, passed: checks.every(check => check.passed), evaluatedAt,
   })
   const inputHashes = [
     input.buildBinding.packageHash,
@@ -353,7 +367,8 @@ async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
     gateId: TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1, gateVersion: '1',
     verifierId: 'storyforge.creator-independent-release-calibration', verifierVersion: '1',
     verifierKind: 'provider-review' as const, inputHashes, environmentHash: null,
-    measuredJson: canonicalProductProductionJsonV2(evidence), status: 'passed' as const,
+    measuredJson: canonicalProductProductionJsonV2(evidence),
+    status: evidence.passed ? 'passed' as const : 'failed' as const,
     thresholdProfileId: 'storyforge.text-open-world-creator-release-calibration.v1', thresholdProfileVersion: '1',
     evidenceRefs: [semantic.semanticReviewHash, inputHash, outputHash, ledgerHash], createdAt: evaluatedAt,
   }
@@ -361,11 +376,44 @@ async function insertCalibrationReceipt(input: FixtureV1): Promise<string> {
   await db.productQualityGateReceipts.add({
     projectId: input.scope.projectId, worldId: input.scope.worldId, workId: input.scope.workId,
     buildId: input.buildId, gateId: receipt.gateId, gateVersion: '1',
-    verifierId: receipt.verifierId, verifierVersion: '1', status: 'passed',
+    verifierId: receipt.verifierId, verifierVersion: '1', status: receipt.status,
     receiptJson: canonicalProductProductionJsonV2(receipt), receiptHash: receipt.receiptHash,
     createdAt: evaluatedAt,
   })
   return receipt.receiptHash
+}
+
+/** Receipt integration only. Narrative projection and independently tested
+ * physical lineage verifiers are adapters here, never real-model evidence. */
+async function calibrationRecheckFixture(score = 90) {
+  const seeded = await fixture({ advisories: false })
+  const context = {
+    schema: 'storyforge.text-open-world-creator-calibration-review-input', version: 1,
+    buildPackageHash: seeded.buildBinding.packageHash,
+  } as calibration.TextOpenWorldCreatorCalibrationReviewContextV1
+  const receiptHash = await insertCalibrationReceipt(seeded, {
+    reviewInputHash: await calibration.hashTextOpenWorldCreatorCalibrationReviewInputV1(context),
+    failedUsage: true, score,
+  })
+  const previousRow = (await db.productQualityGateReceipts.where('[buildId+gateId+receiptHash]')
+    .equals([seeded.buildId, TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1, receiptHash]).first())!
+  const previous = parseTextOpenWorldCreatorCalibrationEvidenceV1(JSON.parse(JSON.parse(previousRow.receiptJson).measuredJson))
+  vi.spyOn(calibration, 'buildTextOpenWorldCreatorCalibrationContextV1').mockReturnValue(context)
+  vi.spyOn(calibration, 'projectTextOpenWorldTemplateDifferentiationV1').mockReturnValue(previous.templateDifferentiation)
+  vi.spyOn(calibration, 'projectTextOpenWorldContentDurationV1').mockReturnValue(previous.contentDuration)
+  const build = (await db.productBuilds.get(seeded.buildId))!
+  const source: TextOpenWorldCreatorCalibrationUsageSourceV1 = {
+    buildNumber: build.buildNumber, briefHash: build.briefHash, planHash: build.planHash,
+    origin: 'creator-start-v1', proofHash: build.rootTerminalReceiptHash!,
+    usage: { ...previous.productionUsage, ledgerHash: 'd'.repeat(64) },
+    observedModelCalls: previous.productionUsage.modelCalls,
+    observedInputTokens: previous.productionUsage.inputTokens, observedOutputTokens: previous.productionUsage.outputTokens,
+    unknownAttemptCount: 0, chargedUpperBoundAttemptCount: 0,
+  }
+  const lineage = vi.spyOn(calibrationUsage, 'readTextOpenWorldCalibrationLineageV1')
+    .mockResolvedValue({ sources: [source], readSets: [] })
+  const cas = vi.spyOn(calibrationUsage, 'assertTextOpenWorldCalibrationLineageUnchangedV1').mockResolvedValue()
+  return { seeded, context, receiptHash, previousRow, previous, lineage, cas }
 }
 
 async function insertCompletedPlaytestRoute(input: FixtureV1, endingKey: string, suffix: string): Promise<number> {
@@ -467,11 +515,57 @@ beforeEach(async () => {
   runtimeEvidence.bySession.clear()
 })
 
+afterEach(() => vi.restoreAllMocks())
+
 afterAll(async () => {
   await db.delete()
 })
 
 describe('TOW-G5-09 · Creator质量、灰盒和问题回执', () => {
+  it.each([90, 64])('复核沿用原%s分和失败回执，生成v2账本结论且零新增评审调用', async score => {
+    const prepared = await calibrationRecheckFixture(score)
+    // Import may relocate local Run IDs. The source verifier above represents
+    // the independently verified current proof; only the old review is reused.
+    const build = (await db.productBuilds.get(prepared.seeded.buildId))!
+    const relocatedLedger = JSON.parse(build.budgetLedgerJson)
+    relocatedLedger.rootRunId = 9876
+    await db.productBuilds.update(build.id!, { budgetLedgerJson: JSON.stringify(relocatedLedger) })
+    const runReview = vi.fn()
+    const receipt = await recordTextOpenWorldCreatorCalibrationV1({
+      scope: prepared.seeded.scope, productionId: prepared.seeded.productionId,
+      buildId: prepared.seeded.buildId, reuseReceiptHash: prepared.receiptHash,
+    }, { runReview, now: () => prepared.previous.evaluatedAt + 1 })
+    expect(runReview).not.toHaveBeenCalled()
+    expect(prepared.cas).toHaveBeenCalledOnce()
+    expect(receipt.evidence.version).toBe(2)
+    expect(receipt.evidence.independentReview).toEqual(prepared.previous.independentReview)
+    const stored = (await db.productQualityGateReceipts.get(receipt.rowId))!
+    expect(JSON.parse(stored.receiptJson).verifierKind).toBe('deterministic')
+    expect(receipt.status).toBe(score >= 70 ? 'passed' : 'failed')
+    expect(await db.productQualityGateReceipts.get(prepared.previousRow.id!)).toEqual(prepared.previousRow)
+    const readback = await readTextOpenWorldCreatorQualityWorkspaceV1({
+      scope: prepared.seeded.scope, productionId: prepared.seeded.productionId,
+    })
+    expect(readback.calibrationReceipt?.receiptHash).toBe(receipt.receiptHash)
+  })
+
+  it('评分输入变化时拒绝复用且不重发模型，验真快照变化时原子拒绝新回执', async () => {
+    const prepared = await calibrationRecheckFixture()
+    const input = { scope: prepared.seeded.scope, productionId: prepared.seeded.productionId,
+      buildId: prepared.seeded.buildId, reuseReceiptHash: prepared.receiptHash }
+    const runReview = vi.fn()
+    prepared.context.buildPackageHash = '0'.repeat(64)
+    await expect(recordTextOpenWorldCreatorCalibrationV1(input, { runReview })).rejects.toThrow('完全相同输入')
+    prepared.context.buildPackageHash = prepared.seeded.buildBinding.packageHash
+    prepared.cas.mockRejectedValueOnce(new Error('terminal CAS Run proof set 已变化'))
+    await expect(recordTextOpenWorldCreatorCalibrationV1(input, { runReview })).rejects.toThrow('terminal CAS')
+    expect(runReview).not.toHaveBeenCalled()
+    expect(await db.productQualityGateReceipts.where('[buildId+gateId]').equals([
+      input.buildId, TEXT_OPEN_WORLD_CREATOR_CALIBRATION_GATE_ID_V1,
+    ]).count()).toBe(1)
+    expect(await db.productQualityGateReceipts.get(prepared.previousRow.id!)).toEqual(prepared.previousRow)
+  })
+
   it('复用生产双评审与完整Artifact治理，代码硬门和建议项分轴展示', async () => {
     const seeded = await fixture()
     const workspace = await readTextOpenWorldCreatorQualityWorkspaceV1({
@@ -864,5 +958,81 @@ describe('TOW-G5-09 · Creator质量、灰盒和问题回执', () => {
         migrationPreviewHash: '5'.repeat(64),
       },
     })).toThrow(/破坏性更新不能声明存档迁移/)
+  })
+})
+
+// Synthetic receipts exercise persistence only; no real human acceptance is claimed.
+describe('W6 versioned visual review gate', () => {
+  async function visualFixture(imageCount = 1) {
+    const seeded = await fixture({ advisories: false })
+    const template = (await db.productBuildArtifacts.where('buildId').equals(seeded.buildId).first())!
+    const blob = await putMediaBlobObject({ scope: seeded.scope, mimeType: 'image/png', backend: 'indexeddb',
+      data: new Uint8Array([137, 80, 78, 71, 1, 2, 3]).buffer })
+    const actorKeys = Array.from({ length: imageCount }, (_, index) => index === 0 ? 'actor.guide' : `actor.guide-${index + 1}`)
+    const inputs = [
+      { artifactKey: 'text-open-world.integration-report', payload: { version: 2 } },
+      { artifactKey: 'text-open-world.media-requirements', payload: { slots: actorKeys.map(subjectKey => ({ subjectKind: 'actor', subjectKey, kind: 'character-portrait' })), coverage: { requiredActorKeys: actorKeys } } },
+      ...actorKeys.map((_, index) => ({ artifactKey: `text-open-world.media.visual.${String(index + 1).padStart(3, '0')}`, payload: {} })),
+    ]
+    for (const item of inputs) {
+      const { id: _id, ...base } = template
+      const media = item.artifactKey.includes('.visual.')
+      const actorKey = actorKeys[Number(item.artifactKey.split('.').at(-1)) - 1]
+      await db.productBuildArtifacts.add({ ...base, artifactKey: item.artifactKey, kind: item.artifactKey,
+        contentHash: media ? blob.contentHash : await hashProductProductionValueV2(item.payload),
+        payloadJson: JSON.stringify(item.payload), blobObjectId: media ? blob.id! : null,
+        mimeType: media ? 'image/png' : null, byteSize: media ? blob.byteSize : 1,
+        metadataJson: media ? JSON.stringify({ sceneTag: actorKey, characterTag: actorKey, altText: '向导头像',
+          width: 16, height: 16, source: 'synthetic-test', license: 'test-only' }) : '{}',
+      })
+      governance.artifactKeys.push(item.artifactKey)
+    }
+    return seeded
+  }
+  it('accepts a complete review in the author selection order but still rejects missing or duplicate decisions', async () => {
+    const seeded = await visualFixture(2)
+    const workspace = await readTextOpenWorldVisualReviewWorkspaceV1(seeded)
+    const decisions = workspace.assets.map(asset => ({ artifactKey: asset.artifactKey, decision: 'approved' as const, note: '' })).reverse()
+    const input = { ...seeded, expectedAssetsHash: workspace.consistency.assetsHash, decisions,
+      characterConsistencyConfirmed: true as const, imagesActuallyViewed: true as const, noAutomationProxy: true as const }
+    await expect(recordTextOpenWorldVisualReviewV1({ ...input, decisions: decisions.slice(0, 1) })).rejects.toThrow('全部图片')
+    await expect(recordTextOpenWorldVisualReviewV1({ ...input, decisions: [decisions[0], decisions[0]] })).rejects.toThrow('全部图片')
+    expect(await db.productQualityGateReceipts.where('buildId').equals(seeded.buildId).count()).toBe(0)
+    const saved = await recordTextOpenWorldVisualReviewV1(input)
+    expect(saved.receipt?.status).toBe('passed')
+    expect(decisions.map(decision => decision.artifactKey)).toEqual(['text-open-world.media.visual.002', 'text-open-world.media.visual.001'])
+    const receipt = (await db.productQualityGateReceipts.where('buildId').equals(seeded.buildId).first())!
+    const evidence = JSON.parse(JSON.parse(receipt.receiptJson).measuredJson)
+    expect(evidence.decisions.map((decision: { artifactKey: string }) => decision.artifactKey)).toEqual(workspace.assets.map(asset => asset.artifactKey))
+  })
+  it('requires explicit decisions, persists immutable human evidence, and fails closed on changed images', async () => {
+    const seeded = await visualFixture()
+    const before = await db.productBuilds.get(seeded.buildId)
+    const workspace = await readTextOpenWorldVisualReviewWorkspaceV1(seeded)
+    expect(workspace.receipt).toBeNull()
+    expect(workspace.consistency.characterGroups[0].artifactKeys).toEqual(['text-open-world.media.visual.001'])
+    const input = { ...seeded, expectedAssetsHash: workspace.consistency.assetsHash,
+      decisions: [{ artifactKey: 'text-open-world.media.visual.001', decision: 'approved' as const, note: '' }],
+      characterConsistencyConfirmed: true as const, imagesActuallyViewed: true as const, noAutomationProxy: true as const }
+    await expect(recordTextOpenWorldVisualReviewV1({ ...input, decisions: [] })).rejects.toThrow('全部图片')
+    await expect(recordTextOpenWorldVisualReviewV1({ ...input, expectedAssetsHash: 'a'.repeat(64) })).rejects.toThrow('图片集合')
+    const saved = await recordTextOpenWorldVisualReviewV1(input)
+    expect(saved.receipt?.status).toBe('passed')
+    expect(await db.productBuilds.get(seeded.buildId)).toEqual(before)
+    const row = (await db.productBuildArtifacts.where('buildId').equals(seeded.buildId).toArray()).find(row => row.artifactKey.includes('.visual.'))!
+    await db.productBuildArtifacts.update(row.id!, { metadataJson: row.metadataJson.replace('向导头像', '修改后的头像') })
+    await expect(readTextOpenWorldVisualReviewWorkspaceV1(seeded)).rejects.toThrow('失效')
+    expect(await db.productQualityGateReceipts.where('buildId').equals(seeded.buildId).count()).toBe(1)
+  })
+  it('a rejection stays failed and blocks version 2 quality readiness', async () => {
+    const seeded = await visualFixture()
+    const workspace = await readTextOpenWorldVisualReviewWorkspaceV1(seeded)
+    const saved = await recordTextOpenWorldVisualReviewV1({ ...seeded, expectedAssetsHash: workspace.consistency.assetsHash,
+      decisions: [{ artifactKey: 'text-open-world.media.visual.001', decision: 'rejected', note: '工程模拟：人物外观不一致' }],
+      characterConsistencyConfirmed: true, imagesActuallyViewed: true, noAutomationProxy: true })
+    expect(saved.receipt?.status).toBe('failed')
+    const quality = await readTextOpenWorldCreatorQualityWorkspaceV1(seeded)
+    expect(quality.releaseQualityReady).toBe(false)
+    expect(quality.blockers.some(value => value.includes('逐图'))).toBe(true)
   })
 })

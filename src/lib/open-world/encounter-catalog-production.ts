@@ -43,7 +43,7 @@ interface EncounterDemandV1 {
 
 export interface TextOpenWorldEncounterCatalogInputContextV1 {
   schema: 'storyforge.text-open-world-encounter-catalog-input'
-  version: 1
+  version: 1 | 2
   productInstanceKey: string
   gameplayRuleset: TextOpenWorldGameplayRulesetSkeletonV1
   playerBuild: TextOpenWorldPlayerBuildV1
@@ -145,6 +145,7 @@ function buildEncounterDemands(input: {
   regionPacks: TextOpenWorldRegionNarrativePacksV1
   quests: TextOpenWorldQuestSkeletonsV1
   manifest: TextOpenWorldContentRequirementManifestV1
+  version: 1 | 2
 }): EncounterDemandV1[] {
   const demands: EncounterDemandV1[] = []
   const initialPack = input.regionPacks.packs[0] ?? fail('RegionNarrativePacks为空')
@@ -157,9 +158,20 @@ function buildEncounterDemands(input: {
     const relatedQuests = objectiveKeys.map(objectiveKey => questForObjective({ questSkeletons: input.quests }, objectiveKey))
     const regionKey = relatedQuests[0]!.regionKeys[0] ?? initialPack.regionKey
     const regionPack = input.regionPacks.packs.find(pack => pack.regionKey === regionKey) ?? initialPack
+    // A quest may cross regions. Keep the historical v1 projection for frozen
+    // requests, but let new requests select any location owned by its regions.
+    const candidatePacks = input.version === 1 ? [regionPack] : input.regionPacks.packs
+      .filter(pack => relatedQuests.some(quest => quest.regionKeys.includes(pack.regionKey)))
     const questLocations = [...new Set(relatedQuests.flatMap(quest => quest.locationKeys))]
-      .filter(locationKey => regionPack.locationPlans.some(plan => plan.locationKey === locationKey))
-    const candidateLocationKeys = questLocations.length ? questLocations : regionPack.locationPlans.map(plan => plan.locationKey)
+    if (input.version === 2 && questLocations.some(locationKey => candidatePacks
+      .filter(pack => pack.locationPlans.some(plan => plan.locationKey === locationKey)).length !== 1)) {
+      fail(`遭遇任务地点必须属于唯一的关联地区:${requirement.key}`)
+    }
+    const selectedLocations = questLocations.filter(locationKey => candidatePacks
+      .some(pack => pack.locationPlans.some(plan => plan.locationKey === locationKey)))
+    const candidateLocationKeys = selectedLocations.length ? selectedLocations
+      : candidatePacks.flatMap(pack => pack.locationPlans.map(plan => plan.locationKey))
+    if (!candidateLocationKeys.length) fail(`遭遇需求没有候选地点:${requirement.key}`)
     for (let index = 0; index < requirement.minimumCount; index += 1) demands.push({
       demandNumber: demands.length + 1,
       sourceDemandKey: `${requirement.key}.${String(index + 1).padStart(3, '0')}`,
@@ -210,7 +222,7 @@ async function validateUpstream(context: Omit<TextOpenWorldEncounterCatalogInput
     || progressionCatalogs.questSkeletonsHash !== questSkeletons.questSkeletonsHash
     || progressionCatalogs.contentRequirementManifestHash !== contentRequirementManifest.contentRequirementManifestHash
     || progressionCatalogs.governance.allRuntimeBindingsUnbound !== true) fail('Encounter Catalog上游身份、引用或未绑定边界无效')
-  const expected = buildEncounterDemands({ regionPacks: regionNarrativePacks, quests: questSkeletons, manifest: contentRequirementManifest })
+  const expected = buildEncounterDemands({ regionPacks: regionNarrativePacks, quests: questSkeletons, manifest: contentRequirementManifest, version: context.version })
   if (canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(context.encounterDemands)) fail('encounterDemands不是上游确定性投影')
   const combatObjectives = questSkeletons.objectives.filter(objective => objective.playerIntent === 'combat')
   combatObjectives.forEach(objective => {
@@ -247,9 +259,9 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     if (await hashProductProductionValueV2(payloads[index]) !== rowsByKey[keys[index]].contentHash) fail(`Artifact行Hash不匹配:${keys[index]}`)
   }
   const body: Omit<TextOpenWorldEncounterCatalogInputContextV1, 'contextSelectionHash'> = {
-    schema: 'storyforge.text-open-world-encounter-catalog-input', version: 1, productInstanceKey: production.productionKey,
+    schema: 'storyforge.text-open-world-encounter-catalog-input', version: 2, productInstanceKey: production.productionKey,
     gameplayRuleset, playerBuild, regionNarrativePacks, questSkeletons, contentRequirementManifest, progressionCatalogs,
-    encounterDemands: buildEncounterDemands({ regionPacks: regionNarrativePacks, quests: questSkeletons, manifest: contentRequirementManifest }),
+    encounterDemands: buildEncounterDemands({ regionPacks: regionNarrativePacks, quests: questSkeletons, manifest: contentRequirementManifest, version: 2 }),
   }
   await validateUpstream(body)
   const context = { ...body, contextSelectionHash: await hashProductProductionValueV2(body) }
@@ -265,7 +277,7 @@ export async function readTextOpenWorldEncounterCatalogInputContextV1(input: Ass
 async function parseContext(value: string): Promise<TextOpenWorldEncounterCatalogInputContextV1> {
   let context: TextOpenWorldEncounterCatalogInputContextV1
   try { context = JSON.parse(value) as TextOpenWorldEncounterCatalogInputContextV1 } catch { return fail('Context JSON损坏') }
-  if (context.schema !== 'storyforge.text-open-world-encounter-catalog-input' || context.version !== 1) fail('Context身份无效')
+  if (context.schema !== 'storyforge.text-open-world-encounter-catalog-input' || (context.version !== 1 && context.version !== 2)) fail('Context身份无效')
   const { contextSelectionHash, ...body } = context
   await validateUpstream(body)
   if (!isSha256Hash(contextSelectionHash) || await hashProductProductionValueV2(body) !== contextSelectionHash) fail('Context选择Hash不匹配')
@@ -334,6 +346,11 @@ async function createArtifact(input: { context: TextOpenWorldEncounterCatalogInp
   const governedFamilyKeys = new Map<string, string>()
   input.draft.encounters.forEach((draft, index) => {
     const demand = input.context.encounterDemands[draft.demandNumber - 1]!
+    const locationKey = demand.candidateLocationKeys[draft.locationNumber - 1]!
+    const owners = input.context.regionNarrativePacks.packs
+      .filter(pack => pack.locationPlans.some(plan => plan.locationKey === locationKey))
+    if (input.context.version === 2 && owners.length !== 1) fail(`遭遇地点没有唯一地区:${locationKey}`)
+    const regionKey = input.context.version === 2 ? owners[0]!.regionKey : demand.regionKey
     const number = String(index + 1).padStart(3, '0')
     const enemyKey = `enemy.catalog.${number}`
     const encounterKey = `encounter.catalog.${number}`
@@ -361,7 +378,7 @@ async function createArtifact(input: { context: TextOpenWorldEncounterCatalogInp
     enemies.push({
       key: enemyKey, order: index + 1, familyKey, sourceDemandKey: demand.sourceDemandKey,
       title: draft.enemyTitle, description: draft.enemyDescription, tags: draft.enemyTags,
-      regionKey: demand.regionKey, homeLocationKey: demand.candidateLocationKeys[draft.locationNumber - 1]!, level: draft.recommendedLevel,
+      regionKey, homeLocationKey: locationKey, level: draft.recommendedLevel,
       ...stats, skillKeys: [basicSkill.key], strategyProfileKey: strategyKey,
       fulfilledRequirementKeys: demand.demandKind === 'enemy-requirement' ? fulfilled : [],
       sourceRefs: [demand.sourceDemandKey],
@@ -369,8 +386,8 @@ async function createArtifact(input: { context: TextOpenWorldEncounterCatalogInp
     })
     encounters.push({
       key: encounterKey, order: index + 1, sourceDemandKey: demand.sourceDemandKey,
-      title: draft.encounterTitle, description: draft.encounterDescription, regionKey: demand.regionKey,
-      locationKey: demand.candidateLocationKeys[draft.locationNumber - 1]!, questObjectiveKeys: demand.questObjectiveKeys,
+      title: draft.encounterTitle, description: draft.encounterDescription, regionKey,
+      locationKey, questObjectiveKeys: demand.questObjectiveKeys,
       enemyGroups: [{ key: `group.${encounterKey}.001`, enemyKey, count: draft.enemyCount, order: 1 }],
       recommendedLevel: draft.recommendedLevel,
       levelBand: { minimum: Math.max(1, draft.recommendedLevel - 1), maximum: Math.min(20, draft.recommendedLevel + 1) },
@@ -385,7 +402,12 @@ async function createArtifact(input: { context: TextOpenWorldEncounterCatalogInp
   const enemyRequirements = input.context.contentRequirementManifest.requirements.filter(requirement => requirement.kind === 'enemy' && requirement.ownerTaskKey === 'p8.catalog.encounters').map(requirement => requirement.key)
   const encounterRequirements = input.context.contentRequirementManifest.requirements.filter(requirement => requirement.kind === 'encounter' && requirement.ownerTaskKey === 'p8.catalog.encounters').map(requirement => requirement.key)
   const combatObjectiveKeys = input.context.questSkeletons.objectives.filter(objective => objective.playerIntent === 'combat').map(objective => objective.key)
-  const coveredCombatObjectiveKeys = [...new Set(input.context.encounterDemands.flatMap(demand => demand.questObjectiveKeys))].sort()
+  const combatObjectiveKeySet = new Set(combatObjectiveKeys)
+  // Exploration and interaction objectives may also reference encounters.
+  // Keep those consumer links without counting them as required combat.
+  const coveredCombatObjectiveKeys = [...new Set(input.context.encounterDemands
+    .flatMap(demand => demand.questObjectiveKeys)
+    .filter(key => combatObjectiveKeySet.has(key)))].sort()
   const body: Omit<TextOpenWorldEnemyEncounterCatalogV1, 'enemyEncounterCatalogHash'> = {
     schema: 'storyforge.text-open-world-enemy-encounter-catalog', version: 1, productType: 'text-open-world', productInstanceKey: input.context.productInstanceKey,
     gameplayRulesetHash: input.context.gameplayRuleset.gameplayRulesetHash, playerBuildHash: input.context.playerBuild.playerBuildHash,
@@ -500,7 +522,15 @@ function systemPrompt(context: TextOpenWorldEncounterCatalogInputContextV1): str
   return [
     '你是StoryForge文字开放世界Enemy与Encounter Catalog Designer。你为每项encounterDemand设计一个敌人和一个可玩的单组遭遇；代码负责稳定键、数值公式、技能策略、任务消费者、奖励/掉落预留和运行绑定。',
     `encounterDemands共有${context.encounterDemands.length}项，必须按demandNumber顺序精确覆盖。语义必须服从需求的title/description/requestedTraits、regionKey和候选地点；locationNumber是一基candidateLocationKeys序号。`,
-    'enemyArchetype只能balanced/brute/swift/armored；recommendedLevel为1到20；intensity只能ordinary/dangerous/boss；enemyCount为1到5。若多个敌人属于同一家族，在enemyTags中使用完全一致的enemy-family:家族名标记；代码只把该标记编译成共享familyKey，不允许模型直接写运行键。保护需求通常不能靠极端等级制造主线锁死，首版战斗失败始终可重试或无代价复活。',
+    ...(context.version === 2 ? [
+      '跨地区需求的regionKey只是关联起始地区；敌人和遭遇的最终地区由所选地点的真实归属确定。locationNumber只能从本条需求的下列编号选取，不是全地图地点编号；不得把风沙、心理压力或友善居民编成可攻击敌人。',
+      JSON.stringify(context.encounterDemands.map(demand => ({ demandNumber: demand.demandNumber,
+        locationOptions: demand.candidateLocationKeys.map((locationKey, index) => ({ locationNumber: index + 1, locationKey,
+          regionKey: context.regionNarrativePacks.packs.find(pack => pack.locationPlans.some(plan => plan.locationKey === locationKey))!.regionKey,
+        })),
+      }))),
+    ] : []),
+    `enemyArchetype只能balanced/brute/swift/armored；recommendedLevel为${context.gameplayRuleset.progression.acceptanceLevelRange.minimum}到${context.gameplayRuleset.progression.acceptanceLevelRange.maximum}；intensity只能ordinary/dangerous/boss；enemyCount为1到5。若多个敌人属于同一家族，在enemyTags中使用完全一致的enemy-family:家族名标记；代码只把该标记编译成共享familyKey，不允许模型直接写运行键。保护需求通常不能靠极端等级制造主线锁死，首版战斗失败始终可重试或无代价复活。`,
     '只写敌人、遭遇的可见语义和开战/胜利/失败文本。不要输出属性数值、技能键、任务键、奖励、掉落、Action、Effect、Condition或媒资引用。敌人与遭遇标题分别不得重复。',
     '只输出字段精确的JSON：',
     '{"schema":"storyforge.text-open-world-encounter-catalog-draft","version":1,"encounters":[{"demandNumber":1,"enemyTitle":"...","enemyDescription":"...","enemyTags":["..."],"enemyArchetype":"balanced","encounterTitle":"...","encounterDescription":"...","locationNumber":1,"recommendedLevel":1,"intensity":"ordinary","enemyCount":1,"openingText":"...","victoryText":"...","defeatText":"..."}]}',
@@ -534,7 +564,7 @@ export function createTextOpenWorldEncounterCatalogExecutorV1(options: {
     const context = await parseContext(execution.contextText); const prompt = systemPrompt(context); const startedAt = performance.now()
     const response = await runModel({
       projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
-      category: 'text-open-world.production.encounter-catalog',
+      category: SKILL_ID,
       system: prompt, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(28_000, execution.task.budgetReservation.outputTokens)), signal: execution.signal,
     })

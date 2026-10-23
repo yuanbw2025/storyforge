@@ -61,7 +61,8 @@ interface SkillDemandV1 {
 
 export interface TextOpenWorldProgressionCatalogsInputContextV1 {
   schema: 'storyforge.text-open-world-progression-catalogs-input'
-  version: 1
+  /** v2 projects legacy PlayerBuild status skills without numeric scaling. */
+  version: 1 | 2
   productInstanceKey: string
   gameplayRuleset: TextOpenWorldGameplayRulesetSkeletonV1
   playerBuild: TextOpenWorldPlayerBuildV1
@@ -186,6 +187,7 @@ async function assertOwnHash(value: Record<string, unknown>, hashKey: string, la
 function buildSkillDemands(input: {
   playerBuild: TextOpenWorldPlayerBuildV1
   manifest: TextOpenWorldContentRequirementManifestV1
+  version: 1 | 2
 }): SkillDemandV1[] {
   const demands: SkillDemandV1[] = []
   input.playerBuild.catalogRequirements.skills.forEach(skill => demands.push({
@@ -199,7 +201,10 @@ function buildSkillDemands(input: {
       activation: skill.activation,
       kind: skill.kind,
       target: skill.target,
-      scalingAttribute: skill.scalingAttribute,
+      // PlayerBuild v1 retained a primary-attribute preference even for guard/tempo.
+      // Keep that immutable source intact; only new context projections remove it
+      // from non-numeric status mechanics. Frozen v1 contexts remain reproducible.
+      scalingAttribute: input.version === 2 && skill.kind === 'status' ? null : skill.scalingAttribute,
       resourceCost: skill.resourceCost,
       cooldownTurns: skill.cooldownTurns,
     },
@@ -249,6 +254,9 @@ async function validateUpstream(context: Omit<TextOpenWorldProgressionCatalogsIn
   if (context.combatMechanicsContract !== undefined && context.combatMechanicsContract !== 'governed-v17') {
     fail('结构化战斗语义生产合同无效')
   }
+  if (context.version === 2 && context.combatMechanicsContract !== 'governed-v17') {
+    fail('v2成长目录必须使用结构化战斗语义合同')
+  }
   await validateTextOpenWorldGameplayRulesetSkeletonV1({ artifact: gameplayRuleset })
   if (playerBuild.schema !== 'storyforge.text-open-world-player-build' || playerBuild.version !== 1
     || playerBuild.catalogBinding.status !== 'reserved-unbound'
@@ -266,7 +274,7 @@ async function validateUpstream(context: Omit<TextOpenWorldProgressionCatalogsIn
     || contentRequirementManifest.questSkeletonsHash !== questSkeletons.questSkeletonsHash) fail('成长目录上游身份或引用无效')
   await assertOwnHash(questSkeletons as unknown as Record<string, unknown>, 'questSkeletonsHash', 'QuestSkeletons')
   await assertOwnHash(contentRequirementManifest as unknown as Record<string, unknown>, 'contentRequirementManifestHash', 'ContentRequirementManifest')
-  const expected = buildSkillDemands({ playerBuild, manifest: contentRequirementManifest })
+  const expected = buildSkillDemands({ playerBuild, manifest: contentRequirementManifest, version: context.version })
   if (canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(context.skillDemands)) {
     fail('skillDemands不是PlayerBuild和Manifest的确定性投影')
   }
@@ -293,9 +301,9 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     if (await hashProductProductionValueV2(payload) !== row.contentHash) fail(`Artifact行Hash不匹配:${row.artifactKey}`)
   }
   const body: Omit<TextOpenWorldProgressionCatalogsInputContextV1, 'contextSelectionHash'> = {
-    schema: 'storyforge.text-open-world-progression-catalogs-input', version: 1,
+    schema: 'storyforge.text-open-world-progression-catalogs-input', version: 2,
     productInstanceKey: production.productionKey, gameplayRuleset, playerBuild, questSkeletons, contentRequirementManifest,
-    skillDemands: buildSkillDemands({ playerBuild, manifest: contentRequirementManifest }),
+    skillDemands: buildSkillDemands({ playerBuild, manifest: contentRequirementManifest, version: 2 }),
     combatMechanicsContract: 'governed-v17',
   }
   await validateUpstream(body)
@@ -316,7 +324,8 @@ export async function readTextOpenWorldProgressionCatalogsInputContextV1(input: 
 async function parseContext(value: string): Promise<TextOpenWorldProgressionCatalogsInputContextV1> {
   let context: TextOpenWorldProgressionCatalogsInputContextV1
   try { context = JSON.parse(value) as TextOpenWorldProgressionCatalogsInputContextV1 } catch { return fail('Context JSON损坏') }
-  if (context.schema !== 'storyforge.text-open-world-progression-catalogs-input' || context.version !== 1) fail('Context身份无效')
+  if (context.schema !== 'storyforge.text-open-world-progression-catalogs-input'
+    || (context.version !== 1 && context.version !== 2)) fail('Context身份无效')
   const { contextSelectionHash, ...body } = context
   await validateUpstream(body)
   if (!isSha256Hash(contextSelectionHash) || await hashProductProductionValueV2(body) !== contextSelectionHash) fail('Context选择Hash不匹配')
@@ -653,7 +662,7 @@ export function createTextOpenWorldProgressionCatalogsExecutorV1(options: {
     const startedAt = performance.now()
     const response = await runModel({
       projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
-      category: 'text-open-world.production.progression-catalogs',
+      category: SKILL_ID,
       system: prompt, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(24_000, execution.task.budgetReservation.outputTokens)),
       signal: execution.signal,

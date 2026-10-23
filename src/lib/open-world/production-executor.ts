@@ -23,9 +23,6 @@ import {
   freezeTextOpenWorldNovelSourceV1,
   freezeTextOpenWorldWorldReleaseSourceV1,
 } from './source-pin'
-import {
-  readTextOpenWorldCreatorExecutionBriefV1,
-} from './creator-production-start'
 import { textOpenWorldCreatorLocatorFromBriefRowV1 } from './creator-brief-persistence'
 import { createTextOpenWorldSourceCurationExecutorV1 } from './source-curation'
 import { createTextOpenWorldExperienceDesignExecutorV1 } from './experience-design'
@@ -97,9 +94,9 @@ export function createTextOpenWorldSourceLockExecutorV1(options: { now?: () => n
     if (!build || build.productionId !== execution.productionId) fail('找不到当前 Build')
     const bundle = briefRow.briefKind === 'text-open-world-creator-v1'
       ? await (async () => {
-          const contracts = await readTextOpenWorldCreatorExecutionBriefV1({
-            briefRow,
-            planJson: build.planJson,
+          const { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } = await import('./creator-derived-authority')
+          const { contracts } = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+            scope: execution.scope, buildId: execution.buildId,
           })
           const locator = textOpenWorldCreatorLocatorFromBriefRowV1(briefRow)
           const authorization = {

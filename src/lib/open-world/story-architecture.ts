@@ -918,7 +918,9 @@ function systemPrompt(context: TextOpenWorldStoryArchitectureInputContextV1): st
     '核心目标必须在所有结局中真正达成，结局差异来自代价、价值、关系或局部世界后果，不允许玩家转而完成相反目标。主线严格顺序、可等待、不可永久失败，不以到达地点作为唯一关键触发。',
     'macroBeats必须按opening→rising→turning-point→convergence→resolution单调推进，并写出主角变化、必要揭示和未来地区需要承担的空间戏剧功能，但不得创建地区ID或地点ID。',
     '每个promise必须有建立、1到3次中间回响和最终回收；编号使用本JSON数组的一基序号。setupBeatNumber < 每个callback.beatNumber < payoffBeatNumber。每个结局至少由一项promise回收覆盖。',
+    `闭集枚举：macroBeats[].phase只能取${JSON.stringify(PHASES)}；promises[].kind只能取${JSON.stringify(PROMISE_KINDS)}；promises[].callbacks[].function只能取${JSON.stringify(CALLBACK_FUNCTIONS)}。不得使用同义词、组合标签或自造枚举值。`,
     '承诺必须至少覆盖core-conflict、character和world三类。不得输出任务、奖励、数值、Condition/Effect key、运行状态或模型自造的稳定ID。',
+    '结构示例只展示字段，不代表数组完整规模。返回前逐项清点：macroBeats为5到8项，promises为4到12项，每项callbacks为1到3项，endings数量等于上文要求；每个对象字段名必须与结构逐字一致。',
     '只输出一个JSON对象，字段必须精确为以下结构：',
     '{"schema":"storyforge.text-open-world-story-architecture-draft","version":1,"title":"...","logline":"...","themeStatement":"...","coreConflict":{"coreGoal":"...","protagonistDrive":"...","opposingForce":"...","conflictMechanism":"...","personalStakes":"...","regionalStakes":"...","worldStakes":"..."},"macroBeats":[{"phase":"opening","title":"...","dramaticPurpose":"...","protagonistChange":"...","requiredReveal":"...","spatialFunctionNeeds":["..."],"sourceClaimKeys":["source.claim.00001"]}],"endings":[{"title":"...","outcomeSummary":"...","differentiationAxis":"...","decisivePlayerValue":"...","coreGoalResolution":"...","eligiblePathSummary":"...","sourceClaimKeys":["source.claim.00001"]}],"promises":[{"kind":"core-conflict","statement":"...","setupBeatNumber":1,"setupDescription":"...","callbacks":[{"beatNumber":2,"function":"escalate","description":"..."}],"payoffBeatNumber":5,"payoffDescription":"...","endingNumbers":[1,2],"sourceClaimKeys":["source.claim.00001"]}],"explicitAssumptionGapKeys":[]}',
   ].join('\n')
@@ -974,7 +976,7 @@ export function createTextOpenWorldStoryArchitectureExecutorV1(options: {
       projectId: execution.scope.projectId,
       requirementKey,
       expectedCapabilityHash: binding.bindingHash,
-      category: 'text-open-world.production.story-architecture',
+      category: SKILL_ID,
       system: prompt,
       contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(32_000, execution.task.budgetReservation.outputTokens)),

@@ -7,10 +7,13 @@ import {
 import {
   readTextOpenWorldCreatorMediaExecutionAuthorityV1,
   resolveTextOpenWorldCreatorImportedMediaTaskResultV1,
+  readTextOpenWorldCreatorMediaTaskBudgetV1,
 } from '../../src/lib/open-world/creator-media-authority'
 import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from '../../src/lib/open-world/creator-derived-authority'
+import { parseProductProductionPlanV3 } from '../../src/lib/product-production/plan'
 import { verifyTextOpenWorldMediaRightsV1 } from '../../src/lib/open-world/media-quality'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
+import { setProductProductionPausedV1 } from '../../src/lib/product-production/service'
 import { parseProductProductionCommandV1 } from '../../src/lib/product-production/contracts'
 import {
   canonicalProductProductionJsonV2,
@@ -61,6 +64,29 @@ vi.mock('../../src/lib/open-world/creator-artifact-governance', async importOrig
 const PNG_1X1 = Uint8Array.from(atob(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
 ), char => char.charCodeAt(0)).buffer
+
+/** A valid PNG with a large ancillary text chunk exercises file bytes, not pixel count. */
+function pngWithLargeMetadata() {
+  const content = new Uint8Array(1024 * 1024)
+  content.set(new TextEncoder().encode('Comment\0'))
+  content.fill(65, 8)
+  const chunk = new Uint8Array(content.length + 12)
+  new DataView(chunk.buffer).setUint32(0, content.length)
+  chunk.set(new TextEncoder().encode('tEXt'), 4)
+  chunk.set(content, 8)
+  let crc = 0xffffffff
+  for (const byte of chunk.subarray(4, chunk.length - 4)) {
+    crc ^= byte
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0)
+  }
+  new DataView(chunk.buffer).setUint32(chunk.length - 4, (crc ^ 0xffffffff) >>> 0)
+  const png = new Uint8Array(PNG_1X1.byteLength + chunk.length)
+  const end = PNG_1X1.byteLength - 12
+  png.set(new Uint8Array(PNG_1X1, 0, end))
+  png.set(chunk, end)
+  png.set(new Uint8Array(PNG_1X1, end), end + chunk.length)
+  return png.buffer
+}
 
 function fixtureVisualSlots() {
   return [
@@ -263,10 +289,10 @@ async function seedMediaFixture(): Promise<FixtureV1> {
   }
 }
 
-async function importedPreparation(fixture: FixtureV1) {
+async function importedPreparation(fixture: FixtureV1, data = PNG_1X1) {
   const blob = await putMediaBlobObject({
     scope: fixture.scope,
-    data: PNG_1X1,
+    data,
     mimeType: 'image/png',
     backend: 'indexeddb',
   })
@@ -395,6 +421,7 @@ describe.sequential('Text Open World G5-08 · governed Creator media Build', () 
       usage: { modelCalls: 0, mediaCalls: 0, costUsd: 0 },
     })
     expect(direct?.result.artifacts).toHaveLength(18)
+    expect(direct?.authorizedStorageBytes).toBe(PNG_1X1.byteLength * 18)
 
     const imported = candidates[0]
     const imageRequirement = authority.executionBrief.capabilityRequirements.find(item => (
@@ -409,6 +436,147 @@ describe.sequential('Text Open World G5-08 · governed Creator media Build', () 
       rightsBasis: 'author-owned',
       commercialPolicyPassed: true,
     })
+    // A scheduler acceptance receipt is distinct from the original import
+    // command. These are structural validator cases, not a synthetic Run.
+    const accepted: ProductBuildArtifactRecordV1 = {
+      ...imported, status: 'accepted', producerReceiptHash: 'e'.repeat(64),
+    }
+    const verifyAccepted = (artifact = accepted, importAuthorizations = [authority.authorization]) => (
+      verifyTextOpenWorldMediaRightsV1({
+        artifact, qualityProfile: 'commercial-candidate', capabilityRequirement: imageRequirement,
+        importAuthorizations,
+      })
+    )
+    await expect(verifyAccepted()).resolves.toMatchObject({
+      producerReceiptHash: accepted.producerReceiptHash, origin: 'imported', commercialPolicyPassed: true,
+    })
+    await expect(verifyAccepted({ ...accepted, status: 'carried-forward',
+      controlEpoch: accepted.controlEpoch + 1 })).resolves.toMatchObject({ commercialPolicyPassed: true })
+    await expect(verifyAccepted(accepted, [])).rejects.toThrow(/唯一授权/)
+    await expect(verifyTextOpenWorldMediaRightsV1({
+      artifact: accepted, qualityProfile: 'commercial-candidate', capabilityRequirement: imageRequirement,
+    })).rejects.toThrow(/授权谱系/)
+    await expect(verifyAccepted({ ...accepted, qualityJson: canonicalProductProductionJsonV2({
+      ...JSON.parse(accepted.qualityJson), authorizationHash: 'f'.repeat(64),
+    }) })).rejects.toThrow(/物理校验回执不闭合/)
+    await expect(verifyAccepted({ ...accepted, rightsJson: canonicalProductProductionJsonV2({
+      ...JSON.parse(accepted.rightsJson), rightsNote: 'changed after the import command',
+    }) })).rejects.toThrow(/已签署文件或权利清单不一致/)
+    await expect(verifyAccepted({ ...accepted, byteSize: accepted.byteSize + 1 }))
+      .rejects.toThrow(/已签署文件或权利清单不一致/)
+    for (const expected of ['paused', 'resumed']) {
+      expect(await setProductProductionPausedV1({ scope: fixture.scope,
+        production: (await db.productProductions.get(fixture.productionId))!,
+        build: (await db.productBuilds.get(target!.id!))!,
+      })).toBe(expected)
+    }
+    // This authority fixture models the scheduler's atomic Plan rebind; it
+    // does not claim to run a production DAG or a real import in a browser.
+    const resumed = (await db.productBuilds.get(target!.id!))!
+    const reboundPlan = { ...prepared.targetPlan, controlEpoch: resumed.controlEpoch,
+      tasks: prepared.targetPlan.tasks.map(task => ({ ...task, reuse: null })) }
+    await db.productBuilds.update(target!.id!, { planJson: canonicalProductProductionJsonV2(reboundPlan),
+      planHash: await hashProductProductionValueV2(reboundPlan) })
+    const readAuthority = () => readTextOpenWorldCreatorMediaExecutionAuthorityV1({
+      scope: fixture.scope, buildId: target!.id! })
+    const recovered = await readAuthority()
+    expect(recovered.targetProductionPlan.controlEpoch).toBe(resumed.controlEpoch)
+    const recoveredImport = await resolveTextOpenWorldCreatorImportedMediaTaskResultV1({
+      authority: recovered, taskKey: 'media.visual' })
+    expect(recoveredImport?.result).toEqual(direct?.result)
+    for (const mutated of [
+      { ...reboundPlan, controlEpoch: resumed.controlEpoch + 1 },
+      { ...reboundPlan, tasks: prepared.targetPlan.tasks },
+      { ...reboundPlan, tasks: reboundPlan.tasks.map(task => task.taskKey === 'media.visual'
+        ? { ...task, budgetReservation: { ...task.budgetReservation, maximumCostUsd: 99 } } : task) },
+    ]) {
+      await db.productBuilds.update(target!.id!, { planJson: canonicalProductProductionJsonV2(mutated),
+        planHash: await hashProductProductionValueV2(mutated) })
+      await expect(readAuthority()).rejects.toThrow()
+    }
+    await db.productBuilds.update(target!.id!, { planJson: canonicalProductProductionJsonV2(reboundPlan),
+      planHash: await hashProductProductionValueV2(reboundPlan) })
+    await db.productBuildArtifacts.update(imported.id!, { controlEpoch: resumed.controlEpoch })
+    await expect(readAuthority()).rejects.toThrow(/完整暂存sibling/)
+  }, 30_000)
+
+  it('uses signed import bytes above procedural storage while preserving the frozen Plan and total ceiling', async () => {
+    const fixture = await seedMediaFixture()
+    const png = pngWithLargeMetadata()
+    const prepared = await importedPreparation(fixture, png)
+    const importedBytes = png.byteLength * 18
+    const oldBudget = fixture.plan.tasks.find(task => task.taskKey === 'media.visual')!.budgetReservation
+    expect(importedBytes).toBeGreaterThan(oldBudget.storageBytes)
+    expect(() => parseProductProductionPlanV3(prepared.targetPlan, prepared.targetExecutionBrief))
+      .not.toThrow()
+    const command = {
+      type: 'authorize-text-open-world-creator-media' as const,
+      commandId: `g5-08-large:${crypto.randomUUID()}`,
+      expectedStateRevision: prepared.production.stateRevision,
+      baseBuildNumber: prepared.baseBuild.buildNumber,
+      expectedBasePlanHash: prepared.baseBuild.planHash,
+      expectedMediaPlanHash: prepared.mediaPlan.planHash,
+      expectedTargetPlanHash: prepared.targetPlanHash,
+      mode: prepared.mediaPlan.mode,
+      acknowledgement: {
+        completeBundle: true as const, rightsAndProvenance: true as const,
+        costAndProvider: true as const, oldBuildImmutable: true as const,
+      },
+      authorizationNonce: 'g5-08-large-confirmed',
+      authorizedAt: Date.now() + 1,
+    }
+    expect((await executeProductProductionCommand({
+      scope: fixture.scope, productionId: fixture.productionId, command, preparedCreatorMedia: prepared,
+    })).ok).toBe(true)
+    const target = (await db.productBuilds.where('[productionId+buildNumber]')
+      .equals([fixture.productionId, fixture.buildNumber + 1]).first())!
+    const commandRow = (await db.productProductionCommands.where('[productionId+commandId]')
+      .equals([fixture.productionId, command.commandId]).first())!
+
+    const authorization = JSON.parse(commandRow.resultJson)
+    const frozenBefore = (await db.productBuilds.get(target.id!))!
+    const authority = await readTextOpenWorldCreatorMediaExecutionAuthorityV1({
+      scope: fixture.scope, buildId: target.id!,
+    })
+    expect(authority.authorization.plan.version).toBe(1)
+    const imported = await resolveTextOpenWorldCreatorImportedMediaTaskResultV1({
+      authority, taskKey: 'media.visual',
+    })
+    expect(imported?.authorizedStorageBytes).toBe(importedBytes)
+    const task = prepared.targetPlan.tasks.find(task => task.taskKey === 'media.visual')!
+    const readBudget = () => readTextOpenWorldCreatorMediaTaskBudgetV1({
+      scope: fixture.scope, buildId: target.id!, task,
+    })
+    expect(await readBudget()).toMatchObject({
+      storageBytes: importedBytes, modelCalls: 0, inputTokens: 0, outputTokens: 0,
+      mediaCalls: 0, maximumCostUsd: 0,
+    })
+    expect(imported?.result.usage).toMatchObject({
+      storageBytes: importedBytes, modelCalls: 0, mediaCalls: 0, costUsd: 0,
+    })
+    expect(await db.productBuilds.get(target.id!)).toEqual(frozenBefore)
+    expect(authority.executionBrief.productionBudget).toEqual(prepared.sourceExecutionBrief.productionBudget)
+    await expect(readTextOpenWorldCreatorMediaTaskBudgetV1({
+      scope: fixture.scope, buildId: target.id!,
+      task: { ...task, budgetReservation: { ...task.budgetReservation, storageBytes: importedBytes * 2 } },
+    })).rejects.toThrow(/预算任务不属于已签署Plan/)
+
+    const { planHash: _mediaHash, ...mediaBody } = authorization.plan
+    const { authorizationHash: _authorizationHash, ...authorizationBody } = authorization
+    const badMediaBody = {
+      ...mediaBody,
+      estimatedRerunBudget: { ...mediaBody.estimatedRerunBudget, storageBytes: importedBytes - 1 },
+    }
+    const badMedia = { ...badMediaBody, planHash: await hashProductProductionValueV2(badMediaBody) }
+    const badAuthorizationBody = { ...authorizationBody, plan: badMedia, mediaPlanHash: badMedia.planHash }
+    await db.productProductionCommands.update(commandRow.id!, {
+      resultJson: canonicalProductProductionJsonV2({
+        ...badAuthorizationBody, authorizationHash: await hashProductProductionValueV2(badAuthorizationBody),
+      }),
+    })
+    await expect(readTextOpenWorldCreatorMediaExecutionAuthorityV1({
+      scope: fixture.scope, buildId: target.id!,
+    })).rejects.toThrow(/media预算不符合签署/)
   }, 30_000)
 
   it('freezes a real provider identity and positive cost without dispatching during preview', async () => {

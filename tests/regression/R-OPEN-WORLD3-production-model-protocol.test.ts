@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as configuredCapabilities from '../../src/lib/product-production/capabilities'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import {
   ProductProductionDraftRejectedErrorV1,
@@ -14,6 +15,7 @@ import {
 import { AIError } from '../../src/lib/types'
 import {
   executeTextOpenWorldProductionModelProtocolV1,
+  runTextOpenWorldConfiguredProductionModelV1,
   type TextOpenWorldProductionDomainExecutorFactoryV1,
   type TextOpenWorldProductionModelResponseV1,
   type TextOpenWorldProductionModelTransportV1,
@@ -26,14 +28,14 @@ const CONTEXT_TEXT = JSON.stringify({
   title: '原子上下文',
 })
 
-async function bindingReceipt(): Promise<ProviderBindingReceiptV1> {
+async function bindingReceipt(provider = 'test-provider'): Promise<ProviderBindingReceiptV1> {
   const executionConfigHash = await hashProductProductionValueV2({
     requestRoute: '/v1', temperature: 0.7, configuredMaxTokens: 0, contextWindow: null,
   })
   const identity = {
     adapterId: 'configured-text.v1' as const,
     adapterVersion: 1 as const,
-    provider: 'test-provider',
+    provider,
     model: 'test-model',
     endpointOrigin: 'https://model.test',
     executionConfigHash,
@@ -111,13 +113,14 @@ function execution(input: {
 function domainFactory(input: {
   events?: string[]
   afterModel?: (output: string) => void | Promise<void>
+  category?: string
 } = {}): TextOpenWorldProductionDomainExecutorFactoryV1 {
   return ({ runModel }) => async request => {
     const model = await runModel({
       projectId: request.scope.projectId,
       requirementKey: REQUIREMENT_KEY,
       expectedCapabilityHash: request.capabilityBindings[0]!.bindingHash,
-      category: request.task.skillId,
+      category: input.category ?? request.task.skillId,
       system: '只输出测试 JSON。',
       contextText: request.contextText,
       maximumOutputTokens: 512,
@@ -164,6 +167,82 @@ function expectUsage(error: unknown, expected: Partial<ProductProductionTaskUsag
 }
 
 describe('R-OPEN-WORLD3 · shared production model protocol', () => {
+  it.each(['continue', 'abort', 'stale'] as const)('Agnes有界批处理节流后复核%s，等待不创建模型调用', async mode => {
+    const receipt = await bindingReceipt('agnes')
+    const abort = new AbortController()
+    let stale = false
+    const request = execution({ receipt, signal: abort.signal,
+      beforeAdditionalModelRequest: async () => stale ? 'discarded-stale' : undefined })
+    request.attemptBudgetReservation = { modelCalls: 2, inputTokens: 2_000, outputTokens: 1_000,
+      mediaCalls: 0, maximumCostUsd: null, durationMs: 20_000, storageBytes: 0 }
+    const sentAt: number[] = []
+    const twice: TextOpenWorldProductionDomainExecutorFactoryV1 = ({ runModel }) => async current => {
+      const one = domainFactory()({ runModel })
+      await one(current)
+      return one(current)
+    }
+    vi.useFakeTimers()
+    try {
+      const pending = executeTextOpenWorldProductionModelProtocolV1({
+        execution: request, factory: twice, callPolicy: 'bounded-derived-context',
+        modelTransport: async () => { sentAt.push(Date.now()); return modelResponse(receipt) },
+      }).catch(error => error)
+      // Hash verification uses WebCrypto, not the fake timer queue.
+      await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1))
+      expect(sentAt).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(sentAt).toHaveLength(1)
+      if (mode === 'abort') abort.abort()
+      if (mode === 'stale') stale = true
+      await vi.runAllTimersAsync()
+      const result = await pending
+      if (mode === 'continue') {
+        expect(sentAt).toHaveLength(2)
+        expect(sentAt[1]! - sentAt[0]!).toBeGreaterThanOrEqual(6_000)
+        expect(result.usage.modelCalls).toBe(2)
+      } else {
+        expect(sentAt).toHaveLength(1)
+        expect(result).toBeInstanceOf(Error)
+        expect(result.usage.modelCalls).toBe(1)
+      }
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { vi.useRealTimers() }
+  })
+
+  it.each([
+    'text-open-world.production.experience-design',
+    'text-open-world.production.gameplay-ruleset.v1',
+    'text-open-world.production.experience-design.v2',
+  ])('拒绝非冻结调用身份 %s，且派发前拒绝记零用量', async category => {
+    const receipt = await bindingReceipt()
+    const transport = vi.fn(async () => modelResponse(receipt))
+    const error = await executeTextOpenWorldProductionModelProtocolV1({
+      execution: execution({ receipt }),
+      factory: domainFactory({ category }),
+      modelTransport: transport,
+    }).catch(failure => failure)
+    expect(error.message).toContain('领域请求越过冻结执行边界')
+    expectUsage(error, { modelCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 })
+    expect(transport).not.toHaveBeenCalled()
+  })
+
+  it('正式结构化生产显式关闭可选thinking并保留有限输出预算与JSON约束', async () => {
+    const receipt = await bindingReceipt()
+    const configured = vi.spyOn(configuredCapabilities, 'runConfiguredProductionTextWithOutcomeV1')
+      .mockResolvedValue({ output: '{"draft":true}', bindingReceipt: receipt })
+    try {
+      await runTextOpenWorldConfiguredProductionModelV1({
+        projectId: 17, requirementKey: REQUIREMENT_KEY, expectedCapabilityHash: receipt.capabilityHash,
+        category: 'text-open-world.production.experience-design', system: 'schema', contextText: CONTEXT_TEXT,
+        maximumOutputTokens: 4096, signal: new AbortController().signal,
+      })
+      expect(configured).toHaveBeenCalledWith(expect.objectContaining({
+        maximumOutputTokens: 4096, responseFormat: 'json_object', thinkingMode: 'disabled',
+        expectedCapabilityHash: receipt.capabilityHash,
+      }))
+    } finally { configured.mockRestore() }
+  })
+
   it('保持原子上下文和隔离修复数据，并在领域解析前持久化模型原文', async () => {
     const receipt = await bindingReceipt()
     const events: string[] = []
@@ -193,6 +272,34 @@ describe('R-OPEN-WORLD3 · shared production model protocol', () => {
       existingRight: true,
       origin: 'configured-text-model',
     })
+  })
+
+  it('分片修复不把任务级历史正文注入当前场景的披露上下文', async () => {
+    const receipt = await bindingReceipt()
+    const boundedExecution = execution({
+      receipt,
+      repairFeedbackText: JSON.stringify({ rawResponse: '未到达的后续场景揭示了隐藏结局' }),
+    })
+    boundedExecution.attemptBudgetReservation = {
+      modelCalls: 2, inputTokens: 2_000, outputTokens: 1_000,
+      mediaCalls: 0, maximumCostUsd: null, durationMs: 10_000, storageBytes: 0,
+    }
+    const delivered: unknown[] = []
+    const result = await executeTextOpenWorldProductionModelProtocolV1({
+      execution: boundedExecution,
+      factory: domainFactory(),
+      callPolicy: 'bounded-derived-context',
+      modelTransport: async request => {
+        delivered.push(request)
+        return modelResponse(receipt)
+      },
+    })
+    expect(delivered).toHaveLength(1)
+    expect(delivered[0]).toMatchObject({ contextText: CONTEXT_TEXT })
+    expect(delivered[0]).not.toHaveProperty('repairFeedbackText')
+    expect(JSON.stringify(delivered)).not.toContain('隐藏结局')
+    expect(boundedExecution.repairFeedbackText).toContain('隐藏结局')
+    expect(result.usage).toMatchObject({ modelCalls: 1, inputTokens: 41, outputTokens: 13 })
   })
 
   it('scheduler 标记原文回调已失权后立即中断 bounded 协议，不再发起下一次付费调用', async () => {

@@ -32,6 +32,10 @@ import {
 import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
 import { validateTextOpenWorldSourceCurationArtifactsV1 } from './source-curation'
 import { TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1 } from './production-contract'
+import {
+  hasTextOpenWorldBoundedRepairBudgetV1,
+  textOpenWorldProductionResourceProfileV1,
+} from './production-budget'
 import type {
   ProductBuildArtifactRecordV1,
   ProductProductionBriefV3,
@@ -128,6 +132,7 @@ interface ExperienceDraftV1 {
     sourceClaimKeys: string[]
   }
   protagonist: {
+    displayName?: string
     identitySummary: string
     motivations: string[]
     personalStakes: string[]
@@ -761,7 +766,8 @@ async function compileGameBrief(input: {
 function parseDraft(value: unknown, context: TextOpenWorldExperienceInputContextV1): ExperienceDraftV1 {
   const root = record(value, 'draft')
   exactKeys(root, ['schema', 'version', 'experience', 'protagonist'], 'draft')
-  if (root.schema !== 'storyforge.text-open-world-experience-draft' || root.version !== 1) {
+  if (root.schema !== 'storyforge.text-open-world-experience-draft' || ![1, 2].includes(Number(root.version))
+    || typeof root.version !== 'number') {
     fail('draft schema/version无效')
   }
   const experience = record(root.experience, 'experience')
@@ -771,8 +777,14 @@ function parseDraft(value: unknown, context: TextOpenWorldExperienceInputContext
   ], 'experience')
   const protagonist = record(root.protagonist, 'protagonist')
   exactKeys(protagonist, [
+    ...(root.version === 2 ? ['displayName'] : []),
     'identitySummary', 'motivations', 'personalStakes', 'sourceClaimKeys',
   ], 'protagonist')
+  const displayName = root.version === 2 ? text(protagonist.displayName, 'protagonist.displayName', 500) : null
+  if (displayName != null && context.brief.intent.protagonistRefs.length
+    && displayName !== context.protagonistCandidates[0]?.label) {
+    fail('来源型主角展示名必须保持冻结角色名称')
+  }
   const allowedClaims = new Set(context.selectedClaims.map(entry => entry.claimKey))
   const sourceClaimKeys = stringArray(experience.sourceClaimKeys, 'experience.sourceClaimKeys', 100, true)
   const protagonistClaimKeys = stringArray(protagonist.sourceClaimKeys, 'protagonist.sourceClaimKeys', 50, true)
@@ -802,6 +814,7 @@ function parseDraft(value: unknown, context: TextOpenWorldExperienceInputContext
       sourceClaimKeys,
     },
     protagonist: {
+      ...(displayName == null ? {} : { displayName }),
       identitySummary: text(protagonist.identitySummary, 'protagonist.identitySummary', 2_000),
       motivations,
       personalStakes,
@@ -817,8 +830,9 @@ function systemPrompt(gameBrief: TextOpenWorldGameBriefV1): string {
     '不得改变主线严格顺序、多个合规结局、有边界自由、三类交互、标准难度、回合制战斗、重要故事线安全等待或普通世界持续演化。',
     '不得新增作者未确认的产品边界。创意表达必须服务于已冻结体验；引用来源时只能使用selectedClaims内的claimKey。',
     `GameBriefHash=${gameBrief.gameBriefHash}。`,
+    'protagonist.displayName 只写简短人物姓名；保留完整角色职责于identitySummary。来源型主角必须逐字使用protagonistCandidates首项label，作者自定义主角按已确认playerRole填写姓名，不把角色介绍当姓名。',
     '只输出一个JSON对象，字段必须精确为：',
-    '{"schema":"storyforge.text-open-world-experience-draft","version":1,"experience":{"pitch":"...","playerFantasy":"...","narrativePillars":["至少三项"],"regionalVarietyPromise":"...","growthPromise":"...","toneGuide":["..."],"sourceClaimKeys":["source.claim.00001"]},"protagonist":{"identitySummary":"...","motivations":["..."],"personalStakes":["..."],"sourceClaimKeys":["source.claim.00001"]}}',
+    '{"schema":"storyforge.text-open-world-experience-draft","version":2,"experience":{"pitch":"...","playerFantasy":"...","narrativePillars":["至少三项"],"regionalVarietyPromise":"...","growthPromise":"...","toneGuide":["..."],"sourceClaimKeys":["source.claim.00001"]},"protagonist":{"displayName":"人物姓名","identitySummary":"...","motivations":["..."],"personalStakes":["..."],"sourceClaimKeys":["source.claim.00001"]}}',
   ].join('\n')
 }
 
@@ -850,11 +864,13 @@ async function createExperienceArtifacts(input: {
   createdAt: number
 }): Promise<TextOpenWorldExperienceDesignArtifactsV1> {
   const claimByKey = new Map(input.context.selectedClaims.map(entry => [entry.claimKey, entry]))
+  const experienceClaimKeys = [...input.draft.experience.sourceClaimKeys].sort()
+  const protagonistClaimKeys = [...input.draft.protagonist.sourceClaimKeys].sort()
   const experienceBasis = {
     gameBriefHash: input.gameBrief.gameBriefHash,
     sourceLedgerHash: input.context.source.sourceLedgerHash,
     contextSelectionHash: input.context.contextSelectionHash,
-    claimHashes: input.draft.experience.sourceClaimKeys.map(key => claimByKey.get(key)!.entryHash),
+    claimHashes: experienceClaimKeys.map(key => claimByKey.get(key)!.entryHash),
   }
   const experienceBody: Omit<TextOpenWorldExperienceContractV1, 'experienceContractHash'> = {
     schema: 'storyforge.text-open-world-experience-contract',
@@ -901,7 +917,7 @@ async function createExperienceArtifacts(input: {
       importantStoryline: 'cannot-abandon',
       ordinaryQuest: 'may-abandon-expire-or-fail',
     },
-    sourceClaimKeys: [...input.draft.experience.sourceClaimKeys].sort(),
+    sourceClaimKeys: experienceClaimKeys,
     basisHash: await hashProductProductionValueV2(experienceBasis),
     createdAt: input.createdAt,
   }
@@ -916,7 +932,7 @@ async function createExperienceArtifacts(input: {
     gameBriefHash: input.gameBrief.gameBriefHash,
     experienceContractHash: experienceContract.experienceContractHash,
     contextSelectionHash: input.context.contextSelectionHash,
-    claimHashes: input.draft.protagonist.sourceClaimKeys.map(key => claimByKey.get(key)!.entryHash),
+    claimHashes: protagonistClaimKeys.map(key => claimByKey.get(key)!.entryHash),
   }
   const protagonistBody: Omit<TextOpenWorldProtagonistAssetV1, 'protagonistAssetHash'> = {
     schema: 'storyforge.text-open-world-protagonist-asset',
@@ -927,12 +943,12 @@ async function createExperienceArtifacts(input: {
     experienceContractHash: experienceContract.experienceContractHash,
     origin: sourceMode ? 'source-character' : 'author-defined',
     sourceRefs: [...input.gameBrief.authorIntent.protagonistSourceRefs],
-    displayName: candidate?.label ?? input.gameBrief.authorIntent.playerRole,
+    displayName: candidate?.label ?? input.draft.protagonist.displayName ?? input.gameBrief.authorIntent.playerRole,
     playerRole: input.gameBrief.authorIntent.playerRole,
     identitySummary: input.draft.protagonist.identitySummary,
     motivations: input.draft.protagonist.motivations,
     personalStakes: input.draft.protagonist.personalStakes,
-    sourceClaimKeys: [...input.draft.protagonist.sourceClaimKeys].sort(),
+    sourceClaimKeys: protagonistClaimKeys,
     protection: {
       criticalRole: true,
       playerMayAbandonMainline: false,
@@ -951,7 +967,7 @@ async function createExperienceArtifacts(input: {
 function draftFromArtifacts(artifacts: TextOpenWorldExperienceDesignArtifactsV1): unknown {
   return {
     schema: 'storyforge.text-open-world-experience-draft',
-    version: 1,
+    version: 2,
     experience: {
       pitch: artifacts.experienceContract.pitch,
       playerFantasy: artifacts.experienceContract.playerFantasy,
@@ -962,6 +978,7 @@ function draftFromArtifacts(artifacts: TextOpenWorldExperienceDesignArtifactsV1)
       sourceClaimKeys: artifacts.experienceContract.sourceClaimKeys,
     },
     protagonist: {
+      displayName: artifacts.protagonistAsset.displayName,
       identitySummary: artifacts.protagonistAsset.identitySummary,
       motivations: artifacts.protagonistAsset.motivations,
       personalStakes: artifacts.protagonistAsset.personalStakes,
@@ -1143,6 +1160,10 @@ export async function validateTextOpenWorldExperienceArtifactsV1(input: {
       fail('体验产物与登记上下文不一致')
     }
     exactStringArray(gameBrief.authorIntent.protagonistSourceRefs, brief.intent.protagonistRefs, 'GameBrief主角来源')
+    if (protagonistAsset.origin === 'source-character'
+      && protagonistAsset.displayName !== context.protagonistCandidates[0]?.label) {
+      fail('来源型主角展示名必须保持冻结角色名称')
+    }
     exactStringArray(gameBrief.authorIntent.coreExperience, brief.intent.coreExperience, 'GameBrief核心体验')
     exactStringArray(gameBrief.authorIntent.tone, brief.intent.tone, 'GameBrief基调')
     exactStringArray(gameBrief.authorIntent.requiredFacts, brief.intent.requiredFacts, 'GameBrief必需事实')
@@ -1227,13 +1248,23 @@ export function createTextOpenWorldExperienceDesignExecutorV1(options: {
     if (!binding) fail('P2缺少文本capability binding')
     const context = await parseExperienceContext(execution.contextText)
     const createdAt = timestamp(now(), 'createdAt')
-    const gameBrief = await compileGameBrief({ context, calibration, createdAt })
+    const effectiveCalibration = structuredClone(calibration)
+    if (options.calibration == null && hasTextOpenWorldBoundedRepairBudgetV1(context.brief.productionBudget)) {
+      const profile = textOpenWorldProductionResourceProfileV1('bounded-repair-v1')
+      effectiveCalibration.aiBudget.production = {
+        maximumCalls: profile.maximumCalls,
+        maximumInputTokens: profile.maximumInputTokens,
+        maximumOutputTokens: profile.maximumOutputTokens,
+        maximumEstimatedCostUsd: profile.maximumEstimatedCostUsd,
+      }
+    }
+    const gameBrief = await compileGameBrief({ context, calibration: effectiveCalibration, createdAt })
     const startedAt = performance.now()
     const response = await runModel({
       projectId: execution.scope.projectId,
       requirementKey,
       expectedCapabilityHash: binding.bindingHash,
-      category: 'text-open-world.production.experience-design',
+      category: SKILL_ID,
       system: systemPrompt(gameBrief),
       contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(16_000, execution.task.budgetReservation.outputTokens)),

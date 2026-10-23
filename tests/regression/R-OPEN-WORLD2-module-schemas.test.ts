@@ -24,6 +24,21 @@ describe('Text Open World vNext · vNext module schemas and reference integrity'
     expect(() => parseTextOpenWorldModulesV1(duplicate)).toThrow('world.locations.key 不能重复')
   })
 
+  it('任务标签保留生产合同中的自然语言，任务引用仍必须是稳定key', () => {
+    const runtime = createTextOpenWorldVNextFixture()
+    const quests = runtime.modules.quests.payload as any
+    quests.quests[0].tags = ['mainline', '调查旧灾', '两地协作']
+    expect(parseTextOpenWorldModulesV1(runtime).quests.quests[0].tags)
+      .toEqual(['mainline', '调查旧灾', '两地协作'])
+    for (const tags of [['调查旧灾', '调查旧灾'], [''], [123]]) {
+      const invalid = structuredClone(runtime)
+      ;(invalid.modules.quests.payload as any).quests[0].tags = tags
+      expect(() => parseTextOpenWorldModulesV1(invalid)).toThrow(/tags/)
+    }
+    quests.quests[0].key = '调查旧灾'
+    expect(() => parseTextOpenWorldModulesV1(runtime)).toThrow(/稳定key/)
+  })
+
   it('拒绝重要任务过期、首版装备位漂移和玩家未知技能', () => {
     const expiringMainline = createTextOpenWorldVNextFixture()
     ;(expiringMainline.modules.quests.payload as any).quests[0].expirationMinutes = 60

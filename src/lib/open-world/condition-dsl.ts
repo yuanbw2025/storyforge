@@ -61,6 +61,7 @@ function scalar(value: unknown, label: string): string | number | boolean | null
 function references(modules: TextOpenWorldParsedModulesV1) {
   const set = (items: Array<{ key: string }>) => new Set(items.map(item => item.key))
   return {
+    actionEvidence: modules.actions.version >= 20, skills: set(modules.progression.skills),
     items: set(modules.items.items), recipes: set(modules.crafting.recipes), quests: set(modules.quests.quests),
     questStages: set(modules.quests.stages), objectives: set(modules.quests.objectives), locations: set(modules.world.locations),
     regions: set(modules.world.regions), travelPoints: set(modules.world.fastTravelPoints), edges: set(modules.world.edges),
@@ -90,6 +91,11 @@ function parseExpression(value: unknown, refs: ReferenceCatalog, depth: number, 
   if (op === 'not') {
     exact(parsed, ['op', 'condition'], label)
     return { op, condition: parseExpression(parsed.condition, refs, depth + 1, budget, `${label}.condition`) }
+  }
+  if (op === 'player-skill') {
+    if (!refs.actionEvidence) fail('旧Action模块不能声明已学技能证据')
+    exact(parsed, ['op', 'skillKey', 'known'], label)
+    return { op, skillKey: ref(parsed.skillKey, refs.skills, `${label}.skillKey`), known: bool(parsed.known, `${label}.known`) }
   }
   if (op === 'player-number') {
     exact(parsed, ['op', 'field', 'comparator', 'value'], label)
@@ -256,6 +262,7 @@ function evaluate(expression: TextOpenWorldConditionExpressionV1, context: TextO
       }
       return compare(values[expression.field], expression.comparator, expression.value)
     }
+    case 'player-skill': return (context.player.learnedSkillKeys ?? []).includes(expression.skillKey) === expression.known
     case 'player-status': return context.player.statusKeys.includes(expression.statusKey) === expression.present
     case 'player-resource-below-maximum': return expression.resource === 'health'
       ? context.player.health < context.player.maximumHealth

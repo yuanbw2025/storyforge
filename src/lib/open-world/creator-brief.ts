@@ -23,6 +23,7 @@ import { canonicalStringify, hashCanonicalValue } from '../agent/run/hash'
 import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
 import { getAgentSkillV1 } from '../agent/skill-registry'
 import { db } from '../db/schema'
+import { assertTextOpenWorldCreatorBriefLifecycleV1 } from './creator-brief-lifecycle'
 import { executeProductProductionCommand } from '../product-production/commands'
 import { assembleContext } from '../registry/assemble-context'
 import type {
@@ -409,6 +410,9 @@ async function hydrateSession(
   let candidate: TextOpenWorldCreatorBriefCandidateV1 | null = null
   let candidateRunId: number | null = null
   let confirmedBrief: TextOpenWorldCreatorBriefV1 | null = null
+  let confirmedEventHash: string | null = null
+  let confirmedEventSequence = 0
+  let candidateEventSequence = 0
   for (const item of payloads) {
     if (isDraftEvent(item.payload)) {
       if (item.payload.sourceBindingHash !== start.sourceBindingHash
@@ -424,12 +428,16 @@ async function hydrateSession(
       draft = parseTextOpenWorldCreatorBriefDraftV1(item.payload.draft)
       candidate = structuredClone(item.payload.candidate)
       candidateRunId = item.event.durableRunId ?? null
+      candidateEventSequence = item.event.sequence
     } else if (isConfirmationEvent(item.payload)) {
       if (item.payload.sourceBindingHash !== start.sourceBindingHash
         || item.payload.brief.sourceBindingHash !== start.sourceBindingHash) {
         fail('event-corrupt', `会谈确认事件 #${item.event.sequence} 来源不匹配`)
       }
       await verifyTextOpenWorldCreatorBriefV1(item.payload.brief)
+      confirmedEventHash = item.payload.brief.briefHash
+      confirmedEventSequence = item.event.sequence
+      draft = parseTextOpenWorldCreatorBriefDraftV1(item.payload.brief.draft)
     }
   }
   if (production.currentBriefRevision != null) {
@@ -442,8 +450,14 @@ async function hydrateSession(
         || row.candidateRunId == null) {
         fail('brief-corrupt', '正式 Creator Brief 与 Production/来源/Run 不一致')
       }
-      draft = parseTextOpenWorldCreatorBriefDraftV1(confirmedBrief.draft)
-      candidateRunId = row.candidateRunId
+      // A newer saved revision is a recoverable draft, not a rewrite of the confirmed Brief.
+      // If the confirmation event was interrupted, the immutable Brief row remains authoritative.
+      if (confirmedEventHash !== confirmedBrief.briefHash) {
+        draft = parseTextOpenWorldCreatorBriefDraftV1(confirmedBrief.draft)
+      }
+      if (candidateEventSequence <= confirmedEventSequence || confirmedEventHash !== confirmedBrief.briefHash) {
+        candidateRunId = row.candidateRunId
+      }
     }
   }
   let selection: TextOpenWorldCreatorSourceSelectionV1 | null = null
@@ -1151,6 +1165,11 @@ export async function confirmTextOpenWorldCreatorBriefV1(input: {
   }
   confirmedAt?: number
 }): Promise<TextOpenWorldCreatorBriefSessionV1> {
+  const production = await db.productProductions.get(input.session.production.id)
+  if (!production || production.stateRevision !== input.session.production.stateRevision) {
+    fail('production-state-conflict', '制作状态已变化，请恢复当前会谈后再确认')
+  }
+  await assertTextOpenWorldCreatorBriefLifecycleV1({ scope: input.session.scope, production, phase: 'revise' })
   const draft = parseTextOpenWorldCreatorBriefDraftV1(input.draft)
   if (draft.unresolvedQuestions.length) fail('unresolved', '仍有未决问题；请回答、删除或转为明确接受的假设')
   if (!input.acknowledgements.sourceIdentityReviewed

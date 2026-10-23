@@ -1,4 +1,5 @@
 /* Text open world runtime shell: responsive navigation and projection-owned status slots. */
+.open-world-game-shell { --bg-base: #0a1318; --bg-surface: #142229; --bg-elevated: #1c2c32; --bg-hover: #23383e; --text-primary: #e7ecea; --text-secondary: #bbc9c5; --text-muted: #9bb0aa; --accent: #9dcbb9; --accent-hover: #b7ddce; --accent-muted: #79ad98; --accent-soft: rgba(157,203,185,.14); --border: #37524f; --border-hover: #63867d; --border-subtle: #253d3a; --success: #97cfae; --warning: #e3bc7e; --error: #f2aaa1; --info: #9cc8df; color-scheme: dark; }
 .open-world-game-shell { --open-world-reader-font-size: 18px; --open-world-reader-line-height: 1.9; position: relative; display: grid; width: 100%; height: min(860px,calc(100dvh - 32px)); min-height: 700px; max-height: 900px; grid-template-rows: auto minmax(0,1fr) auto auto; overflow: hidden; background: radial-gradient(circle at 72% -8%,rgba(83,132,112,.14),transparent 32%),#091218; color: #e7ecea; font-family: var(--font-sans); }
 .open-world-game-shell svg { width: 16px; height: 16px; }
 .open-world-game-shell .open-world-player-map-svg { display: block; width: 100%; height: auto; min-height: 256px; }

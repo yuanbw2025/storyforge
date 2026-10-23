@@ -343,10 +343,10 @@ async function readClosedRootRun(input: {
   return root
 }
 
-function exactSiblingCandidateArtifacts(
+async function exactSiblingCandidateArtifacts(
   result: Record<string, unknown>,
   siblings: readonly TextOpenWorldCreatorEditBaseSiblingV1[],
-): void {
+): Promise<void> {
   if (!Array.isArray(result.artifacts) || result.artifacts.length !== siblings.length) {
     fail('producer checkpoint candidate 未完整覆盖 owner siblings')
   }
@@ -358,10 +358,14 @@ function exactSiblingCandidateArtifacts(
     }
     byKey.set(row.artifactKey, row)
   }
-  if (siblings.some(sibling => {
+  for (const sibling of siblings) {
     const row = byKey.get(sibling.artifactKey)
-    return !row || row.contentHash !== sibling.contentHash
-  })) fail('producer checkpoint candidate 与 owner sibling contentHash 不闭合')
+    // Task candidates may omit contentHash; the artifact store derives it
+    // from the payload at acceptance. Verify the same complete hash here.
+    if (!row || (row.contentHash ?? await hashProductProductionValueV2(row.payload)) !== sibling.contentHash) {
+      fail('producer checkpoint candidate 与 owner sibling contentHash 不闭合')
+    }
+  }
 }
 
 function zeroPortableUsage(value: {
@@ -511,7 +515,7 @@ async function defaultReadProducerEvidence(input: {
     || ledger.entry.attempt !== attempt || ledger.entry.candidateHash !== candidateHash) {
     fail('producer checkpoint/Run/Build/task 身份不闭合')
   }
-  exactSiblingCandidateArtifacts(result, input.baseSiblings)
+  await exactSiblingCandidateArtifacts(result, input.baseSiblings)
   if (await hashProductProductionTaskCandidateV1(result) !== candidateHash) {
     fail('producer checkpoint candidateHash 不匹配')
   }

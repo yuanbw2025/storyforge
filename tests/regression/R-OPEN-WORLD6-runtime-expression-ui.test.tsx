@@ -108,4 +108,22 @@ describe('R-OPEN-WORLD6 · 终态结果演绎玩家界面', () => {
     })))
     expect(host.querySelector('[data-testid="text-open-world-runtime-expression"]')).toBeNull()
   })
+
+  it('使用同Session同终态的公开标题，缺失或错配时不回退到内部Action编号', async () => {
+    const receipt = feedback()
+    receipt.presentation.headline = '前往location.secret已完成'
+    const original = JSON.stringify(receipt)
+    for (const sessionId of [1, 99]) {
+      await act(async () => root.render(createElement(TextOpenWorldResultExpressionPanel, {
+        feedback: receipt, presentation: null, busy: false, issue: null, onGenerate: vi.fn(),
+        notifications: [{
+          id: 'travel', sessionId, effectsEventSequence: 4, origin: 'player', category: 'world',
+          priority: 'normal', headline: '已抵达：盐灯集市', details: [], worldMinute: null, randomEventStatus: null,
+        }],
+      })))
+      expect(host.textContent).toContain(sessionId === 1 ? '已抵达：盐灯集市' : '行动已结算')
+      expect(host.textContent).not.toContain('location.secret')
+      expect(JSON.stringify(receipt)).toBe(original)
+    }
+  })
 })

@@ -287,15 +287,18 @@ async function validatePortableReleaseQuality(
     verifierKind: 'deterministic' as const,
     inputHashes: [
       evidence.build.packageHash, evidence.build.previewHash, evidence.hardGateReceiptHash,
+      ...(evidence.version === 2 ? [evidence.calibrationReceiptHash!] : []),
       evidence.semanticDecisionReceiptHash, evidence.grayboxReceiptHash, evidence.issueSetHash,
+      ...(evidence.visualReviewReceiptHash ? [evidence.visualReviewReceiptHash] : []),
     ],
     environmentHash: null,
     measuredJson: canonicalProductProductionJsonV2(evidence), status: 'passed' as const,
     thresholdProfileId: RELEASE_QUALITY_POLICY_ID, thresholdProfileVersion: '1',
     evidenceRefs: [
-      evidence.hardGateReceiptHash, evidence.semanticDecisionReceiptHash,
+      evidence.hardGateReceiptHash, ...(evidence.version === 2 ? [evidence.calibrationReceiptHash!] : []), evidence.semanticDecisionReceiptHash,
       evidence.grayboxReceiptHash, ...evidence.issueReceiptHashes,
       ...evidence.issueWaiverReceiptHashes,
+      ...(evidence.visualReviewReceiptHash ? [evidence.visualReviewReceiptHash] : []),
     ],
     createdAt: evidence.completedAt,
   }
@@ -319,7 +322,7 @@ export async function createTextOpenWorldCreatorReleaseSourceContractsV1(input: 
 }): Promise<TextOpenWorldCreatorReleaseSourceContractsV1> {
   const artifactReceipts = sortedArtifactReceipts(input.artifactReceipts)
   const body: Omit<TextOpenWorldCreatorReleaseSourceContractsV1, 'contractHash'> = {
-    schema: 'storyforge.text-open-world-creator-release-source-contracts', version: 1,
+    schema: 'storyforge.text-open-world-creator-release-source-contracts', version: 2,
     productType: 'text-open-world', creatorBrief: structuredClone(input.creatorBrief),
     sourcePlan: structuredClone(input.sourcePlan), creatorStart: structuredClone(input.creatorStart),
     sourcePin: structuredClone(input.sourcePin), sourceManifest: structuredClone(input.sourceManifest),
@@ -348,7 +351,7 @@ export async function validateTextOpenWorldCreatorReleaseSourceContractsV1(
     'governanceSnapshotHash', 'releaseQuality', 'releaseAuthorization', 'contractHash',
   ], 'creatorSourceContracts')
   if (row.schema !== 'storyforge.text-open-world-creator-release-source-contracts'
-    || row.version !== 1 || row.productType !== 'text-open-world'
+    || (row.version !== 1 && row.version !== 2) || row.productType !== 'text-open-world'
     || runtimePackage.productType !== 'text-open-world' || !runtimePackage.textOpenWorldVNext) {
     fail('Creator Release来源合同身份无效')
   }
@@ -423,12 +426,31 @@ export async function validateTextOpenWorldCreatorReleaseSourceContractsV1(
     || integrationReport.sourcePinHash !== sourcePin.pinHash) {
     fail('RuntimePackage没有消费精确双来源与SourcePin单元集合')
   }
+  if (integrationReport.version === 2) {
+    const snapshot = integrationReport.responsibilitySnapshot!
+    for (const track of snapshot.tracks) for (const input of track.inputs) {
+      const receipt = receiptByKey(artifactReceipts, input.artifactKey)
+      if (receipt.version !== input.version || receipt.contentHash !== input.contentHash) {
+        fail('三线快照与冻结 Artifact receipt 不一致')
+      }
+    }
+    if (releaseQuality.evidence.version !== 2
+      || (integrationReport.generatedBindings.generatedMediaArtifactKeys.some(key => key.includes('.visual.'))
+        && !releaseQuality.evidence.visualReviewReceiptHash)) fail('新版装配缺少可移植的校准或逐图人工确认')
+  }
   const artifactMatches = (artifactKey: string, contentHash: string) => (
     receiptByKey(artifactReceipts, artifactKey).contentHash === contentHash
   )
+  // These regular Artifacts store the hash of the entire accepted payload.
+  // Their embedded hashes bind the body without the self-hash field. Keep
+  // historical v1 portable contracts readable without rewriting their bytes.
+  const sourceManifestArtifactHash = row.version === 1 ? sourceManifest.manifestHash
+    : await hashProductProductionValueV2(sourceManifest)
+  const integrationArtifactHash = row.version === 1 ? integrationReport.integrationReportHash
+    : await hashProductProductionValueV2(integrationReport)
   if (!artifactMatches('text-open-world.source-pin', sourcePin.pinHash)
-    || !artifactMatches('text-open-world.source-manifest', sourceManifest.manifestHash)
-    || !artifactMatches('text-open-world.integration-report', integrationReport.integrationReportHash)
+    || !artifactMatches('text-open-world.source-manifest', sourceManifestArtifactHash)
+    || !artifactMatches('text-open-world.integration-report', integrationArtifactHash)
     || !artifactMatches('text-open-world.runtime-package', releaseQuality.evidence.build.packageHash)
     || !artifactMatches('text-open-world.quality-report', releaseQuality.evidence.build.qualityReportHash)
     || sourcePin.units.some(unit => !artifactMatches(unit.artifactKey, unit.artifactContentHash))) {
@@ -445,7 +467,7 @@ export async function validateTextOpenWorldCreatorReleaseSourceContractsV1(
   }
   const contractHash = hash(row.contractHash, 'contractHash')
   const parsed: TextOpenWorldCreatorReleaseSourceContractsV1 = {
-    schema: 'storyforge.text-open-world-creator-release-source-contracts', version: 1,
+    schema: 'storyforge.text-open-world-creator-release-source-contracts', version: row.version,
     productType: 'text-open-world', creatorBrief, sourcePlan, creatorStart, sourcePin,
     sourceManifest, artifactReceipts, artifactSetHash, integrationReport,
     governanceSnapshotHash, releaseQuality, releaseAuthorization, contractHash,

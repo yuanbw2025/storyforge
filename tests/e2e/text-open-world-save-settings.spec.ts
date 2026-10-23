@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
 
 async function openFormalSession(page: Page, projectId: number, title: string) {
   await page.goto(`./openworld/runtime?project=${projectId}&mode=play`)
@@ -94,6 +95,21 @@ test('正式开放世界存档中心保留分支与旧Release，并持久化本�
     .toContainText('PRODUCT RELEASE v1 · 已固定')
 
   let panel = await openSaveSettings(page)
+  const experience = page.getByTestId('text-open-world-experience-feedback')
+  await experience.getByRole('button', { name: '读取本地体验记录' }).click()
+  await expect(experience).toContainText('语义相似度未测量')
+  await expect(experience).toContainText('证据不足')
+  const exportFeedback = experience.getByRole('button', { name: '导出本地反馈文件' })
+  await expect(exportFeedback).toBeDisabled()
+  await experience.getByLabel('问题描述（至少五字）').fill('浏览器工程测试：任务说明需要更清楚')
+  await experience.getByLabel('我已确认描述不含原文或敏感信息。').check()
+  const downloadPromise = page.waitForEvent('download')
+  await exportFeedback.click()
+  const feedbackDownload = await downloadPromise
+  const feedbackFile = JSON.parse(await readFile((await feedbackDownload.path())!, 'utf8'))
+  expect(feedbackFile.formalAcceptance).toBe(false)
+  expect(JSON.stringify(feedbackFile)).not.toMatch(/payloadJson|projectId|sessionId|canonSnapshotJson/)
+  await expect(experience).toContainText('尚未发送给作者')
   const tabs = panel.getByRole('navigation', { name: '存档与设置分类' })
   await expect(tabs.getByRole('button')).toHaveText(['存档0', '分支1', '版本', '设置'])
 

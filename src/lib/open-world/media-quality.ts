@@ -4,6 +4,10 @@ import type {
   TextOpenWorldMediaRequirementsV1,
 } from '../types'
 import { hashProductProductionValueV2, isSha256Hash } from '../product-production/hash'
+import {
+  parseTextOpenWorldCreatorMediaAuthorizationV1,
+  type TextOpenWorldCreatorMediaAuthorizationV1,
+} from './creator-media-contract'
 
 function fail(message: string): never {
   throw new Error(`[text-open-world-media-quality] ${message}`)
@@ -44,6 +48,8 @@ export async function verifyTextOpenWorldMediaRightsV1(input: {
   artifact: ProductBuildArtifactRecordV1
   qualityProfile: 'prototype' | 'internal' | 'commercial-candidate'
   capabilityRequirement: ProviderCapabilityRequirementV1
+  /** Only receipts from the current Build's verified Creator command lineage. */
+  importAuthorizations?: readonly TextOpenWorldCreatorMediaAuthorizationV1[]
 }): Promise<TextOpenWorldVerifiedMediaRightsV1> {
   let metadata: Record<string, unknown>
   let rights: Record<string, unknown>
@@ -94,11 +100,44 @@ export async function verifyTextOpenWorldMediaRightsV1(input: {
     || adapterId !== 'storyforge.creator-media-import.v1'
     || rights.source !== source
     || !isSha256Hash(rights.importReceiptHash)
-    || rights.importReceiptHash !== input.artifact.producerReceiptHash
+    || quality.authorizationHash !== rights.importReceiptHash
     || quality.imported !== true || quality.mimeVerified !== true
     || quality.dimensionsVerified !== true
     || quality.importReceiptHash !== rights.importReceiptHash)) {
     fail(`导入媒资来源、权利声明或物理校验回执不闭合:${input.artifact.artifactKey}`)
+  }
+  if (isImported) {
+    // The import command authorizes the original file; the scheduler later
+    // signs its own task receipt. A carried or accepted artifact must retain
+    // both identities instead of treating them as the same receipt.
+    if (input.importAuthorizations) {
+      const matches = input.importAuthorizations.filter(value => (
+        value.authorizationHash === rights.importReceiptHash
+      ))
+      if (matches.length !== 1) fail(`导入媒资缺少当前谱系的唯一授权:${input.artifact.artifactKey}`)
+      const authorization = await parseTextOpenWorldCreatorMediaAuthorizationV1(matches[0])
+      const plan = authorization.plan
+      const descriptor = plan.imports.find(value => value.artifactKey === input.artifact.artifactKey)
+      const slot = plan.slots.find(value => value.artifactKey === input.artifact.artifactKey)
+      if (plan.mode !== 'author-import' || !descriptor || !slot
+        || plan.capability.requirementKey !== input.artifact.requirementKey
+        || plan.capability.adapterId !== adapterId
+        || descriptor.contentHash !== input.artifact.contentHash
+        || descriptor.mimeType !== input.artifact.mimeType || descriptor.byteSize !== input.artifact.byteSize
+        || descriptor.assetKey !== assetKey || descriptor.name !== metadata.name
+        || descriptor.altText !== metadata.altText || descriptor.width !== metadata.width
+        || descriptor.height !== metadata.height || slot.subjectKey !== metadata.sceneTag
+        || slot.mediaKind !== input.artifact.mediaKind
+        || descriptor.source !== source || descriptor.license !== license
+        || descriptor.rightsBasis !== rightsBasis || descriptor.rightsNote !== rightsNote
+        || descriptor.commercialUse !== rights.commercialUse) {
+        fail(`导入媒资与已签署文件或权利清单不一致:${input.artifact.artifactKey}`)
+      }
+    } else if (rights.importReceiptHash !== input.artifact.producerReceiptHash) {
+      // Preserve direct staged-candidate inspection. Accepted task receipts
+      // require the verified lineage supplied by the production assembler.
+      fail(`导入媒资没有可核验的授权谱系:${input.artifact.artifactKey}`)
+    }
   }
   const rightsPolicyVersion = isProcedural
     ? 'CC0-1.0'

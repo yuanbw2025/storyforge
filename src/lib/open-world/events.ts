@@ -1,10 +1,11 @@
+import Dexie from 'dexie'
 import { db } from '../db/schema'
 import { canonicalProductProductionJsonV2 } from '../product-production/hash'
 import {
   applyProductRuntimeEvent,
   assertFormalRuntimeSourceUnchangedV1,
   hashProductRuntimeStateV1,
-  replayProductRuntimeEvents,
+  replayProductRuntimeEventsVerifiedAsyncV1,
   updateProductRuntimeSessionHeadV1,
 } from '../product/runtime-core'
 import type {
@@ -144,7 +145,12 @@ export async function commitTextOpenWorldOutcomeBatchV1(input: {
       existingRandomEventSequences.push(event.sequence)
     }
 
-    const now = Date.now(); let currentState = replayProductRuntimeEvents(JSON.parse(session.initialStateJson), events); let sequence = projection.lastSequence
+    const now = Date.now()
+    // Hashing is asynchronous; keep this atomic outcome transaction alive
+    // while the pure replay runs outside its Dexie zone.
+    let currentState = await Dexie.waitFor(Dexie.ignoreTransaction(() =>
+      replayProductRuntimeEventsVerifiedAsyncV1(JSON.parse(session.initialStateJson), events)))
+    let sequence = projection.lastSequence
     assertTextOpenWorldVNextProjectionBindingV1(currentState.textOpenWorld, binding)
     if (currentState.textOpenWorld) {
       const verified = await createTextOpenWorldEffectCatalogV1(currentState.textOpenWorld.runtimePackage).apply({ plan: input.plan, state: currentState.textOpenWorld.state })

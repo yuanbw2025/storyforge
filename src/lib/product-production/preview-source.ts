@@ -6,7 +6,9 @@ import { createBuildProductMediaResolver, createReleaseProductMediaResolver } fr
 import { verifyProductBuildPreviewManifestV1 } from './preview-manifest'
 import { verifyProductReleaseManifestV1 } from './runtime-package'
 
-export async function productRuntimeSourceForSessionV1(session: ProductRuntimeSession): Promise<ProductRuntimeSourceV1> {
+export async function productRuntimeSourceForSessionV1(
+  session: Pick<ProductRuntimeSession, 'productReleaseId' | 'productBuildId'>,
+): Promise<ProductRuntimeSourceV1> {
   if (session.productReleaseId != null) return { kind: 'release', productReleaseId: session.productReleaseId }
   if (session.productBuildId != null) {
     const build = await db.productBuilds.get(session.productBuildId)

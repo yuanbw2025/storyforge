@@ -3,6 +3,7 @@ import type { TextOpenWorldFeedbackReceiptV1 } from '../../lib/types'
 import type { TextOpenWorldRuntimeExpressionPresentationV1 } from '../../lib/open-world/runtime-expression'
 import type { TextOpenWorldRuntimeAIFailureV1 } from '../../lib/open-world/runtime-ai-error'
 import TextOpenWorldRuntimeAIFailureNotice from './TextOpenWorldRuntimeAIFailureNotice'
+import { projectTextOpenWorldPlayerFeedbackV1, type TextOpenWorldPlayerNotificationV1 } from '../../lib/open-world/player-notifications'
 
 const KIND_LABELS: Record<TextOpenWorldRuntimeExpressionPresentationV1['kind'], string> = {
   scene: '场景结果',
@@ -13,6 +14,7 @@ const KIND_LABELS: Record<TextOpenWorldRuntimeExpressionPresentationV1['kind'], 
 
 export interface TextOpenWorldResultExpressionPanelProps {
   feedback: TextOpenWorldFeedbackReceiptV1 | null
+  notifications?: readonly TextOpenWorldPlayerNotificationV1[]
   presentation: TextOpenWorldRuntimeExpressionPresentationV1 | null
   busy: boolean
   /** String is accepted only for restored/legacy callers and is never rendered verbatim. */
@@ -29,6 +31,7 @@ export default function TextOpenWorldResultExpressionPanel(
     ? props.feedback
     : null
   if (!terminal) return null
+  const feedbackPresentation = projectTextOpenWorldPlayerFeedbackV1(terminal, props.notifications ?? [])
   const presentation = props.presentation?.receiptHash === terminal.receiptHash
     && props.presentation.commandId === terminal.commandId
     ? props.presentation
@@ -53,7 +56,7 @@ export default function TextOpenWorldResultExpressionPanel(
         仅依据正式事件 {presentation.evidenceEventSequences.map(sequence => `#${sequence}`).join('、')} · 不写游戏状态
       </small>
     </> : <>
-      <p>“{terminal.presentation.headline}”已经由确定性规则结算。你可以让AI只依据这份回执补充现场感。</p>
+      <p>“{feedbackPresentation.headline}”已经由确定性规则结算。你可以让AI只依据这份回执补充现场感。</p>
       {governedFailure ? <TextOpenWorldRuntimeAIFailureNotice
         failure={governedFailure}
         busy={props.busy}

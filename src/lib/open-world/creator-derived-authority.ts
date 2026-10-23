@@ -13,6 +13,7 @@ import type {
 } from '../types'
 import type { TextOpenWorldCreatorRepairExecutionAuthorityV1 } from './creator-artifact-repair-authority'
 import type { TextOpenWorldCreatorMediaExecutionAuthorityV1 } from './creator-media-authority'
+import type { TextOpenWorldBudgetRecoveryAuthorityV1 } from './creator-budget-recovery'
 import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../product-production/hash'
 import { parseProductProductionPlanV3 } from '../product-production/plan'
@@ -29,6 +30,19 @@ export interface TextOpenWorldCreatorDerivedContractsV1 {
 }
 
 export type TextOpenWorldCreatorDerivedBuildAuthorityV1 =
+  | {
+      origin: 'creator-budget-recovery-v1'
+      production: ProductProductionRecordV1 & { id: number }
+      build: ProductBuildRecordV1 & { id: number }
+      briefRow: ProductProductionBriefRecordV1 & { id: number }
+      contracts: TextOpenWorldCreatorDerivedContractsV1
+      productionPlan: ProductProductionPlanV3
+      authorizationHash: string
+      commandChain: Array<ProductProductionCommandRecordV1 & { id: number }>
+      repair: null
+      media: null
+      budgetRecovery: TextOpenWorldBudgetRecoveryAuthorityV1
+    }
   | {
       origin: 'creator-start-v1'
       production: ProductProductionRecordV1 & { id: number }
@@ -83,8 +97,31 @@ export async function readTextOpenWorldCreatorDerivedBuildAuthorityV1(input: {
     fail('Build 不存在或越界')
   }
   const build = buildValue as ProductBuildRecordV1 & { id: number }
-  if (build.parentBuildNumber != null) {
+  const parent = build.parentBuildNumber == null ? null : await db.productBuilds
+    .where('[productionId+buildNumber]').equals([build.productionId, build.parentBuildNumber]).first()
+  const isReconfirmedStart = parent != null && build.briefRevision > parent.briefRevision
+  let restartCommand: (ProductProductionCommandRecordV1 & { id: number }) | null = null
+  if (isReconfirmedStart) {
+    const { readTextOpenWorldCreatorStartPlanAuthorityV1 } = await import('./production-authority')
+    const authority = await readTextOpenWorldCreatorStartPlanAuthorityV1({ scope, buildId: build.id })
+    if (!authority.authority.valid || !authority.startCommand) {
+      fail(authority.authority.diagnostic ?? '后继制作缺少新的 Creator Start 权威')
+    }
+    restartCommand = authority.startCommand
+  }
+  if (build.parentBuildNumber != null && !isReconfirmedStart) {
     const candidates: TextOpenWorldCreatorDerivedBuildAuthorityV1[] = []
+    try {
+      const { readTextOpenWorldBudgetRecoveryAuthorityV1 } = await import('./creator-budget-recovery')
+      const recovery = await readTextOpenWorldBudgetRecoveryAuthorityV1({ scope, buildId: build.id })
+      candidates.push({ origin: 'creator-budget-recovery-v1',
+        production: recovery.source.production, build: recovery.targetBuild,
+        briefRow: recovery.source.briefRow, contracts: recovery.source.contracts,
+        productionPlan: recovery.targetPlan, authorizationHash: recovery.authorization.authorizationHash,
+        commandChain: [...recovery.source.commandChain, recovery.command],
+        repair: null, media: null, budgetRecovery: recovery,
+      })
+    } catch { /* another registered Creator derived-build authority may own it */ }
     try {
       const { readTextOpenWorldCreatorRepairExecutionAuthorityV1 } = await import(
         './creator-artifact-repair-authority'
@@ -129,7 +166,7 @@ export async function readTextOpenWorldCreatorDerivedBuildAuthorityV1(input: {
         media,
       })
     } catch { /* reported below without leaking an unrelated parser diagnostic */ }
-    if (candidates.length !== 1) fail('派生 Build 缺少唯一 Creator repair/media 权威')
+    if (candidates.length !== 1) fail('派生 Build 缺少唯一 Creator repair/media/budget 权威')
     return candidates[0]
   }
   const [productionValue, briefValue] = await Promise.all([
@@ -166,7 +203,7 @@ export async function readTextOpenWorldCreatorDerivedBuildAuthorityV1(input: {
     contracts,
     productionPlan,
     authorizationHash: contracts.start.startHash,
-    commandChain: [],
+    commandChain: restartCommand ? [restartCommand] : [],
     repair: null,
     media: null,
   }

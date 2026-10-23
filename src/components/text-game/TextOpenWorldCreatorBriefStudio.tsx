@@ -27,6 +27,7 @@ import type {
 } from '../../lib/types'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
+import { canonicalStringify } from '../../lib/agent/run/hash'
 
 export interface TextOpenWorldCreatorBriefStudioProps {
   selection?: TextOpenWorldCreatorSourceSelectionV1 | null
@@ -168,6 +169,9 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
   const allAcknowledged = Object.values(acknowledgements).every(Boolean)
   const canConfirm = Boolean(session && draft && !session.sourceIssue
     && draft.unresolvedQuestions.length === 0 && allAcknowledged && !busy)
+  const canContinue = Boolean(session?.confirmedBrief && draft && !busy && !session.sourceIssue
+    && session.production.status === 'brief-ready'
+    && canonicalStringify(draft) === canonicalStringify(session.confirmedBrief.draft))
   const sourceLabel = session?.sourceSummary.label ?? '正在读取来源…'
   const hasAI = isAIConfigReady(aiConfig)
   const fixedBoundary = useMemo(() => Object.entries(TEXT_OPEN_WORLD_CREATOR_PRODUCT_BOUNDARY_V1), [])
@@ -233,7 +237,7 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
     try {
       const next = await confirmTextOpenWorldCreatorBriefV1({ session, draft, acknowledgements })
       setSession(next); setDraft(next.draft)
-      setNotice(`Brief v${next.confirmedBrief?.revision ?? '—'} 已确认，当前只进入待授权状态，尚未创建 Build。`)
+      setNotice(`Brief v${next.confirmedBrief?.revision ?? '—'} 已确认，当前只进入待授权状态，尚未创建新 Build。`)
       props.onConfirmed?.(next)
     } catch (cause) { setError(errorMessage(cause, '确认 Brief 失败。')) }
     finally { setBusy(null) }
@@ -272,7 +276,7 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
         <div className="rounded-lg border border-border bg-bg-base p-3">
           <div className="text-[10px] text-text-muted">Production</div>
           <div className="mt-1 text-sm font-medium">{session.production.status === 'brief-ready' ? 'Brief 已就绪' : '会谈中'}</div>
-          <div className="mt-1 text-[10px] text-text-muted">当前修订 {session.production.currentBriefRevision ?? 0} · Build 0</div>
+          <div className="mt-1 text-[10px] text-text-muted">当前修订 {session.production.currentBriefRevision ?? 0} · {session.production.currentBuildNumber == null ? 'Build 0' : `保留旧 Build #${session.production.currentBuildNumber}`}</div>
         </div>
         <div className="rounded-lg border border-border bg-bg-base p-3">
           <div className="text-[10px] text-text-muted">模型路径</div>
@@ -421,9 +425,10 @@ export function TextOpenWorldCreatorBriefStudio(props: TextOpenWorldCreatorBrief
         {session.confirmedBrief
           ? <><CheckCircle2 className="mr-1 inline h-4 w-4 text-success" />已确认 v{session.confirmedBrief.revision}，可继续修订</>
           : '确认只保存 Brief，不会启动计费生产。'}
+        {session.confirmedBrief && !canContinue && !busy && <p className="mt-1">请先确认当前简报，再核对新制作的模型与预算。</p>}
       </div>
       <div className="flex flex-wrap gap-2">
-        {session.confirmedBrief && props.onContinue && <button type="button" disabled={Boolean(busy)}
+        {session.confirmedBrief && props.onContinue && <button type="button" disabled={!canContinue}
           onClick={() => props.onContinue?.(session)}
           data-testid="text-open-world-creator-brief-continue"
           className="inline-flex items-center gap-2 rounded-lg border border-accent px-4 py-2 text-xs font-semibold text-accent disabled:opacity-40">

@@ -49,12 +49,26 @@ for (const evidence of [
 const quality = sources.get('src/lib/open-world/creator-quality.ts') ?? ''
 for (const evidence of [
   'plausibleRealProviderIdentity',
-  "verifierKind: 'provider-review'",
+  "previous.gateReceipt.verifierKind !== 'provider-review'",
+  "verifierKind: previous ? 'deterministic' : 'provider-review'",
+  'verifyReusedCalibrationReview',
+  'CALIBRATION_LINEAGE_POLICY_ID',
   'priceQuoteHash',
   'ledgerHash',
   '必须先通过当前Build的独立叙事、重复度、时长与成本校准',
 ]) {
   if (!quality.includes(evidence)) throw new Error(`校准回执缺少发布边界:${evidence}`)
+}
+const usage = sources.get('src/lib/open-world/creator-calibration-usage.ts') ?? ''
+for (const evidence of [
+  'verifyProductBuildTerminalArtifactSetV1',
+  'verifyTextOpenWorldBudgetRecoveryPrefixV1',
+  'verifyStoredProductBuildRootBudgetEvidenceV1',
+  'assertProductBuildTerminalReadSetUnchangedV1',
+  'unknown === 0 && upperBounds === 0',
+  '同一付费尝试不能在多个制作版本重复计入',
+]) {
+  if (!usage.includes(evidence)) throw new Error(`校准制作来源缺少验真边界:${evidence}`)
 }
 
 console.log(`Text Open World G7 calibration harness OK: ${matrix.gates.length} gates; real provider evidence remains author-triggered`)

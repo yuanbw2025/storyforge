@@ -45,6 +45,24 @@ function elapsed(startedAt: number): number {
   return Math.max(0, Math.round(performance.now() - startedAt))
 }
 
+/** Pace bulk Agnes production; an HTTP rejection still stops the task. */
+function waitForBulkDispatch(delayMs: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'))
+  if (delayMs <= 0) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', onAbort)
+      reject(new DOMException('Aborted', 'AbortError'))
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, delayMs)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
 function zeroUsage(): ProductProductionTaskUsageV1 {
   return {
     modelCalls: 0,
@@ -195,6 +213,7 @@ export const runTextOpenWorldConfiguredProductionModelV1: TextOpenWorldProductio
     signal: input.signal,
     result,
     responseFormat: 'json_object',
+    thinkingMode: 'disabled',
   })
   return {
     output: response.output,
@@ -281,6 +300,7 @@ export async function executeTextOpenWorldProductionModelProtocolV1(input: {
       ?? fail(`${execution.task.taskKey} 缺少有界批处理模型调用预算`)
     : 1
   let calls = 0
+  let nextBulkDispatchAt = 0
   let captured: CapturedDraftV1 | null = null
   const capture = (draft: CapturedDraftV1) => {
     if (!captured) {
@@ -325,6 +345,11 @@ export async function executeTextOpenWorldProductionModelProtocolV1(input: {
     await persistModelOutput(execution.authorDraftJson)
   }
   const runModel: TextOpenWorldProductionModelTransportV1 = async request => {
+    if (nextBulkDispatchAt > Date.now()) {
+      await waitForBulkDispatch(nextBulkDispatchAt - Date.now(), execution.signal)
+    }
+    // Re-fence after pacing: a pause or other tab may change the epoch while
+    // waiting. No timer is authority to dispatch a stale request.
     if (calls > 0
       && await execution.beforeAdditionalModelRequest?.() === 'discarded-stale') {
       throw staleExecutionError()
@@ -341,7 +366,12 @@ export async function executeTextOpenWorldProductionModelProtocolV1(input: {
       || request.expectedCapabilityHash !== binding.bindingHash
       || request.category !== skillId
       || (callPolicy === 'single-exact-context' && request.contextText !== execution.contextText)) {
-      fail(`${execution.task.taskKey} 领域请求越过冻结执行边界`)
+      // This guard runs before transport. Preserve the rejection without
+      // reserving unknown provider usage for a request that was never sent.
+      throw new ProductProductionDraftRejectedErrorV1(
+        `[text-open-world-production-model] ${execution.task.taskKey} 领域请求越过冻结执行边界`,
+        zeroUsage(),
+      )
     }
     assertAtomicContextJson(request.contextText)
     if (execution.authorDraftJson != null) {
@@ -377,7 +407,9 @@ export async function executeTextOpenWorldProductionModelProtocolV1(input: {
         ? execution.contextText : request.contextText,
       maximumOutputTokens: request.maximumOutputTokens,
       signal: execution.signal,
-      ...(execution.repairFeedbackText?.trim()
+      // Task repair evidence may contain raw outputs from later fragments.
+      // A bounded projection must not reintroduce those undisclosed scenes.
+      ...(callPolicy === 'single-exact-context' && execution.repairFeedbackText?.trim()
         ? { repairFeedbackText: execution.repairFeedbackText }
         : {}),
     }
@@ -443,6 +475,9 @@ export async function executeTextOpenWorldProductionModelProtocolV1(input: {
       requirementKey,
       expectedCapabilityHash: binding.bindingHash,
     })
+    if (callPolicy === 'bounded-derived-context' && response.bindingReceipt.provider === 'agnes') {
+      nextBulkDispatchAt = Date.now() + 6_000
+    }
     return response
   }
 

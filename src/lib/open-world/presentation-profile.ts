@@ -286,6 +286,8 @@ function prompts(context: TextOpenWorldPresentationProfileInputContextV1) {
     ].join('\n'),
     user: [
       `为${CONSUMER_DEFINITIONS.length}个消费槽按slotNumber顺序各写一条简短text，说明媒资/模型失败时如何以文字继续。`,
+      `消费槽编号与用途：${JSON.stringify(CONSUMER_DEFINITIONS.map(([key, surface, purpose], index) => ({ slotNumber: index + 1, key, surface, purpose })))}`,
+      '每条text只描述对应槽位的通用文字降级方式；不得虚构当前人物、地点、数值、奖励、任务进度或已发生的剧情，实际状态和选项由运行包提供。',
       '给出title/designIntent/colorMood/typographyTone和一个BCP47 contentLanguage。',
       '返回：{"schema":"storyforge.text-open-world-presentation-profile-draft","version":1,"title":"...","designIntent":"...","colorMood":"...","typographyTone":"...","contentLanguage":"zh-CN","fallbackTexts":[{"slotNumber":1,"text":"..."}]}',
       `体验标题：${context.experienceContract.title}；调性：${context.experienceContract.toneGuide.join('、')}。`,

@@ -801,3 +801,43 @@ export async function verifyTextOpenWorldRuntimeIntentAuthorizationV1(input: {
   }
   return projected.evidence
 }
+
+/** Aggregate historical candidates without returning utterances, replies or model text.
+ * This reads verified durable checkpoints; it never re-runs an intent. */
+export async function readTextOpenWorldIntentObservationsV1(input: {
+  scope: WorkspaceScope; sessionId: number; throughSequence: number
+}) {
+  const runs = await db.agentRuns.where('productRuntimeSessionId').equals(input.sessionId).toArray()
+  const observations: Array<{ baseSequence: number; kind: 'mapping-offered' | 'boundary' | 'reply-only'; evidenceHash: string }> = []
+  let unavailable = 0
+  for (const run of runs) {
+    if (run.id == null) continue
+    // The persisted contract identifies the skill; arbitrary text is not classified.
+    let contract: { executionBindings?: Array<{ skillId: string }> }
+    try { contract = JSON.parse(run.contractJson) } catch { unavailable++; continue }
+    if (!contract.executionBindings?.some(binding => binding.skillId === 'prose.text-open-world-runtime-intent')) continue
+    try {
+      const saved = await readLatestVerifiedAgentRunCheckpointV1(input.scope, run.id, { owner: 'instance' })
+      if (!saved || !isCandidate(saved.resumePayload) || saved.snapshot.projection.state !== 'completed'
+        || !saved.snapshot.projection.terminalReceiptHash) { unavailable++; continue }
+      const candidate = saved.resumePayload
+      const { candidateHash, contextManifestHash: _manifest, ...body } = candidate
+      const draft = parseDraft(JSON.stringify({
+        kind: candidate.kind, confidence: candidate.confidence, actionKeys: candidate.actionKeys,
+        choiceKeys: candidate.choiceKeys, extractedArguments: candidate.extractedArguments,
+        rationale: candidate.rationale, requiresConfirmation: candidate.requiresConfirmation,
+        boundaryExplanation: candidate.boundaryExplanation, replyText: candidate.replyText,
+      }))
+      if (candidate.runId !== run.id || candidate.productRuntimeSessionId !== input.sessionId
+        || await hashCanonicalValue(candidateHashBody(body)) !== candidateHash) { unavailable++; continue }
+      if (candidate.baseSequence > input.throughSequence) continue
+      observations.push({
+        baseSequence: candidate.baseSequence,
+        kind: draft.confidence < TEXT_OPEN_WORLD_RUNTIME_INTENT_CONFIDENCE_V1 || draft.kind === 'unsupported'
+          ? 'boundary' : draft.kind === 'dialogue-only' ? 'reply-only' : 'mapping-offered',
+        evidenceHash: candidateHash,
+      })
+    } catch { unavailable++ }
+  }
+  return { observations, unavailable }
+}

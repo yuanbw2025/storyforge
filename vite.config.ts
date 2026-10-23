@@ -177,6 +177,11 @@ export default defineConfig(({ mode }) => {
     // 实际打开的却是被旧进程占用的 1111（错误服务 / 重定向循环）。
     strictPort: true,
     open: '/storyforge/',
+    // Parallel verification emits portable-player HTML into these directories.
+    // Generated files must not reload an author's live production session.
+    watch: {
+      ignored: ['**/dist/**', '**/dist-adventure-player/**', '**/dist-showcase/**', '**/dist-android/**'],
+    },
     proxy: showcase ? {} : providerProxies,
   },
   build: {

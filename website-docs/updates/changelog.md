@@ -88,6 +88,12 @@
 
 操作见[文字冒险](/features/interactive/text-adventure)、[备份与恢复](/guides/backup-restore)和[版本与兼容](/updates/compatibility)。技术用例与代码交付不代表《潮钟群岛》等具体作品已完成真人验收或公开发布。
 
+## 2026-10-13 · 文字开放世界产品化分支预览
+
+开发分支增加三线制作总览、缺件与费用定位、新版组装来源快照、逐图人工确认，以及玩家本地体验记录和分类反馈导出。详情见[功能说明](/features/interactive/open-world)和[待合并记录](/updates/development-status)。
+
+施工基线 `45c541e9`，W0 审计提交 `351bb52f`；实现提交 [614fe1ca](https://github.com/yuanbw2025/storyforge/commit/614fe1ca)、[3216158f](https://github.com/yuanbw2025/storyforge/commit/3216158f)、[ae1b3f3a](https://github.com/yuanbw2025/storyforge/commit/ae1b3f3a)、[2505ef9d](https://github.com/yuanbw2025/storyforge/commit/2505ef9d)、[404f5cf0](https://github.com/yuanbw2025/storyforge/commit/404f5cf0)。本条是分支开发记录，不代表已合并、上线或完成真实模型/真人验收。
+
 ## 2026-10-13 · v4.0.0 本地便携版
 
 [最新发行页](https://github.com/yuanbw2025/storyforge/releases/latest)提供 Windows x64、Mac Apple Silicon/Intel 和 Linux x64 便携包，包含发布时冻结的界面、内置媒资与 Node.js。解压后启动，不需要安装 npm 依赖；固定地址为 `http://localhost:1111/storyforge/`。官网和 README 下载入口同步指向最新发行，旧版继续作为历史记录。

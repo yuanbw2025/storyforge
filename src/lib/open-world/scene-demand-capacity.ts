@@ -1,8 +1,17 @@
-/** Current Creator inventory needs 136 governed Scenes in the Salt Ridge
- * acceptance world. Keep a bounded 159-Scene ceiling so P9 can still reserve
- * one shared request and one explicit fragment-repair request inside a
- * 161-call task contract. */
-export const TEXT_OPEN_WORLD_MAX_GOVERNED_SCENES_V1 = 159
+/** Absolute fan-out bound for the existing 322-call bounded-repair profile:
+ * one shared request and one explicit fragment repair remain reserved.
+ * This ceiling grants no calls. P9 separately checks the frozen task budget,
+ * so a standard 161-call Plan still supports at most 159 Scenes. */
+export const TEXT_OPEN_WORLD_MAX_GOVERNED_SCENES_V1 = 320
+
+export function assertTextOpenWorldSceneRequestBudgetV1(sceneCount: number, modelCalls: number): void {
+  const requiredCallsWithRepair = sceneCount + 2
+  if (requiredCallsWithRepair > modelCalls) {
+    throw new Error(
+      `[text-open-world-scene-capacity] P9 governed-v3硬隔离与一次片段修复需要${requiredCallsWithRepair}次模型调用，但Plan只预留${modelCalls}次`,
+    )
+  }
+}
 
 export interface TextOpenWorldSceneDemandCapacityInputV1 {
   quests: readonly unknown[]

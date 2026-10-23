@@ -65,7 +65,7 @@ async function validateRepairPlanV1(input: {
   sourcePlan: ProductProductionPlanV3
   targetPlan: ProductProductionPlanV3
   sourceArtifacts: ProductBuildArtifactRecordV1[]
-}): Promise<void> {
+}): Promise<ProductProductionPlanV3> {
   const { authorization, sourceBuild, targetBuild, sourcePlan, targetPlan } = input
   const impact = authorization.impactPlan
   const normalizedTarget = stripReuse({
@@ -90,7 +90,9 @@ async function validateRepairPlanV1(input: {
   const handoffByTask = new Map(impact.handoffs.map(handoff => [handoff.ownerTaskKey, handoff]))
   const sourceByKey = new Map(activeArtifacts(sourceBuild, input.sourceArtifacts)
     .map(row => [row.artifactKey, row]))
-  for (const task of targetPlan.tasks) {
+  const initialTasks = []
+  for (const sourceTask of sourcePlan.tasks) {
+    const task = stripReuse({ ...sourcePlan, tasks: [sourceTask] }).tasks[0]!
     const handoff = handoffByTask.get(task.taskKey)
     if (handoff && (!sameJson(handoff.artifacts.map(row => row.artifactKey), task.outputArtifactKeys)
       || task.reuse !== null)) {
@@ -103,7 +105,7 @@ async function validateRepairPlanV1(input: {
       fail(`repair target 的 base sibling 已偏离授权来源:${task.taskKey}`)
     }
     if (expectedStale.has(task.taskKey)) {
-      if (task.reuse !== null) fail(`stale task 不得复用:${task.taskKey}`)
+      initialTasks.push(task)
       continue
     }
     const sources = task.outputArtifactKeys.map(key => sourceByKey.get(key))
@@ -119,15 +121,33 @@ async function validateRepairPlanV1(input: {
       userImpact: impact.targetTaskKeys,
       artifacts: rows.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })),
     })
-    if (!task.reuse
-      || task.reuse.sourceBuildNumber !== sourceBuild.buildNumber
-      || task.reuse.sourceArtifactKey !== representative.artifactKey
-      || task.reuse.sourceContentHash !== representative.contentHash
-      || task.reuse.reuseKey !== expectedReuseKey
-      || task.reuse.requiresRevalidation !== true) {
-      fail(`reuse task 缺少精确跨 Build 授权:${task.taskKey}`)
-    }
+    initialTasks.push({ ...task, reuse: {
+      sourceBuildNumber: sourceBuild.buildNumber,
+      sourceArtifactKey: representative.artifactKey,
+      sourceContentHash: representative.contentHash,
+      reuseKey: expectedReuseKey,
+      requiresRevalidation: true as const,
+      reason: `Creator 修改未影响 ${task.taskKey}，依赖闭包与完整 sibling group 保持不变`,
+    } })
   }
+  const initialPlan = parseProductProductionPlanV3({ ...sourcePlan,
+    buildNumber: targetBuild.buildNumber, controlEpoch: sourceBuild.controlEpoch, tasks: initialTasks })
+  if (await hashProductProductionValueV2(initialPlan) !== authorization.targetPlanHash) {
+    fail('repair 原始 Plan 不能由封存来源与授权重建')
+  }
+  // A recovery command advances Build first; only the scheduler may atomically
+  // rebind its Plan and verified child outputs. Never revive parent reuse.
+  if (targetPlan.controlEpoch < initialPlan.controlEpoch || targetPlan.controlEpoch > targetBuild.controlEpoch) {
+    fail('repair Plan 恢复轮次越界')
+  }
+  const expectedPlan = targetPlan.controlEpoch === initialPlan.controlEpoch ? initialPlan : {
+    ...initialPlan, controlEpoch: targetPlan.controlEpoch,
+    tasks: initialPlan.tasks.map(task => ({ ...task, reuse: null })),
+  }
+  if (!sameJson(expectedPlan, targetPlan)) {
+    fail('repair Plan 不是原始授权或精确恢复 Plan')
+  }
+  return initialPlan
 }
 
 export interface TextOpenWorldCreatorRepairExecutionAuthorityV1 {
@@ -144,6 +164,7 @@ export interface TextOpenWorldCreatorRepairExecutionAuthorityV1 {
   executionBrief: ProductProductionBriefV3
   sourceProductionPlan: ProductProductionPlanV3
   targetProductionPlan: ProductProductionPlanV3
+  authorizedProductionPlan: ProductProductionPlanV3
   authorization: TextOpenWorldCreatorRepairAuthorizationV1
 }
 
@@ -206,8 +227,7 @@ export async function readTextOpenWorldCreatorRepairExecutionAuthorityV1(input: 
       || row.expectedStateRevision == null || !isSha256Hash(row.payloadHash)) continue
     try {
       const authorization = await parseTextOpenWorldCreatorRepairAuthorizationV1(row.resultJson)
-      if (authorization.impactPlan.targetBuildNumber === targetBuild.buildNumber
-        && authorization.targetPlanHash === targetBuild.planHash) {
+      if (authorization.impactPlan.targetBuildNumber === targetBuild.buildNumber) {
         matches.push({
           command: row as ProductProductionCommandRecordV1 & { id: number },
           authorization,
@@ -256,11 +276,10 @@ export async function readTextOpenWorldCreatorRepairExecutionAuthorityV1(input: 
     briefRow.briefHash,
   )
   if (canonicalProductProductionJsonV2(targetProductionPlan) !== targetBuild.planJson
-    || await hashProductProductionValueV2(targetProductionPlan) !== targetBuild.planHash
-    || authorization.targetPlanHash !== targetBuild.planHash) {
+    || await hashProductProductionValueV2(targetProductionPlan) !== targetBuild.planHash) {
     fail('repair target Plan Hash 不闭合')
   }
-  await validateRepairPlanV1({
+  const authorizedProductionPlan = await validateRepairPlanV1({
     authorization,
     sourceBuild,
     targetBuild,
@@ -284,6 +303,7 @@ export async function readTextOpenWorldCreatorRepairExecutionAuthorityV1(input: 
     executionBrief: contracts.executionBrief,
     sourceProductionPlan,
     targetProductionPlan,
+    authorizedProductionPlan,
     authorization,
   }
 }
@@ -328,7 +348,7 @@ export async function resolveTextOpenWorldCreatorRepairTaskResultV1(input: {
   }
   const allTargetRows = await db.productBuildArtifacts
     .where('buildId').equals(authority.targetBuild.id).toArray()
-  const candidates = allTargetRows.filter(row => row.controlEpoch === authority.targetBuild.controlEpoch
+  const candidates = allTargetRows.filter(row => row.controlEpoch === authority.sourceBuild.controlEpoch
     && row.status === 'candidate' && task.outputArtifactKeys.includes(row.artifactKey))
   if (candidates.length !== task.outputArtifactKeys.length
     || new Set(candidates.map(row => row.artifactKey)).size !== candidates.length) {

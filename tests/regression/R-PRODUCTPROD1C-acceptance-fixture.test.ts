@@ -460,23 +460,15 @@ describe('R-PRODUCTPROD-1C · authorized deterministic acceptance fixture', () =
       .where('[buildId+artifactKey]').equals([owned.buildId, 'runtime.narrative']).first()
     expect(sourceBuild).toMatchObject({ status: 'release-ready' })
     expect(sourceArtifact).toBeTruthy()
-    const { id: _sourceId, ...sourceFields } = sourceBuild!
-    const targetControlEpoch = sourceBuild!.controlEpoch + 1
-    const targetBuildId = await db.productBuilds.add({
-      ...sourceFields,
-      buildNumber: sourceBuild!.buildNumber + 1,
-      parentBuildNumber: sourceBuild!.buildNumber,
-      status: 'authorized',
-      controlEpoch: targetControlEpoch,
-      stateRevision: 1,
-      planRevision: 0,
-      rootTerminalReceiptHash: null,
-      adoptionIntentHash: null,
-      releasedProductReleaseId: null,
-      completedAt: null,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    }) as number
+    // Reach the source-integrity gate through a genuinely authorized target;
+    // a cloned Build with no reuse Plan only tests the earlier authority gate.
+    const { targetBuildId, targetControlEpoch } = await authorizedCrossBuildCarryTarget({
+      owned,
+      sourceBuildId: owned.buildId,
+      sourceArtifactKeys: [sourceArtifact!.artifactKey],
+      targetTaskKey: 'content.narrative',
+      authorizeReuse: true,
+    })
     await db.productBuildArtifacts.update(sourceArtifact!.id!, {
       [field]: canonicalProductProductionJsonV2({
         priorEnvelope: JSON.parse(sourceArtifact![field]),

@@ -111,18 +111,31 @@ test('世界记录在桌面与390px只披露亲历内容，并从持久Session�
     .getByRole('button', { name: /与岑阿婆交谈/ })
   await expect(talkAction).toBeVisible()
   await talkAction.click()
-  await expect(page.getByTestId('text-open-world-feedback')).toContainText('与岑阿婆交谈已完成', { timeout: 30_000 })
+  // Public feedback now shows only disclosed terminal changes, never raw Effect details.
+  await expect(page.getByTestId('text-open-world-feedback')).toContainText('行动已结算', { timeout: 30_000 })
   await expect.poll(async () => page.evaluate(async sessionId => {
     const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
-    const { readProductRuntimeState } = await importer('/storyforge/src/lib/product/runtime-core.ts')
+    const [{ readProductRuntimeState }, { useTextOpenWorldPlayerStore }] = await Promise.all([
+      importer('/storyforge/src/lib/product/runtime-core.ts'),
+      importer('/storyforge/src/stores/text-open-world-player.ts'),
+    ])
     const runtime = await readProductRuntimeState(sessionId)
+    const feedback = useTextOpenWorldPlayerStore.getState().lastFeedback
     return {
       readRumorKeys: runtime.textOpenWorld?.state.knowledge.readRumorKeys ?? [],
       earnedAchievementKeys: runtime.textOpenWorld?.state.knowledge.earnedAchievementKeys ?? [],
+      feedback: feedback && {
+        sessionId: feedback.sessionId, actionKey: feedback.actionKey,
+        phase: feedback.phase, status: feedback.status, outcomeCommitted: feedback.outcomeCommitted,
+      },
     }
   }, seeded.sessionId)).toEqual({
     readRumorKeys: ['rumor.secret-channel.read'],
     earnedAchievementKeys: ['achievement.first-clue'],
+    feedback: {
+      sessionId: seeded.sessionId, actionKey: 'action.talk-caretaker',
+      phase: 'terminal', status: 'succeeded', outcomeCommitted: true,
+    },
   })
 
   let panel = await openDesktopWorldRecord(page)

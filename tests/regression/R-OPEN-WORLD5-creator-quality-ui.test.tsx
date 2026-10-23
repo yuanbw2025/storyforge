@@ -31,6 +31,7 @@ vi.mock('../../src/lib/open-world/creator-quality', () => ({
 vi.mock('../../src/lib/export/text-export', () => ({ downloadTextFile: mocks.download }))
 
 import TextOpenWorldCreatorQualityStudio from '../../src/components/text-game/TextOpenWorldCreatorQualityStudio'
+import { TextOpenWorldCreatorCalibrationOutputErrorV1 } from '../../src/lib/open-world/creator-quality-calibration'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -85,6 +86,7 @@ function workspace(input: { graybox?: boolean; issueWaived?: boolean; calibratio
       credentialReady: true, independentIdentity: true, ready: true, issue: null,
     },
     calibrationReceipt: input.calibration ? receipt('text-open-world.creator.release-calibration', '9'.repeat(64), {
+      version: 1,
       independentReview: { scores: [
         { metricKey: 'mainline-quality', score: 90 },
         { metricKey: 'significant-stories', score: 88 },
@@ -93,6 +95,7 @@ function workspace(input: { graybox?: boolean; issueWaived?: boolean; calibratio
       templateDifferentiation: { templateCount: 5, variantCount: 15 },
       contentDuration: { mainlineMinutes: 105, optionalInventoryMinutes: 220 },
       productionUsage: { modelCalls: 187, averageCallDurationMs: 1200, p95CallDurationMs: 2400, estimatedTextCostUsd: 2.5 },
+      checks: [{ key: 'production-call-usage-observed', passed: true, summary: '已观测187次模型调用。' }],
     }) : null,
     grayboxCandidates: [{
       sessionId: 901, title: '完整核心循环', createdAt: 1, updatedAt: 2, completed: true,
@@ -178,6 +181,30 @@ describe('Text Open World G5-09 · Creator quality studio UI', () => {
     expect(onChanged).not.toHaveBeenCalled()
   })
 
+  it('保留校准解析失败原文供显式本地导出，不造通过回执或隐藏重试', async () => {
+    mocks.read.mockResolvedValue(workspace({ calibration: false }))
+    const diagnostic = {
+      schema: 'storyforge.text-open-world-calibration-output-failure' as const, version: 1 as const,
+      buildPackageHash: HASH, provider: 'agnes', model: 'independent-grader', promptVersion: 'v2',
+      inputHash: HASH, outputHash: HASH, rawOutput: '{broken grader response}',
+      inputTokens: 12, outputTokens: 3, finishReason: 'stop', durationMs: 5, issue: 'grader没有返回合法JSON',
+    }
+    mocks.recordCalibration.mockRejectedValueOnce(new TextOpenWorldCreatorCalibrationOutputErrorV1(diagnostic))
+    const onChanged = vi.fn()
+    await act(async () => root.render(createElement(TextOpenWorldCreatorQualityStudio, {
+      scope: SCOPE, productionId: 71, buildId: 81, refreshToken: '1', onPreview: vi.fn(), onChanged,
+    })))
+    await act(async () => button(host, '运行一次独立校准并冻结回执').click())
+    expect(mocks.recordCalibration).toHaveBeenCalledOnce()
+    expect(onChanged).not.toHaveBeenCalled()
+    expect(host.textContent).toContain(diagnostic.rawOutput)
+    expect(host.querySelector('[data-testid="text-open-world-creator-calibration-result"]')).toBeNull()
+    await act(async () => button(host, '导出校准失败响应').click())
+    expect(mocks.download).toHaveBeenCalledWith(JSON.stringify([diagnostic], null, 2),
+      'text-open-world-calibration-failures.json', 'application/json')
+    expect(mocks.recordCalibration).toHaveBeenCalledOnce()
+  })
+
   it('展示硬门和双评审，并以完整覆盖及五项人工确认冻结灰盒回执', async () => {
     mocks.read.mockResolvedValue(workspace())
     const onPreview = vi.fn()
@@ -228,6 +255,31 @@ describe('Text Open World G5-09 · Creator quality studio UI', () => {
     expect(host.textContent).toContain('模板 5 个 / 变体 15 个')
     expect(host.textContent).toContain('P95 2400ms')
     expect(host.textContent).toContain('冻结价格估算 $2.5000')
+  })
+
+  it('评分通过但用量门失败时显示真实阻断，保留失败回执且不重新请求评分', async () => {
+    const value = workspace({ calibration: true })
+    value.calibrationReceipt!.status = 'failed'
+    value.calibrationReceipt!.evidence.productionUsage.modelCalls = 0
+    value.calibrationReceipt!.evidence.checks = [
+      { key: 'independent-narrative-release-line', passed: true, summary: '独立复评三项最低80分。' },
+      { key: 'production-call-usage-observed', passed: false, summary: '当前Build观测0次模型调用。' },
+    ]
+    mocks.read.mockResolvedValue(value)
+    await act(async () => root.render(createElement(TextOpenWorldCreatorQualityStudio, {
+      scope: SCOPE, productionId: 71, buildId: 81, refreshToken: '1',
+      onPreview: vi.fn(), onChanged: vi.fn(),
+    })))
+    const checks = host.querySelector('[aria-label="独立校准检查结果"]')
+    expect(checks?.textContent).toContain('通过 · 独立复评三项最低80分。')
+    expect(checks?.textContent).toContain('未通过 · 当前Build观测0次模型调用。')
+    expect(host.querySelector('[data-testid="text-open-world-creator-calibration-result"]')?.textContent).toContain('校准未通过')
+    expect(mocks.recordCalibration).not.toHaveBeenCalled()
+    await act(async () => button(host, '保留评分，复核制作来源用量').click())
+    expect(mocks.recordCalibration).toHaveBeenCalledTimes(1)
+    expect(mocks.recordCalibration).toHaveBeenCalledWith({
+      scope: SCOPE, productionId: 71, buildId: 81, reuseReceiptHash: '9'.repeat(64),
+    })
   })
 
   it('只有两条不同结局、十项说明、时长、费用观察与真人声明齐全时才可冻结完整试玩', async () => {

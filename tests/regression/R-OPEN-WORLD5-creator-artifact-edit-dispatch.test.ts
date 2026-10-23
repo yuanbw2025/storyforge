@@ -3,6 +3,8 @@ import {
   hashTextOpenWorldCreatorEditPatchV1,
   type TextOpenWorldCreatorEditPatchV1,
 } from '../../src/lib/open-world/creator-artifact-edit-contract'
+import { canonicalProductProductionJsonV2 } from '../../src/lib/product-production/hash'
+import * as progressionCompiler from '../../src/lib/open-world/progression-catalogs-production'
 
 vi.mock('../../src/lib/open-world/progression-catalogs-production', () => ({
   projectTextOpenWorldProgressionCatalogsAuthorEditableDraftV1: async (input: {
@@ -30,14 +32,15 @@ vi.mock('../../src/lib/open-world/progression-catalogs-production', () => ({
     const draft = input.draft as {
       skills: Array<{ demandNumber: number; title: string; description: string; tags: string[] }>
     }
+    const { skills: baseSkills, ...rest } = input.baseArtifact
     return {
-      ...input.baseArtifact,
       skills: draft.skills.map(skill => ({
-        ...input.baseArtifact.skills[skill.demandNumber - 1],
+        ...baseSkills[skill.demandNumber - 1],
         title: skill.title,
         description: skill.description,
         tags: skill.tags,
       })),
+      ...rest,
     }
   },
 }))
@@ -56,8 +59,9 @@ function artifacts() {
     payload: {
       schema: 'storyforge.text-open-world-progression-catalogs',
       version: 1,
+      productInstanceKey: 'text-open-world.instance',
       skills: [
-        { key: 'skill.one', order: 1, title: '旧标题一', description: '旧描述一', tags: ['近战'] },
+        { key: 'skill.one', order: 1, title: '旧标题一', description: '旧描述一', tags: ['近战'], fulfilledRequirementKeys: ['requirement.one', 'requirement.two'] },
         { key: 'skill.two', order: 2, title: '旧标题二', description: '旧描述二', tags: ['远程'] },
       ],
     },
@@ -65,6 +69,48 @@ function artifacts() {
 }
 
 describe('G5-06 Creator Artifact edit dispatch', () => {
+  it('keeps persisted canonical evidence when the compiler reconstructs object keys in another order', async () => {
+    const persisted = JSON.parse(canonicalProductProductionJsonV2(artifacts())) as ReturnType<typeof artifacts>
+    const projection = await projectTextOpenWorldCreatorAuthorEditableDraftV1({
+      taskKey: 'p8.catalog.progression', artifacts: persisted, context: '{}',
+      target: { artifactKey: ARTIFACT_KEY, entityIdentity: 'skill:skill.one' },
+    })
+    const edited = structuredClone(projection.draft) as { skills: Array<{ description: string }> }
+    edited.skills[0].description = '作者修订后的公开简介'
+    const rebuilt = await rebuildTextOpenWorldCreatorArtifactsFromAuthorEditableDraftV1({
+      taskKey: projection.taskKey, baseArtifacts: persisted, context: '{}', draft: edited,
+    })
+    expect(Object.keys(rebuilt.artifacts[0].payload as object)).not.toEqual(Object.keys(persisted[0].payload))
+    expect(rebuilt.identitySequenceHash).toBe(projection.identitySequenceHash)
+    expect(rebuilt.referenceSlots).toEqual(projection.referenceSlots)
+    expect(rebuilt.referenceHash).toBe(projection.referenceHash)
+    expect(rebuilt.stableStructureHash).toBe(projection.stableStructureHash)
+    expect((rebuilt.artifacts[0].payload as { skills: Array<{ description: string }> }).skills[0].description)
+      .toBe('作者修订后的公开简介')
+  })
+
+  it.each(['target', 'reference-order', 'structure'] as const)('still rejects genuine %s changes after canonical persistence', async mutation => {
+    const persisted = JSON.parse(canonicalProductProductionJsonV2(artifacts())) as ReturnType<typeof artifacts>
+    const projection = await projectTextOpenWorldCreatorAuthorEditableDraftV1({
+      taskKey: 'p8.catalog.progression', artifacts: persisted, context: '{}',
+      target: { artifactKey: ARTIFACT_KEY, entityIdentity: 'skill:skill.one' },
+    })
+    const compile = progressionCompiler.rebuildTextOpenWorldProgressionCatalogsFromAuthorEditableDraftV1
+    const spy = vi.spyOn(progressionCompiler, 'rebuildTextOpenWorldProgressionCatalogsFromAuthorEditableDraftV1')
+      .mockImplementationOnce(async input => {
+        const result = await compile(input)
+        if (mutation === 'target') result.productInstanceKey = 'text-open-world.foreign'
+        if (mutation === 'reference-order') result.skills[0].fulfilledRequirementKeys.reverse()
+        if (mutation === 'structure') result.skills[0].order += 1
+        return result
+      })
+    try {
+      await expect(rebuildTextOpenWorldCreatorArtifactsFromAuthorEditableDraftV1({
+        taskKey: projection.taskKey, baseArtifacts: persisted, context: '{}', draft: projection.draft,
+      })).rejects.toThrow(mutation === 'structure' ? 'owner sibling 结构' : '稳定引用')
+    } finally { spy.mockRestore() }
+  })
+
   it('projects one exact target, applies an allowlisted patch and atomically rebuilds without identity drift', async () => {
     const projection = await projectTextOpenWorldCreatorAuthorEditableDraftV1({
       taskKey: 'p8.catalog.progression',

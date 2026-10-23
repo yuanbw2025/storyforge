@@ -1,7 +1,7 @@
 ---
 productId: upper.text-open-world
 status: preview
-lastVerified: 2026-10-06
+lastVerified: 2026-10-14
 ---
 # Text open world
 
@@ -38,6 +38,17 @@ The main stories use frozen scripts supplied with the repository, without free-f
 
 Production may use your model and image services. Budget, failure, and quality gates must not be bypassed by editing stored data.
 
+## Validate your own production version
+
+Save a [full backup](/en/guides/backup-restore) of the work you actually produced, and note the current build, published release, and saves to retest. Progress in a showcase cannot replace acceptance records for your own build.
+
+1. In AI settings, assign an independent preset to **Review and validation (审查校验)**. Its provider/model combination must differ from the production generator; changing only the API key does not establish independence. Check both identities under **Independent model and data calibration (独立模型与数据校准)** in the production workspace. After explicitly accepting the cost of this call, select **Run one independent calibration and freeze the receipt (运行一次独立校准并冻结回执)**. Inspect scores, repetition, authored duration, usage, and costs. Record frozen-price estimates separately from actual provider charges.
+2. After calibration passes, the author personally completes two to six routes in the current build, reaching at least two different endings and covering actions, exploration, combat, progression, and recovery. Actually use free input and obtain at least one runtime AI response. Under **Complete human playtest with two endings (真人双结局完整试玩)**, select the relevant saves and enter active play time excluding idle time, all ten ratings and observations, costs, and waiting experience. Confirm the four human declarations and freeze the receipt. If provider charges are unavailable, select **The provider did not supply attributable costs (服务商未提供可归因费用)**.
+3. Update acceptance starts with a problem actually observed in a published release. Register the issue, save the complete playtest receipt indicating that repair is required, and create a successor build through the existing local repair entry. Recheck affected artifacts and publication requirements, then explicitly publish a direct successor to that source release. Preserve the original release and saves.
+4. Complete the two-ending playtest again in the repaired release, retesting every original issue and low-rated criterion. Open **Human update verification for the repaired release (修复版真人更新验证)**, enter observations, and link the routes actually completed. Open the old save to verify that it still runs its original release, or, when the system confirms compatibility, test an explicitly created migration child save. Confirm the four update declarations and freeze the update receipt.
+
+Receipts are stored with the work and retained in full backups. Images also require the per-image review applicable to the current version. Failed calibration, unresolved issues, or a missing real repair and old-save retest leave the corresponding acceptance step pending. The person who actually played supplies the ratings and confirmations.
+
 ## Player controls and saves
 
 The Player view provides scenes, maps, quests, characters, inventory, combat, crafting and trade, world records, and save settings. Inspect action requirements, costs, and results; follow explanations for unavailable actions.
@@ -45,6 +56,18 @@ The Player view provides scenes, maps, quests, characters, inventory, combat, cr
 New games and existing saves each bind to an immutable release. Existing saves are never silently upgraded; migration requires a compatible, validated path. Confirm the target before restoring, branching, or deleting a timeline. Deleting one timeline does not remove other saves or its frozen release.
 
 Runtime AI can assist with intent interpretation, character dialogue, and result expression, within gameplay state and permission boundaries. On service failure, inspect the error and recovery options instead of repeatedly resending an action whose result is unknown.
+
+## Productization branch preview (not merged or deployed)
+
+The `feat/text-open-world-productization-20261013` branch adds the following changes. Availability depends on the version you run; this is not a new released version. See [Development status](/en/updates/development-status).
+
+- The production workspace groups progress into **game content**, **product systems**, and **media**. Expand each group to inspect missing artifacts, dependencies, blocked tasks, usage, and the existing repair entry. These groups contribute to one game and retain the underlying execution lanes.
+- New builds freeze the three groups' input hashes during assembly. A repair creates a child build and reruns the affected dependencies; historical builds, releases, and saves stay pinned to their original versions. New-format records require an application version containing this update; older applications may reject them.
+- Image review requires opening each verified image, accepting or rejecting it, and explicitly confirming personal review. Character groups use declared identities only; automatic checks do not judge visual similarity. Rejected images require a media repair. New builds with images need this review before the final publication quality gate can pass. Existing image generation/import and declared silent audio fallback remain available.
+- In the player's **More (更多)** view, choose **Read local experience records (读取本地体验记录)** to inspect quest, combat, travel, free-input, and repetition counts. Mainline duration is the wall-clock span between recorded progress events, including idle/offline time. Same-source/fingerprint counts are not semantic similarity scores. Unverifiable AI records are reported separately.
+- Choose an issue category, describe the problem without source text or private information, and export a feedback file to your device. The form is not saved until exported; nothing is uploaded or automatically sent to the author. Feedback and telemetry do not sign a human playtest receipt.
+
+Historical Salt Ridge browser evidence was not obtained in this development environment. Engineering and mock-provider checks do not replace independent real-model calibration, two human-played endings, actual image-quality review, or a real successor release and old-save retest.
 
 ## Current limits
 

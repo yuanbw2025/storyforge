@@ -140,6 +140,7 @@ export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "authorize-text-open-world-creator-start",
   "authorize-text-open-world-creator-repair",
   "authorize-text-open-world-creator-media",
+  "authorize-text-open-world-creator-budget-recovery",
   "pause",
   "resume",
   "stop",
@@ -707,6 +708,16 @@ export interface ProductProductionBlockerResolutionV1 {
   };
 }
 
+/** In-progress open-world repair binds all siblings of one registered task. */
+export interface TextOpenWorldContentRevisionV1 {
+  taskKey: string;
+  expectedPlanHash: string;
+  expectedControlEpoch: number;
+  expectedArtifacts: Array<{ artifactKey: string; version: number; contentHash: string }>;
+  note: string;
+  authorDraftJson: string;
+}
+
 /** Explicit replacement bound to one accepted, registered content artifact. */
 export interface TextAdventureContentRevisionV1 {
   artifactKey: 'content.product-module' | 'content.story-bible' | 'content.cast-bible' | 'content.adventure-architecture' | 'content.narrative-arc-scenes' | 'content.narrative-decision-plan' | 'content.ending-route-plan' | 'content.main-quest-plan' | 'content.adventure-side-quests' | 'content.adventure-ambient-events' | 'content.scene-script.act-1.part-1' | 'content.scene-script.act-1.part-2' | 'content.scene-script.act-2.part-1' | 'content.scene-script.act-2.part-2' | 'content.scene-script.act-3.part-1' | 'content.scene-script.act-3.part-2' | 'content.dialogue-pass.act-1' | 'content.dialogue-pass.act-2' | 'content.dialogue-pass.act-3' | 'content.quest-script.main.act-1.single' | 'content.quest-script.main.act-1.multi' | 'content.quest-script.main.act-2.single' | 'content.quest-script.main.act-2.multi' | 'content.quest-script.main.act-3.single' | 'content.quest-script.main.act-3.multi' | 'content.quest-script.supplemental';
@@ -819,6 +830,17 @@ export type ProductProductionCommandV1 =
       authorizedAt: number;
     }
   | {
+      type: "authorize-text-open-world-creator-budget-recovery";
+      commandId: string;
+      expectedStateRevision: number;
+      baseBuildNumber: number;
+      expectedBasePlanHash: string;
+      expectedPrefixHash: string;
+      expectedTargetPlanHash: string;
+      authorizationNonce: string;
+      authorizedAt: number;
+    }
+  | {
       type: "authorize-text-open-world-creator-media";
       commandId: string;
       expectedStateRevision: number;
@@ -849,6 +871,7 @@ export type ProductProductionCommandV1 =
       /** Required only when pause froze one or more in-flight provider reservations. */
       pausedReservationDispositions?: ProductProductionPausedReservationDispositionV1[];
       contentRevision?: TextAdventureContentRevisionV1;
+      openWorldContentRevision?: TextOpenWorldContentRevisionV1;
     }
   | {
       type: "stop";
@@ -1070,6 +1093,8 @@ export interface ProductBuildRecordV1 {
   qualityReportHash: string;
   compatibilityJson: string;
   rootTerminalReceiptHash: string | null;
+  /** Immutable v2 root hash preimage evidence. Historical IDs inside are never live references. */
+  rootBudgetEvidenceJson?: string;
   adoptionIntentHash: string | null;
   releasedProductReleaseId: number | null;
   failureJson: string;

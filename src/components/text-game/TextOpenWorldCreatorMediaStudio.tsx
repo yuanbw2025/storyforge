@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createLatestSnapshotReadQueue } from './latest-snapshot-read'
 import { Image, Loader2, Upload, WandSparkles } from 'lucide-react'
 import {
   authorizeTextOpenWorldCreatorMediaV1,
@@ -67,22 +68,27 @@ export default function TextOpenWorldCreatorMediaStudio(
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
+  const readQueue = useRef(createLatestSnapshotReadQueue())
   useEffect(() => {
+    const queue = readQueue.current
     let active = true
     setWorkspace(null)
     setPrepared(null)
     setImports({})
     setError('')
-    void inspectTextOpenWorldCreatorMediaWorkspaceV1({
-      scope: props.scope,
-      productionId: props.productionId,
-      buildId: props.buildId,
-    }).then(value => {
-      if (active) setWorkspace(value)
-    }).catch(cause => {
-      if (active) setError(cause instanceof Error ? cause.message : String(cause))
+    void queue.enqueue(async isCurrent => {
+      try {
+        const value = await inspectTextOpenWorldCreatorMediaWorkspaceV1({
+          scope: props.scope,
+          productionId: props.productionId,
+          buildId: props.buildId,
+        })
+        if (active && isCurrent()) setWorkspace(value)
+      } catch (cause) {
+        if (active && isCurrent()) setError(cause instanceof Error ? cause.message : String(cause))
+      }
     })
-    return () => { active = false }
+    return () => { active = false; queue.invalidate() }
   }, [props.buildId, props.productionId, props.scope])
 
   const resetPreview = () => {

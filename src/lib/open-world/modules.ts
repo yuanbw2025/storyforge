@@ -145,8 +145,56 @@ export function parseTextOpenWorldPlayerCharacterDefinitionV1(value: unknown): T
   return structuredClone(playerDefinition(value)) as unknown as TextOpenWorldPlayerCharacterDefinitionV1
 }
 
-/** Strictly validates every v1 logical module and all cross-module stable references. */
+let lastValidatedModules: { source: string; modules: TextOpenWorldParsedModulesV1 | string } | null = null
+
+function moduleReuseSource(value: unknown): string | null {
+  try {
+    // Preserve exact text without sorting/normalizing every module again.
+    // Reject values that JSON.stringify could erase or coerce; only the full
+    // parser below can establish validity on a cache miss.
+    let root = true
+    const source = JSON.stringify(value, function (key, entry: unknown) {
+      const descriptor = root ? null : Object.getOwnPropertyDescriptor(this, key)
+      const original = root ? value : descriptor?.value
+      root = false
+      // Accessors/toJSON are not stable JSON snapshots; use the full parser.
+      if ((descriptor && !('value' in descriptor)) || !Object.is(original, entry)
+        || Object.is(entry, -0)) throw new Error('not a plain JSON snapshot')
+      const type = typeof entry
+      if (type === 'undefined' || type === 'function' || type === 'symbol'
+        || type === 'bigint' || (type === 'number' && !Number.isFinite(entry))) {
+        throw new Error('not a lossless JSON value')
+      }
+      if (entry !== null && type === 'object' && !Array.isArray(entry)) {
+        const prototype = Object.getPrototypeOf(entry)
+        if (prototype !== Object.prototype && prototype !== null) throw new Error('not a plain JSON object')
+      }
+      return entry
+    })
+    return source.length <= 2_000_000 ? source : null
+  } catch { return null }
+}
+
+/** Strictly validates every module/reference; identical JSON reuses a private, bounded result. */
 export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1 | string | unknown): TextOpenWorldParsedModulesV1 {
+  const source = moduleReuseSource(value)
+  if (source != null && lastValidatedModules?.source === source) {
+    // A private lossless JSON snapshot is cheaper to copy for large authored
+    // catalogs; every caller still receives independent mutable objects.
+    return typeof lastValidatedModules.modules === 'string'
+      ? JSON.parse(lastValidatedModules.modules) as TextOpenWorldParsedModulesV1
+      : structuredClone(lastValidatedModules.modules)
+  }
+  const modules = parseTextOpenWorldModulesUncachedV1(value)
+  // Neither caller mutations nor a different package/hash can change this
+  // private value. Retain only one package; source/DB authority checks stay live.
+  lastValidatedModules = source == null ? null : {
+    source, modules: moduleReuseSource(modules) ?? structuredClone(modules),
+  }
+  return modules
+}
+
+function parseTextOpenWorldModulesUncachedV1(value: TextOpenWorldRuntimePackageV1 | string | unknown): TextOpenWorldParsedModulesV1 {
   const packageValue = parseTextOpenWorldRuntimePackageV1(value)
 
   const narrative = versioned(packageValue, 'narrative', [1, 2])
@@ -473,7 +521,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (actorRows.find(actor => actor.key === item.actorKey)?.scheduleKey !== item.key) fail(`schedule/actor反向引用不一致:${String(item.key)}`)
   })
 
-  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
+  const actions = versioned(packageValue, 'actions', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
   const modernActionModule = Number(actions.version) >= 2
   const travelActionModule = Number(actions.version) >= 3
   const fastTravelActionModule = Number(actions.version) >= 4
@@ -830,7 +878,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       if (!repeatable || instantiationPolicy !== 'director' || initialStatus !== 'locked' || storylineKey != null) fail(`${label}模板任务必须由Director重复实例化且不能直接开放`)
     } else if (repeatable || instantiationPolicy !== 'session-start') fail(`${label}正式任务必须在Session开始时建立单一实例`)
     int(item.estimatedMinutes, `${label}.estimatedMinutes`, 1, 100_000)
-    strings(item.tags, `${label}.tags`)
+    strings(item.tags, `${label}.tags`, 'text')
   })
   questStages.forEach((item, index) => { requireRef(key(item.questKey, `quests.stages[${index}].questKey`), questKeys, 'quest stage owner'); int(item.order, `quests.stages[${index}].order`, 0, 10_000); text(item.title, `quests.stages[${index}].title`, 2_000); requireRefs(strings(item.objectiveKeys, `quests.stages[${index}].objectiveKeys`), objectiveKeys, 'quest objective'); requireRefs(strings(item.completionConditionKeys, `quests.stages[${index}].completionConditionKeys`), conditionKeys, 'quest completion condition'); requireRef(nullableKey(item.completionActionKey, `quests.stages[${index}].completionActionKey`), actionKeys, 'quest stage completion Action') })
   objectives.forEach((item, index) => { requireRef(key(item.stageKey, `quests.objectives[${index}].stageKey`), questStageKeys, 'objective stage'); text(item.title, `quests.objectives[${index}].title`, 2_000); bool(item.optional, `quests.objectives[${index}].optional`); requireRefs(strings(item.actionKeys, `quests.objectives[${index}].actionKeys`), actionKeys, 'objective action') })
@@ -916,7 +964,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
         const successEffects = strings(action.successEffectKeys, `objective action ${String(action.key)} successEffectKeys`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
         const completionEffects = successEffects.filter(effect => effect.operation === 'complete-objective')
         if (action.actorScope !== 'player' || action.targetScope !== 'quest'
-          || strings(action.costEffectKeys, `objective action ${String(action.key)} costEffectKeys`).length
+          || (Number(actions.version) < 19 && strings(action.costEffectKeys, `objective action ${String(action.key)} costEffectKeys`).length)
           || strings(action.failureEffectKeys, `objective action ${String(action.key)} failureEffectKeys`).length
           || successEffects.length !== 1 || completionEffects.length !== 1
           || row(completionEffects[0].payload, `objective action ${String(action.key)} payload`).objectiveKey !== objective.key
@@ -954,7 +1002,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
         && expectedStatus === 'completed'
         && successEffects[0]?.operation === 'transition-quest'
         && storyOutcomeEffects.every(effect => String(effect.key).startsWith('effect.story-outcome.')
-          && ['change-morality', 'change-faction-affinity', 'set-story-modifier', 'change-region-state', 'change-currency']
+          && ['change-morality', 'change-faction-affinity', 'set-story-modifier', 'change-region-state', 'change-currency', 'grant-item']
             .includes(String(effect.operation)))
       const payload = transitions.length === 1 ? row(transitions[0].payload, `stage action ${completionActionKey} payload`) : null
       if (!payload || action.category !== 'quest-action' || action.actorScope !== 'system' || action.targetScope !== 'quest'
@@ -967,13 +1015,35 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   actionRows.filter(action => ['accept-quest', 'restart-quest', 'abandon-quest'].includes(String(action.category))).forEach(action => {
     const label = `quest action ${String(action.key)}`
     if (action.actorScope !== 'player' || action.targetScope !== 'quest' || strings(action.costEffectKeys, `${label}.costEffectKeys`).length || strings(action.failureEffectKeys, `${label}.failureEffectKeys`).length) fail(`${label}必须是无cost/failure的玩家任务实例Action`)
-    const transitions = strings(action.successEffectKeys, `${label}.successEffectKeys`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
-      .filter(effect => effect.operation === 'transition-quest')
-    if (transitions.length !== strings(action.successEffectKeys, `${label}.successEffectKeys`).length) fail(`${label}只能包含任务迁移Effect`)
+    const successEffects = strings(action.successEffectKeys, `${label}.successEffectKeys`).map(effectKey => effects.find(effect => effect.key === effectKey)!)
+    const transitions = successEffects.filter(effect => effect.operation === 'transition-quest')
     const transitionPayloads = transitions.map(effect => row(effect.payload, `${label}.${String(effect.key)}.payload`))
     const definitionKeys = new Set(transitionPayloads.map(payload => String(payload.questKey)))
     if (definitionKeys.size !== 1) fail(`${label}必须只绑定一个任务定义`)
     const definition = questRows.find(quest => quest.key === [...definitionKeys][0]) ?? fail(`${label}任务定义不存在`)
+    const learning = successEffects.filter(effect => effect.operation !== 'transition-quest')
+    if (learning.length) {
+      const hasCraftProof = (value: unknown, flagKey: string): boolean => {
+        const expression = row(value, 'craft objective condition')
+        if (expression.op === 'world-flag') return expression.flagKey === flagKey && expression.value === true
+        return ['all', 'any'].includes(String(expression.op))
+          && array(expression.conditions, 'craft objective conditions').some(child => hasCraftProof(child, flagKey))
+      }
+      const requiredConditions = objectives.filter(objective => strings(definition.stageKeys, 'craft quest stages').includes(String(objective.stageKey)))
+        .flatMap(objective => strings(objective.actionKeys, 'craft objective actions'))
+        .map(actionKey => actionRows.find(candidate => candidate.key === actionKey)!)
+        .filter(candidate => candidate.category === 'objective-action')
+        .flatMap(candidate => strings(candidate.requirementConditionKeys, 'craft objective requirements'))
+        .map(conditionKey => conditions.find(condition => condition.key === conditionKey)!.expression)
+      if (Number(actions.version) < 19 || action.category === 'abandon-quest' || definition.type === 'template'
+        || successEffects.slice(0, transitions.length).some(effect => effect.operation !== 'transition-quest')
+        || learning.some(effect => {
+          if (effect.operation !== 'learn-recipe') return true
+          const payload = row(effect.payload, 'quest recipe learning')
+          return effect.key !== `effect.learn.${String(payload.recipeKey)}`
+            || !requiredConditions.some(condition => hasCraftProof(condition, `flag.fulfillment.recipe.${String(payload.recipeKey)}`))
+        })) fail(`${label}只能在任务迁移后解锁本任务实际制作目标所需配方`)
+    }
     if (action.category === 'accept-quest') {
       const orderedStages = strings(definition.stageKeys, `${label}.definition.stageKeys`)
         .map(stageKey => questStages.find(stage => stage.key === stageKey)!)
@@ -1022,7 +1092,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       && String(action.key).startsWith('action.advance.quest.significant.')
       && successEffects[0]?.operation === 'transition-quest'
       && storyOutcomeEffects.every(effect => String(effect.key).startsWith('effect.story-outcome.')
-        && ['change-morality', 'change-faction-affinity', 'set-story-modifier', 'change-region-state', 'change-currency']
+        && ['change-morality', 'change-faction-affinity', 'set-story-modifier', 'change-region-state', 'change-currency', 'grant-item']
           .includes(String(effect.operation)))
     if (action.actorScope !== 'system' || action.targetScope !== 'quest'
       || strings(action.costEffectKeys, `${label}.costEffectKeys`).length
@@ -1383,6 +1453,22 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
   const slots = catalog(items.equipmentSlots, 'items.equipmentSlots', ['key', 'label']); const itemRows = catalog(items.items, 'items.items', ['key', 'title', 'description', 'tags', 'kind', 'stackPolicy', 'maximumStack', 'unique', 'consumable', 'critical', 'droppable', 'sellable', 'baseValue', 'useActionKey', 'equipActionKey', 'unequipActionKey', 'equipConditionKeys', 'equipmentSlotKey', 'statModifiers', 'effectKeys', 'sourceRefs', 'presentationRefs']); const rewardContracts = catalog(items.rewardContracts, 'items.rewardContracts', ['key', 'title', 'sourceKind', 'claimPolicy', 'expectedMinutes', 'budgetClass', 'conditionKeys', 'effectKeys', 'dropTableKeys']); const dropTables = catalog(items.dropTables, 'items.dropTables', ['key', 'algorithm', 'rolls', 'conditionKeys', 'entries'])
   const slotKeys = keysOf(slots, 'items.equipmentSlots'); if ([...slotKeys].sort().join(',') !== ['accessory', 'armor', 'weapon'].join(',')) fail('首版装备位必须为weapon/armor/accessory')
   slots.forEach((item, index) => text(item.label, `items.equipmentSlots[${index}].label`, 100)); const itemKeys = keysOf(itemRows, 'items.items'); const rewardContractKeys = keysOf(rewardContracts, 'items.rewardContracts'); const dropTableKeys = keysOf(dropTables, 'items.dropTables')
+  effects.filter(effect => effect.operation === 'grant-item' && String(effect.key).startsWith('effect.story-outcome.'))
+    .forEach(effect => {
+      const label = `story evidence ${String(effect.key)}`
+      const payload = row(effect.payload, `${label}.payload`)
+      exact(payload, ['itemKey', 'quantity', 'ifAbsent'], `${label}.payload`)
+      requireRef(key(payload.itemKey, `${label}.itemKey`), itemKeys, 'story evidence item')
+      int(payload.quantity, `${label}.quantity`, 1, 1)
+      if (payload.ifAbsent !== true) fail(`${label}必须保留已持有证物，不能重复授予唯一物品`)
+      const owners = actionRows.filter(action => ['costEffectKeys', 'successEffectKeys', 'failureEffectKeys']
+        .some(field => strings(action[field], `${label}.${field}`).includes(String(effect.key))))
+      if (owners.length !== 1 || !questStages.some(stage => stage.completionActionKey === owners[0].key
+        && questRows.some(quest => quest.key === stage.questKey && quest.type === 'significant'
+          && strings(quest.stageKeys, `${label}.stageKeys`).slice(-1)[0] === stage.key))) {
+        fail(`${label}只能由唯一重要故事最终Stage提交`)
+      }
+    })
   const modifierFields = ['maximumHealth', 'attack', 'defense', 'criticalChance', 'initiative', 'skillPower', 'skillResource']
   itemRows.forEach((item, index) => {
     text(item.title, `items.items[${index}].title`, 2_000); text(item.description, `items.items[${index}].description`); strings(item.tags, `items.items[${index}].tags`, 'text')
@@ -1407,6 +1493,45 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
     if (consumable !== (kind === 'consumable') || consumable !== (useActionKey != null)) fail(`items.items[${index}] 消耗品/useAction不一致`)
     const modifiers = row(item.statModifiers, `items.items[${index}].statModifiers`); if (Object.keys(modifiers).some(field => !modifierFields.includes(field))) fail(`items.items[${index}].statModifiers字段无效`); Object.entries(modifiers).forEach(([field, value]) => numberValue(value, `items.items[${index}].statModifiers.${field}`, -1_000_000, 1_000_000))
     requireRefs(strings(item.effectKeys, `items.items[${index}].effectKeys`), effectKeys, 'item effect'); strings(item.sourceRefs, `items.items[${index}].sourceRefs`, 'text'); strings(item.presentationRefs, `items.items[${index}].presentationRefs`, 'text')
+  })
+  const fulfillmentEffects = effects.filter(effect => effect.operation === 'remove-item' && row(effect.payload, 'fulfillment').reason === 'fulfillment')
+  if (fulfillmentEffects.length && Number(actions.version) < 19) fail('旧Action模块不能包含实体交付结算')
+  fulfillmentEffects.forEach(effect => {
+    const owners = actionRows.filter(action => strings(action.costEffectKeys, 'fulfillment costs').includes(String(effect.key)))
+    if (owners.length !== 1 || owners[0].actorScope !== 'player'
+      || (owners[0].category !== 'objective-action' && !String(owners[0].key).startsWith('action.interaction.'))
+      || actionRows.some(action => [...strings(action.successEffectKeys, 'fulfillment success'), ...strings(action.failureEffectKeys, 'fulfillment failure')].includes(String(effect.key)))
+      || rewardContracts.some(reward => strings(reward.effectKeys, 'fulfillment reward').includes(String(effect.key)))) fail('实体交付只能属于唯一玩家目标或地点交互的成本')
+  })
+  if (Number(actions.version) >= 19) actionRows.filter(action => action.category === 'objective-action' || String(action.key).startsWith('action.interaction.')).forEach(action => {
+    const costs = strings(action.costEffectKeys, 'objective fulfillment costs').map(effectKey => effects.find(effect => effect.key === effectKey)!)
+    const requirementExpressions = strings(action.requirementConditionKeys, 'objective fulfillment conditions')
+      .map(conditionKey => conditions.find(condition => condition.key === conditionKey)!.expression)
+    costs.forEach(effect => {
+      const payload = row(effect.payload, 'objective fulfillment cost')
+      const item = itemRows.find(item => item.key === payload.itemKey)
+      if (effect.operation !== 'remove-item' || payload.reason !== 'fulfillment' || !item || item.critical || (item.stackPolicy !== 'stacked' && (Number(actions.version) < 20 || item.unique || item.kind !== 'equipment'))
+        || !Number.isSafeInteger(payload.quantity) || Number(payload.quantity) < 1 || Number(payload.quantity) > Number(item.maximumStack ?? 1)
+        || !requirementExpressions.some(expression => canonicalProductProductionJsonV2(expression) === canonicalProductProductionJsonV2({
+          op: 'inventory-quantity', itemKey: item.key, comparator: 'gte', value: payload.quantity,
+        }))) fail('目标交付必须原子扣除有持有条件且符合当前合同的非关键物品')
+    })
+    if (new Set(costs.map(effect => row(effect.payload, 'objective cost').itemKey)).size !== costs.length) fail('目标交付不能重复扣除同种物品')
+    if (String(action.key).startsWith('action.interaction.')) {
+      const interactionKey = String(action.key).slice('action.interaction.'.length)
+      const flagKey = `flag.fulfillment.interaction.${interactionKey}`
+      const proofKey = `effect.fulfillment.interaction.${interactionKey}`
+      const proof = effects.find(effect => effect.key === proofKey)
+      if (!proof || proof.operation !== 'set-world-flag'
+        || canonicalProductProductionJsonV2(proof.payload) !== canonicalProductProductionJsonV2({ flagKey, value: true })
+        || !strings(action.successEffectKeys, 'interaction success').includes(proofKey)
+        || effects.filter(effect => effect.operation === 'set-world-flag' && row(effect.payload, 'repair proof').flagKey === flagKey).length !== 1
+        || actionRows.some(other => other.key !== action.key && [...strings(other.costEffectKeys, 'repair costs'), ...strings(other.successEffectKeys, 'repair success'), ...strings(other.failureEffectKeys, 'repair failure')].includes(proofKey))
+        || rewardContracts.some(reward => strings(reward.effectKeys, 'repair reward').includes(proofKey))
+        || costs.length > 0 && !requirementExpressions.some(expression => canonicalProductProductionJsonV2(expression) === canonicalProductProductionJsonV2({
+          op: 'not', condition: { op: 'world-flag', flagKey, value: true },
+        }))) fail('地点实体操作必须唯一记录证据并防止重复扣料')
+    }
   })
   dropTables.forEach((item, index) => {
     if (item.algorithm !== 'weighted-item-then-quantity-v1' || item.rolls !== 1) fail(`items.dropTables[${index}] 算法或首版rolls无效`)
@@ -1991,10 +2116,27 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
         .filter(effect => effect.operation === 'perform-crafting')
       if (action.actorScope !== 'player' || action.targetScope !== 'recipe'
         || strings(action.costEffectKeys, `${label}.costEffectKeys`).length || strings(action.failureEffectKeys, `${label}.failureEffectKeys`).length
-        || markers.length !== 1 || successEffectKeys.length !== 1 || action.timeCostMinutes !== 0
+        || markers.length !== 1 || successEffectKeys.length !== (Number(actions.version) >= 19 ? 2 : 1) || action.timeCostMinutes !== 0
         || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) fail(`${label}合同无效`)
       const markerPayload = row(markers[0].payload, `${label}.marker.payload`); exact(markerPayload, ['recipeKey'], `${label}.marker.payload`)
       const recipeKey = key(markerPayload.recipeKey, `${label}.recipeKey`); requireRef(recipeKey, recipeKeys, 'craft action recipe')
+      if (Number(actions.version) >= 19) {
+        const proofKey = `effect.fulfillment.recipe.${recipeKey}`
+        const proofFlagKey = `flag.fulfillment.recipe.${recipeKey}`
+        const proof = effects.find(effect => effect.key === proofKey)
+        if (successEffectKeys[0] !== markers[0].key || successEffectKeys[1] !== proofKey
+          || !proof || proof.operation !== 'set-world-flag'
+          || canonicalProductProductionJsonV2(proof.payload) !== canonicalProductProductionJsonV2({ flagKey: proofFlagKey, value: true })
+          || effects.filter(effect => effect.operation === 'set-world-flag'
+            && row(effect.payload, 'craft proof').flagKey === proofFlagKey).length !== 1
+          || actionRows.filter(candidate => [
+            ...strings(candidate.costEffectKeys, 'proof costs'), ...strings(candidate.successEffectKeys, 'proof success'),
+            ...strings(candidate.failureEffectKeys, 'proof failure'),
+          ].includes(proofKey)).some(candidate => candidate.key !== action.key)
+          || rewardContracts.some(reward => strings(reward.effectKeys, 'proof reward').includes(proofKey))) {
+          fail(`${label}真实制作证据必须由成功制作唯一写入`)
+        }
+      }
       const recipe = normalizedRecipes.find(candidate => candidate.key === recipeKey)!
       requireSameKeys(strings(action.locationKeys, `${label}.locationKeys`), recipe.stationLocationKeys, `${label}制作地点`)
       requireSameKeys(strings(action.requirementConditionKeys, `${label}.requirementConditionKeys`), recipe.requirementConditionKeys, `${label}制作条件`)
@@ -2110,7 +2252,7 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
         if (action.category !== transactionKind || action.actorScope !== 'player' || action.targetScope !== 'vendor'
           || strings(action.costEffectKeys, `vendor ${vendor.key} ${transactionKind} costs`).length
           || strings(action.failureEffectKeys, `vendor ${vendor.key} ${transactionKind} failures`).length
-          || successEffectKeys.length !== 1 || markers.length !== 1 || Number(action.timeCostMinutes) !== 0
+          || successEffectKeys.length !== (Number(actions.version) >= 20 && transactionKind === 'buy' ? 2 : 1) || markers.length !== 1 || successEffectKeys[0] !== markers[0].key || Number(action.timeCostMinutes) !== 0
           || action.confirmationPolicy !== 'never' || action.repeatPolicy !== 'repeatable' || action.cooldownMinutes != null) {
           fail(`商店交易Action合同无效:${vendor.key}:${transactionKind}`)
         }
@@ -2119,6 +2261,11 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
         const marker = row(markers[0].payload, `vendor ${vendor.key} ${transactionKind} marker`)
         exact(marker, ['kind', 'vendorKey'], `vendor ${vendor.key} ${transactionKind} marker`)
         if (marker.kind !== transactionKind || marker.vendorKey !== vendor.key) fail(`商店交易Effect与Vendor不一致:${vendor.key}:${transactionKind}`)
+        if (Number(actions.version) >= 20 && transactionKind === 'buy') {
+          const proof = effects.find(effect => effect.key === successEffectKeys[1])!
+          if (proof.operation !== 'prove-purchase' || proof.key !== `effect.fulfillment.purchase.${vendor.key}`
+            || canonicalProductProductionJsonV2(proof.payload) !== canonicalProductProductionJsonV2({ vendorKey: vendor.key })) fail('购买证明必须绑定本商店交易')
+        }
         ownedActionKeys.push(String(actionKey))
         ownedEffectKeys.push(String(markers[0].key))
       }
@@ -2135,6 +2282,16 @@ export function parseTextOpenWorldModulesV1(value: TextOpenWorldRuntimePackageV1
       if (owners.length !== 1) fail(`perform-transaction Effect必须且只能属于一个交易Action:${String(effect.key)}`)
     })
   } else if (performTransactionEffects.length) fail('旧Economy模块不能包含正式交易Effect')
+  const purchaseProofs = effects.filter(effect => effect.operation === 'prove-purchase')
+  if (Number(actions.version) < 20 && purchaseProofs.length) fail('旧Action不能携带购买证明')
+  if (Number(actions.version) >= 20) {
+    requireSameKeys(purchaseProofs.map(effect => String(effect.key)), normalizedVendors.map(vendor => `effect.fulfillment.purchase.${vendor.key}`), '购买证明覆盖')
+    purchaseProofs.forEach(effect => {
+      const owners = actionRows.filter(action => [...strings(action.costEffectKeys, 'purchase costs'), ...strings(action.successEffectKeys, 'purchase success'), ...strings(action.failureEffectKeys, 'purchase failure')].includes(String(effect.key)))
+      if (owners.length !== 1 || owners[0].category !== 'buy' || rewardContracts.some(reward => strings(reward.effectKeys, 'purchase reward').includes(String(effect.key)))) fail('购买证明只能归属一个实际购买操作')
+    })
+    if (effects.some(effect => effect.operation === 'set-world-flag' && String(row(effect.payload, 'purchase flag').flagKey).startsWith('flag.fulfillment.purchase.'))) fail('不能以任意标志伪造购买证明')
+  }
   const normalizedEconomy: TextOpenWorldParsedModulesV1['economy'] = {
     version: 2, sourceVersion: modernEconomy ? 2 : 1,
     currency: { key: 'currency', label: String(currency.label) },

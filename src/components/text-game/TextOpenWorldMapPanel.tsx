@@ -15,6 +15,7 @@ import {
   type TextOpenWorldPlayerMapLocationV1,
 } from '../../lib/open-world/player-map'
 import { classifyTextOpenWorldPlayerIssueV1 } from '../../lib/open-world/player-resilience'
+import { projectTextOpenWorldPlayerFeedbackV1, type TextOpenWorldPlayerNotificationV1 } from '../../lib/open-world/player-notifications'
 import type {
   TextOpenWorldFastTravelOptionV1,
   TextOpenWorldTravelOptionV1,
@@ -96,7 +97,7 @@ function OrdinaryTravelButton(props: {
   return <button
     type="button"
     disabled={disabled}
-    aria-label={`${props.option.label}：前往${props.option.destinationTitle}，耗时${props.option.travelMinutes}分钟，${RISK_LABELS[props.option.riskProfile]}`}
+    aria-label={`沿道路前往${props.option.destinationTitle}，耗时${props.option.travelMinutes}分钟，${RISK_LABELS[props.option.riskProfile]}`}
     title={props.blockedReason ?? (!props.option.available ? firstReason(props.option) : props.option.description)}
     onClick={() => props.onConfirm(props.option)}
     className="inline-flex min-h-11 items-center justify-center gap-1 rounded border border-accent/40 px-3 py-2 text-[10px] text-accent disabled:border-border disabled:text-text-muted"
@@ -161,6 +162,7 @@ export default function TextOpenWorldMapPanel(props: {
   projection: TextOpenWorldSessionProjectionV1
   /** Authoritative ProductRuntime event baseline, not the nested game projection sequence. */
   runtimeEventSequence: number
+  notifications?: readonly TextOpenWorldPlayerNotificationV1[]
   busy: boolean
   /** Pure UI identity: changing Session resets browsing and pending map feedback. */
   sessionKey?: string | number | null
@@ -319,6 +321,7 @@ export default function TextOpenWorldMapPanel(props: {
     ? mapOutcome
     : null
   const mapFeedback = visibleOutcome?.feedback ?? null
+  const mapPresentation = mapFeedback ? projectTextOpenWorldPlayerFeedbackV1(mapFeedback, props.notifications ?? []) : null
   const mapError = visibleOutcome?.error?.trim() || null
   const travelBusy = props.busy || submittingRequest != null
   const highlightedRouteKeys = new Set([
@@ -349,14 +352,14 @@ export default function TextOpenWorldMapPanel(props: {
     </header>
 
     {(mapFeedback || mapError) && <section
-      className={`mt-3 rounded border px-3 py-2 text-xs ${mapFeedback?.presentation.mayNarrateSuccess ? 'border-accent/40 bg-accent/5' : 'border-danger/40 bg-danger/5'}`}
+      className={`mt-3 rounded border px-3 py-2 text-xs ${mapPresentation?.mayNarrateSuccess ? 'border-accent/40 bg-accent/5' : 'border-danger/40 bg-danger/5'}`}
       data-testid="text-open-world-map-feedback"
       role="status"
       aria-live="polite"
       aria-atomic="true"
     >
-      <strong>{mapFeedback?.presentation.headline ?? '旅行未能执行'}</strong>
-      {mapFeedback?.presentation.details.slice(0, 3).map((detail, index) => <p key={`${index}:${detail}`} className="mt-1 text-text-muted">{detail}</p>)}
+      <strong>{mapPresentation?.headline ?? '旅行未能执行'}</strong>
+      {mapPresentation?.details.slice(0, 3).map((detail, index) => <p key={`${index}:${detail}`} className="mt-1 text-text-muted">{detail}</p>)}
       {mapError && <p className="mt-1 text-text-muted">{mapError}</p>}
     </section>}
 
@@ -380,7 +383,7 @@ export default function TextOpenWorldMapPanel(props: {
         <svg
           role="group"
           aria-labelledby="text-open-world-map-title text-open-world-map-description"
-          viewBox={`0 0 ${map.viewBox.width} ${map.viewBox.height}`}
+          viewBox={`-80 -80 ${map.viewBox.width + 160} ${map.viewBox.height + 160}`}
           preserveAspectRatio="xMidYMid meet"
           className="open-world-player-map-svg block h-auto min-h-[16rem] w-full rounded border border-border bg-bg-base"
           data-testid="text-open-world-map-svg"

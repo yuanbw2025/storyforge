@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
   branchTextOpenWorldSessionFromCheckpointV1,
@@ -11,6 +11,7 @@ import { commitTextOpenWorldCommandV1 } from '../../src/lib/open-world/commands'
 import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
 import { commitTextOpenWorldOutcomeBatchV1 } from '../../src/lib/open-world/events'
 import { hashProductRuntimeStateV1, readProductRuntimeState, readProductRuntimeStateVersion } from '../../src/lib/product/runtime-core'
+import * as runtimeCore from '../../src/lib/product/runtime-core'
 import type { TextOpenWorldCommandEnvelopeV1, TextOpenWorldRuntimePackageV1 } from '../../src/lib/types'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
@@ -43,6 +44,7 @@ async function playReward(runtimePackage: TextOpenWorldRuntimePackageV1, session
 
 describe('Text Open World vNext · checkpoint, replay and child branch', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
+  afterEach(() => vi.restoreAllMocks())
   afterAll(() => db.close())
 
   it('从已验证历史检查点建立序号归零的子Session，不删除父分支未来事件', async () => {
@@ -87,6 +89,46 @@ describe('Text Open World vNext · checkpoint, replay and child branch', () => {
     const checkpoint = await createTextOpenWorldCheckpointV1({ sessionId: session.id!, name: '旧版手动点' })
     await db.productRuntimeCheckpoints.update(checkpoint.id!, { purpose: undefined, subjectKey: undefined })
     await expect(inspectTextOpenWorldCheckpointV1(checkpoint.id!)).resolves.toMatchObject({ valid: true, code: 'valid' })
+  })
+
+  it('已验证历史点只复用相同原始证据，未来事件与损坏的派生head不成为检查点权威', async () => {
+    const runtimePackage = rewardRuntimePackage(); const session = await createSession(runtimePackage)
+    await playReward(runtimePackage, session.id!, 'command.memo.1', 'claim.memo.1')
+    const checkpoint = await createTextOpenWorldCheckpointV1({ sessionId: session.id!, name: '历史核验点' })
+    await playReward(runtimePackage, session.id!, 'command.memo.2', 'claim.memo.2')
+    await db.productRuntimeSessions.update(session.id!, {
+      runtimeHeadSequence: 999, runtimeHeadStateJson: '{}', runtimeHeadStateHash: 'f'.repeat(64),
+    })
+    const replay = vi.spyOn(runtimeCore, 'replayProductRuntimeEventsVerifiedAsyncV1')
+    expect(await inspectTextOpenWorldCheckpointV1(checkpoint.id!)).toMatchObject({ valid: true })
+    expect(replay).not.toHaveBeenCalled()
+    const future = await db.productRuntimeEvents.where('sessionId').equals(session.id!).last()
+    await db.productRuntimeEvents.update(future!.id!, { projectId: session.projectId + 1 })
+    expect(await inspectTextOpenWorldCheckpointV1(checkpoint.id!)).toMatchObject({ valid: false, code: 'event-protocol-invalid' })
+  })
+
+  it.each(['initial-state', 'event-bytes', 'seed'] as const)('已核验点在 %s 改变后重新验证，不只信任检查点Hash', async change => {
+    const runtimePackage = rewardRuntimePackage(); const session = await createSession(runtimePackage)
+    await playReward(runtimePackage, session.id!, 'command.invalidate', 'claim.invalidate')
+    const checkpoint = await createTextOpenWorldCheckpointV1({ sessionId: session.id!, name: '失效核验点' })
+    const replay = vi.spyOn(runtimeCore, 'replayProductRuntimeEventsVerifiedAsyncV1')
+    if (change === 'initial-state') {
+      const initial = JSON.parse(session.initialStateJson)
+      initial.textOpenWorld.state.inventory.currency += 1
+      await db.productRuntimeSessions.update(session.id!, { initialStateJson: JSON.stringify(initial) })
+    } else if (change === 'event-bytes') {
+      const event = await db.productRuntimeEvents.where('sessionId').equals(session.id!).first()
+      await db.productRuntimeEvents.update(event!.id!, { payloadJson: JSON.stringify(JSON.parse(event!.payloadJson), null, 2) })
+    } else {
+      await db.productRuntimeSessions.update(session.id!, { seed: 'changed-checkpoint-seed' })
+    }
+    const inspection = await inspectTextOpenWorldCheckpointV1(checkpoint.id!)
+    expect(replay).toHaveBeenCalled()
+    // Changing the initial balance invalidates the recorded command's base
+    // state before replay can compare the checkpoint's resulting state.
+    expect(inspection).toMatchObject(change === 'initial-state'
+      ? { valid: false, code: 'event-protocol-invalid' }
+      : { valid: true, code: 'valid' })
   })
 
   it('runtime head损坏可诊断并从规范事件安全修复', async () => {

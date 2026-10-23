@@ -72,6 +72,7 @@ import {
   assertProductProductionBudgetLedgerV1,
   executionBindingDriftInvalidatedTaskKeysV1,
   prepareLegacyPausedProductBuildV1,
+  revisedNarrativeQualityRetryTaskV1,
   runProductProductionUntilBlockedV1,
   runProductProductionSchedulerCycleV1,
   recoverImportedProductProductionProofsV1,
@@ -8212,6 +8213,31 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
             })) }) },
       })
     }
+    const resumedReviewBuild = (await db.productBuilds.get(build.id!))!
+    const reviewRetry = {
+      buildId: build.id!,
+      controlEpoch: (JSON.parse(resumedReviewBuild.planJson) as { controlEpoch: number }).controlEpoch,
+      failureJson: resumedReviewBuild.failureJson,
+    }
+    expect(await revisedNarrativeQualityRetryTaskV1(reviewRetry)).toBe('content.adventure-quality-review.act-2')
+    for (const changedProvenance of [
+      { rootRunId: -1 }, { runId: -1 }, { planHash: 'f'.repeat(64) }, { attempt: 999 },
+    ]) {
+      const changedFailure = JSON.parse(reviewRetry.failureJson)
+      Object.assign(changedFailure.previousFailure.failureProvenance, changedProvenance)
+      expect(await revisedNarrativeQualityRetryTaskV1({
+        ...reviewRetry, failureJson: JSON.stringify(changedFailure),
+      })).toBeNull()
+    }
+    const historicalNarrative = (await db.productBuildArtifacts.get(narrativeBeforeReviewRetry.id!))!
+    for (const changedArtifact of [
+      { producerRunId: null }, { producerReceiptHash: 'f'.repeat(64) },
+      { payloadJson: '{"text":"unsigned replacement"}' },
+    ]) {
+      await db.productBuildArtifacts.update(historicalNarrative.id!, changedArtifact)
+      expect(await revisedNarrativeQualityRetryTaskV1(reviewRetry)).toBeNull()
+      await db.productBuildArtifacts.put(historicalNarrative)
+    }
     const repaired = await runProductProductionUntilBlockedV1({
       scope: owned.scope, productionId: owned.productionId,
       executor: createConfiguredProductProductionExecutorV1({
@@ -8293,13 +8319,30 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       .where('[buildId+artifactKey]').equals([build.id!, 'runtime.package']).count()).toBe(1)
   }, 120_000)
 
-  // Each product owns an independent fixture and timeout. The unpublished
-  // recovery path is already covered by the 60-minute adventure above;
-  // this matrix additionally verifies recovery of the published adventure.
-  // Each recovery builds, imports and repairs a complete production under coverage.
+  // Produce a complete parent through the real DAG once. Each later recovery
+  // case restores its own database through the public backup/import and durable
+  // proof-recovery paths, instead of repeating identical parent model work.
+  // A filtered standalone case still creates the full parent itself.
+  let revisionParent: {
+    backup: Awaited<ReturnType<typeof exportProjectJSON>>
+    productionKey: string
+    packageHash: string | null
+    manifestHash: string | null
+  } | null = null
   it.each(['pause', 'review-retry', 'dialogue-repair', 'quality-repair', 'quality-child-revision'] as const)('文字修订从完整生产 Build 派生，%s 恢复后零图片调用保留原图并采纳新正文', async recoveryMode => {
     const productType = 'text-adventure' as ProductionProductKindV1
-    const owned = await fixtureForProduct(productType, { pluginRules: productType === 'ttrpg' })
+    const restoreParent = revisionParent
+    const owned = await (async () => {
+      if (!restoreParent) return fixtureForProduct(productType, { pluginRules: productType === 'ttrpg' })
+      const projectId = await importProjectJSON(structuredClone(restoreParent.backup))
+      const scope = (await resolveWorkspaceOwnership(projectId)).scope
+      const production = await db.productProductions.where('projectId').equals(projectId)
+        .filter(row => row.productionKey === restoreParent.productionKey).first()
+      expect(production).toMatchObject({ worldId: scope.worldId, workId: scope.workId })
+      const brief = await db.productProductionBriefs.where('[productionId+revision]')
+        .equals([production!.id!, production!.currentBriefRevision!]).first()
+      return { scope, productionId: production!.id!, brief: parseProductProductionBriefV3(brief!.briefJson) }
+    })()
     const textRequirement = owned.brief.capabilityRequirements.find(item => item.mediaClass === 'text')!
     expect(owned.brief.capabilityRequirements.filter(item => item.mediaClass !== 'text'))
       .toHaveLength(productType === 'text-adventure' ? 1 : 0)
@@ -8416,9 +8459,21 @@ describe('R-PRODUCTPROD-1F · configured formal production executor', () => {
       ],
     })
 
-    const projection = await executeBuild()
+    const projection = restoreParent
+      ? await recoverImportedProductProductionProofsV1({ scope: owned.scope, productionId: owned.productionId })
+      : await executeBuild()
     expect(projection.buildStatus).toBe('release-ready')
     const before = (await db.productBuilds.get(projection.buildId))!
+    if (restoreParent) {
+      expect(before).toMatchObject({ packageHash: restoreParent.packageHash, manifestHash: restoreParent.manifestHash })
+    } else {
+      revisionParent = {
+        backup: await exportProjectJSON(owned.scope.projectId),
+        productionKey: (await db.productProductions.get(owned.productionId))!.productionKey,
+        packageHash: before.packageHash,
+        manifestHash: before.manifestHash,
+      }
+    }
     // Represent a mixed parent library: author-imported images legitimately
     // have no AI producer. The batch command must authorize their exact bytes.
     const parentImages = (await db.productBuildArtifacts.where('buildId').equals(before.id!).toArray())

@@ -8,6 +8,7 @@
  * 输出只遵循当前便携备份契约；不存在历史格式分支。
  */
 import Dexie from 'dexie'
+import { prepareProductBuildRootBudgetEvidenceExportV1 } from '../product-production/root-budget-evidence-portability'
 import { db } from '../db/schema'
 import { PROJECT_TABLES, REGISTRY_BY_NAME } from '../registry/project-tables'
 import { remapWorldPortalTargets } from '../utils/world-portals'
@@ -542,7 +543,7 @@ async function captureProjectExportInTransaction(
   return { data: result as ProjectExportData, exportIds: idMaps, integrityRows: rowsByTable }
 }
 
-async function captureProjectExport(projectId: number, version: number, strictOwners: boolean): Promise<StrictProjectExportSnapshot> {
+async function captureProjectExport(projectId: number, version: number, strictOwners: boolean): Promise<CapturedProjectExportSnapshot> {
   const tables = [...new Set(PROJECT_TABLES.filter(spec => spec.exportable).map(spec => spec.table))]
   const captured = await db.transaction(
     'r',
@@ -553,10 +554,15 @@ async function captureProjectExport(projectId: number, version: number, strictOw
   // rows captured by the read transaction. Keeping them outside IndexedDB
   // avoids both premature auto-commit and an artificial Dexie.waitFor lock.
   await assertProductRuntimeExportIntegrityV1(captured.integrityRows)
-  return { data: captured.data, exportIds: captured.exportIds }
+  return captured
 }
 
-async function portableizeSnapshot(snapshot: StrictProjectExportSnapshot): Promise<StrictProjectExportSnapshot> {
+async function portableizeSnapshot(snapshot: CapturedProjectExportSnapshot): Promise<StrictProjectExportSnapshot> {
+  if (PROJECT_TABLES.some(spec => spec.portableData?.kind === 'product-build-root-budget')) {
+    await prepareProductBuildRootBudgetEvidenceExportV1({
+      data: snapshot.data, originalRows: snapshot.integrityRows, exportIds: snapshot.exportIds,
+    })
+  }
   if (PROJECT_TABLES.some(spec => spec.portableData?.kind === 'agent-run-root')) {
     const portableLedger = portableizeAgentRunLedgerExportV1(snapshot.data, snapshot.exportIds)
     if (Dexie.currentTransaction) await Dexie.waitFor(portableLedger)
@@ -670,12 +676,11 @@ export async function deriveStrictExportProjectSnapshotInCurrentTransaction(
     throw new Error('[strictExport] 当前事务快照只能在已打开的 Dexie 事务中派生')
   }
   const captured = await captureProjectExportInTransaction(projectId, CURRENT_EXPORT_VERSION, true)
-  // `portableizeSnapshot()` is deliberately asynchronous even when this
-  // particular project has no portable Blob rows. Keeping the whole promise
-  // inside Dexie.waitFor prevents a real browser from auto-committing the
-  // caller-owned revision transaction between the final export read and the
-  // subsequent worldRevisions write.
-  const snapshot = await Dexie.waitFor(portableizeSnapshot(captured))
+  // Conversion reads only the captured rows. Start it outside the transaction
+  // context while waitFor keeps the caller's snapshot alive.
+  // Passing an already-running promise would let inner hash/blob keepalives
+  // join the same wait chain and prevent it from completing.
+  const snapshot = await Dexie.waitFor(Dexie.ignoreTransaction(() => portableizeSnapshot(captured)))
   const worldExportId = snapshot.exportIds.get('worlds')?.get(ownership.worldId)
   const workExportId = snapshot.exportIds.get('works')?.get(ownership.workId)
   if (worldExportId == null || workExportId == null) {

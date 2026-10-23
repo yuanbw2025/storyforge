@@ -6,6 +6,77 @@
 
 本文为G1运行底座和G2确定性玩法的每个工作包冻结入口、owner、读写边界、迁移、测试、旧入口和主要风险。具体字段仍以开工时的代码关联闭包和三注册表为准。
 
+## 产品化 W0：审计与施工边界（2026-10-13）
+
+- 产品与生命周期：文字开放世界，StoryForge 产品研发，主要 S3.1/S3.2，组装/反馈涉及 S3.3/S3.4。
+- owner：WorldRelease 只读冻结；内容归 ProductProduction / Artifact / Build，规则归产品 RuntimePackage，媒资归产品 Build/Release；Session/Event/Checkpoint 与私域演化不回写世界。
+- 交接：WorldReference + ConfirmedProductBrief + ProductSourcePlan → Production Artifacts → ProductBuild → ProductRelease → Runtime Session/Event/Checkpoint。
+- 入口闭包：`TextOpenWorldCreatorWorkflow` → `ProductProductionStudio` → `product-production/service.ts` → 共享 scheduler → `open-world/production-executor.ts` → V3 → QA → adoption/Creator Release → vNext player。
+- 读取闭包：`production-contract.ts` 的 inputArtifactKeys → `product-production.brief/artifact-inputs` 及专属 `text-open-world.*-input` Context Sources → 各专业 Skill 的 Gateway/Manifest。
+- 写入闭包：模型候选经 durable Run 和共享 Artifact Store 签收；`FIELD_REGISTRY` 已登记 `productBuildArtifacts.payloadJson/metadataJson/qualityJson/rightsJson`，采用 `product-production-artifacts` extension。本轮责任映射是确定性投影，不增加模型权限。
+- 生命周期：`PROJECT_TABLES` 已管理 productProductions、productBuilds、productBuildArtifacts、quality receipts、媒体 Blob、ProductRelease、Session/Event/Checkpoint；责任分类不新增表、外键、schema 字段或迁移。需要冻结的三线证据放在产品已有 integration-report payload 内并单独版本化。
+
+### 任务、产物、责任与消费者矩阵
+
+下表产物均省略 `text-open-world.` 前缀；完整输入/输出清单唯一来源仍为 `src/lib/open-world/production-contract.ts`，共 26 个基础任务、40 种基础产物，P0 来源单元与可选 media 任务按 Plan 展开。
+执行 lane 保持既有值；系统任务出现在 content lane 是调度现状，不能将它误解成内容 owner。
+
+| 正式任务 | 现有 lane | 主责任 | 产物及跨线消费者 |
+|---|---|---|---|
+| p0.source-lock | integration | 内容 | source-pin / source-pin-unit；P1 与全图来源 |
+| p1.source-curation | content | 内容 | source-manifest / source-ledger / source-gap-report；内容、系统读取 |
+| p2.experience-design | content | 内容 | game-brief / experience-contract / protagonist-asset；系统与表现消费 |
+| p2.gameplay-ruleset | content | 系统 | gameplay-ruleset-skeleton；任务和系统目录 |
+| p2.presentation-profile | content | 系统 | presentation-profile；P10 媒资需求与运行 UI |
+| p3.story-architecture | content | 内容 | story-arc / ending-contracts / narrative-promises；主支线与 V3 |
+| p4.region-skeleton | content | 内容 | region-skeleton；地区、地图目录 |
+| p4.player-build | content | 系统 | player-build；主线、成长、V3 |
+| p5.mainline | content | 内容 | mainline-thread；支线、任务、V3 |
+| p6.significant-threads | content | 内容 | significant-threads；地区、任务、V3 |
+| p7.region-narrative-packs | content | 内容 | region-narrative-packs；目录、场景、V3 |
+| p8.quest-skeletons | content | 内容 | quest-skeletons / content-requirement-manifest；六类系统目录 |
+| p8.catalog.progression | content | 系统 | progression-catalogs；遭遇/物品/任务 |
+| p8.catalog.encounters | content | 系统 | enemy-encounter-catalog；物品/任务 |
+| p8.catalog.items-rewards | content | 系统 | item-reward-catalog；经济/任务 |
+| p8.catalog.crafting-economy | content | 系统 | crafting-economy-catalog；NPC/任务 |
+| p8.catalog.npc-runtime | content | 系统 | npc-runtime-catalog；任务/场景 |
+| p8.catalog.map-interactions | content | 系统 | map-interaction-catalog；任务/场景 |
+| p8f.quest-finalize | content | 内容 | quest-design-documents；director-decks 主 owner 为系统，同一任务产出、P9/P10/V3 消费 |
+| p9.scene-scripts | content | 内容 | scene-scripts / choice-contracts；action-bindings 主 owner 为系统，P10/V3 消费 |
+| p10.system-finalize | content | 系统 | system-configs；media-requirements 主 owner 为媒资，content-budget 主 owner 为内容；V1、media、V3 消费 |
+| v1.deterministic-preflight | qa | 系统 | deterministic-preflight；V2/V3 |
+| v2.balance-review | qa | 系统 | balance-review；V3 |
+| v2.semantic-review | qa | 内容 | semantic-review；V3 |
+| media.visual / media.audio（可选） | visual / audio | 媒资 | 按 Plan 声明的所有媒体输出；V3 绑定、QA 验权 |
+| v3.runtime-package | integration | 系统，跨线组装 | runtime-package / integration-report；QA/Preview/Release |
+| qa.release | qa | 系统，跨线验收 | quality-report；发布门 |
+
+### W0 审计时的差距、兼容性和验证矩阵
+
+1. W1/W2：目前仅有 lane 和总任务进度，无三线合同/完成门。推导责任映射和 owner，完成须同时满足 task receipt、有效产物、上游闭合和产品允许的媒资降级。
+2. W3：`textOpenWorldProductionTaskDescendantsV1`、`creator-artifact-repair.ts` 已按冻结 Plan 下游闭包创建子 Build，`creator-media.ts` 已限定 media → V3 → QA。复用并补跨线证明，不扩大为全量重跑。
+3. W4：旧 `TextOpenWorldWorkbench` 已不存在；真实工作台为共享 Studio 中挂载的 Creator Artifact/Media/Quality/Release 组件。在这里添加总览并复用原返修入口。
+4. W5：`runtime-package-production.ts` 已验 schema、自身 Hash、输入链、媒体绑定/权利及 V1/V2。新增版本化三线证据；旧 v1 报告继续按旧合同验签，旧 Plan/Artifact/Release 不重写，分类本身不改变其 Hash。
+5. W6：已有 provider-generate / author-import、准确能力绑定、媒资字节/权利/alt、新 Build 与 CAS；缺显式逐图人工确认及角色组检查。首版继续静音，无额外配音系统。
+6. W7：已有确定性 Event、AI observability、问题回执和真人验收设施；需面向调优的只读统计，明确时钟跨度不等于真人主动游玩时长。
+7. W8：继续保留 partial。真实盐脊 Build/Release/回执存在浏览器，当前环境未取得；禁止依据测试夹具补造或替代。新功能不触碰作者浏览器。
+
+定向证据范围：`R-OPEN-WORLD3-production-contract/system-finalize/media-quality`、`R-OPEN-WORLD5-creator-artifact-repair/creator-media/governance-snapshot-cas/creator-quality`、`R-OPEN-WORLD7-release-lifecycle`；新三线合同、状态、UI 和统计反例另行补齐。隔离 E2E 复用 Creator artifact/lifecycle 与玩家旅程，不访问作者现用浏览器数据。
+
+### W1～W7 工程交付闭包
+
+- `614fe1ca`：责任合同、六态/完成门、调用/未知费用与只读工作台服务；原 lane、Plan Hash 和修复 DAG 保持。
+- `3216158f`：精确 V3 输入与 integration-report v2 三线快照，保留 v1。
+- `ae1b3f3a`：逐图人工回执、Blob/Build CAS 与发布质量 evidence v2；可移植发布校验和历史回执分版本读取。
+- `2505ef9d`：既有工作台总览、任务/Artifact 定位及逐图人工 UI；窄屏/键盘与失败不误签验证。
+- `404f5cf0`：本地体验统计与分类导出，只读事件/意图候选；初始通用启动事件、旧档和子分支均覆盖。
+- `1108e3f1`：v2 装配与质量证据共同进入可移植 Release；重算集合 Hash 仍不能掩盖 Artifact 版本错配，v1 双来源开局继续通过。
+- 定向 10 文件 45 项通过；V3 完整模拟 DAG 两项通过；Creator 两项和玩家存档/反馈/迁移一项隔离浏览器验证通过。全仓与最终交付状态以实施计划 W8 为准。
+
+### W8 文档与交付收口
+
+2026-10-14 完成主干同步复核，保留原架构、实施计划、能力基线、AI 手册生成来源及项目中英文知识库交付，并补齐真实作品验收操作说明。串行全量 CI 退出码 0，795 文件 4354 项通过；隔离 Chromium 254 项通过、2 项按开发模式配置跳过；知识库构建、39307 个内部链接、中英文映射和四种宽度预览通过。命令、覆盖率、包体余量、验证快照与外部事实边界统一登记在[实施计划 §0.2](./TEXT-OPEN-WORLD-IMPLEMENTATION-PLAN.md)。W0～W8 工程完成不改变首版/G7 进度，也不代表主干合并、部署或真实作品验收。
+
 ## 1. 共同施工契约
 
 | 项目 | 统一要求 |

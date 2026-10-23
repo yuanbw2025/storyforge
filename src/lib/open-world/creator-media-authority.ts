@@ -5,11 +5,13 @@ import type {
   ProductProductionBriefRecordV1,
   ProductProductionCommandRecordV1,
   ProductProductionPlanV3,
+  ProductProductionPlanTaskV3,
   ProductProductionRecordV1,
   TextOpenWorldCreatorBriefV1,
   TextOpenWorldCreatorProductionSourcePlanV1,
   TextOpenWorldCreatorProductionStartV1,
   WorkspaceScope,
+  ProductTaskBudgetReservationV1,
 } from '../types'
 import type { ProductProductionTaskExecutionResultV1 } from '../product-production/scheduler'
 import { assertRecordInScope, resolveScope } from '../workspace/scope'
@@ -23,6 +25,7 @@ import {
 } from './creator-media-contract'
 import {
   deriveTextOpenWorldCreatorMediaExecutionBriefV1,
+  textOpenWorldCreatorMediaRerunBudgetV1,
 } from './creator-media'
 import { textOpenWorldProductionTaskDescendantsV1 } from './production-contract'
 
@@ -51,7 +54,7 @@ async function validatePlan(input: {
   sourcePlan: ProductProductionPlanV3
   targetPlan: ProductProductionPlanV3
   sourceArtifacts: ProductBuildArtifactRecordV1[]
-}): Promise<void> {
+}): Promise<ProductProductionPlanV3> {
   const { authorization, sourceBuild, targetBuild, sourcePlan, targetPlan } = input
   const media = authorization.plan
   const contracts = sourcePlan.tasks.map(task => ({
@@ -74,6 +77,7 @@ async function validatePlan(input: {
   if (active.length !== expectedKeys.length || expectedKeys.some(key => !activeByKey.has(key))) {
     fail('媒资Build来源Artifact集合不完整')
   }
+  const initialTasks = []
   for (let index = 0; index < sourcePlan.tasks.length; index += 1) {
     const sourceTask = sourcePlan.tasks[index]!
     const targetTask = targetPlan.tasks[index]
@@ -90,6 +94,7 @@ async function validatePlan(input: {
     }
     if (media.staleTaskKeys.includes(sourceTask.taskKey)) {
       if (targetTask.reuse !== null) fail(`stale任务不能携带reuse:${sourceTask.taskKey}`)
+      initialTasks.push(expected)
       continue
     }
     const sourceRows = sourceTask.outputArtifactKeys.map(key => activeByKey.get(key)!)
@@ -103,15 +108,36 @@ async function validatePlan(input: {
       userImpact: ['media.visual'],
       artifacts: sourceRows.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })),
     })
-    if (!targetTask.reuse
-      || targetTask.reuse.sourceBuildNumber !== sourceBuild.buildNumber
-      || targetTask.reuse.sourceArtifactKey !== representative.artifactKey
-      || targetTask.reuse.sourceContentHash !== representative.contentHash
-      || targetTask.reuse.reuseKey !== expectedReuseKey
-      || targetTask.reuse.requiresRevalidation !== true) {
-      fail(`媒资Build reuse授权无效:${sourceTask.taskKey}`)
-    }
+    initialTasks.push({ ...expected, reuse: {
+      sourceBuildNumber: sourceBuild.buildNumber,
+      sourceArtifactKey: representative.artifactKey,
+      sourceContentHash: representative.contentHash,
+      reuseKey: expectedReuseKey,
+      requiresRevalidation: true as const,
+      reason: `Creator媒资调整未影响${sourceTask.taskKey}，完整sibling group与依赖保持不变`,
+    } })
   }
+  const initialPlan = parseProductProductionPlanV3({ ...sourcePlan,
+    buildNumber: targetBuild.buildNumber, controlEpoch: sourceBuild.controlEpoch, tasks: initialTasks })
+  if (await hashProductProductionValueV2(initialPlan) !== authorization.targetProductionPlanHash) {
+    fail('media原始Plan不能由封存来源与授权重建')
+  }
+  if (targetPlan.controlEpoch < initialPlan.controlEpoch || targetPlan.controlEpoch > targetBuild.controlEpoch) {
+    fail('media Plan恢复轮次越界')
+  }
+  const expectedPlan = targetPlan.controlEpoch === initialPlan.controlEpoch ? initialPlan : {
+    ...initialPlan, controlEpoch: targetPlan.controlEpoch,
+    tasks: initialPlan.tasks.map(task => ({ ...task, reuse: null })),
+  }
+  if (!same(expectedPlan, targetPlan)) {
+    fail('media Plan不是原始授权或精确恢复Plan')
+  }
+  if (!same(media.estimatedRerunBudget, textOpenWorldCreatorMediaRerunBudgetV1(
+    initialPlan, stale, media.mode, media.imports.reduce((sum, item) => sum + item.byteSize, 0),
+  ))) {
+    fail('media预算不符合签署的导入清单与下游任务')
+  }
+  return initialPlan
 }
 
 export interface TextOpenWorldCreatorMediaExecutionAuthorityV1 {
@@ -127,6 +153,7 @@ export interface TextOpenWorldCreatorMediaExecutionAuthorityV1 {
   executionBrief: ReturnType<typeof deriveTextOpenWorldCreatorMediaExecutionBriefV1> extends Promise<infer T> ? T : never
   sourceProductionPlan: ProductProductionPlanV3
   targetProductionPlan: ProductProductionPlanV3
+  authorizedProductionPlan: ProductProductionPlanV3
   authorization: TextOpenWorldCreatorMediaAuthorizationV1
 }
 
@@ -187,8 +214,7 @@ export async function readTextOpenWorldCreatorMediaExecutionAuthorityV1(input: {
     }
     try {
       const authorization = await parseTextOpenWorldCreatorMediaAuthorizationV1(row.resultJson)
-      if (authorization.plan.targetBuildNumber === targetBuild.buildNumber
-        && authorization.targetProductionPlanHash === targetBuild.planHash) {
+      if (authorization.plan.targetBuildNumber === targetBuild.buildNumber) {
         matches.push({
           command: row as ProductProductionCommandRecordV1 & { id: number },
           authorization,
@@ -229,11 +255,10 @@ export async function readTextOpenWorldCreatorMediaExecutionAuthorityV1(input: {
     briefRow.briefHash,
   )
   if (canonicalProductProductionJsonV2(targetProductionPlan) !== targetBuild.planJson
-    || await hashProductProductionValueV2(targetProductionPlan) !== targetBuild.planHash
-    || authorization.targetProductionPlanHash !== targetBuild.planHash) {
+    || await hashProductProductionValueV2(targetProductionPlan) !== targetBuild.planHash) {
     fail('media target Plan Hash不闭合')
   }
-  await validatePlan({
+  const authorizedProductionPlan = await validatePlan({
     authorization,
     sourceBuild,
     targetBuild,
@@ -247,10 +272,11 @@ export async function readTextOpenWorldCreatorMediaExecutionAuthorityV1(input: {
   })
   if (media.mode === 'author-import') {
     const candidates = await db.productBuildArtifacts.where('[buildId+status]')
-      .equals([targetBuild.id, 'candidate']).toArray()
+      .equals([targetBuild.id, 'candidate']).filter(row => row.controlEpoch === sourceBuild.controlEpoch).toArray()
     const task = targetProductionPlan.tasks.find(item => item.taskKey === 'media.visual')
       ?? fail('media target Plan缺少media.visual')
     if (candidates.length !== task.outputArtifactKeys.length
+      || new Set(candidates.map(row => row.artifactKey)).size !== candidates.length
       || task.outputArtifactKeys.some(key => !candidates.some(row => row.artifactKey === key))) {
       fail('导入media Build缺少完整暂存sibling group')
     }
@@ -268,6 +294,7 @@ export async function readTextOpenWorldCreatorMediaExecutionAuthorityV1(input: {
     executionBrief,
     sourceProductionPlan,
     targetProductionPlan,
+    authorizedProductionPlan,
     authorization,
   }
 }
@@ -275,13 +302,22 @@ export async function readTextOpenWorldCreatorMediaExecutionAuthorityV1(input: {
 export async function resolveTextOpenWorldCreatorImportedMediaTaskResultV1(input: {
   authority: TextOpenWorldCreatorMediaExecutionAuthorityV1
   taskKey: string
-}): Promise<{ result: ProductProductionTaskExecutionResultV1; evidenceJson: string } | null> {
+}): Promise<{
+  result: ProductProductionTaskExecutionResultV1
+  evidenceJson: string
+  authorizedStorageBytes: number
+} | null> {
   const { authority } = input
   if (authority.authorization.plan.mode !== 'author-import' || input.taskKey !== 'media.visual') return null
   const task = authority.targetProductionPlan.tasks.find(item => item.taskKey === input.taskKey)
     ?? fail('导入media任务不属于target Plan')
   const candidates = await db.productBuildArtifacts.where('[buildId+status]')
-    .equals([authority.targetBuild.id, 'candidate']).toArray()
+    .equals([authority.targetBuild.id, 'candidate'])
+    .filter(row => row.controlEpoch === authority.sourceBuild.controlEpoch).toArray()
+  if (candidates.length !== task.outputArtifactKeys.length
+    || new Set(candidates.map(row => row.artifactKey)).size !== candidates.length) {
+    fail('导入media缺少唯一完整原始候选')
+  }
   const byKey = new Map(candidates.map(row => [row.artifactKey, row]))
   const artifacts = []
   let storageBytes = 0
@@ -290,7 +326,7 @@ export async function resolveTextOpenWorldCreatorImportedMediaTaskResultV1(input
     const descriptor = authority.authorization.plan.imports[index]
     if (!row || !descriptor || row.contentHash !== descriptor.contentHash
       || row.blobObjectId == null || row.mimeType !== descriptor.mimeType
-      || row.byteSize !== descriptor.byteSize || row.controlEpoch !== authority.targetBuild.controlEpoch) {
+      || row.byteSize !== descriptor.byteSize) {
       fail(`导入media候选已变化:${artifactKey}`)
     }
     const data = await readMediaBlobObjectData({
@@ -344,6 +380,11 @@ export async function resolveTextOpenWorldCreatorImportedMediaTaskResultV1(input
     })),
   }
   return {
+    // Creator media signs exact import sizes separately from the inherited
+    // production Plan. Use that immutable authorization for execution without
+    // rewriting any task reservation or refunding failed usage.
+    // The scheduler still enforces the Build's aggregate storage ceiling.
+    authorizedStorageBytes: authority.authorization.plan.imports.reduce((sum, item) => sum + item.byteSize, 0),
     result: {
       artifacts,
       passedGateIds: [...task.acceptanceGateIds],
@@ -358,5 +399,36 @@ export async function resolveTextOpenWorldCreatorImportedMediaTaskResultV1(input
       },
     },
     evidenceJson: canonicalProductProductionJsonV2(evidence),
+  }
+}
+
+/** Reconstruct the signed import ceiling for checkpoint/producer verification.
+ * Ordinary tasks and provider media retain their frozen production reservation.
+ * Reading authority does not settle/refund usage or enlarge the Build budget. */
+export async function readTextOpenWorldCreatorMediaTaskBudgetV1(input: {
+  scope: WorkspaceScope
+  buildId: number
+  task: ProductProductionPlanTaskV3
+}): Promise<ProductTaskBudgetReservationV1> {
+  if (input.task.taskKey !== 'media.visual') return input.task.budgetReservation
+  const build = await db.productBuilds.get(input.buildId)
+  if (!build?.parentBuildNumber) return input.task.budgetReservation
+  const brief = await db.productProductionBriefs.where('[productionId+revision]')
+    .equals([build.productionId, build.briefRevision]).first()
+  if (brief?.briefKind !== 'text-open-world-creator-v1') return input.task.budgetReservation
+  const { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } = await import('./creator-derived-authority')
+  const derived = await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+    scope: input.scope, buildId: input.buildId,
+  })
+  const authority = derived.media
+  if (authority?.authorization.plan.mode !== 'author-import') return input.task.budgetReservation
+  const authorizedTask = authority.targetProductionPlan.tasks.find(task => task.taskKey === input.task.taskKey)
+  if (!authorizedTask || !same(normalizedTask(authorizedTask), normalizedTask(input.task))) {
+    fail('导入media预算任务不属于已签署Plan')
+  }
+  return {
+    ...input.task.budgetReservation,
+    modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0, maximumCostUsd: 0,
+    storageBytes: authority.authorization.plan.imports.reduce((sum, item) => sum + item.byteSize, 0),
   }
 }

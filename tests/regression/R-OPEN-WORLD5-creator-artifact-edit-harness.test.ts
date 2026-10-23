@@ -692,6 +692,43 @@ describe.sequential('R-OPEN-WORLD5 · Creator Artifact edit durable Harness', ()
     expect(await businessRows(fixture)).toEqual(before)
   })
 
+  it.each([false, true])('字段目录展示顺序不改变候选权威，但字段内容变化仍拒绝（changed=%s）', async changed => {
+    const fixture = await seedHarnessFixture()
+    const workspace = mockRuntime.workspace
+    const context = workspace.targetContext
+    const original = context.editableFields[0]
+    const second = {
+      ...original, fieldId: 'field.story-title', jsonPointer: '/title', label: '故事标题',
+      baseValueHash: await hashProductProductionValueV2('盐脊'),
+    }
+    workspace.fullDraft = { ...workspace.fullDraft, title: '盐脊' }
+    context.baseDraftHash = await hashProductProductionValueV2(workspace.fullDraft)
+    context.editableFields = [original, second]
+    context.semanticDraft.fields.push({ fieldId: second.fieldId, label: second.label, valueKind: 'string', value: '盐脊' })
+    context.semanticDraftHash = await hashProductProductionValueV2(context.semanticDraft)
+    mockRuntime.projection = {
+      ...mockRuntime.projection, draft: workspace.fullDraft, draftHash: context.baseDraftHash,
+      editableFields: [{ ...second, ...(changed ? { baseValueHash: 'f'.repeat(64) } : {}) }, original],
+    }
+    mockRuntime.workspaces = [structuredClone(workspace)]
+    mockRuntime.contextJson = canonicalProductProductionJsonV2(context)
+    const before = await businessRows(fixture)
+    const request = generateTextOpenWorldCreatorArtifactEditCandidateV1({
+      selection: fixture.selection, mode: 'direct', operations: [operation(fixture)],
+    })
+    if (changed) {
+      await expect(request).rejects.toThrow('projection-stale')
+    } else {
+      const result = await request
+      expect(result.snapshot.projection.state).toBe('awaiting_confirmation')
+      expect(result.candidate.editableFields).toEqual(context.editableFields)
+      expect(result.candidate.rebuiltArtifacts[0]?.payload).toMatchObject({ summary: DIRECT_SUMMARY })
+      expect(result.candidate.modelUsage.modelCalls).toBe(0)
+    }
+    expect(formalAIRuntime.execute).not.toHaveBeenCalled()
+    expect(await businessRows(fixture)).toEqual(before)
+  })
+
   it('Agent 模式只调用一次模型，并按 Context、request、result、response 顺序留精确证据', async () => {
     const fixture = await seedHarnessFixture()
     const runAI = vi.fn(async () => modelOutput(fixture))

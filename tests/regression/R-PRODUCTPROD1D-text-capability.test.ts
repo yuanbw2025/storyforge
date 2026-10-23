@@ -176,8 +176,50 @@ describe('R-PRODUCTPROD-1D · reuse existing text provider configuration', () =>
       { category: 'product-production.content', projectId: 7, maxTokens: 2_000 },
       undefined,
       undefined,
+      undefined,
     )
     expect(JSON.stringify(result.bindingReceipt)).not.toContain(configured.apiKey)
+  })
+
+  it.each([
+    ['agnes', 'agnes-2.5-flash', 'disabled', false],
+    ['agnes', 'agnes-3.0-flash', 'disabled', false],
+    ['agnes', 'agnes-2.5-flash', 'enabled', true],
+    ['agnes', 'agnes-3.0-flash', undefined, undefined],
+    ['agnes', 'agnes-2.0-flash', 'disabled', undefined],
+    ['agnes', 'agnes-2.5-pro', 'disabled', undefined],
+    ['custom', 'agnes-3.0-flash', 'disabled', undefined],
+    ['deepseek', 'deepseek-v4-pro', 'disabled', undefined],
+  ] as const)('有限 JSON 生产请求保留输出预算，思考扩展按 provider/model 显式适配：%s/%s/%s', async (
+    provider, model, thinkingMode, expectedAgnesThinking,
+  ) => {
+    const config: AIConfig = { ...configured, provider, model }
+    const frozen = await resolveConfiguredTextCapabilityV1({
+      projectId: 7, category: 'product-production', requirementKey: 'text.primary',
+    }, { resolveConfig: () => config })
+    const fetchProvider = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    try {
+      const result = await runConfiguredProductionTextWithOutcomeV1({
+        projectId: 7, category: 'text-open-world.production.source-curation',
+        requirementKey: 'text.primary', expectedCapabilityHash: frozen.receipt.capabilityHash,
+        messages: [{ role: 'user', content: '只返回 JSON 来源证据' }],
+        maximumOutputTokens: 2_673, responseFormat: 'json_object', thinkingMode,
+      }, { resolveConfig: () => config })
+      expect(fetchProvider).toHaveBeenCalledTimes(1)
+      const body = JSON.parse(String(fetchProvider.mock.calls[0]![1]?.body))
+      expect(body).toMatchObject({ model, max_tokens: 2_673, response_format: { type: 'json_object' } })
+      expect(body.chat_template_kwargs).toEqual(expectedAgnesThinking === undefined
+        ? undefined : { enable_thinking: expectedAgnesThinking })
+      expect(body.thinking).toEqual(provider === 'deepseek' ? { type: 'disabled' } : undefined)
+      expect(result.output).toBe('{"ok":true}')
+      expect(result.bindingReceipt.capabilityHash).toBe(frozen.receipt.capabilityHash)
+      expect(JSON.stringify(result.bindingReceipt)).not.toContain(config.apiKey)
+    } finally {
+      fetchProvider.mockRestore()
+    }
   })
 
   it('底层 chat 复用 capability 已解析路由，不在 dispatch 前按可变全局路由二次改道', async () => {
@@ -251,6 +293,7 @@ describe('R-PRODUCTPROD-1D · reuse existing text provider configuration', () =>
       [{ role: 'user', content: '生成已授权主线' }],
       configured,
       { category: 'product-production', projectId: 7, maxTokens: 2_000 },
+      undefined,
       undefined,
       undefined,
     )

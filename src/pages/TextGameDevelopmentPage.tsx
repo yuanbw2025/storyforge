@@ -75,7 +75,7 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
   const [projects, setProjects] = useState<Project[]>([])
   const [error, setError] = useState('')
   const [mode, setMode] = useState<PageMode>(() => encodedHandoff || queryMode ? 'production' : page.mode)
-  const [session, setSession] = useState<number | null>(Number(params.get('session')) || null)
+  const session = Number(params.get('session')) || null
   const [handoff, setHandoff] = useState<ProductProductionHandoffV1 | null>(null)
   const activeWorldGroupId = useWorldGroupStore(state => state.activeGroupId)
   const settingsReturn = useMemo(
@@ -94,10 +94,6 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
   useEffect(() => {
     if (!encodedHandoff) setMode(queryMode ?? page.mode)
   }, [encodedHandoff, page.mode, queryMode])
-
-  useEffect(() => {
-    setSession(Number(params.get('session')) || null)
-  }, [params])
 
   const returnProjectId = settingsReturn?.sourceKind === 'novel'
     ? settingsReturn.activeWorkProjectId
@@ -159,10 +155,14 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
     aiGmBetaGatePassed: currentAiGmBetaGatePassedV1(),
   })
 
-  const workspacePath = (nextPage: string, extra?: { session?: number | null; mode?: PageMode }) => {
+  const workspacePath = (nextPage: string, extra?: {
+    session?: number | null; mode?: PageMode; scope?: WorkspaceScope
+  }) => {
     const next = new URLSearchParams()
-    if (projectId != null) next.set('project', String(projectId))
-    if (workId != null) next.set('work', String(workId))
+    const nextProjectId = extra?.scope?.projectId ?? projectId
+    const nextWorkId = extra?.scope?.workId ?? workId
+    if (nextProjectId != null) next.set('project', String(nextProjectId))
+    if (nextWorkId != null) next.set('work', String(nextWorkId))
     const nextSession = extra?.session === undefined ? session : extra.session
     if (nextSession != null) next.set('session', String(nextSession))
     if (openWorld && extra?.mode) next.set('mode', extra.mode)
@@ -190,16 +190,15 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
     const next = new URLSearchParams()
     if (nextProjectId) next.set('project', nextProjectId)
     navigate({ pathname: `/${base}/${pageId}`, search: next.toString() })
-    setSession(null)
     setHandoff(null)
   }
 
-  const openPlayer = (nextSession: number | null) => {
-    setSession(nextSession)
+  const openPlayer = (nextSession: number | null, playerScope?: WorkspaceScope) => {
     setMode('play')
     navigate(workspacePath(openWorld ? 'runtime' : 'play', {
       session: nextSession,
       mode: 'play',
+      scope: playerScope,
     }))
   }
 
@@ -219,7 +218,7 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
     <header className="adventure-product-header">
       <button className="adventure-brand" onClick={() => navigate('/')} aria-label="返回 StoryForge 首页"><BrandIcon size={36} /><span>STORYFORGE<small>文字冒险</small></span></button>
       <nav aria-label="文字冒险导航">
-        <button aria-current="page" onClick={() => { setSession(null); navigate(workspacePath('library', { session: null })) }}>作品与试玩</button>
+        <button aria-current="page" onClick={() => navigate(workspacePath('library', { session: null }))}>作品与试玩</button>
         <button onClick={() => navigate(workspacePath('production', { session: null }))}>创作工作台 ↗</button>
       </nav>
       <label className="adventure-workspace-select">工作区
@@ -235,7 +234,7 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
       <AdventureGamePlayer key={scope.workId} project={project} scope={scope}
         worldGroupId={project.enableMultiWorld ? activeWorldGroupId : null} initialSessionId={session}
         onOpenSession={openPlayer}
-        onOpenLibrary={() => { setSession(null); navigate(workspacePath('library', { session: null })) }} />
+        onOpenLibrary={() => navigate(workspacePath('library', { session: null }))} />
     </Suspense> : <div className="adventure-page-empty"><span className="adventure-eyebrow">STORYFORGE / INTERACTIVE FICTION</span><h1>{page.label}</h1><p>每一个选择，都是故事的起点。选择一个工作区，打开其中的文字冒险作品。</p></div>}
   </div>
 
@@ -279,6 +278,8 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
                 initialView={settingsReturn ? 'readiness' : 'brief'}
                 initialResumeTarget={settingsReturn}
                 onOpenSettings={openCreatorSettings}
+                onPreviewStarted={(creatorScope, id) => openPlayer(id, creatorScope)}
+                onPublished={creatorScope => openPlayer(null, creatorScope)}
               />
             : productionDecision.enabled
             ? <ProductProductionStudio
@@ -309,11 +310,17 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
               </div>
           : openWorld
             ? <TextOpenWorldPlayer
-                key={`${scope!.workId}:${session}`}
+                key={`${scope!.projectId}:${scope!.worldId}:${scope!.workId}`}
                 project={project!}
                 scope={scope!}
                 worldGroupId={project!.enableMultiWorld ? activeWorldGroupId : null}
                 initialSessionId={session}
+                onSessionSelected={selectedSessionId => {
+                  const next = new URLSearchParams(params)
+                  if (selectedSessionId == null) next.delete('session')
+                  else next.set('session', String(selectedSessionId))
+                  navigate({ search: next.toString() }, { replace: true, state: location.state })
+                }}
               />
             : <AdventureGamePlayer
                 key={`${scope!.workId}:${session}`}

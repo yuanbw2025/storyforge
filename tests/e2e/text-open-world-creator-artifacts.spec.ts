@@ -132,8 +132,7 @@ async function seedArtifactBrowserFixture(page: Page): Promise<ArtifactBrowserFi
         version: 2,
         rootRunId: root.run.id,
         rootClaim: null,
-        charges: {},
-        reservations: {},
+        attempts: [],
         tasks: {},
       }),
       updatedAt: Date.now(),
@@ -369,6 +368,31 @@ async function openCreatorProduction(page: Page, projectId: number) {
 function rowByText(list: Locator, text: string) {
   return list.getByRole('button').filter({ hasText: text })
 }
+
+test('三线总览从真实生产证据展示缺项并通过键盘定位返修产物', async ({ page }) => {
+  test.setTimeout(180_000)
+  await openProductHub(page)
+  const fixture = await seedArtifactBrowserFixture(page)
+  const browser = await openCreatorProduction(page, fixture.projectId)
+  const overview = page.getByTestId('text-open-world-responsibilities')
+  await expect(overview).toContainText('三线产物尚未齐备', { timeout: 30_000 })
+  await expect(overview.getByTestId('responsibility-product-system')).toContainText('产品系统配置')
+  await expect(overview.getByTestId('responsibility-media')).toContainText('媒资生产')
+  const content = overview.getByTestId('responsibility-game-content')
+  await content.locator(':scope > summary').focus()
+  await page.keyboard.press('Enter')
+  await content.locator('summary').filter({ hasText: '产物与返修位置' }).click()
+  const row = content.locator('li').filter({ has: page.getByText(fixture.artifactKey, { exact: true }) })
+  await row.getByRole('button', { name: '查看或返修产物' }).click()
+  await expect(browser.getByRole('tab', { name: 'Artifact', exact: true })).toHaveAttribute('aria-selected', 'true')
+  await expect(browser.getByRole('searchbox', { name: /安全搜索/ })).toHaveValue(fixture.artifactKey)
+  await expect(browser.getByTestId('text-open-world-creator-artifact-detail')).toContainText(fixture.artifactContentHash)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await overview.scrollIntoViewIfNeeded()
+  expect(await overview.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  await page.reload()
+  await expect(page.getByTestId('text-open-world-responsibilities')).toContainText('三线产物尚未齐备', { timeout: 30_000 })
+})
 
 test('Creator 受治理内容浏览器在桌面与窄屏覆盖内容、Artifact、诊断、搜索和分页', async ({ page }) => {
   test.setTimeout(180_000)

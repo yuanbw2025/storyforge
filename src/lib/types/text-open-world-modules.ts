@@ -414,6 +414,16 @@ export interface TextOpenWorldActionModuleV18 {
   inputBindings: TextOpenWorldActionInputBindingsV1
 }
 
+/** Action v19 requires success-only crafting proof Effects. */
+export interface TextOpenWorldActionModuleV19 extends Omit<TextOpenWorldActionModuleV18, 'version'> {
+  version: 19
+}
+
+/** Exact purchase proof, learned skills and noncritical equipment handover. */
+export interface TextOpenWorldActionModuleV20 extends Omit<TextOpenWorldActionModuleV19, 'version'> {
+  version: 20
+}
+
 export interface TextOpenWorldProgressionModuleV1 {
   version: 1
   rules: {
@@ -1021,7 +1031,7 @@ export interface TextOpenWorldParsedModulesV1 {
   world: TextOpenWorldWorldModuleV1
   actors: TextOpenWorldActorModuleV1
   quests: TextOpenWorldQuestModuleV1
-  actions: TextOpenWorldActionModuleV1 | TextOpenWorldActionModuleV15 | TextOpenWorldActionModuleV16 | TextOpenWorldActionModuleV17 | TextOpenWorldActionModuleV18
+  actions: TextOpenWorldActionModuleV1 | TextOpenWorldActionModuleV15 | TextOpenWorldActionModuleV16 | TextOpenWorldActionModuleV17 | TextOpenWorldActionModuleV18 | TextOpenWorldActionModuleV19 | TextOpenWorldActionModuleV20
   progression: TextOpenWorldProgressionModuleV1 | TextOpenWorldProgressionModuleV2
   combat: TextOpenWorldCombatModuleV1 | TextOpenWorldCombatModuleV4
   items: TextOpenWorldItemModuleV1

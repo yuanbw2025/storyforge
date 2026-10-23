@@ -1007,7 +1007,7 @@ export function createTextOpenWorldQuestSkeletonsExecutorV1(options: {
       projectId: execution.scope.projectId,
       requirementKey,
       expectedCapabilityHash: binding.bindingHash,
-      category: 'text-open-world.production.quest-skeletons',
+      category: SKILL_ID,
       system: prompt,
       contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(32_000, execution.task.budgetReservation.outputTokens)),

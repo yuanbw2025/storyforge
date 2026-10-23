@@ -323,11 +323,14 @@ async function readDetails(scope: WorkspaceScope, worldGroupId: number | null, s
     db.productRuntimeEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
     db.productRuntimeCheckpoints.where('sessionId').equals(sessionId).toArray(),
     assertSession(scope, sessionId),
-    projectTextOpenWorldPlayerSavesV1({
-      owner: { scope, worldGroupId },
-      currentSessionId: sessionId,
-      includeBuildPreviews: selectedSession.productReleaseId == null,
-    }),
+    // Build previews do not expose the formal save/branch library. Current
+    // source, event, automatic-save and combat-retry checks remain independent.
+    selectedSession.productReleaseId == null
+      ? Promise.resolve(emptySaveProjection())
+      : projectTextOpenWorldPlayerSavesV1({
+        owner: { scope, worldGroupId },
+        currentSessionId: sessionId,
+      }),
     projectTextOpenWorldPlayerVersionCompatibilityV1({ scope, currentSessionId: sessionId }),
   ])
   const events = allEvents.filter(event => event.sequence <= runtimeState.lastSequence)

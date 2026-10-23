@@ -485,7 +485,12 @@ function logForAction(input: {
 }): TextOpenWorldPlayerCombatLogEntryV1 {
   const action = input.modules.actions.actions.find(candidate => candidate.key === input.authorization.actionKey)
     ?? fail('战斗日志引用未知Action')
-  const normalizedActionLabel = action.label.replace(/^敌方/, '').replace(/^战斗中/, '')
+  const skill = input.modules.progression.skills.find(candidate => candidate.key === input.authorization.skillKey)
+  // Older frozen packages used the technical skill key in this generated label.
+  // Project the known combat skill's title without rewriting the action or receipt.
+  const actionLabel = skill && action.label === `敌方使用${skill.key}`
+    ? `敌方使用${skill.title}` : action.label
+  const normalizedActionLabel = actionLabel.replace(/^敌方/, '').replace(/^战斗中/, '')
   const actionPhrase = /^(使用|施放|发动|执行)/.test(normalizedActionLabel)
     ? normalizedActionLabel
     : `使用${normalizedActionLabel}`
@@ -564,7 +569,7 @@ function logForAction(input: {
     eventSequence: input.event.sequence,
     round: input.authorization.beforeRound,
     actorLabel,
-    actionLabel: action.label,
+    actionLabel,
     summary,
     details,
     tone: input.authorization.actorKey === 'player' ? 'player' : 'enemy',

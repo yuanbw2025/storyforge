@@ -20,7 +20,9 @@ import {
   TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1,
   TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1,
   createTextOpenWorldProductionPlanV1,
+  textOpenWorldProductionTaskContractsForBudgetV1,
 } from './production-contract'
+import { textOpenWorldProductionEstimateProfileV1 } from './production-budget'
 import { readTextOpenWorldCreatorExecutionBriefV1 } from './creator-production-start'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
@@ -36,7 +38,7 @@ export interface TextOpenWorldProductionTaskAuthorityV1 {
 export interface TextOpenWorldProductionPlanAuthorityV1 {
   valid: boolean
   diagnostic: string | null
-  origin: 'structural-only' | 'creator-start-v1' | 'creator-repair-v1' | 'creator-media-v1' | 'invalid'
+  origin: 'structural-only' | 'creator-start-v1' | 'creator-repair-v1' | 'creator-media-v1' | 'creator-budget-recovery-v1' | 'invalid'
   authorityReceiptHash: string | null
   tasks: ReadonlyMap<string, TextOpenWorldProductionTaskAuthorityV1>
 }
@@ -139,7 +141,13 @@ export function inspectTextOpenWorldProductionPlanAuthorityV1(
   plan: ProductProductionPlanV3,
 ): TextOpenWorldProductionPlanAuthorityV1 {
   const result = new Map<string, TextOpenWorldProductionTaskAuthorityV1>()
-  const contracts = TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1
+  const repairContracts = textOpenWorldProductionTaskContractsForBudgetV1('bounded-repair-v1')
+  // Recognize one complete official profile, never a task-by-task mixture.
+  // Durable authority below still rebuilds it from the signed Start estimate.
+  const contracts = repairContracts.filter(task => task.executionMode === 'model').every(contract => (
+    plan.tasks.find(task => task.taskKey === contract.taskKey)?.budgetReservation.modelCalls
+      === contract.recommendedModelCalls
+  )) ? repairContracts : TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1
   const contractByKey = new Map(contracts.map(contract => [contract.taskKey, contract]))
   const taskByKey = new Map(plan.tasks.map(task => [task.taskKey, task]))
   const extras = plan.tasks.filter(task => !contractByKey.has(task.taskKey))
@@ -263,6 +271,7 @@ function exactCreatorStartResultV1(value: string): Record<string, unknown> | nul
     if (!row || typeof row !== 'object' || Array.isArray(row)) return null
     const result = row as Record<string, unknown>
     const keys = ['buildId', 'buildNumber', 'briefRevision', 'briefHash', 'sourcePlanHash', 'planHash', 'startHash']
+    if (Object.prototype.hasOwnProperty.call(result, 'parentBuildNumber')) keys.push('parentBuildNumber', 'parentBriefHash')
     if (Object.keys(result).length !== keys.length
       || keys.some(key => !Object.prototype.hasOwnProperty.call(result, key))
       || canonicalProductProductionJsonV2(result) !== value) return null
@@ -283,14 +292,15 @@ async function verifyTextOpenWorldProductionPlanAuthorityV1(input: {
   briefRow: (ProductProductionBriefRecordV1 & { id: number }) | null
   startCommand: (ProductProductionCommandRecordV1 & { id: number }) | null
   plan: ProductProductionPlanV3
+  restartParent: (ProductBuildRecordV1 & { id: number }) | null
 }): Promise<TextOpenWorldProductionPlanAuthorityV1> {
   const structural = inspectTextOpenWorldProductionPlanAuthorityV1(input.plan)
   if (!structural.valid) return structural
   try {
     const { production, build, briefRow, startCommand, plan } = input
     if (!briefRow || !startCommand
-      || production.currentBuildNumber !== build.buildNumber
-      || production.currentBriefRevision !== build.briefRevision
+      || (production.currentBuildNumber ?? 0) < build.buildNumber
+      || (production.currentBriefRevision ?? 0) < build.briefRevision
       || build.productionId !== production.id
       || briefRow.productionId !== production.id
       || briefRow.revision !== build.briefRevision
@@ -316,6 +326,7 @@ async function verifyTextOpenWorldProductionPlanAuthorityV1(input: {
       planJson: build.planJson,
     })
     const expectedInitialPlan = await createTextOpenWorldProductionPlanV1({
+      budgetProfile: textOpenWorldProductionEstimateProfileV1(contracts.start.preflight.estimate),
       buildNumber: build.buildNumber,
       controlEpoch: contracts.start.productionPlanControlEpoch,
       brief: contracts.executionBrief,
@@ -329,9 +340,13 @@ async function verifyTextOpenWorldProductionPlanAuthorityV1(input: {
     const expectedInitialHash = await hashProductProductionValueV2(expectedInitialPlan)
     const expectedCurrentPlan = {
       ...expectedInitialPlan,
-      controlEpoch: build.controlEpoch,
+      // Reading the frozen Start is also needed between a recovery command
+      // advancing the Build epoch and the scheduler's atomic Plan/carry commit.
+      // Current execution authority separately requires Plan/Build epoch equality.
+      controlEpoch: plan.controlEpoch,
     }
     if (expectedInitialHash !== contracts.start.productionPlanHash
+      || plan.controlEpoch > build.controlEpoch
       || canonicalProductProductionJsonV2(expectedCurrentPlan) !== canonicalProductProductionJsonV2(plan)
       || canonicalProductProductionJsonV2(plan) !== build.planJson
       || await hashProductProductionValueV2(plan) !== build.planHash
@@ -351,6 +366,19 @@ async function verifyTextOpenWorldProductionPlanAuthorityV1(input: {
       || commandResult.planHash !== contracts.start.productionPlanHash
       || commandResult.startHash !== contracts.start.startHash) {
       throw new Error('成功启动命令回执与 Creator 冻结链不一致')
+    }
+    if (build.parentBuildNumber != null) {
+      const parent = input.restartParent
+      if (!parent || parent.buildNumber !== build.parentBuildNumber
+        || parent.status !== 'cancelled' || parent.releasedProductReleaseId != null
+        || build.sourceProductReleaseId != null || parent.buildNumber >= build.buildNumber
+        || parent.briefRevision >= build.briefRevision
+        || commandResult.parentBuildNumber !== parent.buildNumber
+        || commandResult.parentBriefHash !== parent.briefHash) {
+        throw new Error('后继制作的已取消父 Build 与重新授权回执不闭合')
+      }
+    } else if ('parentBuildNumber' in commandResult || 'parentBriefHash' in commandResult) {
+      throw new Error('初始制作不能声明不存在的父 Build')
     }
     const authorityReceiptHash = await hashProductProductionValueV2({
       schema: 'storyforge.text-open-world-production-plan-authority-receipt',
@@ -399,6 +427,9 @@ export async function readTextOpenWorldProductionPlanAuthorityV1(input: {
   scope: WorkspaceScope
   productionId: number
   buildId: number
+  /** Read the frozen origin of a paused, unfinished Build for author revision.
+   * This does not grant current-epoch task execution authority. */
+  purpose?: 'paused-content-revision'
 }): Promise<TextOpenWorldProductionPlanAuthoritySnapshotV1> {
   const { scope } = input
   const [productionValue, buildValue] = await Promise.all([
@@ -416,7 +447,15 @@ export async function readTextOpenWorldProductionPlanAuthorityV1(input: {
   const production = productionValue as ProductProductionRecordV1 & { id: number }
   const build = buildValue as ProductBuildRecordV1 & { id: number }
   const plan = parseProductProductionPlanV3(build.planJson, undefined, build.briefHash)
-  if (plan.buildNumber !== build.buildNumber || plan.controlEpoch !== build.controlEpoch
+  const pausedRevision = input.purpose === 'paused-content-revision'
+  if (pausedRevision && (production.status !== 'paused' || build.status !== 'paused'
+    || !['building', 'recovery-required'].includes(build.resumeState ?? '')
+    || production.controlEpoch !== build.controlEpoch
+    || build.releasedProductReleaseId != null || build.rootTerminalReceiptHash != null)) {
+    throw new Error('[text-open-world-production-authority] 只有未完成 Preview 的暂停 Build 可读取修订权威')
+  }
+  if (plan.buildNumber !== build.buildNumber
+    || (pausedRevision ? plan.controlEpoch > build.controlEpoch : plan.controlEpoch !== build.controlEpoch)
     || build.planHash !== await hashProductProductionValueV2(plan)) {
     throw new Error('[text-open-world-production-authority] 当前 Build Plan 身份不闭合')
   }
@@ -464,7 +503,8 @@ export async function readTextOpenWorldProductionPlanAuthorityV1(input: {
           brief: { ...derived.briefRow, id: derived.briefRow.id },
           commandChain: derived.commandChain.map(command => ({ ...command, id: command.id })),
           authorizationHash: derived.authorizationHash,
-          authorization: derived.repair?.authorization ?? derived.media?.authorization ?? null,
+          authorization: derived.repair?.authorization ?? derived.media?.authorization
+            ?? (derived.origin === 'creator-budget-recovery-v1' ? derived.budgetRecovery.authorization : null),
         }),
         production: derived.production,
         build: derived.build,
@@ -491,6 +531,50 @@ export async function readTextOpenWorldProductionPlanAuthorityV1(input: {
         plan,
       }
     }
+  }
+  return readCreatorStartSnapshotV1({ scope, production, build, plan })
+}
+
+/** Reads frozen start authority, including historical starts and an older Plan
+ * awaiting recovery. This does not grant current-epoch execution authority. */
+export async function readTextOpenWorldCreatorStartPlanAuthorityV1(input: {
+  scope: WorkspaceScope
+  buildId: number
+}): Promise<TextOpenWorldProductionPlanAuthoritySnapshotV1 & {
+  startCommand: (ProductProductionCommandRecordV1 & { id: number }) | null
+}> {
+  const { scope } = input
+  const build = await db.productBuilds.get(input.buildId)
+  const production = build ? await db.productProductions.get(build.productionId) : null
+  if (!build?.id || !production?.id || production.productType !== 'text-open-world'
+    || !await assertRecordInScope(scope, 'productBuilds', build, { owner: 'work' })
+    || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
+    throw new Error('[text-open-world-production-authority] Creator Start Build 不存在或越界')
+  }
+  const plan = parseProductProductionPlanV3(build.planJson, undefined, build.briefHash)
+  if (plan.buildNumber !== build.buildNumber || plan.controlEpoch > build.controlEpoch
+    || await hashProductProductionValueV2(plan) !== build.planHash) {
+    throw new Error('[text-open-world-production-authority] Creator Start Plan 身份不闭合')
+  }
+  return readCreatorStartSnapshotV1({
+    scope, production: production as ProductProductionRecordV1 & { id: number },
+    build: build as ProductBuildRecordV1 & { id: number }, plan,
+  })
+}
+
+async function readCreatorStartSnapshotV1(input: {
+  scope: WorkspaceScope
+  production: ProductProductionRecordV1 & { id: number }
+  build: ProductBuildRecordV1 & { id: number }
+  plan: ProductProductionPlanV3
+}): Promise<TextOpenWorldProductionPlanAuthoritySnapshotV1 & {
+  startCommand: (ProductProductionCommandRecordV1 & { id: number }) | null
+}> {
+  const { scope, production, build, plan } = input
+  const parent = build.parentBuildNumber == null ? null : await db.productBuilds
+    .where('[productionId+buildNumber]').equals([production.id, build.parentBuildNumber]).first()
+  if (parent && !await assertRecordInScope(scope, 'productBuilds', parent, { owner: 'work' })) {
+    throw new Error('[text-open-world-production-authority] Creator Start 父 Build 越界')
   }
   const brief = await db.productProductionBriefs
     .where('[productionId+revision]')
@@ -541,15 +625,18 @@ export async function readTextOpenWorldProductionPlanAuthorityV1(input: {
     briefRow,
     startCommand,
     plan,
+    restartParent: parent?.id == null ? null : parent as ProductBuildRecordV1 & { id: number },
   })
   return {
     authority,
+    startCommand,
     evidenceHash: await hashProductProductionValueV2({
       schema: 'storyforge.text-open-world-governance-production-authority-evidence',
       version: 1,
       production: { ...production, id: production.id },
       build: { ...build, id: build.id },
       brief: briefRow == null ? null : { ...briefRow, id: briefRow.id },
+      restartParent: parent ?? null,
       commands: commandRows.map(row => ({ ...row, id: row.id ?? null }))
         .sort((left, right) => (left.id ?? -1) - (right.id ?? -1)),
     }),

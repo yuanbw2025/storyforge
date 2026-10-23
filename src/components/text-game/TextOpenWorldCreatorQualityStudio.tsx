@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createLatestSnapshotReadQueue } from './latest-snapshot-read'
 import { AlertTriangle, CheckCircle2, Download, Play, RefreshCw, ShieldCheck } from 'lucide-react'
 import type { WorkspaceScope } from '../../lib/types'
 import {
@@ -27,6 +28,10 @@ import {
   type TextOpenWorldCreatorUpdateVerificationHumanChecksV1,
 } from '../../lib/open-world/creator-quality-contract'
 import { downloadTextFile } from '../../lib/export/text-export'
+import {
+  TextOpenWorldCreatorCalibrationOutputErrorV1,
+  type TextOpenWorldCreatorCalibrationOutputFailureV1,
+} from '../../lib/open-world/creator-quality-calibration'
 
 const COVERAGE_LABELS: Record<typeof TEXT_OPEN_WORLD_CREATOR_GRAYBOX_COVERAGE_KEYS_V1[number], string> = {
   'mainline-ending': '完成一条主线结局',
@@ -124,6 +129,7 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [calibrationFailures, setCalibrationFailures] = useState<TextOpenWorldCreatorCalibrationOutputFailureV1[]>([])
   const [notice, setNotice] = useState('')
   const [selectedSessionIds, setSelectedSessionIds] = useState<number[]>([])
   const [playtestSessionIds, setPlaytestSessionIds] = useState<number[]>([])
@@ -159,55 +165,63 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
   const [updateChecks, setUpdateChecks] = useState(EMPTY_UPDATE_CHECKS)
   const [updateNote, setUpdateNote] = useState('')
 
-  const load = useCallback(async () => {
+  const readQueue = useRef(createLatestSnapshotReadQueue())
+  const load = useCallback(() => {
     setLoading(true)
     setError('')
-    try {
-      const next = await readTextOpenWorldCreatorQualityWorkspaceV1({
-        scope: props.scope, productionId: props.productionId, expectedBuildId: props.buildId,
-      })
-      setWorkspace(next)
-      setSelectedSessionIds(current => {
-        const available = new Set(next.grayboxCandidates.map(candidate => candidate.sessionId))
-        const retained = current.filter(id => available.has(id))
-        if (retained.length) return retained
-        const completed = next.grayboxCandidates.find(candidate => candidate.completed)
-        return completed ? [completed.sessionId] : next.grayboxCandidates[0] ? [next.grayboxCandidates[0].sessionId] : []
-      })
-      setPlaytestSessionIds(current => {
-        const available = new Set(next.grayboxCandidates.map(candidate => candidate.sessionId))
-        const retained = current.filter(id => available.has(id))
-        if (retained.length) return retained
-        const byEnding = new Map<string, number>()
-        next.grayboxCandidates.filter(candidate => candidate.completed && candidate.endingKey)
-          .forEach(candidate => {
-            if (!byEnding.has(candidate.endingKey!)) byEnding.set(candidate.endingKey!, candidate.sessionId)
-          })
-        return [...byEnding.values()].slice(0, 2)
-      })
-      setPlaytestMinutes(current => Object.fromEntries(next.grayboxCandidates.map(candidate => [
-        candidate.sessionId, current[candidate.sessionId] ?? '',
-      ])))
-      setIssueSessionId(current => next.grayboxCandidates.some(candidate => candidate.sessionId === current)
-        ? current : next.grayboxCandidates[0]?.sessionId ?? null)
-      setUpdateSourceSessionId(current => next.updateVerificationReadiness.sourceSessionCandidates
-        .some(candidate => candidate.sessionId === current)
-        ? current : next.updateVerificationReadiness.sourceSessionCandidates[0]?.sessionId ?? null)
-      setUpdateMigratedSessionId(current => next.updateVerificationReadiness.migratedSessionCandidates
-        .some(candidate => candidate.sessionId === current)
-        ? current : null)
-      if (next.updateVerificationReadiness.compatibility?.level !== 'compatible') {
-        setUpdateSaveMode('continued-on-source-release')
-        setUpdateMigratedSessionId(null)
+    return readQueue.current.enqueue(async isCurrent => {
+      try {
+        const next = await readTextOpenWorldCreatorQualityWorkspaceV1({
+          scope: props.scope, productionId: props.productionId, expectedBuildId: props.buildId,
+        })
+        if (!isCurrent()) return
+        setWorkspace(next)
+        setSelectedSessionIds(current => {
+          const available = new Set(next.grayboxCandidates.map(candidate => candidate.sessionId))
+          const retained = current.filter(id => available.has(id))
+          if (retained.length) return retained
+          const completed = next.grayboxCandidates.find(candidate => candidate.completed)
+          return completed ? [completed.sessionId] : next.grayboxCandidates[0] ? [next.grayboxCandidates[0].sessionId] : []
+        })
+        setPlaytestSessionIds(current => {
+          const available = new Set(next.grayboxCandidates.map(candidate => candidate.sessionId))
+          const retained = current.filter(id => available.has(id))
+          if (retained.length) return retained
+          const byEnding = new Map<string, number>()
+          next.grayboxCandidates.filter(candidate => candidate.completed && candidate.endingKey)
+            .forEach(candidate => {
+              if (!byEnding.has(candidate.endingKey!)) byEnding.set(candidate.endingKey!, candidate.sessionId)
+            })
+          return [...byEnding.values()].slice(0, 2)
+        })
+        setPlaytestMinutes(current => Object.fromEntries(next.grayboxCandidates.map(candidate => [
+          candidate.sessionId, current[candidate.sessionId] ?? '',
+        ])))
+        setIssueSessionId(current => next.grayboxCandidates.some(candidate => candidate.sessionId === current)
+          ? current : next.grayboxCandidates[0]?.sessionId ?? null)
+        setUpdateSourceSessionId(current => next.updateVerificationReadiness.sourceSessionCandidates
+          .some(candidate => candidate.sessionId === current)
+          ? current : next.updateVerificationReadiness.sourceSessionCandidates[0]?.sessionId ?? null)
+        setUpdateMigratedSessionId(current => next.updateVerificationReadiness.migratedSessionCandidates
+          .some(candidate => candidate.sessionId === current)
+          ? current : null)
+        if (next.updateVerificationReadiness.compatibility?.level !== 'compatible') {
+          setUpdateSaveMode('continued-on-source-release')
+          setUpdateMigratedSessionId(null)
+        }
+      } catch (cause) {
+        if (isCurrent()) setError(cause instanceof Error ? cause.message : String(cause))
+      } finally {
+        if (isCurrent()) setLoading(false)
       }
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
-    } finally {
-      setLoading(false)
-    }
+    })
   }, [props.scope, props.productionId, props.buildId])
 
-  useEffect(() => { void load() }, [load, props.refreshToken])
+  useEffect(() => {
+    const queue = readQueue.current
+    void load()
+    return () => { queue.invalidate() }
+  }, [load, props.refreshToken])
 
   const selectedCoverage = useMemo(() => {
     const selected = new Set(selectedSessionIds)
@@ -261,6 +275,9 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
       await load()
       await props.onChanged()
     } catch (cause) {
+      if (cause instanceof TextOpenWorldCreatorCalibrationOutputErrorV1) {
+        setCalibrationFailures(previous => [...previous, cause.diagnostic])
+      }
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
       setBusy(false)
@@ -345,6 +362,14 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
     })
   }, '独立叙事、重复度、时长与成本校准回执已冻结。')
 
+  const recheckCalibration = () => run(async () => {
+    if (!workspace?.calibrationReceipt) throw new Error('当前没有可复核的独立评分')
+    await recordTextOpenWorldCreatorCalibrationV1({
+      scope: props.scope, productionId: props.productionId, buildId: props.buildId,
+      reuseReceiptHash: workspace.calibrationReceipt.receiptHash,
+    })
+  }, '已保留原模型评分并复核制作来源账本；没有新增模型请求。')
+
   const confirmUpdateVerification = () => run(async () => {
     if (!workspace || updateSourceSessionId == null) return
     const routeKeys = workspace.updateVerificationReadiness.targetRouteWitnessKeys
@@ -416,7 +441,17 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
 
       <section className="mt-4 rounded border border-border bg-bg-base p-4" aria-labelledby="creator-calibration-title">
         <h3 id="creator-calibration-title" className="text-xs font-semibold">3. 独立模型与数据校准</h3>
-        <p className="mt-1 text-[10px] text-text-muted">一次显式付费调用会使用“审查校验”路由，并且必须与生产生成器的 provider/model 身份不同。它只评价主线、重要故事和模板差异；时长、调用量、延迟与费用来自当前Build的冻结Artifact、账本和价格快照。</p>
+        {calibrationFailures.length > 0 && <div className="mt-3 rounded border border-error/30 p-3 text-xs">
+          <p>本次页面保留了 {calibrationFailures.length} 次未通过解析的模型响应。这些是失败诊断，不是校准回执；离开前可保存原文与真实用量。</p>
+          <button type="button" disabled={disabled} className="mt-2 rounded border border-border px-3 py-2" onClick={() => void run(async () => {
+            await downloadTextFile(JSON.stringify(calibrationFailures, null, 2), 'text-open-world-calibration-failures.json', 'application/json')
+          }, '校准失败响应已导出。')}>导出校准失败响应</button>
+          {calibrationFailures.map((failure, index) => <details key={`${index}:${failure.outputHash}`} className="mt-2">
+            <summary>失败响应 {index + 1} · {failure.provider}/{failure.model} · {failure.inputTokens ?? '未知'}/{failure.outputTokens ?? '未知'} tokens</summary>
+            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words">{failure.rawOutput}</pre>
+          </details>)}
+        </div>}
+        <p className="mt-1 text-[10px] text-text-muted">一次独立模型调用会使用“审查校验”路由，并且必须与生产生成器的 provider/model 身份不同。它只评价主线、重要故事和模板差异；制作统计分别保留当前版本及同一简报下已验真的来源版本，费用是冻结报价估算。</p>
         <div className="mt-3 grid gap-2 md:grid-cols-2 text-[10px]">
           <span className="rounded border border-border p-2">生产生成器：{workspace.calibrationReadiness.generator.provider}/{workspace.calibrationReadiness.generator.model}</span>
           <span className="rounded border border-border p-2">独立评审：{workspace.calibrationReadiness.grader.provider}/{workspace.calibrationReadiness.grader.model}</span>
@@ -430,7 +465,25 @@ export default function TextOpenWorldCreatorQualityStudio(props: {
           <span className="ml-2">{compactHash(workspace.calibrationReceipt.receiptHash)}</span>
           <div className="mt-2 grid gap-1 md:grid-cols-3">{workspace.calibrationReceipt.evidence.independentReview.scores.map(score => <span key={score.metricKey}>{score.metricKey}：{score.score}</span>)}</div>
           <p className="mt-2">模板 {workspace.calibrationReceipt.evidence.templateDifferentiation.templateCount} 个 / 变体 {workspace.calibrationReceipt.evidence.templateDifferentiation.variantCount} 个 · 主线 {workspace.calibrationReceipt.evidence.contentDuration.mainlineMinutes} 分钟 · 可选库存 {workspace.calibrationReceipt.evidence.contentDuration.optionalInventoryMinutes} 分钟</p>
-          <p className="mt-1">生产模型 {workspace.calibrationReceipt.evidence.productionUsage.modelCalls} 次 · 平均 {workspace.calibrationReceipt.evidence.productionUsage.averageCallDurationMs}ms · P95 {workspace.calibrationReceipt.evidence.productionUsage.p95CallDurationMs}ms · 冻结价格估算 ${workspace.calibrationReceipt.evidence.productionUsage.estimatedTextCostUsd.toFixed(4)}</p>
+          <p className="mt-1">当前版本账本模型调用 {workspace.calibrationReceipt.evidence.productionUsage.modelCalls} 次 · 实测尝试均摊平均 {workspace.calibrationReceipt.evidence.productionUsage.averageCallDurationMs}ms · 加权P95 {workspace.calibrationReceipt.evidence.productionUsage.p95CallDurationMs}ms · 冻结价格估算 ${workspace.calibrationReceipt.evidence.productionUsage.estimatedTextCostUsd.toFixed(4)}</p>
+          {workspace.calibrationReceipt.evidence.version === 2 && <ul aria-label="已验真制作来源" className="mt-2 grid gap-1">
+            {workspace.calibrationReceipt.evidence.productionLineage.map(source => <li key={source.buildNumber}>
+              Build {source.buildNumber}：实测 {source.observedModelCalls} 次，输入 {source.observedInputTokens} / 输出 {source.observedOutputTokens} tokens；未知 {source.unknownAttemptCount} 项，上限计费 {source.chargedUpperBoundAttemptCount} 项
+            </li>)}
+          </ul>}
+          <ul aria-label="独立校准检查结果" className="mt-2 grid gap-1">{workspace.calibrationReceipt.evidence.checks.map(check => <li key={check.key} className={check.passed ? 'text-success' : 'text-error'}>
+            {check.passed ? '通过' : '未通过'} · {check.summary}
+          </li>)}</ul>
+          {workspace.calibrationReceipt.evidence.version === 1
+            && workspace.calibrationReceipt.status === 'failed' && <button type="button"
+              disabled={disabled} onClick={() => void recheckCalibration()}
+              className="mt-3 rounded border border-border px-4 py-2 text-xs disabled:opacity-40">
+              保留评分，复核制作来源用量
+            </button>}
+          {workspace.calibrationReceipt.evidence.version === 2
+            && workspace.calibrationReceipt.evidence.reusedReviewReceiptHash && <p className="mt-2">
+              本次复核沿用原始评分回执 {compactHash(workspace.calibrationReceipt.evidence.reusedReviewReceiptHash)}，没有重新请求模型。
+            </p>}
           {workspace.calibrationReceipt.evidence.independentReview.findings.length > 0 && <ul className="mt-2 grid gap-1">{workspace.calibrationReceipt.evidence.independentReview.findings.map(finding => <li key={finding}>· {finding}</li>)}</ul>}
         </div>}
       </section>

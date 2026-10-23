@@ -16,6 +16,7 @@ import type { TextOpenWorldEffectDefinitionV1, TextOpenWorldEffectOperationV1 } 
 import type { TextOpenWorldRuntimeModuleKeyV1 } from './text-open-world-runtime'
 import type { WorkspaceScope } from './world-ownership'
 import type { AIProvider } from './ai'
+import type { TextOpenWorldResponsibilitySnapshotV1 } from '../open-world/responsibility-assembly'
 
 /**
  * Stable, product-owned artifacts in the text-open-world production compiler.
@@ -472,6 +473,7 @@ export type TextOpenWorldCreatorPriceQuoteSourceV1 =
   | 'storyforge-catalog'
   | 'author-provided'
   | 'author-confirmed-local-zero'
+  | 'author-confirmed-account-zero'
 
 /** One author-reviewable USD text-token price snapshot. */
 export interface TextOpenWorldCreatorPriceQuoteV1 {
@@ -489,9 +491,10 @@ export interface TextOpenWorldCreatorPriceQuoteV1 {
   quoteHash: string
 }
 
-export interface TextOpenWorldCreatorProductionEstimateV1 {
+export type TextOpenWorldProductionBudgetProfileV1 = 'standard-v1' | 'bounded-repair-v1'
+
+interface TextOpenWorldCreatorProductionEstimateBaseV1 {
   schema: 'storyforge.text-open-world-creator-production-estimate'
-  version: 1
   recommendedModelCalls: number
   maximumModelCalls: number
   reservedInputTokens: number
@@ -503,6 +506,13 @@ export interface TextOpenWorldCreatorProductionEstimateV1 {
   mediaCostPolicy: 'deferred-until-media-plan'
   estimateHash: string
 }
+
+/** V1 stays byte-for-byte readable; V2 explicitly authorizes the larger,
+ * finite reservation before any Build or provider request exists. */
+export type TextOpenWorldCreatorProductionEstimateV1 = TextOpenWorldCreatorProductionEstimateBaseV1 & (
+  | { version: 1 }
+  | { version: 2; resourceProfile: 'bounded-repair-v1' }
+)
 
 /**
  * Ephemeral G5-03 readiness snapshot. It creates no Build, SourcePlan or DB
@@ -795,7 +805,9 @@ export interface TextOpenWorldCreatorReleaseArtifactReceiptV1 {
  * it in a player/distribution manifest. */
 export interface TextOpenWorldCreatorReleaseSourceContractsV1 {
   schema: 'storyforge.text-open-world-creator-release-source-contracts'
-  version: 1
+  /** v2 binds full SourceManifest/IntegrationReport Artifact payload hashes;
+   * v1 preserves the historical inner-body hash contract for readback. */
+  version: 1 | 2
   productType: 'text-open-world'
   creatorBrief: TextOpenWorldCreatorBriefV1
   sourcePlan: TextOpenWorldCreatorProductionSourcePlanV1
@@ -2600,6 +2612,13 @@ export interface TextOpenWorldEnemyEncounterCatalogV1 {
   enemyEncounterCatalogHash: string
 }
 
+export type TextOpenWorldItemSourceKindV1 = 'initial' | 'reward' | 'drop' | 'craft' | 'vendor' | 'acquisition'
+
+export interface TextOpenWorldItemSourcePlanV1 {
+  itemKey: string
+  sources: Array<{ kind: TextOpenWorldItemSourceKindV1; sourceKey: string }>
+}
+
 export interface TextOpenWorldItemRewardCatalogV1 {
   schema: 'storyforge.text-open-world-item-reward-catalog'
   version: 1
@@ -2611,6 +2630,9 @@ export interface TextOpenWorldItemRewardCatalogV1 {
   contentRequirementManifestHash: string
   progressionCatalogsHash: string
   enemyEncounterCatalogHash: string
+  /** Omission preserves the original frozen v1 compiler, including its hashes. */
+  itemSourceContract?: 'explicit-producers-v1'
+  itemSourcePlans?: TextOpenWorldItemSourcePlanV1[]
   equipmentSlots: TextOpenWorldGameplayRulesetSkeletonV1['inventory']['equipmentSlots']
   items: Array<{
     key: string
@@ -2842,6 +2864,8 @@ export type TextOpenWorldNpcRuntimeDemandKindV1 =
 export interface TextOpenWorldNpcRuntimeCatalogV1 {
   schema: 'storyforge.text-open-world-npc-runtime-catalog'
   version: 1
+  /** Absent on frozen legacy catalogs: vendor reservations remain separate actors. */
+  vendorIdentityContract?: 'canonical-vendor-owners-v1'
   productType: 'text-open-world'
   productInstanceKey: string
   gameplayRulesetHash: string
@@ -3102,6 +3126,35 @@ export type TextOpenWorldQuestBindingDefinitionKindV1 =
   | 'actor' | 'faction' | 'enemy' | 'encounter' | 'item' | 'skill'
   | 'recipe' | 'vendor' | 'reward' | 'interaction' | 'action'
 
+/** P8F v3: explicit, closed-candidate evidence for fixed objectives and repairs.
+ * Template instances retain their own runtime lifecycle; historical operation
+ * flags must never be used to claim fresh work by a repeated template. */
+export interface TextOpenWorldQuestFulfillmentSelectionsV1 {
+  version: 1 | 2
+  objectives: Array<{
+    objectiveNumber: number
+    anyActionGroups: number[][]
+    /** v2: inventory held on each alternative path, parallel to anyActionGroups. */
+    groupItems?: Array<Array<{ itemNumber: number; quantity: number }>>
+    items: Array<{ itemNumber: number; quantity: number; consume: boolean }>
+  }>
+  interactions: Array<{
+    interactionNumber: number
+    consumedItems: Array<{ itemNumber: number; quantity: number }>
+  }>
+  endings: Array<{ endingNumber: number; requiredInteractionNumbers: number[] }>
+}
+
+/** P8F v4: one-time acquisition at a fixed objective's frozen interaction.
+ * These are candidate ordinals, never model-authored runtime effects. */
+export interface TextOpenWorldItemAcquisitionSelectionV1 {
+  /** Fresh contracts permit bounded replacement of missing ordinary deliveries. */
+  replacementPolicy?: 'never' | 'missing-ordinary'
+  objectiveNumber: number
+  interactionNumber: number
+  items: Array<{ itemNumber: number; quantity: number }>
+}
+
 /**
  * P8F quest and gameplay binding document. It owns the exact cross-catalog
  * references plus deterministic Action/Condition/Effect definitions. P9 may
@@ -3244,7 +3297,17 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     questStageKey: string
     consequencePlanKey: string
     effectKeys: string[]
+    /** P8F draft v2 explicitly resolves deferred semantics; v1 artifacts omit this. */
+    selection?: {
+      direction: 'increase' | 'decrease' | 'change'
+      targetKeys: string[]
+    }
   }>
+  /** Pinned ordinal selections are recompiled against the exact upstream hashes. */
+  fulfillmentSelections?: TextOpenWorldQuestFulfillmentSelectionsV1
+  itemAcquisitionSelections?: TextOpenWorldItemAcquisitionSelectionV1[]
+  /** Explicit P8F draft v5 policy; omitted from frozen draft v1-v4 artifacts. */
+  uniqueRewardGrantPolicy?: 'preserve-held-v1'
   /**
    * Deterministic P8F binding of every authored ending to the final protected
    * mainline quest. P9 may author the visible choice copy, but it must point at
@@ -3325,6 +3388,12 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
       availabilityConditionKeys: string[]
       buyActionKey: string
       sellActionKey: string
+      replacement?: {
+        vendorKey: string
+        actorKey: string
+        buyActionKey: string
+        sellActionKey: string
+      }
     }>
     actors: Array<{ actorKey: string; questKeys: string[]; actionKeys: string[] }>
     interactions: Array<{
@@ -3402,6 +3471,9 @@ export interface TextOpenWorldQuestDesignDocumentsV1 {
     knowledgeProgressReady?: true
     /** Fresh G7 build binds important-story consequences and distinct ending eligibility paths. */
     storyOutcomesRuntimeBound?: true
+    /** Action v19 records successful crafts and explicitly settled repairs. */
+    fixedObjectiveFulfillmentReady?: true
+    actionPathEvidenceReady?: true
     allCatalogBindingsResolved: true
     allEndingsRuntimeBound: true
     sceneBindingsDeferred: true
@@ -4164,7 +4236,9 @@ export interface TextOpenWorldSemanticReviewV1 {
  * into the single ProductRuntimePackage consumed by preview and ProductRelease. */
 export interface TextOpenWorldIntegrationReportV1 {
   schema: 'storyforge.text-open-world-integration-report'
-  version: 1
+  version: 1 | 2
+  /** Required for v2. Historical v1 reports retain their original hash. */
+  responsibilitySnapshot?: TextOpenWorldResponsibilitySnapshotV1
   productType: 'text-open-world'
   productInstanceKey: string
   runtimePackageHash: string
@@ -4184,6 +4258,13 @@ export interface TextOpenWorldIntegrationReportV1 {
     endingActionKeys: string[]
     generatedMediaArtifactKeys: string[]
     fallbackMediaSlotKeys: string[]
+    /** Deterministic map-owned correction; original accepted P9 stays immutable. */
+    sceneRegionCorrections?: Array<{
+      sceneKey: string
+      locationKey: string
+      sourceRegionKey: string
+      runtimeRegionKey: string
+    }>
   }
   verification: {
     productPackageParsed: true

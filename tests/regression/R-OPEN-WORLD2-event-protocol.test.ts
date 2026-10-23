@@ -88,6 +88,27 @@ describe('Text Open World vNext · vNext ProductRuntimeEvent protocol', () => {
       .rejects.toThrow('结果批次内容不同')
   })
 
+  it('历史回执读取在外层事务内保持可用，并拒绝缓存命中后被篡改的事件', async () => {
+    const session = await createSession()
+    const envelope = await command(session.id!)
+    await commitTextOpenWorldCommandV1(envelope)
+    await commitTextOpenWorldOutcomeBatchV1({
+      sessionId: session.id!, commandId: envelope.commandId, ruleset: RULESET,
+      randomRequests: [], ...await outcome(session.id!),
+    })
+    const read = () => readProductRuntimeState(session.id!, 3)
+    const expected = await read()
+    expect(expected.lastSequence).toBe(3)
+    await db.transaction('rw', db.productRuntimeSessions, db.productRuntimeEvents, async () => {
+      expect(await read()).toEqual(expected)
+      // A subsequent IndexedDB write detects premature transaction completion.
+      await db.productRuntimeSessions.update(session.id!, { updatedAt: Date.now() })
+    })
+    const committed = await db.productRuntimeEvents.where('[sessionId+sequence]').equals([session.id!, 3]).first()
+    await db.productRuntimeEvents.update(committed!.id!, { payloadJson: '{"tampered":true}' })
+    await expect(db.transaction('r', db.productRuntimeSessions, db.productRuntimeEvents, read)).rejects.toThrow()
+  })
+
   it('上一命令必须先写入Effect终态，之后才能接收下一命令', async () => {
     const session = await createSession(); const first = await command(session.id!); await commitTextOpenWorldCommandV1(first)
     await expect(commitTextOpenWorldCommandV1(await command(session.id!, 'command.event.2')))

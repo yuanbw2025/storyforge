@@ -200,6 +200,12 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
       maxOutput: 65_536,
     })
     expect(getModelPreset('agnes', 'agnes-2.5-pro').maxContext).toBe(524_288)
+    expect(getModelPreset('agnes', 'agnes-3.0-flash')).toMatchObject({
+      maxContext: 524_288, maxOutput: 65_536,
+    })
+    expect(getModelPreset('agnes', 'agnes-2.5-pro-beta')).toMatchObject({
+      maxContext: 1_000_000, maxOutput: 65_536,
+    })
     expect(getModelPreset('agnes', 'agnes-2.0-flash').maxContext).toBe(262_144)
 
     const useAIConfigStore = await freshStore()
@@ -208,7 +214,30 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     expect(useAIConfigStore.getState().config.model).toBe('agnes-2.5-flash')
   })
 
-  it.each(['agnes-2.5-pro-beta', 'agnes-3.0-flash', 'agnes-3.0-pro'])('%s 在保存和刷新后保持原型号，未登记型号仍按原规则处理', async model => {
+  it.each(['agnes-3.0-flash', 'agnes-2.5-pro-beta', 'agnes-3.0-pro'])('%s 经过配置保存、重载和预设应用仍保留真实模型，Key 仅在会话内', async (model) => {
+    const store = await freshStore()
+    store.getState().switchProvider('agnes')
+    store.getState().setConfig({ model, apiKey: 'agnes-session-only' })
+    const presetId = store.getState().saveAsPreset(model)
+    expect(JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}')).toMatchObject({
+      model, apiKey: '',
+    })
+    const reloaded = await freshStore()
+    expect(reloaded.getState().config).toMatchObject({
+      model, apiKey: 'agnes-session-only',
+    })
+    reloaded.getState().setConfig({ model: 'agnes-2.5-flash' })
+    reloaded.getState().applyPreset(presetId)
+    expect(reloaded.getState().config.model).toBe(model)
+    expect(reloaded.getState().rememberApiKey).toBe(false)
+    expect(localStorage.getItem(CONFIG_KEY)).not.toContain('agnes-session-only')
+  })
+
+  it.each([
+    ['agnes-2.5-pro-beta', 1_000_000],
+    ['agnes-3.0-flash', 524_288],
+    ['agnes-3.0-pro', MODEL_CONTEXT_PRESETS.agnes.maxContext],
+  ] as const)('%s 在保存和刷新后保持原型号，未登记型号仍按原规则处理', async (model, maxContext) => {
     expect(normalizeProviderModel('agnes', model)).toBe(model)
     expect(normalizeProviderModel('agnes', 'not-a-registered-model')).toBe(PROVIDER_PRESETS.agnes.model)
     const useAIConfigStore = await freshStore()
@@ -216,7 +245,9 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     useAIConfigStore.getState().setConfig({ model })
     expect(useAIConfigStore.getState().config.model).toBe(model)
     expect((await freshStore()).getState().config.model).toBe(model)
-    expect(getModelPreset('agnes', model)).toEqual(MODEL_CONTEXT_PRESETS.agnes)
+    expect(getModelPreset('agnes', model)).toMatchObject({
+      maxContext, maxOutput: MODEL_CONTEXT_PRESETS.agnes.maxOutput,
+    })
   })
 
   it('DeepSeek、Gemini 与 NVIDIA 使用 2026-08 官方端点、模型 ID 和窗口', async () => {

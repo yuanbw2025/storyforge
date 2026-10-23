@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createLatestSnapshotReadQueue } from './latest-snapshot-read'
 import { CheckCircle2, LoaderCircle, Rocket, ShieldCheck } from 'lucide-react'
 import type { WorkspaceScope } from '../../lib/types'
 import {
@@ -47,34 +48,38 @@ export default function TextOpenWorldCreatorReleaseStudio(props: {
   const [error, setError] = useState('')
   const [receipt, setReceipt] = useState<ProductProductionPublishReceiptV1 | null>(null)
   const loadGeneration = useRef(0)
+  const readQueue = useRef(createLatestSnapshotReadQueue())
   const authorizationNonce = useRef(crypto.randomUUID())
 
-  const load = useCallback(async () => {
+  const load = useCallback(() => {
     const generation = ++loadGeneration.current
     setLoading(true)
     setError('')
-    try {
-      const next = await prepareTextOpenWorldCreatorReleaseV1({
-        scope: props.scope, productionId: props.productionId, expectedBuildId: props.buildId,
-      })
-      if (generation !== loadGeneration.current) return
-      setPrepared(next)
-      setReleaseLabel(`${next.title} v${next.releaseVersion}`)
-      setAcknowledgement(EMPTY_ACKNOWLEDGEMENT)
-      setReceipt(null)
-      authorizationNonce.current = crypto.randomUUID()
-    } catch (cause) {
-      if (generation !== loadGeneration.current) return
-      setPrepared(null)
-      setError(cause instanceof Error ? cause.message : String(cause))
-    } finally {
-      if (generation === loadGeneration.current) setLoading(false)
-    }
+    return readQueue.current.enqueue(async isCurrent => {
+      try {
+        const next = await prepareTextOpenWorldCreatorReleaseV1({
+          scope: props.scope, productionId: props.productionId, expectedBuildId: props.buildId,
+        })
+        if (!isCurrent() || generation !== loadGeneration.current) return
+        setPrepared(next)
+        setReleaseLabel(`${next.title} v${next.releaseVersion}`)
+        setAcknowledgement(EMPTY_ACKNOWLEDGEMENT)
+        setReceipt(null)
+        authorizationNonce.current = crypto.randomUUID()
+      } catch (cause) {
+        if (!isCurrent() || generation !== loadGeneration.current) return
+        setPrepared(null)
+        setError(cause instanceof Error ? cause.message : String(cause))
+      } finally {
+        if (isCurrent() && generation === loadGeneration.current) setLoading(false)
+      }
+    })
   }, [props.buildId, props.productionId, props.scope])
 
   useEffect(() => {
+    const queue = readQueue.current
     void load()
-    return () => { loadGeneration.current += 1 }
+    return () => { loadGeneration.current += 1; queue.invalidate() }
   }, [load, props.refreshToken])
 
   const allAcknowledged = useMemo(

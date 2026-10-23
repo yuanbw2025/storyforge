@@ -6,7 +6,7 @@ import {
   hashProductRuntimeStateV1,
   normalizeProductRuntimeCheckpointPurposeV1,
   parseProductRuntimeState,
-  replayProductRuntimeEvents,
+  replayProductRuntimeEventsVerifiedAsyncV1,
   updateProductRuntimeSessionHeadV1,
   verifyFormalRuntimeSourceV1,
   verifyProductRuntimeCheckpoint,
@@ -245,7 +245,7 @@ async function canonicalBoundary(
     const protocol = await replayTextOpenWorldEventProtocolV1(events, session.seed)
     if (protocol.pendingCommandId) fail('不能在未终结命令上建立或修复存档')
   }
-  const state = replayProductRuntimeEvents(initialState, events, boundary)
+  const state = await replayProductRuntimeEventsVerifiedAsyncV1(initialState, events, boundary)
   if (state.lastSequence !== boundary) fail('规范事件与共享运行投影序号不一致')
   if (runtimeFormat === 'vnext') {
     const latestTextOpenWorldSequence = [...events].reverse()

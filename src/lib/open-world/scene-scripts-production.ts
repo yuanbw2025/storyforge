@@ -3,10 +3,15 @@ import { estimateTokens } from '../ai/context-budget'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import { appendAgentRunEventV1, readAgentRunV1, type AgentRunSnapshotV1 } from '../agent/run/event-store'
 import { canonicalStringify } from '../agent/run/hash'
-import { createContextManifestV1 } from '../agent/run/context-manifest'
+import {
+  createContextManifestV1,
+  parseContextManifestV1,
+  verifyContextManifestIntegrityV1,
+} from '../agent/run/context-manifest'
 import { db } from '../db/schema'
 import { readAgentRunArtifactExactV1, recordAgentRunArtifactV1 } from '../memory/artifact-store'
 import { readAcceptedBuildArtifacts } from '../product-production/artifact-store'
+import { validateProductProductionRecoveryDirectiveV1 } from '../product-production/context'
 import {
   runConfiguredProductionTextV1,
   type ProviderBindingReceiptV1,
@@ -47,10 +52,15 @@ import { assertRecordInScope } from '../workspace/scope'
 import {
   assertTextOpenWorldSceneDemandCapacityV1,
   TEXT_OPEN_WORLD_MAX_GOVERNED_SCENES_V1,
+  assertTextOpenWorldSceneRequestBudgetV1,
 } from './scene-demand-capacity'
 
 const SKILL_ID = 'text-open-world.production.scene-scripts.v1'
 const MAX_CONTEXT_CHARS = 440_000
+// Governed v3 stores the full bounded catalogue but dispatches only a single
+// disclosure-isolated Scene at a time. Allow the larger bounded-repair profile
+// without relaxing legacy envelopes or any per-request/token/call reservation.
+const MAX_GOVERNED_CONTEXT_CHARS = 880_000
 const FRAGMENT_CONTEXT_SOURCE_KEY = 'text-open-world.scene-scripts-input'
 const FRAGMENT_CONTEXT_READER_VERSION = 'text-open-world-scene-scripts-governed-v3-fragment-v1'
 const COMBAT_CATEGORIES = new Set<TextOpenWorldActionDefinitionV1['category']>([
@@ -139,9 +149,9 @@ export interface TextOpenWorldSceneActionSourceV1 {
 
 export interface TextOpenWorldSceneScriptsInputContextV1 {
   schema: 'storyforge.text-open-world-scene-scripts-input'
-  /** v1 is retained for durable-run replay; all newly assembled contexts use v2. */
-  version: 1 | 2
-  /** Fresh governed Knowledge builds keep the durable v2 envelope while the
+  /** v1/v2 retain durable request bytes; v3 binds objective regions to locations. */
+  version: 1 | 2 | 3
+  /** Governed Knowledge builds keep the complete durable compiler envelope while the
    * executor sends only a disclosure-safe deterministic projection to the
    * model. Historical v1/v2 contexts omit this marker. */
   modelDisclosureContract?: 'governed-v3'
@@ -163,6 +173,7 @@ export interface TextOpenWorldSceneScriptsInputContextV1 {
   }
   contentRequirementManifestHash: string
   npcRuntimeCatalog: {
+    vendorIdentityContract?: TextOpenWorldNpcRuntimeCatalogV1['vendorIdentityContract']
     productInstanceKey: string
     regionNarrativePacksHash: string
     questSkeletonsHash: string
@@ -207,6 +218,7 @@ export interface TextOpenWorldSceneScriptsInputContextV1 {
         'actors' | 'encounters' | 'items' | 'recipes' | 'vendors' | 'interactions' | 'rewards'>
       governance: Pick<TextOpenWorldQuestDesignDocumentsV1['governance'],
         | 'questAndEncounterBindingsReady' | 'sceneBindingsDeferred' | 'restartActionsRequireOriginalOfferRoute'
+        | 'actionPathEvidenceReady'
         | 'knowledgeProgressReady' | 'allRumorsHaveUniquePropagationPath'
         | 'allKnowledgeHasConfirmationPath' | 'allAchievementsOneTimeReachable'>
     }
@@ -606,8 +618,11 @@ function buildDemands(context: TextOpenWorldSceneScriptsContextBaseV1) {
   for (const objective of context.questDesignDocuments.objectives) {
     const quest = context.questSkeletons.quests.find(item => item.key === objective.questKey) ?? fail(`缺少QuestSkeleton:${objective.questKey}`)
     const actions = playerActionKeys(hydrated, [...objective.supportActionKeys, objective.completionActionKey])
-    const regionKey = quest.regionKeys[0] ?? context.mapInteractionCatalog.initialRegionKey
     const locationKey = locationForActions(hydrated, actions, quest.locationKeys)
+    const regionKey = context.version < 3
+      ? quest.regionKeys[0] ?? context.mapInteractionCatalog.initialRegionKey
+      : context.mapInteractionCatalog.locations.find(location => location.key === locationKey)?.regionKey
+        ?? fail(`目标场景地点缺少地区:${objective.key}:${locationKey}`)
     addScene({
       sceneKey: `scene.objective.${objective.key}`, sourceKind: 'quest-objective', sourceKey: objective.key,
       suggestedTitle: objective.title, purpose: objective.description, regionKey,
@@ -715,6 +730,10 @@ function buildDemands(context: TextOpenWorldSceneScriptsContextBaseV1) {
 }
 
 async function validateUpstream(context: Omit<TextOpenWorldSceneScriptsInputContextV1, 'contextSelectionHash'>): Promise<void> {
+  if (context.questDesignDocuments.governance.actionPathEvidenceReady !== undefined
+    && context.questDesignDocuments.governance.actionPathEvidenceReady !== true) fail('P9行动证据合同无效')
+  if (context.npcRuntimeCatalog.vendorIdentityContract !== undefined
+    && context.npcRuntimeCatalog.vendorIdentityContract !== 'canonical-vendor-owners-v1') fail('P9商店身份合同无效')
   const artifacts: Array<[Record<string, unknown>, string, string]> = [
     [context.sourceLedger as unknown as Record<string, unknown>, 'ledgerHash', 'SourceLedger'],
     [context.experienceContract as unknown as Record<string, unknown>, 'experienceContractHash', 'ExperienceContract'],
@@ -876,7 +895,7 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     actionDefinitionHash: await hashProductProductionValueV2(action),
   })))
   const base: TextOpenWorldSceneScriptsContextBaseV1 = {
-    schema: 'storyforge.text-open-world-scene-scripts-input' as const, version: 2 as const,
+    schema: 'storyforge.text-open-world-scene-scripts-input' as const, version: 3 as const,
     ...(questDesignDocuments.governance.knowledgeProgressReady === true
       ? { modelDisclosureContract: 'governed-v3' as const }
       : {}),
@@ -900,6 +919,7 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
     },
     contentRequirementManifestHash: contentRequirementManifest.contentRequirementManifestHash,
     npcRuntimeCatalog: {
+      ...(npcRuntimeCatalog.vendorIdentityContract ? { vendorIdentityContract: npcRuntimeCatalog.vendorIdentityContract } : {}),
       productInstanceKey: npcRuntimeCatalog.productInstanceKey,
       regionNarrativePacksHash: npcRuntimeCatalog.regionNarrativePacksHash,
       questSkeletonsHash: npcRuntimeCatalog.questSkeletonsHash,
@@ -976,6 +996,9 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
       governance: {
         questAndEncounterBindingsReady: questDesignDocuments.governance.questAndEncounterBindingsReady,
         sceneBindingsDeferred: questDesignDocuments.governance.sceneBindingsDeferred,
+        ...(questDesignDocuments.governance.actionPathEvidenceReady === true
+          ? { actionPathEvidenceReady: true as const }
+          : {}),
         ...(questDesignDocuments.governance.restartActionsRequireOriginalOfferRoute === true
           ? { restartActionsRequireOriginalOfferRoute: true as const }
           : {}),
@@ -1019,7 +1042,8 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
   }
   const context = { ...body, contextSelectionHash: await hashProductProductionValueV2(body) }
   const contextCharacters = canonicalProductProductionJsonV2(context).length
-  if (contextCharacters > MAX_CONTEXT_CHARS) fail(`SceneScripts Context超过硬上限(${contextCharacters}/${MAX_CONTEXT_CHARS})，需要拆分P9生产批次`)
+  const maximumContextCharacters = governedKnowledge(context) ? MAX_GOVERNED_CONTEXT_CHARS : MAX_CONTEXT_CHARS
+  if (contextCharacters > maximumContextCharacters) fail(`SceneScripts Context超过硬上限(${contextCharacters}/${maximumContextCharacters})，需要拆分P9生产批次`)
   return context
 }
 
@@ -1032,14 +1056,15 @@ async function parseContext(value: string): Promise<TextOpenWorldSceneScriptsInp
   let context: TextOpenWorldSceneScriptsInputContextV1
   try { context = JSON.parse(value) as TextOpenWorldSceneScriptsInputContextV1 } catch { return fail('Context JSON损坏') }
   if (context.schema !== 'storyforge.text-open-world-scene-scripts-input'
-    || (context.version !== 1 && context.version !== 2)) fail('Context身份无效')
+    || ![1, 2, 3].includes(context.version)) fail('Context身份无效')
   const { contextSelectionHash, ...body } = context
   await validateUpstream(body)
   if (governedKnowledge(context) && context.sceneDemands.length !== governedSceneDemandCount(context)) {
     fail('P9 governed-v3 SceneDemand数量不等于确定性上游容量投影')
   }
   if (!isSha256Hash(contextSelectionHash) || await hashProductProductionValueV2(body) !== contextSelectionHash) fail('Context选择Hash不匹配')
-  if (canonicalProductProductionJsonV2(context).length > MAX_CONTEXT_CHARS) fail('Context超过硬上限')
+  const maximumContextCharacters = governedKnowledge(context) ? MAX_GOVERNED_CONTEXT_CHARS : MAX_CONTEXT_CHARS
+  if (canonicalProductProductionJsonV2(context).length > maximumContextCharacters) fail('Context超过硬上限')
   return context
 }
 
@@ -1277,7 +1302,7 @@ function draftParsingContext(
 }
 
 /**
- * The durable P9 Context remains the complete version-2 compiler contract so
+ * The durable P9 Context remains the complete versioned compiler contract so
  * historical runs can still be replayed. Fresh Knowledge builds must never
  * deliver that envelope to the model: this deterministic projection contains
  * only ordinals, stable references and public labels needed by one isolated
@@ -1469,8 +1494,25 @@ export async function createTextOpenWorldSceneScriptsModelContextV1(
         rumorRequirementKey: demand.rumorRequirementKey,
       }
     }),
-    knowledgePresentationDemands: view.knowledgePresentationDemands.map(demand => ({ ...demand })),
-    achievementPresentationDemands: view.achievementPresentationDemands.map(demand => ({ ...demand })),
+    // These optional collections are always empty for an isolated Scene. New
+    // vendor-owner contexts omit that repeated transport scaffolding; shared
+    // presentations and frozen older contexts retain every original field.
+    ...(slice.kind === 'scene' && context.npcRuntimeCatalog.vendorIdentityContract === 'canonical-vendor-owners-v1'
+      ? {}
+      : {
+          knowledgePresentationDemands: view.knowledgePresentationDemands.map(demand => ({ ...demand })),
+          achievementPresentationDemands: view.achievementPresentationDemands.map(demand => ({ ...demand })),
+        }),
+  }
+  // A v20 single-Scene slice has no shared demands. Keep the durable context,
+  // shared slice and every populated field unchanged; omit only empty arrays
+  // whose meaning is stated in the versioned single-Scene prompt.
+  if (slice.kind === 'scene' && context.questDesignDocuments.governance.actionPathEvidenceReady === true) {
+    const transport = body as Record<string, unknown>
+    for (const key of ['actionLanguageDemands', 'templateVariantDemands', 'randomEventPresentationDemands']) {
+      if (!Array.isArray(transport[key]) || transport[key].length !== 0) fail(`P9单场景共享需求必须为空:${key}`)
+      delete transport[key]
+    }
   }
   return {
     ...body,
@@ -1690,6 +1732,9 @@ function fixedTarget(input: {
   if (action.targetScope === 'vendor') {
     const binding = context.questDesignDocuments.catalogBindings.vendors.find(item => item.buyActionKey === action.key || item.sellActionKey === action.key)
     if (binding) return { targetPolicy: 'fixed', targetKey: binding.vendorKey }
+    const replacement = context.questDesignDocuments.catalogBindings.vendors.map(item => item.replacement)
+      .find(item => item && (item.buyActionKey === action.key || item.sellActionKey === action.key))
+    if (replacement) return { targetPolicy: 'fixed', targetKey: replacement.vendorKey }
   }
   return { targetPolicy: 'runtime-valid-target', targetKey: null }
 }
@@ -2155,14 +2200,44 @@ function prompts(context: TextOpenWorldSceneScriptsInputContextV1) {
       && (context.achievementPresentationDemands?.length ?? 0) === 0
     if (isolatedScene) {
       const demand = context.sceneDemands[0]!
+      const actionEvidence = context.questDesignDocuments.governance.actionPathEvidenceReady === true
+      const publicLabels = demand.actionKeys.map(key => (
+        safeActionPublicWritingMaterial(context, demand, actionByKey(context, key)).label
+      ))
+      const duplicateSafeChoices = new Set(publicLabels).size < publicLabels.length
+        ? publicLabels.map((label, index) => {
+            const prefix = `${index + 1}. `
+            return prefix + label.slice(0, 100 - prefix.length)
+          })
+        : null
       return {
-        system: [
-          '只为输入中的唯一当前Scene写公开叙事，只返回JSON。',
-          '仅用currentObjective与publicCatalogs；禁止输入外事实、未来目标、私密资料、来源证据和新Action。',
-        ].join('\n'),
+        system: actionEvidence
+          ? "Use public input only, in its language; invent no hidden/future facts, rewards or resource changes."
+          : "Use only public input. Do not invent hidden/future facts, rewards or resource changes. Write in the input's language.",
         user: [
-          `scenes精确1项且sceneNumber=1；choiceLabels精确${demand.choiceCount}条；${demand.sourceKind === 'actor-dialogue' ? 'attitudeOpenings为bad/neutral/good字符串对象' : 'attitudeOpenings=null'}。`,
-          'Scene字段仅title/openingText/bodyText/successText/failureText/choiceLabels/attitudeOpenings；根schema="storyforge.text-open-world-scene-scripts-draft",version=1，另五组数组actionUtterances/templateVariants/randomEvents/knowledgePresentations/achievementPresentations均=[]。',
+          actionEvidence
+            ? 'Full JSON, keeping schema/version. Char limits: title 1..160; openingText/successText 1..2000; bodyText 1..4000. successText nonempty, never null, neutral if no new result. failureText nullable.'
+            : 'Return full JSON, keeping schema/version. Limits: title 1..160; openingText/successText 1..2000; bodyText 1..4000. successText must be nonempty (never null); use neutral completion if no new result. failureText may be null.',
+          actionEvidence
+            ? `choiceLabels: ${demand.choiceCount} unique strings in actionKeys order, 1..100 chars, number duplicates. Required attitudeOpenings:${demand.sourceKind === 'actor-dialogue' ? 'bad/neutral/good, each 1..500 chars' : 'null'}. Omitted shared-demand arrays are empty.`
+            : `choiceLabels依actionKeys顺序共${demand.choiceCount}个唯一字符串（1..100字；同名编号）。attitudeOpenings必填：${demand.sourceKind === 'actor-dialogue' ? 'bad/neutral/good各1..500字' : 'null'}。`,
+          ...(duplicateSafeChoices ? [
+            '同名行动的choiceLabels逐项原样采用示例编号文案。',
+          ] : []),
+          JSON.stringify({
+            schema: 'storyforge.text-open-world-scene-scripts-draft', version: 1,
+            scenes: [{
+              sceneNumber: 1, title: '标题', openingText: '环境',
+              bodyText: '正文', successText: '成功', failureText: null,
+              choiceLabels: duplicateSafeChoices
+                ?? Array.from({ length: demand.choiceCount }, (_, index) => `选项${index + 1}`),
+              attitudeOpenings: demand.sourceKind === 'actor-dialogue'
+                ? { bad: '疏远', neutral: '中立', good: '友好' } : null,
+            }],
+            // This slice has no shared demands. Its existing strict normalizer
+            // supplies only these empty collections; repeating them in every
+            // scene wastes the frozen input budget without adding authority.
+          }),
         ].join('\n'),
       }
     }
@@ -2450,6 +2525,48 @@ function fragmentRenderedRequest(input: {
   }
 }
 
+const FRAGMENT_REUSE_SCHEMA = 'storyforge.text-open-world-scene-scripts-fragment-reuse'
+
+function parseFragmentDraft(value: unknown, fragment: PreparedSceneScriptsFragmentV1): SceneScriptsDraftV1 {
+  // These collections have no authorized members in a single-Scene request.
+  // Their absence is an explicit empty projection, never invented model text.
+  // Keep the raw response unchanged; the ordinary parser still rejects an
+  // unknown key, an explicit nonempty collection or any missing Scene field.
+  if (fragment.slice.kind === 'scene' && value && typeof value === 'object' && !Array.isArray(value)) {
+    return parseDraft({
+      actionUtterances: [], templateVariants: [], randomEvents: [],
+      knowledgePresentations: [], achievementPresentations: [], ...value,
+    }, fragment.parsingContext)
+  }
+  return parseDraft(value, fragment.parsingContext)
+}
+
+/** Epochs are portable within a Build; never persist another machine's Run ID. */
+async function readFragmentSourceRun(input: {
+  execution: ProductProductionTaskExecutionInputV1
+  controlEpoch: number
+  beforeEpoch: number
+  cache: Map<number, AgentRunSnapshotV1>
+}): Promise<AgentRunSnapshotV1> {
+  if (!Number.isSafeInteger(input.controlEpoch) || input.controlEpoch < 0
+    || input.controlEpoch >= input.beforeEpoch) fail('P9分片复用来源epoch无效')
+  const cached = input.cache.get(input.controlEpoch)
+  if (cached) return cached
+  const rows = (await db.agentRuns.where('productBuildId').equals(input.execution.buildId).toArray())
+    .filter(row => row.parentRelation === `task:${input.execution.task.taskKey}`
+      && row.status === 'failed'
+      && JSON.parse(row.contractJson).scope?.productProduction?.controlEpoch === input.controlEpoch)
+  if (rows.length !== 1) fail('P9分片复用缺少唯一历史失败Run')
+  const snapshot = await readAgentRunV1(input.execution.scope, rows[0]!.id!)
+  const boundary = snapshot.contract.scope.productProduction
+  if (boundary?.productBuildId !== input.execution.buildId
+    || boundary.buildNumber !== input.execution.buildNumber
+    || boundary.taskKey !== input.execution.task.taskKey
+    || boundary.controlEpoch !== input.controlEpoch) fail('P9分片复用来源越过Build/task')
+  input.cache.set(input.controlEpoch, snapshot)
+  return snapshot
+}
+
 async function restoreSuccessfulFragment(input: {
   execution: ProductProductionTaskExecutionInputV1
   snapshot: AgentRunSnapshotV1
@@ -2457,7 +2574,20 @@ async function restoreSuccessfulFragment(input: {
   requirementKey: string
   bindingHash: string
   stepId: string
+  sourceRuns: Map<number, AgentRunSnapshotV1>
 }): Promise<SceneScriptsDraftV1> {
+  if (!await assertRecordInScope(input.execution.scope, 'agentRuns', input.snapshot.run)) {
+    fail(`P9分片恢复来源越过当前Work:${input.stepId}`)
+  }
+  const boundary = input.snapshot.contract.scope.productProduction
+  if (input.snapshot.run.id !== input.execution.taskRunId
+    || input.snapshot.contract.scope.projectId !== input.execution.scope.projectId
+    || input.snapshot.run.productBuildId !== input.execution.buildId
+    || boundary?.productBuildId !== input.execution.buildId
+    || boundary.buildNumber !== input.execution.buildNumber
+    || boundary.taskKey !== input.execution.task.taskKey) {
+    fail(`P9分片恢复来源越过当前Work/Build/task:${input.stepId}`)
+  }
   const step = input.snapshot.projection.steps[input.stepId]
   if (!step || step.status !== 'succeeded' || !step.candidateHash) {
     fail(`P9分片没有可恢复的成功候选:${input.stepId}`)
@@ -2472,9 +2602,6 @@ async function restoreSuccessfulFragment(input: {
     && event.payload.stepId === input.stepId && event.payload.attempt === step.attempt
     ? [event.payload.manifestHash]
     : [])
-  if (assembledManifestHashes.length !== 1 || assembledManifestHashes[0] !== expectedManifest.manifestHash) {
-    fail(`P9分片恢复ContextManifest不一致:${input.stepId}`)
-  }
   const manifestHashes = input.snapshot.events.flatMap(event => event.type === 'evidence.artifact.recorded'
     && event.payload.stepId === input.stepId
     && event.payload.attempt === step.attempt
@@ -2487,7 +2614,23 @@ async function restoreSuccessfulFragment(input: {
     artifactKind: 'context-manifest',
     contentHash: manifestHashes[0]!,
   })
-  if (storedManifest !== canonicalStringify(expectedManifest)) {
+  const originalManifest = parseContextManifestV1(JSON.parse(storedManifest))
+  if (!await verifyContextManifestIntegrityV1(originalManifest)
+    || assembledManifestHashes.length !== 1
+    || assembledManifestHashes[0] !== originalManifest.manifestHash) {
+    fail(`P9分片恢复ContextManifest不一致:${input.stepId}`)
+  }
+  // Exact evidence keeps the physical IDs from the original database. Import
+  // rebinds the owning Run/contract, not these historical bytes. The verified
+  // current Run above is the authority for ownership; normalize only its two
+  // transport locators when comparing the complete disclosure projection.
+  const { manifestHash: _originalHash, ...originalBody } = originalManifest
+  const reboundManifest = await createContextManifestV1({
+    ...originalBody,
+    runId: input.snapshot.run.id,
+    scope: { ...originalBody.scope, projectId: input.execution.scope.projectId },
+  })
+  if (canonicalStringify(reboundManifest) !== canonicalStringify(expectedManifest)) {
     fail(`P9分片ContextManifest正文与当前安全投影不一致:${input.stepId}`)
   }
   const expectedRequest = canonicalStringify(fragmentRenderedRequest({
@@ -2508,6 +2651,42 @@ async function restoreSuccessfulFragment(input: {
     artifactKind: 'rendered-request',
     contentHash: requestHashes[0]!,
   }) !== expectedRequest) fail(`P9分片请求证据与当前安全投影不一致:${input.stepId}`)
+  const reuseHashes = input.snapshot.events.flatMap(event => event.type === 'evidence.artifact.recorded'
+    && event.payload.stepId === input.stepId && event.payload.attempt === step.attempt
+    && event.payload.artifactKind === 'source-snapshot' ? [event.payload.contentHash] : [])
+  if (reuseHashes.length) {
+    if (reuseHashes.length !== 1) fail(`P9分片复用证明不唯一:${input.stepId}`)
+    const reuse = JSON.parse(await readAgentRunArtifactExactV1({
+      projectId: input.execution.scope.projectId,
+      artifactKind: 'source-snapshot', contentHash: reuseHashes[0]!,
+    })) as Record<string, unknown>
+    const epoch = input.snapshot.contract.scope.productProduction?.controlEpoch
+    if (Object.keys(reuse).sort().join(',') !== 'candidateHash,schema,sourceAttempt,sourceControlEpoch,version'
+      || reuse.schema !== FRAGMENT_REUSE_SCHEMA || reuse.version !== 1 || epoch == null
+      || !Number.isSafeInteger(reuse.sourceAttempt) || Number(reuse.sourceAttempt) < 1
+      || !Number.isSafeInteger(reuse.sourceControlEpoch)
+      || reuse.candidateHash !== step.candidateHash || step.outputHash !== step.candidateHash) {
+      fail(`P9分片复用证明损坏:${input.stepId}`)
+    }
+    const candidates = input.snapshot.events.filter(event => event.type === 'candidate.persisted'
+      && event.payload.stepId === input.stepId && event.payload.attempt === step.attempt
+      && event.payload.candidateHash === step.candidateHash && event.payload.requiresConfirmation === false)
+    const modelEvents = input.snapshot.events.filter(event => (event.type === 'model.requested'
+      || event.type === 'model.responded') && event.payload.stepId === input.stepId
+      && event.payload.attempt === step.attempt)
+    if (candidates.length !== 1 || modelEvents.length) fail(`P9分片复用不得伪造新模型响应:${input.stepId}`)
+    const source = await readFragmentSourceRun({
+      execution: input.execution, controlEpoch: Number(reuse.sourceControlEpoch), beforeEpoch: epoch,
+      cache: input.sourceRuns,
+    })
+    const sourceStep = source.projection.steps[input.stepId]
+    if (sourceStep?.candidateHash !== reuse.candidateHash || sourceStep.attempt !== reuse.sourceAttempt) {
+      fail(`P9分片复用来源候选不一致:${input.stepId}`)
+    }
+    return restoreSuccessfulFragment({
+      ...input, snapshot: source, execution: { ...input.execution, taskRunId: source.run.id },
+    })
+  }
   const requestBindingHashes = input.snapshot.events.flatMap(event => event.type === 'model.requested'
     && event.payload.stepId === input.stepId && event.payload.attempt === step.attempt
     ? [event.payload.bindingHash]
@@ -2550,9 +2729,9 @@ async function restoreSuccessfulFragment(input: {
     || candidates[0]!.requiresConfirmation !== false) {
     fail(`P9分片恢复候选与冻结证据不一致:${input.stepId}`)
   }
-  return parseDraft(
+  return parseFragmentDraft(
     parseProductionModelJsonObjectV1(response.output, `text-open-world-scene-scripts:${input.stepId}`),
-    input.fragment.parsingContext,
+    input.fragment,
   )
 }
 
@@ -2617,6 +2796,8 @@ async function runGovernedFragment(input: {
   requirementKey: string
   bindingHash: string
   onPaidUsage: (usage: ProductProductionTaskUsageV1) => void
+  recoverySource: AgentRunSnapshotV1 | null
+  sourceRuns: Map<number, AgentRunSnapshotV1>
 }): Promise<SceneScriptsDraftV1> {
   if (input.execution.taskRunId == null) {
     const { response, usage } = await callFragmentModel(input)
@@ -2624,12 +2805,12 @@ async function runGovernedFragment(input: {
     if (response.bindingReceipt.capabilityHash !== input.bindingHash) {
       fail(`执行时文本capability与Plan binding不一致:fragment-${input.fragment.fragmentNumber}`)
     }
-    return parseDraft(
+    return parseFragmentDraft(
       parseProductionModelJsonObjectV1(
         response.output,
         `text-open-world-scene-scripts-fragment-${input.fragment.fragmentNumber}`,
       ),
-      input.fragment.parsingContext,
+      input.fragment,
     )
   }
   const stepId = durableFragmentStepId(input.execution, input.fragment.slice)
@@ -2643,12 +2824,38 @@ async function runGovernedFragment(input: {
       requirementKey: input.requirementKey,
       bindingHash: input.bindingHash,
       stepId,
+      sourceRuns: input.sourceRuns,
     })
   }
   if (existing && existing.status !== 'failed' && existing.status !== 'scheduled') {
     // A running fragment has crossed model.requested but lacks a verified
     // terminal candidate. Re-dispatch could duplicate both content and cost.
     throw new ProductProductionResultUnknownErrorV1()
+  }
+  let recovered: { draft: SceneScriptsDraftV1; candidateHash: string; sourceAttempt: number; sourceControlEpoch: number } | null = null
+  const source = input.recoverySource
+  const sourceStep = source?.projection.steps[stepId]
+  if (source && sourceStep?.status === 'succeeded') {
+    const requestHashes = source.events.flatMap(event => event.type === 'evidence.artifact.recorded'
+      && event.payload.stepId === stepId && event.payload.attempt === sourceStep.attempt
+      && event.payload.artifactKind === 'rendered-request' ? [event.payload.contentHash] : [])
+    if (requestHashes.length !== 1) fail(`P9历史成功分片缺少唯一请求:${stepId}`)
+    const oldRequest = await readAgentRunArtifactExactV1({
+      projectId: input.execution.scope.projectId, artifactKind: 'rendered-request', contentHash: requestHashes[0]!,
+    })
+    // A legitimate prompt, output limit or disclosure change requires fresh
+    // production. Matching inputs still require the complete original proof.
+    if (oldRequest === canonicalStringify(fragmentRenderedRequest({ ...input, stepId }))) {
+      recovered = {
+        draft: await restoreSuccessfulFragment({
+          ...input, stepId, snapshot: source,
+          execution: { ...input.execution, taskRunId: source.run.id },
+        }),
+        candidateHash: sourceStep.candidateHash!,
+        sourceAttempt: sourceStep.attempt,
+        sourceControlEpoch: source.contract.scope.productProduction!.controlEpoch,
+      }
+    }
   }
   if (!existing) snapshot = await appendFragmentEvent(input.execution, snapshot, 'step.scheduled', { stepId })
   const attempt = existing?.status === 'failed' ? existing.attempt + 1 : 1
@@ -2687,6 +2894,24 @@ async function runGovernedFragment(input: {
     attempt,
     manifestHash: manifest.manifestHash,
   })
+  if (recovered) {
+    snapshot = (await recordAgentRunArtifactV1({
+      scope: input.execution.scope, runId: snapshot.run.id, artifactKind: 'source-snapshot',
+      content: canonicalStringify({
+        schema: FRAGMENT_REUSE_SCHEMA, version: 1,
+        sourceControlEpoch: recovered.sourceControlEpoch,
+        sourceAttempt: recovered.sourceAttempt, candidateHash: recovered.candidateHash,
+      }),
+      stepId, attempt, expectedLastSequence: snapshot.projection.lastSequence,
+    })).snapshot
+    snapshot = await appendFragmentEvent(input.execution, snapshot, 'candidate.persisted', {
+      stepId, attempt, candidateHash: recovered.candidateHash, requiresConfirmation: false,
+    })
+    await appendFragmentEvent(input.execution, snapshot, 'step.succeeded', {
+      stepId, attempt, outputHash: recovered.candidateHash,
+    })
+    return recovered.draft
+  }
   snapshot = await appendFragmentEvent(input.execution, snapshot, 'model.requested', {
     stepId,
     attempt,
@@ -2694,6 +2919,15 @@ async function runGovernedFragment(input: {
   })
   try {
     const { response, usage } = await callFragmentModel(input)
+    // The shared production protocol durably records its raw response in the
+    // same Run before returning. Re-read that sequence, while requiring this
+    // exact fragment attempt to retain execution authority.
+    snapshot = await readAgentRunV1(input.execution.scope, snapshot.run.id)
+    const currentStep = snapshot.projection.steps[stepId]
+    if (currentStep?.status !== 'running' || currentStep.attempt !== attempt) {
+      input.onPaidUsage(usage)
+      fail(`P9分片响应到达时执行权已过期:${stepId}`)
+    }
     const candidateHash = await hashProductProductionValueV2(response.output)
     snapshot = await appendFragmentEvent(input.execution, snapshot, 'model.responded', {
       stepId,
@@ -2718,9 +2952,9 @@ async function runGovernedFragment(input: {
     }
     let draft: SceneScriptsDraftV1
     try {
-      draft = parseDraft(
+      draft = parseFragmentDraft(
         parseProductionModelJsonObjectV1(response.output, `text-open-world-scene-scripts:${stepId}`),
-        input.fragment.parsingContext,
+        input.fragment,
       )
     } catch (error) {
       // The response and exact paid usage are known and durably recorded. A
@@ -2812,10 +3046,7 @@ export function createTextOpenWorldSceneScriptsExecutorV1(options: {
         ...context.sceneDemands.map((_, sceneIndex) => ({ kind: 'scene' as const, sceneIndex })),
         { kind: 'shared-presentations' },
       ]
-      const requiredCallsWithRepair = slices.length + 1
-      if (requiredCallsWithRepair > execution.task.budgetReservation.modelCalls) {
-        fail(`P9 governed-v3硬隔离与一次片段修复需要${requiredCallsWithRepair}次模型调用，但Plan只预留${execution.task.budgetReservation.modelCalls}次`)
-      }
+      assertTextOpenWorldSceneRequestBudgetV1(context.sceneDemands.length, execution.task.budgetReservation.modelCalls)
       const fragmentBases = await Promise.all(slices.map(async (slice, index) => {
         const parsingContext = draftParsingContext(context, slice)
         const modelContext = await createTextOpenWorldSceneScriptsModelContextV1(context, slice)
@@ -2856,6 +3087,14 @@ export function createTextOpenWorldSceneScriptsExecutorV1(options: {
         maximumOutputTokens: outputBudgets[index]!,
       }))
       const parsed: SceneScriptsDraftV1[] = []
+      const sourceRuns = new Map<number, AgentRunSnapshotV1>()
+      const recoverySource = execution.taskRunId != null && execution.authorResolution?.resolution.action === 'retry'
+        ? (await validateProductProductionRecoveryDirectiveV1({
+            scope: execution.scope, productProductionId: execution.productionId,
+            productBuildId: execution.buildId, productProductionTaskKey: execution.task.taskKey,
+            expectedState: 'resolved', allowLegacyRetry: true,
+          })).snapshot
+        : null
       let paidUsage = zeroTaskUsage()
       const activeReservation = execution.attemptBudgetReservation ?? execution.task.budgetReservation
       const accountPaidUsage = (usage: ProductProductionTaskUsageV1) => {
@@ -2886,6 +3125,8 @@ export function createTextOpenWorldSceneScriptsExecutorV1(options: {
             requirementKey,
             bindingHash: binding.bindingHash,
             onPaidUsage: accountPaidUsage,
+            recoverySource,
+            sourceRuns,
           }))
         }
       } catch (error) {

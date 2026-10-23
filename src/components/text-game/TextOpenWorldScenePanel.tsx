@@ -29,6 +29,7 @@ import {
 } from '../../lib/open-world/runtime-ai-error'
 import TextOpenWorldRuntimeAIFailureNotice from './TextOpenWorldRuntimeAIFailureNotice'
 import type { TextOpenWorldPlayerMediaVisualV1 } from '../../lib/open-world/player-media'
+import { projectTextOpenWorldPlayerFeedbackV1, type TextOpenWorldPlayerNotificationV1 } from '../../lib/open-world/player-notifications'
 
 export interface TextOpenWorldSceneTutorialAvailabilityV1 {
   systemActions: boolean
@@ -44,6 +45,7 @@ interface TextOpenWorldScenePanelProps {
   projection: TextOpenWorldSceneProjectionV1
   availableActions: TextOpenWorldActionAvailabilityV1[]
   feedback: TextOpenWorldFeedbackReceiptV1 | null
+  notifications?: readonly TextOpenWorldPlayerNotificationV1[]
   busy: boolean
   fallback: {
     regionTitle: string
@@ -130,8 +132,12 @@ function targetForAction(action: TextOpenWorldActionAvailabilityV1): {
   return { targetKey: null, error: `“${action.action.label}”当前没有合法目标，未执行任何行动。` }
 }
 
-function SystemReceipt({ feedback }: { feedback: TextOpenWorldFeedbackReceiptV1 | null }) {
+function SystemReceipt({ feedback, notifications }: {
+  feedback: TextOpenWorldFeedbackReceiptV1 | null
+  notifications: readonly TextOpenWorldPlayerNotificationV1[]
+}) {
   if (!feedback) return null
+  const presentation = projectTextOpenWorldPlayerFeedbackV1(feedback, notifications)
   return <section
     className={`open-world-scene-receipt ${feedback.presentation.mayNarrateSuccess ? 'is-success' : 'is-warning'}`}
     data-testid="text-open-world-feedback"
@@ -141,8 +147,8 @@ function SystemReceipt({ feedback }: { feedback: TextOpenWorldFeedbackReceiptV1 
     aria-label="系统结算回执"
   >
     <header><TerminalSquare aria-hidden="true" /><strong>系统结算回执</strong></header>
-    <h3>{feedback.presentation.headline}</h3>
-    {feedback.presentation.details.map((detail, index) => <p key={index}>{detail}</p>)}
+    <h3>{presentation.headline}</h3>
+    {presentation.details.map((detail, index) => <p key={index}>{detail}</p>)}
     <small>
       正式证据 {feedback.evidenceEventSequences.map(sequence => `#${sequence}`).join('、') || '预检'}
       {' · '}{feedback.status}
@@ -195,6 +201,7 @@ export default function TextOpenWorldScenePanel({
   projection,
   availableActions,
   feedback,
+  notifications = [],
   busy,
   fallback,
   background = null,
@@ -533,7 +540,7 @@ export default function TextOpenWorldScenePanel({
       </aside>}
     </article>}
 
-    <SystemReceipt feedback={feedback} />
+    <SystemReceipt feedback={feedback} notifications={notifications} />
 
     {dialogueTurns.length > 0 && <section
       className="open-world-runtime-dialogue-log"

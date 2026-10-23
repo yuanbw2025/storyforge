@@ -1459,7 +1459,10 @@ async function buildCandidate(input: {
   })
   if (projected.draftHash !== context.baseDraftHash
     || projected.stableStructureHash !== input.workspace.stableStructureHash
-    || !sameJson(projected.editableFields, context.editableFields)) {
+    // Context stores the capability catalog by fieldId; domain projections may
+    // present it by JSON pointer. Compare the same canonical catalog ordering,
+    // retaining every descriptor and its value hash, not merely the field IDs.
+    || !sameJson([...projected.editableFields].sort((left, right) => left.fieldId.localeCompare(right.fieldId)), context.editableFields)) {
     fail('projection-stale', '领域投影与登记目标 Context 不一致')
   }
   const applied = await applyTextOpenWorldCreatorEditPatchToAuthorEditableDraftV1({

@@ -12,6 +12,7 @@ import type {
   ProductBuildRecordV1,
   ProductProductionPlanV3,
   ProductProductionRecordV1,
+  ProductTaskBudgetReservationV1,
   WorkspaceScope,
 } from '../types'
 import type {
@@ -24,6 +25,10 @@ import {
 } from '../product-production/adoption'
 import { readVerifiedMediaBlobObjectData } from '../product-production/media-blob-store'
 import { verifyProductBuildRootTerminalReceiptV1 } from '../product-production/receipts'
+import {
+  productBuildBudgetRunReferencesV1,
+  verifyProductBuildRootBudgetEvidenceV1,
+} from '../product-production/root-budget-evidence'
 import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import {
   canonicalProductProductionJsonV2,
@@ -31,6 +36,7 @@ import {
   isSha256Hash,
 } from '../product-production/hash'
 import { parseProductProductionPlanV3 } from '../product-production/plan'
+import { readTextOpenWorldCreatorMediaTaskBudgetV1 } from './creator-media-authority'
 import { parseProductRuntimePackageV1 } from '../product-production/runtime-package'
 import {
   hashProductProductionCarriedCandidateV1,
@@ -1259,11 +1265,10 @@ function copiedArtifactContentMatches(
 
 function candidateUsageWithinTaskBudget(
   usage: ProductProductionTaskExecutionResultV1['usage'],
-  task: ProductProductionPlanV3['tasks'][number],
+  budget: ProductTaskBudgetReservationV1,
 ): boolean {
   const integers = [usage.modelCalls, usage.inputTokens, usage.outputTokens, usage.mediaCalls,
     usage.durationMs, usage.storageBytes]
-  const budget = task.budgetReservation
   return integers.every(value => Number.isInteger(value) && value >= 0)
     && (usage.costUsd == null || Number.isFinite(usage.costUsd) && usage.costUsd >= 0)
     && usage.modelCalls <= budget.modelCalls
@@ -1417,6 +1422,57 @@ async function verifyAcceptedRowsAgainstProof(input: {
   return null
 }
 
+async function verifyBuildRootSealFromEvidenceV1(input: {
+  build: ProductBuildRecordV1 & { id: number }
+  artifacts: ProductBuildArtifactRecordV1[]
+  runEvidenceById: ReadonlyMap<number, TextOpenWorldArtifactRunEvidenceV1>
+}) {
+  const { build } = input
+  const receiptInput = {
+    planHash: build.planHash, manifestHash: build.manifestHash,
+    packageHash: build.packageHash, qualityReportHash: build.qualityReportHash,
+    controlEpoch: build.controlEpoch, budgetLedgerJson: build.budgetLedgerJson,
+    artifacts: input.artifacts, expectedReceiptHash: build.rootTerminalReceiptHash ?? '',
+  }
+  const direct = await verifyProductBuildRootTerminalReceiptV1(receiptInput)
+  if (direct.valid || !build.rootBudgetEvidenceJson) return direct
+  const rootRunId = JSON.parse(build.budgetLedgerJson).rootRunId
+  const assertOwner = (runId: number, epoch: number, taskKey: string) => {
+    const run = input.runEvidenceById.get(runId)
+    if (!run || run.error || run.projectId !== build.projectId || run.workId !== build.workId
+      || run.productBuildId !== build.id || run.boundary?.productBuildId !== build.id
+      || run.boundary.buildNumber !== build.buildNumber || run.boundary.controlEpoch !== epoch
+      || run.boundary.taskKey !== taskKey
+      || epoch === build.controlEpoch && run.boundary.planHash !== build.planHash) {
+      throw new Error('封存预算 Run 的当前 owner/任务/轮次证据不闭合')
+    }
+    return run
+  }
+  await verifyProductBuildRootBudgetEvidenceV1({
+    ...receiptInput,
+    evidenceJson: build.rootBudgetEvidenceJson,
+    verifyCurrentRun: async ref => {
+      const run = assertOwner(ref.runId, ref.controlEpoch, ref.taskKey)
+      if (ref.taskKey === '$root') {
+        if (run.runId !== rootRunId || run.parentRunId !== null || run.parentRelation !== null
+          || run.state !== 'completed' || run.terminalReceiptHash !== build.rootTerminalReceiptHash) {
+          throw new Error('封存预算 root 尚未完成当前作用域复验')
+        }
+      } else {
+        if (run.parentRunId == null || run.parentRelation !== `task:${ref.taskKey}`) {
+          throw new Error('封存预算 task 缺少父 root')
+        }
+        const parent = assertOwner(run.parentRunId, ref.controlEpoch, '$root')
+        if (parent.parentRunId !== null || parent.parentRelation !== null
+          || ref.controlEpoch === build.controlEpoch && parent.runId !== rootRunId) {
+          throw new Error('封存预算 task 的父 root 不闭合')
+        }
+      }
+    },
+  })
+  return { valid: true as const, version: 2 as const }
+}
+
 async function completedBuildRootIssue(input: {
   production: ProductProductionRecordV1 & { id: number }
   buildEvidence: TextOpenWorldArtifactBuildEvidenceV1
@@ -1464,15 +1520,10 @@ async function completedBuildRootIssue(input: {
       || qualityRows[0].contentHash !== build.qualityReportHash) {
       return '已完成 Build 的 package/quality Artifact 指针不唯一或不一致'
     }
-    const rootReceiptVerification = await verifyProductBuildRootTerminalReceiptV1({
-      planHash: build.planHash,
-      manifestHash: build.manifestHash,
-      packageHash: build.packageHash,
-      qualityReportHash: build.qualityReportHash,
-      controlEpoch: build.controlEpoch,
-      budgetLedgerJson: build.budgetLedgerJson,
+    const rootReceiptVerification = await verifyBuildRootSealFromEvidenceV1({
+      build,
       artifacts: orderedRows,
-      expectedReceiptHash: build.rootTerminalReceiptHash ?? '',
+      runEvidenceById: input.runEvidenceById,
     })
     const root = buildEvidence.rootRunId == null
       ? null : input.runEvidenceById.get(buildEvidence.rootRunId)
@@ -1508,14 +1559,18 @@ async function completedBuildRootIssue(input: {
   }
 }
 
-async function sealedParentProofHashFromEvidenceV1(input: {
+interface SealedParentBuildProofInputV1 {
   production: ProductProductionRecordV1 & { id: number }
   buildEvidence: TextOpenWorldArtifactBuildEvidenceV1
-  artifact: ProductBuildArtifactRecordV1
   activeRows: ProductBuildArtifactRecordV1[]
+  runEvidenceById: ReadonlyMap<number, TextOpenWorldArtifactRunEvidenceV1>
   blobEvidenceById?: ReadonlyMap<number, TextOpenWorldArtifactBlobEvidenceV1>
-}): Promise<string> {
-  const { production, buildEvidence, artifact } = input
+}
+
+type SealedParentBuildProofV1 = Awaited<ReturnType<typeof verifySealedParentBuildEvidenceV1>>
+
+async function verifySealedParentBuildEvidenceV1(input: SealedParentBuildProofInputV1) {
+  const { production, buildEvidence } = input
   const { build, plan } = buildEvidence
   if (!plan || !['preview-ready', 'release-ready', 'released', 'archived'].includes(build.status)
     || !isSha256Hash(build.rootTerminalReceiptHash)
@@ -1562,15 +1617,10 @@ async function sealedParentProofHashFromEvidenceV1(input: {
     !== canonicalProductProductionJsonV2(manifest.artifactReceipts)) {
     throw new Error('carriedFrom 父 Build 的完整 active Artifact 集合与 Manifest 不一致')
   }
-  const rootReceiptVerification = await verifyProductBuildRootTerminalReceiptV1({
-    planHash: build.planHash,
-    manifestHash: build.manifestHash,
-    packageHash: build.packageHash,
-    qualityReportHash: build.qualityReportHash,
-    controlEpoch: build.controlEpoch,
-    budgetLedgerJson: build.budgetLedgerJson,
+  const rootReceiptVerification = await verifyBuildRootSealFromEvidenceV1({
+    build,
     artifacts: orderedRows,
-    expectedReceiptHash: build.rootTerminalReceiptHash ?? '',
+    runEvidenceById: input.runEvidenceById,
   })
   if (!rootReceiptVerification.valid || rootReceiptVerification.version !== 2) {
     throw new Error('carriedFrom 父 Build 不是 v2 完整 Artifact 封存证明')
@@ -1589,6 +1639,30 @@ async function sealedParentProofHashFromEvidenceV1(input: {
     budgetLedgerJson: build.budgetLedgerJson,
     plan,
   })
+  const portableRootSealHash = await hashProductProductionPortableRootSealV1({
+    planHash: build.planHash,
+    manifestHash: build.manifestHash,
+    packageHash: build.packageHash,
+    qualityReportHash: build.qualityReportHash,
+    rootTerminalReceiptHash: build.rootTerminalReceiptHash,
+    controlEpoch: build.controlEpoch,
+    portableTaskLedger,
+  })
+  return { plan, manifest, portableTaskLedger, portableRootSealHash }
+}
+
+async function sealedParentProofHashFromEvidenceV1(input: SealedParentBuildProofInputV1 & {
+  artifact: ProductBuildArtifactRecordV1
+  parentBuildProofById: Map<number, Promise<SealedParentBuildProofV1>>
+}): Promise<string> {
+  const { production, artifact } = input
+  const { build } = input.buildEvidence
+  let parentProof = input.parentBuildProofById.get(build.id)
+  if (!parentProof) {
+    parentProof = verifySealedParentBuildEvidenceV1(input)
+    input.parentBuildProofById.set(build.id, parentProof)
+  }
+  const { plan, manifest, portableTaskLedger, portableRootSealHash } = await parentProof
   const ownerTasks = plan.tasks.filter(task => task.outputArtifactKeys.includes(artifact.artifactKey))
   const ownerTask = ownerTasks[0]
   const ownerLedger = ownerTask == null ? null
@@ -1604,15 +1678,6 @@ async function sealedParentProofHashFromEvidenceV1(input: {
     || manifestMember.producerReceiptHash !== artifact.producerReceiptHash) {
     throw new Error('carriedFrom 父 Artifact 的 owner/ledger/manifest member 不闭合')
   }
-  const portableRootSealHash = await hashProductProductionPortableRootSealV1({
-    planHash: build.planHash,
-    manifestHash: build.manifestHash,
-    packageHash: build.packageHash,
-    qualityReportHash: build.qualityReportHash,
-    rootTerminalReceiptHash: build.rootTerminalReceiptHash,
-    controlEpoch: build.controlEpoch,
-    portableTaskLedger,
-  })
   return hashProductProductionSealedParentArtifactProofV1({
     productionKey: production.productionKey,
     productType: production.productType,
@@ -1635,7 +1700,9 @@ async function verifyCarriedLineage(input: {
   activeArtifactRowsByBuildId: ReadonlyMap<number, ProductBuildArtifactRecordV1[]>
   runEvidenceById: ReadonlyMap<number, TextOpenWorldArtifactRunEvidenceV1>
   acceptedProofByRunId: Map<number, Promise<AcceptedCandidateProofV1>>
+  parentBuildProofById: Map<number, Promise<SealedParentBuildProofV1>>
   blobEvidenceById?: ReadonlyMap<number, TextOpenWorldArtifactBlobEvidenceV1>
+  budgetParentProof?: (targetBuildId: number, artifactKey: string) => Promise<string | null>
 }): Promise<string | null> {
   let current = input.row
   const visited = new Set<string>()
@@ -1724,13 +1791,20 @@ async function verifyCarriedLineage(input: {
         return '跨 Build carry 父行不是父 Build 当前有效内容'
       }
       const parentBuildEvidence = parentBuilds.find(item => item.build.id === parentBuild.id)
+      if (parentBuild.status === 'recovery-required') {
+        const expected = await input.budgetParentProof?.(currentBuild.id, parent.artifactKey)
+        return expected && expected === current.carriedFrom.proofHash
+          ? null : 'carriedFrom 预算续建父前缀缺少当前正式证明'
+      }
       if (!parentBuildEvidence
         || await sealedParentProofHashFromEvidenceV1({
           production: input.production,
           buildEvidence: parentBuildEvidence,
           artifact: parent,
           activeRows: input.activeArtifactRowsByBuildId.get(parentBuild.id) ?? [],
+          runEvidenceById: input.runEvidenceById,
           blobEvidenceById: input.blobEvidenceById,
+          parentBuildProofById: input.parentBuildProofById,
         }) !== current.carriedFrom.proofHash) {
         return 'carriedFrom 跨 Build 封存父证明 Hash 不一致'
       }
@@ -1923,6 +1997,8 @@ export interface TextOpenWorldArtifactGovernanceProjectionInputV1 {
 async function projectTextOpenWorldArtifactGovernanceTrustedV1(
   input: TextOpenWorldArtifactGovernanceProjectionInputV1,
   productionAuthority: TextOpenWorldProductionPlanAuthorityV1,
+  budgetParentProof?: (targetBuildId: number, artifactKey: string) => Promise<string | null>,
+  mediaTaskBudget?: ProductTaskBudgetReservationV1,
 ): Promise<TextOpenWorldArtifactGovernanceProjectionV1> {
   const { scope, production, build, plan } = input
   if (production.projectId !== scope.projectId || production.worldId !== scope.worldId
@@ -1946,7 +2022,8 @@ async function projectTextOpenWorldArtifactGovernanceTrustedV1(
   }
   const originAuthorized = (productionAuthority.origin === 'creator-start-v1'
     || productionAuthority.origin === 'creator-repair-v1'
-    || productionAuthority.origin === 'creator-media-v1')
+    || productionAuthority.origin === 'creator-media-v1'
+    || productionAuthority.origin === 'creator-budget-recovery-v1')
     && isSha256Hash(productionAuthority.authorityReceiptHash)
   const ownerByArtifact = new Map<string, ProductProductionPlanV3['tasks'][number]>()
   for (const task of plan.tasks) for (const artifactKey of task.outputArtifactKeys) {
@@ -2089,8 +2166,10 @@ async function projectTextOpenWorldArtifactGovernanceTrustedV1(
     }
     view.schema = typeof payloadRecord.schema === 'string' ? payloadRecord.schema : null
     const expectedSchema = expectedArtifactSchema(row.kind)
-    if (payloadRecord.schema !== expectedSchema || payloadRecord.version !== 1) {
-      artifactIssue(view, 'artifact.schema', `Artifact payload 应为 ${expectedSchema} v1`)
+    const supportedVersion = payloadRecord.version === 1
+      || (row.kind === 'text-open-world.integration-report' && payloadRecord.version === 2)
+    if (payloadRecord.schema !== expectedSchema || !supportedVersion) {
+      artifactIssue(view, 'artifact.schema', `Artifact payload 的 ${expectedSchema} 版本不受支持`)
       continue
     }
     if (typeof payloadRecord.productInstanceKey === 'string'
@@ -2176,6 +2255,10 @@ async function projectTextOpenWorldArtifactGovernanceTrustedV1(
   }
   const viewByRowId = new Map(views.map(view => [view.rowId, view]))
   const acceptedProofByRunId = new Map<number, Promise<AcceptedCandidateProofV1>>()
+  // This map belongs to one captured read set only. Every sibling still checks
+  // its exact owner/ledger/manifest member; the full parent set, root and physical
+  // media are verified once, including failures. Never reuse across reads.
+  const parentBuildProofById = new Map<number, Promise<SealedParentBuildProofV1>>()
   const markTaskGroup = (
     rows: ProductBuildArtifactRecordV1[],
     code: string,
@@ -2267,7 +2350,8 @@ async function projectTextOpenWorldArtifactGovernanceTrustedV1(
         || candidateKeys.some((key, index) => key !== expectedKeys[index])
         || new Set(candidate.result.passedGateIds).size !== candidate.result.passedGateIds.length
         || task.acceptanceGateIds.some(gate => !candidate.result.passedGateIds.includes(gate))
-        || !candidateUsageWithinTaskBudget(candidate.result.usage, task)) {
+        || !candidateUsageWithinTaskBudget(candidate.result.usage,
+          task.taskKey === 'media.visual' && mediaTaskBudget ? mediaTaskBudget : task.budgetReservation)) {
         markTaskGroup(rows, 'artifact.candidate-group', 'task-candidate checkpoint 未精确覆盖 Plan 输出与验收门')
         continue
       }
@@ -2309,7 +2393,9 @@ async function projectTextOpenWorldArtifactGovernanceTrustedV1(
         activeArtifactRowsByBuildId,
         runEvidenceById: input.runEvidenceById,
         acceptedProofByRunId,
+        parentBuildProofById,
         blobEvidenceById: input.blobEvidenceById,
+        budgetParentProof,
       })
       if (lineageIssue) break
     }
@@ -3466,7 +3552,14 @@ async function loadGovernanceRunEvidenceV1(input: {
 }): Promise<Map<number, TextOpenWorldArtifactRunEvidenceV1>> {
   const requested = new Set<number>()
   for (const row of input.artifacts) if (row.producerRunId != null) requested.add(row.producerRunId)
-  for (const evidence of input.buildEvidence) if (evidence.rootRunId != null) requested.add(evidence.rootRunId)
+  for (const evidence of input.buildEvidence) {
+    if (evidence.rootRunId != null) requested.add(evidence.rootRunId)
+    if (evidence.build.rootBudgetEvidenceJson) {
+      for (const ref of productBuildBudgetRunReferencesV1(
+        evidence.build.budgetLedgerJson, evidence.build.controlEpoch,
+      )) requested.add(ref.runId)
+    }
+  }
   const currentRuns = new Set(input.artifacts
     .filter(row => row.buildId === input.currentBuildId && row.producerRunId != null)
     .map(row => row.producerRunId!))
@@ -3622,11 +3715,27 @@ export async function readTextOpenWorldArtifactGovernanceV1(input: {
     blobPhysicalFingerprints: initialBlobVerification.fingerprints,
     authorityEvidenceHash: productionAuthority.evidenceHash,
   })
+  const budgetProofs = new Map<number, ReturnType<typeof import('../product-production/artifact-store')['readTextOpenWorldBudgetRecoveryCarryProofsV1']>>()
+  const budgetParentProof = async (targetBuildId: number, artifactKey: string) => {
+    let pending = budgetProofs.get(targetBuildId)
+    if (!pending) {
+      const { readTextOpenWorldBudgetRecoveryCarryProofsV1 } = await import('../product-production/artifact-store')
+      pending = readTextOpenWorldBudgetRecoveryCarryProofsV1({ scope, targetBuildId })
+      budgetProofs.set(targetBuildId, pending)
+    }
+    return (await pending).proofs.get(artifactKey) ?? null
+  }
+  const mediaTask = plan.tasks.find(task => task.taskKey === 'media.visual')
+  const mediaTaskBudget = mediaTask && productionAuthority.authority.valid
+    && productionAuthority.authority.origin === 'creator-media-v1'
+    ? await readTextOpenWorldCreatorMediaTaskBudgetV1({
+    scope, buildId: build.id, task: mediaTask,
+  }) : undefined
   const projection = await projectTextOpenWorldArtifactGovernanceTrustedV1({
     scope, production: production as ProductProductionRecordV1 & { id: number },
     build: build as ProductBuildRecordV1 & { id: number }, plan,
     artifactRows, lineageArtifactRows, buildEvidenceById, runEvidenceById, blobEvidenceById,
-  }, productionAuthority.authority)
+  }, productionAuthority.authority, budgetParentProof, mediaTaskBudget)
   const currentProduction = await db.productProductions.get(production.id)
   if (!currentProduction || currentProduction.id == null
     || currentProduction.productType !== 'text-open-world'
@@ -3671,6 +3780,10 @@ export async function readTextOpenWorldArtifactGovernanceV1(input: {
   })
   if (tailReadSetHash !== initialReadSetHash) {
     throw new Error('[text-open-world-artifact-governance] 读取期间治理快照已变化，请刷新')
+  }
+  for (const pending of budgetProofs.values()) {
+    const { assertProductBuildTerminalReadSetUnchangedV1 } = await import('../product-production/artifact-store')
+    await assertProductBuildTerminalReadSetUnchangedV1({ readSet: (await pending).readSet })
   }
   return projection
 }

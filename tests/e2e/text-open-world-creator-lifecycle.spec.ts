@@ -17,23 +17,16 @@ async function seedPublishedCreator(page: Page) {
     const [
       { db },
       { createTextOpenWorldCreatorReleaseFixtureV1 },
-      { acceptTextOpenWorldSourcePinBundleV1 },
       { createTextOpenWorldInstance },
       { hashProductProductionValueV2 },
     ] = await Promise.all([
       importer('/storyforge/src/lib/db/schema.ts'),
       importer('/storyforge/tests/helpers/text-open-world-creator-release.ts'),
-      importer('/storyforge/src/lib/open-world/source-pin.ts'),
       importer('/storyforge/src/lib/product/runtime-instances.ts'),
       importer('/storyforge/src/lib/product-production/hash.ts'),
     ])
-    const fixture = await createTextOpenWorldCreatorReleaseFixtureV1('world-release')
-    const sourceArtifacts = await acceptTextOpenWorldSourcePinBundleV1({
-      scope: fixture.scope,
-      buildId: fixture.creator.buildId,
-      controlEpoch: fixture.creator.controlEpoch,
-      bundle: fixture.pinBundle,
-    })
+    const fixture = await createTextOpenWorldCreatorReleaseFixtureV1('world-release', 1, { portableRoot: true })
+    const sourceArtifacts = fixture.portableRoot!.sourceArtifacts
     const now = Date.now()
     const release = {
       ...fixture.scope,
@@ -102,6 +95,7 @@ test('Creator正式游戏经UI篡改拒绝、导出导入、玩家恢复与项�
   const backupText = await readFile(backupPath!, 'utf8')
   const backupData = JSON.parse(backupText)
   expect(backupData.productBuildArtifacts).toHaveLength(seeded.sourceArtifactCount)
+  expect(backupData.productBuilds[0].rootBudgetEvidenceJson).toEqual(expect.any(String))
 
   const projectsBeforeTamperedImport = await page.evaluate(async () => {
     const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
@@ -144,10 +138,12 @@ test('Creator正式游戏经UI篡改拒绝、导出导入、玩家恢复与项�
       { db },
       { assertProductReleaseUnchanged },
       { verifyTextOpenWorldVNextSessionBindingV1 },
+      { verifyStoredProductBuildRootBudgetEvidenceV1 },
     ] = await Promise.all([
       importer('/storyforge/src/lib/db/schema.ts'),
       importer('/storyforge/src/lib/product/releases.ts'),
       importer('/storyforge/src/lib/open-world/session-binding.ts'),
+      importer('/storyforge/src/lib/product-production/root-budget-evidence-store.ts'),
     ])
     const [project, production, build, release, session] = await Promise.all([
       db.projects.get(importedProjectId),
@@ -162,7 +158,12 @@ test('Creator正式游戏经UI篡改拒绝、导出导入、玩家恢复与项�
     }
     await assertProductReleaseUnchanged(release.id)
     await verifyTextOpenWorldVNextSessionBindingV1(session)
-    const artifacts = await db.productBuildArtifacts.where('buildId').equals(build.id).count()
+    const artifactRows = await db.productBuildArtifacts.where('buildId').equals(build.id).toArray()
+    await verifyStoredProductBuildRootBudgetEvidenceV1({
+      scope: { projectId: importedProjectId, worldId: build.worldId, workId: build.workId },
+      build, artifacts: artifactRows,
+    })
+    const artifacts = artifactRows.length
     const commands = await db.productProductionCommands.where('productionId').equals(production.id).toArray()
     const result = commands
       .map((command: any) => JSON.parse(command.resultJson))

@@ -1,23 +1,18 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
-import { acceptTextOpenWorldSourcePinBundleV1 } from '../../src/lib/open-world/source-pin'
 import { createTextOpenWorldInstance } from '../../src/lib/product/runtime-instances'
 import { assertProductReleaseUnchanged } from '../../src/lib/product/releases'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import { verifyStoredProductBuildRootBudgetEvidenceV1 } from '../../src/lib/product-production/root-budget-evidence-store'
 import { cascadeDeleteProject } from '../../src/lib/registry/lifecycle'
 import type { ProductRelease } from '../../src/lib/types'
 import { verifyTextOpenWorldVNextSessionBindingV1 } from '../../src/lib/open-world/session-binding'
 import { createTextOpenWorldCreatorReleaseFixtureV1 } from '../helpers/text-open-world-creator-release'
 
 async function seedPublishedCreatorWorkspace(sourceKind: 'world-release' | 'novel') {
-  const fixture = await createTextOpenWorldCreatorReleaseFixtureV1(sourceKind)
-  const sourceArtifacts = await acceptTextOpenWorldSourcePinBundleV1({
-    scope: fixture.scope,
-    buildId: fixture.creator.buildId,
-    controlEpoch: fixture.creator.controlEpoch,
-    bundle: fixture.pinBundle,
-  })
+  const fixture = await createTextOpenWorldCreatorReleaseFixtureV1(sourceKind, 1, { portableRoot: true })
+  const sourceArtifacts = fixture.portableRoot!.sourceArtifacts
   const now = Date.now()
   const release: ProductRelease = {
     ...fixture.scope,
@@ -65,6 +60,7 @@ describe('TOW-G5-12 · Creator工作台完整备份、验真和删除', () => {
       const backup = await exportProjectJSON(seeded.fixture.scope.projectId)
       expect(backup.productProductions).toHaveLength(1)
       expect(backup.productBuilds).toHaveLength(1)
+      expect(backup.productBuilds[0]!.rootBudgetEvidenceJson).toBeTypeOf('string')
       expect(backup.productReleases).toHaveLength(1)
       expect(backup.productRuntimeSessions).toHaveLength(1)
       expect(backup.productBuildArtifacts.filter(row => (
@@ -101,6 +97,15 @@ describe('TOW-G5-12 · Creator工作台完整备份、验真和删除', () => {
       const importedSourceArtifacts = await db.productBuildArtifacts
         .where('buildId').equals(build!.id!).toArray()
       expect(importedSourceArtifacts).toHaveLength(1 + seeded.sourceArtifacts.unitArtifacts.length)
+      expect(build!.rootTerminalReceiptHash).toBe(seeded.fixture.portableRoot!.rootTerminalReceiptHash)
+      await verifyStoredProductBuildRootBudgetEvidenceV1({
+        scope: { projectId: importedProjectId, worldId: build!.worldId, workId: build!.workId },
+        build: build!,
+        artifacts: importedSourceArtifacts,
+      })
+      const reexported = await exportProjectJSON(importedProjectId)
+      expect(reexported.productBuilds[0]!.rootBudgetEvidenceJson)
+        .toBe(backup.productBuilds[0]!.rootBudgetEvidenceJson)
 
       await cascadeDeleteProject(importedProjectId)
       expect(await db.projects.get(importedProjectId)).toBeUndefined()

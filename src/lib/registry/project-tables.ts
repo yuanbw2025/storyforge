@@ -1795,6 +1795,7 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
   {
     table: db.productBuilds,
     name: "productBuilds",
+    portableData: { kind: "product-build-root-budget", evidenceField: "rootBudgetEvidenceJson" },
     owner: "project",
     exportable: true,
     exportIdField: true,
@@ -1878,6 +1879,26 @@ const PROJECT_TABLE_REGISTRATIONS: ProjectTableRegistration[] = [
           { path: "reservations", keyFields: ["runId", "attempt"], separator: ":" },
         ],
         exportAs: "_budgetLedgerPortableJson",
+        onUnmapped: "require-if-present",
+      },
+      {
+        // Recovery authorization compares the failed Run/attempt with the
+        // ledger. Preserve that identity across a portable backup too.
+        field: "failureJson",
+        remapVia: "agentRuns",
+        kind: "json-id-paths",
+        paths: [
+          ...["", "previousFailure.", "repairCause.", "previousFailure.repairCause.",
+            "taskFailures.*.", "previousFailure.taskFailures.*."].flatMap(prefix => [
+            `${prefix}failureProvenance.runId`, `${prefix}failureProvenance.rootRunId`,
+          ]),
+          "pausedProviderReservations.*.runId",
+          "automaticallySettledReservations.*.runId",
+          "unknownResultAccounting.runId",
+          "resolution.unknownResultAccounting.runId",
+          "resolution.unknownResultReservation.runId",
+        ],
+        exportAs: "_failurePortableJson",
         onUnmapped: "require-if-present",
       },
     ],

@@ -472,6 +472,50 @@ describe('TOW-G5-02 · Creator Brief UI', () => {
     expect(creatorBriefMocks.consult).toHaveBeenCalledTimes(1)
   })
 
+  it('后继制作待授权 Brief 刷新后回到简报，不误入已取消 Build', async () => {
+    const recovered = consultationSession()
+    recovered.production = { ...recovered.production, status: 'brief-ready', currentBuildNumber: 1 }
+    creatorBriefMocks.recover.mockResolvedValue(recovered)
+    await act(async () => root.render(createElement(TextOpenWorldCreatorWorkflow, { novelScope: SCOPE })))
+    await waitFor(() => expect(host.querySelector('[data-testid="text-open-world-creator-brief-studio"]')).not.toBeNull())
+    expect(host.textContent).toContain('保留旧 Build #1')
+  })
+
+  it('已停止或修改未确认的简报不能把旧确认带入新制作核对', async () => {
+    const original = consultationSession()
+    const draft = { ...original.draft, unresolvedQuestions: [] }
+    const brief = await confirmedBrief(original, draft)
+    const onContinue = vi.fn()
+    const stopped = {
+      ...original, draft, confirmedBrief: brief,
+      production: { ...original.production, status: 'stopped' as const, currentBuildNumber: 1 },
+    }
+    await act(async () => root.render(createElement(TextOpenWorldCreatorBriefStudio, {
+      initialSession: stopped, onBack: vi.fn(), onContinue,
+    })))
+    expect(button(host, '核对模型与预算').disabled).toBe(true)
+    await act(async () => button(host, '核对模型与预算').click())
+    expect(onContinue).not.toHaveBeenCalled()
+    const ready = { ...stopped, production: { ...stopped.production, status: 'brief-ready' as const } }
+    await act(async () => root.render(createElement(TextOpenWorldCreatorBriefStudio, {
+      initialSession: ready, onBack: vi.fn(), onContinue,
+    })))
+    expect(button(host, '核对模型与预算').disabled).toBe(false)
+    await setControlValue(host.querySelector<HTMLInputElement>('#tow-title')!, '修订后河灯长夜')
+    expect(button(host, '核对模型与预算').disabled).toBe(true)
+    await act(async () => button(host, '保存草稿').click())
+    expect(button(host, '核对模型与预算').disabled).toBe(true)
+    for (const label of [
+      '我确认当前来源身份与 Hash', '我理解首版是有边界的自由演绎',
+      '我确认未决问题已经清空', '我理解通过质量门后直接发布',
+    ]) await act(async () => checkbox(host, label).click())
+    await act(async () => button(host, '确认 Brief').click())
+    await waitFor(() => expect(button(host, '核对模型与预算').disabled).toBe(false))
+    await act(async () => button(host, '核对模型与预算').click())
+    expect(onContinue).toHaveBeenCalledTimes(1)
+    expect(onContinue.mock.calls[0]?.[0].confirmedBrief.draft.gameTitle).toBe('修订后河灯长夜')
+  })
+
   it('从设置返回后恢复已确认 Brief，并直接回到模型与预算核对页', async () => {
     const recovered = consultationSession()
     const draft = { ...recovered.draft, unresolvedQuestions: [] }

@@ -13,12 +13,14 @@ import type {
   TextOpenWorldProductionRunContractBlueprintV1,
   TextOpenWorldProductionStageV1,
   TextOpenWorldProductionTaskContractV1,
+  TextOpenWorldProductionBudgetProfileV1,
 } from '../types'
 import {
   TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_KINDS_V1,
   TEXT_OPEN_WORLD_PRODUCTION_STAGES_V1,
 } from '../types'
 import { TEXT_OPEN_WORLD_SOURCE_PIN_LIMITS_V1 } from './source-pin-contract'
+import { hasTextOpenWorldBoundedRepairBudgetV1 } from './production-budget'
 
 const REQUIRED_STALE_WATCHES = [
   'sourcePinHash', 'briefHash', 'planHash', 'controlEpoch', 'inputArtifactHashes',
@@ -600,6 +602,27 @@ export const TEXT_OPEN_WORLD_PRODUCTION_MODEL_CALL_BUDGET_V1 = Object.freeze({
     .reduce((sum, task) => sum + task.recommendedModelCalls, 0),
 })
 
+/** Each model task keeps its existing bounded attempts. The opt-in profile
+ * reserves enough calls for those attempts instead of advertising a retry
+ * that cannot dispatch. Legacy contracts and their hashes are unchanged. */
+export function textOpenWorldProductionTaskContractsForBudgetV1(
+  profile: TextOpenWorldProductionBudgetProfileV1 = 'standard-v1',
+): TextOpenWorldProductionTaskContractV1[] {
+  if (!['standard-v1', 'bounded-repair-v1'].includes(profile)) fail('生产预算档位未登记')
+  return TEXT_OPEN_WORLD_PRODUCTION_TASK_CONTRACTS_V1.map(task => ({
+    ...task,
+    recommendedModelCalls: profile === 'bounded-repair-v1' && task.executionMode === 'model'
+      ? task.recommendedModelCalls * task.retryPolicy.maxAttempts : task.recommendedModelCalls,
+  }))
+}
+
+export function textOpenWorldProductionRecommendedCallsV1(
+  profile: TextOpenWorldProductionBudgetProfileV1 = 'standard-v1',
+): number {
+  return textOpenWorldProductionTaskContractsForBudgetV1(profile)
+    .reduce((sum, task) => sum + task.recommendedModelCalls, 0)
+}
+
 /**
  * Token reservations intentionally keep the authored production proportions
  * independent from provider-call fan-out. P9 may execute one isolated call per
@@ -899,6 +922,7 @@ function planTask(
 
 /** Generates the active, shared-Harness-compatible text-open-world plan. */
 export async function createTextOpenWorldProductionPlanV1(input: {
+  budgetProfile?: TextOpenWorldProductionBudgetProfileV1
   buildNumber: number
   controlEpoch?: number
   /** Hash of the scheduler compatibility Brief supplied below. */
@@ -919,6 +943,9 @@ export async function createTextOpenWorldProductionPlanV1(input: {
   mediaCostAuthorized?: boolean
 }): Promise<ProductProductionPlanV3> {
   const brief = parseProductProductionBriefV3(input.brief)
+  if (input.budgetProfile === 'bounded-repair-v1' && !hasTextOpenWorldBoundedRepairBudgetV1(brief.productionBudget)) {
+    fail('修复预算档位与作者冻结的完整资源上限不一致')
+  }
   if (brief.intent.productType !== 'text-open-world') fail('只能为 text-open-world Brief 创建专属 Plan')
   if (brief.media.voiceLineCount > 0) fail('文字开放世界首版尚未实现独立voice媒资通路，请将voiceLineCount设为0')
   if (!Number.isInteger(input.buildNumber) || input.buildNumber < 1) fail('buildNumber 无效')
@@ -950,7 +977,9 @@ export async function createTextOpenWorldProductionPlanV1(input: {
     fail('P0来源单元 Artifact keys 不连续或不唯一')
   }
 
-  const contracts = validateTextOpenWorldProductionTaskContractsV1()
+  const contracts = validateTextOpenWorldProductionTaskContractsV1(
+    textOpenWorldProductionTaskContractsForBudgetV1(input.budgetProfile),
+  )
   const modelCallsByTask = allocateModelCalls(contracts, brief.productionBudget.maximumModelCalls)
   const plannedModelCalls = [...modelCallsByTask.values()].reduce((sum, value) => sum + value, 0)
   const tokenBudgetWeightTotal = contracts

@@ -121,7 +121,7 @@ export async function seedCurrentProductBuild(input: {
     rootTerminalReceiptHash: null,
     adoptionIntentHash: null,
     releasedProductReleaseId: null,
-    failureJson: '',
+    failureJson: '{}',
     authorizedAt: now,
     startedAt: now,
     completedAt: now,

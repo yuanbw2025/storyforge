@@ -1,10 +1,19 @@
 import { hashProductProductionValueV2, isSha256Hash } from '../product-production/hash'
 import { parseProductBuildQualityReportV1 } from '../product-production/adoption'
 import { parseProductProductionBriefV3 } from '../product-production/contracts'
+import {
+  assertTextOpenWorldAssemblyInputsV1,
+  freezeTextOpenWorldResponsibilitySnapshotV1,
+  validateTextOpenWorldResponsibilitySnapshotV1,
+} from './responsibility-assembly'
 import { readMediaBlobObjectData } from '../product-production/media-blob-store'
 import { parseProductRuntimePackageV1 } from '../product-production/runtime-package'
 import { db } from '../db/schema'
 import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
+import {
+  parseTextOpenWorldCreatorMediaAuthorizationV1,
+  type TextOpenWorldCreatorMediaAuthorizationV1,
+} from './creator-media-contract'
 import type {
   ProductProductionTaskExecutionInputV1,
   ProductProductionTaskExecutionResultV1,
@@ -54,8 +63,11 @@ import { parseTextOpenWorldModulesV1 } from './modules'
 import { DEFAULT_TEXT_OPEN_WORLD_CALIBRATION_V1 } from './product-config'
 import { parseTextOpenWorldRuntimePackageV1 } from './runtime-package'
 import { createInitialTextOpenWorldSessionProjectionV1 } from './session-projection'
+import { resolveTextOpenWorldSceneRegionV1 } from './scene-region-binding'
 import { validateTextOpenWorldDeterministicPreflightV1 } from './system-finalize-production'
 import { validateTextOpenWorldKnowledgeProductionClosureV1 } from './knowledge-production'
+import { assertTextOpenWorldItemSourceClosureV1 } from './item-source-production'
+import { resolveTextOpenWorldVendorServiceV1 } from './npc-runtime-catalog-production'
 import {
   evaluateTextOpenWorldMediaCoverageV1,
   verifyTextOpenWorldMediaRightsV1,
@@ -228,6 +240,12 @@ function readV3Artifacts(input: ProductProductionTaskExecutionInputV1): V3Artifa
 }
 
 function validateV3HashChain(artifacts: V3Artifacts): void {
+  assertTextOpenWorldItemSourceClosureV1({ catalog: artifacts.items, economy: artifacts.craftingEconomy,
+    acquisitions: (artifacts.quests.itemAcquisitionSelections ?? []).flatMap(selection => selection.items.map(item => ({
+      itemKey: artifacts.items.items[item.itemNumber - 1]?.key ?? '',
+      objectiveKey: artifacts.skeletons.objectives[selection.objectiveNumber - 1]?.key ?? '',
+    }))),
+  })
   const system = artifacts.system
   const mismatches = [
     artifacts.sourceLedger.sourcePinHash !== artifacts.sourcePin.pinHash,
@@ -298,6 +316,7 @@ async function generatedMediaBindings(
   execution: ProductProductionTaskExecutionInputV1,
   requirements: TextOpenWorldMediaRequirementsV1,
   brief: ProductProductionBriefV3,
+  importAuthorizations: readonly TextOpenWorldCreatorMediaAuthorizationV1[],
 ): Promise<{
   assetKeyBySlot: Map<string, string>
   artifactKeys: string[]
@@ -384,6 +403,7 @@ async function generatedMediaBindings(
       })
       rightsEvidence.push(await verifyTextOpenWorldMediaRightsV1({
         artifact: row, qualityProfile: brief.qualityProfile, capabilityRequirement: capability,
+        importAuthorizations,
       }))
       assetKeyBySlot.set(slot.key, metadata.assetKey)
       assets.push({
@@ -423,10 +443,14 @@ function compileModulePayloads(
   const binding = qdd.catalogBindings
   const actionModuleVersion = artifacts.system.runtimeModules.find(module => module.moduleKey === 'actions')?.schemaVersion
   if (actionModuleVersion !== 15 && actionModuleVersion !== 16
-    && actionModuleVersion !== 17 && actionModuleVersion !== 18) {
+    && actionModuleVersion !== 17 && actionModuleVersion !== 18 && actionModuleVersion !== 19 && actionModuleVersion !== 20) {
     fail('SystemConfigs任务Action版本无效')
   }
-  const expectedActionModuleVersion = qdd.governance.protectedStoryRevealActionsReady === true
+  const expectedActionModuleVersion = qdd.governance.actionPathEvidenceReady === true
+    ? 20
+    : qdd.governance.fixedObjectiveFulfillmentReady === true
+    ? 19
+    : qdd.governance.protectedStoryRevealActionsReady === true
     ? 18
     : qdd.governance.structuredCombatMechanicsReady === true
     ? 17
@@ -480,9 +504,35 @@ function compileModulePayloads(
   const encounterBindingByKey = new Map(binding.encounters.map(item => [item.encounterKey, item]))
   const recipeBindingByKey = new Map(binding.recipes.map(item => [item.recipeKey, item]))
   const vendorBindingByKey = new Map(binding.vendors.map(item => [item.vendorKey, item]))
-  const runtimeVendorKeys = new Set(artifacts.craftingEconomy.vendors.map(vendor => vendor.key))
+  const canonicalVendorOwners = artifacts.npcs.vendorIdentityContract === 'canonical-vendor-owners-v1'
+  const vendorServices: Array<{
+    catalog: TextOpenWorldCraftingEconomyCatalogV1['vendors'][number]
+    binding: TextOpenWorldQuestDesignDocumentsV1['catalogBindings']['vendors'][number]
+    title: string
+  }> = artifacts.craftingEconomy.vendors.flatMap(vendor => {
+    const runtime = vendorBindingByKey.get(vendor.key) ?? fail(`商店未完成P8F绑定:${vendor.key}`)
+    const { actor, replacement } = resolveTextOpenWorldVendorServiceV1(artifacts.npcs, {
+      ...vendor, actorRequirementKey: vendor.runtimeBinding.actorRequirementKey,
+    })
+    if (runtime.actorKey !== actor.key || runtime.factionKey !== actor.factionKey) fail(`商店P8F角色身份不匹配:${vendor.key}`)
+    if (replacement) {
+      const expectedKey = `vendor.replacement.${vendor.key}`
+      if (!runtime.replacement || runtime.replacement.actorKey !== replacement.key
+        || runtime.replacement.vendorKey !== expectedKey
+        || runtime.replacement.buyActionKey !== `action.buy.${expectedKey}`
+        || runtime.replacement.sellActionKey !== `action.sell.${expectedKey}`) fail(`商店接替未在P8F完整绑定:${vendor.key}`)
+      return [
+        { catalog: vendor, binding: runtime, title: vendor.title },
+        { catalog: vendor, title: `${vendor.title}接替服务`, binding: {
+          ...runtime.replacement, factionKey: runtime.factionKey, availabilityConditionKeys: runtime.availabilityConditionKeys,
+        } },
+      ]
+    }
+    if (runtime.replacement) fail(`商店不允许额外接替绑定:${vendor.key}`)
+    return [{ catalog: vendor, binding: runtime, title: vendor.title }]
+  })
   const serviceKeysByActor = new Map<string, string[]>()
-  for (const vendor of binding.vendors) {
+  for (const { binding: vendor } of vendorServices) {
     serviceKeysByActor.set(vendor.actorKey, [...(serviceKeysByActor.get(vendor.actorKey) ?? []), vendor.vendorKey])
   }
   const edgeBindingByKey = new Map(binding.edges.map(item => [item.edgeKey, item]))
@@ -627,7 +677,8 @@ function compileModulePayloads(
       })),
       scenes: artifacts.scenes.scenes.map(scene => ({
         key: scene.key, order: scene.order, sourceKind: scene.sourceKind, sourceKey: scene.sourceKey,
-        title: scene.title, purpose: scene.purpose, regionKey: scene.regionKey,
+        title: scene.title, purpose: scene.purpose,
+        regionKey: resolveTextOpenWorldSceneRegionV1({ scene, locations: artifacts.map.locations, quests: artifacts.skeletons.quests }),
         locationKey: scene.locationKey, questKey: scene.questKey, stageKey: scene.stageKey,
         objectiveKey: scene.objectiveKey, actorKey: scene.actorKey,
         interactionKey: scene.interactionKey, randomEventKey: scene.randomEventKey,
@@ -708,17 +759,19 @@ function compileModulePayloads(
         key: schedule.key, actorKey: schedule.actorKey,
         entries: schedule.entries.map(entry => ({
           ...entry,
-          availableServiceKeys: (serviceKeysByActor.get(schedule.actorKey) ?? []).filter(serviceKey => (
-            artifacts.craftingEconomy.vendors.find(vendor => vendor.key === serviceKey)?.locationKey === entry.locationKey
-          )),
+          availableServiceKeys: vendorServices.filter(service => service.binding.actorKey === schedule.actorKey
+            && service.catalog.locationKey === entry.locationKey
+            && (!canonicalVendorOwners || entry.availableServiceKeys.includes(`service.${service.catalog.key}`)))
+            .map(service => service.binding.vendorKey),
         })),
       })),
-      serviceContinuity: [...runtimeVendorKeys].map(serviceKey => {
-        const ownerActorKey = vendorBindingByKey.get(serviceKey)?.actorKey ?? fail(`商店没有Actor绑定:${serviceKey}`)
+      serviceContinuity: vendorServices.map(({ binding: runtime }) => {
+        const serviceKey = runtime.vendorKey
         return {
-          key: `service-continuity.${serviceKey}`, ownerActorKey, serviceKey,
-          policy: 'disappear-on-owner-death' as const,
-          replacementActorKey: null, replacementServiceKey: null,
+          key: `service-continuity.${serviceKey}`, ownerActorKey: runtime.actorKey, serviceKey,
+          policy: runtime.replacement ? 'replace-on-owner-death' as const : 'disappear-on-owner-death' as const,
+          replacementActorKey: runtime.replacement?.actorKey ?? null,
+          replacementServiceKey: runtime.replacement?.vendorKey ?? null,
         }
       }),
     },
@@ -926,10 +979,9 @@ function compileModulePayloads(
         maximumTransactionQuantity: artifacts.craftingEconomy.economyRules.maximumTransactionQuantity,
         maximumTransactionTotal: artifacts.craftingEconomy.economyRules.maximumTransactionTotal,
       },
-      vendors: artifacts.craftingEconomy.vendors.map(vendor => {
-        const runtime = vendorBindingByKey.get(vendor.key) ?? fail(`商店未完成P8F绑定:${vendor.key}`)
+      vendors: vendorServices.map(({ catalog: vendor, binding: runtime, title }) => {
         return {
-          key: vendor.key, title: vendor.title, actorKey: runtime.actorKey,
+          key: runtime.vendorKey, title, actorKey: runtime.actorKey,
           locationKey: vendor.locationKey, factionKey: runtime.factionKey,
           buyPriceMultiplierBasisPoints: vendor.buyPriceMultiplierBasisPoints,
           sellPriceMultiplierBasisPoints: vendor.sellPriceMultiplierBasisPoints,
@@ -1108,6 +1160,7 @@ export async function compileTextOpenWorldRuntimePackageV1(input: {
   execution: ProductProductionTaskExecutionInputV1
   createdAt?: number
 }): Promise<{ runtimePackage: ProductRuntimePackageV1; report: TextOpenWorldIntegrationReportV1 }> {
+  assertTextOpenWorldAssemblyInputsV1(input.execution)
   await validateV3ArtifactClosure(input.execution)
   const artifacts = readV3Artifacts(input.execution)
   validateV3HashChain(artifacts)
@@ -1129,12 +1182,13 @@ export async function compileTextOpenWorldRuntimePackageV1(input: {
     || productionBuild.briefHash !== productionBriefRow.briefHash) {
     fail('找不到当前Build绑定的授权Product Brief')
   }
-  const creatorContracts = productionBriefRow.briefKind === 'text-open-world-creator-v1'
-    ? (await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
+  const creatorAuthority = productionBriefRow.briefKind === 'text-open-world-creator-v1'
+    ? await readTextOpenWorldCreatorDerivedBuildAuthorityV1({
         scope: input.execution.scope,
         buildId: productionBuild.id!,
-      })).contracts
+      })
     : null
+  const creatorContracts = creatorAuthority?.contracts
   const sharedBrief = creatorContracts?.executionBrief
     ?? parseProductProductionBriefV3(productionBriefRow.briefJson)
   const sharedBriefHash = creatorContracts?.start.executionBriefHash
@@ -1152,7 +1206,12 @@ export async function compileTextOpenWorldRuntimePackageV1(input: {
       !== artifacts.gameBrief.completion.minimumMediaCoverage) {
     fail('V3 GameBrief与授权Product Brief不一致')
   }
-  const mediaBindings = await generatedMediaBindings(input.execution, artifacts.media, sharedBrief)
+  const importAuthorizations = await Promise.all((creatorAuthority?.commandChain ?? [])
+    .filter(command => command.type === 'authorize-text-open-world-creator-media')
+    .map(command => parseTextOpenWorldCreatorMediaAuthorizationV1(command.resultJson)))
+  const mediaBindings = await generatedMediaBindings(
+    input.execution, artifacts.media, sharedBrief, importAuthorizations,
+  )
   const modulePayloads = compileModulePayloads(artifacts, mediaBindings.assetKeyBySlot)
   const innerCandidate: TextOpenWorldRuntimePackageV1 = {
     schema: 'storyforge.text-open-world.runtime-package', version: 1,
@@ -1286,7 +1345,8 @@ export async function compileTextOpenWorldRuntimePackageV1(input: {
     rightsEvidenceHash: rightsReport.rightsEvidenceHash,
   })
   const reportBody: Omit<TextOpenWorldIntegrationReportV1, 'integrationReportHash'> = {
-    schema: 'storyforge.text-open-world-integration-report', version: 1,
+    schema: 'storyforge.text-open-world-integration-report', version: 2,
+    responsibilitySnapshot: await freezeTextOpenWorldResponsibilitySnapshotV1(input.execution, artifacts.sourcePin.pinHash),
     productType: 'text-open-world', productInstanceKey: artifacts.gameBrief.productInstanceKey,
     runtimePackageHash, sourcePinHash: artifacts.sourcePin.pinHash,
     systemConfigsHash: artifacts.system.systemConfigsHash,
@@ -1300,6 +1360,12 @@ export async function compileTextOpenWorldRuntimePackageV1(input: {
       parsed: true,
     })),
     generatedBindings: {
+      sceneRegionCorrections: artifacts.scenes.scenes.flatMap(scene => {
+        const runtimeRegionKey = resolveTextOpenWorldSceneRegionV1({ scene, locations: artifacts.map.locations, quests: artifacts.skeletons.quests })
+        return runtimeRegionKey === scene.regionKey ? [] : [{
+          sceneKey: scene.key, locationKey: scene.locationKey, sourceRegionKey: scene.regionKey, runtimeRegionKey,
+        }]
+      }),
       endingActionKeys: artifacts.quests.endingBindings.routes.map(route => route.actionKey),
       generatedMediaArtifactKeys, fallbackMediaSlotKeys: fallbackKeys,
     },
@@ -1333,9 +1399,10 @@ function qddHasStart(qdd: TextOpenWorldQuestDesignDocumentsV1): true {
 export async function validateTextOpenWorldIntegrationReportV1(input: {
   runtimePackage: ProductRuntimePackageV1
   report: TextOpenWorldIntegrationReportV1
+  expectedPlanHash?: string
 }): Promise<TextOpenWorldIntegrationReportV1> {
   const { runtimePackage, report } = input
-  if (report.schema !== 'storyforge.text-open-world-integration-report' || report.version !== 1
+  if (report.schema !== 'storyforge.text-open-world-integration-report' || ![1, 2].includes(report.version)
     || report.productType !== 'text-open-world' || !runtimePackage.textOpenWorldVNext
     || report.productInstanceKey !== runtimePackage.definition.productKey) fail('IntegrationReport身份无效')
   const reportBody = { ...report }
@@ -1346,7 +1413,30 @@ export async function validateTextOpenWorldIntegrationReportV1(input: {
   }
   const packageHash = await hashProductProductionValueV2(runtimePackage)
   if (packageHash !== report.runtimePackageHash) fail('IntegrationReport与RuntimePackage Hash不一致')
+  if (report.version === 2) {
+    if (input.expectedPlanHash && report.responsibilitySnapshot?.planHash !== input.expectedPlanHash) fail('三线快照不属于当前冻结计划')
+    await validateTextOpenWorldResponsibilitySnapshotV1(report.responsibilitySnapshot, {
+      sourcePinHash: report.sourcePinHash,
+      generatedMediaArtifactKeys: report.generatedBindings.generatedMediaArtifactKeys,
+    })
+  } else if (report.responsibilitySnapshot !== undefined) fail('旧版 IntegrationReport 不得冒充三线快照')
   const parsedModules = parseTextOpenWorldModulesV1(runtimePackage.textOpenWorldVNext)
+  const corrections = report.generatedBindings.sceneRegionCorrections
+  if (corrections !== undefined) {
+    if (!Array.isArray(corrections) || new Set(corrections.map(item => item.sceneKey)).size !== corrections.length) {
+      fail('IntegrationReport场景地区校正证据重复或无效')
+    }
+    for (const correction of corrections) {
+      if (parsedModules.narrative.version !== 2) fail('旧版Narrative没有可校正的场景地区')
+      const scene = parsedModules.narrative.scenes.find(item => item.key === correction.sceneKey)
+      if (!scene || scene.sourceKind !== 'quest-objective'
+        || scene.locationKey !== correction.locationKey || scene.regionKey !== correction.runtimeRegionKey
+        || correction.sourceRegionKey === correction.runtimeRegionKey
+        || !parsedModules.world.regions.some(region => region.key === correction.sourceRegionKey)) {
+        fail('IntegrationReport场景地区校正与RuntimePackage不一致')
+      }
+    }
+  }
   const moduleKeys = new Set(report.modules.map(item => item.moduleKey))
   if (report.modules.length !== TEXT_OPEN_WORLD_RUNTIME_MODULE_KEYS_V1.length
     || moduleKeys.size !== report.modules.length
@@ -1473,6 +1563,7 @@ export function createTextOpenWorldReleaseQaExecutorV1(): ProductProductionTaskE
     const report = await validateTextOpenWorldIntegrationReportV1({
       runtimePackage,
       report: payload<TextOpenWorldIntegrationReportV1>(execution, 'text-open-world.integration-report'),
+      expectedPlanHash: execution.planHash,
     })
     const packageHash = await hashProductProductionValueV2(runtimePackage)
     const hardEvidence: Record<string, { passed: boolean; evidence: string[] }> = {

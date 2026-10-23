@@ -2,7 +2,7 @@
   "schema": "storyforge.text-open-world.g7-calibration-matrix",
   "version": 1,
   "profileStatus": "implementation-ready-awaiting-real-provider-evidence",
-  "profileNote": "自动测试只证明独立评审协议、确定性指标、账本和回执闭环；不得冒充真实外部模型已经达到叙事质量线。每个正式Build必须由作者显式使用不同provider/model运行一次，才能产生通过回执。",
+  "profileNote": "自动测试只证明独立评审协议、确定性指标、账本和回执闭环；不得冒充真实外部模型已经达到叙事质量线。每个正式Build必须由作者显式使用不同provider/model运行独立评审；完全相同Build和输入的原始评分可显式复核制作来源用量，保留旧回执且不重复调用模型。",
   "thresholds": {
     "minimumNarrativeScore": 70,
     "variantsPerTemplate": 3,
@@ -15,7 +15,7 @@
       "id": "TOW-G7-C01",
       "title": "独立评审必须走登记的eval-only入口且绝不写内容或运行状态",
       "evidenceFile": "tests/regression/R-OPEN-WORLD7-release-calibration.test.ts",
-      "testName": "独立grader走登记的只读入口并冻结用量、延迟和输入输出Hash"
+      "testName": "独立grader走登记的只读入口并冻结用量、延迟和原始输出Hash (%s)"
     },
     {
       "id": "TOW-G7-C02",
@@ -43,15 +43,15 @@
     },
     {
       "id": "TOW-G7-C06",
-      "title": "模型调用量、Token、平均与P95延迟必须来自当前Build预算账本",
-      "evidenceFile": "src/lib/open-world/creator-quality.ts",
-      "testName": "production-call-usage-observed"
+      "title": "当前版本与已验真制作来源分别保留真实用量，零调用媒资子版本不虚增",
+      "evidenceFile": "tests/regression/R-OPEN-WORLD7-calibration-lineage.test.ts",
+      "testName": "零调用媒资子版本继承真实制作来源，失败尝试计一次且当前版本仍为零"
     },
     {
       "id": "TOW-G7-C07",
       "title": "费用必须按生产前冻结价格快照估算并明确不是供应商账单",
-      "evidenceFile": "src/lib/open-world/creator-quality.ts",
-      "testName": "这不是供应商账单"
+      "evidenceFile": "src/lib/open-world/creator-calibration-usage.ts",
+      "testName": "不是供应商账单，预算不跨版本互相抵扣"
     },
     {
       "id": "TOW-G7-C08",

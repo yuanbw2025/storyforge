@@ -8,7 +8,6 @@ import {
   inspectTextOpenWorldCheckpointV1,
 } from '../../src/lib/open-world/checkpoints'
 import { verifyTextOpenWorldVNextSessionBindingV1 } from '../../src/lib/open-world/session-binding'
-import { acceptTextOpenWorldSourcePinBundleV1 } from '../../src/lib/open-world/source-pin'
 import {
   putMediaBlobObject,
   readProductMediaBlobData,
@@ -35,13 +34,7 @@ function bytes(value: string): ArrayBuffer {
 }
 
 async function seedPublishedCreatorWorkspace() {
-  const fixture = await createTextOpenWorldCreatorReleaseFixtureV1('world-release')
-  await acceptTextOpenWorldSourcePinBundleV1({
-    scope: fixture.scope,
-    buildId: fixture.creator.buildId,
-    controlEpoch: fixture.creator.controlEpoch,
-    bundle: fixture.pinBundle,
-  })
+  const fixture = await createTextOpenWorldCreatorReleaseFixtureV1('world-release', 1, { portableRoot: true })
   const now = Date.now()
   const release: ProductRelease = {
     ...fixture.scope,

@@ -3,6 +3,7 @@ import { estimateTokens } from '../ai/context-budget'
 import { db } from '../db/schema'
 import { readAcceptedBuildArtifacts } from '../product-production/artifact-store'
 import { runConfiguredProductionTextV1, type ProviderBindingReceiptV1 } from '../product-production/capabilities'
+import { ProductProductionContextBudgetErrorV1 } from '../product-production/context'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from '../product-production/hash'
 import { parseProductionModelJsonObjectV1 } from '../product-production/production-executor'
 import type { ProductProductionTaskExecutionResultV1, ProductProductionTaskExecutorV1 } from '../product-production/scheduler'
@@ -118,9 +119,13 @@ export interface TextOpenWorldBalanceReviewInputContextV1 {
   contextSelectionHash: string
 }
 
+const SEMANTIC_SCENE_FIELDS = ['key', 'sourceKind', 'sourceKey', 'title', 'openingText', 'bodyText', 'attitudeOpenings', 'allowedKnowledgeClaimKeys'] as const
+type SemanticSceneV1 = Pick<TextOpenWorldSceneScriptsV1['scenes'][number], typeof SEMANTIC_SCENE_FIELDS[number]>
+type SemanticSceneTableV2 = { fields: typeof SEMANTIC_SCENE_FIELDS; rows: Array<Array<SemanticSceneV1[keyof SemanticSceneV1]>> }
+
 export interface TextOpenWorldSemanticReviewInputContextV1 {
   schema: 'storyforge.text-open-world-semantic-review-input'
-  version: 1
+  version: 1 | 2
   productInstanceKey: string
   artifactHashes: Array<{ artifactKey: TextOpenWorldProductionArtifactKindV1; contentHash: string; payloadHash: string }>
   sourceClaims: Array<{ claimKey: string; claimKind: string; canonicalName: string; statement: string }>
@@ -173,7 +178,8 @@ export interface TextOpenWorldSemanticReviewInputContextV1 {
   }>
   quests: Array<Pick<TextOpenWorldQuestDesignDocumentsV1['quests'][number], 'key' | 'type' | 'title' | 'description' | 'estimatedMinutes' | 'regionKeys'>>
   objectives: Array<Pick<TextOpenWorldQuestDesignDocumentsV1['objectives'][number], 'key' | 'questKey' | 'title' | 'description' | 'successDescription'>>
-  scenes: Array<Pick<TextOpenWorldSceneScriptsV1['scenes'][number], 'key' | 'sourceKind' | 'sourceKey' | 'title' | 'openingText' | 'bodyText' | 'attitudeOpenings' | 'allowedKnowledgeClaimKeys'>>
+  /** v2 encodes the identical scene fields as rows; v1 stays byte-stable. */
+  scenes: SemanticSceneV1[] | SemanticSceneTableV2
   inputPolicy: Pick<TextOpenWorldActionBindingsV1, 'unmatchedNaturalLanguage' | 'thresholds' | 'governance'>
   contentBudget: TextOpenWorldContentBudgetV1
   preflight: TextOpenWorldDeterministicPreflightV1
@@ -392,7 +398,8 @@ async function buildSemanticContext(scope: WorkspaceScope, buildId: number): Pro
     || budget.questDesignDocumentsHash !== quests.questDesignDocumentsHash
     || preflight.contentBudgetHash !== budget.contentBudgetHash || !preflight.result.readyForModelReviews) fail('语义评审输入Hash链或预检状态无效')
   const body = {
-    schema: 'storyforge.text-open-world-semantic-review-input' as const, version: 1 as const,
+    schema: 'storyforge.text-open-world-semantic-review-input' as const,
+    version: quests.governance.actionPathEvidenceReady === true ? 2 as const : 1 as const,
     productInstanceKey: source.productInstanceKey, artifactHashes: hashes,
     sourceClaims: source.entries.map(claim => ({ claimKey: claim.claimKey, claimKind: claim.claimKind, canonicalName: claim.canonicalName, statement: claim.statement })),
     experience: {
@@ -455,7 +462,9 @@ async function buildSemanticContext(scope: WorkspaceScope, buildId: number): Pro
     })),
     quests: quests.quests.map(item => ({ key: item.key, type: item.type, title: item.title, description: item.description, estimatedMinutes: item.estimatedMinutes, regionKeys: item.regionKeys })),
     objectives: quests.objectives.map(item => ({ key: item.key, questKey: item.questKey, title: item.title, description: item.description, successDescription: item.successDescription })),
-    scenes: scenes.scenes.map(item => ({ key: item.key, sourceKind: item.sourceKind, sourceKey: item.sourceKey, title: item.title, openingText: item.openingText, bodyText: item.bodyText, attitudeOpenings: item.attitudeOpenings, allowedKnowledgeClaimKeys: item.allowedKnowledgeClaimKeys })),
+    scenes: quests.governance.actionPathEvidenceReady === true
+      ? { fields: SEMANTIC_SCENE_FIELDS, rows: scenes.scenes.map(item => SEMANTIC_SCENE_FIELDS.map(field => item[field])) }
+      : scenes.scenes.map(item => ({ key: item.key, sourceKind: item.sourceKind, sourceKey: item.sourceKey, title: item.title, openingText: item.openingText, bodyText: item.bodyText, attitudeOpenings: item.attitudeOpenings, allowedKnowledgeClaimKeys: item.allowedKnowledgeClaimKeys })),
     inputPolicy: { unmatchedNaturalLanguage: bindings.unmatchedNaturalLanguage, thresholds: bindings.thresholds, governance: bindings.governance },
     contentBudget: budget, preflight,
     metricDemands: semanticMetricDemands({ source, story, mainline, significant, regions, quests, scenes }),
@@ -486,7 +495,7 @@ async function parseContext<T extends TextOpenWorldBalanceReviewInputContextV1 |
   const semanticKeys = ['schema', 'version', 'productInstanceKey', 'artifactHashes', 'sourceClaims', 'experience', 'story', 'mainline', 'significantThreads', 'regions', 'quests', 'objectives', 'scenes', 'inputPolicy', 'contentBudget', 'preflight', 'metricDemands', 'contextSelectionHash']
   exactKeys(row, kind === 'balance' ? balanceKeys : semanticKeys, 'context')
   const expectedSchema = `storyforge.text-open-world-${kind}-review-input`
-  if (row.schema !== expectedSchema || row.version !== 1 || !isSha256Hash(row.contextSelectionHash)) fail(`${kind} Context身份无效`)
+  if (row.schema !== expectedSchema || (row.version !== 1 && !(kind === 'semantic' && row.version === 2)) || !isSha256Hash(row.contextSelectionHash)) fail(`${kind} Context身份无效`)
   const body = { ...row }; delete body.contextSelectionHash
   if (await hashProductProductionValueV2(body) !== row.contextSelectionHash) fail(`${kind} Context选择Hash不匹配`)
   const context = row as unknown as T
@@ -494,6 +503,18 @@ async function parseContext<T extends TextOpenWorldBalanceReviewInputContextV1 |
   if (!same(context.metricDemands.map(item => item.metricKey), expectedMetrics)
     || context.metricDemands.some((item, index) => item.metricNumber !== index + 1 || !item.eligibleEntityKeys.length)) fail(`${kind}评审指标合同无效`)
   if (!context.preflight.result.readyForModelReviews || context.preflight.result.blockingCheckKeys.length) fail(`${kind}评审不能越过确定性预检`)
+  if (kind === 'semantic') {
+    const scenes = (context as TextOpenWorldSemanticReviewInputContextV1).scenes
+    if (context.version === 1) {
+      if (!Array.isArray(scenes)) fail('旧语义评审不能携带新版场景表格')
+    } else {
+      const table = record(scenes, 'scenes')
+      exactKeys(table, ['fields', 'rows'], 'scenes')
+      if (!same(table.fields, SEMANTIC_SCENE_FIELDS) || !Array.isArray(table.rows)
+        || table.rows.some(row => !Array.isArray(row) || row.length !== SEMANTIC_SCENE_FIELDS.length)
+        || !same(table.rows.map(row => row[0]), context.metricDemands.find(metric => metric.metricKey === 'dialogue-and-knowledge')?.eligibleEntityKeys)) fail('语义评审场景表格字段或覆盖不精确')
+    }
+  }
   return context
 }
 
@@ -637,6 +658,7 @@ function prompts(context: TextOpenWorldBalanceReviewInputContextV1 | TextOpenWor
       '低于70分意味着本次评审不通过并进入新Build局部修复；证据必须具体指出当前内容中的问题。',
     ].join('\n'),
     user: [
+      ...(kind === 'semantic' && context.version === 2 ? ['scenes is a lossless table: each rows entry follows fields in order, retaining all scene text, attitudes and allowed Knowledge references.'] : []),
       `按metricDemands输出${context.metricDemands.length}项scores：metricNumber/score/rationale。`,
       'findings输出metricNumber/summary/evidence/targetEntityKeys/instruction，不要输出Artifact、task或stale清单。',
       `返回：{"schema":"storyforge.text-open-world-${kind}-review-draft","version":1,"scores":[{"metricNumber":1,"score":88,"rationale":"..."}],"findings":[]}`,
@@ -670,6 +692,11 @@ function createReviewExecutor(kind: 'balance' | 'semantic', options: { runModel?
       ? await parseContext<TextOpenWorldBalanceReviewInputContextV1>(execution.contextText, kind)
       : await parseContext<TextOpenWorldSemanticReviewInputContextV1>(execution.contextText, kind)
     const prompt = prompts(context, kind); const started = performance.now()
+    const estimatedInput = context.version === 2
+      ? estimateTokens(`${prompt.system}\n${prompt.user}` + `<quality-review-input>\n${execution.contextText}\n</quality-review-input>`)
+      : estimateTokens(prompt.system + prompt.user + execution.contextText)
+    const reservation = execution.attemptBudgetReservation ?? execution.task.budgetReservation
+    if (context.version === 2 && estimatedInput > reservation.inputTokens) throw new ProductProductionContextBudgetErrorV1(`语义评审完整输入含提示词需要${estimatedInput}，超过预算${reservation.inputTokens}；未调用模型。`)
     const model = await runModel({
       projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
       category: skillId,
@@ -698,7 +725,7 @@ function createReviewExecutor(kind: 'balance' | 'semantic', options: { runModel?
         rights: { reviewDoesNotCopySource: true },
       }],
       usage: {
-        modelCalls: 1, inputTokens: model.usage?.inputTokens ?? estimateTokens(prompt.system + prompt.user + execution.contextText),
+        modelCalls: 1, inputTokens: model.usage?.inputTokens ?? estimatedInput,
         outputTokens: model.usage?.outputTokens ?? estimateTokens(model.output), mediaCalls: 0, costUsd: null,
         durationMs: Math.max(0, Math.round(performance.now() - started)), storageBytes: 0,
       },

@@ -14,6 +14,8 @@ import {
 } from '../../src/lib/product-production/hash'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
 import { runProductProductionSchedulerCycleV1 } from '../../src/lib/product-production/scheduler'
+import { setProductProductionPausedV1 } from '../../src/lib/product-production/service'
+import { prepareTextOpenWorldProductBuildEpochCarryV1 } from '../../src/lib/product-production/artifact-store'
 import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { createProductBuildRootTerminalReceiptV1 } from '../../src/lib/product-production/receipts'
 import type {
@@ -764,5 +766,85 @@ describe.sequential('Text Open World G5-07 · governed local repair Build', () =
     expect(activeTarget).toHaveLength(1)
     expect(activeTarget[0].contentHash)
       .toBe(repairMocks.handoffs[0].candidate.rebuiltArtifacts[0].contentHash)
+  }, 30_000)
+
+  it('recovers a repair child from its own completed proof without reviving parent reuse or changing the sealed source', async () => {
+    const fixture = await seedRepairFixture()
+    const source = (await db.productBuilds.get(fixture.buildId))!
+    const sourceArtifacts = await db.productBuildArtifacts.where('buildId').equals(fixture.buildId).toArray()
+    const prepared = await prepareTextOpenWorldCreatorArtifactRepairV1({ scope: fixture.scope,
+      productionId: fixture.productionId, buildId: fixture.buildId })
+    const command = commandFor(prepared)
+    expect((await executeProductProductionCommand({ scope: fixture.scope, productionId: fixture.productionId,
+      command, now: command.authorizedAt })).ok).toBe(true)
+    const executor = vi.fn(async () => { throw new Error('fixture stops before a provider request') })
+    const cycle = () => runProductProductionSchedulerCycleV1({ scope: fixture.scope,
+      productionId: fixture.productionId, executor, capabilityBindings: capabilityBindingsFor(fixture.plan) })
+    const initial = await cycle()
+    expect(initial.tasks.find(task => task.taskKey === 'p4.player-build')?.status).toBe('completed')
+    const child = (await db.productBuilds.where('[productionId+buildNumber]')
+      .equals([fixture.productionId, source.buildNumber + 1]).first())!
+    for (const expected of ['paused', 'resumed']) {
+      const currentChild = (await db.productBuilds.get(child.id!))!
+      expect(await setProductProductionPausedV1({ scope: fixture.scope,
+        production: (await db.productProductions.get(fixture.productionId))!,
+        build: currentChild,
+        ...(expected === 'resumed' && JSON.parse(currentChild.failureJson).code === 'pause-provider-result-unknown'
+          ? { pausedReservationDisposition: 'confirmed-not-charged' as const } : {}),
+      })).toBe(expected)
+    }
+    const recovered = await cycle()
+    for (const taskKey of ['p0.source-lock', 'p4.player-build']) {
+      expect(recovered.tasks.find(task => task.taskKey === taskKey)?.status).toBe('completed')
+      expect(executor.mock.calls.some(([call]) => call.task.taskKey === taskKey)).toBe(false)
+    }
+    const rebound = (await db.productBuilds.get(child.id!))!
+    const plan = JSON.parse(rebound.planJson)
+    expect(plan.controlEpoch).toBe(rebound.controlEpoch)
+    expect(plan.tasks.every((task: ProductProductionPlanTaskV3) => task.reuse === null)).toBe(true)
+    const readAuthority = () => readTextOpenWorldCreatorRepairExecutionAuthorityV1({
+      scope: fixture.scope, buildId: child.id! })
+    expect((await readAuthority()).authorization.authorizationHash).toBeDefined()
+    expect(await db.productBuilds.get(source.id!)).toEqual(source)
+    expect(await db.productBuildArtifacts.where('buildId').equals(source.id!).toArray()).toEqual(sourceArtifacts)
+    for (const mutated of [
+      { ...plan, controlEpoch: rebound.controlEpoch + 1 },
+      { ...plan, tasks: plan.tasks.map((task: ProductProductionPlanTaskV3, index: number) => index === 0
+        ? { ...task, reuse: prepared.targetPlan.tasks[0].reuse } : task) },
+      { ...plan, tasks: plan.tasks.map((task: ProductProductionPlanTaskV3, index: number) => index === 0
+        ? { ...task, maxAttempts: task.maxAttempts + 1 } : task) },
+    ]) {
+      await db.productBuilds.update(child.id!, { planJson: canonicalProductProductionJsonV2(mutated),
+        planHash: await hashProductProductionValueV2(mutated) })
+      await expect(readAuthority()).rejects.toThrow()
+      await db.productBuilds.put(rebound)
+    }
+    const commandRow = (await db.productProductionCommands.where('[productionId+commandId]')
+      .equals([fixture.productionId, command.commandId]).first())!
+    for (const expected of ['paused', 'resumed']) {
+      const currentChild = (await db.productBuilds.get(child.id!))!
+      expect(await setProductProductionPausedV1({ scope: fixture.scope,
+        production: (await db.productProductions.get(fixture.productionId))!,
+        build: currentChild,
+        ...(expected === 'resumed' && JSON.parse(currentChild.failureJson).code === 'pause-provider-result-unknown'
+          ? { pausedReservationDisposition: 'confirmed-not-charged' as const } : {}),
+      })).toBe(expected)
+    }
+    const pending = (await db.productBuilds.get(child.id!))!
+    const pendingArtifacts = await db.productBuildArtifacts.where('buildId').equals(child.id!).toArray()
+    const commit = await prepareTextOpenWorldProductBuildEpochCarryV1({ scope: fixture.scope, buildId: child.id!,
+      fromControlEpoch: plan.controlEpoch, toControlEpoch: pending.controlEpoch,
+      targetPlan: { ...plan, controlEpoch: pending.controlEpoch },
+      artifactKeys: prepared.targetPlan.tasks.find(task => task.taskKey === 'p0.source-lock')!.outputArtifactKeys })
+    await db.productProductionCommands.update(commandRow.id!, { resultJson: '{}' })
+    const commitPlan = vi.fn(async () => undefined)
+    await expect(commit(commitPlan)).rejects.toThrow(/授权已变化/)
+    expect(commitPlan).not.toHaveBeenCalled()
+    expect(await db.productBuilds.get(child.id!)).toEqual(pending)
+    expect(await db.productBuildArtifacts.where('buildId').equals(child.id!).toArray()).toEqual(pendingArtifacts)
+    await expect(readAuthority()).rejects.toThrow(/唯一成功授权命令回执/)
+    await db.productProductionCommands.put(commandRow)
+    await db.productBuildArtifacts.update(sourceArtifacts[0].id!, { contentHash: '0'.repeat(64) })
+    await expect(readAuthority()).rejects.toThrow()
   }, 30_000)
 })

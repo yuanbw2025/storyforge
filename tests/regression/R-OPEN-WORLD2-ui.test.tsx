@@ -99,7 +99,13 @@ describe('Text Open World vNext · ProductRuntime vNext player UI', () => {
     await waitFor(() => expect(useTextOpenWorldPlayerStore.getState().lastFeedback).not.toBeNull())
     await waitFor(() => expect(useTextOpenWorldPlayerStore.getState().busy).toBe(false))
     expect(useTextOpenWorldPlayerStore.getState().error).toBe('')
-    await waitFor(() => expect(host.querySelector('[data-testid="text-open-world-feedback"]')?.textContent ?? '').toContain('检查盐渠已完成'))
+    await waitFor(() => {
+      const feedback = host.querySelector('[data-testid="text-open-world-feedback"]')
+      expect(feedback?.querySelector('h3')?.textContent).toBe('检查盐渠已结算')
+      expect(feedback?.textContent).toContain('获得10盐票')
+      expect(feedback?.textContent).toContain('正式证据 #3、#4 · succeeded')
+    })
+    expect(useTextOpenWorldPlayerStore.getState().lastFeedback?.presentation.headline).toBe('检查盐渠已完成')
     expect(useTextOpenWorldPlayerStore.getState().runtimeState.textOpenWorld?.state.inventory.currency).toBe(30)
 
     const input = host.querySelector('#text-open-world-manual-save-name') as HTMLInputElement

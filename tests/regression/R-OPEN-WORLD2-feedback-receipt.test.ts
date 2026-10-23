@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { createTextOpenWorldActionRegistryV1 } from '../../src/lib/open-world/action-registry'
+import { executeTextOpenWorldActionV1 } from '../../src/lib/open-world/action-executor'
 import { commitTextOpenWorldCommandV1 } from '../../src/lib/open-world/commands'
 import { createTextOpenWorldEffectCatalogV1 } from '../../src/lib/open-world/effect-dsl'
 import { commitTextOpenWorldOutcomeBatchV1 } from '../../src/lib/open-world/events'
@@ -11,6 +12,7 @@ import {
 } from '../../src/lib/open-world/feedback'
 import { createInitialTextOpenWorldSessionProjectionV1, deriveTextOpenWorldContextsV1 } from '../../src/lib/open-world/session-projection'
 import { readProductRuntimeState, readProductRuntimeStateVersion } from '../../src/lib/product/runtime-core'
+import { projectTextOpenWorldPlayerFeedbackV1, projectTextOpenWorldPlayerNotificationsV1 } from '../../src/lib/open-world/player-notifications'
 import type { TextOpenWorldCommandOutcomeV1, TextOpenWorldDegradationV1, TextOpenWorldOutcomeReasonV1 } from '../../src/lib/types'
 import { createGovernedTextOpenWorldSessionFixtureV1 } from '../helpers/text-open-world-product-session'
 import { createTextOpenWorldVNextFixture } from '../helpers/text-open-world-vnext-fixture'
@@ -19,6 +21,10 @@ async function fixture(suffix: string) {
   const textOpenWorldVNext = createTextOpenWorldVNextFixture()
   if (suffix === 'success') {
     ;(textOpenWorldVNext.modules.actions.payload as any).actions.find((action: any) => action.key === 'action.investigate-channel').successEffectKeys = ['effect.reward-currency', 'effect.investigate-time']
+  }
+  if (suffix === 'travel') {
+    ;(textOpenWorldVNext.modules.actions.payload as any).actions
+      .find((action: any) => action.key === 'action.travel-port-ridge').label = '前往location.ridge-channel'
   }
   const created = await createGovernedTextOpenWorldSessionFixtureV1({
     name: `TEXT-OPEN-WORLD Feedback验收-${suffix}-${crypto.randomUUID()}`,
@@ -89,6 +95,23 @@ describe('Text Open World vNext · unified player feedback receipt', () => {
       expect.objectContaining({ effectKey: 'effect.reward-currency', domain: 'inventory' }),
       expect.objectContaining({ effectKey: 'effect.investigate-time', domain: 'time' }),
     ])
+    const sealed = JSON.stringify(success)
+    const notifications = projectTextOpenWorldPlayerNotificationsV1({
+      sessionId: current.id!, projection: (await readProductRuntimeState(current.id!)).textOpenWorld!,
+      events: await db.productRuntimeEvents.where('sessionId').equals(current.id!).sortBy('sequence'),
+    })
+    expect(notifications).toHaveLength(1)
+    expect(projectTextOpenWorldPlayerFeedbackV1(success, notifications)).toEqual({
+      headline: notifications[0].headline, details: notifications[0].details, mayNarrateSuccess: true,
+    })
+    for (const changed of [
+      { ...notifications[0], sessionId: current.id! + 1 },
+      { ...notifications[0], effectsEventSequence: success.resultingSequence! + 1 },
+    ]) expect(projectTextOpenWorldPlayerFeedbackV1(success, [changed])).toEqual({
+      headline: '行动已结算', details: [], mayNarrateSuccess: true,
+    })
+    expect(projectTextOpenWorldPlayerFeedbackV1(pending, notifications)).toEqual(pending.presentation)
+    expect(JSON.stringify(success)).toBe(sealed)
     await expect(verifyTextOpenWorldFeedbackReceiptV1(success)).resolves.toEqual(success)
   })
 
@@ -106,7 +129,31 @@ describe('Text Open World vNext · unified player feedback receipt', () => {
     const degraded = await readTextOpenWorldFeedbackV1({ sessionId: degradedSession.id!, commandId: 'command.feedback.degraded' })
     expect(degraded).toMatchObject({ status: 'degraded', outcomeCommitted: true, degradation, presentation: { mayNarrateSuccess: true } })
     expect(degraded.presentation.details).toContain('替代表现：使用角色姓名与文字描写。')
+    expect(projectTextOpenWorldPlayerFeedbackV1(degraded, []).details).toContain('替代表现：使用角色姓名与文字描写。')
+    expect(projectTextOpenWorldPlayerFeedbackV1(failed, []).mayNarrateSuccess).toBe(false)
   }, 10_000)
+
+  it('普通旅行按真实抵达Effect显示地点名称，原始回执与运行包保持不变', async () => {
+    const { session } = await fixture('travel')
+    await executeTextOpenWorldActionV1({
+      sessionId: session.id!, commandId: 'command.feedback.travel',
+      actionKey: 'action.travel-port-ridge', targetKey: 'location.ridge-channel', requestedAt: 1_000,
+    })
+    const receipt = await readTextOpenWorldFeedbackV1({ sessionId: session.id!, commandId: 'command.feedback.travel' })
+    expect(receipt.status).toBe('succeeded')
+    expect(receipt.presentation.headline).toContain('location.ridge-channel')
+    const sealed = JSON.stringify(receipt)
+    const projection = (await readProductRuntimeState(session.id!)).textOpenWorld!
+    const notifications = projectTextOpenWorldPlayerNotificationsV1({
+      sessionId: session.id!, projection,
+      events: await db.productRuntimeEvents.where('sessionId').equals(session.id!).sortBy('sequence'),
+    })
+    const presented = projectTextOpenWorldPlayerFeedbackV1(receipt, notifications)
+    expect(presented.headline).toBe('已抵达：断脊渠口')
+    expect(JSON.stringify(presented)).not.toContain('location.')
+    expect(JSON.stringify(receipt)).toBe(sealed)
+    await expect(verifyTextOpenWorldFeedbackReceiptV1(receipt)).resolves.toEqual(receipt)
+  }, 20_000)
 
   it('失败缺原因或降级缺替代说明时，原子批次不会写入终态事件', async () => {
     const created = await fixture('invalid'); const current = created.session; await command(current.id!, 'command.feedback.invalid')

@@ -23,7 +23,6 @@ import { parseProductProductionBriefV3 } from '../product-production/contracts'
 import { parseProductProductionPlanV3 } from '../product-production/plan'
 import { readMediaBlobObjectData } from '../product-production/media-blob-store'
 import { detectProductImageDimensionsV1, detectProductMediaMimeTypeV1 } from '../product-production/media-adapters'
-import { readTextOpenWorldArtifactGovernanceV1 } from './creator-artifact-governance'
 import { readTextOpenWorldCreatorDerivedBuildAuthorityV1 } from './creator-derived-authority'
 import { textOpenWorldProductionTaskDescendantsV1 } from './production-contract'
 import {
@@ -108,7 +107,7 @@ async function parseMediaRequirements(
   return requirements
 }
 
-function sumRerunBudget(
+export function textOpenWorldCreatorMediaRerunBudgetV1(
   plan: ProductProductionPlanV3,
   stale: ReadonlySet<string>,
   mode: TextOpenWorldCreatorMediaModeV1,
@@ -422,6 +421,9 @@ export async function prepareTextOpenWorldCreatorMediaV1(input: {
     briefRow,
     importBlobIds: [],
   })
+  // Media budget readers also use this module. Load the full Creator projection
+  // only when planning media, keeping its dependency cycle out of publication.
+  const { readTextOpenWorldArtifactGovernanceV1 } = await import('./creator-artifact-governance')
   const governance = await readTextOpenWorldArtifactGovernanceV1({ scope, productionId: production.id })
   if (governance.production.id !== production.id || governance.build.id !== baseBuild.id
     || governance.summary.currentProblemArtifactCount !== 0
@@ -597,7 +599,7 @@ export async function prepareTextOpenWorldCreatorMediaV1(input: {
       backgroundSlotCount: slots.filter(slot => slot.slotKind === 'scene-background').length,
       audioFallback: 'silent' as const,
     },
-    estimatedRerunBudget: sumRerunBudget(targetPlan, stale, input.mode, importedBytes),
+    estimatedRerunBudget: textOpenWorldCreatorMediaRerunBudgetV1(targetPlan, stale, input.mode, importedBytes),
   }
   const mediaPlan = await parseTextOpenWorldCreatorMediaPlanV1({
     ...mediaBody,

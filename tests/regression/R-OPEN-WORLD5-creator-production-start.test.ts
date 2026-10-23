@@ -3,6 +3,7 @@ import { db } from '../../src/lib/db/schema'
 import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 import {
   confirmTextOpenWorldCreatorBriefV1,
+  saveTextOpenWorldCreatorBriefDraftV1,
   startTextOpenWorldCreatorBriefSessionV1,
   type TextOpenWorldCreatorBriefSessionV1,
 } from '../../src/lib/open-world/creator-brief'
@@ -16,6 +17,7 @@ import {
   readTextOpenWorldCreatorExecutionBriefV1,
 } from '../../src/lib/open-world/creator-production-start'
 import { createTextOpenWorldProductionExecutorV1 } from '../../src/lib/open-world/production-executor'
+import { readTextOpenWorldProductionPlanAuthorityV1 } from '../../src/lib/open-world/production-authority'
 import {
   inspectTextOpenWorldCreatorNovelSourceV1,
   inspectTextOpenWorldCreatorWorldSourceV1,
@@ -23,15 +25,22 @@ import {
 import {
   authorizeTextOpenWorldCreatorProductionStartV1,
   previewTextOpenWorldCreatorProductionStartV1,
+  readProductProductionDetailsV1,
+  retryProductProductionBlockerV1,
+  setProductProductionPausedV1,
   runAuthorizedProductProductionV1,
+  stopProductProductionV1,
   type TextOpenWorldCreatorStartInputV1,
 } from '../../src/lib/product-production/service'
 import { executeProductProductionCommand } from '../../src/lib/product-production/commands'
 import { resolveConfiguredTextCapabilityV1 } from '../../src/lib/product-production/capabilities'
-import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
+import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import { parseProductProductionPlanV3 } from '../../src/lib/product-production/plan'
 import {
   ProductProductionDraftRejectedErrorV1,
+  ProductProductionResultUnknownErrorV1,
+  projectProductProductionSchedulerV1,
+  recoverImportedProductProductionProofsV1,
   runProductProductionSchedulerCycleV1,
   runProductProductionUntilBlockedV1,
   type ProductProductionTaskExecutionInputV1,
@@ -260,6 +269,170 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
   })
 
   it.each([
+    ['world-release', () => worldSelection(`Creator revision world ${crypto.randomUUID()}`)],
+    ['novel', async () => (await novelSelection(`Creator revision novel ${crypto.randomUUID()}`)).selection],
+  ] as const)('%s 停止后修订简报创建后继 Build，保留历史并拒绝活动 Build 和旧预检', async (_sourceKind, selectionFactory) => {
+    const selection = await selectionFactory()
+    const sessionKey = `revision-${_sourceKind}`
+    const first = await prepareStart(selection, sessionKey)
+    await authorizeTextOpenWorldCreatorProductionStartV1({
+      ...first.input, expectedPlanHash: first.preview.start.productionPlanHash,
+    })
+    let session = await startTextOpenWorldCreatorBriefSessionV1({ selection, sessionKey })
+    const draft = { ...session.draft, mustKeep: [...session.draft.mustKeep, '完整制作八件装备与四种消耗品。'] }
+    const beforeActiveRevision = await productionMutationSnapshot()
+    await expect(confirmTextOpenWorldCreatorBriefV1({ session, draft, acknowledgements: BRIEF_ACKNOWLEDGEMENTS }))
+      .rejects.toThrow(/先停止/)
+    expect(await productionMutationSnapshot()).toEqual(beforeActiveRevision)
+
+    await stopProductProductionV1({ scope: session.scope, production: session.production })
+    session = await startTextOpenWorldCreatorBriefSessionV1({ selection, sessionKey })
+    const oldBuild = await db.productBuilds.where('productionId').equals(session.production.id).first()
+    expect(oldBuild).toMatchObject({ status: 'cancelled', buildNumber: 1 })
+    const saved = await saveTextOpenWorldCreatorBriefDraftV1({ session, draft })
+    expect(saved.draft.mustKeep).toEqual(draft.mustKeep)
+    const recovered = await startTextOpenWorldCreatorBriefSessionV1({ selection, sessionKey })
+    expect(recovered.draft.mustKeep).toEqual(draft.mustKeep)
+    expect(recovered.confirmedBrief!.draft.mustKeep).toEqual(first.confirmed.confirmedBrief!.draft.mustKeep)
+    const revised = await confirmTextOpenWorldCreatorBriefV1({
+      session: recovered, draft: recovered.draft, acknowledgements: BRIEF_ACKNOWLEDGEMENTS,
+    })
+    expect(revised.production).toMatchObject({ status: 'brief-ready', currentBuildNumber: 1, currentBriefRevision: 2 })
+    expect(await db.productBuilds.get(oldBuild!.id!)).toEqual(oldBuild)
+    expect(await db.productBuilds.count()).toBe(1)
+    await expect(previewTextOpenWorldCreatorProductionStartV1({
+      ...first.input,
+      expectedStateRevision: revised.production.stateRevision,
+      briefRevision: revised.confirmedBrief!.revision,
+      briefHash: revised.confirmedBrief!.briefHash,
+    })).rejects.toThrow()
+
+    const preflight = await createTextOpenWorldCreatorProductionPreflightV1({
+      brief: revised.confirmedBrief!, projectId: revised.scope.projectId,
+      aiConfig: AI_CONFIG, rememberApiKey: false, pricing: { mode: 'catalog' },
+    })
+    const confirmation = await confirmTextOpenWorldCreatorProductionPreflightV1({
+      brief: revised.confirmedBrief!, preflight, projectId: revised.scope.projectId,
+      aiConfig: AI_CONFIG, rememberApiKey: false, acknowledgement: PREFLIGHT_ACKNOWLEDGEMENT,
+    })
+    const input = {
+      ...first.input, expectedStateRevision: revised.production.stateRevision,
+      briefRevision: revised.confirmedBrief!.revision, briefHash: revised.confirmedBrief!.briefHash,
+      preflight, confirmation, authorizationNonce: `${sessionKey}-successor`, authorizedAt: Date.now(),
+    }
+    const preview = await previewTextOpenWorldCreatorProductionStartV1(input)
+    expect(preview.buildNumber).toBe(2)
+    const authorized = await authorizeTextOpenWorldCreatorProductionStartV1({
+      ...input, expectedPlanHash: preview.start.productionPlanHash,
+    })
+    expect(authorized.ok).toBe(true)
+    expect(await db.productBuilds.get(oldBuild!.id!)).toEqual(oldBuild)
+    const successor = await db.productBuilds.where('[productionId+buildNumber]').equals([session.production.id, 2]).first()
+    expect(successor).toMatchObject({ parentBuildNumber: 1, briefRevision: 2, status: 'authorized' })
+    const successorAuthority = await readTextOpenWorldProductionPlanAuthorityV1({
+      scope: session.scope, productionId: session.production.id, buildId: successor!.id!,
+    })
+    expect(successorAuthority.authority).toMatchObject({ valid: true, origin: 'creator-start-v1' })
+    const startCommand = (await db.productProductionCommands.where('productionId').equals(session.production.id).toArray())
+      .find(command => command.type === 'authorize-text-open-world-creator-start'
+        && JSON.parse(command.resultJson).buildId === successor!.id)!
+    await db.productProductionCommands.update(startCommand.id!, {
+      resultJson: canonicalProductProductionJsonV2({ ...JSON.parse(startCommand.resultJson), parentBriefHash: 'f'.repeat(64) }),
+    })
+    expect((await readTextOpenWorldProductionPlanAuthorityV1({
+      scope: session.scope, productionId: session.production.id, buildId: successor!.id!,
+    })).authority.valid).toBe(false)
+    await db.productProductionCommands.update(startCommand.id!, { resultJson: startCommand.resultJson })
+    await db.productBuilds.update(oldBuild!.id!, { status: 'released' })
+    expect((await readTextOpenWorldProductionPlanAuthorityV1({
+      scope: session.scope, productionId: session.production.id, buildId: successor!.id!,
+    })).authority.valid).toBe(false)
+    await db.productBuilds.update(oldBuild!.id!, { status: 'cancelled' })
+    expect(preview.start.executionBrief.intent.requiredFacts).toContain('完整制作八件装备与四种消耗品。')
+    const curation = vi.fn(async () => { throw new ProductProductionDraftRejectedErrorV1('受控测试拒绝', {
+      modelCalls: 1, inputTokens: 10, outputTokens: 10, mediaCalls: 0,
+      costUsd: null, durationMs: 1, storageBytes: 0,
+    }) })
+    const progress = await runProductProductionUntilBlockedV1({
+      scope: session.scope, productionId: session.production.id,
+      executor: createTextOpenWorldProductionExecutorV1({
+        production: preview.production, brief: preview.start.executionBrief,
+        taskExecutors: { 'p1.source-curation': curation },
+      }),
+      capabilityBindings: [{ requirementKey: 'text-open-world.production.text.v1',
+        adapterId: 'configured-text-provider.v1', bindingHash: 'b'.repeat(64) }],
+    })
+    expect(progress.tasks.find(task => task.taskKey === 'p0.source-lock')?.status).toBe('completed')
+    expect(progress.buildStatus).toBe('recovery-required')
+    expect(curation).toHaveBeenCalledTimes(1)
+    expect(await db.productBuilds.get(oldBuild!.id!)).toEqual(oldBuild)
+    const details = await readProductProductionDetailsV1(session.scope, session.production.id)
+    await retryProductProductionBlockerV1({ scope: session.scope, details })
+    // The command advances the epoch before the scheduler atomically rebinds
+    // the frozen Plan and accepted artifacts. The real UI reads this state.
+    const recovering = await readProductProductionDetailsV1(session.scope, session.production.id)
+    expect(recovering.build!.controlEpoch).toBe(progress.controlEpoch + 1)
+    expect(recovering.build!.planJson).toBe(details.build!.planJson)
+    await expect(readTextOpenWorldProductionPlanAuthorityV1({
+      scope: session.scope, productionId: session.production.id, buildId: successor!.id!,
+    })).rejects.toThrow(/Plan 身份不闭合/)
+    const recoveredProgress = await runProductProductionUntilBlockedV1({
+      scope: session.scope, productionId: session.production.id,
+      executor: createTextOpenWorldProductionExecutorV1({
+        production: preview.production, brief: preview.start.executionBrief,
+        taskExecutors: { 'p1.source-curation': curation },
+      }),
+      capabilityBindings: [{ requirementKey: 'text-open-world.production.text.v1',
+        adapterId: 'configured-text-provider.v1', bindingHash: 'b'.repeat(64) }],
+    })
+    expect(recoveredProgress.buildStatus).toBe('recovery-required')
+    expect(curation).toHaveBeenCalledTimes(2)
+    expect((await readTextOpenWorldProductionPlanAuthorityV1({
+      scope: session.scope, productionId: session.production.id, buildId: successor!.id!,
+    })).authority).toMatchObject({ valid: true, origin: 'creator-start-v1' })
+    const afterRecovery = (await db.productBuilds.get(successor!.id!))!
+    expect({ ...JSON.parse(afterRecovery.planJson), controlEpoch: preview.plan.controlEpoch }).toEqual(preview.plan)
+    expect(await db.productBuilds.get(oldBuild!.id!)).toEqual(oldBuild)
+    const futurePlan = { ...JSON.parse(afterRecovery.planJson), controlEpoch: afterRecovery.controlEpoch + 1 }
+    await db.productBuilds.update(afterRecovery.id!, {
+      planJson: canonicalProductProductionJsonV2(futurePlan), planHash: await hashProductProductionValueV2(futurePlan),
+    })
+    await expect(readProductProductionDetailsV1(session.scope, session.production.id)).rejects.toThrow(/Plan 身份不闭合/)
+    await db.productBuilds.update(afterRecovery.id!, { planJson: afterRecovery.planJson, planHash: afterRecovery.planHash })
+    await retryProductProductionBlockerV1({
+      scope: session.scope, details: await readProductProductionDetailsV1(session.scope, session.production.id),
+    })
+    for (const type of ['pause', 'resume'] as const) {
+      const current = await readProductProductionDetailsV1(session.scope, session.production.id)
+      expect(await setProductProductionPausedV1({
+        scope: session.scope, production: current.production, build: current.build,
+      })).toBe(type === 'pause' ? 'paused' : 'resumed')
+      expect((await readProductProductionDetailsV1(session.scope, session.production.id)).production.status)
+        .toBe(type === 'pause' ? 'paused' : 'producing')
+    }
+    const resumedProgress = await runProductProductionUntilBlockedV1({
+      scope: session.scope, productionId: session.production.id,
+      executor: createTextOpenWorldProductionExecutorV1({
+        production: preview.production, brief: preview.start.executionBrief,
+        taskExecutors: { 'p1.source-curation': curation },
+      }),
+      capabilityBindings: [{ requirementKey: 'text-open-world.production.text.v1',
+        adapterId: 'configured-text-provider.v1', bindingHash: 'b'.repeat(64) }],
+    })
+    expect(resumedProgress.buildStatus).toBe('recovery-required')
+    expect(curation).toHaveBeenCalledTimes(3)
+    const importedId = await importProjectJSON(await exportProjectJSON(session.scope.projectId))
+    const imported = await db.productBuilds.where('projectId').equals(importedId).sortBy('buildNumber')
+    expect(imported.map(build => [build.buildNumber, build.parentBuildNumber, build.briefRevision]))
+      .toEqual([[1, null, 1], [2, 1, 2]])
+    const importedAuthority = await readTextOpenWorldProductionPlanAuthorityV1({
+      scope: { projectId: importedId, worldId: imported[1].worldId!, workId: imported[1].workId! },
+      productionId: imported[1].productionId, buildId: imported[1].id!,
+    })
+    expect(importedAuthority.authority).toMatchObject({ valid: true, origin: 'creator-start-v1' })
+  }, 60_000)
+
+  it.each([
     ['world-release', () => worldSelection(`G5-04 world ${crypto.randomUUID()}`)],
     ['novel', async () => (await novelSelection(`G5-04 novel ${crypto.randomUUID()}`)).selection],
   ] as const)('%s 来源预览零写入，并原子冻结 SourcePlan、Start、Plan 与 Build', async (sourceKind, selectionFactory) => {
@@ -484,6 +657,42 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
     expect(rebound.start.startHash).toBe(prepared.preview.start.startHash)
   }, 30_000)
 
+  it.each(['standard-v1', 'bounded-repair-v1'] as const)('Agnes %s 免计费报价与预算通过正式启动并随完整备份恢复', async resourceProfile => {
+    const prepared = await prepareStart(await worldSelection(`G5-04 Agnes ${crypto.randomUUID()}`), 'agnes-free')
+    const aiConfig: AIConfig = {
+      ...AI_CONFIG, provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://apihub.agnes-ai.com/v1',
+    }
+    useAIConfigStore.setState({ config: aiConfig })
+    const runtime = { brief: prepared.confirmed.confirmedBrief!, projectId: prepared.input.scope.projectId, aiConfig, rememberApiKey: false }
+    const preflight = await createTextOpenWorldCreatorProductionPreflightV1({
+      ...runtime, resourceProfile, pricing: { mode: 'manual', manual: {
+        inputUsdPerMillionTokens: 0, outputUsdPerMillionTokens: 0,
+        sourceLabel: '作者确认当前 Agnes 账户本次文本调用免计费', asOf: '2026-10-16', accountZeroCostConfirmed: true,
+      } },
+    })
+    const confirmation = await confirmTextOpenWorldCreatorProductionPreflightV1({
+      ...runtime, preflight, acknowledgement: PREFLIGHT_ACKNOWLEDGEMENT,
+      confirmedAt: prepared.input.authorizedAt - 1,
+    })
+    const input = { ...prepared.input, preflight, confirmation }
+    const preview = await previewTextOpenWorldCreatorProductionStartV1(input)
+    await authorizeTextOpenWorldCreatorProductionStartV1({ ...input, expectedPlanHash: preview.start.productionPlanHash })
+    const backup = await exportProjectJSON(input.scope.projectId)
+    expect(JSON.parse(backup.productProductionBriefs[0]!.confirmedBriefJson).preflight.priceQuote.source)
+      .toBe('author-confirmed-account-zero')
+    const projectId = await importProjectJSON(structuredClone(backup))
+    const briefRow = await db.productProductionBriefs.where('projectId').equals(projectId).first()
+    const build = await db.productBuilds.where('projectId').equals(projectId).first()
+    const rebound = await readTextOpenWorldCreatorExecutionBriefV1({ briefRow: briefRow!, planJson: build!.planJson })
+    expect(rebound.start.preflight.priceQuote).toEqual(preflight.priceQuote)
+    expect(rebound.start.preflight.estimate).toEqual(preflight.estimate)
+    expect(rebound.sourcePlan.planHash).toBe(preview.sourcePlan.planHash)
+    expect(rebound.start.startHash).toBe(preview.start.startHash)
+    const scope = (await resolveWorkspaceOwnership(projectId)).scope
+    await expect(readTextOpenWorldProductionPlanAuthorityV1({ scope, productionId: build!.productionId, buildId: build!.id! }))
+      .resolves.toMatchObject({ authority: { valid: true, origin: 'creator-start-v1' } })
+  })
+
   it('source/config/plan 任一 CAS 漂移都在命令 claim 前失败且生产链零写入', async () => {
     const sourceCase = await novelSelection(`G5-04 source CAS ${crypto.randomUUID()}`)
     const sourcePrepared = await prepareStart(sourceCase.selection, 'source-cas')
@@ -649,6 +858,11 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
       }],
     })
     expect(executor).toHaveBeenCalledTimes(1)
+    expect(executor).toHaveBeenCalledWith(expect.objectContaining({
+      task: expect.objectContaining({ taskKey: 'p0.source-lock' }),
+      controlEpoch: prepared.preview.plan.controlEpoch + 2,
+    }))
+    expect(await db.productBuildArtifacts.where('buildId').equals(projection.buildId).count()).toBe(0)
     expect(projection.controlEpoch).toBe(prepared.preview.plan.controlEpoch + 2)
 
     const [currentBuild, currentBriefRow] = await Promise.all([
@@ -695,6 +909,49 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
       briefRow: currentBriefRow!,
       planJson: changedDag,
     })).rejects.toThrow(/DAG|预算|作者授权/)
+  }, 30_000)
+
+  it.each(['missing-unit', 'missing-all'] as const)('P0 已签收但来源产物 %s 时恢复拒绝重建且不写入新 Plan', async damage => {
+    const prepared = await prepareStart(
+      await worldSelection(`G5-04 damaged P0 ${damage} ${crypto.randomUUID()}`),
+      `damaged-p0-${damage}`,
+    )
+    await authorizeTextOpenWorldCreatorProductionStartV1({
+      ...prepared.input,
+      expectedPlanHash: prepared.preview.start.productionPlanHash,
+    })
+    const executor = vi.fn(createTextOpenWorldProductionExecutorV1({
+      production: prepared.preview.production,
+      brief: prepared.preview.start.executionBrief,
+    }))
+    const first = await runProductProductionSchedulerCycleV1({
+      scope: prepared.preview.scope, productionId: prepared.input.productionId, executor,
+    })
+    expect(first.tasks.find(task => task.taskKey === 'p0.source-lock')?.status).toBe('completed')
+    expect(executor).toHaveBeenCalledTimes(1)
+    const artifacts = await db.productBuildArtifacts.where('buildId').equals(first.buildId).toArray()
+    expect(artifacts.length).toBeGreaterThan(1)
+    await db.productBuildArtifacts.bulkDelete(damage === 'missing-all'
+      ? artifacts.map(row => row.id!)
+      : [artifacts.find(row => row.kind === 'text-open-world.source-pin-unit')!.id!])
+    const producing = (await db.productProductions.get(prepared.input.productionId))!
+    await executeProductProductionCommand({
+      scope: prepared.preview.scope, productionId: producing.id!,
+      command: { type: 'pause', commandId: `${damage}.pause`, expectedStateRevision: producing.stateRevision,
+        reason: '验证损坏的来源包不能在恢复时被重建覆盖' },
+    })
+    const paused = (await db.productProductions.get(producing.id!))!
+    await executeProductProductionCommand({
+      scope: prepared.preview.scope, productionId: producing.id!,
+      command: { type: 'resume', commandId: `${damage}.resume`, expectedStateRevision: paused.stateRevision },
+    })
+    const beforeRecovery = await productionMutationSnapshot()
+    executor.mockClear()
+    await expect(runProductProductionSchedulerCycleV1({
+      scope: prepared.preview.scope, productionId: producing.id!, executor,
+    })).rejects.toThrow(/carry-forward 来源 key 不完整或不唯一/)
+    expect(executor).not.toHaveBeenCalled()
+    expect(await productionMutationSnapshot()).toEqual(beforeRecovery)
   }, 30_000)
 
   it('Creator blocker retry 在新 epoch 重跑 scheduler 且不改写冻结 Start 或 Plan body', async () => {
@@ -793,6 +1050,119 @@ describe('TOW-G5-04 · Creator 正式启动链路', () => {
       planJson: currentBuild!.planJson,
     })).resolves.toMatchObject({ start: prepared.preview.start })
   }, 30_000)
+
+  it.each(['accepted', 'carried', 'unknown-reservation', 'damaged-source', 'missing-source', 'missing-ledger-proof'] as const)(
+    '未完成 Build 导入仅恢复已签收任务并保留阻塞和预算：%s', async scenario => {
+      const prepared = await prepareStart(await worldSelection(`partial-import-${scenario}`), `partial-import-${scenario}`)
+      await authorizeTextOpenWorldCreatorProductionStartV1({
+        ...prepared.input, expectedPlanHash: prepared.preview.start.productionPlanHash,
+      })
+      const curation = vi.fn(async () => {
+        if (scenario === 'unknown-reservation') throw new ProductProductionResultUnknownErrorV1()
+        throw new ProductProductionDraftRejectedErrorV1('保留原始 P1 拒绝证据', {
+          modelCalls: 1, inputTokens: 10, outputTokens: 10, mediaCalls: 0,
+          costUsd: null, durationMs: 1, storageBytes: 0,
+        })
+      })
+      const executor = createTextOpenWorldProductionExecutorV1({
+        production: prepared.preview.production, brief: prepared.preview.start.executionBrief,
+        taskExecutors: { 'p1.source-curation': curation },
+      })
+      const capabilityBindings = [{ requirementKey: 'text-open-world.production.text.v1',
+        adapterId: 'configured-text-provider.v1', bindingHash: 'b'.repeat(64) }]
+      let blocked = await runProductProductionUntilBlockedV1({
+        scope: prepared.preview.scope, productionId: prepared.input.productionId, executor, capabilityBindings,
+      })
+      if (scenario === 'carried') {
+        const production = (await db.productProductions.get(prepared.input.productionId))!
+        await executeProductProductionCommand({ scope: prepared.preview.scope, productionId: production.id!, command: {
+          type: 'resolve-blocker', commandId: 'partial-import.carry', expectedStateRevision: production.stateRevision,
+          blockerKey: 'p1.source-curation', resolution: { action: 'retry', note: '测试跨 epoch 证明恢复' },
+        } })
+        blocked = await runProductProductionUntilBlockedV1({
+          scope: prepared.preview.scope, productionId: prepared.input.productionId, executor, capabilityBindings,
+        })
+      }
+      expect(blocked.buildStatus).toBe('recovery-required')
+      await expect(recoverImportedProductProductionProofsV1({
+        scope: prepared.preview.scope, productionId: prepared.input.productionId,
+      })).rejects.toThrow(/没有待复验的导入任务证明/)
+      const backup = await exportProjectJSON(prepared.preview.scope.projectId)
+      const portableFailure = JSON.parse(backup.productBuilds[0]!._failurePortableJson)
+      const portableLedger = JSON.parse(backup.productBuilds[0]!._budgetLedgerPortableJson)
+      expect(portableFailure.failureProvenance.runId).toBe(portableLedger.tasks['p1.source-curation'].runId)
+      expect(portableFailure.taskFailures['p1.source-curation'].failureProvenance.rootRunId).toBe(portableLedger.rootRunId)
+      const corrupted = structuredClone(backup)
+      const invalidFailure = JSON.parse(corrupted.productBuilds[0]!._failurePortableJson)
+      invalidFailure.failureProvenance.runId = 999_999_999
+      corrupted.productBuilds[0]!._failurePortableJson = JSON.stringify(invalidFailure)
+      const projectsBefore = await db.projects.count()
+      await expect(importProjectJSON(corrupted)).rejects.toThrow(/缺少本地映射/)
+      expect(await db.projects.count()).toBe(projectsBefore)
+      const projectId = await importProjectJSON(backup)
+      const scope = (await resolveWorkspaceOwnership(projectId)).scope
+      const production = (await db.productProductions.where('projectId').equals(projectId).first())!
+      const before = (await db.productBuilds.where('productionId').equals(production.id!).first())!
+      const input = { scope, productionId: production.id! }
+      expect((await projectProductProductionSchedulerV1(input)).importedProofRecoveryRequired).toBe(true)
+      const artifacts = await db.productBuildArtifacts.where('buildId').equals(before.id!).toArray()
+      const p1 = (await projectProductProductionSchedulerV1(input)).tasks.find(task => task.taskKey === 'p1.source-curation')!
+      const p1Events = await db.agentRunEvents.where('runId').equals(p1.runId!).toArray()
+      const callsBefore = curation.mock.calls.length
+      if (scenario === 'damaged-source' || scenario === 'missing-source') {
+        const unit = artifacts.find(row => row.kind === 'text-open-world.source-pin-unit')!
+        if (scenario === 'damaged-source') await db.productBuildArtifacts.update(unit.id!, { payloadJson: '{"tampered":true}' })
+        else await db.productBuildArtifacts.delete(unit.id!)
+        await expect(recoverImportedProductProductionProofsV1(input)).rejects.toThrow(/hash|Hash|payload|完成证据/)
+        expect((await projectProductProductionSchedulerV1(input)).importedProofRecoveryRequired).toBe(true)
+      } else if (scenario === 'missing-ledger-proof') {
+        const ledger = JSON.parse(before.budgetLedgerJson)
+        ledger.tasks['p0.source-lock'].terminalReceiptHash = null
+        await db.productBuilds.update(before.id!, { budgetLedgerJson: JSON.stringify(ledger) })
+        await expect(recoverImportedProductProductionProofsV1(input)).rejects.toThrow(/task Run 集合不完整/)
+        await db.productBuilds.update(before.id!, { budgetLedgerJson: before.budgetLedgerJson })
+      } else {
+        const recovered = await recoverImportedProductProductionProofsV1(input)
+        expect(recovered).toMatchObject({ terminal: false, buildStatus: 'recovery-required',
+          importedProofRecoveryRequired: false, controlEpoch: before.controlEpoch })
+        expect(recovered.tasks.find(task => task.taskKey === 'p0.source-lock')?.status).toBe('completed')
+        expect(recovered.tasks.find(task => task.taskKey === 'p1.source-curation')?.status).toBe('blocked')
+        expect(await db.productBuildArtifacts.where('buildId').equals(before.id!).toArray()).toEqual(artifacts)
+      }
+      expect(curation).toHaveBeenCalledTimes(callsBefore)
+      expect(await db.productBuilds.get(before.id!)).toEqual(before)
+      expect(await db.agentRunEvents.where('runId').equals(p1.runId!).toArray()).toEqual(p1Events)
+      expect(await db.productReleases.where('projectId').equals(projectId).count()).toBe(0)
+      if (scenario === 'unknown-reservation') {
+        expect(JSON.parse(before.budgetLedgerJson).attempts.some((entry: { usageKnown: boolean; resolution: unknown }) =>
+          !entry.usageKnown && entry.resolution == null)).toBe(true)
+      }
+      if (scenario === 'accepted' || scenario === 'carried') {
+        const resolution = await executeProductProductionCommand({ scope, productionId: production.id!, command: {
+          type: 'resolve-blocker', commandId: `partial-import.resume.${scenario}`,
+          expectedStateRevision: production.stateRevision, blockerKey: 'p1.source-curation',
+          resolution: { action: 'retry', note: '已复验旧任务，只重试原失败任务' },
+        } })
+        expect(resolution).toMatchObject({ ok: true })
+        const importedBrief = (await db.productProductionBriefs.where('productionId').equals(production.id!).first())!
+        const importedBuild = (await db.productBuilds.get(before.id!))!
+        const importedExecution = await readTextOpenWorldCreatorExecutionBriefV1({
+          briefRow: importedBrief, planJson: importedBuild.planJson,
+        })
+        const resumedExecutor = createTextOpenWorldProductionExecutorV1({
+          production: (await db.productProductions.get(production.id!))!,
+          brief: importedExecution.executionBrief,
+          taskExecutors: { 'p1.source-curation': curation },
+        })
+        const resumed = await runProductProductionUntilBlockedV1({
+          scope, productionId: production.id!, executor: resumedExecutor, capabilityBindings,
+        })
+        expect(resumed.tasks.find(task => task.taskKey === 'p0.source-lock')?.status).toBe('completed')
+        expect(resumed.tasks.find(task => task.taskKey === 'p1.source-curation')?.status).toBe('blocked')
+        expect(curation, (await db.productBuilds.get(before.id!))!.failureJson ?? '').toHaveBeenCalledTimes(callsBefore + 1)
+      }
+    }, 30_000,
+  )
 
   it('正式运行或恢复前模型路由/生成参数漂移会在任何 provider 请求前停止', async () => {
     const selection = await worldSelection(`G5-04 runtime binding ${crypto.randomUUID()}`)

@@ -31,6 +31,7 @@ const serviceMocks = vi.hoisted(() => ({
   readDetails: vi.fn(),
   readProgress: vi.fn(),
   recoverImportedProofs: vi.fn(),
+  retryBlocker: vi.fn(),
   runAuthorized: vi.fn(),
 }))
 
@@ -59,6 +60,7 @@ vi.mock('../../src/lib/product-production/service', async importOriginal => {
     readProductProductionDetailsV1: serviceMocks.readDetails,
     readProductProductionProgressV1: serviceMocks.readProgress,
     recoverImportedProductProductionProofsV1: serviceMocks.recoverImportedProofs,
+    retryProductProductionBlockerV1: serviceMocks.retryBlocker,
     runAuthorizedProductProductionV1: serviceMocks.runAuthorized,
   }
 })
@@ -314,6 +316,7 @@ describe('TOW-G5-04 · production start UI', () => {
     serviceMocks.readDetails.mockResolvedValue(lockedDetails)
     serviceMocks.readProgress.mockResolvedValue(recoveryProgress)
     serviceMocks.recoverImportedProofs.mockResolvedValue(recoveredImportedProgress)
+    serviceMocks.retryBlocker.mockResolvedValue(null)
     serviceMocks.runAuthorized.mockResolvedValue(recoveryProgress)
     host = document.createElement('div')
     document.body.append(host)
@@ -416,6 +419,24 @@ describe('TOW-G5-04 · production start UI', () => {
     expect(host.textContent).toContain('checkpoint：saved · author-retry')
   })
 
+  it('取消的 Creator Build 可回到简报修订，按钮不派发制作', async () => {
+    const revise = vi.fn(async () => undefined)
+    serviceMocks.readDetails.mockResolvedValue({
+      ...lockedDetails,
+      production: { ...lockedProduction, status: 'stopped', creatorSourceBindingHash: 'a'.repeat(64) },
+      build: { ...lockedDetails.build, productionId: lockedProduction.id, status: 'cancelled', releasedProductReleaseId: null },
+    })
+    await act(async () => root.render(createElement(ProductProductionStudio, {
+      scope: SCOPE, allowedProducts: ['text-open-world'], initialProductionId: 91,
+      productionOnly: true, onReviseCreatorBrief: revise,
+    })))
+    await waitFor(() => expect(host.textContent).toContain('修订制作简报'))
+    await act(async () => button(host, '修订制作简报').click())
+    expect(revise).toHaveBeenCalledWith(91)
+    expect(serviceMocks.runAuthorized).not.toHaveBeenCalled()
+    expect(host.textContent).toContain('旧 Build、原始模型产物和用量已保留')
+  })
+
   it('Creator Build 开放检查、试玩和专属发布入口，但仍不展示尚未实现的版本演化', async () => {
     serviceMocks.readDetails.mockResolvedValue({
       ...lockedDetails,
@@ -494,6 +515,81 @@ describe('TOW-G5-04 · production start UI', () => {
     ).toBeNull())
     expect(host.textContent).toContain('已在新本地作用域完成零调用复验')
     await waitFor(() => expect(button(host, '试玩未发布 Build').disabled).toBe(false))
+  })
+
+  it('未完成的导入 Build 先复验已签收证明，保留原修复入口而不冒充终态', async () => {
+    serviceMocks.readProgress.mockResolvedValue({ ...recoveryProgress, importedProofRecoveryRequired: true })
+    serviceMocks.recoverImportedProofs.mockResolvedValue({ ...recoveryProgress, importedProofRecoveryRequired: false })
+    await act(async () => {
+      root.render(createElement(ProductProductionStudio, {
+        scope: SCOPE, allowedProducts: ['text-open-world'], initialProduct: 'text-open-world',
+        initialProductionId: lockedProduction.id, productionOnly: true,
+      }))
+    })
+    await waitFor(() => expect(host.querySelector('[data-testid="product-production-recover-import-proof"]')).toBeTruthy())
+    expect(button(host, '修正后继续制作').disabled).toBe(true)
+    serviceMocks.readProgress.mockResolvedValue({ ...recoveryProgress, importedProofRecoveryRequired: false })
+    await act(async () => { button(host, '复验导入生产证明').click() })
+    await waitFor(() => expect(host.textContent).toContain('原阻塞、待执行任务和用量保留'))
+    expect(button(host, '修正后继续制作').disabled).toBe(false)
+    expect(serviceMocks.runAuthorized).not.toHaveBeenCalled()
+    expect(host.textContent).not.toContain('试玩未发布 Build')
+  })
+
+  it.each(['task-reservation', 'model-calls', 'unknown-detail'] as const)('Creator %s 预算耗尽时只允许提交非空作者稿，导入证明闸门仍有效', async budgetBoundary => {
+    const exhaustedDetails = {
+      ...lockedDetails,
+      executionBrief: {
+        qualityProfile: 'prototype', intent: { productType: 'text-open-world' },
+        productionBudget: { maximumModelCalls: 1 },
+        media: { imageCount: 0, requiredMediaKinds: [] },
+      },
+      build: {
+        ...lockedDetails.build,
+        failureJson: JSON.stringify({
+          taskKey: 'p2.experience-design',
+          code: 'task-budget-exceeded',
+          detail: budgetBoundary === 'task-reservation'
+            ? 'Build lifetime budget 不足:task=p2.experience-design,remainingModelCalls=0'
+            : budgetBoundary === 'model-calls' ? '累计模型调用已达到上限' : '历史预算拒绝，明细格式未知',
+        }),
+      },
+    } as unknown as ProductProductionDetailsV1
+    const progress = {
+      ...recoveryProgress,
+      importedProofRecoveryRequired: true,
+      budget: {
+        ...recoveryProgress.budget,
+        usage: { ...recoveryProgress.budget.usage, modelCalls: budgetBoundary === 'model-calls' ? 1 : 0 },
+      },
+    }
+    serviceMocks.readDetails.mockResolvedValue(exhaustedDetails)
+    serviceMocks.readProgress.mockResolvedValue(progress)
+    await act(async () => root.render(createElement(ProductProductionStudio, {
+      scope: SCOPE, allowedProducts: ['text-open-world'], initialProduct: 'text-open-world',
+      initialProductionId: lockedProduction.id, productionOnly: true,
+    })))
+    await waitFor(() => expect(host.querySelector('textarea[aria-label="作者修订的完整任务 JSON"]')).toBeTruthy())
+    const draftInput = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="作者修订的完整任务 JSON"]')!
+    await changeValue(draftInput, '  ')
+    expect(host.textContent).not.toContain('校验修订稿并继续')
+    expect(host.textContent).not.toContain('修正后继续制作')
+    // A budget code can forbid another paid request without proving that a
+    // historical refusal qualifies for a new child Build.
+    expect(host.querySelector('[aria-label="开放世界预算续建"]')).toBeNull()
+    const draft = '{"schema":"complete-author-draft"}'
+    await changeValue(draftInput, draft)
+    expect(button(host, '校验修订稿并继续').disabled).toBe(true)
+    serviceMocks.readProgress.mockResolvedValue({ ...progress, importedProofRecoveryRequired: false })
+    await act(async () => button(host, '复验导入生产证明').click())
+    await waitFor(() => expect(button(host, '校验修订稿并继续').disabled).toBe(false))
+    await changeValue(draftInput, '')
+    expect(host.textContent).not.toContain('校验修订稿并继续')
+    await changeValue(draftInput, draft)
+    await act(async () => button(host, '校验修订稿并继续').click())
+    await waitFor(() => expect(serviceMocks.retryBlocker).toHaveBeenCalledWith(expect.objectContaining({
+      authorDraftJson: draft, details: exhaustedDetails,
+    })))
   })
 
   it('旧泛型文字开放世界不误挂 Creator Artifact 浏览器，原有发布与演化动作保持可见', async () => {

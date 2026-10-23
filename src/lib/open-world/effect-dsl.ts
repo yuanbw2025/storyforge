@@ -84,7 +84,7 @@ function references(modules: TextOpenWorldParsedModulesV1) {
     encounters: set(modules.combat.encounters), knowledge: set(modules.knowledge.entries), endings: set(modules.narrative.endings), rewards: set(modules.items.rewardContracts), vendors: set(modules.economy.vendors),
     rumors: set(modules.knowledge.rumors), achievements: set(modules.knowledge.achievements), weather: set(modules['time-weather'].weather),
     questStageOwner: new Map(modules.quests.stages.map(item => [item.key, item.questKey])),
-    actorLifecycle: modules.actions.version >= 7,
+    actorLifecycle: modules.actions.version >= 7, actionEvidence: modules.actions.version >= 20,
   }
 }
 
@@ -94,10 +94,24 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
   if (operation === 'change-player-resource') { exact(payload, ['resource', 'amount'], `${label}.payload`); return { key: effectKey, operation, payload: { resource: enumValue(payload.resource, ['health', 'skill-resource'], `${label}.resource`), amount: numberValue(payload.amount, `${label}.amount`) } } }
   if (operation === 'grant-experience') { exact(payload, ['amount'], `${label}.payload`); return { key: effectKey, operation, payload: { amount: int(payload.amount, `${label}.amount`, 1) } } }
   if (operation === 'apply-status' || operation === 'remove-status') { exact(payload, ['statusKey'], `${label}.payload`); return { key: effectKey, operation, payload: { statusKey: ref(payload.statusKey, refs.statuses, `${label}.statusKey`) } } }
-  if (operation === 'grant-item') { exact(payload, ['itemKey', 'quantity'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`), quantity: int(payload.quantity, `${label}.quantity`, 1, 1_000_000) } } }
-  if (operation === 'remove-item') { exact(payload, ['itemKey', 'quantity', 'reason'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`), quantity: int(payload.quantity, `${label}.quantity`, 1, 1_000_000), reason: enumValue(payload.reason, ['consume', 'drop', 'sell', 'craft'], `${label}.reason`) } } }
+  if (operation === 'grant-item') {
+    const ifAbsent = Object.prototype.hasOwnProperty.call(payload, 'ifAbsent')
+    exact(payload, ['itemKey', 'quantity', ...(ifAbsent ? ['ifAbsent'] : [])], `${label}.payload`)
+    if (ifAbsent && payload.ifAbsent !== true) fail(`${label}.ifAbsent只能显式为true`)
+    return { key: effectKey, operation, payload: {
+      itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`),
+      quantity: int(payload.quantity, `${label}.quantity`, 1, ifAbsent ? 1 : 1_000_000),
+      ...(ifAbsent ? { ifAbsent: true as const } : {}),
+    } }
+  }
+  if (operation === 'remove-item') { exact(payload, ['itemKey', 'quantity', 'reason'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`), quantity: int(payload.quantity, `${label}.quantity`, 1, 1_000_000), reason: enumValue(payload.reason, ['consume', 'drop', 'sell', 'craft', 'fulfillment'], `${label}.reason`) } } }
   if (operation === 'equip-item' || operation === 'unequip-item') { exact(payload, ['itemKey'], `${label}.payload`); return { key: effectKey, operation, payload: { itemKey: ref(payload.itemKey, refs.items, `${label}.itemKey`) } } }
-  if (operation === 'learn-skill') { exact(payload, ['skillKey'], `${label}.payload`); return { key: effectKey, operation, payload: { skillKey: ref(payload.skillKey, refs.skills, `${label}.skillKey`) } } }
+  if (operation === 'learn-skill') {
+    const guarded = Object.prototype.hasOwnProperty.call(payload, 'ifUnknown')
+    exact(payload, ['skillKey', ...(guarded ? ['ifUnknown'] : [])], `${label}.payload`)
+    if (guarded && (!refs.actionEvidence || payload.ifUnknown !== true)) fail('重复技能保留需要新版合同')
+    return { key: effectKey, operation, payload: { skillKey: ref(payload.skillKey, refs.skills, `${label}.skillKey`), ...(guarded ? { ifUnknown: true as const } : {}) } }
+  }
   if (operation === 'learn-recipe') { exact(payload, ['recipeKey'], `${label}.payload`); return { key: effectKey, operation, payload: { recipeKey: ref(payload.recipeKey, refs.recipes, `${label}.recipeKey`) } } }
   if (operation === 'change-currency') { exact(payload, ['amount'], `${label}.payload`); return { key: effectKey, operation, payload: { amount: int(payload.amount, `${label}.amount`, -1_000_000_000, 1_000_000_000) } } }
   if (operation === 'transition-quest') {
@@ -138,6 +152,11 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
     return { key: effectKey, operation, payload: { kind, skillKey, itemKey } }
   }
   if (operation === 'perform-crafting') { exact(payload, ['recipeKey'], `${label}.payload`); return { key: effectKey, operation, payload: { recipeKey: ref(payload.recipeKey, refs.recipes, `${label}.recipeKey`) } } }
+  if (operation === 'prove-purchase') {
+    if (!refs.actionEvidence) fail('旧Action模块不能生成购买证据')
+    exact(payload, ['vendorKey'], `${label}.payload`)
+    return { key: effectKey, operation, payload: { vendorKey: ref(payload.vendorKey, refs.vendors, `${label}.vendorKey`) } }
+  }
   if (operation === 'perform-transaction') { exact(payload, ['kind', 'vendorKey'], `${label}.payload`); return { key: effectKey, operation, payload: { kind: enumValue(payload.kind, ['buy', 'sell'], `${label}.kind`), vendorKey: ref(payload.vendorKey, refs.vendors, `${label}.vendorKey`) } } }
   if (operation === 'settle-director') { exact(payload, [], `${label}.payload`); return { key: effectKey, operation, payload: {} } }
   if (operation === 'rest') { exact(payload, ['healthRatio', 'skillResourceRatio', 'clearHarmfulStatuses'], `${label}.payload`); return { key: effectKey, operation, payload: { healthRatio: numberValue(payload.healthRatio, `${label}.healthRatio`, 0.000001, 1), skillResourceRatio: numberValue(payload.skillResourceRatio, `${label}.skillResourceRatio`, 0, 1), clearHarmfulStatuses: bool(payload.clearHarmfulStatuses, `${label}.clearHarmfulStatuses`) } } }
@@ -163,6 +182,7 @@ function parseDefinition(value: unknown, refs: Refs, label: string): TextOpenWor
 function addUnique(values: string[], value: string) { if (!values.includes(value)) values.push(value) }
 function remove(values: string[], value: string) { const index = values.indexOf(value); if (index >= 0) values.splice(index, 1) }
 function effectDomains(operation: TextOpenWorldEffectDefinitionV1['operation']): TextOpenWorldEffectImpactDomainV1[] {
+  if (operation === 'prove-purchase') return ['world']
   if (operation === 'perform-crafting') return ['inventory', 'time']
   if (operation === 'perform-transaction') return ['inventory', 'economy']
   if (operation === 'settle-director') return ['director', 'quests', 'world', 'knowledge']
@@ -564,16 +584,35 @@ function applyDefinitions(
   } else if (authorization?.kind === 'combat-action') fail('CombatAction授权没有对应Effect')
   const craftingEffects = effects.filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-crafting' }> => effect.operation === 'perform-crafting')
   if (craftingEffects.length) {
-    if (craftingEffects.length !== 1 || effects.length !== 1 || authorization?.kind !== 'crafting') fail('制作Effect缺少唯一Crafting授权')
+    if (craftingEffects.length !== 1 || authorization?.kind !== 'crafting') fail('制作Effect缺少唯一Crafting授权')
+    if (modules.actions.version >= 19) {
+      const recipeKey = craftingEffects[0].payload.recipeKey
+      const proof = effects[1]
+      if (effects.length !== 2 || effects[0] !== craftingEffects[0]
+        || proof?.operation !== 'set-world-flag' || proof.key !== `effect.fulfillment.recipe.${recipeKey}`
+        || proof.payload.flagKey !== `flag.fulfillment.recipe.${recipeKey}` || proof.payload.value !== true) {
+        fail('制作证据必须与已授权制作在同一原子批次提交')
+      }
+    } else if (effects.length !== 1) fail('旧制作Effect不能附加新操作证据')
     if (craftingEffects[0].payload.recipeKey !== authorization.recipeKey) fail('制作Effect与配方授权不一致')
     crafting.assertAuthorization({ state: stateValue, authorization })
   } else if (authorization?.kind === 'crafting') fail('Crafting授权没有对应Effect')
+  else if (modules.actions.version >= 19 && effects.some(effect => effect.operation === 'set-world-flag'
+    && effect.payload.flagKey.startsWith('flag.fulfillment.recipe.'))) fail('制作证据不能脱离实际制作独立提交')
   const transactionEffects = effects.filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'perform-transaction' }> => effect.operation === 'perform-transaction')
   if (transactionEffects.length) {
-    if (transactionEffects.length !== 1 || effects.length !== 1 || authorization?.kind !== 'transaction') fail('交易Effect缺少唯一Transaction授权')
+    if (transactionEffects.length !== 1 || authorization?.kind !== 'transaction') fail('交易Effect缺少唯一Transaction授权')
+    if (modules.actions.version >= 20 && authorization.transactionKind === 'buy') {
+      const proof = effects[1]
+      if (effects.length !== 2 || effects[0] !== transactionEffects[0] || proof?.operation !== 'prove-purchase'
+        || proof.payload.vendorKey !== authorization.vendorKey || proof.key !== `effect.fulfillment.purchase.${authorization.vendorKey}`) fail('购买证据必须与精确物品交易原子提交')
+    } else if (effects.length !== 1) fail('旧交易或出售不能附加购买证据')
     if (transactionEffects[0].payload.kind !== authorization.transactionKind || transactionEffects[0].payload.vendorKey !== authorization.vendorKey) fail('交易Effect与授权不一致')
     economy.assertAuthorization({ state: stateValue, authorization })
   } else if (authorization?.kind === 'transaction') fail('Transaction授权没有对应Effect')
+  else if (effects.some(effect => effect.operation === 'prove-purchase')) fail('购买证据不能脱离真实交易提交')
+  if (modules.actions.version >= 20 && effects.some(effect => effect.operation === 'set-world-flag'
+    && effect.payload.flagKey.startsWith('flag.fulfillment.purchase.'))) fail('购买证据不能通过任意标志伪造')
   const directorEffects = effects.filter((effect): effect is Extract<TextOpenWorldEffectDefinitionV1, { operation: 'settle-director' }> => effect.operation === 'settle-director')
   if (directorEffects.length) {
     if (directorEffects.length !== 1 || authorization?.kind !== 'director-settlement') fail('Director结算Effect缺少唯一Director授权')
@@ -646,8 +685,18 @@ function applyDefinitions(
         const { payload } = effect
         const removalReason = effect.operation === 'remove-item' ? effect.payload.reason : null
         const definition = item(payload.itemKey)
+        if (effect.operation === 'grant-item' && effect.payload.ifAbsent) {
+          const held = definition.stackPolicy === 'stacked'
+            ? state.inventory.stackQuantities[payload.itemKey] ?? 0
+            : Object.values(state.inventory.itemInstances).filter(instance => instance.itemKey === payload.itemKey).length
+          if (held > 0) {
+            record(changes, effect, `retain-item:${payload.itemKey}`, held, held)
+            break
+          }
+        }
         if (effect.operation === 'remove-item') {
           if (definition.critical) fail(`${effect.key}不能移除关键物品`)
+          if (removalReason === 'fulfillment' && (modules.actions.version < 19 || (definition.stackPolicy !== 'stacked' && (modules.actions.version < 20 || definition.unique || definition.kind !== 'equipment')))) fail(`${effect.key}交付物品缺少新版结算合同`)
           if (removalReason === 'consume' && !definition.consumable) fail(`${effect.key}目标不是消耗品`)
           if (removalReason === 'drop' && !definition.droppable) fail(`${effect.key}目标不可丢弃`)
           if (removalReason === 'sell' && !definition.sellable) fail(`${effect.key}目标不可出售`)
@@ -712,7 +761,7 @@ function applyDefinitions(
       }
       case 'learn-skill': {
         const { payload } = effect; const before = state.player.learnedSkillKeys.includes(payload.skillKey)
-        if (before) fail(`${effect.key}不能重复学习已有技能`)
+        if (before && !(modules.actions.version >= 20 && payload.ifUnknown === true)) fail(`${effect.key}不能重复学习已有技能`)
         addUnique(state.player.learnedSkillKeys, payload.skillKey); record(changes, effect, `学习技能:${payload.skillKey}`, before, true); break
       }
       case 'learn-recipe': {
@@ -927,6 +976,14 @@ function applyDefinitions(
           ingredients: Object.fromEntries(authorization.ingredients.map(item => [item.itemKey, item.afterQuantity])),
           outputs: Object.fromEntries(authorization.outputs.map(item => [item.itemKey, item.afterQuantity])),
         })
+        break
+      }
+      case 'prove-purchase': {
+        if (authorization?.kind !== 'transaction' || authorization.transactionKind !== 'buy') fail(`${effect.key}缺少购买授权`)
+        const flagKey = `flag.fulfillment.purchase.${authorization.vendorKey}.${authorization.itemKey}`
+        const before = state.world.flags[flagKey] ?? null
+        state.world.flags[flagKey] = true
+        record(changes, effect, `购买证据:${authorization.vendorKey}:${authorization.itemKey}`, before, true)
         break
       }
       case 'perform-transaction': {

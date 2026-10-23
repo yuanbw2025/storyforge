@@ -15,7 +15,7 @@ export const TEXT_OPEN_WORLD_EFFECT_OPERATIONS_V1 = [
   'reveal-knowledge', 'reveal-location', 'unlock-fast-travel',
   'enter-location', 'start-travel', 'fast-travel', 'advance-time', 'settle-weather', 'settle-actor-schedules',
   'start-combat', 'resolve-combat', 'initialize-combat', 'settle-combat-state', 'perform-combat-action', 'rest', 'respawn',
-  'perform-crafting', 'perform-transaction', 'settle-director',
+  'perform-crafting', 'perform-transaction', 'prove-purchase', 'settle-director',
   'change-actor-state', 'change-region-state', 'set-world-flag',
   'earn-achievement', 'unlock-ending', 'reach-ending',
 ] as const
@@ -27,10 +27,10 @@ export type TextOpenWorldEffectDefinitionV1 =
   | { key: string; operation: 'change-player-resource'; payload: { resource: 'health' | 'skill-resource'; amount: number } }
   | { key: string; operation: 'grant-experience'; payload: { amount: number } }
   | { key: string; operation: 'apply-status' | 'remove-status'; payload: { statusKey: string } }
-  | { key: string; operation: 'grant-item'; payload: { itemKey: string; quantity: number } }
-  | { key: string; operation: 'remove-item'; payload: { itemKey: string; quantity: number; reason: 'consume' | 'drop' | 'sell' | 'craft' } }
+  | { key: string; operation: 'grant-item'; payload: { itemKey: string; quantity: number; ifAbsent?: true } }
+  | { key: string; operation: 'remove-item'; payload: { itemKey: string; quantity: number; reason: 'consume' | 'drop' | 'sell' | 'craft' | 'fulfillment' } }
   | { key: string; operation: 'equip-item' | 'unequip-item'; payload: { itemKey: string } }
-  | { key: string; operation: 'learn-skill'; payload: { skillKey: string } }
+  | { key: string; operation: 'learn-skill'; payload: { skillKey: string; ifUnknown?: true } }
   | { key: string; operation: 'learn-recipe'; payload: { recipeKey: string } }
   | { key: string; operation: 'change-currency'; payload: { amount: number } }
   | { key: string; operation: 'transition-quest'; payload: { questKey: string; status: TextOpenWorldQuestStatusV1; stageKey: string | null } }
@@ -59,6 +59,7 @@ export type TextOpenWorldEffectDefinitionV1 =
       itemKey: string | null
     } }
   | { key: string; operation: 'perform-crafting'; payload: { recipeKey: string } }
+  | { key: string; operation: 'prove-purchase'; payload: { vendorKey: string } }
   | { key: string; operation: 'perform-transaction'; payload: { kind: 'buy' | 'sell'; vendorKey: string } }
   | { key: string; operation: 'settle-director'; payload: Record<string, never> }
   | { key: string; operation: 'rest'; payload: { healthRatio: number; skillResourceRatio: number; clearHarmfulStatuses: boolean } }

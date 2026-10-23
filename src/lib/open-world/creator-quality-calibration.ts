@@ -5,7 +5,9 @@ import { hashCanonicalValue } from '../agent/run/hash'
 import type {
   AIConfig,
   TextOpenWorldContentBudgetV1,
+  TextOpenWorldDirectorDecksV1,
   TextOpenWorldMainlineThreadV1,
+  TextOpenWorldQuestSkeletonsV1,
   TextOpenWorldRegionNarrativePacksV1,
   TextOpenWorldSceneScriptsV1,
   TextOpenWorldSignificantThreadsV1,
@@ -15,7 +17,7 @@ import {
   type TextOpenWorldCreatorCalibrationEvidenceV1,
 } from './creator-quality-contract'
 
-export const TEXT_OPEN_WORLD_CREATOR_CALIBRATION_PROMPT_VERSION_V1 = 'text-open-world-release-calibration-grader.v1'
+export const TEXT_OPEN_WORLD_CREATOR_CALIBRATION_PROMPT_VERSION_V1 = 'text-open-world-release-calibration-grader.v3'
 export const TEXT_OPEN_WORLD_CREATOR_CALIBRATION_CATEGORY_V1 = 'review.text-open-world.release-calibration-grader'
 const TIMEOUT_MS = 120_000
 
@@ -83,6 +85,31 @@ interface CalibrationDraftV1 {
   findings: string[]
 }
 
+export interface TextOpenWorldCreatorCalibrationOutputFailureV1 {
+  schema: 'storyforge.text-open-world-calibration-output-failure'
+  version: 1
+  buildPackageHash: string
+  provider: string
+  model: string
+  promptVersion: string
+  inputHash: string
+  outputHash: string
+  rawOutput: string
+  inputTokens: number | null
+  outputTokens: number | null
+  finishReason: string | null
+  durationMs: number
+  issue: string
+}
+
+/** Failed eval output is a local diagnostic, never a passing quality receipt. */
+export class TextOpenWorldCreatorCalibrationOutputErrorV1 extends Error {
+  constructor(readonly diagnostic: TextOpenWorldCreatorCalibrationOutputFailureV1) {
+    super(diagnostic.issue)
+    this.name = 'TextOpenWorldCreatorCalibrationOutputErrorV1'
+  }
+}
+
 function fail(message: string): never {
   throw new Error(`[text-open-world-creator-calibration] ${message}`)
 }
@@ -109,7 +136,11 @@ function text(value: unknown, label: string, maximum = 1_000): string {
 
 function parseDraft(value: string): CalibrationDraftV1 {
   let candidate: unknown
-  try { candidate = JSON.parse(value) } catch { fail('grader没有返回合法JSON') }
+  // A single Markdown code fence is a transport wrapper, not a JSON repair.
+  // Keep the exact schema/score gates below, and hash the original response.
+  const source = value.trim()
+  const fenced = /^```(?:json)?\s*\n([\s\S]*?)\n```$/i.exec(source)
+  try { candidate = JSON.parse(fenced ? fenced[1] : source) } catch { fail('grader没有返回合法JSON') }
   const row = record(candidate, 'grade')
   exactKeys(row, ['schema', 'version', 'scores', 'findings'], 'grade')
   if (row.schema !== 'storyforge.text-open-world-creator-calibration-grade' || row.version !== 1
@@ -155,15 +186,62 @@ function similarityBasisPoints(left: string, right: string): number {
   return union ? Math.round(intersection / union * 10_000) : 0
 }
 
-export function projectTextOpenWorldTemplateDifferentiationV1(input: {
+interface CalibrationTemplateInputsV1 {
   regions: TextOpenWorldRegionNarrativePacksV1
+  quests: TextOpenWorldQuestSkeletonsV1
+  director: TextOpenWorldDirectorDecksV1
   scenes: TextOpenWorldSceneScriptsV1
-}): TextOpenWorldCreatorCalibrationEvidenceV1['templateDifferentiation'] {
-  const templateKeys = input.regions.packs.flatMap(pack => pack.taskTemplateSeeds.map(template => template.key)).sort()
-  const groups = templateKeys.map(templateKey => ({
-    templateKey,
-    variants: input.scenes.templateTextVariants.filter(variant => variant.templateKey === templateKey),
-  }))
+}
+
+/** P7 seed identity and P9 runtime-template identity are different contracts.
+ * Follow the frozen P8/P8F references; array position or matching key suffixes
+ * cannot prove that the reviewed variants belong to a regional template. */
+function calibrationTemplateGroups(input: CalibrationTemplateInputsV1) {
+  if (input.quests.regionNarrativePacksHash !== input.regions.regionNarrativePacksHash
+    || input.director.regionNarrativePacksHash !== input.regions.regionNarrativePacksHash
+    || input.scenes.regionNarrativePacksHash !== input.regions.regionNarrativePacksHash
+    || input.scenes.questSkeletonsHash !== input.quests.questSkeletonsHash
+    || input.scenes.directorDecksHash !== input.director.directorDecksHash) {
+    fail('模板校准的地区、任务、导演与场景来源Hash不闭合')
+  }
+  const seeds = input.regions.packs.flatMap(pack => pack.taskTemplateSeeds)
+    .sort((left, right) => left.key.localeCompare(right.key))
+  const quests = input.quests.quests.filter(quest => quest.type === 'template')
+  const templates = input.director.templates
+  if (new Set(seeds.map(seed => seed.key)).size !== seeds.length
+    || quests.length !== seeds.length || templates.length !== seeds.length
+    || new Set(quests.map(quest => quest.key)).size !== quests.length
+    || new Set(templates.map(template => template.key)).size !== templates.length) {
+    fail('模板校准的种子、任务与运行模板集合不唯一或不完整')
+  }
+  const runtimeKeys = new Set<string>()
+  const groups = seeds.map(seed => {
+    const matchingQuests = quests.filter(quest => quest.source.kind === 'template-seed'
+      && quest.source.sourceKey === seed.key)
+    if (matchingQuests.length !== 1) fail(`模板种子缺少唯一任务来源:${seed.key}`)
+    const matchingTemplates = templates.filter(template => template.questKey === matchingQuests[0]!.key)
+    if (matchingTemplates.length !== 1) fail(`模板任务缺少唯一运行模板:${matchingQuests[0]!.key}`)
+    const template = matchingTemplates[0]!
+    runtimeKeys.add(template.key)
+    const variants = input.scenes.templateTextVariants.filter(variant => variant.templateKey === template.key)
+    const requirements = new Set(variants.map(variant => variant.requirementKey))
+    if (requirements.size !== variants.length
+      || variants.some(variant => !template.variantTextRequirementKeys.includes(variant.requirementKey))) {
+      fail(`模板变体重复或越过冻结展示要求:${template.key}`)
+    }
+    return { templateKey: seed.key, variants }
+  })
+  if (runtimeKeys.size !== seeds.length
+    || input.scenes.templateTextVariants.some(variant => !runtimeKeys.has(variant.templateKey))) {
+    fail('模板校准包含无法追溯到地区种子的场景变体')
+  }
+  return groups
+}
+
+export function projectTextOpenWorldTemplateDifferentiationV1(
+  input: CalibrationTemplateInputsV1,
+): TextOpenWorldCreatorCalibrationEvidenceV1['templateDifferentiation'] {
+  const groups = calibrationTemplateGroups(input)
   let duplicateTitles = 0
   let duplicateDescriptions = 0
   let maximumSimilarity = 0
@@ -209,20 +287,16 @@ export function projectTextOpenWorldContentDurationV1(
   }
 }
 
-export function buildTextOpenWorldCreatorCalibrationContextV1(input: {
+export function buildTextOpenWorldCreatorCalibrationContextV1(input: CalibrationTemplateInputsV1 & {
   buildPackageHash: string
   mainline: TextOpenWorldMainlineThreadV1
   significant: TextOpenWorldSignificantThreadsV1
-  regions: TextOpenWorldRegionNarrativePacksV1
-  scenes: TextOpenWorldSceneScriptsV1
   contentBudget: TextOpenWorldContentBudgetV1
 }): TextOpenWorldCreatorCalibrationReviewContextV1 {
-  const templates = input.regions.packs.flatMap(pack => pack.taskTemplateSeeds.map(template => ({
-    templateKey: template.key,
-    variants: input.scenes.templateTextVariants
-      .filter(variant => variant.templateKey === template.key)
-      .map(variant => ({ title: variant.title, description: variant.description })),
-  })))
+  const templates = calibrationTemplateGroups(input).map(group => ({
+    templateKey: group.templateKey,
+    variants: group.variants.map(variant => ({ title: variant.title, description: variant.description })),
+  }))
   return {
     schema: 'storyforge.text-open-world-creator-calibration-review-input', version: 1,
     buildPackageHash: input.buildPackageHash,
@@ -272,11 +346,21 @@ function messages(context: TextOpenWorldCreatorCalibrationReviewContextV1) {
         '你是独立的文字开放世界叙事校准评审员。只评价输入中的已完成Build，不创造新事实、不修改内容或状态，只返回JSON。',
         '按顺序评价：mainline-quality（主线目标、递进、揭示、结局回收）、significant-stories（人物/势力/地区重要故事的冲突与升级）、template-differentiation（同模板三份变体是否不仅换名，而在动机、情境、阻碍或结果表达上有可感差异）。',
         '每项0到100整数分；70为最低发布校准线，低于85必须在findings给出可定位问题。不得把估算时长冒充真人游玩时长。',
+        '输出必须是可由JSON.parse直接读取的单个JSON对象。不要Markdown、前言、注释或尾逗号；所有字段名与字符串使用双引号，字符串中的换行用\\n转义。不要在对象之外输出分析。',
+        'calibration-input.schema只标识输入资料。返回schema必须严格为storyforge.text-open-world-creator-calibration-grade，不得复制输入的review-input身份。',
+        'scores中每项都必须是独立JSON对象，且只有metricKey、score、rationale三个字段。解释字段拼写固定为rationale，不得改名、缺失或放到对象之外。',
+        'rationale和findings中的引用优先使用中文引号“”。若使用ASCII双引号，必须按JSON规则转义；不要把原文里的双引号直接嵌入字符串。每段解释和每条finding均不超过1000字符。',
         `返回：{"schema":"storyforge.text-open-world-creator-calibration-grade","version":1,"scores":[{"metricKey":"mainline-quality","score":80,"rationale":"..."},{"metricKey":"significant-stories","score":80,"rationale":"..."},{"metricKey":"template-differentiation","score":80,"rationale":"..."}],"findings":["..."]}`,
       ].join('\n'),
     },
     { role: 'user' as const, content: `<calibration-input>\n${JSON.stringify(context)}\n</calibration-input>` },
   ]
+}
+
+export function hashTextOpenWorldCreatorCalibrationReviewInputV1(
+  context: TextOpenWorldCreatorCalibrationReviewContextV1,
+): Promise<string> {
+  return hashCanonicalValue(messages(context))
 }
 
 export async function runTextOpenWorldCreatorIndependentCalibrationReviewV1(input: {
@@ -335,7 +419,20 @@ export async function runTextOpenWorldCreatorIndependentCalibrationReviewV1(inpu
       requestOptions,
       frozenResolution,
     )
-    const draft = parseDraft(output)
+    let draft: CalibrationDraftV1
+    try { draft = parseDraft(output) } catch (cause) {
+      throw new TextOpenWorldCreatorCalibrationOutputErrorV1({
+        schema: 'storyforge.text-open-world-calibration-output-failure', version: 1,
+        buildPackageHash: input.context.buildPackageHash,
+        provider: input.config.provider, model: input.config.model,
+        promptVersion: TEXT_OPEN_WORLD_CREATOR_CALIBRATION_PROMPT_VERSION_V1,
+        inputHash: await hashCanonicalValue(requestMessages), outputHash: await hashCanonicalValue(output),
+        rawOutput: output, inputTokens: result.usage?.inputTokens ?? null,
+        outputTokens: result.usage?.outputTokens ?? null, finishReason: result.finishReason ?? null,
+        durationMs: Math.max(1, Date.now() - startedAt),
+        issue: cause instanceof Error ? cause.message : String(cause),
+      })
+    }
     return {
       provider: input.config.provider, model: input.config.model,
       promptVersion: TEXT_OPEN_WORLD_CREATOR_CALIBRATION_PROMPT_VERSION_V1,

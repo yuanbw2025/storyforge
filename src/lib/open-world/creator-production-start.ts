@@ -1,4 +1,5 @@
 import { db } from '../db/schema'
+import { assertTextOpenWorldCreatorBriefLifecycleV1 } from './creator-brief-lifecycle'
 import type {
   AIConfig,
   ProductProductionBriefRecordV1,
@@ -31,11 +32,10 @@ import {
   verifyTextOpenWorldCreatorBriefV1,
 } from './creator-brief-persistence'
 import { verifyTextOpenWorldCreatorProductionPreflightConfirmationV1 } from './creator-production-preflight'
-import {
-  createTextOpenWorldProductionPlanV1,
-  TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1,
-} from './production-contract'
+import { createTextOpenWorldProductionPlanV1 } from './production-contract'
+import { TEXT_OPEN_WORLD_SOURCE_PIN_LIMITS_V1 } from './source-pin-contract'
 import { TEXT_OPEN_WORLD_REQUIRED_KEY_PORTRAIT_COUNT_V1 } from './product-config'
+import { textOpenWorldProductionEstimateProfileV1 } from './production-budget'
 import {
   assertTextOpenWorldNovelSourceCasWitnessCurrentV1,
   createTextOpenWorldNovelSourceCasWitnessV1,
@@ -46,8 +46,10 @@ import {
 } from './source-pin'
 
 const STABLE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
-const MAX_SOURCE_UNITS = TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1.maximumUnits
-const MAX_SOURCE_TOTAL_CHARS = TEXT_OPEN_WORLD_PRODUCTION_SOURCE_LIMITS_V1.maximumTotalChars
+// Read immutable source bounds from the leaf contract. The production plan
+// imports Creator parsers transitively and may still be initializing here.
+const MAX_SOURCE_UNITS = TEXT_OPEN_WORLD_SOURCE_PIN_LIMITS_V1.maximumUnits
+const MAX_SOURCE_TOTAL_CHARS = TEXT_OPEN_WORLD_SOURCE_PIN_LIMITS_V1.maximumTotalChars
 
 function fail(message: string): never {
   throw new Error('[text-open-world-creator-start] ' + message)
@@ -147,9 +149,10 @@ function sameJson(left: unknown, right: unknown): boolean {
   return canonicalProductProductionJsonV2(left) === canonicalProductProductionJsonV2(right)
 }
 
-async function nestedHashValid(value: unknown, hashKey: string, expectedSchema: string): Promise<boolean> {
+async function nestedHashValid(value: unknown, hashKey: string, expectedSchema: string, versions = [1]): Promise<boolean> {
   const row = record(value, expectedSchema)
-  if (row.schema !== expectedSchema || row.version !== 1 || !isSha256Hash(row[hashKey])) return false
+  if (row.schema !== expectedSchema || typeof row.version !== 'number'
+    || !versions.includes(row.version) || !isSha256Hash(row[hashKey])) return false
   const body = Object.fromEntries(Object.entries(row).filter(([key]) => key !== hashKey))
   return await hashProductProductionValueV2(body) === row[hashKey]
 }
@@ -499,7 +502,7 @@ export async function parseTextOpenWorldCreatorProductionStartV1(input: {
   if (!await nestedHashValid(preflight, 'preflightHash', 'storyforge.text-open-world-creator-production-preflight')
     || !await nestedHashValid(preflight.providerBinding, 'bindingHash', 'storyforge.text-open-world-creator-provider-binding')
     || !await nestedHashValid(preflight.priceQuote, 'quoteHash', 'storyforge.text-open-world-creator-price-quote')
-    || !await nestedHashValid(preflight.estimate, 'estimateHash', 'storyforge.text-open-world-creator-production-estimate')
+    || !await nestedHashValid(preflight.estimate, 'estimateHash', 'storyforge.text-open-world-creator-production-estimate', [1, 2])
     || !await nestedHashValid(confirmation, 'confirmationHash', 'storyforge.text-open-world-creator-production-preflight-confirmation')) {
     fail('Start 内的生产准备快照 Hash 无效')
   }
@@ -601,9 +604,10 @@ export async function createTextOpenWorldCreatorStartPreparationV1(input: {
     || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })
     || production.productType !== 'text-open-world') fail('Production 不存在、跨 Work 或产品类型错误')
   if (production.status !== 'brief-ready' || production.stateRevision !== input.expectedStateRevision
-    || production.currentBriefRevision !== input.briefRevision || production.currentBuildNumber != null) {
+    || production.currentBriefRevision !== input.briefRevision) {
     fail('Production 已变化或不在可授权状态')
   }
+  await assertTextOpenWorldCreatorBriefLifecycleV1({ scope, production, phase: 'start' })
   const briefRow = await db.productProductionBriefs
     .where('[productionId+revision]').equals([production.id, input.briefRevision]).first()
   if (!briefRow?.id || !await assertRecordInScope(scope, 'productProductionBriefs', briefRow, { owner: 'work' })
@@ -652,6 +656,7 @@ export async function createTextOpenWorldCreatorStartPreparationV1(input: {
   const rows = await db.productBuilds.where('productionId').equals(production.id).toArray()
   const buildNumber = Math.max(0, ...rows.map(row => row.buildNumber)) + 1
   const plan = await createTextOpenWorldProductionPlanV1({
+    budgetProfile: textOpenWorldProductionEstimateProfileV1(input.preflight.estimate),
     buildNumber,
     controlEpoch: production.controlEpoch,
     brief: executionBrief,

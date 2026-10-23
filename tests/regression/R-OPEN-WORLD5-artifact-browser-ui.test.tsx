@@ -593,7 +593,7 @@ describe('Text Open World G5-05 · 受治理内容浏览 UI', () => {
     expect(ferryman.getAttribute('aria-current')).toBe('true')
   })
 
-  it('refreshToken 触发的并发读取只采纳最新一代响应', async () => {
+  it('刷新突发合并为一次最新读取，切换作品后不发布旧响应', async () => {
     const oldRead = deferred<TextOpenWorldArtifactGovernanceProjectionV1>()
     const newRead = deferred<TextOpenWorldArtifactGovernanceProjectionV1>()
     governanceMocks.read.mockReturnValueOnce(oldRead.promise).mockReturnValueOnce(newRead.promise)
@@ -604,25 +604,47 @@ describe('Text Open World G5-05 · 受治理内容浏览 UI', () => {
     })))
     await waitFor(() => expect(governanceMocks.read).toHaveBeenCalledTimes(1))
 
-    await act(async () => root.render(createElement(TextOpenWorldCreatorArtifactBrowser, {
-      scope: SCOPE,
-      productionId: 71,
-      refreshToken: 'new',
+    const nextScope = { projectId: 501, worldId: 502, workId: 503 }
+    for (let index = 0; index < 20; index += 1) {
+      await act(async () => root.render(createElement(TextOpenWorldCreatorArtifactBrowser, {
+        scope: index === 19 ? nextScope : SCOPE,
+        productionId: index === 19 ? 81 : 71,
+        refreshToken: `new-${index}`,
+      })))
+    }
+    expect(governanceMocks.read).toHaveBeenCalledTimes(1)
+    await act(async () => oldRead.resolve(governanceProjection({
+      title: '过期快照世界',
+      snapshotHash: HASH_A,
     })))
     await waitFor(() => expect(governanceMocks.read).toHaveBeenCalledTimes(2))
+    expect(governanceMocks.read).toHaveBeenLastCalledWith({ scope: nextScope, productionId: 81 })
+    expect(host.textContent).not.toContain('过期快照世界')
     await act(async () => newRead.resolve(governanceProjection({
       title: '最新快照世界',
       snapshotHash: HASH_B,
     })))
     await waitFor(() => expect(host.textContent).toContain('最新快照世界'))
 
-    await act(async () => oldRead.resolve(governanceProjection({
-      title: '过期快照世界',
-      snapshotHash: HASH_A,
-    })))
-    await act(async () => { await Promise.resolve() })
+    expect(governanceMocks.read).toHaveBeenCalledTimes(2)
     expect(host.textContent).toContain('最新快照世界')
     expect(host.textContent).not.toContain('过期快照世界')
     expect(host.textContent).toContain(HASH_B)
+  })
+
+  it('卸载丢弃待处理刷新，晚到失败不会启动新读取', async () => {
+    const oldRead = deferred<TextOpenWorldArtifactGovernanceProjectionV1>()
+    governanceMocks.read.mockReturnValueOnce(oldRead.promise)
+    await act(async () => root.render(createElement(TextOpenWorldCreatorArtifactBrowser, {
+      scope: SCOPE, productionId: 71, refreshToken: 'first',
+    })))
+    await act(async () => root.render(createElement(TextOpenWorldCreatorArtifactBrowser, {
+      scope: SCOPE, productionId: 71, refreshToken: 'pending',
+    })))
+    expect(governanceMocks.read).toHaveBeenCalledTimes(1)
+    await act(async () => root.render(null))
+    await act(async () => oldRead.reject(new Error('old read failed')))
+    expect(governanceMocks.read).toHaveBeenCalledTimes(1)
+    expect(host.textContent).toBe('')
   })
 })

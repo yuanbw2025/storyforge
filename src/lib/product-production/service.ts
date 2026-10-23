@@ -277,6 +277,33 @@ export async function authorizeTextOpenWorldCreatorMediaV1(input: {
   })
 }
 
+/** Read-only preparation; the subsequent command rechecks this exact prefix. */
+export async function previewTextOpenWorldCreatorBudgetRecoveryV1(input: {
+  scope: WorkspaceScope; productionId: number; buildId: number
+}) {
+  const { prepareTextOpenWorldBudgetRecoveryV1 } = await import('../open-world/creator-budget-recovery')
+  return prepareTextOpenWorldBudgetRecoveryV1(input)
+}
+
+export async function authorizeTextOpenWorldCreatorBudgetRecoveryV1(input: {
+  prepared: Awaited<ReturnType<typeof previewTextOpenWorldCreatorBudgetRecoveryV1>>
+}): Promise<ProductProductionCommandReceiptV1> {
+  const { prepared } = input
+  return executeProductProductionCommand({
+    scope: prepared.scope, productionId: prepared.source.production.id,
+    command: {
+      type: 'authorize-text-open-world-creator-budget-recovery',
+      commandId: `tow-creator-budget:${crypto.randomUUID()}`,
+      expectedStateRevision: prepared.source.production.stateRevision,
+      baseBuildNumber: prepared.source.build.buildNumber,
+      expectedBasePlanHash: prepared.source.build.planHash,
+      expectedPrefixHash: prepared.prefix.prefixHash,
+      expectedTargetPlanHash: prepared.targetPlanHash,
+      authorizationNonce: crypto.randomUUID(), authorizedAt: Date.now(),
+    },
+  })
+}
+
 export async function previewTextOpenWorldCreatorArtifactRepairV1(input: {
   scope: WorkspaceScope
   productionId: number
@@ -448,10 +475,21 @@ export async function readProductProductionTaskEvidenceV1(input: {
     || snapshot.run.parentRelation !== `task:${input.taskKey}`
     || !boundary
     || boundary.productBuildId !== progress.buildId
-    || boundary.controlEpoch !== progress.controlEpoch
     || boundary.planHash !== progress.planHash
     || boundary.taskKey !== input.taskKey) {
     throw new Error('任务证据不属于当前 Build/task Run')
+  }
+  if (boundary.controlEpoch !== progress.controlEpoch) {
+    const build = await db.productBuilds.get(progress.buildId)
+    if (build?.status !== 'recovery-required') throw new Error('任务证据不属于当前 Build/task Run')
+    const { validateProductProductionRecoveryDirectiveV1 } = await import('./context')
+    const recovery = await validateProductProductionRecoveryDirectiveV1({ scope,
+      productProductionId: input.productionId, productBuildId: progress.buildId,
+      productProductionTaskKey: input.taskKey, expectedState: 'blocked' })
+    if (recovery.snapshot?.run.id !== snapshot.run.id
+      || recovery.snapshot.run.contractHash !== snapshot.run.contractHash) {
+      throw new Error('任务证据不属于当前失败 Run')
+    }
   }
   const isCurrentGovernedAttempt = (stepId: string | undefined, attempt: number | undefined) => {
     if (stepId == null || attempt == null) return false
@@ -1289,10 +1327,13 @@ export async function setProductProductionPausedV1(input: {
   build?: ProductBuildRecordV1 | null
   pausedReservationDisposition?: 'confirmed-not-charged' | 'charge-reservation-upper-bound'
   contentRevision?: import('../types').TextAdventureContentRevisionV1
+  openWorldContentRevision?: import('../types').TextOpenWorldContentRevisionV1
 }): Promise<'paused' | 'resumed'> {
   if (input.build) input = { ...input, build: await prepareLegacyPausedProductBuildV1(input.scope, input.build) }
   const paused = input.production.status === 'paused'
-  if (input.contentRevision && !paused) throw new Error('[product-production-service] 请先暂停制作再修订内容')
+  if ((input.contentRevision || input.openWorldContentRevision) && !paused) throw new Error('[product-production-service] 请先暂停制作再修订内容')
+  const openWorldContentRevision = input.openWorldContentRevision ?? (paused && input.build && input.production.productType === 'text-open-world'
+    ? (await import('../open-world/production-content-revision')).pendingTextOpenWorldRevisionV1(input.build.failureJson) : undefined)
   let pausedReservationDispositions: Extract<
     import('../types').ProductProductionCommandV1,
     { type: 'resume' }
@@ -1388,6 +1429,7 @@ export async function setProductProductionPausedV1(input: {
           expectedStateRevision: input.production.stateRevision,
           ...(pausedReservationDispositions ? { pausedReservationDispositions } : {}),
           ...(input.contentRevision ? { contentRevision: input.contentRevision } : {}),
+          ...(openWorldContentRevision ? { openWorldContentRevision } : {}),
         }
       : {
           type: 'pause', commandId: commandId('pause'), expectedStateRevision: input.production.stateRevision,

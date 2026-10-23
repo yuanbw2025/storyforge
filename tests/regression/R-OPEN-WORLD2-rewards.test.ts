@@ -15,6 +15,40 @@ async function evidence(preparation: ReturnType<ReturnType<typeof createTextOpen
 }
 
 describe('Text Open World vNext · reward contracts, drops and unique claims', () => {
+  it('显式保留唯一物品的两次不同奖励各自原子结算，原件、普通物品和一次性claim均不被破坏', async () => {
+    const fixture = createTextOpenWorldVNextFixture()
+    const actions = fixture.modules.actions.payload as any
+    const items = fixture.modules.items.payload as any
+    actions.effects.push({ key: 'effect.reward-retain-seal', operation: 'grant-item',
+      payload: { itemKey: 'item.canal-seal', quantity: 1, ifAbsent: true } })
+    actions.effects.push({ key: 'effect.reward-permit-currency', operation: 'change-currency', payload: { amount: 30 } })
+    for (const key of ['reward.permit-first', 'reward.permit-second']) items.rewardContracts.push({
+      key, title: '借阅凭证奖励', sourceKind: 'system', claimPolicy: 'once-per-source', expectedMinutes: 10,
+      budgetClass: 'standard', conditionKeys: [], dropTableKeys: [],
+      effectKeys: ['effect.reward-experience', 'effect.reward-permit-currency', 'effect.reward-retain-seal', 'effect.drop-salt-1'],
+    })
+    const effects = createTextOpenWorldEffectCatalogV1(fixture)
+    const rewards = createTextOpenWorldRewardCatalogV1(fixture)
+    const start = createInitialTextOpenWorldSessionProjectionV1(fixture).state
+    const firstPreparation = rewards.prepare({ rewardKey: 'reward.permit-first', sourceInstanceKey: 'quest.permit.first' })
+    const first = await rewards.resolve({ preparation: firstPreparation, evidence: [], state: start })
+    const held = await effects.apply({ plan: first.effectPlan, state: start })
+    const originalInstance = Object.entries(held.state.inventory.itemInstances).filter(([, item]) => item.itemKey === 'item.canal-seal')
+    expect(originalInstance).toHaveLength(1)
+    const secondPreparation = rewards.prepare({ rewardKey: 'reward.permit-second', sourceInstanceKey: 'quest.permit.second' })
+    const second = await rewards.resolve({ preparation: secondPreparation, evidence: [], state: held.state })
+    const result = await effects.apply({ plan: second.effectPlan, state: held.state })
+    expect(Object.entries(result.state.inventory.itemInstances).filter(([, item]) => item.itemKey === 'item.canal-seal')).toEqual(originalInstance)
+    expect(result.state.inventory.currency).toBe(start.inventory.currency + 60)
+    expect(result.state.player.experience).toBe(start.player.experience + 200)
+    expect(result.state.inventory.stackQuantities['item.salt-crystal']).toBe((start.inventory.stackQuantities['item.salt-crystal'] ?? 0) + 2)
+    await expect(rewards.resolve({ preparation: secondPreparation, evidence: [], state: result.state })).rejects.toThrow('claim已应用')
+    await expect(effects.apply({ plan: second.effectPlan, state: result.state })).rejects.toThrow('基线状态已变化')
+    const invalid = structuredClone(fixture)
+    ;(invalid.modules.actions.payload as any).effects.find((effect: any) => effect.key === 'effect.reward-retain-seal').payload.quantity = 2
+    expect(() => createTextOpenWorldEffectCatalogV1(invalid)).toThrow(/quantity/)
+  })
+
   it('静态奖励与确定性掉落合并为一个EffectPlan，并只领取一次', async () => {
     const fixture = createTextOpenWorldVNextFixture()
     const rewards = createTextOpenWorldRewardCatalogV1(fixture)

@@ -290,6 +290,10 @@ export type PortableDataSpec = {
   /** CTXG-2 immutable UTF-8 body or a verified evidence-pruned tombstone. */
   kind: 'exact-run-artifact'
 } | {
+  /** Preserves a verified root preimage while live ledger references are remapped. */
+  kind: 'product-build-root-budget'
+  evidenceField: 'rootBudgetEvidenceJson'
+} | {
   /** Content-addressed media object exported as verified inline binary. */
   kind: 'shared-media-object'
   dataField: string

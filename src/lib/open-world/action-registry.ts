@@ -244,6 +244,12 @@ export function createTextOpenWorldActionRegistryV1(value: TextOpenWorldRuntimeP
       const action = entry.action
       const unavailableReasons: TextOpenWorldActionAvailabilityV1['unavailableReasons'] = []
       const removableQuantity = (itemKey: string) => context.removableInventoryQuantities?.[itemKey] ?? 0
+      if (modules.actions.version >= 20) for (const effectKey of action.costEffectKeys) {
+        const cost = effectByKey.get(effectKey)
+        if (cost?.operation === 'remove-item' && cost.payload.reason === 'fulfillment'
+          && modules.items.items.find(item => item.key === cost.payload.itemKey)?.stackPolicy === 'instanced'
+          && removableQuantity(cost.payload.itemKey) < cost.payload.quantity) unavailableReasons.push({ code: 'item-unavailable', message: '交付前需卸下所需装备，并保留足够的可交付实例。', conditionKey: null })
+      }
       const defeated = context.playerHealth === 0 || context.combatStatus === 'defeat'
       const modernCombatAction = modules.actions.version >= 10
         && ['combat-basic-attack', 'combat-skill', 'combat-item', 'escape'].includes(action.category)

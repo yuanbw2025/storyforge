@@ -72,6 +72,7 @@ import TextOpenWorldScenePanel, {
 } from './TextOpenWorldScenePanel'
 import TextOpenWorldSaveSettingsPanel from './TextOpenWorldSaveSettingsPanel'
 import TextOpenWorldWorldRecordPanel from './TextOpenWorldWorldRecordPanel'
+import TextOpenWorldExperienceFeedback from './TextOpenWorldExperienceFeedback'
 
 const QUEST_STATUS_LABELS = {
   revealed: '可接取',
@@ -206,33 +207,46 @@ export default function TextOpenWorldVNextPlayer() {
           })
       })()
     : [], [modules])
-  const mediaSlotAssetSignature = mediaSlotAssetKeys.join('|')
+  const mediaSlotAssetSignature = JSON.stringify(mediaSlotAssetKeys)
+  const mediaAssetCount = presentationAssets.length
+  const mediaSessionId = session?.id ?? null
+  const mediaBuildId = session?.productBuildId ?? null
+  const mediaReleaseId = session?.productReleaseId ?? null
+  const mediaSourceHash = session?.runtimeSourceHash ?? null
+  const mediaProjectId = store.scope?.projectId ?? null
+  const mediaWorldId = store.scope?.worldId ?? null
+  const mediaWorkId = store.scope?.workId ?? null
   useEffect(() => {
     let cancelled = false
     let resolver: ProductMediaResolverV1 | null = null
+    const assetKeys: string[] = JSON.parse(mediaSlotAssetSignature)
     setMediaUrls({})
     setMediaFailures([])
-    if (!store.scope || !session || presentationAssets.length === 0 || mediaSlotAssetKeys.length === 0) {
+    if (mediaProjectId == null || mediaWorldId == null || mediaWorkId == null
+      || mediaSessionId == null || !mediaSourceHash || mediaAssetCount === 0 || assetKeys.length === 0) {
       setMediaLoading(false)
       return () => { cancelled = true }
     }
     setMediaLoading(true)
-    const expectedRuntimeSourceHash = session.runtimeSourceHash
     void (async () => {
       try {
-        const source = await productRuntimeSourceForSessionV1(session)
-        const resolved = await resolveProductRuntimeSource({ scope: store.scope!, source })
+        const source = await productRuntimeSourceForSessionV1({
+          productBuildId: mediaBuildId, productReleaseId: mediaReleaseId,
+        })
+        const resolved = await resolveProductRuntimeSource({
+          scope: { projectId: mediaProjectId, worldId: mediaWorldId, workId: mediaWorkId }, source,
+        })
         resolver = resolved.mediaResolver
         if (cancelled) {
           resolver.dispose()
           resolver = null
           return
         }
-        if (resolved.runtimeSourceHash !== expectedRuntimeSourceHash) {
+        if (resolved.runtimeSourceHash !== mediaSourceHash) {
           throw new Error('玩家媒资来源与当前存档绑定的不可变运行包不一致')
         }
         const result = await resolver.preload({
-          assetKeys: mediaSlotAssetKeys,
+          assetKeys,
           maximumBytes: 64 * 1024 * 1024,
         })
         if (cancelled) return
@@ -243,7 +257,7 @@ export default function TextOpenWorldVNextPlayer() {
         resolver?.dispose()
         resolver = null
         const reason = error instanceof Error ? error.message : String(error)
-        setMediaFailures(mediaSlotAssetKeys.map(assetKey => ({ assetKey, reason })))
+        setMediaFailures(assetKeys.map(assetKey => ({ assetKey, reason })))
       } finally {
         if (!cancelled) setMediaLoading(false)
       }
@@ -253,12 +267,18 @@ export default function TextOpenWorldVNextPlayer() {
       resolver?.dispose()
     }
   }, [
+    // Store reads replace session/manifest/scope objects after every command.
+    // Retain leases while their immutable source and selected assets are equal.
     mediaAssetSignature,
-    mediaSlotAssetKeys,
     mediaSlotAssetSignature,
-    presentationAssets.length,
-    session,
-    store.scope,
+    mediaAssetCount,
+    mediaSessionId,
+    mediaBuildId,
+    mediaReleaseId,
+    mediaSourceHash,
+    mediaProjectId,
+    mediaWorldId,
+    mediaWorkId,
   ])
   const playerMedia = useMemo(() => (
     projection && modules
@@ -1022,6 +1042,7 @@ export default function TextOpenWorldVNextPlayer() {
       projection={sceneProjection}
       availableActions={availableActions}
       feedback={store.lastFeedback}
+      notifications={notifications}
       busy={gameplayLocked}
       fallback={{
         regionTitle: region?.title ?? '未知区域',
@@ -1097,6 +1118,8 @@ export default function TextOpenWorldVNextPlayer() {
       role="status"
       data-testid="text-open-world-world-record-synchronizing"
     >世界记录正在核对，完成前不会展示不完整或尚未揭示的内容。</article>}
+    {session?.id != null && <TextOpenWorldExperienceFeedback key={session.id} sessionId={session.id}
+      scope={{ projectId: session.projectId, worldId: session.worldId, workId: session.workId }} />}
     <TextOpenWorldRuntimeAIStatusPanel
       configured={isAIConfigReady(aiConfig)}
       loading={runtimeAIObservabilityLoading}
@@ -1253,6 +1276,7 @@ export default function TextOpenWorldVNextPlayer() {
         scene: sceneView,
         map: <TextOpenWorldMapPanel
           projection={projection}
+          notifications={notifications}
           runtimeEventSequence={store.runtimeState.lastSequence}
           busy={gameplayLocked}
           sessionKey={sessionKey}
@@ -1315,6 +1339,7 @@ export default function TextOpenWorldVNextPlayer() {
       navigationSupplement={trackedQuestContent}
       resultSupplement={<TextOpenWorldResultExpressionPanel
         feedback={store.lastFeedback}
+        notifications={notifications}
         presentation={resultExpression}
         busy={resultExpressionBusy}
         issue={resultExpressionIssue}

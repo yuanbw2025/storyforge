@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as rootReceipts from '../../src/lib/product-production/receipts'
 import {
   projectTextOpenWorldArtifactGovernanceV1,
   type TextOpenWorldArtifactBuildEvidenceV1,
@@ -966,20 +967,22 @@ describe('R-OPEN-WORLD5 · Creator domain artifact governance projection', () =>
     expect(diagnosticCodes(projection, target.artifactKey)).not.toContain('artifact.carried-lineage')
   })
 
-  it('legacy v1 父 Build 即使能计算公开 portable proof，也不能授权跨 Build carried 内容', async () => {
-    const payload = await governedPayload(
-      'text-open-world.region-skeleton',
-      'regionSkeletonHash',
-      { regions: [{ key: 'region.legacy-parent', title: '旧封存地区', locationKeys: [] }] },
-    )
-    const fixture = await makeFixture([{
-      taskKey: 'region.legacy-parent',
-      artifacts: [{
-        artifactKey: 'text-open-world.region-skeleton',
-        kind: 'text-open-world.region-skeleton',
-        payload,
+  it.each([1, 2] as const)('父 Build v%s 封存证明按完整父集合验证，且只在本次读取内复用', async version => {
+    const specs = [
+      ['text-open-world.region-skeleton', 'regionSkeletonHash', {
+        regions: [{ key: 'region.sealed-parent', title: '封存地区', locationKeys: [] }],
       }],
-    }])
+      ['text-open-world.map-interaction-catalog', 'mapInteractionCatalogHash', {
+        regions: [{ key: 'region.sealed-map', title: '封存地图', locationKeys: [] }],
+      }],
+      ['text-open-world.story-arc', 'storyArcHash', { title: '封存故事', macroBeats: [] }],
+      ['text-open-world.source-ledger', 'ledgerHash', { entries: [] }],
+    ] as const
+    const artifacts: ArtifactSpec[] = await Promise.all(specs.map(async ([kind, hashField, content]) => ({
+      artifactKey: kind, kind, payload: await governedPayload(kind, hashField, content),
+    })))
+    artifacts.sort((left, right) => left.artifactKey.localeCompare(right.artifactKey))
+    const fixture = await makeFixture([{ taskKey: 'region.sealed-parent', artifacts }])
     const targetTask = fixture.plan.tasks[0]
     const parentBuildNumber = BUILD_NUMBER - 1
     const parentControlEpoch = CONTROL_EPOCH - 1
@@ -1027,9 +1030,9 @@ describe('R-OPEN-WORLD5 · Creator domain artifact governance projection', () =>
         },
       },
     })
-    const parentArtifact: ProductBuildArtifactRecordV1 = {
-      ...structuredClone(fixture.artifactRows[0]),
-      id: 90,
+    const parentArtifacts: ProductBuildArtifactRecordV1[] = fixture.artifactRows.map((row, index) => ({
+      ...structuredClone(row),
+      id: 90 + index,
       buildId: parentBuildId,
       controlEpoch: parentControlEpoch,
       inputHash: parentInputHash,
@@ -1038,7 +1041,7 @@ describe('R-OPEN-WORLD5 · Creator domain artifact governance projection', () =>
       status: 'accepted',
       parentArtifactHash: null,
       carriedFrom: null,
-    }
+    }))
     const packageHash = 'a'.repeat(64)
     const quality = {
       schema: 'storyforge.product-build-quality-report',
@@ -1064,25 +1067,25 @@ describe('R-OPEN-WORLD5 · Creator domain artifact governance projection', () =>
       planHash: parentPlanHash,
       controlEpoch: parentControlEpoch,
       runtimePackageHash: packageHash,
-      artifactReceipts: [{
-        artifactKey: parentArtifact.artifactKey,
-        version: parentArtifact.version,
-        contentHash: parentArtifact.contentHash,
-        producerReceiptHash: parentArtifact.producerReceiptHash,
-      }],
+      artifactReceipts: parentArtifacts.map(row => ({
+        artifactKey: row.artifactKey, version: row.version,
+        contentHash: row.contentHash, producerReceiptHash: row.producerReceiptHash,
+      })),
       completedGateIds: [...targetTask.acceptanceGateIds],
       fallbackSummary: [],
     }
     const manifestJson = canonicalProductProductionJsonV2(manifest)
     const manifestHash = await hashProductProductionValueV2(manifest)
-    const legacyRootReceiptHash = await createLegacyProductBuildRootTerminalReceiptV1({
+    const createRootReceipt = version === 1 ? createLegacyProductBuildRootTerminalReceiptV1
+      : rootReceipts.createProductBuildRootTerminalReceiptV1
+    const rootReceiptHash = await createRootReceipt({
       planHash: parentPlanHash,
       manifestHash,
       packageHash,
       qualityReportHash,
       controlEpoch: parentControlEpoch,
       budgetLedgerJson: parentBudgetLedgerJson,
-      artifacts: [parentArtifact],
+      artifacts: parentArtifacts,
     })
     const parentBuild: ProductBuildRecordV1 & { id: number } = {
       ...structuredClone(fixture.build),
@@ -1099,7 +1102,7 @@ describe('R-OPEN-WORLD5 · Creator domain artifact governance projection', () =>
       packageHash,
       qualityReportJson,
       qualityReportHash,
-      rootTerminalReceiptHash: legacyRootReceiptHash,
+      rootTerminalReceiptHash: rootReceiptHash,
       completedAt: 2,
     }
     const portableTaskLedger = parseProductProductionPortableTaskLedgerV1({
@@ -1111,32 +1114,28 @@ describe('R-OPEN-WORLD5 · Creator domain artifact governance projection', () =>
       manifestHash,
       packageHash,
       qualityReportHash,
-      rootTerminalReceiptHash: legacyRootReceiptHash,
+      rootTerminalReceiptHash: rootReceiptHash,
       controlEpoch: parentControlEpoch,
       portableTaskLedger,
     })
-    const proofHash = await hashProductProductionSealedParentArtifactProofV1({
-      productionKey: fixture.production.productionKey,
-      productType: fixture.production.productType,
-      build: parentBuild,
-      portableTaskLedger,
-      portableRootSealHash,
-      ownerTask: parentPlan.tasks[0],
-      manifestMember: manifest.artifactReceipts[0],
-      artifact: parentArtifact,
-      blobContentHash: null,
-    })
-    const targetArtifact = fixture.artifactRows[0]
-    targetArtifact.status = 'carried-forward'
-    targetArtifact.parentArtifactHash = targetArtifact.contentHash
-    targetArtifact.carriedFrom = {
-      buildNumber: parentBuildNumber,
-      artifactKey: parentArtifact.artifactKey,
-      version: parentArtifact.version,
-      contentHash: parentArtifact.contentHash,
-      proofHash,
+    for (const [index, targetArtifact] of fixture.artifactRows.entries()) {
+      const parentArtifact = parentArtifacts[index]
+      const proofHash = await hashProductProductionSealedParentArtifactProofV1({
+        productionKey: fixture.production.productionKey,
+        productType: fixture.production.productType,
+        build: parentBuild, portableTaskLedger, portableRootSealHash,
+        ownerTask: parentPlan.tasks[0], manifestMember: manifest.artifactReceipts[index],
+        artifact: parentArtifact, blobContentHash: null,
+      })
+      targetArtifact.status = 'carried-forward'
+      targetArtifact.parentArtifactHash = targetArtifact.contentHash
+      targetArtifact.carriedFrom = {
+        buildNumber: parentBuildNumber, artifactKey: parentArtifact.artifactKey,
+        version: parentArtifact.version, contentHash: parentArtifact.contentHash, proofHash,
+      }
     }
-    const carriedCandidateHash = await hashProductProductionCarriedCandidateV1([targetArtifact])
+    const targetArtifact = fixture.artifactRows[0]
+    const carriedCandidateHash = await hashProductProductionCarriedCandidateV1(fixture.artifactRows)
     const carriedReceiptHash = await hashProductProductionCarriedReceiptV1({
       taskKey: targetTask.taskKey,
       inputHash: targetArtifact.inputHash,
@@ -1145,7 +1144,7 @@ describe('R-OPEN-WORLD5 · Creator domain artifact governance projection', () =>
       passedGateIds: targetTask.acceptanceGateIds,
       controlEpoch: CONTROL_EPOCH,
     })
-    targetArtifact.producerReceiptHash = carriedReceiptHash
+    for (const row of fixture.artifactRows) row.producerReceiptHash = carriedReceiptHash
     const targetEvidence = fixture.runEvidenceById.get(targetArtifact.producerRunId!)!
     targetEvidence.terminalReceiptHash = carriedReceiptHash
     targetEvidence.taskStep = {
@@ -1177,19 +1176,38 @@ describe('R-OPEN-WORLD5 · Creator domain artifact governance projection', () =>
         },
       },
     })
-    fixture.lineageArtifactRows = [targetArtifact, parentArtifact]
+    fixture.lineageArtifactRows = [...fixture.artifactRows, ...parentArtifacts]
 
-    const projection = await project(fixture)
-    const target = projection.artifacts.find(item => item.currentEpoch)!
-    expect(target.health).toBe('corrupt')
-    expect(target.productionValidation).toBe('not-applicable')
-    expect(target.diagnostics).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        code: 'artifact.proof-error',
-        message: expect.stringMatching(/不是 v2 完整 Artifact 封存证明/),
-      }),
-    ]))
-    expect(projection.entities).toEqual([])
+    const verify = vi.spyOn(rootReceipts, 'verifyProductBuildRootTerminalReceiptV1')
+    try {
+      const projection = await project(fixture)
+      if (version === 1) {
+        expect(projection.artifacts.every(row => row.health === 'corrupt')).toBe(true)
+        expect(projection.artifacts[0].diagnostics).toEqual(expect.arrayContaining([
+          expect.objectContaining({ code: 'artifact.proof-error',
+            message: expect.stringMatching(/不是 v2 完整 Artifact 封存证明/) }),
+        ]))
+        expect(projection.entities).toEqual([])
+      } else {
+        expect(projection.artifacts.every(row => row.health === 'verified')).toBe(true)
+        expect(projection.artifacts).toHaveLength(4)
+        // This pure fixture establishes integrity, not Creator production authority.
+        expect(projection.entities).toEqual([])
+        // Sibling artifacts share the same complete parent seal within one read.
+        expect(verify.mock.calls.filter(([input]) => input.expectedReceiptHash === rootReceiptHash)).toHaveLength(1)
+        verify.mockClear()
+        parentArtifacts[3].rightsJson = canonicalProductProductionJsonV2({ basis: 'tampered' })
+        const changed = await project(fixture)
+        expect(changed.artifacts.every(row => row.health === 'corrupt')).toBe(true)
+        expect(changed.entities).toEqual([])
+        expect(verify.mock.calls.filter(([input]) => input.expectedReceiptHash === rootReceiptHash)).toHaveLength(1)
+        // A failed validation must also never survive into another read.
+        parentArtifacts[3].rightsJson = fixture.artifactRows[3].rightsJson
+        expect((await project(fixture)).artifacts.every(row => row.health === 'verified')).toBe(true)
+      }
+    } finally {
+      verify.mockRestore()
+    }
   })
 
   it('损坏 checkpoint 只使 task 证明失败，不得让整个 Creator reader 抛错', async () => {

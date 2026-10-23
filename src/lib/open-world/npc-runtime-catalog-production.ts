@@ -78,6 +78,7 @@ interface ActorDemandV1 {
 export interface TextOpenWorldNpcRuntimeInputContextV1 {
   schema: 'storyforge.text-open-world-npc-runtime-input'
   version: 1
+  vendorIdentityContract?: 'canonical-vendor-owners-v1'
   productInstanceKey: string
   gameplayRuleset: TextOpenWorldGameplayRulesetSkeletonV1
   regionNarrativePacks: TextOpenWorldRegionNarrativePacksV1
@@ -109,12 +110,14 @@ export type TextOpenWorldNpcRuntimeModelRunnerV1 = (input: {
 interface CatalogDraftV1 {
   factions: Array<{
     demandNumber: number
+    reuseFactionDemandNumber?: number
     description: string
     publicGoal: string
     moralityMultiplier: -1 | 0 | 1
   }>
   actors: Array<{
     demandNumber: number
+    reuseActorDemandNumber?: number
     name: string
     biography: string
     portrayal: string
@@ -247,6 +250,7 @@ function buildDemands(input: {
 }
 
 async function validateUpstream(context: Omit<TextOpenWorldNpcRuntimeInputContextV1, 'contextSelectionHash'>): Promise<void> {
+  if (context.vendorIdentityContract !== undefined && context.vendorIdentityContract !== 'canonical-vendor-owners-v1') fail('商店身份合同无效')
   const { gameplayRuleset, regionNarrativePacks, questSkeletons, contentRequirementManifest, craftingEconomyCatalog } = context
   await validateTextOpenWorldGameplayRulesetSkeletonV1({ artifact: gameplayRuleset })
   for (const [value, hashKey, label] of [
@@ -299,6 +303,7 @@ async function loadContext(input: { scope: WorkspaceScope; productionId: number;
   const demands = buildDemands({ packs: regionNarrativePacks, quests: questSkeletons, manifest: contentRequirementManifest, crafting: craftingEconomyCatalog })
   const body: Omit<TextOpenWorldNpcRuntimeInputContextV1, 'contextSelectionHash'> = {
     schema: 'storyforge.text-open-world-npc-runtime-input', version: 1, productInstanceKey: production.productionKey,
+    vendorIdentityContract: 'canonical-vendor-owners-v1',
     gameplayRuleset, regionNarrativePacks, questSkeletons, contentRequirementManifest, craftingEconomyCatalog, ...demands,
   }
   await validateUpstream(body)
@@ -322,31 +327,79 @@ async function parseContext(value: string): Promise<TextOpenWorldNpcRuntimeInput
   return context
 }
 
+function identityReuses(
+  rows: unknown[],
+  demands: Array<{ demandNumber: number; requirementKey: string | null }>,
+  fixedKeys: Array<string | null>,
+  field: 'reuseActorDemandNumber' | 'reuseFactionDemandNumber',
+  version: number,
+  vendorActors?: ActorDemandV1[],
+): Map<number, number> {
+  const reuses = new Map<number, number>()
+  const label = field === 'reuseActorDemandNumber' ? '角色' : '势力'
+  rows.forEach((value, index) => {
+    const row = record(value, `${label}[${index}]`)
+    if (row.demandNumber !== index + 1) fail(`${label}必须按需求顺序精确覆盖`)
+    if (!Object.prototype.hasOwnProperty.call(row, field)) return
+    if (version !== 2 && version !== 3) fail('身份复用需要draft version 2或3')
+    exactKeys(row, ['demandNumber', field], `${label}复用`)
+    const vendorRole = version === 3 && vendorActors?.[index]?.demandKind === 'vendor-service'
+    if (fixedKeys[index] && !vendorRole) fail(`已预留${label}身份不得合并`)
+    const target = integer(row[field], field, 1, index)
+    if (!fixedKeys[target - 1] || !demands[target - 1]!.requirementKey) fail(`${label}只能复用此前已预留的同类身份`)
+    if (vendorRole) {
+      const source = vendorActors![index]!
+      const owner = vendorActors![target - 1]!
+      if (owner.demandKind !== 'content-requirement' || owner.regionKey !== source.regionKey
+        || owner.homeLocationKey !== source.homeLocationKey) fail('商店岗位只能绑定同地区同家园的固定内容角色')
+    }
+    reuses.set(index + 1, target)
+  })
+  for (const target of new Set(reuses.values())) {
+    const members = demands.filter(demand => demand.demandNumber === target || reuses.get(demand.demandNumber) === target)
+    const countedMembers = version === 3 && vendorActors ? members.filter(demand => demand.requirementKey !== null) : members
+    if (new Set(countedMembers.map(demand => demand.requirementKey)).size !== countedMembers.length) fail(`${label}复用不得降低同一需求的最小数量`)
+  }
+  return reuses
+}
+
 function parseDraft(value: unknown, context: TextOpenWorldNpcRuntimeInputContextV1): CatalogDraftV1 {
   const root = record(value, 'draft'); exactKeys(root, ['schema', 'version', 'factions', 'actors', 'attitudeBands'], 'draft')
-  if (root.schema !== 'storyforge.text-open-world-npc-runtime-draft' || root.version !== 1) fail('draft schema/version无效')
+  if (root.schema !== 'storyforge.text-open-world-npc-runtime-draft'
+    || ![1, 2, 3].includes(Number(root.version)) || typeof root.version !== 'number') fail('draft schema/version无效')
+  if (root.version === 3 && context.vendorIdentityContract !== 'canonical-vendor-owners-v1') fail('draft version 3需要新商店身份合同')
   if (!Array.isArray(root.factions) || root.factions.length !== context.factionDemands.length) fail(`factions必须与${context.factionDemands.length}项需求一一对应`)
+  const factionRows = root.factions
+  const factionReuses = identityReuses(factionRows, context.factionDemands, context.factionDemands.map(demand => demand.fixedFactionKey), 'reuseFactionDemandNumber', root.version)
   const factions = root.factions.map((value, index) => {
-    const row = record(value, `factions[${index}]`); exactKeys(row, ['demandNumber', 'description', 'publicGoal', 'moralityMultiplier'], `factions[${index}]`)
+    const reuse = factionReuses.get(index + 1)
+    const row = record(reuse ? factionRows[reuse - 1] : value, `factions[${index}]`); exactKeys(row, ['demandNumber', 'description', 'publicGoal', 'moralityMultiplier'], `factions[${index}]`)
     return {
-      demandNumber: integer(row.demandNumber, `factions[${index}].demandNumber`, 1, context.factionDemands.length),
+      demandNumber: index + 1,
+      ...(reuse ? { reuseFactionDemandNumber: reuse } : {}),
       description: text(row.description, `factions[${index}].description`), publicGoal: text(row.publicGoal, `factions[${index}].publicGoal`),
       moralityMultiplier: integer(row.moralityMultiplier, `factions[${index}].moralityMultiplier`, -1, 1) as -1 | 0 | 1,
     }
   })
   if (factions.some((faction, index) => faction.demandNumber !== index + 1)) fail('factions必须按需求顺序精确覆盖')
   if (!Array.isArray(root.actors) || root.actors.length !== context.actorDemands.length) fail(`actors必须与${context.actorDemands.length}项需求一一对应`)
+  const actorRows = root.actors
+  const actorReuses = identityReuses(actorRows, context.actorDemands, context.actorDemands.map(demand => demand.fixedActorKey), 'reuseActorDemandNumber', root.version,
+    context.vendorIdentityContract ? context.actorDemands : undefined)
   const actors = root.actors.map((value, index) => {
-    const row = record(value, `actors[${index}]`); exactKeys(row, ['demandNumber', 'name', 'biography', 'portrayal', 'factionNumber', 'scheduleActivities'], `actors[${index}]`)
-    const demandNumber = integer(row.demandNumber, `actors[${index}].demandNumber`, 1, context.actorDemands.length)
-    const demand = context.actorDemands[demandNumber - 1]!
+    const reuse = actorReuses.get(index + 1)
+    const primaryNumber = reuse ?? index + 1
+    const row = record(reuse ? actorRows[reuse - 1] : value, `actors[${index}]`); exactKeys(row, ['demandNumber', 'name', 'biography', 'portrayal', 'factionNumber', 'scheduleActivities'], `actors[${index}]`)
+    const maintained = context.actorDemands.some(demand => (demand.demandNumber === primaryNumber || actorReuses.get(demand.demandNumber) === primaryNumber) && demand.runtimeMode === 'agent-maintained')
     return {
-      demandNumber, name: text(row.name, `actors[${index}].name`, 120), biography: text(row.biography, `actors[${index}].biography`),
+      demandNumber: index + 1, ...(reuse ? { reuseActorDemandNumber: reuse } : {}),
+      name: text(row.name, `actors[${index}].name`, 120), biography: text(row.biography, `actors[${index}].biography`),
       portrayal: text(row.portrayal, `actors[${index}].portrayal`), factionNumber: integer(row.factionNumber, `actors[${index}].factionNumber`, 0, context.factionDemands.length),
-      scheduleActivities: stringArray(row.scheduleActivities, `actors[${index}].scheduleActivities`, demand.runtimeMode === 'rule-driven' ? 4 : 0),
+      scheduleActivities: stringArray(row.scheduleActivities, `actors[${index}].scheduleActivities`, maintained ? 0 : 4),
     }
   })
-  if (actors.some((actor, index) => actor.demandNumber !== index + 1) || new Set(actors.map(actor => actor.name.toLocaleLowerCase('zh-CN'))).size !== actors.length) fail('actors必须按序覆盖且姓名不得重复')
+  const distinctActors = actors.filter(actor => !actor.reuseActorDemandNumber)
+  if (new Set(distinctActors.map(actor => actor.name.toLocaleLowerCase('zh-CN'))).size !== distinctActors.length) fail('actors必须按序覆盖且姓名不得重复')
   if (!Array.isArray(root.attitudeBands) || root.attitudeBands.length !== 3) fail('attitudeBands必须精确包含三档')
   const attitudeBands = root.attitudeBands.map((value, index) => {
     const row = record(value, `attitudeBands[${index}]`); exactKeys(row, ['attitude', 'label', 'greetingTone'], `attitudeBands[${index}]`)
@@ -366,28 +419,80 @@ function serviceKey(actorKeyValue: string, label: string, index: number): string
   return label.startsWith('vendor.catalog.') ? `service.${label}` : `service.${actorKeyValue}.${String(index).padStart(3, '0')}`
 }
 
+/** Vendor reservations describe service roles; only a fresh, explicit identity
+ * contract may resolve them through canonical actor provenance. */
+export function resolveTextOpenWorldVendorActorV1(
+  catalog: Pick<TextOpenWorldNpcRuntimeCatalogV1, 'actors' | 'vendorIdentityContract'>,
+  vendor: { key: string; actorRequirementKey: string; regionKey: string; locationKey: string },
+) {
+  if (!catalog.vendorIdentityContract) return catalog.actors.find(actor => (
+    actor.sourceDemandKey === vendor.actorRequirementKey || actor.key === vendor.actorRequirementKey
+  )) ?? fail(`商店Actor预留未兑现:${vendor.key}`)
+  if (catalog.vendorIdentityContract !== 'canonical-vendor-owners-v1') fail('商店身份合同无效')
+  const matches = catalog.actors.filter(actor => actor.demandKind !== 'service-replacement'
+    && actor.sourceRefs.includes(`vendor-service.${vendor.key}`))
+  if (matches.length !== 1) fail(`商店岗位缺少唯一角色来源映射:${vendor.key}`)
+  const actor = matches[0]!
+  if (!actor.serviceKeys.includes(`service.${vendor.key}`)
+    || actor.regionKey !== vendor.regionKey || actor.homeLocationKey !== vendor.locationKey) fail(`商店岗位的服务或地点不匹配:${vendor.key}`)
+  return actor
+}
+
+export function resolveTextOpenWorldVendorServiceV1(
+  catalog: Pick<TextOpenWorldNpcRuntimeCatalogV1, 'actors' | 'vendorIdentityContract' | 'serviceContinuity'>,
+  vendor: { key: string; actorRequirementKey: string; regionKey: string; locationKey: string },
+) {
+  const actor = resolveTextOpenWorldVendorActorV1(catalog, vendor)
+  if (!catalog.vendorIdentityContract) return { actor, replacement: null }
+  const rules = catalog.serviceContinuity.filter(rule => rule.ownerActorKey === actor.key && rule.serviceKey === `service.${vendor.key}`)
+  if (rules.length !== 1) fail(`商店缺少唯一服务连续性:${vendor.key}`)
+  const rule = rules[0]!
+  if (actor.protected) {
+    if (rule.policy !== 'disappear-on-owner-death' || rule.replacementActorKey !== null || rule.replacementServiceKey !== null) fail(`受保护商店不得绑定替身:${vendor.key}`)
+    return { actor, replacement: null }
+  }
+  const replacement = catalog.actors.find(row => row.key === rule.replacementActorKey)
+  if (rule.policy !== 'replace-on-owner-death' || rule.replacementServiceKey !== rule.serviceKey
+    || !replacement || replacement.demandKind !== 'service-replacement'
+    || replacement.sourceRefs.length !== 1 || replacement.sourceRefs[0] !== `replacement.${actor.key}`
+    || replacement.protected || replacement.mortalityPolicy !== 'mortal'
+    || replacement.homeLocationKey !== actor.homeLocationKey || replacement.regionKey !== actor.regionKey
+    || replacement.factionKey !== actor.factionKey || !replacement.serviceKeys.includes(rule.serviceKey)
+    || replacement.fulfilledRequirementKeys.length || replacement.questConsumerKeys.length) fail(`商店死亡接替来源或身份不闭合:${vendor.key}`)
+  return { actor, replacement }
+}
+
 async function createArtifact(input: { context: TextOpenWorldNpcRuntimeInputContextV1; draft: CatalogDraftV1; createdAt: number }): Promise<TextOpenWorldNpcRuntimeCatalogV1> {
-  const factions = input.draft.factions.map((draft, index) => {
+  const factions = input.draft.factions.filter(draft => !draft.reuseFactionDemandNumber).map((draft, index) => {
     const demand = input.context.factionDemands[draft.demandNumber - 1]!
+    const members = input.draft.factions.filter(row => row.demandNumber === draft.demandNumber || row.reuseFactionDemandNumber === draft.demandNumber)
+      .map(row => input.context.factionDemands[row.demandNumber - 1]!)
     return {
-      key: factionKey(demand, index + 1), order: index + 1, sourceDemandKey: demand.sourceDemandKey,
+      key: factionKey(demand, draft.demandNumber), order: index + 1, sourceDemandKey: demand.sourceDemandKey,
       title: demand.title, description: draft.description, publicGoal: draft.publicGoal,
-      moralityMultiplier: draft.moralityMultiplier, fulfilledRequirementKeys: [demand.requirementKey], sourceRefs: [demand.sourceDemandKey],
+      moralityMultiplier: draft.moralityMultiplier, fulfilledRequirementKeys: members.map(member => member.requirementKey), sourceRefs: members.map(member => member.sourceDemandKey),
     }
   })
-  const baseActors: TextOpenWorldNpcRuntimeCatalogV1['actors'] = input.draft.actors.map((draft, index) => {
+  const primaryActors = input.draft.actors.filter(draft => !draft.reuseActorDemandNumber)
+  const baseActors: TextOpenWorldNpcRuntimeCatalogV1['actors'] = primaryActors.map((draft, index) => {
     const demand = input.context.actorDemands[draft.demandNumber - 1]!
-    const key = actorKey(demand, index + 1)
-    const services = demand.serviceLabels.map((label, serviceIndex) => serviceKey(key, label, serviceIndex + 1))
+    const members = input.draft.actors.filter(row => row.demandNumber === draft.demandNumber || row.reuseActorDemandNumber === draft.demandNumber)
+      .map(row => input.context.actorDemands[row.demandNumber - 1]!)
+    const tier = members.some(member => member.tier === 'mainline') ? 'mainline' : members.some(member => member.tier === 'significant') ? 'significant' : 'resident'
+    const maintained = tier !== 'resident'
+    const key = actorKey(demand, draft.demandNumber)
+    const serviceLabels = members.length === 1 ? demand.serviceLabels : [...new Set(members.flatMap(member => member.serviceLabels))]
+    const services = serviceLabels.map((label, serviceIndex) => serviceKey(key, label, serviceIndex + 1))
     return {
       key, order: index + 1, sourceDemandKey: demand.sourceDemandKey, demandKind: demand.demandKind,
-      tier: demand.tier, runtimeMode: demand.runtimeMode, name: draft.name, biography: draft.biography, portrayal: draft.portrayal,
-      factionKey: draft.factionNumber === 0 ? null : factions[draft.factionNumber - 1]!.key,
-      homeLocationKey: demand.homeLocationKey, regionKey: demand.regionKey, protected: demand.protected,
-      mortalityPolicy: demand.protected ? 'protected' as const : 'mortal' as const,
-      serviceKeys: services, scheduleKey: demand.runtimeMode === 'rule-driven' ? `schedule.${key}` : null,
-      fulfilledRequirementKeys: demand.requirementKey ? [demand.requirementKey] : [], questConsumerKeys: demand.questConsumerKeys,
-      sourceRefs: [demand.sourceDemandKey],
+      tier, runtimeMode: maintained ? 'agent-maintained' : 'rule-driven', name: draft.name, biography: draft.biography, portrayal: draft.portrayal,
+      factionKey: draft.factionNumber === 0 ? null : factions.find(faction => faction.sourceRefs.includes(input.context.factionDemands[draft.factionNumber - 1]!.sourceDemandKey))!.key,
+      homeLocationKey: demand.homeLocationKey, regionKey: demand.regionKey, protected: maintained,
+      mortalityPolicy: maintained ? 'protected' as const : 'mortal' as const,
+      serviceKeys: services, scheduleKey: maintained ? null : `schedule.${key}`,
+      fulfilledRequirementKeys: members.flatMap(member => member.requirementKey ? [member.requirementKey] : []),
+      questConsumerKeys: members.length === 1 ? demand.questConsumerKeys : [...new Set(members.flatMap(member => member.questConsumerKeys))],
+      sourceRefs: members.map(member => member.sourceDemandKey),
       runtimeBinding: { status: 'runtime-partial' as const, dialogueSceneKeys: [] as [], actionKeys: [] as [], presentationRefs: [] as [] },
     }
   })
@@ -406,7 +511,7 @@ async function createArtifact(input: { context: TextOpenWorldNpcRuntimeInputCont
     })
   })
   const actors = [...baseActors, ...replacementActors]
-  const activityByActor = new Map(baseActors.map((actor, index) => [actor.key, input.draft.actors[index]!.scheduleActivities]))
+  const activityByActor = new Map(baseActors.map((actor, index) => [actor.key, primaryActors[index]!.scheduleActivities]))
   const schedules = actors.filter(actor => actor.scheduleKey !== null).map(actor => ({
     key: actor.scheduleKey!, actorKey: actor.key,
     entries: PERIOD_KEYS.map((timePeriodKey, index) => ({
@@ -441,6 +546,7 @@ async function createArtifact(input: { context: TextOpenWorldNpcRuntimeInputCont
   const functionalMortalActors = baseActors.filter(actor => !actor.protected && actor.serviceKeys.length).map(actor => actor.key)
   const body: Omit<TextOpenWorldNpcRuntimeCatalogV1, 'npcRuntimeCatalogHash'> = {
     schema: 'storyforge.text-open-world-npc-runtime-catalog', version: 1, productType: 'text-open-world',
+    ...(input.context.vendorIdentityContract ? { vendorIdentityContract: input.context.vendorIdentityContract } : {}),
     productInstanceKey: input.context.productInstanceKey,
     gameplayRulesetHash: input.context.gameplayRuleset.gameplayRulesetHash,
     regionNarrativePacksHash: input.context.regionNarrativePacks.regionNarrativePacksHash,
@@ -459,7 +565,12 @@ async function createArtifact(input: { context: TextOpenWorldNpcRuntimeInputCont
       requiredFactionRequirementKeys: factionRequirements,
       coveredFactionRequirementKeys: [...new Set(factions.flatMap(faction => faction.fulfilledRequirementKeys))],
       requiredVendorActorReservationKeys: vendorReservations,
-      coveredVendorActorReservationKeys: baseActors.filter(actor => actor.demandKind === 'vendor-service').map(actor => actor.key),
+      coveredVendorActorReservationKeys: input.context.vendorIdentityContract
+        ? input.context.craftingEconomyCatalog.vendors.map(vendor => {
+          resolveTextOpenWorldVendorActorV1({ actors: baseActors, vendorIdentityContract: input.context.vendorIdentityContract }, vendor)
+          return vendor.actorRequirementKey
+        })
+        : baseActors.filter(actor => actor.demandKind === 'vendor-service').map(actor => actor.key),
       requiredRegionKeys: input.context.regionNarrativePacks.packs.map(pack => pack.regionKey),
       regionsWithResidentActors: [...new Set(baseActors.filter(actor => actor.tier === 'resident').map(actor => actor.regionKey))],
       protectedQuestActorKeys: protectedActors,
@@ -493,17 +604,36 @@ async function createArtifact(input: { context: TextOpenWorldNpcRuntimeInputCont
   return { ...body, npcRuntimeCatalogHash: await hashProductProductionValueV2(body) }
 }
 
-function draftFromArtifact(artifact: TextOpenWorldNpcRuntimeCatalogV1): unknown {
+function draftFromArtifact(artifact: TextOpenWorldNpcRuntimeCatalogV1, context: TextOpenWorldNpcRuntimeInputContextV1): unknown {
   const baseActors = artifact.actors.filter(actor => actor.demandKind !== 'service-replacement')
+  const hasReuses = baseActors.some(actor => actor.sourceRefs.length > 1) || artifact.factions.some(faction => faction.sourceRefs.length > 1)
+  const hasVendorReuse = context.actorDemands.some(demand => demand.demandKind === 'vendor-service'
+    && baseActors.some(actor => actor.sourceDemandKey !== demand.sourceDemandKey && actor.sourceRefs.includes(demand.sourceDemandKey)))
   return {
-    schema: 'storyforge.text-open-world-npc-runtime-draft', version: 1,
-    factions: artifact.factions.map(faction => ({ demandNumber: faction.order, description: faction.description, publicGoal: faction.publicGoal, moralityMultiplier: faction.moralityMultiplier })),
-    actors: baseActors.map(actor => ({
-      demandNumber: actor.order, name: actor.name, biography: actor.biography, portrayal: actor.portrayal,
-      factionNumber: actor.factionKey === null ? 0 : artifact.factions.findIndex(faction => faction.key === actor.factionKey) + 1,
-      scheduleActivities: actor.runtimeMode === 'rule-driven'
-        ? artifact.schedules.find(schedule => schedule.actorKey === actor.key)!.entries.map(entry => entry.activity) : [],
-    })),
+    schema: 'storyforge.text-open-world-npc-runtime-draft', version: hasVendorReuse ? 3 : hasReuses ? 2 : 1,
+    factions: context.factionDemands.map(demand => {
+      const matches = artifact.factions.filter(faction => faction.sourceRefs.includes(demand.sourceDemandKey))
+      if (matches.length !== 1) fail('势力需求缺少唯一身份映射')
+      const faction = matches[0]!
+      const primary = context.factionDemands.find(row => row.sourceDemandKey === faction.sourceDemandKey) ?? fail('势力主身份需求不存在')
+      return primary.demandNumber !== demand.demandNumber
+        ? { demandNumber: demand.demandNumber, reuseFactionDemandNumber: primary.demandNumber }
+        : { demandNumber: demand.demandNumber, description: faction.description, publicGoal: faction.publicGoal, moralityMultiplier: faction.moralityMultiplier }
+    }),
+    actors: context.actorDemands.map(demand => {
+      const matches = baseActors.filter(actor => actor.sourceRefs.includes(demand.sourceDemandKey))
+      if (matches.length !== 1) fail('角色需求缺少唯一身份映射')
+      const actor = matches[0]!
+      const primary = context.actorDemands.find(row => row.sourceDemandKey === actor.sourceDemandKey) ?? fail('角色主身份需求不存在')
+      if (primary.demandNumber !== demand.demandNumber) return { demandNumber: demand.demandNumber, reuseActorDemandNumber: primary.demandNumber }
+      const faction = artifact.factions.find(row => row.key === actor.factionKey)
+      return {
+        demandNumber: demand.demandNumber, name: actor.name, biography: actor.biography, portrayal: actor.portrayal,
+        factionNumber: actor.factionKey === null ? 0 : (context.factionDemands.find(row => row.sourceDemandKey === faction?.sourceDemandKey)?.demandNumber ?? fail('角色势力身份不存在')),
+        scheduleActivities: actor.runtimeMode === 'rule-driven'
+          ? artifact.schedules.find(schedule => schedule.actorKey === actor.key)!.entries.map(entry => entry.activity) : [],
+      }
+    }),
     attitudeBands: artifact.relationshipPolicy.attitudeBands.map(band => ({ attitude: band.attitude, label: band.label, greetingTone: band.greetingTone })),
   }
 }
@@ -516,7 +646,7 @@ export async function validateTextOpenWorldNpcRuntimeCatalogV1(input: {
     || !isSha256Hash(input.artifact.npcRuntimeCatalogHash)) fail('NpcRuntimeCatalog身份或Hash字段无效')
   integer(input.artifact.createdAt, 'createdAt', 0, Number.MAX_SAFE_INTEGER)
   const context = await parseContext(canonicalProductProductionJsonV2(input.context))
-  const draft = parseDraft(draftFromArtifact(input.artifact), context)
+  const draft = parseDraft(draftFromArtifact(input.artifact, context), context)
   const rebuilt = await createArtifact({ context, draft, createdAt: input.artifact.createdAt })
   if (canonicalProductProductionJsonV2(rebuilt) !== canonicalProductProductionJsonV2(input.artifact)) fail('角色层级、保护、日程、关系或服务连续性被篡改')
   return structuredClone(input.artifact)
@@ -530,7 +660,7 @@ export async function projectTextOpenWorldNpcRuntimeCatalogAuthorEditableDraftV1
     ? input.context
     : canonicalProductProductionJsonV2(input.context))
   const artifact = await validateTextOpenWorldNpcRuntimeCatalogV1({ artifact: input.artifact, context })
-  return structuredClone(draftFromArtifact(artifact))
+  return structuredClone(draftFromArtifact(artifact, context))
 }
 
 export async function rebuildTextOpenWorldNpcRuntimeCatalogFromAuthorEditableDraftV1(input: {
@@ -556,6 +686,9 @@ function systemPrompt(context: TextOpenWorldNpcRuntimeInputContextV1): string {
     `factions共${context.factionDemands.length}项、actors共${context.actorDemands.length}项，必须按demandNumber顺序精确覆盖。factionNumber为0表示无阵营，否则从1开始引用factions。`,
     'agent-maintained角色的scheduleActivities必须为空；rule-driven角色必须依次填写清晨、白天、傍晚、夜晚四条简单活动。moralityMultiplier只能是-1、0、1，表示该势力如何看待玩家道德方向。',
     '只写姓名、小传、演绎、日常活动、势力目标和三档招呼语气。不得输出Actor/Faction/Service/Schedule Key、保护/死亡策略、Action、Scene、Condition、Effect、Quest绑定或数值阈值。',
+    context.vendorIdentityContract
+      ? '同一人物或势力必须显式复用：使用version:3，复用行仅含demandNumber及reuseActorDemandNumber（势力用reuseFactionDemandNumber），引用前面已有固定身份的内容需求。未预留的任务角色可复用；vendor-service商店岗位也可绑定同地区、同homeLocationKey的固定content-requirement角色，多家店可由一人经营。两个固定内容人物不能合并，不按姓名猜测，不得引用另一岗位、别名或不同地点人物。目标保留完整小传、演绎、阵营与家园，所有服务和任务来源汇总，采用最强保护；任一角色需求为agent-maintained时目标scheduleActivities必须[]。旧version:1/2仍有效但不允许商店岗位复用。'
+      : '若任务需求明确指向前面已经预留的同一人物或势力，使用version:2并将该需求行仅写为{"demandNumber":本项编号,"reuseActorDemandNumber":前面的角色需求编号}，或势力行的reuseFactionDemandNumber；目标必须已有fixedActorKey/fixedFactionKey，当前需求必须没有预留身份。不同人物不得因名字相近而合并，两个预留身份及商店岗位不能合并。同一人物只保留目标行的小传/演绎；若任一复用需求是agent-maintained，目标行scheduleActivities填[]，代码保留全部任务与最强保护。没有复用的旧version:1仍有效。',
     '只输出字段精确的JSON：',
     '{"schema":"storyforge.text-open-world-npc-runtime-draft","version":1,"factions":[{"demandNumber":1,"description":"...","publicGoal":"...","moralityMultiplier":0}],"actors":[{"demandNumber":1,"name":"...","biography":"...","portrayal":"...","factionNumber":0,"scheduleActivities":[]}],"attitudeBands":[{"attitude":"bad","label":"...","greetingTone":"..."},{"attitude":"neutral","label":"...","greetingTone":"..."},{"attitude":"good","label":"...","greetingTone":"..."}]}',
   ].join('\n')
@@ -587,7 +720,7 @@ export function createTextOpenWorldNpcRuntimeCatalogExecutorV1(options: {
     const context = await parseContext(execution.contextText); const prompt = systemPrompt(context); const startedAt = performance.now()
     const response = await runModel({
       projectId: execution.scope.projectId, requirementKey, expectedCapabilityHash: binding.bindingHash,
-      category: 'text-open-world.production.npc-runtime-catalog',
+      category: SKILL_ID,
       system: prompt, contextText: execution.contextText,
       maximumOutputTokens: Math.max(1, Math.min(32_000, execution.task.budgetReservation.outputTokens)), signal: execution.signal,
     })

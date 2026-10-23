@@ -4,6 +4,7 @@ import type {
   TextOpenWorldDirectorSettlementAuthorizationV1,
   TextOpenWorldEffectDefinitionV1,
   TextOpenWorldEffectsAppliedEventPayloadV1,
+  TextOpenWorldFeedbackReceiptV1,
   TextOpenWorldParsedModulesV1,
   TextOpenWorldQuestStatusV1,
   TextOpenWorldRulesetStampV1,
@@ -262,7 +263,9 @@ function effectDetail(
     case 'grant-experience': return `获得${effect.payload.amount}点经验`
     case 'apply-status': return statusTitle(effect.payload.statusKey) ? `获得状态：${statusTitle(effect.payload.statusKey)}` : '角色状态发生变化'
     case 'remove-status': return statusTitle(effect.payload.statusKey) ? `移除状态：${statusTitle(effect.payload.statusKey)}` : '角色状态发生变化'
-    case 'grant-item': return itemTitle(effect.payload.itemKey) ? `获得${itemTitle(effect.payload.itemKey)} × ${effect.payload.quantity}` : '获得物品'
+    case 'grant-item': return effect.payload.ifAbsent
+      ? itemTitle(effect.payload.itemKey) ? `已持有：${itemTitle(effect.payload.itemKey)}` : '已持有相关物品'
+      : itemTitle(effect.payload.itemKey) ? `获得${itemTitle(effect.payload.itemKey)} × ${effect.payload.quantity}` : '获得物品'
     case 'remove-item': return itemTitle(effect.payload.itemKey) ? `失去${itemTitle(effect.payload.itemKey)} × ${effect.payload.quantity}` : '物品数量发生变化'
     case 'equip-item': return itemTitle(effect.payload.itemKey) ? `已装备：${itemTitle(effect.payload.itemKey)}` : '装备已更新'
     case 'unequip-item': return itemTitle(effect.payload.itemKey) ? `已卸下：${itemTitle(effect.payload.itemKey)}` : '装备已更新'
@@ -320,6 +323,7 @@ function effectDetail(
     case 'initialize-combat':
     case 'settle-combat-state':
     case 'perform-combat-action':
+    case 'prove-purchase':
     case 'perform-transaction':
     case 'settle-director': return null
   }
@@ -499,7 +503,11 @@ function notificationFor(
   if (authorization?.kind === 'director-settlement' && authorization.selection.outcomeKind === 'random-event' && !authored) return null
   const details = authored?.details ?? uniqueDetails(terminal.payload.plan.effects.map(effect => effectDetail(effect, modules, disclosure)))
   if (!authored && (terminal.payload.outcome === 'failure' || details.length === 0)) return null
-  const headline = authored?.headline ?? `${terminal.actionLabel}已结算`
+  const arrival = terminal.payload.plan.effects.find(effect => effect.operation === 'enter-location')
+  const arrivalTitle = arrival?.operation === 'enter-location' && disclosure.locationKeys.has(arrival.payload.locationKey)
+    ? modules.world.locations.find(location => location.key === arrival.payload.locationKey)?.title
+    : null
+  const headline = authored?.headline ?? (arrival ? arrivalTitle ? `已抵达：${arrivalTitle}` : '已抵达新地点' : `${terminal.actionLabel}已结算`)
   return {
     id: `text-open-world-notification:${sessionId}:${terminal.event.sequence}`,
     sessionId,
@@ -537,4 +545,22 @@ export function projectTextOpenWorldPlayerNotificationsV1(input: {
     .map(terminal => notificationFor(terminal, modules, projection, disclosure, input.sessionId))
     .filter((notification): notification is TextOpenWorldPlayerNotificationV1 => notification != null)
   return notifications.slice(-limit)
+}
+
+/** Presentation only; keep the sealed command receipt and its raw evidence intact. */
+export function projectTextOpenWorldPlayerFeedbackV1(
+  feedback: TextOpenWorldFeedbackReceiptV1,
+  notifications: readonly TextOpenWorldPlayerNotificationV1[],
+): TextOpenWorldFeedbackReceiptV1['presentation'] {
+  if (!feedback.outcomeCommitted || !feedback.presentation.mayNarrateSuccess
+    || !['succeeded', 'degraded'].includes(feedback.status)) return feedback.presentation
+  const notification = notifications.find(item => item.sessionId === feedback.sessionId
+    && item.effectsEventSequence === feedback.resultingSequence
+    && feedback.evidenceEventSequences.includes(item.effectsEventSequence))
+  return {
+    headline: notification?.headline ?? '行动已结算',
+    details: [...(notification?.details ?? []), ...(feedback.degradation
+      ? [`降级原因：${feedback.degradation.message}`, `替代表现：${feedback.degradation.fallback}`] : [])],
+    mayNarrateSuccess: true,
+  }
 }

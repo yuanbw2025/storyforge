@@ -6,23 +6,31 @@ import {
 import {
   assertTextOpenWorldSceneDemandCapacityV1,
   countTextOpenWorldSceneDemandsV1,
+  assertTextOpenWorldSceneRequestBudgetV1,
 } from '../../src/lib/open-world/scene-demand-capacity'
 
 describe('R-OPEN-WORLD-G4-11A · P9 governed-v3 model disclosure', () => {
-  it('proves the shared P8F/P9 deterministic Scene capacity at 159 and rejects 160', () => {
-    const atLimit = {
-      quests: Array.from({ length: 38 }),
-      objectives: Array.from({ length: 76 }),
-      actors: Array.from({ length: 4 }),
-      interactions: Array.from({ length: 2 }),
-      randomEvents: Array.from({ length: 1 }),
+  it('supports the full real sample within an authorized Plan and retains an absolute fan-out bound', () => {
+    const realSample = {
+      quests: Array.from({ length: 27 }), objectives: Array.from({ length: 61 }),
+      actors: Array.from({ length: 35 }), interactions: Array.from({ length: 37 }),
+      randomEvents: Array.from({ length: 22 }),
     }
-    expect(countTextOpenWorldSceneDemandsV1(atLimit)).toBe(159)
-    expect(assertTextOpenWorldSceneDemandCapacityV1(atLimit)).toBe(159)
+    expect(assertTextOpenWorldSceneDemandCapacityV1(realSample)).toBe(209)
+    expect(() => assertTextOpenWorldSceneRequestBudgetV1(209, 322)).not.toThrow()
+    expect(() => assertTextOpenWorldSceneRequestBudgetV1(209, 210)).toThrow(/需要211次模型调用，但Plan只预留210次/)
+    expect(() => assertTextOpenWorldSceneRequestBudgetV1(159, 161)).not.toThrow()
+    expect(() => assertTextOpenWorldSceneRequestBudgetV1(160, 161)).toThrow(/需要162次模型调用，但Plan只预留161次/)
+    const atLimit = {
+      ...realSample,
+      objectives: Array.from({ length: 172 }),
+    }
+    expect(countTextOpenWorldSceneDemandsV1(atLimit)).toBe(320)
+    expect(assertTextOpenWorldSceneDemandCapacityV1(atLimit)).toBe(320)
     expect(() => assertTextOpenWorldSceneDemandCapacityV1({
       ...atLimit,
-      randomEvents: Array.from({ length: 2 }),
-    })).toThrow(/场景数超过硬上限:160\/159/)
+      randomEvents: Array.from({ length: 23 }),
+    })).toThrow(/场景数超过硬上限:321\/320/)
   })
 
   it('keeps the durable v2 envelope but sends the runner only a deterministic safe projection', async () => {
@@ -213,6 +221,32 @@ describe('R-OPEN-WORLD-G4-11A · P9 governed-v3 model disclosure', () => {
     }
     const actorDialogue = await createTextOpenWorldSceneScriptsModelContextV1(actorContext, { kind: 'scene', sceneIndex: 2 })
     const shared = await createTextOpenWorldSceneScriptsModelContextV1(context, { kind: 'shared-presentations' })
+    const vendorOwnerContext = structuredClone(context)
+    vendorOwnerContext.npcRuntimeCatalog.vendorIdentityContract = 'canonical-vendor-owners-v1'
+    const compactScene = await createTextOpenWorldSceneScriptsModelContextV1(vendorOwnerContext, { kind: 'scene', sceneIndex: 0 })
+    const originalSceneBody = { ...firstScene } as Record<string, unknown>
+    const compactSceneBody = { ...compactScene } as Record<string, unknown>
+    delete originalSceneBody.contextSelectionHash
+    delete compactSceneBody.contextSelectionHash
+    // No writing material, action target, disclosure boundary or stable
+    // reference can disappear when the two empty optional collections do.
+    expect({ ...compactSceneBody, knowledgePresentationDemands: [], achievementPresentationDemands: [] })
+      .toEqual(originalSceneBody)
+    expect(JSON.stringify(compactScene).length).toBeLessThan(JSON.stringify(firstScene).length)
+    await expect(createTextOpenWorldSceneScriptsModelContextV1(vendorOwnerContext, { kind: 'shared-presentations' }))
+      .resolves.toEqual(shared)
+    const actionEvidenceContext = structuredClone(vendorOwnerContext)
+    actionEvidenceContext.questDesignDocuments.governance.actionPathEvidenceReady = true
+    const actionScene = await createTextOpenWorldSceneScriptsModelContextV1(actionEvidenceContext, { kind: 'scene', sceneIndex: 0 })
+    const actionSceneBody = { ...actionScene } as Record<string, unknown>
+    delete actionSceneBody.contextSelectionHash
+    expect({ ...actionSceneBody, actionLanguageDemands: [], templateVariantDemands: [], randomEventPresentationDemands: [] })
+      .toEqual(compactSceneBody)
+    expect(JSON.stringify(actionScene).length).toBeLessThan(JSON.stringify(compactScene).length)
+    await expect(createTextOpenWorldSceneScriptsModelContextV1(actionEvidenceContext, { kind: 'shared-presentations' }))
+      .resolves.toEqual(shared)
+    await expect(createTextOpenWorldSceneScriptsModelContextV1(context, { kind: 'scene', sceneIndex: 0 }))
+      .resolves.toEqual(firstScene)
     const calls = [firstScene, secondScene, actorDialogue, shared] as Array<Record<string, unknown>>
 
     await expect(createTextOpenWorldSceneScriptsModelContextV1(context))
@@ -330,22 +364,22 @@ describe('R-OPEN-WORLD-G4-11A · P9 governed-v3 model disclosure', () => {
 
     const atLimit = {
       ...context,
-      sceneDemands: Array.from({ length: 159 }, (_, index) => ({
+      sceneDemands: Array.from({ length: 320 }, (_, index) => ({
         ...context.sceneDemands[0]!,
         sceneNumber: index + 1,
         sceneKey: `scene.limit.${String(index + 1).padStart(3, '0')}`,
       })),
     }
-    await expect(createTextOpenWorldSceneScriptsModelContextV1(atLimit, { kind: 'scene', sceneIndex: 158 }))
+    await expect(createTextOpenWorldSceneScriptsModelContextV1(atLimit, { kind: 'scene', sceneIndex: 319 }))
       .resolves.toMatchObject({ sceneDemands: [{ sceneNumber: 1 }] })
     await expect(createTextOpenWorldSceneScriptsModelContextV1({
       ...atLimit,
       sceneDemands: [...atLimit.sceneDemands, {
         ...context.sceneDemands[0]!,
-        sceneNumber: 160,
-        sceneKey: 'scene.limit.160',
+        sceneNumber: 321,
+        sceneKey: 'scene.limit.321',
       }],
-    }, { kind: 'scene', sceneIndex: 159 })).rejects.toThrow(/场景数超过硬上限:160\/159/)
+    }, { kind: 'scene', sceneIndex: 320 })).rejects.toThrow(/场景数超过硬上限:321\/320/)
   })
 
   it('preserves historical runner context unchanged when Knowledge governance is absent', async () => {
