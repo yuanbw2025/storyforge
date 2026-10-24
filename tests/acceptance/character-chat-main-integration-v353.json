@@ -1,0 +1,242 @@
+{
+  "schema": "storyforge.chat-main-integration-verification",
+  "version": 1,
+  "at": "2026-10-23T07:44:02.243335+00:00",
+  "status": "main-integrated-registered-verification-refreshed-full-delivery-pending",
+  "mergedMain": "8e82486a586bf411016b7ec128ad112d3144a9e7",
+  "mergeCommit": "79be36aaa7606ea4dfee1afef6fee9921719498d",
+  "productionBehaviorChanged": false,
+  "mainChanges": {
+    "preMergeHead": "e0443eb5d0514cd1ec587ccb861b44cf04f5a827",
+    "mainHead": "8e82486a586bf411016b7ec128ad112d3144a9e7",
+    "conflict": "Only generated architecture metrics; resolved by official generator.",
+    "changedFromV350ExecutableManifest": [
+      ".github/workflows/client-release-upgrade.yml",
+      ".github/workflows/clients.yml",
+      "CHANGELOG.md",
+      "package-lock.json",
+      "package.json"
+    ],
+    "productionSourcesUnchanged": true,
+    "files": [
+      ".github/release-notes/v4.0.4.md",
+      ".github/workflows/client-release-upgrade.yml",
+      ".github/workflows/clients.yml",
+      "CHANGELOG.md",
+      "docs/ARCHITECTURE.md",
+      "package-lock.json",
+      "package.json",
+      "website-docs/en/updates/compatibility.md",
+      "website-docs/en/updates/development-status.md",
+      "website-docs/updates/compatibility.md",
+      "website-docs/updates/development-status.md"
+    ],
+    "initialVerificationCorrection": "Manifest also tracks CHANGELOG.md. Initial expected-file assertion omitted it and failed; exact audited release-note change is now included. No product source changed."
+  },
+  "registeredVerification": {
+    "files": 20,
+    "tests": 151,
+    "passed": 151,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 1163.81,
+    "skillsRefreshed": 23,
+    "date": "2026-10-23",
+    "registryEquivalentExceptVerificationDates": true,
+    "skillIds": [
+      "text-open-world.production.gameplay-ruleset.v1",
+      "text-open-world.production.player-build.v1",
+      "text-open-world.production.story-architecture.v1",
+      "text-open-world.production.region-skeleton.v1",
+      "text-open-world.production.mainline.v1",
+      "text-open-world.production.significant-threads.v1",
+      "text-open-world.production.region-narrative-packs.v1",
+      "text-open-world.production.quest-skeletons.v1",
+      "text-open-world.production.progression-catalogs.v1",
+      "text-open-world.production.encounter-catalog.v1",
+      "text-open-world.production.item-reward-catalog.v1",
+      "text-open-world.production.crafting-economy-catalog.v1",
+      "text-open-world.production.npc-runtime-catalog.v1",
+      "text-open-world.production.map-interaction-catalog.v1",
+      "text-open-world.production.quest-finalize.v1",
+      "text-open-world.production.scene-scripts.v1",
+      "text-open-world.production.presentation-profile.v1",
+      "text-open-world.production.system-finalize.v1",
+      "text-open-world.production.balance-review.v1",
+      "text-open-world.production.semantic-review.v1",
+      "text-adventure.creative-direction.v1",
+      "text-adventure.visual-direction.v1",
+      "text-adventure.visual-quality-review.v1"
+    ]
+  },
+  "mergeChecks": [
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:architecture"
+      ],
+      "exitCode": 0,
+      "seconds": 11.9,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/check-architecture.log",
+      "sha256": "6a2cbdf401161ab53ea3bbf93443853591668d84bf812b7ea405edb69c77b447"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:required-tables"
+      ],
+      "exitCode": 0,
+      "seconds": 0.23,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/check-required-tables.log",
+      "sha256": "bfac8f11d024dd795d28ad301a31c7fe3926ff5bfd642e2b08336758b4f272bc"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:ai-manual"
+      ],
+      "exitCode": 0,
+      "seconds": 0.66,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/check-ai-manual.log",
+      "sha256": "93137c36bff0459ec29f9cbb52edf07c1c6729052ab778a8f1c1570b997a5f3e"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:release-metadata"
+      ],
+      "exitCode": 1,
+      "seconds": 0.25,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/check-release-metadata.log",
+      "sha256": "8366f6b1b88d10a7bb30f6ae0ae40d609abb592a57ff44c6aa96b5b0b8462e22"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:docs"
+      ],
+      "exitCode": 0,
+      "seconds": 0.78,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/check-docs.log",
+      "sha256": "bed87a010e036c73d927a2cd6a2b75833af0c839bca9c3ef846536bf07de98e1"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:roadmap"
+      ],
+      "exitCode": 0,
+      "seconds": 0.26,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/check-roadmap.log",
+      "sha256": "7994f70f9220d301eb9fcec1ebbc6fb5359dade395ee1001e40cfd9fa34ab445"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:project-metrics"
+      ],
+      "exitCode": 0,
+      "seconds": 0.59,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/check-project-metrics.log",
+      "sha256": "ca5b6e762942b4615d668f6d47fe6142267ad2b1486f95f90bef1edc3536e0ce"
+    },
+    {
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "seconds": 81.01,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/--noEmit.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "exitCode": 0,
+      "seconds": 132.58,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/build.log",
+      "sha256": "8964c3bb4c81a407211636fda45650ce57640b963970cf8136132e6b6cd98307"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:bundle-size"
+      ],
+      "exitCode": 0,
+      "seconds": 0.72,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/check-bundle-size.log",
+      "sha256": "1e558153d34a9fb05bfc5dbfb421b300b539bf75a87b4f20699c4f5084eafa3f"
+    }
+  ],
+  "releaseMetadataCorrection": {
+    "command": [
+      "npm",
+      "run",
+      "check:release-metadata",
+      "--",
+      "v4.0.4"
+    ],
+    "exitCode": 0,
+    "seconds": 0.35,
+    "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/release-metadata-explicit-tag.log",
+    "sha256": "c4b53ff6e4535736303752b3a47f92bb136777953b20759288dd86ea10dc75fe",
+    "initialFailurePreserved": "checks.json records the first call without the required release-tag argument."
+  },
+  "postMetadataChecks": {
+    "agentFreshness": "passed: 181 skills, 176 prompt versions, 501 regression references",
+    "aiManual": "passed",
+    "architecture": "passed",
+    "requiredTables": "passed",
+    "diffCheck": "passed"
+  },
+  "checkScope": "Types and build verified the merged 4.0.4 tree. The later Skill registry change replaces only 23 verified-date string literals; normalized source equality and direct freshness/manual checks verified that change. No product logic or prompts changed.",
+  "fullDeliveryValidated": false,
+  "fullE2EStarted": false,
+  "modelCalls": 0,
+  "formalM1QualityPassesAdded": 0,
+  "humanRatingsAdded": 0,
+  "fullObjectiveComplete": false,
+  "evidence": [
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/integration-input.json",
+      "sha256": "6a98cbef0bfe6d8f9cd14d5b63992e063d65c47f1f517c24fe3803c9d1868399"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/checks.json",
+      "sha256": "399857dd50662d962a30d0c40e1058bfa14d8919abe3aadc61de4267639a66e9"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/freshness-selection.json",
+      "sha256": "db2ee88fa5e023817d51a05bd93dd6bf543e3e25b1543b50a15b228a05e4bc4c"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/freshness-run.json",
+      "sha256": "3029ec06763bda08d5947051ca7703f9b38a33e2caeeb96f86c4feca8c4dfebe"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/freshness-regression.json",
+      "sha256": "b5284d8921e7c9a0ad5a39cf15ba7054b0b37c688dc565a29cf99818a128398f"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/freshness-metadata-update.json",
+      "sha256": "36c86429837c5736b80ccf37a14c19b976f67e48c9fa8135afb79f8e6efddc9c"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v353-main-integration/release-metadata-explicit-tag.json",
+      "sha256": "fe59086c1b69646075361383aeb41c718260bd1dc18341cf135e9c50ed65912a"
+    }
+  ]
+}

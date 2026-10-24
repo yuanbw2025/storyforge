@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "at": 1792455542.347563,
+  "status": "delivered-message-identities-targeted-verified",
+  "defaultProducer": 47,
+  "defaultReviewer": 34,
+  "actorReader": "chat-narrative-runtime-view-v15",
+  "formalModelCalls": 0,
+  "semanticQualityAccepted": false,
+  "fullDeliveryValidated": false,
+  "checks": {
+    "regression": {
+      "exitCode": 0,
+      "files": 10,
+      "tests": 237,
+      "session": 40139
+    },
+    "types": {
+      "exitCode": 0,
+      "session": 65255
+    },
+    "lint": {
+      "exitCode": 0,
+      "session": 37448
+    },
+    "browser": {
+      "passed": 16,
+      "injectedResponses": true,
+      "versionOverrides": false,
+      "runs": [
+        {
+          "session": 65090,
+          "passed": 4,
+          "failed": 12,
+          "reason": "choice tests still asserted previous default version; original failures retained"
+        },
+        {
+          "session": 71442,
+          "passed": 12,
+          "failed": 0
+        }
+      ]
+    },
+    "build": {
+      "exitCode": 0,
+      "session": 38551
+    },
+    "static": [
+      {
+        "command": "check:architecture",
+        "exitCode": 0
+      },
+      {
+        "command": "check:required-tables",
+        "exitCode": 0
+      },
+      {
+        "command": "check:ai-manual",
+        "exitCode": 0
+      },
+      {
+        "command": "check:ai-entry-registry",
+        "exitCode": 0
+      }
+    ]
+  },
+  "realEvidenceFinding": {
+    "batch": "V226",
+    "actualActorInputMessageIds": 0,
+    "calls": 3,
+    "tokens": 45479,
+    "outcome": "ordinary pause, not control handoff",
+    "qualityAccepted": false
+  },
+  "preservedFailures": [
+    "logs/before-fix.log",
+    "logs/first-regression.log",
+    "logs/core-regression.log",
+    "logs/types.log",
+    "logs/browser.log",
+    "v226-import-audit.json"
+  ],
+  "remaining": [
+    "New real-model control replay",
+    "Full current-source CI and E2E",
+    "M1-M5 real-model, long-history, ensemble, SillyTavern and commercial evidence"
+  ],
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v227-delivered-message-identities"
+}

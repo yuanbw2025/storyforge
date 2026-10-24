@@ -1,0 +1,22 @@
+{
+  "version": 274,
+  "at": "2026-10-20T18:57:29.048675+00:00",
+  "status": "zero-dispatch-producer-version-incompatible-with-review-only-protocol",
+  "result": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v274-background-review-agnes/run-r1/result.json",
+    "sha256": "08a68261a7fc4089070f2abcbb9ecdf7e135fa9d8b0a1790b8bf2d23c4e478c9"
+  },
+  "restoration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v274-background-review-agnes/run-r1/production-restoration.json",
+    "sha256": "75160f392c36bbf8ed15e1ccb4aa881c9db31a7dd1f48d7bab1ab31f7ee8c3e6"
+  },
+  "modelRequests": 0,
+  "blockedBeforeForwarding": 1,
+  "reason": "Original frozen producer v12 is not reused by current producer v13 recovery. The formal scheduler requested new opening generation, which the review-only collector correctly rejected. Do not relabel an old producer artifact as current or regenerate the negative sample.",
+  "allRestorationChecksPassed": true,
+  "recoveryModelCalls": 0,
+  "semanticResult": null,
+  "formalM1Credit": 0,
+  "qualityAccepted": false,
+  "product": "character-interaction"
+}

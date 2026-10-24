@@ -1,0 +1,89 @@
+{
+  "schema": "storyforge.character-chat-source-unit-production-evidence",
+  "version": 1,
+  "label": "V105 real author-permission review and new local Release",
+  "implementationHead": "1619d4f9134a13e29f41791748f17d46f993f081",
+  "snapshot": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "1619d4f9134a13e29f41791748f17d46f993f081",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v105-real-6_bwc6u9/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v105-real-6_bwc6u9/manifest.json",
+    "manifestSha256": "9a60e45b45dcc4c7e435bb82326a8c4e875b12f4dfbf05e391d7c0d8d98a7b62",
+    "files": 3445
+  },
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v105-source-unit-production",
+  "files": {
+    "preregistration.json": "8cb3bba315c06f5086dfff591b930e61062c8f4457d05464ced7df4ca0c2c7a2",
+    "runner.mjs": "785089e9c59b5830f5c29deee6c0c8699705fedc454dd1d1699c76bcbe4dbf53",
+    "prepared.json": "6482433d86f014da9f81518ed40089bdd51690c26c8240ed4f070dca352db284",
+    "reviewed.json": "fb857715d965be732bad80dbab1eb5598b25b1d09ff41707bc36ec2e13b8cf1a",
+    "adopted.json": "1e6fe56d29242e1b7eed226a949e2a5518561016b658f022c5e74849aaf3164d",
+    "production-prepared.json": "584f847e8e1e75aa99f075be188da0c40c9cae168d316cd97c8cdccac29d2c4a",
+    "opening-review.json": "6b1df944ea676991f960fdb720e6e25598f82f4089309c4949e15c4964d46457",
+    "release-ready.json": "488ee429b3c280ab9075e97aa1f054d10be2ef150b6832d9e4528f01fa3cf93f",
+    "release.json": "670cbe91ba16e1475d760538358da417696684c706c4b07d6c49dc37b7807a80",
+    "preflight.json": "bab579c5abae56f6944bbefd1cdcebc50382349fc0d06579c954d0750ca045ab",
+    "preflight-backup.json": "f20d902caa2dd0a282ad1e75348d084b5cd7dfe458c41abff89c2465f6366c0e",
+    "transport-progress.json": "e028bc66ae1c2336193ab9db9b4b1a686c9aef9e334f6f476a56bda509dbd4a2",
+    "preflight-terminal-request-proof.json": "d0f3ce6123a59b85f64b3b19113001126cad9a6bd4e4a72b5e7a39fae5c7ec17",
+    "restore.mjs": "d0f7a8cafa39e77b13f33364ca154f41a186f312240fd241c1a0e290f497619d",
+    "restoration.json": "35da719877ef352d9d9e437fed423ecbd02e85a8e464ebcd8097811ab45073e6",
+    "restored-production-390.png": "6ff61d021e68835834d30136177391dc0bb11a164b849307fb281878c6edf4d9"
+  },
+  "realModel": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "requests": 4,
+    "completed": 4,
+    "tokens": 61977,
+    "costUsd": null,
+    "scope": "One permission review, one opening generation, one opening review, one production media plan. All original results retained; no retry or repair.",
+    "independentProvider": false
+  },
+  "authoring": {
+    "candidate": "Exact saved V104 first candidate, unchanged full original source and initial ignorance",
+    "initialAudience": "all three units empty",
+    "permissionChanges": "New isolated work explicitly permits separately proven location. Handler and purpose retain exact original complete condition. Original source and old cohorts unchanged.",
+    "allowInquiryResults": true,
+    "maximumDiscoveriesPerSituation": 1,
+    "confirmation": "Operator author of isolated evaluation explicitly confirmed exact independently reviewed candidate and permissions; not human acceptance"
+  },
+  "production": {
+    "formal": "Existing Brief/SourcePlan, explicit start, registered production Harness, three reviewed openings, first passing option in original order selected, local ProductRelease",
+    "releaseHash": "5bb46f36c612e537b93262e6c2f1ba8a2dd19f4d1774b6f21dfbab4ec2fc0b79",
+    "selectedOpening": "opening-1",
+    "sourceVersion": 6,
+    "factUnits": 3,
+    "allUnitsInitiallyUnknown": true,
+    "otherPublicPrivateSourceKnowledgeUnchanged": true,
+    "originalWorldUnchanged": true,
+    "sessions": 0,
+    "externalPublication": false
+  },
+  "restoration": {
+    "modelCalls": 0,
+    "confirmedUnitsAndRawResponsesEqual": true,
+    "productionProofsRecovered": true,
+    "releaseManifestAndHashEqual": true,
+    "worldPreserved": true,
+    "refreshEqual": true,
+    "ui": "390px restored production view inspected; local released status visible"
+  },
+  "limitations": [
+    "One known development source and one production, not broad semantic calibration",
+    "Same model generation and separate review, no second provider or human scoring",
+    "No runtime episode in V105; sustained story progress evaluated separately",
+    "New explicit atomic permissions are not equivalent to replacing an old M1 source or passing its failed slot",
+    "Full CI/E2E still in progress on unchanged production implementation"
+  ],
+  "priorCohortHashes": {
+    "character-chat-m1-cohort-v77.json": "98b3dea026d14e21be049773a65dffef2dfee4ad5c9284cc0cbb7c41ac672eb3",
+    "character-chat-m1-cohort-v89.json": "9cc915bb35d9576b9550b65536d8464ccb5b3c3b32ebd38c02e4b33b7c098d39",
+    "character-chat-m1-cohort-v90.json": "41d85e4b76ddeacf6efd0a45a84eeef7999c314122e9a8c2395a132cdce8bc05",
+    "character-chat-m1-cohort-v92.json": "1c715d3aea56f08968824a01debad127468de4b3d8d38d283eefb67ef717c033",
+    "character-chat-m1-cohort-v97.json": "60fa37522a117b60ec87724ad0a8cd4a58f05dc3c84af0f27e9d7ff7b9a09844"
+  },
+  "holdoutsInspected": false,
+  "countsInM1": false,
+  "goalStatus": "active"
+}

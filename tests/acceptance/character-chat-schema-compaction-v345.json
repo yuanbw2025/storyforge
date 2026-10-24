@@ -1,0 +1,364 @@
+{
+  "schema": "storyforge.chat-versioned-output-schema-compaction",
+  "version": 1,
+  "at": "2026-10-22T23:52:20.162114+00:00",
+  "status": "targeted-engineering-passed-real-model-and-current-full-delivery-pending",
+  "source": {
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "baseHead": "39fce49b",
+    "sourceKind": "manifest-verified-worktree",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v345-compact-action-schema/manifest-final.json",
+    "manifestSha256": "d52315d2abf77aa3b202692b58ef87e2987c6dc4ee5885f7df94007782946000",
+    "files": 3446
+  },
+  "versions": {
+    "producer": "chat-narrative-action-v67",
+    "reviewer": "chat-narrative-action-review-v41",
+    "schema": "chat_narrative_outcome_v4",
+    "reader": "chat-narrative-runtime-view-v18",
+    "retrieval": "chat-relevance-v14"
+  },
+  "behavior": {
+    "sharedExactSubtrees": [
+      "goal",
+      "playerRequest",
+      "controlSource",
+      "goalUpdate",
+      "stringList"
+    ],
+    "expandedSchemaIdenticalToV66": true,
+    "v66RequestBytesPreserved": true,
+    "semanticPromptRulesUnchanged": true,
+    "contextAndCandidateMessagesUnchanged": true,
+    "newTables": false,
+    "worldWrites": false,
+    "modelCallBudget": 3,
+    "inputBudget": 56000,
+    "outputBudget": 14000,
+    "automaticRetries": 0
+  },
+  "retainedInputBudgetProof": {
+    "at": "2026-10-22T23:43:09.281Z",
+    "sourceBase": "39fce49b",
+    "sourceKind": "frozen-browser-input-manifest",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v345-compact-action-schema/browser-manifest-before.json",
+    "result": {
+      "rows": [
+        {
+          "stepId": "interaction:action-choice",
+          "original": 9497,
+          "current": 9497
+        },
+        {
+          "stepId": "interaction:runtime-candidate",
+          "original": 26483,
+          "current": 26112
+        },
+        {
+          "stepId": "interaction:action-review",
+          "original": 20179,
+          "current": 20179
+        }
+      ],
+      "originalTotal": 56159,
+      "currentTotal": 55788,
+      "inputBudget": 56000,
+      "originalSchemaCharacters": 14630,
+      "currentSchemaCharacters": 13147,
+      "newDefinitions": [
+        "goal",
+        "playerRequest",
+        "controlSource",
+        "goalUpdate",
+        "stringList"
+      ]
+    },
+    "modelCalls": 0,
+    "scope": "Exact retained V343 inputs with only new expression schema; not a new model result or general budget acceptance."
+  },
+  "regression": {
+    "distinctFiles": 165,
+    "distinctPassed": 2135,
+    "newTests": 6,
+    "runs": [
+      {
+        "file": "focused.json",
+        "numTotalTests": 78,
+        "numPassedTests": 78,
+        "numFailedTests": 0
+      },
+      {
+        "file": "all-chat.json",
+        "numTotalTests": 2135,
+        "numPassedTests": 2134,
+        "numFailedTests": 1
+      },
+      {
+        "file": "corrected.json",
+        "numTotalTests": 121,
+        "numPassedTests": 120,
+        "numFailedTests": 1
+      },
+      {
+        "file": "corrected-r2.json",
+        "numTotalTests": 30,
+        "numPassedTests": 30,
+        "numFailedTests": 0
+      }
+    ],
+    "counting": "Test file, parameter index and full name; preserve same-title distinct cases and supersede only the corrected result.",
+    "corrections": [
+      "Use ES target-compatible own-property check after tsc rejected Object.hasOwn.",
+      "Current transport schema-name expectation updated to v4; historical v66/v3 fixtures retained. First correction attempt did not match the actual assertion spelling; second corrected only that assertion."
+    ]
+  },
+  "browser": {
+    "files": 6,
+    "passed": 46,
+    "failed": 0,
+    "skipped": 0,
+    "flaky": 0,
+    "retries": 0,
+    "runs": [
+      {
+        "file": "browser.json",
+        "stats": {
+          "startTime": "2026-10-22T23:42:29.393Z",
+          "duration": 311440.371,
+          "expected": 43,
+          "skipped": 0,
+          "unexpected": 0,
+          "flaky": 0
+        }
+      },
+      {
+        "file": "strict-browser.json",
+        "stats": {
+          "startTime": "2026-10-22T23:49:54.590Z",
+          "duration": 30621.539,
+          "expected": 3,
+          "skipped": 0,
+          "unexpected": 0,
+          "flaky": 0
+        }
+      }
+    ],
+    "productionBytesUnchangedAcrossRuns": true,
+    "onlyAdditionalTestChange": "Current schema name in character-chat-turn-completion.spec.ts; actual request schema, forbidden combinations, adoption and refresh checks retained."
+  },
+  "checks": [
+    {
+      "name": "lint",
+      "command": [
+        "npx",
+        "eslint",
+        "src/lib/agent/skill-registry.ts",
+        "src/lib/character-interaction/action-choice-budget.ts",
+        "src/lib/character-interaction/action-choice-message-evidence.ts",
+        "src/lib/character-interaction/action-output-contract.ts",
+        "src/lib/character-interaction/action-wire.ts",
+        "src/lib/character-interaction/commitment-prompt.ts",
+        "src/lib/character-interaction/context-selection.ts",
+        "src/lib/character-interaction/control-handoff-wire.ts",
+        "src/lib/character-interaction/maintained-pause-control.ts",
+        "src/lib/character-interaction/narrative-action-prompt.ts",
+        "src/lib/character-interaction/narrative-conversation-evidence.ts",
+        "src/lib/character-interaction/narrative-player-pause.ts",
+        "src/lib/character-interaction/narrative-promise-request.ts",
+        "src/lib/character-interaction/narrative-replanning.ts",
+        "src/lib/character-interaction/narrative-scene-transition.ts",
+        "src/lib/character-interaction/ordinary-action-prompt.ts",
+        "src/lib/character-interaction/player-decision-prompt.ts",
+        "src/lib/character-interaction/turn-completion.ts",
+        "src/lib/character-interaction/turn-end-control.ts",
+        "tests/e2e/character-chat-action-choice.spec.ts",
+        "tests/e2e/character-chat-control-handoff.spec.ts",
+        "tests/regression/R-CHAT-02-action-choice-harness.test.ts",
+        "tests/regression/R-CHAT-02-choice-message-evidence.test.ts",
+        "tests/regression/R-CHAT-02-control-handoff-harness.test.ts",
+        "tests/regression/R-CHAT-02-fact-discovery.test.ts",
+        "tests/regression/R-CHAT-02-ordinary-action.test.ts",
+        "tests/regression/R-CHAT-02-player-decision.test.ts",
+        "tests/regression/R-CHAT-02-replanning.test.ts",
+        "tests/regression/R-CHAT-03-maintained-pause.test.ts",
+        "tests/regression/R-CHAT-03-recent-dialogue-bindings.test.ts",
+        "tests/regression/R-CHAT-03-recent-dialogue-harness.test.ts",
+        "tests/regression/R-CHAT-03-turn-allowance.test.ts",
+        "tests/regression/R-CHAT-03-turn-end-harness.test.ts",
+        "tests/regression/R-CHAT-04-commitment-generation.test.ts",
+        "tests/regression/R-CHAT-02-schema-compaction.test.ts"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:34:34.429705+00:00"
+    },
+    {
+      "name": "architecture",
+      "command": [
+        "npm",
+        "run",
+        "check:architecture"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:34:41.437364+00:00"
+    },
+    {
+      "name": "required-tables",
+      "command": [
+        "npm",
+        "run",
+        "check:required-tables"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:34:41.593760+00:00"
+    },
+    {
+      "name": "ai-manual",
+      "command": [
+        "npm",
+        "run",
+        "check:ai-manual"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:34:42.130223+00:00"
+    },
+    {
+      "name": "ai-entry-registry",
+      "command": [
+        "npm",
+        "run",
+        "check:ai-entry-registry"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:34:43.058142+00:00"
+    },
+    {
+      "name": "docs",
+      "command": [
+        "npm",
+        "run",
+        "check:docs"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:34:43.648227+00:00"
+    },
+    {
+      "name": "roadmap",
+      "command": [
+        "npm",
+        "run",
+        "check:roadmap"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:34:43.805925+00:00"
+    },
+    {
+      "name": "agent-context",
+      "command": [
+        "npm",
+        "run",
+        "check:agent-context"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:34:43.966262+00:00"
+    },
+    {
+      "name": "agent-freshness",
+      "command": [
+        "npm",
+        "run",
+        "check:agent-freshness"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:34:44.715192+00:00"
+    },
+    {
+      "name": "canon-coverage",
+      "command": [
+        "npm",
+        "run",
+        "check:canon-coverage"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:34:44.871247+00:00"
+    },
+    {
+      "name": "project-metrics",
+      "command": [
+        "npm",
+        "run",
+        "check:project-metrics"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:34:45.361127+00:00"
+    },
+    {
+      "name": "types",
+      "command": [
+        "npx",
+        "tsc",
+        "--noEmit"
+      ],
+      "exitCode": 2,
+      "at": "2026-10-22T23:35:28.059517+00:00"
+    }
+  ],
+  "correctedChecks": [
+    {
+      "name": "lint-corrected",
+      "command": [
+        "npx",
+        "eslint",
+        "src/lib/character-interaction/action-output-contract.ts",
+        "tests/regression/R-CHAT-02-output-contract.test.ts"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:41:29.397981+00:00"
+    },
+    {
+      "name": "types-corrected",
+      "command": [
+        "npx",
+        "tsc",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:42:09.122898+00:00"
+    },
+    {
+      "name": "build",
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:43:38.189737+00:00"
+    },
+    {
+      "name": "bundle-size",
+      "command": [
+        "npm",
+        "run",
+        "check:bundle-size"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:43:38.781565+00:00"
+    }
+  ],
+  "externalModelCalls": 0,
+  "formalM1QualityPassesAdded": 0,
+  "humanRatingsAdded": 0,
+  "olderFullDelivery": {
+    "source": "fef76fc1",
+    "status": "terminal-failed-at-documentation-check",
+    "reason": "Git archive lacked metadata required by git ls-files. Source unchanged; environment failure, not a character-chat behavior result.",
+    "receipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v342-current-full-delivery/receipt.json",
+    "cleanup": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v342-current-full-delivery/completed-snapshot-cleanup.json"
+  },
+  "pending": [
+    "Real model continuation from original retained failure",
+    "Current final-source full CI and E2E in the Git-aware V346 snapshot",
+    "Cross-situation and dual-provider M1 acceptance"
+  ],
+  "evidenceDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v345-compact-action-schema"
+}

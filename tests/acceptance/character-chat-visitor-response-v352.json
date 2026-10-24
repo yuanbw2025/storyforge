@@ -1,0 +1,164 @@
+{
+  "schema": "storyforge.chat-visitor-response-followthrough",
+  "version": 1,
+  "at": "2026-10-23T03:20:11.484874+00:00",
+  "status": "real-visitor-response-closure-and-recovery-passed-single-sample",
+  "source": {
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "baseHead": "f33fd74cef1c8e649ce63c8599b02f75f1eb2fce",
+    "sourceKind": "clean-worktree-commit",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/manifest-final.json",
+    "manifestSha256": "8a53c97f17786ee26944543099d2ed422787ae7253be5f1b0a57834b0fff5814"
+  },
+  "sourceUnchanged": true,
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "requests": 8,
+  "completedRequests": 8,
+  "automaticRetries": 0,
+  "usage": {
+    "reasoningOutputTokens": 1194,
+    "totalTokens": 139655,
+    "outputTokens": 3203,
+    "cachedInputTokens": 12416,
+    "cacheWriteInputTokens": 0,
+    "inputTokens": 136452
+  },
+  "costUsd": null,
+  "executionStartedAt": "2026-10-23T03:13:30.766Z",
+  "completedAt": "2026-10-23T03:16:20.056Z",
+  "wallSeconds": 169.29,
+  "playerOpportunities": 1,
+  "newPlayerMessages": 0,
+  "completedRuns": 3,
+  "adoptedRoleActions": 1,
+  "adoptedSituationResults": 1,
+  "adoptedControlHandoffs": 1,
+  "progress": [
+    "The saved visitor response was settled: the visitor accepted shelter and crossed the open doorway.",
+    "The guard closed the door and pointed out the innkeeper-approved shelter area.",
+    "The door-contact goal was fulfilled and its thread resolved; unverified identity stayed unverified.",
+    "The rejected search goal remained paused and its original thread open; no player participation was invented.",
+    "The remaining turn ended with a reviewed control handoff, without a duplicate character message."
+  ],
+  "final": {
+    "lastSequence": 4,
+    "goalKey": "goal.door-inquiry-1",
+    "goalStatus": "fulfilled",
+    "threadKey": "thread.door-visitor-1",
+    "threadStatus": "resolved",
+    "pendingSituation": null,
+    "triggerStatus": "complete",
+    "actionSequences": [
+      3
+    ],
+    "controlHandoff": {
+      "version": 2,
+      "sequence": 4,
+      "actorKey": "participant.001",
+      "sourceMessageId": "message:harness:44",
+      "sourceSequence": 3
+    }
+  },
+  "actualActionInputBudgetReadback": [
+    {
+      "runId": 44,
+      "steps": [
+        {
+          "stepId": "interaction:action-choice",
+          "contentHash": "a93eab31c8426c51894176ade7dbde78227128b59a1349bd6d61e2f0840e51cc",
+          "estimatedInputTokens": 10668
+        },
+        {
+          "stepId": "interaction:runtime-candidate",
+          "contentHash": "2dfa2fd5710b80eeedc7702e4e6fd4824dcf594e38b35e9418f0a58ac9cd15d9",
+          "estimatedInputTokens": 21868
+        },
+        {
+          "stepId": "interaction:action-review",
+          "contentHash": "848716b5775da8a3e3c78e0991572ac802482b1df2d7f85326553d235b34bbc3",
+          "estimatedInputTokens": 21419
+        }
+      ],
+      "total": 53955,
+      "limit": 56000
+    },
+    {
+      "runId": 45,
+      "steps": [
+        {
+          "stepId": "interaction:action-choice",
+          "contentHash": "b0760a9de362b1a8fbcd88133613b2f2013d8fcfe6b9c78575d145df40043f35",
+          "estimatedInputTokens": 10557
+        },
+        {
+          "stepId": "interaction:runtime-candidate",
+          "contentHash": "28a653c76c5f3ef24ecb3c17abfcd64b31fd313b215b0f11b99754e17a64fe79",
+          "estimatedInputTokens": 21443
+        },
+        {
+          "stepId": "interaction:action-review",
+          "contentHash": "d9df3e9e5d137a2423a1836f08aa237f303789fafe559c78824f42cabebf6d55",
+          "estimatedInputTokens": 13566
+        }
+      ],
+      "total": 45566,
+      "limit": 56000
+    }
+  ],
+  "restoration": {
+    "checksPassed": 22,
+    "sessions": 6,
+    "modelCalls": 0,
+    "blockedAttempts": 0,
+    "originalFailuresPreserved": 3,
+    "rawArtifactBytesAndMultiplicityPreserved": true,
+    "worldPreserved": true
+  },
+  "preflightFailure": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v352-visitor-response/initial-admission-zero-calls/visitor-response.json",
+    "modelCalls": 0,
+    "reason": "Collector expected the last rebased parent event at 0; actual branch mapping correctly places it at -1. Original registration and failure preserved; only collector assertion corrected before first dispatch."
+  },
+  "budgetReadbackMethod": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v352-visitor-response/input-budget-readback-method.json",
+  "remaining": [
+    "This is one diagnostic continuation, not an end-to-end cross-scenario or dual-provider M1 pass.",
+    "Narration still exposes control constraints, including not moving or seating another person.",
+    "One continue took about 169 seconds and 139655 reported tokens; performance and monetary cost acceptance remain open.",
+    "Three calls after the adopted closure produced only a reviewed control handoff; inspect whether an existing deterministic completion boundary can avoid this overhead without suppressing meaningful further action."
+  ],
+  "formalM1QualityPassesAdded": 0,
+  "humanRatingsAdded": 0,
+  "originalScheduledDenominatorChanged": false,
+  "fullObjectiveComplete": false,
+  "evidence": [
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v352-visitor-response/preregistration.json",
+      "sha256": "9adf5e33c1a8cf0cfdcb1c5fcb05ead0f0570705886c2916aa3c5d5b46e6d5ed"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v352-visitor-response/visitor-response.json",
+      "sha256": "ed59249ba2723cf3d6cb4b28a209df4eb12c58afb5e5975948df1d7ce0137e4d"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v352-visitor-response/visitor-response-backup.json",
+      "sha256": "afeed2701f9fc4c51e5063a3ade2300b8875b41bb4e28319f45ad2fabf015575"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v352-visitor-response/restoration-logical-history.json",
+      "sha256": "3274b8cc82e88a5c5f8ced44710d6eeb819c20a4ea81651b381e7d2f2e870f43"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v352-visitor-response/input-budget-readback.json",
+      "sha256": "ac60197dd5b99c71f124b33d6a68a847af2223ce01acf915f70611fa8c772cb1"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v352-visitor-response/input-budget-readback-method.json",
+      "sha256": "3cb8c5dfbc125ee971e59eebb44fecc0b55701537568e7c1891c03c0d2f2ab26"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v352-visitor-response/completed-test-service-stop.json",
+      "sha256": "e63aebbc5a9bff1407fbf4eaff0fc60cd71bb80b417880fb116de894a422716d"
+    }
+  ]
+}

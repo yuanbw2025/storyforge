@@ -1,0 +1,90 @@
+{
+  "schema": "storyforge.character-chat-development-evidence",
+  "version": 1,
+  "iteration": "V58",
+  "date": "2026-10-14",
+  "scope": "Applicable instruction selection with single-goal completion fix. Development evidence only, not M1 or commercial acceptance.",
+  "code": {
+    "initialHead": "03c13fc8ce5b7d2c5186c080321f4369fda9c342",
+    "finalHead": "0398417459c0090a013348fb34021f01d6988e43",
+    "finalSnapshotSha256": "f9317868fb63f9af54b940b57ae1e03720f21d833584ea494405cfc5947b5cb3",
+    "finalRuntimeSnapshotMatchesCommit": true
+  },
+  "engineering": {
+    "relatedRegressionFiles": 35,
+    "relatedRegressionTests": 506,
+    "finalExpressionTests": 42,
+    "completionContractTests": 47,
+    "browserPaths": 17,
+    "finalEditBrowserPaths": 4,
+    "governanceTypesLintBuildDocs": "passed",
+    "fullCI": "queued on final fixed snapshot, not passed",
+    "fullE2E": "queued on final fixed snapshot, not passed"
+  },
+  "fullEpisode": {
+    "file": "codex-photo-window-rules-v58.json",
+    "sha256": "a203ad5dd930320e783c5d09bf4aa80e0b05dba698f9146e9eb83dfb627cad8f",
+    "status": "failed",
+    "prefix": "original V56 completed natural opening; same fresh player request and three-action pace as V57",
+    "provider": "local-codex",
+    "model": "gpt-6.1-sol",
+    "requests": 7,
+    "completedProviderResponses": 7,
+    "totalTokens": 70252,
+    "completedRuntimeRuns": 3,
+    "failedRuntimeRuns": 1,
+    "committedActions": 2,
+    "cause": "Final output used speak with fulfilled goal and resolved thread; deterministic rejection before independent review. Raw output and committed observation retained, no automatic retry.",
+    "firstReplySeconds": 50.745,
+    "comparisonLimit": "V57 first reply was 58.051 seconds. V58 did not complete the episode; partial timing or fewer tokens cannot establish an overall improvement.",
+    "restoration": {
+      "file": "codex-photo-window-rules-restoration-v58.json",
+      "sha256": "7dcae9250af8d41394574ac406815c0ea7e94d3c546949e2836dd2a9a0d956cc",
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true
+    }
+  },
+  "reproduction": {
+    "file": "codex-photo-window-rules-failure-proof-verified-v58.json",
+    "sha256": "cbb9b0f8f08da179afd1fc4ac79275b6ac3b26c64afff1fc49bbea151d34718e",
+    "modelCalls": 0,
+    "stateUnchanged": true,
+    "error": "[chat-action] 意图或等待选择不能写成已完成后果",
+    "earlierProbeErrors": [
+      "First probe used missing state.participants; second used trigger.sequence instead of requestedSequence. Both setup failures retained and made no model calls."
+    ]
+  },
+  "repairValidation": {
+    "file": "codex-photo-window-completion-v58.json",
+    "sha256": "e6dc37595eaeaad1bbc737bbf49d456f55aa16f73b23953a937109542a6f6b2b",
+    "status": "completed",
+    "scope": "New explicitly authorized single continuation in an isolated branch after the exact saved V58 observation. No changed player input, regenerated observation, replaced raw output or replay of the failed request. Not a full episode rerun.",
+    "requests": 2,
+    "totalTokens": 20349,
+    "completedRuns": 1,
+    "parentUnchanged": true,
+    "refreshEqual": true,
+    "noModelRequestOnRefresh": true,
+    "result": "Actor cites reflection and frame visibility, decides no adjustment, and completes its own goal and thread after independent review.",
+    "restoration": {
+      "file": "codex-photo-window-completion-restoration-v58.json",
+      "sha256": "cacfe2b81d23aa84bf4eefc25663029b716908a1150703eb943abd5eb7aaadf4",
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true
+    }
+  },
+  "knownLimits": [
+    "The final response still repeats the full canonical observation before its natural judgment; disclosure wording remains a product-quality gap.",
+    "No statistically established latency improvement, no independent human ratings, no formal M1 episode, and no commercial quality claim.",
+    "Agnes configuration remains unavailable after the completed cross-branch search."
+  ],
+  "costUsd": null,
+  "formalEpisodesCompleted": 0,
+  "humanReviewsCompleted": 0
+}

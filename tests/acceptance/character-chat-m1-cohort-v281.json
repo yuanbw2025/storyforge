@@ -1,0 +1,85 @@
+{
+  "version": 281,
+  "recordedAt": "2026-10-20T20:42:12.791684+00:00",
+  "sourceHead": "ec77b69d24cff76eb079922cd6245bf86b7d3540",
+  "sourceUnchanged": true,
+  "cohort": "m1-v281-current",
+  "scheduledEpisodes": 120,
+  "startedEpisodes": 1,
+  "failedEpisodes": 1,
+  "unitStoppedUnrunEpisodes": 5,
+  "remainingScheduledEpisodes": 114,
+  "humanScored": 0,
+  "production": {
+    "requests": 3,
+    "openingChecks": [
+      true,
+      true,
+      false
+    ],
+    "firstPassingSelectedIndex": 0,
+    "localReleaseId": 1
+  },
+  "runtime": {
+    "playerOpportunities": 7,
+    "completedRuns": 7,
+    "failedRuns": 1,
+    "failureStage": "action-choice",
+    "cause": "Choice placed a delivered player message ID alongside two valid fact keys in evidenceFactKeys. Current schema supports facts only; the validator rejected before expression or review.",
+    "semanticDirection": "Acknowledge the player preference for original sound and adjust future proposals; neither an actual response nor an adopted consequence."
+  },
+  "model": {
+    "requests": 25,
+    "allNativeRequestsCompleted": true,
+    "usage": {
+      "totalTokens": 387778,
+      "inputTokens": 369466,
+      "outputTokens": 18312,
+      "cachedInputTokens": 41472,
+      "reasoningOutputTokens": 4668
+    },
+    "costUsd": null
+  },
+  "restoration": {
+    "stem": "clock-r1-weak-guidance",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 7,
+    "retainedFailedRuns": 1,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true,
+    "terminalReceiptBodiesRetained": true,
+    "usageEvidenceRetained": true
+  },
+  "evidence": {
+    "protocol": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v281-m1-current/codex-clock-r1/preregistration.json",
+      "sha256": "fed3c0990cd903e3acacbda46af616a60d2c7d569e11fc2d313a0d9dcb70e95c"
+    },
+    "result": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v281-m1-current/codex-clock-r1/clock-r1-weak-guidance.json",
+      "sha256": "42dfd568b2e6c1ed8d7d57b54ff2081f9994db05023157f3d4191ece73a94b71"
+    },
+    "backup": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v281-m1-current/codex-clock-r1/clock-r1-weak-guidance-backup.json",
+      "sha256": "0f15c96849b915a15eb1a7ce79286f6a37cf29781e7da4510f95c0a1e1995b49"
+    },
+    "restoration": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v281-m1-current/codex-clock-r1/clock-r1-weak-guidance-restoration-verified.json",
+      "sha256": "6cfee1c81f78644c3c2320608b315d6e86a0ca1357faea1eda6a4ea9e85a0e8f"
+    },
+    "playerDecisions": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v281-m1-current/codex-clock-r1/player-decisions.json",
+      "sha256": "3e093f6b021b26f571f37f7f50a2c930f9c257de5e89e1dc48a11627ea6bee54"
+    }
+  },
+  "fullCI": false,
+  "fullE2E": false,
+  "m1Passed": false,
+  "holdoutBodiesInspected": false,
+  "priorCohortsUnmodified": true
+}

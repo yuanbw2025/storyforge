@@ -1,0 +1,252 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 320,
+  "at": "2026-10-22T08:24:00.274428+00:00",
+  "kind": "versioned-coordinator-scene-person-alignment",
+  "engineering": {
+    "schema": "storyforge.chat-isolated-engineering-evidence",
+    "version": 1,
+    "recordedAt": "2026-10-22T08:23:17.451741+00:00",
+    "passed": true,
+    "sourceKind": "isolated-archive-plus-recorded-patch",
+    "baseHead": "1b2e43e1d996c3613b36f50c82790eecd9b58e56",
+    "sourceRoot": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v320-coordinator-scene-person/source",
+    "sourceManifest": {
+      "file": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v320-coordinator-scene-person/manifest.json",
+      "sha256": "2e64b8ede9af4797b119485de45a21a81df81089b511f4212500b33a55b2992b",
+      "files": 3980
+    },
+    "patch": {
+      "file": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v320-coordinator-scene-person/implementation.patch",
+      "sha256": "b8a806c0c3792b438708d04477b75465471028bd157d4f206382d32adcbd705a",
+      "changedFiles": 80,
+      "appliesToFrozenWorktree": true,
+      "applied": false
+    },
+    "boundary": {
+      "product": "character-interaction",
+      "lifecycle": "product-development",
+      "stage": "S3",
+      "owner": "existing ProductRuntimeSession and Harness",
+      "newTables": 0,
+      "newFields": 0,
+      "newModelSteps": 0,
+      "worldWrites": 0,
+      "mediaChanges": 0
+    },
+    "changes": "Versioned registered coordinator source aligns public scene-person contact with existing actor view. Action61/review38, options37/review28 and situation17/review16 preserve historical contracts, private boundaries and independent rejection. Principal knowledge ledger remains unchanged; public contact does not grant secret access or establish an NPC response. Exact V319 failure retained. Includes prior V314/V316/V318 patches and evidence.",
+    "checks": [
+      {
+        "check": "metrics-generate",
+        "command": [
+          "npm",
+          "run",
+          "gen:project-metrics"
+        ],
+        "startedAt": "2026-10-22T08:16:36.980728+00:00",
+        "completedAt": "2026-10-22T08:16:37.466770+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "types",
+        "command": [
+          "npx",
+          "tsc",
+          "--noEmit"
+        ],
+        "startedAt": "2026-10-22T08:16:37.467368+00:00",
+        "completedAt": "2026-10-22T08:17:23.508901+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "lint",
+        "command": [
+          "npm",
+          "run",
+          "lint"
+        ],
+        "startedAt": "2026-10-22T08:17:23.510764+00:00",
+        "completedAt": "2026-10-22T08:18:00.304902+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "architecture",
+        "command": [
+          "npm",
+          "run",
+          "check:architecture"
+        ],
+        "startedAt": "2026-10-22T08:18:00.305623+00:00",
+        "completedAt": "2026-10-22T08:18:07.170864+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "tables",
+        "command": [
+          "npm",
+          "run",
+          "check:required-tables"
+        ],
+        "startedAt": "2026-10-22T08:18:07.171247+00:00",
+        "completedAt": "2026-10-22T08:18:07.316087+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "ai-entry",
+        "command": [
+          "npm",
+          "run",
+          "check:ai-entry-registry"
+        ],
+        "startedAt": "2026-10-22T08:18:07.846464+00:00",
+        "completedAt": "2026-10-22T08:18:08.726090+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "freshness",
+        "command": [
+          "npm",
+          "run",
+          "check:agent-freshness"
+        ],
+        "startedAt": "2026-10-22T08:18:08.726506+00:00",
+        "completedAt": "2026-10-22T08:18:09.462602+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "ai-manual",
+        "command": [
+          "npm",
+          "run",
+          "check:ai-manual"
+        ],
+        "startedAt": "2026-10-22T08:20:10.723555+00:00",
+        "completedAt": "2026-10-22T08:20:11.228347+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "docs",
+        "command": [
+          "npm",
+          "run",
+          "check:docs"
+        ],
+        "startedAt": "2026-10-22T08:20:11.229190+00:00",
+        "completedAt": "2026-10-22T08:20:11.820867+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "roadmap",
+        "command": [
+          "npm",
+          "run",
+          "check:roadmap"
+        ],
+        "startedAt": "2026-10-22T08:20:11.821293+00:00",
+        "completedAt": "2026-10-22T08:20:11.968382+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "metrics",
+        "command": [
+          "npm",
+          "run",
+          "check:project-metrics"
+        ],
+        "startedAt": "2026-10-22T08:20:11.968760+00:00",
+        "completedAt": "2026-10-22T08:20:12.423285+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "build",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "startedAt": "2026-10-22T08:20:12.423702+00:00",
+        "completedAt": "2026-10-22T08:21:27.010956+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "bundle",
+        "command": [
+          "npm",
+          "run",
+          "check:bundle-size"
+        ],
+        "startedAt": "2026-10-22T08:21:27.011644+00:00",
+        "completedAt": "2026-10-22T08:21:27.543084+00:00",
+        "exitCode": 0
+      }
+    ],
+    "regression": {
+      "files": 20,
+      "tests": 293,
+      "logs": [
+        "regression.log",
+        "regression-span.log"
+      ]
+    },
+    "browser": {
+      "files": 5,
+      "tests": 29,
+      "log": "browser.log",
+      "automaticRetries": 0
+    },
+    "metadataCorrection": {
+      "reason": "Keep distinct turn-end and unresolved-control manifest identities under the new coordinator view",
+      "focusedRegression": {
+        "files": 3,
+        "tests": 46,
+        "log": "regression-manifest.log"
+      },
+      "focusedBrowser": {
+        "files": 2,
+        "tests": 7,
+        "log": "browser-manifest.log"
+      },
+      "overlapsMainChecks": true
+    },
+    "realModelCalls": 0,
+    "formalM1Credit": 0,
+    "storyQualityPassed": false,
+    "fullDelivery": "Integration and current full CI/E2E pending; original V312 validation is separate.",
+    "logs": {
+      "types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "regression-second.log": "13a706052ab48e99edd913b677a23e4738cc4c163cf645f0d192ac7e654b4ad5",
+      "regression.log": "7c9ca88c674e1731fb1833a67dcfa789c8b380dd6726eb7ad70161200809629f",
+      "browser.log": "d1c2933eddf9aa70b66f1fdb8214ff4ccd5196360ddd280c09af69581bd4d18d",
+      "lint.log": "c8bd26fb2b68c69b86e0c51b7e999259bb290b9f1447e8439b239b1d08ae64d1",
+      "architecture.log": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616",
+      "types-initial.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "regression-third.log": "c5236a0ecf3c01657e4c2fc8b97033be8a2d50924b5e50a1a330b17dcef7c572",
+      "regression-manifest.log": "6a7a770974ce64a0be3b165fc8d9cbfbe6efaf2f474f4040fab7871550ad2c24",
+      "ai-manual-initial.log": "382dcd2bf5f2c8eb46cf44f61f6a5dd82fceac5b7622a8450aef80b38eba193a",
+      "browser-manifest.log": "5299388132fe0cd8cabd739c191b6731c59ef0df9a1e5debd8e02ffe1a27e043",
+      "regression-span.log": "9e57347338a4b5d93b0d8e0a8601c16ccf41dc00ef346d61e9fa3cf9c9192109",
+      "ai-manual.log": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19",
+      "model-server.log": "93e4b668b197ac54d26187f3fbd17feeee24772aa7c469dbcfc2b8ce13390ea7",
+      "tables.log": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444",
+      "docs.log": "662333faadfa7b54bafa6fc4419d1123446e66c4587c8ec37c765b17e6d95b9a",
+      "check-docs-final.log": "8af68316b81ecb5c8eac18b385140035b89f90108852c1c523ba492f0744bafe",
+      "metrics.log": "32f5ade067b3496f6b4dd1d2dde0aeef10be09621b5d5059fa5833f42f99b0ff",
+      "baseline.log": "1dbfa5ec0cb017fc831e6f5dd520f79a9ee0db2435f8bdb352304828e69fc458",
+      "bundle.log": "6f9a2cf3fbb3047ab723ef3593fdb87e40f3a3af2c613aa234d562ca7c27328b",
+      "browser-before-manifest-label.log": "d1c2933eddf9aa70b66f1fdb8214ff4ccd5196360ddd280c09af69581bd4d18d",
+      "ai-manual-generate.log": "3395b5e737f52a05d9c19e988e9189038725875fbd32aff89394e5a63cb558ea",
+      "docs-initial.log": "b24b1b091ec6d687e6614be52c7f66fdfe79df6b1d75bd763fae7bb07ee1739a",
+      "regression-initial.log": "21d1cd8824c35d172ce76aa86295569feca91e665038dbb756b7992f86e2e226",
+      "roadmap.log": "9e45dab19b38810e932d85373ca28150ee63803849201a58a23941d0bccabb2a",
+      "check-roadmap-final.log": "9e45dab19b38810e932d85373ca28150ee63803849201a58a23941d0bccabb2a",
+      "metrics-generate.log": "0555eabe41357efe38464a935ad593aa025a0682300d6c86a7fa03fe2642b146",
+      "freshness.log": "e56dbcddd6530139e98744f1883c347bd33e8f23a95001be5c47523d54039a50",
+      "build.log": "3ae99be7cf9a584e756fce9dec609956d83968b36e19f27aec29eadfadca9f7e",
+      "ai-entry.log": "eb460ca57d9e2ba78254d28856cfeb86716ddfb9c682cfa7c706f25086477dce"
+    }
+  },
+  "realModelCalls": 0,
+  "formalM1Credit": 0,
+  "humanScoring": "deferred",
+  "nextAction": "Continue exact V319 failed story branch using ordinary weak guidance; independent review, original permissions and failure retention unchanged."
+}

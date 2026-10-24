@@ -1,0 +1,244 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "label": "V132 runtime history capacity, bounded projections and atomic runtime head",
+  "recordedAt": "2026-10-16T07:02:38.284515+00:00",
+  "implementation": {
+    "baseCommit": "6a30718744f88b1a82d5fe4d98e5e0429523f88e",
+    "sourceIdentity": "This evidence is committed with the implementation. Full-suite freeze metadata records the exact clean commit separately.",
+    "status": "formal implementation and related verification passed; complete CI/E2E and larger loads pending",
+    "changedSourceSha256": {
+      "src/lib/character-interaction/context-reader-version.ts": "af9a152e9eca8d4308fe9397feb60f2818c4b8b6871e60cffab03f80797861ed",
+      "src/lib/character-interaction/context-selection.ts": "3a0b04924156ab2cd865b2dcdfc97e75a20d8b03cfc6a860c71596c259953575",
+      "src/lib/character-interaction/coordinator-selection.ts": "cf22036c9b2d5b048371a93cd094f2f66735700c4e7f6f12a27b33d8dc085f58",
+      "src/lib/character-interaction/harness.ts": "3d6f6da5131da24a6cba2536ebafe4d9a611f6f9e988658d299e58d44d14a6f1",
+      "src/lib/character-interaction/history-actor-context.ts": "8a1a83210d18134c1da72ce23937328c3cf759336e530e37c40c64066231fa3a",
+      "src/lib/character-interaction/history-capacity.ts": "fcfff5caed35ba9af7aad34deed916c2a993343f1ef622256d9bd962393865bb",
+      "src/lib/character-interaction/history-context-cache.ts": "fa3c82bfdd4d8f3ba6caac7d50f14e424a64d0383e2fb396e513d24373172bfe",
+      "src/lib/character-interaction/history-coordinator-context.ts": "9b8cfaebab3d1b6d131de4eb45e0e871ef41849578c65f0c09fdf2a0fcc8c6c5",
+      "src/lib/character-interaction/narrative-commitments.ts": "4cdd6b2354a1fe00979ad68ca2a925f83d3b081ef67808881961ab4376666db8",
+      "src/lib/character-interaction/narrative-contract.ts": "9a0abfae5e49e852d26e3c3c43382972a489f7def21bccd5b83c0f1f9b1e0bf6",
+      "src/lib/character-interaction/narrative-thread-followup.ts": "fc29b85c077da3025770458a37658c2f6fde2041b98c35828f9ba3d0352aa1c1",
+      "src/lib/character-interaction/runtime-commands.ts": "db4f3a287774342882b44b0bbafbd677a8608a62c83efbf14eeb6ee660eeaa1d",
+      "src/lib/character-interaction/runtime.ts": "31d213e2c7dfeeece6238d7ce8e25aab0bf6292ba68ba27b549aeb189c97bc09",
+      "src/lib/character-interaction/situation-harness.ts": "f240808879704336a4b3f62604427f997067e6fcf2d89f3d7bb5b32b8b1535b6",
+      "src/lib/registry/context-sources.ts": "fb74819a20ad281c4e7baf6872c2acf61f3d7068cb2f5822abf4fc4948b0fed7",
+      "tests/e2e/character-chat-commitment-context.spec.ts": "0a8f9d867ba7485f95b4d5f16bbbaba0dd36fbfb5a679423a03b6575f839b9c7",
+      "tests/helpers/chat-commitment-history-runtime.ts": "dd1644506cdb2906c83e19d7ea126743d52d79cc76fec8f5873f5f238dd33dc4",
+      "tests/helpers/chat-historical-reader.ts": "0e0f976715969d9de8054e23c414572536338460411da440e072d99c9f2d0c83",
+      "tests/regression/R-CHAT-02-followup-action.test.ts": "2bae36025d793838c175f9808cb638a245bef2ed16ce1b98031687496ca39510",
+      "tests/regression/R-CHAT-02-thread-followup.test.ts": "63c28c3ef503aba863509db67f215f9968d9ee264cbdd7c4f8435aff1e52d41d",
+      "tests/regression/R-CHAT-03-context-inspector.test.ts": "fa10d4390f79ac6be456d98865fcab1aa35425a5473bb167f71ec63a6125c634",
+      "tests/regression/R-CHAT-04-commitment-context-harness.test.ts": "ba4e2922e9e50992e71126d097e0d5f2bf4f521021d6ccad7fe17c18ef2d06fa",
+      "tests/regression/R-CHAT-04-commitment-contract.test.ts": "a4925ab69a23670b2ee556439647d60bbffb41921b6bca6b154745db70116954",
+      "tests/regression/R-CHAT-04-coordinator-dialogue-harness.test.ts": "1d0074744bafe3f9b0ff3a95896b2b622be97be0948de6685571eaba17ec8d64",
+      "tests/regression/R-CHAT-04-coordinator-dialogue.test.ts": "7cdad96514be9a68bac327844e7d4e005bee719e5ebbf441771225ebb7127180",
+      "tests/regression/R-CHAT-04-history-audit.test.ts": "bdec2aab1f03bd5c8fc766b9ef288a6f89e6dcc469fffd855edad154f93bea74",
+      "tests/regression/R-CHAT-04-history-cache.test.ts": "f0e0a175cdf3c40777ab77eb1271a8415f3746158317f76f68dafde12dbb5778",
+      "tests/regression/R-CHAT-04-history-capacity-harness.test.ts": "617b3e3dbe0d2ecf5ece44e8b99270994369de51cc5a44d9520dd81a9d92d3f9",
+      "tests/regression/R-CHAT-04-history-capacity.test.ts": "6e5b8a0a886af8f033b1a1aa3a78ba2ab274e0c5f294a840d1fe620b8cbc9e70",
+      "tests/regression/R-CHAT-04-memory-reconciliation-harness.test.ts": "31a2a4efdf89161d1f8773b5c391ab5d7dd4c89329c6d63db93761b703804b51",
+      "tests/regression/R-CHAT-04-runtime-head.test.ts": "8f9504643d9df7093d31ec14ebaa515caa61c802178240e88f5851338d704f23"
+    }
+  },
+  "boundary": {
+    "product": "character-interaction",
+    "lifecycle": "product development; S3 runtime",
+    "owner": "existing Chat Work / ProductRuntimeSession",
+    "world": "frozen references only; no world writes",
+    "reads": "registered interactionRuntime and chatSituationRuntime; actor v13, situation v15, retrieval v9; action review v13, situation review v14",
+    "writes": "existing reviewed candidate/adoption event path and existing authorized derived runtime-head helper",
+    "storage": "no new table, schema, migration, canonical state field or free model write contract",
+    "media": "unchanged product-owned media",
+    "externalModelCalls": 0
+  },
+  "baseline": {
+    "commit": "6a30718744f88b1a82d5fe4d98e5e0429523f88e",
+    "manifestSha256": "445b52327417708f725c18a787a363f55ef5655d1cab21e29e31998140512e22",
+    "targetActions": 120,
+    "adoptedActions": 98,
+    "newObservations": 196,
+    "totalFacts": 200,
+    "injectedCalls": 197,
+    "firstGrowthFailure": {
+      "attempt": 99,
+      "stage": "after producer, before review",
+      "message": "[chat-narrative] 情境事实 数量无效"
+    },
+    "reopenEqual": true,
+    "worldUnchanged": true,
+    "retainedDiagnosticFailures": [
+      "Initial 180-second timeout.",
+      "Progressive diagnostic saved result and canonical state, then failed because writeFileSync received an export object without JSON serialization. No complete baseline backup was saved."
+    ],
+    "trackedTreeRestoredAndVerified": true
+  },
+  "change": [
+    "Separate frozen authoring caps (200 facts / 32 goals / 64 threads) from runtime history caps (4096 facts / 1024 goals / 1024 threads / 1024 commitments per goal / 4096 total commitments / 8000000 serialized situation characters). Keep at most 32 unfinished or paused goals, frozen active-thread permissions and one unresolved promise per goal. Capacity failure preserves full history.",
+    "Version new reader behavior. Preserve exact old reader paths. Optional actor history uses 18000 characters / 6000 estimated tokens, while required closure retains 24000 / 8000. Coordinator limits remain 28000 / 12000. No mandatory reference is silently dropped.",
+    "Store complete coordinator selection identities and reasons in durable context-packets bound to the actual assembled text and Manifest. Model text contains compact counts; selected actual material and candidate/actor-delivered reference closure remain. Review packets stay outside player input inspection.",
+    "Bound deterministic projection caches to four entries and 4 MiB per cache using full serialized input and isolated cloned values. Changed source, visibility, candidate, policy or budget invalidates the key; large keys bypass caching.",
+    "Maintain the existing chat runtime head atomically with each new event. Hash next state outside the transaction, still replay and compare the authoritative prefix inside it, and reject stale or mismatched prepared state. Failure rolls back event and head; idempotence and corrupt-head fallback remain. Other product command paths are unchanged."
+  ],
+  "formalPressure": {
+    "kind": "injected engineering workload, not real-model or meaningful-story acceptance",
+    "hundredActions": {
+      "adoptedBeforeRecall": 100,
+      "newObservations": 200,
+      "retainedFacts": 204,
+      "recallActions": 1,
+      "injectedCallsIncludingRecall": 202,
+      "elapsedTestMs": 131175,
+      "milestonesMs": {
+        "25": 9650,
+        "50": 25966,
+        "75": 61028,
+        "100": 112585
+      },
+      "lifecycle": "current head equals authoritative replay; earliest clue recalled; branch survives parent deletion; export/import/reopen retain exact interaction; original frozen world unchanged"
+    },
+    "promises": {
+      "actuallyFulfilled": 18,
+      "actionsBeforeRecall": 36,
+      "recallActions": 1,
+      "injectedCalls": 74,
+      "elapsedTestMs": 16555,
+      "oldDispositionRead": true
+    },
+    "followupGoals": {
+      "newGoalsAndThreads": 34,
+      "formalActions": 35,
+      "totalGoals": 36,
+      "goalResolutionProofs": 35,
+      "threadResolutionProofs": 34,
+      "injectedCalls": 70,
+      "elapsedTestMs": 16840,
+      "reopenEqual": true
+    },
+    "test": "tests/regression/R-CHAT-04-history-capacity-harness.test.ts",
+    "earlierCacheOnlyPass": {
+      "hundredActionTestMs": 540532,
+      "receipt": "/tmp/storyforge-chat-v132-capacity-cached-receipt.json",
+      "note": "Same functional test before runtime-head maintenance; measurements are not a controlled benchmark or product latency guarantee."
+    }
+  },
+  "verification": {
+    "associated": {
+      "files": 117,
+      "tests": 1350,
+      "exitCode": 0,
+      "durationSeconds": 363.12,
+      "receipt": "/tmp/storyforge-chat-v132-regression-complete-receipt.json",
+      "scope": "all changed source at recorded hashes; capacity, historical reader bytes, governance, atomic rollback, stale prefix, corrupted head, candidate adoption, shared consumers and portable lifecycle"
+    },
+    "browser": {
+      "paths": 12,
+      "exitCode": 0,
+      "isolatedStorage": true,
+      "receipt": "/tmp/storyforge-chat-v132-browser-final-receipt.json",
+      "scope": "18 promises beyond previous cap, portable promise replacement, input inspection, alternatives, player/thread followup, refresh and branch history"
+    },
+    "gates": {
+      "count": 11,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v132-complete-gates-receipt.json",
+      "checks": [
+        "architecture",
+        "required-tables",
+        "ai-manual",
+        "ai-entry-registry",
+        "docs",
+        "roadmap",
+        "project-metrics",
+        "tsc",
+        "lint",
+        "build",
+        "bundle-size"
+      ]
+    },
+    "retainedFailures": [
+      {
+        "log": "/tmp/storyforge-chat-v132-initial-tsc.log",
+        "outcome": "Duplicate ChatSituationV1 import, removed before final checks."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v132-capacity-contract.log",
+        "outcome": "66 passed and 2 failed: old goal-limit fixture and a missing branch parent-through argument; corrected fixtures and verified unchanged initial limits."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v132-capacity-formal.log",
+        "outcome": "Storage-only expansion failed all 3 formal loads on mandatory coordinator budget; capacity constants alone were insufficient."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v132-capacity-formal-v9.log",
+        "outcome": "70 passed and 1 failed: 100-action test timed out at 240 seconds; 18 fulfilled promises and 34 new goals passed."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v132-reader-regression.log",
+        "outcome": "29 passed and 1 failed: optional history headroom incorrectly reduced the mandatory promise budget. Corrected to retain the original 24000-character / 8000-token hard budget for required closure."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v132-capacity-100.log",
+        "outcome": "100-action test timed out at 600 seconds; last milestone was 75 actions at 493071 ms. Not attributed to environment or counted as a pass."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v132-regression.log",
+        "outcome": "100 files / 1325 tests passed, 14 files / 17 tests failed. Retained timeout failures; fixed old goal-limit and reader-version fixtures and limited packet corruption injection to the intended actor step."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v132-regression-final.log",
+        "outcome": "113 files / 1342 tests passed, 2 files / 2 tests timed out at the original 5-second threshold (narrative-player and source-unit-production). The final complete run passes both without changing that threshold."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v132-head-small.log",
+        "outcome": "13 passed and 2 failed: immutable reducer return was initially ignored, producing a derived head one event behind. The implementation now hashes and stores the returned state."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v132-head-regression.log",
+        "outcome": "Earlier still-running bad-head code completed with 8 passed and 3 failed, including the 100-action head equality check. Canonical events remained intact; final repaired run passes all paths."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v132-core-gates.log",
+        "outcome": "Generated AI manual was stale; regenerated."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v132-final-gates.log",
+        "outcome": "Generated project metrics were stale; regenerated. Final complete gates all pass."
+      }
+    ]
+  },
+  "fullValidation": {
+    "status": "V132 E2E failed: 371 passed, 2 skipped, 1 ENOSPC screenshot failure. V132 CI was superseded before start; no whole-suite pass claimed.",
+    "ciReceipt": "/tmp/storyforge-chat-v132-full-ci-receipt.json",
+    "e2eReceipt": "/tmp/storyforge-chat-v132-full-e2e-receipt.json",
+    "supersededV131": {
+      "ciExitCode": 143,
+      "e2eExitCode": 143,
+      "reason": "Both own queues verified unstarted and childless before stopping; not passed.",
+      "receipt": "/tmp/storyforge-chat-v132-superseded-v131-queues.json"
+    },
+    "e2eTerminal": {
+      "head": "7dbd3d8fceb5b3b37bb8bfefb42933ed2891d9d6",
+      "exitCode": 1,
+      "passed": 371,
+      "skipped": 2,
+      "failed": 1,
+      "failure": "ENOSPC while writing screenshot /tmp/motion-materials-delivery.png at motion-drama-preproduction.spec.ts:113; trace/archive/directory writes also failed",
+      "missingEvidence": "Failing test screenshot/trace could not be fully written; no such artifact is claimed",
+      "slot": "Released normally; no lock file removed; next owner belongs to another task",
+      "receipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v134-cache-budget/v132-e2e-terminal/storyforge-chat-v132-full-e2e-receipt.json"
+    }
+  },
+  "evidence": {
+    "privateDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v132-history-capacity",
+    "indexSha256": "ae3d0f08fa1b5383a273bdb745f196385eecf3a3ab8e108fc027bd8710e7436b",
+    "profile": "40 injected actions / 80 injected calls; CPU sample identified repeated full replay because chat commands did not update the existing runtime head. Logs and profile retained.",
+    "storage": "Own inactive snapshots use byte-identical APFS clone copies with complete manifest reverification; no file contents, failures or user data deleted."
+  },
+  "limits": [
+    "CHAT-04.06a/b/c still await complete-suite terminal evidence; d remains open for 300/1000 new-consequence actions and remaining sustained-growth checks.",
+    "100-action observations are synthetic new facts, not proof of meaningful autonomous story progression. No new real-model requests, Agnes evidence, human play or commercial acceptance. Historical provider failures and cohort denominators remain unchanged.",
+    "Storage ceilings do not guarantee every possible 100-round conversation fits. Mandatory player statements, ongoing commitments, durable facts and discovery closure can still exhaust the unchanged model budgets; admission stops visibly.",
+    "Deterministic lexical recall is not a semantic-recall guarantee. Larger histories may still incur repeated canonical-replay cost; no product performance threshold is claimed from these timings."
+  ]
+}

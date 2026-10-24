@@ -19,6 +19,12 @@
 
 操作见[大纲、细纲与正文](/features/longform/writing)。依据：[PR #141](https://github.com/yuanbw2025/storyforge/pull/141)、[PR #171](https://github.com/yuanbw2025/storyforge/pull/171)；问题跟进见 [Issue #183](https://github.com/yuanbw2025/storyforge/issues/183)。
 
+## 开发中：角色聊天候选流程（未发布）
+
+角色聊天开发分支正在整合角色卡转换、体验包安装/导出、兼容存档升级副本及三类原创起稿。已提交基线为 `a4f16fd9`，本次观察的后续内容尚未提交，不计为已发布功能。操作与限制见[角色聊天](/features/interactive/character-chat#开发分支中的新流程-尚未发布)，具体交付状态见[待合并开发记录](/updates/development-status#character-chat-candidate)。
+
+候选增量现还包括随发行冻结的作品署名与使用说明，并修正了先装新版导致完整备份失败的安装编号问题；完整验证仍在进行。
+
 ## 2026-10-20 · 系统文规划、全章评审与范围修订
 
 [PR #141](https://github.com/yuanbw2025/storyforge/pull/141) 已合入主干 `1b96e80a`。

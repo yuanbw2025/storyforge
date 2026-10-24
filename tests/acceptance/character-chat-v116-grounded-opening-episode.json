@@ -1,0 +1,285 @@
+{
+  "schema": "storyforge.character-chat-development-episode-evidence",
+  "version": 1,
+  "label": "V116 fresh weak-guidance episode on V115 grounded opening",
+  "recordedAt": "2026-10-16T00:23:36.115172+00:00",
+  "implementationCommit": "8dcb1788a1dd8dd84095a16bd7c49d8e52b5b374",
+  "manifestSha256": "ef97145364b836c636d56e12355d69789aef834070d2e93811dc2559ee3d9544",
+  "releaseHash": "3235facf915f325f3c3ef14c17faab66af1bd9a1e2f9d00ec3ffb37c555f8701",
+  "worldHash": "103ac348ab504155f0ff2a30034cf38d112b175cf3f40e2011251f5cedb4a6ee",
+  "scope": {
+    "product": "experimental character-chat v3, default hidden",
+    "lifecycle": "S3 runtime development evaluation in isolated browser data",
+    "production": "V115 first-passing new opening; exact source/permissions/discovery conditions from V109; old V114 failure kept",
+    "noProductionRegeneration": true,
+    "noRetries": true,
+    "noRepairs": true,
+    "noInjectedOutputs": true,
+    "holdoutsInspected": false,
+    "countsInM1": false
+  },
+  "episode": {
+    "planned": 1,
+    "finished": 1,
+    "playerOpportunities": 1,
+    "playerMessages": 0,
+    "continues": 1,
+    "automaticOpeningActorActions": 1,
+    "continuedActorActions": 1,
+    "maximumAuthorizedActorActionsPerTrigger": 3,
+    "runtimeRequests": 6,
+    "completedRuns": 3,
+    "failedRuns": 0,
+    "completionReason": "meaningful-closure",
+    "boundedNarrativeGoalClosure": true,
+    "completeOriginalHiddenTruth": false,
+    "goals": [
+      {
+        "key": "goal-1",
+        "desire": "找回铜印，先核实可接触的储物处，避免无证据地指责住客。",
+        "status": "fulfilled"
+      }
+    ],
+    "threads": [
+      {
+        "key": "thread-1",
+        "question": "能否核实铜印所在并找回；若当前无法继续，是否明确保留尚未查清的部分？",
+        "status": "resolved"
+      }
+    ],
+    "publicMessages": [
+      "“先核对眼前这只箱子。”叶岑俯身握住木箱的箱盖边缘，试着向上提，检查能否打开并查看其中是否有铜印。",
+      "“铜印放在柜台下的木箱里。”叶岑从木箱内取出铜印，握在手中。“找回了。但它在这里，不能说明是谁放的，也不能说明放在这里的用意。”"
+    ],
+    "sequence": [
+      "Guard independently tries to open visible box, without needing a player-authored method",
+      "Separate situation generation/review establishes actual open-box check and discovers only the existing location fact under its original condition",
+      "Guard takes out the seal, tells the player where it was found, leaves handler/purpose unknown, and closes the original find-seal goal and thread"
+    ],
+    "sourceUnits": [
+      {
+        "factKey": "fact-5",
+        "audienceKeys": []
+      },
+      {
+        "factKey": "fact-6",
+        "audienceKeys": []
+      },
+      {
+        "factKey": "fact-7",
+        "audienceKeys": [
+          "participant.001",
+          "player"
+        ]
+      }
+    ],
+    "discoveryHistory": [
+      {
+        "actionSequence": 5,
+        "actorKey": "participant.001",
+        "evidenceExcerpt": "“先核对眼前这只箱子。”叶岑俯身握住木箱的箱盖边缘，试着向上提，检查能否打开并查看其中是否有铜印。",
+        "evidenceFactKeys": [
+          "fact-4",
+          "fact-8",
+          "fact-10"
+        ],
+        "factKey": "fact-7",
+        "reason": "本次提盖检查的结果为箱盖打开、箱内可见，叶岑实际核对后发现铜印在柜台下的木箱中，满足该位置事实的发现条件。此项发现仅使叶岑确认铜印所在，不确认经手者、用途，也不代表已将铜印取出或告知沈禾。",
+        "result": "discovered",
+        "discoverySequence": 7
+      }
+    ],
+    "typedInquiryResults": 0,
+    "factsAtEnd": 12
+  },
+  "provider": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "usage": {
+      "inputTokens": 75807,
+      "outputTokens": 3113,
+      "totalTokens": 78920,
+      "cachedInputTokens": 19968,
+      "reasoningOutputTokens": 1013
+    },
+    "costUsd": null,
+    "includingSharedPreparationAndNewProductionOnce": 210550,
+    "costPolicy": "Count original V104/V105 source preparation and production once74862 plus new V115 production56768. V109 comparison production52859 stays in its own historical record, not a dependency of this fresh V115 production from the pre-production brief. Runtime reported separately; money unknown.",
+    "cachePolicy": "Cached input is included in input; reasoning output included in output, no double count",
+    "wholeTriggerChainSeconds": [
+      35.911,
+      59.643
+    ],
+    "timingBoundary": "First request creation to corresponding captured settled stage, including generation/review/persistence/UI; not first-token latency or single model latency",
+    "inputShare": 0.96055,
+    "requestInputSizes": [
+      {
+        "requestId": "ddbff8b8-5a4d-4ec3-ab48-279f353025c5",
+        "systemCharacters": 11152,
+        "userCharacters": 5539,
+        "usage": {
+          "totalTokens": 13602,
+          "inputTokens": 12852,
+          "cachedInputTokens": 3328,
+          "cacheWriteInputTokens": 0,
+          "outputTokens": 750,
+          "reasoningOutputTokens": 368
+        }
+      },
+      {
+        "requestId": "c7f4f71a-3acc-41ed-98b0-3da991d4df98",
+        "systemCharacters": 7991,
+        "userCharacters": 10162,
+        "usage": {
+          "totalTokens": 13868,
+          "inputTokens": 13523,
+          "cachedInputTokens": 3328,
+          "cacheWriteInputTokens": 0,
+          "outputTokens": 345,
+          "reasoningOutputTokens": 50
+        }
+      },
+      {
+        "requestId": "f091355c-d7c5-4e60-a582-77aabae1dd33",
+        "systemCharacters": 6263,
+        "userCharacters": 10157,
+        "usage": {
+          "totalTokens": 12554,
+          "inputTokens": 11926,
+          "cachedInputTokens": 3328,
+          "cacheWriteInputTokens": 0,
+          "outputTokens": 628,
+          "reasoningOutputTokens": 272
+        }
+      },
+      {
+        "requestId": "a774e5b9-709b-4072-84bf-f07de657b1ba",
+        "systemCharacters": 2188,
+        "userCharacters": 10822,
+        "usage": {
+          "totalTokens": 10656,
+          "inputTokens": 10304,
+          "cachedInputTokens": 3328,
+          "cacheWriteInputTokens": 0,
+          "outputTokens": 352,
+          "reasoningOutputTokens": 61
+        }
+      },
+      {
+        "requestId": "c4ae82f1-20db-447c-a535-4bdd93ae1efe",
+        "systemCharacters": 11152,
+        "userCharacters": 6344,
+        "usage": {
+          "totalTokens": 13802,
+          "inputTokens": 13203,
+          "cachedInputTokens": 3328,
+          "cacheWriteInputTokens": 0,
+          "outputTokens": 599,
+          "reasoningOutputTokens": 227
+        }
+      },
+      {
+        "requestId": "437e10e9-5aea-4b7b-8cd1-31edfe252a94",
+        "systemCharacters": 7942,
+        "userCharacters": 11273,
+        "usage": {
+          "totalTokens": 14438,
+          "inputTokens": 13999,
+          "cachedInputTokens": 3328,
+          "cacheWriteInputTokens": 0,
+          "outputTokens": 439,
+          "reasoningOutputTokens": 35
+        }
+      }
+    ]
+  },
+  "restoration": [
+    {
+      "stem": "inn-multistep-weak-guidance",
+      "runStatusesPreserved": true,
+      "verifiedCompletedHistories": 3,
+      "retainedFailedRuns": 0,
+      "resumableRuns": 0,
+      "openingReviewRetained": true,
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true
+    }
+  ],
+  "terminalReadback": {
+    "checks": [
+      {
+        "id": "ddbff8b8-5a4d-4ec3-ab48-279f353025c5",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "c7f4f71a-3acc-41ed-98b0-3da991d4df98",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "f091355c-d7c5-4e60-a582-77aabae1dd33",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "a774e5b9-709b-4072-84bf-f07de657b1ba",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "c4ae82f1-20db-447c-a535-4bdd93ae1efe",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "437e10e9-5aea-4b7b-8cd1-31edfe252a94",
+        "status": "completed",
+        "readbackEqual": true
+      }
+    ],
+    "allTerminal": true
+  },
+  "limitations": [
+    "Only one short naturally closed find-object episode; not sustained long-form, multi-role or commercial acceptance",
+    "Location discovery is real but handler and purpose remain unknown; cannot count it as complete original hidden truth or formal M1 acceptance",
+    "Codex separate generation and review are the same provider/model; Agnes and independent human calibration remain unavailable",
+    "New opening differs from V114, with model sampling variation; no statistical A/B attribution or replacement of prior failure",
+    "No negative real opening-review candidate in V115; all three passed, so bad-candidate detection is not established",
+    "35.9s opening and59.6s continuation, 78,920 tokens for two actor messages remain a material experience/cost issue"
+  ],
+  "next": "Evaluate refusal/alternative/recovery routes from this exact Release before expanding narrative scope; separately analyze repeated prompt/context cost. Preserve old failed cohorts and M1 denominator.",
+  "evidence": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v116-grounded-opening-episode/preregistration.json",
+      "sha256": "3e454ad6656382364a581043f84fc66b5a62dfe04c0cb5151c83a0abcb2616c2"
+    },
+    "runner.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v116-grounded-opening-episode/runner.mjs",
+      "sha256": "8e2ec919c8a22557aa6b302bf52a7deae64e49112118078268f5258408cc042e"
+    },
+    "prepared.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v116-grounded-opening-episode/prepared.json",
+      "sha256": "2ee90b7c52ed9d0aafd90291214132af74f3f594ae3052885aea555566725f5b"
+    },
+    "inn-multistep-weak-guidance.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v116-grounded-opening-episode/inn-multistep-weak-guidance.json",
+      "sha256": "174334c13d3806bda600852991d89038f8a5019554545585f82281b732e1eebb"
+    },
+    "inn-multistep-weak-guidance-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v116-grounded-opening-episode/inn-multistep-weak-guidance-backup.json",
+      "sha256": "df39d67089828454a7cbac943290d8fa523b83f5c39f41c800afd39ac7067b61"
+    },
+    "restoration-verified.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v116-grounded-opening-episode/restoration-verified.json",
+      "sha256": "8dd87f4a972a5645dfcd16b6fcc25155aea3d79b648ea6955fb9d9d2572a4da0"
+    },
+    "terminal-request-proof.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v116-grounded-opening-episode/terminal-request-proof.json",
+      "sha256": "fa7c50edea752c42f3e338dd4874cc1d9ef6d4e7daded989b9436de5e506a98a"
+    }
+  }
+}

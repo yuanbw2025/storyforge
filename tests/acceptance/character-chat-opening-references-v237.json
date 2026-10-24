@@ -1,0 +1,92 @@
+{
+  "schema": "storyforge.character-chat-opening-reference-engineering-evidence",
+  "version": 1,
+  "batch": "V237",
+  "recordedAt": 1792468557.049495,
+  "status": "targeted-engineering-passed; real-model-validation-pending",
+  "contract": {
+    "producer": "chat-situation-production-v9",
+    "gate": "chat.opening-source-references.v1",
+    "catalog": "design.chat-fact-catalog",
+    "repairVersion": 3,
+    "maximumModelCalls": 2,
+    "newTables": false,
+    "worldWriteback": false
+  },
+  "checks": {
+    "distinctRegressionFilesPassed": 7,
+    "distinctRegressionTestsPassed": 87,
+    "browserTestsPassed": 5,
+    "browserReleaseRestoreRecheckPassed": 1,
+    "types": true,
+    "lint": true,
+    "architecture": true,
+    "requiredTables": true,
+    "aiManual": true,
+    "aiEntries": true,
+    "docs": true,
+    "build": true,
+    "bundleSize": true
+  },
+  "coverage": [
+    "Exact source/catalog delivery before model request; missing/stale/tampered delivery costs zero calls.",
+    "Automatic reference repair preserves retained stories and only appends missing or recovers complete misplaced options; legacy v6/v7/v8 remain frozen.",
+    "Canonical candidates independently reviewed, selected by author, published and restored without model replay.",
+    "World source v4 discovery and v6 atomic facts retained even without model selection; hidden truth stays hidden from runtime views.",
+    "390px author choice, local Release, initial runtime, refresh and independent backup import."
+  ],
+  "retainedFailures": [
+    {
+      "log": "production-tests.log",
+      "reason": "Eight lifecycle tests failed because newly added gate ordering differed from portable ledger canonical order; fixed new plan registration order; full 12-case file then passed."
+    },
+    {
+      "log": "browser-release.log",
+      "reason": "Extended browser check compared all original WorldRelease rows with only the product workspace rows. Corrected evidence readback to original exact row IDs; no product rule change; recheck passed."
+    }
+  ],
+  "sourceFileSha256": {
+    "src/lib/character-interaction/opening-source-references.ts": "5c4e7a0b9b01a89f0df95d795d05532149220b94ce8a3f68d7031ae272ccce61",
+    "src/lib/character-interaction/opening-reference-prompt.ts": "767cd9370da4fd73187937bc72ab3bc5b8142d5363ffaeda4aab06ee75cdf4d0",
+    "src/lib/character-interaction/opening-reference-repair.ts": "8fad8fb4e75df9efd01be07f5c88896404ee453675151a7077750722d55f1e23",
+    "src/lib/character-interaction/opening-repair-patch.ts": "925e55dce29851661495937b709389f6c0eb3f30c78090fd99a68fe96ec13b20",
+    "src/lib/character-interaction/opening-repair-evidence.ts": "1d237b0977103ff3dfd70bd89ddff938875ea5a23d38fba8fb011777c77fc204",
+    "src/lib/character-interaction/opening-production-binding.ts": "19a15e705a482b289b61001fba1f0fb871c3d5d6b29be026aab602a264503655",
+    "src/lib/product-production/chat-situation-tasks.ts": "e3c1e64cd00afd36b67a8b0942c4d5c945d3c3660a592309518ea0417fa26636",
+    "src/lib/product-production/plan.ts": "1aba9881d81f915c35697b3c148f3c5101ad4f8aa35075ba5fb38ccd5d58ba9b",
+    "src/lib/product-production/production-executor.ts": "605d85624ec4097e29bd2bb92a5165b29c69e85e14041d92513570bac2a11892",
+    "src/lib/agent/skill-registry.ts": "347c705513bb0cc2fa649923bdfa4fa698ab378905d42312c34b8dccef446252",
+    "tests/helpers/chat-narrative-production-fixture.ts": "be94bf04a02f33322ca54dde08784a46bbac39e14745041da2c34b5e50ab14fa",
+    "tests/e2e/character-chat-production-repair.spec.ts": "ddfd679c289947dbdcff7c7509b6c8b238f778872220e459141f458ec1fea4dc",
+    "tests/regression/R-CHAT-02-opening-source-references.test.ts": "3aff9318d4e9ef4f0cea79b9e1c1043f6195453d3aa7324d28c8010ff42b4c5d",
+    "tests/regression/R-CHAT-02-opening-repair.test.ts": "a1feeef13bfd9bc8f36af04c87293a66ccb9905f45af6a312c3570aaf4e670d3",
+    "tests/regression/R-CHAT-02-opening-agency.test.ts": "5d88d915222b90cebb6d8f12fa3f81a29e8949cf304bf787abee6cef9ba723c4",
+    "tests/regression/R-CHAT-02-narrative-production.test.ts": "39232d2202b5cdd55d9a428b68bbdc6f7e1e44fb703053bba774194ee9fb4ebe",
+    "tests/regression/R-CHAT-02-source-unit-production.test.ts": "bc3387c37658e2b041a5d0159095c3655f1ec48d29dc5cccf50dd97279f44c16"
+  },
+  "evidenceSha256": {
+    "initial-tests.log": "73373a85a49d24f0c3b3889b9812356c217b2152317115d01f3e930e631962e8",
+    "production-tests.log": "48a9d131203634e5ef763695ac3bc8a925a27a119804ffaf0cd625d2f07d1d33",
+    "production-lifecycle-recheck.log": "72ea672da7a446250d7c1f00e28c080dd790e16f44fe87b2ab4a5bb1366931f7",
+    "related-tests.log": "75c0295ddb837c6338442065798d5e88f2fc38ea17767b6689010349e0ea0063",
+    "browser.log": "05f7e838785ad26fbb3c6eeae93abcd5a0903efee96509fd063843892e393ddc",
+    "browser-release.log": "945fb5c744a469f615b92cc336dc6d5177b5a20ae61f1329deeccc5ddc7d722d",
+    "browser-release-recheck.log": "5eda19ac6534f2d0935eb1100c52d9e4c152a0518628006e454722bc1cbd6594",
+    "checks.json": "a71dedd6c0d433106ef1da324a2951444e66d22046b7e6f437e76e7ed4a65b1a",
+    "architecture.log": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616",
+    "required-tables.log": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444",
+    "ai-manual.log": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19",
+    "ai-entries.log": "e789c090422f8fb0b79fc174dffd5a8dd0a14b96e2952e3ed720e16b5489c00d",
+    "docs.log": "7f60a7ca0134a5c6870523cc01198c0398c2092946cf1914e0087bdcb4aa8528",
+    "types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lint.log": "c8bd26fb2b68c69b86e0c51b7e999259bb290b9f1447e8439b239b1d08ae64d1",
+    "build.log": "048fbd0439f795ca76e0b24e170f892068d0d4e70a204e63fcbfe572e451b85d",
+    "bundle-size.log": "cb495994358d2f98ac4efb79206af6b3a4a276e8711c1a63b02c3c5b257270a9"
+  },
+  "modelCalls": 0,
+  "fullDeliveryValidated": false,
+  "semanticQualityAccepted": false,
+  "humanAcceptance": false,
+  "commercialAcceptance": false,
+  "next": "Freeze unchanged implementation and perform a new independently registered Agnes production; retain V236 failure and original M1 scope."
+}

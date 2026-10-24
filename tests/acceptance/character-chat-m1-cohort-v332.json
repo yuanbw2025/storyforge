@@ -1,0 +1,550 @@
+{
+  "schema": "storyforge.chat-m1-cohort-progress",
+  "version": 1,
+  "at": "2026-10-22T20:28:22.165129+00:00",
+  "cohort": "m1-v332-current",
+  "source": {
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "baseHead": "554eeee4f219f1c107184003c4ab455a77e08537",
+    "sourceKind": "manifest-verified-worktree",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/manifest.json",
+    "manifestSha256": "9ffa5d739b495c741e6fca809c6f5c45c8b25795db0eee3335f3bbb3899f73e4",
+    "files": 3436,
+    "scope": "All tracked files except docs, website-docs and tests/acceptance; executed external helpers and acceptance source pinned separately; no dependency or source copies."
+  },
+  "protocol": {
+    "registration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/cohort-registration.json",
+    "registrationSha256": "db4cf119ab307b1a4e07778716a1a5337f7b54b0cc8b7734811d3dd82ab0d50c",
+    "scheduled": 120,
+    "sameMatrixAndDenominator": true,
+    "priorCohortsUnmodified": true,
+    "automaticRetries": 0,
+    "holdoutBodiesInspected": false
+  },
+  "progress": {
+    "at": "2026-10-22T20:28:22.165129+00:00",
+    "cohort": "m1-v332-current",
+    "scheduled": 120,
+    "failed": 2,
+    "runtimeBlocked": 8,
+    "running": 0,
+    "notStarted": 108,
+    "completed": 2,
+    "collectorError": 0,
+    "formalQualityPasses": 0,
+    "humanScores": 0,
+    "holdoutBodiesInspected": false
+  },
+  "episodes": [
+    {
+      "at": "2026-10-22T19:19:15.530274+00:00",
+      "episodeId": "m1-v332-current/inn-missing-seal/local-codex/r1/weak-guidance",
+      "collectionStatus": "completed",
+      "ending": "meaningful-closure",
+      "playerOpportunities": 4,
+      "modelSummary": {
+        "all": {
+          "requests": 43,
+          "usage": {
+            "totalTokens": 729585,
+            "inputTokens": 699937,
+            "cachedInputTokens": 100096,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 29648,
+            "reasoningOutputTokens": 6794
+          }
+        },
+        "production": {
+          "requests": 3,
+          "usage": {
+            "totalTokens": 62306,
+            "inputTokens": 53059,
+            "cachedInputTokens": 2432,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 9247,
+            "reasoningOutputTokens": 688
+          }
+        },
+        "runtime": {
+          "requests": 40,
+          "usage": {
+            "totalTokens": 667279,
+            "inputTokens": 646878,
+            "cachedInputTokens": 97664,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 20401,
+            "reasoningOutputTokens": 6106
+          }
+        }
+      },
+      "runtimeRuns": 15,
+      "goalStatuses": [
+        "fulfilled"
+      ],
+      "threadStatuses": [
+        "resolved"
+      ],
+      "sourceUnchanged": true,
+      "independentRestoration": {
+        "stem": "inn-r1-weak-guidance",
+        "runStatusesPreserved": true,
+        "verifiedCompletedHistories": 15,
+        "retainedFailedRuns": 0,
+        "resumableRuns": 0,
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true,
+        "terminalReceiptBodiesRetained": true,
+        "usageEvidenceRetained": true
+      },
+      "rawEvidence": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r1/inn-r1-weak-guidance.json",
+      "backup": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r1/inn-r1-weak-guidance-backup.json",
+      "restorationEvidence": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r1/inn-r1-weak-guidance-restoration-verified.json",
+      "humanScores": 0,
+      "formalQualityPass": false,
+      "generalLatencyPass": false,
+      "costUsd": null,
+      "comparisonClaim": "No causal or aggregate improvement claimed from this independently generated single episode."
+    },
+    {
+      "at": "2026-10-22T19:34:00.502577+00:00",
+      "episodeId": "m1-v332-current/inn-missing-seal/local-codex/r1/refuse",
+      "collectionStatus": "failed",
+      "failureKind": "semantic-action-review",
+      "failureCode": "narrative-review-failed",
+      "failedChecks": [
+        {
+          "check": "meaningful-direction",
+          "passed": false,
+          "reason": "上一轮已经总结掌柜记不清放置处并结束该轮问话，本次仅重复这一理由后暂缓整个追索。掌柜已承认拿走并使用铜印，仍可基于既有接触条件询问尚未问过的使用用途，无需检查柜台、木箱或玩家参与；候选未说明为何这一不重复的方向也应暂缓，局部记忆不清不足以支持退回整体等待。"
+        }
+      ],
+      "otherReviewChecks": [
+        {
+          "check": "continuity",
+          "passed": true,
+          "reason": "未改写掌柜的答复、铜印未找回的状态，也未恢复玩家拒绝的柜台和木箱检查。"
+        },
+        {
+          "check": "permissions",
+          "passed": true,
+          "reason": "仅自主暂缓自身追索，未搜查物品、扩大权限或预定调查结果。"
+        },
+        {
+          "check": "player-agency",
+          "passed": true,
+          "reason": "未替玩家决定或要求其参与；waitingForPlayer=false，没有把旧拒绝当作等待新决定的理由。"
+        },
+        {
+          "check": "visibility",
+          "passed": true,
+          "reason": "仅复述双方已知的答复及未解决状态，未泄露铜印位置、用途或角色私有背景。"
+        },
+        {
+          "check": "consequences",
+          "passed": true,
+          "reason": "正文的自身暂缓与goalStatus=paused一致，未宣称共同事项结束；没有漏记物理行动、披露或明确承诺。"
+        }
+      ],
+      "playerOpportunities": 2,
+      "modelSummary": {
+        "all": {
+          "requests": 19,
+          "usage": {
+            "totalTokens": 301027,
+            "inputTokens": 291349,
+            "cachedInputTokens": 60160,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 9678,
+            "reasoningOutputTokens": 2982
+          }
+        },
+        "runtime": {
+          "requests": 19,
+          "usage": {
+            "totalTokens": 301027,
+            "inputTokens": 291349,
+            "cachedInputTokens": 60160,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 9678,
+            "reasoningOutputTokens": 2982
+          }
+        },
+        "production": {
+          "requests": 0,
+          "usage": {}
+        }
+      },
+      "runtimeRuns": 7,
+      "runtimeStatuses": {
+        "completed": 6,
+        "failed": 1
+      },
+      "goalStatuses": [
+        "active"
+      ],
+      "threadStatuses": [
+        "open"
+      ],
+      "sourceUnchanged": true,
+      "independentRestoration": {
+        "stem": "inn-r1-refuse",
+        "runStatusesPreserved": true,
+        "verifiedCompletedHistories": 6,
+        "retainedFailedRuns": 1,
+        "resumableRuns": 0,
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true,
+        "terminalReceiptBodiesRetained": true,
+        "usageEvidenceRetained": true
+      },
+      "rawEvidence": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r1-refuse/inn-r1-refuse.json",
+      "backup": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r1-refuse/inn-r1-refuse-backup.json",
+      "restorationEvidence": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r1-refuse/inn-r1-refuse-restoration-verified.json",
+      "humanScores": 0,
+      "formalQualityPass": false,
+      "costUsd": null,
+      "unadoptedFailurePreserved": true,
+      "inputAudit": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r1-refuse/failure-input-audit.json"
+    },
+    {
+      "at": "2026-10-22T20:04:12.966443+00:00",
+      "episodeId": "m1-v332-current/inn-missing-seal/local-codex/r2/weak-guidance",
+      "collectionStatus": "completed",
+      "ending": "meaningful-closure",
+      "playerOpportunities": 4,
+      "modelSummary": {
+        "all": {
+          "requests": 40,
+          "usage": {
+            "cacheWriteInputTokens": 0,
+            "cachedInputTokens": 125184,
+            "inputTokens": 639021,
+            "outputTokens": 26636,
+            "reasoningOutputTokens": 5504,
+            "totalTokens": 665657
+          }
+        },
+        "production": {
+          "requests": 3,
+          "usage": {
+            "cacheWriteInputTokens": 0,
+            "cachedInputTokens": 0,
+            "inputTokens": 52885,
+            "outputTokens": 8797,
+            "reasoningOutputTokens": 704,
+            "totalTokens": 61682
+          }
+        },
+        "runtime": {
+          "requests": 37,
+          "usage": {
+            "cacheWriteInputTokens": 0,
+            "cachedInputTokens": 125184,
+            "inputTokens": 586136,
+            "outputTokens": 17839,
+            "reasoningOutputTokens": 4800,
+            "totalTokens": 603975
+          }
+        }
+      },
+      "runtimeRuns": 14,
+      "goalStatuses": [
+        "fulfilled"
+      ],
+      "threadStatuses": [
+        "resolved"
+      ],
+      "sourceUnchanged": true,
+      "independentRestoration": {
+        "stem": "inn-r2-weak-guidance",
+        "runStatusesPreserved": true,
+        "verifiedCompletedHistories": 14,
+        "retainedFailedRuns": 0,
+        "resumableRuns": 0,
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true,
+        "terminalReceiptBodiesRetained": true,
+        "usageEvidenceRetained": true
+      },
+      "rawEvidence": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r2/inn-r2-weak-guidance.json",
+      "backup": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r2/inn-r2-weak-guidance-backup.json",
+      "restorationEvidence": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r2/inn-r2-weak-guidance-restoration-verified.json",
+      "humanScores": 0,
+      "formalQualityPass": false,
+      "generalLatencyPass": false,
+      "costUsd": null,
+      "comparisonClaim": "Two independent weak-guidance episodes completed; no aggregate stability, controlled improvement or commercial quality claim."
+    },
+    {
+      "at": "2026-10-22T20:28:22.165129+00:00",
+      "episodeId": "m1-v332-current/inn-missing-seal/local-codex/r2/refuse",
+      "collectionStatus": "failed",
+      "failureKind": "semantic-action-review",
+      "failedChecks": [
+        {
+          "check": "meaningful-direction",
+          "passed": false,
+          "reason": "掌柜无法回忆去向或指出目击者，只说明这些追问暂未得到线索，不能证明寻找整体受阻。玩家叫停的是翻查，而非全部寻找；仍可按已有权限有限核实当前是否有其他可接触的询问来源，不预定人物或答案。本次没有说明新的暂缓顾虑或该替代方向为何不可行，直接暂停原责任缺乏充分依据。"
+        }
+      ],
+      "otherReviewChecks": [
+        {
+          "check": "continuity",
+          "passed": true,
+          "reason": "准确保留掌柜记不清用后去向、无法指出目击者及铜印尚未找回的状态，也未恢复玩家叫停的翻查。"
+        },
+        {
+          "check": "permissions",
+          "passed": true,
+          "reason": "仅暂停自身寻找，没有搜查、扩大行动范围或预定他人行为。"
+        },
+        {
+          "check": "player-agency",
+          "passed": true,
+          "reason": "未要求玩家参与或替玩家决定，也没有把自主暂停标为等待玩家许可。"
+        },
+        {
+          "check": "visibility",
+          "passed": true,
+          "reason": "所复述的答复双方均已知；未泄露木箱内铜印的位置或角色私有经历，亦未把无法指出目击者说成无人目击。"
+        },
+        {
+          "check": "consequences",
+          "passed": true,
+          "reason": "正文仅暂缓自身目标，goalStatus=paused、清空后续打算与之相符；未宣称共同事项解决，也无新增物理结果或承诺漏记。"
+        }
+      ],
+      "playerOpportunities": 4,
+      "modelSummary": {
+        "all": {
+          "requests": 33,
+          "usage": {
+            "cacheWriteInputTokens": 0,
+            "cachedInputTokens": 100736,
+            "inputTokens": 515285,
+            "outputTokens": 16922,
+            "reasoningOutputTokens": 4870,
+            "totalTokens": 532207
+          }
+        },
+        "production": {
+          "requests": 0,
+          "usage": {}
+        },
+        "runtime": {
+          "requests": 33,
+          "usage": {
+            "cacheWriteInputTokens": 0,
+            "cachedInputTokens": 100736,
+            "inputTokens": 515285,
+            "outputTokens": 16922,
+            "reasoningOutputTokens": 4870,
+            "totalTokens": 532207
+          }
+        }
+      },
+      "runtimeRuns": 13,
+      "runtimeStatuses": {
+        "completed": 12,
+        "failed": 1
+      },
+      "goalStatuses": [
+        "active"
+      ],
+      "threadStatuses": [
+        "open"
+      ],
+      "sourceUnchanged": true,
+      "independentRestoration": {
+        "stem": "inn-r2-refuse",
+        "runStatusesPreserved": true,
+        "verifiedCompletedHistories": 12,
+        "retainedFailedRuns": 1,
+        "resumableRuns": 0,
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true,
+        "terminalReceiptBodiesRetained": true,
+        "usageEvidenceRetained": true
+      },
+      "rawEvidence": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r2-refuse/inn-r2-refuse.json",
+      "backup": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r2-refuse/inn-r2-refuse-backup.json",
+      "restorationEvidence": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r2-refuse/inn-r2-refuse-restoration-verified.json",
+      "humanScores": 0,
+      "formalQualityPass": false,
+      "costUsd": null,
+      "unadoptedFailurePreserved": true,
+      "classification": "Role respected refusal and obtained further information, then proposed voluntary pause; independent review required another possible contact inquiry. Cause under input/policy audit, not yet labeled a product defect or accepted pause.",
+      "inputAudit": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r2-refuse/failure-input-audit.json"
+    }
+  ],
+  "engineering": {
+    "localTargeted": "V329: 23 files / 357 tests; 16 isolated browser cases, retries disabled; required local gates passed.",
+    "currentSourceFullCI": "in progress; current source build and four desktop platform packages passed; publication skipped",
+    "priorRemoteHead": "a497f9159e4be67ea0e6ca0220769db24312e4d6",
+    "priorRemoteFullCI": "Full delivery CLI and browser success; ordinary CI still in progress at 2026-10-22T19:35Z. Covers a497f915, not the current source.",
+    "published": false,
+    "priorRemoteFullDelivery": {
+      "runId": 39821008918,
+      "cliJobId": 119971954362,
+      "browserJobId": 119971953534,
+      "testFiles": 994,
+      "testsPassed": 6727,
+      "browserPassed": 501,
+      "browserSkipped": 4,
+      "browserRetryPasses": 0,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/remote-a497-full-delivery.log",
+      "logSha256": "7ee7d3c3c16322bd521739b049ce56640d76a78250f3a43c5afb1c7ff761f696"
+    },
+    "currentRemote": {
+      "at": "2026-10-22T20:04:12.966443+00:00",
+      "head": "554eeee4f219f1c107184003c4ab455a77e08537",
+      "isDraft": true,
+      "state": "OPEN",
+      "checks": [
+        {
+          "name": "verify",
+          "status": "IN_PROGRESS",
+          "conclusion": "",
+          "detailsUrl": "https://github.com/yuanbw2025/storyforge/actions/runs/39843753647/job/120051437213",
+          "startedAt": "2026-10-22T19:51:43Z",
+          "completedAt": "0001-01-01T00:00:00Z"
+        },
+        {
+          "name": "Full delivery / cli",
+          "status": "IN_PROGRESS",
+          "conclusion": "",
+          "detailsUrl": "https://github.com/yuanbw2025/storyforge/actions/runs/39843752978/job/120051436766",
+          "startedAt": "2026-10-22T19:51:38Z",
+          "completedAt": "0001-01-01T00:00:00Z"
+        },
+        {
+          "name": "clients",
+          "status": "COMPLETED",
+          "conclusion": "SKIPPED",
+          "detailsUrl": "https://github.com/yuanbw2025/storyforge/actions/runs/39843753472/job/120051439793",
+          "startedAt": "2026-10-22T19:51:37Z",
+          "completedAt": "2026-10-22T19:51:36Z"
+        },
+        {
+          "name": "Full delivery / browser",
+          "status": "IN_PROGRESS",
+          "conclusion": "",
+          "detailsUrl": "https://github.com/yuanbw2025/storyforge/actions/runs/39843752978/job/120051436279",
+          "startedAt": "2026-10-22T19:51:38Z",
+          "completedAt": "0001-01-01T00:00:00Z"
+        },
+        {
+          "name": "build",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/yuanbw2025/storyforge/actions/runs/39843753472/job/120051437724",
+          "startedAt": "2026-10-22T19:51:38Z",
+          "completedAt": "2026-10-22T19:54:28Z"
+        },
+        {
+          "name": "signed-upgrade",
+          "status": "COMPLETED",
+          "conclusion": "SKIPPED",
+          "detailsUrl": "https://github.com/yuanbw2025/storyforge/actions/runs/39843753472/job/120051440507",
+          "startedAt": "2026-10-22T19:51:37Z",
+          "completedAt": "2026-10-22T19:51:36Z"
+        },
+        {
+          "name": "package (windows-latest, windows-x64)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/yuanbw2025/storyforge/actions/runs/39843753472/job/120052953388",
+          "startedAt": "2026-10-22T19:54:30Z",
+          "completedAt": "2026-10-22T19:55:46Z"
+        },
+        {
+          "name": "package (ubuntu-latest, linux-x64)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/yuanbw2025/storyforge/actions/runs/39843753472/job/120052953331",
+          "startedAt": "2026-10-22T19:54:30Z",
+          "completedAt": "2026-10-22T19:55:23Z"
+        },
+        {
+          "name": "package (macos-15, macos-arm64)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/yuanbw2025/storyforge/actions/runs/39843753472/job/120052953420",
+          "startedAt": "2026-10-22T19:59:31Z",
+          "completedAt": "2026-10-22T20:01:01Z"
+        },
+        {
+          "name": "package (macos-15-intel, macos-x64)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": "https://github.com/yuanbw2025/storyforge/actions/runs/39843753472/job/120052953422",
+          "startedAt": "2026-10-22T19:54:33Z",
+          "completedAt": "2026-10-22T19:57:25Z"
+        },
+        {
+          "name": "publish",
+          "status": "COMPLETED",
+          "conclusion": "SKIPPED",
+          "detailsUrl": "https://github.com/yuanbw2025/storyforge/actions/runs/39843753472/job/120056307557",
+          "startedAt": "2026-10-22T20:01:02Z",
+          "completedAt": "2026-10-22T20:01:01Z"
+        }
+      ],
+      "merged": false,
+      "published": false
+    },
+    "native300": {
+      "status": "passed",
+      "record": "tests/acceptance/character-chat-native-history-v333.json",
+      "actions": 300,
+      "facts": 604,
+      "injectedModelInvocations": 906,
+      "externalModelCalls": 0,
+      "twoBranchesRestoredAndRefreshed": true,
+      "countsAsRealStoryQuality": false
+    },
+    "native1000": {
+      "status": "running",
+      "preregistration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/preregistration.json",
+      "externalModelCalls": 0,
+      "execSession": 81531
+    }
+  },
+  "boundaries": {
+    "M1Passed": false,
+    "humanScoringDeferredByUser": true,
+    "commercialQualityPassed": false,
+    "costUsd": null,
+    "singleEpisodeNotGeneralStability": true,
+    "Agnes": "existing configuration retained; last generation quota failure, no new request until external restoration confirmation"
+  },
+  "operatorEvidence": {
+    "prematureProductionRestorationInvocation": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r1/early-restoration-invocation.json",
+    "effect": "Retained extra-helper error before any browser/database/model action; correct runtime restoration subsequently passed."
+  },
+  "next": "Observe native1000 runner81531 with frozen source. Continue autonomous-pause policy audit from the two preserved refusal cases: current evidence suggests detailed review ambiguity, with no missing refusal/concern/answer inputs. Do not relabel original failures or relax unsupported waiting. Versioned change and targeted positive/negative proof required if implementing.",
+  "uniqueNativeRequests": 135,
+  "reportedTotalTokensAcrossEpisodes": 2228476,
+  "performanceInvestigation": {
+    "record": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/codex-inn-r2/input-structure-audit.json",
+    "externalModelCalls": 0,
+    "measuresCharactersNotTokens": true,
+    "noSavingsClaim": true
+  }
+}

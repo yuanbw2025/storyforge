@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 135 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 144 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -97,8 +97,14 @@
 | `ai-town.authoring` | AI 小镇 作者方案与会谈 | project | L0 | 16000 |
 | `avg.authoring` | AVG 作者方案与会谈 | project | L0 | 16000 |
 | `chat.authoring` | 角色聊天作者方案与会谈 | project | L0 | 16000 |
+| `chat.consultation` | 角色聊天本轮方案与所选证据 | project | L0 | 20000 |
+| `chat.source-review` | 角色聊天作者选中的原文资料 | project | L0 | 20000 |
+| `chat.source-units` | 角色聊天待整理事实的完整原文 | project | L0 | 20000 |
+| `chat.source-units-review` | 角色聊天事实候选与完整原文复核 | project | L0 | 20000 |
+| `chat.source-unit-confirmation` | 角色聊天事实与权限确认复核 | project | L0 | 20000 |
 | `product-production.brief` | 已授权上层产品生产 Brief | project | L0 | 8000 |
 | `product-production.artifact-inputs` | 上层产品生产任务依赖 | project | L1 | 24000 |
+| `product-production.chat-opening-review-inputs` | 角色聊天开场审查来源与引用目录 | project | L1 | 24000 |
 | `product-production.adventure-scene-script-inputs` | 文字冒险单幕分场写作投影 | project | L0 | 15100 |
 | `product-production.adventure-dialogue-inputs` | 文字冒险独立对白审校投影 | project | L0 | 12500 |
 | `product-production.adventure-visual-direction-inputs` | 文字冒险美术定向与完整正文投影 | project | L0 | 52000 |
@@ -152,7 +158,10 @@
 | `adventureRuntime` | 文字冒险玩家视角 | runtime | L0 | 8000 |
 | `textOpenWorldEvolutionRuntime` | 文字开放世界·内部状态演化玩家视角 | runtime | L0 | 8000 |
 | `openWorldRuntime` | 文字开放世界玩家视角 | runtime | L0 | 8000 |
-| `interactionRuntime` | 角色互动单一视角 | runtime | L0 | 8000 |
+| `chatActionRevision` | 未通过回复的受限修订来源 | runtime | L0 | 6000 |
+| `chatMemoryReview` | 记忆正文与实际共同来源 | runtime | L0 | 20000 |
+| `chatActionCandidate` | 待审查的持久化行动候选 | runtime | L0 | 8000 |
+| `chatSituationCandidate` | 待审查的持久化情境候选 | runtime | L0 | 8000 |
 | `aiTownRuntime` | 后日谈 AI 小镇居民单一视角 | runtime | L0 | 8000 |
 | `aiTownDirectorRuntime` | 后日谈 AI 小镇导演公开运行视角 | runtime | L0 | 10000 |
 | `productRuntime` | 冻结运行时状态 | runtime | L0 | 8000 |
@@ -236,6 +245,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `characterDrivenPlans` | `generatedVolumes` `status` |
 | `characterRelations` | `description` `fromCharacterId` `isBidirectional` `label` `relationType` `toCharacterId` |
 | `characters` | `abilities` `activeChapterRange` `appearance` `arc` `background` `cultivationStageId` `cultivationSystemId` `ending` `exitChapterId` `fears` `firstAppearChapterId` `firstAppearance` `goals` `habits` `homeWorldGroupId` `identity` `importantLocationId` `innerConflict` `isCrossWorld` `keyEvents` `location` `moralAxis` `motivation` `name` `narrativeStatus` `orderAxis` `personality` `powerLevel` `powerSystemId` `profile` `raceEntryId` `relationships` `roleWeight` `shortDescription` `signatureItem` `speechStyle` `statusEvidenceChapterId` `statusEvidenceStoryArcId` `statusProducerCandidateHash` `statusProducerContractHash` `statusReason` `storyRole` `strengths` `values` `weaknesses` |
+| `chatAuthoringDrafts` | `roleProfilesJson` `settingsJson` `sourceUnitsJson` |
 | `codexCategories` | `builtInKey` `domain` `fieldSchema` `hidden` `icon` `name` `order` `parentId` |
 | `codexEntries` | `categoryId` `cultivationStageId` `cultivationSystemId` `description` `fields` `icon` `importance` `importantLocationId` `name` `order` `origin` `producerCandidateHash` `producerRunId` `refs` `sourceContentHash` `sourceEvidenceQuotes` `summary` `tags` `worldGroupId` |
 | `comicPagePlans` | `beatKeys` `endReveal` `goal` `pageTurn` |
@@ -296,6 +306,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 | ID | 目标表 | 领域策略注册表 | 唯一入口 | 复审日期 |
 |---|---|---|---|---|
+| `chat-authoring-draft-lifecycle` | `chatAuthoringDrafts` | `PROJECT_TABLES + WorkspaceScope + draft revision CAS + FIELD_REGISTRY roleProfilesJson/settingsJson/sourceUnitsJson + immutable identity/source/permission guard` | `src/lib/character-interaction/draft-service.ts`<br/>`src/lib/character-interaction/role-profile-store.ts`<br/>`src/lib/character-interaction/consultation-store.ts`<br/>`src/lib/character-interaction/source-unit-store.ts` | 2027-10-01 |
 | `extension-record-lifecycle` | `extensionRecords` | `ExtensionRegistrySnapshot + PROJECT_TABLES + bounded DataSchema` | `src/lib/extensions/store.ts` | 2027-01-01 |
 | `reference-analysis-run-lifecycle` | `referenceAnalysisRuns` | `REFERENCE_ANALYSIS_RUN_POLICY + ADOPTION_SCHEMAS + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
 | `reference-analysis-source-lifecycle` | `referenceAnalysisSources` | `REFERENCE_ANALYSIS_RUN_POLICY + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
@@ -358,8 +369,8 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ## 四、AI 调用点（消耗统计 category · 在哪触发)
 
-共 39 个 category。
-未分类调用: 0 个。动态 category 调用: 37 个。
+共 40 个 category。
+未分类调用: 0 个。动态 category 调用: 39 个。
 
 | category | 触发文件 |
 |---|---|
@@ -394,6 +405,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
 | `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:288` |
 | `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
+| `runtime.character.chat-narrative-action` | `src/lib/character-interaction/action-choice-harness.ts:131` |
 | `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:271` |
 | `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:134` |
 | `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:310` |
@@ -428,7 +440,9 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/agent/story-core-copilot.ts:557 · chat`
 - `src/lib/agent/storyline-progress-copilot.ts:366 · chat`
 - `src/lib/agent/worldview-field-copilot.ts:903 · chat`
-- `src/lib/character-interaction/harness.ts:404 · chat`
+- `src/lib/character-interaction/harness.ts:888 · chat`
+- `src/lib/character-interaction/memory-review-harness.ts:73 · chat`
+- `src/lib/character-interaction/situation-harness.ts:189 · chat`
 - `src/lib/comic/durable-production.ts:270 · chat`
 - `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:98 · chat`
 - `src/lib/evals/creative-reliability/browser.ts:89 · chat`
@@ -438,17 +452,23 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 - `src/lib/open-world/evolution-harness.ts:246 · chat`
 - `src/lib/open-world/harness.ts:139 · chat`
 - `src/lib/product-production/authoring-consultation.ts:169 · chat`
-- `src/lib/product-production/capabilities.ts:314 · chat`
+- `src/lib/product-production/capabilities.ts:323 · chat`
 - `src/lib/screenplay/durable-production.ts:449 · chat`
 - `src/lib/ttrpg/gm-actor-harness.ts:481 · chat`
 - `src/lib/ttrpg/gm-harness.ts:542 · chat`
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 47 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
+共 53 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
+| `chat.source-unit-confirmation` | `chat.source-unit-confirmation.v1` | `authoring.chat-source-unit-confirmation` | formal / durable-run | `chat-source-unit-confirmation` | `chatAuthoringDrafts` | `src/lib/character-interaction/source-unit-confirmation-harness.ts` |
+| `chat.source-units` | `chat.source-units.v1` | `authoring.chat-source-units` | formal / durable-run | `chat-source-units` | 禁止 | `src/lib/character-interaction/source-units-harness.ts` |
+| `chat.source-units-review` | `chat.source-units-review.v1` | `authoring.chat-source-units-review` | formal / durable-run | `chat-source-units-review` | 禁止 | `src/lib/character-interaction/source-units-harness.ts` |
+| `chat.consultation` | `chat.consult.v2` | `authoring.chat-consultation` | formal / durable-run | `chat-plan` | `chatAuthoringDrafts` | `src/lib/character-interaction/consultation-harness.ts` |
+| `chat.role-profile` | `chat.role-profile.v1` | `authoring.chat-role-profile` | formal / durable-run | `chat-role-profile` | `chatAuthoringDrafts` | `src/lib/character-interaction/role-profile-harness.ts` |
+| `chat.source-review` | `chat.source-review.v1` | `authoring.chat-source-review` | formal / durable-run | `chat-source-review-suggestions` | 禁止 | `src/lib/character-interaction/source-review-harness.ts` |
 | `extensions.generate` | `extensions.generate` | `extension.generate` | formal / durable-run | `extension-record-candidate` | `extensionRecords` | `src/lib/extensions/ai-run.ts` |
 | `ai-town.authoring.consult` | `ai-town.consult.v1` | `authoring.ai-town-consult` | auxiliary / durable-run | `ai-town-settings-preview` | 禁止 | `src/lib/ai-town/consultation.ts` |
 | `prose.chapter.generate` | `prose.generate` | `chapter.content` | formal / durable-run | `chapter-draft` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
@@ -499,4 +519,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `f4382057`
+生成时间基准:commit `a36a4fad`

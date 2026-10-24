@@ -19,6 +19,12 @@ See [outlines and writing](/en/features/longform/writing), [PR #141](https://git
 
 Feature updates, fixes, and workflow improvements are organized by user impact. See [compatibility](/en/updates/compatibility) for version information.
 
+## In development: Candidate character-chat flows (unreleased)
+
+The character-chat branch is integrating character-card conversion, experience-package installation/export, compatible save-upgrade copies, and three original starter drafts. The committed baseline is `a4f16fd9`; the subsequent changes observed here remain uncommitted and are not released features. See [Character chat](/en/features/interactive/character-chat#new-flows-in-the-development-branch-unreleased) for candidate instructions and limitations, and [pending development records](/en/updates/development-status#character-chat-candidate) for delivery status.
+
+The candidate also includes authorship and usage statements frozen with each release, and fixes installation numbering that could break a complete backup when a newer version was installed first. Full validation remains in progress.
+
 ## October 20, 2026 · System-fiction planning, whole-chapter review, and scoped revision
 
 [PR #141](https://github.com/yuanbw2025/storyforge/pull/141) merged into main as `1b96e80a`.

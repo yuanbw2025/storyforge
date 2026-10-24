@@ -1,0 +1,120 @@
+{
+  "schema": "storyforge.character-chat-development-diagnostic-summary",
+  "version": 1,
+  "recordedAt": "2026-10-19",
+  "status": "diagnosed-not-accepted",
+  "code": {
+    "kind": "working-tree-diagnostic",
+    "baseHead": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+    "manifestSha256": "ce5babf2722aaf0269c8418163a1d2d2b1fb5a83e49cbdb651a33252e0e7117d"
+  },
+  "engineering": {
+    "scope": "Fixed V173 working input; focused regressions and type check passed. Full CI was withdrawn before execution after additional model failures; full browser delivery validation pending. No full-delivery claim."
+  },
+  "privateEvidence": {
+    "directory": "character-chat-20261014/v174-runtime-output-diagnostics",
+    "summarySha256": "17002164f83e386008748882550ae0fb707bf3e761007ae6df04b1df4f286ab8",
+    "policy": "Raw model replies, requests and backups stay in local evaluation storage."
+  },
+  "episodes": [
+    {
+      "episode": "codex-rest",
+      "status": "completed",
+      "completionReason": "budget",
+      "requests": 8,
+      "observedTokens": 115803,
+      "costUsd": null,
+      "wallSeconds": 132.121,
+      "evidenceSha256": "86018ec0dd702e87fa9c4b988c21214ffa7bb8b3b3bd12a2be29a4d8c09c9132",
+      "restoreModelCalls": 0,
+      "restorationChecks": {
+        "runStatusesPreserved": true,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      },
+      "independentHumanScored": false,
+      "countsInM1": false
+    },
+    {
+      "episode": "agnes-rest",
+      "status": "failed",
+      "completionReason": null,
+      "requests": 1,
+      "observedTokens": 8809,
+      "costUsd": null,
+      "wallSeconds": 12.986,
+      "evidenceSha256": "97fcd57fb335424c2fdb55743a6fbe94df28b01e18cecf29d2d35426ab68cb05",
+      "restoreModelCalls": 0,
+      "restorationChecks": {
+        "runStatusesPreserved": true,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      },
+      "independentHumanScored": false,
+      "countsInM1": false
+    },
+    {
+      "episode": "codex-refuse",
+      "status": "completed",
+      "completionReason": "budget",
+      "requests": 10,
+      "observedTokens": 141672,
+      "costUsd": null,
+      "wallSeconds": 199.004,
+      "evidenceSha256": "42b38bc93efff024f3c9494b1e9729c057b6d90b404fa77c4787734185f4c31e",
+      "restoreModelCalls": 0,
+      "restorationChecks": {
+        "runStatusesPreserved": true,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      },
+      "independentHumanScored": false,
+      "countsInM1": false
+    },
+    {
+      "episode": "agnes-refuse",
+      "status": "failed",
+      "completionReason": null,
+      "requests": 1,
+      "observedTokens": 9043,
+      "costUsd": null,
+      "wallSeconds": 14.007,
+      "evidenceSha256": "e1aa209a78a04b4af95ab42d1af92d9c937d23f6021101e5764ad993223a9dc8",
+      "restoreModelCalls": 0,
+      "restorationChecks": {
+        "runStatusesPreserved": true,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      },
+      "independentHumanScored": false,
+      "countsInM1": false
+    }
+  ],
+  "totalRequests": 20,
+  "observedTokens": 275327,
+  "findings": {
+    "codexRest": "Own goal and shared thread paused, persisted playerPause, no further investigation. Original completion remains budget; registered pauseState excluded waiting-player but the product contract explicitly requires it for player-held goals. This is a protocol mismatch, not evidence of resumed investigation. Correct future predicate with domain evidence; do not overwrite the original result.",
+    "agnes": "Both responses contain all required fields and repeat active on an already-active goal. Rest fails the actual read-only candidate preview on unchanged goal; refuse also repeats open on an open thread and fails first on unchanged thread. Strict shape alone did not solve semantic correctness.",
+    "codexRefuse": "Opening found copper seal; after refusal actor did not take it or assume consent and requested a bounded alternate direction concerning the custodian. Read the adopted result before judging meaningful progress."
+  },
+  "followup": {
+    "candidate": "V175 action v39, options v29, revision v18",
+    "change": "Explain state-change semantics in both field descriptions and the final producer instructions; retain old schema bytes and deterministic rejection of no-op effects. Keep player-held goals waiting for explicit resume authorization.",
+    "focusedFiles": 10,
+    "focusedTests": 139,
+    "typeCheckPassed": true,
+    "realModelTested": false,
+    "next": "Bounded Agnes diagnostic of actual candidate semantics, then remaining real-model paths and full delivery gates. Correct the next rest stopping predicate to distinguish a recorded player hold from an unanswered participation decision; do not rewrite prior completion reasons."
+  },
+  "countsInM1": false,
+  "independentHumanScored": false,
+  "holdoutsInspected": false
+}

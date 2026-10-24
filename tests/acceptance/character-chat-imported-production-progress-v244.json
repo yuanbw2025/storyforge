@@ -1,0 +1,77 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "batch": "V244",
+  "recordedAt": 1792478697.802291,
+  "status": "targeted-engineering-passed; full-delivery-pending",
+  "scope": "S3 production progress. A completed imported task awaiting local receipt verification is not an executing task. No ledger, permission, provider, budget, world or schema change.",
+  "sourceFiles": {
+    "src/lib/product-production/scheduler.ts": "f554074b18522f2b2e691d4b521c64caefdd8a950c94d3ffb8eb4b421f260f4b",
+    "src/components/product/ProductProductionStudio.tsx": "223ae5ada4a996f0dc94e38495eac21635f1704819753dedf258181d85633f38",
+    "tests/regression/R-CHAT-02-imported-production-progress.test.ts": "5a430808edc28334d26ea263c3450f9bf5ea111d8800b23ff3fe92099fbf412e",
+    "tests/regression/R-PRODUCTPROD1D-auto-resume.test.ts": "f9520df71496d12687016d9cb5c81a14259fe7464dbe443634d5965ef06e96fa",
+    "tests/e2e/character-chat-production-repair.spec.ts": "369d73f86da61673fa66ffd35bc850a9a296c2239736ddc99aacf295221e949f"
+  },
+  "reproduction": {
+    "original": "V243 Agnes real failed-production backup imported into isolated browser",
+    "beforeStatus": "running",
+    "beforeLabel": "执行中",
+    "afterStatus": "verification-required",
+    "afterLabel": "待核对",
+    "modelCalls": 0,
+    "rawLedgerStatusPreserved": "running; local receipt invalidated by existing scope rebound"
+  },
+  "checks": {
+    "targetedRegression": {
+      "files": 3,
+      "tests": 7,
+      "exitCode": 0
+    },
+    "browserRegression": {
+      "tests": 1,
+      "exitCode": 0,
+      "covers": "rejection, refresh stop, isolated backup import, pending verification display, zero-call refresh, explicit repair still usable"
+    },
+    "realBackupReadback": {
+      "exitCode": 0,
+      "modelCalls": 0,
+      "refreshLabelRetained": true
+    },
+    "types": true,
+    "changedFileLint": true,
+    "architecture": true,
+    "requiredTables": true,
+    "aiManual": true,
+    "build": true,
+    "diffCheck": true,
+    "documentAuthority": true,
+    "bundleSize": true
+  },
+  "negativeEvidence": {
+    "initialRegression": "Expected verification-required; actual running; retained in before-tests.log",
+    "beforeBrowser": "Actual content.design card displayed executing after all provider work had stopped",
+    "checkCommandCorrection": "npm run check:document-authority does not exist; retained missing-script log; actual scripts/check-document-authority.mjs subsequently exited 0."
+  },
+  "evidenceSha256": {
+    "before-tests.log": "2f8bb6274691155589d486df51f9e244a27d7ba7f9f0af8220a463643d131370",
+    "tests.log": "e19ee7648ddc3c6d7a93f58b6c5c1e18485b069dca26bad2c47772fd7634ae6b",
+    "browser.log": "4f17a1baa4be36dd2e75a0d3b821cd8e76092c85d91b96a24cb753f45c2accb3",
+    "before.json": "de92fd4068e313863bead8cd6bf6bf921b7fdbddb2fb448718a277f58dfcd23f",
+    "after.json": "e9fa044f0d278a024270454a15c10f60bef0a51435a84b6de54b8c6849520b56",
+    "types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "architecture.log": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616",
+    "tables.log": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444",
+    "ai-manual.log": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19",
+    "build.log": "2270e53abce9a554a4f37e400987fed98e50c28390fb0744ff79adfd6d1a2c1d",
+    "document-authority.log": "9ef9a7b6d14c53da5f4dd2fc12327ed33bfbb3176c8d03428ef418b0ef760a94",
+    "document-authority-verified.log": "211b0f6f00c931878d80bf4aaccf46ca6b982a0897303f4464a3d4411eaeda76",
+    "bundle-size.log": "b756681bee7b3b59647a0350129130e6cdc08539615e628a1253edebf868fba6"
+  },
+  "fullCurrentCI": false,
+  "fullCurrentE2E": false,
+  "realModelNarrativeAcceptance": false,
+  "humanAcceptance": false,
+  "commercialAcceptance": false,
+  "knownRemaining": "V243 action choice labels own-action while providing playerDependency; new versioned output contract required. Agnes generation outcome remains unknown; no resend."
+}

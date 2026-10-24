@@ -1,0 +1,133 @@
+{
+  "version": 275,
+  "recordedAt": "2026-10-20T19:25:55.495786+00:00",
+  "product": "character-interaction",
+  "status": "basic-arrangement-agreed-repetitive-spatial-checks-original-goal-open",
+  "scope": "Existing original reading-night scenario; current producer v13/reviewer v8 and action v50/reviewer v34; same source, permissions and player role. New draft allows two actions per trigger. No change to original release or world.",
+  "sourceBaseHead": "8453ed82d70c6499e73e0a4fd9ff5e5223c7566a",
+  "protocol": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v275-reading-night-current/run-r4/preregistration.json",
+    "sha256": "e016f77707b6497f67652618cedc66f085e51e82020d8e5c3bab22fac623e17c"
+  },
+  "production": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v275-reading-night-current/run-r3/reading-night.json",
+    "sha256": "9b0a206d7e6ab9d473a4ce7672aa3508154a3c0d4e78ac80f76719afdeb17ad2"
+  },
+  "runtime": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v275-reading-night-current/run-r4/reading-night.json",
+    "sha256": "05aa1cb42b186cdcad5c19b8224c07dd3f9af38782fb1e596ab45a66f5dbaa9b"
+  },
+  "backup": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v275-reading-night-current/run-r4/reading-night-backup.json",
+    "sha256": "e3fd69cdb152a94142e2631e6697c1d27c1811b805a50d59773e2bb74ed603f9"
+  },
+  "restoration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v275-reading-night-current/run-r4/reading-night-restoration-verified.json",
+    "sha256": "25d452d595c949a5b502e9019ee2a337f8e797bc54d1fc31607c30d326d0884b"
+  },
+  "model": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "productionRequests": 3,
+    "runtimeRequests": 24,
+    "allNativeRequestsCompleted": true,
+    "usage": {
+      "totalTokens": 395715,
+      "inputTokens": 376336,
+      "outputTokens": 19379,
+      "cachedInputTokens": 47104,
+      "reasoningOutputTokens": 3874
+    },
+    "costUsd": null
+  },
+  "runtimeRuns": {
+    "completed": 9,
+    "failed": 0
+  },
+  "playerInputs": [
+    "嗯，我在听。",
+    "我不想主持，也不想出钱。你能自己安排的话，我愿意只当听众。",
+    "可以，我只当听众，你按自己能承担的方式安排。"
+  ],
+  "outcome": {
+    "basicFlowConfirmed": true,
+    "playerRefusalRespected": true,
+    "publicArrangement": "“好，那基本流程就定为：我读准备好的短篇，读后自愿交流，不设必须发言的环节。你只当听众，没有分派给你的任务。\n桌端先作为暂定朗读位置。刚才坐下时椅背没有伸进通道，但这还不等于有人经过就一定方便，摆法先留着调整的余地。”",
+    "remainingGoals": [
+      {
+        "goalKey": "goal-1",
+        "desire": "让愿意来的人得到一次值得参加的小型朗读聚会，与玩家共同确定实际可承担的安排。",
+        "status": "active"
+      }
+    ],
+    "remainingThreads": [
+      {
+        "threadKey": "thread-1",
+        "status": "open"
+      }
+    ],
+    "lastTrigger": "complete",
+    "completionReason": "Pre-registered three-player-input ceiling, not story closure.",
+    "limitation": "The actor repeatedly tests chair placement, seated clearance and walking past the empty chair. A real decision was registered, but the whole activity is unresolved and the interaction is slow. No sustained-story or M1 acceptance."
+  },
+  "restorationChecks": {
+    "stem": "reading-night",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 9,
+    "retainedFailedRuns": 0,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true,
+    "terminalReceiptBodiesRetained": true,
+    "usageEvidenceRetained": true
+  },
+  "collectorCorrections": [
+    {
+      "run": "r1",
+      "requests": 0,
+      "cause": "General collector expected an inn-only receipt path; no model dispatch.",
+      "result": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v275-reading-night-current/run-r1/reading-night.json",
+        "sha256": "0950bd29e538fd1ac6ca4c9d6275aadd972cc468abe49babc013bede879f8757"
+      }
+    },
+    {
+      "run": "r2",
+      "requests": 0,
+      "cause": "Automatic production was already enabled in imported workspace; obsolete enable-button locator timed out.",
+      "result": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v275-reading-night-current/run-r2/reading-night.json",
+        "sha256": "af73985f2f7f02095e1785de5b71a8eaca5d0a15843464d84169cf4b8a5d1d73"
+      }
+    },
+    {
+      "run": "r3",
+      "requests": 3,
+      "cause": "Production and local release succeeded, but global New Session locator matched both old and new release. r4 targeted the exact new release card and reused all production artifacts.",
+      "result": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v275-reading-night-current/run-r3/reading-night.json",
+        "sha256": "9b0a206d7e6ab9d473a4ce7672aa3508154a3c0d4e78ac80f76719afdeb17ad2"
+      }
+    }
+  ],
+  "automaticRetries": 0,
+  "sourceUnchanged": true,
+  "worldUnchanged": true,
+  "formalM1Credit": 0,
+  "qualityAccepted": false,
+  "nextAction": "Prioritize a useful next decision and proportionate uncertainty over repeated micro-inspections; preserve real consent, source truth and unresolved goals. Investigate Agnes model capability separately without replacing the old failed cohort.",
+  "engineeringRepair": {
+    "receipt": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v275-reading-night-current/engineering.json",
+      "sha256": "16d7ff9875086d053e2c577fe6650294702d3e87933612dfffbd3e25dc4a3f79"
+    },
+    "description": "Correct the old rejection-shape assertion to explicit typeErrors, zero writes and unchanged author draft; product validation unchanged.",
+    "targetedRegressionTestsPassed": 17,
+    "fullCI": false,
+    "fullE2E": false
+  }
+}

@@ -20,6 +20,7 @@ test-results/
 playwright-report/
 website-docs/.vitepress/cache/
 website-docs/.vitepress/dist/
+.vite-e2e-cache/
 
 # 公司内部资料（仅保留在本地，不进入仓库）
 application-materials/

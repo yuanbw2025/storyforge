@@ -1,0 +1,190 @@
+{
+  "schema": "storyforge.chat-new-situation-after-pause-real-model",
+  "version": 1,
+  "at": "2026-10-22T23:10:28.446549+00:00",
+  "status": "situation-adopted-action-review-pre-dispatch-input-budget-failed-restoration-passed",
+  "source": {
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "baseHead": "fef76fc1dfd12b7057fa1b00cf20d399262fe0bf",
+    "sourceKind": "clean-worktree-commit",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v343-new-situation-after-pause/run-r2/manifest.json",
+    "manifestSha256": "d9fe0099eee0f8ec91eaf17a7ead83c040a6b5423d1c79881e9ca1fa837449d0"
+  },
+  "sourceUnchanged": true,
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "nativeRequests": 4,
+  "nativeStatuses": {
+    "1f596b5e-b367-4bdd-8e35-7d29163b05b8": "completed",
+    "0cd8facd-72bd-4d8d-9ded-15c54390c0e3": "completed",
+    "75ce6eeb-d2aa-46c0-8db1-740ff1201c08": "completed",
+    "617846f3-0782-4033-b55e-7b24a5c07249": "completed"
+  },
+  "usage": {
+    "totalTokens": 67081,
+    "inputTokens": 65319,
+    "outputTokens": 1762,
+    "cachedInputTokens": 6656,
+    "reasoningOutputTokens": 458
+  },
+  "costUsd": null,
+  "automaticRetries": 0,
+  "playerSeed": "驿站门外传来急促的敲门声，来者的身份和目的暂时不明。",
+  "outcome": {
+    "situationAdopted": true,
+    "newFacts": [
+      {
+        "factKey": "observation.door-knocking-1",
+        "text": "驿站门外传来急促的敲门声，玩家与叶岑都能听见；目前尚未确认来者的身份、目的或是否需要帮助。",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "origin": "runtime-situation",
+        "sourceKnowledgeKey": null,
+        "sourceEventSequence": 2
+      }
+    ],
+    "newGoals": [
+      {
+        "actorKey": "participant.001",
+        "boundary": "不替玩家决定是否接近门口或参与交谈；不借此恢复已暂停的翻查。",
+        "concern": "急促的敲门声不足以判断来者有危险，也不足以确认开门安全。",
+        "desire": "在不贸然开门的情况下，确认敲门者的来意及是否有紧急需要。",
+        "evidenceFactKeys": [
+          "world-fact.0002",
+          "world-fact.0004",
+          "observation.door-knocking-1"
+        ],
+        "goalKey": "goal.door-contact-1",
+        "status": "active",
+        "updatedSequence": 2
+      }
+    ],
+    "newThreads": [
+      {
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "closureSignals": [
+          "来者身份与来意得到足够确认，可以另行决定如何回应。",
+          "若暂未获得回应，保留未知并暂停接触。"
+        ],
+        "evidenceFactKeys": [
+          "world-fact.0004",
+          "observation.door-knocking-1"
+        ],
+        "participantKeys": [
+          "participant.001"
+        ],
+        "question": "门外来者是谁、为何敲门，怎样回应才合适？",
+        "threadKey": "thread.door-contact-1",
+        "title": "暴雨中的敲门声",
+        "status": "open",
+        "updatedSequence": 2
+      }
+    ],
+    "roleChoice": "Actor independently chose to ask through the closed door about identity, purpose and urgent need; no required player participation.",
+    "actionExpressionGenerated": true,
+    "actionExpressionAdopted": false,
+    "actualDialogueUnchanged": true,
+    "actionReviewModelRequestSent": false,
+    "originalSealGoalStillPaused": true,
+    "roleInputEvidence": {
+      "choiceAndExpressionSourcesEqual": true,
+      "originalHiddenFactKeyAbsent": true,
+      "originalHiddenFactFullTextAbsent": true
+    }
+  },
+  "failure": {
+    "code": "narrative-review-failed",
+    "actualBoundary": "assertChatActionChoiceInputBudgetV1 before model.requested for action-review",
+    "budgetAudit": {
+      "previous": [
+        {
+          "stepId": "interaction:action-choice",
+          "inputEstimate": 9497
+        },
+        {
+          "stepId": "interaction:runtime-candidate",
+          "inputEstimate": 26483
+        }
+      ],
+      "previousTotal": 35980,
+      "reviewEstimate": 20179,
+      "aggregateEstimate": 56159,
+      "aggregateBudget": 56000,
+      "aggregateOverflow": 159,
+      "reviewMessages": [
+        {
+          "role": "system",
+          "characters": 8981,
+          "estimatedTokens": 9618
+        },
+        {
+          "role": "user",
+          "characters": 20602,
+          "estimatedTokens": 10561
+        }
+      ],
+      "reviewOutputAllowance": 8000,
+      "clientWindow": {
+        "inputBudget": 23130,
+        "wouldTrim": false,
+        "originalEstimate": 20179,
+        "overflow": -2951
+      },
+      "modelRequests": 0
+    },
+    "semanticReviewOccurred": false,
+    "notProviderFailure": true
+  },
+  "restoration": {
+    "checks": {
+      "originalRootStatePreserved": true,
+      "originalV339StatePreserved": true,
+      "maintainedPauseParentPreserved": true,
+      "maintainedPauseRunPreserved": true,
+      "branchStatePreserved": true,
+      "refreshAllFourStatesPreserved": true,
+      "worldPreserved": true,
+      "childRunStatesPreserved": true,
+      "rootRunStatesPreserved": true,
+      "parentRunStatesPreserved": true,
+      "originalV332FailurePreserved": true,
+      "originalV339FailurePreserved": true,
+      "originalOpeningReviewPreserved": true,
+      "allArtifactBytesAndMultiplicityPreserved": true,
+      "zeroModelRequests": true,
+      "noResumableRuns": true
+    },
+    "modelCalls": 0,
+    "retainedAncestors": 3,
+    "totalSessions": 4,
+    "originalAndNewFailuresPreserved": true
+  },
+  "zeroCallPreparationFailure": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v343-new-situation-after-pause/preparation-failure-receipt.json",
+  "offlineFollowup": {
+    "artifact": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v343-new-situation-after-pause/run-r2/schema-compaction-prototype.json",
+    "savedSchemaCharacters": 1039,
+    "expandedSchemaIdentical": true,
+    "productChangeImplemented": false,
+    "budgetProjectionArtifact": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v343-new-situation-after-pause/run-r2/schema-compaction-budget-projection.json",
+    "revisedAggregateEstimate": 55899,
+    "unchangedInputBudget": 56000,
+    "remainingEstimate": 101,
+    "notGeneralBudgetAcceptance": true,
+    "collectorPreparationFailure": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v343-new-situation-after-pause/run-r2/schema-budget-projection-preparation-failure.json"
+  },
+  "formalM1Credit": false,
+  "humanQualityPass": false,
+  "originalScheduledDenominatorChanged": false,
+  "artifacts": {
+    "raw": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v343-new-situation-after-pause/run-r2/new-situation-after-pause.json",
+    "backup": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v343-new-situation-after-pause/run-r2/new-situation-after-pause-backup.json",
+    "restoration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v343-new-situation-after-pause/run-r2/restoration-logical-history.json",
+    "budgetAudit": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v343-new-situation-after-pause/run-r2/input-budget-audit.json",
+    "registration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v343-new-situation-after-pause/run-r2/preregistration.json"
+  }
+}

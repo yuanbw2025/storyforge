@@ -1,0 +1,168 @@
+{
+  "version": 359,
+  "recordedAt": "2026-10-23T12:57:14.936906+00:00",
+  "cohort": "m1-v359-current",
+  "sourceHead": "7a4b4b2cac2f2faa9615be0526f3eba5a96d3734",
+  "status": "one-completed-one-failed-production-unit-stopped",
+  "product": "character-interaction",
+  "phase": "S3 product development",
+  "matrix": {
+    "total": 120,
+    "statuses": {
+      "completed": 1,
+      "failed": 1,
+      "not-dispatched-after-unit-failure": 4,
+      "not-started": 114
+    },
+    "formalQualityPasses": 0,
+    "humanScores": 0
+  },
+  "production": {
+    "independentUnitsAttempted": 1,
+    "independentUnitsReleased": 1,
+    "requests": 3,
+    "tokens": 62757,
+    "candidateCount": 3,
+    "allOpeningReviewsPassed": true,
+    "selection": "first passing candidate in original order",
+    "sharedAcrossIndependentSessions": true
+  },
+  "episodes": [
+    {
+      "behavior": "weak-guidance",
+      "status": "completed",
+      "ending": "meaningful-closure",
+      "playerOpportunities": 2,
+      "playerMessages": 0,
+      "runtimeRequests": 28,
+      "runtimeTokens": 441933,
+      "adoptedActorActions": 6,
+      "settledInquiries": 2,
+      "goals": [
+        {
+          "key": "goal-1",
+          "status": "fulfilled"
+        }
+      ],
+      "threads": [
+        {
+          "key": "thread-1",
+          "status": "resolved"
+        }
+      ],
+      "summary": "The character inspected public storage, questioned the known innkeeper, followed the replies, opened the public box, retrieved the seal and explicitly avoided unsupported accusations. All obligations closed in persisted state.",
+      "privateEvidence": "v359-m1-current/codex-inn-r1/episode-summary.json",
+      "sourceEvidenceSha256": "77a30f56a7646384847f427ba735b190cd7c82de1d1ace4a7c986deb54b33acf",
+      "restoration": [
+        {
+          "stem": "inn-r1-weak-guidance",
+          "runStatusesPreserved": true,
+          "verifiedCompletedHistories": 11,
+          "retainedFailedRuns": 0,
+          "resumableRuns": 0,
+          "openingReviewRetained": true,
+          "modelCalls": 0,
+          "interactionEqual": true,
+          "refreshEqual": true,
+          "worldPreserved": true,
+          "rawEvidenceRetained": true,
+          "terminalReceiptBodiesRetained": true,
+          "usageEvidenceRetained": true
+        }
+      ]
+    },
+    {
+      "behavior": "refuse",
+      "status": "failed",
+      "phase": "automatic-opening-before-refusal-input",
+      "playerOpportunities": 0,
+      "runtimeRequests": 10,
+      "runtimeTokens": 150488,
+      "adoptedActorActions": 2,
+      "settledInquiries": 0,
+      "failedRunId": 22,
+      "diagnosis": {
+        "reviewFailureCode": "narrative-review-failed",
+        "failedCriteria": [
+          "meaningful-direction",
+          "bounded-answer",
+          "meaningful-result"
+        ],
+        "candidateHash": "8eb4cd96d96deb8f1553612fa477bfd3376e46809b2f17f02ab8ba1ebfe212f3",
+        "reviewHash": "353e214e01d262ea319ea6f78562174ff6bb05e9bea9259972c74ee8d4511db6",
+        "finding": "The NPC confirmed handling the seal but postponed answering its past storage location on the grounds that the current location was not guaranteed. Independent review rejected that unsupported conflation and the reply was not adopted. The already spoken question remains pending.",
+        "playerRefusalBehaviorExercised": false
+      },
+      "privateEvidence": "v359-m1-current/codex-inn-r1-refuse/episode-summary.json",
+      "sourceEvidenceSha256": "53a2ef374e61ce8f2015a46a8f0d2769161320df623d28deca95c91363250bad",
+      "restoration": [
+        {
+          "stem": "episode",
+          "runStatusesPreserved": true,
+          "verifiedCompletedHistories": 3,
+          "retainedFailedRuns": 1,
+          "resumableRuns": 0,
+          "openingReviewRetained": true,
+          "modelCalls": 0,
+          "interactionEqual": true,
+          "refreshEqual": true,
+          "worldPreserved": true,
+          "rawEvidenceRetained": true,
+          "terminalReceiptBodiesRetained": true,
+          "usageEvidenceRetained": true
+        }
+      ]
+    }
+  ],
+  "totalUniqueRequests": 41,
+  "totalObservedTokens": 655178,
+  "allNativeRequestsTerminalCompleted": true,
+  "automaticRetries": 0,
+  "sharedProductionCountedOnce": true,
+  "costUsd": null,
+  "latency": {
+    "method": "Unique native final request IDs; persisted trigger-to-action and trigger-to-final-commit times. No new calls.",
+    "rounds": [
+      {
+        "kind": "scene-start",
+        "triggerSequence": 4,
+        "committedActorActions": 2,
+        "requests": 10,
+        "firstActorCommitSeconds": 61.827,
+        "roundCommitSeconds": 181.362
+      },
+      {
+        "kind": "continue",
+        "triggerSequence": 9,
+        "committedActorActions": 2,
+        "requests": 10,
+        "firstActorCommitSeconds": 72.439,
+        "roundCommitSeconds": 263.065
+      },
+      {
+        "kind": "continue",
+        "triggerSequence": 14,
+        "committedActorActions": 2,
+        "requests": 8,
+        "firstActorCommitSeconds": 75.039,
+        "roundCommitSeconds": 181.772
+      }
+    ],
+    "limitations": [
+      "Single collected core regression episode, no cross-scenario latency conclusion.",
+      "Commit times are not browser render or first-token measurements.",
+      "Cached input and reasoning output are reported subcategories and must not be added to total tokens.",
+      "A local subscription does not prove zero commercial cost."
+    ]
+  },
+  "followup": "Improve answer generation scope while retaining independent rejection, frozen secrets, original failures and denominator. No scored reroll or repair inside this unit.",
+  "claims": {
+    "oneStructuralStoryClosure": true,
+    "currentFullDeliveryPassed": false,
+    "m1Passed": false,
+    "formalQualityPass": false,
+    "humanScoringDeferred": true,
+    "commercialReady": false,
+    "released": false
+  }
+}

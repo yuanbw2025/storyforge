@@ -1,0 +1,57 @@
+{
+  "schema": "storyforge.chat-development-acceptance",
+  "version": 303,
+  "at": "2026-10-22T03:34:53.225752+00:00",
+  "status": "full-ci-passed-browser-failure-retained-main-traffic-integrated",
+  "fullCi": {
+    "at": "2026-10-22T03:29:18.076321+00:00",
+    "head": "228e257c6238808ac247eeba8ff8042f55c38a95",
+    "status": "passed",
+    "command": "CI=1 npm run ci",
+    "exitCode": 0,
+    "testFiles": 983,
+    "tests": 6595,
+    "sourceVerification": "Revalidated clean tracked worktree, exact HEAD and V302 all-tracked-file manifest after the run terminated.",
+    "log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v301-current-reader-delivery/ci.log",
+      "sha256": "b1b7a7fa2d1d2403bfc2237ca5a7385e7cc18aab90b12d368557a83118ec7e06"
+    },
+    "fullE2e": "not passed; older head has one media-revision browser failure",
+    "m1Passed": false
+  },
+  "mainIntegration": {
+    "mergeHead": "1fe04c48e6135ee0e35729d11c8bdb38ea06ad77",
+    "mainHead": "fdfe481736c748a3f70a601a996a6aaf379cf6b7",
+    "changedFromValidatedHead": [
+      "data/traffic/clones.csv",
+      "data/traffic/release-assets.csv",
+      "data/traffic/views.csv"
+    ],
+    "applicationAndTestsUnchanged": true,
+    "exactMergedHeadFullCiRun": false
+  },
+  "olderHeadBrowser": {
+    "at": "2026-10-21T03:42:44.807267+00:00",
+    "runId": 39525650007,
+    "jobId": 118979542442,
+    "head": "2050d3823db77359b3b18d5971bd6d7f8ee27bcf",
+    "conclusion": "failure",
+    "passed": 492,
+    "failed": 1,
+    "skipped": 4,
+    "failure": "text-adventure-media-revision initial studio display assertion: expected visual-bible title, actual UI says visual bible read failed. Both original and retry fail; failure occurs before the V298 durable-receipt wait change. Root cause not yet established.",
+    "log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v301-current-reader-delivery/remote-full-browser-2050.log",
+      "sha256": "3e5054faf02464f520a11a0890acabe9aeb1a9f6db18f60e4506a85df888dbb3"
+    },
+    "artifact": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v301-current-reader-delivery/remote-full-browser-2050-artifacts.zip",
+      "sha256": "80db5e6048ecb2c1ea2640c380bf04b8c4a0a087c05e9f9faf5f869e5bc6b868"
+    },
+    "currentSourceNotModified": true,
+    "fullCurrentDeliveryPassed": false
+  },
+  "modelCalls": 0,
+  "fullCurrentDeliveryPassed": false,
+  "m1Passed": false
+}

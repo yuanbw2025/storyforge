@@ -1,0 +1,78 @@
+{
+  "schema": "storyforge.character-chat-multistep-production-evidence",
+  "version": 1,
+  "label": "V109 explicitly authorized new three-action Release; old one-action Release preserved",
+  "snapshot": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "3983639b7a5762cf2a797caf1bdb250199f6d3e9",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v109-real-3rt397t5/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v109-real-3rt397t5/manifest.json",
+    "manifestSha256": "9555a9d7baa2f92f57d4d2d8bd8f1c88aa0bb2e269deebeea5386b63552e167a",
+    "files": 3451
+  },
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v109-multistep-production-resume",
+  "files": {
+    "preregistration.json": "fdd2946cece040aaea3ee9b3dc75cfaada09b7be414b4d1bd294eff739e6c398",
+    "runner.mjs": "ced3e829eeb942377bf44146b7561ebab23a8a9401ada4f7f3b01ff01af4fb26",
+    "prepared.json": "5bf0f71eb3133d7aa7bef89f9016734d199872f7a0e4cb89bb9c239217454654",
+    "production-prepared.json": "f39a381c3964c27e900bdaae6739ad719722b32a7c29f1cf8884791f94f8d015",
+    "opening-review.json": "24759bfed425231e3e19909e4d4ad83b2c09ad7496e4f06ae26e4d9ae122c739",
+    "release-ready.json": "0be52982ee82aa8c0ebe5bab162f8a444e721980b8b6475953f24aaf8267389b",
+    "release.json": "707b786d9a5718235103352357423702eb9456edf1f92cbdbe76bdfb999b2c1f",
+    "preflight.json": "5e0f7bbd5886deb9fc3a72847b1a5d64a3b2cc4e1a46ba3d881144674b79f53d",
+    "preflight-backup.json": "995b079f92841377529aaafee7ec05383050b09abeb3cb678740515cb10f072e",
+    "transport-progress.json": "cca6d3d5dfbbc36cbb3984ebaa52ec5ab7a5b9f61076f48667ecd6eda67a8fe3",
+    "preflight-terminal-request-proof.json": "80e4e778a49dea506f977fce962572dec46e885eb06808b47409f5b8c02b89fd",
+    "restore.mjs": "64dfa0d2518a06f4b44858694c3f06d88228e5c3d42c7ec175ae625b3e07e052",
+    "restoration.json": "a4fed87aec6bf856db1a492b168b2c0c847fb33a7cf4933be4f10dd6490f6b80",
+    "restored-production-390.png": "38b628bcb348710d5e79d95a674b53cd08ea7334c6506f849568f654a782a5b7"
+  },
+  "retainedZeroCallPreflightFailure": {
+    "folder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v109-multistep-production",
+    "evidenceSha256": "a52a762458e5f76384fbcaa234322e5d93af36ab4ae59a384765633e6c573de4",
+    "cause": "Imported workspace already enabled production opt-in; runner waited for absent enable button. Read-only UI inspection found ready saved brief and explicit start. No Build or model call existed.",
+    "requests": 0,
+    "repair": "Resume exact saved brief with explicit operator author start, not a model retry or re-generation."
+  },
+  "authoring": {
+    "onlyChange": "maxActionsPerTrigger1to3",
+    "sourceCompilerOutputExact": true,
+    "sourceUnitsAndDiscoveryConditionsUnchanged": true,
+    "castAndWorldUnchanged": true,
+    "confirmedViaRealUI": true,
+    "refreshRetained": true
+  },
+  "production": {
+    "requests": 3,
+    "tokens": 52859,
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "costUsd": null,
+    "allTerminalAndReadbackEqual": true,
+    "openingSelection": "first passing opening1; all3 reviewed options passed",
+    "sourcePlanAndExplicitStart": true,
+    "releaseHash": "b854e30f564918ea15cf32114ed11ea6357463ff9a9520022df5e7e2a2097a21",
+    "newMaxActions": 3,
+    "oldMaxActions": 1,
+    "sessions": 0,
+    "oldReleaseUnchanged": true
+  },
+  "restoration": {
+    "modelCalls": 0,
+    "draftAndSourceUnitsEqual": true,
+    "originalConfirmationRetained": true,
+    "newProductionProofRecovered": true,
+    "oldAndNewReleaseRetained": true,
+    "rawResponsesEqual": true,
+    "worldUnchanged": true,
+    "refreshEqual": true,
+    "mobile390ScreenshotInspected": true
+  },
+  "limits": [
+    "This production proves author setting and formal delivery, not runtime pacing quality or sustained story.",
+    "New opening differs from V105; subsequent runtime cannot be an A/B causal comparison.",
+    "V110 separately preregistered full weak-guidance development episode pending; no M1 slot replaced.",
+    "No Agnes, human, holdout, comparative or commercial acceptance."
+  ],
+  "goalStatus": "active"
+}

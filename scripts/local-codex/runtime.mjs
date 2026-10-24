@@ -29,6 +29,39 @@ function toml(value) {
   }
   return JSON.stringify(value)
 }
+// Only public protocol variants may enter a receipt. Never retain arbitrary
+// messages, additionalDetails, unknown variant strings, paths or credentials.
+const TURN_FAILURE_LABELS = {
+  contextWindowExceeded: '上下文长度超限', sessionBudgetExceeded: '单次会话预算超限',
+  usageLimitExceeded: '使用额度已达上限', rateLimitExceeded: '请求频率受限',
+  flexUnavailable: '弹性处理暂不可用', serverOverloaded: '服务暂时过载',
+  cyberPolicy: '请求受提供商策略限制', misalignmentPolicyViolation: '请求受提供商策略限制',
+  tooManyDenials: '请求被提供商停止', internalServerError: '提供商内部错误',
+  unauthorized: '提供商未授权本次请求', badRequest: '请求参数未被提供商接受',
+  threadRollbackFailed: '提供商无法回退会话', sandboxError: '提供商隔离环境错误',
+  other: '提供商未给出可识别原因',
+  httpConnectionFailed: '上游连接失败', responseStreamConnectionFailed: '回复流连接失败',
+  responseStreamDisconnected: '回复流已断开', responseTooManyFailedAttempts: '提供商已停止失败尝试',
+}
+const HTTP_FAILURE_VARIANTS = new Set(['httpConnectionFailed', 'responseStreamConnectionFailed', 'responseStreamDisconnected', 'responseTooManyFailedAttempts'])
+function turnFailureDetail(info) {
+  const keys = info && typeof info === 'object' && !Array.isArray(info) ? Object.keys(info) : []
+  const code = typeof info === 'string' && !HTTP_FAILURE_VARIANTS.has(info) ? info : keys.length === 1 && HTTP_FAILURE_VARIANTS.has(keys[0]) ? keys[0] : null
+  if (!code || !Object.hasOwn(TURN_FAILURE_LABELS, code)) return ''
+  const http = typeof info === 'object' && HTTP_FAILURE_VARIANTS.has(code) ? info[code]?.httpStatusCode : null
+  const status = Number.isInteger(http) && http >= 400 && http <= 599 ? `，HTTP ${http}` : ''
+  return `（提供商报告：${TURN_FAILURE_LABELS[code]}；${code}${status}）`
+}
+// Only a matching turn/completed notification establishes a provider terminal state.
+// Never persist provider error text: it can contain input, paths or credentials.
+export class CodexTurnError extends Error {
+  constructor(providerTurn, codexErrorInfo) {
+    super(providerTurn.status === 'interrupted'
+      ? 'Codex 已确认本次生成被中断；未完成内容不会成为正式候选，不会自动重发。'
+      : `Codex 已确认本次生成失败${turnFailureDetail(codexErrorInfo)}；未完成内容不会成为正式候选，不会自动重发。`)
+    this.providerTurn = providerTurn
+  }
+}
 export class CodexRuntime {
   constructor({ executable = process.env.STORYFORGE_CODEX_BIN || 'codex', spawnProcess = spawn } = {}) {
     this.executable = executable; this.spawnProcess = spawnProcess
@@ -171,7 +204,8 @@ export class CodexRuntime {
             if (method === 'bridge/disconnected') return reject(new Error('Codex 已断开，在途请求结果未知。'))
             if (method === 'bridge/forbiddenTool') return abort('Codex 请求了不允许的工具；本次结果已被阻止。')
             if (p?.threadId !== threadId) return
-            if (method === 'turn/started') turnId = p.turn.id
+            if (method === 'turn/started' && !turnId) turnId = p.turn.id
+            if (p.turnId && turnId && p.turnId !== turnId) return
             if (method === 'item/started' && !['userMessage', 'agentMessage', 'reasoning'].includes(p.item.type)) {
               return abort('Codex 尝试执行文本生成范围外的工具；已阻止本次结果。')
             }
@@ -186,8 +220,8 @@ export class CodexRuntime {
             }
             if (method === 'thread/tokenUsage/updated') notify({ usage: p.tokenUsage.last })
             if (method === 'turn/completed') {
-              if (p.turn.status === 'completed') resolve()
-              else reject(new Error('Codex 未成功完成本次生成，请检查登录、套餐额度及模型权限。'))
+              if (turnId && typeof p.turn?.id === 'string' && p.turn.id !== turnId) return
+              resolve(p.turn)
             }
           } catch { abort('Codex 返回或恢复记录处理失败，已停止本次请求。') }
         })
@@ -205,7 +239,14 @@ export class CodexRuntime {
       })
       turnId = turn.turn.id
       if (signal.aborted) { void this.rpc('turn/interrupt', { threadId, turnId }).catch(() => {}); throw new Error('请求已取消。') }
-      await completion
+      const completed = await completion
+      if (!completed || completed.id !== turnId || typeof turnId !== 'string' || !turnId
+        || !['completed', 'failed', 'interrupted'].includes(completed.status)) {
+        throw new Error('Codex 结束通知无法核验，本次结果未知；不会自动重发。')
+      }
+      const providerTurn = { threadId, turnId, status: completed.status }
+      if (completed.status !== 'completed') throw new CodexTurnError(providerTurn, completed.error?.codexErrorInfo)
+      notify({ providerTurn })
     } finally {
       clearTimeout(timer); unsubscribe()
       if (threadId) void this.rpc('thread/unsubscribe', { threadId }).catch(() => {})

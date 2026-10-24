@@ -1,0 +1,155 @@
+{
+  "schema": "storyforge.chat-source-admission-evidence",
+  "version": 1,
+  "id": "v96-scenario-source-admission",
+  "recordedAt": "2026-10-15T18:40:56.269630+00:00",
+  "baseHead": "9975642bc5a13bbec4076fab7666c484609f57af",
+  "sourceHashes": {
+    "tests/acceptance/character-chat-m1-source.ts": "7a3c09c47a1ffcdc29e708f8c79f3f78d03729e3dee9d11bef8011a98ea27704",
+    "tests/regression/R-CHAT-00-m1-source-fidelity.test.ts": "d0f4ed188d4eab202e9c457e8bcd86bbe1bfa69e10863f5256b3d190309a7327",
+    "tests/regression/R-CHAT-00-m1-hidden-source-fidelity.test.ts": "5213878628dc534edaffb151a7e0c8210ae7ac71fbd4ed4e5418c2fa2fe15218"
+  },
+  "scope": "Evaluation author material admission through the existing WorldRelease and S2 compiler; no product runtime rules, schema, tables or write authority changed.",
+  "modelCalls": 0,
+  "cases": [
+    "daily-clock-promise",
+    "inn-missing-seal"
+  ],
+  "holdoutsInspected": false,
+  "checks": [
+    "Exact full authored hidden truth retained with no initial audience, explicit actor/condition/public prerequisite and frozen background provenance.",
+    "Both initial actor and player views exclude hidden truth; full compound truth requires full evidence, not merely seeing its location.",
+    "Original private facts, goals, beliefs, public facts, name and values retain declared source fields and purposes.",
+    "Twenty compiled-material and six pre-confirmation mapping counterexamples rejected without mutation or model calls.",
+    "Original actor-only helper unchanged; ordinary no-hidden-truth material remains valid."
+  ],
+  "regression": {
+    "files": 4,
+    "tests": 22,
+    "command": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/regression/R-CHAT-00-m1-hidden-source-fidelity.test.ts",
+      "tests/regression/R-CHAT-00-m1-source-fidelity.test.ts",
+      "tests/regression/R-CHAT-01-world-discovery.test.ts",
+      "tests/regression/R-CHAT-01-background-source.test.ts"
+    ],
+    "exitCode": 0,
+    "logSha256": "5c7c34f9a3b9eac5bc2127ca9e97dd55a3608a3550b20325b90bb0af93003d2a"
+  },
+  "gates": [
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:architecture"
+      ],
+      "startedAt": 1792089366.6879911,
+      "completedAt": 1792089373.4007108,
+      "exitCode": 0
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:required-tables"
+      ],
+      "startedAt": 1792089373.400836,
+      "completedAt": 1792089373.64281,
+      "exitCode": 0
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:ai-manual"
+      ],
+      "startedAt": 1792089373.642891,
+      "completedAt": 1792089374.249977,
+      "exitCode": 0
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:ai-entry-registry"
+      ],
+      "startedAt": 1792089374.250081,
+      "completedAt": 1792089375.446302,
+      "exitCode": 0
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:docs"
+      ],
+      "startedAt": 1792089375.446414,
+      "completedAt": 1792089376.080283,
+      "exitCode": 0
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:roadmap"
+      ],
+      "startedAt": 1792089376.080412,
+      "completedAt": 1792089376.2644649,
+      "exitCode": 0
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "check:project-metrics"
+      ],
+      "startedAt": 1792089376.264596,
+      "completedAt": 1792089376.730807,
+      "exitCode": 0
+    },
+    {
+      "command": [
+        "npx",
+        "tsc",
+        "--noEmit"
+      ],
+      "startedAt": 1792089376.7309198,
+      "completedAt": 1792089428.255072,
+      "exitCode": 0
+    },
+    {
+      "command": [
+        "npx",
+        "eslint",
+        "tests/acceptance/character-chat-m1-source.ts",
+        "tests/regression/R-CHAT-00-m1-source-fidelity.test.ts",
+        "tests/regression/R-CHAT-00-m1-hidden-source-fidelity.test.ts"
+      ],
+      "startedAt": 1792089428.255338,
+      "completedAt": 1792089429.9530299,
+      "exitCode": 0
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "startedAt": 1792089429.953144,
+      "completedAt": 1792089526.622792,
+      "exitCode": 0
+    }
+  ],
+  "initialFailure": {
+    "handle": 28615,
+    "exitCode": 1,
+    "testsPassed": 8,
+    "testsFailed": 4,
+    "reason": "Background name was incorrectly classified with the actor identity purpose by the reused helper. Product validation correctly rejected it.",
+    "resolution": "New scenario helper uses knowledge for every background fragment; original actor helper and archived cohorts unchanged."
+  },
+  "qualityAcceptance": false,
+  "next": "Preregister a fixed-source formal investigation cohort before any model call; preserve original full author truth and the declared discovery condition. Do not amend prior failed episodes or count source checks as narrative quality."
+}

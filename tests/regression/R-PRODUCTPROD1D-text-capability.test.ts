@@ -20,6 +20,34 @@ const configured: AIConfig = {
   baseUrl: 'https://apihub.agnes-ai.com/v1', temperature: 0.7, maxTokens: 0,
 }
 
+it.each(['agnes', 'codex', 'openai'] as const)('selects schema transport only for supported resolved providers (%s)', async provider => {
+  const schema = {name: 'bounded_test', strict: true, schema: {type: 'object', properties: {ok: {type: 'boolean'}}, required: ['ok'], additionalProperties: false}}
+  const runAI = vi.fn(async () => '{"ok":true}')
+  await runConfiguredProductionTextV1({
+    projectId: 7, category: 'product-production', requirementKey: 'text.runtime-package', maximumOutputTokens: 2000,
+    messages: [{role: 'user', content: '已授权测试'}], responseFormat: 'json_object', jsonSchema: schema,
+  }, {resolveConfig: () => ({...configured, provider}), runAI})
+  expect(runAI).toHaveBeenCalledOnce()
+  expect((runAI.mock.calls[0] as unknown[])[5]).toEqual(provider === 'openai' ? {responseFormat: 'json_object'} : {jsonSchema: schema})
+})
+
+it('keeps a provider schema rejection terminal instead of resending as JSON object', async () => {
+  const request = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+    error: {message: 'Unsupported response_format schema', type: 'invalid_request_error'},
+  }), {status: 400, headers: {'content-type': 'application/json'}}))
+  try {
+    await expect(runConfiguredProductionTextV1({
+      projectId: 7, category: 'product-production', requirementKey: 'text.runtime-package', maximumOutputTokens: 2000,
+      messages: [{role: 'user', content: '已授权测试'}], responseFormat: 'json_object',
+      jsonSchema: {name: 'bounded_test', strict: true, schema: {type: 'object', properties: {}, additionalProperties: false}},
+    }, {resolveConfig: () => configured})).rejects.toThrow()
+    expect(request).toHaveBeenCalledOnce()
+    const body = JSON.parse(request.mock.calls[0][1]!.body as string)
+    expect(body.response_format.type).toBe('json_schema')
+    expect(body.max_tokens).toBe(2000)
+  } finally {request.mockRestore()}
+})
+
 describe('R-PRODUCTPROD-1D · reuse existing text provider configuration', () => {
   const readiness = (overrides: Partial<ProductProductionCapabilityReadinessV1> = {}): ProductProductionCapabilityReadinessV1 => ({
     text: {

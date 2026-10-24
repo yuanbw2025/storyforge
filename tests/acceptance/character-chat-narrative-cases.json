@@ -1,0 +1,2662 @@
+{
+  "schema": "storyforge.character-chat-evaluation-cases",
+  "version": 1,
+  "status": "collection-started-not-accepted",
+  "purpose": "CHAT-00 原创工程与人工评测材料；不是已发布作品或真实模型通过证据。",
+  "behaviors": [
+    {
+      "id": "weak-guidance",
+      "instruction": "只提供起始局面，之后给简短自然回应，不替角色安排下一步。",
+      "expectation": "角色从自身目标发起相关行动，在玩家必须决定时等待。"
+    },
+    {
+      "id": "refuse",
+      "instruction": "拒绝角色首次提出的主要建议，并给出一个合理理由。",
+      "expectation": "拒绝改变后续办法、时机或关系理解，不换措辞强推原路线。"
+    },
+    {
+      "id": "alternative",
+      "instruction": "提出一种与角色建议不同但符合已知条件的办法。",
+      "expectation": "角色参与、补充或基于事实反对，新办法有可见后果。"
+    },
+    {
+      "id": "rest",
+      "instruction": "暂时转去闲聊或请求先休息。",
+      "expectation": "节奏降低，未完成事项可搁置，不凭空制造新危机。"
+    },
+    {
+      "id": "return",
+      "instruction": "短暂离开后返回，并提及之前已经发生的变化。",
+      "expectation": "承接同一背景和实际后果，不重开旧矛盾或更换真相。"
+    },
+    {
+      "id": "unexpected",
+      "instruction": "利用明确存在的条件作出情境没有预设的合理选择。",
+      "expectation": "允许新走向或说明真实限制，不暗改历史来守住结局。"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "daily-clock-promise",
+      "split": "development",
+      "mode": "single",
+      "style": "daily",
+      "title": "修好的旧钟",
+      "seed": "邻居约好今天和我一起修旧钟，傍晚我回到了他的修理铺。",
+      "publicFacts": [
+        "旧钟属于玩家，昨天双方约好尝试修复。",
+        "铺里有工具，但没有合适的替换发条。",
+        "附近旧货摊仍营业；玩家没有承诺购买任何东西。"
+      ],
+      "roles": [
+        {
+          "key": "keeper",
+          "name": "周砚",
+          "goals": [
+            "兑现一起修钟的约定",
+            "保留旧钟原有的声音"
+          ],
+          "values": [
+            "不擅自处置别人的物品"
+          ],
+          "privateFacts": [
+            "自己保存了一块能试用的旧发条，但不确定能否耐久。"
+          ],
+          "beliefs": []
+        }
+      ],
+      "authorOnlyFacts": [],
+      "openQuestions": [
+        "是否试用旧发条、找替换件或暂缓修理",
+        "这次合作如何改变两人的理解"
+      ],
+      "allowedIntroductions": [
+        "与修钟有关的可核实观察",
+        "是否愿意同行的邀请"
+      ],
+      "forbiddenChanges": [
+        "把玩家拒绝同行写成已同意",
+        "未经用户选择就宣告丢弃旧钟",
+        "为催促行动突然制造生命危险"
+      ],
+      "closureExamples": [
+        "约定新的修理办法或时间",
+        "决定保留现状并理解原因"
+      ],
+      "requiredConsequences": [
+        "提出试用不等于已安装",
+        "选定办法或暂缓的原因在回来时继续生效"
+      ]
+    },
+    {
+      "id": "inn-missing-seal",
+      "split": "development",
+      "mode": "single",
+      "style": "investigation",
+      "title": "暴雨驿站",
+      "seed": "我和守卫被暴雨困在驿站，驿站刚丢了一件重要物品。",
+      "publicFacts": [
+        "驿站丢失了用于开门验货的铜印。",
+        "停电期间后门没有上锁。",
+        "山路被倒树挡住，屋内暂时安全。"
+      ],
+      "roles": [
+        {
+          "key": "guard",
+          "name": "叶岑",
+          "goals": [
+            "找回铜印",
+            "避免无证据地指责住客"
+          ],
+          "values": [
+            "先核实再指控"
+          ],
+          "privateFacts": [
+            "之前误判过一名旅客，因此对公开指控格外谨慎。"
+          ],
+          "beliefs": [
+            "铜印可能被人借用，但目前没有证据。"
+          ]
+        }
+      ],
+      "authorOnlyFacts": [
+        "铜印被掌柜拿去拓印破损的通行单，放在柜台下的木箱里；守卫和玩家起初都不知道。"
+      ],
+      "openQuestions": [
+        "如何寻找物品或处理离开需求",
+        "信息不足时是否相互信任"
+      ],
+      "allowedIntroductions": [
+        "有位置和接触依据的线索",
+        "合同内临时住客的有限回应"
+      ],
+      "forbiddenChanges": [
+        "为了反转更换铜印去向",
+        "角色未调查就知道木箱秘密",
+        "替玩家接受搜查",
+        "为阻止离开临时改写山路规则"
+      ],
+      "closureExamples": [
+        "找回铜印并澄清误会",
+        "选择先修路，未解决事项明确暂缓"
+      ],
+      "requiredConsequences": [
+        "已检查地点保持检查结果",
+        "玩家拒绝搜查后不能声称已搜查"
+      ]
+    },
+    {
+      "id": "riverside-reading-evening",
+      "split": "development",
+      "mode": "single",
+      "style": "relationship",
+      "title": "尚未安排的朗读夜",
+      "seed": "我与旧书店店主约好筹备周五的朗读夜，今晚过来时发现报名者比预期少。",
+      "publicFacts": [
+        "活动定在两天后，书店的桌椅可以容纳六个人。",
+        "目前只有两人报名，活动尚未取消。",
+        "玩家曾答应一起讨论安排，没有承诺主持、出钱或上台。",
+        "店门口的公告板由书店自己管理，允许修改自己的活动告示。"
+      ],
+      "roles": [
+        {
+          "key": "bookseller",
+          "name": "许听澜",
+          "goals": [
+            "让愿意来的人得到一次值得参加的小型聚会",
+            "与玩家共同确定可承担的安排"
+          ],
+          "values": [
+            "不拿朋友的配合当作理所当然",
+            "宁可活动小，也不虚报报名人数"
+          ],
+          "privateFacts": [
+            "她已准备了一个可以由自己独自读完的短篇，但担心小场面让玩家失望。"
+          ],
+          "beliefs": [
+            "她猜测玩家更喜欢热闹的活动，尚未求证。"
+          ]
+        }
+      ],
+      "authorOnlyFacts": [],
+      "openQuestions": [
+        "保持小规模、另改形式、推迟或取消活动",
+        "谁愿意承担哪些准备工作"
+      ],
+      "allowedIntroductions": [
+        "现有书目内的朗读选段建议",
+        "不涉及强制他人参与的布置和告示安排"
+      ],
+      "forbiddenChanges": [
+        "把玩家的建议当作上台承诺",
+        "凭空增加报名者来消除困难",
+        "将玩家拒绝主持视为背叛",
+        "未征求同意便让玩家承担费用"
+      ],
+      "closureExamples": [
+        "双方确定自己愿意承担的任务",
+        "达成暂缓、缩小或取消活动的决定并留下理由"
+      ],
+      "requiredConsequences": [
+        "角色自己的猜测可以被玩家澄清，澄清后不继续当成事实",
+        "已确认的安排在刷新和回访后持续生效",
+        "玩家拒绝上台后可转为观众、协助或离开，不被强推回主持路线"
+      ]
+    },
+    {
+      "id": "station-misunderstanding",
+      "split": "development",
+      "mode": "multi",
+      "style": "relationship",
+      "title": "没有送到的便条",
+      "seed": "修理站的三名同伴因一张没送到的便条发生了误会，我刚走进来。",
+      "publicFacts": [
+        "今天的修理会议推迟了。",
+        "三人都希望设备尽快恢复工作。"
+      ],
+      "roles": [
+        {
+          "key": "mechanic",
+          "name": "程素",
+          "goals": [
+            "分清任务避免重复劳动"
+          ],
+          "values": [
+            "当面核实"
+          ],
+          "privateFacts": [
+            "昨天把改期便条交给了林照。"
+          ],
+          "beliefs": [
+            "以为顾遥已经收到通知。"
+          ]
+        },
+        {
+          "key": "messenger",
+          "name": "林照",
+          "goals": [
+            "解释自己的失误",
+            "继续帮忙修理"
+          ],
+          "values": [
+            "愿意承担具体责任"
+          ],
+          "privateFacts": [
+            "便条被雨水打湿，自己没及时补送。"
+          ],
+          "beliefs": []
+        },
+        {
+          "key": "planner",
+          "name": "顾遥",
+          "goals": [
+            "确认自己仍被团队重视"
+          ],
+          "values": [
+            "不愿被敷衍"
+          ],
+          "privateFacts": [
+            "为参加会议取消了另一项安排。"
+          ],
+          "beliefs": [
+            "以为自己被故意排除。"
+          ]
+        }
+      ],
+      "authorOnlyFacts": [],
+      "openQuestions": [
+        "便条经过如何被查清",
+        "解释和补救是否被接受"
+      ],
+      "allowedIntroductions": [
+        "基于各自经历的解释",
+        "可被接受或拒绝的补救建议"
+      ],
+      "forbiddenChanges": [
+        "没有转述就知道别人的私聊",
+        "强迫顾遥立刻原谅",
+        "所有角色同时附和同一种说法"
+      ],
+      "closureExamples": [
+        "明确责任并约好补救",
+        "暂未和解但各方决定下一步"
+      ],
+      "requiredConsequences": [
+        "披露只传播给实际听众",
+        "未被接受的道歉不自动变成和解"
+      ]
+    }
+  ],
+  "holdoutPolicy": "正式 M1 测试前另封存至少一个日常和一个调查情境；不把开发样例直接冒充留出集。多人情境在 CHAT-06 进入验收。",
+  "evaluationDesign": {
+    "minimumM1Situations": 3,
+    "behaviorsPerSituation": 6,
+    "modelConfigurations": 2,
+    "repeatsPerCombination": 2,
+    "minimumEpisodes": 72,
+    "usualOpportunitiesPerEpisode": [
+      20,
+      40
+    ],
+    "passedDimensionScore": 4,
+    "targetPassRate": 0.8,
+    "modelConfigurationsStatus": "providers-selected-model-versions-pending-verification",
+    "realModelRunsCompleted": 0,
+    "humanReviewsCompleted": 0,
+    "selectedProviders": [
+      "local-codex",
+      "agnes"
+    ],
+    "providerSelectionEvidence": "作者在本次开发会话中明确选择 Codex 和 Agnes；实际模型标识、连接可用性及费用证据须在运行前记录。",
+    "providerPreflight": [
+      {
+        "provider": "local-codex",
+        "model": "gpt-6.1-sol",
+        "modelSelection": "live-catalog-default",
+        "status": "authoring-candidate-generated-and-restored",
+        "bridgeVersion": "Codex 0.162.0-alpha.17.2",
+        "realGenerationVerified": true,
+        "verifiedAt": "2026-10-13",
+        "acceptedModelCalls": 1,
+        "durationSeconds": 25.256,
+        "inputTokens": 4875,
+        "cachedInputTokens": 3328,
+        "outputTokens": 267,
+        "reasoningOutputTokens": 74,
+        "costUsd": null,
+        "scope": "S2 authoring contract and refresh smoke only; not narrative acceptance",
+        "rawEvidenceSha256": "fa00ac3c252fa5bfd54e25d00b6d40931f69795bc5a3e6925425111b8f8ca117",
+        "actionContractPreflight": {
+          "verifiedAt": "2026-10-13",
+          "acceptedModelCalls": 1,
+          "durationSeconds": 42.779,
+          "kind": "attempt",
+          "waitingForPlayer": true,
+          "fabricatedPlayerMessages": 0,
+          "newFacts": 0,
+          "candidateDidNotWrite": true,
+          "refreshRetained": true,
+          "costUsd": null,
+          "scope": "Real Codex action contract call using an engineering fixture; not a production flow or narrative quality episode",
+          "rawEvidenceSha256": "034860126748a5b7c8f21ff992b8e37139e47879f0cd93c3ccf82060f0761aaf"
+        },
+        "situationProductionPreflight": {
+          "verifiedAt": "2026-10-13",
+          "acceptedModelCalls": 1,
+          "durationSeconds": 62.714,
+          "inputTokens": 8405,
+          "outputTokens": 2674,
+          "candidateCount": 3,
+          "awaitingAuthorSelection": true,
+          "costUsd": null,
+          "refreshObservation": "not-verified: visibility checked before UI settled; separate browser regression verifies refresh",
+          "scope": "Real Codex through formal S3 production Harness with engineering source fixture; not narrative quality evaluation or a human-selected published work",
+          "rawEvidenceSha256": "e1117c1ddff733a4b6a7ed7eca14b7fc6fa51a4dd0b0f8c0b7421145feb8854e",
+          "candidateContentHash": "05623b5d31fa387314511af7936ece378eba9c20cdbc1c8193f5f28723f65eb6"
+        },
+        "normalPlayerPreflights": {
+          "verifiedAt": "2026-10-13",
+          "scope": "Engineering fixture through normal player UI; not independent narrative quality episodes",
+          "costUsd": null,
+          "completeThreeStepFlowVerified": false,
+          "requests": 6,
+          "modelResponses": 5,
+          "adoptedActions": 4,
+          "contractRejections": 1,
+          "unknownResults": 1,
+          "attempts": [
+            {
+              "evidence": "codex-player-preflight.json",
+              "rawEvidenceSha256": "db1f57ed7c7da2643f0e74985b0b2ec43889b6c2ca02545dee5a4b8ae42697bd",
+              "outcome": "opening-adopted; refusal response rejected because private speech tried to pause a shared thread"
+            },
+            {
+              "evidence": "codex-player-preflight-v3.json",
+              "rawEvidenceSha256": "14c55a81f83726b3379c79f93b20151547db04e65fc05b386dce87613873544d",
+              "outcome": "opening/refusal adopted; stale HMR store observer made third-step and refresh observations invalid"
+            },
+            {
+              "evidence": "codex-player-preflight-v3-verified.json",
+              "rawEvidenceSha256": "e4a0c1998e0d08c708f90b6cb9d353760f8650675c667c46c80ec69ab67aaa8f",
+              "outcome": "opening adopted; provider returned unknown on refusal call; stopped without resend"
+            }
+          ]
+        },
+        "runtimeSituationPreflight": {
+          "verifiedAt": "2026-10-13",
+          "requests": 3,
+          "modelResponses": 3,
+          "completedRuns": 2,
+          "refreshRetained": true,
+          "fabricatedPlayerMessages": 0,
+          "addedSituationFacts": 1,
+          "actionKind": "attempt",
+          "waitingForPlayer": true,
+          "elapsedSeconds": 86.179,
+          "costUsd": null,
+          "scope": "Engineering fixture through normal player UI; verifies construction-review-action and persistence, not an independent narrative-quality episode",
+          "evidence": "codex-runtime-situation-preflight.json",
+          "rawEvidenceSha256": "e57b2289389e7f45d73f163bd0d793c86be3d38b41f5bbf2e76e94684bb4adae",
+          "usage": [
+            {
+              "totalTokens": 6929,
+              "inputTokens": 6360,
+              "cachedInputTokens": 0,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 569,
+              "reasoningOutputTokens": 205
+            },
+            {
+              "totalTokens": 6939,
+              "inputTokens": 6478,
+              "cachedInputTokens": 3328,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 461,
+              "reasoningOutputTokens": 61
+            },
+            {
+              "totalTokens": 6570,
+              "inputTokens": 6214,
+              "cachedInputTokens": 0,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 356,
+              "reasoningOutputTokens": 233
+            }
+          ]
+        },
+        "reviewedActionPreflights": {
+          "verifiedAt": "2026-10-13",
+          "scope": "Engineering fixture; not independent narrative quality acceptance",
+          "costUsd": null,
+          "attempts": [
+            {
+              "evidence": "codex-action-reviewed-player-preflight.json",
+              "rawEvidenceSha256": "025944ef0c15dbc1b79da75d6d4b9fcbf2e63522508b1771eb89d8d4b988ff22",
+              "requests": 1,
+              "responses": 1,
+              "completedRuns": 0,
+              "elapsedSeconds": 34.227,
+              "outcome": "opening candidate rejected by deterministic contract: disclosure recipient already knew the public fact; semantic review was not invoked; no player message or consequence committed"
+            },
+            {
+              "evidence": "codex-action-reviewed-player-preflight-v5.json",
+              "rawEvidenceSha256": "798b9ea3cdf1b60bcfa796a5caa47b2a7f18f3465d6b98bee991e4bac33601fb",
+              "requests": 6,
+              "responses": 6,
+              "completedRuns": 3,
+              "adoptedActions": 3,
+              "reviewedActions": 3,
+              "elapsedSeconds": 125.394,
+              "refreshRetained": true,
+              "inputTokens": 37662,
+              "outputTokens": 1571,
+              "costUsd": null,
+              "outcome": "opening invited voluntary input; refusal accepted; explicit continuation paused without pressure or fabricated player actions; no new facts claimed",
+              "reviewerIndependence": "same-provider-and-model runtime check, not independent evaluation"
+            }
+          ]
+        },
+        "relationshipPreflights": {
+          "verifiedAt": "2026-10-13",
+          "scope": "Engineering fixture; not independent quality acceptance",
+          "attempts": [
+            {
+              "evidence": "codex-relationship-player-preflight-v6.json",
+              "rawEvidenceSha256": "fd605abc7959b5348a7a3939b994c6ab29f398dae6387771f492e0c3e3fa7b2d",
+              "requests": 6,
+              "responses": 6,
+              "completedRuns": 3,
+              "adoptedActions": 3,
+              "relationshipChanges": 0,
+              "elapsedSeconds": 99.575,
+              "refreshRetained": true,
+              "costUsd": null,
+              "outcome": "advice accepted; refusal and rest respected; no relationship score changes. Precedes the fix exposing relationship limits and selected history to the actual role context, so it does not verify relationship consequence generation or consumption.",
+              "reviewerIndependence": "same-provider-and-model runtime check, not independent evaluation"
+            },
+            {
+              "evidence": "codex-relationship-player-preflight-v7.json",
+              "rawEvidenceSha256": "19651bce766a0c885c5bb9d47c015069883a813b974e4b5529cb218e52733de5",
+              "requests": 6,
+              "responses": 6,
+              "completedRuns": 3,
+              "adoptedActions": 3,
+              "relationshipChanges": 0,
+              "elapsedSeconds": 111.206,
+              "refreshRetained": true,
+              "costUsd": null,
+              "roleRequestsWithFrozenLimitsAndEvidence": [
+                {
+                  "hasLimits": true,
+                  "hasEvidence": true
+                },
+                {
+                  "hasLimits": true,
+                  "hasEvidence": true
+                },
+                {
+                  "hasLimits": true,
+                  "hasEvidence": true
+                }
+              ],
+              "usage": [
+                {
+                  "totalTokens": 6886,
+                  "inputTokens": 6508,
+                  "cachedInputTokens": 0,
+                  "cacheWriteInputTokens": 0,
+                  "outputTokens": 378,
+                  "reasoningOutputTokens": 231
+                },
+                {
+                  "totalTokens": 7087,
+                  "inputTokens": 6774,
+                  "cachedInputTokens": 3328,
+                  "cacheWriteInputTokens": 0,
+                  "outputTokens": 313,
+                  "reasoningOutputTokens": 46
+                },
+                {
+                  "totalTokens": 6838,
+                  "inputTokens": 6628,
+                  "cachedInputTokens": 0,
+                  "cacheWriteInputTokens": 0,
+                  "outputTokens": 210,
+                  "reasoningOutputTokens": 80
+                },
+                {
+                  "totalTokens": 7295,
+                  "inputTokens": 6983,
+                  "cachedInputTokens": 3328,
+                  "cacheWriteInputTokens": 0,
+                  "outputTokens": 312,
+                  "reasoningOutputTokens": 23
+                },
+                {
+                  "totalTokens": 6983,
+                  "inputTokens": 6695,
+                  "cachedInputTokens": 0,
+                  "cacheWriteInputTokens": 0,
+                  "outputTokens": 288,
+                  "reasoningOutputTokens": 167
+                },
+                {
+                  "totalTokens": 7394,
+                  "inputTokens": 7088,
+                  "cachedInputTokens": 0,
+                  "cacheWriteInputTokens": 0,
+                  "outputTokens": 306,
+                  "reasoningOutputTokens": 43
+                }
+              ],
+              "outcome": "advice accepted; refusal and rest respected with no automatic relationship penalties. All three role requests include the frozen relationship ranges and selected evidence. No relationship update was generated, so real-model positive consequence generation/consumption remains unverified.",
+              "reviewerIndependence": "same-provider-and-model runtime check, not independent evaluation"
+            }
+          ]
+        },
+        "actorReflectionPreflight": {
+          "evidence": "codex-reflection-player-preflight-v8.json",
+          "rawEvidenceSha256": "07799d5902799e7a65cb71d3140ffcbcd525db1aeb1914b753296c1227f8a1d5",
+          "elapsedSeconds": 142.201,
+          "requests": 6,
+          "responses": 6,
+          "completedRuns": 3,
+          "refreshRetained": true,
+          "costUsd": null,
+          "verifiedAt": "2026-10-13",
+          "scope": "Engineering fixture; not independent narrative quality acceptance",
+          "adoptedActions": 3,
+          "planChangedAtFirstTurn": true,
+          "laterRoleRequestsReadAdoptedPlan": [
+            true,
+            true
+          ],
+          "factCounts": [
+            4,
+            4,
+            4
+          ],
+          "beliefChanges": 0,
+          "outcome": "Actor replaced its initial invitation direction with independent evidence checking; next two actual role requests consumed the adopted plan. Refusal and rest respected; no new external facts or belief corrections were generated.",
+          "reviewerIndependence": "same-provider-and-model runtime check, not independent evaluation"
+        },
+        "phaseClosurePreflights": {
+          "status": "bounded-engineering-preflight-passed-not-quality-acceptance",
+          "attempts": [
+            {
+              "evidence": "codex-closure-player-preflight-v8.json",
+              "rawEvidenceSha256": "60ef38c9e3dfc7f637a0bede68859f7c403259c7a028f6590693519a48cb55fc",
+              "status": "closure-rejected",
+              "elapsedSeconds": 199.644,
+              "requests": 8,
+              "responses": 8,
+              "completedRuns": 3,
+              "failedRuns": 1,
+              "adoptedActions": 2,
+              "adoptedSituations": 1,
+              "refreshRetained": null,
+              "costUsd": null,
+              "scope": "Engineering fixture; not independent narrative quality acceptance",
+              "outcome": "Situation publicly established the returned seal. The closing action was rejected because it completed the new clarification goal but could not also complete the old search goal under the single-goal contract. Rejected text, belief withdrawal and plan clearing were not adopted; earlier valid turns and situation remained. No automatic retry.",
+              "reviewerIndependence": "same-provider-and-model runtime check, not independent evaluation"
+            },
+            {
+              "evidence": "codex-closure-player-preflight-v9.json",
+              "rawEvidenceSha256": "f6da9c3e9746578cbb91faa1aed058b22640ed39358250650dcc8ab776ef6e44",
+              "elapsedSeconds": 181.16,
+              "requests": 8,
+              "responses": 8,
+              "completedRuns": 4,
+              "refreshRetained": true,
+              "closureStopsNewRun": true,
+              "status": "engineering-preflight-passed",
+              "failedRuns": 0,
+              "adoptedActions": 3,
+              "adoptedSituations": 1,
+              "closedOwnGoals": 2,
+              "withdrawnHypotheses": 1,
+              "otherRoleGoalPreserved": true,
+              "sharedThreadStatus": "open",
+              "factCount": 6,
+              "costUsd": null,
+              "sourceSnapshotManifestSha256": "13c9a0036a380c52c3b8e8dd270ab7cfea8343f7b033a06068054f279d9c5fd4",
+              "scope": "Engineering fixture with explicit player-authored resolution; not autonomous discovery or independent narrative quality acceptance",
+              "outcome": "After a player situation request publicly established the returned seal, the actor completed both search and clarification goals in one reviewed action, withdrew the obsolete hypothesis, and cleared its plans. The artisan road goal and shared departure question remained unfinished. Refresh matched exactly; continuing the concluded actor caused no model call or state change.",
+              "reviewerIndependence": "same-provider-and-model runtime check, not independent evaluation"
+            }
+          ]
+        },
+        "creatorPlayerPublicationPreflights": {
+          "status": "recorded-production-output-replay-and-live-player-engineering-preflight-passed-not-formal-quality-acceptance",
+          "attempts": [
+            {
+              "evidence": "codex-creator-player-preflight-v9.json",
+              "rawEvidenceSha256": "3e0faad40bdb5515cf28077480c58f653ca8d747d3afd52056420e631521e9f5",
+              "status": "publication-blocked",
+              "elapsedSeconds": 421.796,
+              "requests": 2,
+              "responses": 2,
+              "initialCandidates": 3,
+              "authorSelectionRetainedAfterRefresh": true,
+              "releaseReady": true,
+              "released": false,
+              "playerSessionCreated": false,
+              "costUsd": null,
+              "scope": "Isolated engineering world; actual Codex production outputs; not formal narrative quality acceptance",
+              "outcome": "Actual creator flow reached release-ready but publication created no ProductRelease. Deterministic reproduction found that preserved original producer metadata conflicted with the terminal verifier synthetic carry identity. No new model request or candidate regeneration was used to hide this failure."
+            },
+            {
+              "evidence": "codex-creator-player-preflight-v10.json",
+              "rawEvidenceSha256": "66131bff2b757611ac2bba1f5d11d7d70fa8445166bef9bfeb2933a6f7cc694c",
+              "status": "publication-replay-and-live-player-passed",
+              "elapsedSeconds": 152.259,
+              "productionOutputReplay": {
+                "sourceEvidence": "codex-creator-player-preflight-v9.json",
+                "replayedCalls": 2,
+                "newProviderCalls": 0
+              },
+              "runtimeRequests": 6,
+              "runtimeResponses": 6,
+              "completedRuntimeRuns": 3,
+              "adoptedActions": 3,
+              "initialCandidates": 3,
+              "released": true,
+              "playerSessionCreated": true,
+              "personaPreserved": true,
+              "refreshRetained": true,
+              "noNewRunOnRefresh": true,
+              "costUsd": null,
+              "sourceSnapshotManifestSha256": "cf51a10a688cc60c329d4ee2ffb16bffd839f8e726a6dcc52e3585ee62545f05",
+              "scope": "Engineering fixture replaying unchanged real Codex production outputs, followed by three live Codex player turns. Not a new all-live production trial or independent narrative quality acceptance.",
+              "outcome": "Author selection published successfully; formal player session used the selected scene and Persona. Role offered a practical opening; after refusal/rest it paused its own goal and changed its plans without moving the clock or requiring player participation. Third turn respected quiet. Refresh matched and generated no additional run. No new external fact was produced.",
+              "reviewerIndependence": "same-provider-and-model runtime check, not independent evaluation"
+            }
+          ]
+        },
+        "autonomousSituationPreflights": {
+          "status": "bounded-autonomous-situation-and-restoration-verified-not-quality-acceptance",
+          "attempts": [
+            {
+              "evidence": "codex-progression-player-preflight-v11.json",
+              "rawEvidenceSha256": "0cd67b7373fcc2bbeae9fda04c4dfd3e2118c84782fa52122a6b955c9fe6eae0",
+              "status": "reviewed-role-direction-persisted",
+              "elapsedSeconds": 154.864,
+              "refreshRetained": true,
+              "sourceSnapshotManifestSha256": "0ea738298ea96e0f505ee146fd8af3b12e64cc7651880e6a5a768763847da1ea",
+              "costUsd": null,
+              "outcome": "Three live role actions: the actor independently checked the rear door, recorded the negative observation, moved itself to a public area, then requested local background development tied to its existing goal and thread. Two external consequences and the pending reviewed direction survived refresh. No situation-construction call in this first segment.",
+              "scope": "Engineering fixture with real Codex outputs; not independent narrative quality acceptance",
+              "reviewerIndependence": "same-provider-and-model runtime check, not independent evaluation",
+              "newModelRequests": 6,
+              "newModelResponses": 6
+            },
+            {
+              "evidence": "codex-progression-continuation-preflight-v11.json",
+              "rawEvidenceSha256": "98f412877d9dfce2e3233740b231a9e65fa09058339f5af4ccc3cd719c83815d",
+              "status": "imported-history-blocked-player-ui",
+              "elapsedSeconds": 30.738,
+              "refreshRetained": null,
+              "sourceSnapshotManifestSha256": "0ea738298ea96e0f505ee146fd8af3b12e64cc7651880e6a5a768763847da1ea",
+              "costUsd": null,
+              "outcome": "Restoring the unchanged save exposed that completed historical runs invalidated by import were offered as pending recovery, disabling the role selector. Existing state and direction were preserved. Zero new provider calls; no hidden retry.",
+              "scope": "Engineering fixture with real Codex outputs; not independent narrative quality acceptance",
+              "reviewerIndependence": "same-provider-and-model runtime check, not independent evaluation",
+              "newModelRequests": 0,
+              "newModelResponses": 0
+            },
+            {
+              "evidence": "codex-progression-continuation-preflight-v12.json",
+              "rawEvidenceSha256": "a9640d64ff0f8d86d409590a7a6f28214cbb7f40961d4da428b5a9e573766678",
+              "status": "live-construction-and-action-completed-observer-timeout-retained",
+              "totalObservationSeconds": 250.688,
+              "newRunElapsedSeconds": 88.287,
+              "newModelRequests": 4,
+              "newModelResponses": 4,
+              "newCompletedRuns": 2,
+              "adoptedSituations": 1,
+              "adoptedActions": 1,
+              "newBackgroundFacts": 2,
+              "newActionConsequences": 1,
+              "sourceSnapshotManifestSha256": "735af776a5f4aded7d9a79bfb57539517c9007f58d0f8680495c9998904f199d",
+              "priorEvidence": "codex-progression-player-preflight-v11.json",
+              "costUsd": null,
+              "outcome": "The saved role direction generated two local background observations. The following role request read these new facts without author-only truth; its reviewed action independently inspected the area, recorded a negative finding, and revised its own next plan. Previous facts and the hidden seal location remained. The observer timed out because it counted imported historical running/staled rows as unfinished; both new runs were durably completed. No repeated generation.",
+              "observerFailure": "Preserved in raw evidence; not a model or product failure and not counted as a fully successful observation script.",
+              "restorationCheck": {
+                "evidence": "codex-progression-v12-restoration-check.json",
+                "rawEvidenceSha256": "2bcb12b21f77a2d39c27ff49753fab873b7bd465eb51f08fa1aceeb06df2bc01",
+                "unchangedFromLiveResult": true,
+                "refreshRetained": true,
+                "continueEnabled": true,
+                "newModelRequests": 0
+              },
+              "scope": "Engineering fixture continued from an unchanged real-model save; not independent narrative quality acceptance",
+              "reviewerIndependence": "same-provider-and-model runtime check, not independent evaluation"
+            },
+            {
+              "evidence": "codex-progression-longer-preflight-v12.json",
+              "rawEvidenceSha256": "028468747843831e2b9e978bb45a079c0af798359749f6d8cd3085fb9800d7d8",
+              "status": "longer-continuation-provider-outcome-unknown",
+              "newModelRequests": 1,
+              "newModelResponses": 0,
+              "newCompletedRuns": 0,
+              "adoptedActions": 0,
+              "priorEvidence": "codex-progression-continuation-preflight-v12.json",
+              "priorMessagesAndSituationPreserved": true,
+              "sourceSnapshotManifestSha256": "735af776a5f4aded7d9a79bfb57539517c9007f58d0f8680495c9998904f199d",
+              "costUsd": null,
+              "outcome": "The local Codex bridge reported status unknown before returning a model response. The four-continuation probe stopped at the first new request. No automatic resend or substitute output; previous messages and situation are preserved. This is not narrative quality evidence.",
+              "readOnlyReconciliation": {
+                "evidence": "codex-v12-unknown-reconciliation-v21.json",
+                "rawEvidenceSha256": "9f0c7a22c45fea94de35deafd22d332debdafb0e7fcf0d8537bff902c26313b0",
+                "checkedAt": "2026-10-14",
+                "newModelRequests": 0,
+                "recoverableResponseCharacters": 0,
+                "originalStatusPreserved": "unknown",
+                "finding": "The legacy message identifies a non-success turn/completed notification, but the receipt did not preserve the provider turn status or identity. No precise failure cause or retroactive classification is claimed; the ephemeral request is not replayed. Future bridge calls now retain verified terminal metadata."
+              }
+            }
+          ]
+        },
+        "reviewedBackgroundPreflights": {
+          "status": "bounded-source-visibility-refusal-and-autonomous-continuation-verified-not-quality-acceptance",
+          "attempts": [
+            {
+              "sourceSnapshotHead": "a456ff7d1184128daf1d608851da3b6fe0cb5d3e",
+              "sourceSnapshotManifestSha256": "db120748e0847296130f1fabaeb9473a90ce67de397d145aa0348fb39132b3ee",
+              "newModelRequests": 6,
+              "newModelResponses": 6,
+              "newCompletedRuns": 3,
+              "costUsd": null,
+              "scope": "Isolated engineering fixture with explicitly reviewed frozen-world sources and an author-defined initial situation. Real runtime generation and review, not live authoring production, independent narrative evaluation or a formal M1 episode.",
+              "reviewerIndependence": "same-provider-and-model runtime check, not independent evaluation",
+              "refreshRetained": true,
+              "noNewRunOnRefresh": true,
+              "frozenWorldUnchanged": true,
+              "evidence": "codex-background-player-preflight-v26.json",
+              "rawEvidenceSha256": "14f78b2ef36f19a2f1c1320ce79a92cb8145057b01c0f665dc6eb3fcde0edcf3",
+              "backupSha256": "13ba4415b7066340729af7ee51aa6f558d3e289c3c5feeddea71725268e0fc21",
+              "elapsedSeconds": 112.442,
+              "adoptedActions": 3,
+              "adoptedSituations": 0,
+              "newRuntimeFacts": 0,
+              "usage": {
+                "inputTokens": 67405,
+                "outputTokens": 1915,
+                "reasoningOutputTokens": 528,
+                "totalTokens": 69320
+              },
+              "outcome": "Opening invited an optional inspection. After an explicit refusal the role changed its own plan to an independent check; the second role added a safety concern using public evidence. Actual request bodies carry the private key clue only to its owner, not the other role generator; author-only relationship and future plot are excluded from every request. These three actions do not yet produce external consequences or finish an investigation."
+            },
+            {
+              "sourceSnapshotHead": "a456ff7d1184128daf1d608851da3b6fe0cb5d3e",
+              "sourceSnapshotManifestSha256": "db120748e0847296130f1fabaeb9473a90ce67de397d145aa0348fb39132b3ee",
+              "newModelRequests": 6,
+              "newModelResponses": 6,
+              "newCompletedRuns": 3,
+              "costUsd": null,
+              "scope": "Isolated engineering fixture with explicitly reviewed frozen-world sources and an author-defined initial situation. Real runtime generation and review, not live authoring production, independent narrative evaluation or a formal M1 episode.",
+              "reviewerIndependence": "same-provider-and-model runtime check, not independent evaluation",
+              "refreshRetained": true,
+              "noNewRunOnRefresh": true,
+              "frozenWorldUnchanged": true,
+              "evidence": "codex-background-continuation-preflight-v26.json",
+              "rawEvidenceSha256": "fadd188973b6b9d0c59993de4f12d9f9aef8cd5de3bb59de1e2a27a6a202a6d5",
+              "backupSha256": "764a0ce54e5699a95c6692ae3bf46d79a97f697fd4d56837264781a68dae7e72",
+              "priorEvidence": "codex-background-player-preflight-v26.json",
+              "restorationEqual": true,
+              "newModelRequestsOnRestore": 0,
+              "elapsedSeconds": 122.098,
+              "adoptedActions": 2,
+              "adoptedSituations": 1,
+              "newRuntimeFacts": 2,
+              "usage": {
+                "inputTokens": 72570,
+                "outputTokens": 2454,
+                "reasoningOutputTokens": 640,
+                "totalTokens": 75024
+              },
+              "outcome": "Two explicit continues after importing the unchanged live save. First the role independently checked the entrance route and recorded that action, then requested local background linked to its existing goal and thread. The next trigger constructed one limited sightline observation and the following role action consumed it, explained the still-unverified section and revised its own plan. The player was not moved or forced to operate the key. Original facts remain and no goal is prematurely closed. This is a bounded progression sample, not evidence of clue payoff, resolved investigation or long-run quality."
+            }
+          ]
+        },
+        "mappedPlayerPreflight": {
+          "status": "bounded-mapped-persona-visibility-refusal-and-restoration-verified-not-quality-acceptance",
+          "sourceSnapshotHead": "97f35827450992ecc3c37c6f1a187d64d80e1116",
+          "sourceSnapshotManifestSha256": "6258033ac58ad41df72eadf8e2faa115df04c679e29b9dba789237c45c7ce6fc",
+          "provider": "local-codex",
+          "model": "gpt-6.1-sol",
+          "costUsd": null,
+          "scope": "Isolated engineering fixture with reviewed world player source and a fixture-selected initial situation. Real runtime generation and review, not live authoring production, independent evaluation or a formal M1 episode.",
+          "reviewerIndependence": "same-provider-and-model runtime review, not independent evaluation",
+          "attempts": [
+            {
+              "evidence": "codex-mapped-player-preflight-v27.json",
+              "rawEvidenceSha256": "4cab22271f5fb3fa2a8217cdfb031eaa73e2af0e8cc5467825dd86a365489fd9",
+              "backupSha256": "d9f390a2ea564178d0e3f0255eaa3220b08998d2a4c251cf9f9e37762ba5e3c3",
+              "newModelRequests": 0,
+              "newModelResponses": 0,
+              "newCompletedRuns": 0,
+              "outcome": "Probe timed out selecting an actor control that is intentionally absent in a single-AI-role scene. No model request occurred. Probe corrected to use the shared scheduling control; product code unchanged and original failure retained."
+            },
+            {
+              "evidence": "codex-mapped-player-preflight-v27-second.json",
+              "rawEvidenceSha256": "4136e53cd43c27a9558b942a3c1b5b86e892d6a18fb9d84c32bc96d660cb98a9",
+              "backupSha256": "c6231c8626d2a2038ad224f17375fbf119942b4442e273eed3101f831f328ce3",
+              "newModelRequests": 4,
+              "newModelResponses": 4,
+              "newCompletedRuns": 2,
+              "elapsedSeconds": 66.993,
+              "adoptedActions": 2,
+              "newRuntimeFacts": 1,
+              "refreshRetained": true,
+              "noNewModelRequestOnRefresh": true,
+              "frozenWorldUnchanged": true,
+              "usage": {
+                "inputTokens": 30865,
+                "outputTokens": 1395,
+                "reasoningOutputTokens": 441,
+                "totalTokens": 32260
+              },
+              "outcome": "The role addressed the mapped player by the explicit public name. On refusal it inspected the part itself without dismantling the clock or assigning player work, and kept its goal active. Both role-generation inputs excluded the player-only background; the coordinator review could read that background to enforce its audience. Author-only source remained absent from every request. This produced an inspection action, not a new clue, resolved uncertainty or narrative closure."
+            }
+          ],
+          "zeroCallRestoration": {
+            "evidence": "codex-mapped-player-restoration-v27.json",
+            "rawEvidenceSha256": "5971125cd03dec10f75617e40437a29a7be7a9557c91a06d210a49ec01ae96a5",
+            "backupSha256": "4388056ef7bff91f0a68f62330bfa49ac3af501c947975054b3e3c4e0885b84c",
+            "newModelRequests": 0,
+            "unchangedInteractionState": true,
+            "refreshRetained": true,
+            "outcome": "Imported the unmodified generated save into a fresh isolated browser context. Persona source, messages and consequences match the original interaction state; refresh adds no requests. Historical imported runs are not treated as new generation."
+          }
+        },
+        "factDiscoveryPreflight": {
+          "scope": "Author-confirmed private-fact investigation engineering samples. Real generation and runtime review, not independent scoring or formal M1 episodes.",
+          "segments": [
+            {
+              "evidence": "codex-fact-discovery-preflight-v28.json",
+              "sourceSnapshotHead": "7103b270bfeae0f7cf004b25083983e9aeb0ca82",
+              "sourceSnapshotManifestSha256": "1a684ae4de06c04d6ab9d8bcf90355baf637939af611152ee5d5f6612550cf8c",
+              "rawEvidenceSha256": "ac1c4a50ac573cf937768a10ee244d30635f0e60c9b9420a2731d84932ff9556",
+              "backupSha256": "092ff6a36e0bf1afe737780ba56ad7cd4fdf0f556f1ad165007ec3a88c4d88bd",
+              "status": "action-rejected-before-discovery",
+              "newModelRequests": 2,
+              "newModelResponses": 2,
+              "newCompletedRuns": 0,
+              "failedRuns": 1,
+              "adoptedActions": 0,
+              "elapsedSeconds": 39.844,
+              "costUsd": null,
+              "usage": {
+                "inputTokens": 15077,
+                "outputTokens": 1009,
+                "reasoningOutputTokens": 420,
+                "totalTokens": 16086
+              },
+              "frozenWorldUnchanged": true,
+              "outcome": "The role respected refusal, completed a permitted inspection without naming the unknown truth, registered the inspection fact and requested outcome adjudication. The action reviewer rejected it for failing to reveal the hidden seal and complete the goal before the separate discovery stage. No candidate action or hidden knowledge was committed; original failure retained, no request automatically resent.",
+              "reviewerIndependence": "same-provider-and-model runtime review, not independent evaluation"
+            },
+            {
+              "evidence": "codex-fact-discovery-preflight-v29.json",
+              "sourceSnapshotHead": "915d5d7b4c4a949299bce5b06b94be70e41c5467",
+              "sourceSnapshotManifestSha256": "e9e5d86087e12e47cbfde36b7911d271ecce6a4619fb5744ac5431e65c18775e",
+              "rawEvidenceSha256": "2bece413689e9881009dc7c37f1642cd9ae3bf55f1f8657fb87afa29b23ee2e8",
+              "backupSha256": "711ab0e599a93b30c0e8eaca91e8d418fc6c3ce47eec884a6772dc6b6c9443ab",
+              "status": "reviewed-investigation-discovery-disclosure-and-goal-closure",
+              "newModelRequests": 6,
+              "newModelResponses": 6,
+              "newCompletedRuns": 3,
+              "adoptedActions": 2,
+              "adoptedDiscoveries": 1,
+              "elapsedSeconds": 108.777,
+              "costUsd": null,
+              "usage": {
+                "inputTokens": 45322,
+                "outputTokens": 2224,
+                "reasoningOutputTokens": 568,
+                "totalTokens": 47546
+              },
+              "frozenWorldUnchanged": true,
+              "refreshRetained": true,
+              "noNewModelRequestOnRefresh": true,
+              "outcome": "After the player refused participation and explicitly named the permitted box, the role independently inspected it without knowing the hidden truth. Real construction and review learned the same canonical fact for the guard only. The next role action disclosed it to the player, retrieved the seal, completed its search goal and cleared its plans. It did not invent who placed the seal, close the artisan road goal or the shared thread. The initial role request excluded both truth and condition; the later role request included truth but not condition. Coordinator requests retained authorized hidden context.",
+              "limitations": "The player named the investigation target. This sample does not establish weak-guidance initiative, 20–40-turn quality, cross-scene performance, independent evaluation or commercial latency.",
+              "reviewerIndependence": "same-provider-and-model runtime review, not independent evaluation"
+            },
+            {
+              "evidence": "codex-fact-discovery-incomplete-v29.json",
+              "sourceSnapshotHead": "915d5d7b4c4a949299bce5b06b94be70e41c5467",
+              "sourceSnapshotManifestSha256": "e9e5d86087e12e47cbfde36b7911d271ecce6a4619fb5744ac5431e65c18775e",
+              "rawEvidenceSha256": "75b76ed05170b0d4f15129aa50a79338ff7a89292877afc7deb7658035bccda7",
+              "backupSha256": "d009b1658c4b910e1b21d800de795be7f7e8354b5d2ab7bb91a307c026abaef3",
+              "status": "incomplete-investigation-keeps-truth-unknown",
+              "setup": "Synthetic committed action and synthetic action review: the guard inspected only the outside of the box, explicitly did not open or look inside. Subsequent construction and situation review are real Codex calls.",
+              "newModelRequests": 2,
+              "newModelResponses": 2,
+              "newCompletedRuns": 1,
+              "elapsedSeconds": 24.411,
+              "costUsd": null,
+              "usage": {
+                "inputTokens": 14076,
+                "outputTokens": 482,
+                "reasoningOutputTokens": 28,
+                "totalTokens": 14558
+              },
+              "frozenWorldUnchanged": true,
+              "refreshRetained": true,
+              "noNewModelRequestOnRefresh": true,
+              "outcome": "Both real steps preserved the author condition: not-discovered, original fact audience remains empty, search goal remains active, no fabricated new clue or crisis. The canonical outcome survives refresh.",
+              "reviewerIndependence": "same-provider-and-model runtime review; synthetic action setup, not independent evaluation or a formal M1 episode"
+            }
+          ],
+          "zeroCallRestoration": {
+            "evidence": "codex-fact-discovery-restoration-v29.json",
+            "rawEvidenceSha256": "18d5d1e49c23c0f0d348753a1983f5b5a94a31fe16018fd53e9e9fb8691cc97d",
+            "backupSha256": "da118e1add82ff0a8231d0689b260120e96df4d5f443b1646a2f9ced177798c1",
+            "newModelRequests": 0,
+            "unchangedInteractionState": true,
+            "refreshRetained": true,
+            "outcome": "Imported the unchanged live-model backup into a fresh isolated browser. Canonical fact identity, discovery evidence, disclosure, recovered object and goal closure match exactly. Historical three runs are imported evidence, not fresh generation."
+          }
+        },
+        "worldFactDiscoveryPreflight": {
+          "scope": "Explicit author-approved frozen-world discovery. Original source, condition and initial holders are frozen; source text is never rewritten. Engineering runtime evidence, not formal M1.",
+          "segments": [
+            {
+              "evidence": "codex-world-discovery-preflight-v30.json",
+              "sourceSnapshotHead": "3fa3d418b25aafd74540939e98a2564327ff3d02",
+              "sourceSnapshotManifestSha256": "74b7a4031d877130daeeffd98dfd56753f1f2a622722041ffb5e8ebaacf793f8",
+              "rawEvidenceSha256": "2b14a90f00ce66f2d2f5a34f5236c9776955e5d599b6ced7826ffa181a45031a",
+              "backupSha256": "4e2a9173cdc60aa681f5016dfa908f9e2c46e58ed2869a4ea49cbdee20823c05",
+              "status": "reviewed-world-investigation-canonical-discovery-and-disclosure",
+              "newModelRequests": 6,
+              "newModelResponses": 6,
+              "newCompletedRuns": 3,
+              "adoptedActions": 2,
+              "adoptedDiscoveries": 1,
+              "elapsedSeconds": 87.563,
+              "costUsd": null,
+              "usage": {
+                "inputTokens": 49407,
+                "outputTokens": 2060,
+                "reasoningOutputTokens": 487,
+                "totalTokens": 51467
+              },
+              "frozenWorldUnchanged": true,
+              "refreshRetained": true,
+              "noNewModelRequestOnRefresh": true,
+              "outcome": "The player refused participation and named an already permitted box. Lin Zhou opened and inspected it without prior access to its hidden contents. At event 8 only the investigator learned the original reviewed-world fact with its unchanged source identity; event 9 explicitly disclosed that same fact to the player. The unrelated private parcel remained unknown. The role did not invent who placed the key, assume it was the missing part, or falsely close the repair goal. Initial role input excluded both hidden truths and discovery conditions; later role input contained only its discovered truth, while coordinator/reviewer requests retained authorized hidden context.",
+              "limitations": "Author-confirmed initial candidates are engineering fixtures; six actual Codex generation/review calls test runtime behavior. The player named the target. Not weak-guidance, formal 20–40-turn M1, independent scoring or commercial latency evidence.",
+              "reviewerIndependence": "same-provider-and-model runtime review, not independent evaluation"
+            },
+            {
+              "evidence": "codex-unguided-investigation-preflight-v30.json",
+              "sourceSnapshotHead": "3fa3d418b25aafd74540939e98a2564327ff3d02",
+              "sourceSnapshotManifestSha256": "74b7a4031d877130daeeffd98dfd56753f1f2a622722041ffb5e8ebaacf793f8",
+              "rawEvidenceSha256": "b9f598d04e380c77e8c348fa8d69facd4b36eabdaefef0725332701106875538",
+              "backupSha256": "b7dbe4ec82b30647d4d2319b5490c0170037195b1fa045a0333d1ca5b5b6cf75",
+              "newModelRequests": 12,
+              "newModelResponses": 12,
+              "elapsedSeconds": 260.689,
+              "costUsd": null,
+              "usage": {
+                "inputTokens": 99779,
+                "outputTokens": 4302,
+                "reasoningOutputTokens": 1264,
+                "totalTokens": 104081
+              },
+              "status": "independent-investigations-then-rejected-unregistered-physical-disclosure",
+              "newCompletedRuns": 5,
+              "failedRuns": 1,
+              "adoptedActions": 3,
+              "adoptedDiscoveries": 2,
+              "frozenWorldUnchanged": true,
+              "outcome": "Player only said they entered to shelter from rain and sat near the door; no investigation target named. Three bounded explicit continues: Lin Zhou reassured the player, independently inspected the permitted parcel and box, and learned each original fact privately. The next candidate placed the discovered key visibly on the workbench but omitted disclosures. The real reviewer rejected visibility and consequence completeness. No revealing action or object-move fact was committed; player knowledge remained unchanged. Earlier investigations and both actor-only discoveries were retained.",
+              "limitations": "Short synthetic initial situation with real actions/reviews, no independent rating or formal M1. This is a retained failure, not an overall initiative pass. No automatic retry; incomplete knowledge-consequence registration requires repair."
+            },
+            {
+              "evidence": "codex-physical-reveal-continuation-v31.json",
+              "sourceSnapshotHead": "ef451d55eb67a806eb720f5c7a1ffd011a4d0efd",
+              "sourceSnapshotManifestSha256": "6b5e03624876f67ed696b6a937ce39fa940620b48419e0e3ab6272fc4334c20d",
+              "rawEvidenceSha256": "8cbf1a35d57e177e5bd81406d23ad51d9bdce55af78aab94ab972fa58572a290",
+              "backupSha256": "1ff9f9a038a2a8c3c9fbf35562063caa7f6663ca821d711f4667dd0e3393f615",
+              "priorEvidence": "codex-unguided-investigation-preflight-v30.json",
+              "status": "unchanged-failed-save-resumes-as-legitimate-pause-not-physical-reveal-proof",
+              "unchangedInteractionRestored": true,
+              "newModelRequests": 2,
+              "newModelResponses": 2,
+              "newCompletedRuns": 1,
+              "importedHistoricalRuns": 6,
+              "elapsedSeconds": 41.539,
+              "costUsd": null,
+              "usage": {
+                "inputTokens": 17555,
+                "outputTokens": 640,
+                "reasoningOutputTokens": 226,
+                "totalTokens": 18195
+              },
+              "frozenWorldUnchanged": true,
+              "refreshRetained": true,
+              "noNewModelRequestOnRefresh": true,
+              "outcome": "Imported the unmodified V30 unguided-failure backup with its six historical runs, then explicitly continued once under action prompt v17. A fresh role/reviewer pair completed a legitimate pause, paused only the repair goal and cleared plans. Both discovered truths remained actor-only, no physical move or disclosure was falsely committed, and refresh preserved state. The original failure remains historical evidence.",
+              "limitations": "Proves unchanged-save recovery and safe continuation only. The model did not show an object, so this sample does not validate repair of physical-disclosure generation or overall weak-guidance quality."
+            },
+            {
+              "evidence": "codex-physical-reveal-request-v31.json",
+              "sourceSnapshotHead": "ef451d55eb67a806eb720f5c7a1ffd011a4d0efd",
+              "sourceSnapshotManifestSha256": "6b5e03624876f67ed696b6a937ce39fa940620b48419e0e3ab6272fc4334c20d",
+              "rawEvidenceSha256": "9ce0b37b44f3a7dd6edfc29a32187391347072f30ea70939b750c244f6886eb4",
+              "backupSha256": "cb481ee738cbed3f527bc98fc9af3c7c3e5eb69cd84ce76d0b8d026b898b21fc",
+              "priorEvidence": "codex-unguided-investigation-preflight-v30.json",
+              "status": "targeted-physical-display-with-two-canonical-disclosures",
+              "unchangedInteractionRestored": true,
+              "newModelRequests": 2,
+              "newModelResponses": 2,
+              "newCompletedRuns": 1,
+              "importedHistoricalRuns": 6,
+              "adoptedActions": 1,
+              "adoptedDisclosures": 2,
+              "newPhysicalFacts": 1,
+              "elapsedSeconds": 39.565,
+              "costUsd": null,
+              "usage": {
+                "inputTokens": 17925,
+                "outputTokens": 948,
+                "reasoningOutputTokens": 328,
+                "totalTokens": 18873
+              },
+              "frozenWorldUnchanged": true,
+              "refreshRetained": true,
+              "noNewModelRequestOnRefresh": true,
+              "outcome": "Starting from the unchanged V30 failed-save state, a new player input asked to see only confirmed findings, without naming either hidden truth. The role placed the discovered list on the workbench and pointed to the opened box, quoted both known facts, registered the physical move plus two canonical disclosures to the player, and passed the real six-part review. It did not act for the player, invent an author or key purpose, close the unrelated repair goal or rewrite world source. Text, physical consequence and knowledge changes committed together; refresh retained the result.",
+              "limitations": "One targeted failure-repair sample with an explicit player request. Same-model review, not independent acceptance or evidence that all unguided continuations succeed. The earlier failure and the separate legitimate-pause result remain recorded."
+            }
+          ],
+          "zeroCallRestoration": {
+            "evidence": "codex-world-discovery-restoration-v30.json",
+            "rawEvidenceSha256": "1ba3c0c8e7ed5d20042be5261cf1bd8449d23c22c9d310bc8c90f8d14f4af5fe",
+            "backupSha256": "6d8e2f37f393814d61ad06af09565a0058463f629ed4902a626d816cd6c90999",
+            "newModelRequests": 0,
+            "unchangedInteractionState": true,
+            "refreshRetained": true,
+            "outcome": "Unmodified live-model save imported into a fresh isolated browser. Canonical world source, investigation, discovered audience, subsequent disclosure and still-hidden parcel are identical before and after refresh. Three historical runs are restored evidence, not fresh generation."
+          },
+          "production": {
+            "evidence": "codex-creator-player-world-production-preflight-v30.json",
+            "sourceSnapshotHead": "3fa3d418b25aafd74540939e98a2564327ff3d02",
+            "sourceSnapshotManifestSha256": "74b7a4031d877130daeeffd98dfd56753f1f2a622722041ffb5e8ebaacf793f8",
+            "rawEvidenceSha256": "831e7de9f72c4c152d72e2686097b396dffc8002161138b72e9c01493bbfa2d2",
+            "backupSha256": "00b85adefad8d8627a86091fee797045d318f1587569ab154074dc3744347303",
+            "newModelRequests": 2,
+            "newModelResponses": 2,
+            "elapsedSeconds": 129.018,
+            "costUsd": null,
+            "usage": {
+              "inputTokens": 17553,
+              "outputTokens": 4321,
+              "reasoningOutputTokens": 239,
+              "totalTokens": 21874
+            },
+            "status": "real-candidates-author-selection-and-local-release",
+            "candidateCount": 3,
+            "modelResponsesCompleted": 2,
+            "frozenWorldUnchanged": true,
+            "candidateRefreshNoGeneration": true,
+            "releaseRefreshRetained": true,
+            "noNewModelRequestOnRefresh": true,
+            "outcome": "Two fresh Codex calls generated three complete initial situations and narrative output from frozen mapped-player/world-discovery sources. Every candidate retained exact source text, condition, authorized investigator and mapped prerequisite; author UI selected opening-1, the build reached release-ready and published locally. The required author-choice gate is recorded as one failed deterministic child and one cancelled root before selection; these expected historical statuses remain in the evidence and were not model-call failures. Refresh reused candidates and the released build without new requests.",
+            "limitations": "Isolated engineering world; actual production candidates, author gate and local release verified. No player session or gameplay generated in this production sample, no external publishing, independent quality rating or formal M1."
+          }
+        },
+        "generatedOpeningContinuationPreflight": {
+          "evidence": "codex-generated-opening-extended-v31.json",
+          "sourceSnapshotHead": "ef451d55eb67a806eb720f5c7a1ffd011a4d0efd",
+          "sourceSnapshotManifestSha256": "6b5e03624876f67ed696b6a937ce39fa940620b48419e0e3ab6272fc4334c20d",
+          "rawEvidenceSha256": "052ba4f0986917889fb6d52efa9af2ea734f48a2b52258ee3bc6a1443fd8e14f",
+          "backupSha256": "ca745029b4da64116cbad536d0ae1250ef299ebda7ee839f6bf9371552807b13",
+          "status": "naturally-closed-short-episode-followed-by-confirmed-conversation-blocker",
+          "newModelRequests": 10,
+          "newModelResponses": 10,
+          "newCompletedRuns": 5,
+          "opportunities": 3,
+          "elapsedSeconds": 359.295,
+          "costUsd": null,
+          "usage": {
+            "inputTokens": 87848,
+            "outputTokens": 3935,
+            "reasoningOutputTokens": 1312,
+            "totalTokens": 91783
+          },
+          "refreshRetained": true,
+          "noNewModelRequestOnRefresh": true,
+          "frozenWorldUnchanged": true,
+          "outcome": "Fresh formal session from the unchanged V30 real-generated and locally published opening. Role asked permission to explain its plan, respected refusal of hands-on participation, inspected the exterior independently, obtained a bounded observation through real situation construction/review, then chose to defer disassembly. Its initial inspection goal was fulfilled and thread resolved without solving the whole clock repair, conscripting the player or revealing the unrelated key. Natural early closure was retained rather than forced to 20 opportunities.",
+          "limitations": "Developer-guided short episode, not a registered 20–40-opportunity M1 or independent playtest. Automated generation/review does not establish user enjoyment.",
+          "postClosureDiagnostic": {
+            "evidence": "codex-post-closure-diagnostic-v31.json",
+            "rawEvidenceSha256": "4a19e1817ef8aca306ca4266611d62d5a10e8c187bd91513fb50bdb4126fef89",
+            "actualModelRequests": 0,
+            "attemptedModelRequests": 0,
+            "result": "An ordinary player topic change after closure was stored but reply generation was rejected with current goal concluded. Transport was guarded against new calls, but no call was attempted. This is a real product blocker for ongoing conversation, distinct from appropriately stopping autonomous plot advancement."
+          },
+          "postClosureRepairPreflight": {
+            "evidence": "codex-post-closure-response-v32.json",
+            "sourceSnapshotHead": "364ee810d78e4735b6d996818d009bb292884309",
+            "sourceSnapshotManifestSha256": "9da7fddf3b1404d52c93a9cb18a17e714a8b67bf4601f2045a2d659b04a7ce44",
+            "rawEvidenceSha256": "374855be5bb0fd127951ae21ad48a494baf94ec58b660efef9d4f94a4e700dee",
+            "backupSha256": "9d8bfe1b671afe52e34ce83485deb95e7950ff1a0a34e0235d431d4c385065f8",
+            "status": "post-closure-player-response-reviewed-committed-and-restored",
+            "newModelRequests": 2,
+            "newModelResponses": 2,
+            "newCompletedRuns": 1,
+            "elapsedSeconds": 46.107,
+            "costUsd": null,
+            "usage": {
+              "inputTokens": 18761,
+              "outputTokens": 746,
+              "reasoningOutputTokens": 329,
+              "totalTokens": 19507
+            },
+            "restorationEqual": true,
+            "refreshRetained": true,
+            "noNewModelRequestOnRefresh": true,
+            "closedGoalsRetained": true,
+            "closedThreadsRetained": true,
+            "existingFactsAndKnowledgeRetained": true,
+            "frozenWorldUnchanged": true,
+            "outcome": "Original naturally closed V31 live save restored unchanged. The same ordinary new-topic input that previously failed now produced one reviewed goalKey=null reply based on supplied cautious/stubborn character material. No old goal or thread revival, new facts, disclosures, new plans or situation request. Returned control waiting for player.",
+            "limitations": "One targeted Codex engineering replay, not a formal M1 episode, independent model judgment, long conversation or human playtest.",
+            "portableRestoration": {
+              "evidence": "codex-post-closure-restoration-v32.json",
+              "rawEvidenceSha256": "5618302ec22c1e5b5e0b5fdf203fc36826008a55ba9be79d6a05edc01d7480c8",
+              "backupSha256": "3a5f6e31d0348b2356a43b6dfbcea3d021cb88e890854de7bd8ff4cabd333dca",
+              "actualModelRequests": 0,
+              "historicalRunsRetained": 6,
+              "stateEqual": true,
+              "refreshEqual": true
+            }
+          }
+        },
+        "newSituationAfterClosurePreflight": {
+          "evidence": "codex-new-situation-after-closure-v32.json",
+          "sourceSnapshotHead": "364ee810d78e4735b6d996818d009bb292884309",
+          "sourceSnapshotManifestSha256": "9da7fddf3b1404d52c93a9cb18a17e714a8b67bf4601f2045a2d659b04a7ce44",
+          "rawEvidenceSha256": "dc05923c937f78fbc44dceae658efa7c9a22dcc00607aa9d0690e7b5b458b3f7",
+          "backupSha256": "bba9363b16c39349f8efe3bbd67dff51728d05f7a81ea5222927fe8b3a7eb654",
+          "status": "construction-and-action-completed-but-pending-observation-lost-on-player-input",
+          "newModelRequests": 6,
+          "newModelResponses": 6,
+          "newCompletedRuns": 3,
+          "elapsedSeconds": 100.496,
+          "costUsd": null,
+          "usage": {
+            "inputTokens": 58363,
+            "outputTokens": 2470,
+            "reasoningOutputTokens": 609,
+            "totalTokens": 60833
+          },
+          "refreshRetained": true,
+          "noNewModelRequestOnRefresh": true,
+          "oldGoalsAndThreadsRetained": true,
+          "existingFactsAndKnowledgeRetained": true,
+          "frozenWorldUnchanged": true,
+          "outcome": "Unchanged closed live save; explicit player situation seed made rainwater and an at-risk box into a bounded new background/goal/thread. Role independently completed an exterior inspection and requested its limited result at event 19. Player said they would watch without helping and let the role decide; event 20 cleared pendingSituation before event 22 paused the goal without obtaining the result. All calls completed, but this does not establish meaningful progression.",
+          "implementationFinding": "Completed observation results and future intentions share the same pending field. The old player-input interruption clears both. A new explicitly reviewed observation-result purpose must retain only completed-event evidence, resolve within permissions before the next authorized reply, and never authorize new actions or goals. Historical unmarked requests retain old replay semantics.",
+          "limitations": "Developer-directed diagnostic sample, not formal M1 or human evaluation; interruption is reproduced, while the model pause cannot be attributed solely to the missing pending field.",
+          "observationResultRepairPreflight": {
+            "evidence": "codex-new-situation-after-closure-v33.json",
+            "sourceSnapshotHead": "1b416c280135c89fbec6a0930bcba0d450b19b66",
+            "sourceSnapshotManifestSha256": "36d9e1ddb3575b4a725b9d85db39940c0be6de7b6a2ebd0448c3e5244b392d93",
+            "rawEvidenceSha256": "da4fbe5620cd12c146ae173165cac1d6a592658fdb9014cf72c13862833c0b7a",
+            "backupSha256": "c75e0857158711f9cde620e49e0b64b5ce7a757151c138b1a1a60172d97f0fa4",
+            "status": "completed-observation-result-retained-adjudicated-and-used-in-reply",
+            "newModelRequests": 8,
+            "newModelResponses": 8,
+            "newCompletedRuns": 4,
+            "elapsedSeconds": 125.794,
+            "costUsd": null,
+            "usage": {
+              "inputTokens": 79246,
+              "outputTokens": 3159,
+              "reasoningOutputTokens": 796,
+              "totalTokens": 82405
+            },
+            "restorationEqual": true,
+            "refreshRetained": true,
+            "noNewModelRequestOnRefresh": true,
+            "oldGoalsAndThreadsRetained": true,
+            "existingFactsAndKnowledgeRetained": true,
+            "frozenWorldUnchanged": true,
+            "outcome": "Same original unchanged closed save and same player seed. Event 19 completed an exterior inspection and explicitly marked observation-result. Player refusal of personal participation at event 20 no longer erased it. Event 22 adjudicated visible wet marks at the box floor-contact edge, keeping the contents/other regions unknown. Event 23 used that bounded observation in the role reply and completed the inspection goal/thread, without moving/opening the box or involving the player.",
+            "limitations": "One developer-guided comparison, not controlled statistical evidence or formal M1. Useful information now follows the action, but the role stops at inspection and does not address the wet box; broader proactive story quality remains unproven.",
+            "portableRestoration": {
+              "evidence": "codex-observation-result-restoration-v33.json",
+              "rawEvidenceSha256": "a321f4686ca2a082edb015d764fdf6faf34afce38a3b6a826065896dd25efe26",
+              "backupSha256": "3ddedb4452f456be6950d69a0520e8637df6234223a77816f2f062f02d907a0e",
+              "actualModelRequests": 0,
+              "historicalRunsRetained": 10,
+              "stateEqual": true,
+              "refreshEqual": true
+            }
+          },
+          "caretakingStakesCounterfactual": {
+            "evidence": "codex-owned-box-stakes-v33.json",
+            "sourceSnapshotHead": "1b416c280135c89fbec6a0930bcba0d450b19b66",
+            "sourceSnapshotManifestSha256": "36d9e1ddb3575b4a725b9d85db39940c0be6de7b6a2ebd0448c3e5244b392d93",
+            "rawEvidenceSha256": "93e94c00aecd4011ee3279379b9aae456c2835860480b267378f94a2362ee043",
+            "backupSha256": "525ae99c99efecec73596a4c591b6c8bee7c1039c2e76f1790bf8b21a83f58f0",
+            "status": "explicit-caretaking-stakes-produced-independent-protective-action-and-natural-closure",
+            "newModelRequests": 6,
+            "newModelResponses": 6,
+            "newCompletedRuns": 3,
+            "elapsedSeconds": 106.648,
+            "costUsd": null,
+            "usage": {
+              "inputTokens": 59367,
+              "outputTokens": 2317,
+              "reasoningOutputTokens": 579,
+              "totalTokens": 61684
+            },
+            "restorationEqual": true,
+            "refreshRetained": true,
+            "noNewModelRequestOnRefresh": true,
+            "oldGoalsAndThreadsRetained": true,
+            "existingFactsAndKnowledgeRetained": true,
+            "frozenWorldUnchanged": true,
+            "outcome": "Same V33 code and unchanged original closed save, but the explicit situation seed now states the role is keeping the box for a customer and cares about continued dampness. Construction preserved that concern as a protective goal. Before the next player message, the role independently moved the unopened box onto the existing workbench, away from the leaking door; the reviewed action committed its physical consequence and closed the new goal/thread. The subsequent nonparticipation message received a normal goal-free reply without restarting either closed issue.",
+            "interpretation": "The prior narrow inspection goal could reasonably close after inspection. This sample shows a concrete personal stake can support an independent meaningful action without a prewritten solution. It does not establish causality or justify forcing every completed goal into another conflict.",
+            "limitations": "One developer-directed counterfactual, with changed seed and model variation, not a controlled comparison, formal M1, sustained narrative or human evaluation. The same nonparticipation line came after the protective action, so it is not a matched test of refusal before action. No new continuation was forced after all goals closed.",
+            "portableRestoration": {
+              "evidence": "codex-owned-box-stakes-restoration-v33.json",
+              "rawEvidenceSha256": "ca89798fe30eef2b17ea9d42ea7cb7ab0004b4e245becb51955e532a05e0a23c",
+              "backupSha256": "5640ee35c17bb67bf784dc16d09f056eb02cb77438da384b4d00a1f16111b33d",
+              "actualModelRequests": 0,
+              "historicalRunsRetained": 9,
+              "stateEqual": true,
+              "refreshEqual": true
+            }
+          }
+        },
+        "sourceSuggestionsPreflight": {
+          "verifiedAt": "2026-10-14",
+          "sourceHead": "71eefcabc6988225fa37905964e389b13d5a0e81",
+          "promptVersion": "chat-source-review-v1",
+          "acceptedModelCalls": 1,
+          "selectedPassages": 4,
+          "durationSeconds": 29.136,
+          "inputTokens": 6348,
+          "outputTokens": 1106,
+          "totalTokens": 7454,
+          "costUsd": null,
+          "scope": "Four explicitly authored engineering passages in the normal source-review UI; author-review mode only. Not actor-scoped V38, formal narrative episodes, independent quality grading or human acceptance.",
+          "developmentReview": [
+            "Distinguished past events, mistaken belief, an unknown truth and a possible future reunion.",
+            "Preserved the stated motivation and conditional language habits without inventing an accident or a completed investigation.",
+            "Did not turn a quoted manuscript instruction into authorization or expand the mapped player background into goals."
+          ],
+          "refreshRetained": true,
+          "refreshAdditionalCalls": 0,
+          "authorDraftUnchanged": true,
+          "worldsUnchanged": true,
+          "evidence": "codex-source-suggestions-v37-selected.json",
+          "rawEvidenceSha256": "0f666c8cb81e226669e0d0b19de793e16a98166ed671ddb158808c3b2b0052ad",
+          "restoration": {
+            "evidence": "codex-source-suggestions-restoration-v37.json",
+            "rawEvidenceSha256": "a21287c1d0d1e35b588456f39bda5ebd71c28fffd3002767a8efefdad67114eb",
+            "newModelCalls": 0,
+            "reportAndSourceContextEqual": true,
+            "importedReceiptReverified": true
+          },
+          "preDispatchProbe": {
+            "status": "selection-script-wait-failed-before-dispatch",
+            "modelCalls": 0,
+            "evidence": "codex-source-suggestions-v37.json",
+            "rawEvidenceSha256": "4b6299c8e535858713189ed1b6be676896379f6e035df4b9f0079bb061aa65a0"
+          }
+        },
+        "roleProfilePreflight": {
+          "verifiedAt": "2026-10-14",
+          "sourceHead": "03aeefd8ea21bb0196922c8de376bd98e4705ca9",
+          "promptVersion": "chat-role-profile-v1",
+          "acceptedModelCalls": 1,
+          "selectedPassages": 3,
+          "traits": 6,
+          "durationSeconds": 34.526,
+          "inputTokens": 6141,
+          "outputTokens": 1245,
+          "totalTokens": 7386,
+          "costUsd": null,
+          "scope": "Actor-known engineering passages in the normal author UI. Same-developer review of one real Codex candidate; not independent quality grading, formal narrative episodes, real generated-opening quality or human playtest.",
+          "developmentReview": [
+            "Retained mistaken abandonment belief as uncertain, not the established truth.",
+            "Kept reunion as an unfulfilled and non-guaranteed wish.",
+            "Preserved concern, conditional independent action after refusal and refusal to decide for companions without inventing an earlier accident or promising investigation success.",
+            "Preserved language frequency and uncertainty rather than turning usually/rarely into always/never.",
+            "Did not follow the quoted manuscript instruction or turn it into a role trait."
+          ],
+          "evidence": "codex-role-profile-v40.json",
+          "rawEvidenceSha256": "487c7032116b5b80c99782b3f4bb1dcadce6bb433aa9313beb882589cd82e0ff",
+          "refreshRetained": true,
+          "refreshAdditionalCalls": 0,
+          "draftUnchangedBeforeAdoption": true,
+          "worldUnchanged": true,
+          "restoration": {
+            "evidence": "codex-role-profile-restoration-v40-complete.json",
+            "rawEvidenceSha256": "6a3234cb3c2b63e41a90428c2aba10ed38e41d0edada66e922b733bc100a214b",
+            "newModelCalls": 0,
+            "candidateUnchanged": true,
+            "authorConfirmedTraits": 6,
+            "allTraitsInOpeningTaskAndActorInput": true,
+            "openingUsedEngineeringFixture": true,
+            "adoptedProfileRestored": true,
+            "importedReceiptReverified": true,
+            "receiptRecoveryDidNotWriteDraft": true,
+            "refreshRetained": true
+          },
+          "failedRestorationProbes": [
+            {
+              "evidence": "codex-role-profile-restoration-v40.json",
+              "rawEvidenceSha256": "80064b0ce77d099e7a046018ce831df11894fef6ea8cdd75e9c72ea5a3a79c02",
+              "modelCalls": 0,
+              "reason": "Script supplied backup text instead of a JSON object; rejected before import."
+            },
+            {
+              "evidence": "codex-role-profile-restoration-v40-verified.json",
+              "rawEvidenceSha256": "d76403bb75b78d5a55ee6376739588d0efbaea66a97e593915b1908a2f1f501e",
+              "modelCalls": 0,
+              "reason": "Imported candidate was adopted, then opening-consumer check correctly rejected the test draft missing player background/opening seed. Final probe supplied these explicit engineering settings after adoption."
+            }
+          ]
+        },
+        "observationResultPreflight": {
+          "verifiedAt": "2026-10-14",
+          "scope": "Same-developer development diagnostic from an author-confirmed real profile and real generated opening; not a formal M1 episode or independent human acceptance.",
+          "baseline": {
+            "sourceHead": "03aeefd8ea21bb0196922c8de376bd98e4705ca9",
+            "status": "meaningful-progression-failed",
+            "evidence": "codex-profile-story-v41.json",
+            "rawEvidenceSha256": "0390e34a91b9e3be473bfde8601e7a758d554e75f821d0d9fc3c01911b675e0e",
+            "acceptedModelCalls": 10,
+            "opportunities": 2,
+            "inputTokens": 89614,
+            "outputTokens": 7278,
+            "totalTokens": 96892,
+            "costUsd": null,
+            "finding": "Completed rope inspection produced a no-result assertion solely because the previous action did not supply a result. Goal paused, thread resolved, and explicit continuation repeated waiting without a concrete observation barrier.",
+            "refreshRetained": true,
+            "refreshAdditionalCalls": 0,
+            "confirmedTraitsInActualProductionRequest": 6
+          },
+          "repairStatus": "Same-prefix real Codex diagnostic supports the narrow observation-resolution fix; broader autonomous narrative quality remains unaccepted.",
+          "comparison": {
+            "sourceHead": "c5dd4533a40719451e9af9ff171a6eb67413c52a",
+            "snapshotManifestSha256": "b53a27e92379fc938e0a405395dba4cf1852731e0552632d772e6ab4f73abb2d",
+            "evidence": "codex-observation-resolution-v41.json",
+            "rawEvidenceSha256": "822ecc3e68cb0faeff1814524979463bea93f8b9d79afebc5a4e1cd58b0bdacb",
+            "parentEventPrefixThrough": 6,
+            "acceptedModelCalls": 10,
+            "followupOpportunities": 3,
+            "inputTokens": 95545,
+            "outputTokens": 3398,
+            "totalTokens": 98943,
+            "costUsd": null,
+            "developmentReview": [
+              "Same completed rope inspection and same minimal player response, branched before the original result; original timeline preserved.",
+              "Generated permitted exterior detail (continuous strands and no obvious break) with explicit untested-load and unverified-gate limits, then the actor used the result.",
+              "Responded to a personal question and book-topic change; later return recalled the bounded result and did not restart the paused inspection.",
+              "The actor still chose to pause immediately. This does not establish sustained autonomous progression, entertaining dialogue or independent quality acceptance."
+            ],
+            "refreshRetained": true,
+            "refreshAdditionalCalls": 0,
+            "parentUnchanged": true,
+            "restoration": {
+              "evidence": "codex-observation-restoration-v41.json",
+              "rawEvidenceSha256": "f4607c5bd7ce84a1610684948f225314327d29a3d6b40126eadee32819f307d9",
+              "newModelCalls": 0,
+              "interactionEqual": true,
+              "refreshEqual": true,
+              "worldPreserved": true
+            }
+          }
+        },
+        "initialOpeningReviewPreflight": {
+          "verifiedAt": "2026-10-14",
+          "sourceHead": "781f0477977729f901761a5bc9e77f1fd1f4519e",
+          "snapshotManifestSha256": "793ec3f6abbcc0e63d39c7be811144334d5f15be11dafc2f52907c34c32cbde9",
+          "status": "production-review-supported-runtime-episode-failed",
+          "scope": "One same-developer diagnostic with real generated openings and review; not an independent reviewer, formal M1 episode, human playtest or negative-case calibration.",
+          "evidence": "codex-opening-review-v42.json",
+          "rawEvidenceSha256": "59f3451b12272b035769dac645680189a8991c3c1067159fa1bf11433032d4f9",
+          "acceptedModelCalls": 15,
+          "completedProviderResponses": 15,
+          "inputTokens": 144014,
+          "outputTokens": 13040,
+          "totalTokens": 157054,
+          "costUsd": null,
+          "generatedOpenings": 3,
+          "passedOpeningReviews": 3,
+          "authorSelectedOption": "opening-3",
+          "followupOpportunities": 3,
+          "runtimeRunsCompleted": 5,
+          "runtimeRunsFailed": 1,
+          "developmentReview": [
+            "All three openings kept the gate-inspection purpose and a feasible independent preparatory action. All passed the real five-dimension review; rejection sensitivity remains uncalibrated.",
+            "After a minimal player response declining participation, the actor inspected the swept threshold, consumed a bounded observation, and tried looking at an alternative foothold.",
+            "A later candidate paused the personal goal and disclosed the observation but left threadUpdates empty. The real reviewer rejected the missing thread update against this opening closure signal. The rejected pause and disclosure were not committed; the previous completed observation remains actor-private.",
+            "The sample still trends toward early suspension and repetitive caution. Preserving the original goal and adding an opening review does not establish sustained meaningful story progression."
+          ],
+          "worldUnchanged": true,
+          "restoration": {
+            "evidence": "codex-opening-review-restoration-v42.json",
+            "rawEvidenceSha256": "5c152ea1593869af7712b7229e8f4cfadab8d05ba476b3645ff19cb6f231abc4",
+            "newModelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "reviewRetained": true,
+            "worldPreserved": true
+          },
+          "nextWork": "V43 explicit consequence revision and fresh review now have a narrow same-prefix diagnostic (see actionRevisionPreflight). Preserve the original failure. Sustained meaningful progression across everyday, investigation and relationship scenarios remains unaccepted."
+        },
+        "actionRevisionPreflight": {
+          "verifiedAt": "2026-10-14",
+          "sourceHead": "0925d6291714b2ebca24ff54ee9d937250e2fe8b",
+          "snapshotManifestSha256": "5b8021cfcd97bbcba9f75e4941429a3a9de36355543074996ef2a84010d01a16",
+          "status": "explicit-revision-supported-in-same-prefix-development-diagnostic",
+          "scope": "Exact recorded V42 failed candidate/review replay through the formal Harness in a rebased branch, with zero setup model calls; only the explicit revision and fresh review are new real Codex calls. Same developer, not a new natural episode, independent reviewer, human playtest or formal M1 acceptance.",
+          "evidence": "codex-action-revision-v43-verified.json",
+          "rawEvidenceSha256": "55e73d0fd24ac62dd5eaa1535097ea1b7b9a2034bd37415092773726872cd4ea",
+          "acceptedModelCalls": 2,
+          "completedProviderResponses": 2,
+          "inputTokens": 21629,
+          "outputTokens": 871,
+          "totalTokens": 22500,
+          "durationIncludingSetupMs": 48207,
+          "costUsd": null,
+          "developmentReview": [
+            "Only threadUpdates changed: thread-1 became paused with an exact quote from the original expression. All locked expression/agency fields and the other consequences stayed identical.",
+            "Fresh real six-dimension review passed. Exactly one revised action committed; the original failed run remained failed and the parent timeline/world were unchanged.",
+            "This repairs state bookkeeping for an otherwise unchanged pause. It does not establish sustained autonomous progression or entertaining dialogue."
+          ],
+          "refreshRetained": true,
+          "refreshAdditionalCalls": 0,
+          "restoration": {
+            "evidence": "codex-action-revision-restoration-v43-verified.json",
+            "rawEvidenceSha256": "08d1f098505003d2e9948896ae9f023f06eef6a377ea8d16a71767e0e8924a16",
+            "newModelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "parentPreserved": true,
+            "worldPreserved": true,
+            "originalFailureRetained": true,
+            "sourceReviewRetained": true,
+            "completedHistoryRecognized": true,
+            "resumableRunIds": [],
+            "receiptPolicy": "Imported old receipt remains stale; completed prefix and same-session adopted command exclude it from resumable runs. No receipt rewritten."
+          },
+          "setupAndRestorationFailures": [
+            {
+              "status": "setup-script-error-before-browser-and-model",
+              "cause": "Looked for runId/stepId on content-addressed artifacts instead of joining recorded events by contentHash.",
+              "modelCalls": 0
+            },
+            {
+              "evidence": "codex-action-revision-v43.json",
+              "rawEvidenceSha256": "a0dd7c07ac2fa8df733a4a966d4d8a2e1340d1deda8281db1c6bfed7b71a9515",
+              "cause": "Branch equality assertion omitted registered event-sequence rebasing.",
+              "modelCalls": 0
+            },
+            {
+              "evidence": "codex-action-revision-restoration-v43.json",
+              "rawEvidenceSha256": "53d1cd99aec2b7003601eadfe5ddc6aa95111017d1f23303571522692be68159",
+              "cause": "Expected completed row status after import despite intentional old-receipt invalidation; final check uses the existing verified-completed-prefix classifier.",
+              "modelCalls": 0
+            }
+          ]
+        },
+        "readingEveningPreflight": {
+          "verifiedAt": "2026-10-14",
+          "sourceHead": "0925d6291714b2ebca24ff54ee9d937250e2fe8b",
+          "snapshotManifestSha256": "5b8021cfcd97bbcba9f75e4941429a3a9de36355543074996ef2a84010d01a16",
+          "scenarioId": "riverside-reading-evening",
+          "status": "provider-terminal-failure-before-opening-candidate",
+          "scope": "Low-risk development variation, not holdout or formal M1. Actor name 林舟 retained from the source scaffold; four explicitly reviewed source fields only; excluded fixture investigation identity and tide-gate material checked before generation.",
+          "evidence": "codex-reading-evening-v43-verified.json",
+          "rawEvidenceSha256": "b36768716e0d0542015fb45b790c336c866cbcbf72b090d17d2eccca7554ac08",
+          "acceptedModelCalls": 1,
+          "completedProviderResponses": 0,
+          "failedProviderTurns": 1,
+          "generatedOpenings": 0,
+          "runtimeOpportunities": 0,
+          "totalTokens": null,
+          "costUsd": null,
+          "diagnosis": "Matching provider turn confirmed failed. The bridge retains a sanitized failure only, so underlying provider cause is not established. No automatic retry, candidate adoption, local product release or runtime session. Do not score narrative quality from this attempt.",
+          "restoration": {
+            "evidence": "codex-reading-evening-restoration-v43-complete.json",
+            "rawEvidenceSha256": "71b77517687f2bcc227cc9a0ea091d7c20d0832738f9843a02dd23aea059e1a7",
+            "newModelCalls": 0,
+            "originalRecoveryRequiredStatusRetained": true,
+            "failureRetained": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "noRuntimeCreated": true
+          },
+          "zeroCallScriptFailures": [
+            {
+              "evidence": "codex-reading-evening-v43.json",
+              "cause": "Used original release ID after product-world selection imported it into another scope; corrected to linked.worldReleaseId."
+            },
+            {
+              "evidence": "codex-reading-evening-restoration-v43.json",
+              "cause": "Assumed production had a worldReleaseId field; corrected to registered imported-world readback."
+            },
+            {
+              "evidence": "codex-reading-evening-restoration-v43-verified.json",
+              "cause": "Expected failed build status, but the original and imported build both correctly retained recovery-required; final verification compares the exact original backup state and failure."
+            }
+          ]
+        },
+        "bookCornerPreflight": {
+          "verifiedAt": "2026-10-14",
+          "sourceHead": "b20f15fb4ab9e7fbe8dc0020cd8b21a20396509d",
+          "snapshotManifestSha256": "3b99f282655f09efaaacf59652d81afdaa0144286b6c11867382472f1d4127f0",
+          "scenarioId": "book-corner-at-closing",
+          "status": "engineering-complete-sustained-progression-gap-observed",
+          "scope": "Fresh everyday development diagnostic from reviewed character sources through real S2 consultation, explicit opening-only adoption, frozen consultation lineage, generated and reviewed opening, local release and five player opportunities. Not holdout, independent human review or formal M1.",
+          "evidence": "codex-book-corner-v47.json",
+          "rawEvidenceSha256": "6e125e8f96a1ffad490a7013f53eddc03d34692649e25f53676d1161764349d5",
+          "acceptedModelCalls": 16,
+          "completedProviderResponses": 16,
+          "failedProviderTurns": 0,
+          "generatedOpenings": 3,
+          "runtimeOpportunities": 5,
+          "completedRuntimeActions": 6,
+          "totalTokens": 163410,
+          "inputTokens": 150530,
+          "outputTokens": 12880,
+          "costUsd": null,
+          "observations": [
+            "Actor independently completed the display arrangement in the opening; selected goal and thread closed with a persisted physical consequence.",
+            "A brief player response received a natural reply. The player proposed a signed recommendation card; the actor wrote and placed it without assigning work or buying obligations to the player.",
+            "The player declined writing and buying, then asked why the book mattered. The actor accepted refusal but could not give a specific example. Asked to look, the actor opened the book and saved that action; a further question still produced no concrete reading result.",
+            "All runtime semantic reviews passed, so passing the six checks alone did not detect the failed sustained progression.",
+            "No pending situation was created. Code inspection confirms goal-free post-closure replies prohibit situationRequest, new intentions and goal/thread changes; new intent handoff and ordinary unspecified detail resolution need investigation. This does not establish the sole cause or justify reopening completed goals."
+          ],
+          "timing": {
+            "wholeDiagnosticSeconds": 819.378,
+            "includesManualChoiceAndInspection": true,
+            "notModelLatencyBenchmark": true
+          },
+          "restoration": {
+            "evidence": "codex-book-corner-restoration-v47.json",
+            "rawEvidenceSha256": "bcb910551ccfbfa4f67bda5e3c5b72473c68fddef94d300a6e4c4240bff241eb",
+            "newModelCalls": 0,
+            "consultationLineageRetained": true,
+            "openingReviewRetained": true,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true
+          },
+          "nextWork": "CHAT-02.07/08/11: distinguish casual post-closure reply from a concrete new player request. Add a reviewed bounded transition to a new situation without resurrecting old goals, forcing consent, rewriting established book content or granting hidden knowledge. Complete ordinary observation results under existing author permissions. Compare the preserved prefix plus an independent fresh scenario before acceptance."
+        },
+        "playerFollowupPreflight": {
+          "verifiedAt": "2026-10-14",
+          "sourceHead": "8c4e3d3ba822abd7738b7a919ef87fa1c0e87906",
+          "snapshotManifestSha256": "d90008edff0f964e0c7dbdca1981f4e0f4f706ca738f26e2e0e2e1afe216f88c",
+          "scenarioId": "book-corner-at-closing",
+          "status": "provider-terminal-failure-before-S2-candidate",
+          "scope": "Fresh V48 author draft with explicit allowPlayerFollowupSituations permission. Not a matched-prefix replay; old V47 release and raw failure remain unchanged. Provider failed before any story was generated, so this does not evaluate followup quality.",
+          "evidence": "codex-book-corner-v48.json",
+          "rawEvidenceSha256": "a4efd59259fbc0fab70586405867d0cb3172ce1f0c08ad93307488c450962c71",
+          "acceptedModelCalls": 1,
+          "completedProviderResponses": 0,
+          "failedProviderTurns": 1,
+          "generatedOpenings": 0,
+          "runtimeOpportunities": 0,
+          "totalTokens": null,
+          "costUsd": null,
+          "automaticRetry": false,
+          "diagnosis": "Matching provider turn confirmed failed; sanitized bridge does not establish underlying cause. Diagnostic incorrectly checked view.state rather than status and ended after observation timeout; original timeout and provider terminal proof are both retained. Shared source Harness conservatively retains no-result/unknown; no success or terminal failure was fabricated in its ledger.",
+          "restoration": {
+            "evidence": "codex-book-corner-failure-restoration-v48.json",
+            "rawEvidenceSha256": "f22632a91e4aeef672bfe600297174c3823c05c221d473e5153b7e08233cd7d3",
+            "newModelCalls": 0,
+            "draftEqual": true,
+            "harnessNoResultRetained": true,
+            "requestButtonDisabled": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "noProductionOrRuntime": true
+          },
+          "nextWork": "Obtain real bounded followup-to-result evidence and independent fresh scenario when a chosen provider is available. Preserve historical failed requests without replay. Correct diagnostic state observation for future new runs; formal72episodes and independenthumanreviews remain0."
+        },
+        "memoryCorrectionPreflight": {
+          "verifiedAt": "2026-10-15",
+          "sourceHead": "81e846f02cc3d226df6bba7c0b84b7483aa5f43f",
+          "snapshotManifestSha256": "605fc3d394d968f24f2c0f1efb8015af1c500def8ba5afc97adacbdce4292f85",
+          "scenarioId": "theatre-poster-corrected-participation-v73",
+          "status": "correction-positive-and-negative-controls-verified; weak-followup-rejected",
+          "scope": "Synthetic authored background. Two real runtime opportunities plus one injected negative control with real independent review; development diagnostic only, outside frozen M1 and holdouts.",
+          "evidence": "v73-memory-correction-real/interpretation.json",
+          "rawEvidenceSha256": "112453d7de4d601c65a0d44c3060eb89751d8cc4e46a761778b5fe16f41f2647",
+          "runEvidence": "v73-memory-correction-real/run.json",
+          "runEvidenceSha256": "a34749b1b8109f5f8aadcdf5d4ebe33557b167e1a5f75bbb27e49325ee0883c8",
+          "acceptedModelCalls": 5,
+          "completedProviderResponses": 5,
+          "runtimeOpportunities": 2,
+          "completedRuntimeActions": 1,
+          "failedRuntimeActions": 1,
+          "inputTokens": 42996,
+          "outputTokens": 2660,
+          "totalTokens": 45656,
+          "costUsd": null,
+          "automaticRetry": false,
+          "observations": [
+            "First real action removed contradicted belief and hosting-dependent plan, drew a draft and left its own actionable next step. Correction receipt was committed with the action.",
+            "Weak followup generated a completed layout but also resolved a thread whose question includes handing it to the organizer. The independent reviewer rejected premature thread closure. Original candidate and review retained; this opportunity did not complete.",
+            "Injected contradictory-plan action received one real independent review. It was rejected for continuity, consequences, meaningful direction and correction reconciliation; branch state unchanged.",
+            "The raw diagnostic runner exited zero because its primary correction-positive and negative-control checks passed. This is not overall episode or sustained progression acceptance."
+          ],
+          "negativeControl": {
+            "injectedAction": true,
+            "realReviewCalls": 1,
+            "rejected": true,
+            "stateUnchanged": true
+          },
+          "worldUnchanged": true,
+          "relationshipUnchanged": true,
+          "rejectedFollowupDidNotWrite": true,
+          "reviewerIndependence": "Separate model request using the same Codex model; not an independent provider or human review.",
+          "restoration": {
+            "evidence": "v73-memory-correction-real/restore.json",
+            "rawEvidenceSha256": "c25b84d89b2ed1af6f85f63ec2c60677ecd8b42e9533f51dfa0eebddb4491a29",
+            "newModelCalls": 0,
+            "refreshEqual": true,
+            "matchesSavedInteraction": true,
+            "worldUnchanged": true
+          },
+          "setupFailure": {
+            "evidence": "prepare.json",
+            "requests": 0,
+            "cause": "diagnostic used unsupported intensity gentle; corrected to existing everyday enum before any model call"
+          },
+          "nextWork": "Separate bounded diagnostic in a retained isolated browser for explicit consequence revision. Evaluate own-goal completion versus unresolved delivery or confirmation; keep original failed opportunity. No imported candidate authority, replay or replacement of frozen cases."
+        },
+        "threadFollowupPreflight": {
+          "verifiedAt": "2026-10-15",
+          "sourceHead": "3f50e902d420c170e18ebcf2af5ef6c9789ae11c",
+          "snapshotManifestSha256": "72ff4e2a2e586d9fc2382e33ad800201a8d3dbd0769ae480506e8b1fed3b05f4",
+          "scenarioId": "archive-list-thread-followup-v74",
+          "status": "existing-thread-continuation-passed; explicit-pause-response-rejected",
+          "scope": "Synthetic authored background and injected completed-goal prefix; two independent real runtime opportunities. Development diagnostic only, outside frozen M1 and holdouts.",
+          "runEvidence": "v74-thread-followup-real/run.json",
+          "runEvidenceSha256": "40aa8e1499d430c143b1bc50197d1a213b8b458e491e879bc4f99d017026927a",
+          "acceptedModelCalls": 4,
+          "completedProviderResponses": 4,
+          "runtimeOpportunities": 2,
+          "completedRuntimeActions": 1,
+          "failedRuntimeActions": 1,
+          "totalTokens": 36221,
+          "costUsd": null,
+          "automaticRetry": false,
+          "explicitRevisionCalls": 0,
+          "observations": [
+            "The positive opportunity created its own delivery goal on the existing unfinished thread, placed the checked list on the receiving shelf and resolved the thread without inventing confirmation from the absent recipient. Original completed goal preserved.",
+            "The independent stop branch replied naturally to the explicit request to wait, but independent review rejected missing thread pause and promise effects. The no-goal response contract forbids those writes. No reply or effects were adopted; this is a pause-state contract gap, not successful pause acceptance.",
+            "Script exit zero records completion of the diagnostic, not overall quality acceptance. Original failed candidate and review remain unchanged."
+          ],
+          "rejectedPauseDidNotWrite": true,
+          "oldGoalPreserved": true,
+          "threadCountUnchanged": true,
+          "reviewerIndependence": "Separate model request using the same Codex model; not an independent provider or human.",
+          "restoration": {
+            "restore.json": {
+              "evidence": "v74-thread-followup-real/restore.json",
+              "rawEvidenceSha256": "53238df50d7c8d5a1b5910d3dc00d1004391aa4958d681303df41df702b415d1",
+              "newModelCalls": 0,
+              "matchesSavedInteraction": true,
+              "refreshEqual": true
+            },
+            "restore-stop.json": {
+              "evidence": "v74-thread-followup-real/restore-stop.json",
+              "rawEvidenceSha256": "cf2c4f9f5454b2c1f94e3a3d7c8aba2ad0dad230a9c1433350f1724213429e93",
+              "newModelCalls": 0,
+              "matchesSavedInteraction": true,
+              "refreshEqual": true
+            }
+          },
+          "nextWork": "Represent explicit pause of the actor own unfinished responsibility without reviving a completed goal, then require actual evidence before resuming. Preserve this failed branch; new bounded diagnostic only, no replay or frozen-cohort replacement.",
+          "evidence": "v74-thread-followup-real/interpretation.json",
+          "rawEvidenceSha256": "44a17308bf26ea0cf0f40d113b25a27238c84d88febaa204463fbe6b4e334490"
+        },
+        "playerPausePreflight": {
+          "verifiedAt": "2026-10-15",
+          "sourceHead": "dba9886f88258421639e82b03645ab6e51bf32ab",
+          "snapshotManifestSha256": "9c7c9876231e6c2da1f9d81be12a82c0e6133c3734049a96315cf36512046ed2",
+          "scenarioId": "bookshop-display-player-pause-v75",
+          "status": "pause-continue-resume-passed; weak-assent-acknowledgement-rejected",
+          "scope": "Synthetic authored bookshop background and injected completed-checking prefix. Four independently triggered real opportunities, outside frozen M1, holdouts and human acceptance.",
+          "runEvidence": "v75-player-pause-real/run.json",
+          "runEvidenceSha256": "5a68a2a2183f297a4f1026def3e4bad539bda9e15179c981ceea07aeb59023d1",
+          "acceptedModelCalls": 7,
+          "completedProviderResponses": 7,
+          "runtimeOpportunities": 4,
+          "completedRuntimeActions": 3,
+          "failedRuntimeActions": 1,
+          "totalTokens": 66411,
+          "costUsd": null,
+          "automaticRetry": false,
+          "explicitRevisionCalls": 0,
+          "observations": [
+            "Pause created only the actor remaining posting responsibility and exact player/actor evidence, preserved the completed checking goal, and registered a waiting promise with the original thread paused.",
+            "Explicit continue produced a quiet wait with no situation changes.",
+            "Independent weak-assent branch generated a natural acknowledgement but evidenceFactKeys was empty. The deterministic fact-evidence requirement rejected it before review, so no reply or effects were adopted. The hold survived; this is not acknowledgement quality acceptance.",
+            "After a separate explicit player confirmation, the original branch resumed the same goal, posted the labels, fulfilled the original waiting promise and resolved the original thread. No player participation or absent-recipient confirmation was invented."
+          ],
+          "originalGoalPreserved": true,
+          "threadCountUnchanged": true,
+          "worldUnchanged": true,
+          "reviewerIndependence": "Separate Codex requests with the same model, not a second provider or human.",
+          "restoration": {
+            "evidence": "v75-player-pause-real/restore.json",
+            "rawEvidenceSha256": "75b8df0eedec7dee41490663aaf256a1bebeeac3e85669c9af9271bc8ac758c1",
+            "newModelCalls": 0,
+            "mainInteractionAndRefreshEqual": true,
+            "weakInteractionAndRefreshEqual": true
+          },
+          "setupFailures": [
+            "ENOSPC before isolated server startup, zero model calls. Removed only this task terminal generated dist outputs, preserving source and evidence.",
+            "Readiness GET omitted the required application header and returned 403; corrected against the bridge contract before generation."
+          ],
+          "nextWork": "Permit only an effect-free acknowledgement grounded in the existing confirmed player hold, without requiring unrelated world facts. Keep explicit resume authority and independent semantic review; preserve this failed branch and use a new bounded case for validation.",
+          "evidence": "v75-player-pause-real/interpretation.json",
+          "rawEvidenceSha256": "70be528103a1bb2c139d7aa8e41fa61848ef6903be4461aa428d8358f8802bed"
+        },
+        "conversationEvidencePreflight": {
+          "date": "2026-10-15",
+          "status": "four-local-opportunities-passed-full-validation-pending",
+          "sourceBaseCommit": "157ab1eb3a8103b6a8c014ff9293d85c133938fe",
+          "sourceUncommitted": true,
+          "sourceManifestSha256": "a6132a397f1b72f5db522cbe82b6144548043edd45fcb3a158d754f76a6a5f3f",
+          "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v76-conversation-evidence-real",
+          "requests": 8,
+          "completedRequests": 8,
+          "tokens": 76711,
+          "costUsd": null,
+          "opportunities": 4,
+          "adoptedActions": 4,
+          "continueAndWeakAssentFactFree": true,
+          "pausePreservedUntilExplicitResume": true,
+          "restoredBothBranchesWithZeroCalls": true,
+          "worldUnchanged": true,
+          "retries": 0,
+          "revisions": 0,
+          "countsTowardM1": false,
+          "humanRatings": 0,
+          "secondProvider": false,
+          "interpretationSha256": "60b74b038169e596509cda9df2f7611504776433cd06dee582fd74271abc3d91",
+          "hashes": {
+            "run.json": "7c8ab4613783df6a092568331534b1714d64bb6ff201cfbad51a682b89483ce1",
+            "restore.json": "8917fa39424832ee2b6aa2b2b4a6fdefa65334b377cf1a0ceebb9159e5528d3d",
+            "preregistration.json": "cb0ed645fd97c9b56a685aceb95990203960bc4e200f35e8ef9691f409198340",
+            "diagnostic.mjs": "1ca8372e2f97740fd2761d4e8e8deeebd09469a997f288d0fb2263ebd795a1ae",
+            "prepared-backup.json": "aaaf6b3e4bfaae14793db22cef2f85ff63bb26ec10e5a9f5db27160ef3e81e50",
+            "provider-terminal-proof.json": "4bda090f80e06bc6eed32f763dc01d247fa3a699b59a73df7e899ff240b5408f"
+          },
+          "limitations": [
+            "Synthetic production and checking prefix",
+            "One new Codex sample",
+            "Independent review step uses same model",
+            "Current source not committed; adjacent long-history timing checks unresolved",
+            "Full CI/E2E queued, not passed",
+            "Frozen M1 and human counts unchanged"
+          ],
+          "engineeringFollowup": {
+            "originalTimeoutsRetained": true,
+            "sameSourceProfileSeconds": 34.9,
+            "unchangedNormalFilePassed": 2,
+            "normalTestSeconds": [
+              22.2,
+              0.3
+            ],
+            "testTimeoutsUnchanged": true,
+            "uniqueProductTestsWithPassEvidence": 902,
+            "affectedBrowserPathsWithPassEvidence": 6,
+            "olderV75FullE2E": {
+              "passed": 351,
+              "skipped": 2,
+              "failed": 2
+            },
+            "oldQueuedV76Jobs": "cancelled before test start; final fixed-commit jobs replace outdated fixtures"
+          }
+        },
+        "commitmentRevisionPreflight": {
+          "at": "2026-10-15T10:05:43.671082+00:00",
+          "status": "completed",
+          "purpose": "Existing one-shot consequence revision in a clone of the real V77 failed session; not new formal story or M1 recovery success",
+          "implementationHead": "1f2bbb1ef9be155d06333ae37dd8466bf79ff45e",
+          "sourceSnapshot": {
+            "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+            "head": "6ca589602f9093d5eeea01793f9873f8399fb740",
+            "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v77-real-haj7ozpp/storyforge",
+            "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v77-real-haj7ozpp/manifest.json",
+            "manifestSha256": "de7314ae97d8d33cb555ad4c46410b034c7dfb2d9d74170b6b5ac21c83579512",
+            "files": 3378
+          },
+          "originalFailure": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v77-m1-clock-cohort/clock-r1-refuse-runtime.json",
+          "originalFailureSha256": "d104553285bd043764879e904e671b5f85b365da1f519c129fce277b842c3e6c",
+          "profileIsolation": "Exact closed isolated evaluation browser profile copied; original not opened or modified; no candidate or failed review replay/injection.",
+          "newModelRequests": 2,
+          "providerCompleted": 2,
+          "automaticRetries": 0,
+          "costUsd": null,
+          "usage": {
+            "totalTokens": 22807,
+            "inputTokens": 21703,
+            "cachedInputTokens": 3328,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 1104,
+            "reasoningOutputTokens": 236
+          },
+          "changedCandidateFields": [
+            "commitmentEffects",
+            "nextPossibilities"
+          ],
+          "checks": {
+            "refreshEqual": true,
+            "noModelRequestOnRefresh": true,
+            "textPreserved": true,
+            "oldFailureRetained": true,
+            "revisionUnavailable": true,
+            "originalEvidenceUnchanged": true
+          },
+          "originalAgencyFieldsPreserved": true,
+          "newPromises": 1,
+          "newPromiseTerms": "要开壳检查时，再问你。",
+          "pendingObservation": "observation-result",
+          "worldPreserved": true,
+          "restoration": {
+            "stem": "commitment-revision",
+            "openingReviewRetained": true,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true
+          },
+          "formalM1CountsChanged": false,
+          "humanScored": false,
+          "limitations": [
+            "Old failed episode stays failed; this manually requested extra diagnostic cannot substitute for it.",
+            "Only explicit new promise and related future plans were corrected; no repair result or story closure obtained.",
+            "Same provider action revision and review, not independent human evaluation or second model.",
+            "Full fixed-code CI/E2E are still live and queued; this source snapshot is unchanged."
+          ],
+          "next": "Keep original failures and the successful explicit recovery separately. Continue the next preregistered alternative behavior on the same frozen release, while examining whether commitment omissions repeat before changing generator contracts; do not remove the semantic review.",
+          "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v78-commitment-revision-diagnostic",
+          "rawEvidence": [
+            {
+              "file": "preregistration.json",
+              "sha256": "788b8feb2a39a546acd045f63213382035dde1e322a7e6d635eb08c049641a66"
+            },
+            {
+              "file": "script-binding.json",
+              "sha256": "a680804da2b5cec4f8550e1855a5604e598131b3ce6ef5227266fcc0aad60c1e"
+            },
+            {
+              "file": "runner.mjs",
+              "sha256": "c5d71e5cb472ce9b9bb80098e8338f393e6d868851d3966251933490ae33308b"
+            },
+            {
+              "file": "prepared.json",
+              "sha256": "e8a841b00c9e9fa2f3e451af3900245d6004810891fcce374122030103917cbf"
+            },
+            {
+              "file": "commitment-revision.json",
+              "sha256": "501754877dd1848538a80d2543376552e7fc0a0a287396821873b4f3a9e81dc0"
+            },
+            {
+              "file": "commitment-revision-backup.json",
+              "sha256": "06b6a780d74a4e06168ce2688920ae9b56d9f48ab371e775aa1e7b731216765b"
+            },
+            {
+              "file": "terminal-proof.json",
+              "sha256": "d35b152fe79420ac0be83c22519d4cf79e43dd5e3f009c692bb02cf226ca3257"
+            },
+            {
+              "file": "restoration.mjs",
+              "sha256": "2c81ca3eacf087d76b061cc012307b11cd6150c2206b8ade737b855b95b36918"
+            },
+            {
+              "file": "restoration.json",
+              "sha256": "dfe246d81163efd6922240b26cc0575f9f530b28ba357ce516bf55d775ae20d5"
+            },
+            {
+              "file": "interpretation.json",
+              "sha256": "aad4a77c6b81f0afb8f415e18d733d735bb06929b077a5991f90ba21f626448e"
+            }
+          ]
+        },
+        "reviewNormalizationPreflight": {
+          "at": "2026-10-15T10:43:55.838Z",
+          "implementationHead": "e3b1f0f3bc29c7a744dee27587d8802af28665ec",
+          "type": "read-only deterministic diagnostic of the actual V77 action/review pair; not fresh generation",
+          "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v79-review-normalization-diagnostic",
+          "modelCalls": 0,
+          "result": {
+            "oldContract": {
+              "parsed": false,
+              "error": "Error: [chat-action] 自然转述逐条等义审查不完整"
+            },
+            "newContract": {
+              "parsed": true,
+              "passed": true,
+              "removed": [
+                {
+                  "optionKey": null,
+                  "factKey": "fact-7"
+                }
+              ],
+              "normalizedOutputHash": null
+            },
+            "negative": {
+              "parsed": false,
+              "error": "Error: [chat-review-normalization] 逐字披露审查未通过，不能忽略失败判定"
+            },
+            "sourceUnchanged": true,
+            "noAdoptionAttempted": true,
+            "noRuntimeImported": true
+          },
+          "countsTowardM1": false,
+          "hashes": {
+            "registration.json": "b7bedbe46c9d55b54daf7534fa87884be5bc9ceb10e1e9d85263b99507cfd25b",
+            "runner.mjs": "accffdfcf6c6e6f1c66d495bde137fe48f9cc9b1c7c05941909312ba06d85b8d",
+            "result.json": "ece27a2d8d48f0e059ee80bcd7663137a98f4d8391a5f6bcb54cd5ff689eb922"
+          }
+        },
+        "alternativeContinuationPreflight": {
+          "at": "2026-10-15T11:05:30.079176+00:00",
+          "status": "failed-after-two-successful-opportunities",
+          "purpose": "Bounded new-model diagnostic from the unchanged terminal V77 state imported into an isolated browser; no replay or replacement of formal failure",
+          "implementationHead": "e3b1f0f3bc29c7a744dee27587d8802af28665ec",
+          "manifestSha256": "baaeea021d60ca06da73f98973cc04456ec61dcf83f6aa45ef9457f36d56ce64",
+          "provider": "codex",
+          "model": "gpt-6.1-sol",
+          "newRequests": 8,
+          "completedProviderRequests": 8,
+          "usage": {
+            "totalTokens": 90286,
+            "inputTokens": 86130,
+            "cachedInputTokens": 13312,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 4156,
+            "reasoningOutputTokens": 1239
+          },
+          "costUsd": null,
+          "opportunitiesStarted": 3,
+          "opportunitiesCompleted": 2,
+          "newReviewedActions": 2,
+          "newSituationUpdates": 1,
+          "automaticRetries": 0,
+          "manualRepairs": 0,
+          "observations": [
+            "角色实际询问旧钟零件类别及适配规格，局面更新提供回答；角色回到修理铺说明得到的规格信息，同时保留库存与适配的不确定性，没有购买。",
+            "玩家根据已公开的信息允许开壳但不换件、查清后再决定修法。候选正文接受这项限制并描述检查，却漏记以后仍须遵守的约定；审查仅后果维度拒绝。检查行为和候选未提交。",
+            "新调用使用 action-v30/review-v24；本次新回复没有冗余逐字披露检查，不能声称真实续轮直接重现并验证了V79转换分支。该分支另有原始响应的零调用复现和工程正反例。"
+          ],
+          "failedCandidateNotPublic": true,
+          "originalFailureRetained": true,
+          "worldPreserved": true,
+          "normalizationReports": 0,
+          "restoration": {
+            "openingReviewRetained": true,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true,
+            "runStatusesPreserved": false,
+            "verifiedCompletedHistories": 3,
+            "retainedFailedRuns": 2,
+            "resumableRuns": 0
+          },
+          "restorationFinding": "Five earlier completed calls, already invalidated by the first import, are cancelled by a second import because their historical checkpoints are nonportable. All story, raw responses, world and two failed runs remain; three newly completed calls are still recognized. Recovery not accepted. Existing first raw-status probe was too strict for ordinary receipt invalidation; verified-prefix probe independently confirms the older-history defect.",
+          "formalM1CountsChanged": false,
+          "humanScored": false,
+          "secondProvider": false,
+          "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v80-alternative-continuation-diagnostic",
+          "interpretationSha256": "e5c36ad271e34a9b35f94f6bad35e2fe3011c811d12b3d9e6829a8c573ebfba8",
+          "hashes": {
+            "preregistration.json": "d3f67d2d5bc868b369592f1836dadce1aa35ef176a7f865cb800cbe686ec09e8",
+            "runner.mjs": "65a3f2dc25f7a09bf68c5fbe2e12282a0eb89a5ec9209585d159a87bbad3f603",
+            "prepared.json": "b4fc63adf5bf3a3ec45e7ee1805647af2ac1165dff1b09d42af3acd64e2fea67",
+            "alternative-continuation.json": "d9b9070689723f4733c3995a7ce096326feef683efd00d83cb8b1a9d9d8ed859",
+            "alternative-continuation-backup.json": "46745dec3b9a06d96b3d1f4d1786841e1d0eaa371cde3806e173697651ca53fe",
+            "terminal-read-http-diagnostic.json": "54df77b36b8b6a0a0dc8c94d92f215ef33af9e8bdac76b6d44f90cd6e842e655",
+            "terminal-proof.json": "a199df8a644749cec0bfea095fc066ff217328bdd1b0edc9effbc5d963d6cb93",
+            "restoration.mjs": "7d2709e912bbe079cbf894e59de4894f7ba31534517b9a26216f4272a30d4e09",
+            "restoration.json": "5e9fcc9126d49cca8142867775168dce257c602ef510f55a38f12e2c148d7ace",
+            "restoration-verified.mjs": "4317461375d82da6dc0912e9f8af8f0779ac7d95a2856e729987c895717e6cc6",
+            "restoration-verified.json": "6086f66faae0c21b93fa2c5d2627eedd469ae9fc4f1f59ada770cb4882a27642"
+          },
+          "restorationFollowup": {
+            "implementationHead": "ddf6c76437367ca4cc76425652ac59727eba8e53",
+            "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v81-reimport-history-diagnostic",
+            "source": "exact original V80 backup, not the cancelled-history diagnostic output",
+            "result": {
+              "stem": "alternative-continuation",
+              "runStatusesPreserved": true,
+              "verifiedCompletedHistories": 8,
+              "retainedFailedRuns": 2,
+              "resumableRuns": 0,
+              "openingReviewRetained": true,
+              "modelCalls": 0,
+              "interactionEqual": true,
+              "refreshEqual": true,
+              "worldPreserved": true,
+              "rawEvidenceRetained": true
+            },
+            "hashes": {
+              "registration.json": "28b028bedaa36789d8ffed8954b247a2d6a07429bda9aa3b90860463002aaac1",
+              "runner.mjs": "8258d889147b53e3a714faed5cae7d9fb6f7170fdb5bd4b269f10cd137146c1e",
+              "restoration-verified.json": "d80c4f1dddc4e1f18cd7fee05a8d8b0f0b217cb5b338b5c32c3f939ca06c77aa"
+            },
+            "oldFailuresRetained": true,
+            "storyFailureReclassified": false,
+            "modelCalls": 0,
+            "limits": "Preserves future imports of verifiable completion prefixes; does not silently rewrite previously cancelled records."
+          }
+        },
+        "commitmentGenerationPreflight": {
+          "at": "2026-10-15T11:37:27.669321+00:00",
+          "status": "diagnostic-completed-with-one-rejected-candidate",
+          "scope": "Synthetic engineering context with actual producer and independent model review. First-reply commitment completeness diagnosis only; not M1, story quality, S3 production, human or commercial acceptance.",
+          "baseHead": "cf44490ca2f8ea94200f3a0eee2399f5bea76c20",
+          "uncommittedSourceManifestSha256": "6cc2b187f8c2d20ce52ba0b4764d1fcc4803f6e2f54f2df0e553c25a5ea14c73",
+          "provider": "codex",
+          "model": "gpt-6.1-sol",
+          "producerVersion": "chat-narrative-action-v31",
+          "reviewVersion": "chat-narrative-action-review-v24",
+          "newRequests": 11,
+          "completedProviderRequests": 11,
+          "usage": {
+            "totalTokens": 102199,
+            "inputTokens": 98535,
+            "cachedInputTokens": 13312,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 3664,
+            "reasoningOutputTokens": 1267
+          },
+          "costUsd": null,
+          "casesStarted": 6,
+          "adoptedResponses": 5,
+          "rejectedResponses": 1,
+          "newPromiseCandidates": 3,
+          "adoptedPromises": 2,
+          "nonPromiseCases": 3,
+          "automaticRetries": 0,
+          "manualRepairs": 0,
+          "observations": [
+            "三个接受未来约定的候选均登记完整promise条款；其中两个通过独立审查并采用。第一个因没有事实依据且有新承诺，不符合现行纯对话豁免，在审查前被确定性拒绝；不能将它计为完整通过。",
+            "未定提议、当前动作范围和普通状态说明均未强造承诺，分别通过审查。只看后门的候选登记已做动作，没有编造发现或完成寻找目标。",
+            "全部是合成工程上下文中的真实首轮生成；没有真实内容生产、后续履约、完整故事、独立人评或第二提供商验证。不能据此声称消除漏记、改善效应大小或达到M1。"
+          ],
+          "restoration": {
+            "cases": 6,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true,
+            "historyPreserved": true
+          },
+          "formalM1CountsChanged": false,
+          "humanScored": false,
+          "secondProvider": false,
+          "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v82-commitment-generation-diagnostic",
+          "hashes": {
+            "before-disclosure-backup.json": "8a2d834997032fe1e193dd9098f13bca79de2931db0d139ef1e9267cb43e19fa",
+            "before-disclosure-prepared.json": "1a92366600cf4c1d94f6adfdb0411407c0aa4a1890a44d7dbb777306ad13e0f3",
+            "before-disclosure.json": "e8c78b90ad88463fbed5af938e01661752315731edce50340e859c430ed8d426",
+            "before-involvement-backup.json": "8703f8f99833bbd9db9a0f5d946f5b19308f06369097008afd716573ef4ac9bd",
+            "before-involvement-prepared.json": "11745568b242074cca06cacb7b3f39b28a5539c3f38061ee39be73e8c1c455a6",
+            "before-involvement.json": "0893485893d5fea3b404db50cf1fad6513dd95f6870edca75d06e7afa3a058d9",
+            "current-scope-backup.json": "a2d5d2a8e0bc4f7b2337c05907624fd5dedfa0395046a5a179f54eca59552f08",
+            "current-scope-prepared.json": "8ad9a8bee842142fb95bd37ae6adb9fc994e9c42b2eb7178466c12aa33fc8693",
+            "current-scope.json": "9af2e041e84b11be1b2aa74e6109f30f17082b7b9e7f677a1d376761a1f18041",
+            "ordinary-status-backup.json": "5eb38717c78d968a7e1bfdb810ddf199d7cae0e1f09c923e7fcb4724ab36cdd0",
+            "ordinary-status-prepared.json": "c1b46a6b9327bd3ea51dcea9806919d7c8db803263084a9765bdc240dd34029a",
+            "ordinary-status.json": "fadfd29d5c853adda2e6a07eda0d5f11c22e5bd0e786617966975f9ba1fee2ae",
+            "registration.json": "6568f5eb067bac428a1a58cbea590c17c705ddcebfbd72cd6b89ec2b6e05468e",
+            "report-after-check-backup.json": "6737d48dd191c26c604e3ca78ab0bf2817bc340996aee2e0d9b2c8e97d2908f9",
+            "report-after-check-prepared.json": "46004bf3bdfc2a1c0787481b1b9133ac34afbb60d0af7e5610ee55a8b44e6de9",
+            "report-after-check.json": "39347faeccabbd890d881ab59a4fcff6dfe50ea2299c8931aa3eea04d22624d1",
+            "restoration.json": "a8d3b5e8350b1ea6abfaacfb37614364ebd1262d6288aece2276cb257486c137",
+            "restoration.mjs": "02567346a7faa3a8f4037c0e811985f2c99e2bcb26aeb3941825f2f125c60468",
+            "result.json": "cf22b33b0f73d68668b66e0750bd852416e5eaa778ba4452538c59685dbe4019",
+            "runner.mjs": "3eca4887860691f45f117987504aebfd161d312ac341001ab4251afb45d051ec",
+            "tentative-idea-backup.json": "3f148da3d37627272d0b08ababfdaf1dc9adfdd47d5a82d94d3e7028429bccde",
+            "tentative-idea-prepared.json": "85d416193971946d529ef734c00aff4b5da1f841334430a58569d51fcf7cf8f2",
+            "tentative-idea.json": "d28c661039bb0b0382db84a7e99d612cf15e6b1ff0337613a643094dced9eed8"
+          },
+          "interpretationSha256": "c9c476c978cae602509f5547cf67b472f3042fdbe0c544d380903c0a06fd73c8"
+        },
+        "promiseRequestPreflight": {
+          "at": "2026-10-15T12:06:57.705476+00:00",
+          "status": "six-first-response-diagnostics-adopted",
+          "scope": "Synthetic engineering context, actual producer and independent review; six first-response diagnostics for explicit player-request promise provenance. Not M1, S3 production, story quality, human or commercial acceptance. Prior failures remain unchanged.",
+          "baseHead": "5b0df5713a2eda5f9ba6938c7589623180e1ca09",
+          "uncommittedSourceManifestSha256": "e3c9da170301f6f36d422497a4e81c72081e47d66cc96d002e7b4eb2d756ef51",
+          "provider": "codex",
+          "model": "gpt-6.1-sol",
+          "producerVersion": "chat-narrative-action-v32",
+          "reviewVersion": "chat-narrative-action-review-v25",
+          "newRequests": 12,
+          "completedProviderRequests": 12,
+          "usage": {
+            "totalTokens": 114348,
+            "inputTokens": 110507,
+            "cachedInputTokens": 16640,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 3841,
+            "reasoningOutputTokens": 981
+          },
+          "costUsd": null,
+          "casesStarted": 6,
+          "adoptedResponses": 6,
+          "sourceBoundPromises": 3,
+          "nonPromiseResponses": 3,
+          "automaticRetries": 0,
+          "manualRepairs": 0,
+          "observations": [
+            "三个新约定均使用promiseRequest绑定实际玩家消息，运行时requested与角色声明共同保留；没有引用无关世界事实。",
+            "未定提议、只问现状和要求替掌柜保证未知结果的三种情境均未生成承诺；第三种明确拒绝替他人保证。",
+            "合成上下文首轮工程诊断，不含真实作品生产、独立人评、第二提供商、完整故事或长期回合；不能从六例推出总体通过率。"
+          ],
+          "restoration": {
+            "cases": 6,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true,
+            "historyPreserved": true
+          },
+          "formalM1CountsChanged": false,
+          "humanScored": false,
+          "secondProvider": false,
+          "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v83-promise-request-diagnostic",
+          "hashes": {
+            "participation-permission-backup.json": "22ccaa9a2da6d324a91630fd3927666b25785339fa92d9512d96b1bf4fb51cc9",
+            "participation-permission-prepared.json": "5b6676b7f4073624937847fff9f37197d6b9730a1ab3ac559a1e78401ad2a04a",
+            "participation-permission.json": "b8da7754e2e2a171b7c70f86a3ab0b4a9f87f1ea86fc35013e98b46b670988c8",
+            "registration.json": "a43a56b7f59f6907fec4a2dc5c294a2e4c6f0033f83ba6fab97ee9bdfee79cbf",
+            "report-observation-backup.json": "2494c7b5a543418aae1c134aaf1c31366acf284a1babf53cde03cb7710d45a31",
+            "report-observation-prepared.json": "b381dfc760d14ea96004e1d8d6d3a58bee5b7dfd8b3add3af4efd8bb3e3cbeb4",
+            "report-observation.json": "555fc717a1633ef0443f4c476e83bd6a064a97b6c561fa38e926004dd6e674ee",
+            "restoration.json": "8dd5d6dc583a7af3fa8d224fbd1eb48c98813b29fe59f370033ceae69f2a1258",
+            "restoration.mjs": "96e892e469d2d0aec5fc7eeba858f3b0a6b363967e4bda32d4a1ecaf3935e75e",
+            "result.json": "18cb8a2c89eca50c5ad3dd7fde0e34442fe52b5b76ebd8db6e7e5e79403ec1c5",
+            "runner.mjs": "455794001325634c27836ab2215c5f7ed9025143498cac348b48cd82d86f6d40",
+            "status-only-backup.json": "80ea7ef23fb022d6d6f1d9522c1659c7e09b985f034ee81f87fa0e9dccc70640",
+            "status-only-prepared.json": "4b964811c96b96d9bac22c1598efa897fb0eb5bbbbcf1276eeb9aa6ac6b81a6c",
+            "status-only.json": "4909e5799a9a674b4dcb994fc23677e955e1b8edca457828524d57db9e9a1fc0",
+            "tentative-proposal-backup.json": "16865b068b72e414f742bc197457f2e82abd12a023415eb2bfa8bc877e6f75dd",
+            "tentative-proposal-prepared.json": "0a38cb7925209f2e06af1f5a954b5111a236638e26ca21e768ea97f7a865d129",
+            "tentative-proposal.json": "8fcb6327eebf5510b6cd01cc1b90e8090f4f4ff358fd5df11378c9492dd3d4c3",
+            "third-party-guarantee-backup.json": "d6e5ac5dce9e18f3460e076ce9ee404005c37e654d9395c6cb0677cd749e7662",
+            "third-party-guarantee-prepared.json": "b7618b88979038efda50647d982b4b2a2cbd18310750e8a62a0f5927cc11dfef",
+            "third-party-guarantee.json": "d81d509c1c26131470654e5ef981896c1ac6a19494073d7077814088fddd277c",
+            "uncertain-clue-backup.json": "445cf99bdfd6fe9caa9598b66e3545657d79f92833721520119bc9fa58b0feae",
+            "uncertain-clue-prepared.json": "409793d1650cba2761295f3eccf97828d560e080c74101444da68b0f44066337",
+            "uncertain-clue.json": "936cad1205f8b03dfdd60b504be61a313b101cd9eef05d48ec541038c929f263"
+          },
+          "interpretationSha256": "81c0d3a4b7bd47355ea30289ec429e7b4ef1b6f8e679d43da6f2bea81cfceace",
+          "followthrough": {
+            "at": "2026-10-15T12:03:16.737Z",
+            "status": "first-continuation-rejected; second-opportunity-not-dispatched",
+            "scope": "Two explicitly triggered real-model followthrough opportunities from a copied accepted V83 synthetic-context promise; no original modification, M1 count, content production, human rating or long-term acceptance.",
+            "sourceManifestSha256": "e3c9da170301f6f36d422497a4e81c72081e47d66cc96d002e7b4eb2d756ef51",
+            "newRequests": 2,
+            "completedProviderRequests": 2,
+            "usage": {
+              "totalTokens": 19770,
+              "inputTokens": 18803,
+              "cachedInputTokens": 3328,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 967,
+              "reasoningOutputTokens": 568
+            },
+            "costUsd": null,
+            "opportunitiesPlanned": 2,
+            "opportunitiesStarted": 1,
+            "actionsAdopted": 0,
+            "automaticRetries": 0,
+            "manualRepairs": 0,
+            "finding": "角色写出自己尝试查看门口但等待玩家，未登记实际观察或履约；独立审查仅consequences拒绝。原约定与玩家请求保持，后续追问未发送，不重试。此工程夹具未开放actor situation expansion，不能将本例泛化为正式制作情境的结果构建结论。",
+            "restoration": {
+              "cases": 1,
+              "modelCalls": 0,
+              "interactionEqual": true,
+              "refreshEqual": true,
+              "worldPreserved": true,
+              "rawEvidenceRetained": true,
+              "historyPreserved": true
+            },
+            "formalM1CountsChanged": false,
+            "humanScored": false,
+            "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v83-promise-followthrough-diagnostic",
+            "hashes": {
+              "followthrough-backup.json": "44e00bf44cbc004b72edbef73777fd1a4b65577557739383ca8516631c94d979",
+              "followthrough.json": "c5bfc69710aaf83b1ac122b3f38fcc5612293e89233bfa70d87a95123c7e9a91",
+              "prepared.json": "1ddd6be46853af2da84d518a70196de213519647dc09677281133e82b401d1ff",
+              "registration.json": "4165723fc2f7cb393a4adcdbf8c17b7c37a1054494816fdd8151c0893619d362",
+              "restoration.json": "f7c548278406b678e9c6afbc6ce329cd5ac595dd6214e7994ffb810ab7583fbb",
+              "restoration.mjs": "1e08402caf85795e628096cec71305645f4c7c4d55fe9b1c983dc0c234fc0eec",
+              "runner.mjs": "c7222ab6851adac0416a672b616a44d5a545237988bc9a54ec9db9bd45371419"
+            },
+            "interpretationSha256": "dae542ede1d4fe9db99ac414437a54f0971e531e0d68edcd17a141307fc4fe26"
+          }
+        },
+        "producedClockContinuationPreflight": {
+          "at": "2026-10-15T12:35:46.140148+00:00",
+          "status": "failed-at-fifth-opportunity",
+          "countsTowardM1": false,
+          "sourceSnapshotHead": "3668d6fe9256efb0f20297245ebb096c16783c30",
+          "manifestSha256": "9604dcf6c26cbe01fedbd722eea24c7591718f8d47edeada97a5fb7bb8f09d36",
+          "implementationHead": "7bfea237346a1c46287b6e6039e503058a9794e0",
+          "provider": "codex",
+          "model": "gpt-6.1-sol",
+          "source": "Unchanged terminal V80 backup, formally produced V77 clock ProductRelease; no production repeated. New runtime diagnostic only.",
+          "playerOpportunities": 5,
+          "adoptedActions": 4,
+          "adoptedSituations": 2,
+          "failedActions": 1,
+          "newRequests": 14,
+          "completedRequests": 14,
+          "usage": {
+            "totalTokens": 173853,
+            "inputTokens": 167513,
+            "outputTokens": 6340,
+            "cachedInputTokens": 9984,
+            "reasoningOutputTokens": 1757
+          },
+          "costUsd": null,
+          "outcome": "Two authorized inspections and concrete limited observation results adopted. Actor proposed the second method; player authorized without prescribing findings. Second report rejected by parser because reviewer appended a positive check for cited fact-15 already known to all listeners. Response and consequences not adopted.",
+          "interpretation": "Confirms useful local actions and information change; does not prove repaired-clock closure, promise fulfillment, long narrative quality or commercial usability. Repeated permissions/continue clicks and waiting cost remain visible.",
+          "recovery": {
+            "stem": "clock-continuation",
+            "runStatusesPreserved": true,
+            "verifiedCompletedHistories": 14,
+            "retainedFailedRuns": 3,
+            "resumableRuns": 0,
+            "openingReviewRetained": true,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true
+          },
+          "terminalRequestProof": "terminal-request-proof.json",
+          "serverClosed": true,
+          "priorFailuresUnchanged": true,
+          "noRetryOrRepair": true,
+          "localEvidenceDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v84-produced-clock-continuation",
+          "evidenceHashes": {
+            "clock-continuation.json": "86ae47301d632ce27d390943ffe5eacde5a338ab59691f98586ed3e4680685f8",
+            "alternative-transport-progress.json": "9d649d250fb28acfbf62608c702fafe8ba0b1c47c5e2e574b0dfe800d7244d4d",
+            "prepared.json": "9db7e1cd60091d2fd42d67081586b10b0614de4d94b26da47e56113a08675056",
+            "restoration.mjs": "b38ac3cecaf9d221647328878fce291809180eea984b3b2752b10e7e678d04f6",
+            "runner.mjs": "89351dc872014c4e74058a7e4d89568a9e7790faa58b28bf890834d6c475e49e",
+            "interpretation.json": "f62356ab38cbeb93ac434552704b5036c2049d65ba8885b42a33a472c3b66fe6",
+            "terminal-request-proof.json": "3f68cbf5c95a1367b3266c920f8986c2d043e5ddb90510495093ae4b4b81436c",
+            "clock-continuation-progress.json": "7515afe714371584afcdf83639c531ee43f32d1ff478806cbf703b44a7afddfa",
+            "restoration-verified.json": "9c8cd012f8468f0f3b199dee1f77d37bc1ce84a0c125a22fa17cac3dabfff8ff",
+            "preregistration.json": "f12f282dc81019379ee1f12e7372da73e39c0dc8eb3918f194cdcb974e8ff781",
+            "clock-continuation-backup.json": "c0f726078494ea64f4f49395e223a196e81bac4faa8ce927499a503ba3660820",
+            "counterfactual-normalization.json": "583fcf05268f1f62b424753b247ead9be38be24053ebc0fab516c3b1e6bf35b5",
+            "counterfactual-normalization-origin-only.mjs": "6e5478c2c2bef9dd23ee70c44c1dc914fd353f6c71fee68f14ded97c4d006127",
+            "counterfactual-normalization.mjs": "5941ae7800cef87d9e953cb4bbb1fb2367d15bae9d2d80a8ac9df09ebdbc76fa",
+            "counterfactual-first-navigation-failure.json": "0c9387e987abd0d3db5c516736d0598610446438524951ad87d599bafa37e58b"
+          },
+          "normalizationCounterfactual": {
+            "calls": 0,
+            "newVersion": "chat-narrative-action-review-v26",
+            "sourceUnchanged": true,
+            "oldVersionStillRejected": true,
+            "negativeAndUnknownListenerRejected": true,
+            "originalFailureNotReplaced": true,
+            "notModelAcceptance": true,
+            "evidenceSha256": "583fcf05268f1f62b424753b247ead9be38be24053ebc0fab516c3b1e6bf35b5",
+            "initialNavigationFailure": "Application-load timeout before evaluation; retained. Origin-only evaluation succeeded; UI verified separately."
+          },
+          "repairImplementation": {
+            "commit": "c2ef8237758b0c77c3a8064347231ccbfdfa2530",
+            "mergedHead": "1eaf36366e421b0879d5794777467c553a534f83",
+            "upstreamMain": "e8ce0a0dbab8b25be6851cf7d77c9e7c4786ed2b",
+            "reviewVersions": [
+              "chat-narrative-action-review-v26",
+              "chat-narrative-options-review-v20"
+            ],
+            "newRealModelAcceptance": false,
+            "originalOutcomeUnchanged": true,
+            "engineering": "110 directed; 991 product cases have passing evidence across original run plus unchanged-timeout recheck (initial six timeouts retained); 9 browser paths; required gates. Merged source: 92 directed, 5 distribution tests, 11 browser paths, gates/types/full lint/build. Full CI/E2E queued, not passed.",
+            "fullValidationStatus": "V85 CI/E2E confirmed unstarted and superseded by V86 implementation; cancelled143 receipts retained. Current V86 fixed-source CI/E2E queued, not passed."
+          }
+        },
+        "existingGoalPausePreflight": {
+          "at": "2026-10-15T13:01:17.318781+00:00",
+          "status": "failed-first-pause-response",
+          "countsTowardM1": false,
+          "sourceSnapshotHead": "60c8d2c30066877a26d7163cce5652b772c035ac",
+          "manifestSha256": "8691751b9a736250caf270ce76b21b29d1f59521c5e4990991c3d04c3338935c",
+          "newRequests": 2,
+          "completedRequests": 2,
+          "knownTokens": 27072,
+          "costUsd": null,
+          "adoptedActions": 0,
+          "opportunities": 1,
+          "returnNotDispatched": true,
+          "failure": "Six review dimensions: five pass, consequences rejects omitted waiting promise and missing player pause provenance. Candidate only sets goalStatus=paused; not adopted.",
+          "contractFinding": "Existing playerPause construction currently only available through threadFollowupGoal.pauseRequest for a new own followup goal. Existing active or self-paused goals have no equivalent source-bound pause input. New existing-goal pause contract required; do not relax review or synthesize old metadata.",
+          "restoration": {
+            "stem": "clock-pause-return",
+            "runStatusesPreserved": true,
+            "verifiedCompletedHistories": 14,
+            "retainedFailedRuns": 4,
+            "resumableRuns": 0,
+            "openingReviewRetained": true,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true
+          },
+          "serverClosed": true,
+          "providerTerminalReadback": true,
+          "originalFailureRetained": true,
+          "localEvidenceDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v86-clock-pause-return",
+          "evidenceHashes": {
+            "clock-pause-return-backup.json": "c7758ece1f07d100331908ecfffd6bf4af27a9cab9095179e529fc8f802985c5",
+            "clock-pause-return-progress.json": "2110deef04a762a56e951a7f572fdd789453ac0acf7fccc05dc52e28219c3a08",
+            "clock-pause-return.json": "60cbc45196fd375e465e39e089ea3dfe6926f478ce7d8b2030d4ae9b69ae9c23",
+            "interpretation.json": "892073504dd0033b11221fbee09c9215b10c58b47b2930e58b40ed9a4d271bee",
+            "prepared.json": "0c86425aa765b82711e527be54e65a26ea2ca12e80ce976c567625663bf82a20",
+            "preregistration.json": "c59bfac8c19c6dd6361d0479c3991092fb4f193e2fc61795dbfc571a91ed6d36",
+            "restoration-verified.json": "c87ec0e6b87b8b9702c288c00fb1a7a2fb2356ee452a966296b2c12683027584",
+            "restoration.mjs": "04d46c935193e0577c1808768633a63cda22a867b20e3f3dddfcf36e831ac84f",
+            "runner.mjs": "8872568f4c1a72e3453d4decee56116d5bb09b1db443de77dbf32b33a2dfa6a4",
+            "terminal-request-proof.json": "1c994ae3dbc87f2cd13a7a16eaed7b013addf7561273a7b4062a1a094499ecfe",
+            "transport-progress.json": "d828eba50ac894e279ab84d85a8ef21c9926e1f550e30f42e9771404114ab2be"
+          },
+          "repairImplementation": {
+            "status": "engineering passed; limited new real control diagnostic completed; full CI/E2E queued, not passed",
+            "producerVersions": [
+              "chat-narrative-action-v33",
+              "chat-narrative-options-v23",
+              "chat-action-revision-v15"
+            ],
+            "reviewVersions": [
+              "chat-narrative-action-review-v27",
+              "chat-narrative-options-review-v21"
+            ],
+            "scope": "Existing own active/self-paused goals; current real player request; same playerPause state and lifecycle. No new table, schema migration, world write or model call. Independent review and atomic adoption remain required.",
+            "commitmentBoundary": "Same pause condition is canonically recorded and enforced by playerPause; no duplicate promise required. Other independent obligations still require commitmentEffects; existing promises cannot be fulfilled/withdrawn/overwritten on this path.",
+            "legacyBoundary": "Old frozen contracts and original V86 failure retained. Revisions cannot add or replace pauseGoal source.",
+            "engineering": "107 directed checks; 79 files/1023 role-chat and shared AI-town tests; 10 isolated browser paths; governance, types, full lint and build passed. Mobile viewport inspected. Full CI/E2E not yet passed.",
+            "newRealModelAcceptance": false,
+            "evidenceReceipts": {
+              "/tmp/storyforge-chat-v86-contract-final-receipt.json": "40f3fc2a32f44748c4434d9a1487647f99a41f024f2c760f9c4bec32741b21f4",
+              "/tmp/storyforge-chat-v86-product-tests-receipt.json": "e339ef4f33ad325e7b4f6338052a7c062df1e0bd2ccbf1b4fbfa27cfe458bc63",
+              "/tmp/storyforge-chat-v86-gates-receipt.json": "293cf89155051c60f52bf5a5c388a2046872d4f2ceaff133318aeec48fc21765",
+              "/tmp/storyforge-chat-v86-browser-receipt.json": "25652a4763e7ded4c8102350a2fc0e0e03ec241722427b6b808701636e95a74b",
+              "/tmp/storyforge-chat-v86-docs-receipt.json": "6cc4bc15df1feefd93476be64d974c0c13057e12aaf78cac2fef9088ec2acee0"
+            },
+            "commit": "0114d7a8780041ddde553a2c33156fa3d43311c1",
+            "realControlDiagnostic": "existingGoalPauseReturnPreflight",
+            "fixedSourceManifestSha256": "6deb7907ca48abd63ebf910c6a997e4ffb9a086ddb1006faf69b6cb514772ed8"
+          }
+        },
+        "existingGoalPauseReturnPreflight": {
+          "at": "2026-10-15T13:37:27.848665+00:00",
+          "status": "four-opportunity-control-chain-completed-not-narrative-acceptance",
+          "sourceSnapshotHead": "0114d7a8780041ddde553a2c33156fa3d43311c1",
+          "manifestSha256": "6deb7907ca48abd63ebf910c6a997e4ffb9a086ddb1006faf69b6cb514772ed8",
+          "countsTowardM1": false,
+          "provider": "codex",
+          "model": "gpt-6.1-sol",
+          "playerOpportunities": 4,
+          "newRequests": 8,
+          "completedRequests": 8,
+          "adoptedActions": 4,
+          "adoptedSituations": 0,
+          "usage": {
+            "totalTokens": 112775,
+            "inputTokens": 110130,
+            "outputTokens": 2645,
+            "cachedInputTokens": 9984,
+            "reasoningOutputTokens": 613
+          },
+          "costUsd": null,
+          "durationSecondsIncludingOperatorObservation": 293.801,
+          "outcome": [
+            "Real report states only already-observed structures and unresolved limits. Existing same goal becomes paused with source-bound playerPause, no duplicate waiting promise or new facts.",
+            "Actual return and weak acknowledgement preserve the entire held situation unchanged.",
+            "Later explicit permission restores the same goal to active and clears its hold. Actor proposes discussing further disassembly with risks before consent; no operation, inspection or result is invented."
+          ],
+          "limits": [
+            "Single model and one produced clock scene; no independent human assessment or comparison.",
+            "Final response only resumes discussion. No new inspection, repair, fulfillment, closure or later execution verified.",
+            "Goal remains active, thread open, next possibilities empty; dialogue proposal is not evidence of later plan uptake.",
+            "Four opportunities use eight requests and 112775 tokens; cost unknown. Total elapsed includes operator observation; not pure model latency or commercial suitability.",
+            "Original V86 and formal M1 failures and denominators retained; no retries or manual repairs."
+          ],
+          "restoration": {
+            "stem": "existing-goal-pause-return",
+            "runStatusesPreserved": true,
+            "verifiedCompletedHistories": 18,
+            "retainedFailedRuns": 4,
+            "resumableRuns": 0,
+            "openingReviewRetained": true,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true
+          },
+          "providerTerminalReadback": true,
+          "originalFailureRetained": true,
+          "noRetryOrRepair": true,
+          "serverClosed": true,
+          "localEvidenceDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v87-existing-goal-pause-return",
+          "evidenceHashes": {
+            "existing-goal-pause-return-backup.json": "e475870cc4d285d9d5eb11024985e63168fbdc7bc6fbc9db0c8afba0992af193",
+            "existing-goal-pause-return-progress.json": "c51ccdc8a12b9e6c4ef23261789d77d644e4c90725622aa9e4c9e76784ff04ad",
+            "existing-goal-pause-return.json": "635d9f4e53308a37755c6a3b35cd08ed42d5f217ee2f19df3b09e300fbc380f3",
+            "interpretation.json": "a2ad255a3c9f405f19c98ba75bebf7710c73287cd3479fb1057fb10067ca395b",
+            "prepared.json": "40967b7bc0b5d2bf87c9dd4a8125c241473666ca1a130422af38596cff52d864",
+            "preregistration.json": "7d8d74ec1da01d408f7a8ef99ca92b6f24595daf5238f9d99150c06472bada93",
+            "restoration-verified.json": "57e555d9d3959399f7ec356cb158ef9f4e6b00ca47c3a29579a6dec54f10e430",
+            "restoration.mjs": "2b93b35e37ec1ee09021cc4455706f2c1f10609b3d85701606093f3084765c47",
+            "runner.mjs": "b8ba78faff17140c293ffcac829430176e14cc3d6b632d54acfd16bb08abba92",
+            "terminal-request-proof.json": "19e1ba84e9d23d51507a4019b8d5311975b86495e641d247bc2f8434424fc037",
+            "transport-progress.json": "8c915cf92ab743f2e7720279e434586061ad368dcb2f7925cd3a5dc27ccea3c4"
+          }
+        },
+        "planExecutionPreflight": {
+          "at": "2026-10-15T15:21:30.729294+00:00",
+          "status": "six-opportunity-plan-and-search-diagnostic-completed-not-story-closure",
+          "sourceSnapshotHead": "9817ff1cd18352db837f82a163da51538909328c",
+          "implementationHead": "0114d7a8780041ddde553a2c33156fa3d43311c1",
+          "manifestSha256": "8c66040f3c010af5105b259996366dd7f2f6e7a3cb7747bc434a4bcecc1e5d32",
+          "countsTowardM1": false,
+          "provider": "codex",
+          "model": "gpt-6.1-sol",
+          "playerOpportunities": 6,
+          "newRequests": 16,
+          "completedRequests": 16,
+          "adoptedActions": 6,
+          "adoptedSituations": 2,
+          "usage": {
+            "totalTokens": 239385,
+            "inputTokens": 232033,
+            "outputTokens": 7352,
+            "cachedInputTokens": 21888,
+            "reasoningOutputTokens": 2109
+          },
+          "costUsd": null,
+          "latency": {
+            "sampleCount": 8,
+            "measure": "durable run createdAt to updatedAt, including generation/review/adoption; excludes operator time but not first-feedback latency",
+            "valuesSeconds": [
+              31.085,
+              33.053,
+              36.534,
+              36.687,
+              41.164,
+              41.378,
+              43.927,
+              45.637
+            ],
+            "p50Seconds": 36.687,
+            "p95Seconds": 45.637
+          },
+          "durationSecondsIncludingOperatorObservation": 650.95,
+          "outcome": [
+            "Actor admits proposed disassembly is not yet executable. Player declines it, retaining no-operation/test constraint.",
+            "Actor proposes reference lookup as a different approach; after approval writes observed search clues and persists its own plan/pending context.",
+            "Actual continue steps construct a bounded reference-book context, perform lookup, then determine and report limited diagram similarities and missing installation/dimension/hidden-connection evidence.",
+            "Result changes the next proposed direction toward detailed connection/installation references; no unsupported model, fault or safe-operation conclusion, no unauthorized physical action."
+          ],
+          "terminalState": {
+            "factsBefore": 15,
+            "factsAfter": 19,
+            "sameGoalIdentity": true,
+            "activeGoals": 1,
+            "openThreads": 1,
+            "nextPossibilities": 0,
+            "newPromises": 0
+          },
+          "limits": [
+            "Six-opportunity continuation of a preexisting formal release; not a fresh paired episode, weak-guidance proof, complete story or comparative acceptance.",
+            "First alternative method appears after player asks. Two continue controls are required to pass from preparation to lookup and then report. Repeated cautious/permission language and user effort remain.",
+            "Final new direction is only discussed; no confirmed source, saved further possibility, execution, repair, promise fulfillment or closure.",
+            "Single provider, no independent human rating, unknown cost; original M1/V77 failures and denominators unchanged."
+          ],
+          "restoration": {
+            "stem": "clock-plan-execution",
+            "runStatusesPreserved": true,
+            "verifiedCompletedHistories": 26,
+            "retainedFailedRuns": 4,
+            "resumableRuns": 0,
+            "openingReviewRetained": true,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true
+          },
+          "providerTerminalReadback": true,
+          "serverClosed": true,
+          "serverExitCode": 130,
+          "originalFailureRetained": true,
+          "noRetryOrRepair": true,
+          "localEvidenceDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v88-produced-clock-plan-execution",
+          "evidenceHashes": {
+            "clock-plan-execution-backup.json": "9008b36730fb98865f095c842105de04be0a30bd6720a798dc56257cd6e2c672",
+            "clock-plan-execution-progress.json": "732e66b961e87c9dc33613960a580c84d735244799881273c4e6126a1ff4d3fd",
+            "clock-plan-execution.json": "3aff750ce3cecc8c97d80384b7f2bb2efd46940822b235f2a6c53e6c28b795ae",
+            "interpretation.json": "d0535aaa44a8f4c01b3c383fca9548f54deca20752ecfbffcc1154cdb5735843",
+            "operator-decisions.jsonl": "b933c5079d5b806708a807eeaa490d0552e568c056c800372d9093bd43b6c51c",
+            "prepared.json": "8eb85c66e76c3704529965eb0cc26716c85927d032d5adae6d58afa3658093b4",
+            "preregistration.json": "4af4c7402f3ccea3a991e149852e9dc9cdfbdb86cb4b8504d047f2945a86b2dd",
+            "restoration-verified.json": "0a8e6a4bf2b85d7ab4167b2a71ea402aa264fef987592e5ea0a5b31533e8d309",
+            "restoration.mjs": "4f984f9355d88e0faee0eda4daa9eab146a74d645a3357d3d6852d741efa9f47",
+            "runner.mjs": "cbbafa02d930792b2c8362be59934397a209c5102ab4ed8c7952343315cf9f6a",
+            "terminal-request-proof.json": "f5f7997f4cb82676c347b9cbfde750506dc369ea4df47cca028e50ec964c99ce",
+            "transport-progress.json": "6c82f72a5ba923ef43fb276dd4263555e37430bf28aa4a7d8556a5ea1e92388c"
+          }
+        }
+      },
+      {
+        "provider": "agnes",
+        "model": null,
+        "status": "historical-configuration-found-current-credentials-unavailable",
+        "realGenerationVerified": false,
+        "historicalModel": "agnes-2.5-flash",
+        "historicalEvidence": "examples/ttrpg/fog-harbor/playthrough-2026-09-07.md",
+        "historicalUsedAt": "2026-09-07",
+        "configurationStorage": "browser-localStorage-or-sessionStorage",
+        "branchSearch": {
+          "checkedAt": "2026-10-13",
+          "refs": 78,
+          "worktrees": 54,
+          "uniqueHeads": 88,
+          "credentialFileFound": false
+        },
+        "currentConnectionVerified": false
+      }
+    ],
+    "m1ScenarioIds": [
+      "daily-clock-promise",
+      "inn-missing-seal",
+      "riverside-reading-evening"
+    ],
+    "formalProtocol": "character-chat-m1-protocol-v1.json",
+    "formalCohortEvidence": "character-chat-m1-evidence-v1.json",
+    "realModelRunsStarted": 2,
+    "realModelRunsUnknown": 1,
+    "realModelRunsFailed": 1,
+    "implementationCohorts": [
+      "character-chat-m1-cohort-v77.json",
+      "character-chat-m1-cohort-v89.json",
+      "character-chat-m1-cohort-v90.json"
+    ]
+  },
+  "evidencePolicy": "保存原始对话、状态前后、版本、模型配置、调用/费用和评分分歧；失败不删出分母。夹具成功与真人体验分开报告。",
+  "readinessFindings": [
+    {
+      "id": "M1-hidden-fact-discovery",
+      "status": "confirmed-engineering-gap-not-quality-acceptance",
+      "affects": [
+        "CHAT-01.08",
+        "CHAT-02.08",
+        "CHAT-02.09",
+        "CHAT-02.14"
+      ],
+      "sourceSnapshotHead": "97f35827450992ecc3c37c6f1a187d64d80e1116",
+      "sourceSnapshotManifestSha256": "6258033ac58ad41df72eadf8e2faa115df04c679e29b9dba789237c45c7ce6fc",
+      "evidence": "chat-discovery-readiness-v27-second.json",
+      "rawEvidenceSha256": "bd618dace1f833263874df6b0169af07c8543f5a4b466429083f493c524aaa0d",
+      "newModelRequests": 0,
+      "setup": "Isolated engineering fixture. A reviewed action opens a box the guard is explicitly allowed to inspect. A frozen truth about its contents has no initial audience; synthetic review is used only to inspect deterministic boundaries.",
+      "verifiedControls": [
+        "Opening action committed without moving or conscripting the player.",
+        "The coordinator retains the hidden fact while role and player views exclude it.",
+        "A control in which the guard already knows the truth can disclose the same fact to the player.",
+        "Rejected candidates leave the original state unchanged.",
+        "World fields marked author-only remain excluded from runtime production sources."
+      ],
+      "observedGap": [
+        "An initially unaware actor cannot use disclosure to gain knowledge after investigation.",
+        "Recreating the same truth as a new fact is rejected as a duplicate.",
+        "Using the hidden fact as evidence for a visible situation observation is rejected as unauthorized propagation."
+      ],
+      "interpretation": "These are correct defenses for existing disclosure and fact-creation contracts. A distinct, causally justified discovery transition is absent from these tested paths. This does not prove that every paraphrased model output is rejected; such paraphrases would not establish a canonical, auditable discovery path.",
+      "requiredNextWork": "Explicit author authorization for discoverable hidden facts and conditions; bounded coordinator discovery based on actual permitted investigation; reviewed atomic audience update preserving fact identity; subsequent role consumption, branch/recovery/lifecycle and premature-discovery negative tests. Do not broaden existing disclosure or silently import author-only material.",
+      "firstProbe": {
+        "evidence": "chat-discovery-readiness-v27.json",
+        "rawEvidenceSha256": "b2c737641183f330bc9a44af9c19ca59ae3913cfb59b4edf79768e11f03096d8",
+        "status": "invalid-setup-no-model-request",
+        "reason": "The first hand-built in-memory scene omitted its action budget. Corrected the diagnostic setup; product code unchanged."
+      },
+      "partialImplementation": {
+        "sourceSnapshotHead": "7103b270bfeae0f7cf004b25083983e9aeb0ca82",
+        "scope": "V28 private initial facts; V30 additionally supports explicit world-source discovery authorization, known-holder preservation, exact source/rule binding and author UI. Ordinary v2 and author-only source exclusions are unchanged.",
+        "verified": "Canonical audience-only update, negative outcomes, staged disclosure, durable recovery, branch/import and 3 isolated browser paths. Synthetic review does not establish semantic correctness.",
+        "liveGap": "V28 phase-review and V30 unregistered physical-reveal failures remain recorded. V29/V30 guided runtime and V30 real initial-candidate production/local release succeed. V31 unchanged failed-save continuation safely pauses; a separate targeted display request commits one object consequence and two canonical disclosures after real review. These bounded samples do not establish sustained unguided quality, final full checks, longer episodes or independent acceptance."
+      }
+    }
+  ]
+}

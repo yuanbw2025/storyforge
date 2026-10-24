@@ -1,0 +1,97 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "label": "V130 terminal goal and thread provenance",
+  "recordedAt": "2026-10-16T05:19:28.559711+00:00",
+  "implementation": {
+    "baseCommit": "bf07d07dbd34cc2888a047731d60866e5ad1e62e",
+    "commit": "d9a7fe28e98d3dea56197167e10b7376baaa57d1",
+    "status": "implemented; associated regression, isolated browser and engineering gates passed; full CI/E2E pending"
+  },
+  "boundary": {
+    "product": "character-interaction",
+    "lifecycle": "product development; S3 runtime",
+    "owner": "existing Chat Work / ProductRuntimeSession",
+    "world": "frozen reference only; original world and fact identities preserved",
+    "reads": "registered interactionRuntime/chatSituationRuntime; original producer identity verified from saved packet",
+    "writes": "deterministic optional resolutionEvidence in existing runtime state; no new AI-writable field or table",
+    "media": "unchanged product-owned media",
+    "externalModelCalls": 0
+  },
+  "baselineAudit": {
+    "snapshot": {
+      "gitHistory": "shared local Git object store; exact HEAD and independent tracked tree verified",
+      "head": "bf07d07dbd34cc2888a047731d60866e5ad1e62e",
+      "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v130-history-d2cx3kaz/storyforge",
+      "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v130-history-d2cx3kaz/manifest.json",
+      "manifestSha256": "19db626bc4d660b060b9f730a231e73d2e8ce8b90de95808d4eca2d2eda23cae",
+      "files": 3492
+    },
+    "result": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v130-resolution-evidence/result.json",
+    "restoration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v130-resolution-evidence/source-restored.json",
+    "receipt": "/tmp/storyforge-chat-v130-resolution-audit-3-receipt.json",
+    "tests": 1,
+    "injectedCalls": 4,
+    "externalModelCalls": 0,
+    "outcome": "Two valid closure candidates with different per-effect goal dependency keys and goal/thread excerpts reduce to identical state. Parentless nested branches preserve full prose, facts and statuses but cannot recover the precise per-effect association. Original parent event preserved it before deletion. Audit snapshot restored and hashes verified."
+  },
+  "change": [
+    "Reviewed actions derive terminal primary/secondary goal and thread references atomically with expression and consequences. Primary goal uses action evidence and whole expression; secondary goals use their own references/excerpts; threads use action references and their own excerpts.",
+    "Records contain stable target/actor/fact keys and a message ID plus UTF-16 half-open range. Excerpts bind to their first exact match. No duplicated prose or event number; canonical target.updatedSequence remains authoritative.",
+    "Actor reader v11 and situation reader v13 bind retrieval v7; only reviewed action/options adoption writes resolutionEvidenceVersion=1. Old readers retain exact payload/replay and no inferred backfill. Situation and legacy unreviewed action events reject this marker.",
+    "Saved original producer context is verified against baseSequence before interrupted adoption recovery. Mutually exclusive options retain only the chosen references, without additional model calls.",
+    "Exact fields/version, unique terminal target, actor, known and temporally valid facts, real source message/speaker/audience/event and range are validated. Negative review and corrupt import remain atomic. Retrieval-excluded messages still preserve canonical consequences.",
+    "Nested parentless branches, negative event rebasing, checkpoints and export/import/reopen preserve references without ancestor events/runs. Registered import preflight validates recognized provenance in initial/head/checkpoint states and portable event markers. Role and player contexts do not disclose the complete index."
+  ],
+  "verification": {
+    "targetedFinal": {
+      "files": 3,
+      "tests": 35,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v130-targeted-3-receipt.json"
+    },
+    "associatedFinal": {
+      "files": 110,
+      "tests": 1325,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v130-regression-receipt.json",
+      "pool": "forks; 2 workers; existing timeouts unchanged"
+    },
+    "browser": {
+      "paths": 10,
+      "exitCode": 0,
+      "isolatedStorage": true,
+      "receipt": "/tmp/storyforge-chat-v130-targeted-e2e-receipt.json",
+      "assertions": "actual player-followup closure references and original expression binding; context privacy, options, thread followup, refresh and portable history"
+    },
+    "gates": {
+      "count": 11,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v130-gates-receipt.json"
+    },
+    "retainedFailures": [
+      {
+        "log": "/tmp/storyforge-chat-v130-resolution-audit.log",
+        "outcome": "Audit runner used an absolute /var test path differing from resolved /private/var; no tests found, zero calls. Corrected runner to use relative test path."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v130-resolution-audit-2.log",
+        "outcome": "Closure fixture omitted empty nextPossibilities after closing all actor goals; existing reflection guard rejected it. Corrected fixture, preserving initial two injected calls and zero external calls."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v130-targeted-2.log",
+        "outcome": "Options fixture reused identical expression text; existing uniqueness guard rejected it (1 failed, 34 passed). Corrected alternate expression, preserving different evidence. Final targeted and expanded regression passed."
+      }
+    ]
+  },
+  "fullValidation": {
+    "status": "pending final committed snapshot; no full-suite pass claimed",
+    "ciReceipt": "/tmp/storyforge-chat-v130-full-ci-receipt.json",
+    "e2eReceipt": "/tmp/storyforge-chat-v130-full-e2e-receipt.json"
+  },
+  "limits": [
+    "CHAT-04.06c remains open: this supplies closure provenance only. Joint historical fact/goal/thread/commitment selection is not implemented.",
+    "No archive, history omission or storage/token capacity increase. CHAT-04.06a/b await full-suite evidence; 04.06d and consequential 100/300/1000 action loads remain open.",
+    "Deterministic engineering evidence uses injected output. This is not real-model long-story, Codex/Agnes, human play or commercial acceptance. Prior failures and cohort denominators remain unchanged."
+  ]
+}

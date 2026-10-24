@@ -1,0 +1,69 @@
+{
+  "version": 380,
+  "recordedAt": "2026-10-24T05:57:23.985054+00:00",
+  "status": "engineering-verified-main-integration-and-real-model-pending",
+  "sourceBase": "2967c6b89cd47ebd224ce1936de208b0279fb5f7",
+  "producer": "chat-opening-review-v13",
+  "change": "Model may explicitly cite its own agency/development proof. The compiler validates that proof before resolving exact original excerpts. Explicit refs remain strict and omitted excerpts are never completed. Native choices exclude facts without a declared known direction and adaptive when fewer than two distinct directions exist. Verdicts and the canonical v3 report remain unchanged.",
+  "boundaries": {
+    "product": "character-chat",
+    "phase": "S3 production capability development",
+    "owner": "Chat Work and product build",
+    "world": "frozen read-only",
+    "modelCallsPerReview": 1,
+    "maximumRequestedOutputTokens": 10000,
+    "inputBudget": 30000,
+    "automaticRetries": 0,
+    "newTables": false,
+    "newWorldWrites": false,
+    "fullSourceRetained": true,
+    "historicalV12BytesVerified": true
+  },
+  "verification": {
+    "targetedFiles": 12,
+    "targetedTestsPassed": 161,
+    "failed": 0,
+    "browserCasesPassed": 32,
+    "browserFailed": 0,
+    "browserSkipped": 0,
+    "browserAutomaticRetries": 0,
+    "tsc": true,
+    "changedFileLint": true,
+    "governanceChecksPassed": 9,
+    "build": true,
+    "bundleSize": true,
+    "externalModelCalls": 0,
+    "completeDeliveryPassed": false
+  },
+  "retainedInitialFailures": {
+    "targetedInitialPassed": 47,
+    "targetedInitialFailed": 2,
+    "reason": "Duplicate format explanation and unused schema definitions exceeded the original input reservation by 542/533 tokens. Retained all semantic rules and full sources while removing duplicate format prose and unreachable schema definitions. Both source-unit paths then passed under the original budget.",
+    "tsc": "Replaced unsupported Array.at with String.slice, preserving the configured TypeScript target."
+  },
+  "integrationPending": {
+    "remoteMain": "87eec76a9db50b0bca692368a71f95768bfff660",
+    "missingMainCommits": 4,
+    "prAtPriorHead": "CONFLICTING; no current-head CI runs observed",
+    "note": "This receipt is before main integration; no current integrated-source delivery claim."
+  },
+  "evidenceHashes": {
+    "v12-baseline.json": "7067bb6b2f9981a672bd2a091ce1b720a16b80f21fdadbd7899fa1c175090873",
+    "targeted-initial.json": "3f6aca63a37cd3760601c3524d95714bb8576a7fea9554d34b5f864a01155c40",
+    "targeted-final.json": "eea79038a16280d149791100cb51d56e960ce5dcb258b65e75acbe54419ced14",
+    "related.json": "229246e1b3bc07f3d8963c342fea72f5d5f9a81d6fd7c385398287870c44083f",
+    "browser.json": "098f045e15b07ee02dc03086897ef1dfe8c295ac4e6f85c134adddc14099147b",
+    "tsc-initial.log": "5bffb4a02e3953048921fbbf3dd0f0c03de25f228a365c2221850de3145a1cea",
+    "tsc-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lint.json": "4bc6104a663e9137cc853dbaa9d4326ff2712187a6ca94ccfe56c7079f8a97ce",
+    "governance.json": "344bc6fd5ae6f8a9957aff67101a66c19a1d2a76a48a78172d20eaa61d02c015",
+    "build.log": "32904e1bd6136b09b228ba470ae7f20b1a9a71dad97950e7c8e380ac64cc70a2",
+    "bundle.log": "01ec593bf18216035f88aceb75b18ace16dd7ef6f07740ce2445df3077523e06"
+  },
+  "claims": {
+    "formalM1Credit": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "released": false
+  }
+}

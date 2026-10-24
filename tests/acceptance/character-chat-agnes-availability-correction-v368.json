@@ -1,0 +1,38 @@
+{
+  "version": 368,
+  "at": "2026-10-24T03:38:36.920098+00:00",
+  "status": "prior-provider-wide-quota-blocker-withdrawn",
+  "correction": "The assistant generalized an October 20 agnes-3.0-pro error to the whole provider and overlooked a successful October 23 agnes-2.5-flash verification. That was an incorrect current availability conclusion.",
+  "currentProvider": "agnes",
+  "currentModel": "agnes-2.5-flash",
+  "currentCheck": {
+    "httpStatus": 200,
+    "durationMs": 1625,
+    "tokens": 327,
+    "expectedObjectReceived": true,
+    "requests": 1,
+    "retries": 0
+  },
+  "subsequentFormalCalls": {
+    "requests": 4,
+    "httpStatuses": [
+      200,
+      200,
+      200,
+      200
+    ],
+    "evidence": "character-chat-m1-cohort-v367.json"
+  },
+  "userActionRequired": false,
+  "credentialResubmissionRequired": false,
+  "priorV364Interpretation": "The 60 Agnes slots were not run because of the assistant stale availability assumption. The retained old quota-blocked label is not evidence of a verified current provider outage.",
+  "v367StatusCorrection": "Removed the stale blocker from all 60 Agnes slots before dispatch. Formal results are reported separately; no quality pass added.",
+  "formalQualityCredit": 0,
+  "productWrites": 0,
+  "oldRawErrorsAndCohortsRetained": true,
+  "evidenceHashes": {
+    "receipt.json": "5c0b5a6d3b41c355ee09e27e13d2250763a383928dcd6386295bab5d117d66b7",
+    "availability-correction.json": "366a0c75c4809e779c2c7c4eac3632a49c8f715bef78e9be7b1456104c330f35",
+    "v367-matrix-before-correction.json": "88143e564ea02c075b34aba57ced3929620a1732ab72863bdcc22507814b53c4"
+  }
+}

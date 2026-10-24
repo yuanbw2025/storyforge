@@ -1,0 +1,127 @@
+{
+  "schema": "storyforge.character-chat-real-diagnostic",
+  "version": 1,
+  "batch": "V248",
+  "recordedAt": 1792481711.896496,
+  "status": "failed-semantic-review; parent-failure-preserved",
+  "sourceManifestSha256": "3ccbfd4790475d9c306e28e9576de83dd3ffa59cdcd0647d5a1cafa8b514cf45",
+  "producer": "chat-narrative-action-v48",
+  "reviewer": "chat-narrative-action-review-v34",
+  "branchThroughSequence": 33,
+  "playerInput": "我想听听你的想法。",
+  "model": "gpt-6.1-sol",
+  "requests": 3,
+  "nativeCompleted": 3,
+  "observedTokens": 50188,
+  "costUsd": null,
+  "choiceSchemaAccepted": true,
+  "choiceDependencyParsingPassed": true,
+  "candidateAdopted": false,
+  "semanticFailures": [
+    {
+      "check": "meaningful-direction",
+      "passed": false,
+      "reason": "此前已多次说明静止观察的局限、旧发条的不确定性及不急于换件，并已提出询问故障表现的替代起点。本次虽回应玩家想听意见，却再次重述同一顾虑后暂停，未说明新的暂缓理由、真实阻碍或不同选择；也未解释为何暂缓已有的非动手了解方向。承认办法未用尽本身不构成推进。"
+    }
+  ],
+  "sourceUnchanged": true,
+  "recovery": {
+    "at": "2026-10-20T07:28:07.649Z",
+    "status": "completed",
+    "sourceManifestSha256": "3ccbfd4790475d9c306e28e9576de83dd3ffa59cdcd0647d5a1cafa8b514cf45",
+    "backupSha256": "703be07edd8190d596f1940913b88ceb7c4a5dbb413bc580fc5e8af78d765137",
+    "posts": 0,
+    "modelCalls": 0,
+    "result": {
+      "projectId": 1,
+      "sessionId": 2,
+      "failedRunId": 27,
+      "artifactsPreserved": 12,
+      "originalParentFailureRetained": true,
+      "diagnosticFailureRetained": true,
+      "noRejectedStoryCommit": true,
+      "worldUnchanged": true,
+      "historicalInputAvailable": true,
+      "stateSha256": "254fdd38670cd4eba38383240004124501c71015053af640a39e94ada7269ce1",
+      "refreshEqual": true
+    }
+  },
+  "agnesReadOnlyHealth": {
+    "registered": {
+      "at": 1792481148.680403,
+      "provider": "agnes",
+      "model": "agnes-2.5-flash",
+      "method": "GET",
+      "resource": "models",
+      "maxRequests": 1,
+      "maxSeconds": 30,
+      "generationRequests": 0,
+      "originalUnknownGenerationResent": false,
+      "purpose": "Read-only endpoint/authentication/model-list diagnosis, not inference acceptance or proof of previous job outcome."
+    },
+    "startedAt": 1792481148.68078,
+    "completedAt": 1792481150.6147032,
+    "curlExitCode": 0,
+    "httpStatus": "200",
+    "jsonResponse": true,
+    "requestedModelListed": true,
+    "bodyBytes": 1280,
+    "bodySha256": "042ce086375d9a935ad14546e4c2f985a0fdf3df939ea81a73eb59d5622a31fb",
+    "stderrBytes": 0,
+    "generationRequests": 0,
+    "credentialDisplayedOrSaved": false,
+    "storageModified": false,
+    "originalGenerationOutcome": "unknown"
+  },
+  "finding": "The choice stage received all role facts and the actual expansion permission, but did not receive the existing substantive replanning rules used by expression. It chose repeated caution and self-pause; the unchanged semantic reviewer rejected it. This establishes a policy delivery gap, not proof that adding the rules will fix model quality.",
+  "next": "Reuse the existing bounded replanning decision policy in a new frozen producer; retain old versions, all permission checks and failed evidence. Verify engineering and real behavior separately.",
+  "newM1Episodes": 0,
+  "humanAcceptance": false,
+  "qualityAcceptance": false,
+  "artifacts": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v248-action-choice-dependency-real/preregistration.json",
+      "sha256": "488c9592b8dcf2c9fabbe10579b11c4d61e9980b3e28e5363112e7fdffad5da6"
+    },
+    "runner.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v248-action-choice-dependency-real/runner.mjs",
+      "sha256": "7698ceaff53fde49146c68adfd27e2625ad1f14d61e4cc5a1ca6ff9e7095b3c0"
+    },
+    "receipt.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v248-action-choice-dependency-real/receipt.json",
+      "sha256": "6ff391b0c84d3552aea18cc2f8d33ca158906cf61329f173216b209c7a7f269a"
+    },
+    "transport-progress.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v248-action-choice-dependency-real/transport-progress.json",
+      "sha256": "d3d4b6110e3a37b7f97f8fa3998e30ade40dd033b920e17ba60b5a04d023362e"
+    },
+    "run-evidence.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v248-action-choice-dependency-real/run-evidence.json",
+      "sha256": "f217289be95b0236f1583ce412194a125e4fffd29185536be3822ba7edfeafa9"
+    },
+    "backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v248-action-choice-dependency-real/backup.json",
+      "sha256": "703be07edd8190d596f1940913b88ceb7c4a5dbb413bc580fc5e8af78d765137"
+    },
+    "audit-import.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v248-action-choice-dependency-real/audit-import.mjs",
+      "sha256": "7980f024c78fc65fca4c884a9ba6a695248ea63da3a5cd2549e205723a5631a4"
+    },
+    "import-audit.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v248-action-choice-dependency-real/import-audit.json",
+      "sha256": "7b07ba52abb9f836bb89e16fa9afd46106620b713c59f76343f9c26e556ed4df"
+    },
+    "agnes-readonly-health.py": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v248-action-choice-dependency-real/agnes-readonly-health.py",
+      "sha256": "23212502f3ab4650559c733d6ad3cb6447f9cdd208f01ddc88dfc69d5e50cbee"
+    },
+    "agnes-health-registration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v248-action-choice-dependency-real/agnes-health-registration.json",
+      "sha256": "a293973ba0361bdf1e18a9ef1d82dec9b3694c57d595810b5429def08c4d3a30"
+    },
+    "agnes-health-receipt.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v248-action-choice-dependency-real/agnes-health-receipt.json",
+      "sha256": "e7f0063ac6757c3a6b5a3c2c1b5a8ac65d07127f44be5a269439bc09037424bb"
+    }
+  }
+}

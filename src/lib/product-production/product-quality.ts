@@ -46,7 +46,14 @@ export function evaluateProductRuntimeProductQualityV1(input: {
   const narrative = runtimePackage.narrative
   const endingCount = narrative.nodes.filter(node => node.kind === 'ending').length
   const nonEndingCount = narrative.nodes.length - endingCount
-  const gates: ProductQualityGateV1[] = [
+  const chatNarrative = runtimePackage.productType === 'character-interaction' ? runtimePackage.interaction?.chatNarrative : null
+  const gates: ProductQualityGateV1[] = chatNarrative ? [
+    gate('product.chat.open-situation', brief.characterChat?.version === 3 && nonEndingCount === 1 && endingCount === 0 && narrative.choices.length === 0,
+      ['requires=one-initial-situation', 'prewritten-outcomes=0']),
+    gate('product.chat.role-agency', !!runtimePackage.interaction?.profiles.every(profile => chatNarrative.initialSituation.goals.some(goal => goal.actorKey === profile.participantKey))
+      && (chatNarrative.permissions.mode === 'companionship' || chatNarrative.initialSituation.threads.length > 0),
+      [`goals=${chatNarrative.initialSituation.goals.length}`, `threads=${chatNarrative.initialSituation.threads.length}`]),
+  ] : [
     gate('product.narrative.play-loop', nonEndingCount >= 1 && narrative.choices.length >= 1,
       [`nonEndingNodes=${nonEndingCount}`, `choices=${narrative.choices.length}`]),
     gate('product.narrative.endings', endingCount >= (runtimePackage.productType === 'ttrpg'
@@ -131,12 +138,13 @@ export function evaluateProductRuntimeProductQualityV1(input: {
     gates.push(
       gate('product.interaction.cast', !!interaction && interaction.profiles.length >= 1,
         [`profiles=${interaction?.profiles.length ?? 0}`]),
-      gate('product.interaction.scenes', !!interaction && interaction.sceneTemplates.length >= 2
+      gate('product.interaction.scenes', !!interaction && (chatNarrative ? interaction.sceneTemplates.length === 1 : interaction.sceneTemplates.length >= 2)
         && interaction.sceneTemplates.every(scene => scene.maxTurns >= 8 && scene.safetyBoundaries.length > 0
-          && scene.relationshipRules.length >= 2),
+          && (chatNarrative ? scene.relationshipRules.length === 0 : scene.relationshipRules.length >= 2)),
       [`scenes=${interaction?.sceneTemplates.length ?? 0}`, 'requires=maxTurns+safety']),
       gate('product.interaction.memory-relationship', !!interaction && interaction.profiles.every(profile => (
-        profile.initialKnowledge.length > 0 && profile.relationshipDimensions.length >= 2 && profile.maxMemoryEntries >= 40
+        (profile.initialKnowledge.length > 0 || interaction.chatSource?.knowledge.some(k => k.audienceKeys.includes(profile.participantKey)))
+        && profile.relationshipDimensions.length >= 2 && profile.maxMemoryEntries >= 40
       )), ['requires=knowledge+2-relationship-dimensions+bounded-memory']),
     )
   } else if (runtimePackage.productType === 'text-adventure') {

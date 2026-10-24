@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "at": "2026-10-20T08:26:06.379991+00:00",
+  "status": "terminal",
+  "diagnosticCompleted": true,
+  "error": null,
+  "formalM1Credit": false,
+  "qualityAccepted": false,
+  "stopReason": "budget",
+  "playerOpportunities": 3,
+  "calls": {
+    "production": 3,
+    "runtime": 18,
+    "total": 21,
+    "allNativeCompleted": true
+  },
+  "observedTotalTokens": 300503,
+  "costUsd": null,
+  "sourceUnchanged": true,
+  "recovery": {
+    "passed": true,
+    "modelCalls": 0,
+    "completedRunsRetained": 7
+  },
+  "findings": [
+    "First generated opening selected by registered first-passing rule; no manual repair or source changes.",
+    "Guard performed a public-area observation, disclosed its inconclusive result, requested an additional nearby area, and performed a second observation.",
+    "Both observed areas yielded no identifiable object or continuous track; original seal goal and thread remain open.",
+    "The run proves bounded action and situation handoff on a second core scenario; it does not prove sustained meaningful narrative progression or story closure.",
+    "Opening review accepted one grounded entrance with generic later redirection, also observed in the previous clock case."
+  ],
+  "nextHypothesis": "Prepare usable background for substantively different ways to pursue the original goal, and review that continuation within existing possibilities/facts and permissions. Do not merely add runtime pause instructions or make every failed search reveal a clue.",
+  "evidence": {
+    "preregistration.json": "1f29a8c1dd19be8246839cd4bb3897dde2c0dbb5cab3a70b26851069c4ec74ec",
+    "inn-weak-guidance.json": "0919ded5f8519b9afdb2f8683674a9b8a93edf9ec8f0dd83707d13f3f6d5d7ce",
+    "inn-weak-guidance-backup.json": "90c7fc83365b826996b377d6f579834ae64994abd0ac630d143467edad34371d",
+    "inn-weak-guidance-restoration-verified.json": "10199aa604f87476b96997525bdc508799f6927b47a40fa4635f443087a3d41c",
+    "restoration.mjs": "0f38da602ff67da43b68b09f7e7878576637781a536aa20c3ef33a2ac24e18e8"
+  },
+  "schema": "storyforge.character-chat-development-diagnostic",
+  "diagnostic": "v252-inn-autonomy",
+  "sourceSnapshot": "5c0ff5689ec812587b7fc808a4955ba250a6d346",
+  "sourceManifestSha256": "3ccbfd4790475d9c306e28e9576de83dd3ffa59cdcd0647d5a1cafa8b514cf45",
+  "localEvidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v252-inn-autonomy-probe",
+  "retainedPreviousFailures": [
+    "V243",
+    "V248",
+    "V250"
+  ]
+}

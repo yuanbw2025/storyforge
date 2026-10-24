@@ -1,3 +1,7 @@
+import {CHAT_OPENING_REVIEW_KEY, assertChatOpeningReviewedV1, minimumChatOpeningReviewVersionV1} from '../character-interaction/situation-production-review'
+import {CHAT_MEDIA_AUTHOR_GATE, readCurrentChatMediaReviewV1} from './chat-media-authority'
+import {confirmChatMediaSelectionV1} from '../character-interaction/media-selection'
+import {readChatConsultationLineageWitnessV1} from '../character-interaction/consultation-harness'
 import { canReviseTextContentBuildV1, createTextContentRevisionPlanV1 } from './text-content-revision'
 import Dexie from 'dexie'
 import { db } from '../db/schema'
@@ -21,6 +25,7 @@ import type {
 import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from './hash'
 import { parseProductProductionBriefV3, parseProductProductionCommandV1 } from './contracts'
+import { selectChatNarrativeCandidateV1, parseChatSituationCandidatesV1, type ChatNarrativeProductionSourceV1 } from '../character-interaction/narrative-production'
 import {
   createConfirmedProductBriefV1,
   createProductProductionSourcePlanV1,
@@ -67,6 +72,7 @@ import { verifyTextOpenWorldCreatorProductionPreflightConfirmationV1 } from '../
 import { useAIConfigStore } from '../../stores/ai-config'
 import {
   assertProductProductionBudgetLedgerV1,
+  recoverImportedChatProductionPrefixV1,
   prepareLegacyPausedProductBuildV1,
   resolveProductProductionUnknownResultReservationLedgerV2,
 } from './scheduler'
@@ -2033,9 +2039,49 @@ async function applyCommand(input: {
       || previousFailure.taskKey !== 'media.anchor-author-gate')) {
       reject('invalid-state-transition', '角色视觉锚点确认只能用于文字冒险商业美术作者闸门')
     }
+    if (command.resolution.action === 'confirm-chat-situation') {
+      if (production.productType !== 'character-interaction' || command.blockerKey !== 'content.chat-author-gate'
+        || previousFailure.taskKey !== command.blockerKey || !command.resolution.chatSituation) {
+        reject('invalid-state-transition', '初始情境选择只能用于角色聊天作者确认步骤')
+      }
+      const rows = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+        .filter(row => row.controlEpoch === build.controlEpoch && ['accepted', 'carried-forward'].includes(row.status))
+      const source = rows.filter(row => row.artifactKey === 'design.game')
+      const candidates = rows.filter(row => row.artifactKey === 'content.chat-candidates')
+      if (source.length !== 1 || candidates.length !== 1) reject('invalid-state-transition', '初始情境来源或候选版本不唯一')
+      try {
+        const authorTask = parseProductProductionPlanV3(build.planJson).tasks.find(task => task.taskKey === command.blockerKey)
+        if (authorTask && minimumChatOpeningReviewVersionV1(authorTask.acceptanceGateIds) > 1 && !authorTask.inputArtifactKeys.includes(CHAT_OPENING_REVIEW_KEY)) reject('invalid-state-transition', '开场审查依赖不完整')
+        if (authorTask?.inputArtifactKeys.includes(CHAT_OPENING_REVIEW_KEY)) {
+          const reports = rows.filter(row => row.artifactKey === CHAT_OPENING_REVIEW_KEY)
+          if (reports.length !== 1) reject('invalid-state-transition', '缺少唯一开场叙事审查')
+          const input = JSON.parse(source[0].payloadJson) as ChatNarrativeProductionSourceV1
+          await assertChatOpeningReviewedV1(JSON.parse(reports[0].payloadJson), input, parseChatSituationCandidatesV1(JSON.parse(candidates[0].payloadJson), input), command.resolution.chatSituation.selectedOptionKey, minimumChatOpeningReviewVersionV1(authorTask.acceptanceGateIds))
+        }
+        await selectChatNarrativeCandidateV1({source: JSON.parse(source[0].payloadJson) as ChatNarrativeProductionSourceV1,
+          candidates: JSON.parse(candidates[0].payloadJson), selection: {
+            schema: 'storyforge.chat-situation-selection', version: 1, ...command.resolution.chatSituation!, authorCommandId: command.commandId,
+          }})
+      } catch { reject('invalid-state-transition', '初始情境选择无效或版本已变化，请重新比较并选择') }
+    }
+    if (command.resolution.action === 'confirm-chat-media') {
+      const decision = command.resolution.chatMedia
+      if (production.productType !== 'character-interaction' || command.blockerKey !== CHAT_MEDIA_AUTHOR_GATE
+        || previousFailure.taskKey !== CHAT_MEDIA_AUTHOR_GATE || !decision
+        || decision.buildNumber !== build.buildNumber || decision.controlEpoch !== build.controlEpoch) {
+        reject('invalid-state-transition', '图片确认只能用于当前角色聊天制作的待确认步骤')
+      }
+      try {
+        const review = await readCurrentChatMediaReviewV1({scope, build})
+        await confirmChatMediaSelectionV1({source: review.source,
+          submitted: {sourceHash: decision.sourceHash, bindings: decision.bindings}, authorCommandId: command.commandId})
+      } catch (cause) {
+        reject('invalid-state-transition', cause instanceof Error ? cause.message : '当前图片不能确认，请重新查看')
+      }
+    }
     if (![
       'retry', 'author-edit', 'change-capability', 'accept-product-private-expansion',
-      'confirm-character-anchors', 'cancel',
+      'confirm-character-anchors', 'confirm-chat-situation', 'confirm-chat-media', 'cancel',
     ].includes(command.resolution.action)) {
       reject('invalid-state-transition', '当前 blocker 只允许重试、更换能力、处理已登记作者闸门或取消；降级/豁免必须先生成新 Brief')
     }
@@ -2817,6 +2863,7 @@ async function applyCommand(input: {
 }
 
 async function executeTransaction(input: {
+  preparedChatConsultationWitness?: string
   preparedTextRevision?: Awaited<ReturnType<typeof prepareTextContentRevisionV1>> | null
   preparedPausedBuild?: PreparedPausedBuildV1 | null
   scope: WorkspaceScope
@@ -2982,6 +3029,8 @@ async function executeTransaction(input: {
           reject('creator-media-stale', 'Creator media 的 Production、Build、Artifact、Blob 或命令链已变化')
         }
       }
+      if (input.preparedChatConsultationWitness !== undefined
+        && await readChatConsultationLineageWitnessV1(scope) !== input.preparedChatConsultationWitness) reject('source-stale', '会谈采纳证据在保存前发生变化，请重新保存方案')
       const applied = await applyCommand({
         preparedTextRevision: input.preparedTextRevision,
         scope, production, command,
@@ -3103,10 +3152,17 @@ export async function executeProductProductionCommand(input: {
       return replay
     }
   }
+  if ((command.type === 'resolve-blocker' || command.type === 'resume')
+    && Number.isInteger(input.productionId)) {
+    await recoverImportedChatProductionPrefixV1({
+      scope, productionId: input.productionId!, expectedStateRevision: command.expectedStateRevision,
+    })
+  }
   const preparedBriefHash = command.type === 'save-brief-revision'
     ? await hashProductProductionValueV2(command.brief)
     : null
   let preparedSourcePlan: ProductSourcePlanV1 | null = null
+  let preparedChatConsultationWitness: string | undefined
   let preparedConfirmedBrief: ConfirmedProductBriefV1 | null = null
   let preparedCreatorSource: {
     locator: TextOpenWorldCreatorSourceLocatorV1
@@ -3149,6 +3205,7 @@ export async function executeProductProductionCommand(input: {
     }
     const production = await productionInScope(scope, input.productionId!)
     if (command.brief.aiTown) await assertAiTownWorldSourceSelectionHashV1(command.brief.aiTown.sourceSelection)
+    if (command.brief.intent.productType === 'character-interaction') preparedChatConsultationWitness = await readChatConsultationLineageWitnessV1(scope)
     preparedSourcePlan = await createProductProductionSourcePlanV1({
       scope,
       productionKey: production.productionKey,
@@ -3373,6 +3430,7 @@ export async function executeProductProductionCommand(input: {
     preparedPausedBuild = { before, after, runs }
   }
   const request = {
+    preparedChatConsultationWitness,
     preparedTextRevision,
     scope,
     productionId: input.productionId,

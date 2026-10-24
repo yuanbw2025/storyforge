@@ -1,0 +1,66 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 317,
+  "kind": "real-codex-closure-predispatch-budget-stop",
+  "at": "2026-10-22T07:33:03.538861+00:00",
+  "formalM1Credit": 0,
+  "humanScoring": "deferred",
+  "requests": 1,
+  "allNativeRequestsCompleted": true,
+  "reportedTokens": 11594,
+  "playerOpportunities": 1,
+  "result": "Selection proposed returning the lamp and reporting recovery to the innkeeper. Expression never reached native transport. Exact saved full expression request reproduced a context-budget rejection with V59, while V58 schema with the same messages would fit. No expression, review, adoption or story closure occurred.",
+  "budgetReproduction": {
+    "current": {
+      "optionsEstimatedTokens": 5482,
+      "optionsCharacters": 15630,
+      "totalInputTokens": 27022,
+      "inputBudget": 27130,
+      "trimmed": true,
+      "protectedEnvelopePreserved": true
+    },
+    "previousSchemaSameMessages": {
+      "optionsEstimatedTokens": 5075,
+      "optionsCharacters": 13236,
+      "totalInputTokens": 26917,
+      "inputBudget": 27130,
+      "trimmed": false,
+      "protectedEnvelopePreserved": true
+    },
+    "modelCalls": 0
+  },
+  "restoration": {
+    "checks": {
+      "parentPreserved": true,
+      "branchPreserved": true,
+      "refreshPreserved": true,
+      "worldPreserved": true,
+      "runStatesPreserved": true,
+      "durableEvidencePreserved": true,
+      "noAutomaticCalls": true,
+      "noResumableRuns": true
+    },
+    "modelCalls": 0,
+    "completedHistories": 0,
+    "retainedFailedRuns": 1
+  },
+  "nextAction": "Factor identical current-expression evidence schemas into shared references in a new frozen version; preserve original message text, output allowance, context-window setting, strict validation and all old schema bytes. Validate the retained full request before another explicit continuation.",
+  "evidence": {
+    "story-closure.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v317-story-closure/story-closure.json",
+      "sha256": "0cfa892842e06a51c891daf104bda61fab7b1b4a6a3509b2b684569c48304f12"
+    },
+    "story-closure-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v317-story-closure/story-closure-backup.json",
+      "sha256": "2129df324e8da92ff1e8002c63fbaf641c0e2de254e0a133e95092e65c976a43"
+    },
+    "restoration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v317-story-closure/restoration.json",
+      "sha256": "a9be8aa1fce9a1670aa7a3fa4d78022999da8d0fccfd716ce0ee0fe947ee368c"
+    },
+    "request-budget-reproduction.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v317-story-closure/request-budget-reproduction.json",
+      "sha256": "b3a92ea39e75067954f2a1496831db7ab89999bd8e9dd72952fadffb682475dd"
+    }
+  }
+}

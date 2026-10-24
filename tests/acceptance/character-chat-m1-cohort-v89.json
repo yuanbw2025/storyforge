@@ -1,0 +1,279 @@
+{
+  "schema": "storyforge.chat-m1-cohort",
+  "version": 1,
+  "cohort": "m1-v89-runtime-reliability",
+  "registeredAt": "2026-10-15T15:25:46.160414+00:00",
+  "status": "first-production-source-invalid-after-start; remaining unit slots blocked",
+  "parentProtocol": "character-chat-m1-protocol-v1.json",
+  "parentProtocolSha256": "a70ce9a0395edb55216420b07f321fc9c21d840bbb8b3a3b5a48c0f9762e8b25",
+  "priorCohort": "character-chat-m1-cohort-v77.json",
+  "priorCohortUnmodified": true,
+  "code": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "cfdcd564faebbe4111efaa748262b855cf1ab3a3",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v89-real-a5ocelqy/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v89-real-a5ocelqy/manifest.json",
+    "manifestSha256": "3484317be485273c029c690f65b58264f26b9c4803ecfb4744621d59e2a1811a",
+    "files": 3397
+  },
+  "implementationHead": "0114d7a8780041ddde553a2c33156fa3d43311c1",
+  "engineeringGate": "1023 product regressions, 107 directed cases, 10 browser paths and required gates passed; V86 full CI/E2E confirmed live queued. Collection may start, acceptance may not.",
+  "matrix": {
+    "coreScenarioIds": [
+      "daily-clock-promise",
+      "inn-missing-seal",
+      "riverside-reading-evening"
+    ],
+    "coreMaterial": "character-chat-narrative-cases.json:scenarios",
+    "coreSplit": "development-regression; never relabelled holdout",
+    "holdoutScenarioIds": [
+      "pottery-gift-deadline",
+      "archive-missing-map"
+    ],
+    "holdoutMaterial": "character-chat-m1-holdouts-v1.json",
+    "behaviorIds": [
+      "weak-guidance",
+      "refuse",
+      "alternative",
+      "rest",
+      "return",
+      "unexpected"
+    ],
+    "providerSlots": [
+      "local-codex",
+      "agnes"
+    ],
+    "repeats": [
+      1,
+      2
+    ],
+    "coreEpisodes": 72,
+    "holdoutEpisodes": 48,
+    "totalScheduledEpisodes": 120,
+    "productionUnits": 20,
+    "episodeId": "m1-v89-runtime-reliability/{scenarioId}/{providerSlot}/r{repeat}/{behaviorId}",
+    "pairing": "每个情境/提供商/重复单独生产一个冻结 release；六种行为从该 release 的同一初始状态创建独立会话，不共享运行记忆。两次重复重新生产。",
+    "order": "core scenarios in listed order, then holdouts; provider slots independently runnable; repeat 1 before 2; behaviors in listed order",
+    "productionFailure": "保留该生产单元及其六个 production-blocked episode 槽位；不重抽开场，不以未运行冒充通过。运行质量仅对实际运行报告，端到端分母保留全部计划槽位。"
+  },
+  "budget": {
+    "usualOpportunities": [
+      20,
+      40
+    ],
+    "maximumPlayerOpportunities": 20,
+    "maximumProductionRequests": 6,
+    "maximumRuntimeRequests": 90,
+    "maximumObservedTotalTokens": 1000000,
+    "maximumWallMinutes": 60,
+    "observationTimeoutMinutes": 20,
+    "automaticRetries": 0,
+    "manualRepairInScoredEpisode": false,
+    "stopCheck": "每次新触发前检查预算，已发请求只观察到终态；上限含审查/局面/发现调用，不把玩家输入次数冒充调用次数。正常产品有界链可能越过软 token 上限一次，记录实际值，不悄悄继续。"
+  },
+  "changes": [
+    "Current implementation adds request-bound promises, redundant common-fact review conversion and existing-goal pause boundaries.",
+    "Same core author materials, source classifications, first passing opening selection, player policies, budgets and scoring criteria as parent protocol. Fresh production; no cherry-picking old continuations.",
+    "Original and V77 cohorts and all diagnostic failures retained; no failure replaced or denominator combined."
+  ],
+  "authorPermissionOverrides": {
+    "allowActorThreadFollowups": true
+  },
+  "models": [
+    {
+      "slot": "local-codex",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "transport": "local subscription bridge; no paid API fallback",
+      "appSettings": {
+        "temperature": 0.2,
+        "maxTokens": 16000
+      },
+      "effectiveSampling": "bridge request accepts model/messages/output schema only; app temperature and maxTokens are not passed to Codex; retain actual request and usage, do not claim controlled sampling",
+      "costUsd": null
+    },
+    {
+      "slot": "agnes",
+      "model": null,
+      "status": "configuration-unavailable; not runnable",
+      "condition": "在此槽位首次调用之前追加配置修订，冻结实际模型、采样、预算及连接核验；不得用历史模型记录代替当次配置。"
+    }
+  ],
+  "counts": {
+    "scheduled": 120,
+    "productionUnitsPlanned": 20,
+    "productionUnitsStarted": 1,
+    "productionUnitsCompleted": 0,
+    "productionBlockedEpisodes": 5,
+    "started": 1,
+    "collectionCompleted": 1,
+    "narrativePassed": 0,
+    "failed": 1,
+    "unknown": 0,
+    "notStarted": 119,
+    "humanScored": 0,
+    "productionUnitsReleasedLocally": 1,
+    "sourceInvalidProductionUnits": 1
+  },
+  "firstEpisode": "m1-v89-runtime-reliability/daily-clock-promise/local-codex/r1/weak-guidance",
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v89-m1-runtime-reliability",
+  "actualGenerationRequestsAtRegistration": 0,
+  "limitations": [
+    "Collection is scripted, not a real human participant or independent quality assessment",
+    "Agnes configuration remains unavailable; no substitute provider",
+    "No holdout material opened or used to tune this run",
+    "Local isolated author material, formal S3 production and local ProductRelease only; no online publication"
+  ],
+  "priorCohortsUnmodified": [
+    "character-chat-m1-evidence-v1.json",
+    "character-chat-m1-cohort-v77.json"
+  ],
+  "priorCohortHashes": {
+    "character-chat-m1-evidence-v1.json": "ee16ee227fd8ca4a2954345f2f6788d615a002de4fe3b37f87c1852c53d4cbcc",
+    "character-chat-m1-cohort-v77.json": "98b3dea026d14e21be049773a65dffef2dfee4ad5c9284cc0cbb7c41ac672eb3"
+  },
+  "countSemantics": "New independent implementation cohort. collectionCompleted includes any protocol terminal outcome; narrativePassed requires independent scoring. Other cohorts retain their own denominators. First started episode failed admission retrospectively; five other sessions of the same invalid production are blocked and remain among119 unstarted slots. Local publication is retained as evidence but is not valid production completion.",
+  "productionUnits": [
+    {
+      "id": "m1-v89-runtime-reliability/daily-clock-promise/local-codex/r1",
+      "status": "source-invalid-after-local-release",
+      "firstAttempt": true,
+      "modelCalls": 3,
+      "openingSelection": "first candidate in original order; all required checks passed",
+      "localReleaseId": 1,
+      "sourceFidelityAudit": "source-fidelity-audit.json",
+      "remainingUnstartedEpisodesBlocked": 5
+    }
+  ],
+  "recordedAt": "2026-10-15T15:55:05.057404+00:00",
+  "episodes": [
+    {
+      "id": "m1-v89-runtime-reliability/daily-clock-promise/local-codex/r1/weak-guidance",
+      "status": "failed",
+      "behavior": "weak-guidance",
+      "collectionCompleted": true,
+      "humanScored": false,
+      "failureKind": "evaluation-source-fidelity",
+      "ending": "failure",
+      "playerOpportunities": 8,
+      "runtimeRequests": 20,
+      "completedReviewedActions": 9,
+      "narrativeQualityAccepted": false,
+      "artifact": "clock-r1-weak-guidance.json",
+      "interpretation": "interpretation.json"
+    }
+  ],
+  "aggregateUsage": {
+    "uniqueProviderRequests": 23,
+    "sharedProductionRequests": 3,
+    "runtimeRequests": 20,
+    "completedProviderResponses": 23,
+    "totalTokens": 265591,
+    "inputTokens": 251825,
+    "outputTokens": 13766,
+    "cachedInputTokens": 30976,
+    "reasoningOutputTokens": 2387,
+    "costUsd": null,
+    "productionCountedOnce": true,
+    "humanScored": 0
+  },
+  "sourceFidelityAudit": {
+    "at": "2026-10-15T15:49:54.056031+00:00",
+    "finding": "evaluation-author-material-classification-mismatch",
+    "owner": "evaluation setup; production contract correctly forbids treating motivation as established fact",
+    "sourceMaterialFact": "自己保存了一块能试用的旧发条，但不确定能否耐久。",
+    "authoredBackground": "目标：兑现一起修钟的约定；目标：保留旧钟原有的声音；自己保存了一块能试用的旧发条，但不确定能否耐久。",
+    "submittedClassification": {
+      "pointer": "/background",
+      "purpose": "motivation",
+      "visibility": "participants"
+    },
+    "renderedSemanticLabel": "目标和动机（意愿，不代表已经发生）",
+    "runtimeRequestsContainOriginalText": true,
+    "initialCanonicalFactCount": 2,
+    "privateSpringHasInitialFact": false,
+    "contractEvidence": {
+      "narrativeProduction": "src/lib/character-interaction/narrative-production.ts:150; reviewed-world only identity/knowledge, motivation and voice not established fact",
+      "runtimeLabel": "src/lib/character-interaction/runtime.ts:393",
+      "existingSeparateAuthorFields": "src/lib/types/character.ts; background, motivation, goals already separate"
+    },
+    "interpretation": "Original private fact survived as bytes but its factual status was changed by our author setup. This episode cannot isolate proactive-story quality under the preregistered scenario. No claim that the model lacked the text or that this alone caused its behavior.",
+    "action": "Terminate after current terminal response, retain all original production/runtime calls and author classification. Do not repair the frozen release or retry this slot. Correct future setup and add zero-call source-fidelity admission before another cohort.",
+    "narrativeStagnationClaim": false,
+    "latestStagnationStreak": 0,
+    "setupScriptSha256": "ffa56fc462a7fe3b287d3b9a2e9d57888ee29370b4775b89e138339b0e5c2f0c"
+  },
+  "restoration": {
+    "stem": "clock-r1-weak-guidance",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 10,
+    "retainedFailedRuns": 0,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true
+  },
+  "serverClosed": true,
+  "rawEvidence": [
+    {
+      "file": "clock-r1-weak-guidance-backup.json",
+      "sha256": "cfa4e3c642b0ba93ece06a68492e158e6efc611f37da0a49b496c9c166670473"
+    },
+    {
+      "file": "clock-r1-weak-guidance-progress.json",
+      "sha256": "c116f9f02fdc49fa5e9e502700489b7c8c175e6935dcde05b8142a2e9c7f7610"
+    },
+    {
+      "file": "clock-r1-weak-guidance.json",
+      "sha256": "7fca34bbc5c6d0257385b278171187bb6ba7a8dc8924336cae65ccbe5ffd64bf"
+    },
+    {
+      "file": "cohort-registration.json",
+      "sha256": "57fd9361cc962ba82cb82c7ef3ee65ea63e87c06cb85120fd05ddc87429a7383"
+    },
+    {
+      "file": "interpretation.json",
+      "sha256": "9b6c78d97cb3b40dea7d4579d3483ca14c82f95f9658a9ae61b7e1bfb4d47498"
+    },
+    {
+      "file": "operator-decisions.jsonl",
+      "sha256": "478f2d52dbf2a5bfba8f4862d2cb2cbbc5d23d546f9385ad2d0add102333bf6a"
+    },
+    {
+      "file": "prepared.json",
+      "sha256": "c6cd19cae3cf20a4f06e17600db9f1cc0833d56839e9154959dd071eecc7d7f7"
+    },
+    {
+      "file": "preregistration.json",
+      "sha256": "5d8249d0ab091e037db6e415d4931b18a37f21d17a6cd93d45cdda6892babf1d"
+    },
+    {
+      "file": "restoration-verified.json",
+      "sha256": "2e53cdd578cd8370306cb455928112dfd48ccaa81f6cbe3e3c9e7649869005a2"
+    },
+    {
+      "file": "restoration.mjs",
+      "sha256": "8fdd61c599555bb4c6cb7da9fe75bde06489d11c97d9b624bfa5272ed56c27e1"
+    },
+    {
+      "file": "runner.mjs",
+      "sha256": "ffa56fc462a7fe3b287d3b9a2e9d57888ee29370b4775b89e138339b0e5c2f0c"
+    },
+    {
+      "file": "source-fidelity-audit.json",
+      "sha256": "ff5b1940121a1cdb9db213c30efc6c7e9ae526ec519476ad198507d090f8d27f"
+    },
+    {
+      "file": "terminal-request-proof.json",
+      "sha256": "225374dac2fdd482ea1d5e0da27efecb44531855531911f2e2f6d07883f5e2fe"
+    },
+    {
+      "file": "transport-progress.json",
+      "sha256": "91948c48448c7b6826d0a7407fbf46cb9d5adc1b10fac6609cf606a7ee070e62"
+    }
+  ],
+  "next": "Correct future author-material mapping and add zero-call compiled-source admission; never repair/replay this frozen episode or reuse the invalid release for remaining behaviors."
+}

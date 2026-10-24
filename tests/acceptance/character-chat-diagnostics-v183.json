@@ -1,0 +1,3740 @@
+{
+  "schema": "storyforge.character-chat-development-diagnostic-summary",
+  "version": 1,
+  "recordedAt": "2026-10-19T21:12:44.860861+00:00",
+  "status": "engineering-progress-not-accepted",
+  "code": {
+    "kind": "working-tree-diagnostic",
+    "baseHead": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+    "currentGenerationVersions": [
+      "chat-narrative-action-v44",
+      "chat-narrative-options-v34",
+      "chat-action-revision-v20"
+    ],
+    "currentReviewVersions": [
+      "chat-narrative-action-review-v32",
+      "chat-narrative-options-review-v26"
+    ]
+  },
+  "episodes": [
+    {
+      "version": "V176",
+      "privateEvidence": "character-chat-20261014/v176-change-semantics-diagnostic/diagnostic-summary.json",
+      "summarySha256": "bc2ec3d9f765e16c3d0ebb80de2c57bc646b44f00e36d31677240651ee57582f",
+      "summary": {
+        "provider": "agnes",
+        "model": "agnes-2.5-flash",
+        "observedTokens": 8920,
+        "costUsd": null,
+        "status": "failed-opening",
+        "countsInM1": false
+      }
+    },
+    {
+      "version": "V179",
+      "privateEvidence": "character-chat-20261014/v179-agnes-3-selected-model/diagnostic-summary.json",
+      "summarySha256": "c734d3d6aed9fcc4ed50c3431a3a4df0f175dea53c3eda5d29d496cb6161388d",
+      "summary": {
+        "provider": "agnes",
+        "model": "agnes-3.0-flash",
+        "actualRequests": 1,
+        "totalTokens": 8566,
+        "costUsd": null,
+        "status": "failed-before-review",
+        "failure": "situationRequest.evidenceExcerpt paraphrases current action text with ellipsis; deterministic preview rejected it",
+        "countsInM1": false,
+        "restoration": {
+          "runStatusesPreserved": true,
+          "retainedFailedRuns": 1,
+          "resumableRuns": 0,
+          "modelCalls": 0,
+          "interactionEqual": true,
+          "refreshEqual": true,
+          "worldPreserved": true,
+          "rawEvidenceRetained": true
+        }
+      }
+    },
+    {
+      "version": "V181",
+      "privateEvidence": "character-chat-20261014/v181-own-expression-diagnostic/diagnostic-summary.json",
+      "summarySha256": "68bb76db218fe3d4b72bbd47a6e32ebb937ffe1e9981c2297725b2572adc496b",
+      "summary": {
+        "provider": "agnes",
+        "model": "agnes-3.0-flash",
+        "actualRequests": 1,
+        "totalTokens": 8578,
+        "costUsd": null,
+        "status": "failed-before-review",
+        "failure": "Empty audienceKeys rejected by deterministic preview. Response also chose attempt while waitingForPlayer=false; that independent contradiction remains invalid.",
+        "countsInM1": false,
+        "ownExpressionBindingExercised": false,
+        "restoration": {
+          "runStatusesPreserved": true,
+          "retainedFailedRuns": 1,
+          "resumableRuns": 0,
+          "modelCalls": 0,
+          "interactionEqual": true,
+          "refreshEqual": true,
+          "worldPreserved": true,
+          "rawEvidenceRetained": true
+        }
+      }
+    },
+    {
+      "version": "V182",
+      "privateEvidence": "character-chat-20261014/v182-agnes-pro-control/diagnostic-summary.json",
+      "summarySha256": "c314b9591d1b06638f1d1505079cbd32560e4318d75cbb97919af726fca47e29",
+      "summary": {
+        "provider": "agnes",
+        "requestedModel": "agnes-3.0-pro",
+        "actualRequests": 1,
+        "observedTokens": null,
+        "costUsd": null,
+        "status": "provider-rejected",
+        "httpStatus": 403,
+        "providerCode": "insufficient_user_quota",
+        "countsInM1": false,
+        "modelQualityResult": null,
+        "restoration": {
+          "runStatusesPreserved": true,
+          "retainedFailedRuns": 1,
+          "resumableRuns": 0,
+          "modelCalls": 0,
+          "interactionEqual": true,
+          "refreshEqual": true,
+          "worldPreserved": true,
+          "rawEvidenceRetained": true
+        }
+      }
+    }
+  ],
+  "setupFailure": {
+    "version": "V177",
+    "actualRequests": 0,
+    "reason": "UI normalized current Agnes 3.0 Flash to the old 2.5 default; dispatch guard stopped the call; fixed in V178",
+    "privateEvidence": "character-chat-20261014/v177-current-agnes-diagnostic/setup-failure.json"
+  },
+  "engineering": {
+    "version": "V200",
+    "focusedFiles": 2,
+    "focusedTests": 17,
+    "focusedExitCode": 0,
+    "focusedLogSha256": "67147b0e3c0d954e9dfffcef5fb2817283101093decbee7f49099460700194b0",
+    "relatedFiles": 6,
+    "relatedTests": 86,
+    "relatedExitCode": 0,
+    "testRunsOverlap": true,
+    "typeCheckExitCode": 0,
+    "changedLintExitCode": 0,
+    "staticGatesPassed": [
+      "check:architecture",
+      "check:required-tables",
+      "check:ai-manual",
+      "check:project-metrics",
+      "check:roadmap",
+      "check:agent-freshness",
+      "git diff --check"
+    ],
+    "fullDeliveryValidated": false,
+    "realModelAcceptance": false,
+    "browserUiAccepted": false
+  },
+  "modelPolicy": {
+    "agnesRequests": "stopped until quota is restored",
+    "codex": "continue bounded diagnostics",
+    "automaticRetries": 0,
+    "humanScoring": "deferred by user",
+    "countsInM1": false
+  },
+  "pending": [
+    "V205 output budget semantics audited and new frozen receipt criterion implemented. Related 108 checks and ten existing plus two native budget browser cases passed. Run current-source full CI/build/E2E, then broader real-model/default-activation evidence; original goal intact.",
+    "full-ci",
+    "build",
+    "full-e2e",
+    "M1-M5 matrices and long-range evidence",
+    "SillyTavern comparison",
+    "formal original packages",
+    "human/commercial acceptance"
+  ],
+  "previousSourceCodexDiagnostics": [
+    {
+      "privateEvidence": "character-chat-20261014/v184-codex-expression-diagnostic/diagnostic-summary.json",
+      "summarySha256": "90d71d849c3daf1456a33d5addd54a2c514d6eaddbac0801e7ff04fac5e9fc09",
+      "status": "partial-diagnostic-not-accepted",
+      "sourceUnchanged": true,
+      "totalRequests": 12,
+      "totalObservedTokens": 193267,
+      "costUsd": null,
+      "countsInM1": false,
+      "episodes": [
+        {
+          "stem": "codex-rest",
+          "status": "completed",
+          "completionReason": "intentional-pause",
+          "requests": 6,
+          "observedTokens": 95907,
+          "rejectedChecks": [],
+          "restoration": {
+            "runStatusesPreserved": true,
+            "verifiedCompletedHistories": 3,
+            "retainedFailedRuns": 0,
+            "resumableRuns": 0,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true
+          }
+        },
+        {
+          "stem": "codex-refuse",
+          "status": "failed",
+          "completionReason": null,
+          "requests": 6,
+          "observedTokens": 97360,
+          "rejectedChecks": [
+            "meaningful-direction"
+          ],
+          "restoration": {
+            "runStatusesPreserved": true,
+            "verifiedCompletedHistories": 2,
+            "retainedFailedRuns": 1,
+            "resumableRuns": 0,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true
+          }
+        }
+      ]
+    },
+    {
+      "status": "partial-diagnostic-not-accepted",
+      "sourceUnchanged": true,
+      "sourceManifestSha256": "867d83b824dde95ad2ced4cf05b97687658a3546edf995353aab39093ac504d4",
+      "totalRequests": 14,
+      "totalObservedTokens": 229911,
+      "costUsd": null,
+      "countsInM1": false,
+      "privateEvidence": "character-chat-20261014/v186-codex-settled-progress-diagnostic/diagnostic-summary.json",
+      "summarySha256": "fbc89e42eda79f36ceba495b128cc4f23681284250d0f2272217cab30a0a9e45",
+      "episodes": [
+        {
+          "stem": "codex-refuse",
+          "status": "completed",
+          "completionReason": "budget",
+          "requests": 8,
+          "observedTokens": 133362,
+          "rejectedChecks": [],
+          "finalGoals": [
+            {
+              "goalKey": "goal-1",
+              "status": "active",
+              "playerPause": false
+            }
+          ],
+          "finalThreads": [
+            {
+              "threadKey": "thread-1",
+              "status": "open"
+            }
+          ],
+          "sealLocationKnowledge": [
+            {
+              "factKey": "fact-7",
+              "audienceKeys": [
+                "participant.001",
+                "player"
+              ]
+            }
+          ],
+          "restoration": {
+            "runStatusesPreserved": true,
+            "verifiedCompletedHistories": 4,
+            "retainedFailedRuns": 0,
+            "resumableRuns": 0,
+            "openingReviewRetained": true,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true
+          }
+        },
+        {
+          "stem": "codex-rest",
+          "status": "completed",
+          "completionReason": "intentional-pause",
+          "requests": 6,
+          "observedTokens": 96549,
+          "rejectedChecks": [],
+          "finalGoals": [
+            {
+              "goalKey": "goal-1",
+              "status": "paused",
+              "playerPause": true
+            }
+          ],
+          "finalThreads": [
+            {
+              "threadKey": "thread-1",
+              "status": "paused"
+            }
+          ],
+          "sealLocationKnowledge": [
+            {
+              "factKey": "fact-7",
+              "audienceKeys": [
+                "participant.001"
+              ]
+            }
+          ],
+          "restoration": {
+            "runStatusesPreserved": true,
+            "verifiedCompletedHistories": 3,
+            "retainedFailedRuns": 0,
+            "resumableRuns": 0,
+            "openingReviewRetained": true,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true
+          }
+        }
+      ],
+      "observations": [
+        "Refusal: adopted disclosure carries the confirmed location to player knowledge; next action clarifies the scope of the objection. No repeated identification task. Goal still active at the two-opportunity budget ending; no whole-episode quality pass.",
+        "Rest: own goal and shared thread paused with actual playerPause; no next investigation."
+      ],
+      "limitations": [
+        "Development scenario used for diagnosis; not a holdout or formal matrix slot.",
+        "No independent human scores, monetary cost unavailable, Agnes quota remains unavailable."
+      ]
+    },
+    {
+      "version": 2,
+      "recordedAt": "2026-10-19T17:48:12.040890+00:00",
+      "status": "partial-diagnostic-not-accepted",
+      "sourceUnchanged": true,
+      "sourceManifestSha256": "d4069c5203711e0e9f07d2376fa5bbdcdbc7fb6ec99ba8842f9224239b3b1af8",
+      "totalRequests": 34,
+      "totalObservedTokens": 569242,
+      "costUsd": null,
+      "countsInM1": false,
+      "humanScored": false,
+      "episodes": [
+        {
+          "stem": "clock-r1-refuse",
+          "status": "completed",
+          "completionReason": "intentional-pause",
+          "opportunities": 6,
+          "requests": 18,
+          "observedTokens": 298915,
+          "rejectedChecks": [],
+          "initialStateVerified": true,
+          "finalGoals": [
+            {
+              "goalKey": "goal-1-1",
+              "status": "paused",
+              "playerPause": true
+            }
+          ],
+          "finalThreads": [
+            {
+              "threadKey": "thread-1-1",
+              "status": "paused"
+            }
+          ],
+          "restoration": {
+            "runStatusesPreserved": true,
+            "verifiedCompletedHistories": 9,
+            "retainedFailedRuns": 0,
+            "resumableRuns": 0,
+            "openingReviewRetained": true,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true
+          }
+        },
+        {
+          "stem": "clock-r1-weak-guidance",
+          "status": "failed",
+          "completionReason": "meaningful-direction-review-rejected",
+          "opportunities": 6,
+          "requests": 16,
+          "observedTokens": 270327,
+          "initialStateVerified": true,
+          "rejectedChecks": [
+            {
+              "check": "meaningful-direction",
+              "passed": false,
+              "reason": "玩家要求听取想法已在上一轮得到回应，本轮继续触发没有新的玩家请求。此前已说明开壳未获同意、无需立即拿主意，本次再次重述同一等待与宽慰，没有新增理由、信息、选择或实际推进，不能作为持续推进采用。"
+            }
+          ],
+          "finalGoals": [
+            {
+              "goalKey": "goal-1-1",
+              "status": "active",
+              "playerPause": false
+            }
+          ],
+          "finalThreads": [
+            {
+              "threadKey": "thread-1-1",
+              "status": "open"
+            }
+          ],
+          "springKnowledge": [
+            "participant.001",
+            "player"
+          ],
+          "remainingPossibilities": [
+            {
+              "actorKey": "participant.001",
+              "text": "等待沈禾决定是否允许打开外壳查看内部机构；若获准，检查范围仅限查看，不拆换零件。",
+              "evidenceFactKeys": [
+                "fact-1-1",
+                "fact-1-3",
+                "fact-1-8"
+              ]
+            }
+          ],
+          "restoration": {
+            "runStatusesPreserved": true,
+            "verifiedCompletedHistories": 7,
+            "retainedFailedRuns": 1,
+            "resumableRuns": 0,
+            "openingReviewRetained": true,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true
+          },
+          "actorRequestCheck": {
+            "specificDependencyRulePresent": true,
+            "generalSituationWaitWordingPresent": true,
+            "pendingOpeningPlanPresent": true,
+            "privateSpringPresent": true
+          }
+        }
+      ],
+      "observations": [
+        "Player refused the first main proposal to open the shell and did not invent missing handling history. The actor respected these choices and independently performed a distinct noncontact visual gap check.",
+        "Actor first reported this new limited result and self-paused; review accepted the report and bounded pause without claiming all methods exhausted. On an ordinary continue, actor offered a grounded storage choice rather than another identical check.",
+        "Player chose to leave the clock in its original position and stop repair today. The adopted acknowledgement attached playerPause to the original goal and paused the original shared thread; no repair success, movement or replacement was claimed.",
+        "Nine durable runtime histories completed; same-source refresh and independent backup restore retained interaction, original raw responses, opening review and world hash, with zero recovery model calls.",
+        "Weak guidance: actor voluntarily disclosed its known trial spring while preserving uncertainty; player knowledge actually changed. Player never granted opening permission.",
+        "After that disclosure, the actor returned to caution and waiting for the same opening decision. On an ordinary continue, the final reassurance repeated already-stated freedom not to decide; meaningful-direction rejected it. Seven child runs completed, one failed, and the rejected expression was not adopted.",
+        "Original waiting plan remained in possibilities. Actual actor prompt contains both the specific current-action dependency rule and the broadly worded situation-request prohibition while waiting for a decision. This is a possible conflicting interpretation, not proven causality."
+      ],
+      "limitations": [
+        "The episode followed a different path from the V188 book-reading failure; stochastic trajectory differences prevent attributing improvement solely to the prompt change.",
+        "Original V188 failures retained. This fresh-session diagnostic neither reproduces the exact book-observation failure point nor replaces a formal M1 slot.",
+        "Weak-guidance failure remains unresolved; targeted V191 original-book-point improvement does not override this failure."
+      ],
+      "next": "Establish a regression using a real unanswered invitation, then a fresh weak player response and an independent situation request. Verify current deterministic authority permits the independent method while keeping actual permission-dependent steps and playerPause blocked. Clarify only the applicable frozen prompt wording after the contract is established; do not weaken semantic review or retry the failed episode.",
+      "privateEvidence": "character-chat-20261014/v190-codex-progress-replanning/diagnostic-summary-v2.json",
+      "summarySha256": "2885eea7e7fc77bc7158bd09e658caacfdeabc4f8fb0a49645dfc924d9520f50"
+    }
+  ],
+  "currentSourceCodexDiagnostic": {
+    "version": 1,
+    "recordedAt": "2026-10-19T18:12:16.710Z",
+    "status": "target-not-improved-review-rejected",
+    "sourceManifestSha256": "379aef66f34ff985d2a7741d4c7e988d953ebd30aa23a9cd185630c48a90e6e8",
+    "sourceUnchanged": true,
+    "countsInM1": false,
+    "humanScored": false,
+    "requests": 2,
+    "observedTokens": 36078,
+    "opportunities": 1,
+    "costUsd": null,
+    "producerVersions": [
+      "chat-narrative-action-v44",
+      "chat-narrative-options-v34"
+    ],
+    "reviewerVersions": [
+      "chat-narrative-action-review-v32",
+      "chat-narrative-options-review-v26"
+    ],
+    "branchAdmission": {
+      "originalPointExact": true,
+      "deterministicRebaseExact": true,
+      "parentUnchanged": true,
+      "parentFailedRunsRetained": 1,
+      "throughSequence": 20
+    },
+    "parentUnchangedAfterRun": true,
+    "candidate": {
+      "text": "“我的想法先说到这里。开不开外壳，留给你决定；不必为了接着聊，就勉强拿主意。”",
+      "expressionMode": "speech-awaiting-player",
+      "situationRequest": null,
+      "nextPossibilities": null,
+      "newFacts": []
+    },
+    "rejectedChecks": [
+      {
+        "check": "meaningful-direction",
+        "passed": false,
+        "reason": "此前已说过顾虑说到这里、开壳未获同意且不必立即决定，随后也已回答玩家想听想法的请求。本轮没有新的玩家输入，却再次收束并重申同一等待，未提供新信息、理由、选择或后果，属于重复而非持续推进。"
+      }
+    ],
+    "finalGoals": [
+      {
+        "goalKey": "goal-1-1",
+        "status": "active",
+        "playerPause": false
+      }
+    ],
+    "finalThreads": [
+      {
+        "threadKey": "thread-1-1",
+        "status": "open"
+      }
+    ],
+    "actorRequest": {
+      "correctContinueObjective": true,
+      "newScopeRulePresent": true,
+      "systemCharacters": 13021,
+      "actorContextCharacters": 7094,
+      "retainedWaitingPlan": true
+    },
+    "restoration": {
+      "stem": "pre-failure",
+      "parentUnchanged": true,
+      "runStatusesPreserved": true,
+      "verifiedCompletedHistories": 0,
+      "retainedFailedRuns": 1,
+      "resumableRuns": 0,
+      "openingReviewRetained": true,
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true
+    },
+    "observations": [
+      "The exact original event-20 state and deterministic child rebase were verified before any model call; original failed parent remained unchanged.",
+      "Plain continue produced another permission-wait reassurance, without an independent action, question, situation request or new consequence. Independent meaningful-direction review rejected it; the candidate was not adopted.",
+      "Current request carries the correct continue objective, the narrowed wait-scope rule, known facts and prior dialogue. A wrong trigger objective or deterministic request-permission blocker does not explain this sample.",
+      "The existing situation builder requires an already reviewed actor request; at this point no request exists. Selection of a new grounded direction is still left to the same expression generator. This is a mechanism observation, not proof that adding a planner will improve quality."
+    ],
+    "limitations": [
+      "One targeted development-state sample; does not establish statistical causality or cross-model quality.",
+      "No new formal M1 slot or human/commercial acceptance. Agnes remains unavailable due service quota.",
+      "New wording removed an ambiguity but did not solve this observed stagnation; do not report it as a functional quality fix."
+    ],
+    "next": "Audit and test explicit selection of a grounded action before expression, reusing the existing role-scoped context, candidate, review and lifecycle. Evaluate the hypothesis before adding a new production stage; preserve current constraints and original failures."
+  },
+  "previousEngineering": [
+    {
+      "version": "V185",
+      "focusedFiles": 13,
+      "focusedTests": 200,
+      "focusedExitCode": 0,
+      "focusedLogSha256": "ea06219f5e9affb62b0d8883bf1ae465c06fe0f4f6848564b8fb95aa96c70b93",
+      "fullDeliveryValidated": false,
+      "typeCheckExitCode": 0,
+      "staticGatesPassed": [
+        "check:architecture",
+        "check:required-tables",
+        "check:ai-manual",
+        "check:roadmap",
+        "check:agent-freshness",
+        "check:project-metrics",
+        "lint-changed"
+      ]
+    },
+    {
+      "version": "V189",
+      "focusedFiles": 14,
+      "focusedTests": 211,
+      "focusedExitCode": 0,
+      "focusedLogSha256": "513b785a725aacdcfd3fced53de328169704f1f95f0394eda43997dac10f92de",
+      "fullDeliveryValidated": false,
+      "typeCheckExitCode": 0,
+      "staticGatesPassed": [
+        "check:architecture",
+        "check:required-tables",
+        "check:ai-manual",
+        "check:roadmap",
+        "check:agent-freshness",
+        "check:project-metrics",
+        "lint-changed"
+      ],
+      "staticInitialFailure": "Project metrics stale after new source lines; official generator refreshed it and recheck passed. Original failure log retained."
+    },
+    {
+      "version": "V192",
+      "focusedFiles": 5,
+      "focusedTests": 72,
+      "focusedExitCode": 0,
+      "focusedLogSha256": "ee550b2bd527cb8bd90bfa1eb3dccb96f009e8c1486ad117aba38ca26b03d3ba",
+      "fullDeliveryValidated": false,
+      "typeCheckExitCode": 0,
+      "staticGatesPassed": [
+        "check:architecture",
+        "check:required-tables",
+        "check:ai-manual",
+        "check:roadmap",
+        "check:agent-freshness",
+        "check:project-metrics",
+        "lint-changed",
+        "git-diff-check"
+      ],
+      "relatedFirstRun": {
+        "files": 22,
+        "passedTests": 437,
+        "failedTests": 2,
+        "exitCode": 1,
+        "failure": "Two stale current-review version assertions, retained in original log. Updated current versions and added scope-rule check; affected file included in final 72 passing tests.",
+        "logSha256": "f602afb8569f598be1fda0acfe326fff00e3ba920a573b79d85e74f6dc18864d"
+      },
+      "prechangeWaitScopeProof": {
+        "tests": 9,
+        "exitCode": 0,
+        "modelCalls": "injected engineering fixtures only",
+        "summary": "Persisted unanswered invitation permits an independent situation request; actual action wait and playerPause reject before independent review; import retains request without granting consent."
+      },
+      "legacyPromptBytesPreserved": [
+        "v42/v32 with review v31/v25",
+        "v43/v33 with review v31/v25"
+      ],
+      "realModelAcceptance": false
+    },
+    {
+      "version": "V196",
+      "focusedFiles": 4,
+      "focusedTests": 83,
+      "focusedExitCode": 0,
+      "focusedLogSha256": "59153c2b7e95f791005cc51aac182eb43b4477b5ccdc946c0fce9603e7d82a94",
+      "additionalBudgetCounterexampleRun": {
+        "files": 1,
+        "tests": 12,
+        "exitCode": 0,
+        "logSha256": "3940448eb393fb25c442f17777fc26a0884a1159db748b95b16e66f821205a7d"
+      },
+      "typeCheckExitCode": 0,
+      "staticGatesPassed": [
+        "check:architecture",
+        "check:required-tables",
+        "check:ai-manual",
+        "check:project-metrics",
+        "check:roadmap",
+        "check:agent-freshness",
+        "git diff --check"
+      ],
+      "fullDeliveryValidated": false,
+      "realModelAcceptance": false
+    }
+  ],
+  "targetedOriginalPointDiagnostics": [
+    {
+      "version": 1,
+      "recordedAt": "2026-10-19T17:38:30.025046+00:00",
+      "status": "target-observed-not-accepted",
+      "sourceManifestSha256": "d4069c5203711e0e9f07d2376fa5bbdcdbc7fb6ec99ba8842f9224239b3b1af8",
+      "sourceUnchanged": true,
+      "countsInM1": false,
+      "humanScored": false,
+      "requests": 6,
+      "observedTokens": 105307,
+      "opportunities": 2,
+      "costUsd": null,
+      "modelOrContractFailure": null,
+      "branchAdmission": {
+        "originalPointExact": true,
+        "deterministicRebaseExact": true,
+        "parentUnchanged": true,
+        "parentFailedRunsRetained": 1,
+        "throughSequence": 24
+      },
+      "parentUnchangedAfterRun": true,
+      "actorRequest": {
+        "bookPresent": true,
+        "newMinuteRecordsPresent": true,
+        "newProducerGuidancePresent": true,
+        "oldReviewerRationalePresent": false
+      },
+      "finalGoals": [
+        {
+          "goalKey": "goal-1-1",
+          "status": "paused",
+          "playerPause": false
+        }
+      ],
+      "finalThreads": [
+        {
+          "threadKey": "thread-1-1",
+          "status": "open"
+        }
+      ],
+      "restoration": {
+        "parentUnchanged": true,
+        "runStatusesPreserved": true,
+        "verifiedCompletedHistories": 3,
+        "retainedFailedRuns": 0,
+        "resumableRuns": 0,
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      },
+      "observations": [
+        "Existing branch API replayed the exact original successful state through event 24 and deterministically rebased it, retaining the original failed parent; no player message, new fact or method was inserted.",
+        "On plain continue, actor used fresh intervals and cumulative hand motion to perform a distinct lookup in the known reference book. Independent review accepted it as a new question grounded in new results, with no contact or promised answer.",
+        "Actual lookup result clarified limits of the specific section and the need for direct internal observation to resolve a particular distinction. Actor disclosed those limited findings and grounded its self-pause in the retained no-opening/no-touching boundary.",
+        "The original thread remains open and repair unfinished. Three new child histories completed; original parent state, child interaction, raw evidence, opening review and world survived independent import and refresh with zero model calls."
+      ],
+      "limitations": [
+        "One targeted development-state sample, not a fresh-production or whole-story acceptance result.",
+        "Does not establish statistical reliability, cross-model quality or general weak-guidance performance.",
+        "Original V188 failure is neither retried nor replaced. Human scoring deferred; Agnes quota unavailable."
+      ],
+      "next": "Run the already registered independent weak-guidance diagnostic from the original release initial state, then retain all results for full engineering and later formal matrix validation.",
+      "privateEvidence": "character-chat-20261014/v191-original-point-diagnostic/diagnostic-summary.json",
+      "summarySha256": "c51ad92f7ec21eb816e0f15dde3a539a650532363abc4d7dbea50cb151883631"
+    },
+    {
+      "version": 1,
+      "recordedAt": "2026-10-19T18:12:16.710Z",
+      "status": "target-not-improved-review-rejected",
+      "sourceManifestSha256": "379aef66f34ff985d2a7741d4c7e988d953ebd30aa23a9cd185630c48a90e6e8",
+      "sourceUnchanged": true,
+      "countsInM1": false,
+      "humanScored": false,
+      "requests": 2,
+      "observedTokens": 36078,
+      "opportunities": 1,
+      "costUsd": null,
+      "producerVersions": [
+        "chat-narrative-action-v44",
+        "chat-narrative-options-v34"
+      ],
+      "reviewerVersions": [
+        "chat-narrative-action-review-v32",
+        "chat-narrative-options-review-v26"
+      ],
+      "branchAdmission": {
+        "originalPointExact": true,
+        "deterministicRebaseExact": true,
+        "parentUnchanged": true,
+        "parentFailedRunsRetained": 1,
+        "throughSequence": 20
+      },
+      "parentUnchangedAfterRun": true,
+      "candidate": {
+        "text": "“我的想法先说到这里。开不开外壳，留给你决定；不必为了接着聊，就勉强拿主意。”",
+        "expressionMode": "speech-awaiting-player",
+        "situationRequest": null,
+        "nextPossibilities": null,
+        "newFacts": []
+      },
+      "rejectedChecks": [
+        {
+          "check": "meaningful-direction",
+          "passed": false,
+          "reason": "此前已说过顾虑说到这里、开壳未获同意且不必立即决定，随后也已回答玩家想听想法的请求。本轮没有新的玩家输入，却再次收束并重申同一等待，未提供新信息、理由、选择或后果，属于重复而非持续推进。"
+        }
+      ],
+      "finalGoals": [
+        {
+          "goalKey": "goal-1-1",
+          "status": "active",
+          "playerPause": false
+        }
+      ],
+      "finalThreads": [
+        {
+          "threadKey": "thread-1-1",
+          "status": "open"
+        }
+      ],
+      "actorRequest": {
+        "correctContinueObjective": true,
+        "newScopeRulePresent": true,
+        "systemCharacters": 13021,
+        "actorContextCharacters": 7094,
+        "retainedWaitingPlan": true
+      },
+      "restoration": {
+        "stem": "pre-failure",
+        "parentUnchanged": true,
+        "runStatusesPreserved": true,
+        "verifiedCompletedHistories": 0,
+        "retainedFailedRuns": 1,
+        "resumableRuns": 0,
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      },
+      "observations": [
+        "The exact original event-20 state and deterministic child rebase were verified before any model call; original failed parent remained unchanged.",
+        "Plain continue produced another permission-wait reassurance, without an independent action, question, situation request or new consequence. Independent meaningful-direction review rejected it; the candidate was not adopted.",
+        "Current request carries the correct continue objective, the narrowed wait-scope rule, known facts and prior dialogue. A wrong trigger objective or deterministic request-permission blocker does not explain this sample.",
+        "The existing situation builder requires an already reviewed actor request; at this point no request exists. Selection of a new grounded direction is still left to the same expression generator. This is a mechanism observation, not proof that adding a planner will improve quality."
+      ],
+      "limitations": [
+        "One targeted development-state sample; does not establish statistical causality or cross-model quality.",
+        "No new formal M1 slot or human/commercial acceptance. Agnes remains unavailable due service quota.",
+        "New wording removed an ambiguity but did not solve this observed stagnation; do not report it as a functional quality fix."
+      ],
+      "next": "Audit and test explicit selection of a grounded action before expression, reusing the existing role-scoped context, candidate, review and lifecycle. Evaluate the hypothesis before adding a new production stage; preserve current constraints and original failures."
+    }
+  ],
+  "previousDiagnosticSnapshots": [
+    {
+      "version": 1,
+      "recordedAt": "2026-10-19T17:30:09.121834+00:00",
+      "status": "partial-diagnostic-not-accepted",
+      "sourceUnchanged": true,
+      "sourceManifestSha256": "d4069c5203711e0e9f07d2376fa5bbdcdbc7fb6ec99ba8842f9224239b3b1af8",
+      "totalRequests": 18,
+      "totalObservedTokens": 298915,
+      "costUsd": null,
+      "countsInM1": false,
+      "humanScored": false,
+      "episodes": [
+        {
+          "stem": "clock-r1-refuse",
+          "status": "completed",
+          "completionReason": "intentional-pause",
+          "opportunities": 6,
+          "requests": 18,
+          "observedTokens": 298915,
+          "rejectedChecks": [],
+          "initialStateVerified": true,
+          "finalGoals": [
+            {
+              "goalKey": "goal-1-1",
+              "status": "paused",
+              "playerPause": true
+            }
+          ],
+          "finalThreads": [
+            {
+              "threadKey": "thread-1-1",
+              "status": "paused"
+            }
+          ],
+          "restoration": {
+            "runStatusesPreserved": true,
+            "verifiedCompletedHistories": 9,
+            "retainedFailedRuns": 0,
+            "resumableRuns": 0,
+            "openingReviewRetained": true,
+            "modelCalls": 0,
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "worldPreserved": true,
+            "rawEvidenceRetained": true
+          }
+        }
+      ],
+      "observations": [
+        "Player refused the first main proposal to open the shell and did not invent missing handling history. The actor respected these choices and independently performed a distinct noncontact visual gap check.",
+        "Actor first reported this new limited result and self-paused; review accepted the report and bounded pause without claiming all methods exhausted. On an ordinary continue, actor offered a grounded storage choice rather than another identical check.",
+        "Player chose to leave the clock in its original position and stop repair today. The adopted acknowledgement attached playerPause to the original goal and paused the original shared thread; no repair success, movement or replacement was claimed.",
+        "Nine durable runtime histories completed; same-source refresh and independent backup restore retained interaction, original raw responses, opening review and world hash, with zero recovery model calls."
+      ],
+      "limitations": [
+        "The episode followed a different path from the V188 book-reading failure; stochastic trajectory differences prevent attributing improvement solely to the prompt change.",
+        "Original V188 failures retained. This fresh-session diagnostic neither reproduces the exact book-observation failure point nor replaces a formal M1 slot.",
+        "Weak-guidance diagnostic registered but unstarted; holdout bodies unread. No independent human score, long-range quality, monetary cost or full engineering acceptance."
+      ],
+      "next": "Exercise the original V188 pre-failure point through the existing branch API at sequence 24 in a new isolated diagnostic with new generation rules. Preserve old failed run and raw response, avoid repair or replacement. Assess whether new observations support a genuinely new targeted question or another grounded direction. Then collect remaining independent behavior evidence.",
+      "privateEvidence": "character-chat-20261014/v190-codex-progress-replanning/diagnostic-summary.json",
+      "summarySha256": "b956e29a38d6edf5760ad5c56b0556b45de30fa809403d5b5482130aec22317c"
+    }
+  ],
+  "actionSelectionExperiments": [
+    {
+      "version": 1,
+      "recordedAt": "2026-10-19T18:23:25.545024+00:00",
+      "status": "hypothesis-supported-by-draft-not-product-acceptance",
+      "executionBoundary": "experimental",
+      "entryId": "prompt.workflow.step",
+      "sourceManifestSha256": "379aef66f34ff985d2a7741d4c7e988d953ebd30aa23a9cd185630c48a90e6e8",
+      "sourceUnchanged": true,
+      "sameActorContext": true,
+      "requests": 1,
+      "observedTokens": 8790,
+      "countsInM1": false,
+      "humanScored": false,
+      "adopted": false,
+      "rawEvidenceSha256": "62ad93c2da767b7068c7e0d29b459fd13a4465d27534cc78e4274fe8e929b65b",
+      "draft": {
+        "directions": [
+          {
+            "id": "d1",
+            "action": "不触碰旧钟，对照工作表延长观察至一分钟，记录停顿时刻，并比较指针在观察起止时的位置。",
+            "evidenceFactKeys": [
+              "fact-1-4",
+              "fact-1-5",
+              "fact-1-6",
+              "fact-1-8"
+            ],
+            "changes": "补足此前观察时间过短的局限，尝试澄清停顿间隔是否重复、指针是否有可辨位移；不预定能得出结论或诊断。",
+            "playerDependency": null,
+            "unconfirmedConditions": [
+              "延长观察后是否仍出现可供比较的停顿",
+              "指针位移是否足以直接辨认"
+            ],
+            "kind": "own-action"
+          },
+          {
+            "id": "d2",
+            "action": "暂不继续检查，留出安静时间让沈禾考虑是否同意开壳。",
+            "evidenceFactKeys": [
+              "fact-1-1",
+              "fact-1-3",
+              "fact-1-8"
+            ],
+            "changes": "保留开壳许可尚未决定的状态，不把继续演绎当作同意，也不重复催问。",
+            "playerDependency": "开壳查看仍需沈禾明确同意。",
+            "unconfirmedConditions": [],
+            "kind": "wait"
+          }
+        ],
+        "selectedId": "d1",
+        "decisionSummary": "先延长无需触碰旧钟的外部观察，针对此前明确的时间不足补充信息。开壳仍等待许可，观察也不保证能查明原因。"
+      },
+      "selectedReferencesVisible": true,
+      "setupAttempts": [
+        {
+          "attempt": 1,
+          "requests": 0,
+          "failure": "React DOM default export not normalized in isolated test component; original setup evidence retained."
+        },
+        {
+          "attempt": 2,
+          "requests": 1,
+          "transport": "completed",
+          "originalGuardFailure": "Error: Experimental node changed database rows",
+          "changedTables": {
+            "promptTemplates": {
+              "before": 0,
+              "after": 238
+            },
+            "promptWorkflows": {
+              "before": 0,
+              "after": 3
+            },
+            "aiUsageLog": {
+              "before": 0,
+              "after": 1
+            }
+          }
+        }
+      ],
+      "followupAudit": {
+        "modelCalls": 0,
+        "startupNonempty": {
+          "promptTemplates": 238,
+          "promptWorkflows": 3
+        },
+        "auditSha256": "f7f93533ab720587ead0d0fe08c9b8774b61680343926ce4c8bbfe6f79050fbc",
+        "sourcePointers": [
+          "src/main.tsx:71-82",
+          "src/stores/prompt.ts:38-54",
+          "src/stores/workflow.ts"
+        ]
+      },
+      "observations": [
+        "With the identical role-visible context but a short explicit choice task, the model selected a longer noncontact observation, grounded in the known working watch and the prior observation being too short. It did not claim a result or permission to open the clock.",
+        "The model also preserved waiting as a separate possibility; the selected independent direction has no player dependency. All cited fact keys are visible in the saved role view.",
+        "The broad no-database-changes guard failed after the completed model call. Only default prompt templates/workflows and an AI usage log appeared; a fresh zero-model startup audit reproduced exactly the template/workflow populations. All other tables remained empty. Original failed guard output is retained and not relabeled as a passed run."
+      ],
+      "limitations": [
+        "A planning draft has no factual or adoption authority and has not gone through the formal expression/consequence/review path.",
+        "One sample does not prove improved storytelling, stable selection, useful consequences, or the need for another Agent/model call.",
+        "The isolated bootstrap audit differs from full runtime and lifecycle acceptance; the product path remains unchanged."
+      ],
+      "next": "Compare a decision-before-expression output contract within the existing action generator against a separate choice step, using the same known state and a real player-pause counterexample before choosing an implementation. Prefer existing context/candidate/review ownership; do not add a second story state or automatically retry historical failures."
+    },
+    {
+      "version": 1,
+      "recordedAt": "2026-10-19T18:38:42.534948+00:00",
+      "status": "split-choice-supported-by-drafts-and-preview-not-formal-acceptance",
+      "entryId": "prompt.workflow.step",
+      "executionBoundary": "experimental",
+      "adoptAllowed": false,
+      "adopted": false,
+      "countsInM1": false,
+      "humanScored": false,
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "sourceManifestSha256": "379aef66f34ff985d2a7741d4c7e988d953ebd30aa23a9cd185630c48a90e6e8",
+      "sourceUnchanged": true,
+      "designSha256": "5f99129c90774b0ce41fddd8ab3bf35ba1ea3b04d46fd61a9f825b75a2723da5",
+      "runnerSha256": "e1a807f6656fedcb6c9eda139ef6a15240a795d9d3877c7ddaf858460ec02985",
+      "previewVerifierSha256": "21af54ef2f988620823b404f8728ed7dcd2e1939a915625ee6223f5dbb9586b0",
+      "previewEvidenceSha256": "669a42d2cdfe46cc2022ba88e2f07d78ad6d34cbf9575b75ec8380fb32ce5e22",
+      "requests": 5,
+      "observedTokens": 72828,
+      "cases": [
+        {
+          "caseId": "positive-combined",
+          "requests": 1,
+          "observedTokens": 15799,
+          "sourceUnchanged": true,
+          "sameActorContext": true,
+          "nonUsageDataUnchanged": true,
+          "usageChange": {
+            "before": 0,
+            "after": 1
+          },
+          "rawEvidenceSha256": "109d2f33296cfb16ca392c06528a9907f56cf837d16ca8395e75fd11386f1000",
+          "registrationSha256": "4d4c55bc73b0bb7ed61671598f5d955c14b0a60bc100f09f7f3bc83e0997d6bb",
+          "canonicalParsed": true
+        },
+        {
+          "caseId": "negative-combined",
+          "requests": 1,
+          "observedTokens": 16262,
+          "sourceUnchanged": true,
+          "sameActorContext": true,
+          "nonUsageDataUnchanged": true,
+          "usageChange": {
+            "before": 0,
+            "after": 1
+          },
+          "rawEvidenceSha256": "69737c664d037365217013591b1e5e23de9c4e30332d4bb106118f45206497e6",
+          "registrationSha256": "46e740fd238a7a71fd8baf8bebd2d5eb0f5115b4e441564f6392699c451c5237",
+          "canonicalParsed": true
+        },
+        {
+          "caseId": "positive-expression",
+          "requests": 1,
+          "observedTokens": 15985,
+          "sourceUnchanged": true,
+          "sameActorContext": true,
+          "nonUsageDataUnchanged": true,
+          "usageChange": {
+            "before": 0,
+            "after": 1
+          },
+          "rawEvidenceSha256": "6519011b257170b28434628540879874b02c6846e3fd8270689fef8447ac83ae",
+          "registrationSha256": "5ce60cf249b2891a89043b75b336c461283ea5c8579797d46df4783e797248ce",
+          "canonicalParsed": true
+        },
+        {
+          "caseId": "negative-choice",
+          "requests": 1,
+          "observedTokens": 8758,
+          "sourceUnchanged": true,
+          "sameActorContext": true,
+          "nonUsageDataUnchanged": true,
+          "usageChange": {
+            "before": 0,
+            "after": 1
+          },
+          "rawEvidenceSha256": "8a4131ce576484c20f8683528abee6bf302db3af8bc37ab242403e95dbc0d25f",
+          "registrationSha256": "8113ae7db9746ab7f442a0f9da92e1145aaa6cfe0589a7e907fe7ca5686ea501",
+          "canonicalParsed": false
+        },
+        {
+          "caseId": "negative-expression",
+          "requests": 1,
+          "observedTokens": 16024,
+          "sourceUnchanged": true,
+          "sameActorContext": true,
+          "nonUsageDataUnchanged": true,
+          "usageChange": {
+            "before": 0,
+            "after": 1
+          },
+          "rawEvidenceSha256": "ad258cffa9aa1fd87fb06ab737a2794c0023a8fa2c71b64ec82169ed2c3053ad",
+          "registrationSha256": "63da781f2c348d31c78f7a0d82ce500cb37443d0c8b9d4a83127068ae3483c12",
+          "canonicalParsed": true
+        }
+      ],
+      "preview": {
+        "modelCalls": 0,
+        "eventReplayVerified": true,
+        "casesPassed": 4,
+        "originalStatesUnchanged": true,
+        "positivePendingPurpose": "observation-result",
+        "negativePlayerPausePreserved": true,
+        "negativeSharedThreadPaused": true
+      },
+      "observations": [
+        "Same-call choice+expression generated another wait/self-pause at the original stagnation point. It parsed and previewed but did not demonstrate the desired independent progress; no semantic model review was run in this experiment.",
+        "Separate expression using the exact V194 choice draft performed a longer noncontact observation grounded in the known working watch and explicit insufficiency of the earlier short observation. It registered the action and requested bounded observation-result settlement, without claiming findings, cause, player permission or goal completion.",
+        "Both same-call and split-expression stop counterexamples accepted the actual player stop, preserved the exact player source and produced playerPause plus shared-thread pause; neither requested new investigation.",
+        "Negative choice came from a fresh real-model draft; it was passed verbatim without critique, correction or new facts.",
+        "All five calls completed once, with only aiUsageLog changing after bootstrap. Four canonical actions passed unchanged production wire/parser/preview against replay-verified pre-action states."
+      ],
+      "limitations": [
+        "One development situation and one stop point; not evidence of cross-story reliability or a causal superiority estimate.",
+        "Experimental hook did not request provider JSON schema; no formal durable actor candidate, independent semantic review or adoption occurred.",
+        "Positive split choice reused V194 draft (8790 tokens), outside the 72828 tokens used by these five calls. Two-stage latency/cost must be measured from production traces.",
+        "Agnes validation, formal cohort, long-range, ensemble, comparison and human acceptance remain incomplete."
+      ],
+      "decision": "Implement and verify a versioned bounded choice step within the existing action Harness before broader model collection. Reuse the registered role context, existing artifacts/checkpoints, action review/adoption and product event lifecycle; no parallel story state. Keep current production versions until budget/recovery/legacy tests cover the new contract."
+    }
+  ],
+  "frozenV187Engineering": {
+    "sourceManifestSha256": "11007d69336fa29458e95b6aa8f7fb75ee8464cf5502e925df7e0022485fdf1f",
+    "fullCiExitCode": 0,
+    "testFiles": 935,
+    "tests": 5966,
+    "buildPassed": true,
+    "bundleSizePassed": true,
+    "fullCiLogSha256": "ca79adb4b4edcd8cd40ea39f08f93389cbfe902f7483fa646675a0ac63aec84e",
+    "sourceUnchanged": true,
+    "e2eStatus": "terminal-failed",
+    "coversV192CurrentChanges": false,
+    "e2eObservedFailure": "Only failed test is malformed-review privacy route expecting obsolete 2400 instead of frozen 8000. Original failure and source retained; no full E2E pass claimed.",
+    "targetedRepair": "V197 immutable source copy queued for one repaired privacy test; result pending, not a replacement full E2E pass",
+    "e2eExitCode": 1,
+    "e2ePassed": 407,
+    "e2eSkipped": 4,
+    "e2eFailed": 1,
+    "e2eLogSha256": "23a05c4ab1455c60c833cf67b5101737df2bccdd573de3742981a9efe1d4d4c3",
+    "terminalReceiptSha256": "4dcf16a16ba554c8f0889c429e5590fe395040ca1aa6f4690a5bb63cef1ed831",
+    "coversV201CurrentChanges": false
+  },
+  "actionChoiceImplementation": {
+    "version": "V200",
+    "recordedAt": "2026-10-19T19:45:55.619354+00:00",
+    "status": "turn-and-controls-allowance-integrated-not-default-enabled",
+    "previousGoalTurn": "progress",
+    "currentGoalTurn": "progress",
+    "baseCommit": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+    "modelCalls": 0,
+    "activeGenerationVersions": [
+      "chat-narrative-action-v44",
+      "chat-narrative-options-v34",
+      "chat-action-revision-v20"
+    ],
+    "futureSingleActionVersion": "chat-narrative-action-v45",
+    "futureVersionActivated": false,
+    "changes": [
+      "Shared allowance calculation previews the existing deterministic trigger reducer, so a prior waiting/complete trigger cannot underprice the next explicit turn. Insufficient allowance rejects before new trigger, run or provider request.",
+      "Reserve at most five before background plus action because background may change goals or scheduled actor; then check the actual post-adoption actor and frozen recipe. Each automatic continuation is checked separately.",
+      "Resume checks the frozen actor or newly selected actor of an undirected historical turn. Prepared backgrounds are reused; final background-only settlement remains two. Comparison remains two/four; ordinary closed-goal response and current v44 remain two.",
+      "NarrativeControls uses the shared rule with current event head, audience and schedule for opening, continuation, comparison, seed and recovery. Shows insufficient allowance and respects background-model availability. No calls on mount, new tables, world writes or private proposal display."
+    ],
+    "sourceHashes": {
+      "src/lib/character-interaction/action-choice-contract.ts": "197a37b4df8ebb1e2dc5a9ddab5df33b3f249f443c8edb473083967c5b9de073",
+      "src/lib/character-interaction/narrative-budget.ts": "f0fe9c65a6f2397aa83d26b6df5db9b374d1acf9ce81cdc10e8d23c3bf3c071d",
+      "src/lib/character-interaction/narrative-turn.ts": "449196c128f04b52e5560df6c17eb885f4dc698c5080cf94815d25f64f41752d",
+      "src/components/character-interaction/NarrativeControls.tsx": "4932bdfc5d61fb2aa8bac3efb9600c478a437ffcc9ba7e75a13fcd124c59f605",
+      "src/components/character-interaction/CharacterInteractionPanel.tsx": "41771ef0327ce36cfa1155ce80f3b0ef5c7a78f22e4befe07c01787a536a0636",
+      "tests/regression/R-CHAT-03-turn-allowance.test.ts": "c5d50a19a1e5b0921b14c1ef2177cd9f87cbc7ceee782ac079a00a606fa60ed2",
+      "tests/regression/R-CHAT-03-turn-allowance-ui.test.tsx": "ba04a7b93b5c759d8c9a049b7160431be20348355281f232f833e22c3ef9e458",
+      "src/lib/agent/skill-registry.ts": "4b9515056f646cf79c9a2d04e25ab8da9e7c13a3c82b7ca7cdf5bb417c9c05f0"
+    },
+    "checks": {
+      "types": {
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "changedLint": {
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "architecture": {
+        "exitCode": 0,
+        "logSha256": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616"
+      },
+      "tables": {
+        "exitCode": 0,
+        "logSha256": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444"
+      },
+      "aiManual": {
+        "exitCode": 0,
+        "logSha256": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19"
+      },
+      "projectMetrics": {
+        "exitCode": 0,
+        "logSha256": "32f5ade067b3496f6b4dd1d2dde0aeef10be09621b5d5059fa5833f42f99b0ff"
+      },
+      "roadmap": {
+        "exitCode": 0,
+        "logSha256": "9e45dab19b38810e932d85373ca28150ee63803849201a58a23941d0bccabb2a"
+      },
+      "agentFreshness": {
+        "exitCode": 0,
+        "logSha256": "9cc4b944a33d2c5183c23c149636f6916c303d9fab3349701f2e26757500d46c"
+      },
+      "diff": {
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "focused": {
+        "files": 2,
+        "tests": 17,
+        "exitCode": 0,
+        "logSha256": "67147b0e3c0d954e9dfffcef5fb2817283101093decbee7f49099460700194b0"
+      },
+      "related": {
+        "files": 6,
+        "tests": 86,
+        "exitCode": 0,
+        "logSha256": "d5a1e552f43640debb9e5a8f6964dbc5b7a59d842b505bdb87104946d552c43a"
+      }
+    },
+    "checksNote": "Final focused 17 and earlier related 86 overlap and must not be added. Initial UI tests failed due unsupported Vitest matcher and a synthetic direction fixture missing its prior scene-start trigger; both were corrected and original logs retained. Project metrics were regenerated after new files. No real browser, current build/full CI/full E2E or provider acceptance in this increment.",
+    "remaining": [
+      "Add and execute isolated browser acceptance for action continuation, privacy, unknown-result controls and allowance boundaries; audit activation before switching exact v45.",
+      "Run real-provider schema/choice-expression-review-adoption and original stagnation/refusal cases, then current-source full CI/build/E2E. Existing frozen V187/V197 queues do not cover V200.",
+      "Finish the original M1-M5 core/holdout, 100/300/1000 long-range, ensembles, three original packages and matched SillyTavern comparison; human scoring remains deferred as authorized."
+    ],
+    "fullDeliveryValidated": false,
+    "realModelAcceptance": false,
+    "browserUiAccepted": false,
+    "existingValidation": {
+      "V187": {
+        "status": "full-e2e-running",
+        "observedAt": "2026-10-19T19:45:55.619354+00:00",
+        "queuePid": 64835,
+        "runnerPid": 93509,
+        "childPid": 14973,
+        "playwrightPid": 15177,
+        "sessionId": 6227,
+        "fullCiExitCode": 0,
+        "knownFailure": "Frozen privacy test expects obsolete 2400 review output cap; actual cap is 8000. Current assertion corrected; original failure retained.",
+        "coversV200": false
+      },
+      "V197": {
+        "status": "queued-targeted-e2e",
+        "observedAt": "2026-10-19T19:45:55.619354+00:00",
+        "queuePid": 20440,
+        "sessionId": 54460,
+        "scope": "one repaired malformed-review privacy test",
+        "coversV200": false
+      }
+    }
+  },
+  "previousActionChoiceImplementations": [
+    {
+      "version": "V196",
+      "recordedAt": "2026-10-19T18:55:49.364745+00:00",
+      "status": "choice-contract-and-accounting-foundation-implemented-stage-not-enabled",
+      "modelCalls": 0,
+      "activeGenerationVersions": [
+        "chat-narrative-action-v44",
+        "chat-narrative-options-v34",
+        "chat-action-revision-v20"
+      ],
+      "futureSingleActionVersion": "chat-narrative-action-v45",
+      "futureVersionActivated": false,
+      "changes": [
+        "Strict internal direction proposal, one selected direction, actual delivered-role fact keys, bounded fields and explicit unknown conditions; no facts/permissions are granted.",
+        "Role context is reused verbatim; expression appends only a validated unconfirmed proposal.",
+        "Choice eligibility and logical three-call allowance are isolated to exact future single-action version and unfinished goals or existing authorized followup; legacy/edits/revision/options/closed ordinary replies retain original behavior.",
+        "System-only actionChoiceVersion:1 reviewed-event metadata charges three units; absent metadata remains two. Exact original run recipe is checked transactionally; missing run or forged extra stage on a legacy run rejects without damaging its original candidate.",
+        "Import guards reject unsupported versions, other products and event types. No new tables or model-writable story fields.",
+        "Corrected E2E stale review max_tokens assertion from 2400 to current frozen 8000; original V187 failure retained and V197 isolated targeted rerun queued."
+      ],
+      "sourceHashes": {
+        "src/lib/character-interaction/action-choice-contract.ts": "f85f91f08bed43f509aed3d3723bc53739a356840fe46b01f8a2a897af78f6fd",
+        "src/lib/character-interaction/action-choice-budget.ts": "f4e522088484c6f0ce5fefd344a396396201a3a461bc32eb0e7abdcbdb075e6c",
+        "src/lib/character-interaction/narrative-actions.ts": "8fc261662a649bd0e14c7ea52090feef677e6a21032b07f491f54dd2bbca3b21",
+        "src/lib/character-interaction/runtime.ts": "1f6459fe756d0b8ad0c2386ad7ce5079e8851efadb258e8be0dc946b26aad651",
+        "src/lib/character-interaction/runtime-commands.ts": "d35fc9b900d731977e3ca11f28afea9067e6fed520ab0e2b12aa5cb5f455b2d8",
+        "src/lib/character-interaction/narrative-evidence-import.ts": "108cefb4e5e2435b49226ae952ff5ea91447df9efedc20a49202c753648c702d",
+        "src/lib/character-interaction/harness.ts": "a0fd7ea5e61f88b2ae549fb30a7105eaa4c4e83a25ca29d00f859b926c42b679",
+        "tests/regression/R-CHAT-02-action-choice-contract.test.ts": "c7861ba84af2a88bc72523b79f90a62c062a223af92ceaa408538aa342d8e640",
+        "tests/regression/R-CHAT-02-action-choice-budget.test.ts": "c0fc92da2e307bbeb42cc6f808a06691c1c105313bed4ed8ac9c5cba9324d878",
+        "tests/e2e/character-chat-integration.spec.ts": "f92f53278144caf0939421898920242713758cffd2fcf646b66cabbde79bbbfa"
+      },
+      "checks": {
+        "firstContractAttempt": {
+          "tests": 20,
+          "passed": 1,
+          "failed": 19,
+          "reason": "New fixture omitted explicit seed:null required by existing trigger contract; product code was not weakened."
+        },
+        "contractAfterFixtureFix": {
+          "files": 1,
+          "tests": 20,
+          "exitCode": 0,
+          "logSha256": "4bc5d4ccc937fe2f59fd0fca47594ccbd148cbe8ebad9327110cce26f2517a80"
+        },
+        "related": {
+          "files": 4,
+          "tests": 83,
+          "exitCode": 0,
+          "logSha256": "59153c2b7e95f791005cc51aac182eb43b4477b5ccdc946c0fce9603e7d82a94"
+        },
+        "budgetAfterAdditionalLegacyRunCounterexample": {
+          "files": 1,
+          "tests": 12,
+          "exitCode": 0,
+          "logSha256": "3940448eb393fb25c442f17777fc26a0884a1159db748b95b16e66f821205a7d"
+        },
+        "initialTypeCheck": {
+          "exitCode": 2,
+          "reason": "Array.at is outside current project library target; replaced with established slice(-1)[0].",
+          "logSha256": "a4e0e92c8a99a782da6f2f26e24305a34ebbe679132e259f5fb0898f677584fe"
+        },
+        "typeCheckExitCode": 0,
+        "typeLogSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "changedLintExitCode": 0,
+        "additionalBudgetLintExitCode": 0,
+        "staticGatesPassed": [
+          "check:architecture",
+          "check:required-tables",
+          "check:ai-manual",
+          "check:project-metrics",
+          "check:roadmap",
+          "check:agent-freshness",
+          "git diff --check"
+        ],
+        "aiManualInitiallyDrifted": true,
+        "officialGeneratorsRun": [
+          "npm run gen:ai-manual",
+          "node scripts/generate-project-metrics.mjs"
+        ]
+      },
+      "remaining": [
+        "Durable choice dispatch, frozen step binding/manifest/raw response and checkpoint.",
+        "Resume from a saved choice without re-sending it; response-unknown/cancel/stale failure paths and UI recovery.",
+        "Propagate exact allowance through turn/seed/compare/continue buttons and server command preflight; no silent fallback.",
+        "Verify actual step evidence before new-version adoption; full backup/import/branch lifecycle for the new step.",
+        "Preserve original prompt hashes while extending capabilities to exact v45; do not silently upgrade old runs or immutable edits.",
+        "New formal real-model failure-point and cross-situation validation, full current-source CI/E2E, original M1-M5 scope."
+      ],
+      "fullDeliveryValidated": false,
+      "realModelAcceptance": false
+    },
+    {
+      "version": "V198",
+      "recordedAt": "2026-10-19T19:11:48.749639+00:00",
+      "status": "durable-choice-stage-implemented-not-default-enabled",
+      "modelCalls": 0,
+      "activeGenerationVersions": [
+        "chat-narrative-action-v44",
+        "chat-narrative-options-v34",
+        "chat-action-revision-v20"
+      ],
+      "futureSingleActionVersion": "chat-narrative-action-v45",
+      "futureVersionActivated": false,
+      "changes": [
+        "Exact future v45 single-action gate adds a read-only choice step to the existing durable action run; frozen input/output limits are 16000/2000, with total choice-expression-review budget 3 calls, 56000 input and 14000 output tokens.",
+        "The choice step binds the original Gateway-delivered role view and actor input, records its manifest, rendered request, raw response and completed proposal hash before expression; no story state is changed by the proposal.",
+        "Reopening the database and re-entering the choice stage consumes the retained original response without resending selection. Requested-but-unknown and stale evidence are rejected; malformed response remains inspectable and prevents expression/review.",
+        "An injected full path verifies choice-expression-review, transactional three-unit adoption and idempotent repeated adoption. A mocked provider transport verifies 2000/4000/8000 caps and strict choice schema; it is not a live provider acceptance test.",
+        "Extended inherited capability gates to exact future v45; the current Skill stays v44. Existing prompt-byte and legacy behavior regression tests still pass."
+      ],
+      "sourceHashes": {
+        "src/lib/character-interaction/action-choice-harness.ts": "0e11614bac1066c86a78ea028d08f27f27fbc6c1c8bc70fb132f400194285bbb",
+        "src/lib/character-interaction/action-choice-contract.ts": "f85f91f08bed43f509aed3d3723bc53739a356840fe46b01f8a2a897af78f6fd",
+        "src/lib/character-interaction/action-choice-budget.ts": "f4e522088484c6f0ce5fefd344a396396201a3a461bc32eb0e7abdcbdb075e6c",
+        "src/lib/character-interaction/harness.ts": "da69012ae72077ba14ab9cabeb87ccb0874cb2ca1e875348768fdd745145fc82",
+        "src/lib/character-interaction/narrative-scene-transition.ts": "7807afd166e561b9e893c2e3643977bbf90843533b26054633e2ec108bab2f94",
+        "src/lib/character-interaction/player-decision-prompt.ts": "218a2d29ed3e25a1e062eac2cbd4ca18a1b8374fa8bac29dbe4443ae7d8c5d27",
+        "src/lib/character-interaction/narrative-replanning.ts": "deffd9f8ef32fdbb7cfb921235a789697c7b9ed85c988710805038e35670fde0",
+        "src/lib/character-interaction/action-wire.ts": "ac3b313be7d2780e700603b5743a71ed3bc3334eaf6eafa638408da678bf770c",
+        "src/lib/character-interaction/narrative-player-pause.ts": "36ddd8d0340bdb1ebaa829b330e35ce049b5668e6059ab06f97831b01acb37e6",
+        "src/lib/character-interaction/commitment-prompt.ts": "a40c873e9aa86ca8e440462308944c7ccb1e5aeb13212c75414f209fac3e0fcb",
+        "src/lib/character-interaction/narrative-action-prompt.ts": "1042d8bc13540eab06864709528a2d86741cb69a0f5511106dd0440d49cd5bfb",
+        "src/lib/character-interaction/narrative-promise-request.ts": "5f81c554635c51cca7470b759ebf3408fe32288f442a0d4b6ba43a27d8fcd12c",
+        "tests/regression/R-CHAT-02-action-choice-harness.test.ts": "f3a2f8020b7f46b53cdb4314dc45b98a4971854c2e1a68c4f7812660a2ab89f6"
+      },
+      "checks": {
+        "firstStageAttempt": {
+          "tests": 8,
+          "passed": 7,
+          "failed": 1,
+          "reason": "The new stale-state fixture supplied sourceEventSequence:0 instead of the current event head; fixed the fixture without weakening the product guard.",
+          "logSha256": "50055c3d83aef4385d4c1e02a3ac22da8d70602cdca0254ab71f61218c52e4ac"
+        },
+        "stage": {
+          "files": 1,
+          "tests": 8,
+          "exitCode": 0,
+          "logSha256": "cb55f2aacba04df401d6e47d19e1e176b6259cdb4b098877ad66a08e3d3457eb"
+        },
+        "related": {
+          "files": 5,
+          "tests": 83,
+          "exitCode": 0,
+          "logSha256": "15c1f0350434a621a618e0ffd542c0e58c0d88531ee7f53cc20e54b993eaa718"
+        },
+        "typeCheckExitCode": 0,
+        "typeLogSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "changedLintExitCode": 0,
+        "lintLogSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "diffCheckExitCode": 0
+      },
+      "remaining": [
+        "Read-only adoption proof must verify retained choice artifacts, completed step and exact proposal delivered to expression, not only the declared recipe.",
+        "Expose explicit resume of the remaining expression/review from the saved choice; do not resend selection or ambiguous expression requests. Wire store/UI phase recovery without offering the proposal as an adoptable candidate.",
+        "Propagate exact three/five-unit allowance through single-action and situation-plus-action controls; keep legacy/revision/options contracts unchanged.",
+        "Complete current-version cancel/backup/import/branch lifecycle counterexamples before activation.",
+        "Activate v45 only after the remaining integration gates, then validate original failure points with real models and finish full current-source CI/E2E and M1-M5."
+      ],
+      "fullDeliveryValidated": false,
+      "realModelAcceptance": false
+    },
+    {
+      "version": "V199",
+      "recordedAt": "2026-10-19T19:30:22.540686+00:00",
+      "status": "choice-proof-expression-recovery-and-player-entry-implemented-not-default-enabled",
+      "previousGoalTurn": "progress",
+      "currentGoalTurn": "progress",
+      "baseCommit": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+      "modelCalls": 0,
+      "activeGenerationVersions": [
+        "chat-narrative-action-v44",
+        "chat-narrative-options-v34",
+        "chat-action-revision-v20"
+      ],
+      "futureSingleActionVersion": "chat-narrative-action-v45",
+      "futureVersionActivated": false,
+      "changes": [
+        "Read-only selection proof verifies historical role state, both original manifests and source text, choice request/response and completed hash, and the exact proposal delivered to expression.",
+        "Public reviewed-action command preflight binds that proof, original expression output, reviewed candidate and command envelope. The transaction still checks the exact running ledger sequence; cancellation after preflight rejects without consequences.",
+        "Explicit continuation resumes the same run from saved selection or expression; requested-but-unknown output, stale state, changed version and cancellation do not cause resends. A candidate event saved before its checkpoint is reused without duplication.",
+        "Reused ordinary expression dispatch and candidate retention for fresh and resumed paths. Review remains independent and authoritative; no repair, fallback generation or story mutation before adoption.",
+        "Player store and UI distinguish unfinished action continuation from adoptable replies. Refresh is read-only. Continuing performs only remaining expression/review and one adoption; unknown output offers cancellation instead.",
+        "Choice request/completion checkpoints explicitly mark portable:false. Import retains evidence and cancels unfinished runs; completed history and single budget charge survive repeated import. Branches do not copy pending selection. Progress labels expose no proposal text."
+      ],
+      "sourceHashes": {
+        "src/lib/character-interaction/action-choice-evidence.ts": "4ed7d077d08a54363eaa0c0bcba2b9a79868d0cfd64255972599f8d25a73899b",
+        "src/lib/character-interaction/action-choice-harness.ts": "e417e562a8fa2c0aa0af394b3d6022c0f277ce99f53ba26d092b21e5c209c6b7",
+        "src/lib/character-interaction/harness.ts": "84ba711f09c5ef9f2dc8fcb00a979efe609f6e3451379affbc3358103cd6d7a7",
+        "src/lib/character-interaction/runtime-commands.ts": "632de0d024d8490a1b71ea17dc7f311602defe78429fc1bdf55d4c0c11bc22b7",
+        "src/lib/character-interaction/run-progress.ts": "c41dab928abbb9e33743e3c643e030fa35be3212815a59d6bc4091076cc7217c",
+        "src/stores/character-interaction-player.ts": "a113eac8beda85f44401cad1f11c6a693e380c854d5411d51d40619c97072c28",
+        "src/components/character-interaction/CharacterInteractionPanel.tsx": "fc2adf0ef017c177186b1c884f622393fc9bb9f2fbeeb3b3f1872ade3416c83e",
+        "tests/regression/R-CHAT-02-action-choice-harness.test.ts": "2a6f93738a14f8d57956f63e27870c0aca3c35b17b5c9e649fd52edbdea5f367",
+        "src/lib/agent/skill-registry.ts": "4b9515056f646cf79c9a2d04e25ab8da9e7c13a3c82b7ca7cdf5bb417c9c05f0"
+      },
+      "checks": {
+        "types": {
+          "exitCode": 0,
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "changedLint": {
+          "exitCode": 0,
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "architecture": {
+          "exitCode": 0,
+          "logSha256": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616"
+        },
+        "tables": {
+          "exitCode": 0,
+          "logSha256": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444"
+        },
+        "aiManual": {
+          "exitCode": 0,
+          "logSha256": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19"
+        },
+        "projectMetrics": {
+          "exitCode": 0,
+          "logSha256": "32f5ade067b3496f6b4dd1d2dde0aeef10be09621b5d5059fa5833f42f99b0ff"
+        },
+        "roadmap": {
+          "exitCode": 0,
+          "logSha256": "9e45dab19b38810e932d85373ca28150ee63803849201a58a23941d0bccabb2a"
+        },
+        "agentFreshness": {
+          "exitCode": 0,
+          "logSha256": "9cc4b944a33d2c5183c23c149636f6916c303d9fab3349701f2e26757500d46c"
+        },
+        "diff": {
+          "exitCode": 0,
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stage": {
+          "files": 1,
+          "tests": 30,
+          "exitCode": 0,
+          "logSha256": "4fa245a2eced1709a85634bdc63c7074ce3c593f7b76d620e6605a74628e41ba"
+        },
+        "related": {
+          "files": 7,
+          "tests": 129,
+          "exitCode": 0,
+          "logSha256": "491d7f6dd0ec3f0e9757c50929b1454c5ff7be3a6e06a28503f885c3a3ec961a"
+        },
+        "player": {
+          "files": 4,
+          "tests": 57,
+          "exitCode": 0,
+          "logSha256": "cb76e4defa40fef5529bb65c47d63208c2c09fefdb02c272bf5cc1dcc30d3179"
+        },
+        "lifecycle": {
+          "files": 2,
+          "tests": 32,
+          "exitCode": 0,
+          "logSha256": "db772a356d305888de922843e155d8961078e3ca52cb4882e00ccc4d1d838241"
+        },
+        "sharedCallers": {
+          "files": 4,
+          "tests": 34,
+          "exitCode": 0,
+          "logSha256": "9b9f15c02aa1da808558f231f6027fc28616060bc5bd9894e5bfd53ad0a2d590"
+        }
+      },
+      "checksNote": "Test runs overlap. Final stage run covers the latest 30 choice/proof/recovery/UI-store/lifecycle cases. Browser UI acceptance and live models were not run in this increment. AI manual initially drifted after function extraction; official generators ran and checks passed. Types were checked after final implementation; last edit added only two typed assertions to existing tests.",
+      "remaining": [
+        "Propagate exact three-unit action/five-unit situation-plus-action allowance through narrative-turn preflight, automatic scheduling and NarrativeControls; preserve two-unit settlement/revision/options and legacy versions. Sources still contain fixed two/four thresholds.",
+        "Add and execute isolated browser UI acceptance of action continuation, privacy and unknown-result controls, then complete activation audit before switching exact v45.",
+        "Run real-provider schema/choice-expression-review-adoption and original stagnation/refusal cases, then current-source full CI/build/E2E.",
+        "Finish full original M1-M5 cohort/holdout, 100/300/1000 long-range, ensemble, original packages and matched SillyTavern comparison; human scoring remains deferred as authorized."
+      ],
+      "fullDeliveryValidated": false,
+      "realModelAcceptance": false,
+      "browserUiAccepted": false,
+      "existingValidation": {
+        "V187": {
+          "status": "full-e2e-running",
+          "queuePid": 64835,
+          "runnerPid": 93509,
+          "childPid": 14973,
+          "playwrightPid": 15177,
+          "sessionId": 6227,
+          "fullCiExitCode": 0,
+          "knownFailure": "Original frozen privacy test asserts old 2400 review max_tokens; actual frozen cap is 8000. Original source and failure preserved.",
+          "coversV199": false
+        },
+        "V197": {
+          "status": "queued-targeted-e2e",
+          "queuePid": 20440,
+          "sessionId": 54460,
+          "scope": "one repaired malformed-review privacy test",
+          "coversV199": false
+        }
+      }
+    }
+  ],
+  "previousEngineeringSnapshots": [
+    {
+      "version": "V198",
+      "focusedFiles": 1,
+      "focusedTests": 8,
+      "focusedExitCode": 0,
+      "focusedLogSha256": "cb55f2aacba04df401d6e47d19e1e176b6259cdb4b098877ad66a08e3d3457eb",
+      "relatedFiles": 5,
+      "relatedTests": 83,
+      "relatedExitCode": 0,
+      "relatedLogSha256": "15c1f0350434a621a618e0ffd542c0e58c0d88531ee7f53cc20e54b993eaa718",
+      "typeCheckExitCode": 0,
+      "changedLintExitCode": 0,
+      "fullDeliveryValidated": false,
+      "realModelAcceptance": false
+    },
+    {
+      "version": "V199",
+      "focusedFiles": 1,
+      "focusedTests": 30,
+      "focusedExitCode": 0,
+      "focusedLogSha256": "4fa245a2eced1709a85634bdc63c7074ce3c593f7b76d620e6605a74628e41ba",
+      "relatedFiles": 7,
+      "relatedTests": 129,
+      "relatedExitCode": 0,
+      "playerStoreFiles": 4,
+      "playerStoreTests": 57,
+      "lifecycleFiles": 2,
+      "lifecycleTests": 32,
+      "sharedCallerFiles": 4,
+      "sharedCallerTests": 34,
+      "testRunsOverlap": true,
+      "typeCheckExitCode": 0,
+      "changedLintExitCode": 0,
+      "staticGatesPassed": [
+        "check:architecture",
+        "check:required-tables",
+        "check:ai-manual",
+        "check:project-metrics",
+        "check:roadmap",
+        "check:agent-freshness",
+        "git diff --check"
+      ],
+      "fullDeliveryValidated": false,
+      "realModelAcceptance": false,
+      "browserUiAccepted": false
+    }
+  ],
+  "actionChoiceBrowserVerification": {
+    "status": "terminal-passed",
+    "observedAt": "2026-10-19T20:46:11.394622+00:00",
+    "queuePid": null,
+    "sessionId": null,
+    "manifestSha256": "b58e9f86ba07651c4e6f89dc1c966f37f30d79aace062a973b7691b5dbd8da71",
+    "files": 3749,
+    "cases": 10,
+    "defaultSkillChanged": false,
+    "testOnlyVersionOverride": {
+      "from": "chat-narrative-action-v44",
+      "to": "chat-narrative-action-v45",
+      "scope": "intercepted skill registry module in isolated Playwright page"
+    },
+    "listExitCode": 0,
+    "listLogSha256": "b077d1c7c7e779ca872a772ffc987cd9dc65b2982ab3e899d7a054a2ae8dcc34",
+    "lintExitCode": 0,
+    "lintLogSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "browserUiAccepted": true,
+    "modelCalls": 0,
+    "queueWithdrawnBeforeStart": true,
+    "pid": null,
+    "passed": 10,
+    "receipt": {
+      "version": 1,
+      "status": "terminal",
+      "exitCode": 0,
+      "sourceUnchanged": true,
+      "startedAt": 1792441859.768815,
+      "completedAt": 1792441941.9251761,
+      "command": [
+        "npm",
+        "run",
+        "test:e2e",
+        "--",
+        "tests/e2e/character-chat-action-choice.spec.ts",
+        "--project=chromium"
+      ],
+      "manifestSha256": "b58e9f86ba07651c4e6f89dc1c966f37f30d79aace062a973b7691b5dbd8da71",
+      "logSha256": "883ff3a188986f58154ad2b54fa79a79f71b5ec39dd6bc2193afb4c6a7a80c6d",
+      "scope": "ten action-choice browser tests using isolated staged v45 route override; not default activation, full delivery or real-model acceptance"
+    },
+    "acceptanceScope": "Ten isolated staged-v45 browser cases only; excludes V202 guard, complete UI/product acceptance and current full E2E."
+  },
+  "actionChoiceInputBudgetImplementation": {
+    "version": "V202",
+    "recordedAt": "2026-10-19T20:07:27.315858+00:00",
+    "status": "rendered-input-budget-integrated-not-default-enabled",
+    "modelCalls": 0,
+    "defaultActionVersion": "chat-narrative-action-v44",
+    "futureVersion": "chat-narrative-action-v45",
+    "futureVersionActivated": false,
+    "sourceHashes": {
+      "src/lib/character-interaction/action-choice-input-budget.ts": "be31d339dbf08989f1ac8e4cbc56f96c33b2867ac3f33752c9981929e272aeb4",
+      "src/lib/character-interaction/action-choice-evidence.ts": "465bc5ab40d30f591ace6f164e29fb71bf371beb2bc4ff0a1fe897cd445e3ec5",
+      "src/lib/character-interaction/action-choice-harness.ts": "1f97cc7b6339a113f64b7e558dbe626d899201f64154aeaae4535bbd39ca3211",
+      "src/lib/character-interaction/harness.ts": "4b84fecc0537cd5d6e04e2a6fcea5d0c804b427d4607aa273f92ebb795cadbd9",
+      "src/lib/character-interaction/situation-harness.ts": "399d78e8843a93a744fb66fce31ac05ea875d45f26face605dcd09ff37956ab8",
+      "tests/regression/R-CHAT-02-action-choice-harness.test.ts": "cedad24c2c97c2c4c35dbd1e32eeed9c47a9bae669ee2ed7eceae84a20a103e4"
+    },
+    "changes": [
+      "Each choice/expression/review dispatch checks its full rendered request, including system/objective/proposal/structured-output schema, against the frozen run cumulative input estimate.",
+      "Prior requests are reconstructed from exact artifacts, context and request binding hashes; prepared unsent requests do not count, unknown requested calls still count and cannot be sent again.",
+      "Input overruns stop before model.requested; existing raw results and story state remain. Adoption requires three intact request proofs within the same frozen budget.",
+      "Client estimator is admission accounting, not measured provider billing. Old contracts without the choice step retain prior behavior; no new tables, story fields, or world writes."
+    ],
+    "checks": {
+      "initialFocused": {
+        "exitCode": 1,
+        "passed": 29,
+        "failed": 1,
+        "reason": "New budget evidence check ran before the existing candidate validity check, changing the rejection reason. Candidate validity is now checked first."
+      },
+      "newFixturesFirstAttempt": {
+        "exitCode": 1,
+        "passed": 32,
+        "failed": 5,
+        "reason": "Tests attempted another same-head generation after cancellation, correctly blocked by the existing no-resend gate. Fixtures now reset only their isolated test database before creating a fresh accepted contract."
+      },
+      "focusedAfterFixtureFix": {
+        "exitCode": 0,
+        "files": 1,
+        "tests": 37
+      },
+      "relatedFinal": {
+        "exitCode": 0,
+        "files": 6,
+        "tests": 111,
+        "includesFocused": true
+      },
+      "typecheckInitial": {
+        "exitCode": 0
+      },
+      "typecheckFinal": {
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "static": [
+        {
+          "check": "lint",
+          "command": [
+            "npx",
+            "eslint",
+            "src/lib/character-interaction/action-choice-input-budget.ts",
+            "src/lib/character-interaction/action-choice-evidence.ts",
+            "src/lib/character-interaction/action-choice-harness.ts",
+            "src/lib/character-interaction/harness.ts",
+            "src/lib/character-interaction/situation-harness.ts",
+            "tests/regression/R-CHAT-02-action-choice-harness.test.ts"
+          ],
+          "exitCode": 0
+        },
+        {
+          "check": "architecture",
+          "command": [
+            "npm",
+            "run",
+            "check:architecture"
+          ],
+          "exitCode": 0
+        },
+        {
+          "check": "required-tables",
+          "command": [
+            "npm",
+            "run",
+            "check:required-tables"
+          ],
+          "exitCode": 0
+        },
+        {
+          "check": "ai-manual",
+          "command": [
+            "npm",
+            "run",
+            "check:ai-manual"
+          ],
+          "exitCode": 1
+        },
+        {
+          "check": "agent-freshness",
+          "command": [
+            "npm",
+            "run",
+            "check:agent-freshness"
+          ],
+          "exitCode": 0
+        },
+        {
+          "check": "project-metrics",
+          "command": [
+            "npm",
+            "run",
+            "check:project-metrics"
+          ],
+          "exitCode": 1
+        },
+        {
+          "check": "roadmap",
+          "command": [
+            "npm",
+            "run",
+            "check:roadmap"
+          ],
+          "exitCode": 0
+        },
+        {
+          "check": "diff",
+          "command": [
+            "git",
+            "diff",
+            "--check"
+          ],
+          "exitCode": 0
+        }
+      ],
+      "generatedFinal": [
+        {
+          "check": "gen:ai-manual",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v202-request-input-budget/gen-ai-manual-final.log"
+        },
+        {
+          "check": "gen:project-metrics",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v202-request-input-budget/gen-project-metrics-final.log"
+        },
+        {
+          "check": "check:ai-manual",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v202-request-input-budget/check-ai-manual-final.log"
+        },
+        {
+          "check": "check:project-metrics",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v202-request-input-budget/check-project-metrics-final.log"
+        },
+        {
+          "check": "check:roadmap",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v202-request-input-budget/check-roadmap-final.log"
+        }
+      ],
+      "postDocsRoadmapAndDiff": {
+        "exitCode": 0
+      }
+    },
+    "logHashes": {
+      "agent-freshness.log": "9cc4b944a33d2c5183c23c149636f6916c303d9fab3349701f2e26757500d46c",
+      "ai-manual.log": "30958d024ff685fe14c8a9ae8fe5f751069f40c845020f86be9350443a6aad5f",
+      "architecture.log": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616",
+      "check-ai-manual-final.log": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19",
+      "check-project-metrics-final.log": "32f5ade067b3496f6b4dd1d2dde0aeef10be09621b5d5059fa5833f42f99b0ff",
+      "check-roadmap-final.log": "9e45dab19b38810e932d85373ca28150ee63803849201a58a23941d0bccabb2a",
+      "diff.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gen-ai-manual-final.log": "3395b5e737f52a05d9c19e988e9189038725875fbd32aff89394e5a63cb558ea",
+      "gen-project-metrics-final.log": "0555eabe41357efe38464a935ad593aa025a0682300d6c86a7fa03fe2642b146",
+      "lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "project-metrics.log": "33c982f5f860fa13717fbaeb24c1593cdf72c78db42d90ce01f8a0d92db8ef45",
+      "related.log": "b3edc73c7289f2f253f82d61b02ae349b0ad308f3dac654607fcae7a6dcee01c",
+      "required-tables.log": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444",
+      "roadmap.log": "9e45dab19b38810e932d85373ca28150ee63803849201a58a23941d0bccabb2a",
+      "stage-01.log": "d3b158274a1af0ac0a3fb70de4a7c3928072134bac27727836861eae8c4c8c4b",
+      "stage-02.log": "186522ad23a5ef83c245dd823054aabc690688bbf02203ce44f721bc25617b29",
+      "stage-03.log": "fa7384183dfc298dea7039bb134be673abb7c0d5efb24349fdd15dd36cdcd077",
+      "typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "typecheck-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "limitations": [
+      "V197 and V201 remain queued; their frozen sources predate this guard.",
+      "Current source has no full CI/build/browser acceptance and no new real-model calls.",
+      "Codex/Agnes formal cohorts, long-range/ensemble/package tests and matched SillyTavern evaluation remain open; human scoring stays deferred."
+    ]
+  },
+  "actionChoiceFormalDiagnosticPreparation": {
+    "version": "V203",
+    "recordedAt": "2026-10-19T20:23:20.362776+00:00",
+    "previousGoalTurn": "progress",
+    "currentGoalTurn": "progress",
+    "status": "historical-preparation-completed-see-terminal-diagnostics",
+    "modelCalls": 0,
+    "sourceManifestSha256": "40fdd67189066a00f0c3757b11c20af2df05397b62bee742b10a5e9f4fa3a593",
+    "sourceFiles": 3750,
+    "defaultVersion": "chat-narrative-action-v44",
+    "stagedVersion": "chat-narrative-action-v45",
+    "defaultActivated": false,
+    "nativeBrowserPreflight": {
+      "at": "2026-10-19T20:18:55.608Z",
+      "status": "terminal",
+      "exitCode": 0,
+      "sourceUnchanged": true,
+      "manifestSha256": "40fdd67189066a00f0c3757b11c20af2df05397b62bee742b10a5e9f4fa3a593",
+      "modelCalls": 0,
+      "results": [
+        {
+          "name": "stagnation",
+          "modelCalls": 0,
+          "originalPointSha256": "b0865d4e878c8535a15ab370f769c0d5effc1d87ab51f588d79798ab06d4de10",
+          "refreshEqual": true,
+          "expectedControlPresent": true,
+          "branchAdmission": {
+            "originalPointExact": true,
+            "portableHeadExact": true,
+            "deterministicRebaseExact": true,
+            "parentUnchanged": true,
+            "historyPreserved": true,
+            "rawResponsesRetained": true,
+            "throughSequence": 20,
+            "originalFailedRuns": 1,
+            "initialControl": "new-plain-continue"
+          }
+        },
+        {
+          "name": "player-stop",
+          "modelCalls": 0,
+          "originalPointSha256": "463cc9d36c26768fe26a24ca1c61d77be96008d65b6f52c8ab7241577ca2e83b",
+          "refreshEqual": true,
+          "expectedControlPresent": true,
+          "branchAdmission": {
+            "originalPointExact": true,
+            "portableHeadExact": true,
+            "deterministicRebaseExact": true,
+            "parentUnchanged": true,
+            "historyPreserved": true,
+            "rawResponsesRetained": true,
+            "throughSequence": 22,
+            "originalFailedRuns": 0,
+            "initialControl": "resume-existing-player-response"
+          }
+        }
+      ]
+    },
+    "registrationChecks": {
+      "at": "2026-10-19T20:21:03.322Z",
+      "modelCalls": 0,
+      "results": [
+        {
+          "case": "stagnation",
+          "check": "source-input-gates",
+          "passed": true
+        },
+        {
+          "case": "stagnation",
+          "check": "wrong-point",
+          "passed": true
+        },
+        {
+          "case": "stagnation",
+          "check": "unregistered-model",
+          "passed": true
+        },
+        {
+          "case": "stagnation",
+          "check": "hidden-retry",
+          "passed": true
+        },
+        {
+          "case": "stagnation",
+          "check": "expanded-call-budget",
+          "passed": true
+        },
+        {
+          "case": "stagnation",
+          "check": "old-producer",
+          "passed": true
+        },
+        {
+          "case": "stagnation",
+          "check": "browser-gate",
+          "status": "blocked-before-dispatch",
+          "reason": "specific browser terminal receipt not yet present"
+        },
+        {
+          "case": "player-stop",
+          "check": "source-input-gates",
+          "passed": true
+        },
+        {
+          "case": "player-stop",
+          "check": "wrong-point",
+          "passed": true
+        },
+        {
+          "case": "player-stop",
+          "check": "unregistered-model",
+          "passed": true
+        },
+        {
+          "case": "player-stop",
+          "check": "hidden-retry",
+          "passed": true
+        },
+        {
+          "case": "player-stop",
+          "check": "expanded-call-budget",
+          "passed": true
+        },
+        {
+          "case": "player-stop",
+          "check": "old-producer",
+          "passed": true
+        },
+        {
+          "case": "player-stop",
+          "check": "browser-gate",
+          "status": "blocked-before-dispatch",
+          "reason": "specific browser terminal receipt not yet present"
+        }
+      ]
+    },
+    "preregistrationHashes": {
+      "stagnation": "979a4a6930a5b78cfd6f28078efb3356a855ad72be186a4abc2bc45ba1bb0326",
+      "player-stop": "87ba00cb28fd552434f4bc72e1112078706d08ad636a40365029759a4edfcb55"
+    },
+    "scriptHashes": {
+      "prepare-original.mjs": "e5bd6d56b503edd631de37cceeefc54bf0f8ff6c6591fb40dea011ec0de70efc",
+      "diagnostic-source.mjs": "42cdd0491709a850e9636c5fffd10b047cada349b30c8e73678a84c4e881744f",
+      "runner.mjs": "3d1f6685df86f02c1e6f5fb259258693e0c778a5aa63d7b72ab7998616b306c1",
+      "restoration.mjs": "20024bd34e8124cfc5a0e3d5ff7995f88a567be89997e000bee3f2e1d73d4812",
+      "preflight-browser.mjs": "68d299041513ec30709df4668ff2f5234c6a153ad99d51251cc3facd699fc741"
+    },
+    "preparedRuntime": {
+      "behavior": "stagnation",
+      "requests": 0,
+      "preparedEvidenceSha256": "164920fd67ef6905368b5a28cf0e4ef907a51a3d3fb791d5baaf546a3150af0b",
+      "sessionId": 66194,
+      "pid": 51003,
+      "state": "waiting-for-start-command; do not send start before specific V201 receipt passes"
+    },
+    "simulationAttempt": {
+      "status": "explicitly-stopped-incomplete",
+      "exitCode": 143,
+      "reason": "CPU/memory hotspot sampled in fake-indexeddb transaction scheduler; switched to native isolated browser and retained original logs/stack. No product or model failure inferred."
+    },
+    "limits": {
+      "stagnation": {
+        "opportunities": 3,
+        "runtimeRequests": 16,
+        "observedTokenCap": 500000
+      },
+      "playerStop": {
+        "opportunities": 1,
+        "runtimeRequests": 5,
+        "observedTokenCap": 150000
+      },
+      "automaticRetries": 0,
+      "minutesFromExplicitStart": 25
+    },
+    "limitations": [
+      "This historical preparation record covers zero-call input restoration and preregistration only; current completed model evidence is in actionChoiceFormalDiagnostics.",
+      "The V201 dispatch gate passed before both actual diagnostics. Default activation and current-source full CI/E2E remain open."
+    ],
+    "supersededBy": "actionChoiceFormalDiagnostics",
+    "processesObservedAtPreparation": {
+      "stagnationRunner": {
+        "pid": 51003,
+        "sessionId": 66194,
+        "live": true,
+        "observedProcess": "51003 01:25 node"
+      },
+      "frozenServer": {
+        "pid": 49933,
+        "sessionId": 76005,
+        "live": true,
+        "observedProcess": "49933 05:25 node"
+      },
+      "V197": {
+        "pid": 20440,
+        "sessionId": 54460,
+        "live": true,
+        "observedProcess": "20440 01:29:21 /Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python"
+      },
+      "V201": {
+        "pid": 41839,
+        "sessionId": 95117,
+        "live": true,
+        "observedProcess": "41839 32:13 /Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python"
+      }
+    }
+  },
+  "actionChoiceStopEvidenceAudit": {
+    "version": "V204",
+    "recordedAt": "2026-10-19T20:32:23.304825+00:00",
+    "status": "terminal-stop-check-and-targeted-browser-passed",
+    "previousGoalTurn": "progress",
+    "currentGoalTurn": "progress",
+    "productCodeChanged": false,
+    "defaultVersionChanged": false,
+    "modelCalls": 0,
+    "finding": "The legacy diagnostic pauseState demanded requested.sequence > 0. Correct deterministic branching maps the original player-stop event to -2, so a valid pause would be falsely rejected.",
+    "fix": "New targeted stop predicate invokes the product pause-source validator, binds to the exact initial player message/turn, requires a fresh actual public acknowledgement and paused state, and rejects pending action/situation.",
+    "verification": {
+      "at": "2026-10-19T20:28:11.490Z",
+      "status": "terminal",
+      "exitCode": 0,
+      "modelCalls": 0,
+      "adopted": 0,
+      "sourceUnchanged": true,
+      "sourceManifestSha256": "40fdd67189066a00f0c3757b11c20af2df05397b62bee742b10a5e9f4fa3a593",
+      "oldCheckerRejectsBranchPreview": true,
+      "results": [
+        {
+          "name": "actual-original-unbranched",
+          "expected": true,
+          "actual": true,
+          "passed": true
+        },
+        {
+          "name": "branch-counterfactual-preview",
+          "expected": true,
+          "actual": true,
+          "passed": true
+        },
+        {
+          "name": "choice-or-trigger-only",
+          "expected": false,
+          "actual": false,
+          "passed": true
+        },
+        {
+          "name": "status-without-request",
+          "expected": false,
+          "actual": false,
+          "passed": true
+        },
+        {
+          "name": "different-request-sequence",
+          "expected": false,
+          "actual": false,
+          "passed": true
+        },
+        {
+          "name": "different-request-message",
+          "expected": false,
+          "actual": false,
+          "passed": true
+        },
+        {
+          "name": "request-not-in-player-text",
+          "expected": false,
+          "actual": false,
+          "passed": true
+        },
+        {
+          "name": "no-actual-acknowledgement",
+          "expected": false,
+          "actual": false,
+          "passed": true
+        },
+        {
+          "name": "wrong-character",
+          "expected": false,
+          "actual": false,
+          "passed": true
+        },
+        {
+          "name": "private-acknowledgement",
+          "expected": false,
+          "actual": false,
+          "passed": true
+        },
+        {
+          "name": "historical-acknowledgement",
+          "expected": false,
+          "actual": false,
+          "passed": true
+        },
+        {
+          "name": "active-goal",
+          "expected": false,
+          "actual": false,
+          "passed": true
+        },
+        {
+          "name": "open-thread",
+          "expected": false,
+          "actual": false,
+          "passed": true
+        },
+        {
+          "name": "pending-situation",
+          "expected": false,
+          "actual": false,
+          "passed": true
+        },
+        {
+          "name": "replaced-by-continue",
+          "expected": false,
+          "actual": false,
+          "passed": true
+        }
+      ],
+      "limitations": [
+        "The branch success case is a deterministic counterfactual preview of the old accepted response; it is not a new model reply or adoption.",
+        "This only verifies stopping evidence and original request identity; story quality still needs complete model diagnostics."
+      ]
+    },
+    "supersession": {
+      "at": "2026-10-19T20:30:49.260094+00:00",
+      "originalRegistration": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v203-formal-choice-diagnostic/player-stop-preregistration.json",
+        "sha256": "87ba00cb28fd552434f4bc72e1112078706d08ad636a40365029759a4edfcb55",
+        "priorModelCalls": 0,
+        "reason": "Old diagnostic pauseState rejects valid negative historical player references after branching. Preserve original registration; v2 uses product pause-source validator, exact initial request and a newly recorded acknowledgement."
+      },
+      "replacementPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v203-formal-choice-diagnostic/player-stop-preregistration-v2.json",
+      "replacementSha256": "c393dbe9aac9fea80f05af3f2fe54b963b85cf2d61089cab2152041edf7b6ab4",
+      "stagnationRegistrationChanged": false,
+      "productSourceChanged": false,
+      "defaultVersionChanged": false,
+      "modelCalls": 0,
+      "command": [
+        "node",
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v203-formal-choice-diagnostic/runner-player-stop-v2.mjs",
+        "player-stop"
+      ]
+    },
+    "sourceHashes": {
+      "stop-evidence.mjs": "cf73c873ff448e49e082ee26fbb1eeb7bac178c5a0c8b5d6997f3407ea633f80",
+      "verify.mjs": "e679f34d95f9f0216f8fb5df38d7d1e9f83401d0f509be8cc2f213dffa48aafd",
+      "verification.json": "2fc859fd42ad13d940c00c9815409df53e8279c7b729c6a328694eadc6129054"
+    },
+    "browserRescheduling": {
+      "reason": "Bounded one-worker short tests moved off full-CI queue after confirming no child/process or start receipt; source/commands unchanged, serial execution only, no other task altered.",
+      "resourceObservation": {
+        "memoryFreePercent": 59,
+        "freeDiskGiB": 107.16,
+        "logicalCpus": 10
+      },
+      "V197": {
+        "withdrawal": {
+          "at": "2026-10-19T20:30:11.323024+00:00",
+          "status": "withdrawn-before-test-start",
+          "pid": 20440,
+          "verifiedQueueCommand": "/Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /tmp/storyforge-serial-ci-20261013.py -- python3 /Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v197-review-budget-e2e/run_check.py",
+          "childrenAtWithdrawal": [],
+          "runningReceiptPresent": false,
+          "terminalReceiptPresent": false,
+          "modelCalls": 0,
+          "reason": "These are bounded one-worker browser regressions, not a full delivery suite. Run the same immutable source/command serially in this task after resource check; preserve original queued attempt. No other queue changed."
+        },
+        "receipt": {
+          "version": 1,
+          "status": "terminal",
+          "exitCode": 0,
+          "sourceUnchanged": true,
+          "startedAt": 1792441812.5148659,
+          "completedAt": 1792441846.539881,
+          "command": [
+            "npm",
+            "run",
+            "test:e2e",
+            "--",
+            "tests/e2e/character-chat-integration.spec.ts",
+            "--project=chromium",
+            "--grep",
+            "a malformed action review never exposes the unapproved reply or coordinator secret"
+          ],
+          "manifestSha256": "1f756b26f752b7b228350391b5cd30fcae704530add6ab5e4ff49d3f1e4799c0",
+          "logSha256": "a4ce5af0c380276ce58a929bf2e6a824c553f8288246432746f58c394034b2bc",
+          "scope": "one malformed-review privacy test; not full E2E or real-model acceptance"
+        }
+      },
+      "V201": {
+        "withdrawal": {
+          "at": "2026-10-19T20:30:11.455960+00:00",
+          "status": "withdrawn-before-test-start",
+          "pid": 41839,
+          "verifiedQueueCommand": "/Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /tmp/storyforge-serial-ci-20261013.py -- python3 /Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v201-choice-browser/run_check.py",
+          "childrenAtWithdrawal": [],
+          "runningReceiptPresent": false,
+          "terminalReceiptPresent": false,
+          "modelCalls": 0,
+          "reason": "These are bounded one-worker browser regressions, not a full delivery suite. Run the same immutable source/command serially in this task after resource check; preserve original queued attempt. No other queue changed."
+        },
+        "sessionId": null,
+        "historicalRunning": {
+          "status": "running",
+          "pid": 53175,
+          "childPid": 53182,
+          "startedAt": 1792441859.768815,
+          "command": [
+            "npm",
+            "run",
+            "test:e2e",
+            "--",
+            "tests/e2e/character-chat-action-choice.spec.ts",
+            "--project=chromium"
+          ],
+          "manifestSha256": "b58e9f86ba07651c4e6f89dc1c966f37f30d79aace062a973b7691b5dbd8da71"
+        },
+        "status": "terminal-passed",
+        "receipt": {
+          "version": 1,
+          "status": "terminal",
+          "exitCode": 0,
+          "sourceUnchanged": true,
+          "startedAt": 1792441859.768815,
+          "completedAt": 1792441941.9251761,
+          "command": [
+            "npm",
+            "run",
+            "test:e2e",
+            "--",
+            "tests/e2e/character-chat-action-choice.spec.ts",
+            "--project=chromium"
+          ],
+          "manifestSha256": "b58e9f86ba07651c4e6f89dc1c966f37f30d79aace062a973b7691b5dbd8da71",
+          "logSha256": "883ff3a188986f58154ad2b54fa79a79f71b5ec39dd6bc2193afb4c6a7a80c6d",
+          "scope": "ten action-choice browser tests using isolated staged v45 route override; not default activation, full delivery or real-model acceptance"
+        }
+      }
+    },
+    "limitations": [
+      "The 15 deterministic source/identity counterexamples are separate from actual model quality evidence.",
+      "Both registered real-model diagnostics and zero-call restorations are terminal; see actionChoiceFormalDiagnostics.",
+      "Player-stop used runner-player-stop-v2.mjs and player-stop-preregistration-v2.json; original unused registration retained.",
+      "Current-source full CI/E2E and M1-M5 remain open."
+    ],
+    "currentStatusAt": "2026-10-19T20:46:11.394622+00:00"
+  },
+  "actionChoicePrivacyRetest": {
+    "status": "terminal",
+    "passed": 1,
+    "receipt": {
+      "version": 1,
+      "status": "terminal",
+      "exitCode": 0,
+      "sourceUnchanged": true,
+      "startedAt": 1792441812.5148659,
+      "completedAt": 1792441846.539881,
+      "command": [
+        "npm",
+        "run",
+        "test:e2e",
+        "--",
+        "tests/e2e/character-chat-integration.spec.ts",
+        "--project=chromium",
+        "--grep",
+        "a malformed action review never exposes the unapproved reply or coordinator secret"
+      ],
+      "manifestSha256": "1f756b26f752b7b228350391b5cd30fcae704530add6ab5e4ff49d3f1e4799c0",
+      "logSha256": "a4ce5af0c380276ce58a929bf2e6a824c553f8288246432746f58c394034b2bc",
+      "scope": "one malformed-review privacy test; not full E2E or real-model acceptance"
+    },
+    "doesNotReplaceFullE2E": true
+  },
+  "actionChoiceFormalDiagnostics": {
+    "schema": "storyforge.character-chat.targeted-diagnostic-summary",
+    "version": 1,
+    "recordedAt": "2026-10-19T20:46:11.323415+00:00",
+    "status": "terminal-targeted-evidence",
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "defaultActivated": false,
+    "sourceDefaultVersion": "chat-narrative-action-v44",
+    "pageLocalTreatment": "chat-narrative-action-v45",
+    "cases": {
+      "stagnation": {
+        "resultSha256": "82736bfa65994412ff25789cd9fdd13c12b01bf46bed94de9153bae82ae87c75",
+        "completedAt": "2026-10-19T20:37:11.905Z",
+        "modelCalls": 11,
+        "usage": {
+          "inputTokens": 160910,
+          "outputTokens": 4810,
+          "totalTokens": 165720
+        },
+        "costUsd": null,
+        "opportunities": 3,
+        "completionReason": "diagnostic-observation-complete",
+        "operationSeconds": [
+          70.591,
+          33.408,
+          39.325
+        ],
+        "runs": [
+          {
+            "id": 23,
+            "status": "completed",
+            "steps": [
+              "interaction:action-choice",
+              "interaction:runtime-candidate",
+              "interaction:action-review"
+            ],
+            "adoption": {
+              "adoptionHash": "a2deef9db2c0fe2c5b274dbea9afbddea214453243379845b1ed9b8c24680c66",
+              "baseSequence": 1,
+              "candidateHash": "41162674ae808f1d003db9994838215cdc5a6101e987ce635a2ba51ee077b6e2",
+              "commandIds": [
+                "harness:23:chat-narrative-action-candidate"
+              ],
+              "resultingSequence": 2,
+              "stepId": "interaction:runtime-candidate"
+            }
+          },
+          {
+            "id": 24,
+            "status": "completed",
+            "steps": [
+              "interaction:runtime-candidate",
+              "interaction:situation-review"
+            ],
+            "adoption": {
+              "adoptionHash": "7bc02b9e5db5f96fbc846933e3fa5f0c636f2b7735a09ffc6731320d527a4d61",
+              "baseSequence": 2,
+              "candidateHash": "17c4ef397b0953ee4fd8f307dd7282af0db6e6273c458b5debc9c6c61baf6765",
+              "commandIds": [
+                "harness:24:chat-situation-candidate"
+              ],
+              "resultingSequence": 3,
+              "stepId": "interaction:runtime-candidate"
+            }
+          },
+          {
+            "id": 25,
+            "status": "completed",
+            "steps": [
+              "interaction:action-choice",
+              "interaction:runtime-candidate",
+              "interaction:action-review"
+            ],
+            "adoption": {
+              "adoptionHash": "85dd85353b77ded3a4054efc6188dbac344f1e3bc94747f117418b662decf954",
+              "baseSequence": 4,
+              "candidateHash": "31a7cb299ce50fb842d81f8e96fbadcea6962129f95c338efe29405fb84f0606",
+              "commandIds": [
+                "harness:25:chat-narrative-action-candidate"
+              ],
+              "resultingSequence": 5,
+              "stepId": "interaction:runtime-candidate"
+            }
+          },
+          {
+            "id": 26,
+            "status": "completed",
+            "steps": [
+              "interaction:action-choice",
+              "interaction:runtime-candidate",
+              "interaction:action-review"
+            ],
+            "adoption": {
+              "adoptionHash": "b8ad977fc28d7fb1aa63d5c942e6969640cc43e5abbd54858056497e54c1e006",
+              "baseSequence": 6,
+              "candidateHash": "9ae391c14db481d70516ee64ccb14396a7b0f98d943dfadd9c85893c26f8c3ef",
+              "commandIds": [
+                "harness:26:chat-narrative-action-candidate"
+              ],
+              "resultingSequence": 7,
+              "stepId": "interaction:runtime-candidate"
+            }
+          }
+        ],
+        "calls": [
+          {
+            "requestId": "c5f1ff54-555b-468d-97b3-2a00d4d96b15",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 8897,
+              "inputTokens": 8503,
+              "cachedInputTokens": 0,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 394,
+              "reasoningOutputTokens": 185
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          },
+          {
+            "requestId": "f91c90ab-42a1-49e1-9a21-01b3c38290c2",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 22075,
+              "inputTokens": 21439,
+              "cachedInputTokens": 0,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 636,
+              "reasoningOutputTokens": 157
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          },
+          {
+            "requestId": "f9facd44-a25c-4761-a82d-56ed18bc52a2",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 15343,
+              "inputTokens": 14863,
+              "cachedInputTokens": 3328,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 480,
+              "reasoningOutputTokens": 91
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          },
+          {
+            "requestId": "ce1fcf35-18be-4ae3-98fb-af69dbf869f1",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 13737,
+              "inputTokens": 13301,
+              "cachedInputTokens": 3328,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 436,
+              "reasoningOutputTokens": 115
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          },
+          {
+            "requestId": "0e90b9bc-3592-4abf-8b6f-38c121e79f79",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 11811,
+              "inputTokens": 11487,
+              "cachedInputTokens": 3328,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 324,
+              "reasoningOutputTokens": 45
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          },
+          {
+            "requestId": "546b1248-5af5-44b4-af2b-0ebc3ffe6883",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 9169,
+              "inputTokens": 8882,
+              "cachedInputTokens": 0,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 287,
+              "reasoningOutputTokens": 68
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          },
+          {
+            "requestId": "f6b39fd4-3ddc-4a19-b914-f6d86ce4101f",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 22265,
+              "inputTokens": 21828,
+              "cachedInputTokens": 0,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 437,
+              "reasoningOutputTokens": 92
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          },
+          {
+            "requestId": "52410de9-b8dc-4d07-85bf-f3c362629090",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 15465,
+              "inputTokens": 14931,
+              "cachedInputTokens": 3328,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 534,
+              "reasoningOutputTokens": 42
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          },
+          {
+            "requestId": "796c5694-8bf4-4e32-8b0f-7c6ba6a98959",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 9328,
+              "inputTokens": 8994,
+              "cachedInputTokens": 0,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 334,
+              "reasoningOutputTokens": 121
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          },
+          {
+            "requestId": "002a8f8b-2d98-439c-80d5-f1da86bf4e77",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 22395,
+              "inputTokens": 21936,
+              "cachedInputTokens": 9728,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 459,
+              "reasoningOutputTokens": 261
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          },
+          {
+            "requestId": "cd638b91-42c0-41c4-9e4a-54799e63fe58",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 15235,
+              "inputTokens": 14746,
+              "cachedInputTokens": 0,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 489,
+              "reasoningOutputTokens": 156
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          }
+        ],
+        "restoration": {
+          "parentUnchanged": true,
+          "runStatusesPreserved": true,
+          "interactionEqual": true,
+          "refreshEqual": true,
+          "worldPreserved": true,
+          "openingReviewRetained": true,
+          "rawEvidenceRetained": true,
+          "modelCalls": 0,
+          "resumableRuns": 0
+        },
+        "finalGoalStatuses": [
+          "paused"
+        ],
+        "finalThreadStatuses": [
+          "open"
+        ],
+        "playerPauses": [],
+        "sourceUnchanged": true,
+        "parentUnchanged": true,
+        "refreshEqual": true,
+        "countsInM1": false
+      },
+      "player-stop": {
+        "resultSha256": "540d8a38a80b19f443d6c1857770eb0a47223663ebd7dc1e4070400006ed0579",
+        "completedAt": "2026-10-19T20:38:33.460Z",
+        "modelCalls": 3,
+        "usage": {
+          "inputTokens": 45031,
+          "outputTokens": 1179,
+          "totalTokens": 46210
+        },
+        "costUsd": null,
+        "opportunities": 1,
+        "completionReason": "intentional-pause",
+        "operationSeconds": [
+          32.176
+        ],
+        "runs": [
+          {
+            "id": 24,
+            "status": "completed",
+            "steps": [
+              "interaction:action-choice",
+              "interaction:runtime-candidate",
+              "interaction:action-review"
+            ],
+            "adoption": {
+              "adoptionHash": "5d7f4dff23b193f51fc9896cf764d9bab104967a56fa7c999b318f46ce637aa2",
+              "baseSequence": 0,
+              "candidateHash": "515d82be0968f8de840ed15752b0340369bc20d23434fee8345ee10e63fdbd41",
+              "commandIds": [
+                "harness:24:chat-narrative-action-candidate"
+              ],
+              "resultingSequence": 1,
+              "stepId": "interaction:runtime-candidate"
+            }
+          }
+        ],
+        "calls": [
+          {
+            "requestId": "9cfd2109-c561-460c-98b0-52b9fa2719c3",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 9063,
+              "inputTokens": 8754,
+              "cachedInputTokens": 0,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 309,
+              "reasoningOutputTokens": 151
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          },
+          {
+            "requestId": "19f86224-d42e-4359-8aa4-7634ad901369",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 22256,
+              "inputTokens": 21814,
+              "cachedInputTokens": 0,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 442,
+              "reasoningOutputTokens": 139
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          },
+          {
+            "requestId": "5aea5ca9-bbac-4c37-b57b-2be36f9a2ab2",
+            "status": "completed",
+            "usage": {
+              "totalTokens": 14891,
+              "inputTokens": 14463,
+              "cachedInputTokens": 8320,
+              "cacheWriteInputTokens": 0,
+              "outputTokens": 428,
+              "reasoningOutputTokens": 93
+            },
+            "renderedMessagesMatch": true,
+            "schemaMatch": true,
+            "rawResponseMatch": true,
+            "nativeOutputTokenLimitSent": false
+          }
+        ],
+        "restoration": {
+          "parentUnchanged": true,
+          "runStatusesPreserved": true,
+          "interactionEqual": true,
+          "refreshEqual": true,
+          "worldPreserved": true,
+          "openingReviewRetained": true,
+          "rawEvidenceRetained": true,
+          "modelCalls": 0,
+          "resumableRuns": 0
+        },
+        "finalGoalStatuses": [
+          "paused"
+        ],
+        "finalThreadStatuses": [
+          "paused"
+        ],
+        "playerPauses": [
+          {
+            "threadKey": "thread-1-1",
+            "requested": {
+              "messageId": "message:player:f53432bd-5b5a-4df2-b18e-4af6d7c770c4",
+              "sequence": -2,
+              "excerpt": "先暂时留在铺里原来的位置，别再动它。今天就先停在这里。"
+            },
+            "acknowledged": {
+              "messageId": "message:harness:24",
+              "sequence": 1,
+              "excerpt": "旧钟就暂时留在铺里原来的位置，不再动它，今天的检查和修复就停在这里。"
+            }
+          }
+        ],
+        "sourceUnchanged": true,
+        "parentUnchanged": true,
+        "refreshEqual": true,
+        "countsInM1": false
+      }
+    },
+    "totalModelCalls": 14,
+    "totalUsage": {
+      "inputTokens": 205941,
+      "outputTokens": 5989,
+      "totalTokens": 211930
+    },
+    "costUsd": null,
+    "countsInM1": false,
+    "findings": [
+      "Original stagnation input received only plain continue controls: one further external observation produced new settled facts, followed by disclosure and a pause at the remaining permission boundary. Repair remains unresolved and the thread is open.",
+      "Original player-stop input reused the original player-response trigger: the actor stopped, both goal and thread paused, and a fresh public acknowledgement binds the historical player request.",
+      "Both terminal backups restored with zero model calls and retained original parent, world, run statuses, raw responses and opening review."
+    ],
+    "limitations": [
+      "Two targeted original cases do not close cross-scene, long-range, two-provider, M1-M5, comparison or commercial acceptance.",
+      "Operation latency is approximately 32-71 seconds; total token usage is observed, monetary cost is unknown.",
+      "Native Codex transport/runtime carries messages and schema but no output token cap. Declared output allowances must not be described as provider-enforced hard caps; capability and budget semantics remain an activation audit item.",
+      "Source default remains v44; full current-source CI/E2E and staged activation remain open."
+    ]
+  },
+  "actionChoiceOutputBudgetImplementation": {
+    "version": "V205",
+    "recordedAt": "2026-10-19T21:05:00.235430+00:00",
+    "status": "implemented-directed-checks-and-browser-budget-cases-passed",
+    "scope": "Character-chat S3 private action runs only; no new tables, AI story fields, world writes or media owners.",
+    "defaultActivated": false,
+    "sourceDefault": "chat-narrative-action-v44",
+    "contractOptIn": "runtime.action-output-budget-v1",
+    "providerProtocol": {
+      "recordedAt": "2026-10-19T20:57:57.423902+00:00",
+      "cliVersion": "codex-cli 0.163.0-alpha.10.2",
+      "officialDocumentation": "https://learn.chatgpt.com/docs/app-server",
+      "schemaPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v205-output-budget-audit/schema/v2/TurnStartParams.json",
+      "schemaSha256": "abf0d6d29d223b38c650ff1155cb9c9f9b4211e6d0e20c57d750a9e1babfdb41",
+      "turnStartFields": [
+        "additionalContext",
+        "approvalPolicy",
+        "approvalsReviewer",
+        "clientUserMessageId",
+        "collaborationMode",
+        "cwd",
+        "cyberAccessProgram",
+        "disabledPluginIds",
+        "effort",
+        "environments",
+        "input",
+        "model",
+        "multiAgentMode",
+        "outputSchema",
+        "parentTurnId",
+        "permissions",
+        "personality",
+        "responsesapiClientMetadata",
+        "rootTurnId",
+        "runtimeWorkspaceRoots",
+        "sandboxPolicy",
+        "serviceTier",
+        "serviceTierForTurn",
+        "summary",
+        "threadId",
+        "toolOutput",
+        "turnTrigger"
+      ],
+      "nativeOutputTokenCap": false,
+      "interpretation": "No per-turn output cap in the installed protocol or current StoryForge transport. Application response admission cannot guarantee provider-side generation/spend limits.",
+      "modelCalls": 0
+    },
+    "changes": [
+      "A new frozen acceptance criterion opts new choice runs into response usage evidence; historical contracts are unchanged.",
+      "Choice, expression and review retain raw output and bound usage artifacts before parsing; checks precede further calls, recovery and adoption.",
+      "Per-step/user and aggregate budget checks use the larger of reported output and visible-text estimate; raw over-budget results remain inspectable, never adopted or silently retried.",
+      "Native Codex requires an actual usage receipt; other missing-receipt providers retain an explicit visible estimate, not measured billing.",
+      "This is post-response application admission, not provider-side prevention of generation or spend.",
+      "UI distinguishes scene call allowance from native Codex token consumption."
+    ],
+    "verification": {
+      "modelCalls": 0,
+      "focused": {
+        "files": 2,
+        "passed": 54
+      },
+      "related": {
+        "files": 6,
+        "passed": 108,
+        "includesFocused": true
+      },
+      "tsc": 0,
+      "lint": 0,
+      "architecture": 0,
+      "tables": 0,
+      "aiManualAfterRegeneration": 0,
+      "freshness": 0,
+      "metrics": 0,
+      "roadmap": 0,
+      "initialFailuresRetained": [
+        "Two prior diagnostic-message assertions initially changed order; fixed order and all focused checks passed.",
+        "AI manual drift after source edits resolved with official generator.",
+        "V206 native fixture reset provider on reload; V207 preserved provider but omitted actor selection. Both failures preceded native dispatch. Original ten cases passed; fixed native cases passed in V208."
+      ],
+      "nativeBudgetBrowser": {
+        "version": "V208",
+        "passed": 2,
+        "modelCalls": 0,
+        "receipt": {
+          "version": 1,
+          "status": "terminal",
+          "exitCode": 0,
+          "sourceUnchanged": true,
+          "startedAt": 1792443778.968992,
+          "completedAt": 1792443821.736715,
+          "command": [
+            "npm",
+            "run",
+            "test:e2e",
+            "--",
+            "tests/e2e/character-chat-action-choice.spec.ts",
+            "--project=chromium",
+            "--retries=0",
+            "--grep",
+            "Codex transport"
+          ],
+          "manifestSha256": "1796eba8eca598240004dd157cfdbbc9f2e73f73ff0d22df8944e51f1bac2872",
+          "logSha256": "ecb8c1446be7219e35011e1c9af8b24f93f9a81a69b066bc32f79d9854958166",
+          "scope": "two native Codex output budget browser fixtures using isolated staged v45 route override; not default activation, full delivery or real-model acceptance"
+        }
+      },
+      "existingBrowser": {
+        "version": "V207",
+        "passed": 10,
+        "nativeFixtureFailures": 2,
+        "sourceUnchanged": true,
+        "note": "Native cases initially omitted required actor selection and timed out before dispatch; corrected only those cases, both passed in V208."
+      }
+    },
+    "sourceHashes": {
+      "src/lib/character-interaction/action-choice-output-budget.ts": "c873cc31eb69fd7324b75fa82f3d7d84c3093f3a5b22d1f3c782742a614d2954",
+      "src/lib/character-interaction/action-choice-input-budget.ts": "a264e473df8ba92b67f74cc796a4f2a5656090b9ce866a26aea88f7717a846b7",
+      "src/lib/character-interaction/action-choice-harness.ts": "ce9aa1cdd57e431e924f75dd6a0006b38148aec22d8d3303e22d24c13f9e9a71",
+      "src/lib/character-interaction/action-choice-evidence.ts": "2434ef2a91078032ebfc086468d098a56d8210b7f8bad2aab8a55c49ceec9525",
+      "src/lib/character-interaction/harness.ts": "2bed223eefcdba6465fa3c0f10d5c540ec36d54163d2a19efba86eba40527519",
+      "src/lib/character-interaction/situation-harness.ts": "d61b535408e5d90b9ca9f736b8678154463735800406cb8857938be8210105bc",
+      "src/components/character-interaction/NarrativeControls.tsx": "3f4bae8e254331a24726a413bdb8c5ae7c222cece26e569c4e14bb12e5b239b4",
+      "src/components/character-interaction/CharacterInteractionPanel.tsx": "3b3bdf92a55051bc130a1f1d2a7319037e89d5230b96f4ee5eb1d4e06cee7264",
+      "tests/regression/R-CHAT-02-action-choice-harness.test.ts": "0b0462da05be0f067aaeec31b2083ef8156382715df5ad63990ba29f383f0fcf",
+      "tests/regression/R-CHAT-03-turn-allowance-ui.test.tsx": "4ce2212db764308cc8fa24c84a1cf596205ce12290ac339982c744a485fac5da",
+      "tests/e2e/character-chat-action-choice.spec.ts": "a961707a0be0c62e8097c8835634032c3d9fac5ebe10e00cba62a80de843d210"
+    },
+    "logHashes": {
+      "focused-initial.log": "11e71a409189ad099aaa9ea4a673963449e30ffb02f4a2b11880388308641352",
+      "focused-final.log": "448e7794a5d381b4f9dfc3ff2745eac97325833690f41dec84786364a82abf8f",
+      "related-final.log": "e54467142e3d00ff099284b21e996a2dd62eb585e2699106f1b44d1873e91b6b",
+      "tsc-post-tests.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lint-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "architecture.log": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616",
+      "tables.log": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444",
+      "ai-manual.log": "30958d024ff685fe14c8a9ae8fe5f751069f40c845020f86be9350443a6aad5f",
+      "ai-manual-final.log": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19",
+      "freshness.log": "9cc4b944a33d2c5183c23c149636f6916c303d9fab3349701f2e26757500d46c",
+      "metrics-check.log": "32f5ade067b3496f6b4dd1d2dde0aeef10be09621b5d5059fa5833f42f99b0ff",
+      "roadmap.log": "9e45dab19b38810e932d85373ca28150ee63803849201a58a23941d0bccabb2a"
+    },
+    "mainline": {
+      "fetched": true,
+      "originMain": "d3df49a3dd587c5594a9da7a60ab466e5d926fe5",
+      "mainCommitsMissing": 0
+    },
+    "limitations": [
+      "No new real-model calls; V203 real results predate this output guard.",
+      "Current complete CI/build/E2E remain open; ten original plus two native browser cases are targeted evidence only.",
+      "M1-M5, broader original cases, dual provider, long-range, comparison, packages and human/commercial acceptance remain open."
+    ]
+  },
+  "currentChoiceFullDelivery": {
+    "at": "2026-10-19T21:06:51.391805+00:00",
+    "status": "withdrawn-obsolete-before-start",
+    "queuePid": 63353,
+    "queueSessionId": 44073,
+    "queueProcessVerified": "63353 30130 01:48 Ss   /Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python -u /tmp/storyforge-serial-ci-20261013.py -- python3 -u /Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v209-current-choice-delivery/run_checks.py",
+    "children": [],
+    "freeze": {
+      "at": 1792443903.1700659,
+      "manifestSha256": "a37eacf33779bd4e1c0c3fee4b8488d071efb54bb180271f18dab0bcbd6926b9",
+      "files": 3751,
+      "head": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+      "originMain": "d3df49a3dd587c5594a9da7a60ab466e5d926fe5",
+      "defaultVersion": "chat-narrative-action-v44",
+      "stagedVersion": "chat-narrative-action-v45",
+      "scope": "Full current implementation CI and full isolated E2E. No real model calls. Includes V192-V205 changes and corrected native budget tests."
+    },
+    "receiptPresent": false,
+    "scope": "Full CI then isolated full E2E, zero real-model calls. This is not a passing receipt.",
+    "coverageNote": "V205 source excludes V212 terminal receipt and V214 default activation. Verified unstarted queue withdrawn; no full CI/E2E pass. Latest full gates pending focused compatibility fixes.",
+    "previousQueueStatus": "queued-not-started",
+    "withdrawal": {
+      "at": 1792447371.5197172,
+      "status": "withdrawn-obsolete-before-start",
+      "queuePid": 63353,
+      "verifiedProcess": [
+        "63353",
+        "30130",
+        "/Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python -u /tmp/storyforge-serial-ci-20261013.py -- python3 -u /Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v209-current-choice-delivery/run_checks.py"
+      ],
+      "children": [],
+      "lockOwnerBeforeSignal": "43723",
+      "reason": "Frozen V205 code excludes V212 terminal receipt and V214 default activation. Latest source requires its own full gates after focused failures are resolved.",
+      "passingEvidence": false,
+      "verifiedStopped": true,
+      "verifiedStoppedAt": 1792447424.685861
+    }
+  },
+  "nextOriginalCoreSourcePreflight": {
+    "version": "V210",
+    "recordedAt": "2026-10-19T21:12:44.860861+00:00",
+    "status": "two-original-source-preflights-passed",
+    "modelCalls": 0,
+    "countsInM1": false,
+    "sourceManifestSha256": "a37eacf33779bd4e1c0c3fee4b8488d071efb54bb180271f18dab0bcbd6926b9",
+    "registrationSha256": "189b03e288648da14a5319aeeaafdf9372b73414c6dab0a9b36805685b0aa242",
+    "runnerSha256": "e77d6c6823ee04826fd2e009cf99c64d8ac3ffa42482cdb36e5240ac1aad025b",
+    "receipt": {
+      "at": "2026-10-19T21:10:24.635Z",
+      "status": "terminal",
+      "sourceUnchanged": true,
+      "modelCalls": 0,
+      "results": [
+        {
+          "scenario": "inn-missing-seal",
+          "passed": true,
+          "error": null,
+          "blockedRequests": [],
+          "modelCalls": 0,
+          "sourceFidelityPassed": true,
+          "refreshEqual": true
+        },
+        {
+          "scenario": "riverside-reading-evening",
+          "passed": true,
+          "error": null,
+          "blockedRequests": [],
+          "modelCalls": 0,
+          "sourceFidelityPassed": true,
+          "refreshEqual": true
+        }
+      ],
+      "scope": "S1/S2 zero-model source fidelity preflight for two other original development scenarios; not M1 scored episodes or release acceptance"
+    },
+    "server": {
+      "pid": 63852,
+      "sessionId": 81030,
+      "port": 51283,
+      "processVerified": "63852 63836 03:20 S node /Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v209-current-choice-delivery/source/node_modules/.bin/vite --host 127.0.0.1 --port 51283 --strictPort"
+    },
+    "profiles": [
+      "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v210-core-source-preflight/profile-inn-missing-seal",
+      "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v210-core-source-preflight/profile-riverside-reading-evening"
+    ],
+    "limitations": [
+      "Source-fidelity and refresh checks only; no generated opening, formal runtime, scored M1 episode, author acceptance or new story-quality result.",
+      "Next real collection must register the exact source, page-local staged version, model, budgets, scenario, allowed controls and all outcomes before dispatch. Preserve original source material and stop policies."
+    ]
+  },
+  "originalCoreNativeObservations": {
+    "version": "V211",
+    "recordedAt": "2026-10-19T21:37:36.376650+00:00",
+    "status": "two-original-short-observations-terminal-restored",
+    "sourceManifestSha256": "a37eacf33779bd4e1c0c3fee4b8488d071efb54bb180271f18dab0bcbd6926b9",
+    "defaultActivated": false,
+    "countsInM1": false,
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "totalModelCalls": 33,
+    "productionModelCalls": 6,
+    "runtimeModelCalls": 27,
+    "actualUsage": {
+      "inputTokens": 428412,
+      "outputTokens": 29883,
+      "totalTokens": 458295
+    },
+    "boundNativeUsageReceipts": 21,
+    "costUsd": null,
+    "findings": [
+      "Inn: after automatic opening and two plain continues, the actor inspected distinct nearby areas and disclosed limited negative findings without moving player belongings or revealing the frozen hidden truth. Goal remains active; stopped at 15 runtime requests.",
+      "Bookstore: disclosed own prepared short story and unconfirmed worries, proposed a two-person event and optional listening, and explained six-seat constraints. No assumed player hosting or funding; no confirmed arrangement. Three weak-guidance opportunities only.",
+      "Actual returned usage matched each of the 21 persisted choice/expression/review output receipts; both independent backup imports preserved stories, original outputs and usage with zero model calls.",
+      "Audit found existing terminal verification retained only a hash, not its full body. V212 changes the new choice contract verifier and persists the complete receipt; V211 precedes that fix."
+    ],
+    "limitations": [
+      "Neither short observation is a complete M1 episode, independent human score or commercial acceptance.",
+      "Original goals remain unresolved; no new Agnes result or fair SillyTavern comparison.",
+      "Full latest engineering gates and default activation remain open."
+    ],
+    "evidenceSummaryPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v211-original-core-native-observation/terminal-summary.json",
+    "evidenceSummarySha256": "4a5494f5d87ef0931adbd07e81e02eebc3d1ea6bc15e18f64435a0ebb2ff360f",
+    "cases": {
+      "inn-missing-seal": {
+        "version": 1,
+        "at": "2026-10-19T21:27:59.265011+00:00",
+        "scenario": "inn-missing-seal",
+        "resultSha256": "5b10650b650483fdd2decac4e6a103c20e7ce7963f36b32d05010ed2abd4447c",
+        "sourceUnchanged": true,
+        "error": null,
+        "completionReason": "budget",
+        "countsInM1": false,
+        "requests": 18,
+        "productionRequests": 3,
+        "runtimeRequests": 15,
+        "actualUsage": {
+          "inputTokens": 231543,
+          "outputTokens": 16159,
+          "totalTokens": 247702
+        },
+        "costUsd": null,
+        "refreshEqual": true,
+        "restoration": {
+          "stem": "inn-missing-seal",
+          "runStatusesPreserved": true,
+          "verifiedCompletedHistories": 6,
+          "retainedFailedRuns": 0,
+          "resumableRuns": 0,
+          "openingReviewRetained": true,
+          "modelCalls": 0,
+          "interactionEqual": true,
+          "refreshEqual": true,
+          "worldPreserved": true,
+          "rawEvidenceRetained": true,
+          "usageEvidenceRetained": true
+        },
+        "goalStatuses": [
+          "active"
+        ],
+        "threadStatuses": [
+          "open"
+        ],
+        "limits": [
+          "Targeted short observation only; not independent human scoring or M1 acceptance.",
+          "Default remains v44; v45 page-local treatment only.",
+          "Native output caps are application-side after-response admission, not provider generation caps."
+        ],
+        "nativeUsageReceipts": 9,
+        "completedRuns": 6,
+        "actionRunSeconds": [
+          30.139,
+          38.711,
+          41.531
+        ]
+      },
+      "riverside-reading-evening": {
+        "version": 1,
+        "at": "2026-10-19T21:34:42.198004+00:00",
+        "scenario": "riverside-reading-evening",
+        "resultSha256": "bb992852d652b1e75ac8911bc126a10aa7f1d8e3816948c334a260a0f95fd9d3",
+        "sourceUnchanged": true,
+        "error": null,
+        "completionReason": "diagnostic-observation-complete",
+        "countsInM1": false,
+        "requests": 15,
+        "productionRequests": 3,
+        "runtimeRequests": 12,
+        "actualUsage": {
+          "inputTokens": 196869,
+          "outputTokens": 13724,
+          "totalTokens": 210593
+        },
+        "costUsd": null,
+        "refreshEqual": true,
+        "restoration": {
+          "stem": "riverside-reading-evening",
+          "runStatusesPreserved": true,
+          "verifiedCompletedHistories": 4,
+          "retainedFailedRuns": 0,
+          "resumableRuns": 0,
+          "openingReviewRetained": true,
+          "modelCalls": 0,
+          "interactionEqual": true,
+          "refreshEqual": true,
+          "worldPreserved": true,
+          "rawEvidenceRetained": true,
+          "usageEvidenceRetained": true
+        },
+        "goalStatuses": [
+          "active"
+        ],
+        "threadStatuses": [
+          "open"
+        ],
+        "limits": [
+          "Targeted short observation only; not independent human scoring or M1 acceptance.",
+          "Default remains v44; v45 page-local treatment only.",
+          "Native output caps are application-side after-response admission, not provider generation caps."
+        ],
+        "nativeUsageReceipts": 12,
+        "completedRuns": 4,
+        "actionRunSeconds": [
+          38.898,
+          33.457,
+          32.535,
+          41.148
+        ]
+      }
+    }
+  },
+  "currentTerminalReceiptImplementation": {
+    "version": "V212",
+    "recordedAt": "2026-10-19T21:39:54.752840+00:00",
+    "status": "implemented-directed-browser-and-build-passed",
+    "scope": "New staged character-chat choice contracts only; existing artifact table and lifecycle; no new AI content fields, model calls or world writes.",
+    "finding": "V211 real native output usage was retained and matched transport, but full terminal verification body was not retained; only terminalReceiptHash remained.",
+    "frozenVerifier": "character-chat-action-terminal-v2",
+    "changes": [
+      "Retain the full terminal receipt as exact tool-result before accepting its hash.",
+      "Recovery reuses original body, timestamp and hash only when current adoption/post-state evidence matches.",
+      "Missing, conflicting or corrupt original evidence blocks re-signing and repeated completion reads.",
+      "Historical verifier v1 contracts keep their original behavior; repeated backup imports retain original receipt body as history."
+    ],
+    "verification": {
+      "focusedFinal": {
+        "files": 1,
+        "tests": 54,
+        "exitCode": 0,
+        "includesSixNewCases": true,
+        "includesNewImportAssertions": true
+      },
+      "related": {
+        "files": 6,
+        "tests": 114,
+        "exitCode": 0,
+        "overlapsFocused": true,
+        "testOnlyDeltaAfterRun": "Additional exact body retention assertions in repeated-import case passed in final 54-test rerun."
+      },
+      "typesFinal": 0,
+      "lintFinal": 0,
+      "static": [
+        {
+          "check": "gen:ai-manual",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v212-terminal-receipt/gen-ai-manual.log"
+        },
+        {
+          "check": "gen:project-metrics",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v212-terminal-receipt/gen-project-metrics.log"
+        },
+        {
+          "check": "check:architecture",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v212-terminal-receipt/check-architecture.log"
+        },
+        {
+          "check": "check:required-tables",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v212-terminal-receipt/check-required-tables.log"
+        },
+        {
+          "check": "check:ai-manual",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v212-terminal-receipt/check-ai-manual.log"
+        },
+        {
+          "check": "check:agent-freshness",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v212-terminal-receipt/check-agent-freshness.log"
+        },
+        {
+          "check": "check:project-metrics",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v212-terminal-receipt/check-project-metrics.log"
+        },
+        {
+          "check": "check:roadmap",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v212-terminal-receipt/check-roadmap.log"
+        }
+      ],
+      "browser": {
+        "version": 1,
+        "status": "terminal",
+        "exitCode": 0,
+        "sourceUnchanged": true,
+        "startedAt": 1792445833.653068,
+        "completedAt": 1792445924.9608839,
+        "command": [
+          "npm",
+          "run",
+          "test:e2e",
+          "--",
+          "tests/e2e/character-chat-action-choice.spec.ts",
+          "--project=chromium",
+          "--retries=0",
+          "--workers=1"
+        ],
+        "manifestSha256": "a0f4972d4ed815ba43e66de93402c7fde7d2ee653b521c1c14f9d3c9ab555b93",
+        "logSha256": "54014b3856a360a9cfb6ec823fc8e73585cb9d3809fbe0fea11ce16ec24227f7",
+        "modelCalls": 0,
+        "scope": "Twelve isolated staged action-choice browser cases, including full native output receipt and persisted terminal receipt checks; no real-model calls or full CI claim."
+      },
+      "browserTests": 12,
+      "fullCI": false,
+      "fullE2E": false,
+      "realModelCallsAfterFix": 0,
+      "build": {
+        "exitCode": 0,
+        "sourceRoot": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v213-terminal-receipt-browser/source",
+        "sourceManifestSha256": "a0f4972d4ed815ba43e66de93402c7fde7d2ee653b521c1c14f9d3c9ab555b93",
+        "sourceUnchanged": true,
+        "logSha256": "924bfa4975a2ff82e8696053915dedbbc343a257a45a110609e245a11dd5c2e1",
+        "existingCircularChunkWarningAlsoInV187": true
+      }
+    },
+    "sourceHashes": {
+      "src/lib/character-interaction/action-terminal-receipt.ts": "eeedc8c503131bc17dc418e9279155394a4cb7bf194abf0f3ded1491464575ae",
+      "src/lib/character-interaction/harness.ts": "280ec9913adf12f14527addb4e271ed0ca01ea58d4124dd9d91bae4fbd970177",
+      "tests/regression/R-CHAT-02-action-choice-harness.test.ts": "b1c9491936b7f909dbcf55b3f9bb2e3c7345c2d1165f4b569be93ee9bed5fa2b",
+      "tests/e2e/character-chat-action-choice.spec.ts": "7456f15a2f863cb0a12f62da6ef2009303dd016726746f756c42a0af20ae3c5a"
+    },
+    "defaultActivated": false,
+    "limitations": [
+      "V211 model results precede terminal body persistence fix and do not imply current full model acceptance.",
+      "V209 queued full validation covers V205 source only and excludes this fix.",
+      "Default activation, full latest CI/E2E and M1-M5 remain incomplete."
+    ]
+  },
+  "defaultActionChoiceActivation": {
+    "version": "V214",
+    "recordedAt": "2026-10-19T22:40:12.777823+00:00",
+    "status": "default-v45-character-regression-passed-browser-fixture-failures-corrected-full-delivery-pending",
+    "defaultVersion": "chat-narrative-action-v45",
+    "delivered": false,
+    "realModelAcceptance": false,
+    "fullDeliveryValidated": false,
+    "changes": [
+      "Use v45 in actual registry and browser test without route overrides.",
+      "Preserve v44 and earlier frozen two-step contracts in explicit historical recovery cases.",
+      "Provide distinct choice/expression/review test responses; assert actual three-call budgets without weakening permissions or review."
+    ],
+    "secondFocusedRun": {
+      "tests": 944,
+      "passed": 857,
+      "failed": 87,
+      "files": 62,
+      "exitCode": 1,
+      "reportSha256": "216ff60bdd1525da34e0ea4bca2d3f7821430afd3b24562be525b2ddfe470b84"
+    },
+    "longHistoryEngineering": {
+      "status": "passed-in-second-run",
+      "actions": 100,
+      "facts": 204,
+      "checks": [
+        "earliest clue retrieval",
+        "parentless branch export/import",
+        "18 fulfilled promises",
+        "34 completed goals and threads"
+      ],
+      "realModelCalls": 0
+    },
+    "thirdFocusedRun": {
+      "status": "terminal-failed",
+      "files": 29,
+      "tests": 378,
+      "passed": 368,
+      "failed": 10,
+      "exitCode": 1,
+      "reportSha256": "0e9d711b70ca6ff018a8eb4461a7725939675115132a95cb6cec46e585f5b5e6"
+    },
+    "fourthFocusedRun": {
+      "status": "terminal-passed",
+      "files": 9,
+      "tests": 89,
+      "passed": 89,
+      "failed": 0,
+      "exitCode": 0,
+      "reportSha256": "573b33dbc2cf4106bbfeb16274b6022004f50556bdd64fc0da07daf0dcd9919a",
+      "overlapsPriorRuns": true,
+      "countsAsFullCohort": false
+    },
+    "checks": {
+      "types": 0,
+      "changedLint": 0,
+      "gitDiff": 0,
+      "static": [
+        {
+          "task": "gen:ai-manual",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v214-default-activation/gen-ai-manual.log"
+        },
+        {
+          "task": "gen:project-metrics",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v214-default-activation/gen-project-metrics.log"
+        },
+        {
+          "task": "check:architecture",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v214-default-activation/check-architecture.log"
+        },
+        {
+          "task": "check:required-tables",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v214-default-activation/check-required-tables.log"
+        },
+        {
+          "task": "check:ai-manual",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v214-default-activation/check-ai-manual.log"
+        },
+        {
+          "task": "check:project-metrics",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v214-default-activation/check-project-metrics.log"
+        },
+        {
+          "task": "check:roadmap",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v214-default-activation/check-roadmap.log"
+        },
+        {
+          "task": "check:agent-freshness",
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v214-default-activation/check-agent-freshness.log"
+        }
+      ]
+    },
+    "pending": [
+      "Observe existing V221 full gates; V219 ended at generated-cache lint, no E2E pass. Keep native Vite caches outside future CI source directories.",
+      "Formal real-model, long-history, ensemble and comparative acceptance."
+    ],
+    "fullCharacterRegression": {
+      "version": "V215",
+      "files": 143,
+      "tests": 1673,
+      "passed": 1673,
+      "failed": 0,
+      "skipped": 0,
+      "sourceManifestSha256": "d0d50f04841a3cc1ac3acc9d2cf8dc2db836aa844f3a0d2f94bcaf2799375c1b",
+      "scope": "All R-CHAT regression files plus AI Town runtime and shared Harness instance ledger; actual default v45; injected model fixtures, not real story quality.",
+      "evidence": {
+        "directory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v215-default-regression",
+        "reportSha256": "6077a4f8bbd071c68cfe9d56e2f06d645305772b6369304bd8e327f224e2e918",
+        "receipt": {
+          "exitCode": 0,
+          "startedAt": 1792448039.038534,
+          "completedAt": 1792448881.1953,
+          "files": 143,
+          "sourceUnchanged": true,
+          "scope": "Complete character-chat regression plus two shared callers, default v45, injected fixtures only."
+        },
+        "receiptSha256": "7d86f87b3b0330fcf8f09f4e342db692bb264365138cbc2678009b3fb0c98744"
+      }
+    },
+    "defaultBrowserRegression": {
+      "version": "V216",
+      "sourceManifestSha256": "c727cf3645cde17f29cb2edd0814ea8049fe7f5ac9cba5b8c007aeeb94c466a9",
+      "productionSourceEqualsV215": true,
+      "core": {
+        "tests": 38,
+        "passed": 37,
+        "failed": 1,
+        "skipped": 0,
+        "failure": "Refresh test expected the old expression label during the now-first choice request. Original failure retained.",
+        "evidence": {
+          "directory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v216-default-browser",
+          "reportSha256": "441b3f33e424291f246080b17c587a9ffc44b8bb9fbc17f503841b19c3531f31",
+          "receipt": {
+            "exitCode": 1,
+            "sourceUnchanged": true,
+            "startedAt": 1792448387.809418,
+            "completedAt": 1792448686.470774,
+            "modelCalls": 0,
+            "command": [
+              "npm",
+              "run",
+              "test:e2e",
+              "--",
+              "tests/e2e/character-chat-action-choice.spec.ts",
+              "tests/e2e/character-chat-turn-resume.spec.ts",
+              "tests/e2e/character-chat-run-progress.spec.ts",
+              "tests/e2e/character-chat-integration.spec.ts",
+              "--project=chromium",
+              "--retries=0",
+              "--workers=1",
+              "--reporter=line,json",
+              "--output=/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v216-default-browser/core-test-results"
+            ],
+            "manifestSha256": "c727cf3645cde17f29cb2edd0814ea8049fe7f5ac9cba5b8c007aeeb94c466a9"
+          },
+          "receiptSha256": "5b4918b405a95f08b36a637a7a5b12122833d92f676da041a6f5308bb167ff5b"
+        }
+      },
+      "remaining": {
+        "status": "terminal-failed-original-retained",
+        "tests": 122,
+        "files": 57,
+        "passed": 117,
+        "failed": 5,
+        "skipped": 0,
+        "flaky": 0,
+        "directory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v216-default-browser",
+        "reportSha256": "dc9d3e7a84a840d44c6c0c1be9308b7592564e280d46dab3f72d4e595cfc72ec",
+        "receipt": {
+          "exitCode": 1,
+          "sourceUnchanged": true,
+          "startedAt": 1792448727.104747,
+          "completedAt": 1792449595.2800682,
+          "modelCalls": 0,
+          "command": [
+            "node",
+            "node_modules/@playwright/test/cli.js",
+            "test",
+            "tests/e2e/character-chat-action-revision.spec.ts",
+            "tests/e2e/character-chat-actor-progression.spec.ts",
+            "tests/e2e/character-chat-background-source.spec.ts",
+            "tests/e2e/character-chat-card-import.spec.ts",
+            "tests/e2e/character-chat-commitment-context.spec.ts",
+            "tests/e2e/character-chat-commitment-portable.spec.ts",
+            "tests/e2e/character-chat-commitments.spec.ts",
+            "tests/e2e/character-chat-composer-draft.spec.ts",
+            "tests/e2e/character-chat-consultation.spec.ts",
+            "tests/e2e/character-chat-context-inspector.spec.ts",
+            "tests/e2e/character-chat-ensemble.spec.ts",
+            "tests/e2e/character-chat-existing-goal-pause.spec.ts",
+            "tests/e2e/character-chat-experience-package.spec.ts",
+            "tests/e2e/character-chat-fact-discovery.spec.ts",
+            "tests/e2e/character-chat-history-edit.spec.ts",
+            "tests/e2e/character-chat-history-growth.spec.ts",
+            "tests/e2e/character-chat-inquiry-result.spec.ts",
+            "tests/e2e/character-chat-media-production.spec.ts",
+            "tests/e2e/character-chat-media.spec.ts",
+            "tests/e2e/character-chat-memory-control.spec.ts",
+            "tests/e2e/character-chat-memory-management.spec.ts",
+            "tests/e2e/character-chat-memory-reconciliation-contract.spec.ts",
+            "tests/e2e/character-chat-memory-review.spec.ts",
+            "tests/e2e/character-chat-message-retrieval.spec.ts",
+            "tests/e2e/character-chat-natural-disclosure.spec.ts",
+            "tests/e2e/character-chat-observation-results.spec.ts",
+            "tests/e2e/character-chat-options-history.spec.ts",
+            "tests/e2e/character-chat-options.spec.ts",
+            "tests/e2e/character-chat-package-version.spec.ts",
+            "tests/e2e/character-chat-persona-source.spec.ts",
+            "tests/e2e/character-chat-player-audience.spec.ts",
+            "tests/e2e/character-chat-player-followup.spec.ts",
+            "tests/e2e/character-chat-player-layout.spec.ts",
+            "tests/e2e/character-chat-player-pause.spec.ts",
+            "tests/e2e/character-chat-private-character.spec.ts",
+            "tests/e2e/character-chat-private-conversation.spec.ts",
+            "tests/e2e/character-chat-promise-request.spec.ts",
+            "tests/e2e/character-chat-relationship-history.spec.ts",
+            "tests/e2e/character-chat-release-start.spec.ts",
+            "tests/e2e/character-chat-release-upgrade.spec.ts",
+            "tests/e2e/character-chat-reply-continuation.spec.ts",
+            "tests/e2e/character-chat-review-normalization.spec.ts",
+            "tests/e2e/character-chat-role-profile-ai.spec.ts",
+            "tests/e2e/character-chat-role-profile.spec.ts",
+            "tests/e2e/character-chat-scene-transition.spec.ts",
+            "tests/e2e/character-chat-scheduling.spec.ts",
+            "tests/e2e/character-chat-source-passages.spec.ts",
+            "tests/e2e/character-chat-source-suggestions.spec.ts",
+            "tests/e2e/character-chat-source-terminal-failure.spec.ts",
+            "tests/e2e/character-chat-source-unit-confirmation.spec.ts",
+            "tests/e2e/character-chat-source-units.spec.ts",
+            "tests/e2e/character-chat-starter-experiences.spec.ts",
+            "tests/e2e/character-chat-thread-followup.spec.ts",
+            "tests/e2e/character-chat-turn-direction.spec.ts",
+            "tests/e2e/character-chat-visual-intent.spec.ts",
+            "tests/e2e/character-chat-voice.spec.ts",
+            "tests/e2e/character-chat-world-discovery.spec.ts",
+            "--project=chromium",
+            "--retries=0",
+            "--workers=1",
+            "--reporter=line,json",
+            "--output=/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v216-default-browser/remaining-test-results"
+          ],
+          "manifestSha256": "c727cf3645cde17f29cb2edd0814ea8049fe7f5ac9cba5b8c007aeeb94c466a9"
+        },
+        "failures": [
+          {
+            "file": "character-chat-media.spec.ts",
+            "title": "frozen chat images survive save changes and restoration at 390px"
+          },
+          {
+            "file": "character-chat-media.spec.ts",
+            "title": "frozen chat images survive save changes and restoration at 1440px"
+          },
+          {
+            "file": "character-chat-memory-reconciliation-contract.spec.ts",
+            "title": "persists reviewed memory reconciliation through browser reload and portable nested branches without changing facts"
+          },
+          {
+            "file": "character-chat-release-start.spec.ts",
+            "title": "release details keep secrets private and start the selected actor at 390px"
+          },
+          {
+            "file": "character-chat-release-start.spec.ts",
+            "title": "release details keep secrets private and start the selected actor at 1440px"
+          }
+        ],
+        "correction": "V218 test response/current-version changes; all seven cases from these three files passed against unchanged V216 product code."
+      },
+      "realModelCalls": 0,
+      "fullDeliveryValidated": false
+    },
+    "refreshPhaseCorrection": {
+      "version": "V217",
+      "tests": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "source": "V216 frozen product source with three-file focused test snapshot",
+      "checks": [
+        "Refresh while choice is unknown preserves the saved choice phase and one actual request.",
+        "Refresh while expression is unknown preserves the saved expression phase and two actual requests.",
+        "A repeated refresh neither resends nor offers unsafe completion.",
+        "Existing generation/review visibility and cancellation checks remain passing."
+      ],
+      "evidence": {
+        "directory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v217-progress-phase-browser",
+        "reportSha256": "876f588e9a5b429316388f22c21ec018610ed9874bf392dec980b60d736f8c12",
+        "receipt": {
+          "exitCode": 0,
+          "sourceAndTestsUnchanged": true,
+          "startedAt": 1792448815.009451,
+          "completedAt": 1792448856.936509,
+          "modelCalls": 0
+        },
+        "receiptSha256": "9044164a8ad37c5242a635b2d0ff2aa141af336b05fb7bb7c50f1fdcc2c28032"
+      },
+      "isCompleteBrowserRerun": false,
+      "realModelCalls": 0
+    },
+    "additionalBrowserCompatibility": {
+      "version": "V218",
+      "tests": 7,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "scope": [
+        "Media images and zero-call restore on desktop/mobile with all three calls counted.",
+        "Release entry preserves player secrets and invokes the selected actor through choice/expression/review.",
+        "Memory reconciliation retains current action-review-v32 through nested portable branches and refresh."
+      ],
+      "productSource": "Unchanged V216 source; only three browser specifications and their common test helper copied.",
+      "reportSha256": "e868ea8d7fccdb9bde5f23941c2f646b082db98c45342a2ad7df59247df8786b",
+      "receipt": {
+        "exitCode": 0,
+        "sourceAndTestsUnchanged": true,
+        "startedAt": 1792449174.1614878,
+        "completedAt": 1792449247.079239,
+        "modelCalls": 0
+      },
+      "lint": {
+        "command": [
+          "npx",
+          "eslint",
+          "tests/e2e/character-chat-media.spec.ts",
+          "tests/e2e/character-chat-release-start.spec.ts",
+          "tests/e2e/character-chat-memory-reconciliation-contract.spec.ts",
+          "--max-warnings=0"
+        ],
+        "startedAt": 1792449208.187943,
+        "completedAt": 1792449212.4354181,
+        "exitCode": 0
+      },
+      "types": {
+        "command": "npx tsc --noEmit",
+        "exitCode": 0,
+        "scope": "Current feature worktree after these test corrections."
+      },
+      "originalFailuresRetained": true,
+      "isCompleteBrowserRerun": false,
+      "realModelCalls": 0
+    },
+    "fullDeliveryAttempt": {
+      "version": "V219",
+      "recordedAt": "2026-10-19T22:41:07.352837+00:00",
+      "status": "terminal-failed-generated-cache-lint",
+      "queuePid": 95944,
+      "queueSessionId": 18295,
+      "verifiedProcess": "95944 30130       00:28 Ss   /Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python -u /tmp/storyforge-serial-ci-20261013.py -- python3 -u /Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v219-default-full-delivery/run_checks.py",
+      "source": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v219-default-full-delivery/source",
+      "manifestSha256": "0abb398d4875f63869c6adfb2c65994e11742f06b431e715e1c8c79dd10b743e",
+      "defaultVersion": "chat-narrative-action-v45",
+      "receipt": {
+        "version": 1,
+        "status": "terminal",
+        "exitCode": 1,
+        "error": null,
+        "pid": 4713,
+        "startedAt": 1792450846.919965,
+        "completedAt": 1792450905.4710798,
+        "cwd": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v219-default-full-delivery/source",
+        "manifestSha256": "0abb398d4875f63869c6adfb2c65994e11742f06b431e715e1c8c79dd10b743e",
+        "sourceUnchanged": true,
+        "checks": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v219-default-full-delivery/checks.json",
+        "modelCalls": 0,
+        "fullDeliveryValidated": false
+      },
+      "doNotRestart": true,
+      "notQuotaRelated": true,
+      "fullCI": false,
+      "fullE2E": false,
+      "fullDeliveryValidated": false,
+      "failureCause": "ESLint included native evaluation generated optimizer cache; all 33 reported paths were outside the frozen source manifest. Native model runner and server terminated before cache removal. Original failure preserved.",
+      "cacheCleanup": {
+        "filesTouchedInManifest": 0,
+        "removedBytes": 30136721,
+        "sourceUnchanged": true,
+        "receiptSha256": "b34bf72ae0c1d69ce4711b02f9566c72b3ea9ce3251b12f88afeb73d3779d9bb"
+      }
+    },
+    "fullDeliveryRetry": {
+      "version": "V221",
+      "at": "2026-10-19T23:04:03.066900+00:00",
+      "status": "queued-not-started",
+      "queuePid": 6549,
+      "queueSessionId": 17838,
+      "verifiedProcess": "6549 30130       00:47 Ss   /Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python -u /tmp/storyforge-serial-ci-20261013.py -- python3 -u /Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v221-cache-isolated-delivery/run_checks.py",
+      "source": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v219-default-full-delivery/source",
+      "manifestSha256": "0abb398d4875f63869c6adfb2c65994e11742f06b431e715e1c8c79dd10b743e",
+      "receipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v221-cache-isolated-delivery/receipt.json",
+      "doNotRestart": true,
+      "fullDeliveryValidated": false,
+      "reason": "Same immutable source after safely removing generated native evaluation cache; original failed attempt retained."
+    }
+  },
+  "defaultM1Cohort": {
+    "version": "V220",
+    "cohort": "m1-v220-default-source",
+    "status": "production-unit-stopped-runtime-review-failure-not-accepted",
+    "registeredAt": "2026-10-19T22:43:11.955491+00:00",
+    "sourceManifestSha256": "0abb398d4875f63869c6adfb2c65994e11742f06b431e715e1c8c79dd10b743e",
+    "preregistrationSha256": "9035b84cfa7e0096e1ea4604065f25085fb46fe24f03804431d2f57fe5f257f5",
+    "plannedEpisodes": 120,
+    "productionUnits": 20,
+    "currentProductionUnit": "m1-v220-default-source/daily-clock-promise/local-codex/r1",
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "actualDefault": "chat-narrative-action-v45",
+    "pageLocalVersionOverride": false,
+    "injectedModelResponses": false,
+    "production": "Three actual requests; three openings passed mandatory reviews; first passing opening published only in isolated local browser.",
+    "runnerSessionId": 21230,
+    "queueSessionId": 18295,
+    "directory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v220-m1-default-source",
+    "episodeCompleted": true,
+    "qualityAccepted": false,
+    "humanScoring": "deferred",
+    "previousFailuresPreserved": true,
+    "receiptAudit": "Separate zero-call product reader validated all seven completed action receipts by exact frozen verifier identity; original per-stage optional counter was not used as evidence.",
+    "next": "Keep semantic rejection. Add a governed, reviewed control outcome for a genuine wait on an explicit continuation without creating repeated dialogue, invented story progress or an automatic retry. Preserve all prior failures; validate the next version as a new cohort.",
+    "protocolQualityPass": false,
+    "summaryFile": "character-chat-m1-cohort-v220.json",
+    "requests": 29,
+    "actualUsage": {
+      "inputTokens": 389948,
+      "outputTokens": 17991,
+      "totalTokens": 407939
+    },
+    "runtimeFailure": {
+      "code": "narrative-review-failed",
+      "check": "meaningful-direction",
+      "choiceKind": "wait",
+      "expressionMode": "speech-awaiting-player",
+      "reason": "继续触发下只再次重申已说明的开盖许可等待，没有新信息、理由、选择或后果。等待本身合理，但重复台词不构成有意义推进。",
+      "permissionsPassed": true,
+      "playerAgencyPassed": true,
+      "consequencesPassed": true
+    },
+    "restorationPassed": true,
+    "restorationCalls": 0,
+    "fullTerminalReceiptsVerified": 7
+  },
+  "controlHandoffContract": {
+    "version": 1,
+    "status": "contract-and-state-verified-integration-pending",
+    "updatedAt": 1792451907.285547,
+    "defaultActionVersion": 45,
+    "modelCalls": 0,
+    "semanticQualityAccepted": false,
+    "fullDeliveryValidated": false,
+    "scope": [
+      "strict control candidate and independent review shape",
+      "versioned waiting marker without a message or action",
+      "source visibility and delivered-dialogue checks",
+      "state readback and repeated parentless branch rebasing",
+      "import validation and legacy waiting invariants"
+    ],
+    "checks": {
+      "targetedRegression": {
+        "files": 4,
+        "tests": 127,
+        "passed": 127,
+        "newControlTests": 63
+      },
+      "types": {
+        "command": "npx tsc --noEmit --pretty false",
+        "execSessionId": 27391,
+        "exitCode": 0
+      },
+      "staticGates": [
+        "architecture",
+        "required-tables",
+        "ai-manual",
+        "targeted-eslint",
+        "diff-check",
+        "check:docs"
+      ]
+    },
+    "evidence": {
+      "folder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v222-control-handoff-contract",
+      "manifestSha256": "f761bf2e85caa68ae04e3bb9c6508c509e28955beef9242c546fe2b99b806ede",
+      "receiptSha256": "9896ec90fe2f837965a4ad4a7c49e67f8ce6edd652a589b91a39d1aafa157db4"
+    },
+    "remaining": [
+      "versioned model-output and persisted candidate integration",
+      "independent review context and actual review step",
+      "governed event/command evidence and terminal receipt",
+      "cancel/unknown/stale/refresh recovery and isolated browser UI",
+      "new actual-default real-model cohort, preserving V220 failure"
+    ],
+    "fullDeliveryQueue": {
+      "batch": "V221",
+      "source": "V219",
+      "includesThisChange": false
+    }
+  },
+  "controlHandoffDefaultV224": {
+    "status": "default-and-choice-backed-control-review-targeted-verified",
+    "summaryFile": "character-chat-control-handoff-v224.json",
+    "defaultProducer": 46,
+    "defaultReviewer": 33,
+    "tests": {
+      "regression": 489,
+      "browser": 9
+    },
+    "formalModelCalls": 0,
+    "semanticQualityAccepted": false,
+    "fullDeliveryValidated": false
+  }
+}

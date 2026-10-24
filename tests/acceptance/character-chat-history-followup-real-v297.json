@@ -1,0 +1,89 @@
+{
+  "schema": "storyforge.character-chat-acceptance-evidence",
+  "version": 297,
+  "at": "2026-10-21T00:58:14.321745+00:00",
+  "status": "later-history-retention-verified-subsequent-pause-rejected",
+  "product": "character-chat",
+  "lifecycle": "product-development",
+  "stage": "S3-runtime",
+  "sourceBaseHead": "648e4fa8a66e376bc2190eda7a0a3f4e5aa89e89",
+  "sourceManifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v297-history-followup-real/run-r1/manifest.json",
+    "sha256": "0fa21abcaf366293bddcfdac16e4940d17bd8c9e6182e3db5052431090d6a5c0"
+  },
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v296-history-followup-evidence/engineering.json",
+    "sha256": "64e36cd04d476c03cc2bdfed9a6183f9f2e42bf4ca83e506e9419b9a5168938c"
+  },
+  "protocol": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v297-history-followup-real/run-r1/preregistration.json",
+    "sha256": "4c87d3cf0b9e89d2ee00e0bd31a2d4a8807585446eff7fc3f51a20146538cc1b"
+  },
+  "model": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "requests": 6,
+    "terminalCompleted": 6,
+    "reportedTotalTokens": 109790,
+    "costUsd": null,
+    "automaticRetries": 0
+  },
+  "result": {
+    "completedRuns": 1,
+    "failedRuns": 1,
+    "acceptedActions": 1,
+    "rejectedActionApplied": false,
+    "goalStatus": "active",
+    "originalTurnFinished": false,
+    "meaningfulClosure": false,
+    "m1Passed": false,
+    "formalMatrixReplaced": false
+  },
+  "evidence": {
+    "run": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v297-history-followup-real/run-r1/continuation.json",
+      "sha256": "bc2dc6950590b1a6e4e580859bd58d3ed9e680d9f2dc39e7f0daacb0a681ea8d"
+    },
+    "backup": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v297-history-followup-real/run-r1/continuation-backup.json",
+      "sha256": "d1ec90d744183684cd984da73d435ebb4f8b38d1fa8a354feab859cabd45866e"
+    },
+    "proof": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v297-history-followup-real/run-r1/history-followup-input-proof.json",
+      "sha256": "1fa4b78d878a949e9f43a4b33b541c8e33c321bbdbd15f93ee34b56c80236af4"
+    },
+    "restoration": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v297-history-followup-real/run-r1/continuation-restoration-verified.json",
+      "sha256": "8bd41f2189e669bb2c3ed8ae3755408c11669a143157f3e5f1ffe11bd43f0a26"
+    }
+  },
+  "restoration": {
+    "stem": "continuation",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 1,
+    "retainedFailedRuns": 1,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "parentPreserved": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true,
+    "terminalReceiptBodiesRetained": true,
+    "usageEvidenceRetained": true
+  },
+  "sourceUnchanged": true,
+  "observed": "Choice and expression included pickup and later return. The role exited the counter after the actual uncertain NPC answer; all six action checks passed and the action was saved. The next empty choice proposed ending this turn, but expression paused the entire unresolved goal; meaningful-direction rejected it. The rejected pause was not applied.",
+  "next": "Keep the successful history repair and all failures. Inspect local-purpose completion versus empty choice and whole-goal pause using the actual delivered inputs; do not relax the reviewer or treat an unfinished story as complete.",
+  "limitations": [
+    "Single-state bounded development diagnostic, not a full episode or formal M1 slot.",
+    "No automatic retry or new player hints.",
+    "No cost or latency improvement conclusion.",
+    "Human scoring and commercial trial remain deferred."
+  ],
+  "preparationFailure": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v297-preparation-initial-failure.json",
+    "sha256": "336e95a73e4b4ef8ddb2a8cba047a7f2b2db6dca57562569155edc29830a45e4"
+  }
+}

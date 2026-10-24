@@ -1,0 +1,51 @@
+import {expect, test} from '@playwright/test'
+
+test('public picture drafts persist without generation, remain separate from secrets, and retain removed cast descriptions', async ({page}, info) => {
+  await page.setViewportSize({width: 390, height: 844})
+  await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
+  let calls = 0
+  await page.route('**/chat/completions', async route => {calls++; await route.abort()})
+  await page.route('**/local-codex/v1/requests', async route => {if (route.request().method() === 'POST') {calls++; await route.abort()} else await route.continue()})
+  await page.route('**/images/generations', async route => {calls++; await route.abort()})
+  await page.goto('./chat/library')
+  const f = await page.evaluate(async () => {
+    const load = new Function('p', 'return import(p)')
+    const f = await (await load('/storyforge/tests/helpers/chat-narrative-production-fixture.ts')).seedChatNarrativeProductionFixture()
+    const {db} = await load('/storyforge/src/lib/db/schema.ts')
+    return {scope: f.scope, characterKey: f.settings.characters[0].sourceKey, before: f.settings,
+      world: JSON.stringify(await db.worldReleases.toArray()), mediaCount: await db.mediaBlobObjects.count()}
+  })
+  await page.goto(`./chat/cast?project=${f.scope.projectId}&work=${f.scope.workId}`)
+  const draft = page.getByLabel('公开画面描述', {exact: true})
+  await draft.getByText('公开画面描述（实验草稿）', {exact: true}).click()
+  await expect(draft.getByLabel('林舟 · 公开外观', {exact: true})).toHaveValue('')
+  await draft.getByLabel('林舟 · 公开外观', {exact: true}).fill('灰色短发，深蓝布衣。')
+  await draft.getByLabel('开场背景画面描述', {exact: true}).fill('雨中的空店面，木桌与暖色油灯。')
+  await page.getByRole('button', {name: '保存方案', exact: true}).click()
+  await expect(page.getByText('方案已保存', {exact: true})).toBeVisible()
+  await page.reload()
+  await draft.getByText('公开画面描述（实验草稿）', {exact: true}).click()
+  await expect(draft.getByLabel('林舟 · 公开外观', {exact: true})).toHaveValue('灰色短发，深蓝布衣。')
+  await expect(draft.getByLabel('开场背景画面描述', {exact: true})).toHaveValue('雨中的空店面，木桌与暖色油灯。')
+  const saved = await page.evaluate(async f => {
+    const load = new Function('p', 'return import(p)'), {db} = await load('/storyforge/src/lib/db/schema.ts')
+    const row = await db.chatAuthoringDrafts.where('workId').equals(f.scope.workId).first()
+    return {settings: JSON.parse(row.settingsJson), world: JSON.stringify(await db.worldReleases.toArray()), mediaCount: await db.mediaBlobObjects.count()}
+  }, f)
+  expect(saved.settings).toEqual({...f.before, visuals: {version: 1, characters: [{characterKey: f.characterKey, description: '灰色短发，深蓝布衣。'}], openingBackground: '雨中的空店面，木桌与暖色油灯。'}})
+  expect(saved.world).toBe(f.world); expect(saved.mediaCount).toBe(f.mediaCount)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await draft.scrollIntoViewIfNeeded()
+  await page.screenshot({path: info.outputPath('public-picture-draft-mobile.png'), fullPage: false})
+  await page.goto(`./chat/confirm?project=${f.scope.projectId}&work=${f.scope.workId}`)
+  await expect(page.getByLabel('视觉目标', {exact: true})).toBeEnabled()
+  await page.getByLabel('视觉目标', {exact: true}).selectOption('key-scenes')
+  await expect(page.getByLabel('视觉目标', {exact: true})).toHaveValue('key-scenes')
+  expect(calls).toBe(0)
+  await page.goto(`./chat/cast?project=${f.scope.projectId}&work=${f.scope.workId}`)
+  await draft.getByText('公开画面描述（实验草稿）', {exact: true}).click()
+  await page.getByRole('checkbox', {name: '参与本次聊天', exact: true, checked: true}).uncheck()
+  await expect(draft.getByText('此人物已不在当前聊天中。描述仍保留，制作前需要重新选择人物或移除。', {exact: true})).toBeVisible()
+  await expect(draft.getByText('灰色短发，深蓝布衣。', {exact: true})).toBeVisible()
+  expect(calls).toBe(0)
+})

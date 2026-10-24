@@ -1,0 +1,109 @@
+{
+  "at": "2026-10-20T09:36:09.409340+00:00",
+  "status": "terminal",
+  "modelCalls": 1,
+  "sourceUnchanged": true,
+  "phase": "source-unit-authoring",
+  "independentReviewPassed": false,
+  "adopted": false,
+  "productionStarted": false,
+  "formalM1Credit": false,
+  "qualityAccepted": false,
+  "nativeStatuses": [
+    {
+      "id": "3d13c38f-94c2-4849-b39f-7de193747bc8",
+      "status": "completed"
+    }
+  ],
+  "observedTotalTokens": 9058,
+  "costUsd": null,
+  "review": {
+    "interpretation": {
+      "fragments": [
+        {
+          "complete": true,
+          "constraints": [
+            {
+              "faithful": true,
+              "key": "initial-knowledge",
+              "reason": "“守卫和玩家起初都不知道”承接前句整体，候选保留两类主体、初始时间以及位置、经手者和用途的未知范围。"
+            }
+          ],
+          "facts": [
+            {
+              "atomic": true,
+              "established": true,
+              "faithful": true,
+              "key": "location",
+              "reason": "原文明确铜印放在柜台下的木箱里；此项仅陈述既有位置，主体明确，不捆绑经手者或用途。",
+              "standalone": true
+            },
+            {
+              "atomic": true,
+              "established": true,
+              "faithful": true,
+              "key": "handler",
+              "reason": "原文“铜印被掌柜拿去”支持掌柜拿走铜印这一既有行为；此项独立陈述经手者，不附加位置或目的。",
+              "standalone": true
+            },
+            {
+              "atomic": true,
+              "established": true,
+              "faithful": true,
+              "key": "purpose",
+              "reason": "原文“拿去拓印破损的通行单”支持该拿取行为的用途。候选未声称拓印已完成；行为主体、对象及用途明确，构成单一目的关系。",
+              "standalone": true
+            }
+          ],
+          "fragmentKey": "world-release:46ac7722dcd6a558c56b9ee0a50f90dc7da3e47125b9af276dd74dd1cc7af13c:story:story-core:6d1930db8b2c2d5115ee2f7765af9b99440e256b7f07e6626250ff27bd75b98a#/subPlots",
+          "reason": "三项事实分别承接铜印的位置、经手者及拿取用途，限制保留守卫和玩家起初均不知情的主体、时间与范围；未把拓印用途扩写为拓印已经完成。"
+        }
+      ]
+    },
+    "permissions": [
+      {
+        "discoverySupported": true,
+        "fragmentKey": "world-release:46ac7722dcd6a558c56b9ee0a50f90dc7da3e47125b9af276dd74dd1cc7af13c:story:story-core:6d1930db8b2c2d5115ee2f7765af9b99440e256b7f07e6626250ff27bd75b98a#/subPlots",
+        "initialKnowledgeFaithful": true,
+        "reason": "初始知情名单为空，未提前向守卫或玩家开放位置。实际打开并检查指定木箱、核对其中铜印，足以直接确认该项位置事实；条件明确不据此开放经手者或用途。",
+        "unitKey": "location"
+      },
+      {
+        "discoverySupported": false,
+        "fragmentKey": "world-release:46ac7722dcd6a558c56b9ee0a50f90dc7da3e47125b9af276dd74dd1cc7af13c:story:story-core:6d1930db8b2c2d5115ee2f7765af9b99440e256b7f07e6626250ff27bd75b98a#/subPlots",
+        "initialKnowledgeFaithful": true,
+        "reason": "初始名单为空，保留起初未知限制。但原文未提供掌柜可供询问、会作出该说明或其说明可据以确证事实的依据；已知前提仅涉及铜印丢失、后门、山路及屋内安全，不含掌柜在场与接触依据。条件虽要求取得明确原话，实际取得原话直接证明的是掌柜如此自述，尚不足以无条件确证其经手行为。",
+        "unitKey": "handler"
+      },
+      {
+        "discoverySupported": false,
+        "fragmentKey": "world-release:46ac7722dcd6a558c56b9ee0a50f90dc7da3e47125b9af276dd74dd1cc7af13c:story:story-core:6d1930db8b2c2d5115ee2f7765af9b99440e256b7f07e6626250ff27bd75b98a#/subPlots",
+        "initialKnowledgeFaithful": true,
+        "reason": "初始名单为空，未提前公开用途。但原文没有提供可询问掌柜及其陈述可信的依据，已知前提也不含在场与接触资料。实际取得用途说明只能直接确认掌柜作出该自述，不能仅凭其主观目的陈述确证真实拿取用途；原文中用途为真，不等于所设问询路径已获证实。",
+        "unitKey": "purpose"
+      }
+    ]
+  },
+  "evidence": {
+    "preregistration.json": "4c88bebb4f32207690c57a8627519674cae751cf9d9c5fa675c1efc8ddd9c06f",
+    "inn-weak-guidance.json": "331d768012c9c4878622cf4f70d7eb51fd24ad2d23ecde7ed0b61988a0d1c337",
+    "inn-weak-guidance-backup.json": "8f927114f84a3dd44c3fdb7e2fda654e0ffe2ec7d5b7f190fd7189936756d9dd",
+    "expected-authoring-review.json": "cc3e9e62fdeb478277fcd4f81fa0446a45fcb92aa2ea751697805492705b55d9",
+    "source-authoring-restoration-r3.json": "fa162a219ab8c5ad0153135d0a0b0ef2d71df809721e50cf21295dd05512f89e"
+  },
+  "finding": "All fact interpretations and initial knowledge passed. Location discovery passed. Handler/purpose conditions rejected for missing current contact plus treating a source-established first-person disclosure as insufficient testimony. Conditional sufficiency and current availability require separate policy handling; no adoption or retry occurred.",
+  "restoration": {
+    "passed": true,
+    "modelCalls": 0,
+    "blockedReportRetained": true,
+    "rawReplyReportAndSourceRetained": true,
+    "sourceUnitsAbsent": true,
+    "refreshEqual": true
+  },
+  "localEvidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v255-inn-source-units-real/r2",
+  "preparationFailure": {
+    "modelCalls": 0,
+    "reason": "Collector omitted explicit AI config; corrected in a new isolated preparation before the one real call."
+  },
+  "restorationCollectorCorrections": "First read passed a string instead of parsed backup; second expected a raw-response artifact although this authoring harness retains the complete response in its checkpoint artifact. Both zero-call failures retained; third read checks exact original report, raw text and source."
+}

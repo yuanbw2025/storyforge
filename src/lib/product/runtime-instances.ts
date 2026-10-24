@@ -23,6 +23,7 @@ import {
   type ProductNarrativeRuntimeState,
   type ProductRuntimeState,
   type ProductRuntimeSession,
+  type ProductRuntimeEvent,
   type ProductRuntimeKind,
   type WorkspaceScope,
 } from '../types'
@@ -54,6 +55,13 @@ import {
   type TtrpgContinuationRequestV2,
 } from '../ttrpg/continuity-state'
 import { resolveScope, scopeTransactionTables } from '../workspace/scope'
+import {createChatReleaseUpgradeInitialStateV1} from '../character-interaction/release-upgrade-branch'
+import {
+  prepareChatReleaseUpgradeV1,
+  assertChatReleaseUpgradeUnchangedV1,
+  readCompletedChatReleaseUpgradeV1,
+  type ChatReleaseUpgradeRequestV1,
+} from '../character-interaction/release-upgrade-plan'
 
 /**
  * Sole upper-product runtime entry.
@@ -69,6 +77,7 @@ export interface CreateProductRuntimeInstanceInput {
   worldGroupId?: number | null
   seed?: string
   ttrpgContinuation?: TtrpgContinuationRequestV2
+  chatReleaseUpgrade?: ChatReleaseUpgradeRequestV1
 }
 
 interface FrozenNarrativeDefinition {
@@ -182,6 +191,8 @@ export function createProductInitialStateV1(input: {
       playerKey: runtimePackage.interaction!.playerKey,
       profiles: runtimePackage.interaction!.profiles,
       sceneTemplates: runtimePackage.interaction!.sceneTemplates,
+      chatSource: runtimePackage.interaction!.chatSource,
+      chatNarrative: runtimePackage.interaction!.chatNarrative,
     })
   }
   if (runtimePackage.productType === 'ai-town') {
@@ -312,6 +323,7 @@ async function addInitialNarrativeEvents(input: {
 export async function createProductRuntimeInstance(
   input: CreateProductRuntimeInstanceInput,
 ): Promise<ProductRuntimeSession> {
+  input = structuredClone(input)
   const scope = await resolveScope({ scope: input.scope })
   if (!input.productSource || (input.productSource.kind !== 'release' && input.productSource.kind !== 'build')) {
     throw new Error('[instance] 正式产品实例必须且只能绑定一个 Product Release/Build')
@@ -333,6 +345,23 @@ export async function createProductRuntimeInstance(
     ? await db.productBuilds.get(input.productSource.productBuildId)
     : null
   if (input.productSource.kind === 'build' && !productBuild) throw new Error('[instance] 产品 Build 不存在')
+
+  const chatRequest = input.chatReleaseUpgrade
+  if (chatRequest && (input.kind !== 'character-interaction' || input.productSource.kind !== 'release'
+    || chatRequest.targetReleaseId !== productRelease?.id || input.ttrpgContinuation
+    || !/^[a-zA-Z0-9._:-]{1,200}$/.test(chatRequest.commandId) || !/^[a-f0-9]{64}$/.test(chatRequest.expectedPlanHash))) {
+    throw new Error('[instance] 角色聊天升级请求与目标版本不一致')
+  }
+  if (chatRequest) {
+    const completed = await readCompletedChatReleaseUpgradeV1(scope, chatRequest)
+    if (completed) return assertInstanceBinding(completed.id!, scope)
+  }
+  const chatUpgrade = chatRequest ? await prepareChatReleaseUpgradeV1({scope,
+    parentSessionId: chatRequest.parentSessionId, targetReleaseId: chatRequest.targetReleaseId}) : null
+  if (chatUpgrade && (!chatUpgrade.plan.canCopy || chatUpgrade.plan.planHash !== chatRequest!.expectedPlanHash
+    || chatUpgrade.plan.compatibility.targetPackageHash !== playable.runtimeSourceHash)) {
+    throw new Error('[instance] 存档升级条件或预览已变化，请重新预览')
+  }
 
   const continuation = input.ttrpgContinuation ?? null
   if (continuation && (
@@ -422,10 +451,13 @@ export async function createProductRuntimeInstance(
     }
     initialState = continued.state
   }
+  if (chatUpgrade) {
+    initialState = createChatReleaseUpgradeInitialStateV1(chatUpgrade.state, playable.runtimeSourceHash)
+  }
 
   const sessionInput: CreateProductRuntimeSessionInput = {
     projectId: scope.projectId,
-    worldGroupId: input.worldGroupId ?? null,
+    worldGroupId: chatUpgrade ? chatUpgrade.saved.parent.worldGroupId ?? null : input.worldGroupId ?? null,
     kind: input.kind,
     title: input.title,
     seed: input.seed,
@@ -444,7 +476,7 @@ export async function createProductRuntimeInstance(
         worldId: scope.worldId,
         workId: scope.workId,
         productReleaseId: productRelease.id!,
-        origin: continuation ? 'branch' : 'release',
+        origin: continuation || chatUpgrade ? 'branch' : 'release',
       })
     : input.productSource.kind === 'build' && productBuild
       ? await preparePreviewProductRuntimeSessionRecordV1({
@@ -458,6 +490,26 @@ export async function createProductRuntimeInstance(
         })
       : (() => { throw new Error('[instance] 不支持的产品来源') })()
 
+  // Precompute the new session's first receipt and projection before opening
+  // the transaction. This event does not replay opening effects or dialogue.
+  let upgradeEvent: Omit<ProductRuntimeEvent, 'sessionId'> | null = null
+  if (chatUpgrade) {
+    const {plan} = chatUpgrade, {compatibility} = plan
+    const envelope = {commandId: chatRequest!.commandId, baseSequence: 0, baseStateHash: await hashProductRuntimeStateV1(initialState)}
+    upgradeEvent = {projectId: scope.projectId, worldGroupId: preparedSession.worldGroupId,
+      type: 'interaction.release.upgraded', sequence: 1, ...envelope,
+      createdAt: preparedSession.createdAt, payloadJson: JSON.stringify({version: 1, policy: 'copy-preserving-story-v1',
+        planHash: plan.planHash, compatibilityHash: compatibility.compatibilityHash,
+        sourceReleaseHash: compatibility.sourceReleaseHash, targetReleaseHash: compatibility.targetReleaseHash,
+        sourcePackageHash: compatibility.sourcePackageHash, targetPackageHash: compatibility.targetPackageHash,
+        sourceStateHash: plan.sourceStateHash, sourceSequence: plan.sourceSequence, ...envelope})}
+    const projected = applyProductRuntimeEvent(initialState, {...upgradeEvent, sessionId: 0})
+    preparedSession.status = chatUpgrade.saved.parent.status
+    preparedSession.runtimeHeadSequence = 1
+    preparedSession.runtimeHeadStateJson = JSON.stringify(projected)
+    preparedSession.runtimeHeadStateHash = await hashProductRuntimeStateV1(projected)
+  }
+
   return db.transaction('rw', scopeTransactionTables(
     db.productRuntimeSessions,
     db.ttrpgSessionParticipants,
@@ -466,8 +518,14 @@ export async function createProductRuntimeInstance(
     db.productProductionBriefs,
     db.productBuilds,
     db.productRuntimeEvents,
+    ...(chatUpgrade ? [db.agentRuns] : []),
   ), async () => {
     const currentScope = await resolveScope({ scope })
+    if (chatUpgrade) {
+      const completed = await readCompletedChatReleaseUpgradeV1(currentScope, chatRequest!)
+      if (completed) return completed
+      await assertChatReleaseUpgradeUnchangedV1(chatUpgrade)
+    }
     if (continuation && continuationParent) {
       const currentParent = await db.productRuntimeSessions.get(continuationParent.id!)
       const parentEvents = await db.productRuntimeEvents
@@ -503,12 +561,13 @@ export async function createProductRuntimeInstance(
     const session = await insertPreparedProductRuntimeSessionV1(preparedSession)
 
     const binding = {
-      parentSessionId: continuationParent?.id ?? null,
-      parentThroughSequence: continuation?.expectedParentSequence ?? null,
+      parentSessionId: chatUpgrade?.saved.parent.id ?? continuationParent?.id ?? null,
+      parentThroughSequence: chatUpgrade?.plan.sourceSequence ?? continuation?.expectedParentSequence ?? null,
     }
     await db.productRuntimeSessions.update(session.id!, binding)
     const boundSession = { ...session, ...binding }
-    await addInitialNarrativeEvents({
+    if (upgradeEvent) await db.productRuntimeEvents.add({...upgradeEvent, sessionId: boundSession.id!})
+    else await addInitialNarrativeEvents({
       scope: currentScope,
       worldGroupId: input.worldGroupId ?? null,
       session: boundSession,

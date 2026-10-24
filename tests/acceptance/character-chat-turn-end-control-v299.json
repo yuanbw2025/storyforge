@@ -1,0 +1,41 @@
+{
+  "schema": "storyforge.chat-development-acceptance",
+  "version": 299,
+  "at": "2026-10-21T02:56:31.507955+00:00",
+  "baseHead": "2050d3823db77359b3b18d5971bd6d7f8ee27bcf",
+  "status": "focused-engineering-passed-real-pending",
+  "product": "character-chat",
+  "stage": "S3-runtime",
+  "owner": "ProductRuntimeSession",
+  "change": "A reviewed version-2 control result can complete the current single-actor turn using its latest already-adopted meaningful action, without another bubble, consequence or goal pause. Existing v1 player-decision handoff and old producer contracts remain.",
+  "versions": {
+    "action": "chat-narrative-action-v57",
+    "review": "chat-narrative-action-review-v36",
+    "reader": "chat-narrative-runtime-view-v17",
+    "options": "chat-narrative-options-v35",
+    "revision": "chat-action-revision-v21"
+  },
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v299-turn-ending-investigation/engineering.json",
+    "sha256": "e8a52d61c5dca366f7f67c178fcb559610a3be7c7c4d3228671f454359a6a2c0"
+  },
+  "sourceManifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v299-turn-ending-investigation/manifest-final.json",
+    "sha256": "083cf2ffa82fbcb356a0b2b61efd2bfb2a2ae21085215f89bc4db8146dbccda1"
+  },
+  "regression": {
+    "files": 22,
+    "tests": 536,
+    "workers": 1,
+    "perTestTimeoutMs": 5000
+  },
+  "browser": {
+    "files": 6,
+    "tests": 27
+  },
+  "modelCalls": 0,
+  "m1Passed": false,
+  "fullCurrentDeliveryPassed": false,
+  "humanScoring": "deferred by author",
+  "next": "Independently resume the exact V297 accepted-action state once, with no new player messages or hints; keep prior failures and formal M1 denominator."
+}

@@ -1,0 +1,190 @@
+{
+  "status": "terminal-runtime-failed",
+  "at": "2026-10-20T12:12:50.600057+00:00",
+  "sourceManifestSha256": "b88185a0aab5a63d8b0eca4e0ba4c3212a9737916c772def8eadcf28d8bb5d80",
+  "cap": 2,
+  "sourceAdmission": {
+    "passed": true,
+    "wholeOriginalRetained": true,
+    "units": 4,
+    "initialAudienceEmpty": true,
+    "adoptionRecoveredWithoutModelCall": true
+  },
+  "modelCalls": 0,
+  "originalRunner": {
+    "exitCode": 1,
+    "error": "Error: No explicit start command; prepared state retained without model calls",
+    "deliberatelyNotStarted": true,
+    "sourceUnchanged": true
+  },
+  "nextRunner": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r5/runner.mjs",
+  "requiredEngineering": {
+    "receiptPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/bundle-r2/delivery-receipt.json",
+    "receiptSha256": null,
+    "runnerPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/bundle-r2/run_delivery.py",
+    "runnerSha256": "e4c93fa78b50f400996ad278d084a384ceb2a8bcf04067f574327b5135bf5b03",
+    "sourceManifestSha256": "753dd359bc14e544787d181e2c6ef588ddc80b5ad98a8ec2d7430997507a6882",
+    "stages": [
+      "build",
+      "bundle",
+      "focused-browser",
+      "repaired-browser",
+      "production-navigation",
+      "diff"
+    ],
+    "statusAtRegistration": "V268 bundle-r2 queued; exact source must pass all six stages. Original V268 bundle failure is retained and cannot authorize model calls."
+  },
+  "evidence": {
+    "prepared.json": "402110599fffeeafd1d43b325e7f69fc80a6ec78016450787c7c0516c2060c86",
+    "inn-weak-guidance.json": "a9acf23a938117eaf04bdc98040d54f31e582ae41c1d686d44894bbdfd83ec14",
+    "inn-weak-guidance-backup.json": "61cce6a5574f35f5229ff0a825cc43685335360fdd6ae43bdaa81174e98409b4"
+  },
+  "formalM1Credit": false,
+  "qualityAccepted": false,
+  "localEvidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime",
+  "nextPreregistration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r5/preregistration.json",
+    "sha256": "159edfc1f5527cc966c6465c26c4600861061a0a7ec55556c2992eb29fc6dc43"
+  },
+  "nextRunnerSourceCheck": {
+    "passed": true,
+    "at": "2026-10-20T12:25:46.189Z",
+    "scope": "R3 frozen source, collector hashes, original authoring evidence and local gates verified; model requests still require pending V266 delivery."
+  },
+  "temporaryServerStopped": true,
+  "nextExecutionSourceManifest": "753dd359bc14e544787d181e2c6ef588ddc80b5ad98a8ec2d7430997507a6882",
+  "applicationBytesUnchangedFromPreparation": false,
+  "currentExecution": {
+    "observedAt": "2026-10-20T16:55:45.023544+00:00",
+    "status": "terminal-runtime-failed",
+    "runner": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r6/runner.mjs",
+    "preregistration": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r6/preregistration.json",
+      "sha256": "737b32901bd88260729e24e27173e00820fc59ba0a899eba12a1c32eb7773739"
+    },
+    "requiredEngineering": {
+      "receiptPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/bundle-r2/delivery-completed-receipt.json",
+      "receiptSha256": "370da31ee28ee4b640fe1c428271db6795029e3bb0e1747170b2734989dbaa1c",
+      "runnerPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/bundle-r2/run_navigation_completion.py",
+      "runnerSha256": "1a664f7bb5b4b49c99a388456dfd0ddc243a562b1f8aa2aa483a19ac76bff75f",
+      "sourceManifestSha256": "753dd359bc14e544787d181e2c6ef588ddc80b5ad98a8ec2d7430997507a6882",
+      "stages": [
+        "build",
+        "bundle",
+        "focused-browser",
+        "repaired-browser",
+        "production-navigation",
+        "diff"
+      ],
+      "statusAtRegistration": "All six stages passed on the same unchanged application source. Original bundle and zero-match navigation selector failures preserved; only the intended navigation case was rerun."
+    },
+    "sourceManifestSha256": "753dd359bc14e544787d181e2c6ef588ddc80b5ad98a8ec2d7430997507a6882",
+    "observedModelRequests": 31,
+    "evidence": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r6/inn-weak-guidance.json",
+      "sha256": "0941eeac5b997c04e3a49586915a47a884ff1db1b55cceef85040a201ac8d2db"
+    },
+    "formalM1Credit": 0,
+    "qualityAccepted": false,
+    "productionStarted": true,
+    "runtimeStarted": true,
+    "completedObservedStages": 4,
+    "note": "Mutable progress-file hash identifies this observation only; the episode is not terminal.",
+    "backup": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r6/inn-weak-guidance-backup.json",
+      "sha256": "5c5be895a276deb97af4961e29222f8728055bf676ebc4447d90c08745538de0"
+    },
+    "error": "Error: runtime stopped; no automatic retry",
+    "restoration": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r6/inn-weak-guidance-restoration-verified.json",
+      "sha256": "5c5bd0574a69cb34561880ff7ba96eab3714b52c5b8106b30b9f8fe31e3c60eb"
+    },
+    "restorationStatus": "passed-zero-model-calls",
+    "reportedTokens": 482663,
+    "nativeRequestsCompleted": 31,
+    "completedRuntimeRuns": 10,
+    "failedRuntimeRuns": 1,
+    "failureSummary": "Repeated bounded negative inspections; unsupported suspension rejected by meaningful-direction review. No hidden discovery or goal resolution."
+  },
+  "executionPreparationHistory": [
+    {
+      "at": "2026-10-20T13:50:11.468338+00:00",
+      "status": "prepared-not-started",
+      "runner": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r4/runner.mjs",
+      "restoration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r4/restoration.mjs",
+      "preregistration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r4/preregistration.json",
+      "preregistrationSha256": "325191f30961bfb3005dd334fd59c2590d9169a41ab8f9c313eceafcaaf93568",
+      "sourceManifestSha256": "888ab3078314f2738ce8a9962b55ae55402e0f70a646739f916837342dd699ac",
+      "requiredEngineering": {
+        "receiptPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/delivery-receipt.json",
+        "receiptSha256": null,
+        "runnerPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/run_delivery.py",
+        "runnerSha256": "786d189ccd31a85e36c354ae2a1a46f0386fa16a42428596b3ce50eedb7e75bc",
+        "sourceManifestSha256": "888ab3078314f2738ce8a9962b55ae55402e0f70a646739f916837342dd699ac",
+        "stages": [
+          "build",
+          "bundle",
+          "focused-browser",
+          "repaired-browser",
+          "diff"
+        ],
+        "statusAtRegistration": "V268 queued on the existing process; all five stages and exact source identity must pass before any model request."
+      },
+      "sourceAndCollectorsVerified": true,
+      "previousPendingProtocolSuperseded": true,
+      "materialAndBudgetUnchanged": true,
+      "modelCalls": 0
+    },
+    {
+      "at": "2026-10-20T16:10:05.432721+00:00",
+      "status": "prepared-not-started",
+      "runner": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r5/runner.mjs",
+      "restoration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r5/restoration.mjs",
+      "preregistration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r5/preregistration.json",
+      "preregistrationSha256": "159edfc1f5527cc966c6465c26c4600861061a0a7ec55556c2992eb29fc6dc43",
+      "sourceManifestSha256": "753dd359bc14e544787d181e2c6ef588ddc80b5ad98a8ec2d7430997507a6882",
+      "requiredEngineering": {
+        "receiptPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/bundle-r2/delivery-receipt.json",
+        "receiptSha256": null,
+        "runnerPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/bundle-r2/run_delivery.py",
+        "runnerSha256": "e4c93fa78b50f400996ad278d084a384ceb2a8bcf04067f574327b5135bf5b03",
+        "sourceManifestSha256": "753dd359bc14e544787d181e2c6ef588ddc80b5ad98a8ec2d7430997507a6882",
+        "stages": [
+          "build",
+          "bundle",
+          "focused-browser",
+          "repaired-browser",
+          "production-navigation",
+          "diff"
+        ],
+        "statusAtRegistration": "V268 bundle-r2 queued; exact source must pass all six stages. Original V268 bundle failure is retained and cannot authorize model calls."
+      },
+      "sourceAndCollectorsVerified": true,
+      "previousPendingProtocolSuperseded": true,
+      "materialAndBudgetUnchanged": true,
+      "modelCalls": 0,
+      "actualZeroCallPreparation": {
+        "at": "2026-10-20T16:18:11.827556+00:00",
+        "status": "prepared-awaiting-engineering-and-explicit-start",
+        "preparedPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r5/prepared.json",
+        "preparedSha256": "3985ec3b2db033efa6ddea9aff624097d9a51d3365009371c93d22ae59c15366",
+        "sourceManifestSha256": "753dd359bc14e544787d181e2c6ef588ddc80b5ad98a8ec2d7430997507a6882",
+        "sourceAdmission": {
+          "passed": true,
+          "wholeOriginalRetained": true,
+          "units": 4,
+          "initialAudienceEmpty": true,
+          "adoptionRecoveredWithoutModelCall": true
+        },
+        "worldHash": "46ac7722dcd6a558c56b9ee0a50f90dc7da3e47125b9af276dd74dd1cc7af13c",
+        "cap": 2,
+        "modelCalls": 0,
+        "serverSessionId": 78120,
+        "runnerSessionId": 26577,
+        "runnerPid": 33571,
+        "serverConfiguration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v265-bounded-inn-runtime/run-r5/server-configuration.json",
+        "executionBudgetStarted": false
+      }
+    }
+  ]
+}

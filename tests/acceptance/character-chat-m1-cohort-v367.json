@@ -1,0 +1,110 @@
+{
+  "version": 367,
+  "at": "2026-10-24T03:38:36.920098+00:00",
+  "cohort": "m1-v367-current",
+  "sourceHead": "0a75f7f7c1fa58db73c2f3a3cfc0855dfa5f01cb",
+  "status": "stopped-observed-runtime-production-and-collector-failures-retained",
+  "matrixSlots": 120,
+  "counts": {
+    "runtime-failed": 1,
+    "not-dispatched-unit-failure": 15,
+    "not-started": 102,
+    "collector-interrupted-production": 1,
+    "production-failed": 1
+  },
+  "formalQualityPasses": 0,
+  "humanScoring": "deferred",
+  "providerRequests": 46,
+  "observedTotalTokens": 684942,
+  "costUsd": null,
+  "availabilityCorrection": "character-chat-agnes-availability-correction-v368.json",
+  "units": [
+    {
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "repeat": 1,
+      "productionRequests": 3,
+      "runtimeRequests": 39,
+      "observedTotalTokens": 626685,
+      "playerOpportunities": 12,
+      "runtimeRunsCompleted": 12,
+      "runtimeRunsFailed": 1,
+      "failure": "Repeated question about what the player wants to discuss, without new information or substantive choice; meaningful-direction rejected it. Earlier independent proposals and silent handoffs succeeded but did not close the story.",
+      "restoration": "Original runtime statuses, all raw evidence, terminal receipts, usage, opening review, world and interaction survived cold import and refresh with zero model calls."
+    },
+    {
+      "provider": "agnes",
+      "model": "agnes-2.5-flash",
+      "repeat": 1,
+      "providerRequests": 1,
+      "httpStatuses": [
+        200
+      ],
+      "observedTotalTokens": 11135,
+      "status": "collector-interrupted-production",
+      "failure": "First candidate referenced a fact unknown to its thread audience. The existing bounded targeted repair was recorded, then a collector ReferenceError blocked the next request before provider dispatch. No second provider call.",
+      "collectorCorrection": "Preserved initial zero-call sessionStorage setup error and original one-call evidence. Defined the missing token helper, passed six checks including the retained real response, then used the separately registered r2 unit."
+    },
+    {
+      "provider": "agnes",
+      "model": "agnes-2.5-flash",
+      "repeat": 2,
+      "providerRequests": 3,
+      "httpStatuses": [
+        200,
+        200,
+        200
+      ],
+      "observedTotalTokens": 47122,
+      "boundedTargetedRepairs": 1,
+      "failure": "Opening review returned incomplete JSON, extensive trailing whitespace and finish_reason=length at its 10000-token output limit. Existing validator stopped it without resend.",
+      "productionReleased": false
+    }
+  ],
+  "agnesRestoration": {
+    "independentImports": 2,
+    "checksPassedPerImport": 8,
+    "modelCalls": 0,
+    "scope": "Failed Build, failure events, raw responses, failure detail, source world, no release/session and refresh equality.",
+    "limitation": "These checks do not establish full child-run status equivalence: imported completed production child runs were observed as running. This mapping needs separate investigation before claiming complete production recovery."
+  },
+  "engineeringAddendum": {
+    "applicationSourceHead": "0a75f7f7c1fa58db73c2f3a3cfc0855dfa5f01cb",
+    "fullRoleRegression": {
+      "files": 186,
+      "tests": 2282,
+      "passed": 2282,
+      "failed": 0,
+      "skipped": 0,
+      "durationSeconds": 1008.45,
+      "reportSha256": "0e9d4fb43e30e20147fcba0956d0145d25a3555512e675d45bcbb3905cbea3c6"
+    },
+    "historicalFailedRunsRetained": true,
+    "remoteFullCliAndBrowser": "in-progress at 2026-10-24 readback; not passed",
+    "clients": {
+      "runId": 40055754245,
+      "windows": "passed",
+      "android": "passed",
+      "consent": "passed",
+      "macosX64": "JavaScript heap exhaustion",
+      "macosArm64": "JavaScript heap exhaustion"
+    }
+  },
+  "evidenceHashes": {
+    "cohort-registration.json": "ef8cee5fd6f20c6b98fb4d8fce2a81234e3d181a17c3c07ec93786b219a1a937",
+    "provider-availability-addendum.json": "366a0c75c4809e779c2c7c4eac3632a49c8f715bef78e9be7b1456104c330f35",
+    "matrix-status.json": "b1cb8e6ec0d69e2f219138dffddca3cd38c61f276ae90aa30abf38875970ce56",
+    "codex-reading-r1/reading-r1-weak-guidance.json": "7cfb1fcc489617423e9f9238c2e8081c2615ee250183833b2755b7f558e99709",
+    "codex-reading-r1/reading-r1-weak-guidance-backup.json": "92b6ae44bea3d59686402875e66ea0bad16413d85c4a93140e3e9c0c18c33c15",
+    "codex-reading-r1/reading-r1-weak-guidance-restoration-verified.json": "ec41079c5045e1734f69e0f62a8edb26bf5f31e69c519c9d954656c8ec60b611",
+    "agnes-reading-r1/reading-r1-weak-guidance.json": "fd1ccb1295914fce42a9c1682f697cb9a8817a3dc31bfab9e65def83d6f06c26",
+    "agnes-reading-r1-session-config/reading-r1-weak-guidance.json": "06fa269167312512eb105f5c894b8d1f85a916c64dcab46ada58db594283fab3",
+    "agnes-reading-r1-session-config/reading-r1-weak-guidance-backup.json": "2d1c4e5b812a1c69ed584d0d54d2070774a336c33b99122baa14b7f36db83f31",
+    "agnes-reading-r1-session-config/production-restoration.json": "d30d3fe86064963c6b786471e23098ecc8a9866036ea7f3620f5b3c759e1f190",
+    "agnes-reading-r2/reading-r2-weak-guidance.json": "1e8e568618ea9bd9882c727e7ef55935401ef0ac5f1e53c268a9a9d55f501086",
+    "agnes-reading-r2/reading-r2-weak-guidance-backup.json": "f6020dc732ab1964daff66be3abd2243ee46e42d9269279c56a09312844661a0",
+    "agnes-reading-r2/production-restoration.json": "8601aa140daaf48b15b38596827c03b72c6f5977652a67b32135b677b12a2132",
+    "agnes-reading-r2/collector-correction-validation.json": "13327edd29b2c98a3f8c5deaebd5caa88bdf0303ca7d07f8d1724e4848164c76"
+  },
+  "next": "Fix non-actionable player acknowledgement after an existing handoff, investigate Agnes review output/reference reliability and production import child-status mapping, then register a new collection. Original units are not rerolled or relabelled passed."
+}

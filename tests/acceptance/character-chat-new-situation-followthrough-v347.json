@@ -1,0 +1,89 @@
+{
+  "schema": "storyforge.chat-new-situation-followthrough",
+  "version": 1,
+  "at": "2026-10-23T00:10:40.723127+00:00",
+  "status": "real-transport-and-recovery-passed-sustained-new-situation-development-incomplete",
+  "source": {
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "baseHead": "27d87139172874f40331dfb539ad41320348905b",
+    "sourceKind": "clean-worktree-commit",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v345-compact-action-schema/manifest-final.json",
+    "manifestSha256": "d52315d2abf77aa3b202692b58ef87e2987c6dc4ee5885f7df94007782946000"
+  },
+  "sourceUnchanged": true,
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "costUsd": null,
+  "requests": 11,
+  "completedRequests": 11,
+  "automaticRetries": 0,
+  "usage": {
+    "totalTokens": 190137,
+    "inputTokens": 186147,
+    "outputTokens": 3990,
+    "cachedInputTokens": 13952,
+    "reasoningOutputTokens": 1237
+  },
+  "executionStartedAt": "2026-10-23T00:04:14.307Z",
+  "completedAt": "2026-10-23T00:07:01.880Z",
+  "playerOpportunities": 2,
+  "newPlayerSpeech": false,
+  "adoptedRuns": 4,
+  "actionTerminalReceipts": 3,
+  "result": {
+    "firstAction": "Actually asked the unknown visitor their identity, purpose and urgent needs; no door opening or player participation invented.",
+    "firstReviewPassed": true,
+    "previousInputBudgetFailureRecurred": false,
+    "newSituationResult": "Only confirmed no audible answer on this attempt; identity and purpose remained unknown.",
+    "nextAction": "Paused contact and its goal/thread without resolving them.",
+    "secondContinue": "Maintained the adopted pause through version 3 control; no additional dialogue or plot progress.",
+    "newMessages": [
+      "叶岑朝门外扬声问：“门外是哪位？来驿站有什么事？是否有人受伤，或需要紧急帮助？请先说清楚。”",
+      "“这次没听见答话，来者是谁、有什么事，仍不能确定。”叶岑道，“先暂停接触，不连续追问，也不贸然开门；沉默本身说明不了缘由。”"
+    ],
+    "goals": [
+      {
+        "goalKey": "goal-1",
+        "status": "paused"
+      },
+      {
+        "goalKey": "goal.door-contact-1",
+        "status": "paused"
+      }
+    ],
+    "threads": [
+      {
+        "threadKey": "thread-1",
+        "status": "open"
+      },
+      {
+        "threadKey": "thread.door-contact-1",
+        "status": "paused"
+      }
+    ]
+  },
+  "restoration": {
+    "checksPassed": 19,
+    "sessions": 5,
+    "modelCalls": 0,
+    "originalFailuresPreserved": 3,
+    "rawArtifactBytesAndMultiplicityPreserved": true,
+    "worldPreserved": true
+  },
+  "interpretation": {
+    "schemaCompactionRealFollowthroughVerified": true,
+    "sustainedStoryDevelopmentProven": false,
+    "gap": "The original one-sentence situation established the audible event and an intention to ask, but no substantive background supporting further interaction. This sample quickly exhausted its question and paused despite allowing temporary characters. Review accepted each locally valid step; that is not evidence of a satisfying new story.",
+    "nextAction": "Strengthen new-situation background preparation and independent meaningful-direction review within existing permissions, without changing old adopted history or forcing every inquiry to succeed."
+  },
+  "formalM1QualityPassesAdded": 0,
+  "humanRatingsAdded": 0,
+  "originalScheduledDenominatorChanged": false,
+  "evidenceDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v347-new-situation-followthrough",
+  "evidence": {
+    "preregistration.json": "bb72cd8448319b2fab991cb464479a1e0acebb723656c6ea60bfdb967d42ce09",
+    "new-situation-followthrough.json": "07d866dd692cc36257ffcf02a5481969e095d5c6470f243678f3fceb631e0f47",
+    "new-situation-followthrough-backup.json": "a1d5c0e011dbeeeaf4ae31b983f812cdf401ae0634a8c0bda86ea703ee55b1b4",
+    "restoration-logical-history.json": "2743310e2655ce5abb5c9c40d9065439fd0ace6ec89e3822d3a2840114742eb0"
+  }
+}

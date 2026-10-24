@@ -1,0 +1,64 @@
+{
+  "version": 272,
+  "recordedAt": "2026-10-20T18:17:49.642973+00:00",
+  "product": "character-interaction",
+  "status": "background-generated-review-pre-dispatch-blocked",
+  "scope": "Producer v13 and reviewer v7 prepare and inspect substantive authored circumstances in existing localFacts/goals/threads/possibilities. Existing knowledge/discovery permissions and old prompt bindings remain. No table, world-write, media or model-step changes.",
+  "engineering": {
+    "receipt": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v272-authored-background/engineering.json",
+      "sha256": "03bec7a6c4ba48e47724dace49b996bf8cc4405faa3a57cb4fec77683d455176"
+    },
+    "regressionFilesPassed": 6,
+    "regressionTestsPassed": 79,
+    "browserTestsPassed": 3,
+    "governanceTypesLintBuildBundlePassed": true,
+    "fullCI": false,
+    "fullE2E": false
+  },
+  "realProduction": {
+    "protocol": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v272-authored-background/codex-inn-r1/preregistration.json",
+      "sha256": "dc8d767e909781b733d78b38c20f12a2ac15d6c0fdc3a115867c856726e4dc88"
+    },
+    "result": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v272-authored-background/codex-inn-r1/inn-weak-guidance.json",
+      "sha256": "c3d3614927203fc1d4095abf6ba1ef8a27d5192148648665f82cb61579a6f37b"
+    },
+    "backup": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v272-authored-background/codex-inn-r1/inn-weak-guidance-backup.json",
+      "sha256": "ada77ee5e3dfcf54621c527e7ecdfdfd2d4c338ed3ead4fa79285b39a57df843"
+    },
+    "restoration": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v272-authored-background/codex-inn-r1/production-restoration.json",
+      "sha256": "ab10e9f925539e959faf956d213d7cd20fc2663f5419f01647d2d8f14a0bfe16"
+    },
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "newRequests": 1,
+    "nativeRequestCompleted": true,
+    "usageByRequest": {
+      "ecb49ce5-8069-44ce-be3e-b41f23f7b271": {
+        "totalTokens": 24093,
+        "inputTokens": 20862,
+        "cachedInputTokens": 0,
+        "cacheWriteInputTokens": 0,
+        "outputTokens": 3231,
+        "reasoningOutputTokens": 511
+      }
+    },
+    "sourceUnchanged": true,
+    "generatedOptions": 3,
+    "reviewRequests": 0,
+    "runtimeRequests": 0,
+    "releaseCreated": false,
+    "runtimeCreated": false,
+    "failure": "The complete review request exceeded the local conservative 32768-token Codex context budget after reserving 15000 output tokens. Rejected before dispatch, no silent trimming.",
+    "backgroundObservation": "Generated concrete stamp identification, an available innkeeper, and a choice about preserving visible traces. These are candidate contents only; no semantic review or runtime quality conclusion.",
+    "recoveryModelCalls": 0,
+    "automaticRetries": 0
+  },
+  "nextAction": "Keep this production and exact candidates. Reduce only the new frozen opening-review request output allocation within the original reservation, without changing the shared Codex window or clipping source. Explicitly resume the review after validation; do not regenerate the opening.",
+  "formalM1Credit": 0,
+  "qualityAccepted": false
+}

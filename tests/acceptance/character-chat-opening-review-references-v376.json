@@ -1,0 +1,62 @@
+{
+  "version": 376,
+  "recordedAt": "2026-10-24T04:56:04.408745+00:00",
+  "status": "engineering-checkpoint-real-model-and-full-delivery-pending",
+  "sourceBase": "1c6fd559ad0b50e9bd70fbdef71f3f8cc72a2158",
+  "producer": "chat-opening-review-v11",
+  "registeredSource": "product-production.chat-opening-review-inputs",
+  "change": "A registered complete source/candidate packet carries deterministic reference identities. The model selects identities; exact original excerpts compile into the unchanged version 3 review validator and persisted report. No review outcome, fact, permission or story state is inferred by the catalog.",
+  "boundaries": {
+    "product": "character-chat",
+    "phase": "S3 production capability development",
+    "owner": "Chat Work and product build",
+    "world": "frozen read-only",
+    "newTables": false,
+    "newWorldWrites": false,
+    "modelCallsPerReview": 1,
+    "maximumRequestedOutputTokens": 10000,
+    "automaticReviewRetries": 0,
+    "historicalPromptsRetained": true,
+    "canonicalReportVersion": 3
+  },
+  "verification": {
+    "targetedFiles": 11,
+    "uniqueTargetedTestsPassed": 144,
+    "failed": 0,
+    "browser": {
+      "uniqueCases": 14,
+      "passedAfterRepair": 14,
+      "automaticRetries": 0,
+      "initialFailedCases": 1,
+      "initialFailure": "One native-schema browser fixture still expected the old schema name; changed to the current name, keeping structural and semantic assertions. Original failure retained."
+    },
+    "tsc": true,
+    "changedFileLint": true,
+    "governanceChecksPassed": 7,
+    "build": true,
+    "bundleSize": true,
+    "externalModelCalls": 0,
+    "fullCharacterRegression": "running",
+    "completeDeliveryPassed": false
+  },
+  "initialFailures": {
+    "relatedRegressionFailed": 6,
+    "newRegressionSetupFailed": 6,
+    "resolution": "Fixed current fixtures to read accepted candidates instead of rebuilding pre-compilation input; removed duplicated quote payloads from the catalog and kept the established complete-source budget policy; corrected the new test setup command. Original failure reports retained."
+  },
+  "evidenceHashes": {
+    "targeted-final.json": "a5c77d7e3c5b9dd6bece9131ab08ad02d0e505370f2121c7cb87305c834b7d56",
+    "references-final.json": "cda07b95571539c9c3e11af425a49153fa976acb761d2489bb965a610aeaf4d1",
+    "browser.json": "11365c2fc395e1db843b9bd61cb37f9acbf484bdfddb613f2ce8574bcaab45c2",
+    "browser-repair.json": "c48c0c5d227de1ab0bcb490f1f478181181590d963e0b7a055c68285dcae0043",
+    "integration-browser.json": "d22d65e6d46e0903b59695b983e1a05c938f3bae7a15c835f6d39e8d9b99b66c",
+    "governance.json": "3394df8feb20cb915bae48c0181088bad6e3269641946df0b5c473d4c2fb0844",
+    "application-file-hashes.json": "dde3efc5bbe641e6afd4ce7f64419b8b0cc5b90ced6b414d3666ec0c766b1e7c"
+  },
+  "claims": {
+    "formalM1Credit": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "released": false
+  }
+}

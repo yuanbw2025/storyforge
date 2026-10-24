@@ -1,5 +1,6 @@
 /** 当前架构唯一的结构化采纳入口。只接受 FIELD_REGISTRY 的规范字段与规范类型。 */
 import Dexie from 'dexie'
+import {assertChatPlanAdoptionV1} from '../character-interaction/consultation-plan'
 import { db } from '../db/schema'
 import {
   assertRecordInScope,
@@ -83,6 +84,10 @@ export async function adopt(input: AdoptInput): Promise<AdoptResult> {
     return result
   }
 
+  if (input.target === 'chatAuthoringDrafts' && payloads.some(payload => payload && Object.prototype.hasOwnProperty.call(payload, 'settingsJson'))) {
+    if (Array.isArray(input.data) || input.recordId == null || input.mode !== 'replace' || input.compareAndSet) throw new Error('角色聊天方案须通过同事务的指定记录确认写入')
+    if (!Dexie.currentTransaction) return db.transaction('rw', scopeTransactionTables(db.chatAuthoringDrafts), () => adopt(input))
+  }
   const scope = await resolveScope(input)
   const scopedInput: AdoptInput = { ...input, projectId: scope.projectId, scope }
 
@@ -225,6 +230,7 @@ async function adoptCollectionRecord(
   }
   let patch = normalizeAndValidate(input.data, fieldSpecs, result, { preserveEmptyStrings: input.preserveAuthorText, preserveAuthorText: input.preserveAuthorText })
   if (!patch || Object.keys(patch).length === 0) return result
+  if (input.target === 'chatAuthoringDrafts' && Object.prototype.hasOwnProperty.call(patch, 'settingsJson')) assertChatPlanAdoptionV1(target.settingsJson, patch.settingsJson)
   if (input.target === 'characters') patch = normalizeCharacterAxes(patch, target)
 
   if (input.mode === 'append') {

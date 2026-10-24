@@ -1,10 +1,23 @@
+import {applyChatMemoryManagementPlanV1, type ChatMemoryManagementPlanV1, type ChatMemoryManagementActionV1} from '../lib/character-interaction/memory-management'
+import {CHAT_ACTION_REVISION_SKILL, readChatActionRevisionSourceV1} from '../lib/character-interaction/action-revision'
+import type {ChatSchedulingModeV1} from '../lib/character-interaction/narrative-scheduling'
+import {applyChatMessageRetrievalPlanV1, type ChatMessageRetrievalPlanV1} from '../lib/character-interaction/narrative-retrieval-service'
 import { create } from 'zustand'
+import type {ChatComposerSendBindingV1} from '../lib/character-interaction/runtime-api'
+import {ChatComposerConflictError} from '../lib/character-interaction/composer-draft-contract'
+import {resolveChatOpeningSceneV1} from '../lib/character-interaction/release-preview'
 import { db } from '../lib/db/schema'
+import {readInstanceAgentRunV1} from '../lib/agent/run/event-store'
+import {chatActionChoiceVersionForContractV1} from '../lib/character-interaction/action-choice-budget'
+import {CHAT_ACTION_CHOICE_STEP_V1} from '../lib/character-interaction/action-choice-contract'
 import {
   readInteractionDirectorPlanV1,
   adoptInteractionRuntimeCandidateV1,
   cancelInteractionRuntimeRunV1,
   generateInteractionRuntimeCandidateV1,
+  resumeChatNarrativeReviewV1,
+  resumeChatNarrativeActionV1,
+  resumeChatMemoryReviewV1,
 } from '../lib/character-interaction/harness'
 import {
   branchProductRuntimeSession,
@@ -16,8 +29,10 @@ import {
   endInteractionScene,
   readProductRuntimeState,
   readProductRuntimeStateVersion,
-  resolveInteractionMemory,
   startInteractionScene,
+  joinInteractionParticipant,
+  leaveInteractionParticipant,
+  updateChatMessageEditDraft,
 } from '../lib/character-interaction/runtime-api'
 import {
   assertProductReleaseUnchanged,
@@ -40,6 +55,12 @@ import type {
   WorkspaceScope,
 } from '../lib/types'
 import { EMPTY_PRODUCT_RUNTIME_STATE } from '../lib/types'
+import { advanceChatNarrativeTurnV1, createChatNarrativeSituationV1, readChatNarrativeTurnResumeV1, readPendingChatNarrativeRunsV1, resumeChatNarrativeTurnV1, type ChatNarrativeTurnResumeV1, type ChatPlayerTriggerV1 } from '../lib/character-interaction/narrative-turn'
+import {readChatNarrativeOptionsPreviewV1, type ChatNarrativeOptionsPreviewV1} from '../lib/character-interaction/narrative-options-preview'
+import type {ChatNarrativeOptionKeyV1} from '../lib/character-interaction/narrative-options'
+import {readResumableInteractionRunsV1} from '../lib/character-interaction/runtime-run-recovery'
+import {applyChatMessageEditV1, forkChatMessageEditV1, type ChatMessageEditPlanV1} from '../lib/character-interaction/narrative-edit'
+import {forkChatHistoricalOptionV1, readChatHistoricalOptionMessageIdsV1, type ChatHistoricalOptionsPlanV1} from '../lib/character-interaction/narrative-options-history'
 
 export interface CharacterInteractionLibraryItem {
   release: ProductRelease
@@ -56,6 +77,16 @@ interface CharacterInteractionPlayerState {
   events: ProductRuntimeEvent[]
   checkpoints: ProductRuntimeCheckpoint[]
   recoverableRunIds: number[]
+  pendingNarrativeRunIds: number[]
+  narrativeTurnResume: ChatNarrativeTurnResumeV1 | null
+  pendingNarrativeReviewRunIds: number[]
+  pendingNarrativeActionRunIds: number[]
+  pendingMemoryReviewRunIds: number[]
+  pendingActionReviewRunIds: number[]
+  actionRevisionRunId: number | null
+  narrativeOptions: ChatNarrativeOptionsPreviewV1[]
+  narrativeOptionRunIds: number[]
+  historicalOptionMessageIds: string[]
   runtimeState: ProductRuntimeState
   loading: boolean
   busy: boolean
@@ -63,15 +94,29 @@ interface CharacterInteractionPlayerState {
   error: string
   load(scope: WorkspaceScope, worldGroupId: number | null, initialSessionId?: number | null): Promise<void>
   select(sessionId: number | null): Promise<void>
-  start(productReleaseId: number, title?: string): Promise<number>
+  start(productReleaseId: number, title?: string, options?: {sceneKey?: string}): Promise<number>
   startScene(sceneKey: string): Promise<void>
-  sendPlayerMessage(text: string, audienceKeys?: string[] | null): Promise<number>
+  setParticipantPresence(participantKey: string, present: boolean): Promise<void>
+  sendPlayerMessage(text: string, audienceKeys?: string[] | null, draft?: {binding: ChatComposerSendBindingV1; onCommitted: () => void}): Promise<number>
   applyFixedAction(ruleKey: string): Promise<void>
-  generateReplies(input: { aiConfig: AIConfig; replyToSequence: number; preferredParticipantKey?: string }): Promise<void>
+  generateReplies(input: { aiConfig: AIConfig; replyToSequence: number; preferredParticipantKey?: string; actionLimit?: number; schedulingMode?: ChatSchedulingModeV1; audienceKeys?: string[] | null }): Promise<void>
+  advanceNarrative(input: { aiConfig: AIConfig; kind: ChatPlayerTriggerV1; compare?: boolean; participantKey?: string; actionLimit?: number; schedulingMode?: ChatSchedulingModeV1; audienceKeys?: string[] | null }): Promise<void>
+  resumeNarrativeTurn(input: {aiConfig: AIConfig; situationAiConfig?: AIConfig; participantKey?: string}): Promise<void>
+  createSituation(input: {aiConfig: AIConfig; actionAiConfig?: AIConfig; seed: string; participantKey?: string; actionLimit?: number; schedulingMode?: ChatSchedulingModeV1; audienceKeys?: string[] | null}): Promise<void>
+  reviseNarrativeAction(runId: number, aiConfig: AIConfig): Promise<void>
+  resumeNarrativeReview(runId: number, aiConfig: AIConfig): Promise<void>
+  resumeNarrativeAction(runId: number, aiConfig: AIConfig): Promise<void>
+  selectNarrativeOption(runId: number, optionKey: ChatNarrativeOptionKeyV1): Promise<void>
+  applyMessageRetrieval(plan: ChatMessageRetrievalPlanV1): Promise<void>
+  forkMessageEdit(plan: ChatMessageEditPlanV1, text: string): Promise<void>
+  forkHistoricalOption(plan: ChatHistoricalOptionsPlanV1, optionKey: ChatNarrativeOptionKeyV1): Promise<void>
+  applyMessageEdit(text: string, aiConfig?: AIConfig): Promise<void>
+  cancelMessageEdit(): Promise<void>
+  cancelPendingRun(runId: number): Promise<void>
   retryReply(input: { aiConfig: AIConfig; replySequence: number }): Promise<void>
   cancelGeneration(): Promise<void>
   resumeRun(runId: number): Promise<void>
-  resolveMemory(memoryId: string, resolution: 'accepted' | 'rejected'): Promise<void>
+  manageMemory(plan: ChatMemoryManagementPlanV1, action: ChatMemoryManagementActionV1): Promise<void>
   finishScene(reason?: string, aiConfig?: AIConfig): Promise<void>
   chooseNarrative(choiceKey: string): Promise<void>
   saveCheckpoint(name: string): Promise<void>
@@ -141,19 +186,64 @@ async function details(scope: WorkspaceScope, sessionId: number) {
     db.productRuntimeEvents.where('sessionId').equals(sessionId).sortBy('sequence'),
     db.productRuntimeCheckpoints.where('sessionId').equals(sessionId).toArray(),
     readProductRuntimeState(sessionId),
-    db.agentRuns.where('productRuntimeSessionId').equals(sessionId).toArray(),
+    readResumableInteractionRunsV1(scope, sessionId),
   ])
   checkpoints.sort((a, b) => b.createdAt - a.createdAt)
   const resumableRows = runRows.filter(row => !['completed', 'failed', 'cancelled'].includes(row.status))
   const resumeCheckpoints = resumableRows.length
     ? await db.agentRunCheckpoints.where('runId').anyOf(resumableRows.map(row => row.id!)).toArray()
     : []
+  const optionRows = resumableRows.filter(row => JSON.parse(row.contractJson).executionBindings?.some((b: {skillId?: string}) => b.skillId === 'character.chat-narrative-options'))
+  const optionRunIds = optionRows.map(row => row.id!)
+  const choiceStageRunIds = resumableRows.filter(row => {
+    if (chatActionChoiceVersionForContractV1(JSON.parse(row.contractJson)) !== 1) return false
+    const saved = resumeCheckpoints.filter(c => c.runId === row.id).sort((a, b) => b.throughSequence - a.throughSequence)[0]
+    return !saved?.resumePayloadJson || !['chat-narrative-action-candidate', 'chat-control-handoff-candidate'].includes(JSON.parse(saved.resumePayloadJson).kind)
+  }).map(row => row.id!)
+  const pendingNarrativeActionRunIds: number[] = []
+  for (const runId of choiceStageRunIds) {
+    const snapshot = await readInstanceAgentRunV1(scope, runId)
+    if (snapshot.projection.state !== 'running' || snapshot.contract.scope.runtime?.baseSequence !== runtimeState.lastSequence) continue
+    const requested = (step: string) => snapshot.events.filter(event => event.type === 'model.requested' && event.payload.stepId === step)
+    const responses = (step: string) => snapshot.events.filter(event => event.type === 'evidence.artifact.recorded' && event.payload.stepId === step && event.payload.artifactKind === 'raw-response')
+    if (requested(CHAT_ACTION_CHOICE_STEP_V1).length === 1 && responses(CHAT_ACTION_CHOICE_STEP_V1).length === 1
+      && (!requested('interaction:runtime-candidate').length || responses('interaction:runtime-candidate').length === 1)) pendingNarrativeActionRunIds.push(runId)
+  }
+  const revision = runtimeState.interaction?.chatNarrative ? await readChatActionRevisionSourceV1({scope, sessionId}).catch(() => null) : null
   return {
+    actionRevisionRunId: revision?.runId ?? null,
+    historicalOptionMessageIds: runtimeState.interaction?.chatNarrative ? await readChatHistoricalOptionMessageIdsV1(scope, sessionId) : [],
+    narrativeTurnResume: runtimeState.interaction?.chatNarrative
+      ? await readChatNarrativeTurnResumeV1(scope, sessionId, runtimeState.interaction) : null,
+    narrativeOptionRunIds: optionRunIds,
+    narrativeOptions: await Promise.all(optionRows.filter(row => resumeCheckpoints.some(c => c.runId === row.id && c.resumePayloadJson && JSON.parse(c.resumePayloadJson).review)).map(row => readChatNarrativeOptionsPreviewV1(scope, sessionId, row.id!))),
     events,
     checkpoints,
     runtimeState,
+    pendingNarrativeActionRunIds,
+    pendingNarrativeRunIds: [...new Set([
+      ...(runtimeState.interaction?.chatNarrative ? await readPendingChatNarrativeRunsV1(scope, sessionId, runtimeState.interaction) : []),
+      ...resumableRows.filter(row => JSON.parse(row.contractJson).executionBindings?.some((b: {skillId?: string}) => b.skillId === 'character.interaction-memory-curator')).map(row => row.id!),
+    ])],
+    pendingNarrativeReviewRunIds: resumableRows.filter(row => {
+      const saved = resumeCheckpoints.filter(c => c.runId === row.id).sort((a, b) => b.throughSequence - a.throughSequence)[0]
+      if (!saved?.resumePayloadJson) return false
+      const candidate = JSON.parse(saved.resumePayloadJson)
+      return (['chat-situation-candidate', 'chat-narrative-action-candidate', 'chat-control-handoff-candidate', 'chat-narrative-options-candidate'].includes(candidate.kind) && !candidate.review)
+        || (candidate.kind === 'memory-curator-candidate' && !candidate.contentReview)
+    }).map(row => row.id!),
+    pendingMemoryReviewRunIds: resumableRows.filter(row => {
+      const saved = resumeCheckpoints.filter(c => c.runId === row.id).sort((a, b) => b.throughSequence - a.throughSequence)[0]
+      return saved?.resumePayloadJson && JSON.parse(saved.resumePayloadJson).kind === 'memory-curator-candidate'
+    }).map(row => row.id!),
+    pendingActionReviewRunIds: resumableRows.filter(row => {
+      const saved = resumeCheckpoints.filter(c => c.runId === row.id).sort((a, b) => b.throughSequence - a.throughSequence)[0]
+      if (!saved?.resumePayloadJson) return false
+      const candidate = JSON.parse(saved.resumePayloadJson)
+      return ['chat-narrative-action-candidate', 'chat-control-handoff-candidate', 'chat-narrative-options-candidate'].includes(candidate.kind) && !candidate.review
+    }).map(row => row.id!),
     recoverableRunIds: resumableRows
-      .filter(row => resumeCheckpoints.some(item => item.runId === row.id && item.resumePayloadJson != null))
+      .filter(row => !optionRunIds.includes(row.id!) && !choiceStageRunIds.includes(row.id!) && resumeCheckpoints.some(item => item.runId === row.id && item.resumePayloadJson != null))
       .map(row => row.id!),
   }
 }
@@ -164,32 +254,39 @@ function commandId(prefix: string, sessionId: number): string {
 
 export const useCharacterInteractionPlayerStore = create<CharacterInteractionPlayerState>((set, get) => {
   let loadEpoch = 0
+  let refreshEpoch = 0
   const refresh = async () => {
+    const epoch = ++refreshEpoch
+    const navigation = loadEpoch
     const scope = get().scope
     const id = get().selectedSessionId
     if (!scope || id == null) return
     const result = await details(scope, id)
-    if (get().scope === scope && get().selectedSessionId === id) set(result)
+    if (get().scope === scope && get().selectedSessionId === id && epoch === refreshEpoch && navigation === loadEpoch) set(result)
   }
   const reload = async (requested?: number | null) => {
+    const epoch = loadEpoch
     const scope = get().scope
+    const worldGroupId = get().worldGroupId
     if (!scope) return
     const [releases, sessions] = await Promise.all([
       readLibrary(scope),
-      readInteractionSessions(scope, get().worldGroupId),
+      readInteractionSessions(scope, worldGroupId),
     ])
+    if (epoch !== loadEpoch || get().scope !== scope || get().worldGroupId !== worldGroupId) return
     const current = requested === undefined ? get().selectedSessionId : requested
     const selectedSessionId = current != null && sessions.some(row => row.id === current)
       ? current : sessions[0]?.id ?? null
     set({ releases, sessions, selectedSessionId })
     if (selectedSessionId != null) await refresh()
-    else set({ events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE) })
+    else set({ events: [], checkpoints: [], recoverableRunIds: [], pendingNarrativeRunIds: [], narrativeTurnResume: null, pendingNarrativeReviewRunIds: [], pendingNarrativeActionRunIds: [], pendingActionReviewRunIds: [], pendingMemoryReviewRunIds: [], actionRevisionRunId: null, narrativeOptions: [], narrativeOptionRunIds: [], historicalOptionMessageIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE) })
   }
-  const withBusy = async <T>(operation: () => Promise<T>): Promise<T> => {
+  const withBusy = async <T>(operation: () => Promise<T>, reportError = true): Promise<T> => {
     if (get().busy) throw new Error('当前操作尚未结束，请稍后再试。')
     set({ busy: true, error: '' })
     try { return await operation() } catch (reason) {
-      set({ error: reason instanceof Error ? reason.message : String(reason) })
+      // The composer presents both drafts and owns this actionable conflict.
+      set({ error: !reportError || reason instanceof ChatComposerConflictError ? '' : reason instanceof Error ? reason.message : String(reason) })
       throw reason
     } finally {
       generationAbortController = null
@@ -202,6 +299,18 @@ export const useCharacterInteractionPlayerStore = create<CharacterInteractionPla
     await assertInteractionSession(get().scope!, id)
     return { id, ...await readProductRuntimeStateVersion(id) }
   }
+  const performNarrative = async (input: {aiConfig: AIConfig; kind: ChatPlayerTriggerV1; compare?: boolean; participantKey?: string; actionLimit?: number; schedulingMode?: ChatSchedulingModeV1; audienceKeys?: string[] | null; replyToSequence?: number}) => {
+    const scope = get().scope, sessionId = get().selectedSessionId
+    if (!scope || sessionId == null) throw new Error('请先选择角色聊天存档。')
+    const controller = new AbortController()
+    generationAbortController = controller
+    try {
+      await advanceChatNarrativeTurnV1({...input, scope, sessionId, settleSituation: true, expectedSequence: get().runtimeState.lastSequence,
+        signal: controller.signal, onRunCreated: id => set({generatingRunId: id})})
+    } catch (reason) {
+      if (!controller.signal.aborted) throw reason
+    }
+  }
 
   return {
     scope: null,
@@ -212,6 +321,7 @@ export const useCharacterInteractionPlayerStore = create<CharacterInteractionPla
     events: [],
     checkpoints: [],
     recoverableRunIds: [],
+    pendingNarrativeRunIds: [], narrativeTurnResume: null, pendingNarrativeReviewRunIds: [], pendingNarrativeActionRunIds: [], pendingActionReviewRunIds: [], pendingMemoryReviewRunIds: [], actionRevisionRunId: null, narrativeOptions: [], narrativeOptionRunIds: [], historicalOptionMessageIds: [],
     runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
     loading: false,
     busy: false,
@@ -229,40 +339,42 @@ export const useCharacterInteractionPlayerStore = create<CharacterInteractionPla
       const changed = get().scope?.projectId !== scope.projectId || get().scope?.worldId !== scope.worldId
         || get().scope?.workId !== scope.workId || get().worldGroupId !== worldGroupId
       set({ scope, worldGroupId, loading: true, error: '', ...(changed ? { selectedSessionId: null } : {}) })
-      try { await reload(initialSessionId ?? undefined) } catch (reason) { set({ error: reason instanceof Error ? reason.message : String(reason) }) }
-      finally { set({ loading: false }) }
+      try { await reload(initialSessionId ?? undefined) } catch (reason) {
+        if (epoch === loadEpoch) set({ error: reason instanceof Error ? reason.message : String(reason) })
+      } finally { if (epoch === loadEpoch) set({ loading: false }) }
     },
 
     select: async selectedSessionId => {
       if (get().busy) return
+      const epoch = ++loadEpoch
       set({ selectedSessionId, loading: true, error: '' })
       try {
-        if (selectedSessionId == null) set({ events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE) })
+        if (selectedSessionId == null) set({ events: [], checkpoints: [], recoverableRunIds: [], pendingNarrativeRunIds: [], narrativeTurnResume: null, pendingNarrativeReviewRunIds: [], pendingNarrativeActionRunIds: [], pendingActionReviewRunIds: [], pendingMemoryReviewRunIds: [], actionRevisionRunId: null, narrativeOptions: [], narrativeOptionRunIds: [], historicalOptionMessageIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE) })
         else await refresh()
-      } catch (reason) { set({ error: reason instanceof Error ? reason.message : String(reason) }) }
-      finally { set({ loading: false }) }
+      } catch (reason) { if (epoch === loadEpoch) set({ error: reason instanceof Error ? reason.message : String(reason) }) }
+      finally { if (epoch === loadEpoch) set({ loading: false }) }
     },
 
-    start: async (productReleaseId, title) => withBusy(async () => {
+    start: async (productReleaseId, title, options) => withBusy(async () => {
       const scope = get().scope
       const item = get().releases.find(row => row.release.id === productReleaseId)
       if (!scope || !item?.manifest || item.error) throw new Error('请选择可用的角色互动发布。')
+      const sceneKey = resolveChatOpeningSceneV1(item.manifest, options?.sceneKey)
       const session = await createCharacterInteractionInstance({
         scope,
         productReleaseId,
         title: title?.trim() || `${item.manifest.definition.title} · 新会话`,
         worldGroupId: get().worldGroupId,
       })
-      const first = item.manifest.interaction.sceneTemplates[0]
-      if (first) {
+      {
         const base = await readProductRuntimeStateVersion(session.id!)
         await startInteractionScene({
           sessionId: session.id!,
           commandId: commandId('interaction.scene.start', session.id!),
           baseSequence: base.sequence,
           baseStateHash: base.stateHash,
-          sceneId: `scene:${first.sceneKey}:${crypto.randomUUID()}`,
-          sceneKey: first.sceneKey,
+          sceneId: `scene:${sceneKey}:${crypto.randomUUID()}`,
+          sceneKey,
         })
       }
       await reload(session.id!)
@@ -282,23 +394,47 @@ export const useCharacterInteractionPlayerStore = create<CharacterInteractionPla
       await refresh()
     }),
 
-    sendPlayerMessage: async (text, audienceKeys) => withBusy(async () => {
+    setParticipantPresence: async (participantKey, present) => withBusy(async () => {
       const base = await version()
-      const event = await commitInteractionPlayerMessage({
-        sessionId: base.id,
-        commandId: commandId('interaction.message', base.id),
-        baseSequence: base.sequence,
-        baseStateHash: base.stateHash,
-        messageId: `message:player:${crypto.randomUUID()}`,
-        text,
-        audienceKeys: audienceKeys ?? null,
-      })
+      const command = {sessionId: base.id, commandId: commandId('interaction.presence', base.id),
+        baseSequence: base.sequence, baseStateHash: base.stateHash, participantKey}
+      if (present) await joinInteractionParticipant(command)
+      else await leaveInteractionParticipant(command)
       await refresh()
-      return event.sequence
     }),
+
+    sendPlayerMessage: async (text, audienceKeys, draft) => {
+      const save = async () => {
+        const base = await version()
+        if (draft && (base.id !== draft.binding.sessionId || get().scope?.projectId !== draft.binding.scope.projectId
+          || get().scope?.worldId !== draft.binding.scope.worldId || get().scope?.workId !== draft.binding.scope.workId)) throw new Error('已经切换存档，未发送原草稿。')
+        const event = await commitInteractionPlayerMessage({
+          sessionId: base.id,
+          commandId: commandId('interaction.message', base.id),
+          baseSequence: base.sequence,
+          baseStateHash: base.stateHash,
+          messageId: `message:player:${crypto.randomUUID()}`,
+          text,
+          audienceKeys: audienceKeys ?? null,
+          ...(draft ? {composerDraft: draft.binding} : {}),
+        })
+        // The message and consumed draft are durable even if the following UI refresh fails.
+        draft?.onCommitted()
+        await refresh()
+        return event.sequence
+      }
+      if (get().busy && get().runtimeState.interaction?.chatNarrative && generationAbortController) {
+        await get().cancelGeneration()
+        // Save the interruption immediately even if the provider ignores abort.
+        // The old run stays cancelled; its late result cannot adopt over this input.
+        return save()
+      }
+      return withBusy(save)
+    },
 
     applyFixedAction: async ruleKey => withBusy(async () => {
       const state = get().runtimeState.interaction
+      if (state?.chatNarrative) throw new Error('主动叙事通过实际对话产生关系后果，不支持固定加分行动。')
       const rule = state?.activeScene?.relationshipRules.find(item => item.ruleKey === ruleKey)
       if (!state?.activeScene || !rule) throw new Error('固定行动不在当前场景中。')
       const messageBase = await version()
@@ -330,6 +466,10 @@ export const useCharacterInteractionPlayerStore = create<CharacterInteractionPla
     }),
 
     generateReplies: async input => withBusy(async () => {
+      if (get().runtimeState.interaction?.chatNarrative) {
+        await performNarrative({aiConfig: input.aiConfig, kind: 'player-response', replyToSequence: input.replyToSequence, participantKey: input.preferredParticipantKey, actionLimit: input.actionLimit, schedulingMode: input.schedulingMode, audienceKeys: input.audienceKeys})
+        return
+      }
       const scope = get().scope
       const sessionId = get().selectedSessionId
       const state = get().runtimeState.interaction
@@ -402,7 +542,112 @@ export const useCharacterInteractionPlayerStore = create<CharacterInteractionPla
       await refresh()
     }),
 
+    advanceNarrative: async input => withBusy(() => performNarrative(input)),
+    resumeNarrativeTurn: async input => withBusy(async () => {
+      const scope = get().scope, sessionId = get().selectedSessionId
+      if (!scope || sessionId == null) throw new Error('请先选择角色聊天存档。')
+      const controller = new AbortController(); generationAbortController = controller
+      try {
+        await resumeChatNarrativeTurnV1({...input, scope, sessionId, expectedSequence: get().runtimeState.lastSequence,
+          signal: controller.signal, onRunCreated: id => set({generatingRunId: id})})
+      } catch (reason) {if (!controller.signal.aborted) throw reason}
+    }),
+    createSituation: async input => withBusy(async () => {
+      const scope = get().scope, sessionId = get().selectedSessionId
+      if (!scope || sessionId == null) throw new Error('请先选择角色聊天存档。')
+      const controller = new AbortController(); generationAbortController = controller
+      try {
+        await createChatNarrativeSituationV1({...input, scope, sessionId, settleSituation: true, expectedSequence: get().runtimeState.lastSequence,
+          signal: controller.signal, onRunCreated: id => set({generatingRunId: id})})
+      } catch (reason) {if (!controller.signal.aborted) throw reason}
+    }),
+    reviseNarrativeAction: async (runId, aiConfig) => withBusy(async () => {
+      const scope = get().scope, sessionId = get().selectedSessionId
+      if (!scope || sessionId == null || get().actionRevisionRunId !== runId) throw new Error('当前没有该可修订回复。')
+      const source = await readChatActionRevisionSourceV1({scope, sessionId})
+      if (!source || source.runId !== runId) throw new Error('局面或未通过回复已经变化，请刷新后继续。')
+      const controller = new AbortController(); generationAbortController = controller
+      try {
+        const generated = await generateInteractionRuntimeCandidateV1({scope, productRuntimeSessionId: sessionId,
+          skillId: CHAT_ACTION_REVISION_SKILL, participantKey: source.actorKey, narrativeTriggerSequence: source.triggerSequence,
+          objective: '玩家明确请求修订上一条未生效回复的后果登记。保留原表达和玩家选择，重新审查后才可生效；最多一次，不继续下一次行动。',
+          aiConfig, signal: controller.signal, onRunCreated: id => set({generatingRunId: id})})
+        if (!controller.signal.aborted) await adoptInteractionRuntimeCandidateV1({scope, runId: generated.snapshot.run.id})
+      } catch (reason) {if (!controller.signal.aborted) throw reason}
+    }),
+
+    resumeNarrativeReview: async (runId, aiConfig) => withBusy(async () => {
+      const scope = get().scope
+      if (!scope || !get().pendingNarrativeReviewRunIds.includes(runId)) throw new Error('当前没有该待审查候选。')
+      const controller = new AbortController(); generationAbortController = controller
+      set({generatingRunId: runId})
+      try {
+        await (get().pendingMemoryReviewRunIds.includes(runId) ? resumeChatMemoryReviewV1 : resumeChatNarrativeReviewV1)({scope, runId, aiConfig, signal: controller.signal})
+        if (!controller.signal.aborted && !get().narrativeOptionRunIds.includes(runId)) await adoptInteractionRuntimeCandidateV1({scope, runId})
+      } catch (reason) {if (!controller.signal.aborted) throw reason}
+    }),
+
+    resumeNarrativeAction: async (runId, aiConfig) => withBusy(async () => {
+      const scope = get().scope
+      if (!scope || !get().pendingNarrativeActionRunIds.includes(runId)) throw new Error('当前没有该可继续的角色行动。')
+      const controller = new AbortController(); generationAbortController = controller
+      set({generatingRunId: runId})
+      try {
+        await resumeChatNarrativeActionV1({scope, runId, aiConfig, signal: controller.signal})
+        if (!controller.signal.aborted) await adoptInteractionRuntimeCandidateV1({scope, runId})
+      } catch (reason) {if (!controller.signal.aborted) throw reason}
+    }),
+
+    selectNarrativeOption: async (runId, optionKey) => withBusy(async () => {
+      const scope = get().scope
+      if (!scope || !get().narrativeOptions.some(row => row.runId === runId && !row.unavailableReason)) throw new Error('当前没有该可选行动。')
+      await adoptInteractionRuntimeCandidateV1({scope, runId, optionKey})
+    }),
+
+    applyMessageRetrieval: async plan => withBusy(async () => {
+      const scope = get().scope
+      if (!scope || get().selectedSessionId !== plan.sessionId) throw new Error('消息上下文目标已经切换。')
+      await applyChatMessageRetrievalPlanV1(scope, plan)
+    }),
+
+    forkMessageEdit: async (plan, text) => withBusy(async () => {
+      const scope = get().scope
+      if (!scope || get().selectedSessionId !== plan.sessionId) throw new Error('改写目标已经切换。')
+      const child = await forkChatMessageEditV1({scope, plan, text})
+      await reload(child.id!)
+    }),
+
+    forkHistoricalOption: async (plan, optionKey) => withBusy(async () => {
+      const scope = get().scope
+      if (!scope || get().selectedSessionId !== plan.edit.sessionId) throw new Error('历史候选的目标会话已经切换。')
+      const child = await forkChatHistoricalOptionV1({scope, plan, optionKey})
+      await reload(child.id!)
+    }),
+
+    applyMessageEdit: async (text, aiConfig) => withBusy(async () => {
+      const scope = get().scope, sessionId = get().selectedSessionId
+      if (!scope || sessionId == null) throw new Error('请先选择改写分支。')
+      const controller = new AbortController(); generationAbortController = controller
+      try {
+        await applyChatMessageEditV1({scope, sessionId, expectedSequence: get().runtimeState.lastSequence, text, aiConfig,
+          signal: controller.signal, onRunCreated: id => set({generatingRunId: id})})
+      } catch (reason) {if (!controller.signal.aborted) throw reason}
+    }),
+
+    cancelMessageEdit: async () => withBusy(async () => {
+      const base = await version()
+      await updateChatMessageEditDraft({sessionId: base.id, commandId: commandId('chat.edit.cancel', base.id), baseSequence: base.sequence, baseStateHash: base.stateHash, text: '', cancel: true})
+      for (const runId of get().pendingNarrativeRunIds) await cancelInteractionRuntimeRunV1({scope: get().scope!, runId})
+    }),
+
+    cancelPendingRun: async runId => withBusy(async () => {
+      const scope = get().scope
+      if (!scope || ![...get().pendingNarrativeRunIds, ...get().pendingNarrativeReviewRunIds, ...get().pendingNarrativeActionRunIds, ...get().narrativeOptionRunIds].includes(runId)) throw new Error('当前没有该未完成行动。')
+      await cancelInteractionRuntimeRunV1({scope, runId})
+    }),
+
     retryReply: async input => withBusy(async () => {
+      if (get().runtimeState.interaction?.chatNarrative) throw new Error('角色行动包含已经发生的后果；请从行动前的检查点建立分支，不可只替换台词。')
       const scope = get().scope
       const sessionId = get().selectedSessionId
       const reply = get().runtimeState.interaction?.messages.find(item => item.eventSequence === input.replySequence)
@@ -445,18 +690,11 @@ export const useCharacterInteractionPlayerStore = create<CharacterInteractionPla
       await refresh()
     }),
 
-    resolveMemory: async (memoryId, resolution) => withBusy(async () => {
-      const base = await version()
-      await resolveInteractionMemory({
-        sessionId: base.id,
-        commandId: commandId(`interaction.memory.${resolution}`, base.id),
-        baseSequence: base.sequence,
-        baseStateHash: base.stateHash,
-        memoryId,
-        resolution,
-      })
-      await refresh()
-    }),
+    manageMemory: async (plan, action) => withBusy(async () => {
+      const scope = get().scope
+      if (!scope || get().selectedSessionId !== plan.sessionId) throw new Error('已切换聊天，原记忆操作未提交。')
+      await applyChatMemoryManagementPlanV1(scope, plan, action)
+    }, false),
 
     finishScene: async (reason, aiConfig) => withBusy(async () => {
       const state = get().runtimeState.interaction
@@ -488,6 +726,7 @@ export const useCharacterInteractionPlayerStore = create<CharacterInteractionPla
         }
       }
       if (signal.aborted) throw new Error('已停止整理，场景未结束。')
+      if (curatorFailure) throw new Error(`记忆整理未完成，场景保留以供恢复：${curatorFailure}`)
       const base = await version()
       await endInteractionScene({
         sessionId: base.id,
@@ -499,7 +738,6 @@ export const useCharacterInteractionPlayerStore = create<CharacterInteractionPla
       })
       set({ generatingRunId: null })
       await refresh()
-      if (curatorFailure) set({ error: `场景已结束；记忆整理未完成，原始消息和存档未受影响：${curatorFailure}` })
     }),
 
     chooseNarrative: async choiceKey => withBusy(async () => {

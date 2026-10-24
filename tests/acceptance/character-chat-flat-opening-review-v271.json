@@ -1,0 +1,82 @@
+{
+  "version": 271,
+  "recordedAt": "2026-10-20T18:03:35.456152+00:00",
+  "product": "character-interaction",
+  "status": "engineering-passed-real-review-rejected",
+  "scope": "Flat v2 transport schema under a new frozen v6 review binding. Prior bindings and semantic prompt preserved; local per-option identities, exact quotations and visibility validation remain required. No added calls, budget, tables, permissions or world writes.",
+  "engineering": {
+    "receipt": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v271-flat-opening-review/engineering.json",
+      "sha256": "60049905158b67d0890e4c107a6da9c09273b4a4a0a267f5d0f4a823d479bbeb"
+    },
+    "regressionFilesPassed": 5,
+    "regressionTestsPassed": 62,
+    "browserTestsPassed": 3,
+    "governanceTypesLintBuildBundlePassed": true,
+    "fullCI": false,
+    "fullE2E": false
+  },
+  "realReview": {
+    "protocol": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v271-flat-opening-review/agnes-review-r1/preregistration.json",
+      "sha256": "982aa1888c717c56c85a07eb9a62afd8dfff1fae377462c20a960712377562b1"
+    },
+    "result": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v271-flat-opening-review/agnes-review-r1/result.json",
+      "sha256": "f9593814c81a6cb3cb54428386861152c7168d12d949cf7ec1a91f147b7b1d96"
+    },
+    "backup": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v271-flat-opening-review/agnes-review-r1/backup.json",
+      "sha256": "b8be70e414d19542ae1a041b18e7d1975ab1c2019f946bbcea7f37e4302098fd"
+    },
+    "restoration": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v271-flat-opening-review/agnes-review-r1/production-restoration.json",
+      "sha256": "743b7309d5ba8d5593a070dd9bf78bcd226a37f4fd843d1d46dec474992ec283"
+    },
+    "provider": "agnes",
+    "model": "agnes-2.5-flash",
+    "newRequests": 1,
+    "httpStatus": 200,
+    "finishReason": "stop",
+    "usage": {
+      "completion_tokens": 8156,
+      "prompt_tokens": 22551,
+      "total_tokens": 30707,
+      "completion_tokens_details": {
+        "reasoning_tokens": 4373,
+        "text_tokens": 3783
+      },
+      "prompt_tokens_details": {
+        "cached_tokens": 256
+      }
+    },
+    "responseCharacters": 11433,
+    "responseNonWhitespaceCharacters": 6813,
+    "sourceUnchanged": true,
+    "reviewPersisted": false,
+    "allKnownLeakingOptionsRejected": false,
+    "knowledgeVerdicts": [
+      {
+        "optionKey": "opening-1",
+        "passed": true
+      },
+      {
+        "optionKey": "opening-2",
+        "passed": true
+      },
+      {
+        "optionKey": "opening-3",
+        "passed": true
+      }
+    ],
+    "rejection": "Evidence uses option /situation/... paths with target=source. All three known leaking candidates were also incorrectly marked semantically acceptable; syntactic completeness is not quality acceptance.",
+    "automaticRetries": 0,
+    "recoveryModelCalls": 0,
+    "releaseCreated": false,
+    "runtimeCreated": false
+  },
+  "inference": "One bounded response completed without the prior whitespace loop. This supports transport compatibility improvement for this sample only, not a proven unique cause or robust Agnes semantics.",
+  "nextAction": "Prioritize substantive authored background and bounded real narrative progression. Preserve Agnes negative evidence; do not count it as M1 or repeat format changes to seek a passing verdict.",
+  "formalM1Credit": 0,
+  "qualityAccepted": false
+}

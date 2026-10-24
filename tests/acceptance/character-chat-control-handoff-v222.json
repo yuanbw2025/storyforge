@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "status": "contract-and-state-verified-integration-pending",
+  "updatedAt": 1792451907.285547,
+  "defaultActionVersion": 45,
+  "modelCalls": 0,
+  "semanticQualityAccepted": false,
+  "fullDeliveryValidated": false,
+  "scope": [
+    "strict control candidate and independent review shape",
+    "versioned waiting marker without a message or action",
+    "source visibility and delivered-dialogue checks",
+    "state readback and repeated parentless branch rebasing",
+    "import validation and legacy waiting invariants"
+  ],
+  "checks": {
+    "targetedRegression": {
+      "files": 4,
+      "tests": 127,
+      "passed": 127,
+      "newControlTests": 63
+    },
+    "types": {
+      "command": "npx tsc --noEmit --pretty false",
+      "execSessionId": 27391,
+      "exitCode": 0
+    },
+    "staticGates": [
+      "architecture",
+      "required-tables",
+      "ai-manual",
+      "targeted-eslint",
+      "diff-check",
+      "check:docs"
+    ]
+  },
+  "evidence": {
+    "folder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v222-control-handoff-contract",
+    "manifestSha256": "f761bf2e85caa68ae04e3bb9c6508c509e28955beef9242c546fe2b99b806ede",
+    "receiptSha256": "9896ec90fe2f837965a4ad4a7c49e67f8ce6edd652a589b91a39d1aafa157db4"
+  },
+  "remaining": [
+    "versioned model-output and persisted candidate integration",
+    "independent review context and actual review step",
+    "governed event/command evidence and terminal receipt",
+    "cancel/unknown/stale/refresh recovery and isolated browser UI",
+    "new actual-default real-model cohort, preserving V220 failure"
+  ],
+  "fullDeliveryQueue": {
+    "batch": "V221",
+    "source": "V219",
+    "includesThisChange": false
+  }
+}

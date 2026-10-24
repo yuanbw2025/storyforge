@@ -513,6 +513,43 @@ function addDecision(input: {
   input.map.set(input.descriptor.resourceKey, existing)
 }
 
+/** An imported Run retains the exact historical manifest, including its old
+ * local scope fingerprint. Re-prove its portable release/resource identity;
+ * never rewrite that manifest or accept an arbitrary fingerprint mismatch. */
+async function importedWorldManifestMatchesV1(input: {
+  restored: Awaited<ReturnType<typeof readContextGatewayManifestV3ForAttemptV1>>
+  sourceScope: FrozenResourceScopeV1
+}): Promise<boolean> {
+  const {manifest, snapshot} = input.restored
+  const receipt = snapshot.projection.terminalReceiptHash
+  if (snapshot.projection.state !== 'completed' || !receipt) return false
+  const importedAt = snapshot.events.findIndex(event => event.type === 'verification.staled'
+    && event.payload.reason === 'project-import-scope-rebound'
+    && event.payload.previousReceiptHash === receipt)
+  const assembledAt = snapshot.events.findIndex(event => event.type === 'context.assembled'
+    && event.payload.manifestHash === manifest.manifestHash)
+  if (importedAt < 0 || assembledAt < 0 || assembledAt >= importedAt) return false
+  const decisions = traceDecisions(manifest)
+  if (!decisions.length || decisions.some(decision => decision.sourceKey !== 'worldRelease')) return false
+  const historicalLocators = new Set<number | string>()
+  for (const decision of decisions) {
+    const descriptor = await descriptorForTrace({scope: input.sourceScope, resourceKey: decision.resourceKey})
+    if (decision.revision !== descriptor.contentRevision
+      || decision.contentHash !== descriptor.contentHash
+      || decision.policyRevision !== descriptor.policyRevision
+      || decision.policyHash !== descriptor.policyHash
+      || decision.sourceRefs.length !== descriptor.sourceRefs.length) return false
+    for (let index = 0; index < decision.sourceRefs.length; index += 1) {
+      const {recordId, ...historical} = decision.sourceRefs[index]!
+      const {recordId: _local, ...current} = descriptor.sourceRefs[index]!
+      if (historical.table !== 'worldReleases' || !Number.isSafeInteger(recordId) || Number(recordId) < 1
+        || await hashCanonicalValue(historical) !== await hashCanonicalValue(current)) return false
+      historicalLocators.add(recordId)
+    }
+  }
+  return historicalLocators.size === 1
+}
+
 export async function aggregateProductSourceManifestFromExactRunsV1(input: {
   scope: WorkspaceScope
   sourcePlan: ProductSourcePlanV1
@@ -545,9 +582,10 @@ export async function aggregateProductSourceManifestFromExactRunsV1(input: {
       attempt: pointer.attempt,
     })
     const manifest = restored.manifest
+    const reboundScope = manifest.gateway.scopeFingerprint !== gatewaySession.scopeFingerprint
     if (manifest.manifestHash !== pointer.manifestHash
       || manifest.gateway.policyHash !== plan.gatewayPolicyHash
-      || manifest.gateway.scopeFingerprint !== gatewaySession.scopeFingerprint) {
+      || (reboundScope && !await importedWorldManifestMatchesV1({restored, sourceScope}))) {
       fail('run-manifest-binding', `Run ${pointerKey} 未绑定 SourcePlan 的 release/policy`)
     }
     for (const decision of traceDecisions(manifest)) {
@@ -563,7 +601,9 @@ export async function aggregateProductSourceManifestFromExactRunsV1(input: {
         status: 'matched',
         depth: decision.depth,
         contentHash: decision.contentHash,
-        sourceRefsHash: await hashCanonicalValue(decision.sourceRefs),
+        // Exact historical manifests remain unchanged. Only the new aggregate
+        // normalizes verified portable refs to this import's local locator.
+        sourceRefsHash: await hashCanonicalValue(reboundScope ? descriptor.sourceRefs : decision.sourceRefs),
         manifestHash: manifest.manifestHash,
         reasonCode: decision.reason,
       })

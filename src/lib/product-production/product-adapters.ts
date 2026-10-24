@@ -40,9 +40,10 @@ export interface UpperProductProductionAdapterV1 {
 export interface ProductAdapterBuildInputV1 {
   brief: ProductProductionBriefV3
   narrative: ProductRuntimePackageV1['narrative']
+  chatNarrative?: import('../types/chat-narrative').FrozenChatNarrativeV1
   /** Frozen, verified labels/details for the portable IDs in Brief.selection. */
   sourceCatalog?: Pick<ProductWorldSourceCatalog,
-    'storySources' | 'characters' | 'relationships' | 'locations' | 'artifacts' | 'loreEntries' | 'storyArcs'>
+    'storySources' | 'characters' | 'relationships' | 'locations' | 'artifacts' | 'loreEntries' | 'storyArcs' | 'chatSourceProjection'>
   ttrpg?: TtrpgRuntimeContentV1
   textAdventureProduction?: {
     architecture: TextAdventureArchitectureArtifactV1

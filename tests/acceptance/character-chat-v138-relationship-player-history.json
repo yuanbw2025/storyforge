@@ -1,0 +1,167 @@
+{
+  "schema": "storyforge.character-chat-development-evidence",
+  "version": 1,
+  "increment": "V138",
+  "product": "character-interaction",
+  "lifecycle": "product-development",
+  "stage": "S3 runtime read-only projection",
+  "planSteps": [
+    "CHAT-05.01",
+    "CHAT-05.02"
+  ],
+  "status": "targeted-engineering-verified; full-suite-and-narrative-quality-pending",
+  "baseCommit": "20b20fd6",
+  "implementationSha256": {
+    "src/lib/character-interaction/relationship-player-history.ts": "bb8673016b46e82730654b96df3471fefbcced63ed8149c04245b76e44cf6039",
+    "src/components/character-interaction/RelationshipPanel.tsx": "fd0c94479e1cb04a59f1ca036379ccd22d6ac620d966e168f9cdbd64ed6838bc",
+    "src/components/character-interaction/CharacterInteractionPanel.tsx": "c5e8a026a74e8c2fc9977ae284998b72dbcfb58453643d3d3d67cb6b85deccd3",
+    "tests/regression/R-CHAT-05-relationship-player-history.test.ts": "91344cd5a4c16822e3642812310c04e5353385131dd4d5b7653ac50bb918b58c",
+    "tests/e2e/character-chat-relationship-history.spec.ts": "7f691e54c97b624463b0f1750a8ee3ed45e3ef5a267d74f3140794879076c992"
+  },
+  "behavior": [
+    "Current player-directed attitude and traceable joint history share the existing runtime owner.",
+    "Only an exact reviewed narrative cause with both original jointly visible messages is shown.",
+    "Other-role relationships, private, superseded, missing and unverified legacy causes are omitted without changing saved attitude.",
+    "Historical dialogue excluded from model retrieval remains readable by its original audience.",
+    "Recent-first history expands five entries at a time; no model call, event or world write."
+  ],
+  "validation": {
+    "focused": {
+      "files": 3,
+      "tests": 39,
+      "passed": 39,
+      "log": "/tmp/storyforge-chat-v138-focused.log"
+    },
+    "e2e": {
+      "passed": 1,
+      "widths": [
+        390,
+        1440
+      ],
+      "originalModelAndReviewInputs": true,
+      "projectExportImportAndRefresh": true,
+      "externalModelCalls": 0,
+      "log": "/tmp/storyforge-chat-v138-relationship-e2e.log",
+      "visualReadback": "Original exchanges and spacing checked from both screenshots; screenshots are viewport-clipped, not a full-page capture."
+    },
+    "gates": [
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:architecture"
+        ],
+        "exitCode": 0,
+        "seconds": 6.81,
+        "log": "/tmp/storyforge-chat-v138-gate-0.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:required-tables"
+        ],
+        "exitCode": 0,
+        "seconds": 0.16,
+        "log": "/tmp/storyforge-chat-v138-gate-1.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:ai-manual"
+        ],
+        "exitCode": 0,
+        "seconds": 0.53,
+        "log": "/tmp/storyforge-chat-v138-gate-2.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:ai-entry-registry"
+        ],
+        "exitCode": 0,
+        "seconds": 1.3,
+        "log": "/tmp/storyforge-chat-v138-gate-3.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:docs"
+        ],
+        "exitCode": 0,
+        "seconds": 0.62,
+        "log": "/tmp/storyforge-chat-v138-gate-4.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:roadmap"
+        ],
+        "exitCode": 0,
+        "seconds": 0.16,
+        "log": "/tmp/storyforge-chat-v138-gate-5.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:project-metrics"
+        ],
+        "exitCode": 0,
+        "seconds": 0.47,
+        "log": "/tmp/storyforge-chat-v138-gate-6.log"
+      },
+      {
+        "command": [
+          "npx",
+          "tsc",
+          "--noEmit"
+        ],
+        "exitCode": 0,
+        "seconds": 42.49,
+        "log": "/tmp/storyforge-chat-v138-gate-7.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "lint"
+        ],
+        "exitCode": 0,
+        "seconds": 29.36,
+        "log": "/tmp/storyforge-chat-v138-gate-8.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "exitCode": 0,
+        "seconds": 77.48,
+        "log": "/tmp/storyforge-chat-v138-gate-9.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:bundle-size"
+        ],
+        "exitCode": 0,
+        "seconds": 0.53,
+        "log": "/tmp/storyforge-chat-v138-gate-10.log"
+      }
+    ],
+    "fullCI": "pending latest integration snapshot",
+    "fullE2E": "pending latest integration snapshot"
+  },
+  "limitations": [
+    "Does not prove relationship evolution or meaningful model behavior.",
+    "No independent human score; deferred by author.",
+    "Existing state and historical reader versions are unchanged."
+  ]
+}

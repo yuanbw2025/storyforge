@@ -18,6 +18,8 @@ import {
   cloneProductRuntimeBranchExtensionsV1,
   parseProductOwnedRuntimeStateV1,
   rebaseProductRuntimeStateForBranchV1,
+  prepareProductRuntimeBranchIntentV1,
+  type ProductRuntimeBranchIntentV1,
 } from "./runtime-product-adapters";
 export type JsonObject = ProductRuntimeJsonObjectV1;
 export const stableJson = stableProductRuntimeJsonV1;
@@ -2076,6 +2078,7 @@ export interface BranchProductRuntimeSessionInputV1 {
   throughSequence: number;
   title: string;
   seed?: string;
+  intent?: ProductRuntimeBranchIntentV1;
 }
 
 async function branchProductRuntimeSessionInternal(
@@ -2099,6 +2102,10 @@ async function branchProductRuntimeSessionInternal(
     events,
     input.throughSequence,
   );
+  if (input.intent) {
+    const after = replayProductRuntimeEvents(parseProductRuntimeState(parent.initialStateJson), events, input.throughSequence + 1);
+    await prepareProductRuntimeBranchIntentV1(parent, state, after, input.intent);
+  }
   rebaseProductRuntimeStateForBranchV1(state, input.throughSequence);
   state.lastSequence = 0;
   const childInput: CreateProductRuntimeSessionInput = {

@@ -1,0 +1,182 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "label": "V133 exact event-prefix replay and native IndexedDB history growth",
+  "recordedAt": "2026-10-16T08:22:21.431923+00:00",
+  "implementation": {
+    "baseCommit": "7dbd3d8fceb5b3b37bb8bfefb42933ed2891d9d6",
+    "sourceIdentity": "Implementation and evidence are committed together; clean full-suite snapshots record their exact HEAD separately.",
+    "changedSourceSha256": {
+      "src/lib/character-interaction/harness.ts": "67f4b9390c88e9f771f2e6ad011a6affb83e32cb80050efbc97f9d26e1dc3d35",
+      "src/lib/character-interaction/runtime-commands.ts": "a8b3521b006daa9427fed15fcfb288341f88589558615307ee4ed4cdee3f1416",
+      "src/lib/character-interaction/runtime-replay.ts": "bf5d3ad6aeb25e052451ab4a16674cb2b498cc83d2fb0046ac30a18880d97490",
+      "tests/e2e/character-chat-history-growth.spec.ts": "450284fa794c4480198e20110372cbd6faa58f42b233b36341aeb804aabca3d2",
+      "tests/helpers/chat-history-growth.ts": "16acd19c431134d91abd1d6a8ad275142655defdc7aa8e8929b41894acc4c497",
+      "tests/regression/R-CHAT-04-runtime-replay.test.ts": "e076db2158f2e961065ffef904becd785f3cc3ed3091803b00419c3835edb3ac"
+    },
+    "status": "implemented; associated tests, focused browser paths and native100 passed; native1000 timed out; complete suites still pending"
+  },
+  "boundary": {
+    "product": "character-interaction",
+    "lifecycle": "product development; S3 runtime",
+    "owner": "existing Chat Work / ProductRuntimeSession",
+    "reads": "canonical session initialStateJson and complete scope-checked event collection; unchanged registered actor/review readers",
+    "writes": "existing command / reviewed candidate adoption; no new persistent write",
+    "storage": "one process-local exact-prefix cache, estimated serialized UTF-16 input and output bounded to 16 MiB; no schema, table, migration or new canonical field",
+    "world": "frozen references only; no world writes",
+    "media": "unchanged product ownership",
+    "externalModelCalls": 0
+  },
+  "change": [
+    "Compare the complete initial JSON and every serialized event in the previously reduced prefix, including payload and scope metadata. Reuse the internally produced canonical result only when those bytes match; reduce any new suffix through the same validated shared reducer.",
+    "A rewind, changed initial state or altered earlier event falls back to full replay. Malformed or failed suffixes never replace the proven prefix. Return an independent copy, and bypass retention when its byte bound is exceeded.",
+    "Only chat command replay and original-producer historical verification use this adapter. Both still read and scope-check the complete canonical event collection, including events beyond a requested historical cut. No stored head, session ID or sequence is accepted as proof of event contents.",
+    "Add an isolated native Chromium IndexedDB load path. Default CI runs 100 new-consequence actions; explicit CHAT_HISTORY_GROWTH_ACTIONS=300 or 1000 selects larger loads. At 100/300/1000 checkpoints, old facts must enter the actual actor and reviewer inputs, match full replay, and survive parent deletion, import and refresh. Fake producers and reviews are explicitly engineering injections."
+  ],
+  "verification": {
+    "targeted": {
+      "files": 4,
+      "tests": 18,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v133-replay-final-receipt.json",
+      "newCounterexamples": 6,
+      "scope": "exact-prefix reuse, only-suffix reduction, independent return values, changed same-sequence payload/metadata/source, duplicate/gapped events, failed initial state, cache byte bypass, historical read after reopen, complete-scope checking beyond cutoff, atomic head rollback and candidate recovery"
+    },
+    "associated": {
+      "files": 118,
+      "tests": 1356,
+      "exitCode": 0,
+      "durationSeconds": 298.71,
+      "receipt": "/tmp/storyforge-chat-v133-regression-final-receipt.json",
+      "mode": "existing repository two-fork mode; original per-test limits unchanged"
+    },
+    "browser": {
+      "paths": 12,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v133-browser-receipt.json",
+      "scope": "promises, actor input inspection, options, player and thread followup, refresh and parentless recovery"
+    },
+    "gates": {
+      "count": 11,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v133-gates-receipt.json",
+      "note": "Receipt includes two generators before the eleven gates. Final new browser fixture and spec additionally passed current metrics, AI manual, TypeScript and targeted ESLint.",
+      "newTestReceipt": "/tmp/storyforge-chat-v133-new-test-gates-receipt.json"
+    },
+    "retainedFailures": [
+      {
+        "receipt": "/tmp/storyforge-chat-v133-regression-receipt.json",
+        "outcome": "116 files / 1354 tests passed; 2 files / 2 tests timed out at 5 seconds: discovery-evidence-context instance isolation and source-unit-production. First run used one fork. Failures retained without reclassifying them as environment failures."
+      },
+      {
+        "receipt": "/tmp/storyforge-chat-v133-two-timeouts-receipt.json",
+        "outcome": "17 passed / 1 timed out in one-fork focused replay. Source-unit-production still exceeded the original 5-second threshold. Final complete two-fork run passed every case with unchanged limits."
+      }
+    ]
+  },
+  "nativeGrowth": {
+    "native100": {
+      "actions": 100,
+      "newFacts": 200,
+      "totalFacts": 204,
+      "recallActions": 1,
+      "injectedCalls": 202,
+      "externalModelCalls": 0,
+      "loopElapsedMs": 35731,
+      "testSeconds": 52.5,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v133-native-100-receipt.json",
+      "backupDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v133-history-growth/native-100-results",
+      "sourceHashes": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v133-history-growth/native100-source-files.json",
+      "scope": "old clue in actual actor/reviewer inputs; no actor secret; full replay equality; parentless branch backup/import/refresh and unchanged original world",
+      "artifactLimit": "Compressed backup and terminal log retained. The runner did not create an HTML report; the attempted report-directory copy failed after backup preservation. Later runs write result/refresh JSON files explicitly."
+    },
+    "native1000": {
+      "status": "failed: original 1800000 ms Playwright deadline exceeded",
+      "receipt": "/tmp/storyforge-chat-v133-native-1000-receipt.json",
+      "log": "/tmp/storyforge-chat-v133-native-1000.log",
+      "outputDirectory": "/tmp/storyforge-chat-v133-native-1000-results",
+      "sourceHashes": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v133-history-growth/native1000-source-files.json",
+      "exitCode": 1,
+      "lastLoggedActions": 800,
+      "lastLoggedElapsedMs": 1653751,
+      "exactFinalActionCount": "unknown; only progress through 800 was persisted",
+      "finalBackupOrRecovery": "not reached; no native-growth result, backup or refresh files were created",
+      "artifactDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v133-history-growth/native-1000-results",
+      "artifactIndex": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v133-history-growth/native1000-terminal-artifacts.json",
+      "retainedArtifacts": [
+        "terminal log and receipt",
+        "screenshot",
+        "video",
+        "trace",
+        "error context"
+      ]
+    }
+  },
+  "shimGrowth": {
+    "kind": "fake-indexeddb formal-path diagnostic; all three reached the explicit 20-minute workload budget before their targets, then saved state and verified recovery; all exit 1 and remain failures",
+    "fixedV132": {
+      "target": 300,
+      "actions": 237,
+      "facts": 478,
+      "injectedCalls": 474,
+      "elapsedIncludingRecoveryMs": 1342730,
+      "result": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v133-history-growth/baseline-result.json"
+    },
+    "firstPrefixReuse": {
+      "target": 300,
+      "actions": 266,
+      "facts": 536,
+      "injectedCalls": 532,
+      "elapsedIncludingRecoveryMs": 1346541,
+      "result": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v133-history-growth/optimized-result.json"
+    },
+    "finalPrefixReuse": {
+      "target": 1000,
+      "actions": 255,
+      "facts": 514,
+      "injectedCalls": 510,
+      "elapsedIncludingRecoveryMs": 1312497,
+      "result": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v133-history-growth/final-result.json"
+    },
+    "allCanonicalReplayAndRecoveryEqual": true,
+    "allWorldsUnchanged": true,
+    "externalCalls": 0,
+    "timingLimit": "These workloads overlap other validation and use a transaction simulator. Do not interpret their wall-clock differences as a controlled product benchmark."
+  },
+  "profile": {
+    "file": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v133-history-growth/live-optimized.cpuprofile",
+    "summary": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v133-history-growth/live-optimized-profile-summary.json",
+    "durationMs": 5855.667,
+    "dominantSelfSamplesMs": {
+      "nodeProcessImmediate": 1890,
+      "fakeIndexedDBDatabaseTransactionFilter": 1613,
+      "fakeIndexedDBTransactionVersionScan": 833
+    },
+    "localSourceEvidence": [
+      "node_modules/fake-indexeddb/build/esm/lib/Database.js:14",
+      "node_modules/fake-indexeddb/build/esm/FDBDatabase.js:124"
+    ],
+    "decision": "Installed shim retains completed transactions and scans that list when scheduling transactions. Keep its failures, do not patch dependencies or weaken validation, and measure the formal path in isolated native IndexedDB. Browser results remain separate evidence.",
+    "inspector": "Attached only to identity-verified own test worker; loopback port was unused and closed after profiling."
+  },
+  "fullValidation": {
+    "status": "V133 full CI and E2E were verified unstarted and childless, then superseded by fixed V134 snapshots; both exited 143, neither is a pass.",
+    "ciReceipt": "/tmp/storyforge-chat-v133-full-ci-receipt.json",
+    "e2eReceipt": "/tmp/storyforge-chat-v133-full-e2e-receipt.json",
+    "priorV132E2E": "Terminal exit 1: 371 passed, 2 skipped, 1 ENOSPC screenshot failure in motion-drama-preproduction. Failing artifacts could not be fully written; terminal logs and receipt preserved.",
+    "queueAudit": "/tmp/storyforge-chat-v133-queue-audit.json",
+    "supersessionEvidence": "/tmp/storyforge-chat-v134-superseded-queues.json"
+  },
+  "evidence": {
+    "directory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v133-history-growth",
+    "index": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v133-history-growth/evidence-index-before-native1000.json",
+    "diagnosticSetupFailure": "First private diagnostic preparation had a Python syntax error, so the initial Vitest invocation had no test file. Its failed receipt/log is retained; no model call occurred."
+  },
+  "limits": [
+    "Native1000 failed its unchanged 30-minute deadline. The 100/300 actual-input and full-replay checkpoints were reached, but this failed run has no final backup/recovery evidence. CHAT-04.06d remains open.",
+    "Storage/replay/load checks are not meaningful-story, semantic-recall, true-model latency, human-play or commercial acceptance. No real provider requests since V125; original failures and cohort denominators remain unchanged.",
+    "No new Agnes configuration search or provider substitution. Current v3 remains experimental and hidden by default.",
+    "Full CI/E2E are still required before completing the engineering milestones; unchanged older successes do not cover this implementation."
+  ]
+}

@@ -1,0 +1,262 @@
+{
+  "schema": "storyforge.character-chat-capacity-audit",
+  "version": 1,
+  "label": "V126 durable growth exposes unresolved long-run limits",
+  "recordedAt": "2026-10-16T03:16:33.053399+00:00",
+  "implementationCommit": "ebcb50a944193f07c2ead15c1f438a5a42bd4268",
+  "manifestSha256": "2087fdec7cc2d31e8d94ce5ed636ec52dc2803fc8f4ecb0db083cf4f76c1ec29",
+  "boundary": {
+    "product": "character-interaction",
+    "phase": "S3 runtime",
+    "lifecycle": "product development audit",
+    "owner": "Chat Work / ProductRuntimeSession",
+    "world": "existing frozen fixture reference, unchanged",
+    "storage": "test IndexedDB using real Harness/command/event/adoption/export/import code",
+    "modelCalls": 0,
+    "inputOutput": "synthetic producer/review fixtures, not real model or human story quality"
+  },
+  "profiles": [
+    {
+      "kind": "durable-fact-growth",
+      "synthetic": true,
+      "modelCalls": 0,
+      "injectedCalls": 123,
+      "completedActions": 61,
+      "error": "Error: 情境关键背景超过本轮预算，已停止构建，不能截断确定事实、未处理约定、最近处置、固定记忆或本轮行动依据。",
+      "failedRunStatus": "failed",
+      "nextSceneContext": {
+        "actor": {
+          "ok": true,
+          "size": 21096
+        },
+        "coordinator": {
+          "ok": true,
+          "size": 16703
+        },
+        "facts": 65,
+        "goals": 2,
+        "messages": 61
+      },
+      "worldUnchanged": true,
+      "failedCandidateNotAdopted": true,
+      "restoration": {
+        "sessions": 2,
+        "interactionEqual": true,
+        "modelCalls": 0
+      },
+      "lastCommitted": {
+        "action": 61,
+        "calls": 2,
+        "actor": {
+          "ok": true,
+          "size": 21019
+        },
+        "coordinator": {
+          "ok": false,
+          "error": "Error: 情境关键背景超过本轮预算，已停止构建，不能截断确定事实、未处理约定、最近处置、固定记忆或本轮行动依据。"
+        },
+        "facts": 65,
+        "goals": 2,
+        "messages": 61
+      },
+      "firstFailure": {
+        "action": 62,
+        "calls": 1,
+        "error": "Error: 情境关键背景超过本轮预算，已停止构建，不能截断确定事实、未处理约定、最近处置、固定记忆或本轮行动依据。",
+        "actor": {
+          "ok": true,
+          "size": 21013
+        },
+        "coordinator": {
+          "ok": false,
+          "error": "Error: 情境关键背景超过本轮预算，已停止构建，不能截断确定事实、未处理约定、最近处置、固定记忆或本轮行动依据。"
+        },
+        "facts": 65,
+        "goals": 2,
+        "messages": 61
+      }
+    },
+    {
+      "kind": "durable-fulfilled-promise-capacity",
+      "synthetic": true,
+      "modelCalls": 0,
+      "injectedCalls": 65,
+      "completedPromises": 16,
+      "error": "Error: [chat-commitment] 承诺历史已达容量，停止而不删除原记录",
+      "failedRunStatus": "failed",
+      "allPriorPromisesFulfilled": true,
+      "worldUnchanged": true,
+      "failedCandidateNotAdopted": true,
+      "restoration": {
+        "sessions": 2,
+        "interactionEqual": true,
+        "modelCalls": 0
+      },
+      "lastCommitted": {
+        "promise": 16,
+        "calls": 4,
+        "actor": {
+          "ok": true,
+          "size": 18926
+        },
+        "coordinator": {
+          "ok": true,
+          "size": 21017
+        },
+        "facts": 20,
+        "goals": 2,
+        "messages": 32
+      },
+      "firstFailure": {
+        "promise": 17,
+        "calls": 1,
+        "error": "Error: [chat-commitment] 承诺历史已达容量，停止而不删除原记录",
+        "actor": {
+          "ok": true,
+          "size": 18921
+        },
+        "coordinator": {
+          "ok": true,
+          "size": 21012
+        },
+        "facts": 20,
+        "goals": 2,
+        "messages": 32
+      }
+    },
+    {
+      "kind": "durable-multiscene-fact-growth",
+      "synthetic": true,
+      "modelCalls": 0,
+      "injectedCalls": 168,
+      "completedActions": 84,
+      "error": "Error: 当前事实、未处理承诺、最近处置或玩家固定记忆超过预算，已停止发送；不会静默省略固定记忆或未处理约定。",
+      "failedRunStatus": "failed",
+      "worldUnchanged": true,
+      "failedCandidateNotAdopted": true,
+      "restoration": {
+        "sessions": 2,
+        "interactionEqual": true,
+        "modelCalls": 0
+      },
+      "lastCommitted": {
+        "action": 84,
+        "calls": 2,
+        "actor": {
+          "ok": false,
+          "error": "Error: 当前事实、未处理承诺、最近处置或玩家固定记忆超过预算，已停止发送；不会静默省略固定记忆或未处理约定。"
+        },
+        "coordinator": {
+          "ok": true,
+          "size": 22384
+        },
+        "facts": 88,
+        "goals": 2,
+        "messages": 84
+      },
+      "firstFailure": {
+        "action": 85,
+        "calls": 0,
+        "error": "Error: 当前事实、未处理承诺、最近处置或玩家固定记忆超过预算，已停止发送；不会静默省略固定记忆或未处理约定。",
+        "actor": {
+          "ok": false,
+          "error": "Error: 当前事实、未处理承诺、最近处置或玩家固定记忆超过预算，已停止发送；不会静默省略固定记忆或未处理约定。"
+        },
+        "coordinator": {
+          "ok": true,
+          "size": 22378
+        },
+        "facts": 88,
+        "goals": 2,
+        "messages": 84
+      }
+    }
+  ],
+  "diagnosticAssertions": {
+    "passed": 3,
+    "meaning": "Assertions demonstrate retained limits and atomic failure/recovery; they do not establish 100/300/1000-turn support."
+  },
+  "staticLimits": {
+    "facts": 200,
+    "goals": 32,
+    "beliefs": 64,
+    "threads": 64,
+    "commitmentHistoryPerGoal": 16,
+    "actorSourceTokens": 8000,
+    "coordinatorSourceTokens": 12000,
+    "coordinatorCharacters": 28000
+  },
+  "findings": [
+    "Single-scene workload adopts 61 actions (65 facts); action62 invokes injected generation once then cannot assemble independent review. A legitimate scene change makes this particular coordinator context fit again.",
+    "Explicit scene changes every20 actions retain all facts but only84 actions (88 facts) fit; action85 cannot assemble actor input, with zero producer/reviewer calls. Storage fact cap200 is not the first failure.",
+    "Sixteen promises are individually declared and fulfilled through the durable path. Promise17 invokes injected generation but is rejected by history capacity before review; all prior promises are resolved and retained.",
+    "The three failed candidates change no runtime state; world content is unchanged. Each original plus branch is verified through export/import/reopen."
+  ],
+  "nextImplementation": [
+    "Define versioned current-state/history separation and protected dependency closure before changing storage/reader behavior. Preserve original fact and event identities.",
+    "Govern historical selection by role visibility, unresolved obligations, discovery prerequisites, actual candidate references and recorded manifests. Missing mandatory evidence must stop; omitted history must not be treated as absent.",
+    "Address fact/goal/thread growth and resolved promise history together. Do not merely raise constants, silently prune settled records or count filler dialogue as sustained narrative.",
+    "Verify100/300/1000 consequence-bearing engineering actions, more than16 resolved promises and more than32 goals, then separately evaluate real-model and human long conversations."
+  ],
+  "limits": [
+    "Thresholds describe these declared synthetic workloads, not universal maximum conversation lengths.",
+    "No new feature, schema/table, permission, world mutation, model call or commercial acceptance is claimed.",
+    "Goal-count growth is statically identified but was not dynamically exercised here.",
+    "Existing Codex provider failure and missing Agnes configuration remain separate; no rescan or retry."
+  ],
+  "sourceRestoration": {
+    "at": "2026-10-16T03:16:32.948171+00:00",
+    "head": "ebcb50a944193f07c2ead15c1f438a5a42bd4268",
+    "trackedFilesVerified": 3478,
+    "manifestSha256": "2087fdec7cc2d31e8d94ce5ed636ec52dc2803fc8f4ecb0db083cf4f76c1ec29",
+    "temporaryAuditTestRemoved": true,
+    "gitClean": true,
+    "trackedMismatches": []
+  },
+  "evidence": {
+    "audit-source.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v126-growth-audit/audit-source.json",
+      "sha256": "edcf60dcefa6a754dab4ca734898937e2fc11ff468cce7b632ef746aef1e5e5b"
+    },
+    "growth-audit.test.ts": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v126-growth-audit/growth-audit.test.ts",
+      "sha256": "ac9283a6afe262f02f3ff483f2adb42b448dfa8f089998031d9774b2b3a9e9ce"
+    },
+    "facts.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v126-growth-audit/facts.json",
+      "sha256": "561c98e01ba873380910b66f8d234ac3cba74879712c0bd7813a6fb8e6ee474b"
+    },
+    "facts-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v126-growth-audit/facts-backup.json",
+      "sha256": "d2f5938f83d84a7d76f35f25c684426b4bf33de6393b5edfe185e3f9d3c6b078"
+    },
+    "promises.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v126-growth-audit/promises.json",
+      "sha256": "c2666592074849d29cd10b4d6664fb3ba40685045b704dfe96133a13a2b659cc"
+    },
+    "promises-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v126-growth-audit/promises-backup.json",
+      "sha256": "e3a2a8a08da17990eb7d58d68712b7c0d39ad87fb02a1db702f4e473238313a3"
+    },
+    "multiscene.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v126-growth-audit/multiscene.json",
+      "sha256": "d0a45bd0f70823e85e9e1dfc97d875123dca466e11ea04b2078d409307af317e"
+    },
+    "multiscene-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v126-growth-audit/multiscene-backup.json",
+      "sha256": "23ab0f2b8f6f788ce4e289bd1f18474f5848d04f17b2e27566491218a449860a"
+    },
+    "source-restored.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v126-growth-audit/source-restored.json",
+      "sha256": "10d628b9a4386ee63a167575186ac79ccd2e2d42eb1234e5f35dd487fc875d43"
+    },
+    "first-profiles": {
+      "path": "/tmp/storyforge-chat-v126-growth.log",
+      "sha256": "ee9f70f1459f52dd30b3857bb33fa8c8f04d4f6b864436e9eb935b7bf5d47e48"
+    },
+    "multiscene-profile": {
+      "path": "/tmp/storyforge-chat-v126-multiscene.log",
+      "sha256": "021ee175060cb77e3bce95c161696080b7b6d1edb44794be49990e4ece711a9a"
+    }
+  }
+}

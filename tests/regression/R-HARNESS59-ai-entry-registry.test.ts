@@ -24,13 +24,13 @@ const registry = JSON.parse(readFileSync('src/lib/agent/ai-entry-registry.json',
 describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
   it('AST 守卫证明实际 member/alias/wrapper 调用均携带登记 entryId', () => {
     const output = execFileSync(process.execPath, ['scripts/check-ai-entry-registry.mjs'], { encoding: 'utf8' })
-    expect(output).toContain('47 bindings / 51 calls')
-    expect(output).toContain('formal 25, auxiliary 15, evaluation 6, experimental 1')
+    expect(output).toContain('53 bindings / 57 calls')
+    expect(output).toContain('formal 31, auxiliary 15, evaluation 6, experimental 1')
   })
 
   it('唯一注册表严格解析且每项连接 Skill、执行器、候选和调用方', () => {
     expect(registry.version).toBe(2)
-    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(47)
+    expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries).toHaveLength(53)
     for (const retiredId of ['world.setting.lookup.qa', 'world.setting.lookup.extract']) {
       expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some(entry => entry.entryId === retiredId)).toBe(false)
     }
@@ -54,7 +54,7 @@ describe('R-HARNESS59 / WEH-0H · 正式 AI 入口机器绑定', () => {
     expect(() => parseFormalAIEntryRegistryV1(full)).not.toThrow()
     expect(FORMAL_AI_ENTRY_REGISTRY_V1.entries.some((entry) => entry.entryId.startsWith('longform.voice'))).toBe(false)
     delete full.limitedTransports
-    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(47)
+    expect(parseFormalAIEntryRegistryV1(full).entries).toHaveLength(53)
     for (const patch of [{ adoptAllowed: true }, { adoptionTargets: ['chapters'] }, { boundary: 'durable-run' }]) {
       const invalid = JSON.parse(JSON.stringify(registry))
       Object.assign(invalid.limitedTransports[0], patch)

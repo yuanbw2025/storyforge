@@ -1,10 +1,31 @@
+import {chatOpeningRelationalReviewPromptV1, chatOpeningRelationalReviewSchemaV1} from '../character-interaction/opening-review-relations'
+import {chatOpeningProofReviewPromptV1, chatOpeningProofReviewSchemaV1, parseChatOpeningProofReviewV1} from '../character-interaction/opening-review-proof-citations'
+import {chatOpeningKeyedReviewPromptV1, chatOpeningKeyedReviewSchemaV1, parseChatOpeningKeyedReviewV1} from '../character-interaction/opening-review-keyed'
+import {assertChatOpeningReviewReferencesDeliveredV1, chatOpeningReviewReferencePromptV1, chatOpeningReviewReferenceSchemaV1, parseChatOpeningReferenceReviewV1} from '../character-interaction/opening-review-references'
+import {assertChatVisualRequirementsV1, CHAT_PUBLIC_VISUAL_CONSTRAINTS_V1} from '../character-interaction/visual-intent'
+import {executeChatMediaDeterministicTaskV1} from './chat-media-tasks'
+import {createChatMediaReviewSourceV1} from '../character-interaction/media-selection'
+import {readChatMediaAuthorConfirmationV1} from './chat-media-authority'
+import {readChatOpeningProductionVersionV1} from '../character-interaction/opening-production-binding'
+import {CHAT_OPENING_REPAIR_PROMPT_V1, planChatOpeningRepairV1, validateChatOpeningRepairV1} from '../character-interaction/opening-repair'
+import {CHAT_OPENING_REPAIR_PROMPT_V2, planChatOpeningRepairV2, applyChatOpeningRepairPatchV1} from '../character-interaction/opening-repair-patch'
+import {planChatOpeningRepairV3, applyChatOpeningReferenceRepairV1} from '../character-interaction/opening-reference-repair'
+import {planChatOpeningRepairV4, applyChatOpeningOptionRepairV1, chatOpeningReferencePromptV2, planChatOpeningRepairV5, applyChatOpeningOptionRepairV2, chatOpeningReferencePromptV3, type ChatOpeningRepairPlanV5} from '../character-interaction/opening-option-repair'
+import {chatOpeningReferencePromptV1} from '../character-interaction/opening-reference-prompt'
+import {parseChatOpeningSourceBoundOutputV1, parseChatOpeningSourceBoundOutputV2} from '../character-interaction/opening-source-references'
+import {chatOpeningOutputSchemaV1} from '../character-interaction/opening-output-schema'
+import {chatOpeningReviewOutputSchemaV1, chatOpeningReviewOutputSchemaV2, chatOpeningReviewOutputSchemaV3} from '../character-interaction/opening-review-output'
+import {recordChatOpeningRepairV1, requireDeliveredChatOpeningRepairV1} from '../character-interaction/opening-repair-evidence'
+import {chatOpeningReviewPromptV1, createChatOpeningReviewV1} from '../character-interaction/situation-production-review'
+import {chatOpeningContinuationProductionPromptV1, chatOpeningContinuationReviewPromptV1, chatOpeningScopedReviewPromptV1, chatOpeningIndependentReviewPromptV1, chatOpeningBackgroundProductionPromptV1, chatOpeningBackgroundReviewPromptV1, chatOpeningBackgroundProductionPromptV2, chatOpeningBackgroundReviewPromptV2, chatOpeningBackgroundReviewPromptV3} from '../character-interaction/opening-continuation'
 import { parseTextAdventureQuestScriptArtifact, textAdventureQuestRecipientsV3 } from '../adventure/quest-settlement'
 import { hasFrozenAuthorUploadRightsV1 } from './media-rights'
 import { TTRPG_SCENARIO_PROMPT_V1 } from '../ttrpg/scenario-prompt'
 import { parseTtrpgAuthoredScenarioV1, type TtrpgAuthoredScenarioV1 } from '../ttrpg/scenario-authoring'
-import type { ChatResult } from '../ai/client'
+import {estimateChatRequestOptionsTokens, type ChatResult, type ChatRequestOptions} from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
 import { db } from '../db/schema'
+import { readProductProductionBuildWorldScopeV1 } from './world-binding'
 import { validateNarrativeContentGraph } from '../product/narrative-content'
 import type {
   ProductMediaKind,
@@ -29,7 +50,7 @@ import {
   runConfiguredProductionVisionV1,
   type ProviderBindingReceiptV1,
 } from './capabilities'
-import { ProductProductionDraftRejectedErrorV1 } from './scheduler'
+import { ProductProductionDraftRejectedErrorV1, ProductProductionRetryableExecutionErrorV1 } from './scheduler'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from './hash'
 import { putMediaBlobObject, readMediaBlobObjectData, sha256MediaData } from './media-blob-store'
 import {
@@ -46,6 +67,8 @@ import { buildUpperProductModulesV1 } from './product-adapters'
 import { parseTtrpgCampaignContentV1 } from '../ttrpg/campaign'
 import { parseRulePackV1 } from '../ttrpg/rule-pack'
 import { loadProductProductionWorldSourceCatalogV2 } from './world-source'
+import { chatSituationProductionPromptV1, parseChatSituationCandidatesV1, isChatNarrativeShellV1 } from '../character-interaction/narrative-production'
+import { chatProductionArtifactPayloadV1, chatProductionSourceV1, executeChatSituationDeterministicTaskV1, verifyChatNarrativeShellV1, requireChatOpeningFactCatalogV1 } from './chat-situation-tasks'
 import { buildProductWorldSourceBundleV1, verifyProductWorldSourceBundleV1 } from '../product/runtime-canon'
 import { resolveTtrpgProductionRulePackV2 } from '../ttrpg/production-brief'
 import { bindProductionMediaToTtrpgCampaignV1, compileProductionTtrpgCampaignV2 } from '../ttrpg/production-compiler'
@@ -195,7 +218,7 @@ function productCharacterKeys(brief: ProductProductionBriefV3): string[] {
     ?? brief.source.selection.roleBindings.residents
     ?? brief.source.startingPoint.protagonistRefs
     ?? []
-  return resources.slice(0, 100).map((_, index) => `character:${index + 1}`)
+  return resources.slice(0, 100).map((key, index) => brief.characterChat && brief.characterChat.version !== 1 ? key : `character:${index + 1}`)
 }
 
 interface ProductDesignArtifactV1 {
@@ -337,6 +360,7 @@ export interface ProductionTextExecutionV1 {
   output: string
   bindingReceipt: ProviderBindingReceiptV1
   usage: { inputTokens: number; outputTokens: number } | null
+  finishReason?: string
 }
 
 export type ProductionTextRunnerV1 = (input: {
@@ -346,6 +370,7 @@ export type ProductionTextRunnerV1 = (input: {
   system: string
   contextText: string
   maximumOutputTokens: number
+  jsonSchema?: ChatRequestOptions['jsonSchema']
   signal: AbortSignal
 }) => Promise<ProductionTextExecutionV1>
 
@@ -2626,7 +2651,7 @@ function parseProductModule(value: unknown, brief: ProductProductionBriefV3): Ac
 }
 
 function expectedVisualKeys(brief: ProductProductionBriefV3): string[] {
-  if (!['avg', 'ttrpg', 'ai-town', 'text-adventure'].includes(brief.intent.productType)
+  if (!['avg', 'ttrpg', 'ai-town', 'text-adventure', 'character-interaction'].includes(brief.intent.productType)
     || brief.media.imageCount < 1) return []
   return Array.from({ length: brief.media.imageCount }, (_, index) => `media.visual.${String(index + 1).padStart(3, '0')}`)
 }
@@ -3125,6 +3150,7 @@ export function parseProductMediaRequirementsArtifactV2(
   const allowedCharacterAnchors = new Set([
     'intent:protagonist',
     ...productCharacterKeys(brief),
+    ...(brief.characterChat?.version === 3 ? brief.characterChat.visuals?.characters.map(character => character.characterKey) ?? [] : []),
     ...characterAnchors.flatMap(anchor => [anchor.characterKey, ...(anchor.sourceResourceKey ? [anchor.sourceResourceKey] : [])]),
   ])
   const textAdventureBlueprints = brief.intent.productType === 'text-adventure'
@@ -3254,7 +3280,8 @@ export function parseProductMediaRequirementsArtifactV2(
         ))
         .map(character => [character.characterKey, character] as const)),
     ).values()]
-    const requiredCharacterConstraints = [...new Set([
+    const requiredCharacterConstraints = brief.intent.productType === 'character-interaction'
+      ? [...CHAT_PUBLIC_VISUAL_CONSTRAINTS_V1] : [...new Set([
       '保持角色身份、年龄段与核心视觉特征',
       ...(anchoredCharacters.length > 0
         ? anchoredCharacters.flatMap(character => [
@@ -3376,6 +3403,10 @@ export function parseProductMediaRequirementsArtifactV2(
       && !visual.some(item => item.mediaKind === 'character-pose')) fail(`${brief.intent.productType} 视觉需求缺少 character-pose`)
     if (brief.media.requiredMediaKinds.includes('character-expression')
       && !visual.some(item => item.mediaKind === 'character-expression')) fail(`${brief.intent.productType} 视觉需求缺少 character-expression`)
+  }
+  if (brief.intent.productType === 'character-interaction' && visual.length) {
+    if (brief.characterChat?.version !== 3 || !brief.characterChat.visuals) fail('角色聊天缺少公开画面描述')
+    assertChatVisualRequirementsV1(value, brief.characterChat.visuals)
   }
   return { schema: 'storyforge.product-media-requirements-artifact', version: 2, visual, audio }
 }
@@ -5809,8 +5840,9 @@ async function defaultTextRunner(input: Parameters<ProductionTextRunnerV1>[0]): 
     ],
     maximumOutputTokens: input.maximumOutputTokens, signal: input.signal, result,
     responseFormat: 'json_object',
+    ...(input.jsonSchema ? {jsonSchema: input.jsonSchema} : {}),
   })
-  return { output: response.output, bindingReceipt: response.bindingReceipt, usage: result.usage ?? null }
+  return { output: response.output, bindingReceipt: response.bindingReceipt, usage: result.usage ?? null, finishReason: result.finishReason }
 }
 
 async function defaultVisionRunner(input: Parameters<ProductionVisionRunnerV1>[0]): Promise<ProductionTextExecutionV1> {
@@ -6953,7 +6985,21 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
         }
       })()
     : undefined
-  const system = textSystem(
+  const chatOpeningVersion = options.brief.characterChat?.version === 3 && ['content.product-module', 'content.chat-opening-review'].includes(input.task.taskKey)
+    ? await readChatOpeningProductionVersionV1(input) : null
+  let chatOpeningCatalog: Awaited<ReturnType<typeof requireChatOpeningFactCatalogV1>> | null = null
+  if (chatOpeningVersion?.sourceReferences) {
+    try {chatOpeningCatalog = await requireChatOpeningFactCatalogV1(input)} catch (error) {
+      throw new ProductProductionDraftRejectedErrorV1(error instanceof Error ? error.message : String(error), zeroUsage(elapsed(startedAt)))
+    }
+  }
+  const planOpeningRepair = (raw: string, error: string): Promise<ChatOpeningRepairPlanV5 | null> => chatOpeningVersion?.sourceReferences
+    ? (chatOpeningVersion.completeSourceFacts ? planChatOpeningRepairV5 : chatOpeningVersion.optionRepair ? planChatOpeningRepairV4 : planChatOpeningRepairV3)(raw, chatProductionSourceV1(input), chatOpeningCatalog, error)
+    : (chatOpeningVersion?.patchRepair ? planChatOpeningRepairV2 : planChatOpeningRepairV1)(raw, chatProductionSourceV1(input), error)
+  let system = options.brief.characterChat?.version === 3 && input.task.taskKey === 'content.product-module'
+    ? chatOpeningVersion?.sourceReferences ? (chatOpeningVersion.developmentProof ? chatOpeningBackgroundProductionPromptV2() : chatOpeningVersion.authoredBackground ? chatOpeningBackgroundProductionPromptV1() : chatOpeningVersion.meaningfulContinuation ? chatOpeningContinuationProductionPromptV1() : chatOpeningVersion.completeSourceFacts ? chatOpeningReferencePromptV3() : chatOpeningVersion.optionRepair ? chatOpeningReferencePromptV2() : chatOpeningReferencePromptV1())
+      : chatSituationProductionPromptV1(!!options.brief.characterChatSourceUnits?.bundles.length, chatOpeningVersion?.groundedAgency) + (chatOpeningVersion?.patchRepair ? CHAT_OPENING_REPAIR_PROMPT_V2 : chatOpeningVersion?.targetedRepair ? CHAT_OPENING_REPAIR_PROMPT_V1 : '') : options.brief.characterChat?.version === 3 && input.task.taskKey === 'content.chat-opening-review'
+      ? chatOpeningVersion?.relationalReview ? chatOpeningRelationalReviewPromptV1() : chatOpeningVersion?.proofCitationReview ? chatOpeningProofReviewPromptV1() : chatOpeningVersion?.keyedReview ? chatOpeningKeyedReviewPromptV1() : chatOpeningVersion?.referenceReview ? chatOpeningReviewReferencePromptV1() : chatOpeningVersion?.compactReview ? chatOpeningBackgroundReviewPromptV3() : chatOpeningVersion?.developmentProof ? chatOpeningBackgroundReviewPromptV2() : chatOpeningVersion?.authoredBackground ? chatOpeningBackgroundReviewPromptV1() : chatOpeningVersion?.independentReview ? chatOpeningIndependentReviewPromptV1() : chatOpeningVersion?.scopedReview ? chatOpeningScopedReviewPromptV1() : chatOpeningVersion?.meaningfulContinuation ? chatOpeningContinuationReviewPromptV1() : chatOpeningReviewPromptV1(chatOpeningVersion?.groundedAgency ? 2 : 1) : textSystem(
     input.task.taskKey,
     options.brief,
     input.attempt,
@@ -6970,25 +7016,109 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
     textAdventureEndingRouteDecisions,
     input.contextText,
   )
+  let openingRepair: Awaited<ReturnType<typeof requireDeliveredChatOpeningRepairV1>> | null = null
+  const openingJsonSchema = chatOpeningVersion?.completeSourceFacts && input.attempt === 1 && !input.authorDraftJson
+    ? await chatOpeningOutputSchemaV1(chatProductionSourceV1(input), chatOpeningCatalog)
+    : chatOpeningVersion?.scopedReview && !input.authorDraftJson
+      ? (chatOpeningVersion.relationalReview ? chatOpeningRelationalReviewSchemaV1 : chatOpeningVersion.proofCitationReview ? chatOpeningProofReviewSchemaV1 : chatOpeningVersion.keyedReview ? chatOpeningKeyedReviewSchemaV1 : chatOpeningVersion.referenceReview ? chatOpeningReviewReferenceSchemaV1 : chatOpeningVersion.developmentProof ? chatOpeningReviewOutputSchemaV3 : chatOpeningVersion.flatReview ? chatOpeningReviewOutputSchemaV2 : chatOpeningReviewOutputSchemaV1)(chatProductionSourceV1(input),
+        parseChatSituationCandidatesV1(chatProductionArtifactPayloadV1(input, 'content.chat-candidates'), chatProductionSourceV1(input)))
+      : undefined
+  if (chatOpeningVersion?.referenceReview) {
+    const source = chatProductionSourceV1(input)
+    const candidates = parseChatSituationCandidatesV1(chatProductionArtifactPayloadV1(input, 'content.chat-candidates'), source)
+    try {assertChatOpeningReviewReferencesDeliveredV1(input, source, candidates)} catch (error) {
+      throw new ProductProductionDraftRejectedErrorV1(error instanceof Error ? error.message : String(error), zeroUsage(elapsed(startedAt)))
+    }
+    // v11 preserves its inline schema. v12 declares every field in its prompt
+    // and uses shared schema definitions without also copying them inline.
+    if (openingJsonSchema && !chatOpeningVersion.keyedReview) system += '\n输出 JSON Schema：' + JSON.stringify(openingJsonSchema.schema)
+  }
+  // Reserve the schema overhead even for providers using the JSON-object
+  // fallback. This cannot increase the original task's authorized allowance.
+  const openingSchemaTokens = openingJsonSchema ? estimateChatRequestOptionsTokens({jsonSchema: openingJsonSchema}) : 0
+  if (chatOpeningVersion?.scopedReview && !input.authorDraftJson) {
+    const remaining = input.attemptBudgetReservation ?? input.task.budgetReservation
+    if (remaining.modelCalls < 1 || remaining.outputTokens < 1 || remaining.durationMs <= elapsed(startedAt)
+      || estimateTokens(input.contextText + system) + openingSchemaTokens > remaining.inputTokens) {
+      throw new ProductProductionDraftRejectedErrorV1('[chat-opening-review] 剩余调用、输入、输出或时间预算不足，未请求模型', zeroUsage(elapsed(startedAt)))
+    }
+  }
+  if (chatOpeningVersion?.targetedRepair && !input.authorDraftJson) {
+    try {
+      const remaining = input.attemptBudgetReservation
+      if (!remaining || remaining.modelCalls < 1 || remaining.outputTokens < 1
+        || remaining.durationMs <= elapsed(startedAt)
+        || estimateTokens(input.contextText + system) + openingSchemaTokens > remaining.inputTokens) {
+        throw new Error('[chat-opening-repair] 剩余调用、输入、输出或时间预算不足，未请求模型')
+      }
+      if (input.attempt === 2) {
+        openingRepair = await requireDeliveredChatOpeningRepairV1(input)
+        const minimumOutput = openingRepair.repair.version !== 1 ? JSON.stringify({
+          schema: 'storyforge.chat-opening-repair-patch', version: 1, rawResponseHash: openingRepair.repair.rawResponseHash,
+          recoverRootOption: openingRepair.repair.recoverRootOption, applyRepairs: openingRepair.repair.repairs.map(item => item.path), appendedOptions: [],
+          ...((openingRepair.repair.version === 4 || openingRepair.repair.version === 5) && openingRepair.repair.format === 'references' ? {version: 2,
+            replacementOptions: openingRepair.repair.invalidOptions.map(item => ({optionIndex: item.optionIndex, option: {optionKey: item.optionKey}}))} : {}),
+        }) : openingRepair.raw
+        if (estimateTokens(minimumOutput) > remaining.outputTokens) {
+          throw new Error('[chat-opening-repair] 剩余输出预算不足以返回修复结果，未请求模型')
+        }
+        if (openingRepair.repair.version !== (chatOpeningVersion.completeSourceFacts ? 5 : chatOpeningVersion.optionRepair ? 4 : chatOpeningVersion.sourceReferences ? 3 : chatOpeningVersion.patchRepair ? 2 : 1)) throw new Error('[chat-opening-repair] 修复协议与冻结提示不一致')
+        const expected = await planOpeningRepair(openingRepair.raw, openingRepair.repair.error)
+        if (canonicalProductProductionJsonV2(expected) !== canonicalProductProductionJsonV2(openingRepair.repair)) {
+          throw new Error('[chat-opening-repair] 原候选或冻结来源已改变，未请求模型')
+        }
+      }
+      else if (input.attempt !== 1) throw new Error('[chat-opening-repair] 自动修复次数已用尽')
+      input.signal.throwIfAborted()
+    } catch (error) {
+      throw new ProductProductionDraftRejectedErrorV1(error instanceof Error ? error.message : String(error), zeroUsage(elapsed(startedAt)))
+    }
+  }
   const response = input.authorDraftJson ? null : await options.runText({
     projectId: input.scope.projectId, requirementKey, category: options.category,
     system, contextText: input.contextText,
-    maximumOutputTokens: productProductionProviderOutputLimitV1(input.task, input.contextText), signal: input.signal,
+    ...(openingJsonSchema ? {jsonSchema: openingJsonSchema} : {}),
+    maximumOutputTokens: Math.min(productProductionProviderOutputLimitV1(input.task, input.contextText),
+      chatOpeningVersion?.reviewOutputLimit ?? Infinity,
+      chatOpeningVersion?.targetedRepair ? input.attemptBudgetReservation!.outputTokens : Infinity), signal: input.signal,
   })
   const output = input.authorDraftJson ?? response!.output
   if (response) await input.onModelOutput?.(output)
   if (response && response.bindingReceipt.capabilityHash !== binding.bindingHash) fail('执行时文本 capability 与 Plan binding 不一致')
   const paidUsage: ProductProductionTaskUsageV1 = response ? {
     modelCalls: 1,
-    inputTokens: response.usage?.inputTokens ?? estimateTokens(input.contextText + system),
+    inputTokens: response.usage?.inputTokens ?? estimateTokens(input.contextText + system) + openingSchemaTokens,
     outputTokens: response.usage?.outputTokens ?? estimateTokens(response.output),
     mediaCalls: 0,
     costUsd: null,
     durationMs: elapsed(startedAt),
     storageBytes: 0,
   } : zeroUsage(elapsed(startedAt))
+  if (chatOpeningVersion?.independentReview && response?.finishReason === 'length') {
+    throw new ProductProductionDraftRejectedErrorV1(
+      '[chat-opening-review] 提供商报告输出达到上限，审查未完成；原响应及用量已保留，不自动重发。', paidUsage)
+  }
   try {
-  const parsedRaw = parseProductionModelJsonObjectV1(output, input.task.taskKey)
+  let parsedRaw = parseProductionModelJsonObjectV1(output, input.task.taskKey)
+  if (openingRepair?.repair.version === 5) {
+    parsedRaw = {...await applyChatOpeningOptionRepairV2({
+      raw: openingRepair.raw, repair: openingRepair.repair, candidate: parsedRaw, source: chatProductionSourceV1(input), catalog: chatOpeningCatalog,
+    })}
+  } else if (openingRepair?.repair.version === 4) {
+    parsedRaw = {...await applyChatOpeningOptionRepairV1({
+      raw: openingRepair.raw, repair: openingRepair.repair, candidate: parsedRaw, source: chatProductionSourceV1(input), catalog: chatOpeningCatalog,
+    })}
+  } else if (openingRepair?.repair.version === 3) {
+    parsedRaw = {...await applyChatOpeningReferenceRepairV1({
+      raw: openingRepair.raw, repair: openingRepair.repair, candidate: parsedRaw, source: chatProductionSourceV1(input), catalog: chatOpeningCatalog,
+    })}
+  } else if (openingRepair?.repair.version === 2) {
+    parsedRaw = {...await applyChatOpeningRepairPatchV1({
+      raw: openingRepair.raw, repair: openingRepair.repair, candidate: parsedRaw, source: chatProductionSourceV1(input),
+    })}
+  } else if (openingRepair) await validateChatOpeningRepairV1({
+    raw: openingRepair.raw, repair: openingRepair.repair, candidate: parsedRaw, source: chatProductionSourceV1(input),
+  })
   const repairMergedRaw = applyTextAdventureSceneRepairPatchV1(
     input.task.taskKey, input.contextText, parsedRaw, input.authorDraftJson ? 'author-draft' : 'model',
   )
@@ -7394,11 +7524,22 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
       unregisteredStateFieldsDiscarded: legalized.discardedUnregisteredStateFields,
     }
   } else if (input.task.taskKey === 'content.product-module') {
-    payload = parseProductModule(raw, options.brief); kind = 'product-module'
+    payload = options.brief.characterChat?.version === 3
+      ? chatOpeningVersion?.sourceReferences
+        ? await (chatOpeningVersion.completeSourceFacts ? parseChatOpeningSourceBoundOutputV2 : parseChatOpeningSourceBoundOutputV1)(raw, chatProductionSourceV1(input), chatOpeningCatalog)
+        : parseChatSituationCandidatesV1(raw, chatProductionSourceV1(input)) : parseProductModule(raw, options.brief)
+    kind = 'product-module'
     quality = {
       productTypeVerified: true,
       protocolDefaultsApplied: legalized.defaultedFields,
     }
+  } else if (input.task.taskKey === 'content.chat-opening-review') {
+    const source = chatProductionSourceV1(input)
+    const candidates = parseChatSituationCandidatesV1(chatProductionArtifactPayloadV1(input, 'content.chat-candidates'), source)
+    const reviewed = chatOpeningVersion?.referenceReview && !input.authorDraftJson ? (chatOpeningVersion.proofCitationReview ? parseChatOpeningProofReviewV1 : chatOpeningVersion.keyedReview ? parseChatOpeningKeyedReviewV1 : parseChatOpeningReferenceReviewV1)(raw, source, candidates) : raw
+    const report = await createChatOpeningReviewV1(reviewed, source, candidates, chatOpeningVersion?.developmentProof ? 3 : chatOpeningVersion?.groundedAgency ? 2 : 1)
+    payload = report; kind = 'quality-report'
+    quality = {reviewedOptions: report.options.length, eligibleOptions: report.options.filter(option => option.checks.every(check => check.passed)).length}
   } else if (input.task.taskKey === 'media.requirements') {
     const cast = options.brief.textAdventure
       ? parseTextAdventureCastBibleArtifactV1({
@@ -7714,7 +7855,24 @@ async function executeModelTask(input: ProductProductionTaskExecutionInputV1, op
   }
   } catch (error) {
     const failure = error instanceof Error ? error : new Error(String(error))
-    if (input.authorDraftJson) {
+    if (chatOpeningVersion?.targetedRepair && response && input.attempt === 1) {
+      const remaining = input.attemptBudgetReservation!
+      let repair: ChatOpeningRepairPlanV5 | null
+      try {repair = await planOpeningRepair(output, failure.message)} catch (repairError) {
+        throw new ProductProductionDraftRejectedErrorV1(repairError instanceof Error ? repairError.message : String(repairError), paidUsage)
+      }
+      if (repair && remaining.modelCalls > paidUsage.modelCalls && remaining.inputTokens > paidUsage.inputTokens
+        && remaining.outputTokens > paidUsage.outputTokens && remaining.durationMs > paidUsage.durationMs) {
+        try {await recordChatOpeningRepairV1(input, repair)} catch (recordError) {
+          throw new ProductProductionDraftRejectedErrorV1(recordError instanceof Error ? recordError.message : String(recordError), paidUsage)
+        }
+        throw new ProductProductionRetryableExecutionErrorV1(failure.message, paidUsage)
+      }
+    }
+    if (input.authorDraftJson || (options.brief.characterChat?.version === 3
+      && input.task.taskKey === 'content.product-module')) {
+      // Legacy one-call contracts, unrepairable drafts and a rejected second
+      // attempt stop with paid evidence. Only a frozen repair contract can retry.
       throw new ProductProductionDraftRejectedErrorV1(failure.message, paidUsage)
     }
     Object.defineProperty(failure, 'productProductionUsage', {
@@ -8362,7 +8520,7 @@ async function executeVisualTask(input: ProductProductionTaskExecutionInputV1, o
         || reference === 'intent:protagonist' && character.role === 'player'
       ))
     )) ?? []
-    const characterFallback = requirementCharacters.length === 1
+    const characterFallback = options.brief.intent.productType === 'character-interaction' ? requirement.prompt : requirementCharacters.length === 1
       ? `单人角色锚点立绘，唯一角色：${requirementCharacters[0].name}，${requirementCharacters[0].publicIdentity}；视觉锚点：${requirementCharacters[0].visualAnchor}`
       : `单人角色锚点立绘，角色身份：${options.brief.intent.playerRole}`
     const governedPrompt = isAgnesCharacter
@@ -9938,7 +10096,8 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
         locationTitles: textAdventureLocationTitles,
       })
     : undefined
-  const narrative = parseAcceptedNarrative(
+  const chat = options.brief.characterChat?.version === 3 ? await verifyChatNarrativeShellV1(input) : null
+  const narrative = chat?.shell ?? parseAcceptedNarrative(
     artifactPayload(input, 'content.narrative'),
     options.brief,
     textAdventureLocationTitles,
@@ -10032,14 +10191,16 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
     : undefined
   const media = input.inputArtifacts.filter(row => row.blobObjectId != null).map(mediaAsset)
   const assets = media.map(item => item.asset)
+  const worldScope = await readProductProductionBuildWorldScopeV1({...input, brief: options.brief})
   const sourceCatalog = await loadProductProductionWorldSourceCatalogV2({
     scope: {
       projectId: options.production.projectId,
       worldId: options.production.worldId,
       workId: options.production.workId,
     },
-    worldReleaseId: options.brief.source.worldReleaseId,
+    worldReleaseId: worldScope.worldReleaseId,
     selection: options.brief.source.selection,
+    chatPrivateCharacters: options.brief.characterChat?.version === 3 ? options.brief.characterChat.privateCharacters : undefined,
   })
   if (sourceCatalog.release.contentHash !== options.brief.source.worldContentHash) {
     fail('Production 的冻结 WorldRelease 不存在、跨世界或已漂移')
@@ -10085,6 +10246,7 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
   }
   const modules = buildUpperProductModulesV1({
     brief: options.brief, narrative, sourceCatalog, ttrpg, textAdventureProduction,
+    ...(chat ? {chatNarrative: chat.content} : {}),
   })
   const hasAiTownPresentation = options.brief.intent.productType === 'ai-town' && assets.length > 0
   const boundNarrative = modules.adventure?.version === 2
@@ -10167,6 +10329,16 @@ async function executeIntegrationTask(input: ProductProductionTaskExecutionInput
       runtimePackage.definition.enabledCapabilities.push('presentation')
     }
     if (runtimePackage.adventure?.version === 2) runtimePackage.adventure.media.assetKeys = assets.map(asset => asset.assetKey)
+  } else if (options.brief.intent.productType === 'character-interaction' && options.brief.media.imageCount > 0) {
+    if (!runtimePackage.interaction) fail('角色聊天图片缺少选定情境')
+    const source = createChatMediaReviewSourceV1(runtimePackage.interaction, assets)
+    if (canonicalProductProductionJsonV2(source) !== canonicalProductProductionJsonV2(artifactPayload(input, 'media.chat-review'))) fail('角色聊天图片审查与最终内容不一致')
+    runtimePackage.interaction.chatMedia = await readChatMediaAuthorConfirmationV1({
+      scope: input.scope, productionId: input.productionId, buildNumber: input.buildNumber, controlEpoch: input.controlEpoch,
+      source, value: artifactPayload(input, 'media.chat-selection'),
+    })
+    runtimePackage.presentation = {version: 1, cues: [], assets}
+    runtimePackage.definition.enabledCapabilities.push('presentation')
   } else if (assets.length > 0) fail('当前产品 adapter 不能把媒资接入 RuntimePackage')
   const parsed = parseProductRuntimePackageV1(runtimePackage)
   const ttrpgArtifacts: ProductProductionTaskArtifactV1[] = parsed.ttrpg ? [
@@ -10222,7 +10394,11 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
       })
     : null
   const runtimeSpeakerKeys = runtimePackage.interaction?.profiles.map(profile => profile.characterKey) ?? []
-  const graph = validateNarrativeContentGraph({
+  const chatNarrative = runtimePackage.productType === 'character-interaction' ? runtimePackage.interaction?.chatNarrative : null
+  const graph = chatNarrative ? {
+    valid: isChatNarrativeShellV1(runtimePackage.narrative, chatNarrative),
+    entryKey: runtimePackage.narrative.entryNodeKey, reachableEndingKeys: [], errors: ['开放情境导航不匹配'],
+  } : validateNarrativeContentGraph({
     entryNodeKey: runtimePackage.narrative.entryNodeKey,
     nodes: runtimePackage.narrative.nodes, beats: runtimePackage.narrative.beats,
     choices: runtimePackage.narrative.choices,
@@ -10249,7 +10425,7 @@ async function executeQualityTask(input: ProductProductionTaskExecutionInputV1, 
   const hardEvidence: Record<string, { passed: boolean; evidence: string[] }> = {
     'runtime.package.valid': { passed: true, evidence: [packageHash] },
     'runtime.playable': { passed: graph.valid, evidence: graph.valid ? [graph.entryKey!] : graph.errors },
-    'narrative.graph.valid': { passed: graph.valid, evidence: graph.valid ? graph.reachableEndingKeys : graph.errors },
+    'narrative.graph.valid': { passed: graph.valid, evidence: graph.valid ? chatNarrative ? ['validated-initial-situation; no-prewritten-outcomes'] : graph.reachableEndingKeys : graph.errors },
     'rights.complete': {
       passed: rightsComplete,
       evidence: assets.length
@@ -10815,6 +10991,16 @@ export function createConfiguredProductProductionExecutorV1(input: {
     const sceneAssemblyActIndex = textAdventureSceneScriptAssemblyActIndex(request.task.taskKey)
     if (sceneAssemblyActIndex != null) {
       return executeTextAdventureSceneScriptActAssemblyTask(request, options.brief, sceneAssemblyActIndex)
+    }
+    if (options.brief.characterChat?.version === 3 && request.task.executionMode === 'deterministic'
+      && ['content.design', 'content.chat-author-gate', 'content.narrative'].includes(request.task.taskKey)) {
+      return executeChatSituationDeterministicTaskV1(request, options)
+    }
+    if (options.brief.characterChat?.version === 3 && options.brief.media.imageCount > 0
+      && request.task.executionMode === 'deterministic'
+      && ['media.requirements', 'media.chat-review', 'media.chat-author-gate'].includes(request.task.taskKey)) {
+      return executeChatMediaDeterministicTaskV1(request, options,
+        request.inputArtifacts.filter(row => row.blobObjectId != null).map(row => mediaAsset(row).asset))
     }
     if (request.task.executionMode === 'model') return executeModelTask(request, options)
     if (request.task.taskKey === 'source.author-gate') {

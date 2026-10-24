@@ -1,0 +1,81 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "label": "V137 versioned relationship cause retrieval",
+  "recordedAt": "2026-10-16T17:45:09.834233+00:00",
+  "baseCommit": "590a9f93831e438abcf95ba355f4e9942a3ae8c8",
+  "implementationManifestSha256": "c3807aaeb66ff72807f1eafb3a47df9d17e2cb115a389ddc23d804cc0efc3ff4",
+  "boundary": {
+    "product": "character-interaction",
+    "lifecycle": "product development / S3 private runtime",
+    "owner": "existing ProductRuntimeSession relationshipHistory and dialogue",
+    "reads": [
+      "interactionRuntime",
+      "chatSituationRuntime"
+    ],
+    "writes": "No new AI field, table, migration, relationship mutation or world write. New read version and existing Harness evidence only.",
+    "handoff": "Exact actor context and candidate passed to existing independent review and atomic adoption"
+  },
+  "behavior": [
+    "Retrieve relevant older relationship causes with exact retrievable player input and actor expression, while retaining mandatory current causes and present attitude.",
+    "Exclude other roles, non-witnessed/invalid sources, superseded or user-excluded dialogue. Optional causes and dialogue enter the budget as a dependency closure; required overflow stops.",
+    "Independent review retains actor-delivered causes and dialogue in canonical history order. Selection recorded in original context packets; player inspector shows only jointly visible causes.",
+    "New actor reader v14/retrieval v10 and action-review reader v14; old v13 and older producer bytes and recovery remain unchanged. Existing fact and resolution evidence markers retained."
+  ],
+  "verification": {
+    "focused": {
+      "files": 4,
+      "tests": 34,
+      "exitCode": 0,
+      "log": "/tmp/storyforge-chat-v137-final-focused.log"
+    },
+    "associated": {
+      "files": 121,
+      "tests": 1398,
+      "exitCode": 0,
+      "sourceUnchangedDuringFinalRun": true,
+      "receipt": "/tmp/storyforge-chat-v137-regression-final-receipt.json"
+    },
+    "browser": {
+      "tests": 2,
+      "exitCode": 0,
+      "widths": [
+        1440,
+        390
+      ],
+      "paths": [
+        "formal action and review input, imported historical context inspector, refresh and unchanged state",
+        "existing privacy/exclusion/corrupted-packet inspector regression"
+      ],
+      "externalModelCalls": 0,
+      "log": "/tmp/storyforge-chat-v137-relationship-final-e2e.log"
+    },
+    "gates": {
+      "passed": 11,
+      "receipt": "/tmp/storyforge-chat-v137-gates-receipt.json",
+      "includes": "architecture, required tables, AI manual/entry, docs, roadmap, metrics, types, lint, build, bundle"
+    },
+    "fullCI": "latest committed snapshot will replace unstarted V135 full CI; no result claimed",
+    "fullE2E": "latest committed snapshot will replace unstarted V135 full E2E; no result claimed"
+  },
+  "retainedFailures": [
+    {
+      "attempt": "first focused",
+      "result": "30 passed / 1 failed",
+      "cause": "Oversized synthetic source exceeded existing message schema before budget test; corrected fixture to valid length and exercised original smaller context budget. Product limits unchanged."
+    },
+    {
+      "attempt": "first associated",
+      "result": "120 files passed / 1 failed; 1397 tests passed / 1 failed",
+      "cause": "Additional review-audit assertion was introduced while test workers still held an earlier module version. Keep failed exit 1; fresh final run verified unchanged source and passed all 1398 tests.",
+      "receipt": "/tmp/storyforge-chat-v137-regression-receipt.json"
+    }
+  ],
+  "realModel": {
+    "newCallsForThisChange": 0,
+    "formalEpisodesAdded": 0,
+    "humanRatingsAdded": 0,
+    "limits": "Lexical relevance and engineering causal-source retention do not establish long-term relationship behavior or commercial quality. V135/V136 model probes use their own exact source and remain separate."
+  },
+  "userDirection": "Human scoring postponed; engineering proceeds. Redundant unstarted full suites consolidated; running or unique evidence retained."
+}

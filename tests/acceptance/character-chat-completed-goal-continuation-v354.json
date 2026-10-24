@@ -1,0 +1,257 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 1,
+  "at": "2026-10-23T08:15:04.601938+00:00",
+  "status": "targeted-engineering-passed-real-model-and-full-delivery-pending",
+  "source": {
+    "baseCommit": "8d14a0e3bff505123c8392d886f2177aaabb0334",
+    "worktreeManifestSha256": "5d336c0a5dbddde92c11fd4aab3ba440a41f0965d248a598a8181ed79a885ad4",
+    "worktreeManifestFileCount": 3455,
+    "changedProductionPaths": [
+      "src/lib/character-interaction/narrative-scheduling.ts",
+      "src/lib/character-interaction/narrative-turn.ts"
+    ],
+    "registryChange": "Only two regression references added; prompts, versions, budgets and all other registry bytes preserved."
+  },
+  "problem": {
+    "realEvidence": "character-chat-visitor-response-v352.json",
+    "extraPostClosureRequests": 3,
+    "extraReportedTokens": 48500,
+    "extraPostClosureSeconds": 41.977,
+    "cause": "Manual automatic continuation counted an older paused goal as unfinished work after the current active goal had been fulfilled."
+  },
+  "change": "Further actions within a turn require an active goal or an existing authorized follow-up. An explicit new turn may still revisit a paused goal. Recovery checks original durable runs before hiding an unneeded leftover action.",
+  "preserved": [
+    "Existing explicit new-turn behavior",
+    "Other active goals and authorized follow-ups",
+    "Historical failed, cancelled, unknown and unadopted runs",
+    "Stored trigger/event semantics; no new completion event or rewritten history",
+    "Original independent review, player control, visibility, candidate adoption and world ownership",
+    "Prompt versions action v68 / review v41; original model budgets"
+  ],
+  "reproduction": {
+    "tests": 6,
+    "passed": 4,
+    "failed": 2,
+    "sourceCopy": "baseline-regression.test.ts",
+    "failureCases": [
+      "Unexpected extra generation after adopted active-goal closure",
+      "Unnecessary resume view when only an older paused goal remains"
+    ]
+  },
+  "regressions": {
+    "files": 18,
+    "tests": 340,
+    "passed": 340,
+    "failed": 0,
+    "skipped": 0,
+    "newTests": 6,
+    "newTestsIncludedInTotal": true
+  },
+  "browser": {
+    "files": 7,
+    "passed": 19,
+    "failed": 0,
+    "skipped": 0,
+    "flaky": 0,
+    "retries": 0,
+    "newTests": 2,
+    "newTestsIncludedInTotal": true,
+    "widths": [
+      390,
+      1440
+    ],
+    "scope": "Isolated fixture UI, transport, independent review, adoption and reload; no real-model quality claim"
+  },
+  "sourceUnchangedAcrossTargetedRuns": true,
+  "checks": {
+    "types": {
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "seconds": 38.12
+    },
+    "lint": {
+      "command": [
+        "node",
+        "node_modules/eslint/bin/eslint.js",
+        "src/lib/character-interaction/narrative-scheduling.ts",
+        "src/lib/character-interaction/narrative-turn.ts",
+        "src/lib/agent/skill-registry.ts",
+        "tests/regression/R-CHAT-03-completed-goal-continuation.test.ts",
+        "tests/e2e/character-chat-completed-goal-continuation.spec.ts"
+      ],
+      "exitCode": 0,
+      "seconds": 1.31
+    },
+    "check:architecture": {
+      "command": [
+        "npm",
+        "run",
+        "check:architecture"
+      ],
+      "exitCode": 0,
+      "seconds": 6.86
+    },
+    "check:required-tables": {
+      "command": [
+        "npm",
+        "run",
+        "check:required-tables"
+      ],
+      "exitCode": 0,
+      "seconds": 0.14
+    },
+    "check:ai-manual": {
+      "command": [
+        "npm",
+        "run",
+        "check:ai-manual"
+      ],
+      "exitCode": 0,
+      "seconds": 0.49
+    },
+    "check:agent-context": {
+      "command": [
+        "npm",
+        "run",
+        "check:agent-context"
+      ],
+      "exitCode": 0,
+      "seconds": 0.14
+    },
+    "check:agent-freshness": {
+      "command": [
+        "npm",
+        "run",
+        "check:agent-freshness"
+      ],
+      "exitCode": 0,
+      "seconds": 0.69
+    },
+    "check:docs": {
+      "command": [
+        "npm",
+        "run",
+        "check:docs"
+      ],
+      "exitCode": 0,
+      "seconds": 0.56
+    },
+    "check:roadmap": {
+      "command": [
+        "npm",
+        "run",
+        "check:roadmap"
+      ],
+      "exitCode": 0,
+      "seconds": 0.14
+    },
+    "check:project-metrics": {
+      "command": [
+        "npm",
+        "run",
+        "check:project-metrics"
+      ],
+      "exitCode": 0,
+      "seconds": 0.45
+    },
+    "build": {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "exitCode": 0,
+      "seconds": 75.51
+    },
+    "check:bundle-size": {
+      "command": [
+        "npm",
+        "run",
+        "check:bundle-size"
+      ],
+      "exitCode": 0,
+      "seconds": 0.55
+    },
+    "diff": {
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exitCode": 0,
+      "seconds": 0.05
+    }
+  },
+  "modelCalls": 0,
+  "formalM1QualityPassesAdded": 0,
+  "humanRatingsAdded": 0,
+  "fullObjectiveComplete": false,
+  "remaining": [
+    "Real-model post-fix continuation, narration and cross-scenario quality",
+    "Full final-head CI and browser delivery",
+    "All seven technical delivery packages; M1 not passed",
+    "Agnes dual-provider validation remains pending its latest insufficient-quota outcome"
+  ],
+  "evidence": {
+    "directory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v354-completed-goal-continuation",
+    "reproduction": "before.json",
+    "focused": "focused.json",
+    "regressions": "regressions.json",
+    "browser": "browser.log",
+    "checks": "checks.json",
+    "manifest": "manifest-browser-after.json"
+  },
+  "mainlineIntegration": {
+    "sourceFixCommit": "0d7602c2aecbf357672ce762544eb05d5a0fb340",
+    "main": "8d757ddc35b73d6f39146e6f77cd1a669174061a",
+    "mergeChangedPaths": [
+      "data/traffic/clones.csv",
+      "data/traffic/release-assets.csv",
+      "data/traffic/views.csv",
+      "website-docs/en/updates/compatibility.md",
+      "website-docs/en/updates/development-status.md",
+      "website-docs/updates/compatibility.md",
+      "website-docs/updates/development-status.md"
+    ],
+    "executionManifestChanges": [
+      "data/traffic/clones.csv",
+      "data/traffic/release-assets.csv",
+      "data/traffic/views.csv"
+    ],
+    "productionSourceAndTestsUnchanged": true,
+    "fullDeliveryPending": true,
+    "mergeCommit": "29726e63e29d849bfa641f2674ae3033cac76560",
+    "diffChecks": {
+      "default-main-diff": {
+        "command": [
+          "git",
+          "diff",
+          "--check",
+          "0d7602c2aecbf357672ce762544eb05d5a0fb340",
+          "HEAD"
+        ],
+        "exitCode": 2
+      },
+      "crlf-main-diff": {
+        "command": [
+          "git",
+          "-c",
+          "core.whitespace=trailing-space,space-before-tab,cr-at-eol",
+          "diff",
+          "--check",
+          "0d7602c2aecbf357672ce762544eb05d5a0fb340",
+          "HEAD"
+        ],
+        "exitCode": 0
+      }
+    },
+    "diffCheckExplanation": "The default staged diff check reports the 65 CRLF CSV rows imported byte-for-byte from origin/main. No CSV data or newline bytes changed locally. A command-scoped check recognizing CRLF passes; no repository/global Git setting was changed. This qualifies the merge commit message: the default staged check did not pass.",
+    "docsCheck": "passed",
+    "roadmapCheck": "passed"
+  }
+}

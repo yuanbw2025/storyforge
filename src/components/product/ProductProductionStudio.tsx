@@ -1,6 +1,10 @@
+import MediaSelection from '../character-interaction/MediaSelection'
+import {chatVisualMediaProfileV1} from '../../lib/character-interaction/visual-intent'
+import type {ChatMediaProductionDecisionV1} from '../../lib/character-interaction/media-selection'
+import type { ChatAuthoringSettings } from '../../lib/character-interaction/authoring-contract'
+import SituationSelection from '../character-interaction/SituationSelection'
 import { canReviseTextContentBuildV1 } from '../../lib/product-production/text-content-revision'
 import TextAdventureContentRevisionPanel from './TextAdventureContentRevisionPanel'
-import type { ChatAuthoringSettingsV1 } from '../../lib/character-interaction/authoring-contract'
 import type { AvgAuthoringSettingsV1 } from '../../lib/avg/authoring-contract'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -26,6 +30,10 @@ import {
   isTextAdventureCommunityCandidateRepairRequiredV1,
   isTextAdventureMediaAnchorBlockerV1,
   isTextAdventureSourceDecisionBlockerV1,
+  isChatSituationDecisionBlockerV1,
+  confirmChatSituationDecisionV1,
+  isChatMediaDecisionBlockerV1,
+  confirmChatMediaDecisionV1,
   listProductProductionReviewArtifactsV1,
   listTextAdventureMediaAssetsV1,
   listProductProductionWorkspaceV1,
@@ -261,7 +269,7 @@ function statusLabel(value: string): string {
     'release-ready': '可发布', 'recovery-required': '需要处理', cancelled: '已取消',
     draft: '草稿', superseded: '已取代',
     waiting: '等待依赖', ready: '可执行', running: '执行中', 'retry-ready': '等待重试', completed: '已完成',
-    blocked: '阻塞', stale: '旧 epoch',
+    blocked: '阻塞', stale: '旧 epoch', 'verification-required': '待核对',
   } as Record<string, string>)[value] ?? value
 }
 
@@ -636,7 +644,7 @@ export default function ProductProductionStudio(props: {
   initialSource?: ProductProductionHandoffV1 | null
   managedCreation?: boolean
   embedded?: boolean
-  chatSetup?: {settings:ChatAuthoringSettingsV1;title:string;worldReleaseId:number|null}
+  chatSetup?: {settings:ChatAuthoringSettings;title:string;worldReleaseId:number|null}
   avgSetup?: { settings: AvgAuthoringSettingsV1; title: string; worldReleaseId: number | null }
   onProductionSelected?: (id: number | null) => void
   authorOptIn?: boolean
@@ -1657,6 +1665,20 @@ export default function ProductProductionStudio(props: {
           : '重试已由作者确认；已完成产物会跨 epoch 复用，不会重复调用。')
   }, '重试阻塞任务')
 
+  const selectChatSituation = (selection: {candidatesHash: string; sourceHash: string; selectedOptionKey: string}) => run(async () => {
+    if (!details) throw new Error('缺少制作记录')
+    await confirmChatSituationDecisionV1({scope: props.scope, details, ...selection})
+    await refresh(details.production.id!)
+    setMessage('初始情境已选定，正在继续制作。角色将从这个局面开始演绎。')
+  }, '选择初始情境')
+
+  const selectChatMedia = (decision: ChatMediaProductionDecisionV1) => run(async () => {
+    if (!details) throw new Error('缺少制作记录')
+    await confirmChatMediaDecisionV1({scope: props.scope, details, decision})
+    await refresh(details.production.id!)
+    setMessage('图片与用途已确认，正在组装可预览的聊天版本。')
+  }, '确认聊天图片')
+
   const resolveSourceDecision = (
     action: 'accept-product-private-expansion' | 'cancel',
   ) => run(async () => {
@@ -1922,8 +1944,12 @@ export default function ProductProductionStudio(props: {
   const capabilityReadiness = inspectProductProductionCapabilityReadinessV1({
     projectId: props.scope.projectId,
   })
+  const chatVisualAvailability = (() => {
+    try {return {count: chatVisualMediaProfileV1(props.chatSetup?.settings, 'key-scenes').imageCount, issue: ''}}
+    catch (cause) {return {count: 0, issue: cause instanceof Error ? cause.message.replace(/^\[chat-visual-intent\] /, '') : String(cause)}}
+  })()
   const requestedCommercialImageReady = qualityProfile !== 'commercial-candidate'
-    || !['avg', 'ttrpg', 'ai-town', 'text-adventure'].includes(productType)
+    || !['avg', 'ttrpg', 'ai-town', 'text-adventure', 'character-interaction'].includes(productType)
     || (productType === 'ttrpg' ? ttrpgWizard?.maximumGeneratedAssets === 0 : visualLevel === 'none')
     || capabilityReadiness.image.ready || capabilityReadiness.mediaRelayReady
   const requestedCommercialAudioReady = qualityProfile !== 'commercial-candidate'
@@ -1980,7 +2006,7 @@ export default function ProductProductionStudio(props: {
           <label className="grid gap-2 text-[10px] text-text-muted">产品形态<select aria-label="产品形态" disabled={props.allowedProducts.length === 1} value={productType} onChange={event => { const next = event.target.value as SupportedProduct; if (!props.allowedProducts.includes(next)) return; const nextScale = next === 'text-adventure' ? 'short-arc' : 'scene'; setProductType(next); setScale(nextScale); setTextAdventureWizard(createDefaultTextAdventureProductionWizardValueV1(nextScale)); props.onProductSelected?.(next); setVisualLevel(next === 'avg' || next === 'ttrpg' || next === 'ai-town' || next === 'text-adventure' ? 'key-scenes' : 'none'); setAudioLevel(next === 'avg' ? 'music-sfx' : 'none'); setConfirmTtrpgDefaultMappings(false); void loadTtrpgProductionWizardV2().then(module => setTtrpgWizard(module.createDefaultTtrpgProductionWizardValueV2())); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary disabled:opacity-70">{props.allowedProducts.map(kind => <option key={kind} value={kind}>{PRODUCT_LABELS[kind]}</option>)}</select><span>{productType === 'ttrpg' ? '跑团使用自己的需求适配器、规则、战役、媒资和运行协议；世界事实只从冻结 WorldRelease 渐进读取。' : productType === 'text-adventure' ? '文字冒险拥有独立的叙事、规则、媒资、Build、Release 与运行状态；只读引用冻结 WorldRelease。' : '每种产品使用自己的需求适配器和生产图，共享中立世界协议但不共享业务表。'}</span></label>
           <label className="grid gap-2 text-[10px] text-text-muted">制作质量<select value={qualityProfile} onChange={event => { setQualityProfile(event.target.value as ProductProductionBriefV3['qualityProfile']); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary"><option value="prototype">{productType === 'character-interaction' ? '原型 · 纯文字' : '原型 · 内置占位素材'}</option><option value="internal">{productType === 'character-interaction' ? '内部评审' : '内部评审 · Agnes 就绪则生成图片'}</option><option value="commercial-candidate">{productType === 'character-interaction' ? '商业候选 · 完成质量门' : '商业候选 · 生成正式图片并完成质量门'}</option></select><span>始终复用“设置”中的全局 AI 配置。Agnes 文字与图片共用同一个 API Key，图片自动切换到专用模型，不会要求你再次填写。</span></label>
           <label className="grid gap-2 text-[10px] text-text-muted">{productType === 'character-interaction' ? '作品名称' : '游戏标题'}<input value={title} onChange={event => setTitle(event.target.value)} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" placeholder="会谈后可修改" /></label>
-          <div className={`rounded border p-3 text-[10px] leading-5 md:col-span-2 ${capabilityReadiness.text.ready && requestedCommercialImageReady && requestedCommercialAudioReady ? 'border-success/30 bg-success/5 text-success' : 'border-error/30 bg-error/5 text-error'}`} data-testid="product-production-capability-readiness"><strong className="block text-xs">{capabilityReadiness.text.ready ? '文本生成能力已就绪' : '文本生成能力未就绪'}</strong><span>{capabilityReadiness.text.ready ? `将直接复用 ${capabilityReadiness.text.provider} / ${capabilityReadiness.text.model}，无需再次填写 API Key。` : capabilityReadiness.text.issue}</span>{['avg', 'ttrpg', 'ai-town', 'text-adventure'].includes(productType) && (productType === 'ttrpg' ? (ttrpgWizard?.maximumGeneratedAssets ?? 0) > 0 : visualLevel !== 'none') && <span className="block">{productType === 'ai-town' && qualityProfile === 'internal' && capabilityReadiness.authoredImagePackReady ? `原创媒资包已就绪：${capabilityReadiness.authoredImagePackManifestPath}；生产时逐文件校验 SHA-256、MIME 与尺寸。` : capabilityReadiness.image.ready ? `图片能力已就绪：复用同一 Agnes Key，自动调用 ${capabilityReadiness.image.model}。` : capabilityReadiness.mediaRelayReady ? `Agnes 图片不可用，将使用已绑定媒体中继${capabilityReadiness.mediaRelayOrigin ? `：${capabilityReadiness.mediaRelayOrigin}` : ''}。` : capabilityReadiness.image.issue}</span>}{(productType === 'avg' || productType === 'ai-town') && audioLevel !== 'none' && <span className="block">{capabilityReadiness.mediaRelayReady ? `音乐与音效能力已绑定${capabilityReadiness.mediaRelayOrigin ? `：${capabilityReadiness.mediaRelayOrigin}` : ''}。` : 'Agnes 当前公开接口未提供独立音乐/SFX 生成；选择商业音频时仍需绑定音频能力，或改为静音。'}</span>}</div>
+          <div className={`rounded border p-3 text-[10px] leading-5 md:col-span-2 ${capabilityReadiness.text.ready && requestedCommercialImageReady && requestedCommercialAudioReady ? 'border-success/30 bg-success/5 text-success' : 'border-error/30 bg-error/5 text-error'}`} data-testid="product-production-capability-readiness"><strong className="block text-xs">{capabilityReadiness.text.ready ? '文本生成能力已就绪' : '文本生成能力未就绪'}</strong><span>{capabilityReadiness.text.ready ? `将直接复用 ${capabilityReadiness.text.provider} / ${capabilityReadiness.text.model}，无需再次填写 API Key。` : capabilityReadiness.text.issue}</span>{['avg', 'ttrpg', 'ai-town', 'text-adventure', 'character-interaction'].includes(productType) && (productType === 'ttrpg' ? (ttrpgWizard?.maximumGeneratedAssets ?? 0) > 0 : visualLevel !== 'none') && <span className="block">{productType === 'ai-town' && qualityProfile === 'internal' && capabilityReadiness.authoredImagePackReady ? `原创媒资包已就绪：${capabilityReadiness.authoredImagePackManifestPath}；生产时逐文件校验 SHA-256、MIME 与尺寸。` : capabilityReadiness.image.ready ? `图片能力已就绪：复用同一 Agnes Key，自动调用 ${capabilityReadiness.image.model}。` : capabilityReadiness.mediaRelayReady ? `Agnes 图片不可用，将使用已绑定媒体中继${capabilityReadiness.mediaRelayOrigin ? `：${capabilityReadiness.mediaRelayOrigin}` : ''}。` : capabilityReadiness.image.issue}</span>}{(productType === 'avg' || productType === 'ai-town') && audioLevel !== 'none' && <span className="block">{capabilityReadiness.mediaRelayReady ? `音乐与音效能力已绑定${capabilityReadiness.mediaRelayOrigin ? `：${capabilityReadiness.mediaRelayOrigin}` : ''}。` : 'Agnes 当前公开接口未提供独立音乐/SFX 生成；选择商业音频时仍需绑定音频能力，或改为静音。'}</span>}</div>
           <label className="grid gap-2 text-[10px] text-text-muted">玩家身份 / 主角<input value={playerRole} maxLength={300} onChange={event => { setPlayerRole(event.target.value); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary" placeholder="例如：扮演港口守灯人；或与某角色同行" /></label>
           <label className="grid gap-2 text-[10px] text-text-muted">游戏规模<select aria-label="游戏规模" value={scale} onChange={event => { const nextScale = event.target.value as ProductProductionScaleV1['scope']; setScale(nextScale); if (productType === 'text-adventure') setTextAdventureWizard(current => ({ ...current, targetPlayMinutes: nextScale === 'chapter' ? 60 : nextScale === 'short-arc' ? 45 : 20 })); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary"><option value="scene">单场景 · 约 20 分钟</option><option value="short-arc">短篇支线</option><option value="chapter">完整章节</option>{productType !== 'text-adventure' && <><option value="multi-chapter">多章节</option><option value="campaign">长线战役</option></>}</select></label>
           <label className="grid gap-2 text-[10px] text-text-muted md:col-span-2">你想玩的第一幕与核心目标<textarea value={openingSituation} maxLength={2000} rows={4} onChange={event => { setOpeningSituation(event.target.value); setDraft(null) }} className="rounded border border-border bg-bg-base p-3 text-xs text-text-primary" placeholder="例如：主角在港口封锁前收到失踪导师的信号，必须决定先救人还是公开真相。" /><span>这是后续内容、美术和音频拆分共同遵守的用户目标，不会被 Agent 自行替换。</span></label>
@@ -2003,7 +2029,7 @@ export default function ProductProductionStudio(props: {
             <div className="flex flex-wrap gap-3 text-[10px] text-text-muted md:col-span-3"><span>冻结媒资意图：</span>{([['portraits', '居民肖像'], ['expressions', '表情差分'], ['locationCards', '地点卡'], ['ambientAudio', '环境音']] as const).map(([key, label]) => <label key={key} className="flex items-center gap-1"><input type="checkbox" checked={aiTownSettings[key]} onChange={event => { setAiTownSettings(current => ({ ...current, [key]: event.target.checked })); setDraft(null) }} />{label}</label>)}<span className="text-accent">语义地图固定启用</span></div>
             <p className="text-[9px] leading-5 text-text-muted md:col-span-3">重大死亡/永久离开/婚育/设施或世界规则变更固定需要作者确认；私密心智固定不可供玩家读取，这两项不能在界面放宽。</p>
           </fieldset>}
-          <label className="grid gap-2 text-[10px] text-text-muted">视觉目标<select disabled={!['avg', 'ttrpg', 'ai-town', 'text-adventure'].includes(productType)} value={visualLevel} onChange={event => { setVisualLevel(event.target.value as 'none' | 'key-scenes' | 'illustrated'); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary disabled:opacity-50"><option value="none">纯文字</option><option value="key-scenes">关键场景 + 角色素材</option>{productType === 'text-adventure' && <option value="illustrated">丰富插图</option>}</select><span>{productType === 'avg' || productType === 'ttrpg' || productType === 'ai-town' || productType === 'text-adventure' ? qualityProfile === 'prototype' ? '内容会自主拆分美术需求；原型档使用明确标记的安全占位素材。' : '内容拆分需求后，直接复用全局图片能力并行制作并接入玩家界面。' : '当前产品以专用文字舞台为主。'}</span></label>
+          <label className="grid gap-2 text-[10px] text-text-muted">视觉目标<select aria-label="视觉目标" disabled={!['avg', 'ttrpg', 'ai-town', 'text-adventure'].includes(productType) && !(productType === 'character-interaction' && chatVisualAvailability.count > 0)} value={visualLevel} onChange={event => { setVisualLevel(event.target.value as 'none' | 'key-scenes' | 'illustrated'); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary disabled:opacity-50"><option value="none">纯文字</option><option value="key-scenes">{productType === 'character-interaction' ? `按公开描述制作 ${chatVisualAvailability.count} 张图片` : '关键场景 + 角色素材'}</option>{productType === 'text-adventure' && <option value="illustrated">丰富插图</option>}</select><span>{productType === 'character-interaction' ? (chatVisualAvailability.issue || '仅使用你填写的公开画面描述。原型档生成标记的占位图；其他档复用图片能力。生成后须查看原图并确认用途。') : productType === 'avg' || productType === 'ttrpg' || productType === 'ai-town' || productType === 'text-adventure' ? qualityProfile === 'prototype' ? '内容会自主拆分美术需求；原型档使用明确标记的安全占位素材。' : '内容拆分需求后，直接复用全局图片能力并行制作并接入玩家界面。' : '当前产品以专用文字舞台为主。'}</span></label>
           <label className="grid gap-2 text-[10px] text-text-muted">音频目标<select disabled={productType !== 'avg' && productType !== 'ai-town'} value={audioLevel} onChange={event => { setAudioLevel(event.target.value as 'none' | 'music-sfx'); setDraft(null) }} className="rounded border border-border bg-bg-base p-2 text-xs text-text-primary disabled:opacity-50"><option value="none">静音</option><option value="music-sfx">{productType === 'ai-town' ? '小镇环境音' : '主题音 + 关键音效'}</option></select><span>{audioLevel === 'music-sfx' ? qualityProfile === 'commercial-candidate' ? '音乐与音效需要独立音频能力，并和内容、美术并行，完成后自动接入 Cue。' : '音频与内容、美术并行；未绑定外部音频时使用明确标记的程序化 WAV。' : '不制作音频，产品仍可完整游玩。'}</span></label>
           {productType === 'ttrpg' && ttrpgWizard && <><TtrpgProductionWizard scope={props.scope} value={ttrpgWizard} sourceOptions={sourceOptions} sourceSelection={sourceSelection} onChange={next => { setTtrpgWizard(next); setConfirmTtrpgDefaultMappings(next.confirmAll); setDraft(null) }} /><label className="flex items-start gap-2 rounded border border-border bg-bg-base p-3 text-[10px] leading-5 text-text-muted md:col-span-2"><input type="checkbox" checked={confirmTtrpgDefaultMappings} onChange={event => { setConfirmTtrpgDefaultMappings(event.target.checked); setTtrpgWizard(current => current ? ({ ...current, confirmAll: event.target.checked }) : current); setDraft(null) }} className="mt-1" /><span><strong className="block text-xs text-text-primary">确认第一方规则默认映射</strong>同时确认九步向导末页列出的世界边界、规则许可、AI 身份披露和媒资权利；未确认时 Brief 保持阻塞。</span></label></>}
           {productType === 'text-adventure' && <TextAdventureProductionWizard value={textAdventureWizard} onChange={next => { setTextAdventureWizard(next); setDraft(null) }} />}
@@ -2092,6 +2118,9 @@ export default function ProductProductionStudio(props: {
           {isTextOpenWorldCreator && details.build && ['preview-ready', 'release-ready', 'released'].includes(details.build.status) && <p className="mt-3 rounded border border-border bg-bg-base p-3 text-[10px] leading-5 text-text-muted" data-testid="text-open-world-creator-release-stage-notice">{details.build.status === 'released' ? '当前 Release 保持不可变。可在下方修改受治理内容并创建子 Build；重新完成媒资、质量与作者确认后发布新版本。' : 'Creator Build 按“产物检查 → 媒资 → 灰盒与质量 → 作者最终确认 → 不可变 Release”顺序收口。'}</p>}
           {importedProofRecoveryRequired && <div className="mt-3 rounded border border-warning/40 bg-warning/5 p-3 text-[10px] leading-5 text-text-muted" data-testid="product-production-import-proof-recovery"><strong className="block text-text-main">导入内容等待本地证明复验</strong><span>备份中的内容与媒资已经恢复；本地 ID 已重绑，复验不会调用模型或媒资供应商。</span></div>}
           {details.production.status === 'brief-ready' && authorizationReadiness && !authorizationReadiness.ready && <div className="mt-3 rounded border border-error/30 bg-error/5 p-3 text-[10px] text-error" data-testid="product-production-authorization-blocker"><strong className="block">能力未绑定，尚未创建 Build</strong><span className="mt-1 block">{authorizationReadiness.blockerMessages.join('；')}</span></div>}
+          {isChatSituationDecisionBlockerV1(details) && <SituationSelection artifacts={reviewArtifacts} planJson={details.build!.planJson} disabled={busy || productionRunning} onSelect={selectChatSituation}/>}
+          {isChatMediaDecisionBlockerV1(details) && <MediaSelection scope={props.scope} build={details.build!} disabled={busy || productionRunning} onConfirm={selectChatMedia}/>}
+
           {sourceDecisionBlocker && <div className="mt-3 rounded border border-accent/40 bg-accent/5 p-4 text-[10px] text-text-primary" data-testid="text-adventure-source-decision-blocker"><strong className="block text-xs">来源编辑已完成审查，等待作者决策</strong>{sourceDecision?.decision === 'ready-with-private-additions' ? <><p className="mt-2 leading-5 text-text-muted">冻结世界资料可以支撑主线，但需要以下内容仅作为本游戏私域事实补充。接受后不会回写或改变 WorldRelease。</p><ul className="mt-2 grid gap-2">{sourceDecision.privateAdditions.map(item => <li key={item.key} className="rounded bg-bg-base p-2"><strong>{item.title}</strong><span className="ml-2 text-text-muted">{item.rationale}</span></li>)}</ul></> : <><p className="mt-2 leading-5 text-error">来源中存在阻断缺口或事实冲突，系统禁止用 AI 私自补写来绕过。</p><ul className="mt-2 grid gap-1 text-text-muted">{sourceDecision?.gaps.map(gap => <li key={gap}>· {gap}</li>)}</ul></>}<p className="mt-3 text-text-muted">若不接受，请取消本 Build，返回来源选择或缩小产品范围后重新授权；系统不会原地改写已授权 Brief。</p></div>}
           {mediaAnchorBlocker && <div className="mt-3 rounded border border-accent/40 bg-accent/5 p-4 text-[10px] text-text-primary" data-testid="text-adventure-media-anchor-blocker">
             <strong className="block text-xs">美术总监已完成视觉圣经，等待作者确认角色锚点</strong>

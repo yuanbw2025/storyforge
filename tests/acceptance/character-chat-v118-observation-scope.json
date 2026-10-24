@@ -1,0 +1,370 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "label": "V118 actual observation scope in frozen construction/review prompts",
+  "recordedAt": "2026-10-16T00:44:54.500243+00:00",
+  "baseCommit": "8fc13e09",
+  "boundary": {
+    "product": "character-interaction",
+    "lifecycle": "product development",
+    "phase": "S3 runtime observation candidate/review",
+    "owner": "Chat Work / ProductRuntimeSession",
+    "readSources": [
+      "chatSituationRuntime",
+      "chatSituationCandidate"
+    ],
+    "writePath": "existing runtime CreativeArtifact candidate, adopt and productRuntimeEvents",
+    "world": "frozen read-only reference",
+    "media": "unchanged product-owned assets",
+    "newTables": 0,
+    "newFields": 0,
+    "newModelSteps": 0,
+    "newPermissions": 0
+  },
+  "promptBindings": {
+    "new": [
+      "chat-situation-construction-v10",
+      "chat-situation-review-v9"
+    ],
+    "history": "saved bindings retain exact previous instructions; changing global registry after freeze cannot alter the run"
+  },
+  "legacyBaseline": {
+    "snapshot": {
+      "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+      "head": "d0dce8b4103c835f9b138a477dbddf4f9fe94375",
+      "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v118-baseline-lu2qnj0k/storyforge",
+      "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v118-baseline-lu2qnj0k/manifest.json",
+      "manifestSha256": "e5da34d5b1ed7817a24960eb998df9c0158ba94b18e509c4bc41987c793e3627",
+      "files": 3465
+    },
+    "hashLog": "/tmp/storyforge-chat-v118-baseline-hashes.log",
+    "fullSystemPromptSha256": {
+      "construction-v8": "057a52f39ea9067d6607e5526e5bd0760118d109b53f86377090e5d353a9c2f2",
+      "review-v7": "2be4898f1ab2469e7ca5d1f3d238bc1dc399e32a1db18b532b2e3cc223bf3065",
+      "construction-v9": "d48c8a09ca633b20aca8100306893128ce03efb66c7217af377fe22c3eb7218d",
+      "review-v8": "8933d2385dfab00bdd8aa2049b95b8d8508e415b09eea7d8e9f09cc3c65daf17"
+    }
+  },
+  "verification": {
+    "targetedFiles": 5,
+    "targetedTests": 54,
+    "relatedFiles": 95,
+    "relatedTests": 1213,
+    "relatedFirstPass": {
+      "passed": 1212,
+      "failed": 1,
+      "failure": "source-unit-production 5000 ms timeout; original log preserved"
+    },
+    "rerun": {
+      "files": 1,
+      "tests": 1,
+      "passed": true,
+      "durationMs": 2505,
+      "changesOrTimeoutRelaxation": false
+    },
+    "browserCases": 8,
+    "browserPassed": 8,
+    "newTests": 6,
+    "gates": {
+      "passed": 10,
+      "receipt": "/tmp/storyforge-chat-v118-final-gates-receipt.json",
+      "bundleSize": "passed"
+    },
+    "documentationInvocation": "An attempted direct script path did not exist; authoritative npm run check:docs passed before and after documentation edits. No checks skipped."
+  },
+  "realModel": {
+    "status": "three preregistered bounded review diagnostics completed",
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "calls": 3,
+    "usage": {
+      "totalTokens": 31691,
+      "inputTokens": 30583,
+      "outputTokens": 1108,
+      "cachedInputTokens": 5760,
+      "reasoningOutputTokens": 217
+    },
+    "costUsd": null,
+    "cases": [
+      {
+        "id": "retained-access-only",
+        "replayCalls": 1,
+        "realReviewCalls": 1,
+        "review": {
+          "checks": [
+            {
+              "check": "continuity",
+              "passed": true,
+              "reason": "保持原标题、驿站及“暴雨中”，仅结算事件-3已实施的掀盖尝试；玩家随后要求换办法不撤销该次动作，也未被用于继续翻查。"
+            },
+            {
+              "check": "permissions",
+              "passed": true,
+              "reason": "新增内容仅为箱盖打开及盖内侧、箱口木沿的普通观察结果，属于获准的observation；未新增人物、物品或后续动作。"
+            },
+            {
+              "check": "player-agency",
+              "passed": true,
+              "reason": "未替沈禾行动或同意调查，并明确“没有继续翻动物品”，为玩家要求停止翻查、换个办法保留空间。"
+            },
+            {
+              "check": "visibility",
+              "passed": true,
+              "reason": "未确认铜印位置、经手者或用途，未申报发现，也未泄露幕后事实；箱盖打开本身不足以满足铜印核对的发现条件。"
+            },
+            {
+              "check": "meaningful-direction",
+              "passed": true,
+              "reason": "原动作是尝试掀盖、检查能否打开查看，候选明确给出“箱盖顺利掀起”的实际结果；未把尚未实施的物件辨认强加为已完成，也未编造阻碍或追加调查。"
+            }
+          ]
+        },
+        "stateUnchanged": true,
+        "terminalRunStatus": "cancelled",
+        "error": null
+      },
+      {
+        "id": "inspected-contents-no-result",
+        "replayCalls": 1,
+        "realReviewCalls": 1,
+        "review": {
+          "checks": [
+            {
+              "check": "continuity",
+              "passed": false,
+              "reason": "fact-10及事件1已确认叶岑查看并逐一辨认箱内可见物件；候选却称“无法得知任何所见物件，继续等待观察结果”，把已完成的辨认退回未取得结果。玩家随后要求别再翻查，不撤销先前观察。"
+            },
+            {
+              "check": "permissions",
+              "passed": true,
+              "reason": "候选仅登记一项observation，未新增人物、物品、地点或动作，种类与数量未超出冻结权限；其观察结算内容不成立另见连续性与推进检查。"
+            },
+            {
+              "check": "player-agency",
+              "passed": true,
+              "reason": "候选未替沈禾决定、行动或同意调查，也未追加玩家反对的翻查动作。"
+            },
+            {
+              "check": "visibility",
+              "passed": true,
+              "reason": "候选未披露铜印位置、掌柜经手或拓印用途，也未向其他角色传播私下信息；但不泄密不能使错误的未知结算成立。"
+            },
+            {
+              "check": "meaningful-direction",
+              "passed": false,
+              "reason": "本次范围明确包含已完成的箱内查看与逐件辨认，不能只确认箱盖打开，再以“输入没有写出”为由回避所得。材料未提供真实观察限制，“继续等待观察结果”属于无依据重复未知，未完成本次应有的观察结算。"
+            }
+          ]
+        },
+        "stateUnchanged": true,
+        "terminalRunStatus": "failed",
+        "error": "Error: [narrative-review] 情境语义审查未通过，原有局面保留"
+      },
+      {
+        "id": "invented-person",
+        "replayCalls": 1,
+        "realReviewCalls": 1,
+        "review": {
+          "checks": [
+            {
+              "check": "continuity",
+              "passed": false,
+              "reason": "本次仅应结算事件-3的掀盖检查；候选却追加“此前未在场的伙计凑到旁边”及主动作证的新事件，超出已实施观察范围。"
+            },
+            {
+              "check": "permissions",
+              "passed": false,
+              "reason": "冻结权限仅允许新增observation、object；新造伙计及其行为属于人物引入，不能以kind=observation绕过temporary-character权限，观察结算阶段也不得新增人物。"
+            },
+            {
+              "check": "player-agency",
+              "passed": true,
+              "reason": "候选未替沈禾决定、行动或同意调查；结算此前掀盖结果本身不违反后来“先别再翻查”的要求，但不能继续追加翻查。"
+            },
+            {
+              "check": "visibility",
+              "passed": true,
+              "reason": "候选未披露铜印位置、经手者或用途，也未宣告发现秘密；“可以替守卫作证”尚未实际给出证言或确认秘密。"
+            },
+            {
+              "check": "meaningful-direction",
+              "passed": false,
+              "reason": "应交代箱盖开合及打开后直接可见的物品；候选只借开盖引入未经授权的伙计作证，没有落实本次箱内可见内容的观察结算，也未提供真实观察限制。"
+            }
+          ]
+        },
+        "stateUnchanged": true,
+        "terminalRunStatus": "failed",
+        "error": "Error: [narrative-review] 情境语义审查未通过，原有局面保留"
+      }
+    ],
+    "setup": "Case 2 injects one explicitly completed content inspection via normal isolated Harness/adoption and a synthetic action review; all three situation proposals are replayed. Only situation reviews use the real model.",
+    "candidatesAdopted": 0,
+    "parentUnchanged": true,
+    "originalV117FailureRetained": true,
+    "restoration": {
+      "at": "2026-10-16T00:47:57.244Z",
+      "results": [
+        {
+          "id": "retained-access-only",
+          "interactionEqual": true,
+          "refreshEqual": true,
+          "resumableRuns": 0,
+          "historyPreserved": true
+        },
+        {
+          "id": "inspected-contents-no-result",
+          "interactionEqual": true,
+          "refreshEqual": true,
+          "resumableRuns": 0,
+          "historyPreserved": true
+        },
+        {
+          "id": "invented-person",
+          "interactionEqual": true,
+          "refreshEqual": true,
+          "resumableRuns": 0,
+          "historyPreserved": true
+        },
+        {
+          "id": "parent",
+          "interactionEqual": true,
+          "refreshEqual": true,
+          "resumableRuns": 0,
+          "historyPreserved": true
+        }
+      ],
+      "modelRequests": 0,
+      "worldPreserved": true
+    },
+    "terminalReadback": {
+      "checks": [
+        {
+          "id": "8b971864-3046-4821-b7c9-95aada4c8ecc",
+          "status": "completed",
+          "readbackEqual": true
+        },
+        {
+          "id": "e61950ee-c64f-4aeb-b5b8-cdca39d618cc",
+          "status": "completed",
+          "readbackEqual": true
+        },
+        {
+          "id": "73a21b51-0caa-42db-be94-c7f50cd842f3",
+          "status": "completed",
+          "readbackEqual": true
+        }
+      ],
+      "allTerminal": true
+    },
+    "countsInM1": false,
+    "holdoutsInspected": false,
+    "limits": [
+      "Controlled semantic diagnostic, not a full generated episode or success-rate estimate",
+      "Invented-person case also received a scope-demand reason; only its explicit unauthorized new-person rejection establishes that counterexample",
+      "No new story behavior, Agnes or human assessment evidence"
+    ]
+  },
+  "limits": [
+    "Injected engineering review is not evidence of semantic judgment quality",
+    "Access-only versus actual content inspection is assessed semantically against committed action, not a keyword rule",
+    "V115 E2E and V118 CI/E2E terminated with ENOSPC; logs and terminal observations preserved, no full pass.",
+    "Agnes and independent human/commercial gates remain unverified"
+  ],
+  "logs": {
+    "storyforge-chat-v118-initial-regression.log": {
+      "path": "/tmp/storyforge-chat-v118-initial-regression.log",
+      "sha256": "129f0d50e2312a2fd9e49de63bb17d88d13b57047964c028bb357da68438abfa"
+    },
+    "storyforge-chat-v118-final-regression.log": {
+      "path": "/tmp/storyforge-chat-v118-final-regression.log",
+      "sha256": "04cbc64c7a27fa1e85cfd9715da1d65594baf00f057b9bd8997c26b81e0a0f8f"
+    },
+    "storyforge-chat-v118-production-rerun.log": {
+      "path": "/tmp/storyforge-chat-v118-production-rerun.log",
+      "sha256": "08904c9fcd303d9b0499892526868f18fcf0147471e9713845b75c818d23d9a6"
+    },
+    "storyforge-chat-v118-targeted-e2e.log": {
+      "path": "/tmp/storyforge-chat-v118-targeted-e2e.log",
+      "sha256": "cad5cc0bcf664634a8781d7b63f6eabe74cdc5da9b10d5ae998ec3fac76ab2c9"
+    },
+    "storyforge-chat-v118-final-gates.log": {
+      "path": "/tmp/storyforge-chat-v118-final-gates.log",
+      "sha256": "4ce1d6921c756cd00c50fad6a834069c4a2dbe0b9abdad0ebe32cf3a3b733b4f"
+    },
+    "storyforge-chat-v118-final-bundle-size.log": {
+      "path": "/tmp/storyforge-chat-v118-final-bundle-size.log",
+      "sha256": "e7e82e617e0642eff824e78a17aaeaa430c93aeba215fcaa07921c379c939cad"
+    },
+    "storyforge-chat-v118-final-docs.log": {
+      "path": "/tmp/storyforge-chat-v118-final-docs.log",
+      "sha256": "1f340d7fcdb071c787267e28b084fcf8075eeed29f8a4fcaf54bacff9e5f7bfb"
+    },
+    "storyforge-chat-v118-final-docs-rerun.log": {
+      "path": "/tmp/storyforge-chat-v118-final-docs-rerun.log",
+      "sha256": "f67ea9a939e1466b166c82f705fd7f928ad290b7380f6d8cf9c0e35a797a6c77"
+    }
+  },
+  "implementationCommit": "73b9f23c2c6f034adebcf139e0e43e5c2b91cb38",
+  "manifestSha256": "201785684ce0da1cd7ecf4d5dc71cb2b9fc4891f998f44df64b6566c840a79ae",
+  "realEvidence": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v118-observation-scope-review/preregistration.json",
+      "sha256": "cb57439bb15d7029bb6da8335c5055ae9af25396ee824bca4d95870689d8c13e"
+    },
+    "runner.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v118-observation-scope-review/runner.mjs",
+      "sha256": "d1a9747011f9b969697481816e0e29d20f78fdfffd88c2748b57954ccb9835f3"
+    },
+    "diagnostic.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v118-observation-scope-review/diagnostic.json",
+      "sha256": "81e8b3da1731704ef28c409989a0c4371a849f93601df7cbe68b531f1155eb2b"
+    },
+    "diagnostic-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v118-observation-scope-review/diagnostic-backup.json",
+      "sha256": "ce91b305cb7eae6e1c790a69ebe40a14055d7060c013e3832820bd9d98aa3094"
+    },
+    "restoration.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v118-observation-scope-review/restoration.mjs",
+      "sha256": "0c746ffd7fedb3d4eda0f4f3aff068e0c24d91c3ae396b9dafda82380ff092c1"
+    },
+    "restoration-verified.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v118-observation-scope-review/restoration-verified.json",
+      "sha256": "56fd05f889e49dc3c6e29a5013f04ba4c2118a7f45ab3237eca469ec07bd8bf8"
+    },
+    "terminal-request-proof.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v118-observation-scope-review/terminal-request-proof.json",
+      "sha256": "db686bf008697c4de7bd7ab1e6fea0750711e97dffe7942260f43a74b63121de"
+    }
+  },
+  "fullValidation": {
+    "ci": {
+      "status": "terminal exit1; ENOSPC while truncating queue lock, before verification command",
+      "snapshot": {
+        "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+        "head": "73b9f23c2c6f034adebcf139e0e43e5c2b91cb38",
+        "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v118-ci-xikvapv_/storyforge",
+        "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v118-ci-xikvapv_/manifest.json",
+        "manifestSha256": "201785684ce0da1cd7ecf4d5dc71cb2b9fc4891f998f44df64b6566c840a79ae",
+        "files": 3469
+      },
+      "receipt": "/tmp/storyforge-chat-v118-full-ci-receipt.json",
+      "terminalObservation": "/tmp/storyforge-chat-v120-enospc-terminals.json"
+    },
+    "e2e": {
+      "status": "terminal exit1; ENOSPC while truncating queue lock, before verification command",
+      "snapshot": {
+        "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+        "head": "73b9f23c2c6f034adebcf139e0e43e5c2b91cb38",
+        "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v118-e2e-7tcm0wj2/storyforge",
+        "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v118-e2e-7tcm0wj2/manifest.json",
+        "manifestSha256": "201785684ce0da1cd7ecf4d5dc71cb2b9fc4891f998f44df64b6566c840a79ae",
+        "files": 3469
+      },
+      "receipt": "/tmp/storyforge-chat-v118-full-e2e-receipt.json",
+      "terminalObservation": "/tmp/storyforge-chat-v120-enospc-terminals.json"
+    },
+    "priorV115E2E": "terminal exit1; ENOSPC infrastructure failure after last logged case323",
+    "priorV115CI": "verified unstarted then superseded; /tmp/storyforge-chat-v115-ci-superseded.json"
+  }
+}

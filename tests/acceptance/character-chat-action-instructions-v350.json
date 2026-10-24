@@ -1,0 +1,302 @@
+{
+  "schema": "storyforge.chat-consolidated-action-instructions",
+  "version": 1,
+  "at": "2026-10-23T02:35:27.605904+00:00",
+  "status": "targeted-engineering-passed-with-unrelated-freshness-failure-real-model-pending",
+  "source": {
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "baseHead": "b38489c0a166163684a2795a1fbfd583c799eb65",
+    "sourceKind": "manifest-verified-worktree",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/manifest-final.json",
+    "manifestSha256": "8a53c97f17786ee26944543099d2ed422787ae7253be5f1b0a57834b0fff5814",
+    "files": 3452
+  },
+  "versions": {
+    "producer": "chat-narrative-action-v68",
+    "reviewerUnchanged": "chat-narrative-action-review-v41",
+    "readerUnchanged": "chat-narrative-runtime-view-v18",
+    "retrievalUnchanged": "chat-relevance-v14",
+    "schemaUnchanged": "chat_narrative_outcome_v4"
+  },
+  "behavior": {
+    "consolidatedExpressionInstructions": true,
+    "specialAuthorizationRulesPreserved": true,
+    "savedV67FullSystemRequestBytesPreserved": true,
+    "fullUserMessagesAndStoryEvidencePreserved": true,
+    "independentReviewAndAdoptionUnchanged": true,
+    "tablesFieldsAndWorldOwnershipUnchanged": true,
+    "modelCallBudget": 3,
+    "inputBudget": 56000,
+    "outputBudget": 14000,
+    "maxAttemptsPerStep": 1
+  },
+  "retainedInputBudgetReconstructions": [
+    {
+      "case": "V343",
+      "before": 56159,
+      "after": 50385,
+      "saved": 5774,
+      "margin": 5615
+    },
+    {
+      "case": "V349",
+      "before": 56868,
+      "after": 51465,
+      "saved": 5403,
+      "margin": 4535
+    }
+  ],
+  "regression": {
+    "files": 180,
+    "distinctPassed": 2208,
+    "counting": "Replace each entire corrected file report. No failure removed from initial evidence. Only current-version phrase assertions and unknown future-version assertions changed; old request and reviewer checks retained.",
+    "initial": {
+      "numTotalTests": 2208,
+      "numPassedTests": 2166,
+      "numFailedTests": 42
+    },
+    "corrected": {
+      "numTotalTests": 316,
+      "numPassedTests": 316,
+      "numFailedTests": 0
+    },
+    "correctedWorkers": 1,
+    "initialFailuresRetained": true
+  },
+  "browser": {
+    "files": 10,
+    "passed": 59,
+    "skipped": 0,
+    "flaky": 0,
+    "retries": 0,
+    "sourceUnchanged": true,
+    "receipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/browser-receipt.json"
+  },
+  "checks": [
+    {
+      "name": "check:architecture",
+      "exitCode": 0,
+      "seconds": 7.32,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/check-architecture.log",
+      "sha256": "23486d579737fc37398cd3cb43e9da946643d845c6948456591ea74125034e43"
+    },
+    {
+      "name": "check:required-tables",
+      "exitCode": 0,
+      "seconds": 0.15,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/check-required-tables.log",
+      "sha256": "dfa44ee6399f2cf6fc926481d382fb1e8c3dde5998079094d746eb18ba5b5c23"
+    },
+    {
+      "name": "check:ai-manual",
+      "exitCode": 0,
+      "seconds": 0.53,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/check-ai-manual.log",
+      "sha256": "da0e1a7cfe4a41cdb0c20b5ada439f9146ae0d02d441f78fd556a04a1e948e0c"
+    },
+    {
+      "name": "check:ai-entry-registry",
+      "exitCode": 0,
+      "seconds": 0.91,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/check-ai-entry-registry.log",
+      "sha256": "50ec410073f276d3bce9d7c96cd885a6a05afcc5aa7aed9032afebcdff52e1de"
+    },
+    {
+      "name": "check:agent-context",
+      "exitCode": 0,
+      "seconds": 0.16,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/check-agent-context.log",
+      "sha256": "6f3392aaae0540e5489ce6aaf118f48e0aaa444b8794bf0c62d61ec76d986a9d"
+    },
+    {
+      "name": "check:agent-freshness",
+      "exitCode": 1,
+      "seconds": 0.73,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/check-agent-freshness.log",
+      "sha256": "83c759de35a25054109e93cac0c69cce69c8aab6d83062883ad782c5377b4545"
+    },
+    {
+      "name": "check:canon-coverage",
+      "exitCode": 0,
+      "seconds": 0.16,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/check-canon-coverage.log",
+      "sha256": "d3a266ff80e821238cf648a39ff267f03517aece434c4d5ddc16ce1c5ced0be1"
+    },
+    {
+      "name": "check:docs",
+      "exitCode": 0,
+      "seconds": 0.61,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/check-docs.log",
+      "sha256": "3e0adcf02cd404a65cfdf4ba9ce05393d06c9b11dea562c9d7005048a51f3827"
+    },
+    {
+      "name": "check:roadmap",
+      "exitCode": 0,
+      "seconds": 0.15,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/check-roadmap.log",
+      "sha256": "07abeb8220e9621ba2bf0755fe0a5166ecdda367f15a14feae15f55a2fb120cf"
+    },
+    {
+      "name": "check:project-metrics",
+      "exitCode": 0,
+      "seconds": 0.48,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/check-project-metrics.log",
+      "sha256": "b0f6ccd8a091b3d35b98117c88d4c21bb25793ffbe6ec6ac71ba142f9ded42a4"
+    }
+  ],
+  "remainingChecks": [
+    {
+      "name": "lint-final",
+      "exitCode": 0,
+      "seconds": 2.06,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/lint-final.log",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "types-final",
+      "exitCode": 0,
+      "seconds": 36.68,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/types-final.log",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "build",
+      "exitCode": 0,
+      "seconds": 72.29,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/build.log",
+      "sourceUnchanged": true
+    },
+    {
+      "name": "bundle-size",
+      "exitCode": 0,
+      "seconds": 0.48,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/bundle-size.log",
+      "sourceUnchanged": true
+    }
+  ],
+  "unrelatedBaselineFailure": {
+    "check": "check:agent-freshness",
+    "count": 23,
+    "failures": [
+      "- text-open-world.production.gameplay-ruleset.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.player-build.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.story-architecture.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.region-skeleton.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.mainline.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.significant-threads.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.region-narrative-packs.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.quest-skeletons.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.progression-catalogs.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.encounter-catalog.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.item-reward-catalog.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.crafting-economy-catalog.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.npc-runtime-catalog.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.map-interaction-catalog.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.quest-finalize.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.scene-scripts.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.presentation-profile.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.system-finalize.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.balance-review.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.semantic-review.v1 verification is stale: 46 days old (max 45)",
+      "- text-adventure.creative-direction.v1 verification is stale: 46 days old (max 45)",
+      "- text-adventure.visual-direction.v1 verification is stale: 46 days old (max 45)",
+      "- text-adventure.visual-quality-review.v1 verification is stale: 46 days old (max 45)"
+    ],
+    "baselineReceipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v346-current-full-delivery/receipt.json",
+    "verificationDatesChanged": false,
+    "fullDeliveryValidated": false
+  },
+  "externalModelCalls": 0,
+  "formalM1QualityPassesAdded": 0,
+  "humanRatingsAdded": 0,
+  "fullObjectiveComplete": false,
+  "semanticCrosswalk": {
+    "scope": "Manual mapping of old expression instructions to consolidated semantic groups; this is a design cross-check, not model-quality or independent review evidence.",
+    "preservedVerbatim": [
+      "sceneTransition authorization",
+      "promiseRequest authorization",
+      "pauseGoal acceptance",
+      "resumeGoal authorization",
+      "threadFollowupGoal and player pause on followup",
+      "followupGoal",
+      "conversation-only evidence and current turn completion exception",
+      "bounded observation request",
+      "all three handoff variants"
+    ],
+    "consolidated": [
+      [
+        "action kind / wire / player dependency",
+        "行动与后果 + expressionMode mapping + 自主行动与玩家决定"
+      ],
+      [
+        "ordinary completed self-action / bounded attempt",
+        "自主行动与玩家决定 + unchanged bounded observation"
+      ],
+      [
+        "settled evidence / replanning / no repeated nonprogress",
+        "选择与推进 + 合理停止"
+      ],
+      [
+        "player agency / refusal scope / no offline progression",
+        "自主行动与玩家决定 + unchanged playerPause/resumeGoal"
+      ],
+      [
+        "private subjective expression / fact disclosure / object display",
+        "表达与知情"
+      ],
+      [
+        "current and other goals / shared threads / closure",
+        "目标来源 + 目标和事项变更"
+      ],
+      [
+        "commitment creation / conditional future obligations / fulfillment / withdrawal / replacement",
+        "承诺 + unchanged promiseRequest/pauseGoal"
+      ],
+      [
+        "relationships / truthful evidence / capped changes / no refusal penalty",
+        "关系"
+      ],
+      [
+        "memory correction / intention replacement / belief correction",
+        "记忆、打算与猜测"
+      ],
+      [
+        "local background request / scoped refusal / actual observation / discovery",
+        "情境请求 + unchanged bounded observation"
+      ],
+      [
+        "post-closure player followup / old-thread followup",
+        "目标来源 + conditional followup instructions"
+      ],
+      [
+        "pending edits / original audiences / no future branch knowledge",
+        "待处理文字"
+      ],
+      [
+        "full fields / explicit quotes / original budget / frozen audience",
+        "输出与原文证据 + unchanged schema and estimator"
+      ],
+      [
+        "local turn completion / no skipped direct consequence",
+        "本轮完成 + unchanged domain eligibility and independent review"
+      ]
+    ],
+    "unchangedAuthority": [
+      "registered actor reader v18 / relevance v14",
+      "choice and full user messages",
+      "strict action output schema v4",
+      "independent reviewer v41",
+      "three calls / 56000 input / 14000 output / one attempt",
+      "candidate adoption / transaction / receipt / recovery",
+      "WorldRelease and product ownership"
+    ]
+  },
+  "evidence": {
+    "focused-initial.json": "eb6f46067ccfa7c7de835fe0a739d16133f1d89ddf4c36b16ece371813c21212",
+    "all-chat-initial.json": "c3e140e231f857b5d4587e34770bdffa967ad2d5a9082f524bca25381864d294",
+    "corrected.json": "517a720eddca414a8ab96957cfefc4969e31f5f974cff9f81f3c0ed5deae217f",
+    "browser.json": "98ca3725687ccd0694657d1cb83a9b9c349f9e29d99bacf4ef65ff5beaeea384",
+    "semantic-crosswalk.json": "aabf22a00365774c978628cbadb0cde055cad6e609c7a7db3c78707d8e735dff",
+    "manifest-final.json": "8a53c97f17786ee26944543099d2ed422787ae7253be5f1b0a57834b0fff5814"
+  }
+}

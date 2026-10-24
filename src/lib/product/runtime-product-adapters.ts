@@ -11,6 +11,10 @@ import { parseAdventureState, adventureNarrativeProjection, applyAdventureEvent,
 import { adventureNarrativeActionCommandIdV1 } from '../adventure/command-identity'
 import { parseAvgPresentationState, applyAvgPresentationEvent, createInitialAvgPresentationState } from '../avg/runtime'
 import { parseInteractionState, applyInteractionEvent, createInitialInteractionState, rebaseInteractionStateForBranch } from '../character-interaction/runtime'
+import {prepareChatMessageEditBranchV1} from '../character-interaction/narrative-edit-contract'
+import {assertChatReleaseUpgradeReceiptV1} from '../character-interaction/release-upgrade-receipt'
+import type {ChatHistoricalOptionBranchIntentV1, ChatMessageEditBranchIntentV1} from '../types/chat-narrative'
+import {prepareChatHistoricalOptionBranchV1} from '../character-interaction/narrative-options-history'
 import { evaluateNarrativeChoices } from './narrative-content'
 import { parseOpenWorldEvolutionState, applyOpenWorldEvolutionProductRuntimeEvent, openWorldEvolutionProjection, createInitialOpenWorldEvolutionState, rebaseOpenWorldEvolutionStateForBranch } from '../open-world/evolution-runtime'
 import { parseOpenWorldState, applyOpenWorldEvent, openWorldMainlineProjection, createInitialOpenWorldState, rebaseOpenWorldStateForBranch } from '../open-world/runtime'
@@ -37,6 +41,15 @@ import {
   stableProductRuntimeJsonV1,
   type ProductRuntimeJsonObjectV1,
 } from './runtime-values'
+
+export type ProductRuntimeBranchIntentV1 = ChatMessageEditBranchIntentV1 | ChatHistoricalOptionBranchIntentV1
+
+export async function prepareProductRuntimeBranchIntentV1(parent: ProductRuntimeSession, before: ProductRuntimeState, after: ProductRuntimeState, intent: ProductRuntimeBranchIntentV1): Promise<void> {
+  if (parent.kind !== 'character-interaction') throw new Error('分支改写请求与产品不匹配。')
+  if (intent.kind === 'character-chat-option-switch') await prepareChatHistoricalOptionBranchV1(parent, before, after, intent)
+  else if (intent.kind === 'character-chat-message-edit') prepareChatMessageEditBranchV1(before, after, intent)
+  else throw new Error('分支改写请求与产品不匹配。')
+}
 
 export function parseProductOwnedRuntimeStateV1(
   value: ProductRuntimeState,
@@ -162,6 +175,7 @@ export function applyProductOwnedRuntimeEventV1(
     return state
   }
   if (event.type.startsWith('interaction.')) {
+    if (event.type === 'interaction.release.upgraded') assertChatReleaseUpgradeReceiptV1(state, event, payload)
     state.interaction = applyInteractionEvent(state.interaction ?? null, event)
     state.lastSequence = event.sequence
     return state
@@ -254,11 +268,18 @@ export function assertFrozenProductRuntimeStateV1(input: {
       playerKey: runtimePackage.interaction!.playerKey,
       profiles: runtimePackage.interaction!.profiles,
       sceneTemplates: runtimePackage.interaction!.sceneTemplates,
+      chatSource: runtimePackage.interaction!.chatSource,
+      chatNarrative: runtimePackage.interaction!.chatNarrative,
     })
     const frozenMismatch = !interaction
       || interaction.playerKey !== expected.playerKey
       || stableProductRuntimeJsonV1(interaction.profiles) !== stableProductRuntimeJsonV1(expected.profiles)
       || stableProductRuntimeJsonV1(interaction.sceneTemplates) !== stableProductRuntimeJsonV1(expected.sceneTemplates)
+      || Boolean(interaction.chatNarrative) !== Boolean(expected.chatNarrative)
+      || (expected.chatNarrative != null && (
+        interaction.chatNarrative?.worldReleaseHash !== expected.chatNarrative.worldReleaseHash
+        || stableProductRuntimeJsonV1(interaction.chatNarrative?.persona) !== stableProductRuntimeJsonV1(expected.chatNarrative.persona)
+        || stableProductRuntimeJsonV1(interaction.chatNarrative?.permissions) !== stableProductRuntimeJsonV1(expected.chatNarrative.permissions)))
     const entryStateMismatch = input.origin !== 'branch'
       && stableProductRuntimeJsonV1(interaction) !== stableProductRuntimeJsonV1(expected)
     if (frozenMismatch || entryStateMismatch) {

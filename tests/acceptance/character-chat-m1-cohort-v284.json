@@ -1,0 +1,57 @@
+{
+  "version": 284,
+  "recordedAt": "2026-10-20T21:26:26.442898+00:00",
+  "product": "character-interaction",
+  "cohort": "m1-v284-current",
+  "sourceHead": "b7c18eca1c99df8f2c4213ada586d9c1c489d79b",
+  "status": "formal-first-runtime-episode-failed-before-review",
+  "requests": 26,
+  "productionRequests": 3,
+  "runtimeRequests": 23,
+  "nativeStatuses": {
+    "completed": 26
+  },
+  "usage": {
+    "totalTokens": 411933,
+    "inputTokens": 393629,
+    "outputTokens": 18304,
+    "cachedInputTokens": 75520
+  },
+  "openingChecks": {
+    "passed": 3,
+    "selectedIndex": 0,
+    "releasedLocally": true
+  },
+  "playerOpportunitiesSent": 7,
+  "playerOpportunitiesSettled": 6,
+  "completedRuns": 7,
+  "failedRuns": 1,
+  "observedFailure": "The seventh input preference is correctly cited in v53 choice evidenceMessageIds. The expression returns a pure acknowledgement with evidenceFactKeys=[], speech mode and turnCompletion. Local runtime generation fails before independent review; response is not adopted. Inspect the existing conversation-evidence eligibility versus local completion; do not fabricate fact citations or assume semantic quality passed.",
+  "result": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v284-m1-current/codex-clock-r1/clock-r1-weak-guidance.json",
+    "sha256": "b70547df810c98be1cc83061239ac6b27748f1459ffe64bf8a05d14cbbad9a22"
+  },
+  "backup": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v284-m1-current/codex-clock-r1/clock-r1-weak-guidance-backup.json",
+    "sha256": "89c3b078e29bed2777c64db9562cf4cba4d8fd77d7f19550f2940bc813dd2355"
+  },
+  "restoration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v284-m1-current/codex-clock-r1/clock-r1-weak-guidance-restoration-verified.json",
+    "sha256": "1180331d7fb5784fe3b44842dfa84c40b4a0be9970169aa6df6f181041fafc05"
+  },
+  "playerDecisions": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v284-m1-current/codex-clock-r1/player-decisions.json",
+    "sha256": "c3a4dbae933a02968cf2861ee29e38143630ec496d9eac6ae4ebc221a5e47bae"
+  },
+  "worldHash": "3778b503f1ffec790b715590ffd3e1d6d96661b2a359a40e9634a860cb5554d3",
+  "restorationModelCalls": 0,
+  "sourceUnchanged": true,
+  "automaticRetries": 0,
+  "m1Passed": false,
+  "currentCohortCounts": {
+    "failedEpisodes": 1,
+    "sameProductionUnitUnrun": 5,
+    "remainingUnrun": 114
+  },
+  "previousCohortsUnmodified": true
+}

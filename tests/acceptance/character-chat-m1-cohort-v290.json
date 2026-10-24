@@ -1,0 +1,103 @@
+{
+  "version": "V290",
+  "recordedAt": "2026-10-20T23:03:34.924958+00:00",
+  "product": "character-chat",
+  "cohort": "m1-v290-current",
+  "sourceHead": "99c7ca7e174a4d6eeeb5fbe3d821ffd9a6b7c4fc",
+  "sourceUnchanged": true,
+  "status": "formal-core-episode-failed-and-restored",
+  "m1Passed": false,
+  "humanScored": 0,
+  "requests": 36,
+  "nativeCompleted": 36,
+  "knownReportedTokens": 588689,
+  "usageIncomplete": false,
+  "completedRuns": 12,
+  "failedRuns": 1,
+  "playerOpportunitiesAttempted": 6,
+  "playerOpportunitiesCompleted": 5,
+  "openingCandidates": 3,
+  "openingCandidatesPassed": 1,
+  "openingSelection": "first passing in original order",
+  "observedProgress": [
+    "Actor independently inspected below the counter and discovered the box without inferring its contents.",
+    "Actor respected unknown ownership and did not open the box.",
+    "Actor pursued prior handling, established a reachable innkeeper, asked an actual question, and acquired the authorized handling fact."
+  ],
+  "failure": {
+    "requestId": "90f23975-0a1c-40c1-9846-99816e02b337",
+    "nativeStatus": "completed",
+    "stage": "situation candidate deterministic preview, before independent review or adoption",
+    "error": "[chat-inquiry] 答复不能释放无冻结发现授权、已知或缺前提的事实",
+    "cause": "Purpose discovery requires original public prerequisite world-fact.0004. The actor knows it from sequence 0, but the actual question cites newer handler/presence evidence. The inquiry contract restricts all evidence to pending question references, so the coordinator cannot include the missing required public prerequisite.",
+    "failedPurposeCandidateAdopted": false,
+    "reproductionModelCalls": 0,
+    "reproductionStateUnchanged": true
+  },
+  "restoration": {
+    "completedHistories": 12,
+    "failedRunsRetained": 1,
+    "resumableRuns": 0,
+    "worldPreserved": true,
+    "refreshEqual": true,
+    "modelCalls": 0,
+    "rawEvidenceAndReceiptsRetained": true
+  },
+  "matrix": {
+    "scheduled": 120,
+    "failed": 1,
+    "sameProductionUnitNotRun": 5,
+    "remainingNotRun": 114,
+    "priorCohortsPreserved": true
+  },
+  "automaticRetries": 0,
+  "limit": "One core episode failed. Partial investigation progress is not complete-story quality or M1 acceptance. No reroll or repair inside the formal episode.",
+  "evidence": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v290-m1-current/codex-inn-r1/preregistration.json",
+      "sha256": "06ad17aeb641fc5928a1f44f40c2068606393c82e66f679186305909997ecc78"
+    },
+    "inn-r1-weak-guidance.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v290-m1-current/codex-inn-r1/inn-r1-weak-guidance.json",
+      "sha256": "ebc9036a6c4537ace7ff6f6503b4a02d9415d9f095691d51e3595d2f08ac9888"
+    },
+    "inn-r1-weak-guidance-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v290-m1-current/codex-inn-r1/inn-r1-weak-guidance-backup.json",
+      "sha256": "f91a47d48bfc09fd197afce83129f065b7047eef52690682fa6e4646ee226706"
+    },
+    "inn-r1-weak-guidance-restoration-verified.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v290-m1-current/codex-inn-r1/inn-r1-weak-guidance-restoration-verified.json",
+      "sha256": "46411abe146d2a295b26aee4a373de7fc80d52834b8ee62706cfb993db40ca5d"
+    },
+    "inquiry-failure-reproduction.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v290-m1-current/codex-inn-r1/inquiry-failure-reproduction.json",
+      "sha256": "548210b7550af7d5014db20d57a6f125d4e8cdd32efc7cbcb2ebeaad90906014"
+    },
+    "player-decisions.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v290-m1-current/codex-inn-r1/player-decisions.json",
+      "sha256": "8e0d49b4ef5ec12d25c765d727b917d5beaa25c975901367c34f266c0615d19a"
+    }
+  },
+  "registration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v290-m1-current/cohort-registration.json",
+    "sha256": "bae4916356523f6bc1c2e80a9c4807646b1ed65bb427ca17909c968cf252b034"
+  },
+  "runtimeCost": {
+    "completedStages": 6,
+    "requestToDurableStageSeconds": [
+      138.016,
+      39.779,
+      47.181,
+      47.398,
+      97.37,
+      86.207
+    ],
+    "completedStageReportedTokens": 511252,
+    "moneyUsd": null,
+    "limit": "First observed native runtime request to durable adopted stage. Not first-token latency; includes app polling. No provider bill or USD price available. These are one scripted scenario, not p95 or commercial benchmarks.",
+    "evidence": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v290-m1-current/codex-inn-r1/runtime-cost-observations.json",
+      "sha256": "96eb7bd3a0c916dfa569e37caf2f5e06d03d55a74a824522298ffc67c2f2a01d"
+    }
+  }
+}

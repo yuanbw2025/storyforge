@@ -1,0 +1,33 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 318,
+  "kind": "compact-equivalent-completion-output",
+  "at": "2026-10-22T07:41:11.507212+00:00",
+  "sourceKind": "isolated-archive-plus-recorded-patch",
+  "sourceManifestSha256": "62572ce3824fe72e4a8a472bd5a1ee48117180e2cc6fab9ca98348a31498db0a",
+  "engineeringPassed": true,
+  "regression": {
+    "files": 20,
+    "tests": 414,
+    "logs": [
+      "regression.log",
+      "regression-span.log"
+    ]
+  },
+  "browser": {
+    "files": 4,
+    "tests": 22,
+    "log": "browser.log",
+    "automaticRetries": 0
+  },
+  "changes": "V60 shares exactly identical current-expression evidence schemas. Expanded schema equals V59 exactly. The complete retained V317 expression request fits the unchanged context/output limits without message trimming. V59 and all earlier schema/prompt bytes remain unchanged. Includes prior V314/V316 implementation and pending evidence.",
+  "realModelCalls": 0,
+  "formalM1Credit": 0,
+  "humanScoring": "deferred",
+  "storyQualityPassed": false,
+  "integration": "Pending original V312 browser terminal state; complete aggregate patch checked cleanly. V319 records real continuation separately.",
+  "engineeringReceipt": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v318-compact-completion-output/engineering.json",
+    "sha256": "9e488fc96c3dd0e71ca7d3c7e18c36dda2dca781fe4ed82cc0dcab139a611dc6"
+  }
+}

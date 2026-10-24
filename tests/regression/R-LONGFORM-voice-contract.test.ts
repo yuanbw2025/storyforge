@@ -3,7 +3,7 @@ import { assertVoiceTransport, speechText, voiceEndpoint, DEFAULT_COMPANION } fr
 
 describe('长篇语音有限边界', () => {
   it('只开放登记的临时输入与只读输出，不允许其他调用方', () => {
-    for (const id of ['longform.voice.input', 'longform.voice.output']) {
+    for (const id of ['longform.voice.input', 'longform.voice.output', 'chat.voice.input', 'chat.voice.output']) {
       expect(() => assertVoiceTransport(id, 'src/lib/longform-voice/session.ts')).not.toThrow()
       expect(() => assertVoiceTransport(id, 'src/components/fake.tsx')).toThrow('未登记')
     }

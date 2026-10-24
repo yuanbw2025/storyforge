@@ -127,6 +127,15 @@ export interface FrozenInteractionRuntimeV2 {
   playerKey: 'player'
   profiles: FrozenInteractionCharacterProfile[]
   sceneTemplates: FrozenInteractionSceneTemplate[]
+  chatSource?: import('./character-interaction').FrozenChatSourceProjectionV1
+  /** Experimental chat narrative module; absent in existing releases. */
+  chatNarrative?: import('./chat-narrative').FrozenChatNarrativeV1
+  /** Player-visible images owned by this frozen product, never by the world. */
+  chatMedia?: import('../character-interaction/media-contract').ChatMediaBindingsV1
+  /** Attribution for converted external cards; never copied into role knowledge. */
+  chatCardCredits?: import('../character-interaction/card-credits').ChatCharacterCardCreditsV1
+  /** Public author statements, frozen per release and excluded from AI knowledge. */
+  chatExperienceInfo?: import('../character-interaction/experience-info').ChatExperienceInfoV1
 }
 
 export interface FrozenRuntimeMediaAssetV2 extends FrozenProductMediaAsset {
@@ -290,9 +299,20 @@ export interface ProductReleaseLocalFileProvenanceV1 {
   importedAt: number
 }
 
+/** A verified, self-contained file; it carries no marketplace or creator claim. */
+export interface ProductReleaseLocalBundleProvenanceV1 {
+  source: 'local-bundle'
+  bundleHash: string
+  originalReleaseHash: string
+  remoteCreatorIdentityVerified: false
+  localCopyPreserved: true
+  importedAt: number
+}
+
 export type ProductReleaseDistributionProvenanceV1 =
   | ProductReleaseMarketplaceProvenanceV1
   | ProductReleaseLocalFileProvenanceV1
+  | ProductReleaseLocalBundleProvenanceV1
 
 export interface ProductRelease {
   id?: number

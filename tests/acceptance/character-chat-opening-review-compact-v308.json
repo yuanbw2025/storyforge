@@ -1,0 +1,21 @@
+{
+  "schema": "storyforge.chat-development-acceptance",
+  "version": 308,
+  "at": "2026-10-22T04:59:47.066291+00:00",
+  "status": "compact-opening-review-implemented-engineering-passed-real-review-pending",
+  "baseHead": "af13010ce15f631f3f0aff7bcb35af9fd7b135d1",
+  "boundary": "Character chat S3 production review; full registered source/candidate context, original owner, three registries and v3 development report unchanged.",
+  "reviewVersion": "chat-opening-review-v10",
+  "change": "State the five semantic checks once while preserving both existing agency and development rules verbatim. Historical v9 and earlier prompt bytes remain unchanged. New runs use the new frozen binding; old attempts do not silently upgrade.",
+  "reproduction": "Actual complete V307 registered context and the same generated JSON schema exceed the old 10000-output allocation. With the new prompt the entire input fits with over 1000 estimated tokens remaining. No source text, candidates, output allocation, model window or validation was removed or expanded.",
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v308-review-prompt/engineering.json",
+    "sha256": "8e4af857d3c95f1f8cff3fbe10a843dd78c9239487dcc8c7d38da49c49135111"
+  },
+  "frozenFixture": "tests/fixtures/character-chat-opening-review-budget.json",
+  "externalModelCalls": 0,
+  "m1Passed": false,
+  "remainingTechnicalPackages": 7,
+  "currentFullCI": "pending; af13010c jobs still live, not evidence for this source",
+  "next": "Explicitly recover the exact V307 candidates in isolated data, first review only, then at most one required media planning request and bounded runtime. Preserve V307 production-blocked denominator."
+}

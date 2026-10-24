@@ -1,0 +1,32 @@
+{
+  "recordedAt": "2026-10-20T23:59:36.673966+00:00",
+  "runId": 39501843746,
+  "head": "0cb7c84d3f89fefbe2544113345fb51bd3cfca38",
+  "status": "completed",
+  "conclusion": "failure",
+  "url": "https://github.com/yuanbw2025/storyforge/actions/runs/39501843746",
+  "cli": {
+    "filesPassed": 978,
+    "filesFailed": 1,
+    "testsPassed": 6530,
+    "testsFailed": 1,
+    "failure": "tests/regression/R-CHAT-04-commitment-context-harness.test.ts: selected promise history/reopen/import test exceeded its 60000ms limit",
+    "durationSeconds": 7977.27
+  },
+  "browser": {
+    "passed": 488,
+    "failed": 1,
+    "flaky": 2,
+    "skipped": 4,
+    "failure": "tests/e2e/text-adventure-media-revision.spec.ts:440: transient command-activity assertion was overwritten by subsequent Build DAG execution; actual log shows content revision pending, then DAG pending, then missing AI configuration error. Durable revision outcome still requires readback.",
+    "flakyCases": [
+      "character-chat-source-unit-confirmation.spec.ts:29",
+      "text-adventure-media-revision.spec.ts:379"
+    ]
+  },
+  "log": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/full-delivery-39501843746-failed.log",
+    "sha256": "4d8a10d5747807a506aa6acf8ba67336f6325ea642712d877f748b29aa2a8da7"
+  },
+  "limit": "Old-head result only. No failure waived, no current full CI/E2E pass, no automatic rerun. Inspect targeted failures before the next full delivery."
+}

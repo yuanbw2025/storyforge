@@ -1,0 +1,58 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 315,
+  "kind": "real-codex-bounded-observation-continuation",
+  "at": "2026-10-22T06:49:50.879367+00:00",
+  "sourceKind": "isolated-archive-plus-recorded-patch",
+  "baseHead": "1b2e43e1d996c3613b36f50c82790eecd9b58e56",
+  "sourceUnchanged": true,
+  "sourceManifestSha256": "3199225c6714d3cffde5edcb1fac83e3044cb11672d8c78a98119a926f38aa41",
+  "formalM1Credit": 0,
+  "humanScoring": "deferred",
+  "requests": 10,
+  "allNativeRequestsCompleted": true,
+  "reportedTokens": 180926,
+  "playerOpportunities": 2,
+  "completedWork": "The original rejected normal-opening-and-viewing path passed action review. Situation generation and review confirmed the seal location through its frozen discovery rule. The actor then actually retrieved the seal, put it on the counter, and disclosed the location. The original personal search goal is fulfilled; all three runs were adopted with terminal receipts.",
+  "stillIncomplete": "The original shared thread remains open. On the next explicit continue the model proposed an owned follow-up reporting goal, fulfilled it in the same action, and also emitted turnCompletion. Preview rejected the incompatible combination before review/adoption; the report did not occur.",
+  "failure": {
+    "stage": "preview",
+    "error": "Error: [chat-turn-completion] 本轮结束必须保留原有活跃目标",
+    "stateUnchanged": true,
+    "modelCalls": 0
+  },
+  "restoration": {
+    "checks": {
+      "parentPreserved": true,
+      "branchPreserved": true,
+      "refreshPreserved": true,
+      "worldPreserved": true,
+      "runStatesPreserved": true,
+      "durableEvidencePreserved": true,
+      "noAutomaticCalls": true,
+      "noResumableRuns": true
+    },
+    "modelCalls": 0,
+    "completedHistories": 3,
+    "retainedFailedRuns": 1
+  },
+  "nextAction": "Constrain incompatible action outcome combinations in a new frozen output contract: turnCompletion cannot coexist with fulfilled goalStatus, a new follow-up goal, or other forbidden effects. Preserve previous output schemas and deterministic rejection; do not remove fields silently, auto-retry, or weaken meaningful progress. Then resume the retained failed state and verify story closure.",
+  "evidence": {
+    "bounded-followthrough.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v315-bounded-followthrough/bounded-followthrough.json",
+      "sha256": "7573004d7e176c52483ff698388c7889231daff6ca3b4490afff0c5db4bd302e"
+    },
+    "bounded-followthrough-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v315-bounded-followthrough/bounded-followthrough-backup.json",
+      "sha256": "64dfb3e624502badaf30003222d93e1b2a3b65f95bfe7062931f637f522f8264"
+    },
+    "restoration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v315-bounded-followthrough/restoration.json",
+      "sha256": "cc348f4ba9447bf869db60d7b143a0c400c5f81bd605814e73a90bf5d0eb8771"
+    },
+    "failure-reproduction.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v315-bounded-followthrough/failure-reproduction.json",
+      "sha256": "6c86e26abd230452472168000a80727c30b2a33d34b1aaeebf3f6649a7390368"
+    }
+  }
+}

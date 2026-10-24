@@ -1,0 +1,132 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 1,
+  "at": "2026-10-23T08:37:11.686209+00:00",
+  "status": "real-closure-without-extra-action-and-recovery-passed-single-sample",
+  "source": {
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "baseHead": "7390a4fb08ed5a1b39251e8484088894f460acc0",
+    "sourceKind": "clean-worktree-commit",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v355-completed-goal-model/manifest-final.json",
+    "manifestSha256": "ccb4e0ac104cb06f5cd5e1c30b494c48c5b1b3e371c08294d0b21ad0b814ad0f"
+  },
+  "sourceUnchanged": true,
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "requests": 5,
+  "completedRequests": 5,
+  "automaticRetries": 0,
+  "usage": {
+    "totalTokens": 91092,
+    "inputTokens": 88701,
+    "outputTokens": 2391,
+    "cachedInputTokens": 9984,
+    "reasoningOutputTokens": 915
+  },
+  "costUsd": null,
+  "executionStartedAt": "2026-10-23T08:27:59.551Z",
+  "completedAt": "2026-10-23T08:29:52.324Z",
+  "wallSeconds": 112.773,
+  "latencyMeasurement": "Execution start through evidence finalization; not first-token UI latency or a population quantile.",
+  "adoptedClosureSeconds": 108.458,
+  "playerOpportunities": 1,
+  "newPlayerMessages": 0,
+  "completedRuns": 2,
+  "adoptedSituationResults": 1,
+  "adoptedRoleActions": 1,
+  "adoptedControlHandoffs": 0,
+  "postClosureRequests": 0,
+  "progress": {
+    "newSituationFact": "原先的敲门者在敞开的门口说了声“多谢”，声音传入大厅，随后跨过门槛，走到大厅长桌旁停下，没有进入柜台工作区。这次回应只表明其接受了避雨邀请，不能核实其自述身份或此前经历。",
+    "roleAction": "叶岑合上外门，留在大厅。\n\n“来者已经到长桌旁避雨，门口的接待就到这里。他的身份仍未核实，不能因此把他与铜印遗失联系起来。”",
+    "goalStatus": "fulfilled",
+    "threadStatus": "resolved",
+    "oldPausedGoalAndOpenThreadUnchanged": true,
+    "identityStillUnverified": true,
+    "originalRefusalAndHiddenFactPreserved": true
+  },
+  "final": {
+    "sequence": 3,
+    "triggerStatus": "ready",
+    "actionSequences": [
+      3
+    ],
+    "turnResume": null,
+    "pendingRuns": [],
+    "pendingSituation": null,
+    "note": "Stored trigger semantics are unchanged. No completion/control event was fabricated; deterministic eligibility ends automatic work and hides an unneeded resume view."
+  },
+  "comparison": {
+    "priorEvidence": "character-chat-visitor-response-v352.json",
+    "sameSavedInitialState": true,
+    "promptsAndBudgetsUnchanged": true,
+    "priorRequests": 8,
+    "currentRequests": 5,
+    "priorWallSeconds": 169.29,
+    "currentWallSeconds": 112.773,
+    "priorTotalTokens": 139655,
+    "currentTotalTokens": 91092,
+    "priorPostClosureRequests": 3,
+    "currentPostClosureRequests": 0,
+    "interpretation": "The extra post-closure run is absent. Generated content and runtime vary; the single-sample wall/token difference is not a general performance claim."
+  },
+  "actualActionInputBudgetReadback": {
+    "at": "2026-10-23T08:31:10.905Z",
+    "sourceHead": "7390a4fb08ed5a1b39251e8484088894f460acc0",
+    "sourceUnchanged": true,
+    "modelCalls": 0,
+    "rows": [
+      {
+        "runId": 44,
+        "steps": [
+          {
+            "stepId": "interaction:action-choice",
+            "contentHash": "7b8451ed1c7b88a3e66931055ae7ec919dca3d4c86801cf4e49ebb7c9f6910e1",
+            "estimatedInputTokens": 10687
+          },
+          {
+            "stepId": "interaction:runtime-candidate",
+            "contentHash": "c5d31805c63e766927ea50a80f6fffdb4fa8a00138ffccc40affbcfd37946238",
+            "estimatedInputTokens": 21906
+          },
+          {
+            "stepId": "interaction:action-review",
+            "contentHash": "5fbe757c404306fda5423745e44a0532847b1a4c6e513b0e67c6893ce8377b05",
+            "estimatedInputTokens": 21393
+          }
+        ],
+        "total": 53986,
+        "limit": 56000
+      }
+    ]
+  },
+  "restoration": {
+    "sessions": 6,
+    "checks": 24,
+    "allPassed": true,
+    "modelCalls": 0,
+    "blockedAttempts": 0,
+    "originalFailuresPreserved": 3,
+    "artifactBytesAndMultiplicityPreserved": true,
+    "resumeViewAndPanelPreserved": true
+  },
+  "remaining": [
+    "Formal cross-scenario/dual-provider M1 acceptance",
+    "Natural character expression and whole-story continuity",
+    "General p50/p95 latency, cost and final-head delivery",
+    "All seven technical packages remain open"
+  ],
+  "formalM1QualityPassesAdded": 0,
+  "humanRatingsAdded": 0,
+  "originalScheduledDenominatorChanged": false,
+  "fullObjectiveComplete": false,
+  "evidence": {
+    "directory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v355-completed-goal-model",
+    "registration": "preregistration.json",
+    "raw": "completed-goal-model.json",
+    "backup": "completed-goal-model-backup.json",
+    "restoration": "restoration-logical-history.json",
+    "inputBudget": "input-budget-readback.json",
+    "collectorCorrection": "receipt-generation-initial-failure.json"
+  }
+}

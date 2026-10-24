@@ -1,0 +1,263 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "label": "V135 player dependency and bounded native backup transport",
+  "recordedAt": "2026-10-16T17:04:21.292065+00:00",
+  "baseCommit": "8987a9698dbedf6163d0d669e806d6965246443b",
+  "boundary": {
+    "product": "character-interaction",
+    "lifecycle": "product development / S3 private runtime",
+    "owner": "existing Chat Work / ProductRuntimeSession",
+    "world": "frozen reference; no world writes",
+    "tablesOrWritableFieldsAdded": false,
+    "providerCredentials": "existing local Edge configuration; no secret copied into evidence or repository"
+  },
+  "implementation": [
+    "Versioned action v37/options v27 and review v31/options review v25 distinguish optional invitations from necessary current player decisions. Existing permissions, player pause, state transitions, candidate adoption and original producer bytes retained.",
+    "Native history-load E2E uses production JSON Blob creation/readback; backup transfer uses at most 64 KiB binary chunks with gzip backpressure, byte count and SHA-256 receipts. State checkpoints persist before backups. No full-project JSON string across browser protocol; no reduced load or enlarged timeout."
+  ],
+  "verification": {
+    "targeted": {
+      "files": 5,
+      "tests": 44,
+      "exitCode": 0
+    },
+    "associated": {
+      "files": 120,
+      "tests": 1386,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v135-regression-receipt.json"
+    },
+    "checks": "architecture, required tables, AI manual/entry registry, documentation, roadmap, metrics, types, lint, build and bundle passed; initial metrics drift repaired with official generator",
+    "native100": "passed on frozen V135 source; 100 actions, 204 facts and portable recovery; separate native100Readback records independent backup hashes",
+    "native1000": "terminal exit 1 at original 30-minute timeout; last logged 950 actions, state through 900, backups through 800; no browser crash in this run; final 1000 recovery not reached",
+    "fullCI": "V135 full suite superseded before start by frozen V139 latest integration suite",
+    "fullE2E": "V135 full suite superseded before start by frozen V139 latest integration suite"
+  },
+  "realModel": {
+    "provider": "agnes",
+    "model": "agnes-2.5-flash",
+    "episodes": [
+      {
+        "name": "v135-agnes-runtime-preflight",
+        "requests": 8,
+        "responses": 8,
+        "tokens": 77866,
+        "error": null,
+        "opportunities": 3,
+        "ending": "budget",
+        "sha256": "740ca88a6ff2531aea6f9172abec41eb266ff9839c529a6051e7c1f1f92d06f0",
+        "restoration": {
+          "exitCode": 0,
+          "externalCalls": 0,
+          "stateWorldAndOriginalEvidencePreserved": true
+        }
+      },
+      {
+        "name": "v135-agnes-player-decision-episode",
+        "requests": 1,
+        "responses": 1,
+        "tokens": 8714,
+        "error": "Error: runtime stopped; no automatic retry",
+        "opportunities": 0,
+        "ending": null,
+        "sha256": "fabd8412dc52a6b491642c6267340d71f766006b1b945bf74b07f2279d916015",
+        "restoration": {
+          "exitCode": 0,
+          "externalCalls": 0,
+          "stateWorldAndOriginalEvidencePreserved": true
+        }
+      },
+      {
+        "name": "v135-player-decision-review-real",
+        "requests": 3,
+        "responses": 3,
+        "tokens": 31577,
+        "waitingDecisionsMatched": 3,
+        "overallReviewPasses": 0,
+        "additionalRejections": [
+          "Repeated invitation lacks meaningful direction",
+          "Calling into room incorrectly treated as revealing an established respondent; retained false-positive concern"
+        ],
+        "adopted": 0,
+        "generation": "injected exact/controlled candidates; real Agnes review; not full generation",
+        "sha256": "fff2ba8dff2be0518511b9f969ebd8695b814372d1d7381aa02e3230f27cae30"
+      }
+    ],
+    "externalRequests": 12,
+    "knownTokens": 118157,
+    "costUsd": null,
+    "firstFinding": "Role chose an independent alternate path but marked attempt/waitingForPlayer; original reviewer passed. New reviewer rejects that same dependency mistake.",
+    "newGenerationFailure": "New opening referenced nonexistent fact-11 and did not reach review or adoption. No automatic retry.",
+    "formalMatrixAdded": 0,
+    "humanScoresAdded": 0
+  },
+  "retainedSetupFailure": "First review-only diagnostic omitted explicit runReviewAI, so its injected generator also handled review. All three failed shape checks, zero network requests. Preserved separately; corrected runner preregistered in a new directory.",
+  "cleanup": {
+    "removedPayloads": 1,
+    "allocatedBytesRemoved": 437755904,
+    "freeSpaceNetChangeBytes": -958464,
+    "meaning": "Do not claim allocated bytes as physical disk freed; APFS sharing and concurrent writes apply.",
+    "preserved": [
+      "Git history",
+      "manifest",
+      "test results",
+      "backups",
+      "dependency links"
+    ],
+    "schedule": "existing two-hour cleanup automation reused; no duplicate created"
+  },
+  "userDirection": {
+    "humanReview": "deferred until development and model verification complete; does not block engineering; not waived for experience or commercial acceptance",
+    "cleanup": "ongoing own-task redundant rebuildable artifacts authorized"
+  },
+  "limits": [
+    "Prompt clarification is not a deterministic proof of semantic accuracy.",
+    "One new Codex short episode demonstrated independent inspection, discovery and task closure. Agnes new generation failed. Neither establishes sustained narrative quality or a causal improvement estimate.",
+    "Short model probes are neither the formal 72/48 matrix nor human or commercial acceptance."
+  ],
+  "updatedAt": "2026-10-16T17:16:51.503354+00:00",
+  "implementationCommit": "857664bb97a83d88a44a2f02344f35fdb1d60894",
+  "codexProbe": {
+    "requests": 6,
+    "responses": 6,
+    "tokens": 81690,
+    "costUsd": null,
+    "opportunities": 1,
+    "ending": "meaningful-closure",
+    "completedRuns": 3,
+    "adoptedActions": 2,
+    "adoptedSituationResults": 1,
+    "finding": "Role independently inspected accessible container, legitimately discovered the location, disclosed it and retrieved the seal; player only used Continue. Finding task closed; handler and purpose remain unknown.",
+    "worldUnchanged": true,
+    "refreshEqual": true,
+    "noModelRequestOnRefresh": true,
+    "hashes": {
+      "codex-weak-guidance.json": "6ebc5995b5ca53fd1a5ea3ce1a89b232d8fde2ec42bc501dc1b8cc681436b853",
+      "codex-weak-guidance-backup.json": "47205449d3e592cd80e5f8bdd92373363fd52b450fa8372c243c4a540db9787a",
+      "preregistration.json": "5c57df1fcbec918fed1ad7f08223e5704e6566aa574642aca658afbbf4ff593f",
+      "restoration-verified.json": "daa990a71bdbeb048d5f8b7b8dcebc7d57e46ca60c8bd30549ed7480b7ebe003"
+    },
+    "limitations": [
+      "One short stochastic sample, not long-form quality or improvement estimate.",
+      "Local bridge sampling not controlled by UI temperature/token values.",
+      "Original complete hidden truth still unresolved; not added to formal M1 matrix."
+    ],
+    "registrationClarification": "Registration copied historic refusal-specific playerPolicy/acceptanceFocus from the template, but registered episodeId, purpose, maximum 3 opportunities and player.kind/weak-guidance identify the intended weak-guidance probe. Actual runner and recorded sole player action used Continue; no refusal was sent. Treat as development diagnostic only, not formal pre-registered comparative evidence. priorProductionTokens=0 is runtime budget accounting; V115 historic production dependency cost stays in original production record.",
+    "restoration": {
+      "exitCode": 0,
+      "externalCalls": 0,
+      "stateWorldAndOriginalEvidencePreserved": true,
+      "verifiedCompletedHistories": 3
+    }
+  },
+  "realModelTotals": {
+    "requests": 18,
+    "responses": 18,
+    "knownTokens": 199847,
+    "costUsd": null,
+    "formalMatrixAdded": 0,
+    "humanScoresAdded": 0
+  },
+  "native100Readback": {
+    "sourceHead": "857664bb97a83d88a44a2f02344f35fdb1d60894",
+    "exitCode": 0,
+    "result": {
+      "target": 100,
+      "actions": 100,
+      "failure": null,
+      "calls": 202,
+      "progress": [
+        {
+          "actions": 25,
+          "elapsedMs": 6035,
+          "lastActionMs": 246
+        },
+        {
+          "actions": 50,
+          "elapsedMs": 13163,
+          "lastActionMs": 315
+        },
+        {
+          "actions": 75,
+          "elapsedMs": 21759,
+          "lastActionMs": 431
+        },
+        {
+          "actions": 100,
+          "elapsedMs": 32096,
+          "lastActionMs": 428
+        }
+      ],
+      "checkpoints": [
+        {
+          "actions": 100,
+          "sequence": 206,
+          "facts": 204,
+          "actorRead": true,
+          "reviewRead": true
+        }
+      ],
+      "facts": 204,
+      "database": "native IndexedDB",
+      "elapsedMs": 39199,
+      "externalCalls": 0,
+      "worldUnchanged": true
+    },
+    "backupVerification": {
+      "at": 1792174664.9272141,
+      "verified": [
+        {
+          "archive": "/tmp/storyforge-chat-v135-native-100-final-results/character-chat-history-gro-a53e2-ut-and-portable-checkpoints-chromium/native-growth-backup.json.gz",
+          "rawBytes": 19668401,
+          "sha256": "b082c119a9fbbbde9033965d950090c70fd372818c949ebdc9fe713a3b351ebb"
+        },
+        {
+          "archive": "/tmp/storyforge-chat-v135-native-100-final-results/character-chat-history-gro-a53e2-ut-and-portable-checkpoints-chromium/native-growth-100-backup.json.gz",
+          "rawBytes": 23710227,
+          "sha256": "7a04d6b551c0d815ddce882cccd531c893a8c523cd63204858d8160e605ab131"
+        }
+      ]
+    },
+    "terminalReceipt": "/tmp/storyforge-chat-v135-native-100-final-receipt.json",
+    "native1000": "terminal timeout; see native1000Readback",
+    "priorCrashRootCauseProven": false
+  },
+  "native1000Readback": {
+    "sourceHead": "857664bb97a83d88a44a2f02344f35fdb1d60894",
+    "terminalReceipt": "/tmp/storyforge-chat-v135-native1000-receipt.json",
+    "readback": {
+      "at": 1792177848.187735,
+      "exitCode": 1,
+      "termination": "original 1800000ms test timeout",
+      "lastLoggedActions": 950,
+      "lastStateCheckpointActions": 900,
+      "backups": [
+        {
+          "archive": "/tmp/storyforge-chat-v135-native-1000-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-100-backup.json.gz",
+          "rawBytes": 23710227,
+          "sha256": "18165662948a1d07b55385bda9602a4c99f434b3c8eec43ee3578391b0e7c069",
+          "verified": true
+        },
+        {
+          "archive": "/tmp/storyforge-chat-v135-native-1000-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-300-backup.json.gz",
+          "rawBytes": 87551558,
+          "sha256": "e0eecb83edffb1c9ba676b1f7525f51a8295ff0ae4cab1e652f2a17a6a6b1cff",
+          "verified": true
+        },
+        {
+          "archive": "/tmp/storyforge-chat-v135-native-1000-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-800-backup.json.gz",
+          "rawBytes": 319293604,
+          "sha256": "60f669fb3408f4ca3668ff16f4887443bb92eade486aa4ff9d893eec330e3399",
+          "verified": true
+        }
+      ],
+      "final1000RestoreExecuted": false,
+      "browserCrashObservedInThisRun": false,
+      "previousCrashRootCauseProven": false,
+      "noAutomaticRetry": true
+    },
+    "performanceObservation": "Per-action duration grew from about 0.35 seconds at 100 to 4.36 seconds at 950. This suggests a growing-state cost; no production cause has yet been isolated.",
+    "nextInvestigation": "Profile existing read/replay/context/adoption work before changing limits; preserve original target, timeout and failure."
+  }
+}

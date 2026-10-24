@@ -1,4 +1,5 @@
 import { db } from '../db/schema'
+import { readProductProductionBuildWorldScopeV1 } from './world-binding'
 import type {
   ConfirmedProductBriefV1,
   ProductMediaAsset,
@@ -624,6 +625,7 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
       releaseQualityReceiptHash: qualityWorkspace.releaseQualityReceipt.receiptHash,
     }
   } else {
+    await readProductProductionBuildWorldScopeV1({scope, productionId: production.id!, buildId: build.id!, brief})
     sourcePlan = await parseProductProductionSourcePlanV1(briefRow)
     confirmedBrief = await parseConfirmedProductBriefV1({ row: briefRow, sourcePlan })
     if (sourcePlan.productType !== brief.intent.productType
@@ -706,7 +708,7 @@ async function inspectAdoption(scope: WorkspaceScope, productionId: number): Pro
     fail('RuntimePackage来源Hash与正式来源合同不一致')
   }
   if (!creatorReleaseAuthority && sourcePlan && (
-    sourcePlan.worldReference.localReleaseRecordId !== brief.source.worldReleaseId
+    sourcePlan.worldReference.localReleaseRecordId !== briefRow.sourceWorldReleaseId
     || sourcePlan.worldReference.releaseHash !== brief.source.worldContentHash
   )) {
     fail('WorldReference 来源绑定失败')

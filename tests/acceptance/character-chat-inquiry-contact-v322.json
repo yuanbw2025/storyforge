@@ -1,0 +1,204 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 322,
+  "kind": "question-time-contact-evidence",
+  "engineering": {
+    "schema": "storyforge.chat-isolated-engineering-evidence",
+    "version": 1,
+    "recordedAt": "2026-10-22T09:17:37.656266+00:00",
+    "passed": true,
+    "sourceKind": "frozen-worktree-with-recorded-patch",
+    "sourceRoot": "/Users/qinyingying/.codex/worktrees/character-chat-plan/storyforge",
+    "baseHead": "ab7d82591983e0b7665e795843fbc5ac801e8d12",
+    "sourceManifest": {
+      "file": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v322-inquiry-contact-evidence/manifest.json",
+      "sha256": "560cb81d7ef1b682f4ab19691d466711748b88c5d46d74973b08f539c6f5caa9",
+      "files": 3986
+    },
+    "patch": {
+      "file": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v322-inquiry-contact-evidence/implementation.patch",
+      "sha256": "b9a99012fde8dabac924537e45feaf6d061892fad1119836896aa7c715399952"
+    },
+    "boundary": {
+      "product": "character-interaction",
+      "stage": "S3",
+      "owner": "existing ProductRuntimeSession and Harness",
+      "newTables": 0,
+      "worldWrites": 0,
+      "newModelSteps": 0
+    },
+    "changes": "Construction18/review17 and inquiry evidence4 admit only the selected respondent contact known at the original question. Preserve original failed response, temporal continuity, audience, discovery prerequisites and semantic review. Historical contracts unchanged. Prior V314-V320 changes integrated.",
+    "checks": [
+      {
+        "check": "lint",
+        "command": [
+          "npm",
+          "run",
+          "lint"
+        ],
+        "startedAt": "2026-10-22T09:14:57.693082+00:00",
+        "completedAt": "2026-10-22T09:15:27.816526+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "architecture",
+        "command": [
+          "npm",
+          "run",
+          "check:architecture"
+        ],
+        "startedAt": "2026-10-22T09:15:27.817245+00:00",
+        "completedAt": "2026-10-22T09:15:34.551339+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "tables",
+        "command": [
+          "npm",
+          "run",
+          "check:required-tables"
+        ],
+        "startedAt": "2026-10-22T09:15:34.551789+00:00",
+        "completedAt": "2026-10-22T09:15:34.701542+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "ai-manual",
+        "command": [
+          "npm",
+          "run",
+          "check:ai-manual"
+        ],
+        "startedAt": "2026-10-22T09:15:34.701914+00:00",
+        "completedAt": "2026-10-22T09:15:35.200974+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "ai-entry",
+        "command": [
+          "npm",
+          "run",
+          "check:ai-entry-registry"
+        ],
+        "startedAt": "2026-10-22T09:15:35.201379+00:00",
+        "completedAt": "2026-10-22T09:15:36.103809+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "freshness",
+        "command": [
+          "npm",
+          "run",
+          "check:agent-freshness"
+        ],
+        "startedAt": "2026-10-22T09:15:36.104201+00:00",
+        "completedAt": "2026-10-22T09:15:36.802768+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "docs",
+        "command": [
+          "npm",
+          "run",
+          "check:docs"
+        ],
+        "startedAt": "2026-10-22T09:15:36.803169+00:00",
+        "completedAt": "2026-10-22T09:15:37.350901+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "roadmap",
+        "command": [
+          "npm",
+          "run",
+          "check:roadmap"
+        ],
+        "startedAt": "2026-10-22T09:15:37.351333+00:00",
+        "completedAt": "2026-10-22T09:15:37.497619+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "metrics",
+        "command": [
+          "npm",
+          "run",
+          "check:project-metrics"
+        ],
+        "startedAt": "2026-10-22T09:15:37.498041+00:00",
+        "completedAt": "2026-10-22T09:15:37.963136+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "build",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "startedAt": "2026-10-22T09:15:37.963543+00:00",
+        "completedAt": "2026-10-22T09:16:53.112914+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "bundle",
+        "command": [
+          "npm",
+          "run",
+          "check:bundle-size"
+        ],
+        "startedAt": "2026-10-22T09:16:53.113310+00:00",
+        "completedAt": "2026-10-22T09:16:53.640258+00:00",
+        "exitCode": 0
+      }
+    ],
+    "types": {
+      "exitCode": 0,
+      "log": "types-r2.log"
+    },
+    "regression": {
+      "files": 21,
+      "tests": 306,
+      "logs": [
+        "regression-r2.log",
+        "regression-span.log"
+      ]
+    },
+    "browser": {
+      "files": 2,
+      "tests": 11,
+      "log": "browser.log",
+      "automaticRetries": 0
+    },
+    "retainedInitialFailures": [
+      "Initial unknown-property type check and two outdated version assertions corrected.",
+      "First lint scan raced Playwright removal of test-results; rerun after browser terminal, without source change."
+    ],
+    "logs": {
+      "browser.log": "5c60a64abfe5107c329cb680f11354fe65e0f7222e0b102e6911a9e12ccec236",
+      "regression-r2.log": "80098471f14e620f9f0529e0952ef3189b23b7be2c31b66bf295f82c9db970e9",
+      "lint.log": "c8bd26fb2b68c69b86e0c51b7e999259bb290b9f1447e8439b239b1d08ae64d1",
+      "architecture.log": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616",
+      "docs-status-update.log": "fe0b1d003c3d360bc359fa03d7e99f1090714edf0381ced33c343fed2fb701ec",
+      "types-initial.log": "079975605c2b87e7b0eece77e1a78e92bd130c584e901021f2d8b56222e5adfc",
+      "regression-span.log": "981a8dd2e7adffde9f38b441aabe23abbac0da24c6a34a5dbe5923972fa8158e",
+      "ai-manual.log": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19",
+      "model-server.log": "8f10ced8cc18ce180b02951920c0dc4c22ad3c62ab4402ec9569e69c6895f0d8",
+      "tables.log": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444",
+      "types-r2.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "docs.log": "8a1a5842d7efb5102532f21b5512d6f2c5ae08eb2b1c12082ce779fc8cbe82a4",
+      "metrics.log": "32f5ade067b3496f6b4dd1d2dde0aeef10be09621b5d5059fa5833f42f99b0ff",
+      "bundle.log": "6e45abd08105797f0ebcd71985ec17b909d0a10a2f07ccd06641f08e5bb016e6",
+      "ai-manual-generate.log": "3395b5e737f52a05d9c19e988e9189038725875fbd32aff89394e5a63cb558ea",
+      "regression-initial.log": "2121a87a93d26a6812707ada76687d04d954545741b13c35cf323ce12a443299",
+      "roadmap.log": "9e45dab19b38810e932d85373ca28150ee63803849201a58a23941d0bccabb2a",
+      "metrics-generate.log": "0555eabe41357efe38464a935ad593aa025a0682300d6c86a7fa03fe2642b146",
+      "lint-initial.log": "60cf61de3aac83ae2cf03fdc0f088cd0b750f60f9e400d5a7ebbefcf6d14f065",
+      "freshness.log": "e56dbcddd6530139e98744f1883c347bd33e8f23a95001be5c47523d54039a50",
+      "build.log": "6113c3fa4517a64bb8c8aa25bf71895a62b1043bd7751d98d5182421329a9ee1",
+      "ai-entry.log": "eb460ca57d9e2ba78254d28856cfeb86716ddfb9c682cfa7c706f25086477dce"
+    },
+    "realModelCalls": 0,
+    "formalM1Credit": 0,
+    "fullDelivery": "Current complete CI/E2E pending; V312 full pass predates these changes."
+  }
+}

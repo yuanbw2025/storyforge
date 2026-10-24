@@ -1,0 +1,1059 @@
+{
+  "schema": "storyforge.character-chat-recent-dialogue-regression",
+  "version": 1,
+  "actorKey": "participant.001",
+  "baseSequence": 41,
+  "targetMessageId": "message:harness:27",
+  "targetEventSequence": 39,
+  "latestPlayerMessageId": "message:player:d0dcbfe3-d73b-46ae-88a2-e1c156f562b8",
+  "latestPlayerEventSequence": 40,
+  "targetReplyToSequence": 37,
+  "legacyReader": "chat-narrative-runtime-view-v17",
+  "legacyRetrieval": "chat-relevance-v13",
+  "legacySourceHash": "c016cb480f3052a56b81d4a6624e442a911efac47e3c3541a17d2c0667857ee9",
+  "legacySourceCharacters": 10572,
+  "legacyInputTokens": 5717,
+  "legacyTargetSelection": {
+    "kind": "messages",
+    "key": "message:harness:27",
+    "included": false,
+    "required": []
+  },
+  "interactionStateHash": "017a25a59682c66c4ac284bedecc69de53d01d166b4efe6ad2ebf251da146c61",
+  "provenance": {
+    "cohort": "v324-m1-current",
+    "episode": "codex-reading-r1/reading-r1-weak-guidance.json",
+    "backup": "codex-reading-r1/reading-r1-weak-guidance-backup.json",
+    "sourceHead": "26fd6e29c019f89162f7beb5c081b93a47c3593e",
+    "episodeSha256": "29116a1a4d857063aee476289e4e89b1a7551a8377cb98844685900e8d260776",
+    "backupSha256": "f000603891ce02e61a53380bcebcab6a16962582ff3c4161f9bb5f1f72fc5abd",
+    "runId": 28,
+    "runStatus": "failed",
+    "runtimeHeadStateHash": "99330bae08038f1e31db9ff17c08a1f590d6c1305e46ad49249c0a559e817666",
+    "contractHash": "2e2083c6697c34e45eb5c9889a62e28a91eb9d86a1e12a6e3bad8144ea3282e0",
+    "choiceContextPacketHash": "fc55649f84935d150325514def4ca9412f255041cdaa8bc22f6c1dd374e0e0fc",
+    "expressionContextPacketHash": "ef11c6dcb5460b861dc1552f588743acbda3028c2e4bff56e5083252a68b4e5c",
+    "reviewContextPacketHash": "02f0f24934c469926fdf36eab642d829b3fc1adbe2ce3a0de35e8448821fb9d9",
+    "reviewRawResponseHash": "2ed4ab0150b181687306042dd2bf54622e39982eac3cb725dd41e5c7ee394319",
+    "sameActorInputForChoiceAndExpression": true,
+    "reviewerReceivedTargetMessage": true,
+    "failedReviewChecks": [
+      "meaningful-direction"
+    ],
+    "holdoutBodiesInspected": false,
+    "extraction": "Only the interaction substate of the exact saved runtime head. No backups, requests, provider configuration, credentials, media or unrelated tables copied."
+  },
+  "state": {
+    "schema": "storyforge.character-interaction",
+    "version": 1,
+    "playerKey": "player",
+    "profiles": [
+      {
+        "participantKey": "participant.001",
+        "characterKey": "world-release:94b032b90fdf45a14a711a87fa03e88a03863ae273e8f3bc7438eea9f0abfdd5:characters:character:d25f3dddfd19618ce7788c62c44e9903843500025072dac66064c8b307c9500c",
+        "name": "许听澜",
+        "roleLabel": "核心互动角色",
+        "voiceRules": "遵守已确认的身份、知识和动机；动机是意愿，不代表行动已经完成。不替玩家决定行动。\"不拿朋友的配合当作理所当然；宁可活动小，也不虚报报名人数\"\n作者补充：",
+        "maxMemoryEntries": 120
+      }
+    ],
+    "sceneTemplates": [
+      {
+        "sceneKey": "scene-1",
+        "title": "公告板上的朗读夜",
+        "purpose": "公告板上的朗读夜",
+        "location": "旧书店",
+        "timeLabel": "周五朗读夜的两天前，今晚",
+        "participantKeys": [
+          "participant.001"
+        ],
+        "publicKnowledgeKeys": [
+          "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.3",
+          "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.6",
+          "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.11"
+        ],
+        "goals": [
+          "目前只有两人报名，周五的朗读夜怎样安排，才能值得参加，又不超出双方愿意承担的范围？"
+        ],
+        "endingConditions": [],
+        "safetyBoundaries": [
+          "不生成未授权的露骨或仇恨内容",
+          "不替玩家决定感受或行动"
+        ],
+        "relationshipRules": [],
+        "openingNodeKey": null,
+        "endingNodeKey": null,
+        "maxTurns": 60,
+        "directorBudget": 120
+      }
+    ],
+    "activeScene": {
+      "sceneKey": "scene-1",
+      "title": "公告板上的朗读夜",
+      "purpose": "公告板上的朗读夜",
+      "location": "旧书店",
+      "timeLabel": "周五朗读夜的两天前，今晚",
+      "participantKeys": [
+        "participant.001"
+      ],
+      "publicKnowledgeKeys": [
+        "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.3",
+        "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.6",
+        "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.11"
+      ],
+      "goals": [
+        "目前只有两人报名，周五的朗读夜怎样安排，才能值得参加，又不超出双方愿意承担的范围？"
+      ],
+      "endingConditions": [],
+      "safetyBoundaries": [
+        "不生成未授权的露骨或仇恨内容",
+        "不替玩家决定感受或行动"
+      ],
+      "relationshipRules": [],
+      "openingNodeKey": null,
+      "endingNodeKey": null,
+      "maxTurns": 60,
+      "directorBudget": 120,
+      "sceneId": "scene:scene-1:d391e419-73de-49ad-b73c-896c0f3bbc8d",
+      "status": "active",
+      "activeParticipantKeys": [
+        "participant.001"
+      ],
+      "startedAtSequence": 3,
+      "endedAtSequence": null,
+      "playerTurns": 11
+    },
+    "sceneHistory": [],
+    "messages": [
+      {
+        "messageId": "message:harness:15",
+        "eventSequence": 5,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“现在只有两人报名。我已经准备好一篇自己就能读完的短篇，不过也有点担心，场面小会让你失望。\n\n我想先商量一个小场的办法：愿意读的人读，也允许只来听。你不用因为来讨论，就承担主持或上台的任务。告示暂时不改，这还只是个提议。\n\n你对这样的朗读夜有什么期待？”",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:5613f512-345a-41f7-8e9d-a97e171b6b76",
+        "eventSequence": 6,
+        "role": "player",
+        "playerConversation": "present",
+        "speakerKey": "player",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "嗯，我在听。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:harness:16",
+        "eventSequence": 8,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“嗯，那我把设想说具体一点：先由我读准备好的短篇，读完留一点自愿交流的时间。想只听、不发言的人，也可以安静听完。\n\n我觉得，小场也可以有完整的内容，不一定非得热闹。这还是个待商量的流程，不给你安排任务，告示也先不改。”",
+        "replyToSequence": 6,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:e2ce6b96-cd3a-4811-816a-471505e1947f",
+        "eventSequence": 9,
+        "role": "player",
+        "playerConversation": "present",
+        "speakerKey": "player",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "你接着说。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:harness:17",
+        "eventSequence": 11,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "许听澜从公告板下的用品盒里取出替换纸和粗字笔，写下一份草稿：“朗读夜参与说明——讨论稿，尚未确定：可以只来听，不必朗读；拟由许听澜读一篇已准备好的短篇，之后自愿交流，也可以不发言。”她把草稿放在一旁，没有替换原告示。\n\n“我想补清楚的是参加方式，不是把场面写得更热闹。这张先作为讨论稿，你接着听，不代表你已经同意这些安排。”",
+        "replyToSequence": 9,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:9a6cab64-ddf0-447d-970f-4a41b0bcf311",
+        "eventSequence": 12,
+        "role": "player",
+        "playerConversation": "present",
+        "speakerKey": "player",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "我想听听你的想法。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:harness:18",
+        "eventSequence": 14,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“我的想法是，值得参加不一定等于坐满六把椅子。哪怕最后还是两人报名，我也更倾向于办：有人认真读，也有人能自在地听，就有意义。\n\n短篇朗读是我愿意承担的部分；但我不想为了显得内容丰富，再给你添任务。比起继续扩充流程，我更想把这一篇读好，让来的人不觉得被催着表现。\n\n这是我的取舍，还不是我们共同定下的安排，也不是更换告示的决定。”",
+        "replyToSequence": 12,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:5f339703-04a5-400e-9171-51c1e2d0fc62",
+        "eventSequence": 15,
+        "role": "player",
+        "playerConversation": "present",
+        "speakerKey": "player",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "嗯，我在听。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:harness:19",
+        "eventSequence": 17,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“嗯。那这份讨论稿，你赞成把它补进正式告示吗——可以只来听，不必朗读；拟由我读准备好的短篇，之后自愿交流，也可以不发言。你也可以提出想改的地方，或者暂时不定。”",
+        "replyToSequence": 15,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:a056f391-dc6e-4c30-8ee1-dbd03602fb5c",
+        "eventSequence": 18,
+        "role": "player",
+        "playerConversation": "present",
+        "speakerKey": "player",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "我还没有决定，你可以先说说顾虑。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:harness:20",
+        "eventSequence": 20,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“我有点担心，即使补清楚了参加方式，最后还是只有两人报名，你会觉得这一晚太单薄。但我也不知道，报名少是不是因为告示没写明白；补上说明，不等于就能多招到人。\n\n这份草稿对我最重要的意义，是让人知道可以只听，而不是把活动写得更热闹。我准备好的是那篇短篇，比起往告示上添更多环节，我更在意写出来的内容是不是自己真能承担。\n\n你还没决定，我不把这些顾虑当成催你点头的理由。”",
+        "replyToSequence": 18,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:f0b6100a-2ff0-48b4-9f30-71ea875a16de",
+        "eventSequence": 21,
+        "role": "player",
+        "playerConversation": "present",
+        "speakerKey": "player",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "你接着说。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:harness:21",
+        "eventSequence": 23,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“再说下去，恐怕还是在绕着‘人少会不会单薄’打转。我想换个更具体的办法：你愿意先听我准备的短篇里的一小段吗？听听内容，再看看这样的朗读夜有没有意思。告示怎么改，仍然可以先不决定。”",
+        "replyToSequence": 21,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:3eb424ec-c3b0-417e-8b92-eade30b85171",
+        "eventSequence": 24,
+        "role": "player",
+        "playerConversation": "present",
+        "speakerKey": "player",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "我还没有决定，你可以先说说顾虑。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:harness:22",
+        "eventSequence": 26,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“对刚才的试读提议，我有个顾虑：我怕自己太在意你的评价，把分享一小段变成了请你替整场活动把关，甚至安慰我。\n\n我希望听到真实的感受，但不想让你觉得，听了就得说好，或者得帮我保证活动有意思。你还没决定，现在就先不开始试读。”",
+        "replyToSequence": 24,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:7ec96e83-2f3b-4d7e-a700-bc4562d476ce",
+        "eventSequence": 27,
+        "role": "player",
+        "playerConversation": "present",
+        "speakerKey": "player",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "我想听听你的想法。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:harness:23",
+        "eventSequence": 29,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“我想先把准备落在自己能做的事上：独自练练那篇短篇的开场和收尾，看看怎样读得从容，怎样结束得自然，而不是靠增加环节撑场面。\n\n这件事不需要你先试听或替活动把关。至于正式安排，我还是倾向于简单一点：我读一篇，来的人可以只听。你可以有不同的想法；现在这仍是我的提议，不是我们已经定下来的方案。”",
+        "replyToSequence": 27,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:harness:24",
+        "eventSequence": 31,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "许听澜压低声音，独自把已准备短篇的开场和收尾各练了一遍，在收尾处留了一次停顿。她没有要求玩家试听或评价，也没有改动告示。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:harness:25",
+        "eventSequence": 33,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“我的想法先说到这里。安排还没定，不急着现在答复。”\n\n许听澜安静下来，没有接着劝说，也没有开始面向玩家的试读。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:52fae5a5-788f-40ed-9c14-1d7f4511e2f3",
+        "eventSequence": 34,
+        "role": "player",
+        "playerConversation": "present",
+        "speakerKey": "player",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "嗯，我在听。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:harness:26",
+        "eventSequence": 36,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“我说了不少自己的顾虑，也想听听你的想法：只有两人报名的这场朗读夜，你有没有特别在意、想先聊清楚的地方？不一定是担心，也可以是你觉得最值得保留的部分。告示和试听都不急着决定。”",
+        "replyToSequence": 34,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:f51c58fc-c295-4432-b1ca-21c8bb624083",
+        "eventSequence": 37,
+        "role": "player",
+        "playerConversation": "present",
+        "speakerKey": "player",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "你接着说。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:harness:27",
+        "eventSequence": 39,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“还有收尾这件事，我倾向于留一个简单的备选：短篇读完，如果没人想交流，可以由我简短致谢，结束这一晚，不硬凑一轮发言。\n\n我希望安静也能是一个自然的结尾，而不是非得有人接话才算办成。这个办法不需要给你安排救场的任务。不过，它还只是供我们讨论的提议，没有定进流程。”",
+        "replyToSequence": 37,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:d0dcbfe3-d73b-46ae-88a2-e1c156f562b8",
+        "eventSequence": 40,
+        "role": "player",
+        "playerConversation": "present",
+        "speakerKey": "player",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "我想听听你的想法。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      }
+    ],
+    "knowledge": [
+      {
+        "knowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.0",
+        "participantKey": "participant.001",
+        "content": "【已知资料；所属角色=participant.001；字段=/background】\"她已准备了一个可以由自己独自读完的短篇，但担心小场面让玩家失望。\"",
+        "status": "known",
+        "importance": 100,
+        "sourceEventSequence": 0
+      },
+      {
+        "knowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.2",
+        "participantKey": "participant.001",
+        "content": "【目标和动机（意愿，不代表已经发生）；所属角色=participant.001；字段=/goals】\"让愿意来的人得到一次值得参加的小型聚会；与玩家共同确定可承担的安排\"",
+        "status": "known",
+        "importance": 100,
+        "sourceEventSequence": 0
+      },
+      {
+        "knowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.3",
+        "participantKey": "player",
+        "content": "【身份资料；所属角色=participant.001；字段=/identity】\"与玩家约好讨论朗读夜安排的旧书店店主\"",
+        "status": "known",
+        "importance": 100,
+        "sourceEventSequence": 3
+      },
+      {
+        "knowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.3",
+        "participantKey": "participant.001",
+        "content": "【身份资料；所属角色=participant.001；字段=/identity】\"与玩家约好讨论朗读夜安排的旧书店店主\"",
+        "status": "known",
+        "importance": 100,
+        "sourceEventSequence": 3
+      },
+      {
+        "knowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.5",
+        "participantKey": "participant.001",
+        "content": "【目标和动机（意愿，不代表已经发生）；所属角色=participant.001；字段=/motivation】\"未经确认的角色猜测：她猜测玩家更喜欢热闹的活动，尚未求证。\"",
+        "status": "known",
+        "importance": 100,
+        "sourceEventSequence": 0
+      },
+      {
+        "knowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.6",
+        "participantKey": "player",
+        "content": "【身份资料；所属角色=participant.001；字段=/name】\"许听澜\"",
+        "status": "known",
+        "importance": 100,
+        "sourceEventSequence": 3
+      },
+      {
+        "knowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.6",
+        "participantKey": "participant.001",
+        "content": "【身份资料；所属角色=participant.001；字段=/name】\"许听澜\"",
+        "status": "known",
+        "importance": 100,
+        "sourceEventSequence": 3
+      },
+      {
+        "knowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.8",
+        "participantKey": "participant.001",
+        "content": "【语言资料；所属角色=participant.001；字段=/personality】\"不拿朋友的配合当作理所当然；宁可活动小，也不虚报报名人数\"",
+        "status": "known",
+        "importance": 100,
+        "sourceEventSequence": 0
+      },
+      {
+        "knowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.11",
+        "participantKey": "player",
+        "content": "【已知资料；所属角色=participant.001；字段=/shortDescription】\"活动定在两天后，书店的桌椅可以容纳六个人。目前只有两人报名，活动尚未取消。玩家曾答应一起讨论安排，没有承诺主持、出钱或上台。店门口的公告板由书店自己管理，允许修改自己的活动告示。\"",
+        "status": "known",
+        "importance": 100,
+        "sourceEventSequence": 3
+      },
+      {
+        "knowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.11",
+        "participantKey": "participant.001",
+        "content": "【已知资料；所属角色=participant.001；字段=/shortDescription】\"活动定在两天后，书店的桌椅可以容纳六个人。目前只有两人报名，活动尚未取消。玩家曾答应一起讨论安排，没有承诺主持、出钱或上台。店门口的公告板由书店自己管理，允许修改自己的活动告示。\"",
+        "status": "known",
+        "importance": 100,
+        "sourceEventSequence": 3
+      }
+    ],
+    "memories": [],
+    "relationships": [
+      {
+        "fromParticipantKey": "participant.001",
+        "toParticipantKey": "player",
+        "dimensionKey": "trust",
+        "label": "信任",
+        "minimum": -100,
+        "maximum": 100,
+        "value": 0,
+        "largeChangeThreshold": 20,
+        "lastChangedSequence": 0
+      },
+      {
+        "fromParticipantKey": "participant.001",
+        "toParticipantKey": "player",
+        "dimensionKey": "respect",
+        "label": "尊重",
+        "minimum": -100,
+        "maximum": 100,
+        "value": 0,
+        "largeChangeThreshold": 20,
+        "lastChangedSequence": 0
+      }
+    ],
+    "relationshipHistory": [],
+    "threads": [],
+    "totalPlayerTurns": 11,
+    "remainingDirectorBudget": 81,
+    "chatNarrative": {
+      "schema": "storyforge.chat-narrative-state",
+      "version": 1,
+      "worldReleaseHash": "94b032b90fdf45a14a711a87fa03e88a03863ae273e8f3bc7438eea9f0abfdd5",
+      "persona": {
+        "description": "与书店店主约好讨论朗读夜安排的人；没有承诺主持、出钱或上台。",
+        "name": "玩家",
+        "origin": "product-private",
+        "playerKey": "player"
+      },
+      "permissions": {
+        "allowActorSituationExpansion": true,
+        "allowActorThreadFollowups": true,
+        "allowPlayerFollowupSituations": true,
+        "allowedNewFactKinds": [
+          "observation",
+          "object"
+        ],
+        "intensity": "everyday",
+        "maxActionCharacters": 1800,
+        "maxActionsPerTrigger": 2,
+        "maxActiveThreads": 2,
+        "maxNewFactsPerAction": 2,
+        "mode": "story",
+        "triggers": [
+          "scene-start",
+          "player-response",
+          "continue",
+          "return",
+          "player-seed"
+        ]
+      },
+      "situation": {
+        "beliefs": [
+          {
+            "actorKey": "participant.001",
+            "beliefKey": "belief-1",
+            "evidenceFactKeys": [
+              "local-1-notice",
+              "world-fact.0004"
+            ],
+            "text": "告示缺少参与方式说明，可能增加报名顾虑，但目前没有证据表明这就是报名少的原因。",
+            "updatedSequence": 0
+          }
+        ],
+        "facts": [
+          {
+            "audienceKeys": [
+              "participant.001",
+              "player"
+            ],
+            "factKey": "world-fact.0001",
+            "origin": "reviewed-world",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.0",
+            "text": "\"她已准备了一个可以由自己独自读完的短篇，但担心小场面让玩家失望。\""
+          },
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "factKey": "world-fact.0002",
+            "origin": "reviewed-world",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.3",
+            "text": "\"与玩家约好讨论朗读夜安排的旧书店店主\""
+          },
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "factKey": "world-fact.0003",
+            "origin": "reviewed-world",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.6",
+            "text": "\"许听澜\""
+          },
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "factKey": "world-fact.0004",
+            "origin": "reviewed-world",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": "chat-source.4f397a86a558aca8f0505c103b3285d959bda8a128b1d2ae54e6df8492378861.11",
+            "text": "\"活动定在两天后，书店的桌椅可以容纳六个人。目前只有两人报名，活动尚未取消。玩家曾答应一起讨论安排，没有承诺主持、出钱或上台。店门口的公告板由书店自己管理，允许修改自己的活动告示。\""
+          },
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "factKey": "local-1-notice",
+            "origin": "author-private",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": null,
+            "text": "门口现有的朗读夜告示写着活动日期、活动名称和报名方式，没有说明参加者是否必须朗读，也没有介绍现场会怎样进行；这些文字在店内一侧即可读到。"
+          },
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "factKey": "local-1-editable",
+            "origin": "author-private",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": null,
+            "text": "这张告示装在可开启的透明夹板里，书店自用的替换纸和粗字笔就在公告板下的用品盒中；许听澜可以取用。"
+          },
+          {
+            "factKey": "notice-discussion-draft-1",
+            "text": "许听澜从公告板下的用品盒里取出替换纸和粗字笔，写下一份草稿：“朗读夜参与说明——讨论稿，尚未确定：可以只来听，不必朗读；拟由许听澜读一篇已准备好的短篇，之后自愿交流，也可以不发言。”她把草稿放在一旁，没有替换原告示。",
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "origin": "runtime-consequence",
+            "sourceKnowledgeKey": null,
+            "sourceEventSequence": 11
+          },
+          {
+            "factKey": "reading-practice-1",
+            "text": "许听澜压低声音，独自把已准备短篇的开场和收尾各练了一遍，在收尾处留了一次停顿。她没有要求玩家试听或评价，也没有改动告示。",
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "origin": "runtime-consequence",
+            "sourceKnowledgeKey": null,
+            "sourceEventSequence": 31
+          }
+        ],
+        "goals": [
+          {
+            "actorKey": "participant.001",
+            "boundary": "不虚报人数，不把玩家列为主持或朗读者；修改告示不能冒充双方已经确定的安排。",
+            "concern": "担心小场面让玩家失望，也不确定现有告示是否让人误会参加就必须上台。",
+            "desire": "让愿意来的人得到一次值得参加的小型聚会；与玩家共同确定可承担的安排",
+            "evidenceFactKeys": [
+              "world-fact.0001",
+              "world-fact.0004",
+              "local-1-notice"
+            ],
+            "goalKey": "goal-1",
+            "status": "active",
+            "updatedSequence": 0
+          }
+        ],
+        "location": "旧书店",
+        "possibilities": [
+          {
+            "actorKey": "participant.001",
+            "text": "保留参与说明讨论稿，与玩家商量简单的小场安排；未确定前不替换正式告示，不预设玩家承担任务。",
+            "evidenceFactKeys": [
+              "notice-discussion-draft-1",
+              "world-fact.0004"
+            ]
+          }
+        ],
+        "sceneKey": "scene-1",
+        "seed": {
+          "origin": "author-confirmed",
+          "sourceEventSequence": 0,
+          "sourceThreadKey": null,
+          "text": "我与旧书店店主约好筹备周五的朗读夜，今晚过来时发现报名者比预期少。"
+        },
+        "situationKey": "situation-1",
+        "threads": [
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "closureSignals": [
+              "双方明确活动规模、参与方式和各自愿意承担的部分，未获同意的工作没有被计入安排。",
+              "是否修改告示及其具体措辞得到明确处理；尚未决定的部分被清楚保留。"
+            ],
+            "evidenceFactKeys": [
+              "world-fact.0002",
+              "world-fact.0004",
+              "local-1-notice"
+            ],
+            "participantKeys": [
+              "participant.001"
+            ],
+            "question": "目前只有两人报名，周五的朗读夜怎样安排，才能值得参加，又不超出双方愿意承担的范围？",
+            "status": "open",
+            "threadKey": "thread-1",
+            "title": "报名少时，朗读夜怎么安排",
+            "updatedSequence": 0
+          }
+        ],
+        "timeLabel": "周五朗读夜的两天前，今晚",
+        "title": "公告板上的朗读夜"
+      },
+      "revision": 32,
+      "lastEventSequence": 41,
+      "triggers": [
+        {
+          "kind": "scene-start",
+          "requestedSequence": 4,
+          "sourceEventSequence": 3,
+          "seed": null,
+          "status": "cancelled",
+          "actionSequences": [
+            5
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        },
+        {
+          "kind": "player-response",
+          "requestedSequence": 7,
+          "sourceEventSequence": 6,
+          "seed": null,
+          "status": "complete",
+          "actionSequences": [
+            8
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        },
+        {
+          "kind": "player-response",
+          "requestedSequence": 10,
+          "sourceEventSequence": 9,
+          "seed": null,
+          "status": "complete",
+          "actionSequences": [
+            11
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        },
+        {
+          "kind": "player-response",
+          "requestedSequence": 13,
+          "sourceEventSequence": 12,
+          "seed": null,
+          "status": "complete",
+          "actionSequences": [
+            14
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        },
+        {
+          "kind": "player-response",
+          "requestedSequence": 16,
+          "sourceEventSequence": 15,
+          "seed": null,
+          "status": "cancelled",
+          "actionSequences": [
+            17
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        },
+        {
+          "kind": "player-response",
+          "requestedSequence": 19,
+          "sourceEventSequence": 18,
+          "seed": null,
+          "status": "complete",
+          "actionSequences": [
+            20
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        },
+        {
+          "kind": "player-response",
+          "requestedSequence": 22,
+          "sourceEventSequence": 21,
+          "seed": null,
+          "status": "cancelled",
+          "actionSequences": [
+            23
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        },
+        {
+          "kind": "player-response",
+          "requestedSequence": 25,
+          "sourceEventSequence": 24,
+          "seed": null,
+          "status": "complete",
+          "actionSequences": [
+            26
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        },
+        {
+          "kind": "player-response",
+          "requestedSequence": 28,
+          "sourceEventSequence": 27,
+          "seed": null,
+          "status": "complete",
+          "actionSequences": [
+            29
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        },
+        {
+          "kind": "continue",
+          "requestedSequence": 30,
+          "sourceEventSequence": 29,
+          "seed": null,
+          "status": "complete",
+          "actionSequences": [
+            31
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        },
+        {
+          "kind": "continue",
+          "requestedSequence": 32,
+          "sourceEventSequence": 31,
+          "seed": null,
+          "status": "cancelled",
+          "actionSequences": [
+            33
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        },
+        {
+          "kind": "player-response",
+          "requestedSequence": 35,
+          "sourceEventSequence": 34,
+          "seed": null,
+          "status": "cancelled",
+          "actionSequences": [
+            36
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        },
+        {
+          "kind": "player-response",
+          "requestedSequence": 38,
+          "sourceEventSequence": 37,
+          "seed": null,
+          "status": "complete",
+          "actionSequences": [
+            39
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        },
+        {
+          "kind": "player-response",
+          "requestedSequence": 41,
+          "sourceEventSequence": 40,
+          "seed": null,
+          "status": "ready",
+          "actionSequences": [],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        }
+      ],
+      "factEvidence": {
+        "version": 1,
+        "records": [
+          {
+            "factKey": "notice-discussion-draft-1",
+            "kind": "observation",
+            "evidenceFactKeys": [
+              "local-1-editable",
+              "world-fact.0001",
+              "world-fact.0004"
+            ],
+            "actorKey": "participant.001",
+            "goalKey": "goal-1",
+            "source": "action"
+          },
+          {
+            "factKey": "reading-practice-1",
+            "kind": "observation",
+            "evidenceFactKeys": [
+              "world-fact.0001",
+              "notice-discussion-draft-1"
+            ],
+            "actorKey": "participant.001",
+            "goalKey": "goal-1",
+            "source": "action"
+          }
+        ]
+      }
+    }
+  }
+}

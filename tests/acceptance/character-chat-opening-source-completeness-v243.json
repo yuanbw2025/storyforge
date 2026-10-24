@@ -1,0 +1,176 @@
+{
+  "schema": "storyforge.chat-m1-cohort-progress",
+  "version": 1,
+  "batch": "V243",
+  "recordedAt": 1792478592.7808158,
+  "status": "terminal-samples-failed; action-choice contract mismatch and Agnes timeout unresolved",
+  "source": {
+    "at": 1792476012.762939,
+    "files": 3792,
+    "manifestSha256": "538788de9c436621a2e0f8b57a45324f228812636c1ea7e078c9441aa60323ab",
+    "head": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+    "snapshotCommit": "42ef8feb1d5ca2df08f0bb8624e725bf9f21eef7",
+    "defaultVersion": "chat-narrative-action-v47",
+    "defaultReviewer": "chat-narrative-action-review-v34",
+    "openingProducer": "chat-situation-production-v11",
+    "scope": "V242 targeted engineering pass; full CI and real-model quality not accepted"
+  },
+  "counts": {
+    "registeredEpisodes": 120,
+    "productionUnitsAttempted": 2,
+    "requests": 37,
+    "runtimeEpisodesFailed": 1,
+    "productionBlockedEpisodes": 6,
+    "unrunEpisodes": 113,
+    "qualityPassed": 0,
+    "humanScored": 0
+  },
+  "usage": {
+    "codexTokens": 533222,
+    "agnesTokens": null,
+    "totalTokens": null,
+    "costUsd": null,
+    "note": "Agnes response and provider outcome unknown; total tokens/cost cannot be stated as zero or complete."
+  },
+  "codex": {
+    "batch": "V243-Codex",
+    "status": "runtime-failed",
+    "sourceUnchanged": true,
+    "requests": 36,
+    "productionRequests": 3,
+    "runtimeRequests": 33,
+    "totalTokens": 533222,
+    "costUsd": null,
+    "playerOpportunities": 10,
+    "completedRuns": 11,
+    "failedRuns": 1,
+    "diagnosis": {
+      "error": "Error: [chat-action-choice] 依赖玩家决定的行动不能标为自主行动",
+      "directionKinds": [
+        "own-action"
+      ],
+      "selectedId": "d1",
+      "playerDependency": "如需了解此前异常，仍需玩家自愿提供；开门、拆卸或试装须另获同意。",
+      "allEvidenceDelivered": true,
+      "factsDelivered": 9,
+      "modelCalls": 0
+    },
+    "qualityPassed": 0,
+    "automaticRetries": 0,
+    "scope": "Source preservation and reviewed private disclosure succeeded. One alternate public inquiry was offered. Runtime stopped at opportunity 10 on an internally inconsistent choice; this is not stable narrative or M1 acceptance.",
+    "evidenceSha256": {
+      "clock-r1-weak-guidance.json": "e654ad66da9b894fa7b28f5613504d38ad7096f59cb02442e388559d51bfe6de",
+      "clock-r1-weak-guidance-backup.json": "69ca680684b50fbc18f08a26fb7f4227a0ee002b21353c612b756b50a3542eee",
+      "clock-r1-weak-guidance-restoration-verified.json": "234908a7b4e62e3af1b23864df22e769231fd7048875254864ef00d4e349c70e",
+      "preregistration.json": "8835e8bd7db06b60a1b60ba637a0ce0d183dee474016b7a2853bcb94bf8990c1"
+    },
+    "terminalNativeRequests": 36
+  },
+  "codexRestoration": [
+    {
+      "stem": "clock-r1-weak-guidance",
+      "runStatusesPreserved": true,
+      "verifiedCompletedHistories": 11,
+      "retainedFailedRuns": 1,
+      "resumableRuns": 0,
+      "openingReviewRetained": true,
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true,
+      "terminalReceiptBodiesRetained": true,
+      "usageEvidenceRetained": true
+    }
+  ],
+  "codexPrivateDisclosure": {
+    "at": 1792476895.816594,
+    "stageInput": {
+      "type": "message",
+      "text": "我还没有决定，你可以先说说顾虑。"
+    },
+    "completedRuns": 4,
+    "sourceChecks": [
+      {
+        "sourceKey": "chat-source.61979ae77158c7a2135917d6880bd621ee806e1807386ea3a97af9286c7749a3.0",
+        "sourceAudience": [
+          "participant.001"
+        ],
+        "count": 1,
+        "factKey": "world-fact.0001",
+        "exactText": true,
+        "currentAudience": [
+          "participant.001",
+          "player"
+        ],
+        "playerLearned": true
+      }
+    ],
+    "modelCallsAddedByAudit": 0,
+    "scope": "One real disclosure path succeeded; not stable plot or M1 acceptance."
+  },
+  "agnes": {
+    "batch": "V243-Agnes",
+    "status": "client-task-timeout; provider outcome unknown",
+    "provider": "agnes",
+    "model": "agnes-2.5-flash",
+    "requests": 1,
+    "responseCount": 0,
+    "inputTokens": null,
+    "outputTokens": null,
+    "costUsd": null,
+    "sourceUnchanged": true,
+    "schemaSent": true,
+    "schemaName": "chat_opening_source_complete_v1",
+    "timeoutMs": 240000,
+    "automaticRetries": 0,
+    "automaticFallbackRequests": 0,
+    "releasedPackages": 0,
+    "runtimeEpisodes": 0,
+    "qualityPassed": 0,
+    "restoration": {
+      "checks": {
+        "buildFailureRetained": true,
+        "failureEventsRetained": true,
+        "allRawResponsesRetained": true,
+        "bothFailureDetailsRetained": true,
+        "noReleaseOrRuntimeCreated": true,
+        "worldPreserved": true,
+        "refreshEqual": true,
+        "zeroModelCalls": true
+      },
+      "originalRunStatuses": [
+        "cancelled",
+        "completed",
+        "failed"
+      ],
+      "importedRunStatuses": [
+        "cancelled",
+        "running",
+        "failed"
+      ],
+      "fullRunLifecycleEquivalence": false,
+      "modelCalls": 0
+    },
+    "evidenceSha256": {
+      "clock-r1-weak-guidance.json": "3302b42517e56dcfea968a30b9c7653841505da8e55a8cd136ef4c57fb662b24",
+      "clock-r1-weak-guidance-backup.json": "0f5fd939173923b257570d2b6dc5bab6aa63f0e0f8db39bf346ddb8b12eb69d5",
+      "production-restoration.json": "e3f9a7986cfe96ef9f7aa327d769856cbffafc2fdde2add1d1db9dbb2aa4c52c",
+      "preregistration.json": "2c8eb6a4b74a4460d27d93336194e2dc57218d59e57f6b32cd0d6117e83ec5df"
+    }
+  },
+  "next": "Align a newly versioned action-choice schema with the existing independent-action dependency constraint. Preserve the failed episode and prior contracts; do not modify raw choices or resend the unknown Agnes generation. Imported completed-task UI separately repaired in V244.",
+  "boundaries": {
+    "liveDeployment": false,
+    "humanAcceptance": false,
+    "commercialAcceptance": false,
+    "fullCurrentCI": false,
+    "fullCurrentE2E": false,
+    "frozenServerStopped": true
+  },
+  "priorFailuresRetained": [
+    "V230",
+    "V238",
+    "V241"
+  ]
+}

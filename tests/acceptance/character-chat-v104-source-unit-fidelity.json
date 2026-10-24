@@ -1,0 +1,103 @@
+{
+  "schema": "storyforge.character-chat-source-unit-fidelity-evidence",
+  "version": 1,
+  "label": "V104 source interpretation and production path",
+  "implementationHead": "44306e0eab6efe97db99bc3d2262289567fd9183",
+  "snapshot": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "44306e0eab6efe97db99bc3d2262289567fd9183",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v104-real-_w0ka4h3/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v104-real-_w0ka4h3/manifest.json",
+    "manifestSha256": "cbe381e60c311862ebe9d120a83ac6a88939e485c9874fc9bbc9891f066d9065",
+    "files": 3443
+  },
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v104-source-unit-fidelity",
+  "files": {
+    "preregistration.json": "58671a24e4e528b40be3a68c4a7db1a0c2164020e5d8c1df98daf763bd187190",
+    "runner.mjs": "4a82b2bedd9ed0f090d40ed4e936cb5721094eef85a64753bb5a8706c595c2f7",
+    "prepared.json": "5eafb5549dd1b78e0ac352c2c82df588af8148afebba70faf0d73a613580e8e3",
+    "generated.json": "649f9b9e461f9ef5fba548d61b58a65e3de1adf18ad37147fb7c5f7264933f47",
+    "reviewed.json": "26b51a1a1798382ee9d7707895ba9d822ae5f829d150be91411f3df3cf284604",
+    "preflight.json": "c4ee34f9ca9aad00a53df259ba98308d00111aab9c90963cef2e8992bbf67378",
+    "transport-progress.json": "3597e5d3a0c6546f2b7178023261f268299edf081fb170e27a99505871887ab5",
+    "preflight-backup.json": "2df27685168f9a0ebf4a7aca5ecc2284342cde5a03ac25931faa0517c5e2780f",
+    "preflight-terminal-request-proof.json": "6d0808944ceedbcf6c69ab2aae2a6af7f7f359dc5c96b764619b2d74bd78a678",
+    "restore.mjs": "91a093066555f2676c922bcd3eba126f2c3ce859f7d8266ea7063e7927d53e5f",
+    "restoration.json": "25e1402f18d8c2208ef1b44ec7e8bb8d9762351fe7fa1f5cd1fe7f6d8866c607",
+    "restore-ui.mjs": "5e7ee4d349fa4581cd2d68dc9c5c2eb6c9187c7dc238e08f02081be61d13e304",
+    "restoration-ui.json": "07b8574393dcf726aec052b6f965e23e24e2f10ac97b27a5ae39fabd58ea377b",
+    "restored-workbench-facts-390.png": "2b8a56a09362c7f45884904338fd1892e0ba6d6fa3052106d7744860363080bc",
+    "restored-workbench-constraints-390.png": "2dc7a34c75099aa9bb4eb0c25cacf5633f8234feca1b9ab425f142a43b8205a3",
+    "restored-workbench-review-390.png": "ffe4dc54c2e00f053a3ccdbf400dc89ba83f66b7b78468f8037ca9adacd000a4"
+  },
+  "realModel": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "requests": 2,
+    "tokens": 12885,
+    "costUsd": null,
+    "scope": "One full original passage, generation and separate review; no candidate edits, repair or retry",
+    "candidateFacts": 3,
+    "candidateConstraints": 1,
+    "reviewPassed": true,
+    "sourceAdmission": "V97 complete original material, initial knowledge and unchanged complete discovery condition checked before requests; no truth truncation",
+    "readback": "both completed provider records read back exactly",
+    "sideEffects": "authoring draft and world unchanged; no adoption, product production or runtime created"
+  },
+  "restoration": {
+    "histories": 2,
+    "modelCalls": 0,
+    "rawResponsesEqual": true,
+    "candidateAndReviewEqual": true,
+    "worldAndDraftUnchanged": true,
+    "ui": "readback of actual candidate/report, refresh and 390 width checked in isolated browser; screenshots visually inspected"
+  },
+  "engineering": {
+    "productionRegression": "tests/regression/R-CHAT-02-source-unit-production.test.ts",
+    "passed": 1,
+    "log": "/tmp/storyforge-chat-v104-production-r4.log",
+    "scope": "scripted author confirmation through authorized scheduler, exact source manifests, selected opening, immutable local Release, new session and backup import; draft removal preserves release/session",
+    "initialTestFailures": [
+      {
+        "log": "/tmp/storyforge-chat-v104-production-r1.log",
+        "reason": "test passed projectionHash instead of fragmentKeys to removal API; corrected test call"
+      },
+      {
+        "log": "/tmp/storyforge-chat-v104-production-r2.log",
+        "reason": "test expected removed optional field instead of existing empty bundles contract"
+      },
+      {
+        "log": "/tmp/storyforge-chat-v104-production-r3.log",
+        "reason": "test referenced nonexistent manifest root hash list; now typed manifest and actual per-resource proofs"
+      }
+    ],
+    "requiredGates": {
+      "passed": 10,
+      "receipt": "/tmp/storyforge-chat-v104-final-gates-receipt.json",
+      "bundleSize": "passed",
+      "bundleLog": "/tmp/storyforge-chat-v104-final-bundle-size.log"
+    },
+    "fullValidation": {
+      "implementationHead": "44306e0eab6efe97db99bc3d2262289567fd9183",
+      "ci": "queued; no terminal receipt",
+      "e2e": "queued; no terminal receipt",
+      "newProductionRegression": "separately passed; not included in queued V103 snapshot"
+    }
+  },
+  "limitations": [
+    "Same model in separate calls, not independent provider calibration",
+    "One development passage does not validate semantic judgment over the full matrix",
+    "Readonly real candidate not adopted or used for real production; scripted Release test is separate engineering evidence",
+    "No new runtime episode, narrative score, human or commercial acceptance",
+    "Original cohorts, failures and all denominators unchanged; holdouts not inspected"
+  ],
+  "priorCohortHashes": {
+    "character-chat-m1-cohort-v77.json": "98b3dea026d14e21be049773a65dffef2dfee4ad5c9284cc0cbb7c41ac672eb3",
+    "character-chat-m1-cohort-v89.json": "9cc915bb35d9576b9550b65536d8464ccb5b3c3b32ebd38c02e4b33b7c098d39",
+    "character-chat-m1-cohort-v90.json": "41d85e4b76ddeacf6efd0a45a84eeef7999c314122e9a8c2395a132cdce8bc05",
+    "character-chat-m1-cohort-v92.json": "1c715d3aea56f08968824a01debad127468de4b3d8d38d283eefb67ef717c033",
+    "character-chat-m1-cohort-v97.json": "60fa37522a117b60ec87724ad0a8cd4a58f05dc3c84af0f27e9d7ff7b9a09844"
+  },
+  "countsInM1": false,
+  "goalStatus": "active"
+}

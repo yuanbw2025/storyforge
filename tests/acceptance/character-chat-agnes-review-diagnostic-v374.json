@@ -1,0 +1,37 @@
+{
+  "version": 374,
+  "recordedAt": "2026-10-24T04:30:13.418495+00:00",
+  "status": "evaluation-only-review-rejected",
+  "purpose": "Evaluation-only reference selection with Agnes 3.0 Flash. Model selects immutable source/option IDs; exact original quotes and pointers come from the frozen catalog. The original domain validator must accept the compiled report. Same original story/candidates and five review judgments; no product code change, model retry, primary switch or formal M1 credit.",
+  "provider": "agnes",
+  "model": "agnes-3.0-flash",
+  "sourceValidatorSha256": "447e75be2039b6943f83aecf86542a7e0fa9f8492391016db9874bedeb26e2c2",
+  "result": {
+    "requests": 1,
+    "httpStatus": 200,
+    "finishReason": "stop",
+    "durationMs": 65453,
+    "observedTokens": 18137,
+    "plainJsonAccepted": true,
+    "wireSchemaAccepted": true,
+    "productSemanticReviewAccepted": false,
+    "failure": "An adaptive development witness repeated the first action direction; the unchanged validator rejected it.",
+    "primaryProfileChanged": false,
+    "modelCallsDuringValidation": 0
+  },
+  "evidenceHashes": {
+    "preregistration.json": "b290236c9ab1a3b63607b569c28b7b4abbf608f9ad54f805ee0ee20b2db67360",
+    "request.json": "e254adcc41b02568c9b2d82ba22b3efe1d488119ffc69841ab472f1d4145a687",
+    "response.json": "b0c6132117d6b33e07af48288733e7d90fdc965a9dbcea6c2443b104a8b50cd0",
+    "receipt.json": "9336f66d7da00e2da6394f32272bfa75c0f41f07e2e4216b8fad9081f5a18a8c",
+    "validation.json": "542dec459973049579308ba8ce249a1d4166cc9f4d6d722dd18b53215832c357"
+  },
+  "claims": {
+    "noProductWrites": true,
+    "formalM1Credit": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "quotaFailure": false
+  },
+  "referenceCompilation": "The model chose immutable catalog IDs; the local evaluation codec restored exact original source paths and text before applying the unchanged product review validator. This protocol is not integrated into production."
+}

@@ -1,0 +1,40 @@
+{
+  "version": 375,
+  "recordedAt": "2026-10-24T04:38:11.368424+00:00",
+  "status": "targeted-browser-regressions-passed-full-delivery-pending",
+  "sourceBase": "a46b32bb42a29d654f0e9d7c5ebe9e0db65d07fe",
+  "applicationSourceCommit": "49c53da628aea7a06a5e17826fea35f63f9d5d24",
+  "applicationSourceUnchanged": true,
+  "originalRemoteFailure": {
+    "head": "0a75f7f7c1fa58db73c2f3a3cfc0855dfa5f01cb",
+    "jobId": 120758304017,
+    "passed": 503,
+    "failed": 8,
+    "skipped": 4,
+    "reason": "Two browser fixtures omitted the current selection contract possibilityChecks field and stopped before testing control review. Original failure log retained."
+  },
+  "change": "Use the existing version-aware engineering response fixture in turn-end and maintained-pause browser tests. Current production contract, semantic checks, assertions and timeouts remain unchanged.",
+  "verification": {
+    "browserFiles": 2,
+    "passed": 8,
+    "failed": 0,
+    "flaky": 0,
+    "skipped": 0,
+    "retries": 0,
+    "nativeIsolatedChromium": true,
+    "typecheck": true,
+    "changedTestLint": true,
+    "diffCheck": true,
+    "externalModelCalls": 0
+  },
+  "evidenceHashes": {
+    "browser.json": "334811f88a17e5de058dc444fb80b5e64e042b32507289949f093a507652a812",
+    "remote-browser-0a75.log": "1d8659ae69d5375507233a7699ea3c977f12e08fa20ab555319d7898600f271f"
+  },
+  "claims": {
+    "formalM1Credit": false,
+    "fullDeliveryPassed": false,
+    "commercialReady": false,
+    "released": false
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "version": 360,
+  "recordedAt": "2026-10-23T13:06:48.849600+00:00",
+  "status": "activated-engineering-verified-real-model-pending",
+  "product": "character-interaction",
+  "phase": "S3 product development",
+  "branch": "fix/chat-narrative-flow-20261023",
+  "baseHead": "7a4b4b2cac2f2faa9615be0526f3eba5a96d3734",
+  "problem": "The V359 second independent session failed before player refusal: the NPC used uncertainty about the current location to postpone answering where it had previously put an item. Independent review rejected the reply and retained the pending question.",
+  "change": "New situation generation v21 distinguishes past events, routine practice and current state. Ordinary details remain within frozen creative permission and established knowledge; unknown or declined answers require grounded reasons. Independent review v19 is unchanged.",
+  "boundaries": {
+    "owner": "Chat Work and runtime session",
+    "sources": [
+      "chatSituationRuntime",
+      "chatSituationCandidate"
+    ],
+    "candidateAndAdoption": "Existing governed runtime candidate, independent review, adoption, events and receipts",
+    "world": "Frozen read-only WorldRelease",
+    "mediaOwner": "unchanged",
+    "newTables": false,
+    "schemaChanged": false,
+    "inquiryEvidenceVersion": 5,
+    "generationReader": "chat-situation-runtime-view-v18",
+    "maximumCalls": 2,
+    "originalInputBudget": 40000,
+    "historicalPromptsPreserved": true
+  },
+  "validation": [
+    {
+      "check": "new binding regression before implementation",
+      "passed": 5,
+      "failed": 2,
+      "evidence": "v360-inquiry-answer-scope/baseline.json",
+      "note": "Missing v21 default and allowed pair; this is engineering activation evidence, not a semantic-model reproduction."
+    },
+    {
+      "check": "scope, historical exact requests, independent rejection, uncertain/declined answers, state and budget",
+      "passed": 7,
+      "failed": 0,
+      "evidence": "v360-inquiry-answer-scope/focused.json",
+      "injectedResponses": true
+    },
+    {
+      "check": "TypeScript noEmit",
+      "exitCode": 0,
+      "sessionId": 62389
+    },
+    {
+      "check": "lint 19 changed TS/TSX files",
+      "exitCode": 0,
+      "evidence": "v360-inquiry-answer-scope/lint-receipt.json"
+    },
+    {
+      "check": "ten governance gates",
+      "exitCode": 0,
+      "evidence": "v360-inquiry-answer-scope/governance-checks.json"
+    },
+    {
+      "check": "build and bundle size",
+      "exitCode": 0,
+      "evidence": "v360-inquiry-answer-scope/build-checks.json"
+    },
+    {
+      "check": "three isolated native-browser files",
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "retries": 0,
+      "evidence": "v360-inquiry-answer-scope/browser.json",
+      "injectedResponses": true
+    },
+    {
+      "check": "185 character-chat regression files",
+      "sessionId": 78374,
+      "evidence": "v360-inquiry-answer-scope/chat-regressions.json",
+      "files": 185,
+      "passed": 2272,
+      "failed": 0,
+      "skipped": 0,
+      "sourceUnchanged": true
+    }
+  ],
+  "retainedInput": {
+    "at": "2026-10-23T13:04:26.993Z",
+    "oldGenerationHash": "b26f5e933a0ba904f08283314f952b5ecc4c2aed5bd273e51777d30121dac137",
+    "unchangedReviewHash": "dd9370ca7b096ea2c49aae9e3eeff58a91bc8740a142b68ef4ed97fc7fa9df06",
+    "originalGenerationMessagesTokens": 15578,
+    "updatedGenerationMessagesTokens": 15848,
+    "reviewMessagesTokens": 12989,
+    "originalTotal": 28567,
+    "updatedTotal": 28837,
+    "inputBudget": 40000,
+    "allOriginalUserMessagesRetained": true,
+    "modelCalls": 0,
+    "scope": "Reconstructed full retained generation/review message arrays, changing only the one versioned generation rule; an admission estimate, not billing or real generation evidence."
+  },
+  "outstanding": [
+    "Commit and freeze the validated source and update the existing draft PR.",
+    "Collect a fresh explicit diagnostic from the original failed inquiry branch, preserving its failed parent and full evidence; do not count repaired continuation as the original scored episode.",
+    "Obtain full delivery results for the final commit and continue the complete M1 matrix and remaining plan."
+  ],
+  "claims": {
+    "realModelCalls": 0,
+    "semanticImprovementVerified": false,
+    "currentFullDeliveryPassed": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "released": false
+  },
+  "updatedAt": "2026-10-23T13:12:56.454707+00:00"
+}

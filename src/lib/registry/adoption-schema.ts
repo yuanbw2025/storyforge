@@ -8,6 +8,7 @@ import type { AdoptionExtensionSpec, CollectionAdoptionSpec } from './types'
 import { REGISTRY_BY_NAME } from './project-tables'
 
 const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
+  {target: 'chatAuthoringDrafts', identity: 'id', recordOnly: true, duplicatePolicy: 'error', required: [], autoStamps: ['updatedAt'], ownerFrom: 'work'},
   // Existing singleton records also support exact author edits by ID. Creation
   // still uses the singleton boundary; these entries never permit collection adds.
   { target: 'worldviews', identity: 'id', recordOnly: true, duplicatePolicy: 'error', required: [], autoStamps: ['updatedAt'] },
@@ -476,6 +477,13 @@ const ADOPTION_SCHEMAS_RAW: CollectionAdoptionSpec[] = [
 ]
 
 export const ADOPTION_EXTENSIONS: readonly AdoptionExtensionSpec[] = Object.freeze([
+  {
+    id: 'chat-authoring-draft-lifecycle', target: 'chatAuthoringDrafts',
+    entrypoints: ['src/lib/character-interaction/draft-service.ts', 'src/lib/character-interaction/role-profile-store.ts', 'src/lib/character-interaction/consultation-store.ts', 'src/lib/character-interaction/source-unit-store.ts'],
+    policyRegistry: 'PROJECT_TABLES + WorkspaceScope + draft revision CAS + FIELD_REGISTRY roleProfilesJson/settingsJson/sourceUnitsJson + immutable identity/source/permission guard',
+    reason: 'S2作者方案创建、资料权限确认、会谈和revision属于普通领域生命周期。draft-service仅保留整理字段，不生成或改写；role-profile-store、consultation-store和source-unit-store的正文须经adopt()，直接更新仅限同事务revision。事实整理须绑定完整原文、逐项权限复核和作者确认，不得借此改写来源分类或世界。',
+    reviewAfter: '2027-10-01',
+  },
   { id: 'extension-record-lifecycle', target: 'extensionRecords', entrypoints: ['src/lib/extensions/store.ts'], policyRegistry: 'ExtensionRegistrySnapshot + PROJECT_TABLES + bounded DataSchema', reason: '普通作者编辑、内容包、迁移与历史代恢复通过命名空间、schema 和 revision CAS；模型候选必须由 adopt 委托同一事务写入。', reviewAfter: '2027-01-01' },
   {
     id: 'reference-analysis-run-lifecycle',

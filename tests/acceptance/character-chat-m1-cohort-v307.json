@@ -1,0 +1,75 @@
+{
+  "schema": "storyforge.chat-development-acceptance",
+  "version": 307,
+  "at": "2026-10-22T04:47:47.958656+00:00",
+  "status": "production-blocked-review-context-budget",
+  "baseHead": "af13010ce15f631f3f0aff7bcb35af9fd7b135d1",
+  "cohort": "m1-v307-current",
+  "plannedEpisodes": 120,
+  "productionBlockedEpisodes": 6,
+  "notStartedEpisodes": 114,
+  "runtimeEpisodesStarted": 0,
+  "m1Passed": false,
+  "requests": 1,
+  "allNativeRequestsCompleted": true,
+  "usage": {
+    "totalTokens": 24525,
+    "inputTokens": 20791,
+    "cachedInputTokens": 0,
+    "cacheWriteInputTokens": 0,
+    "outputTokens": 3734,
+    "reasoningOutputTokens": 516
+  },
+  "costUsd": null,
+  "sourceUnchanged": true,
+  "production": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v307-m1-current/codex-inn-r1/inn-r1-weak-guidance.json",
+    "sha256": "dd61d43b024faf846390bf534db175d362c181acad3bee4678ddf05f3cd93934"
+  },
+  "backup": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v307-m1-current/codex-inn-r1/inn-r1-weak-guidance-backup.json",
+    "sha256": "91aa4f3a9c61dffe25fba7fd01f3dd362521b079984bff87e1e864db18d6c0c2"
+  },
+  "restoration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v307-m1-current/codex-inn-r1/production-restoration.json",
+    "sha256": "8fa239d71bb0af8a0ef98cb36bde2348f06d452658a62a025ca6b07220dab743"
+  },
+  "diagnostic": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v307-m1-current/codex-inn-r1/review-budget-diagnostic.json",
+    "sha256": "7d2d81acccd99a5665e8fe4614544a750e1f1cec83b52763cea2eb284ce6d70c"
+  },
+  "finding": "Initial generation completed. Mandatory opening review stopped before dispatch because complete input exceeded the conservative Codex context allowance. The error displayed the proposed trimmed size; no trimmed request was sent. No release or runtime was created.",
+  "budgetDiagnostic": {
+    "tokenParts": {
+      "system": 5125,
+      "context": 15826,
+      "schema": 1229
+    },
+    "wholeInput": 22180,
+    "budgets": [
+      {
+        "output": 10000,
+        "trimmed": true,
+        "inputBudget": 21130
+      },
+      {
+        "output": 8192,
+        "trimmed": false,
+        "inputBudget": 22938
+      },
+      {
+        "output": 8000,
+        "trimmed": false,
+        "inputBudget": 23130
+      },
+      {
+        "output": 6000,
+        "trimmed": false,
+        "inputBudget": 25130
+      }
+    ],
+    "modelCalls": 0
+  },
+  "recovery": "Independent import and refresh preserve failed build, raw responses, failure details and world; zero model calls.",
+  "next": "Remove repeated reviewer instructions under a new frozen prompt version, retain full sources, candidates, five checks and v3 proof. Validate actual failed input before explicitly resuming the existing candidate in a separate diagnostic; do not relabel this cohort."
+}

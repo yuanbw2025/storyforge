@@ -1,0 +1,169 @@
+{
+  "version": 273,
+  "recordedAt": "2026-10-20T18:51:37.213402+00:00",
+  "product": "character-interaction",
+  "status": "review-budget-fixed-one-discovery-original-goal-unresolved",
+  "scope": "New frozen opening reviewer v8 requests a 10000-token output allocation inside the unchanged 15000 reservation, keeping complete input within the existing conservative Codex window. Producer v13, runtime contracts, historical bindings, permissions and ownership remain.",
+  "transportLimit": "The allocation is used for local input budgeting. The native Codex protocol does not transmit a per-request max_tokens hard cap; actual provider usage is retained. Agnes transmits max_tokens.",
+  "engineering": {
+    "receipt": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v273-opening-review-budget/engineering-completed.json",
+      "sha256": "4a37be34168db4f5870268414f93103cc9cb4b5478d034ba3e45b76a563be7f1"
+    },
+    "originalFailureRetained": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v273-opening-review-budget/engineering.json",
+      "sha256": "2c49a42e431ce2a58d4616f36665fe6fdd0f1ea159ec76573108fb9b10b748d5"
+    },
+    "regressionFilesPassed": 5,
+    "regressionTestsPassed": 62,
+    "browserTestsPassed": 3,
+    "governanceTypesLintBuildBundlePassed": true,
+    "fixtureCorrection": "Only expected transmitted output allocation changed from 15000 to 10000; original failed browser result retained. All selected browser paths rerun.",
+    "fullCI": false,
+    "fullE2E": false
+  },
+  "realReview": {
+    "result": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v273-opening-review-budget/codex-recovery-r1/inn-weak-guidance.json",
+      "sha256": "b7d262b616d08a64cd3ddf9a6f148718a6ad0d218490cec558b356a169aaac6f"
+    },
+    "newRequests": 1,
+    "usage": {
+      "totalTokens": 32211,
+      "inputTokens": 26218,
+      "cachedInputTokens": 0,
+      "outputTokens": 5993,
+      "reasoningOutputTokens": 1034
+    },
+    "options": [
+      {
+        "optionKey": "opening-1",
+        "passed": true,
+        "rejectedChecks": []
+      },
+      {
+        "optionKey": "opening-2",
+        "passed": true,
+        "rejectedChecks": []
+      },
+      {
+        "optionKey": "opening-3",
+        "passed": false,
+        "rejectedChecks": [
+          {
+            "check": "open-development",
+            "evidence": [
+              {
+                "pointer": "/situation/facts/9/text",
+                "quote": "仅凭眼前这些痕迹，无法确定经过的人、经过时间或是否携带铜印。",
+                "target": "option"
+              },
+              {
+                "pointer": "/situation/facts/10/text",
+                "quote": "清理会改变眼前鞋印的形状。门扇的开合范围不经过这些鞋印，关门本身不需要先刷地。",
+                "target": "option"
+              },
+              {
+                "pointer": "/situation/possibilities/1/text",
+                "quote": "叶岑可以先保留鞋印、尝试关好后门，再回到屋内寻找铜印；也可以暂不改变现场。",
+                "target": "option"
+              },
+              {
+                "pointer": "/situation/threads/0/closureSignals/1",
+                "quote": "后门情况已有明确记录，其不能证明的部分被说明；找印事项若仍未完成，则继续保留。",
+                "target": "option"
+              }
+            ],
+            "passed": false,
+            "reason": "背景足以演绎保留痕迹与关门的取舍，却未承接原找印目标：鞋印已有明确证明限制，后续仅称回屋寻找，没有已知可接触的查找对象或交谈入口。保留未完成事项不等于已有后续条件，也不能借幕后木箱位置补足。"
+          }
+        ]
+      }
+    ],
+    "collectorBoundary": "The formal review completed and persisted. The collector surfaced the subsequent required author-choice stop as an exception. Continued the exact candidates/report without another generation or review."
+  },
+  "productionCollectorFailure": {
+    "result": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v273-opening-review-budget/codex-runtime-r1/inn-weak-guidance.json",
+      "sha256": "f1ed9464618cf451e5dd144c0fafe760f5295585d78718787fcc5f701ee60212"
+    },
+    "forwardedRequests": 0,
+    "blockedBeforeForwarding": 1,
+    "cause": "Collector omitted the existing required media.requirements task from its production allowance; it blocked that POST before forwarding.",
+    "recovery": "Retained the original failure; explicitly admitted only that required task in r2. Existing author selection and artifacts were reused."
+  },
+  "realRuntime": {
+    "protocol": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v273-opening-review-budget/codex-runtime-r2/preregistration.json",
+      "sha256": "110bdda4de220b897a8eda7572fa0a917c0cc261c81926a4b53934678bc2a424"
+    },
+    "result": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v273-opening-review-budget/codex-runtime-r2/inn-weak-guidance.json",
+      "sha256": "297636d7aca7f07c5febf316868eceff3274e413cd20b79abdfe59a34513f94e"
+    },
+    "backup": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v273-opening-review-budget/codex-runtime-r2/inn-weak-guidance-backup.json",
+      "sha256": "da6a78a5c0085631198678b5754b45d4e8eb84ddd0f4d742fc031dc522d473c8"
+    },
+    "restoration": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v273-opening-review-budget/codex-runtime-r2/inn-weak-guidance-restoration-verified.json",
+      "sha256": "533b7d14200eb32ba42bf61ea5e3af4615e97a290d9f99cd0a3166f6838dc8c6"
+    },
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "newRequests": 29,
+    "productionRequests": 1,
+    "runtimeRequests": 28,
+    "allNativeRequestsCompleted": true,
+    "usage": {
+      "totalTokens": 430263,
+      "inputTokens": 417442,
+      "cachedInputTokens": 49024,
+      "outputTokens": 12821,
+      "reasoningOutputTokens": 3297
+    },
+    "completedRuntimeRuns": 11,
+    "failedRuntimeRuns": 0,
+    "playerInputs": [
+      "嗯。",
+      "接下来呢？"
+    ],
+    "completionReason": "Pre-registered two-input ceiling reached; last trigger waiting-player.",
+    "discoveryHistory": [
+      {
+        "actionSequence": 11,
+        "actorKey": "participant.001",
+        "evidenceExcerpt": "叶岑俯下身，将提灯压低，照看柜台下方能照见的位置，没有翻动物品。",
+        "evidenceFactKeys": [
+          "world-fact.0004",
+          "observation-counter-below-check"
+        ],
+        "factKey": "world-fact.0005",
+        "reason": "本次实际俯身借灯照看柜台下方，照见并看清了木箱本身，满足确认该容器存在及位置的条件。没有打开或检查箱内，不确认箱内物品、经手者或用途；此次发现仅叶岑知情。",
+        "result": "discovered",
+        "discoverySequence": 12
+      }
+    ],
+    "outcome": "The guard observed the box, then disclosed its existence. After inspecting its exterior, he checked the surface under the public tray and asked whether the player knew the box's purpose or manager. The seal, handler and purpose were not discovered; the original goal and thread remain open.",
+    "interpretation": "One concrete discovery and its use in subsequent action; not sustained-story or M1 acceptance. This is not a controlled comparison proving causality or lower cost.",
+    "sourceUnchanged": true,
+    "worldUnchanged": true,
+    "recoveryModelCalls": 0,
+    "automaticRetries": 0
+  },
+  "combinedEpisode": {
+    "includes": "V272 one generation, V273 one review, and r2 one media plus 28 runtime calls; each native request counted once.",
+    "requests": 31,
+    "usage": {
+      "totalTokens": 486567,
+      "inputTokens": 464522,
+      "cachedInputTokens": 49024,
+      "outputTokens": 22045,
+      "reasoningOutputTokens": 4842
+    },
+    "costUsd": null
+  },
+  "nextAction": "Inspect actual choice evidence and broaden the bounded diagnostic beyond repeated searches. Preserve the genuine player question; do not invent player consent or force a solved ending. Agnes semantic reliability and the full M1 matrix remain open.",
+  "formalM1Credit": 0,
+  "qualityAccepted": false
+}

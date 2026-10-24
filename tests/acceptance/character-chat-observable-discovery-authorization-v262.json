@@ -1,0 +1,38 @@
+{
+  "at": "2026-10-20T11:12:54.932Z",
+  "sourceUnchanged": true,
+  "results": [
+    {
+      "case": "conditional-firsthand",
+      "passed": true,
+      "status": "ready",
+      "adopted": "adopted",
+      "calls": 1
+    }
+  ],
+  "allCasesPassed": true,
+  "formalM1Credit": false,
+  "qualityAccepted": false,
+  "nativeRequestsCompleted": true,
+  "observedTotalTokens": 10111,
+  "restoration": {
+    "passed": true,
+    "modelCalls": 0,
+    "receipt": "restoration-positive-recovered.json"
+  },
+  "allInitiallyUnknown": true,
+  "existingTruthConditionsRetained": true,
+  "status": "bounded-real-authorization-adopted-and-restored",
+  "generatorEvidence": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v261-observable-source-units/real-receipt.json",
+  "sourceManifestSha256": "026582806e9eb058eb711be939743d61af78538fe24a275a68df07cb799656ce",
+  "localEvidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v262-observable-discovery-authorization",
+  "fullCI": false,
+  "fullE2E": false,
+  "meaningfulStoryProgressAccepted": false,
+  "evidence": {
+    "preregistration.json": "346a229d0a0ac0e3f01c3cffd633f89eeba5f6530828f1602c0db024f4b9f577",
+    "conditional-firsthand.json": "98032731588a1422fa694f167d425dbc90912818f247160f70ff367f840666ab",
+    "conditional-firsthand-backup.json": "3b2054f21dc7c21f81da251cdb65ef3276a9f2a22cdd40a846ee0140c5dc113c",
+    "restoration-positive-recovered.json": "b986c479f701391fbeadd5ca311ffc8495cd2ffd73d50fed3e3ab1ed71f97db2"
+  }
+}

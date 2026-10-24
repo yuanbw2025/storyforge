@@ -1,0 +1,122 @@
+{
+  "schema": "storyforge.character-chat-opening-reference-real-evidence",
+  "version": 1,
+  "batch": "V238",
+  "recordedAt": 1792469815.111468,
+  "status": "failed-production; no-runtime-quality-acceptance",
+  "source": {
+    "snapshotCommit": "12b2dde39b6dcd10bba115c52f085c397d675256",
+    "manifestSha256": "468f3a4a9f491059f8b244155fda7ae87b1454f5dcaa6ca94d6bdbbd3ca99d0f",
+    "sourceUnchanged": true
+  },
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "producerVersion": "chat-situation-production-v9",
+  "productionUnitsAttempted": 1,
+  "actualRequests": 1,
+  "httpStatuses": [
+    200
+  ],
+  "usage": [
+    {
+      "completion_tokens": 2577,
+      "prompt_tokens": 8035,
+      "total_tokens": 10612,
+      "completion_tokens_details": {
+        "reasoning_tokens": 355,
+        "text_tokens": 2222
+      },
+      "prompt_tokens_details": {
+        "cached_tokens": 256
+      }
+    }
+  ],
+  "runtimeOpportunities": 0,
+  "releasedPackages": 0,
+  "humanScoredEpisodes": 0,
+  "costUsd": null,
+  "failure": {
+    "attempt": 1,
+    "code": "task-draft-rejected",
+    "detail": "[chat-narrative] 剧情线引用了视角不可知的事实"
+  },
+  "diagnostic": {
+    "results": [
+      {
+        "optionKey": "opening-1",
+        "structurallyValid": true
+      },
+      {
+        "optionKey": "opening-2",
+        "structurallyValid": true
+      },
+      {
+        "optionKey": "opening-3",
+        "structurallyValid": false,
+        "error": "Error: [chat-narrative] 剧情线引用了视角不可知的事实"
+      }
+    ],
+    "repair": null,
+    "modelCalls": 0,
+    "semanticReviewPerformed": false,
+    "note": "Original complete batch remains failed; per-option structural validity is not story quality acceptance."
+  },
+  "findings": [
+    "Three reference-format openings with valid source bindings; no repeated-source copying or origin repair required in this sample.",
+    "Exact original per-option compilation passes opening-1/2 and rejects opening-3. Its public thread cites private world-fact.0001. No independent semantic review was reached.",
+    "Whole batch remains failed. One HTTP request only; no operator reroll or automatic second call under frozen v9 contract."
+  ],
+  "restoration": {
+    "checks": {
+      "buildFailureRetained": true,
+      "failureEventsRetained": true,
+      "allRawResponsesRetained": true,
+      "bothFailureDetailsRetained": true,
+      "noReleaseOrRuntimeCreated": true,
+      "worldPreserved": true,
+      "refreshEqual": true,
+      "zeroModelCalls": true
+    },
+    "modelCalls": 0,
+    "originalRunStatuses": [
+      "cancelled",
+      "completed",
+      "failed"
+    ],
+    "importedRunStatuses": [
+      "cancelled",
+      "running",
+      "failed"
+    ],
+    "scope": "Listed failure/raw-response/world/refresh checks only. Imported historical run statuses differ; no full lifecycle equivalence claimed."
+  },
+  "cohort": {
+    "cohort": "m1-v238-opening-reference-source",
+    "registeredEpisodes": 120,
+    "registeredProductionUnits": 20,
+    "productionUnitsAttempted": 1,
+    "failedProductionUnits": 1,
+    "runtimeEpisodesAttempted": 0,
+    "productionBlockedEpisodes": 6,
+    "unrunEpisodes": 114,
+    "qualityPassedEpisodes": 0,
+    "humanScoredEpisodes": 0,
+    "failedProductionUnit": "m1-v238-opening-reference-source/daily-clock-promise/agnes/r1",
+    "actualRequests": 1,
+    "originalCohortsUnmodified": true
+  },
+  "evidenceSha256": {
+    "agnes-clock-r1/clock-r1-weak-guidance.json": "b6ee8d088c95af9dc56d49d5e2c9972a1d62c2f4d35327fc58898fca3b359a06",
+    "agnes-clock-r1/clock-r1-weak-guidance-backup.json": "9d2c41d7c242bd357327b8b1c9d74e1304ac27ab7eeaccc80175bc854eb49456",
+    "agnes-clock-r1/original-source-response.json": "a61d9f47bf301bd930219fadc4c7da6c9fb9b42923efc4ef65223e2728fd2ea3",
+    "agnes-clock-r1/production-restoration.json": "a7157a3f037c08e87167ecb0cd772ec0fbf28d9ac96db6b96616efeaeca86727",
+    "agnes-clock-r1/individual-option-diagnostic.json": "3040f06c74a6301f76e63efbda58dfede3881a6adc8f4e543c284ca33dc2ec63",
+    "cohort-registration.json": "3bb4602b7432c1b06718adbf62c502666da6edcac588bdf049a1018291cf71c5",
+    "scheduled-episodes.json": "0d1b82d964757c7d01dc20f17fcacd86ef7262c38a1cf03f7bb8ea7f25951658"
+  },
+  "next": "Design a new frozen bounded repair contract that identifies invalid options, preserves valid options byte-for-byte, and lets the model replace only failed options before unchanged complete validation, independent review and author choice. Do not silently narrow audiences, drop private evidence or mark original sample passed. Not implemented yet.",
+  "fullDeliveryValidated": false,
+  "semanticQualityAccepted": false,
+  "humanAcceptance": false,
+  "commercialAcceptance": false
+}

@@ -1,0 +1,56 @@
+{
+  "schema": "storyforge.character-chat-browser-repair-evidence",
+  "version": 1,
+  "label": "V108 checkpoint busy controls and asynchronous browser assertions",
+  "baseHead": "6cc08b98224c0bb3bf1a1e72e0acb6ccc5014725",
+  "scope": "Role-chat S3 runtime UI; same session owner, frozen world and existing checkpoint/branch APIs; no AI or data contract change",
+  "originalFullE2E": {
+    "head": "44306e0eab6efe97db99bc3d2262289567fd9183",
+    "passed": 369,
+    "failed": 3,
+    "skipped": 2,
+    "exitCode": 1,
+    "retained": true
+  },
+  "causes": [
+    {
+      "file": "character-chat-commitment-context.spec.ts",
+      "kind": "async assertion race",
+      "fix": "Wait for confirmation preview to close after durable exclusion before reading DB; same expectation retains commitments and excludes raw dialogue."
+    },
+    {
+      "file": "character-chat-integration.spec.ts",
+      "kind": "product UI gap",
+      "fix": "Disable checkpoint save, fork and current branch controls and inputs while loading or another operation is active; existing store guard remains."
+    },
+    {
+      "file": "character-chat-memory-reconciliation-contract.spec.ts",
+      "kind": "stale binding expectation",
+      "fix": "Verify current v29 production binding and preserved correction through import/reload."
+    }
+  ],
+  "verification": {
+    "targetedFailedFlowsPassed": 3,
+    "additionalPrivateMessageAndBranchFlowPassed": 1,
+    "engineeringGatesPassed": 10,
+    "bundleSizePassed": true,
+    "fullCI": "V107 running; final snapshot pending",
+    "fullE2E": "V107 queued but unstarted cancelled143 after actual UI/test corrections; final snapshot pending"
+  },
+  "evidence": {
+    "/tmp/storyforge-chat-v103-full-e2e.log": "411db3eb9ee30fca12d6f91d02f9baf7034e2c88492b367baefb650554fbbbd2",
+    "/tmp/storyforge-chat-v103-full-e2e-receipt.json": "b6cadac31f1112a123f95dec7a38496d31349d81f8a2316fdbf473a996f708e9",
+    "/tmp/storyforge-chat-v108-targeted-e2e.log": "120f54cec5e932b7f18f0b7a6b87f316cf6b4ac20e791d0ba33e9caef31a343d",
+    "/tmp/storyforge-chat-v108-branch-continuity-e2e.log": "0ce045af48af844e99cce6fa431d9b2769d01af17a156b85d2ffd606482696c3",
+    "/tmp/storyforge-chat-v108-final-gates-receipt.json": "0186f60ddc66b858bbcd800b49d741e584f5848cdb1eb7887f247023456414c1",
+    "/tmp/storyforge-chat-v108-final-bundle-size.log": "601b4cf940b14a60afadc3a9cebfa9d275b81401db27e7574778adba545dca93",
+    "/tmp/storyforge-chat-v107-e2e-superseded.json": "cc1c1c3ab70c979bdc66136319c31966100475a2cfe63a29584578cdb1f89059",
+    "/tmp/storyforge-chat-v107-full-e2e-receipt.json": "7be5c70106729df56436af713d6a67102d7b5a7e03c7ab5574d959cb2cb43600"
+  },
+  "limits": [
+    "The old full-suite failure remains a failure, not replaced by targeted passes.",
+    "Final-code full CI/E2E still required.",
+    "No narrative, real-model, human or commercial acceptance is established by these UI tests."
+  ],
+  "goalStatus": "active"
+}

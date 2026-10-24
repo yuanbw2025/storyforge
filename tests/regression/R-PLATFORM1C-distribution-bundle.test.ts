@@ -1,17 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
   DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1,
   deleteImportedProductReleaseV1,
   exportProductDistributionBundleV2,
   importLocalProductDistributionV2,
+  importLocalProductBundleV1,
   importMarketplaceProductDistributionV2,
   listImportedProductReleasesV1,
   verifyProductDistributionBundleV2,
   type MarketplaceImportProvenanceV2,
 } from '../../src/lib/product-platform/distribution-bundle'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
-import { putMediaBlobObject, sha256MediaData } from '../../src/lib/product-production/media-blob-store'
+import { discardUnreferencedMediaBlobObjectsV1, putMediaBlobObject, sha256MediaData } from '../../src/lib/product-production/media-blob-store'
 import { parseProductRuntimePackageV1 } from '../../src/lib/product-production/runtime-package'
 import { assertProductReleaseUnchanged } from '../../src/lib/product/releases'
 import { createAvgGameInstance } from '../../src/lib/product/runtime-instances'
@@ -22,6 +23,7 @@ import { createWorldRevision, publishWorldRevision } from '../../src/lib/world-e
 import { CURRENT_PRODUCT_RESOURCE_KEYS, currentProductSelection } from '../helpers/current-product-world'
 import { createFixtureProductReleaseManifestV1 } from '../helpers/product-release-v1'
 import { seedCurrentProject } from '../helpers/current-workspace'
+import { exportProjectJSON, importProjectJSON } from '../../src/lib/export/json-export'
 
 async function workspace(name: string) {
   const now = Date.now()
@@ -270,6 +272,61 @@ describe('PLATFORM-1C · Marketplace ProductDistributionBundle', () => {
     expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(0)
   }, 40_000)
 
+  it('本地完整包按真实 hash 记录来源，冻结调用输入、重复安装与备份恢复均不伪造权益', async () => {
+    const source = await workspace('完整包来源')
+    const fixture = await publishedFixture(source.scope)
+    const bundle = await exportProductDistributionBundleV2({ scope: source.scope, productReleaseId: fixture.releaseId })
+    const original = structuredClone(bundle), target = await workspace('完整包目标')
+    const input = { scope: { ...target.scope }, bundle, productType: 'avg' as const }
+    const pending = importLocalProductBundleV1(input)
+    input.scope.workId = source.scope.workId
+    bundle.productRelease.manifest.runtimePackage.definition.title = '异步迟到篡改'
+    bundle.media[0].dataBase64 = 'AAAA'
+    const imported = await pending
+    expect(imported.workId).toBe(target.scope.workId)
+    expect(imported.distributionProvenance).toEqual({
+      source: 'local-bundle', bundleHash: original.bundleHash,
+      originalReleaseHash: original.productRelease.contentHash,
+      remoteCreatorIdentityVerified: false, localCopyPreserved: true,
+      importedAt: expect.any(Number),
+    })
+    expect(await exportProductDistributionBundleV2({scope: target.scope, productReleaseId: imported.id!})).toEqual(original)
+    const repeated = await importLocalProductBundleV1({scope: target.scope, bundle: original, productType: 'avg'})
+    expect(repeated).toEqual(imported)
+    expect(await db.productReleases.where('workId').equals(target.scope.workId).count()).toBe(1)
+    expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(1)
+    expect(await db.worldReleases.where('worldId').equals(target.scope.worldId).count()).toBe(0)
+    const copiedProjectId = await importProjectJSON(await exportProjectJSON(target.scope.projectId))
+    const copy = (await db.productReleases.where('projectId').equals(copiedProjectId).first())!
+    expect(copy.distributionProvenance).toEqual(imported.distributionProvenance)
+    expect(copy.id).not.toBe(imported.id)
+    const copiedScope = {projectId: copy.projectId, workId: copy.workId, worldId: copy.worldId}
+    expect(await exportProductDistributionBundleV2({scope: copiedScope, productReleaseId: copy.id!})).toEqual(original)
+    await expect(deleteImportedProductReleaseV1({scope: copiedScope, productReleaseId: copy.id!,
+      confirmation: DELETE_IMPORTED_PRODUCT_RELEASE_CONFIRMATION_V1})).resolves.toMatchObject({source: 'local-bundle', deletedMediaAssetCount: 1})
+    expect(await db.productReleases.get(imported.id!)).toEqual(imported)
+    const corrupt = structuredClone(original.productRelease.manifest)
+    corrupt.runtimePackage.definition.title = '本机内容损坏但仍保留旧 hash'
+    await db.productReleases.update(imported.id!, {manifestJson: JSON.stringify(corrupt)})
+    await expect(importLocalProductBundleV1({scope: target.scope, bundle: original, productType: 'avg'})).rejects.toThrow('内容与分发包冲突')
+    expect((await db.productReleases.get(imported.id!))!.manifestJson).toBe(JSON.stringify(corrupt))
+    expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(1)
+    await db.productReleases.update(imported.id!, {manifestJson: 'broken-json'})
+    await expect(importLocalProductBundleV1({scope: target.scope, bundle: original, productType: 'avg'})).rejects.toThrow('内容损坏')
+  }, 40_000)
+
+  it('完整包在写入前拒绝错误产品与损坏图片，来源不能代替内容校验', async () => {
+    const source = await workspace('完整包反例来源'), target = await workspace('完整包反例目标')
+    const fixture = await publishedFixture(source.scope)
+    const bundle = await exportProductDistributionBundleV2({scope: source.scope, productReleaseId: fixture.releaseId})
+    await expect(importLocalProductBundleV1({scope: target.scope, bundle, productType: 'character-interaction'})).rejects.toThrow('当前产品不一致')
+    bundle.media[0].dataBase64 = 'AAAA'
+    await expect(importLocalProductBundleV1({scope: target.scope, bundle, productType: 'avg'})).rejects.toThrow()
+    expect(await db.productReleases.where('workId').equals(target.scope.workId).count()).toBe(0)
+    expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(0)
+    expect(await db.productMediaAssets.where('workId').equals(target.scope.workId).count()).toBe(0)
+  }, 40_000)
+
   it('本地文件导入使用独立来源语义，重复导入幂等且不伪造市场权益', async () => {
     const source = await workspace('本地包来源')
     const fixture = await publishedFixture(source.scope)
@@ -332,6 +389,46 @@ describe('PLATFORM-1C · Marketplace ProductDistributionBundle', () => {
     expect(await db.productReleases.where('workId').equals(target.scope.workId).count()).toBe(1)
     expect(await db.productMediaAssets.where('workId').equals(target.scope.workId).count()).toBe(0)
     expect(await db.mediaBlobObjects.where('workId').equals(target.scope.workId).count()).toBe(0)
+  }, 40_000)
+
+  it.each(['deleted', 'pending-delete'] as const)('暂存图片被并发回收（%s）时原子拒绝安装，保留无关上传并可显式重选', async deletion => {
+    const source = await workspace('并发回收来源'), target = await workspace('并发回收目标')
+    const fixture = await publishedFixture(source.scope)
+    const bundle = await exportProductDistributionBundleV2({scope: source.scope, productReleaseId: fixture.releaseId})
+    const unrelated = await putMediaBlobObject({scope: target.scope,
+      data: new TextEncoder().encode('unrelated-author-upload').buffer, mimeType: 'image/png'})
+    const transaction = db.transaction.bind(db)
+    let injected = false
+    const spy = vi.spyOn(db, 'transaction').mockImplementation((async (...args: Parameters<typeof db.transaction>) => {
+      if (!injected && args.slice(1, -1).flat().includes(db.productReleases)) {
+        injected = true
+        const staged = await db.mediaBlobObjects.where('[workId+contentHash]')
+          .equals([target.scope.workId, fixture.asset.blobContentHash]).first()
+        expect(staged?.storageState).toBe('ready')
+        if (deletion === 'deleted') {
+          expect(await discardUnreferencedMediaBlobObjectsV1({scope: target.scope, blobObjectIds: [staged!.id!]})).toEqual([staged!.id])
+        } else {
+          // GC has claimed the row but has not finished physical deletion.
+          await db.mediaBlobObjects.update(staged!.id!, {storageState: 'pending-delete'})
+        }
+      }
+      return transaction(...args)
+    }) as typeof db.transaction)
+    try {
+      await expect(importLocalProductBundleV1({scope: target.scope, bundle, productType: 'avg'})).rejects.toThrow('暂存媒资已变化或被回收')
+    } finally { spy.mockRestore() }
+    expect(injected).toBe(true)
+    expect(await db.productReleases.where('workId').equals(target.scope.workId).count()).toBe(0)
+    expect(await db.productMediaAssets.where('workId').equals(target.scope.workId).count()).toBe(0)
+    expect(await db.productMediaBlobs.where('workId').equals(target.scope.workId).count()).toBe(0)
+    expect(await db.mediaBlobObjects.get(unrelated.id!)).toEqual(unrelated)
+    expect(await db.productReleases.get(fixture.releaseId)).toBeDefined()
+    const selectedAgain = await importLocalProductBundleV1({scope: target.scope, bundle, productType: 'avg'})
+    expect(await exportProductDistributionBundleV2({scope: target.scope, productReleaseId: selectedAgain.id!})).toEqual(bundle)
+    const restoredProject = await importProjectJSON(await exportProjectJSON(target.scope.projectId))
+    const restoredRelease = (await db.productReleases.where('projectId').equals(restoredProject).toArray())[0]
+    expect(await exportProductDistributionBundleV2({scope: {projectId: restoredProject, workId: restoredRelease.workId, worldId: restoredRelease.worldId},
+      productReleaseId: restoredRelease.id!})).toEqual(bundle)
   }, 40_000)
 
   it('只删除导入副本及其私域会话，并按注册引用保留其他 Release 共用的 Blob', async () => {

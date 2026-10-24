@@ -129,6 +129,8 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
     { value: 'Qwen/Qwen3-4B', label: 'Qwen3 4B', desc: '超轻量' },
   ],
   agnes: [
+    { value: 'agnes-3.0-flash', label: 'Agnes 3.0 Flash', desc: '服务实时目录·新版 Flash' },
+    { value: 'agnes-3.0-pro', label: 'Agnes 3.0 Pro', desc: '服务实时目录·新版 Pro' },
     { value: 'agnes-2.5-flash', label: 'Agnes 2.5 Flash', desc: '512K 上下文·Agent/推理推荐' },
     { value: 'agnes-2.5-pro', label: 'Agnes 2.5 Pro', desc: '历史型号·以服务可用性为准' },
     { value: 'agnes-2.5-pro-alpha', label: 'Agnes 2.5 Pro Alpha', desc: '服务实时目录·实验性' },

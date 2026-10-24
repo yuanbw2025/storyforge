@@ -1,0 +1,61 @@
+{
+  "schema": "storyforge.chat-targeted-diagnostic-result",
+  "version": 1,
+  "recordedAt": "2026-10-15T18:20:49.215972+00:00",
+  "id": "v94-action-kind-diagnostic",
+  "implementationHead": "3b87befdeb4edd846cff7896722a7d37cc174893",
+  "snapshotManifestSha256": "192021d77a60b1a9369ffbfed0d9017c040791e40021d268d585e4eeecc7831f",
+  "purpose": "Fresh isolated child branch from the completed V92 arrival. Verify new action-kind prompt and following bounded situation/action; not scored M1, not a retry of the original failed run, not evidence of sustained quality. Original failed source retained.",
+  "countsInM1": false,
+  "qualityAccepted": false,
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v94-action-kind-diagnostic",
+  "preregistrationSha256": "8b680f4c2442c1bc9c3b6c51943581de3155ede4454ef62dee1eaecfddf0eddb",
+  "runnerSha256": "5594721fb2fbafcd301fbbf296e7d6953a538d8c61507a181f1e719db79df25c",
+  "sourceBackupSha256": "5b5c793b5bebf8da741d09394f424a0a7e57f0f21dd767eddee8f662a6c2afa1",
+  "evidenceSha256": "ee3a6944e532f9a27a24dc2710ecdbade20d25d61ee7cf27b7add1de21acf502",
+  "backupSha256": "a4a5ad622491b0f423df113eab33990cf937a3a744cfeea11c900483403713f4",
+  "model": "gpt-6.1-sol via existing Codex bridge",
+  "providerRequests": 4,
+  "playerContinueTriggers": 2,
+  "completedActions": 2,
+  "completedSituationUpdates": 0,
+  "ending": "registered-trigger-limit",
+  "usage": {
+    "totalTokens": 48759,
+    "inputTokens": 47100,
+    "cachedInputTokens": 3328,
+    "cacheWriteInputTokens": 0,
+    "outputTokens": 1659,
+    "reasoningOutputTokens": 613
+  },
+  "costUsd": null,
+  "observations": [
+    "Both genuine actor inquiries used speak with waitingForPlayer=false and passed independent review.",
+    "Second inquiry recorded a bounded request for ordinary stall information while retaining no purchase/disassembly constraints.",
+    "No stall answer, new observation or repair outcome was adopted within the two-trigger budget."
+  ],
+  "refreshEqual": true,
+  "parentPreserved": true,
+  "sourceBackupUnchanged": true,
+  "restoration": {
+    "stem": "diagnostic",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 2,
+    "retainedFailedRuns": 0,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true
+  },
+  "providerTerminalReadback": "diagnostic-terminal-request-proof.json",
+  "serverStopped": true,
+  "limitations": [
+    "Targeted new child branch, not a new M1 episode or replay of the failed source run.",
+    "One short diagnostic cannot establish stable instruction adherence or sustained meaningful progression.",
+    "Prior V92 failures and all unstarted slots remain unchanged.",
+    "Agnes, human scoring and commercial comparisons remain incomplete."
+  ]
+}

@@ -30,6 +30,7 @@ class FakeRecorder {
   }
 }
 class FakeUtterance {
+  volume = 1
   onstart?: () => void
   onend?: () => void
   onerror?: () => void
@@ -50,7 +51,7 @@ describe('长篇语音会话与资源回收', () => {
   const stopTrack = vi.fn()
   const getUserMedia = vi.fn()
   const fetcher = vi.fn()
-  const synthesis = { speak: vi.fn(), cancel: vi.fn(), getVoices: () => [] }
+  const synthesis = { speak: vi.fn(), cancel: vi.fn(), pause: vi.fn(), resume: vi.fn(), getVoices: () => [] }
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
@@ -236,5 +237,105 @@ describe('长篇语音会话与资源回收', () => {
     expect(createUrl).not.toHaveBeenCalled()
     expect(state.phase).toBe('idle')
     createUrl.mockRestore()
+  })
+  it('暂停保留未读文本及剩余等待时间；迟到的句末不能在暂停中继续排队', async () => {
+    await session.speak('第一句话。第二句话。', config())
+    const first = synthesis.speak.mock.calls[0][0] as FakeUtterance
+    first.onstart?.()
+    await vi.advanceTimersByTimeAsync(10_000)
+    session.pause()
+    expect(state).toMatchObject({phase: 'speaking', paused: true})
+    first.onend?.()
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(state.paused).toBe(true); expect(synthesis.speak).toHaveBeenCalledTimes(1)
+    await session.resume()
+    expect(synthesis.resume).toHaveBeenCalledOnce()
+    expect(synthesis.speak).toHaveBeenCalledTimes(2)
+    expect(synthesis.speak.mock.calls[1][0].text).toBe('第二句话。')
+    expect(state.paused).toBe(false); expect(fetcher).not.toHaveBeenCalled()
+  })
+  it('暂停时间不消耗当前句的超时预算；停止后恢复不能重启朗读', async () => {
+    await session.speak('等一等。', config())
+    const utterance = synthesis.speak.mock.calls[0][0] as FakeUtterance
+    utterance.onstart?.()
+    await vi.advanceTimersByTimeAsync(10_000); session.pause()
+    await vi.advanceTimersByTimeAsync(120_000); await session.resume()
+    await vi.advanceTimersByTimeAsync(49_999)
+    expect(state.phase).toBe('speaking')
+    await vi.advanceTimersByTimeAsync(1)
+    expect(state.phase).toBe('idle'); expect(state.error).toContain('未及时响应')
+    await session.resume()
+    expect(synthesis.speak).toHaveBeenCalledOnce(); expect(synthesis.resume).toHaveBeenCalledOnce()
+  })
+  it('音量不改变文本；下一句沿用用户音量且拒绝非有限或越界值', async () => {
+    session.setVolume(.25)
+    await session.speak('第一句。第二句。', config())
+    const first = synthesis.speak.mock.calls[0][0] as FakeUtterance
+    expect(first.volume).toBe(.25)
+    session.setVolume(.6); first.onend?.()
+    expect(synthesis.speak.mock.calls[1][0].volume).toBe(.6)
+    for (const invalid of [-1, 2, NaN, Infinity]) expect(() => session.setVolume(invalid)).toThrow('音量')
+    expect(fetcher).not.toHaveBeenCalled(); expect(transcript).not.toHaveBeenCalled()
+  })
+  it('切换语音所有者停止前一段；旧句末和旧暂停不能干扰新录音', async () => {
+    await session.speak('旧角色第一句。旧角色第二句。', config())
+    const utterance = synthesis.speak.mock.calls[0][0] as FakeUtterance, lateEnd = utterance.onend!
+    utterance.onstart?.()
+    let otherState: VoiceSnapshot | undefined
+    const other = new VoiceSession(next => {otherState = next}, vi.fn())
+    try {
+      await other.listen(config())
+      expect(state.phase).toBe('idle'); expect(synthesis.cancel).toHaveBeenCalledOnce()
+      lateEnd(); session.pause(); await session.resume()
+      expect(otherState?.phase).toBe('listening')
+      expect(synthesis.speak).toHaveBeenCalledOnce(); expect(synthesis.pause).not.toHaveBeenCalled()
+    } finally {other.dispose()}
+  })
+  it('已释放的语音实例不能再请求设备或开始播放', async () => {
+    session.dispose()
+    await session.listen(serviceConfig()); await session.speak('不会播放', config())
+    expect(getUserMedia).not.toHaveBeenCalled(); expect(synthesis.speak).not.toHaveBeenCalled(); expect(fetcher).not.toHaveBeenCalled()
+  })
+  it('已取得的服务音频暂停/恢复不再请求合成，恢复失败会释放资源', async () => {
+    const createUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:pause-test'), revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    const pause = vi.fn(), play = vi.fn().mockResolvedValue(undefined)
+    let audioVolume = () => 1
+    vi.stubGlobal('Audio', class {
+      volume = 1; pause = pause; play = play
+      constructor() {audioVolume = () => this.volume}
+      removeAttribute() {} load() {}
+    })
+    fetcher.mockResolvedValue(new Response(new Blob(['audio'], {type: 'audio/mpeg'})))
+    try {
+      await session.speak('只合成一次。', serviceConfig()); session.pause()
+      session.setVolume(.3); expect(audioVolume()).toBe(.3)
+      await session.resume(); expect(play).toHaveBeenCalledTimes(2); expect(fetcher).toHaveBeenCalledOnce()
+      session.pause(); play.mockRejectedValueOnce(new DOMException('blocked', 'NotAllowedError'))
+      await session.resume()
+      expect(state).toMatchObject({phase: 'idle', paused: false}); expect(state.error).toContain('权限')
+      expect(revoke).toHaveBeenCalledWith('blob:pause-test'); expect(fetcher).toHaveBeenCalledOnce()
+    } finally {createUrl.mockRestore(); revoke.mockRestore()}
+  })
+  it('聊天有限入口拒绝服务模式，不复用长篇的提供商设置或发起请求', async () => {
+    const chat = new VoiceSession(next => {state = next}, transcript, 'character-chat')
+    try {
+      await chat.listen(serviceConfig())
+      expect(state.error).toContain('仅支持浏览器语音输入')
+      await chat.speak('玩家可见消息。', serviceConfig())
+      expect(state.error).toContain('仅支持浏览器朗读')
+      expect(fetcher).not.toHaveBeenCalled(); expect(getUserMedia).not.toHaveBeenCalled()
+    } finally {chat.dispose()}
+  })
+  it('聊天入口允许显式浏览器转写和朗读，但不接受未登记的产品边界', async () => {
+    expect(() => new VoiceSession(vi.fn(), vi.fn(), 'unknown-product' as never)).toThrow('未登记')
+    const chat = new VoiceSession(next => {state = next}, transcript, 'character-chat')
+    try {
+      await chat.listen(config())
+      FakeRecognition.last.onresult?.({results: [{isFinal: true, 0: {transcript: '我想先休息。'}}]})
+      expect(transcript).not.toHaveBeenCalled(); chat.finish()
+      expect(transcript).toHaveBeenCalledWith('我想先休息。')
+      await chat.speak('那就先休息。', config())
+      expect(synthesis.speak).toHaveBeenCalledOnce(); expect(fetcher).not.toHaveBeenCalled()
+    } finally {chat.dispose()}
   })
 })

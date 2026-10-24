@@ -1,0 +1,72 @@
+{
+  "version": 282,
+  "recordedAt": "2026-10-20T21:05:24.246848+00:00",
+  "product": "character-interaction",
+  "status": "choice-message-evidence-engineering-passed-real-model-pending",
+  "sourceBaseHead": "ec77b69d24cff76eb079922cd6245bf86b7d3540",
+  "contract": {
+    "producer": "chat-narrative-action-v53",
+    "reviewer": "chat-narrative-action-review-v35",
+    "behavior": "Separate actual delivered message IDs from fact keys in the internal action-choice draft. Check the frozen producer version in generation, recovery and adoption. A cited utterance is neither an established world fact nor implicit permission.",
+    "boundaries": [
+      "Same registered interactionRuntime source, frozen role window and durable three-call contract.",
+      "Reject hidden, private, omitted or fabricated message references. Keep historical exact shapes.",
+      "No new tables, world writes, product media or public/internal draft mixing."
+    ]
+  },
+  "coverage": {
+    "productionSourceUnchanged": true,
+    "differencesFromInitialManifest": [
+      "docs/products/UPPER-PRODUCTS.md",
+      "docs/roadmap/CHARACTER-CHAT-DEVELOPMENT-PLAN.md",
+      "tests/e2e/character-chat-action-choice.spec.ts",
+      "tests/e2e/character-chat-control-handoff.spec.ts",
+      "tests/regression/R-CHAT-03-turn-allowance.test.ts"
+    ],
+    "regression": {
+      "initialFilesPassed": 157,
+      "initialFilesFailed": 1,
+      "initialTestsPassed": 1892,
+      "initialTestsFailed": 8,
+      "correctedFileTestsPassed": 12,
+      "coveredUniqueFiles": 158,
+      "coveredUniqueTests": 1900,
+      "initial": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v282-choice-message-evidence/chat-regression.log",
+        "sha256": "6bcc0027795227cc4f5f9903e53b99f9f7390282e754730886e52cacbe555af4"
+      },
+      "correction": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v282-choice-message-evidence/allowance-r2.log",
+        "sha256": "eeb475b2ef259664437de29b10e08f814718e77b7e4ed61b1755541d05ead721"
+      }
+    },
+    "browser": {
+      "initialPassed": 17,
+      "initialFailed": 4,
+      "correctedFiles": 2,
+      "correctionPassed": 15,
+      "coveredUniqueTests": 21,
+      "initial": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v282-choice-message-evidence/browser.log",
+        "sha256": "945573eebb9d344380f93d35b87f52f27d81100db58f2dca99fb7052856f8e8a"
+      },
+      "correction": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v282-choice-message-evidence/browser-r2.log",
+        "sha256": "bda7aea34b78a274c1d08b200beb6a4b2a700bda0eab59ceb02bf32bfdc56a76"
+      }
+    },
+    "disposition": "Only three engineering fixture files gained the required empty message-evidence array. All production files and all unaffected tests match the initial validation manifest. Original failing fixture bytes and logs retained. Coverage combines unaffected initial passes with rerun affected files; it is not represented as one green initial suite."
+  },
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v282-choice-message-evidence/engineering.json",
+    "sha256": "23d01e4a251fdab9a07fced332127aa3c0ab09ef2cf6259fd35a763948e358b2"
+  },
+  "manifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v282-choice-message-evidence/manifest-final.json",
+    "sha256": "efd7a757507b2d4886f085a369f652f3b9226220b94147c1151ae3b8fb3d9695"
+  },
+  "fullRepositoryDelivery": "Pending for this source; remote ec77b69d run 39490727328 cannot cover this increment.",
+  "realModel": "Pending independent branch from V281 pre-seventh-input state; original failure and formal cohort retained.",
+  "m1Passed": false,
+  "humanScoringDeferred": true
+}

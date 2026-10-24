@@ -1,0 +1,419 @@
+{
+  "at": "2026-10-20T13:04:29.996941+00:00",
+  "fetchSucceeded": true,
+  "head": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+  "main": "500627454927c577079e8f6db4ef783a37ba89af",
+  "mergeBase": "d3df49a3dd587c5594a9da7a60ab466e5d926fe5",
+  "aheadBehind": [
+    239,
+    86
+  ],
+  "upstreamChangedPaths": 199,
+  "overlapPaths": [
+    "docs/AI-FUNCTIONS-MANUAL.generated.md",
+    "docs/ARCHITECTURE.md",
+    "docs/CONTEXT-ROUTING.md",
+    "docs/DOCUMENT-AUTHORITY.md",
+    "docs/roadmap/README.md",
+    "scripts/check-ai-entry-registry.mjs",
+    "scripts/check-document-authority.mjs",
+    "src/lib/agent/ai-entry-registry.json",
+    "src/lib/agent/skill-registry.ts",
+    "src/lib/ai/client.ts",
+    "src/lib/context-gateway/selector.ts",
+    "src/lib/export/registry-import.ts",
+    "src/lib/registry/adopt.ts",
+    "src/lib/registry/context-sources.ts",
+    "src/lib/registry/field-registry.ts",
+    "src/lib/registry/project-tables.ts",
+    "src/lib/registry/types.ts",
+    "src/lib/types/ai.ts",
+    "tests/regression/R-HARNESS59-ai-entry-registry.test.ts",
+    "tests/regression/R-ai-config-storage.test.ts",
+    "website-docs/en/updates/changelog.md",
+    "website-docs/en/updates/development-status.md",
+    "website-docs/updates/changelog.md",
+    "website-docs/updates/development-status.md"
+  ],
+  "sharedHotspots": [
+    "scripts/check-ai-entry-registry.mjs",
+    "src/lib/agent/ai-entry-registry.json",
+    "src/lib/agent/skill-registry.ts",
+    "src/lib/ai/client.ts",
+    "src/lib/context-gateway/selector.ts",
+    "src/lib/export/registry-import.ts",
+    "src/lib/registry/adopt.ts",
+    "src/lib/registry/context-sources.ts",
+    "src/lib/registry/field-registry.ts",
+    "src/lib/registry/project-tables.ts",
+    "src/lib/registry/types.ts",
+    "tests/regression/R-HARNESS59-ai-entry-registry.test.ts"
+  ],
+  "workingTreeModified": true,
+  "mergeAttempted": true,
+  "interpretation": "Read-only integration inventory; path overlap does not establish a conflict. Current validation/model sources remain frozen. Integrate latest main after preserving the validated branch changes, then run checks on actual merged source.",
+  "textPreview": {
+    "at": "2026-10-20T13:05:58.428954+00:00",
+    "rows": [
+      {
+        "path": "docs/AI-FUNCTIONS-MANUAL.generated.md",
+        "currentSha256": "7f6c903c59e62e3d8941e8e153d05f2decc83a4d15d236dc9e3c47b35acee109",
+        "previewExitCode": 5,
+        "conflictBlocks": 5,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "docs/ARCHITECTURE.md",
+        "currentSha256": "5206f458ef62eb80e00db78b09cc660e4c0fe02ab5ab3707577d66236a70f65b",
+        "previewExitCode": 1,
+        "conflictBlocks": 1,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "docs/CONTEXT-ROUTING.md",
+        "currentSha256": "0d03d56f6c85578784b6841b546e22cb989eb45f7c7eda5e526c0f0c4c395587",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "docs/DOCUMENT-AUTHORITY.md",
+        "currentSha256": "07f5ac06fde60e347d29760639147fc0a4b6a7b601654ca8fb36ea8cbefb2c0a",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "docs/roadmap/README.md",
+        "currentSha256": "195c59432d57d12da7832a7d5685dc0363fd4d56dbb2109468fb883fcf654279",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "scripts/check-ai-entry-registry.mjs",
+        "currentSha256": "0de732cf1b97f65e7eefdb187e12a44efc990e9b03512cd3ce1f5c644ffd1eda",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "scripts/check-document-authority.mjs",
+        "currentSha256": "d03e1e856d09e52ecc96065d1b403b36fed1d76f476b9f8b5036dd4cbdcb3229",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "src/lib/agent/ai-entry-registry.json",
+        "currentSha256": "1f05685c809a61afdd515976c4516e5acc6929abf6087cf153b8a0db2ded66ec",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "src/lib/agent/skill-registry.ts",
+        "currentSha256": "cbc605c113833e6bd73a6257144d750477343e8597c6cfa9e34f2d7e4a4133c9",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "src/lib/ai/client.ts",
+        "currentSha256": "39c6f8d513adb2c2d503d28cfcb20f67b33f832ddc9674477a88fc67ff556a43",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "src/lib/context-gateway/selector.ts",
+        "currentSha256": "0ef1235e1eee71c13051a863e6de743829b6644cab64ad1c7b6be33e01ff210b",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "src/lib/export/registry-import.ts",
+        "currentSha256": "9ea194468eb2a20629baf2074924e920be6942720b0e8f789bbfde29704a575d",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "src/lib/registry/adopt.ts",
+        "currentSha256": "d58187b99fc30a62537c4d1951f251ec313068b45b071f84aa57597f30e2fc78",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "src/lib/registry/context-sources.ts",
+        "currentSha256": "8c83bc80237f196c3e1798806cda40c7038d353a37eea83a0113784514d5544a",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "src/lib/registry/field-registry.ts",
+        "currentSha256": "99ab0df87a7fde32afe2151e253dac8f61b158d8ce7f97cc9a51b405db83f57f",
+        "previewExitCode": 1,
+        "conflictBlocks": 1,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "src/lib/registry/project-tables.ts",
+        "currentSha256": "ed1c453240192aad458c8caa3edaf4075d47b72d0e50fd51a0093d5184c74332",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "src/lib/registry/types.ts",
+        "currentSha256": "947dc269fb28f2a23f9b1f1d7a22f1a5d298720cae10c36366a7208f0a6b5a64",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "src/lib/types/ai.ts",
+        "currentSha256": "39197c4f22e4383686fb3a93c53a86c5eb0dee71512fcfb5a4197dda57dc12ff",
+        "previewExitCode": 0,
+        "conflictBlocks": 0,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "tests/regression/R-HARNESS59-ai-entry-registry.test.ts",
+        "currentSha256": "46310100bfac131d9afb76537f16a4494bf20487a341287425ce99cde71774ec",
+        "previewExitCode": 3,
+        "conflictBlocks": 3,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "tests/regression/R-ai-config-storage.test.ts",
+        "currentSha256": "defe4354753f555f4b528eb16832332104a02795dde2b2e2adbc275f7177c877",
+        "previewExitCode": 1,
+        "conflictBlocks": 1,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "website-docs/en/updates/changelog.md",
+        "currentSha256": "1d6e275e5a8f1802f86d397d9a8e438c96b9319c7cbb50cb9bfa20f78812acc5",
+        "previewExitCode": 1,
+        "conflictBlocks": 1,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "website-docs/en/updates/development-status.md",
+        "currentSha256": "031090f7f4b636b50f458b2608f5f62288e6f8b9980fbaef4b1606c10ba79887",
+        "previewExitCode": 1,
+        "conflictBlocks": 1,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "website-docs/updates/changelog.md",
+        "currentSha256": "e2276e583dc594d56ece71edefce60d5473cdbf635e492121ca164f9e88f01fc",
+        "previewExitCode": 1,
+        "conflictBlocks": 1,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      },
+      {
+        "path": "website-docs/updates/development-status.md",
+        "currentSha256": "5cd5451e91dc28b1f00bbbabd927e430ac97c0998da2183de3a2debe68739343",
+        "previewExitCode": 1,
+        "conflictBlocks": 1,
+        "note": "text preview only; no working-tree mutation or claim of semantic compatibility"
+      }
+    ],
+    "conflictPaths": [
+      "docs/AI-FUNCTIONS-MANUAL.generated.md",
+      "docs/ARCHITECTURE.md",
+      "src/lib/registry/field-registry.ts",
+      "tests/regression/R-HARNESS59-ai-entry-registry.test.ts",
+      "tests/regression/R-ai-config-storage.test.ts",
+      "website-docs/en/updates/changelog.md",
+      "website-docs/en/updates/development-status.md",
+      "website-docs/updates/changelog.md",
+      "website-docs/updates/development-status.md"
+    ]
+  },
+  "resolutionProposals": {
+    "manifest": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/main-sync-20261020-preview/resolution-manifest.json",
+    "manifestSha256": "e9e46200b59c14ab32af70f2e05c3c2eddadb8f07c47fb06a19004f8e863ba28",
+    "reviewedTextPaths": 7,
+    "syntaxCheckedTypeScriptPaths": 3,
+    "generatedPathsToRegenerate": 2,
+    "applied": true,
+    "requiresActualMergedTreeValidation": true
+  },
+  "workingMerge": {
+    "at": "2026-10-20T13:36:48.643972+00:00",
+    "targetMain": "500627454927c577079e8f6db4ef783a37ba89af",
+    "headBefore": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+    "backupManifest": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/main-sync-20261020-premerge/manifest.json",
+    "stash": "3342c56c1d566e5a341f2427db9b1be92d7a1485",
+    "stashRetained": true,
+    "restoration": {
+      "byteIdenticalPreexistingPaths": 258,
+      "changedOnlyWithUpstream": [
+        "src/lib/agent/skill-registry.ts",
+        "src/lib/registry/context-sources.ts",
+        "src/lib/registry/types.ts",
+        "src/lib/types/ai.ts",
+        "tests/regression/R-ai-config-storage.test.ts"
+      ],
+      "allNonoverlappingWorkPreserved": true,
+      "stashRetained": true,
+      "unresolvedConflicts": [],
+      "commitCreated": false
+    },
+    "generatedDocumentsRegenerated": true,
+    "registeredEntries": 53,
+    "actualCalls": 57,
+    "aiEntryCheckPassed": true,
+    "committed": false,
+    "mergedTreeValidation": "first-build-passed-bundle-failed; dependency-refactor-36-regressions-static-passed; rebuilt-source-focused-delivery-queued",
+    "validationEvidence": {
+      "verifiedAt": "2026-10-20T13:44:05.569317+00:00",
+      "receipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/static-checks.json",
+      "sha256": "0d36b381eda9fb4c376e928c8ae349190587010ec0011fc25775c8555a536563",
+      "checks": [
+        {
+          "stage": "types",
+          "command": [
+            "npx",
+            "tsc",
+            "--noEmit"
+          ],
+          "exitCode": 0,
+          "startedAt": 1792503480.535053,
+          "completedAt": 1792503522.947871,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/logs/types.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "stage": "check:architecture",
+          "command": [
+            "npm",
+            "run",
+            "check:architecture"
+          ],
+          "exitCode": 0,
+          "startedAt": 1792503522.9489121,
+          "completedAt": 1792503530.380865,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/logs/check:architecture.log",
+          "sha256": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616"
+        },
+        {
+          "stage": "check:required-tables",
+          "command": [
+            "npm",
+            "run",
+            "check:required-tables"
+          ],
+          "exitCode": 0,
+          "startedAt": 1792503530.381366,
+          "completedAt": 1792503530.537899,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/logs/check:required-tables.log",
+          "sha256": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444"
+        },
+        {
+          "stage": "check:ai-manual",
+          "command": [
+            "npm",
+            "run",
+            "check:ai-manual"
+          ],
+          "exitCode": 0,
+          "startedAt": 1792503530.5384169,
+          "completedAt": 1792503531.084863,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/logs/check:ai-manual.log",
+          "sha256": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19"
+        },
+        {
+          "stage": "check:ai-entry-registry",
+          "command": [
+            "npm",
+            "run",
+            "check:ai-entry-registry"
+          ],
+          "exitCode": 0,
+          "startedAt": 1792503531.0853739,
+          "completedAt": 1792503532.016067,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/logs/check:ai-entry-registry.log",
+          "sha256": "eb460ca57d9e2ba78254d28856cfeb86716ddfb9c682cfa7c706f25086477dce"
+        },
+        {
+          "stage": "check:docs",
+          "command": [
+            "npm",
+            "run",
+            "check:docs"
+          ],
+          "exitCode": 0,
+          "startedAt": 1792503532.0165498,
+          "completedAt": 1792503532.646218,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/logs/check:docs.log",
+          "sha256": "f8db1ff3f685c1d709918e30f6a8dfc46681ca5869ea64817510baeb78814d80"
+        },
+        {
+          "stage": "merged-regressions",
+          "command": [
+            "npx",
+            "vitest",
+            "run",
+            "tests/regression/R-HARNESS59-ai-entry-registry.test.ts",
+            "tests/regression/R-ai-config-storage.test.ts",
+            "tests/regression/R-CTXG5-context-selector.test.ts",
+            "tests/regression/R-CHAT-02-observable-source-units.test.ts",
+            "tests/regression/R-CHAT-02-source-unit-production.test.ts",
+            "tests/regression/R-CHAT-02-source-unit-confirmation.test.ts",
+            "tests/regression/R-CHAT-03-default-pacing.test.ts",
+            "tests/regression/R-CHAT-03-turn-allowance.test.ts",
+            "--maxWorkers=1",
+            "--minWorkers=1"
+          ],
+          "exitCode": 0,
+          "startedAt": 1792503532.646666,
+          "completedAt": 1792503558.367599,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/logs/merged-regressions.log",
+          "sha256": "39ecc326cdbef8c4d48ae4f3abd119218d00fc9403b33ce0dc8e895009336db6"
+        },
+        {
+          "stage": "diff",
+          "command": [
+            "git",
+            "diff",
+            "--check"
+          ],
+          "exitCode": 0,
+          "startedAt": 1792503558.368108,
+          "completedAt": 1792503558.416422,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/logs/diff.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "regressionFiles": 8,
+      "regressionTests": 75,
+      "sourceKind": "uncommitted-working-merge",
+      "buildPassed": false,
+      "browserPassed": false,
+      "fullDeliveryPassed": false,
+      "realModelQualityAccepted": false,
+      "note": "Static and targeted checks passed on the integrated working tree. Pending V266 source predates this main integration and cannot establish integrated-source delivery."
+    },
+    "validationSnapshot": {
+      "sourceManifestSha256": "753dd359bc14e544787d181e2c6ef588ddc80b5ad98a8ec2d7430997507a6882",
+      "snapshotTree": "449e6032a1bad42e53ccb6a4cbf550ffdbae9504",
+      "frozenRoot": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/bundle-r2/source",
+      "queuePid": 30742,
+      "evidence": "tests/acceptance/character-chat-integrated-main-v268.json"
+    },
+    "firstValidationSnapshot": {
+      "sourceManifestSha256": "888ab3078314f2738ce8a9962b55ae55402e0f70a646739f916837342dd699ac",
+      "snapshotTree": "8a03369dc4abe548e9dcdaf945a0af9c72b23600",
+      "frozenRoot": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v268-integrated-main-runtime/source",
+      "queuePid": 2216,
+      "evidence": "tests/acceptance/character-chat-integrated-main-v268.json"
+    }
+  }
+}

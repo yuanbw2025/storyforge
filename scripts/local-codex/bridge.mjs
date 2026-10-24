@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync, renameSync, openSync, closeSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { CodexRuntime } from './runtime.mjs'
+import { CodexRuntime, CodexTurnError } from './runtime.mjs'
 
 export const PREFIX = '/storyforge/local-codex/v1'
 const UUID = /^[a-f0-9-]{36}$/i
@@ -97,7 +97,10 @@ export function createBridge({ runtime = new CodexRuntime(), journalDir = join(h
       if (!TERMINAL.has(record.status)) record.status = 'completed'
     } catch (error) {
       if (!TERMINAL.has(record.status)) {
-        record.status = controller.signal.aborted ? 'cancelled' : record.dispatched ? 'unknown' : 'failed'
+        if (error instanceof CodexTurnError) {
+          record.providerTurn = error.providerTurn
+          record.status = error.providerTurn.status === 'interrupted' ? 'cancelled' : 'failed'
+        } else record.status = controller.signal.aborted ? 'cancelled' : record.dispatched ? 'unknown' : 'failed'
         record.error = error.message || 'Codex 请求失败。'
       }
     } finally {

@@ -1,0 +1,81 @@
+{
+  "schema": "storyforge.chat-real-continuation-receipt",
+  "version": 1,
+  "at": "2026-10-22T22:07:43.783336+00:00",
+  "status": "failed-repeated-pause-expression-preserved",
+  "sourceHead": "268806bb9cd9ac4b68d44b7c49d09b29058d2f0d",
+  "sourceManifestSha256": "310de4dcf609f0660cfac35f5a5fe1df65d16fe75ca8befb33c731c07ae7fc94",
+  "sourceUnchanged": true,
+  "nativeCalls": 6,
+  "nativeAllCompleted": true,
+  "reportedTotalTokens": 104470,
+  "reportedUsage": {
+    "inputTokens": 101899,
+    "outputTokens": 2571,
+    "cachedInputTokens": 19200,
+    "reasoningOutputTokens": 1208
+  },
+  "costUsd": null,
+  "playerOpportunities": 2,
+  "secondContinueDispatched": true,
+  "injectedModelOutputs": false,
+  "automaticRetries": 0,
+  "runtimeRuns": {
+    "completed": 1,
+    "failed": 1
+  },
+  "firstPauseAdopted": true,
+  "rejectedRepeatAdopted": false,
+  "firstAction": "“掌柜说不准当时谁在旁，这条线索暂时指不向具体的人，再追问也不该逼他猜。”叶岑道，“我先暂缓寻找，不恢复翻查公用工作区。铜印还没找回，后续经手情况也没查清；这些记忆空缺不能算作住客的过错。”",
+  "secondChoice": {
+    "directions": [],
+    "selectedId": null,
+    "decisionSummary": "叶岑维持暂缓寻找的安排，本轮留白，不重复追问掌柜，也不恢复玩家明确反对的翻查。铜印下落仍未查明；继续演绎不视为玩家接受任何建议。"
+  },
+  "rejectedExpression": "“不必再让掌柜猜了。”叶岑停下问话，也没有恢复翻查，让话头安静地落在这里。",
+  "failedChecks": [
+    {
+      "check": "meaningful-direction",
+      "passed": false,
+      "reason": "上一条表达已明确不再逼掌柜猜测、暂缓寻找且不恢复翻查。本次只是再次停止问话并收住话头，没有新的信息、理由、选择或后果，也没有新的玩家请求需要回应。"
+    }
+  ],
+  "goals": [
+    [
+      "goal-1",
+      "paused"
+    ]
+  ],
+  "threads": [
+    [
+      "thread-1",
+      "open"
+    ]
+  ],
+  "restorationChecks": {
+    "parentPreserved": true,
+    "branchPreserved": true,
+    "refreshPreserved": true,
+    "worldPreserved": true,
+    "childRunStatesPreserved": true,
+    "parentRunIdentitiesPreserved": true,
+    "parentRunStatesPreserved": true,
+    "originalFailurePreserved": true,
+    "originalOpeningReviewPreserved": true,
+    "allArtifactBytesAndMultiplicityPreserved": true,
+    "zeroModelRequests": true,
+    "noResumableRuns": true
+  },
+  "restorationModelCalls": 0,
+  "formalM1Credit": false,
+  "humanQualityPass": false,
+  "originalV332Unchanged": true,
+  "v338ControlHandoffExercised": false,
+  "evidence": {
+    "resultPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v339-turn-end-choice-continuation/turn-end-choice-continuation.json",
+    "backupPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v339-turn-end-choice-continuation/turn-end-choice-continuation-backup.json",
+    "restorationPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v339-turn-end-choice-continuation/restoration-logical-history.json",
+    "preregistrationPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v339-turn-end-choice-continuation/preregistration.json"
+  },
+  "next": "Inspect why the actual empty direction reaches a repeated self-pause expression after an adopted pause. Preserve the meaningful-direction rejection and original cohort; this run did not exercise the newly clarified turn-end handoff review."
+}

@@ -310,6 +310,18 @@ function hasNonPortableCheckpoint(checkpoints: AgentRunCheckpointRecord[]): bool
   })
 }
 
+/** A prior import invalidated the local receipt, not the completed history.
+ * Re-import must not treat that exact, verifiable prefix as pending execution.
+ * Keep the stale event and checkpoint; this grants no fresh receipt or resume. */
+function hasImportedCompletedPrefix(projection: AgentRunProjectionV1, events: AnyAgentRunEventV1[]): boolean {
+  const last = events[events.length - 1]
+  if (projection.state !== 'running' || last?.type !== 'verification.staled'
+    || last.payload.reason !== 'project-import-scope-rebound') return false
+  const prefix = replayAgentRunEventsV1(events.slice(0, -1))
+  return prefix.errors.length === 0 && prefix.state === 'completed' && !!prefix.terminalReceiptHash
+    && prefix.terminalReceiptHash === last.payload.previousReceiptHash
+}
+
 async function rebindGenerationHashes(input: {
   run: AgentRunRecord & { id: number }
   events: AgentRunEventRecord[]
@@ -427,7 +439,8 @@ export async function finalizeImportedAgentRunLedgersV1(input: {
       domainEvents = [...domainEvents, staled]
       projection = replayAgentRunEventsV1(domainEvents)
       appendedImportTerminalEvent = true
-    } else if (hasNonPortableCheckpoint(checkpoints) && !['failed', 'cancelled'].includes(projection.state)) {
+    } else if (hasNonPortableCheckpoint(checkpoints) && !['failed', 'cancelled'].includes(projection.state)
+      && !hasImportedCompletedPrefix(projection, domainEvents)) {
       const cancelled = parseAgentRunEventV1({
         version: 1,
         runId,

@@ -1,0 +1,69 @@
+{
+  "version": 362,
+  "recordedAt": "2026-10-24T00:55:41.719677+00:00",
+  "status": "targeted-engineering-passed-current-full-delivery-pending",
+  "product": "character-interaction",
+  "phase": "S3 product development",
+  "baseHead": "3001e02eaeff5a4282d036da8be82494bc01ff59",
+  "productCodeChanged": false,
+  "modelContractChanged": false,
+  "realModelCalls": 0,
+  "problem": "Full delivery on 3001e02e passed CLI but failed seven browser cases. Four files still asserted v68/v41 defaults or emitted the legacy implicit exact-disclosure output while current v70/v42 requires explicit per-fact review.",
+  "changes": [
+    "Update default binding assertions to v70/v42.",
+    "Make new disclosure responses explicitly use equivalent wording and supply independent per-fact review.",
+    "Keep rejection, raw-response retention, shared-fact normalization, knowledge boundaries, reload and portable-history assertions. Required disclosure review is retained rather than counted as a removed redundant check."
+  ],
+  "baseline": {
+    "runId": 39959704207,
+    "head": "3001e02eaeff5a4282d036da8be82494bc01ff59",
+    "fullCliPassed": true,
+    "browserPassed": 504,
+    "browserFailed": 7,
+    "browserSkipped": 4,
+    "originalFailuresRetained": true
+  },
+  "validation": {
+    "nativeBrowserFiles": 5,
+    "nativeBrowserPassed": 14,
+    "nativeBrowserFailed": 0,
+    "skipped": 0,
+    "retries": 0,
+    "injectedResponses": true,
+    "typescript": true,
+    "changedFileLint": true,
+    "architecture": true,
+    "requiredTables": true,
+    "aiManual": true,
+    "build": true,
+    "documentationChecks": true,
+    "sourceHashesUnchangedDuringChecks": true,
+    "bundleSize": true,
+    "diffCheck": true
+  },
+  "claims": {
+    "currentFullDeliveryPassed": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "released": false
+  },
+  "evidence": [
+    {
+      "file": "v362-browser-contract-fixtures/source-and-baseline.json",
+      "sha256": "4e245c560466225fa370f173c79a931ba4d88bfca023bf441897ae03feeb9088"
+    },
+    {
+      "file": "v362-browser-contract-fixtures/browser.json",
+      "sha256": "ad0aa10961a536127485c30d73af67216991bb4c46c2517f8f3b2496fddcaf5c"
+    },
+    {
+      "file": "v362-browser-contract-fixtures/static-checks.json",
+      "sha256": "18cb0f379e3904305388d96d159d45cbed8e96e9987d3aa4a0cea961642f4f05"
+    },
+    {
+      "file": "v362-browser-contract-fixtures/final-checks.json",
+      "sha256": "6e83ba28175d88c0c227badbb8ebb3d3bcb994e2d86aa9854bf638fa1d2fe2d5"
+    }
+  ],
+  "updatedAt": "2026-10-24T00:58:04.999048+00:00"
+}

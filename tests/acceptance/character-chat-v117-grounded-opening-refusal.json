@@ -1,0 +1,187 @@
+{
+  "schema": "storyforge.character-chat-development-episode-evidence",
+  "version": 1,
+  "label": "V117 refusal route stops at ambiguous prior observation result review",
+  "recordedAt": "2026-10-16T00:34:45.860521+00:00",
+  "implementationCommit": "8dcb1788a1dd8dd84095a16bd7c49d8e52b5b374",
+  "manifestSha256": "ef97145364b836c636d56e12355d69789aef834070d2e93811dc2559ee3d9544",
+  "releaseHash": "3235facf915f325f3c3ef14c17faab66af1bd9a1e2f9d00ec3ffb37c555f8701",
+  "worldHash": "103ac348ab504155f0ff2a30034cf38d112b175cf3f40e2011251f5cedb4a6ee",
+  "countsInM1": false,
+  "holdoutsInspected": false,
+  "episode": {
+    "planned": 1,
+    "terminated": 1,
+    "outcome": "failed at situation meaningful-direction before role response to player objection",
+    "playerOpportunities": 1,
+    "playerMessage": "这个箱子先别再翻查，换个办法吧。",
+    "runtimeRequests": 4,
+    "completedRuns": 1,
+    "failedRuns": 1,
+    "committedActorActions": 1,
+    "retries": 0,
+    "repairs": 0,
+    "originalObservation": "叶岑蹲到木箱前，伸手试着掀起箱盖，检查能否打开查看。",
+    "originalDirection": "确认本次掀盖检查的结果：箱盖是否打开；若打开，仅确认此次可直接看见的箱内物品，不推断经手者。",
+    "candidateResult": {
+      "kind": "chat-situation",
+      "title": "柜台旁的查找起点",
+      "location": "驿站",
+      "timeLabel": "暴雨中",
+      "newFacts": [
+        {
+          "factKey": "fact-11",
+          "kind": "observation",
+          "text": "箱盖顺利掀起，露出了盖内侧与箱口木沿，确认木箱可以打开查看。本次掀盖尚未完成对箱内物件的辨认，不能确认铜印是否在内，也不能判断经手者；没有继续翻动物品。",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "evidenceFactKeys": [
+            "fact-8",
+            "fact-10"
+          ],
+          "seedExcerpt": "确认本次掀盖检查的结果：箱盖是否打开；若打开，仅确认此次可直接看见的箱内物品，不推断经手者。"
+        }
+      ],
+      "newGoals": [],
+      "newThreads": [],
+      "possibilities": []
+    },
+    "review": {
+      "checks": [
+        {
+          "check": "continuity",
+          "passed": true,
+          "reason": "保持原题名、时地，仅结算事件5已经实施的掀盖动作；玩家随后要求换办法，不撤销此前动作，候选也未追加翻查。"
+        },
+        {
+          "check": "permissions",
+          "passed": true,
+          "reason": "箱盖打开、盖内侧及箱口木沿属于既有木箱的局部观察，未新增人物、超额事实或后续行动。"
+        },
+        {
+          "check": "player-agency",
+          "passed": true,
+          "reason": "未替沈禾行动、同意调查或作出判断，也未安排叶岑继续翻动物品。"
+        },
+        {
+          "check": "visibility",
+          "passed": true,
+          "reason": "未确认铜印位置、经手者或用途，未将幕后事实转为公开知识，也未申报不满足条件的发现。"
+        },
+        {
+          "check": "meaningful-direction",
+          "passed": false,
+          "reason": "虽确认箱盖打开，却以无具体依据的“尚未完成对箱内物件的辨认”回避此次打开后直接可见内容的结算。材料未给出视线受限等原因；不能仅因此前未写出辨认结果，就继续将本次观察所得留空。应补足已完成动作范围内的有限可见结果，而非追加翻查或强行发现秘密。"
+        }
+      ]
+    },
+    "allTruthUnitsStillUnknown": true,
+    "pendingObservationRetained": true
+  },
+  "provider": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "usage": {
+      "inputTokens": 48565,
+      "outputTokens": 2331,
+      "totalTokens": 50896,
+      "cachedInputTokens": 6656,
+      "reasoningOutputTokens": 1181
+    },
+    "costUsd": null,
+    "includingSharedPreparationAndNewProductionOnce": 182526
+  },
+  "scopeAudit": {
+    "originalDraftDeterministicallyValid": true,
+    "newFacts": 1,
+    "goalStatesUnchanged": true,
+    "knowledgeUnchanged": true,
+    "messagesUnchanged": true,
+    "objectRejected": true,
+    "persistedStateUnchanged": true,
+    "originalObservation": "叶岑蹲到木箱前，伸手试着掀起箱盖，检查能否打开查看。",
+    "direction": "确认本次掀盖检查的结果：箱盖是否打开；若打开，仅确认此次可直接看见的箱内物品，不推断经手者。",
+    "playerMessage": "这个箱子先别再翻查，换个办法吧。",
+    "modelRequests": 0,
+    "limits": "Deterministic eligibility does not establish semantic quality; actual inspection scope must still be reviewed."
+  },
+  "finding": "Original action checks whether the lid can open; result establishes opened lid/rim but no content identification. Review requires actual visible contents without accepting this scope limit. This exposes an ambiguous distinction between testing access and inspecting contents, plus legacy blanket box-content prohibition alongside permitted ordinary details. It does not prove the old semantic verdict should simply be ignored.",
+  "next": "Clarify actual action scope in new frozen producer/reviewer versions; test both valid access-only result and negative already-performed content inspection with missing result. Keep secret/new-object/character/permission constraints and original failed run.",
+  "restoration": [
+    {
+      "stem": "inn-grounded-opening-refusal",
+      "runStatusesPreserved": true,
+      "verifiedCompletedHistories": 1,
+      "retainedFailedRuns": 1,
+      "resumableRuns": 0,
+      "openingReviewRetained": true,
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true
+    }
+  ],
+  "terminalReadback": {
+    "checks": [
+      {
+        "id": "8e1caf37-1c36-4187-9e60-97d461dbcda4",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "c8bf9377-cd5b-4c51-b236-951c4b7fb8b1",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "71123eb7-e948-452b-950a-02df4a964634",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "ad0e347d-f965-4e8c-b1be-9129884bcef3",
+        "status": "completed",
+        "readbackEqual": true
+      }
+    ],
+    "allTerminal": true
+  },
+  "limits": [
+    "No actual role response to refusal was generated; cannot claim respectful alternative planning passed or failed",
+    "Read-only deterministic preview adds one observation but does not establish semantic quality",
+    "V116 short success and V114 failure retained separately; no M1 completion or human/Agnes acceptance"
+  ],
+  "evidence": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v117-grounded-opening-refusal/preregistration.json",
+      "sha256": "265f789258570be8feb1c116d59ffd16e17efc6fb65f09b003f3d71db04e20f2"
+    },
+    "runner.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v117-grounded-opening-refusal/runner.mjs",
+      "sha256": "db70c13e22827a7b2c5e3cc7d9eee45bbc0c4011b914fb26060914292a725a05"
+    },
+    "inn-grounded-opening-refusal.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v117-grounded-opening-refusal/inn-grounded-opening-refusal.json",
+      "sha256": "013d5344983d623898c8c84a52d84dd313de9aee33b0d337b862743fc919c9ab"
+    },
+    "inn-grounded-opening-refusal-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v117-grounded-opening-refusal/inn-grounded-opening-refusal-backup.json",
+      "sha256": "5123972aea781ecfee6e3c3776eb1a2565b8cbe6be9ec54e32e1b5ad6ce25500"
+    },
+    "scope-audit.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v117-grounded-opening-refusal/scope-audit.json",
+      "sha256": "9cc06f57a3a2edfc2d519924cfd32629db0cd9e436aac02a5dd946064cb75a1e"
+    },
+    "restoration-verified.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v117-grounded-opening-refusal/restoration-verified.json",
+      "sha256": "729a0bc59eb197f9fd9dbcdae482aa6a09b63f32f99d740df3c54aba19388e2c"
+    },
+    "terminal-request-proof.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v117-grounded-opening-refusal/terminal-request-proof.json",
+      "sha256": "d7966dc7377a4edda6e089ece62e22532a934645a838b24a26ebc3da86c1ac4a"
+    }
+  }
+}

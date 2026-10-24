@@ -1,0 +1,554 @@
+{
+  "schema": "storyforge.character-chat-engineering",
+  "version": 325,
+  "kind": "historical-test-contract-alignment",
+  "at": "2026-10-22T11:49:21.994857+00:00",
+  "baseHead": "26fd6e29c019f89162f7beb5c081b93a47c3593e",
+  "scope": "Test-only repair for six exact-head CI failures; no production, dependency, schema, world or model configuration changes.",
+  "changedFiles": [
+    "tests/helpers/chat-historical-reader.ts",
+    "tests/regression/R-CHAT-02-situation-character-permissions.test.ts",
+    "tests/regression/R-CHAT-02-spoken-inquiry-review.test.ts",
+    "tests/regression/R-CHAT-04-fact-evidence-harness.test.ts",
+    "tests/regression/R-CHAT-04-history-audit.test.ts"
+  ],
+  "realModelCalls": 0,
+  "targeted": {
+    "files": 11,
+    "tests": 96,
+    "passed": true,
+    "includesPriorFocusedRuns": true
+  },
+  "checks": [
+    {
+      "check": "aggregate-regression",
+      "command": [
+        "npx",
+        "vitest",
+        "run",
+        "tests/regression/R-CHAT-02-situation-character-permissions.test.ts",
+        "tests/regression/R-CHAT-02-spoken-inquiry-review.test.ts",
+        "tests/regression/R-CHAT-04-fact-evidence-harness.test.ts",
+        "tests/regression/R-CHAT-04-history-audit.test.ts",
+        "tests/regression/R-CHAT-04-commitment-context-harness.test.ts",
+        "tests/regression/R-CHAT-03-context-inspector.test.ts",
+        "tests/regression/R-CHAT-04-resolution-evidence-harness.test.ts",
+        "tests/regression/R-CHAT-04-coordinator-dialogue-harness.test.ts",
+        "tests/regression/R-CHAT-04-memory-reconciliation-harness.test.ts",
+        "tests/regression/R-CHAT-02-coordinator-audience.test.ts",
+        "tests/regression/R-CHAT-02-inquiry-contact-evidence.test.ts",
+        "--maxWorkers=2"
+      ],
+      "exitCode": 0,
+      "seconds": 56.059,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/aggregate-regression.log",
+      "sha256": "a9232882d467222ff99c96cda18317c728dd25e4605f54c9c81667dc738a6efd"
+    },
+    {
+      "check": "architecture",
+      "command": [
+        "npm",
+        "run",
+        "check:architecture"
+      ],
+      "exitCode": 0,
+      "seconds": 7.555,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/architecture.log",
+      "sha256": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616"
+    },
+    {
+      "check": "required-tables",
+      "command": [
+        "npm",
+        "run",
+        "check:required-tables"
+      ],
+      "exitCode": 0,
+      "seconds": 0.169,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/required-tables.log",
+      "sha256": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444"
+    },
+    {
+      "check": "ai-manual",
+      "command": [
+        "npm",
+        "run",
+        "check:ai-manual"
+      ],
+      "exitCode": 0,
+      "seconds": 0.559,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/ai-manual.log",
+      "sha256": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19"
+    },
+    {
+      "check": "types",
+      "command": [
+        "npx",
+        "tsc",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "seconds": 44.504,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "check": "changed-lint",
+      "command": [
+        "npx",
+        "eslint",
+        "tests/helpers/chat-historical-reader.ts",
+        "tests/regression/R-CHAT-02-situation-character-permissions.test.ts",
+        "tests/regression/R-CHAT-02-spoken-inquiry-review.test.ts",
+        "tests/regression/R-CHAT-04-fact-evidence-harness.test.ts",
+        "tests/regression/R-CHAT-04-history-audit.test.ts",
+        "--max-warnings=0"
+      ],
+      "exitCode": 0,
+      "seconds": 2.372,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/changed-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "check": "build",
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "exitCode": 0,
+      "seconds": 89.691,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/build.log",
+      "sha256": "00a3007e38f30496adf357d3c3451e36df9fa999f04477146f0f05e57e07f5ef"
+    },
+    {
+      "check": "bundle-size",
+      "command": [
+        "npm",
+        "run",
+        "check:bundle-size"
+      ],
+      "exitCode": 0,
+      "seconds": 0.595,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/bundle-size.log",
+      "sha256": "1b7224ac343029f4e46189eb7ae170ff3b40dd87249019ef253193171a02945d"
+    }
+  ],
+  "originalFailure": {
+    "ciRun": 39755565042,
+    "failedTests": 6,
+    "passedTests": 6680,
+    "statusRetained": "failure",
+    "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v324-m1-current/remote-ci-39755565042-failed.log"
+  },
+  "repair": [
+    "Freeze every historical situation producer/reviewer pair rather than following registry defaults.",
+    "Treat all supported pairs as supported, and preserve mixed, missing, wrong-identity and genuinely future-version rejections.",
+    "Verify legacy, previous and current spoken-review bindings without rewriting preserved old prompt hashes.",
+    "Use actual historical situation v12/v11 contracts with reader v11 and relevance v5; retain packet and restore review/adoption/import under old provenance semantics.",
+    "Verify current and prior review reader versions separately; current missing-selection evidence still stops before any reviewer call."
+  ],
+  "productionEquivalence": {
+    "files": 1831,
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/production-source-equivalence.json",
+    "sha256": "4a1599d74f5a4e249e7ebe46869b8a180b432ffb972c99698c10a70613fdc154",
+    "recheckedAfterBrowserFixes": true
+  },
+  "independentReview": {
+    "blockingFindings": 0,
+    "boundary": "Retained old-reader packet equality verifies selection/recovery consistency, not a separately captured historical full-text golden sample."
+  },
+  "fullDelivery": "Original full CLI finished with the same6regression failures. New commit full CI/browser evidence still pending; original browser flaky results retained.",
+  "modelQuality": "No M1 or human quality pass added. Original V324 source and denominator retained.",
+  "performanceAudit": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/latency-audit.json",
+    "status": "Unimplemented proposals only; no performance gain claimed."
+  },
+  "browserStabilityRepair": {
+    "files": [
+      "tests/e2e/character-chat-commitment-context.spec.ts",
+      "tests/e2e/character-chat-memory-management.spec.ts"
+    ],
+    "original": {
+      "run": 39755565039,
+      "head": "26fd6e29c019f89162f7beb5c081b93a47c3593e",
+      "passed": 499,
+      "flaky": 2,
+      "skipped": 4
+    },
+    "diagnosis": [
+      "Commitment inspector used an immediate count after details toggle and sometimes skipped the required second page; failing DOM retained first12of18 and the pagination button.",
+      "Memory correction test read persisted state3.22ms after save-click returned while trace still showed a disabled editor. Later error-context showed the new active memory and closed editor, proving commit eventually completed."
+    ],
+    "repair": "Wait for actual pagination and saved-state UI completion; retain all original content/privacy/provenance assertions, timeouts and no-retry semantics.",
+    "verification": {
+      "command": [
+        "npx",
+        "playwright",
+        "test",
+        "tests/e2e/character-chat-commitment-context.spec.ts",
+        "tests/e2e/character-chat-memory-management.spec.ts",
+        "--workers=1",
+        "--retries=0",
+        "--reporter=list"
+      ],
+      "exitCode": 0,
+      "seconds": 62.686,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/browser-race-fixes.log",
+      "sha256": "9575a85b87fff88bbcb9dd8b37d0b3011a2c529ff148b19760628aead4741646",
+      "automaticRetries": 0,
+      "port": 51535,
+      "realModelCalls": 0,
+      "files": 2,
+      "tests": 5,
+      "firstAttemptPasses": 5
+    },
+    "lint": {
+      "exitCode": 0,
+      "command": [
+        "npx",
+        "eslint",
+        "tests/e2e/character-chat-commitment-context.spec.ts",
+        "tests/e2e/character-chat-memory-management.spec.ts",
+        "--max-warnings=0"
+      ]
+    },
+    "evidence": [
+      {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/remote-browser-artifact/test-results/character-chat-commitment--4f88f-s-when-dialogue-is-excluded-chromium/trace.zip",
+        "sha256": "3e33e754e5a8aa58a9b4dbb649508c31b5e65bdc0bfcd5f0c45ba609724366bb"
+      },
+      {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/remote-browser-artifact/test-results/character-chat-commitment--4f88f-s-when-dialogue-is-excluded-chromium/error-context.md",
+        "sha256": "9157abc384ddfb50d0864e806fac9253a7d4321c382b4be1c25dcab78e7e7a3f"
+      },
+      {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/remote-browser-artifact/test-results/character-chat-commitment--4f88f-s-when-dialogue-is-excluded-chromium/test-failed-1.png",
+        "sha256": "ea912659450b71a3529d84ed37a98671eef11d665b020ad08ac9895bd364c6e8"
+      },
+      {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/remote-browser-artifact/test-results/character-chat-memory-mana-057bb-ith-portable-branch-history-chromium/trace.zip",
+        "sha256": "92b9e088f12e265361318fe177a4e286faa55508b3870959d0c4794949aef905"
+      },
+      {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/remote-browser-artifact/test-results/character-chat-memory-mana-057bb-ith-portable-branch-history-chromium/error-context.md",
+        "sha256": "faf00a649a76120f72395ea0d48580ce2daf1648ef1d1ca90b52d12bbc467cbf"
+      },
+      {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/remote-browser-artifact/test-results/character-chat-memory-mana-057bb-ith-portable-branch-history-chromium/test-failed-1.png",
+        "sha256": "651fb27bf99569982148d44499041cf6f5744e4b692832b973b184d69bc38a88"
+      }
+    ]
+  },
+  "unchangedGateInputs": "TypeScript includes only src. Production src, scripts, dependencies and execution configs remain byte-identical after the two E2E edits; prior required type/build/governance results retained. Added browser tests and changed-file lint passed separately.",
+  "mainlineIntegration": {
+    "mainHead": "c5a1cab7d7d02eb4382d13ecb9b3de2785037d88",
+    "previousPrHead": "f20fac24923abf0d575405110a119d6e4fe20486",
+    "sourceIntegrationTree": "386d80634128333662fac860934c0f5ac54a668d",
+    "sourceIntegrationTreeBoundary": "Index tree after mechanical mainline conflict resolution, before plan and acceptance status closeout. Subsequent changes only update these two status documents; final commit and remote check IDs are recorded in repository-external receipts.",
+    "sourceRuntimePinnedHead": "26fd6e29c019f89162f7beb5c081b93a47c3593e",
+    "version": "4.0.3",
+    "previousPrHeadRemoteChecks": "Not scheduled because the pull request was merge-conflicting; no old-head run was restarted.",
+    "conflictResolution": [
+      "Retain all chat Skill bytes and only use the 36 latest non-chat lastVerifiedAt dates from main.",
+      "Regenerate docs/ARCHITECTURE.md using the official project metrics script.",
+      "Retain both Chinese and English changelog contents from both parents."
+    ],
+    "semanticReview": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/merge-review.json",
+      "sha256": "f75cd305248131e9cfd921f306df331423f9666f07b4075bbb2084f430a43bce",
+      "protectedFilesCompared": 454,
+      "chatGovernanceAndTestsUnchangedFromPreviousPrHead": true,
+      "dependencyGraphsUnchanged": true
+    },
+    "localChecks": [
+      {
+        "name": "targeted-regressions",
+        "command": [
+          "npx",
+          "vitest",
+          "run",
+          "tests/regression/R-CHAT-02-situation-character-permissions.test.ts",
+          "tests/regression/R-CHAT-02-spoken-inquiry-review.test.ts",
+          "tests/regression/R-CHAT-04-fact-evidence-harness.test.ts",
+          "tests/regression/R-CHAT-04-history-audit.test.ts",
+          "tests/regression/R-SCREEN2-professional-pipeline.test.ts",
+          "tests/regression/R-COMIC2-professional-pipeline.test.ts",
+          "tests/regression/R-SHORT2-professional-production.test.ts",
+          "tests/regression/R-AITOWN2-director.test.ts",
+          "tests/regression/R-TTRPG4-ai-kp-director.test.ts",
+          "tests/regression/R-OPEN-WORLD3-source-curation.test.ts",
+          "tests/regression/R-OPEN-WORLD3-experience-design.test.ts",
+          "tests/regression/R-TEXTADV3-agent-team.test.ts",
+          "tests/regression/R-TEXTADV2-production.test.tsx",
+          "tests/regression/R-CLIENT-signed-upgrade-fixture.test.ts",
+          "tests/regression/R-ONLINE1-verifiable-dice.test.ts"
+        ],
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/targeted-regressions.log",
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 160.16,
+        "sha256": "045c6eebd1846f2177d6773fbbf5f5ed6c8b8af7fc9800df86e5603daf83fad6"
+      },
+      {
+        "name": "release-apk-upgrade",
+        "command": [
+          "node",
+          "--test",
+          "scripts/distribution/release-apk-upgrade.test.mjs"
+        ],
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/release-apk-upgrade.log",
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 3.43,
+        "sha256": "1667983d712c54c55c19380f042311086a615f3bce092a97980a4ff59f8f4be9"
+      },
+      {
+        "name": "architecture",
+        "command": [
+          "npm",
+          "run",
+          "check:architecture"
+        ],
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/architecture.log",
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 7.19,
+        "sha256": "23486d579737fc37398cd3cb43e9da946643d845c6948456591ea74125034e43"
+      },
+      {
+        "name": "required-tables",
+        "command": [
+          "npm",
+          "run",
+          "check:required-tables"
+        ],
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/required-tables.log",
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 0.15,
+        "sha256": "dfa44ee6399f2cf6fc926481d382fb1e8c3dde5998079094d746eb18ba5b5c23"
+      },
+      {
+        "name": "ai-manual",
+        "command": [
+          "npm",
+          "run",
+          "check:ai-manual"
+        ],
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/ai-manual.log",
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 0.52,
+        "sha256": "da0e1a7cfe4a41cdb0c20b5ada439f9146ae0d02d441f78fd556a04a1e948e0c"
+      },
+      {
+        "name": "ai-entry-registry",
+        "command": [
+          "npm",
+          "run",
+          "check:ai-entry-registry"
+        ],
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/ai-entry-registry.log",
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 0.89,
+        "sha256": "50ec410073f276d3bce9d7c96cd885a6a05afcc5aa7aed9032afebcdff52e1de"
+      },
+      {
+        "name": "agent-context",
+        "command": [
+          "npm",
+          "run",
+          "check:agent-context"
+        ],
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/agent-context.log",
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 0.15,
+        "sha256": "6f3392aaae0540e5489ce6aaf118f48e0aaa444b8794bf0c62d61ec76d986a9d"
+      },
+      {
+        "name": "agent-freshness",
+        "command": [
+          "npm",
+          "run",
+          "check:agent-freshness"
+        ],
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/agent-freshness.log",
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 0.7,
+        "sha256": "aafc4254d0a153fb7c5ee173a2b64b35e5de37e23236f52b092f57bd5cd91e48"
+      },
+      {
+        "name": "project-metrics",
+        "command": [
+          "npm",
+          "run",
+          "check:project-metrics"
+        ],
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/project-metrics.log",
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 0.45,
+        "sha256": "b0f6ccd8a091b3d35b98117c88d4c21bb25793ffbe6ec6ac71ba142f9ded42a4"
+      },
+      {
+        "name": "docs",
+        "command": [
+          "npm",
+          "run",
+          "check:docs"
+        ],
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/docs.log",
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 0.56,
+        "sha256": "682391277f2e8d6fe66953b62e31c5cd2468ef07a3b3d6774dbbd2aa13f5902b"
+      },
+      {
+        "name": "typescript",
+        "command": [
+          "npx",
+          "tsc",
+          "--noEmit"
+        ],
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/typescript.log",
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 39.26,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "build",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/build.log",
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 76.92,
+        "sha256": "289548c4010456026bff093a01852594687a5b1838e2b71d73a1fbadcddb5544"
+      }
+    ],
+    "fullDelivery": "Completed successfully for 754e4053. Full CLI: 991 files / 6696 tests. Dedicated full browser: 501 passed, 4 skipped, no flaky results. Ordinary CI also succeeded but its browser phase retained 2 retry passes. These results do not validate later V326 source.",
+    "modelEvidenceBoundary": "Original V324 source and raw results remain frozen. Its reading-r1 episode failed the semantic review after 13 player opportunities; zero-call restoration passed. V327 on V326 source separately completed one directed resume; neither changes V324 outcomes nor proves M1.",
+    "statusCloseoutChecks": [
+      {
+        "name": "status-docs",
+        "command": [
+          "npm",
+          "run",
+          "check:docs"
+        ],
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 0.65,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/status-docs.log",
+        "sha256": "84693a7149f2a66a76740a0c95070eb09019e2f2b793f07c00a8d7b2f02f1aad"
+      },
+      {
+        "name": "status-roadmap",
+        "command": [
+          "npm",
+          "run",
+          "check:roadmap"
+        ],
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 0.15,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/status-roadmap.log",
+        "sha256": "07abeb8220e9621ba2bf0755fe0a5166ecdda367f15a14feae15f55a2fb120cf"
+      },
+      {
+        "name": "bundle-size",
+        "command": [
+          "npm",
+          "run",
+          "check:bundle-size"
+        ],
+        "status": "passed",
+        "exitCode": 0,
+        "elapsedSeconds": 0.49,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/bundle-size.log",
+        "sha256": "9c005e458706b380262f9c525f825ee699138de7dca5b9b935c410f9671cbb2c"
+      },
+      {
+        "status": "passed",
+        "command": [
+          "npx",
+          "eslint",
+          "src/lib/agent/skill-registry.ts",
+          "tests/helpers/native-upgrade-fixture.ts",
+          "tests/regression/R-CLIENT-signed-upgrade-fixture.test.ts",
+          "tests/regression/R-ONLINE1-verifiable-dice.test.ts",
+          "--max-warnings=0"
+        ],
+        "exitCode": 0,
+        "elapsedSeconds": 0.96,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/merged-files-lint-r2.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "originalFailureRetained": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/merge-main-c5a1cab7/merged-files-lint.log",
+        "originalFailureReason": "The first invocation explicitly selected two scripts excluded by repository ESLint configuration; --max-warnings=0 rejected ignored-file warnings, with zero code errors. R2 covers all changed TypeScript files under the unchanged configured lint scope. No ignore rules or thresholds changed."
+      }
+    ],
+    "terminalReadback": {
+      "at": "2026-10-22T17:14:40.557989+00:00",
+      "sourceHead": "754e40539e475577aa6ffe6742d7e17af2e00f7a",
+      "runs": [
+        {
+          "url": "https://github.com/yuanbw2025/storyforge/actions/runs/39776190023",
+          "conclusion": "success",
+          "jobs": [
+            {
+              "name": "verify",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "url": "https://github.com/yuanbw2025/storyforge/actions/runs/39776189836",
+          "conclusion": "success",
+          "jobs": [
+            {
+              "name": "Full delivery / browser",
+              "conclusion": "success"
+            },
+            {
+              "name": "Full delivery / cli",
+              "conclusion": "success"
+            }
+          ]
+        }
+      ],
+      "cli": {
+        "files": 991,
+        "tests": 6696,
+        "failed": 0
+      },
+      "dedicatedBrowser": {
+        "passed": 501,
+        "flaky": 0,
+        "skipped": 4
+      },
+      "ordinaryCIBrowser": {
+        "passed": 499,
+        "flaky": 2,
+        "skipped": 4,
+        "flakyCases": [
+          "character-chat-production-repair.spec.ts",
+          "text-open-world-complete-journey.spec.ts"
+        ],
+        "originalAttemptsPreserved": true
+      },
+      "evidence": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v325-regression-compat/terminal-754e-20261023/receipt.json",
+        "sha256": "23f2997caba0361a9dd0974b42d7ede52955d502abacfc92eeae30ac6cb8c996"
+      },
+      "laterV326SourceIncluded": false
+    }
+  }
+}

@@ -1,0 +1,312 @@
+{
+  "schema": "storyforge.character-chat-development-episode-evidence",
+  "version": 1,
+  "label": "V114 full weak-guidance episode: actual inquiry passes, unsupported actor pause rejected",
+  "code": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "691619a3748e47438150553b546965f5a1159af1",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v113-real-l7blrldq/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v113-real-l7blrldq/manifest.json",
+    "manifestSha256": "13c7d3bf4a31e25365006b16e327b1626d608ede68bd854ff93828991ee49789",
+    "files": 3459
+  },
+  "countsInM1": false,
+  "commercialAcceptance": false,
+  "humanPlayer": false,
+  "source": {
+    "releaseHash": "b854e30f564918ea15cf32114ed11ea6357463ff9a9520022df5e7e2a2097a21",
+    "worldHash": "103ac348ab504155f0ff2a30034cf38d112b175cf3f40e2011251f5cedb4a6ee",
+    "sourceUnits": 3,
+    "truthInitiallyUnknown": true,
+    "sourceAndDiscoveryConditionsUnchanged": true,
+    "pacing": "unchanged one-action opening, explicitly select three actions after opening"
+  },
+  "execution": {
+    "playerOpportunities": 6,
+    "playerMessages": 2,
+    "continues": 4,
+    "requests": 46,
+    "completedRuns": 22,
+    "failedRuns": 1,
+    "committedRoleActions": 12,
+    "situationFacts": 25,
+    "typedReplies": 0,
+    "knownTruthUnits": 0,
+    "remainingGoal": "active",
+    "ending": "failed; unsupported pause rejected, no retry or adoption"
+  },
+  "operator": {
+    "policy": "Only preregistered noncommittal replies and continue from public dialogue. No hidden hints.",
+    "messages": [
+      "我还没有决定，你可以先说说顾虑。",
+      "你接着说。"
+    ],
+    "infrastructureInterruption": "Initial noninteractive stdin closed after 2-call opening and zero opportunities. Its completed status is process exit, not episode completion. Original evidence retained; a separately recorded continuation reopened exactly the same persistent session and kept start time, calls and budget. No new opening was sampled."
+  },
+  "observedProgress": [
+    "Player participation remains ungranted; role explains concern without inventing consent.",
+    "Role obtains duty-room sign, actually asks, walks there and knocks; no answer is invented.",
+    "Role checks public ground near rear door, then reads initial and remaining pages of public register.",
+    "No key truth unit learned; proposed pause lacks a reason addressing other known public scope and is rejected."
+  ],
+  "failure": {
+    "runId": 54,
+    "rawResponses": [
+      {
+        "stepId": "interaction:runtime-candidate",
+        "artifactHash": "e0a2682d7e4f17ce67e508ad8b34287d6c85c388a7f6b7694d1697d52c464716",
+        "response": {
+          "kind": "complete",
+          "text": "叶岑合上《验货交接登记》，将簿册放回木架上。“翻看的内页没有明确的铜印使用或收存记录；这不证明所有交接都已入册。当值人员还没联系上，后门内侧查过的地面和墙脚也没找到铜印。我先暂停寻找：铜印仍未找回，最后的使用和收存经过也没有核实，不能据此指责任何人。”",
+          "goalKey": "goal-1",
+          "evidenceFactKeys": [
+            "fact-public-handover-register",
+            "fact-register-pages-local-result",
+            "fact-register-remaining-pages-result",
+            "fact-duty-door-response-result",
+            "fact-rear-door-ground-result"
+          ],
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "waitingForPlayer": false,
+          "newFacts": [
+            {
+              "factKey": "fact-register-returned-to-rack",
+              "kind": "object",
+              "text": "叶岑合上《验货交接登记》，将簿册放回木架上。",
+              "evidenceFactKeys": [
+                "fact-public-handover-register",
+                "fact-register-remaining-pages-inspection"
+              ],
+              "evidenceExcerpt": "叶岑合上《验货交接登记》，将簿册放回木架上。"
+            }
+          ],
+          "disclosures": [],
+          "threadUpdates": [],
+          "goalStatus": "paused",
+          "goalUpdates": [],
+          "commitmentEffects": [],
+          "relationshipUpdates": [],
+          "nextPossibilities": [],
+          "beliefUpdates": [],
+          "situationRequest": null,
+          "followupGoal": null,
+          "threadFollowupGoal": null,
+          "resumeGoal": null,
+          "promiseRequest": null,
+          "pauseGoal": null,
+          "sceneTransition": null
+        }
+      },
+      {
+        "stepId": "interaction:action-review",
+        "artifactHash": "3b454e56fbfc767499df58509388c96b360f916f530b2e3d23bcf4bf73608279",
+        "response": {
+          "checks": [
+            {
+              "check": "continuity",
+              "passed": true,
+              "reason": "准确保留翻阅、联系当值人员及后门局部检查的有限结果，没有将未见记载等同于记录完整，也未声称铜印已找回。自主暂停与goalStatus一致，未覆盖玩家暂停边界。"
+            },
+            {
+              "check": "permissions",
+              "passed": true,
+              "reason": "合簿并放回公开木架属于已授权的小行动；未搜索私人物品、扩大危险强度或利用幕后答案。"
+            },
+            {
+              "check": "player-agency",
+              "passed": true,
+              "reason": "只处置自身行动和目标，没有替沈禾移动、同意调查或承担义务。"
+            },
+            {
+              "check": "visibility",
+              "passed": true,
+              "reason": "所述调查结果均为双方已知事实，未泄露铜印的位置、持有人或用途，也未公开角色私有往事。"
+            },
+            {
+              "check": "consequences",
+              "passed": true,
+              "reason": "合簿归架已登记，旧查阅打算已清空；仅暂停自身寻找，未宣布共同事项结束，无须关闭剧情线。正文没有遗漏的新承诺或关系变化。"
+            },
+            {
+              "check": "meaningful-direction",
+              "passed": false,
+              "reason": "局部查阅无结果、值房未应答和后门表面未见铜印，并未形成寻找目标整体受阻的依据。柜台此前只核实了人员情况，仍可依已有地点请求核实尚未查看的公共可查范围，而不预定任何物件或答案。本次没有说明休息或其他暂缓理由，却直接暂停原责任，不足以支持这一方向变化。"
+            }
+          ],
+          "disclosureChecks": [],
+          "commitmentChecks": [],
+          "memoryChecks": []
+        }
+      }
+    ],
+    "classification": "Generation/replanning quality failure; not the V112 speech/physical-fact contract mismatch.",
+    "readOnlyAudit": "Existing actor v36 replanning rules and public counter facts were present in actual role input; possibilities still center on last register check. No model calls or source modifications for this audit.",
+    "limits": [
+      "Counter exists, but this does not establish a container, permission to search all property, accessible person or guaranteed clue.",
+      "Do not require exhaustion of all imagined routes or guaranteed goal success.",
+      "New methods and technically valid steps are insufficient evidence of meaningful sustained progress."
+    ]
+  },
+  "usage": {
+    "realRuntimeCalls": 46,
+    "runtimeUsage": {
+      "totalTokens": 643661,
+      "inputTokens": 624103,
+      "outputTokens": 19558,
+      "cachedInputTokens": 157184,
+      "reasoningOutputTokens": 5080
+    },
+    "sharedPreparationAndProductionOnce": {
+      "calls": 9,
+      "tokens": 127721
+    },
+    "includingPreparationAndProductionOnce": 771382,
+    "separateV113ReviewDiagnosisTokensNotEpisodeCost": 49110,
+    "costUsd": null,
+    "cachePolicy": "Cached input included in input; reasoning included in output; old episodes retained separately."
+  },
+  "observedOperationLatencies": [
+    {
+      "input": "new formal-release session and automatic one-action opening",
+      "requests": 2,
+      "firstRequestToSettledOrTerminalSeconds": 28.72
+    },
+    {
+      "input": {
+        "type": "message",
+        "text": "我还没有决定，你可以先说说顾虑。",
+        "visibleBasis": "角色询问玩家是否愿意提供见闻，当前等待玩家；按预登记弱引导策略保留未决定，不提供经历、秘密或额外行动许可。"
+      },
+      "requests": 2,
+      "firstRequestToSettledOrTerminalSeconds": 22.46
+    },
+    {
+      "input": {
+        "type": "message",
+        "text": "你接着说。",
+        "visibleBasis": "角色已解释自己的顾虑并确认玩家尚未答应协助；仅按弱引导策略请它继续表达，不授权搜查或替玩家行动。"
+      },
+      "requests": 6,
+      "firstRequestToSettledOrTerminalSeconds": 74.08
+    },
+    {
+      "input": {
+        "type": "continue",
+        "visibleBasis": "角色在公开回复中区分柜台旁无人可问与驿站无人，提出核实其他位置的原目标方向；当前无待玩家决定事项，依弱引导协议让角色继续。"
+      },
+      "requests": 4,
+      "firstRequestToSettledOrTerminalSeconds": 58.79
+    },
+    {
+      "input": {
+        "type": "continue",
+        "visibleBasis": "公开消息中角色已实际向值房廊口发问，尚无答复或玩家待决事项；不预定有人应答，仅继续既有请求。"
+      },
+      "requests": 12,
+      "firstRequestToSettledOrTerminalSeconds": 162.6
+    },
+    {
+      "input": {
+        "type": "continue",
+        "visibleBasis": "角色已走到值房、敲门并确认本次未得到答复，转向原已知的后门公共区域；未要求玩家随行或批准新动作，按弱引导规则继续。"
+      },
+      "requests": 8,
+      "firstRequestToSettledOrTerminalSeconds": 103.9
+    },
+    {
+      "input": "terminal failure",
+      "requests": 12,
+      "firstRequestToSettledOrTerminalSeconds": 208.26
+    }
+  ],
+  "terminalReadback": {
+    "completedRequests": 46,
+    "allResponseBytesEqual": true
+  },
+  "restoration": [
+    {
+      "stem": "inn-multistep-weak-guidance-continuation",
+      "runStatusesPreserved": true,
+      "verifiedCompletedHistories": 22,
+      "retainedFailedRuns": 1,
+      "resumableRuns": 0,
+      "openingReviewRetained": true,
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true
+    }
+  ],
+  "nextWork": [
+    "Review goal-level planning and grounded open opportunities: tried scope, actual result, remaining evidenced route, and concrete justification for pause. Existing general prompt guidance alone did not prevent this failure.",
+    "Review production viable-agency evidence: a currently attemptable action is not proof of a reachable respondent or an information-bearing opportunity. Preserve old Release and failures.",
+    "Design cost and pacing improvements against meaningful result quality without deleting mandatory source evidence or weakening independent review.",
+    "Obtain final fixed-code full CI/E2E; continue real episodes and other acceptance gates, do not close M1."
+  ],
+  "evidence": [
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/preregistration.json",
+      "sha256": "d2192a555c0e18cf96603fae56faaa420e2369d89c039537cf59b548091a613d"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/runner.mjs",
+      "sha256": "45bbf887ebb3077648b80b4743470d39a2c977e2891f76f3e84e5ebcc7f83650"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/inn-multistep-weak-guidance.json",
+      "sha256": "8e9bbcb516c09dfecf3ab3c343a0349d480422d12979aa5296853ac6a6cd7649"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/inn-multistep-weak-guidance-backup.json",
+      "sha256": "2fdcfe0bef6698970585a1ced3a4f63e6c2c9adaf75e6b67ad11eb24b2868f5a"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/continuation-registration.json",
+      "sha256": "85a1a846bad510ca477598c1a8f9e7240096249b2f784c4c84016bb2cb4579bc"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/continuation.mjs",
+      "sha256": "6c34ddaff68b288885c6e97d1a6af2235a49314080dc682aa5c44d2c07cbe8a0"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/inn-multistep-weak-guidance-continuation.json",
+      "sha256": "ca86d195c3d2ee91bca92d89bc218346c26ccd36e7a924c9a446cbe9c7dbc518"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/inn-multistep-weak-guidance-continuation-backup.json",
+      "sha256": "483fa89783ff13d005982da04bee282a734babeb4295d61acf4eb98799db58f5"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/transport-progress.json",
+      "sha256": "de9ce03e6cd0ac92c09af18fa3314aa3ffb39266a83ddabf15805cfadd5a33d6"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/inn-multistep-weak-guidance-continuation-terminal-request-proof.json",
+      "sha256": "f388ae09aab2f4d9dfe64998df0d2a6720b7141b38f7813ee4537fd09353dd53"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/restoration.mjs",
+      "sha256": "5cf0321ed9b48d6875ecc2d2104f105f85e4d8a2612e1443301a9999458ce6c8"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/restoration-verified.json",
+      "sha256": "27e45e84ccb76f169570e91633c97dfd760568861f72e4dd03eb563ed3f4c6de"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/usage-ledger.json",
+      "sha256": "0a74a8d4de1aa2e420d63b9966a9853c24924d35bfce73298974372af6a17723"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/alternative-context-audit.json",
+      "sha256": "1d1e9b594ab7d013998774298ba1c050bb28bf7ee43a7d1b1aa91687ea411475"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v114-multistep-episode/observed-operation-latencies.json",
+      "sha256": "9926b0743ff1ca67b5e5ec323217dfaea299db7f5978ece5c4adbfc9a1681a61"
+    }
+  ]
+}

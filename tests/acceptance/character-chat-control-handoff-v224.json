@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "at": 1792453978.918102,
+  "status": "default-and-choice-backed-control-review-targeted-verified",
+  "defaultProducer": 46,
+  "defaultReviewer": 33,
+  "controlReviewReader": "chat-control-handoff-review-v1",
+  "formalModelCalls": 0,
+  "semanticQualityAccepted": false,
+  "fullDeliveryValidated": false,
+  "checks": {
+    "regression": {
+      "session": 74948,
+      "exitCode": 0,
+      "files": 18,
+      "tests": 489,
+      "passed": 489
+    },
+    "browser": {
+      "session": 38921,
+      "exitCode": 0,
+      "files": 3,
+      "tests": 9,
+      "passed": 9,
+      "versionOverrides": false,
+      "injectedResponses": true
+    },
+    "types": {
+      "session": 40512,
+      "exitCode": 0
+    },
+    "lint": {
+      "session": 46048,
+      "exitCode": 0
+    },
+    "staticGates": [
+      "architecture",
+      "required-tables",
+      "ai-manual",
+      "ai-entry-registry"
+    ],
+    "build": {
+      "session": 65556,
+      "exitCode": 0
+    },
+    "docs": {
+      "session": 60532,
+      "exitCode": 0
+    }
+  },
+  "sourceIntegrity": {
+    "manifest": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v224-default-control-handoff/revised-source-manifest.json",
+    "manifestSha256": "8c0f96fd6c3758b799b0f10b3307f3ad614a878b3648df2057f5a20323685252",
+    "checkedFiles": 2956,
+    "changedFiles": []
+  },
+  "earlierVerification": {
+    "browserTests": 17,
+    "sameAsFinalSource": false,
+    "reason": "Subsequent self-review added the already retained action choices to the control reviewer through the registered context source. The 17-test run is retained separately, not added to the final 9-test count."
+  },
+  "preservedFailures": [
+    "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v224-default-control-handoff/logs/initial-regression.log",
+    "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v224-default-control-handoff/partial-regression-stop.json"
+  ],
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v224-default-control-handoff",
+  "remaining": [
+    "Latest full CI and full E2E on immutable delivery snapshot",
+    "New real-model cohort on default source preserving V220 failure",
+    "Remaining M1-M5 live and commercial evidence; human scoring deferred"
+  ],
+  "fullDelivery": {
+    "batch": "V225",
+    "folder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v225-latest-default-full-delivery",
+    "status": "pending"
+  }
+}

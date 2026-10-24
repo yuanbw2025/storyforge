@@ -1,0 +1,41 @@
+{
+  "startedAt": "2026-10-22T05:50:04.802478+00:00",
+  "sourceHead": "1b2e43e1d996c3613b36f50c82790eecd9b58e56",
+  "pid": 93249,
+  "status": "passed",
+  "checks": [
+    {
+      "stage": "ci",
+      "command": [
+        "npm",
+        "run",
+        "ci"
+      ],
+      "startedAt": "2026-10-22T05:50:05.205233+00:00",
+      "status": "passed",
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v312-current-delivery/ci.log",
+      "pid": 93255,
+      "completedAt": "2026-10-22T07:26:19.812017+00:00",
+      "exitCode": 0,
+      "sha256": "28a59b42165dcb91f37a8b1adee7445391a1f737f053acbf3cf8352d7ed7d3ea"
+    },
+    {
+      "stage": "e2e",
+      "command": [
+        "npm",
+        "run",
+        "ci:e2e"
+      ],
+      "startedAt": "2026-10-22T07:26:20.654928+00:00",
+      "status": "passed",
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v312-current-delivery/e2e.log",
+      "pid": 19370,
+      "completedAt": "2026-10-22T08:42:41.993300+00:00",
+      "exitCode": 0,
+      "sha256": "79356a7f9f8b415243da92b606afefd26e95a08d0bfafb3e7ff696eafb35ac19"
+    }
+  ],
+  "policy": "Frozen current worktree; one complete CLI run followed by complete isolated browser run. No code edits while active. No automatic reruns; retain failures and source changes.",
+  "completedAt": "2026-10-22T08:42:41.994499+00:00",
+  "sourceUnchanged": true
+}

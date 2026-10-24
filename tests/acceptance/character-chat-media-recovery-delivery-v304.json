@@ -1,0 +1,77 @@
+{
+  "schema": "storyforge.chat-development-acceptance",
+  "version": 304,
+  "at": "2026-10-22T03:41:40.355636+00:00",
+  "status": "remaining-browser-display-assertion-fixed-focused-path-passed",
+  "baseHead": "1fe04c48e6135ee0e35729d11c8bdb38ea06ad77",
+  "scope": "Narrow repair of an existing complete-delivery browser test; no production application change.",
+  "priorFailure": {
+    "runId": 39525650007,
+    "head": "2050d3823db77359b3b18d5971bd6d7f8ee27bcf",
+    "test": "tests/e2e/text-adventure-media-revision.spec.ts: old two-image commercial Build recovery",
+    "passed": 492,
+    "failed": 1,
+    "skipped": 4
+  },
+  "diagnosis": {
+    "probe": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v304-media-display-investigation/probe.json",
+      "sha256": "b88e132b14ebbbdd3da17294faa0d6b4c26cef233e41be024a97a9bcc649110e"
+    },
+    "trace": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v304-media-display-investigation/probe-trace.zip",
+      "sha256": "c609bd63a0d592772bbcd1595cd90dfd857fe3d5699e853df1d9ce36ff8a9d86"
+    },
+    "observation": "In an isolated legacy recovery-required Build, the visual bible finished loading around 3 seconds and remained readable. The runtime-preview title expected by the test never appeared during 30 seconds. The production title is the actual identity of this recovery surface. The transient initial read-failure label alone was not evidence of corrupt data."
+  },
+  "change": "Only the legacy recovery test now checks its production title. Preview-ready test titles, image call guard, two-to-twelve-image repair, source hash, revisions, lineage and reauthorization assertions remain intact.",
+  "testFile": {
+    "path": "/Users/qinyingying/.codex/worktrees/character-chat-plan/storyforge/tests/e2e/text-adventure-media-revision.spec.ts",
+    "sha256": "c55ab7b172ba78e2f515b4eb481e75af043cef9b178eba0bce306e7d98b3972e"
+  },
+  "validation": {
+    "focusedBrowser": {
+      "tests": 1,
+      "exitCode": 0,
+      "log": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v304-media-display-investigation/focused-browser.log",
+        "sha256": "731d9839e907988252df2220c06ce502049e15df5fb9b0b21f81d85c0f4eafa1"
+      }
+    },
+    "types": {
+      "exitCode": 0,
+      "log": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v304-media-display-investigation/types.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "lint": {
+      "exitCode": 0,
+      "log": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v304-media-display-investigation/lint.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "build": {
+      "exitCode": 0,
+      "log": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v304-media-display-investigation/build.log",
+        "sha256": "f648aecbb62a9a6496f4b74e1cab6ed17128b9c56c57cc78837cc1d9fe9bcb11"
+      }
+    },
+    "governance": {
+      "commands": [
+        "check:architecture",
+        "check:required-tables",
+        "check:ai-manual",
+        "check:docs"
+      ],
+      "exitCode": 0
+    },
+    "unchangedApplication": "Matches the application and unit-test source of successful full CI 228e257c. This browser test assertion is the only non-document/traffic change."
+  },
+  "externalModelCalls": 0,
+  "m1Passed": false,
+  "fullCurrentBrowserPassed": false,
+  "next": "Run final-head complete browser validation; continue meaningful narrative-development work with all partial and failed episodes retained."
+}

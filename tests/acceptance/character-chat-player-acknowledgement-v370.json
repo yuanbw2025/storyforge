@@ -1,0 +1,76 @@
+{
+  "version": 370,
+  "recordedAt": "2026-10-24T04:08:13.631907+00:00",
+  "status": "engineering-verified-model-diagnostics-pending",
+  "product": "character-interaction",
+  "phase": "S3 product capability development",
+  "branch": "fix/chat-narrative-flow-20261023",
+  "baseHead": "7a9a067d19895391276d269c385c5223f2f37588",
+  "problem": "V367 repeated a generic discussion question after an unresolved concrete decision and the real player message indicating that they were listening. The independent meaningful-direction review rejected it; the failed run is retained.",
+  "change": "Producer v72 can yield silently after the exact triggering player acknowledgement, using a version4 control candidate. Structural eligibility binds the current player message and prior public question; six independent checks must pass. Available autonomous directions still prohibit wait. Questions, refusals, decisions, pauses, new information and requests must not be swallowed.",
+  "boundaries": {
+    "owner": "character-chat Work and runtime session",
+    "world": "read-only frozen WorldRelease",
+    "sources": [
+      "interactionRuntime",
+      "chatSituationRuntime",
+      "chatActionCandidate"
+    ],
+    "writes": "Existing governed control candidate, review, control event and terminal receipt; no new story fact, player decision, goal completion or relationship change.",
+    "tables": "Existing PROJECT_TABLES lifecycle; no new table or schema migration.",
+    "versioning": "New producer v72 and control marker v4; prior producer prompts and v1/v2/v3 markers retained. Review v42 retains old-body rules and requires six checks for the newly gated v4 body.",
+    "modelBudget": "Same three requests, one attempt per step; no hidden resend."
+  },
+  "validation": [
+    {
+      "check": "final targeted regressions",
+      "files": 8,
+      "passed": 174,
+      "failed": 0,
+      "skipped": 0,
+      "injectedResponses": true
+    },
+    {
+      "check": "final isolated Chromium UI",
+      "files": 2,
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "injectedResponses": true
+    },
+    {
+      "check": "types, changed-file lint, architecture, required tables, AI manual, AI entry, agent context/freshness, build and bundle size",
+      "exitCode": 0,
+      "note": "Generated AI manual was stale after the final source line change; regenerated with the official script and rechecked. Earlier failed check remains recorded."
+    },
+    {
+      "check": "full current role regression",
+      "status": "pending",
+      "note": "An earlier broader run was interrupted for the final expression-rule review correction. It is not counted as passing."
+    }
+  ],
+  "evidenceHashes": {
+    "targeted-initial.json": "c4b3afd323f328aaeb654598c72654f50e574e74662ee5ca2a646b63b6430319",
+    "targeted-activated.json": "d38d295c6ccfa8c2b13515c6c00047e67de0aca4496515170022daa8c2281939",
+    "targeted-final.json": "00357905fb593eec5293f672b9e45f7667b2e9d5190ba1ef4ba6376648057c03",
+    "browser-final.json": "0aa1d400c289f1c73bc34e13ba1cfbc983a0bb27170d75006bf7937fb9ffc475",
+    "engineering-checks-final.json": "4b7fcf732133f1b269b7bfeef01f3be9a5ec3269bdf3caa4828b437de0e860d1",
+    "ai-manual-final-regenerated.log": "93137c36bff0459ec29f9cbb52edf07c1c6729052ab778a8f1c1570b997a5f3e",
+    "lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "chat-regression-interrupted-status.json": "b13db466e97c9fd3b04bf27a0dd8593049eb4e059914d7955b3cfa9b8bda6e15"
+  },
+  "outstanding": [
+    "One bounded real-model diagnostic from the unchanged V367 failed player-response parent.",
+    "Full role and delivery checks on the final source.",
+    "Agnes opening-output/reference reliability, formal M1 and the other six technical packages."
+  ],
+  "claims": {
+    "realModelCalls": 0,
+    "semanticImprovementVerified": false,
+    "currentFullDeliveryPassed": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "released": false
+  }
+}

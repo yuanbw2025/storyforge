@@ -1,0 +1,79 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "label": "V129 durable fact provenance foundation",
+  "recordedAt": "2026-10-16T04:42:01.376096+00:00",
+  "implementation": {
+    "baseCommit": "3b627464be1c900cbeafaa3b1a27fb9daa59376f",
+    "commit": "9e9b02361277962247e2bc3b23463393906b72c8",
+    "status": "implemented; targeted, associated regression, isolated browser and engineering gates passed; full CI/E2E pending"
+  },
+  "boundary": {
+    "product": "character-interaction",
+    "lifecycle": "product development; S3 runtime",
+    "owner": "existing Chat Work / ProductRuntimeSession",
+    "world": "frozen reference only; original fact identities and world content preserved",
+    "reads": "registered interactionRuntime/chatSituationRuntime; producer-owned reader version verified from saved packet",
+    "writes": "commit-derived optional factEvidence index in existing runtime state; no new AI-writable field or table",
+    "media": "unchanged product-owned media",
+    "externalModelCalls": 0
+  },
+  "change": [
+    "Actor reader v10 and situation reader v12 bind retrieval v6 and factEvidenceVersion=1. Historical versions retain exact actor projection and do not acquire metadata on replay or adoption.",
+    "Action/options, situation construction and attributed inquiry speech derive type, dependency keys and applicable actor/goal in the same atomic reducer as reviewed facts. Facts retain their sole text and event-sequence ownership. Discoveries retain original fact identities.",
+    "An adoption interrupted after the command transaction verifies the saved producer against baseSequence before idempotent recovery. It does not use the new current default reader or the advanced state.",
+    "Unique runtime fact binding, frozen fact kinds, known actor/goal, earlier canonical dependency order and role knowledge are validated. Same-event earlier dependencies are allowed; missing, self, future, cyclic and unknown-secret references are rejected.",
+    "Nested branches retain metadata after deleting ancestors and all their source runs/events. Negative fact sequences rebase once; export/import/reopen preserves the independent child. Legacy facts without metadata remain unknown, not guessed or backfilled.",
+    "Registered import preflight validates recognized provenance in initial states, runtime heads and checkpoints plus the new event marker before creating a project. Corrupt-import failures preserve the original project. Role and player contexts do not expose the complete index."
+  ],
+  "verification": {
+    "targetedFinal": {
+      "files": 2,
+      "tests": 25,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v129-targeted-repair-2-receipt.json"
+    },
+    "associatedFinal": {
+      "files": 108,
+      "tests": 1297,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v129-regression-final-receipt.json"
+    },
+    "browser": {
+      "paths": 15,
+      "exitCode": 0,
+      "isolatedStorage": true,
+      "receipt": "/tmp/storyforge-chat-v129-targeted-e2e-receipt.json",
+      "assertions": "actual UI action/situation/inquiry provenance, negative review atomicity, private audiences and refresh"
+    },
+    "gates": {
+      "count": 11,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v129-gates-final-receipt.json"
+    },
+    "retainedFailures": [
+      {
+        "log": "/tmp/storyforge-chat-v129-targeted-1.log",
+        "outcome": "20 new unit cases failed during fixture setup because the direct trigger omitted seed:null; fixed test setup, all 34 targeted cases then passed."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v129-targeted-final.log",
+        "outcome": "Corrupt provenance backup imported successfully: genuine missing import preflight. Added recognized-provenance checks and retained this counterexample."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v129-targeted-repair.log",
+        "outcome": "Added event-corruption test accessed payloadJson rather than exported _portablePayloadJson; corrected the test-only portable field, then 25 targeted cases and expanded 1297-test regression passed."
+      }
+    ]
+  },
+  "fullValidation": {
+    "status": "pending final committed snapshot; no full-suite pass claimed",
+    "ciReceipt": "/tmp/storyforge-chat-v129-full-ci-receipt.json",
+    "e2eReceipt": "/tmp/storyforge-chat-v129-full-e2e-receipt.json"
+  },
+  "limits": [
+    "CHAT-04.06a/b remain unchecked pending full CI/E2E terminal evidence.",
+    "No fact archive, history projection or storage/token capacity changes. CHAT-04.06c/d and 100/300/1000 consequential-action loads remain open.",
+    "This is deterministic engineering evidence with injected model output. It is not meaningful long-story, Codex/Agnes, human play or commercial acceptance. Prior real-model failures and cohort denominators remain unchanged."
+  ]
+}

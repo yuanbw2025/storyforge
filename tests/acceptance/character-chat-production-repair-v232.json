@@ -1,0 +1,84 @@
+{
+  "schema": "storyforge.character-chat-opening-repair-evidence",
+  "version": 1,
+  "batch": "V232",
+  "recordedAt": 1792463835.5132108,
+  "status": "budgeted-targeted-repair-engineering-verified; real-model-and-full-delivery-pending",
+  "boundary": "Character-interaction v3 S3 product development. Existing Work/Build candidate adoption and durable run evidence; frozen world read-only; no new table, writable field or context source.",
+  "producerVersion": "chat-situation-production-v7",
+  "contract": {
+    "maximumModelCalls": 2,
+    "maximumAutomaticRepairs": 1,
+    "originalTotalTokenAndTimeBudgetsPreserved": true,
+    "allowedChanges": [
+      "identified fact origin/text corrections using exact frozen knowledge",
+      "append missing opening options"
+    ],
+    "preserved": [
+      "original option identity and order",
+      "existing goals and story",
+      "audiences and knowledge keys",
+      "raw output and usage"
+    ],
+    "required": [
+      "exact original response, source hash and error paths",
+      "same run, build, epoch, plan, parent run and paid first attempt",
+      "remaining budget before provider dispatch",
+      "full parser, independent opening review and author choice"
+    ]
+  },
+  "checks": {
+    "distinctRegressionTestsPassed": 151,
+    "regressionFiles": 7,
+    "browserTestsPassed": 3,
+    "browserResponses": "injected, not real-model quality",
+    "backupRoundTrips": 2,
+    "types": true,
+    "lint": true,
+    "build": true,
+    "staticChecks": [
+      "architecture",
+      "required-tables",
+      "ai-manual",
+      "ai-entry-registry",
+      "docs",
+      "roadmap",
+      "diff-check"
+    ]
+  },
+  "oldFullGate": {
+    "batch": "V229",
+    "source": "V227",
+    "terminalExitCode": 1,
+    "failure": "check:project-metrics: generated ARCHITECTURE source statistics stale",
+    "fullTestsReached": false,
+    "oldSourceUnchanged": true,
+    "originalReceipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v229-latest-identified-context-full-delivery/receipt.json"
+  },
+  "changedFileHashes": {
+    "src/lib/character-interaction/opening-repair.ts": "6a1cea6a87b1cc397bfa4ff859a95ab4800c6a819002a13e85b8e12830c04e55",
+    "src/lib/character-interaction/opening-repair-evidence.ts": "0cace2e77aa09e46c5140c4b3f652b89f5b6c64178b1b474cdc4ff103d4a8295",
+    "src/lib/character-interaction/opening-production-binding.ts": "3edfdce99c0671714b6db48ffcf88c02d3f9323ad0940b1aaa38e64d6b3159f5",
+    "src/lib/product-production/production-executor.ts": "2bfe6422f455e0d6f7f801600d8d0e609c8541279a9c2bb1e98e7922adbb891d",
+    "src/lib/product-production/plan.ts": "e4c47fee18f5eb2f938c8e189520273832b559be6d150d2ece6827edaa7d1981",
+    "src/lib/product-production/context.ts": "55f1262e2cbb88d76b2e0b93c4a06612b7500eaf8dae3893a85882762837875c",
+    "src/lib/product-production/scheduler.ts": "9b7946817a18fe84b98d4052b653548e467fdfa0562e339722f601cedd25b58b",
+    "src/lib/agent/skill-registry.ts": "05569615cb80887fa4e4d6bb2f4090467f9e7006b457a0b7b8d82ff5ac1f02af",
+    "tests/regression/R-CHAT-02-opening-repair.test.ts": "ae93f80be4e25f79b3802bd091b2c30aea85be94b939e04adb6c054264f95909",
+    "tests/regression/R-CHAT-02-production-repair.test.ts": "47f44f012ac05db210b9e6ccaa895d9259a87cd1f6f17bb986cbe1eae365505a",
+    "tests/regression/R-CHAT-02-opening-agency.test.ts": "55bfafab24f17f04b25b19cf3f3ecb6f905f0673a8613acb09a4c2d2ed23384a",
+    "tests/e2e/character-chat-production-repair.spec.ts": "085bbafd373c444ca7c4b9da98421bb91503d4b0860adfbc3e8f1eb828fe1a67"
+  },
+  "formalModelCalls": 0,
+  "semanticQualityAccepted": false,
+  "fullDeliveryValidated": false,
+  "humanAcceptance": false,
+  "commercialAcceptance": false,
+  "evidenceRoot": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v232-targeted-opening-repair",
+  "remaining": [
+    "Current immutable source full CI/E2E",
+    "Actual Agnes opening repair validation",
+    "V230 repeated-reasoning failure and stable meaningful story progression",
+    "Original complete M1-M5 scope; human scoring deferred"
+  ]
+}

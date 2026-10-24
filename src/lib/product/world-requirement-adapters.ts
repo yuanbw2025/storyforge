@@ -40,7 +40,7 @@ export interface UpperProductWorldRequirementGoalV1 {
 }
 
 const PRODUCT_AREAS: Readonly<Record<ProductionProductKindV1, WorldCapabilityArea[]>> = {
-  'character-interaction': ['foundation', 'characters', 'relations', 'story', 'storylines', 'entities', 'multi-world'],
+  'character-interaction': ['foundation', 'characters', 'relations', 'story', 'storylines', 'outline', 'detailed-outline', 'manuscript', 'entities', 'multi-world'],
   'ai-town': ['foundation', 'characters', 'relations', 'story', 'storylines', 'outline', 'detailed-outline', 'entities'],
   'text-adventure': ['foundation', 'characters', 'relations', 'story', 'storylines', 'outline', 'detailed-outline', 'entities', 'multi-world'],
   avg: ['foundation', 'characters', 'relations', 'story', 'storylines', 'outline', 'detailed-outline', 'manuscript', 'entities'],
@@ -49,7 +49,7 @@ const PRODUCT_AREAS: Readonly<Record<ProductionProductKindV1, WorldCapabilityAre
 }
 
 const PRODUCT_CONTEXT_KINDS: Readonly<Record<ProductionProductKindV1, ContextResourceKind[]>> = {
-  'character-interaction': ['world', 'worldview-field', 'character', 'character-relation', 'story-core-field', 'story-arc', 'storyline-progress', 'location', 'codex-entry', 'fact', 'world-link'],
+  'character-interaction': ['world', 'worldview-field', 'character', 'character-relation', 'story-core-field', 'story-arc', 'storyline-progress', 'outline-node', 'detailed-outline', 'chapter', 'foreshadow', 'location', 'codex-entry', 'fact', 'world-link'],
   'ai-town': ['world', 'worldview-field', 'character', 'character-relation', 'story-core-field', 'story-arc', 'storyline-progress', 'outline-node', 'detailed-outline', 'location', 'codex-entry', 'fact'],
   'text-adventure': ['world', 'worldview-field', 'story-core-field', 'character', 'character-relation', 'story-arc', 'storyline-progress', 'outline-node', 'detailed-outline', 'foreshadow', 'location', 'codex-entry', 'fact', 'world-link'],
   avg: ['world', 'worldview-field', 'story-core-field', 'character', 'character-relation', 'story-arc', 'storyline-progress', 'outline-node', 'detailed-outline', 'chapter', 'foreshadow', 'location', 'codex-entry', 'fact'],
@@ -147,7 +147,7 @@ function createUpperProductWorldRequirementAdapterV1(
 ): WorldRequirementAdapterV1<UpperProductWorldRequirementGoalV1> {
   return {
     adapterId: `storyforge.upper-product.${productType}.world-requirements`,
-    adapterVersion: 1,
+    adapterVersion: productType === 'character-interaction' ? 2 : 1,
     productType,
     contextTaskKind: 'agent-outline',
     resolve: goal => upperProductRules(productType, goal),

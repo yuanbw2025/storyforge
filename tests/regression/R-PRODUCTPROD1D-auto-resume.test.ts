@@ -40,4 +40,12 @@ describe('R-PRODUCTPROD-1D · durable author start command', () => {
       ...progress, buildStatus: 'recovery-required',
     }, 7_000)).toBeNull()
   })
+
+  it('导入完成历史等待核对时不安排执行超时检查', () => {
+    const progress = {
+      buildStatus: 'building',
+      tasks: [{ status: 'verification-required', recoveryCheckAt: null }],
+    } as Parameters<typeof productProductionRecoveryCheckDelayV1>[0]
+    expect(productProductionRecoveryCheckDelayV1(progress)).toBeNull()
+  })
 })

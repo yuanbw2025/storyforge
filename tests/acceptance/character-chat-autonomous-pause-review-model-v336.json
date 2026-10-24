@@ -1,0 +1,181 @@
+{
+  "schema": "storyforge.chat-autonomous-pause-review-model-receipt",
+  "version": 1,
+  "at": "2026-10-22T21:36:43.000394+00:00",
+  "status": "six-fixed-candidate-real-reviews-passed-with-preserved-preflight-failures",
+  "sourceHead": "6ed91f15e09f7d9682a2474a1655ddc4c7598fdd",
+  "manifestSha256": "6794a02e0e8dd8fd3a87d2eeffd6b2bb8a3a09c01cf3a164dd59642c02297026",
+  "nativeCalls": 6,
+  "nativeAllCompleted": true,
+  "reportedTotalTokens": 110697,
+  "costUsd": null,
+  "cases": [
+    {
+      "caseId": "A-grounded",
+      "expectedOutcomeMet": true,
+      "adopted": true,
+      "failedChecks": []
+    },
+    {
+      "caseId": "B-false-exhaustion",
+      "expectedOutcomeMet": true,
+      "adopted": false,
+      "failedChecks": [
+        {
+          "check": "continuity",
+          "passed": false,
+          "reason": "并未查遍所有地方或问过所有人：仅检查了托盘和柜台下直接可见范围，并询问掌柜；玩家叫停翻查也不等于所有寻找办法均已穷尽。"
+        },
+        {
+          "check": "consequences",
+          "passed": false,
+          "reason": "goalStatus=paused所依据的全面穷尽与无任何可行办法均未成立；正文也没有提供其他具体依据支持此次自主暂停。"
+        },
+        {
+          "check": "meaningful-direction",
+          "passed": false,
+          "reason": "掌柜无法提供目击者信息，只能说明这条询问未取得人选，不能证明整个目标无路可走。本次仅以无依据的全面受阻结论宣布停止，没有作出有事实支持的取舍。"
+        }
+      ]
+    },
+    {
+      "caseId": "C-false-player-dependency",
+      "expectedOutcomeMet": true,
+      "adopted": false,
+      "failedChecks": [
+        {
+          "check": "continuity",
+          "passed": false,
+          "reason": "玩家拒绝的是继续翻查公用工作区，并非禁止一切寻找；叶岑已接受停止该办法并转向询问。不能据此声称玩家不参与便无法继续。"
+        },
+        {
+          "check": "player-agency",
+          "passed": false,
+          "reason": "没有尚待玩家回答且构成必要条件的具体决定；候选却把安排下一种办法强加给玩家，与不要求玩家必须参与的边界冲突。正文明确等待玩家安排，waitingForPlayer=false亦不一致。"
+        },
+        {
+          "check": "consequences",
+          "passed": false,
+          "reason": "goalStatus=paused所依据的客观阻碍并未成立；正文明确声称等待玩家安排，字段却登记为不等待，未准确反映实际表达。"
+        },
+        {
+          "check": "meaningful-direction",
+          "passed": false,
+          "reason": "掌柜不能指出目击者，并不证明其他寻找办法均不可行。候选没有表达有具体依据的自主暂缓取舍，而是无依据地把继续寻找完全依赖于玩家安排，未合理承接原责任。"
+        }
+      ]
+    },
+    {
+      "caseId": "E-explicit-rest",
+      "expectedOutcomeMet": true,
+      "adopted": true,
+      "failedChecks": []
+    },
+    {
+      "caseId": "F-hidden-location",
+      "expectedOutcomeMet": true,
+      "adopted": false,
+      "failedChecks": [
+        {
+          "check": "continuity",
+          "passed": false,
+          "reason": "叶岑只确认柜台下有木箱，尚未开启检查，也未获知铜印位置；“这一点我已经知道了”与当前知识状态矛盾。"
+        },
+        {
+          "check": "visibility",
+          "passed": false,
+          "reason": "正文向玩家直接宣告铜印在木箱内，泄露了叶岑和玩家均尚未知晓的 world-fact.0006；所列证据不能支持该位置。"
+        },
+        {
+          "check": "consequences",
+          "passed": false,
+          "reason": "正文声称已经知道铜印位置并将其告知玩家，但没有合法发现依据，也未登记相应知情变化；空后果数组不能承载该表达。"
+        },
+        {
+          "check": "meaningful-direction",
+          "passed": false,
+          "reason": "本次以未经发现的位置真相作为收束寻找的前提，不能构成有依据的推进或暂停；不恢复翻查的边界不能使该虚假知情声明成立。"
+        }
+      ]
+    },
+    {
+      "caseId": "D-repeat",
+      "expectedOutcomeMet": true,
+      "adopted": false,
+      "failedChecks": [
+        {
+          "check": "meaningful-direction",
+          "passed": false,
+          "reason": "正文逐字重复最近一次已提交的表达；此后没有新玩家输入、情境结果或阻碍，也没有新的取舍、回应或后果，不能将同一暂停说明再次算作有意义的推进。"
+        }
+      ]
+    }
+  ],
+  "preflightFailures": [
+    {
+      "run": "initial",
+      "nativeCalls": 0,
+      "reason": "stdin closed before explicit start"
+    },
+    {
+      "run": "run-02",
+      "case": "E-explicit-rest",
+      "nativeCalls": 0,
+      "reason": "explicit audience incorrectly represented a public player message as private; runtime correctly rejected public trigger"
+    },
+    {
+      "run": "run-03",
+      "case": "D-repeat",
+      "nativeCalls": 0,
+      "reason": "paused-to-paused duplicate state write rejected before review; later registered candidate keeps same text with goalStatus null"
+    }
+  ],
+  "restoration": [
+    {
+      "run": "run-02",
+      "checks": {
+        "allSessionsPreserved": true,
+        "allRunStatesPreserved": true,
+        "noResumableRuns": true,
+        "refreshPreserved": true,
+        "worldPreserved": true,
+        "releaseShared": true,
+        "openingReviewsPreserved": true,
+        "allArtifactBytesAndMultiplicityPreserved": true,
+        "zeroModelRequests": true
+      }
+    },
+    {
+      "run": "run-03",
+      "checks": {
+        "allSessionsPreserved": true,
+        "allRunStatesPreserved": true,
+        "noResumableRuns": true,
+        "refreshPreserved": true,
+        "worldPreserved": true,
+        "releaseShared": true,
+        "openingReviewsPreserved": true,
+        "allArtifactBytesAndMultiplicityPreserved": true,
+        "zeroModelRequests": true
+      }
+    },
+    {
+      "run": "run-04",
+      "checks": {
+        "allSessionsPreserved": true,
+        "allRunStatesPreserved": true,
+        "noResumableRuns": true,
+        "refreshPreserved": true,
+        "worldPreserved": true,
+        "releaseShared": true,
+        "openingReviewsPreserved": true,
+        "allArtifactBytesAndMultiplicityPreserved": true,
+        "zeroModelRequests": true
+      }
+    }
+  ],
+  "modelBoundary": "Injected fixed choice/expression in test-adapter Harness,actual native Codex reviews captured separately; no full generation evidence",
+  "originalV332Unchanged": true,
+  "formalM1Credit": false,
+  "humanQualityPass": false
+}

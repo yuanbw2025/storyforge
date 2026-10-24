@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "at": 1792455874.785558,
+  "status": "one-real-reviewed-control-handoff-completed",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "producerVersion": 47,
+  "reviewerVersion": 34,
+  "sourceManifestSha256": "5784ad26db98a5a05677bb11bbcac030ae632214a1cb81bd1a07d0bade27b8a7",
+  "formalModelCalls": 3,
+  "observedTotalTokens": 43814,
+  "newIndependentProductions": 0,
+  "newM1Episodes": 0,
+  "semanticQualityAccepted": false,
+  "fullDeliveryValidated": false,
+  "humanAcceptance": false,
+  "realOutcome": {
+    "kind": "chat-control-handoff-candidate",
+    "sourceMessageId": "message:harness:17",
+    "signedSourceSequence": -19,
+    "reviewChecksPassed": 5,
+    "dialogueIdentityRowsInBothActorInputs": 14,
+    "messagesUnchanged": true,
+    "situationUnchanged": true,
+    "refreshEqual": true,
+    "originalParentAndWorldUnchanged": true,
+    "importAudit": {
+      "projectId": 1,
+      "sessionId": 3,
+      "runId": 25,
+      "terminalHash": "63f8c68e53f7b7ab4c0b3433528e65bee8775041856477fc2f1b9dc67c8e2de1",
+      "originalFailureRetained": true,
+      "worldUnchanged": true,
+      "historicalContextAvailable": true,
+      "completedHistoryRetained": true,
+      "importScopeRebindInvalidatesCurrentReceipt": true,
+      "interactionSha256": "eb25c4c443d2eb8e3005c9dacd2b8b8b02f1b7d0eb94fe925a3d2b6139f4174e",
+      "refreshEqual": true
+    }
+  },
+  "preservedPreDispatchFailure": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v228-real-delivered-control/preparation-stdin-closed/receipt.json",
+    "cause": "stdin closed before explicit start; zero model requests; isolated preparation restarted with interactive stdin"
+  },
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v228-real-delivered-control",
+  "fullDelivery": {
+    "batch": "V229",
+    "folder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v229-latest-identified-context-full-delivery",
+    "status": "queued"
+  },
+  "remaining": [
+    "120-episode M1 matrix across two providers and 20 independent productions",
+    "100/300/1000 real history and ensemble evaluation",
+    "SillyTavern matched pairs and completed original experience packages",
+    "Full current-source CI/E2E and feature delivery",
+    "Human scoring deferred; commercial validation not completed"
+  ]
+}

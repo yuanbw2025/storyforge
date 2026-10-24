@@ -1,5 +1,16 @@
 import { parseAdventureContent } from '../adventure/runtime'
 import { parseAiTownRuntimeContentV1 } from '../ai-town/runtime'
+import { assertPreparedChatPrivateCharactersV1, chatProjectionResourcesV1, readPreparedChatSourceProjectionViewV1 } from '../character-interaction/source-projection'
+import {chatPrivateCharacterKeysV1} from '../character-interaction/private-character'
+import type {ChatCharacterCardCreditsV1} from '../character-interaction/card-credits'
+import {composeChatRoleVoiceRulesV1, formatChatRoleProfileV1, validateChatRoleProfilesForSourceV1} from '../character-interaction/role-profile'
+import {validateChatSourceUnitSetForProjectionV1} from '../character-interaction/source-unit-authorization'
+import {compileChatSourceUnitKnowledgeV1} from '../character-interaction/source-unit-runtime'
+import type { FrozenChatSourceProjectionV1 } from '../types/character-interaction'
+import type { FrozenChatNarrativeV1 } from '../types/chat-narrative'
+import { parseFrozenChatNarrativeV1 } from '../character-interaction/narrative-contract'
+import {createChatPersonaV1} from '../character-interaction/persona-source'
+import { canonicalStringify } from '../agent/run/hash'
 import type {
   AdventureContentV1,
   FrozenInteractionCharacterProfile,
@@ -13,8 +24,10 @@ import type { ProductProductionWorldSourceCatalogV2 as ProductWorldSourceCatalog
 export interface ProductModuleCompilerInputV1 {
   brief: ProductProductionBriefV3
   narrative: ProductRuntimePackageV1['narrative']
+  /** Selected, author-confirmed initial situation; required by chat settings v3. */
+  chatNarrative?: FrozenChatNarrativeV1
   sourceCatalog?: Pick<ProductWorldSourceCatalog,
-    'storySources' | 'characters' | 'relationships' | 'locations' | 'artifacts' | 'loreEntries' | 'storyArcs'>
+    'storySources' | 'characters' | 'relationships' | 'locations' | 'artifacts' | 'loreEntries' | 'storyArcs' | 'chatSourceProjection'>
 }
 
 function fail(message: string): never {
@@ -37,23 +50,25 @@ function endings(input: ProductModuleCompilerInputV1) {
   return result
 }
 
-function participants(input: ProductModuleCompilerInputV1): string[] {
-  const keys = (input.brief.source.selection.roleBindings.characters
-    ?? input.brief.source.selection.roleBindings.participants
-    ?? input.brief.source.selection.roleBindings.residents ?? []).slice(0, 8)
+function participants(input: Pick<ProductModuleCompilerInputV1, 'brief'>): string[] {
+  const keys = interactionCharacterKeys(input).slice(0, 8)
   return keys.length ? keys.map((_, index) => `participant.${pad(index)}`) : ['participant.001']
 }
 
-function characterKey(input: ProductModuleCompilerInputV1, index: number): string {
-  const key = (input.brief.source.selection.roleBindings.characters
+function interactionCharacterKeys(input: Pick<ProductModuleCompilerInputV1, 'brief'>): string[] {
+  return [...(input.brief.source.selection.roleBindings.characters
     ?? input.brief.source.selection.roleBindings.participants
-    ?? input.brief.source.selection.roleBindings.residents ?? [])[index]
+    ?? input.brief.source.selection.roleBindings.residents ?? []), ...chatPrivateCharacterKeysV1(input.brief.characterChat)]
+}
+
+function characterKey(input: Pick<ProductModuleCompilerInputV1, 'brief'>, index: number): string {
+  const key = interactionCharacterKeys(input)[index]
   if (key == null) return `generated:participant.${pad(index)}`
   // AI Town residents already carry the immutable WorldRelease resource key.
   // Preserve that same portable identity in the interaction profile so the
   // runtime can prove which resident a participant represents after export,
   // import, refresh and device transfer.
-  return input.brief.intent.productType === 'ai-town' ? key : `character:${index + 1}`
+  return input.brief.intent.productType === 'ai-town' || (input.brief.characterChat && input.brief.characterChat.version !== 1) ? key : `character:${index + 1}`
 }
 
 function selectedRows<T extends { resourceKey: string }>(
@@ -284,22 +299,25 @@ export function compileInteractionModulesV1(input: ProductModuleCompilerInputV1)
   const chat = input.brief.characterChat
   const participantKeys = chat?.mode === 'single' ? participants(input).slice(0,1) : participants(input)
   const sourceCharacters = selectedCharacters(input)
+  const projected = chat && chat.version !== 1 ? compileReviewedChatSource(input, participantKeys) : null
   const profiles: FrozenInteractionCharacterProfile[] = participantKeys.map((participantKey, index) => {
     const frozenCharacterKey = characterKey(input, index)
     const sourceCharacter = sourceCharacters[index]
     const settings = chat?.characters.find(c=>c.sourceKey===sourceCharacter?.resourceKey)
     const spoken = input.narrative.beats.filter(beat => beat.speakerKey === frozenCharacterKey)
       .slice(0, 12).map(beat => beat.text)
+    const reviewedVoice = projected ? composeChatRoleVoiceRulesV1(projected.voices[index], settings?.voiceRules ?? '', projected.roleProfiles[index]) : ''
     return {
       participantKey, characterKey: frozenCharacterKey,
-      name: sourceCharacter?.name ?? `产品角色 ${index + 1}`,
+      name: projected?.names[index] ?? sourceCharacter?.name ?? `产品角色 ${index + 1}`,
       roleLabel: index === 0 ? '核心互动角色' : '相关角色',
-      voiceRules: `保持 ${sourceCharacter?.description || frozenCharacterKey} 的冻结事实和知识边界；遵守：${input.brief.intent.contentBoundaries.join('；')}。${settings?.voiceRules ?? ''}`,
-      initialKnowledge: [{
+      voiceRules: projected ? reviewedVoice
+        : `保持 ${sourceCharacter?.description || frozenCharacterKey} 的冻结事实和知识边界；遵守：${input.brief.intent.contentBoundaries.join('；')}。${settings?.voiceRules ?? ''}`,
+      initialKnowledge: [...(projected ? [] : [{
         key: `profile.${pad(index)}`,
         content: [sourceCharacter?.description, ...spoken].filter(Boolean).join('\n') || input.brief.intent.openingSituation,
-        visibility: 'public', importance: index === 0 ? 100 : 70,
-      }, ...(settings?.privateKnowledge ? [{key:`private.${pad(index)}`,content:settings.privateKnowledge,visibility:'private' as const,importance:100}] : [])],
+        visibility: 'public' as const, importance: index === 0 ? 100 : 70,
+      }]), ...(settings?.privateKnowledge ? [{key:`private.${pad(index)}`,content:settings.privateKnowledge,visibility:'private' as const,importance:100}] : [])],
       relationshipDimensions: [
         { key: 'trust', label: '信任', minimum: -100, maximum: 100, initial: settings?.initialTrust ?? 0, largeChangeThreshold: chat?.relationshipThreshold ?? 20 },
         { key: 'respect', label: '尊重', minimum: -100, maximum: 100, initial: 0, largeChangeThreshold: 20 },
@@ -307,6 +325,35 @@ export function compileInteractionModulesV1(input: ProductModuleCompilerInputV1)
       maxMemoryEntries: chat?.maxMemoryEntries ?? Math.max(40, Math.min(240, input.brief.scale.targetPlayMinutes * 2)),
     }
   })
+  if (chat?.version === 3) {
+    if (!input.chatNarrative || !projected) fail('主动叙事需要作者选定的初始情境，不能回退为旧版回复包')
+    const content = parseFrozenChatNarrativeV1(input.chatNarrative, {source: projected.content,
+      participantKeys, characterKeys: profiles.map(p => p.characterKey), sceneKeys: [input.chatNarrative.initialSituation.sceneKey]})
+    const expectedPersona = createChatPersonaV1(chat, projected.content)
+    if (canonicalStringify(content.persona) !== canonicalStringify(expectedPersona)
+      || canonicalStringify(content.permissions) !== canonicalStringify(chat.narrative.permissions)
+      || content.initialSituation.seed.text !== chat.openingSituation
+      || chat.narrative.location && content.initialSituation.location !== chat.narrative.location
+      || chat.narrative.timeLabel && content.initialSituation.timeLabel !== chat.narrative.timeLabel) fail('选定情境改变了作者的身份、种子、时地或运行权限')
+    const situation = content.initialSituation
+    const cardCredits: ChatCharacterCardCreditsV1['characters'] = (chat.privateCharacters ?? []).flatMap(character => {
+      if (!character.cardOrigin) return []
+      const profile = profiles.find(profile => profile.characterKey === character.characterKey)
+      const source = projected.content.privateCharacterSources?.find(source => source.resourceKey === character.characterKey)
+      if (!profile || !source) fail('外部角色卡缺少已确认的人物来源')
+      return [{participantKey: profile.participantKey, characterKey: character.characterKey, sourceHash: source.sourceHash,
+        cardContentHash: character.cardOrigin.contentHash, creator: character.cardOrigin.creator, characterVersion: character.cardOrigin.characterVersion}]
+    })
+    return {playerKey: 'player' as const, profiles, chatSource: projected.content, chatNarrative: content,
+      ...(cardCredits.length ? {chatCardCredits: {version: 1 as const, characters: cardCredits}} : {}),
+      ...(chat.experienceInfo ? {chatExperienceInfo: structuredClone(chat.experienceInfo)} : {}),
+      sceneTemplates: [{sceneKey: situation.sceneKey, title: situation.title, purpose: chat.experience || situation.title,
+        location: situation.location, timeLabel: situation.timeLabel, participantKeys,
+        publicKnowledgeKeys: projected.content.knowledge.filter(k => ['player', ...participantKeys].every(viewer => k.audienceKeys.includes(viewer))).map(k => k.key),
+        goals: situation.threads.filter(t => t.audienceKeys.includes('player')).map(t => t.question), endingConditions: [],
+        safetyBoundaries: [...input.brief.intent.contentBoundaries, '不替玩家决定感受或行动'], relationshipRules: [],
+        openingNodeKey: null, endingNodeKey: null, maxTurns: chat.maxTurns, directorBudget: chat.replyBudget, order: 0}]}
+  }
   const endingNodes = endings(input)
   const choices = choiceMap(input)
   const sourceNodes = sources(input)
@@ -324,7 +371,8 @@ export function compileInteractionModulesV1(input: ProductModuleCompilerInputV1)
       purpose: node.summary || input.brief.intent.openingSituation,
       location: `冻结场景：${node.title}`, timeLabel: index === 0 ? '故事开始时' : `阶段 ${index + 1}`,
       participantKeys: activeParticipants,
-      publicKnowledgeKeys: profiles.map((_, profileIndex) => `profile.${pad(profileIndex)}`),
+      publicKnowledgeKeys: projected ? projected.content.knowledge.filter(k => ['player', ...participantKeys].every(viewer => k.audienceKeys.includes(viewer))).map(k => k.key)
+        : profiles.map((_, profileIndex) => `profile.${pad(profileIndex)}`),
       goals: outgoing.length ? outgoing.map(choice => choice.text).slice(0, 8) : [...input.brief.intent.coreExperience],
       endingConditions: outgoing.map(choice => `玩家确认选择：${choice.text}`).slice(0, 8),
       safetyBoundaries: [...input.brief.intent.contentBoundaries, '不替玩家决定感受或行动'],
@@ -349,7 +397,78 @@ export function compileInteractionModulesV1(input: ProductModuleCompilerInputV1)
       directorBudget: chat?.replyBudget ?? (input.brief.intent.productType === 'character-interaction' ? Math.max(60, input.brief.scale.targetPlayMinutes * activeParticipants.length * 4) : Math.max(1, Math.min(activeParticipants.length * 2, 12))), order: index,
     }
   })
-  return { playerKey: 'player' as const, profiles, sceneTemplates }
+  return { playerKey: 'player' as const, profiles, sceneTemplates, ...(projected ? {chatSource: projected.content} : {}) }
+}
+
+/** Production-only source projection, before any situation is chosen. */
+export function prepareChatNarrativeCompilerSourceV1(input: Pick<ProductModuleCompilerInputV1, 'brief' | 'sourceCatalog'>) {
+  const participantKeys = input.brief.characterChat?.mode === 'single' ? participants(input).slice(0, 1) : participants(input)
+  return {...compileReviewedChatSource(input, participantKeys), participantKeys, characterKeys: participantKeys.map((_, i) => characterKey(input, i))}
+}
+
+function compileReviewedChatSource(input: Pick<ProductModuleCompilerInputV1, 'brief' | 'sourceCatalog'>, participantKeys: string[]) {
+  const chat = input.brief.characterChat
+  const draft = input.sourceCatalog?.chatSourceProjection
+  if (input.brief.intent.productType !== 'character-interaction' || !chat || chat.version === 1 || !chat.sourceReview || !draft) {
+    fail('角色聊天需要作者确认的完整资料投影')
+  }
+  const keys = interactionCharacterKeys(input)
+  assertPreparedChatPrivateCharactersV1(draft, chat.version === 3 ? chat.privateCharacters : undefined)
+  if (JSON.stringify([...keys].sort()) !== JSON.stringify(draft.characters.map(c => c.resourceKey).sort())
+    || keys.length !== participantKeys.length || input.brief.source.worldContentHash !== draft.worldReleaseHash
+    || input.brief.source.selection.worldReferenceHash !== draft.worldReferenceHash) fail('角色投影与冻结选择不一致')
+  const backgroundKeys = [...(chat.backgroundResourceKeys ?? [])].sort()
+  const playerKey = chat.version === 3 ? chat.narrative.playerCharacterKey : undefined
+  if (playerKey !== draft.playerCharacter?.resourceKey
+    || JSON.stringify(playerKey ? [playerKey] : []) !== JSON.stringify(input.brief.source.selection.roleBindings.chatPlayer ?? [])) fail('玩家人物投影与冻结选择不一致')
+  if (JSON.stringify(backgroundKeys) !== JSON.stringify((draft.background ?? []).map(resource => resource.resourceKey))
+    || JSON.stringify(backgroundKeys) !== JSON.stringify([...(input.brief.source.selection.roleBindings.chatBackground ?? [])].sort())) fail('背景资料投影与冻结选择不一致')
+  const viewers = ['player', ...keys]
+  const views = viewers.map(viewerKey => readPreparedChatSourceProjectionViewV1({draft, review: chat.sourceReview!, viewerKey}))
+  const roleProfiles = input.brief.characterChatProfiles ? validateChatRoleProfilesForSourceV1(input.brief.characterChatProfiles, draft, chat.sourceReview) : undefined
+  const sourceUnits = input.brief.characterChatSourceUnits?.bundles.length ? validateChatSourceUnitSetForProjectionV1(input.brief.characterChatSourceUnits, draft, chat.sourceReview) : undefined
+  const interpreted = new Set(sourceUnits?.bundles.flatMap(bundle => bundle.candidate.fragments.map(row => row.fragmentKey)) ?? [])
+  const visibleByFragment = new Map<string, string[]>()
+  for (const [index, view] of views.entries()) for (const fragment of view) {
+    visibleByFragment.set(fragment.fragmentKey, [...(visibleByFragment.get(fragment.fragmentKey) ?? []), index === 0 ? 'player' : participantKeys[index - 1]])
+  }
+  const purposes = new Map(chat.sourceReview.classifications.map(item => [item.fragmentKey, item.purpose]))
+  const discoveries = new Map(chat.sourceReview.classifications.filter(item => item.discovery).map(item => [item.fragmentKey, item.discovery!]))
+  if (discoveries.size && (chat.version !== 3 || !chat.narrative.permissions.maxDiscoveriesPerSituation)) fail('世界隐情没有作品级发现授权')
+  if (sourceUnits?.bundles.some(bundle => bundle.permissions.some(row => row.discovery)) && (chat.version !== 3 || !chat.narrative.permissions.maxDiscoveriesPerSituation)) fail('逐项事实发现没有作品级授权')
+  const fragments = chatProjectionResourcesV1(draft).flatMap(resource => resource.fragments)
+  const sourceKeys = new Map(fragments.map((fragment, index) => [fragment.fragmentKey, `chat-source.${draft.projectionHash}.${index}`]))
+  const privateSources = draft.characters.filter(c => c.origin === 'product-private').map(({resourceKey, sourceHash}) => ({resourceKey, sourceHash}))
+  const content: FrozenChatSourceProjectionV1 = {
+    schema: 'storyforge.chat-runtime-source', version: sourceUnits ? 6 : privateSources.length ? 5 : discoveries.size ? 4 : draft.playerCharacter ? 3 : draft.background?.length ? 2 : 1, projectionHash: draft.projectionHash,
+    ...(sourceUnits ? {sourceUnits: structuredClone(sourceUnits)} : {}),
+    ...(privateSources.length || sourceUnits ? {privateCharacterSources: privateSources} : {}),
+    ...(draft.playerCharacter ? {playerCharacterSource: {resourceKey: draft.playerCharacter.resourceKey, sourceHash: draft.playerCharacter.sourceHash}} : discoveries.size || privateSources.length || sourceUnits ? {playerCharacterSource: null} : {}),
+    ...(draft.background?.length || draft.playerCharacter || discoveries.size || privateSources.length || sourceUnits ? {backgroundSources: (draft.background ?? []).filter(resource => resource.fragments.some(fragment => interpreted.has(fragment.fragmentKey) || visibleByFragment.has(fragment.fragmentKey) || discoveries.has(fragment.fragmentKey)))
+      .map(({resourceKey, sourceHash, resourceKind, relatedResourceKeys}) => ({resourceKey, sourceHash, resourceKind,
+        ...(relatedResourceKeys ? {relatedResourceKeys} : {})}))} : {}),
+    worldReleaseHash: draft.worldReleaseHash, playerRole: input.brief.intent.playerRole,
+    knowledge: [...fragments.flatMap((fragment, index) => {
+      if (interpreted.has(fragment.fragmentKey)) return []
+      const audienceKeys = visibleByFragment.get(fragment.fragmentKey) ?? [], discovery = discoveries.get(fragment.fragmentKey)
+      if (!audienceKeys.length && !discovery) return []
+      const source = chatProjectionResourcesV1(draft).find(c => c.resourceKey === fragment.resourceKey)!
+      return [{key: `chat-source.${draft.projectionHash}.${index}`, content: fragment.valueJson, audienceKeys,
+        ...(discovery ? {discovery: {actorKeys: discovery.actorKeys.map(key => participantKeys[keys.indexOf(key)]), condition: discovery.condition,
+          prerequisiteKnowledgeKeys: discovery.prerequisiteFragmentKeys.map(key => sourceKeys.get(key)!)}} : {}),
+        source: {resourceKey: source.resourceKey, sourceHash: source.sourceHash, pointer: fragment.pointer, purpose: purposes.get(fragment.fragmentKey)!,
+          ...(fragment.textRange ? {textRange: {...fragment.textRange}} : {})}}]
+    }), ...(sourceUnits ? compileChatSourceUnitKnowledgeV1(sourceUnits, draft, sourceKeys, keys, participantKeys) : [])],
+  }
+  return {content,
+    roleProfiles: keys.map(key => {const profile = roleProfiles?.profiles.find(row => row.actorKey === key); return profile ? formatChatRoleProfileV1(profile) : ''}),
+    names: keys.map((key, index) => {
+      const name = views[0].find(fragment => fragment.resourceKey === key && fragment.pointer === '/name')
+      const value: unknown = name ? JSON.parse(name.valueJson) : null
+      return typeof value === 'string' && value.trim() ? value : `角色 ${index + 1}`
+    }),
+    voices: keys.map((key, index) => views[index + 1].filter(fragment => fragment.resourceKey === key && fragment.purpose === 'voice').map(fragment => fragment.valueJson).join('\n')),
+  }
 }
 
 interface LocationIndexV1 {

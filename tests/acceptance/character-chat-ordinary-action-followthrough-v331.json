@@ -1,0 +1,144 @@
+{
+  "schema": "storyforge.character-chat-ordinary-action-followthrough",
+  "version": 331,
+  "at": "2026-10-22T18:45:57.672594+00:00",
+  "status": "targeted-real-followthrough-and-restoration-passed",
+  "sourceHead": "d7db27e935102aa3594791120090debb601b5cd4",
+  "sourceManifestSha256": "9ffa5d739b495c741e6fca809c6f5c45c8b25795db0eee3335f3bbb3899f73e4",
+  "sourceUnchanged": true,
+  "originalInput": {
+    "cohort": "V328",
+    "parentHead": 37,
+    "branchThroughSequence": 35,
+    "futureAttemptExcluded": true,
+    "newPlayerMessages": 0,
+    "explicitContinueClicks": 1,
+    "originalActionLimit": 2,
+    "permissionsUnchanged": true,
+    "originalParentAndBudgetFailurePreserved": true
+  },
+  "setupFailure": {
+    "cohort": "V330",
+    "modelCalls": 0,
+    "reason": "Local Codex journal was held by completed V328 isolated service; status503 before request dispatch",
+    "resolution": "Confirmed all64 journal requests terminal, terminated only old V328 service, and verified new service ready",
+    "evidence": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v330-ordinary-action-followthrough/environment-resolution.json",
+    "restorationPassed": true,
+    "originalFailureRetained": true
+  },
+  "actualResult": {
+    "actions": 1,
+    "completedRuns": 1,
+    "calls": 3,
+    "ordinaryActionCompleted": true,
+    "goalStatus": "fulfilled",
+    "threadStatus": "resolved",
+    "independentChecks": [
+      {
+        "check": "continuity",
+        "passed": true,
+        "reason": "铜印已实际核对在木箱内，箱盖已正常打开且此前未取物；本次取出并放到台面承接既有状态，没有把未知用途当作事实。"
+      },
+      {
+        "check": "permissions",
+        "passed": true,
+        "reason": "铜印位于职责范围内已打开的公用收纳箱，取回失物属于原事项的有限行动，不涉及私人储物、强开或扩大搜查。"
+      },
+      {
+        "check": "player-agency",
+        "passed": true,
+        "reason": "取回铜印由叶岑独立完成，无需玩家许可、物品或参与；不等待玩家符合实际依赖，也未替玩家行动或表态。"
+      },
+      {
+        "check": "visibility",
+        "passed": true,
+        "reason": "铜印位置和掌柜经手情况均已为听众所知；正文未泄露未知用途或私有背景，并明确否定仅凭经手即可认定偷窃或指责住客。"
+      },
+      {
+        "check": "consequences",
+        "passed": true,
+        "reason": "取出铜印并放到台面的物理变化已完整登记。实际找回失物且未作无据指控，足以完成自身目标并解决原线问题；未知用途不构成该问题的必要尾项。"
+      },
+      {
+        "check": "meaningful-direction",
+        "passed": true,
+        "reason": "本次从核对位置推进到实际取回铜印，并区分已证实的经手事实与未经证实的偷窃判断，形成有依据的收束而非重复说明。"
+      }
+    ],
+    "extraSituationRequests": 0,
+    "hiddenPurposeUnchanged": true,
+    "terminalReceipts": 1,
+    "lastVisibleMessage": "叶岑从柜台下的木箱中取出铜印，放在柜台台面上。\n“铜印找回了。掌柜拿过它，但仅凭经手这一点，不能认定是偷窃，也没有依据指责住客。”",
+    "runElapsedSeconds": 59.598,
+    "timingBoundary": "one local run including choice, expression, review and adoption; not general product latency"
+  },
+  "usage": {
+    "totalTokens": 53596,
+    "inputTokens": 52250,
+    "outputTokens": 1346,
+    "cachedInputTokens": 3328,
+    "reasoningOutputTokens": 417
+  },
+  "costUsd": null,
+  "restoration": {
+    "checks": {
+      "parentPreserved": true,
+      "branchPreserved": true,
+      "refreshPreserved": true,
+      "worldPreserved": true,
+      "childRunStatesPreserved": true,
+      "parentRunIdentitiesPreserved": true,
+      "parentRunStatesPreserved": true,
+      "originalFailurePreserved": true,
+      "originalOpeningReviewPreserved": true,
+      "allArtifactBytesAndMultiplicityPreserved": true,
+      "zeroModelRequests": true,
+      "noResumableRuns": true
+    },
+    "modelCalls": 0,
+    "sourceUnchanged": true
+  },
+  "completionBoundary": {
+    "formalM1Credit": false,
+    "m1Passed": false,
+    "originalScheduledDenominatorsUnchanged": true,
+    "humanQualityScores": 0,
+    "commercialCostOrLatencyPassed": false,
+    "fullCurrentHeadCI": "pending"
+  },
+  "evidence": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v331-ordinary-action-followthrough/preregistration.json",
+      "sha256": "5979e4a178a269071d42e88f76456128aa04982d49a697c34c2ba89bf5f9d035"
+    },
+    "ordinary-action-followthrough.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v331-ordinary-action-followthrough/ordinary-action-followthrough.json",
+      "sha256": "a43e2889291f36c2e509fb24fd0ecb5c10dbedef57ee9f6e0c9f6693d55aa1f5"
+    },
+    "ordinary-action-followthrough-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v331-ordinary-action-followthrough/ordinary-action-followthrough-backup.json",
+      "sha256": "7013e09c90afa4372fc8484af82a8f34ee1f0a240cf8af1d2d95e528994774ad"
+    },
+    "restoration-logical-history.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v331-ordinary-action-followthrough/restoration-logical-history.json",
+      "sha256": "ce9107a364bd9efa7e4e81f342ef613e3f853957a3dc1f451293008fa286d7dc"
+    },
+    "usage-ledger.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v331-ordinary-action-followthrough/usage-ledger.json",
+      "sha256": "0620419e43797519179989602001ee724064ad9f8d81df58aa5c2ff2cad44581"
+    }
+  },
+  "next": "Freeze the new executable version for cross-situation M1 evaluation; complete final-head full engineering gates and continue original remaining work packages.",
+  "uiReadback": {
+    "replyVisible": true,
+    "modelCalls": 0,
+    "evidence": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v331-ordinary-action-followthrough/ui-readback.json",
+    "screenshot": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v331-ordinary-action-followthrough/runtime-result.png"
+  },
+  "cleanup": {
+    "logicalBytesReleased": 538779593,
+    "authorDataTouched": false,
+    "evidenceAndSourcePreserved": true,
+    "receipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v331-ordinary-action-followthrough/cleanup-receipt.json"
+  }
+}

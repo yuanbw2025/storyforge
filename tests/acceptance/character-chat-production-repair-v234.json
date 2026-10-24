@@ -1,0 +1,78 @@
+{
+  "schema": "storyforge.character-chat-opening-repair-real-evidence",
+  "version": 1,
+  "batch": "V234",
+  "status": "failed-opening-repair; no-runtime-quality-acceptance",
+  "recordedAt": "2026-10-20T02:52:55.994862+00:00",
+  "source": {
+    "snapshotCommit": "6616da142054b8c137c1a62293e577ad0ef4ac11",
+    "manifestSha256": "47fc40c9ee46dc8d7395d363f758637188b6282f3c57b39655eb7b68c7bb5a1d",
+    "sourceUnchanged": true
+  },
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "producerVersion": "chat-situation-production-v7",
+  "productionUnitsAttempted": 1,
+  "actualRequests": 2,
+  "httpStatuses": [
+    200,
+    200
+  ],
+  "runtimeOpportunities": 0,
+  "releasedPackages": 0,
+  "humanScoredEpisodes": 0,
+  "costUsd": null,
+  "failure": {
+    "attempt": 2,
+    "code": "task-draft-rejected",
+    "detail": "[chat-opening-repair] 修改了错误路径之外的原候选内容"
+  },
+  "findings": [
+    "First response contained only one opening and extra root option fields; referenced facts required origin/text correction.",
+    "Automatic second request received bound original response and explicit repair feedback, but rewrote existing pitch and goal evidence and omitted exact source text quoting.",
+    "Rejected candidate was not adopted or released. Both paid responses and original failure remain recorded."
+  ],
+  "restoration": {
+    "checks": {
+      "buildFailureRetained": true,
+      "failureEventsRetained": true,
+      "allRawResponsesRetained": true,
+      "bothFailureDetailsRetained": true,
+      "noReleaseOrRuntimeCreated": true,
+      "worldPreserved": true,
+      "refreshEqual": true,
+      "zeroModelCalls": true
+    },
+    "modelCalls": 0,
+    "originalRunStatuses": [
+      "cancelled",
+      "completed",
+      "failed"
+    ],
+    "importedRunStatuses": [
+      "cancelled",
+      "running",
+      "failed"
+    ],
+    "scope": "Only listed checks; this receipt does not claim identical run statuses or full lifecycle acceptance."
+  },
+  "evidenceFiles": {
+    "v234-m1-opening-repair-source/agnes-clock-r1/clock-r1-weak-guidance.json": {
+      "sha256": "2814a6e02d2b05f70d8987a25c5b6b0c8d43d540f1f9a5e5b323954812390e0f"
+    },
+    "v234-m1-opening-repair-source/agnes-clock-r1/clock-r1-weak-guidance-backup.json": {
+      "sha256": "512ad3013072c911f3d7211da8498f76ffbd68474a10ee8d03e2f84f6f31419a"
+    },
+    "v234-m1-opening-repair-source/agnes-clock-r1/production-restoration.json": {
+      "sha256": "c1ebe87bf2c67e18891de8564ef6ada4783894e5cec4e03f0bd8b0cc1aeba0e6"
+    },
+    "v234-m1-opening-repair-source/cohort-registration.json": {
+      "sha256": "98932ba39942f7386f2687d1dc6874becb4dd5f0053fcd0419687122c98eeded"
+    }
+  },
+  "next": "Evaluate bounded patch-only repair without regenerating retained candidates; retain frozen v7 behavior and original failed cohort. No new implementation or success claimed by this receipt.",
+  "fullDeliveryValidated": false,
+  "semanticQualityAccepted": false,
+  "humanAcceptance": false,
+  "commercialAcceptance": false
+}

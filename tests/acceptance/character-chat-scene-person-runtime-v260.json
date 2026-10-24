@@ -1,0 +1,61 @@
+{
+  "status": "terminal-bounded-development-completed",
+  "at": "2026-10-20T10:46:19.052Z",
+  "producerVersion": "chat-narrative-action-v50",
+  "readerVersion": "chat-narrative-runtime-view-v16",
+  "sourceManifestSha256": "e32f97c5af5702247f4a5756b60ebe5fbafd5ff424e4108a4316a42d8181f7c5",
+  "sourceUnchanged": true,
+  "requests": 28,
+  "nativeRequestsCompleted": true,
+  "observedTotalTokens": 449249,
+  "costUsd": null,
+  "playerOpportunities": 6,
+  "runtimeStatuses": {
+    "completed": 11
+  },
+  "completionReason": "budget",
+  "goals": [
+    {
+      "status": "active",
+      "desire": "找回铜印，核实其失去踪迹的经过，避免无证据地指责住客。"
+    }
+  ],
+  "threads": [
+    {
+      "status": "open",
+      "question": "怎样核实铜印的下落并找回它，同时不把尚未证实的怀疑变成指控？"
+    }
+  ],
+  "finding": "The same third neutral input produced an actual question to the grounded scene worker and an independently reviewed finite reply, without adding a schedulable actor. Further inputs led to counter-surface, under-counter, personal-recollection and rear-door checks; results were negative or uncertain. The original objective remains open. This fixes the demonstrated roster confusion but does not prove meaningful sustained story quality.",
+  "comparisonBoundary": "Fresh isolated branch before original terminal failure; content/permissions verified equal, event sequences rebased. The old failure is preserved, not retried or relabelled. No new production or holdout credit.",
+  "restoration": {
+    "stem": "inn-weak-guidance",
+    "parentStatePreserved": true,
+    "legacyReaderMatchesOriginalRequest": true,
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 11,
+    "retainedFailedRuns": 0,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true,
+    "terminalReceiptBodiesRetained": true,
+    "usageEvidenceRetained": true
+  },
+  "qualityAccepted": false,
+  "formalM1Credit": false,
+  "fullCI": false,
+  "fullE2E": false,
+  "localEvidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v260-scene-person-runtime",
+  "evidence": {
+    "preregistration.json": "38087c4cdab9cb4638e0325f13883b281ecca5c5b4f87c9daca0070a177bcf92",
+    "prepared.json": "54c2b2a491af86c7592b82d62332040093e89a21750229ea0c0f2903a7f97ee6",
+    "engineering-admission.json": "cec22bc68281fde33081eb8e2d3c4023c8a405077cf57545255286167b06d796",
+    "inn-weak-guidance.json": "682dcd4be77d733be3d8fb487bb1b046c28156114c9285df0b89d64e56c43ac4",
+    "inn-weak-guidance-backup.json": "c580c784f9962536e7af0cef36d4b3f95c70eb859b6206058e38939d3057171f",
+    "inn-weak-guidance-restoration-verified.json": "423a4ef87ed700638c2a10e456e972d5d1a13b28d329671dfe7bc74c302d06d4"
+  }
+}

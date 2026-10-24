@@ -64,7 +64,7 @@ export default function CodexConnectionCard() {
         <summary className="cursor-pointer">最近请求（本机保留 24 小时，最多 100 条）</summary>
         <p className="my-2 text-xs">刷新页面或断线后先检查此处，避免重复生成。这里是传输记录；复制的内容仍需按原创作流程审查和采纳。</p>
         <div className="max-h-96 space-y-2 overflow-auto">{records.map(r => <article key={r.id} className="rounded border border-border p-2 text-xs">
-          <p>{new Date(r.createdAt).toLocaleString()} · {r.model} · {({ accepted: '准备中', running: '生成中', completed: '已完成', failed: '未发送 / 失败', cancelled: '已取消', unknown: '结果未知' })[r.status]}</p>
+          <p>{new Date(r.createdAt).toLocaleString()} · {r.model} · {({ accepted: '准备中', running: '生成中', completed: '已完成', failed: r.dispatched ? '已发送，生成失败' : '未发送', cancelled: '已取消', unknown: '结果未知' })[r.status]}</p>
           <p className="break-all text-text-muted">{r.id}</p>
           {r.error && <p>{r.error}</p>}
           {['accepted', 'running'].includes(r.status) && <button type="button" className={button} onClick={() => { void codexRequest(`/requests/${r.id}/cancel`, {}).then(refresh).catch(e => setError(String(e))) }}>取消请求</button>}

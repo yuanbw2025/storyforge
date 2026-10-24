@@ -41,6 +41,7 @@ function createResolver(input: {
       const asset = assets.get(assetKey)
       if (!asset) throw new Error(`[product-media-resolver] 未知媒资:${assetKey}`)
       const data = await input.readBytes(asset)
+      ensureActive()
       return new Blob([data], { type: asset.mimeType })
     },
     async preload({ assetKeys, maximumBytes }): Promise<ResolvedMediaCatalogV1> {
@@ -60,6 +61,7 @@ function createResolver(input: {
           continue
         }
         try {
+          ensureActive()
           const cached = urls.get(assetKey)
           if (cached) {
             result.urls[assetKey] = cached
@@ -67,6 +69,7 @@ function createResolver(input: {
             continue
           }
           const blob = await this.read(assetKey)
+          ensureActive()
           const url = URL.createObjectURL(blob)
           urls.set(assetKey, url)
           result.urls[assetKey] = url

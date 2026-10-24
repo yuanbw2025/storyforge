@@ -1,0 +1,129 @@
+{
+  "version": 366,
+  "recordedAt": "2026-10-24T02:46:25.090384+00:00",
+  "status": "two-bounded-diagnostics-and-cold-restores-completed",
+  "product": "character-interaction",
+  "phase": "S3 product development",
+  "sourceHead": "f2e2b05e282971da0a97e6f1f879783635533f9a",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "producer": "chat-narrative-action-v71",
+  "reviewer": "chat-narrative-action-review-v42",
+  "purpose": "Check the two V364 failure modes from independently branched original committed states. These are repaired continuations, not new scored M1 episodes.",
+  "boundaries": {
+    "owner": "Chat Work and runtime session",
+    "world": "frozen read-only WorldRelease",
+    "originalParentsAndFailuresPreserved": true,
+    "allRawArtifactsAndMultiplicityPreserved": true,
+    "newPlayerMessages": 0,
+    "automaticRetries": 0,
+    "reviewWeakened": false,
+    "permissionChanges": false,
+    "requestsPerUnit": 3,
+    "originalM1DenominatorChanged": false
+  },
+  "results": [
+    {
+      "unit": "r1",
+      "sourceHead": "f2e2b05e282971da0a97e6f1f879783635533f9a",
+      "requests": 3,
+      "observedTokens": 47894,
+      "runStatus": "completed",
+      "triggerStatus": "complete",
+      "newMessageCount": 1,
+      "newPublicText": [
+        "“还有一处我有点介意：门口的告示没写能不能只听不读，也没说明交流是不是必须发言。我的顾虑是，想来的人会不会以为参加就得开口。\n\n如果最后采用自愿交流的安排，告示可以补一句：‘可只听不读，交流自愿。’比起强调场面热闹，我更想把这一点说清楚。\n\n这只是供商量的措辞，不代表参与方式已经定了。”"
+      ],
+      "terminalReceiptCount": 1,
+      "durableRunMilliseconds": 57381,
+      "restorationChecks": {
+        "originalFailedParentStatePreserved": true,
+        "originalRunHistoryPreserved": true,
+        "originalFailurePreserved": true,
+        "originalPendingFieldPreserved": true,
+        "branchStatePreserved": true,
+        "branchResumeViewPreserved": true,
+        "restoredResumePanelMatches": true,
+        "refreshBothStatesPreserved": true,
+        "worldPreserved": true,
+        "childRunStatesPreserved": true,
+        "originalOpeningReviewPreserved": true,
+        "allArtifactBytesAndMultiplicityPreserved": true,
+        "zeroModelRequests": true,
+        "noResumableRuns": true
+      },
+      "restoreModelCalls": 0
+    },
+    {
+      "unit": "r2",
+      "sourceHead": "f2e2b05e282971da0a97e6f1f879783635533f9a",
+      "requests": 3,
+      "observedTokens": 39787,
+      "runStatus": "completed",
+      "triggerStatus": "waiting-player",
+      "newMessageCount": 0,
+      "newPublicText": [],
+      "terminalReceiptCount": 1,
+      "durableRunMilliseconds": 43599,
+      "restorationChecks": {
+        "originalFailedParentStatePreserved": true,
+        "originalRunHistoryPreserved": true,
+        "originalFailurePreserved": true,
+        "originalPendingFieldPreserved": true,
+        "branchStatePreserved": true,
+        "branchResumeViewPreserved": true,
+        "restoredResumePanelMatches": true,
+        "refreshBothStatesPreserved": true,
+        "worldPreserved": true,
+        "childRunStatesPreserved": true,
+        "originalOpeningReviewPreserved": true,
+        "allArtifactBytesAndMultiplicityPreserved": true,
+        "zeroModelRequests": true,
+        "noResumableRuns": true
+      },
+      "restoreModelCalls": 0
+    }
+  ],
+  "totalUniqueRequests": 6,
+  "totalObservedTokens": 87681,
+  "costUsd": null,
+  "latencyMeasurement": "Durable run createdAt to updatedAt for one committed action/control result; not first token, first paint, distribution or a performance pass.",
+  "restorationCheckerCorrection": {
+    "firstResultRetained": "r1/restoration-logical-history.json",
+    "firstChecksPassed": 13,
+    "firstChecksFailed": 1,
+    "cause": "The original pendingSituation field was absent. The reused checker compared it with registration null. Complete parent-state equality already passed.",
+    "correction": "Compare the actual original field exactly, without normalizing persisted state. Both independent cold imports then passed all 14 checks with zero model requests.",
+    "productCodeOrStoredDataChanged": false,
+    "modelRerun": false
+  },
+  "evidenceHashes": {
+    "r1/preregistration.json": "829b1f71590a43223e1da3adf082554e4fc7c1d0003f8da0bc43e9361a325c8e",
+    "r1/choice-continuation-model.json": "39b7984becf623b3b770e031f79d363d8f05d9263c484dd97655dbd936330364",
+    "r1/choice-continuation-model-backup.json": "2417f40cfc2cc5d5b05db959aecca1731d20dc99160f4c87f64f9263a31dfbf2",
+    "r1/restoration-exact-pending-field.json": "db6f730060037db71d26df5eacbf77a623ee1713b299fcc2da939744bdbe5791",
+    "r2/preregistration.json": "20947ba59a28f079655514de9b2022a1d8b15ea1ea6ea7ac6d9a63277332dea1",
+    "r2/choice-continuation-model.json": "b9629ab59982603359a5034c9b08401721013f9b7392aaa6844a85317bdc9260",
+    "r2/choice-continuation-model-backup.json": "0ebb511fcd8e674ddf51acf6c46c103c8a004f3fd869871bc2f495eb1fa6e8ed",
+    "r2/restoration-exact-pending-field.json": "6a6b58be980e935ddd9adfa7881814512085ddb18e1a183dee1da0340278796a",
+    "source-manifest.json": "2e61c87d4b439107eb0d0bce29cde6553dba0d1661faa5915477625f6de5d9cd",
+    "restoration-checker-addendum.json": "e1ace119576008d07680e5f2ea0714f4a53b6901433d5f10374feabcb5374302",
+    "r1/restoration-logical-history.json": "3d98ee9fad7eac7d1b9dceb635c2bff48f148ff1a1bab5dea40c65d03113fb14"
+  },
+  "claims": {
+    "twoSpecificFailureModesNoLongerObservedInTheseRuns": true,
+    "formalM1EpisodesAdded": 0,
+    "m1Passed": false,
+    "humanQualityPass": false,
+    "longTermQualityPassed": false,
+    "performancePassed": false,
+    "currentFullDeliveryPassed": false,
+    "commercialReady": false,
+    "released": false
+  },
+  "next": [
+    "Run fresh independent production and the registered M1 scenario matrix on this implementation.",
+    "Complete final-commit full delivery checks.",
+    "Continue long-memory, relationships, ensemble, experience packages and controlled Tavern comparison; human scoring remains deferred."
+  ]
+}

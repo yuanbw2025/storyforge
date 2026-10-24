@@ -1,0 +1,283 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 326,
+  "kind": "recent-dialogue-reading-repair",
+  "at": "2026-10-22T13:03:48.741369+00:00",
+  "sourceBaseHead": "754e40539e475577aa6ffe6742d7e17af2e00f7a",
+  "boundary": {
+    "product": "character-interaction",
+    "phase": "S3 product R&D / runtime",
+    "owner": "existing ProductRuntimeSession and durable Harness",
+    "reads": "registered interactionRuntime via Context Gateway; actor-visible and retrievable messages only",
+    "writes": "existing candidate/adoption/event path unchanged; no new model-writable fields or tables",
+    "world": "frozen WorldRelease read-only",
+    "media": "unaffected"
+  },
+  "originalFailure": {
+    "cohort": "V324 reading-r1 weak-guidance",
+    "actorMessageSequence": 39,
+    "run": 28,
+    "allNativeRequestsCompleted": 45,
+    "reportedTokens": 732100,
+    "reviewRejected": [
+      "meaningful-direction",
+      "turnCompletionCheck"
+    ],
+    "cause": "Actor choice/expression v17 reader omitted the preceding proposal, while independent review retained it and correctly rejected the repeated proposal.",
+    "originalRecordUnchanged": true,
+    "pairedCasesBlocked": 5
+  },
+  "change": {
+    "actionProducer": "chat-narrative-action-v62",
+    "optionsProducer": "chat-narrative-options-v38",
+    "revisionProducer": "chat-action-revision-v23",
+    "reader": "chat-narrative-runtime-view-v18",
+    "retrieval": "chat-relevance-v14",
+    "reviewersUnchanged": [
+      "chat-narrative-action-review-v38",
+      "chat-narrative-options-review-v28"
+    ],
+    "policy": "Protect complete current/recent actual visible response segments and the actor latest own response, using actual player/visible-action trigger boundaries, plus explicit reply/player-response sources. Keep other history relevance-selected.",
+    "budgetsUnchanged": true,
+    "oldReadersPreserved": true,
+    "modelCallsAdded": 0
+  },
+  "verification": {
+    "regressionFiles": 19,
+    "regressionTests": 255,
+    "passedFiles": {
+      "tests/regression/R-CHAT-04-history-selection.test.ts": 11,
+      "tests/regression/R-CHAT-04-history-followup-evidence.test.ts": 9,
+      "tests/regression/R-CHAT-04-history-capacity.test.ts": 3,
+      "tests/regression/R-CHAT-02-action-choice-harness.test.ts": 54,
+      "tests/regression/R-CHAT-03-turn-end-harness.test.ts": 15,
+      "tests/regression/R-CHAT-03-recent-dialogue.test.ts": 14,
+      "tests/regression/R-CHAT-04-history-selection-harness.test.ts": 1,
+      "tests/regression/R-CHAT-04-coordinator-dialogue-harness.test.ts": 3,
+      "tests/regression/R-CHAT-02-output-contract.test.ts": 30,
+      "tests/regression/R-CHAT-02-control-handoff-harness.test.ts": 20,
+      "tests/regression/R-CHAT-03-turn-allowance.test.ts": 12,
+      "tests/regression/R-CHAT-02-fact-discovery.test.ts": 17,
+      "tests/regression/R-CHAT-02-replanning.test.ts": 12,
+      "tests/regression/R-CHAT-02-player-decision.test.ts": 9,
+      "tests/regression/R-CHAT-03-context-inspector.test.ts": 15,
+      "tests/regression/R-CHAT-02-choice-message-evidence.test.ts": 9,
+      "tests/regression/R-CHAT-03-recent-dialogue-bindings.test.ts": 13,
+      "tests/regression/R-CHAT-04-commitment-generation.test.ts": 4,
+      "tests/regression/R-CHAT-03-recent-dialogue-harness.test.ts": 4
+    },
+    "browser": {
+      "passed": 15,
+      "retries": 0,
+      "isolatedData": true,
+      "realProvider": false
+    },
+    "governance": [
+      {
+        "check": "check:architecture",
+        "startedAt": "2026-10-22T12:57:05.545000+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "check:required-tables",
+        "startedAt": "2026-10-22T12:57:19.163838+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "check:ai-manual",
+        "startedAt": "2026-10-22T12:57:19.626306+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "check:source-reachability",
+        "startedAt": "2026-10-22T12:57:20.256693+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "check:ai-entry-registry",
+        "startedAt": "2026-10-22T12:57:21.934947+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "check:agent-freshness",
+        "startedAt": "2026-10-22T12:57:23.097394+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "check:project-metrics",
+        "startedAt": "2026-10-22T12:57:24.120927+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "check:docs",
+        "startedAt": "2026-10-22T12:57:24.626301+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "check:roadmap",
+        "startedAt": "2026-10-22T12:57:25.258474+00:00",
+        "exitCode": 0
+      }
+    ],
+    "lint": {
+      "files": [
+        "src/lib/agent/skill-registry.ts",
+        "src/lib/character-interaction/action-choice-budget.ts",
+        "src/lib/character-interaction/action-choice-message-evidence.ts",
+        "src/lib/character-interaction/action-output-contract.ts",
+        "src/lib/character-interaction/action-wire.ts",
+        "src/lib/character-interaction/commitment-prompt.ts",
+        "src/lib/character-interaction/context-selection.ts",
+        "src/lib/character-interaction/coordinator-selection.ts",
+        "src/lib/character-interaction/harness.ts",
+        "src/lib/character-interaction/history-actor-context.ts",
+        "src/lib/character-interaction/history-coordinator-context.ts",
+        "src/lib/character-interaction/narrative-action-prompt.ts",
+        "src/lib/character-interaction/narrative-conversation-evidence.ts",
+        "src/lib/character-interaction/narrative-player-pause.ts",
+        "src/lib/character-interaction/narrative-promise-request.ts",
+        "src/lib/character-interaction/narrative-replanning.ts",
+        "src/lib/character-interaction/narrative-scene-transition.ts",
+        "src/lib/character-interaction/player-decision-prompt.ts",
+        "src/lib/character-interaction/runtime.ts",
+        "src/lib/character-interaction/situation-harness.ts",
+        "src/lib/character-interaction/turn-completion.ts",
+        "src/lib/character-interaction/turn-end-control.ts",
+        "tests/e2e/character-chat-action-choice.spec.ts",
+        "tests/e2e/character-chat-control-handoff.spec.ts",
+        "tests/regression/R-CHAT-02-action-choice-harness.test.ts",
+        "tests/regression/R-CHAT-02-choice-message-evidence.test.ts",
+        "tests/regression/R-CHAT-02-control-handoff-harness.test.ts",
+        "tests/regression/R-CHAT-02-fact-discovery.test.ts",
+        "tests/regression/R-CHAT-02-player-decision.test.ts",
+        "tests/regression/R-CHAT-02-replanning.test.ts",
+        "tests/regression/R-CHAT-03-turn-allowance.test.ts",
+        "tests/regression/R-CHAT-03-turn-end-harness.test.ts",
+        "tests/regression/R-CHAT-04-commitment-generation.test.ts",
+        "tests/regression/R-CHAT-04-coordinator-dialogue-harness.test.ts",
+        "src/lib/character-interaction/recent-dialogue-context.ts",
+        "tests/regression/R-CHAT-03-recent-dialogue-bindings.test.ts",
+        "tests/regression/R-CHAT-03-recent-dialogue-harness.test.ts",
+        "tests/regression/R-CHAT-03-recent-dialogue.test.ts"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T12:55:20.787712+00:00"
+    },
+    "typecheck": "passed",
+    "build": "passed",
+    "fullCI": "not yet run for this source; base754e remote gates still running",
+    "sourceEquivalence": "Original real fixture state/source hashes pass for v13. Old/new producer output schemas and prompt rules equal; new reader differs intentionally.",
+    "durable": "Old61/reader17 and new62/reader18 created from their frozen producers, then refreshed/reviewed/adopted/imported with packet bytes retained; mismatched recovery performs zero calls.",
+    "bundleSize": "passed",
+    "buildChecks": [
+      {
+        "check": "typecheck-final",
+        "startedAt": "2026-10-22T12:57:05.545027+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "build",
+        "startedAt": "2026-10-22T12:57:58.031309+00:00",
+        "exitCode": 0
+      },
+      {
+        "check": "bundle-size",
+        "startedAt": "2026-10-22T12:59:30.031484+00:00",
+        "exitCode": 0
+      }
+    ]
+  },
+  "retainedTestFailures": [
+    {
+      "log": "targeted-initial.log",
+      "reason": "One test compared raw newlines with JSON-escaped dialogue. Updated the assertion to the exact JSON string; no production change."
+    },
+    {
+      "log": "targeted-compat.log",
+      "reason": "Two test final spy counts were cleared by restoring Skill mocks. Added counters spanning refresh/import; exact call expectations unchanged and rerun passed."
+    }
+  ],
+  "sourceFiles": {
+    "src/lib/agent/skill-registry.ts": "ad2216ec2cd684eb8a87e053130bea69de1ac7920cf847c91fdd8b42942be617",
+    "src/lib/character-interaction/action-choice-budget.ts": "3af79281bbc5dc7c2a1723d885f9448bace48356cb1ae80b944e21be318f5202",
+    "src/lib/character-interaction/action-choice-message-evidence.ts": "e02d80d6510aafb1b55866a7043acce62c3db44994ab966c007451ef7cd4b030",
+    "src/lib/character-interaction/action-output-contract.ts": "49a0f866189f67309197f422207a43a8eb59147a925e776a80c4ca6d7d8af49b",
+    "src/lib/character-interaction/action-wire.ts": "5aa981bc7548fd40efbc7893ab8a98c4e417a81beca6743325949f4784fbe125",
+    "src/lib/character-interaction/commitment-prompt.ts": "89d85aea5c84ae257b1dac7979db900f7f8f7d303db134be2e15800e9fb899d4",
+    "src/lib/character-interaction/context-selection.ts": "ad0569ba081e2b9e7702a2f5fd20766aeece4aa367423d75442ff34620c5755f",
+    "src/lib/character-interaction/coordinator-selection.ts": "b7ae9d84220ef680f1c9674f54de098358cd934fff4a6da53e5d0bc6d2546e53",
+    "src/lib/character-interaction/harness.ts": "bae3e9694a9201648e935ef36456fcdc9605016f1de19126d3a53e584a6232ba",
+    "src/lib/character-interaction/history-actor-context.ts": "8f925edbedf8518c3322ba19ae7066809053d1be3f44b30eec7d29e007902e6e",
+    "src/lib/character-interaction/history-coordinator-context.ts": "c09ff2d621935da403f05f89410799cf11fc2a72e1b08a4a13e775cf80c7d321",
+    "src/lib/character-interaction/narrative-action-prompt.ts": "38a2dd41b8281676002bb94a2c81243f0f9b41fd6016919709f03aa59f418135",
+    "src/lib/character-interaction/narrative-conversation-evidence.ts": "596e425503da3e42ac52e7632990fe0a7cb3da852cb82bddce46972887382cec",
+    "src/lib/character-interaction/narrative-player-pause.ts": "82bb45a8e0457a921e6ea655bd12e01340c8654e9e932d1d51839157b48b2b68",
+    "src/lib/character-interaction/narrative-promise-request.ts": "dc59a746f68773ba887cffaaa41848d2a0f21adafe92a8fac618e9b6b80bcf2c",
+    "src/lib/character-interaction/narrative-replanning.ts": "6aaffafbb7d16e0cddea40a2c967db75e5d3f5280a554c16c35571c35ec3ab00",
+    "src/lib/character-interaction/narrative-scene-transition.ts": "6b8c66f6dee015f06d2ce958540c034d287df6e3814339bdce5361e05448e407",
+    "src/lib/character-interaction/player-decision-prompt.ts": "c69d580752151f379793a9a6e2b69d282d00454f9b02f205fbadc2aa49fd5924",
+    "src/lib/character-interaction/recent-dialogue-context.ts": "857c1cf0e41d3c20cf516e18b6f312f7d9b4ef7d4c2f1668ad4c6c8f4462f458",
+    "src/lib/character-interaction/runtime.ts": "8b18aca4a0e2e631a6903c9bd991626b45e9a67e13ab91eb9736628bcb080bcc",
+    "src/lib/character-interaction/situation-harness.ts": "38fdb1636763b6f729973859cfda4feef98bbc26cc7d53a2f897a0a8bc99ee34",
+    "src/lib/character-interaction/turn-completion.ts": "b4ba86137160783ccb389c585dfcf4365738990fc34cdea3ffe398a8d9fb62f1",
+    "src/lib/character-interaction/turn-end-control.ts": "3adc37f46a8a66a6cae1180bf86d8d82df96bb21e187423b8a3b5c0d0c69a468"
+  },
+  "evidence": {
+    "targeted-initial.log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v326-recent-dialogue/targeted-initial.log",
+      "sha256": "7042881f0708a5a5030ea654aa571347d1c8701a41cb251f37b289ece16c643f"
+    },
+    "targeted-harness.log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v326-recent-dialogue/targeted-harness.log",
+      "sha256": "095ef3c4d4eebabae6f5c5a1ccac38561fe63b499138af32cd14cc3f34721b3a"
+    },
+    "targeted-compat.log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v326-recent-dialogue/targeted-compat.log",
+      "sha256": "d53299743ebe1f57c765f7b73eb8923f7aec3c94515975d9e5a039c1508b1271"
+    },
+    "targeted-compat-counters.log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v326-recent-dialogue/targeted-compat-counters.log",
+      "sha256": "bf112bdc9be8f7966e604c9654181db3988971c3a7961104ba1000e96b69e57e"
+    },
+    "browser.log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v326-recent-dialogue/browser.log",
+      "sha256": "1b69df162794ff3c7c57bab906a8f475b94ac7a08875327cc7e6132b2ea106b7"
+    },
+    "lint.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v326-recent-dialogue/lint.json",
+      "sha256": "894b42b1a3980789975e8bfed6e7abae34a9dc7af9ceb726a9fda850620a8517"
+    },
+    "lint.log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v326-recent-dialogue/lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "governance.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v326-recent-dialogue/governance.json",
+      "sha256": "f58fbd144e0a43e4ff92ef412d1ce8952f2a173763358a1b6574bed89bd005a6"
+    },
+    "typecheck-final.log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v326-recent-dialogue/typecheck-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "build-verification.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v326-recent-dialogue/build-verification.json",
+      "sha256": "5540575b71b462d3e828c77cd7d2a94412e7f38b4f4a5727b687de107a92cdc3"
+    },
+    "build.log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v326-recent-dialogue/build.log",
+      "sha256": "acf254131fec15df329d7ad79fc2c5fc904098919ee6b732047a6890fa40b2d4"
+    },
+    "bundle-size.log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v326-recent-dialogue/bundle-size.log",
+      "sha256": "a60909ffc5bb65575eb30ca943963a146e2bd38343200967ba6a76958b9ee90f"
+    }
+  },
+  "maturity": {
+    "M1": "not passed",
+    "formalQualityPasses": 0,
+    "realModelRetest": "V327 draft preparation only; not dispatched",
+    "humanScoring": "deferred by user",
+    "commercialReadiness": false
+  },
+  "next": "Commit and freeze verified source; one bounded isolated branch followthrough from the retained reading failure, then final-head full engineering gates. Do not change the original 120-slot cohort or count this diagnosis as M1."
+}

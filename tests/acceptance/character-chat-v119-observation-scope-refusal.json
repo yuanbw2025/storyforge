@@ -1,0 +1,234 @@
+{
+  "schema": "storyforge.character-chat-development-episode-evidence",
+  "version": 1,
+  "label": "V119 fresh refusal route fails on unadopted discovery evidence",
+  "recordedAt": "2026-10-16T00:53:12.811973+00:00",
+  "implementationCommit": "73b9f23c2c6f034adebcf139e0e43e5c2b91cb38",
+  "manifestSha256": "201785684ce0da1cd7ecf4d5dc71cb2b9fc4891f998f44df64b6566c840a79ae",
+  "releaseHash": "3235facf915f325f3c3ef14c17faab66af1bd9a1e2f9d00ec3ffb37c555f8701",
+  "worldHash": "103ac348ab504155f0ff2a30034cf38d112b175cf3f40e2011251f5cedb4a6ee",
+  "countsInM1": false,
+  "holdoutsInspected": false,
+  "episode": {
+    "planned": 1,
+    "terminated": 1,
+    "outcome": "failed at deterministic discovery preview, before situation semantic review and actual role response to refusal",
+    "playerOpportunities": 1,
+    "runtimeRequests": 3,
+    "completedRuns": 1,
+    "failedRuns": 1,
+    "committedActorActions": 1,
+    "retries": 0,
+    "repairs": 0,
+    "publicMessages": [
+      {
+        "messageId": "message:harness:32",
+        "eventSequence": 5,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“先核对眼前这只箱子，不能凭后门没锁就指认谁。”叶岑蹲到柜台旁，伸手试着掀起木箱盖，查看能否打开及箱内是否有铜印。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:6f7b7f95-9372-4019-a44a-01ec503b1013",
+        "eventSequence": 6,
+        "role": "player",
+        "speakerKey": "player",
+        "audienceKeys": null,
+        "text": "这个箱子先别再翻查，换个办法吧。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      }
+    ],
+    "pendingObservation": {
+      "direction": "确认这次掀盖检查的实际结果：木箱是否打开；若打开，本次查看是否能辨认出铜印。不据物品位置推断经手者。",
+      "evidenceExcerpt": "叶岑蹲到柜台旁，伸手试着掀起木箱盖，查看能否打开及箱内是否有铜印。",
+      "evidenceFactKeys": [
+        "fact-8",
+        "fact-10"
+      ],
+      "purpose": "observation-result",
+      "threadKey": "thread-1",
+      "actorKey": "participant.001",
+      "goalKey": "goal-1",
+      "sourceEventSequence": 5
+    },
+    "candidate": {
+      "kind": "chat-situation",
+      "title": "柜台旁的查找起点",
+      "location": "驿站",
+      "timeLabel": "暴雨中",
+      "newFacts": [
+        {
+          "factKey": "fact-11",
+          "kind": "observation",
+          "text": "木箱盖顺利掀开，箱内物件清楚可见，足以完成本次对铜印的辨认，无须继续翻查。此次查看没有核实经手者或用途。",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "evidenceFactKeys": [
+            "fact-8",
+            "fact-10"
+          ],
+          "seedExcerpt": "确认这次掀盖检查的实际结果：木箱是否打开；若打开，本次查看是否能辨认出铜印。"
+        }
+      ],
+      "newGoals": [],
+      "newThreads": [],
+      "possibilities": [],
+      "discoveries": [
+        {
+          "factKey": "fact-7",
+          "actorKey": "participant.001",
+          "actionSequence": 5,
+          "evidenceFactKeys": [
+            "fact-4",
+            "fact-8",
+            "fact-10",
+            "fact-11"
+          ],
+          "evidenceExcerpt": "“先核对眼前这只箱子，不能凭后门没锁就指认谁。”叶岑蹲到柜台旁，伸手试着掀起木箱盖，查看能否打开及箱内是否有铜印。",
+          "result": "discovered",
+          "reason": "本次已完成的掀盖查看使箱内物件清楚可见，叶岑辨认出了铜印，满足实际打开并核对的条件，确认铜印在柜台下木箱中。此结果仅确认位置，不证明经手者或用途；后来的停止翻查请求不撤销此前已完成的查看。"
+        }
+      ]
+    },
+    "truthUnitsStillUnknown": true
+  },
+  "provider": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "usage": {
+      "totalTokens": 40028,
+      "inputTokens": 38394,
+      "outputTokens": 1634,
+      "cachedInputTokens": 6656,
+      "reasoningOutputTokens": 557
+    },
+    "costUsd": null,
+    "includingSharedPreparationAndProductionOnce": 171658
+  },
+  "audit": {
+    "originalError": "Error: [chat-discovery] 调查依据引用了角色未知材料",
+    "removedKeys": [
+      "fact-11"
+    ],
+    "counterfactualStructurallyValid": true,
+    "originalCandidateRetained": true,
+    "persistedStateUnchanged": true,
+    "truthBefore": [
+      {
+        "factKey": "fact-5",
+        "audienceKeys": []
+      },
+      {
+        "factKey": "fact-6",
+        "audienceKeys": []
+      },
+      {
+        "factKey": "fact-7",
+        "audienceKeys": []
+      }
+    ],
+    "counterfactualTruth": [
+      {
+        "factKey": "fact-5",
+        "audienceKeys": []
+      },
+      {
+        "factKey": "fact-6",
+        "audienceKeys": []
+      },
+      {
+        "factKey": "fact-7",
+        "audienceKeys": [
+          "participant.001"
+        ]
+      }
+    ],
+    "modelRequests": 0,
+    "limits": "Read-only structural counterfactual, not an adopted repair or semantic verdict; original failed run and raw draft unchanged."
+  },
+  "finding": "discovery evidence includes fact-11, which is only proposed in the same candidate. Existing deterministic validation permits already-known committed evidence, and correctly rejects it before semantic review. Read-only removal of this proposed reference changes structural eligibility only; nothing was adopted or repaired.",
+  "next": "Clarify already-known committed evidence versus current unadopted newFacts in new frozen generation inputs/instructions. Consider deriving the eligible evidence identifiers in registered context, keep actual action and prerequisites required. Add same-candidate/cross-event/hidden evidence negatives, retain original failure and bounded retry policy, then run independent fresh full generation. Never silently strip references, auto-unlock truth, or relax discovery guards.",
+  "restoration": [
+    {
+      "stem": "inn-grounded-opening-refusal",
+      "runStatusesPreserved": true,
+      "verifiedCompletedHistories": 1,
+      "retainedFailedRuns": 1,
+      "resumableRuns": 0,
+      "openingReviewRetained": true,
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true
+    }
+  ],
+  "terminalReadback": {
+    "checks": [
+      {
+        "id": "c408b4fb-d1a5-4525-aa3f-e5e8a9171b5e",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "d6bb02cf-8add-488c-ad4c-7a750e31fbeb",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "f665c205-0b66-4037-9d06-82562d5b62f9",
+        "status": "completed",
+        "readbackEqual": true
+      }
+    ],
+    "allTerminal": true
+  },
+  "limits": [
+    "No situation semantic review or role response to refusal; cannot evaluate respectful replanning",
+    "V118 controlled review results remain separate; fresh opening differs from V117 so no strict A/B attribution",
+    "No M1, Agnes, human or commercial acceptance added"
+  ],
+  "evidence": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v119-observation-scope-refusal/preregistration.json",
+      "sha256": "df22f5922422fe2941557c5eab3b968acdbb6d086b71cef5567d22725edd1c9a"
+    },
+    "runner.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v119-observation-scope-refusal/runner.mjs",
+      "sha256": "53c4cb2b3d8892f5ee63f696f8e1c96fe73e64bfd90b6c914268ae3a14b53e95"
+    },
+    "inn-grounded-opening-refusal.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v119-observation-scope-refusal/inn-grounded-opening-refusal.json",
+      "sha256": "bfdf735f66b71bedcb7f6e463ec03d5cce8271f0ebcf5c32d030f0a4cff3812c"
+    },
+    "inn-grounded-opening-refusal-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v119-observation-scope-refusal/inn-grounded-opening-refusal-backup.json",
+      "sha256": "92736be841592fbca779ea5d043c40f1808bae984e266c4b9eee411c4aea1ca6"
+    },
+    "audit-discovery-evidence.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v119-observation-scope-refusal/audit-discovery-evidence.mjs",
+      "sha256": "2af07c87ddb0ffc1ade1062cd2dfb63794733c73b2ec1151fb8eb376918895c6"
+    },
+    "discovery-evidence-audit.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v119-observation-scope-refusal/discovery-evidence-audit.json",
+      "sha256": "00de1b51b341058cdaa4389e878948783ce76d648070c39bdc1b9c50d0ec37b8"
+    },
+    "restoration-verified.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v119-observation-scope-refusal/restoration-verified.json",
+      "sha256": "696d87d7570a79dbfcd1433809ffcdc02eeb5837fdb6c6f89623e00f75fcffca"
+    },
+    "terminal-request-proof.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v119-observation-scope-refusal/terminal-request-proof.json",
+      "sha256": "dcbd73fc4574a2281b15e69b35a6632011f200a78a9c3226e9393f7709d6a43d"
+    }
+  }
+}

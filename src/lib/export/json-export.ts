@@ -428,7 +428,7 @@ export interface ProjectExportData {
   productBuilds: (
     Omit<ProductBuildRecordV1,
       'id' | 'projectId' | 'worldId' | 'workId' | 'productionId' | 'sourceProductReleaseId'
-      | 'releasedProductReleaseId' | 'budgetLedgerJson'>
+      | 'releasedProductReleaseId' | 'budgetLedgerJson' | 'failureJson'>
     & {
       _exportId: number
       _worldExportId: number
@@ -437,6 +437,9 @@ export interface ProjectExportData {
       _sourceProductReleaseExportId?: number | null
       _releasedProductReleaseExportId?: number | null
       _budgetLedgerPortableJson: string
+      _failurePortableJson?: string
+      /** Legacy backups retain diagnostic text; unproven old Run IDs never authorize recovery. */
+      failureJson?: string
     }
   )[]
   productQualityGateReceipts: (

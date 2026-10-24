@@ -1,5 +1,6 @@
 import { assertGenerationAvailable } from '../showcase/policy'
 import { streamCodex, CODEX_BASE_URL } from './codex-transport'
+import type { CodexTerminalFailureV1 } from './codex-terminal-failure'
 import type { AIConfig, ChatMessage } from '../types'
 import { AIError, CodexRequestError } from '../types'
 import { createLog, updateLog, type TokenUsage } from './logger'
@@ -127,6 +128,8 @@ export interface ChatResult {
     phase: 'pre-dispatch' | 'request-dispatched' | 'response-observed'
     responseStatus: number | null
   }
+  /** Confirmed local turn failure; delivery remains dispatched and never auto-retryable. */
+  terminalFailure?: CodexTerminalFailureV1
   /** Raw OpenAI-compatible tool_calls; the Agent protocol validates it. */
   toolCalls?: unknown
   toolCallsPresent?: boolean
@@ -504,6 +507,7 @@ export async function chat(
   assertGenerationAvailable()
   if (result) {
     result.requestLifecycle = { phase: 'pre-dispatch', responseStatus: null }
+    delete result.terminalFailure
   }
   const resolved = frozenResolution ?? resolveRequestConfig(config, meta)
   warnRouteFallback(resolved, meta)

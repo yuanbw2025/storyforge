@@ -4,7 +4,7 @@ import {
 } from './contract'
 
 export type VoicePhase = 'idle' | 'requesting' | 'listening' | 'transcribing' | 'preparing' | 'speaking'
-export interface VoiceSnapshot { phase: VoicePhase; preview: string; error: string }
+export interface VoiceSnapshot { phase: VoicePhase; preview: string; error: string; paused?: boolean }
 interface RecognitionResult { isFinal: boolean; 0: { transcript: string } }
 interface Recognition {
   lang: string; continuous: boolean; interimResults: boolean
@@ -32,6 +32,9 @@ export function voiceError(error: unknown): string {
 
 /** One cancellable turn. No DB, model context, Agent execution or adoption capability. */
 export class VoiceSession {
+  // Browser synthesis has one global queue. Product views must not leave two
+  // owners speaking/recording concurrently or pause another view's utterance.
+  private static active: VoiceSession | undefined
   private generation = 0
   private recognition?: Recognition
   private recorder?: MediaRecorder
@@ -43,10 +46,18 @@ export class VoiceSession {
   private timer?: ReturnType<typeof setTimeout>
   private snapshot: VoiceSnapshot = { phase: 'idle', preview: '', error: '' }
   private disposed = false
+  private volume = 1
+  private pausedRemainingMs = 0
+  private deadlineAt = 0
+  private deadlineAction?: () => void
+  private resumeContinuation?: () => void
   constructor(
     private readonly changed: (state: VoiceSnapshot) => void,
     private readonly transcript: (text: string) => void,
-  ) {}
+    private readonly boundary: 'longform' | 'character-chat' = 'longform',
+  ) {
+    if (boundary !== 'longform' && boundary !== 'character-chat') throw new Error('未登记的语音产品边界')
+  }
 
   private update(patch: Partial<VoiceSnapshot>) {
     this.snapshot = { ...this.snapshot, ...patch }
@@ -55,11 +66,56 @@ export class VoiceSession {
   private current(generation: number) { return !this.disposed && generation === this.generation }
   private deadline(ms: number, action: () => void) {
     clearTimeout(this.timer)
+    this.deadlineAt = Date.now() + ms
+    this.deadlineAction = action
     this.timer = setTimeout(action, ms)
+  }
+  private activate() {
+    if (VoiceSession.active && VoiceSession.active !== this) VoiceSession.active.cancel()
+    VoiceSession.active = this
+  }
+  setVolume(volume: number) {
+    if (!Number.isFinite(volume) || volume < 0 || volume > 1) throw new Error('音量必须在 0 到 1 之间。')
+    this.volume = volume
+    if (this.audio) this.audio.volume = volume
+    if (this.utterance) this.utterance.volume = volume
+  }
+  pause() {
+    if (!this.current(this.generation) || VoiceSession.active !== this || this.snapshot.phase !== 'speaking' || this.snapshot.paused) return
+    try {
+      if (this.utterance) window.speechSynthesis.pause()
+      else if (this.audio) this.audio.pause()
+      else return
+      this.pausedRemainingMs = Math.max(1, this.deadlineAt - Date.now())
+      clearTimeout(this.timer)
+      this.update({paused: true})
+    } catch (cause) {this.fail(cause, this.generation)}
+  }
+  async resume(): Promise<void> {
+    if (!this.current(this.generation) || VoiceSession.active !== this || !this.snapshot.paused) return
+    const generation = this.generation
+    try {
+      if (this.utterance) window.speechSynthesis.resume()
+      else if (this.audio) await this.audio.play()
+      else return
+      if (!this.current(generation)) return
+      this.update({paused: false})
+      if (this.resumeContinuation) {
+        const next = this.resumeContinuation
+        this.resumeContinuation = undefined
+        next()
+        return
+      }
+      if (this.deadlineAction) this.deadline(this.pausedRemainingMs, this.deadlineAction)
+    } catch (cause) {this.fail(cause, generation)}
   }
   cancel() {
     this.generation++
     clearTimeout(this.timer)
+    this.deadlineAction = undefined
+    this.resumeContinuation = undefined
+    this.deadlineAt = this.pausedRemainingMs = 0
+    if (VoiceSession.active === this) VoiceSession.active = undefined
     if (this.recognition) {
       this.recognition.onstart = this.recognition.onresult = this.recognition.onerror = this.recognition.onend = null
       this.recognition.abort()
@@ -88,7 +144,7 @@ export class VoiceSession {
     }
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
     this.objectUrl = undefined
-    this.update({ phase: 'idle', preview: '', error: '' })
+    this.update({ phase: 'idle', preview: '', error: '', paused: false })
   }
   dispose() { this.disposed = true; this.cancel() }
   private fail(error: unknown, generation: number) {
@@ -106,14 +162,18 @@ export class VoiceSession {
 
   async listen(config: CompanionPreferences): Promise<void> {
     this.cancel()
+    if (this.disposed) return
+    this.activate()
     const generation = this.generation
-    assertVoiceTransport('longform.voice.input', 'src/lib/longform-voice/session.ts')
+    if (this.boundary === 'character-chat') assertVoiceTransport('chat.voice.input', 'src/lib/longform-voice/session.ts')
+    else assertVoiceTransport('longform.voice.input', 'src/lib/longform-voice/session.ts')
     this.update({ phase: 'requesting' })
     this.deadline(30_000, () => this.fail(new Error('等待麦克风权限超时；需要时请再次点击说话。'), generation))
     try {
+      if (this.boundary === 'character-chat' && config.inputMode !== 'browser') throw new Error('角色聊天当前仅支持浏览器语音输入，请继续打字或选择浏览器识别。')
       if (config.inputMode === 'browser') {
         const Constructor = browserRecognition()
-        if (!Constructor) throw new Error('此浏览器不支持语音识别。可在助手设置中配置语音服务，或继续打字。')
+        if (!Constructor) throw new Error(this.boundary === 'character-chat' ? '此浏览器不支持语音识别，可以继续打字。' : '此浏览器不支持语音识别。可在助手设置中配置语音服务，或继续打字。')
         const recognition = new Constructor()
         this.recognition = recognition
         recognition.lang = 'zh-CN'
@@ -135,7 +195,7 @@ export class VoiceSession {
           error === 'not-allowed' || error === 'service-not-allowed'
             ? '语音识别权限未开放，请检查浏览器权限。'
             : error === 'no-speech' ? '没有听到语音，请靠近麦克风再试。'
-              : error === 'network' ? '浏览器识别服务连接失败。可切换模型服务或继续打字。'
+              : error === 'network' ? (this.boundary === 'character-chat' ? '浏览器识别服务连接失败。请检查网络，或继续打字。' : '浏览器识别服务连接失败。可切换模型服务或继续打字。')
                 : '浏览器语音识别中断，请重试或继续打字。',
         ), generation)
         recognition.onend = () => this.accept(finalText, generation)
@@ -236,22 +296,29 @@ export class VoiceSession {
 
   async speak(text: string, config: CompanionPreferences): Promise<void> {
     this.cancel()
+    if (this.disposed) return
+    this.activate()
     const generation = this.generation
-    assertVoiceTransport('longform.voice.output', 'src/lib/longform-voice/session.ts')
+    if (this.boundary === 'character-chat') assertVoiceTransport('chat.voice.output', 'src/lib/longform-voice/session.ts')
+    else assertVoiceTransport('longform.voice.output', 'src/lib/longform-voice/session.ts')
     const input = speechText(text)
     if (!input) { this.update({ error: '这条消息没有可朗读的文字。' }); return }
     this.update({ phase: 'preparing' })
     try {
+      if (this.boundary === 'character-chat' && config.outputMode !== 'browser') throw new Error('角色聊天当前仅支持浏览器朗读，请选择设备音色。')
       if (config.outputMode === 'browser') {
-        if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) throw new Error('此浏览器不支持朗读。可在助手设置中配置语音合成服务。')
+        if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) throw new Error(this.boundary === 'character-chat' ? '此浏览器不支持朗读，可以继续阅读文字。' : '此浏览器不支持朗读。可在助手设置中配置语音合成服务。')
         const chunks = input.match(/[^。！？\n]{1,150}[。！？\n]?/g) ?? [input]
         const voice = window.speechSynthesis.getVoices().find((item) => item.voiceURI === config.browserVoice)
+        if (this.boundary === 'character-chat' && config.browserVoice && !voice) throw new Error('此设备已找不到所选音色，请重新选择。')
         const next = (index: number) => {
           if (!this.current(generation)) return
+          if (this.snapshot.paused) {this.resumeContinuation = () => next(index); return}
           if (index >= chunks.length) { this.cancel(); return }
           const utterance = new SpeechSynthesisUtterance(chunks[index])
           this.utterance = utterance
           utterance.lang = 'zh-CN'
+          utterance.volume = this.volume
           if (voice) utterance.voice = voice
           utterance.onstart = () => { if (this.current(generation)) this.update({ phase: 'speaking' }) }
           utterance.onend = () => next(index + 1)
@@ -271,6 +338,7 @@ export class VoiceSession {
       this.objectUrl = URL.createObjectURL(blob)
       const audio = new Audio(this.objectUrl)
       this.audio = audio
+      audio.volume = this.volume
       if (config.outputDeviceId) {
         const sink = audio as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }
         if (!sink.setSinkId) throw new Error('此浏览器不支持指定输出设备，请在助手设置中切换到系统默认。')

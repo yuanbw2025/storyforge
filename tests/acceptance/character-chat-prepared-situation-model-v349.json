@@ -1,0 +1,131 @@
+{
+  "schema": "storyforge.chat-prepared-situation-model",
+  "version": 1,
+  "at": "2026-10-23T00:41:08.623435+00:00",
+  "status": "background-adopted-action-blocked-by-cumulative-input-budget",
+  "source": {
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "baseHead": "ddce42fe6fdf29c42f9ebbe8ed1943ab610ef5f9",
+    "sourceKind": "clean-worktree-commit",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/manifest-final.json",
+    "manifestSha256": "70b7c2d3f96c5207db24294bafe4c6372d8807e166a2a30dd582f7bfef096b42"
+  },
+  "sourceUnchanged": true,
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "costUsd": null,
+  "requests": 4,
+  "completedRequests": 4,
+  "automaticRetries": 0,
+  "usage": {
+    "totalTokens": 68826,
+    "inputTokens": 66676,
+    "outputTokens": 2150,
+    "cachedInputTokens": 13952,
+    "reasoningOutputTokens": 586
+  },
+  "executionStartedAt": "2026-10-23T00:34:51.025Z",
+  "completedAt": "2026-10-23T00:36:07.022Z",
+  "playerOpportunities": 1,
+  "background": {
+    "producer": "chat-situation-construction-v19",
+    "reviewer": "chat-situation-review-v18",
+    "adopted": true,
+    "newFactKinds": [
+      "temporary-character",
+      "object"
+    ],
+    "newFacts": [
+      {
+        "factKey": "local.door-visitor-1",
+        "text": "驿站外门处有一名尚未露面的敲门者，急促的敲门声在大厅内可以听见；其身份、来意及是否需要帮助尚未确认，也没有依据将其与铜印遗失联系起来。",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "origin": "runtime-situation",
+        "sourceKnowledgeKey": null,
+        "sourceEventSequence": 2
+      },
+      {
+        "factKey": "local.front-door-condition-1",
+        "text": "外门目前闭合，门闩位于内侧，门前通道畅通。门内的人可以隔门扬声询问，不必先解除门闩；这些条件不保证门外的人会回答。",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "origin": "runtime-situation",
+        "sourceKnowledgeKey": null,
+        "sourceEventSequence": 2
+      }
+    ],
+    "allFiveReviewChecksPassed": true,
+    "goal": "goal.door-inquiry-1",
+    "thread": "thread.door-visitor-1",
+    "goalAndThreadStatus": "active/open"
+  },
+  "action": {
+    "choiceAndExpressionReturned": true,
+    "independentReviewDispatched": false,
+    "adopted": false,
+    "newDialogueMessages": 0,
+    "failureCode": "narrative-review-failed",
+    "category": "protocol",
+    "retryable": false,
+    "inputBudgetReconstruction": {
+      "at": "2026-10-23T00:38:17.322Z",
+      "sourceHead": "ddce42fe6fdf29c42f9ebbe8ed1943ab610ef5f9",
+      "sourceUnchanged": true,
+      "failedRunId": 36,
+      "rows": [
+        {
+          "stepId": "interaction:action-choice",
+          "contentHash": "a37a27777384b1874d0f21e30d35d33e63894e5f8b35af75b046060875014234",
+          "estimatedInputTokens": 9845
+        },
+        {
+          "stepId": "interaction:runtime-candidate",
+          "contentHash": "ac64b894e475a08b6e83121c47963b5b4fdd3cd181923666a580f4e49de38cd0",
+          "estimatedInputTokens": 26516
+        },
+        {
+          "stepId": "interaction:action-review",
+          "contentHash": "c408e8c5824a28ffb825cb0859e43ae2b04447f5919280e70b99cdf6d440193e",
+          "estimatedInputTokens": 20507
+        }
+      ],
+      "estimatedTotal": 56868,
+      "limit": 56000,
+      "overBy": 868,
+      "requestedSteps": [
+        "interaction:action-choice",
+        "interaction:runtime-candidate"
+      ],
+      "reviewDispatched": false,
+      "modelCalls": 0,
+      "scope": "Reconstruct the exact retained three-step input using the production estimator; no new model output or retry."
+    }
+  },
+  "restoration": {
+    "checksPassed": 16,
+    "sessions": 4,
+    "modelCalls": 0,
+    "rawArtifactBytesAndMultiplicityPreserved": true,
+    "originalFailuresPreserved": 2,
+    "newFailurePreserved": true,
+    "worldPreserved": true
+  },
+  "interpretation": "The new background included an explicitly permitted temporary visitor and current contact conditions, but the richer context exceeded the cumulative action input budget before independent review. No action or sustained story result is established. Earlier schema savings are insufficient for general situation growth.",
+  "nextAction": "Consolidate duplicated expression instructions under a new frozen action version, preserving all semantic constraints, full source messages, original budgets and independent review; verify multiple retained input cases and actual continuation.",
+  "formalM1QualityPassesAdded": 0,
+  "humanRatingsAdded": 0,
+  "originalScheduledDenominatorChanged": false,
+  "evidenceDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v349-prepared-situation-model",
+  "evidence": {
+    "preregistration.json": "df79437b15b29f2c7cf495567848179cca31fae326db0e57b1378e088c361db2",
+    "prepared-situation-model.json": "915d4a5e32aaf0a8c5ad0071444d75ae2fddb487c92909e49b48912d61933791",
+    "prepared-situation-model-backup.json": "7adf8452d6e762e11fe10eb2058ae26db4064d0c761e306971ffa50cce2e218b",
+    "restoration-logical-history.json": "8b99a21d43300c2c3e885d2faf038c32473027cdb3a945dc2951b831b3388648",
+    "input-budget-reconstruction.json": "6213e126210bacc4fb6edd15b8771049b23b8c84b7fb6a1c305b7572203e1d5d"
+  }
+}

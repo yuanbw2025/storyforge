@@ -1,0 +1,110 @@
+{
+  "schema": "storyforge.character-chat-opening-repair-evidence",
+  "version": 1,
+  "batch": "V231",
+  "at": 1792457917.774972,
+  "status": "blind-opening-retry-stopped; explicit-repair-targeted-verified",
+  "boundary": "Character-interaction v3 S3 production. Existing Work-owned Build candidates, registered repair-feedback, author commands and frozen read-only world; no table, schema, context source or writable field added.",
+  "change": "Received opening drafts that fail deterministic parsing are task-draft-rejected with the original paid usage, rather than a retryable generic executor failure. No same-run replay. Existing explicit author repair gets the rejected response and exact error through registered context.",
+  "formalModelCalls": 0,
+  "semanticQualityAccepted": false,
+  "fullDeliveryValidated": false,
+  "automaticTargetedRepairCompleted": false,
+  "humanAcceptance": false,
+  "sourceBaseHead": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+  "changedFileHashes": {
+    "src/lib/product-production/production-executor.ts": "8da1486a75dd1d76456d9795b56ee8249fbf87b29c7b165a0d852b66230f0030",
+    "tests/regression/R-CHAT-02-production-repair.test.ts": "7deafc1ffd52a0f9f27b8fea0d3917b39ccc577c2e662107e335b834aabfa24c",
+    "tests/e2e/character-chat-production-repair.spec.ts": "7b397b18bcfcb5ab0a7332af0437115016938f13b91996e214961863fcc777ee"
+  },
+  "checks": {
+    "beforeFix": {
+      "exitCode": 1,
+      "session": 53595,
+      "finding": "Expected one opening request, observed two; failing regression retained"
+    },
+    "regression": {
+      "distinctTestsPassed": 39,
+      "files": 3,
+      "runs": [
+        {
+          "session": 5292,
+          "exitCode": 0,
+          "tests": 38
+        },
+        {
+          "session": 57283,
+          "exitCode": 0,
+          "tests": 2,
+          "overlap": 1
+        }
+      ]
+    },
+    "browser": {
+      "session": 18776,
+      "exitCode": 0,
+      "tests": 1,
+      "injectedResponses": true,
+      "verified": [
+        "author starts production",
+        "failure retains original response",
+        "refresh no new calls",
+        "explicit repair action",
+        "error and response delivered in actual request",
+        "repair completes mandatory review and reaches author opening choice",
+        "world unchanged; no release or runtime created"
+      ]
+    },
+    "types": {
+      "session": 43078,
+      "exitCode": 0
+    },
+    "lint": {
+      "session": 64070,
+      "exitCode": 0
+    },
+    "static": {
+      "session": 13634,
+      "exitCode": 0,
+      "commands": [
+        "check:architecture",
+        "check:required-tables",
+        "check:ai-manual",
+        "check:ai-entry-registry"
+      ]
+    },
+    "build": {
+      "session": 60390,
+      "exitCode": 0
+    },
+    "diffCheck": {
+      "exitCode": 0
+    }
+  },
+  "logs": {
+    "types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "repair-positive-negative.log": "5687ba9ee7cc3af6f8602f3bc6032ce15aa9d70adbc8dbf1299fa62d6bde11a7",
+    "browser.log": "f4cd6063d943a51c46c30bcac78ef2bb4156b507bccb4186e32888525cff5a30",
+    "lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "targeted.log": "deb4bb773bd80d6c4460b0fad020627d9ca4935bfd4703b14f4d1dcb96e3f93c",
+    "lint-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "before-fix.log": "0007a798e715892ae81335a7340d475e6fd4383b0bb697b1c92bd1017130bc1a",
+    "build.log": "158f75da626491148366a078ace36f7ff0149c62f5c9b745e50219eed9eb6391"
+  },
+  "evidenceRoot": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v231-opening-repair-admission",
+  "fullEngineeringGate": "V229 PID25229/session55312 remains queued; frozen V227 source does not cover this new edit. Do not use it as full V231 validation.",
+  "remaining": [
+    "Explicitly budgeted, source-bound, at-most-once targeted repair contract with original draft and exact error paths, without blindly redoing the entire creation.",
+    "Stable control handoff or meaningful new direction for repeated weak player prompts; V230 runtime failure remains.",
+    "Full current-source CI/E2E and clean feature commit before delivery; fetched origin/main is already contained in this branch.",
+    "Original complete M1-M5 matrix, long histories, ensemble, media/experience packages, matched SillyTavern comparison; human/commercial scoring remains deferred/unproven."
+  ],
+  "mainlineCheck": {
+    "fetchExitCode": 0,
+    "originMain": "d3df49a3dd587c5594a9da7a60ab466e5d926fe5",
+    "originMainIsAncestorOfFeatureHead": true,
+    "ahead": 239,
+    "behind": 0
+  }
+}

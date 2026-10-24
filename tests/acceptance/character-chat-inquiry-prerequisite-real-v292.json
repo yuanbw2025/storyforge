@@ -1,0 +1,158 @@
+{
+  "version": 292,
+  "recordedAt": "2026-10-20T23:34:37.529241+00:00",
+  "product": "character-interaction",
+  "status": "known-prerequisite-explicitly-cited-reviewed-adopted-and-restored",
+  "sourceBaseHead": "7e5979078fee9eeb42041f9ac828089a6c110476",
+  "sourceKind": "manifest-verified-worktree",
+  "sourceManifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v292-inquiry-prerequisite-real/run-r1/manifest.json",
+    "sha256": "1428d4a7d402bf4f902d4794de3e4580ec958f0e552678cdd08520aca4174050"
+  },
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v291-inquiry-prerequisite-evidence/engineering.json",
+    "sha256": "1c1faab3c2c4190df19ca56a989cb07bbb9f799c1e853e3d180471f62f47140e"
+  },
+  "formalM1Credit": 0,
+  "m1Passed": false,
+  "requests": 5,
+  "nativeCompleted": 5,
+  "knownReportedTokens": 85531,
+  "usageIncomplete": false,
+  "automaticRetries": 0,
+  "throughSequence": 24,
+  "rebasedQuestionSequence": -1,
+  "playerInputs": [
+    {
+      "type": "continue"
+    }
+  ],
+  "parentFailurePreserved": true,
+  "sameStateAndInput": true,
+  "productionCalls": 0,
+  "knownPrerequisiteOmittedFromOriginalQuestion": "world-fact.0004",
+  "actualModelInquiryResult": {
+    "actorKey": "participant.001",
+    "questionSequence": -1,
+    "questionExcerpt": "叶岑向掌柜问道：“那先从您经手的这段问起。您当时拿铜印是办什么事？拿去后在哪里用过？只说您亲自记得的经过，不确定的地方不必猜。”",
+    "respondentFactKey": "local.innkeeper-presence.001",
+    "respondentExcerpt": "驿站掌柜此刻在大厅柜台旁，与叶岑之间没有阻隔，处于可以当面提问的距离。",
+    "respondentName": "掌柜",
+    "statementFactKey": "statement.innkeeper.seal-purpose.001",
+    "answerKind": "statement",
+    "answerText": "我拿铜印是为了拓印一张破损的通行单，就在这柜台的台面上用的。这段是我亲手做的，能确认。至于用完后收在哪里、后来有没有别人动过，我还没核对，不能给你准话。",
+    "audienceKeys": [
+      "player",
+      "participant.001"
+    ],
+    "evidenceFactKeys": [
+      "world-fact.0007",
+      "local.innkeeper-presence.001",
+      "statement.innkeeper.seal-handler.001",
+      "world-fact.0004"
+    ],
+    "discoveries": [
+      {
+        "factKey": "world-fact.0008",
+        "answerExcerpt": "我拿铜印是为了拓印一张破损的通行单",
+        "reason": "掌柜已有在场和可交谈依据，并已承认亲自经手铜印；叶岑本次实际询问取印用途，掌柜明确说明自己拿铜印用于拓印破损的通行单，与冻结原文一致，满足用途事实的发现条件。仅确认用途；所述使用地点仍是未独立核实的说法，不据此确认铜印当前位置。"
+      }
+    ]
+  },
+  "independentReview": {
+    "checks": [
+      {
+        "check": "continuity",
+        "passed": true,
+        "reason": "承接序号-1已实际提出的用途及使用地点问题，保持原标题、时地；未重启开箱检查，也未将答复中的使用地点认定为铜印当前位置。"
+      },
+      {
+        "check": "permissions",
+        "passed": true,
+        "reason": "答复者为已有在场依据的掌柜；普通使用地点仅作为其陈述补足，未新增人物或独立物品事实。用途发现一项，未超出冻结权限与数量限制。"
+      },
+      {
+        "check": "player-agency",
+        "passed": true,
+        "reason": "未替玩家行动、决定或设定心理，也未擅自安排叶岑后续调查。"
+      },
+      {
+        "check": "visibility",
+        "passed": true,
+        "reason": "答复面向当前当面交谈中的玩家与叶岑，未设置私语或额外听众。用途通过明确授权的询问发现更新，未泄露木箱内铜印的位置。"
+      },
+      {
+        "check": "meaningful-direction",
+        "passed": true,
+        "reason": "具体回答取印用途和自述使用地点，同时将后续收放及他人接触情况保留为尚未核对；没有重复空转或提前完成调查。"
+      }
+    ],
+    "inquiryReview": {
+      "checks": [
+        {
+          "check": "actual-question",
+          "passed": true,
+          "reason": "questionSequence=-1及questionExcerpt与实际消息和pendingSituation一致，叶岑已经向掌柜问出用途及使用地点问题。"
+        },
+        {
+          "check": "grounded-respondent",
+          "passed": true,
+          "reason": "local.innkeeper-presence.001证明掌柜当前在场且可交谈；既定原文支持其亲自取印办理拓印，对自身用途具有知情依据。"
+        },
+        {
+          "check": "bounded-answer",
+          "passed": true,
+          "reason": "答复限于掌柜自述亲历经过，没有执行未来行动。柜台台面的使用地点仅为未独立核实的普通说法，未改写已定事实或确认当前位置。"
+        },
+        {
+          "check": "actual-audience",
+          "passed": true,
+          "reason": "答复延续柜台旁的公开当面问答，audienceKeys恰为玩家与叶岑，没有私下声量设定或对场外人物传播。"
+        },
+        {
+          "check": "meaningful-result",
+          "passed": true,
+          "reason": "明确提供用途及自述使用地点，直接回应本次问题；对未核对的后续情况不作保证，新增信息与不确定范围清楚区分。"
+        }
+      ],
+      "discoveries": [
+        {
+          "factKey": "world-fact.0008",
+          "passed": true,
+          "reason": "允许角色叶岑在scene-1已有掌柜在场与接触依据，并实际询问用途；前提world-fact.0004已知且已引用。answerExcerpt明确说明掌柜拿铜印用于拓印破损通行单，覆盖完整用途事实并符合冻结原文，满足该项发现条件，不扩及当前位置。"
+        }
+      ]
+    }
+  },
+  "committedInquiryEvidenceVersion": 1,
+  "actorFollowup": "叶岑向掌柜问道：“用途已经弄清了。您说用后的去向还没核对，能否请您从拓印结束那一步核对起，看看有没有收放或交接的线索？只说能核实的部分，仍不清楚的就先留着。”",
+  "longTermGoalRemainedActive": true,
+  "completedRuns": 2,
+  "failedRuns": 0,
+  "sceneClosed": false,
+  "parentPreserved": true,
+  "worldPreserved": true,
+  "worldHash": "46ac7722dcd6a558c56b9ee0a50f90dc7da3e47125b9af276dd74dd1cc7af13c",
+  "restorationModelCalls": 0,
+  "sourceUnchanged": true,
+  "requestIds": [
+    "5b13ffc2-8c41-40b3-a6a3-91f8cde1e71e",
+    "e921140f-5732-46e4-a043-6d16c0b73621",
+    "01cbe594-32cd-48ff-8f8c-4ac47efab80d",
+    "2e50b6d5-f7f1-449b-b677-10a0801e58a6",
+    "342b1b31-38ef-4577-b2d2-d612ea533da6"
+  ],
+  "evidence": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v292-inquiry-prerequisite-real/run-r1/continuation.json",
+    "sha256": "7d19df0c78d019b298a9294346ba89346f8349d8884d83b350d5f76d5af36641"
+  },
+  "backup": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v292-inquiry-prerequisite-real/run-r1/continuation-backup.json",
+    "sha256": "fd84a6b1389362d6a3530d6b6eca33f8acf30db4d0c71c987bf6177ed58b6d3a"
+  },
+  "restoration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v292-inquiry-prerequisite-real/run-r1/continuation-restoration-verified.json",
+    "sha256": "9e2e8272b65a9dd5c4202687eaaa57928e691e6152f5df0849e13f24977bf100"
+  },
+  "limit": "One original opportunity on an exact branch of the V290 failed state; not a full story, new formal cohort, human rating or commercial acceptance. V290 formal failure and denominator remain. Inherited production artifacts are not new production calls."
+}

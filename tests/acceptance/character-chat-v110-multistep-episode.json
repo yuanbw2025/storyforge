@@ -1,0 +1,92 @@
+{
+  "schema": "storyforge.character-chat-multistep-episode-evidence",
+  "version": 1,
+  "label": "V110 full development episode stops on unauthorized new scene person",
+  "snapshot": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "3983639b7a5762cf2a797caf1bdb250199f6d3e9",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v109-real-3rt397t5/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v109-real-3rt397t5/manifest.json",
+    "manifestSha256": "9555a9d7baa2f92f57d4d2d8bd8f1c88aa0bb2e269deebeea5386b63552e167a",
+    "files": 3451
+  },
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v110-multistep-episode",
+  "files": {
+    "inn-multistep-weak-guidance-backup.json": "c06c95dfad972b9a17f614907bc2935b8782a2f615034b2f5603ae1b4a5b77a7",
+    "inn-multistep-weak-guidance-progress.json": "27989e0d1f737c43976d15153f19b5689846290ec798b95c6a44fbcc5d21f8d6",
+    "inn-multistep-weak-guidance-terminal-request-proof.json": "531d188aabb902a8cff7c6b0c7089cc83d12d928aa523fe8f046725a70694bf7",
+    "inn-multistep-weak-guidance.json": "14bbd2c76b4ec66dccdeaed829d1047bceafd939a63e3e6134f4a0bdabc907a6",
+    "prepared.json": "ec0a667b023f0ca7ef8fc148379cb0ff6715b4b1fdcbd396f87612c50950559e",
+    "preregistration.json": "171b1c19705b0f3188a984f503e80110befe7401f36c5d861ef2560c5faba4c9",
+    "restoration-verified.json": "7445d6d2bdf4862f4f6f1a5db8f192fa0c52a4fc0ff9f51aff7532da64f56894",
+    "restoration.mjs": "384f3b859ddef8ff04f87a7d83ea1d93e05d8d54c7d07c735a2e8c09515d601f",
+    "runner.mjs": "c7f1c30841b11242539f47254fc3053dc67c79d3db5931a95679412c6e7c9598",
+    "transport-progress.json": "c45e3db0f624d6061066b4de3461054bff8fd827ac695ab1767d712dbf20df8a"
+  },
+  "registration": {
+    "countsInM1": false,
+    "plannedEpisodes": 1,
+    "holdoutsInspected": false,
+    "sameOriginalSource": true,
+    "newAuthorPermission": "maximum3actions per trigger; other permissions and discovery conditions unchanged",
+    "releaseHash": "b854e30f564918ea15cf32114ed11ea6357463ff9a9520022df5e7e2a2097a21",
+    "inputPolicy": "preregistered weak guidance; actual inputs2continue, no hints or player dialogue"
+  },
+  "collection": {
+    "started": 1,
+    "failed": 1,
+    "narrativeAccepted": 0,
+    "humanScored": 0,
+    "playerOpportunities": 2,
+    "firstBadOutcomeRetained": true,
+    "repairOrRetry": false
+  },
+  "realModel": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "requests": 14,
+    "completedRequests": 14,
+    "runtimeTokens": 177324,
+    "priorSharedPreparationAndNewProductionTokens": 127721,
+    "totalIncludingPreparationOnce": 305045,
+    "costUsd": null,
+    "terminalReadbacksEqual": true
+  },
+  "runtime": {
+    "completedRuns": 6,
+    "failedRuns": 1,
+    "committedActorActions": 4,
+    "firstThreeActionTrigger": "2actions: actual inspection, bounded negative result, then actor replans; stops at next new-direction boundary",
+    "secondThreeActionTrigger": "Existing-context expansion provides service bell; actor rings it; result generator invents a new worker whose presence/answer was not authorized. Situation review rejects permissions and does not adopt candidate.",
+    "pendingResultRetained": true,
+    "newPersonNotAdopted": true,
+    "truthUnitsDiscovered": 0,
+    "inquiryResults": 0,
+    "worldUnchanged": true
+  },
+  "restoration": {
+    "completedHistories": 6,
+    "failedHistories": 1,
+    "resumableRuns": 0,
+    "modelCalls": 0,
+    "stateAndOpeningReviewEqual": true,
+    "rawResponsesEqual": true,
+    "worldPreserved": true,
+    "refreshEqual": true
+  },
+  "limitsAndNext": [
+    "Existing bounded multi-action path actually inspected, settled a result and replanned; it did not ensure a valid subsequent result or full episode.",
+    "Do not broaden old author permissions or replace this failed episode.",
+    "Clarify situation generation and independent review: observation labels do not authorize new people; distinguish already established background persons from newly invented ones, preserve hidden facts and uncertainty.",
+    "Treat the service bell as an available tool, not a guarantee that a new person may be created to answer it.",
+    "Full current-code CI/E2E remain running/queued; no Agnes, human, holdout, comparative or commercial acceptance."
+  ],
+  "priorCohortHashes": {
+    "character-chat-m1-cohort-v77.json": "98b3dea026d14e21be049773a65dffef2dfee4ad5c9284cc0cbb7c41ac672eb3",
+    "character-chat-m1-cohort-v89.json": "9cc915bb35d9576b9550b65536d8464ccb5b3c3b32ebd38c02e4b33b7c098d39",
+    "character-chat-m1-cohort-v90.json": "41d85e4b76ddeacf6efd0a45a84eeef7999c314122e9a8c2395a132cdce8bc05",
+    "character-chat-m1-cohort-v92.json": "1c715d3aea56f08968824a01debad127468de4b3d8d38d283eefb67ef717c033",
+    "character-chat-m1-cohort-v97.json": "60fa37522a117b60ec87724ad0a8cd4a58f05dc3c84af0f27e9d7ff7b9a09844"
+  },
+  "goalStatus": "active"
+}

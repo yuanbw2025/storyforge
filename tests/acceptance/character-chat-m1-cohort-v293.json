@@ -1,0 +1,121 @@
+{
+  "version": 293,
+  "recordedAt": "2026-10-20T23:58:20.073030+00:00",
+  "product": "character-interaction",
+  "status": "formal-episode-failed-and-independently-restored",
+  "sourceHead": "16617de3d64ae7aa499ca99f2954255131584768",
+  "sourceManifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v293-m1-current/manifest.json",
+    "sha256": "d78501b784586282b0685a91ad40953754f626c7ec4aba6bbc44c27659ba5f18"
+  },
+  "registration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v293-m1-current/cohort-registration.json",
+    "sha256": "db6a6a429520cf55f765f37e923c8db887feddb7737af6bca75931e2a12c9b20"
+  },
+  "sourceUnchanged": true,
+  "m1Passed": false,
+  "humanScored": 0,
+  "scheduled": 120,
+  "failedEpisodes": 1,
+  "sameUnitUnrun": 5,
+  "remainingOtherUnrun": 114,
+  "productionCandidates": 3,
+  "productionCandidatesPassed": 2,
+  "selection": "first passing candidate in original order; failed opening retained",
+  "worldHash": "46ac7722dcd6a558c56b9ee0a50f90dc7da3e47125b9af276dd74dd1cc7af13c",
+  "originalSourceAndDiscoveryConditionsPreserved": true,
+  "requests": 41,
+  "nativeCompleted": 41,
+  "nativeFailed": 0,
+  "knownReportedTokens": 678949,
+  "usageIncomplete": false,
+  "runtimeRuns": {
+    "completed": 14,
+    "failed": 1
+  },
+  "playerOpportunitiesAttempted": 5,
+  "playerOpportunitiesCompleted": 4,
+  "completedStagesIncludingAutomaticOpening": 5,
+  "playerDecisions": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v293-m1-current/codex-inn-r1/player-decisions.json",
+    "sha256": "39ff89fda8135a9bdd0b042baa897dbdcc8f567a503c6ead67e932aabac94835"
+  },
+  "observedBehavior": [
+    "Actor independently discovered the box, then accepted the player did not witness prior use.",
+    "Actor inspected the box exterior without assuming ownership or opening authority.",
+    "Actor changed direction to question a present goods inspector; two limited replies were adopted.",
+    "Original location, handler and purpose remained undiscovered; story did not reach closure."
+  ],
+  "failure": {
+    "requestId": "d4408fdf-9f5e-40df-859b-8c71cf3da05f",
+    "nativeStatus": "completed",
+    "candidate": {
+      "kind": "chat-situation",
+      "title": "柜台边的空位",
+      "location": "驿站",
+      "timeLabel": "暴雨期间",
+      "newFacts": [],
+      "newGoals": [],
+      "newThreads": [],
+      "possibilities": []
+    },
+    "localError": "Error: [chat-situation] 情境候选没有可执行的新方向",
+    "reviewed": false,
+    "adopted": false,
+    "boundSequence": 24,
+    "boundText": "叶岑对周成说：“不必猜，知道的部分直说就好。”",
+    "actualEarlierQuestionSequence": 23,
+    "actualEarlierQuestion": "叶岑向周成问道：“平日除了你，还有谁会经手或收存铜印？若你知道这样的人，眼下有什么办法能联系到他？我想找了解收存经过的人核实，不是凭谁经手过就认定谁有嫌疑。不清楚的部分直说就好。”",
+    "finding": "The actual question was emitted at sequence 23. A subsequent reassurance at 24 carried the situation request, whose sourceEventSequence also became the required answer questionSequence. Current inference input included both messages but only 24 was eligible under the frozen inquiry contract. The native model returned an empty situation. No causal claim about its internal reasoning; the anchor mismatch is directly reproducible."
+  },
+  "restoration": {
+    "stem": "inn-r1-weak-guidance",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 14,
+    "retainedFailedRuns": 1,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true,
+    "terminalReceiptBodiesRetained": true,
+    "usageEvidenceRetained": true
+  },
+  "latency": {
+    "metric": "First observed native runtime request to durable adopted stage. Not first-token latency; includes app polling. No provider bill or USD price available. These are one scripted scenario, not p95 or commercial benchmarks.",
+    "seconds": [
+      106.142,
+      103.906,
+      117.258,
+      72.251,
+      120.727
+    ],
+    "knownTokensForCompletedRuntimeStages": 600416,
+    "moneyUsd": null
+  },
+  "automaticRetries": 0,
+  "repairInsideFormalEpisode": false,
+  "evidence": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v293-m1-current/codex-inn-r1/inn-r1-weak-guidance.json",
+    "sha256": "f463fe222684b17ea04486b834840b9ee564d180fe22a63d6d0b73be5d9cf901"
+  },
+  "backup": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v293-m1-current/codex-inn-r1/inn-r1-weak-guidance-backup.json",
+    "sha256": "362aa5450d5e1af62a4d9db788215adc04f00bcfd4f7894ed354d5b25940592e"
+  },
+  "restorationEvidence": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v293-m1-current/codex-inn-r1/inn-r1-weak-guidance-restoration-verified.json",
+    "sha256": "f5a2ca06f5bea93439f4f71593b68572b2331581fe542358b5459e3f33c68871"
+  },
+  "zeroCallReproduction": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v293-m1-current/codex-inn-r1/question-anchor-reproduction.json",
+    "sha256": "92f7ad8264f6413c5292d990531f9173f510f87ae4d64cc3d74a8befa235daf0"
+  },
+  "costEvidence": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v293-m1-current/codex-inn-r1/runtime-cost-observations.json",
+    "sha256": "7a1214e82e114db56e15bf2a7fbdc338756e708e0aee29c7c313e7fbab9385af"
+  },
+  "next": "Repair explicit question identity across separate utterances, including permissions, actual respondent/audience, original knowledge time, duplicate answers, legacy replay, branch/import and independent review. Preserve failure. Investigate current delivery failures before another expensive full run."
+}

@@ -1,0 +1,110 @@
+{
+  "schema": "storyforge.character-chat-atomic-inquiry-episode-evidence",
+  "version": 1,
+  "label": "V106 full weak-guidance development episode ends in stagnation",
+  "implementationHead": "1619d4f9134a13e29f41791748f17d46f993f081",
+  "snapshot": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "1619d4f9134a13e29f41791748f17d46f993f081",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v105-real-6_bwc6u9/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v105-real-6_bwc6u9/manifest.json",
+    "manifestSha256": "9a60e45b45dcc4c7e435bb82326a8c4e875b12f4dfbf05e391d7c0d8d98a7b62",
+    "files": 3445
+  },
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v106-atomic-inquiry-episode",
+  "files": {
+    "preregistration.json": "5e36bf96700ed907905676b01564aaa3dc46b9a2e344bbecbd4e65dbc6069cd1",
+    "runner.mjs": "c24e439a34058f14a995bc0f0edf078bbdf37431df7a95984a74cd0414c17ecf",
+    "prepared.json": "34e154415da72342b4b1a82e46c3b0c803dd8a7fb1b58d989b44c615686c4655",
+    "transport-progress.json": "8f3a96696af6d084d5ca941bf772c2aa497f1a352ae08adac39ee8826defbd57",
+    "inn-atomic-weak-guidance-progress.json": "490a236fca3f2433db805be78363bb8cbb2bf2824f49c4c483595e5cca3e3abe",
+    "inn-atomic-weak-guidance.json": "79527ab5777e152642219227cbb7235b087177dc60929aaa09308c0a9893b9fa",
+    "inn-atomic-weak-guidance-backup.json": "ce4e21d3dba1a61953129e73f3b6d8c210ebd013a245bf8dcdcc8b9cf4d425bf",
+    "inn-atomic-weak-guidance-terminal-request-proof.json": "0401f0b9fd3b79c00fa14d6bb764de8e5307c2110745fbbdfcc1bd07d4b3a557",
+    "restoration.mjs": "5b3e8b508214041346a756294221246a188702288779e3e0f484ecf0a2405b51",
+    "restoration-verified.json": "29358f1f152f73fe2af5f9c6c7cddac9d4539e7b8a3262d69b096eaaa4f3ea97",
+    "replanning-preview.ts": "65dca24b3d832f24abfa3dff5309b47c0c3ef1308b49573b9282bc0b37225a24",
+    "replanning-preview.cjs": "1275ee52ca6b6fc39769bcf7423edc249baf258b19fddbc191c485b47c265403",
+    "replanning-preview.json": "734d3546c4b6d212683e37ce776dd8ba86b9194cfc9175cd5b59f235c159023a"
+  },
+  "registration": {
+    "plannedEpisodes": 1,
+    "countsInM1": false,
+    "holdoutsInspected": false,
+    "policy": "Original frozen weak-guidance responses, 20 opportunity / 90 runtime request bounds and original ending rules; stop on third unchanged repeat. Known development source and explicitly new atomic permissions, never an old M1 replacement.",
+    "production": "Exact V105 local Release imported and proof recovered; zero repeated production calls",
+    "releaseHash": "5bb46f36c612e537b93262e6c2f1ba8a2dd19f4d1774b6f21dfbab4ec2fc0b79"
+  },
+  "collection": {
+    "started": 1,
+    "terminated": 1,
+    "stagnationFailures": 1,
+    "narrativeAccepted": 0,
+    "humanScored": 0,
+    "opportunities": 12,
+    "inputTypes": {
+      "continue": 9,
+      "message": 3
+    },
+    "reason": "stagnation",
+    "firstBadOutcomePreserved": true,
+    "repairOrRetry": false
+  },
+  "realModel": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "requests": 36,
+    "allCompleted": 36,
+    "runtimeTokens": 482571,
+    "priorPreparationAndProductionTokens": 74862,
+    "totalTokensWithSharedProductionOnce": 557433,
+    "costUsd": null,
+    "terminalReadbacksEqual": true
+  },
+  "runtime": {
+    "completedDurableRuns": 18,
+    "engineFailures": 0,
+    "meaningfulIntermediateSteps": "Autonomously inspected public shelf, rear-door indoor passage and previously occluded floor/wall; actual bounded negative observations recorded, no accusation or player participation invented.",
+    "final": "Actor self-paused despite unresolved goal; three further continue inputs only repeated waiting/uncertainty. Situation unchanged after pause; goal paused, original thread open, possibilities empty.",
+    "originalTruthUnitsKnown": 0,
+    "inquiryResults": 0,
+    "worldUnchanged": true,
+    "playerRequestedPause": false
+  },
+  "restoration": {
+    "historiesRetained": 18,
+    "resumableRuns": 0,
+    "modelCalls": 0,
+    "stateAndOpeningReviewEqual": true,
+    "rawResponsesEqual": true,
+    "worldPreserved": true,
+    "refreshEqual": true
+  },
+  "zeroCallCauseProbe": {
+    "checks": 3,
+    "scope": "Counterfactual state preview on exact final interaction; not model output, semantic acceptance or adopted event",
+    "existingPath": "Self-paused goal without playerPause can be reactivated in place and issue bounded situationRequest; next trigger accepts it. No new goal/resume API is shown necessary.",
+    "negativeCases": [
+      "keeping goal paused while requesting expansion rejects",
+      "referencing hidden location rejects"
+    ],
+    "originalStateUnchanged": true,
+    "persisted": false
+  },
+  "limitsAndNext": [
+    "All single-turn reviews passed, yet full episode stagnated; engineering completion is not narrative success.",
+    "No inquiry result or atomic discovery occurred; V103 inquiry semantics remain unverified by this episode.",
+    "Distinguish own temporary obstacle from a player hold; preserve original goals, facts and player control while improving meaningful replanning.",
+    "Audit opening opportunity viability and multi-turn quality, not only valid actions; avoid forced success, automatic secret disclosure or fabricated answers.",
+    "Nine continue clicks and twelve player opportunities are a pacing cost; assess bounded action/result chaining with explicit interruption and budgets.",
+    "Codex only; no Agnes, human, holdout, comparison or commercial acceptance."
+  ],
+  "priorCohortHashes": {
+    "character-chat-m1-cohort-v77.json": "98b3dea026d14e21be049773a65dffef2dfee4ad5c9284cc0cbb7c41ac672eb3",
+    "character-chat-m1-cohort-v89.json": "9cc915bb35d9576b9550b65536d8464ccb5b3c3b32ebd38c02e4b33b7c098d39",
+    "character-chat-m1-cohort-v90.json": "41d85e4b76ddeacf6efd0a45a84eeef7999c314122e9a8c2395a132cdce8bc05",
+    "character-chat-m1-cohort-v92.json": "1c715d3aea56f08968824a01debad127468de4b3d8d38d283eefb67ef717c033",
+    "character-chat-m1-cohort-v97.json": "60fa37522a117b60ec87724ad0a8cd4a58f05dc3c84af0f27e9d7ff7b9a09844"
+  },
+  "goalStatus": "active"
+}

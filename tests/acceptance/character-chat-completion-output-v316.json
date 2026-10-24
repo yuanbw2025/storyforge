@@ -1,0 +1,59 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 316,
+  "kind": "mutually-exclusive-completion-output",
+  "at": "2026-10-22T07:21:56.733994+00:00",
+  "sourceKind": "isolated-archive-plus-recorded-patch",
+  "passed": true,
+  "baseHead": "1b2e43e1d996c3613b36f50c82790eecd9b58e56",
+  "sourceManifestSha256": "3f805c50a63d799ae3047fa32ded0e0829c4cd330124f03031ec905738e49cfc",
+  "boundary": {
+    "product": "character-interaction",
+    "lifecycle": "product-development",
+    "stage": "S3",
+    "owner": "existing ProductRuntimeSession and Harness",
+    "readSources": [
+      "interactionRuntime",
+      "chatActionCandidate"
+    ],
+    "newTables": 0,
+    "newFields": 0,
+    "newModelSteps": 0,
+    "worldWrites": 0,
+    "mediaChanges": 0
+  },
+  "regression": {
+    "files": 21,
+    "tests": 433,
+    "logs": [
+      "regression-repaired.log",
+      "regression-span.log",
+      "regression-span-repaired.log"
+    ],
+    "counting": "6 files/96 passed plus 15 files/337 after fixing six stale expectations; 4-file/42 recheck overlaps the 337 and is not added."
+  },
+  "browser": {
+    "files": 4,
+    "tests": 22,
+    "logs": [
+      "browser-span-initial.log",
+      "browser-final.log",
+      "browser-handoff.log"
+    ],
+    "counting": "7 completion/control paths passed; only stale default-version guard in action-choice fixture changed, then its 12 paths passed; 3 separate handoff paths passed.",
+    "automaticRetries": 0
+  },
+  "changes": "Action v59 structurally separates ordinary goal effects from local turn completion; unchanged review v37, domain validation and three-call budget. Shared definitions keep schema overhead below 30 percent. Exact V315 contradictory output rejected; goal-closing alternative remains valid without runtime rewriting. Includes V314 bounded-observation repair and pending V313/V315 evidence.",
+  "realModelCalls": 0,
+  "formalM1Credit": 0,
+  "humanScoring": "deferred",
+  "storyQualityPassed": false,
+  "integration": "Pending V312 frozen worktree terminal state; full recorded patch applies cleanly. V317 real continuation separate.",
+  "engineeringReceipt": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v316-turn-completion-output/engineering.json",
+    "sha256": "a9c9db9ee05b0935dd30412a2fde6c20b0145fa63ad634ece379155d25f11068"
+  },
+  "officialSchemaReference": "https://developers.openai.com/api/docs/guides/structured-outputs#supported-schemas",
+  "remotePriorHead": "af13010ce15f631f3f0aff7bcb35af9fd7b135d1",
+  "remotePriorFullDelivery": "success; does not cover this patch"
+}

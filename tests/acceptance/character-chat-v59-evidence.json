@@ -1,0 +1,98 @@
+{
+  "schema": "storyforge.character-chat-development-evidence",
+  "version": 1,
+  "iteration": "V59",
+  "date": "2026-10-14",
+  "scope": "Natural equivalent disclosure with per-fact independent semantic review; no changed fact identity, source, permissions, author data or world. Development evidence, not narrative/commercial acceptance.",
+  "code": {
+    "head": "104624e8856e3a31d6b9c95d9e730ee45e483189",
+    "snapshotManifestSha256": "918e5d24a6fe9ae7736b650253eff80cf0527f7d5a33c4f2af0d3f0d263b319d",
+    "runtimeMatchesCommit": true
+  },
+  "engineering": {
+    "regressionFiles": 36,
+    "regressionTests": 528,
+    "browserPaths": 5,
+    "governanceTypesLintBuildDocs": "passed",
+    "fullCI": "queued on final fixed snapshot; not passed",
+    "fullE2E": "queued on final fixed snapshot; not passed",
+    "initialTestSetupFailure": "Missing brace in the new test helper; corrected, original failed-suite log retained."
+  },
+  "naturalContinuation": {
+    "file": "codex-photo-natural-disclosure-v59.json",
+    "sha256": "f44690faaca4d394b4830a6fbb8d56da8e4bcd34a985e0ebcfb04ef2469c4570",
+    "requests": 2,
+    "completedResponses": 2,
+    "totalTokens": 20653,
+    "prefix": "Exact saved V58 observation; one explicit continue, same one-action pace as V58 completion test. No prior generation or observation replay.",
+    "status": "completed",
+    "wording": "equivalent",
+    "perFactReviewPassed": true,
+    "goalAndThreadCompleted": true,
+    "originalCanonicalFactRetained": true,
+    "newFacts": 0,
+    "parentUnchanged": true,
+    "refreshEqual": true,
+    "noModelRequestOnRefresh": true,
+    "visibleCharacters": 130,
+    "v58VisibleCharacters": 175,
+    "comparisonLimit": "Single development example; length is diagnostic only, not a prose quality or latency benchmark.",
+    "restoration": {
+      "file": "codex-photo-natural-disclosure-restoration-v59.json",
+      "sha256": "666d5006d61b60ddb3251caab65c374c9d97cdac96506cc6251fe0236c29788e",
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true
+    }
+  },
+  "counterexamples": [
+    {
+      "file": "codex-natural-disclosure-partial-v59.json",
+      "sha256": "b9021b29e070046fdacf7c5d941b62fc6399baeeba1e253b9759014253e4b508",
+      "mode": "partial",
+      "requests": 1,
+      "completedResponses": 1,
+      "totalTokens": 10121,
+      "fixedCandidate": true,
+      "runtimeActionCommitted": false,
+      "perFactReviewPassed": false,
+      "stateUnchanged": true,
+      "parentUnchanged": true,
+      "refreshEqual": true
+    },
+    {
+      "file": "codex-natural-disclosure-overgeneral-v59.json",
+      "sha256": "c8759bc566456e1d728bcba7bd2922c786761ac2a1a23e37b34dd2afc51ddef1",
+      "mode": "overgeneral",
+      "requests": 1,
+      "completedResponses": 1,
+      "totalTokens": 10084,
+      "fixedCandidate": true,
+      "runtimeActionCommitted": false,
+      "perFactReviewPassed": false,
+      "stateUnchanged": true,
+      "parentUnchanged": true,
+      "refreshEqual": true
+    }
+  ],
+  "controlsRestoration": {
+    "file": "codex-natural-disclosure-controls-restoration-v59.json",
+    "sha256": "09821d8b8e05c4641a7283324bbd1e9f008fb9792256ab65997c318678345a2e",
+    "modelCalls": 0,
+    "bothInteractionEqual": true,
+    "bothRefreshEqual": true,
+    "bothWorldPreserved": true,
+    "bothRawEvidenceRetained": true
+  },
+  "costUsd": null,
+  "formalEpisodesCompleted": 0,
+  "humanReviewsCompleted": 0,
+  "limits": [
+    "One local Codex configuration and separate review calls; no independent human quality verdict.",
+    "A partial account of a composite fact still cannot grant its whole canonical contents. Future partial knowledge needs an explicit finer-grained contract, not permissive equivalence.",
+    "Wording remains explanatory. Sustained initiative, diverse player choices, formal episodes, longer memory and commercial gates remain open.",
+    "Agnes remains unavailable after the completed cross-branch search."
+  ]
+}

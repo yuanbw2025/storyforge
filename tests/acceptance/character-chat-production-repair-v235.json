@@ -1,0 +1,94 @@
+{
+  "schema": "storyforge.character-chat-opening-repair-evidence",
+  "version": 1,
+  "batch": "V235",
+  "recordedAt": 1792465913.211172,
+  "status": "patch-only-repair-engineering-verified; real-model-and-full-delivery-pending",
+  "producerVersion": "chat-situation-production-v8",
+  "gate": "chat.opening-targeted-repair.v2",
+  "checks": {
+    "distinctRegressionTestsPassed": 154,
+    "regressionFiles": 7,
+    "browserTestsPassed": 3,
+    "browserResponses": "injected, not real-model quality",
+    "types": true,
+    "lint": true,
+    "build": true,
+    "staticChecks": [
+      "architecture",
+      "required-tables",
+      "ai-manual",
+      "ai-entry-registry",
+      "project-metrics",
+      "docs",
+      "roadmap",
+      "diff-check"
+    ],
+    "lintCacheBoundary": "generated .vite-e2e-cache excluded; product source still linted"
+  },
+  "contract": {
+    "maximumModelCalls": 2,
+    "maximumAutomaticRepairs": 1,
+    "originalTotalBudgetPreserved": true,
+    "unchangedLegacyVersions": [
+      "v5",
+      "v6",
+      "v7"
+    ],
+    "permittedPatchOperations": [
+      "acknowledge exact frozen source field corrections",
+      "move a complete misplaced root option into options without changing it",
+      "append exactly the missing options"
+    ],
+    "required": [
+      "same durable raw/source/run/epoch binding",
+      "validate every retained option before second request",
+      "full candidate validation, independent review and author choice"
+    ]
+  },
+  "actualFailureDiagnostic": {
+    "modelCalls": 0,
+    "originalBatch": "V234",
+    "result": "rejected as unrepairable before any second request",
+    "sourceCorrectionsIdentified": 16,
+    "additionalProblems": [
+      "player in AI-only thread participants",
+      "public thread uses private fact evidence"
+    ],
+    "initialDiagnosticExpectationFailed": true,
+    "initialLogsRetained": [
+      "lifecycle-diagnostic-tests.log",
+      "real-failure-subset.log"
+    ],
+    "finalDiagnosticPassed": true,
+    "noRawSourceEdited": true
+  },
+  "oldFullGate": {
+    "batch": "V233",
+    "terminalExitCode": 1,
+    "failure": "eslint scanned generated Vite dependency cache; all 33 offending files were inside .vite-e2e-cache",
+    "sourceUnchanged": true,
+    "fullTestsReached": false
+  },
+  "changedFileHashes": {
+    "src/lib/character-interaction/opening-repair-patch.ts": "d74cc2c8a15c2dca5c298111255d2087ce59052e5140b61bd511f96fac9107a4",
+    "src/lib/character-interaction/narrative-production.ts": "e71ab58fb122f7d70da3f5c5c22f6897ac4181200ba2f6c038e5495ce2d3faa3",
+    "src/lib/character-interaction/opening-production-binding.ts": "9f1e948fa820b7e3af16d55f7c8125c6533679f7f95afe2f0e72d121e45156ca",
+    "src/lib/character-interaction/opening-repair-evidence.ts": "0b5747cca1ee526c91931bc3fed0e888c259bdd6baade77c395bd3515a98ac16",
+    "src/lib/product-production/production-executor.ts": "a96e77f91524973a9bb96f3dccb5103d26e75d65b4e28cafb4d19cf2b3236e42",
+    "src/lib/product-production/plan.ts": "ba93c62e04c61196b225be2ce7f21e9e33ef4fbaa8282d58078343cb88fb3333",
+    "src/lib/product-production/scheduler.ts": "4dc5751f97f7e1356bac9aefa384e67333a846cac8537e9dc68c343362dda4cb",
+    "src/lib/agent/skill-registry.ts": "a8a878681401beee165760e90e36151fe476848f2d6c050e9d6aa1fe0e670bd3",
+    "tests/regression/R-CHAT-02-opening-repair.test.ts": "b9b6e304b2c409b06bcc54d4db37254e7d2eae0d9bf2e2408a7cf321bb96f249",
+    "tests/regression/R-CHAT-02-opening-agency.test.ts": "10615f61f0ca0d7f28ac1cf6b2a6d880436cbb8a5fcacc6454b781cc5b4597af",
+    "tests/e2e/character-chat-production-repair.spec.ts": "1d8524eb403c323470bb978d8d9bae96ecd3970259b0ea0fe5132c233c19979f",
+    "eslint.config.mjs": "bc91fbd6aa1937653ce75d8b97f5a377f845671efb27fa5fda6527ccf1243e50",
+    ".gitignore": "ffcd32ea5e9513a532b6aefc623e617a72ebc7128aa6babde2ee1d086f6c4722"
+  },
+  "formalModelCalls": 0,
+  "fullDeliveryValidated": false,
+  "semanticQualityAccepted": false,
+  "humanAcceptance": false,
+  "commercialAcceptance": false,
+  "evidenceRoot": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v235-opening-repair-patch"
+}

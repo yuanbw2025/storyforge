@@ -1,0 +1,225 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "label": "V134 combined projection cache bound and incremental native-load evidence",
+  "recordedAt": "2026-10-16T12:35:39.137312+00:00",
+  "baseCommit": "f8e164630d9b30b819707c43c7fecd3f61e96c87",
+  "sourceSha256": {
+    "src/lib/character-interaction/history-context-cache.ts": "8abfad180b08155591ed1dbaac065b990737a8488e49cf58c857087d3619b725",
+    "tests/regression/R-CHAT-04-history-cache.test.ts": "77be3260912407c91494a9d5158724efb6914c21a26222658bfa4681d441403c",
+    "tests/e2e/character-chat-history-growth.spec.ts": "fee90eadab7b55c56f6307434349c816f6d7713326ec97809c6d6a476f3a374e"
+  },
+  "boundary": {
+    "product": "character-interaction",
+    "lifecycle": "product development; S3 runtime",
+    "owner": "existing Chat Work / ProductRuntimeSession",
+    "reads": "same complete cache inputs; existing registered role and coordinator projections",
+    "writes": "no new persisted product data; test checkpoints only",
+    "tablesAndContracts": "unchanged",
+    "worldAndMedia": "frozen world reference and existing product-owned media unchanged",
+    "externalModelCalls": 0
+  },
+  "change": [
+    "Retain an exact serialized key larger than half the budget when its actual key-plus-projection fits the unchanged 4 MiB total. Complete-key comparison, independent returned values, four-entry limit and eviction remain unchanged.",
+    "Persist native test state each 100 actions and original-session backups at 100, 300 and 800 actions before the final lifecycle phase. Intermediate saved states/backups do not establish restoration or whole-run acceptance."
+  ],
+  "verification": {
+    "targeted": {
+      "files": 2,
+      "tests": 9,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v134-cache-targeted-receipt.json"
+    },
+    "types": {
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v134-tsc-receipt.json"
+    },
+    "native100": {
+      "status": "passed",
+      "receipt": "/tmp/storyforge-chat-v134-native-100-receipt.json",
+      "exitCode": 0,
+      "actions": 100,
+      "facts": 204,
+      "injectedCalls": 202,
+      "externalModelCalls": 0,
+      "loopElapsedMs": 30841,
+      "totalReportedElapsedMs": 36772,
+      "testSeconds": 46.7,
+      "artifacts": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v134-cache-budget/native-100-results",
+      "scope": "actual actor/review old-clue input, canonical replay, intermediate checkpoint persistence, parentless export/import and refresh, world unchanged"
+    },
+    "native1000": {
+      "status": "failed: browser target crashed after last logged action800; not the 30-minute deadline",
+      "receipt": "/tmp/storyforge-chat-v134-native-1000-receipt.json",
+      "log": "/tmp/storyforge-chat-v134-native-1000.log",
+      "outputDirectory": "/tmp/storyforge-chat-v134-native-1000-results",
+      "sourceHashes": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v134-cache-budget/native1000-source-files.json",
+      "originalTimeoutMs": 1800000,
+      "exitCode": 1,
+      "lastLoggedActions": 800,
+      "lastLoggedElapsedMs": 1214064,
+      "testMinutes": 21.0,
+      "failure": "page.evaluate: Target crashed",
+      "persistedStateCheckpoints": [
+        100,
+        200,
+        300,
+        400,
+        500,
+        600,
+        700
+      ],
+      "persistedOriginalBackupCheckpoints": [
+        100,
+        300
+      ],
+      "missingEvidence": [
+        "800 checkpoint completion",
+        "final native-growth result",
+        "final parentless import and refresh"
+      ],
+      "artifactDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v134-cache-budget/native-1000-terminal-results",
+      "artifactIndex": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v134-cache-budget/native1000-terminal-artifacts.json",
+      "rootCause": "unconfirmed; do not label OOM or product corruption from Target crashed alone"
+    },
+    "associated": {
+      "status": "passed",
+      "receipt": "/tmp/storyforge-chat-v134-regression-receipt.json",
+      "exitCode": 0,
+      "files": 118,
+      "tests": 1357,
+      "durationSeconds": 257.62,
+      "mode": "existing two-fork mode; original time limits"
+    },
+    "fullSuites": {
+      "status": "Full CI passed at implementation commit; E2E interrupted after wrapper/lock loss. No full E2E pass.",
+      "head": "ef7f7fcad68a415fdd921982fd2e283fd240d999",
+      "manifestSha256": "16aa007152bb1346ec7fa9b8d0376c2ab704b0aa94c1983957bd44fd44dd8b6b",
+      "ciReceipt": "/tmp/storyforge-chat-v134-full-ci-receipt.json",
+      "e2eReceipt": "/tmp/storyforge-chat-v134-full-e2e-receipt.json",
+      "supersededV133": "Both queues verified unstarted and childless, then exited143; results preserved, not passes.",
+      "ci": {
+        "exitCode": 0,
+        "files": 893,
+        "tests": 5656,
+        "coverageDurationSeconds": 2445.47,
+        "scope": "complete npm run ci including dependency audit, governance, lint, types, coverage, build and bundle checks"
+      },
+      "e2e": {
+        "status": "interrupted to restore serial validation after own queue wrapper disappeared",
+        "passed": 164,
+        "interrupted": 1,
+        "notRun": 210,
+        "originalExitCode": null,
+        "originalReceiptMissing": true,
+        "recoveryReceipt": "/tmp/storyforge-chat-v134-full-e2e-recovery-receipt.json",
+        "evidenceDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v134-cache-budget/orphan-e2e-20261016",
+        "noRestart": true
+      }
+    },
+    "gates": {
+      "count": 11,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v134-gates-receipt.json",
+      "note": "Two generators precede eleven engineering checks, including type, lint and build."
+    }
+  },
+  "retainedFailure": {
+    "previousEvidence": "character-chat-v133-native-history-growth.json",
+    "result": "V133 native1000 failed the unchanged 30-minute deadline. Last persisted progress 800; final backup and recovery absent. Screenshot/video/trace/log preserved.",
+    "causality": "Premature half-budget admission is a confirmed cache limitation. Its contribution to the observed native-load slowdown remains a hypothesis until separate evidence is collected."
+  },
+  "limits": [
+    "Keep the native1000 timeout unchanged and retain the original failure.",
+    "Engineering injections do not establish meaningful autonomous story, actual-model recall, latency, human experience or commercial acceptance.",
+    "No new real model calls, Agnes rescan, provider substitution or cohort replacement. V3 remains experimental and hidden by default."
+  ],
+  "privateEvidenceDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v134-cache-budget",
+  "implementationCommit": "ef7f7fcad68a415fdd921982fd2e283fd240d999",
+  "projectionMeasurement": {
+    "kind": "Read-only current reader projection of persisted native post-action states; does not claim these are the actor request-time state or a controlled latency benchmark",
+    "rows": [
+      {
+        "actions": 100,
+        "keyBytes": 324438,
+        "outputBytes": 65390,
+        "totalBytes": 389828,
+        "oldKeyAdmissible": true,
+        "combinedAdmissible": true
+      },
+      {
+        "actions": 200,
+        "keyBytes": 634424,
+        "outputBytes": 92782,
+        "totalBytes": 727206,
+        "oldKeyAdmissible": true,
+        "combinedAdmissible": true
+      },
+      {
+        "actions": 300,
+        "keyBytes": 946364,
+        "outputBytes": 120828,
+        "totalBytes": 1067192,
+        "oldKeyAdmissible": true,
+        "combinedAdmissible": true
+      },
+      {
+        "actions": 400,
+        "keyBytes": 1256350,
+        "outputBytes": 148620,
+        "totalBytes": 1404970,
+        "oldKeyAdmissible": true,
+        "combinedAdmissible": true
+      },
+      {
+        "actions": 500,
+        "keyBytes": 1566448,
+        "outputBytes": 176232,
+        "totalBytes": 1742680,
+        "oldKeyAdmissible": true,
+        "combinedAdmissible": true
+      },
+      {
+        "actions": 600,
+        "keyBytes": 1881048,
+        "outputBytes": 204246,
+        "totalBytes": 2085294,
+        "oldKeyAdmissible": true,
+        "combinedAdmissible": true
+      },
+      {
+        "actions": 700,
+        "keyBytes": 2195648,
+        "outputBytes": 232246,
+        "totalBytes": 2427894,
+        "oldKeyAdmissible": false,
+        "combinedAdmissible": true
+      }
+    ],
+    "artifact": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v134-cache-budget/storyforge-chat-v134-projection-measure.json",
+    "interpretation": "At persisted native700 state, the exact actor input key is 2195648 UTF-16 bytes and key plus projection 2427894 bytes. The former half-budget gate rejects this complete key despite fitting the unchanged total bound. This is post-action reader evidence, not a controlled request-time performance measurement."
+  },
+  "priorV132E2E": {
+    "head": "7dbd3d8fceb5b3b37bb8bfefb42933ed2891d9d6",
+    "exitCode": 1,
+    "passed": 371,
+    "skipped": 2,
+    "failed": 1,
+    "failure": "ENOSPC while writing screenshot /tmp/motion-materials-delivery.png at motion-drama-preproduction.spec.ts:113; trace/archive/directory writes also failed",
+    "missingEvidence": "Failing test screenshot/trace could not be fully written; no such artifact is claimed",
+    "slot": "Released normally; no lock file removed; next owner belongs to another task",
+    "receipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v134-cache-budget/v132-e2e-terminal/storyforge-chat-v132-full-e2e-receipt.json"
+  },
+  "validationLauncherRepair": {
+    "recordedAt": "2026-10-16T12:35:39.135433+00:00",
+    "scope": "own validation launcher only; shared queue entry, lock file and other task processes unchanged",
+    "runner": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v134-cache-budget/serial_validation.py",
+    "runnerSha256": "ad05438d9f171641c91c59b2b515d4499ecf5366d21bb373fa3ece2583f96ec3",
+    "tests": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v134-cache-budget/test_serial_validation.py",
+    "testReceipt": "/tmp/storyforge-chat-v134-lock-lifecycle-tests-receipt.json",
+    "testsPassed": 4,
+    "behavior": "Detached guardian owns inherited lock FD and writes the actual child receipt. Command also inherits lock FD. Launcher death retains slot until child completion; guardian death leaves receipt unknown and does not release slot while Node child lives. SIGTERM forwards and waits. Existing evidence cannot be overwritten.",
+    "verification": "Harmless isolated temporary locks and short Python/Node children only; no CI/E2E launched.",
+    "limits": "Protects launcher/guardian loss while command remains alive; no guarantee against arbitrary detached descendants or OS reboot. Does not retroactively recover the lost E2E process exit code."
+  }
+}

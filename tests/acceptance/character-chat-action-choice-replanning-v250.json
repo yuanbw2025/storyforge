@@ -1,0 +1,187 @@
+{
+  "schema": "storyforge.character-chat-real-diagnostic",
+  "version": 1,
+  "batch": "V250",
+  "recordedAt": 1792482413.100374,
+  "status": "failed-semantic-review; experiment-withdrawn",
+  "sourceManifestSha256": "d233bd8a4f4da5347da85b71ec7c15deaba4b4e9cd05054363fba03116850d9f",
+  "testedProducer": "chat-narrative-action-v49",
+  "reviewer": "chat-narrative-action-review-v34",
+  "currentDefaultAfterWithdrawal": "chat-narrative-action-v48",
+  "model": "gpt-6.1-sol",
+  "branchThroughSequence": 33,
+  "playerInput": "我想听听你的想法。",
+  "requests": 3,
+  "maximumRegisteredRequests": 5,
+  "nativeCompleted": 3,
+  "observedTokens": 51014,
+  "costUsd": null,
+  "choiceParsingPassed": true,
+  "candidateAdopted": false,
+  "settlementCalls": 0,
+  "semanticFailures": [
+    {
+      "check": "meaningful-direction",
+      "passed": false,
+      "reason": "最近多轮已说明观察局限、开门选择和询问既往表现的用途。本次再次重述相同未知范围后暂停，却未说明为何放下现有的异常表现询问方向，也未提出新的顾虑或暂停理由。玩家要求听想法可以自然回应，但不足以使这次重复说明并退回暂缓构成有意义的方向变化。"
+    }
+  ],
+  "sourceUnchanged": true,
+  "recovery": {
+    "at": "2026-10-20T07:42:55.277Z",
+    "status": "completed",
+    "sourceManifestSha256": "d233bd8a4f4da5347da85b71ec7c15deaba4b4e9cd05054363fba03116850d9f",
+    "backupSha256": "67dd52664f1602e4f90307546bd221ef5eebe2cd236cbd5688129d93bcad15a8",
+    "posts": 0,
+    "modelCalls": 0,
+    "result": {
+      "projectId": 1,
+      "sessionId": 2,
+      "failedRunId": 27,
+      "artifactsPreserved": 12,
+      "originalParentFailureRetained": true,
+      "diagnosticFailureRetained": true,
+      "noRejectedStoryCommit": true,
+      "worldUnchanged": true,
+      "historicalInputAvailable": true,
+      "stateSha256": "bf05327497d063ac3344b65f89fc5d6fffa48c0847f14c7da5c98f551e41e28c",
+      "refreshEqual": true
+    }
+  },
+  "experimentWithdrawal": {
+    "at": 1792482279.037921,
+    "status": "experimental-default-change-withdrawn",
+    "reason": "V250 still chose repeated caution and self-pause; unchanged semantic review rejected it. No observed story improvement.",
+    "restoredDefault": "chat-narrative-action-v48",
+    "currentSourceAndTestFilesMatchingV247": 2893,
+    "sourceAndTestBytesMatchV247": true,
+    "filesRestored": [
+      "src/lib/agent/skill-registry.ts",
+      "src/lib/character-interaction/action-choice-budget.ts",
+      "src/lib/character-interaction/action-choice-contract.ts",
+      "src/lib/character-interaction/action-wire.ts",
+      "src/lib/character-interaction/commitment-prompt.ts",
+      "src/lib/character-interaction/context-selection.ts",
+      "src/lib/character-interaction/control-handoff-wire.ts",
+      "src/lib/character-interaction/harness.ts",
+      "src/lib/character-interaction/narrative-action-prompt.ts",
+      "src/lib/character-interaction/narrative-player-pause.ts",
+      "src/lib/character-interaction/narrative-promise-request.ts",
+      "src/lib/character-interaction/narrative-replanning.ts",
+      "src/lib/character-interaction/narrative-scene-transition.ts",
+      "src/lib/character-interaction/player-decision-prompt.ts",
+      "src/lib/registry/context-sources.ts",
+      "tests/e2e/character-chat-action-choice.spec.ts",
+      "tests/e2e/character-chat-control-handoff.spec.ts",
+      "tests/regression/R-CHAT-02-action-choice-contract.test.ts",
+      "tests/regression/R-CHAT-02-action-choice-dependency.test.ts",
+      "tests/regression/R-CHAT-02-action-choice-harness.test.ts",
+      "tests/regression/R-CHAT-02-control-handoff-harness.test.ts",
+      "tests/regression/R-CHAT-02-fact-discovery.test.ts",
+      "tests/regression/R-CHAT-02-player-decision.test.ts",
+      "tests/regression/R-CHAT-02-replanning.test.ts",
+      "tests/regression/R-CHAT-03-turn-allowance.test.ts",
+      "tests/regression/R-CHAT-04-commitment-generation.test.ts"
+    ],
+    "experimentFrozenSourcePreserved": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v249-choice-replanning/source",
+    "noBroaderValidationStarted": true
+  },
+  "upstreamAudit": {
+    "productionSource": "V243 original Codex opening, no new generation",
+    "opening": "opening-1",
+    "initialDirections": [
+      {
+        "actorKey": "participant.001",
+        "text": "周砚可以提出先调整台灯、隔着玻璃从侧面观察，核实指针是否碰擦；若仍看不清，再询问是否允许打开前门，而不预先认定故障。",
+        "evidenceFactKeys": [
+          "local-1-2",
+          "local-1-3"
+        ]
+      },
+      {
+        "actorKey": "participant.001",
+        "text": "若沈禾不愿检查指针，周砚可以转而讨论缺少替换发条时还愿意尝试哪些修复步骤；不把购买当作继续履约的条件。",
+        "evidenceFactKeys": [
+          "world-fact.0004",
+          "local-1-1"
+        ]
+      }
+    ],
+    "firstActionReview": {
+      "actorKey": "participant.001",
+      "goalKey": "goal-1",
+      "possibilityIndex": 0,
+      "basisFactKeys": [
+        "local-1-2",
+        "local-1-3"
+      ],
+      "mode": "act",
+      "expectedChange": "借助侧面照明和放大观察，核实指针是否存在可见碰擦，或明确当前仍看不清的部分。",
+      "unresolved": "观察未必足以判断碰擦；打开前门仍需授权，其他故障与替换发条问题尚未解决。"
+    },
+    "openDevelopmentReview": {
+      "check": "open-development",
+      "passed": true,
+      "reason": "碰擦仍是待核实的问题，观察结果不等于修好旧钟；收束允许选择后续检查或明确暂缓，并保留未解决事项。",
+      "evidence": [
+        {
+          "target": "option",
+          "pointer": "/situation/possibilities/0/text",
+          "quote": "若仍看不清，再询问是否允许打开前门，而不预先认定故障。"
+        },
+        {
+          "target": "option",
+          "pointer": "/situation/threads/0/closureSignals/0",
+          "quote": "间隙检查的实际所见得到说明，并据此选定下一项修复尝试。"
+        },
+        {
+          "target": "option",
+          "pointer": "/situation/threads/0/closureSignals/1",
+          "quote": "双方明确改用其他检查办法，或明确暂缓修复及尚未解决的问题。"
+        }
+      ]
+    },
+    "finding": "The accepted opening identifies one concrete independent observation, then an optional player permission and generic discussion/pause. The production review demonstrates first-step agency and an unresolved ending, but its evidence does not demonstrate a concrete independent continuation after an inconclusive result and no player decision. Inspect this upstream contract before further runtime prompt changes; do not force a full plot or guarantee an external outcome."
+  },
+  "newM1Episodes": 0,
+  "humanAcceptance": false,
+  "qualityAcceptance": false,
+  "evidence": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v250-choice-replanning-real/preregistration.json",
+      "sha256": "fed567cfb4af8190448308135a38ef19f38904fe4c6bb59557bf3bb886e21fe9"
+    },
+    "runner.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v250-choice-replanning-real/runner.mjs",
+      "sha256": "cc8d93182438a63c839e71d4768d3671e3449bd6d0aa5beb0797956f4ff2e68d"
+    },
+    "receipt.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v250-choice-replanning-real/receipt.json",
+      "sha256": "0ede36a30995144fe5d2a411d995aa6d3427732445473b602b2be9577a88de35"
+    },
+    "transport-progress.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v250-choice-replanning-real/transport-progress.json",
+      "sha256": "543807df34e93094b0da6ed1ecd0bd83d0948c3ef5f0468367d1c44b44b8c5cf"
+    },
+    "run-evidence.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v250-choice-replanning-real/run-evidence.json",
+      "sha256": "8fe79c4a0f5e9cb1f25bb7550c07517ea9104225d3264aa5d8256be5673232c5"
+    },
+    "backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v250-choice-replanning-real/backup.json",
+      "sha256": "67dd52664f1602e4f90307546bd221ef5eebe2cd236cbd5688129d93bcad15a8"
+    },
+    "audit-import.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v250-choice-replanning-real/audit-import.mjs",
+      "sha256": "062bab43d040df15dc7dcbb7c86044b9ff2f676d5e6c0524d5e60c84022957fd"
+    },
+    "import-audit.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v250-choice-replanning-real/import-audit.json",
+      "sha256": "06dd3d0a54588d0d86947d9697dccb4c07c823091dd307ff735a8def444b79b8"
+    },
+    "upstream-opening-audit.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v250-choice-replanning-real/upstream-opening-audit.json",
+      "sha256": "98a767510ffbc76420313f4436a11d4c9a7ada697a657fc85fa30008e1a98a4a"
+    }
+  }
+}

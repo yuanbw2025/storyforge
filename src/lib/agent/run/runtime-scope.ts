@@ -56,6 +56,7 @@ export async function captureRuntimeHarnessBoundaryV1(input: {
   scope: WorkspaceScope;
   productRuntimeSessionId: number;
   participantKey: string;
+  view?: 'character' | 'chat-situation';
 }): Promise<RuntimeHarnessBoundaryV1> {
   const session = await assertRuntimeInstanceBinding(
     input.productRuntimeSessionId,
@@ -77,10 +78,14 @@ export async function captureRuntimeHarnessBoundaryV1(input: {
     frozenRuntimeSource(session.id!),
   ]);
   if (!state.interaction) fail("实例没有角色互动状态");
-  const { interactionVisibilityView } = await import("../../character-interaction/runtime");
-  const visibilityHash = await hashCanonicalValue(
-    interactionVisibilityView(state.interaction, participantKey),
-  );
+  const { interactionRetrievalView } = await import("../../character-interaction/runtime");
+  if (input.view === 'chat-situation' && (session.kind !== 'character-interaction' || participantKey !== state.interaction.playerKey)) {
+    fail('情境协调视角仅限角色聊天的明确玩家请求');
+  }
+  const visible = input.view === 'chat-situation'
+    ? (await import('../../character-interaction/narrative-situations')).chatSituationCoordinatorViewV1(state.interaction)
+    : interactionRetrievalView(state.interaction, participantKey);
+  const visibilityHash = await hashCanonicalValue(visible);
   const runtime = {
     productRuntimeSessionId: session.id!,
     baseSequence: version.sequence,
@@ -103,6 +108,7 @@ export async function assertRuntimeHarnessFreshV1(input: {
   scope: WorkspaceScope;
   contractScope: AgentRunScopeV1;
   participantKey: string;
+  view?: 'character' | 'chat-situation';
 }): Promise<void> {
   const expected = input.contractScope.runtime;
   if (!expected) fail("RunContract 缺少 runtime 输入边界");
@@ -110,6 +116,7 @@ export async function assertRuntimeHarnessFreshV1(input: {
     scope: input.scope,
     productRuntimeSessionId: expected.productRuntimeSessionId,
     participantKey: input.participantKey,
+    view: input.view,
   });
   const expectedHash = await hashCanonicalValue(expected);
   if (current.boundaryHash !== expectedHash) {

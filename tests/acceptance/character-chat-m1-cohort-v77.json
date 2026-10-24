@@ -1,0 +1,528 @@
+{
+  "schema": "storyforge.chat-m1-cohort",
+  "version": 1,
+  "cohort": "m1-v77-thread-followup",
+  "registeredAt": "2026-10-15T09:03:59.895620+00:00",
+  "status": "three-episodes-terminal; implementation-fix-under-verification",
+  "parentProtocol": "character-chat-m1-protocol-v1.json",
+  "parentProtocolSha256": "a70ce9a0395edb55216420b07f321fc9c21d840bbb8b3a3b5a48c0f9762e8b25",
+  "priorCohort": "character-chat-m1-evidence-v1.json",
+  "priorCohortUnmodified": true,
+  "code": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "6ca589602f9093d5eeea01793f9873f8399fb740",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v77-real-haj7ozpp/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v77-real-haj7ozpp/manifest.json",
+    "manifestSha256": "de7314ae97d8d33cb555ad4c46410b034c7dfb2d9d74170b6b5ac21c83579512",
+    "files": 3378
+  },
+  "implementationHead": "1f2bbb1ef9be155d06333ae37dd8466bf79ff45e",
+  "engineeringGate": "902 unique product tests and targeted browser paths have pass evidence; full fixed-code CI/E2E live, acceptance not granted",
+  "matrix": {
+    "coreScenarioIds": [
+      "daily-clock-promise",
+      "inn-missing-seal",
+      "riverside-reading-evening"
+    ],
+    "coreMaterial": "character-chat-narrative-cases.json:scenarios",
+    "coreSplit": "development-regression; never relabelled holdout",
+    "holdoutScenarioIds": [
+      "pottery-gift-deadline",
+      "archive-missing-map"
+    ],
+    "holdoutMaterial": "character-chat-m1-holdouts-v1.json",
+    "behaviorIds": [
+      "weak-guidance",
+      "refuse",
+      "alternative",
+      "rest",
+      "return",
+      "unexpected"
+    ],
+    "providerSlots": [
+      "local-codex",
+      "agnes"
+    ],
+    "repeats": [
+      1,
+      2
+    ],
+    "coreEpisodes": 72,
+    "holdoutEpisodes": 48,
+    "totalScheduledEpisodes": 120,
+    "productionUnits": 20,
+    "episodeId": "m1-v77-thread-followup/{scenarioId}/{providerSlot}/r{repeat}/{behaviorId}",
+    "pairing": "每个情境/提供商/重复单独生产一个冻结 release；六种行为从该 release 的同一初始状态创建独立会话，不共享运行记忆。两次重复重新生产。",
+    "order": "core scenarios in listed order, then holdouts; provider slots independently runnable; repeat 1 before 2; behaviors in listed order",
+    "productionFailure": "保留该生产单元及其六个 production-blocked episode 槽位；不重抽开场，不以未运行冒充通过。运行质量仅对实际运行报告，端到端分母保留全部计划槽位。"
+  },
+  "budget": {
+    "usualOpportunities": [
+      20,
+      40
+    ],
+    "maximumPlayerOpportunities": 20,
+    "maximumProductionRequests": 6,
+    "maximumRuntimeRequests": 90,
+    "maximumObservedTotalTokens": 1000000,
+    "maximumWallMinutes": 60,
+    "observationTimeoutMinutes": 20,
+    "automaticRetries": 0,
+    "manualRepairInScoredEpisode": false,
+    "stopCheck": "每次新触发前检查预算，已发请求只观察到终态；上限含审查/局面/发现调用，不把玩家输入次数冒充调用次数。正常产品有界链可能越过软 token 上限一次，记录实际值，不悄悄继续。"
+  },
+  "changes": [
+    "New implementation and source reader/reviewer contracts since original cohort",
+    "Author explicitly enables allowActorThreadFollowups, all other permissions follow current DEFAULT_CHAT_SETTINGS_V3",
+    "Core author materials, original-order first passing opening selection, player policy, budgets and scoring criteria unchanged"
+  ],
+  "authorPermissionOverrides": {
+    "allowActorThreadFollowups": true
+  },
+  "models": [
+    {
+      "slot": "local-codex",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "transport": "local subscription bridge; no paid API fallback",
+      "appSettings": {
+        "temperature": 0.2,
+        "maxTokens": 16000
+      },
+      "effectiveSampling": "bridge request accepts model/messages/output schema only; app temperature and maxTokens are not passed to Codex; retain actual request and usage, do not claim controlled sampling",
+      "costUsd": null
+    },
+    {
+      "slot": "agnes",
+      "model": null,
+      "status": "configuration-unavailable; not runnable",
+      "condition": "在此槽位首次调用之前追加配置修订，冻结实际模型、采样、预算及连接核验；不得用历史模型记录代替当次配置。"
+    }
+  ],
+  "counts": {
+    "scheduled": 120,
+    "productionUnitsPlanned": 20,
+    "productionUnitsStarted": 1,
+    "productionUnitsCompleted": 1,
+    "productionBlockedEpisodes": 0,
+    "started": 3,
+    "collectionCompleted": 3,
+    "narrativePassed": 0,
+    "failed": 3,
+    "unknown": 0,
+    "notStarted": 117,
+    "humanScored": 0
+  },
+  "firstEpisode": "m1-v77-thread-followup/daily-clock-promise/local-codex/r1/weak-guidance",
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v77-m1-clock-cohort",
+  "actualGenerationRequestsAtRegistration": 0,
+  "limitations": [
+    "Collection is scripted, not a real human participant or independent quality assessment",
+    "Agnes configuration remains unavailable; no substitute provider",
+    "No holdout material opened or used to tune this run",
+    "Local isolated author material, formal S3 production and local ProductRelease only; no online publication"
+  ],
+  "recordedAt": "2026-10-15T10:38:25.020958+00:00",
+  "productionUnits": [
+    {
+      "id": "m1-v77-thread-followup/daily-clock-promise/local-codex/r1",
+      "status": "released-locally",
+      "firstAttempt": true,
+      "modelCalls": 3,
+      "completedResponses": 3,
+      "knownTokens": 33501,
+      "openingSelection": "first candidate in original order; all required checks passed",
+      "localReleaseId": 1
+    }
+  ],
+  "collectionSetupErrors": [
+    {
+      "artifact": "clock-r1-weak-guidance.json",
+      "stage": "before first runtime session",
+      "reason": "Navigation checked New Session visibility before rendering and then waited for an inapplicable panel button",
+      "productionPreserved": true,
+      "runtimeCallsBeforeFix": 0,
+      "runtimeSessionsBeforeFix": 0,
+      "inspection": "setup-inspection.json",
+      "resolution": "Wait for observed New Session button; reuse exact release; runtime-only script separately hash-bound",
+      "modelCallsRepeated": 0
+    }
+  ],
+  "countSemantics": "collectionCompleted counts a protocol terminal collection, including failure; it is independent of narrativePassed/humanScored. The original cohort retains its original counts and records.",
+  "next": "Preserve three original failures and separate V79/V80/V81 diagnostics. Address repeated missing commitment effects, collect final fixed-code engineering receipts, then register any new formal implementation/cohort without replacing slots.",
+  "rawEvidence": [
+    {
+      "file": "cohort-registration.json",
+      "sha256": "7cfe97ba1ec7592076f64a6f375a5dbd1873596fd12b5c339695d4f2092b3b1f"
+    },
+    {
+      "file": "preregistration.json",
+      "sha256": "811ea563fae6c4c05711cd8fa3c858cb08949f0a141d155741302c7b67f141e4"
+    },
+    {
+      "file": "script-binding.json",
+      "sha256": "77daf52e782d34b2cb5b1aa060e066605dc2101162d488aba9b84de028a4a5a3"
+    },
+    {
+      "file": "runner.mjs",
+      "sha256": "a146f62fe3c3ddd1c7029ae0dc702e50d71aafaa794b0a24088651a5586f4766"
+    },
+    {
+      "file": "runtime-script-binding.json",
+      "sha256": "7976958c3b1d3492b62b3ca25c7a157e6d85dcc7c6deda7dfcddf7d6885967a8"
+    },
+    {
+      "file": "runtime-runner.mjs",
+      "sha256": "aed6f7a8d8bbdfe971aecd0b0e2db5a7a67ac01367f19a632d017b39466be3d5"
+    },
+    {
+      "file": "clock-r1-weak-guidance.json",
+      "sha256": "952872e9220ef3a79359663a5df7ce8725ebaacd3bdd6453c1ad8ff3a4d82b85"
+    },
+    {
+      "file": "clock-r1-weak-guidance-backup.json",
+      "sha256": "041f9d54f4414f0710fb411f64d3a156d9b7c9f090753fd9c9cb7fe09e66170b"
+    },
+    {
+      "file": "setup-inspection.json",
+      "sha256": "2611991e85f14583852786823ecd208c01f6cc43e42c54c736b6f65d02c3caef"
+    },
+    {
+      "file": "runtime-prepared.json",
+      "sha256": "a869a3c44133b708ec9e945c1ff5018b4ee412cfc035be0be9f91b92a9211fb1"
+    },
+    {
+      "file": "clock-r1-weak-guidance-runtime.json",
+      "sha256": "fb12b30688f2330fcf28ea6b0e06e0dcc153e8b034384872eafd554e8978a167"
+    },
+    {
+      "file": "clock-r1-weak-guidance-runtime-backup.json",
+      "sha256": "9c6d50e1097f78b7a2a6722da2e8be3a1d7e337cdb4a9dd0fa8eb8746031a054"
+    },
+    {
+      "file": "runtime-terminal-proof.json",
+      "sha256": "d06f65ddcc5c5bc8cbfd9d881fa17e1811f66bcf82b4aff0b972f2d5ff917cf3"
+    },
+    {
+      "file": "restoration.mjs",
+      "sha256": "7a6f152a0de774d47c24412b867bb9b4ab595372006e99265fb31c4049e2db99"
+    },
+    {
+      "file": "restoration.json",
+      "sha256": "f562682f9535d461b6fc9facc3179360363f731cd453daa56909d8dc21646e67"
+    },
+    {
+      "file": "clock-r1-weak-guidance-interpretation.json",
+      "sha256": "edd1c3316449dba162a5f5b2890afff74807dfe52de9738d3317cfea0ac5ec4f"
+    },
+    {
+      "file": "refuse-preregistration.json",
+      "sha256": "ac3c362e59b31c21ba734a7e9761a57a0467826555ab0531783c107e941afc34"
+    },
+    {
+      "file": "refuse-script-binding.json",
+      "sha256": "497558391288741e9d0bf4948d207e0d0f535a84bc3dcf2f4011dbab2b9850d2"
+    },
+    {
+      "file": "refuse-runner.mjs",
+      "sha256": "b7580689f6b4eedb68b864d9314e2cb34c611e98fd24bec69c9e5e765f8c0376"
+    },
+    {
+      "file": "refuse-prepared.json",
+      "sha256": "9c1b1fd1a52f80fadde667ee0239c28100c95e159db4c9231c0f7c4d74a3ee8d"
+    },
+    {
+      "file": "clock-r1-refuse-runtime.json",
+      "sha256": "d104553285bd043764879e904e671b5f85b365da1f519c129fce277b842c3e6c"
+    },
+    {
+      "file": "clock-r1-refuse-runtime-backup.json",
+      "sha256": "f1045166f9ff4b5f04b43b9cc674cc8390e8df466a8c2cade328b647c7e4b827"
+    },
+    {
+      "file": "refuse-terminal-proof.json",
+      "sha256": "ebb33f4f775bcabd849ecfe18ca30f0212af0d908534f0fbb5330abc25086d43"
+    },
+    {
+      "file": "refuse-restoration.mjs",
+      "sha256": "8acd479eab5e3631b7be8dc2344141e21a74b7042cb5e139853c0530e68111ce"
+    },
+    {
+      "file": "refuse-restoration.json",
+      "sha256": "c78d8c5eb033fb082d6010821f61be1d0fac6708dcb100e812882a4b0c4d6dae"
+    },
+    {
+      "file": "clock-r1-refuse-interpretation.json",
+      "sha256": "74e234f0a743b8c6a8f413705f991d616cd2cba61bdc6b3c50f3d1b8dcecb0c5"
+    },
+    {
+      "file": "alternative-preregistration.json",
+      "sha256": "66e7daee31cad07e55db4b59f3781f7e6614a9fc22f31687cbb179c4ee3a49da"
+    },
+    {
+      "file": "alternative-script-binding.json",
+      "sha256": "edd030a074a512f381e548ef28dc52d0d6be84279480f068514df9960eb30809"
+    },
+    {
+      "file": "alternative-runner.mjs",
+      "sha256": "9e92fff335430b5985fc9fb45e13260bfb50bac8540dfaec323d988b0fbdedb1"
+    },
+    {
+      "file": "alternative-prepared.json",
+      "sha256": "9c1b1fd1a52f80fadde667ee0239c28100c95e159db4c9231c0f7c4d74a3ee8d"
+    },
+    {
+      "file": "clock-r1-alternative-runtime.json",
+      "sha256": "fb41006006c941b706d7b43dfaa91a6bfc207f37cef810e00fa35b539b89cc88"
+    },
+    {
+      "file": "clock-r1-alternative-runtime-backup.json",
+      "sha256": "e5ff901903414c2f48a07ca0e9530dc259f7d55979efb6c714282de4f5804271"
+    },
+    {
+      "file": "alternative-terminal-proof.json",
+      "sha256": "efcfa07cca231a0cf6b994f73dc356f7c928c8f99da4bec7d5f222974556ad31"
+    },
+    {
+      "file": "alternative-restoration.mjs",
+      "sha256": "9f993f9ae277b5edeb88256b18a7e347cccac0ef956c883608ed176580ddc772"
+    },
+    {
+      "file": "alternative-restoration.json",
+      "sha256": "146e849494b262d51d0d86a753b25935ea63b67a3a79438eb1b334923a23697e"
+    },
+    {
+      "file": "alternative-parser-reproduction.mjs",
+      "sha256": "09adfa783d93bc63966ed03b2ffd8f62cd0251252373ed5699377760e09eb31c"
+    },
+    {
+      "file": "alternative-parser-reproduction.json",
+      "sha256": "ada9be293962373596820f6eaa7c842289593de7d995073fd5c4dbb28b18f78e"
+    },
+    {
+      "file": "clock-r1-alternative-interpretation.json",
+      "sha256": "996ef0dce846007203eca8e4c2ba672cb4ca46c99702ec1a22a5b475b4a583d6"
+    }
+  ],
+  "episodes": [
+    {
+      "id": "m1-v77-thread-followup/daily-clock-promise/local-codex/r1/weak-guidance",
+      "status": "failed",
+      "ending": "stagnation",
+      "collectionCompleted": true,
+      "artifact": "clock-r1-weak-guidance-runtime.json",
+      "interpretation": "clock-r1-weak-guidance-interpretation.json",
+      "productionRequests": 3,
+      "runtimeRequests": 26,
+      "completedProviderResponses": 29,
+      "playerOpportunities": 12,
+      "completedReviewedActions": 13,
+      "usage": {
+        "totalTokens": 325134,
+        "inputTokens": 309781,
+        "cachedInputTokens": 43008,
+        "cacheWriteInputTokens": 0,
+        "outputTokens": 15353,
+        "reasoningOutputTokens": 3128
+      },
+      "costUsd": null,
+      "latency": {
+        "sampleCount": 13,
+        "measure": "durable runtime createdAt to last updatedAt; includes action and review, not first feedback or token latency; excludes operator think time",
+        "p50Seconds": 31.062,
+        "p95Seconds": 38.058,
+        "valuesSeconds": [
+          20.882,
+          26.689,
+          27.731,
+          29.822,
+          29.932,
+          30.456,
+          31.062,
+          31.284,
+          33.575,
+          35.622,
+          36.744,
+          37.815,
+          38.058
+        ]
+      },
+      "terminalState": {
+        "activeGoals": 1,
+        "openThreads": 1,
+        "lastTriggerStatus": "waiting-player",
+        "situationUnchangedAfterOpening": true,
+        "relationshipsUnchangedAfterOpening": true,
+        "worldPreserved": true
+      },
+      "restoration": {
+        "stem": "clock-r1-weak-guidance-runtime",
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      },
+      "humanScored": false,
+      "narrativePassed": false,
+      "classificationOwner": "implementer applying preregistered collection stopping rule; not independent human scoring",
+      "classificationEvidence": "第9次玩家输入后，角色已提出只看外观且承认不能据此判断机芯。随后第10至12次输入对应的三个回复分别重述不预定修法/接受暂不做、等待决定、外观不足以判断内部，未新增可执行选择、具体线索或行动后果；这些理由已在第1/3/9次回复说明。依预登记重复停止规则结束，保留等待许可及未完成修钟事项。此判断为实现者的采集分类，不是独立真人评分，也不把尊重未授予许可本身当作越权修复依据。",
+      "limitations": [
+        "The player deliberately deferred all inspection consent, then continued the frozen brief-response cycle. Respecting that pending choice is not itself a product defect.",
+        "Early replies added scope and value tradeoffs, and opportunity 9 offered external inspection only. Opportunities 10-12 restated already expressed caution/waiting; this semantic stopping classification remains open to independent review.",
+        "Unlike the V60 concrete path, this path never consented to the actor-proposed inspection. Same policy text does not make these trajectories a controlled before/after comparison.",
+        "All 13 action and review runs completed technically; protocol collection ending and provider completion do not mean story completion.",
+        "No holdout material, human rating, second-provider result, or competitive/commercial acceptance was added."
+      ]
+    },
+    {
+      "id": "m1-v77-thread-followup/daily-clock-promise/local-codex/r1/refuse",
+      "status": "failed",
+      "termination": "failure",
+      "failureStage": "action semantic review, consequences only",
+      "collectionCompleted": true,
+      "playerOpportunitiesStarted": 1,
+      "playerOpportunitiesFinished": 0,
+      "completedReviewedActions": 1,
+      "newProductionRequests": 0,
+      "runtimeRequests": 4,
+      "providerCompleted": 4,
+      "usage": {
+        "totalTokens": 42545,
+        "inputTokens": 40742,
+        "cachedInputTokens": 3328,
+        "cacheWriteInputTokens": 0,
+        "outputTokens": 1803,
+        "reasoningOutputTokens": 693
+      },
+      "costUsd": null,
+      "automaticRetries": 0,
+      "manualRepairs": 0,
+      "sourceMaterialChanged": false,
+      "worldPreserved": true,
+      "situationUnchangedAfterOpening": true,
+      "lastTriggerStatus": "ready",
+      "unadoptedCandidateNotInPublicMessages": true,
+      "producerReceivedCommitmentInstructions": true,
+      "reviewReason": "实际观察已完整登记，结果请求也准确引用观察原文；但正文明确接受“不靠你的回忆来判断”，并约定需要开壳时先询问玩家，形成自身可履行的明确约束，commitmentEffects 为空，漏记承诺。",
+      "restoration": {
+        "stem": "clock-r1-refuse-runtime",
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      },
+      "humanScored": false,
+      "narrativePassed": false,
+      "observations": [
+        "The fresh opening asked the player to recall pre-failure symptoms. The player declined because uncertain recollection could mislead, without supplying a repair method.",
+        "The rejected candidate accepted that refusal, completed an external-only observation and requested bounded observation results. These physical consequences were registered, but its explicit new promise about asking before opening the case was not.",
+        "The independent review accepted the other five dimensions and rejected missing commitment bookkeeping. The candidate and its consequences were not committed.",
+        "The existing producer prompt did include commitment rules. This is not evidence of a missing field/parser capability; generation reliability and the existing one-shot consequence revision need targeted diagnosis.",
+        "This failure is separate from the earlier stagnation and original V60/V61 cohort. No model request was replayed or manually repaired inside this episode."
+      ],
+      "artifact": "clock-r1-refuse-runtime.json",
+      "interpretation": "clock-r1-refuse-interpretation.json",
+      "sharedProductionUnit": "m1-v77-thread-followup/daily-clock-promise/local-codex/r1"
+    },
+    {
+      "id": "m1-v77-thread-followup/daily-clock-promise/local-codex/r1/alternative",
+      "status": "failed",
+      "termination": "failure",
+      "failureStage": "action review response parsing; redundant positive exact-disclosure check",
+      "collectionCompleted": true,
+      "playerOpportunitiesStarted": 3,
+      "playerOpportunitiesFinished": 2,
+      "completedReviewedActions": 3,
+      "completedSituationUpdates": 2,
+      "newProductionRequests": 0,
+      "runtimeRequests": 12,
+      "providerCompleted": 12,
+      "usage": {
+        "totalTokens": 124595,
+        "inputTokens": 118376,
+        "cachedInputTokens": 6656,
+        "cacheWriteInputTokens": 0,
+        "outputTokens": 6219,
+        "reasoningOutputTokens": 2381
+      },
+      "costUsd": null,
+      "automaticRetries": 0,
+      "manualRepairs": 0,
+      "sourceMaterialChanged": false,
+      "worldPreserved": true,
+      "unadoptedCandidateNotInPublicMessages": true,
+      "restoration": {
+        "stem": "clock-r1-alternative-runtime",
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      },
+      "humanScored": false,
+      "narrativePassed": false,
+      "artifact": "clock-r1-alternative-runtime.json",
+      "interpretation": "clock-r1-alternative-interpretation.json",
+      "sharedProductionUnit": "m1-v77-thread-followup/daily-clock-promise/local-codex/r1",
+      "observations": [
+        "玩家提出先去公开背景中仍营业的旧货摊询问、不购买、之后再谈开壳。角色接受顺序，更新打算，随后独自到摊前，旧钟留在铺中；没有替玩家承诺购买或同行。",
+        "局面构建补足摊前条件。下一行动候选向玩家逐字披露新得知的现场事实并询问摊主；六维审查全部通过，但审查额外给出逐字披露的通过项。既有解析器只接受等义转述的逐项检查，因此拒绝整条候选。",
+        "正式失败保留；先前3条行动和2次局面更新保留，最终询问及其待确认结果未提交。12次提供商请求均已完成，未重发。",
+        "另行零调用只读复现：原响应解析失败，仅删除多余肯定检查即可严格解析通过；未采用该反事实结果，不能计作本片段成功。"
+      ],
+      "readOnlyDiagnosis": {
+        "artifact": "alternative-parser-reproduction.json",
+        "modelCalls": 0,
+        "originalParsed": false,
+        "counterfactualParsed": true,
+        "adoptionAttempted": false
+      },
+      "limitations": [
+        "替代方案已改变角色行动，但完整修钟剧情未完成。",
+        "独立真人评分、第二提供商、留出场景及竞品对照均未增加。",
+        "后续代码修复须登记新版本；不得重写本次失败或以诊断替换原槽位。"
+      ]
+    }
+  ],
+  "aggregateUsage": {
+    "uniqueProviderRequests": 45,
+    "sharedProductionRequests": 3,
+    "runtimeRequests": 42,
+    "completedProviderResponses": 45,
+    "totalTokens": 492274,
+    "costUsd": null,
+    "productionCountedOnce": true,
+    "humanScored": 0
+  },
+  "followupDiagnostics": [
+    {
+      "version": "V78",
+      "type": "explicit one-shot consequence revision in a closed-profile copy",
+      "evidence": "character-chat-narrative-cases.json:evaluationDesign.providerPreflight[0].commitmentRevisionPreflight",
+      "newRequests": 2,
+      "replacesFailedEpisode": false,
+      "countsTowardCohort": false
+    },
+    {
+      "version": "V79",
+      "type": "recorded-response normalization, zero new generation",
+      "evidence": "character-chat-narrative-cases.json:evaluationDesign.providerPreflight[0]",
+      "newRequests": 0,
+      "replacesFailedEpisode": false,
+      "countsTowardCohort": false
+    },
+    {
+      "version": "V80",
+      "type": "new real continuation from copied terminal state; final commitment omission failure",
+      "evidence": "character-chat-narrative-cases.json:evaluationDesign.providerPreflight[0]",
+      "newRequests": 8,
+      "replacesFailedEpisode": false,
+      "countsTowardCohort": false
+    }
+  ]
+}

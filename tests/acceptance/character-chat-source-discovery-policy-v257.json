@@ -1,0 +1,49 @@
+{
+  "at": "2026-10-20T09:46:17.367Z",
+  "sourceUnchanged": true,
+  "results": [
+    {
+      "case": "conditional-firsthand",
+      "passed": true,
+      "status": "ready",
+      "adopted": "adopted",
+      "calls": 1
+    },
+    {
+      "case": "insufficient-evidence",
+      "passed": true,
+      "status": "blocked",
+      "calls": 1
+    }
+  ],
+  "allCasesPassed": true,
+  "formalM1Credit": false,
+  "qualityAccepted": false,
+  "sourceSnapshot": {
+    "at": "2026-10-20T09:38:53.614069+00:00",
+    "root": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/source",
+    "snapshot": "e1b41838efb91826bade30aa7478656208cf7e19",
+    "featureBaseHead": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+    "manifestSha256": "a1b660aa08f5649b3dd284d009f2b1b4e684576094bae5242839188be2e83a62",
+    "files": 3806
+  },
+  "status": "terminal",
+  "observedTotalTokens": 18680,
+  "nativeRequestsCompleted": true,
+  "restoration": {
+    "passed": true,
+    "modelCalls": 0,
+    "positive": "Import invalidates local acceptance; explicit existing recover API re-verifies original adoption, without a new model call. Exact raw reply/report, source, adopted units and world retained.",
+    "negative": "Blocked report and lack of adoption retained, with exact reply/source and refresh."
+  },
+  "costUsd": null,
+  "scope": "Two real authoring reviews, not story production, runtime, M1 or general quality acceptance.",
+  "localEvidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v257-source-discovery-review-real/r2",
+  "evidence": {
+    "preregistration.json": "752a4a3a37bf168c75f0432b8f4e83270c6534ff79e2d6037ebee4e9be23fbbf",
+    "conditional-firsthand.json": "c359eea47f9dc6fd13d577b42b08210da3ad1bf708784a9240a9a6919a673275",
+    "insufficient-evidence.json": "4508364aece36fd42bd6cea55b05f3c0a5ad28cb059b370200d43bf29f46f13b",
+    "restoration-positive-recovered.json": "03e5768fa1da34a7e83cae9dfdbbc05cc3cfc771dc4f3fcef9e292ed89f8e33b",
+    "restoration-verified.json": "b87ea070adf50116b3af20b30ced52e491d2be3228b5b816183238a4ed554d28"
+  }
+}

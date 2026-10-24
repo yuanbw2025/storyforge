@@ -1,0 +1,194 @@
+{
+  "status": "focused-engineering-and-bounded-source-interpretation-passed",
+  "at": "2026-10-20T11:18:13.822088+00:00",
+  "generatorVersion": "chat-source-units-v2",
+  "reviewerVersion": "chat-source-units-review-v1",
+  "source": {
+    "at": "2026-10-20T11:09:50.982660+00:00",
+    "root": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v261-observable-source-units/source",
+    "snapshotTree": "5d3f9720856ead42da67f59bb1929291f9231e2d",
+    "featureBaseHead": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+    "manifestSha256": "026582806e9eb058eb711be939743d61af78538fe24a275a68df07cb799656ce",
+    "files": 3815,
+    "changedFromV259": [
+      "docs/ARCHITECTURE.md",
+      "docs/products/UPPER-PRODUCTS.md",
+      "docs/roadmap/CHARACTER-CHAT-DEVELOPMENT-PLAN.md",
+      "src/lib/agent/skill-registry.ts",
+      "src/lib/character-interaction/source-observation-units.ts",
+      "src/lib/character-interaction/source-units-harness.ts",
+      "tests/acceptance/character-chat-scene-person-boundary-v259.json",
+      "tests/acceptance/character-chat-scene-person-runtime-v260.json",
+      "tests/acceptance/character-chat-source-discovery-policy-v256.json",
+      "tests/regression/R-CHAT-02-discovery-granularity-baseline.test.ts",
+      "tests/regression/R-CHAT-02-observable-source-units.test.ts"
+    ]
+  },
+  "scope": "S2 source interpretation, no automatic knowledge or permission assignment; unchanged independent review and author-confirmed adoption. Runtime and old releases unchanged.",
+  "focusedRegression": {
+    "files": 5,
+    "tests": 45,
+    "logSha256": "3e565ce0046e5b8a5c28679a12dd45b34ae10cae20341d1765d627bf5a813fc7"
+  },
+  "initialFailure": {
+    "logSha256": "d811fe42020170752e1db2f825dcb352e9e1249eac3f255bbf238b50252d083a",
+    "reason": "New two-step discovery fixture omitted the required player audience. Corrected fixture to show the completed action and explicitly disclose container before later public inspection; runtime guards unchanged.",
+    "testsPassed": 28,
+    "testsFailed": 1
+  },
+  "checks": [
+    {
+      "stage": "types",
+      "command": [
+        "npx",
+        "tsc",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 45.34,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v261-observable-source-units/logs/types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "stage": "lint",
+      "command": [
+        "npx",
+        "eslint",
+        "src/lib/character-interaction/source-observation-units.ts",
+        "src/lib/character-interaction/source-units-harness.ts",
+        "src/lib/agent/skill-registry.ts",
+        "tests/regression/R-CHAT-02-observable-source-units.test.ts",
+        "tests/regression/R-CHAT-02-discovery-granularity-baseline.test.ts"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 1.86,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v261-observable-source-units/logs/lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "stage": "check:architecture",
+      "command": [
+        "npm",
+        "run",
+        "check:architecture"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 7.05,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v261-observable-source-units/logs/check-architecture.log",
+      "sha256": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616"
+    },
+    {
+      "stage": "check:required-tables",
+      "command": [
+        "npm",
+        "run",
+        "check:required-tables"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.16,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v261-observable-source-units/logs/check-required-tables.log",
+      "sha256": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444"
+    },
+    {
+      "stage": "check:ai-manual",
+      "command": [
+        "npm",
+        "run",
+        "check:ai-manual"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.52,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v261-observable-source-units/logs/check-ai-manual.log",
+      "sha256": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19"
+    },
+    {
+      "stage": "check:ai-entry-registry",
+      "command": [
+        "npm",
+        "run",
+        "check:ai-entry-registry"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.85,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v261-observable-source-units/logs/check-ai-entry-registry.log",
+      "sha256": "e789c090422f8fb0b79fc174dffd5a8dd0a14b96e2952e3ed720e16b5489c00d"
+    },
+    {
+      "stage": "check:project-metrics",
+      "command": [
+        "npm",
+        "run",
+        "check:project-metrics"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.46,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v261-observable-source-units/logs/check-project-metrics.log",
+      "sha256": "32f5ade067b3496f6b4dd1d2dde0aeef10be09621b5d5059fa5833f42f99b0ff"
+    },
+    {
+      "stage": "check:docs",
+      "command": [
+        "npm",
+        "run",
+        "check:docs"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.59,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v261-observable-source-units/logs/check-docs.log",
+      "sha256": "50ab23dc9344cbec6993fdbe82e642be5b96c6ad083b42dcaec4925f14d8ec1a"
+    },
+    {
+      "stage": "diff",
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.09,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v261-observable-source-units/logs/diff.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "realInterpretation": {
+    "status": "terminal",
+    "at": "2026-10-20T11:11:00.319Z",
+    "sourceUnchanged": true,
+    "calls": 2,
+    "nativeCompleted": true,
+    "observedTokens": 12930,
+    "generationStatus": "ready",
+    "reviewStatus": "ready",
+    "interpretationPassed": true,
+    "restoration": {
+      "sourceAndResponsePreserved": true,
+      "noAdoption": true,
+      "worldHashes": [
+        "46ac7722dcd6a558c56b9ee0a50f90dc7da3e47125b9af276dd74dd1cc7af13c"
+      ],
+      "modelCalls": 0
+    },
+    "noAdoption": true,
+    "formalM1Credit": false,
+    "qualityAccepted": false
+  },
+  "focusedDelivery": {
+    "status": "superseded-before-child-start",
+    "sessionId": 30053,
+    "record": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v261-observable-source-units/delivery-superseded.json",
+    "replacement": {
+      "status": "queued",
+      "sessionId": 4209,
+      "script": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v266-default-e2e-fixtures/run_delivery.py",
+      "applicationBytesUnchangedFromV264": true,
+      "includesSourceUnitsV261": true,
+      "includesTwoRepairedBrowserCases": true
+    },
+    "notCountedAsPassed": true
+  },
+  "fullCI": false,
+  "fullE2E": false,
+  "formalM1Credit": false,
+  "qualityAccepted": false,
+  "localEvidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v261-observable-source-units"
+}

@@ -11,6 +11,7 @@ export default tseslint.config(
     ignores: [
       'dist', 'dist-client-verification', 'dist-android', 'android', 'release', 'dist-showcase', 'dist-adventure-player', 'dev-dist', 'coverage', 'node_modules',
       '**/.vitepress/cache/**', '**/.vitepress/dist/**',
+      '.vite-e2e-cache/**',
       '**/*.config.{js,ts,mjs,cjs}', 'scripts/**', 'public/**',
     ],
   },

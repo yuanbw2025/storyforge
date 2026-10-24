@@ -12,6 +12,8 @@ import type {
   WorldReferenceV1,
 } from '../types'
 import { resolveScope } from '../workspace/scope'
+import type { ChatSourceProjectionDraftV1 } from '../character-interaction/source-projection'
+import {parseChatPrivateCharactersV1, type ChatPrivateCharacterV1} from '../character-interaction/private-character'
 
 export interface ProductProductionWorldSourceItemV2 {
   resourceKey: string
@@ -42,6 +44,8 @@ export interface ProductProductionWorldSourceCatalogV2 {
   storyArcs: Array<ProductProductionWorldSourceItemV2 & { type: string }>
   /** Neutral resources are retained only in memory for product compilation. */
   resources: WorldSemanticResourceSnapshotV1[]
+  /** Author-side preparation only; no classification or publication is implied. */
+  chatSourceProjection?: ChatSourceProjectionDraftV1
 }
 
 export interface ProductProductionConsultationSourceV2 {
@@ -271,7 +275,12 @@ export async function loadProductProductionWorldSourceCatalogV2(input: {
    * no "read the whole release" fallback: diagnostics and tests must traverse
    * the same consultation -> adapter -> selection boundary as production. */
   selection: ProductWorldSourceSelectionV1
+  /** Chat-owned authored content, never registered as a WorldRelease resource. */
+  chatPrivateCharacters?: readonly ChatPrivateCharacterV1[]
 }): Promise<ProductProductionWorldSourceCatalogV2> {
+  input = structuredClone(input)
+  const privateCharacters = parseChatPrivateCharactersV1(input.chatPrivateCharacters ?? [])
+  if (privateCharacters.length && input.selection.productType !== 'character-interaction') throw new Error('体验新角色仅属于角色聊天产品')
   const scope = await resolveScope({ scope: input.scope })
   const opened = await openWorldSemanticResourceCatalogV1({
     localReleaseRecordId: input.worldReleaseId,
@@ -333,6 +342,24 @@ export async function loadProductProductionWorldSourceCatalogV2(input: {
     ...item(resource),
     type: text(resource.value.type),
   }))
+  // Match the existing interaction compiler's explicit eight-participant limit.
+  // Extra selected resources remain in `resources`; they are not silently lost.
+  const chatCharacterKeys = input.selection.productType === 'character-interaction'
+    ? (input.selection.roleBindings.characters ?? input.selection.roleBindings.participants ?? []).slice(0, 8)
+    : []
+  const chatPlayerKeys = input.selection.productType === 'character-interaction' ? input.selection.roleBindings.chatPlayer ?? [] : []
+  if (chatPlayerKeys.length > 1 || chatPlayerKeys.some(key => chatCharacterKeys.includes(key))) throw new Error('玩家人物必须是一个独立的冻结来源')
+  const chatSourceProjection = chatCharacterKeys.length || privateCharacters.length
+    ? await (await import('../character-interaction/source-projection')).createChatSourceProjectionDraftV1({
+      worldReferenceHash: opened.description.worldReference.referenceHash,
+      worldReleaseHash: opened.description.identity.releaseHash,
+      characterResourceKeys: chatCharacterKeys,
+      privateCharacters,
+      playerCharacterKey: chatPlayerKeys[0],
+      backgroundResourceKeys: input.selection.roleBindings.chatBackground,
+      resources,
+    })
+    : undefined
   return {
     schema: 'storyforge.product-production-world-source-catalog',
     version: 2,
@@ -356,5 +383,6 @@ export async function loadProductProductionWorldSourceCatalogV2(input: {
     loreEntries,
     storyArcs,
     resources,
+    ...(chatSourceProjection ? { chatSourceProjection } : {}),
   }
 }

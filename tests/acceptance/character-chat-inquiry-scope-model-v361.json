@@ -1,0 +1,135 @@
+{
+  "version": 361,
+  "recordedAt": "2026-10-24T00:54:12.317962+00:00",
+  "status": "bounded-original-failure-continuation-and-restoration-completed",
+  "product": "character-interaction",
+  "phase": "S3 product development",
+  "sourceHead": "3001e02eaeff5a4282d036da8be82494bc01ff59",
+  "sourceUnchanged": true,
+  "purpose": "Verify the original V359 failed inquiry on the activated v21 generator and unchanged v19 reviewer, followed by actual actor progression. This is an explicit new branch diagnostic, not a replacement scored episode.",
+  "boundaries": {
+    "owner": "Chat Work and runtime session",
+    "world": "Frozen read-only WorldRelease",
+    "mediaOwner": "unchanged",
+    "playerMessagesAdded": 0,
+    "ordinaryContinueTriggers": 2,
+    "actionsPerTrigger": 2,
+    "originalQuestionAndPermissionsPreserved": true,
+    "originalFailureRetained": true,
+    "newTables": false,
+    "schemaChanged": false
+  },
+  "result": {
+    "newInquiryReplies": 1,
+    "newActorActions": 4,
+    "newRuns": 8,
+    "allNewRunsCompleted": true,
+    "actionTerminalReceipts": 4,
+    "goal": "fulfilled",
+    "thread": "resolved",
+    "pendingSituation": false,
+    "pendingRuns": 0,
+    "resumableTurn": false,
+    "outcome": "The NPC answered the past-use question; the actor inspected the public storage area, checked the box ownership, opened and inspected it, retrieved the seal, and closed the goal and thread without accusing guests."
+  },
+  "modelEvidence": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "requests": 20,
+    "completed": 20,
+    "retries": 0,
+    "usage": {
+      "totalTokens": 322519,
+      "inputTokens": 311669,
+      "outputTokens": 10850,
+      "cachedInputTokens": 25728,
+      "cacheWriteInputTokens": 0,
+      "reasoningOutputTokens": 3274
+    },
+    "usageSubsets": "Cached input and reasoning output are subsets, not extra tokens.",
+    "costUsd": null,
+    "generationVersion": "chat-situation-construction-v21",
+    "reviewVersion": "chat-situation-review-v19",
+    "actionVersion": "chat-narrative-action-v70",
+    "actionReviewVersion": "chat-narrative-action-review-v42"
+  },
+  "recovery": {
+    "independentBrowserImport": true,
+    "refresh": true,
+    "checksPassed": 14,
+    "modelCalls": 0,
+    "parentFailureAndPendingQuestionPreserved": true,
+    "allRawArtifactsReceiptsAndUsageBytesPreserved": true,
+    "openingReviewPreserved": true,
+    "worldPreserved": true,
+    "childRunHistoryPreserved": true
+  },
+  "latency": {
+    "measurement": "Persisted event timestamps; not DOM first-token or rendering latency, and not a performance percentile.",
+    "triggers": [
+      {
+        "triggerSequence": 1,
+        "firstCommittedChangeSeconds": 65.603,
+        "firstCommittedActorActionSeconds": 122.741,
+        "lastCommittedChangeSeconds": 229.416
+      },
+      {
+        "triggerSequence": 7,
+        "firstCommittedChangeSeconds": 53.108,
+        "firstCommittedActorActionSeconds": 53.108,
+        "lastCommittedChangeSeconds": 123.733
+      }
+    ],
+    "wholeDiagnosticSeconds": 359.75,
+    "usage": {
+      "totalTokens": 322519,
+      "inputTokens": 311669,
+      "outputTokens": 10850,
+      "cachedInputTokens": 25728,
+      "cacheWriteInputTokens": 0,
+      "reasoningOutputTokens": 3274
+    },
+    "costUsd": null
+  },
+  "limits": [
+    "This repaired continuation does not change the V359 denominator or its original failure.",
+    "Formal 120-slot M1 cohort, other situations and behavior paths remain incomplete.",
+    "Rule-like caveats still appear in speech; naturalness and long-term quality remain unverified.",
+    "Latency and monetary cost do not satisfy a commercial-performance claim.",
+    "Full CLI passed on this head; full browser validation had seven fixture failures and is tracked separately."
+  ],
+  "claims": {
+    "originalPathImprovementObserved": true,
+    "formalM1Credit": false,
+    "humanQualityPass": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "released": false
+  },
+  "evidence": [
+    {
+      "file": "v361-inquiry-scope-model/preregistration.json",
+      "sha256": "b7c485a6a9407d9e327a17f1f7266d048878aa071543f8b365dbb39c02732126"
+    },
+    {
+      "file": "v361-inquiry-scope-model/inquiry-scope-model.json",
+      "sha256": "9ca109507fbf54f2e7285a114fb2b6fd6a7873d39ca1507d5d07b287df6cc2e1"
+    },
+    {
+      "file": "v361-inquiry-scope-model/inquiry-scope-model-backup.json",
+      "sha256": "c0be002cf3934d8630661ca36a68e963f9696dac219adb783680e232015a7de9"
+    },
+    {
+      "file": "v361-inquiry-scope-model/restoration-logical-history.json",
+      "sha256": "9e313c6c61b74d9bf6fa289f1515f06374a93ee4976fe57dacbc4b1e8e208f70"
+    },
+    {
+      "file": "v361-inquiry-scope-model/episode-summary.json",
+      "sha256": "ceb7df2ed5b9a51c3e9e1c0b8f41d0ffee42726c58b3fc58e489c85dfa3cec21"
+    },
+    {
+      "file": "v361-inquiry-scope-model/latency-usage.json",
+      "sha256": "7100e7a9c8b0f2c1e54e7e59dadc739f487c66c3f7780d93504614dbe27c5ccb"
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "schema": "storyforge.chat-targeted-diagnostic-evidence",
+  "version": 1,
+  "diagnostic": "v99-inquiry-response",
+  "status": "bounded collection completed; sustained investigation not accepted",
+  "code": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "db4a6b8b6aba788ce52fc7573a7e6d003d11ee9e",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v99-real-tgpf3ms2/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v99-real-tgpf3ms2/manifest.json",
+    "manifestSha256": "ac6a04912deb29eb39c70f48540b029f31b5e408c4ea21308398adf01bae817b",
+    "files": 3413
+  },
+  "sourceCohort": "character-chat-m1-cohort-v97.json",
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v99-inquiry-response-diagnostic",
+  "preregistrationSha256": "6ef014b89acf1f6ef94537db0b4bc4fa136319c0a61f73a0c0c7f3641569de1e",
+  "runnerSha256": "0151ef01fb0388adcca3f95e02e6b8133319a000fcc08cba553722533a9296ec",
+  "sourceEpisodeSha256": "1e79dd8a5230d1a4d2f85f778c4cc8d386e382dd82d47abaf3ac4621fd9669cb",
+  "sourceBackupSha256": "aac27ae3019c47c8762f0a81e4e63e769ecc247803725287b63a0e559a1a72c1",
+  "sourceThroughSequence": 12,
+  "rawEvidenceSha256": "ce78056fcf7d2e0a2cfdbcaf8e9afc6e203cd5db3f82a435b7ff7d9716c64126",
+  "backupSha256": "1432a7d47c0546c95ae71b6ea1e28779e7047c21bc5ce8c348f935c9cff14005",
+  "interpretationSha256": "afe4a67a79a50922e5df8664dcea5b12afe4905a6f745ed019e62e8e467fcb92",
+  "terminalProofSha256": "b619b5c8b1a703170a0d2c9c2028a3c95edc449345cfdb1888199e064432e3f8",
+  "restoreEvidenceSha256": "b76a21d87a97b66e094cbeb0fade7694639d3809bf4281495ec929a483a717c0",
+  "requests": 8,
+  "usage": {
+    "totalTokens": 94199,
+    "inputTokens": 90676,
+    "cachedInputTokens": 9984,
+    "cacheWriteInputTokens": 0,
+    "outputTokens": 3523,
+    "reasoningOutputTokens": 1203
+  },
+  "costUsd": null,
+  "continueTriggers": 2,
+  "completedRuns": 4,
+  "completedSituationUpdates": 2,
+  "completedReviewedActions": 2,
+  "ending": "registered-two-trigger-limit",
+  "observation": "First response supplied ordinary custody arrangement and bounded uncertainty without the previous artificial clarification. Second response reported uncertain recollection without new external evidence; actor asked about records but their existence and content remain unresolved.",
+  "limits": [
+    "No full mystery resolution or sustained narrative score.",
+    "Do not infer all response-stagnation defects fixed from two reviewed steps.",
+    "The original V97 failure and denominator remain unchanged."
+  ],
+  "audit": {
+    "allTerminalReadbackEqual": true,
+    "sourceBackupUnchanged": true,
+    "parentStateUnchanged": true,
+    "refreshUnchanged": true,
+    "noRefreshCalls": true,
+    "hiddenTruthAudienceEmpty": true,
+    "worldUnchanged": true
+  },
+  "restoration": {
+    "stem": "diagnostic",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 4,
+    "retainedFailedRuns": 0,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true
+  },
+  "closed": {
+    "runnerHandle": 69272,
+    "runnerExit": 0,
+    "restorationHandle": 55818,
+    "restorationExit": 0,
+    "serverHandle": 48291,
+    "serverExit": 1,
+    "serverExitNote": "Explicit Ctrl-C after all terminal readbacks and restoration completed."
+  },
+  "m1Contribution": {
+    "scoredEpisodes": 0,
+    "humanScores": 0,
+    "originalV97FailureUnchanged": true
+  },
+  "next": "Investigate meaningful evidence progression after limited replies, including whether compound hidden-truth granularity prevents a supported partial discovery. Keep existing whole-fact authority intact; do not assume schema change is required from this sample."
+}

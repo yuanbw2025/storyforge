@@ -1,0 +1,89 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "label": "V123 observation audiences and private canonical findings",
+  "recordedAt": "2026-10-16T02:47:38.848509+00:00",
+  "baselineCommit": "1f5842f6",
+  "boundary": {
+    "product": "character-interaction",
+    "phase": "S3 runtime",
+    "lifecycle": "product development",
+    "owner": "Chat Work / ProductRuntimeSession",
+    "reads": [
+      "chatSituationRuntime",
+      "chatSituationCandidate"
+    ],
+    "writes": "existing reviewed candidate/adopt/productRuntimeEvents",
+    "world": "frozen read-only reference",
+    "newTables": 0,
+    "newWritableFields": 0,
+    "newModelSteps": 0,
+    "newPermissions": 0
+  },
+  "implementation": {
+    "binding": "construction-v12/review-v11; same registered readers/context shape, original evidence-index versions remain supported",
+    "guidance": "Distinguish observed actions from observed results, ordinary shared mechanics from investigator-only canonical discovery. Canonical findings retain their original identity and can settle an observation without duplicate newFacts. No blanket private audience rule.",
+    "guards": "No output normalization, silent audience changes, added retries or relaxed discovery/visibility checks. Independent semantic rejection remains atomic.",
+    "history": "Saved construction-v8/v9/v10/v11 and review-v7/v8/v9/v10 system bytes remain equal; complete prior v11/v10 hashes recorded before editing at clean baseline."
+  },
+  "regression": {
+    "files": 97,
+    "tests": 1238,
+    "passed": true,
+    "newTests": 7,
+    "coverage": [
+      "private discovery only",
+      "shared neutral mechanics plus private discovery",
+      "finite public observation with inconclusive finding",
+      "indirect public leak rejection",
+      "private semantic duplicate rejection",
+      "unsupported discovery rejection",
+      "frozen prompt/legacy hashes, exact inquiry pairs, branch/export/import, player refusal, no auto repair"
+    ],
+    "initialFailure": "First targeted batch passed 53/54: old future-version negative still listed newly released pair12/11. Updated accepted exact pair and retained cross-version/future13/12 negatives; no production guard removed."
+  },
+  "browser": {
+    "cases": 9,
+    "passed": 9
+  },
+  "gates": {
+    "passed": 10,
+    "bundleSize": "passed",
+    "receipt": "/tmp/storyforge-chat-v123-final-gates-receipt.json"
+  },
+  "legacyHashes": {
+    "construction-v11": "935f11738a6d643f6fd9120be118145b9d4255901d9f590a98a4faeeb044060b",
+    "review-v10": "b336e22b145ef3e56b12471527b452dbec6d970d23e0bd860bb1053a80d84bb8"
+  },
+  "limits": [
+    "Engineering injected verdicts test durability, visibility projection and failure gating, not model judgement accuracy.",
+    "V122 original failed candidate/evidence unchanged. Controlled real review and independent fresh generation remain separate.",
+    "No M1, Agnes, human or commercial acceptance added. Full CI/E2E on this commit still required."
+  ],
+  "logs": {
+    "baseline": {
+      "path": "/tmp/storyforge-chat-v123-baseline.log",
+      "sha256": "091bb5f64b43fb5be1d02f363e683140e1842cf98f5a389864de61b393ffadae"
+    },
+    "targeted": {
+      "path": "/tmp/storyforge-chat-v123-targeted.log",
+      "sha256": "fe2496280680c2b6afada0113471407cebd7b2273b406f588764a05f89df42f0"
+    },
+    "final-regression": {
+      "path": "/tmp/storyforge-chat-v123-final-regression.log",
+      "sha256": "753ae812510cdda66961d2f36a6977d6a42984fda608a8d3b9252b360c426240"
+    },
+    "final-gates": {
+      "path": "/tmp/storyforge-chat-v123-final-gates.log",
+      "sha256": "2ae1984e6d554f0e41e71c7cdb113b690fd0eb0219eb545228dbea1f5d0c1ae6"
+    },
+    "targeted-e2e": {
+      "path": "/tmp/storyforge-chat-v123-targeted-e2e.log",
+      "sha256": "288c9f472e330cf863437c4bb5c23f1f49c3916c1a8314b0881e2fda825a8e42"
+    },
+    "bundle-size": {
+      "path": "/tmp/storyforge-chat-v123-bundle-size.log",
+      "sha256": "777b946ce603b78930861f435c5496ae45b65d6c0517521dad693636911c417d"
+    }
+  }
+}

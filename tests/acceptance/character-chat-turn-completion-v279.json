@@ -1,0 +1,187 @@
+{
+  "version": 279,
+  "recordedAt": "2026-10-20T20:16:58.559811+00:00",
+  "product": "character-interaction",
+  "status": "same-action-local-turn-completion-engineering-passed-real-model-pending",
+  "sourceBaseHead": "3764239854d3d57ab9759990d06d82ea5b59f836",
+  "integratedMain": "47d2c665cfe6725d32193b0c73851010257b315e",
+  "implementationCommit": "1cb27981",
+  "contract": {
+    "producer": "chat-narrative-action-v52",
+    "reviewer": "chat-narrative-action-review-v35",
+    "behavior": "The same adopted action may finish a reviewed local purpose and mark this single-actor turn complete while preserving the active long-term goal. No extra model call, bubble, fact, table or world write.",
+    "boundaries": [
+      "Exact current action quotation and purpose, independently checked alongside all six original checks.",
+      "Reject outstanding player decisions, pending edits/settlement, scene transitions, whole-goal changes and ensemble scheduling.",
+      "Atomic action and control result, original action-choice evidence, stale guard and terminal receipt.",
+      "Older generators/reviewers cannot acquire the new field. Historical handoff and recovery retained."
+    ]
+  },
+  "evidence": {
+    "targeted": {
+      "files": 7,
+      "passed": 156,
+      "log": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/regression-r2.log",
+        "sha256": "9f44cc67ec652f1a30520146a19af2cfa0a50a4892f39a89b87317b7bd2bd058"
+      }
+    },
+    "broaderChatInitial": {
+      "files": 157,
+      "passed": 1891,
+      "failed": 3,
+      "log": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/chat-regression.log",
+        "sha256": "724a231cff7f11b20df7f1d141b7be6bdfce46b2da4161cdb50ee3a3cec547a3"
+      },
+      "failureDisposition": "One old current-reviewer assertion and two historical fixtures that froze the producer but inherited the new default reviewer. Corrected assertions/pinned historical pairs, not runtime guards."
+    },
+    "correctionSlice": {
+      "files": 4,
+      "passed": 42,
+      "log": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/repair-regression.log",
+        "sha256": "271720500b54b15139968370fee0f869e24ff865e61a428df27047a1a0be501b"
+      }
+    },
+    "browser": {
+      "files": 3,
+      "passed": 8,
+      "log": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/browser-r2.log",
+        "sha256": "2e1d0564a7e083d51dcc4662852e180d013986b6f3a04270c8454efdf6a9a2e1"
+      }
+    },
+    "afterMainIntegration": {
+      "regressionFiles": 5,
+      "regressionPassed": 46,
+      "regressionLog": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/integrated-regression.log",
+        "sha256": "3b2302b45543a27927d833a1e149b1b8c13630591ee2c6cf7b07e97e30f20c3e"
+      },
+      "browserPassed": 3,
+      "browserLog": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/integrated-browser.log",
+        "sha256": "bf59d02e8438f53eb55efcc44085033ddbd25cd8ddb23b62176614dbe07dd062"
+      },
+      "checks": [
+        {
+          "stage": "architecture",
+          "command": [
+            "npm",
+            "run",
+            "check:architecture"
+          ],
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/integrated-architecture.log"
+        },
+        {
+          "stage": "tables",
+          "command": [
+            "npm",
+            "run",
+            "check:required-tables"
+          ],
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/integrated-tables.log"
+        },
+        {
+          "stage": "ai-manual",
+          "command": [
+            "npm",
+            "run",
+            "check:ai-manual"
+          ],
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/integrated-ai-manual.log"
+        },
+        {
+          "stage": "ai-entries",
+          "command": [
+            "npm",
+            "run",
+            "check:ai-entry-registry"
+          ],
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/integrated-ai-entries.log"
+        },
+        {
+          "stage": "metrics",
+          "command": [
+            "npm",
+            "run",
+            "check:project-metrics"
+          ],
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/integrated-metrics.log"
+        },
+        {
+          "stage": "types",
+          "command": [
+            "npx",
+            "tsc",
+            "--noEmit"
+          ],
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/integrated-types.log"
+        },
+        {
+          "stage": "integration-lint",
+          "command": [
+            "npx",
+            "eslint",
+            "src/components/style/StyleLearningPanel.tsx",
+            "src/lib/outline/gateway-context.ts"
+          ],
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/integrated-integration-lint.log"
+        },
+        {
+          "stage": "build",
+          "command": [
+            "npm",
+            "run",
+            "build"
+          ],
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/integrated-build.log"
+        },
+        {
+          "stage": "bundle",
+          "command": [
+            "npm",
+            "run",
+            "check:bundle-size"
+          ],
+          "exitCode": 0,
+          "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/integrated-bundle.log"
+        }
+      ]
+    }
+  },
+  "retainedInitialFailures": {
+    "newReviewFieldAdmission": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/regression.log",
+      "sha256": "0ab43eaff73dbaaa76632bd0b1da2ea411714c9a12ad6a73fb66e89f424580af"
+    },
+    "browserSingleActorSelector": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/browser.log",
+      "sha256": "ed06fb02bdcd8e773a4ca1c6ff22e9ee82b7b3943b852789ac5f75850c813160"
+    },
+    "generatedAiManualNeededRefresh": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/check-ai-manual.log",
+      "sha256": "30958d024ff685fe14c8a9ae8fe5f751069f40c845020f86be9350443a6aad5f"
+    },
+    "mistypedCheckCommand": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v279-turn-completion/check-ai-entrypoints.log",
+      "sha256": "eeb0c2ba378db7d258f45f4a63010b89eb2df97264ee2793cb3f70e786098fae"
+    }
+  },
+  "sourceStability": "The final integration slice, browser tests, types, governance and build ran against the same application source. Documentation and this receipt were completed afterward. Counts overlap and must not be added.",
+  "modelCalls": 0,
+  "fullCI": false,
+  "fullE2E": false,
+  "formalM1Credit": 0,
+  "qualityAccepted": false,
+  "next": "One bounded real Codex continuation from the exact V275 state and original third player input, followed by zero-call backup restoration. Agnes remains blocked by its observed insufficient_user_quota response."
+}

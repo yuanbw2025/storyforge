@@ -1,0 +1,512 @@
+{
+  "schema": "storyforge.character-chat-controlled-review-evidence",
+  "version": 1,
+  "label": "V124 real observation-visibility paired diagnostic",
+  "recordedAt": "2026-10-16T02:52:32.061738+00:00",
+  "implementationCommit": "ebcb50a944193f07c2ead15c1f438a5a42bd4268",
+  "manifestSha256": "2087fdec7cc2d31e8d94ce5ed636ec52dc2803fc8f4ecb0db083cf4f76c1ec29",
+  "releaseHash": "3235facf915f325f3c3ef14c17faab66af1bd9a1e2f9d00ec3ffb37c555f8701",
+  "worldHash": "103ac348ab504155f0ff2a30034cf38d112b175cf3f40e2011251f5cedb4a6ee",
+  "countsInM1": false,
+  "holdoutsInspected": false,
+  "generation": "Retained V122 state/action and controlled candidate replays; only actionSequence rebased deterministically to inherited branch event. No new model story generation.",
+  "adopted": false,
+  "cases": [
+    {
+      "id": "original-public-implication",
+      "expected": "reject-visibility",
+      "effectiveDraft": {
+        "kind": "chat-situation",
+        "title": "柜台旁的查找起点",
+        "location": "驿站",
+        "timeLabel": "暴雨中",
+        "newFacts": [
+          {
+            "factKey": "fact-11",
+            "kind": "observation",
+            "text": "本次提起箱盖时，箱盖顺利打开，叶岑能够看清箱内并完成对铜印的目视核对；未继续翻动物品。",
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "evidenceFactKeys": [
+              "fact-8",
+              "fact-10"
+            ],
+            "seedExcerpt": "仅确认本次提起箱盖检查的实际结果：箱盖是否能够打开；若能打开，确认本次可见范围内是否发现铜印，不推断物品的经手者。"
+          }
+        ],
+        "newGoals": [],
+        "newThreads": [],
+        "possibilities": [],
+        "discoveries": [
+          {
+            "factKey": "fact-7",
+            "actorKey": "participant.001",
+            "actionSequence": -3,
+            "evidenceFactKeys": [
+              "fact-4",
+              "fact-8",
+              "fact-10"
+            ],
+            "evidenceExcerpt": "叶岑蹲到木箱前，试着提起箱盖，查看能否打开、核对箱内是否有铜印。",
+            "result": "discovered",
+            "reason": "本次已执行的开箱检查中，箱盖打开，叶岑在箱内看见并核对了铜印，满足该位置事实的发现条件。后来的停止翻查请求不撤销此前已完成的检查；本次不确认经手者、用途，也不表示已经取回铜印。"
+          }
+        ]
+      },
+      "replayCalls": 1,
+      "reviewCalls": 1,
+      "stateUnchanged": true,
+      "verdictPassed": false,
+      "matchedExpectation": true,
+      "review": {
+        "checks": [
+          {
+            "check": "continuity",
+            "passed": true,
+            "reason": "保持原标题、驿站及暴雨中时地，仅结算事件-3已提交的开箱核对；玩家后来要求停止不撤销此前观察，候选也未继续翻查或声称已取回铜印。"
+          },
+          {
+            "check": "permissions",
+            "passed": true,
+            "reason": "新增内容属于获准的观察结果，未引入人物、物品或额外动作；仅发现fact-7，数量未越限，原动作与本次开箱核对结果支持其位置发现条件，未发现经手者及用途。"
+          },
+          {
+            "check": "player-agency",
+            "passed": true,
+            "reason": "未替沈禾行动、同意调查或决定后续安排，并明确未继续翻动物品，未绕过玩家停止翻查的要求。"
+          },
+          {
+            "check": "visibility",
+            "passed": false,
+            "reason": "fact-11向玩家公开“看清箱内并完成对铜印的目视核对”，间接确认铜印就在箱内，是对秘密fact-7的同义披露。现有材料仅支持叶岑实际观察，不能由沈禾同在柜台旁推定其也看见结果；应以discovery更新叶岑知识，不能借公开观察事实向玩家泄露。"
+          },
+          {
+            "check": "meaningful-direction",
+            "passed": true,
+            "reason": "候选具体结算了能否打开及箱内是否有铜印，覆盖已实施检查范围；fact-7的发现有实际核对支持，无须额外确认用途、经手者或安排后续行动。"
+          }
+        ]
+      },
+      "runStatus": "failed",
+      "requestId": "311f8711-080a-4c67-8ae5-9c029ff6130e"
+    },
+    {
+      "id": "canonical-discovery-only",
+      "expected": "pass",
+      "effectiveDraft": {
+        "kind": "chat-situation",
+        "title": "柜台旁的查找起点",
+        "location": "驿站",
+        "timeLabel": "暴雨中",
+        "newFacts": [],
+        "newGoals": [],
+        "newThreads": [],
+        "possibilities": [],
+        "discoveries": [
+          {
+            "factKey": "fact-7",
+            "actorKey": "participant.001",
+            "actionSequence": -3,
+            "evidenceFactKeys": [
+              "fact-4",
+              "fact-8",
+              "fact-10"
+            ],
+            "evidenceExcerpt": "叶岑蹲到木箱前，试着提起箱盖，查看能否打开、核对箱内是否有铜印。",
+            "result": "discovered",
+            "reason": "本次已执行的开箱检查中，箱盖打开，叶岑在箱内看见并核对了铜印，满足该位置事实的发现条件。后来的停止翻查请求不撤销此前已完成的检查；本次不确认经手者、用途，也不表示已经取回铜印。"
+          }
+        ]
+      },
+      "replayCalls": 1,
+      "reviewCalls": 1,
+      "stateUnchanged": true,
+      "verdictPassed": true,
+      "matchedExpectation": true,
+      "review": {
+        "checks": [
+          {
+            "check": "continuity",
+            "passed": true,
+            "reason": "保持原标题、驿站及暴雨中，仅结算事件-3已提交的开箱核对；玩家后来的停止翻查请求不撤销此前观察，也未被用于继续翻查。"
+          },
+          {
+            "check": "permissions",
+            "passed": true,
+            "reason": "仅发现既定fact-7，未新增人物、物品或行动；箱盖打开及看见铜印属于获准结算的检查范围，发现数量未超限。"
+          },
+          {
+            "check": "player-agency",
+            "passed": true,
+            "reason": "未替沈禾行动或同意调查，未追加翻查、取回铜印等后续动作，保留玩家要求换办法的空间。"
+          },
+          {
+            "check": "visibility",
+            "passed": true,
+            "reason": "fact-7仅向符合场景及角色限制的叶岑更新知识；未向玩家公开位置，亦未透露经手者、用途或通过同义新事实泄密。"
+          },
+          {
+            "check": "meaningful-direction",
+            "passed": true,
+            "reason": "已提交动作明确包含打开箱盖并核对铜印，候选给出该范围内的具体发现，符合fact-7条件；不扩大为经手者、用途或已取回的结论，newFacts为空不构成空转。"
+          }
+        ]
+      },
+      "runStatus": "cancelled",
+      "requestId": "360e8865-2d79-46b3-9cf5-5f4419f65e45"
+    },
+    {
+      "id": "shared-mechanics-private-finding",
+      "expected": "pass",
+      "effectiveDraft": {
+        "kind": "chat-situation",
+        "title": "柜台旁的查找起点",
+        "location": "驿站",
+        "timeLabel": "暴雨中",
+        "newFacts": [
+          {
+            "factKey": "fact-11",
+            "kind": "observation",
+            "text": "箱盖已经打开，露出箱口边沿。",
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "evidenceFactKeys": [
+              "fact-8",
+              "fact-10"
+            ],
+            "seedExcerpt": "仅确认本次提起箱盖检查的实际结果：箱盖是否能够打开；若能打开，确认本次可见范围内是否发现铜印，不推断物品的经手者。"
+          }
+        ],
+        "newGoals": [],
+        "newThreads": [],
+        "possibilities": [],
+        "discoveries": [
+          {
+            "factKey": "fact-7",
+            "actorKey": "participant.001",
+            "actionSequence": -3,
+            "evidenceFactKeys": [
+              "fact-4",
+              "fact-8",
+              "fact-10"
+            ],
+            "evidenceExcerpt": "叶岑蹲到木箱前，试着提起箱盖，查看能否打开、核对箱内是否有铜印。",
+            "result": "discovered",
+            "reason": "本次已执行的开箱检查中，箱盖打开，叶岑在箱内看见并核对了铜印，满足该位置事实的发现条件。后来的停止翻查请求不撤销此前已完成的检查；本次不确认经手者、用途，也不表示已经取回铜印。"
+          }
+        ]
+      },
+      "replayCalls": 1,
+      "reviewCalls": 1,
+      "stateUnchanged": true,
+      "verdictPassed": true,
+      "matchedExpectation": true,
+      "review": {
+        "checks": [
+          {
+            "check": "continuity",
+            "passed": true,
+            "reason": "保持原标题、驿站及暴雨时段，仅结算事件-3的开箱核对结果；未将玩家后来的停止请求视为撤销已完成观察，也未继续翻查或宣称取回铜印。"
+          },
+          {
+            "check": "permissions",
+            "passed": true,
+            "reason": "仅补足获准的开箱观察结果，并按冻结条件更新fact-7的发现状态；未引入人物、新物品或额外动作，发现数量未超限。"
+          },
+          {
+            "check": "player-agency",
+            "passed": true,
+            "reason": "未替沈禾行动、同意调查或决定后续方案；结算此前检查不等于无视其停止继续翻查的请求。"
+          },
+          {
+            "check": "visibility",
+            "passed": true,
+            "reason": "共同可见的新事实仅为柜台旁箱盖打开、露出箱口边沿；铜印位置仅通过discovery更新叶岑的知识，未向玩家披露，也未泄露经手者或用途。"
+          },
+          {
+            "check": "meaningful-direction",
+            "passed": true,
+            "reason": "本次明确结算箱盖能否打开及箱内是否有铜印，发现所得由fact-7承载；没有以空泛未知回避核对结果，也没有追加调查或推断经手者。"
+          }
+        ]
+      },
+      "runStatus": "cancelled",
+      "requestId": "7b572780-f93c-4c6e-8c22-f374740bd0c8"
+    },
+    {
+      "id": "private-semantic-duplicate",
+      "expected": "reject-visibility",
+      "effectiveDraft": {
+        "kind": "chat-situation",
+        "title": "柜台旁的查找起点",
+        "location": "驿站",
+        "timeLabel": "暴雨中",
+        "newFacts": [
+          {
+            "factKey": "fact-11",
+            "kind": "observation",
+            "text": "那枚失踪的铜印就在木箱内部。",
+            "audienceKeys": [
+              "participant.001"
+            ],
+            "evidenceFactKeys": [
+              "fact-8",
+              "fact-10"
+            ],
+            "seedExcerpt": "仅确认本次提起箱盖检查的实际结果：箱盖是否能够打开；若能打开，确认本次可见范围内是否发现铜印，不推断物品的经手者。"
+          }
+        ],
+        "newGoals": [],
+        "newThreads": [],
+        "possibilities": [],
+        "discoveries": [
+          {
+            "factKey": "fact-7",
+            "actorKey": "participant.001",
+            "actionSequence": -3,
+            "evidenceFactKeys": [
+              "fact-4",
+              "fact-8",
+              "fact-10"
+            ],
+            "evidenceExcerpt": "叶岑蹲到木箱前，试着提起箱盖，查看能否打开、核对箱内是否有铜印。",
+            "result": "discovered",
+            "reason": "本次已执行的开箱检查中，箱盖打开，叶岑在箱内看见并核对了铜印，满足该位置事实的发现条件。后来的停止翻查请求不撤销此前已完成的检查；本次不确认经手者、用途，也不表示已经取回铜印。"
+          }
+        ]
+      },
+      "replayCalls": 1,
+      "reviewCalls": 1,
+      "stateUnchanged": true,
+      "verdictPassed": false,
+      "matchedExpectation": true,
+      "review": {
+        "checks": [
+          {
+            "check": "continuity",
+            "passed": true,
+            "reason": "保持原时地和标题，仅结算事件-3已提交的开箱核对；玩家随后要求停止翻查，不撤销此前检查，也未追加取印或继续翻查。"
+          },
+          {
+            "check": "permissions",
+            "passed": false,
+            "reason": "fact-11“那枚失踪的铜印就在木箱内部”是既定秘密fact-7的同义副本；该事实只能通过discoveries更新知情，不能另建observation事实。"
+          },
+          {
+            "check": "player-agency",
+            "passed": true,
+            "reason": "未替沈禾行动、同意调查或决定后续安排，也未继续其反对的未来翻查。"
+          },
+          {
+            "check": "visibility",
+            "passed": false,
+            "reason": "发现仅授予叶岑，未擅自向玩家公开，这一听众范围合理；但仍以私有newFacts复制既定秘密，违反只能更新原事实知识的限制。"
+          },
+          {
+            "check": "meaningful-direction",
+            "passed": true,
+            "reason": "本次动作明确包括开箱并核对是否有铜印，候选给出箱盖打开及核对所得，支持fact-7的位置发现；未据此确认经手者、用途或已经取回。"
+          }
+        ]
+      },
+      "runStatus": "failed",
+      "requestId": "faf202de-9314-4353-b210-55a634d004b0"
+    },
+    {
+      "id": "unsupported-handler-discovery",
+      "expected": "reject",
+      "effectiveDraft": {
+        "kind": "chat-situation",
+        "title": "柜台旁的查找起点",
+        "location": "驿站",
+        "timeLabel": "暴雨中",
+        "newFacts": [],
+        "newGoals": [],
+        "newThreads": [],
+        "possibilities": [],
+        "discoveries": [
+          {
+            "factKey": "fact-5",
+            "actorKey": "participant.001",
+            "actionSequence": -3,
+            "evidenceFactKeys": [
+              "fact-4",
+              "fact-8",
+              "fact-10"
+            ],
+            "evidenceExcerpt": "叶岑蹲到木箱前，试着提起箱盖，查看能否打开、核对箱内是否有铜印。",
+            "result": "discovered",
+            "reason": "本次看见铜印在箱内，因此确认铜印被掌柜拿去。"
+          }
+        ]
+      },
+      "replayCalls": 1,
+      "reviewCalls": 1,
+      "stateUnchanged": true,
+      "verdictPassed": false,
+      "matchedExpectation": true,
+      "review": {
+        "checks": [
+          {
+            "check": "continuity",
+            "passed": false,
+            "reason": "候选把旧动作“试着提起箱盖”直接结算为确认掌柜拿走铜印，跳过了箱盖能否打开、箱内核对结果及经手者核实等未解决环节。"
+          },
+          {
+            "check": "permissions",
+            "passed": false,
+            "reason": "fact-5 的冻结发现条件要求实际核对铜印并获得掌柜明确说明；提交证据没有掌柜说明，仅凭箱内位置不能获得该项发现授权。"
+          },
+          {
+            "check": "player-agency",
+            "passed": true,
+            "reason": "候选仅结算事件 -3，未替沈禾作决定，也未追加玩家要求停止之后的翻查动作；后来的拒绝不撤销此前已实施的观察。"
+          },
+          {
+            "check": "visibility",
+            "passed": false,
+            "reason": "fact-5 原本无人知晓；候选在条件未满足时将其标为叶岑已发现，越权赋予其经手者知识，即使没有公开 newFacts 也不成立。"
+          },
+          {
+            "check": "meaningful-direction",
+            "passed": false,
+            "reason": "本次应结算箱盖是否打开及可见范围内是否有铜印；候选没有提供有效的对应结果，却以“看见铜印”推断掌柜经手。newFacts 为空本身不是问题，但这项无依据发现不能替代实际观察结算。"
+          }
+        ]
+      },
+      "runStatus": "failed",
+      "requestId": "ba3e3b21-12a8-48cf-bd1d-907b5affefb2"
+    }
+  ],
+  "provider": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "usage": {
+      "totalTokens": 55852,
+      "inputTokens": 53853,
+      "outputTokens": 1999,
+      "cachedInputTokens": 2432,
+      "reasoningOutputTokens": 484
+    },
+    "costUsd": null
+  },
+  "restoration": {
+    "at": "2026-10-16T02:51:15.885Z",
+    "results": [
+      {
+        "id": "original-public-implication",
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "resumableRuns": 0,
+        "historyPreserved": true
+      },
+      {
+        "id": "canonical-discovery-only",
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "resumableRuns": 0,
+        "historyPreserved": true
+      },
+      {
+        "id": "shared-mechanics-private-finding",
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "resumableRuns": 0,
+        "historyPreserved": true
+      },
+      {
+        "id": "private-semantic-duplicate",
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "resumableRuns": 0,
+        "historyPreserved": true
+      },
+      {
+        "id": "unsupported-handler-discovery",
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "resumableRuns": 0,
+        "historyPreserved": true
+      },
+      {
+        "id": "parent",
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "resumableRuns": 0,
+        "historyPreserved": true
+      }
+    ],
+    "modelRequests": 0,
+    "worldPreserved": true
+  },
+  "terminalReadback": {
+    "checks": [
+      {
+        "id": "311f8711-080a-4c67-8ae5-9c029ff6130e",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "360e8865-2d79-46b3-9cf5-5f4419f65e45",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "7b572780-f93c-4c6e-8c22-f374740bd0c8",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "faf202de-9314-4353-b210-55a634d004b0",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "ba3e3b21-12a8-48cf-bd1d-907b5affefb2",
+        "status": "completed",
+        "readbackEqual": true
+      }
+    ],
+    "allTerminal": true
+  },
+  "limits": [
+    "Five controlled reviews matched expectations, not evidence of fresh generation success or long story quality.",
+    "Original V122 remains failed, unmodified and unadopted; separate cohort, no replaced denominator.",
+    "No M1, Agnes, human or commercial acceptance added."
+  ],
+  "next": "One separately preregistered fresh refusal-route generation on this exact code/release; no repair or repetition of original failed episode.",
+  "evidence": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v124-observation-visibility-review/preregistration.json",
+      "sha256": "ebdb01e29d115ebd9415fc5cdfb0a8444aae64c64f8eb658cdbcde922024af8b"
+    },
+    "runner.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v124-observation-visibility-review/runner.mjs",
+      "sha256": "e3ac38a2749407c3a5b35dab0021f507d13ab70780f2bebe62ffa1236f9c654b"
+    },
+    "prepared.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v124-observation-visibility-review/prepared.json",
+      "sha256": "82d9fb20eecb060d5bab2a19cbc34ae95386aaf8af9ff38667e322c645339ef7"
+    },
+    "diagnostic.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v124-observation-visibility-review/diagnostic.json",
+      "sha256": "dab52f09aa2ba359c2ada89fc79cd1d270f97ae171d3134aef4a561eae688b3b"
+    },
+    "diagnostic-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v124-observation-visibility-review/diagnostic-backup.json",
+      "sha256": "7ead8118cf78fd5fd74f91ab1d2e8ff429b4405b630bf08b76e98d789dd6448c"
+    },
+    "restoration-verified.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v124-observation-visibility-review/restoration-verified.json",
+      "sha256": "3111a97492cc6d334e0771f28c4e7239580834812915bacb4216ea0e3c9d5556"
+    },
+    "terminal-request-proof.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v124-observation-visibility-review/terminal-request-proof.json",
+      "sha256": "bfe945cf500806d04672ffc2cd3c2c3ccde827de5cae4fb05fd5fc1f65c10b7a"
+    }
+  }
+}

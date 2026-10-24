@@ -1,0 +1,177 @@
+{
+  "schema": "storyforge.character-chat-m1-cohort",
+  "version": 328,
+  "at": "2026-10-22T18:05:05.004745+00:00",
+  "cohort": "m1-v328-current",
+  "sourceHead": "a497f9159e4be67ea0e6ca0220769db24312e4d6",
+  "sourceManifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v328-m1-current/manifest.json",
+    "sha256": "52e23697b93cb04626e7e8e7d55069166aea7052abf5444a204d0ce0d72b7394"
+  },
+  "sourceUnchanged": true,
+  "registeredBeforeCalls": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v328-m1-current/cohort-registration.json",
+    "sha256": "452d9ee4fdec7ae6718231545fde9ee5ffebbf1466edb64d5927b2d2683e6429"
+  },
+  "episodeId": "m1-v328-current/inn-missing-seal/local-codex/r1/weak-guidance",
+  "outcome": "budget-stopped-with-runtime-failure-retained",
+  "rawCollectorError": "Error: runtime stopped; no automatic retry",
+  "rawCompletionReason": null,
+  "playerOpportunities": 8,
+  "requestsActuallyDispatched": 61,
+  "nativeStatuses": {
+    "completed": 61
+  },
+  "blockedBeforeNativeDispatch": 1,
+  "automaticRetries": 0,
+  "runStatuses": {
+    "completed": 22,
+    "failed": 1
+  },
+  "reportedUsage": {
+    "production": {
+      "requests": 3,
+      "statuses": {
+        "completed": 3
+      },
+      "reportedUsageSums": {
+        "totalTokens": 61186,
+        "inputTokens": 52599,
+        "outputTokens": 8587,
+        "cachedInputTokens": 3328,
+        "reasoningOutputTokens": 608
+      },
+      "missingUsageCounts": {
+        "totalTokens": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cachedInputTokens": 0,
+        "reasoningOutputTokens": 0
+      }
+    },
+    "runtime": {
+      "requests": 58,
+      "statuses": {
+        "completed": 58
+      },
+      "reportedUsageSums": {
+        "totalTokens": 956506,
+        "inputTokens": 928542,
+        "outputTokens": 27964,
+        "cachedInputTokens": 171776,
+        "reasoningOutputTokens": 8637
+      },
+      "missingUsageCounts": {
+        "totalTokens": 0,
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cachedInputTokens": 0,
+        "reasoningOutputTokens": 0
+      }
+    }
+  },
+  "reportedTotalTokens": 1017692,
+  "costUsd": null,
+  "production": {
+    "fresh": true,
+    "openingCandidatesPassed": 3,
+    "selection": "first passing in original order"
+  },
+  "runtime": {
+    "observedProgress": [
+      "asked the present innkeeper and received bounded replies",
+      "observed an actual search and its negative tabletop result",
+      "independently identified and checked the public wooden box",
+      "discovered and disclosed the seal location without ungrounded accusations",
+      "adopted a bounded attempt to retrieve the seal"
+    ],
+    "notCompleted": [
+      "retrieval result settlement",
+      "goal and thread closure"
+    ],
+    "goals": [
+      "active"
+    ],
+    "threads": [
+      "open"
+    ],
+    "stopCause": "The evaluation guard blocked the next situation request before native dispatch after observed tokens crossed the registered one-million ceiling. All 61 dispatched requests completed; this is not a provider failure or semantic-review rejection.",
+    "recoveryUiLimitation": "The application sees the intercepted request as an unknown-result failed run and does not resend; the external interception evidence proves no native dispatch for that blocked call."
+  },
+  "restoration": {
+    "passed": true,
+    "modelCalls": 0,
+    "completedHistoriesPreserved": 22,
+    "failedRunsPreserved": 1,
+    "stateAndRefreshEqual": true,
+    "rawResponsesReceiptsUsageAndWorldPreserved": true
+  },
+  "performanceFinding": {
+    "runtimeRequests": 58,
+    "runtimeReportedTokens": 956506,
+    "runtimeReportedInputTokens": 928542,
+    "runtimeReportedOutputTokens": 27964,
+    "interpretation": "The episode advances, but the bounded run exhausts its budget before closure. Inspect avoidable subdivision of already authorized ordinary self-actions as well as repeated context before expanding this matrix.",
+    "notProven": [
+      "monetary cost",
+      "browser first-token latency",
+      "a general latency distribution",
+      "causal effect of any future optimization"
+    ]
+  },
+  "formalM1Credit": 0,
+  "humanScores": 0,
+  "m1Passed": false,
+  "holdoutBodiesInspected": false,
+  "cohortCounts": {
+    "scheduled": 120,
+    "failed": 1,
+    "runtimeBlocked": 5,
+    "running": 0,
+    "notStarted": 114,
+    "completed": 0,
+    "collectorError": 0,
+    "formalQualityPasses": 0,
+    "humanScores": 0
+  },
+  "evidence": {
+    "inn-r1-weak-guidance.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v328-m1-current/codex-inn-r1/inn-r1-weak-guidance.json",
+      "sha256": "51c6812f8ce5b915afd85fe37ca5202cb6fd1c654f8a68372ef48941328a02b6"
+    },
+    "inn-r1-weak-guidance-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v328-m1-current/codex-inn-r1/inn-r1-weak-guidance-backup.json",
+      "sha256": "a5b93e564a3146fc7461d9400f697d8e0d5cc40e3ca95736e7efed09159f9474"
+    },
+    "inn-r1-weak-guidance-restoration-verified.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v328-m1-current/codex-inn-r1/inn-r1-weak-guidance-restoration-verified.json",
+      "sha256": "49d5ca05e0677d33bf4780cfb652f8ee896b7e7cca4d81d669121fb986c76d8b"
+    },
+    "inn-r1-weak-guidance-usage-ledger.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v328-m1-current/codex-inn-r1/inn-r1-weak-guidance-usage-ledger.json",
+      "sha256": "4587068b5efdf93073d59602c2306c744522f36bb441c12a269ecff8e5b753ba"
+    },
+    "derive-usage-ledger.py": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v328-m1-current/codex-inn-r1/derive-usage-ledger.py",
+      "sha256": "528dcca944872d655f3968633c52ce378c7acd4908be4bbf8397d75f4921f1f5"
+    },
+    "execution.log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v328-m1-current/codex-inn-r1/execution.log",
+      "sha256": "6050a77a1881879750fb03e9b20e3109e18acc5037c52b6d6ac5fed767915740"
+    },
+    "player-decisions.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v328-m1-current/codex-inn-r1/player-decisions.json",
+      "sha256": "d775275bdf0670f22081b27ae36821a48b4acf03fd2c0181172cf30bd8ad88a1"
+    }
+  },
+  "currentHeadEngineering": {
+    "sourceHead": "a497f9159e4be67ea0e6ca0220769db24312e4d6",
+    "buildRun": 39821006696,
+    "buildAndFourPlatformPackages": "success",
+    "published": false,
+    "ciRun": 39821008690,
+    "fullDeliveryRun": 39821008918,
+    "fullGateStatus": "in_progress"
+  },
+  "priorCohort": "V324 outcomes and denominators remain unchanged; V327 is a separate directed followthrough, not a scored replacement."
+}

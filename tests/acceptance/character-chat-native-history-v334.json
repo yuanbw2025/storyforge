@@ -1,0 +1,514 @@
+{
+  "schema": "storyforge.chat-native-history-engineering-evidence",
+  "version": 1,
+  "at": "2026-10-22T20:57:47.602185+00:00",
+  "step": "CHAT-04.06d",
+  "status": "passed-1000-action-engineering",
+  "source": {
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "baseHead": "554eeee4f219f1c107184003c4ab455a77e08537",
+    "sourceKind": "manifest-verified-worktree",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v332-m1-current/manifest.json",
+    "manifestSha256": "9ffa5d739b495c741e6fca809c6f5c45c8b25795db0eee3335f3bbb3899f73e4",
+    "files": 3436,
+    "scope": "All tracked files except docs, website-docs and tests/acceptance; executed external helpers and acceptance source pinned separately; no dependency or source copies."
+  },
+  "preregistration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/preregistration.json",
+  "exitCode": 0,
+  "retries": 0,
+  "playwright": {
+    "startTime": "2026-10-22T20:27:09.472Z",
+    "duration": 1777346.4919999999,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "nativeResult": {
+    "target": 1000,
+    "actions": 1000,
+    "failure": null,
+    "calls": 3009,
+    "progress": [
+      {
+        "actions": 25,
+        "elapsedMs": 8401,
+        "lastActionMs": 339
+      },
+      {
+        "actions": 50,
+        "elapsedMs": 18165,
+        "lastActionMs": 405
+      },
+      {
+        "actions": 75,
+        "elapsedMs": 29841,
+        "lastActionMs": 501
+      },
+      {
+        "actions": 100,
+        "elapsedMs": 43010,
+        "lastActionMs": 534
+      },
+      {
+        "actions": 125,
+        "elapsedMs": 61962,
+        "lastActionMs": 631
+      },
+      {
+        "actions": 150,
+        "elapsedMs": 78192,
+        "lastActionMs": 677
+      },
+      {
+        "actions": 175,
+        "elapsedMs": 95826,
+        "lastActionMs": 743
+      },
+      {
+        "actions": 200,
+        "elapsedMs": 115129,
+        "lastActionMs": 777
+      },
+      {
+        "actions": 225,
+        "elapsedMs": 135458,
+        "lastActionMs": 832
+      },
+      {
+        "actions": 250,
+        "elapsedMs": 156772,
+        "lastActionMs": 877
+      },
+      {
+        "actions": 275,
+        "elapsedMs": 179627,
+        "lastActionMs": 947
+      },
+      {
+        "actions": 300,
+        "elapsedMs": 204057,
+        "lastActionMs": 990
+      },
+      {
+        "actions": 325,
+        "elapsedMs": 241036,
+        "lastActionMs": 1051
+      },
+      {
+        "actions": 350,
+        "elapsedMs": 269131,
+        "lastActionMs": 1162
+      },
+      {
+        "actions": 375,
+        "elapsedMs": 298412,
+        "lastActionMs": 1195
+      },
+      {
+        "actions": 400,
+        "elapsedMs": 328917,
+        "lastActionMs": 1244
+      },
+      {
+        "actions": 425,
+        "elapsedMs": 361116,
+        "lastActionMs": 1369
+      },
+      {
+        "actions": 450,
+        "elapsedMs": 395335,
+        "lastActionMs": 1428
+      },
+      {
+        "actions": 475,
+        "elapsedMs": 432172,
+        "lastActionMs": 1489
+      },
+      {
+        "actions": 500,
+        "elapsedMs": 469821,
+        "lastActionMs": 1547
+      },
+      {
+        "actions": 525,
+        "elapsedMs": 509875,
+        "lastActionMs": 1626
+      },
+      {
+        "actions": 550,
+        "elapsedMs": 551662,
+        "lastActionMs": 1731
+      },
+      {
+        "actions": 575,
+        "elapsedMs": 594943,
+        "lastActionMs": 1731
+      },
+      {
+        "actions": 600,
+        "elapsedMs": 639402,
+        "lastActionMs": 1756
+      },
+      {
+        "actions": 625,
+        "elapsedMs": 685737,
+        "lastActionMs": 1907
+      },
+      {
+        "actions": 650,
+        "elapsedMs": 734239,
+        "lastActionMs": 1992
+      },
+      {
+        "actions": 675,
+        "elapsedMs": 784579,
+        "lastActionMs": 2095
+      },
+      {
+        "actions": 700,
+        "elapsedMs": 837278,
+        "lastActionMs": 2166
+      },
+      {
+        "actions": 725,
+        "elapsedMs": 891885,
+        "lastActionMs": 2191
+      },
+      {
+        "actions": 750,
+        "elapsedMs": 948346,
+        "lastActionMs": 2264
+      },
+      {
+        "actions": 775,
+        "elapsedMs": 1006177,
+        "lastActionMs": 2349
+      },
+      {
+        "actions": 800,
+        "elapsedMs": 1065407,
+        "lastActionMs": 2413
+      },
+      {
+        "actions": 825,
+        "elapsedMs": 1160456,
+        "lastActionMs": 2477
+      },
+      {
+        "actions": 850,
+        "elapsedMs": 1222982,
+        "lastActionMs": 2545
+      },
+      {
+        "actions": 875,
+        "elapsedMs": 1289386,
+        "lastActionMs": 2718
+      },
+      {
+        "actions": 900,
+        "elapsedMs": 1357522,
+        "lastActionMs": 2844
+      },
+      {
+        "actions": 925,
+        "elapsedMs": 1426981,
+        "lastActionMs": 2682
+      },
+      {
+        "actions": 950,
+        "elapsedMs": 1494274,
+        "lastActionMs": 2839
+      },
+      {
+        "actions": 975,
+        "elapsedMs": 1564294,
+        "lastActionMs": 2916
+      },
+      {
+        "actions": 1000,
+        "elapsedMs": 1637440,
+        "lastActionMs": 3019
+      }
+    ],
+    "checkpoints": [
+      {
+        "actions": 100,
+        "sequence": 206,
+        "facts": 204,
+        "actorRead": true,
+        "reviewRead": true
+      },
+      {
+        "actions": 300,
+        "sequence": 609,
+        "facts": 604,
+        "actorRead": true,
+        "reviewRead": true
+      },
+      {
+        "actions": 1000,
+        "sequence": 2012,
+        "facts": 2004,
+        "actorRead": true,
+        "reviewRead": true
+      }
+    ],
+    "facts": 2004,
+    "database": "native IndexedDB",
+    "elapsedMs": 1739501,
+    "externalCalls": 0,
+    "worldUnchanged": true
+  },
+  "refresh": [
+    {
+      "title": "native-growth-100",
+      "equal": true
+    },
+    {
+      "title": "native-growth-300",
+      "equal": true
+    },
+    {
+      "title": "native-growth-1000",
+      "equal": true
+    }
+  ],
+  "scope": {
+    "nativeIndexedDB": true,
+    "consequentialActions": 1000,
+    "newFactsPerAction": 2,
+    "factsPreserved": 2004,
+    "injectedModelInvocations": 3009,
+    "externalModelCalls": 0,
+    "checkpoints": [
+      100,
+      300,
+      1000
+    ],
+    "actualRoleAndReviewHistoricalInput": true,
+    "secretExcludedFromRoleInput": true,
+    "fullReplayEqualsCurrentState": true,
+    "deletedTestParentBeforeImport": true,
+    "checkpointBranchesRestoredAndRefreshed": 3,
+    "worldUnchanged": true
+  },
+  "boundaries": {
+    "sourceChanged": false,
+    "authorDataTouched": false,
+    "priorFailuresUnmodified": true,
+    "realStoryTurns": false,
+    "realModelLongTermQualityPassed": false,
+    "completeCHAT0406": false,
+    "native1000Verified": true,
+    "generalPerformanceSLOPassed": false,
+    "M1Passed": false,
+    "remaining": [
+      "commitment and ended-goal growth coverage at required scale",
+      "real-model long-term memory, promises and relationships",
+      "deferred independent human scoring"
+    ]
+  },
+  "evidence": [
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/execution-start.json",
+      "bytes": 520,
+      "sha256": "271d2185284f72ed983eb7a8b2abeb4422000d6a6fe4185b72f069cbe59b7608"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/execution.log",
+      "bytes": 5978,
+      "sha256": "512bf128e1fddffc43057f4ed405ecfe9fdc8247f46a46b6bd77aeb8ec8c9edc"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/playwright.config.mjs",
+      "bytes": 941,
+      "sha256": "646cfde67f9d6be86f047612fb8103836c073e557af716143e712c59367aa63e"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/preregistration.json",
+      "bytes": 3900,
+      "sha256": "6bdaa5748c623fd16475283cae8caf7f5542acea0d49e7ee596f69229361469b"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/report.json",
+      "bytes": 20392,
+      "sha256": "dd7a29429100e13ee18c26774bd793bfb8f3ef9d62bf7a4d2a72b997ba40726a"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/source-after.json",
+      "bytes": 222,
+      "sha256": "75c5640d9eb9ccaa1330de0f3fa0c98dd7e3085ef0a7f99af883e29a8319d1b9"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/source-before.json",
+      "bytes": 222,
+      "sha256": "388959a5e1b44eead2d90ba793b87e7c63512b39d83fbeb22d9fa4030e26aa4f"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/source-guard.mjs",
+      "bytes": 972,
+      "sha256": "20e403b594352e1349ca556f4988bd0456d36ab269f8d61ebe2470871548319d"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/source-preparation.json",
+      "bytes": 222,
+      "sha256": "041a98c3c8b6a21063273692e1bd46da8e88aa80328ab3c50f0ff6d25e1ec65e"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/.last-run.json",
+      "bytes": 45,
+      "sha256": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-100-backup-receipt.json",
+      "bytes": 165,
+      "sha256": "dbc27431ad43ab6370180828218e2d10e784d3be7f423620ea41820cc04d8a18"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-100-backup.json.gz",
+      "bytes": 6800984,
+      "sha256": "d41d53ee5b7c4c2bbd832785877bb0894f20c7ce35da3c0976772adb776a920d"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-100-progress.json",
+      "bytes": 80,
+      "sha256": "00fb0f2821efbc7ca5485aa72bce5143e79183fe80c3ad539f3c275b9e4a0ab6"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-100-state.json.gz",
+      "bytes": 8014,
+      "sha256": "4961ab654e12ef49011fe9ba1e26f136883c20419b9660c12f6ce80ad5551159"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-1000-progress.json",
+      "bytes": 84,
+      "sha256": "839a0b547f97f85cd4ba9759765238833187cc391443559e0c0f9c75537f0166"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-1000-state.json.gz",
+      "bytes": 51022,
+      "sha256": "04740a684f32ec8508f42288edfc37944dfabc17d256b8fffc376645bf4b89b1"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-200-progress.json",
+      "bytes": 81,
+      "sha256": "2200707f183d22635034692fb59852e73cf5581605b0bbc31de5301ecee05d2e"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-200-state.json.gz",
+      "bytes": 13056,
+      "sha256": "5351d028e6117df148d658abaf2095718b59af7071752eddb9fb0620c436d0a7"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-300-backup-receipt.json",
+      "bytes": 166,
+      "sha256": "e3385c9c34995f946ebae18707d7b0aba8b97d883cdaefe24a52922c9956b010"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-300-backup.json.gz",
+      "bytes": 21650327,
+      "sha256": "c731d9f28afd95e10f62521809ac12a85eb5b72810028af4b79d418b289c0c42"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-300-progress.json",
+      "bytes": 81,
+      "sha256": "d7dba849b2b85e41f17a3501937bd3bacde7e038c6dfd676c24293d5badf5edf"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-300-state.json.gz",
+      "bytes": 18065,
+      "sha256": "e3344a952b79a79483b9c33e573cd5c6753c56a7d2d22531cc8b32ee4b50a80b"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-400-progress.json",
+      "bytes": 82,
+      "sha256": "945e0518dc71d76128897c9cb467603c75fb49799eb812e87ef702ec5e59ae90"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-400-state.json.gz",
+      "bytes": 22907,
+      "sha256": "b13b32059c03cc93ad4ead0ddd5e77a01c73021294aa0a298d79a472cfbb7219"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-500-progress.json",
+      "bytes": 82,
+      "sha256": "ae5becdf0326018138f2bc09b2a317518b6ce051011268287e2003a73980ef91"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-500-state.json.gz",
+      "bytes": 27759,
+      "sha256": "ff3a9e41d54f852ce5495c1f5e44adf3999df55d4e6f920b77392a5ce71b3c64"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-600-progress.json",
+      "bytes": 82,
+      "sha256": "51c67f5ec91bb02a9cdcd34ba416de6b4a7b75b56055cf790b0e5fef2e3d15a9"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-600-state.json.gz",
+      "bytes": 32313,
+      "sha256": "9f1f8008e10d174d10fa8aa42ccb02d4c4191e49576f4f030a99caaf4f17a108"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-700-progress.json",
+      "bytes": 82,
+      "sha256": "550bae098ae8fb8a8a0c6a13bc9cf4264c9ea5cf514de0027cbca235d9cdbe15"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-700-state.json.gz",
+      "bytes": 36801,
+      "sha256": "4ee1509fcb91abd593305259140ec7b6b8d96abb4b3bd24efdda2f217f58ca0e"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-800-backup-receipt.json",
+      "bytes": 166,
+      "sha256": "80b005a0f631d8999fab84053c536b17618a89d9c71f3dac3de9cfeb2fd99617"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-800-backup.json.gz",
+      "bytes": 62059162,
+      "sha256": "b981ad877f992dd7879b2529e447de5d9b995ed64a0e14f4ba4eb67b06802589"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-800-progress.json",
+      "bytes": 83,
+      "sha256": "f7ec0188908b22658dadc31405fda9c2612edaa70cadb4a97b963f5672890cb4"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-800-state.json.gz",
+      "bytes": 40936,
+      "sha256": "d990007ee228cd4d7f309ce33f78b2cc5b04e050f5dbf9319b65ee83e8fd2c7b"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-900-progress.json",
+      "bytes": 83,
+      "sha256": "f6408550a3fd07205df114f38ceb25877e41da81d50c396ebc4392fff235a075"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-900-state.json.gz",
+      "bytes": 46027,
+      "sha256": "5bdf60a6a8dfeb7bbc712b76619515a9f18181fa273199ae18e45a35d2144bf3"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-backup-receipt.json",
+      "bytes": 166,
+      "sha256": "dfc0480e921c90d6b6608f46237a9f9b936f1e04355822c3916d734d27e3e49b"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-backup.json.gz",
+      "bytes": 74170508,
+      "sha256": "8c510863c8d79dc4ec248bd8604c9b9953998813edacb5ea3ec0fa20083eb449"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-refresh.json",
+      "bytes": 186,
+      "sha256": "a6eca070845d205cddbd079e19fe382739e108845b131d227aa8b716253d2f2c"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v334-native-history-1000-current/test-results/character-chat-history-gro-d2ce5-ut-and-portable-checkpoints-chromium/native-growth-result.json",
+      "bytes": 4176,
+      "sha256": "1c253815e3c602c63a3d8dfd79e5ae9e63533fae5aeb0bae327415755f96754c"
+    }
+  ]
+}

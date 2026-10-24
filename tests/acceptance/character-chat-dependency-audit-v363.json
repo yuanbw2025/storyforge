@@ -1,0 +1,81 @@
+{
+  "version": 363,
+  "recordedAt": "2026-10-24T01:09:21.743803+00:00",
+  "status": "targeted-dependency-validation-passed-current-full-delivery-pending",
+  "baseHead": "f41d05b761f6fd880dd3696914515da63e8dbe74",
+  "scope": "Shared dependency repair needed for the character-chat delivery branch; separate serial commit.",
+  "advisory": {
+    "url": "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
+    "package": "zod",
+    "affectedRange": "<4.6.6",
+    "patchedFloor": "4.6.6",
+    "verifiedRegistryVersion": "4.6.7"
+  },
+  "change": {
+    "from": "4.5.4",
+    "to": "4.6.7",
+    "changedLockedPackages": [
+      "node_modules/zod"
+    ],
+    "manifestDependencyRangesChanged": false,
+    "applicationSourceChanged": false,
+    "modelContractsChanged": false,
+    "newTables": false,
+    "schemaChanged": false
+  },
+  "installation": {
+    "independentTaskDependencyDirectory": true,
+    "protectedParentDependencyUntouched": true,
+    "originalSymlinkPreserved": true,
+    "scriptsSkipped": true,
+    "installedVersionVerified": true
+  },
+  "validation": {
+    "productionAuditVulnerabilities": 0,
+    "mcpProtocolAndDurableRecoveryPassed": 9,
+    "failed": 0,
+    "skipped": 0,
+    "architecture": true,
+    "requiredTables": true,
+    "aiManual": true,
+    "typescript": true,
+    "build": true,
+    "bundleSize": true,
+    "diffCheck": true,
+    "fullDelivery": "pending on final commit"
+  },
+  "originalFailure": {
+    "fullDeliveryRun": 40047600346,
+    "fullCliJob": 120732777055,
+    "cause": "Production npm audit reports the old Zod dependency. Earlier engineering results remain valid only for their recorded source and dependency versions."
+  },
+  "claims": {
+    "realModelCalls": 0,
+    "m1Passed": false,
+    "currentFullDeliveryPassed": false,
+    "commercialReady": false,
+    "released": false
+  },
+  "evidence": [
+    {
+      "file": "v363-zod-audit/baseline.json",
+      "sha256": "c6ff7c2324b5e0beec08479c38f4cfc1b610d8d20dc4bbed655d4295ad252433"
+    },
+    {
+      "file": "v363-zod-audit/dependency-install-plan.json",
+      "sha256": "9afc73048e705f80d9e5401041dfb258d4eaaef6684ee11b42a708f486767500"
+    },
+    {
+      "file": "v363-zod-audit/audit.json",
+      "sha256": "8804a1ac32b1efc4d4fef6157609ffd85f2f5d753f3a1ddb46bb28d15ac7f4f4"
+    },
+    {
+      "file": "v363-zod-audit/mcp-tests.json",
+      "sha256": "7fddd3ff6a38260de63e31a4c2a00d5320aba790f311335d30f8f9342bcb5299"
+    },
+    {
+      "file": "v363-zod-audit/checks.json",
+      "sha256": "fb3e0bc0d9d99ccde4afffb6e758993f29abc7465f8f20495babc3143e99b7d6"
+    }
+  ]
+}

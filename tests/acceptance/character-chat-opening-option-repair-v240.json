@@ -1,0 +1,90 @@
+{
+  "schema": "storyforge.chat-engineering-evidence",
+  "version": 1,
+  "batch": "V240",
+  "recordedAt": 1792471151.4038558,
+  "status": "targeted-engineering-passed; real-model-v10-pending",
+  "contract": {
+    "producer": "chat-situation-production-v10",
+    "gate": "chat.opening-option-repair.v1",
+    "repairPlanVersion": 4,
+    "referencePatchVersion": 2,
+    "maximumCalls": 2,
+    "legacyV9PromptUnchanged": true
+  },
+  "checks": {
+    "distinctRegressionFilesPassed": 8,
+    "distinctRegressionTestsPassed": 116,
+    "browserTestsPassed": 7,
+    "originalResponseDiagnosticTestsPassed": 1,
+    "architecture": true,
+    "required-tables": true,
+    "ai-manual": true,
+    "ai-entries": true,
+    "docs": true,
+    "types": true,
+    "lint": true,
+    "build": true,
+    "bundle-size": true
+  },
+  "coverage": [
+    "Only individually rejected reference options may be replaced; valid options retained from original response.",
+    "Same raw/source/catalog plus option index and identity bound at planning, dispatch and apply.",
+    "Exact whole set validation and independent semantic rejection before author choice.",
+    "Repeated failure stops after two paid attempts; refresh and independent import preserve evidence without calls.",
+    "390px author selection through local release and imported initial runtime; no world mutation.",
+    "v6/v7/v8/v9 frozen compatibility retained."
+  ],
+  "retainedFailures": [
+    {
+      "file": "lifecycle-first.log",
+      "reason": "One new test queried productionId on Build artifacts; corrected to buildId, all 29 tests in that file rechecked."
+    }
+  ],
+  "sourceFileSha256": {
+    "src/lib/character-interaction/opening-option-repair.ts": "3e84eda4d9d2e5d897635b17730c1c98fa2305274a0d2b5ca0f3da909785f6a0",
+    "src/lib/character-interaction/opening-production-binding.ts": "8b82179e1500f36151a69122233c0bcc22476122e41c40679fa9e68b4c60f279",
+    "src/lib/character-interaction/opening-repair-evidence.ts": "38ca5cd5da540043656999dc80b9ceb27fef9c364b2a51291e5de621b586591f",
+    "src/lib/character-interaction/opening-reference-prompt.ts": "767cd9370da4fd73187937bc72ab3bc5b8142d5363ffaeda4aab06ee75cdf4d0",
+    "src/lib/product-production/production-executor.ts": "e6598175722cd2ac0f31e76442d1494076a17ad08a338f82135d62326f1c4acd",
+    "src/lib/product-production/plan.ts": "948920e1cedd9109dfe109bbf98fbd481c5eb1b80127ac5bcd2f650301fbc9fc",
+    "src/lib/agent/skill-registry.ts": "143902d956dd0e4bd799ed1f1651822fad77251b77e91aa4fbcdb0874e56d2cb",
+    "tests/regression/R-CHAT-02-opening-option-repair.test.ts": "432d58363852a15aa3401e39093e0e5b89545f84acb4e7c35bec5747982ee8eb",
+    "tests/regression/R-CHAT-02-opening-repair.test.ts": "0201a29989e4372a7b10e5c357120ccf2712c702b7b8d37bfea720c03a64eca0",
+    "tests/regression/R-CHAT-02-opening-agency.test.ts": "d9a7b2c973487ecc11cd9b0e3e64acf20fccaa6c321b4b92fc69e17152791298",
+    "tests/e2e/character-chat-production-repair.spec.ts": "aa08f572d89dd566e907163134d42c0996937f557c2d9dce98d531aa5fd04ee7"
+  },
+  "evidenceSha256": {
+    "bundle-size.log": "fca781c357103f95924070a4737f1638d72d6ac989d7b4cfb518d38892095265",
+    "initial-tests.log": "a8709be3f5d414a4ae7d5002d99efeb877b6c61fe2dcc43616f24b04ee32a6c8",
+    "types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ai-entries.log": "e789c090422f8fb0b79fc174dffd5a8dd0a14b96e2952e3ed720e16b5489c00d",
+    "browser.log": "7c67e80185929c2eae77612dcde05fe60724dbca8ba10d6dc036af43bb2870b7",
+    "review-recheck.log": "0142a2a33642b6945674a59b0f9074ef257a907ed29a142f441a0bc8d605fada",
+    "lint.log": "c8bd26fb2b68c69b86e0c51b7e999259bb290b9f1447e8439b239b1d08ae64d1",
+    "architecture.log": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616",
+    "required-tables.log": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444",
+    "lifecycle-first.log": "83b90ad1bb303179eedfaa066187f620a6b816e99dd00e41410d0824a99f346a",
+    "ai-manual.log": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19",
+    "docs.log": "211b0f6f00c931878d80bf4aaccf46ca6b982a0897303f4464a3d4411eaeda76",
+    "ai-manual-generate.log": "3395b5e737f52a05d9c19e988e9189038725875fbd32aff89394e5a63cb558ea",
+    "diagnostic.log": "e72f5f5a6b4d3ab708ddcf8ce3caa717b9e0efbc87ba44c066e857861bbc0784",
+    "metrics-generate.log": "0555eabe41357efe38464a935ad593aa025a0682300d6c86a7fa03fe2642b146",
+    "build.log": "ef7654a418bf9da90b695d080249145f0d8f74b4424bb811e73480a68032b074"
+  },
+  "originalAgnesResponseDiagnostic": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v240-opening-option-repair/original-failure-classification.json",
+    "sha256": "a0d44d560222a4a56723e0a09a9093d8933fae1e09e31a7a5bb984273a8be84b",
+    "invalidOptionIndices": [
+      2
+    ],
+    "modelCalls": 0,
+    "repairedCandidateProduced": false
+  },
+  "modelCalls": 0,
+  "fullDeliveryValidated": false,
+  "semanticQualityAccepted": false,
+  "humanAcceptance": false,
+  "commercialAcceptance": false,
+  "next": "Freeze v10 source and run fresh pre-registered Agnes/Codex production and runtime; retain V238 failure."
+}

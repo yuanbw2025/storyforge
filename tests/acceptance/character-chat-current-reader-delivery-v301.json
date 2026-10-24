@@ -1,0 +1,37 @@
+{
+  "schema": "storyforge.chat-development-acceptance",
+  "version": 301,
+  "at": "2026-10-21T03:08:32.000903+00:00",
+  "baseHead": "5cdf04385ff913bac74ef5e98338ad4bf8b9bfcf",
+  "status": "focused-recovery-assertion-passed-full-current-pending",
+  "remoteFailure": {
+    "runId": 39525649993,
+    "head": "2050d3823db77359b3b18d5971bd6d7f8ee27bcf",
+    "conclusion": "failure",
+    "testFilesPassed": 980,
+    "testFilesFailed": 1,
+    "testsPassed": 6557,
+    "testsFailed": 1,
+    "cause": "R-CHAT-04-coordinator-dialogue-harness current fixture expected chat-relevance-v12, while the V296 producer correctly retained chat-relevance-v13.",
+    "log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v299-turn-ending-investigation/standard-ci-2050-failed.log",
+      "sha256": "8138cc8c8215ac8deb4edd103d215862d3d0959b07e0f57bd09209e8e7e43937"
+    }
+  },
+  "change": "Update only the current-producer retrieval expectation to v13. Keep saved-v8 and saved-v13 reader assertions, source checks, one-time recovery/adoption, nested branch/import and unchanged world checks. No runtime change.",
+  "validation": {
+    "tests": 3,
+    "focused": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v301-current-reader-delivery/focused.log",
+      "sha256": "6c238e05f5f53664afb0d1c6f6674126ef95dc3cb409e00a1aef3b3674c20fd9"
+    },
+    "lint": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v301-current-reader-delivery/lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "applicationSource": "unchanged from 5cdf0438 / V299 and V300"
+  },
+  "modelCalls": 0,
+  "fullCurrentDeliveryPassed": false,
+  "m1Passed": false
+}

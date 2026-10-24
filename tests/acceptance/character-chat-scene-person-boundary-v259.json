@@ -1,0 +1,303 @@
+{
+  "status": "terminal-focused-engineering-passed",
+  "producerVersion": "chat-narrative-action-v50",
+  "readerVersion": "chat-narrative-runtime-view-v16",
+  "reviewerVersion": "chat-narrative-action-review-v34",
+  "localChecks": [
+    {
+      "stage": "metadata-ai",
+      "exitCode": 0,
+      "startedAt": 1792491918.936394,
+      "completedAt": 1792491919.8163,
+      "command": [
+        "npm",
+        "run",
+        "gen:ai-manual"
+      ],
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/metadata-ai.log",
+      "sha256": "3395b5e737f52a05d9c19e988e9189038725875fbd32aff89394e5a63cb558ea"
+    },
+    {
+      "stage": "metadata-metrics",
+      "exitCode": 0,
+      "startedAt": 1792491919.8167639,
+      "completedAt": 1792491920.3548758,
+      "command": [
+        "npm",
+        "run",
+        "gen:project-metrics"
+      ],
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/metadata-metrics.log",
+      "sha256": "0555eabe41357efe38464a935ad593aa025a0682300d6c86a7fa03fe2642b146"
+    },
+    {
+      "stage": "types-r2",
+      "exitCode": 0,
+      "startedAt": 1792491920.355267,
+      "completedAt": 1792491962.5709171,
+      "command": [
+        "npx",
+        "tsc",
+        "--noEmit"
+      ],
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/types-r2.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "stage": "changed-lint",
+      "exitCode": 0,
+      "startedAt": 1792491962.571498,
+      "completedAt": 1792491964.770782,
+      "command": [
+        "npx",
+        "eslint",
+        "src/lib/agent/skill-registry.ts",
+        "src/lib/character-interaction/narrative-scene-transition.ts",
+        "src/lib/character-interaction/player-decision-prompt.ts",
+        "src/lib/character-interaction/narrative-replanning.ts",
+        "src/lib/character-interaction/action-wire.ts",
+        "src/lib/character-interaction/narrative-player-pause.ts",
+        "src/lib/character-interaction/commitment-prompt.ts",
+        "src/lib/character-interaction/action-choice-contract.ts",
+        "src/lib/character-interaction/control-handoff-wire.ts",
+        "src/lib/character-interaction/action-choice-budget.ts",
+        "src/lib/character-interaction/runtime.ts",
+        "src/lib/character-interaction/narrative-action-prompt.ts",
+        "src/lib/character-interaction/situation-harness.ts",
+        "src/lib/character-interaction/coordinator-selection.ts",
+        "src/lib/character-interaction/context-selection.ts",
+        "src/lib/character-interaction/history-coordinator-context.ts",
+        "src/lib/character-interaction/narrative-audience.ts",
+        "src/lib/character-interaction/harness.ts",
+        "src/lib/character-interaction/narrative-promise-request.ts",
+        "src/lib/registry/context-sources.ts",
+        "tests/regression/R-CHAT-02-scene-person-boundary.test.ts"
+      ],
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/changed-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "stage": "adjacent-regressions",
+      "exitCode": 0,
+      "startedAt": 1792491964.77125,
+      "completedAt": 1792491992.3950698,
+      "command": [
+        "npx",
+        "vitest",
+        "run",
+        "tests/regression/R-CHAT-02-scene-person-boundary.test.ts",
+        "tests/regression/R-CHAT-03-turn-allowance.test.ts",
+        "tests/regression/R-CHAT-02-replanning.test.ts",
+        "tests/regression/R-CHAT-04-commitment-generation.test.ts",
+        "tests/regression/R-CHAT-02-player-decision.test.ts",
+        "tests/regression/R-CHAT-02-fact-discovery.test.ts",
+        "tests/regression/R-CHAT-02-action-choice-contract.test.ts",
+        "tests/regression/R-CHAT-02-output-contract.test.ts",
+        "--maxWorkers=1",
+        "--minWorkers=1"
+      ],
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/adjacent-regressions.log",
+      "sha256": "85ac0fb6629211ceaf731b3302efedfb696a88b13e970051e2116fb79affe91c"
+    },
+    {
+      "stage": "check:architecture",
+      "exitCode": 0,
+      "startedAt": 1792491992.395707,
+      "completedAt": 1792491999.60366,
+      "command": [
+        "npm",
+        "run",
+        "check:architecture"
+      ],
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/check:architecture.log",
+      "sha256": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616"
+    },
+    {
+      "stage": "check:required-tables",
+      "exitCode": 0,
+      "startedAt": 1792491999.604167,
+      "completedAt": 1792491999.752366,
+      "command": [
+        "npm",
+        "run",
+        "check:required-tables"
+      ],
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/check:required-tables.log",
+      "sha256": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444"
+    },
+    {
+      "stage": "check:ai-manual",
+      "exitCode": 0,
+      "startedAt": 1792491999.75288,
+      "completedAt": 1792492000.334852,
+      "command": [
+        "npm",
+        "run",
+        "check:ai-manual"
+      ],
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/check:ai-manual.log",
+      "sha256": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19"
+    },
+    {
+      "stage": "check:ai-entry-registry",
+      "exitCode": 0,
+      "startedAt": 1792492000.335349,
+      "completedAt": 1792492001.2829702,
+      "command": [
+        "npm",
+        "run",
+        "check:ai-entry-registry"
+      ],
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/check:ai-entry-registry.log",
+      "sha256": "e789c090422f8fb0b79fc174dffd5a8dd0a14b96e2952e3ed720e16b5489c00d"
+    },
+    {
+      "stage": "check:project-metrics",
+      "exitCode": 0,
+      "startedAt": 1792492001.2834392,
+      "completedAt": 1792492001.737653,
+      "command": [
+        "npm",
+        "run",
+        "check:project-metrics"
+      ],
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/check:project-metrics.log",
+      "sha256": "32f5ade067b3496f6b4dd1d2dde0aeef10be09621b5d5059fa5833f42f99b0ff"
+    },
+    {
+      "stage": "document-authority",
+      "exitCode": 0,
+      "startedAt": 1792492001.738219,
+      "completedAt": 1792492001.840974,
+      "command": [
+        "node",
+        "scripts/check-document-authority.mjs"
+      ],
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/document-authority.log",
+      "sha256": "211b0f6f00c931878d80bf4aaccf46ca6b982a0897303f4464a3d4411eaeda76"
+    },
+    {
+      "stage": "diff",
+      "exitCode": 0,
+      "startedAt": 1792492001.8414311,
+      "completedAt": 1792492001.915848,
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/diff.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "focusedRegressionLog": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/focused.log",
+    "sha256": "a5c27ca1bd805912aa368c380fd612b6cf56cb2763b252ea873b497d214e293e"
+  },
+  "firstFocusedFailure": "Test initially expected recovery across changed function versions; existing freshness policy correctly stopped before calls. Test now verifies this stop and explicit original-version restoration. No runtime freshness rule was relaxed.",
+  "initialTypeFailure": "Array.at unsupported by configured lib; replaced with slice(-1)[0].",
+  "fullCI": true,
+  "fullE2E": false,
+  "realModelPassed": false,
+  "formalM1Credit": false,
+  "uniqueRegressions": {
+    "files": 15,
+    "tests": 225,
+    "overlapTests": 5
+  },
+  "buildPassed": true,
+  "bundlePassed": true,
+  "browser": {
+    "passed": true,
+    "tests": 19,
+    "injectedModelResponses": true,
+    "receipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/delivery-receipt.json",
+    "initialFailure": "15 tests stopped at stale fixture assertions requiring v48; 4 other tests passed. Updated only the two default-version assertions to v50; all 19 passed.",
+    "exactFixtureOnlyDelta": [
+      "tests/e2e/character-chat-action-choice.spec.ts",
+      "tests/e2e/character-chat-control-handoff.spec.ts"
+    ],
+    "applicationSourceIdentical": true
+  },
+  "realModelEvidence": "tests/acceptance/character-chat-scene-person-runtime-v260.json",
+  "realModelScope": "The demonstrated roster confusion no longer occurs in this bounded run; the original story objective remains open.",
+  "frozenSource": {
+    "at": "2026-10-20T10:28:11.757580+00:00",
+    "root": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/source",
+    "snapshotTree": "616c4799013a5f7e6a2cac97841a33dde5bb23db",
+    "featureBaseHead": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+    "manifestSha256": "e32f97c5af5702247f4a5756b60ebe5fbafd5ff424e4108a4316a42d8181f7c5",
+    "files": 3812
+  },
+  "fullDelivery": {
+    "status": "terminal-ci-passed-e2e-two-fixture-failures",
+    "sessionId": 96267,
+    "runner": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/run_full.py",
+    "runnerSha256": "d839d1c0c6d5b66ef32e985fed68e42c839df24dea31846049518b49ee005667",
+    "sourceRoot": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/source",
+    "scope": "V259 frozen source. Does not certify V261/V264/V266 or the upcoming main integration.",
+    "ci": {
+      "stage": "full-ci",
+      "command": [
+        "npm",
+        "run",
+        "ci"
+      ],
+      "exitCode": 0,
+      "startedAt": 1792494671.216979,
+      "completedAt": 1792497501.927626,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/logs/full-ci.log",
+      "sha256": "bb99f61a7eab9bc13651cc064a9132af46d7020ee0fcae98b110b59cf792ea2d"
+    },
+    "ciTestFiles": 952,
+    "ciTests": 6289,
+    "observedE2EFailures": {
+      "count": 2,
+      "status": "terminal",
+      "audit": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v266-default-e2e-fixtures/failure-audit.json",
+      "retestStatus": "queued-current-app"
+    },
+    "terminal": {
+      "receipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/full-delivery-receipt.json",
+      "receiptSha256": "d324f51eb5253c0b6f3b6ec65ecfe79c681cfe3c607aad0f0fe1bdda2978f6ed",
+      "sourceUnchanged": true,
+      "ci": {
+        "stage": "full-ci",
+        "command": [
+          "npm",
+          "run",
+          "ci"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792494671.216979,
+        "completedAt": 1792497501.927626,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/logs/full-ci.log",
+        "sha256": "bb99f61a7eab9bc13651cc064a9132af46d7020ee0fcae98b110b59cf792ea2d"
+      },
+      "e2e": {
+        "stage": "full-e2e",
+        "command": [
+          "npm",
+          "run",
+          "ci:e2e"
+        ],
+        "exitCode": 1,
+        "startedAt": 1792497501.9290261,
+        "completedAt": 1792501683.352632,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/logs/full-e2e.log",
+        "sha256": "f9760c4b21322bffbd77e76f97bd7f14475ead8b10978b9dcce11b3a4f9870db"
+      },
+      "passedTests": 430,
+      "failedTests": 2,
+      "skippedTests": 4,
+      "skipCases": [
+        "-  190 [chromium] › tests/e2e/client-support.spec.ts:41:1 › packaged portable consent precedes analytics and survives reload",
+        "-  191 [chromium] › tests/e2e/client-support.spec.ts:67:2 › packaged narrow-screen unified agreement permits offline entry without separate controls",
+        "-  357 [chromium] › tests/e2e/plugin-workshop.spec.ts:130:1 › production build loads shared React plugins under CSP without unsafe-eval",
+        "-  358 [chromium] › tests/e2e/plugin-workshop.spec.ts:147:1 › installed plugins work offline through the production PWA after a cold navigation"
+      ],
+      "failures": "Only the two previously diagnosed stale fixtures; original traces preserved. V266 retest still pending.",
+      "scope": "V259 frozen source. Does not certify V261/V264/V266 or the upcoming main integration."
+    }
+  }
+}

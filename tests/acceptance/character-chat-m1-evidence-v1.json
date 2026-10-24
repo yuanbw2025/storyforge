@@ -1,0 +1,337 @@
+{
+  "schema": "storyforge.character-chat-m1-cohort-evidence",
+  "version": 1,
+  "cohort": "m1-v1",
+  "recordedAt": "2026-10-14T14:57:10.852276+00:00",
+  "protocol": "character-chat-m1-protocol-v1.json",
+  "protocolSha256": "a70ce9a0395edb55216420b07f321fc9c21d840bbb8b3a3b5a48c0f9762e8b25",
+  "holdoutSha256": "248f64ee71a8554076b1898a426776f360bc261622fd3c06e3da7a9a37b1dd1c",
+  "coreMaterialSha256": "edb3ac42302d62bd42d19c0db84901adbc06a5495da587c8002c4f23b5650c3f",
+  "code": {
+    "head": "104624e8856e3a31d6b9c95d9e730ee45e483189",
+    "manifestSha256": "918e5d24a6fe9ae7736b650253eff80cf0527f7d5a33c4f2af0d3f0d263b319d",
+    "engineeringGateAtFreeze": "targeted checks passed; full CI and E2E queued; collection may start, acceptance may not"
+  },
+  "counts": {
+    "scheduled": 120,
+    "scheduledCore": 72,
+    "scheduledHoldout": 48,
+    "started": 2,
+    "completed": 0,
+    "failed": 1,
+    "unknown": 1,
+    "notStarted": 118,
+    "independentHumanReviews": 0,
+    "qualityPassed": null
+  },
+  "productionUnits": {
+    "scheduled": 20,
+    "started": 1,
+    "released": 1,
+    "failed": 0,
+    "notStarted": 19
+  },
+  "episodes": [
+    {
+      "id": "m1-v1/daily-clock-promise/local-codex/r1/weak-guidance",
+      "productionUnit": "m1-v1/daily-clock-promise/local-codex/r1",
+      "split": "development-regression",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "status": "unknown",
+      "qualityAcceptance": false,
+      "startedAt": "2026-10-14T13:09:58.944Z",
+      "observationStoppedAt": "2026-10-14T13:53:54.760Z",
+      "originalError": "Error: observation timeout; result not presumed terminal and no resend",
+      "playerPolicy": "weak-guidance; brief permission-only responses to actor-proposed inspections and explicit continuations; no player-supplied method or result",
+      "productionRequests": 3,
+      "runtimeRequests": 16,
+      "totalRequests": 19,
+      "completedProviderResponses": 18,
+      "unknownProviderResults": 1,
+      "playerOpportunitiesStarted": 5,
+      "playerOpportunitiesFinished": 4,
+      "completedRuntimeActions": 5,
+      "completedObservationUpdates": 2,
+      "usage": {
+        "totalTokens": 179430,
+        "inputTokens": 165848,
+        "outputTokens": 13582,
+        "cachedInputTokens": 15744,
+        "reasoningOutputTokens": 2071,
+        "coverage": "18 completed responses; unknown request usage unavailable",
+        "unknownRequestTokens": null,
+        "costUsd": null
+      },
+      "sourceIdentities": {
+        "worldContentHash": "5970721490c4667bc3908a7a126369c5628ccb4cd4c76bbf25ed770833f4aa24",
+        "productReleaseContentHash": "5d47adb48dc8769422238f705e0022b41cfddfc800be03132b0d746a613c2a60",
+        "sourceProjectionCaptured": true,
+        "frozenBriefCaptured": true
+      },
+      "openingSelection": {
+        "selected": "opening-1",
+        "rule": "first passing in original candidate order",
+        "allCandidatesRetained": true,
+        "ruleReadbackVerified": true
+      },
+      "observations": [
+        "Actor proposed opening the clock, obtained only that permission, performed the inspection and independently requested an observation result.",
+        "The observation preserved visible/unknown boundaries. Actor communicated findings and proposed removing the mechanism for another inspection, again awaiting permission.",
+        "Second actual inspection produced a distinct bounded observation. Goal/thread stayed open; neither preparation nor partial inspection was labelled repair completion.",
+        "After permission for further disassembly, the generated action remained unreviewed. Review request exceeded the local channel 20-minute limit and became unknown; no resulting disassembly or consequence was committed.",
+        "Inspection and observation require separate explicit continuations under the frozen one-action setting; repeated limitation statements and pacing need independent scoring. This episode does not establish satisfactory sustained storytelling or latency."
+      ],
+      "failureClassification": {
+        "observation": "Original observer timed out while action review was running; that record remains unchanged.",
+        "laterProviderReadback": "All 19 matching provider receipts terminal: 18 completed, 1 unknown due to 20-minute provider limit.",
+        "runtimeAtBackup": "Last run running; original trigger ready with no action sequence; candidate and existing progress retained.",
+        "automaticRetry": false,
+        "manualRepairInEpisode": false,
+        "replacementEpisode": false,
+        "narrativeQualityScore": null
+      },
+      "restoration": {
+        "modelRequests": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawResponsesPreserved": true,
+        "openingReviewPreserved": true
+      },
+      "rawEvidence": [
+        {
+          "file": "codex-m1-clock-r1-weak-guidance-v60.json",
+          "sha256": "a96d59eb4c53416c4c603222f6ad0652b3109223493614c4f0dc799be6aa8298"
+        },
+        {
+          "file": "codex-m1-clock-r1-weak-guidance-v60-backup.json",
+          "sha256": "f93a9064191d770b8d86bbabd905b2906394f78f017f212797416ce0336fb48a"
+        },
+        {
+          "file": "codex-m1-clock-r1-preregistration-v60.json",
+          "sha256": "5581cc4bf605be7155d297165c615e32f10caaba959ce4f31bad13014c4b4c64"
+        },
+        {
+          "file": "codex-m1-clock-r1-provider-terminal-v60.json",
+          "sha256": "4940d1d7b4d60f7c8302a3ca99d8852641fca6e78b0d1291c28f737792313b38"
+        },
+        {
+          "file": "codex-m1-clock-r1-restoration-v60.json",
+          "sha256": "99abb5e5d3e62a1e54109e98d5141cd98e11580c46f2b0772766c7cf303ea2a8"
+        },
+        {
+          "file": "storyforge-chat-m1-clock-r1-v60.mjs",
+          "sha256": "916200957572ee970be6e7cb90b8698f4fae1ba52184308183a61ae7ef09696b"
+        },
+        {
+          "file": "storyforge-chat-m1-clock-r1-restoration-v60.mjs",
+          "sha256": "62e2eb927ef2392c065b8eed0b39a3a11f86dfa3ab843dadd145cf6508139940"
+        }
+      ]
+    },
+    {
+      "id": "m1-v1/daily-clock-promise/local-codex/r1/refuse",
+      "productionUnit": "m1-v1/daily-clock-promise/local-codex/r1",
+      "split": "development-regression",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "status": "failed",
+      "qualityAcceptance": false,
+      "startedAt": "2026-10-14T14:42:43.523Z",
+      "observationStoppedAt": "2026-10-14T14:46:26.097Z",
+      "originalError": "Error: provider terminal failure or unknown; no resend",
+      "playerPolicy": "Refuse the first proposed opening of the clock case because of damage concerns; do not accept a rewording of that action. Continue only the actor-proposed external inspection.",
+      "productionRequests": 0,
+      "productionReused": true,
+      "runtimeRequests": 8,
+      "totalRequests": 8,
+      "completedProviderResponses": 7,
+      "failedProviderResults": 1,
+      "playerOpportunitiesStarted": 2,
+      "playerOpportunitiesFinished": 1,
+      "completedRuntimeActions": 2,
+      "completedObservationUpdates": 1,
+      "usage": {
+        "totalTokens": 64777,
+        "inputTokens": 61921,
+        "outputTokens": 2856,
+        "cachedInputTokens": 9984,
+        "reasoningOutputTokens": 1017,
+        "coverage": "7 completed responses; failed request usage unavailable",
+        "failedRequestTokens": null,
+        "costUsd": null
+      },
+      "sourceIdentities": {
+        "worldContentHash": "5970721490c4667bc3908a7a126369c5628ccb4cd4c76bbf25ed770833f4aa24",
+        "productReleaseContentHash": "5d47adb48dc8769422238f705e0022b41cfddfc800be03132b0d746a613c2a60",
+        "sameInitialStateAsOriginal": true
+      },
+      "observations": [
+        "Actor again requested permission to open the clock from a fresh initial state; prior inspection observations were absent from the sampled opening request.",
+        "After explicit refusal, actor accepted the boundary and performed an external visual inspection without opening or touching the clock.",
+        "A bounded observation update was committed. The next proposed character response was not committed because its separate review failed at the provider.",
+        "This provides a partial contrast with the consent path, not a completed story or independent preference judgement."
+      ],
+      "failureClassification": {
+        "providerStatus": "failed",
+        "providerCode": "responseTooManyFailedAttempts",
+        "reportedHttpStatus": 429,
+        "lastRuntimeRunStatus": "failed",
+        "lastTriggerActionSequences": [],
+        "automaticClientRetry": false,
+        "manualRepairInEpisode": false,
+        "replacementEpisode": false,
+        "causeLimit": "The provider reported a rate-limit-related failure. Read-only catalog readiness does not guarantee generation availability; exact upstream cause and retry time are not established.",
+        "narrativeQualityScore": null
+      },
+      "restoration": {
+        "modelRequests": 0,
+        "sameInitialStateAsPairedRelease": true,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawResponsesPreserved": true,
+        "originalUnknownSessionUnchanged": true
+      },
+      "rawEvidence": [
+        {
+          "file": "codex-m1-clock-r1-refuse-v61-run.json",
+          "sha256": "03ec497b8f215a09430d40cd4e69df83ec5643682e9585256eab27c2cf65e310"
+        },
+        {
+          "file": "codex-m1-clock-r1-refuse-v61-run-backup.json",
+          "sha256": "c0e02db608883bd7a4f953a4f00b9e6a1f1e50bbe54cc3c35d76a464a6aaefb0"
+        },
+        {
+          "file": "codex-m1-clock-r1-refuse-v61-run-preregistration.json",
+          "sha256": "4d5fa615eb007353820d2f741c26c3ee7181b23a17405d1cb7ffa535da336115"
+        },
+        {
+          "file": "codex-m1-paired-restoration-v61.json",
+          "sha256": "fc72e6d113833ea5696afc0ca486ac6da651dc3089e04a4c08d962ebb82de0df"
+        },
+        {
+          "file": "storyforge-chat-m1-clock-paired-v61-run.mjs",
+          "sha256": "6d298708b5f0078a2a99124fb307242025645a5cf22078d9c274fac8602ccf43"
+        },
+        {
+          "file": "storyforge-chat-m1-paired-restoration-v61.mjs",
+          "sha256": "0d62078c564452e717bbd1a400aaa4b20bdc6ba06871143f0ff0f49b17c54e8c"
+        },
+        {
+          "file": "codex-m1-channel-readiness-v61.json",
+          "sha256": "2b81c0d44dd2502325511c46f28fff04dee66e2a47f4ea639aba027acf6835b6"
+        }
+      ]
+    }
+  ],
+  "unexecutedSlots": "All other IDs are derived deterministically from protocol matrix; no replacement/retry is counted as this original episode.",
+  "limits": [
+    "Original V59 full CI failed before all tests because its snapshot lacked Git metadata; document check passes in a byte-identical corrected CI copy, full CI is queued, and original full E2E is running. No full-pass claim.",
+    "Agnes has no usable current configuration; its 60 scheduled slots remain unstarted.",
+    "No independent human scoring, fair SillyTavern comparison or commercial acceptance.",
+    "New holdout cases remain unexecuted and were not used for implementation tuning."
+  ],
+  "next": "Preserve both original episode slots: one unknown and one failed. No automatic retry or new generation immediately after the reported 429. Keep fixed-code CI/E2E jobs to terminal; inspect real provider availability before starting further paired cases. Prepared blind packets contain no scores; independent reviewers and Agnes configuration remain outstanding. Any code change creates a separately labelled cohort.",
+  "runtimeWorkspaceIdentity": {
+    "headAtRun": "efe1ab5e6ba108476635fd0dc4c16c66e99b1683",
+    "runtimeCodeMatches": "104624e8856e3a31d6b9c95d9e730ee45e483189",
+    "verifiedPaths": [
+      "src",
+      "scripts",
+      "package.json",
+      "package-lock.json",
+      "vite.config.ts"
+    ],
+    "verification": "git diff 104624e8 for all listed paths was empty; only evaluation/document files changed in V60. The recorded full manifest identifies the V59 engineering snapshot, not the newly added V60 evidence files."
+  },
+  "collectionSetupErrors": [
+    {
+      "episodeId": "m1-v1/daily-clock-promise/local-codex/r1/refuse",
+      "phase": "before new session or generation",
+      "generationRequests": 0,
+      "newRuntimeSessions": 0,
+      "cause": "Evaluation script omitted expanding the existing 作品与存档 picker before selecting 新建会话. Corrected script used the existing UI; no product change and no model request replay.",
+      "evidence": {
+        "file": "codex-m1-clock-r1-refuse-v61.json",
+        "sha256": "3c0f8536277dcf26d4c457d064dc7d2aad5469821aacf157ac848d97ae38f6f5"
+      },
+      "script": {
+        "file": "storyforge-chat-m1-clock-paired-v61.mjs",
+        "sha256": "c9dbbdfc10ac8534a2a161a3430f85a6a3b8eaec00016cd6b2401d9fda61f0df"
+      }
+    }
+  ],
+  "independentReviewPreparation": {
+    "packetVersion": 1,
+    "sampleCount": 2,
+    "scope": "Existing incomplete internal episodes; SillyTavern comparison absent. Not human review results.",
+    "publicPackets": [
+      {
+        "variant": "A",
+        "file": "m1-review-packet-v1/review-A.html",
+        "sha256": "fe6fb7a168d28474c78c4bda787a4857dd9fed61618919b53fc1b6da48198de8"
+      },
+      {
+        "variant": "B",
+        "file": "m1-review-packet-v1/review-B.html",
+        "sha256": "5b3c04179415eeb1ae736706aa3e54ef857f100b2bb08195b8b3353a64861e1f"
+      }
+    ],
+    "publicZip": {
+      "file": "m1-review-packet-v1/character-chat-review-v1.zip",
+      "sha256": "30b9cb6c679d1185863d6bcc66eab3df028066a269900608d8d0f5045e4096de"
+    },
+    "privateMappingExcludedFromZip": true,
+    "productAndProviderMetadataOmitted": true,
+    "scoresPrefilled": false,
+    "humanReviewsRecorded": 0,
+    "qa": {
+      "file": "m1-review-packet-v1/qa.json",
+      "sha256": "6c44dd803a0905dbe8d1fa850937d7fa967cc3a1774283029499ec55083f6c26"
+    },
+    "qaScope": "1280px and 390px layouts, no horizontal overflow, no network calls, blank-score defaults, empty-export prevention, synthetic insufficient-evidence export; not an actual human rating."
+  },
+  "engineeringValidation": {
+    "codeHead": "104624e8856e3a31d6b9c95d9e730ee45e483189",
+    "manifestSha256": "918e5d24a6fe9ae7736b650253eff80cf0527f7d5a33c4f2af0d3f0d263b319d",
+    "originalFullCi": {
+      "status": "failed",
+      "exitCode": 1,
+      "cause": "Plain snapshot had no Git metadata; document-authority checker could not run git ls-files. Full test suite was not reached.",
+      "failurePreserved": true
+    },
+    "environmentCorrection": {
+      "filesVerified": 3324,
+      "sourceBytesUnchanged": true,
+      "newGitIndexMatchesHead": true,
+      "newSnapshotClean": true,
+      "targetedDocumentCheckExit": 0,
+      "separateCiCopy": true,
+      "activeE2ESnapshotUntouched": true
+    },
+    "correctedFullCi": {
+      "status": "queued",
+      "newReceiptRequired": true
+    },
+    "fullE2E": {
+      "status": "running",
+      "complete": false
+    },
+    "evidence": [
+      {
+        "file": "character-chat-v61-ci-environment-proof.json",
+        "sha256": "62bdee51976dbf11f69737f2047b0a27ad43a6e464ea965529cefa56ce9c725f"
+      },
+      {
+        "file": "character-chat-v59-full-ci-failed-environment.log",
+        "sha256": "504a2aa203b7c26d9f32c0de030854a02ff5adda2756e963f27bc086af0400c4"
+      },
+      {
+        "file": "character-chat-v59-full-ci-failed-environment-receipt.json",
+        "sha256": "cd91a01b213c23d73fb6f6476522cc9a40918293e43c6742731caf049fa63074"
+      }
+    ]
+  }
+}

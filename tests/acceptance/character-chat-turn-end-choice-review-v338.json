@@ -1,0 +1,205 @@
+{
+  "schema": "storyforge.chat-turn-end-choice-review-engineering",
+  "version": 1,
+  "at": "2026-10-22T21:55:56.242849+00:00",
+  "status": "targeted-engineering-passed-real-model-pending",
+  "source": {
+    "at": "2026-10-22T21:55:56.167Z",
+    "passed": true,
+    "sourceHead": "6ed91f15e09f7d9682a2474a1655ddc4c7598fdd",
+    "sourceKind": "manifest-verified-worktree",
+    "files": 3438,
+    "manifestSha256": "310de4dcf609f0660cfac35f5a5fe1df65d16fe75ca8befb33c731c07ae7fc94",
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v338-turn-end-choice-review/manifest.json"
+  },
+  "versions": {
+    "producer": "chat-narrative-action-v65",
+    "reviewer": "chat-narrative-action-review-v40",
+    "options": "chat-narrative-options-v40",
+    "optionsReview": "chat-narrative-options-review-v29",
+    "reader": "chat-narrative-runtime-view-v18",
+    "retrieval": "chat-relevance-v14"
+  },
+  "behavior": {
+    "changed": "Only new version2 turn-end review explicitly separates unadopted actionChoice from final handoff and persisted facts",
+    "unchanged": [
+      "historical turn-end review bytes",
+      "ordinary action/pause review instructions",
+      "generation/schema/source selection",
+      "all five independent rejection checks",
+      "no new table,field,permission,world/media write or model step"
+    ],
+    "historicalTurnEndReviewRulesSha256": "0e4d8f9cdd94b8c539c0a41e27d6cbbb3ff16081c3c295eb3abf3dff1e9a761c"
+  },
+  "regression": {
+    "distinctFiles": 28,
+    "distinctPassed": 513,
+    "newRegressionCases": 11,
+    "initialTargeted": {
+      "files": 4,
+      "passed": 58
+    },
+    "relatedFirst": {
+      "files": 24,
+      "passed": 447,
+      "failed": 6,
+      "exitCode": 1
+    },
+    "relatedCorrected": {
+      "files": 4,
+      "passed": 49,
+      "addedSavedReview39Cases": 2
+    },
+    "counting": "58+(453-47)+49=513; correction reruns not added twice",
+    "firstFailuresPreserved": true,
+    "failureExplanation": "Stale current/future version fixtures in four files. Current65/40,future66,and explicit saved39 sample retained."
+  },
+  "browser": {
+    "files": 7,
+    "passed": 32,
+    "failed": 0,
+    "flaky": 0,
+    "skipped": 0,
+    "retries": 0,
+    "exitCode": 0,
+    "durationMs": 179941.63499999998,
+    "sameSourceBeforeAfter": true,
+    "serverPort": 51553,
+    "execSession": 49777
+  },
+  "checks": {
+    "governance": {
+      "at": "2026-10-22T21:51:08.986288+00:00",
+      "checks": [
+        {
+          "check": "check:architecture",
+          "exitCode": 0
+        },
+        {
+          "check": "check:required-tables",
+          "exitCode": 0
+        },
+        {
+          "check": "check:ai-manual",
+          "exitCode": 0
+        },
+        {
+          "check": "check:ai-entry-registry",
+          "exitCode": 0
+        },
+        {
+          "check": "check:agent-context",
+          "exitCode": 0
+        },
+        {
+          "check": "check:agent-freshness",
+          "exitCode": 0
+        },
+        {
+          "check": "check:docs",
+          "exitCode": 0
+        },
+        {
+          "check": "check:roadmap",
+          "exitCode": 0
+        },
+        {
+          "check": "check:project-metrics",
+          "exitCode": 0
+        },
+        {
+          "check": "check:source-reachability",
+          "exitCode": 0
+        }
+      ],
+      "passed": true
+    },
+    "typeLint": {
+      "at": "2026-10-22T21:51:35.630228+00:00",
+      "paths": [
+        "src/lib/agent/skill-registry.ts",
+        "src/lib/character-interaction/action-choice-budget.ts",
+        "src/lib/character-interaction/action-choice-message-evidence.ts",
+        "src/lib/character-interaction/action-output-contract.ts",
+        "src/lib/character-interaction/action-wire.ts",
+        "src/lib/character-interaction/commitment-prompt.ts",
+        "src/lib/character-interaction/context-selection.ts",
+        "src/lib/character-interaction/coordinator-audience.ts",
+        "src/lib/character-interaction/inquiry-prompt.ts",
+        "src/lib/character-interaction/memory-reconciliation.ts",
+        "src/lib/character-interaction/narrative-action-prompt.ts",
+        "src/lib/character-interaction/narrative-commitments.ts",
+        "src/lib/character-interaction/narrative-conversation-evidence.ts",
+        "src/lib/character-interaction/narrative-player-pause.ts",
+        "src/lib/character-interaction/narrative-promise-request.ts",
+        "src/lib/character-interaction/narrative-replanning.ts",
+        "src/lib/character-interaction/narrative-scene-transition.ts",
+        "src/lib/character-interaction/ordinary-action-prompt.ts",
+        "src/lib/character-interaction/player-decision-prompt.ts",
+        "src/lib/character-interaction/review-normalization.ts",
+        "src/lib/character-interaction/situation-harness.ts",
+        "src/lib/character-interaction/turn-completion.ts",
+        "src/lib/character-interaction/turn-end-control.ts",
+        "tests/e2e/character-chat-action-choice.spec.ts",
+        "tests/e2e/character-chat-control-handoff.spec.ts",
+        "tests/e2e/character-chat-memory-reconciliation-contract.spec.ts",
+        "tests/e2e/character-chat-turn-end-control.spec.ts",
+        "tests/regression/R-CHAT-02-action-choice-harness.test.ts",
+        "tests/regression/R-CHAT-02-autonomous-pause-review.test.ts",
+        "tests/regression/R-CHAT-02-bounded-observation.test.ts",
+        "tests/regression/R-CHAT-02-choice-message-evidence.test.ts",
+        "tests/regression/R-CHAT-02-control-handoff-harness.test.ts",
+        "tests/regression/R-CHAT-02-fact-discovery.test.ts",
+        "tests/regression/R-CHAT-02-ordinary-action.test.ts",
+        "tests/regression/R-CHAT-02-player-decision.test.ts",
+        "tests/regression/R-CHAT-02-replanning.test.ts",
+        "tests/regression/R-CHAT-02-spoken-inquiry-review.test.ts",
+        "tests/regression/R-CHAT-03-recent-dialogue-bindings.test.ts",
+        "tests/regression/R-CHAT-03-recent-dialogue-harness.test.ts",
+        "tests/regression/R-CHAT-03-turn-allowance.test.ts",
+        "tests/regression/R-CHAT-03-turn-end-choice-review.test.ts",
+        "tests/regression/R-CHAT-03-turn-end-harness.test.ts",
+        "tests/regression/R-CHAT-04-commitment-generation.test.ts",
+        "tests/regression/R-CHAT-04-history-audit.test.ts"
+      ],
+      "checks": [
+        {
+          "check": "types",
+          "exitCode": 0
+        },
+        {
+          "check": "lint",
+          "exitCode": 0
+        }
+      ]
+    },
+    "build": {
+      "at": "2026-10-22T21:52:13.783438+00:00",
+      "checks": [
+        {
+          "check": "build",
+          "exitCode": 0
+        },
+        {
+          "check": "check:bundle-size",
+          "exitCode": 0
+        }
+      ]
+    }
+  },
+  "boundaries": {
+    "realModelCalls": 0,
+    "fullCIPassed": false,
+    "formalM1Passed": false,
+    "remainingTechnicalPackages": 7,
+    "historicalV332V337FailuresPreserved": true
+  },
+  "evidence": {
+    "preregistration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v338-turn-end-choice-review/preregistration.json",
+    "browserReport": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v338-turn-end-choice-review/browser.json",
+    "targetedLog": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v338-turn-end-choice-review/targeted-1.log",
+    "relatedOriginalLog": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v338-turn-end-choice-review/related-1.log",
+    "relatedCorrectedLog": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v338-turn-end-choice-review/related-r2.log"
+  }
+}

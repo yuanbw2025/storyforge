@@ -1,0 +1,74 @@
+{
+  "version": 371,
+  "recordedAt": "2026-10-24T04:18:15.939393+00:00",
+  "status": "bounded-real-model-diagnostic-passed-not-M1",
+  "sourceHead": "49c53da628aea7a06a5e17826fea35f63f9d5d24",
+  "producer": "chat-narrative-action-v72",
+  "reviewer": "chat-narrative-action-review-v42",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "purpose": "One original player-response continuation from the preserved V367 failed parent; no new player hint or rewritten source.",
+  "result": {
+    "modelRequests": 3,
+    "observedTokens": 41885,
+    "durationSeconds": 56.603,
+    "candidate": "version4 yield-to-player",
+    "sixIndependentChecksPassed": true,
+    "newMessages": 0,
+    "playerDecisionStillUnmade": true,
+    "goalStillActive": true,
+    "originalFailureRetained": true,
+    "originalParentUnchanged": true,
+    "refreshEqual": true,
+    "refreshModelCalls": 0,
+    "coldImport": {
+      "checks": {
+        "originalFailedParentStatePreserved": true,
+        "originalRunHistoryPreserved": true,
+        "originalFailurePreserved": true,
+        "originalPendingQuestionPreserved": true,
+        "branchStatePreserved": true,
+        "branchResumeViewPreserved": true,
+        "restoredResumePanelMatches": true,
+        "refreshBothStatesPreserved": true,
+        "worldPreserved": true,
+        "childRunStatesPreserved": true,
+        "originalOpeningReviewPreserved": true,
+        "allArtifactBytesAndMultiplicityPreserved": true,
+        "zeroModelRequests": true,
+        "noResumableRuns": true
+      },
+      "modelCalls": 0
+    },
+    "sourceUnchanged": true
+  },
+  "evidenceHashes": {
+    "preregistration.json": "ff4594581e7b09e55942c497b5cf82ab466f4af8442d9b4c9bcca8ed8b6be9e2",
+    "player-acknowledgement-model.json": "154ec5c5e46bc4ccdf960d641fa763a99314f175b188782568e722dabae477fa",
+    "player-acknowledgement-model-backup.json": "9ff69039f2894e3e7c8fa6d6c66e76f9b308725f0fd1f522323a7b35b25c4f3b",
+    "restoration-logical-history.json": "51a3b72080eeaf437b292f2937458263f9d459e9d571ec39399f678c165cdab1"
+  },
+  "claims": {
+    "formalM1Credit": false,
+    "humanQualityPass": false,
+    "storyCompletion": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "released": false
+  },
+  "outstanding": [
+    "Fresh full M1 matrix on the corrected source; no historical failure or denominator rewritten.",
+    "Agnes production review reliability.",
+    "Current complete delivery gates plus the remaining plan packages."
+  ],
+  "engineeringFollowup": {
+    "sourceHead": "49c53da628aea7a06a5e17826fea35f63f9d5d24",
+    "applicationSourceUnchanged": true,
+    "files": 187,
+    "passed": 2296,
+    "failed": 0,
+    "skipped": 0,
+    "reportSha256": "673eaa418cd4933c75d6c5468fc152e2b465c82189f21ba9ae84c21c5405a47f",
+    "fullDeliveryPassed": false
+  }
+}

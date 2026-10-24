@@ -1,0 +1,55 @@
+{
+  "version": 283,
+  "recordedAt": "2026-10-20T21:10:22.300233+00:00",
+  "sourceHead": "b7c18eca1c99df8f2c4213ada586d9c1c489d79b",
+  "product": "character-interaction",
+  "status": "actual-player-preference-separated-citation-adopted-and-restored",
+  "formalM1Credit": 0,
+  "protocol": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v283-clock-player-preference/run-r1/preregistration.json",
+    "sha256": "3e21bbdafb62f03f5e153cae06af779c9fd450120d36f0cf31b51226965af20a"
+  },
+  "result": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v283-clock-player-preference/run-r1/continuation.json",
+    "sha256": "b6a44c8b9a001c578dcbcee8191980a83cc28d32ffd33c67b8938a14797ddb51"
+  },
+  "backup": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v283-clock-player-preference/run-r1/continuation-backup.json",
+    "sha256": "7a803ffc9287ea7a97ae03e33b64a90b94d0e21bf5ef01f106e35555ebdf10e8"
+  },
+  "restoration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v283-clock-player-preference/run-r1/continuation-restoration-verified.json",
+    "sha256": "65021634d91e6f2170df2fe9c99531dab22236ab01a0000d65756de2a6fd04d2"
+  },
+  "requests": 3,
+  "nativeStatuses": [
+    "completed",
+    "completed",
+    "completed"
+  ],
+  "usage": {
+    "totalTokens": 51266,
+    "inputTokens": 49714,
+    "outputTokens": 1552,
+    "cachedInputTokens": 3328
+  },
+  "completedRuns": 1,
+  "playerOpportunities": 1,
+  "triggerStatus": "complete",
+  "goalStatus": "active",
+  "resultScope": "The character acknowledges the original preference and changes its advice to prioritize the original clock sound; it does not claim a repair, perform an inspection, or infer consent. Actual selection uses delivered message IDs separately from facts. One response only; unresolved repair goal retained.",
+  "automaticRetries": 0,
+  "parentStatePreserved": true,
+  "worldPreserved": true,
+  "restorationModelCalls": 0,
+  "m1Passed": false,
+  "sourceUnchanged": true,
+  "currentFullDeliveryRun": 39497585901,
+  "currentFullDeliveryStatus": "in_progress",
+  "replacedPreviousFullDeliveryRun": {
+    "runId": 39490727328,
+    "head": "ec77b69d",
+    "status": "cancelled-after-new-head",
+    "passed": false
+  }
+}

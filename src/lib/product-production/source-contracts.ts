@@ -22,7 +22,7 @@ import {
   getUpperProductWorldRequirementAdapterV1,
   type UpperProductWorldRequirementGoalV1,
 } from '../product/world-requirement-adapters'
-import { createWorldReferenceV1 } from '../world-engine/world-reference'
+import { createWorldReferenceV1, resolveWorldReferenceResourceScopeV1 } from '../world-engine/world-reference'
 import { resolveProductProductionWorldCompilationDescriptorsV2 } from './world-source'
 import { textAdventureMandatoryFullWorldResourcesV1 } from '../adventure/world-source-requirements'
 
@@ -97,12 +97,16 @@ export async function createProductProductionSourcePlanV1(input: {
     ...roleAnchors,
   ]).filter(key => input.brief.source.selection.resourceKeys.includes(key))
   if (!initialResourceKeys.length) initialResourceKeys.push(input.brief.source.selection.resourceKeys[0]!)
+  const consultationContextManifests = input.brief.intent.productType === 'character-interaction'
+    ? (await (await import('../character-interaction/consultation-harness')).readChatConsultationProductionEvidenceV1(input.scope, input.brief)).map(row => row.pointer)
+    : []
   return freezeProductSourcePlanV1({
     productInstanceKey: input.productionKey,
     worldReference: await createWorldReferenceV1(input.brief.source.worldReleaseId),
     adapter,
     goal: requirementGoal({ brief: input.brief, descriptors }),
     missingStrategy: 'block',
+    consultationContextManifests,
     initialResourceKeys,
     allowedDepths: ['index', 'summary', 'focused', 'full', 'original'],
     maxReadCalls: Math.min(20_000, Math.max(200, descriptors.length + 50)),
@@ -113,10 +117,11 @@ export async function createProductProductionSourcePlanV1(input: {
 
 export function productProductionTaskUsesWorldGatewayV1(task: ProductProductionPlanTaskV3): boolean {
   const isDeterministicIntegration = task.executionMode === 'deterministic'
-    && task.kind === 'runtime-package'
+    && ['runtime-package', 'chat-media-requirements', 'chat-media-review'].includes(task.kind)
   const skill = getAgentSkillV1(task.skillId ?? 'product-production.integrate.v1')
   return skill.contextGateway?.providerSourceKeys.includes('worldRelease') === true
     && (task.executionMode === 'model' || task.skillId === 'product-production.integrate.v1'
+      || task.taskKey === 'content.design'
       || isDeterministicIntegration)
 }
 
@@ -141,6 +146,26 @@ export async function parseProductProductionSourcePlanV1(
     throw new Error('[product-production-source] SourcePlan row/hash 不一致')
   }
   return plan
+}
+
+/** The Brief is immutable evidence, including its historical local ID. Only
+ * SourcePlan carries the remappable locator used for execution after import. */
+export async function resolveProductProductionWorldScopeV1(input: {
+  scope: WorkspaceScope
+  sourcePlan: ProductSourcePlanV1
+  brief: ProductProductionBriefV3
+}) {
+  const plan = await validateProductSourcePlanV1(input.sourcePlan)
+  if (plan.productType !== input.brief.intent.productType
+    || plan.worldReference.releaseHash !== input.brief.source.worldContentHash) {
+    throw new Error('[product-production-source] SourcePlan 与冻结 Brief 来源不一致')
+  }
+  const scope = await resolveWorldReferenceResourceScopeV1(plan.worldReference)
+  if (scope.projectId !== input.scope.projectId || scope.worldId !== input.scope.worldId) {
+    throw new Error('[product-production-source] WorldReference 超出当前世界作用域')
+  }
+  return {...scope, worldReleaseId: plan.worldReference.localReleaseRecordId,
+    worldReleaseHash: plan.worldReference.releaseHash}
 }
 
 export async function createConfirmedProductBriefV1(input: {
@@ -228,10 +253,11 @@ export async function executeProductProductionWorldGatewayV1(input: {
   signal?: AbortSignal
 }): Promise<ContextGatewayExecutionV1> {
   const skill = getAgentSkillV1(input.task.skillId ?? 'product-production.integrate.v1')
+  const worldScope = await resolveProductProductionWorldScopeV1(input)
   const compilationDescriptors = input.requireCompilationResources
     ? resolveProductProductionWorldCompilationDescriptorsV2({
       descriptors: (await openWorldSemanticResourceCatalogV1({
-        localReleaseRecordId: input.brief.source.worldReleaseId,
+        localReleaseRecordId: worldScope.worldReleaseId,
         expectedProjectId: input.scope.projectId,
         expectedWorldId: input.scope.worldId,
       })).resources,

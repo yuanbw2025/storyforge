@@ -1,0 +1,92 @@
+{
+  "schema": "storyforge.chat-m1-cohort-progress",
+  "version": 1,
+  "recordedAt": "2026-10-19T23:01:35.391024+00:00",
+  "cohort": "m1-v220-default-source",
+  "status": "production-unit-stopped-runtime-review-failure-not-accepted",
+  "sourceManifestSha256": "0abb398d4875f63869c6adfb2c65994e11742f06b431e715e1c8c79dd10b743e",
+  "actualDefault": "chat-narrative-action-v45",
+  "pageLocalOverride": false,
+  "injectedModelResponses": false,
+  "plannedEpisodes": 120,
+  "startedEpisodes": 1,
+  "failedEpisodes": 1,
+  "unitStoppedUnrunEpisodes": 5,
+  "remainingScheduledEpisodes": 114,
+  "humanScored": 0,
+  "episode": {
+    "id": "m1-v220-default-source/daily-clock-promise/local-codex/r1/weak-guidance",
+    "scenario": "daily-clock-promise",
+    "behavior": "weak-guidance",
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "opportunities": 7,
+    "protocolOutcome": "runtime-review-rejected",
+    "protocolQualityPass": false,
+    "productionRequests": 3,
+    "runtimeRequests": 26,
+    "requests": 29,
+    "actualUsage": {
+      "inputTokens": 389948,
+      "outputTokens": 17991,
+      "totalTokens": 407939
+    },
+    "costUsd": null,
+    "completedRuns": 8,
+    "failedRuns": 1,
+    "failedRunAdoptions": 0,
+    "goalStatuses": [
+      "active"
+    ],
+    "threadStatuses": [
+      "open"
+    ],
+    "failure": {
+      "code": "narrative-review-failed",
+      "check": "meaningful-direction",
+      "choiceKind": "wait",
+      "expressionMode": "speech-awaiting-player",
+      "reason": "继续触发下只再次重申已说明的开盖许可等待，没有新信息、理由、选择或后果。等待本身合理，但重复台词不构成有意义推进。",
+      "permissionsPassed": true,
+      "playerAgencyPassed": true,
+      "consequencesPassed": true
+    },
+    "restoration": {
+      "stem": "clock-r1-weak-guidance",
+      "runStatusesPreserved": true,
+      "verifiedCompletedHistories": 8,
+      "retainedFailedRuns": 1,
+      "resumableRuns": 0,
+      "openingReviewRetained": true,
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true,
+      "terminalReceiptBodiesRetained": true,
+      "usageEvidenceRetained": true
+    },
+    "fullTerminalReceiptsVerified": 7,
+    "terminalReceiptReadCalls": 0
+  },
+  "evidence": {
+    "directory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v220-m1-default-source",
+    "episodeSha256": "3032e06d13e8035813651577f97eb55dc64d48e959490d366f3ec76f25d58323",
+    "preregistrationSha256": "9035b84cfa7e0096e1ea4604065f25085fb46fe24f03804431d2f57fe5f257f5",
+    "summarySha256": "4b7f4c7b011defbedb834edcda0fcb5225d27073fe4ff1883d088205c46fae22",
+    "backupSha256": "2c545eacd86fa7815e18f2d705a43e1c6e49f12e36ada9eb3f16d2c3617ac76d",
+    "restorationSha256": "7148d296978c38d0231210f91ce237481a82f1728f8c724a58654c28a30e00c3",
+    "terminalReaderSha256": "181d4478bb7d4f017711a0a84d938228598027f47de2607db49e92fce5a41180"
+  },
+  "instrumentation": {
+    "perStageReceiptListInvalidFilter": true,
+    "independentExactContractReaderVerifiedAllBodies": true,
+    "registeredRunnerUnchanged": true
+  },
+  "next": "Keep semantic rejection. Add a governed, reviewed control outcome for a genuine wait on an explicit continuation without creating repeated dialogue, invented story progress or an automatic retry. Preserve all prior failures; validate the next version as a new cohort.",
+  "limitations": [
+    "One attempted core episode; not M1 completion or human acceptance.",
+    "Full V219 engineering gates remain independently queued.",
+    "Five paired behaviors remain unrun because the registered production-unit policy stops on runtime failure."
+  ]
+}

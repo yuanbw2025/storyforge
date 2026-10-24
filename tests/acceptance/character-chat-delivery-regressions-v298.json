@@ -1,0 +1,102 @@
+{
+  "schema": "storyforge.delivery-regression-repair-evidence",
+  "version": 298,
+  "at": "2026-10-21T01:08:40.349959+00:00",
+  "sourceBaseHead": "1095d3647e2e976c10291a1d91b4c52e632c983a",
+  "scope": "Two test-harness corrections for the exact old-head full-delivery failures; no product implementation changes.",
+  "baselineFailure": {
+    "path": "/Users/qinyingying/.codex/worktrees/character-chat-plan/storyforge/tests/acceptance/character-chat-full-delivery-39501843746.json",
+    "sha256": "5e1c3c643432d87e46db7633adadfcad6c5690791c1f0a76332fb474191c8f9a"
+  },
+  "changes": [
+    {
+      "file": "tests/e2e/text-adventure-media-revision.spec.ts",
+      "problem": "Automatic Build DAG overwrites the shared activity label immediately after content revision.",
+      "repair": "Keep UI submit/refresh assertions and await the production-scoped succeeded revise-text-content durable receipt, completed timestamp and child build 2.",
+      "timeoutChanged": false,
+      "focusedBrowser": {
+        "passed": 1,
+        "log": {
+          "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v298-delivery-regressions/browser.log",
+          "sha256": "3cda6043b7333866337579ebbc7c1a96425190c1b5b03d1c472cf521de5793e2"
+        }
+      }
+    },
+    {
+      "file": "tests/regression/R-CHAT-04-commitment-context-harness.test.ts",
+      "problem": "The 60-second case combines 31 durable setup actions, current retrieval and full portable import of every saved ledger; remote full suite exceeded the deadline.",
+      "repair": "Use the adjacent history lifecycle case allowance of 90 seconds for this one case, retaining all 16 histories, 31 setup actions, producer/reviewer/adoption, reopen and full portable import assertions.",
+      "timeoutBeforeMs": 60000,
+      "timeoutAfterMs": 90000,
+      "profileBaseHead": "c5e497b27ad7dfb5ecc473061cbe3db92845bec5",
+      "profileSource": "Isolated archived checkout with timing instrumentation only.",
+      "phaseTimings": [
+        {
+          "from": "start",
+          "to": "seeded",
+          "milliseconds": 25656
+        },
+        {
+          "from": "seeded",
+          "to": "generated",
+          "milliseconds": 1291
+        },
+        {
+          "from": "generated",
+          "to": "inspected",
+          "milliseconds": 71
+        },
+        {
+          "from": "inspected",
+          "to": "adopted",
+          "milliseconds": 226
+        },
+        {
+          "from": "adopted",
+          "to": "reopened",
+          "milliseconds": 10
+        },
+        {
+          "from": "reopened",
+          "to": "reinspection",
+          "milliseconds": 62
+        },
+        {
+          "from": "reinspection",
+          "to": "exported",
+          "milliseconds": 131
+        },
+        {
+          "from": "exported",
+          "to": "imported",
+          "milliseconds": 21370
+        },
+        {
+          "from": "imported",
+          "to": "finished",
+          "milliseconds": 76
+        }
+      ],
+      "profileLog": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/delivery-39501843746-triage/commitment-phases.log",
+        "sha256": "98eeb8f5067eb9d4092b80e90fe30a0168d33791e963eca2b70b8ac0cf1da170"
+      },
+      "focusedCoverage": {
+        "testsPassed": 2,
+        "commandExitCode": 1,
+        "reason": "Targeted tests passed; whole-repository coverage thresholds are not satisfied by one test file. This is not a full CI pass.",
+        "log": {
+          "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v298-delivery-regressions/commitment-coverage.log",
+          "sha256": "1c2ca0a2e0ed064fece0e2ae4e19653eac8549f6d4fc785ca3ae9b2a3779616a"
+        }
+      }
+    }
+  ],
+  "typesAndChangedFilesLintPassed": true,
+  "applicationCodeUnchangedSince": "1095d364",
+  "performanceImprovementClaim": false,
+  "modelCalls": 0,
+  "fullCurrentCI": false,
+  "fullCurrentE2E": false,
+  "next": "Commit the fixture repairs and run full CLI/browser delivery on the resulting PR head; retain the original failure."
+}

@@ -1,0 +1,99 @@
+{
+  "version": 365,
+  "recordedAt": "2026-10-24T02:37:27.809547+00:00",
+  "status": "engineering-verified-model-diagnostics-pending",
+  "product": "character-interaction",
+  "phase": "S3 product development",
+  "branch": "fix/chat-narrative-flow-20261023",
+  "baseHead": "725a4363662c466822679ff4097ed1b3111e8612",
+  "problem": "V364 reading-night R1 ignored an actually delivered independent direction and selected wait. R2 selected wait but expressed a redundant closing sentence. Original independent reviews rejected both.",
+  "change": "Producer v71 requires ordered coverage of the actor's delivered possibilities. A remaining available direction cannot select wait or no direction. Wait is a silent yield-to-player candidate with a narrow schema and raw-output check shared by generation, recovery and adoption.",
+  "boundaries": {
+    "owner": "Chat Work and runtime session",
+    "source": "existing interactionRuntime and role view",
+    "candidateAndAdoption": "existing durable candidate, unchanged independent review v42, adoption and terminal receipt",
+    "world": "Frozen read-only WorldRelease",
+    "newTables": false,
+    "newGovernedFields": false,
+    "mediaOwner": "unchanged",
+    "maximumCalls": 3,
+    "reader": "chat-narrative-runtime-view-v18",
+    "retrieval": "chat-relevance-v14",
+    "historicalContractsPreserved": true,
+    "automaticSemanticRetries": 0
+  },
+  "validation": [
+    {
+      "check": "new continuation regression",
+      "tests": 10,
+      "passed": 10,
+      "injectedResponses": true
+    },
+    {
+      "check": "full role regression attempt 2",
+      "files": 186,
+      "tests": 2282,
+      "passed": 2251,
+      "failed": 31,
+      "evidence": "chat-regression-2.log",
+      "note": "Retained as failed. Eight failing files were subsequently repaired/rechecked; two production tests passed in an isolated single-worker rerun without raising their timeouts."
+    },
+    {
+      "check": "targeted failure rechecks",
+      "batches": [
+        {
+          "files": 8,
+          "passed": 85,
+          "failed": 0,
+          "evidence": "failed-recheck.log"
+        },
+        {
+          "files": 2,
+          "passed": 14,
+          "failed": 0,
+          "evidence": "final-regressions.log"
+        }
+      ],
+      "note": "Batches overlap; do not sum them as unique tests. All 31 failures from attempt 2 have passing targeted rechecks. A full exact-final-source run remains pending."
+    },
+    {
+      "check": "final isolated Chromium UI",
+      "files": 2,
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "evidence": "browser-final.json",
+      "injectedResponses": true
+    },
+    {
+      "check": "TypeScript, changed-file lint, architecture, required tables, AI manual, AI entry registry, agent context, production build and bundle size",
+      "exitCode": 0
+    }
+  ],
+  "evidenceHashes": {
+    "targeted-1.log": "a5f65545e0a76752b109f9df01c2dc5d8f25de51f21796c6ccf3e44c796e02d5",
+    "chat-regression-1.log": "aa05a692da4d17140752e243215d2d78fa16591fc05fafd1fc5f6f1b5d3f4d9f",
+    "chat-regression-2.log": "9e540b1bb4185d220336d8e6b06f14d43cd2c49193a988c58ef197ba0d55ae14",
+    "failed-recheck.log": "644b253aa47653a6d7af26ae50af9869cd8f606617ee968db92a44afd96dbd0a",
+    "final-regressions.log": "b863a8983cbaab7cd63b287a1bd7ee241bc11aeb00ea3a5ed20a32ad2ef81d94",
+    "browser-final.json": "bf0a1cf5bf9098b69763a7b203194eab5de0dde75230738ec03a09ff226db81e",
+    "types-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "final-check-0.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "verified-governance.json": "ad23ae69591f5f347d1a19eba1d9aa7dff35b6b7213fb8f493985e9951a9c975",
+    "build.log": "bd9a5008bbdd4bc7056ffd7bc58acf828e8d2489bd0dbeb5654bcb5c8be816f7"
+  },
+  "outstanding": [
+    "Two bounded real-model diagnostics from the unchanged V364 failed parent snapshots.",
+    "Full delivery checks on the final commit.",
+    "Fresh formal M1 matrix and the other remaining plan packages."
+  ],
+  "claims": {
+    "realModelCalls": 0,
+    "semanticImprovementVerified": false,
+    "currentFullDeliveryPassed": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "released": false
+  }
+}

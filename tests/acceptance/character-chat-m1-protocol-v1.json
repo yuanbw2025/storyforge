@@ -1,0 +1,101 @@
+{
+  "schema": "storyforge.character-chat-m1-protocol",
+  "version": 1,
+  "frozenAt": "2026-10-14",
+  "status": "frozen-for-collection-not-accepted",
+  "purpose": "完整片段的可重复模型行为评测；脚本玩家不是独立真人试玩。工程、模型运行、人类评分及商业结论分开记录。",
+  "code": {
+    "head": "104624e8856e3a31d6b9c95d9e730ee45e483189",
+    "manifestSha256": "918e5d24a6fe9ae7736b650253eff80cf0527f7d5a33c4f2af0d3f0d263b319d",
+    "engineeringGateAtFreeze": "targeted checks passed; full CI and E2E queued; collection may start, acceptance may not"
+  },
+  "matrix": {
+    "coreScenarioIds": ["daily-clock-promise", "inn-missing-seal", "riverside-reading-evening"],
+    "coreMaterial": "character-chat-narrative-cases.json:scenarios",
+    "coreSplit": "development-regression; never relabelled holdout",
+    "holdoutScenarioIds": ["pottery-gift-deadline", "archive-missing-map"],
+    "holdoutMaterial": "character-chat-m1-holdouts-v1.json",
+    "behaviorIds": ["weak-guidance", "refuse", "alternative", "rest", "return", "unexpected"],
+    "providerSlots": ["local-codex", "agnes"],
+    "repeats": [1, 2],
+    "coreEpisodes": 72,
+    "holdoutEpisodes": 48,
+    "totalScheduledEpisodes": 120,
+    "productionUnits": 20,
+    "episodeId": "m1-v1/{scenarioId}/{providerSlot}/r{repeat}/{behaviorId}",
+    "pairing": "每个情境/提供商/重复单独生产一个冻结 release；六种行为从该 release 的同一初始状态创建独立会话，不共享运行记忆。两次重复重新生产。",
+    "order": "core scenarios in listed order, then holdouts; provider slots independently runnable; repeat 1 before 2; behaviors in listed order",
+    "productionFailure": "保留该生产单元及其六个 production-blocked episode 槽位；不重抽开场，不以未运行冒充通过。运行质量仅对实际运行报告，端到端分母保留全部计划槽位。"
+  },
+  "models": [
+    {
+      "slot": "local-codex",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "transport": "local subscription bridge; no paid API fallback",
+      "appSettings": {"temperature": 0.2, "maxTokens": 16000},
+      "effectiveSampling": "bridge request accepts model/messages/output schema only; app temperature and maxTokens are not passed to Codex; retain actual request and usage, do not claim controlled sampling",
+      "costUsd": null
+    },
+    {
+      "slot": "agnes",
+      "model": null,
+      "status": "configuration-unavailable; not runnable",
+      "condition": "在此槽位首次调用之前追加配置修订，冻结实际模型、采样、预算及连接核验；不得用历史模型记录代替当次配置。"
+    }
+  ],
+  "production": {
+    "source": "作者预登记的原创材料，经 WorldRelease、明确来源分类、Brief/SourcePlan、正式 S3 Harness 生产。保留角色本名；禁止混入工程夹具的额外世界、人物或调查。",
+    "sourceVisibility": "publicFacts 公开；角色 goals/values/privateFacts/beliefs 仅对应角色；authorOnlyFacts 仅经明确 discovery 授权进入发现链，未知真相不进入角色上下文。",
+    "openingChoice": "按原始候选顺序选择第一个所有必要审查通过的开场，保存全部候选和拒绝原因；没有通过项则记生产失败。",
+    "s2Consultation": "本轮使用完整预登记作者 Brief，不另作模型润色；不据此声称已评测自然语言 S2 会谈。",
+    "authorPermissions": "使用该代码版本 DEFAULT_CHAT_SETTINGS_V3；单角色、日常强度、每触发最多一条行动、最多两条活跃事项、允许有限局面扩展及玩家后续情境；调查场景另明确冻结原始发现条件。",
+    "publication": "仅隔离浏览器的本地 ProductRelease；不得发布线上内容或修改作者项目。",
+    "beforeRuntime": "记录 WorldRelease/SourcePlan/SourceManifest/ProductRelease hash、来源分类、实际 settings、模型及代码身份；缺少身份则停止，不伪造已执行片段。"
+  },
+  "player": {
+    "kind": "scripted policy with operator selection from visible dialogue; not a human participant",
+    "visibility": "玩家输入仅依据玩家可见对话和公开材料；不得用作者隐情提示解法。每个选择记录可见依据；不得帮角色逐步完成弱引导任务。",
+    "weak-guidance": "循环简短回应：嗯，我在听。／你接着说。／我想听听你的想法。若角色等待必须由玩家决定的许可，可答我还没有决定，你可以先说说顾虑，不授予未提出的动作；无待决事项且有未完成角色目标时可点让角色继续。",
+    "refuse": "拒绝首次主要建议并给出与公开情境相容的理由；之后不接受同一建议的改写版。可以回应新的合规办法，记录拒绝之后的实际差异。",
+    "alternative": "首次主要建议后提出一个使用公开条件、与原建议不同的可行办法；不得透露隐藏事实，也不得直接宣告实施成功。",
+    "rest": "首次完整回应后明确先休息或闲聊；后续不主动重新开启任务。若角色有效承接休息并不再推进，允许 intentional-pause 提前结束。",
+    "return": "至少一个已提交变化后明确短暂离开；刷新并确认零新增调用；再发送返回消息，引用实际可见的变化。不得擅自增加未发生的时间或离线事件。",
+    "unexpected": "使用公开存在的物品、场所或安排，提出原对话尚未提过但合理的选择；记录事实依据，不强制系统接受不具备的权限。"
+  },
+  "budget": {
+    "usualOpportunities": [20, 40],
+    "maximumPlayerOpportunities": 20,
+    "maximumProductionRequests": 6,
+    "maximumRuntimeRequests": 90,
+    "maximumObservedTotalTokens": 1000000,
+    "maximumWallMinutes": 60,
+    "observationTimeoutMinutes": 20,
+    "automaticRetries": 0,
+    "manualRepairInScoredEpisode": false,
+    "stopCheck": "每次新触发前检查预算，已发请求只观察到终态；上限含审查/局面/发现调用，不把玩家输入次数冒充调用次数。正常产品有界链可能越过软 token 上限一次，记录实际值，不悄悄继续。"
+  },
+  "endings": {
+    "meaningful-closure": "相关目标/事项实际完成或明确放弃，有可见原因和后果，且没有等待中的必要选择；保留提前收束的完整证据给人工评分。",
+    "intentional-pause": "玩家明确要求休息/暂缓且角色承接；保留尚未完成事项，不算任务完成。",
+    "budget": "达到机会、调用、token 或时间上限；不等于叙事成功。",
+    "failure": "生产、合同、审查、调用或恢复失败；保存原始输出、状态与原因，不自动重试，不从分母删除。",
+    "unknown": "观察超时不推断终态、不重发；后续只读核验可追加结果，不覆盖原记录。",
+    "stagnation": "同一未变化的建议/请求连续三次，无新理由、信息、行动或后果；保留为失败结束，避免靠凑轮数隐藏停滞。"
+  },
+  "evidence": {
+    "raw": "请求与原始响应、全部候选/审查、每次输入和触发、角色文本、事实/目标/事项/关系变化、来源与版本、durable run/事件/receipt、用量和失败、原样备份；私有本地归档0600，仓库只存不含凭据的摘要与SHA-256。",
+    "recovery": "每段终态后刷新；每个生产单元至少一次完整备份导入新隔离浏览器并刷新，核对已登记重映射语义和零模型调用。失败状态同样恢复。",
+    "counts": "scheduled、production-blocked、started、completed、failed、unknown、human-scored 分开统计；completed 指协议收集终止，不代表质量通过。",
+    "changes": "代码、材料、选开场规则或评分阈值变化即建立新 cohort；旧失败与分母保留。修复续跑单列诊断，不能顶替原 episode。",
+    "holdouts": "不将留出材料用于提示、逻辑、评分锚点调试。发现问题后的修复从下一 cohort 起评估；已暴露情境不再称新留出。"
+  },
+  "judging": {
+    "dimensions": ["人物动机与忠实", "有效变化及后果承接", "玩家选择权", "节奏与重复控制"],
+    "anchors": {"1": "明显破坏", "2": "多次失效", "3": "勉强成立需玩家补救", "4": "自然成立且无需救场", "5": "持续出色"},
+    "pass": "两名未直接实现该机制的评审各自四维均至少4分才记一致通过；分歧保留原分并复核，不用平均值掩盖低分。",
+    "target": "核心与留出分别报告；总体及每情境/行为/模型分层通过率均至少80%，失败计入已尝试分母；缺配置或缺评分的槽位不算通过且不能关闭M1。",
+    "blind": "隐去产品/模型标识，随机顺序呈现完整文本及另页事实状态证据；保留平局和失败；实现者/同模型审查不是独立人类评分。",
+    "commercial": "本协议不包含SillyTavern公平对照、真人7至14天使用、商业成本或付费意愿证明。"
+  }
+}

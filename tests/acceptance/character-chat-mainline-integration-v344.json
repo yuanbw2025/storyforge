@@ -1,0 +1,190 @@
+{
+  "version": 1,
+  "at": "2026-10-22T23:29:41.297229+00:00",
+  "status": "focused-mainline-integration-passed-full-delivery-pending",
+  "previousHead": "c302e27d",
+  "mainHead": "e4f2496d35ecca4e34bbb76f5f4cc5e50c1ef7ea",
+  "scope": "Merge upstream durable contract byte-budget repair and release docs; preserve character-chat behavior.",
+  "conflicts": [
+    "Generated architecture metrics, resolved using npm run gen:project-metrics"
+  ],
+  "unitTestsPassed": 68,
+  "browser": {
+    "startTime": "2026-10-22T23:27:42.477Z",
+    "duration": 39823.205,
+    "expected": 5,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "checks": [
+    {
+      "name": "focused",
+      "command": [
+        "npx",
+        "vitest",
+        "run",
+        "tests/regression/R-HARNESS0-contract-schema.test.ts",
+        "tests/regression/R-HARNESS1-event-store-resume.test.ts",
+        "tests/regression/R-CHAT-03-maintained-pause.test.ts",
+        "tests/regression/R-CHAT-03-turn-end-harness.test.ts",
+        "tests/regression/R-CHAT-03-recent-dialogue-harness.test.ts",
+        "--reporter=json",
+        "--outputFile=/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v344-main-integration/focused.json"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:24:06.586093+00:00"
+    },
+    {
+      "name": "architecture",
+      "command": [
+        "npm",
+        "run",
+        "check:architecture"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:24:13.553698+00:00"
+    },
+    {
+      "name": "required-tables",
+      "command": [
+        "npm",
+        "run",
+        "check:required-tables"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:24:13.701892+00:00"
+    },
+    {
+      "name": "ai-manual",
+      "command": [
+        "npm",
+        "run",
+        "check:ai-manual"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:24:14.239458+00:00"
+    },
+    {
+      "name": "ai-entry-registry",
+      "command": [
+        "npm",
+        "run",
+        "check:ai-entry-registry"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:24:15.125025+00:00"
+    },
+    {
+      "name": "docs",
+      "command": [
+        "npm",
+        "run",
+        "check:docs"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:24:15.686125+00:00"
+    },
+    {
+      "name": "roadmap",
+      "command": [
+        "npm",
+        "run",
+        "check:roadmap"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:24:15.830629+00:00"
+    },
+    {
+      "name": "agent-context",
+      "command": [
+        "npm",
+        "run",
+        "check:agent-context"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:24:15.976315+00:00"
+    },
+    {
+      "name": "agent-freshness",
+      "command": [
+        "npm",
+        "run",
+        "check:agent-freshness"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:24:16.676623+00:00"
+    },
+    {
+      "name": "canon-coverage",
+      "command": [
+        "npm",
+        "run",
+        "check:canon-coverage"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:24:16.822654+00:00"
+    },
+    {
+      "name": "project-metrics",
+      "command": [
+        "npm",
+        "run",
+        "check:project-metrics"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:24:17.275823+00:00"
+    },
+    {
+      "name": "types",
+      "command": [
+        "npx",
+        "tsc",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:24:56.606456+00:00"
+    },
+    {
+      "name": "build",
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:26:15.863120+00:00"
+    },
+    {
+      "name": "bundle-size",
+      "command": [
+        "npm",
+        "run",
+        "check:bundle-size"
+      ],
+      "exitCode": 0,
+      "at": "2026-10-22T23:26:16.422635+00:00"
+    }
+  ],
+  "browserReceipt": {
+    "exitCode": 0,
+    "sourceUnchanged": true,
+    "command": [
+      "npx",
+      "playwright",
+      "test",
+      "tests/e2e/harness-contract-size.spec.ts",
+      "tests/e2e/character-chat-maintained-pause.spec.ts",
+      "--retries=0",
+      "--reporter=json",
+      "--output=/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v344-main-integration/browser-output"
+    ],
+    "at": "2026-10-22T23:28:23.232343+00:00",
+    "modelCalls": 0
+  },
+  "manifestSha256": "f83831c5798d4d455c90d047797043db380608245a6725b0d3df3a5ec2000b1e",
+  "modelCalls": 0,
+  "formalM1Credit": false,
+  "fullDeliveryValidated": false,
+  "olderFullDeliverySnapshot": "V342 remains frozen at fef76fc1 and cannot validate this integration"
+}

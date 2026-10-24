@@ -1,0 +1,78 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 321,
+  "kind": "real-codex-coordinator-audience-followthrough",
+  "at": "2026-10-22T08:41:09.038057+00:00",
+  "sourceUnchanged": true,
+  "sourceManifestSha256": "2e64b8ede9af4797b119485de45a21a81df81089b511f4212500b33a55b2992b",
+  "formalM1Credit": 0,
+  "humanScoring": "deferred",
+  "requests": 7,
+  "allNativeRequestsCompleted": true,
+  "reportedTokens": 124811,
+  "playerOpportunities": 1,
+  "completedRuns": 2,
+  "failedRuns": 1,
+  "completedWork": "Grounded innkeeper question and subsequent bounded inquiry request passed all six independent checks and were adopted. Original roster/scene-person contradiction did not recur in this case.",
+  "stillIncomplete": "Generated innkeeper reply stopped at structural parsing because respondent fact was absent from evidenceFactKeys. Adding the actual known contact fact in a zero-call preview still fails the pending-only allowlist. No NPC answer or story closure was adopted.",
+  "diagnosis": {
+    "at": "2026-10-22T08:39:01.751Z",
+    "modelCalls": 0,
+    "originalParseError": "Error: [chat-inquiry] 答复缺少听众、人物依据或明确结果",
+    "addingRespondentReferenceStillRejected": "Error: [chat-inquiry] 询问前提证据缺少实际提问和人物依据",
+    "respondentFact": {
+      "audienceKeys": [
+        "player",
+        "participant.001"
+      ],
+      "factKey": "local-1-3",
+      "origin": "author-private",
+      "sourceEventSequence": 0,
+      "sourceKnowledgeKey": null,
+      "text": "掌柜正在大堂的公用茶桌旁清点干净茶碗，与柜台之间没有隔门，叶岑可以走近向他发问；他尚未就铜印失踪作出说明。"
+    },
+    "actorAlreadyKnows": true,
+    "factExistedByQuestion": true,
+    "respondentExcludedByPendingList": true,
+    "stateUnchanged": true,
+    "notApplied": true,
+    "diagnosis": "V3 requires respondent in pending.evidenceFactKeys, while the actual grounded respondent is visible but omitted by the later action request. The model cannot both include that respondent and satisfy the pending-only allowlist. Need a versioned question-time contact evidence closure, preserving original visibility, time and independent semantic review; not just another prompt instruction."
+  },
+  "restoration": {
+    "checks": {
+      "parentPreserved": true,
+      "branchPreserved": true,
+      "refreshPreserved": true,
+      "worldPreserved": true,
+      "runStatesPreserved": true,
+      "durableEvidencePreserved": true,
+      "noAutomaticCalls": true,
+      "noResumableRuns": true
+    },
+    "modelCalls": 0
+  },
+  "setupFailure": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v321-coordinator-followthrough/setup-failure.json",
+  "nextAction": "Version inquiry question-time evidence closure so an established visible contact can be cited even when omitted by the later pending request; preserve temporal knowledge checks, private audiences, unknown facts, original discovery prerequisites and independent review. Do not merely add a permissive prompt or retry the old failed response.",
+  "evidence": {
+    "coordinator-followthrough.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v321-coordinator-followthrough-r2/coordinator-followthrough.json",
+      "sha256": "ad286b6ea8e4df8844fe00db3af684f92f120e587cc125f1a051b88eb4c5ed8f"
+    },
+    "coordinator-followthrough-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v321-coordinator-followthrough-r2/coordinator-followthrough-backup.json",
+      "sha256": "a16428ed11ce098164e33f8334e5f9f420220a7560b4ba481c59e2854a47547d"
+    },
+    "restoration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v321-coordinator-followthrough-r2/restoration.json",
+      "sha256": "e83db844d1e0cf3c1ab10cd36d410785b6d15df5b0eaefd37b967899e5e2c896"
+    },
+    "inquiry-diagnosis.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v321-coordinator-followthrough-r2/inquiry-diagnosis.json",
+      "sha256": "47de375b4e59a40dbcae66e0c34d21c114414cb0aedef0b60d1352a8bf4da509"
+    },
+    "inquiry-boundary-proof.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v321-coordinator-followthrough-r2/inquiry-boundary-proof.json",
+      "sha256": "c9e73666fbde80f8b5692877f3bb7edafda3af38bede0b58457eb528b731aaa1"
+    }
+  }
+}

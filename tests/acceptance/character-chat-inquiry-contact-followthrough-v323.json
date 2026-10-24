@@ -1,0 +1,106 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 323,
+  "kind": "real-codex-inquiry-contact-followthrough",
+  "at": "2026-10-22T09:25:11.073574+00:00",
+  "sourceUnchanged": true,
+  "sourceManifestSha256": "560cb81d7ef1b682f4ab19691d466711748b88c5d46d74973b08f539c6f5caa9",
+  "formalM1Credit": 0,
+  "humanScoring": "deferred",
+  "requests": 5,
+  "allNativeRequestsCompleted": true,
+  "reportedTokens": 89970,
+  "playerOpportunities": 1,
+  "completedRuns": 2,
+  "failedRuns": 0,
+  "bindings": [
+    {
+      "runId": 43,
+      "versions": [
+        {
+          "skillId": "character.chat-situation-construction",
+          "promptVersion": "chat-situation-construction-v18",
+          "stepId": "interaction:runtime-candidate"
+        },
+        {
+          "skillId": "character.chat-situation-review",
+          "promptVersion": "chat-situation-review-v17",
+          "stepId": "interaction:situation-review"
+        }
+      ]
+    },
+    {
+      "runId": 44,
+      "versions": [
+        {
+          "skillId": "character.chat-narrative-action",
+          "promptVersion": "chat-narrative-action-v61",
+          "stepId": "interaction:action-choice"
+        },
+        {
+          "skillId": "character.chat-narrative-action",
+          "promptVersion": "chat-narrative-action-v61",
+          "stepId": "interaction:runtime-candidate"
+        },
+        {
+          "skillId": "character.chat-narrative-action-review",
+          "promptVersion": "chat-narrative-action-review-v38",
+          "stepId": "interaction:action-review"
+        }
+      ]
+    }
+  ],
+  "completedWork": "Original unanswered inquiry received a grounded innkeeper response with the previously omitted known contact reference. Independent review passed; response adopted once and read by the actor, which then made an independently reviewed self-pause. No replay or story answer supplied.",
+  "ending": {
+    "observed": "actor-autonomous-pause",
+    "rawCollectorReason": "unknown",
+    "interpretation": "Raw ending remains unknown because the preregistered intentional-pause helper only adjudicates explicit player-requested pauses. This is an unclassified ending, not a provider unknown or model failure. No post-hoc reclassification as full story success.",
+    "openThreads": [
+      "thread-1"
+    ],
+    "pausedGoals": [
+      "goal-seal-return-account"
+    ]
+  },
+  "stillIncomplete": "Continuous story quality, M1, Agnes, formal comparisons and commercial experience remain unaccepted. Prose remains formal and the five-call exchange cost is substantial; no latency percentile or price claim.",
+  "lineageUsage": {
+    "requests": 56,
+    "reportedTokens": 963857
+  },
+  "restoration": {
+    "checks": {
+      "parentPreserved": true,
+      "branchPreserved": true,
+      "refreshPreserved": true,
+      "worldPreserved": true,
+      "runStatesPreserved": true,
+      "durableEvidencePreserved": true,
+      "noAutomaticCalls": true,
+      "noResumableRuns": true
+    },
+    "modelCalls": 0
+  },
+  "nextAction": "Freeze this repair for integrated delivery. Before a fresh cohort, explicitly distinguish actor self-pause from player-requested pause without treating either as completed story. Continue planned varied-context, weak-response/refusal/redirection evidence; retain all prior failures.",
+  "evidence": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v323-inquiry-contact-followthrough/preregistration.json",
+      "sha256": "5c15289b1ec04986d2c2f6d79797b5f7cecef24ce6bedc49eff2109ebf29b2c5"
+    },
+    "inquiry-contact-followthrough.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v323-inquiry-contact-followthrough/inquiry-contact-followthrough.json",
+      "sha256": "4e21fcf5c18ca4c280aff741c9c4020c549b83a4c4e141f9069978b033abd333"
+    },
+    "inquiry-contact-followthrough-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v323-inquiry-contact-followthrough/inquiry-contact-followthrough-backup.json",
+      "sha256": "26ace5cae7d9c81aee3cacd60da80d079b6b5449e324e7641231c1318e3ef3a9"
+    },
+    "restoration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v323-inquiry-contact-followthrough/restoration.json",
+      "sha256": "5ebb5901eae5aa5b4aeea39b280e5f60611c89830786089c24ec37233413ad93"
+    },
+    "player-decisions.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v323-inquiry-contact-followthrough/player-decisions.json",
+      "sha256": "d182d02bdb4b661f7cc66578b31c22d480fefad67806883d74108430d660017f"
+    }
+  }
+}

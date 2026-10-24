@@ -1,0 +1,321 @@
+{
+  "schema": "storyforge.chat-situation-development",
+  "version": 1,
+  "at": "2026-10-23T00:31:29.332647+00:00",
+  "status": "targeted-engineering-passed-with-unrelated-freshness-failure-real-model-pending",
+  "source": {
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "baseHead": "27d87139172874f40331dfb539ad41320348905b",
+    "sourceKind": "manifest-verified-worktree",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/manifest-final.json",
+    "manifestSha256": "70b7c2d3f96c5207db24294bafe4c6372d8807e166a2a30dd582f7bfef096b42",
+    "files": 3449
+  },
+  "versions": {
+    "producer": "chat-situation-construction-v19",
+    "reviewer": "chat-situation-review-v18",
+    "reader": "chat-situation-runtime-view-v17",
+    "reviewReader": "chat-situation-review-v16",
+    "inquiryEvidence": 4,
+    "actionProducerUnchanged": "chat-narrative-action-v67"
+  },
+  "behavior": {
+    "newSituationOrigins": [
+      "player-request",
+      "player-followup"
+    ],
+    "requiresConcreteUsableBackgroundInGenerationAndIndependentReview": true,
+    "legacySystemRequestHashesPreserved": true,
+    "observationInquiryDiscoveryScopeUnchanged": true,
+    "permissionsAndPlayerAgencyUnchanged": true,
+    "newTables": false,
+    "newStateFields": false,
+    "worldWrites": false,
+    "modelCallBudget": 2,
+    "inputBudget": 40000,
+    "automaticRetries": 0,
+    "retainedV343InputsWithinOriginalBudget": true
+  },
+  "regression": {
+    "files": 179,
+    "distinctPassed": 2202,
+    "counting": "Replace complete corrected test-file results, preserving separate parameter cases. Earlier failures retained.",
+    "runs": [
+      {
+        "numTotalTests": 30,
+        "numPassedTests": 30,
+        "numFailedTests": 0,
+        "file": "focused.json"
+      },
+      {
+        "numTotalTests": 2201,
+        "numPassedTests": 2200,
+        "numFailedTests": 1,
+        "file": "all-chat.json"
+      },
+      {
+        "numTotalTests": 21,
+        "numPassedTests": 21,
+        "numFailedTests": 0,
+        "file": "corrected.json"
+      }
+    ],
+    "correction": "Former future pair 19/18 is now explicitly released; add it to positive historical/version coverage and retain unknown 20/19 and mixed-pair rejection."
+  },
+  "browser": {
+    "files": 5,
+    "passed": 36,
+    "failed": 0,
+    "skipped": 0,
+    "flaky": 0,
+    "retries": 0,
+    "sourceUnchanged": true,
+    "receipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/browser-receipt.json"
+  },
+  "checks": [
+    {
+      "name": "lint",
+      "command": [
+        "npx",
+        "eslint",
+        "src/lib/agent/skill-registry.ts",
+        "src/lib/character-interaction/coordinator-audience.ts",
+        "src/lib/character-interaction/discovery-evidence-context.ts",
+        "src/lib/character-interaction/harness.ts",
+        "src/lib/character-interaction/inquiry-evidence.ts",
+        "src/lib/character-interaction/inquiry-prompt.ts",
+        "src/lib/character-interaction/narrative-inquiry.ts",
+        "src/lib/character-interaction/narrative-situation-prompt.ts",
+        "src/lib/character-interaction/observation-scope-prompt.ts",
+        "src/lib/character-interaction/observation-visibility-prompt.ts",
+        "src/lib/character-interaction/situation-character-permissions.ts",
+        "src/lib/character-interaction/situation-development.ts",
+        "src/lib/character-interaction/situation-harness.ts",
+        "tests/regression/R-CHAT-02-discovery-evidence-context.test.ts",
+        "tests/regression/R-CHAT-02-inquiry-continuity.test.ts",
+        "tests/regression/R-CHAT-02-inquiry-result.test.ts",
+        "tests/regression/R-CHAT-02-observation-scope.test.ts",
+        "tests/regression/R-CHAT-02-observation-visibility.test.ts",
+        "tests/regression/R-CHAT-02-situation-development.test.ts",
+        "tests/regression/R-CHAT-04-fact-evidence-harness.test.ts"
+      ],
+      "exitCode": 0,
+      "seconds": 2.78,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "check:architecture",
+      "command": [
+        "npm",
+        "run",
+        "check:architecture"
+      ],
+      "exitCode": 0,
+      "seconds": 9.16,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/check-architecture.log",
+      "sha256": "23486d579737fc37398cd3cb43e9da946643d845c6948456591ea74125034e43"
+    },
+    {
+      "name": "check:required-tables",
+      "command": [
+        "npm",
+        "run",
+        "check:required-tables"
+      ],
+      "exitCode": 0,
+      "seconds": 0.23,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/check-required-tables.log",
+      "sha256": "dfa44ee6399f2cf6fc926481d382fb1e8c3dde5998079094d746eb18ba5b5c23"
+    },
+    {
+      "name": "check:ai-manual",
+      "command": [
+        "npm",
+        "run",
+        "check:ai-manual"
+      ],
+      "exitCode": 1,
+      "seconds": 0.66,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/check-ai-manual.log",
+      "sha256": "de6835f471eb44fe466ce979092a119d01f5dc2f28f3a3736270b04a406ac5f8"
+    }
+  ],
+  "correctedChecks": [
+    {
+      "name": "check:ai-manual",
+      "command": [
+        "npm",
+        "run",
+        "check:ai-manual"
+      ],
+      "exitCode": 0,
+      "seconds": 0.61,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/corrected-check-ai-manual.log",
+      "sha256": "da0e1a7cfe4a41cdb0c20b5ada439f9146ae0d02d441f78fd556a04a1e948e0c"
+    },
+    {
+      "name": "check:ai-entry-registry",
+      "command": [
+        "npm",
+        "run",
+        "check:ai-entry-registry"
+      ],
+      "exitCode": 0,
+      "seconds": 0.97,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/corrected-check-ai-entry-registry.log",
+      "sha256": "50ec410073f276d3bce9d7c96cd885a6a05afcc5aa7aed9032afebcdff52e1de"
+    },
+    {
+      "name": "check:agent-context",
+      "command": [
+        "npm",
+        "run",
+        "check:agent-context"
+      ],
+      "exitCode": 0,
+      "seconds": 0.17,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/corrected-check-agent-context.log",
+      "sha256": "6f3392aaae0540e5489ce6aaf118f48e0aaa444b8794bf0c62d61ec76d986a9d"
+    },
+    {
+      "name": "check:agent-freshness",
+      "command": [
+        "npm",
+        "run",
+        "check:agent-freshness"
+      ],
+      "exitCode": 1,
+      "seconds": 0.89,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/corrected-check-agent-freshness.log",
+      "sha256": "83c759de35a25054109e93cac0c69cce69c8aab6d83062883ad782c5377b4545"
+    }
+  ],
+  "remainingChecks": [
+    {
+      "name": "check:canon-coverage",
+      "command": [
+        "npm",
+        "run",
+        "check:canon-coverage"
+      ],
+      "exitCode": 0,
+      "seconds": 0.17,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/remaining-check-canon-coverage.log",
+      "sha256": "d3a266ff80e821238cf648a39ff267f03517aece434c4d5ddc16ce1c5ced0be1"
+    },
+    {
+      "name": "check:docs",
+      "command": [
+        "npm",
+        "run",
+        "check:docs"
+      ],
+      "exitCode": 0,
+      "seconds": 0.66,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/remaining-check-docs.log",
+      "sha256": "1cc482e4a4458a676eb0f03495da36882c6633daf1f6af057fbb72937eb999bf"
+    },
+    {
+      "name": "check:roadmap",
+      "command": [
+        "npm",
+        "run",
+        "check:roadmap"
+      ],
+      "exitCode": 0,
+      "seconds": 0.16,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/remaining-check-roadmap.log",
+      "sha256": "07abeb8220e9621ba2bf0755fe0a5166ecdda367f15a14feae15f55a2fb120cf"
+    },
+    {
+      "name": "check:project-metrics",
+      "command": [
+        "npm",
+        "run",
+        "check:project-metrics"
+      ],
+      "exitCode": 0,
+      "seconds": 0.79,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/remaining-check-project-metrics.log",
+      "sha256": "b0f6ccd8a091b3d35b98117c88d4c21bb25793ffbe6ec6ac71ba142f9ded42a4"
+    },
+    {
+      "name": "types",
+      "command": [
+        "npx",
+        "tsc",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "seconds": 42.31,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/remaining-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "build",
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "exitCode": 0,
+      "seconds": 78.33,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/remaining-build.log",
+      "sha256": "40a20b9cfb3c645c4f416111967a6868106b5fe601998eccdeca0080d7843fe1"
+    },
+    {
+      "name": "bundle-size",
+      "command": [
+        "npm",
+        "run",
+        "check:bundle-size"
+      ],
+      "exitCode": 0,
+      "seconds": 0.54,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development/remaining-bundle-size.log",
+      "sha256": "1244bbc36f1ac6b1a0ce63fe26563ea33a8e21881914f12c16959d67c415b8d5"
+    }
+  ],
+  "unrelatedBaselineFailure": {
+    "check": "check:agent-freshness",
+    "baselineHead": "27d87139172874f40331dfb539ad41320348905b",
+    "identicalFailureLines": [
+      "- text-open-world.production.gameplay-ruleset.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.player-build.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.story-architecture.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.region-skeleton.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.mainline.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.significant-threads.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.region-narrative-packs.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.quest-skeletons.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.progression-catalogs.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.encounter-catalog.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.item-reward-catalog.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.crafting-economy-catalog.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.npc-runtime-catalog.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.map-interaction-catalog.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.quest-finalize.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.scene-scripts.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.presentation-profile.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.system-finalize.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.balance-review.v1 verification is stale: 46 days old (max 45)",
+      "- text-open-world.production.semantic-review.v1 verification is stale: 46 days old (max 45)",
+      "- text-adventure.creative-direction.v1 verification is stale: 46 days old (max 45)",
+      "- text-adventure.visual-direction.v1 verification is stale: 46 days old (max 45)",
+      "- text-adventure.visual-quality-review.v1 verification is stale: 46 days old (max 45)"
+    ],
+    "count": 23,
+    "reason": "Existing non-chat skills are 46 days old against a 45-day limit after the UTC date rollover. No unrelated verification dates were changed.",
+    "blocksFullDelivery": true
+  },
+  "externalModelCalls": 0,
+  "formalM1QualityPassesAdded": 0,
+  "humanRatingsAdded": 0,
+  "pending": [
+    "Real same-seed new-background construction and character follow-through",
+    "Unrelated skill freshness verification and current-source full delivery",
+    "Cross-situation, dual-provider M1 and remaining product work packages"
+  ],
+  "evidenceDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v348-situation-development"
+}

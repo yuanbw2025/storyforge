@@ -1,0 +1,43 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 296,
+  "at": "2026-10-21T00:58:14.321745+00:00",
+  "status": "focused-engineering-passed",
+  "scope": "Retain authorized later runtime fact evidence together with selected earlier actions; action v56, options v35 and revision v21 use bound reader v17/retrieval v13. Historical readers unchanged.",
+  "sourceBaseHead": "648e4fa8a66e376bc2190eda7a0a3f4e5aa89e89",
+  "sourceManifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v296-history-followup-evidence/manifest-final.json",
+    "sha256": "0fa21abcaf366293bddcfdac16e4940d17bd8c9e6182e3db5052431090d6a5c0"
+  },
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v296-history-followup-evidence/engineering.json",
+    "sha256": "64e36cd04d476c03cc2bdfed9a6183f9f2e42bf4ca83e506e9419b9a5168938c"
+  },
+  "regression": {
+    "files": 22,
+    "passed": 304
+  },
+  "browser": {
+    "files": 5,
+    "passed": 19
+  },
+  "staticChecksPassed": true,
+  "modelCalls": 0,
+  "newTables": false,
+  "newPersistedOutputFields": false,
+  "privacyAndBudgetBoundariesPreserved": true,
+  "coverage": [
+    "Exact V295 legacy source hash and later fact omission reproduced; new reader retains both actions.",
+    "Private facts and private intermediates do not expand visible history.",
+    "100/300/1000 independent history facts remain bounded; optional components omitted whole, required over-budget closure stops.",
+    "Registered ordinary action/options/revision inputs, review, branch, import, refresh and durable recovery."
+  ],
+  "initialFailureRetained": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v296-history-followup-evidence/harness-initial.log",
+    "sha256": "a50941e9e7ff390c58d0da5450d2acbb1ff2f1600ab9d24c08093a23ad939562"
+  },
+  "fullCurrentCI": false,
+  "fullCurrentE2E": false,
+  "m1Passed": false,
+  "realFollowup": "character-chat-history-followup-real-v297.json"
+}

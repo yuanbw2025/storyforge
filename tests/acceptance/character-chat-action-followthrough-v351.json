@@ -1,0 +1,180 @@
+{
+  "schema": "storyforge.chat-consolidated-action-model",
+  "version": 1,
+  "at": "2026-10-23T02:55:56.406628+00:00",
+  "status": "real-action-progression-and-recovery-passed-pending-situation-remains",
+  "source": {
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "baseHead": "eeb20e506063eac3e0c8a1c927345d760300690c",
+    "sourceKind": "clean-worktree-commit",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v350-action-instructions/manifest-final.json",
+    "manifestSha256": "8a53c97f17786ee26944543099d2ed422787ae7253be5f1b0a57834b0fff5814"
+  },
+  "sourceUnchanged": true,
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "requests": 16,
+  "completedRequests": 16,
+  "automaticRetries": 0,
+  "usage": {
+    "totalTokens": 285264,
+    "inputTokens": 277715,
+    "cachedInputTokens": 14848,
+    "cacheWriteInputTokens": 0,
+    "outputTokens": 7549,
+    "reasoningOutputTokens": 2183
+  },
+  "costUsd": null,
+  "executionStartedAt": "2026-10-23T02:39:18.178Z",
+  "completedAt": "2026-10-23T02:45:36.032Z",
+  "playerOpportunities": 2,
+  "newPlayerMessages": 0,
+  "completedRuns": 6,
+  "adoptedActions": 4,
+  "adoptedInquiryResults": 2,
+  "progress": [
+    "Asked the visitor who they were, why they were knocking and whether help was urgent.",
+    "Visitor said they were passing through and wanted shelter; claims remained unverified.",
+    "Asked the innkeeper whether and where shelter was allowed.",
+    "Innkeeper allowed the hall table area and excluded the counter work area.",
+    "Unlatched and opened the door, while preserving the earlier refusal to search the communal work area."
+  ],
+  "originalInputBudgetFailureRecurred": false,
+  "actualActionInputBudgetReadback": {
+    "at": "2026-10-23T02:50:46.521Z",
+    "sourceHead": "eeb20e506063eac3e0c8a1c927345d760300690c",
+    "sourceUnchanged": true,
+    "modelCalls": 0,
+    "rows": [
+      {
+        "runId": 37,
+        "steps": [
+          {
+            "stepId": "interaction:action-choice",
+            "contentHash": "bc5c0587bb8626e5f1dfed233dc20ff3780d6eab811b19293eaf8954742b6110",
+            "estimatedInputTokens": 9835
+          },
+          {
+            "stepId": "interaction:runtime-candidate",
+            "contentHash": "afdad93702cb42538535db089852edcd8d3c334d9b8d7ec0747ee9deee4c3310",
+            "estimatedInputTokens": 21050
+          },
+          {
+            "stepId": "interaction:action-review",
+            "contentHash": "30681c64a9245128ca29da7e6522e2547d55998a8925ec5498030e0bbab67850",
+            "estimatedInputTokens": 20500
+          }
+        ],
+        "total": 51385,
+        "limit": 56000
+      },
+      {
+        "runId": 39,
+        "steps": [
+          {
+            "stepId": "interaction:action-choice",
+            "contentHash": "4abcbdbc441d30d3f7319f928d30de62444029faf711de95619e5dd10a92b0dc",
+            "estimatedInputTokens": 10068
+          },
+          {
+            "stepId": "interaction:runtime-candidate",
+            "contentHash": "742a242e46d0d553392ca9100753bad08e024b3ce112be30515b41c317591928",
+            "estimatedInputTokens": 21336
+          },
+          {
+            "stepId": "interaction:action-review",
+            "contentHash": "5c53488bc257377af412b070653b48e57c4e36907f8950ba997db7e5d646366e",
+            "estimatedInputTokens": 21212
+          }
+        ],
+        "total": 52616,
+        "limit": 56000
+      },
+      {
+        "runId": 41,
+        "steps": [
+          {
+            "stepId": "interaction:action-choice",
+            "contentHash": "9444600d839c9807733f3d0efce4f953edfaaa9a01f36d7a1a3a3810804a88be",
+            "estimatedInputTokens": 10328
+          },
+          {
+            "stepId": "interaction:runtime-candidate",
+            "contentHash": "7e6da9e4c578596f542dd0ad2779aa79652ab606b3692d9faa588007d4df4644",
+            "estimatedInputTokens": 21568
+          },
+          {
+            "stepId": "interaction:action-review",
+            "contentHash": "0fcfc363a239de4d7afce955fe577a7a63026dd069ec22fbea83cb85fcaec191",
+            "estimatedInputTokens": 21006
+          }
+        ],
+        "total": 52902,
+        "limit": 56000
+      },
+      {
+        "runId": 42,
+        "steps": [
+          {
+            "stepId": "interaction:action-choice",
+            "contentHash": "8769cdf9a6f8d0d212b63525ea2f484d62da40a3ef1222ffc3a5bced825be19f",
+            "estimatedInputTokens": 10419
+          },
+          {
+            "stepId": "interaction:runtime-candidate",
+            "contentHash": "8151373cce4840ebce8b3782c1a88b7df346b25604d697c217d2f0f346c65a5e",
+            "estimatedInputTokens": 21618
+          },
+          {
+            "stepId": "interaction:action-review",
+            "contentHash": "7141d10b19e004a2a5bac1f156692312804653d888e724e9ab9306af6baf5376",
+            "estimatedInputTokens": 21581
+          }
+        ],
+        "total": 53618,
+        "limit": 56000
+      }
+    ]
+  },
+  "remaining": {
+    "goalKey": "goal.door-inquiry-1",
+    "goalStatus": "active",
+    "threadKey": "thread.door-visitor-1",
+    "threadStatus": "open",
+    "pendingSituation": {
+      "direction": "承接已经打开的外门和已经说出的避雨邀请，判定来者是否作出叶岑能直接听见或看见的回应；不预设其愿意入内，不将回应视为身份已经核实。",
+      "evidenceExcerpt": "叶岑留在门内，没有重复催请，只留意门口，听候来者对避雨邀请的回应，没有替对方作出入内的动作。",
+      "evidenceFactKeys": [
+        "observation.front-door-open-1",
+        "statement.innkeeper-shelter-answer-1"
+      ],
+      "threadKey": "thread.door-visitor-1",
+      "actorKey": "participant.001",
+      "goalKey": "goal.door-inquiry-1",
+      "sourceEventSequence": 8
+    },
+    "nextAction": "Settle the saved pending response to the shelter invitation and continue the same goal in a separately registered continuation; do not regenerate or overwrite this completed two-opportunity sample.",
+    "naturalnessIssue": "Several utterances explicitly describe not deciding another person actions; this exposes boundary rules in narrative wording and still needs experience refinement.",
+    "performance": "About 378 seconds and 285264 reported tokens for this bounded two-opportunity sample; not a latency or commercial-cost pass."
+  },
+  "restoration": {
+    "checksPassed": 19,
+    "sessions": 5,
+    "modelCalls": 0,
+    "originalFailuresPreserved": 3,
+    "rawArtifactBytesAndMultiplicityPreserved": true,
+    "worldPreserved": true
+  },
+  "formalM1QualityPassesAdded": 0,
+  "humanRatingsAdded": 0,
+  "originalScheduledDenominatorChanged": false,
+  "fullObjectiveComplete": false,
+  "evidence": {
+    "preregistration.json": "0ccf0943ebfeb50d1b72c00d72006ae3f83a51c6494c4d41fe00c831f47e4f3d",
+    "consolidated-action-model.json": "5bb328736ea792533d738bb72372eefda4ca8c755ad9f9ff9db68a55289f88bf",
+    "consolidated-action-model-backup.json": "dd43d415338ec80fb1f860727181bcbf1f8e14afcfff44af6654f9b827e89c6e",
+    "restoration-logical-history.json": "750a440c496973c9778f0d90745c440fd4ccce1615cdc0ee4e70061c7d32bdac",
+    "input-budget-readback.json": "f4eba19e46b0a78dcecaace50c2ab023fdb8daba3731e0b36aa812ecdc3aeee4",
+    "read-input-budgets.mjs": "fc533c1d75d176d6f937bc281f6c7c98852c8ba9d169390e30e3379d22e0c3f7"
+  }
+}

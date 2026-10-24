@@ -1,0 +1,87 @@
+{
+  "schema": "storyforge.character-chat-provenance-audit",
+  "version": 1,
+  "implementationCommit": "af1bb4947f0152fbfc9ea641e56f737eca384af9",
+  "manifestSha256": "d242fb168db27fa2751fc0fea7b9ba24dd005ea0f4054e99a8e3dcbdbe3741e0",
+  "boundary": "S3 character-interaction runtime engineering audit; test IndexedDB, injected model outputs, frozen world unchanged; no product mutation",
+  "result": {
+    "kind": "durable-fact-provenance-lifecycle-audit",
+    "externalModelCalls": 0,
+    "injectedCalls": 2,
+    "committedFacts": 2,
+    "sourceKinds": [
+      "object",
+      "observation"
+    ],
+    "sourceEvidenceReferences": [
+      [
+        "lost"
+      ],
+      [
+        "record-card"
+      ]
+    ],
+    "sameEventDependencyAllowed": true,
+    "rootEventRetainsStructuredCandidate": true,
+    "canonicalStateOmitsKindAndEvidence": true,
+    "childHasNoSourceEventsOrRuns": true,
+    "parentDeletionRetainsCanonicalStateButClearsManagedParentLink": true,
+    "nestedBranchImportReopenEqual": true,
+    "unversionedExtraFactFieldsRejected": true,
+    "naiveExtraFieldsChangeStateHash": true,
+    "worldUnchanged": true,
+    "limits": "One controlled engineering action with injected approval, not real-model quality. Canonical facts are preserved; only the structured provenance is unavailable through the surviving child state/event/run lineage. Orphan blob forensic recovery is neither tested nor a supported reader."
+  },
+  "diagnosticAssertions": {
+    "tests": 1,
+    "exit": 0,
+    "meaning": "Confirms missing structured provenance in the surviving branch, not a delivered archive/index or long-run capability."
+  },
+  "sourceRestoration": {
+    "head": "af1bb4947f0152fbfc9ea641e56f737eca384af9",
+    "manifestSha256": "d242fb168db27fa2751fc0fea7b9ba24dd005ea0f4054e99a8e3dcbdbe3741e0",
+    "trackedFilesVerified": 3485,
+    "temporaryTestRemoved": true,
+    "gitClean": true
+  },
+  "nextContract": "docs/products/UPPER-PRODUCTS.md",
+  "nextSteps": [
+    "CHAT-04.06a",
+    "CHAT-04.06b",
+    "CHAT-04.06c",
+    "CHAT-04.06d"
+  ],
+  "artifacts": [
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v128-fact-provenance/audit.test.ts",
+      "sha256": "559c5c795ea31f3bb5d4e4759fe6a1536de3c0d724937b370a093cd07ae68788"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v128-fact-provenance/result.json",
+      "sha256": "c44bc7ff3a83f10aff724d2791b55820cf23d4189d3e355ed7dd3c39fae31477"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v128-fact-provenance/backup.json",
+      "sha256": "827487777ba7d797ebc0d2e808c1aeab02110f82b3f36d490602c175cbdd9d8b"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v128-fact-provenance/source-restored.json",
+      "sha256": "aafc4d6f6602364300052659e69165b6ab8c0bf3d27e30ba161805b8a71aad61"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v128-provenance.log",
+      "sha256": "fde95f6f8c973d3e3df340559f532604be4eab2f8f3ebc70960a8d53b5fa3867"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v128-provenance-receipt.json",
+      "sha256": "7bbd9ab3acb9df0fec0b01d1ab231dbebf8fe5342935625b263507821a4730d5"
+    }
+  ],
+  "limits": [
+    "Only one controlled action; real semantic quality not evaluated.",
+    "The original canonical facts are preserved; the missing material is their structured type/dependency provenance.",
+    "No fact archived, omitted or deleted, no storage limit raised, no schema or runtime code changed.",
+    "An unreferenced leftover blob is not a supported source or lifecycle guarantee.",
+    "V127 full CI/E2E remain separate and live; no new real-model, Agnes or human/commercial acceptance."
+  ]
+}

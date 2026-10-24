@@ -1,0 +1,102 @@
+{
+  "version": 383,
+  "recordedAt": "2026-10-24T06:40:17.613914+00:00",
+  "status": "engineering-verified-real-model-pending",
+  "sourceBase": "a36a4fad9392fe234d496a9dc492e8d8b215f67c",
+  "producer": "chat-opening-review-v14",
+  "change": "Constrain complete agency/development proof pairs to matching actors, actor goals, direction-specific known facts, distinct adaptive directions and compatible wait modes. Preserve the v13 wire and canonical v3 parser. Semantic review explicitly checks the actor and addressee, rather than treating player actions or unjustified self-inquiry as autonomous role action.",
+  "boundaries": {
+    "product": "character-chat",
+    "phase": "S3 production capability development",
+    "owner": "Chat Work and product build",
+    "world": "frozen read-only",
+    "newTables": false,
+    "newWorldWrites": false,
+    "newMediaOwner": false,
+    "inputBudget": 30000,
+    "maximumRequestedOutputTokens": 10000,
+    "reviewModelCalls": 1,
+    "automaticRetries": 0,
+    "fullSourcesRetained": true,
+    "canonicalParserChanged": false,
+    "historicalV13SchemaAndPromptUnchanged": true
+  },
+  "verification": {
+    "finalTargetedFiles": 5,
+    "finalTargetedTestsPassed": 70,
+    "finalBrowserCasesPassed": 32,
+    "browserFailed": 0,
+    "browserSkipped": 0,
+    "browserFlaky": 0,
+    "browserRetries": 0,
+    "tsc": true,
+    "changedFileLint": true,
+    "governanceChecksPassed": 9,
+    "build": true,
+    "bundleSize": true,
+    "priorRelatedLatestPerFilePassed": 112,
+    "priorRelatedScope": "Same implementation before final actor-perspective prompt clarification; opening-repair fixture rerun replaces the initially failed file. Final current-source full role regression is running separately.",
+    "completeRoleRegression": "in-progress",
+    "externalModelCalls": 0
+  },
+  "zeroCall": {
+    "at": "2026-10-24T06:32:42.794Z",
+    "historicalV13PromptUnchanged": true,
+    "historicalV13SchemaUnchanged": true,
+    "retainedNativeResponseAcceptedByOldWire": true,
+    "retainedNativeResponseRejectedByNewWire": true,
+    "originalDomainRejection": "Error: [chat-opening-development] 后续办法不能重复首个方向",
+    "estimatedInput": 17336,
+    "maximumInput": 30000,
+    "requests": 0,
+    "blockedPosts": 0,
+    "fullSourceRetained": true,
+    "currentSchemaSha256": "faac5bd526c927fe9cb9ed657bb65e577b7038527bceb53f5621d16e6bb49949"
+  },
+  "retainedFailures": {
+    "initialTargeted": {
+      "passed": 66,
+      "failed": 4,
+      "reasons": [
+        "Two multi-actor test mutations had not created a real second participant; replaced with the actual mixed-cast source fixture.",
+        "Duplicate schema structure exceeded the original input reservation; compact references and inline single-use pairs preserve complete sources and the original budget."
+      ]
+    },
+    "relatedInitial": {
+      "passed": 101,
+      "failed": 11,
+      "reason": "Opening repair fixture asserted the v13 schema name; updated the current contract assertion and all 31 tests in that file passed."
+    },
+    "browserInitial": {
+      "passed": 31,
+      "failed": 1,
+      "reason": "Agnes browser fixture asserted the old schema name. Corrected assertion passed all 9 repair cases; after final prompt clarification all 32 browser cases passed in one run."
+    }
+  },
+  "evidenceHashes": {
+    "tested-source-manifest.json": "8c49d6a9f9c825186b84a1a057f0972c4f1975e67d3246ba5814abd01f1e3a7b",
+    "targeted-initial.json": "4d9b85b34b10f48148b00ead4f0d75985377f8989e6edc005409eadebc5e6ef0",
+    "targeted-final.json": "740ae4b292395a1003925e2a11a447bec15d7b6bd90bb35abc4d6ba91f189a8f",
+    "targeted-final2.json": "329049d9a6f7bd0bfcafe36b8afec49b162b26542ec8166bad9c9ac32e696b6f",
+    "targeted-final3.json": "bed09bc869470848fd4c2fabbcf8cfa42997c0625fc42aec37cc63b972f288fa",
+    "targeted-complete.json": "e5161b38fd19e3b296aede98432b47d78b871ac42564efe5c939ee913f444ad7",
+    "related.json": "300029590347ecd8d2b8c00b24834d1488c04bd9fad675887b3dceb944cd600f",
+    "repair-final.json": "6b0d7c6a1e607b88c2ca81cb8ecf67dbaff0f397b28323264ded3fca79d4c858",
+    "browser.json": "9d5f7175136f142655615a943c8ebd606eb17331666a51b24080cfebdee3afb6",
+    "browser-repair.json": "eb39a415d1c59a2b477ece43ceae250bb5c660885704ddd6f0a17826c91255c0",
+    "browser-complete.json": "75659be8d715c8aad58d244713e516a20daf10feb2d1104f50932ab62a7641c1",
+    "governance-release.json": "344bc6fd5ae6f8a9957aff67101a66c19a1d2a76a48a78172d20eaa61d02c015",
+    "tsc-release.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lint-release.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build-release.log": "59789ab77dcebe5e60711143931c4820446ca358815ab2796d8a34cb667bcc8b",
+    "bundle-release.log": "9811b6a2b7962be69414345a662174e866ecae11b7cd648a9409be94c5b2c1b5",
+    "zero-call-complete.json": "c06cd36e800f831f3686d325c826ee3ce4c5308f3ee3ee6bc4aa5132331c606d"
+  },
+  "claims": {
+    "formalM1Credit": false,
+    "m1Passed": false,
+    "fullDeliveryPassed": false,
+    "commercialReady": false,
+    "released": false
+  }
+}

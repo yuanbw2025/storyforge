@@ -1,0 +1,91 @@
+{
+  "schema": "storyforge.character-chat-opening-repair-real-evidence",
+  "version": 1,
+  "batch": "V236",
+  "recordedAt": 1792466522.348577,
+  "status": "failed-production; no-runtime-quality-acceptance",
+  "source": {
+    "snapshotCommit": "06d803dd42193377968482e02b331f744e5ac601",
+    "manifestSha256": "b1775bd66dfa0c2c471cffec7fdfac2ccd1d687d789dcd69791cdada2fc8700f",
+    "sourceUnchanged": true
+  },
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "producerVersion": "chat-situation-production-v8",
+  "productionUnitsAttempted": 1,
+  "actualRequests": 1,
+  "httpStatuses": [
+    200
+  ],
+  "usage": [
+    {
+      "completion_tokens": 5411,
+      "prompt_tokens": 7807,
+      "total_tokens": 13218,
+      "completion_tokens_details": {
+        "reasoning_tokens": 383,
+        "text_tokens": 5028
+      },
+      "prompt_tokens_details": {
+        "cached_tokens": 256
+      }
+    }
+  ],
+  "runtimeOpportunities": 0,
+  "releasedPackages": 0,
+  "humanScoredEpisodes": 0,
+  "costUsd": null,
+  "failure": {
+    "attempt": 1,
+    "code": "task-draft-rejected",
+    "detail": "[chat-narrative] 私域事实不能伪造世界证据"
+  },
+  "findings": [
+    "Three correctly nested openings; AI-only thread participants fixed in this sample.",
+    "Source-derived facts still marked author-private with world references; one public thread references an actor-private fact.",
+    "Whole retained-subset validation prevents a blind automatic second call. No candidate adoption, release or runtime."
+  ],
+  "restoration": {
+    "checks": {
+      "buildFailureRetained": true,
+      "failureEventsRetained": true,
+      "allRawResponsesRetained": true,
+      "bothFailureDetailsRetained": true,
+      "noReleaseOrRuntimeCreated": true,
+      "worldPreserved": true,
+      "refreshEqual": true,
+      "zeroModelCalls": true
+    },
+    "modelCalls": 0,
+    "originalRunStatuses": [
+      "cancelled",
+      "completed",
+      "failed"
+    ],
+    "importedRunStatuses": [
+      "cancelled",
+      "running",
+      "failed"
+    ],
+    "scope": "Listed failure/raw-response/world/refresh checks only; imported run statuses differ, no full lifecycle equivalence claimed."
+  },
+  "evidenceFiles": {
+    "v236-opening-patch-source/agnes-clock-r1/clock-r1-weak-guidance.json": {
+      "sha256": "2d3713b892a5166eb4d56a49e7b42a891b662c8fdd1be50ad3420ef9829e17e6"
+    },
+    "v236-opening-patch-source/agnes-clock-r1/clock-r1-weak-guidance-backup.json": {
+      "sha256": "26001bfcd0d2172c5c5711b05eec734f97b05a31f16e53b5e215d0e1fe667e46"
+    },
+    "v236-opening-patch-source/agnes-clock-r1/production-restoration.json": {
+      "sha256": "dfe4e36c574f53056052b2ef6135f703060918e78c06b7bd9f11c22b1bc5127c"
+    },
+    "v236-opening-patch-source/cohort-registration.json": {
+      "sha256": "a277ccc2949e02c5540a24a08302189a5dbd4abbc02641d38a5a5a9123a1c780"
+    }
+  },
+  "next": "Trace a versioned source-reference output contract: model selects frozen knowledge references; system materializes exact source text and audiences. Keep semantic review, original failures and original M1 scope. Not implemented by this receipt.",
+  "fullDeliveryValidated": false,
+  "semanticQualityAccepted": false,
+  "humanAcceptance": false,
+  "commercialAcceptance": false
+}

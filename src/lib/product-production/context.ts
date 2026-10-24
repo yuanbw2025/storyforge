@@ -1,3 +1,5 @@
+import {chatSettingsForAIContextV1} from '../character-interaction/experience-info'
+import {readChatOpeningAutomaticRepairFeedbackV1} from '../character-interaction/opening-repair-evidence'
 import { db } from '../db/schema'
 import type { TtrpgProductionBriefV2, WorkspaceScope } from '../types'
 import type { AssembleContextInput, ContextSourceTransformer } from '../registry/types'
@@ -253,6 +255,9 @@ export async function readProductProductionBriefContext(input: AssembleContextIn
     .where('[productionId+revision]').equals([production.id!, production.currentBriefRevision]).first()
   if (!brief || brief.status !== 'authorized') throw new Error('[product-production-context] 当前 Brief 未授权')
   const content = JSON.parse(brief.briefJson)
+  if (content.intent?.productType === 'character-interaction' && content.characterChat) {
+    content.characterChat = chatSettingsForAIContextV1(content.characterChat)
+  }
   const ttrpgRules = content.intent?.productType === 'ttrpg' && content.ttrpg
     ? await (await import('../ttrpg/production-brief')).resolveTtrpgProductionRulePackV2({ scope, brief: content.ttrpg as TtrpgProductionBriefV2 })
     : null
@@ -262,7 +267,7 @@ export async function readProductProductionBriefContext(input: AssembleContextIn
     schema: 'storyforge.product-production.brief-context', version: 1,
     productionKey: production.productionKey, briefRevision: brief.revision, briefHash: brief.briefHash,
     sourceWorldContentHash: brief.sourceWorldContentHash, userIntentSummary: brief.userIntentSummary,
-    estimate: JSON.parse(brief.estimateJson), brief: JSON.parse(brief.briefJson),
+    estimate: JSON.parse(brief.estimateJson), brief: content,
   })
 }
 
@@ -2076,6 +2081,10 @@ export async function readProductProductionQualityFeedback(input: AssembleContex
 export async function readProductProductionRepairFeedback(input: AssembleContextInput): Promise<string> {
   const { scope, production, build } = await productionAndBuild(input)
   if (!build || !input.productProductionTaskKey) throw new Error('[product-production-context] 修复反馈需要 Build 与 task key')
+  if (production.productType === 'character-interaction') {
+    const automatic = await readChatOpeningAutomaticRepairFeedbackV1({scope, build, taskKey: input.productProductionTaskKey})
+    if (automatic) return JSON.stringify(automatic)
+  }
   if (production.productType !== 'text-open-world') {
     const resolution = JSON.parse(build.failureJson).resolution
     const authorRepairNote = typeof resolution?.note === 'string' ? resolution.note : null

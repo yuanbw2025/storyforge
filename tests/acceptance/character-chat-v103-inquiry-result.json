@@ -1,0 +1,93 @@
+{
+  "version": 103,
+  "status": "implemented; directed engineering gates passed; full CI and real acceptance pending",
+  "baseHead": "62d5de394d495f50e9d64af1c9ce6ac5e5c1e744",
+  "scope": "CHAT-02.16 actual inquiry reply, heard-only history, independently reviewed per-fact confirmation",
+  "realModelCalls": 0,
+  "implementation": {
+    "permissions": "allowInquiryResults explicitly frozen; absent is denied",
+    "producer": "chat-situation-construction-v8",
+    "reviewer": "chat-situation-review-v7",
+    "legacy": "v6/v7 producer and v6 reviewer system digests retained; new field rejected in old bindings",
+    "owner": "chat product instance; WorldRelease readonly",
+    "newTables": false,
+    "newAIEntrypoints": false,
+    "lifecycle": "existing durable runtime candidate and event, branch sequence rebase, backup import and refresh"
+  },
+  "validation": {
+    "targeted": {
+      "files": 5,
+      "passed": 65,
+      "newTests": 17,
+      "log": "/tmp/storyforge-chat-v103-inquiry-r4.log"
+    },
+    "browser": {
+      "passed": 3,
+      "log": "/tmp/storyforge-chat-v103-inquiry-e2e-r3.log",
+      "provider": "scripted mock; isolated browser; 390 width"
+    },
+    "broad": {
+      "files": 88,
+      "passed": 1148,
+      "logs": [
+        "/tmp/storyforge-chat-v103-chat-aitown-regression.log",
+        "/tmp/storyforge-chat-v103-aitown-regression.log"
+      ]
+    },
+    "gates": {
+      "receipt": "/tmp/storyforge-chat-v103-final-gates-receipt.json",
+      "passed": 9,
+      "metricsInitialFailure": "generated source count drift after adding two files",
+      "metricsCorrection": "/tmp/storyforge-chat-v103-project-metrics.log; regenerated via official script; check passed",
+      "bundleSize": "/tmp/storyforge-chat-v103-bundle-size.log"
+    },
+    "fullCI": "pending final clean snapshot",
+    "fullE2E": "pending final clean snapshot",
+    "finalTargeted": {
+      "passed": 17,
+      "log": "/tmp/storyforge-chat-v103-inquiry-r6.log"
+    },
+    "merged": {
+      "gatesPassed": 10,
+      "receipt": "/tmp/storyforge-chat-v103-merged-gates-receipt.json",
+      "bundleSize": "/tmp/storyforge-chat-v103-merged-bundle-size.log",
+      "regression": {
+        "files": 4,
+        "passed": 47,
+        "log": "/tmp/storyforge-chat-v103-merged-regression.log"
+      },
+      "browser": {
+        "passed": 12,
+        "log": "/tmp/storyforge-chat-v103-merged-e2e.log"
+      }
+    }
+  },
+  "initialFailuresPreserved": [
+    {
+      "log": "/tmp/storyforge-chat-v103-tsc-r1.log",
+      "reason": "readerVersion optional value in includes; narrowed without changing authority"
+    },
+    {
+      "log": "/tmp/storyforge-chat-v103-inquiry-r1.log",
+      "reason": "private question fixture violated existing player-visible action contract; kept production guard, use public question/private reply"
+    },
+    {
+      "log": "/tmp/storyforge-chat-v103-inquiry-e2e-r1.log",
+      "reason": "Node test runner imported browser helper; extracted pure output fixture, no product bypass"
+    }
+  ],
+  "remaining": [
+    "full engineering gates",
+    "new formal production and frozen release",
+    "preregistered Codex and Agnes semantic fidelity and sustained progression",
+    "independent human and commercial acceptance"
+  ],
+  "historicalEvidence": "V97/V99 and all earlier failures/denominators untouched; no holdout inspection",
+  "mainSync": {
+    "originMain": "ce49309b619880bcb79836c09356ee1cead0cb8a",
+    "incomingCommits": 2,
+    "scope": "longform outline Gateway skill fix",
+    "resolution": "Only generated AI manual and architecture counts conflicted; regenerated via official scripts."
+  },
+  "featureCommit": "4ad143b2"
+}

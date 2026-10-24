@@ -1,0 +1,79 @@
+{
+  "version": 378,
+  "recordedAt": "2026-10-24T05:21:47.853835+00:00",
+  "sourceBase": "ce6578383a61e51af2cb4b5fa7bde17753171306",
+  "status": "engineering-checkpoint-full-regression-browser-and-model-followup-pending",
+  "producer": "chat-opening-review-v12",
+  "change": "The review wire uses exact candidate and check keys. Each candidate has its own reference, goal, fact and direction schema. Shared identical definitions reduce schema size; the full field contract remains in the prompt without duplicating the entire schema inline. The original v3 semantic validator and stored report are unchanged.",
+  "boundaries": {
+    "product": "character-chat",
+    "phase": "S3 production capability development",
+    "owner": "Chat Work and product build",
+    "world": "frozen read-only",
+    "newTables": false,
+    "newWrites": false,
+    "modelCallsPerReview": 1,
+    "maximumRequestedOutputTokens": 10000,
+    "automaticReviewRetries": 0,
+    "historicalV11AndEarlierPreserved": true,
+    "canonicalReportVersion": 3,
+    "fullSourceRetained": true,
+    "originalInputBudget": 30000
+  },
+  "verification": {
+    "targetedInitial": {
+      "files": 3,
+      "passed": 38,
+      "failed": 0
+    },
+    "relatedInitial": {
+      "files": 8,
+      "passed": 98,
+      "failed": 2
+    },
+    "budgetAndBoundaryRecheck": {
+      "files": 3,
+      "passed": 37,
+      "failed": 0
+    },
+    "tsc": true,
+    "changedFileLint": true,
+    "governanceChecksPassed": 9,
+    "build": true,
+    "bundleSize": true,
+    "fullCharacterRegression": "running",
+    "currentBrowserRegression": "running",
+    "initialBrowser": {
+      "cases": 32,
+      "passed": 31,
+      "failed": 1,
+      "retries": 0
+    },
+    "externalModelCalls": 0,
+    "completeDeliveryPassed": false
+  },
+  "retainedFailures": {
+    "inputBudget": "The first keyed schema duplicated too much structure: author-source integration needed 32364/32352 input tokens versus the original 30000 reservation. Shared definitions and complete field instructions without an extra inline schema restored the original boundary. Both source lifecycle tests now pass without increasing the budget or removing source material.",
+    "browser": "A fixture reading an array index was changed to read the current candidate key; the original rejected-response and explicit-review assertions remain. Current browser suite is running."
+  },
+  "evidenceHashes": {
+    "targeted-initial.json": "2e93354713252a50a5d6c6e1ede1f56159afa8caf3f233388679ddfe06573fba",
+    "related.json": "5781cb3835f48ec01d084849896c5503e1412a10326c5d21d8b1b464defd8483",
+    "budget-before.json": "968cb1f39914167761a42ff1b747717b68f774c4d874363be8889341b4dccefe",
+    "budget-after.json": "9f12dc22b076e3685a2eab2fac1de203421c4d64104f5d3198db412681f00732",
+    "browser.json": "a2696ad0087f6c4675d0de0f63a1bf791a51e5a90ef4bf9c8e5be917b1c1421c",
+    "governance.json": "9638646280bce30dea466987636483d0aa26b74f6e676ada5f7c8dcb7193a5f2",
+    "lint.json": "a82a9a017c99f1dd9e564be605b43871c77e110e981829d5bb117faf13995c1c",
+    "tsc-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lint-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build-final.log": "228563cc1b9a3c1c33eaa72d339d58816a23c1c5161859da3bd65586b152c77b",
+    "bundle-final.log": "4aa5e14fca6d0ad8bf37172bc0ee5ccd534ce02c74865dce22870cd539842eb1",
+    "implementation-hashes.json": "95a290a9f96c60ed1f14d907c51736cce8f7099f447d618061bfa5a6e875b997"
+  },
+  "claims": {
+    "formalM1Credit": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "released": false
+  }
+}

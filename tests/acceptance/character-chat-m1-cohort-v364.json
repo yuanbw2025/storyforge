@@ -1,0 +1,39 @@
+{
+  "version": 364,
+  "at": "2026-10-24T01:58:21.746847+00:00",
+  "cohort": "m1-v364-current",
+  "sourceHead": "725a4363662c466822679ff4097ed1b3111e8612",
+  "status": "two-independent-production-units-failed-preserved-for-repair",
+  "matrixSlots": 120,
+  "counts": {
+    "failed": 2,
+    "not-dispatched-after-unit-failure": 10,
+    "external-provider-quota-blocked": 60,
+    "not-started": 48
+  },
+  "independentProductions": 2,
+  "openingCandidates": 6,
+  "openingCandidatesReviewPassed": 6,
+  "providerRequests": 59,
+  "allProviderRequestsCompleted": true,
+  "observedTotalTokens": 868266,
+  "independentRestorationsPassed": 2,
+  "restorationModelCalls": 0,
+  "humanScoring": "deferred",
+  "formalQualityPasses": 0,
+  "costUsd": null,
+  "oldCohortsUnchanged": true,
+  "next": "Address the recurring wait/continuation failure boundary before spending the remaining fresh matrix. Original slots and failures remain; source changes require a new registered cohort.",
+  "failureSummary": {
+    "r1": "A delivered independent notice-clarity direction was still available, but the role selected wait. Independent review rejected the control candidate.",
+    "r2": "The selector chose wait, but expression added a redundant closing speech. Independent review rejected it."
+  },
+  "evidenceHashes": {
+    "cohort-summary.json": "9f84721f5c0d393d701371b062cb3ab907fa947892899f0febc4248cd7479cf4",
+    "codex-reading-r1/reading-r1-weak-guidance.json": "27db26c21400650d573d1ea0b581fd73662f5cb0322d9bbf4ab2f663646aac63",
+    "codex-reading-r1/reading-r1-weak-guidance-backup.json": "58a4ce144dd73d70531db814fab5e5992e5809050dca1435144baa099db88201",
+    "codex-reading-r2/reading-r2-weak-guidance.json": "3af52fb7efa0da6e0d8ac0dafcfbbfb37188041487b533e56ceda62af64e3180",
+    "codex-reading-r2/reading-r2-weak-guidance-backup.json": "3dbc906c3b32b2aad3101bb9ea59bd1d2056ee6365315269ed708f8a42365dfe"
+  },
+  "relatedDiagnostics": "character-chat-choice-continuation-model-v366.json; bounded new branches, original failures unchanged"
+}

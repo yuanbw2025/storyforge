@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { createBridge, allowedRequest, validateInput, PREFIX } from './bridge.mjs'
+import { CodexTurnError } from './runtime.mjs'
 
 const input = () => ({ id: randomUUID(), model: 'model', messages: [{ role: 'user', content: 'private prompt' }] })
 async function fixture(t, generate, journalDir = mkdtempSync(join(tmpdir(), 'sf-bridge-test-'))) {
@@ -74,4 +75,35 @@ test('quota/transport failure after dispatch is unknown and never retried', asyn
   const body = input(); await f.request('/requests', body)
   const record = await (await f.request(`/requests/${body.id}`)).json()
   assert.equal(record.status, 'unknown'); assert.equal(calls, 1)
+})
+test('provider-confirmed failure/interruption persists across restart without replaying or adopting partial output', async t => {
+  for (const status of ['failed', 'interrupted']) {
+    const providerTurn = { threadId: 'thread', turnId: 'turn', status }; let calls = 0
+    const f = await fixture(t, async (_input, notify) => {
+      calls++; notify({ dispatched: true }); notify({ text: 'unaccepted partial output' })
+      throw new CodexTurnError(providerTurn, {httpConnectionFailed: {httpStatusCode: 429, raw: 'private diagnostic'}})
+    })
+    const body = input(); await f.request('/requests', body)
+    const record = await (await f.request(`/requests/${body.id}`)).json()
+    assert.equal(record.status, status === 'failed' ? 'failed' : 'cancelled')
+    assert.deepEqual(record.providerTurn, providerTurn)
+    assert.equal(JSON.stringify(record).includes('private'), false)
+    if (status === 'failed') assert.match(record.error, /httpConnectionFailed，HTTP 429/)
+    assert.equal(record.dispatched, true)
+    assert.equal((await f.request('/requests', body)).status, 200)
+    const directory = mkdtempSync(join(tmpdir(), 'sf-terminal-restart-'))
+    writeFileSync(join(directory, 'receipts.json'), readFileSync(join(f.journalDir, 'receipts.json')))
+    const restored = await fixture(t, async () => { calls++ }, directory)
+    assert.deepEqual(await (await restored.request(`/requests/${body.id}`)).json(), record)
+    await restored.request('/requests', body)
+    assert.equal(calls, 1)
+  }
+})
+test('historical unknown receipt is not inferred into a successful or failed turn', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'sf-old-unknown-')); const id = randomUUID()
+  writeFileSync(join(directory, 'receipts.json'), JSON.stringify([{ id, createdAt: Date.now(), status: 'unknown', text: '', dispatched: true, error: 'Codex 未成功完成本次生成，请检查登录、套餐额度及模型权限。' }]))
+  let calls = 0
+  const f = await fixture(t, async () => { calls++ }, directory)
+  const record = await (await f.request(`/requests/${id}`)).json()
+  assert.equal(record.status, 'unknown'); assert.equal(record.providerTurn, undefined); assert.equal(calls, 0)
 })

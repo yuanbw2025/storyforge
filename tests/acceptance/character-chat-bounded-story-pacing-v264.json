@@ -1,0 +1,257 @@
+{
+  "status": "focused-engineering-passed-delivery-queued",
+  "at": "2026-10-20T12:01:36.531303+00:00",
+  "scope": "Character-chat S2 new v3 draft and S3 explicit player triggers. Existing frozen permissions cap all pacing; no new AI calls, prompts, fields, tables, migrations, world writes or automatic calls on page load. Existing model steps remain unchanged.",
+  "source": {
+    "at": "2026-10-20T11:55:04.173093+00:00",
+    "root": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/browser-r2/source",
+    "snapshotTree": "4f7ec1f66780a7705e4d0d3849972a9395228317",
+    "featureBaseHead": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+    "manifestSha256": "b88185a0aab5a63d8b0eca4e0ba4c3212a9737916c772def8eadcf28d8bb5d80",
+    "files": 3820,
+    "changedFromV261": [
+      "docs/ARCHITECTURE.md",
+      "docs/products/UPPER-PRODUCTS.md",
+      "docs/roadmap/CHARACTER-CHAT-DEVELOPMENT-PLAN.md",
+      "src/components/character-interaction/CharacterInteractionPanel.tsx",
+      "src/components/character-interaction/ReleaseStartCard.tsx",
+      "src/lib/character-interaction/narrative-pacing.ts",
+      "src/lib/character-interaction/narrative-setup.ts",
+      "tests/acceptance/character-chat-observable-discovery-authorization-v262.json",
+      "tests/acceptance/character-chat-observable-inn-runtime-v263.json",
+      "tests/acceptance/character-chat-observable-source-units-v261.json",
+      "tests/e2e/character-chat-release-start.spec.ts",
+      "tests/e2e/character-chat-scheduling.spec.ts",
+      "tests/e2e/character-chat-turn-direction.spec.ts",
+      "tests/helpers/chat-library-fixture.ts",
+      "tests/regression/R-CHAT-03-default-pacing.test.ts",
+      "tests/regression/R-CHAT-03-turn-allowance.test.ts"
+    ],
+    "changedFromV264": [
+      "tests/e2e/character-chat-release-start.spec.ts"
+    ],
+    "applicationBytesUnchanged": true
+  },
+  "changes": [
+    "New story authoring cap and empty-story UI default up to two actions; companionship default one.",
+    "Latest saved explicit turn allowance survives refresh; undirected legacy turn retains prior one-step UI default.",
+    "New-session automatic opening uses the current session allowance and shows its cap before start.",
+    "Current manual pace selection is session-scoped; existing resume, waiting, interruption and budget gates retained."
+  ],
+  "regression": {
+    "files": 8,
+    "tests": 70,
+    "suites": [
+      {
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/focused.log",
+        "sha256": "82e8975ac3474a89de5b9cb5755d849f21fa3b6ea94c43222f7a0a9285115a03",
+        "files": 5,
+        "tests": 56
+      },
+      {
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/entry-regression.log",
+        "sha256": "0b16f319886c82c7b0addd9c973ea7dde76dd46ca7f9583b3d0185c49e967c04",
+        "files": 3,
+        "tests": 14
+      }
+    ],
+    "boundary": "Injected responses, not model quality."
+  },
+  "checks": [
+    {
+      "stage": "metrics",
+      "command": [
+        "npm",
+        "run",
+        "gen:project-metrics"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.82,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/logs/metrics.log",
+      "sha256": "0555eabe41357efe38464a935ad593aa025a0682300d6c86a7fa03fe2642b146"
+    },
+    {
+      "stage": "types",
+      "command": [
+        "npx",
+        "tsc",
+        "--noEmit"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 41.55,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/logs/types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "stage": "lint",
+      "command": [
+        "npx",
+        "eslint",
+        "src/lib/character-interaction/narrative-pacing.ts",
+        "src/lib/character-interaction/narrative-setup.ts",
+        "src/components/character-interaction/CharacterInteractionPanel.tsx",
+        "src/components/character-interaction/ReleaseStartCard.tsx",
+        "tests/regression/R-CHAT-03-default-pacing.test.ts",
+        "tests/regression/R-CHAT-03-turn-allowance.test.ts",
+        "tests/e2e/character-chat-turn-direction.spec.ts",
+        "tests/e2e/character-chat-scheduling.spec.ts",
+        "tests/e2e/character-chat-release-start.spec.ts",
+        "tests/helpers/chat-library-fixture.ts"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 1.8,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/logs/lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "stage": "check:architecture",
+      "command": [
+        "npm",
+        "run",
+        "check:architecture"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 7.23,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/logs/check-architecture.log",
+      "sha256": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616"
+    },
+    {
+      "stage": "check:required-tables",
+      "command": [
+        "npm",
+        "run",
+        "check:required-tables"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.15,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/logs/check-required-tables.log",
+      "sha256": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444"
+    },
+    {
+      "stage": "check:ai-manual",
+      "command": [
+        "npm",
+        "run",
+        "check:ai-manual"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.53,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/logs/check-ai-manual.log",
+      "sha256": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19"
+    },
+    {
+      "stage": "check:ai-entry-registry",
+      "command": [
+        "npm",
+        "run",
+        "check:ai-entry-registry"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.92,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/logs/check-ai-entry-registry.log",
+      "sha256": "e789c090422f8fb0b79fc174dffd5a8dd0a14b96e2952e3ed720e16b5489c00d"
+    },
+    {
+      "stage": "check:project-metrics",
+      "command": [
+        "npm",
+        "run",
+        "check:project-metrics"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.47,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/logs/check-project-metrics.log",
+      "sha256": "32f5ade067b3496f6b4dd1d2dde0aeef10be09621b5d5059fa5833f42f99b0ff"
+    },
+    {
+      "stage": "check:docs",
+      "command": [
+        "npm",
+        "run",
+        "check:docs"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.57,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/logs/check-docs.log",
+      "sha256": "4b6079d2c11fc7439cc61dd229d75580c59e432389770fa9cb44cef2df451094"
+    },
+    {
+      "stage": "diff",
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exitCode": 0,
+      "elapsedSeconds": 0.1,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/logs/diff.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "staticTestCorrection": {
+    "record": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/delivery-superseded.json",
+    "applicationBytesUnchanged": true,
+    "initialBrowserRuns": 0
+  },
+  "focusedDelivery": {
+    "status": "superseded-before-child-start",
+    "sessionId": 72033,
+    "record": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/browser-r2/delivery-superseded.json",
+    "replacement": {
+      "status": "queued",
+      "sessionId": 4209,
+      "script": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v266-default-e2e-fixtures/run_delivery.py",
+      "applicationBytesUnchangedFromV264": true,
+      "includesSourceUnitsV261": true,
+      "includesTwoRepairedBrowserCases": true
+    },
+    "notCountedAsPassed": true
+  },
+  "priorUsageAudit": {
+    "sourceVersion": "V263",
+    "requests": 34,
+    "totalTokens": 539120,
+    "inputTokens": 517869,
+    "inputFraction": 0.960582,
+    "costUsd": null,
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/v263-usage-audit.json",
+    "sha256": "2b88ad5d68738cc53ed913de5463fc3b687369625a9e916be55865565d6a7138",
+    "newModelCalls": 0,
+    "interpretation": "Two-step pacing does not itself lower call cost. Inspect repeated instructions and context before claiming lower latency or cost."
+  },
+  "realModelValidation": {
+    "status": "pending",
+    "calls": 0
+  },
+  "fullCI": false,
+  "fullE2E": false,
+  "formalM1Credit": false,
+  "qualityAccepted": false,
+  "localEvidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing",
+  "priorEpisodeCostLedger": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/v263-episode-cost-ledger-v2.json",
+    "sha256": "5cc2ad17a9eb3717fa1bdaaf372d046ae20814e17b81689da0193907ff5eb573",
+    "collector": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/episode-cost-ledger.py",
+    "collectorSha256": "953cd51b61e64a9ba71e1410e2e3926b034c1f1ff75fa397a90e2f267cad6333",
+    "runtimeRequests": 31,
+    "runtimeTokens": 480098,
+    "settledTriggers": 7,
+    "committedRoleActions": 7,
+    "requestsPerTriggerRange": [
+      3,
+      5
+    ],
+    "durableRunSpanSecondsRange": [
+      48.248,
+      89.414
+    ],
+    "firstPlayerVisibleReplyCommitSecondsRange": [
+      44.315,
+      61.704
+    ],
+    "timingBoundary": "Trigger event to first committed action addressed to player; stored event timestamps, not a browser paint or first-token measurement.",
+    "newModelCalls": 0,
+    "qualityAccepted": false,
+    "costUsd": null
+  }
+}

@@ -1,0 +1,180 @@
+{
+  "schema": "storyforge.character-chat-development-diagnostic-summary",
+  "version": 1,
+  "recordedAt": "2026-10-19",
+  "status": "diagnosed-not-accepted",
+  "code": {
+    "head": "6fba4d00588d0b5809c4de2e4f0424a031700745",
+    "tree": "5d0c1164219d56a68843ff00d4ed5ff5dfe7fc9e"
+  },
+  "engineering": {
+    "fullCi": {
+      "files": 934,
+      "tests": 5934,
+      "passed": true
+    },
+    "fullBrowser": {
+      "passed": 408,
+      "failed": 0,
+      "conditionalSkipped": 4
+    },
+    "receipt": "v172-latest-main-integration/engineering-admission/receipt.json",
+    "receiptSha256": "a06c93a75f30466c60fa69418a3a849ba18f51f8e4292708fb37442d53a8fc25"
+  },
+  "privateEvidence": {
+    "directory": "character-chat-20261014/v142-settled-choice-routes",
+    "summarySha256": "94e1343c54c3be65daed9b0af8bf7e5e4719cd3dad56c5d73fb496a40f959876",
+    "policy": "Raw model replies, requests and backups stay in local evaluation storage."
+  },
+  "episodes": [
+    {
+      "episode": "codex-refuse",
+      "status": "completed",
+      "semanticObservation": "alternative-action-and-observed-result-within-two-player-opportunities",
+      "requests": 12,
+      "observedTokens": 162106,
+      "unknownUsageRequests": 0,
+      "costUsd": null,
+      "playerOpportunities": 2,
+      "wallSeconds": 196.248,
+      "completionReason": "budget",
+      "evidenceSha256": "f40d9a6197195d0ec6cbdb77b488f3dedb253ba717026209a4b8a47c1b26423f",
+      "restorationSha256": "d9ab006d48ba8e224ea30a02b36b987f1cb8ffcb88abbb21d3592dcbf3e8f485",
+      "restoreModelCalls": 0,
+      "independentHumanScored": false,
+      "countsInM1": false,
+      "evidence": "codex-refuse.json",
+      "restoration": "codex-refuse/restoration-verified.json",
+      "restorationChecks": {
+        "statePreserved": true,
+        "refreshPreserved": true,
+        "rawResponsesPreserved": true,
+        "failureOrCompletedRunHistoryPreserved": true,
+        "frozenWorldPreserved": true
+      }
+    },
+    {
+      "episode": "codex-rest",
+      "status": "failed",
+      "semanticObservation": "failed-review-shared-thread-pause-missing",
+      "requests": 6,
+      "observedTokens": 81683,
+      "unknownUsageRequests": 0,
+      "costUsd": null,
+      "playerOpportunities": 1,
+      "wallSeconds": 95.834,
+      "completionReason": null,
+      "evidenceSha256": "8f2a46434c09b5cce5796ee133d89ca84a1ad9cb023f331e9115353451d14c14",
+      "restorationSha256": "5b87be6702e036ac5c465a5215d50ee9da5ed5a126a92bbefaaa98d9b7e8b200",
+      "restoreModelCalls": 0,
+      "independentHumanScored": false,
+      "countsInM1": false,
+      "evidence": "codex-rest.json",
+      "restoration": "codex-rest/restoration-verified.json",
+      "restorationChecks": {
+        "statePreserved": true,
+        "refreshPreserved": true,
+        "rawResponsesPreserved": true,
+        "failureOrCompletedRunHistoryPreserved": true,
+        "frozenWorldPreserved": true
+      }
+    },
+    {
+      "episode": "agnes-refuse",
+      "status": "failed",
+      "semanticObservation": "failed-opening-review-output-budget-exhausted",
+      "requests": 2,
+      "observedTokens": 19784,
+      "unknownUsageRequests": 0,
+      "costUsd": null,
+      "playerOpportunities": 0,
+      "wallSeconds": 34.7,
+      "completionReason": null,
+      "evidenceSha256": "24c31249f63a5dec1db2ae6d3848d439aad35816c8d34399164a31338ca69adb",
+      "restorationSha256": "5fa5e967a5d95299fdb4511d30bb4e4ac9a0eda83d2cbd4824145017200e6fa1",
+      "restoreModelCalls": 0,
+      "independentHumanScored": false,
+      "countsInM1": false,
+      "evidence": "agnes-refuse.json",
+      "restoration": "agnes-refuse/restoration-verified.json",
+      "restorationChecks": {
+        "statePreserved": true,
+        "refreshPreserved": true,
+        "rawResponsesPreserved": true,
+        "failureOrCompletedRunHistoryPreserved": true,
+        "frozenWorldPreserved": true
+      }
+    },
+    {
+      "episode": "agnes-rest",
+      "status": "failed",
+      "semanticObservation": "failed-opening-candidate-missing-required-goalKey-and-inconsistent-action",
+      "requests": 1,
+      "observedTokens": 8685,
+      "unknownUsageRequests": 0,
+      "costUsd": null,
+      "playerOpportunities": 0,
+      "wallSeconds": 12.711,
+      "completionReason": null,
+      "evidenceSha256": "423872bb973d493131bbe6847217fe98d735b6cf78e44b989b73ddb1c517df24",
+      "restorationSha256": "1d99c312b357aec3c24c7d11e2846b211316636ef66f7de6b286f8fd0dd141e6",
+      "restoreModelCalls": 0,
+      "independentHumanScored": false,
+      "countsInM1": false,
+      "evidence": "agnes-rest.json",
+      "restoration": "agnes-rest/restoration-verified.json",
+      "restorationChecks": {
+        "statePreserved": true,
+        "refreshPreserved": true,
+        "rawResponsesPreserved": true,
+        "failureOrCompletedRunHistoryPreserved": true,
+        "frozenWorldPreserved": true
+      }
+    }
+  ],
+  "totals": {
+    "started": 4,
+    "completed": 1,
+    "failed": 3,
+    "modelRequests": 21,
+    "observedTokens": 272258,
+    "unknownUsageRequests": 0,
+    "costUsd": null,
+    "restoreModelRequests": 0
+  },
+  "findings": [
+    {
+      "id": "shared-pause-incomplete",
+      "detail": "Codex acknowledged the request to pause the investigation and proposed a playerPause on its own goal, but omitted the shared thread pause. Review rejected it and no incomplete consequence was adopted."
+    },
+    {
+      "id": "review-output-budget",
+      "detail": "Agnes opening review used the 2400 completion-token cap entirely for reasoning and returned no structured review. Preserve failure and revise governed output budgeting; do not accept missing review."
+    },
+    {
+      "id": "candidate-completeness",
+      "detail": "The other Agnes opening omitted required goalKey. It was rejected before adoption; the text also describes movement using speak and repeats an unchanged open thread status, which requires additional validation before any repaired candidate can be accepted."
+    },
+    {
+      "id": "refusal-alternative",
+      "detail": "Codex respected refusal and the objection to further box searching, inspected a public passage, and recorded a bounded negative observation without revealing the box contents. This two-opportunity diagnosis does not establish full-story or long-term quality."
+    }
+  ],
+  "qualityAcceptance": false,
+  "humanScoring": {
+    "completed": 0,
+    "deferred": true
+  },
+  "countsInM1": false,
+  "comparisonPairs": 0,
+  "nextWork": [
+    "Clarify and verify shared pause consequences without weakening review or inferring player consent.",
+    "Fix structured candidate completeness and reasoning-aware review output budgeting within governed contracts.",
+    "Run a new bounded cohort after engineering verification; preserve all four original outcomes."
+  ],
+  "setupCorrection": {
+    "status": "preserved-before-browser-zero-call-failure",
+    "reason": "The recreated private configuration reader required a handshake not sent by the old helper caller. Both callers were corrected and the handoff verified before model dispatch.",
+    "configuration": "Existing authorized Agnes 2.5 Flash preset; no credential persisted in evaluation evidence."
+  }
+}

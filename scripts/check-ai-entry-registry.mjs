@@ -217,6 +217,12 @@ const scannedFiles = [
   // Q07/Q08: step and node review/revision share this formal provider service.
   'src/lib/prose/quality-transport.ts',
   'src/lib/ai-town/consultation.ts',
+  // CHAT-01: source suggestions remain read-only; role profiles require explicit governed adoption.
+  'src/lib/character-interaction/source-review-harness.ts',
+  'src/lib/character-interaction/role-profile-harness.ts',
+  'src/lib/character-interaction/source-units-harness.ts',
+  'src/lib/character-interaction/source-unit-confirmation-harness.ts',
+  'src/lib/character-interaction/consultation-harness.ts',
   // G5-02 creator consultation is a formal durable service rather than a UI
   // hook; keep its literal entry/category binding under the same machine gate.
   'src/lib/open-world/creator-brief.ts',
@@ -249,7 +255,7 @@ const limited = new Map()
 for (const entry of registry.limitedTransports ?? []) {
   if (!entry.entryId || registered.has(entry.entryId) || limited.has(entry.entryId)
     || entry.adoptAllowed !== false || entry.adoptionTargets?.length
-    || !['ephemeral-author-input', 'read-only-audio'].includes(entry.boundary)
+    || !['ephemeral-author-input', 'ephemeral-player-input', 'read-only-audio'].includes(entry.boundary)
     || !entry.allowedCallers?.length || !entry.reason) {
     failures.push('有限语音入口边界无效: ' + entry.entryId)
   }

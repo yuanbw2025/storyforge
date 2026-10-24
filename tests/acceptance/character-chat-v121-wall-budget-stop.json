@@ -1,0 +1,103 @@
+{
+  "schema": "storyforge.character-chat-development-episode-evidence",
+  "version": 1,
+  "label": "V121 wall budget stop before player refusal was submitted",
+  "implementationCommit": "2eed4cfdc7d09d473260885ab53998c88f8e1d0e",
+  "manifestSha256": "1db39043d724b3073c2332c940a54612b8ed4aad9814b1afe3aca57fda597074",
+  "releaseHash": "3235facf915f325f3c3ef14c17faab66af1bd9a1e2f9d00ec3ffb37c555f8701",
+  "worldHash": "103ac348ab504155f0ff2a30034cf38d112b175cf3f40e2011251f5cedb4a6ee",
+  "startedAt": "2026-10-16T01:08:56.550Z",
+  "completedAt": "2026-10-16T02:26:27.435Z",
+  "countsInM1": false,
+  "holdoutsInspected": false,
+  "episode": {
+    "planned": 1,
+    "terminated": 1,
+    "outcome": "budget stop after completed opening; operator delay exceeded registered 60 minute wall allowance before next trigger",
+    "runnerError": "Error: Protocol request or wall budget reached before next trigger",
+    "runnerAttemptedOpportunityCounter": 1,
+    "committedPlayerMessages": 0,
+    "runtimeRequests": 2,
+    "completedRuns": 1,
+    "failedRuntimeRuns": 0,
+    "actorActions": 1,
+    "situationGenerationCalls": 0,
+    "discoveryEvidenceIndexExercised": false,
+    "retries": 0,
+    "originalRuntimeUnchangedByAttemptedRefusal": true
+  },
+  "provider": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "usage": {
+      "totalTokens": 27293,
+      "inputTokens": 26369,
+      "outputTokens": 924,
+      "cachedInputTokens": 6656,
+      "reasoningOutputTokens": 220
+    },
+    "costUsd": null
+  },
+  "restoration": [
+    {
+      "stem": "inn-grounded-opening-refusal",
+      "runStatusesPreserved": true,
+      "verifiedCompletedHistories": 1,
+      "retainedFailedRuns": 0,
+      "resumableRuns": 0,
+      "openingReviewRetained": true,
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true
+    }
+  ],
+  "terminalReadback": {
+    "checks": [
+      {
+        "id": "ff77e852-4ec3-4b85-ad02-4bcbeead286c",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "4799728a-a628-400c-ae7a-1e10854957b0",
+        "status": "completed",
+        "readbackEqual": true
+      }
+    ],
+    "allTerminal": true
+  },
+  "next": "Separate V122 fresh episode automatically submits the preregistered first refusal immediately after confirming the player-visible opening mentions the box. Original V121 time bound and outcome remain unchanged.",
+  "limits": [
+    "Cannot evaluate role response or new discovery-context behavior; refusal never entered runtime",
+    "Not a narrative-model failure or success, no exclusion/replacement of prior evidence",
+    "V122 separate preparation does not repair or continue V121"
+  ],
+  "evidence": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v121-committed-evidence-refusal/preregistration.json",
+      "sha256": "ac9cedfe84f5e2bfec114276a68944c3019691974c5a4e6d9cbb42f3b9348e4f"
+    },
+    "runner.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v121-committed-evidence-refusal/runner.mjs",
+      "sha256": "442fb87b96ad911ebeeb14ccd5bd639f8b58260150b99ff7ca5656db4c9fd24a"
+    },
+    "inn-grounded-opening-refusal.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v121-committed-evidence-refusal/inn-grounded-opening-refusal.json",
+      "sha256": "5e15bc3123d1af007b717fe1a7ad3182dedfcfc32665e0c65dbdaf8373aad602"
+    },
+    "inn-grounded-opening-refusal-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v121-committed-evidence-refusal/inn-grounded-opening-refusal-backup.json",
+      "sha256": "9671f291db9196b5e8338d9fe0fed92b2c67ffb517f8ed54a239c9c656494974"
+    },
+    "restoration-verified.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v121-committed-evidence-refusal/restoration-verified.json",
+      "sha256": "75f0325a8f8c6f0fa0718af6103140e24cb9432f7794cbaa9d0dc739b36922fb"
+    },
+    "terminal-request-proof.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v121-committed-evidence-refusal/terminal-request-proof.json",
+      "sha256": "8b902a7332987c08234f277c20b025b04acb55e2a89ddd7b918ac54cdd3ca4f0"
+    }
+  }
+}

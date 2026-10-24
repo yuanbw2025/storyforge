@@ -1,0 +1,88 @@
+{
+  "schema": "storyforge.chat-development-acceptance",
+  "version": 300,
+  "at": "2026-10-21T03:03:21.267975+00:00",
+  "status": "bounded-turn-completion-and-restoration-passed",
+  "sourceBaseHead": "2050d3823db77359b3b18d5971bd6d7f8ee27bcf",
+  "sourceManifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v300-turn-end-real/run-r1/manifest.json",
+    "sha256": "8e03be2431cea9a27198d0f4de777d2d281bf5a39f7b86c8ad06611988147ef7"
+  },
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v299-turn-ending-investigation/engineering.json",
+    "sha256": "e8a52d61c5dca366f7f67c178fcb559610a3be7c7c4d3228671f454359a6a2c0"
+  },
+  "preregistration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v300-turn-end-real/run-r1/preregistration.json",
+    "sha256": "2387293875982fa990661e3c0d027e9282a7c2c2bd5ec13b2526af7cd30f4841"
+  },
+  "model": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "requests": 3,
+    "nativeCompleted": 3,
+    "reportedTotalTokens": 50185,
+    "costUsd": null,
+    "automaticRetries": 0
+  },
+  "result": {
+    "originalTurnStatus": "complete",
+    "goalStatus": [
+      "active"
+    ],
+    "allNonControlStateUnchanged": true,
+    "messageCountUnchanged": true,
+    "spentDirectorAllowance": 3,
+    "newRuntimeEvents": [
+      "interaction.narrative.control-handoff.committed"
+    ],
+    "sourceUnchanged": true,
+    "refreshEqual": true,
+    "noModelRequestOnRefresh": true
+  },
+  "restoration": {
+    "stem": "continuation",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 1,
+    "retainedFailedRuns": 0,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "parentPreserved": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true,
+    "terminalReceiptBodiesRetained": true,
+    "usageEvidenceRetained": true
+  },
+  "evidence": {
+    "run": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v300-turn-end-real/run-r1/continuation.json",
+      "sha256": "d7be9361cad3609dafb38eef449529d70d4dac61b4be9bbedea1bf6e4e9a7ed4"
+    },
+    "backup": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v300-turn-end-real/run-r1/continuation-backup.json",
+      "sha256": "d264b71a3779b98b470d29a31cf743ae9ae2405d27f65d12495f38453f11a801"
+    },
+    "proof": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v300-turn-end-real/run-r1/turn-end-proof.json",
+      "sha256": "fdcf17a41f2e343d8217a456a33a3dd5c483e81e78c77bc5535dc7ce7f0b5ac9"
+    },
+    "restoration": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v300-turn-end-real/run-r1/continuation-restoration-verified.json",
+      "sha256": "a9e18477dbac9e8afa44ff4e757c3fc675014c386772b3df5433f48382f22c6f"
+    }
+  },
+  "observed": "From the exact V297 post-adoption state, one original-turn resume produced a version-2 finish-current-turn candidate. All five independent checks passed. One control event completed the turn; no dialogue, actions, facts, goals, relationships or threads changed. The unresolved search goal remains active.",
+  "m1Passed": false,
+  "formalMatrixReplaced": false,
+  "meaningfulStoryClosure": false,
+  "fullCurrentDeliveryPassed": false,
+  "limitations": [
+    "One exact-state development diagnostic, not sustained multi-turn quality or a formal M1 slot.",
+    "A control ending is not counted as story advancement.",
+    "No latency distribution, cost improvement, human scoring or commercial readiness conclusion."
+  ],
+  "next": "Preserve this fix and all previous failures, complete current-source full gates and resume complete-episode narrative acceptance. Agnes inference quota remains a separate dependency."
+}

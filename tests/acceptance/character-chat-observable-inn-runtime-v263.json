@@ -1,0 +1,55 @@
+{
+  "status": "terminal-bounded-development-completed",
+  "at": "2026-10-20T11:35:53.110379+00:00",
+  "sourceManifestSha256": "026582806e9eb058eb711be939743d61af78538fe24a275a68df07cb799656ce",
+  "sourceUnchanged": true,
+  "requests": 34,
+  "requestsByPhase": {
+    "production": 3,
+    "runtime": 31
+  },
+  "observedTotalTokens": 539120,
+  "costUsd": null,
+  "nativeRequestsCompleted": true,
+  "playerOpportunities": 6,
+  "runtimeStatuses": {
+    "completed": 12
+  },
+  "completionReason": "budget",
+  "goals": [
+    {
+      "status": "active",
+      "desire": "找回丢失的铜印，并以可核实的事实处理失物事件，避免无证据地指责住客。"
+    }
+  ],
+  "discoveredFacts": 0,
+  "finding": "New four-unit source completed production; all three opening candidates passed review and the first was selected. The role checked common equipment, records, own recollection and belongings. It established under-table access at the sixth neutral reply but did not inspect it. Container/content discovery not exercised; main objective remains open. This is not evidence that source decomposition solved sustained story progression.",
+  "restoration": {
+    "stem": "inn-weak-guidance",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 12,
+    "retainedFailedRuns": 0,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true,
+    "terminalReceiptBodiesRetained": true,
+    "usageEvidenceRetained": true
+  },
+  "formalM1Credit": false,
+  "qualityAccepted": false,
+  "fullCI": false,
+  "fullE2E": false,
+  "localEvidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v263-observable-inn-runtime",
+  "evidence": {
+    "preregistration.json": "e1f7811acdef6e66e651c88b1ecfd49746bddbfb8adf7eade7a0717332cb1812",
+    "prepared.json": "612ef5567c53cdbc52f781de904218fb9e15b6896583dce017bc12acdf8bd408",
+    "production-evidence.json": "3dd4f18b0cba514b7cca98be4d61f9b85669ca2fd76d6b40390dc7d900c3ffb6",
+    "inn-weak-guidance.json": "0520b31c61c926a758a1a898545008a86dfc0b2019829e9a647abfe4bee43852",
+    "inn-weak-guidance-backup.json": "38c16f950e5e89bb4867c63ac6b8119c1abf1328dc13f46dc49f197b7880ffb9",
+    "inn-weak-guidance-restoration-verified.json": "3edf31284dadaa2e9590b57048014ceeb92f470f48bd9716111d8ef1d8a2aac9"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "schema": "storyforge.chat-development-acceptance",
+  "version": 311,
+  "at": "2026-10-22T05:48:02.223003+00:00",
+  "status": "real-cross-turn-inquiry-repair-and-actor-continuation-passed",
+  "sourceHead": "c9e9fdb6a54adc3fe161fcd88f48ffeb65390cdb",
+  "formalM1Credit": 0,
+  "m1Passed": false,
+  "remainingTechnicalPackages": 7,
+  "preregistration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v310-inquiry-continuity/codex-preregistration.json",
+    "sha256": "2bdf7610e6929bfe0a52b3109ba149b69b32cb54912e21447dabf20369da6013"
+  },
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v310-inquiry-continuity/engineering.json",
+    "sha256": "65f63c873aa00a2203e02c9c709e8873e053447098b9a88c0c8f4197436950b6"
+  },
+  "source": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v310-inquiry-continuity/codex-result.json",
+    "sha256": "9b7e1a72ad68648d19ce6f7e687508f43de29a89815a6f714511d15e1660e750"
+  },
+  "backup": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v310-inquiry-continuity/codex-backup.json",
+    "sha256": "e60150d25895e2f172d5ef199f6a98380b59d0b0bc80c306f7f409b8a09c31b4"
+  },
+  "restoration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v310-inquiry-continuity/codex-restoration.json",
+    "sha256": "17355144745b931838a3fcdd8f198d2fd2cd895cc0e52ed453f8a6b53e1a0627"
+  },
+  "model": "gpt-6.1-sol",
+  "provider": "local-codex",
+  "requests": 5,
+  "nativeCompleted": 5,
+  "reportedTokens": 80774,
+  "costUsd": null,
+  "runtimeRuns": {
+    "completed": 2,
+    "failed": 0
+  },
+  "sourceUnchanged": true,
+  "recoveryModelCalls": 0,
+  "actualQuestionRetainedInBothRequests": true,
+  "originalPlayerAcknowledgmentRetained": true,
+  "originalFailurePreserved": true,
+  "storyChange": {
+    "inquiryResults": 1,
+    "confirmedFactKeys": [
+      "world-fact.0007"
+    ],
+    "meaning": "The innkeeper admitted handling the seal. The actor used the answer to ask for a concrete account and checkable location, without requiring additional player guidance.",
+    "stillUnknown": [
+      "location",
+      "purpose"
+    ],
+    "goalClosed": false
+  },
+  "limits": [
+    "A bounded repair diagnostic on a branch of the original failed state; not a new independent M1 episode or replacement of the old failure",
+    "Five completed calls establish this handoff and continuation only, not sustained story quality",
+    "The respondent withheld location using a concern about unverified claims; whether this becomes repetitive clarification or yields an effective alternative remains to be observed",
+    "Human scoring, Agnes and the full final engineering gate remain pending"
+  ],
+  "next": "Continue observing whether the new information leads to evidence, a justified alternative or natural closure; preserve unchanged story permissions and weak player guidance."
+}

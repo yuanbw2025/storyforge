@@ -1,0 +1,282 @@
+{
+  "schema": "storyforge.character-chat-development-episode-evidence",
+  "version": 1,
+  "label": "V122 committed discovery evidence passes; public observation leaks investigator-only result",
+  "recordedAt": "2026-10-16T02:37:59.422347+00:00",
+  "implementationCommit": "2eed4cfdc7d09d473260885ab53998c88f8e1d0e",
+  "manifestSha256": "1db39043d724b3073c2332c940a54612b8ed4aad9814b1afe3aca57fda597074",
+  "releaseHash": "3235facf915f325f3c3ef14c17faab66af1bd9a1e2f9d00ec3ffb37c555f8701",
+  "worldHash": "103ac348ab504155f0ff2a30034cf38d112b175cf3f40e2011251f5cedb4a6ee",
+  "startedAt": "2026-10-16T02:28:28.485Z",
+  "completedAt": "2026-10-16T02:29:53.610Z",
+  "countsInM1": false,
+  "holdoutsInspected": false,
+  "episode": {
+    "planned": 1,
+    "terminated": 1,
+    "outcome": "failed at independent situation visibility review, before adoption and actual role response to refusal",
+    "runnerError": "Error: runtime stopped; no automatic retry",
+    "playerOpportunities": 1,
+    "runtimeRequests": 4,
+    "completedRuns": 1,
+    "failedRuns": 1,
+    "committedActorActions": 1,
+    "retries": 0,
+    "repairs": 0,
+    "publicMessages": [
+      {
+        "messageId": "message:harness:32",
+        "eventSequence": 5,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“后门没锁，还不能说明铜印是被人偷走的。”叶岑蹲到木箱前，试着提起箱盖，查看能否打开、核对箱内是否有铜印。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:21e29805-bddc-4761-90a2-d52f53b3b80c",
+        "eventSequence": 6,
+        "role": "player",
+        "speakerKey": "player",
+        "audienceKeys": null,
+        "text": "这个箱子先别再翻查，换个办法吧。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      }
+    ],
+    "pendingObservation": {
+      "direction": "仅确认本次提起箱盖检查的实际结果：箱盖是否能够打开；若能打开，确认本次可见范围内是否发现铜印，不推断物品的经手者。",
+      "evidenceExcerpt": "叶岑蹲到木箱前，试着提起箱盖，查看能否打开、核对箱内是否有铜印。",
+      "evidenceFactKeys": [
+        "fact-8",
+        "fact-10"
+      ],
+      "purpose": "observation-result",
+      "threadKey": "thread-1",
+      "actorKey": "participant.001",
+      "goalKey": "goal-1",
+      "sourceEventSequence": 5
+    },
+    "candidate": {
+      "kind": "chat-situation",
+      "title": "柜台旁的查找起点",
+      "location": "驿站",
+      "timeLabel": "暴雨中",
+      "newFacts": [
+        {
+          "factKey": "fact-11",
+          "kind": "observation",
+          "text": "本次提起箱盖时，箱盖顺利打开，叶岑能够看清箱内并完成对铜印的目视核对；未继续翻动物品。",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "evidenceFactKeys": [
+            "fact-8",
+            "fact-10"
+          ],
+          "seedExcerpt": "仅确认本次提起箱盖检查的实际结果：箱盖是否能够打开；若能打开，确认本次可见范围内是否发现铜印，不推断物品的经手者。"
+        }
+      ],
+      "newGoals": [],
+      "newThreads": [],
+      "possibilities": [],
+      "discoveries": [
+        {
+          "factKey": "fact-7",
+          "actorKey": "participant.001",
+          "actionSequence": 5,
+          "evidenceFactKeys": [
+            "fact-4",
+            "fact-8",
+            "fact-10"
+          ],
+          "evidenceExcerpt": "叶岑蹲到木箱前，试着提起箱盖，查看能否打开、核对箱内是否有铜印。",
+          "result": "discovered",
+          "reason": "本次已执行的开箱检查中，箱盖打开，叶岑在箱内看见并核对了铜印，满足该位置事实的发现条件。后来的停止翻查请求不撤销此前已完成的检查；本次不确认经手者、用途，也不表示已经取回铜印。"
+        }
+      ]
+    },
+    "review": {
+      "checks": [
+        {
+          "check": "continuity",
+          "passed": true,
+          "reason": "保持原标题、驿站和暴雨中，仅结算第5事件已提交的开箱核对，未将玩家随后要求停止翻查改写为继续调查的许可。"
+        },
+        {
+          "check": "permissions",
+          "passed": true,
+          "reason": "箱盖打开及目视核对属于本次获准补足的观察结果；未新增人物、物品或后续动作，也未确认经手者和用途。"
+        },
+        {
+          "check": "player-agency",
+          "passed": true,
+          "reason": "未替沈禾行动或答应调查；“未继续翻动物品”保留了玩家停止后续翻查的要求。"
+        },
+        {
+          "check": "visibility",
+          "passed": false,
+          "reason": "fact-11向player公开“完成对铜印的目视核对”，实际透露铜印在箱内。fact-7的发现仅授权叶岑受限知情；玩家在柜台旁不证明其已查看箱内，不能借公开观察事实同步披露该秘密。"
+        },
+        {
+          "check": "meaningful-direction",
+          "passed": true,
+          "reason": "候选具体结算箱盖能否打开及箱内铜印核对结果，承接本次实际检查范围，未虚构阻碍、追加翻查或推断经手者。"
+        }
+      ]
+    },
+    "truthUnitsStillUnknown": true
+  },
+  "provider": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "usage": {
+      "totalTokens": 51541,
+      "inputTokens": 49405,
+      "outputTokens": 2136,
+      "cachedInputTokens": 15104,
+      "reasoningOutputTokens": 803
+    },
+    "costUsd": null,
+    "includingSharedPreparationAndProductionOnce": 183171
+  },
+  "audit": {
+    "generationRequestId": "89d12b06-bf24-49f0-9468-59c63fabb05c",
+    "wireSha256": "a4076af400ffcf8f14fff0e886328f34926b8950aa3ef37f69f94bab9cb07421",
+    "deliveredIndex": {
+      "schema": "storyforge.chat-discovery-evidence",
+      "version": 1,
+      "actorKey": "participant.001",
+      "actionSequence": 5,
+      "allowedEvidenceFactKeys": [
+        "fact-1",
+        "fact-2",
+        "fact-3",
+        "fact-4",
+        "fact-8",
+        "fact-9",
+        "fact-10"
+      ],
+      "actionEvidenceFactKeys": [
+        "fact-10"
+      ],
+      "targets": [
+        {
+          "factKey": "fact-5",
+          "requiredEvidenceFactKeys": [
+            "fact-4"
+          ]
+        },
+        {
+          "factKey": "fact-6",
+          "requiredEvidenceFactKeys": [
+            "fact-4"
+          ]
+        },
+        {
+          "factKey": "fact-7",
+          "requiredEvidenceFactKeys": [
+            "fact-4"
+          ]
+        }
+      ]
+    },
+    "discoveryReferenceKeys": [
+      "fact-4",
+      "fact-8",
+      "fact-10"
+    ],
+    "newCandidateFactKeys": [
+      "fact-11"
+    ],
+    "allReferencesInCommittedIndex": true,
+    "noSameCandidateReferences": true,
+    "sourceActionSequenceMatches": true,
+    "independentReviewCalled": true,
+    "proposedFactNotCommitted": true,
+    "allTruthStillUnknown": true,
+    "modelRequestsAddedByAudit": 0
+  },
+  "restoration": [
+    {
+      "stem": "inn-grounded-opening-refusal",
+      "runStatusesPreserved": true,
+      "verifiedCompletedHistories": 1,
+      "retainedFailedRuns": 1,
+      "resumableRuns": 0,
+      "openingReviewRetained": true,
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true
+    }
+  ],
+  "terminalReadback": {
+    "checks": [
+      {
+        "id": "234e57dd-51a6-46db-9c9a-1974e913f4e0",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "86758ab2-ab6d-4d9b-b64b-d57eb6db3f7a",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "89d12b06-bf24-49f0-9468-59c63fabb05c",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "cbdb9fc4-2025-4030-a414-a753fab00416",
+        "status": "completed",
+        "readbackEqual": true
+      }
+    ],
+    "allTerminal": true
+  },
+  "finding": "V120 index was delivered in the actual generation wire. All discovery references belong to the committed index; the proposed fact-11 is not referenced. Structural preview passes and independent review runs, but rejects the public observation because it implies the private canonical location discovery. Failed candidate and unknown truth remain unchanged.",
+  "next": "Separate ordinary witnessed mechanics from investigator-only canonical discovery in frozen generation and review guidance. Discovery-only settlement may be meaningful; do not duplicate secret truth into ordinary observations, silently narrow audiences, force discoveries, or weaken visibility. Retain legitimate public observations with evidence. Add paired engineering cases, then independent real diagnostic/full generation.",
+  "limits": [
+    "No actual role response or respectful replanning observed",
+    "No M1, Agnes, human or commercial acceptance added",
+    "V119 and V121 outcomes retained; this fresh episode does not replace prior denominators"
+  ],
+  "evidence": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v122-automatic-first-refusal/preregistration.json",
+      "sha256": "e4a2af3f85c75609451443cbfbb000584a5ab154684be02c52accda06dec2bef"
+    },
+    "runner.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v122-automatic-first-refusal/runner.mjs",
+      "sha256": "d87d7eb86ab56c4502937a255bf90bfdc342194ba2ffbe2c38de69c7d1bfb039"
+    },
+    "inn-grounded-opening-refusal.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v122-automatic-first-refusal/inn-grounded-opening-refusal.json",
+      "sha256": "ade8f992a6aa15252e0fc5f81a272b4afb11f20e49c131e2d0b9c70bbaac74cf"
+    },
+    "inn-grounded-opening-refusal-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v122-automatic-first-refusal/inn-grounded-opening-refusal-backup.json",
+      "sha256": "8427e2983b3970f507ad3cf9e78673b27ca1bc889334a517c8a6ff43257f2e57"
+    },
+    "evidence-index-audit.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v122-automatic-first-refusal/evidence-index-audit.json",
+      "sha256": "a21121d9cf96136fb878b053ca3e91b1beff9598d7d52adc1734cae4633f3354"
+    },
+    "restoration-verified.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v122-automatic-first-refusal/restoration-verified.json",
+      "sha256": "7ddcf91d8eaf82a9377e54d68705c65ab7e6a236f1f69144ae64784b0e6fc596"
+    },
+    "terminal-request-proof.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v122-automatic-first-refusal/terminal-request-proof.json",
+      "sha256": "eca525bb25a70f2cfbb4d6c49d48c320430c09baa3f0e13aee3b7c9eba076ac5"
+    }
+  }
+}

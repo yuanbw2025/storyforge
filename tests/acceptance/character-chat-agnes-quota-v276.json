@@ -1,0 +1,35 @@
+{
+  "startedAt": "2026-10-20T19:28:19.280Z",
+  "completedAt": "2026-10-20T19:28:20.544Z",
+  "status": "response-received",
+  "statusCode": 403,
+  "error": "Error: Provider response status 403; no retry",
+  "model": "agnes-3.0-pro",
+  "attemptedRequests": 1,
+  "automaticRetries": 0,
+  "usage": null,
+  "finishReason": null,
+  "decisions": [],
+  "allKnownLeakingOptionsRejected": false,
+  "applicationWrites": 0,
+  "formalM1Credit": 0,
+  "qualityAccepted": false,
+  "version": 276,
+  "product": "character-interaction",
+  "protocol": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v276-agnes-model-diagnostic/preregistration.json",
+    "sha256": "9c7d5519aa8af22307c422615304c36ab7bf2def7ce61425ae7069fcd91308fa"
+  },
+  "response": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v276-agnes-model-diagnostic/response.json",
+    "sha256": "5ec5d0c627f72bf74c0d6e65e2e82996221be9b06abcc4dc2d3a158096533744"
+  },
+  "result": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v276-agnes-model-diagnostic/result.json",
+    "sha256": "b09eb3aae97d747a5964655d1d81bd251c6ab4ca57b6dd1795c7e40dcf73d169"
+  },
+  "providerErrorCode": "insufficient_user_quota",
+  "interpretation": "The configured provider returned HTTP 403 insufficient_user_quota before any review output. The model catalogue alone did not establish inference availability. This result says nothing about agnes-3.0-pro review quality. Do not retry or probe another model with the exhausted account.",
+  "configurationChanged": false,
+  "nextAction": "Continue Codex and engineering work. Resume independent Agnes evaluation only after provider quota is restored; retain the original Flash semantic failure and all formal matrix counts."
+}

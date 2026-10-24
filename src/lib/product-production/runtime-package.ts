@@ -1,4 +1,7 @@
+import {parseChatExperienceInfoV1} from '../character-interaction/experience-info'
 import { parseAdventureContent } from '../adventure/runtime'
+import {parseChatMediaBindingsV1} from '../character-interaction/media-contract'
+import {parseChatCharacterCardCreditsV1} from '../character-interaction/card-credits'
 import { parseAvgPresentationContent, validateAvgPresentation } from '../avg/runtime'
 import { freezeProductMediaAsset } from './media-contracts'
 import { parseOpenWorldEvolutionContent, validateOpenWorldEvolutionContent } from '../open-world/evolution-runtime'
@@ -10,6 +13,9 @@ import { validateNarrativeContentGraph } from '../product/narrative-content'
 import { parseTtrpgCampaignContentV1 } from '../ttrpg/campaign'
 import { parseRulePackV1 } from '../ttrpg/rule-pack'
 import { parseAiTownRuntimeContentV1 } from '../ai-town/runtime'
+import { parseFrozenChatSourceV1 } from '../character-interaction/runtime'
+import { parseFrozenChatNarrativeV1 } from '../character-interaction/narrative-contract'
+import { isChatNarrativeShellV1 } from '../character-interaction/narrative-production'
 import {
   NARRATIVE_BEAT_KINDS,
   NARRATIVE_MODULE_KINDS,
@@ -285,6 +291,14 @@ function validateInteraction(value: unknown): ProductRuntimePackageV1['interacti
     fail('interaction 至少需要唯一角色和场景')
   }
   const participants = new Set(participantKeys)
+  if (interaction.chatSource) parseFrozenChatSourceV1(interaction.chatSource, participantKeys, interaction.profiles.map(p => p.characterKey))
+  if (interaction.chatCardCredits !== undefined) parseChatCharacterCardCreditsV1(interaction.chatCardCredits, interaction)
+  if (interaction.chatExperienceInfo !== undefined) parseChatExperienceInfoV1(interaction.chatExperienceInfo)
+  if (interaction.chatNarrative !== undefined) {
+    if (!interaction.chatSource) fail('主动叙事情境缺少已确认资料')
+    parseFrozenChatNarrativeV1(interaction.chatNarrative, {source: interaction.chatSource, participantKeys,
+      characterKeys: interaction.profiles.map(p => p.characterKey), sceneKeys: interaction.sceneTemplates.map(s => s.sceneKey)})
+  }
   for (const scene of interaction.sceneTemplates) {
     requiredText(scene.sceneKey, 'sceneKey', 500)
     if (!Array.isArray(scene.participantKeys) || scene.participantKeys.some(key => !participants.has(key))) {
@@ -301,10 +315,19 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
   }
   const pkg = record(raw, 'package')
   const selectedProduct = productType(pkg.productType)
+  if (selectedProduct !== 'character-interaction' && (pkg.interaction as {chatSource?: unknown} | undefined)?.chatSource) {
+    fail('角色资料投影只属于角色聊天产品')
+  }
+  if (selectedProduct !== 'character-interaction' && (pkg.interaction as {chatNarrative?: unknown} | undefined)?.chatNarrative !== undefined) fail('主动叙事情境只属于角色聊天产品')
+  const chatMedia = (pkg.interaction as {chatMedia?: unknown} | undefined)?.chatMedia
+  if (selectedProduct !== 'character-interaction' && (pkg.interaction as {chatCardCredits?: unknown} | undefined)?.chatCardCredits !== undefined) fail('角色卡署名只属于角色聊天产品')
+  if (selectedProduct !== 'character-interaction' && (pkg.interaction as {chatExperienceInfo?: unknown} | undefined)?.chatExperienceInfo !== undefined) fail('聊天作品说明只属于角色聊天产品')
+  if (selectedProduct !== 'character-interaction' && chatMedia !== undefined) fail('角色图片绑定只属于角色聊天产品')
   const hasOptionalPresentation = (
     selectedProduct === 'ttrpg'
     || selectedProduct === 'ai-town'
     || selectedProduct === 'text-adventure'
+    || selectedProduct === 'character-interaction'
   )
     && Object.prototype.hasOwnProperty.call(pkg, 'presentation')
   const hasTextOpenWorldVNext = selectedProduct === 'text-open-world'
@@ -354,13 +377,16 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
   }
 
   const narrative = parseFrozenNarrative(pkg.narrative)
+  const chatInteraction = selectedProduct === 'character-interaction' ? validateInteraction(pkg.interaction) : null
   const graph = validateNarrativeContentGraph({
     entryNodeKey: narrative.entryNodeKey,
     nodes: narrative.nodes,
     beats: narrative.beats,
     choices: narrative.choices,
   })
-  if (!graph.valid) fail(`narrative 图无效:${graph.errors.join('；')}`)
+  if (chatInteraction?.chatNarrative) {
+    if (!isChatNarrativeShellV1(narrative, chatInteraction.chatNarrative)) fail('主动叙事情境导航不匹配，不能混入预设未来或秘密')
+  } else if (!graph.valid) fail(`narrative 图无效:${graph.errors.join('；')}`)
 
   const parsed: ProductRuntimePackageV1 = {
     schema: 'storyforge.product-runtime-package',
@@ -379,7 +405,10 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
   }
 
   if ((!hasTextOpenWorldVNext || hasTextOpenWorldLegacy) && (selectedProduct === 'character-interaction' || selectedProduct === 'ai-town' || selectedProduct === 'text-adventure'
-    || selectedProduct === 'text-open-world')) parsed.interaction = validateInteraction(pkg.interaction)
+    || selectedProduct === 'text-open-world')) parsed.interaction = chatInteraction ?? validateInteraction(pkg.interaction)
+  if (parsed.interaction?.chatSource && parsed.interaction.chatSource.worldReleaseHash !== sourceWorld.contentHash) {
+    fail('角色资料投影与发布包世界版本不一致')
+  }
   if ((!hasTextOpenWorldVNext || hasTextOpenWorldLegacy) && (selectedProduct === 'text-adventure' || selectedProduct === 'text-open-world')) {
     parsed.adventure = parseAdventureContent(pkg.adventure as never)
     if (selectedProduct === 'text-open-world' && parsed.adventure.version !== 1) {
@@ -408,6 +437,11 @@ export function parseProductRuntimePackageV1(value: string | unknown): ProductRu
     const report = validateAvgPresentation({ content, beats: narrative.beats, assets })
     if (!report.valid) fail(`presentation 无效:${report.errors.join('；')}`)
     parsed.presentation = { ...content, assets }
+  }
+  if (selectedProduct === 'character-interaction' && (chatMedia !== undefined || parsed.presentation)) {
+    if (!parsed.presentation || chatMedia === undefined) fail('角色图片目录与绑定必须同时存在')
+    if (parsed.presentation.cues.length) fail('角色聊天图片不能执行预设节拍演出')
+    parsed.interaction!.chatMedia = parseChatMediaBindingsV1(chatMedia, parsed.interaction!, parsed.presentation.assets)
   }
   if (selectedProduct === 'text-open-world' && (!hasTextOpenWorldVNext || hasTextOpenWorldLegacy)) {
     const openWorldEvolution = parseOpenWorldEvolutionContent(pkg.openWorldEvolution)

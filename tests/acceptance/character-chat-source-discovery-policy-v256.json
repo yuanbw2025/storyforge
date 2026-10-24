@@ -1,0 +1,231 @@
+{
+  "at": "2026-10-20T09:43:04.054402+00:00",
+  "status": "terminal-focused-engineering-passed",
+  "source": {
+    "at": "2026-10-20T09:38:53.614069+00:00",
+    "root": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/source",
+    "snapshot": "e1b41838efb91826bade30aa7478656208cf7e19",
+    "featureBaseHead": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+    "manifestSha256": "a1b660aa08f5649b3dd284d009f2b1b4e684576094bae5242839188be2e83a62",
+    "files": 3806
+  },
+  "scope": "Source-unit authoring review of conditional evidence; source-run harness prompt selection from frozen skill version. No new field, table, permission or runtime write.",
+  "focusedRegression": {
+    "files": 3,
+    "tests": 32,
+    "passed": true,
+    "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/focused.log",
+    "sha256": "5272050e94c37312f2eedb8d538932aa2338ae5c0384ee0dcaa5731e3df74229",
+    "note": "Before metadata/date and generated-doc refresh; included again in frozen shared-caller suite, do not sum."
+  },
+  "frozenSuite": {
+    "status": "completed",
+    "sessionId": 89260,
+    "runner": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/run_checks.py",
+    "passed": true,
+    "regressionFiles": 7,
+    "regressionTests": 56,
+    "browserTests": 4,
+    "receipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/receipt.json",
+    "sourceUnchanged": true,
+    "checks": [
+      {
+        "stage": "focused-regressions",
+        "command": [
+          "npx",
+          "vitest",
+          "run",
+          "tests/regression/R-CHAT-02-source-discovery-policy.test.ts",
+          "tests/regression/R-CHAT-02-source-unit-confirmation.test.ts",
+          "tests/regression/R-CHAT-02-source-units.test.ts",
+          "tests/regression/R-CHAT-02-source-unit-production.test.ts",
+          "tests/regression/R-CHAT-01-role-profile-harness.test.ts",
+          "tests/regression/R-CHAT-01-source-review-context.test.ts",
+          "tests/regression/R-CHAT-01-source-review-perspective.test.ts",
+          "--maxWorkers=1",
+          "--minWorkers=1"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792492542.151378,
+        "completedAt": 1792492566.663056,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/logs/focused-regressions.log",
+        "sha256": "ab5743353cb05d3f9799f0ebbb19cc7f29201e1d641da07725896b883f3b18cf"
+      },
+      {
+        "stage": "types",
+        "command": [
+          "npx",
+          "tsc",
+          "--noEmit"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792492566.663525,
+        "completedAt": 1792492605.59055,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/logs/types.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "stage": "changed-lint",
+        "command": [
+          "npx",
+          "eslint",
+          "src/lib/character-interaction/source-unit-discovery-policy.ts",
+          "src/lib/character-interaction/source-run-harness.ts",
+          "src/lib/character-interaction/source-unit-confirmation-harness.ts",
+          "src/lib/agent/skill-registry.ts",
+          "tests/regression/R-CHAT-02-source-discovery-policy.test.ts"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792492605.591559,
+        "completedAt": 1792492607.3229382,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/logs/changed-lint.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "stage": "check:architecture",
+        "command": [
+          "npm",
+          "run",
+          "check:architecture"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792492607.323461,
+        "completedAt": 1792492614.455383,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/logs/check:architecture.log",
+        "sha256": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616"
+      },
+      {
+        "stage": "check:required-tables",
+        "command": [
+          "npm",
+          "run",
+          "check:required-tables"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792492614.455987,
+        "completedAt": 1792492614.599329,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/logs/check:required-tables.log",
+        "sha256": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444"
+      },
+      {
+        "stage": "check:ai-manual",
+        "command": [
+          "npm",
+          "run",
+          "check:ai-manual"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792492614.599906,
+        "completedAt": 1792492615.120895,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/logs/check:ai-manual.log",
+        "sha256": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19"
+      },
+      {
+        "stage": "check:ai-entry-registry",
+        "command": [
+          "npm",
+          "run",
+          "check:ai-entry-registry"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792492615.121422,
+        "completedAt": 1792492616.0372531,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/logs/check:ai-entry-registry.log",
+        "sha256": "e789c090422f8fb0b79fc174dffd5a8dd0a14b96e2952e3ed720e16b5489c00d"
+      },
+      {
+        "stage": "check:project-metrics",
+        "command": [
+          "npm",
+          "run",
+          "check:project-metrics"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792492616.037743,
+        "completedAt": 1792492616.5237608,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/logs/check:project-metrics.log",
+        "sha256": "32f5ade067b3496f6b4dd1d2dde0aeef10be09621b5d5059fa5833f42f99b0ff"
+      },
+      {
+        "stage": "document-authority",
+        "command": [
+          "node",
+          "scripts/check-document-authority.mjs"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792492616.524278,
+        "completedAt": 1792492616.636534,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/logs/document-authority.log",
+        "sha256": "211b0f6f00c931878d80bf4aaccf46ca6b982a0897303f4464a3d4411eaeda76"
+      },
+      {
+        "stage": "build",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792492616.637012,
+        "completedAt": 1792492697.425976,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/logs/build.log",
+        "sha256": "7b8bf57b4974d6b3cd99564aad71e0e12232434a0496158568a2475ee08aede1"
+      },
+      {
+        "stage": "bundle",
+        "command": [
+          "npm",
+          "run",
+          "check:bundle-size"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792492697.4273322,
+        "completedAt": 1792492697.942973,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/logs/bundle.log",
+        "sha256": "b5a135311ff0b1c13701902d97814b0de17c970bb6268e324bc1f4b534ec2995"
+      },
+      {
+        "stage": "focused-browser",
+        "command": [
+          "npx",
+          "playwright",
+          "test",
+          "tests/e2e/character-chat-source-unit-confirmation.spec.ts",
+          "tests/e2e/character-chat-source-units.spec.ts",
+          "--workers=1",
+          "--retries=0"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792492697.943516,
+        "completedAt": 1792492737.602889,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/logs/focused-browser.log",
+        "sha256": "37193bf7c9e58df2b5e0a3b8531de40bd2379e30bd9fd14e1c0cebb0bbea21e7"
+      },
+      {
+        "stage": "diff",
+        "command": [
+          "git",
+          "diff",
+          "--check"
+        ],
+        "exitCode": 0,
+        "startedAt": 1792492737.603533,
+        "completedAt": 1792492737.6803682,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v256-source-discovery-policy/logs/diff.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "realSemanticReview": {
+    "status": "terminal",
+    "calls": 2,
+    "passed": true,
+    "restorationPassed": true,
+    "evidence": "tests/acceptance/character-chat-source-discovery-policy-v257.json",
+    "runtimeOrProductionCalls": 0
+  },
+  "fullCI": false,
+  "fullE2E": false,
+  "formalM1Credit": false,
+  "qualityAccepted": false
+}

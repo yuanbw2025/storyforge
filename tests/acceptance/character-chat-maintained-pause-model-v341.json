@@ -1,0 +1,72 @@
+{
+  "schema": "storyforge.chat-maintained-pause-real-model",
+  "version": 1,
+  "at": "2026-10-22T22:52:38.148439+00:00",
+  "status": "bounded-real-control-and-restoration-passed-not-M1",
+  "source": {
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "baseHead": "fef76fc1dfd12b7057fa1b00cf20d399262fe0bf",
+    "sourceKind": "clean-worktree-commit",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v341-maintained-pause-model/manifest.json",
+    "manifestSha256": "d9fe0099eee0f8ec91eaf17a7ead83c040a6b5423d1c79881e9ca1fa837449d0"
+  },
+  "sourceUnchanged": true,
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "nativeRequests": 3,
+  "nativeStatuses": {
+    "b4dcd684-b835-4944-9c8c-e2eef1978b76": "completed",
+    "b0cbf399-8956-47a0-a4e5-b7420a435d54": "completed",
+    "231e22db-902e-40ad-88f0-806df2647fe1": "completed"
+  },
+  "usage": {
+    "totalTokens": 47874,
+    "inputTokens": 47015,
+    "outputTokens": 859,
+    "cachedInputTokens": 9472,
+    "reasoningOutputTokens": 237
+  },
+  "costUsd": null,
+  "opportunities": 1,
+  "automaticRetries": 0,
+  "outcome": {
+    "controlVersion": 3,
+    "messagesUnchanged": true,
+    "situationUnchanged": true,
+    "directorCallsCharged": 3,
+    "newStoryProgress": false,
+    "newPlayerMessages": 0,
+    "allSixIndependentReviewChecksPassed": true
+  },
+  "restoration": {
+    "checks": {
+      "originalRootStatePreserved": true,
+      "originalV339StatePreserved": true,
+      "branchStatePreserved": true,
+      "refreshAllThreeStatesPreserved": true,
+      "worldPreserved": true,
+      "childRunStatesPreserved": true,
+      "rootRunStatesPreserved": true,
+      "parentRunStatesPreserved": true,
+      "originalV332FailurePreserved": true,
+      "originalV339FailurePreserved": true,
+      "originalOpeningReviewPreserved": true,
+      "allArtifactBytesAndMultiplicityPreserved": true,
+      "zeroModelRequests": true,
+      "noResumableRuns": true
+    },
+    "modelCalls": 0,
+    "retainedAncestors": 2,
+    "totalSessions": 3,
+    "bothOriginalFailuresPreserved": true
+  },
+  "formalM1Credit": false,
+  "humanQualityPass": false,
+  "originalScheduledDenominatorChanged": false,
+  "artifacts": {
+    "raw": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v341-maintained-pause-model/maintained-pause-model.json",
+    "backup": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v341-maintained-pause-model/maintained-pause-model-backup.json",
+    "restoration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v341-maintained-pause-model/restoration-logical-history.json",
+    "registration": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v341-maintained-pause-model/preregistration.json"
+  }
+}

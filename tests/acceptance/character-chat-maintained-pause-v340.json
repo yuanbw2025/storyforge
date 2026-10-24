@@ -1,0 +1,317 @@
+{
+  "schema": "storyforge.chat-maintained-pause-engineering",
+  "version": 1,
+  "at": "2026-10-22T22:37:56.971880+00:00",
+  "status": "targeted-engineering-passed-real-model-and-current-full-delivery-pending",
+  "source": {
+    "at": "2026-10-22T22:37:56.961Z",
+    "passed": true,
+    "sourceHead": "c07d40dc57b9082a9461ac2d6f9d6856a42cbe5d",
+    "sourceKind": "manifest-verified-worktree",
+    "files": 3443,
+    "manifestSha256": "d9fe0099eee0f8ec91eaf17a7ead83c040a6b5423d1c79881e9ca1fa837449d0",
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v340-maintained-pause/manifest-final.json"
+  },
+  "versions": {
+    "producer": "chat-narrative-action-v66",
+    "reviewer": "chat-narrative-action-review-v41",
+    "options": "chat-narrative-options-v40",
+    "optionsReview": "chat-narrative-options-review-v29",
+    "reader": "chat-narrative-runtime-view-v18",
+    "retrieval": "chat-relevance-v14"
+  },
+  "behavior": {
+    "changed": "Version3 handoff can maintain an already adopted autonomous pause at a fresh single-actor continue/return opportunity after six independent checks. It adds no dialogue or story progress.",
+    "deterministicBoundaries": [
+      "adopted own paused goal matches actual shared retrievable source",
+      "no active own goal or player pause",
+      "current scene and current actor",
+      "no unanswered player message",
+      "no pending edit, situation result or ensemble scheduling",
+      "zero current-turn actions and three-call allowance"
+    ],
+    "independentChecks": [
+      "current-pause",
+      "current-opportunity",
+      "pending-obligations",
+      "available-direction",
+      "player-agency",
+      "visibility"
+    ],
+    "existingBoundaries": [
+      "choice remains unadopted draft",
+      "new directions still use ordinary action/resume",
+      "failures preserved with no automatic retries",
+      "same registered context, CreativeArtifact, governed event, adoption and receipt",
+      "no new table, world write or media owner"
+    ],
+    "coordinatorBinding": "Historical review40 retains effective version1 after removal of an ignored fourth tuple element; new review41 explicitly selects existing version2 scene-NPC review guidance."
+  },
+  "regression": {
+    "distinctFiles": 164,
+    "distinctPassed": 2129,
+    "newRegressionCases": 39,
+    "first": {
+      "files": 164,
+      "passed": 2023,
+      "failed": 103
+    },
+    "corrected": {
+      "files": 11,
+      "passed": 168,
+      "failed": 0
+    },
+    "additionalStrictSchemaCase": 1,
+    "initialSchemaTestConfigurationError": "openai provider deliberately does not supply strict response schema; corrected the test to the existing Codex path, no production provider behavior changed",
+    "counting": "Replace results for the 11 corrected files, retain all other results, add the one later schema case. Initial 38 targeted cases overlap and are not added again.",
+    "firstFailuresPreserved": true
+  },
+  "browser": {
+    "distinctFiles": 8,
+    "distinctPassed": 36,
+    "failed": 0,
+    "skipped": 0,
+    "flaky": 0,
+    "retries": 0,
+    "newPaths": 4,
+    "runs": [
+      {
+        "file": "browser.json",
+        "stats": {
+          "startTime": "2026-10-22T22:27:07.933Z",
+          "duration": 143920.836,
+          "expected": 20,
+          "skipped": 0,
+          "unexpected": 16,
+          "flaky": 0
+        },
+        "distinctPaths": 36
+      },
+      {
+        "file": "browser-corrected.json",
+        "stats": {
+          "startTime": "2026-10-22T22:30:51.567Z",
+          "duration": 91669.159,
+          "expected": 17,
+          "skipped": 0,
+          "unexpected": 0,
+          "flaky": 0
+        },
+        "distinctPaths": 17
+      }
+    ],
+    "counting": "20 first passing paths plus 17 corrected paths minus one overlapping passing path equals 36. Initial 16 assertion failures remain preserved.",
+    "correctionScope": {
+      "onlyChangedFiles": [
+        "tests/e2e/character-chat-action-choice.spec.ts",
+        "tests/e2e/character-chat-control-handoff.spec.ts",
+        "tests/e2e/character-chat-memory-reconciliation-contract.spec.ts"
+      ],
+      "productionSourceUnchanged": true,
+      "reason": "Current default assertion 65/40 becomes 66/41. No domain assertion, timeout or retry change."
+    },
+    "sameSourceBeforeAfterEachRun": true,
+    "finalSourceVerified": {
+      "at": "2026-10-22T22:37:56.961Z",
+      "passed": true,
+      "sourceHead": "c07d40dc57b9082a9461ac2d6f9d6856a42cbe5d",
+      "sourceKind": "manifest-verified-worktree",
+      "files": 3443,
+      "manifestSha256": "d9fe0099eee0f8ec91eaf17a7ead83c040a6b5423d1c79881e9ca1fa837449d0"
+    }
+  },
+  "checks": {
+    "governance": {
+      "at": "2026-10-22T22:22:16.443156+00:00",
+      "checks": [
+        {
+          "check": "check:architecture",
+          "exitCode": 0
+        },
+        {
+          "check": "check:required-tables",
+          "exitCode": 0
+        },
+        {
+          "check": "check:ai-manual",
+          "exitCode": 0
+        },
+        {
+          "check": "check:ai-entry-registry",
+          "exitCode": 0
+        },
+        {
+          "check": "check:agent-context",
+          "exitCode": 0
+        },
+        {
+          "check": "check:agent-freshness",
+          "exitCode": 0
+        },
+        {
+          "check": "check:docs",
+          "exitCode": 0
+        },
+        {
+          "check": "check:roadmap",
+          "exitCode": 0
+        },
+        {
+          "check": "check:project-metrics",
+          "exitCode": 0
+        },
+        {
+          "check": "check:source-reachability",
+          "exitCode": 0
+        }
+      ],
+      "passed": true
+    },
+    "typeLint": {
+      "at": "2026-10-22T22:28:30.316506+00:00",
+      "paths": [
+        "src/components/character-interaction/NarrativeControls.tsx",
+        "src/lib/agent/skill-registry.ts",
+        "src/lib/character-interaction/action-choice-budget.ts",
+        "src/lib/character-interaction/action-choice-message-evidence.ts",
+        "src/lib/character-interaction/action-output-contract.ts",
+        "src/lib/character-interaction/action-wire.ts",
+        "src/lib/character-interaction/commitment-prompt.ts",
+        "src/lib/character-interaction/context-selection.ts",
+        "src/lib/character-interaction/control-handoff-contract.ts",
+        "src/lib/character-interaction/control-handoff-state.ts",
+        "src/lib/character-interaction/control-handoff-wire.ts",
+        "src/lib/character-interaction/coordinator-audience.ts",
+        "src/lib/character-interaction/inquiry-prompt.ts",
+        "src/lib/character-interaction/maintained-pause-control.ts",
+        "src/lib/character-interaction/memory-reconciliation.ts",
+        "src/lib/character-interaction/narrative-action-prompt.ts",
+        "src/lib/character-interaction/narrative-commitments.ts",
+        "src/lib/character-interaction/narrative-conversation-evidence.ts",
+        "src/lib/character-interaction/narrative-player-pause.ts",
+        "src/lib/character-interaction/narrative-promise-request.ts",
+        "src/lib/character-interaction/narrative-replanning.ts",
+        "src/lib/character-interaction/narrative-scene-transition.ts",
+        "src/lib/character-interaction/ordinary-action-prompt.ts",
+        "src/lib/character-interaction/player-decision-prompt.ts",
+        "src/lib/character-interaction/review-normalization.ts",
+        "src/lib/character-interaction/situation-harness.ts",
+        "src/lib/character-interaction/turn-completion.ts",
+        "src/lib/character-interaction/turn-end-control.ts",
+        "src/lib/types/chat-narrative.ts",
+        "tests/e2e/character-chat-maintained-pause.spec.ts",
+        "tests/helpers/chat-maintained-pause.ts",
+        "tests/regression/R-CHAT-02-action-choice-harness.test.ts",
+        "tests/regression/R-CHAT-02-autonomous-pause-review.test.ts",
+        "tests/regression/R-CHAT-02-bounded-observation.test.ts",
+        "tests/regression/R-CHAT-02-choice-message-evidence.test.ts",
+        "tests/regression/R-CHAT-02-control-handoff-harness.test.ts",
+        "tests/regression/R-CHAT-02-fact-discovery.test.ts",
+        "tests/regression/R-CHAT-02-ordinary-action.test.ts",
+        "tests/regression/R-CHAT-02-player-decision.test.ts",
+        "tests/regression/R-CHAT-02-replanning.test.ts",
+        "tests/regression/R-CHAT-02-spoken-inquiry-review.test.ts",
+        "tests/regression/R-CHAT-03-maintained-pause-harness.test.ts",
+        "tests/regression/R-CHAT-03-maintained-pause.test.ts",
+        "tests/regression/R-CHAT-03-recent-dialogue-bindings.test.ts",
+        "tests/regression/R-CHAT-03-recent-dialogue-harness.test.ts",
+        "tests/regression/R-CHAT-03-turn-allowance.test.ts",
+        "tests/regression/R-CHAT-03-turn-end-choice-review.test.ts",
+        "tests/regression/R-CHAT-03-turn-end-harness.test.ts",
+        "tests/regression/R-CHAT-04-commitment-generation.test.ts",
+        "tests/regression/R-CHAT-04-history-audit.test.ts"
+      ],
+      "checks": [
+        {
+          "check": "types",
+          "exitCode": 0
+        },
+        {
+          "check": "lint",
+          "exitCode": 0
+        }
+      ]
+    },
+    "finalTypeLint": {
+      "at": "2026-10-22T22:32:26.390727+00:00",
+      "changesSincePriorCheck": [
+        "tests/e2e/character-chat-action-choice.spec.ts",
+        "tests/e2e/character-chat-control-handoff.spec.ts",
+        "tests/e2e/character-chat-memory-reconciliation-contract.spec.ts"
+      ],
+      "checks": [
+        {
+          "check": "types",
+          "exitCode": 0
+        },
+        {
+          "check": "browser-lint",
+          "exitCode": 0
+        }
+      ]
+    },
+    "build": {
+      "at": "2026-10-22T22:29:09.706996+00:00",
+      "checks": [
+        {
+          "check": "build",
+          "exitCode": 0
+        },
+        {
+          "check": "check:bundle-size",
+          "exitCode": 0
+        }
+      ]
+    },
+    "finalDocs": {
+      "at": "2026-10-22T22:38:19.178549+00:00",
+      "checks": [
+        {
+          "check": "check:docs",
+          "exitCode": 0
+        },
+        {
+          "check": "check:roadmap",
+          "exitCode": 0
+        },
+        {
+          "check": "check:project-metrics",
+          "exitCode": 0
+        },
+        {
+          "check": "diff-check",
+          "exitCode": 0
+        }
+      ]
+    }
+  },
+  "externalModelCalls": 0,
+  "formalM1QualityPassesAdded": 0,
+  "humanRatingsAdded": 0,
+  "remotePreviousHead": {
+    "runId": 39843752978,
+    "head": "554eeee4f219f1c107184003c4ab455a77e08537",
+    "status": "completed",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "name": "Full delivery / cli",
+        "completedAt": "2026-10-22T22:10:57Z",
+        "conclusion": "success"
+      },
+      {
+        "name": "Full delivery / browser",
+        "completedAt": "2026-10-22T22:19:56Z",
+        "conclusion": "success"
+      }
+    ],
+    "coversCurrentSource": false
+  },
+  "pending": [
+    "real unmodified model generation from adopted pause",
+    "cross-situation autonomous progression and M1 two-provider matrix",
+    "current-source full CI and E2E"
+  ],
+  "evidenceDirectory": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v340-maintained-pause"
+}

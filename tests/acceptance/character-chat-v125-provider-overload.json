@@ -1,0 +1,263 @@
+{
+  "schema": "storyforge.character-chat-development-episode-evidence",
+  "version": 1,
+  "label": "V125 finite public observation adopted; subsequent role review stopped by provider overload",
+  "recordedAt": "2026-10-16T02:56:20.287183+00:00",
+  "implementationCommit": "ebcb50a944193f07c2ead15c1f438a5a42bd4268",
+  "manifestSha256": "2087fdec7cc2d31e8d94ce5ed636ec52dc2803fc8f4ecb0db083cf4f76c1ec29",
+  "releaseHash": "3235facf915f325f3c3ef14c17faab66af1bd9a1e2f9d00ec3ffb37c555f8701",
+  "worldHash": "103ac348ab504155f0ff2a30034cf38d112b175cf3f40e2011251f5cedb4a6ee",
+  "startedAt": "2026-10-16T02:53:10.261Z",
+  "completedAt": "2026-10-16T02:54:38.743Z",
+  "countsInM1": false,
+  "holdoutsInspected": false,
+  "episode": {
+    "planned": 1,
+    "terminated": 1,
+    "outcome": "terminal provider failure in role action review; new observation adopted but proposed refusal response not adopted",
+    "playerOpportunities": 1,
+    "runtimeRequests": 6,
+    "completedProviderRequests": 5,
+    "failedProviderRequests": 1,
+    "completedRuns": 2,
+    "failedRuns": 1,
+    "committedActorActions": 1,
+    "retries": 0,
+    "repairs": 0,
+    "publicMessages": [
+      {
+        "messageId": "message:harness:32",
+        "eventSequence": 5,
+        "role": "character",
+        "speakerKey": "participant.001",
+        "audienceKeys": [
+          "player",
+          "participant.001"
+        ],
+        "text": "“先核实眼前这处，不能凭铜印不见了就指责谁。”叶岑蹲到木箱前，握住箱盖边缘向上轻抬，检查箱盖能否打开。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      },
+      {
+        "messageId": "message:player:95c3510b-47ab-42f6-80b0-7f5d49bcc469",
+        "eventSequence": 6,
+        "role": "player",
+        "speakerKey": "player",
+        "audienceKeys": null,
+        "text": "这个箱子先别再翻查，换个办法吧。",
+        "replyToSequence": null,
+        "supersededBySequence": null
+      }
+    ],
+    "adoptedObservationCandidate": {
+      "kind": "chat-situation",
+      "title": "柜台旁的查找起点",
+      "location": "驿站",
+      "timeLabel": "暴雨中",
+      "newFacts": [
+        {
+          "factKey": "fact-11",
+          "kind": "observation",
+          "text": "箱盖随叶岑这次轻抬离开箱沿，打开了一道缝，确认可以开启；本次未核对箱内物品。",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "evidenceFactKeys": [
+            "fact-8",
+            "fact-10"
+          ],
+          "seedExcerpt": "确认这次轻抬箱盖的检查结果：箱盖是否打开；不预定箱内物品或铜印所在。"
+        }
+      ],
+      "newGoals": [],
+      "newThreads": [],
+      "possibilities": []
+    },
+    "observationReview": {
+      "checks": [
+        {
+          "check": "continuity",
+          "passed": true,
+          "reason": "保持原标题、驿站地点及暴雨中时间，仅结算事件5轻抬箱盖的结果；玩家后来要求换办法不撤销这次已实施的检查。"
+        },
+        {
+          "check": "permissions",
+          "passed": true,
+          "reason": "仅新增一项获准的普通观察，补足箱盖可开启的局部结果；未引入人物、物品或追加翻查动作。"
+        },
+        {
+          "check": "player-agency",
+          "passed": true,
+          "reason": "未替沈禾行动或同意调查，也未安排继续翻查，保留玩家要求换办法的空间。"
+        },
+        {
+          "check": "visibility",
+          "passed": true,
+          "reason": "两人均在柜台旁，箱盖抬开一道缝属于现场可见的外部结果；未透露铜印位置、经手者或用途，也未授予秘密发现。"
+        },
+        {
+          "check": "meaningful-direction",
+          "passed": true,
+          "reason": "本次仅检查箱盖能否打开，候选明确给出可以开启的结果，并保留未经核对的箱内内容，完整回应实际检查范围。"
+        }
+      ]
+    },
+    "unadoptedRoleCandidate": {
+      "kind": "speak",
+      "text": "“好，换个办法。箱内还没核对，不能算排除了这一处。停电时后门没有上锁，我想换到这条线索上：先弄清后门目前是否便于查看，或是否有可询问当时情况的对象，不据此认定有人偷拿。”",
+      "goalKey": "goal-1",
+      "evidenceFactKeys": [
+        "fact-4",
+        "fact-9",
+        "fact-11"
+      ],
+      "audienceKeys": [
+        "player",
+        "participant.001"
+      ],
+      "waitingForPlayer": false,
+      "newFacts": [],
+      "disclosures": [],
+      "threadUpdates": [],
+      "goalStatus": null,
+      "goalUpdates": [],
+      "commitmentEffects": [],
+      "relationshipUpdates": [],
+      "nextPossibilities": [
+        {
+          "text": "暂不继续翻查木箱，改从后门未上锁的已知情况着手，先核实是否有可接触的现场或可询问的对象，不要求沈禾参与，不预定查问结果。",
+          "evidenceFactKeys": [
+            "fact-4",
+            "fact-9",
+            "fact-11"
+          ]
+        }
+      ],
+      "beliefUpdates": [],
+      "situationRequest": {
+        "threadKey": "thread-1",
+        "direction": "核实当前是否能接触并查看后门现场，或是否有可询问停电期间后门情况的对象；不预定有人在场、知情或愿意回答，不预定存在铜印线索。",
+        "evidenceFactKeys": [
+          "fact-4",
+          "fact-9",
+          "fact-11"
+        ],
+        "evidenceExcerpt": "先弄清后门目前是否便于查看，或是否有可询问当时情况的对象"
+      },
+      "followupGoal": null,
+      "threadFollowupGoal": null,
+      "resumeGoal": null,
+      "promiseRequest": null,
+      "pauseGoal": null,
+      "sceneTransition": null
+    },
+    "pendingObservation": null,
+    "truthUnitsStillUnknown": true
+  },
+  "provider": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "knownUsage": {
+      "totalTokens": 64820,
+      "inputTokens": 62849,
+      "outputTokens": 1971,
+      "cachedInputTokens": 4864,
+      "reasoningOutputTokens": 526
+    },
+    "usageMissingRequests": 1,
+    "knownTokensIncludingSharedPreparationAndProductionOnce": 196450,
+    "usageLimit": "Failed dispatched review has no returned usage; reported sum is observed usage only, not complete cost.",
+    "costUsd": null,
+    "failure": {
+      "id": "2c304dba-32c6-4c50-b572-50f5bae06c9d",
+      "status": "failed",
+      "dispatched": true,
+      "error": "Codex 已确认本次生成失败（提供商报告：服务暂时过载；serverOverloaded）；未完成内容不会成为正式候选，不会自动重发。",
+      "usage": null
+    }
+  },
+  "restoration": [
+    {
+      "stem": "inn-grounded-opening-refusal",
+      "runStatusesPreserved": true,
+      "verifiedCompletedHistories": 2,
+      "retainedFailedRuns": 1,
+      "resumableRuns": 0,
+      "openingReviewRetained": true,
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true
+    }
+  ],
+  "terminalReadback": {
+    "checks": [
+      {
+        "id": "e39a2223-8cc6-4e86-a270-fd84d4a1c621",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "4524a161-890b-4af1-93da-90f094630732",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "8f9b8233-bf0a-4dee-bb18-2aa76745543d",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "922de2af-75ee-4f1d-83e1-73e381dab987",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "c9d15ffd-7528-47d2-891c-87e26c62153b",
+        "status": "completed",
+        "readbackEqual": true
+      },
+      {
+        "id": "2c304dba-32c6-4c50-b572-50f5bae06c9d",
+        "status": "failed",
+        "readbackEqual": true
+      }
+    ],
+    "allTerminal": true
+  },
+  "finding": "Actual generation confirms only the access test performed: lid opens a crack, inside remains unchecked. This public finite observation passes independent review and is adopted with all canonical secrets unknown. Later role generation acknowledges refusal and proposes the public back-door alternative, but its review request failed with serverOverloaded and no verdict; no reply/plan was committed.",
+  "next": "Retain provider failure and never automatically resend this terminal run. Continue independent validation work; any later model episode must be separately preregistered with this outcome retained. Full refusal-response quality remains unverified.",
+  "limits": [
+    "No formal role response to refusal; candidate wording alone is not successful replanning.",
+    "Fresh opening tested lid access only, unlike V122 content inspection; this is not a controlled A/B proof of the new canonical-discovery path.",
+    "No M1, Agnes, human or commercial acceptance added; no replacement of prior cohorts."
+  ],
+  "evidence": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v125-observation-visibility-refusal/preregistration.json",
+      "sha256": "df51cc17d76b2fb8915cc7553afc48d8c3e4484b7baf3001f515ee07b9af95fa"
+    },
+    "runner.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v125-observation-visibility-refusal/runner.mjs",
+      "sha256": "0f3e508baf5bf47085a474e948241d2f45b5bbf465b93cf9c13ae1820a75aabe"
+    },
+    "inn-grounded-opening-refusal.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v125-observation-visibility-refusal/inn-grounded-opening-refusal.json",
+      "sha256": "2f7bedc917444fc88105aaa828d29d69debea068a4411e947a907f1920ee7a92"
+    },
+    "inn-grounded-opening-refusal-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v125-observation-visibility-refusal/inn-grounded-opening-refusal-backup.json",
+      "sha256": "0d6e814f4f928d6a26c215a2487dcf8b68ac8a27557b5f0609d0bf49999ff07e"
+    },
+    "restoration-verified.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v125-observation-visibility-refusal/restoration-verified.json",
+      "sha256": "78ce47ab42d4296fc09a84ba7d535868802f3d3feff0515a11ab88738d04a15f"
+    },
+    "terminal-request-proof.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v125-observation-visibility-refusal/terminal-request-proof.json",
+      "sha256": "e3f21e4c6c4405e147593513d284d85a6ba9173aab9eb23b78c90dcfdbdd8fd4"
+    }
+  }
+}

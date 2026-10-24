@@ -1,0 +1,97 @@
+{
+  "scope": "CHAT-04 current projection cost only; not 1000-action completion or model quality",
+  "baselineHead": "6f1e31d415e51ff6e7028c831800f5607414460a",
+  "nativeSource": "V135 saved 100/300/800 action checkpoints",
+  "outputsEqual": true,
+  "cases": [
+    {
+      "actions": 100,
+      "reader": "chat-relevance-v9",
+      "sha256": "0be328a622f9fd84cc1c1f1bc30ae4c6cce26c9fe97e5c9168c96580065247dd",
+      "characters": 64291,
+      "baselineMs": {
+        "actor": 72.29,
+        "review": 60.08
+      },
+      "optimizedMs": {
+        "actor": 62.3,
+        "review": 46.17
+      }
+    },
+    {
+      "actions": 100,
+      "reader": "chat-relevance-v10",
+      "sha256": "54a53ae76de4b882a9122d3e6ba2ec777418f613c78c0aaa8499f7c0265f422c",
+      "characters": 63754,
+      "baselineMs": {
+        "actor": 58.93,
+        "review": 61.03
+      },
+      "optimizedMs": {
+        "actor": 44.0,
+        "review": 35.95
+      }
+    },
+    {
+      "actions": 300,
+      "reader": "chat-relevance-v9",
+      "sha256": "5447e7b2099d0256475b00c660c4f890f8d4b79fb32add6182f5ee23f6eed28b",
+      "characters": 91866,
+      "baselineMs": {
+        "actor": 210.33,
+        "review": 347.35
+      },
+      "optimizedMs": {
+        "actor": 121.77,
+        "review": 144.21
+      }
+    },
+    {
+      "actions": 300,
+      "reader": "chat-relevance-v10",
+      "sha256": "5c7e4c13f425dcef6e3c75c4ecdb448c848eef9ca181102e0a7bfce46081e0de",
+      "characters": 91528,
+      "baselineMs": {
+        "actor": 208.99,
+        "review": 336.56
+      },
+      "optimizedMs": {
+        "actor": 102.82,
+        "review": 144.23
+      }
+    },
+    {
+      "actions": 800,
+      "reader": "chat-relevance-v9",
+      "sha256": "353a7d8ee17280d7dee7582ef7d457e0b698dd0a17401ac59f3866263efc7abc",
+      "characters": 161646,
+      "baselineMs": {
+        "actor": 858.05,
+        "review": 2198.06
+      },
+      "optimizedMs": {
+        "actor": 294.77,
+        "review": 719.36
+      }
+    },
+    {
+      "actions": 800,
+      "reader": "chat-relevance-v10",
+      "sha256": "6f0f2fec96cd7abe5ffcfb00a08d134c8041508574d28efed6dc306691c0cc4c",
+      "characters": 161308,
+      "baselineMs": {
+        "actor": 1062.31,
+        "review": 4509.22
+      },
+      "optimizedMs": {
+        "actor": 325.79,
+        "review": 1383.82
+      }
+    }
+  ],
+  "timingLimit": "Single development samples on a shared host, not an isolated benchmark; native browser CPU/whole-action profile remains queued.",
+  "baselineHashMatrix": "character-chat-v140-projection-baseline.json",
+  "baselineCaptureLog": "/tmp/storyforge-chat-v140-baseline-golden-output-fixed.log",
+  "equivalenceLog": "/tmp/storyforge-chat-v140-equivalence-complete-baseline.log",
+  "engineeringCalls": "no model calls; pure projections of retained engineering fixtures"
+}

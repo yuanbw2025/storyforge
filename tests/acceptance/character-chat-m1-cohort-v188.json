@@ -1,0 +1,185 @@
+{
+  "schema": "storyforge.chat-m1-cohort-progress",
+  "version": 1,
+  "recordedAt": "2026-10-20",
+  "cohort": "m1-v188-current-source",
+  "status": "production-unit-stopped-runtime-review-failure-not-accepted",
+  "source": {
+    "kind": "working-tree-validation-copy",
+    "baseHead": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+    "manifestSha256": "11007d69336fa29458e95b6aa8f7fb75ee8464cf5502e925df7e0022485fdf1f",
+    "fullEngineeringGates": "V187 live queue; not yet executed at this record"
+  },
+  "parentProtocol": "character-chat-m1-protocol-v1.json",
+  "parentProtocolSha256": "a70ce9a0395edb55216420b07f321fc9c21d840bbb8b3a3b5a48c0f9762e8b25",
+  "planned": {
+    "coreEpisodes": 72,
+    "holdoutEpisodes": 48,
+    "productionUnits": 20
+  },
+  "observed": {
+    "productionUnitsStarted": 1,
+    "productionUnitsReleased": 1,
+    "episodesStarted": 2,
+    "episodesCollected": 2,
+    "stagnation": 1,
+    "modelOrContractFailures": 1,
+    "acceptedEpisodes": 0,
+    "humanScoredEpisodes": 0,
+    "agnesEpisodesStarted": 0,
+    "holdoutEpisodesStarted": 0
+  },
+  "currentEpisode": {
+    "episodeId": "m1-v188-current-source/daily-clock-promise/local-codex/r1/refuse",
+    "protocolOutcome": "runtime-review-rejected",
+    "protocolQualityPass": false,
+    "humanScored": false,
+    "sourceUnchanged": true,
+    "sourceManifestSha256": "11007d69336fa29458e95b6aa8f7fb75ee8464cf5502e925df7e0022485fdf1f",
+    "initialStateVerified": true,
+    "sharedProductionRequestsCountedHere": 0,
+    "runtimeRequests": 24,
+    "totalRequests": 24,
+    "observedTokens": 390031,
+    "costUsd": null,
+    "opportunities": 7,
+    "modelOrContractFailure": "meaningful-direction semantic review rejected; candidate not adopted",
+    "terminalRuntimeStatuses": [
+      "completed",
+      "completed",
+      "completed",
+      "completed",
+      "completed",
+      "completed",
+      "completed",
+      "completed",
+      "completed",
+      "completed",
+      "completed",
+      "failed"
+    ],
+    "finalGoals": [
+      {
+        "goalKey": "goal-1-1",
+        "status": "active",
+        "playerPause": false
+      }
+    ],
+    "finalThreads": [
+      {
+        "threadKey": "thread-1-1",
+        "status": "open"
+      }
+    ],
+    "restoration": {
+      "runStatusesPreserved": true,
+      "verifiedCompletedHistories": 11,
+      "retainedFailedRuns": 1,
+      "resumableRuns": 0,
+      "openingReviewRetained": true,
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true
+    },
+    "failedChecks": [
+      {
+        "check": "meaningful-direction",
+        "passed": false,
+        "reason": "上一轮已经完整报告同样的观察局限，本轮主要重复这些结论后暂停。重复盯看缺乏收益不等于其他非接触方向受阻：已有参考册，可结合新取得的一分钟停顿记录继续查阅，或有限核实是否有适用说明。候选未说明为何这一有依据且尚未重复的方向也暂不采用，未知故障原因本身不足以解释停止原责任。"
+      }
+    ]
+  },
+  "observations": [
+    "Original formal production created three reviewed opening candidates; first passing opening selected. Source fidelity admitted before dispatch.",
+    "Actor performed a bounded external observation, reported limited results and requested permission to open the clock without replacing parts.",
+    "Player never granted that permission. Actor correctly retained the boundary, then continued explaining the same inspection proposal without a new finding or adopted consequence.",
+    "Last three replies meet the preregistered repetition stop interpretation; this is not a permission failure or evidence that the actor should open the clock anyway.",
+    "Generator and review both contained prior actor expression prefixes and the private spring fact. Missing source/context is not supported. Last reviewer treated the response to \"你接着说\" as grounded explanation; pacing divergence requires interpretation, not automatic critic weakening.",
+    "Player explicitly refused touching, opening or replacing clock parts; actor retained this boundary.",
+    "Actor asked about onset and handling history, then independently sought and read an existing repair reference book; after longer noncontact observation, it reported limited findings. These actions and results were adopted.",
+    "Actor then proposed self-pause. Review rejected this candidate because fresh observations could support a new targeted lookup in the existing book; final cause still unknown did not establish that no grounded direction remained.",
+    "The book facts did not say all useful contents were exhausted. Actor-visible prior dialogue and private spring were present; missing context is not supported.",
+    "The failed self-pause was not adopted. Existing thread closure criteria were not met, and the actor did not claim entire-thread closure."
+  ],
+  "evidence": {
+    "privateSummary": "character-chat-20261014/v188-m1-current-source/clock-r1-weak-guidance-summary.json",
+    "summarySha256": "e7548319910b186a08d0ce9c27e5a12aa7553435c7815b9a28b7b9d0df5d0cdd",
+    "cohortRegistrationSha256": "ff83f43a5b6b2b058c88d94fc6e3c164792800ee8c3e1b1230a85d5d13af4d86",
+    "refusalPrivateSummary": "character-chat-20261014/v188-m1-current-source/clock-r1-refuse-summary.json",
+    "refusalSummarySha256": "c91ed25763308d4ec5743e27dec7b2a3796124bbb676b71af6a7ff29527d8993"
+  },
+  "boundaries": [
+    "Original M1 and diagnostic cohorts and failures remain unchanged; no previous failure replaced.",
+    "Collection termination and completed durable runs do not imply narrative quality acceptance.",
+    "Player never granted opening permission; this result does not justify bypassing the choice.",
+    "Generator and reviewer both saw the prior actor expressions and private spring; no evidence of missing context.",
+    "Agnes configuration known, requests held for provider quota; human scoring deferred.",
+    "Leave holdout bodies unread during development; no product release or main deployment."
+  ],
+  "next": "Preserve failure and end this production unit under its registered stop policy. Do not launch remaining paired behaviors or repair/retry this failed episode. Any changed generation guidance requires a new source cohort and fresh evidence; keep semantic review and player permissions intact.",
+  "previousEpisodes": [
+    {
+      "episodeId": "m1-v188-current-source/daily-clock-promise/local-codex/r1/weak-guidance",
+      "protocolOutcome": "stagnation",
+      "protocolQualityPass": false,
+      "humanScored": false,
+      "sourceUnchanged": true,
+      "productionRequests": 3,
+      "runtimeRequests": 14,
+      "totalRequests": 17,
+      "observedTokens": 275454,
+      "costUsd": null,
+      "opportunities": 5,
+      "modelOrContractFailure": null,
+      "terminalRuntimeStatuses": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "finalGoals": [
+        {
+          "goalKey": "goal-1-1",
+          "status": "active",
+          "playerPause": false
+        }
+      ],
+      "finalThreads": [
+        {
+          "threadKey": "thread-1-1",
+          "status": "open"
+        }
+      ],
+      "waitingForPlayer": true,
+      "restoration": {
+        "runStatusesPreserved": true,
+        "verifiedCompletedHistories": 7,
+        "retainedFailedRuns": 0,
+        "resumableRuns": 0,
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      },
+      "contextCheck": [
+        {
+          "request": 16,
+          "privateSpringPresent": true,
+          "allPreviousActorExpressionPrefixesPresent": true
+        },
+        {
+          "request": 17,
+          "privateSpringPresent": true,
+          "allPreviousActorExpressionPrefixesPresent": true
+        }
+      ]
+    }
+  ]
+}

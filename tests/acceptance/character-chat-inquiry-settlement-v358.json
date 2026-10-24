@@ -1,0 +1,337 @@
+{
+  "version": 358,
+  "recordedAt": "2026-10-23T11:20:03.446858+00:00",
+  "status": "activated-engineering-verified-real-model-pending",
+  "product": "character-interaction",
+  "phase": "S3 product development",
+  "branch": "fix/chat-narrative-flow-20261023",
+  "baseHead": "8f98673b",
+  "problem": "An actual question at the last permitted action could be left pending after the turn had already constructed a situation, requiring another player continuation and encouraging repeated waiting.",
+  "change": "An explicit inquiry-result request binds one already spoken question to one previously known NPC. The existing reviewed result can settle in the same turn without another actor action. A new player interruption cancels the unanswered result without erasing the spoken question.",
+  "activation": {
+    "active": true,
+    "producerVersions": [
+      "chat-narrative-action-v70",
+      "chat-narrative-options-v42",
+      "chat-action-revision-v25"
+    ],
+    "reviewVersions": [
+      "chat-narrative-action-review-v42",
+      "chat-narrative-options-review-v30"
+    ],
+    "situationVersions": [
+      "chat-situation-construction-v20",
+      "chat-situation-review-v19"
+    ],
+    "note": "The registry selects the V358 defaults. Actual-registry Harness, historical-contract regressions and isolated native-browser settlement paths have passed. Current full-repository delivery and real-model quality remain unverified."
+  },
+  "validation": [
+    {
+      "check": "inquiry settlement core and strict Codex/Agnes schema",
+      "passed": 22,
+      "failed": 0,
+      "evidence": "v358-inquiry-settlement/storyforge-inquiry-settlement-schema.json"
+    },
+    {
+      "check": "durable Harness adoption, independent rejection, pending/settled branch and import recovery",
+      "passed": 3,
+      "failed": 0,
+      "evidence": "v358-inquiry-settlement/storyforge-inquiry-settlement-harness-final.json",
+      "injectedResponses": true
+    },
+    {
+      "check": "related inquiry continuity, contact, disclosure and core regression",
+      "files": 5,
+      "passed": 83,
+      "failed": 0,
+      "evidence": "v358-inquiry-settlement/storyforge-inquiry-settlement-bindings.json",
+      "overlapsOtherBatches": true
+    },
+    {
+      "check": "npx tsc --noEmit",
+      "exitCode": 0,
+      "sessionId": 33526
+    },
+    {
+      "check": "actual registry Harness entry paths, explicit options and original-candidate revision",
+      "passed": 6,
+      "failed": 0,
+      "evidence": "v358-inquiry-settlement/entry-paths-final.json",
+      "injectedResponses": true,
+      "confirmedWithActualRegistryIn": "v358-inquiry-settlement/chat-regressions-initial.json",
+      "overlapsOtherBatches": true
+    },
+    {
+      "check": "full character-chat regressions before completion pairing correction",
+      "files": 184,
+      "passedFiles": 152,
+      "failedFiles": 32,
+      "passed": 2098,
+      "failed": 158,
+      "evidence": "v358-inquiry-settlement/chat-regressions-initial.json",
+      "note": "Failures include obsolete current-default expectations and disclosure fixtures, plus an actual new-producer/old-reviewer completion pairing omission. Original failures are retained; focused later results do not mark the other failures passed."
+    },
+    {
+      "check": "completion pairing correction, historical pairing rejection, inquiry settlement and actual-registry Harness",
+      "files": 3,
+      "passed": 40,
+      "failed": 0,
+      "evidence": "v358-inquiry-settlement/turn-completion-pairing.json",
+      "injectedResponses": true,
+      "overlapsOtherBatches": true
+    },
+    {
+      "check": "character-chat regressions after targeted corrections",
+      "files": 184,
+      "passed": 2265,
+      "failed": 0,
+      "skipped": 0,
+      "evidence": "v358-inquiry-settlement/regression-aggregate.json",
+      "aggregation": "Latest complete-file result replaces its earlier result across the original 184-file run and the 32-file/2-file corrections; original failures retained. Not a new monolithic full-repository CI pass."
+    },
+    {
+      "check": "isolated native-browser current inquiry settlement",
+      "files": 1,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "retries": 0,
+      "evidence": "v358-inquiry-settlement/browser-initial.json",
+      "injectedResponses": true,
+      "coverage": [
+        "390px and 1440px: two actual questions and replies from one two-action turn",
+        "second reply independent rejection preserves the pending question",
+        "reload does not dispatch a request or change state"
+      ]
+    },
+    {
+      "check": "related isolated native-browser paths",
+      "files": 7,
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0,
+      "retries": 0,
+      "evidence": [
+        "v358-inquiry-settlement/browser-related.json",
+        "v358-inquiry-settlement/browser-choice-corrected.json"
+      ],
+      "aggregation": "First batch: 16 passed and 12 rejected at an obsolete default-version fixture assertion. After correcting only that assertion, all 12 complete-file cases passed. Original failures retained.",
+      "injectedResponses": true
+    },
+    {
+      "check": "npx tsc --noEmit",
+      "exitCode": 0,
+      "sessionId": 90970
+    },
+    {
+      "check": "eslint all 86 changed TS/TSX files, followed by four subsequently edited test files",
+      "exitCode": 0,
+      "sessionIds": [
+        69488,
+        82915
+      ]
+    },
+    {
+      "check": "ten governance gates",
+      "exitCode": 0,
+      "evidence": "v358-inquiry-settlement/governance-checks.json"
+    },
+    {
+      "check": "npm run build and npm run check:bundle-size",
+      "exitCode": 0,
+      "evidence": "v358-inquiry-settlement/build-checks.json"
+    },
+    {
+      "check": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "retainedRuns": [
+    {
+      "file": "storyforge-inquiry-settlement-bindings.json",
+      "sha256": "54475c7f4237e5a095d94e6a9f6e5c50594f5e4aa8270cb5cfe008183567a91e",
+      "passed": 83,
+      "failed": 0,
+      "success": true
+    },
+    {
+      "file": "storyforge-inquiry-settlement-core.json",
+      "sha256": "32e93a2a32debcfabab6627632f0d5d8705ff1e08068460ec9a65d3805ea9e6c",
+      "passed": 98,
+      "failed": 2,
+      "success": false
+    },
+    {
+      "file": "storyforge-inquiry-settlement-first.json",
+      "sha256": "77cd6a70c96626efef36a1b5589cf634aae512e9a234668f6477cf53283bfde5",
+      "passed": 18,
+      "failed": 1,
+      "success": false
+    },
+    {
+      "file": "storyforge-inquiry-settlement-harness-corrected.json",
+      "sha256": "e602d3e33fd34f3ea240a5b53d2de4479958d3d27ec4cb88ebd25bb0817db027",
+      "passed": 2,
+      "failed": 1,
+      "success": false
+    },
+    {
+      "file": "storyforge-inquiry-settlement-harness-final.json",
+      "sha256": "a21ba30e5f9a00abac84b52767957e0679f83626ff9913e17672e0f447621a57",
+      "passed": 3,
+      "failed": 0,
+      "success": true
+    },
+    {
+      "file": "storyforge-inquiry-settlement-harness-first.json",
+      "sha256": "9dbf9f5541e557c387d710ead7cada222bf9aac15ecedf02afc3d805585cd9a5",
+      "passed": 2,
+      "failed": 1,
+      "success": false
+    },
+    {
+      "file": "storyforge-inquiry-settlement-schema.json",
+      "sha256": "ac78f51fc57c485414a89dc807f56ac6483cd023ef5679bab1f7de384c5af2cd",
+      "passed": 22,
+      "failed": 0,
+      "success": true
+    },
+    {
+      "file": "entry-paths-initial.json",
+      "sha256": "ee2bede454d9d4e9a43d67ca3d9b8a5e60d5057810e510d22a75bd847afdce43",
+      "passed": 3,
+      "failed": 3,
+      "success": false
+    },
+    {
+      "file": "entry-paths-corrected.json",
+      "sha256": "301e6e19c4e9fdcec9b43c0d3f6cd4288287a891e62465e29956c9920dc944de",
+      "passed": 3,
+      "failed": 3,
+      "success": false
+    },
+    {
+      "file": "entry-paths-final.json",
+      "sha256": "ca3a0b557b0da36c1960529fb9b49eb195bb0b0982cabb4f6a1e5cdfbad6b2c3",
+      "passed": 6,
+      "failed": 0,
+      "success": true
+    },
+    {
+      "file": "activated-entry-paths.json",
+      "sha256": "90748b5df353908f8a3e82408c557bb6fdf7960cb3bb27055272e6912b30f9eb",
+      "passed": 78,
+      "failed": 8,
+      "success": false
+    },
+    {
+      "file": "chat-regressions-initial.json",
+      "sha256": "b74b9c3459610c3491c7943a24cc551f9be310b232a786c95f52f38b7465aa21",
+      "passed": 2098,
+      "failed": 158,
+      "success": false
+    },
+    {
+      "file": "turn-completion-pairing.json",
+      "sha256": "814d55d41d7d5ebee582bbb724ad9a5801f2ed3adca3275b0f2cd0bc1407eb63",
+      "passed": 40,
+      "failed": 0,
+      "success": true
+    },
+    {
+      "file": "chat-regressions-corrected.json",
+      "sha256": "6b9becde9692fd3db6339e98f15c9c545d672e40ff310b5e5e30b6be04d1fd82",
+      "passed": 426,
+      "failed": 2,
+      "success": false
+    },
+    {
+      "file": "chat-regressions-final.json",
+      "sha256": "4e43b8c7e06ca720a369d2440dc00895eeec208f167ff11cef9bf0c4b9623cc0",
+      "passed": 22,
+      "failed": 0,
+      "success": true
+    },
+    {
+      "file": "regression-aggregate.json",
+      "sha256": "470727d3815f665f8aecbed6ecbb55e5e2f65d75b6b3d04c32104a8cddcce347",
+      "passed": 2265,
+      "failed": 0
+    },
+    {
+      "file": "browser-initial.json",
+      "sha256": "6bac5b33368198cf844bee613ddc7592126047b146a20d49bf9efb2f5151ffab",
+      "browserStats": {
+        "startTime": "2026-10-23T11:57:00.716Z",
+        "duration": 34857.188,
+        "expected": 3,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    },
+    {
+      "file": "browser-related.json",
+      "sha256": "f99ac4ed4f0fe487434c7286d0cdc8860b5a0086a07da1cfaeb12e283b6cb3ad",
+      "browserStats": {
+        "startTime": "2026-10-23T11:58:31.377Z",
+        "duration": 135099.063,
+        "expected": 16,
+        "skipped": 0,
+        "unexpected": 12,
+        "flaky": 0
+      }
+    },
+    {
+      "file": "browser-choice-corrected.json",
+      "sha256": "4229d5cc6ab97714cee9334feef04f8d80615d0f0a94f5381e1303821fdf92bc",
+      "browserStats": {
+        "startTime": "2026-10-23T12:01:17.663Z",
+        "duration": 82623.43,
+        "expected": 12,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    },
+    {
+      "file": "governance-checks.json",
+      "sha256": "32641505cdf3d1fe46cc8cfaf06da2821cd51031b990c9d66001444338d2a3bc"
+    },
+    {
+      "file": "build-checks.json",
+      "sha256": "a2772be8393c9dce29384240ef7ad63085845816ac42fa4aca50b19eab7a9031"
+    }
+  ],
+  "remoteExistingSource": {
+    "head": "7390a4fb08ed5a1b39251e8484088894f460acc0",
+    "runId": 39923888159,
+    "url": "https://github.com/yuanbw2025/storyforge/actions/runs/39923888159",
+    "status": "completed",
+    "conclusion": "failure",
+    "cli": "success",
+    "browser": {
+      "passed": 506,
+      "failed": 2,
+      "skipped": 4,
+      "failureFile": "tests/e2e/character-chat-natural-disclosure.spec.ts",
+      "firstFailure": "Outdated literal prompt assertion expects wording:\"equivalent\"; consequent UI assertions do not reach their target.",
+      "log": "v358-inquiry-settlement/storyforge-chat-full-browser-39923888159.log"
+    },
+    "coversCurrentSource": false
+  },
+  "outstanding": [
+    "Commit and freeze the validated execution source, update the existing draft PR, and obtain current-head full-repository CLI and browser delivery results.",
+    "Perform fresh bounded real-model verification on that frozen source, preserving the original V356 failures and denominator. Engineering fixtures are not narrative quality passes.",
+    "Complete M1 across the registered scenarios/providers and the seven existing technical packages. Agnes remains configured with its last quota failure retained; human scoring remains deferred."
+  ],
+  "claims": {
+    "realModelCalls": 0,
+    "nativeBrowserSettlementVerified": true,
+    "currentFullDeliveryPassed": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "released": false
+  },
+  "updatedAt": "2026-10-23T12:06:43.524682+00:00"
+}

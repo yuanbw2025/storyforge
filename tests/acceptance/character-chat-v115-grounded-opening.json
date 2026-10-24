@@ -1,0 +1,272 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "label": "V115 grounded opening opportunities with explicit review evidence",
+  "recordedAt": "2026-10-16T00:19:20.125597+00:00",
+  "baselineCommit": "632bdc3b8ef6ca94dda9dff020b4aff26849fda3",
+  "scope": {
+    "product": "character-chat experimental v3; default hidden",
+    "lifecycle": "product development, S3 production and author choice",
+    "reads": [
+      "product-production.artifact-inputs"
+    ],
+    "writes": "Existing CreativeArtifact/adopt extension into productBuildArtifacts.payloadJson; report schema version 2; no new table, runtime facts, world writes or media changes",
+    "handoff": "Frozen source and opening candidates -> independently reviewed opportunity claims -> explicit author selection -> original assembly/Release lifecycle",
+    "newPromptVersions": [
+      "chat-situation-production-v6",
+      "chat-opening-review-v2"
+    ],
+    "oldPromptVersionsPreserved": [
+      "chat-situation-production-v5",
+      "chat-opening-review-v1"
+    ],
+    "unsupportedEarlierPromptBindings": "Fail closed on execution; historical artifacts remain readable. Do not silently apply current prompts.",
+    "newModelSteps": 0
+  },
+  "contract": {
+    "agency": [
+      "actorKey",
+      "goalKey",
+      "possibilityIndex",
+      "basisFactKeys",
+      "mode",
+      "expectedChange",
+      "unresolved"
+    ],
+    "deterministic": "Known role and owned goal; actual direction owned by role; 1-3 unique referenced facts known to role; exact pointers and literal quotes; bounded closed shape; source/candidate hashes; new-plan v2 gate",
+    "semantic": "Concrete current opportunity supports useful change; preparation alone or assumed available respondent is insufficient; justified wait and companionship allowed; no guarantee of success, forced plot or invented permission",
+    "limitation": "The agency object is a model review claim, not a new fact or deterministic proof of narrative quality"
+  },
+  "regression": {
+    "files": 94,
+    "passed": 1207,
+    "failed": 0,
+    "newTests": 27,
+    "finalBindingRerun": {
+      "passed": 27,
+      "failed": 0
+    },
+    "firstRun": {
+      "files": 3,
+      "passed": 20,
+      "failed": 7,
+      "cause": "New plan acceptance-gate array order differed from existing portable ledger sorting, causing carry task/ledger verification to fail",
+      "repair": "Order new opening gates canonically; retain immutable historical plan/evidence and strict verifier",
+      "rerun": {
+        "files": 3,
+        "passed": 27,
+        "failed": 0
+      }
+    },
+    "covered": [
+      "legacy independent prompt hashes",
+      "role/goal/direction/knowledge/quote negative cases",
+      "semantic rejection kept; failed option cannot be selected",
+      "v1 report cannot satisfy new-plan gate; legacy plans remain readable",
+      "saved binding selection and foreign/missing/unknown binding refusal",
+      "formal scheduler, no extra model steps, author choice, build carry, release, portable report restore and unchanged frozen world"
+    ]
+  },
+  "browser": {
+    "passed": 5,
+    "failed": 0,
+    "scope": "isolated IndexedDB; author production and rejected option; opportunity card; 390px layout; refresh, transfer, release and hidden-fact discovery/rejection"
+  },
+  "gates": {
+    "passed": 10,
+    "bundleSizePassed": true,
+    "projectMetricsRefreshedAfterLastEdit": true
+  },
+  "independentBaseline": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "632bdc3b8ef6ca94dda9dff020b4aff26849fda3",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v115-baseline-xz_afgfi/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v115-baseline-xz_afgfi/manifest.json",
+    "manifestSha256": "204a11ddcc5c5e987da1fce65cd33a9f9e14b2cfb2dbbb5b6f28ac75296a3e6f",
+    "files": 3460
+  },
+  "fullValidation": {
+    "currentCode": "8dcb1788",
+    "CI": "superseded only after verified unstarted; proof retained",
+    "E2E": "terminal exit1 after last logged case323; infrastructure ENOSPC; no successful full result",
+    "manifestSha256": "ef97145364b836c636d56e12355d69789aef834070d2e93811dc2559ee3d9544",
+    "priorV113CI": "passed on691619a3:875 files/5504tests; does not cover V115",
+    "priorV113E2E": "verified unstarted, then superseded; exit143 proof retained",
+    "terminalObservation": "/tmp/storyforge-chat-v120-enospc-terminals.json"
+  },
+  "realValidation": {
+    "status": "new formal production and zero-call recovery passed; no runtime episode in V115",
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "requests": 3,
+    "requestPhases": [
+      "generation",
+      "review",
+      "media"
+    ],
+    "allTerminalReadbackEqual": true,
+    "usage": {
+      "inputTokens": 45111,
+      "outputTokens": 11657,
+      "totalTokens": 56768,
+      "cachedInputTokens": 5760,
+      "reasoningOutputTokens": 609
+    },
+    "costUsd": null,
+    "sourceExactEqualToV109": true,
+    "reviewVersion": 2,
+    "eligibleOptions": 3,
+    "options": [
+      {
+        "optionKey": "opening-1",
+        "title": "先核对柜台储物处",
+        "agency": {
+          "actorKey": "participant.001",
+          "basisFactKeys": [
+            "fact-4",
+            "fact-8"
+          ],
+          "expectedChange": "通过尝试打开并核对眼前木箱，查明箱内是否有丢失的铜印。",
+          "goalKey": "goal-1",
+          "mode": "act",
+          "possibilityIndex": 0,
+          "unresolved": "木箱能否实际打开、是否需要另行许可及核对结果仍待确认；即使找到铜印，也不能据此确定经手者或用途。"
+        },
+        "allFiveChecksPassed": true
+      },
+      {
+        "optionKey": "opening-2",
+        "title": "从后门内侧排查",
+        "agency": {
+          "actorKey": "participant.001",
+          "basisFactKeys": [
+            "fact-4",
+            "fact-8"
+          ],
+          "expectedChange": "照看门槛并掀起草垫，核实该处遮挡的地面是否有铜印或可辨认物件。",
+          "goalKey": "goal-1",
+          "mode": "act",
+          "possibilityIndex": 0,
+          "unresolved": "检查可能没有收获；即使看见物件，也仍需核实其身份及与失物的关系，不能据此认定铜印曾经过后门。"
+        },
+        "allFiveChecksPassed": true
+      },
+      {
+        "optionKey": "opening-3",
+        "title": "先查自己的值勤袋",
+        "agency": {
+          "actorKey": "participant.001",
+          "basisFactKeys": [
+            "fact-4",
+            "fact-8"
+          ],
+          "expectedChange": "摊开并核对自己的值勤袋，查明已检查的随身物品中是否混有铜印。",
+          "goalKey": "goal-1",
+          "mode": "act",
+          "possibilityIndex": 0,
+          "unresolved": "自查可能找不到铜印，只能确认实际检查范围；后续查找条件及铜印真实去向仍需另行核实。"
+        },
+        "allFiveChecksPassed": true
+      }
+    ],
+    "selected": "opening-1, first eligible option in original order",
+    "releaseHash": "3235facf915f325f3c3ef14c17faab66af1bd9a1e2f9d00ec3ffb37c555f8701",
+    "worldHash": "103ac348ab504155f0ff2a30034cf38d112b175cf3f40e2011251f5cedb4a6ee",
+    "runtimeSessions": 0,
+    "meaning": "First opening gives guard an accessible uninspected container; content, handler and purpose are not initially known. Other openings provide a concrete floor inspection or own-bag inspection. Later vague fallback directions were explicitly not accepted as independent sufficient opportunity evidence.",
+    "restoration": {
+      "status": "passed",
+      "modelCalls": 0,
+      "draftAndUnitsEqual": true,
+      "rawResponsesEqual": true,
+      "worldUnchanged": true,
+      "confirmationAdoptionRetained": true,
+      "oldReleaseRetained": true,
+      "sourceAndSettingsUnchanged": true,
+      "releaseRetained": true,
+      "productionProofRecovered": true,
+      "refreshEqual": true,
+      "sessions": 0
+    },
+    "initialReadbackFailure": "One local read-only GET returned403 due omitted required middleware header; retained diagnostic then used the documented header. No model resend or state change.",
+    "limits": [
+      "Separate generation/review calls use the same Codex model; not independent provider calibration",
+      "Three passed candidates do not establish bad-candidate detection or sustained useful progression",
+      "V116 is separately preregistered for fresh complete weak-guidance runtime on this Release; no V114 failure replacement"
+    ],
+    "Agnes": "exhaustive branch search complete; no usable configuration",
+    "M1Complete": false,
+    "humanAcceptance": false,
+    "commercialAcceptance": false,
+    "holdoutsInspected": false,
+    "evidence": {
+      "preregistration.json": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v115-grounded-opening/preregistration.json",
+        "sha256": "4f098e7a9b4c5bbda3f1d793026716a7e724b3b80917f48f54790cf97331f44a"
+      },
+      "preflight.json": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v115-grounded-opening/preflight.json",
+        "sha256": "65e106963567a5f455d70474c474d919ced8e266d571aa9c08d7118504b40f50"
+      },
+      "preflight-backup.json": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v115-grounded-opening/preflight-backup.json",
+        "sha256": "da3ccd8051d18348c473722a011e89ce0a2c196b7787b08a5c3f7e5a4d2a9466"
+      },
+      "opening-review.json": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v115-grounded-opening/opening-review.json",
+        "sha256": "b7029021b7f54c6a32b603b3f257f1a808cc4f6a7287d835051dfcfccfd8e694"
+      },
+      "release.json": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v115-grounded-opening/release.json",
+        "sha256": "c11cd67c88c30a0af966c367d8044897e6e6a8d5c16837ed55f7c27e17688bed"
+      },
+      "restoration.json": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v115-grounded-opening/restoration.json",
+        "sha256": "d68e8e02c7f96a54df9f10abfb642e88f1c6fa946e2575e48dcab8f4c4cb33f9"
+      },
+      "terminal-request-proof.json": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v115-grounded-opening/terminal-request-proof.json",
+        "sha256": "bdbe59efcb516f6454ab3e8b20c6b96eead2c701fbeb445c0f524903b9f80f70"
+      },
+      "readback-initial-failure.json": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v115-grounded-opening/readback-initial-failure.json",
+        "sha256": "c10281fb80ffca2f6f920cefeac600d113a1d4c36840add2cbc61e7f2b10cdd7"
+      }
+    }
+  },
+  "logs": {
+    "initial-regression": {
+      "path": "/tmp/storyforge-chat-v115-initial-regression.log",
+      "sha256": "6a4d6ea7bc053046b1cce90113746888cde1ff83000020c0e62fd7325f278a4c"
+    },
+    "carry-rerun": {
+      "path": "/tmp/storyforge-chat-v115-carry-rerun.log",
+      "sha256": "912f4707cf255d172a19a36fd1fe053f6807013b869fb7845991af976faf3449"
+    },
+    "agency-regression": {
+      "path": "/tmp/storyforge-chat-v115-agency-regression.log",
+      "sha256": "2fa9496a1cffd404c0ef87def86ee5cfdf6e538b30e55af1c52177092044893b"
+    },
+    "binding-rerun": {
+      "path": "/tmp/storyforge-chat-v115-binding-rerun.log",
+      "sha256": "222f29944a714039737c46e3c995352be08b7333c0e121a2634ffcebc5e6a16a"
+    },
+    "final-regression": {
+      "path": "/tmp/storyforge-chat-v115-final-regression.log",
+      "sha256": "69d5762465ae731f29ba172e2a7499bbfec5437c627f2ce3ba0a1d49840c09a6"
+    },
+    "targeted-e2e": {
+      "path": "/tmp/storyforge-chat-v115-targeted-e2e.log",
+      "sha256": "6bbf79544c5b9781b5f00efca6fc0c49b2980a91cb3cdc1e7602eb0e1e3f477f"
+    },
+    "final-gates": {
+      "path": "/tmp/storyforge-chat-v115-final-gates.log",
+      "sha256": "54ee97a66d789b747b7580bbc17df99fcf84d6863fd6ec56088f733bedb349f3"
+    },
+    "final-bundle-size": {
+      "path": "/tmp/storyforge-chat-v115-final-bundle-size.log",
+      "sha256": "5948d632702238dbf860990dd62c00092772c8eaa764b9346c4ba3be8f102065"
+    }
+  },
+  "implementationCommit": "8dcb1788a1dd8dd84095a16bd7c49d8e52b5b374"
+}

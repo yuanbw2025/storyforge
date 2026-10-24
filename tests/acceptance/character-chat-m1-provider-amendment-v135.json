@@ -1,0 +1,30 @@
+{
+  "schema": "storyforge.character-chat-provider-amendment",
+  "version": 1,
+  "recordedAt": "2026-10-16T17:43:04.779705+00:00",
+  "appliesTo": "future separately registered cohorts only; historical failures and original frozen protocol remain unchanged",
+  "protocol": {
+    "path": "character-chat-m1-protocol-v1.json",
+    "sha256": "a70ce9a0395edb55216420b07f321fc9c21d840bbb8b3a3b5a48c0f9762e8b25"
+  },
+  "slot": "agnes",
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "configurationStatus": "existing browser-local configuration located and used for actual role-chat requests",
+  "secretHandling": "Credential remains local; no key, credential hash or full configuration in this file. Existing credential used through private in-memory handoff to an isolated session.",
+  "appSettings": {
+    "temperature": 0.2,
+    "maxTokens": 8000
+  },
+  "effectiveLimits": "Actual generation/review requests use their saved Skill output caps (4000/2400 in V135 probes). Preserve per-call payloads and usage; do not infer controlled Codex sampling from app settings.",
+  "connectionEvidence": {
+    "summary": "character-chat-v135-player-decision.json",
+    "requests": 12,
+    "responses": 12,
+    "knownTokens": 118157,
+    "costUsd": null
+  },
+  "qualityBoundary": "Responses observed, including failed generation and rejected review. Not a reliability pass, model quality acceptance or guarantee of future availability.",
+  "formalMatrixAdded": 0,
+  "humanScoresAdded": 0
+}

@@ -1,0 +1,177 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 327,
+  "kind": "recent-dialogue-real-followthrough",
+  "at": "2026-10-22T13:24:42.873031+00:00",
+  "source": {
+    "head": "f8b592a0fb03b72ab8f5d339f4d3d7329f0fb4a7",
+    "manifestSha256": "52e23697b93cb04626e7e8e7d55069166aea7052abf5444a204d0ce0d72b7394",
+    "sourceUnchanged": true
+  },
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "purpose": "One isolated formal resume from the retained V324 reading failure after V326 context repair; original player message, permissions, release, world and two-action limit retained.",
+  "requestResults": {
+    "count": 3,
+    "statuses": [
+      "completed",
+      "completed",
+      "completed"
+    ],
+    "reportedTokens": 52067,
+    "costUsd": null,
+    "retries": 0,
+    "playerOpportunities": 1,
+    "productionRequests": 0
+  },
+  "inputProof": {
+    "targetMessageId": "message:harness:27",
+    "targetOriginalSequence": 39,
+    "targetBranchSequence": -3,
+    "reader": "chat-narrative-runtime-view-v18",
+    "retrieval": "chat-relevance-v14",
+    "targetRequiredAndTextPreserved": true,
+    "choiceExpressionSameSource": true,
+    "actualSourceSha256": "62568b0bf6d12e4dce027ce294a8a07b2d4fade1592b6316e9bea9b2bb8c1179"
+  },
+  "observedOutcome": {
+    "runtimeRunsCompleted": 1,
+    "integrityValidatedTerminalReceipts": 1,
+    "actionAdopted": true,
+    "triggerStatus": "complete",
+    "newProposal": "Actor offered to handle the opening introduction, reading and hosting/closing, retaining joint agreement rather than assigning work to the player.",
+    "originalRepeatedClosingProposalReproduced": false,
+    "semanticChecks": [
+      {
+        "check": "continuity",
+        "passed": true,
+        "reason": "承接已有短篇与收尾提议，补充开场和组织工作的承担范围；没有将草案写成已确定分工，也未改动告示。"
+      },
+      {
+        "check": "permissions",
+        "passed": true,
+        "reason": "仅提出自身可承担的日常活动安排，未扩张权限或预定他人行为。"
+      },
+      {
+        "check": "player-agency",
+        "passed": true,
+        "reason": "未替玩家承担任务或表示同意。本次只是回应玩家、提出方案，不执行需要玩家决定的正式分工，因此不标记等待合理。"
+      },
+      {
+        "check": "visibility",
+        "passed": true,
+        "reason": "表达当前组织偏好与提议，涉及的短篇准备已为双方所知，未泄露私有背景或将猜测当成事实。"
+      },
+      {
+        "check": "consequences",
+        "passed": true,
+        "reason": "正文没有实际执行组织工作、确定分工或作出独立承诺；空后果数组与提议性质一致，原目标和事项继续保留。"
+      },
+      {
+        "check": "meaningful-direction",
+        "passed": true,
+        "reason": "回应玩家希望继续听想法的请求，在已有朗读和收尾设想上明确补充开场介绍及组织职责，不只是重复人数顾虑或催促决定。"
+      }
+    ],
+    "turnCompletionCheck": {
+      "passed": true,
+      "reason": "实际正文已提出由自己承担简要组织工作的方案，并明确保留共同决定；摘录支持其提议性质。本轮回应已经完成，不以分工获准或活动实施作为完成条件。"
+    },
+    "goalStatuses": [
+      "active"
+    ],
+    "threadStatuses": [
+      "open"
+    ],
+    "wholeStoryCompleted": false,
+    "originalParentUnchanged": true
+  },
+  "restoration": {
+    "initialCollectorExitCode": 1,
+    "initialFailureRetained": true,
+    "initialFailure": "Collector compared imported raw running rows against event-proven completed-history. All other ten checks passed and zero model requests occurred.",
+    "correction": "Compare original V324 terminal states and exact run identities to imported logical state proved by replay, receipt hash and adoption events. Production code and frozen protocol unchanged.",
+    "supplementaryExitCode": 0,
+    "checks": {
+      "parentPreserved": true,
+      "branchPreserved": true,
+      "refreshPreserved": true,
+      "worldPreserved": true,
+      "childRunStatesPreserved": true,
+      "parentRunIdentitiesPreserved": true,
+      "parentRunStatesPreserved": true,
+      "originalFailurePreserved": true,
+      "originalOpeningReviewPreserved": true,
+      "allArtifactBytesAndMultiplicityPreserved": true,
+      "zeroModelRequests": true,
+      "noResumableRuns": true
+    },
+    "modelRequests": 0
+  },
+  "timing": {
+    "singleRunCreatedToUpdatedMs": 88888,
+    "scope": "Single durable run timing; not DOM first-token latency or population distribution"
+  },
+  "maturity": {
+    "M1": "not passed",
+    "formalQualityPassesAdded": 0,
+    "humanScoring": "deferred by user",
+    "original120SlotCohortChanged": false,
+    "newHeadFullCI": "pending",
+    "commercialReadiness": false
+  },
+  "evidence": {
+    "preregistration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v327-reading-followthrough/preregistration.json",
+      "sha256": "a570b1629248416ffcf76568fd27d7644890234866e936a2abf61290b67464bc"
+    },
+    "executable-source-manifest.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v327-reading-followthrough/executable-source-manifest.json",
+      "sha256": "52e23697b93cb04626e7e8e7d55069166aea7052abf5444a204d0ce0d72b7394"
+    },
+    "local-engineering-receipt.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v327-reading-followthrough/local-engineering-receipt.json",
+      "sha256": "f11bf53b2ab2c5a89a488e4579eda9205bbcf5d294235c728576e58a42aecd3b"
+    },
+    "prepared.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v327-reading-followthrough/prepared.json",
+      "sha256": "4276bde95940a85927de5607d13eab14a6b88e854550b8f955d84b0df6f1beab"
+    },
+    "reading-followthrough.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v327-reading-followthrough/reading-followthrough.json",
+      "sha256": "ece9bd7755ea654eecc06490bccbdb1030faf189b8ed3f6aaad232bdef79fe21"
+    },
+    "reading-followthrough-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v327-reading-followthrough/reading-followthrough-backup.json",
+      "sha256": "6748700a0fb1f3c4b6bd8e40630310e00d803ef716bdc813ddf0c3f9a3dd1521"
+    },
+    "execution.log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v327-reading-followthrough/execution.log",
+      "sha256": "9b5256fc0f8f6a76771b42721d7f09cee959c651f67405801aa2a6f18e45dfd6"
+    },
+    "restoration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v327-reading-followthrough/restoration.json",
+      "sha256": "efa3c3518d13bf9764a9a2ee3925c3ca1cd38e4c90bef04a80e118eba611ddd0"
+    },
+    "restoration.log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v327-reading-followthrough/restoration.log",
+      "sha256": "f6cdc4e4b84deb38a14fed5d9ce226b55f2fcf997651ec85e8c3549cfae82d89"
+    },
+    "restoration-correction.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v327-reading-followthrough/restoration-correction.json",
+      "sha256": "fed4c56ef3447aee152932e916a75630bad1b32e50275bc0b3e58f7605133005"
+    },
+    "restore-logical-history.mjs": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v327-reading-followthrough/restore-logical-history.mjs",
+      "sha256": "070ff7c4eb7e1425abdaac5e0bad53a9f2d52acd859802ef4a831adf289b6caa"
+    },
+    "restoration-logical-history.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v327-reading-followthrough/restoration-logical-history.json",
+      "sha256": "8bb43d73914bbcc301b98352e96a0b597d0cbd069848dd77d5fcb2470645c893"
+    },
+    "restoration-logical-history.log": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v327-reading-followthrough/restoration-logical-history.log",
+      "sha256": "eefac059d41682796784f338fe0aa6697105d88184561eefd539fc9211af6675"
+    }
+  }
+}

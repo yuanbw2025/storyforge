@@ -1,0 +1,53 @@
+{
+  "version": 285,
+  "recordedAt": "2026-10-20T21:36:19.228113+00:00",
+  "product": "character-interaction",
+  "status": "message-grounded-turn-completion-engineering-passed-real-pending",
+  "sourceBaseHead": "b7c18eca1c99df8f2c4213ada586d9c1c489d79b",
+  "contract": {
+    "producer": "chat-narrative-action-v54",
+    "reviewer": "chat-narrative-action-review-v35",
+    "behavior": "Permit a reviewed pure response grounded in the latest delivered player message to finish this turn without inventing an unrelated fact citation or another pending decision. Preserve active goals and all original no-consequence restrictions.",
+    "boundaries": [
+      "Only the first player-response speech with a valid same-action turnCompletion; local completion eligibility and independent review remain required.",
+      "Continue/scene-start, excluded or stale sources, private-audience expansion, new facts, commitments, relationships, plan deletion and failed or missing review remain rejected.",
+      "No new output fields, table, world write or model call. Older prompt bytes retained; historical failures are not silently resumed or relabeled."
+    ]
+  },
+  "defectReproduction": {
+    "exitCode": 1,
+    "expectedFailure": "行动缺少当前事实依据",
+    "evidence": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v285-message-turn-completion/reproduction.log",
+      "sha256": "046c697f5e662e52a90b8d8f84c79753afb7f03d6249e111868f9e5086c6e68d"
+    }
+  },
+  "regression": {
+    "files": 10,
+    "passed": 180,
+    "evidence": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v285-message-turn-completion/regression-default.log",
+      "sha256": "53e637c2b94e435b27c15ec7100c5d8b910126da2cc21f819613c7c90addfb30"
+    }
+  },
+  "browser": {
+    "files": 4,
+    "passed": 23,
+    "evidence": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v285-message-turn-completion/browser.log",
+      "sha256": "d759f4122340fd3d82b0ecf8d77840180b8ebf2f4f8d45173b009d8531982287"
+    }
+  },
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v285-message-turn-completion/engineering.json",
+    "sha256": "efc01ea93db9e3ed017a90096c8ac19bb76cb064f75517a3ba516045941b4609"
+  },
+  "manifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v285-message-turn-completion/manifest-final.json",
+    "sha256": "d76b9c2d9785e0e588e048c8f42d0cdbea2c407b26ce1dd9ff8c7aef7f83e4b8"
+  },
+  "realModel": "Pending same-state original-input diagnostic from V284 before the failed seventh input; old failure and cohort retained.",
+  "fullRepositoryDelivery": "Pending for v54 source; b7c18eca run 39497585901 covers only the previous source.",
+  "m1Passed": false,
+  "humanScoringDeferred": true
+}

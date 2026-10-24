@@ -1,0 +1,69 @@
+{
+  "version": 269,
+  "recordedAt": "2026-10-20T17:31:18.263536+00:00",
+  "product": "character-interaction",
+  "status": "engineering-passed-real-review-failed",
+  "scope": "Opening review pointer/agency schema, full source preservation, hidden-field audit and schema input budget; no new model steps or data tables.",
+  "engineering": {
+    "receipt": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v269-opening-review-contract/compact-source/delivery-completed-receipt.json",
+      "sha256": "1d06964b7656c6f2f7c24113cc879a60ba021f97ed576e32ca331ecb18466537"
+    },
+    "focusedPassed": true,
+    "fullCI": false,
+    "fullE2E": false
+  },
+  "realReview": {
+    "provider": "agnes",
+    "model": "agnes-2.5-flash",
+    "newRequests": 1,
+    "httpStatus": 200,
+    "finishReason": "length",
+    "usage": {
+      "completion_tokens": 10000,
+      "prompt_tokens": 26242,
+      "total_tokens": 36242,
+      "completion_tokens_details": {
+        "reasoning_tokens": 8884,
+        "text_tokens": 1116
+      },
+      "prompt_tokens_details": {
+        "cached_tokens": 256
+      }
+    },
+    "reviewPersisted": false,
+    "semanticSuccess": false,
+    "sourceAndCandidatesPreserved": true,
+    "protocol": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v269-opening-review-contract/agnes-review-recovery-r3/preregistration.json",
+      "sha256": "56035e1c1617860508ed6e464d13f2e42545628b44e47a0e540f1c8415cd8e44"
+    },
+    "result": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v269-opening-review-contract/agnes-review-recovery-r3/result.json",
+      "sha256": "fa21cdeb3a856389c8866a36d7e109a5b98d3c153db1e54e36e0ed18d43f6b28"
+    },
+    "backup": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v269-opening-review-contract/agnes-review-recovery-r3/backup.json",
+      "sha256": "451ecb72979a9c9b256f5433c003bcb9b5c9fd650bfa693c6844949cb0051946"
+    },
+    "restoration": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v269-opening-review-contract/agnes-review-recovery-r3/production-restoration.json",
+      "sha256": "bd8a82714fe66bb1f911dd203da4a82da92fb6f1506d90242830a5c5e27692cd"
+    },
+    "recoveryModelCalls": 0,
+    "automaticRetries": 0,
+    "releaseCreated": false,
+    "runtimeCreated": false
+  },
+  "previousAttempt": {
+    "result": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v269-opening-review-contract/agnes-review-recovery-r2/result.json",
+      "sha256": "b976e50e5eb7db7bb991ce87345cd50d76518c336f330862a5732aab4410e1ff"
+    },
+    "modelCalls": 0,
+    "reason": "Full pointer schema exceeded existing input budget before dispatch; compact schema excludes metadata-only citation paths and keeps all source text."
+  },
+  "nextAction": "Fresh review excludes rejected report from model input; explicit output-length failure and bounded output allocation preserve paid evidence. Core autonomous storytelling remains unaccepted.",
+  "formalM1Credit": 0,
+  "qualityAccepted": false
+}

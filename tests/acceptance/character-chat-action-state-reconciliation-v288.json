@@ -1,0 +1,117 @@
+{
+  "version": 288,
+  "sourceBaseHead": "0cb7c84d3f89fefbe2544113345fb51bd3cfca38",
+  "change": "Default action v55 adds own belief/plan post-action reconciliation guidance. Review remains v35; same fields, three-call budget, registries, permissions and old contracts.",
+  "engineering": {
+    "recordedAt": "2026-10-20T22:30:30.029628+00:00",
+    "scope": "V288 current v55 generation post-action own-belief/plan reconciliation; old contracts, atomic reflection, private-owner boundaries, durable recovery, choice/default/turn completion, desktop/mobile browser paths and static/build gates. Real semantic improvement and full CI remain separate.",
+    "passed": true,
+    "sourceUnchanged": true,
+    "modelCalls": 0,
+    "manifestSha256": "93923238a7515cb83e1c6b7f99790c7c3aeebf3515a282d8cb34b8b4779090ba",
+    "checks": [
+      {
+        "stage": "check:architecture",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/check-architecture.log",
+        "sha256": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616"
+      },
+      {
+        "stage": "check:required-tables",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/check-required-tables.log",
+        "sha256": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444"
+      },
+      {
+        "stage": "check:ai-manual",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/check-ai-manual.log",
+        "sha256": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19"
+      },
+      {
+        "stage": "check:ai-entry-registry",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/check-ai-entry-registry.log",
+        "sha256": "eb460ca57d9e2ba78254d28856cfeb86716ddfb9c682cfa7c706f25086477dce"
+      },
+      {
+        "stage": "check:docs",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/check-docs.log",
+        "sha256": "704597f61e5ae3787f2ea563efef9f6a648aeaba1e775e2f62aa9d42d1618c72"
+      },
+      {
+        "stage": "check:roadmap",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/check-roadmap.log",
+        "sha256": "9e45dab19b38810e932d85373ca28150ee63803849201a58a23941d0bccabb2a"
+      },
+      {
+        "stage": "check:project-metrics",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/check-project-metrics.log",
+        "sha256": "32f5ade067b3496f6b4dd1d2dde0aeef10be09621b5d5059fa5833f42f99b0ff"
+      },
+      {
+        "stage": "changed-files-lint",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/changed-files-lint.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "stage": "build",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/build.log",
+        "sha256": "e210c54e9de822ecb5425111c5ae9b0adf9d6959e90ef98dc21e9b2b24c4fcf6"
+      },
+      {
+        "stage": "check:bundle-size",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/check-bundle-size.log",
+        "sha256": "423e3c35a744830707fc8aa799c128c0106025533f3a4637f14a91882bd4b4c4"
+      },
+      {
+        "stage": "diff-whitespace",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/diff-whitespace.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "stage": "related-regression",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/regression.log",
+        "sha256": "fac961d356818888e963579d6f2ade33f8d3bbc925470a40fbc2f613c96b6610"
+      },
+      {
+        "stage": "current-types",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/types.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "stage": "current-browser",
+        "exitCode": 0,
+        "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v288-action-state-reconciliation/browser.log",
+        "sha256": "801632f31a0ec0bb4c88b8d47e583f8b8475d69aa751f764d7f0e285f2d7e924"
+      }
+    ],
+    "regression": {
+      "files": 12,
+      "tests": 223
+    },
+    "browser": {
+      "files": 4,
+      "passed": 23
+    },
+    "sourceTiming": "Application/test files were unchanged between targeted regression/types and subsequent frozen static/browser verification; only documentation/acceptance receipts were added before this manifest."
+  },
+  "realVerification": {
+    "path": "tests/acceptance/character-chat-belief-reconciliation-real-v289.json",
+    "requests": 3,
+    "knownReportedTokens": 51275,
+    "localFailureRepaired": true,
+    "fullQualityAccepted": false
+  },
+  "fullCurrentDelivery": "Pending; remote 39501843746 covers previous committed v54 only.",
+  "m1Passed": false
+}

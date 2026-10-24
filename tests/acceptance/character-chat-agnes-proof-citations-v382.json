@@ -1,0 +1,120 @@
+{
+  "version": 382,
+  "recordedAt": "2026-10-24T06:13:06.230120+00:00",
+  "status": "both-responses-observed-reviews-rejected",
+  "sourceHead": "a36a4fad9392fe234d496a9dc492e8d8b215f67c",
+  "producer": "chat-opening-review-v13",
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "primaryProfileChanged": false,
+  "purpose": "Fixed retained-source diagnostic; no new production, product adoption, retries or M1 credit.",
+  "requests": 2,
+  "sourceUnchanged": true,
+  "productWrites": 0,
+  "results": [
+    {
+      "arm": "native-schema",
+      "httpStatus": 200,
+      "finishReason": "stop",
+      "durationMs": 62207,
+      "usage": {
+        "completion_tokens": 5426,
+        "prompt_tokens": 13843,
+        "total_tokens": 19269,
+        "completion_tokens_details": {
+          "reasoning_tokens": 3387,
+          "text_tokens": 2039
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        }
+      },
+      "validation": {
+        "productParserAccepted": true,
+        "domainContractAccepted": false,
+        "eligibleOptions": 0,
+        "checks": [],
+        "error": "Error: [chat-opening-development] 后续办法不能重复首个方向",
+        "wireSchemaAccepted": true,
+        "wireSchemaErrors": null
+      }
+    },
+    {
+      "arm": "json-object",
+      "httpStatus": 200,
+      "finishReason": "stop",
+      "durationMs": 46940,
+      "usage": {
+        "completion_tokens": 3612,
+        "prompt_tokens": 13843,
+        "total_tokens": 17455,
+        "completion_tokens_details": {
+          "reasoning_tokens": 2253,
+          "text_tokens": 1359
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 13824
+        }
+      },
+      "validation": {
+        "productParserAccepted": true,
+        "domainContractAccepted": false,
+        "eligibleOptions": 0,
+        "checks": [],
+        "error": "Error: [chat-opening-keyed] 必须完整且仅包含当前候选和检查字段",
+        "wireSchemaAccepted": false,
+        "wireSchemaErrors": [
+          {
+            "keyword": "additionalProperties",
+            "dataPath": "",
+            "schemaPath": "#/additionalProperties",
+            "params": {
+              "additionalProperty": "schema"
+            },
+            "message": "should NOT have additional properties"
+          }
+        ]
+      }
+    }
+  ],
+  "findings": {
+    "native-schema": "All proof citations had the new explicit form, but one adaptive development selected the same direction as its first action. Original cross-field validation rejected the report.",
+    "json-object": "The response added forbidden top-level schema/version/buildNumber/summary fields. The strict unchanged envelope validator rejected the report.",
+    "availability": "Both requests returned HTTP 200; no quota error observed.",
+    "actorPerspectiveConcern": "Manual inspection of the retained candidates also found directions addressing the named actor itself as if written for the player. Structural validity does not establish autonomous role action; a fresh semantic review must check the actor and addressee against participants."
+  },
+  "evidenceHashes": {
+    "candidates.json": "417d0502b25496c211c2bbf7b86bdd26c8399a9155fcd937df19215c52d7cf69",
+    "input.json": "1de1e99132071068d03025c115e2753ffd519d7cc4aad85003f70928f88b90d2",
+    "json-object/dispatch.json": "ea4b66908a531d908b554e6ad4909b51576219caa22a11b64ea0d795f70ea5d8",
+    "json-object/receipt.json": "9e5e47a0b1cf65eaf504c06578570b6b529bca8321f53813c0a384057eafd502",
+    "json-object/request.json": "b8d773f09e21db49644eb01b90a6d572afc59d7017d0077086c4e0ff7145d1a6",
+    "json-object/response.json": "d1fd86f23e1f71211bf62cf76fc2f49e822772d78fb5b9913ac0299e3516ebc5",
+    "json-object/validation.json": "0627f95f71d6b7bae08af119febc3cf2333f69b3ecb0c9fe0fe3c0f6059c3a23",
+    "native-schema/dispatch.json": "08f640f870e5cfa082a36d72a9d5cbe6444a349f988813475efce4a054ee6c1c",
+    "native-schema/receipt.json": "6b2220a6c1ed6e7de1f1146f3c7f8929f2d8ca9d485a9ad03b8c82849d84f340",
+    "native-schema/request.json": "ad3b3d55217b88d6bfc182aa762301d3ba33d6257219626891569a9066e3c55f",
+    "native-schema/response.json": "3a49110646f6683dee95458255a700911e2fe71ff6504fafca41ad6b5d6d9a1e",
+    "native-schema/validation.json": "36f2661b8cde0c292aa278ac2f088ea0a875e4867049d9398548adda75777d16",
+    "preregistration.json": "c00b81f635919fbf7aecfa0ce38d1ec55f79ec82a91c28afae6cf5e8f2f9162c",
+    "source-manifest.json": "d4f5c41bbee3f8d03480999e0c1e05894ad830b8dea73e03cc397b32daa43a1e",
+    "source.json": "4a1ae55cd856b9bc05b3c22ca3a7b19aa20210c03fd31439567bc9f225a3c2f3",
+    "summary.json": "301fa1b45ed8e26b57aa5b7aa4ed3843efc43722bf921860d7aa2fb7f4108159"
+  },
+  "claims": {
+    "formalM1Credit": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "released": false
+  },
+  "integratedRoleRegression": {
+    "sourceHead": "a36a4fad9392fe234d496a9dc492e8d8b215f67c",
+    "files": 190,
+    "testsPassed": 2354,
+    "failed": 0,
+    "tsAndTsxIncluded": true,
+    "exitCode": 0,
+    "reportSha256": "603874b3b87b5eccc7bee40e21fceb3563cd221b443f9ab08d57f0f4e7644c0b",
+    "fileListSha256": "975bc1bd30facaee4e8026b4334ea276be09ca1b56ae1ffb5ad2a737cbb20874"
+  }
+}

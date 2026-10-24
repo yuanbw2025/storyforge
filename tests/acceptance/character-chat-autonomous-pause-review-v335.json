@@ -1,0 +1,343 @@
+{
+  "schema": "storyforge.chat-autonomous-pause-review-engineering-evidence",
+  "version": 1,
+  "at": "2026-10-22T21:12:10.714429+00:00",
+  "step": "CHAT-02/03",
+  "status": "targeted-engineering-passed-real-model-pending",
+  "source": {
+    "at": "2026-10-22T21:10:46.606Z",
+    "passed": true,
+    "sourceHead": "554eeee4f219f1c107184003c4ab455a77e08537",
+    "sourceKind": "manifest-verified-worktree",
+    "files": 3437,
+    "manifestSha256": "6794a02e0e8dd8fd3a87d2eeffd6b2bb8a3a09c01cf3a164dd59642c02297026",
+    "root": "/Users/qinyingying/.codex/worktrees/chat-regression-compat/storyforge",
+    "manifestPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/manifest.json"
+  },
+  "versions": {
+    "producer": "chat-narrative-action-v64",
+    "options": "chat-narrative-options-v40",
+    "review": "chat-narrative-action-review-v39",
+    "optionsReview": "chat-narrative-options-review-v29",
+    "reader": "chat-narrative-runtime-view-v18",
+    "retrieval": "chat-relevance-v14"
+  },
+  "behavior": "Clarify voluntary grounded pause versus a claim of whole-goal infeasibility, only in new review contracts and actual self-pause candidates. Retain independent refusal for repetition, unsupported claims, missing consequences, permissions, visibility and player agency.",
+  "regression": {
+    "uniqueFiles": 27,
+    "uniquePassedTests": 485,
+    "firstTargeted": {
+      "files": 3,
+      "tests": 44,
+      "exitCode": 0
+    },
+    "initialRelated": {
+      "files": 24,
+      "passedTests": 437,
+      "failedTests": 2,
+      "exitCode": 1
+    },
+    "correctedFixture": {
+      "file": "tests/regression/R-CHAT-02-spoken-inquiry-review.test.ts",
+      "reason": "Preserve saved v38/v28 cases and separately assert current v39/v29; historical prompt hashes unchanged",
+      "tests": 14,
+      "exitCode": 0
+    },
+    "originalFailurePreserved": true
+  },
+  "browser": {
+    "distinctPathsPassed": 24,
+    "files": 7,
+    "initial": {
+      "startTime": "2026-10-22T21:05:53.403Z",
+      "duration": 139835.19499999998,
+      "expected": 23,
+      "skipped": 0,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "isolatedServerRerun": {
+      "startTime": "2026-10-22T21:10:30.617Z",
+      "duration": 15399.107,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "rerunScope": "Only reply-continuation on fresh51551 with separate optimizer cache and HMR disabled",
+    "applicationAndTestSourceUnchanged": true,
+    "sourceBeforeAndAfterEqual": true,
+    "retries": 0,
+    "failureRetained": true,
+    "environmentEvidence": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/browser-environment-audit.json"
+  },
+  "checks": {
+    "type": {
+      "command": "node_modules/.bin/tsc --noEmit",
+      "exitCode": 0
+    },
+    "lint": {
+      "files": [
+        "src/lib/agent/skill-registry.ts",
+        "src/lib/character-interaction/action-choice-budget.ts",
+        "src/lib/character-interaction/action-choice-message-evidence.ts",
+        "src/lib/character-interaction/action-output-contract.ts",
+        "src/lib/character-interaction/action-wire.ts",
+        "src/lib/character-interaction/commitment-prompt.ts",
+        "src/lib/character-interaction/context-selection.ts",
+        "src/lib/character-interaction/coordinator-audience.ts",
+        "src/lib/character-interaction/inquiry-prompt.ts",
+        "src/lib/character-interaction/memory-reconciliation.ts",
+        "src/lib/character-interaction/narrative-action-prompt.ts",
+        "src/lib/character-interaction/narrative-commitments.ts",
+        "src/lib/character-interaction/narrative-conversation-evidence.ts",
+        "src/lib/character-interaction/narrative-player-pause.ts",
+        "src/lib/character-interaction/narrative-promise-request.ts",
+        "src/lib/character-interaction/narrative-replanning.ts",
+        "src/lib/character-interaction/narrative-scene-transition.ts",
+        "src/lib/character-interaction/ordinary-action-prompt.ts",
+        "src/lib/character-interaction/player-decision-prompt.ts",
+        "src/lib/character-interaction/review-normalization.ts",
+        "src/lib/character-interaction/turn-completion.ts",
+        "src/lib/character-interaction/turn-end-control.ts",
+        "tests/e2e/character-chat-action-choice.spec.ts",
+        "tests/e2e/character-chat-control-handoff.spec.ts",
+        "tests/e2e/character-chat-memory-reconciliation-contract.spec.ts",
+        "tests/regression/R-CHAT-02-action-choice-harness.test.ts",
+        "tests/regression/R-CHAT-02-autonomous-pause-review.test.ts",
+        "tests/regression/R-CHAT-02-bounded-observation.test.ts",
+        "tests/regression/R-CHAT-02-choice-message-evidence.test.ts",
+        "tests/regression/R-CHAT-02-control-handoff-harness.test.ts",
+        "tests/regression/R-CHAT-02-fact-discovery.test.ts",
+        "tests/regression/R-CHAT-02-ordinary-action.test.ts",
+        "tests/regression/R-CHAT-02-player-decision.test.ts",
+        "tests/regression/R-CHAT-02-replanning.test.ts",
+        "tests/regression/R-CHAT-02-spoken-inquiry-review.test.ts",
+        "tests/regression/R-CHAT-03-recent-dialogue-bindings.test.ts",
+        "tests/regression/R-CHAT-03-recent-dialogue-harness.test.ts",
+        "tests/regression/R-CHAT-03-turn-allowance.test.ts",
+        "tests/regression/R-CHAT-03-turn-end-harness.test.ts",
+        "tests/regression/R-CHAT-04-commitment-generation.test.ts",
+        "tests/regression/R-CHAT-04-history-audit.test.ts"
+      ],
+      "exitCode": 0
+    },
+    "governance": [
+      {
+        "name": "check:architecture",
+        "exitCode": 0
+      },
+      {
+        "name": "check:required-tables",
+        "exitCode": 0
+      },
+      {
+        "name": "check:ai-manual",
+        "exitCode": 0
+      },
+      {
+        "name": "check:ai-entry-registry",
+        "exitCode": 0
+      },
+      {
+        "name": "check:agent-context",
+        "exitCode": 0
+      },
+      {
+        "name": "check:agent-freshness",
+        "exitCode": 0
+      },
+      {
+        "name": "check:docs",
+        "exitCode": 0
+      },
+      {
+        "name": "check:roadmap",
+        "exitCode": 0
+      },
+      {
+        "name": "check:project-metrics",
+        "exitCode": 0
+      },
+      {
+        "name": "check:source-reachability",
+        "exitCode": 0
+      }
+    ],
+    "build": [
+      {
+        "name": "build",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "start": "2026-10-22T21:03:27.189584+00:00",
+        "end": "2026-10-22T21:04:40.495690+00:00",
+        "exitCode": 0
+      },
+      {
+        "name": "bundle-size",
+        "command": [
+          "npm",
+          "run",
+          "check:bundle-size"
+        ],
+        "start": "2026-10-22T21:04:40.495731+00:00",
+        "end": "2026-10-22T21:04:40.980848+00:00",
+        "exitCode": 0
+      }
+    ],
+    "diffCheckPassed": true
+  },
+  "boundaries": {
+    "externalModelCalls": 0,
+    "semanticImprovementProven": false,
+    "M1Passed": false,
+    "V332OutcomesChanged": false,
+    "newTables": false,
+    "newFields": false,
+    "worldWrites": false,
+    "authorDataTouched": false,
+    "newSourceFullCIPassed": false,
+    "published": false,
+    "remaining": [
+      "separately registered real Codex positive/negative diagnostics",
+      "new-source full CI and complete browser gates",
+      "cross-scenario paired model cohort; Agnes last actual generation lacked quota",
+      "deferred human quality evaluation"
+    ]
+  },
+  "evidence": [
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/preregistration.json",
+      "sha256": "df55b8662731ea63aa9990c64225d79edf033a4a1ab6dcbdbb0038b9ff66a8bc",
+      "bytes": 2791
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/application.json",
+      "sha256": "010d6def2309e1e669b968f1aaa07cf9c54464f50f3a6398e9e6b0665cc2e088",
+      "bytes": 304
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/prepared/baseline-review-hashes.json",
+      "sha256": "244f99b81c54cede4e26b7a96c916a1e43b9b83e9c36cac27125b0a832bb5549",
+      "bytes": 338
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/prepared/prepared-contract-check.json",
+      "sha256": "154450a37b5cd6bc70d5a552e3a19150b04d7ac45f338dc6d318039316882e5f",
+      "bytes": 472
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/targeted-1.log",
+      "sha256": "88ca7952a12427e5277ab01ea0045dbb5e371d96919ce99b78e4f69e7df58533",
+      "bytes": 1681
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/related-1.log",
+      "sha256": "6b16f02cb80d9ddc15a06ce47ad6db171d09c419a2377246511945d4ef48b761",
+      "bytes": 13395
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/related-1-receipt.json",
+      "sha256": "2022cbc137943cf7d44d5dc44b446257f9e64681b12e80d4632eb62c66f7fc38",
+      "bytes": 1681
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/spoken-inquiry-r2.log",
+      "sha256": "953c33c5aeac9942dfd29e2842a5006e5b5c6bc8625e4b994519da945df6fbbe",
+      "bytes": 619
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/governance-receipt.json",
+      "sha256": "4ea303c9d9a23c19579d60b743cb8945b715e32385a2e45efa94d5c9320b6e3a",
+      "bytes": 762
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/build-receipt.json",
+      "sha256": "3b920ed528b0bb30ef10254f25174d7cbb95838904be091f71b8048b4c67d3c9",
+      "bytes": 437
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/build.log",
+      "sha256": "7b82e05709fab6334643bca9c07c6e3fc3ea50fc1b15d93d47b90e113cec55c1",
+      "bytes": 164645
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/bundle-size.log",
+      "sha256": "2087a1938257a36da13fae4231bd5b38aaf871ec3e5df351b8f473edbe78ec38",
+      "bytes": 278
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/manifest.json",
+      "sha256": "6794a02e0e8dd8fd3a87d2eeffd6b2bb8a3a09c01cf3a164dd59642c02297026",
+      "bytes": 408104
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/source-before-browser.json",
+      "sha256": "982dc6e2ed776b6856e19e9e5bf7d0c8200cf53666f44075d48bbc49ac5d2997",
+      "bytes": 243
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/source-after-browser.json",
+      "sha256": "e9b77128a10d2c346113331118ecc942d6b8dc501636f6eb73cb4d4a67ec0637",
+      "bytes": 243
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/source-before-browser-r2.json",
+      "sha256": "bff934251985bd67b1e661e7bd8aa2b73a15c41a025ef22b7ec3de4b97c3cef3",
+      "bytes": 243
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/source-after-browser-r2.json",
+      "sha256": "30b75fbc1e074200b8b221878d341a6a0364a18c5e842c91108b52c123a7f9b6",
+      "bytes": 243
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/browser.log",
+      "sha256": "115b8bd7be0ecad6fc4a97dd797369e9e0656a36f81a8f9f67bc0d0ac295f1b6",
+      "bytes": 9825
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/browser-report.json",
+      "sha256": "f673385009a01c314a8c1e4cbdbe0a7a0b4bb7e59b7233c05b9a65d9b69f8bdc",
+      "bytes": 34998
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/browser-execution.json",
+      "sha256": "873ee5c6560045f5421701c271860599cdb9ab80e9cba545c6b642ee733e2a01",
+      "bytes": 145
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/browser-r2.log",
+      "sha256": "4217735518a31bc11dddd10ac16c3d76910d8c57f772dec03f6d444259570d44",
+      "bytes": 487
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/browser-r2-report.json",
+      "sha256": "88a6f18d3337763075c5629b18d8389b70176501d1f31f946feb377ce068fdb2",
+      "bytes": 3574
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/browser-r2-execution.json",
+      "sha256": "e310fc86021ba21b3abd96403b4608855d6e3d75367578085da19aa283adc9d1",
+      "bytes": 236
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v335-autonomous-pause-review/browser-environment-audit.json",
+      "sha256": "156aa5bfa0bef4a4e476c46bc1c830ccaf673db5e3ed5076fc1be32a0a3e30cf",
+      "bytes": 695
+    }
+  ]
+}

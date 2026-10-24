@@ -1,0 +1,122 @@
+{
+  "schema": "storyforge.chat-development-acceptance",
+  "version": 302,
+  "at": "2026-10-22T03:33:35.914695+00:00",
+  "status": "formal-episode-observation-interrupted-recovered-without-calls",
+  "sourceHead": "228e257c6238808ac247eeba8ff8042f55c38a95",
+  "sourceManifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v302-m1-current/manifest.json",
+    "sha256": "8133eec43bc30f671cbbcdf26891038e1c03ec23823bcccf0c66a84ce9eaa2af"
+  },
+  "sourceUnchangedAtCollectionClose": true,
+  "m1Passed": false,
+  "humanScored": 0,
+  "scheduled": 120,
+  "completedEpisodes": 0,
+  "failedEpisodes": 0,
+  "unknownEpisodes": 1,
+  "unrunEpisodes": 119,
+  "interruption": {
+    "kind": "operator-process-missing-after-settled-stage",
+    "observedAt": "2026-10-22T03:30:28.806Z",
+    "priorRunnerSession": 61532,
+    "priorServerSession": 18063,
+    "processesVerifiedAbsent": true,
+    "allIssuedRequestsHadNativeCompletedResponses": true,
+    "activeRunResumed": false,
+    "modelCallsDuringRecovery": 0,
+    "originalBrowserProfilePreserved": true,
+    "wallBudgetExpiredBeforeReadOnlyRecovery": true,
+    "semanticMeaning": "Observation process interrupted; no product or provider failure inferred. Episode remains incomplete; original protocol and denominator retained."
+  },
+  "production": {
+    "candidates": 3,
+    "passed": 1,
+    "selection": "first passing candidate in original order",
+    "requests": 3,
+    "rejectedOpenings": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v302-m1-current/opening-review-observation.json",
+      "sha256": "8f4ebd41b5fc24bdecc947e844e895a5064ea0ebdd3459ac0f8633e6c261ceb7"
+    }
+  },
+  "requests": 51,
+  "nativeCompleted": 51,
+  "runtimeRequests": 48,
+  "reportedTotalTokens": 858806,
+  "moneyUsd": null,
+  "playerOpportunities": 6,
+  "settledRuntimeStages": 7,
+  "runtimeRuns": {
+    "completed": 18
+  },
+  "finalGoals": {
+    "active": 1
+  },
+  "finalThreads": {
+    "open": 1
+  },
+  "finalTrigger": "complete",
+  "observedBehavior": [
+    "Actor independently found the box and checked its exterior, preserving the limits of each observation.",
+    "When authority was unclear, actor sought a custody ledger; its custody and permission fields were empty.",
+    "Actor searched the ledger for the seal, asked the player for eyewitness information, then inspected the inside of the back door after the player had no information.",
+    "Actual actions, local conclusions and player handoff were retained; the seal location, handler and purpose were not discovered and the goal remained active."
+  ],
+  "qualityFinding": "This partial episode supports local action continuity but does not prove sustained meaningful story development. Several different investigations yielded limited negative results without changing the situation sufficiently. Do not label interruption or technical completions as quality success.",
+  "latency": {
+    "metric": "First observed native runtime request to durable adopted stage. Not first-token latency; includes app polling. No provider bill or USD price available. These are one scripted scenario, not p95 or commercial benchmarks.",
+    "stageSeconds": [
+      154.069,
+      153.235,
+      188.043,
+      81.213,
+      177.342,
+      39.148,
+      144.731
+    ],
+    "moneyUsd": null
+  },
+  "restoration": {
+    "stem": "inn-r1-weak-guidance",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 18,
+    "retainedFailedRuns": 0,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true,
+    "terminalReceiptBodiesRetained": true,
+    "usageEvidenceRetained": true
+  },
+  "automaticRetries": 0,
+  "newModelCallsAfterInterruption": 0,
+  "repairInsideScoredEpisode": false,
+  "evidence": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v302-m1-current/codex-inn-r1/inn-r1-weak-guidance.json",
+    "sha256": "4ca3c76e44ae0c013339c862258f407ce01f2e14131b3228fd088a366b09e7fe"
+  },
+  "backup": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v302-m1-current/codex-inn-r1/inn-r1-weak-guidance-backup.json",
+    "sha256": "1d9252a07f62133b3f5eb56aeaa2ff380d7e743b9468fbf015fca7d77d15267e"
+  },
+  "restorationEvidence": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v302-m1-current/codex-inn-r1/inn-r1-weak-guidance-restoration-verified.json",
+    "sha256": "689b26ac459e8161e739fc2f7fd8e0f4c89c7cfd75cc50553af67048f410aa5c"
+  },
+  "costEvidence": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v302-m1-current/codex-inn-r1/runtime-cost-observations.json",
+    "sha256": "ab4f139ea1650136224f198ce447e32409dab02f9ddb8756683e9d52faa94d33"
+  },
+  "currentHeadCi": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v301-current-reader-delivery/ci-verified.json",
+    "sha256": "2c22a7a6fa9393b1e6c007ff7596e29ec6bb8ab5602b83123869cde2108dc05d"
+  },
+  "remainingDeliveryFailure": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v301-current-reader-delivery/remote-full-browser-2050-summary.json",
+    "sha256": "49728bc0e1010c939b0024b052785bb5d041578dc730320bc0fee631d789db5c"
+  },
+  "next": "Preserve this incomplete slot. Address actionable situation preparation and useful consequences at a complete-story level; keep ordinary negative results valid. Resolve the remaining exact-head browser failure, retain CI evidence, and keep human scoring deferred."
+}

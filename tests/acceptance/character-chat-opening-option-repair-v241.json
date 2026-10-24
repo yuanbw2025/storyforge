@@ -1,0 +1,176 @@
+{
+  "schema": "storyforge.chat-m1-cohort-progress",
+  "version": 1,
+  "batch": "V241",
+  "recordedAt": 1792473451.236674,
+  "status": "terminal-samples-failed; next source repair required",
+  "source": {
+    "at": 1792471220.490867,
+    "files": 3788,
+    "manifestSha256": "32af5ab31c26fc0ec2ea2a8e6d2fc50d1da3d31dacf8dc2d48df4175a7bb582f",
+    "head": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+    "snapshotCommit": "8d7b7956b15b5f9f9d857994eca83c2268cf5194",
+    "defaultVersion": "chat-narrative-action-v47",
+    "defaultReviewer": "chat-narrative-action-review-v34",
+    "openingProducer": "chat-situation-production-v10",
+    "scope": "V240 opening option repair targeted engineering pass; full CI and real model quality not yet accepted"
+  },
+  "counts": {
+    "registeredEpisodes": 120,
+    "productionUnitsAttempted": 2,
+    "requests": 16,
+    "runtimeEpisodesFailed": 1,
+    "productionBlockedEpisodes": 6,
+    "unrunEpisodes": 113,
+    "qualityPassed": 0,
+    "humanScored": 0
+  },
+  "usage": {
+    "codexTokens": 196337,
+    "agnesTokens": 23222,
+    "totalTokens": 219559,
+    "costUsd": null
+  },
+  "codex": {
+    "batch": "V241-Codex",
+    "status": "failed-runtime; original unit stopped",
+    "sourceUnchanged": true,
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "requests": 15,
+    "terminalNativeRequests": 15,
+    "totalTokens": 196337,
+    "productionRequests": 3,
+    "runtimeRequests": 12,
+    "releasedPackages": 1,
+    "reviewedPassingOpenings": 3,
+    "playerOpportunities": 3,
+    "completedRuns": 4,
+    "failedRuns": 1,
+    "referenceAudit": {
+      "missingRuntimeFactKeys": [
+        "chat-source.c776626c4107cc01b6c50c236099add82414d0259bb8c2d2756b2b5f25d7377f.0"
+      ],
+      "knownSourceKnowledgeKeys": [
+        "chat-source.c776626c4107cc01b6c50c236099add82414d0259bb8c2d2756b2b5f25d7377f.0"
+      ],
+      "sourceAlreadyVisibleToActor": true,
+      "representedInSituationFacts": {
+        "chat-source.c776626c4107cc01b6c50c236099add82414d0259bb8c2d2756b2b5f25d7377f.0": false
+      },
+      "choiceAction": "继续说明自己保存着一块能试用的旧发条，但耐久性不确定，也不能认定适合这座钟；仅介绍这一备选，不拆钟、不试装，也不催促购买。",
+      "structuralFailure": "action-choice-failed; candidate expression and independent runtime review not dispatched for this opportunity",
+      "newModelCalls": 0
+    },
+    "costUsd": null,
+    "semanticQualityAccepted": false,
+    "humanAcceptance": false,
+    "evidenceSha256": {
+      "clock-r1-weak-guidance.json": "1060de811c6351a4cd0af3da1bdc5823e80766e04d6a7fb3203fd0872382c460",
+      "clock-r1-weak-guidance-backup.json": "2d3d026d6f865e404c3cb561b9c35c3d53c8e43cbe90a400cda075565354ed16",
+      "clock-r1-weak-guidance-restoration-verified.json": "cbc7782389186d85529cc297f48eb95c7c341108373b313543be784a08bd2659",
+      "preregistration.json": "567b83b8b5cf5764743fe206caeac8b5e8618a14f2de70f57ba4bdbffb14d0b3"
+    }
+  },
+  "codexRestoration": [
+    {
+      "stem": "clock-r1-weak-guidance",
+      "runStatusesPreserved": true,
+      "verifiedCompletedHistories": 4,
+      "retainedFailedRuns": 1,
+      "resumableRuns": 0,
+      "openingReviewRetained": true,
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true,
+      "terminalReceiptBodiesRetained": true,
+      "usageEvidenceRetained": true
+    }
+  ],
+  "agnes": {
+    "batch": "V241-Agnes",
+    "provider": "agnes",
+    "model": "agnes-2.5-flash",
+    "productionUnitsAttempted": 1,
+    "actualRequests": 1,
+    "httpStatuses": [
+      200
+    ],
+    "usage": {
+      "completion_tokens": 15000,
+      "prompt_tokens": 8222,
+      "total_tokens": 23222,
+      "completion_tokens_details": {
+        "reasoning_tokens": 461,
+        "text_tokens": 14539
+      },
+      "prompt_tokens_details": {
+        "cached_tokens": 256
+      }
+    },
+    "finishReason": "length",
+    "failure": {
+      "attempt": 1,
+      "code": "task-draft-rejected",
+      "detail": "content.product-module did not contain one complete JSON object",
+      "contentChars": 263000,
+      "nonWhitespaceChars": 164,
+      "automaticRepairRequests": 0,
+      "reason": "Incomplete JSON and exhausted original output allowance; no valid option-level repair scope."
+    },
+    "sourceUnchanged": true,
+    "runtimeOpportunities": 0,
+    "releasedPackages": 0,
+    "humanScoredEpisodes": 0,
+    "costUsd": null,
+    "restoration": {
+      "checks": {
+        "buildFailureRetained": true,
+        "failureEventsRetained": true,
+        "allRawResponsesRetained": true,
+        "bothFailureDetailsRetained": true,
+        "noReleaseOrRuntimeCreated": true,
+        "worldPreserved": true,
+        "refreshEqual": true,
+        "zeroModelCalls": true
+      },
+      "originalRunStatuses": [
+        "cancelled",
+        "completed",
+        "failed"
+      ],
+      "importedRunStatuses": [
+        "cancelled",
+        "running",
+        "failed"
+      ],
+      "fullRunLifecycleEquivalence": false,
+      "modelCalls": 0
+    },
+    "fullDeliveryValidated": false,
+    "semanticQualityAccepted": false,
+    "humanAcceptance": false,
+    "commercialAcceptance": false,
+    "evidenceSha256": {
+      "clock-r1-weak-guidance.json": "10c5662f29ad1c03a3a5480511842f11e37818d39ca55afbe0e3bc30205158ed",
+      "clock-r1-weak-guidance-backup.json": "02325040ac9ecfc40dd60bf48776e906778f48d6841ed73e4d45fa6f5532625d",
+      "production-restoration.json": "071d744f18950c608b503d17bfcb554387a58be653cb4a1fdcfa434ae2900f61",
+      "preregistration.json": "c9576dc7c9eccbfce200316f4c0b240857d1bb7efbb4337c99ea73374f04704f"
+    },
+    "next": "Preserve Agnes failure; continue independently preregistered Codex slot on the same immutable source."
+  },
+  "sourceServerReleased": true,
+  "fullDeliveryValidated": false,
+  "semanticQualityAccepted": false,
+  "humanAcceptance": false,
+  "commercialAcceptance": false,
+  "holdoutBodiesInspected": false,
+  "evidenceRoot": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v241-opening-option-repair-source",
+  "next": [
+    "Ensure every role-readable reviewed world fact has a stable usable fact identity in newly compiled situations; preserve frozen v9/v10 behavior and visibility.",
+    "Evaluate a source-bound structured output schema for opening generation; retain Agnes truncation and no-retry result.",
+    "Continue full M1, long history, ensemble, experience packages and fair comparison; defer human scoring as requested."
+  ]
+}

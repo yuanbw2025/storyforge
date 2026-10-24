@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "id": "character-chat-v102-source-unit-confirmation",
+  "status": "partial-engineering-only",
+  "baseHead": "5e81884e52159b514097e9b210fc74d6cbf5bd3b",
+  "product": "character-interaction",
+  "phase": "S2 experimental v3 confirmation to S3 frozen source v6 and runtime",
+  "ownership": "Chat Work owns source interpretation; Build/Release/Session owns frozen and runtime data; WorldRelease read only",
+  "entries": [
+    "chat.source-unit-confirmation"
+  ],
+  "contexts": [
+    "chat.source-unit-confirmation",
+    "chatSituationRuntime"
+  ],
+  "writeTargets": [
+    "chatAuthoringDrafts.sourceUnitsJson"
+  ],
+  "newTables": [],
+  "boundaries": [
+    "Prior chat.source-units.v1 and chat.source-units-review.v1 remain read only",
+    "Full original passages and constraints retained for coordinator only; each atomic fact has explicit initial audiences and discovery rules",
+    "No automatic repair or resend, no silent source/classification changes, old source v1-v5 unchanged when no confirmed units",
+    "All confirmed facts required in each initial candidate, including facts with no initial audience and no discovery rule",
+    "Explicit removal affects future production only; installed instance keeps frozen interpretation"
+  ],
+  "evidence": {
+    "regression": {
+      "files": 87,
+      "passed": 1131,
+      "log": "/tmp/storyforge-chat-v102-chat-aitown-regression.log",
+      "note": "Includes new confirmation tests; expanded real command/branch/import test verified separately afterward"
+    },
+    "finalTargeted": {
+      "files": 1,
+      "passed": 13,
+      "log": "/tmp/storyforge-chat-v102-confirmation-r9.log"
+    },
+    "browser": {
+      "files": [
+        "tests/e2e/character-chat-source-unit-confirmation.spec.ts",
+        "tests/e2e/character-chat-source-units.spec.ts"
+      ],
+      "passed": 4,
+      "log": "/tmp/storyforge-chat-v102-target-e2e-r3.log",
+      "isolatedData": true,
+      "mobileWidth": 390,
+      "initialPassedLog": "/tmp/storyforge-chat-v102-target-e2e-r1.log",
+      "status": "passed final UI including discovery-permission setting lock"
+    },
+    "gates": {
+      "passed": 10,
+      "receipt": "/tmp/storyforge-chat-v102-final-gates-receipt.json",
+      "checks": [
+        [
+          "npm",
+          "run",
+          "check:architecture"
+        ],
+        [
+          "npm",
+          "run",
+          "check:required-tables"
+        ],
+        [
+          "npm",
+          "run",
+          "check:ai-manual"
+        ],
+        [
+          "npm",
+          "run",
+          "check:ai-entry-registry"
+        ],
+        [
+          "npm",
+          "run",
+          "check:docs"
+        ],
+        [
+          "npm",
+          "run",
+          "check:roadmap"
+        ],
+        [
+          "npm",
+          "run",
+          "check:project-metrics"
+        ],
+        [
+          "npx",
+          "tsc",
+          "--noEmit"
+        ],
+        [
+          "npm",
+          "run",
+          "lint"
+        ],
+        [
+          "npm",
+          "run",
+          "build"
+        ]
+      ],
+      "initialPassedReceipt": "/tmp/storyforge-chat-v102-gates-receipt.json",
+      "status": "passed final code"
+    },
+    "modelCalls": 0,
+    "semanticAcceptance": false,
+    "humanAcceptance": false,
+    "m1Accepted": false,
+    "fullCI": "pending final fixed snapshot",
+    "fullE2E": "pending final fixed snapshot",
+    "bundleSize": {
+      "status": "passed",
+      "log": "/tmp/storyforge-chat-v102-final-bundle-size.log"
+    }
+  },
+  "retainedDevelopmentFailures": [
+    {
+      "log": "/tmp/storyforge-chat-v102-tsc-initial.log",
+      "reason": "missing FIELD_REGISTRY parser import"
+    },
+    {
+      "log": "/tmp/storyforge-chat-v102-tsc-r2.log",
+      "reason": "unknown source.unit access before record narrowing"
+    },
+    {
+      "log": "/tmp/storyforge-chat-v102-confirmation-r1.log",
+      "reason": "fixture omitted active scene"
+    },
+    {
+      "log": "/tmp/storyforge-chat-v102-confirmation-r3.log",
+      "reason": "fixture manually created scene without initializing action budget; changed to real scene event reducer"
+    },
+    {
+      "log": "/tmp/storyforge-chat-v102-confirmation-r4.log",
+      "reason": "action fixture omitted mandatory player audience"
+    },
+    {
+      "log": "/tmp/storyforge-chat-v102-confirmation-r5.log",
+      "reason": "fixture selected first discoverable fact instead of exact source unit; selected existing unrelated hidden-note"
+    },
+    {
+      "log": "/tmp/storyforge-chat-v102-confirmation-r8.log",
+      "reason": "runtime command fixture assumed event sequence 1; now uses actual start and command receipts"
+    },
+    {
+      "log": "/tmp/storyforge-chat-v102-target-e2e-r2.log",
+      "reason": "Playwright disabled matcher does not recognize option elements; native disabled property was present and is now explicitly asserted",
+      "artifacts": "/tmp/storyforge-chat-v102-e2e-r2-failure"
+    }
+  ],
+  "remaining": [
+    "Final fixed-code full CI and isolated full E2E",
+    "Fresh formal production/Release and preregistered real-model fidelity, completeness and progressive discovery acceptance with Codex and Agnes",
+    "CHAT-02.16 grounded inquiry-result contract, actual answer evidence and audience-aware knowledge transitions",
+    "M1 sustained progression and independent human/commercial acceptance"
+  ],
+  "cohortPolicy": "No formal cohort started; V97/V99 failures, denominators and frozen originals retained; holdout contents not inspected"
+}

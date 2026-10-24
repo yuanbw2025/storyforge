@@ -138,6 +138,15 @@ async function assertProductRuntimeExportIntegrityV1(
     if (hasParent !== hasParentSequence) {
       throw new Error('[deriveExport] ProductRuntimeSession 分支 lineage 配对无效')
     }
+    const upgradeReceipts = (eventsBySession.get(session.id) ?? []).filter(event => event.type === 'interaction.release.upgraded')
+    if (upgradeReceipts.length > 1) throw new Error('[deriveExport] 升级回执不能重复')
+    const upgradeReceipt = upgradeReceipts[0]
+    if (upgradeReceipt) {
+      const childManifest = releaseManifestsById.get(session.productReleaseId)
+      if (!childManifest) throw new Error('[deriveExport] 角色聊天升级副本缺少冻结版本')
+      const contract = await import('../character-interaction/release-upgrade-branch')
+      await contract.verifyChatReleaseUpgradeReceiptV1({childSession: session, childManifest, receipt: upgradeReceipt})
+    }
     if (!hasParent) continue
     const parent = sessionsById.get(session.parentSessionId)
     const parentMaximumSequence = maximumRuntimeSequenceForExport(
@@ -154,7 +163,7 @@ async function assertProductRuntimeExportIntegrityV1(
     const sameSource = parent.runtimeSourceHash === session.runtimeSourceHash
       && parent.productReleaseId === session.productReleaseId
       && parent.productBuildId === session.productBuildId
-    if (sameSource) continue
+    if (sameSource && !upgradeReceipt) continue
     if (parent.productReleaseId == null || session.productReleaseId == null
       || parent.productBuildId != null || session.productBuildId != null) {
       throw new Error('[deriveExport] ProductRuntimeSession 分支 lineage 或序号无效')
@@ -167,6 +176,12 @@ async function assertProductRuntimeExportIntegrityV1(
       throw new Error('[deriveExport] ProductRuntimeSession 迁移Release缺失')
     }
     try {
+      if (session.kind === 'character-interaction') {
+        const contract = await import('../character-interaction/release-upgrade-branch')
+        await contract.verifyChatReleaseUpgradeBranchV1({parentSession: parent, childSession: session, parentManifest, childManifest,
+          parentEvents: eventsBySession.get(parent.id) ?? [], childEvents: eventsBySession.get(session.id) ?? []})
+        continue
+      }
       migrationContract ??= await import('../open-world/player-save-migration-contract')
       const sourceStateHash = await migrationContract.replayTextOpenWorldMigrationSourceStateHashV1({
         session: parent,

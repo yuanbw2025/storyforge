@@ -1,0 +1,161 @@
+{
+  "schema": "storyforge.character-chat-development-readback",
+  "version": 1,
+  "at": 1792174664.88029,
+  "sourceHead": "857664bb97a83d88a44a2f02344f35fdb1d60894",
+  "sourceSnapshotManifest": "1f3220f28c4e6f0fd718ebd6792868598b9d80ee7ca2a715bae8a614f220e56f",
+  "releaseHash": "3235facf915f325f3c3ef14c17faab66af1bd9a1e2f9d00ec3ffb37c555f8701",
+  "episodes": [
+    {
+      "episode": "codex-refuse",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "requests": 8,
+      "responses": 8,
+      "totalTokens": 111569,
+      "costUsd": null,
+      "playerOpportunities": 2,
+      "adoptedActions": 3,
+      "adoptedSituations": 1,
+      "ending": "budget",
+      "error": null,
+      "findings": [
+        "Accepted non-participation and replaced the box investigation plan with an alternative records inquiry.",
+        "Ended with a pending plan, not an actual inquiry result or full closure. Fresh player input cancelled the prior future-direction request, then the actor proposed it again."
+      ],
+      "recovery": {
+        "modelCalls": 0,
+        "runStatusesPreserved": true,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true,
+        "retainedFailedRuns": 0,
+        "verifiedCompletedHistories": 4
+      },
+      "evidenceHashes": {
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/codex-refuse/codex-refuse.json": "bbc448dd08c3ce0a64f4d767d3b3ac42d2b49959ba42fc89a85a1a173c078055",
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/codex-refuse/preregistration.json": "575884af9b4d3b12b72f6dad1ae6b16a05fe000e8c3b28c1a740a7e16a561a3e",
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/codex-refuse/restoration-verified.json": "f387ddbc92b4fb8e98aff998d2a110c95aaaad8dd8b1fa072b0ec4ce9a1f01af",
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/codex-refuse/codex-refuse-backup.json": "bb5fc51cad6def58747121db54e874fb54fe5c209b745beef284d5d97d59d1fd"
+      }
+    },
+    {
+      "episode": "codex-rest",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "requests": 6,
+      "responses": 6,
+      "totalTokens": 81300,
+      "costUsd": null,
+      "playerOpportunities": 1,
+      "adoptedActions": 1,
+      "adoptedSituations": 1,
+      "ending": null,
+      "error": "Error: runtime stopped; no automatic retry",
+      "findings": [
+        "Settled the already completed observation before responding to pause.",
+        "Review rejected missing shared-thread pause; own-goal pause and expression were not adopted."
+      ],
+      "recovery": {
+        "modelCalls": 0,
+        "runStatusesPreserved": true,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true,
+        "retainedFailedRuns": 1,
+        "verifiedCompletedHistories": 2
+      },
+      "evidenceHashes": {
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/codex-rest/codex-rest.json": "46b3db15ee739e340a9b15fb2cd11103b179f0fc92668238ea87361d56a2d69d",
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/codex-rest/preregistration.json": "f8cda0232bd0843554a3cb8fff558dd476dd1a83e465500343becb909a9d371e",
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/codex-rest/restoration-verified.json": "bad2f1b4052f2960e8ef702a5a2f6defe3fae76c2603396096eda989f03a8a40",
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/codex-rest/codex-rest-backup.json": "d2555b4848048ed6ce53c16c6ffbd589ddcad5346e6af92f016b2f59983c81e7"
+      }
+    },
+    {
+      "episode": "agnes-refuse",
+      "provider": "agnes",
+      "model": "agnes-2.5-flash",
+      "requests": 2,
+      "responses": 2,
+      "totalTokens": 19020,
+      "costUsd": null,
+      "playerOpportunities": 0,
+      "adoptedActions": 0,
+      "adoptedSituations": 0,
+      "ending": null,
+      "error": "Error: runtime stopped; no automatic retry",
+      "findings": [
+        "Opening persisted but review returned malformed checks with inconsistent wrapper shapes; no action adopted.",
+        "Raw review also justified an unnecessary optional-player wait. Shape repair alone would not establish correct semantics."
+      ],
+      "recovery": {
+        "modelCalls": 0,
+        "runStatusesPreserved": true,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true,
+        "retainedFailedRuns": 1,
+        "verifiedCompletedHistories": 0
+      },
+      "evidenceHashes": {
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/agnes-refuse/agnes-refuse.json": "bb482ab5b712c59e4a160614936842864bacf2d0129acf5a0553dfe586440ba7",
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/agnes-refuse/preregistration.json": "57724625a24b2fd87b2a0b95e30f1a307c3c44d59070b244dc1f2f152a32cd67",
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/agnes-refuse/restoration-verified.json": "f9326a3b47e06cebf5f504bb205ec8a959a61f6440d48169cc8d908dd803c12a",
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/agnes-refuse/agnes-refuse-backup.json": "8b0c99600610e0ed5437805d2be35f159a62ac7f07a5c7b4dc30549cd0203c70"
+      }
+    },
+    {
+      "episode": "agnes-rest",
+      "provider": "agnes",
+      "model": "agnes-2.5-flash",
+      "requests": 1,
+      "responses": 1,
+      "totalTokens": 8620,
+      "costUsd": null,
+      "playerOpportunities": 0,
+      "adoptedActions": 0,
+      "adoptedSituations": 0,
+      "ending": null,
+      "error": "Error: runtime stopped; no automatic retry",
+      "findings": [
+        "Opening failed deterministic validation before review and redundantly wrote existing active/open statuses.",
+        "Unadopted text mentioned private history without disclosure registration. No player reply opportunity or adopted action."
+      ],
+      "recovery": {
+        "modelCalls": 0,
+        "runStatusesPreserved": true,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true,
+        "retainedFailedRuns": 1,
+        "verifiedCompletedHistories": 0
+      },
+      "evidenceHashes": {
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/agnes-rest/agnes-rest.json": "e76eb144ba7265096faf0433d9e9e6bd9e94ff6a11eec3650ae5045b5cc7bedb",
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/agnes-rest/preregistration.json": "18f1f9842475a3d0bf27647f65360eebac70788e11cc129d5d20ad927f82badf",
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/agnes-rest/restoration-verified.json": "94c2fcf5e2a5032586dd82d612341093251587f90f902f1d7d45fa88abeb8344",
+        "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v136-choice-routes/agnes-rest/agnes-rest-backup.json": "7ea9486a7747fdf9300fcc044fd715c4143fa4e506b9ef42fd2a67664bfb9fc1"
+      }
+    }
+  ],
+  "totals": {
+    "requests": 17,
+    "responses": 17,
+    "totalTokens": 220509,
+    "adoptedActions": 4,
+    "adoptedSituations": 2,
+    "playerOpportunities": 3
+  },
+  "formalM1Episodes": 0,
+  "humanRatings": 0,
+  "automaticRetries": 0,
+  "currentV137ToV139FeaturesCovered": false,
+  "qualityStatus": "not passed; all four bounded slots retained, including three failed and one budget-terminated partial route",
+  "readbackSetupNote": "Initial read-only aggregation assumed an error key on a successful JSON record; corrected to optional lookup. Zero model requests or source evidence changes.",
+  "label": "V136 Codex/Agnes refusal and rest diagnostics; not formal M1 acceptance"
+}

@@ -7,6 +7,7 @@ import type { ProductQualityGateReceiptV1 } from '../../src/lib/product-producti
 import { deleteWork } from '../../src/lib/workspace/lifecycle'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
 import { resolveWorkspaceOwnership } from '../../src/lib/workspace/ownership'
+import { seedFullProject } from '../helpers/seed-full-project'
 
 const HASH_A = 'a'.repeat(64)
 const HASH_B = 'b'.repeat(64)
@@ -102,6 +103,43 @@ async function seedProductionGraph() {
 describe('R-PRODUCTPROD-1A1 · current product-production lifecycle', () => {
   beforeAll(async () => { await db.delete(); await db.open() })
   afterAll(() => db.close())
+
+  it.sequential('失败与暂停证明中的 Run 引用随备份重映射，缺失引用拒绝且导入零写入', async () => {
+    const f = await seedFullProject()
+    const failure = (runId: number) => ({
+      taskKey: 'fixture.task', code: 'task-result-unknown', detail: '保存原失败，不替换或重发请求',
+      failureProvenance: {runId, rootRunId: runId, controlEpoch: 1, attempt: 1, planHash: HASH_A},
+      taskFailures: {child: {failureProvenance: {runId, rootRunId: runId}}},
+      previousFailure: {failureProvenance: {runId, rootRunId: runId},
+        taskFailures: {child: {failureProvenance: {runId, rootRunId: runId}}}},
+      repairCause: {failureProvenance: {runId, rootRunId: runId}},
+      pausedProviderReservations: [{runId, attempt: 1}], automaticallySettledReservations: [{runId}],
+      unknownResultAccounting: {runId}, resolution: {unknownResultAccounting: {runId}, unknownResultReservation: {runId}},
+    })
+    await db.productBuilds.update(f.productBuild, {failureJson: JSON.stringify(failure(f.productionAgentRun))})
+    const exported = await exportProjectJSON(f.projectId)
+    const production = exported.productProductions.find(row => row.productionKey === 'full-fixture-production')!
+    const portable = exported.productBuilds.find(row => row._productionExportId === production._exportId)!
+    expect(portable.failureJson).toBeUndefined()
+    expect(portable._failurePortableJson).toBeDefined()
+    const portableRun = exported.agentRuns.find(run => run._productBuildExportId === portable._exportId)!
+    expect(JSON.parse(portable._failurePortableJson!)).toEqual(failure(portableRun._exportId))
+    const importedId = await importProjectJSON(exported)
+    const restoredProduction = (await db.productProductions.where('projectId').equals(importedId)
+      .filter(row => row.productionKey === 'full-fixture-production').first())!
+    const build = (await db.productBuilds.where('productionId').equals(restoredProduction.id!).first())!
+    const run = (await db.agentRuns.where('productBuildId').equals(build.id!).first())!
+    expect(run.id).not.toBe(f.productionAgentRun)
+    expect(JSON.parse(build.failureJson)).toEqual(failure(run.id!))
+    const corrupt = structuredClone(exported)
+    corrupt.productBuilds.find(row => row._exportId === portable._exportId)!._failurePortableJson = JSON.stringify(failure(999_999))
+    const before = await db.projects.count()
+    await expect(importProjectJSON(corrupt)).rejects.toThrow(/引用|映射/)
+    expect(await db.projects.count()).toBe(before)
+    await db.productBuilds.update(f.productBuild, {failureJson: JSON.stringify(failure(999_999))})
+    await expect(exportProjectJSON(f.projectId)).rejects.toThrow(/引用|映射/)
+    await db.productBuilds.update(f.productBuild, {failureJson: JSON.stringify(failure(f.productionAgentRun))})
+  })
 
   it.sequential('六张表随项目严格导出导入，所有本地主键与共享二进制都被重映射', async () => {
     const seeded = await seedProductionGraph()

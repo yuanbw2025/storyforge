@@ -1,0 +1,90 @@
+{
+  "schema": "storyforge.chat-development-acceptance",
+  "version": 309,
+  "at": "2026-10-22T05:20:47.414048+00:00",
+  "status": "real-opening-review-passed-runtime-inquiry-handoff-blocked",
+  "sourceHead": "419034b9fe59fb13919ef84372fd74ae8e6e5932",
+  "formalM1Credit": 0,
+  "m1Passed": false,
+  "remainingTechnicalPackages": 7,
+  "review": {
+    "source": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v308-review-prompt/codex-recovery-r1/inn-weak-guidance.json",
+      "sha256": "306d91729dfb00deac7ebc5c22f2f600e686a7ccaa475c0342c6a7b1a454b4be"
+    },
+    "dispatch": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v308-review-prompt/codex-recovery-r1/review-dispatch-proof.json",
+      "sha256": "d62fe89e17bcd5fb93e544db1db6845db285e81e6ee5b2d6fa3d8b0d7a3dfad5"
+    },
+    "requests": 1,
+    "reportedTokens": 32190,
+    "reportVersion": 3,
+    "passedOptions": 3,
+    "retainedOriginalGeneration": true,
+    "recovery": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v308-review-prompt/codex-recovery-r1/production-restoration.json",
+      "sha256": "b243e9f2e4aab71f7cd36012066053845b4a9d0cf8988ebb9e334ce4c8c263f5"
+    }
+  },
+  "runtime": {
+    "source": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v308-review-prompt/codex-runtime-r3/inn-weak-guidance.json",
+      "sha256": "cbaed22e7403268c7fc74aa4f1247c243ce7052cba6fad2d731b6609d7d09b0b"
+    },
+    "backup": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v308-review-prompt/codex-runtime-r3/inn-weak-guidance-backup.json",
+      "sha256": "9c32492331db0e576004ac61a6e60a0223eb0bbb87b05ca730fe3ee0f06624a1"
+    },
+    "restoration": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v308-review-prompt/codex-runtime-r3/inn-weak-guidance-restoration-verified.json",
+      "sha256": "b75a6df230df5e666c499ec7939db068e0d3365dae06a90fc1822e575ecdac38"
+    },
+    "requests": 13,
+    "productionRequests": 1,
+    "runtimeRequests": 12,
+    "reportedTokens": 195324,
+    "completedRuns": 4,
+    "failedRuns": 1,
+    "playerOpportunities": 1,
+    "playerInputs": [
+      "嗯，我在听。"
+    ],
+    "result": "The actor inspected the public work area and asked the present innkeeper about the seal, then acknowledged the player and waited. The answer construction returned an empty situation and stopped. No answer, recovery of the seal, story closure or sustained quality is claimed.",
+    "sourceUnchanged": true,
+    "recoveryModelCalls": 0
+  },
+  "combined": {
+    "requestsIncludingOriginalV307Generation": 15,
+    "reportedTokensIncludingOriginalV307Generation": 252039,
+    "allNativeRequestsCompleted": true,
+    "costUsd": null
+  },
+  "collectorFailures": [
+    {
+      "source": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v308-review-prompt/codex-recovery-r1/inn-weak-guidance.json",
+        "sha256": "306d91729dfb00deac7ebc5c22f2f600e686a7ccaa475c0342c6a7b1a454b4be"
+      },
+      "boundary": "Expected author-choice stop surfaced as an exception after review was saved; no review rerun."
+    },
+    {
+      "source": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v308-review-prompt/codex-runtime-r1/inn-weak-guidance.json",
+        "sha256": "cf7f5769c7cd025d034bf8b35ddcc06d5456f140a61c6537b0211e2b4db2e0d6"
+      },
+      "boundary": "Premature polling saw the prior blocker after UI choice; zero calls. Actual profile confirmed the author command persisted at epoch 2."
+    },
+    {
+      "source": {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v308-review-prompt/codex-runtime-r2/inn-weak-guidance.json",
+        "sha256": "5ea3cd813e2a861fa6983183b01a993a3f73048f0a87b1ec56838a2995d6c0b0"
+      },
+      "boundary": "Zero-call preparation used a nonexistent commandId-only index; corrected to registered compound index."
+    }
+  ],
+  "finding": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v308-review-prompt/codex-runtime-r3/inquiry-handoff-diagnostic.json",
+    "sha256": "7b737c548cfaaa51d728d0ca664903b7521561f2edb0e3d4bf89687577d2c25a"
+  },
+  "next": "Repair unresolved inquiry handoff across player turns under a new frozen evidence contract, preserving original question, scene, actor, knowledge at question time, player refusal/withdrawal, review and replay boundaries. Do not merely instruct the model to cite evidence excluded by the system."
+}

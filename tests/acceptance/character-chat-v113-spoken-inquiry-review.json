@@ -1,0 +1,490 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "label": "V113 distinguish actual spoken inquiry from completed physical observation in review",
+  "recordedAt": "2026-10-15T23:24:54.262227+00:00",
+  "baselineCommit": "eb5de64000f8e5111552c431accda189fee09295",
+  "scope": {
+    "product": "character-chat experimental v3; default hidden",
+    "lifecycle": "product development, S3 runtime",
+    "owner": "product-private runtime and durable Harness",
+    "reads": [
+      "interactionRuntime",
+      "chatSituationRuntime",
+      "chatActionCandidate"
+    ],
+    "writeContract": "Existing candidate/explicit adoption only; no new fields, tables, schema, source permission or world writes",
+    "newReviewVersions": [
+      "chat-narrative-action-review-v30",
+      "chat-narrative-options-review-v24"
+    ],
+    "unchangedProducerVersions": [
+      "chat-narrative-action-v36",
+      "chat-narrative-options-v26",
+      "chat-action-revision-v16"
+    ],
+    "oldBindings": "Byte hashes captured independently on baseline; older review prompts unchanged"
+  },
+  "regression": {
+    "files": 93,
+    "uniqueTestsCovered": 1180,
+    "initialResult": {
+      "passed": 1179,
+      "failed": 1,
+      "failure": "R-CHAT-02-fact-discovery expected old phrase 调查发现分两阶段; new version explicitly scopes 物理观察发现分两阶段"
+    },
+    "repair": "Update exact new-version assertion only; producer, constraints and tested lifecycle unchanged",
+    "targetedRerun": {
+      "files": 1,
+      "passed": 17,
+      "failed": 0
+    },
+    "newTests": 10,
+    "singleFullPassingRun": false,
+    "covered": [
+      "Pure question persists as actual message, same-event pending request, facts unchanged",
+      "Known grounded respondent uses actual question then separate typed reply",
+      "Old producer and reviewer bytes",
+      "speak cannot gain newFacts or observation-result purpose",
+      "Physical omission and invented person/answer semantic rejection remain retained",
+      "Candidate/adoption/branch/export/import/reopen/frozen world"
+    ]
+  },
+  "browser": {
+    "passed": 7,
+    "failed": 0,
+    "scope": "Isolated IndexedDB, inquiry audience/recovery, observation results, memory review context"
+  },
+  "gates": {
+    "passed": 10,
+    "bundleSizePassed": true
+  },
+  "realValidation": {
+    "status": "three preregistered real independent reviews match expected outcomes; zero-call recovery passed",
+    "model": {
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "realReviewCalls": 3,
+      "injectedCandidateReplays": 3,
+      "usage": {
+        "totalTokens": 49110,
+        "inputTokens": 47871,
+        "outputTokens": 1239,
+        "cachedInputTokens": 9088,
+        "reasoningOutputTokens": 303
+      },
+      "costUsd": null,
+      "cachePolicy": "Cached input included in input, reasoning included in output; no double count. No invented money conversion.",
+      "notEpisode": true
+    },
+    "cases": [
+      {
+        "id": "original-spoken-question",
+        "runStatus": "cancelled",
+        "stateUnchanged": true,
+        "checks": [
+          {
+            "check": "continuity",
+            "passed": true,
+            "reason": "准确承接登记与长桌的局部查看结果，明确未找遍；未声称已有目击者或得到答复。"
+          },
+          {
+            "check": "permissions",
+            "passed": true,
+            "reason": "在现有公共区域进行公开询问，并请求核实回应条件，未扩大调查权限或预定结果。"
+          },
+          {
+            "check": "player-agency",
+            "passed": true,
+            "reason": "未要求沈禾参加调查、替其回答或决定行动；向不特定对象发问可以不等待玩家决定。"
+          },
+          {
+            "check": "visibility",
+            "passed": true,
+            "reason": "仅复述双方已知的查看结果并提出问题，未泄露铜印实际位置、经手人、用途或角色私有背景。"
+          },
+          {
+            "check": "consequences",
+            "passed": true,
+            "reason": "实际行为仅为发言询问，没有移动、翻查、发现或承诺；问话随角色消息保存，newFacts为空合法，情境请求未冒充回答结果。"
+          },
+          {
+            "check": "meaningful-direction",
+            "passed": true,
+            "reason": "此前呼问针对当值人员，之后登记和桌面查看仍未提供线索；此次改向大厅询问亲眼见过使用情形的人，是有依据的替代来源，而非重复等待，且服务仍有效的原目标与剧情线。"
+          }
+        ],
+        "rawReviewArtifactHash": "0d28e9a74f8f8796fb95d8f87d57cbe83de8b73efac15075f6522c637bbddd01"
+      },
+      {
+        "id": "physical-omission",
+        "runStatus": "failed",
+        "stateUnchanged": true,
+        "checks": [
+          {
+            "check": "continuity",
+            "passed": false,
+            "reason": "《验货登记》已放回柜台外侧的开放搁架；长桌所见物件为木尺、细绳和一叠纸。正文却把登记册写成长桌上的遮挡物，与既有位置和所见不符。"
+          },
+          {
+            "check": "permissions",
+            "passed": true,
+            "reason": "自行检查公共验货长桌属于日常强度的小行动，不涉及搜查住客、强迫玩家或进入受限区域。"
+          },
+          {
+            "check": "player-agency",
+            "passed": true,
+            "reason": "只描述叶岑自己的行动，未替玩家参与、同意或作出决定。"
+          },
+          {
+            "check": "visibility",
+            "passed": true,
+            "reason": "未透露铜印位置、经手人或用途等未知秘密；登记册的位置错误另由连续性审查否决。"
+          },
+          {
+            "check": "consequences",
+            "passed": false,
+            "reason": "正文已经完成移动登记册和检查遮挡处的物理行为，newFacts却为空，也没有对应的observation-result情境请求，遗漏实际行动及后续观察判定。"
+          },
+          {
+            "check": "meaningful-direction",
+            "passed": true,
+            "reason": "进一步检查此前被遮挡的桌面，方向上承接最新观察尚未覆盖的范围，服务找回铜印，并非重复查看已确认范围；但不能抵消对象位置错误和后果漏记。"
+          }
+        ],
+        "rawReviewArtifactHash": "d830746ba5d8ff94cf9932d9c25c28188182f8488f458a11b6c591165c93f715"
+      },
+      {
+        "id": "invented-answer",
+        "runStatus": "failed",
+        "stateUnchanged": true,
+        "checks": [
+          {
+            "check": "continuity",
+            "passed": false,
+            "reason": "正文预设叶岑已问完问题，并直接确立伙计从后屋出现及作答；现有消息与事实不支持这些已发生事件。"
+          },
+          {
+            "check": "permissions",
+            "passed": false,
+            "reason": "允许请求情境扩展不等于可以自行引入新在场人物并预写其回答；本候选未走获准的情境或询问结果路径。"
+          },
+          {
+            "check": "player-agency",
+            "passed": true,
+            "reason": "没有替沈禾行动、作答或同意参与调查。"
+          },
+          {
+            "check": "visibility",
+            "passed": false,
+            "reason": "伙计声称刚才在柜台边见过铜印，没有角色可知证据或已核准的答复来源；不能借他人台词凭空建立线索。"
+          },
+          {
+            "check": "consequences",
+            "passed": false,
+            "reason": "正文实际完成了伙计出场和提供线索，并非纯语言询问；newFacts为空且无对应情境请求，遗漏并越权确立了实际变化。"
+          },
+          {
+            "check": "meaningful-direction",
+            "passed": false,
+            "reason": "核实铜印去向符合原目标，但此次推进依赖凭空出现的答复者与预写线索，不构成有依据的调查进展。"
+          }
+        ],
+        "rawReviewArtifactHash": "d0586feb2ee09f7d7fe8cc803c03ccd107598b7209adb91fb1df8af819937b5d"
+      }
+    ],
+    "adopted": false,
+    "boundary": "Injected retained/controlled candidates followed by real review via normal Codex transport; not fresh model generation, full episode, M1, Agnes or human/commercial acceptance.",
+    "physicalNegativeLimitation": "The controlled physical case also moved a register from the wrong known location, and continuity was rejected independently. Consequences was explicitly rejected too; not a clean single-variable estimate of all physical-omission cases.",
+    "zeroCallPreflightFailure": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v113-spoken-inquiry-review/diagnostic.json",
+      "realRequests": 0,
+      "reason": "Diagnostic expected unchanged source sequences across branch; corrected to full documented negative prehistory rebase, parent equality still required. Original attempt retained."
+    },
+    "terminalReadback": {
+      "completed": 3,
+      "allResponseBytesEqual": true
+    },
+    "restoration": {
+      "at": "2026-10-15T23:28:17.053Z",
+      "result": {
+        "rows": [
+          {
+            "id": "source-parent",
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "resumableRuns": 0,
+            "runStatusesPreserved": true,
+            "logical": [
+              {
+                "createdAt": 1792104856168,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792104924577,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792104952691,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792104983881,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105001372,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105047821,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105072002,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105161041,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105186751,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105214110,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105236846,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105292367,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105317216,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105342770,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105370967,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105473846,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105496310,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105520390,
+                "status": "completed-history"
+              },
+              {
+                "createdAt": 1792105544083,
+                "status": "failed"
+              }
+            ]
+          },
+          {
+            "id": "original-spoken-question",
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "resumableRuns": 0,
+            "runStatusesPreserved": true,
+            "logical": [
+              {
+                "createdAt": 1792106816327,
+                "status": "cancelled"
+              }
+            ]
+          },
+          {
+            "id": "physical-omission",
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "resumableRuns": 0,
+            "runStatusesPreserved": true,
+            "logical": [
+              {
+                "createdAt": 1792106833796,
+                "status": "failed"
+              }
+            ]
+          },
+          {
+            "id": "invented-answer",
+            "interactionEqual": true,
+            "refreshEqual": true,
+            "resumableRuns": 0,
+            "runStatusesPreserved": true,
+            "logical": [
+              {
+                "createdAt": 1792106849938,
+                "status": "failed"
+              }
+            ]
+          }
+        ],
+        "modelCalls": 0,
+        "parentPreserved": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      }
+    }
+  },
+  "fullCI": {
+    "v111": {
+      "status": "passed on 0b107a60, not V113",
+      "files": 874,
+      "tests": 5494,
+      "receipt": "/tmp/storyforge-chat-v111-full-ci-receipt.json"
+    },
+    "v113": {
+      "status": "passed",
+      "handle": 83944,
+      "snapshotHead": "691619a3748e47438150553b546965f5a1159af1",
+      "log": "/tmp/storyforge-chat-v113-full-ci.log",
+      "exitCode": 0,
+      "files": 875,
+      "tests": 5504,
+      "testDurationSeconds": 1986.2,
+      "receipt": "/tmp/storyforge-chat-v113-full-ci-receipt.json",
+      "receiptSha256": "9ac6825036041019d13ec7f9998681a9cbe6e2ea1942a169284a71d8685e9040",
+      "logSha256": "dfdde410e8a2a5f1c4fe262c0b0650fa8f3f13a6ed28e427960fee553eda9e4d"
+    }
+  },
+  "fullE2E": {
+    "v111": {
+      "status": "verified unstarted queue superseded after V113 commit",
+      "proof": "/tmp/storyforge-chat-v111-e2e-superseded.json"
+    },
+    "v113": {
+      "status": "verified unstarted queue superseded after V115 commit",
+      "handle": 20638,
+      "snapshotHead": "691619a3748e47438150553b546965f5a1159af1",
+      "log": "/tmp/storyforge-chat-v113-full-e2e.log",
+      "exitCode": 143,
+      "proof": "/tmp/storyforge-chat-v113-e2e-superseded.json"
+    }
+  },
+  "limitations": [
+    "Injected engineering review outcomes do not prove real semantic accuracy.",
+    "No Agnes configuration available after exhaustive branch search; no rescan/substitution.",
+    "No human/commercial acceptance, no holdouts opened."
+  ],
+  "evidence": [
+    {
+      "path": "/tmp/storyforge-chat-v113-final-regression.log",
+      "sha256": "5f2c5a0f5b6efcba12794e8a62dcdade6d1abb6b26836b64799e3a2c259bfc45"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v113-final-regression-receipt.json",
+      "sha256": "f6f13e9c7ab1b061d7c8e66b9876d0b0bd41c695b2cbb0a791d12b62d51e324a"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v113-fact-discovery-rerun.log",
+      "sha256": "a440dabda261eb7a6e0b581ca4f5bf1beb9fe7004d2cb60d98a6a617e71ff4d1"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v113-fact-discovery-rerun-receipt.json",
+      "sha256": "0bc09521071d79b6f12cc1fc91d9bbe7ff0a3b1a3709e6ccde4d1ad01e195a88"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v113-targeted-e2e.log",
+      "sha256": "9fe3e57073f3c735dfd93082e3fd78b23876d8d858b153cca06a968b4123a048"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v113-targeted-e2e-receipt.json",
+      "sha256": "1e32454afab383d57f7eb358a851a458fcb61b6de6c2c6fcd1f2f54f4d06ac89"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v113-final-gates.log",
+      "sha256": "b058df11e925e6588abe372e00c26fc1507710ea7d13bd7e00333b2693d82b8a"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v113-final-gates-receipt.json",
+      "sha256": "f4a891111c8cf47858bd0fa3c5656c008a9688930f9ebc87e9cbdfd919141bc3"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v113-bundle-size.log",
+      "sha256": "0029f1f2a47d0d36b508c1ede40d0e1d72235ca5be173b6a9c0b2fb4b39ee719"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v113-bundle-size-receipt.json",
+      "sha256": "45b7f512ea8ee73cd5d0e40c7180178a26b0ab280ee1963e3a3fa56df97b9798"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v113-baseline-hashes.log",
+      "sha256": "1f06a7eb777ff64fed51298b5d29f47e263a39250b71154cff89f340aafaf778"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v113-baseline-snapshot.json",
+      "sha256": "c3765dfce2c7022bd3589f07f3f9160e91a085d2fde5555fa2f3834aae90f467"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v113-spoken-inquiry-review/preregistration.json",
+      "sha256": "19f195a509243ba226d1e4a8de5d6da45712e7490742aba03e4039bf8bcda044"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v113-spoken-inquiry-review/diagnostic.json",
+      "sha256": "aebd71dd6f1228253558555ac5b966b626c991ac13c165a272d7f8d59c4a362e"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v113-spoken-inquiry-review/runner.mjs",
+      "sha256": "ba910e4080820d513073fa5045c006446d6214692b2d104129d7e699d07119c0"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v113-spoken-inquiry-review/attempt-2/preregistration.json",
+      "sha256": "1c415b06019f9b89a067c0bf2d26f99943be4a6717e089c00d4cfb90af779941"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v113-spoken-inquiry-review/attempt-2/runner.mjs",
+      "sha256": "b4cb3365febc3f730f367b52f6c4f6cd4eee70a62a6df0cdafa8a3c5a90f392b"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v113-spoken-inquiry-review/attempt-2/diagnostic.json",
+      "sha256": "9095fdc326107e430f5fbb64f14b02b711e1745beeb9176b9c23707eec897638"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v113-spoken-inquiry-review/attempt-2/diagnostic-backup.json",
+      "sha256": "dd13beb6de4bee5a09c8463f6867abbe751e89a08d6b9e4dbccdeb42108724f2"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v113-spoken-inquiry-review/attempt-2/transport-progress.json",
+      "sha256": "9d778d1a28f697294b5c4a70857e90cc5f49ec338223bb698c17fc1255c67358"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v113-spoken-inquiry-review/attempt-2/terminal-request-proof.json",
+      "sha256": "5b202494d0ce163b5a193e9af498be317bcb122e6650a5653a772120b12f4119"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v113-spoken-inquiry-review/attempt-2/restoration.mjs",
+      "sha256": "c61f70a1fb45fc9e28b489734077e52e0a236d1f87d56b1d449196bcb7edd860"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v113-spoken-inquiry-review/attempt-2/restoration-verified.json",
+      "sha256": "83bf72978e5bff3a7b16fd2fa5b87da9ecea3b89e91234f70db3d6abde55f475"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v113-spoken-inquiry-review/attempt-2/usage-ledger.json",
+      "sha256": "6d67da5ab8a8e7c16dd829098d03a01548b7906b3620548c51ee9d702e39eaf3"
+    }
+  ],
+  "fixedCode": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "691619a3748e47438150553b546965f5a1159af1",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v113-real-l7blrldq/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v113-real-l7blrldq/manifest.json",
+    "manifestSha256": "13c7d3bf4a31e25365006b16e327b1626d608ede68bd854ff93828991ee49789",
+    "files": 3459
+  }
+}

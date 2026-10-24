@@ -1,0 +1,67 @@
+{
+  "version": 270,
+  "recordedAt": "2026-10-20T17:43:36.466122+00:00",
+  "product": "character-interaction",
+  "sourceCommit": "19f4e461c2558d7bc4f39d71b5a780296f941822",
+  "status": "engineering-passed-real-review-incomplete",
+  "scope": "Independent opening review reads complete source/candidates without rejected review feedback; observed truncation stops with retained raw output and paid usage. The 15000 output ceiling stays inside the preexisting task reservation; no new model step, retry, table or world write.",
+  "engineering": {
+    "receipt": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v270-independent-opening-review/engineering.json",
+      "sha256": "49b1b45cbfaf4fdb2d18db44bc039652e756fa8cc4363b7a12cc5a55f95e8a28"
+    },
+    "regressionFilesPassed": 4,
+    "regressionTestsPassed": 30,
+    "browserTestsPassed": 3,
+    "governanceTypesLintBuildBundlePassed": true,
+    "fullCI": false,
+    "fullE2E": false
+  },
+  "realReview": {
+    "protocol": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v270-independent-opening-review/agnes-review-r1/preregistration.json",
+      "sha256": "167684c1e27decca79bb22c10d6a92d4ebab493c03f253ad2e2cd0f04131f0c7"
+    },
+    "result": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v270-independent-opening-review/agnes-review-r1/result.json",
+      "sha256": "c8fa17d9a8a384b8c07485fed6beb05a2efee7f80a868ab3c03120012e0ad0fd"
+    },
+    "backup": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v270-independent-opening-review/agnes-review-r1/backup.json",
+      "sha256": "b0060ab2222698e9980053a8a41aa097cee312e1122ff39df1401cd5418fbbf2"
+    },
+    "restoration": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v270-independent-opening-review/agnes-review-r1/production-restoration.json",
+      "sha256": "3aee7588c075901a372e4480bbfe6cc060691759f7bda3dcd4b255f5817963f1"
+    },
+    "provider": "agnes",
+    "model": "agnes-2.5-flash",
+    "newRequests": 1,
+    "httpStatus": 200,
+    "finishReason": "length",
+    "usage": {
+      "completion_tokens": 15000,
+      "prompt_tokens": 22546,
+      "total_tokens": 37546,
+      "completion_tokens_details": {
+        "reasoning_tokens": 8085,
+        "text_tokens": 6915
+      },
+      "prompt_tokens_details": {
+        "cached_tokens": 256
+      }
+    },
+    "responseCharacters": 353719,
+    "responseNonWhitespaceCharacters": 2066,
+    "oldReviewFeedbackIncluded": false,
+    "sourceUnchanged": true,
+    "reviewPersisted": false,
+    "automaticRetries": 0,
+    "recoveryModelCalls": 0,
+    "releaseCreated": false,
+    "runtimeCreated": false
+  },
+  "nextAction": "Investigate the constrained-output whitespace loop with a simpler bounded wire contract, retaining complete independent source and deterministic evidence validation. Do not increase budget again or count a partial report as semantic success. Autonomous narrative progression remains a separate open requirement.",
+  "formalM1Credit": 0,
+  "qualityAccepted": false
+}

@@ -1,0 +1,237 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "label": "V127 protected coordinator dialogue selection",
+  "recordedAt": "2026-10-16T03:44:26.637497+00:00",
+  "implementation": {
+    "baseCommit": "b0ea8a154a8aa601d65f357a70a78bde724a171f",
+    "status": "targeted engineering, associated regression, build and browser paths passed; full CI/E2E pending",
+    "codeAndTestManifest": {
+      "path": "/tmp/storyforge-chat-v127-code-manifest.json",
+      "sha256": "a2914e67c21347d4c0f66493322a929da5025ce4a14e9db2c8b95b8205e42d57"
+    },
+    "growthSnapshot": {
+      "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v127-growth-s8wgaucd/storyforge",
+      "baseHead": "b0ea8a154a8aa601d65f357a70a78bde724a171f",
+      "uncommittedSnapshot": true,
+      "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v127-growth-s8wgaucd/manifest.json",
+      "manifestSha256": "21dca6db4d6781ac42ca237d04251434770bfff7579fedc2101b7e5c2db2d3fd",
+      "files": 3484
+    },
+    "commit": "38ba906b3efffd0069c605e70ff37b9c201695ce"
+  },
+  "boundary": {
+    "product": "character-interaction",
+    "phase": "S3 runtime",
+    "owner": "existing Chat Work / ProductRuntimeSession",
+    "reads": "registered interactionRuntime/chatSituationRuntime; preserved candidate-owned reader versions",
+    "writes": "no new AI-writable field, table, storage capacity or world mutation",
+    "externalModelCalls": 0
+  },
+  "change": [
+    "Actor reader v9 retains v8 role bytes and binds subsequent review to protected dialogue selection v1. New situation reader v11 uses the same policy. Historical saved readers retain their policy.",
+    "Current-scene player statements, actor-delivered messages including prior scenes, pending action and candidate message references are mandatory. Missing/excluded evidence or mandatory overflow stops.",
+    "Other current-scene dialogue is ranked by candidate and unfinished matters, with recent tie-breaking; retained messages preserve source order. Exact input, mandatory reasons and omitted count are recorded.",
+    "All canonical facts, secrets, permission rules, discovery prerequisites, memory pins and obligation selection remain protected. Full runtime and original events are unchanged."
+  ],
+  "verification": {
+    "targeted": {
+      "files": 4,
+      "tests": 23,
+      "exit": 0
+    },
+    "associatedRegression": {
+      "filesPassed": 98,
+      "filesFailed": 1,
+      "testsPassed": 1246,
+      "testsFailed": 1,
+      "failure": "R-CHAT-02-source-unit-production.test.ts timed out at unchanged 5000ms. Reproduced in unchanged V123 baseline and current single-case runs. Cause not established; failure retained and not converted to pass.",
+      "unchangedTimeoutForkCheck": {
+        "pool": "forks",
+        "workers": 1,
+        "timeoutMs": 5000,
+        "testsPassed": 1,
+        "durationMs": 2403,
+        "exit": 0,
+        "interpretation": "Single-case pass using the repository CI process-isolation approach; prior timeout logs remain. This does not establish a unique cause."
+      }
+    },
+    "browser": {
+      "tests": 15,
+      "exit": 0,
+      "isolatedStorage": true
+    },
+    "checks": {
+      "passed": [
+        "architecture",
+        "required-tables",
+        "ai-entry-registry",
+        "docs",
+        "roadmap",
+        "tsc",
+        "lint",
+        "build",
+        "bundle-size"
+      ],
+      "generatedInitiallyStale": [
+        "ai-manual",
+        "project-metrics"
+      ],
+      "generatedAfterUpdatePassed": [
+        "ai-manual",
+        "project-metrics"
+      ]
+    },
+    "growthScriptInitialFailure": "Backup string was passed without JSON.parse; failed before runtime/model calls. Test-only parser fixed, original log retained.",
+    "finalAssociatedRegression": {
+      "files": 99,
+      "tests": 1247,
+      "exit": 0,
+      "pool": "forks",
+      "workers": 2,
+      "timeoutConfiguration": "unchanged repository configuration; local default5000ms",
+      "durationSeconds": 189.61,
+      "originalFailuresRetained": true
+    }
+  },
+  "durableContinuation": {
+    "kind": "V126 retained single-scene continuation",
+    "externalModelCalls": 0,
+    "injectedCalls": 46,
+    "initialActions": 61,
+    "completedActions": 84,
+    "newActions": 23,
+    "facts": 88,
+    "messages": 84,
+    "error": "Error: 当前事实、未处理承诺、最近处置或玩家固定记忆超过预算，已停止发送；不会静默省略固定记忆或未处理约定。",
+    "failedRunStatus": "failed",
+    "originalFailurePreserved": true,
+    "prefixUnchanged": true,
+    "worldUnchanged": true,
+    "branchImportReopenEqual": true,
+    "limitations": "Synthetic repeated observations, not meaningful story or100/300/1000 acceptance; fact, goal and commitment storage unchanged."
+  },
+  "sourceRestoration": {
+    "snapshotManifestSha256": "21dca6db4d6781ac42ca237d04251434770bfff7579fedc2101b7e5c2db2d3fd",
+    "snapshotFilesVerified": 3484,
+    "temporaryTestRemoved": true,
+    "sourceAndTestFilesMatchCurrent": 2754,
+    "mismatches": []
+  },
+  "artifacts": [
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v127-dialogue-continuation/continuation.test.ts",
+      "sha256": "b9dd2e7c2858850cb18fd179e4d3eaf56bb791651ed6a11e9e35dd7ff22ca1b6"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v127-dialogue-continuation/result.json",
+      "sha256": "b878ffdf4d3e2111008ac01c89ac0b7cdeaa982f4f7c746dec32abe063ab9e25"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v127-dialogue-continuation/backup.json",
+      "sha256": "7f2907cc537e1b4f2dadc69a282e337b4851e686a46afb1ef891d4cd2ff29dcf"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v127-dialogue-continuation/source-restored.json",
+      "sha256": "99bbda26ccfd1a16c84e47d9c995f52fcf4cbbc97390ae367e1e35298bb55d66"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v127-targeted.log",
+      "sha256": "04885687121428c9185dc06b744edfae8c34a5eeacf61145bba2b67c839c684a"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v127-regression.log",
+      "sha256": "29f84d99e70254056fdfda9de656e6062aee4a941d10bd82801d0a8e603d6efe"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v127-production-recheck.log",
+      "sha256": "e4ee1d79d19b855de7d77fd8fb0253a079eed516e3b10cc630e47cab3622ebc3"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v127-production-baseline.log",
+      "sha256": "eb801780ad8c56372d20f8882d5cf5bc3854affbfcf928a91a2526405c659510"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v127-production-idle.log",
+      "sha256": "c9eb527d0953481689b167da7e42cfc5900ac7ec44b31735d203199f42b14741"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v127-gates.log",
+      "sha256": "da8cb3faf9756b07999ad1617e7393a394df3de262170a4911cbe741947b0584"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v127-generated-checks.log",
+      "sha256": "217ea49dfe9b847e5429d961220c7dd2679664a28c121787dcd89089e7b17ef9"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v127-growth.log",
+      "sha256": "f88d7a65c72ddede8e0b1a1c43b7699fdd01559e89fc9d5259f208e7fbca0f83"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v127-growth-recheck.log",
+      "sha256": "cd282ccfce1d93ddf0494e8ac5150da77845993abc9c8815d3749889d0f81988"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v127-targeted-e2e.log",
+      "sha256": "71ef8770d61432ceaf72bff251d17cbdf0ba7d5d2aef01e00461d131be5f9c8a"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v127-production-fork.log",
+      "sha256": "c9d98ee767800a02192b2842f20e72c74af1e582bd83b6038ee8b98468053b48"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v127-final-regression.log",
+      "sha256": "7ad2e72ff3e385b995494075647032863d6e710e1ba673183d26f571ebaf7da2"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v127-final-regression-receipt.json",
+      "sha256": "06421c79c2c5a06ca58be22695b55dede7274b85b25c1ca03c8d2e10dd113d5c"
+    },
+    {
+      "path": "/tmp/storyforge-chat-v123-queued-superseded.json",
+      "sha256": "b20a5d850af5167faf835bf1381ed2114d6a928c543e7ae125af98b2bbfb1b43"
+    }
+  ],
+  "limits": [
+    "This synthetic repeated-observation workload is an engineering capacity comparison, not meaningful story quality or100/300/1000-turn acceptance.",
+    "Single-scene continuation improves61 to84 committed actions; action85 still stops before model dispatch because all current facts no longer fit actor input.",
+    "Fact/goal/thread storage and sixteen-promise history limits remain unchanged. Fact/history separation and substantive long-run acceptance remain open.",
+    "Full CI/E2E for this implementation are not complete. The older V123 queued runs cannot establish current-code acceptance.",
+    "No new real model episode, Agnes validation, human playtest or commercial acceptance."
+  ],
+  "olderValidation": {
+    "V123": "Both queued jobs verified unstarted/no children, superseded with exit143; not a test pass or executed test failure.",
+    "proof": "/tmp/storyforge-chat-v123-queued-superseded.json"
+  },
+  "fullValidation": {
+    "ci": {
+      "handle": 28475,
+      "snapshot": {
+        "gitHistory": "shared local Git object store; exact HEAD and independent tracked tree verified",
+        "head": "38ba906b3efffd0069c605e70ff37b9c201695ce",
+        "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v127-ci-z7s5l6zr/storyforge",
+        "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v127-ci-z7s5l6zr/manifest.json",
+        "manifestSha256": "0cb034c8fce904ed0c8a6be6970bb112917620b3ae55a80e04c4c4ece944e2c6",
+        "files": 3485
+      },
+      "log": "/tmp/storyforge-chat-v127-full-ci.log",
+      "receipt": "/tmp/storyforge-chat-v127-full-ci-receipt.json",
+      "status": "queued; not started at recording"
+    },
+    "e2e": {
+      "handle": 98973,
+      "snapshot": {
+        "gitHistory": "shared local Git object store; exact HEAD and independent tracked tree verified",
+        "head": "38ba906b3efffd0069c605e70ff37b9c201695ce",
+        "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v127-e2e-txlkwgxk/storyforge",
+        "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v127-e2e-txlkwgxk/manifest.json",
+        "manifestSha256": "0cb034c8fce904ed0c8a6be6970bb112917620b3ae55a80e04c4c4ece944e2c6",
+        "files": 3485
+      },
+      "log": "/tmp/storyforge-chat-v127-full-e2e.log",
+      "receipt": "/tmp/storyforge-chat-v127-full-e2e-receipt.json",
+      "status": "queued; not started at recording",
+      "port": 51158
+    }
+  }
+}

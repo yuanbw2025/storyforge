@@ -1,4 +1,7 @@
+import {validateImportedChatNarrativeEvidenceStateV1, validateImportedChatNarrativeEvidenceEventV1} from '../character-interaction/narrative-evidence-import'
 import { validateExtensionBackup } from '../extensions/portable'
+import {parseChatComposerDraftV1} from '../character-interaction/composer-draft-contract'
+import {parseProductRuntimeState} from '../product/runtime-core'
 /**
  * 注册表派生的项目导入引擎(AUDIT-1)
  *
@@ -477,6 +480,12 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     }
   }
   for (const session of runtimeSessions) {
+    validateImportedChatNarrativeEvidenceStateV1(session.initialStateJson, session.kind)
+    validateImportedChatNarrativeEvidenceStateV1(session.runtimeHeadStateJson, session.kind)
+    if (session.chatComposerDraft !== undefined) {
+      if (session.kind !== 'character-interaction') throw new Error('[deriveImport] 聊天输入草稿不能归入其他产品存档')
+      parseChatComposerDraftV1(session.chatComposerDraft, parseProductRuntimeState(session.initialStateJson).interaction?.profiles.map(p => p.participantKey) ?? [])
+    }
     const releaseId = session._productReleaseExportId
     const buildId = session._productBuildExportId
     if (!productKinds.has(session.kind) || (releaseId == null) === (buildId == null)
@@ -507,6 +516,7 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     const ownedEvents = runtimeEventsBySession.get(session._exportId) ?? []
     const replaySessionId = session._exportId + 1
     const portablePayload = event._portablePayloadJson ?? event.payloadJson
+    validateImportedChatNarrativeEvidenceEventV1(portablePayload, session.kind, event.type)
     let replayPayload = portablePayload
     try {
       const parsed = JSON.parse(portablePayload)
@@ -549,6 +559,15 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     if (hasParent !== hasParentSequence) {
       throw new Error('[deriveImport] v10 ProductRuntime 分支 lineage 配对无效')
     }
+    const upgradeReceipts = (runtimeEventsBySession.get(session._exportId) ?? []).filter(event => event.type === 'interaction.release.upgraded')
+    if (upgradeReceipts.length > 1) throw new Error('[deriveImport] 升级回执不能重复')
+    const upgradeReceipt = upgradeReceipts[0]
+    if (upgradeReceipt) {
+      const childManifest = releaseManifests.get(session._productReleaseExportId)
+      if (!childManifest) throw new Error('[deriveImport] 角色聊天升级副本缺少冻结版本')
+      const contract = await import('../character-interaction/release-upgrade-branch')
+      await contract.verifyChatReleaseUpgradeReceiptV1({childSession: session as unknown as import('../types').ProductRuntimeSession, childManifest, receipt: upgradeReceipt})
+    }
     if (!hasParent) continue
     const parent = runtimeSessionById.get(parentExportId)
     const parentMaximumSequence = maximumRuntimeSequence(runtimeSequences.get(parentExportId))
@@ -563,7 +582,7 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     const sameSource = parent.runtimeSourceHash === session.runtimeSourceHash
       && parent._productReleaseExportId === session._productReleaseExportId
       && parent._productBuildExportId === session._productBuildExportId
-    if (sameSource) continue
+    if (sameSource && !upgradeReceipt) continue
     if (parent._productReleaseExportId == null || session._productReleaseExportId == null
       || parent._productBuildExportId != null || session._productBuildExportId != null) {
       throw new Error('[deriveImport] v10 ProductRuntime 分支 lineage 或序号无效')
@@ -576,6 +595,13 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
       throw new Error('[deriveImport] v10 ProductRuntime 迁移Release缺失')
     }
     try {
+      if (session.kind === 'character-interaction') {
+        const contract = await import('../character-interaction/release-upgrade-branch')
+        await contract.verifyChatReleaseUpgradeBranchV1({parentSession: parent as unknown as import('../types').ProductRuntimeSession,
+          childSession: session as unknown as import('../types').ProductRuntimeSession, parentManifest, childManifest,
+          parentEvents: runtimeEventsBySession.get(parent._exportId) ?? [], childEvents: runtimeEventsBySession.get(session._exportId) ?? []})
+        continue
+      }
       const sourceStateHash = await replayTextOpenWorldMigrationSourceStateHashV1({
         session: parent as unknown as Pick<import('../types').ProductRuntimeSession, 'initialStateJson'>,
         events: runtimeEventsBySession.get(parent._exportId) ?? [],
@@ -641,6 +667,7 @@ async function validateProductArchitectureBackup(value: Record<string, any>): Pr
     } catch {
       throw new Error('[deriveImport] v10 ProductRuntimeCheckpoint stateJson 无效')
     }
+    validateImportedChatNarrativeEvidenceStateV1(checkpoint.stateJson, session.kind)
     if (state.lastSequence !== throughSequence) {
       throw new Error('[deriveImport] v10 ProductRuntimeCheckpoint 状态序号不一致')
     }

@@ -1,0 +1,56 @@
+{
+  "schema": "storyforge.chat-contract-diagnostic-evidence",
+  "version": 1,
+  "diagnostic": "v100-discovery-granularity-and-inquiry",
+  "at": "2026-10-15T19:30:05.782364+00:00",
+  "baseHead": "a7931e9163a8d4f71028eb6ae48c9b538be20eee",
+  "runtimeImplementationHead": "db4a6b8b6aba788ce52fc7573a7e6d003d11ee9e",
+  "status": "contract gaps confirmed; new source-unit and inquiry-result paths not implemented",
+  "modelCalls": 0,
+  "newTest": "tests/regression/R-CHAT-02-discovery-granularity-baseline.test.ts",
+  "newTestSha256": "79292d6e975a0955989b943dc24f31fdc4dbec08344154058447bdd1bd134dc6",
+  "newAssertions": 8,
+  "relatedVerification": {
+    "files": 5,
+    "tests": 40,
+    "receipt": "/tmp/storyforge-chat-v100-regression-receipt.json",
+    "receiptSha256": "5c118c623d88c537a8f722dd28940db816f02835c7f9027fc51521df559d3ee0"
+  },
+  "requiredGates": {
+    "passed": 10,
+    "receipt": "/tmp/storyforge-chat-v100-gates-receipt.json",
+    "receiptSha256": "841b508af2839e04c39978fce1244c85521cf3e7e0843e78cf8399d8d6e5fba6"
+  },
+  "originalSourceAudit": {
+    "preparedArtifact": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v97-investigation-core/prepared.json",
+    "sha256": "b9624f529d1400d5b01829576a074745b16e1919b8c1e485a0d153b589a91c6a",
+    "sourceProjectionVersion": 4,
+    "fullTruthRecordCount": 1,
+    "initialAudience": [],
+    "source": {
+      "resourceKey": "world-release:fa478d4cbc1afe239cf16c5bb5a6709281cc55e5c8f1194cbe81e1b796e9855c:entities:codex-entry:0186c5e4ae0e1ce14afc87bd28c71a16b40db88455bcee0935b9aa6d816ecbf0",
+      "sourceHash": "e5966b08727943c3a2eb0967827139dbf23cb749ef5ef4831fc542f29df070f7",
+      "pointer": "/description",
+      "purpose": "knowledge"
+    },
+    "discoveryCondition": "角色实际核对柜台下木箱中的铜印，并通过掌柜的明确说明核实由他拿去拓印破损通行单；仅看到铜印位置不能证明持有人与用途，必须满足整条事实的依据。"
+  },
+  "findings": [
+    "Approved discovery reveals the complete canonical compound statement; no partial-knowledge result or learned-text field exists.",
+    "Rejection keeps the whole statement unknown; hidden-source references cannot create a public partial fact.",
+    "Separately authoring atomic position and historical cause allows existing physical discovery to expose only position. This is a different engineering fixture, not a change to original source.",
+    "A committed speak question has real message and pendingSituation evidence but lacks the runtime-consequence fact currently required by discovery.",
+    "A question cannot fabricate a completed answer by placing newFacts on speak."
+  ],
+  "limits": [
+    "An affirmative fixture review demonstrates state granularity, not semantic permission to discover a compound truth from a location inspection.",
+    "No proof that every observed model stall has this structural cause.",
+    "No new M1 episode, human score or commercial acceptance.",
+    "Original V97/V99 sources and failures unchanged; holdouts not inspected."
+  ],
+  "nextWork": [
+    "CHAT-02.15: full source to proposed atomic units, independent fidelity/coverage review, explicit author confirmation, versioned frozen projection and complete production/lifecycle/UI consumption.",
+    "CHAT-02.16: bind an actual inquiry and legitimate respondent to a reviewed response, distinguish statement from verified fact, atomically update actual listeners and support role continuation."
+  ],
+  "fullValidation": "Existing V98 full CI 71539 and E2E 16199 confirmed live and remain queued on unchanged runtime implementation; this additional diagnostic test has targeted and required gates, not a completed new whole-repo CI receipt."
+}

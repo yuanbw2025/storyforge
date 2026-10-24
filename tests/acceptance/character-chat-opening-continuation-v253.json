@@ -1,0 +1,45 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "change": "V253 opening continuation preparation and review",
+  "sourceSnapshot": "da6b5dd04aacbeffd4936b2a6b89b3be837f79c6",
+  "manifestSha256": "09e376b75e893f4fab67a3bfca546e62e2248e76d8c449f807a0298b997f7e8c",
+  "boundaries": {
+    "existingFactsAndPossibilities": true,
+    "newTables": 0,
+    "newFields": 0,
+    "extraModelSteps": 0,
+    "runtimeActionVersion": "v48",
+    "runtimeReviewerVersion": "v34",
+    "openingProductionVersion": "v12",
+    "openingReviewVersion": "v3",
+    "oldProductionAndReviewPromptHashes": {
+      "referenceV3": "e977ae976574fa6921c0fbc03ad6a54d51e23ffd463ccb200e01365eea684cc5",
+      "reviewV2": "c76b57644260fa826a0c463bd37e700a710f51b3047a943eb3e6498907f46d66"
+    }
+  },
+  "checks": {
+    "distinctRegressionFiles": 10,
+    "distinctRegressionTestsPassed": 152,
+    "isolatedBrowserTestsPassed": 10,
+    "types": true,
+    "changedFileLint": true,
+    "architecture": true,
+    "requiredTables": true,
+    "aiManual": true,
+    "aiEntryRegistry": true,
+    "metrics": true,
+    "documentAuthority": true,
+    "build": true,
+    "bundle": true,
+    "diff": true,
+    "standalone46TestsOverlapWith152": true
+  },
+  "modelCalls": 0,
+  "fullCI": false,
+  "fullE2E": false,
+  "qualityAccepted": false,
+  "localReceipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v253-opening-continuation/receipt.json",
+  "receiptSha256": "b65d29ce9d20548edaf6a0b28fd660f3c7a33ff60fb920793d781b22b0eddca4",
+  "realModelEvaluation": "V254 separately registered; no engineering result substitutes for meaningful progression."
+}

@@ -1,0 +1,46 @@
+{
+  "version": 286,
+  "recordedAt": "2026-10-20T21:41:26.820774+00:00",
+  "product": "character-interaction",
+  "sourceHead": "0cb7c84d3f89fefbe2544113345fb51bd3cfca38",
+  "status": "actual-message-only-completion-generated-review-provider-failed-not-adopted",
+  "formalM1Credit": 0,
+  "requests": 3,
+  "nativeStatuses": [
+    "completed",
+    "completed",
+    "failed"
+  ],
+  "knownReportedTokens": 35608,
+  "usageIncomplete": true,
+  "missingUsageStage": "review",
+  "providerError": "Codex 已确认本次生成失败（提供商报告：提供商未给出可识别原因；other）；未完成内容不会成为正式候选，不会自动重发。",
+  "failureClassification": "Native provider explicitly reported failed, reason unrecognized other. This does not establish quota exhaustion, semantic rejection or an unknown request outcome. No resend.",
+  "actualExpression": {
+    "emptyFactReferences": true,
+    "turnCompletion": true,
+    "passedLocalGenerationValidation": true,
+    "independentReviewCompleted": false,
+    "adopted": false
+  },
+  "parentPreserved": true,
+  "worldPreserved": true,
+  "sourceUnchanged": true,
+  "restorationModelCalls": 0,
+  "automaticRetries": 0,
+  "m1Passed": false,
+  "result": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v286-clock-player-preference/run-r1/continuation.json",
+    "sha256": "05d0932c0c04985bbd84ad8fb00a65aafc063435ac25a47f295656ea7508d961"
+  },
+  "backup": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v286-clock-player-preference/run-r1/continuation-backup.json",
+    "sha256": "d7c32f915aaf9348eb7d341e446b3a2fbd1e69c779028a89440ad0d6f14eb911"
+  },
+  "restoration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v286-clock-player-preference/run-r1/continuation-restoration-verified.json",
+    "sha256": "2f8a27ac0afc4e66bf3c2b05719aa1c9910918fc73aae30666c4a92b4ad1de6b"
+  },
+  "currentFullDeliveryRun": 39501843746,
+  "currentFullDeliveryStatus": "in_progress"
+}

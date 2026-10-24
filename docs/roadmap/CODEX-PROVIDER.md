@@ -36,7 +36,11 @@
 
 浏览器每次生成只提交一次 UUID；同 ID 同内容返回原记录，不同内容拒绝。服务顺序执行、最多 32 条待处理请求。取消排队请求不会发送模型请求；在途取消请求会向 Codex 发送 `turn/interrupt`。未知结果、授权失败、额度不足不静默重发。单次最多 20 分钟，请求和返回文本各限 2 MiB。
 
-只把最终答复消息当作者文本，排除 reasoning 和 commentary；有明确 final_answer phase 时增量返回，否则等消息完成。必须收到 `turn/completed` 且有非空文本才成功。失联/崩溃后部分文本仍不能当成功候选。客户端保留 pre-dispatch / request-dispatched / response-observed 边界，现有 durable Harness 继续决定恢复和采纳。
+只把最终答复消息当作者文本，排除 reasoning 和 commentary；有明确 final_answer phase 时增量返回，否则等消息完成。必须收到 `turn/completed`、turn 状态为 `completed` 且有非空文本才成功。失联/崩溃后部分文本仍不能当成功候选。客户端保留 pre-dispatch / request-dispatched / response-observed 边界，现有 durable Harness 继续决定恢复和采纳。
+
+已核验的失败turn若携带标准`codexErrorInfo`，连接只把白名单错误类别及400—599整数HTTP状态转换为固定提示，供请求记录与原有失败页面显示；原始message/additionalDetails、未知字符串及对象字段一律不保存。诊断来自同一已核验终态，不根据错误文字、登录状态或额度余额猜测原因，不改变终态判定、派发边界或禁止自动重试。旧失败没有类别时保持未知原因，不补造分类。[官方错误协议](https://learn.chatgpt.com/docs/app-server#errors)；实现同时核对当前本机CLI生成的TurnError/CodexErrorInfo合同。
+
+共享客户端可返回可选的 `ChatResult.terminalFailure`：仅接受与本次请求ID和模型相同、已派发且服务状态与提供商turn终态一致的失败/中断回执；保留版本、提供商、请求、模型和turn身份，不携带提示词、部分输出或错误原文。它不把 `request-dispatched` 改成成功响应，不授权自动重试，也不证明没有消耗。缺少身份、状态不一致、历史记录及断线仍无此回执；不得从报错文字补造证据。各产品可在自己的durable检查点保存该回执，恢复只补运行记录，不自动重发旧请求或生成候选。
 
 现有以 API 金额为必填统计的模型评测入口暂不接受 Codex；在共享客户端发送前明确阻止，不伪造评测美元费用。原生 tool_calls 不支持，Agent 继续走既有 text-json 协议；JSON schema 映射 `outputSchema`；`json_object` 映射为固定格式约束并在共享客户端严格解析为对象，非法结果直接停止、不自动修复重发。两者仍需原产品字段/schema 校验。温度和 API max_tokens 不发送；本地上下文预算使用保守 32K、预留 8K 输出，可由高级设置调整。这不是模型实际窗口或远端输出 token 硬上限。批量生产的金额闸门不得把未知订阅成本当作零成本放行。
 

@@ -1,0 +1,45 @@
+{
+  "schema": "storyforge.character-chat-current-binding-test-evidence",
+  "version": 1,
+  "batch": "V239",
+  "recordedAt": 1792470084.575527,
+  "status": "targeted-regressions-passed; frozen-full-ci-still-running",
+  "changedRegressionFiles": 9,
+  "verifiedRegressionFiles": 10,
+  "distinctRegressionTestsPassed": 94,
+  "productSourceUnchangedSinceV238": true,
+  "changes": [
+    "Current default producer/reviewer v47/v34 and current message-identity readers v11/v15 asserted explicitly.",
+    "Raw evidence checks compare exact emitted provider response bytes after fixture transport wrapping; successful and rejected outputs both preserved.",
+    "Legacy pinned producer/reviewer/reader behavior and byte hashes unchanged."
+  ],
+  "checks": {
+    "regression": true,
+    "types": true,
+    "changedFileLint": true
+  },
+  "sourceFileSha256": {
+    "tests/regression/R-CHAT-02-fact-discovery.test.ts": "7fc740dfd6e7cceca9af0001d6e2ce486cbfba4e520a24b5355131d1d1f3eccb",
+    "tests/regression/R-CHAT-02-replanning.test.ts": "18b9182db00b51ccecc2e7147a4affc150329c661290c4f2e225a762fa652285",
+    "tests/regression/R-CHAT-03-turn-allowance.test.ts": "3f2b6a9dfa1c9cd5f7b75d934f2f0c30a1327d19f71ba2d1cd16deaef5534df5",
+    "tests/regression/R-CHAT-02-player-decision.test.ts": "9b59f8818ee38e5ea66325882f2d2912ac64428b5ace34a8a31410b00d626ce5",
+    "tests/regression/R-CHAT-02-spoken-inquiry-review.test.ts": "a05869a70aaf95ca7672cac66213de8c04ba220878b2374cd525415688de3a23",
+    "tests/regression/R-CHAT-04-commitment-generation.test.ts": "0d1f0d17ce6724b33f8fe9bc20a59e1f2b26f165f22ff6f98743796f68e8c917",
+    "tests/regression/R-CHAT-02-narrative-harness.test.ts": "a54be0536174331bb6a43bdd3569f045b1f0512c4ed08a1182c8982a6cb5ac52",
+    "tests/regression/R-CHAT-04-history-audit.test.ts": "9bc9eb4d85c800300bfedbfec8963ef4f4e4e6771af335a3269807ddf11b4725",
+    "tests/regression/R-CHAT-04-coordinator-dialogue-harness.test.ts": "d3fe0e7324c7445bc3842bbcd6ea257594e90cffb0239324ff79431f8bb0a444"
+  },
+  "evidenceSha256": {
+    "observed-failures.log": "6c95eccb3fd16ce0acec4e032ab80840020bdadc31349be42de0e2c48356197d",
+    "tests.log": "30313934ed214fe06ebd7e8ae74fb70acf1d33401cf90f04e6a308edfb903014",
+    "raw-evidence-tests.log": "21ccd8ce56e2192ba0a91f4bb79bc73edd74c1890871a818b7ba6830b1620769",
+    "reader-tests.log": "0e9503794842e7ab483ffa45f58fc38915215d63a698615259f34e21d25709ac",
+    "types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "reader-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "fullDeliveryValidated": false,
+  "realModelCalls": 0,
+  "semanticQualityAccepted": false,
+  "humanAcceptance": false
+}

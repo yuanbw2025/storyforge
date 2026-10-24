@@ -1,0 +1,119 @@
+{
+  "schema": "storyforge.chat-engineering-evidence",
+  "version": 1,
+  "batch": "V242",
+  "recordedAt": 1792475752.97925,
+  "status": "targeted-engineering-passed; fresh real-model and full-delivery validation pending",
+  "contract": {
+    "producer": "chat-situation-production-v11",
+    "gate": "chat.opening-source-completeness.v1",
+    "catalogVersion": 2,
+    "repairPlanVersion": 5,
+    "maximumCalls": 2,
+    "strictOutput": "initial attempt, resolved Codex or Agnes only",
+    "schemaInputOverheadReserved": true,
+    "legacyPromptAudit": {
+      "v9FileUnchanged": true,
+      "v9Sha256": "767cd9370da4fd73187937bc72ab3bc5b8142d5363ffaeda4aab06ee75cdf4d0",
+      "v10FunctionUnchanged": true,
+      "v10FunctionSha256": "1116fda891441b09b9e32b2446688e2c42f6dd17ae0fafc2da6c281e5dc61163"
+    }
+  },
+  "checks": {
+    "distinctRegressionFilesPassed": 10,
+    "distinctRegressionTestsPassed": 155,
+    "browserTestsPassed": 8,
+    "types": true,
+    "ai-manual-generate": true,
+    "metrics-generate": true,
+    "architecture": true,
+    "required-tables": true,
+    "ai-manual": true,
+    "ai-entries": true,
+    "docs": true,
+    "lint": true,
+    "build": true,
+    "bundle-size": true,
+    "requiredFocusedSuitesPassed": true
+  },
+  "pending": null,
+  "coverage": [
+    "All reviewed identity/knowledge facts retained exactly once with original audience; motives and voice are not facts.",
+    "Previously omitted private source fact survives selection and compilation and supports an actor choice and reviewed disclosure.",
+    "Reference and full-candidate repair, discovery prerequisites, author selection, assembly, rejection of collisions and duplicates.",
+    "Strict schema transport selected only for resolved Codex/Agnes; HTTP 400 stops without JSON-object retry.",
+    "390px author choice through release, independent import and refresh with unchanged world and secret visibility.",
+    "Schema token overhead exceeding the reserved input allowance stops before provider dispatch; original retry/call/output budgets preserved."
+  ],
+  "retainedFailures": [
+    {
+      "log": "initial-tests.log",
+      "reason": "Three old agency fixtures omitted new required facts; one new assertion compared raw text with JSON-escaped serialization. Fixed test preparation and field assertions; reruns passed."
+    },
+    {
+      "log": "recheck.log",
+      "reason": "Two source-unit lifecycle tests exceeded default 5 seconds during concurrent validation; isolated bounded 30 second rerun passed."
+    },
+    {
+      "log": "schema-browser.log",
+      "reason": "Three publication-button waits exceeded default 5 seconds; bounded 30 second wait rerun passed all eight paths. No provider/page error was captured."
+    }
+  ],
+  "sourceFileSha256": {
+    "src/lib/character-interaction/opening-source-references.ts": "bea29ab6de2b3e8c0e1a2059b9d0e08d9d73d6c65a638e2e26cdbfaf58182ab3",
+    "src/lib/character-interaction/opening-option-repair.ts": "0ee5d9e890c19278f97915d72cddb824dc664b68d8235d7af7db23a5557552e6",
+    "src/lib/character-interaction/opening-output-schema.ts": "a057608bca72eae98a98f8fbcec3f65295728428abe3f98c9868e490e1455972",
+    "src/lib/character-interaction/opening-production-binding.ts": "d1899453052c19e1420c3ec58d08b8fc7e76fa2389273e8e441815c764e109d8",
+    "src/lib/character-interaction/opening-repair-evidence.ts": "9ee62b652718df0384efbd45cbca240cb46f4de71258fbc6067f312df1bd6e55",
+    "src/lib/character-interaction/narrative-contract.ts": "1c2ddf5d931a38784583c773252d9859d3f26ebb3dd71f66966dd618bf02a8cc",
+    "src/lib/product-production/capabilities.ts": "0f3acd06037e0c24e652c6f31c977b180638b8c6fcb58e09cc24799ef0ebfebb",
+    "src/lib/product-production/production-executor.ts": "774e70161b9ad00dc3cb2dbc50a8fbadc21fa14b95007ae0741624edab0a5509",
+    "src/lib/product-production/chat-situation-tasks.ts": "13f9bb827ef6128c9647ac1dea86cc05bb1cdb98464d2aff8f38d3bc8b2c40a3",
+    "src/lib/product-production/plan.ts": "517fd03ca2276f09071ed93b01118b44c11449b189dda1ad56fc4f05c31ced14",
+    "src/lib/agent/skill-registry.ts": "e9cb3f5f03c9e4645a16a2ec890cad8b74dd32a16df0db5142bfcfa0a4e6c444",
+    "tests/helpers/chat-narrative-production-fixture.ts": "8b5f9ed61c436d57582c52a87134c5ea59caac01cec85c5b8b608e4fe43db06a",
+    "tests/regression/R-CHAT-02-opening-source-completeness.test.ts": "79114bfd17a3e5c0dc57f786ce5094e8d323903a726e8e1bfaa242a47f376f28",
+    "tests/regression/R-CHAT-02-opening-repair.test.ts": "452144497eca6a24c9d7529c3e5a8d2040ee144c0f38b861f216cb09fcceb2c8",
+    "tests/regression/R-CHAT-02-opening-agency.test.ts": "2adca683e5da3128fdea49bfcbaeee4e4b2fb4cce2edc6bbd5da1861ead1d93b",
+    "tests/regression/R-PRODUCTPROD1D-text-capability.test.ts": "62bd1a92bafdc544c4ee8a171e996e9cf430babd00ca066d743d265abb259b24",
+    "tests/e2e/character-chat-production-repair.spec.ts": "7d8a585c3e78a46f47947745313b3ac36099c54c6ed239ef5354ca623c26b9bb"
+  },
+  "evidenceSha256": {
+    "bundle-size.log": "73136b1210ee0807484c4fe5ca5e6b1695e7700fbb837ce4466fe889c70ac700",
+    "initial-tests.log": "51ef1078783f6026939c6c9cbbb4770704f89edb9b29e7b47992121b22fb3a62",
+    "types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ai-entries.log": "e789c090422f8fb0b79fc174dffd5a8dd0a14b96e2952e3ed720e16b5489c00d",
+    "browser.log": "a372372bddbc557340806622c63e1865a5782948086b3016a2dad012e8b8be85",
+    "lint.log": "c8bd26fb2b68c69b86e0c51b7e999259bb290b9f1447e8439b239b1d08ae64d1",
+    "architecture.log": "b866dc47a6aec0840a8914b6a132b7f22afdd092a76763b4d7e3156c024dd616",
+    "recheck.log": "aa559d70a9465522555a86c21f14375346ef08c690fb2e7ed47497fb08c156c1",
+    "final-browser.log": "34f193a57cefee48a9482c7675ef0f5dbf0ca2a452dcfa7a609a1a4fe6ba9e1f",
+    "budget-lifecycle-final.log": "572c9f9f5076f2b73f2361d05f122754bf9838af02d291ad46affb913833ec61",
+    "required-tables.log": "3bd6304c4b1a8d2aebf4bc8d09595b2e9e7b3fb83d6aaaac44a29cbb93b15444",
+    "ai-manual.log": "0f5a2a83ad4bd05571e280342f4221ce9cd2c9c1926eae9e281190e03bdb8d19",
+    "docs.log": "211b0f6f00c931878d80bf4aaccf46ca6b982a0897303f4464a3d4411eaeda76",
+    "final-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "budget-caller-tests.log": "7a2192275f47f011b10fb917d7f9e40569a12cf04f2eac36440a777a8d2920f8",
+    "ai-manual-generate.log": "3395b5e737f52a05d9c19e988e9189038725875fbd32aff89394e5a63cb558ea",
+    "late-test-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "schema-browser.log": "e33fdb89cba528eb5d75dee6296f21fbf9c0516e0a574f636da62f3e48e0094f",
+    "final-tests.log": "8d80aa0713e21b4e76f36c0debd87e3e81d1ae9c7b593e8911c29ed99fbd4a4b",
+    "schema-tests.log": "4567a6afc4abf8807f86522982a9516c06907631a406ac0f67f7552366f48cfa",
+    "metrics-generate.log": "0555eabe41357efe38464a935ad593aa025a0682300d6c86a7fa03fe2642b146",
+    "checked-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build.log": "0cecc953b5a852d27b61a03107623534c47ea9b90f5f110fdaf8b80141408032"
+  },
+  "modelCalls": 0,
+  "fullDeliveryValidated": false,
+  "semanticQualityAccepted": false,
+  "humanAcceptance": false,
+  "commercialAcceptance": false,
+  "next": "Freeze v11 source and run fresh preregistered Codex/Agnes production and runtime, preserving V241 failures. Full CI/E2E, M1-M5 and human/commercial acceptance remain open.",
+  "supplementalBroadSuite": {
+    "status": "operator-cancelled",
+    "sessionId": 98940,
+    "exitCode": 130,
+    "countedAsPassed": false,
+    "reason": "Full product executor suite remained CPU-active without completed file results; scoped transport and chat budget/lifecycle suites completed separately; broad coverage remains part of full CI."
+  }
+}

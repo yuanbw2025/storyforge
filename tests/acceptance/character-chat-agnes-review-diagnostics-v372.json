@@ -1,0 +1,64 @@
+{
+  "version": 372,
+  "recordedAt": "2026-10-24T04:22:12.801947+00:00",
+  "status": "evaluation-prototype-rejected-not-integrated",
+  "purpose": "Test explicit evidence IDs instead of model-authored JSON pointers on retained V369 input; one independent evaluation request, no retry or product write.",
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "result": {
+    "requests": 1,
+    "httpStatus": 200,
+    "finishReason": "stop",
+    "durationMs": 103211,
+    "observedTokens": 21325,
+    "productParserAccepted": false,
+    "schemaOrSemanticValidationReached": false,
+    "failure": "Response omitted the checks property name before its array, making the retained object invalid JSON. No deterministic repair, schema weakening or adoption.",
+    "primaryProfileChanged": false
+  },
+  "productionImportInvestigation": {
+    "sourceHead": "49c53da628aea7a06a5e17826fea35f63f9d5d24",
+    "findings": [
+      {
+        "unit": "agnes-reading-r1-session-config",
+        "completedOriginalCount": 1,
+        "checks": {
+          "allCompletedRepresented": true,
+          "noTaskTreatedAsExecuting": true,
+          "originalFailedTaskStillBlocked": true,
+          "readOnlyProjection": true
+        },
+        "modelCalls": 0
+      },
+      {
+        "unit": "agnes-reading-r2",
+        "completedOriginalCount": 2,
+        "checks": {
+          "allCompletedRepresented": true,
+          "noTaskTreatedAsExecuting": true,
+          "originalFailedTaskStillBlocked": true,
+          "readOnlyProjection": true
+        },
+        "modelCalls": 0
+      }
+    ],
+    "interpretation": "Imported completed child runs deliberately use an internal running state after scope rebound. The actual scheduler projects verification-required with no recovery timer, not a running model task. Original failed steps remain blocked. Revalidation was not executed; this does not establish complete production recovery."
+  },
+  "evidenceHashes": {
+    "preregistration.json": "6db31d73f2aa3489d4b5967f791ff77cf7bdaff194eaa7df20fb01d816cca4be",
+    "request.json": "a83eee0b055dc181693d8d4dc48964391e6fda4e3608b4c119373a1b26fb8efa",
+    "response.json": "f1b49e29db388d42c84437fb2b8c6edd0debf128f1c50ef88de051e4b9045a4c",
+    "receipt.json": "b51414aa6e9c9e11f07e61aa58db34929c0063c429d834d68b4dbdb55c0bc758",
+    "validation.json": "57f96c3ac8d04267756c8ae4c951f498c5c86d3368b1192bdea1dc8f8687d06c"
+  },
+  "additionalEvidenceHashes": {
+    "production-import-audit.json": "6999b2e6851eec4ee5e8d0ba3559e1e5d83c31bf1e7777498555df1dce1035d9"
+  },
+  "claims": {
+    "noProductWrites": true,
+    "formalM1Credit": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "quotaFailure": false
+  }
+}

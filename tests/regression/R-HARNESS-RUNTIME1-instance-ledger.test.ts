@@ -1,3 +1,4 @@
+import {CHAT_MEMORY_CHECKS} from '../../src/lib/character-interaction/memory-review-contract'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { appendAgentRunEventV1 } from '../../src/lib/agent/run/event-store'
 import {
@@ -216,9 +217,10 @@ describe('R-HARNESS-RUNTIME1 · Instance-scoped 统一 Harness', () => {
         kind: 'memory-curator', memoryKind: 'key-memory', content: '玩家询问信件是否收到。', importance: 70,
         sourceEventSequences: [seeded.playerSequence], evidenceExcerpt: '你收到我的信了吗',
       }),
+      runReviewAI: async () => JSON.stringify({checks: CHAT_MEMORY_CHECKS.map(check => ({check, passed: true, reason: '隔离工程核对'}))}),
     })
     expect(await db.agentRunEvents.where('runId').equals(generated.snapshot.run.id).count()).toBeGreaterThan(0)
-    expect(await db.agentRunCheckpoints.where('runId').equals(generated.snapshot.run.id).count()).toBe(1)
+    expect(await db.agentRunCheckpoints.where('runId').equals(generated.snapshot.run.id).count()).toBe(2)
     await deleteProductRuntimeSession(seeded.sessionId)
     expect(await db.agentRuns.get(generated.snapshot.run.id)).toBeUndefined()
     expect(await db.agentRunEvents.where('runId').equals(generated.snapshot.run.id).count()).toBe(0)

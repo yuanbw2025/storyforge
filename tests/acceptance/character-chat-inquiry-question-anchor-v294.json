@@ -1,0 +1,56 @@
+{
+  "version": 294,
+  "recordedAt": "2026-10-21T00:31:08.448808+00:00",
+  "product": "character-interaction",
+  "lifecycle": "product capability development; S3 runtime, session-owned inquiry state",
+  "status": "targeted-engineering-passed-question-anchor-real-verified-followup-failed",
+  "sourceBaseHead": "c5e497b27ad7dfb5ecc473061cbe3db92845bec5",
+  "sourceManifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v294-inquiry-question-anchor/manifest-final.json",
+    "sha256": "ac5447b5f39ca586e391ee59279720b9435617aacf6a19ac44e0c635ac7b4713"
+  },
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v294-inquiry-question-anchor/engineering.json",
+    "sha256": "e48d9f4b21c52dbba5f2d13c66a6f6bc47d5f129b792f7a1d587201adecce7c3"
+  },
+  "regression": {
+    "files": 10,
+    "passed": 115
+  },
+  "browser": {
+    "files": 3,
+    "passed": 9
+  },
+  "promptVersions": {
+    "producer": "chat-situation-construction-v14",
+    "reviewer": "chat-situation-review-v13"
+  },
+  "eventMetadata": "inquiryEvidenceVersion:2, derived only from the exact frozen producer and reviewer contract",
+  "scope": "Reuse questionSequence to identify the actual earlier question in the same original actor turn. Current scene, original audience and knowledge time remain deterministic checks; the independent reviewer sees the question and subsequent utterances and rejects changed or withdrawn questions. Old contracts retain their original semantics.",
+  "negativeEvidence": [
+    "another speaker, scene or turn",
+    "superseded, future or answered question",
+    "intervening player, actor or knowledge settlement",
+    "facts not yet known when asking",
+    "public followup cannot widen private question audience",
+    "semantic question rejection prevents adoption",
+    "forged version on old reviewed run or without run"
+  ],
+  "recoveryEvidence": [
+    "public and private answers",
+    "omitted known prerequisite",
+    "review interruption and post-commit crash",
+    "idempotent adoption",
+    "branch before and after answer",
+    "signed historical question/request sequences",
+    "portable import and refresh"
+  ],
+  "newTables": 0,
+  "newModelOutputFields": 0,
+  "newModelSteps": 0,
+  "worldWrites": 0,
+  "realVerification": "character-chat-inquiry-question-real-v295.json",
+  "fullCurrentCI": false,
+  "fullCurrentE2E": false,
+  "m1Passed": false
+}

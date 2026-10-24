@@ -1,0 +1,237 @@
+{
+  "schema": "storyforge.chat-m1-cohort",
+  "version": 1,
+  "parentProtocol": "character-chat-m1-protocol-v1.json",
+  "parentProtocolSha256": "a70ce9a0395edb55216420b07f321fc9c21d840bbb8b3a3b5a48c0f9762e8b25",
+  "matrix": {
+    "coreScenarioIds": [
+      "inn-missing-seal",
+      "daily-clock-promise",
+      "riverside-reading-evening"
+    ],
+    "coreMaterial": "character-chat-narrative-cases.json:scenarios",
+    "coreSplit": "development-regression; never relabelled holdout",
+    "holdoutScenarioIds": [
+      "pottery-gift-deadline",
+      "archive-missing-map"
+    ],
+    "holdoutMaterial": "character-chat-m1-holdouts-v1.json",
+    "behaviorIds": [
+      "weak-guidance",
+      "refuse",
+      "alternative",
+      "rest",
+      "return",
+      "unexpected"
+    ],
+    "providerSlots": [
+      "local-codex",
+      "agnes"
+    ],
+    "repeats": [
+      1,
+      2
+    ],
+    "coreEpisodes": 72,
+    "holdoutEpisodes": 48,
+    "totalScheduledEpisodes": 120,
+    "productionUnits": 20,
+    "episodeId": "m1-v97-investigation-core/{scenarioId}/{providerSlot}/r{repeat}/{behaviorId}",
+    "pairing": "每个情境/提供商/重复单独生产一个冻结 release；六种行为从该 release 的同一初始状态创建独立会话，不共享运行记忆。两次重复重新生产。",
+    "order": "core scenarios inn, clock, reading; then unopened holdouts; repeat 1 before 2; original behavior order",
+    "productionFailure": "保留该生产单元及其六个 production-blocked episode 槽位；不重抽开场，不以未运行冒充通过。运行质量仅对实际运行报告，端到端分母保留全部计划槽位。"
+  },
+  "budget": {
+    "usualOpportunities": [
+      20,
+      40
+    ],
+    "maximumPlayerOpportunities": 20,
+    "maximumProductionRequests": 6,
+    "maximumRuntimeRequests": 90,
+    "maximumObservedTotalTokens": 1000000,
+    "maximumWallMinutes": 60,
+    "observationTimeoutMinutes": 20,
+    "automaticRetries": 0,
+    "manualRepairInScoredEpisode": false,
+    "stopCheck": "每次新触发前检查预算，已发请求只观察到终态；上限含审查/局面/发现调用，不把玩家输入次数冒充调用次数。正常产品有界链可能越过软 token 上限一次，记录实际值，不悄悄继续。"
+  },
+  "models": [
+    {
+      "slot": "local-codex",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "transport": "local subscription bridge; no paid API fallback",
+      "appSettings": {
+        "temperature": 0.2,
+        "maxTokens": 16000
+      },
+      "effectiveSampling": "bridge request accepts model/messages/output schema only; app temperature and maxTokens are not passed to Codex; retain actual request and usage, do not claim controlled sampling",
+      "costUsd": null
+    },
+    {
+      "slot": "agnes",
+      "model": null,
+      "status": "configuration-unavailable; not runnable",
+      "condition": "在此槽位首次调用之前追加配置修订，冻结实际模型、采样、预算及连接核验；不得用历史模型记录代替当次配置。"
+    }
+  ],
+  "cohort": "m1-v97-investigation-core",
+  "registeredAt": "2026-10-15T18:45:20.769276+00:00",
+  "status": "collection stopped after first runtime semantic failure; original source and all unstarted denominator retained",
+  "implementationHead": "ce546498101ff16dae39f93841ec597c128d929c",
+  "code": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "ce546498101ff16dae39f93841ec597c128d929c",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v97-real-5ku4x2hy/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v97-real-5ku4x2hy/manifest.json",
+    "manifestSha256": "cc44e131bbbd781058e20b86ef48f0f71cadbc4143dae41c41d981459f66f0bf",
+    "files": 3410
+  },
+  "authorPermissionOverrides": {
+    "allowActorThreadFollowups": true,
+    "maxDiscoveriesPerSituation": 1
+  },
+  "collectionOrderAmendment": {
+    "beforeAnyModelCall": true,
+    "scenarioIds": [
+      "inn-missing-seal",
+      "daily-clock-promise",
+      "riverside-reading-evening"
+    ],
+    "behaviorIds": [
+      "weak-guidance",
+      "refuse",
+      "alternative",
+      "rest",
+      "return",
+      "unexpected"
+    ],
+    "reason": "Validate cross-scenario investigation with full original unknown truth after the clock result chain; all 120 slots, player policies, scoring and budgets retained. No retrospective selection."
+  },
+  "sourceMappingAmendment": {
+    "beforeAnyModelCall": true,
+    "scope": "source mapping for the inn production unit, not changes to original material",
+    "mapping": "Full authorOnlyFacts stored as frozen Codex description, explicitly discoverable with no initial audience; actor fields retain prior mapping. All role/private/public/hidden truth/name/value checks occur after real S2 compilation and before model calls.",
+    "discoveryPermission": {
+      "inn-missing-seal": 1
+    },
+    "compoundTruth": "Original full fact remains intact; the whole registered condition must hold. A location observation alone does not reveal who moved the item or why.",
+    "otherUnits": "Before calls in each later unit, freeze any required full-source mapping and discovery authority against that original material; never infer permission from a failed output. Holdout contents remain unopened."
+  },
+  "firstEpisode": "m1-v97-investigation-core/inn-missing-seal/local-codex/r1/weak-guidance",
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v97-investigation-core",
+  "preregistrationSha256": "9645f4f104fad2ca41986afcdfccc4c6acbd06d50c4dc06111da59e74997fff6",
+  "runnerSha256": "faa43ba383df8acd16306e914fd1b35ddcc08c1e75e35dc08a31582ad0f0ec3c",
+  "coreMaterialSha256": "8fa5c8ac56fd43b0279b553bfb9c2cf9209249fc9cce16c57307c9d0012e3cbd",
+  "sourceMaterialSha256": "7abe45f62c5f1a86ee545027c7ae719b8c7a094fbf606c7a784e889494f611a0",
+  "sourceMaterialHashEncoding": "UTF-8 JSON with sorted keys and compact separators; Unicode preserved",
+  "actualGenerationRequestsAtRegistration": 0,
+  "priorCohortHashes": {
+    "character-chat-m1-evidence-v1.json": "ee16ee227fd8ca4a2954345f2f6788d615a002de4fe3b37f87c1852c53d4cbcc",
+    "character-chat-m1-cohort-v77.json": "98b3dea026d14e21be049773a65dffef2dfee4ad5c9284cc0cbb7c41ac672eb3",
+    "character-chat-m1-cohort-v89.json": "9cc915bb35d9576b9550b65536d8464ccb5b3c3b32ebd38c02e4b33b7c098d39",
+    "character-chat-m1-cohort-v90.json": "41d85e4b76ddeacf6efd0a45a84eeef7999c314122e9a8c2395a132cdce8bc05",
+    "character-chat-m1-cohort-v92.json": "1c715d3aea56f08968824a01debad127468de4b3d8d38d283eefb67ef717c033"
+  },
+  "engineeringGate": "V93 runtime: 1084 related regressions and required gates passed; V96 source mapping: 22 directed tests and required gates passed. Full CI/E2E pending, not acceptance.",
+  "limitations": [
+    "No Agnes configuration found; no substitution.",
+    "Scripted policy is not a human participant.",
+    "Direct author preparation uses the existing complete Brief and SourcePlan path, not natural S2 authoring UI assessment.",
+    "Holdouts not inspected; original failed cohorts remain unchanged."
+  ],
+  "counts": {
+    "scheduled": 120,
+    "productionUnitsPlanned": 20,
+    "productionUnitsStarted": 1,
+    "productionUnitsCompleted": 1,
+    "productionBlockedEpisodes": 0,
+    "started": 1,
+    "collectionCompleted": 1,
+    "narrativePassed": 0,
+    "failed": 1,
+    "unknown": 0,
+    "notStarted": 119,
+    "humanScored": 0,
+    "intentionalPause": 0
+  },
+  "productionUnits": [
+    {
+      "id": "m1-v97-investigation-core/inn-missing-seal/local-codex/r1",
+      "status": "source-admitted-local-release",
+      "firstAttempt": true,
+      "modelCalls": 3,
+      "openingSelection": "first passing in original order; all three passed",
+      "productReleaseHash": "8ebdd145afc40ce07468f83460184a09d565d7f6e37d3c4700959ae471e78cb2"
+    }
+  ],
+  "episodes": [
+    {
+      "id": "m1-v97-investigation-core/inn-missing-seal/local-codex/r1/weak-guidance",
+      "status": "failed",
+      "ending": "failure",
+      "failureKind": "situation-response-stagnation-rejected",
+      "collectionCompleted": true,
+      "playerOpportunities": 3,
+      "productionRequests": 3,
+      "runtimeRequests": 12,
+      "completedReviewedActions": 3,
+      "completedSituationUpdates": 2,
+      "rawRunFailures": 1,
+      "humanScored": false,
+      "narrativeQualityAccepted": false,
+      "artifact": "inn-r1-weak-guidance.json",
+      "evidenceSha256": "1e79dd8a5230d1a4d2f85f778c4cc8d386e382dd82d47abaf3ac4621fd9669cb",
+      "backupSha256": "aac27ae3019c47c8762f0a81e4e63e769ecc247803725287b63a0e559a1a72c1",
+      "restoration": {
+        "stem": "inn-r1-weak-guidance",
+        "runStatusesPreserved": true,
+        "verifiedCompletedHistories": 5,
+        "retainedFailedRuns": 1,
+        "resumableRuns": 0,
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      },
+      "interpretation": "inn-r1-weak-guidance-interpretation.json",
+      "interpretationSha256": "65411c2af74f0ec48379b11c12aaa659d93205732b5aae4d84eb1781afa01bb9"
+    }
+  ],
+  "sourceAdmission": {
+    "passed": true,
+    "helper": "tests/acceptance/character-chat-m1-source.ts",
+    "stage": "after frozen-world/S2 compilation, before first model request",
+    "privateFacts": 1,
+    "goals": 2,
+    "beliefs": 1,
+    "publicFacts": 3,
+    "authorOnlyFacts": 1
+  },
+  "aggregateUsage": {
+    "totalTokens": 178598,
+    "inputTokens": 166095,
+    "cachedInputTokens": 6656,
+    "cacheWriteInputTokens": 0,
+    "outputTokens": 12503,
+    "reasoningOutputTokens": 2001,
+    "costUsd": null,
+    "uniqueProviderRequests": 15,
+    "terminalReadbackEqual": true,
+    "productionCountedOnce": true
+  },
+  "collectorClosed": {
+    "runnerHandle": 42914,
+    "runnerExit": 1,
+    "restoreHandle": 63587,
+    "restoreExit": 0,
+    "serverHandle": 50783,
+    "serverExit": 1,
+    "serverExitNote": "Closed via explicit Ctrl-C only after all 15 provider requests were terminal and readback-equal, backup and zero-call restoration completed.",
+    "at": "2026-10-15T18:59:43.225294+00:00"
+  },
+  "next": "Investigate response-stagnation generation without relaxing review, original hidden truth or authority; any changed-code run remains a separate diagnostic/cohort, never a replacement of this failure."
+}

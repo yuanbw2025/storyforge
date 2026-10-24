@@ -1,0 +1,167 @@
+{
+  "schema": "storyforge.character-chat-m1-cohort-evidence",
+  "version": 1,
+  "batch": "V230",
+  "recordedAt": 1792457846.5146391,
+  "status": "initial-three-production-units-terminal-with-failures; remaining collection unrun",
+  "source": {
+    "batch": "V227",
+    "manifestSha256": "5784ad26db98a5a05677bb11bbcac030ae632214a1cb81bd1a07d0bade27b8a7",
+    "defaultProducer": 47,
+    "defaultReviewer": 34,
+    "unchangedDuringCollection": true
+  },
+  "counts": {
+    "scheduledEpisodes": 120,
+    "plannedIndependentProductions": 20,
+    "attemptedIndependentProductions": 3,
+    "productionReleased": 1,
+    "productionFailed": 2,
+    "runtimeEpisodesStarted": 1,
+    "runtimeEpisodesFailed": 1,
+    "productionBlockedEpisodeSlots": 12,
+    "pairedBehaviorSlotsUnrunAfterRuntimeFailure": 5,
+    "otherEpisodeSlotsUnrun": 102,
+    "humanScored": 0,
+    "qualityAccepted": 0
+  },
+  "usage": {
+    "requests": 33,
+    "productionRequests": 7,
+    "runtimeRequests": 26,
+    "codexObservedTokens": 424249,
+    "agnesObservedTokens": 44470,
+    "totalObservedTokens": 468719,
+    "costUsd": null
+  },
+  "codex": {
+    "model": "gpt-6.1-sol",
+    "playerOpportunities": 7,
+    "completedRuns": 8,
+    "failedRuns": 1,
+    "terminalNativeRequests": 29,
+    "actualOutcome": "角色完成一次外部观察及结果披露、公开旧发条信息，随后反复说明同一检查建议。末个候选因重复既有理由被 meaningful-direction 拒绝，未采用；原许可仍由玩家决定。",
+    "restoration": {
+      "stem": "clock-r1-weak-guidance",
+      "runStatusesPreserved": true,
+      "verifiedCompletedHistories": 8,
+      "retainedFailedRuns": 1,
+      "resumableRuns": 0,
+      "openingReviewRetained": true,
+      "modelCalls": 0,
+      "interactionEqual": true,
+      "refreshEqual": true,
+      "worldPreserved": true,
+      "rawEvidenceRetained": true,
+      "terminalReceiptBodiesRetained": true,
+      "usageEvidenceRetained": true
+    }
+  },
+  "agnes": {
+    "model": "agnes-2.5-flash",
+    "units": [
+      {
+        "repeat": 1,
+        "requests": 2,
+        "httpStatuses": [
+          200,
+          200
+        ],
+        "tokens": 24157,
+        "failureDetails": [
+          {
+            "detail": "[chat-narrative] 私域事实不能伪造世界证据",
+            "schema": "storyforge.product-task-failure",
+            "taskKey": "content.product-module",
+            "version": 1
+          },
+          {
+            "detail": "[chat-narrative] 事实来源无效",
+            "schema": "storyforge.product-task-failure",
+            "taskKey": "content.product-module",
+            "version": 1
+          }
+        ],
+        "recovery": {
+          "buildFailureRetained": true,
+          "failureEventsRetained": true,
+          "allRawResponsesRetained": true,
+          "bothFailureDetailsRetained": true,
+          "noReleaseOrRuntimeCreated": true,
+          "worldPreserved": true,
+          "refreshEqual": true,
+          "zeroModelCalls": true
+        },
+        "budgetFinding": {
+          "taskModelCallReservation": 1,
+          "maximumAttempts": 2,
+          "actualModelCalls": 2,
+          "secondAttemptStopCode": "task-budget-exceeded"
+        }
+      },
+      {
+        "repeat": 2,
+        "requests": 2,
+        "httpStatuses": [
+          200,
+          200
+        ],
+        "tokens": 20313,
+        "failureDetails": [
+          {
+            "detail": "[chat-production] 情境候选数量与作者设置不符",
+            "schema": "storyforge.product-task-failure",
+            "taskKey": "content.product-module",
+            "version": 1
+          },
+          {
+            "detail": "[chat-narrative] 事实来源无效",
+            "schema": "storyforge.product-task-failure",
+            "taskKey": "content.product-module",
+            "version": 1
+          }
+        ],
+        "recovery": {
+          "buildFailureRetained": true,
+          "failureEventsRetained": true,
+          "allRawResponsesRetained": true,
+          "bothFailureDetailsRetained": true,
+          "noReleaseOrRuntimeCreated": true,
+          "worldPreserved": true,
+          "refreshEqual": true,
+          "zeroModelCalls": true
+        },
+        "budgetFinding": {
+          "taskModelCallReservation": 1,
+          "maximumAttempts": 2,
+          "actualModelCalls": 2,
+          "secondAttemptStopCode": "task-budget-exceeded"
+        }
+      }
+    ],
+    "configurationMissing": false,
+    "protocolDeviation": "Each application production automatically made a second same-task attempt. This contradicts the literal zero-auto-retry collection rule. All four calls and both failures are retained; neither unit is clean protocol compliance or a passing runtime episode.",
+    "finding": "Both second requests had empty repair feedback; task reserved one model call but dispatched two before reporting budget exceeded."
+  },
+  "engineeringFullGate": "V229 remains queued on V227 source; no full delivery claim. Subsequent V231 fix is not covered by V229.",
+  "humanAcceptance": false,
+  "commercialAcceptance": false,
+  "holdoutBodiesInspected": false,
+  "evidenceRoot": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v230-m1-v47-source",
+  "sourceServerReleased": true,
+  "next": [
+    "Complete the explicitly budgeted targeted-repair contract before claiming autonomous opening recovery; V231 only stops blind unfunded replays and verifies explicit repair.",
+    "Use preserved Codex choice/expression/review evidence to address repeat proposals; one successful control handoff does not prove stable meaningful progression.",
+    "Continue remaining original M1-M5 requirements on a properly registered applicable source; retain all old cohorts and failure denominators."
+  ],
+  "evidenceHashes": {
+    "cohort-registration.json": "4686264d0e1c6c2b210deeb1a5ee1916f91fe496d82a0fbb73ecd524bbee261f",
+    "codex-clock-r1/clock-r1-weak-guidance.json": "1d1791aaf11651dcd7b0430255ff86caa743ed3893741ab039bd3cdfcf99cafe",
+    "codex-clock-r1/terminal-summary.json": "ce5061c721554d7c22c0e5ee793619a24a22ec7ae4d2927562d5775342ee4024",
+    "codex-clock-r1/clock-r1-weak-guidance-restoration-verified.json": "6a2599c4ecc7903ff970a0790364174e2af19c0745254c1cf9770a70c5b9d6a4",
+    "agnes-clock-r1/failure-summary-current.json": "fe6a66c9da9b9e4e85bb0877ad783701c70be0e6947a23ea8b4480d53b4f995b",
+    "agnes-clock-r1/production-restoration.json": "1d99a9d4e7d08e75814c71b6625dc3f9e6089e2733fe18d780e40fb42c17b9c3",
+    "agnes-clock-r2/failure-summary-current.json": "08d8c03361907e360f9c13ba5b176c49f8b1b783d99ebfe84846ffa2056ce62e",
+    "agnes-clock-r2/production-restoration.json": "7fb9c747f4320dcea43a47d6f9cb141aec87db2c81256fad117a3151da0d1c29"
+  }
+}

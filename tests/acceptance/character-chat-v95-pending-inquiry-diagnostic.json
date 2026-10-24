@@ -1,0 +1,60 @@
+{
+  "schema": "storyforge.chat-targeted-diagnostic-result",
+  "version": 1,
+  "recordedAt": "2026-10-15T18:29:17.612878+00:00",
+  "id": "v95-pending-inquiry-result",
+  "implementationHead": "3b87befdeb4edd846cff7896722a7d37cc174893",
+  "snapshotManifestSha256": "192021d77a60b1a9369ffbfed0d9017c040791e40021d268d585e4eeecc7831f",
+  "purpose": "Separately registered continuation of the V94 completed diagnostic prefix. Test the pending inquiry result and meaningful follow-through on an isolated child branch; not a scored M1 episode or an extension of V94 recorded limits. Original evidence remains immutable.",
+  "countsInM1": false,
+  "qualityAccepted": false,
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v95-pending-inquiry-result",
+  "preregistrationSha256": "931ff465c042f615a1e4341783c6a8218a723ecb89a5a7176e5f9ed5e2e945a0",
+  "runnerSha256": "5d94e8a40a729c66f721934e95554c2902b1bb584cc0784f864a3c303473fd38",
+  "sourceBackupSha256": "a4a5ad622491b0f423df113eab33990cf937a3a744cfeea11c900483403713f4",
+  "evidenceSha256": "29ac4ace1ee0a2d826acb6037c5040069ab30679d3717640d008e5a0945f5407",
+  "backupSha256": "755f8f32117a18ba52f385d1ab5b10f1fcdc0ebb779461f492bfd32a517828f2",
+  "model": "gpt-6.1-sol via existing Codex bridge",
+  "providerRequests": 6,
+  "playerContinueTriggers": 2,
+  "completedActions": 2,
+  "completedSituationUpdates": 1,
+  "ending": "waiting-player",
+  "usage": {
+    "totalTokens": 69246,
+    "inputTokens": 66923,
+    "cachedInputTokens": 6656,
+    "cacheWriteInputTokens": 0,
+    "outputTokens": 2323,
+    "reasoningOutputTokens": 744
+  },
+  "costUsd": null,
+  "observations": [
+    "Pending inquiry generated two bounded ordinary observations: fit requirements and wear-inspection advice, not proof about any particular part.",
+    "Actor incorporated these results while retaining unknown diagnosis and durability, and no-purchase/no-disassembly constraints.",
+    "Actor then asked whether to keep asking or stop for today; collection stopped at the genuine player decision without supplying permission."
+  ],
+  "refreshEqual": true,
+  "parentPreserved": true,
+  "sourceBackupUnchanged": true,
+  "restoration": {
+    "stem": "diagnostic",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 3,
+    "retainedFailedRuns": 0,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true
+  },
+  "providerTerminalReadback": "diagnostic-terminal-request-proof.json",
+  "serverStopped": true,
+  "limitations": [
+    "Short continuation diagnostic, not a full story, M1 episode or independent human evaluation.",
+    "No repair, suitable replacement part or durability was established.",
+    "V92 failures and unstarted denominators unchanged; Agnes and commercial comparison incomplete."
+  ]
+}

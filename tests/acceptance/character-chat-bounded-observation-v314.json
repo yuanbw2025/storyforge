@@ -1,0 +1,28 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 314,
+  "kind": "bounded-observation-engineering",
+  "at": "2026-10-22T06:32:12.579040+00:00",
+  "sourceKind": "isolated-archive-plus-recorded-patch",
+  "passed": true,
+  "scope": "Performed bounded observation is distinct from success: normal access and direct viewing may form one actual attempt, with access failure and unread contents retained. Planned-only, access-only, new actions, hidden facts and player decisions retain original guards. Same semantics cover action, options and explicit consequence revision; old prompts and run contracts preserved.",
+  "regression": {
+    "files": 21,
+    "tests": 308,
+    "log": "regression-final.log",
+    "afterFinalChange": "Only redundant boolean casts in control-handoff-wire and a stale browser version expectation changed afterwards; affected control paths and frozen prompts rechecked: 4 files,57 tests. Counts overlap and are not added."
+  },
+  "browser": {
+    "files": 6,
+    "tests": 20,
+    "log": "browser-final.log",
+    "automaticRetries": 0,
+    "currentSource": true
+  },
+  "realModelCalls": 0,
+  "formalM1Credit": 0,
+  "storyQualityPassed": false,
+  "receiptPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v314-bounded-observation/engineering.json",
+  "receiptSha256": "1d93a6c66ea178593c4b08adb75f092124d4eea9c68fdb2507f06700cd48499a",
+  "integration": "Pending frozen worktree validation; V316 contains this patch."
+}

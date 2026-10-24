@@ -1,0 +1,133 @@
+{
+  "schema": "storyforge.character-chat-multistep-episode-evidence",
+  "version": 1,
+  "label": "V112 complete development episode stopped by speech/physical-observation review mismatch",
+  "snapshot": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "0b107a60180df809e3814371599b3bc936e61f2f",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v111-real-m5deujwc/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v111-real-m5deujwc/manifest.json",
+    "manifestSha256": "e533880503eb3d6d985680cb955b2a657f0472f065900dbc9d456f4b5c297b58",
+    "files": 3456
+  },
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v112-multistep-episode",
+  "files": {
+    "contract-counterfactual.json": "081b12e5d6ace6d61b099c39d9a6188c4ecffa3a424f3be9f47f2b8bad12d2bf",
+    "contract-counterfactual.mjs": "66c0eb46226d9a849b57eb789c7167f76492cdb2db0c85a78fad113e2416ddf1",
+    "inn-multistep-weak-guidance-backup.json": "8c4326852ee0a63889c53a6d265c035a804c81ee14f095c54063ab29ad9db340",
+    "inn-multistep-weak-guidance-progress.json": "881c4de75edae154aaae397843dd1817cb0452a6ec4f432dab13fbedb680e6c2",
+    "inn-multistep-weak-guidance-terminal-request-proof.json": "ad1def2a564957f0375f351f75b398382d1ac8c24c495fa82c6d553240a7ce1a",
+    "inn-multistep-weak-guidance.json": "4a6800ec93184faeacdb8fc7036ee8399450d1a73b343a22330db1dc1b76bb81",
+    "input-cost-audit.json": "4f7704c407cf81a3b3d733f31843d7f0a698d62d4531fb55e7132e291822cdfd",
+    "opening-opportunity-audit.json": "b7c4a280351cc8f3ce73358f966d9702fde6f154a19cbfcb36c900ed50511183",
+    "prepared.json": "77e1c98625d587bb5699051cc05c63240cbd69bd857beca111dde4f0988ff1e1",
+    "preregistration.json": "0fae93636577b93eff397908398238eb26664a85aa819e5865973183c0bdd03f",
+    "restoration-verified.json": "66894604cb6fd3c607b418017b167c02fe0a99e388353c8bf7cc0dce1c11a72d",
+    "restoration.mjs": "a43104457455d1b9e5716a94f8a05496c0aeac8d87cc33245569e4ef5789e48c",
+    "runner.mjs": "d0cdb23261db9dff6f6b25c9d6107fe827f38e8ddb5008ca34240cb4ae522ae6",
+    "transport-progress.json": "6180d14b593b7eb886e96b2d24c79869be0895369a07082fd1878a7f449ad125",
+    "usage-ledger.json": "79dba71d3cbf61df9a3d034e52f57672eb2fb470af52c33fda7c231beaa48b79"
+  },
+  "registration": {
+    "countsInM1": false,
+    "plannedEpisodes": 1,
+    "holdoutsInspected": false,
+    "sameOriginalSourceAndDiscoveryConditions": true,
+    "releaseHash": "b854e30f564918ea15cf32114ed11ea6357463ff9a9520022df5e7e2a2097a21",
+    "pacing": "Explicit3 after original one-action opening; no runtime permission retrofit",
+    "player": "Five continue inputs using public visible dialogue only, no hints or player messages"
+  },
+  "collection": {
+    "started": 1,
+    "failed": 1,
+    "narrativeAccepted": 0,
+    "humanScored": 0,
+    "playerOpportunities": 5,
+    "firstBadOutcomeRetained": true,
+    "repairOrRetry": false
+  },
+  "realModel": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "requests": 38,
+    "completedRequests": 38,
+    "runtimeTokens": 520255,
+    "inputTokens": 503465,
+    "priorSharedPreparationAndProductionTokens": 127721,
+    "totalIncludingPreparationOnce": 647976,
+    "costUsd": null,
+    "terminalReadbacksEqual": true
+  },
+  "runtime": {
+    "completedRuns": 18,
+    "failedRuns": 1,
+    "committedActorActions": 9,
+    "situationFacts": 26,
+    "trace": "Record known information, ring/call, leave a note, inspect and return public register, inspect rear door, inspect marked goods table. Several bounded negative results lead to different methods; no original truth discovered.",
+    "finalRejectedAction": "speak: call publicly for eyewitnesses, no physical action or claimed answer; newFacts empty; ordinary bounded situationRequest.",
+    "rejectedChecks": [
+      "consequences",
+      "meaningful-direction"
+    ],
+    "reviewReason": "Reviewer demands completed investigation newFact for an actual spoken question and treats its absence as invalid two-stage investigation.",
+    "truthUnitsDiscovered": 0,
+    "inquiryResults": 0,
+    "worldUnchanged": true
+  },
+  "counterfactual": {
+    "code": "0b107a60180df809e3814371599b3bc936e61f2f",
+    "modelCalls": 0,
+    "persisted": false,
+    "result": {
+      "purePreviewOnly": true,
+      "originalAccepted": true,
+      "questionRetainedAsActualMessage": true,
+      "pendingReferencesActualQuestion": true,
+      "factsUnchanged": true,
+      "addedFactError": "Error: [chat-action] 意图或等待选择不能写成已完成后果",
+      "observationPurposeError": "Error: [chat-action] 观察结果请求必须绑定本次实际完成并登记的观察事实",
+      "sourceStateUnchanged": true
+    }
+  },
+  "contractAudit": {
+    "generation": "CHAT_ACTION_KIND_RULE_V1 explicitly allows speak + false for a question to non-player, without new completed facts or a prewritten response.",
+    "deterministic": "narrative-actions.ts rejects newFacts unless kind=complete and not waiting. Pure preview of exact failed action retains actual message and pending source event, with facts unchanged.",
+    "inquiry": "narrative-inquiry.ts binds question to actual character message, not a duplicate investigation fact; actual respondent and answer still need separate evidence. Public calling does not create a respondent.",
+    "reviewGap": "Generic two-stage investigation wording is present for discovery-capable state and conflates spoken inquiry with physical observation. Correct scope and preserve all six independent checks, legacy binding bytes and failed response.",
+    "notAFix": "Counterfactual was pure in-memory preview; no adoption, retry, source mutation or model call."
+  },
+  "restoration": {
+    "at": "2026-10-15T23:06:44.622Z",
+    "results": [
+      {
+        "stem": "inn-multistep-weak-guidance",
+        "runStatusesPreserved": true,
+        "verifiedCompletedHistories": 18,
+        "retainedFailedRuns": 1,
+        "resumableRuns": 0,
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      }
+    ]
+  },
+  "inputCostAudit": "Actual characters measured separately from usage tokens. Role system instructions reach11152characters. Full original source constraints are retained once per source fragment in this representation; no savings or bridge overhead claimed.",
+  "openingOpportunityAudit": "Opening review mentions questioning duty staff but quoted evidence establishes paper/pen and public inspection, not a currently present respondent. This is an audit point, not proof that every goal must be guaranteed or this episode is impossible.",
+  "next": [
+    "Version action and options review to distinguish actual speech from physical observation; do not make speak invent a new fact. Cover known respondent and public call positives, physical-action/secret/unknown-request negatives, old prompt hashes and portable histories.",
+    "Retain V112 failure and counts; any fixed-code replay or new episode must be separately registered.",
+    "After the contract fix, continue full weak-guidance evaluation of useful consequences, opportunity grounding and closure, not merely number of actions.",
+    "Final current-code full CI/E2E remain pending; Agnes, human, holdout and commercial gates remain open."
+  ],
+  "priorCohortHashes": {
+    "character-chat-m1-cohort-v77.json": "98b3dea026d14e21be049773a65dffef2dfee4ad5c9284cc0cbb7c41ac672eb3",
+    "character-chat-m1-cohort-v89.json": "9cc915bb35d9576b9550b65536d8464ccb5b3c3b32ebd38c02e4b33b7c098d39",
+    "character-chat-m1-cohort-v90.json": "41d85e4b76ddeacf6efd0a45a84eeef7999c314122e9a8c2395a132cdce8bc05",
+    "character-chat-m1-cohort-v92.json": "1c715d3aea56f08968824a01debad127468de4b3d8d38d283eefb67ef717c033",
+    "character-chat-m1-cohort-v97.json": "60fa37522a117b60ec87724ad0a8cd4a58f05dc3c84af0f27e9d7ff7b9a09844"
+  },
+  "goalStatus": "active"
+}

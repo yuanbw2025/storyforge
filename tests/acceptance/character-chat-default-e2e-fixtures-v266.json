@@ -1,0 +1,116 @@
+{
+  "status": "fixtures-corrected-retest-queued",
+  "at": "2026-10-20T12:25:44.739829+00:00",
+  "source": {
+    "at": "2026-10-20T12:24:25.090998+00:00",
+    "root": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v266-default-e2e-fixtures/source",
+    "snapshotTree": "5b90aaacfad689b80a2349d94dfcc8b1ce7e8557",
+    "featureBaseHead": "2a2aae10621c93f03cef8235a4ca8b66cd7c92aa",
+    "manifestSha256": "92f35cb15486b8480105ae6a810a3d2a95091d2324ce9fc71fbf6bf05a5db149",
+    "files": 3820,
+    "baselineManifest": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v264-bounded-story-pacing/browser-r2/manifest.json",
+    "baselineManifestSha256": "b88185a0aab5a63d8b0eca4e0ba4c3212a9737916c772def8eadcf28d8bb5d80",
+    "exactChangedFiles": [
+      "tests/e2e/character-chat-integration.spec.ts",
+      "tests/e2e/character-chat-memory-reconciliation-contract.spec.ts"
+    ],
+    "applicationBytesUnchanged": true
+  },
+  "audit": {
+    "at": "2026-10-20T12:24:25.187747+00:00",
+    "originalEvidence": [
+      {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/source/test-results/character-chat-integration-c767a-reply-or-coordinator-secret-chromium/error-context.md",
+        "sha256": "691b923c79863f971ea8445c1a40986ab61d6fe0068d4f075c31b358363e7727"
+      },
+      {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/source/test-results/character-chat-integration-c767a-reply-or-coordinator-secret-chromium/trace.zip",
+        "sha256": "963625a95ea62120d0049c8b0c881a9a351de7fffebc81d6d385908a8d23160a"
+      },
+      {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/source/test-results/character-chat-memory-reco-504a9-ches-without-changing-facts-chromium/error-context.md",
+        "sha256": "9d63736719ce86f7f812221fae486236d73124df99b09729add8c32f4123e94d"
+      },
+      {
+        "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/source/test-results/character-chat-memory-reco-504a9-ches-without-changing-facts-chromium/trace.zip",
+        "sha256": "7ec43efd1038bdf0f46919fd6d9ed6a48872d9a523de70127a90db54c90288c5"
+      }
+    ],
+    "changes": [
+      "Wrap only the injected action in the current requested outcome envelope, preserving the deliberately malformed review, refusal text and no-secret assertions.",
+      "Expect current review-v34 while retaining branch/import/reload and exact state-equality assertions."
+    ],
+    "applicationChanged": false,
+    "originalFailureRetained": true,
+    "retestStatus": "not-started"
+  },
+  "lint": {
+    "exitCode": 0,
+    "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v266-default-e2e-fixtures/lint.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "focusedDelivery": {
+    "status": "queued",
+    "sessionId": 4209,
+    "script": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v266-default-e2e-fixtures/run_delivery.py",
+    "includesV264PacingAndV261Sources": true
+  },
+  "modelCalls": 0,
+  "fullCI": false,
+  "fullE2E": false,
+  "formalM1Credit": false,
+  "qualityAccepted": false,
+  "localEvidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v266-default-e2e-fixtures",
+  "baselineFullValidation": {
+    "receipt": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/full-delivery-receipt.json",
+    "receiptSha256": "d324f51eb5253c0b6f3b6ec65ecfe79c681cfe3c607aad0f0fe1bdda2978f6ed",
+    "sourceUnchanged": true,
+    "ci": {
+      "stage": "full-ci",
+      "command": [
+        "npm",
+        "run",
+        "ci"
+      ],
+      "exitCode": 0,
+      "startedAt": 1792494671.216979,
+      "completedAt": 1792497501.927626,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/logs/full-ci.log",
+      "sha256": "bb99f61a7eab9bc13651cc064a9132af46d7020ee0fcae98b110b59cf792ea2d"
+    },
+    "e2e": {
+      "stage": "full-e2e",
+      "command": [
+        "npm",
+        "run",
+        "ci:e2e"
+      ],
+      "exitCode": 1,
+      "startedAt": 1792497501.9290261,
+      "completedAt": 1792501683.352632,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v259-scene-person-boundary/browser-r2/logs/full-e2e.log",
+      "sha256": "f9760c4b21322bffbd77e76f97bd7f14475ead8b10978b9dcce11b3a4f9870db"
+    },
+    "passedTests": 430,
+    "failedTests": 2,
+    "skippedTests": 4,
+    "skipCases": [
+      "-  190 [chromium] › tests/e2e/client-support.spec.ts:41:1 › packaged portable consent precedes analytics and survives reload",
+      "-  191 [chromium] › tests/e2e/client-support.spec.ts:67:2 › packaged narrow-screen unified agreement permits offline entry without separate controls",
+      "-  357 [chromium] › tests/e2e/plugin-workshop.spec.ts:130:1 › production build loads shared React plugins under CSP without unsafe-eval",
+      "-  358 [chromium] › tests/e2e/plugin-workshop.spec.ts:147:1 › installed plugins work offline through the production PWA after a cold navigation"
+    ],
+    "failures": "Only the two previously diagnosed stale fixtures; original traces preserved. V266 retest still pending.",
+    "scope": "V259 frozen source. Does not certify V261/V264/V266 or the upcoming main integration."
+  },
+  "currentExecution": {
+    "status": "superseded-before-start",
+    "at": "2026-10-20T13:50:11.468338+00:00",
+    "replacement": "V268 integrated-main source",
+    "queuePid": 2216,
+    "originalSourcePreserved": true,
+    "originalRunnerSha256": "709e77950c6a7a706a151c9dca245335cbe06c7f83f4ffc15a0164c89aea5c5e",
+    "redirectEvidence": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v266-default-e2e-fixtures/queue-redirect-v268.json",
+    "noOriginalChecksStarted": true
+  }
+}

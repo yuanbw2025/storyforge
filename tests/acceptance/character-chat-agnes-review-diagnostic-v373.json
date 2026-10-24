@@ -1,0 +1,37 @@
+{
+  "version": 373,
+  "recordedAt": "2026-10-24T04:30:13.416703+00:00",
+  "status": "evaluation-only-review-rejected",
+  "purpose": "One comparison using existing Agnes catalog candidate agnes-3.0-flash. Only model changes from V369; original messages, output schema, temperature, max output and plain format stay identical. Does not switch the primary profile, retry historical production or count toward M1.",
+  "provider": "agnes",
+  "model": "agnes-3.0-flash",
+  "sourceValidatorSha256": "447e75be2039b6943f83aecf86542a7e0fa9f8492391016db9874bedeb26e2c2",
+  "result": {
+    "requests": 1,
+    "httpStatus": 200,
+    "finishReason": "stop",
+    "durationMs": 41861,
+    "observedTokens": 14330,
+    "plainJsonAccepted": true,
+    "wireSchemaAccepted": true,
+    "productSemanticReviewAccepted": false,
+    "failure": "One reference combined non-contiguous source excerpts.",
+    "primaryProfileChanged": false,
+    "modelCallsDuringValidation": 0
+  },
+  "evidenceHashes": {
+    "preregistration.json": "7d51abb8394162c6b7fe25b9462d059cd356f2ce10137c8fd591143f3b7e7935",
+    "request.json": "b7ad6949dcccf9a4565b2964c2458f4338ab0a7f0e019a9415801d015cc81a99",
+    "response.json": "e8050127f88957902674b750533872bea293f0a69f7b0a2a68e905e92e41b8e2",
+    "receipt.json": "27da94e53bde2b0813f75e4a4ccfa4e2af09baaeafc27dc8d051a39c489f7d4d",
+    "validation-final.json": "8cc7fea64c5e7f7da7abb8c9c5e67f7a602ac55b46aadf0a06012291a69f668c"
+  },
+  "claims": {
+    "noProductWrites": true,
+    "formalM1Credit": false,
+    "m1Passed": false,
+    "commercialReady": false,
+    "quotaFailure": false
+  },
+  "validationCorrection": "The initial validator inherited a hard-coded plain-JSON=false flag from V369. A zero-call recheck computes that flag from the retained bytes; both validations reject the same discontinuous quote."
+}

@@ -1,0 +1,196 @@
+{
+  "schema": "storyforge.character-chat-development-evidence",
+  "version": 1,
+  "increment": "V139",
+  "baseCommit": "535a0d34",
+  "boundary": {
+    "product": "character-interaction",
+    "stage": "S3 runtime",
+    "owner": "existing instance events and message audience",
+    "worldWrites": false,
+    "newTables": false,
+    "newAIWritableFields": false,
+    "newModelCalls": 0
+  },
+  "implementationSha256": {
+    "src/lib/character-interaction/runtime.ts": "eed801c1d488c24e84a0cbd32d4239b2e868435a02544d3eaf6cdbbbfa841560",
+    "src/lib/character-interaction/runtime-commands.ts": "5390dc070ceecb7202ba6206a887ef165d7c907fcdd986144e268c865d1ca1e8",
+    "tests/regression/R-CHAT-06-player-audience.test.ts": "5f4f6468240a00347be72cd4420fb551e3b541611904aa3f14b1e690d1d108cf",
+    "tests/regression/R-CHAT-03-history-edit.test.ts": "984b4c01fe92139b1758ede94245605d97d18e9d6749484b8064b35f2313fd0a",
+    "tests/e2e/character-chat-player-audience.spec.ts": "2369e74d14a12c3cab82ee75956359cd277539bfc8bfbd9b0db77fb40044c82a",
+    "tests/e2e/character-chat-history-edit.spec.ts": "78721fea2d23cce9fa27a652c9abb6c8200e2852209a13a79ad6c78111370650"
+  },
+  "behavior": [
+    "New narrative player events bind playerAudienceVersion=1 and freeze actual current listeners.",
+    "Explicit absent recipients reject the entire message. Returning roles do not gain old absent dialogue.",
+    "Private audiences remain private through editing, nested branches, parent deletion and portable restore.",
+    "Unversioned events keep original null/public semantics. Exact old-command retries preserve original payload binding.",
+    "Only character-interaction narrative sessions receive the new event marker; other products retain their command path."
+  ],
+  "validation": {
+    "focused": {
+      "files": 4,
+      "tests": 38,
+      "log": "/tmp/storyforge-chat-v139-focused.log"
+    },
+    "associated": {
+      "files": 123,
+      "tests": 1414,
+      "passed": 1414,
+      "sourceUnchanged": true,
+      "log": "/tmp/storyforge-chat-v139-regression-final.log",
+      "receipt": "/tmp/storyforge-chat-v139-regression-final-receipt.json"
+    },
+    "e2e": {
+      "passed": 8,
+      "externalModelCalls": 0,
+      "log": "/tmp/storyforge-chat-v139-final-audience-e2e.log",
+      "coverage": [
+        "actual composer send",
+        "actual returning-role Harness input",
+        "portable restore and refresh",
+        "round-robin and natural scheduling",
+        "interruptions and waiting",
+        "private-message edit branch"
+      ]
+    },
+    "gates": [
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:architecture"
+        ],
+        "exitCode": 0,
+        "seconds": 8.46,
+        "log": "/tmp/storyforge-chat-v139-final-gate-0.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:required-tables"
+        ],
+        "exitCode": 0,
+        "seconds": 0.2,
+        "log": "/tmp/storyforge-chat-v139-final-gate-1.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:ai-manual"
+        ],
+        "exitCode": 0,
+        "seconds": 0.64,
+        "log": "/tmp/storyforge-chat-v139-final-gate-2.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:ai-entry-registry"
+        ],
+        "exitCode": 0,
+        "seconds": 1.2,
+        "log": "/tmp/storyforge-chat-v139-final-gate-3.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:docs"
+        ],
+        "exitCode": 0,
+        "seconds": 0.81,
+        "log": "/tmp/storyforge-chat-v139-final-gate-4.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:roadmap"
+        ],
+        "exitCode": 0,
+        "seconds": 0.21,
+        "log": "/tmp/storyforge-chat-v139-final-gate-5.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:project-metrics"
+        ],
+        "exitCode": 0,
+        "seconds": 0.72,
+        "log": "/tmp/storyforge-chat-v139-final-gate-6.log"
+      },
+      {
+        "command": [
+          "npx",
+          "tsc",
+          "--noEmit"
+        ],
+        "exitCode": 0,
+        "seconds": 54.13,
+        "log": "/tmp/storyforge-chat-v139-final-gate-7.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "lint"
+        ],
+        "exitCode": 0,
+        "seconds": 34.56,
+        "log": "/tmp/storyforge-chat-v139-final-gate-8.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "exitCode": 0,
+        "seconds": 90.14,
+        "log": "/tmp/storyforge-chat-v139-final-gate-9.log"
+      },
+      {
+        "command": [
+          "npm",
+          "run",
+          "check:bundle-size"
+        ],
+        "exitCode": 0,
+        "seconds": 0.57,
+        "log": "/tmp/storyforge-chat-v139-final-gate-10.log"
+      }
+    ],
+    "fullCI": "queued after original native1000, using the final committed snapshot",
+    "fullE2E": "queued after fullCI, using the same committed snapshot",
+    "relationshipE2EReadback": {
+      "sourceCodeCommit": "6f1e31d415e51ff6e7028c831800f5607414460a",
+      "passed": 1,
+      "widths": [
+        390,
+        1440
+      ],
+      "log": "/tmp/storyforge-chat-v139-relationship-e2e.log",
+      "note": "Rechecked original causes, exact dialogue, portable restore, actor/review input and no extra requests after the player-audience change."
+    }
+  },
+  "retainedFailure": {
+    "log": "/tmp/storyforge-chat-v139-regression.log",
+    "filesPassed": 122,
+    "filesFailed": 1,
+    "testsPassed": 1413,
+    "testsFailed": 1,
+    "sourceUnchanged": true,
+    "cause": "Old private-message edit assertion expected only guard; new explicit audience also includes the speaking player. Updated exact expected audience, keeping the private recipient constraint."
+  },
+  "limits": [
+    "Old messages with no audience version are not retroactively interpreted or repaired.",
+    "This does not deliver the complete participant join/leave UI or validate multi-role story quality.",
+    "Human scoring deferred by author; commercial acceptance remains open."
+  ]
+}

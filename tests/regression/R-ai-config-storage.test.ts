@@ -186,6 +186,8 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     expect(PROVIDER_PRESETS.agnes?.baseUrl).toBe('https://apihub.agnes-ai.com/v1')
     expect(PROVIDER_PRESETS.agnes?.model).toBe('agnes-2.5-flash')
     expect(PROVIDER_MODELS.agnes?.map(model => model.value)).toEqual([
+      'agnes-3.0-flash',
+      'agnes-3.0-pro',
       'agnes-2.5-flash',
       'agnes-2.5-pro',
       'agnes-2.5-pro-alpha',
@@ -206,6 +208,29 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     useAIConfigStore.getState().switchProvider('agnes')
     expect(useAIConfigStore.getState().config.baseUrl).toBe('https://apihub.agnes-ai.com/v1')
     expect(useAIConfigStore.getState().config.model).toBe('agnes-2.5-flash')
+  })
+
+  it.each(['agnes-3.0-flash', 'agnes-3.0-pro'])('加载、应用预设及刷新保留已选 %s，不静默降回 2.5', async model => {
+    const config = {provider: 'agnes', model, baseUrl: 'https://apihub.agnes-ai.com/v1', apiKey: '', temperature: 0.2, maxTokens: 8000}
+    const savedConfig = JSON.stringify(config)
+    const savedPresets = JSON.stringify([{id: 'agnes-current', name: '当前 Agnes', config, createdAt: 1}])
+    localStorage.setItem(CONFIG_KEY, savedConfig)
+    localStorage.setItem('storyforge-ai-presets', savedPresets)
+    localStorage.setItem(REMEMBER_KEY, 'false')
+    sessionStorage.setItem(SESSION_KEY, 'test-only-session-key')
+
+    const store = await freshStore()
+    expect(store.getState().config.model).toBe(model)
+    expect(store.getState().presets[0].config.model).toBe(model)
+    expect(localStorage.getItem(CONFIG_KEY)).toBe(savedConfig)
+    expect(localStorage.getItem('storyforge-ai-presets')).toBe(savedPresets)
+    store.getState().setConfig({temperature: 0.3})
+    expect(JSON.parse(localStorage.getItem(CONFIG_KEY)!).model).toBe(model)
+    expect(JSON.parse(localStorage.getItem(CONFIG_KEY)!).apiKey).toBe('')
+    store.getState().switchProvider('deepseek')
+    store.getState().applyPreset('agnes-current')
+    expect(store.getState().config.model).toBe(model)
+    expect((await freshStore()).getState().config.model).toBe(model)
   })
 
   it.each(['agnes-2.5-pro-beta', 'agnes-3.0-flash', 'agnes-3.0-pro'])('%s 在保存和刷新后保持原型号，未登记型号仍按原规则处理', async model => {

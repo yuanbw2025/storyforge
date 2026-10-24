@@ -1,0 +1,58 @@
+{
+  "at": "2026-10-20T10:06:44.329Z",
+  "status": "terminal-runtime-failed",
+  "sourceUnchanged": true,
+  "sourceSnapshotManifestSha256": "a1b660aa08f5649b3dd284d009f2b1b4e684576094bae5242839188be2e83a62",
+  "provider": "codex",
+  "model": "gpt-6.1-sol",
+  "requests": 17,
+  "requestsByPhase": {
+    "production": 3,
+    "runtime": 14
+  },
+  "nativeRequestsCompleted": true,
+  "observedTotalTokens": 264516,
+  "costUsd": null,
+  "playerOpportunities": 3,
+  "runtimeStatuses": {
+    "completed": 4,
+    "failed": 1
+  },
+  "failedChecks": [
+    {
+      "check": "meaningful-direction",
+      "passed": false,
+      "reason": "上一轮已明确提出向收盆杂役询问亲见情况，本轮仍只重述将去询问。local-1-2已确认可以隔柜台交谈，未出现必须先另行确认方便程度的新阻碍；正文也没有实际向杂役发问。以情境请求再确认交谈条件，未实质落实已有办法。"
+    }
+  ],
+  "finding": "An existing local fact established the worker was present and could be addressed across the counter. After proposing an inquiry, the actor requested the conversation condition again instead of asking. Independent meaningful-direction review rejected the repeated preparation.",
+  "rootCauseLead": "The choice treats background-worker contact as requiring addition to the conversation roster. The input limits registered participant audiences. Whether this wording causes the failure requires a versioned correction and verification; this run alone does not prove causation.",
+  "restoration": {
+    "stem": "inn-weak-guidance",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 4,
+    "retainedFailedRuns": 1,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true,
+    "terminalReceiptBodiesRetained": true,
+    "usageEvidenceRetained": true
+  },
+  "formalM1Credit": false,
+  "qualityAccepted": false,
+  "fullCurrentEngineeringPassed": false,
+  "scope": "Bounded development observation using real adopted source units, first passing generated opening and preregistered neutral inputs; no automatic retry or repair after failure.",
+  "localEvidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v258-inn-confirmed-units-runtime/r2",
+  "evidence": {
+    "preregistration.json": "7f1e2fd86565d995ea3394389ba99cc73a78e982f654264a30367019bf1722dd",
+    "engineering-admission.json": "f33bd68e2fd8fc8955de75d590de5c1bc77e2a4bc9e1ca2c11b7204775422177",
+    "production-evidence.json": "61e8ff8de080ddddcfc92bb44d37135e63c6c013fe076a4a94e9f896913a3476",
+    "inn-weak-guidance.json": "06867ab917f94c43dd55289f753918441a9a39f41a912e17b8cdcb2e940357db",
+    "inn-weak-guidance-backup.json": "b285b739c860f80b58e9e0cbde0c19d6f91babb17a2e3131fbf5a7df036e7782",
+    "inn-weak-guidance-restoration-verified.json": "da70b9f67c5888880cb854094fa4a91335fd5ac6492abf4a80a45283da2c001e"
+  }
+}

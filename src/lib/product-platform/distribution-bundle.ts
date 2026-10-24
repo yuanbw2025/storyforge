@@ -21,7 +21,6 @@ import type {
   ProductMediaBlob,
   ProductReleaseDistributionProvenanceV1,
   ProductReleaseMarketplaceProvenanceV1,
-  ProductReleaseLocalFileProvenanceV1,
   WorkspaceScope,
 } from '../types'
 import { assertProductReleaseUnchanged } from '../product/releases'
@@ -412,6 +411,37 @@ export async function importLocalProductDistributionV2(input: {
   })
 }
 
+/** Install an explicitly selected self-contained package, without inventing a
+ * catalog entry, candidate review, license, order or entitlement. The expected
+ * product closes the caller's UI boundary before any Blob or Release write. */
+export async function importLocalProductBundleV1(input: {
+  scope: WorkspaceScope
+  bundle: unknown
+  productType: ProductRelease['productType']
+}): Promise<ProductRelease> {
+  const bundle = structuredClone(input.bundle)
+  const expectedProduct = input.productType
+  const scope = await resolveScope({ scope: { ...input.scope } })
+  const verified = await verifiedBundle(bundle)
+  if (verified.bundle.productRelease.manifest.productType !== expectedProduct) {
+    throw new Error('[distribution] 本地体验包与当前产品不一致')
+  }
+  return importVerifiedProductDistributionV2({
+    scope,
+    verified,
+    productionKeyPrefix: 'local-bundle',
+    labelSuffix: '本地体验包',
+    distributionProvenance: {
+      source: 'local-bundle',
+      bundleHash: verified.bundle.bundleHash,
+      originalReleaseHash: verified.bundle.productRelease.contentHash,
+      remoteCreatorIdentityVerified: false,
+      localCopyPreserved: true,
+      importedAt: Date.now(),
+    },
+  })
+}
+
 export async function listImportedProductReleasesV1(input: {
   scope: WorkspaceScope
   productType?: ProductRelease['productType']
@@ -511,9 +541,9 @@ export async function deleteImportedProductReleaseV1(input: {
 async function importVerifiedProductDistributionV2(input: {
   scope: WorkspaceScope
   verified: Awaited<ReturnType<typeof verifiedBundle>>
-  productionKeyPrefix: 'marketplace' | 'community' | 'local-file'
+  productionKeyPrefix: 'marketplace' | 'community' | 'local-file' | 'local-bundle'
   labelSuffix: string
-  distributionProvenance: ProductReleaseMarketplaceProvenanceV1 | ProductReleaseLocalFileProvenanceV1
+  distributionProvenance: ProductReleaseDistributionProvenanceV1
 }): Promise<ProductRelease> {
   const { scope, verified, distributionProvenance } = input
   const { bundle, decodedMedia } = verified
@@ -549,6 +579,20 @@ async function importVerifiedProductDistributionV2(input: {
       db.productMediaBlobs,
       db.mediaBlobObjects,
     ), async () => {
+    // Staging is outside this transaction. Another failed install or GC may
+    // reclaim an unreferenced object before we bind it. Recheck under the same
+    // write transaction as the Release and references so no dangling binding
+    // can be committed, including when OPFS deletion is still pending.
+    for (let index = 0; index < blobObjects.length; index += 1) {
+      const id = blobObjects[index].id
+      const current = id == null ? null : await db.mediaBlobObjects.get(id)
+      const { asset } = decodedMedia[index]
+      if (!current || !await assertRecordInScope(scope, 'mediaBlobObjects', current, { owner: 'work' })
+        || current.storageState !== 'ready' || current.contentHash !== asset.blobContentHash
+        || current.mimeType !== asset.mimeType || current.byteSize !== asset.byteSize) {
+        throw new Error('[distribution] 暂存媒资已变化或被回收，未安装发行版本，请重新选择原体验包')
+      }
+    }
     const manifest = bundle.productRelease.manifest
     const productKey = manifest.runtimePackage.definition.productKey
     const productionKey = manifest.productionProvenance?.productionKey
@@ -559,12 +603,24 @@ async function importVerifiedProductDistributionV2(input: {
       .first()
     if (release) {
       if (!await assertRecordInScope(scope, 'productReleases', release, { owner: 'work' })
-        || release.productType !== manifest.productType || release.productionKey !== productionKey) {
+        || release.productType !== manifest.productType || release.productionKey !== productionKey
+        || release.version !== manifest.lineage.releaseVersion) {
         throw new Error('[distribution] 已有 ProductRelease 身份与分发包冲突')
+      }
+      // A retained contentHash is not evidence that the local payload survived
+      // intact. Never overwrite damaged content or silently reuse it on reinstall.
+      let storedManifest: unknown
+      try { storedManifest = JSON.parse(release.manifestJson) }
+      catch { throw new Error('[distribution] 已有 ProductRelease 内容损坏，原存档已保留') }
+      if (canonicalProductProductionJsonV2(storedManifest) !== canonicalProductProductionJsonV2(manifest)) {
+        throw new Error('[distribution] 已有 ProductRelease 内容与分发包冲突，原存档已保留')
       }
     } else {
       const prior = (await db.productReleases.where('workId').equals(scope.workId).toArray())
         .filter(row => row.productionKey === productionKey)
+      if (prior.some(row => row.version === manifest.lineage.releaseVersion)) {
+        throw new Error('[distribution] 本作品已有同一发行版本号的不同内容，请选择另一部作品安装；原版本与存档保持不变')
+      }
       const importedAt = distributionProvenance.importedAt
       const releaseRow = stampNewRecord(scope, 'productReleases', {
         projectId: scope.projectId,
@@ -573,7 +629,9 @@ async function importVerifiedProductDistributionV2(input: {
         productionKey,
         productType: manifest.productType,
         worldReleaseId: null,
-        version: Math.max(0, ...prior.map(candidate => candidate.version)) + 1,
+        // This is a frozen release identity, not a local installation counter.
+        // Backups and lineage verification require the author's exact version.
+        version: manifest.lineage.releaseVersion,
         label: `${manifest.runtimePackage.definition.title} · ${input.labelSuffix}`,
         manifestJson: canonicalProductProductionJsonV2(manifest),
         contentHash: bundle.productRelease.contentHash,

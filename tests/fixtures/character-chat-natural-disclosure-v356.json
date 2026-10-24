@@ -1,0 +1,1421 @@
+{
+  "evidence": "Original V356 r1 failed expression; no regeneration or corrected original.",
+  "sourceHead": "99970163c5c3fc0135ab5486e5b6cae6fdef659b",
+  "rawText": "{\"outcome\":\"action\",\"action\":{\"text\":\"叶岑从柜台下的木箱里取出铜印，拿在手中，供验货取用。\\n“铜印放在柜台下的木箱里。现在取回来了，可以继续用于验货。找到的位置已经核实，但此前完整的经手经过仍不清楚，不能据此指控住客。”\",\"goalKey\":\"goal-1\",\"evidenceFactKeys\":[\"world-fact.0006\",\"local-1-counter\",\"world-fact.0004\",\"statement.keeper-disposition-12\",\"observation.box-check-1\"],\"audienceKeys\":null,\"newFacts\":[{\"factKey\":\"observation.seal-recovered-1\",\"kind\":\"observation\",\"text\":\"叶岑从柜台下的木箱里取出铜印，拿在手中，供验货取用。\",\"evidenceFactKeys\":[\"world-fact.0006\",\"local-1-counter\",\"observation.box-check-1\"],\"evidenceExcerpt\":\"叶岑从柜台下的木箱里取出铜印，拿在手中，供验货取用。\"}],\"disclosures\":[{\"factKey\":\"world-fact.0006\",\"toParticipantKeys\":[\"player\"],\"evidenceExcerpt\":\"铜印放在柜台下的木箱里。\"}],\"threadUpdates\":[{\"threadKey\":\"thread-1\",\"status\":\"resolved\",\"evidenceExcerpt\":null}],\"goalStatus\":\"fulfilled\",\"goalUpdates\":[],\"commitmentEffects\":[],\"relationshipUpdates\":[],\"nextPossibilities\":[],\"beliefUpdates\":[],\"situationRequest\":null,\"followupGoal\":null,\"threadFollowupGoal\":null,\"resumeGoal\":null,\"promiseRequest\":null,\"pauseGoal\":null,\"sceneTransition\":null,\"turnCompletion\":null,\"expressionMode\":\"self-action-performed\"},\"handoff\":null}",
+  "rawSha256": "e726b898115d901887d39f8731d2c541820802866e778f92ded0ada7e83c7ef7",
+  "response": {
+    "outcome": "action",
+    "action": {
+      "text": "叶岑从柜台下的木箱里取出铜印，拿在手中，供验货取用。\n“铜印放在柜台下的木箱里。现在取回来了，可以继续用于验货。找到的位置已经核实，但此前完整的经手经过仍不清楚，不能据此指控住客。”",
+      "goalKey": "goal-1",
+      "evidenceFactKeys": [
+        "world-fact.0006",
+        "local-1-counter",
+        "world-fact.0004",
+        "statement.keeper-disposition-12",
+        "observation.box-check-1"
+      ],
+      "audienceKeys": null,
+      "newFacts": [
+        {
+          "factKey": "observation.seal-recovered-1",
+          "kind": "observation",
+          "text": "叶岑从柜台下的木箱里取出铜印，拿在手中，供验货取用。",
+          "evidenceFactKeys": [
+            "world-fact.0006",
+            "local-1-counter",
+            "observation.box-check-1"
+          ],
+          "evidenceExcerpt": "叶岑从柜台下的木箱里取出铜印，拿在手中，供验货取用。"
+        }
+      ],
+      "disclosures": [
+        {
+          "factKey": "world-fact.0006",
+          "toParticipantKeys": [
+            "player"
+          ],
+          "evidenceExcerpt": "铜印放在柜台下的木箱里。"
+        }
+      ],
+      "threadUpdates": [
+        {
+          "threadKey": "thread-1",
+          "status": "resolved",
+          "evidenceExcerpt": null
+        }
+      ],
+      "goalStatus": "fulfilled",
+      "goalUpdates": [],
+      "commitmentEffects": [],
+      "relationshipUpdates": [],
+      "nextPossibilities": [],
+      "beliefUpdates": [],
+      "situationRequest": null,
+      "followupGoal": null,
+      "threadFollowupGoal": null,
+      "resumeGoal": null,
+      "promiseRequest": null,
+      "pauseGoal": null,
+      "sceneTransition": null,
+      "turnCompletion": null,
+      "expressionMode": "self-action-performed"
+    },
+    "handoff": null
+  },
+  "state": {
+    "version": 1,
+    "clock": 0,
+    "entities": {},
+    "memories": [],
+    "narratives": [],
+    "narrative": {
+      "schema": "storyforge.product-narrative-runtime",
+      "version": 2,
+      "moduleKind": "main",
+      "moduleTitle": "尚未检查的工作区域",
+      "sourceHash": "6862b28ecac0ae69fdc29c3ba532b8d779d2710a5571d5a2a7905e8b2e4b9830",
+      "nodes": [
+        {
+          "key": "scene-1",
+          "kind": "entry",
+          "title": "尚未检查的工作区域",
+          "summary": "驿站 · 暴雨期间",
+          "conditionJson": "{}",
+          "effectsJson": "[]",
+          "successorKeys": []
+        }
+      ],
+      "currentNodeKey": "scene-1",
+      "visitedNodeKeys": [
+        "scene-1"
+      ],
+      "availableNodeKeys": [],
+      "variables": {
+        "productAdapterCommercialReady": false,
+        "productAdapterId": "storyforge.product.character-interaction.v1"
+      },
+      "completed": false,
+      "contentHash": "6862b28ecac0ae69fdc29c3ba532b8d779d2710a5571d5a2a7905e8b2e4b9830",
+      "beats": [
+        {
+          "beatKey": "chat.setting",
+          "nodeKey": "scene-1",
+          "kind": "narration",
+          "speakerKey": null,
+          "text": "驿站 · 暴雨期间",
+          "order": 0
+        }
+      ],
+      "choices": [],
+      "visibleChoiceKeys": [],
+      "availableChoiceKeys": [],
+      "choiceHistory": [],
+      "endingKey": null,
+      "completedAtSequence": null,
+      "lastEnteredNodeSequence": 2
+    },
+    "ttrpg": null,
+    "interaction": {
+      "schema": "storyforge.character-interaction",
+      "version": 1,
+      "playerKey": "player",
+      "profiles": [
+        {
+          "participantKey": "participant.001",
+          "characterKey": "world-release:46ac7722dcd6a558c56b9ee0a50f90dc7da3e47125b9af276dd74dd1cc7af13c:characters:character:86c4d82e60f2b18e3938caf8a2ad84c9f6091100ea9150a608ed5883986627b7",
+          "name": "叶岑",
+          "roleLabel": "核心互动角色",
+          "voiceRules": "遵守已确认的身份、知识和动机；动机是意愿，不代表行动已经完成。不替玩家决定行动。\"先核实再指控\"\n作者补充：",
+          "maxMemoryEntries": 120
+        }
+      ],
+      "sceneTemplates": [
+        {
+          "sceneKey": "scene-1",
+          "title": "尚未检查的工作区域",
+          "purpose": "尚未检查的工作区域",
+          "location": "驿站",
+          "timeLabel": "暴雨期间",
+          "participantKeys": [
+            "participant.001"
+          ],
+          "publicKnowledgeKeys": [
+            "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.3",
+            "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.6",
+            "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.11"
+          ],
+          "goals": [
+            "铜印在哪里，怎样在不无据指责住客的情况下找回它？"
+          ],
+          "endingConditions": [],
+          "safetyBoundaries": [
+            "不生成未授权的露骨或仇恨内容",
+            "不替玩家决定感受或行动"
+          ],
+          "relationshipRules": [],
+          "openingNodeKey": null,
+          "endingNodeKey": null,
+          "maxTurns": 60,
+          "directorBudget": 120
+        }
+      ],
+      "activeScene": {
+        "sceneKey": "scene-1",
+        "title": "尚未检查的工作区域",
+        "purpose": "尚未检查的工作区域",
+        "location": "驿站",
+        "timeLabel": "暴雨期间",
+        "participantKeys": [
+          "participant.001"
+        ],
+        "publicKnowledgeKeys": [
+          "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.3",
+          "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.6",
+          "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.11"
+        ],
+        "goals": [
+          "铜印在哪里，怎样在不无据指责住客的情况下找回它？"
+        ],
+        "endingConditions": [],
+        "safetyBoundaries": [
+          "不生成未授权的露骨或仇恨内容",
+          "不替玩家决定感受或行动"
+        ],
+        "relationshipRules": [],
+        "openingNodeKey": null,
+        "endingNodeKey": null,
+        "maxTurns": 60,
+        "directorBudget": 120,
+        "sceneId": "scene:scene-1:b28a954d-bab6-4d62-8a5c-739f044439bc",
+        "status": "active",
+        "activeParticipantKeys": [
+          "participant.001"
+        ],
+        "startedAtSequence": 3,
+        "endedAtSequence": null,
+        "playerTurns": 3
+      },
+      "sceneHistory": [],
+      "messages": [
+        {
+          "messageId": "message:harness:19",
+          "eventSequence": 5,
+          "role": "character",
+          "speakerKey": "participant.001",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "text": "“铜印不见了，还不能据此怀疑谁。我先查验货柜台。”\n叶岑从畅通的工作入口走到柜台内侧，查看台面，随后俯身检查柜台下方的可见区域，没有移动或开启任何容器，也没有触碰旅客物品。",
+          "replyToSequence": null,
+          "supersededBySequence": null
+        },
+        {
+          "messageId": "message:harness:21",
+          "eventSequence": 7,
+          "role": "character",
+          "speakerKey": "participant.001",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "text": "叶岑转向厅内的掌柜：“掌柜，你最后一次亲眼见到铜印，是在什么时候、什么地方？你自己用过或挪动过它吗？亲历的和听来的，请分开说。”",
+          "replyToSequence": null,
+          "supersededBySequence": null
+        },
+        {
+          "messageId": "message:player:43148965-7c12-466d-96a7-d4741ec0aeda",
+          "eventSequence": 8,
+          "role": "player",
+          "playerConversation": "present",
+          "speakerKey": "player",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "text": "嗯，我在听。",
+          "replyToSequence": null,
+          "supersededBySequence": null
+        },
+        {
+          "messageId": "message:harness:22",
+          "eventSequence": 10,
+          "role": "character",
+          "speakerKey": "participant.001",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "text": "“嗯，先听掌柜怎么说。”叶岑没有催问，留意着掌柜对刚才问题的回应。",
+          "replyToSequence": 8,
+          "supersededBySequence": null
+        },
+        {
+          "messageId": "message:harness:24",
+          "eventSequence": 12,
+          "role": "character",
+          "speakerKey": "participant.001",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "text": "叶岑问掌柜：“你用完铜印后，是怎么处置的——放在了哪里，还是交给了谁？只说你明确记得的亲历；记不准的地方直说，不必猜。”",
+          "replyToSequence": 8,
+          "supersededBySequence": null
+        },
+        {
+          "messageId": "message:player:bd8b39eb-89de-4b85-b86b-3485e47f348a",
+          "eventSequence": 13,
+          "role": "player",
+          "playerConversation": "present",
+          "speakerKey": "player",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "text": "你接着说。",
+          "replyToSequence": null,
+          "supersededBySequence": null
+        },
+        {
+          "messageId": "message:harness:25",
+          "eventSequence": 15,
+          "role": "character",
+          "speakerKey": "participant.001",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "text": "叶岑应道：“好，先听掌柜答完用后的去向，再决定查哪里。”他没有重复催问，等着掌柜回应刚才的问题。",
+          "replyToSequence": 13,
+          "supersededBySequence": null
+        },
+        {
+          "messageId": "message:harness:27",
+          "eventSequence": 17,
+          "role": "character",
+          "speakerKey": "participant.001",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "text": "叶岑问掌柜：“柜台下有一个木箱。那是驿站自用的收纳箱，还是旅客寄存的物品？先确认归属，免得碰了不该碰的东西。”",
+          "replyToSequence": 13,
+          "supersededBySequence": null
+        },
+        {
+          "messageId": "message:player:8f90d08e-8d25-42a9-8914-25b004d425b2",
+          "eventSequence": 18,
+          "role": "player",
+          "playerConversation": "present",
+          "speakerKey": "player",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "text": "我想听听你的想法。",
+          "replyToSequence": null,
+          "supersededBySequence": null
+        },
+        {
+          "messageId": "message:harness:28",
+          "eventSequence": 20,
+          "role": "character",
+          "speakerKey": "participant.001",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "text": "“我的想法是先沿着工作区域的收存线索查，不把铜印不见了当成怀疑旅客的理由。掌柜说自己用后收了起来，但记不清放在哪里；这能提供查找方向，不能证明铜印现在在哪儿，更不能证明就在木箱里。”\n“所以我刚才先问箱子的归属。归属还没弄清，现在不打开它；若是旅客寄存的物品，也不在我检查驿站自用容器的职责范围内。”",
+          "replyToSequence": 18,
+          "supersededBySequence": null
+        },
+        {
+          "messageId": "message:harness:29",
+          "eventSequence": 21,
+          "role": "character",
+          "speakerKey": "participant.001",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "text": "叶岑将目光转回掌柜，留出答话的空隙，等他回答方才关于木箱归属的问题，没有伸手碰箱子。",
+          "replyToSequence": 18,
+          "supersededBySequence": null
+        },
+        {
+          "messageId": "message:harness:31",
+          "eventSequence": 24,
+          "role": "character",
+          "speakerKey": "participant.001",
+          "audienceKeys": [
+            "player",
+            "participant.001"
+          ],
+          "text": "“掌柜认得这是驿站自用的箱子，那就查这个。铜印在不在里面，要看过才知道。”\n叶岑俯身，尝试正常打开柜台下的木箱并查看开盖后直接可见的内容；遇到无法正常开启的阻碍便停手，不撬拆，也不触碰旅客物品。",
+          "replyToSequence": null,
+          "supersededBySequence": null
+        }
+      ],
+      "knowledge": [
+        {
+          "knowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.0",
+          "participantKey": "participant.001",
+          "content": "【已知资料；所属角色=participant.001；字段=/background】\"之前误判过一名旅客，因此对公开指控格外谨慎。\"",
+          "status": "known",
+          "importance": 100,
+          "sourceEventSequence": 0
+        },
+        {
+          "knowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.2",
+          "participantKey": "participant.001",
+          "content": "【目标和动机（意愿，不代表已经发生）；所属角色=participant.001；字段=/goals】\"找回铜印；避免无证据地指责住客\"",
+          "status": "known",
+          "importance": 100,
+          "sourceEventSequence": 0
+        },
+        {
+          "knowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.3",
+          "participantKey": "player",
+          "content": "【身份资料；所属角色=participant.001；字段=/identity】\"驿站守卫\"",
+          "status": "known",
+          "importance": 100,
+          "sourceEventSequence": 3
+        },
+        {
+          "knowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.3",
+          "participantKey": "participant.001",
+          "content": "【身份资料；所属角色=participant.001；字段=/identity】\"驿站守卫\"",
+          "status": "known",
+          "importance": 100,
+          "sourceEventSequence": 3
+        },
+        {
+          "knowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.5",
+          "participantKey": "participant.001",
+          "content": "【目标和动机（意愿，不代表已经发生）；所属角色=participant.001；字段=/motivation】\"未经确认的角色猜测：铜印可能被人借用，但目前没有证据。\"",
+          "status": "known",
+          "importance": 100,
+          "sourceEventSequence": 0
+        },
+        {
+          "knowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.6",
+          "participantKey": "player",
+          "content": "【身份资料；所属角色=participant.001；字段=/name】\"叶岑\"",
+          "status": "known",
+          "importance": 100,
+          "sourceEventSequence": 3
+        },
+        {
+          "knowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.6",
+          "participantKey": "participant.001",
+          "content": "【身份资料；所属角色=participant.001；字段=/name】\"叶岑\"",
+          "status": "known",
+          "importance": 100,
+          "sourceEventSequence": 3
+        },
+        {
+          "knowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.8",
+          "participantKey": "participant.001",
+          "content": "【语言资料；所属角色=participant.001；字段=/personality】\"先核实再指控\"",
+          "status": "known",
+          "importance": 100,
+          "sourceEventSequence": 0
+        },
+        {
+          "knowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.11",
+          "participantKey": "player",
+          "content": "【已知资料；所属角色=participant.001；字段=/shortDescription】\"驿站丢失了用于开门验货的铜印。停电期间后门没有上锁。山路被倒树挡住，屋内暂时安全。\"",
+          "status": "known",
+          "importance": 100,
+          "sourceEventSequence": 3
+        },
+        {
+          "knowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.11",
+          "participantKey": "participant.001",
+          "content": "【已知资料；所属角色=participant.001；字段=/shortDescription】\"驿站丢失了用于开门验货的铜印。停电期间后门没有上锁。山路被倒树挡住，屋内暂时安全。\"",
+          "status": "known",
+          "importance": 100,
+          "sourceEventSequence": 3
+        }
+      ],
+      "memories": [],
+      "relationships": [
+        {
+          "fromParticipantKey": "participant.001",
+          "toParticipantKey": "player",
+          "dimensionKey": "trust",
+          "label": "信任",
+          "minimum": -100,
+          "maximum": 100,
+          "value": 0,
+          "largeChangeThreshold": 20,
+          "lastChangedSequence": 0
+        },
+        {
+          "fromParticipantKey": "participant.001",
+          "toParticipantKey": "player",
+          "dimensionKey": "respect",
+          "label": "尊重",
+          "minimum": -100,
+          "maximum": 100,
+          "value": 0,
+          "largeChangeThreshold": 20,
+          "lastChangedSequence": 0
+        }
+      ],
+      "relationshipHistory": [],
+      "threads": [],
+      "totalPlayerTurns": 3,
+      "remainingDirectorBudget": 83,
+      "chatNarrative": {
+        "schema": "storyforge.chat-narrative-state",
+        "version": 1,
+        "worldReleaseHash": "46ac7722dcd6a558c56b9ee0a50f90dc7da3e47125b9af276dd74dd1cc7af13c",
+        "persona": {
+          "description": "与守卫被暴雨困在驿站的旅人；没有同意搜查个人物品或代替自己作决定。",
+          "name": "玩家",
+          "origin": "product-private",
+          "playerKey": "player"
+        },
+        "permissions": {
+          "allowActorSituationExpansion": true,
+          "allowActorThreadFollowups": true,
+          "allowInquiryResults": true,
+          "allowPlayerFollowupSituations": true,
+          "allowedNewFactKinds": [
+            "observation",
+            "object",
+            "temporary-character"
+          ],
+          "intensity": "everyday",
+          "maxActionCharacters": 1800,
+          "maxActionsPerTrigger": 2,
+          "maxActiveThreads": 2,
+          "maxDiscoveriesPerSituation": 1,
+          "maxNewFactsPerAction": 2,
+          "mode": "story",
+          "triggers": [
+            "scene-start",
+            "player-response",
+            "continue",
+            "return",
+            "player-seed"
+          ]
+        },
+        "situation": {
+          "beliefs": [],
+          "facts": [
+            {
+              "audienceKeys": [
+                "participant.001"
+              ],
+              "factKey": "world-fact.0001",
+              "origin": "reviewed-world",
+              "sourceEventSequence": 0,
+              "sourceKnowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.0",
+              "text": "\"之前误判过一名旅客，因此对公开指控格外谨慎。\""
+            },
+            {
+              "audienceKeys": [
+                "player",
+                "participant.001"
+              ],
+              "factKey": "world-fact.0002",
+              "origin": "reviewed-world",
+              "sourceEventSequence": 0,
+              "sourceKnowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.3",
+              "text": "\"驿站守卫\""
+            },
+            {
+              "audienceKeys": [
+                "player",
+                "participant.001"
+              ],
+              "factKey": "world-fact.0003",
+              "origin": "reviewed-world",
+              "sourceEventSequence": 0,
+              "sourceKnowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.6",
+              "text": "\"叶岑\""
+            },
+            {
+              "audienceKeys": [
+                "player",
+                "participant.001"
+              ],
+              "factKey": "world-fact.0004",
+              "origin": "reviewed-world",
+              "sourceEventSequence": 0,
+              "sourceKnowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.11",
+              "text": "\"驿站丢失了用于开门验货的铜印。停电期间后门没有上锁。山路被倒树挡住，屋内暂时安全。\""
+            },
+            {
+              "audienceKeys": [
+                "participant.001",
+                "player"
+              ],
+              "discovery": {
+                "actorKeys": [
+                  "participant.001"
+                ],
+                "condition": "角色实际查看柜台下方并看清木箱本身，确认柜台下存在该木箱；未看到或仅打算查看不能成立。本次只确认容器存在与位置，不确认箱内物品、经手者或用途。",
+                "prerequisiteFactKeys": [
+                  "world-fact.0004"
+                ],
+                "sceneKey": "scene-1"
+              },
+              "factKey": "world-fact.0005",
+              "origin": "reviewed-world",
+              "sourceEventSequence": 0,
+              "sourceKnowledgeKey": "chat-unit.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.20.box-location",
+              "text": "\"柜台下有一个木箱。\""
+            },
+            {
+              "audienceKeys": [
+                "participant.001"
+              ],
+              "discovery": {
+                "actorKeys": [
+                  "participant.001"
+                ],
+                "condition": "角色实际打开并检查柜台下木箱，核对其中的铜印；本次发现只确认位置，不确认经手者和用途。",
+                "prerequisiteFactKeys": [
+                  "world-fact.0004"
+                ],
+                "sceneKey": "scene-1"
+              },
+              "factKey": "world-fact.0006",
+              "origin": "reviewed-world",
+              "sourceEventSequence": 0,
+              "sourceKnowledgeKey": "chat-unit.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.20.seal-location",
+              "text": "\"铜印放在柜台下的木箱里。\""
+            },
+            {
+              "audienceKeys": [
+                "player",
+                "participant.001"
+              ],
+              "discovery": {
+                "actorKeys": [
+                  "participant.001"
+                ],
+                "condition": "在已有在场与接触依据后，角色实际询问掌柜并取得其亲自拿走铜印的明确原话说明；本次发现只确认经手者，不确认用途或当前位置。",
+                "prerequisiteFactKeys": [
+                  "world-fact.0004"
+                ],
+                "sceneKey": "scene-1"
+              },
+              "factKey": "world-fact.0007",
+              "origin": "reviewed-world",
+              "sourceEventSequence": 0,
+              "sourceKnowledgeKey": "chat-unit.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.20.seal-handler",
+              "text": "\"铜印被掌柜拿去。\""
+            },
+            {
+              "audienceKeys": [],
+              "discovery": {
+                "actorKeys": [
+                  "participant.001"
+                ],
+                "condition": "在已有在场与接触依据后，角色实际询问掌柜并取得其拿走铜印用于拓印破损通行单的明确原话说明；本次发现只确认用途，不确认当前位置。",
+                "prerequisiteFactKeys": [
+                  "world-fact.0004"
+                ],
+                "sceneKey": "scene-1"
+              },
+              "factKey": "world-fact.0008",
+              "origin": "reviewed-world",
+              "sourceEventSequence": 0,
+              "sourceKnowledgeKey": "chat-unit.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.20.seal-purpose",
+              "text": "\"掌柜拿去铜印的用途是拓印破损的通行单。\""
+            },
+            {
+              "audienceKeys": [
+                "player",
+                "participant.001"
+              ],
+              "factKey": "local-1-counter",
+              "origin": "author-private",
+              "sourceEventSequence": 0,
+              "sourceKnowledgeKey": null,
+              "text": "验货柜台是驿站公用工作台，柜台侧面的工作入口畅通。叶岑的守卫职责允许他检查柜台台面、下方及其中驿站所有的普通收纳容器，但不包括旅客寄存或随身的物品；柜台下方尚未查看。"
+            },
+            {
+              "audienceKeys": [
+                "player",
+                "participant.001"
+              ],
+              "factKey": "local-1-keeper",
+              "origin": "author-private",
+              "sourceEventSequence": 0,
+              "sourceKnowledgeKey": null,
+              "text": "叶岑认识的掌柜正在厅内清点驿站的备用灯具，处于可以正常交谈的距离；尚未就铜印向其询问，也不知道他会如何回答。"
+            },
+            {
+              "audienceKeys": [
+                "player",
+                "participant.001"
+              ],
+              "factKey": "local-1-boundary",
+              "origin": "author-private",
+              "sourceEventSequence": 0,
+              "sourceKnowledgeKey": null,
+              "text": "当前尚未取得玩家同意搜查其个人物品；检查驿站自有工作区域不需要玩家交出行李或参与。"
+            },
+            {
+              "factKey": "observation.counter-check-1",
+              "text": "叶岑从畅通的工作入口走到柜台内侧，查看台面，随后俯身检查柜台下方的可见区域，没有移动或开启任何容器，也没有触碰旅客物品。",
+              "audienceKeys": [
+                "player",
+                "participant.001"
+              ],
+              "origin": "runtime-consequence",
+              "sourceKnowledgeKey": null,
+              "sourceEventSequence": 5
+            },
+            {
+              "factKey": "statement.keeper-seal-7",
+              "text": "【掌柜的实际答复；只证明说过这些话，陈述内容仍须独立核实】我最后一次亲眼见到铜印是在验货柜台这边，具体时辰没留意，报不准。铜印是我拿走的，也用过，这是我亲手做的，不是听来的。至于它现在的位置，我没有重新查看，不能只凭先前见过就作保证。",
+              "audienceKeys": [
+                "player",
+                "participant.001"
+              ],
+              "origin": "runtime-situation",
+              "sourceKnowledgeKey": null,
+              "sourceEventSequence": 11
+            },
+            {
+              "factKey": "statement.keeper-disposition-12",
+              "text": "【掌柜的实际答复；只证明说过这些话，陈述内容仍须独立核实】用完后是我自己收起来的，没有交给别人。这一点我记得。具体收在什么地方，我现在记不准，不能随口指一处；后来我没有重新查看，也不能确认它如今还在原处。",
+              "audienceKeys": [
+                "player",
+                "participant.001"
+              ],
+              "origin": "runtime-situation",
+              "sourceKnowledgeKey": null,
+              "sourceEventSequence": 16
+            },
+            {
+              "factKey": "statement.keeper-box-ownership-17",
+              "text": "【掌柜的实际答复；只证明说过这些话，陈述内容仍须独立核实】那是驿站自用的收纳箱，不是旅客寄存的物品，归属这一点我认得清。至于箱里现在放着什么，我没有重新查看，不能确认。",
+              "audienceKeys": [
+                "player",
+                "participant.001"
+              ],
+              "origin": "runtime-situation",
+              "sourceKnowledgeKey": null,
+              "sourceEventSequence": 22
+            },
+            {
+              "factKey": "observation.box-check-1",
+              "text": "叶岑俯身，尝试正常打开柜台下的木箱并查看开盖后直接可见的内容；遇到无法正常开启的阻碍便停手，不撬拆，也不触碰旅客物品。",
+              "audienceKeys": [
+                "player",
+                "participant.001"
+              ],
+              "origin": "runtime-consequence",
+              "sourceKnowledgeKey": null,
+              "sourceEventSequence": 24
+            }
+          ],
+          "goals": [
+            {
+              "actorKey": "participant.001",
+              "boundary": "不把玩家拒绝协助视为嫌疑，不擅自检查玩家个人物品。",
+              "concern": "遗漏工作区域与过早怀疑旅客，都可能使寻找偏离事实。",
+              "desire": "找回铜印；避免无证据地指责住客",
+              "evidenceFactKeys": [
+                "world-fact.0001",
+                "world-fact.0004",
+                "local-1-counter",
+                "local-1-boundary"
+              ],
+              "goalKey": "goal-1",
+              "status": "active",
+              "updatedSequence": 0
+            }
+          ],
+          "location": "驿站",
+          "possibilities": [],
+          "sceneKey": "scene-1",
+          "seed": {
+            "text": "判定本次木箱能否正常打开；若能，判定此次开盖后箱内直接可见的内容，不预定有铜印；若不能，止于开合结果，不追加撬拆、翻找或取物。",
+            "origin": "continued-thread",
+            "sourceEventSequence": 23,
+            "sourceThreadKey": "thread-1"
+          },
+          "situationKey": "situation-1",
+          "threads": [
+            {
+              "audienceKeys": [
+                "player",
+                "participant.001"
+              ],
+              "closureSignals": [
+                "实际找到并核对铜印，确认其已恢复可取用。",
+                "对外说明时区分已核实的位置与尚不清楚的经手经过。"
+              ],
+              "evidenceFactKeys": [
+                "world-fact.0004",
+                "local-1-counter",
+                "local-1-boundary"
+              ],
+              "participantKeys": [
+                "participant.001"
+              ],
+              "question": "铜印在哪里，怎样在不无据指责住客的情况下找回它？",
+              "status": "open",
+              "threadKey": "thread-1",
+              "title": "丢失的铜印",
+              "updatedSequence": 0
+            }
+          ],
+          "timeLabel": "暴雨期间",
+          "title": "尚未检查的工作区域"
+        },
+        "revision": 20,
+        "lastEventSequence": 25,
+        "triggers": [
+          {
+            "kind": "scene-start",
+            "requestedSequence": 4,
+            "sourceEventSequence": 3,
+            "seed": null,
+            "status": "complete",
+            "actionSequences": [
+              5,
+              7
+            ],
+            "direction": {
+              "actorKey": "participant.001",
+              "actionLimit": 2,
+              "settleSituationVersion": 1,
+              "audienceParticipantKeys": [
+                "participant.001"
+              ],
+              "conversationMode": "present"
+            }
+          },
+          {
+            "kind": "player-response",
+            "requestedSequence": 9,
+            "sourceEventSequence": 8,
+            "seed": null,
+            "status": "complete",
+            "actionSequences": [
+              10,
+              12
+            ],
+            "direction": {
+              "actorKey": "participant.001",
+              "actionLimit": 2,
+              "settleSituationVersion": 1,
+              "audienceParticipantKeys": [
+                "participant.001"
+              ],
+              "conversationMode": "present"
+            }
+          },
+          {
+            "kind": "player-response",
+            "requestedSequence": 14,
+            "sourceEventSequence": 13,
+            "seed": null,
+            "status": "complete",
+            "actionSequences": [
+              15,
+              17
+            ],
+            "direction": {
+              "actorKey": "participant.001",
+              "actionLimit": 2,
+              "settleSituationVersion": 1,
+              "audienceParticipantKeys": [
+                "participant.001"
+              ],
+              "conversationMode": "present"
+            }
+          },
+          {
+            "kind": "player-response",
+            "requestedSequence": 19,
+            "sourceEventSequence": 18,
+            "seed": null,
+            "status": "complete",
+            "actionSequences": [
+              20,
+              21
+            ],
+            "direction": {
+              "actorKey": "participant.001",
+              "actionLimit": 2,
+              "settleSituationVersion": 1,
+              "audienceParticipantKeys": [
+                "participant.001"
+              ],
+              "conversationMode": "present"
+            }
+          },
+          {
+            "kind": "continue",
+            "requestedSequence": 23,
+            "sourceEventSequence": 22,
+            "seed": null,
+            "status": "ready",
+            "actionSequences": [
+              24
+            ],
+            "direction": {
+              "actorKey": "participant.001",
+              "actionLimit": 2,
+              "settleSituationVersion": 1,
+              "audienceParticipantKeys": [
+                "participant.001"
+              ],
+              "conversationMode": "present"
+            }
+          }
+        ],
+        "factEvidence": {
+          "version": 1,
+          "records": [
+            {
+              "factKey": "observation.counter-check-1",
+              "kind": "observation",
+              "evidenceFactKeys": [
+                "local-1-counter",
+                "local-1-boundary"
+              ],
+              "actorKey": "participant.001",
+              "goalKey": "goal-1",
+              "source": "action"
+            },
+            {
+              "factKey": "statement.keeper-seal-7",
+              "kind": "observation",
+              "evidenceFactKeys": [
+                "local-1-keeper",
+                "world-fact.0004"
+              ],
+              "actorKey": "participant.001",
+              "goalKey": "goal-1",
+              "source": "inquiry"
+            },
+            {
+              "factKey": "statement.keeper-disposition-12",
+              "kind": "observation",
+              "evidenceFactKeys": [
+                "local-1-keeper",
+                "statement.keeper-seal-7"
+              ],
+              "actorKey": "participant.001",
+              "goalKey": "goal-1",
+              "source": "inquiry"
+            },
+            {
+              "factKey": "statement.keeper-box-ownership-17",
+              "kind": "observation",
+              "evidenceFactKeys": [
+                "local-1-keeper",
+                "local-1-counter",
+                "world-fact.0005"
+              ],
+              "actorKey": "participant.001",
+              "goalKey": "goal-1",
+              "source": "inquiry"
+            },
+            {
+              "factKey": "observation.box-check-1",
+              "kind": "observation",
+              "evidenceFactKeys": [
+                "world-fact.0005",
+                "local-1-counter",
+                "local-1-boundary",
+                "statement.keeper-box-ownership-17"
+              ],
+              "actorKey": "participant.001",
+              "goalKey": "goal-1",
+              "source": "action"
+            }
+          ]
+        },
+        "discoveryHistory": [
+          {
+            "actionSequence": 5,
+            "actorKey": "participant.001",
+            "evidenceExcerpt": "叶岑从畅通的工作入口走到柜台内侧，查看台面，随后俯身检查柜台下方的可见区域，没有移动或开启任何容器，也没有触碰旅客物品。",
+            "evidenceFactKeys": [
+              "world-fact.0004",
+              "local-1-counter",
+              "observation.counter-check-1"
+            ],
+            "factKey": "world-fact.0005",
+            "reason": "叶岑已实际俯身查看柜台下方，能够看清该处木箱本身，满足确认容器存在与位置的条件。本次仅确认柜台下有木箱，不确认箱内物品、经手者或用途；也不据此确认铜印的位置。",
+            "result": "discovered",
+            "discoverySequence": 6
+          },
+          {
+            "actionSequence": 24,
+            "actorKey": "participant.001",
+            "evidenceExcerpt": "叶岑俯身，尝试正常打开柜台下的木箱并查看开盖后直接可见的内容；遇到无法正常开启的阻碍便停手，不撬拆，也不触碰旅客物品。",
+            "evidenceFactKeys": [
+              "world-fact.0004",
+              "observation.box-check-1"
+            ],
+            "factKey": "world-fact.0006",
+            "reason": "本次木箱正常打开，铜印处于开盖后直接可见的范围，叶岑在此次查看中看清并核对了铜印，满足实际打开并检查木箱、核对其中铜印的发现条件。仅确认铜印在箱内，不包含取物、翻找或用途确认；此次发现仅更新叶岑的知识，不据玩家在场认定其看清箱内结果。",
+            "result": "discovered",
+            "discoverySequence": 25
+          }
+        ],
+        "inquiryHistory": [
+          {
+            "actorKey": "participant.001",
+            "answerKind": "statement",
+            "answerText": "我最后一次亲眼见到铜印是在验货柜台这边，具体时辰没留意，报不准。铜印是我拿走的，也用过，这是我亲手做的，不是听来的。至于它现在的位置，我没有重新查看，不能只凭先前见过就作保证。",
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "discoveries": [
+              {
+                "answerExcerpt": "铜印是我拿走的",
+                "factKey": "world-fact.0007",
+                "reason": "叶岑已向在场且可正常交谈的掌柜实际询问是否使用或挪动铜印，掌柜明确亲口承认由自己拿走，与冻结事实及经手者发现条件一致。仅确认经手者，不确认用途或当前位置。"
+              }
+            ],
+            "evidenceFactKeys": [
+              "local-1-keeper",
+              "world-fact.0004"
+            ],
+            "questionExcerpt": "掌柜，你最后一次亲眼见到铜印，是在什么时候、什么地方？你自己用过或挪动过它吗？亲历的和听来的，请分开说。",
+            "questionSequence": 7,
+            "respondentExcerpt": "叶岑认识的掌柜正在厅内清点驿站的备用灯具，处于可以正常交谈的距离",
+            "respondentFactKey": "local-1-keeper",
+            "respondentName": "掌柜",
+            "statementFactKey": "statement.keeper-seal-7",
+            "resultSequence": 11,
+            "sceneKey": "scene-1"
+          },
+          {
+            "actorKey": "participant.001",
+            "answerKind": "uncertain",
+            "answerText": "用完后是我自己收起来的，没有交给别人。这一点我记得。具体收在什么地方，我现在记不准，不能随口指一处；后来我没有重新查看，也不能确认它如今还在原处。",
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "discoveries": [],
+            "evidenceFactKeys": [
+              "local-1-keeper",
+              "statement.keeper-seal-7"
+            ],
+            "questionExcerpt": "你用完铜印后，是怎么处置的——放在了哪里，还是交给了谁？只说你明确记得的亲历；记不准的地方直说，不必猜。",
+            "questionSequence": 12,
+            "respondentExcerpt": "叶岑认识的掌柜正在厅内清点驿站的备用灯具，处于可以正常交谈的距离",
+            "respondentFactKey": "local-1-keeper",
+            "respondentName": "掌柜",
+            "statementFactKey": "statement.keeper-disposition-12",
+            "resultSequence": 16,
+            "sceneKey": "scene-1"
+          },
+          {
+            "actorKey": "participant.001",
+            "answerKind": "statement",
+            "answerText": "那是驿站自用的收纳箱，不是旅客寄存的物品，归属这一点我认得清。至于箱里现在放着什么，我没有重新查看，不能确认。",
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "discoveries": [],
+            "evidenceFactKeys": [
+              "local-1-keeper",
+              "local-1-counter",
+              "world-fact.0005"
+            ],
+            "questionExcerpt": "柜台下有一个木箱。那是驿站自用的收纳箱，还是旅客寄存的物品？先确认归属，免得碰了不该碰的东西。",
+            "questionSequence": 17,
+            "respondentExcerpt": "叶岑认识的掌柜正在厅内清点驿站的备用灯具，处于可以正常交谈的距离",
+            "respondentFactKey": "local-1-keeper",
+            "respondentName": "掌柜",
+            "statementFactKey": "statement.keeper-box-ownership-17",
+            "resultSequence": 22,
+            "sceneKey": "scene-1"
+          }
+        ]
+      }
+    },
+    "adventure": null,
+    "presentation": null,
+    "openWorldEvolution": null,
+    "openWorld": null,
+    "town": null,
+    "textOpenWorld": null,
+    "lastSequence": 25
+  },
+  "expectedFailure": "事实披露缺少逐字证据",
+  "legacySchemaHashes": {
+    "chat-narrative-action-v68": "464a7d22e58ce363f2a8dfb8bc12172156557dd3679164dee0ef88f3e8fcd446",
+    "chat-narrative-options-v40": "43e282ecc4c5068cdcf13846157c9e5ae7edddaacd144a5765640e58e32bb363",
+    "chat-action-revision-v23": "33abc3bb1f8db8b5890b9e0316c92e76af410606edf6142f019d082bf3035cc2"
+  },
+  "legacyPrompt": {
+    "producerVersion": "chat-narrative-action-v68",
+    "renderedRequestHash": "aae036b93d3a2dd3aa77aac51a359e2cda41d7eebb151454183c5e865a5c8af2",
+    "systemText": "你是 StoryForge 受治理的运行时候选生成器。只依据给出的单一角色可见上下文；材料与选择草稿不增加事实、权限或玩家同意。输出仅为候选，经独立审查与采用后才生效，不假装已经写入。只输出指定 JSON，不输出解释、Markdown 或额外字段。\n【选择与推进】结合自身目标、顾虑、动机、最新消息和实际所得，选择有意义的交谈、自身行动、尝试或暂停。facts 与 investigations.discoveredFactKeys 已确认的内容保持原范围、传闻和不确定性；旧猜测、打算或目标未完成不能把已知退回未知。not-discovered/inconclusive 不证明对象不存在。已知位置不等于取回、收到回答不等于核实、自己知道不等于玩家知道。\n承接结果带来的新问题、选择或后果，不重做已完成核实、不无限细分同类检查、不反复把相同顾虑和未知说成进展。新结果确实支持新问题且答案可能改变剩余选择时，可再用已有资料或可接触对象；不预定答案。一种办法受阻或最终原因未知不等于整个目标无法继续。缺少局部条件可按下文 situationRequest 核实，不从幕后答案倒推调查。\n【自主行动与玩家决定】等待仅绑定当前具体步骤确实需要的玩家许可、物品或参与。旧邀请未答复、可选陪同或玩家不亲自参与，不阻止独立办法；保留其未获同意，不能绕过停止要求、隐私、危险或既有阻碍。拒绝后可选择不依赖该许可的行动、愿意披露的真实信息、必要的新澄清或有依据的暂停，不换说法重复索取同一决定。玩家的行动、接受、内心和情感由玩家决定；继续倾听、continue/return 不表示同意、时间流逝或外部条件改善，不因离线惩罚玩家。不用更早的换话题要求机械暂停新的情境。\n已有条件、权限和能力支持普通自身动作时，可在候选 text 中连贯演绎实际完成并登记后果，不要求历史里先有“已做完”的记录，不必每步征求许可。一次可完成同一目的下不依赖新决定或未知结果的几个短动作，不刻意拆步或先只承诺；仅打算不算完成。不能保证困难行动成功或夹带隐情、未知发现、他人答复与选择；遇真正未决结果或玩家决定就停在边界，按观察/发现/询问路径处理。\n【合理停止】有真实限制或人物充分理由可暂停、放弃、留白或收束，不要求穷尽所有假想办法。表达具体取舍与未完成部分，区分“自己暂不继续”和“客观无路可走”；不虚构资料耗尽、疲劳、时间、资源限制，不强造线索或危机。没有 playerPause 的自身暂停目标，有实际新方向可沿原 goalKey 用 goalStatus=active 恢复并按权限请求情境，无需复制目标或 resumeGoal；原阻碍、结果、承诺仍在。有 playerPause 必须走下文真实恢复授权。自然表达必要依据与局限，不在台词中复述规划、权限或系统步骤。\n【行动与后果】下文 kind/waitingForPlayer 是领域含义，输出只用 expressionMode。speak 是已说出的话/问题，不能登记完成事实；attempt 仅用于确需玩家决定的步骤，必须等待；complete 是本次完成的自身动作或有依据的事项收束，可含说话；pause 是停止/暂缓。等待环境结果或非玩家回答不等于等待玩家：可直接问话，不预写答复；请求玩家行动许可仍为 attempt。新增事实、fulfilled 目标或 resolved 事项仅 complete 且不等玩家，普通发言/尝试/暂停不冒充完成。\nnewFacts={factKey,kind,text,evidenceFactKeys,evidenceExcerpt}，数量与 kind 限冻结权限，仅登记已完成实际变化；text 必须逐字出现于本次正文和摘录，引用可知依据。既有事实不改写、不复制，打算和猜测不成为事实。\n【表达与知情】可以自然说出当下偏好、感受、顾虑和意愿；若不披露未知既有事实，仅作为本次说过的话，无需 newFacts/disclosures，不自动成为履约、认可或权限。逐项检查明说与暗示的命题：身份、既往事件、位置和秘密仍受知情约束，不以第一人称、偏好或猜测泄露。motivation/voice/目标/人物背景不整类豁免，没有 factKey 也不授权披露或编造键、复制秘密；不能仅因表达偏好且 disclosures=[] 判错。\ndisclosures={factKey,toParticipantKeys,evidenceExcerpt,wording?} 只披露自己已知的既有事实，接收者属于本次听众且原先未知；双方已知的不重复登记。说话与展示物件/文字均须逐条登记实际知情变化，物理变化另记 newFacts。默认摘录含事实原文；wording=\"equivalent\" 可完整等义转述，保留主体、否定、时地、不确定性和全部限制，不加推断或只传部分；独立审查通过才更新知情，无需先照抄再复述。展示位置不说明谁放、时间或动机；私下检查的未知内容不得出现在玩家正文，不能借旁白或候选预览绕过。\n【目标来源】goalKey 引用自己的 active/paused 原目标，不复活结束目标或替别人设定目标。\n【目标和事项变更】goalStatus 仅为当前 goalKey 的实际状态变更，未变填 null（继续 active 不能再填 active）。threadUpdates={threadKey,status,evidenceExcerpt} 仅改变自己参与且知情的事项；open/blocked/paused/resolved/abandoned 无变化不填，待玩家决定不能 resolved。个人暂停不自动暂停整线；共同变更必须有表达依据且该线全部 audienceKeys 都在本次听众内，私聊不能改变其他人的共同局面。接受整项暂停时相应 open/blocked 原线也须 paused，使用同段确认摘录，已 paused 不重写。\n对照目标 desire、事项 question 与已发生结果分别判断完成，closureSignals 只是线索。制作/调查/准备完成不代表尚待交付、确认或他人行动已完成；自己的目标完成就如实结束，不为继续行动强留旧目标或顺带关整线，后续可按授权接续。问题确已解决也不虚构确认环节或尾巴。\n本次 goalUpdates=[]；当前目标仅用 goalStatus 更新。\n自然回应也可以有对话依据：本轮首个 player-response 的来源是自己实际可读的最新玩家消息、且本次听众均能看到它时，纯粹的回应、确认听见或留白可用 evidenceFactKeys=[]，不必引用无关世界事实。自己的 goalKey 含已确认 playerPause 时，也可依据该暂停请求与确认在本轮首个 player-response/continue/return 中自然等待；不能由此解除暂停。此类表达只用 speak/pause；有 goalKey 且仍需玩家决定时 waitingForPlayer=true。仅在本轮首个 player-response 中已实际回应当前可见玩家消息、满足 turnCompletion 条件并保持活跃目标时，纯 speak 回应可用 waitingForPlayer=false 和 turnCompletion 结束本轮，evidenceFactKeys 仍可为空；不要为凑依据引用无关世界事实。结束标记须通过同次独立审查，不能把重复、等待必要决定或遗漏后果伪装成完成。goalStatus=null，newFacts/disclosures/threadUpdates/goalUpdates/relationshipUpdates/beliefUpdates/commitmentEffects=[]，situationRequest/followupGoal/threadFollowupGoal/resumeGoal=null；nextPossibilities=null 保留原打算，已有打算时不能用[]清空。正文不得增加事实、行动成果、知识披露、关系或猜测，不制造或改动承诺；只是自然重申同一已记录约定时不重复新建承诺。除下述显式 promiseRequest 新约定和 pauseGoal 玩家暂停路径外，实际新增、改变或完成的事情仍按原规则提供事实依据和全部后果；不能把它藏在没有后果的文本里。没有上述对话或暂停依据的主动行动仍须 evidenceFactKeys。\nsceneTransition 默认为 null。当前仅有你一个在场角色时，玩家最新真实消息明确允许与你前往此前双方已知的地点，可把实际共同到达登记为本次 complete 行动的后果；不是邀请、准备、出发、等待或继续按钮本身。填 {destinationFactKey:\"此前双方已知地点的事实\",destinationExcerpt:\"该事实里的地点名称原文\",arrivalFactKey:\"本次到达事实标识\",evidenceExcerpt:\"本次实际共同到达的原话\",playerEventSequence:真实玩家事件序号,playerExcerpt:\"完整授权条件原话\"}，waitingForPlayer=false，保留自身 active 目标。newFacts 只登记这一条 observation 到达事实，正文含地点原文，并引用原地点事实；evidenceFactKeys 同样引用它。不得发明地点、借新披露授权或代其他角色移动。仅 player-response 或随后 continue 且没有更新的玩家消息、尚未使用此授权时有效；return 不是转场机会。一次授权只完成一次到达。保留不购买、不拆解等全部条件，不能把到达当作调查、购买或履约结果；需要当地普通条件可按既有 situationRequest 在到达之后另行构建。不能同时 followupGoal/threadFollowupGoal/pauseGoal/promiseRequest；原 playerPause/resumeGoal 和承诺约束仍有效。系统原子更新当前场景标题地点并保存完整玩家原话，时间和参与者不变。\npromiseRequest 默认为 null。当前真实玩家消息明确请求你作出一项未来约定时，可以接受或拒绝，不必引用无关世界事实。若接受且本轮只作出这项新约定，使用 speak、evidenceFactKeys=[]、promiseRequest={playerEventSequence:本轮trigger.sourceEventSequence,playerExcerpt:\"完整表达请求条件的玩家原话摘录\"}，commitmentEffects 恰有一项 promise；goalKey 必须是已有自身未完成目标，所有听众必须看得到该玩家消息。系统绑定来源身份，不由你伪造。新约定仅约束自己的未来行为，不能承诺别人的行动、把询问当玩家同意、把假设说成事实或声称已履行。其余后果数组为空，goalStatus=null，nextPossibilities=null；不能同时改计划、改约、履行、披露、恢复暂停或提出新目标。需要这些实质变化时仍使用原事实依据路径，promiseRequest=null。普通提议、未接受请求或重申已记录承诺仍不新建承诺。修订必须保留原 promiseRequest，不得临时添加对话依据绕过原合同。\npauseGoal 默认为 null。玩家本轮明确要求暂停你已有的 active/paused 责任，而你接受时，不新建目标：goalKey 保留原目标，填 pauseGoal={threadKey:\"自己参与且知情的未结束原事项\",playerEventSequence:trigger.sourceEventSequence,playerExcerpt:\"完整暂停条件的玩家原话\",evidenceExcerpt:\"本次明确接受的逐字原话\"}。只能首次player-response、speak、waitingForPlayer=true；active目标用goalStatus=paused，已自行paused但没有playerPause的目标用goalStatus=null。系统在原目标记录真实playerPause，继续/返回不会解除。可同时如实报告已完成观察，但须引用可知事实、完整登记实际披露；只确认暂停时可以evidenceFactKeys=[]，不引用无关世界事实。不得做新动作、生成结果、改其他目标/关系/猜测、增加打算或情境，也不能同时followupGoal/threadFollowupGoal/resumeGoal/promiseRequest。nextPossibilities=null或[]，threadUpdates仅可按实际范围把原线paused。同一暂停条件由playerPause完整保存并强制执行，不需要再为相同等待条件新增promise；尤其不能覆盖原有未履行承诺。正文另有独立未来义务时仍完整登记commitmentEffects.promise；不能在暂停路径履行、撤回或改约。已有playerPause只能沿原resumeGoal规则处理，不能覆盖原请求；普通客套、含糊回应或玩家不亲自参与不自动构成暂停。\nresumeGoal 默认为 null。自己的目标含 playerPause 时，其 requested 和 acknowledged 是已发生的暂停依据，不能由继续/返回解除。未获解除依据，只可 speak/pause、waitingForPlayer=true、goalStatus=null，不能推进、处置约定、改目标/原线或生成新的打算与情境。只有确认暂停之后的新 player-response 首步，玩家本轮确实解除原条件、允许恢复或明确取消该责任时，才填 resumeGoal:{playerEventSequence:trigger.sourceEventSequence,playerExcerpt:\"本轮解除或取消的逐字摘录\"}，goalKey 引用该原目标、goalStatus=active/fulfilled/abandoned，并按真实结果更新原线和处理原约。普通“嗯”、无关消息或简单继续不是解除；不能用附带目标更新或另建目标绕过。恢复只解除原限制，不替玩家做事、不等于已有成果或履约。\n本次 threadFollowupGoal=null；不能借原事项建立新目标。\n【承诺】先读自身 goals.commitments 与共同可见 sharedCommitments，resolution=null 为未处理。在相关时机实际履行、解释真实阻碍或明确撤回，不反复承诺代替行动、不因离线认定失约，不替玩家决定参与/情感/同意。commitmentEffects 最多四项，依据完整 text，确无变化才 []。新约定为 {kind:\"promise\",terms:\"完整逐字条款\",evidenceExcerpt:\"本次原话\"}，terms 完整包含于摘录；系统生成身份/听众/事件，仅绑定自身当前 active/paused 目标，同一目标最多一个未处理承诺。\n现在明确承担的未来义务或持续限制已成立，即使未来条件到达才履行；保留完整范围、触发条件和玩家决定。仅合法 pauseGoal 已完整承载的同一暂停条件不重复 promise，额外未来义务仍登记，旧承诺不抹除。当前已做行为/当前动作范围、未承担的提议/打算/邀约/客套/猜测不自动构成承诺，也不删自然承诺规避登记。声明可 speak/complete，等待另一件事不推迟声明成立，但不等于履约。\n履行用 {kind:\"fulfill\",commitmentKey,evidenceExcerpt}，仅 complete/不等待，须满足原条款并有本次实际行为/交付证据，不以“办好”、计划、尝试或玩家未决选择代替。撤回用 {kind:\"withdraw\",commitmentKey,evidenceExcerpt} 及明确原话，不因拒绝/离线自动撤回。改约须同时 withdraw 原约、promise 新约，两份保留且不等于玩家接受。处置涵盖原约全部听众，结束目标前处理未完成承诺；完成目标不代替履约，单次履约也不必结束尚有责任的目标。\n【关系】读取 relationships、relationshipEvidence 和未完成事项，让已有态度影响措辞/合作，不报数值或无故重置；数值不代表玩家感受/同意。拒绝、休息、换方法、不愿亲近本身不等于失信/不尊重，continue/return/离线不奖惩关系。真实欺骗/威胁等独立行为只能按本身证据审查。\n本次 relationshipUpdates=[]，不能改变关系。\n【记忆、打算与猜测】memoryCorrections 是待核对摘要，依双方可见原话与确定事实检查，不创造事实/同意/权限/履约。矛盾摘要不当真；只调整仍依赖误解的自身打算、猜测、目标和态度，不在正文承认却保留相反方向。不强行道歉/解释系统/造矛盾，不撤销旧事实、承诺或关系历史，不把旧误解当新玩家行为，不因此奖惩关系。\nnextPossibilities=null 保留，数组完整替换自己的打算，最多三项 {text,evidenceFactKeys}，[] 清空。只引用自身可知事实（可含本次完成的新事实），不传 actorKey，不替别人计划、不把未来当已发生。拒绝/改道后移除依赖已拒参与的打算；目标全部 fulfilled/abandoned 时清空；暂停可保留明确恢复条件，不离线执行。\nbeliefUpdates={beliefKey,text,evidenceFactKeys} 只改/增自己的猜测，text=null 撤回，引用可知依据，不传 actorKey/updatedSequence。按本次行动后的局面检查：正文/newFacts 推翻旧判断时同候选修正或撤回，不能只改物件留相反猜测。只改受影响的自己的判断/计划；过去成立的情况、未证实原因和无关猜测不因环境变化批量证伪。确定新信息按事实登记，不再复制为猜测，不改旧事实或别人私有判断，不借猜测命中不可知真相。\n【情境请求】situationRequest 默认 null。除下文 player-followup 外，仅 allowActorSituationExpansion=true、当前 goalKey 保持 active、不暂停且不等玩家时，关联自己知情并参与的 open/blocked 原线提出一次 {threadKey,direction,evidenceFactKeys,evidenceExcerpt}。仅补下一步真缺少的局部条件/线索，引用已知事实与本次原文；可问“是否”，不预定人物在场/合作、他人行为、玩家参与、许可、时间变化或成功。普通说话、小动作或已有条件足够无需请求，不每轮强加情节。当前停止/暂停要求或请求本身依赖未决玩家决定时禁止；旧邀请未答不阻塞真正独立方向，不绕过拒绝。\n已实际动手进行的有限检查可登记为本次 observation，并用 purpose=observation-result 请求判定结果；记录完成的是这次尝试，不是成功、看见答案或解决目标。正文、事实与请求须一致写清实际动作、对象和停止边界。例如已经借灯试着正常打开并查看同一获准木箱，可请求确认是否打开、正常打开后本次直接看到什么；打不开则止于开合结果，不强拆。仅说打算查看、试试能否打开、等许可再看，不包含实际内容检查。请求不得增加正文未实施的翻找、取物、移动、第二对象、他人行为或未来决定；引用本次观察事实并完整摘录其原文，秘密仍等待冻结发现条件判定。\n有 maxDiscoveriesPerSituation 权限且完成获准检查后，需判定未知结果时只登记本次检查并引用它请求结算，不声称已见未知答案、不倒推调查位置。下一次 investigations 是审查结果，仅 discoveredFactKeys 已获知，其它结果不证明目标不存在；据此调整或暂停，不机械重复检查。\n本次不使用 followupGoal 或 player-followup 新事项请求。\n【输出与原文证据】输出完整对象；无变化数组 []、可空字段 null，不省略字段，不为填字段编造行动/后果或改原文。当前表达 evidenceExcerpt 可 null，由系统逐字绑定 text；若超摘录上限须连续逐字片段：承诺1000、情境1200、目标/关系/后续目标/暂停/转场2000、事实/披露/事项8000。playerExcerpt、destinationExcerpt、历史和来源事实须真实原文，不能 null。绑定文字不证明事实/授权/后果成立，仍须校验和独立审查。\nexpressionMode 映射：speech=speak/false，speech-awaiting-player=speak/true，player-dependent-attempt=attempt/true，self-action-performed=complete/false，self-action-awaiting-player=complete/true，self-pause=pause/false，self-pause-awaiting-player=pause/true。只输出 expressionMode，不输出 kind/waitingForPlayer；所有上述约束按映射值执行。接受/维持玩家暂停用 speech-awaiting-player，不能解除恢复授权。audienceKeys=null 使用冻结听众 [\"player\",\"participant.001\"]；显式缩小时须含 player 和自身，不可为空或扩至对话外，待改写保留原听众。系统不从正文猜行动类型或替玩家同意。\n【本轮完成】次数是上限，不必用尽。新行动已承接本轮消息并实现具体局部目的时可 turnCompletion={version:1,purpose:\"已实现的局部目的\",evidenceExcerpt:\"text连续原文\"}，随同次独立审查与保存结束本轮，否则 null。只用于保留行动前自身 active 目标、goalStatus=null、goalUpdates=[]，expressionMode=speech/self-action-performed，且无新目标、暂停/恢复、情境请求/待结果、改写、转场或多人调度；实际玩家决定、提问答复、观察所需直接后续不能省略。不为填标记撤销真实目标变更或虚构任务，目标/事项达到原关闭条件就如实登记。标记本身不算进展，不用重复旧安排或宣布结束冒充完成；不暂停/完成长期目标、不加台词/事实，下一玩家消息或继续可再推进，无离线行动。\n严格输出 JSON：{\"text\":\"实际角色表达与自身行动\",\"goalKey\":\"自身未完成目标标识\",\"evidenceFactKeys\":[\"可知事实标识\"],\"audienceKeys\":null,\"newFacts\":[],\"disclosures\":[],\"threadUpdates\":[],\"goalStatus\":null,\"goalUpdates\":[],\"commitmentEffects\":[],\"relationshipUpdates\":[],\"nextPossibilities\":null,\"beliefUpdates\":[],\"situationRequest\":null,\"followupGoal\":null,\"threadFollowupGoal\":null,\"resumeGoal\":null,\"promiseRequest\":null,\"pauseGoal\":null,\"sceneTransition\":null,\"turnCompletion\":null,\"expressionMode\":\"speech|speech-awaiting-player|player-dependent-attempt|self-action-performed|self-action-awaiting-player|self-pause|self-pause-awaiting-player\"}\n最终输出使用互斥结果外层：正常行动为 {\"outcome\":\"action\",\"action\":上述完整行动对象,\"handoff\":null}；交还控制为 {\"outcome\":\"handoff\",\"action\":null,\"handoff\":{\"version\":1,\"kind\":\"yield-to-player\",\"reason\":\"awaiting-player-decision\",\"source\":{\"messageId\":\"实际角色消息ID\",\"sequence\":实际事件序号,\"excerpt\":\"连续逐字原文\"},\"decision\":\"尚未作出的具体玩家决定\",\"dependentStep\":\"确实需要该决定的下一步\"}}。不得同时输出行动与交还控制，不输出不存在的台词、空行动或状态变化。\n以下限制仅针对 version:1 等待玩家决定的控制结果：交还控制仅用于明确 continue 的单角色手动轮次：已交付角色对话中已有玩家共同可见的未决许可，当前下一步仍确实依赖它，且没有可落实的自主行动或必要的新说明。它不发布气泡，不算剧情推进，不等于所有办法耗尽。choice 草稿仅供重新核对，选择 wait 本身不授权交还控制；有依据的独立行动仍选择 action。\n以下限制仅针对 version:1 等待玩家决定的控制结果：新玩家消息、scene-start/return/player-seed、多人调度、待处理改写或情境结果不能静默交还控制。不要把旧邀请、已经拒绝或回答的问题、可选陪同当作阻碍。source 必须来自本次实际交付的自己在当前场景的有效消息，不能引用未给出的历史；之后对话可能已经改变其含义，仍需独立审查。\n若同一单角色轮次中已有正式保存的行动完成一个有意义的局部目的，后续不需新增台词、行动或直接结果，可用交还控制外层输出 handoff={version:2,kind:\"finish-current-turn\",reason:\"local-purpose-completed\",source:{messageId:\"本轮最新已保存的自身行动消息ID\",sequence:实际事件序号,excerpt:\"连续逐字原文\"},purpose:\"该行动已经实现的具体局部目的\"}。action 必须为 null；本结果不生成气泡、不增加行动、不暂停或完成长期目标。\n这是对本轮已发生进展的确认，不能引用前一轮的进展结束新的继续，也不能仅因选择草稿为空就结束。未承接的玩家请求、实际提问或观察仍需的直接结果、待情境结算/改写/转场和多人调度不能跳过。没有新进展、只是反复解释限制或宣布结束，也不满足条件。\n本次新行动本身已实现局部目的时，优先在该行动上填写 turnCompletion；version:2 只处理该行动已经保存后，当前轮次仍有剩余额度的情况。整段故事尚有活跃目标可以保留，下一条玩家消息或明确继续重新推进；控制结束本身不算有意义的剧情推进。\ncontinue/return 的首步若自己已正式自主暂停、没有 active 目标或 playerPause，且现有暂停仍适用，可选择不新增表达：handoff={version:3,kind:\"maintain-existing-pause\",reason:\"pause-still-applicable\",source:{messageId:\"实际暂停消息ID\",sequence:该目标updatedSequence,excerpt:\"暂停原文\"},goalKey:\"自己的paused目标\",rationale:\"依据当前情况说明原暂停仍适用\"}，action=null。这只结束本轮机会，不新增台词、暂停、事实或进展，不声称所有办法穷尽。\n维持暂停需要已采纳目标状态和已交付共同对话的证据，空方向草稿本身不能授权。重新核对原责任、近期答复、当前可行方向和未处理请求；新玩家消息、直接结果或必要后续不能跳过。有依据的新方向仍应正常行动或恢复原目标；无新变化时不要再说一遍暂停。待改写、待情境结算和多人调度不能用此结果。",
+    "systemSha256": "48eb12d6b9fed7711bf4a4400b88eb92c795266dfaa656c935a654252afed9b5",
+    "view": {
+      "chatNarrative": {
+        "situationKey": "situation-1",
+        "sceneKey": "scene-1",
+        "title": "尚未检查的工作区域",
+        "location": "驿站",
+        "timeLabel": "暴雨期间",
+        "persona": {
+          "description": "与守卫被暴雨困在驿站的旅人；没有同意搜查个人物品或代替自己作决定。",
+          "name": "玩家",
+          "origin": "product-private",
+          "playerKey": "player"
+        },
+        "permissions": {
+          "allowActorSituationExpansion": true,
+          "allowActorThreadFollowups": true,
+          "allowInquiryResults": true,
+          "allowPlayerFollowupSituations": true,
+          "allowedNewFactKinds": [
+            "observation",
+            "object",
+            "temporary-character"
+          ],
+          "intensity": "everyday",
+          "maxActionCharacters": 1800,
+          "maxActionsPerTrigger": 2,
+          "maxActiveThreads": 2,
+          "maxDiscoveriesPerSituation": 1,
+          "maxNewFactsPerAction": 2,
+          "mode": "story",
+          "triggers": [
+            "scene-start",
+            "player-response",
+            "continue",
+            "return",
+            "player-seed"
+          ]
+        },
+        "conversationBoundary": {
+          "participantKeys": [
+            "participant.001"
+          ],
+          "mode": "present",
+          "instruction": "participantKeys 是本轮可调度主角色的范围；表达、新事实和答复的 audienceKeys 只登记玩家及这里列出的主角色，不为场景人物编造 participantKey。调度、新目标、打算和剧情线不能扩至名单外的主角色。场景人物以角色可见事实为在场和接触依据，不需要加入主角色名单才能交谈；已有依据明确可交谈时，可以实际向其发问，不需重复请求“纳入交谈范围”。人物未被证实在场或可接触时仍须先补足真实条件；能提问不代表对方知情、愿意或已经回答。只有冻结 permissions.allowInquiryResults=true 且符合原情境权限时，实际问题才能请求后续 inquiryResult；角色不能预写答复、发现或玩家行动。不得把私有信息说给无权得知的场景人物，也不得绕过明确拒绝或玩家暂停。已有共同事项不能在未通知其他参与者时私下修改。"
+        },
+        "facts": [
+          {
+            "audienceKeys": [
+              "participant.001"
+            ],
+            "factKey": "world-fact.0001",
+            "origin": "reviewed-world",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.0",
+            "text": "\"之前误判过一名旅客，因此对公开指控格外谨慎。\""
+          },
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "factKey": "world-fact.0002",
+            "origin": "reviewed-world",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.3",
+            "text": "\"驿站守卫\""
+          },
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "factKey": "world-fact.0003",
+            "origin": "reviewed-world",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.6",
+            "text": "\"叶岑\""
+          },
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "factKey": "world-fact.0004",
+            "origin": "reviewed-world",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": "chat-source.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.11",
+            "text": "\"驿站丢失了用于开门验货的铜印。停电期间后门没有上锁。山路被倒树挡住，屋内暂时安全。\""
+          },
+          {
+            "audienceKeys": [
+              "participant.001",
+              "player"
+            ],
+            "factKey": "world-fact.0005",
+            "origin": "reviewed-world",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": "chat-unit.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.20.box-location",
+            "text": "\"柜台下有一个木箱。\""
+          },
+          {
+            "audienceKeys": [
+              "participant.001"
+            ],
+            "factKey": "world-fact.0006",
+            "origin": "reviewed-world",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": "chat-unit.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.20.seal-location",
+            "text": "\"铜印放在柜台下的木箱里。\""
+          },
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "factKey": "world-fact.0007",
+            "origin": "reviewed-world",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": "chat-unit.e86fb5ef76cee0b999e78db090cecfc1b49ac92219196567daeb1e8598c0a991.20.seal-handler",
+            "text": "\"铜印被掌柜拿去。\""
+          },
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "factKey": "local-1-counter",
+            "origin": "author-private",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": null,
+            "text": "验货柜台是驿站公用工作台，柜台侧面的工作入口畅通。叶岑的守卫职责允许他检查柜台台面、下方及其中驿站所有的普通收纳容器，但不包括旅客寄存或随身的物品；柜台下方尚未查看。"
+          },
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "factKey": "local-1-keeper",
+            "origin": "author-private",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": null,
+            "text": "叶岑认识的掌柜正在厅内清点驿站的备用灯具，处于可以正常交谈的距离；尚未就铜印向其询问，也不知道他会如何回答。"
+          },
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "factKey": "local-1-boundary",
+            "origin": "author-private",
+            "sourceEventSequence": 0,
+            "sourceKnowledgeKey": null,
+            "text": "当前尚未取得玩家同意搜查其个人物品；检查驿站自有工作区域不需要玩家交出行李或参与。"
+          },
+          {
+            "factKey": "observation.counter-check-1",
+            "text": "叶岑从畅通的工作入口走到柜台内侧，查看台面，随后俯身检查柜台下方的可见区域，没有移动或开启任何容器，也没有触碰旅客物品。",
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "origin": "runtime-consequence",
+            "sourceKnowledgeKey": null,
+            "sourceEventSequence": 5
+          },
+          {
+            "factKey": "statement.keeper-seal-7",
+            "text": "【掌柜的实际答复；只证明说过这些话，陈述内容仍须独立核实】我最后一次亲眼见到铜印是在验货柜台这边，具体时辰没留意，报不准。铜印是我拿走的，也用过，这是我亲手做的，不是听来的。至于它现在的位置，我没有重新查看，不能只凭先前见过就作保证。",
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "origin": "runtime-situation",
+            "sourceKnowledgeKey": null,
+            "sourceEventSequence": 11
+          },
+          {
+            "factKey": "statement.keeper-disposition-12",
+            "text": "【掌柜的实际答复；只证明说过这些话，陈述内容仍须独立核实】用完后是我自己收起来的，没有交给别人。这一点我记得。具体收在什么地方，我现在记不准，不能随口指一处；后来我没有重新查看，也不能确认它如今还在原处。",
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "origin": "runtime-situation",
+            "sourceKnowledgeKey": null,
+            "sourceEventSequence": 16
+          },
+          {
+            "factKey": "statement.keeper-box-ownership-17",
+            "text": "【掌柜的实际答复；只证明说过这些话，陈述内容仍须独立核实】那是驿站自用的收纳箱，不是旅客寄存的物品，归属这一点我认得清。至于箱里现在放着什么，我没有重新查看，不能确认。",
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "origin": "runtime-situation",
+            "sourceKnowledgeKey": null,
+            "sourceEventSequence": 22
+          },
+          {
+            "factKey": "observation.box-check-1",
+            "text": "叶岑俯身，尝试正常打开柜台下的木箱并查看开盖后直接可见的内容；遇到无法正常开启的阻碍便停手，不撬拆，也不触碰旅客物品。",
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "origin": "runtime-consequence",
+            "sourceKnowledgeKey": null,
+            "sourceEventSequence": 24
+          }
+        ],
+        "investigations": [
+          {
+            "actionSequence": 5,
+            "result": "discovered",
+            "discoveredFactKeys": [
+              "world-fact.0005"
+            ]
+          },
+          {
+            "actionSequence": 24,
+            "result": "discovered",
+            "discoveredFactKeys": [
+              "world-fact.0006"
+            ]
+          }
+        ],
+        "inquiryReplies": [
+          {
+            "sequence": 11,
+            "questionSequence": 7,
+            "respondentName": "掌柜",
+            "answerKind": "statement",
+            "answerText": "我最后一次亲眼见到铜印是在验货柜台这边，具体时辰没留意，报不准。铜印是我拿走的，也用过，这是我亲手做的，不是听来的。至于它现在的位置，我没有重新查看，不能只凭先前见过就作保证。",
+            "statementFactKey": "statement.keeper-seal-7",
+            "confirmedFactKeys": [
+              "world-fact.0007"
+            ]
+          },
+          {
+            "sequence": 16,
+            "questionSequence": 12,
+            "respondentName": "掌柜",
+            "answerKind": "uncertain",
+            "answerText": "用完后是我自己收起来的，没有交给别人。这一点我记得。具体收在什么地方，我现在记不准，不能随口指一处；后来我没有重新查看，也不能确认它如今还在原处。",
+            "statementFactKey": "statement.keeper-disposition-12",
+            "confirmedFactKeys": []
+          },
+          {
+            "sequence": 22,
+            "questionSequence": 17,
+            "respondentName": "掌柜",
+            "answerKind": "statement",
+            "answerText": "那是驿站自用的收纳箱，不是旅客寄存的物品，归属这一点我认得清。至于箱里现在放着什么，我没有重新查看，不能确认。",
+            "statementFactKey": "statement.keeper-box-ownership-17",
+            "confirmedFactKeys": []
+          }
+        ],
+        "goals": [
+          {
+            "actorKey": "participant.001",
+            "boundary": "不把玩家拒绝协助视为嫌疑，不擅自检查玩家个人物品。",
+            "concern": "遗漏工作区域与过早怀疑旅客，都可能使寻找偏离事实。",
+            "desire": "找回铜印；避免无证据地指责住客",
+            "evidenceFactKeys": [
+              "world-fact.0001",
+              "world-fact.0004",
+              "local-1-counter",
+              "local-1-boundary"
+            ],
+            "goalKey": "goal-1",
+            "status": "active",
+            "updatedSequence": 0
+          }
+        ],
+        "beliefs": [],
+        "threads": [
+          {
+            "audienceKeys": [
+              "player",
+              "participant.001"
+            ],
+            "closureSignals": [
+              "实际找到并核对铜印，确认其已恢复可取用。",
+              "对外说明时区分已核实的位置与尚不清楚的经手经过。"
+            ],
+            "evidenceFactKeys": [
+              "world-fact.0004",
+              "local-1-counter",
+              "local-1-boundary"
+            ],
+            "participantKeys": [
+              "participant.001"
+            ],
+            "question": "铜印在哪里，怎样在不无据指责住客的情况下找回它？",
+            "status": "open",
+            "threadKey": "thread-1",
+            "title": "丢失的铜印",
+            "updatedSequence": 0
+          }
+        ],
+        "possibilities": [],
+        "trigger": {
+          "kind": "continue",
+          "requestedSequence": 23,
+          "sourceEventSequence": 22,
+          "seed": null,
+          "status": "ready",
+          "actionSequences": [
+            24
+          ],
+          "direction": {
+            "actorKey": "participant.001",
+            "actionLimit": 2,
+            "settleSituationVersion": 1,
+            "audienceParticipantKeys": [
+              "participant.001"
+            ],
+            "conversationMode": "present"
+          }
+        }
+      },
+      "relationships": [
+        {
+          "fromParticipantKey": "participant.001",
+          "toParticipantKey": "player",
+          "dimensionKey": "trust",
+          "label": "信任",
+          "minimum": -100,
+          "maximum": 100,
+          "value": 0,
+          "largeChangeThreshold": 20,
+          "lastChangedSequence": 0
+        },
+        {
+          "fromParticipantKey": "participant.001",
+          "toParticipantKey": "player",
+          "dimensionKey": "respect",
+          "label": "尊重",
+          "minimum": -100,
+          "maximum": 100,
+          "value": 0,
+          "largeChangeThreshold": 20,
+          "lastChangedSequence": 0
+        }
+      ],
+      "participantKey": "participant.001"
+    },
+    "audience": [
+      "player",
+      "participant.001"
+    ],
+    "wireExample": "{\"text\":\"实际角色表达与自身行动\",\"goalKey\":\"自身未完成目标标识\",\"evidenceFactKeys\":[\"可知事实标识\"],\"audienceKeys\":null,\"newFacts\":[],\"disclosures\":[],\"threadUpdates\":[],\"goalStatus\":null,\"goalUpdates\":[],\"commitmentEffects\":[],\"relationshipUpdates\":[],\"nextPossibilities\":null,\"beliefUpdates\":[],\"situationRequest\":null,\"followupGoal\":null,\"threadFollowupGoal\":null,\"resumeGoal\":null,\"promiseRequest\":null,\"pauseGoal\":null,\"sceneTransition\":null,\"turnCompletion\":null,\"expressionMode\":\"speech|speech-awaiting-player|player-dependent-attempt|self-action-performed|self-action-awaiting-player|self-pause|self-pause-awaiting-player\"}"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "version": 278,
+  "recordedAt": "2026-10-20T19:49:56.483222+00:00",
+  "product": "character-interaction",
+  "status": "arrangement-adopted-redundant-whole-goal-pause-rejected",
+  "sourceBaseHead": "cd9e903f107407e4218599103c5dfd4bbd74e54c",
+  "protocol": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v278-reading-night-choice/run-r1/preregistration.json",
+    "sha256": "b8befe3e2109b5fffc4a5b4a38dbf0373a830f57ad5b6ed1982bf0a8bb72af24"
+  },
+  "result": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v278-reading-night-choice/run-r1/continuation.json",
+    "sha256": "d0af4d6d8dc6cfe09de71656a327dbac3e83747d884b112e7d1096700ff0e1e2"
+  },
+  "backup": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v278-reading-night-choice/run-r1/continuation-backup.json",
+    "sha256": "fba7135f2c70ae2b016502af83db3c84de616a7d63eb64cf5046d4e3d11b5d96"
+  },
+  "restoration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v278-reading-night-choice/run-r1/continuation-restoration-verified.json",
+    "sha256": "47bb906db0e06c8c6415397a0a66c81bb3055bce80bc09c5199d9d1cdbbc46df"
+  },
+  "scope": "An isolated registered branch at exact V275 sequence 14, before the third prescribed input. Whole rebased state, original source, release, refusal and parent state were verified unchanged. No production regeneration.",
+  "model": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "requests": 6,
+    "allNativeRequestsCompleted": true,
+    "usage": {
+      "totalTokens": 98683,
+      "inputTokens": 95325,
+      "outputTokens": 3358,
+      "cachedInputTokens": 10368,
+      "reasoningOutputTokens": 1577
+    },
+    "costUsd": null
+  },
+  "playerInputs": [
+    "可以，我只当听众，你按自己能承担的方式安排。"
+  ],
+  "outcome": {
+    "adopted": "Confirmed the basic reading plan and explicitly ended the chair trial, without assigning the player tasks or claiming the activity itself completed.",
+    "notAdopted": "The next candidate repeated the arrangement and tried to pause the entire active goal. Independent meaningful-direction review rejected the ungrounded pause.",
+    "rejectedChecks": [
+      {
+        "check": "meaningful-direction",
+        "passed": false,
+        "reason": "上一轮已明确基本方案成立、通行尚未验证及筹备未完，本轮只是重述并暂停原目标，没有给出新的顾虑、实际阻碍或暂停理由。玩家已授权其自行安排且未要求停止，现有条件仍支持不依赖玩家的有限通行检查；不能仅以‘这轮做到这里’作为停止推进的依据。"
+      }
+    ],
+    "completedRuns": 1,
+    "failedRuns": 1,
+    "goals": [
+      {
+        "key": "goal-1",
+        "status": "active"
+      }
+    ],
+    "parentUnchanged": true,
+    "worldUnchanged": true,
+    "sourceUnchanged": true,
+    "automaticRetries": 0
+  },
+  "restorationChecks": {
+    "stem": "continuation",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 1,
+    "retainedFailedRuns": 1,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true,
+    "terminalReceiptBodiesRetained": true,
+    "usageEvidenceRetained": true
+  },
+  "followupFinding": {
+    "confirmedContractGap": "The existing silent control outcome only supports awaiting-player-decision during an explicit continue trigger. It cannot finish a satisfied local beat within the current player-response turn while leaving the long-term goal active.",
+    "causalLimit": "This gap is consistent with the attempted whole-goal pause but does not prove it is the sole cause of this model choice.",
+    "nextImplementation": "Audit and extend bounded turn completion after a real adopted local consequence, with independent review and exact source binding. Never equate ending the current turn with pausing or fulfilling the goal, waive player decisions, or silence an unanswered player message. Preserve old handoff and recovery contracts."
+  },
+  "fullCI": false,
+  "fullE2E": false,
+  "formalM1Credit": 0,
+  "qualityAccepted": false
+}

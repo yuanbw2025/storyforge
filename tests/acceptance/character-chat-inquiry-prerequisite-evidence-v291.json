@@ -1,0 +1,56 @@
+{
+  "version": 291,
+  "recordedAt": "2026-10-20T23:34:37.529241+00:00",
+  "product": "character-interaction",
+  "lifecycle": "product capability development; S3 runtime evidence and recovery",
+  "status": "targeted-engineering-and-same-state-real-repair-passed",
+  "sourceBaseHead": "7e5979078fee9eeb42041f9ac828089a6c110476",
+  "sourceManifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v291-inquiry-prerequisite-evidence/manifest-final.json",
+    "sha256": "1428d4a7d402bf4f902d4794de3e4580ec958f0e552678cdd08520aca4174050"
+  },
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v291-inquiry-prerequisite-evidence/engineering.json",
+    "sha256": "1c1faab3c2c4190df19ca56a989cb07bbb9f799c1e853e3d180471f62f47140e"
+  },
+  "regression": {
+    "files": 9,
+    "passed": 96
+  },
+  "browser": {
+    "files": 3,
+    "passed": 7
+  },
+  "promptVersions": {
+    "producer": "chat-situation-construction-v13",
+    "reviewer": "chat-situation-review-v12"
+  },
+  "eventMetadata": "inquiryEvidenceVersion:1, derived only from the exact frozen run contract",
+  "scope": "Coordinator-only eligible prerequisite references; the model explicitly cites prerequisites and independent review still evaluates question, person, audience, conditions and meaning. Old contracts keep the original evidence restriction.",
+  "negativeEvidence": [
+    "missing explicit prerequisite",
+    "unrelated or private evidence",
+    "future knowledge",
+    "wrong actor or scene",
+    "knowledge changed after question",
+    "unsupported or wrong-kind metadata",
+    "forged metadata without a run or on an old run"
+  ],
+  "recoveryEvidence": [
+    "public and private answers",
+    "review interruption",
+    "after-commit recovery",
+    "branch and import",
+    "refresh",
+    "old-contract restriction"
+  ],
+  "newTables": 0,
+  "newModelOutputFields": 0,
+  "newModelSteps": 0,
+  "worldWrites": 0,
+  "realVerification": "character-chat-inquiry-prerequisite-real-v292.json",
+  "fullCurrentCI": false,
+  "fullCurrentE2E": false,
+  "m1Passed": false,
+  "limit": "The engineering record is immutable and predates the separate real verification. Current full delivery and full quality matrix remain required."
+}

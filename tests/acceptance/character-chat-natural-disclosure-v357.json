@@ -1,0 +1,123 @@
+{
+  "version": 357,
+  "status": "implemented-targeted-verified",
+  "recordedAt": "2026-10-23T10:08:00.727387+00:00",
+  "product": "character-interaction",
+  "phase": "S3 product development",
+  "branch": "fix/chat-narrative-flow-20261023",
+  "baseHead": "99970163c5c3fc0135ab5486e5b6cae6fdef659b",
+  "problem": "The original V356 action omitted the equivalent wording mode; serialized source quotes caused exact-evidence rejection before independent review. A second independently produced episode repeated waiting after an inquiry and failed meaningful-direction review.",
+  "implemented": {
+    "producerVersions": [
+      "chat-narrative-action-v69",
+      "chat-narrative-options-v41",
+      "chat-action-revision-v24"
+    ],
+    "disclosure": "New outputs must explicitly request the existing complete-equivalence per-fact independent review. Missing modes are rejected; no automatic response editing.",
+    "historicalContracts": "Old schemas, action parsing and raw failures retained.",
+    "modelCallsAdded": 0,
+    "worldOwnerChanged": false,
+    "tablesAdded": 0
+  },
+  "validation": [
+    {
+      "check": "new disclosure output regression",
+      "passed": 11,
+      "failed": 0,
+      "evidence": "v357-natural-disclosure/focused-initial-results.json"
+    },
+    {
+      "check": "initial 12-file regression",
+      "passed": 176,
+      "failed": 62,
+      "evidence": "v357-natural-disclosure/targeted-initial.json",
+      "note": "Initial failures retained. Five suites still expected the former current versions or treated the newly registered versions as unknown; one expected the old prompt spelling."
+    },
+    {
+      "check": "corrected five suites; includes both historical v68 and current v69 review/adoption",
+      "files": 5,
+      "passed": 129,
+      "failed": 0,
+      "evidence": "v357-natural-disclosure/targeted-corrected.json"
+    },
+    {
+      "check": "npx tsc --noEmit",
+      "exitCode": 0,
+      "sessionId": 4909
+    },
+    {
+      "check": "git diff --check before this documentation update",
+      "exitCode": 0
+    },
+    {
+      "check": "old v68 real system prompt byte preservation and new output guard",
+      "passed": 12,
+      "failed": 0,
+      "evidence": "v357-natural-disclosure/disclosure-paths.json"
+    },
+    {
+      "check": "disclosure/options/revision paths first run",
+      "files": 5,
+      "passed": 68,
+      "failed": 1,
+      "evidence": "v357-natural-disclosure/disclosure-paths.json",
+      "note": "An options privacy fixture used the now-invalid old disclosure shape; original failure retained."
+    },
+    {
+      "check": "options privacy fixture corrected to new explicit disclosure shape; privacy assertions unchanged",
+      "files": 1,
+      "passed": 15,
+      "failed": 0,
+      "evidence": "v357-natural-disclosure/options-corrected.json"
+    },
+    {
+      "check": "isolated browser disclosure allow/deny, explicit choice, revision and refresh",
+      "files": 3,
+      "passed": 5,
+      "failed": 0,
+      "sourceFiles": 2012,
+      "sourceUnchanged": true,
+      "realModelCalls": 0,
+      "evidence": "v357-natural-disclosure/browser/receipt.json"
+    },
+    {
+      "check": "architecture, tables, AI manual, AI entry registry, roadmap, freshness, metrics",
+      "exitCode": 0,
+      "evidence": "v357-natural-disclosure/static-gates.json"
+    },
+    {
+      "check": "changed-file lint, TypeScript and production build",
+      "exitCode": 0,
+      "evidence": "v357-natural-disclosure/precommit-gates.json"
+    }
+  ],
+  "currentM1": {
+    "cohort": "m1-v356-current",
+    "totalSlots": 120,
+    "runtimeFailed": 2,
+    "protocolNotDispatched": 10,
+    "notStarted": 108,
+    "formalQualityPasses": 0,
+    "humanScores": 0,
+    "originalSourceAndFailuresPreserved": true
+  },
+  "outstanding": [
+    "Complete current-source full delivery gates and real-model repair verification; targeted tests, historical prompt bytes, browser, types, lint, build and static governance are verified.",
+    "Implement bounded settlement for completed inquiries and avoid repeated wait-only actions.",
+    "Freeze new validated source before collecting new real-model evidence; never relabel the V356 failures.",
+    "Complete the seven existing technical delivery packages; human evaluation remains deferred."
+  ],
+  "remoteExistingSource": {
+    "head": "7390a4fb08ed5a1b39251e8484088894f460acc0",
+    "runId": "39923888159",
+    "cli": "success",
+    "browser": "in_progress",
+    "coversCurrentDirtySource": false
+  },
+  "claims": {
+    "m1Passed": false,
+    "realModelRepairPassed": false,
+    "commercialReady": false,
+    "released": false
+  }
+}

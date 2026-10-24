@@ -1,0 +1,50 @@
+{
+  "at": 1792452780.76237,
+  "source": "/Users/qinyingying/.codex/worktrees/character-chat-plan/storyforge",
+  "defaultProducer": 45,
+  "defaultReviewer": 32,
+  "engineeringActivation": {
+    "producer": 46,
+    "reviewer": 33,
+    "mechanism": "explicit test-only registry mock / browser module route"
+  },
+  "formalModelCalls": 0,
+  "earlierFailure": {
+    "execSessionId": 19313,
+    "tests": 14,
+    "failed": 11,
+    "cause": "Full basis comparison used insertion-order JSON against a canonical persisted checkpoint; corrected to canonical serialization only for the new candidate source."
+  },
+  "earlierTypeCheck": {
+    "execSessionId": 26759,
+    "exitCode": 0
+  },
+  "passingChecks": {
+    "integration": {
+      "tests": 18,
+      "passed": 18
+    },
+    "legacyAndContract": {
+      "files": 4,
+      "tests": 163,
+      "passed": 163
+    }
+  },
+  "fullDeliveryQueue": "V221 uses V219 source and excludes V222/V223",
+  "version": 1,
+  "status": "pipeline-engineering-verified-before-default-activation",
+  "semanticQualityAccepted": false,
+  "fullDeliveryValidated": false,
+  "browser": {
+    "at": 1792452975.987241,
+    "execSessionId": 52493,
+    "exitCode": 0,
+    "tests": 3,
+    "passed": 3,
+    "sourceFilesChecked": 2955,
+    "changedFiles": [],
+    "evidenceBoundary": "Isolated browser engineering tests with explicit producer v46/reviewer v33 and mocked provider; repository default remains v45/v32; not real-model acceptance."
+  },
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v223-control-handoff-pipeline",
+  "manifestSha256": "935384743215325bfb3698af04e2ebebb200fe3c96b4782071ca8c91529f6b3d"
+}

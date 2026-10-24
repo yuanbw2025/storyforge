@@ -13,6 +13,7 @@ import { getFactPredicate } from './fact-predicate-registry'
 import { retrieveChunks, embedQuery, readNarrativeSummaryContext } from '../retrieval/retrieval'
 import { isEmbeddingReady, embeddingModelTag } from '../ai/adapters/embedding-adapter'
 import { useAIConfigStore } from '../../stores/ai-config'
+import {CHAT_CONTEXT_SOURCE_TOKENS_V1, CHAT_COORDINATOR_SOURCE_TOKENS_V1} from '../character-interaction/source-budgets'
 import {
   buildCreativeRulesContext,
   buildHistoricalContext,
@@ -692,6 +693,135 @@ async function readProductRuntimeContext(input: AssembleContextInput): Promise<s
   ].join('\n')
 }
 
+async function readChatMemoryReviewContext(input: AssembleContextInput): Promise<string> {
+  if (!input.scope || input.productRuntimeSessionId == null || input.chatMemoryCandidateRunId == null) return ''
+  const {readChatMemoryReviewSourceV1} = await import('../character-interaction/memory-review-source')
+  return `【待审查记忆及实际共同可见来源；尚未采用】\n${await readChatMemoryReviewSourceV1(input.scope, input.productRuntimeSessionId, input.chatMemoryCandidateRunId, input.worldGroupId ?? null)}`
+}
+
+async function readChatSituationCandidateContext(input: AssembleContextInput): Promise<string> {
+  if (!input.scope || input.productRuntimeSessionId == null || input.chatSituationCandidateRunId == null) return ''
+  const {readLatestVerifiedAgentRunCheckpointV1} = await import('../agent/run/checkpoint')
+  const saved = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.chatSituationCandidateRunId, {owner: 'instance'})
+  if (!saved || saved.snapshot.run.productRuntimeSessionId !== input.productRuntimeSessionId) return ''
+  const candidate = saved.resumePayload as {kind?: string; draft?: unknown}
+  if (candidate?.kind !== 'chat-situation-candidate') return ''
+  const {parseChatSituationDraftV1} = await import('../character-interaction/narrative-situations')
+  return `【本次持久化情境候选，仅供审查，尚未发生】\n${JSON.stringify(parseChatSituationDraftV1(candidate.draft))}`
+}
+
+async function readChatActionCandidateValue(input: AssembleContextInput) {
+  if (!input.scope || input.productRuntimeSessionId == null || input.chatActionCandidateRunId == null) return null
+  const {readLatestVerifiedAgentRunCheckpointV1} = await import('../agent/run/checkpoint')
+  const saved = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.chatActionCandidateRunId, {owner: 'instance'})
+  if (!saved || saved.snapshot.run.productRuntimeSessionId !== input.productRuntimeSessionId) return null
+  const candidate = saved.resumePayload as {kind?: string; participantKey?: string; action?: unknown; options?: unknown; handoff?: unknown}
+  if (!candidate?.participantKey) return null
+  if (candidate.kind === 'chat-narrative-options-candidate') {
+    const {parseChatNarrativeOptionsV1, CHAT_NARRATIVE_OPTION_KEYS_V1} = await import('../character-interaction/narrative-options')
+    return {snapshot: saved.snapshot, value: {actorKey: candidate.participantKey,
+      options: parseChatNarrativeOptionsV1(candidate.options).map((action, index) => ({optionKey: CHAT_NARRATIVE_OPTION_KEYS_V1[index], action}))}}
+  }
+  if (candidate.kind === 'chat-control-handoff-candidate') {
+    const {parseChatControlHandoffV1, readChatControlHandoffBasisV1} = await import('../character-interaction/control-handoff-contract')
+    const {assertChatControlHandoffBindingsV1} = await import('../character-interaction/control-handoff-wire')
+    const {readChatActionChoiceEvidenceV1} = await import('../character-interaction/action-choice-evidence')
+    assertChatControlHandoffBindingsV1(saved.snapshot.contract, parseChatControlHandoffV1(candidate.handoff))
+    const {choice} = await readChatActionChoiceEvidenceV1({scope: input.scope, snapshot: saved.snapshot, participantKey: candidate.participantKey})
+    const handoff = parseChatControlHandoffV1(candidate.handoff)
+    const state = await readProductRuntimeStateForContext(input.productRuntimeSessionId)
+    if (!state.interaction) return null
+    return {snapshot: saved.snapshot, value: {actorKey: candidate.participantKey, handoff, actionChoice: choice,
+      basisMessages: readChatControlHandoffBasisV1(state.interaction, candidate.participantKey, handoff)}}
+  }
+  if (candidate.kind !== 'chat-narrative-action-candidate') return null
+  const {parseChatNarrativeActionV1} = await import('../character-interaction/narrative-actions')
+  return {snapshot: saved.snapshot, value: {actorKey: candidate.participantKey, action: parseChatNarrativeActionV1(candidate.action)}}
+}
+
+async function readChatActionRevisionContext(input: AssembleContextInput): Promise<string> {
+  if (!input.scope || input.productRuntimeSessionId == null || !input.interactionParticipantKey || input.chatActionRevisionCurrentRunId == null) return ''
+  const {readChatActionRevisionSourceV1} = await import('../character-interaction/action-revision')
+  const source = await readChatActionRevisionSourceV1({scope: input.scope, sessionId: input.productRuntimeSessionId,
+    actorKey: input.interactionParticipantKey, currentRunId: input.chatActionRevisionCurrentRunId})
+  if (!source) return ''
+  // Only a failed check code, never coordinator reasons or hidden facts.
+  return `【明确请求修订的未生效行动；不是已发生事实】\n${JSON.stringify({schema: 'storyforge.chat-action-revision-source', version: 1,
+    candidateHash: source.candidateHash, reviewHash: source.reviewHash, failedChecks: ['consequences'], action: source.action})}`
+}
+
+async function readChatActionCandidateContext(input: AssembleContextInput): Promise<string> {
+  const saved = await readChatActionCandidateValue(input)
+  if (!saved) return ''
+  const candidate = saved.value
+  return `${'options' in candidate ? '【本次持久化行动候选组，仅供逐项审查，彼此互斥且均未发生】' : 'handoff' in candidate ? '【本次持久化交还控制候选及完整对话依据，仅供审查，无新台词或后果】' : '【本次持久化行动候选，仅供审查，尚未展示或提交】'}\n${'handoff' in candidate ? canonicalStringify(candidate) : JSON.stringify(candidate)}`
+}
+
+async function readChatSituationRuntimeProjection(input: AssembleContextInput) {
+  if (input.productRuntimeSessionId == null || !input.scope) return {text: ''}
+  const {assertInstanceBinding} = await import('../product/runtime-instances')
+  const session = await assertInstanceBinding(input.productRuntimeSessionId, input.scope)
+  if (session.kind !== 'character-interaction' || session.projectId !== input.projectId) return {text: ''}
+  if (input.worldGroupId !== undefined && (session.worldGroupId ?? null) !== (input.worldGroupId ?? null)) return {text: ''}
+  const playable = await verifyPlayableRuntimeSession({scope: input.scope, session})
+  if (playable.runtimePackage.productType !== 'character-interaction' || !playable.runtimePackage.interaction?.chatNarrative) return {text: ''}
+  const state = await readProductRuntimeStateForContext(session.id!)
+  if (!state.interaction) return {text: ''}
+  const {projectChatCoordinatorContextV1} = await import('../character-interaction/coordinator-selection')
+  const project = (candidate: Parameters<typeof projectChatCoordinatorContextV1>[1]) => projectChatCoordinatorContextV1(state.interaction!, candidate)
+  const sourceUnits = playable.runtimePackage.interaction.chatSource?.version === 6 ? playable.runtimePackage.interaction.chatSource.sourceUnits : undefined
+  const saved = await readChatActionCandidateValue(input)
+  const {chatCoordinatorAudienceVersionV1} = await import('../character-interaction/coordinator-audience')
+  const {readChatCandidateRetrievalVersion} = await import('../character-interaction/context-reader-version')
+  if (!saved) {
+    let discoveryEvidence = false
+    let audienceVersion: 1 | 2 = 1
+    let inquiryEvidence: 1 | 2 | 3 | 4 | 5 | undefined
+    const {usesChatDiscoveryEvidenceContextV1} = await import('../character-interaction/discovery-evidence-context')
+    const {chatInquiryEvidenceVersionForContractV1} = await import('../character-interaction/inquiry-evidence')
+    if (input.chatSituationConstructionRunId != null) {
+      const {readInstanceAgentRunV1} = await import('../agent/run/event-store')
+      const producer = await readInstanceAgentRunV1(input.scope, input.chatSituationConstructionRunId)
+      if (producer.run.productRuntimeSessionId !== session.id || producer.projection.state !== 'running'
+        || !producer.contract.executionBindings?.some(b => b.stepId === 'interaction:runtime-candidate' && b.skillId === 'character.chat-situation-construction')) {
+        throw new Error('情境证据读取缺少当前实例的生成合同')
+      }
+      const {assertRuntimeHarnessFreshV1} = await import('../agent/run/runtime-scope')
+      await assertRuntimeHarnessFreshV1({scope: input.scope, contractScope: producer.contract.scope, participantKey: 'player', view: 'chat-situation'})
+      audienceVersion = chatCoordinatorAudienceVersionV1(producer.contract)
+      discoveryEvidence = usesChatDiscoveryEvidenceContextV1(producer)
+      inquiryEvidence = chatInquiryEvidenceVersionForContractV1(producer.contract)
+    }
+    let retrievalVersion: import('../character-interaction/context-selection').ChatRetrievalVersion = 'chat-relevance-v9'
+    if (input.chatSituationCandidateRunId != null) {
+      const {readLatestVerifiedAgentRunCheckpointV1} = await import('../agent/run/checkpoint')
+      const producer = await readLatestVerifiedAgentRunCheckpointV1(input.scope, input.chatSituationCandidateRunId, {owner: 'instance'})
+      if (!producer || producer.snapshot.run.productRuntimeSessionId !== input.productRuntimeSessionId) return {text: ''}
+      retrievalVersion = await readChatCandidateRetrievalVersion(producer.snapshot, input.projectId, 'chatSituationRuntime')
+      audienceVersion = chatCoordinatorAudienceVersionV1(producer.snapshot.contract)
+      discoveryEvidence = usesChatDiscoveryEvidenceContextV1(producer.snapshot)
+      inquiryEvidence = chatInquiryEvidenceVersionForContractV1(producer.snapshot.contract)
+    }
+    return project({text: await readChatSituationCandidateContext(input), retrievalVersion, discoveryEvidence, inquiryEvidence, audienceVersion, ...(sourceUnits ? {sourceUnits} : {})})
+  }
+  const retrievalVersion = await readChatCandidateRetrievalVersion(saved.snapshot, input.projectId, 'interactionRuntime', saved.value.actorKey, state.interaction)
+  return project({text: JSON.stringify(saved.value), actorKey: saved.value.actorKey, retrievalVersion, audienceVersion: chatCoordinatorAudienceVersionV1(saved.snapshot.contract), ...(sourceUnits ? {sourceUnits} : {})})
+}
+
+async function readChatSituationRuntimeContext(input: AssembleContextInput): Promise<string> {
+  return (await readChatSituationRuntimeProjection(input)).text
+}
+
+/** Replays the registered projection against the locked state. Audit identities
+ * stay in the durable packet, outside the model budget. A mismatched assembly
+ * is rejected rather than attaching evidence for a different request. */
+export async function readChatCoordinatorSelectionEvidenceV1(input: AssembleContextInput, assembledText: string) {
+  const projection = await readChatSituationRuntimeProjection(input)
+  if (!('selection' in projection) || !projection.selection) return undefined
+  if (!projection.text || !assembledText.includes(projection.text)) throw new Error('协调历史选择证据与实际输入不一致。')
+  return projection.selection
+}
+
 async function readInteractionRuntimeContext(input: AssembleContextInput): Promise<string> {
   if (input.productRuntimeSessionId == null) return ''
   const participantKey = input.interactionParticipantKey?.trim()
@@ -715,9 +845,25 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
   const profile = state.interaction.profiles.find(item => item.participantKey === participantKey)
   if (!profile) return ''
   const { buildInteractionContextWindow } = await import('../character-interaction/runtime')
+  let retrievalVersion: import('../character-interaction/context-selection').ChatRetrievalVersion = 'chat-relevance-v10'
+  if (input.chatActionContextRunId != null) {
+    if (!input.scope || session.kind !== 'character-interaction') throw new Error('角色对话标识读取缺少实例作用域')
+    const {readInstanceAgentRunV1} = await import('../agent/run/event-store')
+    const producer = await readInstanceAgentRunV1(input.scope, input.chatActionContextRunId)
+    const {chatActionContextVersionsV1, usesChatActionBoundContextV1} = await import('../character-interaction/context-selection')
+    const binding = producer.contract.executionBindings?.find(b => b.stepId === 'interaction:runtime-candidate')
+    if (producer.run.productRuntimeSessionId !== session.id || producer.projection.state !== 'running'
+      || !binding || !usesChatActionBoundContextV1(binding)) {
+      throw new Error('角色对话标识读取缺少当前实例的生成合同')
+    }
+    const {assertRuntimeHarnessFreshV1} = await import('../agent/run/runtime-scope')
+    await assertRuntimeHarnessFreshV1({scope: input.scope, contractScope: producer.contract.scope, participantKey})
+    retrievalVersion = chatActionContextVersionsV1(binding.promptVersion).retrievalVersion
+  }
   const view = buildInteractionContextWindow(state.interaction, participantKey, {
     maxCharacters: 24_000,
     maxRecentMessages: 32,
+    retrievalVersion,
   })
   const town = state.town
   const townResident = town?.content.residents.find(item => {
@@ -741,21 +887,8 @@ async function readInteractionRuntimeContext(input: AssembleContextInput): Promi
     ...(townMemories.length ? townMemories.map(memory => `- ${memory.summary}｜证据=${memory.sourceSequences.join(',') || '初始'}`) : ['- 无']),
     '【小镇行为边界】你拥有自己的生活和立场；只能谈论自己知道的事实；不得替玩家决定行动；不得把私密想法当作玩家已知信息。',
   ] : []
-  return [
-    `【角色互动视角】${profile.name}｜key=${profile.participantKey}｜身份=${profile.roleLabel}`,
-    `【说话约束】${profile.voiceRules}`,
-    `【当前场景】${view.activeScene?.title ?? '未开始'}｜${view.activeScene?.purpose ?? ''}`,
-    '【该角色已知事实】',
-    ...(view.knowledge.length ? view.knowledge.map(item => `- ${item.knowledgeKey}｜${item.status}｜${item.content}`) : ['- 无']),
-    '【该角色持久记忆】',
-    ...(view.memories.length ? view.memories.map(item => `- ${item.kind}｜重要度=${item.importance}｜${item.content}`) : ['- 无']),
-    '【该角色关系视图】',
-    ...(view.relationships.length ? view.relationships.map(item => `- ${item.toParticipantKey}｜${item.label}=${item.value}`) : ['- 无']),
-    '【该角色可见对话】',
-    ...(view.messages.length ? view.messages.map(message => `- #${message.eventSequence}｜${message.speakerKey}｜${message.text}`) : ['- 无']),
-    `【预算证据】省略早期消息=${view.omittedMessageCount}｜字符=${view.characterCount}`,
-    ...townLines,
-  ].join('\n')
+  const {formatInteractionRuntimeContextV1} = await import('../character-interaction/context-format')
+  return formatInteractionRuntimeContextV1(profile, view, townLines)
 }
 
 async function readAiTownRuntimeContext(input: AssembleContextInput): Promise<string> {
@@ -1946,7 +2079,61 @@ export const CONTEXT_SOURCES: ContextSource[] = [
       const scope = await resolveScope(input)
       const rows = await readOwnedRows<import('../character-interaction/authoring-contract').ChatAuthoringDraftV1>(scope, 'chatAuthoringDrafts', { owner: 'work' })
       const draft = rows[0]
-      return draft ? JSON.stringify({ revision: draft.revision, settings: JSON.parse(draft.settingsJson), conversation: (JSON.parse(draft.conversationJson) as import('../character-interaction/draft-service').ChatConversationTurnV1[]).filter(turn=>!turn.archived), worldSelected: draft.worldReleaseId != null }) : ''
+      if (!draft) return ''
+      const settings = JSON.parse(draft.settingsJson) as import('../character-interaction/authoring-contract').ChatAuthoringSettings
+      const {chatSettingsForAIContextV1} = await import('../character-interaction/experience-info')
+      return JSON.stringify({ revision: draft.revision, settings: chatSettingsForAIContextV1(settings), conversation: (JSON.parse(draft.conversationJson) as import('../character-interaction/draft-service').ChatConversationTurnV1[]).filter(turn=>!turn.archived), worldSelected: draft.worldReleaseId != null })
+    },
+  },
+  {
+    key: 'chat.consultation', label: '角色聊天本轮方案与所选证据', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 20_000, protectedFromTrim: true, atomic: true,
+    enabled: input => input.chatConsultationRequest !== undefined,
+    read: async input => {
+      if (!input.chatConsultationRequest) throw new Error('请指定本轮方案会谈')
+      const {readChatConsultationContextV2} = await import('../character-interaction/consultation-context')
+      return JSON.stringify(await readChatConsultationContextV2(await resolveScope(input), input.chatConsultationRequest))
+    },
+  },
+  {
+    key: 'chat.source-review', label: '角色聊天作者选中的原文资料', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 20_000, protectedFromTrim: true, atomic: true,
+    enabled: input => input.chatSourceReviewRequest !== undefined,
+    read: async input => {
+      if (!input.chatSourceReviewRequest) throw new Error('请明确选择需要整理的原文片段')
+      const request = structuredClone(input.chatSourceReviewRequest)
+      const {readChatSourceReviewContextV1} = await import('../character-interaction/source-review-context')
+      return JSON.stringify(await readChatSourceReviewContextV1(await resolveScope(input), request))
+    },
+  },
+  {
+    key: 'chat.source-units', label: '角色聊天待整理事实的完整原文', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 20_000, protectedFromTrim: true, atomic: true,
+    enabled: input => input.chatSourceUnitsRequest !== undefined,
+    read: async input => {
+      if (!input.chatSourceUnitsRequest) throw new Error('请指定事实整理原文')
+      const {readChatSourceUnitsContextV1} = await import('../character-interaction/source-units-context')
+      return JSON.stringify(await readChatSourceUnitsContextV1(await resolveScope(input), input.chatSourceUnitsRequest))
+    },
+  },
+  {
+    key: 'chat.source-units-review', label: '角色聊天事实候选与完整原文复核', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 20_000, protectedFromTrim: true, atomic: true,
+    enabled: input => input.chatSourceUnitsReviewRequest !== undefined,
+    read: async input => {
+      if (!input.chatSourceUnitsReviewRequest) throw new Error('请指定事实复核候选')
+      const {readChatSourceUnitsReviewContextV1} = await import('../character-interaction/source-units-context')
+      return JSON.stringify(await readChatSourceUnitsReviewContextV1(await resolveScope(input), input.chatSourceUnitsReviewRequest))
+    },
+  },
+  {
+    key: 'chat.source-unit-confirmation', label: '角色聊天事实与权限确认复核', scope: 'project', layer: 'L0', ownerFrom: 'work',
+    budgetTokens: 20_000, protectedFromTrim: true, atomic: true,
+    enabled: input => input.chatSourceUnitConfirmationRequest !== undefined,
+    read: async input => {
+      if (!input.chatSourceUnitConfirmationRequest) throw new Error('请指定待确认的事实与权限')
+      const {readChatSourceUnitConfirmationContextV1} = await import('../character-interaction/source-unit-confirmation-context')
+      return JSON.stringify(await readChatSourceUnitConfirmationContextV1(await resolveScope(input), input.chatSourceUnitConfirmationRequest))
     },
   },
   {
@@ -1969,6 +2156,14 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     budgetTokens: 24_000,
     enabled: input => Number.isInteger(input.productBuildId) && !!input.productArtifactKeys?.length,
     read: readProductProductionArtifactInputs,
+  },
+  {
+    key: 'product-production.chat-opening-review-inputs',
+    label: '角色聊天开场审查来源与引用目录',
+    scope: 'project', layer: 'L1', ownerFrom: 'work', budgetTokens: 24_000,
+    protectedFromTrim: true,
+    enabled: input => Number.isInteger(input.productBuildId) && input.productProductionTaskKey === 'content.chat-opening-review',
+    read: async input => (await import('../character-interaction/opening-review-references')).readChatOpeningReviewReferenceContextV1(input),
   },
   {
     key: 'product-production.adventure-scene-script-inputs',
@@ -2581,12 +2776,51 @@ export const CONTEXT_SOURCES: ContextSource[] = [
     read: readOpenWorldRuntimeContext,
   },
   {
-    key: 'interactionRuntime',
-    label: '角色互动单一视角',
+    key: 'chatActionRevision', label: '未通过回复的受限修订来源',
+    scope: 'runtime', ownerFrom: 'instance', layer: 'L0', budgetTokens: 6000,
+    atomic: true, protectedFromTrim: true, requiresProductRuntimeSessionId: true,
+    enabled: input => input.chatActionRevisionCurrentRunId != null, read: readChatActionRevisionContext,
+  },
+  {
+    key: 'chatMemoryReview', label: '记忆正文与实际共同来源', atomic: true,
+    scope: 'runtime', ownerFrom: 'instance', layer: 'L0', budgetTokens: 20000,
+    protectedFromTrim: true, requiresProductRuntimeSessionId: true,
+    enabled: input => input.chatMemoryCandidateRunId != null, read: readChatMemoryReviewContext,
+  },
+  {
+    key: 'chatActionCandidate', label: '待审查的持久化行动候选',
+    scope: 'runtime', ownerFrom: 'instance', layer: 'L0', budgetTokens: 8000,
+    protectedFromTrim: true, requiresProductRuntimeSessionId: true,
+    enabled: input => input.chatActionCandidateRunId != null, read: readChatActionCandidateContext,
+  },
+  {
+    key: 'chatSituationCandidate',
+    label: '待审查的持久化情境候选',
+    scope: 'runtime', ownerFrom: 'instance', layer: 'L0', budgetTokens: 8000,
+    protectedFromTrim: true, requiresProductRuntimeSessionId: true,
+    enabled: input => input.chatSituationCandidateRunId != null,
+    read: readChatSituationCandidateContext,
+  },
+  {
+    key: 'chatSituationRuntime',
+    label: '角色聊天情境协调视角',
     scope: 'runtime',
     ownerFrom: 'instance',
     layer: 'L0',
-    budgetTokens: 8000,
+    budgetTokens: CHAT_COORDINATOR_SOURCE_TOKENS_V1,
+    atomic: true,
+    protectedFromTrim: true,
+    requiresProductRuntimeSessionId: true,
+    read: readChatSituationRuntimeContext,
+  },
+  {
+    key: 'interactionRuntime',
+    label: '角色互动单一视角',
+    atomic: true,
+    scope: 'runtime',
+    ownerFrom: 'instance',
+    layer: 'L0',
+    budgetTokens: CHAT_CONTEXT_SOURCE_TOKENS_V1,
     protectedFromTrim: true,
     requiresProductRuntimeSessionId: true,
     enabled: input => !!input.interactionParticipantKey?.trim(),
@@ -3382,3 +3616,4 @@ export const CONTEXT_SOURCES: ContextSource[] = [
 export const CONTEXT_SOURCE_BY_KEY: ReadonlyMap<string, ContextSource> = new Map(
   CONTEXT_SOURCES.map(source => [source.key, source] as const),
 )
+import {canonicalStringify} from '../agent/run/hash'

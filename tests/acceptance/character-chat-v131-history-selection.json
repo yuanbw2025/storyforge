@@ -1,0 +1,123 @@
+{
+  "schema": "storyforge.character-chat-engineering-evidence",
+  "version": 1,
+  "label": "V131 joint history selection and reference closure",
+  "recordedAt": "2026-10-16T05:56:18.128410+00:00",
+  "implementation": {
+    "baseCommit": "5a7f05759560484ce19b7617b72b8f0422febba2",
+    "commit": "f56041e3d73ba1c417b69c0be4ff13699e338b0a",
+    "status": "implemented in formal registered readers; associated and focused validation passed; full suites pending"
+  },
+  "boundary": {
+    "product": "character-interaction",
+    "lifecycle": "product development; S3 runtime",
+    "owner": "existing Chat Work / ProductRuntimeSession",
+    "world": "frozen reference only; world and complete canonical state unchanged",
+    "reads": "interactionRuntime and chatSituationRuntime; actor v12, situation v14, retrieval v8",
+    "writes": "existing reviewed candidate/adoption contracts; factEvidenceVersion=1 and resolutionEvidenceVersion=1 retained for applicable paths",
+    "storage": "no new table, schema, archive, state field or storage-cap increase",
+    "media": "unchanged product-owned media",
+    "externalModelCalls": 0
+  },
+  "change": [
+    "Versioned actor and coordinator projections jointly rank source-classified observations, proven terminal goals/threads and resolved commitments. The complete canonical state still supplies visibility and stale hashes; old readers reproduce original inputs.",
+    "Mandatory roots include unclassified facts, durable object/place/character facts, unfinished or paused matters, beliefs/plans, discovery conditions and results, inquiry results, visited places, latest known consequences and pending actions. Pins, pending corrections, selected relationship reasons and their source-event facts stay protected.",
+    "Every selected unit expands its authorized dependency closure. Selected goals include original and terminal fact references plus their latest commitment disposition; selected commitments retain their own goal when authorized and facts from declaration/request/resolution events. Shared promises never disclose private goals.",
+    "Closed matters include exact original expression excerpts; excluded dialogue does not erase canonical resolution evidence. Role selection cannot expose unknown dependency identities or private omission counts.",
+    "Coordinator review protects the actor-delivered rows and explicit existing candidate references before selecting additional history. Context packets preserve decisions and versions; coordinator manifests retain compact included/omitted identities and required reasons.",
+    "Current-scene player statements are protected beyond the old recent-message count. Required closure exceeding the unchanged budget stops before sending; no arbitrary truncation, automatic retry, state reset or lost obligation.",
+    "Historical input inspection shows only shared fact and thread selections. Recent commitment disposition is labeled as such. Full stored facts, statuses, source references and old candidate adoption behavior remain unchanged."
+  ],
+  "formalPressure": {
+    "kind": "injected engineering pressure; not meaningful-story acceptance",
+    "actionsBeforeRecall": 26,
+    "newObservations": 52,
+    "totalFacts": 56,
+    "recallActions": 1,
+    "injectedCallsIncludingRecall": 54,
+    "externalModelCalls": 0,
+    "oldPolicy": "retrieval v7 stops on the same retained state due to budget",
+    "newPolicy": "v8 recalls the old map clue through actual producer/reviewer; review resumes after reopen, adopts idempotently and retains every canonical fact",
+    "lifecycle": "two nested branches, both parents deleted; no ancestor events or runs; export/import/reopen state and selection equal; original world unchanged",
+    "test": "tests/regression/R-CHAT-04-history-selection-harness.test.ts"
+  },
+  "verification": {
+    "selectionCounterexamples": {
+      "tests": 11,
+      "scope": "recursive dependencies, unresolved and unclassified roots, hidden identities, exact closure excerpts, nested negative rebase, excluded source dialogue, pinned memory/relationship sources and mandatory-player overflow"
+    },
+    "associated": {
+      "files": 112,
+      "tests": 1337,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v131-regression-final-receipt.json",
+      "note": "Passed before the final latest-disposition display-reason correction; no actor input or retrieval membership changed in that correction."
+    },
+    "finalAffectedRegression": {
+      "files": 7,
+      "tests": 54,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v131-final-label-regression-receipt.json",
+      "scope": "final selection, registered Harness, promise history, exact inspection, legacy bytes, source privacy and parentless lifecycle"
+    },
+    "browser": {
+      "isolatedStorage": true,
+      "firstPasses": 12,
+      "firstFailures": 1,
+      "firstReceipt": "/tmp/storyforge-chat-v131-targeted-e2e-receipt.json",
+      "repairedPathPasses": 1,
+      "repairedReceipt": "/tmp/storyforge-chat-v131-browser-repair-receipt.json",
+      "uniquePathsWithSuccessfulEvidence": 13,
+      "scope": "input inspection, promises, corrections, options, player/thread followup, refresh, portable branches, mobile layout and explicit dialogue exclusion"
+    },
+    "gates": {
+      "count": 11,
+      "exitCode": 0,
+      "receipt": "/tmp/storyforge-chat-v131-final-gates-receipt.json",
+      "finalCorrectionReceipt": "/tmp/storyforge-chat-v131-label-gates-receipt.json",
+      "finalCorrectionChecks": [
+        "docs",
+        "roadmap",
+        "metrics",
+        "tsc",
+        "lint",
+        "build",
+        "bundle-size"
+      ]
+    },
+    "retainedFailures": [
+      {
+        "log": "/tmp/storyforge-chat-v131-initial-tsc.log",
+        "outcome": "Initial implementation used Array.at unsupported by the repository target; changed to slice(-1)[0]."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v131-integrated-first.log",
+        "outcome": "Seven failures: outdated reader fixture labels, changed protected-player count behavior and historical selection reasons. Old fixtures now create actual old bytes and identities; current behavior has separate assertions."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v131-harness-first.log",
+        "outcome": "Real implementation defect: adding the displayed character count after selection could cross the budget by its extra digits. Measure the final displayed count during each trial; original failed promise fixture retained, repaired replay passed."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v131-regression.log",
+        "outcome": "109 files / 1326 tests passed; 3 files / 11 tests failed. Restored specific relevance reasons and omission counters, separated v7 historical-count tests from v8 protection tests, and updated explicit reader mappings. Mandatory player overflow remains a documented limit."
+      },
+      {
+        "log": "/tmp/storyforge-chat-v131-targeted-e2e.log",
+        "outcome": "12 passed, one failed: a retained latest disposition showed generic relevance instead of its actual protection reason. Corrected the display metadata and reran the affected browser path and 54 related regressions.",
+        "artifacts": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v131-history-selection/browser-first"
+      }
+    ]
+  },
+  "fullValidation": {
+    "status": "pending final committed snapshot; no full-suite pass claimed",
+    "ciReceipt": "/tmp/storyforge-chat-v131-full-ci-receipt.json",
+    "e2eReceipt": "/tmp/storyforge-chat-v131-full-e2e-receipt.json"
+  },
+  "limits": [
+    "CHAT-04.06c remains open pending full-suite terminal evidence; 04.06d storage capacity work has not begun. Existing fact/goal/thread/commitment caps remain.",
+    "This lexical projection is not a semantic-recall guarantee. Sustained 100/300/1000 consequential actions and more than existing historical storage caps remain unverified.",
+    "Large current-scene player histories and mandatory durable/discovery evidence can still exceed budget. The new policy stops rather than claiming unlimited conversation.",
+    "No new real-model requests. Prior Codex failures, all cohort denominators, unavailable Agnes configuration, human-play and commercial gates remain unchanged."
+  ]
+}

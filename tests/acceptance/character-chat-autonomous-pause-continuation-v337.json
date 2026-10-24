@@ -1,0 +1,64 @@
+{
+  "schema": "storyforge.chat-real-continuation-receipt",
+  "version": 1,
+  "at": "2026-10-22T21:48:56.560236+00:00",
+  "status": "failed-control-review-draft-confusion-preserved",
+  "sourceHead": "6ed91f15e09f7d9682a2474a1655ddc4c7598fdd",
+  "sourceManifestSha256": "6794a02e0e8dd8fd3a87d2eeffd6b2bb8a3a09c01cf3a164dd59642c02297026",
+  "sourceUnchanged": true,
+  "nativeCalls": 6,
+  "nativeAllCompleted": true,
+  "reportedTotalTokens": 101050,
+  "costUsd": null,
+  "playerOpportunities": 1,
+  "secondContinueDispatched": false,
+  "injectedModelOutputs": false,
+  "runtimeRuns": {
+    "completed": 1,
+    "failed": 1
+  },
+  "failedChecks": [
+    {
+      "check": "player-agency",
+      "passed": false,
+      "reason": "已交付行动只宣布本轮向掌柜的问话结束，候选却进一步选择“暂缓主动追查铜印”，包括不转向住客试探。这把局部问话收束扩大为未经共同可见告知的整体追查暂停；结束本轮不能据此改变共同事项的推进状态。"
+    }
+  ],
+  "observedMismatch": "The reviewer player-agency rejection cites the unadopted actionChoice pause draft. The final version2 finish-current-turn handoff only marks local closure; the adopted response closes questioning, goals remain active and threads open. No rejected handoff or pause was adopted.",
+  "goals": [
+    [
+      "goal-1",
+      "active"
+    ]
+  ],
+  "threads": [
+    [
+      "thread-1",
+      "open"
+    ]
+  ],
+  "restorationChecks": {
+    "parentPreserved": true,
+    "branchPreserved": true,
+    "refreshPreserved": true,
+    "worldPreserved": true,
+    "childRunStatesPreserved": true,
+    "parentRunIdentitiesPreserved": true,
+    "parentRunStatesPreserved": true,
+    "originalFailurePreserved": true,
+    "originalOpeningReviewPreserved": true,
+    "allArtifactBytesAndMultiplicityPreserved": true,
+    "zeroModelRequests": true,
+    "noResumableRuns": true
+  },
+  "restorationModelCalls": 0,
+  "formalM1Credit": false,
+  "originalV332Unchanged": true,
+  "evidence": {
+    "resultPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v337-autonomous-pause-continuation/autonomous-pause-continuation.json",
+    "backupPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v337-autonomous-pause-continuation/autonomous-pause-continuation-backup.json",
+    "restorationPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v337-autonomous-pause-continuation/restoration-logical-history.json",
+    "preregistrationPath": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v337-autonomous-pause-continuation/preregistration.json"
+  },
+  "next": "Version the turn-end review clarification, retain historical prompts and five independent checks, verify engineering then real generation separately."
+}

@@ -1,0 +1,142 @@
+{
+  "sourceHead": "1b2e43e1d996c3613b36f50c82790eecd9b58e56",
+  "purpose": "Exact synthetic V313 response excerpts; rejected outcome remains failed. No live-model success implied.",
+  "choice": {
+    "nativeRequestId": "081c87c0-55f0-4c0d-8906-7b2ef1d7324a",
+    "responseSha256": "cda5b1949efe21058a8c647ab2f8cd786faa5887bd2df0865346109fd850b774",
+    "value": {
+      "directions": [
+        {
+          "id": "d1",
+          "action": "借油灯尝试正常开启柜台下的木箱，查看其中是否有铜印；若无法正常开启便停下，不强拆，也不触碰旅人寄存物。",
+          "evidenceFactKeys": [
+            "world-fact.0005",
+            "local-1-1",
+            "local-1-2",
+            "statement.innkeeper.box-ownership.003"
+          ],
+          "evidenceMessageIds": [],
+          "changes": "实际核对尚未检查的工具箱内部，为下一步查找提供依据；不凭箱子的用途认定铜印在内，也不据此指责任何人。",
+          "playerDependency": null,
+          "unconfirmedConditions": [
+            "木箱能否正常开启、内部是否有铜印，均待实际检查。"
+          ],
+          "kind": "own-action"
+        }
+      ],
+      "selectedId": "d1",
+      "decisionSummary": "掌柜已说明木箱属于驿站工具箱，而当值检查公用储物容器已有权限依据。先检查这一具体位置，无须玩家参与，并在得到实际结果后再决定下一步。"
+    }
+  },
+  "expression": {
+    "nativeRequestId": "c86a4c14-1f08-4f84-9abd-731660152a6e",
+    "responseSha256": "603ae8e821fd9bec1475dc0d4aa4278e6e4f706aa0a282da6e7cad32b7edac13",
+    "value": {
+      "outcome": "action",
+      "action": {
+        "text": "叶岑借着油灯的光，检查柜台下木箱的开合处，试着用正常方式开启查看，没有强行撬动，也没有触碰旅人的寄存物。",
+        "goalKey": "goal-1",
+        "evidenceFactKeys": [
+          "world-fact.0005",
+          "local-1-1",
+          "local-1-2",
+          "statement.innkeeper.box-ownership.003"
+        ],
+        "audienceKeys": null,
+        "newFacts": [
+          {
+            "factKey": "observation.toolbox-check.001",
+            "kind": "observation",
+            "text": "叶岑借着油灯的光，检查柜台下木箱的开合处，试着用正常方式开启查看，没有强行撬动，也没有触碰旅人的寄存物。",
+            "evidenceFactKeys": [
+              "world-fact.0005",
+              "local-1-1",
+              "local-1-2",
+              "statement.innkeeper.box-ownership.003"
+            ],
+            "evidenceExcerpt": null
+          }
+        ],
+        "disclosures": [],
+        "threadUpdates": [],
+        "goalStatus": null,
+        "goalUpdates": [],
+        "commitmentEffects": [],
+        "relationshipUpdates": [],
+        "nextPossibilities": [
+          {
+            "text": "依据木箱这次检查的实际结果决定后续查找方向，不凭容器用途认定铜印在其中。",
+            "evidenceFactKeys": [
+              "observation.toolbox-check.001",
+              "statement.innkeeper.box-ownership.003"
+            ]
+          }
+        ],
+        "beliefUpdates": [],
+        "situationRequest": {
+          "threadKey": "thread-1",
+          "direction": "确认这次检查的有限结果：木箱能否用正常方式开启；若能，确认借油灯实际可见的箱内情况，是否见到可辨认的铜印；若不能，确认此次遇到的开合阻碍，不预定箱内内容。",
+          "evidenceFactKeys": [
+            "observation.toolbox-check.001",
+            "world-fact.0005",
+            "local-1-1",
+            "local-1-2",
+            "statement.innkeeper.box-ownership.003"
+          ],
+          "evidenceExcerpt": "叶岑借着油灯的光，检查柜台下木箱的开合处，试着用正常方式开启查看，没有强行撬动，也没有触碰旅人的寄存物。",
+          "purpose": "observation-result"
+        },
+        "followupGoal": null,
+        "threadFollowupGoal": null,
+        "resumeGoal": null,
+        "promiseRequest": null,
+        "pauseGoal": null,
+        "sceneTransition": null,
+        "turnCompletion": null,
+        "expressionMode": "self-action-performed"
+      },
+      "handoff": null
+    }
+  },
+  "review": {
+    "nativeRequestId": "8f545d30-1258-4fec-b810-04d0c6daaf28",
+    "responseSha256": "4113f34fc317dd69a4bdbf814e8cea1a1cd79b96b534f2f7c7ee8fe1bd196392",
+    "value": {
+      "checks": [
+        {
+          "check": "continuity",
+          "passed": true,
+          "reason": "承接木箱归属答复，未将尝试开启写成已经打开，也未声称铜印已经找到；原目标与玩家边界均保留。"
+        },
+        {
+          "check": "permissions",
+          "passed": true,
+          "reason": "检查已确认属于当值范围的驿站自用木箱，未强行撬动或触碰旅人寄存物，未扩大检查权限。"
+        },
+        {
+          "check": "player-agency",
+          "passed": true,
+          "reason": "本次检查不依赖玩家许可、物品或参与，waitingForPlayer=false符合实际依赖，未替玩家行动。"
+        },
+        {
+          "check": "visibility",
+          "passed": true,
+          "reason": "正文未泄露未知的箱内内容、铜印位置或角色私有背景，也未把容器用途当作位置证据。"
+        },
+        {
+          "check": "consequences",
+          "passed": false,
+          "reason": "观察事实仅记录检查开合处并尝试开启，未记录实际打开木箱、查看内部。observation-result请求却包含条件性的箱内观察与铜印辨认，将尚未完成的检查包装为本次观察的待确认结果。"
+        },
+        {
+          "check": "meaningful-direction",
+          "passed": false,
+          "reason": "转向检查获准的木箱本身有意义，但情境请求超出已完成观察：若木箱能够开启，实际打开并查看内部仍是必要后续，不能由结果判定阶段代为执行。"
+        }
+      ],
+      "disclosureChecks": [],
+      "commitmentChecks": [],
+      "memoryChecks": []
+    }
+  }
+}

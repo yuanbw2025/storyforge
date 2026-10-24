@@ -10,6 +10,7 @@ import type {
   NarrativeChoiceHistoryEntry,
 } from "./text-game";
 import type { InteractionRelationshipRule } from "./character-interaction";
+import type {ChatMemoryReviewReceiptV1} from './chat-memory';
 import type { AdventureRuntimeState } from "./adventure";
 import type { AvgRuntimePresentationState } from "./avg";
 import type { OpenWorldEvolutionState } from "./open-world-evolution";
@@ -921,7 +922,7 @@ export interface TtrpgRuntimeCampaignState {
 
 export type InteractionSceneStatus = "active" | "ended";
 export type InteractionMemoryStatus =
-  "proposed" | "accepted" | "rejected" | "superseded";
+  "proposed" | "accepted" | "rejected" | "superseded" | "disabled" | "revoked";
 export type InteractionMemoryKind =
   | "scene-summary"
   | "key-memory"
@@ -967,6 +968,8 @@ export interface InteractionRuntimeScene extends InteractionRuntimeSceneTemplate
 }
 
 export interface InteractionRuntimeMessage {
+  /** New narrative player messages retain explicit private versus present-room intent. */
+  playerConversation?: 'private' | 'present'
   messageId: string;
   eventSequence: number;
   role: "player" | "character" | "system";
@@ -999,6 +1002,13 @@ export interface InteractionRuntimeMemory {
   proposalSequence: number;
   decisionSequence: number | null;
   supersededByMemoryId: string | null;
+  /** Present only for a player-confirmed correction; legacy/model proposals
+   * must not be inferred to have passed a visibility or fidelity review. */
+  authorship?: "player-correction";
+  contentReview?: ChatMemoryReviewReceiptV1;
+  /** Explicit player retrieval preference. Absence keeps legacy serialization;
+   * importance and memory kind never imply that the player pinned an entry. */
+  playerPinned?: true;
 }
 
 export interface InteractionRuntimeRelationship {
@@ -1051,6 +1061,7 @@ export interface CharacterInteractionRuntimeState {
   threads: InteractionRuntimeThread[];
   totalPlayerTurns: number;
   remainingDirectorBudget: number;
+  chatNarrative?: import('./chat-narrative').ChatNarrativeStateV1;
 }
 
 export interface ProductNarrativeRuntimeNodeSnapshot {
@@ -1140,6 +1151,8 @@ interface ProductRuntimeSessionBase {
   runtimeHeadSequence: number;
   runtimeHeadStateJson: string;
   runtimeHeadStateHash: string;
+  /** Character-chat UI draft only; absent on old saves and never copied into a branch. */
+  chatComposerDraft?: import('./character-interaction').ChatComposerDraftV1;
   parentSessionId: number | null;
   parentThroughSequence: number | null;
   createdAt: number;
@@ -1197,11 +1210,22 @@ export const PRODUCT_RUNTIME_EVENT_TYPES = [
   "ttrpg.media.failed",
   "ttrpg.media.cancelled",
   "interaction.scene.started",
+  "interaction.release.upgraded",
   "interaction.scene.ended",
   "interaction.participant.joined",
   "interaction.participant.left",
   "interaction.player.message.committed",
   "interaction.character.reply.committed",
+  "interaction.narrative.trigger.requested",
+  "interaction.narrative.edit.requested",
+  "interaction.narrative.edit.cancelled",
+  "interaction.narrative.message-retrieval.changed",
+  "interaction.narrative.memory-control.changed",
+  "interaction.narrative.memory.corrected",
+  "interaction.narrative.action.committed",
+  "interaction.narrative.action-reviewed.committed",
+  "interaction.narrative.control-handoff.committed",
+  "interaction.narrative.situation.committed",
   "interaction.memory.proposed",
   "interaction.memory.accepted",
   "interaction.memory.rejected",

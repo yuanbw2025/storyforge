@@ -1,0 +1,62 @@
+{
+  "schema": "storyforge.chat-full-delivery-evidence",
+  "version": 1,
+  "sourceHead": "27d87139172874f40331dfb539ad41320348905b",
+  "status": "failed-agent-verification-freshness",
+  "queueStatus": "finished",
+  "completedAt": "2026-10-23T00:43:44.830093+00:00",
+  "sourceUnchanged": true,
+  "checks": [
+    {
+      "stage": "full-ci",
+      "command": [
+        "npm",
+        "run",
+        "ci"
+      ],
+      "exitCode": 1,
+      "startedAt": 1792716211.078944,
+      "completedAt": 1792716223.9555352,
+      "log": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v346-current-full-delivery/logs/full-ci.log",
+      "logSha256": "966784759a3d2d133a5b70cc9454dffcb51580f1a32a74fb977b7c168eb1f423",
+      "sourceUnchanged": true
+    }
+  ],
+  "failureCheck": "check:agent-freshness",
+  "failureCount": 23,
+  "failures": [
+    "- text-open-world.production.gameplay-ruleset.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.player-build.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.story-architecture.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.region-skeleton.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.mainline.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.significant-threads.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.region-narrative-packs.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.quest-skeletons.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.progression-catalogs.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.encounter-catalog.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.item-reward-catalog.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.crafting-economy-catalog.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.npc-runtime-catalog.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.map-interaction-catalog.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.quest-finalize.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.scene-scripts.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.presentation-profile.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.system-finalize.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.balance-review.v1 verification is stale: 46 days old (max 45)",
+    "- text-open-world.production.semantic-review.v1 verification is stale: 46 days old (max 45)",
+    "- text-adventure.creative-direction.v1 verification is stale: 46 days old (max 45)",
+    "- text-adventure.visual-direction.v1 verification is stale: 46 days old (max 45)",
+    "- text-adventure.visual-quality-review.v1 verification is stale: 46 days old (max 45)"
+  ],
+  "e2eStarted": false,
+  "fullDeliveryValidated": false,
+  "modelCalls": 0,
+  "formalM1QualityPassesAdded": 0,
+  "scope": "Frozen 27d87139 only. V348 and later source remain outside this full-delivery run. The existing non-chat verification dates were not changed.",
+  "evidence": {
+    "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v346-current-full-delivery/receipt.json": "52ca9e7c5b5f6a3d811e01bcbff9b5f5fa5af0b80419e989d47690ff38e599aa",
+    "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v346-current-full-delivery/checks.json": "01148a095ecfe180ad130ff7090fc95f927797f4c37d3fa4f11c02c3c8ecf4a2",
+    "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v346-current-full-delivery/logs/full-ci.log": "966784759a3d2d133a5b70cc9454dffcb51580f1a32a74fb977b7c168eb1f423"
+  }
+}

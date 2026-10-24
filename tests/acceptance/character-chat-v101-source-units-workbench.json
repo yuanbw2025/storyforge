@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "id": "character-chat-v101-source-units-workbench",
+  "status": "partial-engineering-only",
+  "baseHead": "a5a5a46253e4f47eb7396dd7ed44f7b12346f733",
+  "product": "character-interaction",
+  "phase": "S2 experimental v3 author candidate and independent review",
+  "ownership": "Chat Work owns candidate runs; frozen WorldRelease is read only; no source classification, production or runtime writes",
+  "entries": [
+    "chat.source-units",
+    "chat.source-units-review"
+  ],
+  "contexts": [
+    "chat.source-units",
+    "chat.source-units-review"
+  ],
+  "writeTargets": [],
+  "newTables": [],
+  "evidence": {
+    "regression": {
+      "files": 3,
+      "passed": 35,
+      "log": "/tmp/storyforge-chat-v101-regression-r5.log"
+    },
+    "browser": {
+      "file": "tests/e2e/character-chat-source-units.spec.ts",
+      "passed": 2,
+      "log": "/tmp/storyforge-chat-v101-target-e2e.log",
+      "isolatedData": true,
+      "mobileWidth": 390
+    },
+    "modelCalls": 0,
+    "semanticAcceptance": false,
+    "humanAcceptance": false,
+    "m1Accepted": false,
+    "fullCI": "pending final fixed snapshot",
+    "fullE2E": "pending final fixed snapshot",
+    "gates": {
+      "passed": 10,
+      "receipt": "/tmp/storyforge-chat-v101-gates-receipt.json",
+      "checks": [
+        [
+          "npm",
+          "run",
+          "check:architecture"
+        ],
+        [
+          "npm",
+          "run",
+          "check:required-tables"
+        ],
+        [
+          "npm",
+          "run",
+          "check:ai-manual"
+        ],
+        [
+          "npm",
+          "run",
+          "check:ai-entry-registry"
+        ],
+        [
+          "npm",
+          "run",
+          "check:docs"
+        ],
+        [
+          "npm",
+          "run",
+          "check:roadmap"
+        ],
+        [
+          "npm",
+          "run",
+          "check:project-metrics"
+        ],
+        [
+          "npx",
+          "tsc",
+          "--noEmit"
+        ],
+        [
+          "npm",
+          "run",
+          "lint"
+        ],
+        [
+          "npm",
+          "run",
+          "build"
+        ]
+      ]
+    }
+  },
+  "retainedDevelopmentFailures": [
+    {
+      "log": "/tmp/storyforge-chat-v101-unit-test.log",
+      "reason": "fixture assumed structural projection had already descended to a scalar"
+    },
+    {
+      "log": "/tmp/storyforge-chat-v101-unit-test-r2.log",
+      "reason": "fixture child remained below the existing lossless projection split threshold"
+    },
+    {
+      "log": "/tmp/storyforge-chat-v101-unit-test-r3.log",
+      "reason": "attempted unsupported CreativeArtifact call purpose review"
+    },
+    {
+      "log": "/tmp/storyforge-chat-v101-regression-r4.log",
+      "reason": "separate review-report generation incorrectly marked as a second-call author-review purpose; fixed by retaining existing report-generation contract"
+    },
+    {
+      "log": "/tmp/storyforge-chat-v101-entries.log",
+      "reason": "new formal caller omitted from explicit scanner scope; registered without weakening guard"
+    }
+  ],
+  "remaining": [
+    "Author confirmation of atomic units and explicit initial audiences/discovery rules",
+    "Governed atomic adoption tied to exact accepted review and current source/classifications",
+    "New frozen source version with full provenance and constraints, without leaking hidden units to actors",
+    "Production and runtime consumption, old source v1-v5 compatibility, full lifecycle",
+    "CHAT-02.16 grounded inquiry results and actual audience knowledge transitions",
+    "Fresh preregistered Codex and Agnes real-model acceptance; do not overwrite V97/V99 failures"
+  ],
+  "cohortPolicy": "No formal cohort started; old failures, denominators and frozen sources retained; holdout contents not inspected"
+}

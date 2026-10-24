@@ -1,0 +1,31 @@
+{
+  "schema": "storyforge.chat-development-acceptance",
+  "version": 310,
+  "at": "2026-10-22T05:42:22.970024+00:00",
+  "status": "cross-turn-inquiry-implemented-engineering-passed-real-recovery-pending",
+  "baseHead": "419034b9fe59fb13919ef84372fd74ae8e6e5932",
+  "boundary": "Character chat S3 runtime development; existing session and Harness own state. Registered chatSituationRuntime delivers original question and complete subsequent dialogue. No new table, output field, model step, world/media mutation or retry.",
+  "versions": {
+    "producer": "chat-situation-construction-v15",
+    "reviewer": "chat-situation-review-v14",
+    "inquiryEvidence": 3
+  },
+  "invariants": [
+    "Same scene and active actor; original actual unanswered question and frozen known prerequisites",
+    "Other actor actions, discovery and inquiry settlement cannot retroactively establish question-time knowledge",
+    "Complete dialogue through current state is mandatory; excluded evidence cannot hide withdrawal",
+    "Independent review must reject withdrawal, redirection or changed respondent; question list is not semantic approval",
+    "Original question audience and discovery rules stay binding",
+    "v1/v2 frozen contracts, prompt bytes, event replay and existing saves retain original behavior",
+    "Version derived from exact producer/reviewer contract, never supplied by model or unchecked caller"
+  ],
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v310-inquiry-continuity/engineering.json",
+    "sha256": "65f63c873aa00a2203e02c9c709e8873e053447098b9a88c0c8f4197436950b6"
+  },
+  "actualFailureFixture": "tests/fixtures/character-chat-inquiry-continuity-v309.json",
+  "m1Passed": false,
+  "remainingTechnicalPackages": 7,
+  "fullDelivery": "Current full CI/E2E still pending. Remote af13010c checks do not include this source.",
+  "next": "On an isolated branch of the exact retained V309 state, resolve its question once and observe one actor continuation, bounded to five native requests, preserving original failure and no formal M1 credit."
+}

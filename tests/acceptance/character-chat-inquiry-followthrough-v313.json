@@ -1,0 +1,49 @@
+{
+  "schema": "storyforge.character-chat-acceptance",
+  "version": 313,
+  "kind": "real-codex-story-continuation",
+  "sourceHead": "1b2e43e1d996c3613b36f50c82790eecd9b58e56",
+  "sourceUnchanged": true,
+  "status": "failed-action-review",
+  "formalM1Credit": 0,
+  "humanEvaluation": "deferred",
+  "requests": 10,
+  "allNativeRequestsCompleted": true,
+  "reportedTokens": 170421,
+  "playerOpportunities": 2,
+  "result": "Confirmed the seal purpose and toolbox ownership; the actor then attempted normal opening and viewing. Independent action review rejected conditional contents because it treated opening and viewing as separate future actions. No rejected action or observation was adopted; no auto retry.",
+  "failureChecks": [
+    "consequences",
+    "meaningful-direction"
+  ],
+  "restoration": {
+    "checks": {
+      "parentPreserved": true,
+      "branchPreserved": true,
+      "refreshPreserved": true,
+      "worldPreserved": true,
+      "runStatesPreserved": true,
+      "durableEvidencePreserved": true,
+      "noAutomaticCalls": true,
+      "noResumableRuns": true
+    },
+    "modelCalls": 0,
+    "completedHistories": 3,
+    "retainedFailedRuns": 1
+  },
+  "nextAction": "V314 versioned bounded-observation semantics, then exact retained-state branch followthrough. Do not use consequence-only revision: the actual rejection also includes meaningful-direction.",
+  "evidence": {
+    "inquiry-followthrough.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v313-inquiry-followthrough/inquiry-followthrough.json",
+      "sha256": "a8a94a8ebeb277cd1093b1aba7d1a7f0c6efba3e3e5db1daa9764bbdb1cdcd03"
+    },
+    "inquiry-followthrough-backup.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v313-inquiry-followthrough/inquiry-followthrough-backup.json",
+      "sha256": "69b26321072cb7192e47b4e39005ed0591dde75f4981b96b035334dbfde3e812"
+    },
+    "restoration.json": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v313-inquiry-followthrough/restoration.json",
+      "sha256": "0bf5cb48cff49ee51f9f8e462d9d6876ac5ced645548610669319854cbd4f209"
+    }
+  }
+}

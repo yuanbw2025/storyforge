@@ -1,0 +1,40 @@
+{
+  "schema": "storyforge.character-chat-holdouts",
+  "version": 1,
+  "frozenAt": "2026-10-14",
+  "usage": "仅在预登记M1留出轮运行；不得据此调试提示或逻辑。运行后保留为已暴露留出，下一cohort另补新材料。",
+  "scenarios": [
+    {
+      "id": "pottery-gift-deadline",
+      "split": "holdout",
+      "mode": "single",
+      "style": "daily",
+      "title": "周末的陶杯",
+      "seed": "我来取准备周末送给姐姐的陶杯，陶艺师说杯沿烧出了一个小缺口。",
+      "publicFacts": ["杯子由玩家订制，尚未交付。", "今天是周四；玩家准备周末送礼，但没有承诺接受瑕疵品或追加费用。", "下一次开窑在下周一，店里有两只未售出的素色成品杯，可以查看但不能默认替换。", "小缺口是否锋利尚未检查，不能预先宣称杯子适合饮用。"],
+      "roles": [{"key": "potter", "name": "顾闻溪", "goals": ["对交付问题负责", "和玩家商定实际可行的处理办法"], "values": ["不掩盖缺陷", "替换和费用由顾客选择"], "privateFacts": ["愿意自己承担重做的费用，但不能承诺提前开窑。"], "beliefs": ["猜测玩家比起杯子的颜色更在意按时送礼，这尚未经确认。"]}],
+      "authorOnlyFacts": [],
+      "openQuestions": ["检查、替换、重做或不再购买", "如何处理礼物时间与原有心意的差距"],
+      "allowedIntroductions": ["对杯沿和店内成品的有限实际观察", "陶艺师权限内的报价或重做承诺"],
+      "forbiddenChanges": ["改成今天可以重新开窑", "默认玩家接受替换或付款", "未检查就宣称缺口无风险", "虚构姐姐的偏好或评价"],
+      "closureExamples": ["双方明确处理方案和时间", "尊重玩家暂不决定并保留原订单状态"],
+      "requiredConsequences": ["提出重做不等于已完成", "拒绝某只替换杯后不把它写成已选定"]
+    },
+      {
+      "id": "archive-missing-map",
+      "split": "holdout",
+      "mode": "single",
+      "style": "investigation",
+      "title": "档案室里的空夹",
+      "seed": "我和档案管理员准备核对老街地图，却发现借阅夹是空的。",
+      "publicFacts": ["玩家获准查看老街地图，地图目前不在借阅夹里。", "档案室内安全，今天没有必须赶走人的闭馆倒计时。", "管理员可以查看本室登记簿和修复台，不可擅自翻他人物品。", "修复台上有一个标着待压平的纸套；尚无人查看内容。"],
+      "roles": [{"key": "archivist", "name": "宋知微", "goals": ["找到地图并核实去向", "不在缺少证据时指责同事或玩家"], "values": ["原件不带出档案室", "实际检查后再下结论"], "privateFacts": ["昨天有同事提过一张纸张起皱，但没有说明是哪张图。"], "beliefs": ["可能与修复有关，尚未证实。"]}],
+      "authorOnlyFacts": [{"key": "map-in-sleeve", "text": "老街地图在修复台标着待压平的纸套里，原件完整。", "knownBy": [], "discovery": {"allowedActorKeys": ["archivist"], "condition": "管理员实际打开修复台上标着待压平的纸套并查看内容。", "prerequisite": "知道修复台和该纸套的位置。"}}],
+      "openQuestions": ["地图在哪里", "找到后怎样在室内核对而不损伤原件"],
+      "allowedIntroductions": ["获准检查的实际观察", "对原件保护的可行安排"],
+      "forbiddenChanges": ["更改地图所在位置或原件完整性", "查看前把幕后真相装进角色视角", "编造放置者身份", "把玩家拒绝帮忙写成同意"],
+      "closureExamples": ["核实并告知地图位置，约定室内查看方式", "依据实际限制暂缓并保留已知线索"],
+      "requiredConsequences": ["猜测不能作为已知事实", "发现后保留同一事实和来源身份", "找到地图不等于玩家已经阅读或借走"]
+    }
+  ]
+}

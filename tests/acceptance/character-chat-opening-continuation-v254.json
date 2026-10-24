@@ -1,0 +1,58 @@
+{
+  "schema": "storyforge.character-chat-development-diagnostic",
+  "version": 1,
+  "at": "2026-10-20T09:09:24.146615+00:00",
+  "diagnostic": "v254-inn-opening-continuation",
+  "status": "terminal",
+  "diagnosticCompleted": true,
+  "error": null,
+  "formalM1Credit": false,
+  "qualityAccepted": false,
+  "stopReason": "budget",
+  "playerOpportunities": 3,
+  "sourceSnapshot": "da6b5dd04aacbeffd4936b2a6b89b3be837f79c6",
+  "sourceManifestSha256": "09e376b75e893f4fab67a3bfca546e62e2248e76d8c449f807a0298b997f7e8c",
+  "sourceUnchanged": true,
+  "calls": {
+    "production": 3,
+    "runtime": 18,
+    "total": 21,
+    "allNativeCompleted": true
+  },
+  "observedTotalTokens": 301419,
+  "costUsd": null,
+  "recovery": {
+    "passed": true,
+    "modelCalls": 0,
+    "completedRunsRetained": 7
+  },
+  "comparison": {
+    "baseline": "V252",
+    "sameOriginalMaterialPermissionsInputsAndBudgets": true,
+    "changed": "opening producer v11 -> v12 and reviewer v2 -> v3; runtime action v48/review v34 unchanged",
+    "inferenceLimit": "One stochastic production per version; a descriptive development comparison, not statistical or human quality evidence.",
+    "observedImprovement": "After a single weak 嗯 response, the guard switched from checking a tray to reading an already-grounded usage register, while disclosing the previous result. The baseline spent an additional opportunity requesting a nearby floor area.",
+    "remainingGap": "The register yielded only a night label and blank handler/notes fields. After explaining the limited result, the guard returned to inspecting the adjacent tabletop. No meaningful closure or sustained progression is established."
+  },
+  "findings": [
+    "All three openings had two materially different grounded paths and preserved the original seal goal; first passing opening selected without reroll.",
+    "Tray contents, register entry and tabletop inspection results were stored and later consumed without rewriting the hidden seal truth.",
+    "The character used the alternate path without inferring player cooperation or permission from the weak reply.",
+    "The third player opportunity returned to nearby-area searching; original goal/thread remain open.",
+    "Current release has no known background interlocutor and no temporary-character permission; whether the frozen discovery route is reachable requires a separate authoring/permission audit, not another runtime prompt tweak."
+  ],
+  "retainedPreviousFailures": [
+    "V243",
+    "V248",
+    "V250"
+  ],
+  "localEvidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v254-inn-continuation-real/r2",
+  "evidence": {
+    "preregistration.json": "98f1b12d4906cfb61d85e89fa1fef08b2918b77b2006646008809fc80867b19b",
+    "engineering-admission.json": "b9ce1b2e9db844b481b60967c7c3a0ebea321ab24a086d3a8ec830f2a177ecb3",
+    "inn-weak-guidance.json": "b514214ac918a5c965cbbedd0e3ee9156cf4cc36543247ec67501c0fc043ab66",
+    "inn-weak-guidance-backup.json": "0edddd6fbbc1ec1c8b0629c0f562fb57aabe91bdeca6b5d3a9ca3887472eebc3",
+    "inn-weak-guidance-restoration-verified.json": "3f532a5160fc8808a0a9d53fff176710c4b6b189a6c4c44a7528097eaad8a015"
+  },
+  "zeroCallPreparationWithdrawal": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v254-inn-continuation-real/withdrawal.json"
+}

@@ -1,0 +1,119 @@
+{
+  "schema": "storyforge.character-chat-replanning-evidence",
+  "version": 1,
+  "label": "V107 grounded self-paused goal replanning; bounded real continuation, sustained outcome still unverified",
+  "baseHead": "d45248bb0dc903e301a92fbff54da9516177b31a",
+  "scope": "New versioned generation and semantic review instructions on existing goal/situation APIs; no schema, permission or adoption change",
+  "bindings": [
+    "chat-narrative-action-v36",
+    "chat-narrative-options-v26",
+    "chat-narrative-action-review-v29",
+    "chat-narrative-options-review-v23"
+  ],
+  "engineering": {
+    "regressionFiles": 90,
+    "regressionTests": 1157,
+    "focusedBrowserTests": 6,
+    "requiredGates": 10,
+    "bundleSize": "passed",
+    "historicalPromptBytes": "Four generation/review hashes match independent d45248bb archive; see R-CHAT-02-replanning",
+    "fullCI": "V107 exact snapshot running; after checkpoint UI correction final snapshot still required",
+    "fullE2E": "V103 ended369passed3failed2skipped; V107 unstarted job cancelled after verified UI/test fixes; final snapshot pending"
+  },
+  "evidence": {
+    "/tmp/storyforge-chat-v107-replanning-r2.log": "23367d21ecb80689d4affe24829ad385c7a46ab03d19c4e52762fee37e0e4cc3",
+    "/tmp/storyforge-chat-v107-chat-aitown-regression.log": "1fe01072a3fe9dd9c3edfb2a184daef04be6aba98ec7880f1405c5e56f7161d1",
+    "/tmp/storyforge-chat-v107-chat-tsx-regression.log": "43e3890c096b9c0a429c60295356fb1f5add01e952970283137c70947cd442ba",
+    "/tmp/storyforge-chat-v107-final-gates-receipt.json": "57448848374f9cdf35cee93259513ab759926e9fad15b8a85655b78053c7b5f6",
+    "/tmp/storyforge-chat-v107-final-bundle-size.log": "d10a3a054ab876cc7269c98ca45abd901695bf9cdfffc7ad972a7f6450cac794",
+    "/tmp/storyforge-chat-v107-targeted-e2e.log": "3eeb8e0954a092ebef0159fe6fd4809e799bc1284e0a7fca217d2f8d936f21b6"
+  },
+  "realModel": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "requests": 16,
+    "completed": 16,
+    "tokens": 245231,
+    "costUsd": null,
+    "opportunities": 5,
+    "operatorInput": "continue only; no direction or hidden hint entered into product",
+    "durableRuns": 8,
+    "allRunsCompleted": true,
+    "terminalReadbacksEqual": true,
+    "countsInM1": false,
+    "holdoutsInspected": false,
+    "status": "bounded positive replanning evidence; stopped before token budget overrun",
+    "stopReason": "bounded-replanning-observed; stop before next context-plus-action cycle because 245231 of 300000 token budget is used and remaining headroom is below the observed four-request cycle; pending inspection result remains unverified"
+  },
+  "limits": [
+    "This is a known development continuation, not a full episode or acceptance cohort replacement.",
+    "Two inquiry replies affected the next action, but no source truth discovery, inspection result, closure or sustained success was established.",
+    "Five continue opportunities used245231tokens; pending context and action would exceed available headroom at observed cost. End-to-end pacing and cost remain material gaps.",
+    "Original V106 stagnation, prior cohorts and discovery conditions are unchanged.",
+    "Independent review steps used the same Codex model, not an independent provider or human.",
+    "No Agnes, human, holdout, comparative or commercial acceptance."
+  ],
+  "goalStatus": "active",
+  "implementationHead": "6cc08b98224c0bb3bf1a1e72e0acb6ccc5014725",
+  "snapshot": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "6cc08b98224c0bb3bf1a1e72e0acb6ccc5014725",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v107-real-24jjxgg2/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v107-real-24jjxgg2/manifest.json",
+    "manifestSha256": "b59a2db5766d99f572c151224e67fc836444bf3f1a34644addf0ec020726eb21",
+    "files": 3450
+  },
+  "realEvidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v107-replanning-real",
+  "realFiles": {
+    "diagnostic-backup.json": "82c27e3c6ba3a774cda39b5a8c1d29ef9bec2a7158527bb7b0d7dc6a556e0c45",
+    "diagnostic-terminal-request-proof.json": "adf7d958c321e489bae5e4d9ad9b76bc5e2cd05c2a8d8cf9ff9862e8845af238",
+    "diagnostic.json": "d84706e55080520a8a24b6806a81ddc0fc2906017caea114b7e5e8ba1bfdc763",
+    "prepared.json": "bfca613935eb45ede44cec86eb3ffb701926250cfd844ef18ddf003557164cd2",
+    "preregistration.json": "8df48aeb102990c7bfbd97e8e3d1583a1317cf5e341aeea55c55913672271e20",
+    "progress.json": "09dc43cff81d74da59edcf59ab2ed520c71d9fbeadf50ba96d2dac074b66e227",
+    "restoration-verified.json": "37f46ecd19d9cb86cb266f4649fb516ee7ae2372a2d8915831b55b038b97f58d",
+    "restoration.mjs": "88763f0393279dbce6a3e148cb67645443dd956a0e6d1f2fc536e03add2e31b5",
+    "runner.mjs": "91e7483df77878cbd3c70012be1213cad2ddda8eedb9375fe6a01528f0e2d185",
+    "transport-progress.json": "68235e32a5c86acc1f52cc4479d005d148a0a44d6a3a7e2f276f9d9934084c1c",
+    "usage-ledger.json": "3a582fc1bd5cf535d24e0096529f8f8b497179dfca0a6ce1a2b1f8737ad943ee"
+  },
+  "observed": {
+    "sameGoalReactivated": true,
+    "originalParentUnchanged": true,
+    "newMethod": "Seek an accessible information source instead of repeating the previously exhausted inspection",
+    "inquiryReplies": 2,
+    "replyKinds": [
+      "uncertain",
+      "statement"
+    ],
+    "actualFollowThrough": "Actor inspected counter surfaces after a limited statement and local access check; no player participation, hidden truth or successful finding invented",
+    "truthUnitsDiscovered": 0,
+    "pending": "Actual observation result requested but not yet run",
+    "narrativeAccepted": 0,
+    "humanScored": 0
+  },
+  "restoration": {
+    "modelCalls": 0,
+    "childHistoryRetained": true,
+    "parentHistoryRetained": true,
+    "resumableRuns": 0,
+    "childStateEqual": true,
+    "parentStateEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true
+  },
+  "observedUsage": {
+    "totals": {
+      "totalTokens": 245231,
+      "inputTokens": 237592,
+      "cachedInputTokens": 53248,
+      "outputTokens": 7639,
+      "reasoningOutputTokens": 2346
+    },
+    "inputShare": 0.9688,
+    "costUsd": null,
+    "scope": "Provider-reported request usage; cached input is included in input, reasoning output included in output; do not add subfields twice.",
+    "next": "Validate existing explicit two/three-action pacing and production opportunity viability before adding a new loop; reduce evidenced duplication under new frozen prompt bindings only."
+  }
+}

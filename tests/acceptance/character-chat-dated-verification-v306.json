@@ -1,0 +1,38 @@
+{
+  "schema": "storyforge.chat-development-acceptance",
+  "version": 306,
+  "at": "2026-10-22T04:30:28.396Z",
+  "status": "dated-verification-metadata-reconciled-current-full-ci-pending",
+  "baseHead": "abce6aa662ffaa0fa98243b3c7f84c074d07f3a3",
+  "scope": "Reconcile stale Skill verification dates with already-completed exact-source CI; no policy, prompt, runtime or test behavior change.",
+  "priorFailure": {
+    "head": "a07b50153ace3e9b715ef11223fcf17aa93e86df",
+    "runId": 39718353756,
+    "jobId": 119625782822,
+    "reason": "36 Skill entries were 46 days old; maximum is 45."
+  },
+  "evidence": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v305-development-proof/freshness-audit.json",
+    "sha256": "6a2e6b04ad16e33dcf4676b33f45151ff86eb192c5761cbc26a94a688c4127bf",
+    "fullCIHead": "228e257c6238808ac247eeba8ff8042f55c38a95",
+    "verifiedAt": "2026-10-21",
+    "skillEntries": 36,
+    "regressionFiles": [
+      "tests/regression/R-AITOWN2-director.test.ts",
+      "tests/regression/R-COMIC2-professional-pipeline.test.ts",
+      "tests/regression/R-OPEN-WORLD3-experience-design.test.ts",
+      "tests/regression/R-OPEN-WORLD3-source-curation.test.ts",
+      "tests/regression/R-SCREEN2-professional-pipeline.test.ts",
+      "tests/regression/R-SHORT2-professional-production.test.ts",
+      "tests/regression/R-TEXTADV2-production.test.tsx",
+      "tests/regression/R-TEXTADV3-agent-team.test.ts",
+      "tests/regression/R-TTRPG4-ai-kp-director.test.ts"
+    ],
+    "entriesAndReferencedTestsUnchanged": true
+  },
+  "changes": "Only lastVerifiedAt is updated to the actual prior CI completion date. The 45-day rule is unchanged. Current-source complete CI is still required.",
+  "externalModelCalls": 0,
+  "m1Passed": false,
+  "fullCurrentCI": false,
+  "fullCurrentE2E": false
+}

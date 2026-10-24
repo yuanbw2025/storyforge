@@ -1,0 +1,128 @@
+[
+  {
+    "version": "chat-relevance-v8",
+    "actor": "guard",
+    "maxCharacters": 8500,
+    "sha256": "71231b855180680074b09f6dc5f63dccf0e6335827ff16cc5a672cf5fe73079c",
+    "bytes": 42147
+  },
+  {
+    "version": "chat-relevance-v8",
+    "actor": "guard",
+    "maxCharacters": 14000,
+    "sha256": "76d10fa93cd8e283836c402ee75f11c20ccb195f13b47394ba47b2720b68f33d",
+    "bytes": 44514
+  },
+  {
+    "version": "chat-relevance-v8",
+    "actor": "guard",
+    "maxCharacters": 24000,
+    "sha256": "76d10fa93cd8e283836c402ee75f11c20ccb195f13b47394ba47b2720b68f33d",
+    "bytes": 44514
+  },
+  {
+    "version": "chat-relevance-v8",
+    "actor": "artisan",
+    "maxCharacters": 8500,
+    "sha256": "91bedf20a63dff84004f62d418141f66e34b8e997c0ce27d2f822e04eeb06196",
+    "bytes": 24880
+  },
+  {
+    "version": "chat-relevance-v8",
+    "actor": "artisan",
+    "maxCharacters": 14000,
+    "sha256": "91bedf20a63dff84004f62d418141f66e34b8e997c0ce27d2f822e04eeb06196",
+    "bytes": 24880
+  },
+  {
+    "version": "chat-relevance-v8",
+    "actor": "artisan",
+    "maxCharacters": 24000,
+    "sha256": "91bedf20a63dff84004f62d418141f66e34b8e997c0ce27d2f822e04eeb06196",
+    "bytes": 24880
+  },
+  {
+    "version": "chat-relevance-v9",
+    "actor": "guard",
+    "maxCharacters": 8500,
+    "sha256": "bf69e3a6fc9bfcd869f2223cba21df222603f5a4779f0d39b945a2c692e64cb1",
+    "bytes": 41056
+  },
+  {
+    "version": "chat-relevance-v9",
+    "actor": "guard",
+    "maxCharacters": 14000,
+    "sha256": "7e394ba1ce096640e284e3caf6de974a834388e4797e46ff5d55504f49046be0",
+    "bytes": 40676
+  },
+  {
+    "version": "chat-relevance-v9",
+    "actor": "guard",
+    "maxCharacters": 24000,
+    "sha256": "7e394ba1ce096640e284e3caf6de974a834388e4797e46ff5d55504f49046be0",
+    "bytes": 40676
+  },
+  {
+    "version": "chat-relevance-v9",
+    "actor": "artisan",
+    "maxCharacters": 8500,
+    "sha256": "794aefd7b646362c361f7f6fd2aac8ac8d4cec91b9520b5c410f3ce852c73813",
+    "bytes": 24297
+  },
+  {
+    "version": "chat-relevance-v9",
+    "actor": "artisan",
+    "maxCharacters": 14000,
+    "sha256": "794aefd7b646362c361f7f6fd2aac8ac8d4cec91b9520b5c410f3ce852c73813",
+    "bytes": 24297
+  },
+  {
+    "version": "chat-relevance-v9",
+    "actor": "artisan",
+    "maxCharacters": 24000,
+    "sha256": "794aefd7b646362c361f7f6fd2aac8ac8d4cec91b9520b5c410f3ce852c73813",
+    "bytes": 24297
+  },
+  {
+    "version": "chat-relevance-v10",
+    "actor": "guard",
+    "maxCharacters": 8500,
+    "sha256": "0d296f7643753969684241f9ac14016fb2e2cb0988e2c986a8d86dd88599ae5f",
+    "bytes": 40576
+  },
+  {
+    "version": "chat-relevance-v10",
+    "actor": "guard",
+    "maxCharacters": 14000,
+    "sha256": "5c9e5af31aab681afb9c1dde831430948d8e8a63f1e89e4e979e20c115d63568",
+    "bytes": 40767
+  },
+  {
+    "version": "chat-relevance-v10",
+    "actor": "guard",
+    "maxCharacters": 24000,
+    "sha256": "5c9e5af31aab681afb9c1dde831430948d8e8a63f1e89e4e979e20c115d63568",
+    "bytes": 40767
+  },
+  {
+    "version": "chat-relevance-v10",
+    "actor": "artisan",
+    "maxCharacters": 8500,
+    "sha256": "90c8b8f0790d7feb497eeeae9300e6539966ba16a52136d1a21702c6d4283495",
+    "bytes": 24297
+  },
+  {
+    "version": "chat-relevance-v10",
+    "actor": "artisan",
+    "maxCharacters": 14000,
+    "sha256": "90c8b8f0790d7feb497eeeae9300e6539966ba16a52136d1a21702c6d4283495",
+    "bytes": 24297
+  },
+  {
+    "version": "chat-relevance-v10",
+    "actor": "artisan",
+    "maxCharacters": 24000,
+    "sha256": "90c8b8f0790d7feb497eeeae9300e6539966ba16a52136d1a21702c6d4283495",
+    "bytes": 24297
+  }
+]

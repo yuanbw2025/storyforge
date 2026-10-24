@@ -1,0 +1,61 @@
+{
+  "version": 381,
+  "recordedAt": "2026-10-24T06:07:19.315676+00:00",
+  "status": "main-integrated-local-targeted-verification-passed-full-delivery-pending",
+  "sourceParent": "44ca5d6d9daddf13284db3ae419ec842c5d1da45",
+  "integratedMain": "87eec76a9db50b0bca692368a71f95768bfff660",
+  "product": "character-chat",
+  "producer": "chat-opening-review-v13",
+  "integration": {
+    "skillRegistry": {
+      "conflicts": 23,
+      "resolution": "Only lastVerifiedAt differed: preserve the newer verified main date 2026-10-24. All character chat implementations and current v13 binding remain."
+    },
+    "architecture": "Regenerate metrics from the complete integrated source, not either historical count.",
+    "dependency": "Installed zod and branch lock already match upstream 4.6.7; no dependency directory reset needed."
+  },
+  "verification": {
+    "targetedFiles": 6,
+    "targetedTestsPassed": 60,
+    "browserFiles": 2,
+    "browserCasesPassed": 26,
+    "browserFailed": 0,
+    "browserSkipped": 0,
+    "browserFlaky": 0,
+    "browserRetries": 0,
+    "tsc": true,
+    "changedFileLint": true,
+    "governanceChecksPassed": 10,
+    "dependencyAuditVulnerabilities": 0,
+    "build": true,
+    "bundleSize": true,
+    "completeRoleRegression": "in-progress; result recorded separately",
+    "completeDelivery": "pending exact integrated-head remote run"
+  },
+  "priorHeadClientBuild": {
+    "sourceHead": "1c6fd559ad0b50e9bd70fbdef71f3f8cc72a2158",
+    "runId": 40063139606,
+    "status": "completed",
+    "conclusion": "success",
+    "scope": "Historical source only; does not prove the integrated head."
+  },
+  "evidenceHashes": {
+    "integrated-source-manifest.json": "8838cf7ef06f0550cd50f686b83bbabc711256a4543ec79e9bea3fabb7bc6ccc",
+    "conflict-resolution.json": "fa90694116404f17fe57e30d58480b2891bde348c8f71eaab5a8811f5ceef2a0",
+    "targeted.json": "38aef971e2d27e0a62cef030a8982a9112ece7bd6ac4b866dbdd75871b51fe4c",
+    "browser.json": "ef0e04b6f50ce5458361ba5197d00a7b12be3683574b3bc5c6c4dbaf4fbd7ee9",
+    "governance.json": "e337ec27353b0468972377b0eb3b8708e4e655a26f8048d409226c8bf5fc607b",
+    "tsc.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build.log": "3c59464685a2b90cb7234d35a7a79d31bc28b29df8038eb70e9db14e1915073d",
+    "bundle.log": "fbca85b6f5117e6d4f656ec9bb397f6d78b16782941ef4bbf678bf5b3f82bfff"
+  },
+  "claims": {
+    "realModelCallsInThisCheckpoint": 0,
+    "formalM1Credit": false,
+    "m1Passed": false,
+    "fullDeliveryPassed": false,
+    "commercialReady": false,
+    "released": false
+  }
+}

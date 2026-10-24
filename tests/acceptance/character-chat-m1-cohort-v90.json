@@ -1,0 +1,442 @@
+{
+  "schema": "storyforge.chat-m1-cohort",
+  "version": 1,
+  "parentProtocol": "character-chat-m1-protocol-v1.json",
+  "parentProtocolSha256": "a70ce9a0395edb55216420b07f321fc9c21d840bbb8b3a3b5a48c0f9762e8b25",
+  "implementationHead": "0114d7a8780041ddde553a2c33156fa3d43311c1",
+  "matrix": {
+    "coreScenarioIds": [
+      "daily-clock-promise",
+      "inn-missing-seal",
+      "riverside-reading-evening"
+    ],
+    "coreMaterial": "character-chat-narrative-cases.json:scenarios",
+    "coreSplit": "development-regression; never relabelled holdout",
+    "holdoutScenarioIds": [
+      "pottery-gift-deadline",
+      "archive-missing-map"
+    ],
+    "holdoutMaterial": "character-chat-m1-holdouts-v1.json",
+    "behaviorIds": [
+      "weak-guidance",
+      "refuse",
+      "alternative",
+      "rest",
+      "return",
+      "unexpected"
+    ],
+    "providerSlots": [
+      "local-codex",
+      "agnes"
+    ],
+    "repeats": [
+      1,
+      2
+    ],
+    "coreEpisodes": 72,
+    "holdoutEpisodes": 48,
+    "totalScheduledEpisodes": 120,
+    "productionUnits": 20,
+    "episodeId": "m1-v90-source-admitted/{scenarioId}/{providerSlot}/r{repeat}/{behaviorId}",
+    "pairing": "每个情境/提供商/重复单独生产一个冻结 release；六种行为从该 release 的同一初始状态创建独立会话，不共享运行记忆。两次重复重新生产。",
+    "order": "core scenarios in listed order, then holdouts; provider slots independently runnable; repeat 1 before 2; behaviors in listed order",
+    "productionFailure": "保留该生产单元及其六个 production-blocked episode 槽位；不重抽开场，不以未运行冒充通过。运行质量仅对实际运行报告，端到端分母保留全部计划槽位。"
+  },
+  "budget": {
+    "usualOpportunities": [
+      20,
+      40
+    ],
+    "maximumPlayerOpportunities": 20,
+    "maximumProductionRequests": 6,
+    "maximumRuntimeRequests": 90,
+    "maximumObservedTotalTokens": 1000000,
+    "maximumWallMinutes": 60,
+    "observationTimeoutMinutes": 20,
+    "automaticRetries": 0,
+    "manualRepairInScoredEpisode": false,
+    "stopCheck": "每次新触发前检查预算，已发请求只观察到终态；上限含审查/局面/发现调用，不把玩家输入次数冒充调用次数。正常产品有界链可能越过软 token 上限一次，记录实际值，不悄悄继续。"
+  },
+  "models": [
+    {
+      "slot": "local-codex",
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "transport": "local subscription bridge; no paid API fallback",
+      "appSettings": {
+        "temperature": 0.2,
+        "maxTokens": 16000
+      },
+      "effectiveSampling": "bridge request accepts model/messages/output schema only; app temperature and maxTokens are not passed to Codex; retain actual request and usage, do not claim controlled sampling",
+      "costUsd": null
+    },
+    {
+      "slot": "agnes",
+      "model": null,
+      "status": "configuration-unavailable; not runnable",
+      "condition": "在此槽位首次调用之前追加配置修订，冻结实际模型、采样、预算及连接核验；不得用历史模型记录代替当次配置。"
+    }
+  ],
+  "authorPermissionOverrides": {
+    "allowActorThreadFollowups": true
+  },
+  "limitations": [
+    "Collection is scripted, not a real human participant or independent quality assessment",
+    "Agnes configuration remains unavailable; no substitute provider",
+    "No holdout material opened or used to tune this run",
+    "Local isolated author material, formal S3 production and local ProductRelease only; no online publication"
+  ],
+  "countSemantics": "Independent new source-corrected cohort. Collection completion is a terminal outcome, not quality acceptance; no combined denominator or replacement of older failures.",
+  "cohort": "m1-v90-source-admitted",
+  "registeredAt": "2026-10-15T16:05:49.272493+00:00",
+  "status": "three episodes collected: weak-guidance stagnation, refusal pause, alternative scene-handoff gap; remaining work pending",
+  "code": {
+    "gitHistory": "depth-1; exact HEAD and tracked tree verified",
+    "head": "9a66f52c3ab63a12e3c1a57173410eaf9e88af0e",
+    "root": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v90-real-hnlj6yec/storyforge",
+    "manifestPath": "/var/folders/mn/tmz6c3px6zn7gzpgrt1rjch80000gn/T/storyforge-chat-v90-real-hnlj6yec/manifest.json",
+    "manifestSha256": "3d731fa052ed202b6f20fdf983400767c219b61ea816d638cc3b7772dd9c108a",
+    "files": 3400
+  },
+  "engineeringGate": "V90 zero-call source regression and required gates passed; original V86 full CI/E2E still queued. No quality acceptance.",
+  "changes": [
+    "Evaluation source authoring corrected: background=privateFacts as knowledge; goals=intentions; motivation=explicitly unconfirmed beliefs. Facts no longer merged with intentions.",
+    "Compiled source must pass purpose, pointer, exact actor and audience checks before first model call. Failed admission cannot be repaired in a scored episode.",
+    "Same original materials, player policies, budgets and first-passing opening selection. New independent cohort; all older failures and denominators preserved."
+  ],
+  "counts": {
+    "scheduled": 120,
+    "productionUnitsPlanned": 20,
+    "productionUnitsStarted": 1,
+    "productionUnitsCompleted": 1,
+    "productionBlockedEpisodes": 0,
+    "started": 3,
+    "collectionCompleted": 3,
+    "narrativePassed": 0,
+    "failed": 2,
+    "unknown": 0,
+    "notStarted": 117,
+    "humanScored": 0,
+    "intentionalPause": 1
+  },
+  "evidenceFolder": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v90-m1-source-admitted",
+  "actualGenerationRequestsAtRegistration": 0,
+  "priorCohortHashes": {
+    "character-chat-m1-evidence-v1.json": "ee16ee227fd8ca4a2954345f2f6788d615a002de4fe3b37f87c1852c53d4cbcc",
+    "character-chat-m1-cohort-v77.json": "98b3dea026d14e21be049773a65dffef2dfee4ad5c9284cc0cbb7c41ac672eb3",
+    "character-chat-m1-cohort-v89.json": "9cc915bb35d9576b9550b65536d8464ccb5b3c3b32ebd38c02e4b33b7c098d39"
+  },
+  "firstEpisode": "m1-v90-source-admitted/daily-clock-promise/local-codex/r1/weak-guidance",
+  "sourceAdmission": {
+    "passed": true,
+    "checkedAt": "2026-10-15T16:08:28.619080+00:00",
+    "helper": "character-chat-m1-source.ts",
+    "modelCallsAtCheck": 0,
+    "privateFacts": 1,
+    "goals": 2,
+    "beliefs": 0,
+    "publicFacts": 3,
+    "evidence": "prepared.json"
+  },
+  "productionUnits": [
+    {
+      "id": "m1-v90-source-admitted/daily-clock-promise/local-codex/r1",
+      "status": "source-admitted-local-release",
+      "firstAttempt": true,
+      "modelCalls": 3,
+      "openingSelection": "first candidate in original order; all 3 passed required review",
+      "localReleaseId": 1,
+      "sourceAdmission": "prepared.json"
+    }
+  ],
+  "recordedAt": "2026-10-15T16:54:56.720249+00:00",
+  "episodes": [
+    {
+      "id": "m1-v90-source-admitted/daily-clock-promise/local-codex/r1/weak-guidance",
+      "status": "failed",
+      "failureKind": "narrative-stagnation",
+      "ending": "stagnation",
+      "collectionCompleted": true,
+      "playerOpportunities": 13,
+      "runtimeRequests": 30,
+      "completedReviewedActions": 14,
+      "completedSituationUpdates": 1,
+      "rawRunFailures": 0,
+      "humanScored": false,
+      "narrativeQualityAccepted": false,
+      "artifact": "clock-r1-weak-guidance.json",
+      "interpretation": "interpretation.json"
+    },
+    {
+      "id": "m1-v90-source-admitted/daily-clock-promise/local-codex/r1/refuse",
+      "status": "collected-unscored",
+      "ending": "intentional-pause",
+      "collectionCompleted": true,
+      "playerOpportunities": 4,
+      "runtimeRequests": 10,
+      "completedReviewedActions": 5,
+      "completedSituationUpdates": 0,
+      "rawRunFailures": 0,
+      "humanScored": false,
+      "narrativeQualityAccepted": false,
+      "sharedProductionCalls": 0,
+      "artifact": "clock-r1-refuse.json",
+      "interpretation": "clock-r1-refuse-interpretation.json",
+      "restoration": {
+        "stem": "clock-r1-refuse",
+        "runStatusesPreserved": true,
+        "verifiedCompletedHistories": 5,
+        "retainedFailedRuns": 0,
+        "resumableRuns": 0,
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      }
+    },
+    {
+      "id": "m1-v90-source-admitted/daily-clock-promise/local-codex/r1/alternative",
+      "status": "failed",
+      "ending": "failure",
+      "collectionCompleted": true,
+      "playerOpportunities": 5,
+      "runtimeRequests": 16,
+      "completedReviewedActions": 6,
+      "completedSituationUpdates": 2,
+      "rawRunFailures": 0,
+      "humanScored": false,
+      "narrativeQualityAccepted": false,
+      "sharedProductionCalls": 0,
+      "artifact": "clock-r1-alternative.json",
+      "interpretation": "clock-r1-alternative-interpretation.json",
+      "restoration": {
+        "stem": "clock-r1-alternative",
+        "runStatusesPreserved": true,
+        "verifiedCompletedHistories": 8,
+        "retainedFailedRuns": 0,
+        "resumableRuns": 0,
+        "openingReviewRetained": true,
+        "modelCalls": 0,
+        "interactionEqual": true,
+        "refreshEqual": true,
+        "worldPreserved": true,
+        "rawEvidenceRetained": true
+      },
+      "failureKind": "player-choice-scene-handoff",
+      "sceneAudit": "clock-r1-alternative-scene-audit.json"
+    }
+  ],
+  "aggregateUsage": {
+    "scope": "completed collected episodes; in-flight episodes excluded until terminal",
+    "uniqueProviderRequests": 59,
+    "sharedProductionRequests": 3,
+    "runtimeRequests": 56,
+    "completedProviderResponses": 59,
+    "totalTokens": 709674,
+    "inputTokens": 679779,
+    "outputTokens": 29895,
+    "cachedInputTokens": 100352,
+    "reasoningOutputTokens": 7669,
+    "costUsd": null,
+    "productionCountedOnce": true
+  },
+  "restoration": {
+    "stem": "clock-r1-weak-guidance",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 15,
+    "retainedFailedRuns": 0,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true
+  },
+  "metadataCaveat": {
+    "field": "preregistration.coreMaterialSha256",
+    "issue": "Inherited hash points to the earlier full cases file, whose evaluation metadata later changed. Original registration retained; no material or score changed retrospectively.",
+    "recordedHash": "59f2bd90272abae0f53e57765953827d8673b1269048e63c642ef01741fb542f",
+    "actualFrozenFileHash": "17bab4b4b160e8f9072ce73897b41f848490ec004f0ea1e8b9cfc13f0896ae4e",
+    "exactScenarioEqualToEmbeddedPreregistration": true,
+    "sourceAuthority": "correct frozen snapshot manifest plus complete embedded preregistered scenario; future registration must compute whole-file hash from its actual snapshot"
+  },
+  "rawEvidence": [
+    {
+      "file": "alternative-scene-ui.mjs",
+      "sha256": "20d637cb5d4ea5c4e8a1167c0eb71fb6bcabd4c524b188044445af96beda4162"
+    },
+    {
+      "file": "clock-r1-alternative-backup.json",
+      "sha256": "4c53c8112d5977d27d2ce6b4b2e204296a4b88d5178869263eb802a8ec44f906"
+    },
+    {
+      "file": "clock-r1-alternative-interpretation.json",
+      "sha256": "21780ce3f8fd3e7070153f9caffb6b73ac6da7636ee2f5cbc80088c110152c7f"
+    },
+    {
+      "file": "clock-r1-alternative-operator-decisions.jsonl",
+      "sha256": "0c307287ee179492847585da24d546e034d3071902421e075e350ab9e59a1f38"
+    },
+    {
+      "file": "clock-r1-alternative-prepared.json",
+      "sha256": "5a67f2dd07ef1461544b096d93243f06502bf6536c1509da601a7fb91170f01f"
+    },
+    {
+      "file": "clock-r1-alternative-prior-session-proof.json",
+      "sha256": "75bfb28357f7734389e66f9aa12327beff1020c5ce3a1e7b57c8b55878212e46"
+    },
+    {
+      "file": "clock-r1-alternative-progress.json",
+      "sha256": "8efd2e2bb70facef329eaa85eaa2575d4f99097ef5105b2b1feac7511c9ab876"
+    },
+    {
+      "file": "clock-r1-alternative-restoration-verified.json",
+      "sha256": "f0af9e11f53b1fd1775ca945a1d214da596f2867c711361f6e5f15027fa2ff44"
+    },
+    {
+      "file": "clock-r1-alternative-scene-audit.json",
+      "sha256": "79568c7dac3775c8790e033084288fdc028734ecd03e1b1ed01d98bc5e304ca2"
+    },
+    {
+      "file": "clock-r1-alternative-scene-header.png",
+      "sha256": "0136f06a551ede41f443a2797bdb04cab214bc9442fbc85a7bc538c9ab5dac84"
+    },
+    {
+      "file": "clock-r1-alternative-scene-ui.json",
+      "sha256": "7e3dd5f962efde5dca4e6d3b60b7c90d5ff4316253d13ebe123c23bce806f546"
+    },
+    {
+      "file": "clock-r1-alternative-terminal-request-proof.json",
+      "sha256": "aeadf3d74040e85ff96033673ee1b76fcbe8bac1a046c0403d7c642af10a8f74"
+    },
+    {
+      "file": "clock-r1-alternative-transport-progress.json",
+      "sha256": "7464f2d7dcee9b6e37283db33393c30a7057c4ba8152006df8fc1b6f117f163c"
+    },
+    {
+      "file": "clock-r1-alternative.json",
+      "sha256": "e0cf647a21f01c591e6046ceacaf5a016dbf97a245f4e43161c4e19ab3a2ade1"
+    },
+    {
+      "file": "clock-r1-refuse-backup.json",
+      "sha256": "5ddfae99bd3ea32e243852c3efd25d664ae007cd8fcac402b6f20dbce1a9b8e8"
+    },
+    {
+      "file": "clock-r1-refuse-interpretation.json",
+      "sha256": "df980ab13dc7fce8b3afcf56c9d8432fdb646c689ec6ae0ba8b1b7820010f129"
+    },
+    {
+      "file": "clock-r1-refuse-operator-decisions.jsonl",
+      "sha256": "a7c7512b2d610386035102496c2db7428856ec9579ef0400ecc8684694b63e6a"
+    },
+    {
+      "file": "clock-r1-refuse-prepared.json",
+      "sha256": "1926f058ed69d6d3b190a63f37a9a0b5cff025a6c330879acf6de66136b5fffb"
+    },
+    {
+      "file": "clock-r1-refuse-prior-session-proof.json",
+      "sha256": "3f71bf06aad8e31710c61902bf2df3f31beedcaca63f062714dcc11cfd27b9ca"
+    },
+    {
+      "file": "clock-r1-refuse-progress.json",
+      "sha256": "0ce7fb2b645398e835f0f2ab6e683360e6f53fcdff366e5332cd465ddbe660a1"
+    },
+    {
+      "file": "clock-r1-refuse-restoration-verified.json",
+      "sha256": "d35bdcf37aef2fae0c0c26d876f77a66080e118c8447fd77eb9dcaacb3e39f93"
+    },
+    {
+      "file": "clock-r1-refuse-terminal-request-proof.json",
+      "sha256": "e10f96fc4b80f9aab40ab397f421ce33279fb46a7a1494e600b84688b38df5a0"
+    },
+    {
+      "file": "clock-r1-refuse-transport-progress.json",
+      "sha256": "7fa69dd897814034cd3d3bed09f14054d40cb3f11b31fa2c31452572a20a40fe"
+    },
+    {
+      "file": "clock-r1-refuse.json",
+      "sha256": "5e742756a9d8e4bb1a2bb87f1ad9cad8435a10a0c005cddfd1f356c790205247"
+    },
+    {
+      "file": "clock-r1-weak-guidance-backup.json",
+      "sha256": "1d2074209cf5f74c65cc40a0380627060dc352ff61c6c8ebfc35ea57d4d19e71"
+    },
+    {
+      "file": "clock-r1-weak-guidance-progress.json",
+      "sha256": "bf65db1e8fd968ff4020cd66f1486b7a50f3d6399ae512999caed6f658395c33"
+    },
+    {
+      "file": "clock-r1-weak-guidance.json",
+      "sha256": "b31c3ddfd6e05bd83d51913519a4348cb0e38390975a018e6873a647831231bb"
+    },
+    {
+      "file": "interpretation.json",
+      "sha256": "1e3956eae8af1d453246e11749c1228060dc0a8f47723f2770490a19a13d591d"
+    },
+    {
+      "file": "operator-decisions.jsonl",
+      "sha256": "b659f53e4b302266bd841d429a70d06092d35b303fe106bacf69da7781b627e3"
+    },
+    {
+      "file": "paired-registration-v3.json",
+      "sha256": "6fa7a4f02bc5fdedd91db47a7c17281dafac292f7362b9c8b15bf21804deccb8"
+    },
+    {
+      "file": "paired-registration.json",
+      "sha256": "07a1519b932e7eb5f20855adcef9f9059ecd38326dfe2726637644843a322302"
+    },
+    {
+      "file": "paired-restoration.mjs",
+      "sha256": "c79c8b23a3352566ebb794f1dde0295ae2f1448c5a57f45e3c302848fabd8f1f"
+    },
+    {
+      "file": "paired-runner-v1.mjs",
+      "sha256": "a3f8f590c812235d322f608b3da0bb3f40781c8db4c095c5001214a1d183c0cb"
+    },
+    {
+      "file": "paired-runner-v2.mjs",
+      "sha256": "b0f500e57e7e842e4e5d3b08a2b8141c79c035ee36e4c5fbd1f00e5b1ece346a"
+    },
+    {
+      "file": "paired-runner-v3.mjs",
+      "sha256": "f8223baafe2e195fba9a77b80843a27044b0e01262d2c06c215746d81cdfaf5f"
+    },
+    {
+      "file": "paired-runner.mjs",
+      "sha256": "b0f500e57e7e842e4e5d3b08a2b8141c79c035ee36e4c5fbd1f00e5b1ece346a"
+    },
+    {
+      "file": "prepared.json",
+      "sha256": "4ef066023e2a5ba15b4468ed3f3e49d709777a521aeefd3a856fde5b9bfe01f4"
+    },
+    {
+      "file": "preregistration.json",
+      "sha256": "c30ed79c7d078d2f1f41db881b33c405be022bbbdb003c105ba549f254ebaf0f"
+    },
+    {
+      "file": "restoration-verified.json",
+      "sha256": "62ed08c71b31e2e13836b158037e2bd9e28b0b8d297a0cefc92439974f709f16"
+    },
+    {
+      "file": "restoration.mjs",
+      "sha256": "73268e586658f44f50ab5651eb74610f469f400042fbc2ec7f582d0433cd998b"
+    },
+    {
+      "file": "runner.mjs",
+      "sha256": "cc3a7f370352f867688dc3c454db52c647a4f2138b6985be885a1d48ff1db6a1"
+    },
+    {
+      "file": "terminal-request-proof.json",
+      "sha256": "63248651cb74888830e4299646643cc3586ed622fac9cc24cc86288dbd77f971"
+    },
+    {
+      "file": "transport-progress.json",
+      "sha256": "07d51e1713381316c18d08e4e2336b0df43ea918f99f0723df52484affa67642"
+    }
+  ],
+  "next": "Implement and verify player-authorized shared transition to an existing mutually known destination without granting new-place creation or allowing actor-driven player movement. Keep current failed episode and all counts. Any changed implementation uses a new cohort; remaining original slots remain unstarted, not passed.",
+  "pairedSourceProof": "Each new session initial state equals the original frozen release; existing session records preserved in later backups. Production calls counted once."
+}

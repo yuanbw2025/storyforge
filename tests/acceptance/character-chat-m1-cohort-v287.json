@@ -1,0 +1,31 @@
+{
+  "version": 287,
+  "sourceHead": "0cb7c84d3f89fefbe2544113345fb51bd3cfca38",
+  "m1Passed": false,
+  "matrix": {
+    "scheduled": 120,
+    "attemptedFailedEpisodes": 2,
+    "sameProductionUnitsUnrun": 10,
+    "remainingUnrun": 108,
+    "humanScored": 0
+  },
+  "requests": 49,
+  "nativeCompleted": 48,
+  "nativeFailed": 1,
+  "knownReportedTokens": 774942,
+  "usageIncomplete": true,
+  "completedRuns": 13,
+  "failedRuns": 2,
+  "independentRestorationModelCalls": 0,
+  "units": [
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v287-m1-current/codex-reading-r1/summary.json",
+      "sha256": "416aaad197b2369f3bcf319b775bbfec0052037a7b2e39311c82e87efc3f4ae5"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v287-m1-current/codex-reading-r2/summary.json",
+      "sha256": "75c5090d4bbfe5eb1d43fb9debc6ec20118d585dec7a797b0b0c59dd4ae68faf"
+    }
+  ],
+  "nextAction": "Keep six-check review unchanged. Audit action generation instruction for atomic reconciliation of own beliefs/plans after actual new facts; same-action new fact references already supported by application reflection preview. Do not relax review or claim current source consistently passes."
+}

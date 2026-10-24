@@ -1,0 +1,123 @@
+{
+  "version": 289,
+  "recordedAt": "2026-10-20T22:34:50.794006+00:00",
+  "product": "character-interaction",
+  "sourceBaseHead": "0cb7c84d3f89fefbe2544113345fb51bd3cfca38",
+  "sourceKind": "manifest-verified-worktree; v55 implementation on 0cb7c84d base",
+  "sourceManifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v289-reading-belief-reconciliation/run-r1/manifest.json",
+    "sha256": "93923238a7515cb83e1c6b7f99790c7c3aeebf3515a282d8cb34b8b4779090ba"
+  },
+  "status": "actual-own-action-and-affected-belief-reconciled-reviewed-adopted-restored",
+  "formalM1Credit": 0,
+  "m1Passed": false,
+  "requests": 3,
+  "nativeCompleted": 3,
+  "knownReportedTokens": 51275,
+  "usageIncomplete": false,
+  "parentFailurePreserved": true,
+  "sameStateAndInput": true,
+  "throughSequence": 14,
+  "playerInputs": [
+    "我也更喜欢小规模、只听也可以的安排。"
+  ],
+  "adoptedEffects": {
+    "newFact": [
+      {
+        "factKey": "notice-voluntary-reading-added",
+        "kind": "observation",
+        "text": "许听澜打开透明夹框，在原告示上补写“只听也欢迎，朗读自愿”，保留原有文字，再合好夹框。",
+        "evidenceFactKeys": [
+          "world-fact.0004",
+          "local-1-1",
+          "local-1-2"
+        ],
+        "evidenceExcerpt": "许听澜打开透明夹框，在原告示上补写“只听也欢迎，朗读自愿”，保留原有文字，再合好夹框。"
+      }
+    ],
+    "beliefUpdates": [
+      {
+        "beliefKey": "belief-1",
+        "text": null,
+        "evidenceFactKeys": [
+          "notice-voluntary-reading-added"
+        ]
+      }
+    ],
+    "nextPossibilities": [
+      {
+        "text": "接下来可单独讨论是否额外招募，再围绕已经准备好的短篇细化小场安排，不预定玩家承担工作。",
+        "evidenceFactKeys": [
+          "world-fact.0001",
+          "world-fact.0004"
+        ]
+      }
+    ],
+    "turnCompletion": {
+      "version": 1,
+      "purpose": "承接玩家对参加方式的偏好，完成自家告示的说明补充，并保留招募问题未定的范围。",
+      "evidenceExcerpt": "许听澜打开透明夹框，在原告示上补写“只听也欢迎，朗读自愿”，保留原有文字，再合好夹框。"
+    }
+  },
+  "independentReview": {
+    "checks": [
+      {
+        "check": "continuity",
+        "passed": true,
+        "reason": "承接玩家对小规模、可只听的明确偏好；补充告示不改写报名人数、活动时间或尚未确定的招募安排。清除旧告示含糊的猜测与实际修改一致。"
+      },
+      {
+        "check": "permissions",
+        "passed": true,
+        "reason": "角色在公告板旁，自家告示允许修改；开启夹框并补写参加方式属于已授权的日常行动。"
+      },
+      {
+        "check": "player-agency",
+        "passed": true,
+        "reason": "仅确认玩家已表达的共同偏好，没有代替玩家承担工作或决定额外招募。修改自家告示无需玩家参与，waitingForPlayer=false 合理。"
+      },
+      {
+        "check": "visibility",
+        "passed": true,
+        "reason": "正文仅涉及双方已知的告示、玩家刚表达的偏好及本次实际修改，没有泄露私有背景或把猜测当成事实。"
+      },
+      {
+        "check": "consequences",
+        "passed": true,
+        "reason": "开启、补写并合好夹框的物理变化已完整登记；没有遗漏独立承诺，也未将局部修改冒充目标完成或整条事项解决。"
+      },
+      {
+        "check": "meaningful-direction",
+        "passed": true,
+        "reason": "由此前待议措辞推进到实际补充告示，回应了玩家最新偏好；后续仍保留招募与小场细节，不重复空泛建议或预定玩家工作。"
+      }
+    ],
+    "disclosureChecks": [],
+    "commitmentChecks": [],
+    "memoryChecks": [],
+    "turnCompletionCheck": {
+      "passed": true,
+      "reason": "摘录直接证明告示补充已完成，实际表达也明确保留招募问题未定；本次局部目的已实现，没有将待答问题或未完成尝试藏入结束标记。"
+    }
+  },
+  "longTermGoalRemainedActive": true,
+  "sceneClosed": false,
+  "parentPreserved": true,
+  "worldPreserved": true,
+  "restorationModelCalls": 0,
+  "automaticRetries": 0,
+  "sourceUnchanged": true,
+  "limit": "One bounded same-state verification, not a completed story, full cohort, human quality score or commercial acceptance. Original V287 failures remain.",
+  "evidence": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v289-reading-belief-reconciliation/run-r1/continuation.json",
+    "sha256": "a4a604aba2d91699f3b50d5cc25ccd2bbada00dc6231e9d93c9bf6db054eb575"
+  },
+  "backup": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v289-reading-belief-reconciliation/run-r1/continuation-backup.json",
+    "sha256": "ded134d1f3af38254398b42ff0e7ae7ae865c18f88c16504eae2923b27248a6a"
+  },
+  "restoration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v289-reading-belief-reconciliation/run-r1/continuation-restoration-verified.json",
+    "sha256": "462353643909c1a59eca77bc7bd0e8cff43f6ade555c5e3014a5654aeb7f8ed3"
+  }
+}

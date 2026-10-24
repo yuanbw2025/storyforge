@@ -1,0 +1,110 @@
+{
+  "version": 377,
+  "recordedAt": "2026-10-24T05:11:08.127660+00:00",
+  "status": "real-model-transport-diagnostic-failed-domain-validation",
+  "sourceHead": "ce6578383a61e51af2cb4b5fa7bde17753171306",
+  "producer": "chat-opening-review-v11",
+  "model": "agnes-2.5-flash",
+  "readOnlyComparison": true,
+  "maximumRequests": 2,
+  "automaticRetries": 0,
+  "results": [
+    {
+      "receipt": {
+        "arm": "native-schema",
+        "requests": 1,
+        "status": "response-observed",
+        "httpStatus": 200,
+        "durationMs": 25112,
+        "finishReason": "stop",
+        "usage": {
+          "completion_tokens": 2483,
+          "prompt_tokens": 14840,
+          "total_tokens": 17323,
+          "completion_tokens_details": {
+            "reasoning_tokens": 40,
+            "text_tokens": 2443
+          },
+          "prompt_tokens_details": {
+            "cached_tokens": 256
+          }
+        },
+        "responseSha256": "d90521751d5835767f6cd3a85d0cfa5d94a1d6c97e92bc9e47bc4bd5454b6a87"
+      },
+      "validation": {
+        "productParserAccepted": true,
+        "domainContractAccepted": false,
+        "eligibleOptions": 0,
+        "checks": [],
+        "error": "Error: [chat-opening-references] 引用不属于当前来源或候选"
+      }
+    },
+    {
+      "receipt": {
+        "arm": "json-object",
+        "requests": 1,
+        "status": "response-observed",
+        "httpStatus": 200,
+        "durationMs": 160832,
+        "finishReason": "stop",
+        "usage": {
+          "completion_tokens": 9062,
+          "prompt_tokens": 14840,
+          "total_tokens": 23902,
+          "completion_tokens_details": {
+            "reasoning_tokens": 6546,
+            "text_tokens": 2516
+          },
+          "prompt_tokens_details": {
+            "cached_tokens": 14592
+          }
+        },
+        "responseSha256": "380623ccc7c241ffa757f9c53552fb4d1884ee1fb6400baa23e8fe10c099fed7"
+      },
+      "validation": {
+        "productParserAccepted": true,
+        "domainContractAccepted": false,
+        "eligibleOptions": 0,
+        "checks": [],
+        "error": "Error: [chat-opening-references] 每项需要一至四条引用"
+      }
+    }
+  ],
+  "sourceUnchanged": true,
+  "productWrites": 0,
+  "formalM1Credit": false,
+  "primaryProfileChanged": false,
+  "correction": "Both calls returned HTTP 200. No quota issue observed. Native schema returned cross-option citations; JSON-object returned five citations where the unchanged contract allows one to four. These are output validation failures, not a provider availability or account balance diagnosis.",
+  "additionalInspection": {
+    "nativeSchema": "All three agency fields were null while viable-agency passed; domain validation would reject these as well. The first rejection was cross-option citation.",
+    "jsonObject": "opening-3 viable-agency returned five evidence entries. Original response retained; no entries were deleted and it was not promoted to accepted evidence."
+  },
+  "v376RegressionCompletion": {
+    "sourceApplicationCommit": "ce6578383a61e51af2cb4b5fa7bde17753171306",
+    "files": 188,
+    "passed": 2310,
+    "failed": 0,
+    "skipped": 0,
+    "sourceUnchanged": true,
+    "engineeringOnly": true
+  },
+  "evidenceHashes": {
+    "preregistration.json": "4ff213d52a5300da6fa57bfd5fe2f23d3c6c53823e5c5e3837d34655eae9b92c",
+    "summary.json": "a40ae998d19942289ce17cb70eba0771d9b4a5091b5352dbe7fc566b828b4aee",
+    "source-manifest.json": "cb04000e36b8891e940019440c1447c1cc64320fb980f04a46d287a96e74e0af",
+    "native-schema/response.json": "d90521751d5835767f6cd3a85d0cfa5d94a1d6c97e92bc9e47bc4bd5454b6a87",
+    "native-schema/validation.json": "b202810614618edad84416a166f6e9c30c03d1a3b4df55877fb60df1b2acbea1",
+    "json-object/response.json": "380623ccc7c241ffa757f9c53552fb4d1884ee1fb6400baa23e8fe10c099fed7",
+    "json-object/validation.json": "83b8dd6b9dc035af3fb3ce946296985cafcb8f185baff8ac20ce08eb5621ef0f"
+  },
+  "regressionHashes": {
+    "chat-regression-command.json": "26b674d1e8eaafb66c0b6871a6e6a51a8d65b5c9fd1ee8e0733c76b4938df831",
+    "chat-regression.json": "f780bfd264e95d36f27a440e9c3aa6f299bc17cd17c718f0d06c62b9222d175c",
+    "chat-regression-status.json": "ffff03dfa8caa56226fa7474f885d87f96600010118348e4ddbf303cdb34fdd2"
+  },
+  "claims": {
+    "m1Passed": false,
+    "commercialReady": false,
+    "released": false
+  }
+}

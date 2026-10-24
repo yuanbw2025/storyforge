@@ -1,0 +1,65 @@
+{
+  "schema": "storyforge.chat-development-acceptance",
+  "version": 305,
+  "at": "2026-10-22T04:28:52.395280+00:00",
+  "status": "opening-development-contract-implemented-focused-engineering-passed-real-story-pending",
+  "baseHead": "a07b50153ace3e9b715ef11223fcf17aa93e86df",
+  "scope": "Character chat S2/S3 product development; improve authored opening circumstances and require explicit development evidence before selection and downstream release.",
+  "boundary": {
+    "world": "read-only frozen WorldRelease",
+    "owners": "existing character-chat Work/Build/Release/Session",
+    "reads": [
+      "product-production.artifact-inputs",
+      "product-production.repair-feedback"
+    ],
+    "writes": "registered productBuildArtifacts.payloadJson through existing production candidate/adoption",
+    "newTables": 0,
+    "newRuntimeFactsFromReview": false,
+    "newModelCallsPerTask": 0
+  },
+  "versions": {
+    "production": "chat-situation-production-v14",
+    "review": "chat-opening-review-v9",
+    "report": 3,
+    "gate": "chat.opening-development.v3"
+  },
+  "changes": [
+    "Generation prepares substantive current conditions supporting the original purpose, with an independent follow-up when needed; no predetermined outcomes or expanded world permissions.",
+    "Review separates first actionable entry from direct, adaptive, conversation or grounded-wait development evidence. Identity, direction, visible facts, exact quotes and schema are locally checked; semantic sufficiency remains a model and human judgement.",
+    "New contracts require v3 at author UI/command, narrative assembly, media and integration. Frozen v1/v2 receipts and old prompt bindings retain their semantics.",
+    "Author sees why the scene can develop and what remains unresolved; the witness is excluded from runtime narrative data."
+  ],
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v305-development-proof/engineering.json",
+    "sha256": "87767ce50585defff3aba3ccfdc5bfb504a207f552e4b3549f74abd8009e95f4"
+  },
+  "failuresPreserved": [
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v305-types-initial.log",
+      "sha256": "5587f964bf6e9764dd923b51473536f34aa6cbb7bda10c8316c476baa23e36d8"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v305-production-regression.log",
+      "sha256": "3c7166d447af9b0b51208f62b0dc9586dc32ef6d1cfb5abf5712b7bab3bd65d1"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v305-production-regression-r2.log",
+      "sha256": "d802a4ddd70abd3f41b66b39d5626de684d9a5042157ba3187fbe8a25b5993c8"
+    },
+    {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v305-development-proof/browser.log",
+      "sha256": "28acad58c7bf8d961d9c2a40be6f7647d57813d92dbd1094e7ac6ef6c5cddb53"
+    }
+  ],
+  "repairsDuringValidation": [
+    "Corrected new gate ordering to match canonical portable carry evidence without weakening receipt checks.",
+    "Updated explicit historical plan fixtures and the current review transport expectation.",
+    "Two full lifecycle tests timed out alongside a build; unchanged timeouts passed in an isolated serial rerun.",
+    "Corrected the new prompt example so a passing example includes development evidence instead of null."
+  ],
+  "externalModelCalls": 0,
+  "m1Passed": false,
+  "remainingTechnicalPackages": 7,
+  "humanScoring": "deferred by user",
+  "next": "Collect a new fixed-source full story episode from the original adopted material, then expand core/provider validation. Preserve V302 unknown and V293 failures; do not relabel old episodes."
+}

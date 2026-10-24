@@ -1,0 +1,183 @@
+{
+  "schema": "storyforge.character-chat-ordinary-self-action",
+  "version": 329,
+  "at": "2026-10-22T18:26:45.003469+00:00",
+  "status": "local-engineering-passed-real-followthrough-pending",
+  "sourceParentHead": "a497f9159e4be67ea0e6ca0220769db24312e4d6",
+  "sourceSnapshot": {
+    "kind": "executable-working-tree-before-commit",
+    "files": 3436,
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v329-ordinary-self-action/source-manifest.json",
+    "sha256": "9ffa5d739b495c741e6fca809c6f5c45c8b25795db0eee3335f3bbb3899f73e4"
+  },
+  "product": "character-interaction",
+  "lifecycle": "product-development",
+  "stage": "S3 runtime",
+  "owner": "Chat Work and product runtime instance",
+  "boundary": {
+    "readSources": [
+      "interactionRuntime",
+      "chatSituationRuntime",
+      "chatActionCandidate"
+    ],
+    "writes": "existing reviewed candidate adoption and runtime events",
+    "newFields": false,
+    "newTables": false,
+    "worldWrites": false,
+    "mediaWrites": false
+  },
+  "change": {
+    "action": "chat-narrative-action-v63",
+    "options": "chat-narrative-options-v39",
+    "unchangedReview": [
+      "chat-narrative-action-review-v38",
+      "chat-narrative-options-review-v28"
+    ],
+    "unchangedRevision": "chat-action-revision-v23",
+    "unchangedReader": "chat-narrative-runtime-view-v18",
+    "newModelSteps": 0,
+    "meaning": "Distinguish actual unresolved conditions from generic possible failure; existing authorized ordinary self-actions may be fully narrated in a candidate. Hidden facts, obstacles, player and other-character decisions retain their original boundaries."
+  },
+  "verification": {
+    "baseline": {
+      "tests": 5,
+      "passed": true,
+      "overlapsFinal": true
+    },
+    "focused": {
+      "files": 7,
+      "tests": 105,
+      "passed": true
+    },
+    "related": {
+      "files": 16,
+      "tests": 252,
+      "passed": true
+    },
+    "totalDistinctFinalRegressionTests": 357,
+    "browser": {
+      "files": 3,
+      "tests": 16,
+      "retries": 0,
+      "passed": true
+    },
+    "typecheck": true,
+    "localChecks": [
+      {
+        "name": "check:architecture",
+        "exitCode": 0,
+        "seconds": 8.494,
+        "log": "/private/tmp/storyforge-v329-checks/check-architecture.log"
+      },
+      {
+        "name": "check:required-tables",
+        "exitCode": 0,
+        "seconds": 0.224,
+        "log": "/private/tmp/storyforge-v329-checks/check-required-tables.log"
+      },
+      {
+        "name": "check:ai-manual",
+        "exitCode": 0,
+        "seconds": 0.64,
+        "log": "/private/tmp/storyforge-v329-checks/check-ai-manual.log"
+      },
+      {
+        "name": "check:ai-entry-registry",
+        "exitCode": 0,
+        "seconds": 1.021,
+        "log": "/private/tmp/storyforge-v329-checks/check-ai-entry-registry.log"
+      },
+      {
+        "name": "check:source-reachability",
+        "exitCode": 0,
+        "seconds": 1.744,
+        "log": "/private/tmp/storyforge-v329-checks/check-source-reachability.log"
+      },
+      {
+        "name": "check:agent-context",
+        "exitCode": 0,
+        "seconds": 0.171,
+        "log": "/private/tmp/storyforge-v329-checks/check-agent-context.log"
+      },
+      {
+        "name": "check:agent-freshness",
+        "exitCode": 0,
+        "seconds": 0.826,
+        "log": "/private/tmp/storyforge-v329-checks/check-agent-freshness.log"
+      },
+      {
+        "name": "check:project-metrics",
+        "exitCode": 0,
+        "seconds": 0.559,
+        "log": "/private/tmp/storyforge-v329-checks/check-project-metrics.log"
+      },
+      {
+        "name": "check:roadmap",
+        "exitCode": 0,
+        "seconds": 0.19,
+        "log": "/private/tmp/storyforge-v329-checks/check-roadmap.log"
+      },
+      {
+        "name": "check:docs",
+        "exitCode": 0,
+        "seconds": 0.685,
+        "log": "/private/tmp/storyforge-v329-checks/check-docs.log"
+      },
+      {
+        "name": "changed-lint",
+        "exitCode": 0,
+        "seconds": 2.406,
+        "log": "/private/tmp/storyforge-v329-checks/changed-lint.log"
+      },
+      {
+        "name": "build",
+        "exitCode": 0,
+        "seconds": 86.019,
+        "log": "/private/tmp/storyforge-v329-checks/build.log"
+      },
+      {
+        "name": "check:bundle-size",
+        "exitCode": 0,
+        "seconds": 0.55,
+        "log": "/private/tmp/storyforge-v329-checks/check-bundle-size.log"
+      }
+    ],
+    "historicalV62PromptBytesPreserved": true,
+    "currentAndMixedAndFutureBindingsCovered": true,
+    "firstFailureRetained": "60 initial assertions failed because tests required the former default or treated the newly introduced version as future. Historical cases were retained and current defaults were separated; no production or acceptance rule was relaxed."
+  },
+  "modelEvidence": {
+    "callsDuringThisImplementation": 0,
+    "realBehaviorImprovementVerified": false,
+    "m1Passed": false,
+    "humanScores": 0
+  },
+  "evidence": {
+    "baseline": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v329-ordinary-self-action/baseline.log",
+      "sha256": "92ebf4ba5c480ad20c7ed9b36088da105bf8ce653758b96a47f33dfd0198c393"
+    },
+    "firstFocusedFailure": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v329-ordinary-self-action/firstFocusedFailure.log",
+      "sha256": "d8bd9465bb1cf085863d2136de0782442e5d33504275291d5ca7622d6d4c0efd"
+    },
+    "focusedFinal": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v329-ordinary-self-action/focusedFinal.log",
+      "sha256": "94cb7196a68e251be5b3a4e009a7576274f1a1627c1d093752a6a13b657524d7"
+    },
+    "related": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v329-ordinary-self-action/related.log",
+      "sha256": "166b3fc94a38f818da443d974a554625cb4b327a1f24ecde4ecd98acc4ea3048"
+    },
+    "typecheck": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v329-ordinary-self-action/typecheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "browser": {
+      "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v329-ordinary-self-action/browser.log",
+      "sha256": "3477ff7ade83010183f24964257fc04415732e761f85eac6b19bf2d5b2c49b09"
+    }
+  },
+  "currentHeadFullChecks": "a497f915 remote full checks remain active; these do not cover V329. Final implementation full gates are still required.",
+  "next": "Freeze implementation commit, branch the original V328 pre-retrieval state, and run one bounded explicit continuation through the real existing Harness; retain the original budget-stop episode."
+}

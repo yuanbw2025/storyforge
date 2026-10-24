@@ -1,0 +1,151 @@
+{
+  "version": 379,
+  "recordedAt": "2026-10-24T05:34:01.673327+00:00",
+  "status": "real-model-format-valid-domain-evidence-rejected",
+  "sourceHead": "a73419a05bae1c89b0d6590b2a0cb33a8d70b3ca",
+  "producer": "chat-opening-review-v12",
+  "model": "agnes-2.5-flash",
+  "readOnlyComparison": true,
+  "maximumRequests": 2,
+  "actualRequests": 2,
+  "automaticRetries": 0,
+  "results": [
+    {
+      "receipt": {
+        "arm": "native-schema",
+        "requests": 1,
+        "status": "response-observed",
+        "httpStatus": 200,
+        "durationMs": 34019,
+        "finishReason": "stop",
+        "usage": {
+          "completion_tokens": 3643,
+          "prompt_tokens": 13886,
+          "total_tokens": 17529,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1287,
+            "text_tokens": 2356
+          },
+          "prompt_tokens_details": {
+            "cached_tokens": 256
+          }
+        },
+        "responseSha256": "3f7929e367f5766d176f34099441b57fb959d9b649ad0fa96d9b3200ac53d184"
+      },
+      "validation": {
+        "productParserAccepted": true,
+        "domainContractAccepted": false,
+        "eligibleOptions": 0,
+        "checks": [],
+        "error": "Error: [chat-opening-agency] 行动机会不得借用未知、其他角色或方向未引用的事实",
+        "wireSchemaAccepted": true,
+        "wireSchemaErrors": null
+      }
+    },
+    {
+      "receipt": {
+        "arm": "json-object",
+        "requests": 1,
+        "status": "response-observed",
+        "httpStatus": 200,
+        "durationMs": 107575,
+        "finishReason": "stop",
+        "usage": {
+          "completion_tokens": 6066,
+          "prompt_tokens": 13886,
+          "total_tokens": 19952,
+          "completion_tokens_details": {
+            "reasoning_tokens": 3668,
+            "text_tokens": 2398
+          },
+          "prompt_tokens_details": {
+            "cached_tokens": 13824
+          }
+        },
+        "responseSha256": "1fb2ed60aeacf5f72206cdf8109eb630d41cf9333384a32a9efe151931f9d620"
+      },
+      "validation": {
+        "productParserAccepted": true,
+        "domainContractAccepted": false,
+        "eligibleOptions": 0,
+        "checks": [],
+        "error": "Error: [chat-opening-review] 发展依据缺少对应方向或事实的原文引用",
+        "wireSchemaAccepted": true,
+        "wireSchemaErrors": null
+      }
+    }
+  ],
+  "sourceUnchanged": true,
+  "productWrites": 0,
+  "primaryProfileChanged": false,
+  "correction": "Both responses were HTTP 200 and complete JSON, valid against the current wire schema. No quota failure was observed. Native output cited visible facts not declared by the selected direction; JSON-object output omitted a required direction/fact excerpt for development. Neither response became an accepted review.",
+  "engineeringCompletion": {
+    "applicationCommit": "a73419a05bae1c89b0d6590b2a0cb33a8d70b3ca",
+    "regression": {
+      "files": 189,
+      "passed": 2331,
+      "failed": 0,
+      "skipped": 0,
+      "batches": [
+        "chat-regression.json",
+        "chat-regression-ui.json"
+      ],
+      "note": "First selector covered .ts only; all 13 .tsx files then ran on unchanged application source. File sets are disjoint. Repeated parameterized display titles are identified by per-file assertion index."
+    },
+    "browser": {
+      "uniqueCases": 32,
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0,
+      "automaticRetries": 0,
+      "method": "Latest result per file: complete 32-case run, then all 9 production-repair cases after fixture race fix.",
+      "retainedInitialFailures": [
+        {
+          "report": "browser.json",
+          "failed": 1,
+          "reason": "Old array access in injected fixture"
+        },
+        {
+          "report": "browser-final.json",
+          "failed": 1,
+          "reason": "Test polled before asynchronous build persistence"
+        }
+      ]
+    }
+  },
+  "startupFailure": {
+    "requestsDispatched": 0,
+    "reason": "Diagnostic initially used a nonexistent Ajv entry; resolved the installed package before dispatch. Initial script and log retained."
+  },
+  "evidenceHashes": {
+    "preregistration.json": "01d80e7acdb4dc3763d853cebf73f771a42c1d58eacb0518286f84b8098c0e5a",
+    "summary.json": "bbeb735fbfa70cf10ded4f685029c9ad29479d7a6db0b3a80d7e5b08c472c9aa",
+    "source-manifest.json": "2bf39507f3d2e45c8f21ea6dcc6ad2528e112854573d24df3001cf3df5ae273b",
+    "native-schema/response.json": "3f7929e367f5766d176f34099441b57fb959d9b649ad0fa96d9b3200ac53d184",
+    "native-schema/validation.json": "f0f8f7a1056a4650314018c9bd231136285f8c61b7b460f86e531d2ad177dea4",
+    "json-object/response.json": "1fb2ed60aeacf5f72206cdf8109eb630d41cf9333384a32a9efe151931f9d620",
+    "json-object/validation.json": "e080890cffa05be044f3e265ad4c218f616c4dd7299fea146f267b879aaf1db5",
+    "startup-failure.json": "ca6620a21d780fbb71412cf24ace1a738547d9400578734b8f9568b4891740b6"
+  },
+  "engineeringHashes": {
+    "chat-regression-command.json": "b3161e23d5859b66b653fdc56cb0a68215567c8bbc1323848f425a861f2fdbc0",
+    "chat-regression.json": "83afe05b0c1cde60a4f24cfa610f53eb3044bfb4eb50918ab3ce57b3867719e4",
+    "chat-regression-status.json": "590415aa5db8ebb03b25bc06c2ae4e4f58db53678da1ceace7b06153949412ad",
+    "chat-regression-ui-command.json": "c5d9641433bf627c6536ea996ac7f0fb82ae7b1c33cd422e20e8b2117737cda3",
+    "chat-regression-ui.json": "65082f4e8f45c836cc42ada669560c6ecebe08098e038102b27c70900de75c1d",
+    "chat-regression-ui-status.json": "590415aa5db8ebb03b25bc06c2ae4e4f58db53678da1ceace7b06153949412ad",
+    "browser.json": "a2696ad0087f6c4675d0de0f63a1bf791a51e5a90ef4bf9c8e5be917b1c1421c",
+    "browser-final.json": "b7b96a7b1e84bfe786766b52537f3ac266448051f5f14d60756b0406010c3f1b",
+    "browser-race-fixed.json": "395c6f6cca2a475e3d4e6cc42ea1aa149c9003b8199674db526e8912ca4d8501",
+    "verification-completion.json": "695b5151161a4ed1ab0de0c3d0f548e96010abe025b19eb412d3ae3752e6b3e3",
+    "tsc-complete.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "race-fixture-lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "claims": {
+    "formalM1Credit": false,
+    "m1Passed": false,
+    "completeDeliveryPassed": false,
+    "commercialReady": false,
+    "released": false
+  }
+}

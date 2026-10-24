@@ -1,0 +1,37 @@
+{
+  "version": 277,
+  "recordedAt": "2026-10-20T19:39:29.388695+00:00",
+  "product": "character-interaction",
+  "status": "purposeful-action-choice-engineering-passed-real-effect-pending",
+  "scope": "S3 character action selection only. Work/session own the data; WorldRelease is read-only and media unchanged. The existing Gateway role view, candidate, independent review, adoption and event lifecycle remain.",
+  "change": "New action v51 prioritizes a decision, event or relationship consequence, uses existing observations to act, and does not turn every unrelated uncertainty into another inspection. Stage progress remains distinct from completing a long-term goal; consent, danger and unknown outcome boundaries remain.",
+  "compatibility": {
+    "previousVersion": "chat-narrative-action-v50",
+    "newVersion": "chat-narrative-action-v51",
+    "reviewVersion": "chat-narrative-action-review-v34",
+    "readerVersion": "chat-narrative-runtime-view-v16",
+    "historicalChoicePromptSha256": "4f2209675e76116b2fde8854850559eaa2a6a9373f637ef83e09b24ece1da1c5",
+    "source": "Actual completed V275 first choice system prompt",
+    "roleInputExpressionReviewSchemaAndBudgetUnchanged": true,
+    "newTables": 0,
+    "newStateFields": 0,
+    "newModelSteps": 0
+  },
+  "engineering": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v277-purposeful-action-choice/engineering.json",
+    "sha256": "09b80985c5f0ff2e27c7614e51cc3cd7c6fe4335549357836d33abb93ad65730"
+  },
+  "sourceManifest": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v277-purposeful-action-choice/manifest.json",
+    "sha256": "d4b1be23e465f5ac4b17f0c1e9020467f4099168215a465f0da4f1b13df30b56"
+  },
+  "retainedFirstRegressionFailure": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v277-purposeful-action-choice/regression.log",
+    "sha256": "3b42092a2a8d43985c570f5a8832ed44a8c6f0867f5091a7330fee38d7eac621"
+  },
+  "firstFailureExplanation": "17 assertions still expected default v50; product code was unchanged between first run and r2. Update five expectation labels; retain all real scope, zero-call, recovery, refusal and privacy assertions.",
+  "modelCalls": 0,
+  "formalM1Credit": 0,
+  "qualityAccepted": false,
+  "nextAction": "Use a separately registered branch at V275 before its third player input, preserving original facts and the exact player message; observe whether new v51 actually makes useful progress. Do not replay or relabel the old episode. Agnes remains stopped for insufficient_user_quota."
+}

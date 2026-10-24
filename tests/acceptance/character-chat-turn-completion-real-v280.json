@@ -1,0 +1,89 @@
+{
+  "version": 280,
+  "recordedAt": "2026-10-20T20:27:27.925211+00:00",
+  "product": "character-interaction",
+  "status": "reviewed-local-turn-completion-with-active-long-term-goal",
+  "sourceBaseHead": "ec77b69d24cff76eb079922cd6245bf86b7d3540",
+  "protocol": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v280-reading-night-turn-completion/run-r1/preregistration.json",
+    "sha256": "77e14dcf2340ce983fff0665cfdbc08a2fc421523936be90ca87353193b0ed4f"
+  },
+  "result": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v280-reading-night-turn-completion/run-r1/continuation.json",
+    "sha256": "c4294bf1ba2abdb18641c9b84f606aa4ed4affc8bb81ca3ca46fd4fc44cd7ef1"
+  },
+  "backup": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v280-reading-night-turn-completion/run-r1/continuation-backup.json",
+    "sha256": "2677ae3d13966043c285129630db1d4afeec2022da94f9d916a7e8269063896e"
+  },
+  "restoration": {
+    "path": "/Users/qinyingying/.local/share/storyforge-evaluations/character-chat-20261014/v280-reading-night-turn-completion/run-r1/continuation-restoration-verified.json",
+    "sha256": "f3a91867e7bb7745c201cffdf24fbdac8c47751299e90f660a3a3bb92a1d6d48"
+  },
+  "model": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "requests": 3,
+    "allNativeRequestsCompleted": true,
+    "usage": {
+      "totalTokens": 51029,
+      "inputTokens": 49226,
+      "outputTokens": 1803,
+      "cachedInputTokens": 3328,
+      "reasoningOutputTokens": 694
+    },
+    "costUsd": null
+  },
+  "playerInputs": [
+    "可以，我只当听众，你按自己能承担的方式安排。"
+  ],
+  "outcome": {
+    "text": "“好，就按你只当听众来安排。”\n许听澜确定了基本方案：由她朗读已备好的短篇，读后自愿交流，不要求每个人发言；桌端暂作她的朗读位置，玩家只当听众。\n“我坐着时，椅背没伸进通道；不过有人经过是否方便，还没试过。这个位置先暂定，基本方案有了，不等于整场已经筹备妥当。”",
+    "turnCompletion": {
+      "version": 1,
+      "purpose": "承接玩家只当听众的选择，确定自身可承担的基本方案并保留位置限制。",
+      "evidenceExcerpt": "许听澜确定了基本方案：由她朗读已备好的短篇，读后自愿交流，不要求每个人发言；桌端暂作她的朗读位置，玩家只当听众。"
+    },
+    "turnCompletionCheck": {
+      "passed": true,
+      "reason": "正文实际确定了自身朗读、读后自愿交流及玩家仅作听众的基本方案，并明确位置限制；摘录支持该局部目的完成，无需等待尚未回答的玩家决定。"
+    },
+    "allOriginalChecksPassed": true,
+    "triggerStatus": "complete",
+    "goalStatuses": [
+      "active"
+    ],
+    "threadStatuses": [
+      "open"
+    ],
+    "completedRuns": 1,
+    "parentUnchanged": true,
+    "worldUnchanged": true,
+    "sourceUnchanged": true,
+    "automaticRetries": 0
+  },
+  "restorationChecks": {
+    "stem": "continuation",
+    "runStatusesPreserved": true,
+    "verifiedCompletedHistories": 1,
+    "retainedFailedRuns": 0,
+    "resumableRuns": 0,
+    "openingReviewRetained": true,
+    "modelCalls": 0,
+    "interactionEqual": true,
+    "refreshEqual": true,
+    "worldPreserved": true,
+    "rawEvidenceRetained": true,
+    "terminalReceiptBodiesRetained": true,
+    "usageEvidenceRetained": true
+  },
+  "limitations": [
+    "One bounded continuation at the original V275 pre-third-input state, not a whole episode or cross-scenario stability result.",
+    "Original source, frozen release, refusal and parent state retained; old failures not replaced.",
+    "Same-turn local completion does not close the ongoing goal or establish commercial quality."
+  ],
+  "fullCI": false,
+  "fullE2E": false,
+  "formalM1Credit": 0,
+  "qualityAccepted": false
+}
