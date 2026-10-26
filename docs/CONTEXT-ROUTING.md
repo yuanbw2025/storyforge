@@ -1,6 +1,6 @@
 # StoryForge 上下文路由
 
-> 版本：2.8.2 · 生效：2026-10-13
+> 版本：2.8.3 · 生效：2026-10-26
 > 目标：保持项目级关联理解，同时只读取当前任务需要的现行文档与源码。三注册表和数据红线不因上下文精简而降低。
 
 ## 1. 默认入口
@@ -25,7 +25,7 @@
 | AI 写回、解析、采纳 | Skill `writes`、field/schema/extension、候选和 stale | Field Registry、Adoption、durable run、目标领域仓储与测试 | 无关表与面板 |
 | Agent/Harness、恢复、长程一致性 | run/step/attempt、contract、checkpoint、receipt、context/write scope | `HARNESS-QUALITY-STANDARD.md`；命中的 `src/lib/agent`、Gateway、registry、memory/retrieval 与 eval/test | 旧 Harness 蓝图、完成卡、评测流水 |
 | schema、迁移、删除、导入导出 | 表、owner、refs、schema 版本、blob | `DATA-GOVERNANCE.md`；`project-tables.ts`、schema、迁移、export、lifecycle 及正反例 | 手写历史表清单 |
-| 分步骤长篇或节点 | 具体模块、Skill、领域数据、节点 adapter | `products/LONGFORM-AND-NODE.md`、能力基线相关行、入口→下游闭包；系统文质量优化再读 `roadmap/LONGFORM-SYSTEM-FICTION-QUALITY-PLAN.md` 对应单元 | 上层产品完整实现 |
+| 分步骤长篇或节点 | 具体模块、Skill、领域数据、节点 adapter | `products/LONGFORM-AND-NODE.md`、能力基线相关行、入口→下游闭包；系统文质量优化再读 `roadmap/LONGFORM-SYSTEM-FICTION-QUALITY-PLAN.md` 对应单元；崩溃、保存/采纳和全流程稳定性再读 `roadmap/LONGFORM-STEP-STABILITY-PLAN.md` 及其执行矩阵 | 上层产品完整实现 |
 | 短篇、剧本、漫画 | work/adaptation kind、source manifest、产物 owner | `products/INDEPENDENT-CREATION.md`、`roadmap/INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md` 和且仅和目标产品的专项方案、对应领域代码和表/Skill | 另外两个独立创作产品内部实现、世界引擎或游戏媒资的无关实现 |
 | 漫剧前期生产 | MotionDrama Work、source manifest、series/episode、asset/shot/reference、Image/Video Prompt IR | `products/MOTION-DRAMA.md`、`roadmap/MOTION-DRAMA-PREPRODUCTION-DEVELOPMENT-PLAN.md`、对应 motion-drama 代码与三注册表 | 页漫排字/页面、最终视频/剪辑、世界与上层产品媒资内部实现 |
 | 世界引擎、WorldRelease、世界版本/封存/出口 | World draft/release、codec/hash、source gateway | `products/WORLD-ENGINE.md` §1～11、§13、§18；数据治理、world-engine 代码与三注册表 | 上层运行状态、产品媒资实现 |

@@ -1,6 +1,6 @@
 # StoryForge 文档权威与归档规则
 
-> 版本：2.5.2 · 生效：2026-10-13
+> 版本：2.5.3 · 生效：2026-10-26
 > 本文回答“哪些文档仍可指导开发”。未列入现行清单的历史材料，不得作为设计或施工权威。
 
 ## 1. 裁决层级
@@ -67,6 +67,7 @@
 - `docs/roadmap/README.md`
 - `docs/roadmap/CAPABILITY-BASELINE.md`
 - `docs/roadmap/LONGFORM-SYSTEM-FICTION-QUALITY-PLAN.md`：系统文长篇质量增量的研究、十个施工单元、进度和验收入口；复用分步骤与节点同源主链，不宣称文学或平台验收完成。
+- `docs/roadmap/LONGFORM-STEP-STABILITY-PLAN.md`：分步骤长篇逐功能生成、采纳、修改、保存、回读、故障恢复与客户端发行复测计划；配套 `docs/roadmap/longform-step-stability-matrix.json` 记录初始执行清单，不是运行时注册表或已完成验收证据。
 - `docs/roadmap/INDEPENDENT-CREATION-DEVELOPMENT-PLAN.md`
 - `docs/roadmap/SHORT-NOVEL-DEVELOPMENT-PLAN.md`
 - `docs/roadmap/NOVEL-TO-SCREENPLAY-DEVELOPMENT-PLAN.md`
