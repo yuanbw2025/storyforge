@@ -439,7 +439,7 @@ describe('NW-1A · NW-0B corpus evidence and current database lifecycle', () => 
     const paths = ['src/lib/types/narrative-ir.ts', 'src/lib/types/narrative-time.ts',
       'src/lib/world-engine/narrative-ir.ts', 'src/lib/world-engine/narrative-ir-codec.ts', 'src/lib/world-engine/narrative-identity.ts',
       'src/lib/world-engine/narrative-json.ts', 'src/lib/narrative-domain/json.ts', 'src/lib/narrative-domain/sha256.ts', 'src/lib/world-engine/narrative-time.ts',
-      'src/lib/registry/types.ts', 'src/lib/registry/project-tables.ts', 'src/lib/registry/field-registry.ts',
+      'src/lib/registry/types.ts', 'src/lib/registry/project-tables.ts', 'src/lib/registry/field-registry.ts', 'src/lib/types/state-card.ts',
       'tests/helpers/narrative-ir-fixture.ts', 'tests/helpers/narrative-world-evaluation.ts',
       'tests/regression/R-NW-1A-ir-codec.test.ts', 'tests/acceptance/narrative-world/ir-codec-golden-v1.json',
       'tests/acceptance/narrative-world/corpus-v1.json']
@@ -449,6 +449,6 @@ describe('NW-1A · NW-0B corpus evidence and current database lifecycle', () => 
       cases: corpusResults.sort((a, b) => a.family.localeCompare(b.family, 'en')),
       inputHashes: Object.fromEntries(paths.sort().map(file => [file, createHash('sha256').update(fs.readFileSync(file)).digest('hex')])) }
     if (process.env.NW_IR_REPORT) fs.writeFileSync(process.env.NW_IR_REPORT, JSON.stringify(receipt, null, 2) + '\n')
-    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/ir-contract-20261025-mainline-integration-v1.json', 'utf8')))
+    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/ir-contract-20261027-longform-stability-v1.json', 'utf8')))
   })
 })

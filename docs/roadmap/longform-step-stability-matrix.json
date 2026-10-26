@@ -20478,10 +20478,17 @@
       "usageKnownRequests": 1,
       "totalUsageTokens": null,
       "unobservedUsageReason": "第一次无候选的200响应没有完整用量回执，不记为0。",
-      "ci": "首次完整CI因两项已有文字冒险工程验证过期停止；登记的3组23项回归已重新执行，通过后按实测更新日期，完整CI待重跑。",
+      "ci": "首轮完整CI因两项既有工程验证过期停止，登记的3组23项回归通过后复核日期；620c55的完整覆盖回归5648项通过、3项跳过，但3组末尾来源指纹比较失败。已实际生成并回读三份新版本回执，110项通过，原观察、gold和历史文件不变；完整CI/E2E继续复验。",
       "releaseStatus": "NOT_RELEASED",
       "overallPlanCompleted": false,
-      "pullRequest": "https://github.com/yuanbw2025/storyforge/pull/215"
+      "pullRequest": "https://github.com/yuanbw2025/storyforge/pull/215",
+      "engineeringReceiptRefresh": {
+        "testsPassed": 110,
+        "observationsUnchanged": true,
+        "historicalReceiptsUnchanged": true,
+        "frozenCorpusUnchanged": true,
+        "evidence": "tests/acceptance/narrative-world/shared-source-refresh-20261027-longform-stability-v1.json"
+      }
     }
   ]
 }
