@@ -1,16 +1,11 @@
-.adventure-product-page { --shelf-ink:#e9e5da; --shelf-muted:#9faeac; --shelf-gold:#e2bd83; min-height:100dvh; background:#0c171b; color:var(--shelf-ink); font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif; }
-.adventure-product-page button,.adventure-showcase button { cursor:pointer; font:inherit; }
-.adventure-product-page button:disabled,.adventure-showcase button:disabled { cursor:wait; opacity:.55; }
-.adventure-product-page button:focus-visible,.adventure-showcase button:focus-visible,.adventure-showcase summary:focus-visible { outline:2px solid #e2bd83; outline-offset:5px; }
-.adventure-product-header { min-height:90px; padding:20px clamp(24px,5vw,90px); display:flex; align-items:center; gap:40px; border-bottom:1px solid #d2c8a920; background:#0c171b; }
-.adventure-brand { display:flex; align-items:center; gap:13px; border:0; background:none; color:#e2bd83; font-family:Georgia,serif!important; font-size:34px!important; }
-.adventure-brand>span { display:grid; gap:4px; color:#e9e5da; font:600 12px/1.4 Inter,sans-serif; letter-spacing:2px; text-align:left; }
-.adventure-brand small { color:#9faeac; font:400 10px/1.5 sans-serif; letter-spacing:4px; }
-.adventure-product-header nav { display:flex; gap:24px; margin-left:auto; }
-.adventure-product-header nav button { background:none; border:0; padding:10px 0; color:#9faeac; font-size:13px; }
-.adventure-product-header nav button[aria-current] { color:#e2bd83; }
-.adventure-workspace-select { display:flex; align-items:center; gap:8px; color:#8f9f9e; font-size:11px; border-left:1px solid #ffffff20; padding-left:28px; }
-.adventure-workspace-select select { max-width:190px; color:#d8ded7; background:#132329; border:1px solid #c3cbbd25; padding:8px 10px; border-radius:4px; font-size:12px; }
+.adventure-product-page { --shelf-ink:#e9e5da; --shelf-muted:#9faeac; --shelf-gold:#e2bd83; }
+.adventure-workspace-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px 24px; padding:12px 0 20px; }
+.adventure-workspace-toolbar nav { display:flex; flex-wrap:wrap; gap:16px; }
+.adventure-workspace-toolbar nav a { color:var(--text-secondary); padding:8px 0; font-size:13px; text-decoration:none; }
+.adventure-workspace-toolbar nav a[aria-current] { color:var(--accent); }
+.adventure-product-page a:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+.adventure-workspace-select { display:flex; align-items:center; gap:8px; color:var(--text-secondary); font-size:12px; }
+.adventure-workspace-select select { max-width:190px; color:var(--text-primary); background:var(--bg-elevated); border:1px solid var(--border); padding:8px 10px; border-radius:4px; font-size:12px; }
 .adventure-page-empty,.adventure-page-loading { padding:80px 6vw; }
 .adventure-showcase { --shelf-ink:#e9e5da; --shelf-muted:#9faeac; --shelf-gold:#e2bd83; color:var(--shelf-ink); background:#0c171b; padding:44px clamp(24px,5vw,90px) 0; margin:auto; max-width:1600px; min-height:85vh; }
 .adventure-eyebrow { font-size:10px; font-weight:600; letter-spacing:2.4px; color:var(--shelf-gold); }
@@ -104,7 +99,6 @@
 .adventure-product-page .adventure-console-entry p { font-family:"Songti SC",serif; color:#d7ddd1; }
 .adventure-product-page .adventure-command-center { background:#14282e; border:1px solid #c5c5a833; border-radius:5px; padding:20px; box-shadow:none; }
 @media (max-width:1100px) {
- .adventure-product-header { gap:20px; }
  .adventure-workspace-select { padding-left:16px; }
  .adventure-workspace-select select { max-width:130px; }
  .adventure-feature-copy { width:65%; }
@@ -113,12 +107,6 @@
  .adventure-product-page .adventure-gamebar nav { width:100%; justify-content:center; }
 }
 @media (max-width:640px) {
- .adventure-product-header { min-height:76px; padding:16px 20px; gap:15px; flex-wrap:wrap; }
- .adventure-brand { font-size:26px!important; gap:8px; }
- .adventure-brand>span { font-size:9px; letter-spacing:1px; }
- .adventure-brand small { font-size:9px; letter-spacing:2px; }
- .adventure-product-header nav { gap:16px; }
- .adventure-product-header nav button { font-size:11px; }
  .adventure-workspace-select { width:100%; border:0; padding:0; font-size:10px; }
  .adventure-workspace-select select { max-width:none; flex:1; padding:6px; }
  .adventure-showcase { padding:28px 20px 0; }
@@ -158,7 +146,6 @@
 @media (prefers-reduced-motion:reduce) { .adventure-book-grid article>button { transition:none; } }
 .adventure-edition-select { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:22px 0 0; font-size:11px; color:#9faeac; }
 .adventure-edition-select select { background:#15282d; color:#d5dacd; border:1px solid #c4c5aa33; border-radius:3px; padding:8px 12px; }
-.adventure-product-page:has(.adventure-game)>.adventure-product-header { display:none; }
 .adventure-product-page .adventure-console-prologue>p { font-size:calc(17px * var(--adventure-font-scale,1)); }
 .adventure-book-grid:has(>article:only-child) { grid-template-columns:minmax(0,1fr); }
 .adventure-book-grid>article:only-child>button { display:grid; grid-template-columns:minmax(220px,1fr) 2fr; }
@@ -169,12 +156,7 @@
  .adventure-product-page .adventure-console-prologue>p { font-size:calc(16px * var(--adventure-font-scale,1)); }
 }
 .adventure-product-page .adventure-game.adventure-high-contrast .adventure-console-entry p { color:#fff; }
-.adventure-product-page { --skin-shell-ink:#e9e5da; --skin-accent:#e2bd83; }
-.adventure-crossproduct-nav { display:flex; align-items:center; gap:26px; overflow-x:auto; padding:12px clamp(24px,5vw,90px); border-bottom:1px solid #d2c8a91a; scrollbar-width:thin; }
-.adventure-crossproduct-nav a { flex-shrink:0; color:#91a39e; text-decoration:none; font-size:11px; }
-.adventure-crossproduct-nav a:hover,.adventure-crossproduct-nav a[aria-current] { color:#e2bd83; }
-.adventure-product-page:has(.adventure-game)>.adventure-crossproduct-nav { display:none; }
-@media (max-width:640px) { .adventure-crossproduct-nav { padding:12px 20px; gap:20px; } }
+.adventure-product-page .adventure-game { --skin-shell-ink:#e9e5da; --skin-accent:#e2bd83; }
 
 /* Two independent rows prevent the tools from squeezing the title or wrapping Chinese labels. */
 .adventure-product-page .adventure-gamebar { grid-template-columns:auto minmax(0,1fr) auto; gap:12px 20px; }

@@ -72,6 +72,7 @@ interface AdventurePlayerState {
   busy: boolean
   error: string
   load(scope: WorkspaceScope, worldGroupId: number | null, openLibrary?: boolean): Promise<void>
+  cancelPendingLoad(): void
   select(sessionId: number | null): Promise<void>
   startPreview(buildId: number): Promise<number>
   start(productReleaseId: number, title?: string): Promise<number>
@@ -141,7 +142,6 @@ async function details(scope: WorkspaceScope, sessionId: number, current: {
   let selectedMediaResolver = current.resolver
   let playable = verified
   if (current.sessionId !== sessionId || !selectedMediaResolver) {
-    selectedMediaResolver?.dispose()
     const resolved = await resolveProductRuntimeSource({
       scope, source: await productRuntimeSourceForSessionV1(session),
     })
@@ -182,13 +182,23 @@ async function automaticCheckpoint(sessionId: number): Promise<void> {
 }
 
 export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, get) => {
+  let readRevision = 0
+  const discardStaleResolver = (resolved: Awaited<ReturnType<typeof details>>) => {
+    if (resolved.selectedMediaResolver !== get().selectedMediaResolver) resolved.selectedMediaResolver?.dispose()
+  }
+  const publishResolver = (resolved: Awaited<ReturnType<typeof details>>) => {
+    if (get().selectedMediaResolver !== resolved.selectedMediaResolver) get().selectedMediaResolver?.dispose()
+  }
   const refresh = async () => {
+    const revision = readRevision
     const scope = get().scope; const sessionId = get().selectedSessionId
     if (!scope || sessionId == null) return
     const resolved = await details(scope, sessionId, {
       sessionId: get().selectedSourceSessionId,
       resolver: get().selectedMediaResolver,
     })
+    if (revision !== readRevision) { discardStaleResolver(resolved); return }
+    publishResolver(resolved)
     const endingKey = resolved.runtimeState.narrative?.completed
       ? resolved.runtimeState.narrative.endingKey
       : null
@@ -199,25 +209,30 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
         : get().completedSessionEndingKeys,
     })
   }
-  const reload = async (requested?: number | null) => {
+  const reload = async (requested?: number | null, revision = ++readRevision) => {
     const scope = get().scope
+    const worldGroupId = get().worldGroupId
     if (!scope) return
     const [releases, previews] = await Promise.all([readLibrary(scope), readAdventurePlayerPreviews(scope)])
+    if (revision !== readRevision) return
     const sessions = (await readBoundInstances(scope))
-      .filter(item => item.kind === 'text-adventure' && (item.worldGroupId ?? null) === get().worldGroupId)
+      .filter(item => item.kind === 'text-adventure' && (item.worldGroupId ?? null) === worldGroupId)
       .sort((a, b) => b.updatedAt - a.updatedAt)
-    const completedSessionEndingKeys = Object.fromEntries((await Promise.all(sessions.map(async session => {
+    // Replaying every save concurrently multiplies memory by the save count.
+    // Stop obsolete navigation work between saves and retain only its summary.
+    const completedSessionEndingKeys: Record<number, string> = {}
+    for (const session of sessions) {
+      if (revision !== readRevision) return
       try {
         const state = await readProductRuntimeState(session.id!)
-        return state.narrative?.completed && state.narrative.endingKey
-          ? [session.id!, state.narrative.endingKey] as const
-          : null
+        if (state.narrative?.completed && state.narrative.endingKey) {
+          completedSessionEndingKeys[session.id!] = state.narrative.endingKey
+        }
       } catch {
-        // A damaged timeline remains selectable so its existing recovery/error
-        // path is preserved; it must never be mislabeled as completed.
-        return null
+        // Damaged timelines remain selectable through the existing recovery path.
       }
-    }))).filter((entry): entry is readonly [number, string] => entry != null))
+    }
+    if (revision !== readRevision) return
     const explicitlySelected = requested !== undefined
     const desired = explicitlySelected ? requested : get().selectedSessionId
     const selectedSessionId = desired != null && sessions.some(item => item.id === desired)
@@ -228,6 +243,8 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
         sessionId: get().selectedSourceSessionId,
         resolver: get().selectedMediaResolver,
       })
+      if (revision !== readRevision) { discardStaleResolver(resolved); return }
+      publishResolver(resolved)
       // Publish the new session and its matching resolver together. Exposing
       // the next sessionId with the previous session's resolver lets React
       // start a stale preload between these two states.
@@ -254,17 +271,24 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
     pendingIntent: null, generatedNarrative: null, generatingRunId: null,
     loading: false, busy: false, error: '',
     load: async (scope, worldGroupId, openLibrary = false) => {
-      const changed = get().scope?.workId !== scope.workId || get().worldGroupId !== worldGroupId
-      if (changed) get().selectedMediaResolver?.dispose()
-      set({ scope, worldGroupId, loading: true, error: '', ...(changed ? {
+      const revision = ++readRevision
+      const changed = get().scope?.projectId !== scope.projectId || get().scope?.worldId !== scope.worldId
+        || get().scope?.workId !== scope.workId || get().worldGroupId !== worldGroupId
+      if (changed || openLibrary) get().selectedMediaResolver?.dispose()
+      set({ scope, worldGroupId, loading: true, error: '', ...((changed || openLibrary) ? {
+        events: [], checkpoints: [], recoverableRunIds: [], runtimeState: structuredClone(EMPTY_PRODUCT_RUNTIME_STATE),
+        selectedManifest: null, releases: [], previews: [], sessions: [],
         selectedSessionId: null, selectedMediaResolver: null, selectedSourceSessionId: null, selectedBuildNumber: null,
         completedSessionEndingKeys: {},
         pendingIntent: null, generatedNarrative: null,
       } : {}) })
-      try { await reload(openLibrary ? null : undefined) } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) }
-      finally { set({ loading: false }) }
+      try { await reload(openLibrary ? null : undefined, revision) }
+      catch (error) { if (revision === readRevision) set({ error: error instanceof Error ? error.message : String(error) }) }
+      finally { if (revision === readRevision) set({ loading: false }) }
     },
+    cancelPendingLoad: () => { readRevision += 1; set({ loading: false }) },
     select: async sessionId => {
+      const revision = ++readRevision
       set({ loading: true, error: '', pendingIntent: null, generatedNarrative: null })
       try {
         if (sessionId == null) {
@@ -282,24 +306,29 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
             sessionId: get().selectedSourceSessionId,
             resolver: get().selectedMediaResolver,
           })
+          if (revision !== readRevision) { discardStaleResolver(resolved); return }
+          publishResolver(resolved)
           set({ selectedSessionId: sessionId, ...resolved })
         }
-      } catch (error) { set({ error: error instanceof Error ? error.message : String(error) }) }
-      finally { set({ loading: false }) }
+      } catch (error) { if (revision === readRevision) set({ error: error instanceof Error ? error.message : String(error) }) }
+      finally { if (revision === readRevision) set({ loading: false }) }
     },
     startPreview: buildId => run(async () => {
+      const revision = readRevision
       const scope = get().scope
+      const worldGroupId = get().worldGroupId
       const item = get().previews.find(candidate => candidate.buildId === buildId)
       if (!scope || !item?.manifest || item.error) throw new Error('请选择可用的文字冒险试玩。')
       const { startProductProductionPreviewV1 } = await import('../lib/product-production/service')
       const started = await startProductProductionPreviewV1({
-        scope, productionId: item.productionId, worldGroupId: get().worldGroupId,
+        scope, productionId: item.productionId, worldGroupId,
         expectedBuildId: item.buildId, expectedPreviewHash: item.previewHash,
       })
-      await reload(started.sessionId)
+      if (revision === readRevision) await reload(started.sessionId)
       return started.sessionId
     }),
     start: (productReleaseId, title) => run(async () => {
+      const revision = readRevision
       const scope = get().scope
       const item = get().releases.find(candidate => candidate.release.id === productReleaseId)
       if (!scope || !item?.manifest || item.error) throw new Error('请选择可用的文字冒险发布。')
@@ -307,7 +336,7 @@ export const useAdventureGamePlayerStore = create<AdventurePlayerState>((set, ge
         scope, productReleaseId, worldGroupId: get().worldGroupId,
         title: title?.trim() || `${item.manifest.definition.title} · 新冒险`,
       })
-      await reload(session.id!)
+      if (revision === readRevision) await reload(session.id!)
       return session.id!
     }),
     act: (actionKey, commandId) => run(async () => {

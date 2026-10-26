@@ -229,9 +229,13 @@ export default function AdventureGamePlayer(props: {
   }, [])
 
   useEffect(() => {
-    void store.load(props.scope, props.worldGroupId, props.initialSessionId == null).then(async () => {
-      if (props.initialSessionId != null) await store.select(props.initialSessionId)
+    let active = true
+    // Resolve the library before the explicit route session; never briefly open
+    // whichever unrelated session happened to be selected in a previous page.
+    void store.load(props.scope, props.worldGroupId, true).then(async () => {
+      if (active && props.initialSessionId != null) await store.select(props.initialSessionId)
     })
+    return () => { active = false; store.cancelPendingLoad() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.scope.projectId, props.scope.worldId, props.scope.workId, props.worldGroupId, props.initialSessionId])
 
@@ -604,7 +608,11 @@ export default function AdventureGamePlayer(props: {
 
   if (!selected || !adventure || !manifest || !location) return <AdventureLibrary
     scope={props.scope} error={error} onRemoveSession={removeSession}
-    onOpenSession={id => props.onOpenSession?.(id)}
+    onOpenSession={id => {
+      // Selecting a save replaces the library before its promise resolves.
+      // The player, which survives that switch, owns navigation cancellation.
+      if (playerMounted.current && useAdventureGamePlayerStore.getState().selectedSessionId === id) props.onOpenSession?.(id)
+    }}
   />
 
   return <div

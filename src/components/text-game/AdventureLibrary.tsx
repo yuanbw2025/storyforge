@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowUpRight, BookOpen, ChevronRight, Compass, Play, Save, Trash2 } from 'lucide-react'
 import { resolveProductRuntimeSource } from '../../lib/product-production/preview-source'
 import { currentPlayerReleases } from '../../lib/text-game/player-library'
@@ -62,6 +62,11 @@ export default function AdventureLibrary(props: {
   const store = useAdventureGamePlayerStore()
   const [detailKey, setDetailKey] = useState<string | null>(null)
   const [localError, setLocalError] = useState('')
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
   const editions = useMemo<ShelfItem[]>(() => [
     ...store.previews.map(item => ({
       key: `build:${item.buildId}`, title: clean(item.manifest?.definition.title) || item.title,
@@ -88,7 +93,7 @@ export default function AdventureLibrary(props: {
         ? await store.startPreview(item.source.productBuildId)
         : await store.start(item.source.productReleaseId)
       props.onOpenSession(id)
-    } catch (cause) { setLocalError(cause instanceof Error ? cause.message : String(cause)) }
+    } catch (cause) { if (mounted.current) setLocalError(cause instanceof Error ? cause.message : String(cause)) }
   }
   const open = async (id: number) => {
     await store.select(id)

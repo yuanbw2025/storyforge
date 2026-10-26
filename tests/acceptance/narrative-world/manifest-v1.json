@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261025-mainline-integration-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261026-pr134-integration-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -446,6 +446,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261022-nw2d-v79.json",
         "workPackage": "NW-engineering-checkpoint",
         "note": "Preserved 2026-10-23 checkpoint before current-main integration; original measurements, source hashes and known failures unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261025-mainline-integration-v1.json",
+        "workPackage": "NW-integration",
+        "note": "Preserved before PR134 mainline integration; its deterministic observations remain unchanged in the separately re-executed 20261026 receipt."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
