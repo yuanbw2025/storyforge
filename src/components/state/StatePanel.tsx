@@ -207,7 +207,7 @@ function StandaloneStateTargetCard({
   onSave: (fields: StateField[]) => Promise<void>
 }) {
   const result = useMemo(() => inspectStateFields(card.fields), [card.fields])
-  const fields = result.ok ? result.fields : []
+  const fields = useMemo(() => result.ok ? result.fields : [], [result])
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<StateField[]>(fields)
   const [saveError, setSaveError] = useState('')
@@ -321,8 +321,9 @@ function CharacterStateCard({
   onToggleEdit: () => void
   onSave: (fields: StateField[]) => Promise<void>
 }) {
-  const result = useMemo(() => inspectStateFields(card ? card.fields : '[]'), [card?.fields])
-  const fields = result.ok ? result.fields : []
+  const cardFields = card ? card.fields : '[]'
+  const result = useMemo(() => inspectStateFields(cardFields), [cardFields])
+  const fields = useMemo(() => result.ok ? result.fields : [], [result])
   const [draft, setDraft] = useState<StateField[]>(fields)
   const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
