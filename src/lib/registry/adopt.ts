@@ -631,11 +631,17 @@ function normalizeAndValidate(
   const typeErrorsBefore = result.typeErrors.length
 
   for (const [key, val] of Object.entries(raw)) {
+    const spec = byName.get(key)
+    try { spec?.validate?.(val) }
+    catch (error) {
+      result.typeErrors.push({ field: key, expected: spec!.type, got: error instanceof Error ? error.message : '字段结构无效' })
+      continue
+    }
+
     // 空字符串跳过;但 null 必须保留——如 outlineNodes 顶层卷的 parentId:null。
     // 旧实现 `val == null` 一并跳过,导致顶层卷写库时丢了 parentId(存成 undefined),
     // 而大纲面板用 `parentId === null` 严格过滤顶层卷 → 卷被藏起,表现为"采纳没反应"(FB-10b)。
     if (val === '' && !options.preserveEmptyStrings) continue
-    const spec = byName.get(key)
     if (!spec) {
       result.unknown.push(key)
       continue

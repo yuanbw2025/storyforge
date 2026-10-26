@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { CTextarea } from './CompositionInput'
-import { Square, Check, RotateCcw, Loader2, ThumbsUp, ThumbsDown, Braces, ChevronDown, ChevronRight, X } from 'lucide-react'
+import { Save, Square, Check, RotateCcw, Loader2, ThumbsUp, ThumbsDown, Braces, ChevronDown, ChevronRight, X } from 'lucide-react'
 import { usePromptStore } from '../../stores/prompt'
 import type { PromptModuleKey, PromptExample } from '../../lib/types/prompt'
 import type { TokenUsage } from '../../lib/ai/logger'
+import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 interface AIStreamOutputProps {
   /** 流式输出的文本 */
@@ -30,8 +31,10 @@ interface AIStreamOutputProps {
   placeholder?: string
   /** P15：传入则显示「⭐ 好示例 / 💩 坏示例」标记按钮，写入对应模板的 examples */
   moduleKey?: PromptModuleKey
-  /** 允许作者在确认前直接修订候选；修订文本只会在点击采纳时提交校验。 */
+  /** 允许作者在确认前修订；由采纳或可选的 onSaveDraft 持久化。 */
   editable?: boolean
+  /** Opt-in durable candidate draft save, separate from formal adoption. */
+  onSaveDraft?: (text: string) => Promise<void>
 }
 
 /**
@@ -52,12 +55,53 @@ export default function AIStreamOutput({
   moduleKey,
   tokenUsage,
   editable = false,
+  onSaveDraft,
 }: AIStreamOutputProps) {
   const acceptingRef = useRef(false)
   const [accepting, setAccepting] = useState(false)
   const [acceptError, setAcceptError] = useState('')
   const [editableOutput, setEditableOutput] = useState(output)
-  useEffect(() => setEditableOutput(output), [output])
+  const draftRef = useRef(output)
+  const savedDraftRef = useRef(output)
+  const [savedDraft, setSavedDraft] = useState(output)
+  const [savingDraft, setSavingDraft] = useState(false)
+  const [draftSaveError, setDraftSaveError] = useState('')
+  const draftSaveRef = useRef<Promise<void> | null>(null)
+  const saveCallbackRef = useRef(onSaveDraft)
+  saveCallbackRef.current = onSaveDraft
+  const durableDraft = Boolean(onSaveDraft)
+  useEffect(() => {
+    if (!durableDraft || isStreaming || isFinalizing || draftRef.current === savedDraftRef.current || output === draftRef.current) {
+      draftRef.current = output
+      setEditableOutput(output)
+    }
+    savedDraftRef.current = output
+    setSavedDraft(output)
+  }, [output, isStreaming, isFinalizing, durableDraft])
+  const persistDraft = async () => {
+    const saveDraft = saveCallbackRef.current
+    if (!saveDraft || draftRef.current === savedDraftRef.current) return
+    if (draftSaveRef.current) return draftSaveRef.current
+    const text = draftRef.current
+    setSavingDraft(true)
+    setDraftSaveError('')
+    const operation = Promise.resolve().then(() => saveDraft(text)).then(() => {
+      savedDraftRef.current = text
+      setSavedDraft(text)
+    }).catch(error => {
+      setDraftSaveError(error instanceof Error ? error.message : '候选修改未保存，输入已保留。')
+      throw error
+    }).finally(() => { draftSaveRef.current = null; setSavingDraft(false) })
+    draftSaveRef.current = operation
+    return operation
+  }
+  const persistDraftRef = useRef(persistDraft)
+  persistDraftRef.current = persistDraft
+  const canSaveDraft = Boolean(editable && onSaveDraft && !isStreaming && !isFinalizing)
+  useEffect(() => {
+    if (!canSaveDraft) return
+    return registerPendingDraftFlusherV1(() => acceptingRef.current ? undefined : persistDraftRef.current())
+  }, [canSaveDraft])
   const displayedOutput = editable && !isStreaming && !isFinalizing ? editableOutput : output
   const hasOutput = displayedOutput.length > 0
   const [marked, setMarked] = useState<'good' | 'bad' | null>(null)
@@ -106,6 +150,10 @@ export default function AIStreamOutput({
 
   return (
     <div className="border border-border rounded-lg overflow-hidden border-l-2 border-l-accent">
+      {canSaveDraft && <div className="px-4 py-2 text-xs border-b border-border">
+        <p role="status">{savingDraft ? '正在保存候选修改…' : editableOutput === savedDraft ? '候选已保存，尚未采纳。' : '候选修改尚未保存；可先保存，再刷新或继续编辑。'}</p>
+        {draftSaveError && <p role="alert" className="mt-1 text-error">{draftSaveError}</p>}
+      </div>}
       {/* 输出区域 */}
       <div className={`${isStructured && acceptMode === 'preview' && !isStreaming ? '' : 'min-h-[200px]'} max-h-[500px] overflow-y-auto p-4 bg-accent-soft`}>
         {error ? (
@@ -127,12 +175,12 @@ export default function AIStreamOutput({
               </p>
             )}
           </div>
-        ) : editable && hasOutput && !isStreaming && !isFinalizing ? (
+        ) : editable && output.length > 0 && !isStreaming && !isFinalizing ? (
           <CTextarea
             aria-label="AI 候选可编辑内容"
-            disabled={accepting}
+            disabled={accepting || savingDraft}
             value={editableOutput}
-            onChange={event => setEditableOutput(event.target.value)}
+            onChange={event => { draftRef.current = event.target.value; setEditableOutput(event.target.value); setDraftSaveError('') }}
             className="min-h-[260px] w-full resize-y rounded border border-border bg-bg-surface p-3 text-sm leading-7 text-text-primary outline-none focus:border-accent"
           />
         ) : isStructured ? (
@@ -219,9 +267,15 @@ export default function AIStreamOutput({
             </span>
           ) : (
             <>
-              {(hasOutput || error) && (
+              {canSaveDraft && output.length > 0 && !error && <button type="button"
+                disabled={accepting || savingDraft || editableOutput === savedDraft}
+                onClick={() => { void persistDraft().catch(() => undefined) }}
+                className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs text-text-secondary disabled:opacity-50">
+                <Save className="w-3 h-3" />{savingDraft ? '保存中…' : '保存候选修改'}
+              </button>}
+              {(output.length > 0 || hasOutput || error) && (
                 <button
-                  disabled={accepting}
+                  disabled={accepting || savingDraft}
                   onClick={onRetry}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-bg-hover text-text-secondary rounded-md hover:text-text-primary transition-colors"
                 >
@@ -260,9 +314,9 @@ export default function AIStreamOutput({
                   </button>
                 </>
               )}
-              {hasOutput && !error && onAccept && (
+              {(hasOutput || output.length > 0) && !error && onAccept && (
                 <button
-                  disabled={accepting || !displayedOutput.trim()}
+                  disabled={accepting || savingDraft || !displayedOutput.trim()}
                   onClick={() => { void handleAccept() }}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-accent text-white rounded-md hover:bg-accent-hover transition-colors"
                 >
@@ -271,9 +325,9 @@ export default function AIStreamOutput({
                 </button>
               )}
               {/* G2：关闭/弃用——不满意可直接关掉，保留原文不写回 */}
-              {onDismiss && (hasOutput || error) && (
+              {onDismiss && (output.length > 0 || hasOutput || error) && (
                 <button
-                  disabled={accepting}
+                  disabled={accepting || savingDraft}
                   onClick={onDismiss}
                   title="关闭，保留原文不采纳"
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-bg-hover text-text-muted rounded-md hover:text-text-primary transition-colors"

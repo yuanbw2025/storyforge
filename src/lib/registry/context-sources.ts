@@ -31,7 +31,7 @@ import { buildWorldRulesContext } from '../ai/world-rules-manifest'
 import { formatHandoff } from '../ai/chapter-memory/handoff-format'
 import { getChapterDerivedMemoryStatus, normalizeChapterText } from '../ai/chapter-memory/text-normalization'
 import { parseStages } from '../types/story-arc'
-import { parseFields } from '../types/state-card'
+import { readStateCardFields } from '../types/state-card'
 import { parseBeats } from '../types/emotion-beat'
 import { DETAILED_SCENE_TASK_FIELDS } from '../types/detailed-outline'
 import { buildForeshadowTaskContext } from '../foreshadow/context'
@@ -1389,7 +1389,7 @@ async function readStateCards(projectId: number, referenceText?: string, extraId
     : rows.slice(0, 40)
   if (!selected.length) return ''
   const lines = selected.map(c => {
-    const fields = parseFields(c.fields).slice(0, 8).map(f => `${f.key}:${f.value}`).join(' | ')
+    const fields = readStateCardFields(c).slice(0, 8).map(f => `${f.key}:${f.value}`).join(' | ')
     return `- ${c.category}/${c.entityName}: ${fields}`
   })
   return `【当前状态表】\n${lines.join('\n')}`

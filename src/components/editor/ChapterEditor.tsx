@@ -1,3 +1,4 @@
+import { readStateCardFields, StateFieldsParseError } from '../../lib/types/state-card'
 import { prepareChapterPostAdoptionV1, runChapterPostAdoptionV1, type ChapterPostAdoptionTaskV1 } from '../../lib/prose/post-adoption-runner'
 import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router'
@@ -377,6 +378,14 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   const [impactStoryTimelineRegenerationReceipt, setImpactStoryTimelineRegenerationReceipt] = useState<string | null>(null)
   const [impactStoryTimelineRegenerationError, setImpactStoryTimelineRegenerationError] = useState('')
   const [pendingDiffs, setPendingDiffs] = useState<StateDiffItem[] | null>(null)
+  const stateCardIssue = useMemo(() => {
+    try { stateCards.forEach(readStateCardFields); return '' }
+    catch (error) {
+      if (!(error instanceof StateFieldsParseError)) throw error
+      return error.message
+    }
+  }, [stateCards])
+
   // A2: 按需召回 — 手动额外勾选/取消的状态卡 ID
   const [extraStateIds, setExtraStateIds] = useState<number[]>([])
   const [showStatePreview, setShowStatePreview] = useState(false)
@@ -1174,7 +1183,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
   // A2: 按需召回 — 根据章节大纲+标题+已有文本筛选相关状态卡
   const selectiveState = useMemo(() => {
-    if (!stateCards.length) return { text: '', matchedIds: [] as number[], allIds: [] as number[] }
+    if (stateCardIssue || !stateCards.length) return { text: '', matchedIds: [] as number[], allIds: [] as number[] }
     const refParts: string[] = []
     if (outlineNode?.title) refParts.push(outlineNode.title)
     if (outlineNode?.summary) refParts.push(outlineNode.summary)
@@ -1183,7 +1192,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     const ref = refParts.join(' ')
     if (!ref.trim()) return { text: buildStateContext(), matchedIds: stateCards.map(c => c.id!), allIds: stateCards.map(c => c.id!) }
     return buildSelectiveStateContext(ref, extraStateIds)
-  }, [stateCards, outlineNode?.title, outlineNode?.summary, currentChapter?.title, plainText, extraStateIds, buildSelectiveStateContext, buildStateContext])
+  }, [stateCardIssue, stateCards, outlineNode?.title, outlineNode?.summary, currentChapter?.title, plainText, extraStateIds, buildSelectiveStateContext, buildStateContext])
 
   const handleCreateFromOutline = async () => {
     if (!outlineNodeId) return
@@ -1600,6 +1609,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleGenerate = async () => {
+    if (stateCardIssue) { setProseGenerationError(stateCardIssue); return }
     if (!outlineNode) return
     setProseGenerationError('')
     try {
@@ -1675,6 +1685,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleContinue = async () => {
+    if (stateCardIssue) { setProseGenerationError(stateCardIssue); return }
     if (!plainText || !outlineNode) return
     setProseGenerationError('')
     try {
@@ -1777,6 +1788,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
   }
 
   const handleRunChapterOrganization = async (force = false) => {
+    if (stateCardIssue) { setProseGenerationError(stateCardIssue); return }
     if (!currentChapter?.id || !plainText.trim()) return
     if (organizingChapter) {
       organizationAbortRef.current?.abort()
@@ -2775,6 +2787,16 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
     })
   }
 
+  const handleSaveProseCandidateDraft = async (text: string) => {
+    const candidate = proseCandidate
+    if (!candidate || candidate.semanticReview) throw new Error('当前结果不能保存为正文候选，请重新打开对应章节。')
+    const scope = await resolveScopeLike(project.id!)
+    const revised = await reviseProseGenerationCandidateV1({ scope, candidate, outputText: text })
+    setProseCandidate(revised)
+    proseCandidateRef.current = revised
+    restoreAI({ output: revised.outputText, operation: revised.operation })
+  }
+
   const handleAcceptAI = async (text: string) => {
     if (ai.operation === 'revise-full') {
       await dialog.alert({ title: '旧修订预览只读', message: '请从质量审校重新选择问题与可改范围。旧报告输出不能直接写回当前章节。' })
@@ -2977,6 +2999,18 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           onOpenCompare={() => { void handleOpenComparePolish() }}
           onSave={() => { void handleManualSave() }}
         />
+
+      {stateCardIssue && <div data-testid="state-card-data-warning" role="alert" className="m-3 rounded-lg border border-warning/50 bg-bg-surface p-3 text-sm">
+        <p>{stateCardIssue} 正文仍可手工编辑和保存。</p>
+        <button type="button" className="mt-2 text-accent" onClick={() => {
+          void (async () => {
+            await flushPendingEditsV1()
+            const saved = await persistCurrentEditorContent()
+            if (!saved) throw new Error('正文尚未保存，请保存后再切换。')
+            navigate(`/workspace/${project.id}?module=state-table`)
+          })().catch(error => setManualSaveError(error instanceof Error ? error.message : '切换前未保存，已保留当前正文。'))
+        }}>修复状态字段</button>
+      </div>}
 
       {showContext && (
         <ChapterContextPreview
@@ -3322,8 +3356,9 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
             }}>保留分隔后的正文供核对</button>
           </div>}
           {proseCandidate?.lengthObservation?.message && <p role="status" className="mb-2 rounded border border-warning/30 bg-warning/5 p-3 text-xs text-text-secondary">生成时：{proseCandidate.lengthObservation.message}</p>}
-          <AIStreamOutput output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
+          <AIStreamOutput key={proseCandidate?.durable.runId ?? 'active-prose-output'} output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
             editable={!!proseCandidate && !proseCandidate.semanticReview}
+            onSaveDraft={proseCandidate && !proseCandidate.semanticReview ? handleSaveProseCandidateDraft : undefined}
             onStop={ai.stop}
             onAccept={(
               ai.operation === 'generate' || ai.operation === 'continue'

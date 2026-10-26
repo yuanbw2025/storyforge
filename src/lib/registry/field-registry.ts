@@ -4,6 +4,7 @@ import { PROJECT_TABLES } from './project-tables'
 import { parseNarrativeDomainFieldV1 } from '../narrative-domain/codec'
 import { parseSystemFictionElementsV1 } from '../prose/system-fiction-contract'
 import { normalizeDetailedScenes } from '../types/detailed-outline'
+import { validateStateFields } from '../types/state-card'
 
 const trimString = (val: unknown): unknown =>
   typeof val === 'string' ? val.trim() : val
@@ -797,7 +798,7 @@ export const FIELD_REGISTRY: FieldSpec[] = [
 
   enumeration('stateCards', 'category', ['character', 'location', 'item', 'faction', 'event']),
   text('stateCards', 'entityName', ['角色名', '实体名']),
-  json('stateCards', 'fields', ['状态字段']),
+  { ...json('stateCards', 'fields', ['状态字段']), validate: validateStateFields },
   num('stateCards', 'lastChapterId'),
 ]
 

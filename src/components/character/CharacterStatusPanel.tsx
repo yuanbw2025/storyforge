@@ -10,7 +10,7 @@ import { MapPin, Zap, Package, History, Swords } from 'lucide-react'
 import { db } from '../../lib/db/schema'
 import { assertRecordInScope, resolveReadScopeLike } from '../../lib/workspace/scope'
 import { useStateCardStore } from '../../stores/state-card'
-import { parseFields, type StateField } from '../../lib/types/state-card'
+import { inspectStateFields } from '../../lib/types/state-card'
 import type { Chapter } from '../../lib/types'
 
 interface Props {
@@ -54,7 +54,11 @@ export default function CharacterStatusPanel({ projectId, characterName }: Props
 
   if (!stateCard) return null
 
-  const fields: StateField[] = parseFields(stateCard.fields)
+  const result = inspectStateFields(stateCard.fields)
+  if (!result.ok) return <p role="alert" className="mt-2 text-xs text-error">
+    {result.error} 请到“状态与物品”修复，原始记录已保留。
+  </p>
+  const fields = result.fields
   if (fields.length === 0) return null
 
   return (

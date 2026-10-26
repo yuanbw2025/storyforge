@@ -2,7 +2,7 @@ import { db } from '../db/schema'
 import { remapTemporalFactCharacterRefs } from '../fact-ledger/lifecycle'
 import { remapKnowledgeCharacterRefs } from '../knowledge-ledger/lifecycle'
 import { remapCultivationProgressCharacterRefs } from '../cultivation/progress-lifecycle'
-import { parseFields, stringifyFields } from '../types/state-card'
+import { readStateCardFields, stringifyFields } from '../types/state-card'
 import { PROJECT_TABLES } from './project-tables'
 import type { ArrayRef, JsonRef } from './types'
 import { remapNarrativeDomainReferencesV1 } from '../narrative-domain/lifecycle'
@@ -272,6 +272,8 @@ async function remapCharacterStateCards(
     return
   }
 
+  // A rename/merge must not discard unreadable fields while removing duplicate cards.
+  fromCards.forEach(readStateCardFields)
   const primary = rows.find(c => c.category === 'character' && c.entityName === toName)
   if (!primary?.id) {
     const [first, ...rest] = fromCards
@@ -281,9 +283,9 @@ async function remapCharacterStateCards(
     return
   }
 
-  const mergedFields = parseFields(primary.fields)
+  const mergedFields = readStateCardFields(primary)
   for (const card of fromCards) {
-    for (const field of parseFields(card.fields)) {
+    for (const field of readStateCardFields(card)) {
       const existing = mergedFields.find(f => f.key === field.key)
       if (!existing) mergedFields.push(field)
       else if (!existing.value && field.value) existing.value = field.value

@@ -13,14 +13,15 @@
     "characterRoles": 4,
     "characterDimensionsPerRole": 23,
     "codexCategories": 21,
-    "cases": 157,
+    "cases": 158,
     "leafFieldChecks": 324,
-    "operationChecks": 1214,
-    "notRun": 157,
+    "operationChecks": 1226,
+    "notRun": 156,
     "passed": 0,
     "failed": 0,
-    "faultChecks": 1980,
-    "modeChecks": 75
+    "faultChecks": 1995,
+    "modeChecks": 75,
+    "running": 2
   },
   "sourceInventory": {
     "baseline": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
@@ -1706,8 +1707,8 @@
     {
       "id": "ST01",
       "title": "先阻断崩溃和丢稿风险",
-      "status": "NEXT",
-      "work": "先复现状态卡坏数据导致正文页渲染失败；复核已合并未发行修复。",
+      "status": "IN_PROGRESS",
+      "work": "首批状态字段严格校验与可视修复、正文候选独立保存已实现；受控与真实Agnes主链已走通，交付门继续。",
       "exit": "原始数据保留；页面能恢复；采纳/保存失败可见且可重试；原生故障有版本与退出原因证据。"
     },
     {
@@ -1756,10 +1757,10 @@
   "knownDefects": [
     {
       "id": "STATECARD-MALFORMED-FIELD",
-      "state": "REPRODUCED_SOURCE",
+      "state": "VERIFIED_LOCAL_AWAITING_INTEGRATION_NATIVE_RELEASE",
       "symptom": "坏状态卡字段可使正文上下文构建在渲染时抛TypeError",
       "evidence": "当前源方法的null项/缺value/null值三种合成反例；不是原用户数据库复现，也不是修复通过",
-      "next": "最小隔离UI复现→保留坏数据并可定位/修复→真实保存/刷新/正文生成回归",
+      "next": "完成完整CI/E2E与审查；原生包升级和原场景发行复测。",
       "issue": null
     },
     {
@@ -1825,6 +1826,19 @@
         198
       ],
       "next": "分别绑定采纳、连续性、备份、审查、Canon拒绝、异步错误、导入和空回答的具体用例；未证实同根因不合并。"
+    },
+    {
+      "id": "PROSE-CANDIDATE-DRAFT-LOSS",
+      "state": "VERIFIED_LOCAL_AWAITING_INTEGRATION_NATIVE_RELEASE",
+      "symptom": "候选修改只在页面内，采纳前刷新会丢失修改；清空还会隐藏编辑器。",
+      "next": "已补候选独立保存、切页屏障、错误保留和清空后继续输入；完整交付门待完成。"
+    },
+    {
+      "id": "AGNES-NO-ADOPTABLE-PROSE",
+      "state": "OPEN_REAL_MODEL_EVIDENCE",
+      "relatedIssue": 198,
+      "symptom": "一次maxTokens=2000实测HTTP200完整返回379233字节，但界面未形成可采纳正文；原响应分量未保留，根因未确认。",
+      "next": "保留该失败；另一次显式6000预算请求成功不代表此问题已修复。后续检查流分量、finish reason与提供商预算；不得将有HTTP响应等同成功正文。"
     }
   ],
   "evidenceSchema": {
@@ -13017,14 +13031,14 @@
       "module": "chapters-list",
       "title": "坏状态卡字段：空项、缺value、null值时正文页可恢复",
       "profile": "MANUAL",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
-        "downstream": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [],
@@ -13038,11 +13052,27 @@
       ],
       "candidateTests": [],
       "source": [],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "MOCKED_UI",
+          "result": "passed",
+          "summary": "10项状态修复与主链浏览器用例，含6种坏字段、写失败、双窗口CAS与取消/刷新保留。"
+        },
+        {
+          "type": "SOURCE_REPRO",
+          "result": "passed",
+          "summary": "严格读取、拒绝非法正式采纳、跨scope拒绝、坏记录合并事务回滚；现行定向回归。"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "result": "passed",
+          "summary": "坏字段零模型调用；逐字段修复、刷新后真实生成和候选/正式保存完成。"
+        }
+      ],
       "defects": [
         "STATECARD-MALFORMED-FIELD"
       ],
-      "existingEvidence": "源方法合成反例已复现；本轮UI链/修复包尚未通过。",
+      "existingEvidence": "修复前已在隔离UI复现整页错误边界；修复后受控回归和Agnes真实主链已走通。原用户数据库/原生包/发行仍待验证。",
       "faultChecks": [
         {
           "profile": "LOAD",
@@ -19944,6 +19974,145 @@
       ],
       "modeChecks": {},
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+    },
+    {
+      "id": "LF-158",
+      "wave": "ST01",
+      "module": "chapters-list",
+      "title": "正文候选修改：独立保存、切页屏障、刷新恢复与明确采纳",
+      "profile": "GENERATE",
+      "status": "RUNNING",
+      "checks": {
+        "open": "PASS",
+        "input": "PASS",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "NOT_RUN",
+        "adopt": "PASS",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
+        "downstream": "NOT_RUN",
+        "recover": "NOT_RUN"
+      },
+      "fieldChecks": [],
+      "assertions": [
+        "保存只更新durable候选；正式正文在采纳前不变。",
+        "保存失败保留输入并阻止离开；清空后仍能输入，空候选不能保存/采纳。",
+        "迟到读取不覆盖未保存输入；原有未启用此功能的调用方仍只在采纳时写回。"
+      ],
+      "faultProfiles": [
+        "LOAD",
+        "SAVE",
+        "RACE",
+        "MODEL",
+        "CANDIDATE"
+      ],
+      "candidateTests": [
+        "tests/e2e/longform-state-card-recovery.spec.ts",
+        "tests/regression/R-AI-CANDIDATE-DRAFT-SAVE.test.tsx"
+      ],
+      "source": [
+        "src/components/shared/AIStreamOutput.tsx",
+        "src/components/editor/ChapterEditor.tsx"
+      ],
+      "evidence": [
+        {
+          "type": "MOCKED_UI",
+          "result": "passed",
+          "summary": "候选编辑→独立保存→刷新回读→采纳→手改→保存刷新；含7项组件回归。"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "result": "passed",
+          "summary": "Agnes真实流式经本机转发；修复→生成→候选编辑保存→刷新→采纳→正文手改保存。章后策略off；未证明目标平台安装包。",
+          "requestCount": 1,
+          "knownTokens": 5056
+        }
+      ],
+      "defects": [
+        "PROSE-CANDIDATE-DRAFT-LOSS"
+      ],
+      "faultChecks": [
+        {
+          "profile": "LOAD",
+          "scenario": "空数据/受支持旧记录",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "LOAD",
+          "scenario": "字段缺失、null、错误类型、非法数组成员、损坏JSON",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "LOAD",
+          "scenario": "延迟读取、读取失败与模块/CSS加载失败",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "SAVE",
+          "scenario": "自动保存、失焦、显式保存不同触发时机",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "SAVE",
+          "scenario": "配额不足/写失败/权限撤销，UI保留输入且不假报成功",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "SAVE",
+          "scenario": "中文组合输入、清空、快速输入后立即切页/切章/刷新/关闭",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "RACE",
+          "scenario": "切作品/世界/模块时旧读取迟到",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "RACE",
+          "scenario": "双标签编辑、并发run、重复点击与旧候选",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "RACE",
+          "scenario": "活动Work/world变化、删除目标、保存与刷新竞争",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "MODEL",
+          "scenario": "取消、断网、超时和输出为空（含HTTP200）",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "MODEL",
+          "scenario": "流中断、截断JSON、类型错误、超长候选",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "MODEL",
+          "scenario": "401/403/429/余额/非重试4xx/5xx/结果未知；区分可重试，禁止隐藏重发",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "CANDIDATE",
+          "scenario": "缺必填、错误类型、非法枚举/引用、错误作用域",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "CANDIDATE",
+          "scenario": "作者修改目标后stale、目标删除、双击采纳",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "CANDIDATE",
+          "scenario": "候选预览与持久化不一致、写回事务失败与receipt失败",
+          "status": "NOT_RUN"
+        }
+      ],
+      "modeChecks": {},
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     }
   ],
   "executionStatus": "PLAN_AND_INVENTORY_IN_PROGRESS",
@@ -20294,5 +20463,24 @@
         "pageErrors": []
       }
     ]
-  }
+  },
+  "executionUpdates": [
+    {
+      "date": "2026-10-27",
+      "unit": "ST01 first repair batch",
+      "status": "IMPLEMENTED_LOCAL_VALIDATION_IN_PROGRESS",
+      "scope": "独立分步骤长篇；复用既有三注册表、durable候选与adopt；无新表/迁移。",
+      "controlledBrowserChecks": 20,
+      "liveModelRequests": 2,
+      "liveSuccessfulChains": 1,
+      "liveNoAdoptableCandidate": 1,
+      "knownUsageTokens": 5056,
+      "usageKnownRequests": 1,
+      "totalUsageTokens": null,
+      "unobservedUsageReason": "第一次无候选的200响应没有完整用量回执，不记为0。",
+      "ci": "首次完整CI因两项已有文字冒险工程验证过期停止；登记的3组23项回归已重新执行，通过后按实测更新日期，完整CI待重跑。",
+      "releaseStatus": "NOT_RELEASED",
+      "overallPlanCompleted": false
+    }
+  ]
 }
