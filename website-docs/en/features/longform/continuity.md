@@ -33,7 +33,7 @@ If another window has changed the card, the older repair is rejected. Keep your 
 
 ## Save candidate edits before reloading
 
-A prose candidate can be saved with “Save candidate edits” before reloading or editing further. Saving updates the candidate only; changing formal prose still requires explicit adoption. Switching steps first attempts to save candidate edits; failure blocks navigation and retains the input. Before a direct reload or close, confirm that the candidate has been saved and has not yet been adopted.
+A prose candidate can be saved with “Save candidate edits” before reloading or editing further. Saving updates the candidate only; changing formal prose still requires explicit adoption. Switching steps first attempts to save candidate edits; failure blocks navigation and retains the input. Before a direct reload or close, confirm that the candidate has been saved and has not yet been adopted. On narrow screens, the prose toolbar scrolls with the page so candidate save and adoption controls remain reachable.
 
 Clearing a candidate keeps its editor available for new input. A blank candidate cannot be saved or adopted. Candidate draft saving and state repair are both within the development-build validation scope.
 

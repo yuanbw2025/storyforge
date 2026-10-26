@@ -3,11 +3,11 @@
 
 ## 2026-10-27 · First step-mode stability repairs
 
-[PR #215](https://github.com/yuanbw2025/storyforge/pull/215) builds on [plan #212](https://github.com/yuanbw2025/storyforge/pull/212); both remain unmerged. This batch implements identification and field-by-field repair of malformed state data, original-field export, concurrent-write protection, separate prose-candidate saving, a navigation save barrier, and continued editing after a candidate is cleared.
+[PR #215](https://github.com/yuanbw2025/storyforge/pull/215) depends on [plan #212](https://github.com/yuanbw2025/storyforge/pull/212); both remain unmerged. This batch adds explicit malformed-state repair, original export and concurrent-write protection; durable prose-candidate saves and a navigation barrier; and reachable candidate actions when the toolbar previously covered them at 320px. Invalid values and sparse arrays are rejected before formal writes.
 
-Additional checks fixed a sticky toolbar blocking candidate saving at 320px. Narrow screens now scroll the toolbar with the page. Six touch-viewport paths at 390/320px and 74 targeted regressions passed. State-field writes also reject sparse arrays before serialization can introduce null entries.
+Product source `82436e01` passed complete CI: 928 files, 5,649 tests passed and three skipped. The full isolated browser suite passed 347 with five skipped. Another 74 targeted regressions and six touch-viewport paths at 390/320px passed. Two real Agnes chains passed, including one on final source. A separate HTTP-200/no-candidate result and an unconfirmed transport failure remain recorded with unknown usage.
 
-Twenty targeted browser cases passed, and one real Agnes chain completed generation, candidate save/reload, adoption, and manual prose save/reload. Another HTTP 200 run produced no adoptable candidate and remains open evidence; one success does not resolve empty-answer reports. Full CI and the isolated E2E suite still need terminal results. Windows/Android packages, upgrade checks, and release validation remain pending. See [continuity and recovery](/en/features/longform/continuity).
+Windows/Android repair packages, upgrades, native Crash/OOM and release remain unverified. Engineering success does not complete all 158 full-scope cases. See [continuity and repair](/en/features/longform/continuity).
 
 ## October 26, 2026 · Follow-up development review
 

@@ -1845,6 +1845,12 @@
       "state": "VERIFIED_LOCAL_AWAITING_INTEGRATION_NATIVE_RELEASE",
       "symptom": "320px触屏中，固定正文工具栏超过可视高度，拦截候选保存按钮的点击。",
       "next": "窄屏改随页面滚动，桌面保持固定；390/320px六项触屏主链通过。完整最终E2E、原生包和发行继续核对。"
+    },
+    {
+      "id": "AGNES-TRANSPORT-UNCONFIRMED",
+      "state": "OPEN_DIAGNOSTIC_EVIDENCE",
+      "symptom": "最终源码一次上游尝试约10.5秒后传输失败，未收到HTTP状态；上游是否接收和用量未知，页面未出现未处理异常。",
+      "next": "原失败独立保留；非生成HEAD收到404后，新隔离作品的一次有记录请求成功，不据此关闭旧失败。"
     }
   ],
   "evidenceSchema": {
@@ -13073,6 +13079,15 @@
           "type": "LIVE_AGNES_UI",
           "result": "passed",
           "summary": "坏字段零模型调用；逐字段修复、刷新后真实生成和候选/正式保存完成。"
+        },
+        {
+          "type": "LIVE_AGNES_UI_FINAL_SOURCE",
+          "result": "passed",
+          "sourceCommit": "82436e01c4b1c19a7ea87c9475d777b2e0fb6f06",
+          "requestCount": 1,
+          "knownTokens": 4242,
+          "summary": "最终源码：坏字段零请求阻断→修复刷新→真实生成→候选独立保存刷新→明确采纳→手改保存刷新；原传输失败保留。",
+          "nativePackageEvidence": false
         }
       ],
       "defects": [
@@ -20042,6 +20057,15 @@
           "result": "passed",
           "summary": "390/320px各三条链：损坏字段修复、保存失败重试、生成与候选保存刷新采纳。原320px遮挡失败保留；修复后六项通过。",
           "nativePackageEvidence": false
+        },
+        {
+          "type": "LIVE_AGNES_UI_FINAL_SOURCE",
+          "result": "passed",
+          "sourceCommit": "82436e01c4b1c19a7ea87c9475d777b2e0fb6f06",
+          "requestCount": 1,
+          "knownTokens": 4242,
+          "summary": "最终源码：坏字段零请求阻断→修复刷新→真实生成→候选独立保存刷新→明确采纳→手改保存刷新；原传输失败保留。",
+          "nativePackageEvidence": false
         }
       ],
       "defects": [
@@ -20482,17 +20506,17 @@
     {
       "date": "2026-10-27",
       "unit": "ST01 first repair batch",
-      "status": "IMPLEMENTED_LOCAL_VALIDATION_IN_PROGRESS",
+      "status": "LOCAL_DELIVERY_VERIFIED_NOT_RELEASED",
       "scope": "独立分步骤长篇；复用既有三注册表、durable候选与adopt；无新表/迁移。",
       "controlledBrowserChecks": 20,
-      "liveModelRequests": 2,
-      "liveSuccessfulChains": 1,
+      "liveModelRequests": 4,
+      "liveSuccessfulChains": 2,
       "liveNoAdoptableCandidate": 1,
-      "knownUsageTokens": 5056,
-      "usageKnownRequests": 1,
+      "knownUsageTokens": 9298,
+      "usageKnownRequests": 2,
       "totalUsageTokens": null,
-      "unobservedUsageReason": "第一次无候选的200响应没有完整用量回执，不记为0。",
-      "ci": "保留首轮freshness与三组来源指纹失败；110项回执生成/回读通过，原观察与历史记录不变。c0e9完整覆盖运行因确认稀疏数组和320px遮挡两处后续修复而主动中止，不计通过。最终代码完整CI/E2E待执行。",
+      "unobservedUsageReason": "HTTP200无候选与一次未确认传输均没有完整用量；未知不记为0。",
+      "ci": "最终源码82436e01的npm run ci已通过：928测试文件、5649项通过、3项跳过，类型/lint/治理/依赖/覆盖率/构建/包体检查全部完成。",
       "releaseStatus": "NOT_RELEASED",
       "overallPlanCompleted": false,
       "pullRequest": "https://github.com/yuanbw2025/storyforge/pull/215",
@@ -20514,6 +20538,48 @@
         "passed": 347,
         "skipped": 5,
         "status": "PASSED_BEFORE_FINAL_GUARD_AND_TOUCH_TOOLBAR_FIX"
+      },
+      "validationHistory": [
+        "保留首轮freshness与三组来源指纹失败；110项回执生成/回读通过，原观察与历史记录不变。c0e9完整覆盖运行因确认稀疏数组和320px遮挡两处后续修复而主动中止，不计通过。最终代码完整CI/E2E待执行。"
+      ],
+      "productSourceCommit": "82436e01c4b1c19a7ea87c9475d777b2e0fb6f06",
+      "fullCI": {
+        "sourceCommit": "82436e01c4b1c19a7ea87c9475d777b2e0fb6f06",
+        "exitCode": 0,
+        "testFiles": 928,
+        "passed": 5649,
+        "skipped": 3,
+        "logSha256": "41d7f0b4d929ccd35e80d3e1584a7584c8f3f5edad98300ad23606f33abdbb44"
+      },
+      "fullBrowser": {
+        "sourceCommit": "82436e01c4b1c19a7ea87c9475d777b2e0fb6f06",
+        "command": "PLAYWRIGHT_PORT=57936 npm run ci:e2e",
+        "exitCode": 0,
+        "passed": 347,
+        "skipped": 5,
+        "logSha256": "871127b637d0bd22b88a7d5bcb9852715421de6751ad2332922f5313996476d3",
+        "skips": [
+          "-   22 [chromium] › tests/e2e/client-support.spec.ts:41:1 › packaged portable consent precedes analytics and survives reload",
+          "-   23 [chromium] › tests/e2e/client-support.spec.ts:67:2 › packaged narrow-screen unified agreement permits offline entry without separate controls",
+          "-  255 [chromium] › tests/e2e/narrative-scale.spec.ts:23:1 › NW-2E frozen package scale measurement (explicit opt-in; diagnostics are not acceptance)",
+          "-  270 [chromium] › tests/e2e/plugin-workshop.spec.ts:130:1 › production build loads shared React plugins under CSP without unsafe-eval",
+          "-  271 [chromium] › tests/e2e/plugin-workshop.spec.ts:147:1 › installed plugins work offline through the production PWA after a cold navigation"
+        ]
+      },
+      "liveTransportUnconfirmed": 1,
+      "finalSourceLiveChain": {
+        "sourceCommit": "82436e01c4b1c19a7ea87c9475d777b2e0fb6f06",
+        "status": "passed",
+        "requests": 1,
+        "totalTokens": 4242,
+        "generatedChars": 330,
+        "unhandledPageErrors": 0
+      },
+      "nonGeneratingConnectivityChecks": 1,
+      "integrationBoundary": {
+        "observedOriginMain": "69e2a928a3685ed7849d9a45d74395c6a6b38b18",
+        "merged": false,
+        "latestMainIntegrationVerificationPending": true
       }
     }
   ]
