@@ -9,7 +9,7 @@ import {
   ArrowRight, BookOpenCheck, Download, Edit3, MapPin, Package, Save, Shield, Sparkles, UserRound, X,
 } from 'lucide-react'
 import type { Character, Project, StateCard, StateField } from '../../lib/types'
-import { parseFields, stringifyFields, STATE_CATEGORY_LABELS } from '../../lib/types/state-card'
+import { readStateFields, stringifyFields, STATE_CATEGORY_LABELS, STATE_FIELDS_INVALID_NOTICE } from '../../lib/types/state-card'
 import { useStateCardStore } from '../../stores/state-card'
 import { useCharacterStore } from '../../stores/character'
 import { useChapterStore } from '../../stores/chapter'
@@ -196,7 +196,7 @@ function StandaloneStateTargetCard({
   chapterTitle?: string
   onSave: (fields: StateField[]) => Promise<void>
 }) {
-  const fields = useMemo(() => parseFields(card.fields || '[]'), [card.fields])
+  const { fields, hasInvalidFields } = useMemo(() => readStateFields(card.fields), [card.fields])
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<StateField[]>(fields)
 
@@ -222,6 +222,7 @@ function StandaloneStateTargetCard({
         <button
           type="button"
           onClick={() => setEditing(value => !value)}
+          disabled={hasInvalidFields}
           className="p-1 text-text-muted hover:text-accent"
           title="编辑状态"
         >
@@ -229,7 +230,8 @@ function StandaloneStateTargetCard({
         </button>
       </div>
 
-      {editing ? (
+      {hasInvalidFields && <p role="status" className="mt-3 text-xs text-text-secondary">{STATE_FIELDS_INVALID_NOTICE} 请先恢复有效备份后编辑。</p>}
+      {editing && !hasInvalidFields ? (
         <div className="mt-4 space-y-2">
           {draft.map((field, index) => (
             <div key={index} className="flex gap-2">
@@ -304,7 +306,7 @@ function CharacterStateCard({
   onToggleEdit: () => void
   onSave: (fields: StateField[]) => Promise<void>
 }) {
-  const fields = useMemo(() => parseFields(card?.fields || '[]'), [card?.fields])
+  const { fields, hasInvalidFields } = useMemo(() => readStateFields(card?.fields ?? '[]'), [card?.fields])
   const [draft, setDraft] = useState<StateField[]>(fields)
 
   useEffect(() => {
@@ -341,12 +343,13 @@ function CharacterStateCard({
           </div>
           <p className="text-xs text-text-muted mt-0.5 line-clamp-2">{character.shortDescription || '暂无角色简介'}</p>
         </div>
-        <button onClick={onToggleEdit} className="p-1 text-text-muted hover:text-accent" title="编辑状态">
+        <button onClick={onToggleEdit} disabled={hasInvalidFields} className="p-1 text-text-muted hover:text-accent" title="编辑状态">
           {editing ? <X className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
         </button>
       </div>
 
-      {editing ? (
+      {hasInvalidFields && <p role="status" className="mt-3 text-xs text-text-secondary">{STATE_FIELDS_INVALID_NOTICE} 请先恢复有效备份后编辑。</p>}
+      {editing && !hasInvalidFields ? (
         <div className="mt-4 space-y-2">
           {draft.map((field, index) => (
             <div key={index} className="flex gap-2">

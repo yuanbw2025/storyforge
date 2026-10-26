@@ -10,7 +10,7 @@ import { MapPin, Zap, Package, History, Swords } from 'lucide-react'
 import { db } from '../../lib/db/schema'
 import { assertRecordInScope, resolveReadScopeLike } from '../../lib/workspace/scope'
 import { useStateCardStore } from '../../stores/state-card'
-import { parseFields, type StateField } from '../../lib/types/state-card'
+import { readStateFields, STATE_FIELDS_INVALID_NOTICE } from '../../lib/types/state-card'
 import type { Chapter } from '../../lib/types'
 
 interface Props {
@@ -54,14 +54,15 @@ export default function CharacterStatusPanel({ projectId, characterName }: Props
 
   if (!stateCard) return null
 
-  const fields: StateField[] = parseFields(stateCard.fields)
-  if (fields.length === 0) return null
+  const { fields, hasInvalidFields } = readStateFields(stateCard.fields)
+  if (fields.length === 0 && !hasInvalidFields) return null
 
   return (
     <div className="mt-2 p-2 bg-bg-elevated/50 rounded-lg border border-border/50">
       <p className="text-[10px] text-text-muted font-medium mb-1.5 uppercase tracking-wide">
         当前状态
       </p>
+      {hasInvalidFields && <p role="status" className="mb-2 text-xs text-text-secondary">{STATE_FIELDS_INVALID_NOTICE}</p>}
       <div className="space-y-1">
         {fields.map((f, i) => {
           const Icon = getFieldIcon(f.key)

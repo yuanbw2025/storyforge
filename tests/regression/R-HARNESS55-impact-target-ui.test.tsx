@@ -95,6 +95,7 @@ vi.mock('../../src/components/relations/RelationGraph', () => ({
 import FactLibraryPanel from '../../src/components/facts/FactLibraryPanel'
 import CharacterRelationPanel from '../../src/components/relations/CharacterRelationPanel'
 import StatePanel from '../../src/components/state/StatePanel'
+import CharacterStatusPanel from '../../src/components/character/CharacterStatusPanel'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -150,6 +151,29 @@ afterEach(async () => {
 })
 
 describe('R-HARNESS55 · 人工交接目标在现有面板精确显露', () => {
+  it.each(['character', 'faction'])('issue213 · %s 卡可读但不以部分字段覆盖异常原记录', async category => {
+    const fields = JSON.stringify([null, { key: '控制区域', value: '旧港区' }])
+    mocks.stateStore.cards = [{ id: 31, projectId: 1, category, entityName: '雾港议会', fields, createdAt: 1, updatedAt: 1 }]
+    if (category === 'character') mocks.characterStore.characters = [{ id: 77, projectId: 1, name: '雾港议会', roleWeight: 'main', moralAxis: 'neutral', orderAxis: 'neutral' }]
+    const host = await render(createElement(StatePanel, { project, initialStateCardId: 31 }))
+    const target = host.querySelector('[data-impact-target-id="31"]')!
+    expect(target.textContent).toContain('字段格式异常')
+    expect(target.textContent).toContain('旧港区')
+    const edit = target.querySelector<HTMLButtonElement>('button[title="编辑状态"]')!
+    expect(edit.disabled).toBe(true)
+    await act(async () => edit.click())
+    expect(target.querySelector('input')).toBeNull()
+    expect(mocks.stateStore.updateCard).not.toHaveBeenCalled()
+    expect(mocks.stateStore.cards[0].fields).toBe(fields)
+  })
+
+  it('issue213 · 角色卡内的当前状态提示异常并保留可读字段', async () => {
+    mocks.stateStore.cards = [{ id: 31, projectId: 1, category: 'character', entityName: '店主', fields: '[null,{"key":"位置","value":"山门旅店"}]', createdAt: 1, updatedAt: 1 }]
+    const host = await render(createElement(CharacterStatusPanel, { projectId: 1, characterName: '店主' }))
+    expect(host.textContent).toContain('山门旅店')
+    expect(host.textContent).toContain('字段格式异常')
+  })
+
   it('事实目标不在默认异常页签时，自动切到真实状态页签并高亮该行', async () => {
     mocks.factStore.facts = [{
       id: 17,

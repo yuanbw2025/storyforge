@@ -62,3 +62,32 @@ export function parseFields(fieldsJson: string): StateField[] {
 export function stringifyFields(fields: StateField[]): string {
   return JSON.stringify(fields)
 }
+
+export const STATE_FIELDS_INVALID_NOTICE = '部分状态字段格式异常，原记录已保留。'
+
+/** Read-only projection. Never use this to merge or save a partially readable record. */
+export function readStateFields(fieldsJson: string): { fields: StateField[]; hasInvalidFields: boolean } {
+  try {
+    const parsed: unknown = JSON.parse(fieldsJson)
+    if (!Array.isArray(parsed)) return { fields: [], hasInvalidFields: true }
+    const fields = parsed.filter((field): field is StateField =>
+      field !== null && typeof field === 'object'
+      && typeof field.key === 'string' && typeof field.value === 'string',
+    )
+    return { fields, hasInvalidFields: fields.length !== parsed.length }
+  } catch {
+    return { fields: [], hasInvalidFields: true }
+  }
+}
+
+export function formatStateFieldsForContext(fieldsJson: string, options: {
+  valueSeparator?: string
+  fieldSeparator?: string
+  maxFields?: number
+} = {}): string {
+  const { fields, hasInvalidFields } = readStateFields(fieldsJson)
+  const valueSeparator = options.valueSeparator ?? '：'
+  const parts = fields.slice(0, options.maxFields).map(field => `${field.key}${valueSeparator}${field.value}`)
+  if (hasInvalidFields) parts.push(STATE_FIELDS_INVALID_NOTICE)
+  return parts.join(options.fieldSeparator ?? ' | ')
+}

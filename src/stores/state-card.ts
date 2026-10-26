@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
 import type { StateCard, StateCategory, StateDiffItem, StateField } from '../lib/types'
-import { parseFields, stringifyFields } from '../lib/types/state-card'
+import { formatStateFieldsForContext, parseFields, readStateFields, stringifyFields } from '../lib/types/state-card'
 import { adopt } from '../lib/registry/adopt'
 import { assertRecordInScope, readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 
@@ -177,8 +177,7 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
     for (const [cat, catCards] of grouped) {
       parts.push(`\n[${LABELS[cat]}]`)
       for (const card of catCards) {
-        const fields = parseFields(card.fields)
-        const fieldStr = fields.map(f => `${f.key}：${f.value}`).join(' | ')
+        const fieldStr = formatStateFieldsForContext(card.fields)
         parts.push(`- ${card.entityName} | ${fieldStr}`)
       }
     }
@@ -217,7 +216,7 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
       }
 
       // 字段值匹配（如位置名、物品名等出现在文本中）
-      const fields = parseFields(card.fields)
+      const { fields } = readStateFields(card.fields)
       const fieldMatch = fields.some(f =>
         f.value.length >= 2 && refLower.includes(f.value.toLowerCase())
       )
@@ -250,8 +249,7 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
     for (const [cat, catCards] of grouped) {
       parts.push(`\n[${LABELS[cat]}]`)
       for (const card of catCards) {
-        const fields = parseFields(card.fields)
-        const fieldStr = fields.map(f => `${f.key}：${f.value}`).join(' | ')
+        const fieldStr = formatStateFieldsForContext(card.fields)
         parts.push(`- ${card.entityName} | ${fieldStr}`)
       }
     }
@@ -265,6 +263,6 @@ export const useStateCardStore = create<StateCardStore>((set, get) => ({
       c => c.category === 'character' && c.entityName === characterName
     )
     if (!card) return { fields: [], card: null }
-    return { fields: parseFields(card.fields), card }
+    return { fields: readStateFields(card.fields).fields, card }
   },
 }))
