@@ -1,6 +1,12 @@
 # Pending development and branch audit
 
 
+## 2026-10-27 · First step-mode stability repairs
+
+[PR #215](https://github.com/yuanbw2025/storyforge/pull/215) builds on [plan #212](https://github.com/yuanbw2025/storyforge/pull/212); both remain unmerged. This batch implements identification and field-by-field repair of malformed state data, original-field export, concurrent-write protection, separate prose-candidate saving, a navigation save barrier, and continued editing after a candidate is cleared.
+
+Twenty targeted browser cases passed, and one real Agnes chain completed generation, candidate save/reload, adoption, and manual prose save/reload. Another HTTP 200 run produced no adoptable candidate and remains open evidence; one success does not resolve empty-answer reports. Full CI and the isolated E2E suite still need terminal results. Windows/Android packages, upgrade checks, and release validation remain pending. See [continuity and recovery](/en/features/longform/continuity).
+
 ## October 26, 2026 · Follow-up development review
 
 Reviewed remote main `63af1fba` from successful maintenance baseline `648b6746`. Main only adds traffic archives, so product guides retain the preceding delivered instructions. This round re-enumerates **196 local branches and 114 worktrees**, including the maintenance branch and detached checkouts; heads of 136 branches are not ancestors of main. The following is a snapshot of new progress. Older dated sections remain historical records.

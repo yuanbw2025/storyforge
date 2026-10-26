@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "qa-execution-inventory-not-runtime-registry",
-  "updatedAt": "2026-10-26",
+  "updatedAt": "2026-10-27",
   "baselineCommit": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
   "scope": "分步骤长篇、其通用设置与数据生命周期；节点/Agent只验共享链路互操作",
   "statusPolicy": "已有历史测试/源反例/打开页面都不能自动把完整功能标PASS。",
@@ -20480,7 +20480,8 @@
       "unobservedUsageReason": "第一次无候选的200响应没有完整用量回执，不记为0。",
       "ci": "首次完整CI因两项已有文字冒险工程验证过期停止；登记的3组23项回归已重新执行，通过后按实测更新日期，完整CI待重跑。",
       "releaseStatus": "NOT_RELEASED",
-      "overallPlanCompleted": false
+      "overallPlanCompleted": false,
+      "pullRequest": "https://github.com/yuanbw2025/storyforge/pull/215"
     }
   ]
 }
