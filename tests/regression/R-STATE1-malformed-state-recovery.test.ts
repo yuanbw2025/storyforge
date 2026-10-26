@@ -83,6 +83,15 @@ describe('STATE1 · contexts and storage do not lose malformed originals', () =>
     expect(result.written).toHaveLength(1)
     expect(parseFields((await db.stateCards.get(f.id))!.fields)).toEqual(fields)
   })
+  it('rejects sparse structured arrays before JSON serialization can turn holes into corrupt null fields', async () => {
+    const f = await seed(valid)
+    const fields: Array<{ key: string; value: string }> = new Array(2)
+    fields[0] = { key: '位置', value: '山门' }
+    const result = await adopt({ projectId: f.scope.projectId, scope: f.scope, target: 'stateCards', recordId: f.id, mode: 'replace', data: { fields } })
+    expect(result.written).toEqual([])
+    expect(result.typeErrors).toHaveLength(1)
+    expect(await db.stateCards.get(f.id)).toEqual(f.row)
+  })
   it('explicit repair uses the exact original as a CAS baseline and reads the saved fields back', async () => {
     const f = await seed()
     await useStateCardStore.getState().updateCard(f.id, { fields: valid }, { expectedFields: f.row.fields })

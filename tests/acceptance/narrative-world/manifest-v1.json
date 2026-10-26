@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261027-longform-stability-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261027-longform-stability-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -451,6 +451,11 @@
         "path": "tests/acceptance/narrative-world/baseline-20261025-mainline-integration-v1.json",
         "workPackage": "NW-mainline-integration",
         "note": "Retained unchanged before longform state-field validation and reviewed shared-source fingerprint refresh."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-longform-stability-v1.json",
+        "workPackage": "B-LF-STAB-ST01",
+        "note": "First reviewed state-field guard checkpoint preserved before the sparse structured-array write counterexample."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

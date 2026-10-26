@@ -64,6 +64,8 @@ test('坏字段不击穿正文页；原稿和原字段保留；作者修正后�
     await page.reload()
     await expect(page.getByTestId('state-card-data-warning')).toBeVisible()
     expect((await read(page, target)).card.fields).toBe(badFields)
+    const stepDirectory = page.getByRole('button', { name: '分步骤目录', exact: true })
+    if (await stepDirectory.isVisible()) await stepDirectory.click()
     await page.getByRole('button', { name: '状态与物品', exact: true }).click()
     const repair = page.getByTestId(`state-card-repair-${target.cardId}`)
     await expect(repair).toContainText('第2项')

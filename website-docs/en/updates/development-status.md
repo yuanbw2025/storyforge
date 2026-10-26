@@ -5,6 +5,8 @@
 
 [PR #215](https://github.com/yuanbw2025/storyforge/pull/215) builds on [plan #212](https://github.com/yuanbw2025/storyforge/pull/212); both remain unmerged. This batch implements identification and field-by-field repair of malformed state data, original-field export, concurrent-write protection, separate prose-candidate saving, a navigation save barrier, and continued editing after a candidate is cleared.
 
+Additional checks fixed a sticky toolbar blocking candidate saving at 320px. Narrow screens now scroll the toolbar with the page. Six touch-viewport paths at 390/320px and 74 targeted regressions passed. State-field writes also reject sparse arrays before serialization can introduce null entries.
+
 Twenty targeted browser cases passed, and one real Agnes chain completed generation, candidate save/reload, adoption, and manual prose save/reload. Another HTTP 200 run produced no adoptable candidate and remains open evidence; one success does not resolve empty-answer reports. Full CI and the isolated E2E suite still need terminal results. Windows/Android packages, upgrade checks, and release validation remain pending. See [continuity and recovery](/en/features/longform/continuity).
 
 ## October 26, 2026 · Follow-up development review

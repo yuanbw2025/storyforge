@@ -55,14 +55,15 @@ export class StateFieldsParseError extends Error {
 
 function assertStateFields(value: unknown): asserts value is StateField[] {
   if (!Array.isArray(value)) throw new StateFieldsParseError('状态字段必须是字段列表。')
-  value.forEach((field, index) => {
+  for (let index = 0; index < value.length; index++) {
+    const field = value[index]
     if (!field || typeof field !== 'object' || Array.isArray(field)) {
       throw new StateFieldsParseError(`状态字段第${index + 1}项需要包含字段名和文本值。`)
     }
     if (typeof field.key !== 'string' || typeof field.value !== 'string') {
       throw new StateFieldsParseError(`状态字段第${index + 1}项的字段名和字段值必须是文本。`)
     }
-  })
+  }
 }
 
 /** Strict reader: never convert malformed records into an apparently empty list. */

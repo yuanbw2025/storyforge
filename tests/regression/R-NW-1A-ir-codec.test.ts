@@ -449,6 +449,6 @@ describe('NW-1A · NW-0B corpus evidence and current database lifecycle', () => 
       cases: corpusResults.sort((a, b) => a.family.localeCompare(b.family, 'en')),
       inputHashes: Object.fromEntries(paths.sort().map(file => [file, createHash('sha256').update(fs.readFileSync(file)).digest('hex')])) }
     if (process.env.NW_IR_REPORT) fs.writeFileSync(process.env.NW_IR_REPORT, JSON.stringify(receipt, null, 2) + '\n')
-    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/ir-contract-20261027-longform-stability-v1.json', 'utf8')))
+    else expect(receipt).toEqual(JSON.parse(fs.readFileSync('tests/acceptance/narrative-world/ir-contract-20261027-longform-stability-v2.json', 'utf8')))
   })
 })

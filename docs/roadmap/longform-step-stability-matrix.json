@@ -1839,6 +1839,12 @@
       "relatedIssue": 198,
       "symptom": "一次maxTokens=2000实测HTTP200完整返回379233字节，但界面未形成可采纳正文；原响应分量未保留，根因未确认。",
       "next": "保留该失败；另一次显式6000预算请求成功不代表此问题已修复。后续检查流分量、finish reason与提供商预算；不得将有HTTP响应等同成功正文。"
+    },
+    {
+      "id": "CHAPTER-MOBILE-TOOLBAR-OCCLUSION",
+      "state": "VERIFIED_LOCAL_AWAITING_INTEGRATION_NATIVE_RELEASE",
+      "symptom": "320px触屏中，固定正文工具栏超过可视高度，拦截候选保存按钮的点击。",
+      "next": "窄屏改随页面滚动，桌面保持固定；390/320px六项触屏主链通过。完整最终E2E、原生包和发行继续核对。"
     }
   ],
   "evidenceSchema": {
@@ -20000,7 +20006,8 @@
       "assertions": [
         "保存只更新durable候选；正式正文在采纳前不变。",
         "保存失败保留输入并阻止离开；清空后仍能输入，空候选不能保存/采纳。",
-        "迟到读取不覆盖未保存输入；原有未启用此功能的调用方仍只在采纳时写回。"
+        "迟到读取不覆盖未保存输入；原有未启用此功能的调用方仍只在采纳时写回。",
+        "320/390px触屏中，候选保存、采纳与正文保存均可正常点击，不被固定工具栏遮挡。"
       ],
       "faultProfiles": [
         "LOAD",
@@ -20029,10 +20036,17 @@
           "summary": "Agnes真实流式经本机转发；修复→生成→候选编辑保存→刷新→采纳→正文手改保存。章后策略off；未证明目标平台安装包。",
           "requestCount": 1,
           "knownTokens": 5056
+        },
+        {
+          "type": "CONTROLLED_TOUCH_CHROMIUM",
+          "result": "passed",
+          "summary": "390/320px各三条链：损坏字段修复、保存失败重试、生成与候选保存刷新采纳。原320px遮挡失败保留；修复后六项通过。",
+          "nativePackageEvidence": false
         }
       ],
       "defects": [
-        "PROSE-CANDIDATE-DRAFT-LOSS"
+        "PROSE-CANDIDATE-DRAFT-LOSS",
+        "CHAPTER-MOBILE-TOOLBAR-OCCLUSION"
       ],
       "faultChecks": [
         {
@@ -20478,7 +20492,7 @@
       "usageKnownRequests": 1,
       "totalUsageTokens": null,
       "unobservedUsageReason": "第一次无候选的200响应没有完整用量回执，不记为0。",
-      "ci": "首轮完整CI因两项既有工程验证过期停止，登记的3组23项回归通过后复核日期；620c55的完整覆盖回归5648项通过、3项跳过，但3组末尾来源指纹比较失败。已实际生成并回读三份新版本回执，110项通过，原观察、gold和历史文件不变；完整CI/E2E继续复验。",
+      "ci": "保留首轮freshness与三组来源指纹失败；110项回执生成/回读通过，原观察与历史记录不变。c0e9完整覆盖运行因确认稀疏数组和320px遮挡两处后续修复而主动中止，不计通过。最终代码完整CI/E2E待执行。",
       "releaseStatus": "NOT_RELEASED",
       "overallPlanCompleted": false,
       "pullRequest": "https://github.com/yuanbw2025/storyforge/pull/215",
@@ -20487,7 +20501,19 @@
         "observationsUnchanged": true,
         "historicalReceiptsUnchanged": true,
         "frozenCorpusUnchanged": true,
-        "evidence": "tests/acceptance/narrative-world/shared-source-refresh-20261027-longform-stability-v1.json"
+        "evidence": "tests/acceptance/narrative-world/shared-source-refresh-20261027-longform-stability-v2.json"
+      },
+      "targetedRegressionTests": 74,
+      "controlledTouchBrowserChecks": 6,
+      "controlledTouchViewportWidths": [
+        390,
+        320
+      ],
+      "previousFullBrowserRun": {
+        "sourceCommit": "620c55f973ae2e52f3ba5d0c0648c1f68e36c613",
+        "passed": 347,
+        "skipped": 5,
+        "status": "PASSED_BEFORE_FINAL_GUARD_AND_TOUCH_TOOLBAR_FIX"
       }
     }
   ]

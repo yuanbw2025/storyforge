@@ -4,6 +4,8 @@
 
 NW-0B 交付时只完成评测基础设施，没有模型调用、浏览器产品 E2E、真人验收或规模性能验收。后续各卡证据分别记录在下文，不回填为 NW-0B 的成绩。
 
+**2026-10-27 状态字段写入反例补验**：补齐稀疏数组写入拒绝后，再次实际运行三组110项测试，生成[基线v2](./baseline-20261027-longform-stability-v2.json)、[IR契约v2](./ir-contract-20261027-longform-stability-v2.json)和[投影契约v2](./domain-projection-20261027-longform-stability-v2.json)。[v2对照](./shared-source-refresh-20261027-longform-stability-v2.json)确认观察与v1一致，v1及更早回执均保留。完整交付检查另行核对。
+
 **2026-10-27 长篇稳定性修复的共享依赖回归**：完整 CI 中 5648 项测试通过、3 项跳过，三组末尾比较仍因来源指纹变化失败。保留历史回执和原失败后，实际重新运行三组 110 项测试，生成[新确定性基线](./baseline-20261027-longform-stability-v1.json)、[新 IR 契约](./ir-contract-20261027-longform-stability-v1.json)与[新领域投影契约](./domain-projection-20261027-longform-stability-v1.json)。[逐项对照记录](./shared-source-refresh-20261027-longform-stability-v1.json)确认原观察、gold 和历史文件不变，补充绑定新状态字段校验器。此更新只用于工程回归；完整 CI 继续复验，不新增世界引擎模型、性能或人工验收结论。
 
 **2026-10-25 工程交付收束**：本批以已保留的工程检查点为起点，整合当前主干后重新验证并交付；自动接续已按作者要求停止。本目录的历史失败、未知和未完成验收保持，不因主干合并改写为通过。增强入口仍仅在 DEV + `narrative-preview` 显式试用；原 41.67% 修改影响精确率、正式三档性能缺口、固定读者缺项以及作者实际改稿/用时缺失均保留。

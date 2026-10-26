@@ -2982,8 +2982,8 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
   return (
     <div className="min-h-full bg-bg-base/40">
-      {/* 标题栏 —— sticky 固定在顶部，必须不透光，否则正文下滑时会从底下透出来 */}
-      <div className="sticky top-0 z-20 border-b border-border bg-bg-base">
+      {/* 窄屏工具栏随正文滚动，避免高度超过可视区时遮住候选操作；桌面仍固定。 */}
+      <div className="border-b border-border bg-bg-base md:sticky md:top-0 md:z-20">
         <ChapterEditorHeader
           title={chapterDisplay?.title ?? currentChapter.title}
           wordCount={wordCount}
