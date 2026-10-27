@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "kind": "detailed-outline-rejection-terminal-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "a3544502cd7ee64d4979770c3940f0aeb6ace031",
+    "files": {
+      "src/lib/agent/run/detailed-outline-generation-durable.ts": "0d44717d9f9c15dc85cdf93ad8cbd626891b8e6e56e27042bf247035f6b634b0",
+      "tests/regression/R-HARNESS8-detailed-outline-generation-durable.test.ts": "aa6275d1e5b073d65a49c4d82f66b3d11199cdcf84aef0d9a0ae1ef09f152379",
+      "tests/e2e/longform-scene-tasks.spec.ts": "3aedbfe08b0b5c3f4a94c0de555f04f20af0a41dd1404d1ca7017a418b732438"
+    }
+  },
+  "status": "ATOMIC_REJECTION_VERIFIED_REAL_REPLAY_CONTINUES",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "originalRealFailure": {
+    "sourceCommit": "45ccf3c1b958fc794e65ab9836835d8d2b55490f",
+    "provider": "agnes",
+    "model": "agnes-2.5-flash",
+    "requests": 1,
+    "knownTotalTokens": 2977,
+    "unknownUsageCalls": 0,
+    "transport": "completed: stop and DONE observed",
+    "candidateReload": "PASS",
+    "canonicalUnchanged": "PASS",
+    "rejection": "UI closed but only confirmation.recorded was appended; step failed while root run remained running",
+    "evidenceDirectory": "live-longform-details-2026-10-27T17-27-39-018Z",
+    "originalRootPreserved": true
+  },
+  "originalRegression": {
+    "failed": 1,
+    "passed": 3,
+    "log": "detailed-rejection-before.log"
+  },
+  "regression": {
+    "passed": 49,
+    "files": 5,
+    "log": "detailed-rejection-related-final.log",
+    "checks": [
+      "Exact author_rejected terminal and idempotent repeat",
+      "run.failed storage failure rolls back the confirmation and preserves the recoverable candidate",
+      "memory settlement failure rolls back the entire rejection",
+      "Concurrent duplicate rejection appends one decision, one terminal and one settlement",
+      "Explicit repeated rejection can append the missing terminal to a previously rejected step; history is never rewritten",
+      "Single/batch controllers, candidate adoption, scope and manual scene save boundaries"
+    ]
+  },
+  "nativeBrowser": {
+    "passed": 2,
+    "log": "detailed-rejection-native-second.log",
+    "modelTransport": "SIMULATED: two generation requests in the candidate path",
+    "checks": [
+      "Native quota fault at the root failure event leaves the entire run/events/details exactly unchanged and candidate editable",
+      "Explicit storage recovery permits the same rejection action, with exact failed/author_rejected/retryable=false terminal",
+      "Refresh does not restore the rejected candidate or repeat the model; a new candidate can be edited and adopted",
+      "Manual scene tasks, chapter identity, navigation and narrow-screen readback"
+    ],
+    "firstDiagnosticLog": "detailed-rejection-native.log",
+    "firstDiagnostic": "The first driver used an exact bare quota message. Final matcher requires its unique fault text while allowing the native error wrapper; unchanged-run and exact terminal assertions remain strict."
+  },
+  "implementation": "Confirmation, root terminal and automatic memory settlement share one scope-aware transaction. Single detail rejection uses the existing failed/author_rejected contract; already terminal runs remain unchanged. No bulk historical repair, canonical write, model replay, schema or owner change.",
+  "checks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS:130",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "log": "detailed-rejection-gates.log",
+    "generatedMetrics": "PASS after official refresh; original stale-facts check retained",
+    "fullCI": "PENDING_FINAL_HEAD",
+    "fullE2E": "45cc pinned run continuing independently",
+    "release": "NOT_RELEASED"
+  },
+  "limits": [
+    "The original real root remains as failure evidence; it was not silently healed",
+    "Real scene adoption/enhancement and prose/review continue on the next source pin",
+    "Complete matrix/platform/release acceptance remains open"
+  ]
+}

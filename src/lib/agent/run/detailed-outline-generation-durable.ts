@@ -26,6 +26,7 @@ import type { AssembleContextResult } from '../../registry/types'
 import {
   assertRecordInScope,
   readOwnedRows,
+  scopeTransactionTables,
 } from '../../workspace/scope'
 import {
   getAgentSkillV1,
@@ -726,15 +727,20 @@ export async function rejectDetailedOutlineGenerationCandidateV1(input: {
   runId: number
   candidate: DetailedOutlineGenerationCandidateV1
 }): Promise<AgentRunSnapshotV1> {
-  const snapshot = await readAgentRunV1(input.scope, input.runId)
-  assertDetailedOutlineGenerationExecutionBindingV1(snapshot)
-  const step = snapshot.projection.steps[DETAILED_OUTLINE_GENERATION_STEP_ID_V1]
-  if (step?.status === 'failed' && step.confirmation === 'reject') return snapshot
-  if (!step || step.status !== 'awaiting_confirmation') throw new Error('细纲候选当前不等待作者确认。')
-  return append(input.scope, snapshot, 'confirmation.recorded', {
-    stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
-    candidateHash: input.candidate.durable.candidateHash,
-    decision: 'reject',
+  return db.transaction('rw', scopeTransactionTables(db.agentRuns, db.agentRunEvents), async () => {
+    let snapshot = await readAgentRunV1(input.scope, input.runId)
+    assertDetailedOutlineGenerationExecutionBindingV1(snapshot)
+    const step = snapshot.projection.steps[DETAILED_OUTLINE_GENERATION_STEP_ID_V1]
+    if (!(step?.status === 'failed' && step.confirmation === 'reject')) {
+      if (!step || step.status !== 'awaiting_confirmation') throw new Error('细纲候选当前不等待作者确认。')
+      snapshot = await append(input.scope, snapshot, 'confirmation.recorded', {
+        stepId: DETAILED_OUTLINE_GENERATION_STEP_ID_V1,
+        candidateHash: input.candidate.durable.candidateHash,
+        decision: 'reject',
+      })
+    }
+    if (['completed', 'failed', 'cancelled', 'recovery_required'].includes(snapshot.projection.state)) return snapshot
+    return append(input.scope, snapshot, 'run.failed', { code: 'author_rejected', retryable: false })
   })
 }
 

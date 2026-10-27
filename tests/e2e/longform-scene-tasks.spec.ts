@@ -80,8 +80,34 @@ test('新任务字段走原细纲 Harness；候选在其它章节仍有标记，
   await page.reload()
   await page.getByRole('button', { name: '第1章', exact: true }).click()
   await expect(draft).toHaveValue(JSON.stringify(output))
+  const beforeReject = await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const add = db.agentRunEvents.add.bind(db.agentRunEvents)
+    const before = { run: await db.agentRuns.toCollection().last(), events: await db.agentRunEvents.toArray(), details: await db.detailedOutlines.toArray() }
+    db.agentRunEvents.add = async (event: { type: string }) => {
+      if (event.type === 'run.failed') throw new DOMException('细纲拒绝终态配额测试', 'QuotaExceededError')
+      return add(event)
+    }
+    Object.assign(window, { restoreSceneRejection: () => { db.agentRunEvents.add = add } })
+    return before
+  })
+  await page.getByTitle('关闭，保留原文不采纳', { exact: true }).click()
+  await expect(page.getByText(/细纲拒绝终态配额测试/)).toBeVisible()
+  await expect(draft).toHaveValue(JSON.stringify(output))
+  const failedReject = await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return { run: await db.agentRuns.toCollection().last(), events: await db.agentRunEvents.toArray(), details: await db.detailedOutlines.toArray() }
+  })
+  expect(failedReject).toEqual(beforeReject)
+  await page.evaluate(() => (window as unknown as { restoreSceneRejection: () => void }).restoreSceneRejection())
   await page.getByTitle('关闭，保留原文不采纳', { exact: true }).click()
   await expect(draft).toHaveCount(0)
+  const rejected = await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const run = await db.agentRuns.toCollection().last()
+    return { status: run.status, failures: (await db.agentRunEvents.where('runId').equals(run.id).toArray()).filter((event: { type: string }) => event.type === 'run.failed').map((event: { payloadJson: string }) => JSON.parse(event.payloadJson)) }
+  })
+  expect(rejected).toEqual({ status: 'failed', failures: [{ code: 'author_rejected', retryable: false }] })
   await expect(page.getByPlaceholder('场景标题...', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '第1章', exact: true })).toHaveAttribute('aria-description', '未规划')
   await page.reload()
