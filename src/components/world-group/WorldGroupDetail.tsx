@@ -20,6 +20,8 @@ import type { WorkspaceScope, WorldGroup, WorldGroupType } from '../../lib/types
 import { WORLD_GROUP_TYPE_LABELS } from '../../lib/types/world-group'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { coordinatePendingEditV1, flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { WORLDVIEW_EXPAND_FIELDS_V1 } from '../../lib/ai/world-group-ai'
+import { FIELD_BY_TARGET } from '../../lib/registry/field-registry'
 
 const TYPE_OPTIONS: { value: WorldGroupType; label: string }[] = [
   { value: 'primary', label: '主世界' },
@@ -325,6 +327,15 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
               ? '继续同一 durable 运行完成正式写入与终验；不会重复调用模型。'
               : '世界来源、力量体系、地貌、气候、种族和势力共 6 个字段；历史由独立历史模块维护；确认前正式世界观保持原值。'}
           </div>
+          <details className="mb-3 rounded border border-accent/20 p-2 text-sm">
+            <summary className="cursor-pointer text-accent">查看全部 6 项候选</summary>
+            <dl className="mt-2 space-y-3">
+              {WORLDVIEW_EXPAND_FIELDS_V1.map(field => <div key={field}>
+                <dt className="mb-1 font-medium">{FIELD_BY_TARGET.get('worldviews')?.find(spec => spec.field === field)?.labels?.[0] ?? field}</dt>
+                <dd className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-text-secondary">{candidate.values[field]}</dd>
+              </div>)}
+            </dl>
+          </details>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => { void handleAcceptExpand() }} disabled={expandBusy}
               className="flex items-center gap-1 rounded bg-accent px-2 py-1 text-xs text-white hover:bg-accent-hover disabled:opacity-50">

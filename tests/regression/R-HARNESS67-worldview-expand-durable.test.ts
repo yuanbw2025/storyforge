@@ -144,8 +144,21 @@ describe.sequential('R-HARNESS67 · 世界组六字段扩写 durable 候选与�
     expect((await db.worldviews.get(fixture.siblingWorldviewId))?.worldOrigin).toBe('炎昼旧起源')
   })
 
-  it('严格协议拒绝 Markdown、额外/缺失字段、空值和过长内容', async () => {
-    expect(() => parseWorldExpandOutputStrictV1(`\`\`\`json\n${response()}\n\`\`\``)).toThrow('代码围栏')
+  it('accepts one complete JSON container and rejects prose, multiple blocks and repaired bodies', () => {
+    const raw = response()
+    expect(parseWorldExpandOutputStrictV1('```json\n' + raw + '\n```')).toEqual(JSON.parse(raw))
+    expect(parseWorldExpandOutputStrictV1('```\r\n' + raw + '\r\n```')).toEqual(JSON.parse(raw))
+    for (const wrapped of [
+      '说明\n```json\n' + raw + '\n```',
+      '```json\n' + raw + '\n```\n后记',
+      '```javascript\n' + raw + '\n```',
+      '```json\n' + raw + '\n```\n```json\n{}\n```',
+      '```json\n{"broken": true,}\n```',
+    ]) expect(() => parseWorldExpandOutputStrictV1(wrapped)).toThrow()
+  })
+
+  it('严格协议拒绝无效项数或字段、额外/缺失字段、空值和过长内容', async () => {
+
     expect(() => parseWorldExpandOutputStrictV1(response({ extra: true }))).toThrow('只能包含')
     const missing = JSON.parse(response()); delete missing.races
     expect(() => parseWorldExpandOutputStrictV1(JSON.stringify(missing))).toThrow('只能包含')
