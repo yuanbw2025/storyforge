@@ -1210,6 +1210,9 @@ export async function rejectProseGenerationCandidateV1(input: {
         decision: 'reject',
       })
     } else if (!(step.status === 'failed' && step.confirmation === 'reject')) return snapshot
+    if (snapshot.contract.executionBindings?.some(binding => binding.stepId === PROSE_GENERATION_STEP_ID_V1 && binding.skillId === 'prose.quality-revise')) {
+      return append(input.scope, snapshot, 'run.cancelled', { reason: 'author-rejected-quality-revision' })
+    }
     return append(input.scope, snapshot, 'run.failed', { code: 'author_rejected', retryable: false })
   })
 }

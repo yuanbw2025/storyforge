@@ -47,6 +47,42 @@ async function reviewAndRevise(page: Page, requests: { review?: string; revision
   await page.getByRole('button', { name: '生成修订并复核', exact: true }).click()
 }
 
+test('放弃修订写失败保留预演，刷新重试沿原运行取消且不重发模型', async ({ page }) => {
+  const state = { calls: [] as any[] }; await mock(page, state)
+  await setup(page); await reviewAndRevise(page)
+  const preview = page.getByTestId('quality-revision-preview')
+  await expect(preview).toContainText('复核已返回')
+  const before = await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const run = await db.agentRuns.orderBy('id').last()
+    const chapters = await db.chapters.toArray()
+    const events = await db.agentRunEvents.where('runId').equals(run.id).toArray()
+    const add = db.agentRunEvents.add.bind(db.agentRunEvents)
+    db.agentRunEvents.add = async (...args: any[]) => {
+      if (args[0].type === 'run.cancelled') throw new DOMException('隔离测试：修订拒绝终态写入故障', 'QuotaExceededError')
+      return add(...args)
+    }
+    return { runId: run.id, chapters, events }
+  })
+  await page.getByRole('button', { name: '放弃修订', exact: true }).click()
+  await expect(page.getByText(/修订拒绝终态写入故障/)).toBeVisible()
+  await expect(preview).toContainText('复核已返回')
+  const read = async () => page.evaluate(async runId => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return { status: (await db.agentRuns.get(runId)).status, chapters: await db.chapters.toArray(), events: await db.agentRunEvents.where('runId').equals(runId).toArray() }
+  }, before.runId)
+  expect(await read()).toEqual({ status: 'awaiting_confirmation', chapters: before.chapters, events: before.events })
+  await page.reload(); await page.getByRole('button', { name: '质量审校', exact: true }).click()
+  await expect(preview).toContainText('复核已返回')
+  await page.getByRole('button', { name: '放弃修订', exact: true }).click()
+  await expect(preview).toContainText('已放弃，原稿保留。')
+  await expect(page.getByRole('button', { name: '确认采纳修订', exact: true })).toHaveCount(0)
+  const final = await read()
+  expect(final.status).toBe('cancelled'); expect(final.chapters).toEqual(before.chapters)
+  for (const type of ['confirmation.recorded', 'run.cancelled', 'memory.settlement.recorded']) expect(final.events.filter((event: any) => event.type === type)).toHaveLength(1)
+  expect(state.calls).toHaveLength(3)
+})
+
 test('作者勾选问题→范围修订→一次复核→刷新对照→正式采纳，原稿格式和预算真实生效', async ({ page }) => {
   const state = { calls: [] as any[] }; await mock(page, state)
   const target = await setup(page)

@@ -18213,6 +18213,11 @@
           "type": "REAL_MODEL_AND_EXPLICIT_AUTHOR_REPAIR_PARTIAL",
           "receipt": "tests/acceptance/longform-stability/real-detail-mainline-20261028-04f496bd.json",
           "summary": "04f496bd单章拆场景主链与增强细纲拒绝通过；漏编号原响应保留，作者明确编辑后同一候选采纳。4请求24199已知tokens无未知用量，不计整例PASS。"
+        },
+        {
+          "type": "REAL_MODEL_PARTIAL_MAINLINE",
+          "receipt": "tests/acceptance/longform-stability/real-prose-mainline-20261028-3435e225.json",
+          "summary": "新独立样本2请求17229已知tokens完成正文拒绝、候选编辑保存/刷新/采纳、手改保存与完整细纲交接；另1未知用量请求保留，不计整例PASS。"
         }
       ],
       "defects": [],
@@ -18310,6 +18315,11 @@
           "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
           "receipt": "tests/acceptance/longform-stability/prose-rejection-terminal-20261028.json",
           "summary": "正文拒绝运行不结束的真实原失败保留；61项回归、25条浏览器审修/保存/拒绝恢复路径通过，新源码实模与全矩阵继续。"
+        },
+        {
+          "type": "REAL_MODEL_PARTIAL_MAINLINE",
+          "receipt": "tests/acceptance/longform-stability/real-prose-mainline-20261028-3435e225.json",
+          "summary": "新独立样本2请求17229已知tokens完成正文拒绝、候选编辑保存/刷新/采纳、手改保存与完整细纲交接；另1未知用量请求保留，不计整例PASS。"
         }
       ],
       "defects": [],
@@ -18585,6 +18595,11 @@
           "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
           "receipt": "tests/acceptance/longform-stability/prose-rejection-terminal-20261028.json",
           "summary": "正文拒绝运行不结束的真实原失败保留；61项回归、25条浏览器审修/保存/拒绝恢复路径通过，新源码实模与全矩阵继续。"
+        },
+        {
+          "type": "REAL_MODEL_PARTIAL_MAINLINE",
+          "receipt": "tests/acceptance/longform-stability/real-prose-mainline-20261028-3435e225.json",
+          "summary": "新独立样本2请求17229已知tokens完成正文拒绝、候选编辑保存/刷新/采纳、手改保存与完整细纲交接；另1未知用量请求保留，不计整例PASS。"
         }
       ],
       "defects": [],
@@ -19036,6 +19051,11 @@
           "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
           "receipt": "tests/acceptance/longform-stability/prose-rejection-terminal-20261028.json",
           "summary": "正文拒绝运行不结束的真实原失败保留；61项回归、25条浏览器审修/保存/拒绝恢复路径通过，新源码实模与全矩阵继续。"
+        },
+        {
+          "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
+          "receipt": "tests/acceptance/longform-stability/quality-rejection-terminal-20261028.json",
+          "summary": "范围修订保持既有取消终态；63回归和2条拒绝写失败→刷新→重试浏览器路径通过，无额外模型调用。"
         }
       ],
       "defects": [],
@@ -23931,6 +23951,22 @@
       "date": "2026-10-28",
       "unit": "Atomic prose rejection and storage-failure recovery",
       "sourcePin": "tests/acceptance/longform-stability/prose-rejection-terminal-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Real prose candidate rejection, edited adoption and canonical manual reload",
+      "sourcePin": "tests/acceptance/longform-stability/real-prose-mainline-20261028-3435e225.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Preserve atomic quality-revision cancellation in shared prose helper",
+      "sourcePin": "tests/acceptance/longform-stability/quality-rejection-terminal-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

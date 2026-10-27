@@ -9,6 +9,7 @@ import { normalizeRichEditorHTMLV1 } from '../../src/lib/editor/rich-editor-sche
 import { runWholeChapterQualityReviewV1 } from '../../src/lib/agent/run/quality-review-durable'
 import { runQualityRevisionV1, readLatestQualityRevisionV1, adoptQualityRevisionV1, rejectQualityRevisionV1, abandonQualityRevisionV1 } from '../../src/lib/agent/run/quality-revision-durable'
 import { isProseGenerationCandidateCurrentV1 } from '../../src/lib/agent/run/prose-generation-durable'
+import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import * as protection from '../../src/lib/prose/quality-revision'
 import { verifyQualityRevisionEvidenceV1 } from '../../src/lib/prose/quality-revision-evidence'
 
@@ -43,7 +44,7 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     } } })
     await db.delete(); await db.open(); useAIConfigStore.setState({ config: { ...old.config, provider: 'ollama', model: 'quality-scope', contextWindow: 128000, maxTokens: 4000 } })
   })
-  afterEach(() => { useAIConfigStore.setState(old, true); db.close() })
+  afterEach(() => { vi.restoreAllMocks(); useAIConfigStore.setState(old, true); db.close() })
 
   it('一次修订加一次复核，原稿与加粗不变；恢复后作者采纳才正式写回，禁止同轮重复调用', async () => {
     const f = await seed()
@@ -101,8 +102,31 @@ describe('LFQ8 · 同一正文候选的范围修订与采纳', () => {
     const foreign = await seedCurrentWorkspace('其它作品', { genres: ['realism'] })
     expect(await readLatestQualityRevisionV1({ scope: foreign.scope, chapterId: f.chapterId })).toBeNull()
     await expect(adoptQualityRevisionV1({ scope: foreign.scope, candidate: result.candidate! })).rejects.toThrow()
-    await rejectQualityRevisionV1({ scope: f.scope, candidate: result.candidate! })
+    const rejected = await rejectQualityRevisionV1({ scope: f.scope, candidate: result.candidate! })
+    expect(rejected.projection.state).toBe('cancelled')
+    expect(rejected.events.filter(event => event.type === 'run.cancelled').map(event => event.payload)).toEqual([{ reason: 'author-rejected-quality-revision' }])
+    expect((await rejectQualityRevisionV1({ scope: f.scope, candidate: result.candidate! })).events).toEqual(rejected.events)
     expect((await db.chapters.get(f.chapterId))!.content).toBe(f.sourceHtml)
+  }, DURABLE_TEST_TIMEOUT)
+
+  it.each(['run.cancelled', 'memory.settlement.recorded'])('修订拒绝的 %s 写失败时完整回滚，原候选可恢复并明确重试', async eventType => {
+    const f = await seed(); const result = await runQualityRevisionV1(input(f))
+    const request = { scope: f.scope, candidate: result.candidate! }
+    const before = await readAgentRunV1(f.scope, result.runId)
+    const add = db.agentRunEvents.add.bind(db.agentRunEvents)
+    const spy = vi.spyOn(db.agentRunEvents, 'add').mockImplementation(async (...args) => {
+      if (args[0].type === eventType) throw new DOMException('修订拒绝终态写入故障', 'QuotaExceededError')
+      return add(...args)
+    })
+    await expect(rejectQualityRevisionV1(request)).rejects.toThrow('修订拒绝终态写入故障')
+    expect(await readAgentRunV1(f.scope, result.runId)).toEqual(before)
+    expect((await readLatestQualityRevisionV1({ scope: f.scope, chapterId: f.chapterId }))?.state).toBe('awaiting_confirmation')
+    expect((await db.chapters.get(f.chapterId))!.content).toBe(f.sourceHtml)
+    spy.mockRestore()
+    const rejected = await rejectQualityRevisionV1(request)
+    expect(rejected.projection.state).toBe('cancelled')
+    for (const type of ['confirmation.recorded', 'run.cancelled', 'memory.settlement.recorded']) expect(rejected.events.filter(event => event.type === type)).toHaveLength(1)
+    expect(f.revise).toHaveBeenCalledTimes(1); expect(f.recheck).toHaveBeenCalledTimes(1)
   }, DURABLE_TEST_TIMEOUT)
 
   it.each(['unchanged', 'uncertain'] as const)('复核%s仍由作者决定，不循环重写', async status => {
