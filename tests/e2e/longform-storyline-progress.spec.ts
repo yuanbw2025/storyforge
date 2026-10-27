@@ -76,8 +76,9 @@ test('chapter mapping rejects one candidate, edits the next, refuses invalid ado
     const body = route.request().postDataJSON()
     expect(body.response_format).toEqual({ type: 'json_object' })
     expect(body.messages[0].content).toContain('progressNote')
+    expect(body.messages[0].content).toContain('anchorId')
     expect(body.messages[1].content).toContain(`"id":${f.arcIds[0]}`)
-    const output = { progress: [{ arcId: f.arcIds[0], currentStageId: 'hand-over', status: 'active', progressNote: '以交付推进寻钥主线', involvedEntities: ['林飞', '许宁'], quote: '林飞把青铜钥匙交给许宁' }], crossings: [{ arcIdA: f.arcIds[0], arcIdB: f.arcIds[1], note: '钥匙交付换来运粮路线', quote: '换得运粮路线' }], newArcs: [{ name: '返程支线', type: 'sub', description: '取得路线后仍须核验返程', quote: '换得运粮路线' }] }
+    const output = { progress: [{ arcId: f.arcIds[0], currentStageId: 'hand-over', status: 'active', progressNote: '以交付推进寻钥主线', involvedEntities: ['林飞', '许宁'], anchorId: 'p1' }], crossings: [{ arcIdA: f.arcIds[0], arcIdB: f.arcIds[1], note: '钥匙交付换来运粮路线', anchorId: 'p1' }], newArcs: [{ name: '返程支线', type: 'sub', description: '取得路线后仍须核验返程', anchorId: 'p1' }] }
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(output) }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) })
   })
   const editor = panel(page).getByLabel('故事线进度候选 JSON', { exact: true })
@@ -126,7 +127,7 @@ test('native IME changes in the mapping candidate participate in close and navig
   const f = await setup(page); let calls = 0
   await page.route('https://storyline-progress.invalid/**', route => {
     calls++
-    const data = { progress: [{ arcId: f.arcIds[0], currentStageId: 'hand-over', status: 'active', progressNote: '交付后取得路线', involvedEntities: [], quote: '换得运粮路线' }], crossings: [], newArcs: [] }
+    const data = { progress: [{ arcId: f.arcIds[0], currentStageId: 'hand-over', status: 'active', progressNote: '交付后取得路线', involvedEntities: [], anchorId: 'p1' }], crossings: [], newArcs: [] }
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(data) }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) })
   })
   await panel(page).getByRole('button', { name: '映射本章', exact: true }).click()

@@ -3802,6 +3802,16 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/storyline-progress-model-contract-20261028.json",
           "summary": "补齐完整模型结构、冻结目标编号及JSON模式，逐类拒绝部分非法输出；16项回归、4条浏览器路径通过，新提交实模另跑。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-storyline-progress-20261028-db775df50.json",
+          "summary": "db775df50已修编号和JSON，但逐字引文仍有差异，13,350tokens的4次请求拒绝且不写原稿；整份失败保留。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/storyline-evidence-anchors-20261028.json",
+          "summary": "映射v3复用固定审校定位目录，程序取逐字证据；38项回归、15条浏览器路径通过，新提交实模续验另跑。"
         }
       ],
       "defects": [],
@@ -19565,6 +19575,16 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/storyline-progress-model-contract-20261028.json",
           "summary": "补齐完整模型结构、冻结目标编号及JSON模式，逐类拒绝部分非法输出；16项回归、4条浏览器路径通过，新提交实模另跑。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-storyline-progress-20261028-db775df50.json",
+          "summary": "db775df50已修编号和JSON，但逐字引文仍有差异，13,350tokens的4次请求拒绝且不写原稿；整份失败保留。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/storyline-evidence-anchors-20261028.json",
+          "summary": "映射v3复用固定审校定位目录，程序取逐字证据；38项回归、15条浏览器路径通过，新提交实模续验另跑。"
         }
       ],
       "defects": [],
@@ -24315,6 +24335,14 @@
       "date": "2026-10-28",
       "unit": "Explicit mapping model v2 and verified model-scoped JSON transport after retained real failure",
       "sourcePin": "tests/acceptance/longform-stability/storyline-progress-model-contract-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Frozen physical-text evidence anchors for mapping model protocol v3",
+      "sourcePin": "tests/acceptance/longform-stability/storyline-evidence-anchors-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

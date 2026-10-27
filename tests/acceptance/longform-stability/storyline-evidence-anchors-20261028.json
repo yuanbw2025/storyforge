@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "kind": "mapping-model-v3-frozen-text-evidence-anchors",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "db775df50354bfa3a91cc694c617a14754f89934",
+    "files": {
+      "src/lib/storyline/evidence-anchors.ts": "583d76034886a6643106e0b71d2bb5af78fa24dee7327bec6853ab7ca52782fe",
+      "src/lib/storyline/storyline-progress.ts": "9376813906c02dc3b3355c3044d093a3168a936953b4e864e72b33a5a9194a64",
+      "src/lib/agent/storyline-progress-copilot.ts": "726f3aacbcb79ce50ada44f13072b8524fddc12cd3f9e49f845bd5e906f5e5ad",
+      "src/lib/prose/quality-review.ts": "905d2b1fb8c408a6beb6b9be3140459150c69e97c133fb2a92130907aa7d44e8",
+      "tests/regression/R-STAB-storyline-evidence-anchors.test.ts": "09e7706992d6d8a657019b83c76bf0c75b22fdac5b9caba4604cab086a6b8df1",
+      "tests/regression/R-STAB-storyline-progress-model-contract.test.ts": "df422036074f5275a9dfee5c5f19731e757fa6a76f7324bfdbd0d4ee39ebf26d",
+      "tests/e2e/longform-storyline-progress.spec.ts": "0514378515d19d557f97b0eedaa2b2fb5304365f3cb1cf8e53ba117f6229288f"
+    }
+  },
+  "status": "TARGETED_AND_NATIVE_ANCHOR_MAPPING_PASSED_REAL_COHORT_NEXT",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "originalFailureReceipt": "tests/acceptance/longform-stability/real-storyline-progress-20261028-db775df50.json",
+  "productBoundary": "Same registered chapterContent/storyArcs and frozen mapping snapshot. Existing canonical evidenceQuote and formal adoption; no new source, AI entry, table, field or parallel memory.",
+  "changes": [
+    "New mapping model protocol v3 chooses one anchorId; code derives a literal continuous quotation from the frozen chapter",
+    "Reuse existing qualityReviewAnchorsV1 pinned to whole-chapter-quality-review-v12; no review algorithm change or guessed punctuation/newline repair",
+    "Existing exact-quote model output remains strictly compatible; canonical author-edit/reload/adoption schema unchanged",
+    "Unknown or ambiguous anchor/quote pairs rejected; raw model responses retained; mixed invalid categories continue to reject",
+    "Explicitly aggregate multiple advancement points into one progress per Arc; keep finite existing repair semantics"
+  ],
+  "regression": {
+    "log": "storyline-evidence-related.log",
+    "passed": 38,
+    "files": 6,
+    "checks": [
+      "Exact continuous physical bytes, paragraph/long-segment labels and surrogate-pair boundary",
+      "Unknown, wrong-type and conflicting evidence references rejected",
+      "Historical literal quotes are not repaired",
+      "Actual anchored model output remains candidate-only until formal adoption, then writes the exact resolved quotation",
+      "Request contract, scope/UI/atomic write and existing whole-review contracts retained"
+    ]
+  },
+  "nativeBrowser": {
+    "log": "storyline-evidence-native.log",
+    "passed": 15,
+    "files": 2,
+    "checks": [
+      "Mapping actual JSON body includes target IDs and anchorId protocol",
+      "Anchored progress/crossing/new-Arc candidate edit/reload/adoption and read recovery",
+      "503 one dispatch; native candidate IME guards",
+      "Existing whole-review actual request/evidence/failure/stale paths retained"
+    ]
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "build": "PASS",
+    "targetedEslint": "PASS"
+  },
+  "remaining": "Exact-source real Agnes anchored mapping; retained compression truncation, chapter memory/prose/remaining modules and final/client checks. Earlier full CI still runs at 2f4ebb26."
+}

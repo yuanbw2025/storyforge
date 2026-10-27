@@ -1,6 +1,7 @@
 import { useAIConfigStore } from '../../stores/ai-config'
 import { chat, resolveRequestConfig } from '../ai/client'
 import { supportsVerifiedJsonObjectResponseForModelV1 } from '../ai/provider-capabilities'
+import { resolveStorylineModelEvidenceV1, storylineEvidenceAnchorsV1 } from '../storyline/evidence-anchors'
 import type {
   GenerationGateIssue,
   GenerationNode,
@@ -167,7 +168,7 @@ function parseCandidateDraft(
     raw: draft,
     contract: {
       version: 1,
-      schemaId: 'storyline-progress-analysis.v1',
+      schemaId: 'storyline-progress-analysis.v2',
       target: `chapter:${input.snapshot.chapterId}:storyline-progress`,
       root: 'object',
       maxChars: 120_000,
@@ -180,7 +181,7 @@ function parseCandidateDraft(
         throw new Error('故事线进度候选的三个字段都必须是数组。')
       }
       const normalized = parseStorylineProgressResult({
-        raw: JSON.stringify(source),
+        raw: JSON.stringify(resolveStorylineModelEvidenceV1(source, input.chapterContent)),
         chapterContent: input.chapterContent,
         arcs: input.snapshot.arcs,
       })
@@ -222,7 +223,7 @@ function buildMessages(input: StorylineProgressCopilotInputV1): ChatMessage[] {
     : ''
   // Frozen write-target bindings and chapter body are derived from the same
   // registered storyArcs/chapterContent snapshot that adoption validates.
-  const [contract, targetInput] = buildStorylineProgressPrompt({ chapterTitle: input.chapterTitle, chapterContent: input.chapterContent, arcs: input.snapshot.arcs })
+  const [contract, targetInput] = buildStorylineProgressPrompt({ chapterTitle: input.chapterTitle, chapterContent: input.chapterContent, arcs: input.snapshot.arcs, evidenceAnchors: storylineEvidenceAnchorsV1(input.chapterContent).map(({ anchorId, quote }) => ({ anchorId, quote })) })
   return [
     {
       role: 'system',

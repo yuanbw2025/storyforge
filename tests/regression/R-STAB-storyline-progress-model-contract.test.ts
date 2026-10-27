@@ -4,7 +4,7 @@ import { seedCurrentWorkspace } from '../helpers/current-workspace'
 import { stampNewRecord } from '../../src/lib/workspace/scope'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { prepareStorylineProgressCopilotV1 } from '../../src/lib/agent/storyline-progress-copilot'
-import { runGenerationNode } from '../../src/lib/generation/generation-node'
+import { adoptGenerationNodeOutput, runGenerationNode } from '../../src/lib/generation/generation-node'
 import { supportsVerifiedJsonObjectResponseForModelV1 } from '../../src/lib/ai/provider-capabilities'
 
 const old = useAIConfigStore.getState()
@@ -55,5 +55,15 @@ describe.sequential('STAB · explicit mapping model contract', () => {
   })
   it.each(['agnes-3.0-flash', 'unverified-model'])('Agnes model-specific verification does not widen provider capability: %s', model => {
     expect(supportsVerifiedJsonObjectResponseForModelV1({ provider: 'agnes', model })).toBe(false)
+  })
+  it('anchor model output becomes an exact canonical quotation before explicit author adoption', async () => {
+    const f = await fixture(); const value = JSON.parse(f.raw)
+    delete value.progress[0].quote; value.progress[0].anchorId = 'p1'
+    const p = await prepareStorylineProgressCopilotV1({ projectId: f.scope.projectId, scope: f.scope, worldGroupId: null, chapterId: f.chapterId, authorRequest: '按原文目录映射' }, { runAI: vi.fn(async () => JSON.stringify(value)) })
+    const generated = await runGenerationNode(p.node, p.prepared)
+    expect(generated.output.progress[0].evidenceQuote).toBe('林飞交出青铜钥匙，换得运粮路线。')
+    expect(await db.storylineProgress.count()).toBe(0)
+    expect((await adoptGenerationNodeOutput(p.node, generated.output)).adopted).toBe(true)
+    expect((await db.storylineProgress.toArray())[0].evidenceQuote).toBe(generated.output.progress[0].evidenceQuote)
   })
 })
