@@ -134,6 +134,21 @@ for (const role of [
   })
 }
 
+test('an untouched invalid character field preserves its raw data and allows navigation to recovery tools', async ({ page }) => {
+  const projectId = await createCharacter(page)
+  const original = await row(page, projectId)
+  await page.evaluate(async id => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    await db.characters.update(id, { background: ['保留原始异常字段'] })
+  }, original.id)
+  await page.reload()
+  await page.getByText('新角色', { exact: true }).last().click()
+  await expect(page.getByRole('alert').filter({ hasText: '背景故事格式异常' })).toBeVisible()
+  await openLongformLeaf(page, '导出')
+  await expect(page).toHaveURL(/module=export/)
+  expect((await row(page, projectId)).background).toEqual(['保留原始异常字段'])
+})
+
 test('rejecting the last generated character closes its durable run and survives reload', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', model: 'isolated-character', baseUrl: 'https://character-terminal.invalid/v1', maxTokens: 4000, contextWindow: 64000 })))
   const projectId = await createCharacter(page)

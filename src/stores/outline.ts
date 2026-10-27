@@ -1,18 +1,21 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
-import type { OutlineNode } from '../lib/types'
+import type { OutlineNode, WorkspaceScope } from '../lib/types'
 import { normalizeOutlineNode } from '../lib/outline/normalize'
 import { useChapterStore } from './chapter'
-import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { assertRecordInScope, readOwnedRows, resolveReadScopeLike, resolveScopeLike, scopeTransactionTables, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
+import { FIELD_BY_TARGET } from '../lib/registry/field-registry'
 
 interface OutlineStore {
   nodes: OutlineNode[]
   loading: boolean
+  loadedScope: WorkspaceScope | null
+  loadError: string | null
 
   loadAll: (scope: WorkspaceScopeLike) => Promise<void>
   addNode: (node: Omit<OutlineNode, 'id' | 'createdAt' | 'updatedAt'>) => Promise<number>
-  updateNode: (id: number, data: Partial<OutlineNode>) => Promise<void>
+  updateNode: (id: number, data: Partial<OutlineNode>, options?: { scope?: WorkspaceScope; expected?: Partial<OutlineNode> }) => Promise<void>
   deleteNode: (id: number) => Promise<void>
   /** 批量添加节点（AI 生成大纲后） */
   addNodes: (nodes: Omit<OutlineNode, 'id' | 'createdAt' | 'updatedAt'>[]) => Promise<void>
@@ -32,16 +35,28 @@ interface OutlineStore {
 }
 
 const now = () => Date.now()
+let loadSequence = 0
+const sameWork = (a: WorkspaceScope | null, b: WorkspaceScope) => a?.projectId === b.projectId && a.worldId === b.worldId && a.workId === b.workId
+const authorFields = new Map((FIELD_BY_TARGET.get('outlineNodes') ?? []).filter(field => !field.adoptionPolicy).map(field => [field.field, field]))
 
 export const useOutlineStore = create<OutlineStore>((set, get) => ({
   nodes: [],
   loading: false,
+  loadedScope: null,
+  loadError: null,
 
   loadAll: async (scopeInput: WorkspaceScopeLike) => {
-    set({ loading: true })
-    const nodes = (await readOwnedRows<OutlineNode>(await resolveReadScopeLike(scopeInput), 'outlineNodes', { owner: 'work' }))
-      .sort((a, b) => a.order - b.order)
-    set({ nodes: nodes.map(normalizeOutlineNode), loading: false })
+    const request = ++loadSequence
+    set({ loading: true, loadError: null })
+    try {
+      const scope = await resolveReadScopeLike(scopeInput)
+      if (request !== loadSequence) return
+      if (!sameWork(get().loadedScope, scope)) set({ nodes: [], loadedScope: null })
+      const nodes = (await readOwnedRows<OutlineNode>(scope, 'outlineNodes', { owner: 'work' })).sort((a, b) => a.order - b.order).map(normalizeOutlineNode)
+      if (request === loadSequence) set({ nodes, loading: false, loadedScope: scope })
+    } catch (cause) {
+      if (request === loadSequence) set({ loading: false, loadError: cause instanceof Error ? cause.message : '大纲读取失败。' })
+    }
   },
 
   addNode: async (node) => {
@@ -52,43 +67,63 @@ export const useOutlineStore = create<OutlineStore>((set, get) => ({
     return id
   },
 
-  updateNode: async (id, data) => {
-    await coordinatePendingEditV1({
+  updateNode: (id, input, options) => {
+    const data = structuredClone(input)
+    const cached = get().nodes.find(node => node.id === id)
+    const selected = options?.scope ? { ...options.scope } : (cached ? get().loadedScope ?? undefined : undefined)
+    const expected = structuredClone(options?.expected ?? cached)
+    const scopePromise = selected ? Promise.resolve(selected) : db.outlineNodes.get(id).then(row => {
+      if (!row) throw new Error('大纲节点已删除，输入尚未保存。')
+      return resolveScopeLike(row.projectId)
+    })
+    void scopePromise.catch(() => undefined)
+    return coordinatePendingEditV1({
       key: `outline-node:${id}`,
       persist: async () => {
-        const ts = now()
-        const initial = await db.outlineNodes.get(id)
-        if (!initial) return
-        const scope = await resolveScopeLike(initial.projectId)
-        const before = await db.outlineNodes.get(id)
-        if (!before || !await assertRecordInScope(scope, 'outlineNodes', before, { owner: 'work' })) return
-        await db.outlineNodes.update(id, { ...data, updatedAt: ts })
-        if (
-          before.type === 'chapter'
-          && Object.prototype.hasOwnProperty.call(data, 'title')
-          && typeof data.title === 'string'
-        ) {
-          const chapterIds = (await db.chapters.where('outlineNodeId').equals(id).primaryKeys()) as number[]
-          if (chapterIds.length) {
-            await db.chapters.bulkUpdate(chapterIds.map(chapterId => ({
-              key: chapterId,
-              changes: { title: data.title, updatedAt: ts },
-            })))
-            useChapterStore.setState(state => ({
-              chapters: state.chapters.map(chapter =>
-                chapter.outlineNodeId === id ? { ...chapter, title: data.title!, updatedAt: ts } : chapter,
-              ),
-              currentChapter: state.currentChapter?.outlineNodeId === id
-                ? { ...state.currentChapter, title: data.title!, updatedAt: ts }
-                : state.currentChapter,
-            }))
-          }
+        for (const [key, value] of Object.entries(data)) {
+          const spec = authorFields.get(key)
+          if (!spec) throw new Error('大纲更新包含非作者字段或归属字段。')
+          if (value == null) {
+            if (!['parentId', 'worldGroupId'].includes(key)) throw new Error(`大纲 ${key} 格式异常。`)
+          } else if ((['string', 'longtext'].includes(spec.type) && typeof value !== 'string')
+            || (spec.type === 'enum' && !spec.enums?.includes(value as string))
+            || (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value)))) throw new Error(`大纲 ${key} 格式异常。`)
         }
-        set({
-          nodes: get().nodes.map(n =>
-            n.id === id ? normalizeOutlineNode({ ...n, ...data, updatedAt: ts }) : n
-          ),
+        const scope = await scopePromise
+        const saved = await db.transaction('rw', scopeTransactionTables(db.outlineNodes, db.chapters, db.worldGroups), async () => {
+          await resolveScopeLike(scope)
+          const before = await db.outlineNodes.get(id)
+          if (!before || !await assertRecordInScope(scope, 'outlineNodes', before, { owner: 'work' })) throw new Error('大纲节点已删除或作品归属已变化，输入尚未保存。')
+          if (expected && Object.keys(data).some(key => JSON.stringify(before[key as keyof OutlineNode]) !== JSON.stringify(expected[key as keyof OutlineNode]))) throw new Error('大纲字段已被其他页面修改，输入已保留，请核对后保存。')
+          const ts = Math.max(now(), (Number.isFinite(before.updatedAt) ? before.updatedAt : 0) + 1)
+          const next = normalizeOutlineNode({ ...before, ...data, updatedAt: ts })
+          if (data.parentId != null) {
+            const parent = await db.outlineNodes.get(data.parentId)
+            if (data.parentId === id || !parent || !await assertRecordInScope(scope, 'outlineNodes', parent, { owner: 'work' })) throw new Error('大纲父节点无效或属于其他作品。')
+          }
+          if (data.worldGroupId != null) {
+            const group = await db.worldGroups.get(data.worldGroupId)
+            if (!group || !await assertRecordInScope(scope, 'worldGroups', group, { owner: 'world' })) throw new Error('大纲世界分组不属于原 World。')
+          }
+          if (await db.outlineNodes.update(id, { ...data, updatedAt: ts }) !== 1) throw new Error('大纲节点已删除，输入尚未保存。')
+          const chapterIds: number[] = []
+          if (before.type === 'chapter' && 'title' in data) {
+            for (const chapter of await db.chapters.where('outlineNodeId').equals(id).toArray()) {
+              if (chapter.id == null || !await assertRecordInScope(scope, 'chapters', chapter, { owner: 'work' })) throw new Error('关联正文的作品归属不符，标题未保存。')
+              chapterIds.push(chapter.id)
+            }
+            if (chapterIds.length && await db.chapters.bulkUpdate(chapterIds.map(key => ({ key, changes: { title: next.title, updatedAt: ts } }))) !== chapterIds.length) throw new Error('正文标题未完整保存，请重试。')
+          }
+          return { next, chapterIds }
         })
+        if (saved.chapterIds.length) {
+          const ids = new Set(saved.chapterIds)
+          useChapterStore.setState(state => ({
+            chapters: state.chapters.map(chapter => chapter.id != null && ids.has(chapter.id) ? { ...chapter, title: saved.next.title, updatedAt: saved.next.updatedAt } : chapter),
+            currentChapter: state.currentChapter?.id != null && ids.has(state.currentChapter.id) ? { ...state.currentChapter, title: saved.next.title, updatedAt: saved.next.updatedAt } : state.currentChapter,
+          }))
+        }
+        if (sameWork(get().loadedScope, scope)) set({ nodes: get().nodes.map(node => node.id === id ? saved.next : node) })
       },
     })
   },

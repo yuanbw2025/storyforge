@@ -50,7 +50,7 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
   const dialog = useDialog()
   const toast = useToast()
   const activeWork = useActiveWork(project)
-  const { nodes, loadAll, addNode, updateNode, deleteNode, reorderNodes, insertNodeAt, moveNodeToParent } = useOutlineStore()
+  const { nodes, loading, loadError, loadAll, addNode, updateNode, deleteNode, reorderNodes, insertNodeAt, moveNodeToParent } = useOutlineStore()
   const worldGroups = useWorldGroupStore(s => s.groups)
   const aiConfig = useAIConfigStore(s => s.config)
   const storyArcStore = useStoryArcStore(s => s.buildStoryArcContext)  // 添加 useStoryArcStore 调用
@@ -79,7 +79,7 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
 
   const ai = useAIStream(createAISessionKey(project.id!, 'outline.generate'))
 
-  useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
+  useEffect(() => { loadAll(project.id!) }, [project.id, project.activeWorldId, project.activeWorkId, loadAll])
 
   const normalizedNodes = useMemo(() => nodes.map(normalizeOutlineNode), [nodes])
   const volumes = getTopLevelVolumes(normalizedNodes)
@@ -122,11 +122,14 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
   }, [volumes, selectedVolId])
 
   const handleAddVolume = async () => {
-    const id = await addNode({
-      projectId: project.id!, parentId: null, type: 'volume',
-      title: `第${volumes.length + 1}卷`, summary: '', order: volumes.length,
-    })
-    setSelectedVolId(id)
+    try {
+      await flushPendingEditsV1()
+      const id = await addNode({
+        projectId: project.id!, parentId: null, type: 'volume',
+        title: `第${volumes.length + 1}卷`, summary: '', order: volumes.length,
+      })
+      setSelectedVolId(id)
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : '新增卷未保存。') }
   }
 
   const handleAddChapter = async (parentId?: number) => {
@@ -575,7 +578,7 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
       activeChapterDrag={activeChapterDrag}
       getActiveChapterDrag={getActiveChapterDrag}
       onClearActiveChapterDrag={clearActiveChapterDrag}
-      onSelectVolume={setSelectedVolId}
+      onSelectVolume={id => { void flushPendingEditsV1().then(() => setSelectedVolId(id)).catch(cause => toast.error(cause instanceof Error ? cause.message : '保存未完成，已保留当前大纲。')) }}
       onAddVolume={() => { void handleAddVolume() }}
       onGenerateVolumes={handleAIVolumes}
       onGenerateAllChapters={() => { void batch.generate() }}
@@ -588,6 +591,11 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
   )
 
   // ── 右侧编辑区 ──
+
+  if (loadError) return <div role="alert" className="p-4 text-error">{loadError}；原数据已保留。
+    <button type="button" onClick={() => { void loadAll(project.id!) }} className="ml-2 underline">重试读取大纲</button>
+  </div>
+  if (loading && nodes.length === 0) return <div role="status" className="p-4 text-text-muted">正在读取大纲…</div>
 
   return (
     <div ref={dragScrollRoot} className="h-full min-h-0" data-testid="outline-drag-scroll">
@@ -681,7 +689,7 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
           adoptionRecoveryRequired={generation.adoptionRecoveryRequired}
         />
 
-        <OutlineVolumeDetail
+        <OutlineVolumeDetail key={selectedVolId ?? 'empty'}
           volume={selectedVol}
           nodes={normalizedNodes}
           initialTargetNodeId={initialNodeId}
@@ -692,7 +700,7 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
           getActiveChapterDrag={getActiveChapterDrag}
           onChapterDragStart={beginChapterDrag}
           onChapterDragEnd={clearActiveChapterDrag}
-          onUpdateNode={updateNode}
+          onUpdateNode={(id, patch, options) => updateNode(id, patch, { ...options, scope: activeWork?.id && activeWork.worldId && project.id ? { projectId: project.id, worldId: activeWork.worldId, workId: activeWork.id } : undefined })}
           onDeleteNode={deleteNode}
           onGenerateVolume={volumeId => { void generation.prepare({ kind: 'single-volume', volumeId }) }}
           onGenerateAllChapters={handleAIChapters}

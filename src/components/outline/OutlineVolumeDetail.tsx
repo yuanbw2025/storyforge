@@ -1,8 +1,7 @@
 import { useMemo } from 'react'
 import { Plus, Sparkles, Trash2, Search, RefreshCw } from 'lucide-react'
 import type { OutlineNode, StoryStructure, WorldGroup } from '../../lib/types'
-import AutoResizeTextarea from '../shared/AutoResizeTextarea'
-import { CInput } from '../shared/CompositionInput'
+import AcknowledgedTextField from '../shared/AcknowledgedTextField'
 import { useDragReorder } from './useDragReorder'
 import OutlineStructureMenu from './OutlineStructureMenu'
 import { OutlineChapterRow, OutlineStoryBlockSection } from './OutlineChapterTree'
@@ -23,7 +22,7 @@ interface Props {
   getActiveChapterDrag: GetActiveChapterDrag
   onChapterDragStart: (payload: ChapterDragPayload) => void
   onChapterDragEnd: () => void
-  onUpdateNode: (id: number, patch: Partial<OutlineNode>) => void
+  onUpdateNode: (id: number, patch: Partial<OutlineNode>, options?: { expected?: Partial<OutlineNode> }) => void | Promise<void>
   onDeleteNode: (id: number) => void
   onGenerateVolume: (volumeId: number) => void
   onGenerateAllChapters: () => void
@@ -98,9 +97,9 @@ export default function OutlineVolumeDetail({
       className={`space-y-4 rounded-xl ${volume.id === initialTargetNodeId ? INITIAL_RECORD_TARGET_CLASS : ''}`}
     >
       <div className="flex items-center justify-between">
-        <CInput
+        <AcknowledgedTextField input label="卷标题"
           value={volume.title}
-          onChange={event => onUpdateNode(volume.id!, { title: event.target.value })}
+          onCommit={(value, expected) => onUpdateNode(volume.id!, { title: value }, { expected: { title: expected as string } })}
           className="text-lg font-bold bg-transparent text-text-primary outline-none flex-1"
         />
         <div className="flex items-center gap-1.5">
@@ -143,27 +142,22 @@ export default function OutlineVolumeDetail({
       {multiWorldEnabled && worldGroups.length > 1 && (
         <div className="flex items-center gap-2">
           <label className="text-xs text-text-muted">本卷所属世界</label>
-          <select
-            value={volume.worldGroupId ?? ''}
-            onChange={event => onUpdateNode(volume.id!, { worldGroupId: event.target.value ? Number(event.target.value) : null })}
+          <AcknowledgedTextField label="本卷所属世界"
+            value={volume.worldGroupId === undefined ? undefined : volume.worldGroupId == null ? '' : String(volume.worldGroupId)}
+            onCommit={(value, expected) => onUpdateNode(volume.id!, { worldGroupId: value ? Number(value) : null }, { expected: { worldGroupId: expected === undefined ? undefined : expected === '' ? null : Number(expected) } })}
+            choices={[{ value: '', label: '未指定' }, ...worldGroups.map(group => ({ value: String(group.id), label: `${group.icon || '🌐'} ${group.name}` }))]}
             className="px-2 py-1 bg-bg-surface border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent cursor-pointer"
-          >
-            <option value="">未指定</option>
-            {worldGroups.map(group => (
-              <option key={group.id} value={group.id}>{group.icon || '🌐'} {group.name}</option>
-            ))}
-          </select>
+          />
         </div>
       )}
 
       <div>
         <label className="text-xs text-text-muted mb-1 block">卷情节摘要</label>
-        <AutoResizeTextarea
+        <AcknowledgedTextField autoGrow label="卷情节摘要"
           value={volume.summary}
-          onChange={event => onUpdateNode(volume.id!, { summary: event.target.value })}
+          onCommit={(value, expected) => onUpdateNode(volume.id!, { summary: value }, { expected: { summary: expected as string } })}
           placeholder="描述本卷的核心冲突、关键转折和主要情节..."
-          minRows={3}
-          maxRows={10}
+          rows={3}
           className="w-full px-3 py-2 bg-bg-surface border border-border rounded-md text-text-secondary text-sm focus:outline-none focus:border-accent"
         />
       </div>

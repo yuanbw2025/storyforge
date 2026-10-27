@@ -16,12 +16,12 @@
     "cases": 160,
     "leafFieldChecks": 336,
     "operationChecks": 1233,
-    "notRun": 102,
+    "notRun": 101,
     "passed": 0,
     "failed": 0,
     "faultChecks": 2013,
     "modeChecks": 75,
-    "running": 58
+    "running": 59
   },
   "sourceInventory": {
     "baseline": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
@@ -1974,6 +1974,30 @@
       "symptom": "新建回执迟到时追加进另一个世界/工作区缓存。",
       "evidence": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
       "remaining": "剩余矩阵、最终交付检查、可获得原生包和发行未完成。"
+    },
+    {
+      "id": "OUTLINE-TITLE-HALF-COMMIT-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourcePin": "tests/acceptance/longform-stability/outline-author-save-20261027.json",
+      "symptom": "关联正文标题写失败时，旧章纲标题已提前提交。",
+      "evidence": "tests/acceptance/longform-stability/outline-author-save-20261027.json",
+      "remaining": "结构操作、完整故障矩阵、最终版本检查与发行继续。"
+    },
+    {
+      "id": "OUTLINE-PHANTOM-SAVE-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourcePin": "tests/acceptance/longform-stability/outline-author-save-20261027.json",
+      "symptom": "记录删除、0行写入或归属变化时，旧保存路径仍可能完成或发布缓存。",
+      "evidence": "tests/acceptance/longform-stability/outline-author-save-20261027.json",
+      "remaining": "结构操作、完整故障矩阵、最终版本检查与发行继续。"
+    },
+    {
+      "id": "OUTLINE-INVALID-AUTHOR-PATCH-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourcePin": "tests/acceptance/longform-stability/outline-author-save-20261027.json",
+      "symptom": "非法标题或归属字段可先进入数据库，再在显示阶段报错。",
+      "evidence": "tests/acceptance/longform-stability/outline-author-save-20261027.json",
+      "remaining": "结构操作、完整故障矩阵、最终版本检查与发行继续。"
     }
   ],
   "evidenceSchema": {
@@ -17534,15 +17558,15 @@
       "module": "outline",
       "title": "卷章手工操作：插入、修改、移动、重排、删除、清空",
       "profile": "MANUAL",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
-        "downstream": "NOT_RUN",
-        "recover": "NOT_RUN"
+        "open": "PASS",
+        "input": "PASS",
+        "edit_official": "RUNNING",
+        "save": "RUNNING",
+        "reload": "RUNNING",
+        "downstream": "RUNNING",
+        "recover": "RUNNING"
       },
       "fieldChecks": [],
       "assertions": [
@@ -17553,10 +17577,24 @@
         "SAVE",
         "RACE"
       ],
-      "candidateTests": [],
+      "candidateTests": [
+        "tests/regression/R-OUTLINE-author-save-atomic.test.ts",
+        "tests/e2e/longform-outline-save.spec.ts"
+      ],
       "source": [],
-      "evidence": [],
-      "defects": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_NATIVE_INDEXEDDB_AND_REGRESSION",
+          "sourcePin": "See receipt working-tree SHA256 files; parent 099e7f34 is not the tested source by itself",
+          "receipt": "tests/acceptance/longform-stability/outline-author-save-20261027.json",
+          "summary": "卷、章文本保存与标题原子同步、配额重试、迟到回执、字段冲突和异常读取已验证；插入、移动、重排、删除与清空继续，不记整例PASS。"
+        }
+      ],
+      "defects": [
+        "OUTLINE-TITLE-HALF-COMMIT-20261027",
+        "OUTLINE-PHANTOM-SAVE-20261027",
+        "OUTLINE-INVALID-AUTHOR-PATCH-20261027"
+      ],
       "faultChecks": [
         {
           "profile": "LOAD",
@@ -23141,7 +23179,7 @@
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     }
   ],
-  "executionStatus": "CHARACTER_NORMAL_AND_CODEX_REAL_TRANSPORT_VERIFIED_CONTINUING",
+  "executionStatus": "OUTLINE_TEXT_ATOMIC_SAVE_VERIFIED_STRUCTURAL_AND_WRITING_FLOWS_CONTINUING",
   "passPolicy": {
     "closedCase": "全部适用步骤/字段/模式/故障/派生子用例有本轮回执；PASS不推导已发行。",
     "statuses": [
@@ -23694,6 +23732,14 @@
       "date": "2026-10-27",
       "unit": "18 real codex category normal paths and provider schema budget",
       "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-27",
+      "unit": "Outline author text acknowledgement and atomic chapter-title synchronization",
+      "sourcePin": "tests/acceptance/longform-stability/outline-author-save-20261027.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false
