@@ -79,13 +79,13 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
   useEffect(() => {
     if (!storyCore) return
     setValues({
-      logline:         storyCore.logline || '',
-      concept:         storyCore.concept || '',
-      theme:           storyCore.theme || '',
-      centralConflict: storyCore.centralConflict || '',
-      plotPattern:     storyCore.plotPattern || '',
-      mainPlot:        storyCore.mainPlot || '',
-      subPlots:        storyCore.subPlots || '',
+      logline:         storyCore.logline ?? '',
+      concept:         storyCore.concept ?? '',
+      theme:           storyCore.theme ?? '',
+      centralConflict: storyCore.centralConflict ?? '',
+      plotPattern:     storyCore.plotPattern ?? '',
+      mainPlot:        storyCore.mainPlot ?? '',
+      subPlots:        storyCore.subPlots ?? '',
     })
   }, [storyCore])
 
@@ -117,7 +117,7 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
       <div className="flex flex-wrap md:block md:w-40 shrink-0 gap-1 space-y-0.5 pt-1" aria-label="故事字段">
         {FIELDS.map(f => {
           const active = activeKey === f.key
-          const hasContent = !!values[f.key]
+          const hasContent = values[f.key] != null && values[f.key] !== ''
           const isFieldStreaming = copilot.busy && runningKey === f.key
           const hasPendingCandidate = pendingStoryCoreField === f.key
           return (
@@ -137,7 +137,7 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
                 </p>
                 {hasContent && (
                   <p className="text-[10px] text-text-muted truncate">
-                    {values[f.key].slice(0, 12)}…
+                    {typeof values[f.key] === 'string' ? `${values[f.key].slice(0, 12)}…` : '格式异常'}
                   </p>
                 )}
               </div>
@@ -163,7 +163,7 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
           <div key={f.key} className={activeKey === f.key ? '' : 'hidden'}>
             <FieldEditor
               field={f}
-              value={values[f.key] || ''}
+              value={values[f.key] ?? ''}
               onChange={v => {
                 setValues(prev => ({ ...prev, [f.key]: v }))
                 return save(f.key, v)

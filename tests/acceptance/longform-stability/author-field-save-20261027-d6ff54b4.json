@@ -1,0 +1,73 @@
+{
+  "caseId": [
+    "LF-036",
+    "LF-037",
+    "LF-038",
+    "LF-039",
+    "LF-040",
+    "LF-041",
+    "LF-042",
+    "LF-043",
+    "LF-044",
+    "LF-045",
+    "LF-046",
+    "LF-047",
+    "LF-048",
+    "LF-049",
+    "LF-050",
+    "LF-051",
+    "LF-052",
+    "LF-053",
+    "LF-054",
+    "LF-055",
+    "LF-056",
+    "LF-057",
+    "LF-058",
+    "LF-059",
+    "LF-060"
+  ],
+  "baselineCommit": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
+  "validatedCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+  "buildVersion": "4.0.4",
+  "packageSha256WhenNative": null,
+  "platformAndDevice": "macOS host; isolated Chromium desktop via Playwright 1.62.1",
+  "fixtureId": "longform-author-save: six fresh synthetic-work browser contexts",
+  "profileAndIsolation": "No author profile or manuscript database; outside-loopback requests blocked; no model requests in these tests.",
+  "evidenceType": "SOURCE_REPRO",
+  "stepsAndExpected": [
+    "23 scalar fields: write, blur save, exact readback, reload, clear, reload empty",
+    "7 structured text leaves: write and clear independently without deleting siblings",
+    "Divinity boolean: hide/show retains saved children across reload",
+    "QuotaExceededError at real table update in origin/natural/humanity/story-core: draft retained, error visible, explicit retry and reload"
+  ],
+  "observedResult": {
+    "browserTestsPassed": 6,
+    "pageErrors": 0,
+    "relatedTestsPassed": 215,
+    "relatedFiles": 15,
+    "sourceReprosBeforeFix": 11,
+    "wholeCasePass": false
+  },
+  "fieldReadbackAndProtectedHashes": {
+    "readback": "Exact field values and structured sibling objects asserted in browser; queued A/B workspace protection asserted with real IndexedDB contract fixtures.",
+    "wholeDatabaseProtectedHashes": null,
+    "limitation": "Full lifecycle, platform and fault matrix not yet complete."
+  },
+  "contextManifestAndReceiptWhenAI": null,
+  "requestCountsAndAttemptsWhenAI": {
+    "modelRequestsForControlledUnit": 0
+  },
+  "unhandledErrors": 0,
+  "defectAndPr": {
+    "defect": "AUTHOR-FIELD-SAVE-20261027",
+    "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+    "pullRequest": null
+  },
+  "releaseStatus": "NOT_RELEASED",
+  "testFiles": [
+    "tests/e2e/longform-author-save.spec.ts",
+    "tests/regression/R-INLINE-SAVE-RECOVERY.test.tsx",
+    "tests/regression/R-WORLDVIEW-AUTHOR-SAVE.test.ts"
+  ],
+  "priorFailuresRetained": "Two earlier browser harness failures retained privately; final source browser run has six passing tests. No frozen corpus or old receipt was overwritten."
+}

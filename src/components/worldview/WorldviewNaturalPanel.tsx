@@ -68,13 +68,13 @@ export default function WorldviewNaturalPanel({ project }: Props) {
   useEffect(() => {
     if (!worldview) return
     setValues({
-      worldStructure:   worldview.worldStructure || '',
-      worldDimensions:  worldview.worldDimensions || '',
-      continentLayout:  worldview.continentLayout || '',
-      regionDimensions: worldview.regionDimensions || '',
-      mountainsRivers:  worldview.mountainsRivers || '',
-      climateByRegion:  worldview.climateByRegion || '',
-      naturalResourceOverview: worldview.naturalResourceOverview || '',
+      worldStructure:   worldview.worldStructure ?? '',
+      worldDimensions:  worldview.worldDimensions ?? '',
+      continentLayout:  worldview.continentLayout ?? '',
+      regionDimensions: worldview.regionDimensions ?? '',
+      mountainsRivers:  worldview.mountainsRivers ?? '',
+      climateByRegion:  worldview.climateByRegion ?? '',
+      naturalResourceOverview: worldview.naturalResourceOverview ?? '',
     })
     setNaturalResources(worldview.naturalResources || { ...EMPTY_NATURAL_RESOURCES })
   }, [worldview])
@@ -166,7 +166,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
             <div key={f.key} className={activeKey === f.key ? '' : 'hidden'}>
               <SimpleFieldEditor
                 field={f}
-                value={values[f.key] || ''}
+                value={values[f.key] ?? ''}
                 onChange={v => {
                   setValues(prev => ({ ...prev, [f.key]: v }))
                   return save({ [f.key]: v })
@@ -192,7 +192,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
                   <CodexPanel
                     project={project}
                     fixedCategoryKeys={NATURAL_CODEX_KEYS[f.key]}
-                    extractionSourceText={values[f.key] || ''}
+                    extractionSourceText={values[f.key] ?? ''}
                     embedded
                   />
                 </div>
@@ -203,7 +203,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
             {/* 全貌(上):自然资源整体概述,带 AI 生成,与其它方面一致 */}
             <SimpleFieldEditor
               field={{ key: 'naturalResourceOverview', emoji: '🌿', label: '自然资源', desc: '矿产 / 灵材 / 动植物等自然产出的总体分布、丰饶程度与特点' }}
-              value={values.naturalResourceOverview || ''}
+              value={values.naturalResourceOverview ?? ''}
               onChange={v => {
                 setValues(prev => ({ ...prev, naturalResourceOverview: v }))
                 return save({ naturalResourceOverview: v })

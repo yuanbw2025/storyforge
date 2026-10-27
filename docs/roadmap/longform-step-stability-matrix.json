@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "qa-execution-inventory-not-runtime-registry",
-  "updatedAt": "2026-10-27",
+  "updatedAt": "2026-10-27T03:48:03.114929+00:00",
   "baselineCommit": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
   "scope": "分步骤长篇、其通用设置与数据生命周期；节点/Agent只验共享链路互操作",
   "statusPolicy": "已有历史测试/源反例/打开页面都不能自动把完整功能标PASS。",
@@ -16,12 +16,12 @@
     "cases": 158,
     "leafFieldChecks": 324,
     "operationChecks": 1226,
-    "notRun": 156,
+    "notRun": 131,
     "passed": 0,
     "failed": 0,
     "faultChecks": 1995,
     "modeChecks": 75,
-    "running": 2
+    "running": 27
   },
   "sourceInventory": {
     "baseline": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
@@ -1851,6 +1851,14 @@
       "state": "OPEN_DIAGNOSTIC_EVIDENCE",
       "symptom": "最终源码一次上游尝试约10.5秒后传输失败，未收到HTTP状态；上游是否接收和用量未知，页面未出现未处理异常。",
       "next": "原失败独立保留；非生成HEAD收到404后，新隔离作品的一次有记录请求成功，不据此关闭旧失败。"
+    },
+    {
+      "id": "AUTHOR-FIELD-SAVE-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+      "symptom": "失败后输入丢失、迟到属性覆盖草稿、保存结果被吞、清空回弹、旧作用域覆盖当前缓存、结构子项互相覆盖。",
+      "evidence": "11项失败反例保留本地；修复后215项相关测试与6项隔离浏览器测试通过。",
+      "remaining": "不替代生成模式、其余故障、原生客户端和发行验证。"
     }
   ],
   "evidenceSchema": {
@@ -4585,19 +4593,19 @@
       "module": "worldview-origin",
       "title": "世界来源：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
-        "downstream": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -4605,7 +4613,7 @@
           "key": "worldOrigin",
           "label": "世界来源",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -4624,7 +4632,27 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "result": "PARTIAL_LIVE_CHAIN_PASSED",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "requestCount": 2,
+          "knownTokens": 6040,
+          "summary": "新建候选不写正式字段；候选修改刷新、明确采纳刷新、手改保存刷新、真实重写读取已保存字段、拒绝不写回全部通过。非空扩写、润色与其他故障待验证。",
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-world-origin-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "worldOrigin",
@@ -4634,8 +4662,8 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
+        "expand": "RUNNING",
+        "rewrite": "PASS",
         "polish": "NOT_RUN"
       },
       "faultChecks": [
@@ -4723,18 +4751,18 @@
       "module": "worldview-origin",
       "title": "力量体系：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -4743,7 +4771,7 @@
           "key": "powerHierarchy",
           "label": "力量体系",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -4762,7 +4790,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "powerHierarchy",
@@ -4861,18 +4899,18 @@
       "module": "worldview-origin",
       "title": "神明与信仰：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -4881,19 +4919,19 @@
           "key": "divineNames",
           "label": "神明名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         },
         {
           "key": "divineRank",
           "label": "神明层级",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         },
         {
           "key": "divineRules",
           "label": "信仰规则",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -4912,7 +4950,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "divineDesign",
@@ -5011,18 +5059,18 @@
       "module": "worldview-natural",
       "title": "世界结构：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -5031,7 +5079,7 @@
           "key": "worldStructure",
           "label": "世界结构",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -5050,7 +5098,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "worldStructure",
@@ -5149,18 +5207,18 @@
       "module": "worldview-natural",
       "title": "疆域尺寸：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -5169,7 +5227,7 @@
           "key": "worldDimensions",
           "label": "疆域尺寸",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -5188,7 +5246,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "worldDimensions",
@@ -5287,18 +5355,18 @@
       "module": "worldview-natural",
       "title": "地貌分布：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -5307,7 +5375,7 @@
           "key": "continentLayout",
           "label": "地貌分布",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -5326,7 +5394,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "continentLayout",
@@ -5425,18 +5503,18 @@
       "module": "worldview-humanity",
       "title": "城池重镇：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -5445,7 +5523,7 @@
           "key": "regionDimensions",
           "label": "城池重镇",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -5464,7 +5542,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "regionDimensions",
@@ -5563,18 +5651,18 @@
       "module": "worldview-natural",
       "title": "山川水系：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -5583,7 +5671,7 @@
           "key": "mountainsRivers",
           "label": "山川水系",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -5602,7 +5690,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "mountainsRivers",
@@ -5701,18 +5799,18 @@
       "module": "worldview-natural",
       "title": "气候环境：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -5721,7 +5819,7 @@
           "key": "climateByRegion",
           "label": "气候环境",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -5740,7 +5838,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "climateByRegion",
@@ -5839,18 +5947,18 @@
       "module": "worldview-natural",
       "title": "自然资源概述：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -5859,7 +5967,7 @@
           "key": "naturalResourceOverview",
           "label": "自然资源概述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -5878,7 +5986,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "naturalResourceOverview",
@@ -5977,18 +6095,18 @@
       "module": "worldview-natural",
       "title": "自然资源明细：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -5997,25 +6115,25 @@
           "key": "rareCreatures",
           "label": "珍禽异兽/牲畜",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         },
         {
           "key": "herbs",
           "label": "灵药/粮食作物",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         },
         {
           "key": "minerals",
           "label": "矿石/金属",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         },
         {
           "key": "others",
           "label": "其他特产",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -6034,7 +6152,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "naturalResources",
@@ -6133,18 +6261,18 @@
       "module": "worldview-humanity",
       "title": "种族与民族：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -6153,7 +6281,7 @@
           "key": "races",
           "label": "种族与民族",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -6172,7 +6300,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "races",
@@ -6271,18 +6409,18 @@
       "module": "worldview-humanity",
       "title": "势力分布：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -6291,7 +6429,7 @@
           "key": "factionLayout",
           "label": "势力分布",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -6310,7 +6448,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "factionLayout",
@@ -6409,18 +6557,18 @@
       "module": "worldview-humanity",
       "title": "政治制度：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -6429,7 +6577,7 @@
           "key": "politicsOverview",
           "label": "政治制度",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -6448,7 +6596,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "politicsOverview",
@@ -6547,18 +6705,18 @@
       "module": "worldview-humanity",
       "title": "经济制度：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -6567,7 +6725,7 @@
           "key": "economyOverview",
           "label": "经济制度",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -6586,7 +6744,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "economyOverview",
@@ -6685,18 +6853,18 @@
       "module": "worldview-humanity",
       "title": "文化制度：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -6705,7 +6873,7 @@
           "key": "cultureOverview",
           "label": "文化制度",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -6724,7 +6892,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "cultureOverview",
@@ -6823,18 +7001,18 @@
       "module": "worldview-humanity",
       "title": "矛盾冲突：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -6843,7 +7021,7 @@
           "key": "internalConflicts",
           "label": "矛盾冲突",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -6862,7 +7040,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "internalConflicts",
@@ -6961,18 +7149,18 @@
       "module": "worldview-humanity",
       "title": "道具与器物：逐字段生成、采纳、手改和回读",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -6981,7 +7169,7 @@
           "key": "itemDesign",
           "label": "道具与器物",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -7000,7 +7188,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "worldviews",
       "registryField": "itemDesign",
@@ -7099,18 +7297,18 @@
       "module": "story-design",
       "title": "一句话故事：生成与后续章纲读取",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -7119,7 +7317,7 @@
           "key": "logline",
           "label": "一句话故事",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -7137,7 +7335,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "storyCores",
       "registryField": "logline",
@@ -7231,18 +7439,18 @@
       "module": "story-design",
       "title": "故事概念：生成与后续章纲读取",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -7251,7 +7459,7 @@
           "key": "concept",
           "label": "故事概念",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -7269,7 +7477,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "storyCores",
       "registryField": "concept",
@@ -7363,18 +7581,18 @@
       "module": "story-design",
       "title": "故事主题：生成与后续章纲读取",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -7383,7 +7601,7 @@
           "key": "theme",
           "label": "故事主题",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -7401,7 +7619,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "storyCores",
       "registryField": "theme",
@@ -7495,18 +7723,18 @@
       "module": "story-design",
       "title": "核心冲突：生成与后续章纲读取",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -7515,7 +7743,7 @@
           "key": "centralConflict",
           "label": "核心冲突",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -7533,7 +7761,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "storyCores",
       "registryField": "centralConflict",
@@ -7627,18 +7865,18 @@
       "module": "story-design",
       "title": "故事模式：生成与后续章纲读取",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -7647,7 +7885,7 @@
           "key": "plotPattern",
           "label": "故事模式",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -7665,7 +7903,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "storyCores",
       "registryField": "plotPattern",
@@ -7759,18 +8007,18 @@
       "module": "story-design",
       "title": "故事主线意图：生成与后续章纲读取",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -7779,7 +8027,7 @@
           "key": "mainPlot",
           "label": "故事主线意图",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -7797,7 +8045,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "storyCores",
       "registryField": "mainPlot",
@@ -7891,18 +8149,18 @@
       "module": "story-design",
       "title": "故事复线意图：生成与后续章纲读取",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -7911,7 +8169,7 @@
           "key": "subPlots",
           "label": "故事复线意图",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING"
         }
       ],
       "assertions": [
@@ -7929,7 +8187,17 @@
       "source": [
         "src/lib/registry/field-registry.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+          "result": "PARTIAL_AUTHOR_EDIT_PATH_PASSED",
+          "summary": "真实隔离浏览器完成手改、失焦保存、刷新、清空、再刷新；对应结构字段逐子项与开关验证。生成/模式/全部故障和平台尚未完成，不计整例PASS。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        }
+      ],
       "defects": [],
       "registryTarget": "storyCores",
       "registryField": "subPlots",
@@ -20153,7 +20421,7 @@
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     }
   ],
-  "executionStatus": "PLAN_AND_INVENTORY_IN_PROGRESS",
+  "executionStatus": "AUTHOR_FIELD_PATHS_VERIFIED_CONTINUING_FULL_MATRIX",
   "passPolicy": {
     "closedCase": "全部适用步骤/字段/模式/故障/派生子用例有本轮回执；PASS不推导已发行。",
     "statuses": [
@@ -20581,6 +20849,64 @@
         "merged": false,
         "latestMainIntegrationVerificationPending": true
       }
+    },
+    {
+      "date": "2026-10-27",
+      "unit": "author-field-save continuation",
+      "status": "PARTIAL_PATH_VERIFIED_CONTINUING",
+      "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+      "caseIds": [
+        "LF-036",
+        "LF-037",
+        "LF-038",
+        "LF-039",
+        "LF-040",
+        "LF-041",
+        "LF-042",
+        "LF-043",
+        "LF-044",
+        "LF-045",
+        "LF-046",
+        "LF-047",
+        "LF-048",
+        "LF-049",
+        "LF-050",
+        "LF-051",
+        "LF-052",
+        "LF-053",
+        "LF-054",
+        "LF-055",
+        "LF-056",
+        "LF-057",
+        "LF-058",
+        "LF-059",
+        "LF-060"
+      ],
+      "scalarFields": 23,
+      "structuredTextLeaves": 7,
+      "booleanControls": 1,
+      "browserTestsPassed": 6,
+      "relatedTestsPassed": 215,
+      "relatedTestFiles": 15,
+      "modelCallsForThisControlledUnit": 0,
+      "releaseStatus": "NOT_RELEASED",
+      "overallPlanCompleted": false,
+      "failedHarnessRunsPreserved": "第一次故事按钮包含摘要导致定位失配；第二次遗漏展开原生结构明细。原记录保留；修正脚本后6项全过，不记为产品崩溃。"
+    },
+    {
+      "date": "2026-10-27",
+      "unit": "worldOrigin live smoke",
+      "sourceCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+      "status": "PARTIAL_LIVE_CHAIN_VERIFIED_CONTINUING",
+      "successfulChainRequests": 2,
+      "knownSuccessfulChainTokens": 6040,
+      "otherRetainedCompletedRequests": 1,
+      "otherRetainedKnownTokens": 3246,
+      "zeroRequestHarnessFailures": 1,
+      "pageErrors": 0,
+      "wholeCasePass": false,
+      "overallPlanCompleted": false,
+      "releaseStatus": "NOT_RELEASED"
     }
   ]
 }

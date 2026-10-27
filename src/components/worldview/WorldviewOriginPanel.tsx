@@ -68,8 +68,8 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
 
   // 同步 store -> 本地 state
   useEffect(() => {
-    setWorldOrigin(worldview?.worldOrigin || '')
-    setPowerHierarchy(worldview?.powerHierarchy || '')
+    setWorldOrigin(worldview?.worldOrigin ?? '')
+    setPowerHierarchy(worldview?.powerHierarchy ?? '')
     setDivineDesign(worldview?.divineDesign || { ...EMPTY_DIVINE_DESIGN })
   }, [worldview])
 

@@ -7,7 +7,7 @@ import { containTextareaWheel, parseCssPixels } from './textarea-scroll'
 type InlineSave = (value: string) => void | Promise<void>
 
 /** UI draft state only; persistence remains with the registered domain caller. */
-function useInlineDraft(value: string, onChange: InlineSave) {
+function useInlineDraft(value: string, onChange: InlineSave, readable = true) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   const [baseline, setBaseline] = useState(value)
@@ -22,6 +22,8 @@ function useInlineDraft(value: string, onChange: InlineSave) {
   const editSaveRef = useRef(onChange)
   const savingRef = useRef<Promise<void> | null>(null)
   const errorRef = useRef('')
+  const readableRef = useRef(readable)
+  readableRef.current = readable
   latestValueRef.current = value
   latestSaveRef.current = onChange
 
@@ -49,6 +51,7 @@ function useInlineDraft(value: string, onChange: InlineSave) {
   const commit = useCallback((): Promise<void> => {
     if (savingRef.current) return savingRef.current
     if (!editingRef.current) return Promise.resolve()
+    if (!readableRef.current) return Promise.reject(new Error('原始字段格式异常，已保留输入；请先恢复字段后再保存。'))
     if (composingRef.current) return Promise.reject(new Error('输入法仍在组合文字，请完成输入后再保存。'))
     const text = draftRef.current
     if (text === baselineRef.current && !errorRef.current) {
@@ -94,6 +97,18 @@ function useInlineDraft(value: string, onChange: InlineSave) {
   return { editing, draft, saving, error, begin, change, cancel, commit, saveFromEvent, composingRef }
 }
 
+function InvalidInlineValue({ value, draft }: { value: unknown; draft?: string }) {
+  let raw: string
+  try { raw = JSON.stringify(value, null, 2) ?? String(value) }
+  catch { raw = '原值不能直接展示。请先通过“版本与导出 → 导出与备份”保留完整项目副本。' }
+  return <div role="alert" className="space-y-2 rounded border border-error/30 bg-error/5 p-3 text-xs text-text-secondary">
+    <p className="text-error">字段内容格式异常，应为文本。原始数据已保留，未自动覆盖。</p>
+    <details><summary className="cursor-pointer">查看原始字段内容</summary><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all">{raw}</pre></details>
+    {draft !== undefined && <div><p>未保存的输入仍保留在当前页：</p><pre className="whitespace-pre-wrap break-all">{draft}</pre></div>}
+    <p>请先从“版本与导出 → 导出与备份”保存完整项目副本，再恢复异常字段。</p>
+  </div>
+}
+
 function InlineSaveStatus({ error, saving, retry }: { error: string; saving: boolean; retry: () => void }) {
   return <>
     {saving && <span role="status" className="mt-1 block text-xs text-text-muted">正在保存…</span>}
@@ -107,7 +122,9 @@ function InlineSaveStatus({ error, saving, retry }: { error: string; saving: boo
 export function InlineInput({ value, onChange, placeholder, className, prefix, suffix }: {
   value: string; onChange: InlineSave; placeholder?: string; className?: string; prefix?: string; suffix?: string
 }) {
-  const editor = useInlineDraft(value, onChange)
+  const readable = value == null || typeof value === 'string'
+  const editor = useInlineDraft(typeof value === 'string' ? value : '', onChange, readable)
+  if (!readable) return <InvalidInlineValue value={value} draft={editor.editing ? editor.draft : undefined} />
   if (editor.editing) return <div className="min-w-0">
     <input value={editor.draft} disabled={editor.saving}
       onCompositionStart={() => { editor.composingRef.current = true }}
@@ -129,7 +146,8 @@ export function InlineInput({ value, onChange, placeholder, className, prefix, s
 export function InlineTextarea({ value, onChange, placeholder, className, minRows = 2, maxRows = 16 }: {
   value: string; onChange: InlineSave; placeholder?: string; className?: string; minRows?: number; maxRows?: number
 }) {
-  const editor = useInlineDraft(value, onChange)
+  const readable = value == null || typeof value === 'string'
+  const editor = useInlineDraft(typeof value === 'string' ? value : '', onChange, readable)
   const ref = useRef<HTMLTextAreaElement>(null)
   const resize = useCallback(() => {
     const el = ref.current
@@ -145,6 +163,7 @@ export function InlineTextarea({ value, onChange, placeholder, className, minRow
     el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
   }, [maxRows, minRows])
   useEffect(() => { if (editor.editing) resize() }, [editor.draft, editor.editing, resize])
+  if (!readable) return <InvalidInlineValue value={value} draft={editor.editing ? editor.draft : undefined} />
   if (editor.editing) return <div className="min-w-0">
     <textarea ref={ref} value={editor.draft} disabled={editor.saving}
       onCompositionStart={() => { editor.composingRef.current = true }}

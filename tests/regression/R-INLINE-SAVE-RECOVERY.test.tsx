@@ -82,4 +82,19 @@ describe.each([['single line', InlineInput], ['multiple lines', InlineTextarea]]
     expect(save).toHaveBeenCalledWith('中文输入')
   })
 
+  it('preserves a dirty draft when a corrupt read arrives and blocks an unintended overwrite', async () => {
+    const original = vi.fn().mockResolvedValue(undefined), late = vi.fn().mockResolvedValue(undefined)
+    const ui = await mount(Component, '旧来源', original)
+    await ui.edit('必须保留的未保存输入')
+    await ui.render({ broken: '迟到坏数据' } as unknown as string, late)
+    await act(async () => { await expect(flushPendingEditsV1()).rejects.toThrow('格式异常') })
+    expect(ui.host.querySelector('[role=alert]')?.textContent).toContain('必须保留的未保存输入')
+    expect(original).not.toHaveBeenCalled(); expect(late).not.toHaveBeenCalled()
+    await ui.render('旧来源', late)
+    expect((ui.host.querySelector('input,textarea') as HTMLInputElement)?.value).toBe('必须保留的未保存输入')
+    await act(async () => { await flushPendingEditsV1() })
+    expect(original).toHaveBeenCalledWith('必须保留的未保存输入')
+    expect(late).not.toHaveBeenCalled()
+  })
+
 })

@@ -74,14 +74,14 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
   useEffect(() => {
     if (!worldview) return
     setValues({
-      races:     worldview.races || '',
-      factions:  worldview.factionLayout || '',
-      cities:    worldview.regionDimensions || '',
-      politics: worldview.politicsOverview || '',
-      economy: worldview.economyOverview || '',
-      culture: worldview.cultureOverview || '',
-      conflicts: worldview.internalConflicts || '',
-      items:     worldview.itemDesign || '',
+      races:     worldview.races ?? '',
+      factions:  worldview.factionLayout ?? '',
+      cities:    worldview.regionDimensions ?? '',
+      politics: worldview.politicsOverview ?? '',
+      economy: worldview.economyOverview ?? '',
+      culture: worldview.cultureOverview ?? '',
+      conflicts: worldview.internalConflicts ?? '',
+      items:     worldview.itemDesign ?? '',
     })
   }, [worldview])
 
@@ -200,7 +200,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
               {/* 全貌（上）：现有字段本身就是这个方面的整体概述，带 AI 生成 */}
               <HumanityFieldEditor
                 meta={f}
-                value={values[f.key] || ''}
+                value={values[f.key] ?? ''}
                 onChange={v => {
                   setValues(prev => ({ ...prev, [f.key]: v }))
                   return save(f.field, v)
@@ -225,7 +225,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
                   <CodexPanel
                     project={project}
                     fixedCategoryKeys={HUMANITY_CODEX_KEYS[f.key]}
-                    extractionSourceText={values[f.key] || ''}
+                    extractionSourceText={values[f.key] ?? ''}
                     embedded
                   />
                 </div>

@@ -215,6 +215,10 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
   }
 
   const openExtractor = (operation: 'extract' | 'enrich') => {
+    if (operation === 'extract' && typeof extractionSourceText !== 'string') {
+      toast.error('拆分来源文本格式异常，请先恢复上游字段。')
+      return
+    }
     if (!scopeReady) {
       toast.error('世界数据尚未加载完成，请稍后再试。')
       return
