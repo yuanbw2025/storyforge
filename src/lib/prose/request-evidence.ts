@@ -1,5 +1,6 @@
 import type { AIRequestSettingsV1 } from '../ai/client'
 import type { ChatMessage } from '../types'
+import { supportsAgnesThinkingModeV1 } from '../ai/agnes-parameters'
 
 export interface ProseRenderedRequestV1 {
   version: 'prose-rendered-request-v1'
@@ -28,6 +29,8 @@ export function parseProseRequestSettingsV1(value: unknown): AIRequestSettingsV1
       if (!['minimal', 'low', 'medium', 'high'].includes(String(value))) throw new Error('正文推理参数无效。')
     } else if (key === 'thinking') {
       if (!exact(value, ['type']) || !['enabled', 'disabled'].includes(String((value as { type: string }).type))) throw new Error('正文推理模式无效。')
+    } else if (key === 'chat_template_kwargs') {
+      if (!supportsAgnesThinkingModeV1(row) || !exact(value, ['enable_thinking']) || typeof (value as { enable_thinking: unknown }).enable_thinking !== 'boolean') throw new Error('正文思考输出参数无效。')
     } else if (key === 'response_format') {
       if (!exact(value, ['type']) || (value as { type: unknown }).type !== 'json_object') throw new Error('正文JSON输出模式无效。')
     } else throw new Error(`正文参数证据禁止保存 ${key}。`)

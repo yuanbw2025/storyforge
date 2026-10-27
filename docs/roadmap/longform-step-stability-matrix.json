@@ -19009,6 +19009,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/real-review-modes-20261028-ddcf9275.json",
           "summary": "表达与重复实模评审及刷新通过；追读力不完整JSON严格拒绝，原稿保留，后续继续排查请求。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/quality-review-transport-20261028.json",
+          "summary": "三种全章评审参数与回执一致、节点评审缓存复用；83项回归及21条浏览器路径通过，最终能力谓词源另有1条三模式UI续验。实模另跑，原失败保留。"
         }
       ],
       "defects": [],
@@ -24179,6 +24184,14 @@
       "date": "2026-10-28",
       "unit": "Original full CI failure triage and acknowledged-view fixture refresh",
       "sourcePin": "tests/acceptance/longform-stability/ci-outline-view-refresh-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Bounded whole-review transport evidence and shared Node cache alignment",
+      "sourcePin": "tests/acceptance/longform-stability/quality-review-transport-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

@@ -74,6 +74,41 @@ test('全文请求覆盖4000字后的结尾，三个模式保存报告，刷新�
   await expect(page.locator('.tiptap-editor')).toContainText('作者新增动作')
 })
 
+test('bounded Agnes review records the exact thinking toggle for all three modes and reloads with no request', async ({ page }) => {
+  const requests: any[] = []
+  const target = await setup(page)
+  await page.evaluate(async () => {
+    const { useAIConfigStore } = await (new Function('return import("/storyforge/src/stores/ai-config.ts")'))()
+    useAIConfigStore.setState({ config: { ...useAIConfigStore.getState().config, provider: 'agnes', model: 'agnes-2.5-flash', apiKey: 'isolated-test-token' } })
+  })
+  await page.route('https://whole-review.invalid/**', route => {
+    const body = route.request().postDataJSON(); requests.push(body)
+    expect(body.chat_template_kwargs).toEqual({ enable_thinking: false })
+    expect(body.response_format).toEqual({ type: 'json_object' })
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ summary: '本轮只给可定位建议，保留原稿。', strengths: ['保留安静清点'], issues: [] }) } }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) })
+  })
+  for (const [mode, label] of [['quality', '审校'], ['style', '表达与重复'], ['readability', '追读力']]) {
+    await page.getByRole('button', { name: label, exact: true }).click()
+    await page.getByRole('button', { name: '开始检测', exact: true }).click()
+    await expect(page.getByTestId('whole-chapter-quality-report')).toContainText('本轮只给可定位建议')
+    const settings = await page.evaluate(async ({ target, mode }) => {
+      const imp = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+      const [{ resolveScope }, { readLatestWholeChapterQualityReviewV1 }] = await Promise.all([imp('/storyforge/src/lib/workspace/scope.ts'), imp('/storyforge/src/lib/agent/run/quality-review-durable.ts')])
+      return (await readLatestWholeChapterQualityReviewV1({ scope: await resolveScope({ projectId: target.projectId }), chapterId: target.chapterId, mode }))?.report.reviewer.settings
+    }, { target, mode })
+    expect(settings.parameters.chat_template_kwargs).toEqual(requests.at(-1).chat_template_kwargs)
+  }
+  expect(requests).toHaveLength(3)
+  await page.reload(); await page.getByRole('button', { name: '质量审校', exact: true }).click()
+  await page.getByRole('button', { name: '追读力', exact: true }).click()
+  await expect(page.getByTestId('whole-chapter-quality-report')).toContainText('本轮只给可定位建议')
+  expect(requests).toHaveLength(3)
+  expect(await page.evaluate(async id => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return (await db.chapters.get(id)).content
+  }, target.chapterId)).toContain(quote)
+})
+
 test('假引文拒绝报告，保存原响应且不自动重发；原稿不改', async ({ page }) => {
   let calls = 0
   await page.route('https://whole-review.invalid/**', route => {
