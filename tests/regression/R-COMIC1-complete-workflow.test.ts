@@ -1,3 +1,4 @@
+import { CURRENT_BACKUP_VERSION } from '../../src/lib/export/backup-trust'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
@@ -216,7 +217,7 @@ describe('COMIC-1/2 · complete comic production workflow', () => {
     expect(svg).not.toContain('分镜占位 · page-1-panel-2')
 
     const backup = await exportProjectJSON(item.scope.projectId)
-    expect(backup.version).toBe(16); expect(backup.comicMediaAssets?.[0].rights.declaration).toContain('测试作者')
+    expect(backup.version).toBe(CURRENT_BACKUP_VERSION); expect(backup.comicMediaAssets?.[0].rights.declaration).toContain('测试作者')
     const cyclic = structuredClone(backup)
     const firstAsset = cyclic.comicMediaAssets![0]
     firstAsset.referenceAssetKeys = ['cycle-copy']

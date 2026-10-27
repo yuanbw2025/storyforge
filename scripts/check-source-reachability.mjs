@@ -51,6 +51,9 @@ const entrypoints = [
   // TTRPG's durable host loop is a headless product API; its independent foundation
   // is validated before the playing table is integrated and can be driven by replay tooling.
   'src/lib/ttrpg/kp-coordinator.ts',
+  // Handoff pure kernels are retained as an offline evaluation API, not a
+  // player route or formal runtime/AI writer. P2c-P10 integration remains gated.
+  'src/lib/ttrpg/open-prototypes.ts',
   // G3 content production is a headless contract boundary until all product
   // Skills/executors are registered and the creator route activates it.
   'src/lib/open-world/production-contract.ts',

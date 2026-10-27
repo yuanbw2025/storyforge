@@ -5,3 +5,6 @@
  * - 任何依赖 IndexedDB 的测试(stores / lifecycle / 反例测试)直接 import db 即可
  */
 import 'fake-indexeddb/auto'
+import { installFakeIdbTransactionLifecycleV1 } from './helpers/fake-idb-transaction-lifecycle'
+
+installFakeIdbTransactionLifecycleV1(globalThis.indexedDB)

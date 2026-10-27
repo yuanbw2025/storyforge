@@ -7,6 +7,9 @@ import type {
 } from '../types'
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
+type CharacterSheetTemplateV2 = Omit<TtrpgCharacterTemplateV1, 'characterSheet' | 'controller'> & {
+  controller: TtrpgCharacterTemplateV1['controller'] | 'hybrid'
+}
 
 function fail(message: string): never { throw new Error(`[ttrpg-character-sheet] ${message}`) }
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -82,7 +85,7 @@ export function resolveTtrpgCharacterProgressionV2(input: {
 }
 
 export function createCompleteTtrpgCharacterSheetV2(input: {
-  template: Omit<TtrpgCharacterTemplateV1, 'characterSheet'>
+  template: CharacterSheetTemplateV2
   rulePack: RulePackV1
   authoringMode?: TtrpgCharacterAuthoringModeV2
   identity?: Partial<TtrpgCharacterSheetV2['identity']>
@@ -165,7 +168,7 @@ export function createCompleteTtrpgCharacterSheetV2(input: {
 
 export function parseTtrpgCharacterSheetV2(
   value: unknown,
-  template: Omit<TtrpgCharacterTemplateV1, 'characterSheet'>,
+  template: CharacterSheetTemplateV2,
   rulePack: RulePackV1,
 ): TtrpgCharacterSheetV2 {
   const root = record(value, 'characterSheet')

@@ -75,7 +75,7 @@ describe('NW-1B · 实际备份与领域引用生命周期', () => {
   it('一个事件的多种引用经完整备份重映射，历史 superseded 和冻结 v3 原字节保留', async () => {
     const source = await fixture()
     const backup = await deriveExportProjectJSON(source.scope.projectId) as any
-    expect(backup.version).toBe(16)
+    expect(backup.version).toBe(17)
     const exported = backup.storyTimelineEvents.find((row: any) => row.title === '交付信件')
     expect(exported.narrativeEventV1).toBeUndefined()
     expect(exported._narrativeEventV1Portable.participants[0].entity.characterId).toBe(0)
@@ -141,8 +141,9 @@ describe('NW-1B · 实际备份与领域引用生命周期', () => {
       delete row._narrativeEventV1Portable; delete row._narrativeTimeV1Portable
     }
     const old = { ...current, version: 15 }
+    for (const spec of PROJECT_TABLES) if (spec.exportable && (spec.introducedBackupVersion ?? 1) > 15) delete old[spec.name]
     const converted = normalizeProjectBackup(old)
-    expect(converted.version).toBe(16)
+    expect(converted.version).toBe(17)
     expect(old.version).toBe(15)
     expect(converted.storyTimelineEvents).toEqual(old.storyTimelineEvents)
     expect(JSON.stringify(converted)).not.toContain('narrativeAuthorityV1')

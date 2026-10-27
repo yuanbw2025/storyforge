@@ -2,18 +2,29 @@ import {
   createDefaultTtrpgProductionWizardValueV2,
   type TtrpgProductionWizardValueV2,
 } from "./authoring-settings";
+import {
+  parseTtrpgAuthoringSettingsV2,
+  type TtrpgAuthoringSettingsV2,
+} from "./authoring-contract-v2";
 export interface TtrpgAuthoringSettingsV1 {
+  schema?: never;
+  version?: never;
+  runFormat?: never;
+  openAuthoring?: never;
   wizard: TtrpgProductionWizardValueV2;
   openingSituation: string;
   playerRole: string;
   qualityProfile: "prototype" | "internal" | "commercial-candidate";
 }
-export const defaultTtrpgSettings = (): TtrpgAuthoringSettingsV1 => ({
+/** Keep the version in UI state inferred from defaultTtrpgSettings. */
+export type TtrpgAuthoringSettings = TtrpgAuthoringSettingsV1 | TtrpgAuthoringSettingsV2;
+const defaultLegacySettings = (): TtrpgAuthoringSettingsV1 => ({
   wizard: createDefaultTtrpgProductionWizardValueV2(),
   openingSituation: "",
   playerRole: "",
   qualityProfile: "prototype",
 });
+export const defaultTtrpgSettings = (): TtrpgAuthoringSettings => defaultLegacySettings();
 export interface TtrpgAuthoringDraftV1 {
   id?: number;
   projectId: number;
@@ -31,8 +42,8 @@ export interface TtrpgAuthoringDraftV1 {
   updatedAt: number;
 }
 /** Partial author drafts allow blank text; exact Brief validation remains the production gate. */
-export function parseTtrpgSettings(value: unknown): TtrpgAuthoringSettingsV1 {
-  const defaults = defaultTtrpgSettings();
+export function parseTtrpgSettingsV1(value: unknown): TtrpgAuthoringSettingsV1 {
+  const defaults = defaultLegacySettings();
   function check(v: unknown, d: unknown, path: string): void {
     if (Array.isArray(d)) {
       if (!Array.isArray(v) || v.length > 100)
@@ -56,7 +67,7 @@ export function parseTtrpgSettings(value: unknown): TtrpgAuthoringSettingsV1 {
         throw new Error(`${path} 对象无效`);
       const row = v as Record<string, unknown>,
         base = d as Record<string, unknown>;
-      if (Object.keys(row).some((k) => !(k in base)))
+      if (Object.keys(row).some((k) => !Object.prototype.hasOwnProperty.call(base, k)))
         throw new Error(`${path} 含未知字段`);
       for (const k of Object.keys(base)) check(row[k], base[k], `${path}.${k}`);
       return;
@@ -92,12 +103,28 @@ export function parseTtrpgSettings(value: unknown): TtrpgAuthoringSettingsV1 {
     check(patch, { path: "", value: "", reason: "" }, "村规");
   return settings;
 }
-export function settingsFromTtrpgDraft(row: TtrpgAuthoringDraftV1) {
-  const settings = JSON.parse(row.settingsJson) as TtrpgAuthoringSettingsV1;
+/** Unknown or partial version markers must never fall back to legacy. */
+export function parseTtrpgSettings(value: unknown): TtrpgAuthoringSettings {
+  if (value && typeof value === "object" &&
+    ["schema", "version", "runFormat", "openAuthoring"].some((key) => key in value))
+    return parseTtrpgAuthoringSettingsV2(value);
+  return parseTtrpgSettingsV1(value);
+}
+export function isTtrpgAuthoringSettingsV2(
+  settings: TtrpgAuthoringSettings,
+): settings is TtrpgAuthoringSettingsV2 {
+  return settings.schema === "storyforge.ttrpg-authoring-settings" && settings.version === 2;
+}
+/** Format interpretation is a view; never add runFormat to legacy JSON. */
+export function ttrpgSettingsRunFormat(settings: TtrpgAuthoringSettings): "scripted" | "open" {
+  return isTtrpgAuthoringSettingsV2(settings) ? settings.runFormat : "scripted";
+}
+export function settingsFromTtrpgDraft(row: TtrpgAuthoringDraftV1): TtrpgAuthoringSettings {
+  const settings = parseTtrpgSettings(JSON.parse(row.settingsJson));
   settings.wizard.savedRulePackId = row.savedRulePackId;
   return parseTtrpgSettings(settings);
 }
-export function serializeTtrpgSettings(settings: TtrpgAuthoringSettingsV1) {
+export function serializeTtrpgSettings(settings: TtrpgAuthoringSettings) {
   const parsed = parseTtrpgSettings(settings);
   const savedRulePackId = parsed.wizard.savedRulePackId;
   parsed.wizard.savedRulePackId = null;

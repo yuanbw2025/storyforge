@@ -115,6 +115,6 @@ test('narrative confirmation survives reload and isolated restore; deletion keep
   }, prepared)
   expect(deleted.reference).toEqual({ characterId: null, sourceUid: prepared.characterUid })
   expect(deleted.kinds).toEqual([])
-  expect(deleted.backupVersion).toBe(16)
+  expect(deleted.backupVersion).toBe(17)
   expect(deleted.releaseBytes).toBe(prepared.releaseBytes)
 })

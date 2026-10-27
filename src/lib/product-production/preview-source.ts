@@ -1,10 +1,26 @@
 import { db } from '../db/schema'
 import type { ProductRuntimeSourceV1, ResolvedProductRuntimeSourceV1, ProductRuntimeSession, WorkspaceScope } from '../types'
+import type { ProductRuntimePackageWithTtrpgV2 } from '../ttrpg/content-version'
 import { assertProductReleaseUnchanged } from '../product/releases'
 import { assertRecordInScope, resolveScope } from '../workspace/scope'
 import { createBuildProductMediaResolver, createReleaseProductMediaResolver } from './media-resolver'
 import { verifyProductBuildPreviewManifestV1 } from './preview-manifest'
-import { verifyProductReleaseManifestV1 } from './runtime-package'
+import {
+  verifyProductReleaseManifestV1,
+  type ProductTtrpgProtocol2ReaderV1,
+} from './runtime-package'
+
+export type ResolvedProductRuntimeSourceWithTtrpgV2 = Omit<
+  ResolvedProductRuntimeSourceV1,
+  'runtimePackage'
+> & {
+  runtimePackage: ProductRuntimePackageWithTtrpgV2
+}
+
+type RuntimeSourceInput = { scope: WorkspaceScope; source: ProductRuntimeSourceV1 }
+type RuntimeSessionSourceInput = { scope: WorkspaceScope; session: ProductRuntimeSession }
+type LegacyVerifiedRuntimeSource = Omit<ResolvedProductRuntimeSourceV1, 'mediaResolver'>
+type VersionedVerifiedRuntimeSource = Omit<ResolvedProductRuntimeSourceWithTtrpgV2, 'mediaResolver'>
 import { assertProductRuntimeSourceSnapshotV2, runtimeSourceManifestFromBuildRecordsV1,
   runtimeSourceManifestFromReleaseV1 } from '../product/runtime-source-manifest'
 
@@ -20,22 +36,22 @@ export async function productRuntimeSourceForSessionV1(
   throw new Error('[product-runtime-source] 会话没有绑定 Product Release 或 Build')
 }
 
-export async function verifyProductRuntimeSessionSourceV1(input: {
-  scope: WorkspaceScope
-  session: ProductRuntimeSession
-}): Promise<Omit<ResolvedProductRuntimeSourceV1, 'mediaResolver'>> {
+export function verifyProductRuntimeSessionSourceV1(input: RuntimeSessionSourceInput & { ttrpgProtocol: 2 }): Promise<VersionedVerifiedRuntimeSource>
+export function verifyProductRuntimeSessionSourceV1(input: RuntimeSessionSourceInput & { ttrpgProtocol?: 1 }): Promise<LegacyVerifiedRuntimeSource>
+export function verifyProductRuntimeSessionSourceV1(input: RuntimeSessionSourceInput & { ttrpgProtocol?: 1 | 2 }): Promise<VersionedVerifiedRuntimeSource>
+export async function verifyProductRuntimeSessionSourceV1(input: RuntimeSessionSourceInput & { ttrpgProtocol?: 1 | 2 }): Promise<VersionedVerifiedRuntimeSource> {
   const verified = await verifyProductRuntimeSource({
     scope: input.scope,
     source: await productRuntimeSourceForSessionV1(input.session),
+    ttrpgProtocol: input.ttrpgProtocol,
   })
   assertProductRuntimeSourceSnapshotV2({ canonSnapshot: input.session.canonSnapshotJson, manifest: verified.sourceManifest })
   return verified
 }
 
-export async function resolveProductRuntimeSource(input: {
-  scope: WorkspaceScope
-  source: ProductRuntimeSourceV1
-}): Promise<ResolvedProductRuntimeSourceV1> {
+export function resolveProductRuntimeSource(input: RuntimeSourceInput & { ttrpgProtocol: 2 }): Promise<ResolvedProductRuntimeSourceWithTtrpgV2>
+export function resolveProductRuntimeSource(input: RuntimeSourceInput & { ttrpgProtocol?: 1 }): Promise<ResolvedProductRuntimeSourceV1>
+export async function resolveProductRuntimeSource(input: RuntimeSourceInput & { ttrpgProtocol?: 1 | 2 }): Promise<ResolvedProductRuntimeSourceWithTtrpgV2> {
   const verified = await verifyProductRuntimeSource(input)
   const mediaResolver = input.source.kind === 'release'
     ? await createReleaseProductMediaResolver({
@@ -46,9 +62,9 @@ export async function resolveProductRuntimeSource(input: {
     : await createBuildProductMediaResolver({
       scope: input.scope,
       productBuildId: input.source.productBuildId,
-      preview: await verifyProductBuildPreviewManifestV1(
-        (await db.productBuilds.get(input.source.productBuildId))?.previewManifestJson ?? '',
-      ),
+      preview: input.ttrpgProtocol === 2
+        ? await verifyProductBuildPreviewManifestV1((await db.productBuilds.get(input.source.productBuildId))?.previewManifestJson ?? '', { ttrpgProtocol: 2 })
+        : await verifyProductBuildPreviewManifestV1((await db.productBuilds.get(input.source.productBuildId))?.previewManifestJson ?? ''),
     })
   return { ...verified, mediaResolver }
 }
@@ -58,17 +74,21 @@ export async function resolveProductRuntimeSource(input: {
  * and session boundaries use this form so source validation can participate in
  * their own atomic transaction; player presentation adds the resolver above.
  */
-export async function verifyProductRuntimeSource(input: {
-  scope: WorkspaceScope
-  source: ProductRuntimeSourceV1
-}): Promise<Omit<ResolvedProductRuntimeSourceV1, 'mediaResolver'>> {
+export function verifyProductRuntimeSource(input: RuntimeSourceInput & { ttrpgProtocol: 2 }): Promise<VersionedVerifiedRuntimeSource>
+export function verifyProductRuntimeSource(input: RuntimeSourceInput & { ttrpgProtocol?: 1 }): Promise<LegacyVerifiedRuntimeSource>
+export function verifyProductRuntimeSource(input: RuntimeSourceInput & { ttrpgProtocol?: 1 | 2 }): Promise<VersionedVerifiedRuntimeSource>
+export async function verifyProductRuntimeSource(input: RuntimeSourceInput & { ttrpgProtocol?: 1 | 2 }): Promise<VersionedVerifiedRuntimeSource> {
   const scope = await resolveScope({ scope: input.scope })
   if (input.source.kind === 'release') {
-    const release = await assertProductReleaseUnchanged(input.source.productReleaseId)
+    const release = await assertProductReleaseUnchanged(input.source.productReleaseId, input.ttrpgProtocol === 2 ? { ttrpgProtocol: 2 } : undefined)
     if (!await assertRecordInScope(scope, 'productReleases', release, { owner: 'work' })) {
       throw new Error('[product-runtime-source] ProductRelease 不属于当前 Work')
     }
-    const parsed = await verifyProductReleaseManifestV1(release.manifestJson)
+    const reader: ProductTtrpgProtocol2ReaderV1 | undefined =
+      input.ttrpgProtocol === 2 ? { ttrpgProtocol: 2 } : undefined
+    const parsed = reader
+      ? await verifyProductReleaseManifestV1(release.manifestJson, reader)
+      : await verifyProductReleaseManifestV1(release.manifestJson)
     const runtimePackage = parsed.runtimePackage
     const packageHash = parsed.packageHash
     const sourceManifest = await runtimeSourceManifestFromReleaseV1(parsed)
@@ -95,7 +115,11 @@ export async function verifyProductRuntimeSource(input: {
   if (!production || !brief || production.workId !== scope.workId || brief.briefHash !== build.briefHash) {
     throw new Error('[product-runtime-source] Build 的 Production/Brief 绑定损坏')
   }
-  const preview = await verifyProductBuildPreviewManifestV1(build.previewManifestJson)
+  const reader: ProductTtrpgProtocol2ReaderV1 | undefined =
+    input.ttrpgProtocol === 2 ? { ttrpgProtocol: 2 } : undefined
+  const preview = reader
+    ? await verifyProductBuildPreviewManifestV1(build.previewManifestJson, reader)
+    : await verifyProductBuildPreviewManifestV1(build.previewManifestJson)
   if (preview.previewHash !== input.source.expectedPreviewHash || preview.previewHash !== build.previewHash
     || preview.packageHash !== build.packageHash || preview.buildManifestHash !== build.manifestHash
     || preview.productionKey !== production.productionKey || preview.buildNumber !== build.buildNumber

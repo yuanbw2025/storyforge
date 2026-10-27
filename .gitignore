@@ -1,5 +1,6 @@
 node_modules
 dist/
+.vite-e2e-cache/
 dist-android/
 *.jks
 *.keystore

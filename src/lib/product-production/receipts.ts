@@ -15,9 +15,9 @@ export interface ProductBuildRootTerminalReceiptInputV1 {
     | 'blobObjectId' | 'mimeType' | 'byteSize' | 'parentArtifactHash' | 'carriedFrom'>>
 }
 
-export async function createProductBuildRootTerminalReceiptV1(
+export async function projectProductBuildRootTerminalReceiptBodyV2(
   input: ProductBuildRootTerminalReceiptInputV1,
-): Promise<string> {
+) {
   if (![input.planHash, input.manifestHash, input.packageHash, input.qualityReportHash].every(isSha256Hash)
     || !Number.isInteger(input.controlEpoch) || input.controlEpoch < 0) {
     throw new Error('[product-production-receipt] Build terminal 指针无效')
@@ -83,7 +83,7 @@ export async function createProductBuildRootTerminalReceiptV1(
     || (row.producerReceiptHash != null && !isSha256Hash(row.producerReceiptHash)))) {
     throw new Error('[product-production-receipt] Artifact receipt 无效')
   }
-  return hashProductProductionValueV2({
+  return {
     schema: 'storyforge.product-build-root-terminal-receipt',
     version: 2,
     planHash: input.planHash,
@@ -93,7 +93,13 @@ export async function createProductBuildRootTerminalReceiptV1(
     controlEpoch: input.controlEpoch,
     budgetLedger,
     artifactEnvelopes,
-  })
+  }
+}
+
+export async function createProductBuildRootTerminalReceiptV1(
+  input: ProductBuildRootTerminalReceiptInputV1,
+): Promise<string> {
+  return hashProductProductionValueV2(await projectProductBuildRootTerminalReceiptBodyV2(input))
 }
 
 /**

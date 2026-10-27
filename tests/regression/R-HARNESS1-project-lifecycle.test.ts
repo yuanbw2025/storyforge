@@ -185,7 +185,7 @@ describe('R-HARNESS1-project-lifecycle · run 全生命周期', () => {
       ['worldGroups', new Map([[1, 0]])],
       ['outlineNodes', new Map([[1, 0]])],
     ])
-    await portableizeAgentRunLedgerExportV1(exported, idMaps)
+    await portableizeAgentRunLedgerExportV1(exported, idMaps, { freezeContextEvidence: false })
     expect(keyReads).toBeLessThanOrEqual(2 * (eventOrder.length + checkpointOrder.length))
     eventOrder.forEach((row, index) => expect(exported.agentRunEvents[index]).toBe(row))
     checkpointOrder.forEach((row, index) => expect(exported.agentRunCheckpoints[index]).toBe(row))
@@ -193,9 +193,12 @@ describe('R-HARNESS1-project-lifecycle · run 全生命周期', () => {
     for (const table of ['agentRunEvents', 'agentRunCheckpoints'] as const) {
       const corrupt = structuredClone(exported)
       corrupt[table][0]._worldGroupExportId = 99
-      await expect(portableizeAgentRunLedgerExportV1(corrupt, idMaps))
+      await expect(portableizeAgentRunLedgerExportV1(corrupt, idMaps, { freezeContextEvidence: false }))
         .rejects.toThrow('世界组与运行不一致')
     }
+    // Materializing new owner proof still requires real original Run identity.
+    await expect(portableizeAgentRunLedgerExportV1(structuredClone(exported), idMaps, { freezeContextEvidence: true }))
+      .rejects.toThrow('原始导出映射')
 
     const importedProjectId = await importProjectJSON(exported)
     const scope = await importedScope(importedProjectId)

@@ -51,6 +51,8 @@
 
 测试必须能在干净环境重复运行；禁止依赖顺序、作者 localStorage、现有 IndexedDB 或线上不可控状态。
 
+Node 测试环境的 fake-indexeddb 6.2.5 会在内部调度数组保留已结束事务，并在后续调度时扫描这些历史条目（[上游实现](https://github.com/dumbmatter/fakeIndexedDB/blob/master/src/lib/Database.ts)）。全局测试 setup 使用具名、锁定版本和内部结构检查的生命周期辅助器，只移除 `finished` 调度条目，保留 active/inactive/committing 及其顺序；不移除业务表、运行事件或回执，不改生产 IndexedDB，也不修改共享依赖文件。版本或内部结构改变须失败并重新审查。公开 IDB 的串行/并发、commit、abort、错误回滚、版本阻塞、删除重建和清理恢复须与未处理的新 Factory 对照验证；不能靠放宽超时或减少原测试内容处理性能失败。
+
 ## 5. AI 测试诚实边界
 
 - mock 测试证明协议和控制流，不证明文学质量或供应商兼容。

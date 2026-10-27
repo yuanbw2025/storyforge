@@ -3,7 +3,11 @@ import {
   createProductReleaseManifestV1,
   productReleaseIdentityHashV1,
   parseProductRuntimePackageV1,
+  type ProductTtrpgProtocol2ReaderV1,
 } from '../../src/lib/product-production/runtime-package'
+import type {
+  ProductRuntimePackageWithTtrpgV2, ProductReleaseManifestWithTtrpgV2,
+} from '../../src/lib/ttrpg/content-version'
 import { hashProductProductionValueV2 } from '../../src/lib/product-production/hash'
 import type {
   ConfirmedProductBriefV1,
@@ -28,14 +32,24 @@ const CREATED_AT = 1_700_000_000_000
  * bypassing the formal production boundary with the retired nullable release
  * provenance shape.
  */
-export async function createFixtureProductReleaseManifestV1(input: {
+interface FixtureReleaseInputV1 {
   runtimePackage: ProductRuntimePackageV1
   productionProvenance?: ProductReleaseManifestV1['productionProvenance']
   productionKey?: string
   releaseVersion?: number
   parentRelease?: ProductReleaseLineageV1['parentRelease']
   qualityReceiptHashes?: string[]
-}): Promise<ProductReleaseManifestV1> {
+}
+type FixtureReleaseInputWithTtrpgV2 =
+  Omit<FixtureReleaseInputV1, 'runtimePackage'> & { runtimePackage: ProductRuntimePackageWithTtrpgV2 }
+
+export function createFixtureProductReleaseManifestV1(input: FixtureReleaseInputV1): Promise<ProductReleaseManifestV1>
+export function createFixtureProductReleaseManifestV1(
+  input: FixtureReleaseInputWithTtrpgV2, reader: ProductTtrpgProtocol2ReaderV1,
+): Promise<ProductReleaseManifestWithTtrpgV2>
+export async function createFixtureProductReleaseManifestV1(
+  input: FixtureReleaseInputWithTtrpgV2, reader?: ProductTtrpgProtocol2ReaderV1,
+): Promise<ProductReleaseManifestWithTtrpgV2> {
   const releaseVersion = input.releaseVersion ?? 1
   const productionKey = input.productionProvenance?.productionKey
     ?? input.productionKey
@@ -64,7 +78,7 @@ export async function createFixtureProductReleaseManifestV1(input: {
     ...portableReferenceBody,
     referenceHash: await hashCanonicalValue(referenceIdentity),
   }
-  const runtimePackage = parseProductRuntimePackageV1({
+  const rawPackage = {
     ...structuredClone(input.runtimePackage),
     sourceWorld: {
       ...structuredClone(input.runtimePackage.sourceWorld),
@@ -73,7 +87,10 @@ export async function createFixtureProductReleaseManifestV1(input: {
         worldReferenceHash: worldReference.referenceHash,
       },
     },
-  })
+  }
+  const runtimePackage = reader
+    ? parseProductRuntimePackageV1(rawPackage, reader)
+    : parseProductRuntimePackageV1(rawPackage)
   const selectedResourceKey = runtimePackage.sourceWorld.selection.resourceKeys[0] ?? 'fixture.world.resource'
   const selector = {
     areas: ['foundation'] as const,
@@ -172,7 +189,7 @@ export async function createFixtureProductReleaseManifestV1(input: {
     rootTerminalReceiptHash: await hashCanonicalValue({ productionKey, fixture: 'root-receipt' }),
   }
   const sourceContracts = { sourcePlan, confirmedBrief, sourceManifest }
-  const identityBody: Omit<ProductReleaseManifestV1, 'releaseIdentityHash' | 'lineage'> = {
+  const identityBody: Omit<ProductReleaseManifestWithTtrpgV2, 'releaseIdentityHash' | 'lineage'> = {
     schema: 'storyforge.product-release', version: 1,
     productType: runtimePackage.productType,
     sourceWorldRelease: { contentHash: runtimePackage.sourceWorld.contentHash },
@@ -211,5 +228,11 @@ export async function createFixtureProductReleaseManifestV1(input: {
     },
     createdAt: CREATED_AT,
   })
-  return createProductReleaseManifestV1({ runtimePackage, productionProvenance, sourceContracts, lineage })
+  const prepared = { runtimePackage, productionProvenance, sourceContracts, lineage }
+  return reader
+    ? createProductReleaseManifestV1(prepared, reader)
+    : createProductReleaseManifestV1({
+        ...prepared,
+        runtimePackage: parseProductRuntimePackageV1(runtimePackage),
+      })
 }

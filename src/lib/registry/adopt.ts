@@ -101,6 +101,10 @@ export async function adopt(input: AdoptInput): Promise<AdoptResult> {
     const extensionPolicy = await Dexie.waitFor(import('../extensions/ai-registry'))
     return extensionPolicy.adoptExtensionPayload(scopedInput)
   }
+  if (ADOPTION_BY_TARGET.get(input.target)?.writePolicy === 'ttrpg-open-authoring-design-v1') {
+    const policy = await Dexie.waitFor(import('../ttrpg/open-authoring-design-adoption'))
+    return policy.adoptTtrpgOpenAuthoringDesignPayloadV1(scopedInput)
+  }
 
   if (scopedInput.recordId != null) {
     return adoptCollectionRecord(scopedInput, fieldSpecs, tableSpec, result)

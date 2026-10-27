@@ -790,6 +790,8 @@ export const FIELD_REGISTRY: FieldSpec[] = [
   // TTRPG-2A: AI may propose inert rule/campaign JSON, but only the governed
   // authoring service may parse, hash, fixture-test and persist it.
   { ...text('ttrpgRulePacks', 'title'), candidateId: 'ttrpg.rulePackTitleCandidate' },
+  // Exact requested-section composition; the domain writePolicy grants no generic JSON update.
+  { ...json('ttrpgAuthoringDrafts', 'settingsJson'), candidateId: 'ttrpg.open.authoringDesignSettings' },
   text('ttrpgRulePacks', 'ruleSystemId'),
   text('ttrpgRulePacks', 'ruleSystemVersion'),
   { ...json('ttrpgRulePacks', 'rulePackJson'), candidateId: 'ttrpg.rulePackCandidate' },

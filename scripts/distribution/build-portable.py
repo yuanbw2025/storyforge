@@ -6,6 +6,13 @@ ROOT = Path(__file__).resolve().parents[2]
 NODE_VERSION = '24.16.0'
 TARGETS = {'windows-x64': ('win-x64', 'zip'), 'macos-arm64': ('darwin-arm64', 'tar.gz'), 'macos-x64': ('darwin-x64', 'tar.gz'), 'linux-x64': ('linux-x64', 'tar.gz')}
 
+def copy_local_tts_resources(staging):
+    files = json.loads(subprocess.check_output(['node', str(ROOT / 'scripts/distribution/local-tts-files.cjs')], cwd=ROOT, text=True))
+    for relative in files:
+        destination = staging / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / relative, destination)
+
 def build(target):
     platform, extension = TARGETS[target]
     version = json.loads((ROOT / 'package.json').read_text())['version']
@@ -42,6 +49,7 @@ def build(target):
         for path in (ROOT / 'scripts' / folder).glob('*.mjs'):
             if not path.name.endswith('.test.mjs'):
                 shutil.copy2(path, destination / path.name)
+    copy_local_tts_resources(staging)
     shutil.copy2(ROOT / 'LICENSE', staging / 'LICENSE')
     sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     (staging / 'release.json').write_text(json.dumps({'version': version, 'commit': sha, 'target': target, 'nodeVersion': NODE_VERSION, 'nodeArchiveSha256': expected}, indent=2) + '\n')

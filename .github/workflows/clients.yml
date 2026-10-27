@@ -130,6 +130,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build:macos -- --${{ matrix.arch }}
+        env:
+          # The full TypeScript graph exceeds the hosted Mac default V8 heap.
+          NODE_OPTIONS: --max-old-space-size=4096
       - name: Launch packaged Mac application
         run: node scripts/desktop/smoke.mjs release/macos/${{ matrix.directory }}/StoryForge.app/Contents/MacOS/StoryForge
       - uses: actions/checkout@v7

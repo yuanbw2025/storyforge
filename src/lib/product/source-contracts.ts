@@ -621,9 +621,15 @@ export async function aggregateProductSourceManifestFromExactRuns(input: {
       attempt: pointer.attempt,
     })
     const manifest = restored.manifest
+    const scopeRebound = manifest.gateway.scopeFingerprint !== gatewaySession.scopeFingerprint
+      && plan.productType === 'ttrpg' && plan.version === 1
+      && await (await import('./world-context-portability')).verifyImportedWorldContextBindingV1({
+        snapshot: restored.snapshot,manifestHash: manifest.manifestHash,sourceScopeFingerprint: manifest.gateway.scopeFingerprint,
+        worldReleaseUid: plan.worldReference.releaseUid,worldReleaseHash: plan.worldReference.releaseHash,
+      })
     if (manifest.manifestHash !== pointer.manifestHash
       || manifest.gateway.policyHash !== plan.gatewayPolicyHash
-      || !permittedFingerprints.has(manifest.gateway.scopeFingerprint)) {
+      || (!permittedFingerprints.has(manifest.gateway.scopeFingerprint) && !scopeRebound)) {
       fail('run-manifest-binding', `Run ${pointerKey} 未绑定 SourcePlan 的 release/policy`)
     }
     const decisions = traceDecisions(manifest).filter(decision => decision.sourceKey === 'worldRelease')
@@ -637,6 +643,13 @@ export async function aggregateProductSourceManifestFromExactRuns(input: {
       const descriptor = descriptors
         ? descriptors.get(decision.resourceKey) ?? fail('permission', `Run ${pointerKey} 的资源在冻结授权下不可用:${decision.resourceKey}`)
         : await descriptorForTrace({ scope: sourceScope, resourceKey: decision.resourceKey })
+      if (scopeRebound) {
+        const portableRefs = (refs: typeof decision.sourceRefs) => refs.map(({ recordId: _localLocator,...ref }) => ref)
+        if (decision.sourceRefs.some(ref => ref.table !== 'worldReleases' || ref.revision !== plan.worldReference.releaseUid)
+          || await hashCanonicalValue(portableRefs(decision.sourceRefs)) !== await hashCanonicalValue(portableRefs(descriptor.sourceRefs))) {
+          fail('run-manifest-binding', '导入的世界读取 SourceRefs 与实际冻结版本不一致')
+        }
+      }
       if (!resourceAllowed(plan, descriptor) || !plan.permission.allowedDepths.includes(decision.depth)) {
         fail('permission', `Run ${pointerKey} 越过 SourcePlan 读取 ${decision.resourceKey}`)
       }

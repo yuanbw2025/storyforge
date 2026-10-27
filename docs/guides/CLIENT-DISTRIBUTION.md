@@ -54,6 +54,10 @@ node scripts/distribution/build-android.mjs --release
 5. 安装操作先等待现有待保存编辑协调器完成写入，失败则阻断安装。Windows 由 `electron-updater` 检查与下载；禁用自动下载、退出时自动安装、预发布和降级。下载与退出安装各有原生确认窗口。GitHub 下载失败仍可使用当前安装。可通过 `CSC_LINK` / `CSC_KEY_PASSWORD` 接入 Windows 代码签名；未配置时为未签名安装器，系统可能提示未知发布者。
 6. Android 只检查固定仓库最新稳定 Release，精确匹配 APK 名称与 URL，验证 GitHub asset SHA-256、APK 包名、递增版本号和当前签名，再调用系统安装器。首次需要用户允许“安装未知应用”。下载或校验失败不得启动安装；用户取消系统安装时旧版保留。
 
+## 桌面第三方声明
+
+桌面构建继续先运行 `scripts/distribution/notices.mjs` 生成当前依赖声明。`electron-builder.config.cjs` 的 `afterExtract` 钩子在平台运行时清理前，把本次实际解包的 Electron 许可、完整 Chromium 声明及 NPM 声明原字节保留到应用资源的 `third-party/`，并记录实际运行时版本、大小与 SHA-256。Mac 的文件随 `.app` 一起保留；Windows/Linux 使用同一资源合同。缺文件、空文件、符号链接或缺少当前依赖声明会中止构建，不产出一个只带部分声明的目录。此构建元数据不包含个人目录，不属于作品表或模型上下文；它不替代具体模型、媒资和发布用途的独立许可审阅。
+
 ## 数据保持
 
 Windows 固定用户目录 `%APPDATA%/StoryForge`，固定本地地址 `http://localhost:17831/storyforge/`；端口冲突时停止，不改端口。Android 固定 `https://localhost/storyforge/` 和应用 ID。升级不执行清库或卸载；数据库仍由现有 Dexie 发布迁移管理。不要用卸载、清除应用数据、改 origin 或降级来解决升级错误。
@@ -63,6 +67,18 @@ Windows 固定用户目录 `%APPDATA%/StoryForge`，固定本地地址 `http://l
 Android 禁用系统自动云备份，避免把用户选择保存的密钥交给系统备份；完整备份由用户自行导出。APK 在后台可能被系统终止，长时间生成应保持应用前台；结果不确定时不要自动重发。Android 无法使用电脑上的本机 Codex CLI，也不支持浏览器目录句柄备份；普通模型服务使用 HTTPS。
 
 ## 验收与当前限制
+
+### 跑团本机配音的安装包接入（开发候选）
+
+桌面端和浏览器便携版复用现有 `/storyforge/local-tts/v1` 产品 bridge。操作者须在启动应用的进程中明确配置已有的 `STORYFORGE_TTRPG_LOCAL_TTS_RUNTIME_DIR`；使用 Qwen 时还须配置已完成独立资产准入的 `STORYFORGE_TTRPG_QWEN_TTS_RUNTIME_DIR`。运行库安装、资产核验与许可边界见 [本机语音说明](../../scripts/ttrpg-local-tts/README.md)。本增量不下载模型、不安装 Python、不调用模型或自动采用音轨；当前固定运行库仅在 macOS Apple Silicon 验证，不因 Windows/Linux 包含脚本就宣称这些平台支持新生成。Android 和静态网页不提供本机 Python 服务，已采用音频的播放另按原媒资兼容路径验收。
+
+`local-tts-files.cjs` 从三个当前 product profile 派生同一份精确源码闭包，逐文件校验原 SHA-256，并携带必要的描述、登记证明及许可。便携包保留相对路径；Electron 把同一闭包放在 `resources/local-tts/`，由固定的主进程路径加载，使 Python 能读取实际文件。相关 TypeScript/AI 登记文件只用于原有实现核验，不需要作者的仓库、Git 或 npm 依赖，也不通过网页提供。模型、运行库、任务目录、个人路径和浏览器资料不打入资源包。
+
+未配置或初始化失败时接口返回明确的 JSON 不可用结果，普通应用仍能启动。接口继续要求 loopback、同源和 `X-StoryForge-TTS: 1`；查询及创建等待任务不启动语音，启动、租约、停止、原始结果核查仍沿原唯一任务。初始化失败不在后台反复重试；修正配置后重新启动应用。不能通过修改包中脚本绕过原 profile 校验或为旧任务取得新执行权。
+
+打包回归覆盖独立资源目录的三 profile 核验、真实便携复制函数、Electron 资源路径、同源 HTTP、等待任务幂等与取消后不能启动；使用合成运行库记录，模型调用为零。`smoke-package.py` 再用包内 Node 核验物理资源。实际安装后的 Qwen 生成、两种声线听感、权利确认、采用与完整游戏仍须单独验证，不能以这些工程检查代替。
+
+### 客户端通用验收
 
 - `npm run test:clients`：更新状态、原生确认门、非法 IPC、网络异常、SSE 分块/取消、网页不出现客户端更新入口。
 - `node scripts/desktop/smoke.mjs`：独立临时 profile 中启动、renderer 无 Node 权限、重启后 IndexedDB/localStorage 保留。Windows Actions 对真正的解包程序执行此检查。
@@ -101,6 +117,8 @@ Windows 只保存固定枚举的进程异常摘要；主进程原生硬崩溃未
 `npm run build:macos -- --arm64` 或 `--x64` 生成对应 DMG；应用使用同一桌面入口、固定 origin 和 `~/Library/Application Support/StoryForge`。当前采用 ad-hoc 签名，不是 Developer ID 签名或 Apple 公证。macOS 更新固定读取官方仓库最新稳定版，选择当前 CPU 的精确文件名，验证大小与 GitHub SHA-256；用户确认后再次验 hash、打开 DMG 并退出，由用户拖入“应用程序”替换，不假装完成无人值守安装。
 
 `upgrade-smoke.mjs` 在隔离目录运行既有正式版本和本次候选，旧源码 SHA 与版本由客户端工作流的 `PREVIOUS_CLIENT_REF` / `PREVIOUS_CLIENT_VERSION` 一起指定；探针必须传入旧版号并核对实际应用版本，不能沿用固定旧值。v4.0.3 从正式 v4.0.2 验证覆盖升级。Windows 实际运行两个 NSIS 安装器，Mac 从新 DMG 替换应用。生产 `createWorkspace()`、注册表派生的完整导出/导入是测试唯一作品入口；比较完整导出，验证正文、封面、OPFS 探针、非法备份零写入与恢复后重启。此证据不代替全部产品媒资/游戏存档或真人移动布局验收。
+
+原生升级用的测试脚本由 `build-upgrade-fixture.mjs` 单独打包，须沿用生产代码的 `?raw` 文本导入语义，准确内嵌源码而非把其当模块执行。该支持只用于测试包构建，不改生产导入导出流程、备份比较或安装替换断言；测试包编译通过仍须继续实际 Windows/Mac 升级与恢复验证。
 
 Android 正式验证用永久密钥在本机签署测试 runner；新正式 APK 与测试 runner 暂存于 Release 草稿，CI 只接收签名后的 APK，不接收密钥。升级工作流从既有正式发行下载旧 APK，从本次草稿下载实际将发布的新 APK，避免另一份同版本测试包替代正式包验收。分别安装旧 APK、执行 seed、`adb install -r` 新 APK、执行恢复和重启校验。旧版号在升级工作流的 `PREVIOUS_CLIENT_VERSION` 指定，与桌面旧版基线一致。测试 JS 只进入 androidTest 的 assets，不进入公开应用。发布前删除临时 `upgrade-test-*.apk` 附件。
 

@@ -1,15 +1,15 @@
 {
   "schema": "storyforge.text-open-world.g7-lifecycle-matrix",
   "version": 1,
-  "backupVersion": 16,
-  "compatibilityPolicy": "validated-v14-v15-conversion-explicit-release-migration",
-  "profileNote": "项目备份导出当前v16，完整v14/v15须经显式校验转换，缺失叙事注释保持缺失且不生成作者确认；旧存档继续绑定旧Release，只有通过兼容性预演和显式提交才能生成绑定新Release的子Session。",
+  "backupVersion": 17,
+  "compatibilityPolicy": "validated-v14-v15-v16-conversion-explicit-release-migration",
+  "profileNote": "项目备份导出当前v17，完整v14/v15和两种v16须经显式校验转换，缺失叙事注释保持缺失且不生成作者确认；旧存档继续绑定旧Release，只有通过兼容性预演和显式提交才能生成绑定新Release的子Session。",
   "gates": [
     {
       "id": "TOW-G7-L01",
-      "title": "当前v16项目备份必须完整携带并重映射正式Release生产与运行闭包",
+      "title": "当前v17项目备份必须完整携带并重映射正式Release生产与运行闭包",
       "evidenceFile": "tests/regression/R-OPEN-WORLD7-release-lifecycle.test.ts",
-      "testName": "当前v16备份完整重映射Release、质量回执、媒资字节、事件、检查点和分支"
+      "testName": "当前格式备份完整重映射Release、质量回执、媒资字节、事件、检查点和分支"
     },
     {
       "id": "TOW-G7-L02",
@@ -37,7 +37,7 @@
     },
     {
       "id": "TOW-G7-L06",
-      "title": "备份恢复只接受当前格式或通过严格校验的v14/v15转换，拒绝任意补表与静默执行插件",
+      "title": "备份恢复只接受当前格式或通过严格校验的v14/v15/v16转换，拒绝任意补表与静默执行插件",
       "evidenceFile": "tests/extensions/plugin-lifecycle.test.ts",
       "testName": "converts only complete v14 backups and refuses missing core tables"
     },

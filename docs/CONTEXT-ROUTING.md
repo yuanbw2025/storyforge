@@ -1,6 +1,6 @@
 # StoryForge 上下文路由
 
-> 版本：2.8.3 · 生效：2026-10-26
+> 版本：2.9.0 · 生效：2026-10-26
 > 目标：保持项目级关联理解，同时只读取当前任务需要的现行文档与源码。三注册表和数据红线不因上下文精简而降低。
 
 ## 1. 默认入口
@@ -32,7 +32,7 @@
 | Narrative IR、角色知识、时间与因果 | temporalFacts、knowledgeLedger、事件/故事线、source UID/证据、projector | `products/WORLD-ENGINE.md` §10～14、§16、§18～19、§22～30（基线、领域投影、候选、冻结索引、查询、精确来源计划、修改影响与规模诊断）；命中的领域类型/采纳/生命周期与反例 | 将 Work 缓存或产品私域当冻结 Canon |
 | 世界检索、世界推演、人物视角/秘密 | world-release-provider、typed query、policy/manifest、hypothesis owner | `products/WORLD-ENGINE.md` §13～16、§19；Gateway、source-contracts、对应测试 | 未实现 query/validate/simulate 不得按现成功能调用 |
 | 产品 Requirement Compiler、上层产品读取世界 | product adapter、精确 selection/依赖闭包、SourcePlan/Manifest | `products/WORLD-ENGINE.md` §14、§17～20；`products/UPPER-PRODUCTS.md`、目标产品契约 | 不读取或复制世界物理表清单，不引入全产品万能 payload |
-| 跑团/聊天/AI 小镇/文字游戏 | WorldReference、产品 requirement adapter、Brief/SourcePlan/SourceManifest、production/build/release/session | `products/UPPER-PRODUCTS.md`、目标产品代码、中立世界资源协议和 owner；文字冒险还须读取 `products/TEXT-ADVENTURE.md`，专业生产任务再由其路由到 `products/text-adventure-production/README.md` | 其它上层产品内部细节 |
+| 跑团/聊天/AI 小镇/文字游戏 | WorldReference、产品 requirement adapter、Brief/SourcePlan/SourceManifest、production/build/release/session | `products/UPPER-PRODUCTS.md`、目标产品代码、中立世界资源协议和 owner；跑团读取 `products/TTRPG-AI-KP.md` 与 `roadmap/TTRPG-DEVELOPMENT-PLAN.md` 的现行版本头、§23/§24/§31/§32及当前单元，不能只读末尾2.0原稿；文字冒险还须读取 `products/TEXT-ADVENTURE.md`，专业生产任务再由其路由到 `products/text-adventure-production/README.md` | 其它上层产品内部细节 |
 | 新体系或完整产品 | 总纲阶段、稳定 ID、依赖和当前能力状态 | 总纲、对应产品契约、能力基线、路线图与质量标准 | 旧任务名驱动的历史方案 |
 | PR、合并、发布、交接 | branch/commit/PR/check 状态 | `COLLAB-WORKFLOW.md` 相关段、diff、验证证据 | 协作历史全文 |
 | 并行产品开发 | 产品 ID、共同基线、共享热点、各自 owner | 总纲 §12.1、`COLLAB-WORKFLOW.md` §2.1、产品契约和受影响注册表；涉及世界语义时读 `products/WORLD-ENGINE.md` §18、§20 | 其它产品内部实现；禁止多分支各改一套共享协议 |

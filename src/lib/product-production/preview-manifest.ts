@@ -1,6 +1,16 @@
 import type { ProductBuildPreviewManifestV1 } from '../types'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
-import { parseProductRuntimePackageV1 } from './runtime-package'
+import { parseProductRuntimePackageV1, type ProductTtrpgProtocol2ReaderV1 } from './runtime-package'
+import {
+  createTtrpgVerifiedContentViewV1,
+  verifyTtrpgFrozenContentHashesV1,
+  type ProductRuntimePackageWithTtrpgV2,
+} from '../ttrpg/content-version'
+
+export type ProductBuildPreviewManifestWithTtrpgV2 =
+  Omit<ProductBuildPreviewManifestV1, 'runtimePackage'> & {
+    runtimePackage: ProductRuntimePackageWithTtrpgV2
+  }
 
 function fail(message: string): never {
   throw new Error(`[product-build-preview] ${message}`)
@@ -34,7 +44,7 @@ function hash(value: unknown, label: string): string {
   return value
 }
 
-function previewHashBody(manifest: Omit<ProductBuildPreviewManifestV1, 'previewHash'>) {
+function previewHashBody(manifest: Omit<ProductBuildPreviewManifestWithTtrpgV2, 'previewHash'>) {
   return {
     buildManifestHash: manifest.buildManifestHash,
     packageHash: manifest.packageHash,
@@ -43,7 +53,13 @@ function previewHashBody(manifest: Omit<ProductBuildPreviewManifestV1, 'previewH
   }
 }
 
-export function parseProductBuildPreviewManifestV1(value: string | unknown): ProductBuildPreviewManifestV1 {
+export function parseProductBuildPreviewManifestV1(value: string | unknown): ProductBuildPreviewManifestV1
+export function parseProductBuildPreviewManifestV1(
+  value: string | unknown, reader: ProductTtrpgProtocol2ReaderV1,
+): ProductBuildPreviewManifestWithTtrpgV2
+export function parseProductBuildPreviewManifestV1(
+  value: string | unknown, reader?: ProductTtrpgProtocol2ReaderV1,
+): ProductBuildPreviewManifestWithTtrpgV2 {
   let raw: unknown = value
   if (typeof raw === 'string') {
     try { raw = JSON.parse(raw) } catch { fail('不是合法 JSON') }
@@ -85,7 +101,9 @@ export function parseProductBuildPreviewManifestV1(value: string | unknown): Pro
     || [...fallbackSummary].sort().join('\u0000') !== fallbackSummary.join('\u0000')) {
     fail('fallbackSummary 必须唯一且排序')
   }
-  const runtimePackage = parseProductRuntimePackageV1(manifest.runtimePackage)
+  const runtimePackage = reader
+    ? parseProductRuntimePackageV1(manifest.runtimePackage, reader)
+    : parseProductRuntimePackageV1(manifest.runtimePackage)
   const knownAssets = new Map((runtimePackage.presentation?.assets ?? []).map(asset => [asset.assetKey, asset]))
   for (const binding of mediaBindings) {
     const asset = knownAssets.get(binding.assetKey)
@@ -108,16 +126,28 @@ export function parseProductBuildPreviewManifestV1(value: string | unknown): Pro
   }
 }
 
-export async function createProductBuildPreviewManifestV1(input: {
+interface ProductBuildPreviewInputV1 {
   productionKey: string
   buildNumber: number
   buildManifestHash: string
   runtimePackage: ProductBuildPreviewManifestV1['runtimePackage']
   mediaBindings?: ProductBuildPreviewManifestV1['mediaBindings']
   fallbackSummary?: string[]
-}): Promise<ProductBuildPreviewManifestV1> {
-  const runtimePackage = parseProductRuntimePackageV1(input.runtimePackage)
-  const body: Omit<ProductBuildPreviewManifestV1, 'previewHash'> = {
+}
+type ProductBuildPreviewInputWithTtrpgV2 =
+  Omit<ProductBuildPreviewInputV1, 'runtimePackage'> & { runtimePackage: ProductRuntimePackageWithTtrpgV2 }
+
+export function createProductBuildPreviewManifestV1(input: ProductBuildPreviewInputV1): Promise<ProductBuildPreviewManifestV1>
+export function createProductBuildPreviewManifestV1(
+  input: ProductBuildPreviewInputWithTtrpgV2, reader: ProductTtrpgProtocol2ReaderV1,
+): Promise<ProductBuildPreviewManifestWithTtrpgV2>
+export async function createProductBuildPreviewManifestV1(
+  input: ProductBuildPreviewInputWithTtrpgV2, reader?: ProductTtrpgProtocol2ReaderV1,
+): Promise<ProductBuildPreviewManifestWithTtrpgV2> {
+  const runtimePackage = reader
+    ? parseProductRuntimePackageV1(input.runtimePackage, reader)
+    : parseProductRuntimePackageV1(input.runtimePackage)
+  const body: Omit<ProductBuildPreviewManifestWithTtrpgV2, 'previewHash'> = {
     schema: 'storyforge.product-build-preview',
     version: 1,
     productionKey: input.productionKey.trim().normalize('NFC'),
@@ -130,16 +160,50 @@ export async function createProductBuildPreviewManifestV1(input: {
     )),
     fallbackSummary: [...new Set(input.fallbackSummary ?? [])].sort(),
   }
-  return parseProductBuildPreviewManifestV1({
+  const manifest = {
     ...body,
     previewHash: await hashProductProductionValueV2(previewHashBody(body)),
-  })
+  }
+  return reader
+    ? verifyProductBuildPreviewManifestV1(manifest, reader)
+    : parseProductBuildPreviewManifestV1(manifest)
 }
 
-export async function verifyProductBuildPreviewManifestV1(value: string | unknown): Promise<ProductBuildPreviewManifestV1> {
-  const manifest = parseProductBuildPreviewManifestV1(value)
+export function verifyProductBuildPreviewManifestV1(value: string | unknown): Promise<ProductBuildPreviewManifestV1>
+export function verifyProductBuildPreviewManifestV1(
+  value: string | unknown, reader: ProductTtrpgProtocol2ReaderV1,
+): Promise<ProductBuildPreviewManifestWithTtrpgV2>
+export async function verifyProductBuildPreviewManifestV1(
+  value: string | unknown, reader?: ProductTtrpgProtocol2ReaderV1,
+): Promise<ProductBuildPreviewManifestWithTtrpgV2> {
+  const manifest = reader
+    ? parseProductBuildPreviewManifestV1(value, reader)
+    : parseProductBuildPreviewManifestV1(value)
   if (await hashProductProductionValueV2(manifest.runtimePackage) !== manifest.packageHash) fail('packageHash 校验失败')
+  if (manifest.runtimePackage.ttrpg) {
+    await verifyTtrpgFrozenContentHashesV1(manifest.runtimePackage.ttrpg)
+  }
   const { previewHash: _previewHash, ...body } = manifest
   if (await hashProductProductionValueV2(previewHashBody(body)) !== manifest.previewHash) fail('previewHash 校验失败')
   return manifest
+}
+
+export async function verifyProductBuildPreviewRuntimeViewV1(
+  value: string | unknown,
+  reader: ProductTtrpgProtocol2ReaderV1,
+) {
+  const rawManifest = await verifyProductBuildPreviewManifestV1(value, reader)
+  const rawRuntimePackage = rawManifest.runtimePackage
+  return {
+    rawManifest,
+    rawRuntimePackage,
+    validatedHashes: {
+      previewHash: rawManifest.previewHash,
+      packageHash: rawManifest.packageHash,
+      ruleContentHash: rawRuntimePackage.ttrpg?.rulePack.contentHash ?? null,
+    },
+    runtimeView: rawRuntimePackage.ttrpg
+      ? await createTtrpgVerifiedContentViewV1(rawRuntimePackage.ttrpg)
+      : null,
+  }
 }

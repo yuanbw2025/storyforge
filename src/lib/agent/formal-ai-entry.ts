@@ -37,6 +37,8 @@ export interface FormalAIEntryBindingV1 {
   adoptionTargets: readonly string[]
   allowedCallers: readonly string[]
   reason: string
+  /** Omitted legacy entries retain their exact frozen text binding. */
+  outputModality?: 'audio'
 }
 
 export interface FormalAIEntryRegistryV1 {
@@ -51,7 +53,7 @@ export type FormalAICallMetaV1 = AICallMeta & { formalEntryId: FormalAIEntryId }
 
 const ENTRY_KEYS = new Set([
   'entryId', 'skillId', 'categories', 'runContractBuilderId', 'executionBoundary',
-  'entryKind', 'candidateKind', 'adoptAllowed', 'adoptionTargets', 'allowedCallers', 'reason',
+  'entryKind', 'candidateKind', 'adoptAllowed', 'adoptionTargets', 'allowedCallers', 'reason', 'outputModality',
 ])
 const ENTRY_KINDS = new Set<FormalAIEntryKindV1>(['formal', 'auxiliary', 'evaluation', 'experimental'])
 const EXECUTION_BOUNDARIES = new Set<FormalAIExecutionBoundaryV1>([
@@ -110,7 +112,7 @@ export function parseFormalAIEntryRegistryV1(
     const path = `registry.entries[${index}]`
     const record = asRecord(raw, path)
     for (const key of Object.keys(record)) if (!ENTRY_KEYS.has(key)) fail(`${path} 含未知字段 ${key}`)
-    const required = [...ENTRY_KEYS].filter(key => key !== 'adoptionTargets')
+    const required = [...ENTRY_KEYS].filter(key => key !== 'adoptionTargets' && key !== 'outputModality')
     for (const key of required) if (!(key in record)) fail(`${path} 缺少字段 ${key}`)
 
     const entryId = readString(record, 'entryId', path)
@@ -163,6 +165,9 @@ export function parseFormalAIEntryRegistryV1(
     if (entryKind === 'experimental' && executionBoundary !== 'experimental') {
       fail(`${entryId} experimental 必须使用 experimental 边界`)
     }
+    const outputModality = record.outputModality === undefined ? undefined : record.outputModality
+    if (outputModality !== undefined && (outputModality !== 'audio' || entryKind !== 'formal' || executionBoundary !== 'product-runtime'
+      || adoptAllowed || adoptionTargets.length || skill.writeTargets.length || skill.readToolNames.length)) fail(`${entryId} 音频入口必须是无工具、无写回和无自动采用的正式产品候选`)
 
     return {
       version: 1,
@@ -177,6 +182,7 @@ export function parseFormalAIEntryRegistryV1(
       adoptionTargets,
       allowedCallers,
       reason,
+      ...(outputModality === undefined ? {} : { outputModality: 'audio' as const }),
     }
   })
 
@@ -269,7 +275,7 @@ export async function executeRegisteredAIEntryV1(
   frozenResolution?: AIRequestConfigResolution,
 ): Promise<string> {
   const governedMeta: FormalAICallMetaV1 = { ...meta, formalEntryId: entryId }
-  assertFormalAIEntryCallV1(governedMeta)
+  if (assertFormalAIEntryCallV1(governedMeta).outputModality !== undefined) fail(`${entryId} 音频入口不得借用文本模型执行器`)
   return chat(messages, config, governedMeta, signal, result, options, frozenResolution)
 }
 
@@ -302,8 +308,28 @@ export async function executeFrozenFormalAIEntryV1(
     || !binding.allowedCallers.includes(caller)) {
     fail(`${entryId} 的冻结入口、Skill、category 或 caller 权限不匹配`)
   }
+  if (binding.outputModality !== undefined) fail(`${entryId} 音频入口不得借用文本模型执行器`)
   const governedMeta: FormalAICallMetaV1 = { ...meta, formalEntryId: binding.entryId }
   return chat(messages, config, governedMeta, signal, result, options, frozenResolution)
+}
+
+/** Non-text dispatch still requires the exact frozen entry/Skill/caller. The
+ * product owns its durable attempt, offline transport, byte limits and raw
+ * response. No Chat API, token fabrication, retry, playback or adoption here. */
+export async function executeFrozenFormalAudioEntryV1<T>(
+  entryId: FormalAIEntryId,
+  snapshot: AgentRunFormalAIEntryBindingV1,
+  frozenSkill: AgentSkillDefinitionV1,
+  caller: string,
+  invoke: () => Promise<T>,
+  meta: AICallMeta,
+  signal?: AbortSignal,
+): Promise<T> {
+  const binding = await assertFormalAIEntrySnapshotIntegrityV1(snapshot, new Map([[frozenSkill.id, frozenSkill]]))
+  if (binding.entryId !== entryId || binding.skillId !== frozenSkill.id || binding.outputModality !== 'audio'
+    || !binding.allowedCallers.includes(caller) || !binding.categories.includes(meta.category ?? '')) fail(`${entryId} 的冻结音频入口、Skill、category 或 caller 权限不匹配`)
+  signal?.throwIfAborted()
+  return invoke()
 }
 
 export async function* streamRegisteredAIEntryV1(
@@ -314,6 +340,6 @@ export async function* streamRegisteredAIEntryV1(
   result?: StreamResult,
   frozenResolution?: AIRequestConfigResolution,
 ): AsyncGenerator<string> {
-  assertFormalAIEntryCallV1(meta)
+  if (assertFormalAIEntryCallV1(meta).outputModality !== undefined) fail(`${meta.formalEntryId} 音频入口不得借用文本模型执行器`)
   yield* streamChat(messages, config, signal, result, meta, frozenResolution)
 }

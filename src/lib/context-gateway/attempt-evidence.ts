@@ -432,6 +432,43 @@ async function assertGatewayEvidenceCoherence(input: {
   }
 }
 
+/** Verify the exact preflight before an external send; final V3 evidence still requires a response. */
+export async function verifyContextGatewayPreflightEvidenceV1(input: {
+  scope: WorkspaceScope
+  runId: number
+  stepId: string
+  attempt: number
+  preflight: ContextGatewayPreflightEvidenceV1
+  selector: ContextSelectorResultV1
+  sufficiency: ContextSufficiencyReportV1
+  retrievalTrace: RetrievalTraceV1
+  gatewayVersionHash: string
+  policyHash: string
+}): Promise<Record<string, string>> {
+  await assertPreflightIntegrity(input.preflight)
+  await assertSelectorIntegrity(input.selector)
+  const { reportHash, ...report } = input.sufficiency
+  const { traceHash, ...trace } = input.retrievalTrace
+  if (await hashCanonicalValue(report) !== reportHash || await hashCanonicalValue(trace) !== traceHash) {
+    fail('preflight-hash', '充分性报告或真实读取轨迹 hash 不一致')
+  }
+  await assertGatewayEvidenceCoherence(input)
+  if (input.preflight.runId !== input.runId || input.preflight.stepId !== input.stepId
+    || input.preflight.attempt !== input.attempt) fail('attempt-scope', 'preflight 不属于此 Run/step/attempt')
+  const snapshot = await readEvidenceRunV1(input.scope, input.runId)
+  const artifactBodies: Record<string, string> = {}
+  for (const ref of input.preflight.artifacts) {
+    if (!snapshot.events.some(event => event.type === 'evidence.artifact.recorded'
+      && event.payload.artifactKind === ref.artifactKind && event.payload.contentHash === ref.contentHash
+      && event.payload.byteLength === ref.byteLength
+      && event.payload.stepId === input.stepId && event.payload.attempt === input.attempt)) {
+      fail('preflight-artifact', `${ref.role} 缺少同一 attempt 的真实字节回执`)
+    }
+    artifactBodies[ref.contentHash] = await readAndVerifyArtifactBodyV1(input.scope.projectId, ref)
+  }
+  return artifactBodies
+}
+
 export async function finalizeContextGatewayAttemptEvidenceV1(input: {
   scope: WorkspaceScope
   runId: number

@@ -1053,8 +1053,8 @@ if (!gatewayToolsSource.includes('sourceRefCount: descriptor.sourceRefs.length')
 if (/\bdb\./.test(gatewayToolsSource)) {
   violations.push('[㉕工具只读] Context Gateway tool adapter 不得直接访问或写数据库')
 }
-if (!agentExecutionBindingSource.includes("AGENT_TOOL_SCHEMA_VERSION_V1 = 'agent-read-tools-v8-narrative-query-v1'")
-  || !agentExecutionBindingSource.includes("AGENT_TOOL_SCHEMA_HASH_V1 = '4e0a7be0ccc9b3d3e7d0d348554cfb1a92466346af109488fcb84f17c7743b6b'")
+if (!agentExecutionBindingSource.includes("AGENT_TOOL_SCHEMA_VERSION_V1 = 'agent-read-tools-v21-narrative-query-v1'")
+  || !agentExecutionBindingSource.includes("AGENT_TOOL_SCHEMA_HASH_V1 = '78723a81dfb12f89ca7ab15e579fa4056508eec8694834f557ace62753d419d0'")
   || !agentExecutionBindingSource.includes('verifyAgentToolSchemaBindingV1')) {
   violations.push('[㉕工具版本] 当前 Gateway 工具必须冻结并校验 Agent tool schema version/hash')
 }
@@ -1683,6 +1683,9 @@ for (const token of [
 if (/from\s+['"]\.\.\/(?:ttrpg|character-interaction|adventure|avg|open-world)\//.test(productRuntimeCoreSource)) {
   violations.push('[㉝B运行核心纯度] product/runtime-core.ts 不得直接依赖任何上层产品实现')
 }
+if (/\bttrpgProtocol\b|\.ttrpg\b|\brunFormat\b/.test(productRuntimeCoreSource)) {
+  violations.push('[㉝B跑团边界] 共享运行核心不得解释跑团格式或协议；通过产品适配器分发')
+}
 for (const token of [
   'parseProductOwnedRuntimeStateV1', 'applyProductOwnedRuntimeEventV1',
   'assertFrozenProductRuntimeStateV1', 'assertProductNarrativeChoiceReadyV1',
@@ -1730,7 +1733,7 @@ if (!productRuntimeMediaLibrarySource.includes('productRuntimeSessionId: number'
   violations.push('[㉝B运行媒资隔离] 运行中新生成的媒资必须绑定具体 ProductRuntimeSession')
 }
 if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'")
-  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 12')
+  || !currentSchemaSource.includes('STORYFORGE_SCHEMA_VERSION = 13')
   || !currentSchemaSource.includes('this.version(1).stores(STORYFORGE_STORES_V1)')
   || !currentSchemaSource.includes('this.version(2).stores(STORYFORGE_STORES_V2)')
   || !currentSchemaSource.includes('this.version(3).stores(STORYFORGE_STORES_V3)')
@@ -1741,11 +1744,12 @@ if (!currentSchemaSource.includes("STORYFORGE_DATABASE_NAME = 'storyforge-core'"
   || !currentSchemaSource.includes('this.version(8).stores({ ...STORYFORGE_STORES_V8, chatAuthoringDrafts: STORYFORGE_STORES.chatAuthoringDrafts })')
   || !currentSchemaSource.includes('this.version(10).stores(STORYFORGE_STORES_V10)')
   || !currentSchemaSource.includes('this.version(11).stores(STORYFORGE_STORES_V11)')
+  || !currentSchemaSource.includes('this.version(12).stores(STORYFORGE_STORES_V12)')
   || !currentSchemaSource.includes('this.version(STORYFORGE_SCHEMA_VERSION).stores(STORYFORGE_STORES)')
-  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 12
+  || (currentSchemaSource.match(/\.version\(/g) ?? []).length !== 13
   || currentSchemaSource.includes('.upgrade(')
   || !currentSchemaSource.includes("productMediaAssets: '++id, projectId, worldId, workId, ownerKind, productType, productReleaseId, productRuntimeSessionId, &[productReleaseId+assetKey+version], &[productRuntimeSessionId+assetKey+version]")) {
-  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v12、保留 v1 至 v11 加表迁移、零数据改写 upgrade，并保留当前根/媒资隔离索引')
+  violations.push('[㉝B当前 schema] 必须使用 storyforge-core v13、保留 v1 至 v12 兼容桥、零数据改写 upgrade，并保留当前根/媒资隔离索引')
 }
 if (!deriveImportSrc.includes('ProductMedia 必须具有唯一、有效的产品所有者')
   || !deriveImportSrc.includes("asset.ownerKind === 'release'")

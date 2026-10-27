@@ -9,7 +9,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 export default tseslint.config(
   {
     ignores: [
-      'dist', 'dist-client-verification', 'dist-android', 'android', 'release', 'dist-showcase', 'dist-adventure-player', 'dev-dist', 'coverage', 'node_modules',
+      'dist', 'dist-client-verification', 'dist-android', 'android', 'release', 'dist-showcase', 'dist-adventure-player', 'dev-dist', 'coverage', 'node_modules', '.vite-e2e-cache',
       '**/.vitepress/cache/**', '**/.vitepress/dist/**',
       '**/*.config.{js,ts,mjs,cjs}', 'scripts/**', 'public/**',
     ],

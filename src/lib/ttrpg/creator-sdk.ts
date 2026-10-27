@@ -3,6 +3,11 @@ import { canonicalProductProductionJsonV2 } from '../product-production/hash'
 import type { RulePackV1, TtrpgCampaignContentV1 } from '../types'
 import { parseTtrpgCampaignContentV1 } from './campaign'
 import { evaluateRuleNumberExpressionV1, parseRulePackV1 } from './rule-pack'
+import type { RulePackV2, TtrpgCampaignContentV2 } from './open-contract'
+import { parseRulePackV2, projectTtrpgRulePackMechanicalCoreV1 } from './rule-pack-v2'
+import { parseTtrpgCampaignContentV2 } from './campaign-v2'
+import { assertTtrpgPlayerProtocolV1 } from './run-format'
+import { hashTtrpgFrozenPredicateIndexV1 } from './content-version'
 
 export interface TtrpgCreatorPackageV1 {
   schema: 'storyforge.creator-package'
@@ -39,6 +44,31 @@ export interface RulePackFixtureReportV1 {
     errors: string[]
   }>
 }
+
+/** Explicit open package; V1 envelopes and their signed bytes remain unchanged. */
+export interface TtrpgCreatorPackageV2 extends Omit<TtrpgCreatorPackageV1, 'version' | 'compatibility' | 'payload'> {
+  version: 2
+  compatibility: {
+    minimumRuntimeProtocol: 2
+    maximumRuntimeProtocol: 2
+    minimumPlayerVersion: 2
+  }
+  payload: {
+    kind: 'rule-pack' | 'campaign-pack'
+    rulePack: RulePackV2
+    campaign: TtrpgCampaignContentV2 | null
+  }
+}
+
+export type TtrpgVersionedCreatorPackage = TtrpgCreatorPackageV1 | TtrpgCreatorPackageV2
+
+/** Parsing/install preparation support is distinct from actual runtime support. */
+export const TTRPG_CREATOR_SDK_CAPABILITIES_V2 = Object.freeze({
+  packageVersions: Object.freeze([1, 2] as const),
+  validationProtocols: Object.freeze([1, 2] as const),
+  installationPreparationProtocols: Object.freeze([1, 2] as const),
+  executionProtocols: Object.freeze([1] as const),
+})
 
 export type TtrpgCreatorRevocationReasonV1 =
   | 'key-compromise'
@@ -110,6 +140,17 @@ export interface TtrpgCreatorInstallReceiptV1 {
     executableCode: false
     permissions: []
   }
+}
+
+export interface TtrpgCreatorDependencyLockV2 extends Omit<TtrpgCreatorDependencyLockV1, 'version' | 'runtimeProtocol'> {
+  version: 2
+  runtimeProtocol: 2
+}
+
+export interface TtrpgCreatorInstallReceiptV2 extends Omit<TtrpgCreatorInstallReceiptV1, 'version'> {
+  version: 2
+  runtimeProtocol: 2
+  execution: 'unsupported'
 }
 
 export interface TtrpgCreatorLoadCircuitBreakerStateV1 {
@@ -216,24 +257,29 @@ function assertBoundedJson(value: unknown, label: string, maximumBytes = MAX_CRE
   if (new TextEncoder().encode(json).byteLength > maximumBytes) fail(`${label} 超过 ${maximumBytes} bytes`)
 }
 
-function signingBody(pkg: Omit<TtrpgCreatorPackageV1, 'signature'>): string {
+function signingBody(pkg: Omit<TtrpgCreatorPackageV1, 'signature'> | Omit<TtrpgCreatorPackageV2, 'signature'>): string {
   return canonicalProductProductionJsonV2(pkg)
 }
 
-function parsePackage(value: unknown): TtrpgCreatorPackageV1 {
+function parsePackage(value: unknown): TtrpgCreatorPackageV1
+function parsePackage(value: unknown, version: 2): TtrpgCreatorPackageV2
+function parsePackage(value: unknown, version: 1 | 2 = 1): TtrpgVersionedCreatorPackage {
   const pkg = record(value, 'package')
   exact(pkg, [
     'schema', 'version', 'packageId', 'packageVersion', 'publisher', 'compatibility',
     'permissions', 'payload', 'payloadHash', 'signatureAlgorithm', 'signature',
   ], 'package')
-  if (pkg.schema !== 'storyforge.creator-package' || pkg.version !== 1) fail('package schema/version 无效')
+  if (pkg.schema !== 'storyforge.creator-package' || pkg.version !== version) fail('package schema/version 无效')
   if (pkg.signatureAlgorithm !== 'ECDSA-P256-SHA256') fail('signatureAlgorithm 无效')
-  if (!Array.isArray(pkg.permissions) || pkg.permissions.length !== 0) fail('data-only v1 不允许声明权限')
+  if (!Array.isArray(pkg.permissions) || pkg.permissions.length !== 0) fail(`data-only v${version} 不允许声明权限`)
   const publisher = record(pkg.publisher, 'publisher')
   exact(publisher, ['publisherId', 'displayName', 'keyId', 'publicKeyJwk'], 'publisher')
   const compatibility = record(pkg.compatibility, 'compatibility')
-  exact(compatibility, ['minimumRuntimeProtocol', 'maximumRuntimeProtocol'], 'compatibility')
-  if (compatibility.minimumRuntimeProtocol !== 1 || compatibility.maximumRuntimeProtocol !== 1) {
+  exact(compatibility, version === 1
+    ? ['minimumRuntimeProtocol', 'maximumRuntimeProtocol']
+    : ['minimumRuntimeProtocol', 'maximumRuntimeProtocol', 'minimumPlayerVersion'], 'compatibility')
+  if (compatibility.minimumRuntimeProtocol !== version || compatibility.maximumRuntimeProtocol !== version
+    || (version === 2 && compatibility.minimumPlayerVersion !== 2)) {
     fail('runtime protocol 不兼容')
   }
   const payload = record(pkg.payload, 'payload')
@@ -243,8 +289,8 @@ function parsePackage(value: unknown): TtrpgCreatorPackageV1 {
     || (payload.kind === 'campaign-pack' && payload.campaign == null)) fail('payload.kind 与 campaign 不一致')
   const publicKeyJwk = publicP256Jwk(publisher.publicKeyJwk, 'publisher.publicKeyJwk')
   if (typeof pkg.payloadHash !== 'string' || !/^[0-9a-f]{64}$/.test(pkg.payloadHash)) fail('payloadHash 无效')
-  return {
-    schema: 'storyforge.creator-package', version: 1,
+  const common = {
+    schema: 'storyforge.creator-package' as const,
     packageId: stableKey(pkg.packageId, 'packageId'),
     packageVersion: semver(pkg.packageVersion, 'packageVersion'),
     publisher: {
@@ -254,16 +300,37 @@ function parsePackage(value: unknown): TtrpgCreatorPackageV1 {
       keyId: stableKey(publisher.keyId, 'publisher.keyId'),
       publicKeyJwk: structuredClone(publicKeyJwk),
     },
+    permissions: [] as [],
+    payloadHash: pkg.payloadHash,
+    signatureAlgorithm: 'ECDSA-P256-SHA256' as const,
+    signature: typeof pkg.signature === 'string' ? pkg.signature : fail('signature 无效'),
+  }
+  if (version === 2) {
+    const rulePack = parseRulePackV2(payload.rulePack)
+    return {
+      ...common, version: 2,
+      compatibility: { minimumRuntimeProtocol: 2, maximumRuntimeProtocol: 2, minimumPlayerVersion: 2 },
+      payload: {
+        kind: payload.kind as TtrpgCreatorPackageV2['payload']['kind'],
+        rulePack,
+        campaign: payload.campaign === null ? null : parseTtrpgCampaignContentV2(payload.campaign, rulePack),
+      },
+    }
+  }
+  return {
+    schema: common.schema, version: 1,
+    packageId: common.packageId, packageVersion: common.packageVersion,
+    publisher: common.publisher,
     compatibility: { minimumRuntimeProtocol: 1, maximumRuntimeProtocol: 1 },
-    permissions: [],
+    permissions: common.permissions,
     payload: {
       kind: payload.kind as TtrpgCreatorPackageV1['payload']['kind'],
       rulePack: parseRulePackV1(payload.rulePack),
       campaign: payload.campaign == null ? null : structuredClone(payload.campaign as TtrpgCampaignContentV1),
     },
-    payloadHash: pkg.payloadHash,
-    signatureAlgorithm: 'ECDSA-P256-SHA256',
-    signature: typeof pkg.signature === 'string' ? pkg.signature : fail('signature 无效'),
+    payloadHash: common.payloadHash,
+    signatureAlgorithm: common.signatureAlgorithm,
+    signature: common.signature,
   }
 }
 
@@ -566,14 +633,16 @@ export async function verifyTtrpgCreatorPackageAgainstTrustManifestV1(input: {
   }
 }
 
-function dependencyLockBody(lock: Omit<TtrpgCreatorDependencyLockV1, 'lockHash'>): string {
+function dependencyLockBody(lock: Omit<TtrpgCreatorDependencyLockV1, 'lockHash'> | Omit<TtrpgCreatorDependencyLockV2, 'lockHash'>): string {
   return canonicalProductProductionJsonV2(lock)
 }
 
-function parseDependencyLock(value: unknown): TtrpgCreatorDependencyLockV1 {
+function parseDependencyLock(value: unknown): TtrpgCreatorDependencyLockV1
+function parseDependencyLock(value: unknown, version: 2): TtrpgCreatorDependencyLockV2
+function parseDependencyLock(value: unknown, version: 1 | 2 = 1): TtrpgCreatorDependencyLockV1 | TtrpgCreatorDependencyLockV2 {
   const lock = record(value, 'dependencyLock')
   exact(lock, ['schema', 'version', 'runtimeProtocol', 'root', 'packages', 'lockHash'], 'dependencyLock')
-  if (lock.schema !== 'storyforge.creator-dependency-lock' || lock.version !== 1 || lock.runtimeProtocol !== 1) {
+  if (lock.schema !== 'storyforge.creator-dependency-lock' || lock.version !== version || lock.runtimeProtocol !== version) {
     fail('dependencyLock schema/version/runtimeProtocol 无效')
   }
   const root = record(lock.root, 'dependencyLock.root')
@@ -598,8 +667,8 @@ function parseDependencyLock(value: unknown): TtrpgCreatorDependencyLockV1 {
   if (canonicalProductProductionJsonV2(sorted) !== canonicalProductProductionJsonV2(packages)) {
     fail('dependencyLock.packages 必须按 packageId 排序')
   }
-  const parsed: TtrpgCreatorDependencyLockV1 = {
-    schema: 'storyforge.creator-dependency-lock', version: 1, runtimeProtocol: 1,
+  const parsed = {
+    schema: 'storyforge.creator-dependency-lock' as const,
     root: {
       packageId: stableKey(root.packageId, 'dependencyLock.root.packageId'),
       packageVersion: semver(root.packageVersion, 'dependencyLock.root.packageVersion'),
@@ -609,7 +678,9 @@ function parseDependencyLock(value: unknown): TtrpgCreatorDependencyLockV1 {
   }
   if (!packages.some(item => item.packageId === parsed.root.packageId
     && item.packageVersion === parsed.root.packageVersion)) fail('dependencyLock.root 不在 packages 中')
-  return parsed
+  return version === 1
+    ? { schema: parsed.schema, version: 1, runtimeProtocol: 1, root: parsed.root, packages, lockHash: parsed.lockHash }
+    : { schema: parsed.schema, version: 2, runtimeProtocol: 2, root: parsed.root, packages, lockHash: parsed.lockHash }
 }
 
 export async function createTtrpgCreatorDependencyLockV1(input: {
@@ -752,6 +823,7 @@ export function assertTtrpgCreatorPackageLoadAllowedV1(input: {
   receipt: TtrpgCreatorInstallReceiptV1
   state: TtrpgCreatorLoadCircuitBreakerStateV1
 }): void {
+  if (input.receipt.version !== 1) fail('protocol2 仅支持验证/准备安装，尚不支持实际运行')
   if (input.state.packageId !== input.receipt.packageId
     || input.state.packageVersion !== input.receipt.packageVersion
     || input.state.payloadHash !== input.receipt.payloadHash
@@ -765,4 +837,186 @@ export function recordTtrpgCreatorLoadSuccessV1(
   state: TtrpgCreatorLoadCircuitBreakerStateV1,
 ): TtrpgCreatorLoadCircuitBreakerStateV1 {
   return { ...structuredClone(state), consecutiveFailures: 0, lastFailureAt: null, trippedAt: null }
+}
+
+async function verifyCreatorCampaignIndexV2(campaign: TtrpgCampaignContentV2 | null): Promise<void> {
+  if (campaign && await hashTtrpgFrozenPredicateIndexV1(campaign.frozenWorldPredicateIndex)
+    !== campaign.frozenWorldPredicateIndex.indexHash) fail('frozen indexHash 校验失败')
+}
+
+export async function createSignedTtrpgCreatorPackageV2(input: Omit<
+  Parameters<typeof createSignedTtrpgCreatorPackageV1>[0], 'rulePack' | 'campaign'
+> & { rulePack: RulePackV2; campaign?: TtrpgCampaignContentV2 | null }): Promise<TtrpgCreatorPackageV2> {
+  const rulePack = parseRulePackV2(input.rulePack)
+  const fixtureReport = runRulePackFixturesV1(projectTtrpgRulePackMechanicalCoreV1(rulePack))
+  if (!fixtureReport.valid) fail('RulePack fixture 未通过')
+  const campaign = input.campaign == null ? null : parseTtrpgCampaignContentV2(input.campaign, rulePack)
+  await verifyCreatorCampaignIndexV2(campaign)
+  const publicKeyJwk = await crypto.subtle.exportKey('jwk', input.publicKey)
+  const payload: TtrpgCreatorPackageV2['payload'] = {
+    kind: campaign ? 'campaign-pack' : 'rule-pack', rulePack, campaign,
+  }
+  const unsigned: Omit<TtrpgCreatorPackageV2, 'signature'> = {
+    schema: 'storyforge.creator-package', version: 2,
+    packageId: stableKey(input.packageId, 'packageId'),
+    packageVersion: semver(input.packageVersion, 'packageVersion'),
+    publisher: {
+      publisherId: stableKey(input.publisherId, 'publisherId'),
+      displayName: input.publisherDisplayName.trim().normalize('NFC'),
+      keyId: `key.${(await hashCanonicalValue(publicKeyJwk)).slice(0, 32)}`,
+      publicKeyJwk,
+    },
+    compatibility: { minimumRuntimeProtocol: 2, maximumRuntimeProtocol: 2, minimumPlayerVersion: 2 },
+    permissions: [], payload,
+    payloadHash: await hashCanonicalValue(payload),
+    signatureAlgorithm: 'ECDSA-P256-SHA256',
+  }
+  if (!unsigned.publisher.displayName) fail('publisherDisplayName 无效')
+  assertBoundedJson(unsigned, 'creator package')
+  const signature = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' }, input.privateKey,
+    new TextEncoder().encode(signingBody(unsigned)),
+  )
+  return parsePackage({ ...unsigned, signature: base64Url(new Uint8Array(signature)) }, 2)
+}
+
+/** Opt-in reader; legacy envelopes still pass the entire original verifier. */
+export async function verifyTtrpgCreatorPackageVersionedV1(input:
+  Parameters<typeof verifyTtrpgCreatorPackageV1>[0] & { playerVersion: 1 | 2 },
+): Promise<{
+  package: TtrpgVersionedCreatorPackage
+  trustedPublisher: boolean
+  fixtureReport: RulePackFixtureReportV1
+}> {
+  const version = record(input.value, 'package').version
+  if (version !== 1 && version !== 2) fail('package schema/version 无效')
+  assertTtrpgPlayerProtocolV1({ runtimeProtocol: version, minimumPlayerVersion: version, playerVersion: input.playerVersion })
+  if (version === 1) return verifyTtrpgCreatorPackageV1(input)
+  assertBoundedJson(input.value, 'creator package')
+  const pkg = parsePackage(input.value, 2)
+  if (input.revokedKeyIds?.has(pkg.publisher.keyId)) fail('publisher key 已撤销')
+  const expectedKeyId = `key.${(await hashCanonicalValue(pkg.publisher.publicKeyJwk)).slice(0, 32)}`
+  if (pkg.publisher.keyId !== expectedKeyId) fail('publisher keyId 与公钥不一致')
+  // Only the parsed original V2 payload participates in identity/signature.
+  if (await hashCanonicalValue(pkg.payload) !== pkg.payloadHash) fail('payloadHash 校验失败')
+  const publicKey = await crypto.subtle.importKey(
+    'jwk', pkg.publisher.publicKeyJwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'],
+  )
+  const { signature: _signature, ...unsigned } = pkg
+  if (!await crypto.subtle.verify(
+    { name: 'ECDSA', hash: 'SHA-256' }, publicKey, fromBase64Url(pkg.signature),
+    new TextEncoder().encode(signingBody(unsigned)),
+  )) fail('package signature 校验失败')
+  await verifyCreatorCampaignIndexV2(pkg.payload.campaign)
+  const fixtureReport = runRulePackFixturesV1(projectTtrpgRulePackMechanicalCoreV1(pkg.payload.rulePack))
+  if (!fixtureReport.valid) fail('RulePack fixture 未通过')
+  return { package: pkg, trustedPublisher: input.trustedKeyIds?.has(pkg.publisher.keyId) ?? false, fixtureReport }
+}
+
+export async function verifyTtrpgCreatorPackageAgainstTrustManifestVersionedV1(input:
+  Parameters<typeof verifyTtrpgCreatorPackageAgainstTrustManifestV1>[0] & { playerVersion: 1 | 2 },
+) {
+  const trust = await verifyTtrpgCreatorTrustManifestV1({
+    value: input.trustManifest, pinnedIssuerKeyIds: input.pinnedIssuerKeyIds,
+    now: input.now, minimumSequence: input.minimumManifestSequence,
+  })
+  const verified = await verifyTtrpgCreatorPackageVersionedV1({
+    value: input.value, playerVersion: input.playerVersion,
+    revokedKeyIds: trust.revokedPublisherKeyIds, trustedKeyIds: trust.trustedPublisherKeyIds,
+  })
+  if (!verified.trustedPublisher) fail('publisher key 不在当前 trustManifest 允许列表中')
+  const revoked = trust.manifest.revokedPackages.find(item =>
+    item.effectiveAt <= input.now && item.packageId === verified.package.packageId
+    && (item.packageVersion === null || item.packageVersion === verified.package.packageVersion)
+    && (item.payloadHash === null || item.payloadHash === verified.package.payloadHash))
+  if (revoked) fail(`creator package 已撤销:${revoked.reason}`)
+  return { package: verified.package, fixtureReport: verified.fixtureReport, trustManifest: trust.manifest }
+}
+
+type CreatorLockInputV2 = Omit<Parameters<typeof createTtrpgCreatorDependencyLockV1>[0], 'rootPackageId' | 'rootPackageVersion'>
+  & { playerVersion: 1 | 2 }
+
+async function verifyProtocol2Packages(input: CreatorLockInputV2) {
+  if (!Array.isArray(input.packages) || input.packages.length < 1 || input.packages.length > 256) {
+    fail('dependencyLock.packages 必须包含 1..256 个包')
+  }
+  return Promise.all(input.packages.map(async value => {
+    const verified = await verifyTtrpgCreatorPackageAgainstTrustManifestVersionedV1({ ...input, value })
+    if (verified.package.version !== 2) fail('dependencyLock protocol2 不接受混合版本包')
+    return { ...verified, package: verified.package }
+  }))
+}
+
+function creatorLockEntries(packages: readonly TtrpgVersionedCreatorPackage[]): TtrpgCreatorDependencyLockV1['packages'] {
+  return packages.map(pkg => ({
+    packageId: pkg.packageId, packageVersion: pkg.packageVersion,
+    payloadHash: pkg.payloadHash, publisherKeyId: pkg.publisher.keyId,
+  })).sort((left, right) => left.packageId.localeCompare(right.packageId))
+}
+
+export async function createTtrpgCreatorDependencyLockV2(input: CreatorLockInputV2 & {
+  rootPackageId: string
+  rootPackageVersion: string
+}): Promise<TtrpgCreatorDependencyLockV2> {
+  const verified = await verifyProtocol2Packages(input)
+  const base: Omit<TtrpgCreatorDependencyLockV2, 'lockHash'> = {
+    schema: 'storyforge.creator-dependency-lock', version: 2, runtimeProtocol: 2,
+    root: { packageId: stableKey(input.rootPackageId, 'rootPackageId'), packageVersion: semver(input.rootPackageVersion, 'rootPackageVersion') },
+    packages: creatorLockEntries(verified.map(item => item.package)),
+  }
+  return parseDependencyLock({ ...base, lockHash: await hashCanonicalValue(base) }, 2)
+}
+
+export async function verifyTtrpgCreatorDependencyLockVersionedV1(input:
+  Parameters<typeof verifyTtrpgCreatorDependencyLockV1>[0] & { playerVersion: 1 | 2 },
+): Promise<{
+  lock: TtrpgCreatorDependencyLockV1 | TtrpgCreatorDependencyLockV2
+  packages: TtrpgVersionedCreatorPackage[]
+  trustManifest: TtrpgCreatorTrustManifestV1
+}> {
+  if (record(input.value, 'dependencyLock').version === 1) {
+    return verifyTtrpgCreatorDependencyLockV1(input)
+  }
+  assertTtrpgPlayerProtocolV1({ runtimeProtocol: 2, minimumPlayerVersion: 2, playerVersion: input.playerVersion })
+  const lock = parseDependencyLock(input.value, 2)
+  const { lockHash: _lockHash, ...base } = lock
+  if (await hashCanonicalValue(base) !== lock.lockHash) fail('dependencyLock.lockHash 校验失败')
+  const verified = await verifyProtocol2Packages(input)
+  const entries = creatorLockEntries(verified.map(item => item.package))
+  if (canonicalProductProductionJsonV2(entries) !== canonicalProductProductionJsonV2(lock.packages)) {
+    fail('dependencyLock 与实际安装包集合不一致')
+  }
+  return { lock, packages: verified.map(item => item.package), trustManifest: verified[0].trustManifest }
+}
+
+/** No database writes and no runtime activation. V2 receipt explicitly forbids execution. */
+export async function prepareTtrpgCreatorPackageInstallVersionedV1(input:
+  Parameters<typeof prepareTtrpgCreatorPackageInstallV1>[0] & { playerVersion: 1 | 2 },
+): Promise<
+  | { package: TtrpgCreatorPackageV1; receipt: TtrpgCreatorInstallReceiptV1 }
+  | { package: TtrpgCreatorPackageV2; receipt: TtrpgCreatorInstallReceiptV2 }
+> {
+  if (record(input.dependencyLock, 'dependencyLock').version === 1) {
+    return prepareTtrpgCreatorPackageInstallV1(input)
+  }
+  const verified = await verifyTtrpgCreatorDependencyLockVersionedV1({ ...input, value: input.dependencyLock })
+  const root = verified.packages.find(pkg => pkg.packageId === verified.lock.root.packageId
+    && pkg.packageVersion === verified.lock.root.packageVersion) ?? fail('dependencyLock root package 缺失')
+  if (root.version !== 2) fail('dependencyLock root protocol 不一致')
+  return {
+    package: structuredClone(root),
+    receipt: {
+      schema: 'storyforge.creator-install-receipt', version: 2, runtimeProtocol: 2, execution: 'unsupported',
+      packageId: root.packageId, packageVersion: root.packageVersion,
+      payloadHash: root.payloadHash, publisherKeyId: root.publisher.keyId,
+      trustManifestHash: verified.trustManifest.manifestHash,
+      trustManifestSequence: verified.trustManifest.sequence,
+      dependencyLockHash: verified.lock.lockHash, verifiedAt: timestamp(input.now, 'now'),
+      isolation: { mode: 'data-only', executableCode: false, permissions: [] },
+    },
+  }
+}
+
+export function assertTtrpgCreatorPackageExecutionAllowedV1(receipt: TtrpgCreatorInstallReceiptV1 | TtrpgCreatorInstallReceiptV2): void {
+  if (receipt.version !== 1) fail('protocol2 仅支持验证/准备安装，尚不支持实际运行')
 }

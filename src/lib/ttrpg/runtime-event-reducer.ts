@@ -1,3 +1,35 @@
+import { applyTtrpgOpenContinuationStartV1 } from './open-release-continuation-start'
+import { applyTtrpgOpenStageOpeningEventV1 } from './open-stage-opening-reducer'
+import { applyTtrpgOpenVoiceRequestEventV1 } from './open-voice-request-reducer'
+import { applyTtrpgOpenAudioEventV1 } from './open-audio-reducer'
+import { applyTtrpgOpenCommonOracleArchiveV1 } from './open-common-oracle-archive-contract'
+import { TTRPG_OPEN_COMMON_ORACLE_INPUT_V1, parseTtrpgOpenCommonOracleRequestCloseV1 } from './open-common-oracle-request'
+import { assertTtrpgOpenCommonOracleCallOriginV1 } from './open-model-calls'
+import { assertTtrpgOpenCommonOracleEpochAuthorityV1, assertTtrpgOpenCommonOracleEpochOriginV1 } from './open-coordination'
+import { applyTtrpgOpenEntityEventV1 } from './open-entity-reducer'
+import { assertTtrpgOpenSupportSlotV1, assertTtrpgOpenOracleInterpretationSlotV1 } from './open-model-calls'
+import { assertTtrpgOpenSituationRuntimeReferenceJournalV1, assertTtrpgOpenOracleRuntimeReferenceJournalV1, assertTtrpgOpenNormalizationRuntimeReferenceOriginV1 } from './open-runtime-entity-references'
+import { applyTtrpgOpenSessionSituationEventV1 } from './open-session-situation-reducer'
+import { TTRPG_OPEN_PUBLIC_SITUATION_TRIGGER_V1, assertTtrpgOpenPublicSituationOriginalScopeV1 } from './open-public-situation-authorization-contract'
+import { TTRPG_OPEN_ORACLE_INSTANCE_INPUT_V1, TTRPG_OPEN_NORMALIZATION_INSTANCE_INPUT_V1, assertTtrpgOpenOracleRuntimeEpochAuthorityV1, ttrpgOpenEpochBudgetForTriggerV1, assertTtrpgOpenBriefEpochAuthorityV1, assertTtrpgOpenSituationEpochAuthorityV1, assertTtrpgOpenSituationWindowEventV1 } from './open-coordination'
+import { applyTtrpgOpenTableMessageEventV1 } from './open-table-conversation-reducer'
+import { applyTtrpgOpenMemoryEventV1 } from './open-memory-reducer'
+import { applyTtrpgOpenHostingDelegationEventV1 } from './open-hosting-delegation'
+import { parseTtrpgOpenManualRequestV1 } from './open-manual-action'
+import { applyTtrpgOpenPrivateChoiceDisclosureEventV1 } from './open-private-choice-reducer'
+import { applyTtrpgOpenGateRecoveryEventV1 } from './open-gate-recovery-reducer'
+import { applyTtrpgOpenHandoffEventV1 } from './open-handoff'
+import { applyTtrpgOpenCompanionPreauthorizationEventV1 } from './open-companion-preauthorization'
+import { applyTtrpgOpenNarrationEventV1 } from './open-kp-reducer'
+import { ttrpgOpenClosedStageRecoveryAllowedV1 } from './open-stage-close'
+import { applyTtrpgOpenStageClosureEventV1 } from './open-stage-close-reducer'
+import { applyTtrpgOpenTerminalGateEventV1 } from './open-terminal-gates-reducer'
+import { applyTtrpgOpenSituationCycleEventV1 } from './open-situation-cycle-reducer'
+import { applyTtrpgOpenSituationWorkEventV1 } from './open-situation-work-reducer'
+import { applyTtrpgOpenPressureEffectEventV1 } from './open-pressure-effect-reducer'
+import { parseTtrpgRuntimeStateV2 } from './open-runtime-contract'
+import { applyTtrpgOpenPressureEventV1 } from './open-pressure-reducer'
+import { applyTtrpgMechanicalResultV1 } from './rule-action-mechanical';
 import { parseTtrpgPrivateGuidanceReceiptV1 } from './private-guidance-model'
 import { parseTtrpgDirectorReceiptV1 } from './director-model'
 /** TTRPG-owned event reducer. Shared runtime storage dispatches here by product event namespace. */
@@ -42,13 +74,298 @@ import {
   stableProductRuntimeJsonV1 as stableJson,
   type ProductRuntimeJsonObjectV1,
 } from '../product/runtime-values'
+import {
+  parseTtrpgOpenFailureRuntimeStateV1,
+  parseTtrpgOpenRunStateV1,
+  parseTtrpgOpenSituationRuntimeStateV1,
+} from './open-runtime-contract'
+import { parseTtrpgOpenAuthorizationV1 } from './open-authorization'
+import { parseTtrpgOpenEpochV1 } from './open-coordination'
+import { applyTtrpgOpenOperationEventV1 } from './open-operation-reducer'
+import { applyTtrpgOpenModelCallEventV1 } from './open-model-call-reducer'
+import { applyTtrpgOpenBranchEventV1 } from './open-branch-reducer'
+import { applyTtrpgOpenOracleEventV1 } from './open-oracle-reducer'
+import { applyTtrpgOpenFactEventV1 } from './open-fact-reducer'
+import { applyTtrpgOpenOracleReviewEventV1 } from './open-oracle-review-reducer'
+import { applyTtrpgOpenKnowledgeShareEventV1 } from './open-knowledge-share-reducer'
+import { applyTtrpgOpenIdentityKnowledgeEventV1 } from './open-identity-knowledge-reducer'
 
 export function applyTtrpgRuntimeEventV1(
   state: ProductRuntimeState,
   event: ProductRuntimeEvent,
   payload: ProductRuntimeJsonObjectV1,
 ): ProductRuntimeState {
+  assertTtrpgOpenSituationWindowEventV1(state.ttrpg?.sessionKey ? parseTtrpgRuntimeStateV2(state.ttrpg) : null, event.type)
+  if (applyTtrpgOpenVoiceRequestEventV1(state, event, payload) || applyTtrpgOpenAudioEventV1(state, event, payload) || applyTtrpgOpenEntityEventV1(state, event, payload) || applyTtrpgOpenSessionSituationEventV1(state, event, payload) || applyTtrpgOpenMemoryEventV1(state, event, payload)) {
+    state.ttrpg = parseTtrpgRuntimeStateV2(state.ttrpg)!
+    state.lastSequence = event.sequence
+    return state
+  }
+  if (state.ttrpg?.sessionKey && (applyTtrpgOpenHostingDelegationEventV1(state,event,payload) || applyTtrpgOpenTableMessageEventV1(state,event,payload) || applyTtrpgOpenPrivateChoiceDisclosureEventV1(state,event,payload) || applyTtrpgOpenHandoffEventV1(state, event, payload) || applyTtrpgOpenCompanionPreauthorizationEventV1(state, event, payload) || applyTtrpgOpenNarrationEventV1(state, event, payload) || applyTtrpgOpenGateRecoveryEventV1(state, event, payload) || applyTtrpgOpenStageOpeningEventV1(state, event, payload) || applyTtrpgOpenStageClosureEventV1(state, event, payload) || applyTtrpgOpenTerminalGateEventV1(state, event, payload) || applyTtrpgOpenSituationCycleEventV1(state, event, payload) || applyTtrpgOpenSituationWorkEventV1(state, event, payload) || applyTtrpgOpenPressureEffectEventV1(state, event, payload) || applyTtrpgOpenPressureEventV1(state, event, payload))) {
+    state.ttrpg = parseTtrpgRuntimeStateV2(state.ttrpg)!;
+    state.lastSequence = event.sequence;
+    return state;
+  }
+  if (state.ttrpg?.sessionKey && (applyTtrpgOpenOperationEventV1(state, event, payload) || applyTtrpgOpenModelCallEventV1(state, event, payload)
+    || applyTtrpgOpenBranchEventV1(state, event, payload) || applyTtrpgOpenOracleEventV1(state, event, payload) || applyTtrpgOpenFactEventV1(state, event, payload)
+    || applyTtrpgOpenKnowledgeShareEventV1(state, event, payload) || applyTtrpgOpenIdentityKnowledgeEventV1(state, event, payload) || applyTtrpgOpenOracleReviewEventV1(state, event, payload))) {
+    const openState = parseTtrpgRuntimeStateV2(state.ttrpg)!;
+    if (openState.openRun?.operations.some(o => o.pressureTurnConditions) || openState.openRun?.narrations || openState.openRun?.stageClosures || openState.openRun?.terminalReceipts || openState.openRun?.gateReceipts || openState.openRun?.situationCycles || openState.openRun?.pressureCycles || openState.openRun?.pressureSignals) state.ttrpg = openState;
+    state.lastSequence = event.sequence;
+    return state;
+  }
   switch (event.type) {
+    case "ttrpg.open.run.started": {
+      const ttrpg = requireTtrpgState(state);
+      const authorization = parseTtrpgOpenAuthorizationV1(ttrpg.authorization);
+      if (!ttrpg.product.sessionZero.completed || authorization.revision !== ttrpg.product.sessionZero.completedAtSequence) {
+        throw new Error("open run 需要有效 Session Zero 和真人批准关系。");
+      }
+      if (
+        !Object.prototype.hasOwnProperty.call(ttrpg, "openRun") ||
+        ttrpg.openRun !== null
+      ) {
+        throw new Error("open run 只能由第一次 started 事件初始化。");
+      }
+      if (Object.keys(payload).sort().join(",") !== "authorizationRevision,intent,openRun,startedBySeatKey,viewerKey") {
+        throw new Error("open run started 事件字段不精确。");
+      }
+      const openRun = parseTtrpgOpenRunStateV1(payload.openRun);
+      const seat = authorization.seats.find(item => item.seatKey === payload.startedBySeatKey && item.viewerKey === payload.viewerKey);
+      if (
+        Object.prototype.hasOwnProperty.call(openRun, "situationReceipts") || openRun.worldTime.worldTurn !== 0 ||
+        openRun.worldTime.lastAdvancedByEventSequence !== -1 ||
+        openRun.chaos.value !== 5 ||
+        openRun.stage.status !== "open" || openRun.stage.openedAtWorldTurn !== 0 ||
+        openRun.stage.closedAtWorldTurn !== null || openRun.consultedThisWorldTurn !== 0 ||
+        openRun.coordination.epochs.length !== 0 || openRun.coordination.calls.length !== 0 || openRun.coordination.activeEpochKey !== null ||
+        openRun.operations.length !== 0 || openRun.ruleReceipts.length !== 0 || openRun.knowledge.length !== 0 ||
+        (openRun.oracleReceipts?.length ?? 0) !== 0 ||
+        openRun.factLedger !== undefined ||
+        (openRun.knowledgeShares?.length ?? 0) !== 0 ||
+        openRun.gates.length !== 0 || openRun.failures.length !== 0 ||
+        openRun.situations.active.length !== 0 || openRun.situations.queued.length !== 0 ||
+        Object.keys(openRun.situations.cooldowns).length !== 0 ||
+        payload.authorizationRevision !== authorization.revision || !seat || seat.controller === "ai" ||
+        seat.assignmentState !== "claimed" || event.actorKey !== seat.actorKey ||
+        stableJson(openRun.companions.map(companion => companion.actorKey).sort()) !== stableJson([...authorization.selectedActorKeys].sort()) ||
+        openRun.companions.some(companion => companion.consecutiveActions !== 0)
+      ) {
+        throw new Error("open run started 初始状态不符合固定起点。");
+      }
+      ttrpg.openRun = openRun;
+      state.clock = 0;
+      break;
+    }
+    case "ttrpg.open.epoch.started": {
+      const ttrpg = requireTtrpgState(state);
+      const authorization = parseTtrpgOpenAuthorizationV1(ttrpg.authorization);
+      const openRun = parseTtrpgOpenRunStateV1(ttrpg.openRun, ttrpg.sessionKey);
+      if (Object.keys(payload).sort().join(",") !== "epoch,intent") throw new Error("epoch.started 字段不精确。");
+      const epoch = parseTtrpgOpenEpochV1(payload.epoch);
+      if (openRun.gateRecoveries?.some(r => r.stoppedRef && openRun.operations.some(o => o.operationKey === r.operationKey && o.status === 'executing'))) throw new Error('本轮质量门恢复已停止，未完成业务不能借新 epoch 绕过');
+      const seat = authorization.seats.find(item => item.seatKey === epoch.triggeredBySeatKey && item.viewerKey === epoch.viewerKey);
+      if (!ttrpg.sessionKey || !seat || seat.controller === "ai" || seat.assignmentState !== "claimed"
+        || event.actorKey !== seat.actorKey || !isObject(payload.intent)
+        || payload.intent.viewerKey !== epoch.viewerKey || payload.intent.triggerKind !== epoch.triggerKind
+        || typeof payload.intent.rawInput !== "string" || !payload.intent.rawInput.trim()
+        || epoch.startedRef.sessionKey !== ttrpg.sessionKey || epoch.startedRef.sequence !== event.sequence
+        || epoch.sessionZeroRevision !== authorization.revision || epoch.status !== "active"
+        || epoch.closedRef !== null || epoch.stopReason !== null || epoch.hostingDelegation || epoch.successfulActorKeys.length !== 0
+        || epoch.reservedCalls !== 0 || epoch.consumedTokens !== 0 || epoch.actualCostUsd !== 0
+        || stableJson(epoch.budget) !== stableJson(ttrpgOpenEpochBudgetForTriggerV1(ttrpg.epochBudget, epoch.triggerKind, Boolean(epoch.commonOracle || epoch.oracleRuntimeReferencePolicy || epoch.normalizationRuntimeReferencePolicy)))
+        || openRun.stage.status !== "open" && epoch.triggerKind !== "request-brief" && !ttrpgOpenClosedStageRecoveryAllowedV1(parseTtrpgRuntimeStateV2(state.ttrpg)!, epoch.triggerKind) || openRun.coordination.activeEpochKey !== null
+        || openRun.coordination.epochs.some(item => item.epochKey === epoch.epochKey)) {
+        throw new Error("epoch.started 的真人授权、初始额度或活动窗口无效。");
+      }
+      if (epoch.triggerKind === 'request-brief') assertTtrpgOpenBriefEpochAuthorityV1(parseTtrpgRuntimeStateV2(state.ttrpg)!, epoch.viewerKey);
+      if (epoch.triggerKind === 'request-situation') assertTtrpgOpenSituationEpochAuthorityV1(parseTtrpgRuntimeStateV2(state.ttrpg)!, epoch.viewerKey);
+      if (epoch.commonOracle) {
+        const runtime = parseTtrpgRuntimeStateV2(state.ttrpg)!, basis = epoch.commonOracle.basis;
+        assertTtrpgOpenCommonOracleEpochAuthorityV1(runtime, epoch.viewerKey);
+        assertTtrpgOpenOracleInterpretationSlotV1(runtime, openRun.worldTime.worldTurn);
+        if (payload.intent.rawInput !== TTRPG_OPEN_COMMON_ORACLE_INPUT_V1 || stableJson(payload.intent.commonOracle) !== stableJson(epoch.commonOracle)
+          || basis.readEvidence.sequence !== event.baseSequence || basis.readEvidence.stateHash !== event.baseStateHash) throw new Error('共同事实窗口不是本次本人确认的原准确来源和切点');
+        assertTtrpgOpenCommonOracleEpochOriginV1(runtime, epoch);
+      } else if (Object.prototype.hasOwnProperty.call(payload.intent, 'commonOracle')) throw new Error('旧窗口不能夹带共同事实授权');
+      if (epoch.normalizationRuntimeReferencePolicy) {
+        const runtime = parseTtrpgRuntimeStateV2(state.ttrpg)!, policy = epoch.normalizationRuntimeReferencePolicy;
+        assertTtrpgOpenOracleRuntimeEpochAuthorityV1(runtime, epoch.viewerKey);
+        assertTtrpgOpenSupportSlotV1(runtime, openRun.worldTime.worldTurn);
+        if (payload.intent.rawInput !== TTRPG_OPEN_NORMALIZATION_INSTANCE_INPUT_V1 || stableJson(payload.intent.normalizationRuntimeReferencePolicy) !== stableJson(policy)) throw new Error('实例归一不是本次原已接受解释的明确策略');
+        assertTtrpgOpenNormalizationRuntimeReferenceOriginV1({ runtime, policy, reviewSourceRef: policy.reviewSourceRef, recipientActorKeys: authorization.selectedActorKeys,
+          runtimeSourceHash: policy.oraclePolicy.references.runtimeSourceHash, rulePackContentHash: ttrpg.product.rulePackContentHash, consumerRef: epoch.startedRef });
+      } else if (Object.prototype.hasOwnProperty.call(payload.intent, 'normalizationRuntimeReferencePolicy')) throw new Error('旧窗口不能夹带新的实例归一策略');
+      if (epoch.oracleRuntimeReferencePolicy) {
+        const runtime = parseTtrpgRuntimeStateV2(state.ttrpg)!;
+        assertTtrpgOpenOracleRuntimeEpochAuthorityV1(runtime, epoch.viewerKey);
+        if (payload.intent.rawInput !== TTRPG_OPEN_ORACLE_INSTANCE_INPUT_V1 || stableJson(payload.intent.oracleRuntimeReferencePolicy) !== stableJson(epoch.oracleRuntimeReferencePolicy)) throw new Error('实例事实不是本次明确冻结的原策略');
+        const oracle = openRun.oracleReceipts?.find(row => stableJson(row.sourceRef) === stableJson(epoch.oracleRuntimeReferencePolicy!.oracleSourceRef));
+        if (!oracle) throw new Error('实例事实窗口缺少原 Oracle');
+        assertTtrpgOpenOracleRuntimeReferenceJournalV1({ policy: epoch.oracleRuntimeReferencePolicy, operations: openRun.entityOperations ?? [], oracle,
+          recipientActorKeys: authorization.selectedActorKeys, runtimeSourceHash: epoch.oracleRuntimeReferencePolicy.references.runtimeSourceHash,
+          rulePackContentHash: ttrpg.product.rulePackContentHash, consumerRef: epoch.startedRef });
+      } else if (Object.prototype.hasOwnProperty.call(payload.intent, 'oracleRuntimeReferencePolicy')) throw new Error('旧窗口不能伪装新的实例事实策略');
+      if (epoch.runtimeEntityReferencePolicy) {
+        if (stableJson(payload.intent.runtimeEntityReferencePolicy) !== stableJson(epoch.runtimeEntityReferencePolicy)) throw new Error('局势实例引用不是本次明确冻结的原策略');
+        assertTtrpgOpenSituationRuntimeReferenceJournalV1({ policy: epoch.runtimeEntityReferencePolicy, operations: openRun.entityOperations ?? [],
+          recipientActorKeys: authorization.selectedActorKeys, rulePackContentHash: ttrpg.product.rulePackContentHash,
+          consumerRef: epoch.startedRef });
+      } else if (Object.prototype.hasOwnProperty.call(payload.intent, 'runtimeEntityReferencePolicy')) throw new Error('旧窗口不能借元数据扩大实例读取策略');
+      if (epoch.publicSituation) {
+        const grant = epoch.publicSituation, b = grant.basis;
+        assertTtrpgOpenSituationEpochAuthorityV1(parseTtrpgRuntimeStateV2(state.ttrpg)!, epoch.viewerKey);
+        assertTtrpgOpenPublicSituationOriginalScopeV1(grant, ttrpg.sessionKey);
+        if (epoch.triggerKind !== TTRPG_OPEN_PUBLIC_SITUATION_TRIGGER_V1 || stableJson(payload.intent.publicSituation) !== stableJson(grant)
+          || payload.intent.rawInput !== b.sharedRequest.text
+          || b.readEvidence.sequence !== event.baseSequence || b.readEvidence.stateHash !== event.baseStateHash
+          || grant.authorizationCommandId !== event.commandId || b.requester.seatRevision !== seat.revision
+          || stableJson(b.recipientActorKeys) !== stableJson([...authorization.selectedActorKeys].sort())) throw new Error('共同局势授权没有绑定原请求、共享输入及实际接收者');
+      } else if (Object.prototype.hasOwnProperty.call(payload.intent, 'publicSituation')) throw new Error('其他窗口不能携带共同局势授权');
+      if (epoch.manualAction) {
+        const request = parseTtrpgOpenManualRequestV1(epoch.manualAction);
+        if (seat.role !== 'player' || request.actorKey !== seat.actorKey || !isObject(payload.intent)
+          || stableJson(payload.intent.manualAction) !== stableJson(epoch.manualAction)) throw new Error('人工 epoch 未绑定本人的明确请求');
+      } else if (isObject(payload.intent) && Object.prototype.hasOwnProperty.call(payload.intent,'manualAction')) throw new Error('人工请求元数据不闭合');
+      openRun.coordination.epochs.push(epoch);
+      openRun.coordination.activeEpochKey = epoch.epochKey;
+      ttrpg.openRun = openRun;
+      break;
+    }
+    case "ttrpg.open.epoch.closed": {
+      const ttrpg = requireTtrpgState(state);
+      const openRun = parseTtrpgOpenRunStateV1(ttrpg.openRun, ttrpg.sessionKey);
+      const hasArchive = Object.prototype.hasOwnProperty.call(payload, 'commonOracleArchive');
+      if (Object.keys(payload).sort().join(",") !== (hasArchive ? "commonOracleArchive,epochKey,intent,reason,viewerKey" : "epochKey,intent,reason,viewerKey")) throw new Error("epoch.closed 字段不精确。");
+      const epoch = openRun.coordination.epochs.find(item => item.epochKey === payload.epochKey);
+      const authorization = parseTtrpgOpenAuthorizationV1(ttrpg.authorization);
+      const seat = authorization.seats.find(item => item.viewerKey === payload.viewerKey);
+      if (!epoch || epoch.status !== "active" || openRun.coordination.activeEpochKey !== epoch.epochKey
+        || epoch.viewerKey !== payload.viewerKey || !seat || seat.controller === "ai" || seat.assignmentState !== "claimed"
+        || event.actorKey !== seat.actorKey || typeof payload.reason !== "string" || !payload.reason.trim()
+        || payload.reason.length > 2000 || !isObject(payload.intent)
+        || payload.intent.epochKey !== epoch.epochKey || payload.intent.viewerKey !== payload.viewerKey
+        || payload.intent.reason !== payload.reason || !hasArchive && epoch.reservedCalls > 0) {
+        throw new Error("epoch.closed 不能跳过业务回执、额度或真人授权。");
+      }
+      if (openRun.operations.some(operation => operation.authorizationEpochKey === epoch.epochKey && ["awaiting-approval", "executing"].includes(operation.status))) {
+        throw new Error("epoch 仍有未完成操作，不能跳过业务步骤关闭。");
+      }
+      if (hasArchive) {
+        if (!isObject(payload.intent) || payload.intent.commonOracleEmpty !== undefined || payload.intent.commonOracleRequest !== undefined
+          || payload.intent.commonOracleArchive !== 'archive-this-unresumable-common-oracle-window') throw new Error('归档不能混用本地原 Run 的结束许可');
+        const runtime = parseTtrpgRuntimeStateV2(ttrpg)!;
+        runtime.openRun = openRun;
+        applyTtrpgOpenCommonOracleArchiveV1(runtime, epoch, payload.commonOracleArchive, event.sequence, String(payload.viewerKey));
+      } else if (isObject(payload.intent) && payload.intent.commonOracleArchive !== undefined) throw new Error('缺少准确共同归档回执');
+      if (epoch.commonOracle && !hasArchive) {
+        const calls = openRun.coordination.calls.filter(call => call.authorizationEpochKey === epoch.epochKey);
+        if (payload.intent.commonOracleEmpty === true) {
+          if (calls.length || payload.intent.commonOracleRequest !== undefined) throw new Error('共同事实空窗口结束不能跳过原请求终验');
+        } else {
+          const close = parseTtrpgOpenCommonOracleRequestCloseV1(payload.intent.commonOracleRequest), call = calls[0];
+          if (calls.length !== 1 || !call || call.requestKey !== close.requestKey || ['prepared', 'dispatched'].includes(call.status)) throw new Error('共同事实须先闭合原请求与费用记录');
+          assertTtrpgOpenCommonOracleCallOriginV1({ openRun }, call);
+          const reviewed = openRun.oracleReviews?.some(row => row.requestKey === close.requestKey) || openRun.factLedger?.entries.some(row => row.modelCandidate?.requestKey === close.requestKey);
+          if ((close.decision === 'close-this-reviewed-common-oracle-window') !== Boolean(reviewed)) throw new Error('共同事实结束不能改变原审阅、采用或弃用决定');
+        }
+      } else if (!hasArchive && (payload.intent.commonOracleEmpty !== undefined || payload.intent.commonOracleRequest !== undefined)) throw new Error('其他窗口不能夹带共同事实结束授权');
+      const closingEpoch = openRun.coordination.epochs.find(row => row.epochKey === epoch.epochKey)!;
+      closingEpoch.closedRef = { sessionKey: ttrpg.sessionKey!, sequence: event.sequence };
+      closingEpoch.status = "closed";
+      closingEpoch.stopReason = payload.reason;
+      openRun.coordination.activeEpochKey = null;
+      ttrpg.openRun = openRun;
+      break;
+    }
+    case "ttrpg.world-turn.advanced": {
+      throw new Error("世界时间推进需要已结算 operation 的因果耗时回执，禁止直接 tick。");
+    }
+    case "ttrpg.situation.changed": {
+      const ttrpg = requireTtrpgState(state);
+      if (!Object.prototype.hasOwnProperty.call(ttrpg, "openRun")) {
+        throw new Error("situation 事件只能用于 protocol-2/open。");
+      }
+      const openRun = parseTtrpgOpenRunStateV1(ttrpg.openRun);
+      if (
+        Object.keys(payload).sort().join(",") !==
+        "intent,mode,situation"
+      ) {
+        throw new Error("situation changed 事件字段不精确。");
+      }
+      const mode = String(payload.mode ?? "");
+      if (mode !== "activated" && mode !== "queued") {
+        throw new Error("situation changed mode 无效。");
+      }
+      const situation = parseTtrpgOpenSituationRuntimeStateV1(
+        payload.situation,
+        "situation.changed.situation",
+      );
+      if (
+        situation.activatedAtSequence !== event.sequence ||
+        situation.activatedAtWorldTurn !== openRun.worldTime.worldTurn
+      ) {
+        throw new Error("situation changed 没有绑定当前事件和世界轮次。");
+      }
+      if (
+        (mode === "activated" && situation.status !== "active") ||
+        (mode === "queued" && situation.status !== "queued")
+      ) {
+        throw new Error("situation changed mode 与状态不一致。");
+      }
+      if (
+        [...openRun.situations.active, ...openRun.situations.queued].some(
+          (item) => item.situationKey === situation.situationKey,
+        )
+      ) {
+        throw new Error("同一局势实例不能重复进入 active/queued。");
+      }
+      if (mode === "activated") {
+        if (openRun.situations.active.length >= 5) {
+          throw new Error("活跃局势不能超过 5 个。");
+        }
+        if (situation.queuePosition !== null) {
+          throw new Error("activated 局势不能携带 queuePosition。");
+        }
+        openRun.situations.active.push(situation);
+      } else {
+        const maxQueuePosition = openRun.situations.queued.reduce(
+          (maximum, item) =>
+            Math.max(maximum, item.queuePosition ?? -1),
+          -1,
+        );
+        if (situation.queuePosition !== maxQueuePosition + 1) {
+          throw new Error("queued 局势必须按 FIFO 顺序排队。");
+        }
+        openRun.situations.queued.push(situation);
+      }
+      ttrpg.openRun = openRun;
+      break;
+    }
+    case "ttrpg.open.failure.logged": {
+      const ttrpg = requireTtrpgState(state);
+      if (!Object.prototype.hasOwnProperty.call(ttrpg, "openRun")) {
+        throw new Error("failure 事件只能用于 protocol-2/open。");
+      }
+      const openRun = parseTtrpgOpenRunStateV1(ttrpg.openRun);
+      if (Object.keys(payload).sort().join(",") !== "failure,intent") {
+        throw new Error("open failure 事件字段不精确。");
+      }
+      const failure = parseTtrpgOpenFailureRuntimeStateV1(payload.failure);
+      if (
+        failure.atSequence !== event.sequence ||
+        failure.atWorldTurn !== openRun.worldTime.worldTurn ||
+        openRun.failures.some((item) => item.failureKey === failure.failureKey)
+      ) {
+        throw new Error("open failure 记录没有绑定当前事件或重复。");
+      }
+      openRun.failures.push(failure);
+      if (openRun.failures.length > 200) {
+        openRun.failures.splice(0, openRun.failures.length - 200);
+      }
+      ttrpg.openRun = openRun;
+      break;
+    }
     case "ttrpg.character.customized": {
       const ttrpg = requireTtrpgState(state);
       const product = ttrpg.product;
@@ -240,6 +557,29 @@ export function applyTtrpgRuntimeEventV1(
       const completedBy = String(payload.completedBy ?? "").trim();
       if (!completedBy || completedBy !== event.actorKey)
         throw new Error("Session Zero 完成人身份无效。");
+      if (Object.prototype.hasOwnProperty.call(ttrpg, "authorization")) {
+        const continuedRuntime = parseTtrpgRuntimeStateV2(state.ttrpg);
+        const continuedOpening = continuedRuntime?.openRun?.releaseContinuation?.plan.childSessionKey === continuedRuntime?.sessionKey && !continuedRuntime?.openRun?.releaseContinuation?.confirmedRef;
+        const expectedKeys = ['acceptedItemKeys', 'authorization', 'completedBy', 'intent', 'selectedCharacterKeys', ...(continuedOpening ? ['continuationOpening'] : [])].sort().join(',');
+        if (Object.keys(payload).sort().join(",") !== expectedKeys) {
+          throw new Error("open Session Zero 必须携带完整授权回执。");
+        }
+        const authorization = parseTtrpgOpenAuthorizationV1(payload.authorization);
+        if (ttrpg.authorization !== null || authorization.revision !== event.sequence
+          || authorization.sourceRef.sessionKey !== ttrpg.sessionKey
+          || authorization.completedBySeatKey !== completedBy
+          || stableJson([...authorization.selectedActorKeys].sort()) !== stableJson([...selectedCharacterKeys].sort())) {
+          throw new Error("open Session Zero 授权与本事件不一致。");
+        }
+        ttrpg.authorization = authorization;
+        if (ttrpg.openRun && Object.prototype.hasOwnProperty.call(ttrpg, 'branchLineage')) {
+          const run = parseTtrpgOpenRunStateV1(ttrpg.openRun);
+          run.companions = run.companions.filter(companion => selectedCharacterKeys.includes(companion.actorKey));
+          ttrpg.openRun = run;
+        }
+      } else if (Object.prototype.hasOwnProperty.call(payload, "authorization")) {
+        throw new Error("scripted Session Zero 不能接受 open 授权。");
+      }
       product.sessionZero = {
         ...product.sessionZero,
         completed: true,
@@ -254,7 +594,9 @@ export function applyTtrpgRuntimeEventV1(
       const allPlayerKeys = Object.values(state.entities)
         .filter((entity) => entity.kind === "player")
         .map((entity) => entity.entityKey);
-      ttrpg.campaign.roster = allPlayerKeys.map((characterKey) => ({
+      const continuationRuntime = 'runFormat' in ttrpg && ttrpg.runFormat === 'open'
+        ? parseTtrpgRuntimeStateV2(state.ttrpg) : null;
+      if (!continuationRuntime?.openRun?.releaseContinuation) ttrpg.campaign.roster = allPlayerKeys.map((characterKey) => ({
         characterKey,
         status: selectedCharacterKeys.includes(characterKey)
           ? ("active" as const)
@@ -265,6 +607,8 @@ export function applyTtrpgRuntimeEventV1(
         reason: existingRoster.get(characterKey)?.reason ?? "",
         updatedSequence: event.sequence,
       }));
+      const pendingContinuation = continuationRuntime;
+      if (pendingContinuation && pendingContinuation.openRun?.releaseContinuation?.plan.childSessionKey === pendingContinuation.sessionKey && !pendingContinuation.openRun.releaseContinuation.confirmedRef) applyTtrpgOpenContinuationStartV1(state, event, payload);
       break;
     }
     case "ttrpg.safety.changed": {
@@ -276,6 +620,15 @@ export function applyTtrpgRuntimeEventV1(
       const reason =
         payload.reason == null ? null : String(payload.reason).trim() || null;
       const changedBy = String(payload.changedBy ?? "").trim();
+      if (Object.prototype.hasOwnProperty.call(ttrpg, "authorization")) {
+        const authorization = parseTtrpgOpenAuthorizationV1(ttrpg.authorization);
+        const seat = authorization.seats.find(item => item.viewerKey === payload.viewerKey);
+        if (Object.keys(payload).sort().join(",") !== "changedBy,intent,reason,status,viewerKey"
+          || !seat || seat.controller === "ai" || seat.assignmentState !== "claimed"
+          || ![seat.seatKey, seat.actorKey, seat.viewerKey].includes(changedBy)) {
+          throw new Error("open 安全状态必须由已确认真人席位更改。");
+        }
+      }
       if (
         !["active", "paused"].includes(status) ||
         !changedBy ||
@@ -758,69 +1111,8 @@ export function applyTtrpgRuntimeEventV1(
           throw new Error("ActionReceipt 上下文与规则行动提交前状态不一致。");
         }
       }
-      for (const change of result.resourceChanges) {
-        const entity = state.entities[change.entityKey];
-        if (!entity)
-          throw new Error(`正式规则资源目标不存在:${change.entityKey}`);
-        const current = entity.attributes[`resource.${change.resourceKey}`];
-        const maximum = entity.attributes[`resourceMax.${change.resourceKey}`];
-        if (
-          current !== change.before ||
-          maximum !== change.maximum ||
-          change.after !==
-            Math.max(0, Math.min(change.maximum, change.before + change.delta))
-        ) {
-          throw new Error(
-            `正式规则资源变化与当前状态不一致:${change.resourceKey}`,
-          );
-        }
-        entity.attributes[`resource.${change.resourceKey}`] = change.after;
-        if (change.resourceKey === "vigor") entity.attributes.hp = change.after;
-      }
-      for (const change of result.conditionChanges) {
-        if (!state.entities[change.entityKey])
-          throw new Error(`正式规则状态目标不存在:${change.entityKey}`);
-        const current = product.conditions[change.entityKey] ?? [];
-        const without = current.filter(
-          (item) => item.conditionKey !== change.conditionKey,
-        );
-        product.conditions[change.entityKey] =
-          change.stacks > 0
-            ? [
-                ...without,
-                {
-                  conditionKey: change.conditionKey,
-                  stacks: change.stacks,
-                  duration: change.duration,
-                },
-              ]
-            : without;
-      }
-      if (!result.abilityChange) {
-        throw new Error("正式规则行动缺少能力次数/冷却变化证据。");
-      }
-      {
-        if (
-          stableJson(product.abilityStates[result.abilityChange.stateKey]) !==
-            stableJson(result.abilityChange.before)
-        ) {
-          throw new Error("正式规则行动的能力账本基线不一致。");
-        }
-        product.abilityStates[result.abilityChange.stateKey] = structuredClone(
-          result.abilityChange.after,
-        );
-        if (result.abilityChange.sharedPoolKey != null) {
-          if (
-            stableJson(
-              product.usagePools[result.abilityChange.sharedPoolKey],
-            ) !== stableJson(result.abilityChange.sharedPoolBefore)
-          ) {
-            throw new Error("正式规则行动的共享次数池基线不一致。");
-          }
-          product.usagePools[result.abilityChange.sharedPoolKey] =
-            structuredClone(result.abilityChange.sharedPoolAfter!);
-        }
-      }
+      if (!result.abilityChange) throw new Error("正式规则行动缺少能力次数/冷却变化证据。");
+      applyTtrpgMechanicalResultV1(state, result);
       if (result.actionPhase) {
         const transition = spendTtrpgActionEconomyV2({
           economy: product.actionEconomy,

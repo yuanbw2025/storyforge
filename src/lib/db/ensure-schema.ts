@@ -5,6 +5,7 @@ import {
 } from './schema'
 
 export const REQUIRED_TABLES = [
+  'ttrpgNarrativeMemories',
   'worldNarrativeIndexCaches',
   'extensionPackages',
   'extensionProfiles',
@@ -155,7 +156,9 @@ export function assertCurrentSchemaDefinition(): void {
 export async function openCurrentSchema(): Promise<CurrentSchemaState> {
   assertCurrentSchemaDefinition()
   await db.open()
-  if (db.verno !== STORYFORGE_SCHEMA_VERSION) {
+  // The declared Dexie verno alone can hide a newer native database version.
+  if (db.verno !== STORYFORGE_SCHEMA_VERSION
+    || db.backendDB().version !== STORYFORGE_SCHEMA_VERSION * 10) {
     db.close()
     throw new Error('[schema] 只支持当前 schema v' + STORYFORGE_SCHEMA_VERSION)
   }

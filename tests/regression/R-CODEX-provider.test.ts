@@ -1,7 +1,8 @@
 import { classifyAgentRunFailureV1 } from '../../src/lib/agent/run/failure-policy'
 import { classifyHarnessFailureV1 } from '../../src/lib/agent/run/harness-failure'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { streamCodex, CODEX_BASE_URL } from '../../src/lib/ai/codex-transport'
+import { streamCodex, CODEX_BASE_URL, readBoundCodexReceiptV1, acknowledgeBoundCodexReceiptV1, CODEX_REQUEST_HASH_ALGORITHM_V1, CODEX_DURABLE_RECEIPT_RETENTION_V1, type CodexRequestRefV1 } from '../../src/lib/ai/codex-transport'
+import { sha256Text } from '../../src/lib/ai/chapter-memory/text-normalization'
 import { chat, streamChat, type ChatResult } from '../../src/lib/ai/client'
 import { useAIConfigStore } from '../../src/stores/ai-config'
 import { db } from '../../src/lib/db/schema'
@@ -28,6 +29,91 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); sessionStorage.clear() })
 
 describe('Codex subscription transport shares the governed client', () => {
+  it('awaits one immutable request reference before dispatch and freezes the actual messages/schema across that wait', async () => {
+    let enter!: () => void, release!: () => void, saved = false
+    const entered = new Promise<void>(resolve => { enter = resolve }), gate = new Promise<void>(resolve => { release = resolve })
+    const original = [{ role: 'user' as const, content: 'original private source' }], schema = { type: 'object', properties: { title: { type: 'string' } } }
+    const result: ChatResult = { onCodexRequestPrepared: vi.fn(async ref => {
+      expect(Object.isFrozen(ref)).toBe(true); expect(Object.keys(ref).sort()).toEqual(['model', 'provider', 'requestHash', 'requestHashAlgorithm', 'requestId', 'version'])
+      enter(); await gate; saved = true
+    }) }
+    let wire = ''
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/status')) return response({ state: 'ready' })
+      if (init?.method === 'POST') { expect(saved).toBe(true); wire = init.body as string; return response({ id: JSON.parse(wire).id }, 202) }
+      const ref = result.localCodexRequest!
+      return response({ id: ref.requestId, model: ref.model, createdAt: 1, requestHash: ref.requestHash, requestHashAlgorithm: ref.requestHashAlgorithm,
+        status: 'completed', text: '{"title":"retained"}', dispatched: true })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const pending = collect(streamCodex(original, 'test', undefined, result, schema, 'json_object'))
+    await entered
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0)
+    original[0].content = 'later edit'; schema.properties.title.type = 'number'; release()
+    expect(await pending).toBe('{"title":"retained"}')
+    expect(JSON.parse(wire)).toMatchObject({ messages: [{ role: 'user', content: 'original private source' }], receiptRetention: CODEX_DURABLE_RECEIPT_RETENTION_V1,
+      outputSchema: { properties: { title: { type: 'string' } } }, responseFormat: 'json_object' })
+    expect(result.localCodexRequest?.requestHash).toBe(await sha256Text(wire))
+    expect(result.onCodexRequestPrepared).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+  })
+  it('does not dispatch or cancel when durable reference persistence fails', async () => {
+    const fetchMock = mockBridge(); vi.stubGlobal('fetch', fetchMock)
+    const result: ChatResult = { onCodexRequestPrepared: vi.fn(async () => { throw new Error('original-reference-write-failed') }) }
+    await expect(collect(streamCodex(messages, 'test', undefined, result))).rejects.toThrow('original-reference-write-failed')
+    expect(result.requestLifecycle?.phase).toBe('pre-dispatch')
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0)
+  })
+  it('stops before dispatch if cancelled while its original reference is being saved', async () => {
+    const controller = new AbortController(), fetchMock = mockBridge(); vi.stubGlobal('fetch', fetchMock)
+    const result: ChatResult = { onCodexRequestPrepared: vi.fn(async () => { controller.abort() }) }
+    await expect(collect(streamCodex(messages, 'test', controller.signal, result))).rejects.toThrow('取消')
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0)
+    expect(result.requestLifecycle?.phase).toBe('pre-dispatch')
+  })
+  const reference: CodexRequestRefV1 = { version: 1, provider: 'codex', requestId: 'e4e175fe-0509-4a7f-8f90-b0556ce166c1', model: 'test',
+    requestHash: 'a'.repeat(64), requestHashAlgorithm: CODEX_REQUEST_HASH_ALGORITHM_V1 }
+  const receipt = () => ({ id: reference.requestId, model: reference.model, createdAt: 1, requestHash: reference.requestHash,
+    requestHashAlgorithm: reference.requestHashAlgorithm, status: 'completed', text: 'retained raw', dispatched: true })
+  it.each(['running', 'completed', 'unknown'])('only reads the original hash-bound %s receipt without treating it as a candidate or replaying', async status => {
+    const value = { ...receipt(), status }, fetchMock = vi.fn(async () => response(value)); vi.stubGlobal('fetch', fetchMock)
+    expect(await readBoundCodexReceiptV1(reference)).toEqual(value)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0]).toMatchObject([`${CODEX_BASE_URL}/requests/${reference.requestId}`, { method: 'GET' }])
+  })
+  it.each([
+    { id: 'foreign-request' }, { model: 'other-model' }, { requestHash: 'b'.repeat(64) }, { requestHashAlgorithm: 'future-unknown' },
+    { requestHash: undefined }, { status: 'new-unknown-status' }, { text: null }, { createdAt: null }, { dispatched: undefined },
+    { receiptRetention: 'future-unknown' }, { ownerAcknowledgedAt: 'invalid-time' },
+  ])('refuses mismatched or incomplete original receipt metadata with one GET and no fallback: %j', async patch => {
+    const fetchMock = vi.fn(async () => response({ ...receipt(), ...patch })); vi.stubGlobal('fetch', fetchMock)
+    await expect(readBoundCodexReceiptV1(reference)).rejects.toThrow('原冻结 Codex 请求不一致')
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+  it('rejects an invalid request reference before network access', async () => {
+    const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock)
+    await expect(readBoundCodexReceiptV1({ ...reference, requestHash: '' })).rejects.toThrow('原 Codex 请求引用不完整')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+  it.each([null, [], 'invalid-record', 7])('refuses a malformed receipt envelope without replay: %j', async value => {
+    const fetchMock = vi.fn(async () => response(value)); vi.stubGlobal('fetch', fetchMock)
+    await expect(readBoundCodexReceiptV1(reference)).rejects.toThrow('原冻结 Codex 请求不一致')
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+  it.each(['completed', 'unknown'] as const)('hands off only the caller-saved original %s record, without a generation or candidate decision', async status => {
+    const value = { id: reference.requestId, acknowledged: true, acknowledgedAt: 10, status }
+    const fetchMock = vi.fn(async () => response(value)); vi.stubGlobal('fetch', fetchMock)
+    expect(await acknowledgeBoundCodexReceiptV1({ request: reference, rawResponseHash: 'b'.repeat(64), confirmation: 'owner-record-saved-v1' })).toEqual(value)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0]).toMatchObject([`${CODEX_BASE_URL}/requests/${reference.requestId}/acknowledge`, { method: 'POST' }])
+  })
+  it('refuses an unconfirmed owner handoff or incomplete acknowledgement without a generation fallback', async () => {
+    const fetchMock = vi.fn(async () => response({ id: reference.requestId, acknowledged: false })); vi.stubGlobal('fetch', fetchMock)
+    await expect(acknowledgeBoundCodexReceiptV1({ request: reference, rawResponseHash: '', confirmation: 'owner-record-saved-v1' })).rejects.toThrow('原作品保存准确回执')
+    expect(fetchMock).not.toHaveBeenCalled()
+    await expect(acknowledgeBoundCodexReceiptV1({ request: reference, rawResponseHash: 'b'.repeat(64), confirmation: 'owner-record-saved-v1' })).rejects.toThrow('交接返回不完整')
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
   it('chat and stream select the local transport, pass schema and expose usage/lifecycle', async () => {
     const fetchMock = mockBridge(); vi.stubGlobal('fetch', fetchMock)
     const result: ChatResult = {}

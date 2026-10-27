@@ -21,7 +21,15 @@ export interface MemorySettlementSnapshotV1 {
   projection: AgentRunProjectionV1
 }
 
-export function memoryRunExportIdV1(snapshot: MemorySettlementSnapshotV1): string {
+/** Historical ledger data, not a newly created or resumable Run. */
+export type FrozenMemorySettlementLedgerV1 = Omit<MemorySettlementSnapshotV1, 'run'> & {
+  run: Pick<AgentRunRecord, 'contractHash' | 'createdAt'> & { id: number }
+}
+export interface FrozenMemorySettlementIdentityV1 { worldCode?: string; workCode?: string }
+type SettlementIdentityV1 = { kind: 'scope'; scope: WorkspaceScope }
+  | { kind: 'frozen'; identity: FrozenMemorySettlementIdentityV1 }
+
+export function memoryRunExportIdV1(snapshot: FrozenMemorySettlementLedgerV1): string {
   const created = snapshot.events.find(event => event.type === 'run.created')
   if (!created || created.type !== 'run.created') throw new Error('[memory-settlement] Run 缺少创建事件')
   return `RUN-${created.payload.objectiveHash.slice(0, 20)}-${snapshot.run.createdAt}`
@@ -32,7 +40,7 @@ async function artifactRef(input: Omit<MemoryArtifactRefV1, 'artifactId'>): Prom
   return { ...input, artifactId: `ART-${hash.slice(0, 24)}` }
 }
 
-function assertRunGovernanceRegistered(snapshot: MemorySettlementSnapshotV1): void {
+function assertRunGovernanceRegistered(snapshot: FrozenMemorySettlementLedgerV1): void {
   for (const key of snapshot.contract.permissions.contextSourceKeys) {
     if (!CONTEXT_SOURCE_BY_KEY.has(key)) throw new Error(`[memory-settlement] 未登记 Context source: ${key}`)
   }
@@ -56,16 +64,22 @@ function assertRunGovernanceRegistered(snapshot: MemorySettlementSnapshotV1): vo
 }
 
 async function artifactRefsForRun(
-  snapshot: MemorySettlementSnapshotV1,
-  scope: WorkspaceScope,
+  snapshot: FrozenMemorySettlementLedgerV1,
+  origin: SettlementIdentityV1,
 ): Promise<MemoryArtifactRefV1[]> {
   const refs: MemoryArtifactRefV1[] = []
-  const work = await db.works.get(scope.workId)
-  const world = await db.worlds.get(scope.worldId)
+  let worldCode: string | undefined, workCode: string | undefined
+  if (origin.kind === 'frozen') {
+    worldCode = origin.identity.worldCode; workCode = origin.identity.workCode
+  } else {
+    const work = await db.works.get(origin.scope.workId)
+    const world = await db.worlds.get(origin.scope.worldId)
+    worldCode = world?.code; workCode = work?.code
+  }
   const common = {
     runExportId: memoryRunExportIdV1(snapshot),
-    worldCode: world?.code,
-    workCode: work?.code,
+    worldCode,
+    workCode,
   }
   for (const event of snapshot.events) {
     const sourceExportId = `${common.runExportId}:event:${event.sequence}`
@@ -121,9 +135,9 @@ async function artifactRefsForRun(
  * Pure Harness-ledger settlement apart from scoped identity reads. It never
  * writes IndexedDB or the file system and never copies artifact bodies.
  */
-export async function buildMemorySettlementReceiptFromSnapshotV1(input: {
-  snapshot: MemorySettlementSnapshotV1
-  scope: WorkspaceScope
+async function buildReceiptFromLedger(input: {
+  snapshot: FrozenMemorySettlementLedgerV1
+  origin: SettlementIdentityV1
   workspaceDirty: boolean
   evaluatedAt: number
 }): Promise<MemorySettlementReceiptV1> {
@@ -137,7 +151,7 @@ export async function buildMemorySettlementReceiptFromSnapshotV1(input: {
     .filter(event => event.type === 'adoption.committed')
     .map(event => event.payload.adoptionHash)
     .sort()
-  const artifactRefs = await artifactRefsForRun(snapshot, input.scope)
+  const artifactRefs = await artifactRefsForRun(snapshot, input.origin)
   const steps = Object.values(snapshot.projection.steps)
   const hasPendingConfirmation = snapshot.projection.state === 'awaiting_confirmation'
     || steps.some(step => step.status === 'awaiting_confirmation')
@@ -172,6 +186,24 @@ export async function buildMemorySettlementReceiptFromSnapshotV1(input: {
     contractHash: snapshot.run.contractHash,
     receiptHash: await hashCanonicalValue(portableBody),
   }
+}
+
+/** Existing live path: same scoped identity reads, receipt fields and hashes. */
+export async function buildMemorySettlementReceiptFromSnapshotV1(input: {
+  snapshot: MemorySettlementSnapshotV1; scope: WorkspaceScope; workspaceDirty: boolean; evaluatedAt: number
+}): Promise<MemorySettlementReceiptV1> {
+  return buildReceiptFromLedger({ ...input, origin: { kind: 'scope', scope: input.scope } })
+}
+
+/** Pure historical projection through the same settlement algorithm. The
+ * caller must verify this ledger and its frozen identity; no DB lookup,
+ * settlement event, resumed execution or adoption permission is issued. */
+export async function buildMemorySettlementReceiptFromFrozenLedgerV1(input: {
+  snapshot: FrozenMemorySettlementLedgerV1; identity: FrozenMemorySettlementIdentityV1
+  workspaceDirty: boolean; evaluatedAt: number
+}): Promise<MemorySettlementReceiptV1> {
+  const frozen = structuredClone(input)
+  return buildReceiptFromLedger({ ...frozen, origin: { kind: 'frozen', identity: frozen.identity } })
 }
 
 export async function hashMemoryArtifactIndexV1(

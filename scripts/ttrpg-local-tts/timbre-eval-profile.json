@@ -1,0 +1,256 @@
+{
+  "schema": "storyforge.ttrpg-timbre-fixture-eval",
+  "version": 1,
+  "entryId": "ttrpg.local-voice.timbre-eval",
+  "fixture": {
+    "caseId": "long-zh",
+    "sourceWavSha256": "315c6c8c0db734b5f03237f1e8c4cccfe57d78f689cf065b279afcc5286a49d9",
+    "sourceSampleRate": 44100,
+    "sourceSamples": 598016,
+    "text": "雨停以后，你们沿着石阶走到旧码头。守夜人抬起灯，仔细看了看每个人的脸，却没有立刻开口。远处传来两下缓慢的钟声，一只小船正从黑暗里靠近。你可以先问清来人的身份，再决定是否登船。"
+  },
+  "source": {
+    "sourceRevision": "74a1d147b17a8c3092dd5430504bd83ef6c7eb23",
+    "files": [
+      {
+        "path": "LICENSE",
+        "bytes": 1057,
+        "sha256": "bb3541f421e6273d3a3e3dd5bdba2bd3b79a3c2eadca65cde9c62c2467903ac0",
+        "gitBlobSha1": "2d29d020b993b9c21e30aa6fc6c97737f34594b8"
+      },
+      {
+        "path": "demo_part3.ipynb",
+        "bytes": 4869,
+        "sha256": "b60a930f422c0a39908142f10d769e7c7afeeea5b1010b50dda55c269cdd0843",
+        "gitBlobSha1": "9b2bd34e9ef3439235d7df2fcfc957210ac0d0b0"
+      },
+      {
+        "path": "openvoice/__init__.py",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "gitBlobSha1": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+      },
+      {
+        "path": "openvoice/api.py",
+        "bytes": 7823,
+        "sha256": "6830abaf9b0ea6023fe7e3df3d9a0a1fd9b73a7dbbc13f8a892da009052637b9",
+        "gitBlobSha1": "48f7eebb098c7028edb65f004b9270a7aa11c520"
+      },
+      {
+        "path": "openvoice/attentions.py",
+        "bytes": 16360,
+        "sha256": "6a392057838e6051afc8beed43c2d1279d75de8c8b600552e7232ad930b356c3",
+        "gitBlobSha1": "5c410f07a6751bedfb94bb0d169f3f36f797ee45"
+      },
+      {
+        "path": "openvoice/commons.py",
+        "bytes": 4956,
+        "sha256": "046943d265635c3d9c99195562e703564a26300981a7db5b87d4cd3fd180ae0d",
+        "gitBlobSha1": "d3fa07f65b1681e1f469b04b2fe689b7c174eaaa"
+      },
+      {
+        "path": "openvoice/mel_processing.py",
+        "bytes": 6098,
+        "sha256": "b8fd9924f8fb4c5b31031e04464c4a8145104e4bdfc3c29ecb6c485fa3b5c049",
+        "gitBlobSha1": "822d7f19062497b198ae54554a3ab828c10147ad"
+      },
+      {
+        "path": "openvoice/models.py",
+        "bytes": 16801,
+        "sha256": "54f9e8284a0e9a89c75cb3163d2694cf34d90a5d05cfbcbf12ccd4f0b1ba2dc8",
+        "gitBlobSha1": "b7c659a0f6347de37adc9362d873cd48eee840ef"
+      },
+      {
+        "path": "openvoice/modules.py",
+        "bytes": 19010,
+        "sha256": "b2376049141934eb63bb4d905920c486a286bec65f0735b78ba52b2fb54564d0",
+        "gitBlobSha1": "d659a32626bdc34eae8650961611948a3405928b"
+      },
+      {
+        "path": "openvoice/transforms.py",
+        "bytes": 7253,
+        "sha256": "e6798989a0d75cbec45e7e24e3697e1c4886b3664c6a80a452645ef1d2a93f9c",
+        "gitBlobSha1": "a11f799e023864ff7082c1f49c0cc18351a13b47"
+      },
+      {
+        "path": "openvoice/utils.py",
+        "bytes": 5776,
+        "sha256": "87c1e5b375503e07098d7d21d5493a96f2a4f084893dade063f6aac5065638bd",
+        "gitBlobSha1": "4e80909d6a03976400322cc0219d1871e9f84bfa"
+      },
+      {
+        "path": "requirements.txt",
+        "bytes": 253,
+        "sha256": "ff3a30cda9e6b66e5628677fd88632f72c8eef784832e08dadd11046dcafd59a",
+        "gitBlobSha1": "8ddba70d611d3b15ed5b4b2ef4a020a2bd0c61df"
+      }
+    ]
+  },
+  "model": {
+    "repo": "myshell-ai/OpenVoiceV2",
+    "revision": "f36e7edfe1684461a8343844af60babc2efbb727",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "base_speakers/ses/en-au.pth",
+        "type": "file",
+        "size": 1701,
+        "oid": "83cc04fcfc206148e9295f78fba4060b230d3c2e",
+        "lfs": {
+          "oid": "5e9782233deef51fc5289d05ad4dd4ce12b196e282eccf6b6db6256bbd02daaa",
+          "size": 1701,
+          "pointerSize": 129
+        }
+      },
+      {
+        "path": "base_speakers/ses/en-br.pth",
+        "type": "file",
+        "size": 1701,
+        "oid": "848b00486ea77ea4c71a7bc90b5cf126ad3e1695",
+        "lfs": {
+          "oid": "2bf5a88025cfd10473b25d65d5c0e608338ce4533059c5f9a3383e69c812d389",
+          "size": 1701,
+          "pointerSize": 129
+        }
+      },
+      {
+        "path": "base_speakers/ses/en-default.pth",
+        "type": "file",
+        "size": 1783,
+        "oid": "fcee330f862e5dcb54227718b1d23cdbd15fef50",
+        "lfs": {
+          "oid": "e4139de3bc2ea162f45a5a5f9559b710686c9689749b5ab8945ee5e2a082d154",
+          "size": 1783,
+          "pointerSize": 129
+        }
+      },
+      {
+        "path": "base_speakers/ses/en-india.pth",
+        "type": "file",
+        "size": 1701,
+        "oid": "3ab96e9468282789c3f554a3d7ae50f996e06cd6",
+        "lfs": {
+          "oid": "ad03d946757e95fe9e13239aa4b11071d98f22316f604f34b1a0b4bdf41cda48",
+          "size": 1701,
+          "pointerSize": 129
+        }
+      },
+      {
+        "path": "base_speakers/ses/en-newest.pth",
+        "type": "file",
+        "size": 1692,
+        "oid": "88082ac29f6bc6799a6f42bfeec082ba6ce2a90f",
+        "lfs": {
+          "oid": "6a3798229b1114f0e9cc137b33211809def7dda5a8a9398d5a112c0b42699177",
+          "size": 1692,
+          "pointerSize": 129
+        }
+      },
+      {
+        "path": "base_speakers/ses/en-us.pth",
+        "type": "file",
+        "size": 1701,
+        "oid": "30bdaacfb81611de2e3c396b22d18c3f7be6eede",
+        "lfs": {
+          "oid": "0d092d4af0815a4bfbc6105b65621ab68dc4c61b2f55044d8a66968a34947c32",
+          "size": 1701,
+          "pointerSize": 129
+        }
+      },
+      {
+        "path": "base_speakers/ses/es.pth",
+        "type": "file",
+        "size": 1692,
+        "oid": "9a3eb78a6ca0a51c5ec8afda4ef1c764fac6e509",
+        "lfs": {
+          "oid": "b8cece8853fb75b9f5217a1f5cda9807bac92a3e4c4547fc651e404d05deff63",
+          "size": 1692,
+          "pointerSize": 129
+        }
+      },
+      {
+        "path": "base_speakers/ses/fr.pth",
+        "type": "file",
+        "size": 1692,
+        "oid": "d19dbe324e7a370821f429cab679693da85b79e6",
+        "lfs": {
+          "oid": "8a01f6d30a73efa368c288a542a522a2bcdd4e2ec5589d8646b307cf8e2ad9ae",
+          "size": 1692,
+          "pointerSize": 129
+        }
+      },
+      {
+        "path": "base_speakers/ses/jp.pth",
+        "type": "file",
+        "size": 1692,
+        "oid": "ebbc7e9391c8e83884c84762a4aa4b6d4bc04cd8",
+        "lfs": {
+          "oid": "7b645ff428de4a57a22122318968f1e6127ac81fda2e2aa66062deccd3864416",
+          "size": 1692,
+          "pointerSize": 129
+        }
+      },
+      {
+        "path": "base_speakers/ses/kr.pth",
+        "type": "file",
+        "size": 1692,
+        "oid": "96e0c00f26c451e5d4f719a683a569fbbb1c3e0c",
+        "lfs": {
+          "oid": "f501479d6072741a396725bec79144653e9f4a5381b85901e29683aa169795df",
+          "size": 1692,
+          "pointerSize": 129
+        }
+      },
+      {
+        "path": "base_speakers/ses/zh.pth",
+        "type": "file",
+        "size": 1692,
+        "oid": "8d89210dd6a6bad7f9484cf86d48ba5d40ac51f1",
+        "lfs": {
+          "oid": "2b353de562700c13faacf096ecfc0adcafd26e6704a9feef572be1279714e031",
+          "size": 1692,
+          "pointerSize": 129
+        }
+      },
+      {
+        "path": "converter/checkpoint.pth",
+        "type": "file",
+        "size": 131320490,
+        "oid": "fa2f9421735901fd3db22a904f07b5a591faad7d",
+        "lfs": {
+          "oid": "9652c27e92b6b2a91632590ac9962ef7ae2b712e5c5b7f4c34ec55ee2b37ab9e",
+          "size": 131320490,
+          "pointerSize": 134
+        }
+      },
+      {
+        "path": "converter/config.json",
+        "type": "file",
+        "size": 838,
+        "oid": "3e33566b0d976167bd5f15801ef7005d59143e2f",
+        "lfs": null
+      }
+    ]
+  },
+  "sourceSpeaker": "zh",
+  "targetSpeakers": [
+    "en-au",
+    "en-br",
+    "en-default",
+    "en-india",
+    "en-newest",
+    "en-us",
+    "es",
+    "fr",
+    "jp",
+    "kr"
+  ],
+  "tau": 0.3,
+  "maxCalls": 10,
+  "timeoutMs": 300000,
+  "cpuThreads": 2,
+  "network": "disabled",
+  "productInvocationAllowed": false,
+  "adoptionAllowed": false,
+  "pythonAssetProfileSha256": "8a73ace3bf7e56dd8acd281d0e1600b1364611fa6a194d402129eae213994bf8"
+}

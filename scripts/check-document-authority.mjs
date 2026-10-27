@@ -54,6 +54,7 @@ const activeDocs = [
   'docs/products/WORLD-ENGINE.md',
   'docs/products/UPPER-PRODUCTS.md',
   'docs/products/TTRPG-AI-KP.md',
+  'docs/roadmap/TTRPG-DEVELOPMENT-PLAN.md',
   'docs/products/TEXT-ADVENTURE.md',
   'docs/products/text-adventure-production/README.md',
   'docs/products/text-adventure-production/01-DELIVERY-CONTRACT.md',

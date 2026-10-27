@@ -2,6 +2,21 @@ import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
 
+// Observe the same failed page without replaying navigation or changing the
+// assertion. Distinguish a slow dev module graph from a persistent app failure.
+test.afterEach(async ({ page }, info) => {
+  if (info.status === info.expectedStatus || page.isClosed()) return
+  const initial = await page.locator('body').innerText().catch(() => '')
+  const started = Date.now()
+  let lateReady = false
+  try { await page.locator('[data-workspace-ready]').waitFor({ state: 'visible', timeout: 20_000 }); lateReady = true } catch { /* Retain the original failure. */ }
+  await info.attach('same-page-readiness-observation', {
+    body: JSON.stringify({ initialLoadingOnly: initial.trim() === '加载中…', lateReady, observedAfterMs: Date.now() - started,
+      resources: await page.evaluate(() => performance.getEntriesByType('resource').length).catch(() => null), driverHeapBytes: process.memoryUsage().heapUsed }),
+    contentType: 'application/json',
+  })
+})
+
 const scalarFields: Array<[string, string, string, 'worldviews' | 'storyCores']> = [
   ['世界起源', '世界来源', 'worldOrigin', 'worldviews'], ['世界起源', '力量体系', 'powerHierarchy', 'worldviews'],
   ['自然环境', '世界结构', 'worldStructure', 'worldviews'], ['自然环境', '疆域尺寸', 'worldDimensions', 'worldviews'],

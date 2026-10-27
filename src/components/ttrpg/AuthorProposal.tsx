@@ -3,6 +3,7 @@ import type {
   WorkspaceScope,
   TtrpgCampaignDesignV2,
   TtrpgCampaignProposalSectionV2,
+  ProductProductionBriefV3,
 } from "../../lib/types";
 import { readProductProductionDetailsV1 } from "../../lib/product-production/service";
 import { parseProductProductionBriefV3 } from "../../lib/product-production/contracts";
@@ -13,17 +14,21 @@ import { resolveRequestConfig } from "../../lib/ai/client";
 import { isAIConfigReady } from "../../lib/ai/config-readiness";
 import TtrpgCampaignProposalSelector from "./TtrpgCampaignProposalSelector";
 import { registerPendingDraftFlusherV1 } from "../../lib/authoring/pending-edit-coordinator";
+import TtrpgOpenBriefReview from './TtrpgOpenBriefReview';
 export default function AuthorProposal({
   scope,
   productionId,
+  onProduction,
 }: {
   scope: WorkspaceScope;
   productionId: number;
+  onProduction?: () => void;
 }) {
   const [details, setDetails] = useState<Awaited<
       ReturnType<typeof readProductProductionDetailsV1>
     > | null>(null),
     [design, setDesign] = useState<TtrpgCampaignDesignV2 | null>(null),
+    [openBrief, setOpenBrief] = useState<ProductProductionBriefV3 | null>(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
@@ -31,15 +36,15 @@ export default function AuthorProposal({
   const config = useAIConfigStore((s) => s.config);
   useEffect(() => {
     let active = true;
+    setDetails(null); setOpenBrief(null); setDesign(null); setError('');
     void readProductProductionDetailsV1(scope, productionId, ["ttrpg"])
       .then((d) => {
         if (active) {
+          const brief = d.brief ? parseProductProductionBriefV3(d.brief.briefJson) : null;
           setDetails(d);
+          setOpenBrief(brief?.ttrpgOpen ? brief : null);
           setDesign(
-            d.brief
-              ? (parseProductProductionBriefV3(d.brief.briefJson).ttrpg
-                  ?.campaignDesign ?? null)
-              : null,
+            brief?.ttrpg?.campaignDesign ?? null,
           );
           setDirty(false);
         }
@@ -136,6 +141,10 @@ export default function AuthorProposal({
       });
       await save(result.design);
     });
+  if (openBrief?.ttrpgOpen) return <>
+    {error && <p role="alert">{error}</p>}
+    <TtrpgOpenBriefReview brief={openBrief} started={Boolean(details?.build)} onProduction={onProduction} />
+  </>;
   return (
     <section className="lf-paper">
       <h3>讨论方案，比较不同的战役方向</h3>

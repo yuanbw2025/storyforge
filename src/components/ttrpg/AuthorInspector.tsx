@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import type { WorkspaceScope, ProductRuntimePackageV1 } from "../../lib/types";
+import type { WorkspaceScope } from "../../lib/types";
+import type { ProductRuntimePackageWithTtrpgV2 } from '../../lib/ttrpg/content-version';
 import {
   readProductProductionDetailsV1,
   beginProductProductionEvolutionV1,
 } from "../../lib/product-production/service";
 import { verifyProductBuildPreviewManifestV1 } from "../../lib/product-production/preview-manifest";
 import { createBuildProductMediaResolver } from "../../lib/product-production/media-resolver";
+import TtrpgOpenAuthorDiagnostics from './TtrpgOpenAuthorDiagnostics';
 export default function AuthorInspector({
   scope,
   productionId,
@@ -17,7 +19,7 @@ export default function AuthorInspector({
   page: string;
   onProduction: () => void;
 }) {
-  const [pkg, setPkg] = useState<ProductRuntimePackageV1 | null>(null),
+  const [pkg, setPkg] = useState<ProductRuntimePackageWithTtrpgV2 | null>(null),
     [details, setDetails] = useState<Awaited<
       ReturnType<typeof readProductProductionDetailsV1>
     > | null>(null),
@@ -42,6 +44,7 @@ export default function AuthorInspector({
         if (!d.build?.previewManifestJson) return;
         const p = await verifyProductBuildPreviewManifestV1(
           d.build.previewManifestJson,
+          { ttrpgProtocol: 2 },
         );
         if (!active) return;
         setPkg(p.runtimePackage);
@@ -71,12 +74,17 @@ export default function AuthorInspector({
       created.forEach((u) => URL.revokeObjectURL(u));
     };
   }, [scope, productionId, page]);
+  useEffect(() => { setRequest(''); }, [scope?.projectId, scope?.worldId, scope?.workId, productionId]);
   const campaign = pkg?.ttrpg?.campaign;
   const collections = campaign
     ? page === "characters"
       ? [["角色卡", campaign.characterTemplates]]
       : page === "scenes"
-        ? [
+        ? campaign.version === 2 ? [
+            ['局势', campaign.situationTemplates], ['压力时钟', campaign.clocks], ['威胁', campaign.fronts],
+            ['冻结事实（作者可见）', campaign.frozenWorldPredicateIndex.entries],
+            ['秘密（作者可见）', campaign.secrets], ['阶段闭合', [campaign.stageClosurePolicy]],
+          ] : [
             ["场景", campaign.scenes],
             ["线索", campaign.clues],
             ["压力与威胁", campaign.fronts],
@@ -180,7 +188,16 @@ export default function AuthorInspector({
           </>
         )}
       </section>
-      {campaign && (
+      {page === 'scenes' && scope && productionId && details && <TtrpgOpenAuthorDiagnostics
+        key={`${scope.projectId}:${scope.worldId}:${scope.workId}:${productionId}`}
+        scope={scope} productionId={productionId} onRevisionDraft={text => {
+          if (request.includes(text)) return true;
+          const next = request.trim() ? `${request}\n\n${text}` : text;
+          if (next.length > 10000) return false;
+          setRequest(next);
+          return true;
+        }} />}
+      {details && (
         <section className="lf-paper">
           <h3>修订这一版</h3>
           <p>

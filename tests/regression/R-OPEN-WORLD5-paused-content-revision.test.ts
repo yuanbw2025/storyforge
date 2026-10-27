@@ -171,6 +171,10 @@ describe('TOW paused accepted-task revision', () => {
     const f = await fixture()
     expect(() => parseProductProductionCommandV1({ type: 'resume', commandId: 'mixed', expectedStateRevision: 1,
       contentRevision: {}, openWorldContentRevision: f.revision })).toThrow(/混用/)
+    expect(() => parseProductProductionCommandV1({ type: 'resume', commandId: 'mixed-ttrpg-open-world', expectedStateRevision: 1,
+      ttrpgContentRevision: {}, openWorldContentRevision: f.revision })).toThrow(/混用/)
+    expect(() => parseProductProductionCommandV1({ type: 'resume', commandId: 'mixed-ttrpg-adventure', expectedStateRevision: 1,
+      ttrpgContentRevision: {}, contentRevision: {} })).toThrow(/混用/)
     expect(() => parseProductProductionCommandV1({ type: 'resume', commandId: 'duplicates', expectedStateRevision: 1,
       openWorldContentRevision: { ...f.revision, expectedArtifacts: [f.revision.expectedArtifacts[0], f.revision.expectedArtifacts[0]] } })).toThrow(/重复/)
   })

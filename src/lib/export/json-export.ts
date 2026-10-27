@@ -1,6 +1,7 @@
 import { saveFile } from '../platform/save-file'
 import type { ExtensionProfile, ExtensionRecord, ExtensionContract, ExtensionOperation } from '../extensions/types'
 import type { AvgAuthoringDraftV1, AvgDraftMediaV1 } from '../avg/authoring-contract'
+import type { TtrpgNarrativeMemoryV1 } from '../ttrpg/narrative-memory'
 /**
  * 项目 JSON 导出/导入 · 对外门面
  *
@@ -460,6 +461,11 @@ export interface ProjectExportData {
       _producerRunExportId?: number | null
       _blobObjectExportId?: number | null
     }
+  )[]
+  ttrpgNarrativeMemories: (
+    Omit<TtrpgNarrativeMemoryV1, 'id' | 'projectId' | 'worldGroupId' | 'worldId' | 'workId' | 'sessionId' | 'sourceSessionId'>
+    & { _exportId: number; _worldGroupExportId?: number | null; _worldExportId: number; _workExportId: number;
+      _productRuntimeSessionExportId: number; _sourceSessionExportId?: number | null }
   )[]
   ttrpgSessionParticipants: (
     Omit<TtrpgSessionParticipantRecordV2, 'id' | 'projectId' | 'worldGroupId' | 'worldId' | 'workId' | 'sessionId'>

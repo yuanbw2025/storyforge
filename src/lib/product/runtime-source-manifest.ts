@@ -8,13 +8,17 @@ import { validateProductSourcePlan } from './source-contracts'
 import { parseProductProductionSourcePlanV1 } from '../product-production/source-contracts'
 import { verifyProductBuildPreviewManifestV1 } from '../product-production/preview-manifest'
 
+/** Only the neutral source envelope is consumed here. Product-private payloads
+ * remain on the original object for whole-package hashing and their own parser. */
+type RuntimePackageSourceEnvelopeV1 = Pick<ProductRuntimePackageV1, 'productType' | 'sourceWorld'>
+
 function fail(message: string): never {
   throw new Error(`[product-runtime-source-manifest] ${message}`)
 }
 
 async function createManifest(input: {
   sourcePlan: ProductSourcePlan
-  runtimePackage: ProductRuntimePackageV1
+  runtimePackage: RuntimePackageSourceEnvelopeV1
   packageHash: string
   sourceKind: ProductRuntimeSourceManifestV1['sourceKind']
   sourceIdentityHash: string
@@ -55,7 +59,8 @@ async function createManifest(input: {
 
 /** Caller verifies the immutable release before deriving this system receipt. */
 export async function runtimeSourceManifestFromReleaseV1(
-  manifest: ProductReleaseManifestV1,
+  manifest: Pick<ProductReleaseManifestV1, 'sourceContracts' | 'packageHash' | 'releaseIdentityHash'>
+    & { runtimePackage: RuntimePackageSourceEnvelopeV1 },
 ): Promise<ProductRuntimeSourceManifestV1 | null> {
   if (manifest.sourceContracts.sourcePlan.schema !== 'storyforge.product-source-plan') return null
   return createManifest({ sourcePlan: manifest.sourceContracts.sourcePlan, runtimePackage: manifest.runtimePackage,

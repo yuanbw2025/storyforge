@@ -146,6 +146,8 @@ export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
   "resume",
   "stop",
   "resolve-blocker",
+  "book-original-response",
+  "book-local-no-dispatch",
   "request-preview",
   "revise-media-asset",
   "revise-media-assets",
@@ -520,6 +522,8 @@ export interface ProductProductionBriefV3 {
   avg?: import('../avg/authoring-contract').AvgAuthoringSettingsV1;
   avgRevision?: { version: 1; basePackageHash: string; runtimePackage: import('./product-release').ProductRuntimePackageV1 };
   ttrpg?: TtrpgProductionBriefV2;
+  /** Open construction uses the same production budgets and lifecycle, with its own frozen content contract. */
+  ttrpgOpen?: import('../ttrpg/production-brief-v3').TtrpgProductionBriefContentV3;
   /** Closed AI Town construction contract; required exactly when productType=ai-town. */
   aiTown?: AiTownProductionBriefV1;
   /** Closed text-adventure construction contract; required exactly for text-adventure. */
@@ -694,6 +698,8 @@ export interface ProductProductionBlockerResolutionV1 {
   note: string;
   /** Explicit authored replacement; validated by the same task parser before acceptance. */
   authorDraftJson?: string;
+  /** Explicit reference to an already retained and booked complete original response. */
+  originalResponseSource?: { captureRunId: number; captureReceiptHash: string };
   /**
    * Required before retrying an attempt whose provider result or usage has not
    * been fully settled. The exact durable attempt is named explicitly so a
@@ -724,6 +730,19 @@ export interface TextAdventureContentRevisionV1 {
   artifactKey: 'content.product-module' | 'content.story-bible' | 'content.cast-bible' | 'content.adventure-architecture' | 'content.narrative-arc-scenes' | 'content.narrative-decision-plan' | 'content.ending-route-plan' | 'content.main-quest-plan' | 'content.adventure-side-quests' | 'content.adventure-ambient-events' | 'content.scene-script.act-1.part-1' | 'content.scene-script.act-1.part-2' | 'content.scene-script.act-2.part-1' | 'content.scene-script.act-2.part-2' | 'content.scene-script.act-3.part-1' | 'content.scene-script.act-3.part-2' | 'content.dialogue-pass.act-1' | 'content.dialogue-pass.act-2' | 'content.dialogue-pass.act-3' | 'content.quest-script.main.act-1.single' | 'content.quest-script.main.act-1.multi' | 'content.quest-script.main.act-2.single' | 'content.quest-script.main.act-2.multi' | 'content.quest-script.main.act-3.single' | 'content.quest-script.main.act-3.multi' | 'content.quest-script.supplemental';
   expectedArtifactVersion: number;
   expectedArtifactHash: string;
+  note: string;
+  authorDraftJson: string;
+}
+
+/** Same-Build author revision of an accepted open TTRPG content task. */
+export interface TtrpgOpenContentRevisionV1 {
+  artifactKey: 'ttrpg.open.source-facts' | 'ttrpg.open.rule-system' | 'ttrpg.open.situation-layer';
+  expectedArtifactVersion: number;
+  expectedArtifactHash: string;
+  expectedPlanHash: string;
+  expectedControlEpoch: number;
+  /** Freezes the reviewed recovery effects and current executable bindings. */
+  expectedImpactHash?: string;
   note: string;
   authorDraftJson: string;
 }
@@ -762,6 +781,36 @@ export interface ProductBuildCompatibilityReportV1 {
 }
 
 export type ProductProductionCommandV1 =
+  | {
+      type: "book-local-no-dispatch";
+      commandId: string;
+      expectedStateRevision: number;
+      buildNumber: number;
+      controlEpoch: number;
+      planHash: string;
+      ledgerHash: string;
+      anchor: {
+        artifactKey: TtrpgOpenContentRevisionV1['artifactKey'];
+        version: number;
+        contentHash: string;
+      };
+      /** Stable proof hashes, never portable local Run locators. */
+      proofs: Array<{ attemptKeyHash: string; proofHash: string }>;
+    }
+  | {
+      type: "book-original-response";
+      commandId: string;
+      expectedStateRevision: number;
+      buildNumber: number;
+      controlEpoch: number;
+      planHash: string;
+      taskKey: string;
+      originalRunId: number;
+      originalAttempt: number;
+      captureRunId: number;
+      captureReceiptHash: string;
+      disposition: "use-native-token-usage" | "charge-reservation-upper-bound";
+    }
   | {
       type: "create-intent";
       commandId: string;
@@ -872,6 +921,7 @@ export type ProductProductionCommandV1 =
       /** Required only when pause froze one or more in-flight provider reservations. */
       pausedReservationDispositions?: ProductProductionPausedReservationDispositionV1[];
       contentRevision?: TextAdventureContentRevisionV1;
+      ttrpgContentRevision?: TtrpgOpenContentRevisionV1;
       openWorldContentRevision?: TextOpenWorldContentRevisionV1;
     }
   | {

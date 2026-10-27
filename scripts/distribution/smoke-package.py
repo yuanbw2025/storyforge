@@ -25,7 +25,12 @@ try:
         raise RuntimeError('Bundled server did not start.')
     assert '/storyforge/assets/' in html and 'showcase-entry' not in html
     manifest = json.loads((root / 'release.json').read_text())
-    print(json.dumps({'launch': 'passed', 'release': manifest}))
+    # Use the actual shipped Node and physical helper files, not the checkout.
+    # Hash validation is not inference or a device/listening acceptance claim.
+    module = (root / 'scripts/ttrpg-local-tts/product-contract.mjs').as_uri()
+    script = 'import {productProfiles,assertProductImplementation} from ' + json.dumps(module) + '; for (const p of productProfiles) assertProductImplementation(p); console.log(JSON.stringify({profileIds:productProfiles.map(p=>p.profileId),modelCalls:0}))'
+    helper = subprocess.run([str(node), '--input-type=module', '-e', script], cwd=root, capture_output=True, text=True, timeout=30, check=True)
+    print(json.dumps({'launch': 'passed', 'release': manifest, 'localTtsResources': json.loads(helper.stdout)}))
 finally:
     proc.terminate()
     try: proc.wait(timeout=8)

@@ -3,7 +3,8 @@ import type {
   VerificationCriterionReceiptV1,
   VerificationReceiptV1,
 } from '../../types/agent-run'
-import { hashCanonicalValue } from './hash'
+import { hashCanonicalValue, canonicalStringify } from './hash'
+import { parseAgentRunContract } from './contract'
 import {
   assertExactKeys,
   assertUnique,
@@ -67,11 +68,12 @@ export function parseVerificationReceiptV1(value: unknown): VerificationReceiptV
     'verifierSetVersion',
     'lineage',
     'semanticVerifier',
+    'zeroModelCommit',
     'criteria',
     'acceptedAt',
     'receiptHash',
   ] as const
-  const required = keys.filter(key => key !== 'semanticVerifier' && key !== 'lineage')
+  const required = keys.filter(key => key !== 'semanticVerifier' && key !== 'lineage' && key !== 'zeroModelCommit')
   assertExactKeys(record, keys, required, 'receipt')
   if (record.version !== 1) failSchema('unsupported_version', 'receipt.version', '仅支持版本 1')
   const adoptionEventIds = readArray(record.adoptionEventIds, 'receipt.adoptionEventIds').map((item, index) => (
@@ -120,18 +122,34 @@ export function parseVerificationReceiptV1(value: unknown): VerificationReceiptV
       }),
     }
   }
+  let zeroModelCommit: VerificationReceiptV1['zeroModelCommit']
+  if (record.zeroModelCommit !== undefined) {
+    const proof = readRecord(record.zeroModelCommit, 'receipt.zeroModelCommit')
+    assertExactKeys(proof, ['contractJson', 'inputArtifactHashes'], ['contractJson', 'inputArtifactHashes'], 'receipt.zeroModelCommit')
+    const contractJson = readString(proof.contractJson, 'receipt.zeroModelCommit.contractJson', { max: 200000 })
+    const contract = parseAgentRunContract(JSON.parse(contractJson))
+    if (canonicalStringify(contract) !== contractJson || contract.budget.maxModelCalls !== 0
+      || contract.budget.maxInputTokens !== 0 || contract.budget.maxOutputTokens !== 0
+      || contract.permissions.contextSourceKeys.length || contract.permissions.writeTargets.length || contract.executionBindings?.length
+      || readArray(record.contextManifestHashes, 'receipt.contextManifestHashes').length
+      || readArray(record.candidateHashes, 'receipt.candidateHashes').length || adoptionEventIds.length || semanticVerifier) {
+      failSchema('invalid_zero_model_receipt', 'receipt.zeroModelCommit', '仅零模型、零上下文、零候选/采用的确定性提交可使用此回执')
+    }
+    zeroModelCommit = { contractJson, inputArtifactHashes: readHashArray(proof.inputArtifactHashes, 'receipt.zeroModelCommit.inputArtifactHashes') }
+  }
   return {
     version: 1,
     runId: readInteger(record.runId, 'receipt.runId', { min: 1 }),
     generation: readInteger(record.generation, 'receipt.generation', { min: 1 }),
     contractHash: readHash(record.contractHash, 'receipt.contractHash'),
-    contextManifestHashes: readHashArray(record.contextManifestHashes, 'receipt.contextManifestHashes'),
+    contextManifestHashes: readHashArray(record.contextManifestHashes, 'receipt.contextManifestHashes', { allowEmpty: !!zeroModelCommit }),
     candidateHashes: readHashArray(record.candidateHashes, 'receipt.candidateHashes', { allowEmpty: true }),
     adoptionEventIds,
     postStateHash: readHash(record.postStateHash, 'receipt.postStateHash'),
     verifierSetVersion: readString(record.verifierSetVersion, 'receipt.verifierSetVersion', { max: 160 }),
     ...(lineage ? { lineage } : {}),
     semanticVerifier,
+    ...(zeroModelCommit ? { zeroModelCommit } : {}),
     criteria,
     acceptedAt: readInteger(record.acceptedAt, 'receipt.acceptedAt', { min: 0 }),
     receiptHash: readHash(record.receiptHash, 'receipt.receiptHash'),
@@ -143,11 +161,15 @@ export async function createVerificationReceiptV1(
 ): Promise<VerificationReceiptV1> {
   const provisional = { ...body, receiptHash: '0'.repeat(64) }
   const parsed = parseVerificationReceiptV1(provisional)
+  if (parsed.zeroModelCommit && await hashCanonicalValue(JSON.parse(parsed.zeroModelCommit.contractJson)) !== parsed.contractHash) {
+    failSchema('zero_model_contract_hash', 'receipt.zeroModelCommit', '零模型合同必须与当前回执的原合同 hash 一致')
+  }
   return { ...parsed, receiptHash: await hashCanonicalValue(receiptBody(parsed)) }
 }
 
 export async function verifyVerificationReceiptIntegrityV1(value: unknown): Promise<boolean> {
   const receipt = parseVerificationReceiptV1(value)
+  if (receipt.zeroModelCommit && await hashCanonicalValue(JSON.parse(receipt.zeroModelCommit.contractJson)) !== receipt.contractHash) return false
   return await hashCanonicalValue(receiptBody(receipt)) === receipt.receiptHash
 }
 
@@ -228,6 +250,7 @@ export function isVerificationReceiptFreshV1(
     | 'adoptionEventIds'
     | 'postStateHash'
     | 'verifierSetVersion'
+    | 'zeroModelCommit'
   >,
 ): boolean {
   const receipt = parseVerificationReceiptV1(value)
@@ -242,4 +265,5 @@ export function isVerificationReceiptFreshV1(
     && sameArray(receipt.adoptionEventIds, current.adoptionEventIds)
     && receipt.postStateHash === current.postStateHash
     && receipt.verifierSetVersion === current.verifierSetVersion
+    && canonicalStringify(receipt.zeroModelCommit ?? null) === canonicalStringify(current.zeroModelCommit ?? null)
 }

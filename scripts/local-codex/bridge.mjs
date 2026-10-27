@@ -7,6 +7,8 @@ import { CodexRuntime } from './runtime.mjs'
 export const PREFIX = '/storyforge/local-codex/v1'
 const UUID = /^[a-f0-9-]{36}$/i
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'unknown'])
+const DURABLE_RETENTION = 'until-owner-ack-v1'
+const pinned = record => record.receiptRetention === DURABLE_RETENTION && record.ownerAcknowledgedAt == null
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 export function allowedRequest(req) {
   try {
@@ -21,6 +23,10 @@ export function allowedRequest(req) {
 function send(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' })
   res.end(JSON.stringify(body))
+}
+function publicReceipt({ hash, ...record }) {
+  return { ...record, ...(/^[a-f0-9]{64}$/.test(hash ?? '')
+    ? { requestHash: hash, requestHashAlgorithm: 'sha256-json-request-v1' } : {}) }
 }
 async function readBody(req) {
   if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) throw new Error('仅接受 JSON 请求。')
@@ -38,7 +44,8 @@ export function validateInput(input) {
     || input.messages.some(m => !m || !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string')
     || (input.outputSchema != null && (typeof input.outputSchema !== 'object' || Array.isArray(input.outputSchema)))
     || (input.responseFormat != null && input.responseFormat !== 'json_object')
-    || Object.keys(input).some(k => !['id', 'model', 'messages', 'outputSchema', 'responseFormat'].includes(k))) throw new Error('无效的 Codex 文本请求。')
+    || (input.receiptRetention !== undefined && input.receiptRetention !== DURABLE_RETENTION)
+    || Object.keys(input).some(k => !['id', 'model', 'messages', 'outputSchema', 'responseFormat', 'receiptRetention'].includes(k))) throw new Error('无效的 Codex 文本请求。')
   return input
 }
 
@@ -58,16 +65,18 @@ export function createBridge({ runtime = new CodexRuntime(), journalDir = join(h
   const file = join(journalDir, 'receipts.json')
   try {
     const saved = JSON.parse(readFileSync(file, 'utf8'))
-    if (!Array.isArray(saved) || saved.some(r => !r || !UUID.test(r.id) || !Number.isFinite(r.createdAt) || typeof r.text !== 'string') || new Set(saved.map(r => r.id)).size !== saved.length) throw new Error('Invalid receipt journal')
+    if (!Array.isArray(saved) || saved.some(r => !r || !UUID.test(r.id) || !Number.isFinite(r.createdAt) || typeof r.text !== 'string'
+      || (r.receiptRetention !== undefined && r.receiptRetention !== DURABLE_RETENTION)
+      || (r.ownerAcknowledgedAt != null && !Number.isFinite(r.ownerAcknowledgedAt))) || new Set(saved.map(r => r.id)).size !== saved.length) throw new Error('Invalid receipt journal')
     records = new Map(saved.map(r => [r.id, {
       ...r, ...(!TERMINAL.has(r.status) ? { status: 'unknown', error: '服务重启，先前请求结果未知；不会自动重发。' } : {}),
     }]))
   } catch (error) { if (error.code !== 'ENOENT') { unlinkSync(lockFile); throw new Error('Codex 恢复记录无法读取；请保留文件并检查，避免重复生成。') } }
   function persist() {
     if (closed) return
-    for (const [id, record] of records) if (TERMINAL.has(record.status) && Date.now() - record.createdAt > 24 * 3600_000) records.delete(id)
+    for (const [id, record] of records) if (TERMINAL.has(record.status) && !pinned(record) && Date.now() - record.createdAt > 24 * 3600_000) records.delete(id)
     while (records.size > 100) {
-      const oldest = [...records.values()].find(r => TERMINAL.has(r.status))
+      const oldest = [...records.values()].find(r => TERMINAL.has(r.status) && !pinned(r))
       if (!oldest) break
       records.delete(oldest.id)
     }
@@ -113,7 +122,7 @@ export function createBridge({ runtime = new CodexRuntime(), journalDir = join(h
     try {
       if (req.method === 'GET' && route === '/status') return send(res, 200, { ...await runtime.account(), version: runtime.version })
       if (req.method === 'GET' && route === '/models') return send(res, 200, { models: await runtime.models() })
-      if (req.method === 'GET' && route === '/requests') { persist(); return send(res, 200, { records: [...records.values()].reverse().map(({ hash, ...r }) => r) }) }
+      if (req.method === 'GET' && route === '/requests') { persist(); return send(res, 200, { records: [...records.values()].reverse().map(publicReceipt) }) }
       if (req.method === 'POST' && route === '/login') { await readBody(req); if (active.size) return send(res, 409, { error: '请先停止或完成现有请求，再切换 Codex 登录。' }); return send(res, 200, await runtime.login()) }
       if (req.method === 'POST' && route === '/disconnect') {
         await readBody(req)
@@ -126,8 +135,12 @@ export function createBridge({ runtime = new CodexRuntime(), journalDir = join(h
         const hash = createHash('sha256').update(JSON.stringify(input)).digest('hex')
         const existing = records.get(input.id)
         if (existing) return send(res, existing.hash === hash ? 200 : 409, existing.hash === hash ? { id: input.id } : { error: '请求编号已用于不同内容。' })
+        if (input.receiptRetention === DURABLE_RETENTION && [...records.values()].filter(pinned).length >= 32) {
+          return send(res, 409, { error: '已有 32 条待原作品回收的 Codex 回执；请核对原记录后继续，不会删除旧答复或自动重发。' })
+        }
         if (active.size >= 32) return send(res, 409, { error: 'Codex 待处理请求已达 32 条。请等待或取消已有请求；不会自动重试。' })
-        const record = { id: input.id, hash, model: input.model, createdAt: Date.now(), status: 'accepted', text: '', dispatched: false }
+        const record = { id: input.id, hash, model: input.model, createdAt: Date.now(), status: 'accepted', text: '', dispatched: false,
+          ...(input.receiptRetention === DURABLE_RETENTION ? { receiptRetention: DURABLE_RETENTION } : {}) }
         records.set(input.id, record)
         try { persist() } catch { records.delete(input.id); storageFailed = true; throw new Error('无法保存请求记录，未发送模型请求。') }
         const controller = new AbortController(); active.set(input.id, controller)
@@ -135,12 +148,27 @@ export function createBridge({ runtime = new CodexRuntime(), journalDir = join(h
         queue.push({ input, record, controller }); pump()
         return
       }
-      const match = /^\/requests\/([a-f0-9-]{36})(\/cancel)?$/i.exec(route)
+      const match = /^\/requests\/([a-f0-9-]{36})(\/cancel|\/acknowledge)?$/i.exec(route)
       if (match) {
         const record = records.get(match[1])
         if (!record) return send(res, 404, { error: '请求记录不存在或已超过保留期限。' })
-        if (req.method === 'GET' && !match[2]) { const { hash, ...view } = record; return send(res, 200, view) }
-        if (req.method === 'POST' && match[2]) {
+        if (req.method === 'GET' && !match[2]) return send(res, 200, publicReceipt(record))
+        if (req.method === 'POST' && match[2] === '/acknowledge') {
+          const body = await readBody(req)
+          if (!body || Object.keys(body).length !== 4 || Object.keys(body).some(k => !['decision', 'model', 'requestHash', 'rawResponseHash'].includes(k))
+            || body.decision !== 'owner-record-saved-v1') throw new Error('需要原作品明确确认已保存这条回执。')
+          if (record.receiptRetention !== DURABLE_RETENTION || !TERMINAL.has(record.status) || active.has(record.id)) {
+            return send(res, 409, { error: '原回执尚未形成可交接终态或未登记持有，请保留原记录。' })
+          }
+          if (body.model !== record.model || body.requestHash !== record.hash
+            || body.rawResponseHash !== createHash('sha256').update(record.text).digest('hex')) {
+            return send(res, 409, { error: '原模型、请求摘要或原文摘要不一致；回执继续保留。' })
+          }
+          record.ownerAcknowledgedAt ??= Date.now()
+          persist()
+          return send(res, 200, { id: record.id, acknowledged: true, acknowledgedAt: record.ownerAcknowledgedAt, status: record.status })
+        }
+        if (req.method === 'POST' && match[2] === '/cancel') {
           await readBody(req)
           active.get(record.id)?.abort()
           if (record.status === 'accepted') { record.status = 'cancelled'; record.error = '请求已取消。'; persist() }

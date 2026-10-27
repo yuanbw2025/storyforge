@@ -9,6 +9,7 @@ import type {
 } from '../types'
 import { planExactArtifactRetentionV1 } from './artifact-retention'
 import { canonicalStringify } from '../agent/run/hash'
+import { exactArtifactOwnerTablesV1, readRegisteredExactArtifactOwnerRefsV1 } from './artifact-root-registry'
 
 const HASH = /^[a-f0-9]{64}$/
 const KINDS = new Set<ExactRunArtifactKindV1>([
@@ -33,6 +34,7 @@ function identityKey(value: ExactRunArtifactIdentityV1): string {
 async function liveArtifactRefsForProjectInTransactionV1(projectId: number): Promise<{
   refs: MemoryArtifactRefV1[]
   runIdsByIdentity: Map<string, Set<number>>
+  ownerPinned: Set<string>
 }> {
   const events = await db.agentRunEvents.where('projectId').equals(projectId).toArray()
   const refs: MemoryArtifactRefV1[] = []
@@ -65,7 +67,9 @@ async function liveArtifactRefsForProjectInTransactionV1(projectId: number): Pro
       authority: 'evidence',
     })
   }
-  return { refs, runIdsByIdentity }
+  const ownerRefs = await readRegisteredExactArtifactOwnerRefsV1(projectId)
+  const ownerPinned = new Set(ownerRefs.map(ref => identityKey({ artifactKind: ref.artifactKind!, contentHash: ref.contentHash! })))
+  return { refs: [...refs, ...ownerRefs], runIdsByIdentity, ownerPinned }
 }
 
 async function writePruneReceiptsV1(
@@ -88,7 +92,7 @@ async function writePruneReceiptsV1(
   }
 }
 
-/** @internal Caller must enlist agentRunArtifacts and agentRunEvents. */
+/** @internal Caller enlists artifacts, Run events and registry-derived exactArtifactOwnerTablesV1. */
 export async function pruneUnreferencedAgentRunArtifactsInCurrentTransactionV1(
   projectId: number,
   now = Date.now(),
@@ -110,7 +114,7 @@ export async function markAndSweepAgentRunArtifactsV1(
   projectId: number,
   now = Date.now(),
 ): Promise<ExactRunArtifactPruneReceiptV1[]> {
-  return db.transaction('rw', db.agentRunArtifacts, db.agentRunEvents, async () => (
+  return db.transaction('rw', [db.agentRunArtifacts, db.agentRunEvents, ...exactArtifactOwnerTablesV1()], async () => (
     pruneUnreferencedAgentRunArtifactsInCurrentTransactionV1(projectId, now)
   ))
 }
@@ -121,8 +125,9 @@ export async function pruneAgentRunArtifactsExplicitlyV1(input: {
   targets: readonly ExactRunArtifactIdentityV1[]
   now?: number
 }): Promise<ExactRunArtifactPruneReceiptV1[]> {
-  return db.transaction('rw', db.agentRunArtifacts, db.agentRunEvents, db.agentRuns, async () => {
-    const { refs, runIdsByIdentity } = await liveArtifactRefsForProjectInTransactionV1(input.projectId)
+  return db.transaction('rw', [db.agentRunArtifacts, db.agentRunEvents, db.agentRuns, ...exactArtifactOwnerTablesV1()], async () => {
+    const { refs, runIdsByIdentity, ownerPinned } = await liveArtifactRefsForProjectInTransactionV1(input.projectId)
+    if (input.targets.some(target => ownerPinned.has(identityKey(target)))) fail('confirmed-owner', '工件仍被已确认产物引用；请先通过拥有者的生命周期释放依赖。')
     const referencedRunIds = [...new Set(input.targets.flatMap(target => (
       [...(runIdsByIdentity.get(identityKey(target)) ?? [])]
     )))]

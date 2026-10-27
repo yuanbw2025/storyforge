@@ -8,6 +8,7 @@ import type {
   ProductProductionPlanTaskV3,
   ProductionProductKindV1,
   ProductSourcePlan,
+  ProductSourcePlanV1,
   WorkspaceScope,
 } from '../types'
 import {
@@ -28,6 +29,7 @@ import { freezeExactProductSourcePlanV2, refreezeExactProductSourcePlanBriefV2 }
 import { hashProductProductionValueV2 } from './hash'
 import { resolveProductProductionWorldCompilationDescriptorsV2 } from './world-source'
 import { textAdventureMandatoryFullWorldResourcesV1 } from '../adventure/world-source-requirements'
+import { verifyTtrpgOpenProductionSourcePlanV1 } from '../ttrpg/production-source-plan'
 
 function unique<T extends string>(values: readonly T[]): T[] {
   return [...new Set(values)].sort() as T[]
@@ -79,7 +81,12 @@ export async function createProductProductionSourcePlanV1(input: {
   productionKey: string
   brief: ProductProductionBriefV3
   createdAt?: number
+  /** Registry-remapped locator of an already persisted immutable open Brief; content bytes/hashes stay unchanged. */
+  verifiedSourcePlan?: ProductSourcePlanV1
 }): Promise<ProductSourcePlan> {
+  if (input.brief.ttrpgOpen) {
+    return verifyTtrpgOpenProductionSourcePlanV1(input)
+  }
   const catalog = await openProductWorldResourceCatalogV2({
     productType: input.brief.intent.productType,
     localReleaseRecordId: input.brief.source.worldReleaseId,
@@ -201,9 +208,18 @@ export async function createConfirmedProductBriefV1(input: {
   authorStartRevision: number
   confirmedAt?: number
 }): Promise<ConfirmedProductBriefV1> {
-  const parsedBrief = JSON.parse(input.briefRow.briefJson) as ProductProductionBriefV3
+  const parsedBrief = JSON.parse(input.briefRow.briefJson) as ProductProductionBriefV3 | {
+    schema: 'storyforge.ttrpg-production-brief'
+    version: 3
+    runFormat: 'open'
+  }
+  const productType = parsedBrief.schema === 'storyforge.ttrpg-production-brief'
+    && parsedBrief.version === 3
+    && parsedBrief.runFormat === 'open'
+    ? 'ttrpg'
+    : (parsedBrief as ProductProductionBriefV3).intent.productType
   return createConfirmedProductBriefContractV1({
-    productType: parsedBrief.intent.productType,
+    productType,
     productInstanceKey: input.productionKey,
     sourcePlan: input.sourcePlan,
     briefRevision: input.briefRow.revision,
@@ -325,6 +341,8 @@ export async function executeProductProductionWorldGatewayV1(input: {
   })
   const mandatoryResourceKeys = unique([
     ...boundary.mandatoryResourceKeys, ...compilationResources, ...specialistFullResources,
+    ...(input.brief.ttrpgOpen && ['ttrpg.open.source-facts', 'ttrpg.open.rule-system', 'ttrpg.open.situation-layer']
+      .includes(input.task.taskKey) ? input.brief.source.selection.resourceKeys : []),
   ])
   return executeContextGatewayV1({
     skill,
@@ -336,6 +354,8 @@ export async function executeProductProductionWorldGatewayV1(input: {
     mandatoryResourceKeys,
     mandatoryFullResourceKeys: unique([
       ...boundary.mandatoryFullResourceKeys, ...compilationResources, ...specialistFullResources,
+      ...(input.brief.ttrpgOpen && ['ttrpg.open.source-facts', 'ttrpg.open.rule-system', 'ttrpg.open.situation-layer']
+        .includes(input.task.taskKey) ? input.brief.source.selection.resourceKeys : []),
     ]),
     mandatoryOriginalResourceKeys: input.sourcePlan.version === 2 ? mandatoryResourceKeys : unique(compilationResources),
     targetResourceKeys: unique([...boundary.targetResourceKeys, ...compilationResources]),

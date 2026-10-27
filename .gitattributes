@@ -4,6 +4,21 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
+# Local voice profiles verify these implementation files by exact SHA-256 bytes.
+# Keep the pinned LF representation even when Windows core.autocrlf is enabled.
+scripts/ttrpg-local-tts/product-contract.mjs text eol=lf
+scripts/ttrpg-local-tts/product-worker.py text eol=lf
+scripts/ttrpg-local-tts/product-jobs.mjs text eol=lf
+scripts/ttrpg-local-tts/product-bridge.mjs text eol=lf
+scripts/ttrpg-local-tts/engine.py text eol=lf
+scripts/ttrpg-local-tts/reading_frontend.py text eol=lf
+scripts/ttrpg-local-tts/reading-preview.mjs text eol=lf
+scripts/ttrpg-local-tts/qwen-product.py text eol=lf
+scripts/ttrpg-local-tts/qwen-native-eval-profile.json text eol=lf
+src/lib/ttrpg/open-local-voice-transport.ts text eol=lf
+src/lib/ttrpg/open-voice-execution.ts text eol=lf
+src/lib/ttrpg/open-voice-execution-input.ts text eol=lf
+src/lib/ttrpg/open-voice-product-profile.ts text eol=lf
 # Verification evidence must keep the exact emitted bytes, including coverage
 # table padding and trailing blank lines. Source files retain normal checks.
 tests/acceptance/narrative-world/raw/** -text whitespace=-blank-at-eol,-blank-at-eof

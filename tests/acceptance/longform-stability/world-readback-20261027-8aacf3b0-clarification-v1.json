@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "kind": "evidence-scope-clarification",
+  "corrects": "tests/acceptance/longform-stability/world-readback-20261027-8aacf3b0.json",
+  "preserveOriginal": true,
+  "regressionCountUnchanged": 222,
+  "browserCountUnchanged": 25,
+  "correction": "The Narrative World subset in the original 222-test run contained 115 tests (25 NW-0B, 73 IR codec, 17 domain projection), not 110. The separate 12-test NW-1B corpus file was not in that command, so its dated domain receipt did not receive a fresh default readback there. The current integration independently generated and compares that receipt; its separate default readback is recorded in the v3 integration evidence.",
+  "literaryAcceptance": false,
+  "releaseStatus": "NOT_RELEASED"
+}

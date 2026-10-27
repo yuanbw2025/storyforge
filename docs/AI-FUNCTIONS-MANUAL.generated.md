@@ -80,7 +80,7 @@
 
 ## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
 
-共 135 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+共 157 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
 
 | key | 标签 | 作用域 | 层级 | 预算(token) |
 |---|---|---|---|---|
@@ -89,15 +89,37 @@
 | `shortNovel.manuscript` | 短篇当前结构与正文 | project | L0 | 64000 |
 | `worldRelease` | 冻结世界版本资源 | manual | L0 | 100000 |
 | `ttrpgRuntime` | 正式 TTRPG 主持人运行视角 | runtime | L0 | 10000 |
+| `ttrpgOpenVoiceText` | open 跑团原预留配音的准确朗读片段 | runtime | L0 | 8000 |
+| `ttrpgOpenAuthority` | open 跑团角色权限与机械状态 | runtime | L0 | 10000 |
+| `ttrpgOpenKnowledge` | open 跑团当前角色知识 | runtime | L0 | 10000 |
+| `ttrpgOpenCommonIdentities` | open 跑团全体当前队员共同身份与原可靠性 | runtime | L0 | 6000 |
+| `ttrpgOpenLearnedIdentities` | open 跑团角色已识别身份与原可靠性 | runtime | L0 | 6000 |
+| `ttrpgOpenOracleHistory` | open 跑团角色可读 Oracle 历史 | runtime | L0 | 6000 |
+| `ttrpgOpenFacts` | open 跑团角色可读会话叙事事实 | runtime | L0 | 10000 |
+| `ttrpgOpenKpInput` | open 跑团共同可见结算叙述输入 | runtime | L0 | 16000 |
+| `ttrpgOpenGmOracleInput` | open 跑团受限 GM Oracle 解释输入 | runtime | L0 | 16000 |
+| `ttrpgOpenActorContext` | open 跑团角色情境指引与已保存叙述 | runtime | L0 | 16000 |
+| `ttrpgOpenPartyContext` | open 跑团共同叙述情境指引与已保存叙述 | runtime | L0 | 16000 |
+| `ttrpgOpenGmContext` | open 跑团GM 助手情境指引与已保存叙述 | runtime | L0 | 16000 |
+| `ttrpgOpenMemory` | open 跑团活动角色获准接收的记忆 | runtime | L0 | 8000 |
+| `ttrpgOpenPartyMemory` | open 跑团全队共同可见的记忆 | runtime | L0 | 8000 |
+| `ttrpgOpenBriefInput` | open 跑团阶段复盘的全队共同资料 | runtime | L0 | 16000 |
+| `ttrpgOpenSituationInput` | open 跑团独立局势生成的模型 GM 资料 | runtime | L0 | 16000 |
+| `ttrpgOpenPublicSituationInput` | open 跑团共同局势的全体玩家资料交集 | runtime | L0 | 16000 |
+| `ttrpgOpenEntityInput` | open 跑团原咨询下的分范围实体提案资料 | runtime | L0 | 16000 |
+| `ttrpgOpenCommonOracleInput` | open 跑团共同 Oracle 事实的全体玩家资料交集 | runtime | L0 | 16000 |
 | `ttrpgPrivateGuidance` | 正式 TTRPG 单角色私密指引 | runtime | L0 | 8000 |
 | `ttrpgDirector` | 正式 TTRPG AI KP 决策与冻结揭示条件 | runtime | L0 | 12000 |
 | `ttrpgPublicNarration` | 正式 TTRPG 已授权公开叙述素材 | runtime | L0 | 10000 |
 | `ttrpgNpcRuntime` | 正式 TTRPG NPC 独立知情视角 | runtime | L0 | 10000 |
 | `ttrpgPlayerRuntime` | 正式 TTRPG 单角色玩家运行视角 | runtime | L0 | 10000 |
+| `ttrpg.open.authoring-design` | 开放跑团作者设计的准确草稿与冻结来源 | project | L0 | 24000 |
 | `ai-town.authoring` | AI 小镇 作者方案与会谈 | project | L0 | 16000 |
 | `avg.authoring` | AVG 作者方案与会谈 | project | L0 | 16000 |
 | `chat.authoring` | 角色聊天作者方案与会谈 | project | L0 | 16000 |
 | `product-production.brief` | 已授权上层产品生产 Brief | project | L0 | 8000 |
+| `product-production.ttrpg-open-task-brief` | 开放跑团 V3 原授权任务方案投影 | project | L0 | 100000 |
+| `product-production.ttrpg-open-media-inputs` | 开放跑团已采纳的媒资槽位与身份锚点 | project | L0 | 16000 |
 | `product-production.artifact-inputs` | 上层产品生产任务依赖 | project | L1 | 24000 |
 | `product-production.adventure-scene-script-inputs` | 文字冒险单幕分场写作投影 | project | L0 | 15100 |
 | `product-production.adventure-dialogue-inputs` | 文字冒险独立对白审校投影 | project | L0 | 12500 |
@@ -285,6 +307,7 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 | `storylineCrossings` | `arcIdA` `arcIdB` `chapterId` `chapterTitle` `evidenceQuote` `note` |
 | `storylineProgress` | `arcId` `currentStageId` `evidenceQuote` `involvedEntities` `lastActiveChapterId` `lastActiveChapterTitle` `narrativeDependenciesV1` `narrativeDevelopmentsV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeTimeV1` `narrativeVisibilityV1` `progressNote` `status` |
 | `temporalFacts` | `narrativeAssertionV1` `narrativeDependenciesV1` `narrativeEvidenceV1` `narrativeModalityV1` `narrativeRuleV1` `narrativeTimeV1` `narrativeVisibilityV1` |
+| `ttrpgAuthoringDrafts` | `settingsJson` |
 | `ttrpgRulePacks` | `contentHash` `rulePackJson` `ruleSystemId` `ruleSystemVersion` `status` `title` |
 | `userStyleProfiles` | `enabled` `profile` `sampleCount` `sampleWords` `sourceChapterIds` |
 | `works` | `customGenre` `description` `genres` `includeCultivationProgressInAI` `methodologyId` `status` `targetWordCount` `title` `writingStyleId` |
@@ -297,6 +320,8 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 | ID | 目标表 | 领域策略注册表 | 唯一入口 | 复审日期 |
 |---|---|---|---|---|
+| `ttrpg-authoring-draft-lifecycle` | `ttrpgAuthoringDrafts` | `parseTtrpgSettings + revision CAS + PROJECT_TABLES + ttrpg-open-authoring-design-v1 adopt writePolicy` | `src/lib/ttrpg/authoring-service.ts` | 2027-04-19 |
+| `ttrpg-human-memory-lifecycle` | `ttrpgNarrativeMemories` | `parseTtrpgOpenMemoryReceipt + verifyTtrpgOpenBriefCandidateProofV1 + verifyTtrpgOpenMemoryReceiptsV1 + E15 + PROJECT_TABLES` | `src/lib/ttrpg/runtime-commands.ts`<br/>`src/lib/ttrpg/runtime-branch.ts` | 2027-08-21 |
 | `extension-record-lifecycle` | `extensionRecords` | `ExtensionRegistrySnapshot + PROJECT_TABLES + bounded DataSchema` | `src/lib/extensions/store.ts` | 2027-01-01 |
 | `reference-analysis-run-lifecycle` | `referenceAnalysisRuns` | `REFERENCE_ANALYSIS_RUN_POLICY + ADOPTION_SCHEMAS + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
 | `reference-analysis-source-lifecycle` | `referenceAnalysisSources` | `REFERENCE_ANALYSIS_RUN_POLICY + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
@@ -453,10 +478,23 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ## 五、正式 AI 入口（FormalAIEntryBindingV1）
 
-共 47 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
+共 60 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。显式 outputModality=audio 使用独立冻结音频执行器，文本入口不补默认字段。
 
 | entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
 |---|---|---|---|---|---|---|
+| `ttrpg.open.authoring-design` | `ttrpg.open.authoring-design.v1` | `authoring.ttrpg-open-design` | formal / durable-run | `ttrpg-open-authoring-design-creative-artifact` | `ttrpgAuthoringDrafts` | `src/lib/ttrpg/open-authoring-design-harness.ts` |
+| `ttrpg.open.authoring-design.full` | `ttrpg.open.authoring-design.full.v1` | `authoring.ttrpg-open-design` | formal / durable-run | `ttrpg-open-authoring-design-creative-artifact` | `ttrpgAuthoringDrafts` | `src/lib/ttrpg/open-authoring-design-harness.ts` |
+| `ttrpg.open.common-oracle-interpret` | `prose.ttrpg-open-common-oracle-interpret` | `runtime.ttrpg-open.common-oracle-interpret` | formal / product-runtime | `storyforge.ttrpg-open-common-oracle-candidate` | 禁止 | `src/lib/ttrpg/open-intent-harness.ts` |
+| `ttrpg.open.oracle-interpret` | `prose.ttrpg-open-oracle-interpret` | `runtime.ttrpg-open.oracle-interpret` | formal / product-runtime | `storyforge.ttrpg-open-oracle-candidate` | 禁止 | `src/lib/ttrpg/open-intent-harness.ts` |
+| `ttrpg.open.fact-normalize` | `prose.ttrpg-open-fact-normalize` | `runtime.ttrpg-open.fact-normalize` | formal / product-runtime | `storyforge.ttrpg-open-oracle-candidate` | 禁止 | `src/lib/ttrpg/open-intent-harness.ts` |
+| `ttrpg.open.intent` | `prose.ttrpg-open-intent` | `runtime.ttrpg-open.intent` | formal / product-runtime | `storyforge.ttrpg-open-intent-candidate` | 禁止 | `src/lib/ttrpg/open-intent-harness.ts` |
+| `ttrpg.open.companion` | `prose.ttrpg-open-companion` | `runtime.ttrpg-open.companion` | formal / product-runtime | `storyforge.ttrpg-open-intent-candidate` | 禁止 | `src/lib/ttrpg/open-intent-harness.ts` |
+| `ttrpg.open.kp` | `prose.ttrpg-open-kp` | `runtime.ttrpg-open.kp` | formal / product-runtime | `storyforge.ttrpg-open-kp-candidate` | 禁止 | `src/lib/ttrpg/open-intent-harness.ts` |
+| `ttrpg.open.local-voice` | `prose.ttrpg-open-local-voice` | `runtime.ttrpg-open.local-voice` | formal / product-runtime / audio | `storyforge.ttrpg-open-voice-candidate` | 禁止 | `src/lib/ttrpg/open-voice-execution.ts` |
+| `ttrpg.open.situation-propose` | `prose.ttrpg-open-situation-propose` | `runtime.ttrpg-open.situation-propose` | formal / product-runtime | `storyforge.ttrpg-open-situation-candidate` | 禁止 | `src/lib/ttrpg/open-intent-harness.ts` |
+| `ttrpg.open.entity-propose` | `prose.ttrpg-open-entity-propose` | `runtime.ttrpg-open.entity-propose` | formal / product-runtime | `storyforge.ttrpg-open-entity-candidate` | 禁止 | `src/lib/ttrpg/open-intent-harness.ts` |
+| `ttrpg.open.public-situation-propose` | `prose.ttrpg-open-public-situation-propose` | `runtime.ttrpg-open.public-situation-propose` | formal / product-runtime | `storyforge.ttrpg-open-public-situation-candidate` | 禁止 | `src/lib/ttrpg/open-intent-harness.ts` |
+| `ttrpg.open.brief` | `prose.ttrpg-open-brief` | `runtime.ttrpg-open.brief` | formal / product-runtime | `storyforge.ttrpg-open-brief-candidate` | 禁止 | `src/lib/ttrpg/open-intent-harness.ts` |
 | `extensions.generate` | `extensions.generate` | `extension.generate` | formal / durable-run | `extension-record-candidate` | `extensionRecords` | `src/lib/extensions/ai-run.ts` |
 | `ai-town.authoring.consult` | `ai-town.consult.v1` | `authoring.ai-town-consult` | auxiliary / durable-run | `ai-town-settings-preview` | 禁止 | `src/lib/ai-town/consultation.ts` |
 | `prose.chapter.generate` | `prose.generate` | `chapter.content` | formal / durable-run | `chapter-draft` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
@@ -519,4 +557,4 @@ AI 输出只可提议这里登记的规范字段。普通写回经 `adopt({ targ
 
 ---
 
-生成时间基准:commit `61c0a7ddc`
+生成时间基准:commit `cf37af74f`

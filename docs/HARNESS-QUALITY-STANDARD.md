@@ -45,6 +45,14 @@ Harness 的目标是让一次 AI 工作可授权、可恢复、可停止、可�
 
 合同的规范 JSON 与 `contract.accepted` / `contract.revised` 事件快照使用同一 32 MiB UTF-8 有界记录预算，与既有 durable checkpoint JSON 的规模保护一致。合同先校验全部 schema、权限和来源，再在接纳/哈希之前检查完整序列化大小；事件、刷新恢复与备份重映射保持相同边界，不截断或省略合同快照。该记录预算不增加模型调用、Token、单字段或 Skill 的预算。
 
+Instance-owned 运行创建可携带 `expectedRuntimeSessionHash` 前置条件：产品先完成自己的来源/权限读取，创建事务再核对整个原实例记录的 canonical hash，匹配后才写 Run/事件。它是防止取消、删除或其他实例变化穿过“最后一次读取 → 创建”的原子边界，不能代替产品授权。该值在首次 await 前固定，不进入 RunContract 或备份身份；省略它的既有调用与原合同/hash 保持。失败不创建半个 Run，也不借此自动重读来源或重发模型。
+
+零模型的确定性提交可在 V1 终验回执中使用显式 `zeroModelCommit` 扩展：保留原 canonical RunContract、非空准确输入工件引用与实际 post-state/验收依据。仅合同的模型与输入/输出 token 预算全为零、Context/Skill/写回权限为空，且无候选、采用或语义评审时，才允许空 `contextManifestHashes`；合同正文 hash 必须匹配回执合同 hash。不得伪造一份模型 Context Manifest 来完成人工记账。普通模型回执仍保持原非空来源约束，旧回执/hash 不补字段。零模型记录完成只证明确定性提交，后续模型 lineage 必须另冻目的、来源、profile/transport、预算与用户授权。
+
+音频候选的正式入口显式冻结 `outputModality:'audio'`；省略该字段的历史文本入口保持原字节与 hash。音频绑定只允许无只读工具、无正式写目标、无自动采用的产品运行候选，经独立冻结执行器核对 Skill、category、实际 caller 和取消后调用产品传输，不能借用 Chat/流式文本执行器。产品仍负责原请求谱系、发送前持久 attempt、离线/预算约束和原始响应；音频时长、字节、字符与实际模型调用分别计量，不能把文本窗口估算当成实际语音 token 用量或捏造费用。原始返回留存也不等于音频候选通过验证。
+
+音频使用显式 `CreativeAudioArtifactV1` 引用合同：原输入、真实 Context Manifest 和原始响应的准确 hash，加上实际音频描述、检查问题与原请求证据。一次 durable 音频请求可能包含多段实际编码/合成，`requestEvidence` 不冒充一次物理模型调用；真实次数与音频用量由产品原输出证据核验，不填造文本 token。大音频留在原 exact artifact/产品 Blob 生命周期中，不复制进文本 V1 的 `originalText/editableText`，不裁剪原始响应。纯合同解析不证明 PCM 正确、owner/权限或真人听感，产品须另核验真实原证据与字节。候选固定 `humanListening:'unproven'`、`adoptionAllowed:false` 与禁止自动重试；试听与正式采用由产品沿原 owner 独立确认。旧文本 V1 解析/字节不变，文本采用判断不接受音频合同，不能把音频 `ready` 当作授权。
+
 ## 4. 渐进式上下文披露
 
 上下文分层保存与读取：
@@ -92,7 +100,9 @@ Context Gateway 应先给 Agent “能读什么”的目录，再根据任务、
 - 每个外部调用前后保存 checkpoint/attempt identity。
 - 网络结果未知时不盲目重复可能产生费用或重复写入的调用。
 - 恢复时校验 contract、执行版本、来源/目标 revision 和既有回执。
+- Instance-owned 检查点核验及恢复开始/完成显式传入 `productRuntimeSessionId`，沿用创建时的实例事务与精确 owner 核对；缺失或不同实例拒绝，错误不留下半个恢复事件。省略参数的 Work 路径继续保留原事务表集合和原合同/检查点 hash，不把实例表偷偷加入作者的既有子事务。
 - 终态只有在完成判据和 post-state 证据满足后成立；UI 显示完成不能替代 durable receipt。
+- 离线核验历史终态的记忆结算时，可将已验证的原合同、事件、投影、创建时间与冻结的 World/Work code 传给同一结算投影器；不得用导入后的当前身份替换原身份。该只读路径不查当前身份行、不生成结算事件、不创建或恢复 Run，也不授予采纳权限；原在线路径的字段、身份读取与回执 hash 保持不变。历史账本与冻结身份的完整性由调用方先行验证。
 
 ## 9. 多 Agent 与自主生产
 

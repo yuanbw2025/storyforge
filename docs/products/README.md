@@ -14,4 +14,4 @@
 实现状态统一看 [`../roadmap/CAPABILITY-BASELINE.md`](../roadmap/CAPABILITY-BASELINE.md)，下一步看
 [`../roadmap/README.md`](../roadmap/README.md)。
 
-跑团专项契约：[AI KP 跑团](TTRPG-AI-KP.md)。
+跑团专项契约：[AI KP 跑团](TTRPG-AI-KP.md)。后续标准格式施工以 [跑团开发与施工方案](../roadmap/TTRPG-DEVELOPMENT-PLAN.md) 2.1.0 为唯一入口；先读首次接手信息和现行修订，原稿/决策完整保留但冲突条款不指导施工。

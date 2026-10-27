@@ -1491,6 +1491,7 @@ function parseTtrpgMediaStateV1(
 
 function parseTtrpgProductState(
   value: unknown,
+  format: "scripted" | "open" = "scripted",
 ): TtrpgRuntimeState["product"] {
   if (
     !isObject(value) ||
@@ -1517,7 +1518,8 @@ function parseTtrpgProductState(
   const campaignKey = String(value.campaignKey ?? "").trim();
   const campaignTitle = String(value.campaignTitle ?? "").trim();
   const openingSceneKey = String(value.openingSceneKey ?? "").trim();
-  if (!campaignKey || !campaignTitle || !openingSceneKey)
+  if (!campaignKey || !campaignTitle || (format === "scripted" && !openingSceneKey)
+    || (format === "open" && typeof value.openingSceneKey !== "string"))
     throw new Error("正式 TTRPG 产品身份不完整。");
   if (
     !isObject(value.sessionZero) ||
@@ -1619,7 +1621,7 @@ function parseTtrpgProductState(
   }
   const sceneKeys = value.sceneKeys.map((item) => String(item).trim());
   if (
-    !sceneKeys.length ||
+    (format === "scripted" && !sceneKeys.length) ||
     sceneKeys.some((item) => !item) ||
     new Set(sceneKeys).size !== sceneKeys.length
   ) {
@@ -1995,7 +1997,7 @@ function parseTtrpgProductState(
     };
   });
   if (
-    !questProgress.length ||
+    (format === "scripted" && !questProgress.length) ||
     new Set(questProgress.map((item) => item.questKey)).size !==
       questProgress.length
   ) {
@@ -2049,7 +2051,7 @@ function parseTtrpgProductState(
     return { endingKey, title, epilogue, trigger };
   });
   if (
-    endingCatalog.length < 2 ||
+    (format === "scripted" && endingCatalog.length < 2) ||
     new Set(endingCatalog.map((item) => item.endingKey)).size !==
       endingCatalog.length
   ) {
@@ -2105,7 +2107,7 @@ function parseTtrpgProductState(
   if (
     !currencyKey ||
     !currencyName ||
-    !milestones.length ||
+    (format === "scripted" && !milestones.length) ||
     new Set(milestones.map((item) => item.milestoneKey)).size !==
       milestones.length ||
     awardedMilestoneKeys.some(
@@ -2460,7 +2462,10 @@ function parseTtrpgProductState(
   };
 }
 
-export function parseTtrpgState(value: unknown): TtrpgRuntimeState | null {
+function parseTtrpgMechanicalState(
+  value: unknown,
+  format: "scripted" | "open",
+): TtrpgRuntimeState | null {
   if (value == null) return null;
   if (!isObject(value)) throw new Error("跑团状态必须是对象或 null。");
   assertExactKeys(
@@ -2592,8 +2597,18 @@ export function parseTtrpgState(value: unknown): TtrpgRuntimeState | null {
     encounter:
       value.encounter == null ? null : assertTtrpgEncounter(value.encounter),
     campaign: parseTtrpgCampaignState(value.campaign),
-    product: parseTtrpgProductState(value.product),
+    product: parseTtrpgProductState(value.product, format),
   };
+}
+
+/** Legacy exact parser and scene requirements stay unchanged. */
+export function parseTtrpgState(value: unknown): TtrpgRuntimeState | null {
+  return parseTtrpgMechanicalState(value, "scripted");
+}
+
+/** Only the versioned open-state owner may validate a scene-free mechanical view. */
+export function parseTtrpgOpenMechanicalStateV1(value: unknown): TtrpgRuntimeState | null {
+  return parseTtrpgMechanicalState(value, "open");
 }
 
 export function emptyTtrpgCampaignState(): TtrpgRuntimeCampaignState {

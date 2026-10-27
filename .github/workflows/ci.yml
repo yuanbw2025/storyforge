@@ -25,47 +25,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: 表注册完整性(REQUIRED_TABLES vs schema)
-        run: npm run check:required-tables
-
-      - name: AI 说明书与代码一致(防 prompt key 漂移)
-        run: npm run check:ai-manual
-
-      - name: 架构铁律(三注册表反模式守护)
-        run: npm run check:architecture
-
-      - name: 源码可达性(防孤儿文件回潮)
-        run: npm run check:source-reachability
-
-      - name: 公共 README 语言入口与文档权威一致性
-        run: npm run check:docs
-
-      - name: 路线图迁移与文档链接完整性
-        run: npm run check:roadmap
-
-      - name: Blueprint 实时规模与代码一致
-        run: npm run check:project-metrics
-
-      - name: 生产依赖漏洞门槛
-        run: npm run check:dependencies
-
-      - name: ESLint 零 warning
-        run: npm run lint
-
-      - name: TypeScript 严格类型检查
-        run: npx tsc --noEmit
-
-      - name: Codex 本机桥协议与隔离反例
-        run: npm run test:codex-bridge
-
-      - name: 测试 + 覆盖率门槛
-        run: npm run test:coverage
-
-      - name: 生产构建
-        run: npm run build
-
-      - name: 构建产物体积预算
-        run: npm run check:bundle-size
+      # Run the canonical full CLI gate once. Do not add a second full-delivery
+      # workflow to repeat coverage/build for the same PR head.
+      - name: 完整工程检查（单次统一入口）
+        run: npm run ci
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium

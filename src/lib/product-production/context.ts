@@ -13,9 +13,13 @@ import {
 import { TEXT_ADVENTURE_QUALITY_REVIEW_SCORE_KEYS_BY_SCOPE_V1 } from '../adventure/production-artifacts'
 import { textAdventureDecisionEchoPresentationV1 } from '../adventure/production-compiler'
 import { isSha256Hash, canonicalProductProductionJsonV2, hashProductProductionValueV2 } from './hash'
-import { parseProductProductionCommandV1 } from './contracts'
+import { parseProductProductionCommandV1, parseProductProductionBriefV3 } from './contracts'
+import { textAdventureQualityReviewScopeFromTaskKeyV1, parseProductProductionPlanV3 } from './plan'
+import { isTtrpgOpenProductionTaskV3 } from '../ttrpg/open-production-bindings'
+import { resolveProductProductionTaskRecoveryPolicyV1 } from './recovery-policy'
+import { projectTtrpgOpenProductionTaskBriefV1 } from '../ttrpg/open-production-task-brief'
+import { ttrpgOpenProductionMediaContextV1 } from '../ttrpg/open-production-media'
 import { readVerifiedOrphanRecoveryProvenanceV1 } from './orphan-recovery-evidence'
-import { textAdventureQualityReviewScopeFromTaskKeyV1 } from './plan'
 import {
   textAdventureQualityArcRepairTaskKeysV1,
   textAdventureQualityChoiceCopyOnlyRepairV1,
@@ -206,16 +210,19 @@ export async function validateProductProductionRecoveryDirectiveV1(input: {
   }
   if (failureState.code === 'author-revised-content') {
     const command = parseProductProductionCommandV1(failureState.revisionCommand)
-    if (production.productType !== 'text-adventure' || input.expectedState === 'blocked'
-      || action !== 'author-edit' || !['content.product-module', 'content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-scenes', 'content.narrative-decision-plan', 'content.ending-route-plan', 'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2', 'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2', 'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2', 'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'content.quest-script.main.act-1.single', 'content.quest-script.main.act-1.multi', 'content.quest-script.main.act-2.single', 'content.quest-script.main.act-2.multi', 'content.quest-script.main.act-3.single', 'content.quest-script.main.act-3.multi', 'content.quest-script.supplemental'].includes(input.productProductionTaskKey)
-      || command.type !== 'resume' || !command.contentRevision || command.contentRevision.artifactKey !== input.productProductionTaskKey
+    const ttrpgRevision = command.type === 'resume' && command.ttrpgContentRevision
+    const revision = command.type === 'resume' ? command.ttrpgContentRevision ?? command.contentRevision : undefined
+    const isTtrpgRevision = production.productType === 'ttrpg' && ttrpgRevision != null
+    if ((production.productType !== 'text-adventure' && !isTtrpgRevision) || input.expectedState === 'blocked'
+      || action !== 'author-edit' || (!isTtrpgRevision && !['content.product-module', 'content.story-bible', 'content.cast-bible', 'content.adventure-architecture', 'content.narrative-arc-scenes', 'content.narrative-decision-plan', 'content.ending-route-plan', 'content.main-quest-plan', 'content.adventure-side-quests', 'content.adventure-ambient-events', 'content.scene-script.act-1.part-1', 'content.scene-script.act-1.part-2', 'content.scene-script.act-2.part-1', 'content.scene-script.act-2.part-2', 'content.scene-script.act-3.part-1', 'content.scene-script.act-3.part-2', 'content.dialogue-pass.act-1', 'content.dialogue-pass.act-2', 'content.dialogue-pass.act-3', 'content.quest-script.main.act-1.single', 'content.quest-script.main.act-1.multi', 'content.quest-script.main.act-2.single', 'content.quest-script.main.act-2.multi', 'content.quest-script.main.act-3.single', 'content.quest-script.main.act-3.multi', 'content.quest-script.supplemental'].includes(input.productProductionTaskKey))
+      || command.type !== 'resume' || !revision || revision.artifactKey !== input.productProductionTaskKey
+      || (ttrpgRevision != null && !isTtrpgRevision)
       || command.commandId !== failureState.commandId) {
       throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 内容修订缺少准确的恢复命令')
     }
     const receipt = await db.productProductionCommands.where('[productionId+commandId]')
       .equals([production.id!, command.commandId]).first()
     const result = receipt ? JSON.parse(receipt.resultJson) : null
-    const revision = command.contentRevision
     const expectedResolution = { action: 'author-edit', note: revision.note, authorDraftJson: revision.authorDraftJson }
     const expectedSource = { artifactKey: revision.artifactKey, version: revision.expectedArtifactVersion, contentHash: revision.expectedArtifactHash }
     if (!receipt || !await assertRecordInScope(scope, 'productProductionCommands', receipt, { owner: 'work' })
@@ -233,6 +240,23 @@ export async function validateProductProductionRecoveryDirectiveV1(input: {
     if (!baseline || !await assertRecordInScope(scope, 'productBuildArtifacts', baseline, { owner: 'work' })
       || await hashProductProductionValueV2(JSON.parse(baseline.payloadJson)) !== baseline.contentHash) {
       throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 内容修订原稿证据已变化')
+    }
+    if (isTtrpgRevision) {
+      const plan = parseProductProductionPlanV3(build.planJson)
+      const task = plan.tasks.find(task => task.taskKey === revision.artifactKey)
+      if (!task || !resolveProductProductionTaskRecoveryPolicyV1({ productType: 'ttrpg', task }).authorDraftAllowed
+        || !ttrpgRevision || ttrpgRevision.expectedControlEpoch + 1 !== build.controlEpoch
+        || failureState.resumedFromControlEpoch !== ttrpgRevision.expectedControlEpoch
+        || result.revisionSourceProofHash !== failureState.revisionSourceProofHash) {
+        throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 跑团修订岗位或原稿证明不一致')
+      }
+      const source = await (await import('./artifact-store')).prepareTtrpgOpenContentRevisionSourceV1({
+        scope, build: { ...build, id: build.id! }, artifactKey: revision.artifactKey,
+        version: revision.expectedArtifactVersion, contentHash: revision.expectedArtifactHash, historical: true,
+      })
+      if (source.proofHash !== result.revisionSourceProofHash) {
+        throw new ProductProductionRecoveryDirectiveErrorV1('[product-production-context] 跑团修订原稿生产者证明已变化')
+      }
     }
     return { resolvedDirective: true, resolution, previousFailure: null, snapshot: null, failedAttempt: null }
   }
@@ -335,6 +359,53 @@ export async function readProductProductionBriefContext(input: AssembleContextIn
     sourceWorldContentHash: brief.sourceWorldContentHash, userIntentSummary: brief.userIntentSummary,
     estimate: JSON.parse(brief.estimateJson), brief: JSON.parse(brief.briefJson),
   })
+}
+
+async function ttrpgOpenTaskProjectionInputV3(input: AssembleContextInput) {
+  const { production, scope, build } = await productionAndBuild(input)
+  if (input.projectId !== scope.projectId) throw new Error('[ttrpg-task-brief] projectId 与原作用域不一致')
+  if (!build || !production.currentBriefRevision || !input.productProductionTaskKey) throw new Error('[ttrpg-task-brief] 缺少原 Build/任务')
+  const row = await db.productProductionBriefs.where('[productionId+revision]')
+    .equals([production.id!, production.currentBriefRevision]).first()
+  if (!row || row.status !== 'authorized' || row.briefHash !== build.briefHash) throw new Error('[ttrpg-task-brief] 原 Brief 未授权或已变更')
+  const brief = parseProductProductionBriefV3(row.briefJson)
+  if (await hashProductProductionValueV2(brief) !== row.briefHash) throw new Error('[ttrpg-task-brief] 原 Brief hash 不一致')
+  if (!brief.ttrpgOpen || production.productType !== 'ttrpg') throw new Error('[ttrpg-task-brief] 不是原开放跑团')
+  const plan = parseProductProductionPlanV3(build.planJson, brief, row.briefHash)
+  const task = plan.tasks.find(task => task.taskKey === input.productProductionTaskKey)
+  if (!task || !isTtrpgOpenProductionTaskV3(task) || plan.controlEpoch !== build.controlEpoch
+    || await hashProductProductionValueV2(plan) !== build.planHash) throw new Error('[ttrpg-task-brief] 只接受原 V3 闭合计划的准确任务')
+  return { scope, production, build, row, brief, task }
+}
+
+/** Disabled for unrelated products and retained generations, even when an
+ * old caller asks for the default source set. Direct reads remain strict. */
+export async function canReadTtrpgOpenProductionTaskProjectionV3(input: AssembleContextInput): Promise<boolean> {
+  if (!Number.isSafeInteger(input.productProductionId) || !Number.isSafeInteger(input.productBuildId)
+    || !input.productProductionTaskKey?.startsWith('ttrpg.open.')) return false
+  try { await ttrpgOpenTaskProjectionInputV3(input); return true } catch { return false }
+}
+
+export async function readTtrpgOpenProductionTaskBriefContextV3(input: AssembleContextInput): Promise<string> {
+  const { production, row, brief, task } = await ttrpgOpenTaskProjectionInputV3(input)
+  return JSON.stringify(await projectTtrpgOpenProductionTaskBriefV1({ brief, briefHash: row.briefHash,
+    briefRevision: row.revision, productionKey: production.productionKey, taskKey: task.taskKey }))
+}
+
+export async function readTtrpgOpenProductionMediaInputsV3(input: AssembleContextInput): Promise<string> {
+  const { brief, task } = await ttrpgOpenTaskProjectionInputV3(input)
+  if (task.taskKey !== 'ttrpg.open.media-plan' || JSON.stringify([...(input.productArtifactKeys ?? [])].sort())
+    !== JSON.stringify([...task.inputArtifactKeys].sort())) throw new Error('[ttrpg-media-inputs] 任务依赖未闭合')
+  const original = JSON.parse(await readProductProductionArtifactInputs(input)) as {
+    buildNumber: number; artifacts: Array<{ artifactKey: string; version: number; contentHash: string; producerReceiptHash: string; payload: unknown }>
+  }
+  const payload = (key: string) => original.artifacts.find(row => row.artifactKey === key)?.payload
+  const media = ttrpgOpenProductionMediaContextV1({ ruleSystem: payload('ttrpg.open.rule-system'),
+    situationLayer: payload('ttrpg.open.situation-layer'), rulePack: brief.ttrpgOpen!.rulePack })
+  return JSON.stringify({ schema: 'storyforge.ttrpg-open-production-media-inputs', version: 1,
+    buildNumber: original.buildNumber,
+    sources: original.artifacts.map(({ artifactKey, version, contentHash, producerReceiptHash }) => ({ artifactKey, version, contentHash, producerReceiptHash })),
+    visualBible: media.visualBible, mediaManifest: media.mediaManifest, characterAnchors: media.characterAnchors })
 }
 
 export async function readProductProductionArtifactInputs(input: AssembleContextInput): Promise<string> {
@@ -2148,7 +2219,11 @@ export async function readProductProductionRepairFeedback(input: AssembleContext
   const { scope, production, build } = await productionAndBuild(input)
   if (!build || !input.productProductionTaskKey) throw new Error('[product-production-context] 修复反馈需要 Build 与 task key')
   if (production.productType !== 'text-open-world') {
-    const resolution = JSON.parse(build.failureJson).resolution
+    const failure = JSON.parse(build.failureJson)
+    // A resolved sibling blocker is history, not this task's author input.
+    // Keep its complete record without sending private drafts to another lane.
+    const target = typeof failure.blockerKey === 'string' ? failure.blockerKey : failure.taskKey
+    const resolution = target === input.productProductionTaskKey ? failure.resolution : null
     const authorRepairNote = typeof resolution?.note === 'string' ? resolution.note : null
     const authorDraftJson = resolution?.action === 'author-edit'
       && typeof resolution.authorDraftJson === 'string' ? resolution.authorDraftJson : null

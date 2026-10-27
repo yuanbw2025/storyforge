@@ -1,5 +1,6 @@
+import { productRuntimeContentReaderV1, type ProductRuntimePackageForAdaptersV1 } from '../product/runtime-product-adapters'
 import type { ProductBuildArtifactRecordV1, ProductBuildRecordV1, ProductProductionRecordV1,
-  ProductRuntimePackageV1 } from '../types'
+  } from '../types'
 import { parseProductBuildManifestV1 } from './adoption'
 import { canonicalProductProductionJsonV2, hashProductProductionValueV2, isSha256Hash } from './hash'
 import { parseProductRuntimePackageV1, productProductionTerminalArtifactKeysV1 } from './runtime-package'
@@ -18,7 +19,7 @@ export async function resolveProductBuildCompatibilityPackageV1(input: {
   production: ProductProductionRecordV1
   build: ProductBuildRecordV1
   artifacts: readonly ProductBuildArtifactRecordV1[]
-}): Promise<{ buildNumber: number; packageHash: string; runtimePackage: ProductRuntimePackageV1 }> {
+}): Promise<{ buildNumber: number; packageHash: string; runtimePackage: ProductRuntimePackageForAdaptersV1 }> {
   const { production, build } = input
   if (!build.id || build.productionId !== production.id
     || build.projectId !== production.projectId || build.worldId !== production.worldId
@@ -58,7 +59,8 @@ export async function resolveProductBuildCompatibilityPackageV1(input: {
     || row.producerReceiptHash !== member.producerReceiptHash) {
     fail('历史 package Artifact 与冻结成员或 owner 不一致')
   }
-  const runtimePackage = parseProductRuntimePackageV1(row.payloadJson)
+  const reader = productRuntimeContentReaderV1(production.productType)
+  const runtimePackage = reader ? parseProductRuntimePackageV1(row.payloadJson, reader) : parseProductRuntimePackageV1(row.payloadJson)
   if (runtimePackage.productType !== production.productType
     || await hashProductProductionValueV2(runtimePackage) !== build.packageHash) {
     fail('历史 package Artifact 产品或 payload hash 不一致')

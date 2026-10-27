@@ -1,3 +1,4 @@
+import { useTtrpgOpenPreviewEnabledV1 } from '../../lib/ttrpg/open-preview-preferences'
 import { Link } from 'react-router'
 import { useEffect, useMemo, useState } from 'react'
 import { Dices, ShieldCheck, Trash2 } from 'lucide-react'
@@ -7,6 +8,7 @@ import { useTtrpgRuntimePlayerStore } from '../../stores/ttrpg-runtime-player'
 import { useDialog } from '../shared/Dialog'
 import TtrpgCampaignGuide from './TtrpgCampaignGuide'
 import TtrpgPlayTable from './TtrpgPlayTable'
+import TtrpgOpenSavePanel from './TtrpgOpenSavePanel'
 
 /**
  * Product-owned TTRPG runtime surface.
@@ -29,6 +31,8 @@ export default function TtrpgRuntimePanel(props: {
   const dialog = useDialog()
   const [actionError, setActionError] = useState('')
   const [toolsOpen, setToolsOpen] = useState(false)
+  const [playing, setPlaying] = useState(false), [saving, setSaving] = useState(false)
+  const busy = playing || saving
 
   useEffect(() => {
     let cancelled = false
@@ -50,6 +54,13 @@ export default function TtrpgRuntimePanel(props: {
     && Number(session.productReleaseId != null) + Number(session.productBuildId != null) === 1
   )), [props.workspaceScope, props.worldGroupId, store.sessions])
   const selected = sessions.find(session => session.id === store.selectedSessionId) ?? null
+  const openRun = Boolean(store.runtimeState.ttrpg && 'runFormat' in store.runtimeState.ttrpg && store.runtimeState.ttrpg.runFormat === 'open')
+  const openPreview = useTtrpgOpenPreviewEnabledV1()
+  const selectChild = async (job: Promise<number>) => {
+    const id = await job
+    props.onSessionSelected?.(id)
+    return id
+  }
 
   useEffect(() => {
     if (store.loading || sessions.some(session => session.id === store.selectedSessionId)) return
@@ -57,7 +68,7 @@ export default function TtrpgRuntimePanel(props: {
   }, [sessions, store])
 
   const remove = async () => {
-    if (!selected?.id) return
+    if (!selected?.id || busy) return
     const confirmed = await dialog.confirm({
       title: `删除跑团存档“${selected.title}”？`,
       message: '该产品实例的事件、检查点与私域演化记录将一并删除；世界引擎和产品发布不会被修改。',
@@ -84,7 +95,7 @@ export default function TtrpgRuntimePanel(props: {
         <p className="mt-1">游戏内容已固定，冒险进度自动保存在当前设备。</p>
       </div>
       <div className="space-y-1">
-        {sessions.map(session => <button key={session.id} onClick={() => { void store.select(session.id!); props.onSessionSelected?.(session.id!) }} className={`w-full rounded px-3 py-2 text-left ${session.id === store.selectedSessionId ? 'bg-accent/10 text-accent' : 'text-text-secondary hover:bg-bg-hover'}`}>
+        {sessions.map(session => <button key={session.id} disabled={busy} onClick={() => { void store.select(session.id!); props.onSessionSelected?.(session.id!) }} className={`w-full rounded px-3 py-2 text-left ${session.id === store.selectedSessionId ? 'bg-accent/10 text-accent' : 'text-text-secondary hover:bg-bg-hover'}`}>
           <div className="truncate text-sm font-medium">{session.title}</div>
           <div className="mt-0.5 text-[11px] text-text-muted">跑团 · {session.status}</div>
         </button>)}
@@ -95,22 +106,31 @@ export default function TtrpgRuntimePanel(props: {
       {!selected ? <div className="flex h-full items-center justify-center text-sm text-text-muted">请先完成跑团制作，并从已验证的发布或预览进入。</div> : store.runtimeState.ttrpg?.product ? <div className="mx-auto max-w-6xl space-y-4">
         <header className="flex items-start justify-between gap-4">
           <div><div className="mb-1 text-xs text-text-muted">PLAY / TTRPG</div><h1 className="text-xl font-semibold text-text-primary">{selected.title}</h1><p className="mt-1 text-xs text-text-muted">冻结来源 · 事件 {store.runtimeState.lastSequence} · 检查点 {store.checkpoints.length}</p></div>
-          <button onClick={() => void remove()} className="rounded p-2 text-danger hover:bg-danger/10" title="删除跑团存档" aria-label={`删除跑团存档 ${selected.title}`}><Trash2 className="h-4 w-4" /></button>
+          <button disabled={busy} onClick={() => void remove()} className="rounded p-2 text-danger hover:bg-danger/10" title="删除跑团存档" aria-label={`删除跑团存档 ${selected.title}`}><Trash2 className="h-4 w-4" /></button>
         </header>
         {(store.error || actionError) && <div className="rounded border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{actionError || store.error}</div>}
-        {!props.authorPanel && !props.initialOnlineHandoff && <TtrpgPlayTable key={selected.id} session={selected} state={store.runtimeState}
-          scope={props.workspaceScope} onChanged={() => store.select(selected.id!)} onCheckpoint={name => store.checkpoint(name)} />}
+        {((!props.authorPanel && !props.initialOnlineHandoff) || (openRun && (props.authorPanel === 'inventory' || props.authorPanel === 'tabletop') && !props.initialOnlineHandoff)) && <fieldset disabled={saving} aria-label="跑团游玩桌面">
+          <TtrpgPlayTable key={selected.id} session={selected} state={store.runtimeState}
+            scope={props.workspaceScope} onChanged={() => store.select(selected.id!)} onCheckpoint={name => store.checkpoint(name)} onBusyChange={setPlaying} />
+        </fieldset>}
         <Link to={`/play/session/${selected.id}`} className="inline-flex text-sm text-accent">打开沉浸游玩页面 →</Link>
-        <button className="text-xs text-text-muted underline underline-offset-4" onClick={() => setToolsOpen(value => !value)}>{toolsOpen ? '收起主持工具' : '主持、联机与存档工具'}</button>
-        {(props.authorPanel || toolsOpen || props.initialOnlineHandoff) && <TtrpgCampaignGuide
+        {(!openRun || openPreview) && <button className="text-xs text-text-muted underline underline-offset-4" onClick={() => setToolsOpen(value => !value)}>{openRun ? (toolsOpen ? '收起存档工具' : '存档与分支') : (toolsOpen ? '收起主持工具' : '主持、联机与存档工具')}</button>}
+        {openRun ? <>
+          {(props.authorPanel === 'room' || props.initialOnlineHandoff) && <section role="status"><p>开放跑团的联机桌面尚未开放。当前冒险与进度已保留，请返回游玩页继续。</p></section>}
+          {openPreview && (props.authorPanel === 'history' || toolsOpen) && <TtrpgOpenSavePanel key={selected.id}
+            session={selected} checkpoints={store.checkpoints} busy={playing}
+            onBusyChange={setSaving} onCheckpoint={name => store.checkpoint(name)}
+            onBranch={title => selectChild(store.branch(title))}
+            onRestoreCheckpoint={id => selectChild(store.restoreCheckpoint(id))} />}
+        </> : (props.authorPanel || toolsOpen || props.initialOnlineHandoff) && <TtrpgCampaignGuide
           panel={props.authorPanel}
           session={selected}
           state={store.runtimeState}
           workspaceScope={props.workspaceScope}
           checkpoints={store.checkpoints}
           onCheckpoint={name => store.checkpoint(name)}
-          onBranch={title => store.branch(title)}
-          onRestoreCheckpoint={checkpointId => store.restoreCheckpoint(checkpointId)}
+          onBranch={title => selectChild(store.branch(title))}
+          onRestoreCheckpoint={checkpointId => selectChild(store.restoreCheckpoint(checkpointId))}
           onChanged={() => store.select(selected.id!)}
           initialOnlineHandoff={props.initialOnlineHandoff}
           onOnlineHandoffConsumed={props.onOnlineHandoffConsumed}

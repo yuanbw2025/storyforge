@@ -11,6 +11,7 @@ import type {
   ProductStartingPointSuggestionV1,
   WorkspaceScope,
   AiTownBriefSettingsV1,
+  AiTownProductionBriefV1,
 } from '../types'
 import { resolveScope } from '../workspace/scope'
 import { compileUpperProductWorldRoleBindingsV1 } from '../product/world-requirement-adapters'
@@ -310,7 +311,7 @@ export async function suggestProductStartingPoints(input: {
  * deterministic form compiler: it makes no model/provider call and does not
  * authorize production.
  */
-export async function draftProductProductionBriefV3(input: {
+export interface ProductProductionBriefDraftInputV3 {
   scope: WorkspaceScope
   worldReleaseId: number
   suggestionKey: string
@@ -333,7 +334,22 @@ export async function draftProductProductionBriefV3(input: {
   avg?: AvgAuthoringSettingsV1
   textAdventure?: TextAdventureProductionBriefDraftV1
   sourceSelection?: ProductProductionSourceSelectionV1
-}): Promise<ProductProductionBriefV3> {
+}
+
+export async function draftProductProductionBriefV3(input: ProductProductionBriefDraftInputV3): Promise<ProductProductionBriefV3> {
+  return parseProductProductionBriefV3(await draftProductProductionBriefValueV3(input, false))
+}
+
+/** In-memory S2 draft only; the open product must add its validated content before any save/start. */
+export async function draftTtrpgOpenProductionCommonBriefV3(
+  input: Omit<ProductProductionBriefDraftInputV3, 'productType' | 'ttrpg' | 'aiTown' | 'avg' | 'characterChat' | 'textAdventure'>,
+): Promise<Omit<ProductProductionBriefV3, 'ttrpg' | 'ttrpgOpen'>> {
+  return draftProductProductionBriefValueV3({ ...input, productType: 'ttrpg' }, true)
+}
+
+async function draftProductProductionBriefValueV3(
+  input: ProductProductionBriefDraftInputV3, openMode: boolean,
+): Promise<ProductProductionBriefV3> {
   const scope = await resolveScope({ scope: input.scope })
   const suggestions = await suggestProductStartingPoints({ scope, worldReleaseId: input.worldReleaseId, productType: input.productType })
   const selected = suggestions.suggestions.find(item => item.suggestionKey === input.suggestionKey)
@@ -353,6 +369,7 @@ export async function draftProductProductionBriefV3(input: {
   const avg = input.avg ? parseAvgAuthoringSettingsV1(input.avg) : undefined
   if (avg && input.productType !== 'avg') throw new Error('AVG 方案不能用于其他产品')
   const scale = { scope: selectedScale, ...SCALE_DEFAULTS[selectedScale], ...(avg ? { targetPlayMinutes: avg.targetPlayMinutes, targetEndingCount: avg.targetEndingCount } : {}), ...(characterChat ? {targetPlayMinutes: characterChat.targetPlayMinutes} : {}) }
+  if (openMode) scale.targetEndingCount = 0
   const selectedCatalog = normalizeAuthorSelection({
     source, selected, authorSelection: input.sourceSelection,
   })
@@ -401,7 +418,7 @@ export async function draftProductProductionBriefV3(input: {
     resourceKeys: [...new Set(Object.values(selectedCatalog).flat())].sort(),
     roleBindings,
   })
-  const ttrpg = input.productType === 'ttrpg' ? await compileTtrpgProductionBriefV2({
+  const ttrpg = input.productType === 'ttrpg' && !openMode ? await compileTtrpgProductionBriefV2({
     scope, selection, worldContentHash: source.release.contentHash,
     title: input.ttrpg?.campaign?.title ?? selected.title,
     premise: input.openingSituation?.trim() || selected.openingConflict,
@@ -411,7 +428,7 @@ export async function draftProductProductionBriefV3(input: {
     confirmDefaultMappings: input.confirmTtrpgDefaultMappings === true,
     draft: input.ttrpg,
   }) : null
-  const aiTown = input.productType === 'ai-town' ? await (async () => {
+  const aiTown = input.productType === 'ai-town' ? await (async (): Promise<AiTownProductionBriefV1> => {
     const settings = input.aiTown
     const townCatalog = await loadAiTownWorldSourceCatalogV1({ scope, worldReleaseId: input.worldReleaseId })
     const sourceSelection = await freezeAiTownWorldSourceSelectionV1({
@@ -429,7 +446,7 @@ export async function draftProductProductionBriefV3(input: {
       player: { role: settings?.playerRole ?? 'new-resident' as const, name: settings?.playerName.trim() || input.playerRole?.trim() || '新居民', homeConcept: settings?.homeConcept.trim() || '一间靠近公共空间、可安全休息的小屋' },
       continuity: { mode: 'strict-post-canon' as const, elapsedDays: settings?.elapsedDays ?? 90, romance: settings?.romance ?? 'off' as const },
       town: { title: settings?.townTitle.trim() || `${selected.title} · 后日谈小镇`, premise: input.openingSituation?.trim() || '原作结束三个月后，人物在新的共同体里重新安顿生活。', majorLocationTarget: settings?.majorLocationTarget ?? 4, residentTarget: selectedCatalog.characterResourceKeys.length },
-      clock: { slots: ['morning', 'late-morning', 'noon', 'afternoon', 'evening', 'midnight'] as const, actionsPerDay: settings?.actionsPerDay ?? 3 },
+      clock: { slots: ['morning', 'late-morning', 'noon', 'afternoon', 'evening', 'midnight'], actionsPerDay: settings?.actionsPerDay ?? 3 },
       autonomy: { level: 'observational-high' as const, offlineEnabled: settings?.offlineEnabled ?? true, offlineMaximumDays: settings?.offlineMaximumDays ?? 3 },
       management: { resourceKeys: settings?.resourceKeys ?? ['materials', 'food', 'care'], startingMoney: settings?.startingMoney ?? 200, sharedProjectConcept: settings?.sharedProjectConcept.trim() || '修复一处让居民能够共同生活与相遇的公共设施' },
       safety: { boundaries: [...new Set(input.contentBoundaries?.length ? input.contentBoundaries : ['不生成未授权的露骨或仇恨内容'])], majorChangeConfirmation: true as const, privateMindPlayerAccess: 'none' as const },
@@ -444,7 +461,7 @@ export async function draftProductProductionBriefV3(input: {
     // The built-in deterministic compiler provides a no-provider vertical
     // slice. External text generation is an optional quality upgrade and may
     // never become an implicit prerequisite for an authorized local Build.
-    requirementKey: 'text.runtime-package', mediaClass: 'text', required: false,
+    requirementKey: 'text.runtime-package', mediaClass: 'text', required: openMode,
     allowedDataClasses: [
       'world-selection',
       ...(input.productType === 'text-adventure' && media.imageCount > 0 ? ['product-owned-media'] : []),
@@ -472,7 +489,7 @@ export async function draftProductProductionBriefV3(input: {
     && !explicitOpeningSituation) {
     unresolvedDecisionKeys.push('adventure-starting-location')
   }
-  if (input.productType === 'ttrpg') {
+  if (input.productType === 'ttrpg' && !openMode) {
     // An explicit product-authored opening may introduce a campaign location
     // without requiring the author to write runtime design back into the world.
     const authoredOpening = input.ttrpg?.naturalLanguageInstruction?.trim()
@@ -563,7 +580,13 @@ export async function draftProductProductionBriefV3(input: {
         maximumDurationMs: 3_600_000,
         maximumStorageBytes: 200_000_000,
       }
-  return parseProductProductionBriefV3({
+  if (openMode) {
+    // This is a proposed S2 envelope, never a runtime increase of an authorized budget.
+    const contextLaneCount = 4 + Number(media.imageCount > 0)
+      + Number(media.musicTrackCount + media.sfxCount + media.voiceLineCount > 0)
+    productionBudget.maximumInputTokens = Math.max(productionBudget.maximumInputTokens, contextLaneCount * 48_000)
+  }
+  const value: ProductProductionBriefV3 = {
     schema: 'storyforge.product-production-brief', version: 3,
     ...(avg ? { avg } : {}),
     ...(characterChat ? { characterChat } : {}),
@@ -645,8 +668,9 @@ export async function draftProductProductionBriefV3(input: {
     ...(ttrpg ? { ttrpg } : {}),
     ...(aiTown ? { aiTown } : {}),
     ...(textAdventure ? { textAdventure } : {}),
-    ...(input.productType === 'ttrpg' ? {
+    ...(input.productType === 'ttrpg' && !openMode ? {
       authorConfirmations: { ttrpgDefaultRuleMappings: input.confirmTtrpgDefaultMappings === true },
     } : {}),
-  })
+  }
+  return value
 }

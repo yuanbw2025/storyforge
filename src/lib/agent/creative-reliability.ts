@@ -298,6 +298,18 @@ function assertUniqueBy<T>(values: readonly T[], key: (value: T) => string, labe
   if (new Set(keys).size !== keys.length) fail(`${label} 包含重复身份`)
 }
 
+function assertArtifactStatus(status: CreativeArtifactStatusV1, issues: readonly CreativeArtifactIssueV1[]): void {
+  const hasBlocking = issues.some(issue => issue.disposition === 'blocking')
+  if (status === 'ready' && issues.length > 0) fail('ready 不能携带问题')
+  if (status === 'usable-with-warnings' && (issues.length === 0 || hasBlocking)) {
+    fail('usable-with-warnings 必须有非阻断问题且不能有 blocking')
+  }
+  if (status === 'manual-repair' && (issues.length === 0 || hasBlocking)) {
+    fail('manual-repair 必须有非阻断可修问题且不能有 blocking')
+  }
+  if (status === 'blocked' && !hasBlocking) fail('blocked 必须有 blocking 问题')
+}
+
 export function parseCreativeArtifactV1(value: unknown): CreativeArtifactV1 {
   if (!isRecord(value)) fail('根必须是对象')
   exactKeys(value, [
@@ -345,15 +357,7 @@ export function parseCreativeArtifactV1(value: unknown): CreativeArtifactV1 {
     fail('repair 缺少第二次 repair 调用证据')
   }
 
-  const hasBlocking = issues.some(issue => issue.disposition === 'blocking')
-  if (status === 'ready' && issues.length > 0) fail('ready 不能携带问题')
-  if (status === 'usable-with-warnings' && (issues.length === 0 || hasBlocking)) {
-    fail('usable-with-warnings 必须有非阻断问题且不能有 blocking')
-  }
-  if (status === 'manual-repair' && (issues.length === 0 || hasBlocking)) {
-    fail('manual-repair 必须有非阻断可修问题且不能有 blocking')
-  }
-  if (status === 'blocked' && !hasBlocking) fail('blocked 必须有 blocking 问题')
+  assertArtifactStatus(status, issues)
 
   return {
     version: 1,
@@ -373,5 +377,61 @@ export function parseCreativeArtifactV1(value: unknown): CreativeArtifactV1 {
 }
 
 export function creativeArtifactCanAdoptV1(artifact: CreativeArtifactV1): boolean {
-  return artifact.status === 'ready' || artifact.status === 'usable-with-warnings'
+  return artifact.policyVersion === 'creative-reliability-v1'
+    && (artifact.status === 'ready' || artifact.status === 'usable-with-warnings')
+}
+
+/** Audio candidates keep exact raw bytes in the existing artifact store.
+ * Parsing this descriptor is not PCM validation, listening or adoption authority.
+ * Legacy text V1 stays a separate, unchanged wire contract. */
+export interface CreativeAudioArtifactV1 {
+  schema: 'storyforge.creative-audio-artifact'
+  version: 1
+  policyVersion: 'creative-audio-reliability-v1'
+  modality: 'audio'
+  status: CreativeArtifactStatusV1
+  evidence: { inputArtifactHash: string; contextManifestHash: string; rawResponseArtifactHash: string }
+  audio: { mimeType: 'audio/wav' | 'audio/mpeg' | 'audio/ogg'; contentHash: string; byteLength: number; durationMs: number } | null
+  issues: CreativeArtifactIssueV1[]
+  /** One durable request can contain several physical inference calls.
+   * Product-specific actual usage stays in its original output evidence. */
+  requestEvidence: { kind: 'original-audio-request'; provider: string; model: string; outputHash: string; latencyMs: number | null }
+  humanListening: 'unproven'
+  adoptionAllowed: false
+  automaticRetryAllowed: false
+}
+export function parseCreativeAudioArtifactV1(value: unknown): CreativeAudioArtifactV1 {
+  if (!isRecord(value)) fail('音频根必须是对象')
+  exactKeys(value, ['schema','version','policyVersion','modality','status','evidence','audio','issues','requestEvidence',
+    'humanListening','adoptionAllowed','automaticRetryAllowed'], '音频根')
+  if (value.schema !== 'storyforge.creative-audio-artifact' || value.version !== 1 || value.policyVersion !== 'creative-audio-reliability-v1'
+    || value.modality !== 'audio' || value.humanListening !== 'unproven' || value.adoptionAllowed !== false || value.automaticRetryAllowed !== false) fail('音频版本或审阅/采用边界无效')
+  if (!isRecord(value.evidence)) fail('音频 evidence 必须是对象')
+  exactKeys(value.evidence, ['inputArtifactHash','contextManifestHash','rawResponseArtifactHash'], '音频 evidence')
+  const evidence = { inputArtifactHash: readHash(value.evidence.inputArtifactHash, 'audio.inputArtifactHash')!,
+    contextManifestHash: readHash(value.evidence.contextManifestHash, 'audio.contextManifestHash')!,
+    rawResponseArtifactHash: readHash(value.evidence.rawResponseArtifactHash, 'audio.rawResponseArtifactHash')! }
+  if (!Array.isArray(value.issues) || value.issues.length > MAX_ISSUES) fail('音频 issues 数量无效')
+  const issues = value.issues.map(parseIssue), status = readEnum(value.status, CREATIVE_ARTIFACT_STATUSES, 'audio.status')
+  assertArtifactStatus(status, issues)
+  if (!isRecord(value.requestEvidence)) fail('音频只保留本次原请求，不授予 repair 或重试')
+  exactKeys(value.requestEvidence, ['kind','provider','model','outputHash','latencyMs'], '音频原请求')
+  const latencyMs = readNullableInteger(value.requestEvidence.latencyMs, 'audio.request.latencyMs')
+  if (value.requestEvidence.kind !== 'original-audio-request' || latencyMs !== null && !Number.isSafeInteger(latencyMs)) fail('音频原请求类别或时间无效')
+  const requestEvidence: CreativeAudioArtifactV1['requestEvidence'] = { kind: 'original-audio-request',
+    provider: readString(value.requestEvidence.provider, 'audio.request.provider', 120), model: readString(value.requestEvidence.model, 'audio.request.model', 240),
+    outputHash: readHash(value.requestEvidence.outputHash, 'audio.request.outputHash')!, latencyMs }
+  if (requestEvidence.outputHash !== evidence.rawResponseArtifactHash) fail('音频请求与原始响应不一致')
+  let audio: CreativeAudioArtifactV1['audio'] = null
+  if (value.audio !== null) {
+    if (!isRecord(value.audio)) fail('音频描述必须是对象或 null')
+    exactKeys(value.audio, ['mimeType','contentHash','byteLength','durationMs'], '音频描述')
+    const byteLength = readNullableInteger(value.audio.byteLength, 'audio.byteLength'), durationMs = readNullableInteger(value.audio.durationMs, 'audio.durationMs')
+    if (byteLength === null || !Number.isSafeInteger(byteLength) || byteLength < 1 || durationMs === null || !Number.isSafeInteger(durationMs)) fail('音频实际大小/时长无效')
+    audio = { mimeType: readEnum(value.audio.mimeType, ['audio/wav','audio/mpeg','audio/ogg'] as const, 'audio.mimeType'),
+      contentHash: readHash(value.audio.contentHash, 'audio.contentHash')!, byteLength, durationMs }
+  }
+  if (status !== 'blocked' && !audio) fail('可审阅音频缺少实际描述')
+  return { schema: 'storyforge.creative-audio-artifact', version: 1, policyVersion: 'creative-audio-reliability-v1', modality: 'audio',
+    status, evidence, audio, issues, requestEvidence, humanListening: 'unproven', adoptionAllowed: false, automaticRetryAllowed: false }
 }

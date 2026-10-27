@@ -529,3 +529,9 @@ IR lexical 为 47 正确、2 部分正确、71 合理拒答；原文 lexical 为
 PR208/mainline integration receipt: `baseline-20261027-pr208-integration-v3.json`; all deterministic observations match the preserved browser-helper-v2 and PR134 integration receipts. No model, performance or human acceptance upgrade.
 
 2026-10-27 分步骤后续巡检合入当前 main 的 provider 生命周期与既有状态表校验边界。`manifest-v1.json` 及 R-NW-1A/1B 当前回读指向 `20261027-workflow-continuation-v1` 三份新回执，旧回执和冻结 corpus 保持原样。生成与默认回读均为 110 项通过，与上一组回执的语义观察逐项相同；对应记录为 `shared-source-refresh-20261027-workflow-continuation-v1.json`。这部分是确定性工程证据，模型调用为 0，不代表产品、原生安装包或读者验收。
+
+2026-10-27 PR209/TTRPG 集成保留双方全部既有回执与历史记录；活动基线使用独立新回执，须逐项确认观测结果与双方原件一致。该工程取证不代表模型质量、真人或商业验收。
+
+2026-10-27 长篇后续修复与 main `301d38ef` 再次集成：双方既有回执原件保留，新增 continuation-v3 回执须独立执行并逐项核对观察；不能用输入摘要更新替代观察验证。
+
+continuation-v3 集成的四个文件分别覆盖 NW-0B 25 项、IR codec 73 项、领域投影 17 项与独立领域 corpus 12 项；四者共 127 项。旧长篇 222 项回归中的 NW 子集为前 115 项，不包含独立 corpus；[口径更正](../longform-stability/world-readback-20261027-8aacf3b0-clarification-v1.json)保留原记录并说明，不能把投影测试当作 corpus 回执默认回读。

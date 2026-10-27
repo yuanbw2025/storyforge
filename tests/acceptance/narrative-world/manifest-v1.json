@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261027-workflow-continuation-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261027-workflow-continuation-v3.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -450,7 +450,7 @@
       {
         "path": "tests/acceptance/narrative-world/baseline-20261025-mainline-integration-v1.json",
         "workPackage": "NW-engineering-checkpoint",
-        "note": "Preserved before the 2026-10-26 current-main receipt refresh. Original measurements, input hashes and known gaps remain unchanged."
+        "note": "Preserved before the 2026-10-26 current-main receipt refresh. Original measurements, input hashes and known gaps remain unchanged. / Preserved unchanged before authorized TTRPG schema-v13/shared-lifecycle integration; new receipt must retain identical observed outcomes and frozen corpus."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261026-mainline-integration-v1.json",
@@ -468,6 +468,16 @@
         "note": "Preserved before PR208 mainline integration. Separately executed current-tree observations remain identical to both prior branch receipts; original hashes and gaps stay archived."
       },
       {
+        "path": "tests/acceptance/narrative-world/baseline-20261026-ttrpg-integration-v1.json",
+        "workPackage": "TTRPG-v13-integration",
+        "note": "Preserved byte-for-byte before the final combined PR209/TTRPG integration; original observations, hashes and known gaps remain available."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-pr208-integration-v3.json",
+        "workPackage": "NW-PR209-mainline-integration",
+        "note": "Preserved byte-for-byte before the final combined PR209/TTRPG integration; original observations, hashes and known gaps remain available."
+      },
+      {
         "path": "tests/acceptance/narrative-world/baseline-20261027-longform-stability-v1.json",
         "workPackage": "B-LF-STAB-ST01",
         "note": "First reviewed state-field guard checkpoint preserved before the sparse structured-array write counterexample."
@@ -478,15 +488,22 @@
         "note": "Retained prior verified state-card and touch-toolbar checkpoint before continuing full workflow validation."
       },
       {
-        "path": "tests/acceptance/narrative-world/baseline-20261027-pr208-integration-v3.json",
-        "workPackage": "NW-integration",
-        "note": "Retained mainline provider/navigation integration checkpoint before longform workflow continuation."
-      },
-      {
         "path": "tests/acceptance/narrative-world/baseline-20261027-workflow-continuation-v1.json",
         "workPackage": "longform workflow continuation v1",
         "implementationCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
         "note": "Preserved before explicit author-selected Work metadata scope support."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-workflow-continuation-v2.json",
+        "workPackage": "Preserved before workflow/TTRPG integration",
+        "implementationCommit": "cf37af74f",
+        "note": "Original receipt remains unchanged; a new combined-source receipt must verify semantic observations independently."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-pr209-ttrpg-integration-v1.json",
+        "workPackage": "Preserved before workflow/TTRPG integration",
+        "implementationCommit": "301d38efdac191e25afa98e37f93a5472561c6ab",
+        "note": "Original receipt remains unchanged; a new combined-source receipt must verify semantic observations independently."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."
@@ -599,6 +616,7 @@
     "src/lib/types/narrative-time.ts",
     "src/lib/types/product-release.ts",
     "src/lib/types/rag-library.ts",
+    "src/lib/types/state-card.ts",
     "src/lib/types/world-impact.ts",
     "src/lib/types/world-product-contracts.ts",
     "src/lib/types/world-query.ts",
@@ -744,15 +762,21 @@
     "tests/regression/R-NW-2D-recovery.test.ts",
     "tests/regression/R-NW-2E-author-quality-contract.test.ts",
     "tests/regression/R-NW-2E-author-quality-inputs.test.ts",
+    "tests/regression/R-NW-2E-byte-sink.test.ts",
     "tests/regression/R-NW-2E-canonical-root.test.ts",
     "tests/regression/R-NW-2E-deferred-projection.test.ts",
     "tests/regression/R-NW-2E-domain-allocations.test.ts",
+    "tests/regression/R-NW-2E-frozen-reference-binding.test.ts",
     "tests/regression/R-NW-2E-frozen-shapes.test.ts",
+    "tests/regression/R-NW-2E-fused-freeze-hash.test.ts",
     "tests/regression/R-NW-2E-grounded-knowledge.test.ts",
     "tests/regression/R-NW-2E-hash-backend.test.ts",
+    "tests/regression/R-NW-2E-identity-syntax.test.ts",
     "tests/regression/R-NW-2E-json-memory.test.ts",
     "tests/regression/R-NW-2E-lifecycle.test.ts",
+    "tests/regression/R-NW-2E-numeric-runs.test.ts",
     "tests/regression/R-NW-2E-packing.test.ts",
+    "tests/regression/R-NW-2E-posting-ownership.test.ts",
     "tests/regression/R-NW-2E-reader-contract.test.ts",
     "tests/regression/R-NW-2E-reader-evaluation.test.ts",
     "tests/regression/R-NW-2E-reader-judge.test.ts",
@@ -761,6 +785,8 @@
     "tests/regression/R-NW-2E-reference-index.test.ts",
     "tests/regression/R-NW-2E-scale-v2.test.ts",
     "tests/regression/R-NW-2E-scale.test.ts",
+    "tests/regression/R-NW-2E-token-digest.test.ts",
+    "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
     "tests/regression/R-NW-2E-verified-ir.test.ts",
     "tests/regression/R-NW-2E-version-dispatch.test.ts",
     "tests/regression/R-OPEN-WORLD4-player-save-store-integration.test.ts",
@@ -771,16 +797,7 @@
     "tests/regression/R-STORY1-story-intent-projection.test.ts",
     "tests/regression/R-WORLD-D-phase-d-closure.test.ts",
     "tests/setup.ts",
-    "vitest.config.ts",
-    "tests/regression/R-NW-2E-posting-ownership.test.ts",
-    "tests/regression/R-NW-2E-fused-freeze-hash.test.ts",
-    "tests/regression/R-NW-2E-identity-syntax.test.ts",
-    "tests/regression/R-NW-2E-frozen-reference-binding.test.ts",
-    "tests/regression/R-NW-2E-token-digest.test.ts",
-    "tests/regression/R-NW-2E-byte-sink.test.ts",
-    "tests/regression/R-NW-2E-numeric-runs.test.ts",
-    "tests/regression/R-NW-2E-utf8-token-bytes.test.ts",
-    "src/lib/types/state-card.ts"
+    "vitest.config.ts"
   ],
   "splitPolicy": {
     "unit": "complete scenario family",

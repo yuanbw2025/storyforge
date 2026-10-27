@@ -4,6 +4,8 @@ import { assertProductReleaseUnchanged } from '../product/releases'
 import { verifyProductReleaseManifestV1 } from '../product-production/runtime-package'
 import { db } from '../db/schema'
 import type { ProductRuntimeSourceV1, WorkspaceScope } from '../types'
+import { createTtrpgVerifiedContentViewV1 } from './content-version'
+import { assertTtrpgScriptedOnlyV1 } from './run-format'
 
 /** One verified, immutable content reader shared by the playing table and director. */
 export async function loadTtrpgRuntimeContentV1(input: { scope: WorkspaceScope; productRuntimeSessionId: number }) {
@@ -19,5 +21,14 @@ export async function loadTtrpgRuntimeContentV1(input: { scope: WorkspaceScope; 
       return verifyProductRuntimeSource({ scope: input.scope, source })
     })()
   if (!result.runtimePackage.ttrpg || result.packageHash !== session.runtimeSourceHash) throw new Error('[ttrpg-content] 冻结源绑定不一致')
-  return { session, source, runtimePackage: result.runtimePackage, campaign: result.runtimePackage.ttrpg.campaign, rulePack: result.runtimePackage.ttrpg.rulePack.content }
+  const runtimeView = await createTtrpgVerifiedContentViewV1(result.runtimePackage.ttrpg)
+  assertTtrpgScriptedOnlyV1(runtimeView.runFormat, '旧版玩家运行器')
+  return {
+    session, source,
+    runtimePackage: result.runtimePackage,
+    rawRuntimePackage: result.runtimePackage,
+    runtimeView,
+    campaign: result.runtimePackage.ttrpg.campaign,
+    rulePack: result.runtimePackage.ttrpg.rulePack.content,
+  }
 }

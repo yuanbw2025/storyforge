@@ -38,6 +38,7 @@ export interface ContextGatewayToolSessionV1 {
   readonly resourceKeyDenyList: ReadonlySet<string>
   readonly usage: { readCalls: number; retrievedTokens: number }
   readonly capabilities: Map<string, SourceRefCapabilityV1>
+  readonly readSessionGuards?: readonly (() => Promise<void>)[]
   /** Host-issued, unforgeable v4 perspective. Never supplied by model args. */
   readonly worldQueryAccess?: WorldQueryAccessV1
 }
@@ -57,6 +58,7 @@ export async function createContextGatewayToolSessionV1(input: {
   scope: FrozenResourceScopeV1
   policy: ContextAccessPolicyV1
   allowedResourceKeys?: readonly string[]
+  freezeProviderReads?: boolean
   worldQueryAccess?: WorldQueryAccessV1
   excludedRecordResourceKeys?: readonly string[]
 }): Promise<ContextGatewayToolSessionV1> {
@@ -75,11 +77,25 @@ export async function createContextGatewayToolSessionV1(input: {
     .map(source => ({ source, provider: source.resources }))
     .sort((left, right) => left.source.key.localeCompare(right.source.key))
   if (input.worldQueryAccess && !registered.some(binding => binding.source.key === 'worldRelease')) fail('provider', '叙事读取未登记 worldRelease 来源')
-  const providers = await Promise.all(registered.map(async binding => input.worldQueryAccess && binding.source.key === 'worldRelease'
+  let providers = await Promise.all(registered.map(async binding => input.worldQueryAccess && binding.source.key === 'worldRelease'
     ? { source: binding.source, provider: await binding.provider.worldQuery!.bind(input.worldQueryAccess, {
       allowedResourceKeys: input.allowedResourceKeys ?? null, allowedKinds: policy.allowedResourceKinds, maxTokens: policy.maxRetrievedTokens,
     }) } : binding))
   if (!providers.length) fail('provider', 'Policy 没有可用的 CONTEXT_SOURCES Provider')
+  if (providers.some(binding => binding.source.requiresResourceKeyAllowList) && input.allowedResourceKeys == null) {
+    fail('resource-allow-list', '角色运行来源必须提供内核计算的明确资源 allow-list')
+  }
+  const readSessionGuards: Array<() => Promise<void>> = []
+  if (input.freezeProviderReads) providers = await Promise.all(providers.map(async binding => {
+    const snapshot = await binding.provider.openReadSession?.(input.scope)
+    if (!snapshot) return binding
+    const provider = snapshot.provider
+    if (provider.version !== binding.provider.version || provider.providerId !== binding.provider.providerId || provider.providerVersion !== binding.provider.providerVersion
+      || provider.normalizationVersion !== binding.provider.normalizationVersion
+      || provider.kinds.join(',') !== binding.provider.kinds.join(',')) fail('provider', '只读会话不能替换登记来源或扩大种类权限')
+    readSessionGuards.push(() => snapshot.assertCurrent())
+    return { ...binding, provider }
+  }))
   const fingerprints = await Promise.all(providers.map(binding => binding.provider.fingerprint(input.scope)))
   if (new Set(fingerprints).size !== 1) fail('scope', 'Provider 对冻结 scope 的 fingerprint 不一致')
   const allowedResourceKeys = input.allowedResourceKeys == null
@@ -102,6 +118,7 @@ export async function createContextGatewayToolSessionV1(input: {
     resourceKeyDenyList: excluded,
     usage: { readCalls: 0, retrievedTokens: 0 },
     capabilities: new Map(),
+    readSessionGuards: Object.freeze(readSessionGuards),
     ...(input.worldQueryAccess ? { worldQueryAccess: input.worldQueryAccess } : {}),
   }
 }

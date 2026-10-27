@@ -112,8 +112,10 @@ export function parseTtrpgHouseRuleOverlayV2(
   };
 }
 
+type HouseRuleMechanicalFields = Pick<RulePackV1, 'turnStructure' | 'advancement' | 'diceModels' | 'checks' | 'conditions' | 'actions'>;
+
 function resolvePatchTarget(
-  pack: RulePackV1,
+  pack: HouseRuleMechanicalFields,
   path: string,
 ): { parent: Record<string, unknown>; field: string } {
   const parts = path.split(".");
@@ -226,6 +228,24 @@ function resolvePatchTarget(
   fail(`村规路径无效:${path}`);
 }
 
+/** Shared whitelist mutation for already parsed, cloned V1/V2 rules. */
+export function applyTtrpgHouseRulePatchesV2(
+  next: HouseRuleMechanicalFields,
+  patches: TtrpgHouseRulePatchV2[],
+): TtrpgHouseRuleDiffV2[] {
+  return patches.map((patch) => {
+    const target = resolvePatchTarget(next, patch.path);
+    const before = target.parent[target.field];
+    if (!["string", "number"].includes(typeof before) || typeof before !== typeof patch.value)
+      fail(`patch 类型与原字段不一致:${patch.path}`);
+    target.parent[target.field] = patch.value;
+    return {
+      patchKey: patch.patchKey, path: patch.path,
+      before: before as string | number, after: patch.value, reason: patch.reason,
+    };
+  });
+}
+
 export async function applyTtrpgHouseRuleOverlayV2(input: {
   baseRulePack: RulePackV1;
   overlay: TtrpgHouseRuleOverlayV2;
@@ -244,24 +264,7 @@ export async function applyTtrpgHouseRuleOverlayV2(input: {
   )
     fail("Overlay 基线规则或 hash 已变化");
   const next = structuredClone(base);
-  const diff = overlay.patches.map((patch) => {
-    const target = resolvePatchTarget(next, patch.path);
-    const before = target.parent[target.field];
-    if (
-      !["string", "number"].includes(typeof before) ||
-      typeof before !== typeof patch.value
-    ) {
-      fail(`patch 类型与原字段不一致:${patch.path}`);
-    }
-    target.parent[target.field] = patch.value;
-    return {
-      patchKey: patch.patchKey,
-      path: patch.path,
-      before: before as string | number,
-      after: patch.value,
-      reason: patch.reason,
-    };
-  });
+  const diff = applyTtrpgHouseRulePatchesV2(next, overlay.patches);
   const rulePack = parseRulePackV1(next);
   runRulePackFixturesV1(rulePack);
   return {

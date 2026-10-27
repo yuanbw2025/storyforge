@@ -3665,6 +3665,7 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
       },
     })
     await abandonedCycle.catch(() => undefined)
+    const unknownProvenance = JSON.parse(blockedBuild.failureJson).failureProvenance
 
     const production = (await db.productProductions.get(owned.productionId))!
     await executeProductProductionCommand({
@@ -3675,7 +3676,9 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
         commandId: 'scheduler-provider-result-unknown.resolve',
         expectedStateRevision: production.stateRevision,
         blockerKey: 'content.design',
-        resolution: { action: 'retry', note: '作者确认未知结果不会被采用，并同意新 epoch 重试' },
+        resolution: { action: 'retry', note: '作者确认未知结果不会被采用，并按原预留上限记账后在新 epoch 重试',
+          unknownResultReservation: { runId: unknownProvenance.runId, attempt: unknownProvenance.attempt,
+            controlEpoch: unknownProvenance.controlEpoch, disposition: 'charge-reservation-upper-bound' } },
       },
     })
     const retryCalls = new Map<string, number>()
@@ -3878,6 +3881,10 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     expect(JSON.parse(child!.projectionJson)).toMatchObject({
       state: 'failed',
       steps: { 'content.narrative': { status: 'failed', failureCode: 'task-preflight-failed' } },
+    })
+    const attempts = JSON.parse((await db.productBuilds.get(first.buildId))!.budgetLedgerJson).attempts
+    expect(attempts.find((entry: { runId: number }) => entry.runId === child!.id)).toMatchObject({
+      usageKnown: true, usage: { modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0, costUsd: 0 },
     })
     expect((await db.productBuilds.get(first.buildId))!.status).toBe('recovery-required')
   }, 30_000)
@@ -4580,14 +4587,21 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     const original = (await db.productBuilds.get(blocked.buildId))!
     const history = JSON.parse(original.budgetLedgerJson).attempts
     expect(history).toContainEqual(expect.objectContaining({ usageKnown: false, usage: expect.objectContaining({ costUsd: 100 }) }))
+    const provenance = JSON.parse(original.failureJson).failureProvenance
     const resolved = await executeProductProductionCommand({
       scope: owned.scope, productionId: owned.productionId,
       command: { type: 'resolve-blocker', commandId: `author-cost.${action}`,
         expectedStateRevision: (await db.productProductions.get(owned.productionId))!.stateRevision,
-        blockerKey: 'content.design', resolution: { action, note: '保留未知请求费用；作者稿使用本地编译',
+        blockerKey: 'content.design', resolution: { action, note: '按冻结预留上限封账，保留历史费用；作者稿使用本地编译',
+          unknownResultReservation: { runId: provenance.runId, attempt: provenance.attempt,
+            controlEpoch: provenance.controlEpoch, disposition: 'charge-reservation-upper-bound' },
           ...(action === 'author-edit' ? { authorDraftJson: '{"title":"作者完整草稿"}' } : {}) } },
     })
     expect(resolved.ok).toBe(true)
+    const settledHistory = JSON.parse((await db.productBuilds.get(blocked.buildId))!.budgetLedgerJson).attempts
+    expect(settledHistory).toHaveLength(history.length)
+    expect(settledHistory).toEqual(history.map((entry: Record<string, unknown>) => ({ ...entry,
+      usageKnown: true, resolution: 'author-charged-reservation-upper-bound' })))
     let executorCalls = 0
     const base = executorFor(owned, new Map(), { active: 0, peak: 0 })
     await runProductProductionSchedulerCycleV1({
@@ -4602,7 +4616,7 @@ describe('R-PRODUCTPROD-1D · durable bounded DAG scheduler', () => {
     })
     const current = (await db.productBuilds.get(blocked.buildId))!
     const ledger = JSON.parse(current.budgetLedgerJson)
-    expect(ledger.attempts.slice(0, history.length)).toEqual(history)
+    expect(ledger.attempts.slice(0, settledHistory.length)).toEqual(settledHistory)
     const task = ledger.tasks['content.design']
     const events = await db.agentRunEvents.where('runId').equals(task.runId).toArray()
     expect(events.some(event => event.type === 'model.requested')).toBe(false)

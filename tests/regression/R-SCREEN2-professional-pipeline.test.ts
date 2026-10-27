@@ -1,3 +1,4 @@
+import { CURRENT_BACKUP_VERSION } from '../../src/lib/export/backup-trust'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { createWorkspace } from '../../src/lib/workspace/create-workspace'
@@ -363,7 +364,7 @@ describe('SCREEN-2 · professional novel-to-screenplay pipeline', () => {
     expect(prompts.get('targeted-rewrite')).toContain('expectedSceneRevision 必须是大于 0 的 JSON 整数')
 
     const backup = await exportProjectJSON(item.source.scope.projectId)
-    expect(backup).toMatchObject({ version: 16 })
+    expect(backup).toMatchObject({ version: CURRENT_BACKUP_VERSION })
     expect(backup.screenplayBeats).toHaveLength(1)
     expect(backup.screenplaySceneCards).toHaveLength(1)
     expect(backup.screenplayReviewIssues.length).toBeGreaterThanOrEqual(2)

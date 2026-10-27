@@ -38,6 +38,14 @@
 
 只把最终答复消息当作者文本，排除 reasoning 和 commentary；有明确 final_answer phase 时增量返回，否则等消息完成。必须收到 `turn/completed` 且有非空文本才成功。失联/崩溃后部分文本仍不能当成功候选。客户端保留 pre-dispatch / request-dispatched / response-observed 边界，现有 durable Harness 继续决定恢复和采纳。
 
+需要跨页面恢复的调用方可选择 `ChatResult.onCodexRequestPrepared`：客户端先冻结准确 POST 字节及本次 UUID/model/`sha256-json-request-v1` 摘要，等待调用方把引用记入原 Run，才允许一次发送。保存失败或在保存期间取消均不发送；等待期间外部修改消息或 schema 不得改变已冻结的请求。该钩子只提供传输元数据，不保存提示词，不增加 AI 来源、写权或采纳权限；未接入它的产品不能据此宣称已经可恢复。
+
+本机 GET 单条/列表回执提供原请求摘要，不增加生成入口。`readBoundCodexReceiptV1()` 只读取相同 UUID，并核对 model、摘要算法、摘要、状态与基本记录格式；缺失或不匹配时停止，不 POST、不取消、不重试，也不直接形成候选。`running/unknown` 的原文仍不能成为成功候选。只有原产品 Harness 确认终态、原合同、作用域、实际用量和原始回答后，才能沿既有候选/作者确认链继续。历史请求没有事先保存引用时，不能凭摘要反向猜配或自动认领；人工核对的外部记录仍须明确区分证据层级。
+
+选择该持久化钩子的请求在准确 POST 中登记 `until-owner-ack-v1`。未交接回执不按旧24小时/100项历史窗口删除，重启的未完成原记录仍是 unknown，不把部分答复升级为成功。每个本机记录目录最多持有32项未交接回执；满时阻止新的持久请求，保留旧答复。普通请求的现有历史与并发界限不变。
+
+原产品在自身事务中保存准确回执或失败证据后，才可调用独立 `acknowledgeBoundCodexReceiptV1()`。服务核对原 UUID/model/请求摘要/原文字节摘要、终态与明确的 owner-record-saved 决定，拒绝活动请求或不匹配的交接；确认后回执才回到普通历史保留策略。这个非生成 POST 不增加模型调用，也不声明候选、听感或作者采用成功；未知记录的交接仍保留 unknown 语义。失败保存、未知交接或记录缺失不得转换为重新生成许可。
+
 失败诊断只保留白名单中的公开 `codexErrorInfo` 类型和有效数字 HTTP 状态码；原始 message、additionalDetails 和其它自由文本不离开连接层。终态 error 优先，仅当其缺失时使用同 thread/turn 的错误通知；其它线程或回合不能提供诊断或提前结束当前请求。未知类型明确记为 unclassified，不猜成登录或额度问题，也不由错误码触发重发。此诊断增量由 16 项本机桥接反例验证，完整交付状态另记。
 
 现有以 API 金额为必填统计的模型评测入口暂不接受 Codex；在共享客户端发送前明确阻止，不伪造评测美元费用。原生 tool_calls 不支持，Agent 继续走既有 text-json 协议；JSON schema 映射 `outputSchema`；`json_object` 映射为固定格式约束并在共享客户端严格解析为对象，非法结果直接停止、不自动修复重发。两者仍需原产品字段/schema 校验。温度和 API max_tokens 不发送；本地上下文预算使用保守 32K、预留 8K 输出，可由高级设置调整。这不是模型实际窗口或远端输出 token 硬上限。批量生产的金额闸门不得把未知订阅成本当作零成本放行。

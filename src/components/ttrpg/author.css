@@ -15,3 +15,12 @@
 .ttrpg-author-app [hidden]{display:none!important}
 .ttrpg-runtime{--color-bg-base:#f9f8f1;--color-bg-surface:#f5f6ec;min-width:0}
 @media(max-width:700px){.ttrpg-author-app .lf-paper{padding:20px}.ttrpg-author-app .ttrpg-wizard>section{padding:14px}}
+
+/* Full author design remains readable without widening a small screen. */
+.ttrpg-open-authoring-editor { min-width: 0; }
+.ttrpg-open-authoring-editor fieldset { min-width: 0; }
+.ttrpg-open-authoring-editor pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ttrpg-open-authoring-editor textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.ttrpg-design-proposals { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 1rem; margin: 1rem 0; }
+.ttrpg-design-proposal { border: 1px solid var(--color-border, #4444); border-radius: .5rem; padding: 1rem; min-width: 0; }
+.ttrpg-design-json { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; }
