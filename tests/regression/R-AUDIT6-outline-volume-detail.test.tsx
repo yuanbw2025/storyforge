@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import OutlineVolumeDetail from '../../src/components/outline/OutlineVolumeDetail'
 import { DialogProvider } from '../../src/components/shared/Dialog'
+import { ToastProvider } from '../../src/components/shared/Toast'
 import type { OutlineNode } from '../../src/lib/types'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -14,7 +15,7 @@ async function mount(element: React.ReactElement) {
   document.body.append(host)
   const root = createRoot(host)
   mounted.push({ host, root })
-  await act(async () => root.render(element))
+  await act(async () => root.render(createElement(ToastProvider, null, element)))
   return host
 }
 
@@ -104,20 +105,24 @@ describe('AUDIT-6 · 卷详情视图拆分', () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(titleInput, '新卷名')
       titleInput.dispatchEvent(new Event('input', { bubbles: true }))
     })
+    expect(onUpdateNode).not.toHaveBeenCalled()
+    await act(async () => titleInput.dispatchEvent(new FocusEvent('focusout', { bubbles: true })))
     const summary = host.querySelector<HTMLTextAreaElement>('textarea')!
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(summary, '新卷摘要')
       summary.dispatchEvent(new Event('input', { bubbles: true }))
     })
+    await act(async () => summary.dispatchEvent(new FocusEvent('focusout', { bubbles: true })))
     const select = host.querySelector<HTMLSelectElement>('select')!
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(select, '8')
       select.dispatchEvent(new Event('change', { bubbles: true }))
     })
+    await act(async () => select.dispatchEvent(new FocusEvent('focusout', { bubbles: true })))
 
-    expect(onUpdateNode).toHaveBeenCalledWith(1, { title: '新卷名' })
-    expect(onUpdateNode).toHaveBeenCalledWith(1, { summary: '新卷摘要' })
-    expect(onUpdateNode).toHaveBeenCalledWith(1, { worldGroupId: 8 })
+    expect(onUpdateNode).toHaveBeenCalledWith(1, { title: '新卷名' }, { expected: { title: '旧卷名' } })
+    expect(onUpdateNode).toHaveBeenCalledWith(1, { summary: '新卷摘要' }, { expected: { summary: '' } })
+    expect(onUpdateNode).toHaveBeenCalledWith(1, { worldGroupId: 8 }, { expected: { worldGroupId: 7 } })
     await act(async () => Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('AI 生成本卷卷纲'))!.click())
     await act(async () => Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('生成本卷所有章节'))!.click())
     await act(async () => Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('添加章节'))!.click())

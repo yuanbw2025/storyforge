@@ -3762,6 +3762,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/story-arc-stage-events-20261028.json",
           "summary": "所选阶段版本化事件子合同、compact候选、只追加/精确排列及原记录durable回读已验证；真实新提交上的事件实模继续。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-story-arc-events-20261028-c8c60b87.json",
+          "summary": "新提交Agnes追加/排序各一次成功，候选手改保存刷新采纳；只改所选事件，其他阶段/状态/原稿不变。"
         }
       ],
       "defects": [],
@@ -19475,6 +19480,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/story-arc-stage-events-20261028.json",
           "summary": "所选阶段版本化事件子合同、compact候选、只追加/精确排列及原记录durable回读已验证；真实新提交上的事件实模继续。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-story-arc-events-20261028-c8c60b87.json",
+          "summary": "新提交Agnes追加/排序各一次成功，候选手改保存刷新采纳；只改所选事件，其他阶段/状态/原稿不变。"
         }
       ],
       "defects": [],
@@ -24153,6 +24163,22 @@
       "date": "2026-10-28",
       "unit": "Scoped stage-event append and exact-permutation contract",
       "sourcePin": "tests/acceptance/longform-stability/story-arc-stage-events-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Exact-commit real stage-event edit/reload/adopt verification",
+      "sourcePin": "tests/acceptance/longform-stability/real-story-arc-events-20261028-c8c60b87.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Original full CI failure triage and acknowledged-view fixture refresh",
+      "sourcePin": "tests/acceptance/longform-stability/ci-outline-view-refresh-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "kind": "full-ci-legacy-outline-view-check-refresh-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "c8c60b87e5a694f4a6e8b58f979096db11836176",
+    "files": {
+      "tests/regression/R-AUDIT6-outline-views.test.tsx": "5aa31ba37c95f63aecdc9ec284a151fd305fd619696a782c15d4788c18e85b0f",
+      "tests/regression/R-AUDIT6-outline-volume-detail.test.tsx": "26b877f81a5044935a8a083c3e24dbf92de1a04957b8198299f3c832185d1951"
+    }
+  },
+  "status": "ORIGINAL_FULL_CI_FAILURE_RETAINED_TARGETED_AND_NATIVE_OUTLINE_REPLAY_PASSED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "originalFullCi": {
+    "sourceCommit": "2bcc67bd8dd57080eec70786db21490a18826a62",
+    "command": "caffeinate -i env CI=1 npm run ci",
+    "log": "full-ci-2bcc67bd-CI-caffeinate.log",
+    "exitCode": 1,
+    "testFiles": {
+      "failed": 2,
+      "passed": 1248,
+      "total": 1250
+    },
+    "tests": {
+      "failed": 3,
+      "passed": 8451,
+      "skipped": 3,
+      "total": 8457
+    },
+    "durationSeconds": 8294.46,
+    "failedAt": "test:coverage; later ci build and bundle-size stages did not run",
+    "earlyChecks": "Earlier configured gates, dependency audit (0 findings), lint and TypeScript passed on this exact older source; not counted as final-head evidence"
+  },
+  "currentReproduction": {
+    "sourceCommit": "c8c60b87e5a694f4a6e8b58f979096db11836176",
+    "log": "ci-outline-views-current-before.log",
+    "failed": 3
+  },
+  "causes": [
+    "Chapter view expectation omitted the now-required frozen prior-field value for acknowledged saves",
+    "Volume view fixture expected per-keystroke writes instead of invoking blur/acknowledgement for title, summary and world selection",
+    "Story-block fixture omitted the ToastProvider that the real application supplies"
+  ],
+  "changes": "Only regression fixtures/assertions change; retain callback count, all exact field values, prior-value checks and top-level command assertions. No production UI or storage behavior weakened.",
+  "regression": {
+    "passed": 14,
+    "files": 2,
+    "log": "ci-outline-views-current-final.log"
+  },
+  "nativeBrowser": {
+    "passed": 10,
+    "files": 2,
+    "log": "ci-outline-native-confirmation.log",
+    "source": "Current production source equals c8c60b87; isolated Chromium native IndexedDB",
+    "checks": [
+      "Outline field save/reload, delayed writes, conflicts, invalid-field recovery and linked chapter-title rollback",
+      "Insertion, reorder, cross-volume movement, deletion cancellation, descendant cascade, failure rollback and explicit retry"
+    ]
+  },
+  "remaining": "Repeat full CI and full E2E at a later final pinned source; this replay does not turn the original failed CI green.",
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "docs": "PASS",
+    "roadmap": "PASS",
+    "projectMetrics": "PASS"
+  }
+}
