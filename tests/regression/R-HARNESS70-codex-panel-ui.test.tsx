@@ -28,6 +28,7 @@ const existingEntry = {
 vi.mock('../../src/stores/codex', () => ({
   useCodexStore: () => ({
     categories: [category], entries: [existingEntry], loadAll: mocks.loadAll,
+    loadedScope: { projectId: 1, worldId: 11, workId: 12 }, loading: false, loadError: null,
     addCategory: mocks.addCategory, deleteCategory: mocks.deleteCategory,
     setCategoryHidden: mocks.setCategoryHidden, updateCategory: mocks.updateCategory,
     addEntry: mocks.addEntry, updateEntry: mocks.updateEntry, deleteEntry: mocks.deleteEntry,

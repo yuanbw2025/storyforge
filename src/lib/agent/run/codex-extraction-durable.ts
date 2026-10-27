@@ -10,7 +10,7 @@ import {
 } from '../../ai/adapters/structured-extract-adapter'
 import { splitExtractionText } from '../../ai/structured-extraction'
 import type { AIConfig, ChatMessage, WorkspaceScope } from '../../types'
-import { parseFieldSchema } from '../../types/codex'
+import { codexCategoryFormatIssueV1, codexEntryFormatIssueV1, parseFieldSchema } from '../../types/codex'
 import { db } from '../../db/schema'
 import { assembleContext } from '../../registry/assemble-context'
 import { adopt } from '../../registry/adopt'
@@ -277,6 +277,7 @@ async function prepareSources(scope: WorkspaceScope, rawRequest: CodexExtraction
   const baseline = await readCodexExtractionBaselineV1({
     scope, categoryId: request.categoryId, worldGroupId: request.worldGroupId,
   })
+  if (codexCategoryFormatIssueV1(baseline.category) || baseline.entries.some(entry => codexEntryFormatIssueV1(entry))) throw new Error('词条格式异常，原始数据已保留；请先恢复有效数据再生成。')
   if (!isPortableResourceUidV1(baseline.category.ragDocumentId, 'codex-category')
     || baseline.entries.some(entry => !isPortableResourceUidV1(entry.ragDocumentId, 'codex-entry'))) {
     throw new Error('Codex 资源缺少有效的 portable resource UID，拒绝继续执行。')
@@ -511,6 +512,7 @@ async function parsePlan(value: unknown): Promise<CodexExtractionPlanV1> {
     || typeof category.fieldSchema !== 'string' || !Array.isArray(category.fields)
     || !Number.isFinite(category.updatedAt)
   ) throw new Error('Codex 分类基线无效。')
+  if (codexCategoryFormatIssueV1({ fieldSchema: category.fieldSchema as string })) throw new Error('Codex 分类的专属字段格式异常；原始数据已保留。')
   const parsedFields = parseFieldSchema(category.fieldSchema as string)
   if (canonicalStringify(parsedFields) !== canonicalStringify(category.fields)) {
     throw new Error('Codex 分类字段 schema 快照不匹配。')

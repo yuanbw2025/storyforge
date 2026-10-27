@@ -23,6 +23,7 @@ import { getAIConfigRequiredMessage, isAIConfigReady } from '../../lib/ai/config
 import type { ExtractedCodexEntry } from '../../lib/ai/adapters/structured-extract-adapter'
 import { useToast } from '../shared/Toast'
 import { resolveScopeLike } from '../../lib/workspace/scope'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import {
   abandonCodexExtractionV1,
   adoptCodexExtractionCandidateV1,
@@ -62,7 +63,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
   const worldGroups = useWorldGroupStore(s => s.groups)
   const projectId = project.id!
   const {
-    categories, entries, loadAll,
+    categories, entries, loadAll, loading, loadError, loadedScope,
     addCategory, deleteCategory, setCategoryHidden, updateCategory,
     addEntry, updateEntry, deleteEntry,
   } = useCodexStore()
@@ -77,7 +78,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
   const [activeEntryId, setActiveEntryId] = useState<number | null>(null)
   const [showHidden, setShowHidden] = useState(false)
   // B1:自定义字段管理弹窗
-  const [showFieldsEditor, setShowFieldsEditor] = useState(false)
+  const [fieldsEditor, setFieldsEditor] = useState<{ category: CodexCategory; scope: NonNullable<typeof loadedScope> } | null>(null)
   // 词条排序方式:order=手动顺序 / importance=重要度降序 / pinyin=拼音首字母
   const [sortMode, setSortMode] = useState<'order' | 'importance' | 'pinyin'>('order')
   const [extractOpen, setExtractOpen] = useState(false)
@@ -97,17 +98,33 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
   } | null>(null)
   const [extractError, setExtractError] = useState<string | null>(null)
 
-  useEffect(() => { loadAll(projectId) }, [projectId, loadAll])
+  const authorScope = useMemo(() => project.activeWorldId && project.activeWorkId
+    ? { projectId, worldId: project.activeWorldId, workId: project.activeWorkId } : projectId,
+  [projectId, project.activeWorldId, project.activeWorkId])
+  useEffect(() => { void loadAll(authorScope) }, [authorScope, loadAll])
+  const [manualError, setManualError] = useState('')
+  const [manualBusy, setManualBusy] = useState(false)
+  const perform = async (action: () => void | Promise<void>) => {
+    if (manualBusy) return
+    setManualBusy(true); setManualError('')
+    try { await flushPendingEditsV1(); await action() }
+    catch (cause) { setManualError(cause instanceof Error ? cause.message : '词条操作失败，输入已保留。') }
+    finally { setManualBusy(false) }
+  }
+  const ownerReady = loadedScope?.projectId === projectId
+    && (typeof authorScope === 'number' || loadedScope.worldId === authorScope.worldId)
+  const dataReady = ownerReady && !loading && !loadError
+
 
   const activeGroupBelongsToProject = worldGroups.some(group =>
     group.projectId === projectId && group.id === activeGroupId)
   const scopedWorldGroupId = project.enableMultiWorld
     ? (activeGroupBelongsToProject ? activeGroupId! : undefined)
     : null
-  const scopeReady = scopedWorldGroupId !== undefined
+  const scopeReady = dataReady && scopedWorldGroupId !== undefined
   const scopedEntries = useMemo(
-    () => scopeReady ? filterCodexEntriesByWorld(entries, scopedWorldGroupId) : [],
-    [entries, scopeReady, scopedWorldGroupId],
+    () => ownerReady && scopedWorldGroupId !== undefined ? filterCodexEntriesByWorld(entries, scopedWorldGroupId) : [],
+    [entries, ownerReady, scopedWorldGroupId],
   )
 
   // 当前领域的分类（按 order）。若锁定了 builtInKey 列表,则只取那几类(跨域亦可)。
@@ -142,7 +159,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
     }
     if (sortMode === 'pinyin') {
       // localeCompare('zh') 按拼音排序,无需拼音库
-      return [...list].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-Hans-CN'))
+      return [...list].sort((a, b) => (typeof a.name === 'string' ? a.name : '').localeCompare(typeof b.name === 'string' ? b.name : '', 'zh-Hans-CN'))
     }
     return [...list].sort((a, b) => a.order - b.order)
   }, [scopedEntries, activeCatId, sortMode])
@@ -151,7 +168,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
     const count = new Map<string, number>()
     for (const e of scopedEntries) {
       if (e.categoryId !== activeCatId) continue
-      const n = (e.name || '').trim()
+      const n = typeof e.name === 'string' ? e.name.trim() : ''
       if (n) count.set(n, (count.get(n) ?? 0) + 1)
     }
     return new Set([...count.entries()].filter(([, n]) => n > 1).map(([k]) => k))
@@ -439,6 +456,11 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
     <div className={embedded
       ? `flex min-w-0 flex-col ${compact ? 'max-h-[40rem] overflow-y-auto' : lockedSingle ? 'h-80 overflow-hidden' : 'h-[30rem] overflow-hidden'} border border-border rounded-xl`
       : 'h-full flex flex-col'}>
+      {loadError && <div role="alert" className="p-2 text-xs text-red-400">词条读取失败：{loadError}
+        <button type="button" onClick={() => { void loadAll(authorScope) }} className="ml-2 underline">重新读取词条</button>
+      </div>}
+      {manualError && <p role="alert" className="p-2 text-xs text-red-400">{manualError}</p>}
+      <div className="contents" inert={!dataReady}>
       {/* 顶部：领域切换(嵌入且锁定领域时隐藏;单分类锁定时整条隐藏) */}
       {!lockedSingle && (
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border">
@@ -450,7 +472,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
               {DOMAINS.map(d => (
                 <button
                   key={d}
-                  onClick={() => { setDomain(d); setActiveEntryId(null) }}
+                  onClick={() => { void perform(() => { setDomain(d); setActiveEntryId(null) }) }}
                   className={`px-3 py-1 text-sm rounded-md transition ${
                     domain === d ? 'bg-accent text-white' : 'text-text-muted hover:text-text-primary'
                   }`}
@@ -481,7 +503,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
             {visibleCats.map(cat => (
               <div
                 key={cat.id}
-                onClick={() => { setActiveCatId(cat.id!); setActiveEntryId(null) }}
+                onClick={() => { void perform(() => { setActiveCatId(cat.id!); setActiveEntryId(null) }) }}
                 className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer text-sm transition ${
                   activeCatId === cat.id ? 'bg-accent/10 text-accent' : 'hover:bg-bg-hover text-text-primary'
                 } ${cat.hidden ? 'opacity-50' : ''}`}
@@ -493,7 +515,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
                 </span>
                 {cat.builtInKey ? (
                   <button
-                    onClick={(e) => { e.stopPropagation(); setCategoryHidden(cat.id!, !cat.hidden) }}
+                    onClick={(e) => { e.stopPropagation(); void perform(() => setCategoryHidden(cat.id!, !cat.hidden)) }}
                     className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-text-primary"
                     title={cat.hidden ? '取消隐藏' : '隐藏此内置分类'}
                   >
@@ -501,7 +523,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
                   </button>
                 ) : (
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat) }}
+                    onClick={(e) => { e.stopPropagation(); void perform(() => handleDeleteCategory(cat)) }}
                     className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-400"
                     title="删除自定义分类"
                   >
@@ -513,7 +535,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
           </div>
           {!lockedKeys && (
             <button
-              onClick={handleAddCategory}
+              onClick={() => { void perform(handleAddCategory) }}
               className="m-2 px-2 py-1.5 text-xs rounded-lg border border-dashed border-border text-text-muted hover:text-accent hover:border-accent/50 inline-flex items-center justify-center gap-1"
             >
               <FolderPlus className="w-3.5 h-3.5" /> 新增分类
@@ -544,18 +566,18 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
             {catEntries.map(entry => (
               <div
                 key={entry.id}
-                onClick={() => setActiveEntryId(entry.id!)}
+                onClick={() => { void perform(() => setActiveEntryId(entry.id!)) }}
                 className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer text-sm transition ${
                   activeEntryId === entry.id ? 'bg-accent/10 text-accent' : 'hover:bg-bg-hover text-text-primary'
                 }`}
               >
-                <span>{entry.icon || activeCat?.icon || '•'}</span>
-                <span className="truncate flex-1">{entry.name || '未命名'}</span>
-                {entry.name && dupNames.has(entry.name.trim()) && (
+                <span>{typeof entry.icon === 'string' ? entry.icon : activeCat?.icon || '•'}</span>
+                <span className="truncate flex-1">{typeof entry.name === 'string' ? entry.name || '未命名' : '名称格式异常'}</span>
+                {typeof entry.name === 'string' && entry.name && dupNames.has(entry.name.trim()) && (
                   <span className="text-amber-400 shrink-0" title="本分类下有同名词条">⚠</span>
                 )}
                 <button
-                  onClick={(e) => { e.stopPropagation(); handleDeleteEntry(entry) }}
+                  onClick={(e) => { e.stopPropagation(); void perform(() => handleDeleteEntry(entry)) }}
                   className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-400"
                 >
                   <Trash2 className="w-3 h-3" />
@@ -579,7 +601,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
               <Sparkles className="w-3.5 h-3.5" /> AI 补全新词条建议
             </button>
             <button
-              onClick={handleAddEntry}
+              onClick={() => { void perform(handleAddEntry) }}
               disabled={!activeCatId || !scopeReady}
               className="w-full px-2 py-1.5 text-xs rounded-lg bg-accent text-white hover:bg-accent/90 disabled:opacity-40 inline-flex items-center justify-center gap-1"
             >
@@ -587,7 +609,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
             </button>
             {/* B1:管理本分类的专属字段(增删改字段 schema) */}
             <button
-              onClick={() => setShowFieldsEditor(true)}
+              onClick={() => { if (activeCat && loadedScope) setFieldsEditor({ category: activeCat, scope: loadedScope }) }}
               disabled={!activeCat}
               className="w-full px-2 py-1.5 text-xs rounded-lg border border-border text-text-secondary hover:text-accent hover:border-accent/50 disabled:opacity-40 inline-flex items-center justify-center gap-1"
               title="自定义本分类下词条的专属字段"
@@ -606,8 +628,8 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
               category={activeCat}
               allCategories={categories}
               allEntries={scopedEntries}
-              nameDuplicate={!!activeEntry.name && dupNames.has(activeEntry.name.trim())}
-              onChange={(patch) => updateEntry(activeEntry.id!, patch)}
+              nameDuplicate={typeof activeEntry.name === 'string' && !!activeEntry.name && dupNames.has(activeEntry.name.trim())}
+              onChange={(patch, expected) => updateEntry(activeEntry.id!, patch, { scope: loadedScope!, expected })}
             />
           ) : (
             <div className="h-full flex items-center justify-center text-text-muted text-sm">
@@ -618,11 +640,11 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
       </div>
 
       {/* B1:自定义字段管理弹窗 — 编辑本分类的 fieldSchema(内置类也可改) */}
-      {showFieldsEditor && activeCat && (
+      {fieldsEditor && (
         <CodexCategoryFieldsEditor
-          category={activeCat}
-          onClose={() => setShowFieldsEditor(false)}
-          onSave={(fieldSchema) => { updateCategory(activeCat.id!, { fieldSchema }); setShowFieldsEditor(false) }}
+          category={fieldsEditor.category}
+          onClose={() => setFieldsEditor(null)}
+          onSave={async fieldSchema => { await updateCategory(fieldsEditor.category.id!, { fieldSchema }, { scope: fieldsEditor.scope, expected: fieldsEditor.category }); setFieldsEditor(null) }}
         />
       )}
       {extractOpen && activeCat && (
@@ -737,6 +759,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

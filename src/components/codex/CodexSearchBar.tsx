@@ -40,11 +40,11 @@ export default function CodexSearchBar({ categoryKeys, onJump }: Props) {
     for (const e of entries) {
       const info = catInfo.get(e.categoryId)
       if (!info) continue
-      const name = (e.name || '').trim()
+      const name = typeof e.name === 'string' ? e.name.trim() : '名称格式异常'
       const fieldsText = Object.values(parseEntryFields(e.fields)).join(' ')
-      const score = scoreCodexEntry(name, e.summary || '', fieldsText, query)
+      const score = scoreCodexEntry(name, typeof e.summary === 'string' ? e.summary : '', fieldsText, query)
       if (score === 0) continue
-      scored.push({ id: e.id!, name: name || '未命名', cat: info.name, catKey: info.key, summary: e.summary || '', score })
+      scored.push({ id: e.id!, name: name || '未命名', cat: info.name, catKey: info.key, summary: typeof e.summary === 'string' ? e.summary : '', score })
     }
     return scored.sort((a, b) => b.score - a.score).slice(0, 12)
   }, [q, entries, catInfo])

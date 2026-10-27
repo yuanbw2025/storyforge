@@ -3,6 +3,8 @@ import { ChevronRight, Star } from 'lucide-react'
 import { CInput, CTextarea } from '../shared/CompositionInput'
 import {
   codexEntryInWorld,
+  codexCategoryFormatIssueV1,
+  codexEntryFormatIssueV1,
   parseEntryFields,
   parseEntryRefs,
   parseFieldSchema,
@@ -17,6 +19,7 @@ import type {
 import { parseCultivationStages } from '../../lib/types/cultivation'
 import { useCultivationStore } from '../../stores/cultivation'
 import { useLocationStore } from '../../stores/location'
+import { useCodexEntryDraft, type SaveCodexDraft } from './useCodexEntryDraft'
 
 interface Props {
   entry: CodexEntry
@@ -24,17 +27,18 @@ interface Props {
   allCategories: CodexCategory[]
   allEntries: CodexEntry[]
   nameDuplicate?: boolean
-  onChange: (patch: Partial<CodexEntry>) => void | Promise<void>
+  onChange: SaveCodexDraft
 }
 
 export default function CodexEntryDetail({
-  entry,
+  entry: canonicalEntry,
   category,
   allCategories,
   allEntries,
   nameDuplicate,
-  onChange,
+  onChange: save,
 }: Props) {
+  const { draft: entry, change: onChange, saving, error, flush, composition } = useCodexEntryDraft(canonicalEntry, save)
   const schema = useMemo(() => parseFieldSchema(category.fieldSchema), [category.fieldSchema])
   const fields = useMemo(() => parseEntryFields(entry.fields), [entry.fields])
   const refs = useMemo(() => parseEntryRefs(entry.refs), [entry.refs])
@@ -47,15 +51,34 @@ export default function CodexEntryDetail({
     }
   }, [entry.tags])
 
+  const issue = codexCategoryFormatIssueV1(category) || codexEntryFormatIssueV1(entry)
+  if (issue) {
+    let original: string
+    try { original = JSON.stringify({ entry, fieldSchema: category.fieldSchema }, null, 2) } catch { original = '无法显示完整记录；请使用备份保留原数据。' }
+    return <div role="alert" className="p-4 text-sm text-amber-400">词条格式异常：{issue}。原始数据已保留，编辑暂时关闭，请从有效备份恢复。
+      <details><summary>查看原始词条</summary><pre className="whitespace-pre-wrap text-xs">{original}</pre></details>
+    </div>
+  }
+
+  const saveLinkedPatch = (patch: Partial<CodexEntry>) => {
+    onChange(patch)
+    const operation = flush()
+    void operation.catch(() => undefined)
+    return operation
+  }
   const setField = (key: string, value: string) => {
-    onChange({ fields: stringifyEntryFields({ ...fields, [key]: value }) })
+    onChange(latest => ({ fields: stringifyEntryFields({ ...parseEntryFields(latest.fields), [key]: value }) }))
   }
   const setRef = (key: string, ids: number[]) => {
-    onChange({ refs: stringifyEntryRefs({ ...refs, [key]: ids }) })
+    onChange(latest => ({ refs: stringifyEntryRefs({ ...parseEntryRefs(latest.refs), [key]: ids }) }))
   }
 
   return (
-    <div className="p-4 space-y-3 max-w-2xl">
+    <div className="p-4 space-y-3 max-w-2xl" {...composition}>
+      {saving && <p role="status" className="text-xs text-text-muted">正在保存词条…</p>}
+      {error && <div role="alert" className="text-xs text-red-400">{error}；输入已保留。
+        <button type="button" onClick={() => { void flush().catch(() => undefined) }} className="ml-2 underline">重试保存词条</button>
+      </div>}
       <div className="flex items-center gap-2">
         <CInput
           value={entry.icon || ''}
@@ -113,10 +136,10 @@ export default function CodexEntryDetail({
       />
 
       {category.builtInKey === 'beast' && (
-        <CodexCultivationLink entry={entry} onChange={onChange} />
+        <CodexCultivationLink entry={entry} onChange={saveLinkedPatch} />
       )}
       {category.builtInKey === 'city' && (
-        <CodexImportantLocationLink entry={entry} onChange={onChange} />
+        <CodexImportantLocationLink entry={entry} onChange={saveLinkedPatch} />
       )}
 
       {schema.length > 0 && <div className="border-t border-border pt-3 text-xs text-text-muted">专属属性</div>}
@@ -326,6 +349,7 @@ function CodexRefSelector({
       .filter(entry => entry.id !== currentEntryId)
       .filter(entry => codexEntryInWorld(entry, worldGroupId))
       .filter(entry => hintCategoryIds.length === 0 || hintCategoryIds.includes(entry.categoryId))
+      .filter(entry => typeof entry.name === 'string')
       .sort((left, right) => left.name.localeCompare(right.name))
   }, [allCategories, allEntries, currentEntryId, refCategory, worldGroupId])
   const selected = allEntries.filter(entry => value.includes(entry.id!))

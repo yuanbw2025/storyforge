@@ -8,6 +8,7 @@ import { CONTEXT_SOURCE_BY_KEY } from '../../src/lib/registry/context-sources'
 import { FIELD_BY_TARGET } from '../../src/lib/registry/field-registry'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { parseWorldExpandOutputStrictV1 } from '../../src/lib/ai/world-group-ai'
+import * as aiClient from '../../src/lib/ai/client'
 import * as worldGroupAI from '../../src/lib/ai/world-group-ai'
 import {
   abandonWorldviewExpandRunV1,
@@ -97,6 +98,16 @@ async function targetRow(fixture: Awaited<ReturnType<typeof seed>>) {
 describe.sequential('R-HARNESS67 · 世界组六字段扩写 durable 候选与原子采纳', () => {
   beforeEach(async () => { await db.delete(); await db.open() })
   afterEach(() => { vi.restoreAllMocks(); db.close() })
+
+  it('requests a single JSON object from the provider without a fallback call', async () => {
+    const fixture = await seed()
+    const request = vi.spyOn(aiClient, 'chat').mockResolvedValueOnce(response())
+    await generateWorldviewExpandCandidateV1({ scope: fixture.scope, worldGroupId: fixture.worldGroupId,
+      aiConfig: { provider: 'custom', baseUrl: 'https://provider.example/v1', model: 'isolated-test', apiKey: 'not-a-secret', maxTokens: 8192 },
+    })
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(request.mock.calls[0][5]).toEqual({ responseFormat: 'json_object' })
+  })
 
   it('Skill/Context/Field 三注册表闭合，四个登记来源进入模型且候选确认前零正式写入', async () => {
     expect(['manualText', 'worldGroups', 'storyCore', 'worldview'].map(key => CONTEXT_SOURCE_BY_KEY.has(key))).toEqual([true, true, true, true])
