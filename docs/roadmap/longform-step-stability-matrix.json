@@ -2061,6 +2061,13 @@
       "sourcePin": "tests/acceptance/longform-stability/story-arc-command-recovery-20261028.json",
       "symptom": "阶段进度0行写入未回滚，旧视图删除无冲突保护；命令失败没有可恢复的确认/取消边界。",
       "remaining": "完整矩阵、最终全量检查与发行继续。"
+    },
+    {
+      "id": "STORY-ARC-EVENT-SCOPE-20261028",
+      "state": "LOCAL_SOURCE_VERIFIED_REAL_REPLAY_PENDING",
+      "sourcePin": "tests/acceptance/longform-stability/story-arc-stage-events-20261028.json",
+      "symptom": "新增事件指令与每阶段总量上限矛盾；单阶段事件按钮沿整线变换且缺少确定性只改事件/精确排序约束。",
+      "remaining": "新提交实模、完整故障和最终交付检查继续。"
     }
   ],
   "evidenceSchema": {
@@ -3750,6 +3757,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/real-story-arc-mainline-20261028-6e75670b.json",
           "summary": "真实新建拒绝/再生成采纳和扩写、重写、润色、重规划通过；关键事件新增请求与每阶段上限矛盾，原候选保留未采纳，继续修复。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/story-arc-stage-events-20261028.json",
+          "summary": "所选阶段版本化事件子合同、compact候选、只追加/精确排列及原记录durable回读已验证；真实新提交上的事件实模继续。"
         }
       ],
       "defects": [],
@@ -19458,6 +19470,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/real-story-arc-mainline-20261028-6e75670b.json",
           "summary": "真实新建拒绝/再生成采纳和扩写、重写、润色、重规划通过；关键事件新增请求与每阶段上限矛盾，原候选保留未采纳，继续修复。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/story-arc-stage-events-20261028.json",
+          "summary": "所选阶段版本化事件子合同、compact候选、只追加/精确排列及原记录durable回读已验证；真实新提交上的事件实模继续。"
         }
       ],
       "defects": [],
@@ -24128,6 +24145,14 @@
       "date": "2026-10-28",
       "unit": "Real story arc create and transform modes; event-generation contract conflict retained",
       "sourcePin": "tests/acceptance/longform-stability/real-story-arc-mainline-20261028-6e75670b.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Scoped stage-event append and exact-permutation contract",
+      "sourcePin": "tests/acceptance/longform-stability/story-arc-stage-events-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

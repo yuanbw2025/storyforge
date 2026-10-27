@@ -213,3 +213,75 @@ test('abandoning a failed event releases only its failure; the unsubmitted text 
   await expect.poll(() => rows(page, id)).toHaveLength(2)
   expect((await stage(page, id)).keyEvents).toEqual([])
 })
+
+async function eventAISetup(page: Page) {
+  await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', model: 'scoped-events', baseUrl: 'https://arc-events.invalid/v1', maxTokens: 10000, contextWindow: 128000 })))
+  const id = await setup(page); await addStage(page)
+  await page.getByLabel('故事阶段描述', { exact: true }).fill('依据实测数据逐步决定通行。')
+  await page.getByLabel('故事阶段描述', { exact: true }).blur()
+  for (const text of ['测绳', '记录', '校核', '报告', '等待批复']) {
+    await page.getByPlaceholder('手动添加关键事件...', { exact: true }).fill(text)
+    await page.getByRole('button', { name: '添加', exact: true }).click()
+    await expect(page.getByPlaceholder('手动添加关键事件...', { exact: true })).toHaveValue('')
+  }
+  return id
+}
+function eventCandidate(page: Page) { return page.locator('textarea[aria-label$="候选内容"]').first() }
+function eventAdopt(page: Page) { return eventCandidate(page).locator('xpath=ancestor::section[1]').getByRole('button', { name: /^(采纳|接受提示并采纳)$/ }) }
+async function savedEventDraft(page: Page, projectId: number, text: string) {
+  await expect.poll(() => page.evaluate(async ({ projectId, text }) => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return (await db.agentEvents.where('projectId').equals(projectId).toArray()).some((event: any) => event.kind === 'candidate' && event.content === text && ['ready', 'usable-with-warnings'].includes(JSON.parse(event.payload).creativeArtifact?.status))
+  }, { projectId, text })).toBe(true)
+}
+
+test('stage-scoped AI appends beyond five existing events and sorts through editable, reloadable candidates', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
+  const id = await eventAISetup(page); const before = (await rows(page, id))[0]; const original = JSON.parse(before.stages)
+  let calls = 0; let reply = [...original[0].keyEvents, '按核验结果封闭支路']
+  await page.route('https://arc-events.invalid/**', route => {
+    calls++
+    expect(route.request().postDataJSON().messages[0].content).toContain('唯一字段keyEvents')
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ keyEvents: reply }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) })
+  })
+  await page.getByRole('button', { name: 'AI生成', exact: true }).click()
+  await expect(eventCandidate(page)).toHaveValue(JSON.stringify({ keyEvents: reply }, null, 2))
+  expect((await rows(page, id))[0]).toEqual(before)
+  await eventCandidate(page).fill(JSON.stringify({ keyEvents: ['擅改已有事件'] }))
+  await expect(eventAdopt(page)).toBeDisabled()
+  expect((await rows(page, id))[0]).toEqual(before)
+  const edited = [...original[0].keyEvents, '作者确认：按核验结果封闭支路']; const draft = JSON.stringify({ keyEvents: edited }, null, 2)
+  await eventCandidate(page).fill(draft); await savedEventDraft(page, id, draft)
+  await page.reload(); await expect(eventCandidate(page)).toHaveValue(draft)
+  await eventAdopt(page).click(); await expect(eventCandidate(page)).toHaveCount(0)
+  expect(JSON.parse((await rows(page, id))[0].stages)).toEqual([{ ...original[0], keyEvents: edited }])
+  expect((await rows(page, id))[0].name).toBe(before.name); expect((await rows(page, id))[0].description).toBe(before.description)
+  await page.getByRole('button', { name: /阶段\s*1/ }).click()
+  reply = [...edited].reverse()
+  await page.getByRole('button', { name: 'AI排序', exact: true }).click()
+  const sorted = JSON.stringify({ keyEvents: reply }, null, 2)
+  await expect(eventCandidate(page)).toHaveValue(sorted); await savedEventDraft(page, id, sorted)
+  await page.reload(); await expect(eventCandidate(page)).toHaveValue(sorted)
+  await eventAdopt(page).click(); await expect(eventCandidate(page)).toHaveCount(0)
+  expect(JSON.parse((await rows(page, id))[0].stages)).toEqual([{ ...original[0], keyEvents: reply }])
+  expect(calls).toBe(2); expect(errors).toEqual([])
+})
+
+test('AI sort cannot rewrite events, stops after bounded repair, and accepts an author-corrected permutation without another model', async ({ page }) => {
+  const id = await eventAISetup(page); const before = (await rows(page, id))[0]; const original = JSON.parse(before.stages)[0]
+  let calls = 0
+  await page.route('https://arc-events.invalid/**', route => {
+    calls++
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ keyEvents: [...original.keyEvents.slice(1), '模型擅自改写'] }) }, finish_reason: 'stop' }] }) })
+  })
+  await page.getByRole('button', { name: 'AI排序', exact: true }).click()
+  await expect(page.getByText('需要手动修复', { exact: true })).toBeVisible()
+  await expect(eventAdopt(page)).toBeDisabled(); expect(calls).toBe(2)
+  expect((await rows(page, id))[0]).toEqual(before)
+  const fixed = JSON.stringify({ keyEvents: [...original.keyEvents].reverse() }, null, 2)
+  await eventCandidate(page).fill(fixed); await savedEventDraft(page, id, fixed)
+  await page.reload(); await expect(eventCandidate(page)).toHaveValue(fixed)
+  await eventAdopt(page).click(); await expect(eventCandidate(page)).toHaveCount(0)
+  expect(JSON.parse((await rows(page, id))[0].stages)[0]).toEqual({ ...original, keyEvents: [...original.keyEvents].reverse() })
+  expect(calls).toBe(2)
+})

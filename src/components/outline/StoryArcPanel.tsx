@@ -20,6 +20,7 @@ import CreativeArtifactSummary from '../agent/CreativeArtifactSummary'
 import { creativeArtifactCanAdoptV1 } from '../../lib/agent/creative-reliability'
 import HarnessEvidencePanel from '../agent/HarnessEvidencePanel'
 import type { StoryArcOperationV1, StoryArcCopilotSnapshot } from '../../lib/agent/story-arc-copilot'
+import { STORY_ARC_STAGE_EVENT_LIMITS_V1 } from '../../lib/agent/story-arc-stage-events'
 import {
   INITIAL_RECORD_TARGET_CLASS,
   initialRecordTargetAttributes,
@@ -184,13 +185,13 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
       `阶段描述：${stage.description || '未填写'}。`,
       currentKeyEvents.length > 0 ? `必须保留现有事件：${currentKeyEvents.join('、')}。` : '当前还没有关键事件。',
       neighborSummary ? `相邻阶段：${neighborSummary}；不得改写其他阶段。` : '',
-      '新增 3—5 个具有因果递进的关键事件，并返回完整故事线候选供作者审查。',
+      `在原事件之后新增1—${STORY_ARC_STAGE_EVENT_LIMITS_V1.additionalEvents}个因果递进的关键事件，已有事件不计入新增上限。只返回当前阶段的完整keyEvents数组供作者审查。`,
     ].filter(Boolean).join('\n')
     await submitTargeted(instruction, {
       agentId: 'outline',
       skillId: 'outline.story-arcs',
       instruction,
-      storyArcMutationRequest: { operation: 'expand', targetArcId: activeArc.id },
+      storyArcMutationRequest: { operation: 'expand', targetArcId: activeArc.id, stageEvents: { version: 1, kind: 'append', stageId: stage.id } },
     })
   }
 
@@ -203,13 +204,13 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
     const instruction = [
       `只重排故事线“${activeArc.name}”阶段“${stage.title}”的关键事件。`,
       `现有事件：${currentKeyEvents.map((event, index) => `${index + 1}. ${event}`).join('；')}`,
-      '按时间和因果顺序排列，不得新增、删除、改写事件，也不得改变其他阶段；返回完整故事线候选供作者审查。',
+      '按时间和因果顺序排列，逐字保留全部事件及重复次数，不得新增、删除、改写，也不得改变其他阶段；只返回当前阶段的完整keyEvents数组供作者审查。',
     ].join('\n')
     await submitTargeted(instruction, {
       agentId: 'outline',
       skillId: 'outline.story-arcs',
       instruction,
-      storyArcMutationRequest: { operation: 'replan', targetArcId: activeArc.id },
+      storyArcMutationRequest: { operation: 'replan', targetArcId: activeArc.id, stageEvents: { version: 1, kind: 'sort', stageId: stage.id } },
     })
   }
 
@@ -366,25 +367,27 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
           </div>
           <div className={candidate.payload.storyArcMutationRequest?.operation === 'expand'
             || candidate.payload.storyArcMutationRequest?.operation === 'polish'
+            || candidate.payload.storyArcMutationRequest?.stageEvents
             ? 'grid gap-3 md:grid-cols-2'
             : ''}>
             {(candidate.payload.storyArcMutationRequest?.operation === 'expand'
-              || candidate.payload.storyArcMutationRequest?.operation === 'polish') && (() => {
+              || candidate.payload.storyArcMutationRequest?.operation === 'polish'
+              || candidate.payload.storyArcMutationRequest?.stageEvents) && (() => {
               const snapshot = candidate.payload.baseSnapshot as StoryArcCopilotSnapshot
               const original = snapshot.arcs?.find(arc => (
                 arc.id === candidate.payload.storyArcMutationRequest?.targetArcId
               ))
+              const stageRequest = candidate.payload.storyArcMutationRequest?.stageEvents
+              const stage = original && stageRequest ? parseStages(original.stages).find(row => row.id === stageRequest.stageId) : undefined
+              const frozen = stageRequest ? (stage ? { keyEvents: stage.keyEvents } : undefined) : original ? {
+                name: original.name, type: original.type, description: original.description, stages: parseStages(original.stages),
+              } : undefined
               return (
                 <label className="grid gap-1 text-[11px] text-text-muted">
                   原版（冻结）
                   <CTextarea
                     aria-label={`${candidate.payload.label}原版内容`}
-                    value={original ? JSON.stringify({
-                      name: original.name,
-                      type: original.type,
-                      description: original.description,
-                      stages: parseStages(original.stages),
-                    }, null, 2) : '目标原版不可用，请拒绝并重新生成。'}
+                    value={frozen ? JSON.stringify(frozen, null, 2) : '目标原版不可用，请拒绝并重新生成。'}
                     readOnly
                     className="min-h-72 w-full resize-y font-mono text-xs leading-5"
                   />
@@ -394,6 +397,7 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
             <label className="grid gap-1 text-[11px] text-text-muted">
               {candidate.payload.storyArcMutationRequest?.operation === 'expand'
                 || candidate.payload.storyArcMutationRequest?.operation === 'polish'
+                || candidate.payload.storyArcMutationRequest?.stageEvents
                 ? '新版（可编辑）'
                 : ''}
               <CTextarea
@@ -407,6 +411,7 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
               />
             </label>
           </div>
+          {candidate.payload.storyArcMutationRequest?.stageEvents && <p className="mt-2 text-xs text-text-muted">本轮只处理所选阶段事件；追加时保留已有事件，排序时只调整顺序。</p>}
           {candidate.payload.creativeArtifact && (
             <CreativeArtifactSummary
               artifact={candidate.payload.creativeArtifact}
