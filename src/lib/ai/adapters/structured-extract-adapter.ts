@@ -91,7 +91,7 @@ export function codexEntryTransportOptionsV1(
     ...(field.type === 'select' && field.options?.length ? { enum: [...field.options] } : {}),
     ...(field.type === 'number' ? { pattern: '^[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?$' } : {}),
   }]))
-  return { jsonSchema: { name: 'storyforge_codex_entries_v1', strict: true, schema: {
+  return { thinkingMode: 'disabled', jsonSchema: { name: 'storyforge_codex_entries_v1', strict: true, schema: {
     type: 'array', maxItems: CODEX_LIMITS.entries,
     items: { type: 'object', additionalProperties: false,
       required: ['name', 'icon', 'summary', 'description', 'fields', 'tags', 'importance', 'evidenceQuotes', 'provenance'],

@@ -172,6 +172,7 @@ describe.sequential('R-HARNESS70 · Codex 词条 durable 分块抽取与原子�
       aiConfig: { provider: 'agnes', model: 'agnes-2.5-flash', apiKey: 'isolated-test-key' },
       runAI: async (_messages, _index, options) => {
         calls++
+        expect(options?.thinkingMode).toBe('disabled')
         expect(options?.jsonSchema).toMatchObject({ strict: true, schema: { type: 'array', items: { additionalProperties: false, properties: {
           fields: { additionalProperties: false, properties: { habitat: { type: 'string' } } },
           tags: { minItems: 2, maxItems: 5 }, evidenceQuotes: { minItems: 1, maxItems: 5 },
