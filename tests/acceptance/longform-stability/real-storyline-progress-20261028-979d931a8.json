@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-28",
+  "kind": "real-storyline-progress-20261028-979d931a8",
+  "sourcePin": {
+    "kind": "commit",
+    "commit": "979d931a8486520db1a731f26198ecf9cf86bc57"
+  },
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "boundary": "Frozen chapter anchors; reject then new candidate/edit/acknowledged save/reload/explicit adoption. Progress tied to the selected chapter; prose unchanged. Four compression fallbacks remain separate failures, not successful compression.",
+  "evidenceDirectory": "live-storyline-progress-2026-10-27T23-21-51-585Z",
+  "result": {
+    "status": "passed-real-storyline-progress-reject-edit-reload-adopt",
+    "sourceCommit": "979d931a8486520db1a731f26198ecf9cf86bc57",
+    "model": "agnes-2.5-flash",
+    "modelRequests": 6,
+    "knownTotalTokens": 23264,
+    "unknownUsageRequests": 0,
+    "results": [
+      {
+        "decision": "reject",
+        "modelRequests": 3,
+        "canonicalGuard": true,
+        "progressRows": 0
+      },
+      {
+        "decision": "adopt",
+        "modelRequests": 3,
+        "canonicalGuard": true,
+        "progressRows": 1
+      }
+    ],
+    "pageErrors": []
+  }
+}

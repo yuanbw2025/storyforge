@@ -1,6 +1,7 @@
 import JSON5 from 'json5'
-import { chat } from '../ai/client'
+import { chat, resolveRequestConfig, type AICallMeta, type ChatRequestOptions } from '../ai/client'
 import { estimateTokens } from '../ai/context-budget'
+import { supportsVerifiedJsonObjectResponseForModelV1 } from '../ai/provider-capabilities'
 import { sha256Text } from '../ai/chapter-memory/text-normalization'
 import type { AIConfig, ChatMessage } from '../types'
 import type {
@@ -48,7 +49,7 @@ export interface AgentContextCompressionRuntimeV1 {
   requiredFutureModelCalls: number
   complete?: (
     messages: ChatMessage[],
-    request: { maxOutputTokens: number; temperature: number },
+    request: { maxOutputTokens: number; temperature: number; requestOptions: ChatRequestOptions },
   ) => Promise<string>
 }
 
@@ -297,14 +298,34 @@ export function createAgentContextCompressionSessionV1(input: {
     })
     const anchorTokens = estimateTokens(buildCompressedContent('', anchors))
     const summaryTargetTokens = Math.max(96, sourceInput.sourceBudgetTokens - anchorTokens - 32)
+    // The response repeats every literal anchor inside a JSON envelope. Those
+    // tokens are additional to the summary, even though the assembled context
+    // later stores each anchor only once. Keep the final source budget intact.
+    const envelopeTokens = estimateTokens(JSON.stringify({
+      version: 1, summary: '', coveredAnchorIds: anchors.map(anchor => anchor.id),
+      evidenceQuotes: anchors.map(anchor => ({ anchorId: anchor.id, quote: anchor.quote })),
+    }))
     const maxOutputTokens = Math.min(
       input.policy.maxOutputTokens,
-      Math.max(256, summaryTargetTokens + 160),
+      Math.max(256, summaryTargetTokens + envelopeTokens + 64),
     )
+    const callMeta: AICallMeta = {
+      category: `${input.routingCategory}.context-compression`, projectId: input.projectId,
+      configOverrides: { maxTokens: maxOutputTokens, temperature: 0.1 },
+      contextOverflowPolicy: 'reject', transportRetryPolicy: 'none',
+    }
+    const requestResolution = input.runtime.complete ? undefined : resolveRequestConfig(input.config, callMeta)
+    const requestConfig = requestResolution?.config ?? input.config
+    const requestOptions: ChatRequestOptions = {
+      ...(supportsVerifiedJsonObjectResponseForModelV1(requestConfig) ? { responseFormat: 'json_object' as const } : {}),
+      // This exact bounded JSON/model combination has real request evidence;
+      // neither other Agnes models nor saved author settings are changed.
+      ...(requestConfig.provider === 'agnes' && requestConfig.model === 'agnes-2.5-flash' ? { thinkingMode: 'disabled' as const } : {}),
+    }
     let attempts = 0
-    let failureCode = 'compression-budget-unavailable'
+    let failureCode = envelopeTokens >= maxOutputTokens ? 'compression-envelope-exceeds-output-budget' : 'compression-budget-unavailable'
 
-    while (attempts < input.policy.maxAttemptsPerSource && canCall()) {
+    while (envelopeTokens < maxOutputTokens && attempts < input.policy.maxAttemptsPerSource && canCall()) {
       const messages = buildContextCompressionMessagesV1({
         sourceKey: sourceInput.source.key,
         sourceLabel: sourceInput.source.label,
@@ -327,15 +348,12 @@ export function createAgentContextCompressionSessionV1(input: {
         break
       }
       attempts += 1
+      let receivedResponse = false
       try {
         const raw = input.runtime.complete
-          ? await input.runtime.complete(messages, { maxOutputTokens, temperature: 0.1 })
-          : await chat(messages, input.config, {
-              category: `${input.routingCategory}.context-compression`,
-              projectId: input.projectId,
-              configOverrides: { maxTokens: maxOutputTokens, temperature: 0.1 },
-              contextOverflowPolicy: 'reject',
-            }, input.signal)
+          ? await input.runtime.complete(messages, { maxOutputTokens, temperature: 0.1, requestOptions })
+          : await chat(messages, input.config, { ...callMeta, category: callMeta.category }, input.signal, undefined, requestOptions, requestResolution)
+        receivedResponse = true
         input.runtime.budget.settleCall(reservation, raw)
         settled = true
         const verified = await verifyCandidate({
@@ -366,6 +384,10 @@ export function createAgentContextCompressionSessionV1(input: {
       } catch (error) {
         if (!settled) input.runtime.budget.settleFailedCall(reservation)
         failureCode = error instanceof Error ? error.message : 'compression-call-failed'
+        // A completed, invalid JSON result may use the explicit semantic repair
+        // attempt. A failed dispatch (including an unknown outcome) must not be
+        // silently replayed by this optional context optimization.
+        if (!receivedResponse) break
       }
     }
 

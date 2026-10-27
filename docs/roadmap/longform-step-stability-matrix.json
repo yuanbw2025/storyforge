@@ -19333,6 +19333,16 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/real-prose-mainline-20261028-3435e225.json",
           "summary": "正文采纳后默认建议等待授权，明确本次不运行后取消且0后处理调用；记忆、状态和物品生成不计通过。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-manual-chapter-memory-20261028-979d931a8.json",
+          "summary": "手动生成章节记忆及刷新回读通过：1次真实调用，summary/handoff与正文hash一致，保护正文和作用域；不代表完整章后七域验收。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-organization-20261028-979d931a8.json",
+          "summary": "手动七域实模调用遇到上游连接超时，1次结果/用量未知；错误可见、0未处理页面异常，保留原运行，不计功能通过。"
         }
       ],
       "defects": [],
@@ -19585,6 +19595,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/storyline-evidence-anchors-20261028.json",
           "summary": "映射v3复用固定审校定位目录，程序取逐字证据；38项回归、15条浏览器路径通过，新提交实模续验另跑。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-storyline-progress-20261028-979d931a8.json",
+          "summary": "真实Agnes定位映射：拒绝、新生成、修改落盘、刷新与采纳通过；6次调用中4次为压缩失败，另项修复。"
         }
       ],
       "defects": [],
