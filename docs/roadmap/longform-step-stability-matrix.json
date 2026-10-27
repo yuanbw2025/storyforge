@@ -3787,6 +3787,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/story-arc-ime-draft-20261028.json",
           "summary": "中文组合输入加入关闭和结构切换保护；106项回归、12条浏览器路径通过。所有平台IME与剩余模块另验。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/storyline-progress-workflow-20261028.json",
+          "summary": "动态进度的范围读取/错误重试、候选闭集预检与成功确认、中文组合保护已完成54项回归和4条浏览器路径；实模另跑。"
         }
       ],
       "defects": [],
@@ -19535,6 +19540,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/story-arc-ime-draft-20261028.json",
           "summary": "中文组合输入加入关闭和结构切换保护；106项回归、12条浏览器路径通过。所有平台IME与剩余模块另验。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/storyline-progress-workflow-20261028.json",
+          "summary": "动态进度的范围读取/错误重试、候选闭集预检与成功确认、中文组合保护已完成54项回归和4条浏览器路径；实模另跑。"
         }
       ],
       "defects": [],
@@ -24261,6 +24271,22 @@
       "date": "2026-10-28",
       "unit": "Native IME manual-event draft guard and exact-source rich-Arc real replay",
       "sourcePin": "tests/acceptance/longform-stability/story-arc-ime-draft-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Scoped progress load, candidate validity/acknowledgement and native IME recovery",
+      "sourcePin": "tests/acceptance/longform-stability/storyline-progress-workflow-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Exact earlier-source full configured E2E: 490 passed, 166 skipped, no failures",
+      "sourcePin": "tests/acceptance/longform-stability/full-e2e-2f4ebb26-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

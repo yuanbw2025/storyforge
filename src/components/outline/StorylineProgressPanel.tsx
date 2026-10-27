@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Loader2, Network, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
 import { useStorylineProgressStore } from '../../stores/storyline-progress'
 import { useMasterCopilot } from '../agent/useMasterCopilot'
@@ -18,6 +18,8 @@ import {
   useInitialRecordTarget,
 } from '../shared/initial-record-target'
 import type { StoryArcInitialRecordTarget } from './StoryArcPanel'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
+import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 const EMPTY: StorylineAnalysisCandidates = { progress: [], crossings: [], newArcs: [] }
 const STATUS_LABELS = {
@@ -35,65 +37,83 @@ export default function StorylineProgressPanel(props: {
   onArcsChanged: () => Promise<void>
   initialRecordTarget?: StoryArcInitialRecordTarget | null
 }) {
-  const { progress, crossings, loadAll } = useStorylineProgressStore()
+  const { progress: loadedProgress, crossings: loadedCrossings, loading, loadError: projectionLoadError, loadAll } = useStorylineProgressStore()
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [chapterId, setChapterId] = useState<number | null>(null)
   const [accepted, setAccepted] = useState(false)
   const [actionError, setActionError] = useState('')
   const [loadError, setLoadError] = useState('')
+  const [readAttempt, setReadAttempt] = useState(0)
+  const candidateComposingRef = useRef(false)
+  const [candidateComposing, setCandidateComposing] = useState(false)
+  useBeforeUnload(candidateComposing)
+  const readError = loadError || projectionLoadError
   const arcVersion = props.arcs.map(arc => `${arc.id}:${arc.updatedAt}`).join('|')
 
   useEffect(() => {
     let active = true
     setLoadError('')
-    void resolveReadScopeLike(props.projectId).then(scope => Promise.all([
-      loadAll(scope),
-      Promise.all([
+    setChapters([])
+    void resolveReadScopeLike(props.projectId).then(async scope => {
+      const [, chapterRows, outlineNodes] = await Promise.all([
+        loadAll(scope),
         readOwnedRows<Chapter>(scope, 'chapters', { owner: 'work' }),
         readOwnedRows<any>(scope, 'outlineNodes', { owner: 'work' }),
-      ]).then(([chapterRows, outlineNodes]) => {
-        if (!active) return
-        const { sequence } = resolveCanonicalChapterSequence(outlineNodes, chapterRows)
-        const written = sequence
-          .map(entry => entry.chapter)
-          .filter(row => htmlToPlainText(row.content || '').trim())
-        setChapters(written)
-        setChapterId(current => current != null && written.some(row => row.id === current)
-          ? current
-          : written[written.length - 1]?.id ?? null)
-      }),
-    ])).catch(error => {
+      ])
+      if (!active) return
+      const { sequence } = resolveCanonicalChapterSequence(outlineNodes, chapterRows)
+      const written = sequence
+        .map(entry => entry.chapter)
+        .filter(row => htmlToPlainText(row.content || '').trim())
+      setChapters(written)
+      setChapterId(current => current != null && written.some(row => row.id === current)
+        ? current
+        : written[written.length - 1]?.id ?? null)
+    }).catch(error => {
       if (!active) return
       setChapters([])
       setChapterId(null)
       setLoadError(error instanceof Error ? error.message : String(error))
     })
     return () => { active = false }
-  }, [props.projectId, loadAll, arcVersion])
+  }, [props.projectId, loadAll, arcVersion, readAttempt])
 
   const selectedChapter = chapters.find(row => row.id === chapterId) ?? null
   const arcsById = useMemo(
     () => new Map(props.arcs.filter(arc => arc.id != null).map(arc => [arc.id!, arc])),
     [props.arcs],
   )
+  const progress = useMemo(() => loadedProgress.filter(row => arcsById.has(row.arcId)), [loadedProgress, arcsById])
+  const crossings = useMemo(() => loadedCrossings.filter(row => arcsById.has(row.arcIdA) && arcsById.has(row.arcIdB)), [loadedCrossings, arcsById])
 
   const pendingCandidate = props.copilot.pendingCandidates.find(candidate => (
     candidate.payload.skillId === 'outline.storyline-progress'
   )) ?? null
-  const candidates = useMemo<StorylineAnalysisCandidates>(() => {
-    if (!pendingCandidate) return EMPTY
+  const candidateId = pendingCandidate?.event.id
+  useEffect(() => {
+    candidateComposingRef.current = false
+    setCandidateComposing(false)
+    if (candidateId == null) return
+    return registerPendingDraftFlusherV1(() => {
+      if (candidateComposingRef.current) throw new Error('请先完成故事线进度候选的输入法输入。')
+    })
+  }, [candidateId])
+  const candidateReview = useMemo(() => {
+    if (!pendingCandidate) return { value: EMPTY, valid: false, error: '' }
     const targetChapter = chapters.find(row => row.id === pendingCandidate.payload.storylineProgressChapterId)
-    if (!targetChapter) return EMPTY
+    if (!targetChapter) return { value: EMPTY, valid: false, error: loading ? '' : '候选关联的已写章节尚未读取，请重新读取进度。' }
     try {
-      return validateCanonicalStorylineCandidateV1({
+      const value = validateCanonicalStorylineCandidateV1({
         candidate: JSON.parse(pendingCandidate.event.content),
         chapterContent: htmlToPlainText(targetChapter.content || '').trim(),
         arcs: props.arcs,
       })
-    } catch {
-      return EMPTY
+      return { value, valid: true, error: '' }
+    } catch (error) {
+      return { value: EMPTY, valid: false, error: error instanceof Error ? error.message : '故事线候选格式无效，修改已保留。' }
     }
-  }, [chapters, pendingCandidate, props.arcs])
+  }, [chapters, pendingCandidate, props.arcs, loading])
+  const candidates = candidateReview.value
 
   const analyze = async () => {
     if (!selectedChapter) return
@@ -113,10 +133,10 @@ export default function StorylineProgressPanel(props: {
   }
 
   const acceptAll = async () => {
-    if (!pendingCandidate) return
+    if (!pendingCandidate || candidateComposingRef.current || !candidateReview.valid || loading || readError) return
     try {
       setActionError('')
-      await props.copilot.adoptCandidate(pendingCandidate)
+      if (await props.copilot.adoptCandidate(pendingCandidate) !== true) return
       setAccepted(true)
       await loadAll(props.projectId)
       await props.onArcsChanged()
@@ -144,7 +164,7 @@ export default function StorylineProgressPanel(props: {
             </h3>
             <p className="text-xs text-text-muted mt-1">AI 只生成闭集候选；点击采纳后才写入项目。</p>
           </div>
-          <span className="text-[11px] text-text-muted">已确认 {progress.length} 条进度 · {crossings.length} 个交汇</span>
+          <span className="text-[11px] text-text-muted">{loading ? '正在读取进度…' : readError ? '进度读取失败' : `已确认 ${progress.length} 条进度 · ${crossings.length} 个交汇`}</span>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
@@ -159,7 +179,7 @@ export default function StorylineProgressPanel(props: {
           </select>
           <button
             onClick={analyze}
-            disabled={!selectedChapter || !props.arcs.length || props.copilot.busy || props.copilot.pendingCandidates.length > 0}
+            disabled={loading || Boolean(readError) || !selectedChapter || !props.arcs.length || props.copilot.busy || props.copilot.pendingCandidates.length > 0}
             className="flex items-center justify-center gap-1.5 px-4 py-2 bg-accent text-white rounded-lg text-sm disabled:opacity-50"
           >
             {props.copilot.busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -168,7 +188,8 @@ export default function StorylineProgressPanel(props: {
         </div>
         {!props.arcs.length && <p className="text-xs text-warning mt-2">请先登记至少一条故事线。</p>}
         {!chapters.length && <p className="text-xs text-text-muted mt-2">保存章节正文后才能进行映射。</p>}
-        {(loadError || props.copilot.error || actionError) && <p role="alert" className="text-xs text-error mt-2">{loadError || actionError || props.copilot.error}</p>}
+        {(readError || props.copilot.error || actionError) && <p role="alert" className="text-xs text-error mt-2">{readError || actionError || props.copilot.error}</p>}
+        {readError && <button type="button" disabled={loading} onClick={() => setReadAttempt(value => value + 1)} className="mt-2 text-xs text-accent disabled:opacity-50">重新读取进度</button>}
       </div>
 
       {progress.length > 0 && (
@@ -246,7 +267,7 @@ export default function StorylineProgressPanel(props: {
               ><Trash2 className="w-3 h-3" /> 拒绝</button>}
               {pendingCandidate && <button
                 onClick={() => { void acceptAll() }}
-                disabled={props.copilot.busy || accepted}
+                disabled={props.copilot.busy || accepted || loading || candidateComposing || Boolean(readError) || !candidateReview.valid}
                 className="text-xs text-accent flex items-center gap-1 disabled:opacity-50"
               ><Check className="w-3 h-3" /> {accepted ? '已采纳' : '采纳本次映射'}</button>}
               <button
@@ -260,9 +281,12 @@ export default function StorylineProgressPanel(props: {
             aria-label="故事线进度候选 JSON"
             value={pendingCandidate.event.content}
             disabled={props.copilot.busy || accepted}
+            onCompositionStartCapture={() => { candidateComposingRef.current = true; setCandidateComposing(true) }}
+            onCompositionEndCapture={() => { candidateComposingRef.current = false; setCandidateComposing(false) }}
             onChange={event => { void props.copilot.updateCandidate(pendingCandidate.event.id!, event.target.value) }}
             className="min-h-40 w-full resize-y font-mono text-xs leading-5"
           />}
+          {candidateReview.error && <p role="alert" className="text-xs text-error">{candidateReview.error}</p>}
           {!hasCandidates && !props.copilot.busy && <p className="text-xs text-text-muted">没有通过闭集与逐字证据校验的候选。</p>}
           {candidates.progress.map(item => (
             <CandidateCard

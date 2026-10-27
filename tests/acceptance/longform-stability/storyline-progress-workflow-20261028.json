@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "kind": "scoped-progress-load-validity-acknowledgement-and-ime-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "12ac9d587bcae00c6e3feb435c1431d5232f5617",
+    "files": {
+      "src/stores/storyline-progress.ts": "0e5803ca76b3be840f43980cf4043fe6d2ad3c5a33e767f597bbab0f71eaaa7b",
+      "src/components/outline/StorylineProgressPanel.tsx": "6c86195e4ae1969edc2672880c37cee7dc08ce0d8cee75c381917f9709b46ce5",
+      "tests/regression/R-STAB-storyline-progress-load.test.ts": "4cc66165f0601e7402f25547b2616b5cc8721fde6a192d376fe9f9c7b202e982",
+      "tests/regression/R-PHASE39-storyline-progress-ui.test.tsx": "4e3923841cfbf2c6bf63c1354e8ce5f4facba390fbe05b5ea0056b9595e36dba",
+      "tests/e2e/longform-storyline-progress.spec.ts": "32e7356c58811b582ee0ba09c542cf7ef74240cec34d85c49120653b4c149faa"
+    }
+  },
+  "status": "TARGETED_AND_FOUR_NATIVE_PATHS_PASSED_EXACT_COMMIT_REAL_MODEL_NEXT",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "productBoundary": "Independent longform maintenance. Work-owned existing storyArcs/storylineProgress/storylineCrossings/chapters; same registered mapping Skill, context, candidate/adopt and lifecycle. No new schema, table, field, context source or AI entry.",
+  "originalReproduction": {
+    "log": "storyline-progress-load-before.log",
+    "failed": 3,
+    "causes": [
+      "Read errors swallowed while old data remain visible",
+      "Older Work load overwrites a newer Work",
+      "Late old failures lack scope/error ownership"
+    ]
+  },
+  "changes": [
+    "Freeze resolved scope per read and use monotonic request ownership; clear unknown old projections, surface read errors and preserve newer success from late old failures",
+    "Publish chapter options only after all required reads succeed; explicit read-only retry and real loading/failure labels; retain valid selected chapter",
+    "Filter visible progress/crossings by current registered Arc identities",
+    "Use existing closed-set/quote validator to keep invalid candidate editable and disable adoption; do not enter a formal adoption known to be invalid",
+    "Show accepted only after true formal-service acknowledgement",
+    "Capture native candidate composition for close/draft barriers and inhibit custom adoption before composition ends; shared candidate persistence retained"
+  ],
+  "intermediateEvidence": {
+    "firstAfterLog": "storyline-progress-load-first-after.log",
+    "result": "Provider 503 path passed with one dispatch; native candidate composition lacked close protection and failed; fixed and replayed.",
+    "nativeFirstLog": "storyline-progress-native-first.log",
+    "nativeSecondLog": "storyline-progress-native-second.log",
+    "passed": 2,
+    "faultImeBeforeLog": "storyline-progress-fault-ime-before.log"
+  },
+  "regression": {
+    "log": "storyline-progress-regression-final.log",
+    "passed": 54,
+    "files": 6,
+    "checks": [
+      "Actual scoped reads, overlapping success/failure, no Canon writes on read",
+      "Canonical progress mapping and lifecycle contracts",
+      "False adoption return keeps editable candidate and unaccepted label",
+      "Existing Arc author-save/rich structure and pending-command recovery"
+    ]
+  },
+  "nativeBrowser": {
+    "log": "storyline-progress-native-final.log",
+    "passed": 4,
+    "checks": [
+      "Native IndexedDB read failure clears stale view, pauses mapping, explicit retry restores same canonical progress with zero model requests",
+      "One rejected mapping then one explicit fresh request; edit/invalid prevalidation/ack/reload; atomically adopt progress, crossing and a new Arc; manuscript unchanged",
+      "HTTP503 exactly one dispatch; reload does not restart or change Canon",
+      "Native Chinese composition protects close and global draft flush, custom adopt disabled, finish/ack/reload retains exact text"
+    ]
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "build": "PASS",
+    "targetedEslint": "PASS"
+  },
+  "fullChecks": {
+    "olderSource": "2f4ebb26b57ef05b054087964451d7fa3137ba67",
+    "fullE2eReceipt": "tests/acceptance/longform-stability/full-e2e-2f4ebb26-20261028.json",
+    "ci": "STILL_RUNNING_ON_OLDER_SOURCE",
+    "doesNotProveCurrentFullHead": true
+  },
+  "remaining": "Exact-commit Agnes mapping, remaining detailed plan operations and final/client validation; this checkpoint is not whole-case completion."
+}
