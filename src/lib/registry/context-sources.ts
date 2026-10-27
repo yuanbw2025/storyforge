@@ -30,7 +30,7 @@ import { buildCultivationContext } from '../ai/cultivation-context'
 import { buildWorldRulesContext } from '../ai/world-rules-manifest'
 import { formatHandoff } from '../ai/chapter-memory/handoff-format'
 import { getChapterDerivedMemoryStatus, normalizeChapterText } from '../ai/chapter-memory/text-normalization'
-import { parseStages } from '../types/story-arc'
+import { parseAuthorStoryStagesV1 } from '../types/story-arc'
 import { readStateCardFields } from '../types/state-card'
 import { parseBeats } from '../types/emotion-beat'
 import { DETAILED_SCENE_TASK_FIELDS, normalizeDetailedScenes } from '../types/detailed-outline'
@@ -1382,79 +1382,22 @@ export async function readActiveCharacterDrivenPlanContext(
 }
 
 async function readStoryArcs(projectId: number, scope?: WorkspaceScope): Promise<string> {
-  try {
-    const resolved = scope ?? await resolveScope({ projectId })
-    const arcs = await readOwnedRows<any>(resolved, 'storyArcs', { owner: 'work' })
-    if (!arcs.length) return ''
-
-    const parts = ['【全局故事线】\n⚠️ 注意：若与"故事核心"冲突，以"故事核心"为准。']
-
-    for (const arc of arcs.slice(0, 8)) {
-      if (!arc || typeof arc !== 'object') continue
-
-      const stages = parseStages(arc.stages || '[]')
-      if (stages.length === 0) continue
-
-      const typeLabel = arc.type === 'main' ? '主线' : '支线'
-      const arcName = arc.name || '未命名'
-
-      const arcDesc = arc.description
-        ? smartTruncate(arc.description, 150)
-        : ''
-      parts.push(`\n[${typeLabel}] ${arcName}${arcDesc ? `：${arcDesc}` : ''}`)
-
-      const stagesToShow = stages.slice(0, 6)
-      for (let i = 0; i < stagesToShow.length; i++) {
-        const stage = stagesToShow[i]
-        if (!stage) continue
-
-        const stageTitle = stage.title || `阶段 ${i + 1}`
-        const stageDesc = stage.description
-          ? smartTruncate(stage.description, 100)
-          : '(无描述)'
-
-        const events = Array.isArray(stage.keyEvents)
-          ? stage.keyEvents.slice(0, 5).filter((e: string) => e && e.trim())
-          : []
-        const eventsStr = events.length > 0
-          ? ` | 关键事件：${events.join(' → ')}`
-          : ''
-
-        const tpStr = stage.turningPoint && stage.turningPoint.trim()
-          ? ` | ⚡ 转折点：${smartTruncate(stage.turningPoint, 80)}`
-          : ''
-
-        parts.push(`  ${i + 1}. ${stageTitle}：${stageDesc}${eventsStr}${tpStr}`)
-      }
-
-      if (stages.length > stagesToShow.length) parts.push(`  ...（另有 ${stages.length - stagesToShow.length} 个阶段，可按需读取）`)
-    }
-
-    return parts.join('\n')
-  } catch (error) {
-    console.warn('[readStoryArcs] 读取失败：', error)
-    return ''
+  const resolved = scope ?? await resolveScope({ projectId })
+  const arcs = await readOwnedRows<import('../types').StoryArc>(resolved, 'storyArcs', { owner: 'work' })
+  if (!arcs.length) return ''
+  const parts = ['【全局故事线】\n⚠️ 注意：若与"故事核心"冲突，以"故事核心"为准。']
+  for (const arc of arcs) {
+    if (typeof arc.name !== 'string' || !['main', 'sub'].includes(arc.type) || (arc.description !== undefined && typeof arc.description !== 'string')) throw new Error('故事线格式异常，请先修复；原始内容已保留。')
+    const stages = parseAuthorStoryStagesV1(arc.stages)
+    parts.push(`\n[${arc.type === 'main' ? '主线' : '支线'}] ${arc.name}${arc.description ? `：${arc.description}` : ''}`)
+    stages.forEach((stage, index) => {
+      const events = stage.keyEvents.length ? ` | 关键事件：${stage.keyEvents.join(' → ')}` : ''
+      const turning = stage.turningPoint ? ` | ⚡ 转折点：${stage.turningPoint}` : ''
+      const volumes = stage.startVolume !== undefined || stage.endVolume !== undefined ? ` | 卷范围：${stage.startVolume ?? '未指定'}～${stage.endVolume ?? '未指定'}` : ''
+      parts.push(`  ${index + 1}. ${stage.title}：${stage.description}${events}${turning}${volumes}`)
+    })
   }
-}
-
-/**
- * 智能截断函数：保留首尾，避免丢失反转信息
- * @param text 原始文本
- * @param maxChars 最大字符数
- * @returns 截断后的文本
- */
-function smartTruncate(text: string, maxChars: number): string {
-  if (!text || text.length <= maxChars) return text || ''
-
-  // 保留首段（通常是铺垫）
-  const headSize = Math.floor(maxChars * 0.6)
-  // 保留尾段（通常是反转/结果）
-  const tailSize = Math.floor(maxChars * 0.4) - 5
-
-  const head = text.slice(0, headSize)
-  const tail = text.slice(-tailSize)
-
-  return `${head}...${tail}`
+  return parts.join('\n')
 }
 
 async function readEmotionBeats(projectId: number, chapterId?: number | null, scope?: WorkspaceScope): Promise<string> {

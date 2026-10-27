@@ -2,13 +2,15 @@
  * 故事线面板 — Phase B2
  * 展示/编辑全局故事线（主线+支线），支持 AI 生成
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ArrowUpDown, Check, Plus, Sparkles, Loader2, Trash2, GripVertical, X, ChevronDown, ChevronRight, ChevronUp } from 'lucide-react'
-import { useStoryArcStore } from '../../stores/story-arc'
+import { useStoryArcStore, type StoryStageEditV1 } from '../../stores/story-arc'
 import { useMasterCopilot } from '../agent/useMasterCopilot'
 import { CInput } from '../shared/CompositionInput'
 import { CTextarea } from '../shared/CompositionInput'
 import { useDialog } from '../shared/Dialog'
+import AcknowledgedTextField from '../shared/AcknowledgedTextField'
+import { flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 import type { Project, StoryArc, StoryArcType } from '../../lib/types'
 import { parseStages, type StoryStage } from '../../lib/types/story-arc'
 import { nanoid } from 'nanoid'
@@ -45,14 +47,37 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
     addArc,
     updateArc,
     deleteArc,
-    updateStages,
+    editStage,
+    loading,
+    loadError,
+    loadedScope,
   } = useStoryArcStore()
   const copilot = useMasterCopilot({ project, worldGroupId })
   const [genType, setGenType] = useState<StoryArcType>('main')
+  const [authorBusy, setAuthorBusy] = useState(false)
+  const [authorError, setAuthorError] = useState('')
+  const runAuthorAction = async (action: () => void | Promise<void>, block = true) => {
+    if (block && authorBusy) return
+    if (block) setAuthorBusy(true)
+    setAuthorError('')
+    try { await flushPendingEditsV1(); await action() }
+    catch (error) { setAuthorError(error instanceof Error ? error.message : '故事线操作未完成，输入已保留。') }
+    finally { if (block) setAuthorBusy(false) }
+  }
+  const submitTargeted = (...args: Parameters<typeof copilot.submitTargetedRequest>) => runAuthorAction(() => copilot.submitTargetedRequest(...args), false)
+  const scopeKey = `${project.id}:${project.activeWorldId}:${project.activeWorkId}`
+  const currentScopeKey = useRef(scopeKey)
+  currentScopeKey.current = scopeKey
+  const panelActive = useRef(true)
+  useEffect(() => { panelActive.current = true; return () => { panelActive.current = false } }, [])
+  const reloadCurrentArcs = async () => {
+    if (!panelActive.current || currentScopeKey.current !== scopeKey) return
+    await loadAll(loadedScope ?? { projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! })
+  }
 
   useEffect(() => {
-    loadAll(project.id!)
-  }, [project.id, loadAll])
+    void loadAll({ projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! })
+  }, [project.id, project.activeWorldId, project.activeWorkId, loadAll])
 
   const activeArc = arcs.find(a => a.id === activeArcId)
   const activeIntentAlignment = activeArc?.id == null
@@ -70,15 +95,17 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
 
   // 新建空故事线
   const handleAddArc = async (type: StoryArcType) => {
-    const name = type === 'main' ? '主线' : `支线${arcs.filter(a => a.type === 'sub').length + 1}`
-    const id = await addArc({
-      projectId: project.id!,
-      name,
-      type,
-      stages: '[]',
-      description: '',
+    await runAuthorAction(async () => {
+      const name = type === 'main' ? '主线' : `支线${arcs.filter(a => a.type === 'sub').length + 1}`
+      const id = await addArc({
+        projectId: project.id!,
+        name,
+        type,
+        stages: '[]',
+        description: '',
+      }, loadedScope ?? undefined)
+      if (panelActive.current && currentScopeKey.current === scopeKey) setActiveArc(id)
     })
-    setActiveArc(id)
   }
 
   const pendingStoryArcCandidates = copilot.pendingCandidates.filter(candidate => (
@@ -91,7 +118,7 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
   // 生成请求统一进入主 Agent 的 outline.story-arcs Skill。
   const handleGenerate = async () => {
     const typeLabel = genType === 'main' ? '主线' : '支线'
-    await copilot.submitRequest(`依据当前作品已确认的世界、故事核心、角色和既有规划，生成一条${typeLabel}故事线。`)
+    await runAuthorAction(() => copilot.submitRequest(`依据当前作品已确认的世界、故事核心、角色和既有规划，生成一条${typeLabel}故事线。`), false)
   }
 
   const handleTransform = async (operation: Exclude<StoryArcOperationV1, 'create'>) => {
@@ -104,7 +131,7 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
           ? '润色'
           : '重规划'
     const instruction = `${operationLabel}现有${activeArc.type === 'main' ? '主线' : '支线'}“${activeArc.name}”，保持目标身份并依据当前已确认 Canon 生成可编辑候选。`
-    await copilot.submitTargetedRequest(instruction, {
+    await submitTargeted(instruction, {
       agentId: 'outline',
       skillId: 'outline.story-arcs',
       instruction,
@@ -131,7 +158,7 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
       neighborSummary ? `相邻阶段：${neighborSummary}；不得改写其他阶段。` : '',
       '新增 3—5 个具有因果递进的关键事件，并返回完整故事线候选供作者审查。',
     ].filter(Boolean).join('\n')
-    await copilot.submitTargetedRequest(instruction, {
+    await submitTargeted(instruction, {
       agentId: 'outline',
       skillId: 'outline.story-arcs',
       instruction,
@@ -150,7 +177,7 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
       `现有事件：${currentKeyEvents.map((event, index) => `${index + 1}. ${event}`).join('；')}`,
       '按时间和因果顺序排列，不得新增、删除、改写事件，也不得改变其他阶段；返回完整故事线候选供作者审查。',
     ].join('\n')
-    await copilot.submitTargetedRequest(instruction, {
+    await submitTargeted(instruction, {
       agentId: 'outline',
       skillId: 'outline.story-arcs',
       instruction,
@@ -160,6 +187,7 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
 
   // 删除故事线
   const handleDeleteArc = async (id: number) => {
+    await runAuthorAction(async () => {
     const arc = arcs.find(a => a.id === id)
     if (!arc) return
     const ok = await dialog.confirm({
@@ -169,19 +197,24 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
       tone: 'danger',
     })
     if (!ok) return
-    await deleteArc(id)
+    await deleteArc(id, loadedScope ?? undefined)
+    })
   }
 
   return (
     <div className="max-w-4xl">
       <h2 className="text-xl font-bold text-text-primary mb-4">🧵 全局故事线</h2>
+      {authorError && <p role="alert" className="mb-3 rounded border border-error/30 p-3 text-xs text-error">{authorError}</p>}
+      {loading && <p role="status">正在读取故事线…</p>}
+      {loadError && <div role="alert" className="mb-3 text-xs text-error">{loadError} <button onClick={() => void runAuthorAction(() => loadAll({ projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! }))}>重新读取</button></div>}
+      <fieldset className="contents" disabled={authorBusy || loading || Boolean(loadError)}>
 
       {/* 故事线 Tab 切换 */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         {arcs.map(arc => (
           <button
             key={arc.id}
-            onClick={() => setActiveArc(arc.id!)}
+            onClick={() => void runAuthorAction(() => setActiveArc(arc.id!))}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
               activeArcId === arc.id
                 ? 'bg-accent text-white'
@@ -388,11 +421,12 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
       {activeArc ? (
         <>
           <StoryArcEditor
+            key={activeArc.id}
             arc={activeArc}
             stages={activeStages}
             targeted={activeArc.id === initialArcId}
-            onUpdateArc={(data) => updateArc(activeArc.id!, data)}
-            onUpdateStages={(stages) => updateStages(activeArc.id!, stages)}
+            onUpdateArc={(data, expected) => updateArc(activeArc.id!, data, loadedScope ?? undefined, expected)}
+            onEditStage={edit => editStage(activeArc.id!, edit, loadedScope ?? undefined)}
             onDelete={() => handleDeleteArc(activeArc.id!)}
             onGenerateKeyEvents={generateKeyEvents}
             onSortEvents={sortKeyEvents}
@@ -403,7 +437,7 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
             projectId={project.id!}
             arcs={arcs}
             copilot={copilot}
-            onArcsChanged={() => loadAll(project.id!)}
+            onArcsChanged={reloadCurrentArcs}
             initialRecordTarget={initialRecordTarget?.table === 'storylineProgress'
               || initialRecordTarget?.table === 'storylineCrossings'
               ? initialRecordTarget
@@ -416,32 +450,34 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
           <p className="text-xs">点击上方「AI 生成」或「+ 主线/支线」创建。</p>
         </div>
       )}
+      </fieldset>
     </div>
   )
 }
 
 // ── 故事线编辑器 ──
 
-function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onUpdateStages, onDelete, onGenerateKeyEvents, onSortEvents, isGeneratingEvents, isSortingEvents }: {
+function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onDelete, onGenerateKeyEvents, onSortEvents, isGeneratingEvents, isSortingEvents }: {
   arc: NonNullable<ReturnType<typeof useStoryArcStore.getState>['arcs'][0]>
   stages: StoryStage[]
   targeted: boolean
-  onUpdateArc: (data: Partial<Pick<StoryArc, 'name' | 'description' | 'type'>>) => void
-  onUpdateStages: (stages: StoryStage[]) => void
-  onDelete: () => void
+  onUpdateArc: (data: Partial<Pick<StoryArc, 'name' | 'description' | 'type'>>, expected?: Partial<Pick<StoryArc, 'name' | 'description' | 'type'>>) => Promise<void>
+  onEditStage: (edit: StoryStageEditV1) => Promise<void>
+  onDelete: () => void | Promise<void>
   onGenerateKeyEvents: (stage: StoryStage, allStages: StoryStage[], currentKeyEvents: string[]) => Promise<void>
   onSortEvents: (stage: StoryStage, allStages: StoryStage[], currentKeyEvents: string[]) => Promise<void>
   isGeneratingEvents: boolean
   isSortingEvents: boolean
 }) {
-  const [editName, setEditName] = useState(arc.name)
-  const [editDesc, setEditDesc] = useState(arc.description || '')
-
-  // 同步外部数据
-  useEffect(() => {
-    setEditName(arc.name)
-    setEditDesc(arc.description || '')
-  }, [arc.id, arc.name, arc.description])
+  const [commandError, setCommandError] = useState('')
+  const [commandBusy, setCommandBusy] = useState(false)
+  const command = async (action: () => Promise<void>) => {
+    if (commandBusy) return
+    setCommandBusy(true); setCommandError('')
+    try { await flushPendingEditsV1(); await action() }
+    catch (error) { setCommandError(error instanceof Error ? error.message : '阶段操作未保存。') }
+    finally { setCommandBusy(false) }
+  }
 
   const handleAddStage = () => {
     const newStage: StoryStage = {
@@ -450,16 +486,15 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onUpdateStages, on
       description: '',
       keyEvents: [],
     }
-    onUpdateStages([...stages, newStage])
+    void command(() => onEditStage({ kind: 'add', stage: newStage }))
   }
 
-  const handleUpdateStage = (idx: number, data: Partial<StoryStage>) => {
-    const updated = stages.map((s, i) => i === idx ? { ...s, ...data } : s)
-    onUpdateStages(updated)
+  const handleUpdateStage = (idx: number, data: Partial<Omit<StoryStage, 'id'>>, expected?: Partial<Omit<StoryStage, 'id'>>) => {
+    return onEditStage({ kind: 'patch', stageId: stages[idx].id, patch: data, expected })
   }
 
   const handleDeleteStage = (idx: number) => {
-    onUpdateStages(stages.filter((_, i) => i !== idx))
+    void command(() => onEditStage({ kind: 'remove', stageId: stages[idx].id, expected: stages[idx] }))
   }
 
   return (
@@ -471,27 +506,25 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onUpdateStages, on
       <div className="bg-bg-surface border border-border rounded-xl p-4">
         <div className="flex items-center gap-3 mb-3">
           <span className={`w-3 h-3 rounded-full ${arc.type === 'main' ? 'bg-amber-400' : 'bg-blue-400'}`} />
-          <CInput
-            value={editName}
-            onChange={e => setEditName(e.target.value)}
-            onBlur={() => onUpdateArc({ name: editName })}
+          <AcknowledgedTextField input label="故事线名称" value={arc.name}
+            onCommit={(value, expected) => onUpdateArc({ name: value }, { name: expected as string })}
             className="flex-1 text-lg font-bold bg-transparent text-text-primary border-none focus:outline-none"
           />
           <span className="text-xs px-2 py-0.5 bg-bg-elevated text-text-muted rounded">
             {arc.type === 'main' ? '主线' : '支线'}
           </span>
-          <button onClick={onDelete} className="p-1 text-text-muted hover:text-error transition-colors">
+          <button onClick={onDelete} title="删除故事线" className="p-1 text-text-muted hover:text-error transition-colors">
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
-        <CTextarea
-          value={editDesc}
-          onChange={e => setEditDesc(e.target.value)}
-          onBlur={() => onUpdateArc({ description: editDesc })}
+        <AcknowledgedTextField label="故事线整体描述" rows={3} value={arc.description}
+          onCommit={(value, expected) => onUpdateArc({ description: value }, { description: expected as string })}
           placeholder="故事线整体描述..."
           className="w-full h-16 p-2 bg-bg-base border border-border rounded text-sm text-text-secondary resize-y focus:outline-none focus:border-accent"
         />
       </div>
+      {commandError && <p role="alert" className="text-xs text-error">{commandError}</p>}
+      <fieldset className="contents" disabled={commandBusy}>
 
       {/* 时间线可视化 + 阶段列表 */}
       <div className="space-y-3">
@@ -528,7 +561,7 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onUpdateStages, on
             stage={stage}
             index={idx}
             total={stages.length}
-            onUpdate={(data) => handleUpdateStage(idx, data)}
+            onUpdate={(data, expected) => handleUpdateStage(idx, data, expected)}
             onDelete={() => handleDeleteStage(idx)}
             onGenerateKeyEvents={onGenerateKeyEvents}
             onSortEvents={onSortEvents}
@@ -544,6 +577,7 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onUpdateStages, on
           </div>
         )}
       </div>
+      </fieldset>
     </div>
   )
 }
@@ -554,7 +588,7 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
   stage: StoryStage
   index: number
   total: number
-  onUpdate: (data: Partial<StoryStage>) => void
+  onUpdate: (data: Partial<Omit<StoryStage, 'id'>>, expected?: Partial<Omit<StoryStage, 'id'>>) => Promise<void>
   onDelete: () => void
   onGenerateKeyEvents: (stage: StoryStage, allStages: StoryStage[], currentKeyEvents: string[]) => Promise<void>
   onSortEvents: (stage: StoryStage, allStages: StoryStage[], currentKeyEvents: string[]) => Promise<void>
@@ -566,15 +600,37 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
   const [newEvent, setNewEvent] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSorting, setIsSorting] = useState(false)
+  const [eventError, setEventError] = useState('')
+  const [eventBusy, setEventBusy] = useState(false)
+  const [navigationError, setNavigationError] = useState('')
+  const retryEvent = useRef<(() => Promise<void>) | null>(null)
+  useEffect(() => registerPendingDraftFlusherV1(() => {
+    if (eventError) throw new Error(eventError)
+    if (newEvent.trim()) throw new Error('请先添加或清空尚未提交的关键事件。')
+  }), [eventError, newEvent])
+  const eventAction = async (action: () => Promise<void>, flush = true) => {
+    if (eventBusy) return
+    setEventBusy(true)
+    try {
+      if (flush) await flushPendingEditsV1()
+      await action(); setEventError(''); retryEvent.current = null
+    } catch (error) {
+      setEventError(error instanceof Error ? error.message : '关键事件操作未保存，输入已保留。')
+      retryEvent.current = action
+    } finally { setEventBusy(false) }
+  }
 
   const addEvent = () => {
     if (!newEvent.trim()) return
-    onUpdate({ keyEvents: [...stage.keyEvents, newEvent.trim()] })
-    setNewEvent('')
+    const sent = newEvent.trim()
+    void eventAction(async () => {
+      await onUpdate({ keyEvents: [...stage.keyEvents, sent] }, { keyEvents: stage.keyEvents })
+      setNewEvent(current => current.trim() === sent ? '' : current)
+    }, false)
   }
 
   const removeEvent = (i: number) => {
-    onUpdate({ keyEvents: stage.keyEvents.filter((_, idx) => idx !== i) })
+    void eventAction(() => onUpdate({ keyEvents: stage.keyEvents.filter((_, idx) => idx !== i) }, { keyEvents: stage.keyEvents }))
   }
 
   const handleGenerateEvents = async () => {
@@ -592,14 +648,14 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
     if (i === 0) return
     const newEvents = [...stage.keyEvents]
     ;[newEvents[i - 1], newEvents[i]] = [newEvents[i], newEvents[i - 1]]
-    onUpdate({ keyEvents: newEvents })
+    void eventAction(() => onUpdate({ keyEvents: newEvents }, { keyEvents: stage.keyEvents }))
   }
 
   const moveEventDown = (i: number) => {
     if (i === stage.keyEvents.length - 1) return
     const newEvents = [...stage.keyEvents]
     ;[newEvents[i], newEvents[i + 1]] = [newEvents[i + 1], newEvents[i]]
-    onUpdate({ keyEvents: newEvents })
+    void eventAction(() => onUpdate({ keyEvents: newEvents }, { keyEvents: stage.keyEvents }))
   }
 
   const handleSortEvents = async () => {
@@ -620,7 +676,10 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
     <div className="bg-bg-surface border border-border rounded-xl overflow-hidden">
       {/* 头部 */}
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => {
+          void flushPendingEditsV1().then(() => { setExpanded(!expanded); setNavigationError('') })
+            .catch(error => setNavigationError(error instanceof Error ? error.message : '输入尚未保存，已保留当前阶段。'))
+        }}
         className="w-full flex items-center gap-3 p-3 hover:bg-bg-hover transition-colors"
       >
         <div className="flex items-center gap-2 shrink-0">
@@ -646,22 +705,23 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
           {expanded ? <ChevronDown className="w-4 h-4 text-text-muted" /> : <ChevronRight className="w-4 h-4 text-text-muted" />}
         </div>
       </button>
+      {navigationError && <p role="alert" className="px-3 text-xs text-error">{navigationError}</p>}
 
       {/* 展开编辑 */}
       {expanded && (
         <div className="p-3 pt-0 space-y-3 border-t border-border">
           {/* 标题 */}
-          <CInput
+          <AcknowledgedTextField input label="故事阶段标题"
             value={stage.title}
-            onChange={e => onUpdate({ title: e.target.value })}
+            onCommit={(value, expected) => onUpdate({ title: value }, { title: expected as string })}
             placeholder="阶段标题"
             className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-sm font-medium text-text-primary focus:outline-none focus:border-accent"
           />
 
           {/* 描述 */}
-          <CTextarea
+          <AcknowledgedTextField label="故事阶段描述" rows={4}
             value={stage.description}
-            onChange={e => onUpdate({ description: e.target.value })}
+            onCommit={(value, expected) => onUpdate({ description: value }, { description: expected as string })}
             placeholder="这个阶段发生什么..."
             className="w-full h-20 p-2 bg-bg-base border border-border rounded text-sm text-text-secondary resize-y focus:outline-none focus:border-accent"
           />
@@ -669,9 +729,9 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
           {/* 转折点 */}
           <div>
             <label className="text-xs text-text-muted mb-1 block">转折点（可选）</label>
-            <CInput
-              value={stage.turningPoint || ''}
-              onChange={e => onUpdate({ turningPoint: e.target.value || undefined })}
+            <AcknowledgedTextField input label="故事阶段转折点"
+              value={stage.turningPoint}
+              onCommit={(value, expected) => onUpdate({ turningPoint: value || undefined }, { turningPoint: expected as string | undefined })}
               placeholder="这个阶段的关键转折..."
               className="w-full px-2 py-1.5 bg-bg-base border border-border rounded text-xs text-text-secondary focus:outline-none focus:border-accent"
             />
@@ -749,16 +809,17 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
                 <CInput
                   value={newEvent}
                   onChange={e => setNewEvent(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && addEvent()}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); addEvent() } }}
                   placeholder="手动添加关键事件..."
                   className="flex-1 px-2 py-1 bg-bg-base border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent"
                 />
-                <button onClick={addEvent} disabled={!newEvent.trim()}
+                <button onClick={addEvent} disabled={eventBusy || !newEvent.trim()}
                   className="px-2 py-1 text-xs text-accent hover:bg-accent/10 rounded disabled:opacity-40">
                   添加
                 </button>
               </div>
             </div>
+            {eventError && <div role="alert" className="space-x-2 text-xs text-error">{eventError}<button disabled={eventBusy} onClick={() => { if (retryEvent.current) void eventAction(retryEvent.current, false) }}>重试操作</button><button onClick={() => { setEventError(''); retryEvent.current = null }}>放弃本次操作</button></div>}
           </div>
 
           {/* 删除按钮 */}

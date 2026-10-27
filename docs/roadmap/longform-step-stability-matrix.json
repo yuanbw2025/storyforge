@@ -16,12 +16,12 @@
     "cases": 160,
     "leafFieldChecks": 336,
     "operationChecks": 1233,
-    "notRun": 90,
+    "notRun": 88,
     "passed": 0,
     "failed": 0,
     "faultChecks": 2013,
     "modeChecks": 75,
-    "running": 70
+    "running": 72
   },
   "sourceInventory": {
     "baseline": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
@@ -2046,6 +2046,14 @@
       "symptom": "拒绝回执写入失败仍清除可见候选，缺少明确错误及同次重试。",
       "evidence": "tests/acceptance/longform-stability/outline-candidate-recovery-20261028.json",
       "remaining": "新源码实模、完整故障、最终全量检查和发行继续。"
+    },
+    {
+      "id": "STORY-ARC-AUTHOR-SAVE-20261028",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourcePin": "tests/acceptance/longform-stability/story-arc-author-save-20261028.json",
+      "symptom": "故事线标量/阶段写失败没有保存确认和重试，切换丢草稿；0行写入、字段并发及迟到回执缺少防护。",
+      "evidence": "tests/acceptance/longform-stability/story-arc-author-save-20261028.json",
+      "remaining": "实际AI模式、进度/关联、全量检查和发行继续。"
     }
   ],
   "evidenceSchema": {
@@ -3702,9 +3710,9 @@
       "module": "story-arc",
       "title": "故事线 / 主支线与进度：清点所有子页、按钮、字段和弹窗",
       "profile": "DISCOVER",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
+        "open": "PASS",
         "reload": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -3720,7 +3728,13 @@
         "src/components/longform/navigation.ts",
         "src/pages/WorkspacePage.tsx"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/story-arc-author-save-20261028.json",
+          "summary": "主支线手建、标量/阶段/事件修改、失败保留、显式重试、刷新和登记上下文已走；AI模式、进度和完整故障继续。"
+        }
+      ],
       "defects": [],
       "completionGate": "必须展开所有选项、弹窗、更多菜单和空/有数据状态，派生具体操作用例；本清点用例不代替功能通过。",
       "faultChecks": [
@@ -18951,6 +18965,16 @@
           "type": "REAL_MODEL_PARTIAL",
           "receipt": "tests/acceptance/longform-stability/real-review-mainline-20261028-2bcc67bd.json",
           "summary": "4请求42342已知tokens无未知用量：整章报告回读、一次修订/复核及拒绝通过；新审校后驱动中断留下原运行，采纳继续。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-revision-adoption-20261028-ddcf9275.json",
+          "summary": "真实原中断run18明确结束，另轮评审修订run20采纳刷新；12未选段落HTML与原稿相同、正文等于预演，独立0模型回读通过。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-review-modes-20261028-ddcf9275.json",
+          "summary": "表达与重复实模评审及刷新通过；追读力不完整JSON严格拒绝，原稿保留，后续继续排查请求。"
         }
       ],
       "defects": [],
@@ -19093,6 +19117,11 @@
           "type": "REAL_MODEL_PARTIAL",
           "receipt": "tests/acceptance/longform-stability/real-review-mainline-20261028-2bcc67bd.json",
           "summary": "4请求42342已知tokens无未知用量：整章报告回读、一次修订/复核及拒绝通过；新审校后驱动中断留下原运行，采纳继续。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-revision-adoption-20261028-ddcf9275.json",
+          "summary": "真实原中断run18明确结束，另轮评审修订run20采纳刷新；12未选段落HTML与原稿相同、正文等于预演，独立0模型回读通过。"
         }
       ],
       "defects": [],
@@ -19380,9 +19409,9 @@
       "module": "story-arc",
       "title": "主支线：创建、生成、调整、进度和角色/章节关联",
       "profile": "DISCOVER",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
+        "open": "PASS",
         "reload": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -19397,7 +19426,13 @@
       ],
       "candidateTests": [],
       "source": [],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/story-arc-author-save-20261028.json",
+          "summary": "主支线手建、标量/阶段/事件修改、失败保留、显式重试、刷新和登记上下文已走；AI模式、进度和完整故障继续。"
+        }
+      ],
       "defects": [],
       "completionGate": "必须展开所有选项、弹窗、更多菜单和空/有数据状态，派生具体操作用例；本清点用例不代替功能通过。",
       "faultChecks": [
@@ -23385,7 +23420,7 @@
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     }
   ],
-  "executionStatus": "REAL_DETAIL_AND_PROSE_REJECTION_RECOVERY_VERIFIED_CONTINUING",
+  "executionStatus": "STORY_ARC_MANUAL_RECOVERY_AND_REAL_REVISION_ADOPTION_VERIFIED_CONTINUING",
   "passPolicy": {
     "closedCase": "全部适用步骤/字段/模式/故障/派生子用例有本轮回执；PASS不推导已发行。",
     "statuses": [
@@ -24026,6 +24061,30 @@
       "date": "2026-10-28",
       "unit": "Real whole review and selected revision rejection, interrupted-prefix recovery",
       "sourcePin": "tests/acceptance/longform-stability/revision-incomplete-recovery-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Story arc manual authoring and atomic save recovery",
+      "sourcePin": "tests/acceptance/longform-stability/story-arc-author-save-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Real selected revision adoption and original-prefix recovery",
+      "sourcePin": "tests/acceptance/longform-stability/real-revision-adoption-20261028-ddcf9275.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Real style review passed; readability malformed output retained",
+      "sourcePin": "tests/acceptance/longform-stability/real-review-modes-20261028-ddcf9275.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

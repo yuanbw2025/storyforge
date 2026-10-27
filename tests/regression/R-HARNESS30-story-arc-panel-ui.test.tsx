@@ -18,6 +18,10 @@ const mocks = vi.hoisted(() => ({
   storyArcStore: {
     arcs: [] as any[],
     activeArcId: null as number | null,
+    loadedScope: { projectId: 1, worldId: 11, workId: 12 },
+    loading: false,
+    loadError: null,
+    editStage: vi.fn(async () => undefined),
     intentAlignmentByArcId: {} as Record<number, string>,
     loadAll: vi.fn(),
     setActiveArc: vi.fn(),
@@ -203,7 +207,7 @@ describe('R-HARNESS30 · 故事线面板统一进入主 Agent Harness', () => {
       projectId: project.id,
       name: '主线',
       type: 'main',
-    }))
+    }), mocks.storyArcStore.loadedScope)
   })
 
   it('候选可编辑、拒绝和采纳，且确认前不会伪装成正式故事线', async () => {

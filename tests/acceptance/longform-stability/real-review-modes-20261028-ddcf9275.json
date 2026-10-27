@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-style-and-readability-review-partial-evidence",
+  "date": "2026-10-28",
+  "sourceCommit": "ddcf92752e847d4f9395baad74f562dac6473730",
+  "directory": "live-review-modes-2026-10-27T20-00-45-143Z",
+  "status": "STYLE_PASSED_READABILITY_INVALID_OUTPUT_RETAINED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "modelRequests": 2,
+  "knownTotalTokens": 22851,
+  "unknownUsageRequests": 0,
+  "style": {
+    "runId": 21,
+    "modelRequests": 1,
+    "knownTotalTokens": 12412,
+    "issues": 3,
+    "canonicalUnchanged": true,
+    "reportReload": true,
+    "reloadModelRequests": 0
+  },
+  "readability": {
+    "runId": 22,
+    "modelRequests": 1,
+    "knownTotalTokens": 10439,
+    "result": "failed / quality-review-invalid-or-stale; incomplete JSON summary rejected",
+    "finishReason": "stop",
+    "reasoningTokens": 1373,
+    "textTokens": 65,
+    "canonicalUnchanged": true,
+    "rawRetained": true,
+    "automaticRepairOrReplay": false
+  },
+  "pageErrors": [],
+  "remaining": "Investigate the bounded structured-request transport for this model, then run a separately identified new readability test. No literary acceptance claim."
+}

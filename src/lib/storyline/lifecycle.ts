@@ -43,7 +43,9 @@ export async function updateStoryArcStagesLifecycle(args: {
   validStageIds: readonly string[]
 }): Promise<void> {
   await db.transaction('rw', db.storyArcs, db.storylineProgress, async () => {
-    await db.storyArcs.update(args.arcId, { stages: args.stages, updatedAt: Date.now() })
+    if (await db.storyArcs.update(args.arcId, { stages: args.stages, updatedAt: Date.now() }) !== 1) {
+      throw new Error('故事线写入0行，阶段和进度均未保存。')
+    }
     const progress = await db.storylineProgress.where('arcId').equals(args.arcId).first()
     if (
       progress?.id != null
