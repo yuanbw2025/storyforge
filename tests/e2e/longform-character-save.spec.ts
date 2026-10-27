@@ -134,3 +134,31 @@ for (const role of [
   })
 }
 
+test('rejecting the last generated character closes its durable run and survives reload', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', model: 'isolated-character', baseUrl: 'https://character-terminal.invalid/v1', maxTokens: 4000, contextWindow: 64000 })))
+  const projectId = await createCharacter(page)
+  let calls = 0
+  await page.route('https://character-terminal.invalid/v1/chat/completions', async route => {
+    calls++
+    const candidate = {
+      ...Object.fromEntries(CHARACTER_DIMENSIONS.map(d => [d.key, `${d.label}：先测绳再探路。`])),
+      name: '受限探路人', roleWeight: 'main', moralAxis: 'good', orderAxis: 'lawful', relationships: '',
+    }
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(candidate) } }], usage: { prompt_tokens: 100, completion_tokens: 200, total_tokens: 300 } }) })
+  })
+  await page.getByPlaceholder('角色要求（可选）', { exact: true }).fill('只生成一名主要角色。')
+  await page.getByRole('button', { name: 'AI 设计角色', exact: true }).click()
+  const candidate = page.getByRole('heading', { name: /^待确认 ·/ }).locator('..').locator('..')
+  await expect(candidate.getByLabel('姓名 · 候选 1', { exact: true })).toHaveValue('受限探路人')
+  await candidate.getByRole('button', { name: '拒绝', exact: true }).click()
+  const status = () => page.evaluate(async id => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return { runs: await db.agentRuns.where('projectId').equals(id).toArray(), characters: await db.characters.where('projectId').equals(id).count(), events: await db.agentRunEvents.where('projectId').equals(id).toArray() }
+  }, projectId)
+  await expect.poll(async () => (await status()).runs[0]?.status).toBe('cancelled')
+  expect((await status()).characters).toBe(1)
+  expect((await status()).events.filter((e: { type: string }) => e.type === 'run.cancelled')).toHaveLength(1)
+  await page.reload(); await expect(page.getByRole('button', { name: 'AI 设计角色', exact: true })).toBeEnabled()
+  expect((await status()).runs[0]?.status).toBe('cancelled'); expect(calls).toBe(1)
+})
+

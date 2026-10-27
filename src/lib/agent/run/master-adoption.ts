@@ -461,6 +461,18 @@ export async function rejectMasterAgentCandidateV1(
             },
             expectedLastSequence: snapshot.projection.lastSequence,
           })
+      const taskStepIds = snapshot.contract.acceptance.filter(item => item.kind === 'output-present')
+        .map(item => `master:${item.id.slice(0, -'.candidate'.length)}`)
+      if (!stale && taskStepIds.length && taskStepIds.every(id => {
+        const task = snapshot.projection.steps[id]
+        return task?.status === 'succeeded' || (task?.status === 'failed' && task.confirmation === 'reject')
+      })) {
+        snapshot = await appendAgentRunEventV1({
+          scope: input.scope, runId: input.runId, type: 'run.cancelled',
+          payload: { reason: 'author-rejected-remaining-master-candidates' },
+          expectedLastSequence: snapshot.projection.lastSequence,
+        })
+      }
       await appendAgentEvent({
         projectId: input.scope.projectId,
         conversationId,
