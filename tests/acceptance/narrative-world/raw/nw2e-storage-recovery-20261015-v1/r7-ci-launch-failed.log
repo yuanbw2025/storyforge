@@ -1,7 +1,0 @@
-[serial-ci] Waiting for the shared CI slot.
-[serial-ci] Acquired slot in /Users/qinyingying/.codex/worktrees/nw2e-verification-r7/storyforge
-Traceback (most recent call last):
-  File "/tmp/storyforge-serial-ci-20261013.py", line 48, in <module>
-    lock.truncate()
-    ~~~~~~~~~~~~~^^
-OSError: [Errno 28] No space left on device

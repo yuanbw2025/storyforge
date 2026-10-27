@@ -1,8 +1,0 @@
-{
-  "appId": "com.storyforge.client",
-  "appName": "StoryForge",
-  "webDir": "dist-android",
-  "server": { "hostname": "localhost", "androidScheme": "https", "appStartPath": "/storyforge/" },
-  "android": { "allowMixedContent": false, "webContentsDebuggingEnabled": false },
-  "plugins": { "CapacitorHttp": { "enabled": false } }
-}

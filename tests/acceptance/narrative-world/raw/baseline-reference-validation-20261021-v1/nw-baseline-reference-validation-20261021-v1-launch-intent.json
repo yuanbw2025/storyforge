@@ -1,6 +1,0 @@
-{
-  "at": "2026-10-20T17:54:10.220714+00:00",
-  "supervisor": "/tmp/nw-baseline-reference-validation-20261021-v1-queue-supervisor-r1.py",
-  "pinSha256": "6ea6d9df64993b42981e12331608b740082551dd432230e2f3b60bf94980acb5",
-  "submission": "one existing shared serial entry"
-}

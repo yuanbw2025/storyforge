@@ -1,7 +1,0 @@
-{
-  "submittedAt": "2026-10-20T18:43:16.782181+00:00",
-  "supervisorPid": 77153,
-  "supervisor": "/tmp/nw-current-source-profile-20261021-v1-queue-supervisor-r1.py",
-  "supervisorSha256": "31991c6d00334539ee212ce2f23e4b4cfce2be53e6e2918768b8252c1058db5d",
-  "pinSha256": "55d6273443288d9158ed38c9dfc5eac4fa95b53db6e11627b707cff0546cba21"
-}

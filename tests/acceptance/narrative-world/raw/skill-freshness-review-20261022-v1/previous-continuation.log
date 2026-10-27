@@ -1,9 +1,0 @@
-{"stage": "baseline-v78-self-fingerprint"}
-{"supervisorPid": 35499, "pinSha256": "d296b912973d9062b3620174dc3314752244bf04dca45dcdd0eae0e3c1e00aa9", "inputFiles": 14528, "runtimeFiles": 3994, "directory": "/tmp/nw-impact-sequence-20261022-v1/baseline-v78"}
-{"receipt": "/Users/qinyingying/.codex/worktrees/nw-mainline-refresh-20261016/storyforge/tests/acceptance/narrative-world/impact-sequence-baseline-v78-20261022.json", "ownedProcessesExited": 9, "sourceFrozen": false, "exitCode": 0}
-{"stage": "reviewing-actual-baseline-v78"}
-{"stage": "full-ci-and-full-isolated-e2e"}
-{"supervisorPid": 35819, "pinSha256": "0f41311327f052c2c2dfc6e69a4804a8d887804cf312895824f8cff27a8c1648", "inputFiles": 14553, "runtimeFiles": 3994, "directory": "/tmp/nw-impact-sequence-20261022-v1/delivery-v1"}
-{"receipt": "/Users/qinyingying/.codex/worktrees/nw-mainline-refresh-20261016/storyforge/tests/acceptance/narrative-world/impact-sequence-delivery-v1-20261022.json", "ownedProcessesExited": 6, "sourceFrozen": false, "exitCode": 1}
-{"stage": "needs-evidence-review", "error": "RuntimeError: Validation failed in delivery-v1; archived before further source edits."}
-{"exitCode": 1, "terminal": "/tmp/nw-impact-sequence-20261022-v1/delivery-continuation-v2-terminal.json"}

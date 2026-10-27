@@ -1,9 +1,0 @@
-
-> storyforge@4.0.0 check:architecture
-> node scripts/check-architecture.mjs
-
-[architecture] ❌ 发现反模式违规(违反 CLAUDE.md 三注册表铁律):
-
-  [⑧lib写回旁路] src/lib/world-engine/narrative-derivation.ts:140: db.worlds.update(...) 必须走 adopt() 或 ADOPTION_EXTENSIONS 登记入口
-
-共 1 处。修复方式见 /CLAUDE.md「动手前的四问」。

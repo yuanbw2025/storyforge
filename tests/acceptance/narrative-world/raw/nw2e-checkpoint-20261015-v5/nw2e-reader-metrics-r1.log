@@ -1,5 +1,0 @@
-
-> storyforge@4.0.0 check:project-metrics
-> node scripts/generate-project-metrics.mjs --check
-
-[project-metrics] ARCHITECTURE 实时事实已漂移，请运行 `npm run gen:project-metrics`。

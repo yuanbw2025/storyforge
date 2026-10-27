@@ -1,5 +1,0 @@
-
-> storyforge@4.0.2 check:source-reachability
-> node scripts/check-source-reachability.mjs
-
-[source-reachability] ok: 1533 source files reachable from declared entrypoints

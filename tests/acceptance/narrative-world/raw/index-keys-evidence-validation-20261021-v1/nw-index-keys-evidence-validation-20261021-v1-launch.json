@@ -1,7 +1,0 @@
-{
-  "at": "2026-10-21T03:19:01.440488+00:00",
-  "supervisorPid": 86269,
-  "supervisor": "/tmp/nw-index-keys-evidence-validation-20261021-v1-queue-supervisor-r1.py",
-  "pinSha256": "bfbd06bcb6bb31ef80003796ba8d2469350955bc4a903c8419561d7be0f5ac38",
-  "purpose": "Evidence/documentation validation only; no candidate adoption or new performance run."
-}

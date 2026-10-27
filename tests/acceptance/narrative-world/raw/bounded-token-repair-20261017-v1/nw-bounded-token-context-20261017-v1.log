@@ -1,5 +1,0 @@
-
-> storyforge@4.0.2 check:agent-context
-> node scripts/check-agent-context.mjs
-
-agent context check passed: fixed project entry 8148 bytes (previous mandatory chain 166002 bytes, 95.1% smaller)

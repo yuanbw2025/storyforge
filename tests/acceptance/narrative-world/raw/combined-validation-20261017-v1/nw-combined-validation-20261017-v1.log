@@ -1,5 +1,0 @@
-[serial-ci] Waiting for the shared CI slot.
-[serial-ci] Acquired slot in /Users/qinyingying/.codex/worktrees/nw-mainline-refresh-20261016/storyforge
-{"starting": "ci", "at": "2026-10-16T17:28:46.921489+00:00", "log": "/tmp/nw-combined-validation-20261017-v1-ci.log"}
-{"exitCode": 1, "fullCI": false, "fullE2E": false, "sourceUnchanged": true, "terminal": "/tmp/nw-combined-validation-20261017-v1-terminal.json", "accepted": false}
-[serial-ci] Released slot; exit code 1

@@ -1,5 +1,0 @@
-
-> storyforge@4.0.0 check:required-tables
-> node scripts/check-required-tables.mjs
-
-[required-tables] ok: 129 tables match schema.ts

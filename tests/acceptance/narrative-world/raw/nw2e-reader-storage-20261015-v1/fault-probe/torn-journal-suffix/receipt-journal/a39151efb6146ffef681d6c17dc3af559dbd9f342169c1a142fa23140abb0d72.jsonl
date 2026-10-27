@@ -1,3 +1,0 @@
-{"body":{"version":1,"promptHash":"a39151efb6146ffef681d6c17dc3af559dbd9f342169c1a142fa23140abb0d72","sequence":0,"kind":"started","payload":{"startedAt":"2026-10-15T00:00:00Z","model":"synthetic-no-provider"}},"sha256":"91eb22c2f8497d73d9cf54a2d052846020ccda6a91cf3f5b87d274c34f665d5b"}
-{"body":{"version":1,"promptHash":"a39151efb6146ffef681d6c17dc3af559dbd9f342169c1a142fa23140abb0d72","sequence":1,"kind":"submission-intent","payload":{"fixture":true,"providerInvoked":false}},"sha256":"f33a42f3d508418cef93fd3f90dbbd00c6022607d841fd013526f47ef84cedf8"}
-{"body":{"kind":"terminal-receipt"

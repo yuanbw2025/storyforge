@@ -1,1 +1,0 @@
-tests/helpers/narrative-world-evaluation.ts(393,20): error TS2353: Object literal may only specify known properties, and 'schema' does not exist in type 'Pick<ProductWorldSourceSelection, "resourceKeys">'.

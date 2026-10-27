@@ -1,7 +1,0 @@
-{
-  "createdAt": "2026-10-16T04:37:36.897153+00:00",
-  "beforeSha256": "e2154d7374b3dfed5a918995b9982a23a2828020d356af40982ae90747549c3f",
-  "afterSha256": "775106eb17a21ce37ccfdbbd4bd8bf857b3bdaaf25aacb5c88723aaf9a9c2c99",
-  "contentAfterTrimmingIdentical": true,
-  "reason": "new blank line at EOF from packet builder"
-}

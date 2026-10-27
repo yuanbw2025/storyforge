@@ -1,8 +1,0 @@
-[serial-ci] Waiting for the shared CI slot.
-[serial-ci] Acquired slot in /Users/qinyingying/.codex/worktrees/nw-mainline-refresh-20261016/storyforge
-{"starting": "diff-check", "at": "2026-10-21T06:43:20.203822+00:00"}
-{"completed": "diff-check", "exitCode": 0}
-{"starting": "check-docs", "at": "2026-10-21T06:43:24.555329+00:00"}
-{"completed": "check-docs", "exitCode": 0}
-{"exitCode": 0, "terminal": "/tmp/nw-index-keys-evidence-validation-20261021-v1-terminal.json"}
-[serial-ci] Released slot; exit code 0

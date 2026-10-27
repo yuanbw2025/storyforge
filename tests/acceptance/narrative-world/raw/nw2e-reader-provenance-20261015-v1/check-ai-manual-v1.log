@@ -1,5 +1,0 @@
-
-> storyforge@4.0.0 check:ai-manual
-> node scripts/generate-ai-manual.mjs --check
-
-[ai-manual] ok: generated manual matches code.

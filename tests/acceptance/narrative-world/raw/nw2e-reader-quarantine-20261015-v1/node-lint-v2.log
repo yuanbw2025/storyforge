@@ -1,7 +1,0 @@
-
-/Users/qinyingying/.codex/worktrees/narrative-world-design/storyforge/scripts/evaluate-narrative-reader-local-codex.mjs
-  206:9  error  Unsafe usage of ThrowStatement  no-unsafe-finally
-
-✖ 1 problem (1 error, 0 warnings)
-
-{"files":3,"errors":1,"warnings":0}

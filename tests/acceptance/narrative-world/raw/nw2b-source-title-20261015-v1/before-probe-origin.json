@@ -1,9 +1,0 @@
-{
-  "base": "r7 immutable copy",
-  "frozenManifestSha256": "7f7fcb4f12e077c93466e0bce97661903393360e7071337df50dd5ee83b8edcf",
-  "overlay": [
-    "tests/regression/R-NW-2B-source-title.test.ts",
-    "src/lib/context-gateway/world-query-source-titles.ts"
-  ],
-  "boundary": "Runs only the twelve fixed-clock metadata requests. New helper is loaded by the test file but not called by the unchanged r7 provider/evaluator. Does not modify r7."
-}

@@ -1,8 +1,0 @@
-[serial-ci] Waiting for the shared CI slot.
-[serial-ci] Acquired slot in /private/tmp/nw-impact-sequence-20261022-v1/baseline-v78
-{"starting": "baseline-promotion-regressions", "at": "2026-10-22T17:23:38.928271+00:00"}
-{"completed": "baseline-promotion-regressions", "exitCode": 0}
-{"starting": "baseline-refresh", "at": "2026-10-22T17:23:43.739630+00:00"}
-{"completed": "baseline-refresh", "exitCode": 0}
-{"exitCode": 0, "terminal": "/tmp/nw-impact-sequence-20261022-v1/baseline-v78/validation-terminal.json"}
-[serial-ci] Released slot; exit code 0

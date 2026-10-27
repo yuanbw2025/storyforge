@@ -1,9 +1,0 @@
-{
-  "startedAt": "2026-10-22T11:55:42.707527+00:00",
-  "supervisorPid": 87752,
-  "status": "queued-or-running",
-  "inputPinSha256": "02f802e4e38c85b3641453f335535bc2a5a6a24f96ba0e2506b118a7f8de3571",
-  "automaticRetries": 0,
-  "workspaceFrozen": false,
-  "queuePid": 87753
-}

@@ -1,6 +1,0 @@
-{
-  "version": 1,
-  "parent": "tests/acceptance/narrative-world/raw/reader-fixed-20261015-v3",
-  "parentManifestSha256": "bb0977038a6dbf009115d22b071251b1a5c93717846613edf548a9edb393238f",
-  "output": "tests/acceptance/narrative-world/raw/reader-fixed-20261015-v4"
-}

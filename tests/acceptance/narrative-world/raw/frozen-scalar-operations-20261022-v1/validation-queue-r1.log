@@ -1,6 +1,0 @@
-[serial-ci] Waiting for the shared CI slot.
-[serial-ci] Acquired slot in /Users/qinyingying/.codex/worktrees/nw-mainline-refresh-20261016/storyforge
-{"starting": "operations", "at": "2026-10-22T04:41:52.144062+00:00"}
-{"completed": "operations", "exitCode": 0}
-{"exitCode": 0, "terminal": "/tmp/nw-frozen-scalar-operations-20261022-v1/validation-terminal.json"}
-[serial-ci] Released slot; exit code 0

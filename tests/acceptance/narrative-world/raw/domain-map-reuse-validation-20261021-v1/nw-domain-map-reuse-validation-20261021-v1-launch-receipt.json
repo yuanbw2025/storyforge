@@ -1,8 +1,0 @@
-{
-  "at": "2026-10-20T19:13:22.624318+00:00",
-  "supervisor": "/tmp/nw-domain-map-reuse-validation-20261021-v1-queue-supervisor-r1.py",
-  "pinSha256": "cc313a322383ce4588821eeab336d82707b20dd4f198e03f6ce982c9fa83d8ff",
-  "newSubmissionCount": 1,
-  "actualModelCalls": 0,
-  "supervisorPid": 83416
-}

@@ -1,9 +1,0 @@
-test_changed_observation_is_not_silently_promoted (__main__.BaselinePromotionTest.test_changed_observation_is_not_silently_promoted) ... ok
-test_changing_manifest_after_measurement_does_not_rebind_or_copy (__main__.BaselinePromotionTest.test_changing_manifest_after_measurement_does_not_rebind_or_copy) ... ok
-test_existing_target_is_not_overwritten (__main__.BaselinePromotionTest.test_existing_target_is_not_overwritten) ... ok
-test_predeclared_self_fingerprinted_manifest_copies_exact_measured_bytes (__main__.BaselinePromotionTest.test_predeclared_self_fingerprinted_manifest_copies_exact_measured_bytes) ... ok
-
-----------------------------------------------------------------------
-Ran 4 tests in 0.010s
-
-OK

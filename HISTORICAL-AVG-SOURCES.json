@@ -1,0 +1,453 @@
+{
+  "schema": "storyforge.historical-avg-development-source",
+  "version": 1,
+  "date": "2026-10-28",
+  "purpose": "Preserve historical development source before authorized branch cleanup. These historical alternatives are not current product contracts; the integrated implementation is PR 219. Original source trees and commit history are reachable through the recorded commit parents. No local API settings, browser state, model weights, generated media or raw reports are added.",
+  "currentProductHead": "3f2487b92f9fc3fa0540a9512aa53b77317d6155",
+  "previousDirtySourceArchive": {
+    "tag": "archive/avg-retired-sources-20261027",
+    "commit": "2946a6f1bb7174db7eeb4f98e763284369e5b716"
+  },
+  "historicalBranches": [
+    {
+      "branch": "feat/avg-audio-processing-contract-20261021",
+      "head": "3a925ef19a8941a2dbf7c7406fcab1b9b6e93490",
+      "inFinalCandidate": false,
+      "inUploadedSourceArchive": false,
+      "checkedOut": false,
+      "eligible": false
+    },
+    {
+      "branch": "feat/avg-base00a-20261014",
+      "head": "18218f73b416574c9005682eb1bf45fdd8b453ab",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-base00b-20261014",
+      "head": "13ce67920a7096e3f46fb0d3dba10bdefa091695",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-base01-20261015",
+      "head": "8440ddbd36e99730ca2ca65cb6792605d4e35f10",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-combined-stage-20261020",
+      "head": "534b3812acc8837a5fdfbe37e6a385365d7891c4",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-combined-stage-integration-20261020",
+      "head": "55ea0efa84f8ee66123af743837b1e7baeb6ac5a",
+      "inFinalCandidate": false,
+      "inUploadedSourceArchive": false,
+      "checkedOut": false,
+      "eligible": false
+    },
+    {
+      "branch": "feat/avg-current-consumption-baseline-20261019",
+      "head": "d73de82cd252c3f7b1d2c27fdc032fcc532b0be5",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-current-raw-revalidation-20261018",
+      "head": "51ba374e8d69811585897b2f3b28c180954b9ac7",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-extension-contracts-20261015",
+      "head": "36b3e55fdfa54c69b514d61a231644ab337fa907",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-foreground-execution-20261020",
+      "head": "4f87eade5283d56ef6581b60c667ca810922ddbd",
+      "inFinalCandidate": false,
+      "inUploadedSourceArchive": false,
+      "checkedOut": false,
+      "eligible": false
+    },
+    {
+      "branch": "feat/avg-foreground-processing-contract-20261020",
+      "head": "dc67a3c7fd0c5c9c6d4328df386e587d7240e525",
+      "inFinalCandidate": false,
+      "inUploadedSourceArchive": false,
+      "checkedOut": false,
+      "eligible": false
+    },
+    {
+      "branch": "feat/avg-foreground-read-contract-20261021",
+      "head": "5275645e6d87b1bdd4732e1a914eaaa4475c40a9",
+      "inFinalCandidate": false,
+      "inUploadedSourceArchive": false,
+      "checkedOut": false,
+      "eligible": false
+    },
+    {
+      "branch": "feat/avg-held-failure-validation-20261018",
+      "head": "60a911be271f1afafb354a30aaee18ef4c2a7a69",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-history-batch-validation-20261018",
+      "head": "7f2ecea956f523e71e2e5e86976adc42101e954e",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-history-validation-20261018",
+      "head": "62bca29ed54c52d04f5614de856cecfa7fcc3acb",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-image-alpha-review-20261020",
+      "head": "ad55586b54a868b654bb4ea16781ca5cdbd3882f",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-import-recovery-validation-20261018",
+      "head": "c303ee47fff989c953663ab2472cdf8d57016c14",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-licensed-ambient-sources-20261020",
+      "head": "6d1b79ef6573a6583ae9d06b6c6009bf9f685d1d",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-local-music-runtime-20261019",
+      "head": "d7511e2cfa1c7f2a5754cbc18c3e7cfb82aad4bb",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-local-raw-task-contract-20261018",
+      "head": "5e4c04cd8126bb9fcea65b7331a2cd6f02278362",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-local-voice-validation-20261018",
+      "head": "67950bb45ffd062680b3d60c2a386da15ac09769",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-local-voice-workflow-20261018",
+      "head": "ddfce9ee74d337688fb971ad79103a189465bb75",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-media-harness-20261016",
+      "head": "4d51e5eb3040caf640e834cc74dabc0b9de6382d",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-preview-integration-20261017",
+      "head": "34bf44f7ff1ea5493e97fb4616b6685767953a5b",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-processing-producer-contracts-20261018",
+      "head": "22bafcf422dde7ef5f3d290022a3396016d64e9c",
+      "inFinalCandidate": false,
+      "inUploadedSourceArchive": false,
+      "checkedOut": false,
+      "eligible": false
+    },
+    {
+      "branch": "feat/avg-production-research-20261013-latest",
+      "head": "8df94be1d95626f1cb3d5ce03509c0edca75e8d3",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-professional-family-consumption-20261017",
+      "head": "1fe75a90d9e26d6e9c6c6332f30a55e4aecc05b9",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-professional-prompt-contract-20261017",
+      "head": "21b8280f709e0b83763702a1b9404d1876ca495c",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-professional-role-shape-20261017",
+      "head": "bf0d6e9b726fc4924602637eed86fd5848e2803d",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-publisher-stage-integration-20261020",
+      "head": "f451b4d975cbf8e465d0417d17a373afe94e2328",
+      "inFinalCandidate": false,
+      "inUploadedSourceArchive": false,
+      "checkedOut": false,
+      "eligible": false
+    },
+    {
+      "branch": "feat/avg-publisher-stage-release-20261020",
+      "head": "534b3812acc8837a5fdfbe37e6a385365d7891c4",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-raw-retention-contracts-20261018",
+      "head": "66c28454b116d9f5e077f15316a09cf18b3255b8",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-reference-input-validation-20261018",
+      "head": "a593bd2fffe6739120a7910e00d0700040cadd85",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-sound-production-20261019",
+      "head": "355af294aefae795892e4d0b304d393dc3157ce9",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-sound-source-foundation-20261019",
+      "head": "f018354a3ebafa39331a0b36680299e039c5334b",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-v4-processing-validation-20261018",
+      "head": "48059d64eb2d702fce8c3935eaada7680988cea7",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-v5-author-media-review-20261018",
+      "head": "6b0b468b165b1d49ac3c13c14646c09b58a1b695",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-v5-configuration-20261019",
+      "head": "37031b1bf95c29a5d5b472022a5a30251c0579f9",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-v5-formal-foundation-20261018",
+      "head": "3bc15fe5cd86d05db0349b036a7a39f25cad0fec",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-v5-foundation-validation-20261018",
+      "head": "3bc15fe5cd86d05db0349b036a7a39f25cad0fec",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-v5-image-production-20261018",
+      "head": "c0f8d495333ad81f8b830cc28b0676cb8d8cb5f0",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-v5-media-workbench-20261019",
+      "head": "c4f1a343b587bad2f74df965d6fa48d15a2f19eb",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-v5-native-workbench-20261019",
+      "head": "534b3812acc8837a5fdfbe37e6a385365d7891c4",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-v5-portable-stage-20261018",
+      "head": "d73de82cd252c3f7b1d2c27fdc032fcc532b0be5",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-v5-processing-20261019",
+      "head": "31b7e1e89df4bcc20dc4cfcb8ae6581e2a9c8fa6",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-v5-proposal-execution-20261018",
+      "head": "93d1c55ca8adb8ceca7a5b91852413ec1731378a",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-v5-proposals-validation-20261018",
+      "head": "93d1c55ca8adb8ceca7a5b91852413ec1731378a",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-v5-review-validation-20261018",
+      "head": "534b3812acc8837a5fdfbe37e6a385365d7891c4",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-versioned-planning-validation-20261018",
+      "head": "b5a2f629f14bde466dfd75ba396e90856e7375a8",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-visual-image-consumption-20261017",
+      "head": "f87dc3cfc45a97e41eca8fe9341ad537b72dd202",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-visual-planning-foundation-20261017",
+      "head": "47ac647adecf6174827e0868e6753a6fc9ad50b3",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-visual-planning-roles-20261017",
+      "head": "aeafd28f8bfa46635b45897c8bec9517b8293e17",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-visual-recovery-20261017",
+      "head": "93d1c55ca8adb8ceca7a5b91852413ec1731378a",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-visual-workbench-20261017",
+      "head": "80202961c65636b7fa9c5e1179ab9f75f8db808f",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    },
+    {
+      "branch": "feat/avg-voice-continuation-20261017",
+      "head": "abaa56aa7b276aafd2b8d25a9ac202ad8c38e26a",
+      "inFinalCandidate": true,
+      "inUploadedSourceArchive": true,
+      "checkedOut": false,
+      "eligible": true
+    }
+  ]
+}

@@ -1,9 +1,0 @@
-{
-  "unchangedBehaviorVsV19": [
-    "baseline",
-    "ir-contract",
-    "domain-projection"
-  ],
-  "verifiedSourceHashes": 206,
-  "originalCorpusUnchanged": true
-}

@@ -1,8 +1,0 @@
-{
-  "productionVersion": 28,
-  "referenceRoot": "/Users/qinyingying/.codex/worktrees/nw2e-verification-r10/storyforge",
-  "filesCompared": 1595,
-  "allEqual": true,
-  "pathsSha256": "b380e27c55c06fbc7264e6d69c69e45ee16ba40c6a65b5f65c0493a64e35fafe",
-  "boundary": "Exact application/dependency/runtime source comparison; does not include the new evaluation-only contract."
-}

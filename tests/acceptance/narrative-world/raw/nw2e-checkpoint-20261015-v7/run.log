@@ -1,3 +1,0 @@
-(node:95365) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-[{"name":"canonical-golden-manifest","equalHashes":true,"medianRatio":0.8853646904855488,"canonicalUtf8Bytes":9753},{"name":"canonical-golden-index","equalHashes":true,"medianRatio":0.8533202791240087,"canonicalUtf8Bytes":3542},{"name":"raw-large-unicode-text","equalHashes":true,"medianRatio":0.7545998354685091,"canonicalUtf8Bytes":2550000}]

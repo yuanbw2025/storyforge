@@ -1,9 +1,0 @@
-file:///Users/qinyingying/.codex/worktrees/narrative-world-design/storyforge/scripts/narrative-reader-preflight.mjs:73
-  if (!report.dispatchAllowed) throw Error(`Reader preflight blocked model dispatch: ${report.failures.map(item => item.condition ? `${item.code}:${item.condition}` : item.code).join(', ')}`)
-                                     ^
-
-Error: Reader preflight blocked model dispatch: degenerate-ablation:ir-no-knowledge
-    at assertReaderPreflight (file:///Users/qinyingying/.codex/worktrees/narrative-world-design/storyforge/scripts/narrative-reader-preflight.mjs:73:38)
-    at file:///Users/qinyingying/.codex/worktrees/narrative-world-design/storyforge/scripts/evaluate-narrative-reader-local-codex.mjs:67:3
-
-Node.js v24.16.0

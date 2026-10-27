@@ -1,6 +1,0 @@
-[serial-ci] Waiting for the shared CI slot.
-[serial-ci] Acquired slot in /private/tmp/nw-impact-sequence-20261022-v1/workspace-load-red-v1
-{"starting": "workspace-load-red", "at": "2026-10-22T19:20:25.410682+00:00"}
-{"completed": "workspace-load-red", "exitCode": 1}
-{"exitCode": 1, "terminal": "/tmp/nw-impact-sequence-20261022-v1/workspace-load-red-v1/validation-terminal.json"}
-[serial-ci] Released slot; exit code 1
