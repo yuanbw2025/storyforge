@@ -1,8 +1,9 @@
-import { chat } from '../../ai/client'
+import { chat, type ChatRequestOptions } from '../../ai/client'
 import { estimateTokens } from '../../ai/context-budget'
 import {
   buildCodexExtractPromptFromRegisteredContextV1,
   buildCodexEnrichPromptFromRegisteredContextV1,
+  codexEntryTransportOptionsV1,
   parseCodexEntriesStrictV1,
   readCodexExtractPromptTemplateSnapshotV1,
   readCodexEnrichPromptTemplateSnapshotV1,
@@ -44,7 +45,7 @@ export const CODEX_EXTRACTION_VERIFIER_SET_V1 = 'codex-extraction-terminal-v1' a
 const MAX_MODEL_CALLS = 64
 const MAX_CANDIDATES = 200
 
-type RunAI = (messages: ChatMessage[], callIndex: number) => Promise<string>
+type RunAI = (messages: ChatMessage[], callIndex: number, options?: ChatRequestOptions) => Promise<string>
 
 export interface CodexExtractionRequestV1 {
   categoryId: number
@@ -759,6 +760,7 @@ async function continueExtraction(input: {
           authorRequest: progress.plan.request.authorRequest,
           supplementTags: progress.plan.request.supplementTags,
         })
+    const responseOptions = codexEntryTransportOptionsV1(input.aiConfig, progress.plan.baseline.category.fields, progress.plan.request)
     const promptInputHash = await hashCanonicalValue({
       promptTemplateHash: progress.plan.promptTemplateHash,
       baselineContextHash: progress.plan.baselineContextHash,
@@ -767,6 +769,7 @@ async function continueExtraction(input: {
       supplementTags: progress.plan.request.supplementTags,
       operation: progress.plan.request.operation,
       authorRequest: progress.plan.request.authorRequest,
+      responseOptions: responseOptions ?? null,
     })
     snapshot = await append(input.scope, snapshot, 'model.requested', {
       stepId: CODEX_EXTRACTION_STEP_ID_V1, attempt: 1,
@@ -777,11 +780,11 @@ async function continueExtraction(input: {
     let raw: string
     try {
       raw = await (input.runAI
-        ? input.runAI(messages, callIndex)
+        ? input.runAI(messages, callIndex, responseOptions)
         : chat(messages, input.aiConfig!, {
             category: progress.plan.request.operation === 'extract' ? 'codex.extract' : 'codex.enrich',
             projectId: input.scope.projectId,
-          }))
+          }, undefined, undefined, responseOptions))
     } catch (error) {
       snapshot = await pauseUnsafeRun(input.scope, snapshot, 'codex-extraction-model-outcome-unknown')
       throw error

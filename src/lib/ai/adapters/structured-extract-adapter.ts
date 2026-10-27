@@ -1,4 +1,5 @@
-import type { ChatMessage, LocationTag } from '../../types'
+import type { AIConfig, ChatMessage, LocationTag } from '../../types'
+import type { ChatRequestOptions } from '../client'
 import type { CodexFieldDef } from '../../types/codex'
 import { ALL_LOCATION_TAGS } from '../../types/location'
 import { usePromptStore } from '../../../stores/prompt'
@@ -74,6 +75,38 @@ export function parseCodexEntries(raw: string, allowedFieldKeys: string[]): Extr
 /** HARNESS-70: durable Codex extraction rejects repairable/ambiguous model output. */
 const CODEX_LIMITS = Object.freeze({ entries: 200, name: 120, icon: 16, summary: 1000, description: 8000, tags: 5, evidenceQuotes: 5, quote: 500, importance: 5, fieldValue: 2000, tag: 60 })
 const codexLimitContract = `长度合同（字符数按 JavaScript string.length）：单次最多 ${CODEX_LIMITS.entries} 项；name 非空且最多 ${CODEX_LIMITS.name}，icon 最多 ${CODEX_LIMITS.icon}，summary 非空且最多 ${CODEX_LIMITS.summary}，description 非空且最多 ${CODEX_LIMITS.description}；tags 必须是字符串数组且最多 ${CODEX_LIMITS.tags} 项，每项非空且最多 ${CODEX_LIMITS.tag}，忽略大小写后不可重复；importance 必须是 0～${CODEX_LIMITS.importance} 的整数；evidenceQuotes 最多 ${CODEX_LIMITS.evidenceQuotes} 项，每条非空且最多 ${CODEX_LIMITS.quote}。fields 是对象，可为 {}；只填写已有依据的登记 key，值为非空且最多 ${CODEX_LIMITS.fieldValue} 字符的字符串；select 必须逐字取登记选项，number 必须是有限数字字符串。词条 name 忽略大小写后不可重复。输出须为 JSON 数组，不带解释文字。`
+
+/** Array-root schema support is verified for this specific provider/model.
+ * Other providers keep their existing transport; never retry a rejected schema
+ * request without the schema or weaken the local semantic/evidence checks. */
+export function codexEntryTransportOptionsV1(
+  config: Pick<AIConfig, 'provider' | 'model'> | undefined,
+  fields: readonly CodexFieldDef[],
+  policy: { operation: 'extract' | 'enrich'; supplementTags: boolean },
+): ChatRequestOptions | undefined {
+  if (config?.provider !== 'agnes' || config.model !== 'agnes-2.5-flash') return undefined
+  const text = (maxLength: number, minLength = 1) => ({ type: 'string', minLength, maxLength })
+  const properties = Object.fromEntries(fields.filter(field => field.type !== 'ref').map(field => [field.key, {
+    ...text(CODEX_LIMITS.fieldValue),
+    ...(field.type === 'select' && field.options?.length ? { enum: [...field.options] } : {}),
+    ...(field.type === 'number' ? { pattern: '^[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?$' } : {}),
+  }]))
+  return { jsonSchema: { name: 'storyforge_codex_entries_v1', strict: true, schema: {
+    type: 'array', maxItems: CODEX_LIMITS.entries,
+    items: { type: 'object', additionalProperties: false,
+      required: ['name', 'icon', 'summary', 'description', 'fields', 'tags', 'importance', 'evidenceQuotes', 'provenance'],
+      properties: {
+        name: text(CODEX_LIMITS.name), icon: text(CODEX_LIMITS.icon, 0),
+        summary: text(CODEX_LIMITS.summary), description: text(CODEX_LIMITS.description),
+        fields: { type: 'object', additionalProperties: false, properties },
+        tags: { type: 'array', minItems: policy.supplementTags ? 2 : 0, maxItems: policy.supplementTags ? CODEX_LIMITS.tags : 0, uniqueItems: true, items: text(CODEX_LIMITS.tag) },
+        importance: { type: 'integer', minimum: 0, maximum: CODEX_LIMITS.importance },
+        evidenceQuotes: { type: 'array', minItems: policy.operation === 'extract' ? 1 : 0, maxItems: policy.operation === 'extract' ? CODEX_LIMITS.evidenceQuotes : 0, items: text(CODEX_LIMITS.quote) },
+        provenance: { type: 'string', enum: [policy.operation === 'extract' ? 'verbatim-extraction' : 'ai-created-suggestion'] },
+      },
+    },
+  } } }
+}
 
 export function parseCodexEntriesStrictV1(
   raw: string,
