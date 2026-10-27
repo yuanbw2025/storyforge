@@ -1,24 +1,27 @@
 import type { Character } from '../../lib/types'
 import { dimensionsByGroup, type CharacterDimensionKey, type CharacterDimensionSpec } from '../../lib/character/character-dimensions'
-import { CTextarea } from '../shared/CompositionInput'
+import { CInput, CTextarea } from '../shared/CompositionInput'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 interface Props {
   character: Character
-  onChange: (patch: Partial<Character>) => void | Promise<void>
+  onChange: (patch: Partial<Character>, expected?: Partial<Character>) => void | Promise<void>
   /** 行内已显示、此处不重复的维度（如 NPC 行已有 简介/地点） */
   exclude?: CharacterDimensionKey[]
 }
 
 interface DimensionFieldProps {
-  dimension: CharacterDimensionSpec
+  dimension: Pick<CharacterDimensionSpec, 'label' | 'rows'>
   value: unknown
-  onCommit: (value: string) => void | Promise<void>
+  onCommit: (value: string, expected: unknown) => void | Promise<void>
+  input?: boolean
+  placeholder?: string
+  className?: string
 }
 
-function CharacterDimensionField({ dimension, value, onCommit }: DimensionFieldProps) {
+export function CharacterDraftField({ dimension, value, onCommit, input, placeholder, className }: DimensionFieldProps) {
   const readable = value === undefined || typeof value === 'string'
   const initial = typeof value === 'string' ? value : ''
   const [draft, setDraft] = useState(initial)
@@ -27,6 +30,7 @@ function CharacterDimensionField({ dimension, value, onCommit }: DimensionFieldP
   const [saving, setSaving] = useState(false)
   const [composing, setComposing] = useState(false)
   const draftRef = useRef(initial), baseline = useRef(initial)
+  const sourceBaseline = useRef(value)
   const dirty = useRef(false), readableRef = useRef(readable), composingRef = useRef(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inFlight = useRef<Promise<void> | null>(null)
@@ -45,7 +49,8 @@ function CharacterDimensionField({ dimension, value, onCommit }: DimensionFieldP
       while (first || (dirty.current && draftRef.current !== baseline.current)) {
         first = false
         const text = draftRef.current
-        await editCommit.current(text)
+        await editCommit.current(text, sourceBaseline.current)
+        sourceBaseline.current = text
         baseline.current = text
         dirty.current = draftRef.current !== text
       }
@@ -62,7 +67,7 @@ function CharacterDimensionField({ dimension, value, onCommit }: DimensionFieldP
   useEffect(() => {
     if (dirty.current || inFlight.current || composingRef.current || !readable) return
     const text = typeof value === 'string' ? value : ''
-    baseline.current = text; draftRef.current = text; setDraft(text)
+    baseline.current = text; sourceBaseline.current = value; draftRef.current = text; setDraft(text)
   }, [value, readable])
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current)
@@ -70,17 +75,23 @@ function CharacterDimensionField({ dimension, value, onCommit }: DimensionFieldP
   }, [flushDraft])
   useBeforeUnload(dirty.current || saving || composing || Boolean(error))
   if (!readable) return <div role="alert" className="flex-1 text-xs text-amber-400">{dimension.label}格式异常，原数据已保留；恢复前暂停此项编辑。</div>
+  const controlProps = {
+    value: draft,
+    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      if (!dirty.current && !inFlight.current) editCommit.current = latestCommit.current
+      const text = event.target.value
+      draftRef.current = text; dirty.current = text !== baseline.current || Boolean(errorRef.current); setDraft(text)
+      if (timer.current) clearTimeout(timer.current)
+      if (!error) timer.current = setTimeout(() => { void flushDraft().catch(() => undefined) }, 400)
+    },
+    onBlur: () => { if (!error) void flushDraft().catch(() => undefined) },
+    placeholder: placeholder ?? `${dimension.label}…`,
+    'aria-label': dimension.label,
+    className: className ?? 'w-full px-2 py-1 bg-bg-base border border-border rounded text-xs text-text-primary resize-y focus:outline-none focus:border-accent',
+  }
   return (
     <div className="flex-1 min-w-0" onCompositionStartCapture={() => { composingRef.current = true; setComposing(true) }} onCompositionEndCapture={() => { composingRef.current = false; setComposing(false) }}>
-      <CTextarea value={draft} onChange={event => {
-        if (!dirty.current && !inFlight.current) editCommit.current = latestCommit.current
-        const text = event.target.value
-        draftRef.current = text; dirty.current = text !== baseline.current || Boolean(errorRef.current); setDraft(text)
-        if (timer.current) clearTimeout(timer.current)
-        if (!error) timer.current = setTimeout(() => { void flushDraft().catch(() => undefined) }, 400)
-      }} onBlur={() => { if (!error) void flushDraft().catch(() => undefined) }}
-        placeholder={`${dimension.label}…`} rows={dimension.rows}
-        className="w-full px-2 py-1 bg-bg-base border border-border rounded text-xs text-text-primary resize-y focus:outline-none focus:border-accent" />
+      {input ? <CInput {...controlProps} /> : <CTextarea {...controlProps} rows={dimension.rows} />}
       {saving && <p role="status" className="text-xs text-text-muted">正在保存…</p>}
       {error && <div role="alert" className="text-xs text-red-400">{error}；输入已保留。
         <button type="button" onClick={() => { void flushDraft().catch(() => undefined) }} className="ml-2 underline">重试保存{dimension.label}</button>
@@ -109,11 +120,11 @@ export default function CharacterDimensionFields({ character, onChange, exclude 
               {shown.map(d => (
                 <div key={d.key} className="flex gap-2">
                   <span className="w-20 flex-shrink-0 pt-1.5 text-xs text-text-muted">{d.label}</span>
-                  <CharacterDimensionField
+                  <CharacterDraftField
                     key={`${character.id ?? 'draft'}:${d.key}`}
                     dimension={d}
                     value={character[d.key]}
-                    onCommit={value => onChange({ [d.key]: value } as Partial<Character>)}
+                    onCommit={(value, expected) => onChange({ [d.key]: value } as Partial<Character>, { [d.key]: expected } as Partial<Character>)}
                   />
                 </div>
               ))}

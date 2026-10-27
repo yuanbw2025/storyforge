@@ -148,6 +148,7 @@ describe.sequential('R-HARNESS70 · Codex 词条 durable 分块抽取与原子�
     expect(fields.map((field: { key: string }) => field.key)).not.toContain('craftInto')
     expect(text).toContain('ref 字段的 key 必须从输出 fields 对象完全省略')
     expect(text).toContain('仅供作者后续关联')
+    expect(text).toContain('tags 必须是字符串数组且最多 5 项')
   })
 
   it('accepts one complete JSON container without repairing a body or taking surrounding prose', () => {
@@ -165,6 +166,7 @@ describe.sequential('R-HARNESS70 · Codex 词条 durable 分块抽取与原子�
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, extra: true }]), ['habitat'], policy)).toThrow('字段')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, fields: { unknown: '值' } }]), ['habitat'], policy)).toThrow('未登记字段')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, tags: '月潮' }]), ['habitat'], policy)).toThrow('类型')
+    expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, tags: ['1', '2', '3', '4', '5', '6'] }]), ['habitat'], policy)).toThrow('tags 最多 5 项，实际 6 项')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([valid, valid]), ['habitat'], policy)).toThrow('名称重复')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, importance: 9 }]), ['habitat'], policy)).toThrow('范围')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, summary: '' }]), ['habitat'], policy)).toThrow('范围')

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
+import { CHARACTER_DIMENSIONS } from '../../src/lib/character/character-dimensions'
 
 async function createCharacter(page: Page, weight = '主要') {
   await page.addInitScript(() => localStorage.setItem('storyforge_guide_completed', 'e2e'))
@@ -9,8 +10,8 @@ async function createCharacter(page: Page, weight = '主要') {
   const projectId = Number(new URL(page.url()).pathname.match(/workspace\/(\d+)/)![1])
   await openLongformLeaf(page, '角色生成'); await expect(page).toHaveURL(/module=characters/)
   await page.getByRole('button', { name: /^新建角色/ }).click()
-  await page.getByRole('button', { name: weight, exact: true }).click()
-  await page.getByRole('button', { name: '守序善良', exact: true }).click()
+  await page.getByRole('main').getByRole('button', { name: weight, exact: true }).first().click()
+  await page.getByRole('button', { name: '守序善良', exact: true }).first().click()
   await page.getByRole('button', { name: '创建并分流', exact: true }).click()
   await expect(page.getByPlaceholder('背景故事…', { exact: true })).toBeVisible()
   return projectId
@@ -54,4 +55,82 @@ test('a failed character name stays open and never reports a save before acknowl
   await expect(page.getByRole('alert').filter({ hasText: '角色配额测试' })).toBeVisible()
   await expect(input).toHaveValue('林照'); expect((await row(page, id)).name).toBe('新角色')
 })
+
+test('switching character cannot discard a failed dimension draft', async ({ page }) => {
+  const id = await createCharacter(page)
+  await page.getByText('新角色', { exact: true }).last().click()
+  await page.locator('input.text-2xl').fill('林照')
+  await page.locator('input.text-2xl').press('Enter')
+  await expect.poll(async () => (await row(page, id)).name).toBe('林照')
+  await page.getByRole('button', { name: /^新建角色/ }).click()
+  await page.getByRole('button', { name: '主要', exact: true }).first().click()
+  await page.getByRole('button', { name: '守序善良', exact: true }).first().click()
+  await page.getByRole('button', { name: '创建并分流', exact: true }).click()
+  await expect(page.getByRole('button', { name: '创建并分流', exact: true })).toBeHidden()
+  await expect(page.getByText('新角色', { exact: true }).last()).toBeVisible()
+  await page.getByText('林照', { exact: true }).first().click()
+  await refuse(page)
+  const draft = page.getByPlaceholder('背景故事…', { exact: true })
+  await draft.fill('这份失败的草稿不能被切换角色丢弃。'); await draft.blur()
+  await expect(page.getByRole('alert').filter({ hasText: '角色配额测试' })).toBeVisible()
+  await page.getByText('新角色', { exact: true }).first().click()
+  await expect(draft).toHaveValue('这份失败的草稿不能被切换角色丢弃。')
+  expect((await row(page, id)).background).toBe('')
+})
+
+for (const role of [
+  { weight: '主要', leaf: '主要角色' }, { weight: '次要', leaf: '次要角色' },
+  { weight: 'NPC', leaf: 'NPC' }, { weight: '路人', leaf: '路人' },
+]) {
+  test(`${role.leaf}: all 23 dimensions save, reload, clear, and recover from quota failure`, async ({ page }) => {
+    test.setTimeout(120000)
+    const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
+    const projectId = await createCharacter(page, role.weight)
+    const original = await row(page, projectId)
+    async function open() {
+      await openLongformLeaf(page, role.leaf)
+      if (role.weight === '主要') await page.getByText('新角色', { exact: true }).first().click()
+      else if (role.weight === '次要') await page.getByRole('button', { name: '展开完整设定 ▾', exact: true }).click()
+      else await page.getByRole('button', { name: '展开完整设定', exact: true }).click()
+      await expect(page.getByLabel('背景故事', { exact: true })).toBeVisible()
+    }
+    await open()
+    const expected: Record<string, string> = {}
+    for (const dimension of CHARACTER_DIMENSIONS) {
+      const text = `${role.leaf}-${dimension.label}：探路前先测绳结，遇险时保留退路。`
+      expected[dimension.key] = text
+      if (role.weight === '主要' && dimension.key === 'shortDescription') {
+        await page.getByText('点击添加一句话简介…', { exact: true }).click()
+        await page.getByPlaceholder('点击添加一句话简介…', { exact: true }).fill(text)
+        await page.getByPlaceholder('点击添加一句话简介…', { exact: true }).press('Enter')
+      } else {
+        await page.getByLabel(dimension.label, { exact: true }).fill(text)
+        await page.getByLabel(dimension.label, { exact: true }).blur()
+      }
+    }
+    await page.evaluate(async () => {
+      const { flushPendingEditsV1 } = await (new Function('return import("/storyforge/src/lib/authoring/pending-edit-coordinator.ts")'))()
+      await flushPendingEditsV1()
+    })
+    const saved = await row(page, projectId)
+    for (const [key, value] of Object.entries(expected)) expect(saved[key], `${role.leaf}.${key}`).toBe(value)
+    expect(saved.worldId).toBe(original.worldId)
+    await page.reload(); await open()
+    for (const dimension of CHARACTER_DIMENSIONS.filter(d => d.key !== 'shortDescription' || role.weight !== '主要')) {
+      await expect(page.getByLabel(dimension.label, { exact: true })).toHaveValue(expected[dimension.key])
+    }
+    const background = page.getByLabel('背景故事', { exact: true })
+    await background.fill(''); await background.blur()
+    await expect.poll(async () => (await row(page, projectId)).background).toBe('')
+    await refuse(page)
+    await background.fill('同一角色的失败稿在原位恢复。'); await background.blur()
+    await expect(page.getByRole('alert').filter({ hasText: '角色配额测试' })).toBeVisible()
+    await expect(background).toHaveValue('同一角色的失败稿在原位恢复。')
+    expect((await row(page, projectId)).background).toBe('')
+    await page.evaluate(() => (window as unknown as { restoreCharacterWrite: () => void }).restoreCharacterWrite())
+    await page.getByRole('button', { name: '重试保存背景故事', exact: true }).click()
+    await expect.poll(async () => (await row(page, projectId)).background).toBe('同一角色的失败稿在原位恢复。')
+    expect(errors).toEqual([])
+  })
+}
 
