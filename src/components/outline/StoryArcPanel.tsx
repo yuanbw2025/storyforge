@@ -629,12 +629,16 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
   const [eventError, setEventError] = useState('')
   const [eventBusy, setEventBusy] = useState(false)
   const [navigationError, setNavigationError] = useState('')
+  const eventInputRef = useRef<HTMLInputElement>(null)
+  const eventComposingRef = useRef(false)
+  const [eventComposing, setEventComposing] = useState(false)
   const retryEvent = useRef<(() => Promise<void>) | null>(null)
   const eventFailure = useRef<PendingEditFailureTokenV1 | undefined>(undefined)
-  useBeforeUnload(Boolean(newEvent.trim()) || Boolean(eventError) || eventBusy)
+  useBeforeUnload(eventComposing || Boolean(newEvent.trim()) || Boolean(eventError) || eventBusy)
   useEffect(() => registerPendingDraftFlusherV1(() => {
     if (eventError) throw new Error(eventError)
-    if (newEvent.trim()) throw new Error('请先添加或清空尚未提交的关键事件。')
+    if (eventComposingRef.current) throw new Error('请先完成关键事件的输入法输入。')
+    if (eventInputRef.current?.value.trim() || newEvent.trim()) throw new Error('请先添加或清空尚未提交的关键事件。')
   }), [eventError, newEvent])
   const eventAction = async (action: () => Promise<void>, flush = true) => {
     if (eventBusy || (flush && eventError)) return
@@ -654,8 +658,9 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
   }
 
   const addEvent = () => {
-    if (!newEvent.trim() || eventError) return
-    const sent = newEvent.trim()
+    if (eventComposingRef.current || eventError) return
+    const sent = (eventInputRef.current?.value ?? newEvent).trim()
+    if (!sent) return
     void eventAction(async () => {
       await onUpdate({ keyEvents: [...stage.keyEvents, sent] }, { keyEvents: stage.keyEvents })
       setNewEvent(current => current.trim() === sent ? '' : current)
@@ -839,9 +844,13 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
                 </div>
               ))}
               <div className="flex gap-1.5">
+                {/* CInput owns bubbling IME handlers; capture updates the draft barrier before its buffered onChange. */}
                 <CInput
+                  ref={eventInputRef}
                   value={newEvent}
                   onChange={e => setNewEvent(e.target.value)}
+                  onCompositionStartCapture={() => { eventComposingRef.current = true; setEventComposing(true) }}
+                  onCompositionEndCapture={() => { eventComposingRef.current = false; setEventComposing(false) }}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); addEvent() } }}
                   placeholder="手动添加关键事件..."
                   className="flex-1 px-2 py-1 bg-bg-base border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent"

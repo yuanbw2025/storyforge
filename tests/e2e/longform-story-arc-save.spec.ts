@@ -362,3 +362,28 @@ for (const stageCount of [1, 8]) {
     expect(calls).toBe(1); expect(errors).toEqual([])
   })
 }
+
+test('active native IME event draft blocks close and structural navigation until composition finishes and author submits', async ({ page, context }) => {
+  const id = await setup(page); await addStage(page)
+  const event = page.getByPlaceholder('手动添加关键事件...', { exact: true })
+  const cdp = await context.newCDPSession(page)
+  await event.evaluate(input => { (window as any).__eventImeEnds = 0; input.addEventListener('compositionend', () => { (window as any).__eventImeEnds++ }) })
+  await event.focus()
+  await cdp.send('Input.imeSetComposition', { text: '核验尚在输入', selectionStart: 6, selectionEnd: 6 })
+  await expect(event).toHaveValue('核验尚在输入')
+  const guarded = () => page.evaluate(() => { const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented })
+  expect(await guarded()).toBe(true)
+  const count = (await rows(page, id)).length
+  await page.getByTitle('新增支线', { exact: true }).click()
+  expect(await rows(page, id)).toHaveLength(count)
+  await expect(event).toHaveValue('核验尚在输入')
+  if (await page.evaluate(() => (window as any).__eventImeEnds === 0)) {
+    await event.focus(); await cdp.send('Input.insertText', { text: '核验尚在输入' })
+  }
+  await expect(event).toHaveValue('核验尚在输入')
+  await page.getByRole('button', { name: '添加', exact: true }).click()
+  await expect.poll(async () => (await stage(page, id)).keyEvents).toEqual(['核验尚在输入'])
+  await expect(event).toHaveValue('')
+  expect(await guarded()).toBe(false)
+  await page.reload(); expect((await stage(page, id)).keyEvents).toEqual(['核验尚在输入'])
+})

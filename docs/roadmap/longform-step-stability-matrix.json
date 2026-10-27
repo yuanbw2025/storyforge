@@ -3777,6 +3777,16 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/story-arc-rich-transform-20261028.json",
           "summary": "丰富手工故事线4种整线变换使用原稿感知数量合同；103项回归、11条浏览器路径通过。原失败和共享基础证据保留；实模在明确提交后另跑。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-rich-arc-transforms-20261028-c571fa130.json",
+          "summary": "c571fa130四种整线操作完成4次实模请求及候选确认回读；原驱动刷新过早保留，润色候选恢复零重发。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/story-arc-ime-draft-20261028.json",
+          "summary": "中文组合输入加入关闭和结构切换保护；106项回归、12条浏览器路径通过。所有平台IME与剩余模块另验。"
         }
       ],
       "defects": [],
@@ -19515,6 +19525,16 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/story-arc-rich-transform-20261028.json",
           "summary": "丰富手工故事线4种整线变换使用原稿感知数量合同；103项回归、11条浏览器路径通过。原失败和共享基础证据保留；实模在明确提交后另跑。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-rich-arc-transforms-20261028-c571fa130.json",
+          "summary": "c571fa130四种整线操作完成4次实模请求及候选确认回读；原驱动刷新过早保留，润色候选恢复零重发。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/story-arc-ime-draft-20261028.json",
+          "summary": "中文组合输入加入关闭和结构切换保护；106项回归、12条浏览器路径通过。所有平台IME与剩余模块另验。"
         }
       ],
       "defects": [],
@@ -24233,6 +24253,14 @@
       "date": "2026-10-28",
       "unit": "Source-aware rich existing-Arc transformations and author metadata preservation",
       "sourcePin": "tests/acceptance/longform-stability/story-arc-rich-transform-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Native IME manual-event draft guard and exact-source rich-Arc real replay",
+      "sourcePin": "tests/acceptance/longform-stability/story-arc-ime-draft-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false
