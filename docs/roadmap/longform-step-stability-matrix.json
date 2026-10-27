@@ -16,12 +16,12 @@
     "cases": 160,
     "leafFieldChecks": 336,
     "operationChecks": 1233,
-    "notRun": 106,
+    "notRun": 102,
     "passed": 0,
     "failed": 0,
     "faultChecks": 2013,
     "modeChecks": 75,
-    "running": 54
+    "running": 58
   },
   "sourceInventory": {
     "baseline": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
@@ -8806,159 +8806,297 @@
       "module": "characters-main",
       "title": "主要角色：逐维度编辑与角色候选全链",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
-        "downstream": "NOT_RUN",
-        "recover": "NOT_RUN"
+        "open": "PASS",
+        "input": "PASS",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
+        "downstream": "PASS",
+        "recover": "RUNNING"
       },
       "fieldChecks": [
         {
           "key": "shortDescription",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "identity",
           "label": "身份/职业/势力",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "profile",
           "label": "年龄·性别·种族",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "appearance",
           "label": "外貌",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "location",
           "label": "常驻地点",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "personality",
           "label": "性格",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "values",
           "label": "价值观/信念",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "strengths",
           "label": "优点/长处",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "weaknesses",
           "label": "缺点/性格弱点",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "fears",
           "label": "恐惧/软肋",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "motivation",
           "label": "动机/欲望",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "goals",
           "label": "目标(短/长期)",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "innerConflict",
           "label": "核心矛盾/内心冲突",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "background",
           "label": "背景故事",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "keyEvents",
           "label": "关键经历/转折",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "abilities",
           "label": "能力/金手指",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "powerLevel",
           "label": "实力定位/境界",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "speechStyle",
           "label": "语言风格/口头禅",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "habits",
           "label": "习惯/小动作/癖好",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "signatureItem",
           "label": "标志性物品/符号",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "arc",
           "label": "角色弧光/成长线",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "storyRole",
           "label": "在故事中的作用",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "ending",
           "label": "结局走向",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         }
       ],
       "assertions": [
@@ -8977,7 +9115,15 @@
       "source": [
         "src/lib/character/character-dimensions.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER_AND_REAL_AGNES",
+          "sourceCommit": "1c82d99bc6ab3d8aec1b50f80e4b8faca0d58aef",
+          "result": "FOUR_ROLE_92_DIMENSION_AND_REAL_CANDIDATE_NORMAL_PATHS",
+          "receipt": "tests/acceptance/longform-stability/character-authoring-20261027-1c82d99b.json",
+          "summary": "四类各23维度手工保存回读；真实候选编辑、拒绝、采纳和刷新，四类专用视图下游回读。拒绝账本仍running，保留局限并继续修复，其余故障和生命周期未全验收。"
+        }
+      ],
       "defects": [],
       "faultChecks": [
         {
@@ -9065,159 +9211,297 @@
       "module": "characters-minor",
       "title": "次要角色：逐维度编辑与角色候选全链",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
-        "downstream": "NOT_RUN",
-        "recover": "NOT_RUN"
+        "open": "PASS",
+        "input": "PASS",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
+        "downstream": "PASS",
+        "recover": "RUNNING"
       },
       "fieldChecks": [
         {
           "key": "shortDescription",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "identity",
           "label": "身份/职业/势力",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "profile",
           "label": "年龄·性别·种族",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "appearance",
           "label": "外貌",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "location",
           "label": "常驻地点",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "personality",
           "label": "性格",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "values",
           "label": "价值观/信念",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "strengths",
           "label": "优点/长处",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "weaknesses",
           "label": "缺点/性格弱点",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "fears",
           "label": "恐惧/软肋",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "motivation",
           "label": "动机/欲望",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "goals",
           "label": "目标(短/长期)",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "innerConflict",
           "label": "核心矛盾/内心冲突",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "background",
           "label": "背景故事",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "keyEvents",
           "label": "关键经历/转折",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "abilities",
           "label": "能力/金手指",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "powerLevel",
           "label": "实力定位/境界",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "speechStyle",
           "label": "语言风格/口头禅",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "habits",
           "label": "习惯/小动作/癖好",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "signatureItem",
           "label": "标志性物品/符号",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "arc",
           "label": "角色弧光/成长线",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "storyRole",
           "label": "在故事中的作用",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "ending",
           "label": "结局走向",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         }
       ],
       "assertions": [
@@ -9236,7 +9520,15 @@
       "source": [
         "src/lib/character/character-dimensions.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER_AND_REAL_AGNES",
+          "sourceCommit": "1c82d99bc6ab3d8aec1b50f80e4b8faca0d58aef",
+          "result": "FOUR_ROLE_92_DIMENSION_AND_REAL_CANDIDATE_NORMAL_PATHS",
+          "receipt": "tests/acceptance/longform-stability/character-authoring-20261027-1c82d99b.json",
+          "summary": "四类各23维度手工保存回读；真实候选编辑、拒绝、采纳和刷新，四类专用视图下游回读。拒绝账本仍running，保留局限并继续修复，其余故障和生命周期未全验收。"
+        }
+      ],
       "defects": [],
       "faultChecks": [
         {
@@ -9324,159 +9616,297 @@
       "module": "characters-npc",
       "title": "NPC：逐维度编辑与角色候选全链",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
-        "downstream": "NOT_RUN",
-        "recover": "NOT_RUN"
+        "open": "PASS",
+        "input": "PASS",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
+        "downstream": "PASS",
+        "recover": "RUNNING"
       },
       "fieldChecks": [
         {
           "key": "shortDescription",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "identity",
           "label": "身份/职业/势力",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "profile",
           "label": "年龄·性别·种族",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "appearance",
           "label": "外貌",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "location",
           "label": "常驻地点",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "personality",
           "label": "性格",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "values",
           "label": "价值观/信念",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "strengths",
           "label": "优点/长处",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "weaknesses",
           "label": "缺点/性格弱点",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "fears",
           "label": "恐惧/软肋",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "motivation",
           "label": "动机/欲望",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "goals",
           "label": "目标(短/长期)",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "innerConflict",
           "label": "核心矛盾/内心冲突",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "background",
           "label": "背景故事",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "keyEvents",
           "label": "关键经历/转折",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "abilities",
           "label": "能力/金手指",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "powerLevel",
           "label": "实力定位/境界",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "speechStyle",
           "label": "语言风格/口头禅",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "habits",
           "label": "习惯/小动作/癖好",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "signatureItem",
           "label": "标志性物品/符号",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "arc",
           "label": "角色弧光/成长线",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "storyRole",
           "label": "在故事中的作用",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "ending",
           "label": "结局走向",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         }
       ],
       "assertions": [
@@ -9495,7 +9925,15 @@
       "source": [
         "src/lib/character/character-dimensions.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER_AND_REAL_AGNES",
+          "sourceCommit": "1c82d99bc6ab3d8aec1b50f80e4b8faca0d58aef",
+          "result": "FOUR_ROLE_92_DIMENSION_AND_REAL_CANDIDATE_NORMAL_PATHS",
+          "receipt": "tests/acceptance/longform-stability/character-authoring-20261027-1c82d99b.json",
+          "summary": "四类各23维度手工保存回读；真实候选编辑、拒绝、采纳和刷新，四类专用视图下游回读。拒绝账本仍running，保留局限并继续修复，其余故障和生命周期未全验收。"
+        }
+      ],
       "defects": [],
       "faultChecks": [
         {
@@ -9583,159 +10021,297 @@
       "module": "characters-extra",
       "title": "路人：逐维度编辑与角色候选全链",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
-        "downstream": "NOT_RUN",
-        "recover": "NOT_RUN"
+        "open": "PASS",
+        "input": "PASS",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
+        "downstream": "PASS",
+        "recover": "RUNNING"
       },
       "fieldChecks": [
         {
           "key": "shortDescription",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "identity",
           "label": "身份/职业/势力",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "profile",
           "label": "年龄·性别·种族",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "appearance",
           "label": "外貌",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "location",
           "label": "常驻地点",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "personality",
           "label": "性格",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "values",
           "label": "价值观/信念",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "strengths",
           "label": "优点/长处",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "weaknesses",
           "label": "缺点/性格弱点",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "fears",
           "label": "恐惧/软肋",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "motivation",
           "label": "动机/欲望",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "goals",
           "label": "目标(短/长期)",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "innerConflict",
           "label": "核心矛盾/内心冲突",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "background",
           "label": "背景故事",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "keyEvents",
           "label": "关键经历/转折",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "abilities",
           "label": "能力/金手指",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "powerLevel",
           "label": "实力定位/境界",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "speechStyle",
           "label": "语言风格/口头禅",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "habits",
           "label": "习惯/小动作/癖好",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "signatureItem",
           "label": "标志性物品/符号",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "arc",
           "label": "角色弧光/成长线",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "storyRole",
           "label": "在故事中的作用",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         },
         {
           "key": "ending",
           "label": "结局走向",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "NOT_RUN"
+          }
         }
       ],
       "assertions": [
@@ -9754,7 +10330,15 @@
       "source": [
         "src/lib/character/character-dimensions.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER_AND_REAL_AGNES",
+          "sourceCommit": "1c82d99bc6ab3d8aec1b50f80e4b8faca0d58aef",
+          "result": "FOUR_ROLE_92_DIMENSION_AND_REAL_CANDIDATE_NORMAL_PATHS",
+          "receipt": "tests/acceptance/longform-stability/character-authoring-20261027-1c82d99b.json",
+          "summary": "四类各23维度手工保存回读；真实候选编辑、拒绝、采纳和刷新，四类专用视图下游回读。拒绝账本仍running，保留局限并继续修复，其余故障和生命周期未全验收。"
+        }
+      ],
       "defects": [],
       "faultChecks": [
         {
@@ -9846,15 +10430,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -10003,6 +10587,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -10100,7 +10691,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-066",
@@ -10112,15 +10704,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -10281,6 +10873,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -10378,7 +10977,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-067",
@@ -10390,15 +10990,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -10559,6 +11159,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -10656,7 +11263,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-068",
@@ -10668,15 +11276,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -10861,6 +11469,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -10958,7 +11573,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-069",
@@ -10970,15 +11586,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -11175,6 +11791,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -11272,7 +11895,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-070",
@@ -11284,15 +11908,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -11465,6 +12089,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -11562,7 +12193,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-071",
@@ -11574,15 +12206,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -11755,6 +12387,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -11852,7 +12491,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-072",
@@ -11864,15 +12504,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -11985,6 +12625,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -12082,7 +12729,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-073",
@@ -12094,15 +12742,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -12203,6 +12851,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -12300,7 +12955,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-074",
@@ -12312,15 +12968,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -12433,6 +13089,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -12530,7 +13193,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-075",
@@ -12542,15 +13206,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -12663,6 +13327,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -12760,7 +13431,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-076",
@@ -12772,15 +13444,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -12893,6 +13565,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -12990,7 +13669,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-077",
@@ -13473,15 +14153,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -13606,6 +14286,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -13703,7 +14390,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-081",
@@ -13715,15 +14403,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -13848,6 +14536,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -13945,7 +14640,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-082",
@@ -13957,15 +14653,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -14090,6 +14786,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -14187,7 +14890,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-083",
@@ -14199,15 +14903,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -14320,6 +15024,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -14417,7 +15128,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-084",
@@ -14429,15 +15141,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -14550,6 +15262,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -14647,7 +15366,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-085",
@@ -14659,15 +15379,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -14780,6 +15500,13 @@
           "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
           "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
           "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        },
+        {
+          "type": "REAL_AGNES_ISOLATED_BROWSER",
+          "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+          "result": "EXTRACT_ENRICH_REJECT_ADOPT_REFRESH_AND_DOWNSTREAM_CONTEXT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-real-categories-20261027-bb8dadd5.json",
+          "summary": "本分类真实抽取与补全各执行拒绝和采纳，刷新保留候选，采纳前正式词条不变；采纳字段与原候选一致，已采纳抽取词条实际进入后续补全请求。原失败与新独立资料卡分开留证。"
         }
       ],
       "defects": [],
@@ -14877,7 +15604,8 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "candidateControlBoundary": "当前自定义候选面板提供完整审阅、勾选、拒绝与采纳；不支持修改候选正文，edit_candidate未按已验证折算。"
     },
     {
       "id": "LF-086",
@@ -22413,7 +23141,7 @@
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     }
   ],
-  "executionStatus": "CODEX_MANUAL_AND_WORLD_AI_NORMAL_VERIFIED_CONTINUING_FULL_MATRIX",
+  "executionStatus": "CHARACTER_NORMAL_AND_CODEX_REAL_TRANSPORT_VERIFIED_CONTINUING",
   "passPolicy": {
     "closedCase": "全部适用步骤/字段/模式/故障/派生子用例有本轮回执；PASS不推导已发行。",
     "statuses": [
@@ -22951,6 +23679,22 @@
       "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
       "status": "CONTINUING",
       "caseDenominatorChange": "158 -> 160：LF-094中的两个AI控件独立追加LF-159/160；三个遗留分类保留原计划并纠正为仅维护旧记录。",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-27",
+      "unit": "four-role authoring and real candidate evidence",
+      "sourceCommit": "1c82d99bc6ab3d8aec1b50f80e4b8faca0d58aef",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-27",
+      "unit": "18 real codex category normal paths and provider schema budget",
+      "sourceCommit": "bb8dadd5d9656c1ba966e484b83a88c68e480172",
+      "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false
     }
