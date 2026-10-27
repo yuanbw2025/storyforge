@@ -91,17 +91,18 @@ export const PROVIDER_MODELS: Record<string, { value: string; label: string; des
     { value: 'deepseek-v4-pro-260425', label: 'DeepSeek V4 Pro', desc: '火山方舟·高质量文本推理' },
     { value: 'deepseek-v4-flash-260425', label: 'DeepSeek V4 Flash', desc: '火山方舟·文本推理' },
   ],
-  // Gemini 模型列表（官方 OpenAI compatibility / model catalog，2026-08-22 复核）
+  // Gemini lifecycle / OpenAI compatibility reviewed 2026-10-26; saved IDs remain author-owned.
   gemini: [
-    { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash ⭐', desc: '稳定版·1M 上下文·65K 输出' },
+    { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', desc: '兼容别名；官方 API 自动路由至 3.6，未关闭' },
+    { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', desc: '官方稳定版；请先做当前任务预检' },
     { value: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite', desc: '高吞吐轻量版' },
     { value: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash', desc: '官方当前新一代 Flash；使用前先做任务预检' },
-    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', desc: '历史稳定版' },
-    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite', desc: '轻量稳定版' },
-    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', desc: '最强稳定版，支持思考' },
-    { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite', desc: '⚠️ 预览版' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', desc: '历史稳定版；官方限制新项目访问，未宣布下线' },
+    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite', desc: '历史稳定版；官方限制新项目访问，未宣布下线' },
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', desc: '历史稳定版；官方限制新项目访问，未宣布下线' },
+    { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite', desc: '稳定版；官方 API 计划于 2027-05-07 下线' },
     { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)', desc: '⚠️ 预览版，可能不稳定' },
-    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', desc: '老版' },
+    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', desc: '官方 API 已于 2026-06-01 下线；已保存配置保留，需手动选择可用型号' },
   ],
   poe: [
     { value: 'GPT-4o', label: 'GPT-4o' },
@@ -197,7 +198,7 @@ export const PROVIDER_PRESETS: Record<string, Partial<AIConfig>> = {
   },
   claude: {
     baseUrl: 'https://api.anthropic.com/v1',
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
   },
   nvidia: {
     baseUrl: 'https://integrate.api.nvidia.com/v1',
@@ -226,11 +227,7 @@ export const PROVIDER_PRESETS: Record<string, Partial<AIConfig>> = {
   },
 }
 
-/** Official providers accept only their current registered model IDs; custom/local providers remain open. */
-export function normalizeProviderModel(provider: AIProvider, model: string): string {
-  const normalized = model.trim()
-  const registered = PROVIDER_MODELS[provider]
-  if (!registered?.length) return normalized
-  if (registered.some(option => option.value === normalized)) return normalized
-  return PROVIDER_PRESETS[provider]?.model ?? registered[0].value
+/** The catalog is a suggestion, not a persistence whitelist or permission to switch the author's model. */
+export function normalizeProviderModel(_provider: AIProvider, model: string): string {
+  return typeof model === 'string' ? model.trim() : ''
 }

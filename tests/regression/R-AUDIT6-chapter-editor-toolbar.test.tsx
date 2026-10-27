@@ -117,10 +117,27 @@ afterEach(async () => {
 })
 
 describe('AUDIT-6 / HEALTH-4 · 正文编辑器工具栏', () => {
+  it('生成前先展示现有自定义指令，取消不发起生成，确认才转发原命令', async () => {
+    const { host, props } = await mount({ customInstruction: '只写本章，签收后停笔。' })
+    await act(async () => button(host, '✨ 生成正文').click())
+    expect(props.onGenerate).not.toHaveBeenCalled()
+    const prompt = host.querySelector('[role="dialog"]')!
+    expect(prompt).not.toBeNull()
+    expect(prompt.querySelector('textarea')?.value).toBe('只写本章，签收后停笔。')
+    await act(async () => button(host, '取消').click())
+    expect(host.querySelector('[role="dialog"]')).toBeNull()
+    expect(props.onGenerate).not.toHaveBeenCalled()
+    await act(async () => button(host, '✨ 生成正文').click())
+    await act(async () => button(host, '开始生成').click())
+    expect(props.onGenerate).toHaveBeenCalledOnce()
+    expect(host.querySelector('[role="dialog"]')).toBeNull()
+  })
+
   it('逐项转发现有 AI、提取和面板命令', async () => {
     const { host, props } = await mount()
     for (const label of ['✨ 生成正文', '📝 续写', '📖 扩写', '💎 润色', '🔥 去AI味', '整理本章', '影响分析', '大纲预览', '质量审校', '便签']) {
       await act(async () => button(host, label).click())
+      if (label === '✨ 生成正文') await act(async () => button(host, '开始生成').click())
     }
     expect(props.onGenerate).toHaveBeenCalledOnce()
     expect(props.onContinue).toHaveBeenCalledOnce()

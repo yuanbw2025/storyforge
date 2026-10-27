@@ -7,6 +7,7 @@ import { useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import EmbeddingConfigCard from './EmbeddingConfigCard'
 import type { AIProvider } from '../../lib/types'
 import { PROVIDER_MODELS } from '../../lib/types'
+import { allowsSamplingTemperature, getModelRetirement } from '../../lib/ai/provider-model-lifecycle'
 import { isAIConfigReady } from '../../lib/ai/config-readiness'
 import { getLogs, subscribeLogs, clearLogs } from '../../lib/ai/logger'
 import { useDialog } from '../shared/Dialog'
@@ -78,6 +79,8 @@ function AIConfigPanelFull() {
   const logs = useSyncExternalStore(subscribeLogs, getLogs)
 
   const currentProviderInfo = PROVIDER_OPTIONS.find((p) => p.value === config.provider)
+  const modelRetirement = getModelRetirement(config)
+  const supportsTemperature = allowsSamplingTemperature(config)
   const editingPreset = editingPresetId ? presets.find(p => p.id === editingPresetId) : null
 
   useEffect(() => {
@@ -339,18 +342,23 @@ function AIConfigPanelFull() {
                   className="mb-1.5 w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
                 >
                   <option value="">选择服务返回的模型（{fetchedModels.length}）</option>
-                  {fetchedModels.map(model => <option key={model} value={model}>{model}</option>)}
+                  {fetchedModels.map(model => <option key={model} value={model} disabled={!!getModelRetirement({ ...config, model })}>{model}</option>)}
                 </select>
               )}
               {PROVIDER_MODELS[config.provider] ? (
                 <>
                   <select
                     value={config.model}
+                    aria-label="模型"
                     onChange={(e) => setConfig({ model: e.target.value })}
                     className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
                   >
+                    <option value="">请选择或输入模型</option>
+                    {config.model && !PROVIDER_MODELS[config.provider].some(model => model.value === config.model) && (
+                      <option value={config.model}>{config.model}（当前保存）</option>
+                    )}
                     {PROVIDER_MODELS[config.provider].map((m) => (
-                      <option key={m.value} value={m.value}>
+                      <option key={m.value} value={m.value} disabled={!!getModelRetirement({ ...config, model: m.value })}>
                         {m.value}
                       </option>
                     ))}
@@ -380,6 +388,12 @@ function AIConfigPanelFull() {
                 />
               )}
               {modelListError && <p className="mt-1 text-[11px] text-amber-400">{modelListError}</p>}
+              {modelRetirement && (
+                <p role="alert" className="mt-2 rounded border border-border bg-bg-elevated p-2 text-xs text-text-secondary">
+                  该型号在官方 API 已于 {modelRetirement.retiredOn} 下线。当前配置已保留，请手动选择可用型号后测试连接。{' '}
+                  <a href={modelRetirement.sourceUrl} target="_blank" rel="noreferrer" className="text-text-primary underline">官方说明</a>
+                </p>
+              )}
               {config.provider === 'ollama' && (
                 <p className="mt-1 text-[11px] text-text-muted">未安装的模型请先在 Ollama 中拉取，完成后回到这里刷新。</p>
               )}
@@ -393,13 +407,16 @@ function AIConfigPanelFull() {
               </label>
               <input
                 type="range"
+                aria-label="Temperature"
                 min={0}
                 max={2}
                 step={0.1}
+                disabled={!supportsTemperature}
                 value={config.temperature}
                 onChange={(e) => setConfig({ temperature: Number(e.target.value) })}
                 className="w-full accent-accent"
               />
+              {!supportsTemperature && <p className="mt-1 text-xs text-text-secondary">该型号不支持温度调整；已保留当前数值供切换型号后使用。</p>}
             </div>
             <div>
               <label className="block text-sm text-text-secondary mb-1.5">

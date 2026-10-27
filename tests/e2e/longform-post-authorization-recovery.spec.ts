@@ -75,6 +75,7 @@ for (const automatic of [false, true]) {
     })
     await prepare(page, automatic)
     await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
+  await page.getByRole('dialog', { name: '正文生成提示', exact: true }).getByRole('button', { name: '开始生成', exact: true }).click()
     const draft = page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })
     await expect(draft).toHaveValue(generated)
     await page.getByRole('button', { name: '采纳', exact: true }).click()

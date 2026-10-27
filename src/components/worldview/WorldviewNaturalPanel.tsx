@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useWorldviewStore } from '../../stores/worldview'
+import { EMPTY_NATURAL_RESOURCES } from '../../lib/types/worldview'
+import { useWorldviewStore, type WorldviewAuthorPatch } from '../../stores/worldview'
 import { useWorldGroupStore } from '../../stores/world-group'
 import WorldGroupSwitcher from '../world-group/WorldGroupSwitcher'
 import CodexPanel from '../codex/CodexPanel'
@@ -56,9 +57,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
   })
 
   const [values, setValues] = useState<Record<string, string>>({})
-  const [naturalResources, setNaturalResources] = useState<NaturalResources>({
-    rareCreatures: '', herbs: '', minerals: '', others: '',
-  })
+  const [naturalResources, setNaturalResources] = useState<NaturalResources>({ ...EMPTY_NATURAL_RESOURCES })
   const [activeKey, setActiveKey] = useState<FieldKey>('worldStructure')
   const [runningField, setRunningField] = useState<WorldviewAgentField | null>(null)
 
@@ -77,13 +76,11 @@ export default function WorldviewNaturalPanel({ project }: Props) {
       climateByRegion:  worldview.climateByRegion || '',
       naturalResourceOverview: worldview.naturalResourceOverview || '',
     })
-    setNaturalResources(worldview.naturalResources || {
-      rareCreatures: '', herbs: '', minerals: '', others: '',
-    })
+    setNaturalResources(worldview.naturalResources || { ...EMPTY_NATURAL_RESOURCES })
   }, [worldview])
 
-  const save = (patch: Partial<typeof worldview>) =>
-    saveWorldview({ projectId: project.id!, ...patch })
+  const save = (patch: WorldviewAuthorPatch) =>
+    saveWorldview({ projectId: project.id!, worldGroupId: project.enableMultiWorld ? activeGroupId : null, ...patch })
 
   const pendingWorldviewCandidates = copilot.pendingCandidates.filter(candidate => (
     candidate.payload.skillId === 'world-origin.worldview-field'
@@ -172,7 +169,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
                 value={values[f.key] || ''}
                 onChange={v => {
                   setValues(prev => ({ ...prev, [f.key]: v }))
-                  save({ [f.key]: v })
+                  return save({ [f.key]: v })
                 }}
                 project={project}
                 agentField={f.key}
@@ -209,7 +206,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
               value={values.naturalResourceOverview || ''}
               onChange={v => {
                 setValues(prev => ({ ...prev, naturalResourceOverview: v }))
-                save({ naturalResourceOverview: v })
+                return save({ naturalResourceOverview: v })
               }}
               project={project}
               agentField="naturalResourceOverview"
@@ -294,7 +291,7 @@ function SimpleFieldEditor({
 }: {
   field: { key: string; emoji: string; label: string; desc: string }
   value: string
-  onChange: (v: string) => void
+  onChange: (v: string) => void | Promise<void>
   project: Project
   agentField: WorldviewAgentField
   activeGroupId: number | null
@@ -335,7 +332,7 @@ function SimpleFieldEditor({
 function NaturalResourcesEditor({ naturalResources, setNaturalResources, save }: {
   naturalResources: NaturalResources
   setNaturalResources: React.Dispatch<React.SetStateAction<NaturalResources>>
-  save: (patch: Record<string, unknown>) => void
+  save: (patch: WorldviewAuthorPatch) => Promise<void>
 }) {
   const rows: { key: keyof NaturalResources; label: string; placeholder: string }[] = [
     { key: 'rareCreatures', label: '🦅 珍禽异兽 / 牲畜', placeholder: '例：玄龟 / 火凤 / 战马 / 耕牛 ...' },
@@ -345,9 +342,8 @@ function NaturalResourcesEditor({ naturalResources, setNaturalResources, save }:
   ]
 
   const update = (key: keyof NaturalResources, v: string) => {
-    const next = { ...naturalResources, [key]: v }
-    setNaturalResources(next)
-    save({ naturalResources: next })
+    setNaturalResources(current => ({ ...current, [key]: v }))
+    return save({ naturalResources: { [key]: v } })
   }
 
   return (

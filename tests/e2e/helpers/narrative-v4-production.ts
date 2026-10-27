@@ -79,14 +79,24 @@ export async function publishAndOpenNarrativeProductV4(page: Page, product: 'cha
     await expect(page.getByRole('paragraph').filter({ hasText: /^我们先商议修桥的安排。$/ })).toBeVisible()
   } else {
     const choice = page.getByRole('button', { name: /回到渡口/ })
-    for (let step = 0; step < 8 && !await choice.isVisible(); step++) {
+    const arrival = page.getByText('你回到渡口整理工具。', { exact: true })
+    const readChoiceProgress = () => page.evaluate(async sessionId => {
+      const load = new Function('path', 'return import(path)')
+      const db = (await load('/storyforge/src/lib/db/schema.ts')).db
+      const store = (await load('/storyforge/src/stores/avg-game-player.ts')).useAvgGamePlayerStore.getState()
+      const events = await db.productRuntimeEvents.where('sessionId').equals(sessionId).toArray()
+      return { busy: store.busy, committed: events.filter((event: { type: string; payloadJson: string }) =>
+        event.type === 'narrative.choice.committed' && JSON.parse(event.payloadJson).choiceKey === 'choice.return').length }
+    }, released.sessionId)
+    for (let step = 0; step < 8 && (await readChoiceProgress()).committed === 0; step++) {
       const next = page.getByRole('button', { name: /^(推进|补全|继续)/ }).first()
-      await expect.poll(async () => await choice.isVisible() || await next.isVisible()).toBe(true)
-      if (!await choice.isVisible()) await next.click()
+      // Text completion can replace "continue" with choices between a visibility
+      // check and click. Re-resolve either valid action through the same locator.
+      await choice.or(next).first().click()
+      await expect.poll(async () => (await readChoiceProgress()).busy).toBe(false)
     }
-    await expect(choice).toBeVisible()
-    await choice.click()
-    await expect(page.getByText('你回到渡口整理工具。', { exact: true })).toBeVisible()
+    await expect.poll(async () => (await readChoiceProgress()).committed).toBe(1)
+    await expect(arrival).toBeVisible()
   }
   await page.reload()
   if (product === 'chat') {

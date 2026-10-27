@@ -1,5 +1,6 @@
 import { BookOpenCheck, Check, ClipboardList, Eye, GitBranch, Loader2, RefreshCw, Search, ShieldCheck, StickyNote, X } from 'lucide-react'
-import { CInput } from '../shared/CompositionInput'
+import { useRef, useState } from 'react'
+import { CInput, CTextarea } from '../shared/CompositionInput'
 import type { ImpactPatchCandidateV1 } from '../../lib/agent/run/impact-patch-durable'
 import type { ImpactOutlineRegenerationCandidateV1 } from '../../lib/agent/run/impact-outline-regeneration-durable'
 import type { ImpactStoryTimelineRegenerationCandidateV1 } from '../../lib/agent/run/impact-story-timeline-regeneration-durable'
@@ -37,6 +38,7 @@ const IMPACT_REVIEW_ACTION_LABELS: Record<string, string> = {
 }
 
 interface Props {
+  chapterTitle?: string
   isStreaming: boolean
   hasText: boolean
   organizingChapter: boolean
@@ -122,6 +124,7 @@ interface Props {
 }
 
 export default function ChapterEditorToolbar({
+  chapterTitle,
   isStreaming,
   hasText,
   organizingChapter,
@@ -205,6 +208,12 @@ export default function ChapterEditorToolbar({
   onCustomInstructionChange,
   onPerspectiveCharacterChange,
 }: Props) {
+  const [generationPromptOpen, setGenerationPromptOpen] = useState(false)
+  const generateButtonRef = useRef<HTMLButtonElement>(null)
+  const closeGenerationPrompt = () => {
+    setGenerationPromptOpen(false)
+    generateButtonRef.current?.focus()
+  }
   const reviewedImpactItemIds = new Set(impactReviewRecords.map(record => record.output.itemId))
   const selectedImpactReview = impactReviewRecords.find(record => record.output.itemId === impactReviewItemId)
   const impactDownstreamFocus = impactDownstreamSchedule?.items.find(item => item.status === 'awaiting-confirmation')
@@ -213,10 +222,43 @@ export default function ChapterEditorToolbar({
     ?? impactDownstreamSchedule?.items.find(item => item.status === 'blocked')
   return (
     <div className="flex flex-wrap gap-2 border-t border-border/60 bg-bg-surface/35 px-6 py-3">
-      <button onClick={onGenerate} disabled={isStreaming}
+      <button ref={generateButtonRef} onClick={() => setGenerationPromptOpen(true)} disabled={isStreaming}
         className="rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50 transition-colors">
         ✨ 生成正文
       </button>
+      {generationPromptOpen && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/55 p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="chapter-generation-prompt-title"
+            aria-describedby="chapter-generation-prompt-description"
+            className="max-h-[90dvh] w-full max-w-xl overflow-y-auto rounded-2xl border border-border bg-bg-surface p-6 shadow-2xl"
+            onKeyDown={event => {
+              if (event.nativeEvent.isComposing) return
+              if (event.key === 'Escape') { event.stopPropagation(); closeGenerationPrompt() }
+              if (event.key === 'Tab') {
+                const fields = event.currentTarget.querySelectorAll<HTMLElement>('textarea, button:not(:disabled)')
+                const first = fields[0], last = fields[fields.length - 1]
+                if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+                else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+              }
+            }}>
+            <h2 id="chapter-generation-prompt-title" className="text-lg font-medium text-text-primary">正文生成提示</h2>
+            {chapterTitle && <p className="mt-1 break-words text-sm text-text-secondary">{chapterTitle}</p>}
+            <p id="chapter-generation-prompt-description" className="my-3 text-sm text-text-secondary">
+              补充本章的重点、节奏、视角或篇幅要求。与下方自定义指令同步；留空则按已有资料生成。取消保留本章输入，不开始生成。
+            </p>
+            <CTextarea autoFocus aria-label="本章生成提示" rows={6} value={customInstruction}
+              onChange={event => onCustomInstructionChange(event.target.value)}
+              placeholder="例如：以人物对话推进，保持克制，写到两人达成约定为止。"
+              className="w-full resize-y rounded-lg border border-border bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" />
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={closeGenerationPrompt}
+                className="rounded-lg border border-border px-4 py-2 text-sm text-text-secondary hover:bg-bg-elevated">取消</button>
+              <button type="button" disabled={isStreaming} onClick={() => { closeGenerationPrompt(); onGenerate() }}
+                className="rounded-lg bg-accent px-4 py-2 text-sm text-white hover:bg-accent-hover disabled:opacity-50">开始生成</button>
+            </div>
+          </div>
+        </div>
+      )}
       <button onClick={onContinue} disabled={isStreaming || !hasText}
         className="rounded-md border border-border bg-bg-elevated px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50 transition-colors">
         📝 续写
@@ -248,23 +290,23 @@ export default function ChapterEditorToolbar({
         {analyzingImpact ? '分析中...' : '影响分析'}
       </button>
       {impactInfo && (
-        <div className="basis-full space-y-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300/90">
+        <div className="basis-full space-y-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-warning">
           <div className="flex items-start gap-2">
             <span className="flex-1">{impactInfo}</span>
-            <button onClick={onDismissImpact} aria-label="关闭影响分析结果" className="text-text-muted hover:text-text-primary"><X className="h-3.5 w-3.5" /><span className="sr-only">×</span></button>
+            <button onClick={onDismissImpact} aria-label="关闭影响分析结果" className="text-text-secondary hover:text-text-primary"><X className="h-3.5 w-3.5" /><span className="sr-only">×</span></button>
           </div>
           {impactRemediationPlan && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-border/70 bg-bg-elevated/60 px-2 py-1.5 text-[11px] text-text-secondary">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-border/70 bg-bg-elevated/60 px-2 py-1.5 text-xs text-text-secondary">
               <span>处理计划 {impactRemediationPlan.counts.total} 项</span>
               <span>系统重建 {impactRemediationPlan.counts.deterministic}</span>
               <span>作者复核 {impactReviewRecords.length}/{impactRemediationPlan.counts.authorConfirmed}</span>
-              <span className="ml-auto text-text-muted">计划 {impactRemediationPlan.planHash.slice(0, 12)}</span>
+              <span className="ml-auto text-text-secondary">计划 {impactRemediationPlan.planHash.slice(0, 12)}</span>
               {impactRemediationPlan.counts.deterministic > 0 && (
                 <button
                   onClick={onRunImpactRemediation}
                   disabled={impactRemediationBusy}
                   title="只重建受影响的检索块和层级摘要，不改正文、事实或大纲"
-                  className="flex items-center gap-1 rounded border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-[11px] text-amber-200 hover:bg-amber-400/20 disabled:opacity-50"
+                  className="flex items-center gap-1 rounded border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-xs text-warning hover:bg-amber-400/20 disabled:opacity-50"
                 >
                   <RefreshCw className={`h-3 w-3 ${impactRemediationBusy ? 'animate-spin' : ''}`} />
                   {impactRemediationBusy ? '重建中...' : '执行系统重建'}
@@ -274,7 +316,7 @@ export default function ChapterEditorToolbar({
                 onClick={onReplanImpactRemediation}
                 disabled={impactRemediationBusy}
                 title="重新读取当前正文和影响图，生成新的处理计划；不改正文或正式设定"
-                className="flex items-center gap-1 rounded border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-[11px] text-sky-200 hover:bg-sky-400/20 disabled:opacity-50"
+                className="flex items-center gap-1 rounded border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-xs text-info hover:bg-sky-400/20 disabled:opacity-50"
               >
                 <RefreshCw className={`h-3 w-3 ${impactRemediationBusy ? 'animate-spin' : ''}`} />
                 刷新计划
@@ -284,29 +326,29 @@ export default function ChapterEditorToolbar({
           {futureEvolutionPlan && (
             <div
               aria-label="FUTURE-1 未来演化边界"
-              className="space-y-1.5 rounded border border-emerald-400/20 bg-emerald-400/5 px-2 py-2 text-[11px] text-text-secondary"
+              className="space-y-1.5 rounded border border-emerald-400/20 bg-bg-elevated px-2 py-2 text-xs text-text-secondary"
             >
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="text-emerald-200">未来演化只向前</span>
+                <span className="text-success">未来演化只向前</span>
                 <span>历史保护 {futureEvolutionPlan.frontier.protectedOutlineNodeIds.length} 章</span>
                 <span>未来章纲 {futureEvolutionPlan.frontier.futureOutlineNodeIds.length} 章</span>
                 <span>缺细纲 {futureEvolutionPlan.futureTargets.filter(target => target.detailStatus === 'missing').length} 章</span>
-                <span className="ml-auto text-text-muted">计划 {futureEvolutionPlan.planHash.slice(0, 12)}</span>
+                <span className="ml-auto text-text-secondary">计划 {futureEvolutionPlan.planHash.slice(0, 12)}</span>
               </div>
               <div className="flex flex-wrap gap-1">
                 {futureEvolutionPlan.stages.map((stage, index) => (
                   <span
                     key={stage.id}
                     className={`rounded border px-1.5 py-0.5 ${stage.readiness === 'ready'
-                      ? 'border-emerald-400/20 text-emerald-100/90'
-                      : 'border-border text-text-muted'}`}
+                      ? 'border-emerald-400/20 text-success'
+                      : 'border-border text-text-secondary'}`}
                     title={`${stage.purpose}；进入下一阶段前必须完成作者采纳并重算计划`}
                   >
                     {index + 1}. {stage.label}{stage.readiness === 'empty-target' ? '（待上游）' : ''}
                   </span>
                 ))}
               </div>
-              <div className="text-emerald-100/70">
+              <div className="text-success">
                 每一阶段只使用注册 Skill；上游采纳后重读最新 Canon。游戏、跑团与角色聊天只消费不可变发布，反馈重新进入本循环。
               </div>
             </div>
@@ -314,20 +356,20 @@ export default function ChapterEditorToolbar({
           {impactDownstreamSchedule && (
             <div
               aria-label="H57 下游调度进度"
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-indigo-400/20 bg-indigo-400/5 px-2 py-1.5 text-[11px] text-text-secondary"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-indigo-400/20 bg-bg-elevated px-2 py-1.5 text-xs text-text-secondary"
             >
-              <span className="text-indigo-200">
+              <span className="text-info">
                 H57 下游 {impactDownstreamSchedule.counts.completed}/{impactDownstreamSchedule.items.length}
               </span>
               <span>可继续 {impactDownstreamSchedule.counts.ready}</span>
               <span>待确认 {impactDownstreamSchedule.counts['awaiting-confirmation']}</span>
               <span>依赖阻断 {impactDownstreamSchedule.counts.blocked}</span>
               <span>需人工 {impactDownstreamSchedule.counts['needs-manual-action']}</span>
-              <span className={`ml-auto ${impactDownstreamSchedule.settled ? 'text-success' : 'text-text-muted'}`}>
+              <span className={`ml-auto ${impactDownstreamSchedule.settled ? 'text-success' : 'text-text-secondary'}`}>
                 {impactDownstreamSchedule.settled ? '已全部完成' : `调度 ${impactDownstreamSchedule.scheduleHash.slice(0, 12)}`}
               </span>
               {impactDownstreamFocus && (
-                <span aria-label="H57 当前执行器策略" className="basis-full text-indigo-100/80">
+                <span aria-label="H57 当前执行器策略" className="basis-full text-info">
                   策略 {impactDownstreamFocus.policyId}：{impactDownstreamFocus.policyReason}
                   {impactDownstreamFocus.manualModule ? ` · 人工入口 ${impactDownstreamFocus.manualModule}` : ''}
                 </span>
@@ -335,8 +377,8 @@ export default function ChapterEditorToolbar({
             </div>
           )}
           {impactRemediationPlan && impactRemediationPlan.counts.authorConfirmed > 0 && (
-            <div className="space-y-2 rounded border border-sky-400/20 bg-sky-400/5 px-2 py-2 text-[11px] text-text-secondary">
-              <div className="text-sky-200">作者复核只记录决定和理由，不修改正文、事实、状态或大纲。</div>
+            <div className="space-y-2 rounded border border-sky-400/20 bg-bg-elevated px-2 py-2 text-xs text-text-secondary">
+              <div className="text-info">作者复核只记录决定和理由，不修改正文、事实、状态或大纲。</div>
               <div className="grid gap-2 md:grid-cols-[minmax(180px,1.2fr)_auto_minmax(180px,1fr)_auto]">
                 <label className="flex min-w-0 items-center gap-2 rounded border border-border bg-bg-elevated px-2 text-text-secondary">
                   <span className="sr-only">作者复核项</span>
@@ -363,7 +405,7 @@ export default function ChapterEditorToolbar({
                     type="button"
                     onClick={() => onImpactReviewDecisionChange('acknowledged')}
                     aria-pressed={impactReviewDecision === 'acknowledged'}
-                    className={`rounded px-2 py-1 text-[11px] transition-colors ${impactReviewDecision === 'acknowledged' ? 'bg-emerald-500/15 text-emerald-200' : 'text-text-muted hover:text-text-primary'}`}
+                    className={`rounded px-2 py-1 text-xs transition-colors ${impactReviewDecision === 'acknowledged' ? 'bg-emerald-500/15 text-success' : 'text-text-secondary hover:text-text-primary'}`}
                     disabled={impactReviewBusy}
                   >
                     已确认
@@ -372,7 +414,7 @@ export default function ChapterEditorToolbar({
                     type="button"
                     onClick={() => onImpactReviewDecisionChange('needs-manual-action')}
                     aria-pressed={impactReviewDecision === 'needs-manual-action'}
-                    className={`rounded px-2 py-1 text-[11px] transition-colors ${impactReviewDecision === 'needs-manual-action' ? 'bg-amber-500/15 text-amber-200' : 'text-text-muted hover:text-text-primary'}`}
+                    className={`rounded px-2 py-1 text-xs transition-colors ${impactReviewDecision === 'needs-manual-action' ? 'bg-amber-500/15 text-warning' : 'text-text-secondary hover:text-text-primary'}`}
                     disabled={impactReviewBusy}
                   >
                     需人工处理
@@ -391,15 +433,15 @@ export default function ChapterEditorToolbar({
                   onClick={onExecuteImpactReview}
                   disabled={impactReviewBusy || !impactReviewItemId || impactReviewNote.trim().length < 2}
                   title="记录作者复核 durable Run，不写入正式数据"
-                  className="flex items-center justify-center gap-1 rounded border border-sky-400/30 bg-sky-400/10 px-3 py-1.5 text-xs text-sky-200 hover:bg-sky-400/20 disabled:opacity-50"
+                  className="flex items-center justify-center gap-1 rounded border border-sky-400/30 bg-sky-400/10 px-3 py-1.5 text-xs text-info hover:bg-sky-400/20 disabled:opacity-50"
                 >
                   {impactReviewBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   {impactReviewBusy ? '记录中...' : '记录复核'}
                 </button>
               </div>
               {selectedImpactReview && (
-                <div className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-text-muted">
-                  <span className={selectedImpactReview.output.decision === 'needs-manual-action' ? 'text-amber-200' : 'text-emerald-200'}>
+                <div className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-text-secondary">
+                  <span className={selectedImpactReview.output.decision === 'needs-manual-action' ? 'text-warning' : 'text-success'}>
                     最近决定：{selectedImpactReview.output.decision === 'needs-manual-action' ? '需人工处理' : '已确认'}
                   </span>
                   <span>{selectedImpactReview.output.note}</span>
@@ -408,7 +450,7 @@ export default function ChapterEditorToolbar({
                     <button
                       type="button"
                       onClick={onOpenImpactManualEntry}
-                      className="inline-flex items-center gap-1 rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-200 hover:bg-amber-400/20"
+                      className="inline-flex items-center gap-1 rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] text-warning hover:bg-amber-400/20"
                       title="打开对应的既有人工编辑入口；不会自动修改正式数据"
                     >
                       <BookOpenCheck className="h-3 w-3" />打开人工入口
@@ -425,7 +467,7 @@ export default function ChapterEditorToolbar({
             && !impactStoryTimelineRegenerationCandidate
             && !impactPatchCandidate && (
             <div className="space-y-2 rounded border border-violet-400/20 bg-violet-400/5 p-2">
-              <div className="text-[11px] text-violet-200">
+              <div className="text-xs text-violet-200">
                 H57 生成式下游重建只处理一个后续章纲的 `summary`；模型重新装配当前 Context，确认前不会覆盖正式摘要。
               </div>
               <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_auto]">
@@ -462,16 +504,16 @@ export default function ChapterEditorToolbar({
           )}
           {impactOutlineRegenerationCandidate && !impactStoryTimelineRegenerationCandidate && (
             <div className="space-y-2 rounded border border-violet-400/25 bg-bg-elevated/70 p-2 text-text-secondary">
-              <div className="text-[11px] text-text-muted">H57 child 候选只允许写目标章纲摘要；作者确认前正式数据不变。</div>
+              <div className="text-xs text-text-secondary">H57 child 候选只允许写目标章纲摘要；作者确认前正式数据不变。</div>
               <div className="whitespace-pre-wrap text-xs text-text-primary">{impactOutlineRegenerationCandidate.result.summary}</div>
-              <div className="text-[11px] text-text-secondary">理由：{impactOutlineRegenerationCandidate.result.reason}</div>
-              <div className="text-[10px] text-text-muted">证据：{impactOutlineRegenerationCandidate.result.evidenceRefs.join('、')}</div>
+              <div className="text-xs text-text-secondary">理由：{impactOutlineRegenerationCandidate.result.reason}</div>
+              <div className="text-[10px] text-text-secondary">证据：{impactOutlineRegenerationCandidate.result.evidenceRefs.join('、')}</div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={onConfirmImpactOutlineRegeneration}
                   disabled={impactOutlineRegenerationBusy}
-                  className="flex items-center gap-1 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-200 hover:bg-emerald-400/20 disabled:opacity-50"
+                  className="flex items-center gap-1 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs text-success hover:bg-emerald-400/20 disabled:opacity-50"
                 >
                   {impactOutlineRegenerationBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   确认重建摘要
@@ -484,7 +526,7 @@ export default function ChapterEditorToolbar({
                 >
                   <X className="h-3.5 w-3.5" />放弃候选
                 </button>
-                <span className="text-[10px] text-text-muted">child {impactOutlineRegenerationCandidate.candidateHash.slice(0, 12)}</span>
+                <span className="text-[10px] text-text-secondary">child {impactOutlineRegenerationCandidate.candidateHash.slice(0, 12)}</span>
               </div>
             </div>
           )}
@@ -493,7 +535,7 @@ export default function ChapterEditorToolbar({
             && !impactOutlineRegenerationCandidate
             && !impactPatchCandidate && (
             <div className="space-y-2 rounded border border-cyan-400/20 bg-cyan-400/5 p-2">
-              <div className="text-[11px] text-cyan-200">
+              <div className="text-xs text-cyan-200">
                 H57 年表重建一次只修订一个既有事件的故事时间、重要度和描述；标题、章节绑定与顺序保持冻结。
               </div>
               <div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_auto]">
@@ -530,12 +572,12 @@ export default function ChapterEditorToolbar({
           )}
           {impactStoryTimelineRegenerationCandidate && !impactOutlineRegenerationCandidate && (
             <div className="space-y-2 rounded border border-cyan-400/25 bg-bg-elevated/70 p-2 text-text-secondary">
-              <div className="text-[11px] text-text-muted">
+              <div className="text-xs text-text-secondary">
                 H57 child 候选：{impactStoryTimelineRegenerationCandidate.targetBaseline.title}；确认前正式年表不变。
               </div>
-              <div className="grid gap-1 text-[11px] md:grid-cols-2">
+              <div className="grid gap-1 text-xs md:grid-cols-2">
                 <div className="rounded border border-border/70 bg-bg-surface/60 p-2">
-                  <div className="text-text-muted">当前值</div>
+                  <div className="text-text-secondary">当前值</div>
                   <div>时间：{impactStoryTimelineRegenerationCandidate.targetBaseline.storyTime || '未标注'}</div>
                   <div>重要度：{impactStoryTimelineRegenerationCandidate.targetBaseline.importance}</div>
                   <div className="whitespace-pre-wrap">{impactStoryTimelineRegenerationCandidate.targetBaseline.description || '暂无描述'}</div>
@@ -547,14 +589,14 @@ export default function ChapterEditorToolbar({
                   <div className="whitespace-pre-wrap text-text-primary">{impactStoryTimelineRegenerationCandidate.result.description || '暂无描述'}</div>
                 </div>
               </div>
-              <div className="text-[11px] text-text-secondary">理由：{impactStoryTimelineRegenerationCandidate.result.reason}</div>
-              <div className="text-[10px] text-text-muted">证据：{impactStoryTimelineRegenerationCandidate.result.evidenceRefs.join('、')}</div>
+              <div className="text-xs text-text-secondary">理由：{impactStoryTimelineRegenerationCandidate.result.reason}</div>
+              <div className="text-[10px] text-text-secondary">证据：{impactStoryTimelineRegenerationCandidate.result.evidenceRefs.join('、')}</div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={onConfirmImpactStoryTimelineRegeneration}
                   disabled={impactStoryTimelineRegenerationBusy}
-                  className="flex items-center gap-1 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-200 hover:bg-emerald-400/20 disabled:opacity-50"
+                  className="flex items-center gap-1 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs text-success hover:bg-emerald-400/20 disabled:opacity-50"
                 >
                   {impactStoryTimelineRegenerationBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   确认重建年表事件
@@ -567,7 +609,7 @@ export default function ChapterEditorToolbar({
                 >
                   <X className="h-3.5 w-3.5" />放弃年表候选
                 </button>
-                <span className="text-[10px] text-text-muted">child {impactStoryTimelineRegenerationCandidate.candidateHash.slice(0, 12)}</span>
+                <span className="text-[10px] text-text-secondary">child {impactStoryTimelineRegenerationCandidate.candidateHash.slice(0, 12)}</span>
               </div>
             </div>
           )}
@@ -610,7 +652,7 @@ export default function ChapterEditorToolbar({
                 onClick={onCreateImpactPatch}
                 disabled={impactPatchBusy || !impactPatchTargetId || !impactPatchSummary.trim() || !impactPatchReason.trim()}
                 title="创建作者确认式大纲摘要候选"
-                className="flex items-center justify-center gap-1 rounded border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-400/20 disabled:opacity-50"
+                className="flex items-center justify-center gap-1 rounded border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs text-warning hover:bg-amber-400/20 disabled:opacity-50"
               >
                 {impactPatchBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitBranch className="h-3.5 w-3.5" />}
                 {impactPatchBusy ? '保存中...' : '生成修订候选'}
@@ -619,13 +661,13 @@ export default function ChapterEditorToolbar({
           )}
           {impactPatchCandidate && !impactOutlineRegenerationCandidate && !impactStoryTimelineRegenerationCandidate && (
             <div className="space-y-2 rounded border border-accent/20 bg-bg-elevated/70 p-2 text-text-secondary">
-              <div className="text-[11px] text-text-muted">候选仅允许写入选定大纲的 `summary`，确认前不会改动正式数据。</div>
+              <div className="text-xs text-text-secondary">候选仅允许写入选定大纲的 `summary`，确认前不会改动正式数据。</div>
               <div className="whitespace-pre-wrap text-xs text-text-primary">{impactPatchCandidate.proposal.fields.summary}</div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={onConfirmImpactPatch}
                   disabled={impactPatchBusy}
-                  className="flex items-center gap-1 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-200 hover:bg-emerald-400/20 disabled:opacity-50"
+                  className="flex items-center gap-1 rounded border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs text-success hover:bg-emerald-400/20 disabled:opacity-50"
                 >
                   {impactPatchBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   确认修订
@@ -638,7 +680,7 @@ export default function ChapterEditorToolbar({
                   <X className="h-3.5 w-3.5" />
                   放弃修订
                 </button>
-                <span className="text-[10px] text-text-muted">证据 {impactPatchCandidate.durable.candidateHash.slice(0, 12)}</span>
+                <span className="text-[10px] text-text-secondary">证据 {impactPatchCandidate.durable.candidateHash.slice(0, 12)}</span>
               </div>
             </div>
           )}

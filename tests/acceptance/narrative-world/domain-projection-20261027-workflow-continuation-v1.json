@@ -1,0 +1,414 @@
+{
+  "schema": "storyforge.narrative-domain-evaluation",
+  "version": 1,
+  "workPackage": "NW-1B",
+  "datasetVersion": 1,
+  "evidenceLevel": "deterministic-domain-projection-with-explicit-fixture-author-annotations; not-model-extraction-or-query-acceptance",
+  "modelCalls": 0,
+  "independentHumanReviews": 0,
+  "queryProviderChanged": false,
+  "cases": [
+    {
+      "family": "ferry-names",
+      "split": "development",
+      "kinds": {
+        "assertion": 4,
+        "development": 1,
+        "disclosure": 1,
+        "entity": 3,
+        "epistemic-event": 1,
+        "event": 1,
+        "relation": 1,
+        "rule": 1
+      },
+      "eligibleSources": 23,
+      "projectedSources": 12,
+      "unsupportedSources": 11,
+      "gaps": {
+        "projector-unavailable": 4,
+        "review-required": 7
+      },
+      "excluded": {
+        "not-confirmed": 5
+      },
+      "evidenceSpans": 3,
+      "rawBytesInRegisteredProse": 1915,
+      "evidenceCoveredBytes": 327,
+      "separatedTruthAndBelief": true,
+      "intentExcludedFromFacts": true,
+      "historicalStateRetained": true,
+      "oldV3BytesPreserved": true
+    },
+    {
+      "family": "clock-retelling",
+      "split": "development",
+      "kinds": {
+        "assertion": 4,
+        "development": 1,
+        "disclosure": 1,
+        "entity": 3,
+        "epistemic-event": 1,
+        "event": 1,
+        "relation": 1,
+        "rule": 1
+      },
+      "eligibleSources": 23,
+      "projectedSources": 12,
+      "unsupportedSources": 11,
+      "gaps": {
+        "projector-unavailable": 4,
+        "review-required": 7
+      },
+      "excluded": {
+        "not-confirmed": 5
+      },
+      "evidenceSpans": 3,
+      "rawBytesInRegisteredProse": 1936,
+      "evidenceCoveredBytes": 309,
+      "separatedTruthAndBelief": true,
+      "intentExcludedFromFacts": true,
+      "historicalStateRetained": true,
+      "oldV3BytesPreserved": true
+    },
+    {
+      "family": "sealed-letter",
+      "split": "development",
+      "kinds": {
+        "assertion": 4,
+        "development": 1,
+        "disclosure": 1,
+        "entity": 3,
+        "epistemic-event": 1,
+        "event": 1,
+        "relation": 1,
+        "rule": 1
+      },
+      "eligibleSources": 23,
+      "projectedSources": 12,
+      "unsupportedSources": 11,
+      "gaps": {
+        "projector-unavailable": 4,
+        "review-required": 7
+      },
+      "excluded": {
+        "not-confirmed": 5
+      },
+      "evidenceSpans": 3,
+      "rawBytesInRegisteredProse": 1936,
+      "evidenceCoveredBytes": 309,
+      "separatedTruthAndBelief": true,
+      "intentExcludedFromFacts": true,
+      "historicalStateRetained": true,
+      "oldV3BytesPreserved": true
+    },
+    {
+      "family": "harbor-secret",
+      "split": "development",
+      "kinds": {
+        "assertion": 4,
+        "development": 1,
+        "disclosure": 1,
+        "entity": 3,
+        "epistemic-event": 1,
+        "event": 1,
+        "relation": 1,
+        "rule": 1
+      },
+      "eligibleSources": 23,
+      "projectedSources": 12,
+      "unsupportedSources": 11,
+      "gaps": {
+        "projector-unavailable": 4,
+        "review-required": 7
+      },
+      "excluded": {
+        "not-confirmed": 5
+      },
+      "evidenceSpans": 3,
+      "rawBytesInRegisteredProse": 1900,
+      "evidenceCoveredBytes": 297,
+      "separatedTruthAndBelief": true,
+      "intentExcludedFromFacts": true,
+      "historicalStateRetained": true,
+      "oldV3BytesPreserved": true
+    },
+    {
+      "family": "garden-causality",
+      "split": "development",
+      "kinds": {
+        "assertion": 4,
+        "development": 1,
+        "disclosure": 1,
+        "entity": 3,
+        "epistemic-event": 1,
+        "event": 1,
+        "relation": 1,
+        "rule": 1
+      },
+      "eligibleSources": 23,
+      "projectedSources": 12,
+      "unsupportedSources": 11,
+      "gaps": {
+        "projector-unavailable": 4,
+        "review-required": 7
+      },
+      "excluded": {
+        "not-confirmed": 5
+      },
+      "evidenceSpans": 3,
+      "rawBytesInRegisteredProse": 1924,
+      "evidenceCoveredBytes": 291,
+      "separatedTruthAndBelief": true,
+      "intentExcludedFromFacts": true,
+      "historicalStateRetained": true,
+      "oldV3BytesPreserved": true
+    },
+    {
+      "family": "theater-promise",
+      "split": "development",
+      "kinds": {
+        "assertion": 4,
+        "development": 1,
+        "disclosure": 1,
+        "entity": 3,
+        "epistemic-event": 1,
+        "event": 1,
+        "relation": 1,
+        "rule": 1
+      },
+      "eligibleSources": 23,
+      "projectedSources": 12,
+      "unsupportedSources": 11,
+      "gaps": {
+        "projector-unavailable": 4,
+        "review-required": 7
+      },
+      "excluded": {
+        "not-confirmed": 5
+      },
+      "evidenceSpans": 3,
+      "rawBytesInRegisteredProse": 1975,
+      "evidenceCoveredBytes": 336,
+      "separatedTruthAndBelief": true,
+      "intentExcludedFromFacts": true,
+      "historicalStateRetained": true,
+      "oldV3BytesPreserved": true
+    },
+    {
+      "family": "unmade-wedding",
+      "split": "development",
+      "kinds": {
+        "assertion": 4,
+        "development": 1,
+        "disclosure": 1,
+        "entity": 3,
+        "epistemic-event": 1,
+        "event": 1,
+        "relation": 1,
+        "rule": 1
+      },
+      "eligibleSources": 23,
+      "projectedSources": 12,
+      "unsupportedSources": 11,
+      "gaps": {
+        "projector-unavailable": 4,
+        "review-required": 7
+      },
+      "excluded": {
+        "not-confirmed": 5
+      },
+      "evidenceSpans": 3,
+      "rawBytesInRegisteredProse": 1984,
+      "evidenceCoveredBytes": 327,
+      "separatedTruthAndBelief": true,
+      "intentExcludedFromFacts": true,
+      "historicalStateRetained": true,
+      "oldV3BytesPreserved": true
+    },
+    {
+      "family": "porcelain-repair",
+      "split": "development",
+      "kinds": {
+        "assertion": 4,
+        "development": 1,
+        "disclosure": 1,
+        "entity": 3,
+        "epistemic-event": 1,
+        "event": 1,
+        "relation": 1,
+        "rule": 1
+      },
+      "eligibleSources": 23,
+      "projectedSources": 12,
+      "unsupportedSources": 11,
+      "gaps": {
+        "projector-unavailable": 4,
+        "review-required": 7
+      },
+      "excluded": {
+        "not-confirmed": 5
+      },
+      "evidenceSpans": 3,
+      "rawBytesInRegisteredProse": 1774,
+      "evidenceCoveredBytes": 267,
+      "separatedTruthAndBelief": true,
+      "intentExcludedFromFacts": true,
+      "historicalStateRetained": true,
+      "oldV3BytesPreserved": true
+    },
+    {
+      "family": "branch-sluice",
+      "split": "holdout",
+      "kinds": {
+        "assertion": 4,
+        "development": 1,
+        "disclosure": 1,
+        "entity": 3,
+        "epistemic-event": 1,
+        "event": 1,
+        "relation": 1,
+        "rule": 1
+      },
+      "eligibleSources": 23,
+      "projectedSources": 12,
+      "unsupportedSources": 11,
+      "gaps": {
+        "projector-unavailable": 4,
+        "review-required": 7
+      },
+      "excluded": {
+        "not-confirmed": 5
+      },
+      "evidenceSpans": 3,
+      "rawBytesInRegisteredProse": 1792,
+      "evidenceCoveredBytes": 249,
+      "separatedTruthAndBelief": true,
+      "intentExcludedFromFacts": true,
+      "historicalStateRetained": true,
+      "oldV3BytesPreserved": true
+    },
+    {
+      "family": "two-calendars",
+      "split": "holdout",
+      "kinds": {
+        "assertion": 4,
+        "development": 1,
+        "disclosure": 1,
+        "entity": 3,
+        "epistemic-event": 1,
+        "event": 1,
+        "relation": 1,
+        "rule": 1
+      },
+      "eligibleSources": 23,
+      "projectedSources": 12,
+      "unsupportedSources": 11,
+      "gaps": {
+        "projector-unavailable": 4,
+        "review-required": 7
+      },
+      "excluded": {
+        "not-confirmed": 5
+      },
+      "evidenceSpans": 3,
+      "rawBytesInRegisteredProse": 2017,
+      "evidenceCoveredBytes": 327,
+      "separatedTruthAndBelief": true,
+      "intentExcludedFromFacts": true,
+      "historicalStateRetained": true,
+      "oldV3BytesPreserved": true
+    },
+    {
+      "family": "reed-longtail",
+      "split": "holdout",
+      "kinds": {
+        "assertion": 4,
+        "development": 1,
+        "disclosure": 1,
+        "entity": 3,
+        "epistemic-event": 1,
+        "event": 1,
+        "relation": 1,
+        "rule": 1
+      },
+      "eligibleSources": 23,
+      "projectedSources": 12,
+      "unsupportedSources": 11,
+      "gaps": {
+        "projector-unavailable": 4,
+        "review-required": 7
+      },
+      "excluded": {
+        "not-confirmed": 5
+      },
+      "evidenceSpans": 3,
+      "rawBytesInRegisteredProse": 1828,
+      "evidenceCoveredBytes": 276,
+      "separatedTruthAndBelief": true,
+      "intentExcludedFromFacts": true,
+      "historicalStateRetained": true,
+      "oldV3BytesPreserved": true
+    },
+    {
+      "family": "warehouse-history",
+      "split": "holdout",
+      "kinds": {
+        "assertion": 4,
+        "development": 1,
+        "disclosure": 1,
+        "entity": 3,
+        "epistemic-event": 1,
+        "event": 1,
+        "relation": 1,
+        "rule": 1
+      },
+      "eligibleSources": 23,
+      "projectedSources": 12,
+      "unsupportedSources": 11,
+      "gaps": {
+        "projector-unavailable": 4,
+        "review-required": 7
+      },
+      "excluded": {
+        "not-confirmed": 5
+      },
+      "evidenceSpans": 3,
+      "rawBytesInRegisteredProse": 1990,
+      "evidenceCoveredBytes": 330,
+      "separatedTruthAndBelief": true,
+      "intentExcludedFromFacts": true,
+      "historicalStateRetained": true,
+      "oldV3BytesPreserved": true
+    }
+  ],
+  "inputHashes": {
+    "src/lib/context-gateway/canon-provider.ts": "520b64034bab2880e93f35656805245d1da86eac11318cdd0831372ea6954e8c",
+    "src/lib/export/backup-trust.ts": "f1364618546387173b087ddca4d2f3ba6bffa7ab62a25a4474bf9a57892e72e5",
+    "src/lib/export/registry-export.ts": "72875bdaec8444dcea020b9ee11ed19abfac5af4f8240bd58724c853d0d0c71a",
+    "src/lib/export/registry-import.ts": "939d5faa3b50a76cdafb7f29d4da90b10928b317dafd27d642820fc8adac41e5",
+    "src/lib/narrative-domain/codec.ts": "934da047b0b909abfa42442cdb4535e6bc714d6801c7682f59367e2107ee0c09",
+    "src/lib/narrative-domain/integrity.ts": "3a3f2bf0fe90c73e59582428b5d83c59232082333685cf471c7afc7b4f878404",
+    "src/lib/narrative-domain/json.ts": "fc1fe9db86daaf85808ecc1d1754a0dc524a9d57e1c63625edc87d8101bf52b8",
+    "src/lib/narrative-domain/lifecycle.ts": "2a6f0e181c2da5458e9f5a4ef4d073ebf3d0a32f218281aae3430a7fe91c8693",
+    "src/lib/narrative-domain/references.ts": "c981bf7d8a5d958d84f0b5082f96b713324eeef0753c44e10c15d2d9bffcc1c1",
+    "src/lib/narrative-domain/sha256.ts": "d7b19c749bef23f0ebc441765b9ee499d00e7412dd51c7ca597774125246d6d5",
+    "src/lib/narrative-domain/visibility.ts": "94e6685dd378a99e2e1ac85705fa15539eb68b7dd658f31da2463ee7f83ed8e0",
+    "src/lib/registry/adopt.ts": "90eecc8b07f13cfd4b0baf83c43d49ebc83bb92e8767162d4f6ad6daa3cae96a",
+    "src/lib/registry/adoption-schema.ts": "64b3f1a5e4993267b35676e0e3afff74ad24bacf5fc4a390cacd8315216ebbe9",
+    "src/lib/registry/field-registry.ts": "8a7be7617b8904e5576adcc5703df20fff420396d74b66900a61c0fad2bd7320",
+    "src/lib/registry/project-tables.ts": "0265db1f2b339c683357ee7f17e303173dfabfcb9e8c2c092ad3404782dd93d0",
+    "src/lib/types/narrative-domain.ts": "078b4362a15e6161cec02f7cf6624d63ca53459cdcbbe779246c93d1a9a7a7ec",
+    "src/lib/types/state-card.ts": "4d3464331938a6e59b82f53f6b8646283396bbb17d033995161f2857c7a12f7b",
+    "src/lib/world-engine/narrative-domain-authoring.ts": "3a5c9484f034821db1fbfe76b52acafb34a67da15926db4fd247b40a0ad534bd",
+    "src/lib/world-engine/narrative-domain-candidate.ts": "d8a17c0a0e17a59463d36779c8214c63f4684b21bcc6ebe1754b4f120aa2d5a3",
+    "src/lib/world-engine/narrative-domain-capture.ts": "9085133c1a79184c9854b901ea1376e0faee046e877759b18fdf4aefede0e40d",
+    "src/lib/world-engine/narrative-domain-context.ts": "16da298166d4dc448206b8e62035e3e21505db8464514502739779704c54fbe1",
+    "src/lib/world-engine/narrative-domain-evidence.ts": "ec7577e38077eb9b2f462927e74deba669c8d0dcf666c4fdb75313eff60f7a8f",
+    "src/lib/world-engine/narrative-domain-projection.ts": "547c7d38b6a6c6e65aaef2b69602df77ee32e6bf9296b97bec7a8177b56faf42",
+    "src/lib/world-engine/narrative-domain-registry.ts": "7d4573a16b32026dfff71c3c641ba2186c84260e644fd8e95e5e075f0778907a",
+    "src/lib/world-engine/semantic-registry-v3.ts": "3627ee93ff5ce787f4b94d70e1b6a6149e81b3e3eaba346cebdbf7421042bbf8",
+    "tests/acceptance/narrative-world/corpus-v1.json": "2273c9fcda68cb39a3892e2c4d86a47f3a0df77032dae073665c89ff8ab6e014",
+    "tests/helpers/narrative-domain-fixture.ts": "675491be35e081e459a703106bfaad79a1b5d8f34957c5d42732fb94e5c18702",
+    "tests/regression/R-NW-1B-corpus.test.ts": "64de9dd6e6b5df69fc5c0d003bd35e53997cf31b8436971c307a949d9ca3f941"
+  }
+}

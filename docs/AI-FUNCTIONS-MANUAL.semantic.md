@@ -17,6 +17,14 @@
 
 ## 核心动作语义注解
 
+### 配置与传输边界
+
+提供商预设和型号列表是选择建议，不是覆盖作者模型 ID 的白名单。加载、保存和应用预设保留作者的型号与地址；空型号保持未完成状态。已确认的官方退役型号在设置页说明下线日期并保留原配置，由作者显式选择替代项，不在失败后自动换模型或重发。
+
+只有实际官方地址及已登记的同源代理应用已核实的型号参数限制；私有地址不因提供商标签而被当成官方服务。Claude 不接受自定义温度的已登记新型号省略该请求参数，同时保留作者设置值和 requested / 实际参数回执。预算、usage、非重试失败和候选采纳合同不变，也不由这些合成协议回归提升 JSON、工具调用或真实连接的能力等级。生命周期依据：[Claude 下线公告](https://platform.claude.com/docs/en/about-claude/model-deprecations)、[Claude OpenAI 兼容协议](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk)、[Gemini 下线公告](https://ai.google.dev/gemini-api/docs/deprecations)。
+
+官方 Poe 的正数输出上限实际进入请求，Poe/Gemini 官方兼容目标在流式调用中请求 usage；不更改预算数值或 Poe 采样策略，未登记代理和私有地址保留原合同。服务未返回 usage 时继续标未知，不用估算值冒充实际账单，不自动剥参数重发。依据：[Poe 字段与限制](https://creator.poe.com/docs/external-applications/openai-compatible-api)、[Gemini OpenAI 兼容示例](https://ai.google.dev/gemini-api/docs/openai)。
+
 ### 章节正文生成 — `moduleKey: chapter.content`
 - **业务意图**:项目最核心的功能。读取最丰富的上下文(世界观/角色/状态/伏笔/词条/真实与幻想规则/上一章结尾),经三层记忆预算分配后生成正文。
 - **多世界**:按章节所属世界(沿大纲父链解析)装配上下文,不串台。

@@ -86,7 +86,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
   }, [worldview])
 
   const save = (fieldName: string, v: string) =>
-    saveWorldview({ projectId: project.id!, [fieldName]: v })
+    saveWorldview({ projectId: project.id!, worldGroupId: project.enableMultiWorld ? activeGroupId : null, [fieldName]: v })
 
   const pendingWorldviewCandidates = copilot.pendingCandidates.filter(candidate => (
     candidate.payload.skillId === 'world-origin.worldview-field'
@@ -203,7 +203,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
                 value={values[f.key] || ''}
                 onChange={v => {
                   setValues(prev => ({ ...prev, [f.key]: v }))
-                  save(f.field, v)
+                  return save(f.field, v)
                 }}
                 project={project}
                 activeGroupId={activeGroupId}
@@ -255,7 +255,7 @@ function HumanityFieldEditor({
 }: {
   meta: FieldMeta
   value: string
-  onChange: (v: string) => void
+  onChange: (v: string) => void | Promise<void>
   project: Project
   activeGroupId: number | null
   copilot: ReturnType<typeof useMasterCopilot>

@@ -77,7 +77,9 @@ test('旧两图商业 Build 可在同一 Production 取消、修订为十二图 
 
   await openTextAdventurePage(page, seeded.scope, 'production')
   const studio = page.getByTestId('product-production-studio')
-  await expect(studio).toContainText('潮门灯塔 · 媒资修订验收')
+  // Recovery opens the Production; the frozen runtime preview is not its title.
+  await expect(studio.getByRole('heading', { name: '媒资修订浏览器验收', exact: true })).toBeVisible()
+  await expect(page.getByTestId('text-adventure-author-workbench')).toBeVisible()
   await expect(page.getByTestId('text-adventure-media-plan-blocker')).toContainText('2 张图片')
   await expect(page.getByTestId('text-adventure-media-plan-blocker')).toContainText('12 张底线')
   await expect(studio.getByRole('button', { name: '确认角色锚点并开始出图' })).toBeDisabled()
@@ -400,6 +402,11 @@ test('Visual QA 阻塞时可直接上传同画幅高分辨率替换，旧 Build 
     return seeded
   }, solidPng(1280, 720, [20, 50, 80, 255]).toString('base64'))
   await openTextAdventurePage(page, seeded.scope, 'production')
+  // Navigation finishes before the selected Production and its review artifacts
+  // load. Establish those stages before asserting the media-specific QA state.
+  const studio = page.getByTestId('product-production-studio')
+  await expect(studio.getByRole('heading', { name: '媒资修订浏览器验收', exact: true, level: 1 })).toBeVisible()
+  await expect(page.getByTestId('text-adventure-author-workbench')).toBeVisible()
   const media = page.getByTestId('text-adventure-media-authoring')
   await expect(media).toContainText('Visual QA 退回 1 张图片')
   const first = media.locator('article').filter({ hasText: 'media.visual.001' })
@@ -473,7 +480,17 @@ test('文字修订文件创建独立子版本并在刷新后保留原图与来�
   await expect(submit).toBeDisabled()
   await panel.getByRole('checkbox').check()
   await submit.click()
-  await expect(page.getByTestId('product-production-command-activity')).toContainText('创建内容修订版 · succeeded')
+  // Automatic review can replace the transient command banner before the next
+  // browser observation. Verify the durable revision receipt, not that banner.
+  await expect.poll(() => page.evaluate(async productionId => {
+    const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const { db } = await importer('/storyforge/src/lib/db/schema.ts')
+    const commands = await db.productProductionCommands.where('productionId').equals(productionId).toArray()
+    return commands.filter((row: any) => row.type === 'revise-text-content').map((row: any) => ({
+      status: row.status, errorCode: row.errorCode,
+      buildNumber: JSON.parse(row.resultJson || '{}').buildNumber,
+    }))
+  }, seeded.productionId)).toEqual([{ status: 'succeeded', errorCode: null, buildNumber: 2 }])
   await page.reload()
   await expect(page.getByTestId('product-production-studio')).toContainText('#2')
   const after = await page.evaluate(async seeded => {

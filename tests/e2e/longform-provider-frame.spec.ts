@@ -23,6 +23,7 @@ async function mixedFrame(page: Page) {
   await page.goto(`./workspace/${target.projectId}?module=chapters-list&chapter=${target.outlineNodeId}`)
   await page.locator('[data-workspace-ready=longform]').waitFor()
   await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
+  await page.getByRole('dialog', { name: '正文生成提示', exact: true }).getByRole('button', { name: '开始生成', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })).toHaveValue(received)
   await expect(page.getByRole('alert').filter({ hasText: '独立分隔符' })).toBeVisible()
   return { target, after, received, calls: () => calls }
@@ -69,6 +70,7 @@ test('重复回复原文保留并阻止直接采纳，作者选择后段后正�
   await page.locator('[data-workspace-ready=longform]').waitFor()
   await page.getByRole('textbox', { name: '自定义指令...', exact: true }).fill('写600字，只核对后关灯。')
   await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
+  await page.getByRole('dialog', { name: '正文生成提示', exact: true }).getByRole('button', { name: '开始生成', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })).toHaveValue(raw)
   await expect(page.getByRole('alert').filter({ hasText: '推理分隔符' })).toBeVisible()
   await page.getByRole('button', { name: '采纳', exact: true }).click()

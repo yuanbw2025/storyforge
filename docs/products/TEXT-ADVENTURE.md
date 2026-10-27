@@ -49,6 +49,12 @@
 
 ## 5. 关键代码锚点
 
+### 导航与加载边界
+
+文字冒险的作品库和制作页使用同一产品外壳；顶部产品页签返回当前工作区的作品库，跨产品返回时可恢复上次选择。该选择仅为本机导航偏好，必须重新校验 Project/World/Work 归属，不能授权生产、恢复不存在的作品或自动启动存档。玩家通过作品详情或明确会话地址进入现有播放器。
+
+工作区、页面或存档切换后，旧读取的结果、错误和媒资 resolver 不得覆盖当前页面。作品库逐份核验存档通关摘要，避免同时重放全部存档；损坏存档仍保留既有错误与恢复入口。本路径不新增 AI 读写、表或迁移，继续由 Work 拥有制作、媒资、Build/Release 和运行数据，只读引用冻结世界版本。
+
 - 契约：`src/lib/types/adventure.ts`、`src/lib/types/adventure-v2.ts`
 - 内容校验与确定性规则：`src/lib/adventure/runtime.ts`
 - 正式生产 Brief、Artifact 与编译：`src/lib/adventure/production-brief.ts`、`src/lib/adventure/production-artifacts.ts`、`src/lib/adventure/production-compiler.ts`

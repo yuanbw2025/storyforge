@@ -263,6 +263,7 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
     await act(async () => manual.dispatchEvent(new FocusEvent('focusout', { bubbles: true })))
     expect(mocks.worldviewStore.saveWorldview).toHaveBeenCalledWith({
       projectId: project.id,
+      worldGroupId: null,
       climateByRegion: '盐雾季会让北岸连续失温七日。',
     })
   })

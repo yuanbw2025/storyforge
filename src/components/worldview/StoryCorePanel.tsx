@@ -91,7 +91,7 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
 
   const save = (key: string, v: string) => {
     const field = FIELDS.find(f => f.key === key)!
-    saveStoryCore({ projectId: project.id!, [field.saveKey]: v })
+    return saveStoryCore({ projectId: project.id!, [field.saveKey]: v })
   }
 
   const pendingStoryCoreCandidates = copilot.pendingCandidates.filter(candidate => (
@@ -166,7 +166,7 @@ export default function StoryCorePanel({ project, initialStoryCoreId }: Props) {
               value={values[f.key] || ''}
               onChange={v => {
                 setValues(prev => ({ ...prev, [f.key]: v }))
-                save(f.key, v)
+                return save(f.key, v)
               }}
               project={project}
               activeGroupId={activeGroupId}
@@ -206,7 +206,7 @@ function FieldEditor({
 }: {
   field: FieldDef
   value: string
-  onChange: (v: string) => void
+  onChange: (v: string) => void | Promise<void>
   project: Project
   activeGroupId: number | null
   copilot: ReturnType<typeof useMasterCopilot>

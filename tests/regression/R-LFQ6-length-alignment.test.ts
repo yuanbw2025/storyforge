@@ -11,6 +11,31 @@ const wire = (request: { messages: { content: string }[] }) => request.messages.
 describe('LFQ6 · 作者明确篇幅与实际模板一致', () => {
   afterEach(() => usePromptStore.setState(original, true))
 
+  it.each(['chapter.content', 'chapter.continue'] as const)('作者模板不含 userHint 时 %s 仍交付本轮完整要求，不改模板或参数', key => {
+    const template = { ...seed(key), continuityMode: 'off' as const, systemPrompt: '作者保留的系统模板。', userPromptTemplate: '作者保留的任务模板。', modelOverride: { temperature: 0, maxTokens: 1900 } }
+    const saved = JSON.stringify(template)
+    usePromptStore.setState({ getActive: () => template })
+    const hint = '只写600字。\n先问同行者意愿，签收后停笔。'
+    const request = key === 'chapter.content'
+      ? buildChapterContentRequestV1('收店', '', '', '', '', '', hint)
+      : buildContinueRequestV1('开始清点。', '', '', hint)
+    const content = request.messages.map(item => item.content).join('\n')
+    expect(content).toContain(hint)
+    expect(content.split(hint)).toHaveLength(2)
+    expect(content).toContain('作者保留的任务模板。')
+    expect(JSON.stringify(template)).toBe(saved)
+    expect(request.modelOverride).toEqual({ temperature: 0, maxTokens: 1900 })
+  })
+
+  it('模板已交付的本轮要求不重复，空提示不添加空块', () => {
+    const template = { ...seed('chapter.content'), continuityMode: 'off' as const, userPromptTemplate: '{{userHint}}' }
+    usePromptStore.setState({ getActive: () => template })
+    const hint = '不要增加敌人，签收后停笔。'
+    const request = buildChapterContentRequestV1('收店', '', '', '', '', '', hint)
+    expect(request.messages.map(item => item.content).join('\n').split(hint)).toHaveLength(2)
+    expect(wire(buildChapterContentRequestV1('收店', '', '', '', '', '', '  '))).not.toContain('【本轮作者补充要求】')
+  })
+
   it('600～900 字替代本轮默认 2500，其它默认基调和节奏保留，模板未改写', () => {
     const template = seed('chapter.content')
     usePromptStore.setState({ getActive: () => template })

@@ -127,7 +127,7 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     expect(useAIConfigStore.getState().config.apiKey).toBe('')
   })
 
-  it('应用预设后修改配置仍保留可覆盖的来源预设，官方 provider 只保存当前登记模型', async () => {
+  it('应用预设后修改配置保留来源预设及作者明确输入的模型', async () => {
     const useAIConfigStore = await freshStore()
     const id = useAIConfigStore.getState().saveAsPreset('主力配置')
     useAIConfigStore.getState().applyPreset(id)
@@ -139,7 +139,7 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     useAIConfigStore.getState().updatePresetFromCurrent(id)
     const preset = useAIConfigStore.getState().presets.find(p => p.id === id)
     expect(preset?.config.baseUrl).toBe('https://example.com/v1')
-    expect(preset?.config.model).toBe(PROVIDER_PRESETS.deepseek?.model)
+    expect(preset?.config.model).toBe('new-model')
     expect(useAIConfigStore.getState().activePresetId).toBe(id)
   })
 
@@ -237,9 +237,9 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     ['agnes-2.5-pro-beta', 1_000_000],
     ['agnes-3.0-flash', 524_288],
     ['agnes-3.0-pro', MODEL_CONTEXT_PRESETS.agnes.maxContext],
-  ] as const)('%s 在保存和刷新后保持原型号，未登记型号仍按原规则处理', async (model, maxContext) => {
+  ] as const)('%s 在保存和刷新后保持原型号，列表外型号也由作者决定', async (model, maxContext) => {
     expect(normalizeProviderModel('agnes', model)).toBe(model)
-    expect(normalizeProviderModel('agnes', 'not-a-registered-model')).toBe(PROVIDER_PRESETS.agnes.model)
+    expect(normalizeProviderModel('agnes', 'not-a-registered-model')).toBe('not-a-registered-model')
     const useAIConfigStore = await freshStore()
     useAIConfigStore.getState().switchProvider('agnes')
     useAIConfigStore.getState().setConfig({ model })
@@ -288,7 +288,7 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
     })
   })
 
-  it('加载时拒绝官方提供商未登记的模型 ID 并回到当前默认模型', async () => {
+  it('加载时保留列表外的作者模型 ID，不静默换回当前预设', async () => {
     localStorage.setItem(REMEMBER_KEY, 'true')
     localStorage.setItem(CONFIG_KEY, JSON.stringify({
       provider: 'deepseek',
@@ -299,11 +299,11 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
       maxTokens: 0,
     }))
     const useAIConfigStore = await freshStore()
-    expect(useAIConfigStore.getState().config.model).toBe('deepseek-v4-flash')
+    expect(useAIConfigStore.getState().config.model).toBe('retired-model-id')
     expect(useAIConfigStore.getState().config.apiKey).toBe('deepseek-key')
   })
 
-  it('Agnes 模型 ID 大小写不匹配时拒绝猜测并回到当前默认模型', async () => {
+  it('Agnes 列表外模型保持作者输入的大小写，不猜测其他型号', async () => {
     localStorage.setItem(REMEMBER_KEY, 'true')
     localStorage.setItem(CONFIG_KEY, JSON.stringify({
       provider: 'agnes',
@@ -316,17 +316,17 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
 
     const useAIConfigStore = await freshStore()
 
-    expect(useAIConfigStore.getState().config.model).toBe('agnes-2.5-flash')
+    expect(useAIConfigStore.getState().config.model).toBe('AGNES-NOT-REGISTERED')
     expect(useAIConfigStore.getState().config.apiKey).toBe('agnes-key')
     expect(JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}')).toMatchObject({
       provider: 'agnes',
       apiKey: 'agnes-key',
-      model: 'agnes-2.5-flash',
+      model: 'AGNES-NOT-REGISTERED',
     })
     expect(getModelPreset('agnes', 'AGNES-NOT-REGISTERED').maxContext).toBe(524_288)
   })
 
-  it('豆包 provider 只接受当前方舟在线推理模型', async () => {
+  it('豆包推荐列表保留已登记方舟型号，列表外的作者 ID 不被替换', async () => {
     expect(PROVIDER_PRESETS.doubao?.baseUrl).toBe('https://ark.cn-beijing.volces.com/api/v3')
     expect(PROVIDER_PRESETS.doubao?.model).toBe('doubao-1-5-pro-32k-250115')
     expect(PROVIDER_MODELS.doubao?.map(model => model.value)).toEqual([
@@ -357,8 +357,8 @@ describe('R-AI-CONFIG · API Key 存储策略', () => {
       maxTokens: 0,
     }))
     const useAIConfigStore = await freshStore()
-    expect(useAIConfigStore.getState().config.model).toBe('doubao-1-5-pro-32k-250115')
-    expect(JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}').model).toBe('doubao-1-5-pro-32k-250115')
+    expect(useAIConfigStore.getState().config.model).toBe('retired-model-id')
+    expect(JSON.parse(localStorage.getItem(CONFIG_KEY) || '{}').model).toBe('retired-model-id')
   })
 })
 

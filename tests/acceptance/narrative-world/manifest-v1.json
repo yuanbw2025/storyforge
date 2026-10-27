@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261027-longform-stability-v2.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261027-workflow-continuation-v1.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -449,13 +449,38 @@
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261025-mainline-integration-v1.json",
-        "workPackage": "NW-mainline-integration",
-        "note": "Retained unchanged before longform state-field validation and reviewed shared-source fingerprint refresh."
+        "workPackage": "NW-engineering-checkpoint",
+        "note": "Preserved before the 2026-10-26 current-main receipt refresh. Original measurements, input hashes and known gaps remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261026-mainline-integration-v1.json",
+        "workPackage": "NW-engineering-checkpoint",
+        "note": "Preserved before the 2026-10-26 browser-helper race correction. Original observations and input fingerprints remain unchanged."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261026-pr134-integration-v1.json",
+        "workPackage": "NW-integration",
+        "note": "Preserved PR208/PR134 integration receipt before combining the mainline navigation and PR209 editor/browser fixes."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261026-browser-helper-v2.json",
+        "workPackage": "NW-integration",
+        "note": "Preserved before PR208 mainline integration. Separately executed current-tree observations remain identical to both prior branch receipts; original hashes and gaps stay archived."
       },
       {
         "path": "tests/acceptance/narrative-world/baseline-20261027-longform-stability-v1.json",
         "workPackage": "B-LF-STAB-ST01",
         "note": "First reviewed state-field guard checkpoint preserved before the sparse structured-array write counterexample."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-longform-stability-v2.json",
+        "workPackage": "B-LF-STAB-ST01",
+        "note": "Retained prior verified state-card and touch-toolbar checkpoint before continuing full workflow validation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-pr208-integration-v3.json",
+        "workPackage": "NW-integration",
+        "note": "Retained mainline provider/navigation integration checkpoint before longform workflow continuation."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

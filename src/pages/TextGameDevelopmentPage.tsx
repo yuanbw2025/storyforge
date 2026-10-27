@@ -1,9 +1,10 @@
 import '../components/text-game/adventure-showcase.css'
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
-import BrandIcon from '../components/shared/BrandIcon'
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
+import AdventureProductFrame from '../components/text-game/AdventureProductFrame'
+import { readAdventureWorkspace, rememberAdventureWorkspace } from '../components/text-game/adventure-navigation'
+import ErrorBoundary from '../components/shared/ErrorBoundary'
 import { BuiltinGameShelf } from '../components/text-game/BuiltinGameShelf'
-import { PRODUCT_NAVIGATION } from '../components/navigation/product-navigation'
 import { liveQuery } from 'dexie'
 import ProductFrame from '../components/navigation/ProductFrame'
 import { db } from '../lib/db/schema'
@@ -74,7 +75,9 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
   const encodedHandoff = params.get('worldHandoff')
   const [projects, setProjects] = useState<Project[]>([])
   const [error, setError] = useState('')
-  const [mode, setMode] = useState<PageMode>(() => encodedHandoff || queryMode ? 'production' : page.mode)
+  const mode: PageMode = encodedHandoff || queryMode ? 'production' : page.mode
+  const [lastAdventureWorkspace, setLastAdventureWorkspace] = useState(readAdventureWorkspace)
+  const [workOwners, setWorkOwners] = useState<Array<{ id?: number; projectId: number; worldId: number }>>([])
   const session = Number(params.get('session')) || null
   const [handoff, setHandoff] = useState<ProductProductionHandoffV1 | null>(null)
   const activeWorldGroupId = useWorldGroupStore(state => state.activeGroupId)
@@ -92,22 +95,36 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
   }, [])
 
   useEffect(() => {
-    if (!encodedHandoff) setMode(queryMode ?? page.mode)
-  }, [encodedHandoff, page.mode, queryMode])
+    if (openWorld) return
+    const subscription = liveQuery(() => db.works.toArray()).subscribe({
+      next: rows => setWorkOwners(rows.map(({ id, projectId, worldId }) => ({ id, projectId, worldId }))),
+      error: cause => setError(String(cause)),
+    })
+    return () => subscription.unsubscribe()
+  }, [openWorld])
 
   const returnProjectId = settingsReturn?.sourceKind === 'novel'
     ? settingsReturn.activeWorkProjectId
     : settingsReturn?.activeWorldProjectId
-  const requestedProjectId = Number(params.get('project')) || returnProjectId || 0
+  const remembered = !openWorld && !params.has('project') && !encodedHandoff ? lastAdventureWorkspace : null
+  const requestedProjectId = Number(params.get('project')) || returnProjectId || remembered?.projectId || 0
   const project = projects.find(candidate => candidate.id === requestedProjectId)
   const projectId = project?.id
-  const workId = Number(params.get('work')) || project?.activeWorkId
+  const workId = Number(params.get('work')) || remembered?.workId || project?.activeWorkId
   const worldId = project?.activeWorldId
   const scope = useMemo<WorkspaceScope | undefined>(() => (
     projectId != null && workId != null && worldId != null
+      && (openWorld || workOwners.some(work => work.id === workId && work.projectId === projectId && work.worldId === worldId))
       ? { projectId, worldId, workId }
       : undefined
-  ), [projectId, worldId, workId])
+  ), [projectId, worldId, workId, openWorld, workOwners])
+
+  useEffect(() => {
+    if (!openWorld && scope) {
+      rememberAdventureWorkspace(scope)
+      setLastAdventureWorkspace(current => current?.projectId === scope.projectId && current.worldId === scope.worldId && current.workId === scope.workId ? current : scope)
+    }
+  }, [openWorld, scope])
   const worldProject = projects.find(candidate => candidate.id === settingsReturn?.activeWorldProjectId)
     ?? (settingsReturn?.sourceKind === 'novel' || project?.workspacePurpose !== 'world-engine' ? undefined : project)
   const novelProject = projects.find(candidate => candidate.id === settingsReturn?.activeWorkProjectId)
@@ -137,7 +154,6 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
       }
       if (!active) return
       setHandoff(parsed)
-      setMode('production')
       if (!params.has('project')) {
         const next = new URLSearchParams(params)
         next.set('project', String(release.projectId))
@@ -188,13 +204,13 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
 
   const chooseProject = (nextProjectId: string) => {
     const next = new URLSearchParams()
-    if (nextProjectId) next.set('project', nextProjectId)
+    next.set('project', nextProjectId)
+    if (!openWorld && !nextProjectId) { rememberAdventureWorkspace(null); setLastAdventureWorkspace(null) }
     navigate({ pathname: `/${base}/${pageId}`, search: next.toString() })
     setHandoff(null)
   }
 
   const openPlayer = (nextSession: number | null, playerScope?: WorkspaceScope) => {
-    setMode('play')
     navigate(workspacePath(openWorld ? 'runtime' : 'play', {
       session: nextSession,
       mode: 'play',
@@ -214,31 +230,24 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
     navigate('/settings', { state: { storyforgeProductHubReturn: creatorReturn } })
   }
 
-  if (!openWorld && mode === 'play') return <div className="adventure-product-page">
-    <header className="adventure-product-header">
-      <button className="adventure-brand" onClick={() => navigate('/')} aria-label="返回 StoryForge 首页"><BrandIcon size={36} /><span>STORYFORGE<small>文字冒险</small></span></button>
-      <nav aria-label="文字冒险导航">
-        <button aria-current="page" onClick={() => navigate(workspacePath('library', { session: null }))}>作品与试玩</button>
-        <button onClick={() => navigate(workspacePath('production', { session: null }))}>创作工作台 ↗</button>
-      </nav>
-      <label className="adventure-workspace-select">工作区
-        <select aria-label="创作工作区" value={projectId ?? ''} onChange={event => chooseProject(event.target.value)}>
-          <option value="">选择工作区</option>
-          {projects.map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
-        </select>
-      </label>
-    </header>
-    <nav className="adventure-crossproduct-nav" aria-label="产品导航">{PRODUCT_NAVIGATION.map(item => <Link key={item.id} to={item.path} aria-current={item.id === 'adventure' ? 'page' : undefined}>{item.label}</Link>)}</nav>
+  const adventureFrame = (children: ReactNode) => <AdventureProductFrame
+    projects={projects} projectId={projectId} producing={mode === 'production'} page={page.label}
+    libraryPath={workspacePath('library', { session: null })}
+    productionPath={workspacePath('production', { session: null })}
+    navigation={navigation} onChooseProject={chooseProject}
+  >{children}</AdventureProductFrame>
+
+  if (!openWorld && mode === 'play') return adventureFrame(<>
     {error && <p role="alert">{error}</p>}
-    {decision.enterable && scope && project ? <Suspense fallback={<p className="adventure-page-loading">正在打开故事书…</p>}>
+    {decision.enterable && scope && project ? <ErrorBoundary key={`${scope.projectId}:${scope.worldId}:${scope.workId}`}><Suspense fallback={<p className="adventure-page-loading">正在打开故事书…</p>}>
       <AdventureGamePlayer key={scope.workId} project={project} scope={scope}
         worldGroupId={project.enableMultiWorld ? activeWorldGroupId : null} initialSessionId={session}
         onOpenSession={openPlayer}
         onOpenLibrary={() => navigate(workspacePath('library', { session: null }))} />
-    </Suspense> : <div className="adventure-page-empty"><span className="adventure-eyebrow">STORYFORGE / INTERACTIVE FICTION</span><h1>{page.label}</h1><p>每一个选择，都是故事的起点。选择一个工作区，打开其中的文字冒险作品。</p></div>}
-  </div>
+    </Suspense></ErrorBoundary> : <div className="adventure-page-empty"><span className="adventure-eyebrow">STORYFORGE / INTERACTIVE FICTION</span><p>每一个选择，都是故事的起点。选择一个工作区，打开其中的文字冒险作品。</p></div>}
+  </>)
 
-  return <ProductFrame product={base} title={title} page={page.label} navigation={navigation}>
+  const studio = <>
     <section className="lf-paper">
       <h3>{title} · {openWorld ? '展示作品与创作' : '可验证预览'}</h3>
       <p>{decision.entry.maturityNote}</p>
@@ -250,7 +259,7 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
       </div>}
       {!decision.enterable
         ? <p>当前产品通道尚未开放此入口。</p>
-        : <label>
+        : openWorld && <label>
             选择创作工作区
             <select aria-label="创作工作区" value={projectId ?? ''} onChange={event => chooseProject(event.target.value)}>
               <option value="">请选择</option>
@@ -308,32 +317,26 @@ export default function TextGameDevelopmentPage({ openWorld = false }: { openWor
                   为当前项目显式启用
                 </button>
               </div>
-          : openWorld
-            ? <TextOpenWorldPlayer
-                key={`${scope!.projectId}:${scope!.worldId}:${scope!.workId}`}
-                project={project!}
-                scope={scope!}
-                worldGroupId={project!.enableMultiWorld ? activeWorldGroupId : null}
-                initialSessionId={session}
-                onSessionSelected={selectedSessionId => {
-                  const next = new URLSearchParams(params)
-                  if (selectedSessionId == null) next.delete('session')
-                  else next.set('session', String(selectedSessionId))
-                  navigate({ search: next.toString() }, { replace: true, state: location.state })
-                }}
-              />
-            : <AdventureGamePlayer
-                key={`${scope!.workId}:${session}`}
-                project={project!}
-                scope={scope!}
-                worldGroupId={project!.enableMultiWorld ? activeWorldGroupId : null}
-                initialSessionId={session}
-              />}
+          : <TextOpenWorldPlayer
+              key={`${scope!.projectId}:${scope!.worldId}:${scope!.workId}`}
+              project={project!} scope={scope!}
+              worldGroupId={project!.enableMultiWorld ? activeWorldGroupId : null}
+              initialSessionId={session}
+              onSessionSelected={selectedSessionId => {
+                const next = new URLSearchParams(params)
+                if (selectedSessionId == null) next.delete('session')
+                else next.set('session', String(selectedSessionId))
+                navigate({ search: next.toString() }, { replace: true, state: location.state })
+              }}
+            />}
       </Suspense>
     </section>}
     {decision.enterable && !error && openWorld && mode === 'production' && !creatorSourceReady && <section className="lf-paper" data-testid="text-open-world-source-empty">
       <h3>小说或世界来源工作区归属尚未就绪</h3>
       <p>请选择已初始化的独立小说作品，或从世界引擎交接一个冻结 WorldRelease。</p>
     </section>}
-  </ProductFrame>
+  </>
+  return openWorld
+    ? <ProductFrame product={base} title={title} page={page.label} navigation={navigation}>{studio}</ProductFrame>
+    : adventureFrame(<ErrorBoundary key={`${pageId}:${projectId}:${workId}`}>{studio}</ErrorBoundary>)
 }

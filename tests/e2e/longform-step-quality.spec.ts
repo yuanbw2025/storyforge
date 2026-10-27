@@ -226,6 +226,7 @@ test('step prose honors the author request in the wire prompt and adopts edited 
     }
   })
   await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
+  await page.getByRole('dialog', { name: '正文生成提示', exact: true }).getByRole('button', { name: '开始生成', exact: true }).click()
   const draft = page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })
   await expect(draft).toHaveValue(generated)
   expect(requests).toHaveLength(1)
@@ -337,6 +338,7 @@ test('older chapter memory settles before prose freezes its context and remains 
   await page.goto(`./workspace/${fixture.projectId}?module=chapters-list&chapter=${fixture.nodeId}`)
   await expect(page.locator('[data-workspace-ready=longform]')).toBeVisible()
   await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
+  await page.getByRole('dialog', { name: '正文生成提示', exact: true }).getByRole('button', { name: '开始生成', exact: true }).click()
   try {
     await expect.poll(() => memoryCalls).toBe(1)
     expect(proseCalls).toBe(0)

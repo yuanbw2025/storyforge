@@ -3038,6 +3038,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
       {/* AI 工具栏 */}
       {compareSourceHtml == null && (
         <ChapterEditorToolbar
+          chapterTitle={outlineNode?.title}
           isStreaming={ai.isStreaming}
           hasText={!!plainText}
           organizingChapter={organizingChapter}

@@ -106,6 +106,13 @@ function deliverRequiredGatewayContext(messages: ChatMessage[], content: string 
   return [...messages, { role: 'user', content: required }]
 }
 
+/** A custom template may omit userHint; explicit author requirements must still reach this request. */
+function deliverAuthorHint(messages: ChatMessage[], hint: string | undefined): ChatMessage[] {
+  const content = hint?.trim()
+  if (!content || messages.some(message => message.content.includes(content))) return messages
+  return [...messages, { role: 'user', content: `【本轮作者补充要求】\n${content}` }]
+}
+
 function injectContinuityEnvelope(
   messages: ChatMessage[],
   mode: 'inherit' | 'required' | 'off' | undefined,
@@ -169,7 +176,7 @@ export function buildChapterContentRequestV1(
   const result = options?.skipContinuityEnvelope
     ? guarded
     : injectContinuityEnvelope(guarded, tpl.continuityMode, envelope)
-  return { messages: deliverRequiredGatewayContext(result, options?.requiredGatewayContext), ...(modelOverride ? { modelOverride: { ...modelOverride } } : {}) }
+  return { messages: deliverRequiredGatewayContext(deliverAuthorHint(result, userHint), options?.requiredGatewayContext), ...(modelOverride ? { modelOverride: { ...modelOverride } } : {}) }
 }
 
 export function buildChapterContentPrompt(...args: Parameters<typeof buildChapterContentRequestV1>): ChatMessage[] {
@@ -205,7 +212,7 @@ export function buildContinueRequestV1(
   const result = options?.skipContinuityEnvelope
     ? guarded
     : injectContinuityEnvelope(guarded, tpl.continuityMode, envelope)
-  return { messages: deliverRequiredGatewayContext(result, options?.requiredGatewayContext), ...(modelOverride ? { modelOverride: { ...modelOverride } } : {}) }
+  return { messages: deliverRequiredGatewayContext(deliverAuthorHint(result, userHint), options?.requiredGatewayContext), ...(modelOverride ? { modelOverride: { ...modelOverride } } : {}) }
 }
 
 export function buildContinuePrompt(...args: Parameters<typeof buildContinueRequestV1>): ChatMessage[] {

@@ -8,7 +8,13 @@ NW-0B 交付时只完成评测基础设施，没有模型调用、浏览器产�
 
 **2026-10-27 长篇稳定性修复的共享依赖回归**：完整 CI 中 5648 项测试通过、3 项跳过，三组末尾比较仍因来源指纹变化失败。保留历史回执和原失败后，实际重新运行三组 110 项测试，生成[新确定性基线](./baseline-20261027-longform-stability-v1.json)、[新 IR 契约](./ir-contract-20261027-longform-stability-v1.json)与[新领域投影契约](./domain-projection-20261027-longform-stability-v1.json)。[逐项对照记录](./shared-source-refresh-20261027-longform-stability-v1.json)确认原观察、gold 和历史文件不变，补充绑定新状态字段校验器。此更新只用于工程回归；完整 CI 继续复验，不新增世界引擎模型、性能或人工验收结论。
 
+**2026-10-26 PR134 主干整合复验**：[原始 CI](https://github.com/yuanbw2025/storyforge/actions/runs/40285762186)的 5597 项断言通过、3 项跳过，三组收尾比较因输入指纹变化而失败。实际重新执行三文件 110 项后，[IR 编码](./ir-contract-20261026-pr134-integration-v1.json)、[领域投影](./domain-projection-20261026-pr134-integration-v1.json)与[确定性基线](./baseline-20261026-pr134-integration-v1.json)的业务观察均与 20261025 回执逐项相同；输入变化来自主干的依赖、产品生产及生命周期接缝，随后另记录新回执引用与清单自身的指纹。保留旧回执、原语料和全部判定标准；不新增模型、性能或人工验收结论。
+
 **2026-10-25 工程交付收束**：本批以已保留的工程检查点为起点，整合当前主干后重新验证并交付；自动接续已按作者要求停止。本目录的历史失败、未知和未完成验收保持，不因主干合并改写为通过。增强入口仍仅在 DEV + `narrative-preview` 显式试用；原 41.67% 修改影响精确率、正式三档性能缺口、固定读者缺项以及作者实际改稿/用时缺失均保留。
+
+**2026-10-26 主干输入复核**：PR #209 的首次远端 CI 和完整 CLI 在三个套件末尾拒绝旧输入指纹，5597 项断言通过、3 项条件跳过；该次运行仍为失败。对当前整合树实际重跑三组/110 项回归后，新增并读回[IR 契约回执](./ir-contract-20261026-mainline-integration-v1.json)、[领域投影回执](./domain-projection-20261026-mainline-integration-v1.json)与[确定性基线](./baseline-20261026-mainline-integration-v1.json)，逐项观察与 2026-10-25 回执相同，只有输入指纹更新。旧回执及 gold 语料保持原样；基线仍为 48/120 查询通过、12 项缺口、60 项不支持，不提升模型、性能或人工验收结论。
+
+**2026-10-26 浏览器 helper 复核**：完整浏览器交付另保留 1 项失败与 2 项 flaky；文字修订测试误把会被后续 DAG 覆盖的临时提示当作命令回执，AVG helper 则在继续/选项切换时等待已消失按钮。修订测试改为严格读取唯一 `revise-text-content` 成功回执及子版本号，保留原图、来源、刷新和零图片调用断言；AVG helper 以真实选择事件停止有界推进，不跳过目标台词。首次 helper 修正的过度推进反例亦保留。该 helper 属于冻结输入，实际重跑三组/110 项并读回后新增[第二版基线](./baseline-20261026-browser-helper-v2.json)，全部行为观察保持不变，旧回执和缺口继续保留；此记录不宣称完整远端浏览器或模型验收通过。
 
 **2026-10-25 主干整合回执更新**：合并后的首次完整回归为 896 个文件、5191 项用例通过、3 项跳过，三组末尾回执比较因旧源码指纹而失败，案例观察没有变化。保留原失败日志和旧回执后，实际重新运行并回读了[IR 编码契约](./ir-contract-20261025-mainline-integration-v1.json)、[领域投影契约](./domain-projection-20261025-mainline-integration-v1.json)和[确定性基线](./baseline-20261025-mainline-integration-v1.json)；三份观察与原记录一致，gold 语料未改。此更新只绑定整合后的实际输入，不新增模型、性能或人工验收结论。
 
@@ -519,3 +525,7 @@ IR lexical 为 47 正确、2 部分正确、71 合理拒答；原文 lexical 为
 [新版完整材料](./reader-inputs-20261015-v6.json)保留 24 个确切封存快照、原 120 题和全部 720 条条件输入。四个明确获知事件使用显式局部坐标原点、一个沿用原文日序、七个仍未知，未补故事日期或公开私有真相。[协议 v3 预检](./raw/reader-fixed-20261015-v3/preflight.json)在开发和原留出侧均有实际差异，去时间/去知识/去证据为 12/5/96；并非新盲测或质量接受。
 
 [回执](./reader-profile-20261015-v1.json)与[发现材料](./reader-profile-findings-20261015-v1.md)保留 138 项检查、110 项 v26 基线回读、217 个输入摘要、包装计数修复与首批 8 次真实模型调用。正常 CI 包装内的 20 项 Node 反例不重复累计。继续批次在一次 `httpConnectionFailed` 后退出 1：累计 41 次派发、40 份成功、1 份失败、61 条成功条件观察，420 个未调用。失败没有正文或用量，没有自动重试；费用和底层 HTTP 状态保持未知。原模型材料和未派发的 v5 输入保持，[工程检查点 v19](./engineering-checkpoint-20261015-v19.json)仅结算局部工程与实际失败证据。
+
+PR208/mainline integration receipt: `baseline-20261027-pr208-integration-v3.json`; all deterministic observations match the preserved browser-helper-v2 and PR134 integration receipts. No model, performance or human acceptance upgrade.
+
+2026-10-27 分步骤后续巡检合入当前 main 的 provider 生命周期与既有状态表校验边界。`manifest-v1.json` 及 R-NW-1A/1B 当前回读指向 `20261027-workflow-continuation-v1` 三份新回执，旧回执和冻结 corpus 保持原样。生成与默认回读均为 110 项通过，与上一组回执的语义观察逐项相同；对应记录为 `shared-source-refresh-20261027-workflow-continuation-v1.json`。这部分是确定性工程证据，模型调用为 0，不代表产品、原生安装包或读者验收。
