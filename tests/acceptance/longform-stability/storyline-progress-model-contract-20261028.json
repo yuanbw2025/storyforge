@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "kind": "explicit-frozen-mapping-target-model-contract-v2",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "a43709a06143bf6f3af3e87a046adccc18cb9afd",
+    "files": {
+      "src/lib/agent/storyline-progress-copilot.ts": "fca1515e6a243c4d7cda567243a607bd4b09d760a3e7652d4670c6d71a8b1f3b",
+      "src/lib/storyline/storyline-progress.ts": "5a74b89f23fe2ec7007a26dd48ce28dbfba67b0fcec79ee0c7851459ee2d18dd",
+      "src/lib/ai/provider-capabilities.ts": "73c316972bfb8f07cc0486c48d4bebc645d1e2c01bfb06b2407a08faff084b0b",
+      "tests/regression/R-STAB-storyline-progress-model-contract.test.ts": "312f16719a07b0636808b803c949be3e3967a50f5a2517c41af2b162161e09a0",
+      "tests/e2e/longform-storyline-progress.spec.ts": "89cf6fcae7991c9655a0960d83415834822e5ed48af1640b78352921bbe03db9"
+    }
+  },
+  "status": "TARGETED_AND_NATIVE_MODEL_CONTRACT_PASSED_REAL_REPLAY_NEXT",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "productBoundary": "Same registered longform storyArcs/chapterContent and frozen adoption snapshot; existing mapping Skill, parser, candidate/adopt and lifecycle. No new table, field, context source or formal AI entry.",
+  "originalFailureReceipt": "tests/acceptance/longform-stability/real-storyline-progress-20261028-a43709a06.json",
+  "regressionReproduction": {
+    "beforeLog": "storyline-progress-contract-before.log",
+    "failed": 2,
+    "partialBeforeLog": "storyline-progress-contract-partial-before.log",
+    "note": "A second counterexample proved mixed valid/invalid rows were silently reduced; the same log also retained the still-unverified provider-format test failure."
+  },
+  "changes": [
+    "Reuse the canonical mapping request builder, now marked storyline-progress-model-v2, with complete item fields and dynamic examples using actual frozen IDs",
+    "Provide registered frozen Arc/stage target bindings and exact chapter body alongside Gateway context; adoption still revalidates the same snapshot",
+    "Request supported non-stream JSON-object mode; model-scoped opt-in for Agnes 2.5 uses existing exact-source successful JSON receipts, without broadening the whole provider or unverified Agnes models",
+    "Compare every raw category count with validated rows; invalid or duplicate partial results are rejected with original output retained instead of silently dropped",
+    "Same closed-set, quote, scope, stale, formal write and UI validity checks remain authoritative"
+  ],
+  "verificationBasis": "tests/acceptance/longform-stability/real-review-modes-20261028-101beb866.json",
+  "regression": {
+    "log": "storyline-progress-contract-related-final.log",
+    "passed": 16,
+    "files": 4,
+    "checks": [
+      "Numeric target ID 41 and exact opaque stage ID supplied, full literal body and item fields present",
+      "Actual default request body is non-stream JSON object; one fake HTTP call and no Canon write",
+      "Mixed valid/invalid model rows rejected",
+      "Other Agnes models remain unverified; previous progress scope/UI and formal adoption regressions retained"
+    ]
+  },
+  "nativeBrowser": {
+    "firstLog": "storyline-progress-contract-native.log",
+    "firstResult": "3 passed; protocol assertion incorrectly required JSON mode from the old unverified Ollama fixture. Switched the protocol fixture to the actual verified Agnes model with an isolated dummy token.",
+    "finalLog": "storyline-progress-contract-native-final.log",
+    "passed": 4,
+    "checks": [
+      "Actual known-model JSON request and explicit target bindings",
+      "Read/retry, rejected then corrected candidate/edit/ack/reload/adopt",
+      "503 one dispatch and no replay; native IME draft guards"
+    ]
+  },
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "build": "PASS",
+    "targetedEslint": "PASS"
+  },
+  "remaining": "Exact-commit real mapping replay; investigate the separately retained context-compression length failures; remaining whole plan and final/client checks."
+}

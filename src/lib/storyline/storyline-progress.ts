@@ -66,6 +66,11 @@ export function buildStorylineProgressPrompt(args: {
   chapterContent: string
   arcs: ArcBoundary[]
 }): ChatMessage[] {
+  const exampleArcId = args.arcs[0]?.id ?? 1
+  const exampleStageId = args.arcs[0] ? parseStages(args.arcs[0].stages)[0]?.id ?? null : null
+  const crossingExample = args.arcs.length > 1
+    ? [{ arcIdA: exampleArcId, arcIdB: args.arcs[1].id, note: '两线在本章如何互相影响', quote: '正文中的连续原文' }]
+    : []
   const registry = args.arcs.map(arc => ({
     id: arc.id,
     name: arc.name,
@@ -80,18 +85,19 @@ export function buildStorylineProgressPrompt(args: {
   return [
     {
       role: 'system',
-      content: `你是小说故事线映射器。你只能分析正文如何推进作者已经登记的故事线，不得把推测当事实。
+      content: `你是小说故事线映射器，执行协议storyline-progress-model-v2。你只能分析正文如何推进作者已经登记的故事线，不得把推测当事实。
 
 输出严格 JSON，不要 Markdown：
 {
-  "progress": [{"arcId": 1, "currentStageId": "阶段ID或null", "status": "dormant|active|climax|resolved|abandoned", "progressNote": "本章如何推进", "involvedEntities": ["正文实体名"], "quote": "正文逐字引文"}],
-  "crossings": [{"arcIdA": 1, "arcIdB": 2, "note": "两线在本章如何互相影响", "quote": "正文逐字引文"}],
+  "progress": [{"arcId": ${exampleArcId}, "currentStageId": ${JSON.stringify(exampleStageId)}, "status": "active", "progressNote": "本章如何推进", "involvedEntities": ["正文实体名"], "quote": "正文中的连续原文"}],
+  "crossings": ${JSON.stringify(crossingExample)},
   "newArcs": [{"name": "疑似新故事线", "type": "main|sub", "description": "为什么值得登记", "quote": "正文逐字引文"}]
 }
+以上只说明字段形状，不证明本章有推进；不能复制占位文字或编造证据。每项只使用示例所列字段。progress的status只选dormant/active/climax/resolved/abandoned之一。crossings每项必须有数字arcIdA、数字arcIdB、非空note及逐字quote；仅有一条登记线时crossings必须为空。newArcs每项必须有name、type(main或sub)、description及逐字quote。
 
 硬规则：
-1. progress/crossings 只能使用登记清单里的数字 arcId；currentStageId 只能使用该线的阶段 ID；
-2. quote 必须逐字出现在正文，禁止改写；没有逐字证据就不要输出；
+1. progress/crossings 只能使用登记清单里的数字 arcId，不能填写名称或资源UID；currentStageId只能逐字使用该线的阶段ID或JSON null，不得改名为phaseId；
+2. quote必须是正文中一段连续逐字原文，不得用省略号拼接、改写或补字；不能改名为evidence或hint，没有逐字证据就不要输出；
 3. 同一条线本章最多一个 progress；交汇必须是两条不同的已登记线；
 4. 新线不得冒充已登记线；只能放 newArcs，后续由作者另行确认创建；
 5. 没有可靠映射时返回三个空数组，宁缺毋滥。`,

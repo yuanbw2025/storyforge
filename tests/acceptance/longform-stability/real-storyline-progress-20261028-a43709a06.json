@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "kind": "exact-commit-real-mapping-protocol-failure-retained",
+  "date": "2026-10-28",
+  "sourceCommit": "a43709a06143bf6f3af3e87a046adccc18cb9afd",
+  "directory": "live-storyline-progress-2026-10-27T22-47-43-044Z",
+  "status": "PROTOCOL_REJECTED_RAW_RETAINED_RUN_PAUSED_CANON_UNCHANGED",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "modelRequests": 4,
+  "knownTotalTokens": 11434,
+  "unknownUsageRequests": 0,
+  "requestBreakdown": [
+    {
+      "number": 1,
+      "purpose": "context-compression",
+      "maxTokens": 781,
+      "responseFormat": null,
+      "finishReasons": [
+        "length"
+      ],
+      "knownTotalTokens": 2988
+    },
+    {
+      "number": 2,
+      "purpose": "context-compression",
+      "maxTokens": 781,
+      "responseFormat": null,
+      "finishReasons": [
+        "length"
+      ],
+      "knownTotalTokens": 3000
+    },
+    {
+      "number": 3,
+      "purpose": "mapping-primary",
+      "maxTokens": 8000,
+      "responseFormat": null,
+      "finishReasons": [
+        "stop"
+      ],
+      "knownTotalTokens": 3698
+    },
+    {
+      "number": 4,
+      "purpose": "bounded-structural-repair",
+      "maxTokens": 8000,
+      "responseFormat": null,
+      "finishReasons": [
+        "stop"
+      ],
+      "knownTotalTokens": 1748
+    }
+  ],
+  "observedCauses": [
+    "Main mapping prompt declared only empty arrays and omitted full item shape and explicit numeric Arc/stage target directory",
+    "Primary and repair returned Arc names as IDs, phaseId/evidence/note aliases, duplicate progress rows and ellipsis-spliced quotes",
+    "Actual main/repair requests did not request JSON-object mode",
+    "Two separate context compression attempts hit their small total output budget; raw context fallback allowed mapping to continue. These are not additional author mapping actions."
+  ],
+  "canonicalWrites": 0,
+  "run": {
+    "id": 35,
+    "status": "paused"
+  },
+  "driver": "No fresh editable mapping candidate in bounded wait; did not blindly repeat request or invent corrected progress.",
+  "evidenceSha256": {
+    "executed-runner.mjs": "8332380929a05007b526ba677d85e375c2a9e7336a1a9630d922b4ab35067ffe",
+    "live-result.json": "49d09c915e15e92feb7a2d8f9fcc5ae5548a7983a9d7b3976a1fc12ed2497c89",
+    "live-requests.json": "cfc196065321cea6cdd2190418a011541afe347425fa19d3943707e0a9e1c4ba",
+    "response-3.txt": "d63f3da14d902661eaaf2aade86002aa58a08d5134d27cda4dc32b5116e51df3",
+    "response-4.txt": "b477e4bf0d09ff20286a84fbeab07c551a73d12435d5e8c0b611062e8aafd11d"
+  },
+  "remaining": "Correct explicit model contract and run a separately pinned new cohort; compression-budget behavior remains a separately tracked item."
+}

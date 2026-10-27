@@ -3,9 +3,13 @@ import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
 
 async function setup(page: Page, confirmed = false) {
-  await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', model: 'storyline-test', baseUrl: 'https://storyline-progress.invalid/v1', contextWindow: 128000, maxTokens: 6000 })))
+  await page.addInitScript(() => localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'agnes', model: 'agnes-2.5-flash', baseUrl: 'https://storyline-progress.invalid/v1', contextWindow: 128000, maxTokens: 6000 })))
   await page.route(/^https?:\/\//, route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort())
   await createLongform(page, '动态进度全流程')
+  await page.evaluate(async () => {
+    const { useAIConfigStore } = await (new Function('return import("/storyforge/src/stores/ai-config.ts")'))()
+    useAIConfigStore.setState({ config: { ...useAIConfigStore.getState().config, apiKey: 'isolated-test-token' } })
+  })
   const data = await page.evaluate(async confirmed => {
     const imp = new Function('p', 'return import(p)')
     const [{ db }, { resolveScope, stampNewRecord }] = await Promise.all([imp('/storyforge/src/lib/db/schema.ts'), imp('/storyforge/src/lib/workspace/scope.ts')])
@@ -69,6 +73,10 @@ test('chapter mapping rejects one candidate, edits the next, refuses invalid ado
   const f = await setup(page); const before = await canon(page, f.projectId); let calls = 0
   await page.route('https://storyline-progress.invalid/**', route => {
     calls++
+    const body = route.request().postDataJSON()
+    expect(body.response_format).toEqual({ type: 'json_object' })
+    expect(body.messages[0].content).toContain('progressNote')
+    expect(body.messages[1].content).toContain(`"id":${f.arcIds[0]}`)
     const output = { progress: [{ arcId: f.arcIds[0], currentStageId: 'hand-over', status: 'active', progressNote: '以交付推进寻钥主线', involvedEntities: ['林飞', '许宁'], quote: '林飞把青铜钥匙交给许宁' }], crossings: [{ arcIdA: f.arcIds[0], arcIdB: f.arcIds[1], note: '钥匙交付换来运粮路线', quote: '换得运粮路线' }], newArcs: [{ name: '返程支线', type: 'sub', description: '取得路线后仍须核验返程', quote: '换得运粮路线' }] }
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(output) }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) })
   })

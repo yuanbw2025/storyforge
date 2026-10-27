@@ -3792,6 +3792,16 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/storyline-progress-workflow-20261028.json",
           "summary": "动态进度的范围读取/错误重试、候选闭集预检与成功确认、中文组合保护已完成54项回归和4条浏览器路径；实模另跑。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-storyline-progress-20261028-a43709a06.json",
+          "summary": "a43709a06真实映射协议拒绝，4次调用、11,434tokens，Root35暂停且无正式写入；原响应保留。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/storyline-progress-model-contract-20261028.json",
+          "summary": "补齐完整模型结构、冻结目标编号及JSON模式，逐类拒绝部分非法输出；16项回归、4条浏览器路径通过，新提交实模另跑。"
         }
       ],
       "defects": [],
@@ -19545,6 +19555,16 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/storyline-progress-workflow-20261028.json",
           "summary": "动态进度的范围读取/错误重试、候选闭集预检与成功确认、中文组合保护已完成54项回归和4条浏览器路径；实模另跑。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-storyline-progress-20261028-a43709a06.json",
+          "summary": "a43709a06真实映射协议拒绝，4次调用、11,434tokens，Root35暂停且无正式写入；原响应保留。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/storyline-progress-model-contract-20261028.json",
+          "summary": "补齐完整模型结构、冻结目标编号及JSON模式，逐类拒绝部分非法输出；16项回归、4条浏览器路径通过，新提交实模另跑。"
         }
       ],
       "defects": [],
@@ -24287,6 +24307,14 @@
       "date": "2026-10-28",
       "unit": "Exact earlier-source full configured E2E: 490 passed, 166 skipped, no failures",
       "sourcePin": "tests/acceptance/longform-stability/full-e2e-2f4ebb26-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Explicit mapping model v2 and verified model-scoped JSON transport after retained real failure",
+      "sourcePin": "tests/acceptance/longform-stability/storyline-progress-model-contract-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false
