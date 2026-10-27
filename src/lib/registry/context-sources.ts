@@ -33,7 +33,7 @@ import { getChapterDerivedMemoryStatus, normalizeChapterText } from '../ai/chapt
 import { parseStages } from '../types/story-arc'
 import { readStateCardFields } from '../types/state-card'
 import { parseBeats } from '../types/emotion-beat'
-import { DETAILED_SCENE_TASK_FIELDS } from '../types/detailed-outline'
+import { DETAILED_SCENE_TASK_FIELDS, normalizeDetailedScenes } from '../types/detailed-outline'
 import { buildForeshadowTaskContext } from '../foreshadow/context'
 import { formatHeldItemsContext, readProjectHeldItems } from '../consistency/held-items'
 import { formatCharacterKnowledgeContext, readProjectCharacterKnowledge } from '../knowledge-ledger/knowledge-ledger'
@@ -1715,12 +1715,15 @@ async function readDetailedOutline(projectId: number, outlineNodeId?: number | n
   }
   if (nodeId == null) return ''
   const resolved = scope ?? await resolveScope({ projectId })
-  const rows = await readOwnedRows<any>(resolved, 'detailedOutlines', { owner: 'work' })
-  const detail = rows.find(d => d.outlineNodeId === nodeId)
-  if (!detail || !Array.isArray(detail.scenes) || detail.scenes.length === 0) return ''
+  const rows = (await readOwnedRows<any>(resolved, 'detailedOutlines', { owner: 'work' })).filter(d => d.outlineNodeId === nodeId)
+  if (rows.length > 1) throw new Error('同一章纲存在多个细纲记录，请先核对恢复。')
+  const detail = rows[0]
+  if (!detail) return ''
+  const scenes = normalizeDetailedScenes(detail.scenes)
+  if (scenes.length === 0) return ''
   const parts: string[] = ['【本章细纲(场景拆解)】']
   if (detail.openingHook) parts.push(`开头衔接:${detail.openingHook}`)
-  detail.scenes.forEach((s: any, i: number) => {
+  scenes.forEach((s, i) => {
     const bits = [s.summary, s.conflict ? `冲突:${s.conflict}` : '', s.location ? `地点:${s.location}` : '']
       .filter(Boolean).join(' / ')
     parts.push(`场景${i + 1} ${s.title || ''}: ${bits}`)

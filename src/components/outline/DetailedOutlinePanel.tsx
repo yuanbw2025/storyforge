@@ -77,15 +77,21 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
   const [pendingBatchCandidate, setPendingBatchCandidate] = useState<DetailedOutlineBatchCandidateV1 | null>(null)
   const [ready, setReady] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [pendingNodeIds, setPendingNodeIds] = useState<ReadonlySet<number>>(new Set())
   const [pendingReadError, setPendingReadError] = useState<string | null>(null)
   const batchDecisionRef = useRef<((decision: 'adopt' | 'reject') => void) | null>(null)
 
   useEffect(() => {
     let active = true
-    void Promise.all([loadOutline(scope), loadDetailed(scope), loadForeshadows(scope), loadCharacters(scope)]).then(() => { if (active) setReady(true) }).catch(error => { if (active) setLoadError(error instanceof Error ? error.message : '细纲资料读取失败') })
+    setReady(false); setLoadError(null)
+    void Promise.all([loadOutline(scope), loadDetailed(scope), loadForeshadows(scope), loadCharacters(scope)]).then(() => {
+      const failure = useOutlineStore.getState().loadError || useDetailedOutlineStore.getState().loadError || useCharacterStore.getState().loadError
+      if (failure) throw new Error(failure)
+      if (active) setReady(true)
+    }).catch(error => { if (active) setLoadError(error instanceof Error ? error.message : '细纲资料读取失败') })
     return () => { active = false }
-  }, [scope, loadOutline, loadDetailed, loadForeshadows, loadCharacters])
+  }, [scope, loadOutline, loadDetailed, loadForeshadows, loadCharacters, loadAttempt])
 
   useEffect(() => {
     const subscription = liveQuery(() => readPendingDetailedOutlineNodeIdsV1(scope)).subscribe({
@@ -117,7 +123,11 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
     () => new Set(foreshadows.map(f => f.id).filter((id): id is number => id != null)),
     [foreshadows],
   )
-  const reloadDetailed = useCallback(() => loadDetailed(scope), [loadDetailed, scope])
+  const reloadDetailed = useCallback(async () => {
+    await loadDetailed(scope)
+    const failure = useDetailedOutlineStore.getState().loadError
+    if (failure) throw new Error(failure)
+  }, [loadDetailed, scope])
   const detailGeneration = useDetailedOutlineGenerationController({
     projectId: project.id!,
     outlineNodeId: selectedNodeId,
@@ -171,6 +181,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
   }
 
   const addScene = async () => {
+    await flushPendingEditsV1()
     const dt = await ensureDetailed()
     if (!dt) return
     const newScene: DetailedScene = {
@@ -182,9 +193,9 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
     await editScene(dt.id!, { kind: 'add', scene: newScene }, scope, currentChapter!.summary)
   }
 
-  const updateScene = async (sceneId: string, patch: Partial<DetailedScene>) => {
+  const updateScene = async (sceneId: string, patch: Partial<DetailedScene>, expected?: Partial<DetailedScene>) => {
     if (!ready || !currentDetailed || !currentChapter) throw new Error('当前作品的细纲尚未就绪')
-    await editScene(currentDetailed.id!, { kind: 'patch', sceneId, patch }, scope, currentChapter.summary)
+    await editScene(currentDetailed.id!, { kind: 'patch', sceneId, patch, expected }, scope, currentChapter.summary)
   }
 
   const deleteScene = async (sceneId: string) => {
@@ -358,10 +369,13 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
 
   const handleBatchDetail = useCallback(async () => {
     if (batchProgress) return // 已在运行
+    const readFailure = loadError || useDetailedOutlineStore.getState().loadError
+    if (!ready || readFailure) { toast.error(readFailure || '细纲资料尚未就绪，请先读取完成。'); return }
     const ac = new AbortController()
     batchAbortRef.current = ac
 
     try {
+      await flushPendingEditsV1()
       const frozenScope = await resolveScopeLike(scope)
       const result = await batchGenerateDetails({
         chapters: chapterNodes,
@@ -407,7 +421,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
       // 3 秒后清除进度信息
       setTimeout(() => setBatchProgress(null), 3000)
     }
-  }, [adoptDetailedPatch, batchProgress, chapterNodes, clearPendingCandidate, detailedOutlines, loadDetailed, scope, restoreEnhanced])
+  }, [adoptDetailedPatch, batchProgress, chapterNodes, clearPendingCandidate, detailedOutlines, loadDetailed, scope, restoreEnhanced, ready, loadError, toast])
 
   const handleBatchStop = useCallback(() => {
     batchAbortRef.current?.abort()
@@ -442,7 +456,7 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
         }`}
       >
         {pendingReadError && <p role="alert" className="mb-3 text-xs text-error">待确认候选状态无法核对：{pendingReadError}</p>}
-        {loadError ? <p role="alert" className="text-error">{loadError}</p> : !ready ? <p role="status">正在读取本作品细纲…</p> : !currentChapter ? (
+        {loadError ? <div role="alert" className="text-error">{loadError}<button type="button" className="ml-2 underline" onClick={() => setLoadAttempt(value => value + 1)}>重新读取细纲</button></div> : !ready ? <p role="status">正在读取本作品细纲…</p> : !currentChapter ? (
           <div className="h-full flex items-center justify-center text-text-muted text-sm">
             从左侧选一个章节开始编辑细纲。
           </div>
@@ -622,8 +636,8 @@ function ScopedDetailedOutlinePanel({ project, initialNodeId, onOpenChapter, onO
                     key={s.sceneId}
                     scene={s}
                     index={idx}
-                    onUpdate={patch => updateScene(s.sceneId, patch)}
-                    onDelete={() => { void deleteScene(s.sceneId).catch(error => toast.error(error instanceof Error ? error.message : '场景删除失败')) }}
+                    onUpdate={(patch, expected) => updateScene(s.sceneId, patch, expected)}
+                    onDelete={() => deleteScene(s.sceneId)}
                   />
                 ))}
               </div>

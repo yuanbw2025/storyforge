@@ -58,7 +58,7 @@ async function createWorkspace(label: string): Promise<{
     updatedAt: now,
   } as any, { owner: 'work' })) as number
   await db.detailedOutlines.add(stampNewRecord(scope, 'detailedOutlines', {
-    projectId, outlineNodeId, scenes: [{ sceneId: 'scene-1', title: '潮门开启', summary: '守灯人目睹潮门开启。', characterIds: [], location: '潮门', conflict: '海潮倒流', pace: 'medium', estimatedWords: 1200 }],
+    projectId, outlineNodeId, scenes: [{ sceneId: 'scene-1', title: '潮门开启', summary: '守灯人目睹潮门开启。', characterIds: [], location: '潮门', conflict: '海潮倒流', pace: 'medium', estimatedWords: 1200, notes: '' }],
     openingHook: '潮声骤停。', endingCliffhanger: '门后传来钟响。', sceneLocation: '潮门',
     appearingCharacterIds: [], foreshadowIds: [], emotionArc: 'rising', prohibitions: [],
     lastUsedSummary: '守灯人抵达潮门。', createdAt: now, updatedAt: now,

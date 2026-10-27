@@ -31,7 +31,7 @@ async function seed(): Promise<{ projectId: number; nodeId: number }> {
     endingCliffhanger: '神秘黑影出现',
     prohibitions: ['主角不能提前知道黑影身份', '不能重复首次获得钥匙'],
     scenes: [
-      { sceneId: 's1', title: '废墟苏醒', summary: '主角在废墟中醒来', characterIds: [], location: '城郊废墟', conflict: '失忆与求生', pace: 'normal', estimatedWords: 800, notes: '' },
+      { sceneId: 's1', title: '废墟苏醒', summary: '主角在废墟中醒来', characterIds: [], location: '城郊废墟', conflict: '失忆与求生', pace: 'medium', estimatedWords: 800, notes: '' },
       { sceneId: 's2', title: '遭遇追兵', summary: '被神秘组织追杀', characterIds: [], location: '地下管道', conflict: '逃命', pace: 'fast', estimatedWords: 1200, notes: '' },
     ],
     createdAt: now, updatedAt: now,

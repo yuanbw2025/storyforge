@@ -18,6 +18,7 @@ import { adoptChapterOutlineWorkshopResult } from '../../lib/outline/adopt-works
 import { useDetailedOutlineGenerationController } from './useDetailedOutlineGenerationController'
 import CreativeArtifactSummary from '../agent/CreativeArtifactSummary'
 import DetailedSceneCard from './DetailedSceneCard'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 interface Props {
   project: Project
@@ -36,10 +37,20 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
   const toast = useToast()
   const [expanded, setExpanded] = useState(false)
   const [showWorkshop, setShowWorkshop] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [loadAttempt, setLoadAttempt] = useState(0)
 
   useEffect(() => {
-    void Promise.all([loadAll(scope), loadCharacters(scope), loadForeshadows(scope)]).catch(error => toast.error(error instanceof Error ? error.message : '场景资料读取失败'))
-  }, [loadAll, loadCharacters, loadForeshadows, scope, toast])
+    let active = true
+    setLoaded(false); setLoadError('')
+    void Promise.all([loadAll(scope), loadCharacters(scope), loadForeshadows(scope)]).then(() => {
+      const failure = useDetailedOutlineStore.getState().loadError || useCharacterStore.getState().loadError
+      if (failure) throw new Error(failure)
+      if (active) setLoaded(true)
+    }).catch(error => { if (active) setLoadError(error instanceof Error ? error.message : '场景资料读取失败') })
+    return () => { active = false }
+  }, [loadAll, loadCharacters, loadForeshadows, scope, loadAttempt])
   useEffect(() => { setShowWorkshop(false) }, [outlineNodeId])
 
   const detailed = detailedOutlines.find(d => d.workId === scope.workId && d.projectId === scope.projectId && d.outlineNodeId === outlineNodeId)
@@ -54,7 +65,11 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
     () => new Set(foreshadows.map(item => item.id).filter((id): id is number => id != null)),
     [foreshadows],
   )
-  const reloadDetailed = useCallback(() => loadAll(scope), [loadAll, scope])
+  const reloadDetailed = useCallback(async () => {
+    await loadAll(scope)
+    const failure = useDetailedOutlineStore.getState().loadError
+    if (failure) throw new Error(failure)
+  }, [loadAll, scope])
   const {
     ai,
     enhanceAI,
@@ -82,6 +97,7 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
   }
 
   const addScene = async () => {
+    await flushPendingEditsV1()
     const dt = await ensureDetailed()
     if (!dt) return
     const newScene: DetailedScene = {
@@ -94,9 +110,9 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
     setExpanded(true)
   }
 
-  const updateScene = async (sceneId: string, patch: Partial<DetailedScene>) => {
+  const updateScene = async (sceneId: string, patch: Partial<DetailedScene>, expected?: Partial<DetailedScene>) => {
     if (!detailed) throw new Error('当前作品的场景细纲尚未就绪')
-    await editScene(detailed.id!, { kind: 'patch', sceneId, patch }, scope, chapterSummary)
+    await editScene(detailed.id!, { kind: 'patch', sceneId, patch, expected }, scope, chapterSummary)
   }
 
   const deleteScene = async (sceneId: string) => {
@@ -146,6 +162,8 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
     return true
   }
 
+  if (loadError) return <div role="alert" className="text-xs text-error">{loadError}<button type="button" className="ml-2 underline" onClick={() => setLoadAttempt(value => value + 1)}>重新读取场景</button></div>
+  if (!loaded) return <p role="status" className="text-xs text-text-muted">正在读取本作品场景…</p>
   return (
     <div className="border border-border rounded-lg overflow-hidden">
       {/* 折叠头 */}
@@ -274,8 +292,8 @@ export default function ScenePanel({ project, outlineNodeId, chapterTitle, chapt
           ) : (
             scenes.map((scene, index) => (
               <DetailedSceneCard key={scene.sceneId} scene={scene} index={index}
-                onUpdate={patch => updateScene(scene.sceneId, patch)}
-                onDelete={() => { void deleteScene(scene.sceneId).catch(error => toast.error(error instanceof Error ? error.message : '场景删除失败')) }} />
+                onUpdate={(patch, expected) => updateScene(scene.sceneId, patch, expected)}
+                onDelete={() => deleteScene(scene.sceneId)} />
             ))
           )}
         </div>

@@ -53,7 +53,7 @@ test('scene detail editing retains Chinese composition and the caret after a mid
   await page.getByRole('button', { name: '场景细纲', exact: true }).click()
   await page.getByRole('button', { name: '第1章', exact: true }).click()
   await page.getByRole('button', { name: '添加场景', exact: true }).click()
-  const summary = page.getByRole('textbox', { name: '一句话场景概要...', exact: true })
+  const summary = page.getByLabel('场景1 · 概要', { exact: true })
   const savedSummary = () => page.evaluate(async () => {
     const importer = new Function('path', 'return import(path)') as (path: string) => Promise<any>
     const { db } = await importer('/storyforge/src/lib/db/schema.ts')
@@ -175,7 +175,7 @@ test('streamed scene details survive a burst of chunks and reload before adoptio
   await expect(page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })).toHaveValue(output)
   await page.getByRole('button', { name: '采纳', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('textbox', { name: '场景标题...', exact: true })).toHaveValue('钟楼铜箔')
+  await expect(page.getByLabel('场景1 · 标题', { exact: true })).toHaveValue('钟楼铜箔')
   expect(calls).toBe(1)
 })
 
@@ -201,8 +201,8 @@ test('step prose honors the author request in the wire prompt and adopts edited 
   await page.getByRole('button', { name: '场景细纲', exact: true }).click()
   await page.getByRole('button', { name: '第1章', exact: true }).click()
   await page.getByRole('button', { name: '添加场景', exact: true }).click()
-  await page.getByRole('textbox', { name: '场景标题...', exact: true }).fill('铜箔与敲门声')
-  await page.getByRole('textbox', { name: '一句话场景概要...', exact: true }).fill('沈砚找到铜箔，听到敲门声后没有开门。')
+  await page.getByLabel('场景1 · 标题', { exact: true }).fill('铜箔与敲门声')
+  await page.getByLabel('场景1 · 概要', { exact: true }).fill('沈砚找到铜箔，听到敲门声后没有开门。')
   await page.getByRole('button', { name: '正文', exact: true }).click()
   await page.getByRole('textbox', { name: '自定义指令...', exact: true }).fill(authorRequest)
   await page.evaluate(async () => {
@@ -327,7 +327,7 @@ test('older chapter memory settles before prose freezes its context and remains 
       chapters.push({ nodeId, chapterId, text })
     }
     await add('detailedOutlines', { outlineNodeId: chapters[2].nodeId,
-      scenes: [{ sceneId: 'verify-date', title: '核对日期', summary: '沈砚把维修本放在桌上，核对铜箔日期，仍未开门。', characterIds: [], location: '钟楼', conflict: '门外有人叩门', pace: 'medium', estimatedWords: 600 }],
+      scenes: [{ sceneId: 'verify-date', title: '核对日期', summary: '沈砚把维修本放在桌上，核对铜箔日期，仍未开门。', characterIds: [], location: '钟楼', conflict: '门外有人叩门', pace: 'medium', estimatedWords: 600, notes: '' }],
       openingHook: '承接叩门声。', endingCliffhanger: '日期仍未核实。', lastUsedSummary: '沈砚保持门关闭，先核对日期。',
     })
     const prior = chapters[1]

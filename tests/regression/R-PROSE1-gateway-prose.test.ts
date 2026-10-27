@@ -72,7 +72,7 @@ async function seed() {
   }, 'work')
   const detailId = await addScoped(scope, 'detailedOutlines', {
     outlineNodeId: targetOutlineId,
-    scenes: [{ sceneId: 'scene-enter', title: '入门', summary: '守灯人穿过潮门。', characterIds: [], location: '潮门', conflict: '潮水逆流', pace: 'medium', estimatedWords: 1200 }],
+    scenes: [{ sceneId: 'scene-enter', title: '入门', summary: '守灯人穿过潮门。', characterIds: [], location: '潮门', conflict: '潮水逆流', pace: 'medium', estimatedWords: 1200, notes: '' }],
     openingHook: '承接镜片苏醒。', endingCliffhanger: '潮钟说出他的旧名。', sceneLocation: '潮门',
     appearingCharacterIds: [], foreshadowIds: [], emotionArc: 'rising', prohibitions: ['不得让守灯人提前知道月井密钥'],
     lastUsedSummary: '守灯人进入潮门并听见潮钟',

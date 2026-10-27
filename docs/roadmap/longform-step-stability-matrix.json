@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "qa-execution-inventory-not-runtime-registry",
-  "updatedAt": "2026-10-27",
+  "updatedAt": "2026-10-28",
   "baselineCommit": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
   "scope": "分步骤长篇、其通用设置与数据生命周期；节点/Agent只验共享链路互操作",
   "statusPolicy": "已有历史测试/源反例/打开页面都不能自动把完整功能标PASS。",
@@ -16,12 +16,12 @@
     "cases": 160,
     "leafFieldChecks": 336,
     "operationChecks": 1233,
-    "notRun": 96,
+    "notRun": 93,
     "passed": 0,
     "failed": 0,
     "faultChecks": 2013,
     "modeChecks": 75,
-    "running": 64
+    "running": 67
   },
   "sourceInventory": {
     "baseline": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
@@ -17838,7 +17838,7 @@
       "module": "detailed-outline",
       "title": "细纲：单章/批量生成、场景增删、排序、角色和地点",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
         "open": "NOT_RUN",
         "input": "NOT_RUN",
@@ -17866,7 +17866,13 @@
       ],
       "candidateTests": [],
       "source": [],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "partial-engineering",
+          "receipt": "tests/acceptance/longform-stability/detailed-author-save-20261028.json",
+          "note": "保存/恢复及共享下游已验证；真实细纲生产、批量和完整故障矩阵继续，不记整例PASS。"
+        }
+      ],
       "defects": [],
       "faultChecks": [
         {
@@ -17954,7 +17960,7 @@
       "module": "detailed-outline",
       "title": "场景任务、衔接、悬念、情绪和不可写清单",
       "profile": "MANUAL",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
         "open": "NOT_RUN",
         "input": "NOT_RUN",
@@ -18102,7 +18108,13 @@
       ],
       "candidateTests": [],
       "source": [],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "partial-engineering",
+          "receipt": "tests/acceptance/longform-stability/detailed-author-save-20261028.json",
+          "note": "保存/恢复及共享下游已验证；真实细纲生产、批量和完整故障矩阵继续，不记整例PASS。"
+        }
+      ],
       "defects": [],
       "faultChecks": [
         {
@@ -18160,7 +18172,7 @@
       "module": "detailed-outline",
       "title": "卷纲↔细纲↔正文往返与未保存屏障",
       "profile": "MANUAL",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
         "open": "NOT_RUN",
         "input": "NOT_RUN",
@@ -18181,7 +18193,13 @@
       ],
       "candidateTests": [],
       "source": [],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "partial-engineering",
+          "receipt": "tests/acceptance/longform-stability/detailed-author-save-20261028.json",
+          "note": "保存/恢复及共享下游已验证；真实细纲生产、批量和完整故障矩阵继续，不记整例PASS。"
+        }
+      ],
       "defects": [],
       "faultChecks": [
         {
@@ -23274,7 +23292,7 @@
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     }
   ],
-  "executionStatus": "OUTLINE_RECOVERY_AND_MAIN_WRITING_ENGINEERING_VERIFIED_CONTINUING",
+  "executionStatus": "DETAILED_AUTHOR_SAVES_AND_REAL_OUTLINE_VERIFIED_CONTINUING",
   "passPolicy": {
     "closedCase": "全部适用步骤/字段/模式/故障/派生子用例有本轮回执；PASS不推导已发行。",
     "statuses": [
@@ -23851,6 +23869,22 @@
       "date": "2026-10-28",
       "unit": "Scope-bound candidate hydration, durable acknowledgement and rejection failure recovery",
       "sourcePin": "tests/acceptance/longform-stability/outline-candidate-recovery-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Scoped atomic scene author saves and native blur-click recovery",
+      "sourcePin": "tests/acceptance/longform-stability/detailed-author-save-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Real Agnes single-volume and parameterized three-chapter reject/adopt/readback",
+      "sourcePin": "tests/acceptance/longform-stability/real-outline-mainline-20261028-0d93ae491.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

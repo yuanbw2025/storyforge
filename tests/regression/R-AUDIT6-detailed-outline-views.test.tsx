@@ -65,21 +65,23 @@ const scene: DetailedScene = {
 }
 
 describe('AUDIT-6 / HEALTH-4 · 细纲受控视图', () => {
-  it('场景本地输入不会被旧回执抹去，保存失败阻止导航，完整重试才解除错误', async () => {
+  it('场景本地输入不会被旧回执抹去，保存失败阻止导航，逐字段明确重试才解除错误', async () => {
     const onUpdate = vi.fn().mockRejectedValueOnce(new Error('模拟保存失败')).mockResolvedValue(undefined)
     const host = await mount(createElement(DetailedSceneCard, { scene, index: 0, onUpdate, onDelete: vi.fn() }))
     const goal = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="场景1 · 本场目标"]')!
     await act(async () => setControlValue(goal, '作者尚未保存的目标'))
+    await act(async () => { await expect(flushPendingEditsV1()).rejects.toThrow('模拟保存失败') })
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('模拟保存失败')
     expect(goal.value).toBe('作者尚未保存的目标')
     await expect(flushPendingEditsV1()).rejects.toThrow('模拟保存失败')
+    expect(onUpdate).toHaveBeenCalledOnce()
     const notes = host.querySelector<HTMLTextAreaElement>('textarea[placeholder="备注 / AI 建议..."]')!
     await act(async () => setControlValue(notes, '随后修改的备注'))
     expect(host.querySelector('[role="alert"]')).not.toBeNull()
     expect(goal.value).toBe('作者尚未保存的目标')
-    const retry = Array.from(host.querySelectorAll('button')).find(button => button.textContent === '重试保存')!
+    const retry = Array.from(host.querySelectorAll('button')).find(button => button.textContent === '重试保存场景1 · 本场目标')!
     await act(async () => retry.click())
-    expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ goal: '作者尚未保存的目标', notes: '随后修改的备注' }))
+    expect(onUpdate).toHaveBeenLastCalledWith({ goal: '作者尚未保存的目标' }, { goal: undefined })
     expect(onUpdate.mock.lastCall?.[0]).not.toHaveProperty('sceneId')
     expect(host.querySelector('[role="alert"]')).toBeNull()
     await expect(flushPendingEditsV1()).resolves.toMatchObject({ version: 1 })
@@ -161,14 +163,15 @@ describe('AUDIT-6 / HEALTH-4 · 细纲受控视图', () => {
     await act(async () => setControlValue(host.querySelector<HTMLInputElement>('input[placeholder="📍 地点"]')!, '瓮城'))
     await act(async () => setControlValue(host.querySelector<HTMLInputElement>('input[placeholder="⚔ 核心冲突"]')!, '身份暴露'))
     await act(async () => setControlValue(host.querySelector<HTMLTextAreaElement>('textarea[placeholder="备注 / AI 建议..."]')!, '加快动作节奏'))
+    await act(async () => { await flushPendingEditsV1() })
 
-    expect(onUpdate).toHaveBeenCalledWith({ title: '雨夜闯关' })
-    expect(onUpdate).toHaveBeenCalledWith({ pace: 'fast' })
-    expect(onUpdate).toHaveBeenCalledWith({ estimatedWords: 1200 })
-    expect(onUpdate).toHaveBeenCalledWith({ summary: '主角强行入城' })
-    expect(onUpdate).toHaveBeenCalledWith({ location: '瓮城' })
-    expect(onUpdate).toHaveBeenCalledWith({ conflict: '身份暴露' })
-    expect(onUpdate).toHaveBeenCalledWith({ notes: '加快动作节奏' })
+    expect(onUpdate).toHaveBeenCalledWith({ title: '雨夜闯关' }, { title: scene.title })
+    expect(onUpdate).toHaveBeenCalledWith({ pace: 'fast' }, { pace: scene.pace })
+    expect(onUpdate).toHaveBeenCalledWith({ estimatedWords: 1200 }, { estimatedWords: scene.estimatedWords })
+    expect(onUpdate).toHaveBeenCalledWith({ summary: '主角强行入城' }, { summary: scene.summary })
+    expect(onUpdate).toHaveBeenCalledWith({ location: '瓮城' }, { location: scene.location })
+    expect(onUpdate).toHaveBeenCalledWith({ conflict: '身份暴露' }, { conflict: scene.conflict })
+    expect(onUpdate).toHaveBeenCalledWith({ notes: '加快动作节奏' }, { notes: scene.notes })
 
     await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="删除场景2"]')!.click())
     expect(onDelete).toHaveBeenCalledOnce()

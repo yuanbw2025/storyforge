@@ -10,13 +10,14 @@ export interface AcknowledgedTextFieldProps {
   value: unknown
   onCommit: (value: string, expected: unknown) => void | Promise<void>
   input?: boolean
+  inputType?: 'text' | 'number'
   autoGrow?: boolean
   choices?: ReadonlyArray<{ value: string; label: string }>
   placeholder?: string
   className?: string
 }
 
-export default function AcknowledgedTextField({ label, rows, value, onCommit, input, autoGrow, choices, placeholder, className }: AcknowledgedTextFieldProps) {
+export default function AcknowledgedTextField({ label, rows, value, onCommit, input, inputType, autoGrow, choices, placeholder, className }: AcknowledgedTextFieldProps) {
   const readable = value === undefined || typeof value === 'string'
   const initial = typeof value === 'string' ? value : ''
   const [draft, setDraft] = useState(initial)
@@ -31,9 +32,10 @@ export default function AcknowledgedTextField({ label, rows, value, onCommit, in
   const inFlight = useRef<Promise<void> | null>(null)
   const latestCommit = useRef(onCommit), editCommit = useRef(onCommit)
   latestCommit.current = onCommit; readableRef.current = readable
-  const flushDraft = useCallback((): Promise<void> => {
+  const flushDraft = useCallback((retry = false): Promise<void> => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null }
     if (!dirty.current && !inFlight.current && !composingRef.current && !errorRef.current) return Promise.resolve()
+    if (errorRef.current && !retry) return Promise.reject(new Error(errorRef.current))
     if (!readableRef.current) return Promise.reject(new Error('原文格式异常，已保留原数据，请先恢复。'))
     if (composingRef.current) return Promise.reject(new Error('输入法仍在组合文字，请完成后保存。'))
     if (inFlight.current) return inFlight.current
@@ -87,10 +89,10 @@ export default function AcknowledgedTextField({ label, rows, value, onCommit, in
   }
   return (
     <div className="flex-1 min-w-0" onCompositionStartCapture={() => { composingRef.current = true; setComposing(true) }} onCompositionEndCapture={() => { composingRef.current = false; setComposing(false) }}>
-      {choices ? <select {...controlProps} disabled={saving}>{choices.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select> : input ? <CInput {...controlProps} /> : autoGrow ? <AutoResizeTextarea {...controlProps} minRows={rows ?? 1} maxRows={10} /> : <CTextarea {...controlProps} rows={rows} />}
-      {saving && <p role="status" className="text-xs text-text-muted">正在保存…</p>}
+      {choices ? <select {...controlProps} disabled={saving}>{choices.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select> : input ? <CInput {...controlProps} type={inputType} /> : autoGrow ? <AutoResizeTextarea {...controlProps} minRows={rows ?? 1} maxRows={10} /> : <CTextarea {...controlProps} rows={rows} />}
+      <p role={saving ? 'status' : undefined} aria-hidden={!saving} className="min-h-4 text-xs text-text-muted">{saving ? '正在保存…' : '\u00a0'}</p>
       {error && <div role="alert" className="text-xs text-red-400">{error}；输入已保留。
-        <button type="button" onClick={() => { void flushDraft().catch(() => undefined) }} className="ml-2 underline">重试保存{label}</button>
+        <button type="button" onClick={() => { void flushDraft(true).catch(() => undefined) }} className="ml-2 underline">重试保存{label}</button>
       </div>}
     </div>
   )

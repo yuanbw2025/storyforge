@@ -82,7 +82,7 @@ async function seedWorkspace(): Promise<{
   } as any, { owner: 'work' })) as number
   await db.detailedOutlines.add(stampNewRecord(scope, 'detailedOutlines', {
     projectId, outlineNodeId,
-    scenes: [{ sceneId: 'scene-1', title: '观察退潮', summary: '守灯人在潮门外观察退潮。', characterIds: [], location: '潮门', conflict: '秘密不可泄漏', pace: 'medium', estimatedWords: 1000 }],
+    scenes: [{ sceneId: 'scene-1', title: '观察退潮', summary: '守灯人在潮门外观察退潮。', characterIds: [], location: '潮门', conflict: '秘密不可泄漏', pace: 'medium', estimatedWords: 1000, notes: '' }],
     openingHook: '退潮开始。', endingCliffhanger: '潮门震动。', sceneLocation: '潮门',
     appearingCharacterIds: [], foreshadowIds: [], emotionArc: 'rising',
     prohibitions: ['守灯人不知道月井密钥'], lastUsedSummary: '守灯人在潮门外观察退潮。',
