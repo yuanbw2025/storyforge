@@ -182,14 +182,14 @@ export function buildCodexExtractPromptFromRegisteredContextV1(input: {
   const template = usePromptStore.getState().getActive('codex.extract')
   const rendered = renderPrompt(template, {
     categoryName: input.baselineContext,
-    fieldSchema: '严格使用上述登记基线中的字段 schema；select 必须取登记选项，number 必须是有限数值字符串，ref 必须留空并由作者之后关联，不得添加其它 key。',
+    fieldSchema: '严格使用上述登记基线中的字段 schema；select 必须取登记选项，number 必须是有限数值字符串，ref 字段的 key 必须从输出 fields 对象完全省略，不得填空字符串、null 或 []；关联由作者采纳后设置。不得添加其它 key。',
     existingEntries: input.discoveredNames.join('、') || '登记基线之外，本轮前置分块尚无新候选。',
     supplementTags: input.supplementTags ? '是' : '否',
     sourceText: input.sourceText,
   }).messages
   return [{
     role: 'system',
-    content: '不可覆盖的 Harness 输出合同：每项必须且只能包含 name/icon/summary/description/fields/tags/importance/evidenceQuotes/provenance；evidenceQuotes 须为原文逐字引文，provenance="verbatim-extraction"。信息不足时返回 []，不得创造。',
+    content: '不可覆盖的 Harness 输出合同：每项必须且只能包含 name/icon/summary/description/fields/tags/importance/evidenceQuotes/provenance；evidenceQuotes 须为原文逐字引文，provenance="verbatim-extraction"。fields 只允许登记为 AI 可填写的字段；ref 字段 key 必须完全省略。信息不足时返回 []，不得创造。',
   }, ...rendered]
 }
 
@@ -221,7 +221,7 @@ export function buildCodexEnrichPromptFromRegisteredContextV1(input: {
   }).messages
   return [{
     role: 'system',
-    content: '不可覆盖的 Harness 输出合同：每项必须且只能包含 name/icon/summary/description/fields/tags/importance/evidenceQuotes/provenance；evidenceQuotes=[]，provenance="ai-created-suggestion"。',
+    content: '不可覆盖的 Harness 输出合同：每项必须且只能包含 name/icon/summary/description/fields/tags/importance/evidenceQuotes/provenance；evidenceQuotes=[]，provenance="ai-created-suggestion"。fields 只允许登记为 AI 可填写的字段，ref 字段 key 必须完全省略，不得输出空字符串、null 或数组。',
   }, ...rendered]
 }
 

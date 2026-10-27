@@ -21,8 +21,8 @@ interface Props {
   multiWorld?: boolean
   worldGroups?: WorldGroup[]
   activeWorldGroupId?: number | null
-  onUpdateField: (field: keyof Character, value: string) => void
-  onPatch: (patch: Partial<Character>) => void
+  onUpdateField: (field: keyof Character, value: string) => void | Promise<void>
+  onPatch: (patch: Partial<Character>) => void | Promise<void>
   onReload: () => void
   onDelete: () => void
 }

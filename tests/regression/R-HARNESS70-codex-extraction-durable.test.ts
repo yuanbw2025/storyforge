@@ -129,6 +129,27 @@ describe.sequential('R-HARNESS70 · Codex 词条 durable 分块抽取与原子�
     expect(names).toEqual(['旧潮草', resumed.candidate.entries[1].name])
   })
 
+  it('exposes reference keys as author-only context and omits them from the AI writable fields schema', async () => {
+    const fixture = await seed()
+    const category = (await db.codexCategories.get(fixture.categoryId))!
+    await db.codexCategories.update(fixture.categoryId, { fieldSchema: JSON.stringify([
+      ...JSON.parse(category.fieldSchema), { key: 'craftInto', label: '可炼器物', type: 'ref', refCategory: 'artifact' },
+    ]) })
+    const messages: Array<{ content: string }> = []
+    await generateCodexExtractionCandidateV1({ scope: fixture.scope, request: request(fixture), runAI: async input => {
+      messages.push(...input)
+      return response(entry('月栖花'))
+    } })
+    const text = messages.map(message => message.content).join('\n')
+    const line = text.split('\n').map(value => value.trim()).find(value => value.startsWith('AI 可填写 fields 字段 schema：'))!
+    expect(line).toBeTruthy()
+    const fields = JSON.parse(line.slice(line.indexOf('：') + 1))
+    expect(fields.map((field: { key: string }) => field.key)).toContain('habitat')
+    expect(fields.map((field: { key: string }) => field.key)).not.toContain('craftInto')
+    expect(text).toContain('ref 字段的 key 必须从输出 fields 对象完全省略')
+    expect(text).toContain('仅供作者后续关联')
+  })
+
   it('accepts one complete JSON container without repairing a body or taking surrounding prose', () => {
     const body = response(entry('月栖花'))
     const policy = { operation: 'extract' as const, sourceText: '月栖花生于月潮湿地。' }

@@ -125,7 +125,7 @@ export default function CharacterPanel({ project, view = 'generator', initialCha
   }
 
   const handleUpdate = (field: keyof Character, value: string) => {
-    if (selectedChar?.id) updateCharacter(selectedChar.id, { [field]: value })
+    if (selectedChar?.id) return updateCharacter(selectedChar.id, { [field]: value })
   }
 
   const handleAIGenerate = async () => {

@@ -2,6 +2,7 @@ import type { Character } from '../../lib/types'
 import { dimensionsByGroup, type CharacterDimensionKey, type CharacterDimensionSpec } from '../../lib/character/character-dimensions'
 import { CTextarea } from '../shared/CompositionInput'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 import { registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 interface Props {
@@ -13,68 +14,78 @@ interface Props {
 
 interface DimensionFieldProps {
   dimension: CharacterDimensionSpec
-  value: string
+  value: unknown
   onCommit: (value: string) => void | Promise<void>
 }
 
 function CharacterDimensionField({ dimension, value, onCommit }: DimensionFieldProps) {
-  const [draft, setDraft] = useState(value)
-  const draftRef = useRef(value)
-  const dirtyRef = useRef(false)
-  const lastSentRef = useRef(value)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const onCommitRef = useRef(onCommit)
-
-  useEffect(() => {
-    onCommitRef.current = onCommit
-  }, [onCommit])
-
-  const flushDraft = useCallback((): void | Promise<void> => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    const next = draftRef.current
-    if (!dirtyRef.current || next === lastSentRef.current) return
-    lastSentRef.current = next
-    return onCommitRef.current(next)
+  const readable = value === undefined || typeof value === 'string'
+  const initial = typeof value === 'string' ? value : ''
+  const [draft, setDraft] = useState(initial)
+  const [error, setError] = useState('')
+  const errorRef = useRef('')
+  const [saving, setSaving] = useState(false)
+  const [composing, setComposing] = useState(false)
+  const draftRef = useRef(initial), baseline = useRef(initial)
+  const dirty = useRef(false), readableRef = useRef(readable), composingRef = useRef(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const inFlight = useRef<Promise<void> | null>(null)
+  const latestCommit = useRef(onCommit), editCommit = useRef(onCommit)
+  latestCommit.current = onCommit; readableRef.current = readable
+  const flushDraft = useCallback((): Promise<void> => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null }
+    if (!readableRef.current) return Promise.reject(new Error('角色维度原文格式异常，已保留原数据，请先恢复。'))
+    if (composingRef.current) return Promise.reject(new Error('输入法仍在组合角色文字，请完成后保存。'))
+    if (inFlight.current) return inFlight.current
+    if (!dirty.current || (draftRef.current === baseline.current && !errorRef.current)) return Promise.resolve()
+    const confirmAfterFailure = Boolean(errorRef.current)
+    errorRef.current = ''; setSaving(true); setError('')
+    const operation = Promise.resolve().then(async () => {
+      let first = confirmAfterFailure
+      while (first || (dirty.current && draftRef.current !== baseline.current)) {
+        first = false
+        const text = draftRef.current
+        await editCommit.current(text)
+        baseline.current = text
+        dirty.current = draftRef.current !== text
+      }
+    }).catch(cause => {
+      dirty.current = true
+      errorRef.current = cause instanceof Error ? cause.message : '角色维度保存失败，输入已保留。'
+      setError(errorRef.current)
+      throw cause
+    }).finally(() => { inFlight.current = null; setSaving(false) })
+    inFlight.current = operation
+    return operation
   }, [])
-
   useEffect(() => registerPendingDraftFlusherV1(flushDraft), [flushDraft])
-
   useEffect(() => {
-    const external = String(value ?? '')
-    if (dirtyRef.current && external !== draftRef.current) return
-    dirtyRef.current = false
-    lastSentRef.current = external
-    draftRef.current = external
-    setDraft(external)
-  }, [value])
-
+    if (dirty.current || inFlight.current || composingRef.current || !readable) return
+    const text = typeof value === 'string' ? value : ''
+    baseline.current = text; draftRef.current = text; setDraft(text)
+  }, [value, readable])
   useEffect(() => () => {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    const next = draftRef.current
-    if (dirtyRef.current && next !== lastSentRef.current) {
-      onCommitRef.current(next)
-    }
-  }, [])
-
+    if (timer.current) clearTimeout(timer.current)
+    if (dirty.current && !composingRef.current) void flushDraft().catch(() => undefined)
+  }, [flushDraft])
+  useBeforeUnload(dirty.current || saving || composing || Boolean(error))
+  if (!readable) return <div role="alert" className="flex-1 text-xs text-amber-400">{dimension.label}格式异常，原数据已保留；恢复前暂停此项编辑。</div>
   return (
-    <CTextarea
-      value={draft}
-      onChange={e => {
-        const next = e.target.value
-        draftRef.current = next
-        dirtyRef.current = true
-        setDraft(next)
-        if (timerRef.current) clearTimeout(timerRef.current)
-        timerRef.current = setTimeout(flushDraft, 400)
-      }}
-      onBlur={flushDraft}
-      placeholder={`${dimension.label}…`}
-      rows={dimension.rows}
-      className="flex-1 px-2 py-1 bg-bg-base border border-border rounded text-xs text-text-primary resize-y focus:outline-none focus:border-accent"
-    />
+    <div className="flex-1 min-w-0" onCompositionStartCapture={() => { composingRef.current = true; setComposing(true) }} onCompositionEndCapture={() => { composingRef.current = false; setComposing(false) }}>
+      <CTextarea value={draft} onChange={event => {
+        if (!dirty.current && !inFlight.current) editCommit.current = latestCommit.current
+        const text = event.target.value
+        draftRef.current = text; dirty.current = text !== baseline.current || Boolean(errorRef.current); setDraft(text)
+        if (timer.current) clearTimeout(timer.current)
+        if (!error) timer.current = setTimeout(() => { void flushDraft().catch(() => undefined) }, 400)
+      }} onBlur={() => { if (!error) void flushDraft().catch(() => undefined) }}
+        placeholder={`${dimension.label}…`} rows={dimension.rows}
+        className="w-full px-2 py-1 bg-bg-base border border-border rounded text-xs text-text-primary resize-y focus:outline-none focus:border-accent" />
+      {saving && <p role="status" className="text-xs text-text-muted">正在保存…</p>}
+      {error && <div role="alert" className="text-xs text-red-400">{error}；输入已保留。
+        <button type="button" onClick={() => { void flushDraft().catch(() => undefined) }} className="ml-2 underline">重试保存{dimension.label}</button>
+      </div>}
+    </div>
   )
 }
 
@@ -101,7 +112,7 @@ export default function CharacterDimensionFields({ character, onChange, exclude 
                   <CharacterDimensionField
                     key={`${character.id ?? 'draft'}:${d.key}`}
                     dimension={d}
-                    value={String(character[d.key] ?? '')}
+                    value={character[d.key]}
                     onCommit={value => onChange({ [d.key]: value } as Partial<Character>)}
                   />
                 </div>
