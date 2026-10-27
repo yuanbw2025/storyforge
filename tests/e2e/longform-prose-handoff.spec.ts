@@ -44,6 +44,54 @@ async function prepare(page: Page, smallWindow = false) {
   await page.getByPlaceholder('自定义指令...', { exact: true }).fill('只写600字，保持平静，签收后停笔。')
 }
 
+test('正文拒绝的终态写失败会保留候选，刷新后明确重试且不重发模型', async ({ page }) => {
+  let requests = 0
+  await page.route('https://prose-handoff.invalid/**', async route => {
+    requests += 1
+    await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: generated } }] })}\n\ndata: [DONE]\n\n` })
+  })
+  await prepare(page)
+  await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
+  await page.getByRole('dialog', { name: '正文生成提示', exact: true }).getByRole('button', { name: '开始生成', exact: true }).click()
+  const draft = page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })
+  await expect(draft).toHaveValue(generated)
+  const before = await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const run = await db.agentRuns.orderBy('id').last()
+    const chapters = await db.chapters.toArray()
+    const events = await db.agentRunEvents.where('runId').equals(run.id).toArray()
+    const add = db.agentRunEvents.add.bind(db.agentRunEvents)
+    db.agentRunEvents.add = async (...args: any[]) => {
+      if (args[0].type === 'run.failed') throw new DOMException('隔离测试：正文拒绝终态写入故障', 'QuotaExceededError')
+      return add(...args)
+    }
+    return { runId: run.id, chapters, events }
+  })
+  await page.getByTitle('关闭，保留原文不采纳', { exact: true }).click()
+  await expect(page.getByText(/未能保存拒绝决定，候选已保留/)).toBeVisible()
+  await expect(draft).toHaveValue(generated)
+  const failed = await page.evaluate(async runId => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return { status: (await db.agentRuns.get(runId)).status, chapters: await db.chapters.toArray(), events: await db.agentRunEvents.where('runId').equals(runId).toArray() }
+  }, before.runId)
+  expect(failed).toEqual({ status: 'awaiting_confirmation', chapters: before.chapters, events: before.events })
+  await page.reload()
+  await expect(draft).toHaveValue(generated)
+  await page.getByTitle('关闭，保留原文不采纳', { exact: true }).click()
+  await expect(draft).toHaveCount(0)
+  const final = await page.evaluate(async runId => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return { status: (await db.agentRuns.get(runId)).status, chapters: await db.chapters.toArray(), events: await db.agentRunEvents.where('runId').equals(runId).toArray() }
+  }, before.runId)
+  expect(final.status).toBe('failed')
+  expect(final.chapters).toEqual(before.chapters)
+  for (const type of ['confirmation.recorded', 'run.failed', 'memory.settlement.recorded']) expect(final.events.filter((event: any) => event.type === type)).toHaveLength(1)
+  await page.reload()
+  await expect(page.locator('.tiptap-editor')).toBeVisible()
+  await expect(draft).toHaveCount(0)
+  expect(requests).toBe(1)
+})
+
 test('分步骤实际请求完整交付长备注、元素和作者文风；自定义模板保留，候选刷新采纳', async ({ page }) => {
   const requests: Array<{ messages: Array<{ content: string }>; temperature: number; max_tokens: number }> = []
   await page.route('https://prose-handoff.invalid/**', async route => {

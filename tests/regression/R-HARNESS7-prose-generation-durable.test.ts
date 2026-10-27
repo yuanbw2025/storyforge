@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../src/lib/db/schema'
 import {
   beginProseGenerationGatewayStepV1,
@@ -18,7 +18,7 @@ import {
   type ProseGenerationCandidateV1,
   type ProseGenerationOperationV1,
 } from '../../src/lib/agent/run/prose-generation-durable'
-import { readAgentRunV1 } from '../../src/lib/agent/run/event-store'
+import { appendAgentRunEventV1, readAgentRunV1 } from '../../src/lib/agent/run/event-store'
 import { hashCanonicalValue } from '../../src/lib/agent/run/hash'
 import { hashChapterText, normalizeChapterText } from '../../src/lib/ai/chapter-memory/text-normalization'
 import type { WorkspaceScope } from '../../src/lib/types'
@@ -190,7 +190,49 @@ describe.sequential('R-HARNESS7 · 正文生成 durable run', { timeout: 15_000 
     await db.open()
   })
 
-  afterEach(() => db.close())
+  afterEach(() => { vi.restoreAllMocks(); db.close() })
+
+  it.each(['generate', 'continue'] as const)('拒绝 %s 候选会结束运行，重复拒绝不重复决定或结算', async operation => {
+    const pending = await preparePending('正文拒绝终态', operation)
+    const input = { scope: pending.fixture.scope, runId: pending.candidate.durable.runId, candidate: pending.candidate }
+    await Promise.all([rejectProseGenerationCandidateV1(input), rejectProseGenerationCandidateV1(input)])
+    const after = await readAgentRunV1(input.scope, input.runId)
+    expect(after.projection.state).toBe('failed')
+    expect(after.events.filter(event => event.type === 'run.failed').map(event => event.payload)).toEqual([{ code: 'author_rejected', retryable: false }])
+    for (const type of ['confirmation.recorded', 'run.failed', 'memory.settlement.recorded']) expect(after.events.filter(event => event.type === type)).toHaveLength(1)
+    expect((await db.chapters.get(pending.fixture.chapterId))?.content).toBe(pending.fixture.content)
+    const stored = await readLatestProseGenerationCandidateV1({ scope: input.scope, chapterId: pending.fixture.chapterId })
+    expect(stored).toEqual(pending.candidate)
+    expect(await recoverProseGenerationCandidateV1({ scope: input.scope, candidate: stored! })).toBeNull()
+    expect((await rejectProseGenerationCandidateV1(input)).events).toEqual(after.events)
+  })
+
+  it.each(['run.failed', 'memory.settlement.recorded'])('正文拒绝的 %s 写失败时整次决定回滚，候选可恢复并明确重试', async eventType => {
+    const pending = await preparePending('正文拒绝写失败')
+    const input = { scope: pending.fixture.scope, runId: pending.candidate.durable.runId, candidate: pending.candidate }
+    const before = await readAgentRunV1(input.scope, input.runId)
+    const add = db.agentRunEvents.add.bind(db.agentRunEvents)
+    const spy = vi.spyOn(db.agentRunEvents, 'add').mockImplementation(async (...args) => {
+      if (args[0].type === eventType) throw new DOMException('正文拒绝终态写入故障', 'QuotaExceededError')
+      return add(...args)
+    })
+    await expect(rejectProseGenerationCandidateV1(input)).rejects.toThrow('正文拒绝终态写入故障')
+    expect(await readAgentRunV1(input.scope, input.runId)).toEqual(before)
+    expect(await readLatestProseGenerationCandidateV1({ scope: input.scope, chapterId: pending.fixture.chapterId })).not.toBeNull()
+    spy.mockRestore()
+    expect((await rejectProseGenerationCandidateV1(input)).projection.state).toBe('failed')
+  })
+
+  it('明确再次拒绝可补齐旧的已拒绝正文步骤终态，保留原始事件', async () => {
+    const pending = await preparePending('正文旧拒绝终态')
+    const input = { scope: pending.fixture.scope, runId: pending.candidate.durable.runId, candidate: pending.candidate }
+    const before = await appendAgentRunEventV1({ ...input, expectedLastSequence: pending.snapshot.projection.lastSequence, type: 'confirmation.recorded', payload: { stepId: PROSE_GENERATION_STEP_ID_V1, candidateHash: pending.candidate.durable.candidateHash, decision: 'reject' } })
+    expect(before.projection.state).toBe('running')
+    const after = await rejectProseGenerationCandidateV1(input)
+    expect(after.projection.state).toBe('failed')
+    expect(after.events.slice(0, before.events.length)).toEqual(before.events)
+    expect(after.events.filter(event => event.type === 'confirmation.recorded')).toHaveLength(1)
+  })
 
   it.each(['generate', 'continue'] as const)('作者修订 %s 候选可刷新恢复，并沿原 Gateway 证据链采纳', async operation => {
     const pending = await preparePending('作者修订', operation)
@@ -408,7 +450,7 @@ describe.sequential('R-HARNESS7 · 正文生成 durable run', { timeout: 15_000 
       runId: interrupted.candidate.durable.runId,
       candidate: interrupted.candidate,
     })
-    expect(rejected.projection.state).toBe('running')
+    expect(rejected.projection.state).toBe('failed')
     expect(rejected.projection.steps[PROSE_GENERATION_STEP_ID_V1].status).toBe('failed')
     expect(rejected.projection.steps[PROSE_GENERATION_STEP_ID_V1].confirmation).toBe('reject')
   })

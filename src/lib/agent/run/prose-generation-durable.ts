@@ -1191,19 +1191,26 @@ export async function rejectProseGenerationCandidateV1(input: {
   runId: number
   candidate: ProseGenerationCandidateV1
 }): Promise<AgentRunSnapshotV1> {
-  const snapshot = await readAgentRunV1(input.scope, input.runId)
-  const step = snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
-  if (step?.candidateHash !== input.candidate.durable.candidateHash) return snapshot
-  if (step.status === 'stale' && snapshot.projection.state === 'paused') {
-    return append(input.scope, snapshot, 'run.cancelled', {
-      reason: 'author-discarded-stale-prose-candidate',
-    })
-  }
-  if (step.status !== 'awaiting_confirmation') return snapshot
-  return append(input.scope, snapshot, 'confirmation.recorded', {
-    stepId: PROSE_GENERATION_STEP_ID_V1,
-    candidateHash: input.candidate.durable.candidateHash,
-    decision: 'reject',
+  return db.transaction('rw', scopeTransactionTables(db.agentRuns, db.agentRunEvents), async () => {
+    let snapshot = await readAgentRunV1(input.scope, input.runId)
+    assertProseGenerationExecutionBindingsV1(snapshot)
+    if (input.candidate.durable.runId !== snapshot.run.id) throw new Error('正文候选与运行不一致。')
+    const step = snapshot.projection.steps[PROSE_GENERATION_STEP_ID_V1]
+    if (step?.candidateHash !== input.candidate.durable.candidateHash) return snapshot
+    if (['completed', 'failed', 'cancelled', 'recovery_required'].includes(snapshot.projection.state)) return snapshot
+    if (step.status === 'stale' && snapshot.projection.state === 'paused') {
+      return append(input.scope, snapshot, 'run.cancelled', {
+        reason: 'author-discarded-stale-prose-candidate',
+      })
+    }
+    if (step.status === 'awaiting_confirmation') {
+      snapshot = await append(input.scope, snapshot, 'confirmation.recorded', {
+        stepId: PROSE_GENERATION_STEP_ID_V1,
+        candidateHash: input.candidate.durable.candidateHash,
+        decision: 'reject',
+      })
+    } else if (!(step.status === 'failed' && step.confirmation === 'reject')) return snapshot
+    return append(input.scope, snapshot, 'run.failed', { code: 'author_rejected', retryable: false })
   })
 }
 

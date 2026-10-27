@@ -17871,6 +17871,11 @@
           "kind": "partial-engineering",
           "receipt": "tests/acceptance/longform-stability/detailed-author-save-20261028.json",
           "note": "保存/恢复及共享下游已验证；真实细纲生产、批量和完整故障矩阵继续，不记整例PASS。"
+        },
+        {
+          "type": "REAL_MODEL_AND_EXPLICIT_AUTHOR_REPAIR_PARTIAL",
+          "receipt": "tests/acceptance/longform-stability/real-detail-mainline-20261028-04f496bd.json",
+          "summary": "04f496bd单章拆场景主链与增强细纲拒绝通过；漏编号原响应保留，作者明确编辑后同一候选采纳。4请求24199已知tokens无未知用量，不计整例PASS。"
         }
       ],
       "defects": [],
@@ -18113,6 +18118,11 @@
           "kind": "partial-engineering",
           "receipt": "tests/acceptance/longform-stability/detailed-author-save-20261028.json",
           "note": "保存/恢复及共享下游已验证；真实细纲生产、批量和完整故障矩阵继续，不记整例PASS。"
+        },
+        {
+          "type": "REAL_MODEL_AND_EXPLICIT_AUTHOR_REPAIR_PARTIAL",
+          "receipt": "tests/acceptance/longform-stability/real-detail-mainline-20261028-04f496bd.json",
+          "summary": "04f496bd单章拆场景主链与增强细纲拒绝通过；漏编号原响应保留，作者明确编辑后同一候选采纳。4请求24199已知tokens无未知用量，不计整例PASS。"
         }
       ],
       "defects": [],
@@ -18198,6 +18208,11 @@
           "kind": "partial-engineering",
           "receipt": "tests/acceptance/longform-stability/detailed-author-save-20261028.json",
           "note": "保存/恢复及共享下游已验证；真实细纲生产、批量和完整故障矩阵继续，不记整例PASS。"
+        },
+        {
+          "type": "REAL_MODEL_AND_EXPLICIT_AUTHOR_REPAIR_PARTIAL",
+          "receipt": "tests/acceptance/longform-stability/real-detail-mainline-20261028-04f496bd.json",
+          "summary": "04f496bd单章拆场景主链与增强细纲拒绝通过；漏编号原响应保留，作者明确编辑后同一候选采纳。4请求24199已知tokens无未知用量，不计整例PASS。"
         }
       ],
       "defects": [],
@@ -18290,6 +18305,11 @@
           "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
           "receipt": "tests/acceptance/longform-stability/outline-candidate-recovery-20261028.json",
           "summary": "41项浏览器主链与候选恢复/拒绝写失败/落盘等待通过。实模原失败独立保留；新源码实模与完整故障/平台继续，不计整例PASS。"
+        },
+        {
+          "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
+          "receipt": "tests/acceptance/longform-stability/prose-rejection-terminal-20261028.json",
+          "summary": "正文拒绝运行不结束的真实原失败保留；61项回归、25条浏览器审修/保存/拒绝恢复路径通过，新源码实模与全矩阵继续。"
         }
       ],
       "defects": [],
@@ -18560,6 +18580,11 @@
           "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
           "receipt": "tests/acceptance/longform-stability/outline-candidate-recovery-20261028.json",
           "summary": "41项浏览器主链与候选恢复/拒绝写失败/落盘等待通过。实模原失败独立保留；新源码实模与完整故障/平台继续，不计整例PASS。"
+        },
+        {
+          "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
+          "receipt": "tests/acceptance/longform-stability/prose-rejection-terminal-20261028.json",
+          "summary": "正文拒绝运行不结束的真实原失败保留；61项回归、25条浏览器审修/保存/拒绝恢复路径通过，新源码实模与全矩阵继续。"
         }
       ],
       "defects": [],
@@ -19006,6 +19031,11 @@
           "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
           "receipt": "tests/acceptance/longform-stability/outline-candidate-recovery-20261028.json",
           "summary": "41项浏览器主链与候选恢复/拒绝写失败/落盘等待通过。实模原失败独立保留；新源码实模与完整故障/平台继续，不计整例PASS。"
+        },
+        {
+          "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
+          "receipt": "tests/acceptance/longform-stability/prose-rejection-terminal-20261028.json",
+          "summary": "正文拒绝运行不结束的真实原失败保留；61项回归、25条浏览器审修/保存/拒绝恢复路径通过，新源码实模与全矩阵继续。"
         }
       ],
       "defects": [],
@@ -23292,7 +23322,7 @@
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     }
   ],
-  "executionStatus": "DETAILED_AUTHOR_SAVES_AND_REAL_OUTLINE_VERIFIED_CONTINUING",
+  "executionStatus": "REAL_DETAIL_AND_PROSE_REJECTION_RECOVERY_VERIFIED_CONTINUING",
   "passPolicy": {
     "closedCase": "全部适用步骤/字段/模式/故障/派生子用例有本轮回执；PASS不推导已发行。",
     "statuses": [
@@ -23885,6 +23915,22 @@
       "date": "2026-10-28",
       "unit": "Real Agnes single-volume and parameterized three-chapter reject/adopt/readback",
       "sourcePin": "tests/acceptance/longform-stability/real-outline-mainline-20261028-0d93ae491.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Real simple and enhanced detail with explicit author reference repair",
+      "sourcePin": "tests/acceptance/longform-stability/real-detail-mainline-20261028-04f496bd.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Atomic prose rejection and storage-failure recovery",
+      "sourcePin": "tests/acceptance/longform-stability/prose-rejection-terminal-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

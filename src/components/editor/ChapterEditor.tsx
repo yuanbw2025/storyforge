@@ -2937,13 +2937,18 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
           runId: candidate.durable.runId,
           candidate,
         })
+        if (proseCandidateRef.current !== candidate) return
         proseSnapshotRef.current = snapshot
       } catch (error) {
-        console.warn('[ProseGeneration] 候选拒绝证据写入失败:', error)
+        if (proseCandidateRef.current === candidate) {
+          setProseGenerationError(`未能保存拒绝决定，候选已保留，请重试。${error instanceof Error ? ` ${error.message}` : ''}`)
+        }
+        return
       }
       setProseCandidate(null)
       proseCandidateRef.current = null
     }
+    setProseGenerationError('')
     ai.reset()
   }
 
@@ -3336,7 +3341,7 @@ export default function ChapterEditor({ project, outlineNodeId }: Props) {
 
       {proseGenerationError && (
         <div className="mb-3 rounded-lg border border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
-          正文候选未通过质量门：{proseGenerationError}
+          正文候选处理未完成：{proseGenerationError}
         </div>
       )}
 
