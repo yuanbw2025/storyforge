@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "kind": "longform-stability-partial-work-metadata-receipt",
+  "sourceCommit": "e008da4ccf1572472724368f58ba5b08fe22248a",
+  "date": "2026-10-27",
+  "status": "PARTIAL_VERIFIED_CONTINUING",
+  "cases": [
+    "LF-092",
+    "LF-093"
+  ],
+  "boundary": "Author-selected Work metadata and longform-library rename only. Project remains a workspace shell. No new tables or migrations.",
+  "executionState": "Isolated precommit browser snapshot; relevant application and test files match the committed hashes below.",
+  "sha256": {
+    "src/components/project/ProjectInfoPanel.tsx": "ef85304e3afc58ad55f97986218489f4a3c9cbcf5aa8e7c3430be7fc6902a497",
+    "src/lib/workspace/works.ts": "34211ff5024d6d87872e05c93a53deede0b4e3c8943cfeafad3257c24d3ea89a",
+    "src/pages/LongformLibraryPage.tsx": "0c9feb7decc034c889c1b24da46d9eee37a76dd2ab2a9b78b6e59dbce868895e",
+    "src/stores/project.ts": "5c62d10a78e258783faa7d6e7a518a6735091102e009a4632af8e53850920f16",
+    "tests/regression/R-LONGFORM-work-info-draft.test.tsx": "ffb38e54d3bd82be8f75969b51d1d56bc2c0c0f24e187ce72ea7d43c5a1bc652",
+    "tests/regression/R-LONGFORM-frozen-work-metadata.test.ts": "e0699726eb6a5e4eac3eaadc35b3253fcb9b7e5f4e69be28c4fe33ba401deb21",
+    "tests/e2e/longform-work-metadata.spec.ts": "c911f38e195c46c20ae3065b1e572d34bd561fdcc78ece1270d7c863b97037c8"
+  },
+  "regression": {
+    "files": 6,
+    "passed": 132,
+    "newOwnerAndDraftCases": 9
+  },
+  "browser": {
+    "engine": "Chromium",
+    "passed": 6,
+    "externalNetwork": "blocked; synthetic projects only",
+    "cases": [
+      "Four metadata controls, save, reload, explicit clearing and no Project mirrors",
+      "Queued A save while B becomes active",
+      "Quota failure retains metadata draft and explicit retry",
+      "Rename acknowledgement, immediate reload, search and reopening",
+      "Rename quota failure retains dialog and input until retry",
+      "Inactive sibling rename preserves active Work pointer"
+    ]
+  },
+  "gates": {
+    "architecture": "PASS",
+    "requiredTables": "PASS (129)",
+    "aiManual": "PASS",
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "build": "PASS",
+    "diffCheck": "PASS"
+  },
+  "narrativeWorld": {
+    "newReceipt": "tests/acceptance/narrative-world/baseline-20261027-workflow-continuation-v2.json",
+    "previousReceiptPreserved": true,
+    "changedTopLevelKeys": [
+      "input",
+      "run"
+    ],
+    "semanticObservationsUnchanged": true,
+    "measuredCapabilities": "48 passed / 120; 12 gaps; 60 unsupported; not target acceptance"
+  },
+  "remaining": [
+    "Full-case load/race/fault matrix",
+    "Multiworld toggle and group lifecycle",
+    "Full current-head CI and E2E",
+    "Native clients and release"
+  ],
+  "modelRequests": 0,
+  "nativePackageEvidence": false,
+  "releaseStatus": "NOT_RELEASED",
+  "overallPlanCompleted": false
+}
