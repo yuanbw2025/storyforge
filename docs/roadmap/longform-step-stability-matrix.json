@@ -15818,6 +15818,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/prose-rejection-terminal-20261028.json",
           "summary": "已执行原生正文草稿写失败保留、明确重试与快速切章保护；完整恢复/崩溃模式继续。"
+        },
+        {
+          "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
+          "receipt": "tests/acceptance/longform-stability/revision-incomplete-recovery-20261028.json",
+          "summary": "预演落盘前运行前缀的可见结束、写失败保留、刷新重试和锁保护；68回归16浏览器通过，真实原前缀回放继续。"
         }
       ],
       "defects": [],
@@ -18941,6 +18946,11 @@
           "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
           "receipt": "tests/acceptance/longform-stability/outline-candidate-recovery-20261028.json",
           "summary": "41项浏览器主链与候选恢复/拒绝写失败/落盘等待通过。实模原失败独立保留；新源码实模与完整故障/平台继续，不计整例PASS。"
+        },
+        {
+          "type": "REAL_MODEL_PARTIAL",
+          "receipt": "tests/acceptance/longform-stability/real-review-mainline-20261028-2bcc67bd.json",
+          "summary": "4请求42342已知tokens无未知用量：整章报告回读、一次修订/复核及拒绝通过；新审校后驱动中断留下原运行，采纳继续。"
         }
       ],
       "defects": [],
@@ -19073,6 +19083,16 @@
           "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
           "receipt": "tests/acceptance/longform-stability/quality-rejection-terminal-20261028.json",
           "summary": "范围修订保持既有取消终态；63回归和2条拒绝写失败→刷新→重试浏览器路径通过，无额外模型调用。"
+        },
+        {
+          "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
+          "receipt": "tests/acceptance/longform-stability/revision-incomplete-recovery-20261028.json",
+          "summary": "预演落盘前运行前缀的可见结束、写失败保留、刷新重试和锁保护；68回归16浏览器通过，真实原前缀回放继续。"
+        },
+        {
+          "type": "REAL_MODEL_PARTIAL",
+          "receipt": "tests/acceptance/longform-stability/real-review-mainline-20261028-2bcc67bd.json",
+          "summary": "4请求42342已知tokens无未知用量：整章报告回读、一次修订/复核及拒绝通过；新审校后驱动中断留下原运行，采纳继续。"
         }
       ],
       "defects": [],
@@ -23998,6 +24018,14 @@
       "date": "2026-10-28",
       "unit": "Full browser failure triage and scoped world-origin width",
       "sourcePin": "tests/acceptance/longform-stability/ui-full-replay-triage-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Real whole review and selected revision rejection, interrupted-prefix recovery",
+      "sourcePin": "tests/acceptance/longform-stability/revision-incomplete-recovery-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

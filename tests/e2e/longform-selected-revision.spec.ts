@@ -47,6 +47,47 @@ async function reviewAndRevise(page: Page, requests: { review?: string; revision
   await page.getByRole('button', { name: '生成修订并复核', exact: true }).click()
 }
 
+test('预演落盘前中断的修订刷新后可明确结束，写失败保留入口且不重发模型', async ({ page }) => {
+  const state = { calls: [] as any[] }; await mock(page, state)
+  await setup(page); await reviewAndRevise(page)
+  await expect(page.getByRole('button', { name: '放弃修订', exact: true })).toBeEnabled()
+  const target = await page.evaluate(async () => {
+    const imp = new Function('p', 'return import(p)')
+    const [{ db }, { resolveScope }, { createAgentRunV1, readAgentRunV1, appendAgentRunEventV1 }] = await Promise.all([imp('/storyforge/src/lib/db/schema.ts'), imp('/storyforge/src/lib/workspace/scope.ts'), imp('/storyforge/src/lib/agent/run/event-store.ts')])
+    const run = await db.agentRuns.orderBy('id').last(); const scope = await resolveScope({ projectId: run.projectId })
+    const existing = await readAgentRunV1(scope, run.id)
+    let interrupted = await createAgentRunV1({ scope, worldGroupId: existing.contract.scope.worldGroupId, contract: existing.contract })
+    interrupted = await appendAgentRunEventV1({ scope, runId: interrupted.run.id, type: 'step.scheduled', payload: { stepId: 'prose-generation' }, expectedLastSequence: interrupted.projection.lastSequence })
+    interrupted = await appendAgentRunEventV1({ scope, runId: interrupted.run.id, type: 'step.started', payload: { stepId: 'prose-generation', attempt: 1 }, expectedLastSequence: interrupted.projection.lastSequence })
+    return { runId: interrupted.run.id, chapters: await db.chapters.toArray(), events: await db.agentRunEvents.where('runId').equals(interrupted.run.id).toArray() }
+  })
+  await page.reload(); await page.getByRole('button', { name: '质量审校', exact: true }).click()
+  const recovery = page.getByTestId('quality-revision-incomplete-run')
+  await expect(recovery).toContainText('尚无可采纳的预演')
+  await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const add = db.agentRunEvents.add.bind(db.agentRunEvents)
+    db.agentRunEvents.add = async (...args: any[]) => {
+      if (args[0].type === 'run.cancelled') throw new DOMException('隔离测试：未完成修订结束写入故障', 'QuotaExceededError')
+      return add(...args)
+    }
+  })
+  await recovery.getByRole('button', { name: '结束未完成运行', exact: true }).click()
+  await expect(page.getByText(/未完成修订结束写入故障/)).toBeVisible()
+  await expect(recovery).toBeVisible()
+  const read = async () => page.evaluate(async runId => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return { status: (await db.agentRuns.get(runId)).status, chapters: await db.chapters.toArray(), events: await db.agentRunEvents.where('runId').equals(runId).toArray() }
+  }, target.runId)
+  expect(await read()).toEqual({ status: 'running', chapters: target.chapters, events: target.events })
+  await page.reload(); await page.getByRole('button', { name: '质量审校', exact: true }).click()
+  await recovery.getByRole('button', { name: '结束未完成运行', exact: true }).click()
+  await expect(recovery).toHaveCount(0)
+  const ended = await read(); expect(ended.status).toBe('cancelled'); expect(ended.chapters).toEqual(target.chapters)
+  for (const type of ['run.cancelled', 'memory.settlement.recorded']) expect(ended.events.filter((event: any) => event.type === type)).toHaveLength(1)
+  expect(state.calls).toHaveLength(3)
+})
+
 test('放弃修订写失败保留预演，刷新重试沿原运行取消且不重发模型', async ({ page }) => {
   const state = { calls: [] as any[] }; await mock(page, state)
   await setup(page); await reviewAndRevise(page)

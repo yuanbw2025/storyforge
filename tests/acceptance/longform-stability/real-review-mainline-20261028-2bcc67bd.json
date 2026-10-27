@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-whole-review-and-selected-revision-partial-evidence",
+  "date": "2026-10-28",
+  "sourceCommit": "2bcc67bd8dd57080eec70786db21490a18826a62",
+  "status": "WHOLE_REVIEW_AND_REVISION_REJECTION_PASSED_ADOPTION_CONTINUES",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "modelRequests": 4,
+  "knownTotalTokens": 42342,
+  "unknownUsageRequests": 0,
+  "wholeReview": {
+    "directory": "live-longform-review-2026-10-27T18-49-18-348Z",
+    "requests": 1,
+    "knownTotalTokens": 11482,
+    "issues": 3,
+    "seededTaskTextLocated": true,
+    "canonicalUnchanged": true,
+    "reportReload": true
+  },
+  "firstRevisionAndNewReview": {
+    "directory": "live-longform-revision-2026-10-27T18-53-28-631Z",
+    "requests": 3,
+    "knownTotalTokens": 30860,
+    "selectedIssue": "QA author inserted a writing-task sentence solely as an isolated workflow/repair fixture",
+    "protectedQuote": "Author selected an exact original paragraph",
+    "previewAndRecheck": "PASS",
+    "reloadAndReject": "PASS; original run 16 cancelled, canonical source unchanged",
+    "newIndependentReport": "PASS; report run 17 completed",
+    "adoption": "PENDING; previous-cancelled-view driver race exposed unfinished run 18 before dispatch, original private driver failure retained"
+  },
+  "limits": [
+    "No literary quality, independent-reader or platform acceptance claim",
+    "The added task sentence and duplicated author markers are QA edits, not attributed to model generation",
+    "A driver intended to insert at the end actually inserted the seeded sentence at paragraph 6; the report and selection use its verified actual quote/paragraph",
+    "Remaining review modes, adoption and other operations continue"
+  ]
+}
