@@ -1,5 +1,0 @@
-
-> storyforge@4.0.2 check:architecture
-> node scripts/check-architecture.mjs
-
-[architecture] ✅ ok: 无反模式违规(三注册表铁律守住)。

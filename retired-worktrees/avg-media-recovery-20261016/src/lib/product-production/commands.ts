@@ -1,0 +1,3471 @@
+import { deriveAvgAssemblyRecoveryBaseV1 } from '../avg/assembly-recovery'
+import { resetAvgImageRecoveryForEvolutionV1 } from '../avg/media-production-policy'
+import { avgMediaProductionEnabledV2, avgVoiceProductionEnabledV3 } from '../avg/assembly-contract'
+import { assertAvgStoredAssemblyBriefV3 } from '../avg/voice-assembly-storage'
+import { assertAvgNoUnresolvedVoiceRequestsV1 } from '../avg/voice-request-safety'
+import { avgPendingVoiceRequestsV1, resetAvgVoiceRecoveryForEvolutionV1, validateAvgVoiceRecoveryV1 } from '../avg/voice-recovery'
+import { canReviseTextContentBuildV1, createTextContentRevisionPlanV1 } from './text-content-revision'
+import Dexie from 'dexie'
+import { db } from '../db/schema'
+import type {
+  ConfirmedProductBriefV1,
+  MediaBlobObjectRecordV1,
+  ProductBuildArtifactRecordV1,
+  ProductBuildRecordV1,
+  ProductProductionPlanV3,
+  ProductProductionBriefV3,
+  ProductProductionBriefRecordV1,
+  ProductProductionCommandRecordV1,
+  ProductProductionCommandV1,
+  ProductProductionRecordV1,
+  ProductSourcePlanV1,
+  TextOpenWorldCreatorBriefV1,
+  TextOpenWorldCreatorSourceBindingV1,
+  TextOpenWorldCreatorSourceLocatorV1,
+  TextOpenWorldCreatorSourceSummaryV1,
+  WorkspaceScope,
+} from '../types'
+import { assertRecordInScope, resolveScope, scopeTransactionTables, stampNewRecord } from '../workspace/scope'
+import { canonicalProductProductionJsonV2, hashProductProductionValueV2 } from './hash'
+import { parseProductProductionBriefV3, parseProductProductionCommandV1 } from './contracts'
+import {
+  createConfirmedProductBriefV1,
+  createProductProductionSourcePlanV1,
+  parseProductProductionSourcePlanV1,
+} from './source-contracts'
+import { assertFormalProductProductionStartV1 } from '../product/source-contracts'
+import { createWorldReferenceV1 } from '../product/source'
+import { assertAiTownWorldSourceSelectionHashV1 } from '../ai-town/contracts'
+import {
+  createProductProductionPlanV3,
+  parseProductProductionPlanV3,
+  textAdventureProductionBudgetFloorV1,
+  TEXT_ADVENTURE_SCENE_SCRIPT_INPUT_CEILING_V1,
+  TEXT_ADVENTURE_MAIN_QUEST_INPUT_CEILING_V1,
+  TEXT_ADVENTURE_QUALITY_REVIEW_TIMEOUT_MS_V1,
+} from './plan'
+import { readMediaBlobObjectData, readVerifiedMediaBlobObjectData } from './media-blob-store'
+import { isTextAdventureClockCapacityRevisionV1 } from './clock-capacity-revision'
+import { isProductImageDeliveryDimensionCompatibleV1 } from './media-adapters'
+import { parseTextAdventureQualityReviewArtifactV1 } from '../adventure/production-artifacts'
+import {
+  verifyTextAdventureHumanVisualReviewReceiptV1,
+} from './quality-receipts'
+import { isTextAdventureReadableGlyphViolationV1 } from './text-adventure-quality'
+import { inspectProductProductionBuildRecoveryPolicyV1 } from './recovery-policy'
+import { validateProductProductionRecoveryDirectiveV1 } from './context'
+import { readAgentRunV1 } from '../agent/run/event-store'
+import { createVerificationReceiptV1 } from '../agent/run/verification-receipt'
+import {
+  inspectTextOpenWorldCreatorSourceLocatorV1,
+  TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1,
+  TEXT_OPEN_WORLD_CREATOR_BRIEF_VERIFIER_V1,
+  textOpenWorldCreatorLocatorColumnsV1,
+  textOpenWorldCreatorProductionLocatorColumnsV1,
+  verifyTextOpenWorldCreatorBriefV1,
+} from '../open-world/creator-brief-persistence'
+import {
+  assertTextOpenWorldCreatorProductionSourceCurrentV1,
+  createTextOpenWorldCreatorStartPreparationV1,
+  textOpenWorldCreatorProductionSourceTransactionTablesV1,
+  type TextOpenWorldCreatorStartPreparationV1,
+} from '../open-world/creator-production-start'
+import { verifyTextOpenWorldCreatorProductionPreflightConfirmationV1 } from '../open-world/creator-production-preflight'
+import { useAIConfigStore } from '../../stores/ai-config'
+import {
+  assertProductProductionBudgetLedgerV1,
+  prepareLegacyPausedProductBuildV1,
+  resolveProductProductionUnknownResultReservationLedgerV2,
+} from './scheduler'
+import {
+  assertTextOpenWorldCreatorRepairPreparationCurrentV1,
+  createTextOpenWorldCreatorRepairAuthorizationV1,
+  prepareTextOpenWorldCreatorArtifactRepairV1,
+  type TextOpenWorldCreatorRepairPreparationV1,
+} from '../open-world/creator-artifact-repair'
+import type { TextOpenWorldCreatorRepairAuthorizationV1 } from '../open-world/creator-artifact-repair-contract'
+import { hashTextOpenWorldCreatorEditImpactPlanHandoffV1 } from '../open-world/creator-artifact-edit'
+import {
+  assertTextOpenWorldCreatorMediaPreparationCurrentV1,
+  createTextOpenWorldCreatorMediaAuthorizationV1,
+  prepareTextOpenWorldCreatorMediaV1,
+  type TextOpenWorldCreatorMediaPreparationV1,
+} from '../open-world/creator-media'
+import type { TextOpenWorldCreatorMediaAuthorizationV1 } from '../open-world/creator-media-contract'
+import { applyAvgAuthorArtifactAdoptionV1, AvgAuthorArtifactErrorV1 } from '../avg/author-artifacts'
+
+export type ProductProductionErrorCodeV1 =
+  | 'production-not-found'
+  | 'production-state-conflict'
+  | 'command-id-payload-conflict'
+  | 'command-in-progress'
+  | 'invalid-state-transition'
+  | 'brief-unresolved'
+  | 'brief-not-authorized'
+  | 'source-stale'
+  | 'capability-unbound'
+  | 'cost-authorization-required'
+  | 'storage-budget-insufficient'
+  | 'control-epoch-stale'
+  | 'dependency-receipt-stale'
+  | 'quality-hard-gate-failed'
+  | 'rights-incomplete'
+  | 'repair-impact-stale'
+  | 'creator-media-stale'
+  | 'preview-stale'
+  | 'publication-intent-stale'
+  | 'media-revision-invalid'
+  | 'avg-artifact-invalid'
+  | 'publication-transaction-failed'
+
+export interface ProductProductionCommandReceiptV1 {
+  ok: boolean
+  commandId: string
+  commandType: ProductProductionCommandV1['type']
+  productionId: number
+  stateRevision: number
+  result: Record<string, unknown>
+  errorCode: ProductProductionErrorCodeV1 | null
+  replayed: boolean
+}
+
+class ExpectedCommandFailure extends Error {
+  constructor(readonly code: ProductProductionErrorCodeV1, message: string) {
+    super(message)
+  }
+}
+
+function reject(code: ProductProductionErrorCodeV1, message: string): never {
+  throw new ExpectedCommandFailure(code, message)
+}
+
+async function assertVoicePacketForCommand(brief: ProductProductionBriefV3, scope: WorkspaceScope,
+  productionId: number, expectedParentBuildNumber: number | null) {
+  let resolved: Awaited<ReturnType<typeof assertAvgStoredAssemblyBriefV3>>
+  try {
+    const check = () => assertAvgStoredAssemblyBriefV3(brief.avgAssembly)
+    resolved = Dexie.currentTransaction ? await Dexie.waitFor(Dexie.ignoreTransaction(check), 20_000) : await check()
+  } catch { reject('brief-not-authorized', '配音合同的精确字符、请求或能力绑定无效，请重新准备') }
+  try {
+    if (resolved.assembly.voice.recovery) {
+      if (resolved.assembly.voice.recovery.sourceBuildNumber !== expectedParentBuildNumber) throw new Error('[avg-voice] 配音恢复必须绑定当前准确父版本')
+      await validateAvgVoiceRecoveryV1({ scope, productionId, brief })
+    }
+    const pending = avgPendingVoiceRequestsV1(resolved.assembly, resolved.requests)
+    if (pending.length) await assertAvgNoUnresolvedVoiceRequestsV1({ scope, requests: pending })
+  }
+  catch (error) { reject('brief-not-authorized', error instanceof Error ? error.message : '历史配音调用状态不可验证，不能重发') }
+}
+
+// authorDraftJson is contractually capped at 120k characters. Keep enough
+// envelope room for blocker identity, repair note and canonical JSON keys.
+const SAFE_COMMAND_JSON_MAX_CHARS = 140_000
+
+function safeJson(value: unknown): string {
+  const json = canonicalProductProductionJsonV2(value)
+  if (json.length > SAFE_COMMAND_JSON_MAX_CHARS) {
+    throw new Error('[product-production] command result 超出安全上限')
+  }
+  return json
+}
+
+interface PausedLedgerReservationV1 {
+  taskKey: string
+  runId: number
+  attempt: number
+  controlEpoch: number
+  providerCallPossible: boolean
+}
+
+interface PreparedPausedBuildV1 {
+  before: ProductBuildRecordV1 & { id: number }
+  after: ProductBuildRecordV1 & { id: number }
+  runs: Array<{ id: number; lastSequence: number; contractHash: string; projectionHash: string }>
+}
+
+interface PausedReservationAccountingV1 {
+  taskKey: string
+  runId: number
+  attempt: number
+  controlEpoch: number
+  requestedDisposition: 'confirmed-not-charged' | 'charge-reservation-upper-bound' | null
+  effectiveDisposition:
+    | 'provider-actual-charge'
+    | 'author-confirmed-not-charged'
+    | 'author-charged-reservation-upper-bound'
+    | 'system-released-before-dispatch'
+    | 'system-released-no-usage-reported'
+  usage: {
+    modelCalls: number
+    inputTokens: number
+    outputTokens: number
+    mediaCalls: number
+    costUsd: number | null
+    durationMs: number
+    storageBytes: number
+  }
+}
+
+/** Read only after the scheduler's strict public ledger guard succeeds. */
+function pausedLedgerReservations(value: string): PausedLedgerReservationV1[] {
+  assertProductProductionBudgetLedgerV1(value)
+  if (value === '{}' || !value.trim()) return []
+  const ledger = JSON.parse(value) as {
+    version: number
+    attempts?: Array<{
+      runId: number
+      attempt: number
+      controlEpoch: number
+      taskKey: string
+      usage: { modelCalls: number; mediaCalls: number } | null
+      usageKnown: boolean
+    }>
+  }
+  if (ledger.version !== 2 || !ledger.attempts) return []
+  return ledger.attempts.filter(attempt => !attempt.usageKnown && attempt.usage != null).map(attempt => ({
+    taskKey: attempt.taskKey,
+    runId: attempt.runId,
+    attempt: attempt.attempt,
+    controlEpoch: attempt.controlEpoch,
+    providerCallPossible: (attempt.usage?.modelCalls ?? 0) > 0 || (attempt.usage?.mediaCalls ?? 0) > 0,
+  })).sort((left, right) => (
+    left.runId - right.runId || left.attempt - right.attempt || left.taskKey.localeCompare(right.taskKey)
+  ))
+}
+
+function pauseReservationIdentity(value: Pick<PausedLedgerReservationV1, 'taskKey' | 'runId' | 'attempt' | 'controlEpoch'>): string {
+  return `${value.taskKey}:${value.runId}:${value.attempt}:${value.controlEpoch}`
+}
+
+type PausedLedgerAttemptStateV1 =
+  | { kind: 'absent' }
+  | {
+      kind: 'reservation'
+      taskKey: string
+      runId: number
+      attempt: number
+      controlEpoch: number
+    }
+  | {
+      kind: 'charge'
+      taskKey: string
+      runId: number
+      attempt: number
+      controlEpoch: number | null
+      usage: PausedReservationAccountingV1['usage']
+      resolution:
+        | null
+        | 'author-confirmed-not-charged'
+        | 'author-charged-reservation-upper-bound'
+        | 'system-released-before-dispatch'
+        | 'system-released-no-usage-reported'
+    }
+
+function pausedLedgerAttemptState(
+  value: string,
+  identity: Pick<PausedLedgerReservationV1, 'runId' | 'attempt'>,
+): PausedLedgerAttemptStateV1 {
+  assertProductProductionBudgetLedgerV1(value)
+  if (value === '{}' || !value.trim()) return { kind: 'absent' }
+  const ledger = JSON.parse(value) as {
+    version: number
+    attempts?: Array<{
+      taskKey: string
+      runId: number
+      attempt: number
+      controlEpoch: number
+      usage: PausedReservationAccountingV1['usage'] | null
+      usageKnown: boolean
+      resolution?:
+        | null
+        | 'author-confirmed-not-charged'
+        | 'author-charged-reservation-upper-bound'
+        | 'system-released-before-dispatch'
+        | 'system-released-no-usage-reported'
+    }>
+  }
+  if (ledger.version !== 2) return { kind: 'absent' }
+  const attempt = ledger.attempts?.find(candidate => (
+    candidate.runId === identity.runId && candidate.attempt === identity.attempt
+  ))
+  if (!attempt) return { kind: 'absent' }
+  if (!attempt.usageKnown) {
+    return {
+      kind: 'reservation',
+      taskKey: attempt.taskKey,
+      runId: attempt.runId,
+      attempt: attempt.attempt,
+      controlEpoch: attempt.controlEpoch,
+    }
+  }
+  if (attempt.usage) {
+    return {
+      kind: 'charge',
+      taskKey: attempt.taskKey,
+      runId: attempt.runId,
+      attempt: attempt.attempt,
+      controlEpoch: attempt.controlEpoch,
+      usage: attempt.usage,
+      resolution: attempt.resolution ?? null,
+    }
+  }
+  return { kind: 'absent' }
+}
+
+function requirePausedLedgerAttemptState(
+  value: string,
+  identity: Pick<PausedLedgerReservationV1, 'runId' | 'attempt'>,
+): PausedLedgerAttemptStateV1 {
+  try {
+    return pausedLedgerAttemptState(value, identity)
+  } catch {
+    reject('invalid-state-transition', '暂停恢复预算账本损坏')
+  }
+}
+
+function readResult(value: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+  } catch { return {} }
+}
+
+function compactRecoveryFailure(value: Record<string, unknown>): Record<string, unknown> {
+  const pending: Record<string, unknown>[] = [value]
+  const visited = new Set<Record<string, unknown>>()
+  const failures = new Map<string, Record<string, unknown>>()
+  let direct: Record<string, unknown> | null = null
+  let repairCause: Record<string, unknown> | null = null
+  const compactNode = (node: Record<string, unknown>): Record<string, unknown> => ({
+    ...(typeof node.taskKey === 'string' ? { taskKey: node.taskKey.slice(0, 200) } : {}),
+    ...(typeof node.code === 'string' ? { code: node.code.slice(0, 120) } : {}),
+    ...(typeof node.attempt === 'number' && Number.isSafeInteger(node.attempt)
+      ? { attempt: node.attempt } : {}),
+    ...(typeof node.detail === 'string' ? { detail: node.detail.slice(0, 2_000) } : {}),
+  })
+  for (let inspected = 0; inspected < 256 && pending.length > 0; inspected += 1) {
+    const current = pending.shift()!
+    if (visited.has(current)) continue
+    visited.add(current)
+    if (typeof current.taskKey === 'string' && typeof current.detail === 'string') {
+      direct ??= current
+      if (!failures.has(current.taskKey) && failures.size < 32) {
+        failures.set(current.taskKey, compactNode(current))
+      }
+      if (!repairCause && current.taskKey === 'integration.package'
+        && current.detail.includes('文字冒险叙事质量审查未通过')) repairCause = current
+    }
+    // Prefer the direct causal chain before append-only diagnostic maps so the
+    // latest failure for a task wins deterministically.
+    for (const key of ['previousFailure', 'repairCause']) {
+      const nested = current[key]
+      if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+        pending.push(nested as Record<string, unknown>)
+      }
+    }
+    const taskFailures = current.taskFailures
+    if (taskFailures && typeof taskFailures === 'object' && !Array.isArray(taskFailures)) {
+      for (const nested of Object.values(taskFailures)) {
+        if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+          pending.push(nested as Record<string, unknown>)
+        }
+      }
+    }
+  }
+  const result = compactNode(direct ?? value)
+  if (failures.size > 0) {
+    result.taskFailures = Object.fromEntries([...failures.entries()].sort(([left], [right]) => (
+      left.localeCompare(right)
+    )))
+  }
+  if (repairCause) result.repairCause = compactNode(repairCause)
+  return result
+}
+
+/** Compatibility path for Builds made before deterministic assembly failures became recoverable blockers. */
+export function isRepairRetryableFailedProductBuildV1(
+  build: Pick<ProductBuildRecordV1, 'status' | 'failureJson'>,
+): boolean {
+  if (build.status !== 'failed') return false
+  try {
+    const failure = JSON.parse(build.failureJson) as { taskKey?: unknown; code?: unknown }
+    return (failure.taskKey === 'integration.package' || failure.taskKey === 'qa.release')
+      && (failure.code === 'task-executor-failed' || failure.code === 'task-timeout')
+  } catch { return false }
+}
+
+/** A child Build may reset the same per-Build limits only after proven exhaustion. */
+export function isTextAdventureBuildLifetimeBudgetExhaustedV1(
+  build: Pick<ProductBuildRecordV1, 'status' | 'failureJson'>,
+): boolean {
+  if (build.status !== 'recovery-required') return false
+  try {
+    JSON.parse(build.failureJson)
+    return build.failureJson.includes('Build lifetime budget 不足:')
+  } catch { return false }
+}
+
+/**
+ * Detects an obsolete text-adventure execution reservation or Visual QA
+ * topology. The failure and frozen Plan must agree; a generic failed Build
+ * must never gain the privileged recovery-build evolution path.
+ */
+export function isLegacyOversizedTextAdventureQualityReviewPlanV1(
+  build: Pick<ProductBuildRecordV1, 'status' | 'failureJson' | 'planJson' | 'releasedProductReleaseId'>,
+): boolean {
+  if (build.status !== 'recovery-required' || build.releasedProductReleaseId !== null) return false
+  try {
+    const failure = JSON.parse(build.failureJson) as {
+      taskKey?: unknown
+      code?: unknown
+      detail?: unknown
+    }
+    const plan = parseProductProductionPlanV3(build.planJson)
+    if (plan.productType !== 'text-adventure'
+      || failure.taskKey !== 'content.adventure-quality-review'
+      || !['task-preflight-failed', 'task-executor-failed'].includes(String(failure.code))) return false
+    const qualityOwners = plan.tasks.filter(task => (
+      task.outputArtifactKeys.includes('quality.adventure-review')
+    ))
+    const task = qualityOwners[0]
+    if (qualityOwners.length !== 1 || !task
+      || task.taskKey !== 'content.adventure-quality-review'
+      || task.kind !== 'text-adventure-quality-review'
+      || task.executionMode !== 'model'
+      || task.skillId !== 'text-adventure.production-quality-review.v1'
+      || task.outputArtifactKeys.length !== 1
+      || plan.tasks.some(candidate => /^content\.adventure-quality-review\./.test(candidate.taskKey))) {
+      return false
+    }
+    if (typeof failure.detail !== 'string') return false
+    const explicitLegacyTopologyFailure = failure.detail.includes(
+      '[product-production-context] 旧版整包文字冒险质量审查不可继续执行；必须升级冻结生产计划后按 structure/act scope 重跑',
+    )
+    if (explicitLegacyTopologyFailure) return true
+    const projection = /文字冒险质量审查投影超过登记预算\s*:\s*([0-9]+)\s*\/\s*([0-9]+)/
+      .exec(failure.detail)
+    if (!projection) return false
+    const measuredTokens = Number(projection[1])
+    const registeredLimit = Number(projection[2])
+    return Number.isSafeInteger(measuredTokens) && registeredLimit === 31_500
+      && measuredTokens > registeredLimit
+  } catch { return false }
+}
+
+export async function hasPassedTextAdventureQualityReviewForExecutionPlanUpgradeV1(
+  build: Pick<ProductBuildRecordV1, 'id' | 'controlEpoch'>,
+): Promise<boolean> {
+  if (build.id == null) return true
+  const rows = (await db.productBuildArtifacts
+    .where('[buildId+artifactKey]').equals([build.id, 'quality.adventure-review']).toArray())
+    .filter(row => row.controlEpoch === build.controlEpoch
+      && (row.status === 'accepted' || row.status === 'carried-forward'))
+  return rows.some(row => {
+    try { return parseTextAdventureQualityReviewArtifactV1(JSON.parse(row.payloadJson)).passed } catch { return false }
+  })
+}
+
+export function canUpgradeTextAdventureExecutionPlanV1(
+  build: Pick<ProductBuildRecordV1, 'status' | 'failureJson' | 'planJson' | 'releasedProductReleaseId'>,
+): boolean {
+  if (build.status !== 'recovery-required' || build.releasedProductReleaseId !== null) return false
+  try {
+    const failure = JSON.parse(build.failureJson) as {
+      taskKey?: unknown
+      code?: unknown
+      detail?: unknown
+    }
+    if (typeof failure.taskKey !== 'string') return false
+    const plan = parseProductProductionPlanV3(build.planJson)
+    if (plan.productType !== 'text-adventure') return false
+    const task = plan.tasks.find(candidate => candidate.taskKey === failure.taskKey)
+    if (!task) return false
+    const measuredReservationDrift = failure.code === 'task-budget-exceeded'
+      && typeof failure.detail === 'string'
+      && failure.detail.includes('task usage 超出 Plan 预算预留')
+    const measuredTimeoutDrift = failure.code === 'task-timeout'
+      // A current reviewer timeout is a transient provider failure. Creating
+      // a child with the same deadline cannot upgrade that contract.
+      && (task.kind !== 'text-adventure-quality-review-batch'
+        || task.timeoutMs < TEXT_ADVENTURE_QUALITY_REVIEW_TIMEOUT_MS_V1)
+      && typeof failure.detail === 'string'
+      && failure.detail.includes(
+        `${task.taskKey} 超过任务合同 ${task.timeoutMs}ms`,
+      )
+    const qualityReferenceContractDrift = failure.code === 'task-executor-failed'
+      && task.kind === 'text-adventure-quality-review-batch'
+      && typeof failure.detail === 'string'
+      && (failure.detail.includes('叙事质量审查错误引用冻结身份:')
+        || failure.detail.includes('叙事质量审查越过批次 owning coverage:')
+        || failure.detail.includes('叙事质量审查越过地点字段权威:'))
+    const dialogueProjectionCapacityDrift = failure.code === 'task-preflight-failed'
+      && task.kind === 'text-adventure-dialogue-pass'
+      && typeof failure.detail === 'string'
+      && (() => {
+        const projection = /第\s*[1-3]\s*幕对白审校投影超过登记预算\s*:\s*([0-9]+)\s*\/\s*([0-9]+)/
+          .exec(failure.detail)
+        if (!projection) return false
+        const measuredTokens = Number(projection[1])
+        const registeredLimit = Number(projection[2])
+        return Number.isSafeInteger(measuredTokens)
+          && registeredLimit === 16_500
+          && measuredTokens > registeredLimit
+      })()
+    const sceneRepairInputCapacityDrift = failure.code === 'task-context-budget-exceeded'
+      && task.kind === 'text-adventure-scene-script-part'
+      && typeof failure.detail === 'string'
+      && (() => {
+        const measured = /制作合同或依赖产物未完整进入任务预算（required=([0-9]+), budget=([0-9]+), sources=/
+          .exec(failure.detail)
+        if (!measured) return false
+        const required = Number(measured[1])
+        const reserved = Number(measured[2])
+        return Number.isSafeInteger(required)
+          && reserved === task.budgetReservation.inputTokens
+          && reserved < TEXT_ADVENTURE_SCENE_SCRIPT_INPUT_CEILING_V1
+          && required > reserved
+          && required <= TEXT_ADVENTURE_SCENE_SCRIPT_INPUT_CEILING_V1
+      })()
+    const mainQuestInputCapacityDrift = failure.code === 'task-preflight-failed'
+      && task.taskKey === 'content.main-quest-plan'
+      && task.kind === 'text-adventure-main-quest-plan'
+      && task.budgetReservation.inputTokens < TEXT_ADVENTURE_MAIN_QUEST_INPUT_CEILING_V1
+      && typeof failure.detail === 'string'
+      && (() => {
+        const prefix = '[product-production-scheduler] Brief/Artifact 与冻结世界事实合并后超过任务输入预算'
+        // Older receipts did not include measured sizes; retain this exact
+        // failure only for the old mainline contract, never arbitrary errors.
+        if (failure.detail === prefix) return true
+        const measured = /^（required=([0-9]+), budget=([0-9]+)）$/.exec(failure.detail.slice(prefix.length))
+        if (!failure.detail.startsWith(prefix) || !measured) return false
+        const required = Number(measured[1])
+        const reserved = Number(measured[2])
+        return Number.isSafeInteger(required)
+          && reserved === task.budgetReservation.inputTokens
+          && required > reserved
+          && required <= TEXT_ADVENTURE_MAIN_QUEST_INPUT_CEILING_V1
+      })()
+    const legacyMultiImageReview = task.kind === 'text-adventure-visual-quality-review-batch'
+      && task.inputArtifactKeys.filter(key => /^media\.visual\.\d{3}$/.test(key)).length > 1
+    const missingVisionPreflight = failure.taskKey === 'media.anchor-author-gate'
+      && task.kind === 'text-adventure-media-anchor-decision'
+      && !plan.tasks.some(candidate => candidate.taskKey === 'media.vision-preflight')
+    const missingEndingRoutePlan = !plan.tasks.some(candidate => (
+      candidate.taskKey === 'content.ending-route-plan'
+      && candidate.kind === 'text-adventure-ending-route-plan'
+      && candidate.executionMode === 'model'
+      && candidate.skillId === 'text-adventure.ending-route-plan.v1'
+      && candidate.outputArtifactKeys.includes('content.ending-route-plan')
+    ))
+    return measuredReservationDrift || measuredTimeoutDrift || qualityReferenceContractDrift
+      || dialogueProjectionCapacityDrift
+      || sceneRepairInputCapacityDrift
+      || mainQuestInputCapacityDrift
+      || legacyMultiImageReview
+      || missingVisionPreflight
+      || missingEndingRoutePlan
+      || isLegacyOversizedTextAdventureQualityReviewPlanV1(build)
+  } catch { return false }
+}
+
+/**
+ * Allows a failed text-adventure visual closure to become an immutable visual-only
+ * evolution Build. This is intentionally narrower than generic blocker retry: a
+ * deterministic package/release failure must carry explicit visual evidence, and
+ * the frozen Plan must contain the governed media planning/production topology.
+ */
+export function canReviseTextAdventureVisualContractFromRecoveryV1(
+  build: Pick<ProductBuildRecordV1, 'status' | 'failureJson' | 'planJson'>,
+): boolean {
+  try {
+    const failure = JSON.parse(build.failureJson) as {
+      taskKey?: unknown
+      code?: unknown
+      detail?: unknown
+      blockerKey?: unknown
+      resolution?: { action?: unknown }
+      previousFailure?: { taskKey?: unknown; detail?: unknown }
+    }
+    const rejectedAnchorBuild = build.status === 'cancelled'
+      && failure.blockerKey === 'media.anchor-author-gate'
+      && failure.resolution?.action === 'cancel'
+      && failure.previousFailure?.taskKey === 'media.anchor-author-gate'
+    if (build.status !== 'recovery-required' && !rejectedAnchorBuild) return false
+    const taskKey = rejectedAnchorBuild ? failure.previousFailure?.taskKey : failure.taskKey
+    if (typeof taskKey !== 'string') return false
+    // A rejected input packet has not produced a visual contract. Keep the
+    // ordinary same-Build retry visible after its registered reader is fixed;
+    // it must not force a new Brief or discard already accepted narrative.
+    if (taskKey === 'media.requirements' && failure.code === 'task-context-budget-exceeded') return false
+    if (/^media\.visual-quality-review\.batch-\d+$/.test(taskKey)
+      && (failure.code === 'task-context-budget-exceeded'
+        || failure.code === 'task-preflight-failed' && typeof failure.detail === 'string'
+          && /^\[product-production-context\] 视觉审查投影超过登记预算:\d+\/12000$/.test(failure.detail))) {
+      // A rejected review packet is not a failed image contract. Retrying its
+      // corrected projection must preserve all already generated images.
+      return false
+    }
+    const directlyVisual = taskKey === 'media.requirements'
+      || taskKey === 'media.audit'
+      || taskKey === 'media.visual-quality-review'
+      || taskKey === 'media.anchor-author-gate'
+      || /^media\.visual(?:\.\d{3}|-quality-review\.batch-\d+)$/.test(taskKey)
+    const visualClosureFailure = taskKey === 'integration.package'
+      || taskKey === 'qa.release'
+    const rawDetail = rejectedAnchorBuild ? failure.previousFailure?.detail : failure.detail
+    const detail = typeof rawDetail === 'string' ? rawDetail : ''
+    if (!directlyVisual && !(visualClosureFailure
+      && /media|visual|image|图片|插图|媒资|视觉/iu.test(detail))) return false
+    const plan = parseProductProductionPlanV3(build.planJson)
+    return plan.productType === 'text-adventure'
+      && plan.tasks.some(task => task.taskKey === 'media.requirements')
+      && plan.tasks.some(task => /^media\.visual\.\d{3}$/.test(task.taskKey))
+      && plan.tasks.some(task => task.taskKey === 'media.visual-quality-review')
+  } catch { return false }
+}
+
+/**
+ * The pre-media author gate is also the last economical point at which an
+ * author can reject a narrative defect missed by automated review. Allowing a
+ * content+visual recovery here avoids paying for images that are already stale,
+ * while the frozen recovery Build remains immutable evidence.
+ */
+export function canReviseTextAdventureContentBeforeMediaV1(
+  build: Pick<ProductBuildRecordV1, 'status' | 'failureJson' | 'planJson' | 'releasedProductReleaseId'>,
+): boolean {
+  if (build.status !== 'recovery-required' || build.releasedProductReleaseId !== null) return false
+  try {
+    const failure = JSON.parse(build.failureJson) as { taskKey?: unknown; detail?: unknown }
+    if (failure.taskKey !== 'media.anchor-author-gate'
+      || typeof failure.detail !== 'string'
+      || !failure.detail.includes('作者明确确认角色视觉锚点')) return false
+    const plan = parseProductProductionPlanV3(build.planJson)
+    return plan.productType === 'text-adventure'
+      && plan.tasks.some(task => task.taskKey === 'content.adventure-quality-review')
+      && plan.tasks.some(task => task.taskKey === 'media.anchor-author-gate')
+      && plan.tasks.some(task => /^media\.visual\.\d{3}$/.test(task.taskKey))
+  } catch { return false }
+}
+
+/**
+ * A player-copy failure discovered after runtime assembly cannot be repaired by
+ * retrying the immutable package in place. Allow one narrowly-scoped child
+ * Build that carries accepted production artifacts and re-runs deterministic
+ * runtime assembly plus its downstream quality closure.
+ */
+export function canReviseTextAdventureRuntimeCopyFromRecoveryV1(
+  build: Pick<ProductBuildRecordV1, 'status' | 'failureJson' | 'planJson' | 'releasedProductReleaseId'>,
+): boolean {
+  if (build.status !== 'recovery-required' || build.releasedProductReleaseId !== null) return false
+  try {
+    const failure = JSON.parse(build.failureJson) as { taskKey?: unknown; detail?: unknown }
+    if (failure.taskKey !== 'qa.release'
+      || typeof failure.detail !== 'string'
+      || !failure.detail.includes('product.adventure.recommendation-copy')) return false
+    const plan = parseProductProductionPlanV3(build.planJson)
+    return plan.productType === 'text-adventure'
+      && plan.tasks.some(task => task.taskKey === 'integration.package')
+      && plan.tasks.some(task => task.taskKey === 'qa.autoplay')
+      && plan.tasks.some(task => task.taskKey === 'qa.release')
+  } catch { return false }
+}
+
+async function productionInScope(scope: WorkspaceScope, productionId: number): Promise<ProductProductionRecordV1 & { id: number }> {
+  const production = await db.productProductions.get(productionId)
+  if (!production || !await assertRecordInScope(scope, 'productProductions', production, { owner: 'work' })) {
+    reject('production-not-found', 'Production 不存在或不属于当前 Work')
+  }
+  return production as ProductProductionRecordV1 & { id: number }
+}
+
+async function currentBuild(production: ProductProductionRecordV1 & { id: number }): Promise<ProductBuildRecordV1 & { id: number }> {
+  if (production.currentBuildNumber == null) reject('invalid-state-transition', 'Production 尚无当前 Build')
+  const build = await db.productBuilds
+    .where('[productionId+buildNumber]').equals([production.id, production.currentBuildNumber]).first()
+  if (!build) reject('invalid-state-transition', 'Production 当前 Build 指针损坏')
+  return build as ProductBuildRecordV1 & { id: number }
+}
+
+async function nextBuildNumber(productionId: number): Promise<number> {
+  const rows = await db.productBuilds.where('productionId').equals(productionId).toArray()
+  return Math.max(0, ...rows.map(row => row.buildNumber)) + 1
+}
+
+async function nextBriefRevision(productionId: number): Promise<number> {
+  const rows = await db.productProductionBriefs.where('productionId').equals(productionId).toArray()
+  return Math.max(0, ...rows.map(row => row.revision)) + 1
+}
+
+type ReviseMediaCommandV1 = Extract<ProductProductionCommandV1, { type: 'revise-media-asset' }>
+type MediaRevisionPlanCommandV1 = {
+  commandId: string
+  action: ReviseMediaCommandV1['action']
+  targets: Array<{ artifactKey: string; expectedArtifactHash: string }>
+  includeVisualRepairFeedback: boolean
+  includeRepairFeedbackInVisualReview: boolean
+}
+
+const MEDIA_REPAIR_FEEDBACK_TASK_KEY = 'media.repair-feedback'
+
+function objectJson(value: string, label: string): Record<string, unknown> {
+  let parsed: unknown
+  try { parsed = JSON.parse(value) } catch { reject('media-revision-invalid', `${label} 不是合法 JSON`) }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    reject('media-revision-invalid', `${label} 必须是对象`)
+  }
+  return parsed as Record<string, unknown>
+}
+
+function mediaArtifactLocked(row: ProductBuildArtifactRecordV1): boolean {
+  const metadata = objectJson(row.metadataJson, `${row.artifactKey}.metadata`)
+  const revision = metadata.authorRevision
+  return !!revision && typeof revision === 'object' && !Array.isArray(revision)
+    && (revision as Record<string, unknown>).locked === true
+}
+
+function invalidatedMediaTaskKeys(plan: ProductProductionPlanV3, targetTaskKey: string): Set<string> {
+  const invalidated = new Set([targetTaskKey])
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const task of plan.tasks) {
+      if (!invalidated.has(task.taskKey) && task.dependsOn.some(key => invalidated.has(key))) {
+        invalidated.add(task.taskKey)
+        changed = true
+      }
+    }
+  }
+  return invalidated
+}
+
+async function createMediaRevisionPlan(input: {
+  parentBuild: ProductBuildRecordV1 & { id: number }
+  brief: ReturnType<typeof parseProductProductionBriefV3>
+  command: MediaRevisionPlanCommandV1
+  buildNumber: number
+  controlEpoch: number
+  artifacts: ProductBuildArtifactRecordV1[]
+}): Promise<{ plan: ProductProductionPlanV3; carriedArtifactKeys: string[]; targetTaskKeys: string[] }> {
+  const base = await createProductProductionPlanV3({
+    brief: input.brief,
+    briefHash: input.parentBuild.briefHash,
+    buildNumber: input.buildNumber,
+    controlEpoch: input.controlEpoch,
+  })
+  const targetKeys = new Set(input.command.targets.map(target => target.artifactKey))
+  const targetTasks = base.tasks.filter(task => targetKeys.has(task.taskKey))
+  if (targetTasks.length !== targetKeys.size || targetTasks.some(task => (
+    task.executionMode !== 'media-provider' || task.kind !== 'image-asset'
+    || task.outputArtifactKeys.length !== 1 || task.outputArtifactKeys[0] !== task.taskKey
+  ))) {
+    reject('media-revision-invalid', '批量目标包含非单项图片任务')
+  }
+  const artifacts = new Map(input.artifacts.map(row => [row.artifactKey, row]))
+  if (artifacts.size !== input.artifacts.length) reject('media-revision-invalid', '当前 Build 存在重复有效 Artifact')
+  const invalidated = new Set<string>()
+  for (const target of targetTasks) {
+    for (const taskKey of invalidatedMediaTaskKeys(base, target.taskKey)) invalidated.add(taskKey)
+  }
+  const carriedArtifactKeys: string[] = []
+  const tasks = [] as ProductProductionPlanV3['tasks']
+  if (input.command.includeVisualRepairFeedback) {
+    tasks.push({
+      taskKey: MEDIA_REPAIR_FEEDBACK_TASK_KEY,
+      lane: 'planning',
+      kind: 'text-adventure-visual-repair-feedback',
+      skillId: null,
+      executionMode: 'human-import',
+      dependsOn: [],
+      requiredReceipts: [],
+      inputArtifactKeys: [],
+      outputArtifactKeys: [MEDIA_REPAIR_FEEDBACK_TASK_KEY],
+      requirementKeys: [],
+      capabilityRequirementKeys: [],
+      concurrencyGroup: 'human-import',
+      subjectLockKeys: [MEDIA_REPAIR_FEEDBACK_TASK_KEY],
+      priority: 76,
+      budgetReservation: {
+        modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0,
+        maximumCostUsd: 0, durationMs: 30_000, storageBytes: 0,
+      },
+      maxAttempts: 1,
+      timeoutMs: 30_000,
+      failurePolicy: 'pause',
+      fallbackTaskKey: null,
+      acceptanceGateIds: ['artifact.protocol', 'media.visual-repair-feedback'],
+      reuse: null,
+    })
+  }
+  for (const task of base.tasks) {
+    if (targetKeys.has(task.taskKey)) {
+      if (input.command.action === 'regenerate') {
+        tasks.push(input.command.includeVisualRepairFeedback ? {
+          ...task,
+          dependsOn: [...task.dependsOn, MEDIA_REPAIR_FEEDBACK_TASK_KEY],
+          requiredReceipts: [
+            ...task.requiredReceipts,
+            { taskKey: MEDIA_REPAIR_FEEDBACK_TASK_KEY, receiptHash: null },
+          ],
+          inputArtifactKeys: [...task.inputArtifactKeys, MEDIA_REPAIR_FEEDBACK_TASK_KEY],
+        } : task)
+      } else {
+        tasks.push({
+          ...task,
+          skillId: null,
+          executionMode: 'human-import' as const,
+          capabilityRequirementKeys: [],
+          concurrencyGroup: 'human-import',
+          budgetReservation: {
+            modelCalls: 0, inputTokens: 0, outputTokens: 0, mediaCalls: 0,
+            maximumCostUsd: 0, durationMs: task.budgetReservation.durationMs, storageBytes: 0,
+          },
+          maxAttempts: 1,
+          failurePolicy: 'pause' as const,
+          fallbackTaskKey: null,
+        })
+      }
+      continue
+    }
+    if (invalidated.has(task.taskKey)) {
+      tasks.push(input.command.includeRepairFeedbackInVisualReview
+        && task.kind === 'text-adventure-visual-quality-review-batch'
+        ? {
+            ...task,
+            dependsOn: [...task.dependsOn, MEDIA_REPAIR_FEEDBACK_TASK_KEY],
+            requiredReceipts: [
+              ...task.requiredReceipts,
+              { taskKey: MEDIA_REPAIR_FEEDBACK_TASK_KEY, receiptHash: null },
+            ],
+            inputArtifactKeys: [...task.inputArtifactKeys, MEDIA_REPAIR_FEEDBACK_TASK_KEY],
+          }
+        : task)
+      continue
+    }
+    const outputs = task.outputArtifactKeys.map(key => artifacts.get(key))
+    if (outputs.some(row => !row)) {
+      reject('media-revision-invalid', `父 Build 缺少可复用输出:${task.taskKey}`)
+    }
+    const proven = outputs as ProductBuildArtifactRecordV1[]
+    const reuseKey = await hashProductProductionValueV2({
+      schema: 'storyforge.text-adventure-media-revision-reuse', version: 1,
+      sourceBuildNumber: input.parentBuild.buildNumber,
+      targetBuildNumber: input.buildNumber,
+      taskKey: task.taskKey,
+      commandId: input.command.commandId,
+      artifacts: proven.map(row => ({ artifactKey: row.artifactKey, contentHash: row.contentHash })),
+    })
+    carriedArtifactKeys.push(...task.outputArtifactKeys)
+    tasks.push({
+      ...task,
+      reuse: {
+        sourceBuildNumber: input.parentBuild.buildNumber,
+        sourceArtifactKey: proven[0].artifactKey,
+        sourceContentHash: proven[0].contentHash,
+        reuseKey,
+        requiresRevalidation: true,
+        reason: `媒资修订 ${[...targetKeys].sort().join(',')} 未影响本任务依赖闭包`,
+      },
+    })
+  }
+  const plan = parseProductProductionPlanV3({ ...base, tasks }, input.brief, input.parentBuild.briefHash)
+  return { plan, carriedArtifactKeys, targetTaskKeys: [...targetKeys].sort() }
+}
+
+async function prepareTextContentRevisionV1(scope: WorkspaceScope, productionId: number,
+  command: Extract<ProductProductionCommandV1, { type: 'revise-text-content' }>) {
+  const production = await productionInScope(scope, productionId)
+  if (production.stateRevision !== command.expectedStateRevision) reject('production-state-conflict', '当前版本已变化，请重新载入')
+  const parentBuild = await currentBuild(production)
+  if (!canReviseTextContentBuildV1(production, parentBuild)
+    || parentBuild.buildNumber !== command.buildNumber
+    || parentBuild.briefRevision !== production.currentBriefRevision) {
+    reject('invalid-state-transition', '内容修订需要当前未发布 Build 与已授权 Brief')
+  }
+  const briefRow = await db.productProductionBriefs.where('[productionId+revision]')
+    .equals([production.id, parentBuild.briefRevision]).first()
+  if (!briefRow || briefRow.status !== 'authorized' || briefRow.briefHash !== parentBuild.briefHash) {
+    reject('brief-not-authorized', '内容修订缺少已授权 Brief')
+  }
+  const brief = parseProductProductionBriefV3(briefRow.briefJson)
+  const parentPlan = parseProductProductionPlanV3(parentBuild.planJson, brief, briefRow.briefHash)
+  if (await hashProductProductionValueV2(parentPlan) !== parentBuild.planHash) reject('source-stale', '父 Build Plan 已变化')
+  const artifacts = (await db.productBuildArtifacts.where('buildId').equals(parentBuild.id).toArray())
+    .filter(row => row.controlEpoch === parentBuild.controlEpoch && ['accepted', 'carried-forward'].includes(row.status))
+  const sourceByKey = new Map(artifacts.map(row => [row.artifactKey, row]))
+  if (sourceByKey.size !== artifacts.length) reject('source-stale', '父 Build 存在重复有效工件')
+  for (const artifact of artifacts) {
+    if (!await assertRecordInScope(scope, 'productBuildArtifacts', artifact, { owner: 'work' })
+      || (artifact.blobObjectId == null && await hashProductProductionValueV2(JSON.parse(artifact.payloadJson)) !== artifact.contentHash)) {
+      reject('source-stale', '父 Build 工件作用域或 hash 无效')
+    }
+  }
+  if (parentBuild.status === 'recovery-required') {
+    const review = sourceByKey.get('quality.adventure-review')
+    const result = review ? objectJson(review.payloadJson, 'quality.adventure-review') : null
+    const ledger = objectJson(parentBuild.budgetLedgerJson, 'budgetLedger')
+    if (!result || result.schema !== 'storyforge.text-adventure-quality-review-artifact'
+      || result.passed !== false || !Array.isArray(result.issues)
+      || !result.issues.some(issue => issue && typeof issue === 'object' && issue.severity === 'blocking')
+      || !Array.isArray(ledger.attempts) || ledger.attempts.some(attempt => !attempt || typeof attempt !== 'object'
+        || (!attempt.usageKnown && attempt.resolution == null))) {
+      reject('invalid-state-transition', '返修子 Build 需要已签收的叙事退回报告且所有供应商调用均已结算')
+    }
+  }
+  const images = artifacts.filter(row => row.kind === 'image')
+  if (images.length !== command.retainedImages.length || command.retainedImages.some(item =>
+    !images.some(row => row.artifactKey === item.artifactKey && row.contentHash === item.expectedArtifactHash))) {
+    reject('source-stale', '保留图片必须逐一匹配父 Build 的全部图片与 hash')
+  }
+  // Verify physical bytes before the write transaction, which rechecks every
+  // mutable row identity before sharing Blob references with the child.
+  const blobs: MediaBlobObjectRecordV1[] = []
+  for (const artifact of artifacts.filter(row => row.blobObjectId != null)) {
+    const blob = await db.mediaBlobObjects.get(artifact.blobObjectId!)
+    const rights = objectJson(artifact.rightsJson, `${artifact.artifactKey}.rights`)
+    if (!blob || !await assertRecordInScope(scope, 'mediaBlobObjects', blob, { owner: 'work' })
+      || blob.storageState !== 'ready' || blob.contentHash !== artifact.contentHash
+      || blob.byteSize !== artifact.byteSize || blob.mimeType !== artifact.mimeType) {
+      reject('media-revision-invalid', '保留媒资的 Blob 元数据已变化')
+    }
+    await readVerifiedMediaBlobObjectData(blob)
+    blobs.push(blob)
+    const payload = objectJson(artifact.payloadJson, artifact.artifactKey)
+    const metadata = objectJson(artifact.metadataJson, artifact.artifactKey)
+    if (payload.schema !== 'storyforge.generated-media-artifact' || payload.version !== 1
+      || typeof payload.assetKey !== 'string' || !payload.assetKey.trim()
+      || typeof metadata.assetKey !== 'string' || !metadata.assetKey.trim()) reject('media-revision-invalid', '媒资缺少稳定绑定')
+    if ((brief.qualityProfile === 'commercial-candidate' && rights.commercialUse !== true)
+      || (rights.origin === 'author-upload' && (rights.redistribution !== true
+        || typeof rights.declaration !== 'string' || !rights.declaration.trim()))
+      || typeof rights.origin !== 'string' || !rights.origin.trim()
+      || typeof rights.license !== 'string' || !rights.license.trim()) reject('rights-incomplete', '保留媒资缺少来源与商用再分发权利')
+  }
+  const buildNumber = await nextBuildNumber(production.id)
+  const controlEpoch = production.controlEpoch + 1
+  const base = await createProductProductionPlanV3({ brief, briefHash: briefRow.briefHash, buildNumber, controlEpoch })
+  const revisionPlan = await createTextContentRevisionPlanV1({ base, command, artifacts })
+  revisionPlan.plan = parseProductProductionPlanV3(revisionPlan.plan, brief, briefRow.briefHash)
+  const planHash = await hashProductProductionValueV2(revisionPlan.plan)
+  const authorRevisionHashes: Record<string, string> = {}
+  for (const task of revisionPlan.plan.tasks) if (task.authorRevision) {
+    authorRevisionHashes[task.taskKey] = await hashProductProductionValueV2(task.authorRevision)
+  }
+  return { production, parentBuild, briefRow, buildNumber, controlEpoch, planHash, revisionPlan,
+    artifacts, blobs, authorRevisionHashes }
+}
+
+async function createRevisionBuildWithCarriesV1(input: {
+  scope: WorkspaceScope
+  production: ProductProductionRecordV1 & { id: number }
+  parentBuild: ProductBuildRecordV1 & { id: number }
+  briefRow: ProductProductionBriefRecordV1
+  buildNumber: number
+  controlEpoch: number
+  planHash: string
+  emptyHash: string
+  command: Pick<ProductProductionCommandV1, 'commandId'>
+  revisionPlan: { plan: ProductProductionPlanV3; carriedArtifactKeys: string[] }
+  sourceByKey: Map<string, ProductBuildArtifactRecordV1>
+  now: number
+}): Promise<number> {
+  const { scope, production, parentBuild, briefRow, buildNumber, controlEpoch, planHash,
+    command, revisionPlan, sourceByKey, now } = input
+  const build = stampNewRecord(scope, 'productBuilds', {
+    projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+    productionId: production.id, buildNumber, briefRevision: briefRow.revision, briefHash: briefRow.briefHash,
+    parentBuildNumber: parentBuild.buildNumber, sourceProductReleaseId: parentBuild.sourceProductReleaseId,
+    status: 'building' as const, resumeState: null, stateRevision: 0, controlEpoch,
+    planRevision: 1, planJson: canonicalProductProductionJsonV2(revisionPlan.plan), planHash,
+    budgetLedgerJson: '{}', manifestJson: '{}', manifestHash: input.emptyHash,
+    packageHash: '', previewManifestJson: '{}', previewHash: '', qualityReportJson: '{}',
+    qualityReportHash: input.emptyHash, compatibilityJson: '{}', rootTerminalReceiptHash: null,
+    adoptionIntentHash: null, releasedProductReleaseId: null, failureJson: '{}',
+    authorizedAt: now, startedAt: now, completedAt: null, createdAt: now, updatedAt: now,
+  } satisfies ProductBuildRecordV1, { owner: 'work' })
+  const buildId = await db.productBuilds.add(build) as number
+  for (const artifactKey of revisionPlan.carriedArtifactKeys) {
+    const source = sourceByKey.get(artifactKey)!
+    let payloadJson = source.payloadJson
+    let metadataJson = source.metadataJson
+    let inputHash = source.inputHash
+    if (source.kind === 'image' || source.kind === 'audio') {
+      const payload = objectJson(source.payloadJson, `${artifactKey}.payload`)
+      const metadata = objectJson(source.metadataJson, `${artifactKey}.metadata`)
+      if (payload.schema !== 'storyforge.generated-media-artifact' || payload.version !== 1
+        || typeof payload.assetKey !== 'string' || !payload.assetKey.trim()
+        || typeof metadata.assetKey !== 'string' || !metadata.assetKey.trim()) {
+        reject('media-revision-invalid', `父 Build 媒资缺少可重绑定的生成合同:${artifactKey}`)
+      }
+      const assetKey = `${production.productionKey}.build-${buildNumber}.${artifactKey}`
+      payloadJson = canonicalProductProductionJsonV2({ ...payload, assetKey })
+      metadataJson = canonicalProductProductionJsonV2({ ...metadata, assetKey })
+      inputHash = await Dexie.waitFor(hashProductProductionValueV2({
+        schema: 'storyforge.text-adventure-carried-media-input', version: 1,
+        commandId: command.commandId, sourceBuildNumber: parentBuild.buildNumber,
+        targetBuildNumber: buildNumber, artifactKey, assetKey,
+        sourceInputHash: source.inputHash, contentHash: source.contentHash,
+      }))
+    }
+    await db.productBuildArtifacts.add(stampNewRecord(scope, 'productBuildArtifacts', {
+      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+      buildId, artifactKey, requirementKey: source.requirementKey, version: 1,
+      kind: source.kind, mediaKind: source.mediaKind, status: 'carried-forward' as const,
+      producerRunId: null, producerReceiptHash: source.producerReceiptHash, controlEpoch,
+      inputHash, contentHash: source.contentHash, payloadJson,
+      metadataJson, qualityJson: source.qualityJson, rightsJson: source.rightsJson,
+      blobObjectId: source.blobObjectId, mimeType: source.mimeType, byteSize: source.byteSize,
+      parentArtifactHash: source.contentHash,
+      carriedFrom: {
+        buildNumber: parentBuild.buildNumber, artifactKey, version: source.version,
+        contentHash: source.contentHash,
+      },
+      createdAt: now, updatedAt: now,
+    } satisfies ProductBuildArtifactRecordV1, { owner: 'work' }))
+  }
+
+  return buildId
+}
+
+async function applyCommand(input: {
+  preparedTextRevision?: Awaited<ReturnType<typeof prepareTextContentRevisionV1>> | null
+  preparedPausedBuild?: PreparedPausedBuildV1 | null
+  scope: WorkspaceScope
+  production: ProductProductionRecordV1 & { id: number }
+  command: ProductProductionCommandV1
+  preparedBriefHash: string | null
+  preparedSourcePlan: ProductSourcePlanV1 | null
+  preparedConfirmedBrief: ConfirmedProductBriefV1 | null
+  preparedCreatorSource: {
+    locator: TextOpenWorldCreatorSourceLocatorV1
+    binding: TextOpenWorldCreatorSourceBindingV1
+    bindingHash: string
+    summary: TextOpenWorldCreatorSourceSummaryV1
+  } | null
+  preparedCreatorBrief: TextOpenWorldCreatorBriefV1 | null
+  preparedCreatorEvidence: {
+    runId: number
+    localContractHash: string
+    bindingHash: string
+    candidateHash: string
+    terminalReceiptHash: string
+  } | null
+  preparedCreatorStart?: TextOpenWorldCreatorStartPreparationV1 | null
+  preparedCreatorRepair?: TextOpenWorldCreatorRepairPreparationV1 | null
+  preparedCreatorRepairAuthorization?: TextOpenWorldCreatorRepairAuthorizationV1 | null
+  preparedCreatorMedia?: TextOpenWorldCreatorMediaPreparationV1 | null
+  preparedCreatorMediaAuthorization?: TextOpenWorldCreatorMediaAuthorizationV1 | null
+  emptyHash: string
+  now: number
+}): Promise<{ production: ProductProductionRecordV1 & { id: number }; result: Record<string, unknown> }> {
+  const { scope, command, now } = input
+  let production = input.production
+
+  if (command.type !== 'create-intent' && command.type !== 'create-text-open-world-intent'
+    && command.expectedStateRevision !== production.stateRevision) {
+    reject('production-state-conflict', `Production revision 已从 ${command.expectedStateRevision} 变为 ${production.stateRevision}`)
+  }
+
+  if (command.type === 'adopt-avg-artifact') {
+    try { return await applyAvgAuthorArtifactAdoptionV1({ scope, production, command, now }) }
+    catch (cause) {
+      if (cause instanceof AvgAuthorArtifactErrorV1) reject('avg-artifact-invalid', cause.message)
+      throw cause
+    }
+  }
+
+  if (command.type === 'create-intent') {
+    if (command.productType !== production.productType) {
+      reject('production-state-conflict', 'productionKey 已绑定其他产品，不能跨产品复用')
+    }
+    return { production, result: { status: production.status, productType: production.productType, created: production.createdAt === now } }
+  }
+
+  if (command.type === 'create-text-open-world-intent') {
+    if (production.productType !== 'text-open-world' || command.productType !== production.productType) {
+      reject('production-state-conflict', 'productionKey 已绑定其他产品，不能跨产品复用')
+    }
+    if (!input.preparedCreatorSource
+      || input.preparedCreatorSource.bindingHash !== command.expectedSourceBindingHash) {
+      reject('source-stale', '文字开放世界 intent 缺少当前来源的有效复验')
+    }
+    if (production.creatorSourceBindingHash !== input.preparedCreatorSource.bindingHash
+      || production.creatorSourceKind !== input.preparedCreatorSource.binding.kind) {
+      reject('source-stale', 'productionKey 已绑定另一来源，不能静默换源')
+    }
+    return {
+      production,
+      result: {
+        status: production.status,
+        productType: production.productType,
+        sourceKind: input.preparedCreatorSource.binding.kind,
+        sourceBindingHash: input.preparedCreatorSource.bindingHash,
+        created: production.createdAt === now,
+      },
+    }
+  }
+
+  if (command.type === 'save-brief-revision') {
+    const brief = command.brief
+    if (brief.avgAssembly?.version === 3 && !avgVoiceProductionEnabledV3()) reject('brief-not-authorized', 'AVG 配音生产的采用、编译与恢复闭环尚未开放，不能准备新任务')
+    if (brief.avgAssembly?.version === 3) await assertVoicePacketForCommand(brief, scope, production.id, production.currentBuildNumber)
+    if (brief.avgAssembly?.version === 2 && !avgMediaProductionEnabledV2()) reject('brief-not-authorized', 'AVG 实验性媒资生产尚未启用，不能准备新任务')
+    if (brief.intent.productType !== production.productType) {
+      reject('production-state-conflict', 'Brief 产品身份与 Production 根记录不一致')
+    }
+    const expectedParent = production.currentBriefRevision
+    if (command.parentRevision !== expectedParent) reject('production-state-conflict', 'Brief parent revision 已过期')
+    const revision = await nextBriefRevision(production.id)
+    const briefHash = input.preparedBriefHash!
+    const sourcePlan = input.preparedSourcePlan
+    if (!sourcePlan || sourcePlan.productInstanceKey !== production.productionKey
+      || sourcePlan.productType !== brief.intent.productType
+      || sourcePlan.worldReference.localReleaseRecordId !== brief.source.worldReleaseId
+      || sourcePlan.worldReference.releaseHash !== brief.source.worldContentHash) {
+      reject('source-stale', '保存 Brief 缺少与当前 Production/WorldRelease 一致的 SourcePlan')
+    }
+    const row = stampNewRecord(scope, 'productProductionBriefs', {
+      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+      productionId: production.id, revision, parentRevision: command.parentRevision, status: 'draft' as const,
+      briefKind: 'product-production-v3' as const, sourceKind: 'world-release' as const,
+      sourceWorldReleaseId: brief.source.worldReleaseId, sourceWorldContentHash: brief.source.worldContentHash,
+      userIntentSummary: brief.intent.openingSituation, unresolvedJson: safeJson(brief.unresolvedDecisionKeys),
+      estimateJson: safeJson({
+        scale: brief.scale, media: brief.media, productionBudget: brief.productionBudget,
+        qualityProfile: brief.qualityProfile, externalDataPolicy: brief.externalDataPolicy,
+      }),
+      briefJson: canonicalProductProductionJsonV2(brief), briefHash,
+      sourcePlanJson: canonicalProductProductionJsonV2(sourcePlan), sourcePlanHash: sourcePlan.planHash,
+      confirmedBriefJson: '{}', confirmedBriefHash: '',
+      authorizedAt: null, createdAt: now,
+    } satisfies ProductProductionBriefRecordV1, { owner: 'work' })
+    await db.productProductionBriefs.add(row)
+    const stateRevision = production.stateRevision + 1
+    const status = brief.unresolvedDecisionKeys.length === 0 ? 'brief-ready' as const : 'consulting' as const
+    await db.productProductions.update(production.id, { currentBriefRevision: revision, status, stateRevision, updatedAt: now })
+    production = { ...production, currentBriefRevision: revision, status, stateRevision, updatedAt: now }
+    return { production, result: { briefRevision: revision, briefHash, status } }
+  }
+
+  if (command.type === 'save-text-open-world-creator-brief') {
+    const brief = input.preparedCreatorBrief
+    const source = input.preparedCreatorSource
+    if (production.productType !== 'text-open-world' || !brief || !source) {
+      reject('production-state-conflict', '文字开放世界 Brief 缺少已验证的产品或来源合同')
+    }
+    if (brief.productInstanceKey !== production.productionKey
+      || brief.sourceBindingHash !== source.bindingHash
+      || production.creatorSourceBindingHash !== source.bindingHash
+      || production.creatorSourceKind !== source.binding.kind
+    ) {
+      reject('source-stale', 'Creator Brief、Production 与来源绑定不一致')
+    }
+    const expectedParent = production.currentBriefRevision
+    if (command.parentRevision !== expectedParent) reject('production-state-conflict', 'Brief parent revision 已过期')
+    const revision = await nextBriefRevision(production.id)
+    if (brief.revision !== revision) reject('production-state-conflict', 'Creator Brief revision 与不可变历史不一致')
+    const evidence = input.preparedCreatorEvidence
+    const evidenceRun = await db.agentRuns.get(command.candidateRunId)
+    if (!evidence || evidence.runId !== command.candidateRunId
+      || evidence.bindingHash !== brief.candidateEvidence.runBindingHash
+      || evidence.candidateHash !== brief.candidateEvidence.candidateHash
+      || !evidenceRun || evidenceRun.status !== 'completed'
+      || evidenceRun.contractHash !== evidence.localContractHash
+      || evidenceRun.terminalReceiptHash !== evidence.terminalReceiptHash
+      || !await assertRecordInScope(scope, 'agentRuns', evidenceRun, { owner: 'work' })) {
+      reject('brief-not-authorized', 'Creator Brief 缺少当前 Work 内的 durable Run 证据')
+    }
+    const locatorColumns = textOpenWorldCreatorLocatorColumnsV1(source.locator)
+    const row = stampNewRecord(scope, 'productProductionBriefs', {
+      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+      productionId: production.id, revision, parentRevision: command.parentRevision, status: 'draft' as const,
+      briefKind: 'text-open-world-creator-v1' as const,
+      sourceKind: source.binding.kind,
+      ...locatorColumns,
+      sourceWorldContentHash: source.binding.kind === 'world-release' ? source.binding.releaseHash : null,
+      sourceVersionHash: source.binding.kind === 'world-release'
+        ? source.binding.releaseHash
+        : source.binding.sourceVersionHash,
+      sourceBoundaryHash: source.binding.kind === 'world-release'
+        ? source.binding.referenceHash
+        : source.binding.sourceBoundaryHash,
+      sourceBindingJson: canonicalProductProductionJsonV2(source.binding),
+      sourceBindingHash: source.bindingHash,
+      candidateRunId: command.candidateRunId,
+      userIntentSummary: brief.draft.coreGoal,
+      unresolvedJson: '[]',
+      estimateJson: safeJson({
+        scale: brief.draft.scale,
+        media: brief.draft.media,
+        completion: brief.draft.completion,
+      }),
+      briefJson: canonicalProductProductionJsonV2(brief),
+      briefHash: brief.briefHash,
+      // G5-02 confirms creator intent only. G5-04 must create the formal,
+      // rights-bearing SourcePlan before authorize-start can create a Build.
+      sourcePlanJson: '{}',
+      sourcePlanHash: input.emptyHash,
+      confirmedBriefJson: '{}', confirmedBriefHash: '',
+      authorizedAt: null, createdAt: now,
+    } satisfies ProductProductionBriefRecordV1, { owner: 'work' })
+    await db.productProductionBriefs.add(row)
+    const stateRevision = production.stateRevision + 1
+    await db.productProductions.update(production.id, {
+      currentBriefRevision: revision,
+      status: 'brief-ready',
+      title: brief.draft.gameTitle,
+      stateRevision,
+      updatedAt: now,
+    })
+    production = {
+      ...production,
+      currentBriefRevision: revision,
+      status: 'brief-ready',
+      title: brief.draft.gameTitle,
+      stateRevision,
+      updatedAt: now,
+    }
+    return {
+      production,
+      result: {
+        briefRevision: revision,
+        briefHash: brief.briefHash,
+        sourceBindingHash: source.bindingHash,
+        status: 'brief-ready',
+      },
+    }
+  }
+
+  if (command.type === 'authorize-start') {
+    if (production.currentBriefRevision !== command.briefRevision || production.status !== 'brief-ready') {
+      reject('brief-not-authorized', '当前 Production 没有待授权的 Brief')
+    }
+    const briefRow = await db.productProductionBriefs
+      .where('[productionId+revision]').equals([production.id, command.briefRevision]).first()
+    if (!briefRow || briefRow.status !== 'draft' || briefRow.briefHash !== command.briefHash) {
+      reject('brief-not-authorized', 'Brief revision/hash/status 不一致')
+    }
+    if (briefRow.briefKind === 'text-open-world-creator-v1') {
+      reject('brief-not-authorized', 'Creator Brief 尚未完成 G5-04 正式来源计划，不能创建 Build')
+    }
+    const brief = parseProductProductionBriefV3(briefRow.briefJson)
+    if (brief.avgAssembly?.version === 3 && !avgVoiceProductionEnabledV3()) reject('brief-not-authorized', 'AVG 配音生产的采用、编译与恢复闭环尚未开放，不能开始新任务')
+    if (brief.avgAssembly?.version === 3) await assertVoicePacketForCommand(brief, scope, production.id, production.currentBuildNumber)
+    if (brief.avgAssembly?.version === 2 && !avgMediaProductionEnabledV2()) reject('brief-not-authorized', 'AVG 实验性媒资生产尚未启用，不能开始新任务')
+    if (brief.unresolvedDecisionKeys.length > 0) reject('brief-unresolved', 'Brief 仍有未解决决策')
+    const confirmedBrief = input.preparedConfirmedBrief
+    if (!confirmedBrief || confirmedBrief.productInstanceKey !== production.productionKey
+      || confirmedBrief.productType !== brief.intent.productType
+      || confirmedBrief.sourcePlanHash !== briefRow.sourcePlanHash
+      || confirmedBrief.briefRevision !== briefRow.revision
+      || confirmedBrief.briefContentHash !== briefRow.briefHash
+      || confirmedBrief.authorStartRevision !== command.expectedStateRevision) {
+      reject('brief-not-authorized', 'authorize-start 缺少与当前 SourcePlan/Brief/revision 一致的确认合同')
+    }
+    const buildNumber = await nextBuildNumber(production.id)
+    const build = stampNewRecord(scope, 'productBuilds', {
+      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+      productionId: production.id, buildNumber, briefRevision: briefRow.revision, briefHash: briefRow.briefHash,
+      parentBuildNumber: production.currentBuildNumber, sourceProductReleaseId: production.currentProductReleaseId,
+      status: 'authorized' as const, resumeState: null, stateRevision: 0, controlEpoch: production.controlEpoch,
+      planRevision: 0, planJson: '{}', planHash: input.emptyHash, budgetLedgerJson: '{}',
+      manifestJson: '{}', manifestHash: input.emptyHash, packageHash: '', previewManifestJson: '{}',
+      previewHash: '', qualityReportJson: '{}', qualityReportHash: input.emptyHash, compatibilityJson: '{}',
+      rootTerminalReceiptHash: null, adoptionIntentHash: null,
+      releasedProductReleaseId: null, failureJson: '{}', authorizedAt: now, startedAt: null,
+      completedAt: null, createdAt: now, updatedAt: now,
+    } satisfies ProductBuildRecordV1, { owner: 'work' })
+    const buildId = await db.productBuilds.add(build) as number
+    await db.productProductionBriefs.where('[productionId+status]').equals([production.id, 'authorized'])
+      .modify({ status: 'superseded' })
+    await db.productProductionBriefs.update(briefRow.id!, {
+      status: 'authorized',
+      confirmedBriefJson: canonicalProductProductionJsonV2(confirmedBrief),
+      confirmedBriefHash: confirmedBrief.confirmationHash,
+      authorizedAt: now,
+    })
+    const stateRevision = production.stateRevision + 1
+    await db.productProductions.update(production.id, {
+      status: 'producing', currentBuildNumber: buildNumber, stateRevision, updatedAt: now,
+    })
+    production = { ...production, status: 'producing', currentBuildNumber: buildNumber, stateRevision, updatedAt: now }
+    return { production, result: { buildId, buildNumber, briefRevision: briefRow.revision, briefHash: briefRow.briefHash } }
+  }
+
+  if (command.type === 'authorize-text-open-world-creator-start') {
+    if (production.currentBriefRevision !== command.briefRevision || production.status !== 'brief-ready'
+      || production.currentBuildNumber != null) {
+      reject('brief-not-authorized', '当前文字开放世界 Production 没有待授权 Creator Brief')
+    }
+    const briefRow = await db.productProductionBriefs
+      .where('[productionId+revision]').equals([production.id, command.briefRevision]).first()
+    const prepared = input.preparedCreatorStart
+    if (!briefRow?.id || briefRow.status !== 'draft'
+      || briefRow.briefKind !== 'text-open-world-creator-v1'
+      || briefRow.briefHash !== command.briefHash
+      || !prepared || prepared.production.id !== production.id
+      || prepared.briefRow.id !== briefRow.id
+      || prepared.start.authorStartRevision !== command.expectedStateRevision
+      || prepared.plan.briefHash !== briefRow.briefHash
+      || prepared.start.productionPlanHash !== command.expectedPlanHash
+      || await hashProductProductionValueV2(prepared.plan) !== command.expectedPlanHash) {
+      reject('brief-not-authorized', 'Creator Brief、来源、预检确认或生产计划已经变化')
+    }
+    const buildNumber = await nextBuildNumber(production.id)
+    if (buildNumber !== prepared.buildNumber) {
+      reject('production-state-conflict', 'Build 序号已被其他启动命令占用')
+    }
+    const build = stampNewRecord(scope, 'productBuilds', {
+      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+      productionId: production.id, buildNumber, briefRevision: briefRow.revision, briefHash: briefRow.briefHash,
+      parentBuildNumber: production.currentBuildNumber, sourceProductReleaseId: production.currentProductReleaseId,
+      status: 'authorized' as const, resumeState: null, stateRevision: 0, controlEpoch: production.controlEpoch,
+      planRevision: 1,
+      planJson: canonicalProductProductionJsonV2(prepared.plan),
+      planHash: prepared.start.productionPlanHash,
+      budgetLedgerJson: '{}',
+      manifestJson: '{}', manifestHash: input.emptyHash, packageHash: '', previewManifestJson: '{}',
+      previewHash: '', qualityReportJson: '{}', qualityReportHash: input.emptyHash, compatibilityJson: '{}',
+      rootTerminalReceiptHash: null, adoptionIntentHash: null,
+      releasedProductReleaseId: null, failureJson: '{}', authorizedAt: prepared.start.authorizedAt,
+      startedAt: null, completedAt: null, createdAt: now, updatedAt: now,
+    } satisfies ProductBuildRecordV1, { owner: 'work' })
+    const buildId = await db.productBuilds.add(build) as number
+    await db.productProductionBriefs.where('[productionId+status]').equals([production.id, 'authorized'])
+      .modify({ status: 'superseded' })
+    await db.productProductionBriefs.update(briefRow.id, {
+      status: 'authorized',
+      sourcePlanJson: canonicalProductProductionJsonV2(prepared.sourcePlan),
+      sourcePlanHash: prepared.sourcePlan.planHash,
+      confirmedBriefJson: canonicalProductProductionJsonV2(prepared.start),
+      confirmedBriefHash: prepared.start.startHash,
+      authorizedAt: prepared.start.authorizedAt,
+    })
+    const stateRevision = production.stateRevision + 1
+    await db.productProductions.update(production.id, {
+      status: 'producing', currentBuildNumber: buildNumber, stateRevision, updatedAt: now,
+    })
+    production = {
+      ...production,
+      status: 'producing',
+      currentBuildNumber: buildNumber,
+      stateRevision,
+      updatedAt: now,
+    }
+    return {
+      production,
+      result: {
+        buildId,
+        buildNumber,
+        briefRevision: briefRow.revision,
+        briefHash: briefRow.briefHash,
+        sourcePlanHash: prepared.sourcePlan.planHash,
+        planHash: prepared.start.productionPlanHash,
+        startHash: prepared.start.startHash,
+      },
+    }
+  }
+
+  if (command.type === 'pause') {
+    if (!['producing', 'preview-ready'].includes(production.status)) reject('invalid-state-transition', '当前 Production 不能暂停')
+    const build = await currentBuild(production)
+    if (['released', 'cancelled', 'failed', 'archived', 'paused'].includes(build.status)) reject('invalid-state-transition', '当前 Build 不能暂停')
+    const reservations = pausedLedgerReservations(build.budgetLedgerJson)
+    let budgetLedgerJson = build.budgetLedgerJson
+    const automaticallySettledReservations: PausedReservationAccountingV1[] = []
+    for (const reservation of reservations.filter(item => !item.providerCallPossible)) {
+      const settled = resolveProductProductionUnknownResultReservationLedgerV2({
+        budgetLedgerJson,
+        taskKey: reservation.taskKey,
+        runId: reservation.runId,
+        attempt: reservation.attempt,
+        controlEpoch: reservation.controlEpoch,
+        disposition: 'confirmed-not-charged',
+      })
+      budgetLedgerJson = settled.budgetLedgerJson
+      automaticallySettledReservations.push({
+        taskKey: reservation.taskKey,
+        runId: reservation.runId,
+        attempt: reservation.attempt,
+        controlEpoch: reservation.controlEpoch,
+        ...settled.accounting,
+      })
+    }
+    const providerReservations = reservations
+      .filter(item => item.providerCallPossible)
+      .map(({ providerCallPossible: _providerCallPossible, ...reservation }) => reservation)
+    const controlEpoch = production.controlEpoch + 1
+    const stateRevision = production.stateRevision + 1
+    const previousFailure = compactRecoveryFailure(readResult(build.failureJson))
+    await db.productBuilds.update(build.id, {
+      status: 'paused',
+      resumeState: build.status,
+      controlEpoch,
+      stateRevision: build.stateRevision + 1,
+      budgetLedgerJson,
+      failureJson: safeJson(providerReservations.length ? {
+        code: 'pause-provider-result-unknown',
+        detail: '暂停时仍有供应商请求未返回；恢复前必须逐项封账。',
+        reason: command.reason,
+        pausedProviderReservations: providerReservations,
+        automaticallySettledReservations,
+      } : {
+        code: 'user-paused',
+        reason: command.reason,
+        automaticallySettledReservations,
+        pausedFromControlEpoch: build.controlEpoch,
+        ...(Object.keys(previousFailure).length > 0 ? { previousFailure } : {}),
+      }),
+      updatedAt: now,
+    })
+    await db.productProductions.update(production.id, { status: 'paused', controlEpoch, stateRevision, updatedAt: now })
+    production = { ...production, status: 'paused', controlEpoch, stateRevision, updatedAt: now }
+    return { production, result: {
+      buildNumber: build.buildNumber,
+      controlEpoch,
+      resumeState: build.status,
+      requiresReservationResolution: providerReservations.length > 0,
+      pausedProviderReservations: providerReservations,
+      automaticallySettledReservations,
+    } }
+  }
+
+  if (command.type === 'authorize-text-open-world-creator-repair') {
+    const prepared = input.preparedCreatorRepair
+    const authorization = input.preparedCreatorRepairAuthorization
+    if (production.productType !== 'text-open-world'
+      || !prepared || !authorization
+      || !(
+        production.status === 'preview-ready'
+        || (production.status === 'released'
+          && prepared.baseBuild.status === 'released'
+          && production.currentProductReleaseId != null
+          && prepared.baseBuild.releasedProductReleaseId === production.currentProductReleaseId)
+      )
+      || production.currentBuildNumber !== command.baseBuildNumber
+      || production.currentBriefRevision !== prepared.baseBuild.briefRevision
+      || prepared.production.id !== production.id
+      || prepared.production.stateRevision !== command.expectedStateRevision
+      || prepared.baseBuild.buildNumber !== command.baseBuildNumber
+      || prepared.baseBuild.planHash !== command.expectedBasePlanHash
+      || prepared.impactPlan.handoffSetHash !== command.expectedHandoffSetHash
+      || prepared.impactPlan.impactPlanHash !== command.expectedImpactPlanHash
+      || prepared.targetPlanHash !== command.expectedTargetPlanHash
+      || authorization.expectedStateRevision !== command.expectedStateRevision
+      || authorization.impactPlanHash !== command.expectedImpactPlanHash
+      || authorization.targetPlanHash !== command.expectedTargetPlanHash) {
+      reject('repair-impact-stale', 'Creator 修复预览、生产状态或作者授权已经变化')
+    }
+    const buildNumber = await nextBuildNumber(production.id)
+    if (buildNumber !== prepared.impactPlan.targetBuildNumber) {
+      reject('production-state-conflict', '修复 Build 序号已被其他命令占用')
+    }
+    const build = stampNewRecord(scope, 'productBuilds', {
+      projectId: scope.projectId,
+      worldId: scope.worldId,
+      workId: scope.workId,
+      productionId: production.id,
+      buildNumber,
+      briefRevision: prepared.baseBuild.briefRevision,
+      briefHash: prepared.baseBuild.briefHash,
+      parentBuildNumber: prepared.baseBuild.buildNumber,
+      sourceProductReleaseId: prepared.baseBuild.releasedProductReleaseId
+        ?? prepared.baseBuild.sourceProductReleaseId,
+      status: 'authorized' as const,
+      resumeState: null,
+      stateRevision: 0,
+      controlEpoch: production.controlEpoch,
+      planRevision: 1,
+      planJson: canonicalProductProductionJsonV2(prepared.targetPlan),
+      planHash: prepared.targetPlanHash,
+      budgetLedgerJson: '{}',
+      manifestJson: '{}',
+      manifestHash: input.emptyHash,
+      packageHash: '',
+      previewManifestJson: '{}',
+      previewHash: '',
+      qualityReportJson: '{}',
+      qualityReportHash: input.emptyHash,
+      compatibilityJson: '{}',
+      rootTerminalReceiptHash: null,
+      adoptionIntentHash: null,
+      releasedProductReleaseId: null,
+      failureJson: '{}',
+      authorizedAt: authorization.authorizedAt,
+      startedAt: null,
+      completedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    } satisfies ProductBuildRecordV1, { owner: 'work' })
+    const buildId = await db.productBuilds.add(build) as number
+    for (const handoff of prepared.handoffs) {
+      const impactHandoffHash = await Dexie.waitFor(
+        hashTextOpenWorldCreatorEditImpactPlanHandoffV1(handoff.intent),
+      )
+      for (const artifact of handoff.candidate.rebuiltArtifacts) {
+        await db.productBuildArtifacts.add(stampNewRecord(scope, 'productBuildArtifacts', {
+          projectId: scope.projectId,
+          worldId: scope.worldId,
+          workId: scope.workId,
+          buildId,
+          artifactKey: artifact.artifactKey,
+          requirementKey: artifact.requirementKey,
+          version: 1,
+          kind: artifact.kind,
+          mediaKind: null,
+          status: 'candidate' as const,
+          producerRunId: handoff.snapshot.run.id,
+          producerReceiptHash: handoff.verificationReceipt.receiptHash,
+          controlEpoch: production.controlEpoch,
+          inputHash: impactHandoffHash,
+          contentHash: artifact.contentHash,
+          payloadJson: canonicalProductProductionJsonV2(artifact.payload),
+          metadataJson: canonicalProductProductionJsonV2(artifact.metadata),
+          qualityJson: canonicalProductProductionJsonV2(artifact.quality),
+          rightsJson: canonicalProductProductionJsonV2(artifact.rights),
+          blobObjectId: null,
+          mimeType: null,
+          byteSize: artifact.byteSize,
+          parentArtifactHash: artifact.baseContentHash,
+          carriedFrom: null,
+          createdAt: now,
+          updatedAt: now,
+        } satisfies ProductBuildArtifactRecordV1, { owner: 'work' }))
+      }
+    }
+    const stateRevision = production.stateRevision + 1
+    await db.productProductions.update(production.id, {
+      status: 'producing',
+      currentBuildNumber: buildNumber,
+      stateRevision,
+      updatedAt: now,
+    })
+    production = {
+      ...production,
+      status: 'producing',
+      currentBuildNumber: buildNumber,
+      stateRevision,
+      updatedAt: now,
+    }
+    return { production, result: { ...authorization } }
+  }
+
+  if (command.type === 'authorize-text-open-world-creator-media') {
+    const prepared = input.preparedCreatorMedia
+    const authorization = input.preparedCreatorMediaAuthorization
+    if (production.productType !== 'text-open-world'
+      || !prepared || !authorization
+      || production.status !== 'preview-ready'
+      || production.currentBuildNumber !== command.baseBuildNumber
+      || production.currentBriefRevision !== prepared.baseBuild.briefRevision
+      || prepared.production.id !== production.id
+      || prepared.production.stateRevision !== command.expectedStateRevision
+      || prepared.baseBuild.buildNumber !== command.baseBuildNumber
+      || prepared.baseBuild.planHash !== command.expectedBasePlanHash
+      || prepared.mediaPlan.planHash !== command.expectedMediaPlanHash
+      || prepared.targetPlanHash !== command.expectedTargetPlanHash
+      || prepared.mediaPlan.mode !== command.mode
+      || authorization.expectedStateRevision !== command.expectedStateRevision
+      || authorization.mediaPlanHash !== command.expectedMediaPlanHash
+      || authorization.targetProductionPlanHash !== command.expectedTargetPlanHash) {
+      reject('creator-media-stale', 'Creator 媒资预览、生产状态或作者授权已经变化')
+    }
+    const buildNumber = await nextBuildNumber(production.id)
+    if (buildNumber !== prepared.mediaPlan.targetBuildNumber) {
+      reject('production-state-conflict', '媒资 Build 序号已被其他命令占用')
+    }
+    const build = stampNewRecord(scope, 'productBuilds', {
+      projectId: scope.projectId,
+      worldId: scope.worldId,
+      workId: scope.workId,
+      productionId: production.id,
+      buildNumber,
+      briefRevision: prepared.baseBuild.briefRevision,
+      briefHash: prepared.baseBuild.briefHash,
+      parentBuildNumber: prepared.baseBuild.buildNumber,
+      sourceProductReleaseId: prepared.baseBuild.sourceProductReleaseId,
+      status: 'authorized' as const,
+      resumeState: null,
+      stateRevision: 0,
+      controlEpoch: production.controlEpoch,
+      planRevision: 1,
+      planJson: canonicalProductProductionJsonV2(prepared.targetPlan),
+      planHash: prepared.targetPlanHash,
+      budgetLedgerJson: '{}',
+      manifestJson: '{}',
+      manifestHash: input.emptyHash,
+      packageHash: '',
+      previewManifestJson: '{}',
+      previewHash: '',
+      qualityReportJson: '{}',
+      qualityReportHash: input.emptyHash,
+      compatibilityJson: '{}',
+      rootTerminalReceiptHash: null,
+      adoptionIntentHash: null,
+      releasedProductReleaseId: null,
+      failureJson: '{}',
+      authorizedAt: authorization.authorizedAt,
+      startedAt: null,
+      completedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    } satisfies ProductBuildRecordV1, { owner: 'work' })
+    const buildId = await db.productBuilds.add(build) as number
+    if (prepared.mediaPlan.mode === 'author-import') {
+      const sourceRows = await db.productBuildArtifacts.where('buildId')
+        .equals(prepared.baseBuild.id).toArray()
+      const activeByKey = new Map(sourceRows.filter(row => (
+        row.controlEpoch === prepared.baseBuild.controlEpoch
+        && (row.status === 'accepted' || row.status === 'carried-forward')
+      )).map(row => [row.artifactKey, row]))
+      const localByKey = new Map(prepared.imports.map(item => [item.descriptor.artifactKey, item]))
+      for (const [index, slot] of prepared.mediaPlan.slots.entries()) {
+        const imported = prepared.mediaPlan.imports[index]
+        const local = localByKey.get(slot.artifactKey)
+        const parent = activeByKey.get(slot.artifactKey)
+        if (!imported || imported.artifactKey !== slot.artifactKey
+          || local?.descriptor.contentHash !== imported.contentHash || !parent) {
+          reject('creator-media-stale', `Creator 导入媒资暂存集合已变化:${slot.artifactKey}`)
+        }
+        await db.productBuildArtifacts.add(stampNewRecord(scope, 'productBuildArtifacts', {
+          projectId: scope.projectId,
+          worldId: scope.worldId,
+          workId: scope.workId,
+          buildId,
+          artifactKey: slot.artifactKey,
+          requirementKey: prepared.mediaPlan.capability.requirementKey,
+          version: 1,
+          kind: 'image' as const,
+          mediaKind: slot.mediaKind,
+          status: 'candidate' as const,
+          producerRunId: null,
+          producerReceiptHash: authorization.authorizationHash,
+          controlEpoch: production.controlEpoch,
+          inputHash: prepared.mediaPlan.planHash,
+          contentHash: imported.contentHash,
+          payloadJson: canonicalProductProductionJsonV2({
+            schema: 'storyforge.generated-media-artifact',
+            version: 1,
+            assetKey: imported.assetKey,
+            request: {
+              beatKey: slot.subjectKey,
+              slotKey: slot.slotKey,
+              sceneTag: slot.subjectKey,
+              mediaKind: slot.mediaKind,
+              width: imported.width,
+              height: imported.height,
+              altText: imported.altText,
+            },
+          }),
+          metadataJson: canonicalProductProductionJsonV2({
+            assetKey: imported.assetKey,
+            name: imported.name,
+            width: imported.width,
+            height: imported.height,
+            durationMs: null,
+            altText: imported.altText,
+            characterTag: slot.slotKind === 'character-portrait' ? slot.subjectKey : '',
+            sceneTag: slot.subjectKey,
+            source: imported.source,
+            license: imported.license,
+          }),
+          qualityJson: canonicalProductProductionJsonV2({
+            adapterId: prepared.mediaPlan.capability.adapterId,
+            imported: true,
+            mimeVerified: true,
+            dimensionsVerified: true,
+            importReceiptHash: authorization.authorizationHash,
+            authorizationHash: authorization.authorizationHash,
+          }),
+          rightsJson: canonicalProductProductionJsonV2({
+            origin: 'imported',
+            adapterId: prepared.mediaPlan.capability.adapterId,
+            source: imported.source,
+            license: imported.license,
+            commercialUse: true,
+            rightsBasis: imported.rightsBasis,
+            rightsNote: imported.rightsNote,
+            importReceiptHash: authorization.authorizationHash,
+          }),
+          blobObjectId: local.blobObjectId,
+          mimeType: imported.mimeType,
+          byteSize: imported.byteSize,
+          parentArtifactHash: parent.contentHash,
+          carriedFrom: null,
+          createdAt: now,
+          updatedAt: now,
+        } satisfies ProductBuildArtifactRecordV1, { owner: 'work' }))
+      }
+    }
+    const stateRevision = production.stateRevision + 1
+    await db.productProductions.update(production.id, {
+      status: 'producing', currentBuildNumber: buildNumber, stateRevision, updatedAt: now,
+    })
+    production = {
+      ...production, status: 'producing', currentBuildNumber: buildNumber, stateRevision, updatedAt: now,
+    }
+    return { production, result: { ...authorization } }
+  }
+
+  if (command.type === 'resume') {
+    if (production.status !== 'paused') reject('invalid-state-transition', 'Production 不在暂停态')
+    const persistedBuild = await currentBuild(production)
+    const prepared = input.preparedPausedBuild
+    if (!prepared || canonicalProductProductionJsonV2(persistedBuild)
+      !== canonicalProductProductionJsonV2(prepared.before)) {
+      reject('production-state-conflict', '暂停状态已变化，请重新核对恢复证据')
+    }
+    for (const guard of prepared.runs) {
+      const run = await db.agentRuns.get(guard.id)
+      if (!run || run.lastSequence !== guard.lastSequence || run.contractHash !== guard.contractHash
+        || run.projectionHash !== guard.projectionHash) {
+        reject('production-state-conflict', '暂停请求返回了新证据，请重新核对费用')
+      }
+    }
+    const build = prepared.after
+    if (build.status !== 'paused' || !build.resumeState) {
+      reject('invalid-state-transition', 'Build 没有可恢复状态')
+    }
+    const contentRevision = command.contentRevision
+    if (contentRevision) {
+      if (production.productType !== 'text-adventure' || (build.resumeState !== 'building'
+          && !(build.resumeState === 'recovery-required' && (contentRevision.artifactKey === 'content.product-module'
+            || /^content\.dialogue-pass\.act-[123]$/.test(contentRevision.artifactKey))))
+        || build.releasedProductReleaseId != null) {
+        reject('invalid-state-transition', '内容修订只允许尚在构建的未发布文字冒险暂停态')
+      }
+      const plan = parseProductProductionPlanV3(build.planJson)
+      const task = plan.tasks.find(task => task.taskKey === contentRevision.artifactKey)
+      if (plan.productType !== 'text-adventure' || task?.skillId !== ({
+        'content.product-module': 'text-adventure.production-systems.v1',
+        'content.story-bible': 'text-adventure.story-bible.v1',
+        'content.cast-bible': 'text-adventure.cast-bible.v1',
+        'content.adventure-architecture': 'text-adventure.production-architecture.v1',
+        'content.narrative-arc-scenes': 'text-adventure.narrative-design.v1',
+        'content.narrative-decision-plan': 'text-adventure.narrative-design.v1',
+        'content.ending-route-plan': 'text-adventure.ending-route-plan.v1',
+        'content.main-quest-plan': 'text-adventure.production-mainline.v1',
+        'content.adventure-side-quests': 'text-adventure.production-side-quests.v1',
+        'content.adventure-ambient-events': 'text-adventure.production-ambient-events.v1',
+        'content.scene-script.act-1.part-1': 'text-adventure.scene-script.v1',
+        'content.scene-script.act-1.part-2': 'text-adventure.scene-script.v1',
+        'content.scene-script.act-2.part-1': 'text-adventure.scene-script.v1',
+        'content.scene-script.act-2.part-2': 'text-adventure.scene-script.v1',
+        'content.scene-script.act-3.part-1': 'text-adventure.scene-script.v1',
+        'content.scene-script.act-3.part-2': 'text-adventure.scene-script.v1',
+        'content.dialogue-pass.act-1': 'text-adventure.dialogue-pass.v1',
+        'content.dialogue-pass.act-2': 'text-adventure.dialogue-pass.v1',
+        'content.dialogue-pass.act-3': 'text-adventure.dialogue-pass.v1',
+        'content.quest-script.main.act-1.single': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-1.multi': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-2.single': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-2.multi': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-3.single': 'text-adventure.quest-script.v1',
+        'content.quest-script.main.act-3.multi': 'text-adventure.quest-script.v1',
+        'content.quest-script.supplemental': 'text-adventure.quest-script.v1',
+      }[contentRevision.artifactKey])
+        || task.executionMode !== 'model' || task.failurePolicy !== 'pause'
+        || task.outputArtifactKeys.length !== 1 || task.outputArtifactKeys[0] !== contentRevision.artifactKey) {
+        reject('invalid-state-transition', '内容修订未命中登记的故事、角色、空间架构、叙事、任务计划、任务脚本、分段正文或对白审校岗位')
+      }
+      const baseline = (await db.productBuildArtifacts.where('buildId').equals(build.id!).toArray())
+        .filter(row => row.artifactKey === contentRevision.artifactKey && row.controlEpoch === plan.controlEpoch
+          && (row.status === 'accepted' || row.status === 'carried-forward'))
+        .sort((a, b) => b.version - a.version)[0]
+      if (!baseline || baseline.projectId !== scope.projectId || baseline.worldId !== scope.worldId
+        || baseline.workId !== scope.workId || baseline.version !== contentRevision.expectedArtifactVersion
+        || baseline.contentHash !== contentRevision.expectedArtifactHash || !baseline.producerReceiptHash
+        || !/^[a-f0-9]{64}$/.test(baseline.producerReceiptHash)) {
+        reject('source-stale', '内容原稿已变化或缺少已验收证据，请重新读取')
+      }
+      if (contentRevision.artifactKey === 'content.product-module'
+        && !isTextAdventureClockCapacityRevisionV1(JSON.parse(baseline.payloadJson), JSON.parse(contentRevision.authorDraftJson))) {
+        reject('invalid-state-transition', '时间上限修订只允许提高 clock.maximum，其他系统语义必须保持不变')
+      }
+    }
+    let budgetLedgerJson = build.budgetLedgerJson
+    let pausedReservationAccountings: PausedReservationAccountingV1[] = []
+    let failure: Record<string, unknown>
+    try {
+      const parsed = JSON.parse(build.failureJson) as unknown
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid')
+      failure = parsed as Record<string, unknown>
+    } catch {
+      reject('invalid-state-transition', '暂停恢复证据损坏')
+    }
+    if (failure!.code === 'pause-provider-result-unknown') {
+      if (!Array.isArray(failure!.pausedProviderReservations)
+        || failure!.pausedProviderReservations.length < 1) {
+        reject('invalid-state-transition', '暂停恢复 reservation 证据损坏')
+      }
+      const frozen = (failure!.pausedProviderReservations as unknown[]).map(value => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          reject('invalid-state-transition', '暂停恢复 reservation 证据损坏')
+        }
+        const row = value as Record<string, unknown>
+        if (typeof row.taskKey !== 'string'
+          || !Number.isSafeInteger(row.runId) || Number(row.runId) < 1
+          || !Number.isSafeInteger(row.attempt) || Number(row.attempt) < 1
+          || !Number.isSafeInteger(row.controlEpoch) || Number(row.controlEpoch) < 0) {
+          reject('invalid-state-transition', '暂停恢复 reservation 身份损坏')
+        }
+        return {
+          taskKey: row.taskKey,
+          runId: Number(row.runId),
+          attempt: Number(row.attempt),
+          controlEpoch: Number(row.controlEpoch),
+        }
+      }).sort((left, right) => pauseReservationIdentity(left).localeCompare(pauseReservationIdentity(right)))
+      const requested = [...(command.pausedReservationDispositions ?? [])]
+        .sort((left, right) => pauseReservationIdentity(left).localeCompare(pauseReservationIdentity(right)))
+      const frozenByIdentity = new Map(frozen.map(reservation => [pauseReservationIdentity(reservation), reservation]))
+      if (frozenByIdentity.size !== frozen.length) {
+        reject('invalid-state-transition', '暂停恢复 reservation 证据包含重复身份')
+      }
+      if (requested.some(reservation => !frozenByIdentity.has(pauseReservationIdentity(reservation)))) {
+        reject('invalid-state-transition', '恢复处置包含不属于本次暂停的 Run/attempt/epoch reservation')
+      }
+      const requestedByIdentity = new Map(requested.map(reservation => [pauseReservationIdentity(reservation), reservation]))
+      for (const reservation of frozen) {
+        const attempt = requirePausedLedgerAttemptState(budgetLedgerJson, reservation)
+        if (attempt.kind === 'absent') {
+          reject('invalid-state-transition', '暂停 reservation 缺少可验证的 charge 或 release tombstone')
+        }
+        if (attempt.taskKey !== reservation.taskKey
+          || attempt.runId !== reservation.runId
+          || attempt.attempt !== reservation.attempt
+          || attempt.controlEpoch !== reservation.controlEpoch) {
+          reject('invalid-state-transition', '暂停 reservation 已变化或不再属于冻结的 epoch')
+        }
+        if (attempt.kind === 'reservation'
+          && !requestedByIdentity.has(pauseReservationIdentity(reservation))) {
+          reject('invalid-state-transition', '恢复前必须精确处置仍未封账的 Run/attempt/epoch reservation')
+        }
+      }
+      pausedReservationAccountings = frozen.map(reservation => {
+        const identity = pauseReservationIdentity(reservation)
+        const disposition = requestedByIdentity.get(identity)?.disposition ?? null
+        const attempt = requirePausedLedgerAttemptState(budgetLedgerJson, reservation)
+        if (attempt.kind === 'reservation' || (attempt.kind === 'charge' && disposition)) {
+          if (!disposition) {
+            reject('invalid-state-transition', '恢复前必须处置仍未封账的 reservation')
+          }
+          let settled: ReturnType<typeof resolveProductProductionUnknownResultReservationLedgerV2>
+          try {
+            settled = resolveProductProductionUnknownResultReservationLedgerV2({
+              budgetLedgerJson,
+              taskKey: reservation.taskKey,
+              runId: reservation.runId,
+              attempt: reservation.attempt,
+              controlEpoch: reservation.controlEpoch,
+              disposition,
+            })
+          } catch {
+            reject('invalid-state-transition', '暂停 reservation 已由不同处置封账或身份发生变化')
+          }
+          budgetLedgerJson = settled.budgetLedgerJson
+          return {
+            taskKey: reservation.taskKey,
+            runId: reservation.runId,
+            attempt: reservation.attempt,
+            controlEpoch: reservation.controlEpoch,
+            ...settled.accounting,
+          }
+        }
+        if (attempt.kind === 'charge') {
+          return {
+            taskKey: reservation.taskKey,
+            runId: reservation.runId,
+            attempt: reservation.attempt,
+            controlEpoch: reservation.controlEpoch,
+            requestedDisposition: null,
+            effectiveDisposition: attempt.resolution ?? 'provider-actual-charge',
+            usage: structuredClone(attempt.usage),
+          }
+        }
+        if (attempt.kind === 'absent') {
+          reject('invalid-state-transition', '暂停 reservation 缺少封账证据')
+        }
+        reject('invalid-state-transition', '暂停 reservation 未能完成封账')
+      })
+      if (pausedLedgerReservations(budgetLedgerJson).length > 0) {
+        reject('invalid-state-transition', '恢复前仍存在未封账 reservation')
+      }
+    } else if (failure!.code !== 'user-paused') {
+      reject('invalid-state-transition', '当前暂停证据不能恢复')
+    } else if (command.pausedReservationDispositions) {
+      reject('invalid-state-transition', '普通暂停没有待处置 provider reservation')
+    }
+    const restored = contentRevision ? 'building' : build.resumeState
+    const controlEpoch = production.controlEpoch + 1
+    const stateRevision = production.stateRevision + 1
+    const pausedFailure = readResult(build.failureJson)
+    const previousFailure = compactRecoveryFailure(pausedFailure)
+    await db.productBuilds.update(build.id, {
+      status: restored,
+      resumeState: null,
+      controlEpoch,
+      stateRevision: build.stateRevision + 1,
+      budgetLedgerJson,
+      failureJson: contentRevision ? safeJson({
+        code: 'author-revised-content', commandId: command.commandId, revisionCommand: command,
+        blockerKey: contentRevision.artifactKey,
+        revisionSource: {
+          artifactKey: contentRevision.artifactKey,
+          version: contentRevision.expectedArtifactVersion,
+          contentHash: contentRevision.expectedArtifactHash,
+        },
+        resolution: { action: 'author-edit', note: contentRevision.note, authorDraftJson: contentRevision.authorDraftJson },
+        resumedFromControlEpoch: build.controlEpoch,
+        pauseReceipt: pausedFailure, pausedReservationAccountings, resolvedAt: now,
+      }) : pausedReservationAccountings.length ? safeJson({
+        code: 'user-pause-resolved',
+        previousFailureCode: 'pause-provider-result-unknown',
+        resumedFromControlEpoch: build.controlEpoch,
+        pauseReceipt: pausedFailure,
+        ...(Object.keys(previousFailure).length > 0 ? { previousFailure } : {}),
+        pausedReservationAccountings,
+        resolvedAt: now,
+      }) : safeJson({
+        code: 'user-resumed', resumedFromControlEpoch: build.controlEpoch,
+        pauseReceipt: {
+          code: pausedFailure.code === 'user-paused' ? 'user-paused' : 'unknown-pause-receipt',
+          ...(typeof pausedFailure.reason === 'string' ? { reason: pausedFailure.reason.slice(0, 500) } : {}),
+          ...(Number.isSafeInteger(pausedFailure.pausedFromControlEpoch)
+            ? { pausedFromControlEpoch: pausedFailure.pausedFromControlEpoch } : {}),
+        },
+        ...(Object.keys(previousFailure).length > 0 ? { previousFailure } : {}),
+      }),
+      updatedAt: now,
+    })
+    const productionStatus = restored === 'preview-ready' || restored === 'release-ready' ? 'preview-ready' as const : 'producing' as const
+    await db.productProductions.update(production.id, { status: productionStatus, controlEpoch, stateRevision, updatedAt: now })
+    production = { ...production, status: productionStatus, controlEpoch, stateRevision, updatedAt: now }
+    return { production, result: {
+      buildNumber: build.buildNumber,
+      controlEpoch,
+      restored,
+      pausedReservationAccountings,
+      ...(contentRevision ? { revisionAuthorization: command } : {}),
+    } }
+  }
+
+  if (command.type === 'stop') {
+    const build = await currentBuild(production)
+    if (build.status === 'released' || production.status === 'released') reject('invalid-state-transition', '已发布 Build 不允许 stop 回滚')
+    const controlEpoch = production.controlEpoch + 1
+    const stateRevision = production.stateRevision + 1
+    const stoppedBrief = production.productType === 'avg' ? await db.productProductionBriefs.where('[productionId+revision]').equals([production.id,build.briefRevision]).first() : null
+    const nativeFailure = stoppedBrief && parseProductProductionBriefV3(stoppedBrief.briefJson).avgAssembly && build.failureJson !== '{}'
+      ? { priorFailureJson: build.failureJson } : {}
+    await db.productBuilds.update(build.id, {
+      status: 'cancelled', resumeState: null, controlEpoch, stateRevision: build.stateRevision + 1,
+      failureJson: safeJson({ code: 'user-stopped', retention: command.retention, ...nativeFailure }), completedAt: now, updatedAt: now,
+    })
+    if (command.retention === 'discard-unreleased') {
+      await db.productBuildArtifacts.where('buildId').equals(build.id).filter(row => row.status !== 'orphaned').modify({ status: 'orphaned', updatedAt: now })
+    }
+    await db.productProductions.update(production.id, { status: 'stopped', controlEpoch, stateRevision, updatedAt: now })
+    production = { ...production, status: 'stopped', controlEpoch, stateRevision, updatedAt: now }
+    return { production, result: { buildNumber: build.buildNumber, controlEpoch, retention: command.retention } }
+  }
+
+  if (command.type === 'archive') {
+    if (production.status === 'archived') reject('invalid-state-transition', 'Production 已归档')
+    if (production.status === 'producing' || production.status === 'paused') {
+      reject('invalid-state-transition', '制作中或暂停中的 Production 必须先停止，不能用归档代替 stop')
+    }
+    const previousStatus = production.status
+    const controlEpoch = production.controlEpoch + 1
+    let archivedBuildNumber: number | null = null
+    if (production.currentBuildNumber != null) {
+      const build = await currentBuild(production)
+      archivedBuildNumber = build.buildNumber
+      if (!['released', 'cancelled', 'failed', 'archived'].includes(build.status)) {
+        await db.productBuilds.update(build.id, {
+          status: 'archived', resumeState: build.status, controlEpoch,
+          stateRevision: build.stateRevision + 1, updatedAt: now,
+        })
+      }
+    }
+    const stateRevision = production.stateRevision + 1
+    try { JSON.parse(production.lastErrorJson) } catch {
+      reject('invalid-state-transition', 'Production 原错误证据不是合法 JSON，不能安全归档')
+    }
+    const archiveState = safeJson({
+      code: 'user-archived', previousStatus,
+      previousLastErrorJson: production.lastErrorJson,
+      reason: command.reason,
+    })
+    await db.productProductions.update(production.id, {
+      status: 'archived', controlEpoch, stateRevision, lastErrorJson: archiveState, updatedAt: now,
+    })
+    production = {
+      ...production, status: 'archived', controlEpoch, stateRevision,
+      lastErrorJson: archiveState, updatedAt: now,
+    }
+    return { production, result: { previousStatus, buildNumber: archivedBuildNumber, controlEpoch } }
+  }
+
+  if (command.type === 'restore') {
+    if (production.status !== 'archived') reject('invalid-state-transition', 'Production 不在归档态')
+    let archiveState: { code?: unknown; previousStatus?: unknown; previousLastErrorJson?: unknown } = {}
+    try { archiveState = JSON.parse(production.lastErrorJson) as typeof archiveState } catch { /* rejected below */ }
+    const allowedStatuses: ProductProductionRecordV1['status'][] = [
+      'consulting', 'brief-ready', 'preview-ready', 'released', 'stopped', 'failed',
+    ]
+    if (archiveState.code !== 'user-archived'
+      || typeof archiveState.previousStatus !== 'string'
+      || !allowedStatuses.includes(archiveState.previousStatus as ProductProductionRecordV1['status'])
+      || typeof archiveState.previousLastErrorJson !== 'string') {
+      reject('invalid-state-transition', '归档恢复元数据缺失或损坏')
+    }
+    try { JSON.parse(archiveState.previousLastErrorJson) } catch {
+      reject('invalid-state-transition', '归档中的原错误证据损坏')
+    }
+    const restoredStatus = archiveState.previousStatus as ProductProductionRecordV1['status']
+    const controlEpoch = production.controlEpoch + 1
+    let restoredBuildStatus: ProductBuildRecordV1['status'] | null = null
+    if (production.currentBuildNumber != null) {
+      const build = await currentBuild(production)
+      if (build.status === 'archived') {
+        if (!build.resumeState || ['archived', 'paused'].includes(build.resumeState)) {
+          reject('invalid-state-transition', '归档 Build 缺少可恢复状态')
+        }
+        restoredBuildStatus = build.resumeState
+        await db.productBuilds.update(build.id, {
+          status: build.resumeState, resumeState: null, controlEpoch,
+          stateRevision: build.stateRevision + 1, updatedAt: now,
+        })
+      } else restoredBuildStatus = build.status
+    }
+    const stateRevision = production.stateRevision + 1
+    await db.productProductions.update(production.id, {
+      status: restoredStatus, controlEpoch, stateRevision,
+      lastErrorJson: archiveState.previousLastErrorJson, updatedAt: now,
+    })
+    production = {
+      ...production, status: restoredStatus, controlEpoch, stateRevision,
+      lastErrorJson: archiveState.previousLastErrorJson, updatedAt: now,
+    }
+    return { production, result: { restoredStatus, restoredBuildStatus, controlEpoch } }
+  }
+
+  if (command.type === 'resolve-blocker') {
+    const build = await currentBuild(production)
+    const previousFailure = readResult(build.failureJson)
+    const compactPreviousFailure = compactRecoveryFailure(previousFailure)
+    const repairingLegacyFailure = isRepairRetryableFailedProductBuildV1(build)
+    if (!['recovery-required', 'paused'].includes(build.status) && !repairingLegacyFailure) {
+      reject('invalid-state-transition', '当前 Build 没有待处理 blocker')
+    }
+    if (repairingLegacyFailure && command.resolution.action === 'change-capability') {
+      reject('invalid-state-transition', '确定性装配失败不能用更换模型能力修复')
+    }
+    const sourceExpansionDecision = command.resolution.action === 'accept-product-private-expansion'
+    if (sourceExpansionDecision && (production.productType !== 'text-adventure'
+      || command.blockerKey !== 'source.author-gate'
+      || previousFailure.taskKey !== 'source.author-gate')) {
+      reject('invalid-state-transition', '产品私域补充只能用于文字冒险来源作者闸门')
+    }
+    const sourceReviewRetry = production.productType === 'text-adventure'
+      && command.resolution.action === 'retry'
+      && command.blockerKey === 'content.source-sufficiency'
+      && previousFailure.taskKey === 'source.author-gate'
+    const mediaAnchorDecision = command.resolution.action === 'confirm-character-anchors'
+    if (mediaAnchorDecision && (production.productType !== 'text-adventure'
+      || command.blockerKey !== 'media.anchor-author-gate'
+      || previousFailure.taskKey !== 'media.anchor-author-gate')) {
+      reject('invalid-state-transition', '角色视觉锚点确认只能用于文字冒险商业美术作者闸门')
+    }
+    if (![
+      'retry', 'author-edit', 'change-capability', 'accept-product-private-expansion',
+      'confirm-character-anchors', 'cancel',
+    ].includes(command.resolution.action)) {
+      reject('invalid-state-transition', '当前 blocker 只允许重试、更换能力、处理已登记作者闸门或取消；降级/豁免必须先生成新 Brief')
+    }
+    let failure: Record<string, unknown> = {}
+    try {
+      const parsed = JSON.parse(build.failureJson)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        failure = parsed as Record<string, unknown>
+      }
+    } catch {
+      reject('invalid-state-transition', '当前 blocker 失败证据损坏')
+    }
+    if (command.resolution.action !== 'cancel'
+      && !repairingLegacyFailure
+      && (build.status !== 'recovery-required'
+        || (failure.taskKey !== command.blockerKey && !sourceReviewRetry))) {
+      reject('invalid-state-transition', '重试必须精确对应当前失败任务；暂停态请使用恢复命令')
+    }
+    if (['retry', 'author-edit', 'change-capability'].includes(command.resolution.action)
+      && !sourceReviewRetry) {
+      try {
+        await validateProductProductionRecoveryDirectiveV1({
+          scope,
+          productProductionId: production.id,
+          productBuildId: build.id!,
+          productProductionTaskKey: command.blockerKey,
+          expectedState: 'blocked',
+          requestedAction: command.resolution.action as 'retry' | 'author-edit' | 'change-capability',
+          allowLegacyRetry: true,
+        })
+      } catch {
+        reject('invalid-state-transition', '当前 blocker 缺少与失败 Run/epoch/attempt 一致的恢复证据')
+      }
+    }
+    if (command.resolution.action === 'author-edit') {
+      let authorDraftAllowed = false
+      try {
+        authorDraftAllowed = inspectProductProductionBuildRecoveryPolicyV1({
+          productType: production.productType,
+          planJson: build.planJson,
+          taskKey: command.blockerKey,
+        }).authorDraftAllowed
+      } catch { /* a corrupt or unrelated Plan can never authorize an author draft */ }
+      if (!authorDraftAllowed) {
+        reject('invalid-state-transition', '作者修订必须对应当前失败且支持作者修订的模型任务')
+      }
+    }
+    const unknownResultReservation = command.resolution.unknownResultReservation
+    let resolvedUnknownReservation: ReturnType<
+      typeof resolveProductProductionUnknownResultReservationLedgerV2
+    > | null = null
+    const providerReservationFailure = failure.code === 'unknown-result'
+      || failure.code === 'provider-response-uncheckpointed'
+    if (providerReservationFailure) {
+      if (command.resolution.action !== 'cancel' && !unknownResultReservation) {
+        reject('invalid-state-transition', failure.code === 'provider-response-uncheckpointed'
+          ? '已观察到供应商响应但用量未结算；必须按冻结预留上限封账后才能重试'
+          : '结果未知的任务必须先明确确认未计费，或按预留上限记账')
+      }
+      if (unknownResultReservation) {
+        if (failure.code === 'provider-response-uncheckpointed'
+          && unknownResultReservation.disposition !== 'charge-reservation-upper-bound') {
+          reject('invalid-state-transition', '已观察到供应商响应，不能声明为未计费')
+        }
+        const provenance = failure.failureProvenance != null
+          && typeof failure.failureProvenance === 'object'
+          && !Array.isArray(failure.failureProvenance)
+          ? failure.failureProvenance as Record<string, unknown>
+          : null
+        if (!provenance
+          || provenance.runId !== unknownResultReservation.runId
+          || provenance.attempt !== unknownResultReservation.attempt
+          || provenance.controlEpoch !== unknownResultReservation.controlEpoch
+          || failure.taskKey !== command.blockerKey) {
+          reject('invalid-state-transition', 'unknown-result 处置没有精确命中当前失败 Run/attempt/epoch')
+        }
+        try {
+          resolvedUnknownReservation = resolveProductProductionUnknownResultReservationLedgerV2({
+            budgetLedgerJson: build.budgetLedgerJson,
+            taskKey: command.blockerKey,
+            ...unknownResultReservation,
+          })
+        } catch {
+          reject('invalid-state-transition', 'unknown-result reservation 已变化或不再可处置')
+        }
+      }
+    } else if (unknownResultReservation) {
+      reject('invalid-state-transition', '只有 provider 结果未结算 blocker 可以处置 reservation')
+    }
+    const unknownResultAccounting = resolvedUnknownReservation && unknownResultReservation
+      ? {
+          runId: unknownResultReservation.runId,
+          attempt: unknownResultReservation.attempt,
+          controlEpoch: unknownResultReservation.controlEpoch,
+          ...resolvedUnknownReservation.accounting,
+        }
+      : null
+    // `command.resolution` is the immutable author request. The resolved
+    // failure state records the effective accounting outcome separately so a
+    // provider charge that wins the race cannot be misrepresented as an
+    // author-confirmed zero charge.
+    const persistedResolution = unknownResultAccounting
+      ? {
+          action: command.resolution.action,
+          note: command.resolution.note,
+          ...(command.resolution.authorDraftJson
+            ? { authorDraftJson: command.resolution.authorDraftJson }
+            : {}),
+          unknownResultAccounting,
+        }
+      : command.resolution
+    const controlEpoch = production.controlEpoch + 1
+    const stateRevision = production.stateRevision + 1
+    if (command.resolution.action === 'cancel') {
+      await db.productBuilds.update(build.id, {
+        status: 'cancelled', resumeState: null, controlEpoch,
+        budgetLedgerJson: resolvedUnknownReservation?.budgetLedgerJson ?? build.budgetLedgerJson,
+        failureJson: safeJson({
+          commandId: command.commandId,
+          blockerKey: command.blockerKey,
+          resolution: persistedResolution,
+          unknownResultAccounting,
+          previousFailure: compactPreviousFailure,
+        }),
+        stateRevision: build.stateRevision + 1, completedAt: now, updatedAt: now,
+      })
+      await db.productProductions.update(production.id, {
+        status: 'stopped', controlEpoch, stateRevision, updatedAt: now,
+      })
+      production = { ...production, status: 'stopped', controlEpoch, stateRevision, updatedAt: now }
+    } else {
+      await db.productBuilds.update(build.id, {
+        status: 'building', resumeState: null, controlEpoch,
+        budgetLedgerJson: resolvedUnknownReservation?.budgetLedgerJson ?? build.budgetLedgerJson,
+        failureJson: safeJson({
+          commandId: command.commandId,
+          blockerKey: command.blockerKey,
+          resolution: persistedResolution,
+          unknownResultAccounting,
+          previousFailure: compactPreviousFailure,
+          resolvedAt: now,
+        }),
+        stateRevision: build.stateRevision + 1, completedAt: null, updatedAt: now,
+      })
+      await db.productProductions.update(production.id, {
+        status: 'producing', controlEpoch, stateRevision, updatedAt: now,
+      })
+      production = { ...production, status: 'producing', controlEpoch, stateRevision, updatedAt: now }
+    }
+    return { production, result: {
+      buildNumber: build.buildNumber, blockerKey: command.blockerKey,
+      action: command.resolution.action, controlEpoch, unknownResultAccounting,
+    } }
+  }
+
+  if (command.type === 'request-preview') {
+    const build = await db.productBuilds.where('[productionId+buildNumber]').equals([production.id, command.buildNumber]).first()
+    if (!build || !['preview-ready', 'release-ready', 'released'].includes(build.status) || !build.previewHash) {
+      reject('preview-stale', 'Build 尚无可验证 Preview')
+    }
+    return { production, result: { buildNumber: build.buildNumber, previewHash: build.previewHash, packageHash: build.packageHash } }
+  }
+
+  if (command.type === 'revise-text-content') {
+    const prepared = input.preparedTextRevision
+    if (!prepared || canonicalProductProductionJsonV2(production) !== canonicalProductProductionJsonV2(prepared.production)) {
+      reject('production-state-conflict', '修订预检后 Production 已变化')
+    }
+    const { parentBuild, briefRow, buildNumber, controlEpoch, planHash, revisionPlan, authorRevisionHashes } = prepared
+    const persistedParent = await db.productBuilds.get(parentBuild.id)
+    const persistedBrief = await db.productProductionBriefs.get(briefRow.id!)
+    const artifacts = (await db.productBuildArtifacts.where('buildId').equals(parentBuild.id).toArray())
+      .filter(row => row.controlEpoch === parentBuild.controlEpoch && ['accepted', 'carried-forward'].includes(row.status))
+    if (canonicalProductProductionJsonV2(persistedParent ?? null) !== canonicalProductProductionJsonV2(parentBuild)
+      || canonicalProductProductionJsonV2(persistedBrief ?? null) !== canonicalProductProductionJsonV2(briefRow)
+      || canonicalProductProductionJsonV2(artifacts) !== canonicalProductProductionJsonV2(prepared.artifacts)
+      || await nextBuildNumber(production.id) !== buildNumber) reject('source-stale', '修订预检后原稿或 Brief 已变化')
+    for (const before of prepared.blobs) {
+      const current = await db.mediaBlobObjects.get(before.id!)
+      if (!current) reject('media-revision-invalid', '媒资 Blob 已删除')
+      const { data: oldBytes, ...oldMetadata } = before
+      const { data: newBytes, ...newMetadata } = current
+      const newView = newBytes ? new Uint8Array(newBytes) : null
+      if (canonicalProductProductionJsonV2(oldMetadata) !== canonicalProductProductionJsonV2(newMetadata)
+        || (oldBytes == null) !== (newBytes == null)
+        || (oldBytes != null && newBytes != null && (oldBytes.byteLength !== newBytes.byteLength
+          || new Uint8Array(oldBytes).some((byte, index) => byte !== newView![index])))) {
+        reject('media-revision-invalid', '修订预检后媒资 Blob 已变化')
+      }
+    }
+    const sourceByKey = new Map(artifacts.map(row => [row.artifactKey, row]))
+    const buildId = await createRevisionBuildWithCarriesV1({ scope, production, parentBuild, briefRow,
+      buildNumber, controlEpoch, planHash, emptyHash: input.emptyHash, command, revisionPlan, sourceByKey, now })
+
+    const stateRevision = production.stateRevision + 1
+    await db.productProductions.update(production.id, {
+      status: 'producing', currentBuildNumber: buildNumber, controlEpoch, stateRevision, lastErrorJson: '{}', updatedAt: now,
+    })
+    production = { ...production, status: 'producing', currentBuildNumber: buildNumber,
+      controlEpoch, stateRevision, lastErrorJson: '{}', updatedAt: now }
+    return { production, result: { buildId, buildNumber, parentBuildNumber: parentBuild.buildNumber,
+      controlEpoch, planHash, authorRevisionHashes, retainedImages: command.retainedImages,
+      carriedArtifactCount: revisionPlan.carriedArtifactKeys.length } }
+  }
+
+  if (command.type === 'revise-media-asset' || command.type === 'revise-media-assets') {
+    const batchRepair = command.type === 'revise-media-assets'
+    const singleCommand: ReviseMediaCommandV1 | null = command.type === 'revise-media-asset'
+      ? command : null
+    const revisionTargets = batchRepair
+      ? command.targets
+      : [{ artifactKey: command.artifactKey, expectedArtifactHash: command.expectedArtifactHash }]
+    const revisionAction: ReviseMediaCommandV1['action'] = batchRepair ? 'regenerate' : command.action
+    const replacement = batchRepair ? null : command.replacement
+    const authorRepairFeedback = singleCommand?.repairFeedback ?? (batchRepair ? command.authorReview : null)
+    const automaticBatchRepair = batchRepair && !authorRepairFeedback
+    const uploadRecovery = revisionAction === 'upload-replacement' && production.status === 'producing'
+    if (production.productType !== 'text-adventure'
+      || (automaticBatchRepair || uploadRecovery ? production.status !== 'producing' : production.status !== 'preview-ready')) {
+      reject('invalid-state-transition', automaticBatchRepair
+        ? '仅审图阻塞中的文字冒险 Production 可发起批量媒资修复'
+        : '仅已完成预览的文字冒险 Production 可发起单项媒资修订')
+    }
+    const parentBuild = await currentBuild(production)
+    if (parentBuild.buildNumber !== command.buildNumber || parentBuild.releasedProductReleaseId != null) {
+      reject('invalid-state-transition', '只能从当前未发布 Build 派生媒资修订')
+    }
+    if (automaticBatchRepair || uploadRecovery) {
+      const failure = readResult(parentBuild.failureJson)
+      if (parentBuild.status !== 'recovery-required'
+        || failure.taskKey !== 'integration.package'
+        || typeof failure.detail !== 'string'
+        || !failure.detail.includes('独立图片审查未通过')) {
+        reject('invalid-state-transition', '审图恢复修订仅用于独立 Visual QA 阻塞的 Build')
+      }
+    } else if (!['preview-ready', 'release-ready'].includes(parentBuild.status)) {
+      reject('invalid-state-transition', '单项媒资修订只能从已完成预览的 Build 派生')
+    }
+    if (parentBuild.briefRevision !== production.currentBriefRevision) {
+      reject('brief-not-authorized', '当前 Build 与已授权 Brief 指针不一致')
+    }
+    const briefRow = await db.productProductionBriefs
+      .where('[productionId+revision]').equals([production.id, parentBuild.briefRevision]).first()
+    if (!briefRow || briefRow.status !== 'authorized' || briefRow.briefHash !== parentBuild.briefHash) {
+      reject('brief-not-authorized', '媒资修订缺少父 Build 的已授权 Brief')
+    }
+    const brief = parseProductProductionBriefV3(briefRow.briefJson)
+    const parentPlan = parseProductProductionPlanV3(parentBuild.planJson, brief, briefRow.briefHash)
+    if (parentBuild.planHash !== await hashProductProductionValueV2(parentPlan)) {
+      reject('source-stale', '父 Build 的生产 Plan hash 已失效')
+    }
+    const parentArtifacts = (await db.productBuildArtifacts.where('buildId').equals(parentBuild.id).toArray())
+      .filter(row => row.controlEpoch === parentBuild.controlEpoch
+        && (row.status === 'accepted' || row.status === 'carried-forward'))
+    const expectedHashByKey = new Map(revisionTargets.map(target => [target.artifactKey, target.expectedArtifactHash]))
+    if (!revisionTargets.length || expectedHashByKey.size !== revisionTargets.length) {
+      reject('media-revision-invalid', '媒资修订目标为空或重复')
+    }
+    const targetArtifacts = parentArtifacts.filter(row => expectedHashByKey.has(row.artifactKey))
+    if (targetArtifacts.length !== revisionTargets.length) {
+      reject('media-revision-invalid', '目标图片 Artifact 缺失或重复')
+    }
+    for (const target of targetArtifacts) {
+      if (target.contentHash !== expectedHashByKey.get(target.artifactKey)
+        || target.kind !== 'image' || target.blobObjectId == null
+        || target.mimeType == null || target.mediaKind == null) {
+        reject('source-stale', `目标图片已变化或不是可修订的冻结图片:${target.artifactKey}`)
+      }
+      const targetBlob = await db.mediaBlobObjects.get(target.blobObjectId)
+      if (!targetBlob || !await assertRecordInScope(scope, 'mediaBlobObjects', targetBlob, { owner: 'work' })
+        || targetBlob.storageState !== 'ready' || targetBlob.contentHash !== target.contentHash
+        || targetBlob.mimeType !== target.mimeType || targetBlob.byteSize !== target.byteSize) {
+        reject('media-revision-invalid', `目标图片的物理 Blob 不完整或已损坏:${target.artifactKey}`)
+      }
+      if (revisionAction === 'regenerate' && mediaArtifactLocked(target)) {
+        reject('media-revision-invalid', `图片已锁定，必须先解锁:${target.artifactKey}`)
+      }
+    }
+    let visualRepairFeedback: {
+      payload: Record<string, unknown>
+      inputHash: string
+      contentHash: string
+      sourceHash: string
+      sourceArtifact: ProductBuildArtifactRecordV1 | null
+    } | null = null
+    if (automaticBatchRepair || uploadRecovery) {
+      const sourceArtifact = parentArtifacts.find(row => row.artifactKey === 'quality.visual-review')
+      if (!sourceArtifact) reject('media-revision-invalid', 'Visual QA 阻塞 Build 缺少审查报告')
+      const report = objectJson(sourceArtifact.payloadJson, 'quality.visual-review.payload')
+      if (report.schema !== 'storyforge.text-adventure-visual-quality-review-artifact'
+        || report.version !== 1 || report.buildNumber !== parentBuild.buildNumber
+        || !Array.isArray(report.reviews)) {
+        reject('media-revision-invalid', 'Visual QA 报告与父 Build 不一致')
+      }
+      if (await hashProductProductionValueV2(report) !== sourceArtifact.contentHash) {
+        reject('source-stale', 'Visual QA 报告内容与冻结 hash 不一致')
+      }
+      const reviewByKey = new Map<string, Record<string, unknown>>()
+      for (const value of report.reviews) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          reject('media-revision-invalid', 'Visual QA 逐图证据格式无效')
+        }
+        const review = value as Record<string, unknown>
+        if (typeof review.artifactKey !== 'string' || typeof review.contentHash !== 'string'
+          || !Array.isArray(review.issues) || reviewByKey.has(review.artifactKey)) {
+          reject('media-revision-invalid', 'Visual QA 逐图证据缺失或重复')
+        }
+        reviewByKey.set(review.artifactKey, review)
+      }
+      const feedbackTargets = revisionTargets.map(target => {
+        const review = reviewByKey.get(target.artifactKey)
+        if (!review || review.contentHash !== target.expectedArtifactHash) {
+          reject('source-stale', `Visual QA 证据与目标图片不一致:${target.artifactKey}`)
+        }
+        const issues = (review.issues as unknown[]).map((value, index) => {
+          if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            reject('media-revision-invalid', `${target.artifactKey} 审查问题 ${index + 1} 无效`)
+          }
+          const issue = value as Record<string, unknown>
+          if ((issue.severity !== 'warning' && issue.severity !== 'blocking')
+            || typeof issue.category !== 'string' || typeof issue.detail !== 'string'
+            || typeof issue.recommendation !== 'string') {
+            reject('media-revision-invalid', `${target.artifactKey} 审查问题 ${index + 1} 缺少修复证据`)
+          }
+          const severity = isTextAdventureReadableGlyphViolationV1(issue)
+            ? 'blocking' as const
+            : issue.severity
+          return {
+            severity,
+            category: issue.category,
+            detail: issue.detail,
+            recommendation: issue.recommendation,
+          }
+        })
+        const rejected = review.verdict === 'revise' || review.verdict === 'replace'
+          || review.verdict === 'human-review' || issues.some(issue => issue.severity === 'blocking')
+        if (!rejected && !uploadRecovery) reject('media-revision-invalid', `图片未被 Visual QA 退回:${target.artifactKey}`)
+        const verdict = rejected && review.verdict === 'accept' ? 'revise' : review.verdict
+        return {
+          artifactKey: target.artifactKey,
+          priorContentHash: target.expectedArtifactHash,
+          verdict,
+          scores: review.scores ?? null,
+          issues,
+        }
+      })
+      const payload = {
+        schema: 'storyforge.text-adventure-visual-repair-feedback', version: 1,
+        sourceBuildNumber: parentBuild.buildNumber,
+        sourceReviewArtifactHash: sourceArtifact.contentHash,
+        sourceReview: report,
+        targets: feedbackTargets.sort((left, right) => left.artifactKey.localeCompare(right.artifactKey)),
+      }
+      if (!uploadRecovery) visualRepairFeedback = {
+        payload,
+        inputHash: await hashProductProductionValueV2({
+          schema: 'storyforge.text-adventure-visual-repair-feedback-input', version: 1,
+          commandId: command.commandId, payload,
+        }),
+        contentHash: await hashProductProductionValueV2(payload),
+        sourceHash: sourceArtifact.contentHash,
+        sourceArtifact,
+      }
+    }
+    if (authorRepairFeedback) {
+      let verifiedHumanReview: Awaited<ReturnType<typeof verifyTextAdventureHumanVisualReviewReceiptV1>>
+      try {
+        verifiedHumanReview = await verifyTextAdventureHumanVisualReviewReceiptV1({
+          scope,
+          productBuildId: parentBuild.id,
+          receiptHash: authorRepairFeedback.sourceGateReceiptHash,
+        })
+      } catch (error) {
+        reject('media-revision-invalid', `作者退回回执未通过完整复验:${
+          error instanceof Error ? error.message : String(error)
+        }`)
+      }
+      const { gateReceipt, evidence } = verifiedHumanReview
+      if (gateReceipt.status !== 'failed' || evidence.passed) {
+        reject('media-revision-invalid', '作者退回回执不是冻结失败决定')
+      }
+      const evidenceHash = await hashProductProductionValueV2(evidence)
+      if (evidenceHash !== authorRepairFeedback.sourceEvidenceHash
+        || evidence.buildNumber !== parentBuild.buildNumber
+        || singleCommand && singleCommand.repairFeedback?.priorContentHash !== singleCommand.expectedArtifactHash) {
+        reject('source-stale', '作者退回证据与父 Build 或当前图片 hash 不一致')
+      }
+      const authorTargets = revisionTargets.map(target => {
+        const rejected = evidence.assets.find(asset => asset.artifactKey === target.artifactKey)
+        if (!rejected || rejected.decision !== 'rejected'
+          || rejected.contentHash !== target.expectedArtifactHash || !rejected.note.trim()
+          || singleCommand && rejected.note !== singleCommand.repairFeedback?.note.trim().normalize('NFC')) {
+          reject('media-revision-invalid', '作者退回证据未绑定目标图片与当前修订意见')
+        }
+        return {
+          artifactKey: target.artifactKey, priorContentHash: target.expectedArtifactHash,
+          verdict: 'human-review', scores: null,
+          issues: [{ severity: 'blocking', category: 'author-direction', detail: rejected.note, recommendation: rejected.note }],
+        }
+      })
+      const sourceReview = {
+        schema: 'storyforge.text-adventure-author-visual-repair-source', version: 1,
+        gateReceiptHash: gateReceipt.receiptHash, evidence,
+      }
+      const payload = {
+        schema: 'storyforge.text-adventure-visual-repair-feedback', version: 1,
+        sourceBuildNumber: parentBuild.buildNumber,
+        sourceReviewArtifactHash: await hashProductProductionValueV2(sourceReview),
+        sourceReview,
+        targets: authorTargets,
+      }
+      visualRepairFeedback = {
+        payload,
+        inputHash: await hashProductProductionValueV2({
+          schema: 'storyforge.text-adventure-visual-repair-feedback-input', version: 1,
+          commandId: command.commandId, payload,
+        }),
+        contentHash: await hashProductProductionValueV2(payload),
+        sourceHash: gateReceipt.receiptHash,
+        sourceArtifact: null,
+      }
+    }
+    const targetArtifact = targetArtifacts[0]
+    const locked = mediaArtifactLocked(targetArtifact)
+    if (revisionAction === 'lock' && locked) reject('media-revision-invalid', '图片已经处于锁定状态')
+    if (revisionAction === 'unlock' && !locked) reject('media-revision-invalid', '图片尚未锁定')
+
+    let replacementBlob: MediaBlobObjectRecordV1 | undefined
+    if (replacement) {
+      replacementBlob = await db.mediaBlobObjects.get(replacement.blobObjectId)
+      if (!replacementBlob
+        || !await assertRecordInScope(scope, 'mediaBlobObjects', replacementBlob, { owner: 'work' })
+        || replacementBlob.storageState !== 'ready'
+        || replacementBlob.contentHash !== replacement.contentHash
+        || replacementBlob.mimeType !== replacement.mimeType
+        || replacementBlob.byteSize !== replacement.byteSize) {
+        reject('media-revision-invalid', '作者上传 Blob 不存在、跨 Work、损坏或与命令不一致')
+      }
+      if (brief.qualityProfile === 'commercial-candidate'
+        && (!replacement.commercialUse || !replacement.redistribution)) {
+        reject('rights-incomplete', '商业候选的作者图片必须确认商用与再分发权利')
+      }
+    }
+
+    const buildNumber = await nextBuildNumber(production.id)
+    const controlEpoch = production.controlEpoch + 1
+    const revisionPlan = await createMediaRevisionPlan({
+      parentBuild, brief,
+      command: {
+        commandId: command.commandId, action: revisionAction, targets: revisionTargets,
+        includeVisualRepairFeedback: batchRepair || authorRepairFeedback != null,
+        includeRepairFeedbackInVisualReview: automaticBatchRepair,
+      },
+      buildNumber, controlEpoch, artifacts: parentArtifacts,
+    })
+    const planHash = await hashProductProductionValueV2(revisionPlan.plan)
+    const sourceByKey = new Map(parentArtifacts.map(row => [row.artifactKey, row]))
+    for (const artifactKey of revisionPlan.carriedArtifactKeys) {
+      const source = sourceByKey.get(artifactKey)!
+      if (source.blobObjectId == null) continue
+      const blob = await db.mediaBlobObjects.get(source.blobObjectId)
+      if (!blob || !await assertRecordInScope(scope, 'mediaBlobObjects', blob, { owner: 'work' })
+        || blob.storageState !== 'ready' || blob.contentHash !== source.contentHash
+        || blob.mimeType !== source.mimeType || blob.byteSize !== source.byteSize) {
+        reject('media-revision-invalid', `父 Build 媒资对象不可复用:${artifactKey}`)
+      }
+    }
+    let humanArtifact: {
+      contentHash: string
+      blobObjectId: number
+      mimeType: string
+      byteSize: number
+      inputHash: string
+      payloadJson: string
+      metadataJson: string
+      qualityJson: string
+      rightsJson: string
+    } | null = null
+    if (revisionAction !== 'regenerate') {
+      const oldPayload = objectJson(targetArtifact.payloadJson, `${targetArtifact.artifactKey}.payload`)
+      const oldMetadata = objectJson(targetArtifact.metadataJson, `${targetArtifact.artifactKey}.metadata`)
+      const oldRights = objectJson(targetArtifact.rightsJson, `${targetArtifact.artifactKey}.rights`)
+      const frozenRequirement = oldPayload.request && typeof oldPayload.request === 'object'
+        && !Array.isArray(oldPayload.request) ? oldPayload.request as Record<string, unknown> : null
+      if (!frozenRequirement) reject('media-revision-invalid', '目标图片缺少冻结需求合同')
+      if (replacement && !isProductImageDeliveryDimensionCompatibleV1({
+        requestedWidth: Number(frozenRequirement.width), requestedHeight: Number(frozenRequirement.height),
+        actualWidth: replacement.width, actualHeight: replacement.height,
+      })) {
+        reject('media-revision-invalid', '替换图片必须满足冻结媒资的画幅比例与最低分辨率')
+      }
+      const nextLocked = revisionAction === 'lock'
+        ? true
+        : revisionAction === 'unlock' ? false : locked
+      const assetKey = `${production.productionKey}.build-${buildNumber}.${targetArtifact.artifactKey}`
+      const contentHash = replacement?.contentHash ?? targetArtifact.contentHash
+      const metadata = {
+        ...oldMetadata,
+        assetKey,
+        source: replacement ? 'author-upload' : oldMetadata.source,
+        width: replacement?.width ?? oldMetadata.width,
+        height: replacement?.height ?? oldMetadata.height,
+        altText: replacement?.altText ?? oldMetadata.altText,
+        license: replacement?.license ?? oldMetadata.license,
+        authorRevision: {
+          schema: 'storyforge.text-adventure-media-revision', version: 1,
+          commandId: command.commandId, action: revisionAction, parentBuildNumber: parentBuild.buildNumber,
+          priorContentHash: targetArtifact.contentHash, locked: nextLocked, revisedAt: now,
+        },
+      }
+      const rights = replacement ? {
+        origin: 'author-upload', license: replacement.license,
+        commercialUse: replacement.commercialUse, redistribution: replacement.redistribution,
+        declaration: replacement.declaration, attribution: replacement.attribution,
+      } : oldRights
+      humanArtifact = {
+        contentHash,
+        blobObjectId: replacement?.blobObjectId ?? targetArtifact.blobObjectId!,
+        mimeType: replacement?.mimeType ?? targetArtifact.mimeType!,
+        byteSize: replacement?.byteSize ?? targetArtifact.byteSize,
+        inputHash: await hashProductProductionValueV2({
+          schema: 'storyforge.text-adventure-human-media-input', version: 1,
+          commandId: command.commandId, planHash, artifactKey: targetArtifact.artifactKey,
+          contentHash, parentArtifactHash: targetArtifact.contentHash,
+        }),
+        payloadJson: canonicalProductProductionJsonV2({ ...oldPayload, assetKey }),
+        metadataJson: canonicalProductProductionJsonV2(metadata),
+        qualityJson: canonicalProductProductionJsonV2({
+          authorManaged: true, byteHashVerified: true, dimensionsVerified: true, providerCalls: 0,
+        }),
+        rightsJson: canonicalProductProductionJsonV2(rights),
+      }
+    }
+    const buildId = await createRevisionBuildWithCarriesV1({ scope, production, parentBuild, briefRow,
+      buildNumber, controlEpoch, planHash, emptyHash: input.emptyHash, command, revisionPlan, sourceByKey, now })
+
+    if (visualRepairFeedback) {
+      await db.productBuildArtifacts.add(stampNewRecord(scope, 'productBuildArtifacts', {
+        projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+        buildId, artifactKey: MEDIA_REPAIR_FEEDBACK_TASK_KEY, requirementKey: null,
+        version: 1, kind: 'integration-report', mediaKind: null, status: 'accepted' as const,
+        producerRunId: null, producerReceiptHash: null, controlEpoch,
+        inputHash: visualRepairFeedback.inputHash, contentHash: visualRepairFeedback.contentHash,
+        payloadJson: canonicalProductProductionJsonV2(visualRepairFeedback.payload),
+        metadataJson: canonicalProductProductionJsonV2({
+          source: visualRepairFeedback.sourceArtifact
+            ? 'accepted-visual-quality-review' : 'accepted-author-visual-rejection',
+          commandId: command.commandId,
+        }),
+        qualityJson: canonicalProductProductionJsonV2({
+          targetCount: revisionTargets.length, sourceHashVerified: true,
+        }),
+        rightsJson: canonicalProductProductionJsonV2({
+          origin: 'deterministic-quality-repair', containsThirdPartyMedia: false,
+        }),
+        blobObjectId: null, mimeType: null, byteSize: 0,
+        parentArtifactHash: visualRepairFeedback.sourceHash,
+        carriedFrom: visualRepairFeedback.sourceArtifact ? {
+          buildNumber: parentBuild.buildNumber,
+          artifactKey: visualRepairFeedback.sourceArtifact.artifactKey,
+          version: visualRepairFeedback.sourceArtifact.version,
+          contentHash: visualRepairFeedback.sourceArtifact.contentHash,
+        } : null,
+        createdAt: now, updatedAt: now,
+      } satisfies ProductBuildArtifactRecordV1, { owner: 'work' }))
+    }
+
+    if (humanArtifact) {
+      await db.productBuildArtifacts.add(stampNewRecord(scope, 'productBuildArtifacts', {
+        projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+        buildId, artifactKey: targetArtifact.artifactKey, requirementKey: targetArtifact.requirementKey,
+        version: 1, kind: targetArtifact.kind, mediaKind: targetArtifact.mediaKind,
+        status: 'accepted' as const, producerRunId: null, producerReceiptHash: null,
+        controlEpoch, inputHash: humanArtifact.inputHash, contentHash: humanArtifact.contentHash,
+        payloadJson: humanArtifact.payloadJson, metadataJson: humanArtifact.metadataJson,
+        qualityJson: humanArtifact.qualityJson, rightsJson: humanArtifact.rightsJson,
+        blobObjectId: humanArtifact.blobObjectId, mimeType: humanArtifact.mimeType,
+        byteSize: humanArtifact.byteSize,
+        parentArtifactHash: targetArtifact.contentHash,
+        carriedFrom: {
+          buildNumber: parentBuild.buildNumber, artifactKey: targetArtifact.artifactKey,
+          version: targetArtifact.version, contentHash: targetArtifact.contentHash,
+        },
+        createdAt: now, updatedAt: now,
+      } satisfies ProductBuildArtifactRecordV1, { owner: 'work' }))
+    }
+    const rerunTaskKeys = new Set<string>()
+    for (const taskKey of revisionPlan.targetTaskKeys) {
+      for (const invalidated of invalidatedMediaTaskKeys(revisionPlan.plan, taskKey)) {
+        rerunTaskKeys.add(invalidated)
+      }
+    }
+    const stateRevision = production.stateRevision + 1
+    await db.productProductions.update(production.id, {
+      status: 'producing', currentBuildNumber: buildNumber, controlEpoch, stateRevision,
+      lastErrorJson: '{}', updatedAt: now,
+    })
+    production = {
+      ...production, status: 'producing', currentBuildNumber: buildNumber,
+      controlEpoch, stateRevision, lastErrorJson: '{}', updatedAt: now,
+    }
+    return { production, result: {
+      action: revisionAction,
+      artifactKeys: revisionTargets.map(target => target.artifactKey).sort(),
+      ...(batchRepair ? {} : { artifactKey: targetArtifact.artifactKey }),
+      parentBuildNumber: parentBuild.buildNumber, buildId, buildNumber, controlEpoch,
+      carriedArtifactCount: revisionPlan.carriedArtifactKeys.length,
+      rerunTaskKeys: [...rerunTaskKeys].sort(),
+    } }
+  }
+
+  if (command.type === 'publish') {
+    reject('publication-transaction-failed', '发布必须由 product-production/adoption.ts 原子事务入口执行')
+  }
+
+  const affectedLanes = [...new Set(command.affectedLanes)]
+  const recoveryBase = command.base.kind === 'recovery-build' ? command.base : null
+  const budgetRecovery = recoveryBase != null
+    && affectedLanes.length === 1 && affectedLanes[0] === 'production-budget'
+  const planUpgradeRecovery = recoveryBase != null
+    && affectedLanes.length === 1 && affectedLanes[0] === 'execution-plan'
+  const visualContractRecovery = recoveryBase != null
+    && affectedLanes.length === 1 && affectedLanes[0] === 'visual'
+  const preMediaContentRecovery = recoveryBase != null
+    && affectedLanes.length === 2
+    && affectedLanes.includes('content') && affectedLanes.includes('visual')
+  const runtimeCopyRecovery = recoveryBase != null
+    && affectedLanes.length === 1 && affectedLanes[0] === 'runtime'
+  let nativeRecovery = false
+  if (recoveryBase && production.productType === 'avg'
+    && canonicalProductProductionJsonV2([...affectedLanes].sort()) === canonicalProductProductionJsonV2(['audio','content','product','visual'])) {
+    const base = await db.productBuilds.where('[productionId+buildNumber]').equals([production.id,recoveryBase.buildNumber]).first()
+    const briefRow = base ? await db.productProductionBriefs.where('[productionId+revision]').equals([production.id,base.briefRevision]).first() : null
+    if (!base || !briefRow || production.currentBuildNumber !== base.buildNumber || production.currentBriefRevision !== base.briefRevision
+      || briefRow.status !== 'authorized' || briefRow.authorizedAt !== base.authorizedAt
+      || !await assertRecordInScope(scope,'productBuilds',base,{owner:'work'}) || !await assertRecordInScope(scope,'productProductionBriefs',briefRow,{owner:'work'})) reject('source-stale','AVG 恢复基线已变化')
+    try {
+      nativeRecovery = canonicalProductProductionJsonV2(await deriveAvgAssemblyRecoveryBaseV1(base,parseProductProductionBriefV3(briefRow.briefJson))) === canonicalProductProductionJsonV2(recoveryBase)
+    } catch { reject('source-stale','AVG 恢复基线缺少准确的零 Provider 来源证据') }
+    if (!nativeRecovery) reject('source-stale','AVG 恢复请求与当前冻结基线不一致')
+  }
+  const recoveryEvolution = nativeRecovery || budgetRecovery || planUpgradeRecovery || visualContractRecovery
+    || preMediaContentRecovery || runtimeCopyRecovery
+  if (nativeRecovery) {
+    // Native recovery keeps every old byte/receipt and requires a new start.
+  } else if (recoveryEvolution) {
+    if (!recoveryBase) reject('source-stale', '恢复版本缺少冻结基线')
+    if (production.productType !== 'text-adventure'
+      || production.currentBuildNumber !== recoveryBase.buildNumber) {
+      reject('invalid-state-transition', '只有当前文字冒险恢复 Build 可以升级生产预算、执行计划或视觉合同')
+    }
+    const base = await db.productBuilds
+      .where('[productionId+buildNumber]').equals([production.id, recoveryBase.buildNumber]).first()
+    const rejectedAnchorRecovery = !!base && visualContractRecovery
+      && production.status === 'stopped'
+      && canReviseTextAdventureVisualContractFromRecoveryV1(base)
+    const sourceControlEpoch = rejectedAnchorRecovery
+      ? parseProductProductionPlanV3(base.planJson).controlEpoch
+      : base?.controlEpoch
+    if (!base || (!rejectedAnchorRecovery
+        && (production.status !== 'producing' || base.status !== 'recovery-required'))
+      || base.briefHash !== recoveryBase.briefHash
+      || base.planHash !== recoveryBase.planHash
+      || sourceControlEpoch !== recoveryBase.controlEpoch) {
+      reject('source-stale', '恢复 Build 基线不可验证')
+    }
+    if (planUpgradeRecovery && (!canUpgradeTextAdventureExecutionPlanV1(base)
+      || (isLegacyOversizedTextAdventureQualityReviewPlanV1(base)
+        && await hasPassedTextAdventureQualityReviewForExecutionPlanUpgradeV1(base)))) {
+      reject('invalid-state-transition', '当前 Build 没有可验证的执行计划升级证据，或叙事质量审查已经通过')
+    }
+    if (visualContractRecovery && !canReviseTextAdventureVisualContractFromRecoveryV1(base)) {
+      reject('invalid-state-transition', '当前 Build 没有可验证的视觉合同或媒资质量阻断')
+    }
+    if (runtimeCopyRecovery && !canReviseTextAdventureRuntimeCopyFromRecoveryV1(base)) {
+      reject('invalid-state-transition', '当前 Build 没有可验证的文字冒险公开文案质量阻断')
+    }
+    if (preMediaContentRecovery) {
+      if (!canReviseTextAdventureContentBeforeMediaV1(base)) {
+        reject('invalid-state-transition', '当前 Build 不在可返修正文的生成图片前作者闸门')
+      }
+      const generatedImages = await db.productBuildArtifacts.where('buildId').equals(base.id!).and(row => (
+        /^media\.visual\.\d{3}$/.test(row.artifactKey)
+        && (row.status === 'accepted' || row.status === 'carried-forward')
+      )).count()
+      if (generatedImages > 0) {
+        reject('invalid-state-transition', '当前 Build 已生成正式图片，不能冒用生成图片前正文返修通道')
+      }
+    }
+  } else {
+    if (affectedLanes.includes('production-budget') || affectedLanes.includes('execution-plan')
+      || command.base.kind === 'recovery-build') {
+      reject('invalid-state-transition', '生产预算或执行计划只能从当前恢复 Build 单独升级')
+    }
+    if (!['preview-ready', 'released'].includes(production.status)) reject('invalid-state-transition', '当前 Production 不能开始演化会谈')
+  }
+  if (command.base.kind === 'build') {
+    const base = await db.productBuilds.where('[productionId+buildNumber]').equals([production.id, command.base.buildNumber]).first()
+    if (!base || base.manifestHash !== command.base.manifestHash || !['preview-ready', 'release-ready', 'released'].includes(base.status)) {
+      reject('source-stale', '演化 Build 基线不可验证')
+    }
+  } else if (command.base.kind === 'release') {
+    const release = await db.productReleases.get(command.base.productReleaseId)
+    if (!release || release.workId !== scope.workId || release.contentHash !== command.base.contentHash) reject('source-stale', '演化 Release 基线不可验证')
+  }
+  if (production.currentBriefRevision == null) reject('brief-not-authorized', '演化缺少上一版 Brief')
+  const previous = await db.productProductionBriefs
+    .where('[productionId+revision]').equals([production.id, production.currentBriefRevision]).first()
+  if (!previous) reject('brief-not-authorized', '上一版 Brief 缺失')
+  if (previous.briefKind === 'text-open-world-creator-v1') {
+    reject('brief-not-authorized', 'Creator Brief 尚未进入可演化的正式生产版本')
+  }
+  const priorBrief = parseProductProductionBriefV3(previous.briefJson)
+  const semanticBaselineRows = await db.productProductionBriefs
+    .where('productionId').equals(production.id).and(row => row.revision <= previous.revision).toArray()
+  const semanticBaseline = semanticBaselineRows
+    .sort((left, right) => right.revision - left.revision)
+    .map(row => parseProductProductionBriefV3(row.briefJson))
+    .find(candidate => candidate.evolution == null) ?? priorBrief
+  const evolutionGoal = command.userText.trim().slice(0, 2000)
+  const contentAffected = affectedLanes.includes('content') || affectedLanes.includes('world-source')
+  // Manual assembly uses a zero-call budget; later AI evolution restores the
+  // last governed generative budget from this production's own Brief lineage.
+  let generationPolicy = priorBrief
+  if (priorBrief.avgRevision) {
+    const history = (await db.productProductionBriefs.where('productionId').equals(production.id!).toArray())
+      .filter(row=>row.revision<=previous.revision).sort((a,b)=>b.revision-a.revision)
+    const original = history.map(row=>parseProductProductionBriefV3(row.briefJson)).find(brief=>!brief.avgRevision)
+    if (!original) throw new Error('AVG 修订缺少原始生成方案，不能推断新的模型预算')
+    generationPolicy = original
+  }
+  const publicSemanticsAffected = contentAffected || runtimeCopyRecovery
+  const budgetFloor = recoveryEvolution && production.productType === 'text-adventure' ? textAdventureProductionBudgetFloorV1(priorBrief) : null
+  if (budgetRecovery && budgetFloor
+    && !isTextAdventureBuildLifetimeBudgetExhaustedV1(
+      (await db.productBuilds.where('[productionId+buildNumber]')
+        .equals([production.id, recoveryBase!.buildNumber]).first())!,
+    )
+    && priorBrief.productionBudget.maximumModelCalls >= budgetFloor.minimumModelCalls
+    && priorBrief.productionBudget.maximumInputTokens >= budgetFloor.minimumInputTokens
+    && priorBrief.productionBudget.maximumOutputTokens >= budgetFloor.minimumOutputTokens
+    && priorBrief.productionBudget.maximumDurationMs >= budgetFloor.minimumDurationMs) {
+    reject('invalid-state-transition', '当前 Brief 已满足专业生产预算底线，不能创建无变化的预算恢复版本')
+  }
+  const nextBrief = parseProductProductionBriefV3({
+    ...Object.fromEntries(Object.entries(priorBrief).filter(([key]) => key !== 'avgRevision')),
+    source: publicSemanticsAffected ? {
+      ...priorBrief.source,
+      // Evolution lineage belongs to evolution.base/userGoal. Product source
+      // semantics remain public, authored facts and must never become a repair
+      // prompt. Recover the latest non-evolution revision so legacy polluted
+      // Briefs heal on their next governed evolution.
+      startingPoint: semanticBaseline.source.startingPoint,
+    } : priorBrief.source,
+    intent: publicSemanticsAffected ? semanticBaseline.intent : priorBrief.intent,
+    productionBudget: budgetFloor ? {
+      ...generationPolicy.productionBudget,
+      maximumModelCalls: Math.max(generationPolicy.productionBudget.maximumModelCalls, budgetFloor.minimumModelCalls),
+      maximumInputTokens: Math.max(generationPolicy.productionBudget.maximumInputTokens, budgetFloor.minimumInputTokens),
+      maximumOutputTokens: Math.max(generationPolicy.productionBudget.maximumOutputTokens, budgetFloor.minimumOutputTokens),
+      maximumDurationMs: Math.max(generationPolicy.productionBudget.maximumDurationMs, budgetFloor.minimumDurationMs),
+    } : generationPolicy.productionBudget,
+    capabilityRequirements: generationPolicy.capabilityRequirements,
+    completionContract: generationPolicy.completionContract,
+    ...resetAvgImageRecoveryForEvolutionV1(priorBrief),
+    ...await resetAvgVoiceRecoveryForEvolutionV1(priorBrief),
+    unresolvedDecisionKeys: [],
+    evolution: {
+      schema: 'storyforge.product-evolution-impact', version: 1,
+      base: command.base, userGoal: evolutionGoal, affectedLanes,
+    },
+  })
+  const revision = await nextBriefRevision(production.id)
+  const briefHash = await Dexie.waitFor(hashProductProductionValueV2(nextBrief))
+  await db.productProductionBriefs.add(stampNewRecord(scope, 'productProductionBriefs', {
+    projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+    productionId: production.id, revision, parentRevision: previous.revision, status: 'draft' as const,
+    briefKind: 'product-production-v3' as const, sourceKind: 'world-release' as const,
+    sourceWorldReleaseId: previous.sourceWorldReleaseId, sourceWorldContentHash: previous.sourceWorldContentHash,
+    userIntentSummary: command.userText, unresolvedJson: safeJson(nextBrief.unresolvedDecisionKeys),
+    estimateJson: safeJson({
+      ...JSON.parse(previous.estimateJson) as Record<string, unknown>,
+      productionBudget: nextBrief.productionBudget,
+      evolutionImpact: nextBrief.evolution,
+    }),
+    briefJson: canonicalProductProductionJsonV2(nextBrief), briefHash,
+    sourcePlanJson: previous.sourcePlanJson,
+    sourcePlanHash: previous.sourcePlanHash,
+    confirmedBriefJson: '{}',
+    confirmedBriefHash: '',
+    authorizedAt: null, createdAt: now,
+  } satisfies ProductProductionBriefRecordV1, { owner: 'work' }))
+  const stateRevision = production.stateRevision + 1
+  await db.productProductions.update(production.id, { status: 'brief-ready', currentBriefRevision: revision, stateRevision, updatedAt: now })
+  production = { ...production, status: 'brief-ready', currentBriefRevision: revision, stateRevision, updatedAt: now }
+  return { production, result: { briefRevision: revision, briefHash, base: command.base } }
+}
+
+async function executeTransaction(input: {
+  preparedTextRevision?: Awaited<ReturnType<typeof prepareTextContentRevisionV1>> | null
+  preparedPausedBuild?: PreparedPausedBuildV1 | null
+  scope: WorkspaceScope
+  productionId?: number
+  command: ProductProductionCommandV1
+  payloadHash: string
+  preparedBriefHash: string | null
+  preparedSourcePlan: ProductSourcePlanV1 | null
+  preparedConfirmedBrief: ConfirmedProductBriefV1 | null
+  preparedCreatorSource: {
+    locator: TextOpenWorldCreatorSourceLocatorV1
+    binding: TextOpenWorldCreatorSourceBindingV1
+    bindingHash: string
+    summary: TextOpenWorldCreatorSourceSummaryV1
+  } | null
+  preparedCreatorBrief: TextOpenWorldCreatorBriefV1 | null
+  preparedCreatorEvidence: {
+    runId: number
+    localContractHash: string
+    bindingHash: string
+    candidateHash: string
+    terminalReceiptHash: string
+  } | null
+  preparedCreatorStart?: TextOpenWorldCreatorStartPreparationV1 | null
+  preparedCreatorRepair?: TextOpenWorldCreatorRepairPreparationV1 | null
+  preparedCreatorRepairAuthorization?: TextOpenWorldCreatorRepairAuthorizationV1 | null
+  preparedCreatorMedia?: TextOpenWorldCreatorMediaPreparationV1 | null
+  preparedCreatorMediaAuthorization?: TextOpenWorldCreatorMediaAuthorizationV1 | null
+  preparedWorldReferenceHash: string | null
+  emptyHash: string
+  now: number
+}): Promise<ProductProductionCommandReceiptV1> {
+  const { scope, command, now } = input
+  const transactionTables = scopeTransactionTables(
+    db.productReleases,
+    db.productProductions, db.productProductionBriefs, db.productProductionCommands,
+    db.productBuilds, db.productBuildArtifacts, db.mediaBlobObjects, db.productQualityGateReceipts,
+    ...(command.type === 'adopt-avg-artifact' ? [db.avgDraftMedia] : []),
+    db.agentRuns, db.agentRunEvents, db.agentRunCheckpoints, db.agentRunArtifacts,
+    ...(command.type === 'authorize-text-open-world-creator-start'
+      // Creator source adapters expose only opaque transaction capabilities;
+      // the command layer never learns physical WorldRelease/novel table names.
+      ? textOpenWorldCreatorProductionSourceTransactionTablesV1(command.sourceLocator)
+      : []),
+  )
+  return db.transaction('rw', transactionTables, async () => {
+    let production: ProductProductionRecordV1 & { id: number }
+    if (command.type === 'create-intent' || command.type === 'create-text-open-world-intent') {
+      const existing = await db.productProductions.where('[workId+productionKey]').equals([scope.workId, command.productionKey]).first()
+      if (existing) {
+        if (!await assertRecordInScope(scope, 'productProductions', existing, { owner: 'work' })) reject('production-state-conflict', 'productionKey 跨 Work 冲突')
+        production = existing as ProductProductionRecordV1 & { id: number }
+      } else {
+        if (command.type === 'create-intent' && !input.preparedWorldReferenceHash) {
+          reject('source-stale', 'create-intent 缺少经中立边界验证的 WorldReference')
+        }
+        if (command.type === 'create-text-open-world-intent'
+          && input.preparedCreatorSource?.bindingHash !== command.expectedSourceBindingHash) {
+          reject('source-stale', '文字开放世界 intent 缺少当前来源复验')
+        }
+        const row = stampNewRecord(scope, 'productProductions', {
+          projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId,
+          productionKey: command.productionKey, productType: command.productType,
+          title: command.userText.slice(0, 120), status: 'consulting' as const,
+          stateRevision: 0, controlEpoch: 0, currentBriefRevision: null, currentBuildNumber: null,
+          currentProductReleaseId: null, lastErrorJson: '{}', createdAt: now, updatedAt: now,
+          ...(command.type === 'create-text-open-world-intent' && input.preparedCreatorSource
+            ? textOpenWorldCreatorProductionLocatorColumnsV1(
+                input.preparedCreatorSource.locator,
+                input.preparedCreatorSource.binding,
+                input.preparedCreatorSource.bindingHash,
+              )
+            : {}),
+        } satisfies ProductProductionRecordV1, { owner: 'work' })
+        const id = await db.productProductions.add(row) as number
+        production = { ...row, id }
+      }
+    } else {
+      if (!Number.isInteger(input.productionId)) reject('production-not-found', '命令缺少 productionId')
+      production = await productionInScope(scope, input.productionId!)
+    }
+
+    const existingCommand = await db.productProductionCommands
+      .where('[productionId+commandId]').equals([production.id, command.commandId]).first()
+    if (existingCommand) {
+      if (existingCommand.payloadHash !== input.payloadHash) reject('command-id-payload-conflict', '相同 commandId 的 payload 不同')
+      if (existingCommand.status === 'claimed') reject('command-in-progress', '命令已被其他执行者 claim')
+      return {
+        ok: existingCommand.status === 'succeeded', commandId: command.commandId, commandType: command.type,
+        productionId: production.id, stateRevision: production.stateRevision,
+        result: readResult(existingCommand.resultJson),
+        errorCode: existingCommand.errorCode as ProductProductionErrorCodeV1 | null, replayed: true,
+      }
+    }
+
+    const transactionCreatorStart = input.preparedCreatorStart ?? null
+
+    const claim = stampNewRecord(scope, 'productProductionCommands', {
+      projectId: scope.projectId, worldId: scope.worldId, workId: scope.workId, productionId: production.id,
+      commandId: command.commandId, type: command.type, payloadHash: input.payloadHash,
+      expectedStateRevision: command.type === 'create-intent' || command.type === 'create-text-open-world-intent'
+        ? null
+        : command.expectedStateRevision,
+      status: 'claimed' as const, resultJson: '{}', errorCode: null, createdAt: now, completedAt: null,
+    } satisfies ProductProductionCommandRecordV1, { owner: 'work' })
+    const claimId = await db.productProductionCommands.add(claim) as number
+
+    try {
+      if (command.type === 'authorize-text-open-world-creator-start') {
+        if (!transactionCreatorStart) {
+          throw new Error('[product-production] Creator start 缺少事务外完整预检结果')
+        }
+        // The immutable Plan and its hashes were generated before opening the
+        // transaction. Re-read only the mutable external facts here while all
+        // source stores and Production stores are locked; no provider call is
+        // permitted in this boundary. Expected source races become a durable,
+        // stable source-stale command result instead of an unclassified throw.
+        try {
+          await assertTextOpenWorldCreatorProductionSourceCurrentV1({
+            scope,
+            sourceLocator: command.sourceLocator,
+            novelSourceCasWitness: transactionCreatorStart.novelSourceCasWitness,
+          })
+        } catch {
+          reject('source-stale', 'source-stale：Creator 来源在原子授权边界已经变化')
+        }
+        const aiState = useAIConfigStore.getState()
+        const confirmation = await Dexie.waitFor(
+          verifyTextOpenWorldCreatorProductionPreflightConfirmationV1({
+            brief: transactionCreatorStart.brief,
+            preflight: command.preflight,
+            confirmation: command.confirmation,
+            projectId: scope.projectId,
+            aiConfig: aiState.config,
+            rememberApiKey: aiState.rememberApiKey,
+          }),
+        )
+        if (confirmation.confirmationHash !== transactionCreatorStart.start.confirmation.confirmationHash
+          || transactionCreatorStart.start.productionPlanHash !== command.expectedPlanHash) {
+          reject('source-stale', 'source-stale：Creator 来源、模型或冻结计划在原子授权边界发生变化')
+        }
+      }
+      if (command.type === 'authorize-text-open-world-creator-repair') {
+        if (!input.preparedCreatorRepair || !input.preparedCreatorRepairAuthorization) {
+          throw new Error('[product-production] Creator repair 缺少事务外完整影响计划')
+        }
+        try {
+          await Dexie.waitFor(assertTextOpenWorldCreatorRepairPreparationCurrentV1(
+            input.preparedCreatorRepair,
+          ))
+        } catch {
+          reject('repair-impact-stale', 'Creator repair 的 Production、Build、Handoff 或 Artifact 已变化')
+        }
+      }
+      if (command.type === 'authorize-text-open-world-creator-media') {
+        if (!input.preparedCreatorMedia || !input.preparedCreatorMediaAuthorization) {
+          throw new Error('[product-production] Creator media 缺少事务外完整媒资计划')
+        }
+        try {
+          await Dexie.waitFor(assertTextOpenWorldCreatorMediaPreparationCurrentV1(
+            input.preparedCreatorMedia,
+          ))
+        } catch {
+          reject('creator-media-stale', 'Creator media 的 Production、Build、Artifact、Blob 或命令链已变化')
+        }
+      }
+      const applied = await applyCommand({
+        preparedTextRevision: input.preparedTextRevision,
+        scope, production, command,
+        preparedBriefHash: input.preparedBriefHash,
+        preparedSourcePlan: input.preparedSourcePlan,
+        preparedConfirmedBrief: input.preparedConfirmedBrief,
+        preparedCreatorSource: input.preparedCreatorSource,
+        preparedCreatorBrief: input.preparedCreatorBrief,
+        preparedCreatorEvidence: input.preparedCreatorEvidence,
+        preparedCreatorStart: transactionCreatorStart,
+        preparedPausedBuild: input.preparedPausedBuild,
+        preparedCreatorRepair: input.preparedCreatorRepair,
+        preparedCreatorRepairAuthorization: input.preparedCreatorRepairAuthorization,
+        preparedCreatorMedia: input.preparedCreatorMedia,
+        preparedCreatorMediaAuthorization: input.preparedCreatorMediaAuthorization,
+        emptyHash: input.emptyHash,
+        now,
+      })
+      const resultJson = safeJson(applied.result)
+      await db.productProductionCommands.update(claimId, { status: 'succeeded', resultJson, completedAt: now })
+      return {
+        ok: true, commandId: command.commandId, commandType: command.type, productionId: production.id,
+        stateRevision: applied.production.stateRevision, result: applied.result, errorCode: null, replayed: false,
+      }
+    } catch (cause) {
+      if (!(cause instanceof ExpectedCommandFailure)) throw cause
+      const result = { message: cause.message }
+      await db.productProductionCommands.update(claimId, {
+        status: 'failed', resultJson: safeJson(result), errorCode: cause.code, completedAt: now,
+      })
+      return {
+        ok: false, commandId: command.commandId, commandType: command.type, productionId: production.id,
+        stateRevision: production.stateRevision, result, errorCode: cause.code, replayed: false,
+      }
+    }
+  })
+}
+
+function notifyProductionChanged(receipt: ProductProductionCommandReceiptV1): void {
+  if (typeof BroadcastChannel === 'undefined') return
+  const channel = new BroadcastChannel('storyforge-product-production')
+  try { channel.postMessage({ productionId: receipt.productionId, stateRevision: receipt.stateRevision }) }
+  finally { channel.close() }
+}
+
+/** The only public mutation entry for user/Agent/UI production control. */
+export async function executeProductProductionCommand(input: {
+  scope: WorkspaceScope
+  productionId?: number
+  command: ProductProductionCommandV1 | unknown
+  /** Non-portable local locators used only while atomically authorizing a
+   * Creator media Build. The durable command/result stores hashes and rights,
+   * never browser-local Blob ids. */
+  preparedCreatorMedia?: TextOpenWorldCreatorMediaPreparationV1 | null
+  now?: number
+}): Promise<ProductProductionCommandReceiptV1> {
+  const scope = await resolveScope({ scope: input.scope })
+  const command = parseProductProductionCommandV1(input.command)
+  const payloadHash = await hashProductProductionValueV2(command)
+  const emptyHash = await hashProductProductionValueV2({})
+  const now = input.now ?? Date.now()
+  // Durable command replay must not depend on the source still being locally
+  // resolvable. The first execution already froze and verified those inputs;
+  // a refresh/retry replays that receipt before doing any WebCrypto/Gateway
+  // preflight that could now fail for unrelated reasons.
+  if (command.type !== 'create-intent' && command.type !== 'create-text-open-world-intent'
+    && Number.isInteger(input.productionId)) {
+    const existing = await db.productProductionCommands
+      .where('[productionId+commandId]').equals([input.productionId!, command.commandId]).first()
+    if (existing) {
+      const replay = await executeTransaction({
+        scope,
+        productionId: input.productionId,
+        command,
+        payloadHash,
+        preparedBriefHash: null,
+        preparedSourcePlan: null,
+        preparedConfirmedBrief: null,
+        preparedCreatorSource: null,
+        preparedCreatorBrief: null,
+        preparedCreatorEvidence: null,
+        preparedCreatorRepair: null,
+        preparedCreatorRepairAuthorization: null,
+        preparedCreatorMedia: null,
+        preparedCreatorMediaAuthorization: null,
+        preparedWorldReferenceHash: null,
+        emptyHash,
+        now,
+      })
+      notifyProductionChanged(replay)
+      return replay
+    }
+  }
+  if (command.type === 'create-text-open-world-intent') {
+    const production = await db.productProductions
+      .where('[workId+productionKey]').equals([scope.workId, command.productionKey]).first()
+    const existing = production?.id == null ? null : await db.productProductionCommands
+      .where('[productionId+commandId]').equals([production.id, command.commandId]).first()
+    if (production?.id != null && existing) {
+      const replay = await executeTransaction({
+        scope,
+        command,
+        payloadHash,
+        preparedBriefHash: null,
+        preparedSourcePlan: null,
+        preparedConfirmedBrief: null,
+        preparedCreatorSource: null,
+        preparedCreatorBrief: null,
+        preparedCreatorEvidence: null,
+        preparedCreatorRepair: null,
+        preparedCreatorRepairAuthorization: null,
+        preparedCreatorMedia: null,
+        preparedCreatorMediaAuthorization: null,
+        preparedWorldReferenceHash: null,
+        emptyHash,
+        now,
+      })
+      notifyProductionChanged(replay)
+      return replay
+    }
+  }
+  const preparedBriefHash = command.type === 'save-brief-revision'
+    ? await hashProductProductionValueV2(command.brief)
+    : null
+  let preparedSourcePlan: ProductSourcePlanV1 | null = null
+  let preparedConfirmedBrief: ConfirmedProductBriefV1 | null = null
+  let preparedCreatorSource: {
+    locator: TextOpenWorldCreatorSourceLocatorV1
+    binding: TextOpenWorldCreatorSourceBindingV1
+    bindingHash: string
+    summary: TextOpenWorldCreatorSourceSummaryV1
+  } | null = null
+  let preparedCreatorBrief: TextOpenWorldCreatorBriefV1 | null = null
+  let preparedCreatorEvidence: {
+    runId: number
+    localContractHash: string
+    bindingHash: string
+    candidateHash: string
+    terminalReceiptHash: string
+  } | null = null
+  let preparedCreatorStart: TextOpenWorldCreatorStartPreparationV1 | null = null
+  let preparedCreatorRepair: TextOpenWorldCreatorRepairPreparationV1 | null = null
+  let preparedCreatorRepairAuthorization: TextOpenWorldCreatorRepairAuthorizationV1 | null = null
+  let preparedCreatorMedia: TextOpenWorldCreatorMediaPreparationV1 | null = input.preparedCreatorMedia ?? null
+  let preparedCreatorMediaAuthorization: TextOpenWorldCreatorMediaAuthorizationV1 | null = null
+  const preparedWorldReferenceHash = command.type === 'create-intent'
+    ? (await createWorldReferenceV1(command.worldReleaseId)).referenceHash
+    : null
+  const preparedTextRevision = command.type === 'revise-text-content'
+    ? await prepareTextContentRevisionV1(scope, input.productionId!, command) : null
+  if (command.type === 'revise-media-asset' && command.replacement) {
+    await readMediaBlobObjectData({
+      scope,
+      blobObjectId: command.replacement.blobObjectId,
+      expected: {
+        contentHash: command.replacement.contentHash,
+        byteSize: command.replacement.byteSize,
+        mimeType: command.replacement.mimeType,
+      },
+    })
+  }
+  if (command.type === 'save-brief-revision') {
+    if (!Number.isInteger(input.productionId)) {
+      throw new Error('[product-production] save-brief-revision 缺少 productionId')
+    }
+    const production = await productionInScope(scope, input.productionId!)
+    if (command.brief.aiTown) await assertAiTownWorldSourceSelectionHashV1(command.brief.aiTown.sourceSelection)
+    preparedSourcePlan = await createProductProductionSourcePlanV1({
+      scope,
+      productionKey: production.productionKey,
+      brief: command.brief,
+      createdAt: input.now,
+    })
+  } else if (command.type === 'create-text-open-world-intent'
+    || command.type === 'save-text-open-world-creator-brief') {
+    const inspected = await inspectTextOpenWorldCreatorSourceLocatorV1({
+      scope,
+      locator: command.sourceLocator,
+    })
+    if (command.type === 'create-text-open-world-intent') {
+      if (inspected.bindingHash !== command.expectedSourceBindingHash) {
+        throw new Error('[product-production] 文字开放世界 intent 来源已变化')
+      }
+      preparedCreatorSource = {
+        locator: command.sourceLocator,
+        binding: inspected.binding,
+        bindingHash: inspected.bindingHash,
+        summary: inspected.summary,
+      }
+    } else {
+      if (!Number.isInteger(input.productionId)) {
+        throw new Error('[product-production] save-text-open-world-creator-brief 缺少 productionId')
+      }
+      const production = await productionInScope(scope, input.productionId!)
+      preparedCreatorBrief = await verifyTextOpenWorldCreatorBriefV1(command.brief)
+      if (production.productType !== 'text-open-world'
+        || preparedCreatorBrief.productInstanceKey !== production.productionKey
+        || preparedCreatorBrief.sourceBindingHash !== inspected.bindingHash
+        || canonicalProductProductionJsonV2(preparedCreatorBrief.sourceBinding)
+          !== canonicalProductProductionJsonV2(inspected.binding)
+        || canonicalProductProductionJsonV2(preparedCreatorBrief.sourceSummary)
+          !== canonicalProductProductionJsonV2(inspected.summary)) {
+        throw new Error('[product-production] Creator Brief 与当前来源复验不一致')
+      }
+      const snapshot = await readAgentRunV1(scope, command.candidateRunId)
+      const step = snapshot.projection.steps[TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1]
+      const runContextManifestHashes = snapshot.events.flatMap(event => (
+        event.type === 'context.assembled'
+          && event.payload.stepId === TEXT_OPEN_WORLD_CREATOR_BRIEF_STEP_ID_V1
+          ? [event.payload.manifestHash]
+          : []
+      ))
+      const expectedTerminalReceipt = await createVerificationReceiptV1({
+        version: 1,
+        runId: snapshot.run.id,
+        generation: snapshot.projection.generation,
+        contractHash: snapshot.run.contractHash,
+        contextManifestHashes: preparedCreatorBrief.candidateEvidence.contextManifestHashes,
+        candidateHashes: [
+          preparedCreatorBrief.candidateEvidence.candidateHash,
+          preparedCreatorBrief.briefHash,
+        ],
+        adoptionEventIds: [],
+        postStateHash: preparedCreatorBrief.briefHash,
+        verifierSetVersion: TEXT_OPEN_WORLD_CREATOR_BRIEF_VERIFIER_V1,
+        criteria: [
+          { id: 'creator-brief.protocol-valid', status: 'passed', evidenceRefs: [`brief:${preparedCreatorBrief.briefHash}`] },
+          { id: 'creator-brief.source-bound', status: 'passed', evidenceRefs: [`source:${preparedCreatorBrief.sourceBindingHash}`] },
+          { id: 'creator-brief.author-confirmed', status: 'passed', evidenceRefs: [`candidate:${preparedCreatorBrief.candidateEvidence.candidateHash}`] },
+          { id: 'creator-brief.no-unresolved-items', status: 'passed', evidenceRefs: ['unresolved:0'] },
+        ],
+        acceptedAt: preparedCreatorBrief.confirmedAt,
+      })
+      if (snapshot.projection.state !== 'completed' || !snapshot.projection.terminalReceiptHash
+        || snapshot.contract.runtimeBindingHash !== preparedCreatorBrief.candidateEvidence.runBindingHash
+        || step?.confirmation !== 'adopt'
+        || step?.candidateHash !== preparedCreatorBrief.candidateEvidence.candidateHash
+        || step.outputHash !== preparedCreatorBrief.briefHash
+        || runContextManifestHashes.length !== preparedCreatorBrief.candidateEvidence.contextManifestHashes.length
+        || runContextManifestHashes.some((hash, index) => (
+          hash !== preparedCreatorBrief!.candidateEvidence.contextManifestHashes[index]
+        ))
+        || snapshot.projection.terminalReceiptHash !== expectedTerminalReceipt.receiptHash) {
+        throw new Error('[product-production] Creator Brief 的 durable Run 尚未完成或候选证据不一致')
+      }
+      preparedCreatorEvidence = {
+        runId: snapshot.run.id,
+        localContractHash: snapshot.run.contractHash,
+        bindingHash: snapshot.contract.runtimeBindingHash,
+        candidateHash: step.candidateHash,
+        terminalReceiptHash: snapshot.projection.terminalReceiptHash,
+      }
+      preparedCreatorSource = {
+        locator: command.sourceLocator,
+        binding: inspected.binding,
+        bindingHash: inspected.bindingHash,
+        summary: inspected.summary,
+      }
+    }
+  } else if (command.type === 'authorize-text-open-world-creator-start') {
+    if (!Number.isInteger(input.productionId)) {
+      throw new Error('[product-production] Creator start 缺少 productionId')
+    }
+    const aiState = useAIConfigStore.getState()
+    preparedCreatorStart = await createTextOpenWorldCreatorStartPreparationV1({
+      scope,
+      productionId: input.productionId!,
+      briefRevision: command.briefRevision,
+      briefHash: command.briefHash,
+      expectedStateRevision: command.expectedStateRevision,
+      sourceLocator: command.sourceLocator,
+      preflight: command.preflight,
+      confirmation: command.confirmation,
+      aiConfig: aiState.config,
+      rememberApiKey: aiState.rememberApiKey,
+      rightsBasis: command.rightsBasis,
+      rightsNote: command.rightsNote,
+      authorizationNonce: command.authorizationNonce,
+      authorizedAt: command.authorizedAt,
+    })
+    if (preparedCreatorStart.start.productionPlanHash !== command.expectedPlanHash) {
+      throw new Error('[product-production] 作者核对后的生产 Plan 已变化')
+    }
+  } else if (command.type === 'authorize-start') {
+    if (!Number.isInteger(input.productionId)) {
+      throw new Error('[product-production] authorize-start 缺少 productionId')
+    }
+    const production = await productionInScope(scope, input.productionId!)
+    const briefRow = await db.productProductionBriefs
+      .where('[productionId+revision]').equals([production.id, command.briefRevision]).first()
+    if (!briefRow || briefRow.briefHash !== command.briefHash) {
+      throw new Error('[product-production] authorize-start 的 Brief 不存在或 hash 已变化')
+    }
+    const storedBrief = parseProductProductionBriefV3(briefRow.briefJson)
+    if (storedBrief.aiTown) await assertAiTownWorldSourceSelectionHashV1(storedBrief.aiTown.sourceSelection)
+    if (briefRow.briefKind !== 'text-open-world-creator-v1') {
+      preparedSourcePlan = await parseProductProductionSourcePlanV1(briefRow)
+      preparedConfirmedBrief = await createConfirmedProductBriefV1({
+        productionKey: production.productionKey,
+        briefRow,
+        sourcePlan: preparedSourcePlan,
+        authorStartRevision: command.expectedStateRevision,
+        confirmedAt: input.now,
+      })
+      await assertFormalProductProductionStartV1({
+        sourcePlan: preparedSourcePlan,
+        confirmedBrief: preparedConfirmedBrief,
+        authorStartRevision: command.expectedStateRevision,
+      })
+    }
+  } else if (command.type === 'authorize-text-open-world-creator-repair') {
+    if (!Number.isInteger(input.productionId)) {
+      throw new Error('[product-production] Creator repair 缺少 productionId')
+    }
+    const production = await productionInScope(scope, input.productionId!)
+    const build = await db.productBuilds
+      .where('[productionId+buildNumber]')
+      .equals([production.id, command.baseBuildNumber])
+      .first()
+    if (!build?.id) throw new Error('[product-production] Creator repair base Build 不存在')
+    preparedCreatorRepair = await prepareTextOpenWorldCreatorArtifactRepairV1({
+      scope,
+      productionId: production.id,
+      buildId: build.id,
+    })
+    if (preparedCreatorRepair.baseBuild.planHash !== command.expectedBasePlanHash
+      || preparedCreatorRepair.impactPlan.handoffSetHash !== command.expectedHandoffSetHash
+      || preparedCreatorRepair.impactPlan.impactPlanHash !== command.expectedImpactPlanHash
+      || preparedCreatorRepair.targetPlanHash !== command.expectedTargetPlanHash) {
+      throw new Error('[product-production] Creator repair 预览 Hash 已变化')
+    }
+    preparedCreatorRepairAuthorization = await createTextOpenWorldCreatorRepairAuthorizationV1({
+      prepared: preparedCreatorRepair,
+      expectedStateRevision: command.expectedStateRevision,
+      authorizationNonce: command.authorizationNonce,
+      authorizedAt: command.authorizedAt,
+    })
+  } else if (command.type === 'authorize-text-open-world-creator-media') {
+    const supplied = preparedCreatorMedia
+    if (!Number.isInteger(input.productionId) || !supplied) {
+      throw new Error('[product-production] Creator media 缺少 productionId 或本地媒资准备结果')
+    }
+    const production = await productionInScope(scope, input.productionId!)
+    preparedCreatorMedia = await prepareTextOpenWorldCreatorMediaV1({
+      scope,
+      productionId: production.id,
+      buildId: supplied.baseBuild.id,
+      mode: supplied.mediaPlan.mode,
+      maximumCostUsd: supplied.mediaPlan.mode === 'provider-generate'
+        ? supplied.mediaPlan.capability.maximumCostUsd
+        : undefined,
+      provider: supplied.provider,
+      imports: supplied.imports.map(item => ({
+        artifactKey: item.descriptor.artifactKey,
+        slotKey: item.descriptor.slotKey,
+        blobObjectId: item.blobObjectId,
+        name: item.descriptor.name,
+        altText: item.descriptor.altText,
+        source: item.descriptor.source,
+        license: item.descriptor.license,
+        rightsBasis: item.descriptor.rightsBasis,
+        rightsNote: item.descriptor.rightsNote,
+      })),
+    })
+    if (preparedCreatorMedia.production.id !== production.id
+      || preparedCreatorMedia.production.stateRevision !== command.expectedStateRevision
+      || preparedCreatorMedia.baseBuild.buildNumber !== command.baseBuildNumber
+      || preparedCreatorMedia.baseBuild.planHash !== command.expectedBasePlanHash
+      || preparedCreatorMedia.mediaPlan.planHash !== command.expectedMediaPlanHash
+      || preparedCreatorMedia.targetPlanHash !== command.expectedTargetPlanHash
+      || preparedCreatorMedia.mediaPlan.mode !== command.mode) {
+      throw new Error('[product-production] Creator media 预览 Hash 或本地准备结果已变化')
+    }
+    preparedCreatorMediaAuthorization = await createTextOpenWorldCreatorMediaAuthorizationV1({
+      prepared: preparedCreatorMedia,
+      expectedStateRevision: command.expectedStateRevision,
+      authorizationNonce: command.authorizationNonce,
+      authorizedAt: command.authorizedAt,
+    })
+  }
+  let preparedPausedBuild: PreparedPausedBuildV1 | null = null
+  if (command.type === 'resume') {
+    const production = await productionInScope(scope, input.productionId!)
+    const before = await currentBuild(production)
+    const runs: PreparedPausedBuildV1['runs'] = []
+    const after = await prepareLegacyPausedProductBuildV1(scope, before, run => {
+      runs.push({ id: run.id, lastSequence: run.lastSequence, contractHash: run.contractHash, projectionHash: run.projectionHash })
+    })
+    preparedPausedBuild = { before, after, runs }
+  }
+  const request = {
+    preparedTextRevision,
+    scope,
+    productionId: input.productionId,
+    command,
+    payloadHash,
+    preparedBriefHash,
+    preparedSourcePlan,
+    preparedConfirmedBrief,
+    preparedCreatorSource,
+    preparedCreatorBrief,
+    preparedCreatorEvidence,
+    preparedCreatorStart,
+    preparedPausedBuild,
+    preparedCreatorRepair,
+    preparedCreatorRepairAuthorization,
+    preparedCreatorMedia,
+    preparedCreatorMediaAuthorization,
+    preparedWorldReferenceHash,
+    emptyHash,
+    now,
+  }
+  let receipt: ProductProductionCommandReceiptV1
+  try {
+    receipt = await executeTransaction(request)
+  } catch (cause) {
+    if (!(cause instanceof Dexie.ConstraintError)) throw cause
+    // Another connection won a unique command/production claim. Re-read the
+    // durable receipt instead of blindly replaying domain mutations.
+    receipt = await executeTransaction(request)
+  }
+  notifyProductionChanged(receipt)
+  return receipt
+}

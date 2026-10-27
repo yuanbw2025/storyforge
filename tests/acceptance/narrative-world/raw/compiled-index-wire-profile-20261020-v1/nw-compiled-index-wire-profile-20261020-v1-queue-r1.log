@@ -1,8 +1,0 @@
-[serial-ci] Waiting for the shared CI slot.
-[serial-ci] Acquired slot in /Users/qinyingying/.codex/worktrees/nw-mainline-refresh-20261016/storyforge
-{"starting": "diff-check", "at": "2026-10-20T04:41:18.342891+00:00", "log": "/tmp/nw-compiled-index-wire-profile-20261020-v1-diff-check.log"}
-{"completed": "diff-check", "exitCode": 0}
-{"starting": "profile", "at": "2026-10-20T04:41:20.920357+00:00", "log": "/tmp/nw-compiled-index-wire-profile-20261020-v1-profile.log"}
-{"completed": "profile", "exitCode": 0}
-{"exitCode": 0, "terminal": "/tmp/nw-compiled-index-wire-profile-20261020-v1-terminal.json", "sourceUnchanged": true}
-[serial-ci] Released slot; exit code 0

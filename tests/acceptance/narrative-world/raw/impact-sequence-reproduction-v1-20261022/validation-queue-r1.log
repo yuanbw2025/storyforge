@@ -1,6 +1,0 @@
-[serial-ci] Waiting for the shared CI slot.
-[serial-ci] Acquired slot in /private/tmp/nw-impact-sequence-20261022-v1/reproduction
-{"starting": "confirmed-sequence", "at": "2026-10-22T09:57:53.495607+00:00"}
-{"completed": "confirmed-sequence", "exitCode": 1}
-{"exitCode": 1, "terminal": "/tmp/nw-impact-sequence-20261022-v1/reproduction/validation-terminal.json"}
-[serial-ci] Released slot; exit code 1

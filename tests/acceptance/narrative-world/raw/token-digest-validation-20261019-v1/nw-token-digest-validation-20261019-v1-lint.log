@@ -1,7 +1,0 @@
-
-/Users/qinyingying/.codex/worktrees/nw-mainline-refresh-20261016/storyforge/src/lib/narrative-domain/json.ts
-  16:42  warning  Unused eslint-disable directive (no problems were reported from 'no-control-regex')
-
-✖ 1 problem (0 errors, 1 warning)
-  0 errors and 1 warning potentially fixable with the `--fix` option.
-

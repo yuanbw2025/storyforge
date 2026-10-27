@@ -1,2 +1,0 @@
-{"baselinePayloadUnchanged": true, "currentFingerprintCount": 232, "v22ChangedInputs": ["scripts/evaluate-narrative-reader-local-codex.mjs", "tests/acceptance/narrative-world/manifest-v1.json"], "productionSourceUnchanged": true, "historicalRawHashesUnchanged": 484, "modelCalls": 0}
-Baseline input fingerprint replay matches exactly.

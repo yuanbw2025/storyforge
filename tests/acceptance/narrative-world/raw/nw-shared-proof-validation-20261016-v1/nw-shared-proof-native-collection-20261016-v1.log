@@ -1,5 +1,0 @@
-Listing tests:
-  [chromium] › narrative-query.spec.ts:3:1 › experimental author browser queries frozen facts and plans, then changes to a bounded character perspective without truth leakage
-  [chromium] › narrative-query.spec.ts:58:1 › author can read shared original evidence while fulfilled and pending developments stay in their own views after refresh
-  [chromium] › narrative-query.spec.ts:110:1 › legacy author outlet lists an empty search and does not turn directory counts into narrative capabilities
-Total: 3 tests in 1 file

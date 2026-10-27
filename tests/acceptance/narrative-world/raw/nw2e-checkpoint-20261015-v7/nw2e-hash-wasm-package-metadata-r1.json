@@ -1,6 +1,0 @@
-{
-  "version": "4.12.0",
-  "dist.integrity": "sha512-+/2B2rYLb48I/evdOIhP+K/DD2ca2fgBjp6O+GBEnCDk2e4rpeXIK8GvIyRPjTezgmWn9gmKwkQjjx6BtqDHVQ==",
-  "dist.tarball": "https://registry.npmjs.org/hash-wasm/-/hash-wasm-4.12.0.tgz",
-  "license": "MIT"
-}

@@ -1,0 +1,508 @@
+# AI 行为说明书（自动生成 · 请勿手动编辑）
+
+> 由 `scripts/generate-ai-manual.mjs` 从代码扫描生成。
+> 修改 AI 行为后请运行 `npm run gen:ai-manual` 重新生成。CI 用 `npm run check:ai-manual` 校验一致性。
+> 语义注解(每个动作的业务意图/坑)写在 `AI-FUNCTIONS-MANUAL.semantic.md`(手工维护)。
+
+---
+
+## 一、Prompt 模板清单（PromptModuleKey 事实源）
+
+共 65 个唯一 moduleKey，210 条内置模板定义。
+
+| moduleKey | 模板数 | 代表名称 | 说明 | 读取变量 |
+|---|---:|---|---|---|
+| `worldview.dimension` | 6 | 内置-世界观维度生成 | 为世界观的单个维度（地理/历史/社会/文化/经济/规则/摘要）生成内容。 | `projectName` `genres` `dimension` `worldContext` `worldRulesContext` `userHint` `isSummary` |
+| `character.generate` | 6 | 内置-角色完整设计 | 基于世界观和已有角色，设计一个新角色的完整资料。 | `projectName` `genres` `worldContext` `existingCharacters` `userHint` |
+| `character.dimension` | 1 | 内置-角色维度补全 | 为指定角色的某个维度（背景/性格/能力等）补充约 200-400 字的细节。 | `characterName` `characterInfo` `worldContext` `dimension` |
+| `outline.volume` | 8 | 内置-卷级大纲生成 | 基于世界观与故事核心生成全书的卷级大纲。 | `projectName` `genres` `targetWordCount` `worldContext` `storyCore` `characterContext` `worldRulesContext` `existingVolumesContext` `userHint` |
+| `outline.chapter` | 1 | 内置-章节大纲展开 | 将单卷展开为 15-25 章的章节大纲。 | `volumeTitle` `volumeSummary` `worldContext` `prevVolumeSummary` `characterContext` `worldRulesContext` `userHint` |
+| `chapter.content` | 22 | 内置-长篇连载（默认） | 通用男频网文风格的章节正文生成，支持基调/节奏/字数三个可调参数。 | `chapterTitle` `chapterSummary` `worldContext` `characters` `previousChapterEnding` `worldRulesContext` `userHint` |
+| `chapter.continue` | 6 | 内置-章节续写 | 从已有正文末尾继续往下写约 1000-2000 字。 | `chapterSummary` `worldContext` `existingContent` `userHint` |
+| `chapter.memory` | 1 | 内置-章节连续性记忆 | 一次调用同时提取章节摘要、下一章承接 handoff 与计划正文对账；引文 offset 由系统回查，不信任模型位置。 | `chapterTitle` `chapterPlan` `nextChapterPlan` `chapterText` |
+| `chapter.polish` | 1 | 内置-文本润色 | 按用户指令润色文本，保持原意不变。 | `instruction` `text` |
+| `chapter.expand` | 1 | 内置-文本扩写 | 将文本扩展丰富，增加细节、心理与环境，情节走向不变。 | `userHint` `text` |
+| `chapter.condense` | 1 | 内置-文本缩写 | 在保留事实、因果与人物立场的前提下压缩局部正文。 | `text` |
+| `chapter.rewrite` | 1 | 内置-保真改写 | 以不同表达重写局部正文，同时保持故事事实和信息边界。 | `text` |
+| `chapter.check` | 1 | 内置-局部正文查漏 | 检查局部正文中的可核对问题，只给报告，不生成替换稿。 | `text` |
+| `chapter.de-ai` | 1 | 内置-去 AI 味改写 | 把 AI 味重的文本改写得更像真人写的。 | `text` |
+| `foreshadow.generate` | 2 | 内置-伏笔建议 | 基于世界观、角色和已有伏笔，建议 3-5 个新伏笔。 | `projectName` `genres` `worldContext` `characters` `existingForeshadows` `hasNoForeshadows` |
+| `geography.concept-map` | 1 | 内置-概念地图 SVG | 基于地点列表生成奇幻风格的 SVG 概念地图。 | `overview` `locationList` |
+| `geography.image-map-prompt` | 1 | 内置-地图图像 Prompt | 生成 Midjourney/DALL-E/SD 的世界地图绘图 prompt。 | `imageStyle` `projectName` `locationNames` `locationTypes` |
+| `worldview.generate` | 0 | — | — | — |
+| `worldview.worldbuilding` | 12 | 小说内容-P05-A-叙事最小世界规格 | 世界观 · 世界观 · 叙事最小世界规格。 使用现有模板或工作流运行。 | `story_core` `characters` `genre_promise` `research_boundary` `existing_world` `userHint` |
+| `story.generate` | 6 | 内置-故事核心生成 | 基于已有世界观和用户提示，生成故事的某个维度（一句话/概念/主题/核心冲突等）。 | `projectName` `genres` `dimension` `worldContext` `userHint` |
+| `story.brief` | 1 | 小说内容-P00-A-小说立项：创作任务简报与缺口诊断 | 立项 · 立项 · 小说立项：创作任务简报与缺口诊断。 使用现有模板或工作流运行。 | `raw_intent` `existing_materials` `explicit_constraints` `length_mode` `serialization_mode` `genre_candidates` `target_readers` `delivery_form` `userHint` |
+| `story.ideation` | 1 | 小说内容-P01-A-灵感阶段：混杂素材净化与原创灵感卡 | 灵感 · 灵感 · 灵感阶段：混杂素材净化与原创灵感卡。 使用现有模板或工作流运行。 | `materials` `author_direction` `userHint` |
+| `story.positioning` | 1 | 小说内容-P02-A-定位阶段：题材、读者承诺与差异化 | 定位 · 定位 · 定位阶段：题材、读者承诺与差异化。 使用现有模板或工作流运行。 | `story_direction` `length_mode` `delivery_mode` `author_preferences` `candidate_genres` `userHint` |
+| `story.core` | 5 | 小说内容-P03-A-故事核心：概念筛选与前提压力测试 | 故事核心 · 故事核心 · 故事核心：概念筛选与前提压力测试。 使用现有模板或工作流运行。 | `creative_brief` `genre_promise` `candidate_ideas` `author_nonnegotiables` `userHint` |
+| `story.packaging` | 5 | 小说内容-P16-A-书名发散与筛选 | 包装 · 包装 · 书名发散与筛选。 使用现有模板或工作流运行。 | `core` `genre` `tone` `avoid` `userHint` |
+| `rules.generate` | 1 | 内置-创作规则生成 | 基于项目类型和世界观，建议适配的创作规则（风格/视角/基调/禁忌等）。 | `projectName` `genres` `dimension` `worldContext` `storyCore` `userHint` |
+| `research.method` | 7 | 小说内容-P04-A-研究问题树与最小考证计划 | 研究考证 · 研究考证 · 研究问题树与最小考证计划。 使用现有模板或工作流运行。 | `story_core` `time_place` `key_scenes` `domains` `fictionalization` `existing_sources` `userHint` |
+| `prompt.operations` | 5 | 小说内容-P17-A-Prompt 运行复盘与差异归因 | Prompt 管理 · Prompt 管理 · Prompt 运行复盘与差异归因。 使用现有模板或工作流运行。 | `metadata` `input` `output` `accepted` `feedback` `userHint` |
+| `detail.scene` | 1 | 内置-细纲场景生成 | 把单章大纲展开为若干场景（每个场景含人物 / 地点 / 冲突 / 节奏）。 | `chapterTitle` `chapterSummary` `worldContext` `characters` `previousChapterEnding` `userHint` |
+| `detail.chapter-planning` | 5 | 小说内容-P10-A-章节任务单 | 章场规划 · 章场规划 · 章节任务单。 使用现有模板或工作流运行。 | `volume_goal` `chapter_outline` `previous_actual` `next_plan` `states` `userHint` |
+| `character.design` | 13 | 小说内容-P06-A-核心人物压力模型 | 人物 · 人物 · 核心人物压力模型。 使用现有模板或工作流运行。 | `story_core` `world_pressure` `character` `story_role` `userHint` |
+| `outline.plot` | 22 | 小说内容-P07-A-目标—动机—冲突发动机 | 剧情 · 剧情 · 目标—动机—冲突发动机。 使用现有模板或工作流运行。 | `story_core` `characters` `world_constraints` `length_mode` `userHint` |
+| `outline.structure` | 1 | 小说内容-P08-A-结构阶段：结构模型选择与全书转折 | 结构 · 结构 · 结构阶段：结构模型选择与全书转折。 使用现有模板或工作流运行。 | `story_core` `character_arcs` `world_and_constraints` `genre_promise` `length_mode` `delivery_mode` `target_words` `known_ending` `userHint` |
+| `outline.long-form` | 4 | 小说内容-P09L-A-全书阶段与卷级架构 | 长篇架构 · 长篇架构 · 全书阶段与卷级架构。 使用现有模板或工作流运行。 | `story_core` `major_turns` `character_arcs` `plot_lines` `target_length` `written_progress` `userHint` |
+| `outline.short-story` | 4 | 小说内容-P09S-A-短篇核心变化设计 | 短篇架构 · 短篇架构 · 短篇核心变化设计。 使用现有模板或工作流运行。 | `idea` `target_words` `emotion_or_insight` `rules` `userHint` |
+| `outline.serialization` | 4 | 小说内容-P09R-A-阶段阅读回报规划 | 连载架构 · 连载架构 · 阶段阅读回报规划。 使用现有模板或工作流运行。 | `outline` `genre_promise` `range` `parameters` `userHint` |
+| `chapter.drafting` | 6 | 小说内容-P11-A-首章草稿 | 正文 · 正文 · 首章草稿。 使用现有模板或工作流运行。 | `brief` `core` `plan` `characters` `world` `style` `words` `userHint` |
+| `chapter.continuity` | 6 | 小说内容-P12-A-章节记忆与结尾交接 | 连续性 · 连续性 · 章节记忆与结尾交接。 使用现有模板或工作流运行。 | `title` `text` `previous` `userHint` |
+| `chapter.line-editing` | 0 | — | — | — |
+| `review.developmental` | 5 | 小说内容-P13-A-全稿发展性诊断 | 宏观修订 · 宏观修订 · 全稿发展性诊断。 使用现有模板或工作流运行。 | `brief` `promise` `outline` `manuscript` `questions` `userHint` |
+| `review.line-editing` | 6 | 小说内容-P14-A-场景级诊断与定向修订 | 语言修订 · 语言修订 · 场景级诊断与定向修订。 使用现有模板或工作流运行。 | `scene` `context` `goal` `allowed` `userHint` |
+| `review.reader-validation` | 5 | 小说内容-P15-A-首章盲读轨迹 | 读者验证 · 读者验证 · 首章盲读轨迹。 使用现有模板或工作流运行。 | `reader` `chapter` `userHint` |
+| `import.parse-character` | 1 | 内置-角色文档解析 | 从用户上传的角色设定文档中抽取结构化角色数据（JSON）。 | `rawDocument` |
+| `import.parse-worldview` | 1 | 内置-世界观文档解析 | 从世界观设定文档中抽取结构化字段（JSON）。 | `rawDocument` |
+| `import.parse-outline` | 1 | 内置-大纲文档解析 | 从大纲文档中抽取结构化卷/章节树（JSON 数组）。 | `rawDocument` |
+| `import.parse-all` | 1 | 内置-智能统一解析 | 一次性从任意文档中提取世界基础、地理、历史、角色、大纲章节与写作技法。 | `rawDocument` |
+| `import.parse-chunk` | 1 | 内置-分块解析（大文档流水线） | 针对百万字级小说，把原文切成多块后逐块抽取世界基础、地理、历史、角色、大纲与词条候选。 | `chunkIndex` `totalChunks` `knownContext` `codexCategoryCatalog` `rawDocument` |
+| `import.merge-characters` | 1 | 内置-角色跨块合并 | 检查分块导出的角色清单，判断哪些是同一人（别名 / 尊称 / 昵称）应合并。 | `characterList` |
+| `relation.extract` | 1 | 内置-角色关系提取 | 从大纲摘要和章节正文中自动提取角色间的关系。 | `projectName` `characterList` `outlineSummary` `chapterContent` |
+| `plot.character-driven` | 1 | 内置-角色驱动剧情 | 根据角色初始状态与目标状态，AI 生成中间情节推演（卷/章大纲结构）。 | `projectName` `genres` `worldContext` `storyCore` `existingOutline` `characterArcs` `userHint` `worldRulesContext` |
+| `plot.character-revision` | 1 | 内置-角色变更影响分析 | 分析创作中途的角色变化，把已写区、过渡区和未写区分开，并输出可审查的大纲 patch。 | `revisionContext` |
+| `inspiration.reverse` | 1 | 内置-灵感反推 | 用户写碎片想法，AI 反向生成世界观草稿、故事核心、初始角色卡。 | `projectName` `genres` `inspiration` `userHint` |
+| `inspiration.reverse.multiworld` | 1 | 内置-多世界灵感反推 | 多世界题材：用户给出带有多个世界意图的灵感，AI 顺着思路反推故事主线 + 多个世界 + 角色。 | `projectName` `genres` `inspiration` `userHint` |
+| `world-group.suggest` | 1 | 内置-AI建议世界 | 诸天流/无限流等多世界题材，根据故事概念和已有世界建议新的世界组。 | `projectName` `genres` `concept` `existingWorlds` `userHint` |
+| `world-group.expand` | 1 | 内置-AI扩写世界 | 根据世界的草稿描述，扩展出完整的世界观设定。 | `worldName` `worldType` `draft` `otherWorlds` `storyCore` `userHint` |
+| `inventory.extract` | 1 | 内置-物品栏提取 | 从章节正文提取各角色的物品获得/消耗事件，构建按角色归属的物品栏。 | `knownItemNames` `characterNames` `chapterTitle` `chapterText` |
+| `codex.extract` | 1 | 内置-词条拆分提取 | 把整段世界观内容拆成当前分类下可确认写入的结构化词条。 | `categoryName` `fieldSchema` `existingEntries` `supplementTags` `sourceText` |
+| `codex.enrich` | 1 | 内置-词条创意补全 | 根据已登记世界 Canon 为当前分类提出新词条建议。 | `baselineContext` `worldContext` `authorRequest` `supplementTags` |
+| `location.extract` | 1 | 内置-重要地点提取 | 从已写正文中提取反复出现或推动剧情的重要地点候选。 | `existingEntries` `allowedTags` `sourceText` |
+| `story-timeline.extract` | 1 | 内置-故事年表提取 | 从章节正文提取剧情大事，构建故事进程年表（区别于世界背景历史）。 | `chapterTitle` `chapterText` |
+| `scene.verify` | 1 | 内置-场景考证 | 用户描述当前场景，AI 结合世界观/历史年表/世界规则给出符合背景的细节、时代错乱警示与情节灵感。 | `worldContext` `historyContext` `worldRulesContext` `scene` `sceneEra` `sceneLocation` |
+| `history.consult` | 1 | 内置-历史考据 agent | 历史年表条目的考据 agent。挑剔但合作，绝不顺着作者的错误假设编造细节；尊重作者已声明的艺术改造/架空范围。 | `itemMeta` `finalText` `conceptNote` `consultPrompt` `worldContext` |
+| `history.storm` | 1 | 内置-头脑风暴 agent | 历史年表条目的头脑风暴 agent。围绕作者已设定的方向发散可写素材，尊重作者声明的艺术改造范围。 | `itemMeta` `finalText` `conceptNote` `stormPrompt` `worldContext` |
+| `style.learn` | 1 | 内置-文风学习 | 从用户已定稿/润色的章节中,总结出其个人写作文风画像,供后续章节生成参考。 | `sampleCount` `sampleWords` `samples` `revisionPairs` `calibrationFeedback` `userHint` |
+| `style.calibrate` | 1 | 内置-文风互动校准 | 按现有文风画像和作者认可的改稿对照重写一段短文，供作者比较、反馈并沉淀新样本。 | `profile` `revisionPairs` `calibrationFeedback` `sourceText` |
+
+## 二、上下文源清单（CONTEXT_SOURCES · AI 读什么）
+
+共 135 个上下文源。assembleContext({ sourceKeys }) 按 key 装配。
+
+| key | 标签 | 作用域 | 层级 | 预算(token) |
+|---|---|---|---|---|
+| `extensionRecords` | 插件冻结任务与自有记录 | project | L0 | 24000 |
+| `shortNovel.production` | 短篇已确认生产合同 | project | L0 | 8000 |
+| `shortNovel.manuscript` | 短篇当前结构与正文 | project | L0 | 64000 |
+| `worldRelease` | 冻结世界版本资源 | manual | L0 | 100000 |
+| `ttrpgRuntime` | 正式 TTRPG 主持人运行视角 | runtime | L0 | 10000 |
+| `ttrpgPrivateGuidance` | 正式 TTRPG 单角色私密指引 | runtime | L0 | 8000 |
+| `ttrpgDirector` | 正式 TTRPG AI KP 决策与冻结揭示条件 | runtime | L0 | 12000 |
+| `ttrpgPublicNarration` | 正式 TTRPG 已授权公开叙述素材 | runtime | L0 | 10000 |
+| `ttrpgNpcRuntime` | 正式 TTRPG NPC 独立知情视角 | runtime | L0 | 10000 |
+| `ttrpgPlayerRuntime` | 正式 TTRPG 单角色玩家运行视角 | runtime | L0 | 10000 |
+| `ai-town.authoring` | AI 小镇 作者方案与会谈 | project | L0 | 16000 |
+| `avg.authoring` | AVG 作者方案与会谈 | project | L0 | 16000 |
+| `chat.authoring` | 角色聊天作者方案与会谈 | project | L0 | 16000 |
+| `product-production.brief` | 已授权上层产品生产 Brief | project | L0 | 8000 |
+| `product-production.avg-task-inputs` | AVG 准确任务需求与依赖凭证 | project | L0 | 20000 |
+| `product-production.artifact-inputs` | 上层产品生产任务依赖 | project | L1 | 24000 |
+| `product-production.adventure-scene-script-inputs` | 文字冒险单幕分场写作投影 | project | L0 | 15100 |
+| `product-production.adventure-dialogue-inputs` | 文字冒险独立对白审校投影 | project | L0 | 12500 |
+| `product-production.adventure-visual-direction-inputs` | 文字冒险美术定向与完整正文投影 | project | L0 | 52000 |
+| `product-production.adventure-visual-quality-inputs` | 文字冒险独立图片审查投影 | project | L0 | 12500 |
+| `product-production.adventure-quality-inputs` | 文字冒险分区叙事质量审查投影 | project | L0 | 40000 |
+| `product-production.adventure-playtest-inputs` | 文字冒险试玩总监验收证据投影 | project | L0 | 8500 |
+| `product-production.adventure-repair-feedback` | 文字冒险上一轮质量修复反馈 | project | L0 | 6000 |
+| `text-open-world.source-pin` | 文字开放世界冻结来源与本批读取单元 | project | L0 | 100000 |
+| `text-open-world.creator-edit-target` | 文字开放世界 Creator Artifact 编辑目标 | project | L0 | 100000 |
+| `text-open-world.experience-input` | 文字开放世界作者授权体验设计输入 | project | L0 | 100000 |
+| `text-open-world.gameplay-ruleset-input` | 文字开放世界已确认体验与玩法规则输入 | project | L0 | 40000 |
+| `text-open-world.presentation-profile-input` | 文字开放世界界面表现与文字降级输入 | project | L0 | 40000 |
+| `text-open-world.player-build-input` | 文字开放世界已确认主角与玩法构筑输入 | project | L0 | 40000 |
+| `text-open-world.story-architecture-input` | 文字开放世界全局故事架构输入 | project | L0 | 100000 |
+| `text-open-world.region-skeleton-input` | 文字开放世界来源与故事空间骨架输入 | project | L0 | 100000 |
+| `text-open-world.mainline-input` | 文字开放世界严格顺序主线生产输入 | project | L0 | 100000 |
+| `text-open-world.significant-threads-input` | 文字开放世界重要故事线生产输入 | project | L0 | 100000 |
+| `text-open-world.region-narrative-packs-input` | 文字开放世界地区叙事生态生产输入 | project | L0 | 100000 |
+| `text-open-world.quest-skeletons-input` | 文字开放世界任务骨架与内容需求生产输入 | project | L0 | 100000 |
+| `text-open-world.progression-catalogs-input` | 文字开放世界成长与技能目录生产输入 | project | L0 | 80000 |
+| `text-open-world.encounter-catalog-input` | 文字开放世界敌人与遭遇目录生产输入 | project | L0 | 100000 |
+| `text-open-world.item-reward-catalog-input` | 文字开放世界物品与奖励目录生产输入 | project | L0 | 100000 |
+| `text-open-world.crafting-economy-input` | 文字开放世界配方与经济目录生产输入 | project | L0 | 100000 |
+| `text-open-world.npc-runtime-input` | 文字开放世界NPC运行规则目录生产输入 | project | L0 | 100000 |
+| `text-open-world.map-interaction-input` | 文字开放世界地图交互目录生产输入 | project | L0 | 100000 |
+| `text-open-world.quest-finalize-input` | 文字开放世界任务最终化与地区导演生产输入 | project | L0 | 180000 |
+| `text-open-world.scene-scripts-input` | 文字开放世界场景脚本与三类交互绑定生产输入 | project | L0 | 220000 |
+| `text-open-world.system-finalize-input` | 文字开放世界系统配置、媒资槽与内容预算收口输入 | project | L0 | 180000 |
+| `text-open-world.balance-review-input` | 文字开放世界平衡评审输入 | project | L0 | 120000 |
+| `text-open-world.semantic-review-input` | 文字开放世界叙事语义评审输入 | project | L0 | 220000 |
+| `product-production.quality-feedback` | 上层产品生产质量反馈 | project | L1 | 6000 |
+| `product-production.repair-feedback` | 当前制作任务的失败草稿与校验意见 | project | L1 | 12000 |
+| `product-production.evolution-base` | 游戏持续演化基线 | project | L0 | 12000 |
+| `adaptation.sourceManifest` | 改编来源清单 | project | L0 | 6000 |
+| `adaptation.sourceContent` | 改编来源正文 | project | L0 | 24000 |
+| `adaptation.currentBrief` | 已确认改编 Brief | project | L0 | 4000 |
+| `adaptation.currentPlan` | 已确认改编计划 | project | L0 | 6000 |
+| `adaptation.sourceFacts` | 已确认改编来源事实与因果图 | project | L0 | 10000 |
+| `adaptation.decisions` | 已确认改编决策 | project | L0 | 8000 |
+| `screenplay.currentScenes` | 当前剧本场景 | project | L0 | 16000 |
+| `screenplay.beats` | 已确认剧本 Beat Sheet | project | L0 | 12000 |
+| `screenplay.sceneCards` | 已确认剧本 Scene Cards | project | L0 | 16000 |
+| `screenplay.reviewIssues` | 开放剧本审查问题 | project | L0 | 10000 |
+| `comic.visualBible` | 漫画视觉圣经与视觉条目 | project | L0 | 12000 |
+| `comic.scriptBeats` | 已确认漫画脚本节拍 | project | L0 | 12000 |
+| `comic.pagePlans` | 已确认漫画分页与页节奏 | project | L0 | 14000 |
+| `comic.selectedMedia` | 漫画已选媒资证据 | project | L0 | 12000 |
+| `comic.reviewIssues` | 开放漫画审查问题 | project | L0 | 10000 |
+| `comic.currentPages` | 当前漫画页格 | project | L0 | 20000 |
+| `motionDrama.production` | 漫剧系列物料与当前分集生产状态 | project | L0 | 32000 |
+| `adventureRuntime` | 文字冒险玩家视角 | runtime | L0 | 8000 |
+| `textOpenWorldEvolutionRuntime` | 文字开放世界·内部状态演化玩家视角 | runtime | L0 | 8000 |
+| `openWorldRuntime` | 文字开放世界玩家视角 | runtime | L0 | 8000 |
+| `interactionRuntime` | 角色互动单一视角 | runtime | L0 | 8000 |
+| `aiTownRuntime` | 后日谈 AI 小镇居民单一视角 | runtime | L0 | 8000 |
+| `aiTownDirectorRuntime` | 后日谈 AI 小镇导演公开运行视角 | runtime | L0 | 10000 |
+| `productRuntime` | 冻结运行时状态 | runtime | L0 | 8000 |
+| `workStatus` | 作品概况 | project | L2 | 1200 |
+| `worldGroups` | 世界组目录 | project | L2 | 1500 |
+| `outlineTree` | 大纲树 | world | L2 | 6000 |
+| `searchResults` | 项目内搜索结果 | world | L2 | 2200 |
+| `ragSelection` | 作者选择的资料字段 | manual | L0 | 100000 |
+| `manualText` | 用户指定内容 | manual | L0 | 100000 |
+| `codexExtractionBaseline` | Codex 目标分类与既有词条闭集 | world | L0 | 8000 |
+| `historyAgentBaseline` | 历史 Agent 正式输入基线 | world | L0 | 12000 |
+| `referenceDerivedBaseline` | 参考分析派生 Agent 正式输入基线 | project | L0 | 36000 |
+| `styleLearningBaseline` | 文风学习正式输入基线 | project | L0 | 28000 |
+| `priorOutlineCandidate` | 同批次上一卷章纲候选 | runtime | L1 | 2400 |
+| `chapterContent` | 章节正文 | chapter | L0 | 100000 |
+| `cultivationProgressExtractionBaseline` | 修炼进度角色、体系 DAG 与既有事件闭集 | chapter | L0 | 30000 |
+| `contextMemo` | 上下文快照 | project | L3 | 1500 |
+| `chapterOutline` | 当前章节大纲 | node | L1 | 800 |
+| `adjacentChapterOutlines` | 相邻章纲 | node | L1 | 1000 |
+| `existingVolumeOutlines` | 已有卷大纲 | project | L1 | 2400 |
+| `outlineSummaries` | 大纲标题与摘要（分析） | project | L2 | 6000 |
+| `writtenChapters` | 已写章节正文（分析摘录） | project | L2 | 8000 |
+| `writtenChapterProgress` | 本卷已写正文进度 | node | L1 | 3000 |
+| `currentFacts` | 当前有效事实(事实账本投影) | chapter | L1 | 2000 |
+| `canonAssertions` | 世界宪法(已确认设定断言) | world | L1 | 1800 |
+| `constitutionScanSources` | 世界宪法扫描来源闭集 | project | L0 | 30000 |
+| `characterKnowledge` | 角色认知边界(认知账本投影) | chapter | L1 | 1600 |
+| `retrievedPassages` | 相关前文召回(NS-5 混合检索) | chapter | L2 | 2500 |
+| `consistencyReport` | 一致性报告 | chapter | L1 | 1800 |
+| `consistencyDossier` | 长期一致性档案 | chapter | L1 | 6000 |
+| `detailedOutline` | 本章细纲(场景拆解) | node | L1 | 1500 |
+| `previousChapterEnding` | 全局直接前驱原文尾部 | manual | L1 | 1800 |
+| `chapterContinuityHandoff` | 全局直接前驱连续性交接 | chapter | L1 | 1600 |
+| `previousPlanReconciliation` | 前章计划正文对账 | chapter | L1 | 1400 |
+| `recentChapterSummaries` | 当前世界最近已验证摘要 | chapter | L1 | 2200 |
+| `worldview` | 世界观 | world | L2 | 8000 |
+| `geography` | 地理环境 | world | L2 | 3000 |
+| `storyCore` | 故事核心 | project | L1 | 4000 |
+| `activeNarrativeBlueprint` | 当前选定叙事蓝图 | project | L1 | 5000 |
+| `characterDrivenPlan` | 角色驱动方案 | project | L1 | 5000 |
+| `powerSystem` | 力量规则与修炼路径 | world | L2 | 4000 |
+| `codex` | 设定词条 | world | L2 | 6000 |
+| `characters` | 角色档案 | world | L2 | 8000 |
+| `targetCharacter` | 本次目标角色完整设定 | world | L0 | 8000 |
+| `creativeRules` | 创作规则 | project | L1 | 1000 |
+| `worldRules` | 真实与幻想规则 | world | L1 | 1200 |
+| `historical` | 历史时间线 | world | L2 | 1800 |
+| `locations` | 重要地点 | project | L2 | 1200 |
+| `foreshadows` | 伏笔状态 | chapter | L2 | 1200 |
+| `foreshadowSuggestionBaseline` | 伏笔建议正式基线 | project | L0 | 8000 |
+| `storyArcs` | 故事线 | project | L2 | 1500 |
+| `storylineProgress` | 作者确认的故事线进度与交汇 | project | L1 | 1400 |
+| `cultivationProgress` | 作者确认的正文修炼进度 | world | L1 | 1000 |
+| `emotionBeats` | 情感节拍 | chapter | L1 | 1000 |
+| `stateCards` | 状态卡 | project | L2 | 1800 |
+| `itemLedger` | 物品流水 | project | L2 | 2400 |
+| `heldItems` | 当前已持有物品 | chapter | L1 | 1000 |
+| `storyTimeline` | 故事年表 | project | L2 | 2600 |
+| `storyTimelineTarget` | 目标故事年表事件 | project | L1 | 600 |
+| `characterRelations` | 角色关系 | project | L2 | 2200 |
+| `references` | 引用手法 | project | L3 | 2000 |
+| `userStyleProfile` | 我的文风 | project | L2 | 1800 |
+| `inspirationWorkspace` | 增量灵感工作区 | project | L0 | 11000 |
+| `characterFacts` | 该角色的剧情事实 | project | L1 | 1500 |
+| `characterPassages` | 该角色的正文表现 | project | L1 | 2500 |
+
+> 层级裁剪顺序:超预算时 L3 → L2 → L1 依次裁剪,L0 永不裁剪。
+
+## 三、AI 可写字段（FIELD_REGISTRY · adopt 写什么）
+
+AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(别名自动归一)。
+
+| 目标表 | 可写字段 |
+|---|---|
+| `adaptationCausalEdges` | `fromFactKey` `rationale` `relation` `sourceUnitKeys` `toFactKey` |
+| `adaptationDecisions` | `action` `rationale` `sourceFactKeys` `targetKeys` |
+| `adaptationProjects` | `brief` `plan` `visualBible` |
+| `adaptationSourceFacts` | `confidence` `kind` `sourceUnitKeys` `statement` `subjectKeys` |
+| `chapters` | `content` `continuityHandoff` `notes` `order` `outlineNodeId` `perspectiveCharacterId` `planReconciliation` `status` `summary` `summarySourceTextHash` `summaryTextNormalizationVersion` `title` `wordCount` |
+| `characterDrivenPlans` | `generatedVolumes` `status` |
+| `characterRelations` | `description` `fromCharacterId` `isBidirectional` `label` `relationType` `toCharacterId` |
+| `characters` | `abilities` `activeChapterRange` `appearance` `arc` `background` `cultivationStageId` `cultivationSystemId` `ending` `exitChapterId` `fears` `firstAppearChapterId` `firstAppearance` `goals` `habits` `homeWorldGroupId` `identity` `importantLocationId` `innerConflict` `isCrossWorld` `keyEvents` `location` `moralAxis` `motivation` `name` `narrativeStatus` `orderAxis` `personality` `powerLevel` `powerSystemId` `profile` `raceEntryId` `relationships` `roleWeight` `shortDescription` `signatureItem` `speechStyle` `statusEvidenceChapterId` `statusEvidenceStoryArcId` `statusProducerCandidateHash` `statusProducerContractHash` `statusReason` `storyRole` `strengths` `values` `weaknesses` |
+| `codexCategories` | `builtInKey` `domain` `fieldSchema` `hidden` `icon` `name` `order` `parentId` |
+| `codexEntries` | `categoryId` `cultivationStageId` `cultivationSystemId` `description` `fields` `icon` `importance` `importantLocationId` `name` `order` `origin` `producerCandidateHash` `producerRunId` `refs` `sourceContentHash` `sourceEvidenceQuotes` `summary` `tags` `worldGroupId` |
+| `comicPagePlans` | `beatKeys` `endReveal` `goal` `pageTurn` |
+| `comicPages` | `pagePlanKey` `summary` |
+| `comicPanels` | `action` `continuityRefs` `frame` `lettering` `moment` `narrativeFunction` `negativePrompt` `nextPanelKey` `protectedAreas` `shot` `sourceUnitIds` `subjectStates` `visualPrompt` |
+| `comicReviewIssues` | `assetKey` `category` `evidence` `pageKey` `panelKey` `problem` `severity` `sourceUnitKeys` `subjectKey` `suggestion` |
+| `comicScriptBeats` | `causalFactKeys` `decisionKeys` `dialogueIntent` `emotion` `narrativeFunction` `sectionKey` `sourceUnitKeys` `visualAction` |
+| `comicVisualSubjects` | `design` `label` `sourceUnitIds` |
+| `creativeRules` | `atmosphere` `citedInsightIds` `citedReferenceIds` `consistencyRules` `narrativePOV` `prohibitions` `specialRequirements` `writingStyle` |
+| `cultivationProgress` | `characterId` `characterName` `cultivationSystemId` `cultivationSystemName` `sourceChapterId` `sourceChapterTitle` `sourceOffset` `sourceQuote` `stageId` `stageName` `status` `transition` `trigger` `worldGroupId` |
+| `cultivationSystems` | `description` `name` `stages` `worldGroupId` |
+| `detailedOutlines` | `appearingCharacterIds` `emotionArc` `endingCliffhanger` `foreshadowIds` `lastUsedSummary` `openingHook` `outlineNodeId` `prohibitions` `sceneLocation` `scenes` |
+| `emotionBeatCards` | `beats` `chapterId` `chapterTitle` `overallArc` `source` |
+| `extensionRecords` | `payload` |
+| `foreshadows` | `description` `echoChapterIds` `expectedResolveChapterId` `importance` `name` `notes` `plantChapterId` `resolveChapterId` `status` `timelinePosition` `type` `urgency` |
+| `geographies` | `locations` `overview` `worldMapData` |
+| `historicalKeywords` | `aiBrainstorm` `aiConsult` |
+| `historicalTimelineEvents` | `aiBrainstorm` `aiConsult` |
+| `histories` | `eraSystem` `events` `overview` |
+| `importantLocations` | `description` `name` `parentId` `significance` `sortOrder` `tags` |
+| `inspirationWorkspaces` | `fragments` `versions` |
+| `itemLedger` | `action` `chapterId` `chapterTitle` `characterId` `heldByName` `itemName` `note` `quantity` |
+| `knowledgeLedger` | `action` `belief` `characterId` `characterName` `factId` `knowledgeKey` `sourceChapterId` `sourceQuote` `sourceType` `statement` `status` `worldGroupId` |
+| `motionDramaAssetSubjects` | `appearance` `basePrompt` `continuityLocks` `identity` `kind` `label` `materials` `negativePrompt` `palette` `prohibitedChanges` `referenceBrief` `sourceUnitKeys` |
+| `motionDramaEpisodes` | `beats` `continuityIn` `continuityOut` `endHook` `logline` `openingHook` `sourceUnitKeys` `synopsis` `title` |
+| `motionDramaReviewIssues` | `category` `evidence` `problem` `sceneKey` `severity` `shotKey` `subjectKey` `suggestion` |
+| `motionDramaScriptScenes` | `characterKeys` `dialogue` `dramaticPurpose` `emotionalTurn` `entryState` `estimatedSeconds` `exitState` `heading` `location` `narration` `soundCues` `sourceUnitKeys` `timeOfDay` `visibleAction` |
+| `motionDramaSeriesBibles` | `bible` |
+| `motionDramaShots` | `cameraAngle` `cameraMovement` `composition` `dialogue` `firstFramePrompt` `imagePrompt` `keyFramePrompt` `lastFramePrompt` `lighting` `narration` `narrativeFunction` `negativeImagePrompt` `negativeVideoPrompt` `performance` `shotSize` `soundPlan` `sourceUnitKeys` `subjectKeys` `targetSeconds` `transitionIn` `transitionOut` `videoPrompt` `visibleAction` |
+| `outlineNodes` | `order` `parentId` `summary` `title` `type` `worldGroupId` |
+| `powerSystems` | `description` `levels` `name` `rules` |
+| `productBuildArtifacts` | `metadataJson` `payloadJson` `qualityJson` `rightsJson` |
+| `productBuilds` | `compatibilityJson` `manifestJson` `planJson` `previewManifestJson` `qualityReportJson` |
+| `productProductionBriefs` | `briefJson` `userIntentSummary` |
+| `projects` | `enableMultiWorld` `name` |
+| `referenceAnalysisRuns` | `activatedAt` `analysisSummary` `completedAt` `completedChunks` `depth` `error` `expectedChunks` `fileHash` `mergedCharacters` `progress` `referenceId` `rightsConfirmed` `rightsDeclaredAt` `rightsNote` `sourceFilename` `sourceKind` `status` `totalChars` `usageScope` `version` |
+| `referenceChunkAnalysis` | `analysisRunId` `characterCraft` `chunkIndex` `climaxDesign` `conflictEscalation` `dailyLife` `dialogueTechnique` `emotionalBeats` `endOffset` `foreshadowing` `historicalContext` `label` `languageCustoms` `materialCulture` `narrativeStyle` `openingTechnique` `otherTechniques` `pacingControl` `plotStructure` `proseStyle` `rawExcerpt` `referenceId` `socialInstitutions` `startOffset` `worldBuilding` |
+| `references` | `analysisDepth` `analysisError` `analysisProgress` `analysisStatus` `analysisSummary` `fileHash` `genre` `importSessionId` `mergedCharacters` `totalChars` |
+| `screenplayBeats` | `causalFactKeys` `conflict` `decisionKeys` `episodeNumber` `estimatedSeconds` `objective` `order` `outcome` `scope` `sectionKey` `sectionTitle` `sourceUnitKeys` `turn` |
+| `screenplayReviewIssues` | `blockId` `category` `evidence` `problem` `sceneKey` `severity` `sourceUnitKeys` `suggestion` |
+| `screenplaySceneCards` | `beatKey` `conflict` `entryState` `episodeNumber` `estimatedSeconds` `exitState` `informationReveal` `order` `purpose` `sceneNumber` `sourceUnitKeys` `visibleAction` |
+| `screenplayScenes` | `blocks` `estimatedSeconds` `intExt` `location` `planSectionKey` `sourceUnitIds` `summary` `timeOfDay` |
+| `shortNovelProductions` | `brief` `latestReview` `storyDesign` |
+| `stateCards` | `category` `entityName` `fields` `lastChapterId` |
+| `storyArcs` | `description` `lastAlignedHash` `name` `origin` `producerCandidateHash` `producerRunId` `sourceStoryCoreHash` `sourceStoryCoreId` `sourceStoryCoreRevision` `stages` `status` `type` |
+| `storyTimelineEvents` | `chapterId` `chapterTitle` `description` `importance` `order` `storyTime` `title` |
+| `storylineCrossings` | `arcIdA` `arcIdB` `chapterId` `chapterTitle` `evidenceQuote` `note` |
+| `storylineProgress` | `arcId` `currentStageId` `evidenceQuote` `involvedEntities` `lastActiveChapterId` `lastActiveChapterTitle` `progressNote` `status` |
+| `ttrpgRulePacks` | `contentHash` `rulePackJson` `ruleSystemId` `ruleSystemVersion` `status` `title` |
+| `userStyleProfiles` | `enabled` `profile` `sampleCount` `sampleWords` `sourceChapterIds` |
+| `works` | `customGenre` `description` `genres` `includeCultivationProgressInAI` `methodologyId` `status` `targetWordCount` `title` `writingStyleId` |
+| `worldGroups` | `description` `entryCondition` `exitCondition` `icon` `name` `order` `plannedChapterCount` `powerRestriction` `takeawayRules` `type` |
+| `worldNodes` | `mapConfigJSON` |
+| `worldRulesProfiles` | `customNodes` `entries` `globalNote` |
+| `worlds` | `description` `name` |
+
+### 领域写回扩展（不是第二套通用 adopt）
+
+| ID | 目标表 | 领域策略注册表 | 唯一入口 | 复审日期 |
+|---|---|---|---|---|
+| `extension-record-lifecycle` | `extensionRecords` | `ExtensionRegistrySnapshot + PROJECT_TABLES + bounded DataSchema` | `src/lib/extensions/store.ts` | 2027-01-01 |
+| `reference-analysis-run-lifecycle` | `referenceAnalysisRuns` | `REFERENCE_ANALYSIS_RUN_POLICY + ADOPTION_SCHEMAS + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
+| `reference-analysis-source-lifecycle` | `referenceAnalysisSources` | `REFERENCE_ANALYSIS_RUN_POLICY + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
+| `reference-analysis-chunk-lifecycle` | `referenceChunkAnalysis` | `REFERENCE_ANALYSIS_RUN_POLICY + ADOPTION_SCHEMAS + PROJECT_TABLES` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
+| `reference-analysis-reference-lifecycle` | `references` | `REFERENCE_ANALYSIS_RUN_POLICY + PROJECT_TABLES refs` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
+| `reference-analysis-citation-lifecycle` | `creativeRules` | `PROJECT_TABLES references refs` | `src/lib/reference-analysis/lifecycle.ts` | 2027-01-01 |
+| `fact-ledger` | `temporalFacts` | `FACT_PREDICATE_REGISTRY` | `src/lib/fact-ledger/fact-ledger.ts`<br/>`src/lib/fact-ledger/human-readable-io.ts`<br/>`src/lib/fact-ledger/lifecycle.ts`<br/>`src/lib/fact-ledger/setting-assertions.ts`<br/>`src/lib/consistency/impact-analysis.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/editor/entity-rename.ts` | 2027-01-01 |
+| `character-merge-lifecycle` | `characters` | `PROJECT_TABLES refs + remapCharacterReferences + cultivation DAG validator` | `src/lib/import/character-merge.ts`<br/>`src/lib/codex/references.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/cultivation/progress-lifecycle.ts` | 2027-01-01 |
+| `knowledge-ledger` | `knowledgeLedger` | `KNOWLEDGE_ACTIONS + ADOPTION_SCHEMAS + PROJECT_TABLES` | `src/lib/knowledge-ledger/knowledge-ledger.ts`<br/>`src/lib/knowledge-ledger/lifecycle.ts` | 2027-01-01 |
+| `storyline-progress-lifecycle` | `storylineProgress` | `ADOPTION_SCHEMAS + PROJECT_TABLES refs` | `src/lib/storyline/lifecycle.ts` | 2027-01-01 |
+| `storyline-crossing-lifecycle` | `storylineCrossings` | `ADOPTION_SCHEMAS + PROJECT_TABLES refs` | `src/lib/storyline/lifecycle.ts` | 2027-01-01 |
+| `story-arc-dynamic-lifecycle` | `storyArcs` | `PROJECT_TABLES refs` | `src/lib/storyline/lifecycle.ts` | 2027-01-01 |
+| `cultivation-codex-reference-lifecycle` | `codexEntries` | `PROJECT_TABLES refs + cultivation DAG validator` | `src/lib/codex/references.ts`<br/>`src/lib/cultivation/lifecycle.ts`<br/>`src/lib/location/lifecycle.ts` | 2027-01-01 |
+| `cultivation-progress-lifecycle` | `cultivationProgress` | `ADOPTION_SCHEMAS + PROJECT_TABLES + cultivation DAG validator + canonical chapter sequence` | `src/lib/cultivation/progress.ts`<br/>`src/lib/cultivation/progress-lifecycle.ts` | 2027-01-01 |
+| `workspace-root-lifecycle` | `projects` | `PROJECT_TABLES + workspace purpose + import trust + world lifecycle` | `src/lib/export/registry-import.ts`<br/>`src/lib/memory/workspace-projection.ts`<br/>`src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts`<br/>`src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
+| `world-root-lifecycle` | `worlds` | `PROJECT_TABLES refs + world package trust + world release lifecycle` | `src/lib/world-engine/world-package.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/world-engine/releases.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/world-engine/promotion.ts`<br/>`src/lib/world-engine/draft.ts` | 2027-08-01 |
+| `work-root-lifecycle` | `works` | `PROJECT_TABLES refs + WorkspaceScope + stable work code + narrative lifecycle` | `src/lib/memory/workspace-projection.ts`<br/>`src/lib/workspace/lifecycle.ts`<br/>`src/lib/workspace/ownership.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/world-engine/derivation.ts`<br/>`src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/release.ts` | 2027-08-01 |
+| `adaptation-root-lifecycle` | `adaptationProjects` | `PROJECT_TABLES + ADOPTION_SCHEMAS + adaptation state machine + source manifest CAS` | `src/lib/adaptation/source-manifest.ts`<br/>`src/lib/adaptation/completion.ts`<br/>`src/lib/adaptation/analysis.ts`<br/>`src/lib/screenplay/production.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/production.ts`<br/>`src/lib/comic/release.ts`<br/>`src/lib/comic/authoring.ts`<br/>`src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-08-01 |
+| `adaptation-source-manifest-lifecycle` | `adaptationSourceUnits` | `PROJECT_TABLES + immutable source manifest policy + canonical chapter sequence` | `src/lib/adaptation/source-manifest.ts` | 2027-08-01 |
+| `adaptation-source-fact-lifecycle` | `adaptationSourceFacts` | `PROJECT_TABLES + FIELD_REGISTRY + closed source-fact contract + adaptation manifest CAS` | `src/lib/adaptation/analysis.ts` | 2027-09-01 |
+| `adaptation-causal-edge-lifecycle` | `adaptationCausalEdges` | `PROJECT_TABLES + FIELD_REGISTRY + closed causal-edge contract + same-manifest fact graph validator` | `src/lib/adaptation/analysis.ts` | 2027-09-01 |
+| `adaptation-decision-lifecycle` | `adaptationDecisions` | `PROJECT_TABLES + FIELD_REGISTRY + closed adaptation-decision contract + adaptation manifest CAS` | `src/lib/adaptation/analysis.ts` | 2027-09-01 |
+| `screenplay-scene-lifecycle` | `screenplayScenes` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + screenplay block validator + adaptation freshness CAS` | `src/lib/screenplay/service.ts`<br/>`src/lib/screenplay/adoption.ts`<br/>`src/lib/screenplay/production.ts` | 2027-08-01 |
+| `screenplay-beat-lifecycle` | `screenplayBeats` | `PROJECT_TABLES + FIELD_REGISTRY + closed Beat contract + adaptation/source/decision CAS` | `src/lib/screenplay/production.ts` | 2027-09-01 |
+| `screenplay-scene-card-lifecycle` | `screenplaySceneCards` | `PROJECT_TABLES + FIELD_REGISTRY + closed Scene Card contract + Beat/source CAS` | `src/lib/screenplay/production.ts`<br/>`src/lib/screenplay/service.ts` | 2027-09-01 |
+| `screenplay-review-issue-lifecycle` | `screenplayReviewIssues` | `PROJECT_TABLES + FIELD_REGISTRY + scene/block/revision evidence validator` | `src/lib/screenplay/production.ts`<br/>`src/lib/screenplay/service.ts` | 2027-09-01 |
+| `comic-page-panel-lifecycle` | `comicPages` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + comic geometry/lettering validator + adaptation freshness CAS` | `src/lib/comic/service.ts`<br/>`src/lib/comic/production.ts` | 2027-08-01 |
+| `comic-script-beat-lifecycle` | `comicScriptBeats` | `PROJECT_TABLES + FIELD_REGISTRY + closed comic beat contract + source/decision CAS` | `src/lib/comic/production.ts` | 2027-09-01 |
+| `comic-page-plan-lifecycle` | `comicPagePlans` | `PROJECT_TABLES + FIELD_REGISTRY + closed page rhythm contract + script beat CAS` | `src/lib/comic/production.ts` | 2027-09-01 |
+| `comic-review-issue-lifecycle` | `comicReviewIssues` | `PROJECT_TABLES + FIELD_REGISTRY + page/panel/subject/asset/revision validator` | `src/lib/comic/production.ts` | 2027-09-01 |
+| `creation-release-asset-lifecycle` | `creationReleaseAssets` | `PROJECT_TABLES + immutable release manifest + content hash + registered media strong reference` | `src/lib/comic/release.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-01 |
+| `comic-panel-lifecycle` | `comicPanels` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + comic panel validator` | `src/lib/comic/service.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/comic/production.ts`<br/>`src/lib/comic/authoring.ts` | 2027-08-01 |
+| `comic-visual-subject-lifecycle` | `comicVisualSubjects` | `PROJECT_TABLES + FIELD_REGISTRY + ADOPTION_SCHEMAS + Work cast/source/asset stable-key validator` | `src/lib/comic/service.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/comic/production.ts` | 2027-08-01 |
+| `comic-media-asset-lifecycle` | `comicMediaAssets` | `PROJECT_TABLES + media capability registry + hash/rights/provider receipt + stable-key reference checks` | `src/lib/comic/media-service.ts`<br/>`src/lib/comic/service.ts`<br/>`src/lib/comic/production.ts` | 2027-08-01 |
+| `motion-drama-production-lifecycle` | `motionDramaProductions` | `PROJECT_TABLES + motion-drama state machine + adaptation source manifest CAS` | `src/lib/adaptation/source-manifest.ts`<br/>`src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/prompts.ts`<br/>`src/lib/motion-drama/prompt-pack.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-09 |
+| `motion-drama-series-bible-lifecycle` | `motionDramaSeriesBibles` | `PROJECT_TABLES + FIELD_REGISTRY + append-only bible version + adaptation CAS` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-episode-lifecycle` | `motionDramaEpisodes` | `PROJECT_TABLES + FIELD_REGISTRY + episode contract + source manifest CAS` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-script-scene-lifecycle` | `motionDramaScriptScenes` | `PROJECT_TABLES + FIELD_REGISTRY + scene/dialogue/sound closed contract + episode CAS` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-asset-subject-lifecycle` | `motionDramaAssetSubjects` | `PROJECT_TABLES + FIELD_REGISTRY + stable subject key + versioned media evidence` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-shot-lifecycle` | `motionDramaShots` | `PROJECT_TABLES + FIELD_REGISTRY + shot duration/subject/source validation + dual prompt IR` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-review-issue-lifecycle` | `motionDramaReviewIssues` | `PROJECT_TABLES + FIELD_REGISTRY + current episode revision evidence` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-media-lifecycle` | `motionDramaAssetVersions` | `PROJECT_TABLES + shared media blob + content hash + rights + explicit author selection` | `src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-09 |
+| `motion-drama-prompt-pack-lifecycle` | `motionDramaPromptPacks` | `provider-neutral Image/Video Prompt IR + deterministic provider adapters + content hash` | `src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/prompts.ts`<br/>`src/lib/motion-drama/prompt-pack.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-09 |
+| `motion-drama-asset-binding-lifecycle` | `motionDramaAssetBindings` | `PROJECT_TABLES + stable subject/version/shot keys + per-episode usage contract` | `src/lib/motion-drama/service.ts` | 2027-09-09 |
+| `motion-drama-shot-reference-lifecycle` | `motionDramaShotReferences` | `PROJECT_TABLES + shared media blob + rights + one selected reference per shot role` | `src/lib/motion-drama/service.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-09 |
+| `motion-drama-prompt-override-lifecycle` | `motionDramaPromptOverrides` | `PROJECT_TABLES + work/episode override precedence + registered stage keys` | `src/lib/motion-drama/prompts.ts` | 2027-09-09 |
+| `media-blob-object-lifecycle` | `mediaBlobObjects` | `PROJECT_TABLES portable binary + PRODUCT_PRODUCTION_MEDIA_OBJECT_POLICY + SHA-256/MIME/dimension checks + lease/reference-aware GC` | `src/lib/media/blob-store.ts`<br/>`src/lib/comic/media-service.ts`<br/>`src/lib/product-production/media-blob-store.ts`<br/>`src/lib/product-production/artifact-store.ts` | 2027-08-21 |
+| `short-novel-outline-skeleton-lifecycle` | `outlineNodes` | `PROJECT_TABLES tree refs + WorkspaceScope + SHORT_NOVEL_WORKFLOW_OVERRIDES` | `src/lib/workspace/create-workspace.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts` | 2027-08-01 |
+| `short-novel-production-lifecycle` | `shortNovelProductions` | `SHORT_NOVEL_PRODUCTION_V1 + PROJECT_TABLES + FIELD_REGISTRY + durable Harness` | `src/lib/workspace/create-workspace.ts`<br/>`src/lib/workspace/works.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts` | 2027-09-06 |
+| `independent-creation-release-lifecycle` | `creationReleases` | `SHORT_NOVEL_RELEASE_V1 + SCREENPLAY_RELEASE_V1 + COMIC_RELEASE_V1 + MOTION_DRAMA_RELEASE_V1 + PROJECT_TABLES + completion gates + immutable hash` | `src/lib/short-novel/service.ts`<br/>`src/lib/screenplay/release.ts`<br/>`src/lib/comic/release.ts`<br/>`src/lib/motion-drama/release.ts` | 2027-09-06 |
+| `chapter-delete-lifecycle` | `chapters` | `PROJECT_TABLES refs + WorkspaceScope + chapter deletion impact policy + SHORT_NOVEL_PRODUCTION_V1 + durable Harness` | `src/lib/chapters/lifecycle.ts`<br/>`src/lib/workspace/create-workspace.ts`<br/>`src/lib/short-novel/service.ts`<br/>`src/lib/agent/run/short-novel-durable.ts` | 2027-08-01 |
+| `chapter-emotion-delete-lifecycle` | `emotionBeatCards` | `PROJECT_TABLES chapter refs` | `src/lib/chapters/lifecycle.ts` | 2027-08-01 |
+| `product-production-roots` | `productProductions` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PRODUCT_PRODUCTION_ARTIFACT_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/media-blob-store.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts`<br/>`src/lib/avg/author-artifacts.ts` | 2027-08-21 |
+| `product-production-briefs` | `productProductionBriefs` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/adoption.ts` | 2027-08-21 |
+| `product-production-commands` | `productProductionCommands` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/adoption.ts` | 2027-08-21 |
+| `product-production-builds` | `productBuilds` | `PRODUCT_PRODUCTION_COMMAND_POLICY + PRODUCT_PRODUCTION_ARTIFACT_POLICY + PRODUCT_QUALITY_GATE_RECEIPT_V1 + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts`<br/>`src/lib/product-production/quality-receipts.ts`<br/>`src/lib/avg/author-artifacts.ts` | 2027-08-21 |
+| `product-production-artifacts` | `productBuildArtifacts` | `PRODUCT_PRODUCTION_ARTIFACT_POLICY + AVG_PROFESSIONAL_OUTPUTS_V1 + assertAvgMediaRawProducerAdmissionV2 + PROJECT_TABLES` | `src/lib/product-production/commands.ts`<br/>`src/lib/product-production/artifact-store.ts`<br/>`src/lib/product-production/text-adventure-artifact-store.ts`<br/>`src/lib/avg/author-artifacts.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-production/scheduler.ts` | 2027-08-21 |
+| `product-production-release-adoption` | `productReleases` | `PRODUCT_PRODUCTION_PACKAGE_ADOPTION_V1 + PRODUCT_DISTRIBUTION_BUNDLE_V2 + PROJECT_TABLES + product validators` | `src/lib/product/releases.ts`<br/>`src/lib/product-production/adoption.ts`<br/>`src/lib/product-platform/distribution-bundle.ts` | 2027-08-21 |
+| `ttrpg-rule-pack-library` | `ttrpgRulePacks` | `RULE_PACK_V1 parser + fixture verifier + immutable version identity + PROJECT_TABLES` | `src/lib/ttrpg/rule-pack-library.ts` | 2027-08-21 |
+
+## 四、AI 调用点（消耗统计 category · 在哪触发)
+
+共 43 个 category。
+未分类调用: 0 个。动态 category 调用: 38 个。
+
+| category | 触发文件 |
+|---|---|
+| `agent.orchestrator` | `src/lib/agent/orchestrator.ts:808` |
+| `agent.orchestrator.replan` | `src/lib/agent/orchestrator.ts:912` |
+| `agent.readonly` | `src/lib/agent/client-adapter.ts:118` |
+| `authoring.ttrpg-campaign` | `src/lib/ttrpg/campaign-proposal-harness.ts:429` |
+| `canon.setting.extract` | `src/lib/agent/run/constitution-extraction-durable.ts:508` |
+| `chapter.content` | `src/lib/generation/chapter-generation-node.ts:23` |
+| `chapter.continue` | `src/lib/generation/chapter-generation-node.ts:26` |
+| `chapter.continuity` | `src/lib/node-authoring/domain-execution.ts:778`<br/>`src/lib/node-authoring/domain-execution.ts:843` |
+| `chapter.deai` | `src/components/editor/ChapterEditor.tsx:1699` |
+| `chapter.expand` | `src/components/editor/ChapterEditor.tsx:1677` |
+| `chapter.polish` | `src/components/editor/ChapterEditor.tsx:1667` |
+| `chapter.toolbar` | `src/lib/agent/run/selection-edit-durable.ts:567` |
+| `cultivation.progress` | `src/lib/agent/run/cultivation-progress-extraction-durable.ts:558` |
+| `detail.chapter-planning` | `src/lib/node-authoring/domain-execution.ts:606` |
+| `emotion.beat` | `src/lib/agent/run/emotion-beat-durable.ts:396` |
+| `foreshadow.suggest` | `src/lib/agent/run/foreshadow-suggestions-durable.ts:569` |
+| `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:129` |
+| `geography.world-map` | `src/lib/agent/run/world-map-config-durable.ts:362` |
+| `inventory.extract` | `src/lib/agent/run/inventory-extraction-durable.ts:943` |
+| `location.extract` | `src/lib/agent/run/location-extraction-durable.ts:618` |
+| `node.creation` | `src/lib/node-authoring/executor.ts:374` |
+| `outline.chapter` | `src/lib/ai/batch-outline-runner.ts:200`<br/>`src/lib/outline/generation-node.ts:61` |
+| `outline.impact-regenerate` | `src/lib/agent/run/impact-outline-regeneration-durable.ts:648` |
+| `outline.volume` | `src/lib/outline/generation-node.ts:56` |
+| `outline.workshop.collision` | `src/lib/outline/workshop.ts:452` |
+| `outline.workshop.motivation` | `src/lib/outline/workshop.ts:447` |
+| `outline.workshop.scan` | `src/lib/outline/workshop.ts:442` |
+| `outline.workshop.scenes` | `src/lib/outline/workshop.ts:461` |
+| `prompt.examples` | `src/components/settings/prompt/PromptExamplesEditor.tsx:108` |
+| `relation.extract` | `src/lib/agent/run/character-relationship-durable.ts:288` |
+| `review.anti-ai` | `src/components/editor/ReviewPanel.tsx:122` |
+| `review.outline-workshop` | `src/lib/outline/workshop.ts:457` |
+| `review.quality` | `src/components/editor/ReviewPanel.tsx:112` |
+| `review.readability` | `src/components/editor/ReviewPanel.tsx:133` |
+| `review.revise` | `src/components/editor/ChapterEditor.tsx:1727` |
+| `runtime.prose.ai-town-director` | `src/lib/ai-town/director-harness.ts:271` |
+| `runtime.ttrpg-gm` | `src/lib/ttrpg/decision-harness.ts:134` |
+| `runtime.ttrpg-player` | `src/lib/ttrpg/player-harness.ts:310` |
+| `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
+| `story.timeline` | `src/lib/agent/run/impact-story-timeline-regeneration-durable.ts:670`<br/>`src/lib/agent/run/story-timeline-extraction-durable.ts:758` |
+| `style.learn` | `src/lib/agent/run/style-learning-durable.ts:493` |
+| `world-group.expand` | `src/lib/agent/run/worldview-expand-durable.ts:466` |
+| `world-group.suggest` | `src/lib/agent/run/world-suggest-durable.ts:622` |
+
+### 动态 category 调用
+
+- `src/components/editor/ReviewPanel.tsx:160 · ai.start`
+- `src/lib/adventure/harness.ts:383 · chat`
+- `src/lib/agent/character-copilot.ts:515 · chat`
+- `src/lib/agent/character-driven-copilot.ts:505 · chat`
+- `src/lib/agent/character-lifecycle-copilot.ts:448 · chat`
+- `src/lib/agent/character-revision-copilot.ts:727 · chat`
+- `src/lib/agent/character-supplement-copilot.ts:578 · chat`
+- `src/lib/agent/context-compression.ts:333 · chat`
+- `src/lib/agent/creative-rules-copilot.ts:437 · chat`
+- `src/lib/agent/inspiration-copilot.ts:345 · chat`
+- `src/lib/agent/master-candidate-semantic-review.ts:601 · chat`
+- `src/lib/agent/outline-copilot.ts:522 · chat`
+- `src/lib/agent/outline-copilot.ts:772 · chat`
+- `src/lib/agent/prose-copilot.ts:658 · chat`
+- `src/lib/agent/prose-copilot.ts:924 · chat`
+- `src/lib/agent/run/codex-extraction-durable.ts:779 · chat`
+- `src/lib/agent/run/history-agent-durable.ts:514 · chat`
+- `src/lib/agent/run/reference-derived-durable.ts:506 · chat`
+- `src/lib/agent/run/short-novel-durable.ts:311 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1590 · chat`
+- `src/lib/agent/story-arc-copilot.ts:1642 · chat`
+- `src/lib/agent/story-core-copilot.ts:557 · chat`
+- `src/lib/agent/storyline-progress-copilot.ts:366 · chat`
+- `src/lib/agent/worldview-field-copilot.ts:903 · chat`
+- `src/lib/character-interaction/harness.ts:404 · chat`
+- `src/lib/comic/durable-production.ts:270 · chat`
+- `src/lib/evals/agent-harness/story-arc-main-path-browser.ts:98 · chat`
+- `src/lib/evals/creative-reliability/browser.ts:89 · chat`
+- `src/lib/generation/workflow-generation-node.ts:23 · ai.start`
+- `src/lib/motion-drama/durable-production.ts:144 · chat`
+- `src/lib/node-authoring/executor.ts:431 · chat`
+- `src/lib/open-world/evolution-harness.ts:246 · chat`
+- `src/lib/open-world/harness.ts:139 · chat`
+- `src/lib/product-production/authoring-consultation.ts:169 · chat`
+- `src/lib/product-production/capabilities.ts:314 · chat`
+- `src/lib/screenplay/durable-production.ts:449 · chat`
+- `src/lib/ttrpg/gm-actor-harness.ts:481 · chat`
+- `src/lib/ttrpg/gm-harness.ts:542 · chat`
+
+## 五、正式 AI 入口（FormalAIEntryBindingV1）
+
+共 48 个操作级绑定。运行时按 entryId 校验 category 和 Skill；采纳权限不由文字说明决定。
+
+| entryId | Skill | category | 边界 | 候选 | 采纳目标 | 调用方 |
+|---|---|---|---|---|---|---|
+| `extensions.generate` | `extensions.generate` | `extension.generate` | formal / durable-run | `extension-record-candidate` | `extensionRecords` | `src/lib/extensions/ai-run.ts` |
+| `ai-town.authoring.consult` | `ai-town.consult.v1` | `authoring.ai-town-consult` | auxiliary / durable-run | `ai-town-settings-preview` | 禁止 | `src/lib/ai-town/consultation.ts` |
+| `prose.chapter.generate` | `prose.generate` | `chapter.content` | formal / durable-run | `chapter-draft` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
+| `prose.chapter.continue` | `prose.continue` | `chapter.continue` | formal / durable-run | `chapter-continuation-draft` | `chapters` | `src/lib/generation/chapter-generation-node.ts` |
+| `prose.selection.polish` | `prose.selection-edit` | `chapter.polish` | auxiliary / authoring-draft | `selection-polish-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
+| `prose.selection.expand` | `prose.selection-edit` | `chapter.expand` | auxiliary / authoring-draft | `selection-expand-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
+| `prose.selection.deai` | `prose.selection-edit` | `chapter.deai` | auxiliary / authoring-draft | `selection-rewrite-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
+| `prose.chapter.revise` | `prose.revise` | `review.revise` | auxiliary / authoring-draft | `chapter-revision-preview` | 禁止 | `src/components/editor/ChapterEditor.tsx` |
+| `prose.chapter.memory` | `prose.memory` | `chapter.memory` | formal / durable-run | `chapter-memory-candidate` | `chapters` | `src/components/editor/ChapterEditor.tsx`<br/>`src/lib/prose/post-adoption-runner.ts` |
+| `prose.chapter.organize` | `prose.organize` | `chapter.organize` | formal / durable-run | `chapter-organization-candidate` | `stateCards`<br/>`temporalFacts`<br/>`itemLedger`<br/>`storyTimelineEvents`<br/>`characterRelations`<br/>`foreshadows`<br/>`storylineProgress`<br/>`storylineCrossings`<br/>`storyArcs` | `src/components/editor/ChapterEditor.tsx`<br/>`src/lib/prose/post-adoption-runner.ts` |
+| `prose.review.quality` | `prose.review` | `review.quality` | auxiliary / read-only | `quality-review-report` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
+| `prose.review.anti-ai` | `prose.review` | `review.anti-ai` | auxiliary / read-only | `anti-ai-review-report` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
+| `prose.review.readability` | `prose.review` | `review.readability` | auxiliary / read-only | `readability-review-report` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
+| `prose.review.consistency` | `prose.review` | `review.consistency.fast`<br/>`review.consistency.deep` | auxiliary / durable-run | `consistency-audit-report` | 禁止 | `src/components/editor/ReviewPanel.tsx` |
+| `world.map.concept` | `world-origin.map-config` | `geography.concept-map` | auxiliary / authoring-draft | `concept-map-svg` | 禁止 | `src/components/geography/GeographyPanel.tsx` |
+| `world.setting.lookup.qa` | `world-origin.review` | `setting-qa` | auxiliary / read-only | `setting-qa-answer` | 禁止 | `src/components/editor/SettingLookupPanel.tsx` |
+| `world.setting.lookup.extract` | `world-origin.codex-extract` | `setting-extract` | formal / authoring-draft | `setting-extraction-candidate` | `codexEntries` | `src/components/editor/SettingLookupPanel.tsx` |
+| `outline.workshop.scan` | `outline.chapters` | `outline.workshop.scan` | formal / generation-node | `outline-workshop-scan` | 禁止 | `src/lib/outline/workshop.ts` |
+| `outline.workshop.motivation` | `outline.chapters` | `outline.workshop.motivation` | formal / generation-node | `outline-workshop-motivation` | 禁止 | `src/lib/outline/workshop.ts` |
+| `outline.workshop.collision` | `outline.chapters` | `outline.workshop.collision` | formal / generation-node | `outline-workshop-collision` | 禁止 | `src/lib/outline/workshop.ts` |
+| `outline.workshop.quality` | `prose.review` | `review.outline-workshop` | auxiliary / read-only | `outline-workshop-quality-report` | 禁止 | `src/lib/outline/workshop.ts` |
+| `outline.workshop.scenes` | `outline.chapters` | `outline.workshop.scenes` | formal / generation-node | `outline-workshop-scenes` | `outlineNodes` | `src/lib/outline/workshop.ts` |
+| `outline.volume.generate` | `outline.volumes` | `outline.volume` | formal / durable-run | `volume-outline-candidate` | `outlineNodes` | `src/lib/outline/generation-node.ts` |
+| `outline.chapter.generate` | `outline.chapters` | `outline.chapter` | formal / durable-run | `chapter-outline-candidate` | `outlineNodes` | `src/lib/outline/generation-node.ts`<br/>`src/lib/outline/chunked-session.ts` |
+| `outline.chapter.review` | `outline.chapters` | `outline.review` | auxiliary / read-only | `outline-review-report` | 禁止 | `src/lib/outline/chapter-reviewer.ts` |
+| `outline.chapter.rewrite` | `outline.chapters` | `outline.rewrite` | formal / authoring-draft | `outline-rewrite-candidate` | `outlineNodes` | `src/lib/outline/chapter-reviewer.ts` |
+| `outline.chunked.generate` | `outline.chapters` | `outline.chunked-direction`<br/>`outline.chunked-chapters` | formal / authoring-draft | `chunked-outline-candidate` | `outlineNodes` | `src/lib/outline/chunked-generator.ts` |
+| `outline.detail.scene` | `outline.details` | `detail.scene` | formal / durable-run | `detailed-outline-candidate` | `detailedOutlines` | `src/components/outline/useDetailedOutlineGenerationController.ts` |
+| `outline.detail.enhance` | `outline.details` | `detail.enhance` | formal / durable-run | `detailed-outline-enhancement` | `detailedOutlines` | `src/components/outline/useDetailedOutlineGenerationController.ts`<br/>`src/lib/agent/detailed-outline-authoring.ts` |
+| `outline.detail.batch` | `outline.details` | `detail.enhance` | formal / durable-run | `detailed-outline-batch-candidate` | `detailedOutlines` | `src/lib/ai/batch-detail-runner.ts` |
+| `world.scene.verify` | `world-origin.review` | `scene.verify` | auxiliary / read-only | `scene-verification-report` | 禁止 | `src/components/scene/SceneVerifyPanel.tsx` |
+| `eval.context-compression` | `prose.review` | `eval.h17.compression`<br/>`eval.h17.generation` | evaluation / eval-only | `context-compression-eval-artifact` | 禁止 | `src/components/settings/HarnessEvalPanel.tsx` |
+| `eval.long-consistency.verifier` | `prose.review` | `eval.h4.verifier` | evaluation / eval-only | `long-consistency-verdict` | 禁止 | `src/components/settings/HarnessEvalPanel.tsx` |
+| `eval.long-consistency.adjudicator` | `prose.review` | `eval.h4.verifier` | evaluation / eval-only | `consistency-subtype-adjudication` | 禁止 | `src/components/settings/HarnessEvalPanel.tsx` |
+| `eval.races-gateway.grader` | `prose.review` | `eval.race6.blind-grader` | evaluation / eval-only | `races-gateway-blind-grade` | 禁止 | `src/components/settings/RacesGatewayEvalPanel.tsx` |
+| `eval.text-open-world.runtime-ai-grader` | `prose.review` | `eval.text-open-world.runtime-ai-grader` | evaluation / eval-only | `text-open-world-runtime-ai-semantic-grade` | 禁止 | `src/lib/evals/open-world-runtime/judge.ts` |
+| `eval.text-open-world.release-calibration-grader` | `prose.review` | `review.text-open-world.release-calibration-grader` | evaluation / eval-only | `text-open-world-release-calibration-grade` | 禁止 | `src/lib/open-world/creator-quality-calibration.ts` |
+| `prompt.examples.generate` | `inspiration.review` | `prompt.examples` | auxiliary / authoring-draft | `prompt-example-draft` | 禁止 | `src/components/settings/prompt/PromptExamplesEditor.tsx` |
+| `prompt.workflow.step` | `inspiration.review` | `*` | experimental / experimental | `prompt-workflow-step-draft` | 禁止 | `src/lib/generation/workflow-generation-node.ts` |
+| `style.calibration.preview` | `prose.style-learn` | `style.calibrate` | auxiliary / authoring-draft | `style-calibration-preview` | 禁止 | `src/components/style/StyleCalibrationPanel.tsx` |
+| `text-open-world.creator-brief.consult` | `text-open-world.creator-brief-consult.v1` | `authoring.text-open-world-creator-brief` | formal / durable-run | `text-open-world-creator-brief-synthesis` | 禁止 | `src/lib/open-world/creator-brief.ts` |
+| `text-open-world.creator-artifact.modify` | `text-open-world.creator-artifact-edit.v1` | `authoring.text-open-world-creator-artifact-edit` | formal / durable-run | `text-open-world-creator-edit-patch` | 禁止 | `src/lib/open-world/creator-artifact-edit.ts` |
+| `text-open-world.runtime.intent` | `prose.text-open-world-runtime-intent` | `runtime.text-open-world.intent` | formal / product-runtime | `storyforge.text-open-world.runtime-intent-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.dialogue` | `prose.text-open-world-runtime-dialogue` | `runtime.text-open-world.dialogue` | formal / product-runtime | `storyforge.text-open-world.runtime-dialogue-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.expression` | `prose.text-open-world-runtime-expression` | `runtime.text-open-world.expression` | formal / product-runtime | `storyforge.text-open-world.runtime-expression-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.quest-packaging` | `prose.text-open-world-runtime-quest-packaging` | `runtime.text-open-world.quest-packaging` | formal / product-runtime | `storyforge.text-open-world.runtime-quest-packaging-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.direction` | `prose.text-open-world-runtime-direction` | `runtime.text-open-world.direction` | formal / product-runtime | `storyforge.text-open-world.runtime-direction-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+| `text-open-world.runtime.memory` | `prose.text-open-world-runtime-memory` | `runtime.text-open-world.memory` | formal / product-runtime | `storyforge.text-open-world.runtime-memory-candidate` | 禁止 | `src/lib/open-world/runtime-ai-execution.ts` |
+
+---
+
+生成时间基准:commit `c5febfa3`

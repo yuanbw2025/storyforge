@@ -1,7 +1,0 @@
-{"stage": "waiting-for-existing-metrics-job"}
-{"stage": "baseline-v77"}
-{"supervisorPid": 94798, "pinSha256": "3988ab16941ae730d01e1a9fc6c16483e5575c130c18717df4a007061dfb44ca", "inputFiles": 14464, "runtimeFiles": 3994, "directory": "/tmp/nw-impact-sequence-20261022-v1/baseline-v77"}
-{"receipt": "/Users/qinyingying/.codex/worktrees/nw-mainline-refresh-20261016/storyforge/tests/acceptance/narrative-world/impact-sequence-baseline-v77-20261022.json", "ownedProcessesExited": 6, "sourceFrozen": false, "exitCode": 0}
-{"stage": "reviewing-actual-baseline"}
-{"stage": "needs-evidence-review", "error": "AssertionError: "}
-{"exitCode": 1, "terminal": "/tmp/nw-impact-sequence-20261022-v1/delivery-continuation-terminal.json"}

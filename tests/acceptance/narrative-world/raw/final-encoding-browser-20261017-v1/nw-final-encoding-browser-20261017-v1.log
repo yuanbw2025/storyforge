@@ -1,8 +1,0 @@
-[serial-ci] Waiting for the shared CI slot.
-[serial-ci] Acquired slot in /Users/qinyingying/.codex/worktrees/nw-mainline-refresh-20261016/storyforge
-{"starting": "native", "at": "2026-10-16T23:13:19.003864+00:00", "log": "/tmp/nw-final-encoding-browser-20261017-v1-native.log"}
-{"completed": "native", "exitCode": 1}
-{"starting": "profile", "at": "2026-10-16T23:15:14.984027+00:00", "log": "/tmp/nw-final-encoding-browser-20261017-v1-profile.log"}
-{"completed": "profile", "exitCode": 0}
-{"exitCode": 1, "terminal": "/tmp/nw-final-encoding-browser-20261017-v1-terminal.json", "sourceUnchanged": true}
-[serial-ci] Released slot; exit code 1

@@ -1,1 +1,0 @@
-tests/e2e/narrative-scale.spec.ts(199,33): error TS2550: Property 'at' does not exist on type 'string[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.

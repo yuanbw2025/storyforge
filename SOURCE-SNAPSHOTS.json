@@ -1,0 +1,866 @@
+{
+  "schema": "storyforge.retired-avg-development-source",
+  "version": 1,
+  "date": "2026-10-27",
+  "purpose": "Exact retired source snapshots uploaded before authorized local worktree deletion; not an application release or runtime input. Original source bases remain in commit parents. No local API configuration, model weights, browser state, generated media or raw test reports are included.",
+  "worktrees": [
+    {
+      "worktree": "avg-base00a-20261014",
+      "branch": "feat/avg-audio-consumption-20261022",
+      "baseCommit": "17c9081f13fc410735b7b7769b01f81f4865de13",
+      "files": [
+        {
+          "path": "src/lib/avg/audio-choice-dispatch.ts",
+          "sha256": "8ba9214b6f1b6aea618b33b546a4f863578ce20ce93e338d30158856127b290a",
+          "bytes": 1136
+        },
+        {
+          "path": "src/lib/avg/audio-processing-admission.ts",
+          "sha256": "a8572628944cdfb098039d9d7dab24246b83ece01f3e97bcad9c706ad18f22d5",
+          "bytes": 7603
+        },
+        {
+          "path": "src/lib/avg/audio-processing-execution-kernel.ts",
+          "sha256": "c9d707a0b4e7b456b5374adea8535ca13575f00b27ed823482b0628f7c5849dc",
+          "bytes": 9944
+        },
+        {
+          "path": "src/lib/avg/audio-processing-executor.ts",
+          "sha256": "507b0b02f8d99ec527b6f4448672e7bb2f62a844665659b9712ddcd4ac042a91",
+          "bytes": 2652
+        },
+        {
+          "path": "src/lib/avg/audio-processing-raw-source.ts",
+          "sha256": "b7fad552664a449c2bb3294fb469fc5da838f4fa127cc8be358365a0ad84391e",
+          "bytes": 2575
+        },
+        {
+          "path": "src/lib/avg/audio-processing-task-source.ts",
+          "sha256": "912b69693df18dd2dd72b240299b1a64b749a3fa32c57640ff89536ec3077a22",
+          "bytes": 7300
+        },
+        {
+          "path": "src/lib/avg/processed-audio-consumption.ts",
+          "sha256": "79c5cde4ac044de788104c9f066eeccf7b995928a11739d75f6f6a0ea570d83a",
+          "bytes": 5367
+        },
+        {
+          "path": "src/lib/avg/processed-audio-contract.ts",
+          "sha256": "5b99e29647154fbd2510a1f731bc7fde078db7f261a310556aeefc19d101ff57",
+          "bytes": 7601
+        },
+        {
+          "path": "src/lib/avg/processed-audio-source.ts",
+          "sha256": "9fae0f6a6157b249982496c089e34dab7efd746b4c2fcd3deb001d839f9ad76a",
+          "bytes": 6214
+        },
+        {
+          "path": "src/lib/avg/voice-choice-consumption.ts",
+          "sha256": "424acfea220258867bcb16179c35dfd0f58ae510fb2c8b0e23358e7cbe9c0e1a",
+          "bytes": 4158
+        },
+        {
+          "path": "tests/regression/R-AVG-04B-audio-processing-harness.test.ts",
+          "sha256": "75cde1b6458dd1681eb67d52f0606dad209cad4e89647ee1400b467550c9ae8e",
+          "bytes": 17954
+        },
+        {
+          "path": "tests/regression/R-AVG-04B-audio-processing-kernel.test.ts",
+          "sha256": "fa421f71bc4880ec63728522ff0cd55463ff99c228f69b52e0b5429663e99c2d",
+          "bytes": 11769
+        },
+        {
+          "path": "tests/regression/R-AVG-04B-processed-audio-artifact.test.ts",
+          "sha256": "773c7b1ffe782d774c506dbf1235b77947ddf546132dbefc245f746be903b43a",
+          "bytes": 10726
+        },
+        {
+          "path": "tests/regression/R-AVG-04B-processed-audio-source.test.ts",
+          "sha256": "5c348bfc098efb421ce2972e13e07e312208ebe6aa5f0f24c2a2334983ad433d",
+          "bytes": 12682
+        },
+        {
+          "path": "docs/AI-FUNCTIONS-MANUAL.generated.md",
+          "sha256": "2d24dee4931b65f01699dfe2951e87bb0da20d4265d9cf0892fc2dc5627034b5",
+          "bytes": 66960
+        },
+        {
+          "path": "docs/ARCHITECTURE.md",
+          "sha256": "debf8f5f17acc2cd1b6d543a5c04127245fc6c82e3d186f54c0661f9004fa215",
+          "bytes": 28299
+        },
+        {
+          "path": "docs/products/avg-production/03-MEDIA-PRODUCTION-AND-BINDING.md",
+          "sha256": "eb39a1e8a3e5d776df5f44a4bf3ee284915c65b8e7d0e7002bc10d7bd41ade30",
+          "bytes": 129344
+        },
+        {
+          "path": "docs/roadmap/AVG-IMPLEMENTATION-PLAN.md",
+          "sha256": "2fba58b065c2cb04bdb387f6d05b3185fa885f3e2ad9e1723a874658859233b7",
+          "bytes": 137969
+        },
+        {
+          "path": "docs/roadmap/AVG-WORK-PACKAGE-CARDS.md",
+          "sha256": "d2b8458036ba92b88c90e574d5ceebef98a7f2f3d6e9f8ef8f57e056a2c559ce",
+          "bytes": 388819
+        },
+        {
+          "path": "src/components/avg/VoiceProductionPanel.tsx",
+          "sha256": "dfc30ee83f65c24e4bb029f47c7ead46fdd100469e62a13d1aea3385d6515dde",
+          "bytes": 22752
+        },
+        {
+          "path": "src/components/avg/VoiceReviewPanel.tsx",
+          "sha256": "b89d71d5804d009715da71897c4178c9bb5b76995ce7adcbe002dd820e372ac5",
+          "bytes": 12847
+        },
+        {
+          "path": "src/lib/agent/skill-registry.ts",
+          "sha256": "b5237aa55591f26d9a30df4d29677d11ca07bfaa34bbde2397d2a26b4419b8fb",
+          "bytes": 263677
+        },
+        {
+          "path": "src/lib/avg/assembly-executor.ts",
+          "sha256": "dbc1dafdb39cf34a1e6763d68cf66169474a5f0c08d3e8353c4b60cb7783c7f8",
+          "bytes": 18415
+        },
+        {
+          "path": "src/lib/avg/assembly-media-rights.ts",
+          "sha256": "50c52b8a94dce11eab5cdd9aa2a30efe5214b7d4e5925f3622a44da849008652",
+          "bytes": 5020
+        },
+        {
+          "path": "src/lib/avg/assembly-service.ts",
+          "sha256": "9d010cccff91323c782759ce4f954c2052bb0e82c53d64b64e8356a94c7a1adb",
+          "bytes": 104893
+        },
+        {
+          "path": "src/lib/avg/audio-processing.ts",
+          "sha256": "aaf2584c8fd5c83a1425f6fbb93c0a07848a859d60d083582d0662b729d78f06",
+          "bytes": 8451
+        },
+        {
+          "path": "src/lib/avg/author-artifacts.ts",
+          "sha256": "8a8b9e13bcb100cb0f210902ea68576f1c8bd87bbf94fae8b89e724f899b45c1",
+          "bytes": 128619
+        },
+        {
+          "path": "src/lib/avg/sound-planning-executor.ts",
+          "sha256": "3a85dae6ccf0ad2f71fb8dcf2bae08e6e29da49154d6004e277c64117a817bf1",
+          "bytes": 9725
+        },
+        {
+          "path": "src/lib/avg/voice-configuration.ts",
+          "sha256": "baf32919940dc2d47230d5dc4c66a962f51dcf5babe7e43d40bc14db7c399c43",
+          "bytes": 3743
+        },
+        {
+          "path": "src/lib/avg/voice-review.ts",
+          "sha256": "475d1ae986812aa3257b2556239abebc21c78936f480cab7b88667bb2f74913d",
+          "bytes": 5081
+        },
+        {
+          "path": "src/lib/product-production/artifact-store.ts",
+          "sha256": "f3ff0ac778f88d5bc22082b8dfed1d61387142f1e10394f363b61362e8764ce1",
+          "bytes": 203064
+        }
+      ]
+    },
+    {
+      "worktree": "avg-base00b-20261014",
+      "branch": "feat/avg-audio-derived-production-20261022",
+      "baseCommit": "17c9081f13fc410735b7b7769b01f81f4865de13",
+      "files": [
+        {
+          "path": "src/lib/avg/audio-choice-dispatch.ts",
+          "sha256": "8ba9214b6f1b6aea618b33b546a4f863578ce20ce93e338d30158856127b290a",
+          "bytes": 1136
+        },
+        {
+          "path": "src/lib/avg/audio-processing-admission.ts",
+          "sha256": "a8572628944cdfb098039d9d7dab24246b83ece01f3e97bcad9c706ad18f22d5",
+          "bytes": 7603
+        },
+        {
+          "path": "src/lib/avg/audio-processing-execution-kernel.ts",
+          "sha256": "c9d707a0b4e7b456b5374adea8535ca13575f00b27ed823482b0628f7c5849dc",
+          "bytes": 9944
+        },
+        {
+          "path": "src/lib/avg/audio-processing-executor.ts",
+          "sha256": "507b0b02f8d99ec527b6f4448672e7bb2f62a844665659b9712ddcd4ac042a91",
+          "bytes": 2652
+        },
+        {
+          "path": "src/lib/avg/audio-processing-raw-source.ts",
+          "sha256": "b7fad552664a449c2bb3294fb469fc5da838f4fa127cc8be358365a0ad84391e",
+          "bytes": 2575
+        },
+        {
+          "path": "src/lib/avg/audio-processing-task-source.ts",
+          "sha256": "912b69693df18dd2dd72b240299b1a64b749a3fa32c57640ff89536ec3077a22",
+          "bytes": 7300
+        },
+        {
+          "path": "src/lib/avg/processed-audio-consumption.ts",
+          "sha256": "79c5cde4ac044de788104c9f066eeccf7b995928a11739d75f6f6a0ea570d83a",
+          "bytes": 5367
+        },
+        {
+          "path": "src/lib/avg/processed-audio-contract.ts",
+          "sha256": "5b99e29647154fbd2510a1f731bc7fde078db7f261a310556aeefc19d101ff57",
+          "bytes": 7601
+        },
+        {
+          "path": "src/lib/avg/processed-audio-source.ts",
+          "sha256": "9fae0f6a6157b249982496c089e34dab7efd746b4c2fcd3deb001d839f9ad76a",
+          "bytes": 6214
+        },
+        {
+          "path": "src/lib/avg/processed-voice-frozen-source.ts",
+          "sha256": "78daba097c258aea01855349c1bf142de668291e4f946f5942243d4ca90f4ca8",
+          "bytes": 4610
+        },
+        {
+          "path": "src/lib/avg/voice-choice-consumption.ts",
+          "sha256": "0644322992834825add7b40d685d87cf9801629ae96799d218acab959df167d1",
+          "bytes": 5556
+        },
+        {
+          "path": "tests/regression/R-AVG-04B-audio-processing-harness.test.ts",
+          "sha256": "b627e44e9d71c03312de7c112335c6015b36079bfdc4083a3eaf880b569b66ce",
+          "bytes": 22415
+        },
+        {
+          "path": "tests/regression/R-AVG-04B-audio-processing-kernel.test.ts",
+          "sha256": "fa421f71bc4880ec63728522ff0cd55463ff99c228f69b52e0b5429663e99c2d",
+          "bytes": 11769
+        },
+        {
+          "path": "tests/regression/R-AVG-04B-processed-audio-artifact.test.ts",
+          "sha256": "773c7b1ffe782d774c506dbf1235b77947ddf546132dbefc245f746be903b43a",
+          "bytes": 10726
+        },
+        {
+          "path": "tests/regression/R-AVG-04B-processed-audio-source.test.ts",
+          "sha256": "5c348bfc098efb421ce2972e13e07e312208ebe6aa5f0f24c2a2334983ad433d",
+          "bytes": 12682
+        },
+        {
+          "path": "docs/AI-FUNCTIONS-MANUAL.generated.md",
+          "sha256": "2d24dee4931b65f01699dfe2951e87bb0da20d4265d9cf0892fc2dc5627034b5",
+          "bytes": 66960
+        },
+        {
+          "path": "docs/ARCHITECTURE.md",
+          "sha256": "20011c6fde3862d5a5cb9d6dda5bacdf10b76d72061738d972e5849203286b90",
+          "bytes": 28299
+        },
+        {
+          "path": "docs/products/avg-production/03-MEDIA-PRODUCTION-AND-BINDING.md",
+          "sha256": "9ccc03b6ba72528812e6405aae2a0bffc919cfee69f263c810dc1af926269f2f",
+          "bytes": 130632
+        },
+        {
+          "path": "docs/roadmap/AVG-IMPLEMENTATION-PLAN.md",
+          "sha256": "5540a926ffbeb959c24cb734f456d8d28985ea97862425eec836f47d263228a3",
+          "bytes": 139257
+        },
+        {
+          "path": "docs/roadmap/AVG-WORK-PACKAGE-CARDS.md",
+          "sha256": "23a857381fe366ea6454ae56f4d29216415326a70075ffb3b09222c1670c76b0",
+          "bytes": 390107
+        },
+        {
+          "path": "src/components/avg/VoiceProductionPanel.tsx",
+          "sha256": "dfc30ee83f65c24e4bb029f47c7ead46fdd100469e62a13d1aea3385d6515dde",
+          "bytes": 22752
+        },
+        {
+          "path": "src/components/avg/VoiceReviewPanel.tsx",
+          "sha256": "b89d71d5804d009715da71897c4178c9bb5b76995ce7adcbe002dd820e372ac5",
+          "bytes": 12847
+        },
+        {
+          "path": "src/lib/agent/skill-registry.ts",
+          "sha256": "b5237aa55591f26d9a30df4d29677d11ca07bfaa34bbde2397d2a26b4419b8fb",
+          "bytes": 263677
+        },
+        {
+          "path": "src/lib/avg/assembly-executor.ts",
+          "sha256": "dbc1dafdb39cf34a1e6763d68cf66169474a5f0c08d3e8353c4b60cb7783c7f8",
+          "bytes": 18415
+        },
+        {
+          "path": "src/lib/avg/assembly-media-rights.ts",
+          "sha256": "50c52b8a94dce11eab5cdd9aa2a30efe5214b7d4e5925f3622a44da849008652",
+          "bytes": 5020
+        },
+        {
+          "path": "src/lib/avg/assembly-service.ts",
+          "sha256": "c2de41c2a5f0579e036e8bc7e4fa7af8b7283680c5b557b1047a593d3c5c1a30",
+          "bytes": 105312
+        },
+        {
+          "path": "src/lib/avg/audio-processing.ts",
+          "sha256": "aaf2584c8fd5c83a1425f6fbb93c0a07848a859d60d083582d0662b729d78f06",
+          "bytes": 8451
+        },
+        {
+          "path": "src/lib/avg/author-artifacts.ts",
+          "sha256": "33dfdf297c884fac274c46fbd941c63ec4e9072948d68c7254d78464c035b6db",
+          "bytes": 131375
+        },
+        {
+          "path": "src/lib/avg/sound-planning-executor.ts",
+          "sha256": "3a85dae6ccf0ad2f71fb8dcf2bae08e6e29da49154d6004e277c64117a817bf1",
+          "bytes": 9725
+        },
+        {
+          "path": "src/lib/avg/task-context.ts",
+          "sha256": "171471bb67d55be5db368177cf776101003c8e7c555d2802e6ee3a8096f744a1",
+          "bytes": 13087
+        },
+        {
+          "path": "src/lib/avg/voice-configuration.ts",
+          "sha256": "baf32919940dc2d47230d5dc4c66a962f51dcf5babe7e43d40bc14db7c399c43",
+          "bytes": 3743
+        },
+        {
+          "path": "src/lib/avg/voice-review.ts",
+          "sha256": "475d1ae986812aa3257b2556239abebc21c78936f480cab7b88667bb2f74913d",
+          "bytes": 5081
+        },
+        {
+          "path": "src/lib/product-production/artifact-store.ts",
+          "sha256": "098081e7fb2af7cb1215c2433c9477710ea5d2b306d9eac21df6c86bc94b8461",
+          "bytes": 204691
+        }
+      ]
+    },
+    {
+      "worktree": "avg-media-harness-20261016",
+      "branch": "feat/avg-combined-native-20261020",
+      "baseCommit": "ec3409ff77860eff87882ea71144b02b08a90f0a",
+      "files": [
+        {
+          "path": "src/components/text-game/player-roadshow.css",
+          "sha256": "072bcd5554ab9a74b4eee2a73440db693ab6c36620c612707047b2c60dd1e991",
+          "bytes": 84104
+        },
+        {
+          "path": "tests/e2e/avg-combined-route-resume.spec.ts",
+          "sha256": "5899d299353df144ec5a43c36f1c96aca995c1d824a756dd92a9e176bb43269b",
+          "bytes": 6254
+        }
+      ]
+    },
+    {
+      "worktree": "avg-media-recovery-20261016",
+      "branch": "feat/avg-media-recovery-20261016",
+      "baseCommit": "4b40877b1c4b2e30e87fb9aaf4e1c4203f1f30d7",
+      "files": [
+        {
+          "path": "src/components/avg/VoiceAuditionPlayer.tsx",
+          "sha256": "467f0ff78bb7f3a958c5f8889d2311a35b4065838a1c3c49268ce887b0a18360",
+          "bytes": 6963
+        },
+        {
+          "path": "src/components/avg/VoiceProductionPanel.tsx",
+          "sha256": "5de53913e4a96e27c45ac5c02588533382133d60b568e818a3a0d1b76b1aa354",
+          "bytes": 19120
+        },
+        {
+          "path": "src/components/avg/VoiceRecoveryPanel.tsx",
+          "sha256": "cc232ddb260e16197419230a6ada052c7d9b970526743fccd02745f7a077e60a",
+          "bytes": 10278
+        },
+        {
+          "path": "src/components/avg/VoiceReviewPanel.tsx",
+          "sha256": "faee2b8712b95700b2fd8bfe91e23a095f44eddbdeffc129ba89f41265010f06",
+          "bytes": 11877
+        },
+        {
+          "path": "src/lib/avg/assembly-media-rights.ts",
+          "sha256": "9dcddea2c5a571c96af7ca2bc759bda10e425664f6130dd7e0c47ee2030639a7",
+          "bytes": 3250
+        },
+        {
+          "path": "src/lib/avg/media-production-definition.ts",
+          "sha256": "50a1645de4954a881882214fca25be5873be9ca2daf10a9a63de8890f25317b4",
+          "bytes": 2689
+        },
+        {
+          "path": "src/lib/avg/task-context.ts",
+          "sha256": "f8ef889a1883f7df3d98fccb187a9de24c7e95bf849ed06aaa7c1072964a1836",
+          "bytes": 11245
+        },
+        {
+          "path": "src/lib/avg/voice-assembly-contract.ts",
+          "sha256": "0f1d77ab96888edc388e20025c259da9ac62ca13ead28397d0082e292338b553",
+          "bytes": 9907
+        },
+        {
+          "path": "src/lib/avg/voice-assembly-plan.ts",
+          "sha256": "d49145b3b75f91d8956c778bb73ea8056dedc02cb8548b42067fa1ef4af34643",
+          "bytes": 6243
+        },
+        {
+          "path": "src/lib/avg/voice-assembly-storage.ts",
+          "sha256": "110ce12cd343d1a49f7b6174e84302f5682deba96843de47d01e329b4f41f0e4",
+          "bytes": 2429
+        },
+        {
+          "path": "src/lib/avg/voice-audition.ts",
+          "sha256": "1ae6f5a8a1e07f3222214746829fe3c84b31c5bdc92c0d8b59a38f6a0fba6094",
+          "bytes": 4390
+        },
+        {
+          "path": "src/lib/avg/voice-choice-contract.ts",
+          "sha256": "d226821ace12f2e292b20ca4b4a84ed65a4faf178b8bbb32186ab5ef939fc784",
+          "bytes": 2809
+        },
+        {
+          "path": "src/lib/avg/voice-choice-validation.ts",
+          "sha256": "d937afeeefffdf37186748e70294e45883d1d626bcf1e437277cad72f0cba9fa",
+          "bytes": 6448
+        },
+        {
+          "path": "src/lib/avg/voice-configuration.ts",
+          "sha256": "26b9d7fc10893d7509ab48303d9f98cd770fd5ff18a8a1e464a835bf26d254ff",
+          "bytes": 3751
+        },
+        {
+          "path": "src/lib/avg/voice-decoder.ts",
+          "sha256": "0ac6e63e4bef6410e83624ffad57da7b6d32cfab186c5404186675639d72ecf7",
+          "bytes": 4244
+        },
+        {
+          "path": "src/lib/avg/voice-draft-contract.ts",
+          "sha256": "d2f4f999f8a06d56b86e66d5b9e3b8a6f3c89f5a4701066b7d95d94f76c5da60",
+          "bytes": 6478
+        },
+        {
+          "path": "src/lib/avg/voice-draft-service.ts",
+          "sha256": "99da16ccc6f0cb0df03e95eaca7171fe87c43afe49c49067eff5a5bc8d713fd1",
+          "bytes": 4381
+        },
+        {
+          "path": "src/lib/avg/voice-exact-storage.ts",
+          "sha256": "4e65d6edbacabc6c97e248928a9669f1698d6808dd68174dc50104264a71a409",
+          "bytes": 4298
+        },
+        {
+          "path": "src/lib/avg/voice-production-admission.ts",
+          "sha256": "bc318c630e8953893b37ce93d03874c1ce2615e1925ecc3c92aa08860e4e1e98",
+          "bytes": 9485
+        },
+        {
+          "path": "src/lib/avg/voice-production-contract.ts",
+          "sha256": "3e26236c4dd46773c491aaf9633ed1f241bd65d5f0d0a5302ee1826f23285d58",
+          "bytes": 8781
+        },
+        {
+          "path": "src/lib/avg/voice-production-executor.ts",
+          "sha256": "954a61bb3672ddece29b3f990d683694cb637759bce285e44502222270b7d428",
+          "bytes": 11017
+        },
+        {
+          "path": "src/lib/avg/voice-production-policy.ts",
+          "sha256": "962b687b0f213214e70fc27faf9d30e6e3fd3b4ef88c6942c00e349113d9fb12",
+          "bytes": 7481
+        },
+        {
+          "path": "src/lib/avg/voice-production-source.ts",
+          "sha256": "0ccaa1be2f7893fa4e32666bf58773a4fad535f9e3283f8cca55e47aa3a8e624",
+          "bytes": 4004
+        },
+        {
+          "path": "src/lib/avg/voice-raw-contract.ts",
+          "sha256": "8427474dd952fe3d993b89c934d2f9d6426335f54c3e4c81b73b28b62375f5c7",
+          "bytes": 9686
+        },
+        {
+          "path": "src/lib/avg/voice-recovery-contract.ts",
+          "sha256": "6f6fb826f860040f2dc7b0157218df21ce22a290e74576e4176d0dcb0f0e7b42",
+          "bytes": 4704
+        },
+        {
+          "path": "src/lib/avg/voice-recovery-executor.ts",
+          "sha256": "c5577f1c9f6625580a8e3b5a96e9f0aac60a6b898af8241124670405b07f8999",
+          "bytes": 3098
+        },
+        {
+          "path": "src/lib/avg/voice-recovery.ts",
+          "sha256": "93bc2dcfee61296228138903c461c8685d7fec3fc84ab70186119d31fa95e9b9",
+          "bytes": 15929
+        },
+        {
+          "path": "src/lib/avg/voice-request-contract.ts",
+          "sha256": "6c04e17370984bfdbafd3d1bac8e62df1289d2d93f067afa1ba095d817073a1f",
+          "bytes": 9237
+        },
+        {
+          "path": "src/lib/avg/voice-request-safety.ts",
+          "sha256": "50ef23542fab2b30aa06e83a5c8a0fab2cd7b6f07f2c3cd8ef719d9b3f036f5b",
+          "bytes": 6594
+        },
+        {
+          "path": "src/lib/avg/voice-response-contract.ts",
+          "sha256": "a221238d41ff785df9809783563206952ad21cbfbe6902dc7285bad4c96d0d83",
+          "bytes": 3944
+        },
+        {
+          "path": "src/lib/avg/voice-response-proof.ts",
+          "sha256": "ee1a491b6fd895910b595dbeb3f6326a37f97aee7f49da4aa58826cb258ee63c",
+          "bytes": 4235
+        },
+        {
+          "path": "src/lib/avg/voice-review-contract.ts",
+          "sha256": "7439f6ca938322434fbda233c8f35cf4ce817a79055c983c9e95433176f3f5fc",
+          "bytes": 3134
+        },
+        {
+          "path": "src/lib/avg/voice-review.ts",
+          "sha256": "f783c6f346a4a822206b0b78c754e683d4c7388b3ad2c36de787b46dfda705cd",
+          "bytes": 4162
+        },
+        {
+          "path": "src/lib/avg/voice-task-source.ts",
+          "sha256": "35e31bb1540a3d70bfa6738992948de102ce620130398e8026ce3f25fb15f612",
+          "bytes": 7650
+        },
+        {
+          "path": "src/lib/avg/voice-transport.ts",
+          "sha256": "98a0b518a22270ccc61e0e719022a3b8f72d2d1f88e68de1dcedee9776dd3569",
+          "bytes": 13266
+        },
+        {
+          "path": "src/lib/avg/voice-wave.ts",
+          "sha256": "6a57649434ff068dfe7933cf3c80feeac7f6b14483a69ec948ef31e3c3ac1f19",
+          "bytes": 4276
+        },
+        {
+          "path": "tests/e2e/avg-voice-production.spec.ts",
+          "sha256": "0963b2a314b849b61f91ad796cee07b8c43b5f5137c2a80ceba4592713d0a6fe",
+          "bytes": 38230
+        },
+        {
+          "path": "tests/e2e/avg-voice-workbench.spec.ts",
+          "sha256": "37d265823cdd8ebdcf4a1b151694f1d7eeb6dc8af9c1a54e77929f7e2af5562e",
+          "bytes": 6876
+        },
+        {
+          "path": "tests/helpers/avg-voice-production-fixture.ts",
+          "sha256": "778691c7e7d770956bc7279e7a41fc9fd385b355cd14c6715863736e44860ff3",
+          "bytes": 11718
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-mixed-image-definition.test.ts",
+          "sha256": "787b266e51be3da091521211d5e8aacecf017eced49b81e0b24cf8e8a02c63ad",
+          "bytes": 5297
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-task-context.test.ts",
+          "sha256": "51993f230233aef9d124893af6a8b23c5a1621533a98ac3b515e86a766c956b1",
+          "bytes": 7109
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-admission.test.ts",
+          "sha256": "8f573ab4425c330474a7eeb77ee5fe1fde51ef33318c56f78c2f5278e62919e9",
+          "bytes": 7317
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-assembly.test.ts",
+          "sha256": "c5b8b79fff2f2ca0eda7706d1ee641132c03ede0692110fea4907679114d80d5",
+          "bytes": 6967
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-audition-ui.test.tsx",
+          "sha256": "71c7e711834c611ba86492af3ce20dd0d7f87ecf34426802d64392e1e7c992c7",
+          "bytes": 9467
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-audition.test.ts",
+          "sha256": "d4ff647a5a56703fdf557dfb6954ef6063ba336561128680bfbab71b280ebca6",
+          "bytes": 5249
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-bytes.test.ts",
+          "sha256": "30473151c40f2cac6e82df3aa70a46887580adc335d5e5e88f440f393ca60514",
+          "bytes": 8607
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-configuration.test.ts",
+          "sha256": "d1139538dac2a5cce8aacb6638a4fc26d1cfb849b5eefbb27f9926bbeda88cef",
+          "bytes": 4916
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-draft.test.ts",
+          "sha256": "9ff279b04316794d14217eee337bbc425089f622639c873d5ab642b7377fe3d7",
+          "bytes": 9823
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-executor.test.ts",
+          "sha256": "c0726ab8221dbb3b56c47966a6f928bbf5538160833ba37c095d41aeaf0a2f0d",
+          "bytes": 13924
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-harness.test.ts",
+          "sha256": "919354258a49f3013d3657ab39a10bb996c936bb40315a154872c0c55a78804d",
+          "bytes": 43693
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-policy.test.ts",
+          "sha256": "65813d347b46a2bf8791c08277626f5f962c5d555bc31838372ccb69595596cf",
+          "bytes": 5304
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-production-contract.test.ts",
+          "sha256": "dd9eba917b1c4e2eb6fbc39d13a2a5cba59ec65a586cae2fe83ac9d1d9b808b7",
+          "bytes": 12669
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-prototype.test.ts",
+          "sha256": "217c28282b01bb55a7edac9a89d22fa6c1b133a40fef4dc744d9e14615b914af",
+          "bytes": 2950
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-raw.test.ts",
+          "sha256": "79ce441de0cf639908475c60cebdd4259f6b5a02147b39e737c3701b3300b6cd",
+          "bytes": 5944
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-recovery.test.ts",
+          "sha256": "e8cecb1c5dcf98cc98b6f4f6014774aadfc14c0ec127073ebb410d64798766c3",
+          "bytes": 27003
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-request-contract.test.ts",
+          "sha256": "17ec0c80d9c5c89672b6b0eacb6bcfdf8d19019bb1b2734b64ff8837031e976c",
+          "bytes": 10545
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-review.test.ts",
+          "sha256": "7f7037fa813ff3b12c81039f96e8f7051b673d8f9a0b92b1bd2d18a1db24493d",
+          "bytes": 6839
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-source-proof.test.ts",
+          "sha256": "09ba52f8533c5d6a209d5e31f3e889f6f9802f708f6b297b3bec87c0683e8600",
+          "bytes": 10998
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-storage.test.ts",
+          "sha256": "6617cfe78fc3b1c51c700f541527315ebd4bf5ee81805e83bf71b47d7874c943",
+          "bytes": 8183
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-transport.test.ts",
+          "sha256": "3f5d63006354543fb7c6bf069f68c1da83abd1b7cdbb3ff57f93bf7e001c6e26",
+          "bytes": 13457
+        },
+        {
+          "path": "tests/regression/R-AVG-BASE02-voice-workbench-ui.test.tsx",
+          "sha256": "be8f9c50de4729c93f1f00215f666eaf87750bc3668a3c79a4dff4f06ad5981c",
+          "bytes": 9033
+        },
+        {
+          "path": "docs/AI-FUNCTIONS-MANUAL.generated.md",
+          "sha256": "f97b39692f24746ca543cd78454b4663f8625f3e9f24af6dcb3f7d65252a0ae9",
+          "bytes": 66976
+        },
+        {
+          "path": "docs/ARCHITECTURE.md",
+          "sha256": "0678700abe23e9b734e52bc668e1a41679cb011a79a3280daea77210fb459509",
+          "bytes": 28299
+        },
+        {
+          "path": "docs/roadmap/AVG-IMPLEMENTATION-PLAN.md",
+          "sha256": "0db31ad65a9ffa34c5dc619059452c6c57479fa2eaac294cd7198434234c417a",
+          "bytes": 60297
+        },
+        {
+          "path": "docs/roadmap/AVG-WORK-PACKAGE-CARDS.md",
+          "sha256": "1bf4fb550033d63410b8880255f85cac6a745b6e1b63d7667ffa20064e799cc2",
+          "bytes": 130429
+        },
+        {
+          "path": "src/components/avg/AssemblyWorkbench.tsx",
+          "sha256": "0bf7f797cc51feabaeeda1f69221a476dc471eb31353b7926459952940e6ca65",
+          "bytes": 45800
+        },
+        {
+          "path": "src/components/avg/MediaProductionPanel.tsx",
+          "sha256": "d492f6267304d02322e2e2301c67ad88b898410e5657870c2b61225f5cbf7303",
+          "bytes": 35767
+        },
+        {
+          "path": "src/lib/agent/skill-registry.ts",
+          "sha256": "e520181c0c0405c2a256670f24e4d6303e323bd9add3922565660d53a955073a",
+          "bytes": 250349
+        },
+        {
+          "path": "src/lib/avg/artifact-contract.ts",
+          "sha256": "88bb9881606971fe07399656d0eb929df7bb5400e8adf7de1e13ebdab06d1de0",
+          "bytes": 19180
+        },
+        {
+          "path": "src/lib/avg/assembly-contract.ts",
+          "sha256": "1e3dddc8f7f2ada021a8680e63ffc702d6bc605f10bc8b9ef6503fe886ff76eb",
+          "bytes": 7488
+        },
+        {
+          "path": "src/lib/avg/assembly-executor.ts",
+          "sha256": "0ede0395e0d182cd29e36f529b874cda03040b3a0087e6125b7c89c68367478a",
+          "bytes": 12702
+        },
+        {
+          "path": "src/lib/avg/assembly-plan.ts",
+          "sha256": "1ed964e1c15d88344d9265a169ad317d564a562e20f3ac2dd1b402d48718b5d8",
+          "bytes": 10002
+        },
+        {
+          "path": "src/lib/avg/assembly-service.ts",
+          "sha256": "8d4f63c3d8c90192ef9382c9067d999ab27ee12f262bda3c77dbb9d5d6c3c0fe",
+          "bytes": 73388
+        },
+        {
+          "path": "src/lib/avg/author-artifacts.ts",
+          "sha256": "29b9874d43c1b99b1f63388d23909054ade893eb9374239c5e57f091f28f0b11",
+          "bytes": 63122
+        },
+        {
+          "path": "src/lib/avg/author-workspace-contract.ts",
+          "sha256": "5817e7eb0e5e0f7366748b9552f7603ecda60892683489d7dfefe775e88b384a",
+          "bytes": 4869
+        },
+        {
+          "path": "src/lib/avg/image-processing-contract.ts",
+          "sha256": "80aad951dc39af3a1047810250eed12b167b9143119891c0f865b032d05ca9f2",
+          "bytes": 14428
+        },
+        {
+          "path": "src/lib/avg/image-processing-executor.ts",
+          "sha256": "0ba74ae0f416f5b7860e8d593aecc41c6b3d4bc12a78e4a1149ecc1279f7b635",
+          "bytes": 5531
+        },
+        {
+          "path": "src/lib/avg/image-processing-source.ts",
+          "sha256": "a4307070e4d186f62983e268b87e81d79c123ca3fd0d37d8783712038df476ba",
+          "bytes": 6512
+        },
+        {
+          "path": "src/lib/avg/media-capability.ts",
+          "sha256": "1319d786297c8dfa17fddf7b971c2c5bf2ff9746c7ded0ac29a3aedda896dee4",
+          "bytes": 3547
+        },
+        {
+          "path": "src/lib/avg/media-choice-validation.ts",
+          "sha256": "6aea4c8daa487e9aed3f9c1c53436b25e73daae9d06e7d1b90a030d7a88347fe",
+          "bytes": 5402
+        },
+        {
+          "path": "src/lib/avg/media-production-admission.ts",
+          "sha256": "9aff24fc5b7c2c7a1a0ea1f5a54e2cc088210d943ca20bb558515c23c9484438",
+          "bytes": 9257
+        },
+        {
+          "path": "src/lib/avg/media-production-executor.ts",
+          "sha256": "9c86e56416c7510694dcec0cdb97e9c4dc79f35870f10164ff590157ce76a02d",
+          "bytes": 13689
+        },
+        {
+          "path": "src/lib/avg/media-production-policy.ts",
+          "sha256": "30a0570a739cd44b9862c11a7da75739cca43f5b79b430fd49c4e384205db23d",
+          "bytes": 6574
+        },
+        {
+          "path": "src/lib/avg/media-raw-contract.ts",
+          "sha256": "b87b5714852716cc11635bab688ea2e3e18aeef7cef22f4aec5e83f7d97e807b",
+          "bytes": 8086
+        },
+        {
+          "path": "src/lib/avg/media-recovery-executor.ts",
+          "sha256": "4d3b1531fbea7502b7b47ae8d371d6fbba0ebae8ca385a299bd0a89154023f0d",
+          "bytes": 3142
+        },
+        {
+          "path": "src/lib/avg/media-recovery.ts",
+          "sha256": "21981548d733a3ae08ac97bc505825a501e7379d52cf65fc83f9a51a566f5870",
+          "bytes": 10455
+        },
+        {
+          "path": "src/lib/avg/media-task-source.ts",
+          "sha256": "946174a838022eba159610164d785549dfe03ea81bcfd9eb6bc0d33f27925ddf",
+          "bytes": 2446
+        },
+        {
+          "path": "src/lib/avg/prototype-contract.ts",
+          "sha256": "3598c0fc2fb2f11f3afe0ef9f0a9c991b3f0408ffae7db5a1e5c6aaba853d59e",
+          "bytes": 2585
+        },
+        {
+          "path": "src/lib/avg/stage-image-sources.ts",
+          "sha256": "3edb773fbfe23129465e61c6765dee04237c6f21f01c6af3ffced5ff2871d84d",
+          "bytes": 9466
+        },
+        {
+          "path": "src/lib/avg/visual-review.ts",
+          "sha256": "60b95799be82e0ede9721ff308b383c885d9be0ca2bd5fe3ca4874aa5ee35b93",
+          "bytes": 7477
+        },
+        {
+          "path": "src/lib/product-production/adoption.ts",
+          "sha256": "16e296c2e1490b7aeb032e057d3ed599b007256413250a8e360a68dc37340daf",
+          "bytes": 64222
+        },
+        {
+          "path": "src/lib/product-production/artifact-store.ts",
+          "sha256": "8cfaf95319683ddbc2b5146f1cacf280dd2e56ee0d7374ffca7adc1621aaa210",
+          "bytes": 180157
+        },
+        {
+          "path": "src/lib/product-production/commands.ts",
+          "sha256": "a92142de5c872df988b93dbacdcb1a2ce3bb5157f82a9448565b43eda992fa4b",
+          "bytes": 180437
+        },
+        {
+          "path": "src/lib/product-production/contracts.ts",
+          "sha256": "fd72473eb16d3ecb93e6987f9f1595444e60aa231fb2f3c55ebf1a73756417f9",
+          "bytes": 52307
+        },
+        {
+          "path": "src/lib/product-production/plan.ts",
+          "sha256": "cf9a36340687c6dcf6d2e2c1990778c3694212a8e1a048eedb137c8a44fb7226",
+          "bytes": 86392
+        },
+        {
+          "path": "src/lib/product-production/production-executor.ts",
+          "sha256": "191cecbaa1e8a9e5ac23e5dbdbd85502c4350ee7539ad0376cbfade9728e8c03",
+          "bytes": 628802
+        },
+        {
+          "path": "src/lib/product-production/scheduler.ts",
+          "sha256": "9e6e468a906a672fb1f6bcf21794cd8b7f4a5aceaa08c1bfcd62ac257a8866cf",
+          "bytes": 318284
+        },
+        {
+          "path": "src/lib/product-production/service.ts",
+          "sha256": "6f5146bc70cbf38b1bc5c48b2c77038fc8b7c07dfb56bbb7ad31e503489372bb",
+          "bytes": 93308
+        },
+        {
+          "path": "src/lib/registry/context-sources.ts",
+          "sha256": "7b4060199a03290debc6b148270d778138d0b0687f60456ac9c44b607c180dd6",
+          "bytes": 166004
+        },
+        {
+          "path": "src/lib/types/product-production.ts",
+          "sha256": "3578806a5b05d05c34057e0847f769e5a524b31e734073a12ea94c047cca21b1",
+          "bytes": 36936
+        }
+      ]
+    }
+  ]
+}

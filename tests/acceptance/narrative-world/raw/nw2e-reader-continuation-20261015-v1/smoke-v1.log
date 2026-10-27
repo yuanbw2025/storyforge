@@ -1,5 +1,0 @@
-{"phase":"requesting","distinctCall":42,"promptHash":"8839b2014f9f","model":"gpt-6.1-sol"}
-{"phase":"requesting","distinctCall":42,"promptHash":"16900bac6c00","model":"gpt-6.1-sol"}
-{"phase":"recorded","promptHash":"8839b2014f9f","status":"completed","durationMs":16213,"usage":{"totalTokens":5256,"inputTokens":5069,"cachedInputTokens":0,"cacheWriteInputTokens":0,"outputTokens":187,"reasoningOutputTokens":121}}
-{"phase":"recorded","promptHash":"16900bac6c00","status":"completed","durationMs":18767,"usage":{"totalTokens":5184,"inputTokens":4931,"cachedInputTokens":0,"cacheWriteInputTokens":0,"outputTokens":253,"reasoningOutputTokens":191}}
-{"phase":"summary","path":"summary-0043-3bd5efdf-ed62-43b2-8174-5e10927412c5.json","completedCases":65,"recordedAttempts":43,"actualCalls":43,"completedActualCalls":42,"failedActualCalls":1,"unknownActualCalls":0,"preDispatchFailures":0,"unknownUsageCalls":1,"unattempted":418,"distinctPrompts":461,"sourceUnchanged":false,"stopped":false}

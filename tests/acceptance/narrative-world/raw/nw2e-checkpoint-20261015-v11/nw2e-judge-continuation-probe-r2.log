@@ -1,3 +1,0 @@
-{"phase":"requesting","call":22,"hash":"135a017c3b57"}
-{"phase":"recorded","hash":"135a017c3b57","status":"completed","durationMs":8798,"usage":{"totalTokens":7580,"inputTokens":7363,"cachedInputTokens":0,"cacheWriteInputTokens":0,"outputTokens":217,"reasoningOutputTokens":0}}
-{"phase":"summary","actualCalls":22,"completedObservations":42,"complete":false,"sourceUnchanged":true,"stopped":false}

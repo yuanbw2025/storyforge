@@ -1,5 +1,0 @@
-import runpy
-import sys
-
-sys.path.insert(0, '/Users/qinyingying/.local/share/storyforge-test-cleaner')
-runpy.run_path('/Users/qinyingying/.local/share/storyforge-test-cleaner/queue_runner.py', run_name='__main__')

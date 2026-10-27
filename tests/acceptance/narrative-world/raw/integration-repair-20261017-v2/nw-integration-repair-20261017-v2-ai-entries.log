@@ -1,5 +1,0 @@
-
-> storyforge@4.0.2 check:ai-entry-registry
-> node scripts/check-ai-entry-registry.mjs
-
-[ai-entry-registry] ok: 48 bindings / 52 calls; formal 25, auxiliary 16, evaluation 6, experimental 1

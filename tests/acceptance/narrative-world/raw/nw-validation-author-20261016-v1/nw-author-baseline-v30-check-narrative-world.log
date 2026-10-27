@@ -1,5 +1,0 @@
-
-> storyforge@4.0.0 check:narrative-world
-> node scripts/check-narrative-world-baseline.mjs
-
-NW-0B corpus check passed: 12 families (4 held out), 120 queries, 48 edits; original evidence hashes and spans verified

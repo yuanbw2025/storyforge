@@ -1,6 +1,0 @@
-{
-  "tests/acceptance/narrative-world/raw/nw-approved-bell-flow-20261016-v1/bell.test.ts.txt": "321d52ea5d280294c0f6325d172760efaf163f7e7af74a52c3b151c90eccb467",
-  "tests/acceptance/narrative-world/raw/nw-approved-bell-flow-20261016-v1/config.mts.txt": "e8594b30c697298bb5706c0f7f51f32585684e3e554c065b9c0ac0507cdc2636",
-  "tests/acceptance/narrative-world/raw/nw-approved-bell-flow-20261016-v1/result.json": "771b7e0b340f6678b62c5dbd1ee59b8cefbe594f31f937bf00438f9c9239c1d1",
-  "tests/acceptance/narrative-world/raw/nw-approved-bell-flow-20261016-v1/vitest.log": "62bba023a081caf5d409ad3d8e836a6b86d8fcb64b7d71d080c8e9b9749f0994"
-}

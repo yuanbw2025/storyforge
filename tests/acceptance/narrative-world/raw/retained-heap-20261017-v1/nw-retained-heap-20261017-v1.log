@@ -1,7 +1,0 @@
-[serial-ci] Waiting for the shared CI slot.
-[serial-ci] Acquired slot in /Users/qinyingying/.codex/worktrees/nw-mainline-refresh-20261016/storyforge
-{"starting": "probe", "log": "/tmp/nw-retained-heap-20261017-v1-probe.log"}
-{"completed": "probe", "exitCode": 0}
-{"starting": "summary", "log": "/tmp/nw-retained-heap-20261017-v1-summary.log"}
-{"completed": "summary", "exitCode": 0}
-[serial-ci] Released slot; exit code 0

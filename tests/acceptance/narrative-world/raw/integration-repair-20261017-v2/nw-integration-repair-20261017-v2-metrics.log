@@ -1,5 +1,0 @@
-
-> storyforge@4.0.2 check:project-metrics
-> node scripts/generate-project-metrics.mjs --check
-
-[project-metrics] ok: architecture metrics match current code.

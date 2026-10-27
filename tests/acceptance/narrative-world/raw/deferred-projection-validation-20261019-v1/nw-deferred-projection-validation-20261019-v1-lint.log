@@ -1,6 +1,0 @@
-
-/Users/qinyingying/.codex/worktrees/nw-mainline-refresh-20261016/storyforge/tests/regression/R-NW-2E-deferred-projection.test.ts
-  60:67  warning  Unnecessary escape character: \"  no-useless-escape
-
-✖ 1 problem (0 errors, 1 warning)
-

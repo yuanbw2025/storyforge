@@ -1,8 +1,0 @@
-[WebServer] (node:14206) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
-TypeError: Module "file:///Users/qinyingying/.codex/worktrees/narrative-world-design/storyforge/tests/acceptance/narrative-world/scale-plan-20261015-v1.json" needs an import attribute of "type: json"
-    at eval (<anonymous>:1:1)
-Error: No tests found.
-Make sure that arguments are regular expressions matching test files.
-You may need to escape symbols like "$" or "*" and quote the arguments.
-

@@ -1,8 +1,0 @@
-{
-  "reason": "New shared-proof production repair and native regression require a new frozen validation scope. Cancel own undispatched r12 only.",
-  "observedAt": "2026-10-16T04:04:10.883379+00:00",
-  "wrapperPid": 51980,
-  "command": "/Library/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /tmp/storyforge-serial-ci-20261013.py -- python3 /tmp/nw2e-run-frozen-r12.py ci",
-  "observedLog": "[serial-ci] Waiting for the shared CI slot.\n",
-  "runnerDispatchedAtObservation": false
-}

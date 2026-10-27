@@ -1,2 +1,0 @@
-import config from '../vitest.config'
-export default { ...config, test: { ...config.test, include: ['test-results/nw-approved-story-flow/**/*.test.ts'], maxWorkers: 1, minWorkers: 1 } }

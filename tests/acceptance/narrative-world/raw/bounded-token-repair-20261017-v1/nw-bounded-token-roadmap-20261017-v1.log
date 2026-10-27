@@ -1,5 +1,0 @@
-
-> storyforge@4.0.2 check:roadmap
-> node scripts/check-roadmap.mjs
-
-roadmap check passed: 9 active tasks and 17 completed capabilities across stages A-F

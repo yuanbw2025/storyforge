@@ -1,6 +1,0 @@
-[serial-ci] Waiting for the shared CI slot.
-[serial-ci] Acquired slot in /private/tmp/nw-impact-sequence-20261022-v1/baseline-v77
-{"starting": "baseline-refresh", "at": "2026-10-22T13:28:06.981425+00:00"}
-{"completed": "baseline-refresh", "exitCode": 0}
-{"exitCode": 0, "terminal": "/tmp/nw-impact-sequence-20261022-v1/baseline-v77/validation-terminal.json"}
-[serial-ci] Released slot; exit code 0

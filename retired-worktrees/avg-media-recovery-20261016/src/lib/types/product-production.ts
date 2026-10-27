@@ -1,0 +1,1178 @@
+import type { AnyProductRuntimePackage, ProductRuntimePackageV1, ProductRuntimePackageV2 } from "./product-release";
+import type { ProductMediaKind } from "./product-media";
+import type { ProductionProductKindV1 } from "./product-identity";
+import type { AiTownProductionBriefV1 } from "./ai-town";
+import type {
+  TtrpgHouseRuleDiffV2,
+  TtrpgHouseRuleOverlayV2,
+} from "./ttrpg-product";
+import { TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_KINDS_V1 } from "./text-open-world-production";
+
+export const STORYFORGE_CANONICAL_JSON_VERSION = 2 as const;
+
+export interface ProductProductionHandoffV1 {
+  schema: "storyforge.product-production-handoff";
+  version: 1;
+  productType: ProductionProductKindV1;
+  worldReleaseId: number;
+  worldContentHash: string;
+}
+
+export interface ProductBuildPreviewManifestV1 {
+  schema: "storyforge.product-build-preview";
+  version: 1;
+  productionKey: string;
+  buildNumber: number;
+  buildManifestHash: string;
+  runtimePackage: ProductRuntimePackageV1;
+  packageHash: string;
+  mediaBindings: Array<{
+    assetKey: string;
+    artifactKey: string;
+    blobContentHash: string;
+  }>;
+  fallbackSummary: string[];
+  previewHash: string;
+}
+
+export type ProductRuntimeSourceV1 =
+  | { kind: "release"; productReleaseId: number }
+  | { kind: "build"; productBuildId: number; expectedPreviewHash: string };
+
+/** V2 carries the new package without reinterpreting V1 media bindings. */
+export interface ProductBuildPreviewManifestV2 extends Omit<ProductBuildPreviewManifestV1,
+  'version' | 'runtimePackage' | 'mediaBindings'> {
+  version: 2;
+  runtimePackage: ProductRuntimePackageV2;
+  mediaBindings: ProductBuildPreviewManifestV1['mediaBindings'];
+}
+
+export type AnyProductBuildPreviewManifest = ProductBuildPreviewManifestV1 | ProductBuildPreviewManifestV2;
+
+/** Verified protocol inspection; this is not a playable-source admission. */
+export interface VerifiedProductRuntimeSourceEnvelope {
+  source: ProductRuntimeSourceV1;
+  runtimePackage: AnyProductRuntimePackage;
+  packageHash: string;
+  runtimeSourceHash: string;
+}
+
+export interface ResolvedProductRuntimeSourceV1 {
+  source: ProductRuntimeSourceV1;
+  runtimePackage: AnyProductRuntimePackage;
+  packageHash: string;
+  runtimeSourceHash: string;
+  mediaResolver: ProductMediaResolverV1;
+}
+
+export interface ResolvedMediaCatalogV1 {
+  urls: Record<string, string>;
+  failures: Array<{ assetKey: string; reason: string }>;
+  usedBytes: number;
+}
+
+export interface ProductMediaResolverV1 {
+  preload(input: {
+    assetKeys: string[];
+    maximumBytes: number;
+    /** Opt-in bounded window; legacy callers retain their cached catalog. */
+    retainOnlyRequested?: boolean;
+  }): Promise<ResolvedMediaCatalogV1>;
+  read(assetKey: string): Promise<Blob>;
+  dispose(): void;
+}
+
+export type ProductProductionStatusV1 =
+  | "consulting"
+  | "brief-ready"
+  | "producing"
+  | "paused"
+  | "preview-ready"
+  | "released"
+  | "stopped"
+  | "failed"
+  | "archived";
+
+export type ProductBuildStatusV1 =
+  | "draft"
+  | "authorized"
+  | "planning"
+  | "building"
+  | "integrating"
+  | "validating"
+  | "preview-ready"
+  | "release-ready"
+  | "released"
+  | "paused"
+  | "recovery-required"
+  | "failed"
+  | "cancelled"
+  | "archived";
+
+export type ProductBuildArtifactStatusV1 =
+  | "pending"
+  | "candidate"
+  | "accepted"
+  | "carried-forward"
+  | "rejected"
+  | "orphaned"
+  | "invalid";
+
+export const GENERIC_PRODUCT_BUILD_ARTIFACT_KINDS_V1 = [
+  "consultation-evidence",
+  "product-design",
+  "narrative",
+  "product-module",
+  "visual-bible",
+  "audio-bible",
+  "asset-manifest",
+  "image",
+  "audio",
+  "rule-pack",
+  "campaign-pack",
+  "presentation",
+  "quality-report",
+  "playtest-report",
+  "integration-report",
+] as const;
+
+export const PRODUCT_BUILD_ARTIFACT_KINDS_V1 = [
+  ...GENERIC_PRODUCT_BUILD_ARTIFACT_KINDS_V1,
+  ...TEXT_OPEN_WORLD_PRODUCTION_ARTIFACT_KINDS_V1,
+] as const;
+
+export type ProductBuildArtifactKindV1 =
+  (typeof PRODUCT_BUILD_ARTIFACT_KINDS_V1)[number];
+
+export function isProductBuildArtifactKindV1(
+  value: unknown,
+): value is ProductBuildArtifactKindV1 {
+  return typeof value === "string"
+    && (PRODUCT_BUILD_ARTIFACT_KINDS_V1 as readonly string[]).includes(value);
+}
+
+export const PRODUCT_PRODUCTION_COMMAND_TYPES = [
+  "create-intent",
+  "create-text-open-world-intent",
+  "save-brief-revision",
+  "save-text-open-world-creator-brief",
+  "authorize-start",
+  "adopt-avg-artifact",
+  "authorize-text-open-world-creator-start",
+  "authorize-text-open-world-creator-repair",
+  "authorize-text-open-world-creator-media",
+  "pause",
+  "resume",
+  "stop",
+  "resolve-blocker",
+  "request-preview",
+  "revise-media-asset",
+  "revise-media-assets",
+  "revise-text-content",
+  "publish",
+  "evolve",
+  "archive",
+  "restore",
+] as const;
+export type ProductProductionCommandTypeV1 =
+  (typeof PRODUCT_PRODUCTION_COMMAND_TYPES)[number];
+
+export interface ProductStartingPointV1 {
+  kind: "mainline" | "branch" | "character" | "history" | "custom";
+  title: string;
+  summary: string;
+  sourceRefs: string[];
+  protagonistRefs: string[];
+  openingConflict: string;
+}
+
+export interface ProductStartingPointSuggestionV1 {
+  suggestionKey: string;
+  kind: ProductStartingPointV1["kind"];
+  title: string;
+  rationale: string;
+  sourceRefs: string[];
+  protagonistRefs: string[];
+  openingConflict: string;
+  recommendedProductTypes: ProductionProductKindV1[];
+  scale: ProductProductionScaleV1["scope"];
+  risks: string[];
+}
+
+/** Human-reviewable portable source facets exposed by the frozen WorldRelease. */
+export interface ProductProductionSourceOptionV1 {
+  resourceKey: string;
+  label: string;
+  summary: string;
+  kind: string | null;
+}
+
+export interface ProductProductionSourceOptionsV1 {
+  storySources: ProductProductionSourceOptionV1[];
+  characters: ProductProductionSourceOptionV1[];
+  importantLocations: ProductProductionSourceOptionV1[];
+  artifacts: ProductProductionSourceOptionV1[];
+  codexEntries: ProductProductionSourceOptionV1[];
+  storyArcs: ProductProductionSourceOptionV1[];
+}
+
+/**
+ * Explicit author selection. Relations and product-specific bindings are
+ * derived by the compiler so callers cannot smuggle dangling references.
+ */
+export interface ProductProductionSourceSelectionV1 {
+  storyResourceKeys: string[];
+  characterResourceKeys: string[];
+  importantLocationResourceKeys: string[];
+  artifactResourceKeys: string[];
+  codexEntryResourceKeys: string[];
+  storyArcResourceKeys: string[];
+}
+
+export interface ProductProductionScaleV1 {
+  scope: "scene" | "short-arc" | "chapter" | "multi-chapter" | "campaign";
+  targetPlayMinutes: number;
+  targetWordCount: number;
+  targetEndingCount: number;
+}
+
+export interface ProductProductionMediaProfileV1 {
+  visualLevel: "none" | "key-scenes" | "illustrated";
+  audioLevel: "none" | "music-sfx" | "full";
+  imageCount: number;
+  musicTrackCount: number;
+  sfxCount: number;
+  voiceLineCount: number;
+  requiredMediaKinds: ProductMediaKind[];
+}
+
+export interface ProductConsultationBudgetV1 {
+  maximumModelCalls: number;
+  maximumInputTokens: number;
+  maximumOutputTokens: number;
+  maximumCostUsd: number | null;
+}
+
+export interface ProductProductionBudgetV3 extends ProductConsultationBudgetV1 {
+  maximumMediaCalls: number;
+  maximumDurationMs: number;
+  maximumStorageBytes: number;
+}
+
+export interface ProviderCapabilityRequirementV1 {
+  requirementKey: string;
+  mediaClass: "text" | "image" | "music" | "sfx" | "voice" | "transcode";
+  operation: string;
+  adapterFamily: string;
+  minimumCapabilityVersion: string;
+  allowedDataClasses: string[];
+  maximumRequestCost: number | null;
+  maximumTotalCost: number | null;
+  rightsPolicyVersion: string;
+  capabilityHash: string;
+  required: boolean;
+}
+
+export interface ProductProductionExternalDataPolicyV1 {
+  allowedDataClasses: string[];
+  forbiddenDataClasses: string[];
+  allowReferenceImages: boolean;
+  allowVoiceScripts: boolean;
+}
+
+export interface ProductProductionFallbackPolicyV1 {
+  allowTextOnly: boolean;
+  allowExistingProjectMedia: boolean;
+  allowProceduralAudio: boolean;
+  onRequiredCapabilityMissing: "pause" | "fail";
+}
+
+export interface ProductProductionCompletionContractV1 {
+  requiresPlayablePreview: boolean;
+  requiredGateIds: string[];
+  minimumMediaCoverage: number;
+  allowSoftWaivers: boolean;
+}
+
+export interface TtrpgProductionSeatV2 {
+  seatKey: string;
+  label: string;
+  controller: "human" | "ai" | "open";
+  role: "player" | "assistant-gm";
+  characterMode: "world-template" | "quick-card" | "manual" | "ai-generated";
+  sourceCharacterResourceKey: string | null;
+  characterName: string;
+  rankTier: "D" | "C" | "B" | "A" | null;
+  privateGoal: string;
+}
+
+export type TtrpgCampaignProposalSectionV2 =
+  | "background"
+  | "coreConflict"
+  | "opening"
+  | "fronts"
+  | "secrets"
+  | "endings";
+
+export interface TtrpgCampaignProposalV2 {
+  proposalKey: string;
+  title: string;
+  pitch: string;
+  background: string;
+  coreConflict: string;
+  structure: "linear" | "branching" | "node-based" | "sandbox";
+  opening: string;
+  frontConcepts: string[];
+  secretConcepts: string[];
+  endingConcepts: string[];
+  sourceRefs: string[];
+}
+
+/** Reviewable proposal comparison and per-section mixing frozen into the existing Brief table. */
+export interface TtrpgCampaignDesignV2 {
+  schema: "storyforge.ttrpg-campaign-design";
+  version: 2;
+  origin: "author-guided" | "ai-candidate";
+  sourceWorldContentHash: string;
+  proposals: TtrpgCampaignProposalV2[];
+  selection: {
+    baseProposalKey: string;
+    sectionSources: Record<TtrpgCampaignProposalSectionV2, string>;
+    lockedSections: TtrpgCampaignProposalSectionV2[];
+    authorNotes: string;
+    confirmed: boolean;
+  };
+  /** Durable AI proposal evidence; null for the no-provider author-guided fallback. */
+  candidateEvidence: null | {
+    runId: number;
+    candidateHash: string;
+    contextManifestHash: string;
+  };
+}
+
+export interface TtrpgProductionBriefV2 {
+  schema: "storyforge.ttrpg-production-brief";
+  version: 2;
+  creationMode: "quick" | "advanced";
+  naturalLanguageInstruction: string;
+  campaign: {
+    title: string;
+    premise: string;
+    background: string;
+    coreConflict: string;
+    genreTags: string[];
+    tone: string[];
+    difficulty: "introductory" | "standard" | "challenging";
+    targetSessions: number;
+    targetSessionMinutes: number;
+  };
+  /** Author-confirmed proposal comparison/mixing frozen into every production Brief. */
+  campaignDesign: TtrpgCampaignDesignV2;
+  rules: {
+    origin:
+      | "builtin-storyforge"
+      | "builtin-rank-lite"
+      | "builtin-d20-fantasy"
+      | "builtin-d100-investigation"
+      | "saved-rule-pack";
+    rulePackRecordId: number | null;
+    ruleSystemId: string;
+    ruleSystemVersion: string;
+    baseContentHash: string;
+    effectiveContentHash: string;
+    houseRuleOverlay: TtrpgHouseRuleOverlayV2 | null;
+    houseRuleDiff: TtrpgHouseRuleDiffV2[];
+  };
+  table: {
+    gmMode: "human" | "ai" | "hybrid";
+    seats: TtrpgProductionSeatV2[];
+    spectatorPolicy: "disabled" | "public-only" | "invited";
+    joinInProgress: boolean;
+    asynchronousPlay: boolean;
+  };
+  characters: {
+    defaultCreationMode: TtrpgProductionSeatV2["characterMode"];
+    allowCustomSheets: boolean;
+    allowAiGeneration: boolean;
+    requireGmApproval: boolean;
+    progressionMode: "rule-native" | "rank-lite" | "none";
+    startingLevelOrTier: string;
+    requiredProfileFields: string[];
+  };
+  story: {
+    structure: "linear" | "branching" | "node-based" | "sandbox";
+    openingScene: string;
+    targetSceneCount: number;
+    targetQuestCount: number;
+    clueRedundancy: number;
+    targetEndingCount: number;
+    failForward: boolean;
+    freeRoam: boolean;
+    canonMutationPolicy:
+      "session-only" | "author-review" | "allow-world-candidates";
+  };
+  information: {
+    characterPrivateChannels: boolean;
+    gmSecrets: boolean;
+    hiddenNpcState: boolean;
+    hiddenDice: "never" | "gm-only" | "allowed";
+    interPlayerWhispers: boolean;
+    revealAuditTrail: boolean;
+  };
+  safety: {
+    sessionZeroRequired: boolean;
+    consentChecklist: string[];
+    lines: string[];
+    veils: string[];
+    contentWarnings: string[];
+    pauseSignal: string;
+    openDoor: boolean;
+  };
+  media: {
+    visualStyle: string;
+    sceneImages: boolean;
+    characterPortraits: boolean;
+    characterExpressions: boolean;
+    itemIcons: boolean;
+    handouts: boolean;
+    maps: boolean;
+    tokens: boolean;
+    generationTiming: "prebuild" | "background-during-play" | "hybrid";
+    backgroundGeneration: boolean;
+    textFallback: boolean;
+    maximumGeneratedAssets: number;
+  };
+  confirmations: {
+    worldCanonBoundary: boolean;
+    numericMappings: boolean;
+    ruleLicense: boolean;
+    aiParticipationDisclosure: boolean;
+    mediaRights: boolean;
+  };
+}
+
+/**
+ * Author-confirmed construction contract for a finite text adventure. It is
+ * stored inside the existing versioned ProductProductionBrief record, so it
+ * does not create a parallel product draft or an ungoverned AI write path.
+ */
+export interface TextAdventureProductionBriefV1 {
+  schema: "storyforge.text-adventure-production-brief";
+  version: 1;
+  creationMode: "quick" | "advanced";
+  sourceTreatment: "expand-sparse" | "adapt-rich" | "author-outline";
+  narrative: {
+    structure: "trunk-convergent-storylets";
+    targetRegionCount: number;
+    targetAreaCount: number;
+    targetLocationCount: number;
+    targetSceneCount: number;
+    mainQuestCount: 1;
+    targetSideQuestCount: number;
+    targetAmbientEventCount: number;
+    targetEndingCount: number;
+    minimumDistinctRoutes: number;
+    choiceDensity: "focused" | "balanced" | "dense";
+    failForward: boolean;
+  };
+  character: {
+    preset: "general-adventure-rpg";
+    statLabels: string[];
+    skillLabels: string[];
+    resourceRoles: Array<"health" | "mana" | "stamina" | "experience" | "skill-points" | "currency" | "clock">;
+    equipmentSlotLabels: string[];
+    progressionEnabled: boolean;
+  };
+  experience: {
+    perspective: "second-person" | "first-person";
+    consequenceVisibility: "explicit" | "partial" | "hidden";
+    contentExpansion: "required" | "preserve-source-depth";
+    emotionalTarget: string;
+    endingCauseRecap: boolean;
+  };
+  media: {
+    mode: "text-only" | "key-illustrations" | "rich-illustrations";
+    characterAnchorsRequired: boolean;
+    reviewBeforePublish: boolean;
+    runtimeGeneration: "disabled";
+  };
+  confirmations: {
+    worldCanonBoundary: boolean;
+    deterministicStateAuthority: boolean;
+    genericCoreBoundary: boolean;
+    mediaRights: boolean;
+  };
+}
+
+export interface ProductProductionBriefV3 {
+  schema: "storyforge.product-production-brief";
+  version: 3;
+  source: {
+    worldReleaseId: number;
+    worldContentHash: string;
+    selection: import("./product-release").ProductWorldSourceSelectionV1;
+    startingPoint: ProductStartingPointV1;
+  };
+  intent: {
+    productType: ProductionProductKindV1;
+    playerRole: string;
+    protagonistRefs: string[];
+    openingSituation: string;
+    coreExperience: string[];
+    requiredFacts: string[];
+    forbiddenChanges: string[];
+    contentBoundaries: string[];
+    tone: string[];
+  };
+  scale: ProductProductionScaleV1;
+  media: ProductProductionMediaProfileV1;
+  consultationBudget: ProductConsultationBudgetV1;
+  productionBudget: ProductProductionBudgetV3;
+  qualityProfile: "prototype" | "internal" | "commercial-candidate";
+  capabilityRequirements: ProviderCapabilityRequirementV1[];
+  externalDataPolicy: ProductProductionExternalDataPolicyV1;
+  fallbackPolicy: ProductProductionFallbackPolicyV1;
+  completionContract: ProductProductionCompletionContractV1;
+  unresolvedDecisionKeys: string[];
+  /** Closed TTRPG construction contract; required exactly when productType=ttrpg. */
+  characterChat?: import('../character-interaction/authoring-contract').ChatAuthoringSettingsV1;
+  avg?: import('../avg/authoring-contract').AvgAuthoringSettingsV1;
+  avgRevision?: { version: 1; basePackageHash: string; runtimePackage: import('./product-release').ProductRuntimePackageV1 };
+  avgAssembly?: import('../avg/assembly-contract').AvgAssemblyBrief;
+  ttrpg?: TtrpgProductionBriefV2;
+  /** Closed AI Town construction contract; required exactly when productType=ai-town. */
+  aiTown?: AiTownProductionBriefV1;
+  /** Closed text-adventure construction contract; required exactly for text-adventure. */
+  textAdventure?: TextAdventureProductionBriefV1;
+  /** Explicit author confirmations required by product-specific deterministic compilers. */
+  authorConfirmations?: {
+    ttrpgDefaultRuleMappings: boolean;
+  };
+  /** Present only on a Brief derived from an explicit evolution command. */
+  evolution?: ProductEvolutionImpactV1;
+}
+
+export type ProductProductionTaskLaneV1 =
+  "planning" | "content" | "visual" | "audio" | "integration" | "qa";
+export type ProductProductionTaskExecutionModeV1 =
+  "deterministic" | "model" | "media-provider" | "human-import";
+
+export interface ProductTaskBudgetReservationV1 {
+  modelCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  mediaCalls: number;
+  maximumCostUsd: number | null;
+  durationMs: number;
+  storageBytes: number;
+}
+
+export interface ProductArtifactReuseDecisionV1 {
+  sourceBuildNumber: number;
+  sourceArtifactKey: string;
+  sourceContentHash: string;
+  reuseKey: string;
+  requiresRevalidation: boolean;
+  reason: string;
+}
+
+export interface ProductProductionPlanTaskV3 {
+  taskKey: string;
+  lane: ProductProductionTaskLaneV1;
+  kind: string;
+  skillId: string | null;
+  executionMode: ProductProductionTaskExecutionModeV1;
+  dependsOn: string[];
+  requiredReceipts: Array<{ taskKey: string; receiptHash: string | null }>;
+  inputArtifactKeys: string[];
+  outputArtifactKeys: string[];
+  requirementKeys: string[];
+  capabilityRequirementKeys: string[];
+  concurrencyGroup: string;
+  subjectLockKeys: string[];
+  priority: number;
+  budgetReservation: ProductTaskBudgetReservationV1;
+  maxAttempts: number;
+  timeoutMs: number;
+  failurePolicy: "fail-build" | "pause" | "fallback" | "skip-optional";
+  fallbackTaskKey: string | null;
+  acceptanceGateIds: string[];
+  reuse: ProductArtifactReuseDecisionV1 | null;
+  /** Exact author draft, authorized by a durable child-Build command. */
+  authorRevision?: TextAdventureContentRevisionV1 & { commandId: string; sourceBuildNumber: number };
+  /** Exact registered input projection for deterministic AVG V3 tasks. */
+  contextProfile?: "avg-task-v1";
+}
+
+export interface ProductProductionPlanV3 {
+  schema: "storyforge.product-production-plan";
+  version: 3;
+  buildNumber: number;
+  productType: ProductionProductKindV1;
+  briefHash: string;
+  controlEpoch: number;
+  concurrency: {
+    maximumCostBearingTasks: number;
+    maximumTextProviderTasks: number;
+    maximumMediaProviderTasks: number;
+  };
+  tasks: ProductProductionPlanTaskV3[];
+  terminalTaskKey: string;
+}
+
+export interface ProductBuildManifestV1 {
+  schema: "storyforge.product-build-manifest";
+  version: 1;
+  productionKey: string;
+  buildNumber: number;
+  briefRevision: number;
+  briefHash: string;
+  planHash: string;
+  controlEpoch: number;
+  runtimePackageHash: string;
+  artifactReceipts: Array<{
+    artifactKey: string;
+    version: number;
+    contentHash: string;
+    producerReceiptHash: string | null;
+  }>;
+  completedGateIds: string[];
+  fallbackSummary: string[];
+}
+
+export interface ProductBuildQualityReportV1 {
+  schema: "storyforge.product-build-quality-report";
+  version: 1;
+  buildNumber: number;
+  packageHash: string;
+  hardGateResults: Array<{
+    gateId: string;
+    passed: boolean;
+    evidence: string[];
+  }>;
+  softGateResults: Array<{
+    gateId: string;
+    passed: boolean;
+    evidence: string[];
+  }>;
+  mediaCoverage: number;
+  playable: boolean;
+  releaseReady: boolean;
+  warnings: string[];
+}
+
+export type ProductQualityGateReceiptStatusV1 =
+  "passed" | "failed" | "needs-human" | "waived" | "skipped";
+
+/**
+ * Immutable verifier evidence attached to one Build. The indexed row keeps the
+ * complete canonical receipt instead of spreading verifier-specific fields
+ * across the Build record, so threshold upgrades create a new receipt rather
+ * than rewriting old evidence.
+ */
+export interface ProductQualityGateReceiptRecordV1 {
+  id?: number;
+  projectId: number;
+  worldId: number;
+  workId: number;
+  buildId: number;
+  gateId: string;
+  gateVersion: string;
+  verifierId: string;
+  verifierVersion: string;
+  status: ProductQualityGateReceiptStatusV1;
+  receiptJson: string;
+  receiptHash: string;
+  createdAt: number;
+}
+
+export type ProductEvolutionBaseV1 =
+  | { kind: "build"; buildNumber: number; manifestHash: string }
+  | {
+      kind: "recovery-build";
+      buildNumber: number;
+      briefHash: string;
+      planHash: string;
+      controlEpoch: number;
+    }
+  | { kind: "release"; productReleaseId: number; contentHash: string };
+
+export type ProductEvolutionAffectedLaneV1 =
+  "content" | "product" | "visual" | "audio" | "runtime" | "world-source"
+  | "production-budget" | "execution-plan";
+
+export interface ProductEvolutionImpactV1 {
+  schema: "storyforge.product-evolution-impact";
+  version: 1;
+  base: ProductEvolutionBaseV1;
+  userGoal: string;
+  affectedLanes: ProductEvolutionAffectedLaneV1[];
+}
+
+export interface ProductProductionBlockerResolutionV1 {
+  action:
+    "retry" | "author-edit" | "fallback" | "waive-soft-gate" | "change-capability"
+    | "accept-product-private-expansion" | "confirm-character-anchors" | "cancel";
+  note: string;
+  /** Explicit authored replacement; validated by the same task parser before acceptance. */
+  authorDraftJson?: string;
+  /**
+   * Required before retrying an attempt whose provider result or usage has not
+   * been fully settled. The exact durable attempt is named explicitly so a
+   * stale UI cannot dispose a newer reservation by accident. When a response
+   * body is already durable, only the conservative upper-bound disposition is
+   * legal.
+   */
+  unknownResultReservation?: {
+    runId: number;
+    attempt: number;
+    controlEpoch: number;
+    disposition: "confirmed-not-charged" | "charge-reservation-upper-bound";
+  };
+}
+
+/** Explicit replacement bound to one accepted, registered content artifact. */
+export interface TextAdventureContentRevisionV1 {
+  artifactKey: 'content.product-module' | 'content.story-bible' | 'content.cast-bible' | 'content.adventure-architecture' | 'content.narrative-arc-scenes' | 'content.narrative-decision-plan' | 'content.ending-route-plan' | 'content.main-quest-plan' | 'content.adventure-side-quests' | 'content.adventure-ambient-events' | 'content.scene-script.act-1.part-1' | 'content.scene-script.act-1.part-2' | 'content.scene-script.act-2.part-1' | 'content.scene-script.act-2.part-2' | 'content.scene-script.act-3.part-1' | 'content.scene-script.act-3.part-2' | 'content.dialogue-pass.act-1' | 'content.dialogue-pass.act-2' | 'content.dialogue-pass.act-3' | 'content.quest-script.main.act-1.single' | 'content.quest-script.main.act-1.multi' | 'content.quest-script.main.act-2.single' | 'content.quest-script.main.act-2.multi' | 'content.quest-script.main.act-3.single' | 'content.quest-script.main.act-3.multi' | 'content.quest-script.supplemental';
+  expectedArtifactVersion: number;
+  expectedArtifactHash: string;
+  note: string;
+  authorDraftJson: string;
+}
+
+/**
+ * Author accounting decision for one exact provider reservation that was still
+ * in flight when a Production was paused. Every identity field is required so
+ * a stale resume command cannot dispose a newer attempt.
+ */
+export interface ProductProductionPausedReservationDispositionV1 {
+  taskKey: string;
+  runId: number;
+  attempt: number;
+  controlEpoch: number;
+  disposition: "confirmed-not-charged" | "charge-reservation-upper-bound";
+}
+
+export type ProductBuildCompatibilityLevelV1 =
+  "compatible" | "restart-recommended" | "breaking";
+
+export interface ProductBuildCompatibilityReportV1 {
+  schema: "storyforge.product-build-compatibility";
+  version: 1;
+  level: ProductBuildCompatibilityLevelV1;
+  fromBuildNumber: number | null;
+  fromPackageHash: string | null;
+  toBuildNumber: number;
+  toPackageHash: string;
+  addedStableKeys: string[];
+  removedStableKeys: string[];
+  changedStableKeys: string[];
+  unchangedStableKeyCount: number;
+  migrationPolicy: "initial-session" | "identity" | "additive" | "pin-old-save";
+  reasons: string[];
+  reportHash: string;
+}
+
+export type ProductProductionCommandV1 =
+  | {
+      type: "create-intent";
+      commandId: string;
+      productionKey: string;
+      productType: ProductionProductKindV1;
+      worldReleaseId: number;
+      userText: string;
+    }
+  | {
+      type: "create-text-open-world-intent";
+      commandId: string;
+      productionKey: string;
+      productType: "text-open-world";
+      sourceLocator: import("./text-open-world-production").TextOpenWorldCreatorSourceLocatorV1;
+      expectedSourceBindingHash: string;
+      userText: string;
+    }
+  | {
+      type: "save-brief-revision";
+      commandId: string;
+      expectedStateRevision: number;
+      parentRevision: number | null;
+      brief: ProductProductionBriefV3;
+    }
+  | {
+      type: "save-text-open-world-creator-brief";
+      commandId: string;
+      expectedStateRevision: number;
+      parentRevision: number | null;
+      sourceLocator: import("./text-open-world-production").TextOpenWorldCreatorSourceLocatorV1;
+      candidateRunId: number;
+      brief: import("./text-open-world-production").TextOpenWorldCreatorBriefV1;
+    }
+  | {
+      type: "authorize-start";
+      commandId: string;
+      expectedStateRevision: number;
+      briefRevision: number;
+      briefHash: string;
+      authorizationNonce: string;
+    }
+  | {
+      type: "authorize-text-open-world-creator-start";
+      commandId: string;
+      expectedStateRevision: number;
+      briefRevision: number;
+      briefHash: string;
+      sourceLocator: import("./text-open-world-production").TextOpenWorldCreatorSourceLocatorV1;
+      preflight: import("./text-open-world-production").TextOpenWorldCreatorProductionPreflightV1;
+      confirmation: import("./text-open-world-production").TextOpenWorldCreatorProductionPreflightConfirmationV1;
+      rightsBasis: import("./text-open-world-production").TextOpenWorldSourceRightsBasisV1;
+      rightsNote: string;
+      authorizationNonce: string;
+      expectedPlanHash: string;
+      authorizedAt: number;
+    }
+  | {
+      type: "authorize-text-open-world-creator-repair";
+      commandId: string;
+      expectedStateRevision: number;
+      baseBuildNumber: number;
+      expectedBasePlanHash: string;
+      expectedHandoffSetHash: string;
+      expectedImpactPlanHash: string;
+      expectedTargetPlanHash: string;
+      authorizationNonce: string;
+      authorizedAt: number;
+    }
+  | {
+      type: "authorize-text-open-world-creator-media";
+      commandId: string;
+      expectedStateRevision: number;
+      baseBuildNumber: number;
+      expectedBasePlanHash: string;
+      expectedMediaPlanHash: string;
+      expectedTargetPlanHash: string;
+      mode: "provider-generate" | "author-import";
+      acknowledgement: {
+        completeBundle: true;
+        rightsAndProvenance: true;
+        costAndProvider: true;
+        oldBuildImmutable: true;
+      };
+      authorizationNonce: string;
+      authorizedAt: number;
+    }
+  | {
+      type: "adopt-avg-artifact";
+      commandId: string;
+      expectedStateRevision: number;
+      expectedBuildRevision: number;
+      controlEpoch: number;
+      buildNumber: number;
+      artifactKey: string;
+      candidateVersion: number;
+      candidateHash: string;
+    }
+  | {
+      type: "pause";
+      commandId: string;
+      expectedStateRevision: number;
+      reason: string;
+    }
+  | {
+      type: "resume";
+      commandId: string;
+      expectedStateRevision: number;
+      /** Required only when pause froze one or more in-flight provider reservations. */
+      pausedReservationDispositions?: ProductProductionPausedReservationDispositionV1[];
+      contentRevision?: TextAdventureContentRevisionV1;
+    }
+  | {
+      type: "stop";
+      commandId: string;
+      expectedStateRevision: number;
+      retention: "keep-build" | "discard-unreleased";
+    }
+  | {
+      type: "resolve-blocker";
+      commandId: string;
+      expectedStateRevision: number;
+      blockerKey: string;
+      resolution: ProductProductionBlockerResolutionV1;
+    }
+  | {
+      type: "request-preview";
+      commandId: string;
+      expectedStateRevision: number;
+      buildNumber: number;
+    }
+  | {
+      type: "revise-text-content";
+      commandId: string;
+      expectedStateRevision: number;
+      buildNumber: number;
+      revisions: TextAdventureContentRevisionV1[];
+      retainedImages: Array<{ artifactKey: string; expectedArtifactHash: string }>;
+      /** Preserve the parent's visual contract; independent review runs again. */
+      preserveVisualContract: true;
+    }
+  | {
+      type: "revise-media-asset";
+      commandId: string;
+      expectedStateRevision: number;
+      buildNumber: number;
+      artifactKey: string;
+      expectedArtifactHash: string;
+      action: "upload-replacement" | "regenerate" | "lock" | "unlock";
+      repairFeedback: {
+        sourceGateReceiptHash: string;
+        sourceEvidenceHash: string;
+        priorContentHash: string;
+        note: string;
+      } | null;
+      replacement: {
+        blobObjectId: number;
+        contentHash: string;
+        mimeType: "image/png" | "image/jpeg" | "image/webp";
+        byteSize: number;
+        width: number;
+        height: number;
+        altText: string;
+        license: string;
+        commercialUse: boolean;
+        redistribution: boolean;
+        declaration: string;
+        attribution: string;
+      } | null;
+    }
+  | {
+      type: "revise-media-assets";
+      /** Optional frozen author rejection; absent retains Visual QA recovery. */
+      authorReview?: { sourceGateReceiptHash: string; sourceEvidenceHash: string };
+      commandId: string;
+      expectedStateRevision: number;
+      buildNumber: number;
+      action: "regenerate";
+      targets: Array<{
+        artifactKey: string;
+        expectedArtifactHash: string;
+      }>;
+    }
+  | {
+      type: "publish";
+      commandId: string;
+      expectedStateRevision: number;
+      buildNumber: number;
+      expectedManifestHash: string;
+      adoptionIntentHash: string;
+      /** Required only for the Creator dual-source publication path. */
+      creatorReleaseAuthorizationHash?: string;
+    }
+  | {
+      type: "archive";
+      commandId: string;
+      expectedStateRevision: number;
+      reason: string;
+    }
+  | { type: "restore"; commandId: string; expectedStateRevision: number }
+  | {
+      type: "evolve";
+      commandId: string;
+      expectedStateRevision: number;
+      base: ProductEvolutionBaseV1;
+      userText: string;
+      affectedLanes: ProductEvolutionAffectedLaneV1[];
+    };
+
+export interface ProductProductionRecordV1 {
+  id?: number;
+  projectId: number;
+  worldId: number;
+  workId: number;
+  productionKey: string;
+  productType: ProductionProductKindV1;
+  title: string;
+  status: ProductProductionStatusV1;
+  stateRevision: number;
+  controlEpoch: number;
+  currentBriefRevision: number | null;
+  currentBuildNumber: number | null;
+  currentProductReleaseId: number | null;
+  /** Pre-authorization creator source locator. Local ids are registry-remapped;
+   * the portable binding/hash prevents an existing productionKey changing source. */
+  creatorSourceKind?: "world-release" | "novel" | null;
+  creatorSourceWorldReleaseId?: number | null;
+  creatorSourceWorkId?: number | null;
+  creatorSourceSelectionMode?: import("./adaptation").AdaptationSourceSelectionV1["mode"] | null;
+  creatorSourceOutlineRootId?: number | null;
+  creatorSourceStartChapterId?: number | null;
+  creatorSourceEndChapterId?: number | null;
+  creatorSourceChapterIdsJson?: string;
+  creatorSourceVersionHash?: string;
+  creatorSourceBoundaryHash?: string;
+  creatorSourceBindingJson?: string;
+  creatorSourceBindingHash?: string;
+  lastErrorJson: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ProductProductionBriefRecordV1 {
+  id?: number;
+  projectId: number;
+  worldId: number;
+  workId: number;
+  productionId: number;
+  revision: number;
+  parentRevision: number | null;
+  status: "draft" | "authorized" | "superseded" | "withdrawn";
+  /** Missing on records created before the dual-source creator contract. */
+  briefKind?: "product-production-v3" | "text-open-world-creator-v1";
+  /** Missing on legacy rows, where world-release is implied. */
+  sourceKind?: "world-release" | "novel";
+  sourceWorldReleaseId: number | null;
+  sourceWorldContentHash: string | null;
+  /** Local source locator columns. They are remapped on backup import and are
+   * excluded from the portable Brief/source-plan hashes. */
+  sourceWorkId?: number | null;
+  sourceOutlineRootId?: number | null;
+  sourceStartChapterId?: number | null;
+  sourceEndChapterId?: number | null;
+  sourceChapterIdsJson?: string;
+  sourceSelectionMode?: import("./adaptation").AdaptationSourceSelectionV1["mode"] | null;
+  sourceVersionHash?: string;
+  sourceBoundaryHash?: string;
+  sourceBindingJson?: string;
+  sourceBindingHash?: string;
+  /** Local evidence pointer. The portable Brief carries only the Run contract hash. */
+  candidateRunId?: number | null;
+  userIntentSummary: string;
+  unresolvedJson: string;
+  estimateJson: string;
+  briefJson: string;
+  briefHash: string;
+  /** Frozen stage-two read authority. Empty sentinels are rejected and
+   * require the author to save a fresh Brief before production can start. */
+  sourcePlanJson: string;
+  sourcePlanHash: string;
+  /** Frozen only by the explicit authorize-start command. */
+  confirmedBriefJson: string;
+  confirmedBriefHash: string;
+  authorizedAt: number | null;
+  createdAt: number;
+}
+
+export interface ProductProductionCommandRecordV1 {
+  id?: number;
+  projectId: number;
+  worldId: number;
+  workId: number;
+  productionId: number;
+  commandId: string;
+  type: ProductProductionCommandTypeV1;
+  payloadHash: string;
+  expectedStateRevision: number | null;
+  status: "claimed" | "succeeded" | "failed" | "abandoned";
+  resultJson: string;
+  errorCode: string | null;
+  createdAt: number;
+  completedAt: number | null;
+}
+
+export interface ProductBuildRecordV1 {
+  id?: number;
+  projectId: number;
+  worldId: number;
+  workId: number;
+  productionId: number;
+  buildNumber: number;
+  briefRevision: number;
+  briefHash: string;
+  parentBuildNumber: number | null;
+  sourceProductReleaseId: number | null;
+  status: ProductBuildStatusV1;
+  resumeState: ProductBuildStatusV1 | null;
+  stateRevision: number;
+  controlEpoch: number;
+  planRevision: number;
+  planJson: string;
+  planHash: string;
+  budgetLedgerJson: string;
+  manifestJson: string;
+  manifestHash: string;
+  packageHash: string;
+  previewManifestJson: string;
+  previewHash: string;
+  qualityReportJson: string;
+  qualityReportHash: string;
+  compatibilityJson: string;
+  rootTerminalReceiptHash: string | null;
+  adoptionIntentHash: string | null;
+  releasedProductReleaseId: number | null;
+  failureJson: string;
+  authorizedAt: number;
+  startedAt: number | null;
+  completedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ProductBuildArtifactRecordV1 {
+  id?: number;
+  projectId: number;
+  worldId: number;
+  workId: number;
+  buildId: number;
+  artifactKey: string;
+  requirementKey: string | null;
+  version: number;
+  kind: ProductBuildArtifactKindV1;
+  mediaKind: ProductMediaKind | null;
+  status: ProductBuildArtifactStatusV1;
+  producerRunId: number | null;
+  producerReceiptHash: string | null;
+  controlEpoch: number;
+  inputHash: string;
+  contentHash: string;
+  payloadJson: string;
+  metadataJson: string;
+  qualityJson: string;
+  rightsJson: string;
+  blobObjectId: number | null;
+  mimeType: string | null;
+  byteSize: number;
+  parentArtifactHash: string | null;
+  carriedFrom: {
+    buildNumber: number;
+    artifactKey: string;
+    version: number;
+    contentHash: string;
+    /** Frozen witness over the exact parent Artifact and its producer/root Runs. */
+    proofHash?: string;
+  } | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface MediaBlobObjectRecordV1 {
+  id?: number;
+  projectId: number;
+  worldId: number;
+  workId: number;
+  contentHash: string;
+  mimeType: string;
+  byteSize: number;
+  backend: "indexeddb" | "opfs";
+  storageState: "pending-write" | "ready" | "pending-delete" | "corrupt";
+  data: ArrayBuffer | null;
+  opfsPath: string | null;
+  leaseOwner: string | null;
+  leaseExpiresAt: number | null;
+  lastVerifiedAt: number | null;
+  /** Optional image metadata used by comic/image products on the shared blob row. */
+  width?: number;
+  height?: number;
+  disposition?: "available" | "pending-delete";
+  deleteRequestedAt?: number | null;
+  deleteReceiptHash?: string | null;
+  createdAt: number;
+  updatedAt: number;
+}

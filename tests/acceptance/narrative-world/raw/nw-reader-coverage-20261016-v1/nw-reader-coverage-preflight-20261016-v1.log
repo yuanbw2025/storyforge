@@ -1,9 +1,0 @@
-file:///Users/qinyingying/.codex/worktrees/nw2e-retrieval-repair/storyforge/scripts/narrative-reader-judge-coverage.mjs:43
-      throw Error('Historical reader directory inventory changed')
-            ^
-
-Error: Historical reader directory inventory changed
-    at loadIncompleteReaderJudgeCoverageV1 (file:///Users/qinyingying/.codex/worktrees/nw2e-retrieval-repair/storyforge/scripts/narrative-reader-judge-coverage.mjs:43:13)
-    at async file:///Users/qinyingying/.codex/worktrees/nw2e-retrieval-repair/storyforge/scripts/evaluate-narrative-reader-judge-local-codex.mjs:35:61
-
-Node.js v24.16.0

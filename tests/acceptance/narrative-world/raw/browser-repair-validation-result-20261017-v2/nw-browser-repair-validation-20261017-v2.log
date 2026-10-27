@@ -1,8 +1,0 @@
-[serial-ci] Waiting for the shared CI slot.
-[serial-ci] Acquired slot in /Users/qinyingying/.codex/worktrees/nw-mainline-refresh-20261016/storyforge
-{"starting": "build", "at": "2026-10-16T18:47:05.370655+00:00", "log": "/tmp/nw-browser-repair-validation-20261017-v2-build.log"}
-{"starting": "bundle", "at": "2026-10-16T18:48:21.769188+00:00", "log": "/tmp/nw-browser-repair-validation-20261017-v2-bundle.log"}
-{"starting": "scale-diagnostic", "at": "2026-10-16T18:48:23.207851+00:00", "log": "/tmp/nw-browser-repair-validation-20261017-v2-scale-diagnostic.log"}
-{"starting": "targeted-e2e", "at": "2026-10-16T18:50:26.961743+00:00", "log": "/tmp/nw-browser-repair-validation-20261017-v2-targeted-e2e.log"}
-{"exitCode": 1, "sourceUnchanged": true, "buildPassed": true, "targetedE2E": false, "terminal": "/tmp/nw-browser-repair-validation-20261017-v2-terminal.json", "accepted": false}
-[serial-ci] Released slot; exit code 1
