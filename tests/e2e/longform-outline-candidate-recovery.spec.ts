@@ -3,7 +3,8 @@ import { createLongform } from './helpers/product-entry'
 import { openLongformLeaf } from './helpers/longform-navigation'
 
 const output = JSON.stringify([{ title: '第1卷', summary: '测绳人先检查绳结，再核算木料与退路；在桥边发现新钉痕，由此追查偷工减料。系统只记录已验证的路径，不预知对手的行动。' }])
-async function generate(page: Page, delayCandidate = false) {
+async function generate(page: Page, options: { delayCandidate?: boolean; output?: string; blocked?: boolean } = {}) {
+  const { delayCandidate = false } = options
   await page.addInitScript(() => {
     localStorage.setItem('storyforge_guide_completed', 'e2e')
     localStorage.setItem('storyforge-ai-config', JSON.stringify({ provider: 'ollama', model: 'isolated-outline-recovery', baseUrl: 'https://outline-recovery.invalid/v1', maxTokens: 4000, contextWindow: 64000 }))
@@ -11,7 +12,7 @@ async function generate(page: Page, delayCandidate = false) {
   let calls = 0
   await page.route('https://outline-recovery.invalid/**', async route => {
     calls++
-    await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: output }, finish_reason: 'stop' }], usage: { prompt_tokens: 50, completion_tokens: 80, total_tokens: 130 } })}\n\ndata: [DONE]\n\n` })
+    await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: options.output ?? output }, finish_reason: 'stop' }], usage: { prompt_tokens: 50, completion_tokens: 80, total_tokens: 130 } })}\n\ndata: [DONE]\n\n` })
   })
   await createLongform(page, '单卷候选刷新恢复验收')
   await openLongformLeaf(page, '大纲')
@@ -32,7 +33,8 @@ async function generate(page: Page, delayCandidate = false) {
     await expect(page.getByRole('status').filter({ hasText: '正在建立可恢复候选' })).toBeVisible()
     await expect(page.getByRole('button', { name: '预览候选', exact: true })).toHaveCount(0)
   }
-  await expect(page.getByRole('button', { name: '预览候选', exact: true })).toBeEnabled()
+  if (options.blocked) await expect(page.getByTestId('outline-drag-scroll').getByText('模型输出无法确定性解析为大纲条目。', { exact: true })).toBeVisible()
+  else await expect(page.getByRole('button', { name: '预览候选', exact: true })).toBeEnabled()
   return () => calls
 }
 async function snapshot(page: Page) {
@@ -98,11 +100,32 @@ test('a failed rejection preserves the candidate and allows the same close actio
 })
 
 test('a completed model response exposes review only after its delayed durable candidate is acknowledged', async ({ page }) => {
-  const calls = await generate(page, true)
+  const calls = await generate(page, { delayCandidate: true })
   const saved = await snapshot(page)
   expect(saved.runs[0].status).toBe('awaiting_confirmation')
   expect(saved.nodes[0].summary).toBe(''); expect(calls()).toBe(1)
   await page.reload()
   await expect(page.getByRole('button', { name: '预览候选', exact: true })).toBeEnabled()
   expect(calls()).toBe(1)
+})
+
+test('malformed JSON is retained as a failed raw response without a review button, canonical write or model replay', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
+  const raw = '```json\n[{"title":"第1卷","summary":"桥名"望津桥"错误。"}]\n```'
+  const calls = await generate(page, { output: raw, blocked: true })
+  await expect.poll(async () => (await snapshot(page)).runs[0].status).toBe('failed')
+  const failed = await snapshot(page)
+  expect(failed.nodes).toHaveLength(1); expect(failed.nodes[0].summary).toBe('')
+  await expect(page.getByRole('button', { name: '预览候选', exact: true })).toHaveCount(0)
+  expect(failed.events.filter((event: { type: string }) => event.type === 'run.failed').map((event: { payloadJson: string }) => JSON.parse(event.payloadJson))).toEqual([{ code: 'outline_output_unparseable', retryable: false }])
+  const retained = await page.evaluate(async () => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return (await db.agentRunArtifacts.toArray()).map((artifact: { content: string }) => artifact.content)
+  })
+  expect(retained).toContain(raw)
+  await page.reload()
+  await expect(page.getByLabel('卷情节摘要', { exact: true })).toHaveValue('')
+  await expect(page.getByRole('button', { name: '预览候选', exact: true })).toHaveCount(0)
+  expect((await snapshot(page)).nodes).toEqual(failed.nodes)
+  expect(calls()).toBe(1); expect(errors).toEqual([])
 })

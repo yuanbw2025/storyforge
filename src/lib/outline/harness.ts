@@ -345,6 +345,7 @@ function composeOutlineTraces(input: {
       // persist its response hash immediately before the failure evidence.
       if (trace === input.durable && value.phase === 'gate') {
         await trace.modelResponded(pendingModelOutput)
+        await input.durable.preserveRejectedResponse(pendingModelOutput)
       }
       await trace.stepFailed(value)
     }),

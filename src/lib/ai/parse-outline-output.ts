@@ -5,6 +5,7 @@
  * HARNESS-11：模型输出只做确定性解析。解析失败由生成 gate 阻断，禁止在
  * 解析器内部隐藏发起第二次模型调用。
  */
+import { wholeJSONContainerTextV1 } from './whole-json-container'
 
 export interface ParsedVolume {
   title: string
@@ -18,35 +19,29 @@ export interface ParsedChapter {
 
 // ── JSON 提取 ──
 
-/** 从 AI 输出中提取 JSON 数组（支持 ```json 包裹 或裸 JSON） */
-function extractJsonArray(text: string): unknown[] | null {
-  // 1. 尝试从 ```json ... ``` 代码块提取
-  const codeBlockMatch = text.match(/```json\s*([\s\S]*?)```/)
-  if (codeBlockMatch) {
-    try {
-      const parsed = JSON.parse(codeBlockMatch[1].trim())
-      if (Array.isArray(parsed)) return parsed
-    } catch { /* fall through */ }
-  }
-
-  // 2. 尝试直接解析整个文本（去掉前后空白和可能的 ``` 标记）
-  const cleaned = text.replace(/^```\w*\s*/, '').replace(/\s*```\s*$/, '').trim()
+/** null means ordinary Markdown, [] means structured output must be blocked.
+ * Never reinterpret malformed JSON as headings, coerce fields, or salvage a
+ * subset of an invalid array. The original response stays in the durable run. */
+function parseJSONOutline(text: string): ParsedVolume[] | null {
   try {
-    const parsed = JSON.parse(cleaned)
-    if (Array.isArray(parsed)) return parsed
-  } catch { /* fall through */ }
-
-  // 3. 尝试找到第一个 [ ... ] 区间
-  const firstBracket = text.indexOf('[')
-  const lastBracket = text.lastIndexOf(']')
-  if (firstBracket !== -1 && lastBracket > firstBracket) {
-    try {
-      const parsed = JSON.parse(text.slice(firstBracket, lastBracket + 1))
-      if (Array.isArray(parsed)) return parsed
-    } catch { /* fall through */ }
+    const parsed: unknown = JSON.parse(wholeJSONContainerTextV1(text, '大纲候选'))
+    if (!Array.isArray(parsed)) return []
+    const result: ParsedVolume[] = []
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+      const obj = item as Record<string, unknown>
+      if (typeof obj.title !== 'string' || !obj.title.trim()) return []
+      if (obj.summary !== undefined && typeof obj.summary !== 'string') return []
+      result.push({ title: obj.title.trim(), summary: (obj.summary ?? '').trim() })
+    }
+    return result
+  } catch {
+    // Include JSON embedded after an explanation, without confusing a genuine
+    // Markdown summary such as [系统提示] with a JSON array of objects.
+    if (/^\s*[[{]/.test(text) || /```/.test(text)
+      || /(?:^|\n)\s*(?:\[\s*\{|\{\s*")/.test(text)) return []
+    return null
   }
-
-  return null
 }
 
 // ── 工具函数 ──
@@ -158,7 +153,7 @@ function matchVolumeTitle(line: string): { volNum: string; restTitle: string } |
 
   // 格式1: 第X卷：标题 / 第X卷 标题
   const m1 = stripped.match(
-    /(?:\d+[.)、]\s*)?第([零一二三四五六七八九十百\d]+)卷[：:：\s—-]*(.*)/
+    /^(?:\d+[.)、]\s*)?第([零一二三四五六七八九十百\d]+)卷[：:：\s—-]*(.*)/
   )
   if (m1) {
     return { volNum: chineseToNum(m1[1]), restTitle: stripMarkdown(m1[2]) }
@@ -166,7 +161,7 @@ function matchVolumeTitle(line: string): { volNum: string; restTitle: string } |
 
   // 格式2: 卷X：标题
   const m2 = stripped.match(
-    /(?:\d+[.)、]\s*)?卷([零一二三四五六七八九十百\d]+)[：:：\s—-]*(.*)/
+    /^(?:\d+[.)、]\s*)?卷([零一二三四五六七八九十百\d]+)[：:：\s—-]*(.*)/
   )
   if (m2) {
     return { volNum: chineseToNum(m2[1]), restTitle: stripMarkdown(m2[2]) }
@@ -181,23 +176,8 @@ function matchVolumeTitle(line: string): { volNum: string; restTitle: string } |
  * Phase 30.4: JSON 优先 → 正则降级
  */
 export function parseVolumeOutlineOutput(text: string): ParsedVolume[] {
-  // Phase 30.4: 优先 JSON 解析
-  const jsonArr = extractJsonArray(text)
-  if (jsonArr && jsonArr.length > 0) {
-    const result: ParsedVolume[] = []
-    for (const item of jsonArr) {
-      if (item && typeof item === 'object' && 'title' in item) {
-        const obj = item as { title?: string; summary?: string }
-        if (obj.title) {
-          result.push({
-            title: String(obj.title).trim(),
-            summary: String(obj.summary || '').trim(),
-          })
-        }
-      }
-    }
-    if (result.length > 0) return result
-  }
+  const structured = parseJSONOutline(text)
+  if (structured !== null) return structured
 
   // 降级：正则解析
   const volumes: ParsedVolume[] = []
@@ -249,7 +229,7 @@ export function parseVolumeOutlineOutput(text: string): ParsedVolume[] {
     if (currentVol) {
       const stripped = line.trim()
       // 遇到"第X章"开头说明进入了章节区域，停止收集卷摘要
-      if (/第[零一二三四五六七八九十百\d]+章/.test(stripped)) {
+      if (matchChapterTitle(stripped)) {
         flushVol()
         continue
       }
@@ -271,7 +251,7 @@ function matchChapterTitle(line: string): { chNum: string; restTitle: string } |
 
   // 格式1: 第X章：标题
   const m1 = stripped.match(
-    /(?:\d+[.)、]\s*)?第([零一二三四五六七八九十百\d]+)章[：:：\s—-]*(.*)/
+    /^(?:\d+[.)、]\s*)?第([零一二三四五六七八九十百\d]+)章[：:：\s—-]*(.*)/
   )
   if (m1) {
     return { chNum: chineseToNum(m1[1]), restTitle: stripMarkdown(m1[2]) }
@@ -295,23 +275,8 @@ function matchChapterTitle(line: string): { chNum: string; restTitle: string } |
  * 正则支持格式：第X章、## 第X章、**第X章**、数字序号
  */
 export function parseChapterOutlineOutput(text: string): ParsedChapter[] {
-  // Phase 30.4: 优先 JSON 解析
-  const jsonArr = extractJsonArray(text)
-  if (jsonArr && jsonArr.length > 0) {
-    const result: ParsedChapter[] = []
-    for (const item of jsonArr) {
-      if (item && typeof item === 'object' && 'title' in item) {
-        const obj = item as { title?: string; summary?: string }
-        if (obj.title) {
-          result.push({
-            title: String(obj.title).trim(),
-            summary: String(obj.summary || '').trim(),
-          })
-        }
-      }
-    }
-    if (result.length > 0) return result
-  }
+  const structured = parseJSONOutline(text)
+  if (structured !== null) return structured
 
   // 降级：正则解析
   const chapters: ParsedChapter[] = []
@@ -319,6 +284,7 @@ export function parseChapterOutlineOutput(text: string): ParsedChapter[] {
 
   let currentCh: { title: string; summaryLines: string[] } | null = null
   let autoChapterNum = 0
+  let numberedHeadings = false
 
   const flushCh = () => {
     if (currentCh) {
@@ -350,6 +316,7 @@ export function parseChapterOutlineOutput(text: string): ParsedChapter[] {
     // 尝试匹配"第X章"格式
     const ch = matchChapterTitle(line)
     if (ch) {
+      numberedHeadings = false
       flushCh()
       autoChapterNum++
       const num = ch.chNum || String(autoChapterNum)
@@ -362,8 +329,9 @@ export function parseChapterOutlineOutput(text: string): ParsedChapter[] {
 
     // 尝试匹配纯数字序号: "1. 标题" / "1、标题" / "1) 标题"
     const numMatch = line.trim().match(/^(\d+)[.)、]\s+(.+)/)
-    if (numMatch && !currentCh) {
+    if (numMatch && (!currentCh || numberedHeadings)) {
       flushCh()
+      numberedHeadings = true
       autoChapterNum++
       const restTitle = stripMarkdown(numMatch[2])
       currentCh = { title: `第${numMatch[1]}章：${restTitle}`, summaryLines: [] }
