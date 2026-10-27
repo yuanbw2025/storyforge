@@ -3767,6 +3767,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/real-story-arc-events-20261028-c8c60b87.json",
           "summary": "新提交Agnes追加/排序各一次成功，候选手改保存刷新采纳；只改所选事件，其他阶段/状态/原稿不变。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/canon-stage-identity-20261028.json",
+          "summary": "同名阶段与有序事件不再误报Canon冲突；55项回归、9条隔离浏览器路径及可移植身份导入回读通过。整线丰富结构续修另行验证。"
         }
       ],
       "defects": [],
@@ -19014,6 +19019,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/quality-review-transport-20261028.json",
           "summary": "三种全章评审参数与回执一致、节点评审缓存复用；83项回归及21条浏览器路径通过，最终能力谓词源另有1条三模式UI续验。实模另跑，原失败保留。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-review-modes-20261028-101beb866.json",
+          "summary": "明确101beb866上三模式实模各一次请求均通过参数一致及刷新回读，原失败保留；不等于文学判断达标。"
         }
       ],
       "defects": [],
@@ -19490,6 +19500,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/real-story-arc-events-20261028-c8c60b87.json",
           "summary": "新提交Agnes追加/排序各一次成功，候选手改保存刷新采纳；只改所选事件，其他阶段/状态/原稿不变。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/canon-stage-identity-20261028.json",
+          "summary": "同名阶段与有序事件不再误报Canon冲突；55项回归、9条隔离浏览器路径及可移植身份导入回读通过。整线丰富结构续修另行验证。"
         }
       ],
       "defects": [],
@@ -24192,6 +24207,14 @@
       "date": "2026-10-28",
       "unit": "Bounded whole-review transport evidence and shared Node cache alignment",
       "sourcePin": "tests/acceptance/longform-stability/quality-review-transport-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Portable same-title stage/event Canon identity foundation and exact-source real review replay",
+      "sourcePin": "tests/acceptance/longform-stability/canon-stage-identity-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

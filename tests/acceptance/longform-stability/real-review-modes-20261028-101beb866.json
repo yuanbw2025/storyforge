@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "kind": "exact-commit-real-whole-review-three-modes-partial-evidence",
+  "date": "2026-10-28",
+  "sourceCommit": "101beb8668963f76898e71c7889d4e53740f8e6e",
+  "directory": "live-review-modes-2026-10-27T21-43-31-327Z",
+  "status": "THREE_FRESH_REPORTS_PASSED_READBACK_AND_MATCHED_ACTUAL_REQUEST_OPTIONS",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "provider": "agnes",
+  "model": "agnes-2.5-flash",
+  "modelRequests": 3,
+  "knownTotalTokens": 30093,
+  "unknownUsageRequests": 0,
+  "results": [
+    {
+      "mode": "readability",
+      "runId": 23,
+      "issues": 5,
+      "modelRequests": 1,
+      "canonicalUnchanged": true,
+      "reportReload": true,
+      "wireOptionMatchesReport": true
+    },
+    {
+      "mode": "quality",
+      "runId": 24,
+      "issues": 5,
+      "modelRequests": 1,
+      "canonicalUnchanged": true,
+      "reportReload": true,
+      "wireOptionMatchesReport": true
+    },
+    {
+      "mode": "style",
+      "runId": 25,
+      "issues": 5,
+      "modelRequests": 1,
+      "canonicalUnchanged": true,
+      "reportReload": true,
+      "wireOptionMatchesReport": true
+    }
+  ],
+  "pageErrors": [],
+  "checks": [
+    "Same synthetic manuscript and original failed readability cohort; first run readability, then independent quality and style",
+    "One actual request per author action; non-stream JSON object; enable_thinking false forwarded unchanged upstream",
+    "Persisted report parameters equal observed wire options; all three reports have fresh run IDs",
+    "Formal manuscript bytes unchanged; refresh restores report with no request; no unhandled page errors"
+  ],
+  "originalFailureRetained": "tests/acceptance/longform-stability/real-review-modes-20261028-ddcf9275.json",
+  "evidenceSha256": {
+    "executed-runner.mjs": "740cebce3b536ed9a671853ff6c2abc3f05debf79e84d6693fc08154982a31c6",
+    "executed-forwarder.mjs": "c0c88ba76920d1a87848a6ce0ffccbf6788c48504370bae3da5c4d66c17a033d",
+    "live-result.json": "837c254476efec15e2701b5e221f98c184a2199bd6c09fff2b8ce96a33000880",
+    "live-requests.json": "45d4ed45c331213ad6be7aee1dd8eab226310f3e97d1742f5e7389a4efda3578"
+  },
+  "limits": "Protocol, governance and readback evidence only; model judgment and literary acceptance remain separate."
+}

@@ -235,6 +235,33 @@ async function savedEventDraft(page: Page, projectId: number, text: string) {
   }, { projectId, text })).toBe(true)
 }
 
+test('same-titled stages and events can enter the Gateway independently without a false Canon conflict', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
+  const id = await eventAISetup(page)
+  const before = await page.evaluate(async projectId => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    const arc = await db.storyArcs.where('projectId').equals(projectId).first()
+    const original = JSON.parse(arc.stages)[0]
+    const stages = [{ ...original, id: 'a-b' }, { ...original, id: 'ab', description: '后续再次返程核验', keyEvents: ['第二次核验'] }]
+    await db.storyArcs.update(arc.id, { stages: JSON.stringify(stages) })
+    return { arc: await db.storyArcs.get(arc.id), stages }
+  }, id)
+  await page.reload(); await page.getByRole('button', { name: /阶段\s*1\s+依据实测数据逐步决定通行/ }).click()
+  const reply = [...before.stages[0].keyEvents, '完成本轮核验后保留退路']
+  let calls = 0
+  await page.route('https://arc-events.invalid/**', route => {
+    calls++
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ keyEvents: reply }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) })
+  })
+  await page.getByRole('button', { name: 'AI生成', exact: true }).click()
+  await expect(eventCandidate(page)).toHaveValue(JSON.stringify({ keyEvents: reply }, null, 2))
+  expect((await rows(page, id))[0]).toEqual(before.arc)
+  await eventAdopt(page).click(); await expect(eventCandidate(page)).toHaveCount(0)
+  expect(JSON.parse((await rows(page, id))[0].stages)).toEqual([{ ...before.stages[0], keyEvents: reply }, before.stages[1]])
+  await page.reload()
+  expect(calls).toBe(1); expect(errors).toEqual([])
+})
+
 test('stage-scoped AI appends beyond five existing events and sorts through editable, reloadable candidates', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
   const id = await eventAISetup(page); const before = (await rows(page, id))[0]; const original = JSON.parse(before.stages)
