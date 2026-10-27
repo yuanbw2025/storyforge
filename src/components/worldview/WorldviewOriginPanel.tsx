@@ -1,3 +1,5 @@
+import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
+import WorldviewReadBoundary from './WorldviewReadBoundary'
 import { useState, useEffect } from 'react'
 import { EMPTY_DIVINE_DESIGN } from '../../lib/types/worldview'
 import { useWorldviewStore, type WorldviewAuthorPatch } from '../../stores/worldview'
@@ -42,11 +44,13 @@ interface Props {
 
 /** v3 §2.1 — 世界观.世界起源（三个子模块） */
 export default function WorldviewOriginPanel({ project, initialWorldviewId, initialField, onFieldChange, initialPowerTarget }: Props) {
-  const { worldview, saveWorldview, loadAll } = useWorldviewStore()
+  const { worldview, saveWorldview } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
+  const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
+  const targetWorldGroupId = project.enableMultiWorld ? activeGroupId : (worldview?.worldGroupId ?? null)
   const copilot = useMasterCopilot({
     project,
-    worldGroupId: project.enableMultiWorld ? activeGroupId : null,
+    worldGroupId: targetWorldGroupId,
   })
 
   const [active, setActive] = useState<WorldviewOriginFieldKey>(initialPowerTarget ? 'power' : initialField ?? 'origin')
@@ -61,11 +65,6 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
     setActive(powerTargetKey ? 'power' : initialField ?? 'origin')
   }, [initialField, powerTargetKey])
 
-  // 多世界模式下按当前世界组加载，单世界传 null 走原逻辑
-  useEffect(() => {
-    loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
-  }, [project.id, project.enableMultiWorld, activeGroupId, loadAll])
-
   // 同步 store -> 本地 state
   useEffect(() => {
     setWorldOrigin(worldview?.worldOrigin ?? '')
@@ -75,7 +74,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
 
   // 通用保存
   const save = (patch: WorldviewAuthorPatch) =>
-    saveWorldview({ projectId: project.id!, worldGroupId: project.enableMultiWorld ? activeGroupId : null, ...patch })
+    saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, ...patch }, authorScope)
 
   const pendingWorldviewCandidates = copilot.pendingCandidates.filter(candidate => (
     candidate.payload.skillId === 'world-origin.worldview-field'
@@ -102,6 +101,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
   }, [pendingOriginKey])
 
   return (
+    <WorldviewReadBoundary onRetry={reloadCurrent}>
     <div
       {...initialRecordTargetAttributes(worldview?.id === initialWorldviewId, worldview?.id)}
       className={`flex flex-col w-full max-w-5xl space-y-4 rounded-xl ${
@@ -158,7 +158,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
               onRunningChange={running => setRunningField(running ? 'worldOrigin' : null)}
               onAdopted={async candidate => {
                 await copilot.adoptCandidate(candidate)
-                await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                await reloadCurrent()
               }}
             />
           </div>
@@ -179,7 +179,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
               onRunningChange={running => setRunningField(running ? 'powerHierarchy' : null)}
               onAdopted={async candidate => {
                 await copilot.adoptCandidate(candidate)
-                await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                await reloadCurrent()
               }}
             />
             <PowerSystemDetails project={project} initialRecordId={initialPowerTarget?.table === 'powerSystems' ? initialPowerTarget.recordId : null}/>
@@ -214,7 +214,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
               onRunningChange={running => setRunningField(running ? 'divineDesign' : null)}
               onAdopted={async candidate => {
                 await copilot.adoptCandidate(candidate)
-                await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                await reloadCurrent()
               }}
             />
             <div className="mt-6">
@@ -235,6 +235,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
         </div>
       </div>
     </div>
+    </WorldviewReadBoundary>
   )
 }
 

@@ -7,7 +7,8 @@ import type { Project, WorkspaceScope } from '../../lib/types'
 import { GENRE_OPTIONS } from '../../lib/types'
 import { useActiveWork } from '../../hooks/useActiveWork'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
-import { coordinatePendingEditV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { coordinatePendingEditV1, flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { db } from '../../lib/db/schema'
 
 // 按 group 分组
 const GENRE_GROUPS = Array.from(
@@ -38,6 +39,11 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState('')
+  const [modeSaving, setModeSaving] = useState(false)
+  const [modeError, setModeError] = useState('')
+  const modeBusy = useRef(false)
+  const projectIdRef = useRef(project.id)
+  projectIdRef.current = project.id
   const dirtyRef = useRef(false)
   const formRef = useRef(form)
   const pendingCount = useRef(0)
@@ -125,6 +131,25 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
   }
 
   const ownerIsActive = formOwner?.scope.projectId === project.id && formOwner?.scope.workId === activeWork?.id
+
+  const toggleMultiWorld = async () => {
+    const owner = formOwnerRef.current
+    if (!owner || modeBusy.current || owner.scope.projectId !== project.id) return
+    const next = !project.enableMultiWorld
+    modeBusy.current = true; setModeSaving(true); setModeError('')
+    try {
+      await flushPendingEditsV1()
+      if (next) {
+        if (!await useWorldGroupStore.getState().enableMultiWorld(owner.scope)) return
+      } else await updateWorkspace(owner.scope.projectId, { enableMultiWorld: false })
+      if (projectIdRef.current === owner.scope.projectId) {
+        const latest = await db.projects.get(owner.scope.projectId)
+        if (latest) onUpdate(latest)
+      }
+    } catch (cause) {
+      if (projectIdRef.current === owner.scope.projectId) setModeError(cause instanceof Error ? cause.message : String(cause))
+    } finally { modeBusy.current = false; setModeSaving(false) }
+  }
 
   return (
     <div className="max-w-2xl">
@@ -258,17 +283,8 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
             <button
               aria-label="多世界模式"
               aria-pressed={project.enableMultiWorld === true}
-              onClick={async () => {
-                if (!project.id) return
-                const next = !project.enableMultiWorld
-                // 开启时：确保主世界组 + 把现有项目级数据归属到主世界组
-                if (next) {
-                  const enabled = await useWorldGroupStore.getState().enableMultiWorld(project.id)
-                  if (!enabled) return
-                }
-                await updateWorkspace(project.id, { enableMultiWorld: next })
-                onUpdate({ ...project, enableMultiWorld: next, updatedAt: Date.now() })
-              }}
+              disabled={modeSaving}
+              onClick={() => { void toggleMultiWorld() }}
               className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ml-4 ${
                 project.enableMultiWorld ? 'bg-accent' : 'bg-border'
               }`}
@@ -280,6 +296,8 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
               />
             </button>
           </div>
+          {modeSaving && <p role="status" className="mt-2 text-xs text-text-muted">正在保存多世界设置…</p>}
+          {modeError && <p role="alert" className="mt-2 text-xs text-error">多世界设置未保存：{modeError}。可以重新操作开关。</p>}
         </div>
 
         <div className="pt-4 border-t border-border">

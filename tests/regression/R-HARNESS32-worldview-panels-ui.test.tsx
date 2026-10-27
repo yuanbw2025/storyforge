@@ -137,6 +137,31 @@ async function renderPanel(component: Parameters<typeof createElement>[0], props
   return host
 }
 
+it('a late adoption cannot reload the old workspace after this panel switches owners', async () => {
+  mocks.copilot.pendingCandidates = [candidate('worldOrigin', '世界来源')]
+  let release!: () => void
+  mocks.copilot.adoptCandidate.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve }))
+  const host = await renderPanel(WorldviewOriginPanel)
+  await act(async () => Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('采纳'))!.click())
+  const next = { ...project, id: 2, activeWorldId: 21, activeWorkId: 22 }
+  await act(async () => mounted.at(-1)!.root.render(createElement(WorldviewOriginPanel, { project: next })))
+  await act(async () => release())
+  expect(mocks.worldviewStore.loadAll).toHaveBeenLastCalledWith({ projectId: 2, worldId: 21, workId: 22 }, null)
+  expect(mocks.worldviewStore.loadAll).toHaveBeenCalledTimes(2)
+})
+
+it('a late adoption cannot publish a read after its panel unmounts', async () => {
+  mocks.copilot.pendingCandidates = [candidate('worldOrigin', '世界来源')]
+  let release!: () => void
+  mocks.copilot.adoptCandidate.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve }))
+  const host = await renderPanel(WorldviewOriginPanel)
+  await act(async () => Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('采纳'))!.click())
+  const entry = mounted.pop()!
+  await act(async () => entry.root.unmount()); entry.host.remove()
+  await act(async () => release())
+  expect(mocks.worldviewStore.loadAll).toHaveBeenCalledTimes(1)
+})
+
 function setInputValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
   const prototype = element instanceof HTMLTextAreaElement
     ? HTMLTextAreaElement.prototype
@@ -239,7 +264,7 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
     expect(mocks.copilot.rejectCandidate).toHaveBeenCalledWith(mocks.copilot.pendingCandidates[0])
     await act(async () => buttons.find(button => button.textContent?.includes('采纳'))!.click())
     expect(mocks.copilot.adoptCandidate).toHaveBeenCalledWith(mocks.copilot.pendingCandidates[0])
-    expect(mocks.worldviewStore.loadAll).toHaveBeenCalledWith(project.id, null)
+    expect(mocks.worldviewStore.loadAll).toHaveBeenCalledWith({ projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }, null)
   })
 
   it('刷新恢复非首自然字段候选时自动定位并标记待确认，人工编辑仍走原 store', async () => {
@@ -265,7 +290,7 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
       projectId: project.id,
       worldGroupId: null,
       climateByRegion: '盐雾季会让北岸连续失温七日。',
-    })
+    }, { projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId })
   })
 
   it('自然资源原生对象候选刷新后可审查和修改，不退化为旁路文本', async () => {

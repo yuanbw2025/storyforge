@@ -63,7 +63,7 @@ export default function WorldEnginePage(){
   const description=await dialog.prompt({title:'世界简介',defaultValue:target.world.description});if(description===null)return
   await updateWorldDraftMetadata({projectId:target.project.id!,worldId:target.world.id!,workId:target.work.id!},{name,description},target.world.updatedAt)
  }catch(c){setError(String(c))}}
- const enableMultiWorld=async()=>{if(!row||busy)return;setBusy(true);try{await flushPendingEditsV1();if(await useWorldGroupStore.getState().enableMultiWorld(row.project.id!)){await useProjectStore.getState().updateWorkspace(row.project.id!,{enableMultiWorld:true});await refresh()}}catch(c){setError(String(c))}finally{setBusy(false)}}
+ const enableMultiWorld=async()=>{if(!row||busy)return;setBusy(true);try{await flushPendingEditsV1();if(await useWorldGroupStore.getState().enableMultiWorld(row.project.id!)){await refresh()}}catch(c){setError(String(c))}finally{setBusy(false)}}
  const remove=async(target:Row)=>{try{await flushPendingEditsV1();await useProjectStore.getState().deleteProject(target.project.id!);if(projectId===target.project.id&&!(await db.projects.get(projectId!)))await go('/world/worlds')}catch(c){setError(String(c))}}
  const handoff=(value:ProductProductionHandoffV1)=>{const base=value.productType==='ttrpg'?'ttrpg/source':value.productType==='avg'?'avg/source':value.productType==='text-open-world'?'openworld/runtime':'adventure/runtime';void go(`/${base}?worldHandoff=${encodeURIComponent(JSON.stringify(value))}`)}
  const modules=definition.modules??[]

@@ -1,11 +1,11 @@
 import { create } from 'zustand'
 import { db } from '../lib/db/schema'
-import type { Worldview, StoryCore, PowerSystem, WorkspaceScope, DivineDesign, NaturalResources } from '../lib/types'
+import type { Worldview, StoryCore, PowerSystem, WorkspaceScope, DivineDesign, NaturalResources, WorldGroup } from '../lib/types'
 import { EMPTY_DIVINE_DESIGN, EMPTY_NATURAL_RESOURCES } from '../lib/types/worldview'
 import type { AdoptResult } from '../lib/registry/types'
 import { adopt } from '../lib/registry/adopt'
 import { refreshSettingAssertionSourceStatus } from '../lib/fact-ledger/setting-assertions'
-import { readOwnedRows, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
+import { readOwnedRows, resolveScope, resolveScopeLike, stampNewRecord, type WorkspaceScopeLike } from '../lib/workspace/scope'
 import { coordinatePendingEditV1 } from '../lib/authoring/pending-edit-coordinator'
 
 export type WorldviewAuthorPatch = Partial<Omit<Worldview, 'divineDesign' | 'naturalResources'>> & {
@@ -18,6 +18,7 @@ interface WorldviewStore {
   storyCore: StoryCore | null
   powerSystem: PowerSystem | null
   loading: boolean
+  loadError: string | null
   loadedProjectId: number | null
   loadedScope: WorkspaceScope | null
   /** 当前加载的世界组（null = 单世界模式 / 未指定） */
@@ -25,16 +26,16 @@ interface WorldviewStore {
 
   loadAll: (scope: WorkspaceScopeLike, worldGroupId?: number | null) => Promise<void>
 
-  saveWorldview: (data: WorldviewAuthorPatch) => Promise<void>
-  saveStoryCore: (data: Partial<StoryCore>) => Promise<void>
-  savePowerSystem: (data: Partial<PowerSystem>) => Promise<void>
+  saveWorldview: (data: WorldviewAuthorPatch, scope?: WorkspaceScope) => Promise<void>
+  saveStoryCore: (data: Partial<StoryCore>, scope?: WorkspaceScope) => Promise<void>
+  savePowerSystem: (data: Partial<PowerSystem>, scope?: WorkspaceScope) => Promise<void>
 }
 
 const now = () => Date.now()
 let worldviewLoadRequest = 0
 
-function captureScope(projectId: number) {
-  const promise = resolveScopeLike(projectId)
+function captureScope(projectId: number, scope?: WorkspaceScope) {
+  const promise = resolveScope({ projectId, scope })
   // Queue admission can precede execution. Observe early read failure while
   // retaining the rejected promise for the writer/navigation barrier.
   void promise.catch(() => undefined)
@@ -77,43 +78,55 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
   storyCore: null,
   powerSystem: null,
   loading: false,
+  loadError: null,
   loadedProjectId: null,
   loadedScope: null,
   activeWorldGroupId: null,
 
   loadAll: async (scopeInput: WorkspaceScopeLike, worldGroupId: number | null = null) => {
     const request = ++worldviewLoadRequest
-    set({ loading: true, activeWorldGroupId: worldGroupId })
-    const scope = await resolveScopeLike(scopeInput)
-    if (request !== worldviewLoadRequest) return
-    set({ loadedProjectId: scope.projectId, loadedScope: scope })
-    const [wvList, sc, psList] = await Promise.all([
-      readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' }),
-      readOwnedRows<StoryCore>(scope, 'storyCores', { owner: 'work' }).then(rows => rows[0]),
-      readOwnedRows<PowerSystem>(scope, 'powerSystems', { owner: 'world' }),
-    ])
-    if (request !== worldviewLoadRequest || get().loadedProjectId !== scope.projectId || get().activeWorldGroupId !== worldGroupId) return
-    // 单世界模式（worldGroupId == null）：取第一条
-    // 多世界模式：取匹配该世界组的记录
-    const wv = worldGroupId == null
-      ? wvList.find(w => w.worldGroupId == null)
-      : wvList.find(w => w.worldGroupId === worldGroupId)
-    const ps = psList.find(p => (p.worldGroupId ?? null) === worldGroupId)
-    set({
-      worldview: wv ?? null,
-      storyCore: sc || null,   // 故事核心归当前作品，不分世界组
-      powerSystem: ps || null,
-      loading: false,
-    })
+    set({ loading: true, loadError: null, activeWorldGroupId: worldGroupId })
+    try {
+      const scope = await resolveScopeLike(scopeInput)
+      if (request !== worldviewLoadRequest) return
+      if (!sameScope(get().loadedScope, scope)) set({ worldview: null, storyCore: null, powerSystem: null })
+      set({ loadedProjectId: scope.projectId, loadedScope: scope })
+      const [wvList, sc, psList, groups] = await Promise.all([
+        readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' }),
+        readOwnedRows<StoryCore>(scope, 'storyCores', { owner: 'work' }).then(rows => rows[0]),
+        readOwnedRows<PowerSystem>(scope, 'powerSystems', { owner: 'world' }),
+        worldGroupId == null ? readOwnedRows<WorldGroup>(scope, 'worldGroups', { owner: 'world' }) : Promise.resolve([] as WorldGroup[]),
+      ])
+      if (request !== worldviewLoadRequest || get().loadedProjectId !== scope.projectId || get().activeWorldGroupId !== worldGroupId) return
+      // 关闭多世界只收起分组入口，不把已归属主世界的记录隐藏或复制。
+      const primaryId = groups.find(group => group.type === 'primary')?.id
+      const wv = worldGroupId == null
+        ? wvList.find(w => w.worldGroupId == null) ?? wvList.find(w => w.worldGroupId === primaryId) ?? wvList[0]
+        : wvList.find(w => w.worldGroupId === worldGroupId)
+      const ps = worldGroupId == null
+        ? psList.find(p => p.worldGroupId == null) ?? psList.find(p => p.worldGroupId === primaryId) ?? psList[0]
+        : psList.find(p => p.worldGroupId === worldGroupId)
+      set({
+        worldview: wv ?? null,
+        storyCore: sc || null,   // 故事核心归当前作品，不分世界组
+        powerSystem: ps || null,
+        loading: false,
+      })
+    } catch (cause) {
+      if (request === worldviewLoadRequest) set({ loadError: cause instanceof Error ? cause.message : String(cause) })
+      throw cause
+    } finally {
+      if (request === worldviewLoadRequest) set({ loading: false })
+    }
   },
 
-  saveWorldview: (data: WorldviewAuthorPatch) => {
+  saveWorldview: (data: WorldviewAuthorPatch, frozenScope?: WorkspaceScope) => {
     const { worldview, activeWorldGroupId } = get()
     const projectId = data.projectId ?? worldview?.projectId
     if (projectId == null) return Promise.reject(new Error('编辑未保存：缺少工作区'))
     const { id: _, projectId: __, createdAt: ___, updatedAt: ____, worldGroupId, ...patch } = data
     const targetWorldGroupId = worldGroupId !== undefined ? worldGroupId : activeWorldGroupId
-    const scopePromise = captureScope(projectId)
+    const scopePromise = captureScope(projectId, frozenScope)
     return coordinatePendingEditV1({
       key: `worldview:${projectId}:${targetWorldGroupId ?? 'default'}`,
       persist: async () => {
@@ -130,17 +143,18 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
         const next = (await readOwnedRows<Worldview>(scope, 'worldviews', { owner: 'world' }))
           .find(row => (row.worldGroupId ?? null) === targetWorldGroupId) ?? null
         const current = get()
-        if (sameScope(current.loadedScope, scope) && current.activeWorldGroupId === targetWorldGroupId) set({ worldview: next })
+        if (sameScope(current.loadedScope, scope) && (current.activeWorldGroupId === targetWorldGroupId
+          || (current.activeWorldGroupId == null && target?.id != null && current.worldview?.id === target.id))) set({ worldview: next })
       },
     })
   },
 
-  saveStoryCore: (data: Partial<StoryCore>) => {
+  saveStoryCore: (data: Partial<StoryCore>, frozenScope?: WorkspaceScope) => {
     const { storyCore } = get()
     const projectId = data.projectId ?? storyCore?.projectId
     if (projectId == null) return Promise.reject(new Error('编辑未保存：缺少工作区'))
     const { id: _, projectId: __, createdAt: ___, updatedAt: ____, ...patch } = data
-    const scopePromise = captureScope(projectId)
+    const scopePromise = captureScope(projectId, frozenScope)
     return coordinatePendingEditV1({
       key: `story-core:${projectId}`,
       persist: async () => {
@@ -158,7 +172,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
     })
   },
 
-  savePowerSystem: (data: Partial<PowerSystem>) => {
+  savePowerSystem: (data: Partial<PowerSystem>, frozenScope?: WorkspaceScope) => {
     const { powerSystem, activeWorldGroupId } = get()
     const projectId = data.projectId ?? powerSystem?.projectId
     if (projectId == null) return Promise.resolve()
@@ -170,7 +184,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
         .filter(field => data[field] !== undefined).map(field => [field, data[field]]),
     )
     if (!Object.keys(patch).length) return Promise.resolve()
-    const scopePromise = captureScope(projectId)
+    const scopePromise = captureScope(projectId, frozenScope)
     return coordinatePendingEditV1({
       key: `power-system:${projectId}:${worldGroupId ?? 'default'}`,
       persist: async () => {
@@ -195,7 +209,7 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
           next = { ...row, id: id as number }
         }
         const current = get()
-        if (current.activeWorldGroupId === worldGroupId
+        if ((current.activeWorldGroupId === worldGroupId || (current.activeWorldGroupId == null && current.powerSystem?.id === target?.id))
           && sameScope(current.loadedScope, scope)) {
           set({ powerSystem: next })
         }

@@ -2,7 +2,7 @@
  * 世界组详情面板 — 编辑单个世界的基础信息和穿越规则
  */
 import { CTextarea, CInput } from '../shared/CompositionInput'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { ArrowLeft, Save, Loader2, Sparkles, Check, X } from 'lucide-react'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIConfigStore } from '../../stores/ai-config'
@@ -18,6 +18,8 @@ import {
 import { resolveScopeLike } from '../../lib/workspace/scope'
 import type { WorkspaceScope, WorldGroup, WorldGroupType } from '../../lib/types'
 import { WORLD_GROUP_TYPE_LABELS } from '../../lib/types/world-group'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
+import { coordinatePendingEditV1, flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
 
 const TYPE_OPTIONS: { value: WorldGroupType; label: string }[] = [
   { value: 'primary', label: '主世界' },
@@ -36,21 +38,29 @@ interface Props {
   onBack: () => void
 }
 
+function groupForm(group: WorldGroup) {
+  return {
+    name: group.name, description: group.description ?? '', type: group.type,
+    icon: group.icon ?? '🌐', color: group.color ?? '#6B7280',
+    entryCondition: group.entryCondition ?? '', exitCondition: group.exitCondition ?? '',
+    plannedChapterCount: group.plannedChapterCount ?? 0,
+    powerRestriction: group.powerRestriction ?? '', takeawayRules: group.takeawayRules ?? '',
+  }
+}
+
 export default function WorldGroupDetail({ group, onBack }: Props) {
   const { updateGroup } = useWorldGroupStore()
   const aiConfig = useAIConfigStore(state => state.config)
-  const [form, setForm] = useState({
-    name: '',
-    description: '',
-    type: 'custom' as WorldGroupType,
-    icon: '🌐',
-    color: '#6B7280',
-    entryCondition: '',
-    exitCondition: '',
-    plannedChapterCount: 0,
-    powerRestriction: '',
-    takeawayRules: '',
-  })
+  const [form, setForm] = useState(() => groupForm(group))
+  const formRef = useRef(form)
+  formRef.current = form
+  const editBase = useRef(group)
+  const baseForm = useRef(form)
+  const dirty = JSON.stringify(form) !== JSON.stringify(baseForm.current)
+  const dirtyRef = useRef(dirty)
+  dirtyRef.current = dirty
+  const pendingSave = useRef<Promise<void> | null>(null)
+  const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
   const [scope, setScope] = useState<WorkspaceScope | null>(null)
   const [candidate, setCandidate] = useState<WorldviewExpandCandidateV1 | null>(null)
@@ -61,19 +71,12 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
   const [expandError, setExpandError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
 
+  useBeforeUnload(dirty || saving)
   useEffect(() => {
-    setForm({
-      name: group.name,
-      description: group.description || '',
-      type: group.type,
-      icon: group.icon || '🌐',
-      color: group.color || '#6B7280',
-      entryCondition: group.entryCondition || '',
-      exitCondition: group.exitCondition || '',
-      plannedChapterCount: group.plannedChapterCount || 0,
-      powerRestriction: group.powerRestriction || '',
-      takeawayRules: group.takeawayRules || '',
-    })
+    if (dirtyRef.current || pendingSave.current) return
+    const next = groupForm(group)
+    editBase.current = group; baseForm.current = next; formRef.current = next
+    setForm(next)
   }, [group])
 
   useEffect(() => {
@@ -120,29 +123,42 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
     return () => { cancelled = true }
   }, [group.id, group.projectId])
 
-  const handleSave = async () => {
-    if (!group.id) return
-    setSaving(true)
-    await updateGroup(group.id, {
-      name: form.name,
-      description: form.description,
-      type: form.type,
-      icon: form.icon,
-      color: form.color,
-      entryCondition: form.entryCondition || undefined,
-      exitCondition: form.exitCondition || undefined,
-      plannedChapterCount: form.plannedChapterCount || undefined,
-      powerRestriction: form.powerRestriction || undefined,
-      takeawayRules: form.takeawayRules || undefined,
-    })
-    setSaving(false)
+  const handleSave = useCallback(async function saveGroupDraft(): Promise<void> {
+    if (pendingSave.current) {
+      await pendingSave.current
+      if (dirtyRef.current) return saveGroupDraft()
+      return
+    }
+    if (!dirtyRef.current) return
+    if (!scope || !editBase.current.id) throw new Error('世界仍在加载，请稍后保存。')
+    const snapshot = formRef.current, baseline = editBase.current, frozenScope = scope
+    const operation = (async () => {
+      setSaving(true); setSaveError('')
+      try {
+        const saved = await coordinatePendingEditV1({ key: `world-group:${baseline.id}`, persist: () => updateGroup(baseline.id!, {
+          ...snapshot,
+          entryCondition: snapshot.entryCondition || undefined,
+          exitCondition: snapshot.exitCondition || undefined,
+          plannedChapterCount: snapshot.plannedChapterCount || undefined,
+          powerRestriction: snapshot.powerRestriction || undefined,
+          takeawayRules: snapshot.takeawayRules || undefined,
+        }, { scope: frozenScope, expected: baseline }) })
+        editBase.current = saved; baseForm.current = groupForm(saved)
+        if (formRef.current === snapshot) dirtyRef.current = false
+      } catch (cause) {
+        setSaveError(cause instanceof Error ? cause.message : String(cause))
+        throw cause
+      } finally { pendingSave.current = null; setSaving(false) }
+    })()
+    pendingSave.current = operation
+    return operation
+  }, [scope, updateGroup])
+  useEffect(() => registerPendingDraftFlusherV1(handleSave), [handleSave])
+  const back = async () => {
+    try { await flushPendingEditsV1(); onBack() }
+    catch (cause) { setSaveError(cause instanceof Error ? cause.message : String(cause)) }
   }
-
-  const hasUnsavedDraft = (
-    form.name !== group.name
-    || form.description !== (group.description || '')
-    || form.type !== group.type
-  )
+  const hasUnsavedDraft = dirty
 
   const handleAIExpand = async () => {
     if (!scope || !group.id || expandBusy || candidate || unsafeRunId != null) return
@@ -255,7 +271,7 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
       {/* 返回 + 标题 */}
       <div className="flex items-center justify-between">
         <button
-          onClick={onBack}
+          onClick={() => { void back() }}
           className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text-primary transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -272,8 +288,8 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
             {expandBusy ? '记录可恢复运行...' : expanded ? '已写入世界观' : 'AI 扩写世界观'}
           </button>
           <button
-            onClick={handleSave}
-            disabled={saving}
+            onClick={() => { void handleSave().catch(() => undefined) }}
+            disabled={saving || !scope}
             className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors text-sm font-medium"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -281,6 +297,8 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
           </button>
         </div>
       </div>
+
+      {saveError && <p role="alert" className="text-sm text-error">未保存：{saveError}。草稿仍保留，请核对或重试。</p>}
 
       {expandError && (
         <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">
@@ -354,7 +372,7 @@ export default function WorldGroupDetail({ group, onBack }: Props) {
               disabled={isPrimary}
               className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent transition-colors disabled:opacity-50"
             >
-              {TYPE_OPTIONS.map(opt => (
+              {TYPE_OPTIONS.filter(opt => isPrimary || opt.value !== 'primary').map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>

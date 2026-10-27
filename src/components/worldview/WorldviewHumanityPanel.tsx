@@ -1,3 +1,5 @@
+import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
+import WorldviewReadBoundary from './WorldviewReadBoundary'
 import { useState, useEffect } from 'react'
 import { BookOpen } from 'lucide-react'
 import { useWorldviewStore } from '../../stores/worldview'
@@ -56,20 +58,18 @@ interface Props {
 }
 
 export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props) {
-  const { worldview, saveWorldview, loadAll } = useWorldviewStore()
+  const { worldview, saveWorldview } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
+  const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
+  const targetWorldGroupId = project.enableMultiWorld ? activeGroupId : (worldview?.worldGroupId ?? null)
   const copilot = useMasterCopilot({
     project,
-    worldGroupId: project.enableMultiWorld ? activeGroupId : null,
+    worldGroupId: targetWorldGroupId,
   })
 
   const [values, setValues] = useState<Record<string, string>>({})
   const [activeKey, setActiveKey] = useState(HISTORY_NAV.key)
   const [runningField, setRunningField] = useState<WorldviewAgentField | null>(null)
-
-  useEffect(() => {
-    loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
-  }, [project.id, project.enableMultiWorld, activeGroupId, loadAll])
 
   useEffect(() => {
     if (!worldview) return
@@ -86,7 +86,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
   }, [worldview])
 
   const save = (fieldName: string, v: string) =>
-    saveWorldview({ projectId: project.id!, worldGroupId: project.enableMultiWorld ? activeGroupId : null, [fieldName]: v })
+    saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, [fieldName]: v }, authorScope)
 
   const pendingWorldviewCandidates = copilot.pendingCandidates.filter(candidate => (
     candidate.payload.skillId === 'world-origin.worldview-field'
@@ -105,6 +105,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
   }, [pendingPanelKey])
 
   return (
+    <WorldviewReadBoundary onRetry={reloadCurrent}>
     <div className="flex flex-col w-full h-full space-y-4">
       {/* 顶部 */}
       <div className="pb-4 border-b border-border/40 px-6 pt-4 shrink-0">
@@ -214,7 +215,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
                 onRunningChange={running => setRunningField(running ? f.field : null)}
                 onAdopted={async candidate => {
                   await copilot.adoptCandidate(candidate)
-                  await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                  await reloadCurrent()
                 }}
               />
               {/* 词条（下）：在全貌之下,把"本方面"细化为一个个具体条目(只显示对应那一类,可打星) */}
@@ -235,6 +236,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
         </div>
       </div>
     </div>
+    </WorldviewReadBoundary>
   )
 }
 

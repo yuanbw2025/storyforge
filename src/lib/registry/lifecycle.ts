@@ -10,6 +10,7 @@ import { PROJECT_TABLES, REGISTRY_BY_NAME } from './project-tables'
 import { markAndSweepAgentRunArtifactsV1 } from '../memory/artifact-retention-store'
 import type { TableSpec } from './types'
 import { remapNarrativeDomainReferencesV1 } from '../narrative-domain/lifecycle'
+import { readOwnedRows } from '../workspace/scope'
 
 // ─────────────────────────────────────────────────────────────
 // 派生选择器
@@ -52,8 +53,9 @@ export function transactionTablesFor(
     for (const spec of PROJECT_TABLES) if (spec.worldSemantic?.projector) set.add(spec.table)
     return [...set]
   }
-  // 归属到主世界：所有 worldScoped 表。
-  return worldScopedTables().map(s => s.table)
+  // 归属时还校验 World/Work 根、父记录，并与工作区开关原子提交。
+  // 从注册表派生完整作用域，不能只声明待更新的叶表。
+  return projectScopedTables().map(s => s.table)
 }
 
 /**
@@ -269,13 +271,23 @@ export async function cascadeDeleteGroup(projectId: number, wgId: number): Promi
 
 export async function assignUnscopedRecordsToPrimaryWorld(projectId: number, primaryId: number): Promise<void> {
   await db.transaction('rw', transactionTablesFor('assignPrimaryWorld'), async () => {
+    const primary = await db.worldGroups.get(primaryId)
+    const primaryWorldId = primary?.worldId
+    const world = typeof primaryWorldId === 'number' ? await db.worlds.get(primaryWorldId) : undefined
+    if (!primary || typeof primaryWorldId !== 'number' || primary.projectId !== projectId || primary.type !== 'primary' || world?.projectId !== projectId) {
+      throw new Error('主世界归属无效；未调整任何记录。')
+    }
+    const works = await db.works.where('projectId').equals(projectId).filter(work => work.worldId === primaryWorldId).toArray()
     for (const spec of worldScopedTables()) {
       const wgField = spec.worldGroupField ?? 'worldGroupId'
-      const rows = await spec.table.where('projectId').equals(projectId).toArray()
-      for (const row of rows as any[]) {
-        if (row[wgField] == null) {
-          await spec.table.update(row.id, { [wgField]: primaryId })
+      const owned = new Map<number, Record<string, unknown>>()
+      for (const work of works) {
+        for (const row of await readOwnedRows<Record<string, unknown>>({ projectId, worldId: primaryWorldId, workId: work.id! }, spec.name)) {
+          if (row[wgField] == null) owned.set(row.id as number, row)
         }
+      }
+      for (const id of owned.keys()) {
+        await spec.table.update(id, { [wgField]: primaryId })
       }
     }
   })

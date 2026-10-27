@@ -1,3 +1,5 @@
+import { useScopedWorldviewReadback } from '../../hooks/useScopedWorldviewReadback'
+import WorldviewReadBoundary from './WorldviewReadBoundary'
 import { useState, useEffect } from 'react'
 import { EMPTY_NATURAL_RESOURCES } from '../../lib/types/worldview'
 import { useWorldviewStore, type WorldviewAuthorPatch } from '../../stores/worldview'
@@ -49,21 +51,19 @@ const NATURAL_CODEX_KEYS: Record<string, string[] | undefined> = {
 // ── 主面板 ─────────────────────────────────────────────────────
 
 export default function WorldviewNaturalPanel({ project }: Props) {
-  const { worldview, saveWorldview, loadAll } = useWorldviewStore()
+  const { worldview, saveWorldview } = useWorldviewStore()
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
+  const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
+  const targetWorldGroupId = project.enableMultiWorld ? activeGroupId : (worldview?.worldGroupId ?? null)
   const copilot = useMasterCopilot({
     project,
-    worldGroupId: project.enableMultiWorld ? activeGroupId : null,
+    worldGroupId: targetWorldGroupId,
   })
 
   const [values, setValues] = useState<Record<string, string>>({})
   const [naturalResources, setNaturalResources] = useState<NaturalResources>({ ...EMPTY_NATURAL_RESOURCES })
   const [activeKey, setActiveKey] = useState<FieldKey>('worldStructure')
   const [runningField, setRunningField] = useState<WorldviewAgentField | null>(null)
-
-  useEffect(() => {
-    loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
-  }, [project.id, project.enableMultiWorld, activeGroupId, loadAll])
 
   useEffect(() => {
     if (!worldview) return
@@ -80,7 +80,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
   }, [worldview])
 
   const save = (patch: WorldviewAuthorPatch) =>
-    saveWorldview({ projectId: project.id!, worldGroupId: project.enableMultiWorld ? activeGroupId : null, ...patch })
+    saveWorldview({ projectId: project.id!, worldGroupId: targetWorldGroupId, ...patch }, authorScope)
 
   const pendingWorldviewCandidates = copilot.pendingCandidates.filter(candidate => (
     candidate.payload.skillId === 'world-origin.worldview-field'
@@ -101,6 +101,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
   }, [pendingPanelKey])
 
   return (
+    <WorldviewReadBoundary onRetry={reloadCurrent}>
     <div className="flex flex-col w-full h-full space-y-4">
       {/* 顶部 */}
       <div className="pb-4 border-b border-border/40 px-6 pt-4 shrink-0">
@@ -181,7 +182,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
                 onRunningChange={running => setRunningField(running ? f.key : null)}
                 onAdopted={async candidate => {
                   await copilot.adoptCandidate(candidate)
-                  await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                  await reloadCurrent()
                 }}
               />
               {/* 全貌之下:本方面的专属词条(只显示对应那一类) */}
@@ -218,7 +219,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
               onRunningChange={running => setRunningField(running ? 'naturalResourceOverview' : null)}
               onAdopted={async candidate => {
                 await copilot.adoptCandidate(candidate)
-                await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                await reloadCurrent()
               }}
             />
             {/* 自然资源:矿物/草药/异兽 三类词条 */}
@@ -259,7 +260,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
                     onRunningChange={running => setRunningField(running ? 'naturalResources' : null)}
                     onAdopted={async candidate => {
                       await copilot.adoptCandidate(candidate)
-                      await loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)
+                      await reloadCurrent()
                     }}
                     buttonLabel="AI 生成分类明细"
                   />
@@ -270,6 +271,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
         </div>
       </div>
     </div>
+    </WorldviewReadBoundary>
   )
 }
 
