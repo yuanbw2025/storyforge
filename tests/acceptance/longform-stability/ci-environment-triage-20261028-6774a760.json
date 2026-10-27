@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "kind": "full-ci-environment-triage",
+  "sourceCommit": "6774a760f6d265ddd73bffc624c9510c907f7219",
+  "fullCi": {
+    "status": "FAIL",
+    "filesPassed": 1243,
+    "filesFailed": 2,
+    "testsPassed": 8346,
+    "testsFailed": 3,
+    "testsSkipped": 3,
+    "durationSeconds": 11359.71,
+    "log": "full-ci-6774a760-CI-environment.log"
+  },
+  "observed": "Three 60-second test timeouts reported approximately 15-18 minutes elapsed; filtered local sleep/wake events closely match those intervals. A second file had a worker module-fetch timeout, not an application HTTP call. Private timing evidence retained.",
+  "focusedSameSource": {
+    "testsPassed": 19,
+    "filesPassed": 2,
+    "coverageEnabled": true,
+    "preventIdleSleepForCommand": true,
+    "durationSeconds": 116.54,
+    "log": "ci-6774-targeted-caffeinate-coverage.log",
+    "exitCode": 1,
+    "reason": "Two-file coverage below project-wide thresholds; tests passed, the command and full CI are not PASS."
+  },
+  "productAndAssertionsChanged": false,
+  "next": "Rerun the full final source under a stable awake environment; do not erase or reinterpret the original failures."
+}

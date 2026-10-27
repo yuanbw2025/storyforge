@@ -78,7 +78,7 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
     setPreviewTargetId(null)
   }, [])
 
-  const ai = useAIStream(createAISessionKey(project.id!, 'outline.generate'))
+  const ai = useAIStream(createAISessionKey(project.id!, 'outline.generate', `work:${activeWork?.id ?? 'loading'}`))
 
   useEffect(() => { loadAll(project.id!) }, [project.id, project.activeWorldId, project.activeWorkId, loadAll])
 
@@ -290,6 +290,8 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
       void generation.confirm(mode, chunkedConfig)
     }
   }
+
+  useBeforeUnload(generation.isFinalizing)
 
   const handleApplyChunkedResult = async () => {
     if (!chunkedGen.result) return
@@ -650,9 +652,10 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
         )}
 
         <OutlineGenerationResultPanel
+          isFinalizing={generation.isFinalizing}
           output={ai.output}
           isStreaming={ai.isStreaming}
-          error={ai.error}
+          error={ai.error || generation.executionError || null}
           tokenUsage={ai.tokenUsage}
           moduleKey={generation.moduleKey}
           restructuring={restructuring}

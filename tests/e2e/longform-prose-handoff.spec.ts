@@ -13,7 +13,7 @@ async function prepare(page: Page, smallWindow = false) {
   await page.getByRole('button', { name: '大纲与章纲', exact: true }).click()
   await page.getByRole('button', { name: '添加卷', exact: true }).click()
   await page.getByRole('button', { name: '添加章节', exact: true }).click()
-  await page.getByRole('textbox', { name: '章节摘要（可编辑，失焦自动保存）' }).fill('两人收店，先清点、再约定明日分工，最后才签收，签收后停笔。')
+  await page.getByLabel('章节摘要', { exact: true }).fill('两人收店，先清点、再约定明日分工，最后才签收，签收后停笔。')
   await page.getByTitle('编辑本章细纲', { exact: true }).click()
   await page.getByRole('button', { name: '添加场景', exact: true }).click()
   await page.getByPlaceholder('一句话场景概要...', { exact: true }).fill('关火、清点、约定分工；最后签收。')

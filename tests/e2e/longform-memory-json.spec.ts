@@ -13,7 +13,7 @@ async function addChapter(page: Page, first: boolean) {
   await page.getByRole('button', { name: '大纲与章纲', exact: true }).click()
   if (first) await page.getByRole('button', { name: '添加卷', exact: true }).click()
   await page.getByRole('button', { name: '添加章节', exact: true }).click()
-  const summaries = page.getByRole('textbox', { name: '章节摘要（可编辑，失焦自动保存）' })
+  const summaries = page.getByLabel('章节摘要', { exact: true })
   await expect(summaries).toHaveCount(first ? 1 : 2)
   await summaries.last().fill('先询问意愿，再回应关门，不展开次日。')
   await page.getByTitle('编辑本章细纲', { exact: true }).last().click()

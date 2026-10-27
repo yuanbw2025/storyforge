@@ -22,6 +22,8 @@ import {
   assertRecordInScope,
   readOwnedRows,
   resolveScope,
+  resolveScopeLike,
+  type WorkspaceScopeLike,
   scopeTransactionTables,
 } from '../workspace/scope'
 import type { OutlineNode } from '../types'
@@ -420,9 +422,9 @@ async function candidateForSnapshot(
 }
 
 export async function restoreLatestOutlineGenerationCandidateV1(
-  projectId: number,
+  scopeInput: WorkspaceScopeLike,
 ): Promise<OutlineGenerationCandidateV1 | null> {
-  const scope = await resolveScope({ projectId })
+  const scope = await resolveScopeLike(scopeInput)
   const runs = (await readOwnedRows<AgentRunRecord>(scope, 'agentRuns', { owner: 'work' }))
     .filter(run => run.id != null && run.status === 'awaiting_confirmation' && run.conversationId != null)
     .sort((left, right) => right.updatedAt - left.updatedAt)
@@ -440,9 +442,9 @@ export async function restoreLatestOutlineGenerationCandidateV1(
 }
 
 export async function restoreLatestOutlineGenerationBatchV1(
-  projectId: number,
+  scopeInput: WorkspaceScopeLike,
 ): Promise<RestoredOutlineGenerationBatchV1 | null> {
-  const scope = await resolveScope({ projectId })
+  const scope = await resolveScopeLike(scopeInput)
   const runs = (await readOwnedRows<AgentRunRecord>(scope, 'agentRuns', { owner: 'work' }))
     .filter(run => run.id != null && run.status === 'awaiting_confirmation' && run.conversationId != null)
     .sort((left, right) => right.updatedAt - left.updatedAt)
@@ -1031,9 +1033,9 @@ export async function verifyOutlineGenerationAdoptionV1(
 }
 
 export async function recoverPendingOutlineGenerationAdoptionsV1(
-  projectId: number,
+  scopeInput: WorkspaceScopeLike,
 ): Promise<OutlineGenerationAdoptionRecoveryResultV1> {
-  const scope = await resolveScope({ projectId })
+  const scope = await resolveScopeLike(scopeInput)
   const result: OutlineGenerationAdoptionRecoveryResultV1 = { recoveredRunIds: [], failed: [] }
   const runs = (await readOwnedRows<AgentRunRecord>(scope, 'agentRuns', { owner: 'work' }))
     .filter(run => run.id != null && (run.status === 'running' || run.status === 'verifying') && run.conversationId != null)
