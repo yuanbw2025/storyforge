@@ -104,7 +104,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
     <WorldviewReadBoundary onRetry={reloadCurrent}>
     <div
       {...initialRecordTargetAttributes(worldview?.id === initialWorldviewId, worldview?.id)}
-      className={`flex flex-col w-full max-w-5xl space-y-4 rounded-xl ${
+      className={`worldview-origin-panel flex flex-col w-full max-w-5xl space-y-4 rounded-xl ${
         worldview?.id === initialWorldviewId ? INITIAL_RECORD_TARGET_CLASS : ''
       }`}
     >

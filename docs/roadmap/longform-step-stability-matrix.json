@@ -16,12 +16,12 @@
     "cases": 160,
     "leafFieldChecks": 336,
     "operationChecks": 1233,
-    "notRun": 93,
+    "notRun": 90,
     "passed": 0,
     "failed": 0,
     "faultChecks": 2013,
     "modeChecks": 75,
-    "running": 67
+    "running": 70
   },
   "sourceInventory": {
     "baseline": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
@@ -15792,15 +15792,15 @@
       "module": "chapters-list",
       "title": "保存失败、刷新、中断后恢复手稿",
       "profile": "MANUAL",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "open": "PASS",
+        "input": "RUNNING",
+        "edit_official": "RUNNING",
+        "save": "RUNNING",
+        "reload": "RUNNING",
         "downstream": "NOT_RUN",
-        "recover": "NOT_RUN"
+        "recover": "RUNNING"
       },
       "fieldChecks": [],
       "assertions": [
@@ -15813,7 +15813,13 @@
       ],
       "candidateTests": [],
       "source": [],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/prose-rejection-terminal-20261028.json",
+          "summary": "已执行原生正文草稿写失败保留、明确重试与快速切章保护；完整恢复/崩溃模式继续。"
+        }
+      ],
       "defects": [],
       "faultChecks": [
         {
@@ -17503,18 +17509,18 @@
       "module": "outline",
       "title": "章纲：从卷生成、批量、未写未来章及部分采纳",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
+        "open": "PASS",
+        "input": "RUNNING",
+        "generate": "RUNNING",
+        "candidate_unchanged_owner": "RUNNING",
         "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "reject_candidate": "RUNNING",
+        "adopt": "RUNNING",
+        "edit_official": "RUNNING",
+        "save": "RUNNING",
+        "reload": "RUNNING",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -17531,7 +17537,13 @@
       ],
       "candidateTests": [],
       "source": [],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-outline-mainline-20261028-0d93ae491.json",
+          "summary": "单卷参数化生成三章、刷新、拒绝、新生成、采纳和手改回读已执行；多卷/部分采纳等仍待执行。"
+        }
+      ],
       "defects": [],
       "faultChecks": [
         {
@@ -18320,6 +18332,11 @@
           "type": "REAL_MODEL_PARTIAL_MAINLINE",
           "receipt": "tests/acceptance/longform-stability/real-prose-mainline-20261028-3435e225.json",
           "summary": "新独立样本2请求17229已知tokens完成正文拒绝、候选编辑保存/刷新/采纳、手改保存与完整细纲交接；另1未知用量请求保留，不计整例PASS。"
+        },
+        {
+          "type": "ISOLATED_BROWSER_ENGINEERING_WITH_SIMULATED_TRANSPORT",
+          "receipt": "tests/acceptance/longform-stability/ui-full-replay-triage-20261028.json",
+          "summary": "固定全量失败经定向裁决；宽度修复与现行控件定位后9+1条路径覆盖，非一次全量通过；剩余故障模式继续。"
         }
       ],
       "defects": [],
@@ -19145,9 +19162,9 @@
       "module": "editor",
       "title": "章后记忆、状态、物品和演化候选的逐项确认",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
+        "open": "PASS",
         "input": "NOT_RUN",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
@@ -19173,7 +19190,13 @@
       ],
       "candidateTests": [],
       "source": [],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-prose-mainline-20261028-3435e225.json",
+          "summary": "正文采纳后默认建议等待授权，明确本次不运行后取消且0后处理调用；记忆、状态和物品生成不计通过。"
+        }
+      ],
       "defects": [],
       "faultChecks": [
         {
@@ -23967,6 +23990,14 @@
       "date": "2026-10-28",
       "unit": "Preserve atomic quality-revision cancellation in shared prose helper",
       "sourcePin": "tests/acceptance/longform-stability/quality-rejection-terminal-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Full browser failure triage and scoped world-origin width",
+      "sourcePin": "tests/acceptance/longform-stability/ui-full-replay-triage-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

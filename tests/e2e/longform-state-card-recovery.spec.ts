@@ -197,6 +197,7 @@ test('坏状态阻止模型请求；修复后生成、编辑候选、刷新采�
   await page.goto(`./workspace/${target.projectId}?module=chapters-list&chapter=${target.outlineNodeId}`)
   await page.getByPlaceholder('自定义指令...', { exact: true }).fill('只写当前场景，保留右手受伤，停在断桥处。')
   await page.getByRole('button', { name: '✨ 生成正文', exact: true }).click()
+  await page.getByRole('dialog', { name: '正文生成提示', exact: true }).getByRole('button', { name: '开始生成', exact: true }).click()
   const candidate = page.getByRole('textbox', { name: 'AI 候选可编辑内容', exact: true })
   await expect(candidate).toHaveValue(generated)
   expect(calls).toHaveLength(1)
