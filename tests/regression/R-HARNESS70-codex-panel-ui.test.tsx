@@ -179,6 +179,10 @@ describe('R-HARNESS70 · Codex durable 提取 UI', () => {
       request,
     }))
     expect(host.textContent).toContain('月栖花')
+    const review = Array.from(host.querySelectorAll('details')).find(item => item.textContent?.includes('查看完整词条'))
+    expect(review).toBeTruthy()
+    expect(review!.textContent).toContain(extracted.description)
+    expect(review!.textContent).toContain(extracted.fields.habitat)
     expect(mocks.adopt).not.toHaveBeenCalled()
     await act(async () => button(host, '写入所选 1 项').click())
     expect(mocks.adopt).toHaveBeenCalledWith({ scope, runId: 70, selectedIndexes: [0] })

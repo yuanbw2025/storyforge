@@ -147,11 +147,9 @@ describe('R-18: multiworld context wiring', () => {
     expect(source).toContain("const worldRulesContext = part('worldRules')")
   })
 
-  it('StoryCorePanel loads worldview with the active multiworld group', () => {
-    const source = readFileSync(resolve(process.cwd(), 'src/components/worldview/StoryCorePanel.tsx'), 'utf8')
-    expect(source).toContain('useWorldGroupStore')
-    expect(source).toContain('loadAll(project.id!, project.enableMultiWorld ? activeGroupId : null)')
-  })
+  // The former source-string assertion is covered by the active-group UI behavior
+  // in R-HARNESS32-worldview-panels-ui.test.tsx (including frozen owner scope).
+
 })
 
 describe('R-18: onboarding settings route', () => {

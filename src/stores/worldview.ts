@@ -101,10 +101,10 @@ export const useWorldviewStore = create<WorldviewStore>((set, get) => ({
       // 关闭多世界只收起分组入口，不把已归属主世界的记录隐藏或复制。
       const primaryId = groups.find(group => group.type === 'primary')?.id
       const wv = worldGroupId == null
-        ? wvList.find(w => w.worldGroupId == null) ?? wvList.find(w => w.worldGroupId === primaryId) ?? wvList[0]
+        ? wvList.find(w => w.worldGroupId == null) ?? wvList.find(w => w.worldGroupId === primaryId)
         : wvList.find(w => w.worldGroupId === worldGroupId)
       const ps = worldGroupId == null
-        ? psList.find(p => p.worldGroupId == null) ?? psList.find(p => p.worldGroupId === primaryId) ?? psList[0]
+        ? psList.find(p => p.worldGroupId == null) ?? psList.find(p => p.worldGroupId === primaryId)
         : psList.find(p => p.worldGroupId === worldGroupId)
       set({
         worldview: wv ?? null,

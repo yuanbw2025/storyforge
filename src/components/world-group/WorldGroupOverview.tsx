@@ -19,6 +19,8 @@ import { resolveScopeLike } from '../../lib/workspace/scope'
 import { WORLD_GROUP_TYPE_LABELS, WORLD_LINK_TYPE_LABELS } from '../../lib/types/world-group'
 import type { Project, WorkspaceScope, WorldGroup, WorldGroupType, WorldGroupLinkType } from '../../lib/types'
 import WorldGroupDetail from './WorldGroupDetail'
+import { WORLD_SUGGEST_FIELDS_V1 } from '../../lib/ai/world-group-ai'
+import { FIELD_BY_TARGET } from '../../lib/registry/field-registry'
 import WorldRelationGraph from './WorldRelationGraph'
 
 interface Props {
@@ -419,6 +421,15 @@ export default function WorldGroupOverview({ project }: Props) {
                           </div>
                           <p className="text-xs text-text-muted mt-0.5">{w.description}</p>
                           {w.entryCondition && <p className="text-[10px] text-text-muted mt-0.5">进入：{w.entryCondition}</p>}
+                          <details className="mt-2 text-xs text-text-secondary">
+                            <summary className="cursor-pointer text-accent">查看完整世界建议</summary>
+                            <dl className="mt-2 space-y-2">
+                              {WORLD_SUGGEST_FIELDS_V1.map(field => <div key={field}>
+                                <dt className="text-text-muted">{FIELD_BY_TARGET.get('worldGroups')?.find(item => item.field === field)?.label ?? field}</dt>
+                                <dd className="whitespace-pre-wrap break-words">{field === 'type' ? WORLD_GROUP_TYPE_LABELS[w.type] : String(w[field] ?? '') || '未填写'}</dd>
+                              </div>)}
+                            </dl>
+                          </details>
                         </div>
                         <button
                           onClick={() => toggleSuggested(i)}

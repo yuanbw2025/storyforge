@@ -8,19 +8,26 @@
 import { useMemo, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { useCodexStore } from '../../stores/codex'
-import { parseEntryFields } from '../../lib/types/codex'
+import { codexEntryInWorld, parseEntryFields } from '../../lib/types/codex'
+import type { WorkspaceScope } from '../../lib/types'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { scoreCodexEntry } from '../../lib/codex/search'
 
 interface Props {
   /** 本面板包含的词条分类(builtInKey 列表) */
   categoryKeys: string[]
+  scope?: WorkspaceScope
+  worldGroupId?: number | null
   /** 点击结果:跳到该分类所属的子页(传 builtInKey) */
   onJump?: (categoryKey: string) => void
 }
 
-export default function CodexSearchBar({ categoryKeys, onJump }: Props) {
-  const { categories, entries } = useCodexStore()
+export default function CodexSearchBar({ categoryKeys, scope, worldGroupId, onJump }: Props) {
+  const { categories, entries, loadedScope } = useCodexStore()
   const [q, setQ] = useState('')
+  const [jumpError, setJumpError] = useState('')
+  const [jumping, setJumping] = useState(false)
+  const ready = Boolean(scope && loadedScope?.projectId === scope.projectId && loadedScope.worldId === scope.worldId)
 
   // 本面板的分类 id → builtInKey / 名称
   const catInfo = useMemo(() => {
@@ -35,9 +42,10 @@ export default function CodexSearchBar({ categoryKeys, onJump }: Props) {
 
   const results = useMemo(() => {
     const query = q.trim()
-    if (!query) return []
+    if (!query || !ready) return []
     const scored: { id: number; name: string; cat: string; catKey: string; summary: string; score: number }[] = []
     for (const e of entries) {
+      if (!codexEntryInWorld(e, worldGroupId)) continue
       const info = catInfo.get(e.categoryId)
       if (!info) continue
       const name = typeof e.name === 'string' ? e.name.trim() : '名称格式异常'
@@ -47,7 +55,7 @@ export default function CodexSearchBar({ categoryKeys, onJump }: Props) {
       scored.push({ id: e.id!, name: name || '未命名', cat: info.name, catKey: info.key, summary: typeof e.summary === 'string' ? e.summary : '', score })
     }
     return scored.sort((a, b) => b.score - a.score).slice(0, 12)
-  }, [q, entries, catInfo])
+  }, [q, entries, catInfo, ready, worldGroupId])
 
   return (
     <div className="relative">
@@ -65,6 +73,7 @@ export default function CodexSearchBar({ categoryKeys, onJump }: Props) {
           </button>
         )}
       </div>
+      {jumpError && <p role="alert" className="mt-1 text-xs text-red-400">{jumpError}</p>}
       {q.trim() && (
         <div className="absolute z-20 mt-1 w-full max-h-80 overflow-y-auto bg-bg-surface border border-border rounded-lg shadow-lg">
           {results.length === 0 ? (
@@ -73,7 +82,12 @@ export default function CodexSearchBar({ categoryKeys, onJump }: Props) {
             results.map(r => (
               <button
                 key={r.id}
-                onClick={() => { onJump?.(r.catKey); setQ('') }}
+                disabled={jumping}
+                onClick={() => {
+                  if (jumping) return
+                  setJumping(true); setJumpError('')
+                  void flushPendingEditsV1().then(() => { onJump?.(r.catKey); setQ('') }).catch(cause => { setJumpError(cause instanceof Error ? cause.message : '当前词条尚未保存，请重试后再切换。') }).finally(() => setJumping(false))
+                }}
                 className="w-full text-left px-3 py-2 hover:bg-bg-hover border-b border-border/40 last:border-0"
               >
                 <div className="flex items-center gap-2">

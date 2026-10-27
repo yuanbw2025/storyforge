@@ -129,10 +129,18 @@ describe.sequential('R-HARNESS70 · Codex 词条 durable 分块抽取与原子�
     expect(names).toEqual(['旧潮草', resumed.candidate.entries[1].name])
   })
 
-  it('严格协议拒绝围栏、额外字段、未知 schema、类型修复、重复名和非法 importance', () => {
+  it('accepts one complete JSON container without repairing a body or taking surrounding prose', () => {
+    const body = response(entry('月栖花'))
+    const policy = { operation: 'extract' as const, sourceText: '月栖花生于月潮湿地。' }
+    const expected = parseCodexEntriesStrictV1(body, ['habitat'], policy)
+    expect(parseCodexEntriesStrictV1('```json\n' + body + '\n```', ['habitat'], policy)).toEqual(expected)
+    expect(parseCodexEntriesStrictV1('```\r\n' + body + '\r\n```', ['habitat'], policy)).toEqual(expected)
+    for (const bad of ['说明\n```json\n' + body + '\n```', '```json\n' + body + '\n```\n补充', '```javascript\n' + body + '\n```', '```json\n' + body + '\n```\n```json\n[]\n```', '```json\n[{"name":"未完整的词条",}]\n```']) expect(() => parseCodexEntriesStrictV1(bad, ['habitat'], policy)).toThrow()
+  })
+
+  it('严格协议拒绝额外字段、未知 schema、类型修复、重复名和非法 importance', () => {
     const valid = entry('月栖花')
     const policy = { operation: 'extract' as const, sourceText: '月栖花生于月潮湿地。' }
-    expect(() => parseCodexEntriesStrictV1(`\`\`\`json\n${response(valid)}\n\`\`\``, ['habitat'], policy)).toThrow('严格 JSON')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, extra: true }]), ['habitat'], policy)).toThrow('字段')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, fields: { unknown: '值' } }]), ['habitat'], policy)).toThrow('未登记字段')
     expect(() => parseCodexEntriesStrictV1(JSON.stringify([{ ...valid, tags: '月潮' }]), ['habitat'], policy)).toThrow('类型')

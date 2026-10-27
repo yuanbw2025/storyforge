@@ -152,6 +152,6 @@ describe.sequential('RACE-2 · races mode and finite output contract', () => {
       },
     })
     await expect(runGenerationNode(prepared.node, prepared.prepared))
-      .rejects.toThrow('不是完整候选')
+      .rejects.toThrow(/候选不完整/)
   })
 })

@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "kind": "longform-step-stability-real-world-candidate-receipt",
+  "date": "2026-10-27",
+  "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+  "status": "NORMAL_WORLD_SUGGEST_AND_EXPAND_VERIFIED_CONTINUING",
+  "model": "agnes-2.5-flash",
+  "modelRequests": 4,
+  "knownTotalTokens": 7596,
+  "unknownUsageRequests": 0,
+  "observations": [
+    {
+      "stage": "suggest-reject",
+      "candidateReload": true,
+      "canonicalUnchanged": true
+    },
+    {
+      "stage": "suggest-selective-adopt",
+      "candidateReload": true,
+      "onlyOneSelected": true,
+      "groupId": 2,
+      "worldId": 1
+    },
+    {
+      "stage": "six-field-full-review",
+      "fields": [
+        "climateByRegion",
+        "continentLayout",
+        "factionLayout",
+        "powerHierarchy",
+        "races",
+        "worldOrigin"
+      ],
+      "allValuesVisible": true
+    },
+    {
+      "stage": "six-field-reject",
+      "candidateReload": true,
+      "canonicalUnchanged": true
+    },
+    {
+      "stage": "six-field-full-review",
+      "fields": [
+        "climateByRegion",
+        "continentLayout",
+        "factionLayout",
+        "powerHierarchy",
+        "races",
+        "worldOrigin"
+      ],
+      "allValuesVisible": true
+    },
+    {
+      "stage": "six-field-adopt",
+      "candidateReload": true,
+      "fields": [
+        "climateByRegion",
+        "continentLayout",
+        "factionLayout",
+        "powerHierarchy",
+        "races",
+        "worldOrigin"
+      ],
+      "worldviewId": 1,
+      "worldGroupId": 2
+    }
+  ],
+  "pageErrors": [],
+  "runnerSha256": "871a56505ca90495d564214b2dc8596b487f57be241ddd6c7be84a33bae06e53",
+  "requestLedgerSha256": "3b1908909227d44755a2ce713c3907fd15649e9a3d2ef3f88836b10e2a9e6b0c",
+  "sourceBoundary": "Existing World/Work with explicit author selection/adoption; complete six-field candidate review and canonical readback. Expansion source requests one JSON object; array suggestions retain their registered array contract.",
+  "firstFailuresRetained": [
+    "Bare JSON validator refused a valid complete fenced world suggestion at source 1ce8a3f0; raw completed output retained.",
+    "One source784f8a69 expansion was malformed inside its container; strict validation rejected it and canonical data stayed unchanged.",
+    "Driver path/selector failures had separate preserved runs and are not product defects."
+  ],
+  "remaining": [
+    "Full world suggestion review includes a capability restriction hidden in the old preview; addressed in the following UI unit.",
+    "Remaining fault profiles, final integration checks, native packages and release acceptance."
+  ],
+  "nativePackageEvidence": false,
+  "literaryAcceptance": false,
+  "wholeCasePass": false,
+  "overallPlanCompleted": false,
+  "releaseStatus": "NOT_RELEASED"
+}

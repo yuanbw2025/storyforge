@@ -4,6 +4,7 @@ import { ALL_LOCATION_TAGS } from '../../types/location'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
 import { parseJsonArray, splitExtractionText } from '../structured-extraction'
+import { wholeJSONContainerTextV1 } from '../whole-json-container'
 
 export interface ExtractedCodexEntry {
   name: string
@@ -76,7 +77,7 @@ export function parseCodexEntriesStrictV1(
   allowedFields: readonly string[] | readonly CodexFieldDef[],
   evidencePolicy: { operation: 'extract' | 'enrich'; sourceText: string },
 ): ExtractedCodexEntry[] {
-  const source = raw.trim()
+  const source = wholeJSONContainerTextV1(raw, '词条提取候选')
   let parsed: unknown
   try {
     parsed = JSON.parse(source)

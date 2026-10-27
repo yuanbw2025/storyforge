@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "kind": "longform-step-stability-full-ci-first-failure",
+  "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+  "status": "FAILED_NOT_COMPLETE_CI",
+  "logSha256": "dc9a93433810879c46ca16ee98f35ff45169f4cf12dd9945bf8dda327052da09",
+  "testFiles": {
+    "failed": 5,
+    "passed": 1237,
+    "total": 1242
+  },
+  "tests": {
+    "failed": 6,
+    "passed": 8332,
+    "skipped": 3,
+    "total": 8341
+  },
+  "durationSeconds": 3842.33,
+  "failureGroups": [
+    {
+      "file": "tests/registry/codex-c6-location-importance.test.ts",
+      "cause": "Native delay mock ended the newly atomic Dexie transaction; preserve the delay with Dexie.waitFor."
+    },
+    {
+      "file": "tests/regression/R-07-enable-multiworld-outline-ownership.test.ts",
+      "cause": "Two old positive fixtures omitted current World/Work ownership; stamp them and separately retain unowned-row rollback coverage."
+    },
+    {
+      "file": "tests/regression/R-18-phase2-p1-fixes.test.ts",
+      "cause": "Source-string assertion expected the retired direct loader; replace with actual selected-group UI behavior."
+    },
+    {
+      "file": "tests/regression/R-POWER-unified-origin.test.ts",
+      "cause": "Real default read fallback selected an arbitrary grouped record; remove fallback to first record for worldview and power data."
+    },
+    {
+      "file": "tests/regression/R-RACE2-races-mode-length-contract.test.ts",
+      "cause": "Outdated expected error phrase; keep the finite output rejection and canonical invariants."
+    }
+  ],
+  "targetedRecheck": {
+    "files": 6,
+    "passed": 33
+  },
+  "fullRecheckRequired": true,
+  "nativePackageEvidence": false,
+  "releaseStatus": "NOT_RELEASED"
+}

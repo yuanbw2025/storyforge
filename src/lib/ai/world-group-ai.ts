@@ -5,6 +5,7 @@
 import type { ChatMessage, WorldGroupType } from '../types'
 import { usePromptStore } from '../../stores/prompt'
 import { renderPrompt } from './prompt-engine'
+import { wholeJSONContainerTextV1 } from './whole-json-container'
 
 // ── 世界建议 ────────────────────────────────────────────────────────────
 
@@ -84,19 +85,8 @@ export function readWorldSuggestPromptTemplateSnapshotV1(): ChatMessage[] {
   return buildWorldSuggestPromptFromRegisteredContextV1('{{REGISTERED_CONTEXT}}')
 }
 
-/** Accept only the entire JSON text or one whole JSON code block. The model's
- * raw response remains in the durable run; this never repairs the JSON body. */
-function wholeWorldJSONText(output: string): string {
-  if (typeof output !== 'string') throw new Error('世界候选必须是文本。')
-  const input = output.trim()
-  if (!input.startsWith('```') && !input.endsWith('```')) return input
-  const block = /^```(?:json)?[ \t]*\r?\n([\s\S]*)\r?\n```$/i.exec(input)
-  if (!block) throw new Error('世界候选需要完整的 JSON 内容；代码块外不能附带说明。')
-  return block[1].trim()
-}
-
 export function parseWorldSuggestOutputStrictV1(output: string): SuggestedWorld[] {
-  const input = wholeWorldJSONText(output)
+  const input = wholeJSONContainerTextV1(output, '世界候选')
   if (!input) throw new Error('世界建议候选为空。')
   let parsed: unknown
   try { parsed = JSON.parse(input) } catch { throw new Error('世界建议候选不是有效的严格 JSON 数组。') }
@@ -203,7 +193,7 @@ export function readWorldExpandPromptTemplateSnapshotV1(): ChatMessage[] {
 
 /** 正式世界基础扩写路由的唯一输出解析器。 */
 export function parseWorldExpandOutputStrictV1(output: string): ExpandedWorldview {
-  const input = wholeWorldJSONText(output)
+  const input = wholeJSONContainerTextV1(output, '世界候选')
   if (!input) throw new Error('世界扩写候选为空。')
   let parsed: unknown
   try { parsed = JSON.parse(input) } catch { throw new Error('世界扩写候选不是有效的严格 JSON 对象。') }

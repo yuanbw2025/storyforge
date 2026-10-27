@@ -115,7 +115,7 @@ export default function WorldviewNaturalPanel({ project }: Props) {
           定义世界的地理、气候与自然资源。如需声明真实与幻想的规则，请前往「⚖️ 真实与幻想」面板。
         </p>
         <div className="mt-3 max-w-xl">
-          <CodexSearchBar
+          <CodexSearchBar scope={authorScope} worldGroupId={targetWorldGroupId}
             categoryKeys={[...Object.values(NATURAL_CODEX_KEYS).flat().filter(Boolean) as string[], 'mineral', 'herb', 'beast']}
             onJump={(catKey) => {
               if (['mineral', 'herb', 'beast'].includes(catKey)) { setActiveKey('naturalResources'); return }

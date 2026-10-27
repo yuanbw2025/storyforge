@@ -12,6 +12,8 @@ import type { Project } from '../../lib/types'
 import type { WorldviewAgentField } from '../../lib/agent/worldview-field-copilot'
 import CodexPanel from '../codex/CodexPanel'
 import CodexSearchBar from '../codex/CodexSearchBar'
+import { useCodexStore } from '../../stores/codex'
+import { codexEntryInWorld } from '../../lib/types/codex'
 
 // ── 字段定义（统一标签，兼容幻想与历史） ─────────────────────────
 
@@ -62,6 +64,14 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
   const activeGroupId = useWorldGroupStore(s => s.activeGroupId)
   const { authorScope, reloadCurrent } = useScopedWorldviewReadback(project, activeGroupId)
   const targetWorldGroupId = project.enableMultiWorld ? activeGroupId : (worldview?.worldGroupId ?? null)
+  const codex = useCodexStore()
+  const [legacyHistoryFocus, setLegacyHistoryFocus] = useState('humEra')
+  const legacyExists = (keys: string[]) => {
+    if (!authorScope || codex.loadedScope?.projectId !== authorScope.projectId || codex.loadedScope.worldId !== authorScope.worldId) return false
+    const ids = new Set(codex.categories.filter(category => keys.includes(category.builtInKey ?? '')).map(category => category.id))
+    return codex.entries.some(entry => ids.has(entry.categoryId) && codexEntryInWorld(entry, targetWorldGroupId))
+  }
+
   const copilot = useMasterCopilot({
     project,
     worldGroupId: targetWorldGroupId,
@@ -120,7 +130,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
         </p>
         {/* 词条搜索:跨本面板所有方面,点结果跳到对应子页 */}
         <div className="mt-3 max-w-xl">
-          <CodexSearchBar
+          <CodexSearchBar scope={authorScope} worldGroupId={targetWorldGroupId}
             categoryKeys={[
               ...new Set([
                 ...Object.values(HUMANITY_CODEX_KEYS).flat().filter(Boolean),
@@ -129,6 +139,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
             ]}
             onJump={(catKey) => {
               if (catKey === 'humEra' || catKey === 'humEvent') {
+                setLegacyHistoryFocus(catKey)
                 setActiveKey('history')
                 return
               }
@@ -178,8 +189,7 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
 
         {/* ── 右侧：所有字段同时渲染，hidden 控制显示 ── */}
         <div className="flex-1 min-w-0 overflow-y-auto p-6">
-          {activeKey === 'history' && (
-            <div className="max-w-3xl space-y-5">
+          <div className={activeKey === 'history' ? 'max-w-3xl space-y-5' : 'hidden'}>
               <div>
                 <h3 className="text-lg font-semibold text-text-primary">📜 历史年表</h3>
                 <p className="mt-1 text-sm text-text-muted">
@@ -194,8 +204,12 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
                 <BookOpen className="w-4 h-4" />
                 打开正式历史年表
               </button>
+              {legacyExists(['humEra', 'humEvent']) && <section aria-label="旧版历史词条" className="space-y-2">
+                <h3 className="text-sm font-semibold">旧版历史词条</h3>
+                <p className="text-xs text-text-muted">保留的旧词条可在此维护。新增历史内容请使用正式历史年表。</p>
+                <CodexPanel key={legacyHistoryFocus} project={project} fixedCategoryKeys={['humEra', 'humEvent']} initialCategoryKey={legacyHistoryFocus} embedded existingOnly />
+              </section>}
             </div>
-          )}
           {FIELDS.map(f => (
             <div key={f.key} className={activeKey === f.key ? '' : 'hidden'}>
               {/* 全貌（上）：现有字段本身就是这个方面的整体概述，带 AI 生成 */}
@@ -229,7 +243,12 @@ export default function WorldviewHumanityPanel({ project, onOpenHistory }: Props
                     extractionSourceText={values[f.key] ?? ''}
                     embedded
                   />
-                </div>
+                {f.key === 'politics' && legacyExists(['humSociety']) && <section aria-label="旧版政经文化词条" className="mt-4 space-y-2">
+                <h3 className="text-sm font-semibold">旧版政经文化词条</h3>
+                <p className="text-xs text-text-muted">保留的旧词条可在此维护。新增设定请使用上方对应分类。</p>
+                <CodexPanel project={project} fixedCategoryKeys={['humSociety']} embedded existingOnly />
+              </section>}
+              </div>
               )}
             </div>
           ))}

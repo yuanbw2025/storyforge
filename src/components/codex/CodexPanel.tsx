@@ -11,7 +11,8 @@ import {
 } from 'lucide-react'
 import { useCodexStore } from '../../stores/codex'
 import {
-  CODEX_DOMAIN_LABELS, filterCodexEntriesByWorld,
+  CODEX_DOMAIN_LABELS,
+  parseFieldSchema, filterCodexEntriesByWorld,
   type CodexDomain, type CodexCategory, type CodexEntry,
 } from '../../lib/types/codex'
 import type { Project } from '../../lib/types'
@@ -51,11 +52,14 @@ interface Props {
   /** 当前方面上方的整段全貌，作为 AI 拆分词条的默认来源。 */
   extractionSourceText?: string
   compact?: boolean
+  /** Compatibility view: maintain existing legacy records without new production. */
+  existingOnly?: boolean
+  initialCategoryKey?: string
 }
 
 const DOMAINS: CodexDomain[] = ['natural', 'humanity']
 
-export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, embedded, extractionSourceText = '', compact = false }: Props) {
+export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, embedded, extractionSourceText = '', compact = false, existingOnly = false, initialCategoryKey }: Props) {
   const dialog = useDialog()
   const toast = useToast()
   const aiConfig = useAIConfigStore(s => s.config)
@@ -76,7 +80,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
   const domain = fixedDomain ?? domainState
   const [activeCatId, setActiveCatId] = useState<number | null>(null)
   const [activeEntryId, setActiveEntryId] = useState<number | null>(null)
-  const [showHidden, setShowHidden] = useState(false)
+  const [showHidden, setShowHidden] = useState(existingOnly)
   // B1:自定义字段管理弹窗
   const [fieldsEditor, setFieldsEditor] = useState<{ category: CodexCategory; scope: NonNullable<typeof loadedScope> } | null>(null)
   // 词条排序方式:order=手动顺序 / importance=重要度降序 / pinyin=拼音首字母
@@ -147,9 +151,9 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
   // 默认选中第一个可见分类
   useEffect(() => {
     if (activeCatId && visibleCats.some(c => c.id === activeCatId)) return
-    setActiveCatId(visibleCats[0]?.id ?? null)
+    setActiveCatId((visibleCats.find(category => category.builtInKey === initialCategoryKey) ?? visibleCats[0])?.id ?? null)
     setActiveEntryId(null)
-  }, [visibleCats, activeCatId])
+  }, [visibleCats, activeCatId, initialCategoryKey])
 
   const activeCat = categories.find(c => c.id === activeCatId) || null
   const catEntries = useMemo(() => {
@@ -464,7 +468,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
       {/* 顶部：领域切换(嵌入且锁定领域时隐藏;单分类锁定时整条隐藏) */}
       {!lockedSingle && (
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border">
-        {!fixedDomain && (
+        {!fixedDomain && !lockedKeys && (
           <>
             <Boxes className="w-5 h-5 text-accent" />
             <h2 className="text-base font-semibold text-text-primary mr-2">设定词条</h2>
@@ -585,7 +589,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
               </div>
             ))}
           </div>
-          <div className="m-2 space-y-1.5">
+          {!existingOnly && <div className="m-2 space-y-1.5">
             <button
               onClick={() => openExtractor('extract')}
               disabled={!activeCatId || !scopeReady}
@@ -616,7 +620,7 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
             >
               <Settings2 className="w-3.5 h-3.5" /> 管理字段
             </button>
-          </div>
+          </div>}
         </div>
 
         {/* 右：词条详情 */}
@@ -728,6 +732,18 @@ export default function CodexPanel({ project, fixedDomain, fixedCategoryKeys, em
                     <div className="min-w-0">
                       <div className="font-medium text-sm text-text-primary">{item.name}</div>
                       <div className="text-xs text-text-muted">{item.summary}</div>
+                      <details className="mt-2 text-xs text-text-secondary">
+                        <summary className="cursor-pointer text-accent">查看完整词条</summary>
+                        <p className="mt-2 whitespace-pre-wrap break-words">{item.description}</p>
+                        <dl className="mt-2 space-y-1">
+                          {Object.entries(item.fields).map(([key, value]) => <div key={key}>
+                            <dt className="text-text-muted">{parseFieldSchema(activeCat.fieldSchema).find(field => field.key === key)?.label ?? key}</dt>
+                            <dd className="whitespace-pre-wrap break-words">{value || '未填写'}</dd>
+                          </div>)}
+                        </dl>
+                        <p className="mt-2">图标：{item.icon || '无'} · 重要度：{item.importance ?? 0}</p>
+                        <p>标签：{item.tags.length ? item.tags.join('、') : '无'}</p>
+                      </details>
                       {item.provenance === 'ai-created-suggestion' ? (
                         <div className="mt-1 text-[10px] text-violet-400">AI 新建建议 · 非原文抽取</div>
                       ) : item.evidenceQuotes?.length ? (

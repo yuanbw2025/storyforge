@@ -1,3 +1,4 @@
+import Dexie from 'dexie'
 /**
  * Codex C6（全貌+词条 基座）· 分类全貌 overview + 词条重要度星级
  *
@@ -54,7 +55,7 @@ describe('Codex C6 · 分类全貌 + 词条星级', () => {
     const update = db.codexEntries.update.bind(db.codexEntries)
     vi.spyOn(db.codexEntries, 'update').mockImplementation(async (key, patch) => {
       if ((patch as { name?: string }).name === '慢旧值') {
-        await new Promise(resolve => setTimeout(resolve, 20))
+        await Dexie.waitFor(new Promise(resolve => setTimeout(resolve, 20)))
       }
       return update(key, patch)
     })

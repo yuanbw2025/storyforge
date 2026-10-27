@@ -120,7 +120,7 @@ export default function WorldviewOriginPanel({ project, initialWorldviewId, init
           定义世界的起源、力量体系与信仰体系。如需声明真实与幻想的规则，请前往「⚖️ 真实与幻想」面板。
         </p>
         <div className="mt-3 max-w-xl">
-          <CodexSearchBar
+          <CodexSearchBar scope={authorScope} worldGroupId={targetWorldGroupId}
             categoryKeys={['originPower', 'originDeity']}
             onJump={(catKey) => setActive(catKey === 'originDeity' ? 'divine' : 'power')}
           />

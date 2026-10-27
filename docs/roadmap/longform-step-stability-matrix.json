@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "qa-execution-inventory-not-runtime-registry",
-  "updatedAt": "2026-10-27T05:38:51.605538+00:00",
+  "updatedAt": "2026-10-27",
   "baselineCommit": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
   "scope": "分步骤长篇、其通用设置与数据生命周期；节点/Agent只验共享链路互操作",
   "statusPolicy": "已有历史测试/源反例/打开页面都不能自动把完整功能标PASS。",
@@ -13,15 +13,15 @@
     "characterRoles": 4,
     "characterDimensionsPerRole": 23,
     "codexCategories": 21,
-    "cases": 158,
-    "leafFieldChecks": 324,
-    "operationChecks": 1226,
-    "notRun": 127,
+    "cases": 160,
+    "leafFieldChecks": 336,
+    "operationChecks": 1233,
+    "notRun": 106,
     "passed": 0,
     "failed": 0,
-    "faultChecks": 1995,
+    "faultChecks": 2013,
     "modeChecks": 75,
-    "running": 31
+    "running": 54
   },
   "sourceInventory": {
     "baseline": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
@@ -1657,6 +1657,25 @@
         "recover"
       ],
       "notApplicable": {}
+    },
+    "GENERATE_SELECT": {
+      "label": "生成与选择确认全链",
+      "checks": [
+        "open",
+        "input",
+        "generate",
+        "candidate_unchanged_owner",
+        "reject_candidate",
+        "adopt",
+        "edit_official",
+        "save",
+        "reload",
+        "downstream",
+        "recover"
+      ],
+      "notApplicable": {
+        "edit_candidate": "当前世界建议/六字段扩写提供完整审阅、选择或放弃及确认采纳，不提供候选文本编辑；采纳后沿已登记手工入口修改。"
+      }
     }
   },
   "faultProfiles": {
@@ -1931,6 +1950,30 @@
       "symptom": "故事核心空回读未清理前一份显示文本。",
       "evidence": "tests/acceptance/longform-stability/world-readback-20261027-8aacf3b0.json",
       "remaining": "完整矩阵、最终CI、原生包与发行待完成。"
+    },
+    {
+      "id": "CODEX-SAVE-ACK-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+      "symptom": "词条写入失败未显示且无重试；多个结构化属性连续输入可覆盖；字段管理提前关闭。",
+      "evidence": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+      "remaining": "剩余矩阵、最终交付检查、可获得原生包和发行未完成。"
+    },
+    {
+      "id": "CODEX-MALFORMED-REF-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+      "symptom": "关联字段的值不是数组时编辑区调用includes崩溃。",
+      "evidence": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+      "remaining": "剩余矩阵、最终交付检查、可获得原生包和发行未完成。"
+    },
+    {
+      "id": "CODEX-LATE-CREATE-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+      "symptom": "新建回执迟到时追加进另一个世界/工作区缓存。",
+      "evidence": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+      "remaining": "剩余矩阵、最终交付检查、可获得原生包和发行未完成。"
     }
   ],
   "evidenceSchema": {
@@ -4732,6 +4775,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -4889,6 +4939,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -5058,6 +5115,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -5215,6 +5279,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -5372,6 +5443,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -5529,6 +5607,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -5686,6 +5771,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -5843,6 +5935,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -6000,6 +6099,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -6157,6 +6263,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -6332,6 +6445,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -6489,6 +6609,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -6646,6 +6773,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -6803,6 +6937,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -6960,6 +7101,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -7117,6 +7265,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -7274,6 +7429,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -7431,6 +7593,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -7587,6 +7756,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -7738,6 +7914,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -7889,6 +8072,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -8040,6 +8230,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -8191,6 +8388,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -8342,6 +8546,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -8493,6 +8704,13 @@
           "modelRequests": 5,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
+        },
+        {
+          "type": "REAL_MODEL_REPLAY",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "NORMAL_MODES_PASSED_FULL_FAULTS_CONTINUE",
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-8aacf3b0.json",
+          "summary": "新冻结代码25字段、75模式、125正常阶段。135次全部试验含两次传输未知均保留；LF-057透明重复POST不纳入接受，转发层修正后独立新作品五步重测通过。"
         }
       ],
       "defects": [],
@@ -9624,18 +9842,18 @@
       "module": "worldview-natural",
       "title": "矿物灵材词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -9644,61 +9862,121 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "appearance",
           "label": "外观",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "rank",
           "label": "品级品阶",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "effect",
           "label": "功效作用",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "origin",
           "label": "产地分布",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "rarity",
           "label": "稀有度",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "craftInto",
           "label": "可炼器物",
           "type": "ref",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -9718,7 +9996,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "mineral",
       "faultChecks": [
@@ -9822,18 +10108,18 @@
       "module": "worldview-natural",
       "title": "灵植草药词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -9842,67 +10128,133 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "form",
           "label": "形态",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "effect",
           "label": "药效",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "rank",
           "label": "品级",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "habitat",
           "label": "生长环境",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "maturity",
           "label": "成熟周期",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "difficulty",
           "label": "采集难度",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "craftInto",
           "label": "可炼丹药",
           "type": "ref",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -9922,7 +10274,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "herb",
       "faultChecks": [
@@ -10026,18 +10386,18 @@
       "module": "worldview-natural",
       "title": "灵兽异兽词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -10046,67 +10406,133 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "kind",
           "label": "类别",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "body",
           "label": "体型外貌",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "habit",
           "label": "习性性情",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "habitat",
           "label": "栖息地",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "threat",
           "label": "威胁等级",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "ability",
           "label": "特殊能力",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "drops",
           "label": "可产出材料",
           "type": "ref",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -10126,7 +10552,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "beast",
       "faultChecks": [
@@ -10230,18 +10664,18 @@
       "module": "worldview-humanity",
       "title": "种族民族词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -10250,79 +10684,157 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "appearance",
           "label": "外貌特征",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "talent",
           "label": "种族天赋",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "lifespan",
           "label": "平均寿命",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "population",
           "label": "人口规模",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "settlement",
           "label": "聚居地",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "custom",
           "label": "文化习俗",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "faith",
           "label": "信仰",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "relations",
           "label": "与其他种族关系",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "representatives",
           "label": "代表人物",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -10342,7 +10854,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "race",
       "faultChecks": [
@@ -10446,18 +10966,18 @@
       "module": "worldview-humanity",
       "title": "势力词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -10466,85 +10986,169 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "type",
           "label": "类型",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "territory",
           "label": "势力范围",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "leader",
           "label": "领导者",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "coreMembers",
           "label": "核心成员",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "power",
           "label": "实力等级",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "goal",
           "label": "宗旨目标",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "relations",
           "label": "敌友关系",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "banner",
           "label": "标志旗帜",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "mapRegion",
           "label": "绑定地图区域",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "color",
           "label": "颜色",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -10564,7 +11168,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "faction",
       "faultChecks": [
@@ -10668,18 +11280,18 @@
       "module": "worldview-humanity",
       "title": "城池重镇词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -10688,73 +11300,145 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "faction",
           "label": "所属势力",
           "type": "ref",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "locationNote",
           "label": "位置备注（旧文本）",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "scale",
           "label": "规模人口",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "ruler",
           "label": "统治者",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "economy",
           "label": "经济特产",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "strategic",
           "label": "战略地位",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "style",
           "label": "城市风貌",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "landmark",
           "label": "地标建筑",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -10774,7 +11458,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "city",
       "faultChecks": [
@@ -10878,18 +11570,18 @@
       "module": "worldview-humanity",
       "title": "人工器物词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -10898,73 +11590,145 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "type",
           "label": "类别",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "rank",
           "label": "品级品阶",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "appearance",
           "label": "外观",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "effect",
           "label": "能力效果",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "craft",
           "label": "炼制方式",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "materials",
           "label": "所需材料",
           "type": "ref",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "origin",
           "label": "来历",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "owner",
           "label": "当前持有者",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -10984,7 +11748,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "artifact",
       "faultChecks": [
@@ -11088,18 +11860,18 @@
       "module": "worldview-natural",
       "title": "世界结构词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -11108,43 +11880,85 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "type",
           "label": "层级类型",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "scope",
           "label": "范围",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "feature",
           "label": "特征说明",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -11164,7 +11978,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "natStructure",
       "faultChecks": [
@@ -11268,18 +12090,18 @@
       "module": "worldview-natural",
       "title": "疆域版图词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -11288,37 +12110,73 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "scale",
           "label": "尺度范围",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "feature",
           "label": "区域特征",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -11338,7 +12196,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "natDimension",
       "faultChecks": [
@@ -11442,18 +12308,18 @@
       "module": "worldview-natural",
       "title": "地貌词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -11462,43 +12328,85 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "type",
           "label": "类型",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "location",
           "label": "位置",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "feature",
           "label": "地形特征",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -11518,7 +12426,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "natTerrain",
       "faultChecks": [
@@ -11622,18 +12538,18 @@
       "module": "worldview-natural",
       "title": "山川水系词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -11642,43 +12558,85 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "type",
           "label": "类型",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "scale",
           "label": "规模",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "feature",
           "label": "特征",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -11698,7 +12656,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "natWater",
       "faultChecks": [
@@ -11802,18 +12768,18 @@
       "module": "worldview-natural",
       "title": "气候带词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -11822,43 +12788,85 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "region",
           "label": "所在区域",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "type",
           "label": "气候类型",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "hazard",
           "label": "季节/自然灾害",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -11878,7 +12886,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "natClimate",
       "faultChecks": [
@@ -11980,17 +12996,12 @@
       "id": "LF-077",
       "wave": "ST02",
       "module": "worldview-humanity",
-      "title": "历史时代词条：创建、字段、引用、候选与删除",
-      "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "title": "旧版历史时代词条：搜索、维护、回读、删除与正式历史入口",
+      "profile": "MANUAL",
+      "status": "RUNNING",
       "checks": {
         "open": "NOT_RUN",
         "input": "NOT_RUN",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
         "edit_official": "NOT_RUN",
         "save": "NOT_RUN",
         "reload": "NOT_RUN",
@@ -12042,8 +13053,6 @@
       ],
       "faultProfiles": [
         "LOAD",
-        "MODEL",
-        "CANDIDATE",
         "SAVE",
         "RACE",
         "LIFECYCLE"
@@ -12069,36 +13078,6 @@
         {
           "profile": "LOAD",
           "scenario": "延迟读取、读取失败与模块/CSS加载失败",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "MODEL",
-          "scenario": "取消、断网、超时和输出为空（含HTTP200）",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "MODEL",
-          "scenario": "流中断、截断JSON、类型错误、超长候选",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "MODEL",
-          "scenario": "401/403/429/余额/非重试4xx/5xx/结果未知；区分可重试，禁止隐藏重发",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "CANDIDATE",
-          "scenario": "缺必填、错误类型、非法枚举/引用、错误作用域",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "CANDIDATE",
-          "scenario": "作者修改目标后stale、目标删除、双击采纳",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "CANDIDATE",
-          "scenario": "候选预览与持久化不一致、写回事务失败与receipt失败",
           "status": "NOT_RUN"
         },
         {
@@ -12148,23 +13127,36 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "originalPlannedProfile": "GENERATE",
+      "originalPlannedTitle": "历史时代词条：创建、字段、引用、候选与删除",
+      "notApplicable": {
+        "generate": "三类为旧版保留记录，兼容维护不重新开放AI/新建生产；新历史走正式历史年表，新政经文化走现行对应分类。",
+        "candidate_unchanged_owner": "无AI候选",
+        "edit_candidate": "无AI候选",
+        "reject_candidate": "无AI候选",
+        "adopt": "正式手工操作不伪装AI采纳"
+      },
+      "originalFaultProfiles": [
+        "LOAD",
+        "MODEL",
+        "CANDIDATE",
+        "SAVE",
+        "RACE",
+        "LIFECYCLE"
+      ],
+      "scopeClarification": "冻结类型清点不等于当前生产能力；保留原计划描述和基线哈希，本轮按当前历史产品契约纠正能力并补兼容维护。"
     },
     {
       "id": "LF-078",
       "wave": "ST02",
       "module": "worldview-humanity",
-      "title": "重大事件词条：创建、字段、引用、候选与删除",
-      "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "title": "旧版重大事件词条：搜索、维护、回读、删除与正式历史入口",
+      "profile": "MANUAL",
+      "status": "RUNNING",
       "checks": {
         "open": "NOT_RUN",
         "input": "NOT_RUN",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
         "edit_official": "NOT_RUN",
         "save": "NOT_RUN",
         "reload": "NOT_RUN",
@@ -12222,8 +13214,6 @@
       ],
       "faultProfiles": [
         "LOAD",
-        "MODEL",
-        "CANDIDATE",
         "SAVE",
         "RACE",
         "LIFECYCLE"
@@ -12249,36 +13239,6 @@
         {
           "profile": "LOAD",
           "scenario": "延迟读取、读取失败与模块/CSS加载失败",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "MODEL",
-          "scenario": "取消、断网、超时和输出为空（含HTTP200）",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "MODEL",
-          "scenario": "流中断、截断JSON、类型错误、超长候选",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "MODEL",
-          "scenario": "401/403/429/余额/非重试4xx/5xx/结果未知；区分可重试，禁止隐藏重发",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "CANDIDATE",
-          "scenario": "缺必填、错误类型、非法枚举/引用、错误作用域",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "CANDIDATE",
-          "scenario": "作者修改目标后stale、目标删除、双击采纳",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "CANDIDATE",
-          "scenario": "候选预览与持久化不一致、写回事务失败与receipt失败",
           "status": "NOT_RUN"
         },
         {
@@ -12328,23 +13288,36 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "originalPlannedProfile": "GENERATE",
+      "originalPlannedTitle": "重大事件词条：创建、字段、引用、候选与删除",
+      "notApplicable": {
+        "generate": "三类为旧版保留记录，兼容维护不重新开放AI/新建生产；新历史走正式历史年表，新政经文化走现行对应分类。",
+        "candidate_unchanged_owner": "无AI候选",
+        "edit_candidate": "无AI候选",
+        "reject_candidate": "无AI候选",
+        "adopt": "正式手工操作不伪装AI采纳"
+      },
+      "originalFaultProfiles": [
+        "LOAD",
+        "MODEL",
+        "CANDIDATE",
+        "SAVE",
+        "RACE",
+        "LIFECYCLE"
+      ],
+      "scopeClarification": "冻结类型清点不等于当前生产能力；保留原计划描述和基线哈希，本轮按当前历史产品契约纠正能力并补兼容维护。"
     },
     {
       "id": "LF-079",
       "wave": "ST02",
       "module": "worldview-humanity",
-      "title": "政经文化词条：创建、字段、引用、候选与删除",
-      "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "title": "旧版政经文化词条：搜索、维护、回读与现行生产入口",
+      "profile": "MANUAL",
+      "status": "RUNNING",
       "checks": {
         "open": "NOT_RUN",
         "input": "NOT_RUN",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
         "edit_official": "NOT_RUN",
         "save": "NOT_RUN",
         "reload": "NOT_RUN",
@@ -12396,8 +13369,6 @@
       ],
       "faultProfiles": [
         "LOAD",
-        "MODEL",
-        "CANDIDATE",
         "SAVE",
         "RACE",
         "LIFECYCLE"
@@ -12423,36 +13394,6 @@
         {
           "profile": "LOAD",
           "scenario": "延迟读取、读取失败与模块/CSS加载失败",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "MODEL",
-          "scenario": "取消、断网、超时和输出为空（含HTTP200）",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "MODEL",
-          "scenario": "流中断、截断JSON、类型错误、超长候选",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "MODEL",
-          "scenario": "401/403/429/余额/非重试4xx/5xx/结果未知；区分可重试，禁止隐藏重发",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "CANDIDATE",
-          "scenario": "缺必填、错误类型、非法枚举/引用、错误作用域",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "CANDIDATE",
-          "scenario": "作者修改目标后stale、目标删除、双击采纳",
-          "status": "NOT_RUN"
-        },
-        {
-          "profile": "CANDIDATE",
-          "scenario": "候选预览与持久化不一致、写回事务失败与receipt失败",
           "status": "NOT_RUN"
         },
         {
@@ -12502,7 +13443,25 @@
         }
       ],
       "modeChecks": {},
-      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。",
+      "originalPlannedProfile": "GENERATE",
+      "originalPlannedTitle": "政经文化词条：创建、字段、引用、候选与删除",
+      "notApplicable": {
+        "generate": "三类为旧版保留记录，兼容维护不重新开放AI/新建生产；新历史走正式历史年表，新政经文化走现行对应分类。",
+        "candidate_unchanged_owner": "无AI候选",
+        "edit_candidate": "无AI候选",
+        "reject_candidate": "无AI候选",
+        "adopt": "正式手工操作不伪装AI采纳"
+      },
+      "originalFaultProfiles": [
+        "LOAD",
+        "MODEL",
+        "CANDIDATE",
+        "SAVE",
+        "RACE",
+        "LIFECYCLE"
+      ],
+      "scopeClarification": "冻结类型清点不等于当前生产能力；保留原计划描述和基线哈希，本轮按当前历史产品契约纠正能力并补兼容维护。"
     },
     {
       "id": "LF-080",
@@ -12510,18 +13469,18 @@
       "module": "worldview-humanity",
       "title": "政治制度词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -12530,49 +13489,97 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "type",
           "label": "制度类型",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "scope",
           "label": "适用范围",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "authority",
           "label": "权力主体",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "detail",
           "label": "制度说明",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -12592,7 +13599,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "humPolitics",
       "faultChecks": [
@@ -12696,18 +13711,18 @@
       "module": "worldview-humanity",
       "title": "经济制度词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -12716,49 +13731,97 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "type",
           "label": "制度类型",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "scope",
           "label": "流通范围",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "actors",
           "label": "主要参与者",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "detail",
           "label": "制度说明",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -12778,7 +13841,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "humEconomy",
       "faultChecks": [
@@ -12882,18 +13953,18 @@
       "module": "worldview-humanity",
       "title": "文化制度词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -12902,49 +13973,97 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "type",
           "label": "文化类型",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "region",
           "label": "流行区域/群体",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "taboo",
           "label": "禁忌",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "detail",
           "label": "文化说明",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -12964,7 +14083,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "humCulture",
       "faultChecks": [
@@ -13068,18 +14195,18 @@
       "module": "worldview-humanity",
       "title": "矛盾冲突词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -13088,43 +14215,85 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "type",
           "label": "类型",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "sides",
           "label": "对立方",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "tension",
           "label": "张力/根源",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -13144,7 +14313,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "humConflict",
       "faultChecks": [
@@ -13248,18 +14425,18 @@
       "module": "worldview-origin",
       "title": "力量层级词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -13268,43 +14445,85 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "rank",
           "label": "等级/层级",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "mark",
           "label": "核心标志",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "condition",
           "label": "晋升条件",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -13324,7 +14543,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "originPower",
       "faultChecks": [
@@ -13428,18 +14655,18 @@
       "module": "worldview-origin",
       "title": "神明信仰词条：创建、字段、引用、候选与删除",
       "profile": "GENERATE",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
         "generate": "NOT_RUN",
         "candidate_unchanged_owner": "NOT_RUN",
         "edit_candidate": "NOT_RUN",
         "reject_candidate": "NOT_RUN",
         "adopt": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
         "downstream": "NOT_RUN",
         "recover": "NOT_RUN"
       },
@@ -13448,43 +14675,85 @@
           "key": "name",
           "label": "名称",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "icon",
           "label": "图标",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "summary",
           "label": "一句话简介",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "description",
           "label": "详细描述",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "type",
           "label": "类型",
           "type": "select",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "title",
           "label": "名号/职司",
           "type": "text",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         },
         {
           "key": "rule",
           "label": "规则/禁忌",
           "type": "longtext",
-          "status": "NOT_RUN"
+          "status": "RUNNING",
+          "manualChecks": {
+            "edit": "PASS",
+            "save": "PASS",
+            "reload": "PASS",
+            "clear": "PASS"
+          }
         }
       ],
       "assertions": [
@@ -13504,7 +14773,15 @@
       "source": [
         "src/lib/types/codex.ts"
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "MANUAL_FIELDS_REFERENCES_CLEAR_RELOAD_DELETE_PASSED",
+          "receipt": "tests/acceptance/longform-stability/codex-authoring-20261027-456fd3b4.json",
+          "summary": "18类、90个专属字段通过手工主链；真实拆分/补全、下游AI和其余故障仍继续。"
+        }
+      ],
       "defects": [],
       "codexCategory": "originDeity",
       "faultChecks": [
@@ -20756,9 +22033,387 @@
       ],
       "modeChecks": {},
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+    },
+    {
+      "id": "LF-159",
+      "wave": "ST02",
+      "module": "world-overview",
+      "title": "世界建议：生成、完整审阅、选择/放弃、刷新恢复与采纳",
+      "profile": "GENERATE_SELECT",
+      "status": "RUNNING",
+      "derivedFrom": "LF-094",
+      "discoveryReason": "原世界组MANUAL项未独立展开两个正式AI控件；本轮实际点击和实模请求发现，追加稳定ID，不覆盖原项。",
+      "checks": {
+        "open": "PASS",
+        "input": "PASS",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
+        "edit_official": "NOT_RUN",
+        "save": "PASS",
+        "reload": "PASS",
+        "downstream": "PASS",
+        "recover": "NOT_RUN"
+      },
+      "notApplicable": {
+        "edit_candidate": "当前世界建议/六字段扩写提供完整审阅、选择或放弃及确认采纳，不提供候选文本编辑；采纳后沿已登记手工入口修改。"
+      },
+      "fieldChecks": [
+        {
+          "key": "name",
+          "label": "name",
+          "type": "text",
+          "status": "RUNNING",
+          "candidateReview": "PASS"
+        },
+        {
+          "key": "type",
+          "label": "type",
+          "type": "text",
+          "status": "RUNNING",
+          "candidateReview": "PASS"
+        },
+        {
+          "key": "description",
+          "label": "description",
+          "type": "text",
+          "status": "RUNNING",
+          "candidateReview": "PASS"
+        },
+        {
+          "key": "entryCondition",
+          "label": "entryCondition",
+          "type": "text",
+          "status": "RUNNING",
+          "candidateReview": "PASS"
+        },
+        {
+          "key": "powerRestriction",
+          "label": "powerRestriction",
+          "type": "text",
+          "status": "RUNNING",
+          "candidateReview": "NOT_RUN"
+        },
+        {
+          "key": "plannedChapterCount",
+          "label": "plannedChapterCount",
+          "type": "text",
+          "status": "RUNNING",
+          "candidateReview": "PASS"
+        }
+      ],
+      "assertions": [
+        "生成和放弃不改正式内容；作者确认后才原子写入，刷新与World/Work归属正确。"
+      ],
+      "faultProfiles": [
+        "LOAD",
+        "MODEL",
+        "CANDIDATE",
+        "SAVE",
+        "RACE",
+        "LIFECYCLE"
+      ],
+      "candidateTests": [],
+      "source": [
+        "src/components/world-group/WorldGroupOverview.tsx"
+      ],
+      "evidence": [
+        {
+          "type": "REAL_MODEL_AND_ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "NORMAL_SELECTIVE_ADOPTION_AND_REJECT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/live-world-candidates-20261027-456fd3b4.json",
+          "summary": "真实4次调用走完建议放弃/选择采纳和六字段放弃/采纳；建议能力限制完整预览在后续UI单元补齐。"
+        }
+      ],
+      "defects": [],
+      "faultChecks": [
+        {
+          "profile": "LOAD",
+          "scenario": "空数据/受支持旧记录",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "LOAD",
+          "scenario": "字段缺失、null、错误类型、非法数组成员、损坏JSON",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "LOAD",
+          "scenario": "延迟读取、读取失败与模块/CSS加载失败",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "MODEL",
+          "scenario": "取消、断网、超时和输出为空（含HTTP200）",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "MODEL",
+          "scenario": "流中断、截断JSON、类型错误、超长候选",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "MODEL",
+          "scenario": "401/403/429/余额/非重试4xx/5xx/结果未知；区分可重试，禁止隐藏重发",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "CANDIDATE",
+          "scenario": "缺必填、错误类型、非法枚举/引用、错误作用域",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "CANDIDATE",
+          "scenario": "作者修改目标后stale、目标删除、双击采纳",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "CANDIDATE",
+          "scenario": "候选预览与持久化不一致、写回事务失败与receipt失败",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "SAVE",
+          "scenario": "自动保存、失焦、显式保存不同触发时机",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "SAVE",
+          "scenario": "配额不足/写失败/权限撤销，UI保留输入且不假报成功",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "SAVE",
+          "scenario": "中文组合输入、清空、快速输入后立即切页/切章/刷新/关闭",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "RACE",
+          "scenario": "切作品/世界/模块时旧读取迟到",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "RACE",
+          "scenario": "双标签编辑、并发run、重复点击与旧候选",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "RACE",
+          "scenario": "活动Work/world变化、删除目标、保存与刷新竞争",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "LIFECYCLE",
+          "scenario": "导入导出/删除/恢复事务的正反例",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "LIFECYCLE",
+          "scenario": "损坏/不支持/重复/部分数据，引用重映射与owner检查",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "LIFECYCLE",
+          "scenario": "备份中断、文件冲突、丢失引用、外部权限/服务失败",
+          "status": "NOT_RUN"
+        }
+      ],
+      "modeChecks": {},
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
+    },
+    {
+      "id": "LF-160",
+      "wave": "ST02",
+      "module": "world-overview",
+      "title": "世界组六字段扩写：完整审阅、放弃/采纳、刷新恢复与回读",
+      "profile": "GENERATE_SELECT",
+      "status": "RUNNING",
+      "derivedFrom": "LF-094",
+      "discoveryReason": "原世界组MANUAL项未独立展开两个正式AI控件；本轮实际点击和实模请求发现，追加稳定ID，不覆盖原项。",
+      "checks": {
+        "open": "PASS",
+        "input": "PASS",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
+        "edit_official": "NOT_RUN",
+        "save": "PASS",
+        "reload": "PASS",
+        "downstream": "PASS",
+        "recover": "NOT_RUN"
+      },
+      "notApplicable": {
+        "edit_candidate": "当前世界建议/六字段扩写提供完整审阅、选择或放弃及确认采纳，不提供候选文本编辑；采纳后沿已登记手工入口修改。"
+      },
+      "fieldChecks": [
+        {
+          "key": "worldOrigin",
+          "label": "worldOrigin",
+          "type": "text",
+          "status": "RUNNING",
+          "candidateReview": "PASS"
+        },
+        {
+          "key": "powerHierarchy",
+          "label": "powerHierarchy",
+          "type": "text",
+          "status": "RUNNING",
+          "candidateReview": "PASS"
+        },
+        {
+          "key": "continentLayout",
+          "label": "continentLayout",
+          "type": "text",
+          "status": "RUNNING",
+          "candidateReview": "PASS"
+        },
+        {
+          "key": "climateByRegion",
+          "label": "climateByRegion",
+          "type": "text",
+          "status": "RUNNING",
+          "candidateReview": "PASS"
+        },
+        {
+          "key": "races",
+          "label": "races",
+          "type": "text",
+          "status": "RUNNING",
+          "candidateReview": "PASS"
+        },
+        {
+          "key": "factionLayout",
+          "label": "factionLayout",
+          "type": "text",
+          "status": "RUNNING",
+          "candidateReview": "PASS"
+        }
+      ],
+      "assertions": [
+        "生成和放弃不改正式内容；作者确认后才原子写入，刷新与World/Work归属正确。"
+      ],
+      "faultProfiles": [
+        "LOAD",
+        "MODEL",
+        "CANDIDATE",
+        "SAVE",
+        "RACE",
+        "LIFECYCLE"
+      ],
+      "candidateTests": [],
+      "source": [
+        "src/components/world-group/WorldGroupDetail.tsx"
+      ],
+      "evidence": [
+        {
+          "type": "REAL_MODEL_AND_ISOLATED_BROWSER",
+          "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+          "result": "NORMAL_SELECTIVE_ADOPTION_AND_REJECT_PASSED",
+          "receipt": "tests/acceptance/longform-stability/live-world-candidates-20261027-456fd3b4.json",
+          "summary": "真实4次调用走完建议放弃/选择采纳和六字段放弃/采纳；建议能力限制完整预览在后续UI单元补齐。"
+        }
+      ],
+      "defects": [],
+      "faultChecks": [
+        {
+          "profile": "LOAD",
+          "scenario": "空数据/受支持旧记录",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "LOAD",
+          "scenario": "字段缺失、null、错误类型、非法数组成员、损坏JSON",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "LOAD",
+          "scenario": "延迟读取、读取失败与模块/CSS加载失败",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "MODEL",
+          "scenario": "取消、断网、超时和输出为空（含HTTP200）",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "MODEL",
+          "scenario": "流中断、截断JSON、类型错误、超长候选",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "MODEL",
+          "scenario": "401/403/429/余额/非重试4xx/5xx/结果未知；区分可重试，禁止隐藏重发",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "CANDIDATE",
+          "scenario": "缺必填、错误类型、非法枚举/引用、错误作用域",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "CANDIDATE",
+          "scenario": "作者修改目标后stale、目标删除、双击采纳",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "CANDIDATE",
+          "scenario": "候选预览与持久化不一致、写回事务失败与receipt失败",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "SAVE",
+          "scenario": "自动保存、失焦、显式保存不同触发时机",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "SAVE",
+          "scenario": "配额不足/写失败/权限撤销，UI保留输入且不假报成功",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "SAVE",
+          "scenario": "中文组合输入、清空、快速输入后立即切页/切章/刷新/关闭",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "RACE",
+          "scenario": "切作品/世界/模块时旧读取迟到",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "RACE",
+          "scenario": "双标签编辑、并发run、重复点击与旧候选",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "RACE",
+          "scenario": "活动Work/world变化、删除目标、保存与刷新竞争",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "LIFECYCLE",
+          "scenario": "导入导出/删除/恢复事务的正反例",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "LIFECYCLE",
+          "scenario": "损坏/不支持/重复/部分数据，引用重映射与owner检查",
+          "status": "NOT_RUN"
+        },
+        {
+          "profile": "LIFECYCLE",
+          "scenario": "备份中断、文件冲突、丢失引用、外部权限/服务失败",
+          "status": "NOT_RUN"
+        }
+      ],
+      "modeChecks": {},
+      "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     }
   ],
-  "executionStatus": "WORK_METADATA_PATHS_VERIFIED_CONTINUING_FULL_MATRIX",
+  "executionStatus": "CODEX_MANUAL_AND_WORLD_AI_NORMAL_VERIFIED_CONTINUING_FULL_MATRIX",
   "passPolicy": {
     "closedCase": "全部适用步骤/字段/模式/故障/派生子用例有本轮回执；PASS不推导已发行。",
     "statuses": [
@@ -21287,6 +22942,15 @@
       "unit": "main schema integration and dev readiness investigation",
       "sourceCommit": "1ce8a3f074801907c6d3857ef81f73317511997a",
       "status": "CONTINUING_WITH_ORIGINAL_SLOW_LOAD_EVIDENCE",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-27",
+      "unit": "25-field replay qualification, 18-category manual lifecycle and world AI control discovery",
+      "sourceCommit": "456fd3b4b640d14ffbbe63d28e677dc5ad2f2c54",
+      "status": "CONTINUING",
+      "caseDenominatorChange": "158 -> 160：LF-094中的两个AI控件独立追加LF-159/160；三个遗留分类保留原计划并纠正为仅维护旧记录。",
       "wholeCasePass": false,
       "overallPlanCompleted": false
     }

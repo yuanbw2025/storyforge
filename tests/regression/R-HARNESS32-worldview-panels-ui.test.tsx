@@ -1,9 +1,11 @@
+import StoryCorePanel from '../../src/components/worldview/StoryCorePanel'
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Project } from '../../src/lib/types'
 
 const mocks = vi.hoisted(() => ({
+  activeGroupId: null as number | null,
   copilot: {
     pendingCandidates: [] as any[],
     loading: false,
@@ -59,7 +61,7 @@ vi.mock('../../src/stores/worldview', () => ({
 }))
 
 vi.mock('../../src/stores/world-group', () => ({
-  useWorldGroupStore: (selector: (state: { activeGroupId: number | null }) => unknown) => selector({ activeGroupId: null }),
+  useWorldGroupStore: (selector: (state: { activeGroupId: number | null }) => unknown) => selector({ activeGroupId: mocks.activeGroupId }),
 }))
 
 vi.mock('../../src/components/shared/PromptRunPanel', () => ({
@@ -321,4 +323,13 @@ describe('R-HARNESS32 · 三个世界基座面板统一进入主 Agent Harness',
       value: revisedValue,
     }, null, 2))
   })
+})
+
+it('StoryCore reads the selected group through the frozen World/Work owner scope', async () => {
+  mocks.activeGroupId = 7
+  try {
+    const grouped = { ...project, enableMultiWorld: true }
+    await renderPanel(StoryCorePanel, { project: grouped })
+    expect(mocks.worldviewStore.loadAll).toHaveBeenCalledWith({ projectId: project.id, worldId: project.activeWorldId, workId: project.activeWorkId }, 7)
+  } finally { mocks.activeGroupId = null }
 })
