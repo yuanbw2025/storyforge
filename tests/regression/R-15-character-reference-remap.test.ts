@@ -199,6 +199,8 @@ describe('R-15: character reference remap', () => {
       { ...planBase, name: '无关数组项', arcs: JSON.stringify([null, { characterId: primaryId }]) },
     ] as any[])
 
+    await finalizeCurrentFixtureV1(projectId)
+
     await db.transaction('rw', transactionTablesFor('importProject'), async () => {
       await applyCharacterReferenceRemap({
         projectId,
