@@ -16,12 +16,12 @@
     "cases": 158,
     "leafFieldChecks": 324,
     "operationChecks": 1226,
-    "notRun": 129,
+    "notRun": 128,
     "passed": 0,
     "failed": 0,
     "faultChecks": 1995,
     "modeChecks": 75,
-    "running": 29
+    "running": 30
   },
   "sourceInventory": {
     "baseline": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
@@ -1875,6 +1875,62 @@
       "symptom": "重命名对话框在落库确认前关闭，立刻刷新可能丢失名称；失败也无法在原窗口重试。",
       "evidence": "132项相关回归和6项隔离浏览器测试通过；旧失败保留本地。",
       "remaining": "完整计划、最终CI、原生包与发行待完成。"
+    },
+    {
+      "id": "WORLD-MODE-ATOMIC-OWNER-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "symptom": "开关最后一步失败留下半完成归属；不同World被盖同一个主世界ID。",
+      "evidence": "tests/acceptance/longform-stability/world-readback-20261027-8aacf3b0.json",
+      "remaining": "完整矩阵、最终CI、原生包与发行待完成。"
+    },
+    {
+      "id": "WORLD-MODE-DISABLED-READBACK-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "symptom": "关闭多世界后已有主世界设定显示为空，后续编辑可能新建另一条。",
+      "evidence": "tests/acceptance/longform-stability/world-readback-20261027-8aacf3b0.json",
+      "remaining": "完整矩阵、最终CI、原生包与发行待完成。"
+    },
+    {
+      "id": "WORLD-GROUP-DRAFT-RECOVERY-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "symptom": "世界详情写失败卡在保存中且无错误；缺少草稿离开保护与语义CAS。",
+      "evidence": "tests/acceptance/longform-stability/world-readback-20261027-8aacf3b0.json",
+      "remaining": "完整矩阵、最终CI、原生包与发行待完成。"
+    },
+    {
+      "id": "AUTHOR-PREBLUR-OWNER-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "symptom": "失焦前活动Work/World变化，旧草稿可能借用新目标。",
+      "evidence": "tests/acceptance/longform-stability/world-readback-20261027-8aacf3b0.json",
+      "remaining": "完整矩阵、最终CI、原生包与发行待完成。"
+    },
+    {
+      "id": "SETTING-READ-RECOVERY-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "symptom": "设定读取失败有未处理拒绝，加载状态无法恢复。",
+      "evidence": "tests/acceptance/longform-stability/world-readback-20261027-8aacf3b0.json",
+      "remaining": "完整矩阵、最终CI、原生包与发行待完成。"
+    },
+    {
+      "id": "LATE-ADOPTION-READBACK-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "symptom": "采纳完成时页面已换作品或卸载，旧回读仍覆盖共享状态。",
+      "evidence": "tests/acceptance/longform-stability/world-readback-20261027-8aacf3b0.json",
+      "remaining": "完整矩阵、最终CI、原生包与发行待完成。"
+    },
+    {
+      "id": "STORY-EMPTY-READBACK-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "symptom": "故事核心空回读未清理前一份显示文本。",
+      "evidence": "tests/acceptance/longform-stability/world-readback-20261027-8aacf3b0.json",
+      "remaining": "完整矩阵、最终CI、原生包与发行待完成。"
     }
   ],
   "evidenceSchema": {
@@ -4667,6 +4723,15 @@
           "summary": "新建候选不写正式字段；候选修改刷新、明确采纳刷新、手改保存刷新、真实重写读取已保存字段、拒绝不写回全部通过。非空扩写、润色与其他故障待验证。",
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/live-world-origin-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -4678,9 +4743,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "RUNNING",
+        "expand": "PASS",
         "rewrite": "PASS",
-        "polish": "NOT_RUN"
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -4771,15 +4836,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -4815,6 +4880,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -4826,9 +4900,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -4919,15 +4993,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -4975,6 +5049,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -4986,9 +5069,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -5079,15 +5162,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -5123,6 +5206,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -5134,9 +5226,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -5227,15 +5319,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -5271,6 +5363,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -5282,9 +5383,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -5375,15 +5476,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -5419,6 +5520,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -5430,9 +5540,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -5523,15 +5633,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -5567,6 +5677,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -5578,9 +5697,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -5671,15 +5790,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -5715,6 +5834,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -5726,9 +5854,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -5819,15 +5947,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -5863,6 +5991,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -5874,9 +6011,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -5967,15 +6104,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -6011,6 +6148,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -6022,9 +6168,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -6115,15 +6261,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -6177,6 +6323,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -6188,9 +6343,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -6281,15 +6436,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -6325,6 +6480,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -6336,9 +6500,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -6429,15 +6593,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -6473,6 +6637,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -6484,9 +6657,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -6577,15 +6750,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -6621,6 +6794,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -6632,9 +6814,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -6725,15 +6907,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -6769,6 +6951,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -6780,9 +6971,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -6873,15 +7064,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -6917,6 +7108,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -6928,9 +7128,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -7021,15 +7221,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -7065,6 +7265,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -7076,9 +7285,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -7169,15 +7378,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -7213,6 +7422,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -7224,9 +7442,9 @@
         "polish"
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "faultChecks": [
         {
@@ -7317,15 +7535,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -7360,6 +7578,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -7443,9 +7670,9 @@
         }
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     },
@@ -7459,15 +7686,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -7502,6 +7729,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -7585,9 +7821,9 @@
         }
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     },
@@ -7601,15 +7837,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -7644,6 +7880,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -7727,9 +7972,9 @@
         }
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     },
@@ -7743,15 +7988,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -7786,6 +8031,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -7869,9 +8123,9 @@
         }
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     },
@@ -7885,15 +8139,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -7928,6 +8182,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -8011,9 +8274,9 @@
         }
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     },
@@ -8027,15 +8290,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -8070,6 +8333,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -8153,9 +8425,9 @@
         }
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     },
@@ -8169,15 +8441,15 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "generate": "NOT_RUN",
-        "candidate_unchanged_owner": "NOT_RUN",
-        "edit_candidate": "NOT_RUN",
-        "reject_candidate": "NOT_RUN",
-        "adopt": "NOT_RUN",
+        "generate": "PASS",
+        "candidate_unchanged_owner": "PASS",
+        "edit_candidate": "PASS",
+        "reject_candidate": "PASS",
+        "adopt": "PASS",
         "edit_official": "PASS",
         "save": "PASS",
         "reload": "PASS",
-        "downstream": "NOT_RUN",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [
@@ -8212,6 +8484,15 @@
           "modelRequests": 0,
           "nativePackageEvidence": false,
           "receipt": "tests/acceptance/longform-stability/author-field-save-20261027-d6ff54b4.json"
+        },
+        {
+          "type": "LIVE_AGNES_UI",
+          "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+          "result": "NORMAL_FIELD_AND_THREE_MODES_PASSED",
+          "summary": "创建拒绝、创建采纳、正式手改回读、非空扩写、重写、润色均完成；候选编辑刷新、明确采纳回读，真实下游请求包含已保存手改。完整故障与最终源码复跑仍继续，不计整例PASS。",
+          "modelRequests": 5,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/live-field-modes-20261027-dc5fe37b.json"
         }
       ],
       "defects": [],
@@ -8295,9 +8576,9 @@
         }
       ],
       "modeChecks": {
-        "expand": "NOT_RUN",
-        "rewrite": "NOT_RUN",
-        "polish": "NOT_RUN"
+        "expand": "PASS",
+        "rewrite": "PASS",
+        "polish": "PASS"
       },
       "resultGate": "全部适用checks/fieldChecks/modeChecks/faultChecks、派生子用例及证据要求满足才可PASS；清点项不等于全功能验收。"
     },
@@ -14110,14 +14391,14 @@
       "module": "world-overview",
       "title": "创建、切换、重命名和删除世界组",
       "profile": "MANUAL",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
-        "open": "NOT_RUN",
-        "input": "NOT_RUN",
-        "edit_official": "NOT_RUN",
-        "save": "NOT_RUN",
-        "reload": "NOT_RUN",
-        "downstream": "NOT_RUN",
+        "open": "PASS",
+        "input": "PASS",
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
+        "downstream": "PASS",
         "recover": "NOT_RUN"
       },
       "fieldChecks": [],
@@ -14131,7 +14412,17 @@
       ],
       "candidateTests": [],
       "source": [],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+          "result": "PARTIAL_WORLD_GROUP_MANUAL_AND_RECOVERY_PASSED",
+          "summary": "各可见手工输入、返回前保存、清空、A/B设定隔离、取消/备份后删除、配额失败重试、320px操作通过。AI建议/六字段扩写和完整故障继续。",
+          "modelRequests": 0,
+          "nativePackageEvidence": false,
+          "receipt": "tests/acceptance/longform-stability/world-readback-20261027-8aacf3b0.json"
+        }
+      ],
       "defects": [],
       "faultChecks": [
         {
@@ -20951,6 +21242,32 @@
       "status": "PARTIAL_VERIFIED_CONTINUING",
       "regressionTestsPassed": 132,
       "isolatedBrowserTestsPassed": 6,
+      "wholeCasePass": false,
+      "overallPlanCompleted": false,
+      "releaseStatus": "NOT_RELEASED"
+    },
+    {
+      "date": "2026-10-27",
+      "unit": "25 real Agnes fields and 75 modes",
+      "sourceCommit": "dc5fe37b8b3192386a383fdefc9d37d1378a532a",
+      "status": "NORMAL_PATHS_VERIFIED_CONTINUING_FULL_MATRIX",
+      "fields": 25,
+      "modes": 75,
+      "normalStages": 125,
+      "allTrialRequests": 134,
+      "allTrialKnownTokens": 533132,
+      "unknownUsageRequests": 0,
+      "wholeCasePass": false,
+      "overallPlanCompleted": false,
+      "releaseStatus": "NOT_RELEASED"
+    },
+    {
+      "date": "2026-10-27",
+      "unit": "Atomic world grouping and scoped author/readback recovery",
+      "sourceCommit": "8aacf3b0d5d7b91ddb9f5457167e67e69bddddc2",
+      "status": "PARTIAL_VERIFIED_CONTINUING_FULL_MATRIX",
+      "regressionTestsPassed": 222,
+      "isolatedBrowserTestsPassed": 25,
       "wholeCasePass": false,
       "overallPlanCompleted": false,
       "releaseStatus": "NOT_RELEASED"
