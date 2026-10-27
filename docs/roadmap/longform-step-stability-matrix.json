@@ -2054,6 +2054,13 @@
       "symptom": "故事线标量/阶段写失败没有保存确认和重试，切换丢草稿；0行写入、字段并发及迟到回执缺少防护。",
       "evidence": "tests/acceptance/longform-stability/story-arc-author-save-20261028.json",
       "remaining": "实际AI模式、进度/关联、全量检查和发行继续。"
+    },
+    {
+      "id": "STORY-ARC-PROGRESS-DELETE-20261028",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourcePin": "tests/acceptance/longform-stability/story-arc-command-recovery-20261028.json",
+      "symptom": "阶段进度0行写入未回滚，旧视图删除无冲突保护；命令失败没有可恢复的确认/取消边界。",
+      "remaining": "完整矩阵、最终全量检查与发行继续。"
     }
   ],
   "evidenceSchema": {
@@ -3733,6 +3740,16 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/story-arc-author-save-20261028.json",
           "summary": "主支线手建、标量/阶段/事件修改、失败保留、显式重试、刷新和登记上下文已走；AI模式、进度和完整故障继续。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/story-arc-command-recovery-20261028.json",
+          "summary": "阶段/进度0行回滚、旧视图删除冲突及同次重试/取消已验证；错误回执仅按精确写入身份确认，不清除其他失败。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-story-arc-mainline-20261028-6e75670b.json",
+          "summary": "真实新建拒绝/再生成采纳和扩写、重写、润色、重规划通过；关键事件新增请求与每阶段上限矛盾，原候选保留未采纳，继续修复。"
         }
       ],
       "defects": [],
@@ -19431,6 +19448,16 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/story-arc-author-save-20261028.json",
           "summary": "主支线手建、标量/阶段/事件修改、失败保留、显式重试、刷新和登记上下文已走；AI模式、进度和完整故障继续。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/story-arc-command-recovery-20261028.json",
+          "summary": "阶段/进度0行回滚、旧视图删除冲突及同次重试/取消已验证；错误回执仅按精确写入身份确认，不清除其他失败。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/real-story-arc-mainline-20261028-6e75670b.json",
+          "summary": "真实新建拒绝/再生成采纳和扩写、重写、润色、重规划通过；关键事件新增请求与每阶段上限矛盾，原候选保留未采纳，继续修复。"
         }
       ],
       "defects": [],
@@ -24085,6 +24112,22 @@
       "date": "2026-10-28",
       "unit": "Real style review passed; readability malformed output retained",
       "sourcePin": "tests/acceptance/longform-stability/real-review-modes-20261028-ddcf9275.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Story arc atomic deletion and exact command failure acknowledgement",
+      "sourcePin": "tests/acceptance/longform-stability/story-arc-command-recovery-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Real story arc create and transform modes; event-generation contract conflict retained",
+      "sourcePin": "tests/acceptance/longform-stability/real-story-arc-mainline-20261028-6e75670b.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

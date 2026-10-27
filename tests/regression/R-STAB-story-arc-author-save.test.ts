@@ -163,4 +163,23 @@ describe.sequential('STAB · 故事线作者保存与作用域', () => {
     await expect(useStoryArcStore.getState().addArc({ ...base, worldGroupId: 999999 }, f.scope)).rejects.toThrow('世界分组')
     expect(await db.storyArcs.count()).toBe(1)
   })
+
+  it('另一页面修改后，旧视图删除不能删掉新稿', async () => {
+    const f = await fixture(); await useStoryArcStore.getState().loadAll(f.scope)
+    await db.storyArcs.update(f.id, { description: '另一页刚完成的新稿', updatedAt: 999 })
+    const before = await db.storyArcs.get(f.id)
+    await expect(useStoryArcStore.getState().deleteArc(f.id, f.scope)).rejects.toThrow('修改')
+    expect(await db.storyArcs.get(f.id)).toEqual(before)
+    expect(useStoryArcStore.getState().arcs[0].id).toBe(f.id)
+  })
+
+  it('阶段进度0行写入必须回滚阶段删除，不遗留悬空引用', async () => {
+    const f = await fixture(); await useStoryArcStore.getState().loadAll(f.scope)
+    const id = await db.storylineProgress.add(stampNewRecord(f.scope, 'storylineProgress', { projectId: f.scope.projectId, arcId: f.id, currentStageId: stage.id, currentStageLabel: stage.title, status: 'in_progress', progressPercent: 10, lastActiveChapterId: null, lastActiveChapterTitle: '', notes: '', createdAt: 1, updatedAt: 1 }, { owner: 'work' }) as any)
+    const before = { arc: await db.storyArcs.get(f.id), progress: await db.storylineProgress.get(id) }
+    vi.spyOn(db.storylineProgress, 'update').mockResolvedValue(0)
+    await expect(useStoryArcStore.getState().editStage(f.id, { kind: 'remove', stageId: stage.id }, f.scope)).rejects.toThrow('0行')
+    expect({ arc: await db.storyArcs.get(f.id), progress: await db.storylineProgress.get(id) }).toEqual(before)
+  })
+
 })

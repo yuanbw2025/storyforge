@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "kind": "story-arc-command-recovery-and-atomic-delete-partial-evidence",
+  "date": "2026-10-28",
+  "sourcePin": {
+    "kind": "working-tree-sha256",
+    "parentCommit": "6e75670b6329cb0254e1d2b815bfb73d2ceacd61",
+    "files": {
+      "src/lib/authoring/pending-edit-coordinator.ts": "24c674152962ca06f1cfe6d18df7c095ea12f3c685092604b7d5bd017d64be05",
+      "src/stores/story-arc.ts": "74040159c677503c1ea725db67ae2602bb68b3fe25af0df10c78866c06281609",
+      "src/lib/storyline/lifecycle.ts": "d92b065d4a78e15f202e29e1efc932a56ddeb5ee853e8125ccd93657363ed17d",
+      "src/components/outline/StoryArcPanel.tsx": "e65eed6b49441543c05a6ac1be80d477bc07e7b849237e797114285d729e361b",
+      "tests/regression/R-STAB-story-arc-author-save.test.ts": "e72f17509db0f41f6151b08e420571b017cd8bf6b6a8d722d279d43c877cc7a4",
+      "tests/regression/R-STAB-pending-command-recovery.test.ts": "1244c3ad0b146a32c6f42905d9f48139b1ecc4b5b6050b2c3bb4d37610323b91",
+      "tests/e2e/longform-story-arc-save.spec.ts": "a3a5c73fdf4276753c4bb49ed703d54c3315abec7cd577332c5aeb041b8b306a"
+    }
+  },
+  "status": "SCOPED_COMMAND_RETRY_ABANDON_AND_ATOMIC_DELETE_VERIFIED_CONTINUING",
+  "wholeCasePass": false,
+  "overallPlanComplete": false,
+  "originalRegression": {
+    "log": "story-arc-delete-progress-before.log",
+    "actualProductFailures": 2,
+    "fixtureFailures": 1,
+    "productFailures": [
+      "Old cached arc deletion removed another page's newer canonical content",
+      "Zero-row progress update allowed stage deletion to commit with dangling currentStageId"
+    ],
+    "fixtureFailure": "Third test attempted duplicate progress rows, but native schema already has a unique arcId constraint. This fixture failure is retained and excluded from product defect count."
+  },
+  "nativeOriginal": {
+    "log": "story-arc-command-native-first.log",
+    "failed": 1,
+    "passed": 5,
+    "artifacts": "story-arc-command-native-first-artifacts",
+    "failure": "Stage editor still used a separate command handler, so parent recovery/freeze did not own the failure"
+  },
+  "implementation": [
+    "Manual arc deletion freezes original Work and cached record, rejects changes/deletion failure and updates cache only after registered cascade commits",
+    "Stage write and invalid-stage progress clear roll back together on a zero-row progress result",
+    "Stage add/remove reuse the same panel command handler; failed command freezes controls until explicit retry or abandonment",
+    "Only the exact rejected pending-write token may be acknowledged; another key, newer error or in-flight write cannot be cleared",
+    "Explicit retry flushes remaining drafts before the action; abandoning an event retains its unsubmitted input and navigation/close guard",
+    "No schema, new table, model replay or historical canonical rewrite"
+  ],
+  "regression": {
+    "passed": 111,
+    "files": 11,
+    "log": "story-arc-command-related.log"
+  },
+  "nativeBrowser": {
+    "passed": 6,
+    "log": "story-arc-command-native-final.log",
+    "transport": "model-free, isolated Chromium native IndexedDB",
+    "checks": [
+      "All prior manual save/reload/downstream paths retained",
+      "Progress zero-row stage-delete rollback followed by explicit same-action retry",
+      "Cancel deletion, reject stale cached deletion, explicitly abandon failed action, reload current canon then confirm registered cascade",
+      "Abandon failed event without discarding input; guard remains until text is submitted or cleared",
+      "Before-unload listener remains active for unsubmitted event text (synthetic browser event only; not native-client restart acceptance)"
+    ]
+  },
+  "remaining": [
+    "Full delivery checks at final source, complete applicable fault matrix, native packages and release",
+    "Actual event-generation/sort suboperations and progress linkage continue"
+  ],
+  "requiredChecks": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "build": "PASS",
+    "docs": "PASS",
+    "roadmap": "PASS"
+  },
+  "deliveryChecks": {
+    "fullCi": "Running on older exact 2bcc67bd; no final-source PASS claimed",
+    "fullE2E": "Pending final source; original full-run failures and focused replays remain separate"
+  }
+}

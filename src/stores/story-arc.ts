@@ -138,12 +138,21 @@ export const useStoryArcStore = create<StoryArcStore>((set, get) => {
         publish(scope, saved)
       } })
     },
-    deleteArc: async (id, scopeInput) => {
-      const scope = await captureScope(scopeInput, get().loadedScope, id)
-      await db.transaction('rw', scopeTransactionTables(...transactionTablesForReferenceCascade('storyArcs')), async () => { await ownedRow(scope, id); await deleteStoryArcLifecycle(id) })
-      if (!sameWork(get().loadedScope, scope)) return
-      const arcs = get().arcs.filter(arc => arc.id !== id)
-      set({ arcs, activeArcId: get().activeArcId === id ? (arcs[0]?.id ?? null) : get().activeArcId })
+    deleteArc: (id, scopeInput) => {
+      const expected = structuredClone(get().arcs.find(arc => arc.id === id))
+      const captured = captureScope(scopeInput, get().loadedScope, id)
+      return coordinatePendingEditV1({ key: `story-arc:${id}`, persist: async () => {
+        const scope = await captured
+        await db.transaction('rw', scopeTransactionTables(...transactionTablesForReferenceCascade('storyArcs')), async () => {
+          const row = await ownedRow(scope, id)
+          if (expected && !equal(row, expected)) throw new Error('故事线已被另一页面修改，删除未执行；请重新读取后确认。')
+          await deleteStoryArcLifecycle(id)
+          if (await db.storyArcs.get(id)) throw new Error('故事线删除未生效，原数据已保留。')
+        })
+        if (!sameWork(get().loadedScope, scope)) return
+        const arcs = get().arcs.filter(arc => arc.id !== id)
+        set({ arcs, activeArcId: get().activeArcId === id ? (arcs[0]?.id ?? null) : get().activeArcId })
+      } })
     },
     getActiveStages: () => { const arc = get().arcs.find(row => row.id === get().activeArcId); return arc ? stagesOf(arc) : [] },
     updateStages: (id, input, scopeInput, expectedInput) => {

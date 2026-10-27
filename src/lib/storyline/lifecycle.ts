@@ -52,10 +52,10 @@ export async function updateStoryArcStagesLifecycle(args: {
       && progress.currentStageId != null
       && !args.validStageIds.includes(progress.currentStageId)
     ) {
-      await db.storylineProgress.update(progress.id, {
+      if (await db.storylineProgress.update(progress.id, {
         currentStageId: null,
         updatedAt: Date.now(),
-      })
+      }) !== 1) throw new Error('故事线进度写入0行，阶段和进度均未保存。')
     }
   })
 }

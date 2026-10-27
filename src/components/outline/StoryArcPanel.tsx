@@ -10,7 +10,8 @@ import { CInput } from '../shared/CompositionInput'
 import { CTextarea } from '../shared/CompositionInput'
 import { useDialog } from '../shared/Dialog'
 import AcknowledgedTextField from '../shared/AcknowledgedTextField'
-import { flushPendingEditsV1, registerPendingDraftFlusherV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
+import { acknowledgePendingEditFailureV1, capturePendingEditFailureV1, flushPendingEditsV1, registerPendingDraftFlusherV1, type PendingEditFailureTokenV1 } from '../../lib/authoring/pending-edit-coordinator'
 import type { Project, StoryArc, StoryArcType } from '../../lib/types'
 import { parseStages, type StoryStage } from '../../lib/types/story-arc'
 import { nanoid } from 'nanoid'
@@ -56,13 +57,40 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
   const [genType, setGenType] = useState<StoryArcType>('main')
   const [authorBusy, setAuthorBusy] = useState(false)
   const [authorError, setAuthorError] = useState('')
+  const authorBusyRef = useRef(false)
+  const commandError = useRef('')
+  const [commandRecovery, setCommandRecovery] = useState<{ action: () => void | Promise<void>; token?: PendingEditFailureTokenV1 } | null>(null)
+  useEffect(() => registerPendingDraftFlusherV1(() => {
+    if (commandError.current) throw new Error(commandError.current)
+  }), [])
   const runAuthorAction = async (action: () => void | Promise<void>, block = true) => {
-    if (block && authorBusy) return
-    if (block) setAuthorBusy(true)
+    if (block && (authorBusyRef.current || commandRecovery)) return
+    if (block) { authorBusyRef.current = true; setAuthorBusy(true) }
     setAuthorError('')
-    try { await flushPendingEditsV1(); await action() }
-    catch (error) { setAuthorError(error instanceof Error ? error.message : '故事线操作未完成，输入已保留。') }
-    finally { if (block) setAuthorBusy(false) }
+    let actionStarted = false
+    try { await flushPendingEditsV1(); actionStarted = true; await action() }
+    catch (error) {
+      const message = error instanceof Error ? error.message : '故事线操作未完成，输入已保留。'
+      setAuthorError(message)
+      if (block && actionStarted) {
+        commandError.current = message
+        setCommandRecovery({ action, token: capturePendingEditFailureV1(error) })
+      }
+    } finally { if (block) { authorBusyRef.current = false; setAuthorBusy(false) } }
+  }
+  const resolveCommand = async (retry: boolean) => {
+    if (!commandRecovery || authorBusyRef.current) return
+    authorBusyRef.current = true; setAuthorBusy(true)
+    try {
+      if (commandRecovery.token) acknowledgePendingEditFailureV1({ token: commandRecovery.token, decision: retry ? 'retry-command' : 'abandon-command' })
+      commandError.current = ''
+      if (retry) { await flushPendingEditsV1(); await commandRecovery.action() }
+      setCommandRecovery(null); setAuthorError('')
+    } catch (error) {
+      commandError.current = error instanceof Error ? error.message : '操作仍未完成，原内容已保留。'
+      setAuthorError(commandError.current)
+      setCommandRecovery({ ...commandRecovery, token: capturePendingEditFailureV1(error) })
+    } finally { authorBusyRef.current = false; setAuthorBusy(false) }
   }
   const submitTargeted = (...args: Parameters<typeof copilot.submitTargetedRequest>) => runAuthorAction(() => copilot.submitTargetedRequest(...args), false)
   const scopeKey = `${project.id}:${project.activeWorldId}:${project.activeWorkId}`
@@ -205,9 +233,13 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
     <div className="max-w-4xl">
       <h2 className="text-xl font-bold text-text-primary mb-4">🧵 全局故事线</h2>
       {authorError && <p role="alert" className="mb-3 rounded border border-error/30 p-3 text-xs text-error">{authorError}</p>}
+      {commandRecovery && <div className="mb-3 flex gap-2 text-xs">
+        <button disabled={authorBusy} onClick={() => { void resolveCommand(true) }}>重试本次操作</button>
+        <button disabled={authorBusy} onClick={() => { void resolveCommand(false) }}>取消本次操作</button>
+      </div>}
       {loading && <p role="status">正在读取故事线…</p>}
       {loadError && <div role="alert" className="mb-3 text-xs text-error">{loadError} <button onClick={() => void runAuthorAction(() => loadAll({ projectId: project.id!, worldId: project.activeWorldId!, workId: project.activeWorkId! }))}>重新读取</button></div>}
-      <fieldset className="contents" disabled={authorBusy || loading || Boolean(loadError)}>
+      <fieldset className="contents" disabled={authorBusy || loading || Boolean(loadError) || commandRecovery !== null}>
 
       {/* 故事线 Tab 切换 */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -427,6 +459,7 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
             targeted={activeArc.id === initialArcId}
             onUpdateArc={(data, expected) => updateArc(activeArc.id!, data, loadedScope ?? undefined, expected)}
             onEditStage={edit => editStage(activeArc.id!, edit, loadedScope ?? undefined)}
+            onCommand={action => runAuthorAction(action)}
             onDelete={() => handleDeleteArc(activeArc.id!)}
             onGenerateKeyEvents={generateKeyEvents}
             onSortEvents={sortKeyEvents}
@@ -457,28 +490,19 @@ export default function StoryArcPanel({ project, worldGroupId, initialRecordTarg
 
 // ── 故事线编辑器 ──
 
-function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onDelete, onGenerateKeyEvents, onSortEvents, isGeneratingEvents, isSortingEvents }: {
+function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onCommand, onDelete, onGenerateKeyEvents, onSortEvents, isGeneratingEvents, isSortingEvents }: {
   arc: NonNullable<ReturnType<typeof useStoryArcStore.getState>['arcs'][0]>
   stages: StoryStage[]
   targeted: boolean
   onUpdateArc: (data: Partial<Pick<StoryArc, 'name' | 'description' | 'type'>>, expected?: Partial<Pick<StoryArc, 'name' | 'description' | 'type'>>) => Promise<void>
   onEditStage: (edit: StoryStageEditV1) => Promise<void>
+  onCommand: (action: () => Promise<void>) => Promise<void>
   onDelete: () => void | Promise<void>
   onGenerateKeyEvents: (stage: StoryStage, allStages: StoryStage[], currentKeyEvents: string[]) => Promise<void>
   onSortEvents: (stage: StoryStage, allStages: StoryStage[], currentKeyEvents: string[]) => Promise<void>
   isGeneratingEvents: boolean
   isSortingEvents: boolean
 }) {
-  const [commandError, setCommandError] = useState('')
-  const [commandBusy, setCommandBusy] = useState(false)
-  const command = async (action: () => Promise<void>) => {
-    if (commandBusy) return
-    setCommandBusy(true); setCommandError('')
-    try { await flushPendingEditsV1(); await action() }
-    catch (error) { setCommandError(error instanceof Error ? error.message : '阶段操作未保存。') }
-    finally { setCommandBusy(false) }
-  }
-
   const handleAddStage = () => {
     const newStage: StoryStage = {
       id: nanoid(8),
@@ -486,7 +510,7 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onDel
       description: '',
       keyEvents: [],
     }
-    void command(() => onEditStage({ kind: 'add', stage: newStage }))
+    void onCommand(() => onEditStage({ kind: 'add', stage: newStage }))
   }
 
   const handleUpdateStage = (idx: number, data: Partial<Omit<StoryStage, 'id'>>, expected?: Partial<Omit<StoryStage, 'id'>>) => {
@@ -494,7 +518,7 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onDel
   }
 
   const handleDeleteStage = (idx: number) => {
-    void command(() => onEditStage({ kind: 'remove', stageId: stages[idx].id, expected: stages[idx] }))
+    void onCommand(() => onEditStage({ kind: 'remove', stageId: stages[idx].id, expected: stages[idx] }))
   }
 
   return (
@@ -523,8 +547,6 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onDel
           className="w-full h-16 p-2 bg-bg-base border border-border rounded text-sm text-text-secondary resize-y focus:outline-none focus:border-accent"
         />
       </div>
-      {commandError && <p role="alert" className="text-xs text-error">{commandError}</p>}
-      <fieldset className="contents" disabled={commandBusy}>
 
       {/* 时间线可视化 + 阶段列表 */}
       <div className="space-y-3">
@@ -577,7 +599,6 @@ function StoryArcEditor({ arc, stages, targeted, onUpdateArc, onEditStage, onDel
           </div>
         )}
       </div>
-      </fieldset>
     </div>
   )
 }
@@ -604,24 +625,31 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
   const [eventBusy, setEventBusy] = useState(false)
   const [navigationError, setNavigationError] = useState('')
   const retryEvent = useRef<(() => Promise<void>) | null>(null)
+  const eventFailure = useRef<PendingEditFailureTokenV1 | undefined>(undefined)
+  useBeforeUnload(Boolean(newEvent.trim()) || Boolean(eventError) || eventBusy)
   useEffect(() => registerPendingDraftFlusherV1(() => {
     if (eventError) throw new Error(eventError)
     if (newEvent.trim()) throw new Error('请先添加或清空尚未提交的关键事件。')
   }), [eventError, newEvent])
   const eventAction = async (action: () => Promise<void>, flush = true) => {
-    if (eventBusy) return
+    if (eventBusy || (flush && eventError)) return
     setEventBusy(true)
     try {
       if (flush) await flushPendingEditsV1()
+      else if (eventFailure.current) {
+        acknowledgePendingEditFailureV1({ token: eventFailure.current, decision: 'retry-command' })
+        eventFailure.current = undefined
+      }
       await action(); setEventError(''); retryEvent.current = null
     } catch (error) {
       setEventError(error instanceof Error ? error.message : '关键事件操作未保存，输入已保留。')
       retryEvent.current = action
+      eventFailure.current = capturePendingEditFailureV1(error)
     } finally { setEventBusy(false) }
   }
 
   const addEvent = () => {
-    if (!newEvent.trim()) return
+    if (!newEvent.trim() || eventError) return
     const sent = newEvent.trim()
     void eventAction(async () => {
       await onUpdate({ keyEvents: [...stage.keyEvents, sent] }, { keyEvents: stage.keyEvents })
@@ -813,13 +841,18 @@ function StageCard({ stage, index, total, onUpdate, onDelete, onGenerateKeyEvent
                   placeholder="手动添加关键事件..."
                   className="flex-1 px-2 py-1 bg-bg-base border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent"
                 />
-                <button onClick={addEvent} disabled={eventBusy || !newEvent.trim()}
+                <button onClick={addEvent} disabled={eventBusy || Boolean(eventError) || !newEvent.trim()}
                   className="px-2 py-1 text-xs text-accent hover:bg-accent/10 rounded disabled:opacity-40">
                   添加
                 </button>
               </div>
             </div>
-            {eventError && <div role="alert" className="space-x-2 text-xs text-error">{eventError}<button disabled={eventBusy} onClick={() => { if (retryEvent.current) void eventAction(retryEvent.current, false) }}>重试操作</button><button onClick={() => { setEventError(''); retryEvent.current = null }}>放弃本次操作</button></div>}
+            {eventError && <div role="alert" className="space-x-2 text-xs text-error">{eventError}<button disabled={eventBusy} onClick={() => { if (retryEvent.current) void eventAction(retryEvent.current, false) }}>重试操作</button><button disabled={eventBusy} onClick={() => {
+              try {
+                if (eventFailure.current) acknowledgePendingEditFailureV1({ token: eventFailure.current, decision: 'abandon-command' })
+                eventFailure.current = undefined; setEventError(''); retryEvent.current = null
+              } catch (error) { setEventError(error instanceof Error ? error.message : '操作未取消，请保留输入后重试。') }
+            }}>放弃本次操作</button></div>}
           </div>
 
           {/* 删除按钮 */}

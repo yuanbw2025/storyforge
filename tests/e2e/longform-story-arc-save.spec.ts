@@ -148,3 +148,68 @@ test('typing the next event while a prior event is committing does not erase the
   await expect.poll(async () => (await stage(page, id)).keyEvents).toEqual(['本次提交的事件', '正在写的下一件事'])
   await expect(event).toHaveValue('')
 })
+
+test('stage deletion rolls back failed progress and retries; stale arc deletion is cancelled before a fresh confirmed delete', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
+  const id = await setup(page); await addStage(page)
+  const arc = (await rows(page, id))[0]; const first = await stage(page, id)
+  const progressId = await page.evaluate(async ({ projectId, arcId, stageId }) => {
+    const imp = new Function('path', 'return import(path)') as (path: string) => Promise<any>
+    const [{ db }, { resolveScope, stampNewRecord }] = await Promise.all([imp('/storyforge/src/lib/db/schema.ts'), imp('/storyforge/src/lib/workspace/scope.ts')])
+    const scope = await resolveScope({ projectId })
+    const progressId = await db.storylineProgress.add(stampNewRecord(scope, 'storylineProgress', { projectId, arcId, currentStageId: stageId, currentStageLabel: '阶段快照', status: 'in_progress', progressPercent: 20, lastActiveChapterId: null, lastActiveChapterTitle: '', notes: '', createdAt: 1, updatedAt: 1 }, { owner: 'work' }))
+    const update = db.storylineProgress.update.bind(db.storylineProgress)
+    db.storylineProgress.update = async () => 0
+    Object.assign(window, { restoreStoryProgressWrite: () => { db.storylineProgress.update = update } })
+    return progressId
+  }, { projectId: id, arcId: arc.id, stageId: first.id })
+  const progress = () => page.evaluate(async id => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    return db.storylineProgress.get(id)
+  }, progressId)
+  await page.getByRole('button', { name: '删除此阶段', exact: true }).click()
+  await expect(page.getByRole('alert').filter({ hasText: '进度写入0行' })).toBeVisible()
+  expect((await stage(page, id)).id).toBe(first.id); expect((await progress()).currentStageId).toBe(first.id)
+  await expect(page.getByLabel('故事阶段描述', { exact: true })).toBeDisabled()
+  await page.evaluate(() => (window as any).restoreStoryProgressWrite())
+  await page.getByRole('button', { name: '重试本次操作', exact: true }).click()
+  await expect.poll(async () => JSON.parse((await rows(page, id))[0].stages)).toEqual([])
+  expect((await progress()).currentStageId).toBeNull()
+  await page.getByTitle('删除故事线', { exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click()
+  expect(await rows(page, id)).toHaveLength(1)
+  await page.evaluate(async arcId => {
+    const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+    await db.storyArcs.update(arcId, { description: '另一页刚保存的正式稿', updatedAt: Date.now() + 100 })
+  }, arc.id)
+  await page.getByTitle('删除故事线', { exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click()
+  await expect(page.getByRole('alert').filter({ hasText: '另一页面修改' })).toBeVisible()
+  expect((await rows(page, id))[0].description).toBe('另一页刚保存的正式稿')
+  await page.getByRole('button', { name: '取消本次操作', exact: true }).click()
+  await page.reload()
+  await expect(page.getByLabel('故事线整体描述', { exact: true })).toHaveValue('另一页刚保存的正式稿')
+  await page.getByTitle('删除故事线', { exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click()
+  await expect.poll(() => rows(page, id)).toHaveLength(0)
+  expect(await progress()).toBeUndefined(); expect(errors).toEqual([])
+})
+
+test('abandoning a failed event releases only its failure; the unsubmitted text remains guarded until cleared', async ({ page }) => {
+  const id = await setup(page); await addStage(page); await injectFailure(page)
+  const event = page.getByPlaceholder('手动添加关键事件...', { exact: true })
+  await event.fill('保留后再决定的事件'); await event.press('Enter')
+  await expect(page.getByRole('button', { name: '放弃本次操作', exact: true })).toBeVisible()
+  await restore(page); await page.getByRole('button', { name: '放弃本次操作', exact: true }).click()
+  await expect(event).toHaveValue('保留后再决定的事件')
+  expect(await page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event); return event.defaultPrevented
+  })).toBe(true)
+  await page.getByTitle('新增支线', { exact: true }).click()
+  expect(await rows(page, id)).toHaveLength(1)
+  await expect(event).toHaveValue('保留后再决定的事件')
+  await event.fill(''); await page.getByTitle('新增支线', { exact: true }).click()
+  await expect.poll(() => rows(page, id)).toHaveLength(2)
+  expect((await stage(page, id)).keyEvents).toEqual([])
+})
