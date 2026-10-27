@@ -16,12 +16,12 @@
     "cases": 158,
     "leafFieldChecks": 324,
     "operationChecks": 1226,
-    "notRun": 128,
+    "notRun": 127,
     "passed": 0,
     "failed": 0,
     "faultChecks": 1995,
     "modeChecks": 75,
-    "running": 30
+    "running": 31
   },
   "sourceInventory": {
     "baseline": "7b974fbf7466ef333bd4de05c54b36793da1b65e",
@@ -14137,7 +14137,7 @@
       "module": "client-assets",
       "title": "动态模块、CSS加载失败与版本混用恢复",
       "profile": "READ",
-      "status": "NOT_RUN",
+      "status": "RUNNING",
       "checks": {
         "open": "NOT_RUN",
         "reload": "NOT_RUN",
@@ -14155,7 +14155,17 @@
       ],
       "candidateTests": [],
       "source": [],
-      "evidence": [],
+      "evidence": [
+        {
+          "type": "SOURCE_REPRO",
+          "sourceCommit": "1ce8a3f074801907c6d3857ef81f73317511997a",
+          "result": "DEV_READINESS_DELAY_RETAINED_NOT_PERFORMANCE_ACCEPTANCE",
+          "summary": "反复源模块刷新时5秒未进入工作台；原失败保留。同页随后完成加载，新增观察57ms已就绪；15秒等待窗口下6项功能流程通过。无脚本异常，不据此关闭动态模块失败、生产性能或原生问题。",
+          "receipt": "tests/acceptance/longform-stability/main-integration-20261027-1ce8a3f0.json",
+          "modelRequests": 0,
+          "nativePackageEvidence": false
+        }
+      ],
       "defects": [],
       "faultChecks": [
         {
@@ -21271,6 +21281,14 @@
       "wholeCasePass": false,
       "overallPlanCompleted": false,
       "releaseStatus": "NOT_RELEASED"
+    },
+    {
+      "date": "2026-10-27",
+      "unit": "main schema integration and dev readiness investigation",
+      "sourceCommit": "1ce8a3f074801907c6d3857ef81f73317511997a",
+      "status": "CONTINUING_WITH_ORIGINAL_SLOW_LOAD_EVIDENCE",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
     }
   ]
 }

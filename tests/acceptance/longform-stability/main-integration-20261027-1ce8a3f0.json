@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "kind": "longform-stability-main-integration-receipt",
+  "sourceCommit": "1ce8a3f074801907c6d3857ef81f73317511997a",
+  "integratedMain": "301d38efdac191e25afa98e37f93a5472561c6ab",
+  "schemaVersionAfterMerge": 13,
+  "requiredTables": 130,
+  "backupVersionPreserved": 17,
+  "relatedRegressionsPassed": 222,
+  "nwDefaultReadbackTestsPassed": 127,
+  "nwHistoricalSemanticObservationsUnchanged": true,
+  "browserIntegration": {
+    "firstRunPassed": 24,
+    "firstRunFailed": 1,
+    "twoFreshCompoundRunsRetained": true,
+    "failure": "Workspace readiness missing at the 5 second test assertion after repeated source-module reloads; no trace page/console errors.",
+    "samePageObservation": {
+      "lateReady": true,
+      "additionalWaitMs": 57,
+      "driverHeapBytes": 462885400
+    },
+    "assertionChange": "Allow frozen Vite readiness 15 seconds and the 46-reload compound functional journey 360 seconds. Canonical value/clear/owner assertions unchanged.",
+    "boundedObservedRunPassed": 6,
+    "performanceAcceptance": false
+  },
+  "gates": {
+    "architecture": "PASS",
+    "requiredTables": "PASS",
+    "aiManual": "PASS",
+    "aiEntries": "PASS",
+    "types": "PASS",
+    "lint": "PASS",
+    "build": "PASS"
+  },
+  "overallPlanCompleted": false,
+  "fullCurrentHeadCi": "PENDING",
+  "nativePackageEvidence": false,
+  "releaseStatus": "NOT_RELEASED"
+}

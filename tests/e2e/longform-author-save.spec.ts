@@ -62,7 +62,7 @@ async function editFirst(page: Page, text: string) {
 }
 
 test('23 scalar author fields save edits and clearing through their real UI and survive reload', async ({ page }) => {
-  test.setTimeout(240_000)
+  test.setTimeout(360_000)
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
   const projectId = await create(page, '逐字段作者保存隔离验收')
   for (const [module, label, field, table] of scalarFields) {
