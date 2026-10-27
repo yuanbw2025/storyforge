@@ -312,3 +312,53 @@ test('AI sort cannot rewrite events, stops after bounded repair, and accepts an 
   expect(JSON.parse((await rows(page, id))[0].stages)[0]).toEqual({ ...original, keyEvents: [...original.keyEvents].reverse() })
   expect(calls).toBe(2)
 })
+
+for (const stageCount of [1, 8]) {
+  test(`whole-arc polish preserves ${stageCount} authored stages and their events through edit, reload and adoption`, async ({ page }) => {
+    const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
+    const id = await eventAISetup(page)
+    if (stageCount === 1) {
+      for (const text of ['手工第六事件', '手工第七事件']) {
+        await page.getByPlaceholder('手动添加关键事件...', { exact: true }).fill(text)
+        await page.getByRole('button', { name: '添加', exact: true }).click()
+        await expect(page.getByPlaceholder('手动添加关键事件...', { exact: true })).toHaveValue('')
+      }
+    } else {
+      for (let count = 2; count <= stageCount; count++) {
+        await page.getByRole('button', { name: '添加阶段', exact: true }).click()
+        await expect.poll(async () => JSON.parse((await rows(page, id))[0].stages).length).toBe(count)
+      }
+    }
+    const before = await page.evaluate(async projectId => {
+      const { db } = await (new Function('return import("/storyforge/src/lib/db/schema.ts")'))()
+      const arc = await db.storyArcs.where('projectId').equals(projectId).first()
+      const stages = JSON.parse(arc.stages).map((row: any) => ({ ...row, authorNote: '保留作者附加标记' }))
+      await db.storyArcs.update(arc.id, { stages: JSON.stringify(stages) })
+      return await db.storyArcs.get(arc.id)
+    }, id)
+    await page.reload()
+    const stages = JSON.parse(before.stages)
+    const output = [{ name: before.name, type: before.type, description: '按已确认步骤推进核验，结果交给后续作者决策。', stages: stages.map(({ id, authorNote: _authorNote, ...row }: any) => ({ stageId: id, ...row })) }]
+    let calls = 0
+    await page.route('https://arc-events.invalid/**', route => {
+      calls++
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ storyArcs: output }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) })
+    })
+    await page.getByRole('button', { name: '润色', exact: true }).first().click()
+    await expect(eventCandidate(page)).toHaveValue(JSON.stringify(output, null, 2))
+    expect((await rows(page, id))[0]).toEqual(before)
+    const invalid = structuredClone(output); invalid[0].stages[0].keyEvents.push(invalid[0].stages[0].keyEvents[0])
+    await eventCandidate(page).fill(JSON.stringify(invalid)); await expect(eventAdopt(page)).toBeDisabled()
+    output[0].description += '\n作者确认：保留每个原阶段及全部事件。'
+    const draft = JSON.stringify(output, null, 2)
+    await eventCandidate(page).fill(draft); await savedEventDraft(page, id, draft)
+    await page.reload(); await expect(eventCandidate(page)).toHaveValue(draft)
+    expect((await rows(page, id))[0]).toEqual(before)
+    await eventAdopt(page).click(); await expect(eventCandidate(page)).toHaveCount(0)
+    const after = (await rows(page, id))[0]
+    expect(after.id).toBe(before.id); expect(after.workId).toBe(before.workId)
+    expect(after.description).toBe(output[0].description); expect(JSON.parse(after.stages)).toEqual(stages)
+    await page.reload(); expect(JSON.parse((await rows(page, id))[0].stages)).toEqual(stages)
+    expect(calls).toBe(1); expect(errors).toEqual([])
+  })
+}

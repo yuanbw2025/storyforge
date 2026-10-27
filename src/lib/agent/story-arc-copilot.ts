@@ -16,7 +16,7 @@ import { adopt } from '../registry/adopt'
 import { assembleContext } from '../registry/assemble-context'
 import type { AssembleContextResult } from '../registry/types'
 import type { AIConfig, ChatMessage, StoryArc, StoryArcType, StoryCore, WorkspaceScope } from '../types'
-import { parseStages, stringifyStages, type StoryStage } from '../types/story-arc'
+import { parseStages, parseAuthorStoryStagesV1, stringifyStages, type StoryStage } from '../types/story-arc'
 import type { StorylineCrossing, StorylineProgress } from '../types/storyline-progress'
 import {
   readOwnedRows,
@@ -364,7 +364,11 @@ function parseOptionalString(value: unknown, label: string, maxLength: number): 
   return assertString(value, label, maxLength)
 }
 
-function parseStage(value: unknown, arcIndex: number, stageIndex: number): StoryArcCopilotStageCandidate {
+function parseRetainedOrNewStringV1(value: unknown, label: string, maxLength: number, retained?: string): string {
+  return typeof retained === 'string' && value === retained ? retained : assertString(value, label, maxLength)
+}
+
+function parseStage(value: unknown, arcIndex: number, stageIndex: number, retained?: StoryStage): StoryArcCopilotStageCandidate {
   const label = `故事线候选第 ${arcIndex + 1} 项的第 ${stageIndex + 1} 个阶段`
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${label} 必须是对象。`)
@@ -378,42 +382,54 @@ function parseStage(value: unknown, arcIndex: number, stageIndex: number): Story
   )
   const stageId = source.stageId === undefined
     ? undefined
-    : assertString(source.stageId, `${label}.stageId`, 160)
+    : parseRetainedOrNewStringV1(source.stageId, `${label}.stageId`, 160, retained?.id)
   if (
     !Array.isArray(source.keyEvents)
-    || source.keyEvents.length < 1
-    || source.keyEvents.length > MAX_KEY_EVENTS
+    || source.keyEvents.length < (retained ? 0 : 1)
+    || source.keyEvents.length > MAX_KEY_EVENTS + (retained?.keyEvents.length ?? 0)
   ) {
-    throw new Error(`${label}.keyEvents 必须包含 1-${MAX_KEY_EVENTS} 个事件。`)
+    throw new Error(`${label}.keyEvents 超出范围；新阶段须有1-${MAX_KEY_EVENTS}项，既有阶段可保留原事件并最多新增${MAX_KEY_EVENTS}项。`)
   }
-  const keyEvents = source.keyEvents.map((event, eventIndex) => assertString(
+  const keyEvents = source.keyEvents.map((event, eventIndex) => parseRetainedOrNewStringV1(
     event,
     `${label}.keyEvents[${eventIndex}]`,
     MAX_EVENT_CHARS,
+    typeof event === 'string' && retained?.keyEvents.includes(event) ? event : undefined,
   ))
-  if (new Set(keyEvents.map(normalizeIdentity)).size !== keyEvents.length) {
-    throw new Error(`${label}.keyEvents 不得重复。`)
+  const counts = new Map<string, number>()
+  for (const event of keyEvents) counts.set(normalizeIdentity(event), (counts.get(normalizeIdentity(event)) ?? 0) + 1)
+  const remaining = [...(retained?.keyEvents ?? [])]
+  for (const event of keyEvents) {
+    if ((counts.get(normalizeIdentity(event)) ?? 0) < 2) continue
+    const index = remaining.indexOf(event)
+    if (index < 0) throw new Error(`${label}.keyEvents 不得新增重复事件。`)
+    remaining.splice(index, 1)
   }
   const startVolume = parseVolumeNumber(source.startVolume, `${label}.startVolume`)
   const endVolume = parseVolumeNumber(source.endVolume, `${label}.endVolume`)
-  if ((startVolume === undefined) !== (endVolume === undefined)) {
+  const retainedRange = !!retained && startVolume === retained.startVolume && endVolume === retained.endVolume
+  if (!retainedRange && (startVolume === undefined) !== (endVolume === undefined)) {
     throw new Error(`${label} 的卷范围必须同时提供 startVolume 和 endVolume。`)
   }
   if (startVolume !== undefined && endVolume !== undefined && startVolume > endVolume) {
     throw new Error(`${label} 的卷范围起点不能晚于终点。`)
   }
-  const turningPoint = parseOptionalString(source.turningPoint, `${label}.turningPoint`, MAX_EVENT_CHARS)
+  const turningPoint = retained && source.turningPoint === retained.turningPoint
+    ? retained.turningPoint : parseOptionalString(source.turningPoint, `${label}.turningPoint`, MAX_EVENT_CHARS)
   return {
     ...(stageId === undefined ? {} : { stageId }),
-    title: assertString(source.title, `${label}.title`, MAX_STAGE_TITLE_CHARS),
-    description: assertString(source.description, `${label}.description`, MAX_STAGE_DESCRIPTION_CHARS),
+    title: parseRetainedOrNewStringV1(source.title, `${label}.title`, MAX_STAGE_TITLE_CHARS, retained?.title),
+    description: parseRetainedOrNewStringV1(source.description, `${label}.description`, MAX_STAGE_DESCRIPTION_CHARS, retained?.description),
     keyEvents,
     ...(turningPoint === undefined ? {} : { turningPoint }),
-    ...(startVolume === undefined ? {} : { startVolume, endVolume }),
+    ...(startVolume === undefined ? {} : { startVolume }),
+    ...(endVolume === undefined ? {} : { endVolume }),
   }
 }
 
-function parseStoryArcCandidateRowsV1(rows: unknown[]): StoryArcCopilotCandidate[] {
+type StoryArcSourceRowV1 = NonNullable<StoryArcCopilotSnapshot['arcs']>[number]
+function parseStoryArcCandidateRowsV1(rows: unknown[], target?: StoryArcSourceRowV1): StoryArcCopilotCandidate[] {
+  const retainedStages = target ? parseAuthorStoryStagesV1(target.stages) : []
   if (rows.length < 1 || rows.length > MAX_ARCS) {
     throw new Error(`故事线候选数量必须在 1-${MAX_ARCS} 之间。`)
   }
@@ -426,22 +442,25 @@ function parseStoryArcCandidateRowsV1(rows: unknown[]): StoryArcCopilotCandidate
     if (source.type !== 'main' && source.type !== 'sub') {
       throw new Error(`故事线候选第 ${index + 1} 项.type 必须是 main 或 sub。`)
     }
-    if (!Array.isArray(source.stages) || source.stages.length < 3 || source.stages.length > 7) {
-      throw new Error(`故事线候选第 ${index + 1} 项.stages 必须包含 3-7 个阶段。`)
+    if (!Array.isArray(source.stages) || source.stages.length < (target ? 0 : 3) || source.stages.length > (target ? retainedStages.length + 7 : 7)) {
+      throw new Error(`故事线候选第 ${index + 1} 项.stages 超出范围：新故事线须有3-7个阶段，变换可保留既有阶段并最多新增7个。`)
     }
-    const stages = source.stages.map((stage, stageIndex) => parseStage(stage, index, stageIndex))
+    const stages = source.stages.map((stage, stageIndex) => parseStage(stage, index, stageIndex, retainedStages.find(row => row.id === stage?.stageId)))
+    if (target && stages.filter(stage => stage.stageId === undefined).length > 7) throw new Error('故事线变换每次最多新增7个阶段。')
     const stageNames = stages.map(stage => normalizeIdentity(stage.title))
     if (new Set(stageNames).size !== stageNames.length) {
-      throw new Error(`故事线候选第 ${index + 1} 项包含重复阶段标题。`)
+      const duplicated = stages.filter((_, i) => stageNames.filter(name => name === stageNames[i]).length > 1)
+      if (duplicated.some(stage => !retainedStages.some(row => row.id === stage.stageId && row.title === stage.title))) throw new Error(`故事线候选第 ${index + 1} 项包含新增重复阶段标题。`)
     }
     const type: StoryArcType = source.type
     return {
-      name: assertString(source.name, `故事线候选第 ${index + 1} 项.name`, MAX_NAME_CHARS),
+      name: parseRetainedOrNewStringV1(source.name, `故事线候选第 ${index + 1} 项.name`, MAX_NAME_CHARS, target?.name),
       type,
-      description: assertString(
+      description: parseRetainedOrNewStringV1(
         source.description,
         `故事线候选第 ${index + 1} 项.description`,
         MAX_DESCRIPTION_CHARS,
+        target ? target.description ?? '' : undefined,
       ),
       stages,
     }
@@ -470,7 +489,7 @@ export function parseStoryArcCandidateDraft(draft: string): StoryArcCopilotCandi
  * remain a bare JSON array, while model output uses an exact object envelope so
  * providers with JSON-object mode can enforce a compatible top-level value.
  */
-export function parseStoryArcModelResponseV2(raw: string): StoryArcCopilotCandidate[] {
+export function parseStoryArcModelResponseV2(raw: string, snapshot?: StoryArcCopilotSnapshot, mutation?: StoryArcMutationRequestV1): StoryArcCopilotCandidate[] {
   return parseStructuredOutputV1({
     raw,
     contract: {
@@ -490,13 +509,24 @@ export function parseStoryArcModelResponseV2(raw: string): StoryArcCopilotCandid
         throw new Error('故事线模型响应.storyArcs 必须是 JSON 数组。')
       }
       if (source.assumptions !== undefined) parseStoryArcAssumptionTextsV1(source.assumptions, true)
-      return parseStoryArcCandidateRowsV1(source.storyArcs)
+      return parseStoryArcCandidateRowsV1(source.storyArcs, snapshot && mutation ? readTransformTargetV1(snapshot, mutation) : undefined)
     },
   })
 }
 
 export function parseStoryArcCandidateDraftForMutationV1(draft: string, snapshot: StoryArcCopilotSnapshot, mutation: StoryArcMutationRequestV1): StoryArcCopilotCandidate[] {
-  return mutation.stageEvents ? parseStoryArcStageEventDraftV1(draft, snapshot, mutation, MAX_CANDIDATE_CHARS) : parseStoryArcCandidateDraft(draft)
+  if (mutation.stageEvents) return parseStoryArcStageEventDraftV1(draft, snapshot, mutation, MAX_CANDIDATE_CHARS)
+  if (mutation.operation === 'create') return parseStoryArcCandidateDraft(draft)
+  const target = readTransformTargetV1(snapshot, mutation)
+  return parseStructuredOutputV1({ raw: draft, contract: { version: 1, schemaId: 'story-arc-transform-candidate.v1', target: 'storyArcs.batch', root: 'array', maxChars: MAX_CANDIDATE_CHARS }, parse: value => parseStoryArcCandidateRowsV1(value as unknown[], target) })
+}
+
+function readTransformTargetV1(snapshot: StoryArcCopilotSnapshot, mutation: StoryArcMutationRequestV1): StoryArcSourceRowV1 | undefined {
+  if (mutation.operation === 'create') return undefined
+  const target = snapshot.arcs?.find(row => row.id === mutation.targetArcId)
+  if (!target) throw new Error('目标故事线不存在或不属于当前作品。')
+  parseAuthorStoryStagesV1(target.stages)
+  return target
 }
 
 function candidateIssues(
@@ -511,7 +541,7 @@ function candidateIssues(
   }
   let parsed: StoryArcCopilotCandidate[]
   try {
-    parsed = parseStoryArcCandidateDraft(JSON.stringify(output))
+    parsed = parseStoryArcCandidateDraftForMutationV1(JSON.stringify(output), snapshot, mutation)
   } catch (error) {
     return [{
       code: 'story-arc-invalid-structure',
@@ -845,7 +875,7 @@ function storyArcCreativeParseOutcomeV1(
     const normalized = normalizeStoryArcCreativeItemV1(value, index)
     issues.push(...normalized.issues)
     try {
-      const candidate = parseStoryArcCandidateDraft(JSON.stringify([normalized.value]))[0]
+      const candidate = parseStoryArcCandidateDraftForMutationV1(JSON.stringify([normalized.value]), snapshot, mutation)[0]
       candidates.push(candidate)
       validFragments.push({
         version: 1,
@@ -1266,7 +1296,7 @@ function buildStoryArcMessages(input: StoryArcCopilotInput): ChatMessage[] {
 硬性要求：
 1. ${kindInstruction}
 2. storyCore.mainPlot/subPlots 是作者意图摘要，本轮输出是其 1:N 可执行投影。只能新增候选，绝不能反向改写故事核心，也不能把一条意图强制覆盖成一条同名故事线。
-3. 默认生成紧凑但完整的 3-5 个因果递进阶段；每阶段包含标题、一到两句描述和 1-3 个关键事件，每个事件用一句话表达。不要为了填满上限重复、拆碎或扩写同一事件。
+3. ${target ? '这是既有故事线变换，不能套用新故事线数量把作者已有阶段或事件截短。保留的阶段使用原 stageId；每次最多新增7个阶段，既有阶段可保留全部原事件并最多增加5项，新阶段须有1—5项事件。原有空白、重复或较长内容可以逐字保留，新增或改写内容仍须非空且有界；新增事件最多400字符，不能新增重复。润色保留阶段结构。不要为填上限重复或拆碎事件。' : '默认生成紧凑但完整的 3-5 个因果递进阶段；每阶段包含标题、一到两句描述和 1-3 个关键事件，每个事件用一句话表达。不要为了填满上限重复、拆碎或扩写同一事件。'}
 4. 每条故事线顶层只能有 name/type/description/stages 四个字段。turningPoint、startVolume、endVolume 只能放在 stages 数组内的阶段对象上，绝不能放在故事线顶层；只有确有卷级依据时才同时填写 startVolume/endVolume，均为从 1 开始的整数。
 5. 已有设定是硬约束；不得改变既定时限、能力、代价、因果或实体身份，也不得为未命名人物擅自命名。设定缺失时只做不与现有事实冲突的候选补全，不声称它已经成为 Canon。
 6. 避免复制已有故事线；支线必须有独立目标，也要说明与主线的因果交汇。
@@ -1288,13 +1318,14 @@ function buildStoryArcMessages(input: StoryArcCopilotInput): ChatMessage[] {
         name: target.name,
         type: target.type,
         description: target.description,
-        stages: parseStages(target.stages).map(stage => ({
+        stages: parseAuthorStoryStagesV1(target.stages).map(stage => ({
           stageId: stage.id,
           title: stage.title,
           description: stage.description,
           keyEvents: stage.keyEvents,
-          ...(stage.turningPoint ? { turningPoint: stage.turningPoint } : {}),
-          ...(stage.startVolume == null ? {} : { startVolume: stage.startVolume, endVolume: stage.endVolume }),
+          ...(stage.turningPoint === undefined ? {} : { turningPoint: stage.turningPoint }),
+          ...(stage.startVolume === undefined ? {} : { startVolume: stage.startVolume }),
+          ...(stage.endVolume === undefined ? {} : { endVolume: stage.endVolume }),
         })),
       }, null, 2)}`] : []),
       `【作者要求】\n${input.authorRequest}${supplemental}`,
@@ -1308,17 +1339,23 @@ function toStoredStages(
   candidate: StoryArcCopilotCandidate,
   target?: NonNullable<StoryArcCopilotSnapshot['arcs']>[number],
 ): StoryStage[] {
-  const targetIds = new Set(target ? parseStages(target.stages).map(stage => stage.id) : [])
-  return candidate.stages.map(stage => ({
-    id: stage.stageId && targetIds.has(stage.stageId) ? stage.stageId : nanoid(8),
-    title: stage.title,
-    description: stage.description,
-    keyEvents: [...stage.keyEvents],
-    ...(stage.turningPoint ? { turningPoint: stage.turningPoint } : {}),
-    ...(stage.startVolume === undefined
-      ? {}
-      : { startVolume: stage.startVolume, endVolume: stage.endVolume }),
-  }))
+  const retained = new Map((target ? parseAuthorStoryStagesV1(target.stages) : []).map(stage => [stage.id, stage]))
+  return candidate.stages.map(stage => {
+    const original = stage.stageId === undefined ? undefined : retained.get(stage.stageId)
+    // Unknown author fields are not model-editable. Known optional fields are
+    // replaced by the explicit whole-stage candidate, including absence.
+    const { turningPoint: _turningPoint, startVolume: _startVolume, endVolume: _endVolume, ...authorFields } = original ?? {}
+    return {
+      ...authorFields,
+      id: original?.id ?? nanoid(8),
+      title: stage.title,
+      description: stage.description,
+      keyEvents: [...stage.keyEvents],
+      ...(stage.turningPoint === undefined ? {} : { turningPoint: stage.turningPoint }),
+      ...(stage.startVolume === undefined ? {} : { startVolume: stage.startVolume }),
+      ...(stage.endVolume === undefined ? {} : { endVolume: stage.endVolume }),
+    }
+  })
 }
 
 async function adoptCandidates(input: {
@@ -1694,7 +1731,7 @@ export function createStoryArcCopilotNode(
     : undefined))
   const parseCandidateForMutationModel = (raw: string) => input.mutation.stageEvents
     ? parseStoryArcCandidateDraftForMutationV1(raw, input.snapshot, input.mutation)
-    : parseStoryArcModelResponseV2(raw)
+    : parseStoryArcModelResponseV2(raw, input.snapshot, input.mutation)
   return {
     id: `agent.outline.story-arcs:${input.projectId}:${input.worldGroupId ?? 'global'}:${input.kind}:${input.mutation.operation}:${input.mutation.targetArcId ?? 'new'}:${input.snapshot.serialized.length}${input.mutation.stageEvents ? `:${input.mutation.stageEvents.kind}:${encodeURIComponent(input.mutation.stageEvents.stageId)}` : ''}`,
     kind: 'outline.story-arcs',
@@ -1708,7 +1745,7 @@ export function createStoryArcCopilotNode(
     adopt: async output => {
       const current = await readCurrent()
       if (current.serialized !== input.snapshot.serialized) throw new StoryArcCopilotStaleError()
-      const candidates = input.mutation.stageEvents ? assertStoryArcStageEventCandidatesV1(output, current, input.mutation) : parseStoryArcCandidateDraft(JSON.stringify(output))
+      const candidates = input.mutation.stageEvents ? assertStoryArcStageEventCandidatesV1(output, current, input.mutation) : parseStoryArcCandidateDraftForMutationV1(JSON.stringify(output), current, input.mutation)
       const issues = candidateIssues(candidates, current, input.kind, input.mutation)
       if (issues.length) throw new Error(issues.map(issue => issue.message).join('；'))
       return saveCandidates(candidates)

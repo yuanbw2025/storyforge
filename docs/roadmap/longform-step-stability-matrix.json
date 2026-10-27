@@ -3772,6 +3772,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/canon-stage-identity-20261028.json",
           "summary": "同名阶段与有序事件不再误报Canon冲突；55项回归、9条隔离浏览器路径及可移植身份导入回读通过。整线丰富结构续修另行验证。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/story-arc-rich-transform-20261028.json",
+          "summary": "丰富手工故事线4种整线变换使用原稿感知数量合同；103项回归、11条浏览器路径通过。原失败和共享基础证据保留；实模在明确提交后另跑。"
         }
       ],
       "defects": [],
@@ -19505,6 +19510,11 @@
           "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
           "receipt": "tests/acceptance/longform-stability/canon-stage-identity-20261028.json",
           "summary": "同名阶段与有序事件不再误报Canon冲突；55项回归、9条隔离浏览器路径及可移植身份导入回读通过。整线丰富结构续修另行验证。"
+        },
+        {
+          "type": "PARTIAL_APPLICABLE_VARIANT_EXECUTION",
+          "receipt": "tests/acceptance/longform-stability/story-arc-rich-transform-20261028.json",
+          "summary": "丰富手工故事线4种整线变换使用原稿感知数量合同；103项回归、11条浏览器路径通过。原失败和共享基础证据保留；实模在明确提交后另跑。"
         }
       ],
       "defects": [],
@@ -24215,6 +24225,14 @@
       "date": "2026-10-28",
       "unit": "Portable same-title stage/event Canon identity foundation and exact-source real review replay",
       "sourcePin": "tests/acceptance/longform-stability/canon-stage-identity-20261028.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-28",
+      "unit": "Source-aware rich existing-Arc transformations and author metadata preservation",
+      "sourcePin": "tests/acceptance/longform-stability/story-arc-rich-transform-20261028.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false
