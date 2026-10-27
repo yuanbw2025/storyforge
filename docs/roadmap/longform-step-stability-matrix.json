@@ -1998,6 +1998,30 @@
       "symptom": "非法标题或归属字段可先进入数据库，再在显示阶段报错。",
       "evidence": "tests/acceptance/longform-stability/outline-author-save-20261027.json",
       "remaining": "结构操作、完整故障矩阵、最终版本检查与发行继续。"
+    },
+    {
+      "id": "OUTLINE-PARTIAL-TREE-DELETE-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourcePin": "tests/acceptance/longform-stability/outline-structure-20261027.json",
+      "symptom": "删除按缓存子树分次提交，后续失败可留下已丢失的子稿；缓存遗漏的后代会成为孤儿。",
+      "evidence": "tests/acceptance/longform-stability/outline-structure-20261027.json",
+      "remaining": "完整故障矩阵、安装包和发行继续。"
+    },
+    {
+      "id": "OUTLINE-STRUCTURE-OWNER-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourcePin": "tests/acceptance/longform-stability/outline-structure-20261027.json",
+      "symptom": "移动、重排、插入和删除缺少完整父级、作品和事务校验。",
+      "evidence": "tests/acceptance/longform-stability/outline-structure-20261027.json",
+      "remaining": "完整故障矩阵、安装包和发行继续。"
+    },
+    {
+      "id": "OUTLINE-HIDDEN-UNGROUPED-CHAPTERS-20261027",
+      "state": "LOCAL_SOURCE_VERIFIED_NOT_RELEASED",
+      "sourcePin": "tests/acceptance/longform-stability/outline-structure-20261027.json",
+      "symptom": "新增故事块后，原卷直属章节与整卷审校入口隐藏；清空忽略块内章节。",
+      "evidence": "tests/acceptance/longform-stability/outline-structure-20261027.json",
+      "remaining": "完整故障矩阵、安装包和发行继续。"
     }
   ],
   "evidenceSchema": {
@@ -17562,11 +17586,11 @@
       "checks": {
         "open": "PASS",
         "input": "PASS",
-        "edit_official": "RUNNING",
-        "save": "RUNNING",
-        "reload": "RUNNING",
-        "downstream": "RUNNING",
-        "recover": "RUNNING"
+        "edit_official": "PASS",
+        "save": "PASS",
+        "reload": "PASS",
+        "downstream": "PASS",
+        "recover": "PASS"
       },
       "fieldChecks": [],
       "assertions": [
@@ -17579,7 +17603,9 @@
       ],
       "candidateTests": [
         "tests/regression/R-OUTLINE-author-save-atomic.test.ts",
-        "tests/e2e/longform-outline-save.spec.ts"
+        "tests/e2e/longform-outline-save.spec.ts",
+        "tests/regression/R-OUTLINE-structure-owner-lifecycle.test.ts",
+        "tests/e2e/longform-outline-structure.spec.ts"
       ],
       "source": [],
       "evidence": [
@@ -17588,12 +17614,20 @@
           "sourcePin": "See receipt working-tree SHA256 files; parent 099e7f34 is not the tested source by itself",
           "receipt": "tests/acceptance/longform-stability/outline-author-save-20261027.json",
           "summary": "卷、章文本保存与标题原子同步、配额重试、迟到回执、字段冲突和异常读取已验证；插入、移动、重排、删除与清空继续，不记整例PASS。"
+        },
+        {
+          "type": "ISOLATED_NATIVE_STRUCTURE_AND_LIFECYCLE",
+          "receipt": "tests/acceptance/longform-stability/outline-structure-20261027.json",
+          "summary": "卷章插入/移动/重排/删除/清空与确认取消、完整生命周期回滚、隐藏未分组章节和关联正文细纲已验证。原8反例全部失败并保留；36相关回归及14+4浏览器检查通过，完整故障和平台仍继续。"
         }
       ],
       "defects": [
         "OUTLINE-TITLE-HALF-COMMIT-20261027",
         "OUTLINE-PHANTOM-SAVE-20261027",
-        "OUTLINE-INVALID-AUTHOR-PATCH-20261027"
+        "OUTLINE-INVALID-AUTHOR-PATCH-20261027",
+        "OUTLINE-PARTIAL-TREE-DELETE-20261027",
+        "OUTLINE-STRUCTURE-OWNER-20261027",
+        "OUTLINE-HIDDEN-UNGROUPED-CHAPTERS-20261027"
       ],
       "faultChecks": [
         {
@@ -23740,6 +23774,14 @@
       "date": "2026-10-27",
       "unit": "Outline author text acknowledgement and atomic chapter-title synchronization",
       "sourcePin": "tests/acceptance/longform-stability/outline-author-save-20261027.json",
+      "status": "CONTINUING",
+      "wholeCasePass": false,
+      "overallPlanCompleted": false
+    },
+    {
+      "date": "2026-10-27",
+      "unit": "Outline structural transactions, native commands and complete descendant visibility",
+      "sourcePin": "tests/acceptance/longform-stability/outline-structure-20261027.json",
       "status": "CONTINUING",
       "wholeCasePass": false,
       "overallPlanCompleted": false

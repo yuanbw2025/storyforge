@@ -169,7 +169,7 @@ export default function OutlineVolumeDetail({
             <span className="text-text-muted font-normal ml-1">（{directChapters.length + blockChapterCount} 章）</span>
           </h3>
           <div className="flex items-center gap-2">
-            {!hasBlocks && directChapters.length > 0 && (
+            {directChapters.length + blockChapterCount > 0 && (
               <button
                 onClick={onReviewChapters}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] text-accent border border-accent/30 rounded hover:bg-accent/10 transition-colors"
@@ -220,7 +220,8 @@ export default function OutlineVolumeDetail({
           </div>
         )}
 
-        {!hasBlocks && (
+        {hasBlocks && directChapters.length > 0 && <h4 className="text-xs text-text-muted mb-2">未分配到故事块的章节</h4>}
+        {(!hasBlocks || directChapters.length > 0) && (
           directChapters.length === 0 ? (
             <div className="text-center py-8 text-text-muted text-sm border border-dashed border-border rounded-lg">
               还没有章节，点击「生成本卷所有章节」或「添加章节」

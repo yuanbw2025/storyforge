@@ -1,5 +1,5 @@
 import { adoptOutlineReview, freezeOutlineReviewTarget, type OutlineReviewTarget } from '../../lib/outline/review-adoption'
-import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
+import { registerPendingDraftFlusherV1, flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useOutlineStore } from '../../stores/outline'
 import { useWorldGroupStore } from '../../stores/world-group'
@@ -12,7 +12,7 @@ import {
   type ParsedVolume, type ParsedChapter,
 } from '../../lib/ai/parse-outline-output'
 import { useAIConfigStore } from '../../stores/ai-config'
-import { getTopLevelVolumes } from '../../lib/outline/selectors'
+import { getDescendantChapters, getTopLevelVolumes } from '../../lib/outline/selectors'
 import { normalizeOutlineNode } from '../../lib/outline/normalize'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import PanelLayout from '../shared/PanelLayout'
@@ -38,6 +38,7 @@ import { useInitialRecordTarget } from '../shared/initial-record-target'
 import type { GenerationMode, ChunkedGenerationConfig } from '../../lib/outline/generation-modes'
 import { reviewChapterOutlines, rewriteChapterOutline, toReviewChapters, type ChapterReviewResult, type ChapterReviewIssue, type RewriteResult } from '../../lib/outline/chapter-reviewer'
 import { useActiveWork } from '../../hooks/useActiveWork'
+import { useBeforeUnload } from '../../hooks/useBeforeUnload'
 
 interface Props {
   project: Project
@@ -50,7 +51,7 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
   const dialog = useDialog()
   const toast = useToast()
   const activeWork = useActiveWork(project)
-  const { nodes, loading, loadError, loadAll, addNode, updateNode, deleteNode, reorderNodes, insertNodeAt, moveNodeToParent } = useOutlineStore()
+  const { nodes, loading, loadError, loadAll, addNode, addNodes, updateNode, deleteNode, deleteNodes, reorderNodes, insertNodeAt, moveNodeToParent } = useOutlineStore()
   const worldGroups = useWorldGroupStore(s => s.groups)
   const aiConfig = useAIConfigStore(s => s.config)
   const storyArcStore = useStoryArcStore(s => s.buildStoryArcContext)  // 添加 useStoryArcStore 调用
@@ -114,6 +115,29 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
     setParameterValues,
   })
 
+  const authorScope = activeWork?.id && activeWork.worldId && project.id ? { projectId: project.id, worldId: activeWork.worldId, workId: activeWork.id } : undefined
+  const [authorCommandPending, setAuthorCommandPending] = useState(false)
+  const [authorCommandError, setAuthorCommandError] = useState('')
+  const authorCommandLock = useRef(false)
+  const authorCommandWrite = useRef<Promise<void> | null>(null)
+  useEffect(() => registerPendingDraftFlusherV1(() => authorCommandWrite.current ?? undefined), [])
+  useBeforeUnload(authorCommandPending)
+  const runAuthorCommand = async (action: () => Promise<void>) => {
+    if (authorCommandLock.current) return
+    authorCommandLock.current = true; setAuthorCommandPending(true); setAuthorCommandError('')
+    try {
+      if (!authorScope) throw new Error('作品尚未就绪，请读取后再操作大纲。')
+      await flushPendingEditsV1()
+      const operation = Promise.resolve().then(action)
+      authorCommandWrite.current = operation
+      await operation
+    } catch (cause) {
+      const message = cause && typeof cause === 'object' && 'message' in cause && typeof cause.message === 'string' ? cause.message : '大纲操作未保存，请重试。'
+      setAuthorCommandError(message)
+    }
+    finally { authorCommandWrite.current = null; authorCommandLock.current = false; setAuthorCommandPending(false) }
+  }
+
   // 自动选中第一个卷
   useEffect(() => {
     if (selectedVolId === null && volumes.length > 0) {
@@ -121,40 +145,30 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
     }
   }, [volumes, selectedVolId])
 
-  const handleAddVolume = async () => {
-    try {
-      await flushPendingEditsV1()
-      const id = await addNode({
-        projectId: project.id!, parentId: null, type: 'volume',
-        title: `第${volumes.length + 1}卷`, summary: '', order: volumes.length,
-      })
-      setSelectedVolId(id)
-    } catch (cause) { toast.error(cause instanceof Error ? cause.message : '新增卷未保存。') }
-  }
+  const handleAddVolume = () => runAuthorCommand(async () => {
+    const id = await addNode({
+      projectId: project.id!, parentId: null, type: 'volume',
+      title: `第${volumes.length + 1}卷`, summary: '', order: volumes.length,
+    }, authorScope)
+    setSelectedVolId(id)
+  })
 
-  const handleAddChapter = async (parentId?: number) => {
+  const handleAddChapter = (parentId?: number) => runAuthorCommand(async () => {
     const pid = parentId ?? selectedVol?.id
     if (!pid) return
     const siblings = nodes.filter(n => n.parentId === pid && n.type === 'chapter')
     await addNode({
       projectId: project.id!, parentId: pid, type: 'chapter',
       title: `第${siblings.length + 1}章`, summary: '', order: siblings.length,
-    })
-  }
+    }, authorScope)
+  })
 
-  // FB-2 任意位置插入：在某章之后插入一章（同 parentId 内重排 order）
-  const handleInsertChapterAfter = async (afterChapterId: number, parentId: number) => {
-    const siblingIds = nodes
-      .filter(n => n.parentId === parentId && n.type === 'chapter')
-      .sort((a, b) => a.order - b.order)
-      .map(n => n.id!)
+  const handleInsertChapterAfter = (afterChapterId: number, parentId: number) => runAuthorCommand(async () => {
+    const siblingIds = nodes.filter(n => n.parentId === parentId && n.type === 'chapter').sort((a, b) => a.order - b.order).map(n => n.id!)
     const index = siblingIds.indexOf(afterChapterId) + 1
-    await insertNodeAt(
-      { projectId: project.id!, parentId, type: 'chapter', title: '新章节', summary: '', order: 0 },
-      siblingIds,
-      index,
-    )
-  }
+    if (index === 0) throw new Error('原章节已变化，插入未执行。')
+    await insertNodeAt({ projectId: project.id!, parentId, type: 'chapter', title: '新章节', summary: '', order: 0 }, siblingIds, index, authorScope)
+  })
 
   const findWorldGroupForParent = (parentId: number | null): number | null => {
     if (parentId == null) return null
@@ -175,39 +189,19 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
     return findWorldGroupForParent(chapter.parentId) === findWorldGroupForParent(targetParentId)
   }
 
-  const handleMoveChapter = async (chapterId: number, targetParentId: number, index: number) => {
-    if (!canMoveChapterToParent(chapterId, targetParentId)) {
-      toast.error('不能把章节拖到其它世界组的卷下。')
-      return
-    }
-    try {
-      await moveNodeToParent(chapterId, targetParentId, index)
-    } catch (error) {
-      console.error('[OutlinePanel] Failed to move chapter', error)
-      toast.error('章节移动失败，请重试。')
-    }
-  }
+  const handleMoveChapter = (chapterId: number, targetParentId: number, index: number) => runAuthorCommand(async () => {
+    if (!canMoveChapterToParent(chapterId, targetParentId)) throw new Error('不能把章节拖到其它世界组的卷下。')
+    await moveNodeToParent(chapterId, targetParentId, index, authorScope)
+  })
 
-  const handleAddStructure = async (structure: StoryStructure) => {
+  const handleReorderNodes = (ids: number[]) => runAuthorCommand(() => reorderNodes(ids, authorScope))
+  const handleAddStructure = (structure: StoryStructure) => runAuthorCommand(async () => {
     if (!selectedVol) return
     const def = STORY_STRUCTURES[structure]
-    const currentBlocks = normalizedNodes
-      .filter(node => node.parentId === selectedVol.id && node.type === 'storyBlock')
-      .sort((a, b) => a.order - b.order)
-    if (structure === 'custom') {
-      await addNode({
-        projectId: project.id!, parentId: selectedVol.id!, type: 'storyBlock',
-        title: '自定义故事块', summary: '', order: currentBlocks.length,
-      })
-    } else {
-      for (let i = 0; i < def.blocks.length; i++) {
-        await addNode({
-          projectId: project.id!, parentId: selectedVol.id!, type: 'storyBlock',
-          title: def.blocks[i], summary: '', order: currentBlocks.length + i,
-        })
-      }
-    }
-  }
+    const currentBlocks = normalizedNodes.filter(node => node.parentId === selectedVol.id && node.type === 'storyBlock')
+    const titles = structure === 'custom' ? ['自定义故事块'] : def.blocks
+    await addNodes(titles.map((title, index) => ({ projectId: project.id!, parentId: selectedVol.id!, type: 'storyBlock' as const, title, summary: '', order: currentBlocks.length + index })), authorScope)
+  })
 
   const generationRunOptions = useMemo(() => ({
     parameterValues: Object.keys(parameterValues).length > 0 ? parameterValues : undefined,
@@ -460,52 +454,38 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
     }
   }
 
-  const handleDeleteSelectedVolume = async () => {
-    if (!selectedVol?.id) return
+  const handleDeleteOutlineNode = (id: number) => runAuthorCommand(async () => {
+    const node = nodes.find(row => row.id === id)
+    if (!node) throw new Error('原大纲已变化，请重新读取后删除。')
     const ok = await dialog.confirm({
-      title: `删除「${selectedVol.title}」及其所有章节？`,
-      message: '此操作不可恢复。',
-      confirmText: '删除',
-      tone: 'danger',
+      title: `删除「${node.title}」及其子项？`,
+      message: '将同时删除其下章纲、细纲和正文，此操作不可恢复。',
+      confirmText: '删除', tone: 'danger',
     })
     if (!ok) return
-    deleteNode(selectedVol.id)
-    setSelectedVolId(null)
-  }
+    await deleteNode(id, authorScope)
+    if (selectedVolId === id) setSelectedVolId(null)
+  })
+  const handleDeleteSelectedVolume = () => selectedVol?.id ? handleDeleteOutlineNode(selectedVol.id) : Promise.resolve()
 
-  // 清空当前卷所有章节
-  const handleClearChapters = async () => {
+  const handleClearChapters = () => runAuthorCommand(async () => {
     if (!selectedVol?.id) return
-    const chaptersToDelete = nodes.filter(
-      n => n.parentId === selectedVol.id && n.type === 'chapter'
-    )
-    if (chaptersToDelete.length === 0) {
-      toast.info('当前卷没有章节可清空')
-      return
-    }
-
+    const chaptersToDelete = getDescendantChapters(nodes, selectedVol.id)
+    if (chaptersToDelete.length === 0) { toast.info('当前卷没有章节可清空'); return }
     const ok = await dialog.confirm({
       title: `清空「${selectedVol.title}」的所有 ${chaptersToDelete.length} 章？`,
-      message: '此操作将删除当前卷的所有章节。你可以稍后手动点生成按钮重新生成。',
-      confirmText: '清空',
-      tone: 'danger',
+      message: '将删除本卷和故事块下的全部章节、细纲和正文，保留卷及故事块结构。此操作不可恢复。',
+      confirmText: '清空', tone: 'danger',
     })
     if (!ok) return
-
-    // 删除所有章节
-    for (const chapter of chaptersToDelete) {
-      await deleteNode(chapter.id!)
-    }
-
+    await deleteNodes(chaptersToDelete.map(chapter => chapter.id!), authorScope)
     toast.success(`已清空 ${chaptersToDelete.length} 章`)
-  }
+  })
 
   // 审校相关
   const volumeChapters = useMemo(() => {
     if (!selectedVol) return []
-    return nodes
-      .filter(n => n.parentId === selectedVol.id && n.type === 'chapter')
-      .sort((a, b) => a.order - b.order)
+    return getDescendantChapters(nodes, selectedVol.id!)
   }, [nodes, selectedVol])
 
   const reviewSnapshot = useRef<typeof volumeChapters>([])
@@ -585,7 +565,7 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
       onCancelBatch={batch.cancel}
       onConfirmBatch={() => { void batch.confirm() }}
       onDismissBatch={batch.dismiss}
-      onReorderVolumes={reorderNodes}
+      onReorderVolumes={ids => { void handleReorderNodes(ids) }}
       onMoveChapter={handleMoveChapter}
     />
   )
@@ -598,7 +578,9 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
   if (loading && nodes.length === 0) return <div role="status" className="p-4 text-text-muted">正在读取大纲…</div>
 
   return (
-    <div ref={dragScrollRoot} className="h-full min-h-0" data-testid="outline-drag-scroll">
+    <div ref={dragScrollRoot} className="h-full min-h-0" data-testid="outline-drag-scroll" aria-busy={authorCommandPending} onDragStartCapture={event => { if (authorCommandPending) event.preventDefault() }}>
+    {authorCommandError && <div role="alert" className="mb-2 p-2 text-sm text-error border border-error/30 rounded">大纲操作未完成：{authorCommandError}。请核对当前内容后重试。</div>}
+    <fieldset className="contents" disabled={authorCommandPending}>
     <PanelLayout
       mobileStack
       sidebar={sidebarContent}
@@ -701,7 +683,7 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
           onChapterDragStart={beginChapterDrag}
           onChapterDragEnd={clearActiveChapterDrag}
           onUpdateNode={(id, patch, options) => updateNode(id, patch, { ...options, scope: activeWork?.id && activeWork.worldId && project.id ? { projectId: project.id, worldId: activeWork.worldId, workId: activeWork.id } : undefined })}
-          onDeleteNode={deleteNode}
+          onDeleteNode={id => { void handleDeleteOutlineNode(id) }}
           onGenerateVolume={volumeId => { void generation.prepare({ kind: 'single-volume', volumeId }) }}
           onGenerateAllChapters={handleAIChapters}
           onAddChapter={parentId => { void handleAddChapter(parentId) }}
@@ -711,7 +693,7 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
           onGenerateChapter={chapterId => { void generation.prepare({ kind: 'single-chapter', chapterId }) }}
           onOpenChapter={onOpenChapter}
           onOpenDetailedOutline={onOpenDetailedOutline}
-          onReorderNodes={orderedIds => { void reorderNodes(orderedIds) }}
+          onReorderNodes={orderedIds => { void handleReorderNodes(orderedIds) }}
           onMoveChapter={handleMoveChapter}
           onReviewChapters={() => setReviewDialogOpen(true)}
           onClearChapters={() => { void handleClearChapters() }}
@@ -727,6 +709,7 @@ export default function OutlinePanel({ project, onOpenChapter, onOpenDetailedOut
         />
       </div>
     </PanelLayout>
+    </fieldset>
     </div>
   )
 }

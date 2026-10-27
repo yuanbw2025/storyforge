@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, CornerDownRight, GripVertical, LayoutList, Plus, Sparkles, Trash2 } from 'lucide-react'
 import AcknowledgedTextField from '../shared/AcknowledgedTextField'
-import { useDialog } from '../shared/Dialog'
+import { useToast } from '../shared/Toast'
+import { flushPendingEditsV1 } from '../../lib/authoring/pending-edit-coordinator'
 import { useDragReorder, type ItemDnD } from './useDragReorder'
 import {
   OUTLINE_CHAPTER_DRAG_MIME,
@@ -67,6 +68,7 @@ export function OutlineChapterRow({
 
   return (
     <div
+      data-outline-chapter-row={ch.id}
       {...initialRecordTargetAttributes(targeted, ch.id)}
       {...(baseDropProps ?? {})}
       onDragOver={(event) => {
@@ -146,7 +148,7 @@ export function OutlineChapterRow({
           </button>
         )}
         {onOpenDetail && <button type="button" onClick={() => onOpenDetail(ch.id!)} className="rounded px-2 py-1 text-xs text-accent" title="编辑本章细纲">细纲</button>}
-        <button onClick={() => onDelete(ch.id!)} className="p-1 text-text-muted hover:text-error rounded">
+        <button title="删除章节" onClick={() => onDelete(ch.id!)} className="p-1 text-text-muted hover:text-error rounded">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -189,7 +191,7 @@ export function OutlineStoryBlockSection({
   onChapterDragStart: (payload: ChapterDragPayload) => void
   onChapterDragEnd: () => void
 }) {
-  const dialog = useDialog()
+  const toast = useToast()
   const [expanded, setExpanded] = useState(true)
   const containsInitialTarget = block.id === initialTargetNodeId
     || chapters.some(chapter => chapter.id === initialTargetNodeId)
@@ -198,14 +200,7 @@ export function OutlineStoryBlockSection({
   }, [containsInitialTarget])
   const blockChaptersDnD = useDragReorder(chapters.map(chapter => chapter.id), onReorder)
   const handleDeleteBlock = async () => {
-    if (!block.id) return
-    const ok = await dialog.confirm({
-      title: `删除故事块「${block.title}」？`,
-      message: '其下章节也会被删除，此操作不可恢复。',
-      confirmText: '删除',
-      tone: 'danger',
-    })
-    if (ok) onDeleteNode(block.id)
+    if (block.id) onDeleteNode(block.id)
   }
   const dropToBlockEnd = block.id != null
     ? chapterDropProps({
@@ -219,6 +214,7 @@ export function OutlineStoryBlockSection({
 
   return (
     <div
+      data-outline-block-id={block.id}
       {...initialRecordTargetAttributes(block.id === initialTargetNodeId, block.id)}
       className={`border border-border rounded-lg overflow-hidden ${
         block.id === initialTargetNodeId ? INITIAL_RECORD_TARGET_CLASS : ''
@@ -229,7 +225,7 @@ export function OutlineStoryBlockSection({
         onDrop={event => { if (dropToBlockEnd) void dropToBlockEnd.onDrop(event) }}
         className="flex items-center gap-2 px-3 py-2 bg-bg-elevated"
       >
-        <button onClick={() => setExpanded(!expanded)} className="text-text-muted hover:text-text-primary">
+        <button onClick={() => { void flushPendingEditsV1().then(() => setExpanded(!expanded)).catch(cause => toast.error(cause instanceof Error ? cause.message : '故事块草稿未保存。')) }} className="text-text-muted hover:text-text-primary">
           {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
         </button>
         <LayoutList className="w-3.5 h-3.5 text-accent/60" />
@@ -242,7 +238,7 @@ export function OutlineStoryBlockSection({
         <button onClick={onAddChapter} className="p-1 text-text-muted hover:text-accent rounded" title="添加章节">
           <Plus className="w-3 h-3" />
         </button>
-        <button onClick={() => { void handleDeleteBlock() }} className="p-1 text-text-muted hover:text-error rounded">
+        <button title="删除故事块" onClick={() => { void handleDeleteBlock() }} className="p-1 text-text-muted hover:text-error rounded">
           <Trash2 className="w-3 h-3" />
         </button>
       </div>
