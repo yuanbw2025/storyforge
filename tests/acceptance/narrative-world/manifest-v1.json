@@ -21,7 +21,7 @@
     "edits": 48
   },
   "baseline": {
-    "path": "tests/acceptance/narrative-world/baseline-20261027-workflow-continuation-v1.json",
+    "path": "tests/acceptance/narrative-world/baseline-20261027-workflow-continuation-v2.json",
     "policy": "Preserve this dated receipt. Changed corpus requires a new dataset version; changed implementation requires a reviewed new receipt.",
     "history": [
       {
@@ -481,6 +481,12 @@
         "path": "tests/acceptance/narrative-world/baseline-20261027-pr208-integration-v3.json",
         "workPackage": "NW-integration",
         "note": "Retained mainline provider/navigation integration checkpoint before longform workflow continuation."
+      },
+      {
+        "path": "tests/acceptance/narrative-world/baseline-20261027-workflow-continuation-v1.json",
+        "workPackage": "longform workflow continuation v1",
+        "implementationCommit": "d6ff54b439ce9693de8e4fcc84d67758e8c5f5cb",
+        "note": "Preserved before explicit author-selected Work metadata scope support."
       }
     ],
     "comparison": "NW-2E checkpoint of the unchanged legacy v3 120-query comparator. Typed v4 query, exact product plans, current impact diagnostics and scale failures have separate receipts; no model or human quality acceptance is inferred."

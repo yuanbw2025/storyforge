@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Save, X, ChevronDown } from 'lucide-react'
 import { useProjectStore } from '../../stores/project'
 import { useWorldGroupStore } from '../../stores/world-group'
-import type { Project } from '../../lib/types'
+import type { Project, WorkspaceScope } from '../../lib/types'
 import { GENRE_OPTIONS } from '../../lib/types'
 import { useActiveWork } from '../../hooks/useActiveWork'
 import { useBeforeUnload } from '../../hooks/useBeforeUnload'
@@ -32,6 +32,9 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
     description: '',
     targetWordCount: 500_000,
   })
+  const [formOwner, setFormOwner] = useState<{ scope: WorkspaceScope; title: string } | null>(null)
+  const formOwnerRef = useRef<typeof formOwner>(null)
+  const lastSavedRef = useRef<{ scope: WorkspaceScope; fields: typeof form; updatedAt: number } | null>(null)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState('')
@@ -48,20 +51,29 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
   const [showGenreDropdown, setShowGenreDropdown] = useState(false)
 
   useEffect(() => {
-    if (!activeWork || activeWork.id !== project.activeWorkId || dirtyRef.current) return
+    if (!project.id || !activeWork?.id || !activeWork.worldId || activeWork.id !== project.activeWorkId || dirtyRef.current) return
+    const saved = lastSavedRef.current
+    if (saved?.scope.projectId === project.id && saved.scope.workId === activeWork.id
+      && (activeWork.updatedAt ?? 0) < saved.updatedAt
+      && JSON.stringify([activeWork.title, activeWork.description, activeWork.genres, activeWork.targetWordCount])
+        !== JSON.stringify([saved.fields.title, saved.fields.description, saved.fields.genres, saved.fields.targetWordCount])) return
     const next = {
       title: activeWork.title,
       genres: [...activeWork.genres],
       description: activeWork.description,
       targetWordCount: activeWork.targetWordCount,
     }
+    const owner = { scope: { projectId: project.id, worldId: activeWork.worldId, workId: activeWork.id }, title: activeWork.title }
+    formOwnerRef.current = owner
+    setFormOwner(owner)
     formRef.current = next
     setForm(next)
-  }, [activeWork, project.activeWorkId])
+  }, [activeWork, project.activeWorkId, project.id, dirty])
 
   const handleSave = useCallback(async () => {
     if (!dirtyRef.current) return
-    if (!project.id || !activeWork || activeWork.id !== project.activeWorkId) {
+    const owner = formOwnerRef.current
+    if (!owner) {
       throw new Error('作品仍在加载，请稍后保存。')
     }
     const snapshot = formRef.current
@@ -69,15 +81,15 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
     setSaving(true)
     setError('')
     try {
-      await coordinatePendingEditV1({
-        key: `work-info:${activeWork.id}`,
-        persist: () => updateActiveWork(project.id!, snapshot),
+      const savedWork = await coordinatePendingEditV1({
+        key: `work-info:${owner.scope.workId}`,
+        persist: () => updateActiveWork(owner.scope.projectId, snapshot, owner.scope),
       })
+      lastSavedRef.current = { scope: owner.scope, fields: snapshot, updatedAt: savedWork?.updatedAt ?? Date.now() }
       if (formRef.current === snapshot) {
         dirtyRef.current = false
         setDirty(false)
       }
-      onUpdate(project)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '保存失败，请重试。')
       throw cause
@@ -85,7 +97,7 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
       pendingCount.current--
       setSaving(pendingCount.current > 0)
     }
-  }, [activeWork, onUpdate, project, updateActiveWork])
+  }, [updateActiveWork])
 
   useEffect(() => registerPendingDraftFlusherV1(handleSave), [handleSave])
   useEffect(() => {
@@ -112,13 +124,15 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
       .join(' · ') + (genres.length > 3 ? ` +${genres.length - 3}` : '')
   }
 
+  const ownerIsActive = formOwner?.scope.projectId === project.id && formOwner?.scope.workId === activeWork?.id
+
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold text-text-primary">基本信息</h2>
         <button
           onClick={() => { void handleSave().catch(() => undefined) }}
-          disabled={saving || !activeWork || activeWork.id !== project.activeWorkId}
+          disabled={saving || !formOwner}
           className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors text-sm font-medium"
         >
           <Save className="w-4 h-4" />
@@ -130,7 +144,9 @@ export default function ProjectInfoPanel({ project, onUpdate }: ProjectInfoPanel
         {error ? `未保存：${error}。内容仍保留，请点击保存重试。` : saving ? '正在保存…' : dirty ? '有修改，稍后自动保存；切换步骤时会先保存。' : '修改后自动保存'}
       </p>
 
-      <fieldset disabled={!activeWork || activeWork.id !== project.activeWorkId} className="space-y-5">
+      {dirty && formOwner && !ownerIsActive && <p role="status" className="mb-3 text-xs text-warning">已保留《{formOwner.title}》的改动，将先保存到该作品，再显示当前作品的信息。</p>}
+
+      <fieldset disabled={!ownerIsActive || !activeWork || activeWork.id !== project.activeWorkId} className="space-y-5">
         <div>
           <label className="block text-sm text-text-secondary mb-1.5">作品名称</label>
           <input
