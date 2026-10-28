@@ -54,6 +54,8 @@ node scripts/distribution/build-android.mjs --release
 5. 安装操作先等待现有待保存编辑协调器完成写入，失败则阻断安装。Windows 由 `electron-updater` 检查与下载；禁用自动下载、退出时自动安装、预发布和降级。下载与退出安装各有原生确认窗口。GitHub 下载失败仍可使用当前安装。可通过 `CSC_LINK` / `CSC_KEY_PASSWORD` 接入 Windows 代码签名；未配置时为未签名安装器，系统可能提示未知发布者。
 6. Android 只检查固定仓库最新稳定 Release，精确匹配 APK 名称与 URL，验证 GitHub asset SHA-256、APK 包名、递增版本号和当前签名，再调用系统安装器。首次需要用户允许“安装未知应用”。下载或校验失败不得启动安装；用户取消系统安装时旧版保留。
 
+正式发行的完整 CLI 与浏览器检查分别运行在独立 runner；两者都成功后才继续便携构建，公开仍同时依赖全部目标包、客户端和正式签名 Android 覆盖升级。两个检查都记录实际检出 SHA，不以拆分或 PR 条件不适用代替正式发行验收。
+
 ## 桌面第三方声明
 
 桌面构建继续先运行 `scripts/distribution/notices.mjs` 生成当前依赖声明。`electron-builder.config.cjs` 的 `afterExtract` 钩子在平台运行时清理前，把本次实际解包的 Electron 许可、完整 Chromium 声明及 NPM 声明原字节保留到应用资源的 `third-party/`，并记录实际运行时版本、大小与 SHA-256。Mac 的文件随 `.app` 一起保留；Windows/Linux 使用同一资源合同。缺文件、空文件、符号链接或缺少当前依赖声明会中止构建，不产出一个只带部分声明的目录。此构建元数据不包含个人目录，不属于作品表或模型上下文；它不替代具体模型、媒资和发布用途的独立许可审阅。
